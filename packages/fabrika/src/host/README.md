@@ -48,7 +48,7 @@ Layer on its own subpath.
 |---|---|---|
 | `@kampus/fabrika` | `ledger.ts` | `Ledger` (the service), its tagged errors, `Row`, `Lease`, `streams(name)`, `inboxOf` |
 | `@kampus/fabrika` | `writer.ts` | `Writer`: who wrote a row, a user, an agent for a user, or an agent from before the door. `writerOf` reads it from a row's `writer` text (`user:<id>`, `agent:<id> for:<user id>`, old `agent:<id>`); any other text names neither. `writerText` writes that text |
-| `@kampus/fabrika`, the names | `door.ts` | The door: the one way into a ledger from the network. It turns a credential into a person, an agent for a person, or a refusal, and stamps that as the writer and in the holder. Members as facts on the ledger (`door/members`), SSH-signed logins checked against the keys `Keys` lists, sessions, and `trustedArgs`: what a request may say. `PERSON_KINDS`: the kinds only a person writes (today `answered`, the owner's answer to an ask), refused from an agent's session; `Writes`: a program's table of who writes each of its facts, held to that list by its type. workerd runs it, bundled into the ledger's Worker. The top level exports the names a host signs and reads (`challengeText`, `grantText`, `holderOf`, `hostOf`, `namesOf`: each member's GitHub login by id, ...) |
+| `@kampus/fabrika`, the names | `door.ts` | The door: the one way into a ledger from the network. It turns a credential into a person, an agent for a person, or a refusal, and stamps that as the writer and in the holder. Members as facts on the ledger (`door/members`), SSH-signed logins checked against the keys `Keys` lists, sessions, and `trustedArgs`: what a request may say. `PERSON_KINDS`: the kinds only a person writes (today `answered`, the owner's answer to an ask, and `duplicate_rated`, a person's accept or dismiss on a duplicate hint), refused from an agent's session; `Writes`: a program's table of who writes each of its facts, held to that list by its type. workerd runs it, bundled into the ledger's Worker. The top level exports the names a host signs and reads (`challengeText`, `grantText`, `holderOf`, `hostOf`, `namesOf`: each member's GitHub login by id, ...) |
 | `@kampus/fabrika` | `keys.ts` | `Keys`: the two questions the door asks about a person. `byId`: who has an id now, by what name, and which keys may sign for them, asked at a login about people this ledger already knows. `of`: the same for a name, asked only by a member's invite. The id is what the ledger keeps. `layerNobody`: nobody has any id or name |
 | (inside the ledger) | `keys-github.ts` | `layerGitHub`: `Keys` from GitHub. A name is a login, the id is `github:<GitHub's numeric id>`, so a renamed login stays the same person. Answers kept 5 minutes (`KEYS_CACHE_MS`), a failure 30 seconds (`KEYS_FAIL_MS`). When GitHub says its limit is spent, nothing is asked until the reset it names. With a token (`token`, the Worker's `GITHUB_TOKEN` secret) the ledger has its own budget of 5,000 calls an hour; without one it shares 60 an hour with its outgoing address. A token GitHub refuses is dropped for that call, with a warning in the log |
 | `@kampus/fabrika` | `sshsig.ts` | SSH signatures as `ssh-keygen -Y sign` makes them (SSHSIG), Ed25519, on WebCrypto. `keyLineOf`, `keyOnly` are exported. `keyFileOf` reads an OpenSSH private key file with no passphrase, `keyFileText` writes one |
@@ -61,12 +61,35 @@ Layer on its own subpath.
 | `@kampus/fabrika` | `rules.ts` | The SQL and its migrations, shared by the Durable Object and node:sqlite |
 | `@kampus/fabrika` | `tail.ts` | `tail`: a live read of one stream, in order, once each. `meter` counts what it read |
 | `@kampus/fabrika` | `host.ts` | `serve`, `Self`, `cast`, `envelope`, `savedState`, and the host machine with its laws' inputs |
+| `@kampus/fabrika`, and `Shell` | `jobs.ts` | The job table: what a job is, its machine, its `next` number, and `traceIdOf`, a job's trace. Moved here from tsh |
+| `@kampus/fabrika` | `host-jobs.ts` | Where a host keeps its jobs. `openJobs` and `HostJobs`: the one table a host keeps and every tsh on it shows |
+| `@kampus/fabrika` | `leader.ts` | `leaderOf`: the name that leads a name's job on the ledger, up its parents. `serve` starts each program in its leader's trace |
 | `@kampus/fabrika`, as `Call` | `call.ts` | gen_server:call as a tea module: send, a reply-to, a deadline, a retry under the same id. `Call.update`, as Elm names a module's update |
 | `@kampus/fabrika`, as `Monitor` | `monitor.ts` | Monitors as a tea module: keep watching a name, monitor again after each DOWN, and report every death once (a `down`, or a `gap` of deaths no monitor was on) |
 | `@kampus/fabrika` | `supervisor.ts` | OTP's `supervisor` as a tea program: `one_for_one`, `one_for_all`, `rest_for_one`, a supervisor under a supervisor, its calls, `shutdown` per child, opt-in restart backoff. `supervisor(name, spec)` gives the program, or refuses the spec |
 | `@kampus/fabrika` | `dead-letters.ts` | `deadLetters(name)` lists what the ledger set aside; `redrive(name, rev, writer)` sends one back once (SQS's redrive to source; behind a door, only a person may); `limitEnds(name)` lists the runs a limit ended |
 | `@kampus/fabrika` | `observer.ts` | `whereis` and `getState`: who holds a name, and its last saved state. Writes nothing |
 | `@kampus/fabrika/laws` | `laws.ts` | The ledger's law suite, `runLaws`, and `layerPlanted` (the SQL with one mistake) |
+| `@kampus/fabrika` | `traces.ts` | A job's record, read: `JobTrace` (job, runs, spans, steps, opened) and its parts as Effect Schemas, the shape the trace tile draws. `Traces`, the service that reads one by trace id, and follows one (`watch`): read again at each change notification (`Changes`), polled where the records say nothing of their writes. `jobStorage`: the `Storage` of a job's runs, in its record, with one step per Msg. `jobWrites`: the host's `began` and `ended`, and `opened` and `spanOf`: the span a run's work hangs under, kept as it opens, so a child run started on any host nests under its parent's span before that span ends. `JobCall`: one call as it crosses the door |
+| `@kampus/fabrika` | `records.ts` | `Records`: a host's own jobs' records, one per job by its trace id, each write sending a change for the job. `keepJobs`: the job table, writing each job's start and end. `stepsInto`: the runs' storage, writing each step into its job's record. `layerRecordTraces`: `Traces` over them |
+| `@kampus/fabrika/records` | `sqlite-records.ts` | `sqliteRecords`: the laptop's records, one node:sqlite file per job (`<dir>/<trace>.sqlite`), the same SQL as the Durable Object. A record exists once its job began: a write to any other trace is let go, a read of one is empty |
+| (inside the ledger) | `job-record.ts` | `JobRecord`: one Durable Object per host job, named `<ledger>/<trace id>`, in the ledger's own Worker and its Miniflare twin (bound as `JOB_RECORD`). SQLite inside, nothing ever deleted. No request reaches it but through the ledger's door |
+| (inside the ledger) | `job-rules.ts` | The record's SQL: the `job`, `state`, `steps`, `spans` and `opened` tables, and every call on them in one transaction. A step is kept as a JSON Patch of the one before, or whole once the patches since the last whole state would outweigh it, or after 100 (experiment 166) |
+| (inside the ledger) | `otlp.ts` | OTLP over HTTP, JSON, decoded with Effect Schema: each span by its trace id, its service, tags and events, at most 5,000 spans a request and 1 KiB a tag |
+| `@kampus/fabrika/http` | `http.ts` | `recordsHttp`: calls to the jobs' records through the door, untraced, so a record's own writes are not spans of its job. `layerTracesHttp`: `Traces` over them |
+| `@kampus/fabrika/local` | `inside.ts` | `recordsInside`: the same calls past the door, as a writer the test names. `recordInside`: one record's every row (`dump`) and its steps' bytes (`sizes`), for the laws and experiment 166 |
+
+A job's record has two doors in the ledger's Worker, both behind the ledger's own door, which
+stamps who sent each write:
+
+```text
+POST /<ledger>/job/<trace>    one JobCall as JSON: the runs' Storage, a step, began, ended, opened, spanOf, read
+POST /<ledger>/v1/traces      OTLP/HTTP JSON, as any OpenTelemetry exporter sends it (protobuf: 415)
+```
+
+The direction note is `docs/direction/a-job-record-holds-its-trace.md`. Its `beats`, `summary`
+and `logs` tables are not built yet: each comes with its writer (the host's heartbeats, the
+job's end, a run's output lines), so no table is made before something writes it.
 
 To make the GitHub token: create a fine-grained personal access token with public repositories
 (read-only) and no permissions, and set it as the Worker's `GITHUB_TOKEN` secret.
@@ -88,6 +111,32 @@ The rules, in short:
 - A host stops its program when the ledger says its lease is lost (a renew answers `lost`, or a
   newer claim shows), or at its lease's end plus the grace (10 minutes) with no word from the
   ledger. While it hears nothing it renews every second.
+
+## Jobs
+
+A job is what one start on a host made: a root run and every run it started, like a Unix process
+group. The host keeps them, as WezTerm's mux keeps every pane; a shell only shows them
+(`jobs.ts`, `host-jobs.ts`, and
+[the decision](../../../../docs/direction/the-host-keeps-terminals-and-jobs.md)).
+
+```ts
+const jobs = yield* openJobs(fileStorage(home)); // a host in one process: one table, kept
+yield* leaderOf("lane:700:build");                // on the ledger: "lane:700", up the parents
+```
+
+- **In one process** (tsh's launcher, the app's host process) the host keeps one job table, one
+  tea machine, in the storage it is handed. Every tsh on the host is handed the same table, so
+  each tile in the app sees the same `%n`. tsh's `jobs`, `&`, `attach %n` and `fg` are views of
+  it and Msgs to it.
+- **Numbers count up and are never given twice**, as WezTerm's and tmux's ids: the table keeps
+  `next`, and a job that ended does not free its number. A table kept before `next` reads back
+  with `next` after every number in it.
+- **On the ledger** the registry is the table already. A name with no parent leads a job;
+  `startChild` puts the child in its parent's job, as a forked child keeps its parent's process
+  group. `leaderOf` reads it, and nothing more is written.
+- **One job, one trace.** `serve` starts each program under its leader's trace (`traceOf`), so a
+  lane's stages are in the lane's trace on any host, and a name taken over goes on in it. The
+  law is `packages/pipeline/src/hosted/lane-trace-id.laws.test.ts`.
 
 ## Monitors, links and the supervisor
 
@@ -216,6 +265,13 @@ escalates, and a dead letter sent back) and `experiments/101-real-agents-faults.
 Code agents in containers, their hosts killed mid-question) and `experiments/102-limits.ts` (dollar,
 token, wall and children limits on a tree of tickets on three hosts, with a crash loop, a SIGKILL
 and a freeze mid-spend).
+
+A job's record is tested from `../shell`, since its tests run tsh's programs and its tracer, and
+the shell sits above the host. `../shell/job-record.test.ts` runs `seq --to 3 | tally` against the
+Miniflare twin, through the door, and reads back one record with both runs, every span and
+tally's three `add` steps. `../shell/job-record.laws.test.ts` is the secret law: a state that holds a `Redacted`, under each of Effect
+Schema's ways to write one, leaves no secret text in any row of any table, over HTTP and past the
+door. With the refusal planted out, 9 of its 11 cases fail.
 
 ## Not in it yet
 

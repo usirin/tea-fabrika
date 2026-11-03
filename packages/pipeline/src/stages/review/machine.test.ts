@@ -1,5 +1,5 @@
 import {applyCell} from "@demlik/tea";
-import {noSpend} from "@kampus/fabrika/agents/claude";
+import {noSpend} from "@kampus/fabrika-old/agents/claude";
 import {describe, expect, it} from "vitest";
 import {criterionId} from "../../ids.ts";
 import {msgOf} from "./handlers.ts";

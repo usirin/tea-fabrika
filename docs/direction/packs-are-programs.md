@@ -2,6 +2,10 @@
 
 Proposed 2026-10-18.
 
+*Changed 2026-11-01, for `next/`, proposed: packs wait for Tier 7. A program package in
+`next/programs/` is already the shape a pack has, and repo programs in `.fabrika/programs`
+come first, in Tier 5, lean about 60% ([the tiers](../plan/tiers.md)).*
+
 ## The idea
 
 - **fabrika is a small core plus add-on packs.** The core is report, sort,
@@ -41,7 +45,14 @@ For repos whose work changes what a user sees. Its branches:
 - **Nothing a user sees changes:** the pack stays quiet; the core ships as usual.
 - **Something a user sees changes:** the pack takes before and after
   screenshots and a short video, and emits one ask: "this is what changes,
-  yes or no?"
+  yes or no?" It shoots each changed screen in more than one layout, since a
+  screen that fits one wide window can break at half or a quarter (added
+  2026-10-30). The layouts are a setting, with this repo's as the default:
+
+  ```toml
+  [pack."@tea-fabrika/ui-verification"]
+  layouts = ["one", "side-by-side", "stacked", "grid-2x2", "small-window"]
+  ```
 - **Yes:** it ships.
 - **No, with a note:** the note becomes a new criterion and the work goes back
   to build.

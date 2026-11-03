@@ -12,7 +12,7 @@ import {
 	type PayloadOf,
 	type Program,
 	withDefaults,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {Effect, Layer} from "effect";
 import {layerLanes} from "../asks/claims.ts";
 import {type Ledger, memoryLedger} from "../asks/ledger.ts";
@@ -23,8 +23,8 @@ import {INSTALL, withLocalChecks} from "../local-checks.ts";
 import {CodeHost} from "../services.ts";
 import type {AgentPick, Setup} from "../setup.ts";
 import {sh} from "../sh.ts";
-import {liveBuilder} from "../stages/build/builder.ts";
 import {liveAcpBuilder} from "../stages/build/builder-acp.ts";
+import {liveBuilder} from "../stages/build/builder.ts";
 import {type BuildConfig, cloneIn, gitHubBuild} from "../stages/build/github.ts";
 import {buildProgram} from "../stages/build/program.ts";
 import {operateProgram} from "../stages/operate/program.ts";
@@ -112,8 +112,8 @@ const reviewing = (config: Config, setup: Setup | null) => ({
 });
 
 /**
- * The GitHub reader with what the repository declared in fabrika.toml (whose
- * approval, which review kinds), and, when it names `[[checks.run]]`, those
+ * The GitHub reader with what the repository declared in .fabrika/fabrika.toml
+ * (whose approval), and, when it names `[[checks.run]]`, those
  * checks run by fabrika at each head and counted beside GitHub's
  * (../local-checks.ts). `counted`: which of GitHub's checks a review waits on
  * when the run has no pick of its own.
@@ -130,7 +130,7 @@ const gitHubReads = (
 	const base = gitHubCodeHost({
 		...accounts,
 		checks: github === "required" ? "required" : (counted ?? "required"),
-		declared: {approval: setup.approval.value, kinds: setup.kinds.value},
+		declared: {approval: setup.approval.value},
 	});
 	const [first, ...rest] = setup.run.value;
 	if (first === undefined) return base;

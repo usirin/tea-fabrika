@@ -1,20 +1,20 @@
 # Two hosts, one ledger
 
-A tutorial for the host in `@kampus/fabrika`. You start one ledger and two hosts on your laptop and run
+A tutorial for the host in `@kampus/fabrika-old`. You start one ledger and two hosts on your laptop and run
 two programs that talk to each other: a kettle that brews each order and pours it into a glass,
 and a glass that counts what is poured. Then you kill a host with `kill -9` in the middle of
 thirty orders, and count. Thirty orders, thirty brewed, thirty poured.
 
 These are the finished files. The tutorial has you write them yourself; if a step goes wrong,
-compare with these. `pnpm typecheck` checks them, so they keep working as the package changes. They import `@kampus/fabrika` for the services,
-`@kampus/fabrika/local` for the ledger in Miniflare and for the hosts' way to it.
+compare with these. `pnpm typecheck` checks them, so they keep working as the package changes. They import `@kampus/fabrika-old` for the services,
+`@kampus/fabrika-old/local` for the ledger in Miniflare and for the hosts' way to it.
 
 The ledger has a door: a request with no credential is refused. A local ledger keeps its one
 person's secret in its data folder (`.teahouse/door-secret`, readable by you only), and the hosts
 read it from there (`layerAttach`). So every write is stamped as that person, `user:owner`, and
 a holder reads like `host-a@1761000000000@user:owner`: the host's own tag, then who it is.
 
-You need Node `26.12.0`, `pnpm` 10, four terminals and a spare shell. Run everything from the
+You need Node `26.13.0`, `pnpm` 12, four terminals and a spare shell. Run everything from the
 repo root, after `pnpm install --frozen-lockfile`.
 
 ## 1. Start the ledger

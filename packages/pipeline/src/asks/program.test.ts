@@ -1,4 +1,4 @@
-import {ear, start, tell} from "@kampus/fabrika";
+import {ear, start, tell} from "@kampus/fabrika-old";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import {planOf, ticketId} from "../ids.ts";

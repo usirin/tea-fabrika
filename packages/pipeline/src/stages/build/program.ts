@@ -1,4 +1,4 @@
-import {defineProgram, flag, input, type Kit, kind, output, type RefsOf} from "@kampus/fabrika";
+import {defineProgram, flag, input, type Kit, kind, output, type RefsOf} from "@kampus/fabrika-old";
 import {Clock, Effect, Random, Schema} from "effect";
 import {sessionOf} from "../../combos.ts";
 import {nameOf} from "../outcome.ts";
@@ -178,10 +178,12 @@ export const buildProgram = defineProgram({
 	// by the queue at its next start (../queue.ts).
 	machines: BUILD_KINDS,
 	main: (io) =>
-		workQueue(
-			io.machines.queue,
-			io.inputs.ticket,
-			(ticket) => builtOne(ticket, io),
-			(ticket) => io.machines.build.get(idOf(ticket)).clear,
-		),
+		Effect.gen(function* () {
+			const queue = yield* workQueue(
+				io.machines.queue,
+				(ticket) => builtOne(ticket, io),
+				(ticket) => io.machines.build.get(idOf(ticket)).clear,
+			);
+			yield* queue.drained(io.serve({ticket: queue.told}));
+		}).pipe(Effect.scoped),
 });

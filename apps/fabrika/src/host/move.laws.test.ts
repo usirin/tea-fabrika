@@ -14,8 +14,8 @@ import {
 	sealMove,
 	writerFor,
 	writeUnguarded,
-} from "@kampus/fabrika";
-import {openDb} from "@kampus/fabrika/sqlite";
+} from "@kampus/fabrika-old";
+import {openDb} from "@kampus/fabrika-old/sqlite";
 import {fold, ROOT, readRow} from "@tea-fabrika/tracker";
 import {Effect, Layer, Schema} from "effect";
 import * as fc from "fast-check";

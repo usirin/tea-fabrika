@@ -15,7 +15,15 @@
 // does not answer instead of giving up.
 import {defineMachine} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
-import {defineProgram, envelope, type Inbox, input, Ledger, Self, streams} from "@kampus/fabrika";
+import {
+	defineProgram,
+	envelope,
+	type Inbox,
+	input,
+	Ledger,
+	Self,
+	streams,
+} from "@kampus/fabrika-old";
 import {Fact, homeOf, sendFact} from "@kampus/pipeline/asks/ledger";
 import * as Today from "@kampus/pipeline/hosted/idempotency";
 import {planOf, taskId, ticketId} from "@kampus/pipeline/ids";

@@ -58,9 +58,12 @@ export const shipSubscribe = {
 				return (yield* CodeHost).leftQueue(sub.deps.pr, sub.deps.head);
 			}),
 		).pipe(
-			Stream.map(
-				(left): ShipMsg => ({type: "ship_queue", pr: sub.deps.pr, head: sub.deps.head, ...left}),
-			),
+			Stream.map((left): ShipMsg => ({
+				type: "ship_queue",
+				pr: sub.deps.pr,
+				head: sub.deps.head,
+				...left,
+			})),
 		),
 };
 

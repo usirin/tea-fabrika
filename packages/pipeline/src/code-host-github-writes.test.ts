@@ -2,6 +2,16 @@ import {readFileSync} from "node:fs";
 import {Effect, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {
+	codeHostWritesOn,
+	ENQUEUE_READ,
+	ENQUEUE_WRITE,
+	enqueueOn,
+	MERGE_READ,
+	MERGE_WRITE,
+	mergeOn,
+	rerunChecksOn,
+} from "./code-host-github-writes.ts";
+import {
 	checksSettledNow,
 	codeHostOn,
 	type Gh,
@@ -12,16 +22,6 @@ import {
 	queueStep,
 	queueNow as readQueue,
 } from "./code-host-github.ts";
-import {
-	codeHostWritesOn,
-	ENQUEUE_READ,
-	ENQUEUE_WRITE,
-	enqueueOn,
-	MERGE_READ,
-	MERGE_WRITE,
-	mergeOn,
-	rerunChecksOn,
-} from "./code-host-github-writes.ts";
 import {CodeHost, CodeHostWrites} from "./services.ts";
 import {shipSubscribe, shipTidyTree, shipWriteInterpret} from "./stages/ship/handlers.ts";
 import {launch, modeLine, type Parts, type Plan, planOf} from "./stages/ship/launch.ts";
@@ -163,11 +163,18 @@ describe("enqueue", () => {
 
 	it("sent a second time, it finds its own first write and writes nothing", async () => {
 		const inQueue = inOrder(stands({isInMergeQueue: true}));
-		const merged = inOrder(stands({state: "MERGED", headRefOid: OTHER}));
+		const merged = inOrder(stands({state: "MERGED"}));
 
 		expect(await enqueued(inQueue.gh)).toBe("queued");
 		expect(await enqueued(merged.gh)).toBe("queued");
 		expect([inQueue.calls, merged.calls]).toEqual([[READ_CALL], [READ_CALL]]);
+	});
+
+	it("merged at another head, it is not its own first write: the head moved", async () => {
+		const {gh, calls} = inOrder(stands({state: "MERGED", headRefOid: OTHER}));
+
+		expect(await enqueued(gh)).toBe("head_moved");
+		expect(calls).toEqual([READ_CALL]);
 	});
 
 	it("a write that went through though its answer was lost: the second read finds it in the queue", async () => {
@@ -311,6 +318,20 @@ describe("merge, on a repository with no merge queue", () => {
 
 		expect(await merged(gh)).toEqual({reading: "head_moved"});
 		expect(calls).toEqual([MERGE_READ_CALL, mergeCall("SQUASH"), MERGE_READ_CALL]);
+	});
+
+	it("merged at another head, it is not its own first write: the head moved", async () => {
+		const before = inOrder(
+			allows({}, {state: "MERGED", headRefOid: OTHER, mergeCommit: {oid: MERGE}}),
+		);
+		const after = inOrder(
+			allows({}),
+			"breaks",
+			allows({}, {state: "MERGED", headRefOid: OTHER, mergeCommit: {oid: MERGE}}),
+		);
+
+		expect(await merged(before.gh)).toEqual({reading: "head_moved"});
+		expect(await merged(after.gh)).toEqual({reading: "head_moved"});
 	});
 
 	it("sent a second time, or its answer lost: it finds its own first write, and writes no more", async () => {

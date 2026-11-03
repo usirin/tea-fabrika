@@ -36,7 +36,7 @@ import {type Attached, Found, type LinkNow} from "./messages.ts";
 //   update(s, attach_ok {kind: "version", theirs: 1, ours: 2})   {at: "refused", ...}: never tried again
 //   update(s, attach_ok {kind: "build", theirs: null, ours})     {at: "up", found: {kind: "build", ...}}:
 //                                                                attached, and the window shows a banner
-//   update(s, {type: "restart"})                    {at: "restarting"}, restart: the person said yes to
+//   update(s, {type: "restart"})                    {at: "restarting"}, restart: the person confirmed
 //                                                   "Stop the old host and start this one"
 //   update(s, restart_ok {kind: "up"})              {at: "up", found: {kind: "up"}}
 //

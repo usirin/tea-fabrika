@@ -1,5 +1,12 @@
 import type {Entry} from "../program/listed.ts";
-import {type Declared, type Flag, fit, type Shape} from "../program/shape.ts";
+import {
+	type Declared,
+	type Flag,
+	fit,
+	mustBeGiven,
+	type Output,
+	type Shape,
+} from "../program/shape.ts";
 import {readValue, typeOf} from "./decode.ts";
 import {didYouMean} from "./did-you-mean.ts";
 import {
@@ -22,6 +29,10 @@ import type {At} from "./words.ts";
 //
 //   seq --to 3 | double         seq's output n (integer) fits double's input n (integer): wired n → n
 //   seq --to 3 | upper          refused at the |: seq's outputs fit no input of upper
+//   tally | trace               tally's outputs fit no typed input of trace, and trace's `any`
+//                               takes any value (`anyInput`): wired total → any, tally's first
+//                               output, as a Unix pipe carries stdout and not stderr
+//   tracker | trace             tracker's ticket fits trace's input ticket: a typed fit wins over `any`
 //   ship --mdoe read            refused at --mdoe: ship has no flag --mdoe. Did you mean --mode?
 
 /** Where a value comes from: the line, or the output of a `$( )` that runs first. */
@@ -43,8 +54,16 @@ export interface Stage {
 	readonly wire: {readonly output: string; readonly input: string} | null;
 	/** The input the stage before feeds. `null` on the first stage. */
 	readonly fed: string | null;
+	/** `--all`: its table for a person shows every row, not one screen. */
+	readonly all: boolean;
 	readonly text: string;
 }
+
+/** Whether any output of the program shows a person a table: what `--all` is for. */
+export const hasTable = (entry: Entry): boolean =>
+	Object.values<Output<unknown>>(entry.program.outputs).some(
+		(o) => typeof o.person === "object" && "table" in o.person,
+	);
 
 export interface Line {
 	readonly stages: readonly [Stage, ...Stage[]];
@@ -57,9 +76,9 @@ export type Refusal = Refused & {readonly status: number};
 export type Checked =
 	| {readonly kind: "line"; readonly line: Line}
 	| {
-			readonly kind: "describe";
+			readonly kind: "help";
 			readonly entry: Entry;
-			/** The parts named after `--describe`, to show whole. `null`: the whole program, short. */
+			/** The parts named after `--help`, to show whole. `null`: the whole program, short. */
 			readonly parts: readonly Part[] | null;
 	  }
 	| Refusal;
@@ -82,7 +101,7 @@ export interface Part {
 }
 
 /**
- * The parts a name after `--describe` means: `--mode` a flag, `>found` an
+ * The parts a name after `--help` means: `--mode` a flag, `>found` an
  * output, `<pr` or `pr=` an input, and a bare `pr` every part so named
  * (double has an input n and an output n).
  */
@@ -124,22 +143,13 @@ const stop = (refusal: Refusal): never => {
 /** Check one statement's pipeline against the program list. `text` is the whole line, for each stage's own text. */
 export function check(pipeline: Pipeline, list: ProgramList, text: string): Checked {
 	try {
-		const [head] = pipeline.commands;
-		if (head.describe !== null || pipeline.commands.some((c) => c.describe !== null)) {
-			const asked = pipeline.commands.find((c) => c.describe !== null) ?? head;
-			if (
-				pipeline.commands.length > 1 ||
-				asked.flags.length + asked.told.length > 0 ||
-				asked.out !== null ||
-				asked.into !== null
-			)
-				return no(
-					asked.describe?.at.start ?? asked.at.start,
-					"--describe stands alone: the program, and at most one of its names after it",
-				);
+		// `--help` in any command of the pipe shows that program's help and runs nothing, as
+		// `seq 3 | grep --help` does in bash: the first command that asks is the one answered.
+		const asked = pipeline.commands.find((c) => c.help !== null);
+		if (asked !== undefined && asked.help !== null) {
 			const entry = entryOf(asked, list);
-			const name = asked.describe?.name ?? null;
-			if (name === null) return {kind: "describe", entry, parts: null};
+			const {name} = asked.help;
+			if (name === null) return {kind: "help", entry, parts: null};
 			const parts = partsNamed(entry, name.name);
 			if (parts.length === 0) {
 				const {program} = entry;
@@ -154,7 +164,7 @@ export function check(pipeline: Pipeline, list: ProgramList, text: string): Chec
 					didYouMean(name.name, known),
 				);
 			}
-			return {kind: "describe", entry, parts};
+			return {kind: "help", entry, parts};
 		}
 		return {kind: "line", line: lineOf(pipeline, list, text, true)};
 	} catch (stopped) {
@@ -192,6 +202,14 @@ function lineOf(pipeline: Pipeline, list: ProgramList, text: string, top: boolea
 	});
 	const stages = pipeline.commands.map((command, i): Stage => {
 		const entry = entries[i] as Entry;
+		// Only a statement's own pipeline reaches here with one: `check` answers that one first.
+		if (command.help !== null)
+			stop(
+				no(
+					command.help.at.start,
+					"--help shows a program's help and runs nothing, so it gives no value to a $( )",
+				),
+			);
 		const wire = wires[i] ?? null;
 		const fed = i === 0 ? null : (wires[i - 1]?.input ?? null);
 		if (command.out !== null && wire === null && top)
@@ -208,12 +226,20 @@ function lineOf(pipeline: Pipeline, list: ProgramList, text: string, top: boolea
 					`<${command.into.name} names the input a pipe feeds, and no pipe feeds this command`,
 				),
 			);
+		if (command.all !== null && !hasTable(entry))
+			stop(
+				no(
+					command.all.start,
+					`--all shows every row of a table, and ${entry.program.name} prints no table`,
+				),
+			);
 		return {
 			entry,
 			flags: flagsOf(command, entry, list, text),
 			told: toldOf(command, entry, fed, list, text),
 			wire,
 			fed,
+			all: command.all !== null,
 			text: text.slice(command.at.start, command.at.end),
 		};
 	});
@@ -221,6 +247,26 @@ function lineOf(pipeline: Pipeline, list: ProgramList, text: string, top: boolea
 	if (first === undefined) return stop(no(pipeline.at.start, "expected a program name"));
 	return {stages: [first, ...rest], text: text.slice(pipeline.at.start, pipeline.at.end)};
 }
+
+/**
+ * The inputs of `program` a pipe from a program on `list` can feed: each one an output there
+ * fits, the pairs `wireOf` picks from when a line names no `>out` or `<in`. A command a person
+ * clicks or types (`close`, `quit`) takes a shape no output sends, and is not one. An input
+ * made by `anyInput` is one whenever the list has any output at all.
+ *
+ *   fedBy(ticket, [tracker, ticket, runs, trace])   ["ticket"]     (tracker's output ticket fits)
+ *   fedBy(tracker, [tracker, ticket, runs, trace])  []             (file, close, quit: no output fits)
+ *   fedBy(trace, [tracker, ticket, runs, trace])    ["id", "any"]  (runs' id fits; `any` takes the rest)
+ */
+export const fedBy = (program: Entry["program"], list: readonly Entry[]): readonly string[] =>
+	Object.keys(program.inputs).filter((input) =>
+		list.some((from) =>
+			Object.keys(from.program.outputs).some((output) => {
+				const answer = fit(from.program.outputs[output], program.inputs[input]);
+				return answer === "fits" || answer === "takes_any";
+			}),
+		),
+	);
 
 /** Which output of `a` feeds which input of `b`: named by `>out` / `<in`, or the one pair whose shapes fit. */
 function wireOf(from: Command, a: Entry, to: Command, b: Entry, bar: At) {
@@ -233,7 +279,11 @@ function wireOf(from: Command, a: Entry, to: Command, b: Entry, bar: At) {
 			fit: fit(a.program.outputs[output], b.program.inputs[input]),
 		})),
 	);
-	const fitting = pairs.filter((p) => p.fit === "fits");
+	// A typed fit first; only when none, an input that takes any value (`anyInput`), fed the first
+	// output, as a Unix pipe carries fd 1 and leaves fd 2 alone.
+	const typed = pairs.filter((p) => p.fit === "fits");
+	const fitting =
+		typed.length > 0 ? typed : firstOutput(pairs.filter((p) => p.fit === "takes_any"));
 	const named = from.out !== null && to.into !== null;
 	const chosen =
 		fitting.length === 1
@@ -257,6 +307,19 @@ function wireOf(from: Command, a: Entry, to: Command, b: Entry, bar: At) {
 			`does not fit: ${a.program.name}'s ${from.out === null ? "outputs" : "output"} (${show(a.program, "outputs", outs)}) fit no ${to.into === null ? "input" : "such input"} of ${b.program.name} (${show(b.program, "inputs", ins)}). Nothing was started`,
 		),
 	);
+}
+
+/**
+ * The pairs of the first output among them, in the order the program declares its outputs: what
+ * an input that takes anything is fed when several outputs could go. A program's first output is
+ * its main one, as stdout is fd 1. Two inputs that take anything, both fed, are still two ways.
+ *
+ *   firstOutput([{output: "total", input: "any"}, {output: "refused", input: "any"}])
+ *   // [{output: "total", input: "any"}]
+ */
+function firstOutput<P extends {readonly output: string}>(pairs: readonly P[]): readonly P[] {
+	const first = pairs[0]?.output;
+	return pairs.filter((p) => p.output === first);
 }
 
 /** The one name given, checked, or every name declared. */
@@ -290,19 +353,20 @@ function flagsOf(command: Command, entry: Entry, list: ProgramList, text: string
 				no(
 					given.at.start,
 					`${program.name} has no flag --${given.name}`,
-					maybeDashes(didYouMean(given.name, declared)),
+					// Every program also takes --help: `--hlep` was meant as that.
+					maybeDashes(didYouMean(given.name, [...declared, "help"])),
 				),
 			);
 		if (seen.has(given.name)) return stop(no(given.at.start, `--${given.name} is given twice`));
 		seen.add(given.name);
-		const source = sourceOf(given, flag.shape, `--${given.name}`, list, text);
+		const source = sourceOf(given, flag, `--${given.name}`, list, text);
 		return {name: given.name, source};
 	});
 	for (const name of declared) {
 		if (seen.has(name)) continue;
 		const flag: Flag<unknown> = program.flags[name];
 		// A flag with a default is filled from it when the run starts.
-		if (flag.default === undefined && flag.shape.problem(undefined) !== undefined)
+		if (mustBeGiven(flag))
 			stop(no(command.at.end, `${program.name} needs --${name}: ${flag.description}`));
 	}
 	return flags;
@@ -335,17 +399,19 @@ function toldOf(
 			return stop(
 				no(given.at.start, `${given.name} is fed by the pipe: give it values on one or the other`),
 			);
-		return {name: given.name, source: sourceOf(given, into.shape, given.name, list, text)};
+		return {name: given.name, source: sourceOf(given, into, given.name, list, text)};
 	});
 }
 
+/** Where a flag's or an input's value comes from. `target`: the flag or input, with its shape. */
 function sourceOf(
 	given: Given,
-	shape: Shape<unknown>,
+	target: {readonly shape: Shape<unknown>; readonly any?: true},
 	label: string,
 	list: ProgramList,
 	text: string,
 ): Source {
+	const {shape} = target;
 	const value: Value = given.value;
 	if (value.kind === "text") {
 		const read = readValue(shape, value.text);
@@ -365,8 +431,12 @@ function sourceOf(
 		value.pipeline.commands[value.pipeline.commands.length - 1] ?? value.pipeline.commands[0];
 	const {program} = last.entry;
 	const outs = namedOr(command.out, program.outputs, program.name, "output");
-	const target = {shape};
-	const fitting = outs.filter((o) => fit(program.outputs[o], target) === "fits");
+	// A typed fit first; only when none, an input that takes any value takes the first output.
+	const typed = outs.filter((o) => fit(program.outputs[o], target) === "fits");
+	const fitting =
+		typed.length > 0
+			? typed
+			: outs.filter((o) => fit(program.outputs[o], target) === "takes_any").slice(0, 1);
 	const named =
 		command.out !== null && fit(program.outputs[command.out.name], target) === "cannot_tell";
 	const output = fitting.length === 1 ? fitting[0] : named ? command.out?.name : undefined;

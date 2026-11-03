@@ -44,6 +44,10 @@ migrate: (raw) => {
 - **No version number on each machine.** The schema is the check. A version
   only matters if old state must be carried forward, and tea's `upcast` is the
   place for that, when it comes.
+  - *Walked back 2026-11-01 for state carried forward:* this no longer holds
+    there. A saved model carries its shape's number and a chain of named
+    upgrades ([saved state, S3](./saved-state.md#s3-saved-state-carries-its-shapes-number-and-a-chain-of-named-upgrades)).
+    The schema is still the last check.
 - **This is Elm's answer.** Elm reads saved data through a `Decoder`, and a
   failed decode is an error to handle, never a guess
   ([Json.Decode](https://package.elm-lang.org/packages/elm/json/latest/Json-Decode)).
@@ -79,7 +83,7 @@ migrate: (raw) => {
 - **Decided: say it plainly, then offer the fix.**
   - The window names both versions: "The host speaks link version 1. This app
     speaks 2."
-  - One button: **"Stop the old host and start this one"**. A yes stops the
+  - One button: **"Stop the old host and start this one"**. Confirmed, it stops the
     host by `<home>/host/pid`, waits for it to exit, starts the new one and
     attaches.
   - Running jobs stop. Their saved lists stay, and each comes back with
@@ -118,7 +122,7 @@ const restart = Effect.gen(function* () {
     (reconnecting, stopped, restarting) beside it. The window draws them in one
     `switch` that ends in `absurd`, so a new case fails the typecheck.
   - The refused page says "The host speaks link version 1. This app speaks 2."
-    and has the button. A yes sends `{type: "restart"}` to the app.
+    and has the button. Confirming it sends `{type: "restart"}` to the app.
   - `stopHost` (`apps/fabrika/src/host/stop.ts`) sends a stop only while a host
     answers on the socket, and never to the app's own pid. It waits up to
     10 seconds for the pid to be gone. `restart` in `attach.ts` is `stopHost`,

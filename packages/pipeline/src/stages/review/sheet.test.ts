@@ -1,4 +1,4 @@
-import {jsonSchema, reader} from "@kampus/fabrika/agents/claude";
+import {jsonSchema, reader} from "@kampus/fabrika-old/agents/claude";
 import {Option} from "effect";
 import {describe, expect, it} from "vitest";
 import {criterionId} from "../../ids.ts";

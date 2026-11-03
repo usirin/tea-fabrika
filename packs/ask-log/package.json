@@ -11,7 +11,7 @@
 		"typecheck": "tsc --noEmit -p ."
 	},
 	"dependencies": {
-		"@kampus/fabrika": "workspace:*",
+		"@kampus/fabrika-old": "workspace:*",
 		"@kampus/pipeline": "workspace:*",
 		"effect": "catalog:"
 	},

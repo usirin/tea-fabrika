@@ -30,7 +30,7 @@
 // host's own rules (a push that is not a fast-forward is refused; one pull request per branch;
 // an enqueue of a queued head changes nothing). A comment has no such rule and can be posted twice.
 
-import {Ledger} from "@kampus/fabrika";
+import {Ledger} from "@kampus/fabrika-old";
 import {Context, Duration, Effect, Exit, Layer, Option, Schedule, Schema} from "effect";
 
 type Failed = {readonly _tag: "unknown"};
@@ -126,7 +126,7 @@ export type WriteNote = {
 export class Faults extends Context.Service<
 	Faults,
 	{readonly at: (point: string) => Effect.Effect<void>}
->()("@kampus/fabrika/pipeline/Faults") {}
+>()("@kampus/fabrika-old/pipeline/Faults") {}
 
 /** No faults: what every run outside a fault test has. */
 export const noFaults = Layer.succeed(Faults, {at: () => Effect.void});
@@ -150,7 +150,7 @@ export class Idempotency extends Context.Service<
 		/** The ledger stream the rows are in. */
 		readonly stream: string;
 	}
->()("@kampus/fabrika/pipeline/Idempotency") {}
+>()("@kampus/fabrika-old/pipeline/Idempotency") {}
 
 const DoneRow = Schema.fromJsonString(Schema.Struct({answer: Schema.Unknown}));
 const decodeDone = Schema.decodeUnknownExit(DoneRow);

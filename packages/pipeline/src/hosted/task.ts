@@ -10,7 +10,7 @@
 //           the patch applied, and one commit with a fixed author and date, so every host makes
 //           the same commit. Keyed (./idempotency.ts), from the base only, never forced
 
-import type {Ledger, Self} from "@kampus/fabrika";
+import type {Ledger, Self} from "@kampus/fabrika-old";
 import {Effect, Exit, FileSystem, Option, type Path, Schema, Stream} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
 import {readFacts} from "../asks/ledger.ts";
@@ -22,7 +22,7 @@ import {
 	type BuildBrief,
 	type BuildDrafted,
 	Builder,
-	Built,
+	HeldBuilt,
 	type Ran,
 	Settings,
 } from "../stages/build/form.ts";
@@ -83,7 +83,7 @@ const msgOf =
 	(d: BuildDrafted): TaskMsg => {
 		const ran = ranOf(d);
 		if (d.answer === "built") {
-			const built = Schema.decodeUnknownOption(Built)(d.built);
+			const built = Schema.decodeUnknownOption(HeldBuilt)(d.built);
 			return Option.isSome(built)
 				? {type: "task_built", ...at, built: built.value, ran}
 				: {type: "task_failed", ...at, why: "misfit", error: null, ran};
@@ -174,9 +174,8 @@ const handlers = (o: {
 	const builder = Builder.of({
 		build: (brief, settings) =>
 			ask(brief, settings).pipe(
-				Effect.map(
-					(asked): BuildDrafted =>
-						asked.how === "answered" ? asked.answer.drafted : {answer: "over_budget", ...noRun},
+				Effect.map((asked): BuildDrafted =>
+					asked.how === "answered" ? asked.answer.drafted : {answer: "over_budget", ...noRun},
 				),
 				Effect.provideContext(o.context),
 			),

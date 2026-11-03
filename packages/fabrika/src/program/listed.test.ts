@@ -1,4 +1,4 @@
-import {Context, Effect, Layer, Schema, Stream} from "effect";
+import {Context, Effect, Layer, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {type Entry, listed} from "./listed.ts";
 import {defineProgram} from "./program.ts";
@@ -34,10 +34,10 @@ const label = defineProgram({
 		"Says each number it is told with its Prefix before it, and ends when its input closes.",
 	inputs: {n: input(Schema.Int, "A number.")},
 	outputs: {text: output(Schema.String, "The number, labelled.")},
-	main: ({inputs, send}) =>
+	main: ({serve, send}) =>
 		Effect.gen(function* () {
 			const {text} = yield* Prefix;
-			yield* inputs.n.pipe(Stream.runForEach((n) => send("text", `${text}${n}`)));
+			yield* serve({n: (n) => send("text", `${text}${n}`)});
 		}),
 });
 

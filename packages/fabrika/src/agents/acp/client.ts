@@ -1,4 +1,6 @@
-import * as acp from "@agentclientprotocol/sdk";
+// `/unstable`: a turn's `usage` is an unstable ACP field, and the SDK's stable entry drops it from
+// what it parses. Read through the stable one, every turn would report no tokens, with no error.
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import {type Cause, Effect, Queue, type Scope, Stream} from "effect";
 import {ChildProcess, ChildProcessSpawner} from "effect/process";
 

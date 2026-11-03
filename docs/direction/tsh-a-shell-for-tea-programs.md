@@ -2,6 +2,9 @@
 
 Decided 2026-10-17. The MCP part was added 2026-10-18.
 
+*Changed 2026-11-01: `tsh` stays in today's version. The new version's shell is `fabsh`,
+in `next/`, in Tier 2 ([the tiers](../plan/tiers.md)). It is rethought, not copied.*
+
 ```sh
 tsh -c 'review --pr 712 | ship'       # typed values down a typed pipe
 n=$(count --to 3)                     # call() is $(…)

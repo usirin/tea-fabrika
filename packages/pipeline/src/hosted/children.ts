@@ -4,7 +4,7 @@
 // the parent reads that stream and serves each name it finds there, once. Whichever host then holds
 // a child's lease runs it, as for any registered name.
 
-import {Ledger} from "@kampus/fabrika";
+import {Ledger} from "@kampus/fabrika-old";
 import {Duration, Effect, Schedule, type Scope} from "effect";
 
 /** The stream a parent names its children in, one row per child, the row's id the child's name. */

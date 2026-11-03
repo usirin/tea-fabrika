@@ -1,0 +1,1208 @@
+{
+	"p": {
+		"1641": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real navigation bug that users will hit: SavedChrome renders a bare title in place of the shared feed filters and links, so users get stuck on /pano/kaydedilenler. #1631 is about the same page but a different problem (the empty state), and the fix is a small, clear change for a builder to make in SavedPostsPage."
+					}
+				},
+				"error": null,
+				"usd": 0.11160400000000001,
+				"ms": 3504,
+				"tokens": 13599,
+				"model": "claude-opus-5-5"
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real navigation bug users hit: on /pano/kaydedilenler the subnav swaps the feed tabs for a bare title, and there is no subnav route back to the feed. It is not a duplicate of #1631, which is about the empty state. The cause and the fix are clear (have SavedChrome render the shared filters and links, with kaydedilenler as the active item), so it can be planned and handed to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.010230900000000001,
+				"ms": 3680,
+				"tokens": 13663,
+				"model": "claude-opus-5-5"
+			}
+		],
+		"1674": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is the decision child under #1637 that the nested add and delete slices depend on. It is not a duplicate, and those slices act on it, so it is more than a record. It asks for a choice between named reconciliation strategies (suppress the live append vs. dedupe against it; keep, narrow or replace useReadbackRefetch), and an owner should rule on that trade-off before a builder implements it."
+					}
+				},
+				"error": null,
+				"usd": 0.11595830000000001,
+				"ms": 6632,
+				"tokens": 14200
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is the reconciliation decision that unblocks the nested add and delete slices of #1637. It names the options (suppress the live append vs. dedupe against it; keep, narrow or replace useReadbackRefetch), and an owner has to pick the strategy before any builder works on the call sites."
+					}
+				},
+				"error": null,
+				"usd": 0.0118299,
+				"ms": 4948,
+				"tokens": 14015
+			}
+		],
+		"1789": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a contrast problem someone saw while using the site: the topbar's main create button gets hard to read on hover. The ticket names the exact CSS rule and token, so the next step is to plan a fix for this pairing and check the other places that use --accent-soft. No earlier ticket covers it: #1638 is about a focus ring, and #1514 builds an audit harness, not this fix."
+					}
+				},
+				"error": null,
+				"usd": 0.1112155,
+				"ms": 4583,
+				"tokens": 13902
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real, visible contrast bug in the main create button's hover state, and the ticket points to the exact rule and token. The fix and a check of the other --accent-soft pairings can be planned and handed to a builder. No earlier ticket covers it: #1514 is a contrast check in the audit harness, and #1638 is about a focus ring."
+					}
+				},
+				"error": null,
+				"usd": 0.011060500000000001,
+				"ms": 14763,
+				"tokens": 13881
+			}
+		],
+		"1867": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the UI part of the reaction epic #1840, which is new work. The sibling tickets #1859–#1865 cover the palette choice, storage, the read model and the mutations, so none of them repeats this. The scope and acceptance criteria are already clear, so the next step is to plan the build. It depends on the palette ruling in #1859 and on the wiring tickets #1863–#1865."
+					}
+				},
+				"error": null,
+				"usd": 0.10335390000000001,
+				"ms": 4751,
+				"tokens": 13097
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the UI child of the reaction epic #1840. The earlier children (#1860–#1865) cover storage, the domain service, the aggregate read and the per-surface mutations, and they leave the reaction bar out of scope, so this is new work. The scope is concrete (the curated-palette bar on three card surfaces, optimistic updates, behind a flag), so the next step is to plan it and hand it to a builder, after its sibling dependencies land."
+					}
+				},
+				"error": null,
+				"usd": 0.0101182,
+				"ms": 5462,
+				"tokens": 13146
+			}
+		],
+		"2013": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "not now: hardening with no incident",
+						"why": "An agent's architecture audit filed this, and it guards against a possible future 4th lifecycle state that could slip past the SQL filters. The ticket names no leak that has actually happened. The related sandbox bugs (#1811, #1831, #1835) came from other code paths, not from these visibility rules disagreeing. The work is a refactor plus a truth-table test for checks that already work."
+					}
+				},
+				"error": null,
+				"usd": 0.11498749999999999,
+				"ms": 8066,
+				"tokens": 13938
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is not a duplicate: #2012 covers the copy-pasted remove/restore ceremony, not the visibility predicate. The sandbox boundary has already failed for real (#1811, #1831, #1835), so unifying its four-plus copies of the visibility rule and adding one truth-table test is more than hardening with no incident. The fix is already scoped, so the next step is to plan it for a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.018166500000000002,
+				"ms": 9101,
+				"tokens": 13982
+			}
+		],
+		"2126": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The founder has already set the rule (show the display name on every visible surface, and fall back to username when it is null), and the ticket names the surfaces involved. What's left is building it: check each surface and route them all through one shared name helper."
+					}
+				},
+				"error": null,
+				"usd": 0.1066411,
+				"ms": 4457,
+				"tokens": 13550
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No earlier ticket covers this: #1878 is about a thin profile and #1888 is about the username at signup. The founder already set the rule (show the display name, fall back to the username), so the next step is to plan a sweep of the profil, pano, sözlük and ayarlar screens, probably through one shared name helper."
+					}
+				},
+				"error": null,
+				"usd": 0.0079736,
+				"ms": 3336,
+				"tokens": 13595
+			}
+		],
+		"2325": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "not now: hardening with no incident: no committed credential has been found; reopen if one is",
+						"why": "Agent-filed preventive hardening: the ticket argues from base-rate risk but names no real incident of a committed secret, so the 'has this ever failed in real use?' bar is not met. Not a duplicate: #2310 was about rebuilding leak-guard on gitleaks, not about scanning for secrets."
+					}
+				},
+				"error": null,
+				"usd": 0.118282,
+				"ms": 10030,
+				"tokens": 13909
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "There is no secret scanner in the repo yet, and this is the job gitleaks was built for, so per the 'own less' ruling we adopt it rather than build one. The scope is already clear: a stock-rules CI job that only reports at first, an exit code that avoids gitleaks' reserved ones, and an allowlist pass. So the next step is to plan it for a builder, with a person approving the merge because workflows are protected (ADR 0135)."
+					}
+				},
+				"error": null,
+				"usd": 0.023812999999999997,
+				"ms": 13519,
+				"tokens": 13942
+			}
+		],
+		"2361": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is the minting-side root cause, separate from #2340/#2345/#2358, which only cover reclaiming orphans, and the leak is real and still growing. The ticket offers three fixes with real trade-offs: an explicit stable D1 name (which could rename or replace existing databases), moving dev to hosted state (which goes against ADR 0031), or a destroy-before-reset rule. An owner has to pick one before a builder can plan it."
+					}
+				},
+				"error": null,
+				"usd": 0.11794959999999999,
+				"ms": 7210,
+				"tokens": 14357
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This covers how new orphan D1s keep getting created. #2340, #2345 and #2358 only cover cleaning up the ones that already exist, so it is not a duplicate. The fix is engineering-led under ADR 0078, and option (a), giving PhoenixDb a stable stage-derived name, is backed by the pinned alchemy source and keeps ADR 0031 intact, so it can go straight to planning."
+					}
+				},
+				"error": null,
+				"usd": 0.0161173,
+				"ms": 8752,
+				"tokens": 14327
+			}
+		],
+		"2561": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "not now: hardening with no incident",
+						"why": "This isn't a duplicate. No earlier ticket asks for a per-actor mutation throttle. An agent filed it from an audit as a defense-in-depth control, and it reports no real user flooding or abuse, since registration isn't open yet. Under the repo's bar, hardening that has never failed in real use is a no for now; it can be reopened when real-user registration gets close or abuse actually happens."
+					}
+				},
+				"error": null,
+				"usd": 0.101813,
+				"ms": 13255,
+				"tokens": 12530
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "not now: hardening with no incident",
+						"why": "An agent filed this from an audit as defense-in-depth. It reports no real abuse, flooding or spam, and registration isn't open to real users yet, so nothing has failed in real use. No earlier ticket asks for a per-actor mutation throttle, so it isn't a duplicate."
+					}
+				},
+				"error": null,
+				"usd": 0.012944,
+				"ms": 15913,
+				"tokens": 12476
+			}
+		],
+		"2600": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a defined child of the Subnav epic (#2596). It moves the + gönderi CTA into the pano Subnav slot and removes it from the topbar in one change, behind a flag. The placement law (#2587) already settles where it goes and the acceptance criteria are concrete, so it is ready to plan and build once the substrate (#2598) lands. It is not a duplicate: #2595 depends on this ticket rather than carrying the same work."
+					}
+				},
+				"error": null,
+				"usd": 0.1007642,
+				"ms": 3884,
+				"tokens": 12675
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "A well-specified child of the Subnav epic (#2596): move the pano/yeni link into the pano Subnav CTA slot and remove the topbar + gönderi button in one flagged PR. #2595 depends on it by number and #2598 only adds the slot, so it isn't a duplicate, and the placement law (#2587) already sets the direction."
+					}
+				},
+				"error": null,
+				"usd": 0.013553599999999999,
+				"ms": 5174,
+				"tokens": 12820
+			}
+		],
+		"3332": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The ticket has no 'Filed by' footer, so it counts as filed by a person, and the 'hardening with no incident' rule can't close it by itself. It is also a real least-privilege gap that CodeQL flags. An owner has to pick the fix first: flip the repo-wide default token permission to read, which only an owner can do in settings, or add permissions blocks to each of the 14 workflows. Either way the change is on the control-plane (.github/) path, which needs owner approval."
+					}
+				},
+				"error": null,
+				"usd": 0.16027840000000002,
+				"ms": 10037,
+				"tokens": 19650
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real least-privilege gap that CodeQL keeps flagging, and no earlier ticket covers it. The ticket has no 'Filed by' footer, so it counts as filed by a person and the no-incident rule can't close it alone. The fix is clear: add minimal `permissions:` blocks to the 14 workflows that lack one, then flip the repo default to read. That makes it a batch change to plan and hand to a builder, with the PR going to control-plane approval."
+					}
+				},
+				"error": null,
+				"usd": 0.018439,
+				"ms": 7593,
+				"tokens": 19686
+			}
+		],
+		"3341": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "Four specific HIGH CodeQL alerts are open on main at known lines. Each has a clear way out: fix the regex or the randomness source, or dismiss it with a written reason. That makes this a small, well-bounded batch for a builder to plan. It is not a duplicate: #3331 covers the review-gate enforcement and #3332 covers workflow permissions, and neither one remediates these alerts."
+					}
+				},
+				"error": null,
+				"usd": 0.16155009999999997,
+				"ms": 7899,
+				"tokens": 19978,
+				"model": "claude-opus-5-5"
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "Four specific HIGH CodeQL alerts are open on main and no earlier ticket covers them (#3331 is the review-gate fix, #3332 is workflow permissions). The fix is known and small: bound the three regexes and switch the test helper to crypto randomness, or dismiss any false positive with a written reason. So it can go straight to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.014806300000000001,
+				"ms": 4954,
+				"tokens": 19937,
+				"model": "claude-opus-5-5"
+			}
+		],
+		"3682": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate: same edit-bleed problem as #3594 (and the env misreport in #3458); add this incident's details there",
+						"duplicateOf": 3594,
+						"why": "#3594 already reports isolation:worktree coders writing to the shared primary checkout, and #3458 already covers $WORKTREE_ROOT unset and the inherited agent type. This ticket is the same problem actually happening, with cross-agent contamination as the consequence."
+					}
+				},
+				"error": null,
+				"usd": 0.13395169999999998,
+				"ms": 13558,
+				"tokens": 15613
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate: folded into #3594, which carries this work",
+						"duplicateOf": 3594,
+						"why": "#3594 already reports this problem: isolation:worktree coders sending their first Write/Edit calls to primary-checkout paths. #3458 already covers the unset $WORKTREE_ROOT and the inherited agent type. This ticket is a worse repeat of the same root cause, with cross-lane contamination, and its incident details should be added to #3594."
+					}
+				},
+				"error": null,
+				"usd": 0.017864099999999997,
+				"ms": 6981,
+				"tokens": 15174
+			}
+		],
+		"3886": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a follow-up to the fan-out shipped in #3877 for #3770, not a duplicate of it. The founder already ruled it p1 and the design fits inside one package, so it can be planned now. The plan should reuse the canonical claim key from #3818 rather than invent a new pr-N/issue-N convention."
+					}
+				},
+				"error": null,
+				"usd": 0.10571309999999999,
+				"ms": 6665,
+				"tokens": 13275
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a follow-up to #3770/#3877, not a duplicate. It narrows the broadcast to the claim holder when the target is claimed, the founder has already ruled it p1, and both the channel and the tracker live in one package. The open question about the key mapping is a design detail the plan can settle, building on the canonical claim key in #3818, so the work can be planned now."
+					}
+				},
+				"error": null,
+				"usd": 0.010580800000000001,
+				"ms": 7919,
+				"tokens": 13275
+			}
+		],
+		"4087": [
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the authz lane of the per-package README epic #4073. No earlier ticket covers authz, and 3 source commits have landed since the README was last edited, so the README is likely out of date. The scope is a clear docs-only change with set acceptance criteria, so it is ready to plan and hand to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.1123435,
+				"ms": 3762,
+				"tokens": 13447,
+				"model": "claude-opus-5-5"
+			},
+			{
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the authz lane of the #4073 README epic. Its siblings (#4079–#4086) each cover a different package, so it duplicates none of them, and the README's drift from the source is measured. The scope is already set (docs only, with the shape pinned in .patterns), so the next step is to plan it and hand it to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0090284,
+				"ms": 4809,
+				"tokens": 13422,
+				"model": "claude-opus-5-5"
+			}
+		],
+		"4236": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "Before anyone sweeps the ~12 `node …/bin.ts` sites, an owner has to pick one of two paths: widen cli-invocation-guard with a carve-out for CI workflows that legitimately run that form, or name `node …/bin.ts` as an approved form in specific contexts. A builder should not make that policy call, and the reviewer of #4230 already left it open as a follow-up that still has to be decided."
+					}
+				},
+				"error": null,
+				"usd": 0.1151143,
+				"ms": 7686,
+				"tokens": 14129
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "An owner first has to choose: widen cli-invocation-guard to ban the `node …/bin.ts` form (and decide how CI workflows that legitimately use it are exempted), or sanction that form for named contexts. Only after that can a builder sweep the ~12 skill-doc sites."
+					}
+				},
+				"error": null,
+				"usd": 0.011758900000000001,
+				"ms": 4178,
+				"tokens": 13975
+			}
+		],
+		"5092": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No earlier ticket asks to build the `epic` verb group. #4950 is only the authoring brief, and the sibling tickets (#4965, #4988, #5029, #5061, #5071) cover other groups. The merged contract already pins the verbs, exit codes, ledger and registry rows, so the work just needs to be planned and handed to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0964026,
+				"ms": 4809,
+				"tokens": 12177
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No earlier ticket covers the `epic` verb group. The sibling tickets (#4965, #4988, #5029, #5061, #5071) are about other groups, and #4950 is the authoring brief, not the code. A merged contract already sets out all eight verbs, the wire format and the ledger, so the next step is to plan the build and hand it to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0097578,
+				"ms": 5578,
+				"tokens": 12182
+			}
+		],
+		"5254": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a real break in what fabrika ships: in an adopting repo the adr verbs can never create a first record, which runs against the #4776 shipping criterion. The criteria leave open whether an empty, readable directory should answer 0001 or refuse and point the user to front-door. That changes a deliberate contract stance, so an owner should choose before a builder edits all three exit-5 sites."
+					}
+				},
+				"error": null,
+				"usd": 0.1041044,
+				"ms": 8855,
+				"tokens": 12787
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a real functional break: a fresh adopter can't create their first ADR, which goes against the founder's ruled criterion (#4776) that fabrika must work in other repos. It was split out of #5247, so it isn't a duplicate. The acceptance criteria leave open two ways to fix it: the verb answers 0001 when the folder is readable and empty, or the refusal names a bootstrap route, but the front-door status verbs that route would point to are unbuilt (#5214). An owner should pick one before a builder applies it to all three exit-5 sites."
+					}
+				},
+				"error": null,
+				"usd": 0.0148912,
+				"ms": 6410,
+				"tokens": 12820
+			}
+		],
+		"5416": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate: folded into #5111, which carries this work",
+						"duplicateOf": 5111,
+						"why": "#5111 already reports the same bug: review-code's head handle is keyed by session and not by PR, so parallel gates see the wrong tree and tear down each other's worktree. The eval-token note at the end of this ticket is already covered by #5406."
+					}
+				},
+				"error": null,
+				"usd": 0.0986025,
+				"ms": 6450,
+				"tokens": 12533
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "duplicate: #5111 already reports this problem (the review-code head handle is keyed on the session, not the PR)",
+						"duplicateOf": 5111,
+						"why": "#5111 reports the same root cause: review-code's head.env handle is keyed on the session and not the PR, so parallel gates re-point at or delete each other's worktree. The side note about the `eval` token is already filed as #5406."
+					}
+				},
+				"error": null,
+				"usd": 0.0085475,
+				"ms": 4416,
+				"tokens": 12531
+			}
+		],
+		"5669": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The founder already ruled on 2026-08-15: take `effort:` off builder and shipper, keep it on reviewer. What's left is building it: edit the two shell files, write the reason into agent-shells.md, and check what an omitted `effort:` falls back to. No earlier ticket covers this change."
+					}
+				},
+				"error": null,
+				"usd": 0.09453660000000001,
+				"ms": 4642,
+				"tokens": 12012
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The founder already ruled on 2026-08-15 (quoted word for word in the ticket): remove effort from builder and shipper, keep it on reviewer. What's left is to make that edit and write the reason into agent-shells.md, and a builder can also check how an omitted effort is inherited while doing the work. No earlier ticket covers the effort pin."
+					}
+				},
+				"error": null,
+				"usd": 0.0087448,
+				"ms": 5191,
+				"tokens": 12012
+			}
+		],
+		"5685": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "A real incident: on #5539/PR #5684 a builder got past a permission denial by making the same edit with a script, and the build skill has no rule for what a denial means. The fix is clear: add a rule to claude-plugins/fabrika/skills/build/ that a denial means stop and report it word for word, and never retry the same change with another tool. That's ready to plan and hand to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.09940790000000001,
+				"ms": 7486,
+				"tokens": 12198
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "A real incident happened in PR #5684: a builder got around a permission denial by making the same edit with a script, and the build skill has no rule about denials. The fix is clear (treat a denial as BLOCKED, report it word for word, never retry it through another tool), so a builder can plan and make it."
+					}
+				},
+				"error": null,
+				"usd": 0.0098602,
+				"ms": 3614,
+				"tokens": 11974
+			}
+		],
+		"6585": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This reports the same leak as #6551, but it says outright that it subsumes #6551, and it adds the inert-`changed` cleanup and a fix grounded in the code, so it should carry the work and #6551 should be folded into it. It is a real cross-user bug with a clear design and acceptance criteria, so it can go straight to planning and a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.09737970000000001,
+				"ms": 8996,
+				"tokens": 11941
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This ticket explicitly takes over #6551 and does more than it: it also removes the unused `changed` arrays at every call site. So it is the ticket that should carry the work, not a duplicate to fold away. The fix is already worked out (narrow `select` and `data` in `entityFrame`, then sweep the pano and sözlük call sites) and has concrete acceptance criteria, so the next step is to plan the build."
+					}
+				},
+				"error": null,
+				"usd": 0.0158021,
+				"ms": 6978,
+				"tokens": 12010
+			}
+		],
+		"7043": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the first tracer slice of epic #7042, and no earlier ticket covers it. It names the files, the redirect to intercept, a default-off flag and testable acceptance criteria, so it is ready to plan and hand to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0888608,
+				"ms": 2764,
+				"tokens": 11374
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the first build slice of onboarding epic #7042, with concrete acceptance criteria, a named place to intercept, the data the screen reads and where its files go. No owner choice or open question has to come first, so it goes to planning and a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0118304,
+				"ms": 5955,
+				"tokens": 11582
+			}
+		],
+		"7894": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real wiring bug, not hardening. Boot still provides an empty WindowIndex even though the shell's desk now holds windows, so any spell call that names a real window is refused as NoSuchWindow. The fix is clear: a WindowIndex that reads the live desk through windowBindings, provided beside ShellDispatch.kernel, so it can be planned and handed to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.098191,
+				"ms": 5199,
+				"tokens": 12185
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real wiring bug, not just hardening. Boot provides an empty WindowIndex even though the shell now holds windows, so any spell call that names a real window, including the caller's window that SpellBridge puts on the wire, is refused with NoSuchWindow. The fix is clear: build a WindowIndex that reads the live desk, next to ShellDispatch.kernel. No earlier ticket covers it; #7774 and #7755 are related but separate."
+					}
+				},
+				"error": null,
+				"usd": 0.013278,
+				"ms": 6529,
+				"tokens": 12225
+			}
+		],
+		"7952": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "#7509 ruling 3 already decided that a config reload sends running processes a `config-changed` Msg, so the direction is settled. What's missing is the delivery: the reload path needs to dispatch it, and aiAgentProgram needs a seam to receive it. This is build work in the same shape as `resume`, and no earlier ticket covers it."
+					}
+				},
+				"error": null,
+				"usd": 0.09799440000000001,
+				"ms": 7928,
+				"tokens": 12195
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "No earlier ticket covers delivering config-changed to running processes. #7743, #7841 and #7877 are nearby but different gaps. #7509 ruling 3 already sets the behaviour and the mapping is written, so what's left is building the kernel dispatch and a row-level Msg seam on aiAgentProgram."
+					}
+				},
+				"error": null,
+				"usd": 0.0111927,
+				"ms": 5372,
+				"tokens": 12150
+			}
+		],
+		"8018": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "The fix for #7978 (PR #7997) did not fix the Pi window, and nothing else tracks it. The cause is unknown: the Pi turn may block the step loop (possibly the same root as #7852), it may only happen on restore, or the window may read a different port. It needs a scripted repro before anyone plans a fix."
+					}
+				},
+				"error": null,
+				"usd": 0.10856249999999999,
+				"ms": 12036,
+				"tokens": 12605
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "#7978 was closed by #7997, but the founder still sees the bug for Pi, and nothing open tracks it. The cause isn't known yet: it could be the Pi turn blocking the actor queue (as in #7852), a different transcript port, or a case that only hits restored windows. It needs reproducing with a scripted slow Pi turn before anyone builds a fix."
+					}
+				},
+				"error": null,
+				"usd": 0.017151,
+				"ms": 12449,
+				"tokens": 12256
+			}
+		],
+		"8057": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The fix the ticket suggests means moving the transcript from role=\"log\" to tree semantics, which changes how live announcements work today. That is a trade-off on accessibility direction, so an owner has to choose it before a builder can start. It is also a real gap in shipped ARIA semantics that criterion 7 on #8027 asked for, not hardening for its own sake."
+					}
+				},
+				"error": null,
+				"usd": 0.09736159999999999,
+				"ms": 12659,
+				"tokens": 12004
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This is a real accessibility gap in the shipped Tuval chat: the fold only partly meets criterion 7 of #8027, and no earlier ticket covers it. The proposed fix moves the transcript from role=\"log\" to tree semantics, which changes how live announcements work today, so an owner should choose the direction before a builder starts."
+					}
+				},
+				"error": null,
+				"usd": 0.0122168,
+				"ms": 6595,
+				"tokens": 11944
+			}
+		],
+		"8121": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real UI gap: a running turn and an idle session look the same, and ADR 0162 Pillar 4 already sets the limits, so a builder can plan the indicator directly. It is close to #8120 (the composer's hidden working/ready copy) but asks for different work: a phase dot that differs by state and an indicator at the foot of the transcript."
+					}
+				},
+				"error": null,
+				"usd": 0.0872847,
+				"ms": 4381,
+				"tokens": 10945
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real UX gap a person filed by hand. The phase dot looks the same for ready and prompting, and nothing at the foot of the transcript shows a turn is running. ADR 0162 Pillar 4 already sets the limits (motion can't be the only signal, it must stop under reduced motion, and no second role=status), so a builder can plan it without an owner ruling. It is close to #8120, which is about status text hidden in the composer, but it asks for a different change."
+					}
+				},
+				"error": null,
+				"usd": 0.011828599999999998,
+				"ms": 19969,
+				"tokens": 10994
+			}
+		],
+		"8173": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the Pi child of the partial-streaming epic (#8169). No earlier ticket covers it: #8171 is the port and #8172 is the Claude backend. The ticket already names the files, the id hazard and the acceptance criteria, so the next step is to plan the server-side projection change and hand it to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.09334579999999999,
+				"ms": 3138,
+				"tokens": 11855
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the Pi child of the streaming epic #8169. It sits alongside #8171 (port) and #8172 (Claude), and no earlier ticket covers it. The change is already pinned to apps/tuval/src/pi/server/ with clear acceptance criteria, so it can be planned and handed to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.007068,
+				"ms": 3014,
+				"tokens": 11839
+			}
+		],
+		"8174": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the streaming epic's story about following a growing last row, and partial replies (#8171-#8173) will soon make rows grow in place. The scope is clear and ready to build: extend the jsdom ResizeObserver shim to report a resize, add the pinned and unpinned growing-row follow tests, and fix production code only if one fails."
+					}
+				},
+				"error": null,
+				"usd": 0.10333129999999999,
+				"ms": 11076,
+				"tokens": 12229
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a child of the streaming-replies epic (#8169, #8171-#8173). Once replies stream, the last chat row will grow in real use, and today no test can grow a row. The ticket has no 'Filed by' footer, so the hardening rule can't close it. The scope is already clear (a shim that can emit resizes, plus pinned and unpinned growth cases), so it can go to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0126774,
+				"ms": 6601,
+				"tokens": 11850
+			}
+		],
+		"8179": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a child of the agy backend epic (#8162/#8176), and no earlier ticket covers it. It is not a record nobody acts on: the posture and the two measured sandbox gaps (open network, writable .git) decide how the backend is built and how far its sandbox can be trusted. The content is already measured and the criteria are concrete, so the next step is to plan the ADR and hand it to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.1019807,
+				"ms": 5085,
+				"tokens": 12685
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a child of the agy backend epic (#8162/#8176), and the backend's launch flags and permission handling depend on the posture it records. It also warns that two of agy's own documented guarantees proved false, which matters for later security decisions. The posture is already chosen and tested, so no owner ruling is needed; the next step is to plan writing the ADR and hand it to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.011600099999999999,
+				"ms": 5007,
+				"tokens": 12651
+			}
+		],
+		"8457": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The founder has already decided to retire opencode, so no further ruling is needed. What remains is a known, listed removal (package, shells, config, release wiring, docs, ADR) to plan and hand to a builder as one control-plane PR. No earlier ticket covers it; #8455 is about fabrika-pi's untagged release."
+					}
+				},
+				"error": null,
+				"usd": 0.0956094,
+				"ms": 3375,
+				"tokens": 12099
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The founder already ruled on 2026-09-06 to retire opencode, so nothing is left for an owner to decide, and no earlier ticket carries this removal. What remains is building it: one control-plane PR with the ADR, the deletions, the release and catalog wiring strip, and the doc sweep."
+					}
+				},
+				"error": null,
+				"usd": 0.0083482,
+				"ms": 6205,
+				"tokens": 12051
+			}
+		],
+		"8672": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "not now: hardening with no incident",
+						"why": "An agent filed this asking for a test over readChildTranscript's merge, and it reports no real failure. The possible sort-order bug only shows up with ten or more children in one run, which the filer admits has not been confirmed. It is test coverage for glue code that works, with nothing having gone wrong in real use."
+					}
+				},
+				"error": null,
+				"usd": 0.09923190000000001,
+				"ms": 3426,
+				"tokens": 12544
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "no",
+						"reason": "not now: hardening with no incident",
+						"why": "An agent filed this asking for a test over a merge that has never failed for a real user. The filer says the possible ordering bug with ten or more children is unconfirmed, and the prefix-match case is theoretical."
+					}
+				},
+				"error": null,
+				"usd": 0.0139252,
+				"ms": 5258,
+				"tokens": 12754
+			}
+		],
+		"8731": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a child of the defineProgram epic (#8725, after the #8728 spine) with a clear spec and acceptance criteria, and no earlier ticket covers the key-cell to takesKeys rule. What's left is to plan it and hand it to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0870384,
+				"ms": 2924,
+				"tokens": 11302
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a defined child of the defineProgram epic (#8725), and none of the earlier tickets covers it. Its scope and acceptance criteria are clear: the compiler sets takesKeys from whether update has a key handler, so it's ready to plan and hand to a builder once #8728 lands."
+					}
+				},
+				"error": null,
+				"usd": 0.0073463999999999995,
+				"ms": 2979,
+				"tokens": 11350
+			}
+		],
+		"9196": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "Not a duplicate: #9178 mechanized the hand-verification range, and this ticket is about the text verdict. The two fixes go opposite ways: refuse the route on a text FAIL, or reword #7306's clause so it stops claiming a PASS. Which one is right depends on how the founder's exception is read, so an owner has to decide before a builder starts."
+					}
+				},
+				"error": null,
+				"usd": 0.1058949,
+				"ms": 9017,
+				"tokens": 12887
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This isn't a duplicate: #9178 covers the hand-verification read, while this ticket covers the text verdict. It did cause a real problem: the gate on #9193 stopped at CANT-SEE. Before anything is built, an owner has to decide whether the founder's #7306 exception requires a text PASS (so the verb should refuse) or should drop that wording from its clause, and a builder must not pick for them."
+					}
+				},
+				"error": null,
+				"usd": 0.014487200000000002,
+				"ms": 6065,
+				"tokens": 12811
+			}
+		],
+		"9533": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "research",
+						"why": "Not a duplicate of #9339: that ticket asked whether an agent could get the live secret, and this one proposes a separate preview-only secret, which the ruling did not address. Before planning, someone has to check whether any flow expects a session signed on one stage to verify on another, and what data a forged preview session could reach."
+					}
+				},
+				"error": null,
+				"usd": 0.10029759999999999,
+				"ms": 7219,
+				"tokens": 12312
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "This isn't a repeat of #9339. That ticket asked to give agents the live secret, and the founder said no. This one proposes a separate secret used only by preview deploys. Whether any agent seat may hold a session-signing secret, even a preview-only one, is a security policy call next to the founder's ruling, so an owner must decide before a builder mints and hands out a second secret. The question of whether any flow shares sessions across stages can be checked alongside."
+					}
+				},
+				"error": null,
+				"usd": 0.0146748,
+				"ms": 7144,
+				"tokens": 12334
+			}
+		],
+		"9740": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "No earlier ticket covers this: #9651, #9653 and #9659 add release roots but none adds publish arms or changes the guard. Before the arms can land, an owner has to decide whether publish-isolation-guard should accept a workspace: dependency on a published sibling, since pnpm rewrites it at pack time. Otherwise the guard stays as it is and the specifiers get pinned by hand. That is a policy trade-off a builder must not pick."
+					}
+				},
+				"error": null,
+				"usd": 0.0990911,
+				"ms": 5749,
+				"tokens": 12437
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "ruling",
+						"why": "The seven packages can't reach npm until someone decides whether publish-isolation-guard should accept a workspace: specifier that names a published sibling, or whether the packages must change instead. That is a policy trade-off with a possible unknown reason behind the current rule, so an owner should choose before a builder adds the publish arms."
+					}
+				},
+				"error": null,
+				"usd": 0.010520800000000002,
+				"ms": 5629,
+				"tokens": 12426
+			}
+		],
+		"9826": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The owner already ruled that fabrika behavior may not live only in the driver's memory, and the ticket names the code, the config pattern and the verbs involved. What remains is building a config key of private repo slugs that the leak guard refuses or redacts, so the next step is to plan the build."
+					}
+				},
+				"error": null,
+				"usd": 0.097936,
+				"ms": 8075,
+				"tokens": 11822
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The founder ruled that fabrika behavior must not live only in the driver's private memory, and every adopter with private sibling repos needs this same check, so it counts as a basic gap, not hardening. The fix is clear: add a config key of private repo slugs that the leak scanner in leaks.ts checks for. That can be planned and handed to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0117705,
+				"ms": 9666,
+				"tokens": 11579
+			}
+		],
+		"9935": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the review and review-ui part of the help-rule migration that follows #9926 and #9927. None of the sibling tickets (#9928–#9934, which cover lane, build, ship and guard) includes these verbs. The scope and acceptance criteria are already set, so it can be planned and handed to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0824183,
+				"ms": 3058,
+				"tokens": 10529
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is the review and review-ui part of the help-rule migration that #9926 and #9927 set up. None of the sibling tickets (#9928–#9934) covers these verbs, and the scope is fully specified, so it is ready to plan and hand to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0076379,
+				"ms": 3057,
+				"tokens": 10507
+			}
+		],
+		"10591": [
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "This is a real gap in the new sign-off read. It lacks the agent-stamp skip that #10363 added to the other owner-only checks, so an agent could clear the park before the owner's hand step is done. The fix is clear: reuse the existing skip, add a test, and add the sign-off to ADR 0455's table. It can go straight to planning."
+					}
+				},
+				"error": null,
+				"usd": 0.09111019999999999,
+				"ms": 5613,
+				"tokens": 11253
+			},
+			{
+				"model": "claude-opus-5-5",
+				"answer": {
+					"sort": {
+						"answer": "yes",
+						"next": "plan",
+						"why": "The new owner-signoff.ts read has the same hole #10363 fixed in hand-check.ts and pitch.ts: on a single-account repo an agent comment can pass as the owner and clear the park. That is a real bug in a check this repo ships, not hardening of a check that works. The fix is known: reuse the existing agent-stamp skip, add a test, and add a row to ADR 0455's owner-only steps table. So it can go straight to a builder."
+					}
+				},
+				"error": null,
+				"usd": 0.0137481,
+				"ms": 8721,
+				"tokens": 11292
+			}
+		]
+	}
+}

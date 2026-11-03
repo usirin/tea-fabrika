@@ -11,7 +11,7 @@ import {
 	type Storage,
 	start,
 	tell,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {Deferred, Effect, Fiber, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {holderOf, layerLanes} from "../../asks/claims.ts";
@@ -798,7 +798,7 @@ describe("operate killed (kill -9) twice and started again: the user's job", () 
 			description: "Hands on each ticket it is told.",
 			inputs: {ticket: input(TicketUrl, "A ticket to hand on.")},
 			outputs: {ticket: output(TicketUrl, "Each ticket, as it was told.")},
-			main: ({inputs, send}) => inputs.ticket.pipe(Stream.runForEach((x) => send("ticket", x))),
+			main: ({serve, send}) => serve({ticket: (x) => send("ticket", x)}),
 		});
 		/** One life of the process, `tickets | operate` on the shared disk. Armed, operate's queue writes stall. */
 		const pipedLife = <A, E>(

@@ -23,7 +23,7 @@ import {accessSync, constants, readdirSync, type Stats, statSync} from "node:fs"
 //
 // This file is the only place that may name `settingSources` with a source in
 // it, or `projectConfigRoot` at all: `pnpm lint` refuses both anywhere else
-// (biome-plugins/no-project-settings.grit). A live run checks its options
+// (oxlint-plugins/no-project-settings.ts). A live run checks its options
 // again before Claude Code starts (`startRefusal`).
 //
 // Claude Code reads AGENTS.md only through its built-in agents-md plugin, and
@@ -32,7 +32,7 @@ import {accessSync, constants, readdirSync, type Stats, statSync} from "node:fs"
 // beside CLAUDE.md, nested ones too, the same way.
 //
 // Node at the edge: the folder check reads the file system with `node:fs`.
-// This file is on `@kampus/fabrika/agents/sandbox`, which loads no Effect and
+// This file is on `@kampus/fabrika-old/agents/sandbox`, which loads no Effect and
 // no Agent SDK.
 
 /** Where Claude Code reads a project's settings from instead of the working folder: the system's empty folder. */
@@ -64,7 +64,7 @@ export interface SettingsFrom {
 	readonly projectConfigRoot?: string | undefined;
 }
 
-const USE = `Load them with ownRules (@kampus/fabrika/agents/sandbox), or none with settingSources: [].`;
+const USE = `Load them with ownRules (@kampus/fabrika-old/agents/sandbox), or none with settingSources: [].`;
 
 /**
  * Why these options would load settings a run must not have, or `null` when

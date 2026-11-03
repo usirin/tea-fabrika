@@ -1,5 +1,7 @@
 # Its own workspace root, so installing here never touches the repo root's packages.
 packages:
   - "."
+# `pnpm add` writes the exact version, not a range (docs/direction/pin-exact-versions.md).
+savePrefix: ''
 onlyBuiltDependencies:
   - esbuild

@@ -3,7 +3,8 @@ import {type Cell, type Pen, print} from "./cells.ts";
 // A terminal's grid, for tests: what a run of bytes leaves on the screen, and where the cursor is.
 // It knows only what the line editor writes (./screen.ts): text with a VT100's wrap at the last
 // column, CR, LF, cursor up and right, clear to the end of the row, clear below, home and clear
-// screen, and the full reset a screen shown again starts with (tsh.ts). Anything else is drawn as
+// screen, the full reset a screen shown again starts with (tsh.ts), and the colors of a table
+// (SGR, `m`), which leave nothing on the grid: it keeps text only. Anything else is drawn as
 // the character it is, so a test sees it: a CSI sequence it does not know is written out as `^[[`
 // and the rest.
 //
@@ -70,7 +71,8 @@ export function gridOf(bytes: string, cols: number, height = 24): Grid {
 			while (end < chars.length && /[0-9;]/.test(chars[end] ?? "")) end += 1;
 			const n = Number(chars.slice(i + 2, end).join("") || "0");
 			const final = chars[end];
-			const known = ["A", "C", "H", "K", "J"].includes(final ?? "") && (final !== "K" || n === 0);
+			const known =
+				["A", "C", "H", "K", "J", "m"].includes(final ?? "") && (final !== "K" || n === 0);
 			if (!known) {
 				for (const d of ["^", "[", "[", ...chars.slice(i + 2, end + 1)]) put(d);
 				i = end;

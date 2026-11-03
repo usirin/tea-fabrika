@@ -1,5 +1,5 @@
 import {defineMachine} from "@demlik/tea";
-import {Duration, Effect, Exit, Schema, Scope, Stream} from "effect";
+import {Duration, Effect, Exit, Schema, Scope} from "effect";
 import {describe, expect, it} from "vitest";
 import {defineProgram} from "../program/program.ts";
 import {input} from "../program/shape.ts";
@@ -35,7 +35,7 @@ const counterProgram = defineProgram({
 	description: "Counts the messages in its inbox, once each.",
 	inputs: {inbox: input(envelope(Schema.Struct({})), "One message.")},
 	outputs: {},
-	main: ({inputs}) =>
+	main: ({serve}) =>
 		Effect.gen(function* () {
 			const self = yield* Self;
 			const handle = yield* self.run(
@@ -44,9 +44,7 @@ const counterProgram = defineProgram({
 				{ctx: undefined},
 			);
 			const machine = yield* handle.ready;
-			yield* inputs.inbox.pipe(
-				Stream.runForEach((e) => machine.dispatch({type: "inc", id: e.id, rev: e.rev})),
-			);
+			yield* serve({inbox: (e) => machine.dispatch({type: "inc", id: e.id, rev: e.rev})});
 		}).pipe(Effect.scoped),
 });
 
@@ -191,8 +189,13 @@ describe("serve, cut off from the ledger", () => {
 				link.down = false;
 				for (let i = 10; i < 20; i++) yield* cast("counter:1", `m${i}`, {}, "sender");
 				yield* until(Effect.map(countOf, (n) => n === 20));
+				// The next renewal says it is back, and the count can get there first.
+				const kindsNow = ledger
+					.readStream("counter:1")
+					.pipe(Effect.map((rows) => rows.map((r) => r.kind)));
+				yield* until(Effect.map(kindsNow, (kinds) => kinds.includes("lease_resumed")));
 				const n = yield* countOf;
-				const kinds = (yield* ledger.readStream("counter:1")).map((r) => r.kind);
+				const kinds = yield* kindsNow;
 				yield* Scope.close(scope, Exit.void);
 				return {n, kinds};
 			}).pipe(Effect.provide(layerMemory())),

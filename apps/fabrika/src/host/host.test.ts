@@ -1,11 +1,16 @@
+import {join} from "node:path";
 import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
+import {Ledger, streams, writerText} from "@kampus/fabrika-old";
+import {layerSqliteSync} from "@kampus/fabrika-old/sqlite";
+import {type Fact, nameOf} from "@kampus/pipeline/tickets/ticket";
 import {pullRequestsOf} from "@tea-fabrika/tracker";
-import {Effect, Exit, FileSystem, Layer, Schedule, Scope} from "effect";
+import {Effect, Exit, FileSystem, Layer, Logger, Schedule, Scope} from "effect";
 import {ChildProcess} from "effect/process";
 import {describe, expect, it} from "vitest";
+import type {AsksNow, Marks} from "../asks.ts";
 import {attach, NoHost} from "../attach.ts";
 import type {Open} from "../desk/desk.ts";
 import {tilesOf} from "../desk/desk.ts";
@@ -158,7 +163,9 @@ describe("the host", () => {
 				const first = app.page().map((m) => m.type);
 				const ports = app.got.flatMap((m) => (m.type === "port" ? [m.port] : []));
 				app.type("t1", "counter &\r");
-				yield* until("the job", () => (app.desk()?.running.t1 === 1 ? true : undefined));
+				yield* until("the job", () =>
+					app.desk()?.jobs.t1?.running.length === 1 ? true : undefined,
+				);
 				yield* app.leave;
 				// The app went: the job runs on, and the next app is shown the same desk.
 				const again = yield* appOn(paths.sock);
@@ -170,9 +177,21 @@ describe("the host", () => {
 			}),
 		);
 		expect(tileIds(seen.desk)).toEqual(["t1"]);
-		expect(seen.first.slice(0, 2)).toEqual(["keys", "desk"]);
+		// The asks go to every app, a page or not, as the ledger is read: so leave them out of the order.
+		expect(seen.first.filter((t) => t !== "asks").slice(0, 4)).toEqual([
+			"keys",
+			"programs",
+			"host",
+			"desk",
+		]);
+		expect(seen.first).toContain("asks");
 		expect(seen.ports).toEqual(["tile:t1"]);
-		expect(seen.after.running).toEqual({t1: 1});
+		expect(
+			Object.entries(seen.after.jobs).map(([tile, jobs]) => [
+				tile,
+				jobs.running.map((j) => j.text),
+			]),
+		).toEqual([["t1", ["counter"]]]);
 		expect(tileIds(seen.after)).toEqual(["t1"]);
 	});
 
@@ -251,6 +270,46 @@ describe("the host", () => {
 		expect(row).toBe("tsh$ aXb");
 	});
 
+	it("moves the desk on every app from a word typed in a tile's tsh, and prints why it did not", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const {home, paths} = yield* freshHome;
+				const host = yield* hostOn(home);
+				const a = yield* appOn(paths.sock);
+				const b = yield* appOn(paths.sock);
+				yield* a.wire.up;
+				yield* b.wire.up;
+				a.send({type: "page"});
+				b.send({type: "page"});
+				yield* until("t1's prompt", () => (a.rows("t1")[0] === "tsh$" ? true : undefined));
+				const said = a.page().find((m) => m.type === "host");
+				a.type("t1", "split\r");
+				const split = yield* until("the split on b", () =>
+					tileIds(b.desk()).length === 2 ? b.desk() : undefined,
+				);
+				a.type("t1", "focus --to t9\r");
+				const refused = yield* until("why", () =>
+					a.rows("t1").find((r) => r.startsWith("tsh: focus failed")),
+				);
+				a.type("t1", "agents\r");
+				const shown = yield* until("the agents' lines on b", () =>
+					b.page().find((m) => m.type === "show" && m.what === "agents"),
+				);
+				yield* host.stop;
+				return {said, split, refused, shown};
+			}),
+		);
+		// The home keeps its own ledger, so agents attach on its socket: none yet.
+		expect(seen.said).toMatchObject({
+			type: "host",
+			now: {pid: process.pid, ledger: {kind: "own"}, agents: []},
+		});
+		expect(tileIds(seen.split)).toEqual(["t1", "t2"]);
+		expect(seen.split.workspaces[0].focused).toBe("t2");
+		expect(seen.refused).toBe("tsh: focus failed: no tile t9");
+		expect(seen.shown).toEqual({type: "show", what: "agents"});
+	});
+
 	it("refuses an app of another version, says which, and runs on for the next app", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
@@ -283,6 +342,149 @@ describe("the host", () => {
 			}),
 		);
 		expect(failed._tag).toBe("HostAnswers");
+	});
+});
+
+describe("the asks' later and seen", () => {
+	const owner = writerText({kind: "user", id: "owner"});
+	const agent = writerText({kind: "agent", id: "plan", for: "owner"});
+
+	/** Write facts to the home's own ledger, with no host on it. */
+	const write = (home: string, facts: readonly (readonly [number, string, Fact])[]) =>
+		Effect.gen(function* () {
+			const ledger = yield* Ledger;
+			for (const [n, id, fact] of facts) {
+				if (fact.type === "filed") yield* ledger.register(nameOf(n), owner);
+				const writer = fact.type === "asked" ? agent : owner;
+				yield* ledger.send(streams(nameOf(n)).inbox, id, {kind: fact.type, writer, data: fact});
+			}
+		}).pipe(Effect.provide(layerSqliteSync({path: join(home, "ledger.sqlite"), tickMs: 1000})));
+	const filed = (title: string): Fact => ({type: "filed", title, body: ""});
+	const asked = (what: string, ask = "a-1"): Fact => ({
+		type: "asked",
+		ask,
+		what,
+		picks: ["yes", "no"],
+	});
+
+	/** Two tickets, each with an ask: 1/a-1 and 3/a-1. */
+	const seeded = Effect.gen(function* () {
+		const {home, paths} = yield* freshHome;
+		yield* write(home, [
+			[1, "f1", filed("Login fails")],
+			[1, "a1", asked("approve plan")],
+			[3, "f3", filed("Dark mode")],
+			[3, "a3", asked("is it a duplicate?")],
+		]);
+		return {home, paths};
+	});
+
+	/** An app on the host, once the host has read the ledger: what it last said of the asks. */
+	const asksOn = (sock: string) =>
+		Effect.gen(function* () {
+			const app = yield* appOn(sock);
+			yield* app.wire.up;
+			app.send({type: "page"});
+			const asks = () => {
+				const last = app.page().findLast((m) => m.type === "asks");
+				return last?.type === "asks" && last.now.reach === "ok" ? last.now : undefined;
+			};
+			yield* until("the asks", asks);
+			return {app, asks};
+		});
+	const said = (now: AsksNow | undefined) => ({
+		asks: now?.asks.map((a) => [a.key, a.seen]),
+		later: now?.later.map((a) => a.key),
+	});
+
+	const kept = (home: string) =>
+		FileSystem.FileSystem.pipe(
+			Effect.flatMap((fs) => fs.readFileString(join(home, "asks.json"))),
+			Effect.map((text): unknown => JSON.parse(text)),
+			Effect.orElseSucceed((): unknown => null),
+		);
+	/** Wait for asks.json to hold `marks`. */
+	const keptAs = (home: string, marks: Marks) =>
+		Effect.gen(function* () {
+			for (let i = 0; i < 400; i += 1) {
+				const now = yield* kept(home);
+				if (JSON.stringify(now) === JSON.stringify(marks)) return now;
+				yield* Effect.sleep("5 millis");
+			}
+			const last = JSON.stringify(yield* kept(home));
+			return yield* Effect.die(`waited for asks.json to hold ${JSON.stringify(marks)}: ${last}`);
+		});
+
+	it("keeps later and seen across a host restart, and drops an answered ask's later", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const {home, paths} = yield* seeded;
+				const first = yield* hostOn(home);
+				const {app} = yield* asksOn(paths.sock);
+				// The list opens, then both asks are set aside.
+				app.send({type: "on", port: "desk", m: {type: "seen"}});
+				app.send({type: "on", port: "desk", m: {type: "later", key: "1/a-1"}});
+				app.send({type: "on", port: "desk", m: {type: "later", key: "3/a-1"}});
+				yield* keptAs(home, {later: ["1/a-1", "3/a-1"], seen: ["1/a-1", "3/a-1"]});
+				yield* app.leave;
+				yield* first.stop;
+
+				// The host is stopped: the ask on #3 is answered meanwhile.
+				yield* write(home, [[3, "n3", {type: "answered", ask: "a-1", pick: "yes", note: ""}]]);
+				const second = yield* hostOn(home);
+				const again = yield* asksOn(paths.sock);
+				const after = said(again.asks());
+				const file = yield* keptAs(home, {later: ["1/a-1"], seen: ["1/a-1"]});
+
+				// One more ask comes: it counts, and it is new.
+				yield* write(home, [[1, "a1b", asked("merge?", "a-2")]]);
+				const newer = yield* until("the new ask", () =>
+					again.asks()?.asks.some((a) => a.key === "1/a-2") === true ? again.asks() : undefined,
+				);
+				yield* again.app.leave;
+				yield* second.stop;
+				return {after, file, newer: said(newer)};
+			}),
+		);
+		expect(seen.after).toEqual({asks: [], later: ["1/a-1"]});
+		expect(seen.file).toEqual({later: ["1/a-1"], seen: ["1/a-1"]});
+		expect(seen.newer).toEqual({asks: [["1/a-2", false]], later: ["1/a-1"]});
+	});
+
+	it.each([
+		["a broken file", "{"],
+		["a file an older build wrote", '{"later":["1/a-1"]}'],
+	])("starts on %s with every ask counted and new, and says so in the log", async (_, text) => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const fs = yield* FileSystem.FileSystem;
+				const {home, paths} = yield* seeded;
+				yield* fs.writeFileString(join(home, "asks.json"), text);
+				const logs: string[] = [];
+				const scope = yield* Scope.make();
+				yield* runHost({home, pid: process.pid}).pipe(
+					Effect.scoped,
+					Effect.provide(Logger.layer([Logger.make((l) => logs.push(String(l.message)))])),
+					Effect.forkIn(scope),
+				);
+				yield* live(paths.sock);
+				const {app, asks} = yield* asksOn(paths.sock);
+				const now = said(asks());
+				yield* app.leave;
+				yield* Scope.close(scope, Exit.void);
+				return {now, logs};
+			}),
+		);
+		expect(seen.now).toEqual({
+			asks: [
+				["1/a-1", false],
+				["3/a-1", false],
+			],
+			later: [],
+		});
+		expect(
+			seen.logs.filter((l) => l.includes("the asks' later and seen did not read back")),
+		).toHaveLength(1);
 	});
 });
 

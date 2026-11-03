@@ -4,7 +4,7 @@ import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcess
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import {Cause, Effect, Exit, type FileSystem, Layer, Path, Scope, Stream} from "effect";
-import {ChildProcess, type ChildProcessSpawner} from "effect/process";
+import type {ChildProcessSpawner} from "effect/process";
 import {
 	app,
 	BrowserWindow,
@@ -12,19 +12,25 @@ import {
 	ipcMain,
 	MessageChannelMain,
 	type MessagePortMain,
+	nativeTheme,
+	Notification,
 	protocol,
 	session,
 	shell,
 } from "electron";
+import {type AsksNow, keysOf, newAsks, noticeOf} from "./asks.ts";
 import {attach, NoHello, NoHost, restart} from "./attach.ts";
 import {isPortName, PORT_CHANNEL} from "./bridge.ts";
 import {answer, DESK, isDesk, isOurs, SCHEME} from "./files.ts";
+import {pathsOf} from "./host/socket.ts";
 import {NotStopped} from "./host/stop.ts";
 import {type Launch, launchOf, QUIET_SWITCHES} from "./launch.ts";
 import type {Down, Up} from "./link.ts";
-import {type LinkNow, readToApp, type ToPage} from "./messages.ts";
+import {type LinkNow, readAsks, readToApp, type ToPage} from "./messages.ts";
 import {Browser, NotOpened, openOutside} from "./outside.ts";
 import {noteOf, POLICY, reconnectMachine, type Tried} from "./reconnect.ts";
+import {startHost} from "./start-host.ts";
+import {followLook, frameColor} from "./themes.ts";
 import {Unattached, type Wire} from "./wire.ts";
 
 // The Electron edge: the main process. It runs nothing of fabrika's own: every tile's tsh, every
@@ -40,8 +46,8 @@ import {Unattached, type Wire} from "./wire.ts";
 //                   version: the app does not attach, names both versions in its window, and
 //                   leaves that host running with its jobs. The host's hello names its build too:
 //                   another build, and the app attaches, with a banner, "the host runs older code"
-//   restart         either way, the window offers "Stop the old host and start this one". A yes
-//                   stops that host by its pid, waits for it to exit, and attaches, which starts
+//   restart         either way, the window offers "Stop the old host and start this one". Confirmed,
+//                   it stops that host by its pid, waits for it to exit, and attaches, which starts
 //                   one of this build (attach.ts, `restart`). Its running jobs stop; their saved
 //                   lists stay, and each comes back with `attach %n`
 //   the page        it loads and says hello: the host is told `page`, and sends the desk, its
@@ -84,7 +90,18 @@ import {Unattached, type Wire} from "./wire.ts";
 //                   host runs on, with every tile's tsh and every job. The next start attaches to
 //                   it and draws the same desk
 //
+// The window's frame and the asks:
+//
+//   frame           on macOS no title bar: the page's top bar is the frame, with the system's
+//                   three buttons set in it (`FRAME`). Elsewhere, the system's own frame
+//   Dock badge      the count of asks the host sends the page, read on the way (`readAsks`), so
+//                   the badge and the top bar say the same number
+//   notification    a new ask, while the window is not in front: the system's own, so its own
+//                   settings turn it off. Never on a quiet start, and nothing is focused by it
+//
 // The app's home is Electron's userData folder: FABRIKA_HOME, when set, or Electron's own folder.
+// Electron names its own folder after package.json's `productName`, so that field holds the home's
+// name when the package is renamed.
 // A test sets it, to run on a fresh one. The host is started on the same home, by name, always.
 //
 // A start on a home of its own is quiet (launch.ts): an agent or a test. On macOS it is an
@@ -94,7 +111,8 @@ import {Unattached, type Wire} from "./wire.ts";
 // tile's terminal still takes keys sent over the DevTools protocol.
 //
 // The host is the app's own Electron binary run as Node (`ELECTRON_RUN_AS_NODE=1`, host/main.ts
-// says why), with no stdin, stdout or stderr, and let go (`unref`): quitting the app leaves it.
+// says why), with no stdin or stdout, its stderr appended to its log, and let go (`unref`):
+// quitting the app leaves it (start-host.ts).
 
 /** The bundle's folder: main.mjs, host.mjs, preload.cjs and the page's own files, side by side. */
 const DIST = import.meta.dirname;
@@ -153,16 +171,29 @@ const guard = () => {
 };
 
 /**
+ * The window's frame on macOS: no title bar of its own, the page's top bar in its place, and the
+ * system's three buttons kept, set in that bar, as Linear and Finder set theirs. The page keeps
+ * their space clear (window/frame.ts, `LIGHTS`). Other platforms keep the system's frame, as it is.
+ */
+const FRAME =
+	process.platform === "darwin"
+		? ({titleBarStyle: "hiddenInset", trafficLightPosition: {x: 14, y: 11}} as const)
+		: {};
+
+/**
  * The one window, with the same safe settings the app's windows always had. Quiet, it is made
  * hidden and drawn anyway, then shown without taking focus.
  */
-const deskWindow = (preload: string, launch: Launch) => {
+const deskWindow = (preload: string, icon: string, launch: Launch) => {
 	const quiet = launch.kind === "quiet";
 	const window = new BrowserWindow({
 		width: 1200,
 		height: 760,
 		title: "fabrika",
-		backgroundColor: "#16181d",
+		icon,
+		// The desk's color in the system's look, so the window shows no other color before its page.
+		backgroundColor: frameColor(nativeTheme),
+		...FRAME,
 		show: !quiet,
 		paintWhenInitiallyHidden: true,
 		webPreferences: {
@@ -174,6 +205,7 @@ const deskWindow = (preload: string, launch: Launch) => {
 			preload,
 		},
 	});
+	followLook(nativeTheme, window);
 	if (quiet) window.showInactive();
 	window
 		.loadURL(DESK)
@@ -271,6 +303,9 @@ const main = Effect.gen(function* () {
 	});
 	guard();
 	const path = yield* Path.Path;
+	const icon = path.join(DIST, "icon.png");
+	// A quiet start has no Dock icon to set. An unpackaged app has no icon of its own otherwise.
+	if (launch.kind !== "quiet") app.dock?.setIcon(icon);
 	// Asked for by our own page only: the scheme is registered for nothing else.
 	const files = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 	protocol.handle(SCHEME, (request) => Effect.runPromiseWith(files)(answer(DIST, request.url)));
@@ -298,6 +333,33 @@ const main = Effect.gen(function* () {
 	/** A port whose messages go to the host, under its name. */
 	const relay = (name: string) => ports.push(name, onTo(name));
 	const toPage = (m: ToPage) => ports.post("desk", m);
+	/** The ask keys known since this link came up; `null` before its first count. */
+	let known: ReadonlySet<string> | null = null;
+	/** Notifications shown, held so their click is still heard. */
+	const notices = new Set<Notification>();
+	/**
+	 * The host's count of asks (asks.ts), read on its way to the page: the Dock's badge shows the
+	 * same number as the top bar. A new ask is told by the system's notification only when the
+	 * window is not in front, and never on a quiet start. Nothing is focused or opened by it; a
+	 * click on it brings the window and opens the asks list.
+	 */
+	const heardAsks = (now: AsksNow) => {
+		app.setBadgeCount(now.asks.length);
+		const fresh = newAsks(known, now);
+		known = keysOf(now);
+		const [first, ...rest] = fresh;
+		if (first === undefined || launch.kind === "quiet" || current?.isFocused() === true) return;
+		if (!Notification.isSupported()) return;
+		const notice = new Notification(noticeOf([first, ...rest]));
+		notices.add(notice);
+		notice.on("close", () => notices.delete(notice));
+		notice.on("click", () => {
+			notices.delete(notice);
+			showWindow();
+			toPage({type: "show", what: "asks"});
+		});
+		notice.show();
+	};
 	const fromHost = (m: Down) => {
 		switch (m.type) {
 			case "hello":
@@ -306,27 +368,28 @@ const main = Effect.gen(function* () {
 			case "port":
 				if (m.port !== "desk") relay(m.port);
 				return;
-			case "to":
+			case "to": {
+				if (m.port === "desk") {
+					const asks = readAsks(m.m);
+					if (asks.kind === "read") heardAsks(asks.msg.now);
+				}
 				return ports.post(m.port, m.m);
+			}
 			case "gone":
 				return ports.gone(m.port);
 			case "close":
 				return current?.close();
 		}
 	};
-	/** Start the host on this home: the app's own binary as Node, detached, and let go. */
-	const startHost = Effect.gen(function* () {
-		const handle = yield* ChildProcess.make(process.execPath, [path.join(DIST, "host.mjs")], {
-			env: {ELECTRON_RUN_AS_NODE: "1", FABRIKA_HOME: home},
-			extendEnv: true,
-			detached: true,
-			stdin: "ignore",
-			stdout: "ignore",
-			stderr: "ignore",
+	/** Start the host on this home: the app's own binary as Node, detached, let go (start-host.ts). */
+	const startOne = Effect.gen(function* () {
+		const paths = yield* pathsOf(home);
+		return yield* startHost({
+			binary: process.execPath,
+			entry: path.join(DIST, "host.mjs"),
+			home,
+			paths,
 		});
-		// Let go for good: the app never takes it back, so its way to take it back is dropped.
-		yield* handle.unref.pipe(Effect.asVoid);
-		return handle.exitCode;
 	});
 	/**
 	 * One try to attach, in a scope of its own that lives as long as the link: reach the host, or
@@ -338,7 +401,7 @@ const main = Effect.gen(function* () {
 	const tryWith = (how: typeof attach | typeof restart) =>
 		Effect.gen(function* () {
 			const link = yield* Scope.fork(scope);
-			const exit = yield* how({home, deliver: fromHost, start: startHost}).pipe(
+			const exit = yield* how({home, deliver: fromHost, start: startOne}).pipe(
 				Scope.provide(link),
 				Effect.provideContext(starting),
 				Effect.exit,
@@ -348,11 +411,13 @@ const main = Effect.gen(function* () {
 				return triedOf(Cause.squash(exit.cause));
 			}
 			held = {wire: exit.value.wire, scope: link};
+			// A new link's first count tells of no ask: those were known, or are old news.
+			known = null;
 			if (paged) exit.value.wire.send({type: "page"});
 			return exit.value.found satisfies Tried;
 		});
 	const tryAttach = tryWith(attach);
-	/** The person said yes to the restart: this app lets go of the old host's link first. */
+	/** The person confirmed the restart: this app lets go of the old host's link first. */
 	const tryRestart = Effect.gen(function* () {
 		const link = held;
 		held = null;
@@ -409,7 +474,7 @@ const main = Effect.gen(function* () {
 			current.focus();
 			return;
 		}
-		const made = deskWindow(path.join(DIST, "preload.cjs"), launch);
+		const made = deskWindow(path.join(DIST, "preload.cjs"), icon, launch);
 		current = made;
 		made.once("closed", () => {
 			if (current !== made) return;

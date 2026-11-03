@@ -38,7 +38,7 @@
 // fence. Leaving owning turns it off, which stops the program. (Elm: something that stays open is
 // a Sub.)
 import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
-import type {ExitReason} from "@kampus/fabrika";
+import type {ExitReason} from "@kampus/fabrika-old";
 
 export interface HostSettings {
 	/** How often an owner renews. Well under the lease's ttl. */
@@ -156,9 +156,7 @@ export type HostSub =
 export const START: Host = {phase: "watching", waitMs: 0, tries: 0};
 
 /** The fence the program runs under, or `null`: it is off. The laws read this same function. */
-export const programOf = (
-	s: Host,
-): {readonly fence: number; readonly incarnation: number} | null =>
+export const programOf = (s: Host): {readonly fence: number; readonly incarnation: number} | null =>
 	s.phase === "owning" ? {fence: s.fence, incarnation: s.incarnation} : null;
 
 /** The renew clock, or `null`: off. It runs while owning and while exiting. */

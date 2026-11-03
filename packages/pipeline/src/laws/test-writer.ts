@@ -1,5 +1,5 @@
 import {structuralHash} from "@demlik/tea";
-import {noSpend, type Spend} from "@kampus/fabrika/agents/claude";
+import {noSpend, type Spend} from "@kampus/fabrika-old/agents/claude";
 import type {Checked} from "../stages/test-writer/checked.ts";
 import {
 	commitTests,
@@ -79,16 +79,14 @@ export function testWriterWorld(): World<TestWriter, Msg, TestWriterCmd> {
 				{type: "resume"},
 				...ids.flatMap((id): Msg[] => [
 					{type: "tests_write_tool", key: KEY, id, tool: "Read"},
-					...Object.values(DRAFTS).map(
-						(output): Msg => ({
-							type: "tests_write_finished",
-							key: KEY,
-							id,
-							output,
-							session: "s",
-							spend: SPENT,
-						}),
-					),
+					...Object.values(DRAFTS).map((output): Msg => ({
+						type: "tests_write_finished",
+						key: KEY,
+						id,
+						output,
+						session: "s",
+						spend: SPENT,
+					})),
 					{type: "tests_write_failed", key: KEY, id, error: "boom", spend: SPENT},
 				]),
 			];

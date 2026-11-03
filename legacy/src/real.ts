@@ -5,7 +5,7 @@ import {answerFrom, drive, printEnd, printTriageEnd, untilFrom} from "./drive.ts
 import {saveEnrichment} from "./enrichment.ts";
 import {parseIssueRef, rawIssueFrom, splitEnriched} from "./github.ts";
 import {realLayers, testingFor} from "./host.ts";
-import {checkBase, githubIssue, isClean, seedTicket, TicketFile} from "./local.ts";
+import {checkBase, githubIssue, isClean, jevKey, seedTicket, TicketFile} from "./local.ts";
 import {defaultSettings, settingsFile} from "./settings.ts";
 
 // Run one real GitHub ticket on a real pnpm monorepo, triage through ship, and
@@ -44,7 +44,7 @@ interface Kept {
 const runDir = process.env.RUN || undefined;
 if (runDir === undefined)
 	throw new Error("RUN is needed: a real run is always kept, so it can stop and resume");
-const key = process.env.TYPESAFE_API_KEY || undefined;
+const key = jevKey();
 if (key === undefined)
 	throw new Error("TYPESAFE_API_KEY is needed: a real run sorts and reads with the real Jev");
 const answer = answerFrom(process.env.ANSWER);

@@ -7,7 +7,7 @@ import {
 	output,
 	type RefsOf,
 	type Send,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {Effect, Schema} from "effect";
 import {claim, holding as holds, newLane, release} from "../../asks/claims.ts";
 import {markOf} from "../../criteria/mark.ts";
@@ -461,10 +461,12 @@ export const operateProgram = defineProgram({
 	// the queue's next start. Each stage's machine is run again by the loop's Act that started it.
 	machines: KINDS,
 	main: (io) =>
-		workQueue(
-			io.machines.queue,
-			io.inputs.ticket,
-			(ticket) => run(ticket, io),
-			(ticket) => tidy(ticket, io),
-		),
+		Effect.gen(function* () {
+			const queue = yield* workQueue(
+				io.machines.queue,
+				(ticket) => run(ticket, io),
+				(ticket) => tidy(ticket, io),
+			);
+			yield* queue.drained(io.serve({ticket: queue.told}));
+		}).pipe(Effect.scoped),
 });

@@ -1,0 +1,3 @@
+3bacfdb build: Add slugify: turn a title into a URL slug (round 1)
+d947261 tests for https://github.com/toy/slug-lab/issues/1
+c631e20 first

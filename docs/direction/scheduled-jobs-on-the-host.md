@@ -1,6 +1,6 @@
 # Scheduled jobs run on the host's alarms
 
-Proposed 2026-10-24.
+Proposed 2026-10-24. Decided by the owner 2026-11-01.
 
 ```ts
 // A sketch, not built. A scheduled job is a program that listens to the clock.
@@ -12,7 +12,7 @@ const tlaDrift = scheduled("tla_drift", {every: days(1)}, function* () {
 		yield* act(fileTicket, {title: `The TLA+ spec ${spec.name} no longer fits its code`});
 	}
 });
-// Each ticket then runs like any other: triage, plan, the owner's yes, build.
+// Each ticket then runs like any other: triage, plan, the owner's approval, build.
 ```
 
 ## What is proposed
@@ -33,7 +33,7 @@ const tlaDrift = scheduled("tla_drift", {every: days(1)}, function* () {
 - **A job never changes code. It files a ticket,** written by an agent
   writer, so the timeline shows who filed it
   ([the ticket is the lane's one view](./the-ticket-is-the-lane-view.md)).
-  Everything after that goes through the lane, the owner's yes on the plan
+  Everything after that goes through the lane, the owner's approval of the plan
   included. Dependabot works on a schedule too, but it opens pull requests
   ([GitHub](https://docs.github.com/en/code-security/concepts/supply-chain-security/dependabot-version-updates)).
   A ticket is one step more careful.
@@ -68,8 +68,13 @@ Jobs this could run, each a guess until it is tried:
 
 - Each job is a program to write and keep.
 - A job that reads code must run where the code is. On a laptop that is
-  fine. On Cloudflare there is no copy of the code, so those jobs run on a
-  person's own host, and only while it is up.
+  fine. ~~On Cloudflare there is no copy of the code, so those jobs run on a
+  person's own host, and only while it is up.~~ *Changed 2026-11-02 by the
+  owner ([experiment 197](../../experiments/197-daily-checks-on-cloudflare.md)):
+  on Cloudflare a job's hands can be a box that clones the public repo, one box
+  object per batch. Where each job runs is set in its config (`laptop`, `box`
+  or `laptop first`), `laptop` by default, and a box job runs under a daily box
+  cap, 1 box hour to start. Nothing balances jobs across machines on its own.*
 - Each job needs its false alarms measured before it files anything.
 
 **How sure: 70%.** The doubts: whether a laptop's host is up often enough for
@@ -81,7 +86,8 @@ on 600 runs, but of stand-in children; a week on real lanes would settle it.
 
 - Which job comes first. The PR watcher is already the lean for the first
   version.
-- Where a job that reads code runs for a team.
+- ~~Where a job that reads code runs for a team.~~ Answered 2026-11-02: on a
+  person's laptop, or in a box on Cloudflare, as its config says.
 - How often each one runs.
 
 ## What it cannot tell us

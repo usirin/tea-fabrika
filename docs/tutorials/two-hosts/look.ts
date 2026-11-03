@@ -1,7 +1,7 @@
 // Look without touching: who holds each name, and its last saved state. Writes nothing.
 import {NodeRuntime} from "@effect/platform-node";
-import {getState, whereis} from "@kampus/fabrika";
-import {layerAttach} from "@kampus/fabrika/local";
+import {getState, whereis} from "@kampus/fabrika-old";
+import {layerAttach} from "@kampus/fabrika-old/local";
 import {Console, Effect, type Schema} from "effect";
 import {Glass, Kettle} from "./programs.ts";
 

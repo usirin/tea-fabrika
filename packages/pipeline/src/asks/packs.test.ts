@@ -1,4 +1,4 @@
-import {defineProgram, input, output} from "@kampus/fabrika";
+import {defineProgram, input, output} from "@kampus/fabrika-old";
 import {Effect, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {misfit, type Pack, settingsOf} from "./packs.ts";

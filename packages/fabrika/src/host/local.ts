@@ -20,7 +20,7 @@
 // Node at the edge: `process.execPath` to start the child, a free port from `node:net`, and `ps`
 // for the group's memory. The child itself is started and signalled through Effect's ChildProcess.
 import {createServer} from "node:net";
-import {NodeServices} from "@effect/platform-node";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
 	Context,
 	Deferred,
@@ -72,14 +72,14 @@ const SECRET_FILE = "door-secret";
 /** The local door's secret: kept in the data folder (made once, this user only), or in memory. */
 const secretOf = (persist: string | false) =>
 	Effect.gen(function* () {
-		if (persist === false) return Redacted.make(newToken("fabrika_l_"));
+		if (persist === false) return newToken("fabrika_l_");
 		const fs = yield* FileSystem.FileSystem;
 		const path = (yield* Path.Path).join(persist, SECRET_FILE);
 		if (!(yield* fs.exists(path))) {
 			yield* fs.makeDirectory(persist, {recursive: true});
 			// `wx`: two starters at once, and one of them writes it; the other reads what it wrote.
 			yield* fs
-				.writeFileString(path, newToken("fabrika_l_"), {flag: "wx", mode: 0o600})
+				.writeFileString(path, Redacted.value(newToken("fabrika_l_")), {flag: "wx", mode: 0o600})
 				.pipe(Effect.ignore);
 		}
 		return Redacted.make((yield* fs.readFileString(path)).trim());
@@ -103,7 +103,7 @@ export class LocalLedger extends Context.Service<
 		/** Stop the group gracefully (SIGTERM, then SIGKILL after 3 s) and start it again. */
 		readonly restart: Effect.Effect<{readonly restartMs: number}, LocalError>;
 	}
->()("@kampus/fabrika/LocalLedger") {}
+>()("@kampus/fabrika-old/LocalLedger") {}
 
 const DAEMON = beside(import.meta.url, "daemon");
 
@@ -120,7 +120,7 @@ const miniflareInstalled = Effect.forEach(
 			try: () => import.meta.resolve(peer),
 			catch: () =>
 				new LocalError({
-					message: `@kampus/fabrika/local runs the ledger in Miniflare, bundled by esbuild, and ${peer} is not installed: install it (npm install ${peer})`,
+					message: `@kampus/fabrika-old/local runs the ledger in Miniflare, bundled by esbuild, and ${peer} is not installed: install it (npm install ${peer})`,
 				}),
 		}),
 	// One after the other: the first one missing is the one named.

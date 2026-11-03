@@ -4,17 +4,19 @@ import {join} from "node:path";
 import * as readline from "node:readline";
 import {PassThrough} from "node:stream";
 import {type Cause, Effect, Fiber, Queue, Ref, Stream} from "effect";
+import {HostJobs, openJobs} from "../host/host-jobs.ts";
+import {EMPTY} from "../host/jobs.ts";
 import {start} from "../program/program.ts";
-import {memoryStorage} from "../program/storage.ts";
 import {fileStorage} from "../program/storage-node.ts";
+import {memoryStorage} from "../program/storage.ts";
 import {complete} from "./complete.ts";
 import {runIdOf} from "./execute.ts";
-import {EMPTY} from "./jobs.ts";
 import {homeOf, linesOf, type Source, showOf, sourceOf, USAGE} from "./launch.ts";
-import {JobStorage, type ProgramList, Programs} from "./programs.ts";
+import {type ProgramList, Programs} from "./programs.ts";
 import {begin, keyOf, keysIn, type Search, shown, step} from "./search.ts";
 import {type Printed, type Ready, tsh} from "./shell.ts";
 import type {Show} from "./short.ts";
+import {ANSI, paint, plain, type Table, tableLines} from "./table.ts";
 import {type Short, Shorten} from "./title.ts";
 import {endpointOf, tracing} from "./trace/otel.ts";
 import type {Viewing} from "./trace/view.ts";
@@ -45,19 +47,34 @@ import type {Viewing} from "./trace/view.ts";
 /** What tsh said, in its order. */
 type Said =
 	| {readonly kind: "printed"; readonly printed: Printed}
+	| {readonly kind: "table"; readonly table: Table}
 	| {readonly kind: "ready"; readonly ready: Ready};
+
+/** The width a table is laid out at when stdout is no terminal: tsh's short form's. */
+const NO_TERMINAL_WIDTH = 100;
+
+/**
+ * A table as this process draws it, as gh's IOStreams decides: on a terminal, at its width and in
+ * color, unless `NO_COLOR` is set (no-color.org); anywhere else, at 100 columns and plain.
+ */
+const tableText = (table: Table): string => {
+	const terminal = process.stdout.isTTY === true;
+	const lines = tableLines(table, terminal ? process.stdout.columns : NO_TERMINAL_WIDTH);
+	return terminal && process.env.NO_COLOR === undefined ? paint(lines, ANSI) : plain(lines);
+};
 
 type Started = Extract<Effect.Success<ReturnType<typeof startTsh>>, {readonly kind: "running"}>;
 
 /**
- * Ctrl-C, told at Node's edge, never waiting. A `signal` line that is full
- * already holds an interrupt tsh has not read, so this one is let go.
+ * Ctrl-C, told at Node's edge, never waiting. `signal` is a control input, so
+ * lines waiting in the mailbox never refuse it; one that is full already
+ * holds interrupts tsh has not handled, so this one is let go.
  */
 const interruptOf = (started: Started) => () =>
 	Effect.runSync(
 		started.run.tell("signal", "interrupt").pipe(
 			Effect.asVoid,
-			Effect.catchTag("Full", () => Effect.void),
+			Effect.catchTag("MailboxFull", () => Effect.void),
 		),
 	);
 
@@ -68,9 +85,10 @@ const startTsh = (
 	said: Queue.Queue<Said, Cause.Done>,
 ) =>
 	Effect.gen(function* () {
-		const storage = fileStorage(join(home, "storage"));
-		// A fresh run each time: what outlives one tsh is its job table and its jobs, in the job
-		// storage. tsh's own run is never started again, so it keeps its record in memory, and
+		// On a terminal the launcher is tsh's host: it keeps the jobs, in the home, and tsh shows them.
+		const jobs = yield* openJobs(fileStorage(join(home, "storage")));
+		// A fresh run each time: what outlives one tsh is the host's job table and its jobs, in the
+		// job storage. tsh's own run is never started again, so it keeps its record in memory, and
 		// the folder does not fill with one record per session.
 		const id = yield* runIdOf("tsh");
 		return yield* start(
@@ -78,10 +96,11 @@ const startTsh = (
 			{show},
 			{
 				printed: (printed) => Queue.offerUnsafe(said, {kind: "printed", printed}),
+				table: (table) => Queue.offerUnsafe(said, {kind: "table", table}),
 				ready: (ready) => Queue.offerUnsafe(said, {kind: "ready", ready}),
 			},
 			{id, storage: memoryStorage()},
-		).pipe(Effect.provideService(Programs, list), Effect.provideService(JobStorage, storage));
+		).pipe(Effect.provideService(Programs, list), Effect.provideService(HostJobs, jobs));
 	});
 
 /** One tsh per home: two would each run the jobs of one table. */
@@ -121,23 +140,27 @@ const takeLock = (home: string) =>
 const write = (to: "out" | "err", text: string) =>
 	(to === "out" ? process.stdout : process.stderr).write(`${text}\n`);
 
+/** What tsh said that shows: a line on out or err, or a table on out. */
+const shownOf = (s: Exclude<Said, {readonly kind: "ready"}>) =>
+	s.kind === "printed" ? s.printed : {to: "out" as const, text: tableText(s.table)};
+
 /** Lines from a text or a file, or from stdin as they come; each told in order, then `line` closed. */
 const batch = (started: Started, said: Queue.Queue<Said, Cause.Done>, source: Source) =>
 	Effect.gen(function* () {
 		const last = yield* Ref.make(0);
 		const drawer = yield* Stream.fromQueue(said).pipe(
-			Stream.runForEach((s) =>
-				s.kind === "printed"
-					? Effect.sync(() => write(s.printed.to, s.printed.text))
-					: Ref.set(last, s.ready.status),
-			),
+			Stream.runForEach((s) => {
+				if (s.kind === "ready") return Ref.set(last, s.ready.status);
+				const shown = shownOf(s);
+				return Effect.sync(() => write(shown.to, shown.text));
+			}),
 			Effect.forkScoped,
 		);
 		const interrupt = interruptOf(started);
 		process.on("SIGINT", interrupt);
 		if (source.kind === "stdin") {
-			// Node at the edge: readline. A line the shell's input cannot hold yet (its tell fails
-			// `Full`) is offered, and stdin waits paused until every offered line is in, so a long
+			// Node at the edge: readline. A line the shell's mailbox cannot hold yet (its tell fails
+			// `MailboxFull`) is offered, and stdin waits paused until every offered line is in, so a long
 			// piped script is neither dropped nor held whole in memory. Lines keep their order: once
 			// one waits, the rest wait behind it, and the close comes after the last.
 			const rl = readline.createInterface({input: process.stdin, terminal: false});
@@ -150,7 +173,7 @@ const batch = (started: Started, said: Queue.Queue<Said, Cause.Done>, source: So
 				Effect.runSync(
 					started.run.tell("line", line).pipe(
 						Effect.as(true),
-						Effect.catchTag("Full", () => Effect.succeed(false)),
+						Effect.catchTag("MailboxFull", () => Effect.succeed(false)),
 					),
 				);
 			rl.on("line", (line) => {
@@ -317,13 +340,14 @@ const terminal = (
 						if (waiting === 0) rl.prompt();
 						return;
 					}
+					const shown = shownOf(s);
 					if (waiting > 0) {
-						write(s.printed.to, s.printed.text);
+						write(shown.to, shown.text);
 						return;
 					}
 					// The prompt is up: draw the line above it, then the prompt and what is typed again.
 					clearRow();
-					write(s.printed.to, s.printed.text);
+					write(shown.to, shown.text);
 					if (search === null) rl.prompt(true);
 					else drawSearch(search);
 				}),
@@ -333,12 +357,14 @@ const terminal = (
 
 		rl.prompt();
 		yield* started.run.ended;
+		// Draw all tsh said before the terminal is let go: its last `ready` may still be on its way
+		// when its run ends, and readline draws nothing once closed.
+		Queue.endUnsafe(said);
+		yield* Fiber.join(drawer);
 		process.stdin.off("data", onKeys);
 		process.stdin.setRawMode(false);
 		process.stdin.pause();
 		rl.close();
-		Queue.endUnsafe(said);
-		yield* Fiber.join(drawer);
 		return yield* Ref.get(last);
 	});
 

@@ -1,10 +1,10 @@
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {hostEnv} from "@kampus/fabrika/agents/sandbox";
+import {hostEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Context, Effect, Layer, Schema} from "effect";
 import {ChildProcessSpawner} from "effect/process";
 import {runChild} from "../../child.ts";
-import {answerOf, type Gh, prOf} from "../../code-host-github.ts";
 import {codeHostWritesOn} from "../../code-host-github-writes.ts";
+import {answerOf, type Gh, prOf} from "../../code-host-github.ts";
 import {CodeHostWrites} from "../../services.ts";
 import type {TextKind} from "../review/pack.ts";
 
@@ -66,7 +66,7 @@ export const reviewWritesOn = (gh: Gh): ReviewWrites["Service"] => ({
 });
 
 /** `gh` on Effect's `ChildProcess`, with the host's short environment. */
-const ghOn = Effect.gen(function* () {
+export const ghOn = Effect.gen(function* () {
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 	const gh: Gh = (args) =>
 		runChild("gh", args, {env: hostEnv()}).pipe(

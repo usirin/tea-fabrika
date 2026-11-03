@@ -1,5 +1,5 @@
 import {defineMachine} from "@demlik/tea";
-import {Duration, Effect, Schema, Stream} from "effect";
+import {Duration, Effect, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {defineProgram} from "../program/program.ts";
 import {input} from "../program/shape.ts";
@@ -40,7 +40,7 @@ const child = defineProgram({
 	description: "Counts its inbox; crashes after a crashAfter message, and on a poison one.",
 	inputs: {inbox: input(envelope(Body), "One message.")},
 	outputs: {},
-	main: ({inputs}) =>
+	main: ({serve}) =>
 		Effect.gen(function* () {
 			const self = yield* Self;
 			const handle = yield* self.run(
@@ -49,8 +49,8 @@ const child = defineProgram({
 				{ctx: undefined},
 			);
 			const machine = yield* handle.ready;
-			yield* inputs.inbox.pipe(
-				Stream.runForEach((e) =>
+			yield* serve({
+				inbox: (e) =>
 					machine
 						.dispatch({type: "inc", rev: e.rev, poison: e.body.poison === true})
 						.pipe(
@@ -58,8 +58,7 @@ const child = defineProgram({
 								e.body.crashAfter === true ? Effect.die("planted defect") : Effect.void,
 							),
 						),
-				),
-			);
+			});
 		}).pipe(Effect.scoped),
 });
 

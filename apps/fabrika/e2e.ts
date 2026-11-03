@@ -1,17 +1,23 @@
 import {execFile, spawn} from "node:child_process";
-import {mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile} from "node:fs/promises";
+import {mkdir, mkdtemp, readFile, rename, rm, stat, writeFile} from "node:fs/promises";
 import {createRequire} from "node:module";
+import {createServer, type Socket} from "node:net";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {promisify} from "node:util";
-import {_electron, type ElectronApplication, type Page} from "playwright";
+import type {Shell} from "@kampus/fabrika-old";
+import {_electron, type ElectronApplication, type Locator, type Page} from "playwright";
 
 // The app, driven end to end through Playwright's Electron support: the whole flow in the one
-// tiled window, one screenshot per step. Not part of `pnpm test` or CI: it opens a real window.
-// The window rules it checks are macOS's: run it on a Mac.
+// tiled window, one screenshot per step. Not part of `pnpm test`: it opens a real window. The
+// window rules it checks are macOS's, so it runs on a Mac: CI runs it on a macOS runner, the
+// check workflow's `e2e` job, on every pull request and every push to main.
 //
-//   pnpm --filter @kampus/fabrika-app e2e
-//   SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e     screenshots there, not in a temp folder
+//   pnpm --filter @kampus/fabrika-app-old e2e
+//   SHOTS=<folder> pnpm --filter @kampus/fabrika-app-old e2e     screenshots there, not in a temp folder
+//
+// First, with no screenshot: every key the menu holds goes by a focused tsh tile untouched, while
+// typing, Ctrl-C and Ctrl-D stay with tsh. Then:
 //
 //   1 desk           the window opens on one tile, t1, at tsh's prompt
 //   2 split          Ctrl-B |, then Ctrl-B -: three tiles, each with its own tsh
@@ -24,11 +30,17 @@ import {_electron, type ElectronApplication, type Page} from "playwright";
 //   7 closing        `sleep --ms 600000 &` in t1, Ctrl-B x, y: t1 shows "closing", as sleep runs on
 //   8 stop-asked     Ctrl-B x on the closing t1: "stop t1 now? (y/n)"; y and t1 goes
 //
-// Then, with no screenshot: focus moves with Ctrl-B h and l and with a click; Ctrl-C over counter
-// is back to t3's tsh; Ctrl-B twice sends one Ctrl-B on; a line typed in one tile is in another's
-// Up; the page has the bridge's three names and no Node; a message on the wrong port is refused;
-// window.open hands http and https to the browser and refuses file:, javascript: and the app's
-// own; the page cannot navigate away; and a second copy quits and leaves the first.
+// Then, with no screenshot: focus moves with Ctrl-B h and l and with a click; what opens over the
+// desk (the asks list, the palette) takes focus and every key it reads, so no arrow reaches the tile
+// under it, and Escape or a press outside gives focus back, one open at a time; info mode (Ctrl-B i)
+// is said on and off in the window's status region and by its item's aria-pressed, explains what
+// keyboard focus is on when it comes on and what focus moves to, and Escape leaves it, and with the
+// bars hidden it is still seen, and still heard going off, and at 1024 by 700 an explanation is not
+// cut off; Ctrl-C
+// over counter is back to t3's tsh; Ctrl-B twice sends one Ctrl-B on; a line typed in one tile is
+// in another's Up; the page has the bridge's three names and no Node; a message on the wrong port
+// is refused; window.open hands http and https to the browser and refuses file:, javascript: and
+// the app's own; the page cannot navigate away; and a second copy quits and leaves the first.
 //
 // No run opens a real browser: every launch swaps main's `shell.openExternal` for a list first,
 // and reads the swap back before anything is clicked.
@@ -53,18 +65,22 @@ import {_electron, type ElectronApplication, type Page} from "playwright";
 //
 //   11 mismatch      "Not attached to the host", with both versions; that host still runs
 //
+// Then a host that only talks about asks, on a home of its own: with the list open, one ask leaves
+// as another arrives, and the page says the new one is seen, with the count the same.
+//
 // Then the link to the host drops while the app runs, on a home of its own, with seq's 60 lines
 // in t1 and counter in t2. Main's dialogs, dock bounce and focus are swapped for a list first,
 // and read back empty after each drop:
 //
-//   socket cut       main's socket to the host is cut, the host alive: the window says it is
-//                    reconnecting, then the desk is back on the same host, t1 drawn once
+//   socket cut       main's socket to the host is cut, the host alive: the top bar says host
+//                    down, then the desk is back on the same host, t1 drawn once
 //   host killed      SIGKILL, as a crash: the app starts a new host, and the kept desk comes
 //                    back with fresh screens
 //   12 reconnecting  no host to be had (the home's host folder is a file): the desk stays,
-//                    dimmed and out of reach, with a calm note in its corner
-//   13 stopped       main's clock moved five minutes on: it stops, and offers Try again, which
-//                    takes no focus. The folder back, Try again starts a host, and the desk is back
+//                    dimmed and out of reach; the top bar says host down, its lines reconnecting
+//   13 stopped       main's clock moved five minutes on: it stops, and the top bar offers try
+//                    again, which takes no focus. The folder back, a click on it starts a host,
+//                    and the desk is back
 //
 // Last, as no person ever does (there is no stop command), the run stops the host it started by
 // its pid, and the fake one too, and checks with pgrep that nothing of either home is left.
@@ -105,9 +121,14 @@ const until = async <T>(what: string, look: () => Promise<T>, ok: (seen: T) => b
 };
 
 const tile = (page: Page, id: string) => page.locator(`[data-tile="${id}"]`);
-/** A tile's screen, as text: its rows, with no trailing spaces. */
-const screen = async (page: Page, id: string) =>
-	(await tile(page, id).locator(".screen-text").textContent({timeout: 2000})) ?? "";
+/**
+ * A tile's screen, as text: its rows, with no trailing spaces. Empty while it is not drawn, as the
+ * first tile is not until the host is up: `until` is what waits, and a look here never ends it.
+ */
+const screen = async (page: Page, id: string) => {
+	const text = tile(page, id).locator(".screen-text");
+	return (await text.count()) === 0 ? "" : ((await text.textContent({timeout: 2000})) ?? "");
+};
 const lastRow = (text: string) => text.split("\n").at(-1) ?? "";
 /** The tiles drawn now, in reading order. */
 const tiles = (page: Page) =>
@@ -209,13 +230,643 @@ const activate = async (app: ElectronApplication) => {
 	return await next;
 };
 
+/** The popover that holds the page's focus: its id, or `null`. */
+const overHolds = (page: Page) =>
+	page.evaluate(() => document.activeElement?.closest("[data-over]")?.id ?? null);
+const gone = (page: Page, id: string) =>
+	until(
+		`#${id} to close`,
+		() => page.locator(`#${id}`).count(),
+		(n) => n === 0,
+	);
+
+/**
+ * What opens over the desk (docs/direction/popovers.md), from t3 at an empty prompt, with t1's
+ * line in the shared history: focus moves in; no key it takes reaches t3 under it, even with
+ * focus knocked out of it; Escape and a press outside close it, focus back in t3; one at a time.
+ */
+const popovers = async (page: Page) => {
+	await prefixed(page, "a");
+	await page.locator("#pop-asks").waitFor();
+	check("Ctrl-B a opens the asks list, focus in it", (await overHolds(page)) === "pop-asks");
+	const empty = (await page.locator("#pop-asks").textContent()) ?? "";
+	check(
+		"with nothing waiting, it says so in one calm line",
+		empty.includes("Nothing waits on you"),
+	);
+	for (const key of ["ArrowUp", "ArrowDown", "Enter", "j", "x"]) await page.keyboard.press(key);
+	// Focus knocked out of the list, onto the page itself: the next key still never reaches t3.
+	await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+	await page.keyboard.press("ArrowUp");
+	// `until`: this key is held, and acts only once the host's answer to `a` is in (desk/hold.ts).
+	await until(
+		"focus back in the list",
+		() => overHolds(page),
+		(held) => held === "pop-asks",
+	);
+	check("a key with focus outside it moves focus back in", true);
+	await page.waitForTimeout(200);
+	const under = await screen(page, "t3");
+	check("no arrow, Enter or letter reached t3 under the list", lastRow(under) === "tsh$", under);
+	await page.keyboard.press("Escape");
+	await gone(page, "pop-asks");
+	check("Escape closes it, and focus is back in t3", (await focusedIn(page)) === "t3");
+
+	await page.keyboard.press("Meta+k");
+	const palette = page.getByRole("dialog", {name: "Commands"});
+	await palette.waitFor();
+	check(
+		"Cmd-K opens the palette, focus in its text box",
+		(await overHolds(page)) === "pop-palette",
+	);
+	await page.keyboard.type("zo");
+	await page.keyboard.press("ArrowDown");
+	const typed = await palette.getByRole("combobox").inputValue();
+	check("what is typed goes to its text box, not to t3", typed === "zo", typed);
+	await page.keyboard.press("Escape");
+	await gone(page, "pop-palette");
+	check("Escape closes the palette, and focus is back in t3", (await focusedIn(page)) === "t3");
+
+	await prefixed(page, "a");
+	await page.locator("#pop-asks").waitFor();
+	await page.keyboard.press("Meta+k");
+	await palette.waitFor();
+	check(
+		"one at a time: the palette takes the asks list's place",
+		(await page.locator("#pop-asks").count()) === 0,
+	);
+	await page.keyboard.press("Escape");
+	await gone(page, "pop-palette");
+
+	await prefixed(page, "a");
+	await page.locator("#pop-asks").waitFor();
+	await tile(page, "t3").click();
+	await gone(page, "pop-asks");
+	check("a press outside closes the list, and focus is in t3", (await focusedIn(page)) === "t3");
+	const still = await screen(page, "t3");
+	check("t3's prompt is still empty", lastRow(still) === "tsh$", still);
+
+	// And with nothing open, Up does reach t3: the keys above were held back, not lost on the way.
+	await page.keyboard.press("ArrowUp");
+	await shows(
+		page,
+		"t3",
+		"t1's line, from the history",
+		(t) => lastRow(t) === "tsh$ seq --to 3 | double",
+	);
+	await page.keyboard.press("Control+c");
+	await prompted(page, "t3");
+};
+
+/** Every text a locator finds now, none when it finds nothing: a look that never waits. */
+const textsOf = (at: Locator) => at.evaluateAll((all) => all.map((el) => el.textContent ?? ""));
+/**
+ * The window's own status region for its mode: not a tile's closing note, and not the top bar's
+ * host item, which are status regions too. Waits until there is one, and it says `want`.
+ */
+const modeSaid = (page: Page, want: string) =>
+	until(
+		`one status region for the mode, saying "${want}"`,
+		() => textsOf(page.locator('[role="status"]:not([data-tile] *):not(.topbar *)')),
+		(said) => said.length === 1 && said[0] === want,
+	);
+const bottomLine = (page: Page) => page.locator("footer.bottomline");
+/** Waits until the bottom line's INFO words hold `want`. */
+const explained = (page: Page, want: string) =>
+	until(
+		`the bottom line to explain ${want}`,
+		() => textsOf(bottomLine(page).locator(".info")),
+		(said) => said.some((text) => text.includes(want)),
+	);
+
+/** The bottom line's info item, by its name, which stays `info` whether the mode is on or off. */
+const infoItem = (page: Page) => bottomLine(page).getByRole("button", {name: /info$/});
+/** Click t3, and wait until focus is back in it. */
+const backInT3 = async (page: Page) => {
+	await tile(page, "t3").click();
+	await until(
+		"focus back in t3",
+		() => focusedIn(page),
+		(at) => at === "t3",
+	);
+};
+
+/**
+ * Info mode, from t3 at an empty prompt (docs/direction/modes.md, M3 and M4): Ctrl-B i says it is
+ * on in the window's status region, and its item says it is pressed, under the same name; keyboard
+ * focus moving, with no pointer, is explained on the bottom line; while something is explained, the
+ * bottom line's right side keeps its items; Escape leaves it and says so. Turned on while
+ * focus is on one of the frame's parts, it explains that part at once. With the bars hidden, Ctrl-B
+ * i keeps the bottom line up, and Ctrl-B i again still says it is off: the region is drawn whatever
+ * the bars, never inside the bottom line.
+ */
+const infoMode = async (page: Page) => {
+	check(
+		"its item is not pressed while info mode is off",
+		(await infoItem(page).getAttribute("aria-pressed")) === "false",
+	);
+	await prefixed(page, "i");
+	await modeSaid(page, "Info mode on. Escape leaves.");
+	await explained(page, "point at anything");
+	check(
+		"the hint promises no Tab",
+		!(await textsOf(bottomLine(page).locator(".info"))).some((t) => t.includes("tab")),
+	);
+	check("Ctrl-B i turns info mode on, and the status region says so", true);
+	check(
+		"its item keeps its name and says it is pressed",
+		(await infoItem(page).getAttribute("aria-pressed")) === "true",
+	);
+	const right = await textsOf(bottomLine(page).locator(".right"));
+	await bottomLine(page).getByRole("button", {name: /keys$/}).focus();
+	await explained(page, "keys: press Ctrl-B");
+	check(
+		"while something is explained, the right side keeps its items",
+		(await textsOf(bottomLine(page).locator(".right"))).join() === right.join(),
+		right,
+	);
+	await page.keyboard.press("Shift+Tab");
+	await explained(page, (await infoItem(page).getAttribute("data-info")) ?? "info:");
+	check("keyboard focus moving, by Tab too, is explained on the bottom line", true);
+	await modeSaid(page, "Info mode on. Escape leaves.");
+	check("the status region says nothing of each part explained", true);
+	await page.keyboard.press("Escape");
+	await modeSaid(page, "Info mode off.");
+	check(
+		"Escape leaves info mode, and the status region says so",
+		(await bottomLine(page).locator(".info").count()) === 0,
+	);
+	await backInT3(page);
+
+	const keys = bottomLine(page).getByRole("button", {name: /keys$/});
+	const keysWords = (await keys.getAttribute("data-info")) ?? "keys:";
+	await keys.focus();
+	// Every text the bottom line's INFO words take on the way, the ones replaced in place too. Focus
+	// going back to the item explains it on its own (focusin), so only this tells "at once" from
+	// "point at anything" first (desk.tsx, focusWords).
+	const shown = await page.evaluateHandle(() => {
+		const seen: string[] = [];
+		const holdsInfo = (n: Node) =>
+			n instanceof Element && (n.matches(".info") || n.querySelector(".info") !== null);
+		const watch = new MutationObserver((records) => {
+			for (const r of records) {
+				const at = r.target instanceof Element ? r.target : r.target.parentElement;
+				const inside = at?.closest(".info") != null;
+				if (inside && r.oldValue !== null) seen.push(r.oldValue);
+				for (const n of [...r.addedNodes, ...r.removedNodes])
+					if (inside || holdsInfo(n)) seen.push(n.textContent ?? "");
+			}
+			const now = document.querySelector("footer.bottomline .info");
+			if (now !== null) seen.push(now.textContent ?? "");
+		});
+		watch.observe(document.body, {
+			subtree: true,
+			childList: true,
+			characterData: true,
+			characterDataOldValue: true,
+		});
+		return {seen, stop: () => watch.disconnect()};
+	});
+	await prefixed(page, "i");
+	await modeSaid(page, "Info mode on. Escape leaves.");
+	await explained(page, keysWords);
+	const passed = await shown.evaluate((s) => {
+		s.stop();
+		return s.seen;
+	});
+	await shown.dispose();
+	check(
+		"turned on with focus on the keys item, info mode explains it at once, never the hint first",
+		passed.length > 0 && !passed.some((text) => text.includes("point at anything")),
+		passed,
+	);
+	// Ctrl-B swaps the right side's items for `esc cancels`, so focus falls to the page; the key
+	// done, it goes back to the item it was on (desk.tsx, focusBack).
+	await until(
+		"focus back on the keys item",
+		() => page.evaluate(() => document.activeElement?.getAttribute("data-info") ?? null),
+		(at) => at === keysWords,
+	);
+	check("the key done, focus is back on the keys item it fell from", true);
+	await page.keyboard.press("Escape");
+	await modeSaid(page, "Info mode off.");
+	await backInT3(page);
+
+	await prefixed(page, "B");
+	await until(
+		"both bars hidden",
+		() => bottomLine(page).count(),
+		(n) => n === 0,
+	);
+	await prefixed(page, "i");
+	await modeSaid(page, "Info mode on. Escape leaves.");
+	await explained(page, "point at anything");
+	check("with the bars hidden, info mode keeps the bottom line up", true);
+	check(
+		"the status region is not inside the bottom line",
+		(await bottomLine(page).locator('[role="status"]').count()) === 0,
+	);
+	await prefixed(page, "i");
+	await modeSaid(page, "Info mode off.");
+	await until(
+		"the bottom line to go with the bars hidden",
+		() => bottomLine(page).count(),
+		(n) => n === 0,
+	);
+	check("with the bars hidden, Ctrl-B i twice still says info mode is off", true);
+	await prefixed(page, "B");
+	await bottomLine(page).waitFor();
+	check("Ctrl-B B shows both bars again, focus still in t3", (await focusedIn(page)) === "t3");
+	await prompted(page, "t3");
+};
+
+/**
+ * Info mode in a small window, 1024 by 700. The host item's words are among the longest a part has,
+ * and always on screen: explained, they wrap onto a second line and are not cut off. The right side
+ * never shrinks and keeps its items. While the mode is on, the bottom line keeps one height, so the
+ * desk is the same height for a short explanation and a long one, and no terminal refits as the
+ * pointer or focus moves. The way out goes first on the right, so the info item is where it was
+ * before the mode came on, and a second click there turns it off. The bottom line's items show
+ * their whole focus ring inside the window, the mode off and on, and with the mode on the bottom
+ * line starts on a whole pixel, so the tiles above it end on one. No width or height is guessed:
+ * each box is checked against the one it sits in, or against itself at another moment.
+ *
+ * Playwright sizes the page, not the window: macOS keeps a window inside the screen, and a CI
+ * runner's screen is too short for 700. It goes through the DevTools protocol, not
+ * `page.setViewportSize`, which also sets the pixel ratio to 1 and cannot be undone; scale 0 keeps
+ * the screen's own. The page goes back to the window's size after.
+ */
+const infoModeSmall = async (page: Page) => {
+	const cdp = await page.context().newCDPSession(page);
+	await cdp.send("Emulation.setDeviceMetricsOverride", {
+		width: 1024,
+		height: 700,
+		deviceScaleFactor: 0,
+		mobile: false,
+	});
+	await until(
+		"the window at 1024 by 700",
+		() => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
+		(size) => size === "1024x700",
+	);
+	/** Where the info item is now, in the window. */
+	const itemAt = async () => {
+		const box = await infoItem(page).boundingBox();
+		return box === null ? null : {x: box.x, y: box.y};
+	};
+	/** How tall the desk's workspace is now: it gives the bottom line whatever room it takes. */
+	const deskHeight = () =>
+		page.locator(".workspace").evaluate((el) => el.getBoundingClientRect().height);
+	const keys = bottomLine(page).getByRole("button", {name: /keys$/});
+	/**
+	 * The focus ring of what has focus: its box grown by its outline's width and offset, whether
+	 * that box is inside the window, and whether a ring is drawn at all.
+	 */
+	const ring = () =>
+		page.evaluate(() => {
+			const el = document.activeElement;
+			if (el === null) return {drawn: false, inside: false, box: null, focused: null};
+			const style = getComputedStyle(el);
+			const out = Number.parseFloat(style.outlineWidth) + Number.parseFloat(style.outlineOffset);
+			const r = el.getBoundingClientRect();
+			const box = {
+				left: r.left - out,
+				top: r.top - out,
+				right: r.right + out,
+				bottom: r.bottom + out,
+			};
+			return {
+				drawn: style.outlineStyle !== "none" && Number.parseFloat(style.outlineWidth) > 0,
+				inside:
+					box.left >= 0 &&
+					box.top >= 0 &&
+					box.right <= window.innerWidth &&
+					box.bottom <= window.innerHeight,
+				box,
+				focused: el.getAttribute("data-info"),
+			};
+		});
+	/**
+	 * Tab to the keys item and Shift+Tab back to the info item, by the keyboard, so each draws its
+	 * focus ring (`:focus-visible`): the whole ring is inside the window (WCAG 2.4.7, 2.4.11).
+	 */
+	const ringsInside = async (when: string) => {
+		const infoWords = await infoItem(page).getAttribute("data-info");
+		const keysWords = await keys.getAttribute("data-info");
+		await infoItem(page).focus();
+		const walk: ReadonlyArray<readonly [string, string | null, string]> = [
+			["Tab", keysWords, "keys"],
+			["Shift+Tab", infoWords, "info"],
+		];
+		for (const [press, words, name] of walk) {
+			await page.keyboard.press(press);
+			const seen = await until(`focus on the ${name} item`, ring, (r) => r.focused === words);
+			check(
+				`at 1024 by 700, ${when}, the ${name} item's focus ring is whole inside the window`,
+				seen.drawn && seen.inside,
+				seen,
+			);
+		}
+	};
+	/**
+	 * Where the bottom line starts and the desk ends, in px. On a fraction of a pixel, the tiles
+	 * above end there too: a tile's 1px edge smears over two rows at half strength, and its
+	 * terminal, which covers whole cells, paints over the upper row, so a focused tile's bottom edge
+	 * goes faint but for a short bright stub past the last column (round 3's shots 3b and 6a).
+	 */
+	const lineEdges = () =>
+		page.evaluate(() => {
+			const line = document.querySelector("footer.bottomline")?.getBoundingClientRect();
+			const desk = document.querySelector(".workspace")?.getBoundingClientRect();
+			return {line: line?.top ?? null, height: line?.height ?? null, desk: desk?.bottom ?? null};
+		});
+	await ringsInside("info mode off");
+	await backInT3(page);
+	const off = await itemAt();
+	await prefixed(page, "i");
+	await modeSaid(page, "Info mode on. Escape leaves.");
+	await explained(page, "point at anything");
+	const on = await itemAt();
+	const hint = await deskHeight();
+	const edges = await lineEdges();
+	check(
+		"at 1024 by 700 with info mode on, the bottom line and the desk's end fall on whole pixels",
+		[edges.line, edges.height, edges.desk].every((v) => v !== null && Number.isInteger(v)),
+		edges,
+	);
+	await ringsInside("info mode on");
+	await backInT3(page);
+	check(
+		"at 1024 by 700, the info item is where it was before the mode came on",
+		off !== null && on !== null && off.x === on.x && off.y === on.y,
+		{off, on},
+	);
+	await keys.focus();
+	await explained(page, (await keys.getAttribute("data-info")) ?? "keys:");
+	const short = await deskHeight();
+	const host = page.locator(HOST);
+	const words = (await host.getAttribute("data-info")) ?? "host:";
+	await host.focus();
+	await explained(page, words);
+	const long = await deskHeight();
+	check(
+		"at 1024 by 700, the desk keeps its height from the hint to a short explanation to a long one",
+		hint === short && short === long,
+		{hint, short, long},
+	);
+	const explaining = await itemAt();
+	check(
+		"and the info item stays put while a long explanation wraps",
+		off !== null && explaining !== null && off.x === explaining.x && off.y === explaining.y,
+		{off, explaining},
+	);
+	const seen = await bottomLine(page).evaluate((line, said) => {
+		/** Every rect of `el` lies inside `box`. */
+		const inside = (el: Element, box: DOMRect) =>
+			[...el.getClientRects()].every(
+				(r) =>
+					r.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom,
+			);
+		const view = new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+		const left = line.querySelector(".left");
+		const info = line.querySelector(".info");
+		const out = [...line.querySelectorAll(".right *")].find(
+			(el) => el.children.length === 0 && el.textContent === "esc leaves",
+		);
+		if (left === null || info === null || out === undefined)
+			return {
+				found: false,
+				full: false,
+				wraps: false,
+				wide: false,
+				tall: false,
+				infoIn: false,
+				lineIn: false,
+				outIn: false,
+			};
+		return {
+			found: true,
+			full: (info.textContent ?? "").includes(said),
+			wraps: info.getClientRects().length > 1,
+			wide: left.scrollWidth <= left.clientWidth,
+			tall: left.scrollHeight <= left.clientHeight,
+			infoIn: inside(info, left.getBoundingClientRect()),
+			lineIn: inside(line, view),
+			outIn: inside(out, line.getBoundingClientRect()),
+		};
+	}, words);
+	check(
+		"at 1024 by 700, the host item is explained in full: it wraps, and the left side is not cut off",
+		seen.found && seen.full && seen.wraps && seen.wide && seen.tall && seen.infoIn,
+		seen,
+	);
+	check(
+		"at 1024 by 700, the way out is there in full, inside the bottom line, inside the window",
+		seen.lineIn && seen.outIn,
+		seen,
+	);
+	await page.keyboard.press("Escape");
+	await modeSaid(page, "Info mode off.");
+	await cdp.send("Emulation.clearDeviceMetricsOverride");
+	await cdp.detach();
+	await backInT3(page);
+	await prompted(page, "t3");
+};
+
+/**
+ * Press a chord, and wait until it has ended as `want` says: "free" if the page let the key go by
+ * untouched, which is what lets Electron offer it to the menu, or "taken" if something on the page
+ * called `preventDefault`. A key the page's own listener swallows never reaches the spy, so it
+ * never ends "free". What this cannot see is the menu itself: a key sent over the DevTools protocol
+ * has no native event, and Electron offers only a native one to the menu.
+ */
+const pressEnds = async (page: Page, chord: string, want: "free" | "taken") => {
+	await page.evaluate(() => delete document.documentElement.dataset.keyEnd);
+	await page.keyboard.press(chord);
+	await until(
+		`${chord} to end ${want}`,
+		() => page.evaluate(() => document.documentElement.dataset.keyEnd),
+		(end) => end === want,
+	);
+};
+
+/**
+ * Cmd-W and Cmd-Shift-W, on a Mac: cancelled, so Electron does not offer them to the menu's Close
+ * Window, and nothing closes. `onKey` swallows them before the spy, so a key that ended "free" is
+ * the failure here. The window count cannot fail on its own: a key sent this way never reaches
+ * the menu, whatever the page does. Cancelling is what this proves.
+ */
+const closeKeysDoNothing = async (app: ElectronApplication, page: Page, where: string) => {
+	const before = await tiles(page);
+	for (const chord of ["Meta+w", "Meta+Shift+w"]) {
+		await page.evaluate(() => delete document.documentElement.dataset.keyEnd);
+		await page.keyboard.press(chord);
+		await page.waitForTimeout(200);
+		const end = await page.evaluate(() => document.documentElement.dataset.keyEnd);
+		check(`${chord} is cancelled ${where}`, end !== "free", end);
+		check(`${chord} closes no window`, (await windowCount(app)) === 1);
+		check(`${chord} closes no tile`, (await tiles(page)).join() === before.join());
+	}
+};
+
+/** A menu accelerator, as Playwright spells the same chord. */
+const chordFor = (accelerator: string) =>
+	accelerator
+		.split("+")
+		.map((part) => {
+			if (/^(Command|Cmd|CommandOrControl|CmdOrCtrl)$/.test(part)) return "Meta";
+			if (part === "Option") return "Alt";
+			if (part === "Plus") return "Shift+=";
+			return part.length === 1 ? part.toLowerCase() : part;
+		})
+		.join("+");
+
+/**
+ * Who owns a key, from t1 at an empty prompt: every accelerator in the real menu goes by the tile
+ * untouched and types nothing, as does each key the system or the menu may own, with the prefix
+ * armed or a popover open too. Typing, Ctrl-C and Ctrl-D stay with tsh, and Cmd-W does nothing.
+ */
+const systemKeys = async (app: ElectronApplication, page: Page) => {
+	await page.evaluate(() => {
+		window.addEventListener(
+			"keydown",
+			(e) => {
+				if (["Meta", "Shift", "Alt", "Control"].includes(e.key)) return;
+				// Read on the next turn: by then every listener on the page has had the key.
+				setTimeout(() => {
+					document.documentElement.dataset.keyEnd = e.defaultPrevented ? "taken" : "free";
+				});
+			},
+			{capture: true},
+		);
+		// Playwright's Meta+v really pastes, from this machine's clipboard. The spy notes where the
+		// paste would land, and stops it, so what is on the clipboard never reaches a tile or a log.
+		window.addEventListener(
+			"paste",
+			(e) => {
+				e.preventDefault();
+				e.stopImmediatePropagation();
+				const at = e.target instanceof Element ? e.target : null;
+				const over = at?.closest("[data-over]")?.id;
+				const tile = at?.closest("[data-tile]")?.getAttribute("data-tile");
+				document.documentElement.dataset.pasteIn = over ?? tile ?? "elsewhere";
+			},
+			{capture: true},
+		);
+	});
+	const accelerators = await app.evaluate(({Menu}) => {
+		const inMenu = (menu: Electron.Menu): string[] =>
+			menu.items.flatMap((item) => [
+				...(item.accelerator ? [item.accelerator] : []),
+				...(item.submenu ? inMenu(item.submenu) : []),
+			]);
+		const menu = Menu.getApplicationMenu();
+		return menu === null ? [] : inMenu(menu);
+	});
+	const chords = accelerators.map(chordFor).filter((chord) => chord !== "Meta+w");
+	check("the menu has Quit on Cmd-Q", chords.includes("Meta+q"), chords);
+	for (const chord of [...chords, "Meta+,", "Meta+`", "Meta+t"]) {
+		await pressEnds(page, chord, "free");
+		const row = lastRow(await screen(page, "t1"));
+		check(`${chord} goes by t1 and types nothing`, row === "tsh$", row);
+	}
+
+	// While the host has not answered Ctrl-B yet, and then with the prefix armed.
+	await page.keyboard.press("Control+b");
+	await pressEnds(page, "Meta+q", "free");
+	await page.waitForTimeout(200);
+	await pressEnds(page, "Meta+q", "free");
+	check("Cmd-Q goes by the prefix", true);
+	await page.keyboard.press("q");
+	await page.waitForTimeout(200);
+	await prompted(page, "t1");
+
+	await page.keyboard.press("Meta+k");
+	const palette = page.getByRole("dialog", {name: "Commands"});
+	await palette.waitFor();
+	await page.evaluate(() => {
+		if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+	});
+	await pressEnds(page, "Meta+q", "free");
+	check("Cmd-Q goes by a palette without focus", true);
+
+	// Focus can land in a tile under the palette: a split from another window focuses its new
+	// terminal. Focus is put there by hand here. Cmd-V must not paste into a shell nobody sees.
+	const intoTile = async () => {
+		await page.locator('[data-tile="t1"] .screen').focus();
+		check("focus is in t1, under what is open", (await overHolds(page)) === null);
+	};
+	await intoTile();
+	await page.evaluate(() => delete document.documentElement.dataset.pasteIn);
+	await pressEnds(page, "Meta+v", "free");
+	check("Cmd-V moves focus into the palette", (await overHolds(page)) === "pop-palette");
+	await until(
+		"the paste to land",
+		() => page.evaluate(() => document.documentElement.dataset.pasteIn),
+		(pasted) => pasted === "pop-palette",
+	);
+	check("Cmd-V pastes into the palette", true);
+	await intoTile();
+	await pressEnds(page, "Meta+q", "free");
+	check("Cmd-Q goes by with focus in a tile under the palette", true);
+	await page.waitForTimeout(200);
+	check("nothing reached t1 under the palette", lastRow(await screen(page, "t1")) === "tsh$");
+	await page.keyboard.press("Escape");
+	await gone(page, "pop-palette");
+
+	// The asks list gives way to the desk while the prefix is armed. Cmd-V still does not reach t1.
+	await prefixed(page, "a");
+	await page.locator("#pop-asks").waitFor();
+	await page.waitForTimeout(200);
+	await intoTile();
+	await page.keyboard.press("Control+b");
+	await pressEnds(page, "Meta+v", "free");
+	check(
+		"with the prefix armed, Cmd-V moves focus into the list",
+		(await overHolds(page)) === "pop-asks",
+	);
+	await page.keyboard.press("q");
+	await page.waitForTimeout(200);
+	await page.keyboard.press("Escape");
+	await gone(page, "pop-asks");
+	await prompted(page, "t1");
+
+	await page.keyboard.type("ab");
+	await shows(page, "t1", "typing", (t) => lastRow(t) === "tsh$ ab");
+	await page.keyboard.press("ArrowLeft");
+	await pressEnds(page, "Control+d", "taken");
+	await shows(page, "t1", "Ctrl-D deleting a character", (t) => lastRow(t) === "tsh$ a");
+	check("Ctrl-D stays with tsh", true);
+	await pressEnds(page, "Control+c", "taken");
+	await prompted(page, "t1");
+	check("Ctrl-C stays with tsh", true);
+	await pressEnds(page, "q", "taken");
+	await shows(page, "t1", "a plain q", (t) => lastRow(t) === "tsh$ q");
+	check("a plain q is typed", true);
+	await page.keyboard.press("Control+u");
+	await prompted(page, "t1");
+
+	await closeKeysDoNothing(app, page, "over t1's tsh");
+	const row = lastRow(await screen(page, "t1"));
+	check("Cmd-W and Cmd-Shift-W type nothing in t1", row === "tsh$", row);
+	await page.keyboard.press("Meta+k");
+	await palette.waitFor();
+	await closeKeysDoNothing(app, page, "over the palette");
+	check("the palette is still open", (await palette.count()) === 1);
+	await page.keyboard.press("Escape");
+	await gone(page, "pop-palette");
+	await prompted(page, "t1");
+};
+
 const flow = async (app: ElectronApplication) => {
 	const page = await app.firstWindow();
 	await prompted(page, "t1");
+	await systemKeys(app, page);
 	check("the desk starts on our own scheme", page.url() === "fabrika://app/desk.html", page.url());
 	await run(page, "t1", "seq --to 3 | double");
 	const answer = await prompted(page, "t1");
 	check("t1's tsh answers", answer.includes("double 2\ndouble 4\ndouble 6\ntsh$"), answer);
+	await quietAtRest(page);
 	await shot(page, "1-desk");
 
 	await prefixed(page, "|");
@@ -241,10 +892,15 @@ const flow = async (app: ElectronApplication) => {
 	await tile(page, "t3").click();
 	await focusIs(page, "t3");
 	check("a click focuses a tile", true);
+	await popovers(page);
+	await infoMode(page);
+	await infoModeSmall(page);
 
 	await run(page, "t3", "counter");
 	await countIn(page, "t3").waitFor();
 	check("counter covers t3, at 0", (await countIn(page, "t3").innerText()) === "0");
+	await tile(page, "t3").locator("[data-view]").focus();
+	await closeKeysDoNothing(app, page, "over a program's view");
 	await tile(page, "t3").getByRole("button", {name: "+1"}).click();
 	await countIn(page, "t3").filter({hasText: /^1$/}).waitFor();
 	const t1 = await screen(page, "t1");
@@ -278,7 +934,9 @@ const flow = async (app: ElectronApplication) => {
 
 	await focusIs(page, "t2");
 	await run(page, "t2", "tracker &");
-	const job = await shows(page, "t2", "the job's number", (t) => /\[1\] tracker:/.test(t));
+	// The host keeps one job table, numbers never reused: the tracker's is whatever comes next.
+	const job = await shows(page, "t2", "the job's number", (t) => /\[\d+\] tracker:/.test(t));
+	const n = /\[(\d+)\] tracker:/.exec(job)?.[1] ?? "1";
 	await prompted(page, "t2");
 	await page.waitForTimeout(300);
 	await tilesAre(page, ["t1", "t2"]);
@@ -287,10 +945,10 @@ const flow = async (app: ElectronApplication) => {
 		(await tile(page, "t2").getByLabel("tracker view").count()) === 0,
 		job,
 	);
-	await run(page, "t2", "attach %1");
+	await run(page, "t2", `attach %${n}`);
 	await tile(page, "t2").getByLabel("tracker view").waitFor();
 	await tilesAre(page, ["t1", "t2"]);
-	check("attach %1 brings the tracker in, covering t2, as fg does", true);
+	check(`attach %${n} brings the tracker in, covering t2, as fg does`, true);
 	await shot(page, "5-attached");
 
 	const tracker = tile(page, "t2").getByLabel("tracker view");
@@ -346,9 +1004,9 @@ const flow = async (app: ElectronApplication) => {
 	await run(page, "t1", "sleep --ms 600000 &");
 	await prompted(page, "t1");
 	await until(
-		"t1's job on the status line",
-		() => page.locator(".status .focus").innerText(),
-		(t) => t === "t1 · 1 running",
+		"t1's job on the bottom line",
+		() => page.locator(".bottomline .job").innerText(),
+		(t) => /^%\d+ sleep --ms 600000 \d+s$/.test(t),
 	);
 	await prefixed(page, "x");
 	await askedIs(page, "close t1? (y/n)");
@@ -404,6 +1062,28 @@ const flow = async (app: ElectronApplication) => {
 	);
 	check("a line typed in one tile is in another's Up", true);
 	await page.keyboard.press("Control+u");
+
+	const iconWidth = await app.evaluate(
+		({nativeImage}, file) => nativeImage.createFromPath(file).getSize().width,
+		join(here, "dist", "icon.png"),
+	);
+	check("the app's icon loads as a real image, 1024 wide", iconWidth === 1024, iconWidth);
+
+	const brand = await page.locator(".topbar .brand").evaluate((el) => {
+		const at = el.getBoundingClientRect();
+		const style = getComputedStyle(el);
+		return {
+			off: Math.abs((at.left + at.right) / 2 - innerWidth / 2),
+			shown: style.display !== "none",
+			drags: style.getPropertyValue("app-region"),
+			press: style.pointerEvents,
+		};
+	});
+	check(
+		"the bar's mark and name sit on the window's middle, and the window drags through them",
+		brand.shown && brand.off < 1 && brand.drags === "drag" && brand.press === "none",
+		brand,
+	);
 
 	const reach = await reachOf(page);
 	check(
@@ -542,7 +1222,9 @@ const again = async (app: ElectronApplication, left: string) => {
 	const gone = page.waitForEvent("close");
 	await prefixed(page, "x");
 	await askedIs(page, `close ${left}? (y/n)`);
-	await page.keyboard.press("y");
+	// The window closes on the key going down, so the key's release may find no page, and press
+	// throws. That is this step working. If the window stays, `gone` still fails the run.
+	await page.keyboard.press("y").catch(() => {});
 	await gone;
 	await until(
 		"no window",
@@ -594,6 +1276,32 @@ const hostPid = async (on: string) => {
 	const text = await readFile(join(on, "host", "pid"), "utf8").catch(() => "");
 	const pid = Number.parseInt(text, 10);
 	return Number.isInteger(pid) ? pid : null;
+};
+/**
+ * The jobs in the host's one table, as kept in `<home>/storage/jobs` (host/run.ts), read from the
+ * files and never opened: an open takes the table over from the host that runs on it
+ * (@kampus/fabrika-old's host-jobs.ts), so its next write would fail. The table is the run `tsh`'s
+ * machine `jobs`, under `table`, in two slots, the newer one whole (program/storage.ts). A file
+ * that does not read fails the run, so a change to that layout is seen here.
+ */
+const keptJobs = async (on: string): Promise<readonly Shell.Job[]> => {
+	const slots = await Promise.all(
+		["a", "b"].map((slot) =>
+			readFile(
+				join(on, "storage", "jobs", encodeURIComponent(`run/tsh/machine/jobs/table/${slot}`)),
+				"utf8",
+			).then(
+				(text): {opened: number; count: number; body: string} => JSON.parse(text),
+				() => null,
+			),
+		),
+	);
+	const newest = slots
+		.flatMap((slot) => (slot === null ? [] : [slot]))
+		.sort((x, y) => y.opened - x.opened || y.count - x.count)[0];
+	if (newest === undefined) throw new Error(`no job table kept in ${on}`);
+	const table: Shell.Jobs = JSON.parse(newest.body);
+	return table.jobs;
 };
 /** The pids whose command line names `what`, as pgrep finds them. */
 const pgrep = (what: string) =>
@@ -682,6 +1390,90 @@ const mismatch = async () => {
 	);
 };
 
+/**
+ * A host that only talks about asks: a Node server on the home's socket, in this script, so a run
+ * can hand the page one ask leaving as another arrives, in one line. A real host's read of the
+ * ledger can do that, but nothing can make it do so on cue.
+ */
+const askingHost = async (on: string) => {
+	const dir = join(on, "host");
+	await mkdir(dir, {recursive: true, mode: 0o700});
+	const heard: {readonly type: string; readonly m?: {readonly type: string}}[] = [];
+	const links: Socket[] = [];
+	const server = createServer((link) => {
+		links.push(link);
+		let held = "";
+		link.on("error", () => {});
+		link.on("data", (chunk) => {
+			const lines = `${held}${chunk}`.split("\n");
+			held = lines.pop() ?? "";
+			for (const line of lines) {
+				const m = JSON.parse(line);
+				if (m.type === "hello") link.write('{"type":"hello","version":1}\n');
+				else heard.push(m);
+			}
+		});
+	});
+	await new Promise<void>((resolve) => server.listen(join(dir, "sock"), resolve));
+	return {
+		heard,
+		toPage: (m: unknown) => {
+			for (const link of links) link.write(`${JSON.stringify({type: "to", port: "desk", m})}\n`);
+		},
+		stop: () => {
+			for (const link of links) link.destroy();
+			return new Promise<void>((resolve) => server.close(() => resolve()));
+		},
+	};
+};
+
+/**
+ * The asks list stays open while one ask leaves as another arrives. The count holds, but the new
+ * ask is seen, so the page says so, or the dot in the top bar stays on with the ask in plain view.
+ */
+const asksSwap = async () => {
+	const other = await mkdtemp(join(tmpdir(), "fabrika-asks-"));
+	const host = await askingHost(other);
+	const asks = (key: string, what: string, seen: boolean) => ({
+		type: "asks",
+		now: {
+			asks: [{key, ticket: 7, title: "Swap", what, kind: "ask", at: 1, seen}],
+			later: [],
+			reach: "ok",
+			why: null,
+		},
+	});
+	const seen = async () => host.heard.filter((m) => m.type === "on" && m.m?.type === "seen").length;
+	const app = await launch(other);
+	try {
+		const page = await app.firstWindow();
+		await until(
+			"the page to load",
+			async () => host.heard.some((m) => m.type === "page"),
+			(up) => up,
+		);
+		host.toPage(asks("7/a-1", "first ask", false));
+		host.toPage({type: "show", what: "asks"});
+		const list = page.locator("#pop-asks");
+		await list.getByText("First ask").waitFor();
+		await until("the first seen", seen, (n) => n === 1);
+		check("opening the asks list says its asks are seen", true);
+
+		host.toPage(asks("7/a-2", "second ask", false));
+		await list.getByText("Second ask").waitFor();
+		await until("a seen for the ask that took its place", seen, (n) => n === 2);
+		check("one ask leaving as another arrives, the count the same, says seen again", true);
+
+		// The host's answer to a seen: the same keys, now marked. Saying seen again would never end.
+		host.toPage(asks("7/a-2", "second ask", true));
+		await page.waitForTimeout(300);
+		check("the same asks marked seen say nothing more", (await seen()) === 2, await seen());
+	} finally {
+		await app.close().catch(() => {});
+		await host.stop();
+	}
+};
+
 /** Is `pid` a host of this build: its command line names this folder. Asked before any signal. */
 const ours = (pid: number) =>
 	promisify(execFile)("ps", ["-o", "command=", "-p", String(pid)]).then(
@@ -752,42 +1544,116 @@ const noInterrupts = (app: ElectronApplication) =>
 const interruptions = (app: ElectronApplication) =>
 	app.evaluate(() => (globalThis as {asked?: string[]}).asked ?? []);
 
+/** Where the window says the link: the host's word in the top bar, a status. */
+const LINK = '[role="status"][aria-label="the link to the host"]';
 /**
- * From now on, note each change in what the window says of the link: a note may be up for a
- * moment only. "" is no note.
+ * What the host's item is named while the host is up. It shows an icon and no word, so the run
+ * reads the item's name (its `aria-label`), which is its word when it has one.
+ */
+const UP = "host up";
+/** The host's item: the first button of the link, before any Try again. */
+const HOST = `${LINK} button`;
+/**
+ * From now on, note each change in what the window says of the link: a word may be up for a
+ * moment only.
  */
 const watchNotes = (page: Page) =>
-	page.evaluate(() => {
-		const said: string[] = [""];
-		Object.assign(globalThis, {said});
-		new MutationObserver(() => {
-			const text = document.querySelector(".lost-note")?.textContent ?? "";
-			if (said.at(-1) !== text) said.push(text);
-		}).observe(document.body, {childList: true, subtree: true, characterData: true});
-	});
-/** The notes the window showed since `watchNotes`, in order, with no "". */
+	page.evaluate(
+		({host, up}) => {
+			const said: string[] = [up];
+			Object.assign(globalThis, {said});
+			new MutationObserver(() => {
+				const name = document.querySelector(host)?.getAttribute("aria-label") ?? "";
+				if (said.at(-1) !== name) said.push(name);
+			}).observe(document.body, {
+				childList: true,
+				subtree: true,
+				attributes: true,
+				attributeFilter: ["aria-label"],
+			});
+		},
+		{host: HOST, up: UP},
+	);
+/** The words the window said of the link since `watchNotes`, in order, with no host up. */
 const notesSaid = (page: Page) =>
-	page.evaluate(() => ((globalThis as {said?: string[]}).said ?? []).filter((t) => t !== ""));
-/** The note the window shows now, or "". */
+	page.evaluate((up) => ((globalThis as {said?: string[]}).said ?? []).filter((t) => t !== up), UP);
+/** What the window says of the link now, by the host item's name, or "" for none drawn. */
 const noteNow = (page: Page) =>
 	page
-		.locator(".lost-note")
-		.textContent({timeout: 500})
+		.locator(HOST)
+		.first()
+		.getAttribute("aria-label", {timeout: 500})
 		.then(
 			(t) => t ?? "",
 			() => "",
 		);
+/**
+ * A part that works says nothing: on a fresh home with nothing asking and no agent attached, the
+ * top bar's right end is the host's quiet icon alone, with no word and no `·`. C-b A and C-b S
+ * still open their lines, which say no agent is attached and that the ledger is this home's own.
+ */
+const quietAtRest = async (page: Page) => {
+	const said = await until(
+		"the top bar's right end quiet, the host up",
+		async () =>
+			[
+				(await page.locator(".topbar .right").textContent()) ?? "",
+				await noteNow(page),
+				await page.locator(".topbar .right svg").count(),
+			] as const,
+		([text, name, icons]) => text.trim() === "" && name === UP && icons === 1,
+	);
+	check("at rest the top bar says nothing but the host's icon", true, said);
+	const lines = async (key: string, label: string) => {
+		await prefixed(page, key);
+		const text = (await page.getByRole("dialog", {name: label}).textContent({timeout: 2000})) ?? "";
+		await prefixed(page, key);
+		await until(
+			`${label} closed`,
+			() => page.getByRole("dialog").count(),
+			(n) => n === 0,
+		);
+		return text;
+	};
+	const agents = await lines("A", "The agents");
+	check(
+		"C-b A at zero opens lines: none attached, and how",
+		agents.includes("No agent is attached") && agents.includes("fabrika mcp"),
+		agents,
+	);
+	const sync = await lines("S", "The sync");
+	check(
+		"C-b S on an own ledger opens lines: nothing to sync",
+		sync.includes("Nothing to sync"),
+		sync,
+	);
+};
+/** The host's few lines, opened from its word in the top bar, then closed again. */
+const hostLines = async (page: Page) => {
+	const host = page.locator(LINK).getByRole("button", {name: /^host /});
+	await host.click();
+	const lines =
+		(await page.getByRole("dialog", {name: "The host"}).textContent({timeout: 2000})) ?? "";
+	await host.click();
+	return lines;
+};
 /** The tile that holds the page's focus, or none. */
 const focusedIn = (page: Page) =>
 	page.evaluate(
 		() => document.activeElement?.closest("[data-tile]")?.getAttribute("data-tile") ?? null,
 	);
-/** The desk is back: no note, and nothing dimmed. */
+/** The desk is back: the host's item is its quiet up icon with no word, and nothing is dimmed. */
 const deskBack = (page: Page) =>
 	until(
-		"the desk back, with no note",
-		() => page.locator(".lost-note, .desk.lost").count(),
-		(n) => n === 0,
+		"the desk back, the host up",
+		async () =>
+			[
+				await noteNow(page),
+				await page.locator(`${HOST} svg`).count(),
+				(await page.locator(HOST).first().textContent()) ?? "",
+				await page.locator(".desk.lost").count(),
+			] as const,
+		([name, icons, word, lost]) => name === UP && icons === 1 && word === "" && lost === 0,
 	);
 
 /**
@@ -826,8 +1692,8 @@ const reconnect = async () => {
 		);
 		await deskBack(page);
 		check(
-			"the socket cut: the window says calmly it is reconnecting, and the desk comes back",
-			said[0]?.startsWith("Reconnecting to the host") === true,
+			"the socket cut: the top bar says calmly the host is down, and the desk comes back",
+			said[0] === "host down",
 			said,
 		);
 		check("on the same host: it was alive all along", (await hostPid(own)) === host);
@@ -877,21 +1743,25 @@ const reconnect = async () => {
 		await until(
 			"the window to say it reconnects",
 			() => noteNow(page),
-			(t) => t.startsWith("Reconnecting to the host"),
+			(t) => t === "host down",
 		);
 		await page.waitForTimeout(1500);
 		const dimmed = {
 			lost: await page.locator(".desk.lost").count(),
 			inert: await page.locator(".workspace[inert]").count(),
 			status: await page.getByRole("status", {name: "the link to the host"}).count(),
-			focused: await page.evaluate(
-				() => document.activeElement?.closest(".lost-note, [data-tile]") !== null,
-			),
+			focused: await page.evaluate(() => document.activeElement?.closest("[data-tile]") !== null),
 		};
 		check(
-			"no host: the desk stays, dimmed and out of reach, with a note in its corner, and focus is nowhere in it",
+			"no host: the desk stays, dimmed and out of reach, the top bar says host down, and focus is nowhere in it",
 			dimmed.lost === 1 && dimmed.inert === 1 && dimmed.status === 1 && !dimmed.focused,
 			dimmed,
+		);
+		const reaching = await hostLines(page);
+		check(
+			"the host's lines say it is reconnecting",
+			reaching.startsWith("Reconnecting to the host"),
+			reaching,
 		);
 		await shot(page, "12-reconnecting");
 
@@ -901,16 +1771,18 @@ const reconnect = async () => {
 			Object.assign(globalThis, {realNow: real});
 			Date.now = () => real() + 6 * 60_000;
 		});
-		const stopped = await until(
+		const button = page.locator(".topbar").getByRole("button", {name: "try again", exact: true});
+		await until(
 			"the app to stop trying",
-			() => noteNow(page),
-			(t) => t.startsWith("Could not reconnect to the host"),
+			() => button.count(),
+			(n) => n === 1,
 		);
-		const button = page.getByRole("button", {name: "Try again"});
+		const stopped = await hostLines(page);
 		check(
-			"five minutes on, it stops and offers Try again, which takes no focus",
+			"five minutes on, it stops and offers try again in the top bar, which takes no focus",
 			(await button.count()) === 1 &&
 				!(await button.evaluate((b) => b === document.activeElement)) &&
+				stopped.startsWith("Could not reconnect to the host") &&
 				stopped.includes("five minutes"),
 			stopped,
 		);
@@ -930,12 +1802,14 @@ const reconnect = async () => {
 		if (last !== null) started.add(last);
 		await deskBack(page);
 		await tilesAre(page, ["t1", "t2"]);
-		await prompted(page, "t1");
+		await shows(page, "t1", "only a fresh prompt", (t) => t === "tsh$");
 		check(
 			"the folder back, Try again starts a host, and the desk is back",
 			last !== null && (await ours(last)),
 			last,
 		);
+		const still = await shows(page, "t2", "the earlier job", (t) => t.includes("tsh: 1 job from"));
+		check("on the restored desk, only t2 is told of its counter: t1 never ran it", true, still);
 	} finally {
 		await app.close().catch(() => {});
 		for (const pid of started) if (alive(pid) && (await ours(pid))) await stop(pid);
@@ -954,10 +1828,10 @@ try {
 	}
 	const pid = await hostPid(home);
 	check("the app quit, and the host it started runs on", pid !== null && alive(pid), pid);
-	const kept = await readdir(join(home, "storage", "tiles")).catch((): string[] => []);
+	const kept = (await keptJobs(home)).map((job) => [job.n, job.text, job.owner]);
 	check(
-		"the tile left with counter has its jobs in its own folder, and no closed tile has",
-		kept.includes(left) && !["t1", "t2", "t3"].some((t) => kept.includes(t)),
+		"the host's one job table keeps one job, the counter of the tile left, and no closed tile's",
+		kept.length === 1 && kept[0]?.[1] === "counter" && kept[0]?.[2] === left,
 		kept,
 	);
 	const desk = await readFile(join(home, "desk.json"), "utf8").catch(() => "");
@@ -977,6 +1851,7 @@ try {
 	);
 
 	await mismatch();
+	await asksSwap();
 	await reconnect();
 } finally {
 	// No person stops the host: there is no command for it. The run stops its own, by its pid.

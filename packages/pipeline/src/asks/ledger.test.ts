@@ -3,7 +3,7 @@ import {mkdtempSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
-import {layerSqlite, openDb} from "@kampus/fabrika/sqlite";
+import {layerSqlite, openDb} from "@kampus/fabrika-old/sqlite";
 import {Cause, Effect, Exit, Layer} from "effect";
 import {describe, expect, it} from "vitest";
 import {CriteriaRecord, ledgerRecord} from "../criteria/record.ts";

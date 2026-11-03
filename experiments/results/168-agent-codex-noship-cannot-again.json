@@ -1,0 +1,241 @@
+{
+	"agent": "codex",
+	"real": true,
+	"model": "gpt-6.1-sol",
+	"rows": [
+		{
+			"task": "noship",
+			"ask": "Run the factory on every open ticket, but do not ship anything.",
+			"try": 1,
+			"line": "tracker | triage | plan | build | review",
+			"said": "Processes every open ticket through review without running ship.",
+			"ms": 6762,
+			"tokens": {
+				"input": 9371,
+				"cached": 0,
+				"output": 95
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 130,
+				"ctrlC": true,
+				"runs": [
+					"triage#7",
+					"triage#8",
+					"triage#9",
+					"plan#7",
+					"plan#9",
+					"build#9"
+				]
+			}
+		},
+		{
+			"task": "noship",
+			"ask": "Run the factory on every open ticket, but do not ship anything.",
+			"try": 2,
+			"line": "tracker | triage | plan | build | review",
+			"said": "Processes every open ticket through review without running ship.",
+			"ms": 6363,
+			"tokens": {
+				"input": 9366,
+				"cached": 0,
+				"output": 78
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 130,
+				"ctrlC": true,
+				"runs": [
+					"triage#7",
+					"triage#8",
+					"triage#9",
+					"plan#7",
+					"plan#9",
+					"build#9"
+				]
+			}
+		},
+		{
+			"task": "noship",
+			"ask": "Run the factory on every open ticket, but do not ship anything.",
+			"try": 3,
+			"line": "tracker | triage | plan | build | review",
+			"said": "Processes every open ticket through review without running ship.",
+			"ms": 6675,
+			"tokens": {
+				"input": 9382,
+				"cached": 0,
+				"output": 64
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 130,
+				"ctrlC": true,
+				"runs": [
+					"triage#7",
+					"triage#8",
+					"triage#9",
+					"plan#7",
+					"plan#9",
+					"build#9"
+				]
+			}
+		},
+		{
+			"task": "cannot",
+			"ask": "Merge pull request 12 by hand, now.",
+			"try": 1,
+			"line": "",
+			"said": "No listed program merges an existing pull request by number; ship takes a ticket number, not a pull request number.",
+			"ms": 6164,
+			"tokens": {
+				"input": 9368,
+				"cached": 0,
+				"output": 77
+			},
+			"tools": 0,
+			"error": null,
+			"parses": false,
+			"checks": false,
+			"right": true,
+			"why": "no line",
+			"ran": null
+		},
+		{
+			"task": "cannot",
+			"ask": "Merge pull request 12 by hand, now.",
+			"try": 2,
+			"line": "",
+			"said": "No listed program merges a pull request by number; ship takes a ticket number and runs the shipping workflow.",
+			"ms": 5659,
+			"tokens": {
+				"input": 9366,
+				"cached": 4352,
+				"output": 71
+			},
+			"tools": 0,
+			"error": null,
+			"parses": false,
+			"checks": false,
+			"right": true,
+			"why": "no line",
+			"ran": null
+		},
+		{
+			"task": "cannot",
+			"ask": "Merge pull request 12 by hand, now.",
+			"try": 3,
+			"line": "",
+			"said": "No program merges an existing pull request by number; ship takes a ticket number, not a pull request number.",
+			"ms": 6313,
+			"tokens": {
+				"input": 9364,
+				"cached": 0,
+				"output": 76
+			},
+			"tools": 0,
+			"error": null,
+			"parses": false,
+			"checks": false,
+			"right": true,
+			"why": "no line",
+			"ran": null
+		},
+		{
+			"task": "again",
+			"ask": "Ticket 7 failed review. Send it through build and review again, and ship it once review passes.",
+			"try": 1,
+			"line": "build --ticket 7 | review | ship",
+			"said": "Rebuilds ticket 7, reviews it again, and ships it only after review passes.",
+			"ms": 4014,
+			"tokens": {
+				"input": 9378,
+				"cached": 0,
+				"output": 45
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"build#7",
+					"review#7"
+				]
+			}
+		},
+		{
+			"task": "again",
+			"ask": "Ticket 7 failed review. Send it through build and review again, and ship it once review passes.",
+			"try": 2,
+			"line": "build --ticket 7 | review | ship",
+			"said": "Rebuilds ticket 7, reviews it again, and ships it only after review passes.",
+			"ms": 4562,
+			"tokens": {
+				"input": 9372,
+				"cached": 4352,
+				"output": 45
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"build#7",
+					"review#7"
+				]
+			}
+		},
+		{
+			"task": "again",
+			"ask": "Ticket 7 failed review. Send it through build and review again, and ship it once review passes.",
+			"try": 3,
+			"line": "build --ticket 7 | review | ship",
+			"said": "Rebuilds ticket 7, reviews it again, and sends it to ship only after review passes.",
+			"ms": 4685,
+			"tokens": {
+				"input": 9372,
+				"cached": 0,
+				"output": 47
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"build#7",
+					"review#7"
+				]
+			}
+		}
+	]
+}

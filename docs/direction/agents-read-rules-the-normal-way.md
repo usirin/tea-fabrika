@@ -2,6 +2,8 @@
 
 Decided 2026-10-26 by the owner.
 
+Keys renamed 2026-11-03 (short words keep one meaning): `at` became `ref`.
+
 ```ts
 // A sketch. The builder starts in the working copy and its agent reads the
 // rule files itself, the nearest AGENTS.md winning, as the standard says.
@@ -9,7 +11,7 @@ const built = yield* Agents.run({ prompt, folder: workingCopy, provider }); // l
                                                                             // packages/x/AGENTS.md, ...
 // The reviewer reads them the same way, and is also handed main's copy, marked as the
 // rules the pull request is judged by. A pull request cannot loosen its own rules.
-const rules = yield* readRules({ repo, at: "main" });      // today's Gather in stages/rules.ts
+const rules = yield* readRules({ repo, ref: "main" });     // today's Gather in stages/rules.ts
 const verdict = yield* Agents.run({ prompt: reviewBrief(pr, rules), folder: prCopy, provider });
 ```
 
@@ -38,8 +40,8 @@ const verdict = yield* Agents.run({ prompt: reviewBrief(pr, rules), folder: prCo
 
   The sorter, the ACP builder and the interface's `acp-claude` row stay on
   `settingSources: []`: the sorter has no rules to read, and the ACP
-  adapter's older SDK (0.3.286) was not tested. The ACP paths keep pasting
-  the rules into the prompt.
+  adapter's own SDK (0.3.286 then, 0.3.312 now) was not tested. The ACP paths
+  keep pasting the rules into the prompt.
   - **Wrong guess, kept:** this note first said `["project"]` brings in the
     repository's `.claude/settings.json` with the rules and that the two might
     not come apart. The first half was right: hooks, env and the
@@ -56,14 +58,14 @@ const verdict = yield* Agents.run({ prompt: reviewBrief(pr, rules), folder: prCo
 - **Only `ownRules` says where a Claude run's settings come from.**
   - `pnpm lint` refuses `settingSources` with a source in it, and any
     `projectConfigRoot`, anywhere but `rules.ts`
-    (`biome-plugins/no-project-settings.grit`).
+    (`oxlint-plugins/no-project-settings.ts`).
   - A stage's options for the Claude adapter cannot name them: its type
     refuses it.
   - A live run checks its options again, and the empty folder, before Claude
     Code starts. A refusal names the fix.
   - A run that loads the project's settings on purpose (an experiment that
     measures them, the old operator in `legacy/`) says why in a
-    `biome-ignore`.
+    `oxlint-disable-next-line`.
 
   ```ts
   const options = {...rest, settingSources: ["project"]};

@@ -1,15 +1,15 @@
-import {defineProgram, input} from "@kampus/fabrika";
+import {defineProgram, input} from "@kampus/fabrika-old";
 import {Ask, Settled} from "@kampus/pipeline/asks/ask";
 import type {Pack} from "@kampus/pipeline/asks/packs";
-import {Context, Effect, FileSystem, Layer, Path, Schema, Stream} from "effect";
+import {Context, Effect, FileSystem, Layer, Path, Schema} from "effect";
 
 // The smallest pack: it only listens. One line per ask the core makes and per
 // answer it takes, appended to one file. It answers nothing, so the core
 // cannot tell whether it runs.
 //
-//   packs = ["@tea-fabrika/owner-desk", "@tea-fabrika/ask-log"]    # fabrika.toml
+//   packs = ["@tea-fabrika/owner-desk", "@tea-fabrika/ask-log"]    # .fabrika/fabrika.toml
 //   [pack."@tea-fabrika/ask-log"]
-//   file = ".desk/asks.log"     # from fabrika.toml's folder; `asks.log` in the host's folder for the pack when left out
+//   file = ".desk/asks.log"     # from the repository's root; `asks.log` in the host's folder for the pack when left out
 
 /** Where the lines go. */
 export class LogFile extends Context.Service<LogFile, {readonly file: string}>()("LogFile") {}
@@ -29,20 +29,18 @@ export const logProgram = defineProgram({
 		settled: input(Settled, "An answer the core took."),
 	},
 	outputs: {},
-	main: ({inputs}) =>
+	main: ({serve}) =>
 		Effect.gen(function* () {
 			const fs = yield* FileSystem.FileSystem;
 			const path = yield* Path.Path;
 			const {file} = yield* LogFile;
 			yield* fs.makeDirectory(path.dirname(file), {recursive: true}).pipe(Effect.orDie);
-			const lines = Stream.merge(
-				inputs.ask.pipe(Stream.map((ask) => lineOf({ask}))),
-				inputs.settled.pipe(Stream.map((settled) => lineOf({settled}))),
-			);
-			yield* lines.pipe(
-				Stream.runForEach((line) => fs.writeFileString(file, `${line}\n`, {flag: "a"})),
-				Effect.orDie,
-			);
+			const write = (line: string) =>
+				fs.writeFileString(file, `${line}\n`, {flag: "a"}).pipe(Effect.orDie);
+			yield* serve({
+				ask: (ask) => write(lineOf({ask})),
+				settled: (settled) => write(lineOf({settled})),
+			});
 		}),
 });
 

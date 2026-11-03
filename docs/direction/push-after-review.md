@@ -7,8 +7,9 @@ Decided 2026-10-24.
 {fact: "built", ticket: "demlik-1", task: 1, commit: "a1b2c3…"}             // build, in its box
 {fact: "reviewed", ticket: "demlik-1", task: 1, commit: "a1b2c3…", ok: true} // review reads that commit, in its box
 // The code stays in a git repo on this machine. The ledger holds only the hash.
-// Only then, outside any box:
-// leak check → push that commit → open the PR → CI → final review → ship
+// Only then, the push program, in its own box. Its push Cmds are marked `outside`,
+// so the host does them with its GitHub key. (Was "outside any box"; corrected 2026-10-27.)
+// leak check → push that commit → open the PR → CI → final review → merge
 
 // Today: draft → checks → push → open the PR → review → CI → ship
 ```
@@ -35,7 +36,9 @@ Decided 2026-10-24.
   hold none of the app's own keys as text. GitHub's push protection does the
   same kind of check for secrets it knows
   ([GitHub](https://docs.github.com/en/code-security/secret-scanning/working-with-secret-scanning-and-push-protection)).
-  Ours runs before GitHub sees anything.
+  Ours runs before GitHub sees anything. *Not built in today's version (checked
+  2026-11-01): the check there is a by-hand grep, before the merge yes, when the branch
+  is already public.*
 - **A red CI goes back to build.** The new commit is reviewed again before the
   next push.
 - **This fits [done is per criterion](./done-is-per-criterion.md).** Each task
@@ -78,6 +81,9 @@ out. The review walk settles it.
 
 - **Who pushes and opens the PR:** ship, or a step the parent runs between
   review and ship.
+  *Answered 2026-10-27:* a new small program, push, between review and
+  merge ([a ticket runs from the app](./a-ticket-runs-from-the-app.md),
+  section 8).
 - **Where the local repo lives** and how build's and review's boxes see it:
   for example a folder per job, mounted into build's box and mounted read-only
   into review's.

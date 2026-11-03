@@ -1,4 +1,4 @@
-// The top level runs anywhere: `@kampus/fabrika` bundled for a browser pulls
+// The top level runs anywhere: `@kampus/fabrika-old` bundled for a browser pulls
 // in no platform. esbuild bundles `src/index.ts` with `platform: "browser"` and
 // no Node shims, and every module the bundle reaches is listed. The check fails
 // on any one of:

@@ -1,9 +1,13 @@
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
-import {fileStorage} from "@kampus/fabrika/storage/node";
-import {Effect, FileSystem, Layer, Path, Schema, Scope} from "effect";
+import {keepJobs, layerRecordTraces, openJobs, stepsInto, writerText} from "@kampus/fabrika-old";
+import {recordTracing} from "@kampus/fabrika-old/otel";
+import {sqliteRecords} from "@kampus/fabrika-old/records";
+import {fileStorage} from "@kampus/fabrika-old/storage/node";
+import {Author} from "@tea-fabrika/tracker";
+import {Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope} from "effect";
 import {SocketServer} from "effect/socket";
 import {fileHistory, sharedHistory} from "../editor/history.ts";
-import {hostLedger} from "./connection.ts";
+import {connectionOf, hostLedger} from "./connection.ts";
 import {holdLock} from "./lock.ts";
 import {serve} from "./serve.ts";
 import {pathsOf, reach} from "./socket.ts";
@@ -11,17 +15,24 @@ import {pathsOf, reach} from "./socket.ts";
 // The host on a home: its socket, its files and its services, around the server (serve.ts).
 // host/main.ts runs it as a process of its own; a test runs it in its own process, on a home of
 // its own (host.test.ts). Node is named only through Effect's platform: `NodeSocketServer`, and
-// the ledger's node:sqlite and the storage's files from @kampus/fabrika.
+// the ledger's node:sqlite and the storage's files from @kampus/fabrika-old.
 //
 //   yield* runHost({home, pid: process.pid})
 //   // <home>/host made, mode 0700; the start lock taken (host/lock.ts); a socket left by a crash
-//   // removed; <home>/host/sock listened on, mode 0600; the pid written; the lock let go of; the
-//   // desk read back from desk.json; until the scope closes
+//   // removed; <home>/host/sock listened on, mode 0600; on a home with its own ledger file,
+//   // <home>/host/mcp too, the agents' socket (host/agents.ts), mode 0600; the pid written; the
+//   // lock let go of; the desk read back from desk.json, the asks' marks from asks.json; until
+//   // the scope closes
 //
 // In the home, beside the host's own folder (host/socket.ts):
 //
 //   desk.json            the desk's tiles, kept on each change, for the next start
-//   storage/tiles/<t>/   tile <t>'s tsh: its job table and its jobs, as the terminal tsh keeps them
+//   asks.json            the person's later and seen on the asks, kept on each change (asks.ts)
+//   storage/jobs/        the host's one job table and its jobs' runs, for every tile's tsh, as
+//                        the terminal tsh's host keeps them. A storage/tiles/<t>/ folder left
+//                        by an older build (one table per tile) is not read, and not removed
+//   records/<trace>.sqlite  one job's record each (`sqliteRecords`): its start and end, its
+//                        spans and its steps, what `trace` shows
 //   history              the line editor's history, one for every tile
 //   ledger.sqlite        the ledger, when the home is connected to no server
 //   ledger.json          the ledger server it is connected to, if any (connection.ts)
@@ -58,16 +69,25 @@ export const runHost = (options: {
 		yield* fs.chmod(paths.dir, 0o700);
 		// Under the start lock (host/lock.ts), from the look at the socket until this host listens
 		// on it: a host started at the same moment waits, then finds this one answering.
-		const server = yield* Effect.scoped(
+		// Agents get a socket only on a home that keeps its own ledger (host/agents.ts).
+		const connection = yield* connectionOf(home);
+		const ownLedger = Option.isNone(connection);
+		const {server, agents} = yield* Effect.scoped(
 			Effect.gen(function* () {
 				yield* holdLock(paths.lock, paths.dir);
 				const found = yield* reach(paths.sock);
 				if (found === "live") return yield* new HostAnswers({sock: paths.sock});
 				if (found === "stale") yield* fs.remove(paths.sock);
+				// No host answers, and this one holds the lock: an agents' socket here was left by one that is gone.
+				if (yield* fs.exists(paths.mcp)) yield* fs.remove(paths.mcp);
 				const made = yield* NodeSocketServer.make({path: paths.sock}).pipe(Scope.provide(outer));
 				yield* fs.chmod(paths.sock, 0o600);
+				const forAgents = ownLedger
+					? yield* NodeSocketServer.make({path: paths.mcp}).pipe(Scope.provide(outer))
+					: undefined;
+				if (forAgents !== undefined) yield* fs.chmod(paths.mcp, 0o600);
 				yield* fs.writeFileString(paths.pid, `${pid}\n`);
-				return made;
+				return {server: made, agents: forAgents};
 			}),
 		);
 		// The pid goes while this host still listens, so it never removes the pid of a host
@@ -83,14 +103,42 @@ export const runHost = (options: {
 			Effect.flatMap((text) => Effect.try(() => JSON.parse(text))),
 			Effect.orElseSucceed((): unknown => null),
 		);
+		// The asks' marks, as written; serve.ts reads them, and says so when they do not read.
+		const marks = yield* fs.readFileString(at("asks.json")).pipe(
+			Effect.catchIf(
+				(e) => e.reason._tag === "NotFound",
+				() => Effect.succeed(null),
+			),
+			Effect.catch((e) =>
+				Effect.as(
+					Effect.logWarning(`fabrika host: could not read the asks' later and seen: ${e.message}`),
+					null,
+				),
+			),
+		);
+		// Each job's record, kept as the person who runs the host: the table writes its start and
+		// end, the runs' storage its steps, the tracer its spans. `trace` reads them.
+		const records = yield* sqliteRecords({
+			dir: at("records"),
+			by: writerText(Context.get(ledger, Author)),
+		});
+		// One job table for the host process, for every tile's tsh, open until the host stops.
+		const jobs = keepJobs(
+			yield* openJobs(fileStorage(at("storage", "jobs"), stepsInto(records))),
+			records,
+			"laptop",
+		);
 		yield* Effect.logInfo(`fabrika host: listening, pid ${pid}`);
 		return yield* serve({
 			history,
 			ours,
 			build,
-			place: (tile) => ({
-				jobs: fileStorage(at("storage", "tiles", tile)),
-				drop: fs.remove(at("storage", "tiles", tile), {recursive: true}).pipe(Effect.ignore),
+			agents,
+			jobs,
+			pid,
+			ledger: Option.match(connection, {
+				onNone: () => ({kind: "own"}) as const,
+				onSome: (c) => ({kind: "server", address: `${c.url}/${c.ledger}`, login: c.login}) as const,
 			}),
 			desk: {
 				kept,
@@ -104,8 +152,22 @@ export const runHost = (options: {
 						),
 				forget: fs.remove(at("desk.json")).pipe(Effect.ignore),
 			},
+			asks: {
+				kept: marks,
+				// Written beside, then moved over: a host stopped mid-write leaves the last whole file.
+				save: (saved) =>
+					fs.writeFileString(at("asks.json.new"), JSON.stringify(saved)).pipe(
+						Effect.andThen(fs.rename(at("asks.json.new"), at("asks.json"))),
+						Effect.catch((e) =>
+							Effect.logError(
+								`fabrika host: could not keep the asks' later and seen: ${e.message}`,
+							),
+						),
+					),
+			},
 		}).pipe(
 			Effect.provideService(SocketServer.SocketServer, server),
 			Effect.provideContext(ledger),
+			Effect.provide(Layer.merge(layerRecordTraces(records), recordTracing(records))),
 		);
 	});

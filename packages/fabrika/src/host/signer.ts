@@ -27,7 +27,7 @@ export class Signer extends Context.Service<
 		/** An SSHSIG over `text`, in the door's namespace. */
 		readonly sign: (text: string) => Effect.Effect<string>;
 	}
->()("@kampus/fabrika/Signer") {}
+>()("@kampus/fabrika-old/Signer") {}
 
 const signerOf = (pair: CryptoKeyPair) =>
 	Effect.gen(function* () {

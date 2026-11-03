@@ -11,7 +11,7 @@
 // A killed or crashed container is started again (`docker start`), so two hosts are up again.
 // After the run every row of the ledger and every host line is read and judged.
 import {mkdirSync, rmSync} from "node:fs";
-import {Ledger, type Row} from "@kampus/fabrika";
+import {Ledger, type Row} from "@kampus/fabrika-old";
 import {Duration, Effect, Schedule} from "effect";
 import {numberIn, questionOf} from "../95-agents-across-hosts/question.ts";
 import {
@@ -314,7 +314,7 @@ export async function runFaulted(o: {
 	// ------------------------------------------------ drain
 	let finished = "gave up waiting";
 	let doneAt = 0;
-	for (const t0 = Date.now(); Date.now() - t0 < 600_000; ) {
+	for (const t0 = Date.now(); Date.now() - t0 < 600_000;) {
 		const s = await answeredNow();
 		if (s.answered === o.n && s.pending === 0) {
 			finished = "all answered";

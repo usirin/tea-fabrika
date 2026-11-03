@@ -1,0 +1,112 @@
+{
+	"seed": 165,
+	"runs": 2000,
+	"skipped": {
+		"main edit 1 to 3 lines from a PR edit": 540,
+		"whitespace only, where it means nothing to the program": 93,
+		"both sides made the same change": 86
+	},
+	"made": {
+		"changed | force push: move, rebased, words": 33,
+		"changed | force push: extra, words": 70,
+		"same | rebase, main 4+ lines away": 384,
+		"changed | main changed a PR line, kept pr": 121,
+		"changed | force push: tweak, words": 39,
+		"same | force push: same, rebased": 53,
+		"changed | main changed a PR line, kept main": 90,
+		"same | force push: split": 54,
+		"changed | force push: tweak, rebased, whitespace in YAML indent or a string": 6,
+		"changed | main changed a PR line, kept both": 89,
+		"same | force push: split, rebased": 67,
+		"changed | force push: drop, rebased, words": 54,
+		"changed | force push: move, words": 21,
+		"changed | force push: tweak, rebased, words": 40,
+		"changed | force push: tweak, whitespace in YAML indent or a string": 4,
+		"same | force push: same": 45,
+		"changed | force push: extra, rebased, words": 60,
+		"same | force push: move, rebased": 2,
+		"changed | force push: drop, words": 39,
+		"changed | force push: extra, whitespace in YAML indent or a string": 5,
+		"changed | force push: drop, rebased, whitespace in YAML indent or a string": 2,
+		"changed | force push: extra, rebased, whitespace in YAML indent or a string": 3
+	},
+	"wrong": {
+		"sha": {
+			"same": {},
+			"stale": {
+				"rebase, main 4+ lines away": 384,
+				"force push: same, rebased": 53,
+				"force push: split": 54,
+				"force push: split, rebased": 67,
+				"force push: same": 45,
+				"force push: move, rebased": 2
+			}
+		},
+		"stable": {
+			"same": {
+				"force push: tweak, rebased, whitespace in YAML indent or a string": 6,
+				"force push: tweak, whitespace in YAML indent or a string": 4
+			},
+			"stale": {
+				"rebase, main 4+ lines away": 2
+			}
+		},
+		"verbatim": {
+			"same": {},
+			"stale": {
+				"rebase, main 4+ lines away": 2
+			}
+		},
+		"u0": {
+			"same": {
+				"force push: move, rebased, words": 17,
+				"force push: tweak, rebased, whitespace in YAML indent or a string": 6,
+				"force push: move, words": 14,
+				"force push: tweak, whitespace in YAML indent or a string": 4
+			},
+			"stale": {}
+		},
+		"u0v": {
+			"same": {
+				"force push: move, rebased, words": 17,
+				"force push: move, words": 14
+			},
+			"stale": {}
+		},
+		"fn": {
+			"same": {
+				"force push: move, words": 4,
+				"force push: move, rebased, words": 5
+			},
+			"stale": {
+				"rebase, main 4+ lines away": 14,
+				"force push: same, rebased": 1,
+				"force push: split, rebased": 5
+			}
+		},
+		"replay": {
+			"same": {},
+			"stale": {}
+		},
+		"range-diff": {
+			"same": {},
+			"stale": {
+				"force push: split": 54,
+				"rebase, main 4+ lines away": 33,
+				"force push: split, rebased": 67,
+				"force push: same, rebased": 4
+			}
+		}
+	},
+	"saidSame": {},
+	"notes": {},
+	"smallest": {
+		"same: stable": "should be: changed (force push: tweak, whitespace in YAML indent or a string)\nreviewed PR, against its base:\n@@ -3,6 +3,6 @@ function add(a, b) {\n \treturn a + b;\n }\n \n-add:\n+addx:\n   port: 8080\nnew head, against its base:\n@@ -3,6 +3,6 @@ function add(a, b) {\n \treturn a + b;\n }\n \n-add:\n+  addx:\n   port: 8080",
+		"same: u0": "should be: changed (force push: move, words)\nreviewed PR, against its base:\n@@ -1,3 +1,4 @@\n+\tcheck(a);\n function add(a, b) {\n \treturn a + b;\n }\nnew head, against its base:\n@@ -1,4 +1,5 @@\n function add(a, b) {\n+\tcheck(a);\n \treturn a + b;\n }",
+		"same: u0v": "should be: changed (force push: move, words)\nreviewed PR, against its base:\n@@ -1,3 +1,4 @@\n+\tcheck(a);\n function add(a, b) {\n \treturn a + b;\n }\nnew head, against its base:\n@@ -1,4 +1,5 @@\n function add(a, b) {\n+\tcheck(a);\n \treturn a + b;\n }",
+		"same: fn": "should be: changed (force push: move, words)\nreviewed PR, against its base:\n@@ -1,4 +1,6 @@\n+\tcheck(a);\n function add(a, b) {\n+\tcheck(a);\n \treturn a + b;\n }\nnew head, against its base:\n@@ -1,5 +1,7 @@\n+\tcheck(a);\n function add(a, b) {\n \treturn a + b;\n+\tcheck(a);\n }\n \n function add(a, b) {",
+		"stale: stable": "should be: same (rebase, main 4+ lines away)\nreviewed PR, against its base:\n@@ -1,8 +1,8 @@\n-function add(a, b) {\n+functionx add(a, b) {\n \treturn a + b;\n \treturn a + b;\n }\n-\n+ // edited\n function add(a, b) {\n \treturn a + b;\n }\n@@ -10,7 +10,6 @@ function add(a, b) {\n function add(a, b) {\n \treturn a + b;\n \treturn a;\n-\treturn a;\n \treturn a + b;\n }\nmain moved:\n@@ -13,4 +13,4 @@ function add(a, b) {\n \treturn a;\n \treturn a + b;\n }\n-\n+ // edited\nnew head, against its base:\n@@ -1,8 +1,8 @@\n-function add(a, b) {\n+functionx add(a, b) {\n \treturn a + b;\n \treturn a + b;\n }\n-\n+ // edited\n function add(a, b) {\n \treturn a + b;\n }\n@@ -10,7 +10,6 @@ function add(a, b) {\n function add(a, b) {\n \treturn a + b;\n \treturn a;\n-\treturn a;\n \treturn a + b;\n }\n  // edited",
+		"stale: verbatim": "should be: same (rebase, main 4+ lines away)\nreviewed PR, against its base:\n@@ -1,8 +1,8 @@\n-function add(a, b) {\n+functionx add(a, b) {\n \treturn a + b;\n \treturn a + b;\n }\n-\n+ // edited\n function add(a, b) {\n \treturn a + b;\n }\n@@ -10,7 +10,6 @@ function add(a, b) {\n function add(a, b) {\n \treturn a + b;\n \treturn a;\n-\treturn a;\n \treturn a + b;\n }\nmain moved:\n@@ -13,4 +13,4 @@ function add(a, b) {\n \treturn a;\n \treturn a + b;\n }\n-\n+ // edited\nnew head, against its base:\n@@ -1,8 +1,8 @@\n-function add(a, b) {\n+functionx add(a, b) {\n \treturn a + b;\n \treturn a + b;\n }\n-\n+ // edited\n function add(a, b) {\n \treturn a + b;\n }\n@@ -10,7 +10,6 @@ function add(a, b) {\n function add(a, b) {\n \treturn a + b;\n \treturn a;\n-\treturn a;\n \treturn a + b;\n }\n  // edited",
+		"stale: fn": "should be: same (rebase, main 4+ lines away)\nreviewed PR, against its base:\n@@ -2,6 +2,7 @@ function add(a, b) {\n \treturn a + b;\n \treturn a + b;\n \treturn a + b;\n+\tcheck(a);\n \treturn a + b;\n }\nmain moved:\n@@ -1,4 +1,4 @@\n-function add(a, b) {\n+functionx add(a, b) {\n \treturn a + b;\n \treturn a + b;\n \treturn a + b;\nnew head, against its base:\n@@ -2,6 +2,7 @@ functionx add(a, b) {\n \treturn a + b;\n \treturn a + b;\n \treturn a + b;\n+\tcheck(a);\n \treturn a + b;\n }"
+	}
+}

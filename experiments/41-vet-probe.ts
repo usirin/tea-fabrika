@@ -1,8 +1,8 @@
 import {access, readFile} from "node:fs/promises";
 import {join} from "node:path";
 import {Effect} from "effect";
-import {type Factory, parseFactory} from "../legacy/src/factory.ts";
 import {Workspace} from "../legacy/src/factory-services.ts";
+import {type Factory, parseFactory} from "../legacy/src/factory.ts";
 import {Issue} from "../legacy/src/issue.ts";
 import {localWorkspace} from "../legacy/src/local.ts";
 import {vitestTests} from "../legacy/src/tests.ts";

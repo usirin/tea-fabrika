@@ -24,8 +24,16 @@
 // The child traps nothing: when a limit ends it, the stage (which traps exits) hears an EXIT, and
 // reads the `limit` record in `<child>/dead`.
 import {defineMachine} from "@demlik/tea";
-import {type Cost, defineProgram, envelope, input, Ledger, Self, streams} from "@kampus/fabrika";
-import {Duration, Effect, Exit, Schedule, Schema, Stream} from "effect";
+import {
+	type Cost,
+	defineProgram,
+	envelope,
+	input,
+	Ledger,
+	Self,
+	streams,
+} from "@kampus/fabrika-old";
+import {Duration, Effect, Exit, Schedule, Schema} from "effect";
 import {steady} from "../asks/ledger.ts";
 import {Faults} from "./idempotency.ts";
 
@@ -98,7 +106,7 @@ export const agentProgram = <R>(o: {
 			"One agent under a stage: answers each ask in its inbox once, holding and charging its spend on the ledger.",
 		inputs: {inbox: input(envelope(Schema.Unknown), "Asks from its stage, and nothing else.")},
 		outputs: {},
-		main: ({inputs}) =>
+		main: ({serve}) =>
 			Effect.gen(function* () {
 				const self = yield* Self;
 				const ledger = yield* Ledger;
@@ -208,12 +216,12 @@ export const agentProgram = <R>(o: {
 						if (wrote._tag === "Failure") return yield* Effect.never;
 						yield* say("answered", ask.id, {agent: turn.agent});
 					});
-				return yield* inputs.inbox.pipe(
-					Stream.runForEach((env) => {
+				return yield* serve({
+					inbox: (env) => {
 						const ask = ASK(env.body);
 						return Exit.isSuccess(ask) ? one(ask.value) : Effect.void;
-					}),
-				);
+					},
+				});
 			}).pipe(Effect.scoped),
 	});
 

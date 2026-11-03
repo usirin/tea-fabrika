@@ -1,3 +1,4 @@
+import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {BREAK, bodyText, inert, messageText, type PrBody} from "./body.ts";
 
@@ -21,6 +22,83 @@ describe("a builder's words", () => {
 			"Opens the windows (#hash, issue 7, PR-2).",
 		);
 	});
+});
+
+/** Every mention GitHub would notify from a text: an `@` with no word right before it, then a name. */
+const mentions = (text: string) => text.match(/(?<!\w)@[a-z0-9][\w/-]*/gi) ?? [];
+
+describe("an agent's words, for any text", () => {
+	const PIECES = [
+		"@name",
+		"@org/team",
+		"first.last@example.com",
+		"#2",
+		"a/b#4",
+		"GH-3",
+		"fixes ",
+		"https://github.com/a/b/issues/5",
+		"https://github.com/a/b/pull/6",
+		"plain words",
+		" ",
+		"\n",
+		"(",
+		")",
+		",",
+		"`",
+		"**",
+		"> ",
+	];
+	const texts = fc.array(fc.constantFrom(...PIECES), {maxLength: 12}).map((p) => p.join(""));
+	const RUNS = {numRuns: 500, seed: 7};
+
+	it("ping nobody and reference nothing", () => {
+		fc.assert(
+			fc.property(texts, (text) => {
+				const made = inert(text);
+				expect(mentions(made)).toEqual([]);
+				expect(references(made)).toEqual([]);
+			}),
+			RUNS,
+		);
+	});
+
+	it("read the same to a person", () => {
+		fc.assert(
+			fc.property(texts, (text) => {
+				expect(inert(text).replaceAll(BREAK, "")).toBe(text);
+			}),
+			RUNS,
+		);
+	});
+
+	it("are the same made inert twice, as a text that passes two steps is", () => {
+		fc.assert(
+			fc.property(texts, (text) => {
+				expect(inert(inert(text))).toBe(inert(text));
+			}),
+			RUNS,
+		);
+	});
+
+	it.each([
+		["a name alone", "@name"],
+		["a team", "@org/team"],
+		["a name in a sentence", "Thanks @name, this one is yours."],
+		["a name in brackets", "(@name)"],
+		["a name on a line of its own", "first line\n@name\nlast line"],
+		["a name in bold", "**@name**"],
+	])("%s pings nobody", (_name, text) => {
+		expect(mentions(text)).not.toEqual([]);
+		expect(mentions(inert(text))).toEqual([]);
+	});
+
+	it.each(["first.last@example.com", "Write to a_b+tag@example.co.uk about it.", "x-y@a.io"])(
+		"an email address stays as it is, so it can still be copied: %s",
+		(text) => {
+			expect(mentions(text)).toEqual([]);
+			expect(inert(text)).toBe(text);
+		},
+	);
 });
 
 describe("the pull request's text", () => {

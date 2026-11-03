@@ -1,3 +1,5 @@
+import {Schema} from "effect";
+import {TicketId} from "../../ids.ts";
 import type {Check} from "../../primitives.ts";
 import {type Criterion, criteriaOf, type Job, type PlanDraft, textOf} from "./plan.ts";
 
@@ -6,7 +8,8 @@ import {type Criterion, criteriaOf, type Job, type PlanDraft, textOf} from "./pl
 // conversation (the refine combo). An empty list passes.
 //
 // What it holds a plan to:
-//   - every story says who, what and why, under an id of its own
+//   - every story says who, what and why, under an id of its own, and any
+//     ticket it names in `from` is a ticket id, as the kept plan needs
 //   - every story is served by a criterion, and every criterion serves a
 //     story the plan has (that it serves at least one, the schema holds)
 //   - at least one task, and each opens with the user's whole job on a
@@ -201,6 +204,9 @@ const dodge = /^(?:none|n\/a|unsure|unknown|tbd|no lean|undecided|either)\.?$/i;
 /** What the Check is handed besides the plan: the names a user meets. `null`: none were gathered. */
 export type Known = {readonly names: readonly string[]} | null;
 
+/** The kept plan's own test of a story's `from`, so the Check and the type cannot drift. */
+const isTicketId = Schema.is(TicketId);
+
 /** Each story's own problems, and the ids the plan has. */
 function storyProblems(plan: PlanDraft): {readonly problems: string[]; readonly ids: Set<string>} {
 	const problems: string[] = [];
@@ -213,6 +219,10 @@ function storyProblems(plan: PlanDraft): {readonly problems: string[]; readonly 
 		ids.add(story.id);
 		for (const part of ["who", "want", "why"] as const)
 			if (story[part].trim() === "") problems.push(`${at}: its \`${part}\` is empty.`);
+		if (story.from !== undefined && !isTicketId(story.from))
+			problems.push(
+				`${at}: its \`from\` says ${JSON.stringify(story.from)}. It must be a ticket id like owner/repo#12, or null for the ticket this plan is named by.`,
+			);
 	});
 	return {problems, ids};
 }
@@ -222,6 +232,17 @@ export const planProblems: Check<PlanDraft, Known> = (plan, known) => {
 	const names = new Set(known?.names ?? []);
 	const problems: string[] = [];
 	if (plan.summary.trim() === "") problems.push("The summary is empty.");
+	for (const change of plan.exam ?? []) {
+		if (/[\r\n]/.test(change.path))
+			problems.push(
+				`A rule change's path holds a line break: ${JSON.stringify(change.path)}. A path is one line.`,
+			);
+		// A pull request shows a path in a code span, and a backtick would end the span early.
+		if (change.path.includes("`"))
+			problems.push(
+				`A rule change's path holds a backtick: ${JSON.stringify(change.path)}. A path has none.`,
+			);
+	}
 	const stories = storyProblems(plan);
 	problems.push(...stories.problems);
 
@@ -262,7 +283,11 @@ export const planProblems: Check<PlanDraft, Known> = (plan, known) => {
 	if (plan.goal !== undefined) claims("The plan's goal", plan.goal);
 	else if (plan.tasks.length > 1)
 		problems.push(
-			"The plan has more than one task but no `goal`: say what a user sees only when every task is in, as a job and criteria of the whole plan. All the tasks land in one pull request, and the last review judges the goal there.",
+			`The plan has more than one task but no \`goal\`: say what a user sees only when every task is in, as a job and criteria of the whole plan. ${
+				(plan.exam ?? []).length === 0
+					? "All the tasks land in one pull request, and the last review judges the goal there."
+					: "This plan makes two pull requests: the rule changes land first in their own, then all the tasks together in the other, and the last review judges the goal there."
+			}`,
 		);
 	plan.stories.forEach((story, i) => {
 		if (story.id !== "" && !served.has(story.id))

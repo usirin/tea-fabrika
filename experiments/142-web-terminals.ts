@@ -420,7 +420,7 @@ const fit = async (lib) => {
 
 /**
  * The real app, for comparison: idle CPU with 1, 4 and 16 tiles made with the desk's own keys,
- * as experiment 141 made them. Needs `pnpm --filter @kampus/fabrika-app build` first. `Browser`
+ * as experiment 141 made them. Needs `pnpm --filter @kampus/fabrika-app-old build` first. `Browser`
  * is the main process, where every tile's tsh runs.
  */
 const appIdle = async (count) => {

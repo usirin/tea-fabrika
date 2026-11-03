@@ -2,11 +2,12 @@ import {defineMachine} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
 import {Duration, Effect, Layer, Schema} from "effect";
 import {describe, expect, it} from "vitest";
+import {HostJobs, openJobs} from "../host/host-jobs.ts";
 import {ear} from "../program/ear.ts";
 import {listed} from "../program/listed.ts";
 import {defineProgram, kind, start, tell} from "../program/program.ts";
 import {memoryStorage, type Storage} from "../program/storage.ts";
-import {JobStorage, Programs, programList} from "./programs.ts";
+import {Programs, programList} from "./programs.ts";
 import {type Printed, type Ready, tsh} from "./shell.ts";
 
 // The doubt of docs/direction/an-old-host-is-named-then-restarted.md: when the old host stops
@@ -110,12 +111,13 @@ const session = (storage: Storage) =>
 		const printed = ear<Printed>();
 		const ready = ear<Ready>();
 		runs += 1;
+		const jobs = yield* openJobs(storage);
 		const started = yield* start(
 			tsh,
 			{show: "short"},
 			{printed: printed.hear, ready: ready.hear},
 			{id: `tsh:attach-again-${runs}`, storage},
-		).pipe(Effect.provideService(Programs, LIST), Effect.provideService(JobStorage, storage));
+		).pipe(Effect.provideService(Programs, LIST), Effect.provideService(HostJobs, jobs));
 		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
 		let told = 0;
 		const line = (text: string) =>

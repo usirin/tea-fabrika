@@ -3,7 +3,7 @@
 // and the try's note, so a review taken over after its reviewer answered reads the answer from the
 // ledger and pays for no second run. The verdict is posted as one comment, keyed, once.
 
-import type {Ledger, Self} from "@kampus/fabrika";
+import type {Ledger, Self} from "@kampus/fabrika-old";
 import {Effect, Exit, Option, Schema, Stream} from "effect";
 import type {CodeHost} from "../services.ts";
 import {commentOf, type Verdict} from "../stages/operate/writes.ts";

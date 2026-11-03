@@ -5,7 +5,7 @@ fabrika app ([`apps/fabrika`](../../apps/fabrika/README.md)) lists it, so `count
 app's tsh opens a window of its own.
 
 ```ts
-import {call, memoryStorage, readInput, viewOf} from "@kampus/fabrika";
+import {call, memoryStorage, readInput, viewOf} from "@kampus/fabrika-old";
 import {counter} from "@tea-fabrika/counter";
 
 viewOf(counter)?.of({n: 2});

@@ -1,7 +1,7 @@
 // The ledger: one Durable Object, run locally in Miniflare. Every host talks to it.
 import {NodeRuntime} from "@effect/platform-node";
-import {Ledger} from "@kampus/fabrika";
-import {LocalLedger, layerLocal} from "@kampus/fabrika/local";
+import {Ledger} from "@kampus/fabrika-old";
+import {LocalLedger, layerLocal} from "@kampus/fabrika-old/local";
 import {Console, Effect} from "effect";
 
 const main = Effect.gen(function* () {

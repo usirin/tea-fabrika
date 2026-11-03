@@ -2,9 +2,9 @@
 // Durable Object in a Miniflare child (its own process group, the memory cap, the pool), and
 // `layerHttp` reaches one already running. Each is held by a ManagedRuntime, so the Promise-shaped
 // harness can run the package's Effects on it.
-import {Ledger, type Row} from "@kampus/fabrika";
-import {layerHttp} from "@kampus/fabrika/http";
-import {LocalLedger, layerLocal} from "@kampus/fabrika/local";
+import {Ledger, type Row} from "@kampus/fabrika-old";
+import {layerHttp} from "@kampus/fabrika-old/http";
+import {LocalLedger, layerLocal} from "@kampus/fabrika-old/local";
 import {Duration, Effect, ManagedRuntime} from "effect";
 import {GRACE_MS, started} from "./harness.ts";
 

@@ -1,0 +1,1209 @@
+{
+	"note": "Experiment 163. Every labelled triage case on kamp-us/phoenix, as one set. The yes-or-no question: does triage close the ticket (a no or a duplicate) or keep it? `right` is what really happened, from the source file, read before any answer of this experiment. 92b's 29 hard no's are the tickets 92b's brief missed at least once (135, 159 and 161 ran each twice: the '58 hard no's' are 58 answers on these 29). `hard-yes` is 135's 5 built tickets 92b's brief closed; `built` the rest of 92b's yes side.",
+	"left": [
+		{
+			"source": "88-truth.json and 92-truth.json (kamp-us/demlik, 45 tickets)",
+			"why": "another repo with another bar: its no's are 'already fixed on main', 'the target was removed', 'a settled no asked again', which brief v1 has no rule for and which need the code. They want a demlik brief and a demlik set of their own, not a share of this one."
+		},
+		{
+			"source": "133-truth.json `fold` (13) and `control` (13), kamp-us/demlik",
+			"why": "a fold's right answer is neither close nor keep: the work is real and lands in another open ticket's plan. A yes-or-no answer cannot be scored right or wrong on it. The controls are keeps, but only there to test folds, and they are demlik's."
+		},
+		{
+			"source": "133-truth.json `needsInfo` (15)",
+			"why": "the right answer is a third outcome, asking the filer, which this question does not have."
+		}
+	],
+	"cases": [
+		{
+			"id": "kamp-us/phoenix#1641",
+			"repo": "kamp-us/phoenix",
+			"n": 1641,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 1653 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#1674",
+			"repo": "kamp-us/phoenix",
+			"n": 1674,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "triage typed it a decision; PR 1693 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#1789",
+			"repo": "kamp-us/phoenix",
+			"n": 1789,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 1795 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#1867",
+			"repo": "kamp-us/phoenix",
+			"n": 1867,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 2043 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#2013",
+			"repo": "kamp-us/phoenix",
+			"n": 2013,
+			"source": "162-truth.json",
+			"kind": "security",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 2028 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#2103",
+			"repo": "kamp-us/phoenix",
+			"n": 2103,
+			"source": "92b-truth.json",
+			"kind": "duplicate",
+			"right": "close",
+			"of": 2100,
+			"why": "triage closed it as a duplicate of 2100"
+		},
+		{
+			"id": "kamp-us/phoenix#2126",
+			"repo": "kamp-us/phoenix",
+			"n": 2126,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 2129 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#2156",
+			"repo": "kamp-us/phoenix",
+			"n": 2156,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 2158 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#2200",
+			"repo": "kamp-us/phoenix",
+			"n": 2200,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 2232 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#2281",
+			"repo": "kamp-us/phoenix",
+			"n": 2281,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 2283 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#2325",
+			"repo": "kamp-us/phoenix",
+			"n": 2325,
+			"source": "162-truth.json",
+			"kind": "security",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 2332 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#2361",
+			"repo": "kamp-us/phoenix",
+			"n": 2361,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 2381 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#2556",
+			"repo": "kamp-us/phoenix",
+			"n": 2556,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 2636 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#2561",
+			"repo": "kamp-us/phoenix",
+			"n": 2561,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 2645 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#2563",
+			"repo": "kamp-us/phoenix",
+			"n": 2563,
+			"source": "92b-truth.json",
+			"kind": "hard-yes",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 2609 closed it; 92b's brief closed it at least once"
+		},
+		{
+			"id": "kamp-us/phoenix#2600",
+			"repo": "kamp-us/phoenix",
+			"n": 2600,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 2633 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#2713",
+			"repo": "kamp-us/phoenix",
+			"n": 2713,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 2818 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#2792",
+			"repo": "kamp-us/phoenix",
+			"n": 2792,
+			"source": "92b-truth.json",
+			"kind": "hard-yes",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 2807 closed it; 92b's brief closed it at least once"
+		},
+		{
+			"id": "kamp-us/phoenix#2915",
+			"repo": "kamp-us/phoenix",
+			"n": 2915,
+			"source": "92b-truth.json",
+			"kind": "hard-yes",
+			"right": "keep",
+			"of": null,
+			"why": "triage typed it an investigation; PR 2916 closed it after the finding; 92b's brief closed it at least once"
+		},
+		{
+			"id": "kamp-us/phoenix#2972",
+			"repo": "kamp-us/phoenix",
+			"n": 2972,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 3009 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#3047",
+			"repo": "kamp-us/phoenix",
+			"n": 3047,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 3066 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#3218",
+			"repo": "kamp-us/phoenix",
+			"n": 3218,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 3303 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#3332",
+			"repo": "kamp-us/phoenix",
+			"n": 3332,
+			"source": "162-truth.json",
+			"kind": "security",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 3355 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#3341",
+			"repo": "kamp-us/phoenix",
+			"n": 3341,
+			"source": "162-truth.json",
+			"kind": "security",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 3345 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#3682",
+			"repo": "kamp-us/phoenix",
+			"n": 3682,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "triage typed it an investigation; PR 3775 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#3690",
+			"repo": "kamp-us/phoenix",
+			"n": 3690,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 3700 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#3788",
+			"repo": "kamp-us/phoenix",
+			"n": 3788,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 3836 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#3886",
+			"repo": "kamp-us/phoenix",
+			"n": 3886,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 3890 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#4087",
+			"repo": "kamp-us/phoenix",
+			"n": 4087,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 7104 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#4236",
+			"repo": "kamp-us/phoenix",
+			"n": 4236,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 4382 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#4607",
+			"repo": "kamp-us/phoenix",
+			"n": 4607,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 4612 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#4661",
+			"repo": "kamp-us/phoenix",
+			"n": 4661,
+			"source": "92b-truth.json",
+			"kind": "duplicate",
+			"right": "close",
+			"of": 4500,
+			"why": "triage closed it as a duplicate of 4500"
+		},
+		{
+			"id": "kamp-us/phoenix#4935",
+			"repo": "kamp-us/phoenix",
+			"n": 4935,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 6477 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#4976",
+			"repo": "kamp-us/phoenix",
+			"n": 4976,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "triage typed it a decision; PR 5030 closed it after the call"
+		},
+		{
+			"id": "kamp-us/phoenix#5077",
+			"repo": "kamp-us/phoenix",
+			"n": 5077,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 5140 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#5092",
+			"repo": "kamp-us/phoenix",
+			"n": 5092,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 5110 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#5112",
+			"repo": "kamp-us/phoenix",
+			"n": 5112,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 5130 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#5254",
+			"repo": "kamp-us/phoenix",
+			"n": 5254,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 5297 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#5416",
+			"repo": "kamp-us/phoenix",
+			"n": 5416,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 5470 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#5560",
+			"repo": "kamp-us/phoenix",
+			"n": 5560,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 6344 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#5588",
+			"repo": "kamp-us/phoenix",
+			"n": 5588,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 5810 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#5669",
+			"repo": "kamp-us/phoenix",
+			"n": 5669,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 5693 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#5685",
+			"repo": "kamp-us/phoenix",
+			"n": 5685,
+			"source": "162-truth.json",
+			"kind": "security",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 6159 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#6003",
+			"repo": "kamp-us/phoenix",
+			"n": 6003,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "triage typed it a decision; PR 6047 closed it after the call"
+		},
+		{
+			"id": "kamp-us/phoenix#6004",
+			"repo": "kamp-us/phoenix",
+			"n": 6004,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 6031 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#6186",
+			"repo": "kamp-us/phoenix",
+			"n": 6186,
+			"source": "92b-truth.json",
+			"kind": "duplicate",
+			"right": "close",
+			"of": 6049,
+			"why": "triage closed it as a duplicate of 6049"
+		},
+		{
+			"id": "kamp-us/phoenix#6189",
+			"repo": "kamp-us/phoenix",
+			"n": 6189,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "triage typed it a decision; PR 6653 closed it after the call"
+		},
+		{
+			"id": "kamp-us/phoenix#6262",
+			"repo": "kamp-us/phoenix",
+			"n": 6262,
+			"source": "92b-truth.json",
+			"kind": "duplicate",
+			"right": "close",
+			"of": 6086,
+			"why": "triage closed it as a duplicate of 6086"
+		},
+		{
+			"id": "kamp-us/phoenix#6265",
+			"repo": "kamp-us/phoenix",
+			"n": 6265,
+			"source": "92b-truth.json",
+			"kind": "duplicate",
+			"right": "close",
+			"of": 6205,
+			"why": "triage closed it as a duplicate of 6205"
+		},
+		{
+			"id": "kamp-us/phoenix#6314",
+			"repo": "kamp-us/phoenix",
+			"n": 6314,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "triage typed it a decision; PR 6475 closed it after the call"
+		},
+		{
+			"id": "kamp-us/phoenix#6343",
+			"repo": "kamp-us/phoenix",
+			"n": 6343,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 6930 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#6374",
+			"repo": "kamp-us/phoenix",
+			"n": 6374,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "triage typed it a decision; PR 6894 closed it after the call"
+		},
+		{
+			"id": "kamp-us/phoenix#6457",
+			"repo": "kamp-us/phoenix",
+			"n": 6457,
+			"source": "92b-truth.json",
+			"kind": "hard-yes",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 6784 closed it; 92b's brief closed it at least once"
+		},
+		{
+			"id": "kamp-us/phoenix#6566",
+			"repo": "kamp-us/phoenix",
+			"n": 6566,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 6627 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#6580",
+			"repo": "kamp-us/phoenix",
+			"n": 6580,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 9115 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#6585",
+			"repo": "kamp-us/phoenix",
+			"n": 6585,
+			"source": "162-truth.json",
+			"kind": "security",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 6657 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#6759",
+			"repo": "kamp-us/phoenix",
+			"n": 6759,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 6801 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#6818",
+			"repo": "kamp-us/phoenix",
+			"n": 6818,
+			"source": "92b-truth.json",
+			"kind": "duplicate",
+			"right": "close",
+			"of": 6800,
+			"why": "triage closed it as a duplicate of 6800"
+		},
+		{
+			"id": "kamp-us/phoenix#7043",
+			"repo": "kamp-us/phoenix",
+			"n": 7043,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 7081 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#7216",
+			"repo": "kamp-us/phoenix",
+			"n": 7216,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: self-generated churn; 92b's brief missed it at least once (a line the bar did not draw)"
+		},
+		{
+			"id": "kamp-us/phoenix#7318",
+			"repo": "kamp-us/phoenix",
+			"n": 7318,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#7340",
+			"repo": "kamp-us/phoenix",
+			"n": 7340,
+			"source": "92b-truth.json",
+			"kind": "easy-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; 92b's brief closed it in both runs"
+		},
+		{
+			"id": "kamp-us/phoenix#7344",
+			"repo": "kamp-us/phoenix",
+			"n": 7344,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#7350",
+			"repo": "kamp-us/phoenix",
+			"n": 7350,
+			"source": "92b-truth.json",
+			"kind": "easy-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: self-generated churn; 92b's brief closed it in both runs"
+		},
+		{
+			"id": "kamp-us/phoenix#7636",
+			"repo": "kamp-us/phoenix",
+			"n": 7636,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 7687 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#7750",
+			"repo": "kamp-us/phoenix",
+			"n": 7750,
+			"source": "92b-truth.json",
+			"kind": "hard-yes",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 8581 closed it; 92b's brief closed it at least once"
+		},
+		{
+			"id": "kamp-us/phoenix#7894",
+			"repo": "kamp-us/phoenix",
+			"n": 7894,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 7966 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#7952",
+			"repo": "kamp-us/phoenix",
+			"n": 7952,
+			"source": "162-truth.json",
+			"kind": "security",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 8193 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#7986",
+			"repo": "kamp-us/phoenix",
+			"n": 7986,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; triage also found the report's central claim did not hold at main; 92b's brief missed it at least once (needs the code)"
+		},
+		{
+			"id": "kamp-us/phoenix#8010",
+			"repo": "kamp-us/phoenix",
+			"n": 8010,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 8510 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#8018",
+			"repo": "kamp-us/phoenix",
+			"n": 8018,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 8029 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#8057",
+			"repo": "kamp-us/phoenix",
+			"n": 8057,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 8118 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#8059",
+			"repo": "kamp-us/phoenix",
+			"n": 8059,
+			"source": "92b-truth.json",
+			"kind": "easy-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; triage also found the premise did not hold at main; 92b's brief closed it in both runs"
+		},
+		{
+			"id": "kamp-us/phoenix#8121",
+			"repo": "kamp-us/phoenix",
+			"n": 8121,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 8122 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#8141",
+			"repo": "kamp-us/phoenix",
+			"n": 8141,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: self-generated churn; 92b's brief missed it at least once (a line the bar did not draw)"
+		},
+		{
+			"id": "kamp-us/phoenix#8147",
+			"repo": "kamp-us/phoenix",
+			"n": 8147,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 8189 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#8173",
+			"repo": "kamp-us/phoenix",
+			"n": 8173,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 8199 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#8174",
+			"repo": "kamp-us/phoenix",
+			"n": 8174,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 8199 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#8179",
+			"repo": "kamp-us/phoenix",
+			"n": 8179,
+			"source": "162-truth.json",
+			"kind": "security",
+			"right": "keep",
+			"of": null,
+			"why": "triage typed it a decision; PR 8449 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#8242",
+			"repo": "kamp-us/phoenix",
+			"n": 8242,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; no live caller supplies the source the report worries about; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#8246",
+			"repo": "kamp-us/phoenix",
+			"n": 8246,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: self-generated churn; 92b's brief missed it at least once (a line the bar did not draw)"
+		},
+		{
+			"id": "kamp-us/phoenix#8259",
+			"repo": "kamp-us/phoenix",
+			"n": 8259,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#8320",
+			"repo": "kamp-us/phoenix",
+			"n": 8320,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#8327",
+			"repo": "kamp-us/phoenix",
+			"n": 8327,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; triage could not confirm the end-to-end failure the report claimed; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#8338",
+			"repo": "kamp-us/phoenix",
+			"n": 8338,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: self-generated churn; 92b's brief missed it at least once (a line the bar did not draw)"
+		},
+		{
+			"id": "kamp-us/phoenix#8457",
+			"repo": "kamp-us/phoenix",
+			"n": 8457,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 8459 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#8496",
+			"repo": "kamp-us/phoenix",
+			"n": 8496,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: self-generated churn; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#8501",
+			"repo": "kamp-us/phoenix",
+			"n": 8501,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#8524",
+			"repo": "kamp-us/phoenix",
+			"n": 8524,
+			"source": "92b-truth.json",
+			"kind": "easy-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; 92b's brief closed it in both runs"
+		},
+		{
+			"id": "kamp-us/phoenix#8537",
+			"repo": "kamp-us/phoenix",
+			"n": 8537,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; 92b's brief missed it at least once (a line the bar did not draw)"
+		},
+		{
+			"id": "kamp-us/phoenix#8577",
+			"repo": "kamp-us/phoenix",
+			"n": 8577,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: self-generated churn; 92b's brief missed it at least once (a line the bar did not draw)"
+		},
+		{
+			"id": "kamp-us/phoenix#8587",
+			"repo": "kamp-us/phoenix",
+			"n": 8587,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: self-generated churn; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#8659",
+			"repo": "kamp-us/phoenix",
+			"n": 8659,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "triage typed it an investigation; PR 9401 closed it after the finding"
+		},
+		{
+			"id": "kamp-us/phoenix#8672",
+			"repo": "kamp-us/phoenix",
+			"n": 8672,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 8767 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#8731",
+			"repo": "kamp-us/phoenix",
+			"n": 8731,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 8750 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#8785",
+			"repo": "kamp-us/phoenix",
+			"n": 8785,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: self-generated churn; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#8826",
+			"repo": "kamp-us/phoenix",
+			"n": 8826,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: self-generated churn; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#8944",
+			"repo": "kamp-us/phoenix",
+			"n": 8944,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 9230 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#8992",
+			"repo": "kamp-us/phoenix",
+			"n": 8992,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "triage typed it a decision; PR 8998 closed it after the call"
+		},
+		{
+			"id": "kamp-us/phoenix#9196",
+			"repo": "kamp-us/phoenix",
+			"n": 9196,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "triage typed it a decision; PR 9310 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#9533",
+			"repo": "kamp-us/phoenix",
+			"n": 9533,
+			"source": "162-truth.json",
+			"kind": "security",
+			"right": "keep",
+			"of": null,
+			"why": "triage typed it a decision; PR 9635 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#9727",
+			"repo": "kamp-us/phoenix",
+			"n": 9727,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#9740",
+			"repo": "kamp-us/phoenix",
+			"n": 9740,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 9757 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#9826",
+			"repo": "kamp-us/phoenix",
+			"n": 9826,
+			"source": "162-truth.json",
+			"kind": "security",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 9921 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#9890",
+			"repo": "kamp-us/phoenix",
+			"n": 9890,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: self-generated churn; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#9935",
+			"repo": "kamp-us/phoenix",
+			"n": 9935,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 9958 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#9951",
+			"repo": "kamp-us/phoenix",
+			"n": 9951,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: self-generated churn; 92b's brief missed it at least once (a line the bar did not draw)"
+		},
+		{
+			"id": "kamp-us/phoenix#10090",
+			"repo": "kamp-us/phoenix",
+			"n": 10090,
+			"source": "92b-truth.json",
+			"kind": "built",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 10169 closed it"
+		},
+		{
+			"id": "kamp-us/phoenix#10128",
+			"repo": "kamp-us/phoenix",
+			"n": 10128,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: self-generated churn; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#10138",
+			"repo": "kamp-us/phoenix",
+			"n": 10138,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#10139",
+			"repo": "kamp-us/phoenix",
+			"n": 10139,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; 92b's brief missed it at least once (needs the code)"
+		},
+		{
+			"id": "kamp-us/phoenix#10142",
+			"repo": "kamp-us/phoenix",
+			"n": 10142,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#10144",
+			"repo": "kamp-us/phoenix",
+			"n": 10144,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: self-generated churn; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#10214",
+			"repo": "kamp-us/phoenix",
+			"n": 10214,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: self-generated churn; 92b's brief missed it at least once (the text shows it)"
+		},
+		{
+			"id": "kamp-us/phoenix#10236",
+			"repo": "kamp-us/phoenix",
+			"n": 10236,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: self-generated churn; 92b's brief missed it at least once (a line the bar did not draw)"
+		},
+		{
+			"id": "kamp-us/phoenix#10375",
+			"repo": "kamp-us/phoenix",
+			"n": 10375,
+			"source": "92b-truth.json",
+			"kind": "easy-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: self-generated churn; 92b's brief closed it in both runs"
+		},
+		{
+			"id": "kamp-us/phoenix#10418",
+			"repo": "kamp-us/phoenix",
+			"n": 10418,
+			"source": "92b-truth.json",
+			"kind": "easy-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; 92b's brief closed it in both runs"
+		},
+		{
+			"id": "kamp-us/phoenix#10463",
+			"repo": "kamp-us/phoenix",
+			"n": 10463,
+			"source": "92b-truth.json",
+			"kind": "hard-no",
+			"right": "close",
+			"of": null,
+			"why": "triage closed it not planned under the value bar: hardening with no incident; 92b's brief missed it at least once (a line the bar did not draw)"
+		},
+		{
+			"id": "kamp-us/phoenix#10591",
+			"repo": "kamp-us/phoenix",
+			"n": 10591,
+			"source": "162-truth.json",
+			"kind": "built-random",
+			"right": "keep",
+			"of": null,
+			"why": "built: PR 10592 closed it"
+		}
+	]
+}

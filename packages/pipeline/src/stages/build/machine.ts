@@ -3,7 +3,7 @@ import {Schema} from "effect";
 import {act, gather, intentOf, keptAct, keptCmd, listen} from "../../primitives.ts";
 import {Criterion} from "../review/pack.ts";
 import {Commit, PrBody} from "./body.ts";
-import {type BuildBrief, Built, Ran, Settings} from "./form.ts";
+import {type BuildBrief, type Built, HeldBuilt, Ran, Settings} from "./form.ts";
 import {BuildOutcome} from "./outcome.ts";
 import {Copied, Pushed} from "./services.ts";
 import {branchOf, buildGate, Item, openOf, Ticket} from "./ticket.ts";
@@ -55,7 +55,11 @@ export const readTicket = gather("build_ticket", {input: TicketIn, ok: Ticket, e
 
 export const copyTree = act("build_copy", {input: TicketIn, ok: Copied, err: Unknown});
 
-export const pushBranch = act("build_push", {input: PushIn, ok: Pushed, err: Unknown});
+export const pushBranch = act("build_push", {
+	input: PushIn,
+	ok: Pushed,
+	err: ["unknown", "exam_touched"],
+});
 
 export const openPr = act("build_open", {input: OpenIn, ok: Schema.String, err: Unknown});
 
@@ -89,7 +93,7 @@ export const BuildReport = Schema.Struct({
 	/** This round added a commit. */
 	changed: Schema.Boolean,
 	/** The builder's form. `null`: it handed none back. */
-	built: Schema.NullOr(Built),
+	built: Schema.NullOr(HeldBuilt),
 	/** What the builder's last run cost. `null`: none was started. */
 	ran: Schema.NullOr(Ran),
 	runs: Schema.Finite,
@@ -109,7 +113,7 @@ const Read = Schema.Struct({
 });
 const Made = Schema.Struct({...Read.fields, copied: Copied});
 type Made = typeof Made.Type;
-const Done = Schema.Struct({...Made.fields, built: Built, ran: Ran, runs: Schema.Finite});
+const Done = Schema.Struct({...Made.fields, built: HeldBuilt, ran: Ran, runs: Schema.Finite});
 type Done = typeof Done.Type;
 
 /** The build machine's state, and the schema it is kept and read back through. */
@@ -406,9 +410,13 @@ export const build = defineMachine({
 			});
 			return [{...done, phase: "opening", pushed, asked}, [asked]];
 		},
-		build_push_err: (s): Step =>
+		build_push_err: (s, m): Step =>
 			s.phase === "pushing"
-				? end(s, {kind: "stuck", why: "push_failed"}, {built: s.built, ran: s.ran, runs: s.runs})
+				? end(
+						s,
+						{kind: "stuck", why: m.error._tag === "exam_touched" ? "exam_touched" : "push_failed"},
+						{built: s.built, ran: s.ran, runs: s.runs},
+					)
 				: stay(s),
 
 		build_open_ok: (s, m): Step =>

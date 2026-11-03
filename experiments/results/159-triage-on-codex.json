@@ -1,0 +1,4505 @@
+{
+	"configs": {
+		"sol-medium": {
+			"p": {
+				"2281": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "Concurrent shippers hit an observed bundle collision in this repo's ship-it skill. Use a unique per-run bundle directory and retain the commit-to-head SHA check."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8964,
+						"tokens": {
+							"input": 18413,
+							"cached": 8448,
+							"output": 70
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "Concurrent shippers have already read each other's bundles from the shared temporary path, causing real race friction. Give each invocation an isolated bundle directory while retaining the commit-to-head SHA check."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6981,
+						"tokens": {
+							"input": 18409,
+							"cached": 8448,
+							"output": 86
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"2563": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent reports an audit finding, with no failure in real use. Exploitation requires knowing an unguessable connection ID and causes only a recoverable stream reset."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7076,
+						"tokens": {
+							"input": 17462,
+							"cached": 8448,
+							"output": 91
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent-filed audit describes a hypothetical stream reset requiring knowledge of an unguessable connection ID, with no reported incident in real use."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6468,
+						"tokens": {
+							"input": 17455,
+							"cached": 8448,
+							"output": 96
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"2792": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent-filed ticket identifies potentially expensive regex patterns but reports no failure in real use. The proposed rewrite is preventive hardening; #2784 covered separate copied instances."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6653,
+						"tokens": {
+							"input": 17851,
+							"cached": 8448,
+							"output": 88
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent reports latent regex risks without any failure in real use. The original patterns were explicitly outside #2784's scope, so this is not a duplicate."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5610,
+						"tokens": {
+							"input": 17854,
+							"cached": 8448,
+							"output": 89
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"2915": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "duplicate: folded into #2638, which carries this work",
+								"duplicateOf": 2638,
+								"why": "#2638 already reports integration-test flakes caused by D1 429 errors during stage provisioning and teardown. This ticket reports the same flake class with additional evidence of merge-queue bystander evictions."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7344,
+						"tokens": {
+							"input": 17436,
+							"cached": 8448,
+							"output": 120
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "duplicate: folded into #2638, which carries this work",
+								"duplicateOf": 2638,
+								"why": "#2638 already tracks integration-test flakes caused by D1 429 errors. The merge-group evictions and affected PRs provide additional incident evidence for that same problem."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6266,
+						"tokens": {
+							"input": 17436,
+							"cached": 8448,
+							"output": 107
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"3788": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "research",
+								"why": "Repeated CI failures show a real readiness-budget problem, and #3778 explicitly leaves resizing out of scope. Measure propagation times and the full deploy/readiness chain first so budget sizing accounts for the hook ceiling."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 19267,
+						"tokens": {
+							"input": 19519,
+							"cached": 8448,
+							"output": 300
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "Repeated CI failures establish a real readiness-budget bug. #3778 explicitly covers diagnostics only; this work must size the full deploy/readiness chain so later probes can finish within the hook ceiling."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 16551,
+						"tokens": {
+							"input": 19523,
+							"cached": 8448,
+							"output": 255
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"6457": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The flag is off, and the ticket reports no real-user slowdown or measured performance problem. Request-scoped memoization would preempt a possible future cost."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6715,
+						"tokens": {
+							"input": 17578,
+							"cached": 8448,
+							"output": 95
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The flag is still off, and the ticket reports no real slowdown or measured impact. Request memoization would address a predicted performance problem rather than an incident."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 9653,
+						"tokens": {
+							"input": 17569,
+							"cached": 8448,
+							"output": 86
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"7216": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "An agent filed a one-word docblock correction; the call, overload, and README already use the correct argument position."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5766,
+						"tokens": {
+							"input": 17319,
+							"cached": 8448,
+							"output": 76
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "An agent filed this one-word docblock correction; the call, overload, and README already use the correct argument position. It changes no behavior."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6405,
+						"tokens": {
+							"input": 17320,
+							"cached": 8448,
+							"output": 64
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"7318": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket derives a possible repeated dispatch loop but reports no real incident of repeated clears or duplicate issue filings. The cited provider outages do not establish that this loop occurred."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 9465,
+						"tokens": {
+							"input": 17546,
+							"cached": 8448,
+							"output": 123
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket derives a possible repeated clear-and-dispatch loop but reports no incident where it actually occurred. The five provider outages establish dead spawns, not repeated clears or duplicate incident filings."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8533,
+						"tokens": {
+							"input": 17542,
+							"cached": 8448,
+							"output": 116
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"7340": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent-filed ticket explicitly describes a latent gap with no observed failure and says nobody likely runs unpark from another clone today."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5084,
+						"tokens": {
+							"input": 17502,
+							"cached": 8448,
+							"output": 51
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent-filed ticket explicitly describes a latent gap with no observed failure in real use. Proving clone identity would harden a scenario nobody is reported to have encountered."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6025,
+						"tokens": {
+							"input": 17502,
+							"cached": 8448,
+							"output": 64
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"7344": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The reviewer identified a repair-mode coverage gap, but the ticket reports no actual repair-mode residue surviving a clear. Widening the filter is preventive hardening; narrowing the docblock alone changes no behavior."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8918,
+						"tokens": {
+							"input": 17147,
+							"cached": 8448,
+							"output": 135
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The reviewer identified a possible repair-mode cleanup gap, but the ticket reports no actual incident caused by it. No dispatch is blocked."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6642,
+						"tokens": {
+							"input": 17150,
+							"cached": 0,
+							"output": 111
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"7350": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "The agent-filed ticket asks to complete a parenthetical while explicitly confirming that the authoritative routing table already handles human:epic-review correctly. The wording change would not change driver behavior."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8504,
+						"tokens": {
+							"input": 17404,
+							"cached": 8448,
+							"output": 111
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "This agent-filed ticket asks to widen one explanatory parenthetical. The ticket confirms that the authoritative routing table is correct and the omission does not misroute a driver."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7044,
+						"tokens": {
+							"input": 17407,
+							"cached": 8448,
+							"output": 63
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"7750": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "This agent-filed ticket adds tests for refusal paths that already work. The earlier tag error was caught in review; no failure in real use is reported."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6114,
+						"tokens": {
+							"input": 17379,
+							"cached": 8448,
+							"output": 88
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket adds tests for refusal paths that already work. The earlier tag mistake was caught in review; no failure in real use is reported."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8462,
+						"tokens": {
+							"input": 17377,
+							"cached": 8448,
+							"output": 107
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"7986": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket identifies a possible loss of supervision for internal follow-ups, but reports no failure in real use or evidence that the previous fault behavior was needed."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8329,
+						"tokens": {
+							"input": 17455,
+							"cached": 8448,
+							"output": 108
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket identifies a possible loss of fault visibility but reports no real internal follow-up failure or user impact. A ruling on stricter supervision would be speculative hardening."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8383,
+						"tokens": {
+							"input": 17454,
+							"cached": 8448,
+							"output": 122
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8010": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "This agent-filed ticket proposes defensive error handling based on source inspection. It reports no observed leak or failure in real use."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 9614,
+						"tokens": {
+							"input": 17363,
+							"cached": 0,
+							"output": 130
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent found this through source inspection; no real-user failure or credential leak was observed. Sanitizing hypothetical SDK exception output is hardening without an incident."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8428,
+						"tokens": {
+							"input": 17361,
+							"cached": 0,
+							"output": 121
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8059": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket requests tests for a branch already working after #8029; it reports no real-use failure of promptDropOf. The earlier refusal bug was fixed, and a hypothetical predicate regression is hardening."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8135,
+						"tokens": {
+							"input": 17288,
+							"cached": 8448,
+							"output": 117
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "This asks for tests of the working distinction shipped in #8029, citing a possible future regression rather than an observed failure in promptDropOf."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8649,
+						"tokens": {
+							"input": 17294,
+							"cached": 8448,
+							"output": 115
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8141": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "This agent-filed ticket requests a one-word correction to an internal docblock. It changes no runtime behavior and reports no actual user incident."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 10907,
+						"tokens": {
+							"input": 17516,
+							"cached": 8448,
+							"output": 196
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The shipped doc names an environment variable Pi never reads, so following it silently fails to configure the directory. Correct the variable name and check for other occurrences in Tuval."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 9944,
+						"tokens": {
+							"input": 17520,
+							"cached": 8448,
+							"output": 158
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8147": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This defines concrete transcript port changes and validation for phase 1. It is distinct from the earlier mapper tickets and is ready for a builder to plan and implement."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8391,
+						"tokens": {
+							"input": 17387,
+							"cached": 8448,
+							"output": 87
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This is a distinct prerequisite to the mapper work in #8142 and #8146: extend the backend-neutral transcript contract with thinking, compaction, and collapsible system items. The scope and acceptance criteria are concrete enough to plan and hand to a builder."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6368,
+						"tokens": {
+							"input": 17388,
+							"cached": 8448,
+							"output": 98
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8242": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "All current transcript sources are plain functions, so no hook-count failure has occurred. The ticket guards against a hypothetical future hook-based source."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6542,
+						"tokens": {
+							"input": 17404,
+							"cached": 8448,
+							"output": 52
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "All current transcript sources are plain functions, so the conditional call causes no failure today. The ticket anticipates a future hook-based source and reports no incident in real use."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6608,
+						"tokens": {
+							"input": 17401,
+							"cached": 8448,
+							"output": 99
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8246": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "The repair already settled the backend tag’s meaning. This agent-filed follow-up would copy established definitions into the glossary without changing behavior; the separate workflow-policy suggestion names no concrete change."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 15922,
+						"tokens": {
+							"input": 17417,
+							"cached": 8448,
+							"output": 272
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The missing canonical definitions contributed to conflicting interpretations in a blocking review, so this is an observed documentation gap with practical consequences. Add the three glossary entries using the settled meanings; the separate workflow-policy question need not block that repair."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8119,
+						"tokens": {
+							"input": 17412,
+							"cached": 3328,
+							"output": 94
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8259": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket describes a possible failure dependent on mappers that are not written yet and explicitly says it may never occur. It reports no clipping failure in real use."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7067,
+						"tokens": {
+							"input": 17449,
+							"cached": 8448,
+							"output": 105
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket identifies a possible clipping problem, but the mappers are not written yet and no real notice has triggered it. Its proposed mapper contract or disclosure fallback would harden a hypothetical case."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6197,
+						"tokens": {
+							"input": 17447,
+							"cached": 0,
+							"output": 107
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8320": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent reports a hypothetical confusing refusal and explicitly says it is uncertain whether any spell reads the workspace in this state. No failure in real use is shown."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5962,
+						"tokens": {
+							"input": 17402,
+							"cached": 8448,
+							"output": 96
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent-filed ticket identifies a possible confusing refusal but reports no failure in real use and explicitly says no spell may read this workspace today."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6311,
+						"tokens": {
+							"input": 17402,
+							"cached": 8448,
+							"output": 86
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8327": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "This agent-filed ticket infers a reconnect failure from code review without confirming it in real use; it explicitly leaves open whether desk remounting prevents the problem."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 9005,
+						"tokens": {
+							"input": 17446,
+							"cached": 8448,
+							"output": 125
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent inferred a reconnect failure from code review but reported no real-use incident and did not confirm whether windows survive re-attachment."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7810,
+						"tokens": {
+							"input": 17441,
+							"cached": 8448,
+							"output": 106
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8338": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "An agent filed this one-clause docblock correction against the project's own output. The ticket explicitly says nothing breaks and no machine reads it."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8793,
+						"tokens": {
+							"input": 17609,
+							"cached": 8448,
+							"output": 124
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "An agent filed this to correct one clause in the project's own docblock. The ticket explicitly says nothing breaks and no machine reads it; the change would only tidy the explanation."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8224,
+						"tokens": {
+							"input": 17605,
+							"cached": 8448,
+							"output": 130
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8496": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent-filed ticket explicitly says nothing is wrong at head. Removing the unused failure parameter and sharing the terminal-settlement implementation would prevent hypothetical drift, with no reported failure in real use."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6590,
+						"tokens": {
+							"input": 17794,
+							"cached": 8448,
+							"output": 96
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket explicitly says nothing is wrong at head. Removing the unused failure parameter and sharing the terminal-settlement implementation would guard against hypothetical future drift, with no reported failure in real use."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 16472,
+						"tokens": {
+							"input": 17789,
+							"cached": 8448,
+							"output": 119
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8501": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent found a possible interleaving bug by reading code, but reports no failure in real use and explicitly says it might never fire on a real stream. Scoping the reset and adding a synthetic case would harden an unobserved failure path."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7680,
+						"tokens": {
+							"input": 17852,
+							"cached": 8448,
+							"output": 109
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent reports a possible interleave inferred from code, with no capture or real-use incident showing it occurs. The proposed guard and test harden a hypothetical failure."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7137,
+						"tokens": {
+							"input": 17854,
+							"cached": 8448,
+							"output": 91
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8524": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent-filed ticket explicitly says no sliding port declares capacity 0 today. The incorrect eviction count occurs only in a hypothetical configuration and has never failed in real use."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6927,
+						"tokens": {
+							"input": 17797,
+							"cached": 8448,
+							"output": 64
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent found a latent edge case: no port declares a zero-capacity sliding bound, and the ticket reports no failure in real use."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6481,
+						"tokens": {
+							"input": 17793,
+							"cached": 8448,
+							"output": 94
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8537": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent inferred incorrect trace parenting and span retention from source review, but reports no real-use incident where either caused a problem."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8835,
+						"tokens": {
+							"input": 17911,
+							"cached": 8448,
+							"output": 127
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The ticket identifies an existing tracing bug: spawned processes retain a stale parent span that overrides the live dispatch context. Plan a fix to preserve live tracing context and prevent retention of the spawn-time span."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 11224,
+						"tokens": {
+							"input": 17912,
+							"cached": 8448,
+							"output": 155
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8577": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "An agent filed this to correct numerical claims in agent-produced ADRs. The ticket explicitly says neither correction changes either decision or any shipped behavior."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 18272,
+						"tokens": {
+							"input": 17874,
+							"cached": 8448,
+							"output": 110
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "This agent-filed ticket corrects benchmark wording in the project's own ADRs and explicitly says neither decision changes. It identifies no behavior or action that depends on those corrections."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8524,
+						"tokens": {
+							"input": 17870,
+							"cached": 8448,
+							"output": 132
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8587": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "An agent filed this to refresh version citations and class names in comments and docs. The ticket explicitly says the behavioral claims still hold and identifies no runtime defect."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7150,
+						"tokens": {
+							"input": 17850,
+							"cached": 8448,
+							"output": 98
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "This agent-filed ticket asks to refresh names and dependency citations in comments and docs, and explicitly says the behavior claims remain correct and nothing is a runtime defect."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7130,
+						"tokens": {
+							"input": 17852,
+							"cached": 8448,
+							"output": 96
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8785": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "The agent-filed ticket explicitly reports no runtime misbehavior. It asks to correct a comment or guard against a hypothetical future label divergence."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5816,
+						"tokens": {
+							"input": 17395,
+							"cached": 8448,
+							"output": 79
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "This agent-filed ticket explicitly reports no current runtime problem. Correcting the comment is a documentation nit, and guarding a future label divergence has no incident behind it."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7135,
+						"tokens": {
+							"input": 17399,
+							"cached": 8448,
+							"output": 63
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8826": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "The agent-filed ticket asks to document a heading constraint that enrich already enforces correctly. The observed refusal and successful retry show the check works."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 11875,
+						"tokens": {
+							"input": 16972,
+							"cached": 8448,
+							"output": 154
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "The agent-filed ticket asks to document one formatting requirement of a check that already works: enrich rejects ## and accepts ###. No earlier ticket listed duplicates this work."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8853,
+						"tokens": {
+							"input": 16975,
+							"cached": 8448,
+							"output": 120
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8944": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This is a reproduced delivery bug: process send and agent tools cannot reach graph-launched processes, forcing users to spawn a second copy. Plan a fix so delivery can address existing graph-launched processes."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6867,
+						"tokens": {
+							"input": 17129,
+							"cached": 8448,
+							"output": 92
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "This is a reproduced delivery bug: graph-launched processes cannot receive CLI or agent sends, forcing users to spawn a second copy. Fix process lookup so send can address those live processes."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6391,
+						"tokens": {
+							"input": 17130,
+							"cached": 8448,
+							"output": 94
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"9727": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent-filed ticket explicitly says nothing in the tree imports apps through either gap today. Extending the guard would harden against hypothetical future violations without a real-use incident."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7731,
+						"tokens": {
+							"input": 17453,
+							"cached": 8448,
+							"output": 96
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent-filed ticket explicitly says no code currently uses either bypass and neither gap has caused a real failure. Extending the guard would be preventive hardening."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 10354,
+						"tokens": {
+							"input": 17455,
+							"cached": 8448,
+							"output": 86
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"9890": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "duplicate: the same shared Locale-to-Intl helper was requested in #7666",
+								"duplicateOf": 7666,
+								"why": "The ticket explicitly identifies #7666 as tracking this same change. If its duplicate closure was incorrect, reopen #7666."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 11120,
+						"tokens": {
+							"input": 17140,
+							"cached": 8448,
+							"output": 200
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "duplicate: the shared Locale-to-Intl helper was already requested in #7666",
+								"duplicateOf": 7666,
+								"why": "The ticket explicitly identifies #7666 as the earlier request for this same change. Its closure as a duplicate does not make this a new work item."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 9320,
+						"tokens": {
+							"input": 17140,
+							"cached": 8448,
+							"output": 160
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"9951": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "This agent-filed ticket tidies source citations in the project's own contract without changing the pitch guard or triage behavior."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8950,
+						"tokens": {
+							"input": 16736,
+							"cached": 8448,
+							"output": 133
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "An agent filed this to tidy citations in the project's own contract. Updating the paths and replacing line numbers with function names changes no behavior."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 9802,
+						"tokens": {
+							"input": 16744,
+							"cached": 8448,
+							"output": 157
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"10128": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "This agent-filed ticket removes an unused re-export solely to clarify the preferred import path. It reports no consumer failure or behavior change."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7349,
+						"tokens": {
+							"input": 16764,
+							"cached": 8448,
+							"output": 87
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "This agent-filed ticket removes an unused re-export solely to clarify the import path for readers. It reports no behavior change or real failure."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6579,
+						"tokens": {
+							"input": 16759,
+							"cached": 8448,
+							"output": 83
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"10138": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The audit found a setup dependency, but reports no failure in real use. Moving it to beforeAll would harden hypothetical filtered or isolated runs."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 11768,
+						"tokens": {
+							"input": 16715,
+							"cached": 8448,
+							"output": 109
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket reports a potential failure when tests are filtered or retried, but no failure in real use. Moving the fixture into a hook would harden the test setup."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 9756,
+						"tokens": {
+							"input": 16715,
+							"cached": 8448,
+							"output": 160
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"10139": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "This agent-filed ticket identifies a missing assertion for a rejection that already works, with no observed write-through failure. The reference to #2154 does not establish that the current rejection changes the saved name or byline."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 9667,
+						"tokens": {
+							"input": 16758,
+							"cached": 8448,
+							"output": 122
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The rejection already works; this agent-filed ticket asks for an additional assertion without showing that a rejected empty name changed stored state in real use. The reference to #2154 does not establish that this path has failed."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 8631,
+						"tokens": {
+							"input": 16760,
+							"cached": 8448,
+							"output": 126
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"10142": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "This agent-filed ticket asks for test coverage of a hypothetical audit-field regression and reports no failure in real use."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7810,
+						"tokens": {
+							"input": 16803,
+							"cached": 8448,
+							"output": 83
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "This agent-filed ticket asks for missing integration coverage of an existing ban write, without reporting a failure in real use."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7226,
+						"tokens": {
+							"input": 16797,
+							"cached": 8448,
+							"output": 89
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"10144": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "This agent-filed ticket removes an unused alias and export modifiers from internal helpers. It reports no behavior change or failure in real use."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6109,
+						"tokens": {
+							"input": 16812,
+							"cached": 8448,
+							"output": 87
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "This agent-filed ticket removes an unused alias and un-exports internal helpers without changing behavior. #10103 explicitly excluded this production cleanup, so it is not a duplicate of that sweep."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6899,
+						"tokens": {
+							"input": 16813,
+							"cached": 8448,
+							"output": 111
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"10214": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "This agent-filed follow-up removes an unread option and its relays from the agent's own implementation. It identifies no failure or behavior change."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7610,
+						"tokens": {
+							"input": 16935,
+							"cached": 8448,
+							"output": 99
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "Removing the unread cwd fields and relays changes no behavior. This agent-filed cleanup addresses possible reader confusion, with no reported failure in real use."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7597,
+						"tokens": {
+							"input": 16930,
+							"cached": 8448,
+							"output": 108
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"10236": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "PR #10220 already added the driver's disarm behavior. This agent-filed ticket only adds the existing caller to the ADR, with no behavior change."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6463,
+						"tokens": {
+							"input": 16972,
+							"cached": 8448,
+							"output": 110
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "This agent-filed ticket asks only to name an additional caller in ADR 0198; PR #10220 already added the driver's disarm behavior."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5368,
+						"tokens": {
+							"input": 16973,
+							"cached": 8448,
+							"output": 60
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"10375": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "An agent filed this to reword a docblock while explicitly confirming that behavior and the contract are correct."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 4769,
+						"tokens": {
+							"input": 16875,
+							"cached": 8448,
+							"output": 56
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "This agent-filed ticket asks only to expand a docblock; cleanup behavior already works and the contract and skills already describe both proofs."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 5147,
+						"tokens": {
+							"input": 16878,
+							"cached": 8448,
+							"output": 57
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"10418": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The skill already requires the proving read, and the ticket reports no real instance of an invalid WIP or repeated review loop. Adding verb enforcement and a loop budget would harden hypothetical failures."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 6759,
+						"tokens": {
+							"input": 16986,
+							"cached": 8448,
+							"output": 103
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket identifies a missing proving check and an unbounded loop, but reports no real occurrence of an unnecessary review round or repeated refreshes. Both proposals harden a route whose required read is already stated in the operate skill."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7642,
+						"tokens": {
+							"input": 16989,
+							"cached": 8448,
+							"output": 117
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"10463": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "yes",
+								"next": "plan",
+								"why": "The CLI refusal gives Codex and pi drivers a remedy they cannot use. Update it to state the portable worktree requirement and identify the Claude Code flag, then align the contract and unit test."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 7691,
+						"tokens": {
+							"input": 16966,
+							"cached": 8448,
+							"output": 106
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					},
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "This agent-filed sweep asks to reword an existing refusal and update its contract and test. The isolation check already works; no actual failed shipper run is reported."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "medium",
+						"ms": 13789,
+						"tokens": {
+							"input": 16961,
+							"cached": 8448,
+							"output": 220
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				]
+			},
+			"d": {
+				"21": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "duplicate",
+										"of": 20,
+										"why": "Ticket #20 already asks for acceptedTypes(machine, state) so callers can ask before dispatching. #21 specifies the same helper and behavior."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 6151,
+								"tokens": {
+									"input": 12940,
+									"cached": 0,
+									"output": 75
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "duplicate",
+										"of": 20,
+										"why": "#20 explicitly includes acceptedTypes(machine, state) so callers can ask before dispatching, which is the same public helper requested here."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 5369,
+								"tokens": {
+									"input": 12938,
+									"cached": 0,
+									"output": 71
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"46": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 41,
+										"why": "This is a concrete implementation slice of #41’s export-surface consolidation, not a duplicate of the broader proposal or its grilling session. It specifies the resilience modules to internalize and retype while preserving the public retry-backoff entry point."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 9713,
+								"tokens": {
+									"input": 14603,
+									"cached": 0,
+									"output": 139
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 41,
+										"why": "This is a concrete implementation slice of #41’s export-surface consolidation, with specific moves, retyping, and compatibility requirements. It adds actionable scope rather than duplicating the umbrella ticket or #43’s grilling session."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7216,
+								"tokens": {
+									"input": 14611,
+									"cached": 0,
+									"output": 109
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"66": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 46,
+										"why": "This is a distinct correctness bug: wrapping a machine silently disables typed result validation and settled-message stamping. Plan #46 already moves and retypes these wrappers, so preserving machine metadata and adding a regression test fits that work."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 11798,
+								"tokens": {
+									"input": 17180,
+									"cached": 8832,
+									"output": 174
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 46,
+										"why": "Wrapping a machine silently disables result validation and settlement stamping, a real correctness bug. Plan #46 already changes all three wrappers; preserving command definitions and adding a regression test fits that editing pass."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 9667,
+								"tokens": {
+									"input": 17181,
+									"cached": 0,
+									"output": 116
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"68": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "ruling",
+										"ask": "What should driveToDone do when the start chain quiesces on a non-terminal State?",
+										"options": [
+											"Keep waiting for Sub-driven completion and document the possible indefinite wait.",
+											"Reject at quiescence when no Subs are active.",
+											"Support an optional deadline that rejects when exceeded."
+										],
+										"why": "This is a distinct contract gap discovered during #57, with no existing fix or ruling shown. An owner must choose the waiting policy because unconditional rejection would break legitimate Sub-driven machines."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 8593,
+								"tokens": {
+									"input": 17006,
+									"cached": 8832,
+									"output": 153
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "ruling",
+										"ask": "What should driveToDone promise when the start chain quiesces without reaching a terminal State?",
+										"options": [
+											"Keep waiting for Sub-driven completion and document that it may wait indefinitely.",
+											"Reject at quiescence when no active Subs remain.",
+											"Support an optional deadline that rejects if no terminal State arrives."
+										],
+										"why": "This is a distinct contract gap discovered during #57, with no duplicate or applicable no rule. Choosing how indefinite waiting interacts with legitimate Sub-driven completion requires an owner ruling before implementation."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7455,
+								"tokens": {
+									"input": 17009,
+									"cached": 0,
+									"output": 155
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"107": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "The public parity API exposes two types consumers cannot import; re-exporting them fixes a concrete API gap. This is distinct from #73’s documentation import sweep and has no duplicate among the listed tickets."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7718,
+								"tokens": {
+									"input": 15790,
+									"cached": 0,
+									"output": 91
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "The public parity API exposes types that consumers cannot import, a concrete gap in the shipped package. Re-exporting those types and updating the how-to is distinct API work beyond #73’s documentation import sweep."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 6370,
+								"tokens": {
+									"input": 15786,
+									"cached": 0,
+									"output": 107
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"173": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 24,
+										"why": "The consumer typecheck exposes real failures against the built package’s declarations. This adds consumer validation to #24’s existing work to fix example typechecking and prevent drift."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 13189,
+								"tokens": {
+									"input": 16408,
+									"cached": 0,
+									"output": 227
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 24,
+										"why": "This reports a distinct failure against the built package’s declarations, with no evidence it has been fixed. It adds consumer typechecking coverage and two failing examples to #24’s existing work on example typechecks and CI gating."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 13898,
+								"tokens": {
+									"input": 16414,
+									"cached": 0,
+									"output": 200
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"206": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "This is a reproduced consumer-facing TypeScript 7 compatibility bug with a concrete fix that preserves dependency validation. #201 addresses dependency declaration ergonomics; it does not already cover this inference regression."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 13063,
+								"tokens": {
+									"input": 16115,
+									"cached": 8832,
+									"output": 127
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "This is a reproducible consumer-facing TypeScript 7 compatibility bug with a concrete fix that preserves dependency checks. It is distinct from #201’s longer-term dependency-token design and warrants its own repair."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 10087,
+								"tokens": {
+									"input": 16113,
+									"cached": 8832,
+									"output": 161
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"212": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "The examples still teach imports that fail for installed-package consumers despite published replacements being available. #205 explicitly limited its example migration to job-queue.ts, so this sweep is separate work."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7810,
+								"tokens": {
+									"input": 16073,
+									"cached": 8832,
+									"output": 123
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "The examples still teach imports that fail for installed consumers despite published alternatives being available. This is a separate mechanical sweep explicitly excluded from #205’s scope."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 6602,
+								"tokens": {
+									"input": 16065,
+									"cached": 8832,
+									"output": 91
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"248": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "ruling",
+										"ask": "Should Store<S> be one engine-neutral interface or should each engine define its own store interface?",
+										"options": [
+											"Keep one engine-neutral Store<S> interface shared by both engines.",
+											"Give the Promise and Effect engines their own store interfaces."
+										],
+										"why": "This is an unresolved architectural choice charted under #245, with no duplicate or prior ruling shown. An owner must choose the interface boundary before implementation."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 10001,
+								"tokens": {
+									"input": 15957,
+									"cached": 0,
+									"output": 132
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "ruling",
+										"ask": "Should Store<S> remain one engine-neutral interface, or should each engine define its own store interface?",
+										"options": [
+											"Keep one engine-neutral Store<S> interface.",
+											"Define a separate store interface for each engine."
+										],
+										"why": "This is an unresolved API boundary decision within #245's engine split. An owner must choose the direction before implementation."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 8002,
+								"tokens": {
+									"input": 15952,
+									"cached": 0,
+									"output": 133
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"272": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 268,
+										"why": "ADR 0001 needs an amendment to reflect #268’s wrapper-removal ruling while preserving its in-house resilience and durability decision. This is a documentation part of that existing change and requires no new owner ruling."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 8299,
+								"tokens": {
+									"input": 17378,
+									"cached": 0,
+									"output": 121
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 268,
+										"why": "ADR 0001 needs a concrete documentation amendment to reflect #268’s ruling while preserving its in-house resilience and durability decision. This adds a missed documentation change to the work already covered by plan #268."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 9104,
+								"tokens": {
+									"input": 17373,
+									"cached": 8832,
+									"output": 108
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"295": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 279,
+										"why": "These are two specific test gaps in the subscription reconciliation introduced by #279, so they extend that open plan. No listed ticket reports the same gaps, and there is no evidence a merged change has covered them."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 9884,
+								"tokens": {
+									"input": 18665,
+									"cached": 0,
+									"output": 107
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 279,
+										"why": "The two missing tests protect documented reconciliation behavior and add cases to the subs-as-data work already covered by plan #279. No listed ticket reports the same testing gap."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 8525,
+								"tokens": {
+									"input": 18662,
+									"cached": 0,
+									"output": 99
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"316": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 315,
+										"why": "Unreadable state being overwritten is a distinct data-loss bug, not a duplicate of missing version stamps or migration steps. Add refusal semantics and byte-preservation checks to #315’s store migration plan."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7556,
+								"tokens": {
+									"input": 18383,
+									"cached": 0,
+									"output": 133
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 315,
+										"why": "Unreadable saved state being overwritten is a data-loss bug that needs a supported refusal path. Add it to #315’s migration work so failed restoration preserves the original bytes."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7377,
+								"tokens": {
+									"input": 18383,
+									"cached": 0,
+									"output": 99
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"319": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "ruling",
+										"ask": "Should tea add an optional Effect-native store interface and adapters for Effect hosts?",
+										"options": [
+											"Add EffectStore and adapters while keeping the core Store engine-neutral.",
+											"Keep Promise-based Store and address typed store errors through #308."
+										],
+										"why": "#248 left an Effect store optional; this ticket supplies a real consumer need rather than repeating a rejected proposal. The owner must decide whether that need warrants a new public API."
+									}
+								},
+								"problems": [],
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 11862,
+								"tokens": {
+									"input": 18649,
+									"cached": 0,
+									"output": 206
+								},
+								"tools": 0,
+								"stop": "end_turn"
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "ruling",
+										"ask": "Should tea add an Effect-native store API for this consumer need?",
+										"options": [
+											"Add EffectStore and adapters under @demlik/tea/effect.",
+											"Address store errors through the Effect-native handle in #308.",
+											"Keep Store engine-neutral and document host-side wrapping."
+										],
+										"why": "#248 left an Effect store optional; this ticket adds evidence from a real consumer, so it warrants an owner ruling. The store API request is distinct from #308's handle work, despite overlapping error typing."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 12207,
+								"tokens": {
+									"input": 18657,
+									"cached": 8832,
+									"output": 202
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"320": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "Listing saved runs is a distinct storage capability that lets hosts restore machines without maintaining a separate manifest. Neither store deletion (#314) nor supervision (#312) covers discovery under a store root."
+									}
+								},
+								"problems": [],
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 9161,
+								"tokens": {
+									"input": 18755,
+									"cached": 0,
+									"output": 156
+								},
+								"tools": 0,
+								"stop": "end_turn"
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "Listing saved run keys is a basic storage capability that avoids a crash-prone host-maintained manifest. No listed ticket covers enumeration; #314 covers deletion and #312 covers supervising live machines."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 9809,
+								"tokens": {
+									"input": 18763,
+									"cached": 0,
+									"output": 141
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"323": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "The React hooks have a concrete compatibility gap that forces Effect users to repeat subscription and lifecycle code. This is separate adapter work from #308’s runtime handle changes; #250’s broader design question does not establish that this gap was fixed or ruled out."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 8807,
+								"tokens": {
+									"input": 19260,
+									"cached": 8832,
+									"output": 116
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "This identifies a concrete React integration gap: Effect startup and stream-backed state do not fit the hooks’ synchronous contracts. It needs its own adapter change; #308 covers the engine handle, while #250 asked the broader adapter-design question."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 11529,
+								"tokens": {
+									"input": 19263,
+									"cached": 0,
+									"output": 188
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"360": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "Consumer-specific published defaults cause real misclassification and warrant code, documentation, and regression-test changes. This cleanup is separate from #344’s upstream sync and explicitly follows it; no listed ticket requests the same change."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 8434,
+								"tokens": {
+									"input": 19649,
+									"cached": 8832,
+									"output": 137
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "Consumer-specific defaults cause incorrect classifications in the published package; removing them, documenting configuration, and guarding the defaults are concrete work. This is separate from #344’s upstream sync and explicitly follows it."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 9404,
+								"tokens": {
+									"input": 19647,
+									"cached": 8832,
+									"output": 124
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"381": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "research",
+										"why": "No listed ticket covers this investigation, and no rejection rule applies. A time-boxed spike must establish whether the external index supplies the metrics and resolved edges our analysis needs; its deliverable is a compatibility finding and recommendation, with naming left for a separate owner decision."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7299,
+								"tokens": {
+									"input": 18845,
+									"cached": 8832,
+									"output": 119
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "research",
+										"why": "No listed ticket covers this investigation. A time-boxed spike must establish whether the external index supplies the metrics and resolved edges our analysis needs; naming remains a separate owner decision."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 6702,
+								"tokens": {
+									"input": 18843,
+									"cached": 8832,
+									"output": 91
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"389": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 388,
+										"why": "This reports a distinct evidence gap: merged partial PRs are indistinguishable from PRs that close an issue. It belongs in plan #388 because that signal directly contributes to the false already_done proposals the plan addresses."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7845,
+								"tokens": {
+									"input": 18884,
+									"cached": 0,
+									"output": 106
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 388,
+										"why": "This identifies a concrete evidence gap: merged partial PRs look like issue-closing PRs. It adds the missing relation signal to the false already_done work in plan #388, rather than duplicating that ticket's proposal behavior change."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 9084,
+								"tokens": {
+									"input": 18877,
+									"cached": 0,
+									"output": 118
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"390": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 389,
+										"why": "This identifies missing evidence for obsolete verdicts, distinct from #389’s missing distinction between closing and referencing PRs. It fits that plan’s work to improve backlog-sweep’s evidence and how verdict criteria use it."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 10925,
+								"tokens": {
+									"input": 18998,
+									"cached": 0,
+									"output": 175
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 389,
+										"why": "This is a concrete gap in backlog-sweep’s shipped evidence, with no indication it has been fixed. It adds obsolete-issue signals to the evidence-gathering work already planned in #389."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 8692,
+								"tokens": {
+									"input": 19002,
+									"cached": 0,
+									"output": 126
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"391": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "No listed ticket covers a whole-backlog duplicate-group command. The prototype provides evidence for a concrete feature using existing similarity and pairwise classification code, with human confirmation of the output."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7474,
+								"tokens": {
+									"input": 19172,
+									"cached": 0,
+									"output": 102
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "No listed ticket covers whole-backlog duplicate grouping. The prototype provides evidence for a useful new command; implementing it is separate from the open plans to improve sweep evidence and closing proposals."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7110,
+								"tokens": {
+									"input": 19173,
+									"cached": 0,
+									"output": 87
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"392": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "The README lacks evidence users need to judge Jev’s proposals and avoid repeating refuted experiments. Documenting those findings is distinct from the open tickets changing backlog-sweep’s behavior and evidence."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7167,
+								"tokens": {
+									"input": 19221,
+									"cached": 0,
+									"output": 95
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "The README needs documented reliability limits, sample sizes, and guidance to check close proposals against the code. This is distinct documentation work from the open tickets changing verdict handling, evidence, and duplicate detection."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 11575,
+								"tokens": {
+									"input": 19224,
+									"cached": 0,
+									"output": 112
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"393": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "This is a concrete gap in code-graph’s boundary enforcement that lets undeclared code bypass feature boundaries during incremental adoption. No listed ticket duplicates or carries this fix; the exemption and ratchet details can be resolved in the plan."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 6592,
+								"tokens": {
+									"input": 19526,
+									"cached": 0,
+									"output": 104
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "This is a concrete gap in code-graph's boundary enforcement that undermines incremental adoption. No listed ticket duplicates or carries this fix; the shared-area exemption and ratchet details can be resolved in the plan."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7857,
+								"tokens": {
+									"input": 19531,
+									"cached": 8832,
+									"output": 88
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"412": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "Count-only ceilings let new boundary violations hide behind unrelated fixes, a concrete gap in code-graph’s gate. No listed ticket covers this work; #393 addressed which imports are checked, while this ticket changes how violations are tracked and ratcheted."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7505,
+								"tokens": {
+									"input": 20663,
+									"cached": 0,
+									"output": 103
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "Count-only ceilings let new boundary violations hide behind unrelated fixes, a concrete gap in code-graph's gate. No listed ticket or open plan covers replacing the counts with an enforceable per-edge ledger."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 8827,
+								"tokens": {
+									"input": 20662,
+									"cached": 0,
+									"output": 93
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"413": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "Combining moves with import rewrites can impair rename detection and history tracing in structure-sweep's shipped workflow. No listed ticket covers this problem; a plan can address history preservation and evaluate the suggested two-commit approach."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 9508,
+								"tokens": {
+									"input": 20628,
+									"cached": 0,
+									"output": 157
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "No listed ticket covers this problem. Combining moves with content edits can impair rename detection; preserving file history is concrete work, and the plan can evaluate the suggested two-commit approach."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 8368,
+								"tokens": {
+									"input": 20621,
+									"cached": 0,
+									"output": 110
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"424": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 422,
+										"why": "This adds the lexicon and deterministic concept resolution needed by stage 3 of #422's lowering pipeline. It is a distinct implementation task within that open plan, with no duplicate or applicable no rule shown."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7136,
+								"tokens": {
+									"input": 21599,
+									"cached": 0,
+									"output": 90
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 422,
+										"why": "The lexicon adds stage 3’s human-reviewed mappings and deterministic concept resolution to the lowering pipeline in #422. It is a distinct implementation task, with enough direction to plan the schema, proposer, resolver, and cache invalidation."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 6692,
+								"tokens": {
+									"input": 21600,
+									"cached": 0,
+									"output": 107
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"425": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 422,
+										"why": "This adds stage 4 to the open lowering-pipeline plan: SCC condensation, bottom-up callee summaries, confidence-gated unknowns, and incremental artifacts. It is a concrete implementation task, with no duplicate or applicable no rule in the supplied tickets."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 11878,
+								"tokens": {
+									"input": 21665,
+									"cached": 0,
+									"output": 109
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 422,
+										"why": "This adds stage 4 to #422’s lowering pipeline: SCC condensation, bottom-up callee summaries, confidence-gated unknowns and content-hash caching. It is a distinct implementation task within that open plan, with no duplicate or applicable no rule shown."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 8179,
+								"tokens": {
+									"input": 21663,
+									"cached": 0,
+									"output": 101
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"426": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 422,
+										"why": "This adds stage 5’s evidence-first branch classification to the lowering pipeline in #422. It replaces #414’s raw-function question with a distinct branch-level question; prompt stability and calibration checks belong in the implementation plan."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 8389,
+								"tokens": {
+									"input": 21918,
+									"cached": 0,
+									"output": 119
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 422,
+										"why": "This adds stage 5 to #422: evidence-backed classification of lowered branches into five labels, with stability and calibration checks. It changes the unit and inputs from #414 and incorporates #410’s evidence step, so it is distinct work within the pipeline plan."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 8425,
+								"tokens": {
+									"input": 21916,
+									"cached": 0,
+									"output": 118
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"444": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 397,
+										"why": "Per-lookup tsgo startup is a concrete regression introduced by the engine migration, so it belongs in #397's plan. Session reuse and cleanup can be planned with a benchmark to verify the benefit; no current in-repo caller is required to justify the work."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 8703,
+								"tokens": {
+									"input": 21627,
+									"cached": 0,
+									"output": 129
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 397,
+										"why": "The engine swap introduced repeated process startup for export lookups; fixing session reuse extends #397’s migration work. The cost is unmeasured, but the reported behavior is concrete and no supplied ticket duplicates it."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 8567,
+								"tokens": {
+									"input": 21629,
+									"cached": 0,
+									"output": 119
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"468": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "Framework entry points reported as dead are a real correctness bug in code-graph’s shipped analysis. No listed ticket duplicates this problem or open plan covers the change; framework detection and entry conventions can be resolved during planning."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 9973,
+								"tokens": {
+									"input": 21417,
+									"cached": 0,
+									"output": 95
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "Framework entry points reported as dead are a real correctness bug in code-graph's shipped analysis. No listed ticket duplicates or carries this fix; framework conventions and fixtures can be scoped during planning."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7790,
+								"tokens": {
+									"input": 21416,
+									"cached": 8832,
+									"output": 87
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"473": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "The README misstates which aliases redaction preserves, giving users incorrect privacy expectations. Correcting that documentation is distinct from #471’s divergence-check fixes, and no listed ticket duplicates it."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 10392,
+								"tokens": {
+									"input": 20788,
+									"cached": 0,
+									"output": 185
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "The README makes a false claim about shipped redaction behavior, so correcting it is worthwhile. This is a distinct documentation fix from #471’s divergence checks, and no listed ticket requests the same change."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 12730,
+								"tokens": {
+									"input": 20794,
+									"cached": 0,
+									"output": 200
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"494": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "duplicate",
+										"of": 493,
+										"why": "#493 reports the same pairwise questioning and repeated source transmission costs. #494 adds a non-binding batching proposal for that same problem."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 6103,
+								"tokens": {
+									"input": 19864,
+									"cached": 0,
+									"output": 72
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "duplicate",
+										"of": 493,
+										"why": "#493 reports the same repeated source serialization and pair-count cost in structure-sweep pairs, using the same run evidence. #494 adds a non-binding batching proposal for that same problem."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 6711,
+								"tokens": {
+									"input": 19862,
+									"cached": 0,
+									"output": 87
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"524": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "B17–B19 add concrete boundary checks for binding use, worker cycles and imports across workspaces, with explicit acceptance criteria. This is a separate release from #523’s library-type rules, and no listed ticket duplicates or carries it."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7603,
+								"tokens": {
+									"input": 21091,
+									"cached": 0,
+									"output": 109
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "B17–B19 add distinct checks for binding access, worker cycles and workspace crossings that no listed ticket covers. The implementation direction is specified, and this is a separate release from #523’s B11–B14 work."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7885,
+								"tokens": {
+									"input": 21092,
+									"cached": 8832,
+									"output": 109
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"569": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "The new helpers have a concrete discoverability gap in the shipped docs, distinct from the existing helper bugs and earlier documentation tickets. Adding links is actionable documentation work; the separate generator question need not block it."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 9472,
+								"tokens": {
+									"input": 21967,
+									"cached": 8832,
+									"output": 126
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "The new child-machine helpers have a concrete documentation discovery gap that no listed ticket covers. Add links from the README and Effect-engine how-to; broader reference-generator changes can be considered separately."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 8917,
+								"tokens": {
+									"input": 21965,
+									"cached": 8832,
+									"output": 117
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"575": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 573,
+										"why": "The three code-graph suites add missed cases to #573’s timeout change, outside its named acceptance criteria. The plan can retain the tutorial test’s explicit exclusion while moving those suites’ existing long timeouts to their describes."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7270,
+								"tokens": {
+									"input": 22283,
+									"cached": 0,
+									"output": 121
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 573,
+										"why": "The three code-graph suites add missed cases to #573’s timeout-inheritance change, outside its named files. The plan can carry these additions while preserving the explicit exclusion of build-a-durable-agent.test.ts."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 10648,
+								"tokens": {
+									"input": 22288,
+									"cached": 8832,
+									"output": 125
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"604": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "ruling",
+										"ask": "Should published-API extraction, base diffs, and the CI ratchet live in code-graph or in a separate package?",
+										"options": [
+											"Add an opt-in mode to @demlik/code-graph.",
+											"Create a separate small package for published-API checks."
+										],
+										"why": "This adds consumer-visible API comparison and semver enforcement, beyond the source facts covered by #600 and #601; it is not a duplicate. The ticket explicitly leaves package ownership to maintainers, so that direction needs an owner ruling before implementation."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 10918,
+								"tokens": {
+									"input": 22533,
+									"cached": 0,
+									"output": 165
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "ruling",
+										"ask": "Should published-API inspection, diffing, and the CI ratchet live in @demlik/code-graph or in a separate package?",
+										"options": [
+											"Extend @demlik/code-graph with published-API modes.",
+											"Create a separate small package for published-API inspection and enforcement."
+										],
+										"why": "The ticket identifies a concrete consumer-facing gap; #600 and #601 cover source facts, not emitted API shapes, diffs, or semver enforcement. The maintainers must choose the package boundary before a builder implements it."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 9056,
+								"tokens": {
+									"input": 22525,
+									"cached": 0,
+									"output": 170
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"615": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "This is a concrete bug in shipped header output, with clear acceptance criteria. It is distinct from #600's original header feature and #605's constructor-node bug, and no open plan covers this fix."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 5436,
+								"tokens": {
+									"input": 22954,
+									"cached": 0,
+									"output": 96
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "This is a concrete gap in the shipped headers feature, explicitly left unresolved in #606. It is distinct from #605’s constructor-node bug and the published-API plans, so it needs its own implementation plan."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 6560,
+								"tokens": {
+									"input": 22961,
+									"cached": 0,
+									"output": 94
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"633": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 622,
+										"why": "This is a missed case in #622's existing plan: deleting a subpath with no exported names still breaks side-effect imports but escapes the ratchet. Extend that plan to judge and report the subpath removal itself."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 9453,
+								"tokens": {
+									"input": 22595,
+									"cached": 0,
+									"output": 145
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 622,
+										"why": "This identifies a distinct edge case missed by #622's name-based fix: deleting an empty export subpath still breaks side-effect imports without triggering the ratchet. It belongs in the open plan for detecting removed subpaths."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 9486,
+								"tokens": {
+									"input": 22594,
+									"cached": 0,
+									"output": 137
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"657": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 635,
+										"why": "This builds the ports and non-waiting tell specified by #635’s ruling, so it belongs under that open plan. The design questions and completed spikes do not duplicate this implementation work."
+									}
+								},
+								"problems": [],
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 8294,
+								"tokens": {
+									"input": 24825,
+									"cached": 0,
+									"output": 131
+								},
+								"tools": 0,
+								"stop": "end_turn"
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 635,
+										"why": "This is the concrete implementation of #635's owner ruling, with ordered steps and acceptance guards. It belongs under that open plan; the direction is settled and the preliminary research is complete."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 11518,
+								"tokens": {
+									"input": 24821,
+									"cached": 8832,
+									"output": 191
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"659": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "research",
+										"why": "This asks for a finding about how both engines report queued Msgs after stop() abandons a stuck Cmd handler. It is distinct from #640's stop() hang and #656's late store effects, and no supplied ticket answers it."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 7396,
+								"tokens": {
+									"input": 23751,
+									"cached": 8832,
+									"output": 92
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "research",
+										"why": "This asks for a finding about how each engine reports queued Msgs when stop() abandons a stuck Cmd handler. It is distinct from #640’s stop() hang and #656’s late store effects, and requires investigation before any change is proposed."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 5604,
+								"tokens": {
+									"input": 23753,
+									"cached": 0,
+									"output": 104
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"682": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "ruling",
+										"ask": "Should the repo adopt impure and subpath as its fixed vocabulary, breaking existing public names in a minor release without aliases?",
+										"options": [
+											"Adopt impure in code-graph and subpath in tea, with a minor-release hard break and no aliases.",
+											"Adopt the vocabulary with a compatibility transition for existing public names.",
+											"Keep the current public vocabulary."
+										],
+										"why": "No listed ticket requests this repo-wide rename; #561 concerns two how-to pages. Changing established public names and superseding ADR terminology requires an owner decision before a builder implements it."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 12901,
+								"tokens": {
+									"input": 25831,
+									"cached": 0,
+									"output": 197
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "ruling",
+										"ask": "Should the repo replace “door” with “impure” in code-graph and “subpath” in tea, breaking public names in a minor release without aliases?",
+										"options": [
+											"Adopt the proposed vocabulary and minor-release hard break without aliases.",
+											"Adopt the vocabulary with a compatibility transition.",
+											"Keep the existing vocabulary."
+										],
+										"why": "No listed ticket covers this repo-wide rename; #561 addresses only two how-to pages. Changing public names and superseding an ADR’s terminology requires an owner’s decision before implementation."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 14700,
+								"tokens": {
+									"input": 25827,
+									"cached": 8832,
+									"output": 215
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"693": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "ruling",
+										"ask": "Should restored init be allowed to return Cmds, changing Invariant 2 and replay's contract?",
+										"options": [
+											"Allow Cmds from restored init and define how replay handles them.",
+											"Keep restored init Cmd-free and provide a boot path that runs before Subs can deliver Msgs."
+										],
+										"why": "The ticket reports a concrete resume race, distinct from #318's helper export and return-shape gaps. Resolving it requires an owner decision about the initialization and replay contract before implementation."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 11786,
+								"tokens": {
+									"input": 26109,
+									"cached": 8832,
+									"output": 214
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "The ticket demonstrates a resume race that can repeat writes and proposes a concrete runtime and documentation fix. #318 concerns bootResume’s exports and message count, so it neither duplicates nor carries this change; replay behavior can be resolved in the plan."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 15992,
+								"tokens": {
+									"input": 26103,
+									"cached": 8832,
+									"output": 200
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				],
+				"717": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 714,
+										"why": "Partial port scopes silently skip files, a concrete gap in the boundary gate’s fail-closed behavior. The validation and unreachable-zone cleanup can join #714’s next editing pass through the same boundary files, as the ticket proposes."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 10680,
+								"tokens": {
+									"input": 26528,
+									"cached": 8832,
+									"output": 168
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					},
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 715,
+										"why": "This is a distinct fail-closed bug in the port layout introduced by #715, with no evidence that a merged change fixes it. Complete scope validation and removing unreachable port zones belong in that layout plan as a case it missed."
+									}
+								},
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "medium",
+								"ms": 10912,
+								"tokens": {
+									"input": 26521,
+									"cached": 8832,
+									"output": 150
+								},
+								"tools": 0,
+								"stop": "end_turn",
+								"problems": []
+							}
+						]
+					}
+				]
+			}
+		},
+		"sol-high": {
+			"p": {
+				"2563": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The audit describes a possible stream reset if an attacker knows an unguessable connection ID, but reports no failure in real use. The stated impact is a recoverable reconnect with no disclosure."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "high",
+						"ms": 9253,
+						"tokens": {
+							"input": 17458,
+							"cached": 8448,
+							"output": 152
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"6457": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The flag is off, no real user has experienced a slowdown, and the proposed memoization addresses an unmeasured future cost."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "high",
+						"ms": 7492,
+						"tokens": {
+							"input": 17570,
+							"cached": 8448,
+							"output": 114
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"7318": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The ticket derives a possible repeated dispatch loop from the contracts but reports no actual repeated clearing, dispatching, or duplicate incident filing. The five dead-spawn instances do not establish that this loop occurred."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "high",
+						"ms": 12071,
+						"tokens": {
+							"input": 17539,
+							"cached": 8448,
+							"output": 210
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8010": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The finding comes from source inspection, with no observed credential leak or real-user failure. Sanitizing SDK exception text is preventive hardening."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "high",
+						"ms": 9002,
+						"tokens": {
+							"input": 17364,
+							"cached": 8448,
+							"output": 178
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8338": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "This agent-filed ticket asks for a one-clause correction to a docblock in the project's own output; it explicitly reports no behavior change."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "high",
+						"ms": 7843,
+						"tokens": {
+							"input": 17607,
+							"cached": 8448,
+							"output": 140
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8524": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "not now: hardening with no incident",
+								"why": "The agent-filed ticket explicitly says no sliding port declares capacity 0 today. The miscount is a latent edge case with no failure in real use."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "high",
+						"ms": 9593,
+						"tokens": {
+							"input": 17794,
+							"cached": 8448,
+							"output": 122
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8577": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "This agent-filed ticket corrects benchmark claims in the project's own ADRs and explicitly says neither decision changes. The edits would change only the recorded explanation."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "high",
+						"ms": 10683,
+						"tokens": {
+							"input": 17870,
+							"cached": 8448,
+							"output": 185
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"8826": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "The agent-filed ticket asks to document a heading constraint that enrich already enforces correctly. The observed refusal and successful retry show that the check works."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "high",
+						"ms": 12834,
+						"tokens": {
+							"input": 16968,
+							"cached": 8448,
+							"output": 311
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				],
+				"10128": [
+					{
+						"answer": {
+							"sort": {
+								"answer": "no",
+								"reason": "won't do: churn on our own output, no behavior change",
+								"why": "This agent-filed ticket removes an unused re-export solely to clarify the preferred import path; it identifies no behavior change or real failure."
+							}
+						},
+						"error": null,
+						"model": "gpt-6.1-sol",
+						"effort": "high",
+						"ms": 6879,
+						"tokens": {
+							"input": 16760,
+							"cached": 8448,
+							"output": 120
+						},
+						"tools": 0,
+						"stop": "end_turn"
+					}
+				]
+			},
+			"d": {
+				"319": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "ruling",
+										"ask": "Should tea add an optional Effect-native store API for hosts such as Tuval?",
+										"options": [
+											"Add EffectStore and conversion adapters under @demlik/tea/effect.",
+											"Keep Promise Store and address typed store errors through #308, documenting host-side wrapping."
+										],
+										"why": "#248 left an Effect store optional; this ticket brings concrete consumer evidence rather than repeating a rejection. The owner must decide whether the duplicated glue warrants another public API."
+									}
+								},
+								"problems": [],
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "high",
+								"ms": 23810,
+								"tokens": {
+									"input": 18646,
+									"cached": 0,
+									"output": 630
+								},
+								"tools": 0,
+								"stop": "end_turn"
+							}
+						]
+					}
+				],
+				"320": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": null,
+										"why": "Listing saved runs fills a concrete storage gap and removes the need for a separate manifest that can drift after a crash. It is distinct from #314’s deletion support and #312’s supervision of running machines."
+									}
+								},
+								"problems": [],
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "high",
+								"ms": 19311,
+								"tokens": {
+									"input": 18748,
+									"cached": 0,
+									"output": 343
+								},
+								"tools": 0,
+								"stop": "end_turn"
+							}
+						]
+					}
+				],
+				"657": [
+					{
+						"tries": [
+							{
+								"answer": {
+									"sort": {
+										"answer": "yes",
+										"next": "plan",
+										"partOf": 635,
+										"why": "This builds the settled ruling from #635, adding concrete implementation steps and acceptance guards to that plan. The completed spikes supplied findings, not the shipped ports and non-waiting tell."
+									}
+								},
+								"problems": [],
+								"error": null,
+								"model": "gpt-6.1-sol",
+								"effort": "high",
+								"ms": 17714,
+								"tokens": {
+									"input": 24811,
+									"cached": 0,
+									"output": 342
+								},
+								"tools": 0,
+								"stop": "end_turn"
+							}
+						]
+					}
+				]
+			}
+		}
+	}
+}

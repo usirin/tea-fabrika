@@ -552,14 +552,12 @@ function read(s: Held, report: Report, missing: MissingCheck): Step {
 	const raised = new Set([...s.input.open, ...s.input.decided].filter(isMissed).map((f) => f.file));
 	const flagged =
 		missing.kind === "checked" ? missing.flagged.filter((x) => !raised.has(x.file)) : [];
-	const missed = flagged.map(
-		(x, i): MissedFinding => ({
-			kind: "missed",
-			id: `r${n}-m${i + 1}`,
-			file: x.file,
-			problem: `The change does not touch ${x.file}, and the ticket looks like it needs that file changed too (${x.yes.toFixed(2)}). Change it, or dispute this finding with why it can stay as it is.`,
-		}),
-	);
+	const missed = flagged.map((x, i): MissedFinding => ({
+		kind: "missed",
+		id: `r${n}-m${i + 1}`,
+		file: x.file,
+		problem: `The change does not touch ${x.file}, and the ticket looks like it needs that file changed too (${x.yes.toFixed(2)}). Change it, or dispute this finding with why it can stay as it is.`,
+	}));
 	if (s.input.frozen)
 		return startSorting(s, {
 			missing,

@@ -1,23 +1,151 @@
+/*
+ * The app's tokens: the built-in themes' colors (docs/direction/themes.md; src/themes.ts holds the
+ * same values for the terminal and the window's frame), its type scale and spacing. Radix 3.0.0,
+ * gray slate, accent indigo: every color is a Radix step, used for that step's job (color
+ * principles, principle 5). Text takes steps 11 and 12, lines 4 to 8, solid fills 9 and 10. Each
+ * is light-dark(<fabrika-light>, <fabrika>), so the window follows the system's look.
+ *
+ * What each color means is held strictly: the accent means "your turn" and nothing else; red means
+ * stuck or broken; amber running; green done. A line or a fill token is never a text color. The
+ * four type colors live only on the program map's ports and wires, never on text.
+ */
 :root {
-	color-scheme: dark;
-	--ground: #16181d;
-	--ink: #d8dce4;
-	--faint: #8a93a3;
-	--line: #2a2f3a;
-	--key: #3b82f6;
-	/* For a program's view: a second ink, a surface above the ground, a row under the pointer or
-	   picked, the two states of a thing (open, closed), something that went wrong, and a sans
-	   face for a view that is not a terminal. */
-	--soft: #b8bdc7;
-	--raised: #1d2027;
-	--hover: #1e2128;
-	--pick: #252a38;
-	--open: #4cc38a;
-	--closed: #a28bf0;
-	--alert: #f0868a;
-	--sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
-	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+	color-scheme: light dark;
+
+	--surface-sunken: light-dark(
+		#f9f9fb,
+		#0c0d0e
+	); /* slate 2; dark: a bend, under slate 1 (themes.ts) */
+	--surface: light-dark(#fcfcfd, #111113); /* slate 1 */
+	--surface-raised: light-dark(#fcfcfd, #18191b); /* slate 1; slate 2 */
+	--surface-hover: light-dark(#0000330f, #ddeaf814); /* slate a3 */
+	--surface-selected: light-dark(#0009321f, #d9edfe25); /* slate a5 */
+	--border-faint: light-dark(#00002d17, #d3edf81d); /* slate a4: the resting edge, a bend */
+	--border: light-dark(#00002f26, #d6ebfd30); /* slate a6 */
+	--border-strong: light-dark(#00062e32, #d9edff40); /* slate a7 */
+	--wire: light-dark(#00083046, #d9edff5d); /* slate a8 */
+	/*
+	 * Text takes Radix's two text steps only (decided 2026-11-02): slate 12 for titles and main
+	 * lines, slate a11 for everything quieter. Rank comes from weight and size, not a third gray, so
+	 * secondary, muted and faint are one step under three names. Slate 11 is not used: in light it
+	 * reads 4.42 on a selected row.
+	 */
+	--text-faint: light-dark(#0007149f, #f1f7feb5); /* slate a11 */
+	--text-muted: var(--text-faint);
+	--text-secondary: var(--text-faint);
+	--text-primary: light-dark(#1c2024, #edeef0); /* slate 12 */
+	--focus: light-dark(#00051d74, #dfebfd6d); /* slate a9: a8 is under 3:1 on the desk */
+	--tile-focus: light-dark(#00051d74, #d9edff5d); /* slate a9; slate a8 */
+	--turn: light-dark(#002bb7c5, #9eb1ff); /* indigo a11; indigo 11 */
+	--turn-fill: #3e63dd; /* indigo 9 */
+	--turn-fill-hover: light-dark(#3358d4, #5472e4); /* indigo 10 */
+	--turn-fg: #ffffff; /* Radix's rule for text on step 9 */
+	--done: light-dark(#203c25, #71d083); /* grass 12; grass 11 */
+	--running: light-dark(#4f3422, #ffca16); /* amber 12; amber 11 */
+	--stuck: light-dark(#641723, #ff9592); /* red 12; red 11 */
+	--person-bg: light-dark(#e0e1e6, #2e3135); /* slate 5 */
+	--agent-bg: light-dark(#f0f0f3, #212225); /* slate 3 */
+	--ty-fact: oklch(0.76 0.075 205);
+	--ty-turn: oklch(0.76 0.085 345);
+	--ty-step: oklch(0.8 0.085 120);
+	--ty-checks: oklch(0.8 0.06 55);
+	/*
+	 * One colour per service, on the trace's bars only (programs/trace): six hues at one lightness,
+	 * softer than the status colours and clear of their hues, so a bar's colour says whose it is and
+	 * red still says only that it went wrong.
+	 */
+	--svc-0: oklch(0.72 0.075 225);
+	--svc-1: oklch(0.72 0.075 305);
+	--svc-2: oklch(0.72 0.075 190);
+	--svc-3: oklch(0.72 0.075 340);
+	--svc-4: oklch(0.72 0.075 120);
+	--svc-5: oklch(0.72 0.075 60);
+	/* One colour per tsh line, as a Chrome tab group's: amber, blue, teal, violet, rose, green.
+	   A line's tiles and strips mix it in at --line-strength (window.css, [data-tint]). */
+	--line-0: oklch(0.78 0.12 80);
+	--line-1: oklch(0.72 0.11 250);
+	--line-2: oklch(0.76 0.1 185);
+	--line-3: oklch(0.72 0.12 300);
+	--line-4: oklch(0.74 0.12 15);
+	--line-5: oklch(0.76 0.11 145);
+	--line-strength: 30%;
+
+	--font: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+	--mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+	/*
+	 * The type scale, in px: each size is the number its name says (Linear's body is 13px, macOS's
+	 * 13pt). Not rem: the root below is 14px, so a rem size drew 12.5% small (tracker ticket 108).
+	 * type-scale.test.ts pins these six and refuses a rem anywhere in this file.
+	 */
+	--fs-title: 22px;
+	--fs-head: 15px;
+	--fs-body: 13px;
+	--fs-prose: 14px;
+	--fs-small: 12px;
+	--fs-micro: 11px;
+	--s-1: 4px;
+	--s-2: 8px;
+	--s-3: 12px;
+	--s-4: 16px;
+	--s-5: 20px;
+	--s-6: 24px;
+	--s-8: 32px;
+	--s-10: 40px;
+	--r-sm: 4px;
+	--r: 6px;
+	--r-lg: 8px;
+	--r-xl: 12px;
+	--ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+	--fast: 120ms;
+
+	/* What opens over the desk (docs/direction/popovers.md): made of the tokens above. The only
+	   new values are the shadow and the scrim. */
+	--pop-bg: var(--surface-raised);
+	--pop-edge: var(--border);
+	--pop-shadow:
+		0 0 0 1px rgb(0 0 0 / 0.25), 0 2px 6px rgb(0 0 0 / 0.3), 0 12px 32px rgb(0 0 0 / 0.45);
+	--pop-pad: var(--s-1);
+	--row-h: 32px;
+	--row-2h: 44px;
+	--row-hi: var(--surface-hover);
+	--row-on: var(--surface-selected);
+	--pop-in: var(--fast) var(--ease-out);
+	--scrim: rgb(0 0 0 / 0.35);
+
+	/* The names the counter's and the tracker's windows were written with, on the same palette. */
+	--ground: var(--surface);
+	--faint: var(--text-faint);
+	--line: var(--border);
+	--key: var(--turn-fill);
+	--soft: var(--text-muted);
+	--raised: var(--surface-raised);
+	--hover: var(--surface-hover);
+	--pick: var(--surface-selected);
+	--open: var(--done);
+	--closed: var(--text-faint); /* no hue: the word says closed */
+	--alert: var(--stuck);
+	--sans: var(--font);
+	/* Text that names no size of its own: the app-down page, "starting", an alert. The scale above
+	   does not read it. */
+	font-family: var(--mono);
 	font-size: 14px;
+	-webkit-font-smoothing: antialiased;
+}
+
+.f-fact {
+	--ty: var(--ty-fact);
+}
+
+.f-turn {
+	--ty: var(--ty-turn);
+}
+
+.f-step {
+	--ty: var(--ty-step);
+}
+
+.f-checks {
+	--ty: var(--ty-checks);
 }
 
 html,
@@ -25,8 +153,8 @@ body,
 #root {
 	height: 100%;
 	margin: 0;
-	background: var(--ground);
-	color: var(--ink);
+	background: var(--surface-sunken);
+	color: var(--text-secondary);
 }
 
 #root[role="alert"] {
@@ -34,32 +162,89 @@ body,
 	white-space: pre-wrap;
 }
 
-/* The desk: the active workspace's tiles, and a status line under them, as tmux's. */
+/* The desk: the window's frame around the active workspace's tiles (frame.tsx). */
 .desk {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	height: 100%;
+	box-sizing: border-box;
 }
 
 .workspace {
 	flex: 1;
 	display: flex;
 	min-height: 0;
+	padding: var(--s-1);
 }
 
-.stack {
+.container {
 	flex: 1;
 	display: flex;
+	gap: 0;
 	min-width: 0;
 	min-height: 0;
 }
 
-.stack.horizontal {
+.container.horizontal {
 	flex-direction: row;
 }
 
-.stack.vertical {
+.container.vertical {
 	flex-direction: column;
+}
+
+/*
+ * A folded tile, or a container whose tiles are all folded: a thin strip in its place, along its
+ * parent's direction. Beside others in a row it stands up, its name written sideways; in a column
+ * it lies down. A click opens what it stands for.
+ */
+.strip {
+	flex: none;
+	display: grid;
+	place-items: center;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0;
+	border-radius: var(--r-lg);
+	background: var(--surface);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+	color: var(--text-muted);
+	font: 400 var(--fs-small) var(--mono);
+	cursor: pointer;
+}
+
+.strip-name {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.container.horizontal > .strip {
+	width: 22px;
+	margin: 0 2px;
+}
+
+.container.horizontal > .strip > .strip-name {
+	max-height: 100%;
+	writing-mode: vertical-rl;
+}
+
+.container.vertical > .strip {
+	height: 20px;
+	margin: 2px 0;
+}
+
+.container.vertical > .strip > .strip-name {
+	max-width: 100%;
+}
+
+.strip:hover,
+.strip:focus-visible {
+	color: var(--text-primary);
+	box-shadow: inset 0 0 0 1px var(--border-strong);
+	outline: none;
 }
 
 /* A child's share is its grow: the borders between them are a fixed few pixels. */
@@ -74,37 +259,148 @@ body,
 	flex: 0 0 4px;
 	margin: 0;
 	border: 0;
-	background: var(--line);
+	border-radius: 2px;
+	background: transparent;
 	touch-action: none;
 }
 
-.stack.horizontal > .border {
+.border:hover {
+	background: var(--border);
+}
+
+.container.horizontal > .border {
 	cursor: col-resize;
 }
 
-.stack.vertical > .border {
+.container.vertical > .border {
 	cursor: row-resize;
 }
 
 .tile {
+	--bar: 20px;
 	position: relative;
 	flex: 1;
 	min-width: 0;
 	min-height: 0;
 	box-sizing: border-box;
-	border: 1px solid var(--line);
+	border-radius: var(--r-lg);
+	background: var(--surface);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
 	overflow: hidden;
 }
 
 .tile.focused {
-	border-color: var(--key);
+	box-shadow: inset 0 0 0 1px var(--tile-focus);
 }
 
-/* A tile's terminal fills its slot, with a small margin, as a terminal app's does. */
+/* A tile's title bar: its program and its id. A click focuses the tile; a double-click folds it
+   into a strip. */
+.titlebar {
+	position: absolute;
+	inset: 0 0 auto 0;
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	height: var(--bar);
+	margin: 0;
+	padding: 0 var(--s-3);
+	border: 0;
+	border-bottom: 1px solid var(--border-faint);
+	background: transparent;
+	color: var(--text-muted);
+	font: 400 var(--fs-small) var(--mono);
+	text-align: left;
+	cursor: pointer;
+}
+
+.titlebar .tid {
+	margin-left: auto;
+	color: var(--text-faint);
+}
+
+.titlebar:hover:not([aria-disabled="true"]) {
+	color: var(--text-primary);
+}
+
+/* The last open tile of a workspace does not fold. */
+.titlebar[aria-disabled="true"] {
+	cursor: default;
+}
+
+.tile.focused .titlebar {
+	color: var(--text-primary);
+}
+
+/*
+ * A line's tiles and strips: its tint mixed into the edge at --line-strength, and into the
+ * ground at a sixth of that, a strip's at a third. Only a line of two windows or more has one.
+ */
+[data-tint="0"] {
+	--tint: var(--line-0);
+}
+
+[data-tint="1"] {
+	--tint: var(--line-1);
+}
+
+[data-tint="2"] {
+	--tint: var(--line-2);
+}
+
+[data-tint="3"] {
+	--tint: var(--line-3);
+}
+
+[data-tint="4"] {
+	--tint: var(--line-4);
+}
+
+[data-tint="5"] {
+	--tint: var(--line-5);
+}
+
+/* The mix starts from the page's own ground and edge, written out (slate 1, slate a4): this rule
+   sets --surface and --border-faint, so it cannot read them. */
+.tile[data-tint] {
+	--surface: color-mix(
+		in oklch,
+		var(--tint) calc(var(--line-strength) / 6),
+		light-dark(#fcfcfd, #111113)
+	);
+	--ground: var(--surface);
+	--border-faint: color-mix(
+		in oklch,
+		var(--tint) var(--line-strength),
+		light-dark(#00002d17, #d3edf81d)
+	);
+	background: var(--surface);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+}
+
+.tile[data-tint].focused {
+	box-shadow: inset 0 0 0 1px
+		color-mix(in oklch, var(--tint) var(--line-strength), var(--tile-focus));
+}
+
+.tile[data-tint].closing {
+	box-shadow: none;
+}
+
+.strip[data-tint] {
+	background: color-mix(in oklch, var(--tint) calc(var(--line-strength) / 3), var(--surface));
+	box-shadow: inset 0 0 0 1px
+		color-mix(in oklch, var(--tint) var(--line-strength), var(--border-faint));
+}
+
+/* A tile's terminal fills its slot, under its title bar, with a small margin, as a terminal app's does. */
 .slot,
 .term {
 	position: absolute;
 	inset: 0;
+}
+
+.tile > .slot {
+	top: var(--bar);
 }
 
 .term {
@@ -112,8 +408,13 @@ body,
 	box-sizing: border-box;
 }
 
+/*
+ * ghostty-web makes this element contenteditable, for an input method's text, and draws its own
+ * cursor on the canvas. The browser's text caret would blink at the element's top left corner.
+ */
 .screen {
 	height: 100%;
+	caret-color: transparent;
 }
 
 /* The screen as text: there for a screen reader and a test, out of sight. */
@@ -134,15 +435,41 @@ main.program {
 	display: flex;
 	flex-direction: column;
 	box-sizing: border-box;
-	padding: 16px;
-	background: var(--ground);
-	overflow: auto;
+	background: var(--surface);
+	overflow: clip;
 	outline: none;
+}
+
+/*
+ * One box scrolls in a tile: the frame above clips and never scrolls, not even for a focus, and
+ * its one child, the program's view, owns the scroll, as a VS Code pane does. One rule for every
+ * program, so a new view cannot forget it, and nothing inside a view scrolls on its own
+ * (scroll.test.ts). The view holds what is placed absolutely in it, so that scrolls with it too.
+ * The frame has no padding, so the view's scrollbar sits at the tile's edge; a view pads itself.
+ */
+main.program > * {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+}
+
+/* What the frame says in place of a view, when it has none for the program: off the tile's edge. */
+main.program > [role="alert"] {
+	margin: 16px;
+}
+
+/* A tile's frame stays drawn over its view: the view sits one pixel in. */
+.tile > main.program {
+	inset: var(--bar) 1px 1px;
+	border-radius: 0 0 var(--r-lg) var(--r-lg);
 }
 
 /* A closing tile: its programs were given the end of their inputs, and it waits for their end. */
 .tile.closing {
-	border-style: dashed;
+	box-shadow: none;
+	outline: 1px dashed var(--border-strong);
+	outline-offset: -1px;
 }
 
 .closing-note {
@@ -151,55 +478,20 @@ main.program {
 	right: 0;
 	margin: 0;
 	padding: 2px 8px;
-	background: #2b2f3a;
+	background: var(--surface-raised);
 	color: var(--faint);
 	font-size: 12px;
 }
 
-/* "close t2? (y/n)", over the tile it is for, as tmux's confirm-before asks on its status line. */
-.ask {
-	position: absolute;
-	inset: auto 0 0 0;
-	padding: 8px 12px;
-	background: #2b2f3a;
-	border-top: 1px solid var(--key);
+/* "close t2? (y/n)" in the title bar of the tile it is for; the bottom line asks it too. */
+.titlebar .asking {
+	color: var(--text-primary);
 }
 
-.ask p {
-	margin: 0;
-}
-
-kbd {
-	padding: 0 4px;
-	border: 1px solid var(--faint);
-	border-radius: 3px;
-}
-
-.status {
-	display: flex;
-	gap: 16px;
-	align-items: center;
-	padding: 2px 8px;
-	border-top: 1px solid var(--line);
-	color: var(--faint);
-	font-size: 12px;
-}
-
-.workspaces {
-	display: flex;
-	gap: 6px;
-	margin: 0;
-	padding: 0;
-	list-style: none;
-}
-
-.workspaces li[aria-current="true"] {
-	color: var(--ink);
-	text-decoration: underline;
-}
-
-.prefix.armed {
-	color: var(--key);
+.titlebar .asking::before {
+	content: "·";
+	padding: 0 6px;
+	color: var(--text-faint);
 }
 
 .starting {
@@ -226,60 +518,817 @@ kbd {
 	filter: grayscale(0.6);
 }
 
-/* A calm note in the corner, over the desk, never in the way of reading it. */
-.lost-note {
-	position: fixed;
-	right: 16px;
-	bottom: 36px;
-	max-width: 48ch;
-	padding: 12px 16px;
-	background: var(--ground);
-	border: 1px solid var(--line);
-	border-radius: 8px;
-	line-height: 1.5;
+/*
+ * The window's frame (frame.tsx): a top bar that is the whole desk, and a bottom line that is the
+ * tile you are in and your last key. Plain words, ` · ` between them: no pills, no backgrounds on
+ * items, digits that do not shift. Only "asks you" takes the accent (--turn), and only a broken
+ * part takes red (--stuck), each with its word. On macOS the top bar is the window's title bar:
+ * the window is moved by it, and its buttons take no drag. No line under the top bar or over the
+ * bottom line: the tiles' own edges already end the desk there.
+ */
+.topbar,
+.bottomline {
+	flex: none;
+	display: flex;
+	align-items: center;
+	padding: 0 var(--s-3);
+	color: var(--text-faint);
+	font: 400 var(--fs-small) / 1 var(--mono);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
 }
 
-.lost-note h1 {
-	margin: 0 0 4px;
-	font-size: 14px;
+.topbar {
+	position: relative;
+	height: 34px;
+	-webkit-app-region: drag;
+	app-region: drag;
+}
+
+/* The room the system's three window buttons sit in, on macOS only (main.ts, `FRAME`). */
+.lights-room {
+	display: none;
+	flex: none;
+	width: 72px;
+}
+
+.mac .lights-room {
+	display: block;
+}
+
+/* Both bars hidden, or no desk to draw: on macOS a thin band still holds the window's buttons. */
+.band {
+	display: none;
+	flex: none;
+	height: 28px;
+	-webkit-app-region: drag;
+	app-region: drag;
+}
+
+.mac .band {
+	display: block;
+}
+
+/* Every item of the frame is a button, and a button never moves the window. */
+.fb {
+	all: unset;
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
+	cursor: pointer;
+	padding: 5px 0;
+	color: var(--text-faint);
+}
+
+.fb:hover {
+	color: var(--text-primary);
+}
+
+.fb:focus-visible {
+	outline: 1px solid var(--text-faint);
+	outline-offset: 2px;
+}
+
+/* The bottom line ends at the window's edge, so its items take 3px above and below and not 5px:
+   their focus ring, the same as the top bar's, is then whole inside the window (WCAG 2.4.7). */
+.bottomline .fb {
+	padding-block: 3px;
+}
+
+.fb.accent {
+	color: var(--turn);
+}
+
+.fb.broken {
+	color: var(--stuck);
+}
+
+.sep {
+	padding: 0 6px;
+	color: var(--text-faint);
+}
+
+.quiet {
+	color: var(--text-faint);
+}
+
+/* The bottom line's way out (`esc leaves`, `esc cancels`, `y closes · n keeps it`) is a needed fact,
+   so it takes the faint text step, 5.51:1 on the ground, and not the wire's (WCAG 1.4.3). */
+.bottomline .quiet {
+	color: var(--text-faint);
+}
+
+.topbar .workspaces {
+	display: flex;
+	flex: none;
+	gap: 14px;
+}
+
+.topbar .num {
+	color: var(--text-faint);
+}
+
+.topbar .fb[aria-current="true"] {
+	color: var(--text-primary);
+	text-decoration: underline;
+	text-decoration-color: var(--wire);
+	text-underline-offset: 6px;
+}
+
+.topbar .line {
+	display: flex;
+	flex: 0 1 auto;
+	align-items: center;
+	min-width: 0;
+	margin-left: 22px;
+	overflow: hidden;
+}
+
+.topbar .seg.on {
+	color: var(--text-primary);
+}
+
+.topbar .seg.plain,
+.topbar .pipe {
+	color: var(--text-faint);
+}
+
+.topbar .pipe {
+	padding: 0 7px;
+	cursor: help;
+}
+
+/* The empty stretch the window is moved by. */
+.topbar .drag {
+	flex: 1 1 60px;
+	align-self: stretch;
+	min-width: 44px;
+}
+
+.topbar .right {
+	display: flex;
+	flex: none;
+	align-items: center;
+}
+
+/*
+ * The mark and the name, in the middle of the window and not of the free space. It takes no room
+ * and no press, and goes when the bar needs the middle (frame.tsx, `useFreeMiddle`). On macOS only:
+ * elsewhere the system's own title bar already says "fabrika", right above this one.
+ */
+.topbar .brand {
+	position: absolute;
+	inset: 0 auto 0 50%;
+	display: none;
+	align-items: center;
+	gap: 4px;
+	transform: translateX(-50%);
+	pointer-events: none;
+	color: var(--text-faint);
+	font: 400 var(--fs-small) / 1 var(--font);
+}
+
+.mac .topbar .brand {
+	display: flex;
+}
+
+.topbar .brand[data-free="false"] {
+	visibility: hidden;
+}
+
+.topbar .mark .dim {
+	fill: var(--wire);
+}
+
+.topbar .mark .lit {
+	fill: var(--text-muted);
+}
+
+/*
+ * The host's item: up, only its ring and check, in the bar's faint gray, still. Not up, the word
+ * follows a shape of its own (frame.ts, `HostShape`), in the item's color: faint, or red where it
+ * is broken. The icon is the bar's text size, so the bar keeps its height.
+ */
+.topbar .fb.host {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+
+.topbar .fb.host .ic {
+	flex: none;
+	width: 1em;
+	height: 1em;
+	color: inherit;
+}
+
+/* The host down: the asks it last said are old news, drawn faint until it is back. */
+.desk.lost .topbar .right > .fb {
+	opacity: 0.45;
+}
+
+/* A new ask, not seen yet: a dot beside the count, never a second number. */
+.udot {
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	margin-left: 6px;
+	vertical-align: 1px;
+	border-radius: 50%;
+	background: var(--turn);
+}
+
+/* 26px, and two lines while info mode is on (below). */
+.bottomline {
+	justify-content: space-between;
+	gap: var(--s-4);
+	min-height: 26px;
+	color: var(--text-muted);
+}
+
+.bottomline .left {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/*
+ * Info mode's explanation is never cut off: what does not fit wraps onto a second line. The right
+ * side never shrinks and keeps its items, so the left gives way. Two lines tall the whole time the
+ * mode is on, short explanation or long, so the desk is resized only as the mode comes on and goes
+ * off, never as the pointer or focus moves. Its line height is whole pixels, so the line is 40px
+ * and the tiles above it end on a whole pixel: on a fraction, a tile's 1px edge smears over two rows.
+ */
+.bottomline .left:has(> .info) {
+	height: 2lh;
+	padding: 4px 0;
+	line-height: 16px;
+	white-space: normal;
+}
+
+/* Held to the line's bottom 26px, whatever its height, so its items never move as the mode comes
+   on: a second click where it turned on turns it off. */
+.bottomline .right {
+	display: flex;
+	flex: none;
+	align-self: flex-end;
+	align-items: center;
+	height: 26px;
+}
+
+.bottomline b {
+	color: var(--text-primary);
 	font-weight: 600;
 }
 
-.lost-note p {
-	margin: 0 0 8px;
-	color: var(--faint);
+.bottomline .prompt {
+	color: var(--text-primary);
 }
 
-/* The host runs older code: the desk stays in reach, and this sits in the same corner. */
-.older-note {
-	position: fixed;
-	right: 16px;
-	bottom: 36px;
+/* The mode's status region: heard, not seen. The bottom line shows the same words. Clipped, never
+   `display: none`, which would take it from a screen reader too. */
+.mode-status {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.bottomline .info,
+.bottomline .note {
+	color: var(--text-secondary);
+}
+
+/* The job item: its number and line in the bottom line's own color, its time quieter. A failed
+   job is said in words, never in red: only a broken part of the app takes the warning color. */
+.bottomline .job b {
+	color: inherit;
+	font-weight: 400;
+}
+
+.bottomline .job .job-line {
+	display: inline-block;
 	max-width: 48ch;
-	padding: 12px 16px;
-	background: var(--ground);
-	border: 1px solid var(--line);
-	border-radius: 8px;
-	line-height: 1.5;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	vertical-align: bottom;
 }
 
-.older-note h1 {
-	margin: 0 0 4px;
-	font-size: 14px;
-	font-weight: 600;
+.bottomline .job .took {
+	color: var(--text-faint);
 }
 
-.older-note p {
+/*
+ * What opens over the desk (pop.tsx): the asks list, the jobs list, an item's few lines, the
+ * palette, a tooltip. The product's own UI, so the program windows' own font, sizes and colors;
+ * the bars around the desk stay monospace, as a terminal's status line. Monospace inside only for
+ * typed things: a program's name, a command, a job's `%n`, a build, an error as the system wrote
+ * it (docs/direction/popovers.md).
+ */
+.pop,
+.tip {
+	color: var(--text-secondary);
+	font: 400 var(--fs-body) / 1.4 var(--font);
+	font-variant-numeric: tabular-nums;
+	letter-spacing: 0;
+	white-space: normal;
+}
+
+.pop {
+	position: absolute;
+	z-index: 10;
+	box-sizing: border-box;
+	padding: var(--pop-pad);
+	border: 1px solid var(--pop-edge);
+	border-radius: var(--r-lg);
+	background: var(--pop-bg);
+	box-shadow: var(--pop-shadow);
+	animation: pop-in var(--pop-in) both;
+	transform-origin: top right;
+}
+
+/* The box itself holds focus for its rows (aria-activedescendant): the active row shows where. */
+.pop:focus {
+	outline: none;
+}
+
+.pop code {
+	font-family: var(--mono);
+	font-size: 0.95em;
+}
+
+/* In over --fast with a fade and a 0.96 scale from the anchor; with reduced motion, a fade only. */
+@keyframes pop-in {
+	from {
+		opacity: 0;
+		transform: scale(0.96);
+	}
+}
+
+@keyframes pop-fade {
+	from {
+		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.pop {
+		animation-name: pop-fade;
+	}
+}
+
+/* Keycaps in a row: each one is Manti's Kbd, sized in theme.css. */
+.caps {
+	display: inline-flex;
+	gap: 3px;
+	align-items: center;
+}
+
+/* A menu, or a panel: under the top bar's right end, where its item is. */
+.pop.menu,
+.pop.panel {
+	top: 38px;
+	right: var(--s-2);
+	width: 360px;
+	max-height: calc(100% - 76px);
+	overflow: auto;
+}
+
+/* A menu from the bottom line: over its left end, where the job item is, growing upward. */
+.pop.menu.from-bottom {
+	top: auto;
+	right: auto;
+	bottom: 34px;
+	left: var(--s-2);
+	transform-origin: bottom left;
+}
+
+.pop-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 28px;
+	padding: 0 8px;
+	color: var(--text-muted);
+	font-size: var(--fs-small);
+	font-weight: 500;
+}
+
+.pop-head .n,
+.pop-fold .n {
+	color: var(--text-faint);
+}
+
+.pop-section.ruled {
+	margin: var(--s-1) calc(-1 * var(--pop-pad)) 0;
+	padding: var(--s-1) var(--pop-pad) 0;
+	border-top: 1px solid var(--border-faint);
+}
+
+/* Nothing to show: one calm line, and what to expect. */
+.pop-empty {
+	display: grid;
+	justify-items: center;
+	gap: 6px;
+	padding: 18px 8px 22px;
+	text-align: center;
+}
+
+.pop-empty .t {
+	color: var(--text-secondary);
+	font-weight: 500;
+}
+
+.pop-empty .s {
+	color: var(--text-faint);
+	font-size: var(--fs-small);
+}
+
+/* A row: one line is 32px, a title and a line under it 44px. The active row is lit, inset. */
+.pop-row {
+	display: grid;
+	grid-template-columns: 16px minmax(0, 1fr) auto;
+	column-gap: 10px;
+	align-items: center;
+	box-sizing: border-box;
+	min-height: var(--row-h);
+	padding: 0 8px;
+	border-radius: var(--r);
+	cursor: default;
+}
+
+.pop-row.two {
+	align-items: start;
+	min-height: var(--row-2h);
+	padding: 5px 8px;
+}
+
+.pop-row.on,
+.pop-fold.on {
+	background: var(--row-hi);
+}
+
+.pop-row .lead {
+	display: grid;
+	place-items: center;
+	height: 18px;
+}
+
+.pop-row .text {
+	display: grid;
+	min-width: 0;
+}
+
+.pop-row .t,
+.pop-row .s {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.pop-row .t {
+	color: var(--text-primary);
+	font-weight: 500;
+}
+
+.pop-row .s {
+	margin-top: 1px;
+	color: var(--text-muted);
+	font-size: var(--fs-small);
+}
+
+.pop-row .side {
+	margin-top: 1px;
+	color: var(--text-faint);
+	font-size: var(--fs-small);
+}
+
+/* A row set aside: dimmed, its ring dashed, and not counted. */
+.pop-row[data-icon="later"] .t {
+	color: var(--text-muted);
+	font-weight: 400;
+}
+
+.ic-ask {
+	color: var(--turn);
+}
+
+.ic-stuck {
+	color: var(--stuck);
+}
+
+.ic-later {
+	color: var(--text-faint);
+}
+
+/* A job, and how one ended: in gray, as the bottom line says them, never in red. The shape says which. */
+.ic-running {
+	color: var(--text-secondary);
+}
+
+.ic-done,
+.ic-failed,
+.ic-stopped {
+	color: var(--text-muted);
+}
+
+/* The active row's second thing, for the pointer: its key says the same to the keyboard. */
+.pop-second {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 22px;
+	padding: 0 4px 0 8px;
+	border: 1px solid var(--border);
+	border-radius: var(--r);
+	color: var(--text-secondary);
+	font-size: var(--fs-small);
+	font-weight: 500;
+	cursor: pointer;
+}
+
+.pop-second:hover {
+	background: var(--surface-selected);
+}
+
+.pop-fold {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 28px;
+	padding: 0 8px;
+	border-radius: var(--r);
+	color: var(--text-muted);
+	font-size: var(--fs-small);
+	font-weight: 500;
+	cursor: default;
+}
+
+.pop-chev {
+	transition: transform var(--fast) var(--ease-out);
+}
+
+.pop-fold[aria-expanded="false"] .pop-chev {
+	transform: rotate(-90deg);
+}
+
+.pop-foot {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	height: 30px;
+	margin: var(--s-1) calc(-1 * var(--pop-pad)) calc(-1 * var(--pop-pad));
+	padding: 0 12px;
+	border-top: 1px solid var(--border-faint);
+	color: var(--text-faint);
+	font-size: var(--fs-small);
+}
+
+.pop-foot .hints {
+	display: inline-flex;
+	gap: 14px;
+}
+
+.pop-foot .hint {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+
+/* A panel: a few lines on one item, and the one thing to do about it. */
+.pop.panel {
+	padding: 12px 14px 14px;
+}
+
+.pop-title {
+	margin: 0 0 6px;
+	color: var(--text-primary);
+	font-size: var(--fs-body);
+	font-weight: 500;
+}
+
+.pop-title.broken {
+	color: var(--stuck);
+}
+
+.pop-text {
 	margin: 0 0 8px;
-	color: var(--faint);
+	color: var(--text-muted);
 }
 
-.counter {
+/* Rows to read in a panel (the agents attached): a menu's rows, with no stop to act on. */
+.pop-lines {
+	margin: 0 -8px 8px;
+	padding: 0;
+	list-style: none;
+}
+
+.pop-why {
+	display: block;
+	margin: 0 0 8px;
+	padding: 6px 8px;
+	border-radius: var(--r);
+	background: var(--surface-sunken);
+	color: var(--text-secondary);
+	font-size: var(--fs-small);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.pop-button {
+	all: unset;
+	display: inline-flex;
+	align-items: center;
+	box-sizing: border-box;
+	height: 26px;
+	margin-top: 2px;
+	padding: 0 10px;
+	border: 1px solid var(--border);
+	border-radius: var(--r);
+	color: var(--text-primary);
+	font: 500 var(--fs-small) / 1 var(--font);
+	cursor: pointer;
+}
+
+.pop-button:hover {
+	background: var(--surface-hover);
+}
+
+.pop-button:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+/* The palette: a modal dialog, over a dim page, in the window's middle. */
+.scrim {
+	position: absolute;
+	z-index: 9;
+	inset: 0;
+	background: var(--scrim);
+	animation: pop-fade var(--pop-in) both;
+}
+
+.pop.palette {
+	top: 10vh;
+	right: 0;
+	left: 0;
+	width: min(620px, calc(100% - 32px));
+	margin: 0 auto;
+	padding: 0;
+	overflow: clip;
+	border-radius: var(--r-xl);
+	box-shadow:
+		var(--pop-shadow),
+		0 24px 64px rgb(0 0 0 / 0.35);
+	transform-origin: top center;
+}
+
+.pop .chip-row {
+	display: flex;
+	padding: 12px 16px 0;
+}
+
+.pop .chip {
+	display: inline-flex;
+	align-items: center;
+	height: 20px;
+	padding: 0 7px;
+	border-radius: var(--r);
+	background: var(--surface-hover);
+	color: var(--text-muted);
+	font-size: var(--fs-small);
+	font-weight: 500;
+}
+
+.pop .find {
+	all: unset;
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	height: 46px;
+	padding: 0 16px;
+	border-bottom: 1px solid var(--border-faint);
+	color: var(--text-primary);
+	font: 400 var(--fs-head) / 1 var(--font);
+}
+
+.pop .find::placeholder {
+	color: var(--text-faint);
+}
+
+.pop .list {
+	max-height: min(472px, 55vh);
+	padding: 6px;
+	overflow: auto;
+}
+
+.pop-group {
+	display: flex;
+	align-items: center;
+	height: 28px;
+	padding: 0 10px;
+	color: var(--text-faint);
+	font-size: var(--fs-small);
+	font-weight: 500;
+}
+
+/* In a menu, a section's heading that does not fold lines up with the rows under it. */
+.pop.menu .pop-group {
+	padding: 0 8px;
+}
+
+/* A command: its name over its tsh word (two lines, as a menu's row), its keys at the right. */
+.pop-cmd {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	height: var(--row-2h);
+	padding: 0 10px;
+	border-radius: var(--r);
+	color: var(--text-primary);
+	cursor: default;
+}
+
+.pop-cmd .text {
+	display: grid;
 	flex: 1;
+	min-width: 0;
+}
+
+.pop-cmd .word {
+	overflow: hidden;
+	color: var(--text-muted);
+	font-size: var(--fs-small);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.pop-cmd mark {
+	background: none;
+	color: var(--text-primary);
+	font-weight: 600;
+}
+
+.pop-cmd .word mark {
+	color: var(--text-secondary);
+}
+
+.pop-cmd.on {
+	background: var(--row-on);
+	color: var(--text-primary);
+}
+
+.pop-cmd.on [data-scope="kbd"] {
+	border-color: var(--border-strong);
+	color: var(--text-secondary);
+}
+
+.pop.palette .pop-foot {
+	justify-content: space-between;
+	height: 34px;
+	margin: 0;
+	padding: 0 16px;
+}
+
+/* A tooltip: a name and its keys, after a short wait. Never under the pointer's way. */
+.tip {
+	position: fixed;
+	z-index: 20;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	height: 24px;
+	padding: 0 6px 0 8px;
+	border: 1px solid var(--pop-edge);
+	border-radius: var(--r);
+	background: var(--pop-bg);
+	box-shadow: var(--pop-shadow);
+	color: var(--text-primary);
+	font-size: var(--fs-small);
+	white-space: nowrap;
+	pointer-events: none;
+	animation: pop-fade var(--pop-in) both;
+}
+
+.tip code {
+	font-family: var(--mono);
+}
+
+/* The tsh word that does the same, quieter than the name. */
+.tip .word {
+	color: var(--text-muted);
+}
+
+/* Centred while it fits; in a short tile it starts at the top, so its scroll reaches all of it. */
+.counter {
 	display: flex;
 	flex-direction: column;
-	align-items: center;
-	justify-content: center;
+	align-items: safe center;
+	justify-content: safe center;
+	padding: 16px;
 	gap: 24px;
 }
 
@@ -294,7 +1343,7 @@ kbd {
 
 button {
 	font: inherit;
-	color: var(--ink);
+	color: var(--text-secondary);
 	background: var(--line);
 	border: 1px solid transparent;
 	border-radius: 6px;
@@ -312,14 +1361,291 @@ button:focus-visible {
 }
 
 /*
+ * A round 6 view's base (programs/ticket, map, runs and trace): its type and a plain reset of its
+ * controls. Here, before any rule that styles a control more closely, so those still win.
+ */
+.view {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	background: var(--surface);
+	color: var(--text-secondary);
+	font: 400 var(--fs-body) / 1.5 var(--font);
+	font-feature-settings: "cv11", "ss01";
+	font-variant-numeric: tabular-nums;
+	-webkit-font-smoothing: antialiased;
+}
+
+/* `main.program > *` above is the view itself, and this is only what is inside one, so the two never style the same box. */
+.view *,
+.view *::before,
+.view *::after {
+	box-sizing: border-box;
+}
+
+.view button,
+.view input,
+.view textarea {
+	font: inherit;
+	color: inherit;
+}
+
+.view button {
+	background: none;
+	border: 0;
+	border-radius: 0;
+	padding: 0;
+	cursor: pointer;
+	text-align: start;
+}
+
+.view button:hover {
+	border-color: transparent;
+}
+
+.view button:disabled {
+	cursor: default;
+}
+
+.view :focus {
+	outline: none;
+}
+
+.view :focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+	border-radius: var(--r-sm);
+}
+
+.view p,
+.view h1,
+.view h2,
+.view h3 {
+	margin: 0;
+}
+
+/*
+ * The markdown window (programs/markdown/src/window.tsx): a page to read, as a Linear document
+ * is. One column of the app's sans type, at a reading width, centered in the tile; quiet headings;
+ * code and tables on a raised ground. Links are the page's brightest text, underlined, never the
+ * accent: the accent means "your turn" and nothing else. Here, before the windows that style a
+ * th or a pre more closely, so their rules still win.
+ */
+/* The page is the view, so it is the one box that scrolls (`main.program > *` above). */
+.markdown {
+	display: flex;
+	flex-direction: column;
+	background: var(--ground);
+	color: var(--text-primary);
+	font: 400 var(--fs-prose) / 1.65 var(--font);
+	font-variant-numeric: tabular-nums;
+	-webkit-font-smoothing: antialiased;
+	overflow-wrap: break-word;
+}
+
+.markdown:focus {
+	outline: none;
+}
+
+/* The text grows the page, so the keys' line sits at the foot of a short one. */
+.markdown-body {
+	flex: 1 0 auto;
+	padding: 24px 28px 32px;
+}
+
+.markdown-page {
+	width: 100%;
+	max-width: 760px;
+	margin: 0 auto;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+	color: var(--text-primary);
+	font-weight: 600;
+	line-height: 1.3;
+	letter-spacing: -0.01em;
+	margin: 1.6em 0 0.5em;
+}
+
+.markdown h1 {
+	font-size: var(--fs-title);
+	margin: 0 0 0.4em;
+}
+
+.markdown h2 {
+	font-size: var(--fs-head);
+}
+
+.markdown h3,
+.markdown h4 {
+	font-size: var(--fs-prose);
+}
+
+.markdown strong {
+	color: var(--text-primary);
+	font-weight: 600;
+}
+
+.markdown em {
+	color: var(--soft);
+}
+
+.markdown a {
+	color: var(--text-primary);
+	text-decoration: underline;
+	text-decoration-color: var(--wire);
+	text-underline-offset: 3px;
+}
+
+.markdown a:hover {
+	text-decoration-color: var(--text-primary);
+}
+
+.markdown a:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+	border-radius: 2px;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown blockquote,
+.markdown pre,
+.markdown table {
+	margin: 0 0 0.9em;
+}
+
+.markdown ul,
+.markdown ol {
+	padding-left: 1.4em;
+}
+
+.markdown li + li {
+	margin-top: 0.25em;
+}
+
+.markdown li::marker {
+	color: var(--faint);
+}
+
+.markdown hr {
+	margin: 1.6em 0;
+	border: 0;
+	border-top: 1px solid var(--border-faint);
+}
+
+.markdown code,
+.markdown pre {
+	font-family: var(--mono);
+	font-size: 0.85em;
+}
+
+.markdown :not(pre) > code {
+	padding: 1px 4px;
+	border-radius: var(--r-sm);
+	background: var(--raised);
+	color: var(--text-primary);
+}
+
+.markdown pre {
+	padding: 12px 14px;
+	border: 1px solid var(--border-faint);
+	background: var(--surface-sunken);
+	border-radius: var(--r);
+	line-height: 1.5;
+	/* This repo indents with tabs: four columns, as an editor shows them, not the browser's eight. */
+	tab-size: 4;
+	/* A long line wraps, as the page does: nothing inside the page scrolls on its own. */
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.markdown blockquote {
+	padding-left: 12px;
+	border-left: 2px solid var(--line);
+	color: var(--soft);
+}
+
+.markdown blockquote > :last-child {
+	margin-bottom: 0;
+}
+
+/* Nothing inside the page scrolls on its own: a wide table wraps its cells to the column. */
+.markdown table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--fs-body);
+}
+
+.markdown th,
+.markdown td {
+	padding: 6px 12px 6px 0;
+	border-bottom: 1px solid var(--border-faint);
+	text-align: left;
+	vertical-align: top;
+}
+
+.markdown th:last-child,
+.markdown td:last-child {
+	padding-right: 0;
+}
+
+/* The first column is the row's key, a number or a run label like 165-1: it never wraps. */
+.markdown td:first-child {
+	white-space: nowrap;
+}
+
+.markdown th {
+	color: var(--soft);
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.markdown tbody tr:hover {
+	background: var(--surface-hover);
+}
+
+/* A task list's box sits where the bullet was, and the item's text lines up after it. */
+.markdown li.markdown-task {
+	list-style: none;
+	margin-left: -1.4em;
+}
+
+.markdown-box {
+	margin: 0 0.5em 0 0;
+	vertical-align: -1px;
+}
+
+.markdown-empty {
+	color: var(--faint);
+}
+
+/* The keys, as less shows its prompt: one quiet line at the foot of the tile, under the text. */
+.markdown-keys {
+	position: sticky;
+	bottom: 0;
+	display: flex;
+	flex: none;
+	background: var(--ground);
+	gap: 6px;
+	align-items: center;
+	justify-content: flex-end;
+	padding: 5px 16px;
+	border-top: 1px solid var(--border-faint);
+	color: var(--faint);
+	font-size: var(--fs-micro);
+}
+
+/*
  * The tracker's window (programs/tracker/src/window.tsx). Its colours are the app's tokens, at the
  * top of this file: a program has no theme of its own. Calm on purpose: one column, the app's
  * sans type, and colour only where it says something (a ticket's state, the focus).
  */
-
-main.program:has(> .tracker) {
-	padding: 0;
-}
 
 .tracker {
 	flex: 1;
@@ -327,17 +1653,16 @@ main.program:has(> .tracker) {
 	display: flex;
 	flex-direction: column;
 	background: var(--ground);
-	color: var(--ink);
+	color: var(--text-secondary);
 	font-family: var(--sans);
 	font-size: 13px;
 	line-height: 1.45;
 	-webkit-font-smoothing: antialiased;
-	overflow: auto;
 }
 
+/* The column fills the tile and grows with what it holds; the tracker scrolls, nothing in it does. */
 .tracker-column {
-	flex: 1;
-	min-height: 0;
+	flex: 1 0 auto;
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
@@ -349,8 +1674,7 @@ main.program:has(> .tracker) {
 }
 
 .tracker-page {
-	flex: 1;
-	min-height: 0;
+	flex: 1 0 auto;
 	display: flex;
 	flex-direction: column;
 	gap: 16px;
@@ -361,22 +1685,6 @@ main.program:has(> .tracker) {
 .tracker h2,
 .tracker h3 {
 	margin: 0;
-}
-
-.tracker kbd {
-	display: inline-block;
-	min-width: 1.5em;
-	padding: 0 4px;
-	box-sizing: border-box;
-	border: 1px solid var(--line);
-	border-bottom-width: 2px;
-	border-radius: 4px;
-	background: var(--raised);
-	color: var(--faint);
-	font: inherit;
-	font-size: 11px;
-	line-height: 16px;
-	text-align: center;
 }
 
 .tracker small {
@@ -418,7 +1726,7 @@ main.program:has(> .tracker) {
 }
 
 .tracker button.tracker-primary {
-	color: var(--ink);
+	color: var(--turn-fg);
 	background: var(--key);
 	border-color: transparent;
 	font-weight: 500;
@@ -457,7 +1765,7 @@ main.program:has(> .tracker) {
 
 .tracker .tracker-shows button[aria-pressed="true"] {
 	background: var(--raised);
-	color: var(--ink);
+	color: var(--text-primary);
 	font-weight: 500;
 	box-shadow: 0 0 0 1px var(--line);
 }
@@ -469,8 +1777,10 @@ main.program:has(> .tracker) {
 	font-weight: 400;
 }
 
+/* It narrows with a narrow tile rather than push the tracker sideways. */
 .tracker-find {
 	flex: 1;
+	min-width: 0;
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -493,7 +1803,7 @@ main.program:has(> .tracker) {
 	padding: 5px 0;
 	border: none;
 	background: transparent;
-	color: var(--ink);
+	color: var(--text-primary);
 	font: inherit;
 	outline: none;
 }
@@ -512,7 +1822,7 @@ main.program:has(> .tracker) {
 .tracker .tracker-composer input,
 .tracker .tracker-composer textarea {
 	font: inherit;
-	color: var(--ink);
+	color: var(--text-primary);
 	background: var(--raised);
 	border: 1px solid var(--line);
 	border-radius: 8px;
@@ -553,9 +1863,7 @@ main.program:has(> .tracker) {
 
 /* The lists: tickets, then the open pull requests. */
 .tracker-lists {
-	flex: 1;
-	min-height: 0;
-	overflow: auto;
+	flex: 1 0 auto;
 	display: flex;
 	flex-direction: column;
 	gap: 20px;
@@ -583,7 +1891,7 @@ main.program:has(> .tracker) {
 	border: none;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--ink);
+	color: var(--text-secondary);
 	text-align: left;
 	text-decoration: none;
 }
@@ -612,6 +1920,7 @@ main.program:has(> .tracker) {
 
 .tracker-title {
 	overflow: hidden;
+	color: var(--text-primary);
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	font-size: 14px;
@@ -737,6 +2046,7 @@ main.program:has(> .tracker) {
 }
 
 .tracker h2 {
+	color: var(--text-primary);
 	font-size: 20px;
 	font-weight: 600;
 	line-height: 1.3;
@@ -765,10 +2075,9 @@ main.program:has(> .tracker) {
 	height: 14px;
 }
 
+/* At its full height, the first body (the ticket as filed) too: the page scrolls, not the timeline. */
 .tracker-timeline {
-	flex: 1;
-	min-height: 0;
-	overflow: auto;
+	flex: 1 0 auto;
 	display: flex;
 	flex-direction: column;
 	gap: 18px;
@@ -793,7 +2102,7 @@ main.program:has(> .tracker) {
 }
 
 .tracker-who {
-	color: var(--ink);
+	color: var(--text-primary);
 	font-weight: 600;
 }
 
@@ -809,7 +2118,7 @@ main.program:has(> .tracker) {
 .tracker-body {
 	max-width: 68ch;
 	margin-top: 4px;
-	color: var(--ink);
+	color: var(--text-primary);
 	font-size: 14px;
 	line-height: 1.55;
 	white-space: pre-wrap;
@@ -817,14 +2126,15 @@ main.program:has(> .tracker) {
 
 /* A URL in a body: underlined, and a long one wraps rather than widen the tile. */
 .tracker-body a {
-	color: var(--key);
+	color: var(--turn);
 	text-decoration: underline;
 	text-underline-offset: 2px;
 	overflow-wrap: anywhere;
 }
 
-.tracker-pending {
-	opacity: 0.6;
+/* A comment still saving: its body at the low step, and "saving…" above it says so. */
+.tracker-pending .tracker-body {
+	color: var(--text-secondary);
 }
 
 .tracker-reply {
@@ -839,7 +2149,7 @@ main.program:has(> .tracker) {
 }
 
 .tracker-head-line[data-waits] {
-	color: var(--key);
+	color: var(--turn);
 	font-weight: 600;
 }
 
@@ -860,8 +2170,44 @@ main.program:has(> .tracker) {
 }
 
 .tracker-ask-what {
-	color: var(--ink);
+	color: var(--text-primary);
 	font-size: 14px;
+	font-weight: 600;
+}
+
+/* A duplicate hint: advice, so quieter than an ask: a dashed edge, not a solid one. */
+.tracker-hint {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px 12px;
+	border: 1px dashed var(--line);
+	border-radius: 8px;
+}
+
+.tracker-hint-what {
+	color: var(--text-primary);
+}
+
+/* Dismissed, its words drop to the low step; the pressed Dismiss button says it in words. */
+.tracker-hint[data-says="dismiss"] .tracker-hint-what {
+	color: var(--text-secondary);
+}
+
+.tracker .tracker-hint-link {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	font-weight: 600;
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+.tracker .tracker-hint button[aria-pressed="true"] {
+	border-color: var(--key);
+	color: var(--text-primary);
 	font-weight: 600;
 }
 
@@ -870,5 +2216,1659 @@ main.program:has(> .tracker) {
 	.tracker-list a.tracker-pull-request,
 	.tracker .tracker-shows button {
 		transition: background-color 80ms ease-out;
+	}
+}
+
+/*
+ * Round 6: the three windows one ticket is seen through, each a program in its own tile.
+ * programs/ticket (a page, as Linear draws an issue), programs/map (today's programs on a canvas)
+ * and programs/trace (one job's waterfall, or one ticket's lanes, each on its own axis). Everything
+ * here is under `.view`, so the app's own buttons and tiles keep their look, and the rules match
+ * the round 6 mockup's, class for class.
+ */
+
+main.program:has(> .view) {
+	container: main / inline-size;
+}
+
+.view .sr {
+	position: absolute;
+	inline-size: 1px;
+	block-size: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.view .mono {
+	font-family: var(--mono);
+	font-size: 0.95em;
+}
+
+.view .faint {
+	color: var(--text-faint);
+}
+
+.view .muted {
+	color: var(--text-muted);
+}
+
+.view .prim {
+	color: var(--text-primary);
+}
+
+.view .trunc {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-inline-size: 0;
+}
+
+.view .cmd {
+	padding: 2px 6px;
+	border-radius: var(--r-sm);
+	background: var(--surface-sunken);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+	font: 400 var(--fs-small) / 1.4 var(--mono);
+	color: var(--text-primary);
+	white-space: nowrap;
+}
+
+.view .note {
+	font-size: var(--fs-small);
+	color: var(--text-muted);
+	max-inline-size: 60ch;
+	text-wrap: pretty;
+}
+
+.view .empty,
+.view .view-empty {
+	font-size: var(--fs-small);
+	color: var(--text-faint);
+}
+
+.view .view-empty {
+	margin: var(--s-8) auto;
+}
+
+/* A view's own empty line, when it is all the view shows: off the tile's edge, as the frame no longer pads. */
+.view > .empty {
+	margin: 16px;
+}
+
+.view .alert {
+	padding: var(--s-2) var(--s-3);
+	border-radius: var(--r-lg);
+	box-shadow: inset 0 0 0 1px var(--stuck);
+	color: var(--stuck);
+	font-size: var(--fs-small);
+}
+
+.view .tag {
+	font: 500 var(--fs-micro) / 1 var(--font);
+	color: var(--text-secondary);
+	padding: 3px 5px;
+	border-radius: var(--r-sm);
+	box-shadow: inset 0 0 0 1px var(--border-strong);
+	white-space: nowrap;
+	letter-spacing: 0.02em;
+}
+
+/* Buttons: one filled for "your turn", the rest quiet. */
+.view .btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex: none;
+	block-size: 28px;
+	padding-inline: var(--s-3);
+	border-radius: var(--r);
+	background: var(--surface-raised);
+	box-shadow: inset 0 0 0 1px var(--border);
+	color: var(--text-primary);
+	font-weight: 500;
+	white-space: nowrap;
+	transition:
+		background-color var(--fast) ease,
+		scale 150ms ease-out;
+}
+
+.view .btn:disabled {
+	color: var(--text-faint);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+	background: none;
+}
+
+.view .btn.quiet {
+	background: none;
+	box-shadow: none;
+	color: var(--text-secondary);
+	padding-inline: var(--s-2);
+}
+
+.view .btn.turn {
+	background: var(--turn-fill);
+	box-shadow: none;
+	color: var(--turn-fg);
+}
+
+.view .btn.sm {
+	block-size: 24px;
+	padding-inline: var(--s-2);
+	font-size: var(--fs-small);
+}
+
+@media (hover: hover) {
+	.view .btn:not(:disabled):hover {
+		background: var(--surface-hover);
+	}
+
+	.view .btn.quiet:not(:disabled):hover {
+		color: var(--text-primary);
+	}
+
+	.view .btn.turn:hover {
+		background: var(--turn-fill-hover);
+	}
+}
+
+.view .btn:not(:disabled):active {
+	scale: 0.97;
+}
+
+/* Marks: who did it, by shape and face, never colour. A person a circle, an agent a square. */
+.view .m {
+	flex: none;
+	display: inline-grid;
+	place-items: center;
+	inline-size: 18px;
+	block-size: 18px;
+	font: 600 10px / 1 var(--font);
+	color: var(--text-primary);
+}
+
+.view .m.p {
+	border-radius: 50%;
+	background: var(--person-bg);
+}
+
+.view .m.p.you {
+	box-shadow:
+		0 0 0 2px var(--surface-raised),
+		0 0 0 3.5px var(--turn-fill);
+}
+
+.view .m.a {
+	border-radius: var(--r-sm);
+	background: var(--agent-bg);
+	box-shadow: inset 0 0 0 1px var(--border-strong);
+	color: var(--text-secondary);
+}
+
+.view .m svg {
+	inline-size: 10px;
+	block-size: 10px;
+}
+
+.view .m.s {
+	border-radius: 50%;
+	box-shadow: inset 0 0 0 1px var(--border-strong);
+	color: var(--text-muted);
+}
+
+.view .m.lg {
+	inline-size: 24px;
+	block-size: 24px;
+	font-size: 11px;
+}
+
+.view .who {
+	color: var(--text-primary);
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.view .who.ag {
+	font-family: var(--mono);
+	font-size: 0.95em;
+}
+
+.view .dot {
+	flex: none;
+	inline-size: 8px;
+	block-size: 8px;
+	border-radius: 50%;
+	box-shadow: inset 0 0 0 1.5px var(--text-faint);
+}
+
+.view .dot.run {
+	background: var(--running);
+	box-shadow: none;
+}
+
+.view .dot.you {
+	box-shadow: inset 0 0 0 1.5px var(--turn);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.view .dot.run.live {
+		animation: breathe 2.4s ease-in-out infinite;
+	}
+}
+
+@keyframes breathe {
+	50% {
+		opacity: 0.45;
+	}
+}
+
+.view .w-done {
+	color: var(--done);
+}
+
+.view .w-run {
+	color: var(--running);
+}
+
+.view .w-stuck {
+	color: var(--stuck);
+}
+
+.view .w-you {
+	color: var(--turn);
+	font-weight: 600;
+}
+
+.view .kv {
+	display: grid;
+	grid-template-columns: 76px minmax(0, 1fr);
+	gap: 4px var(--s-3);
+	margin: 0;
+	font-size: var(--fs-small);
+}
+
+.view .kv dt {
+	color: var(--text-faint);
+}
+
+.view .kv dd {
+	margin: 0;
+	color: var(--text-secondary);
+	min-inline-size: 0;
+	overflow-wrap: anywhere;
+}
+
+.view .kv .mono {
+	color: var(--text-primary);
+}
+
+/* 1. The ticket: a page, as Linear draws an issue. */
+
+.ticket-view .tkv {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 280px;
+	min-block-size: 100%;
+}
+
+.ticket-view .tk-main {
+	min-inline-size: 0;
+	padding: var(--s-8) var(--s-10) var(--s-10);
+}
+
+.ticket-view .tk-col {
+	max-inline-size: 700px;
+	margin-inline: auto;
+	display: grid;
+	gap: var(--s-6);
+}
+
+.ticket-view .idl {
+	display: flex;
+	gap: 6px;
+	align-items: baseline;
+	font-size: var(--fs-small);
+	color: var(--text-faint);
+	margin-block-end: 6px;
+}
+
+.ticket-view .idl .mono {
+	color: var(--text-muted);
+}
+
+.ticket-view .tk-title {
+	font-size: var(--fs-title);
+	line-height: 1.3;
+	font-weight: 600;
+	letter-spacing: -0.012em;
+	color: var(--text-primary);
+	text-wrap: balance;
+	overflow-wrap: anywhere;
+}
+
+.ticket-view .turnc {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	flex-wrap: wrap;
+	padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4);
+	border-radius: var(--r-lg);
+	background: var(--surface-raised);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+}
+
+.ticket-view .turnc.you {
+	box-shadow:
+		inset 0 0 0 1px var(--border-faint),
+		inset 2px 0 0 var(--turn-fill);
+}
+
+.ticket-view .turnc.stuck {
+	box-shadow:
+		inset 0 0 0 1px var(--border-faint),
+		inset 2px 0 0 var(--stuck);
+}
+
+.ticket-view .turnc .what {
+	display: grid;
+	min-inline-size: 0;
+	flex: 1 1 260px;
+}
+
+.ticket-view .turnc .big {
+	color: var(--text-primary);
+	font-weight: 500;
+}
+
+.ticket-view .turnc .sub {
+	font-size: var(--fs-small);
+	color: var(--text-muted);
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0 6px;
+}
+
+.ticket-view .turnc .acts {
+	display: inline-flex;
+	gap: var(--s-2);
+	margin-inline-start: auto;
+}
+
+.ticket-view .noform {
+	flex: 1 1 100%;
+	display: grid;
+	gap: var(--s-2);
+}
+
+.ticket-view .noform textarea {
+	inline-size: 100%;
+	min-block-size: 52px;
+	padding: var(--s-2);
+	border-radius: var(--r);
+	border: 0;
+	background: var(--surface-sunken);
+	box-shadow: inset 0 0 0 1px var(--border);
+	color: var(--text-primary);
+	resize: vertical;
+}
+
+.ticket-view .noform .row2 {
+	display: flex;
+	gap: var(--s-2);
+	justify-content: flex-end;
+}
+
+.ticket-view .desc {
+	max-inline-size: 66ch;
+	font-size: var(--fs-prose);
+	line-height: 1.65;
+	color: var(--text-secondary);
+	text-wrap: pretty;
+	display: grid;
+	gap: var(--s-3);
+}
+
+.ticket-view .act-h {
+	display: flex;
+	align-items: baseline;
+	gap: var(--s-2);
+	margin: 0 0 var(--s-2);
+	padding-block-start: var(--s-4);
+	border-block-start: 1px solid var(--border-faint);
+}
+
+.ticket-view .act-h h2 {
+	font-size: var(--fs-body);
+	font-weight: 600;
+	color: var(--text-primary);
+}
+
+.ticket-view .act-h .hint {
+	margin-inline-start: auto;
+	font-size: var(--fs-small);
+	color: var(--text-faint);
+	display: inline-flex;
+	gap: 4px;
+	align-items: center;
+}
+
+.ticket-view .acts-l {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+}
+
+.ticket-view .act {
+	border-radius: var(--r-lg);
+}
+
+.ticket-view .act.open {
+	background: color-mix(in oklab, var(--surface-raised) 60%, var(--surface));
+}
+
+.ticket-view .act-r {
+	display: grid;
+	grid-template-columns: 18px minmax(0, 1fr) auto 14px;
+	gap: var(--s-3);
+	align-items: center;
+	inline-size: 100%;
+	min-block-size: 34px;
+	padding: 4px var(--s-2);
+	border-radius: var(--r-lg);
+	transition: background-color 100ms ease;
+}
+
+@media (hover: hover) {
+	.ticket-view .act-r:hover {
+		background: var(--surface-hover);
+	}
+}
+
+.ticket-view .act-r .line {
+	display: flex;
+	gap: 6px;
+	align-items: baseline;
+	min-inline-size: 0;
+}
+
+.ticket-view .act-r .w {
+	color: var(--text-secondary);
+	white-space: nowrap;
+}
+
+.ticket-view .act-r .code {
+	font: 400 var(--fs-small) var(--mono);
+	color: var(--text-faint);
+}
+
+.ticket-view .act-r .quote {
+	color: var(--text-muted);
+}
+
+.ticket-view .act-r time {
+	font-size: var(--fs-small);
+	color: var(--text-faint);
+	white-space: nowrap;
+}
+
+.ticket-view .chev {
+	inline-size: 14px;
+	block-size: 14px;
+	color: var(--text-faint);
+	opacity: 0;
+	transition: opacity var(--fast) ease;
+}
+
+.ticket-view .act-r:hover .chev,
+.ticket-view .act-r:focus-visible .chev,
+.ticket-view .act.open .chev {
+	opacity: 1;
+}
+
+.ticket-view .act.open .chev {
+	rotate: 90deg;
+}
+
+.ticket-view .act-x {
+	padding: 2px var(--s-3) var(--s-3) 38px;
+	display: grid;
+	gap: var(--s-2);
+}
+
+.ticket-view .composer {
+	margin-block-start: var(--s-3);
+	border-radius: var(--r-lg);
+	background: var(--surface-sunken);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+	transition: box-shadow var(--fast) ease;
+}
+
+.ticket-view .composer:focus-within {
+	box-shadow:
+		inset 0 0 0 1px var(--border-strong),
+		0 0 0 2px var(--surface),
+		0 0 0 3.5px var(--focus);
+}
+
+.ticket-view .composer textarea {
+	display: block;
+	inline-size: 100%;
+	min-block-size: 64px;
+	resize: vertical;
+	padding: var(--s-3);
+	border: 0;
+	background: none;
+	color: var(--text-primary);
+	line-height: 1.5;
+}
+
+.ticket-view .composer textarea:focus-visible {
+	outline: none;
+}
+
+.ticket-view textarea::placeholder {
+	color: var(--text-faint);
+}
+
+.ticket-view .composer .cf {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	padding: 0 var(--s-2) var(--s-2) var(--s-3);
+	font-size: var(--fs-small);
+	color: var(--text-faint);
+}
+
+.ticket-view .composer .cf .sp {
+	margin-inline-end: auto;
+	display: inline-flex;
+	gap: 2px;
+	align-items: center;
+}
+
+/* The properties, as Linear keeps them: a quiet column beside the work. */
+.ticket-view .tk-side {
+	border-inline-start: 1px solid var(--border-faint);
+	padding: var(--s-5) var(--s-4) var(--s-8);
+	display: grid;
+	gap: var(--s-5);
+	align-content: start;
+	position: sticky;
+	inset-block-start: 0;
+	align-self: start;
+}
+
+.ticket-view .tk-side h3,
+.ticket-view .props-inline h3 {
+	margin: 0 0 var(--s-1);
+	font-size: var(--fs-small);
+	font-weight: 500;
+	color: var(--text-faint);
+}
+
+.ticket-view .props {
+	display: grid;
+	grid-template-columns: 64px minmax(0, 1fr);
+	gap: 0 var(--s-3);
+	margin: 0;
+	font-size: var(--fs-small);
+	align-items: center;
+}
+
+.ticket-view .props dt {
+	color: var(--text-faint);
+	min-block-size: 30px;
+	display: flex;
+	align-items: center;
+}
+
+.ticket-view .props dd {
+	margin: 0;
+	min-inline-size: 0;
+	min-block-size: 30px;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--text-secondary);
+}
+
+.ticket-view .meter {
+	display: inline-flex;
+	gap: 2px;
+}
+
+.ticket-view .meter i {
+	inline-size: 7px;
+	block-size: 4px;
+	border-radius: 1px;
+	background: var(--border);
+}
+
+.ticket-view .meter i.d {
+	background: var(--text-faint);
+}
+
+.ticket-view .meter i.run {
+	background: var(--running);
+}
+
+.ticket-view .meter i.you {
+	background: var(--turn-fill);
+}
+
+.ticket-view .meter i.bad {
+	background: var(--stuck);
+}
+
+.ticket-view .made {
+	display: grid;
+	gap: var(--s-2);
+	font-size: var(--fs-small);
+	color: var(--text-muted);
+	justify-items: start;
+}
+
+.ticket-view .props-inline {
+	display: none;
+}
+
+@container main (max-width: 760px) {
+	.ticket-view .tkv {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.ticket-view .tk-side {
+		display: none;
+	}
+
+	.ticket-view .props-inline {
+		display: grid;
+		gap: var(--s-1);
+		padding: var(--s-3) var(--s-3) var(--s-2);
+		border-radius: var(--r-lg);
+		box-shadow: inset 0 0 0 1px var(--border-faint);
+	}
+
+	.ticket-view .props-inline .props {
+		grid-template-columns: 64px minmax(0, 1fr) 64px minmax(0, 1fr);
+	}
+
+	.ticket-view .tk-main {
+		padding: var(--s-5) var(--s-4) var(--s-8);
+	}
+
+	.ticket-view .turnc .acts {
+		margin-inline-start: 0;
+	}
+}
+
+@container main (max-width: 560px) {
+	.ticket-view .props-inline .props {
+		grid-template-columns: 64px minmax(0, 1fr);
+	}
+}
+
+/* The bar over the map, the runs and the trace. */
+
+.view .mapbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--s-2) var(--s-4);
+	padding: var(--s-2) var(--s-4);
+	font-size: var(--fs-small);
+	color: var(--text-muted);
+	border-block-end: 1px solid var(--border-faint);
+}
+
+.view .mapbar .state {
+	display: inline-flex;
+	gap: 6px;
+	align-items: center;
+	color: var(--text-secondary);
+}
+
+.view .legend {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: var(--s-3);
+	margin-inline-start: auto;
+	color: var(--text-faint);
+}
+
+.view .legend > span {
+	display: inline-flex;
+	gap: 5px;
+	align-items: center;
+}
+
+.view .shape {
+	inline-size: 10px;
+	block-size: 10px;
+	flex: none;
+	overflow: visible;
+}
+
+.view .shape * {
+	fill: var(--surface-raised);
+	stroke: var(--ty);
+	stroke-width: 1.6;
+}
+
+/* 2. The program map: today's programs on a React Flow canvas. */
+
+.map-view .canvas {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+}
+
+.map-view .legend .svcl {
+	inline-size: 18px;
+	block-size: 0;
+	border-block-start: 2px dotted var(--border-strong);
+}
+
+.map-view .legend .nbl {
+	inline-size: 12px;
+	block-size: 10px;
+	border-radius: 3px;
+	outline: 1px dashed var(--wire);
+	outline-offset: -1px;
+}
+
+/* React Flow's own canvas, on the app's surface. */
+.map-view .react-flow {
+	--xy-background-color: var(--surface);
+	--xy-edge-stroke: var(--wire);
+	--xy-handle-background-color: transparent;
+	--xy-handle-border-color: transparent;
+	background: var(--surface);
+}
+
+.map-view .react-flow__node {
+	cursor: default;
+}
+
+.map-view .react-flow__attribution {
+	background: transparent;
+	font-size: 9px;
+}
+
+.map-view .react-flow__attribution a {
+	color: var(--text-faint);
+}
+
+.map-view .node {
+	position: relative;
+	border-radius: var(--r-lg);
+	background: var(--surface-raised);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+	color: var(--text-secondary);
+	font: 400 var(--fs-body) / 1.5 var(--font);
+}
+
+.map-view .node.lit {
+	box-shadow: inset 0 0 0 1px var(--text-faint);
+}
+
+.map-view .node.store {
+	background: var(--surface-sunken);
+	box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.map-view .node-h {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	padding: var(--s-2) var(--s-3) 6px;
+	min-block-size: 32px;
+}
+
+.map-view .node-h .n {
+	font: 500 var(--fs-body) var(--mono);
+	color: var(--text-primary);
+	white-space: nowrap;
+}
+
+.map-view .node-h .sig {
+	margin-inline-start: auto;
+	font: 400 var(--fs-micro) var(--mono);
+	color: var(--text-faint);
+	white-space: nowrap;
+}
+
+.map-view .node-b {
+	padding: 0 var(--s-3) var(--s-3);
+	font-size: var(--fs-small);
+	display: grid;
+	gap: 2px;
+	min-inline-size: 0;
+}
+
+.map-view .ins,
+.map-view .outs {
+	display: grid;
+	gap: 1px;
+	padding: 0 var(--s-3) var(--s-2);
+}
+
+.map-view .in,
+.map-view .outr {
+	position: relative;
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	block-size: 17px;
+	font: 400 var(--fs-micro) var(--mono);
+	color: var(--text-faint);
+	white-space: nowrap;
+}
+
+.map-view .in .from {
+	color: var(--text-faint);
+	font-family: var(--font);
+}
+
+.map-view .outr {
+	justify-content: flex-end;
+}
+
+.map-view .outl {
+	padding: 0 var(--s-3) var(--s-2);
+	font: 400 var(--fs-micro) / 1.5 var(--mono);
+	color: var(--text-faint);
+}
+
+/* A port is React Flow's handle, drawn as its family's shape on the box's edge. */
+.map-view .react-flow__handle.port {
+	position: absolute;
+	inline-size: 11px;
+	block-size: 11px;
+	min-width: 0;
+	min-height: 0;
+	display: grid;
+	place-items: center;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+}
+
+.map-view .in .react-flow__handle.port {
+	left: calc(-1 * var(--s-3) - 1px);
+}
+
+.map-view .outr .react-flow__handle.port {
+	left: auto;
+	right: calc(-1 * var(--s-3) - 1px);
+}
+
+.map-view .react-flow__handle.port svg {
+	inline-size: 10px;
+	block-size: 10px;
+	overflow: visible;
+}
+
+.map-view .react-flow__handle.port svg * {
+	fill: var(--surface-raised);
+	stroke: var(--ty);
+	stroke-width: 1.6;
+}
+
+.map-view .in.nil .react-flow__handle.port svg * {
+	stroke: var(--border-strong);
+}
+
+.map-view .react-flow__handle.call-h {
+	inline-size: 1px;
+	block-size: 1px;
+	min-width: 0;
+	min-height: 0;
+	border: 0;
+	background: transparent;
+}
+
+/* Wires: a typed one in its family's colour, a ledger call dotted and grey. */
+.map-view .react-flow__edge-path.wire {
+	stroke: var(--ty);
+	stroke-width: 1.4;
+}
+
+.map-view .react-flow__edge-path.call {
+	stroke: var(--border-strong);
+	stroke-width: 1.2;
+	stroke-dasharray: 1 4;
+	stroke-linecap: round;
+}
+
+.map-view .wl,
+.map-view .cl {
+	position: absolute;
+	pointer-events: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	white-space: nowrap;
+}
+
+.map-view .wl {
+	block-size: 18px;
+	padding-inline: 5px 7px;
+	border-radius: 9px;
+	background: var(--surface);
+	box-shadow: inset 0 0 0 1px var(--border);
+	font: 400 var(--fs-micro) / 1 var(--mono);
+	color: var(--text-muted);
+}
+
+.map-view .cl {
+	padding: 1px 3px;
+	background: var(--surface);
+	font: 400 10px / 1 var(--font);
+	color: var(--text-faint);
+}
+
+/* A lane's frame: operate with its nine spots, deliver with its children. */
+.map-view .frame {
+	border-radius: var(--r-xl);
+	box-shadow: inset 0 0 0 1px var(--border);
+	background: color-mix(in oklab, var(--surface-raised) 35%, var(--surface));
+	padding: 0 var(--s-3) var(--s-3);
+	color: var(--text-secondary);
+	font: 400 var(--fs-body) / 1.5 var(--font);
+}
+
+.map-view .frame-h {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px var(--s-2);
+	align-items: baseline;
+	padding: var(--s-2) 0;
+}
+
+.map-view .frame-h .n {
+	font: 500 var(--fs-body) var(--mono);
+	color: var(--text-primary);
+}
+
+.map-view .frame-h .sig {
+	font: 400 var(--fs-micro) var(--mono);
+	color: var(--text-faint);
+}
+
+.map-view .frame-h .port-line {
+	flex: 1 1 100%;
+}
+
+.map-view .frame-h .how {
+	flex: 1 1 100%;
+	font-size: var(--fs-micro);
+	color: var(--text-muted);
+}
+
+.map-view .spots {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: var(--s-2);
+}
+
+.map-view .spot {
+	display: grid;
+	gap: 2px;
+	align-content: start;
+	min-block-size: 82px;
+	padding: 6px var(--s-2) var(--s-2);
+	border-radius: var(--r-lg);
+	background: var(--surface-raised);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+	font-size: var(--fs-micro);
+	color: var(--text-muted);
+	min-inline-size: 0;
+}
+
+/* A step's name never breaks; a tag that does not fit beside it goes under it ("test writer"). */
+.map-view .spot .n {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 6px;
+	align-items: center;
+	white-space: nowrap;
+	font: 500 var(--fs-small) var(--mono);
+	color: var(--text-primary);
+}
+
+.map-view .spot .n .tag {
+	font: 400 var(--fs-micro) / 1 var(--mono);
+	color: var(--text-muted);
+	padding: 2px 4px;
+	border-radius: var(--r-sm);
+	box-shadow: inset 0 0 0 1px var(--border-strong);
+	white-space: nowrap;
+}
+
+.map-view .spot .n > :is(.w-done, .w-you, .w-stuck, .dot) {
+	margin-inline-start: auto;
+}
+
+.map-view .spot .m2 {
+	color: var(--text-faint);
+}
+
+.map-view .spot .st {
+	color: var(--text-secondary);
+	font-family: var(--mono);
+}
+
+.map-view .spot.nb {
+	box-shadow: none;
+	outline: 1px dashed var(--wire);
+	outline-offset: -1px;
+}
+
+/* A step not built yet: no fill, a dashed edge (.nb) and its "not built" words; its name drops to
+   the low step below. */
+.map-view .spot.nob {
+	background: none;
+}
+
+.map-view .nob .n,
+.map-view .nob .st {
+	color: var(--text-faint);
+}
+
+.map-view .spot.you {
+	box-shadow:
+		inset 0 0 0 1px var(--border-faint),
+		inset 2px 0 0 var(--turn-fill);
+}
+
+.map-view .spot.run {
+	box-shadow:
+		inset 0 0 0 1px var(--border-faint),
+		inset 2px 0 0 var(--running);
+}
+
+.map-view .spot.stuck {
+	box-shadow:
+		inset 0 0 0 1px var(--border-faint),
+		inset 2px 0 0 var(--stuck);
+}
+
+.map-view .spot.nb.you,
+.map-view .spot.nb.run,
+.map-view .spot.nb.stuck {
+	outline-color: var(--text-faint);
+}
+
+.map-view .chips {
+	display: grid;
+	gap: 6px;
+}
+
+.map-view .chip {
+	display: grid;
+	grid-template-columns: 6ch auto minmax(0, 1fr);
+	align-items: center;
+	gap: var(--s-2);
+	padding: 6px var(--s-2);
+	border-radius: var(--r-lg);
+	background: var(--surface-raised);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+	font-size: var(--fs-micro);
+	color: var(--text-muted);
+}
+
+.map-view .chip .n {
+	font: 500 var(--fs-small) var(--mono);
+	color: var(--text-primary);
+}
+
+.map-view .chip .ag {
+	display: inline-flex;
+	gap: 6px;
+	align-items: center;
+	padding: 3px 6px;
+	border-radius: var(--r);
+	box-shadow: inset 0 0 0 1px var(--border);
+	font-family: var(--mono);
+	color: var(--text-secondary);
+}
+
+.map-view .chip .ag svg {
+	inline-size: 10px;
+	block-size: 10px;
+	flex: none;
+}
+
+/* 3. The trace: one job's waterfall, as Jaeger draws one, and each row opening in place. */
+
+.trace-view .trace-running {
+	display: inline-flex;
+	gap: 6px;
+	align-items: center;
+	color: var(--text-secondary);
+}
+
+/* With no legend beside it, the trace id still sits at the head's far end. */
+.trace-view .trace-id:not(.legend + *) {
+	margin-inline-start: auto;
+}
+
+.trace-view .legend .swatch {
+	display: inline-block;
+	inline-size: 10px;
+	block-size: 10px;
+	border-radius: 2px;
+}
+
+.trace-view .wf {
+	inline-size: calc(100% - 2 * var(--s-4));
+	margin: var(--s-2) var(--s-4) var(--s-3);
+	table-layout: fixed;
+	border-collapse: collapse;
+}
+
+.trace-view .wf-c-name {
+	inline-size: 34%;
+}
+
+.trace-view .wf-row {
+	block-size: 26px;
+	cursor: default;
+}
+
+.trace-view .wf-row:not(.wf-head):hover {
+	background: var(--surface-hover);
+}
+
+.trace-view .wf-row.sel {
+	background: var(--surface-selected);
+}
+
+.trace-view .wf-row:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: -2px;
+}
+
+.trace-view .wf th,
+.trace-view .wf td {
+	padding: 0;
+	text-align: start;
+	vertical-align: middle;
+	font-weight: 400;
+}
+
+.trace-view .wf-head {
+	block-size: 22px;
+	color: var(--text-faint);
+	font-size: var(--fs-micro);
+	border-block-end: 1px solid var(--border-faint);
+}
+
+.trace-view .wf-name {
+	overflow: hidden;
+	white-space: nowrap;
+	color: var(--text-primary);
+}
+
+.trace-view .wf-in {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-inline-size: 0;
+}
+
+.trace-view th.wf-name {
+	padding-inline-start: 6px;
+}
+
+.trace-view .wf-caret {
+	inline-size: 10px;
+	flex: none;
+	color: var(--text-faint);
+	font-size: var(--fs-micro);
+}
+
+.trace-view .wf-swatch {
+	inline-size: 3px;
+	block-size: 14px;
+	flex: none;
+	border-radius: 1px;
+}
+
+.trace-view .wf-note {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: var(--fs-small);
+}
+
+.trace-view .wf-track {
+	position: relative;
+	block-size: 26px;
+	margin-inline-end: 64px;
+}
+
+.trace-view .wf-head .wf-track {
+	block-size: 22px;
+}
+
+.trace-view .wf-tick {
+	position: absolute;
+	inset-block-start: 4px;
+	transform: translateX(-50%);
+	font-variant-numeric: tabular-nums;
+	/* Near the track's end the box has little room left: "40 ms" stays one line. */
+	white-space: nowrap;
+}
+
+.trace-view .wf-tick:first-child {
+	transform: none;
+}
+
+.trace-view .wf-span {
+	position: absolute;
+	inset-block: 7px;
+	border-radius: 3px;
+	opacity: 0.85;
+}
+
+.trace-view .wf-span.wrong {
+	opacity: 1;
+}
+
+.trace-view .wf-dot {
+	position: absolute;
+	inset-block-start: 50%;
+	inline-size: 5px;
+	block-size: 5px;
+	margin: -2.5px 0 0 -2.5px;
+	border-radius: 50%;
+	background: var(--surface-sunken);
+	box-shadow: 0 0 0 1px var(--text-primary);
+}
+
+.trace-view .wf-took {
+	position: absolute;
+	inset-block-start: 50%;
+	transform: translateY(-50%);
+	font-size: var(--fs-micro);
+	color: var(--text-faint);
+	white-space: nowrap;
+}
+
+.trace-view .wf-mark {
+	position: absolute;
+	inset-block-start: 50%;
+	inline-size: 9px;
+	block-size: 9px;
+	margin: -4.5px 0 0 -4.5px;
+	transform: rotate(45deg);
+	border-radius: 1px;
+}
+
+.trace-view .wf-detail {
+	display: grid;
+	gap: var(--s-2);
+	margin: var(--s-1) 0 var(--s-3) var(--s-6);
+	padding: var(--s-3);
+	border-radius: var(--r-lg);
+	background: var(--surface-raised);
+	box-shadow: inset 0 0 0 1px var(--border-faint);
+	font-size: var(--fs-small);
+}
+
+.trace-view .wf-detail h4 {
+	margin: var(--s-1) 0 0;
+	font: 600 var(--fs-micro) / 1.4 var(--font);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+.trace-view .wf-detail-h {
+	margin: 0;
+	color: var(--text-secondary);
+}
+
+.trace-view .wf-detail-h b {
+	color: var(--text-primary);
+	font-weight: 600;
+}
+
+.trace-view .wf-detail p,
+.trace-view .wf-detail ul,
+.trace-view .wf-detail ol {
+	margin: 0;
+}
+
+.trace-view .wf-detail ul,
+.trace-view .wf-detail ol {
+	padding-inline-start: var(--s-4);
+}
+
+.trace-view .wf-json {
+	margin: 0;
+}
+
+.trace-view .wf-json figcaption {
+	margin-block-end: 2px;
+	font: 600 var(--fs-micro) / 1.4 var(--font);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+.trace-view .wf-json pre,
+.trace-view .wf-detail code {
+	margin: 0;
+	padding: 2px 6px;
+	border-radius: var(--r-sm);
+	background: var(--surface-sunken);
+	font: 400 var(--fs-small) / 1.5 var(--mono);
+	color: var(--text-primary);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.trace-view .wf-json pre {
+	display: block;
+	padding: var(--s-1) var(--s-2);
+}
+
+.trace-view .wf-states {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: var(--s-2);
+}
+
+.trace-view .wf-diff li.replace,
+.trace-view .wf-diff li.add {
+	color: var(--done);
+}
+
+.trace-view .wf-diff li.remove {
+	color: var(--stuck);
+}
+
+.trace-view .wf-bad {
+	color: var(--stuck);
+	font-weight: 600;
+}
+
+.trace-view .wf-tags {
+	border-collapse: collapse;
+	font-size: var(--fs-small);
+}
+
+.trace-view .wf-tags th,
+.trace-view .wf-tags td {
+	padding: 1px var(--s-3) 1px 0;
+	text-align: start;
+	vertical-align: top;
+	font-weight: 400;
+	overflow-wrap: anywhere;
+}
+
+.trace-view .wf-tags th {
+	color: var(--text-faint);
+}
+
+.trace-view .wf-tags td {
+	color: var(--text-primary);
+}
+
+.trace-view > .note {
+	margin: 0 var(--s-4) var(--s-4);
+}
+
+@container main (max-width: 760px) {
+	.trace-view .wf {
+		inline-size: calc(100% - 2 * var(--s-2));
+		margin-inline: var(--s-2);
+	}
+
+	.trace-view .wf-c-name {
+		inline-size: 40%;
+	}
+
+	.trace-view .wf-note {
+		display: none;
+	}
+}
+
+/* The ruler's finer ticks show only where the ruler has room: 60px or more for each label. */
+.trace-view .wf-ruler {
+	container: ruler / inline-size;
+}
+
+.trace-view .wf-tick.r2,
+.trace-view .wf-tick.r3 {
+	display: none;
+}
+
+@container ruler (min-width: 480px) {
+	.trace-view .wf-tick.r2 {
+		display: block;
+	}
+}
+
+@container ruler (min-width: 960px) {
+	.trace-view .wf-tick.r3 {
+		display: block;
+	}
+}
+
+/* The ticket view: a lane per trace, each on its own axis, and the chosen row's detail beside or under. */
+
+.trace-view .tv-line {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-1) var(--s-3);
+	margin: 0 var(--s-4) var(--s-2);
+	font-size: var(--fs-small);
+}
+
+.trace-view .tv-replay {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s-1);
+	font-variant-numeric: tabular-nums;
+}
+
+.trace-view .tv-body {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	align-items: start;
+}
+
+.trace-view .wf.tv .wf-c-name {
+	inline-size: 30%;
+}
+
+.trace-view .tv-c-end {
+	inline-size: 24ch;
+}
+
+.trace-view .wf.tv .wf-track {
+	margin-inline-end: var(--s-3);
+}
+
+.trace-view .tv-gap td {
+	padding: var(--s-3) 6px var(--s-1);
+	font-size: var(--fs-small);
+	color: var(--text-faint);
+}
+
+.trace-view .tv-lane:not(:first-child) > td {
+	padding-block-start: var(--s-3);
+}
+
+.trace-view .tv-gap + .tv-lane > td {
+	padding-block-start: 0;
+}
+
+.trace-view .tv-stage {
+	color: var(--text-primary);
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.trace-view .tv-note {
+	min-inline-size: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--fs-small);
+}
+
+/* `.wf` too: `.trace-view .wf td` sets every cell's start, and would win over the end here. */
+.trace-view .wf .tv-end {
+	padding-inline: var(--s-2) 6px;
+	text-align: end;
+	white-space: nowrap;
+	font-size: var(--fs-small);
+	font-variant-numeric: tabular-nums;
+	color: var(--text-secondary);
+}
+
+.trace-view .tv-lane .tv-end {
+	color: var(--text-primary);
+	white-space: normal;
+}
+
+/* The dollars and "at list price" each stay whole: a narrow tile breaks only between them. */
+.trace-view .tv-usd {
+	white-space: nowrap;
+}
+
+/* A bar's colour is its state, and its words always say it too (WCAG 1.4.1). */
+.trace-view .tv-bar {
+	position: absolute;
+	inset-block: 6px;
+	display: flex;
+	align-items: center;
+	overflow: hidden;
+	border-radius: 3px;
+	background: color-mix(in oklab, var(--text-faint) 30%, transparent);
+}
+
+.trace-view .tv-bar.running {
+	background: color-mix(in oklab, var(--running) 34%, transparent);
+	box-shadow: inset 2px 0 0 var(--running);
+}
+
+.trace-view .tv-bar.done {
+	background: color-mix(in oklab, var(--done) 32%, transparent);
+}
+
+.trace-view .tv-bar.stuck,
+.trace-view .tv-bar.wrong {
+	background: color-mix(in oklab, var(--stuck) 38%, transparent);
+}
+
+/* A wait on a person still open is your turn: the accent, and only then. */
+.trace-view .tv-bar.waiting {
+	background: var(--turn-fill);
+}
+
+.trace-view .tv-words {
+	position: absolute;
+	inset-block-start: 50%;
+	max-inline-size: 38%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	transform: translateY(-50%);
+	font-size: var(--fs-micro);
+	color: var(--text-secondary);
+	white-space: nowrap;
+}
+
+.trace-view .tv-words.in {
+	position: static;
+	max-inline-size: none;
+	padding-inline: 6px;
+	transform: none;
+	color: var(--text-primary);
+}
+
+.trace-view .tv-bar.waiting .tv-words.in {
+	color: var(--turn-fg);
+}
+
+.trace-view .tv-mini {
+	position: absolute;
+	inset-block: 8px;
+	inset-inline: 0 40%;
+}
+
+.trace-view .tv-mini .tv-bar {
+	inset-block: 0;
+	border-radius: 2px;
+}
+
+.trace-view .tv-words.tv-out {
+	inset-inline-start: calc(60% + var(--s-2));
+	font-size: var(--fs-small);
+}
+
+.trace-view .tv-out.running {
+	color: var(--running);
+}
+
+.trace-view .tv-out.done {
+	color: var(--done);
+}
+
+.trace-view .tv-out.stuck {
+	color: var(--stuck);
+}
+
+.trace-view .tv-out.waiting {
+	color: var(--turn);
+}
+
+/* The detail: under the lanes where the tile is narrow (Datadog), beside them where it is wide (Honeycomb). One hairline, no panel. */
+.trace-view .tv-detail {
+	margin: var(--s-2) var(--s-4) var(--s-3);
+	padding-block-start: var(--s-2);
+	border-block-start: 1px solid var(--border-faint);
+}
+
+.trace-view .tv-detail .wf-detail {
+	margin: 0;
+	padding: 0;
+	background: none;
+	box-shadow: none;
+}
+
+@container main (min-width: 1100px) {
+	.trace-view .tv-body:has(.tv-detail) {
+		grid-template-columns: minmax(0, 1fr) minmax(280px, 32%);
+	}
+
+	.trace-view .tv-detail {
+		position: sticky;
+		inset-block-start: 0;
+		margin: var(--s-2) var(--s-4) var(--s-3) 0;
+		padding: 0 0 0 var(--s-3);
+		border-block-start: 0;
+		border-inline-start: 1px solid var(--border-faint);
+	}
+}
+
+@container main (max-width: 760px) {
+	.trace-view .tv-c-end {
+		inline-size: 15ch;
+	}
+
+	.trace-view .wf.tv .wf-c-name {
+		inline-size: 36%;
+	}
+
+	.trace-view .tv-cached {
+		display: none;
 	}
 }

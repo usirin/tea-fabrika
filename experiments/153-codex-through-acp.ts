@@ -47,7 +47,7 @@ import {fileURLToPath} from "node:url";
 import type * as acp from "@agentclientprotocol/sdk";
 import {layer as nodeHttpServer} from "@effect/platform-node/NodeHttpServer";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {ear, memoryStorage, start, tell} from "@kampus/fabrika";
+import {ear, memoryStorage, start, tell} from "@kampus/fabrika-old";
 import {
 	acpProgram,
 	codexHomeOf,
@@ -56,9 +56,9 @@ import {
 	harnessOf,
 	type Spawnable,
 	type Transcript,
-} from "@kampus/fabrika/agents/acp";
-import {jsonSchema, reader} from "@kampus/fabrika/agents/claude";
-import {runEnv} from "@kampus/fabrika/agents/sandbox";
+} from "@kampus/fabrika-old/agents/acp";
+import {jsonSchema, reader} from "@kampus/fabrika-old/agents/claude";
+import {runEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Context, Effect, Exit, Fiber, Layer, Option, Schema} from "effect";
 import {McpProtocol, McpServer, Tool, Toolkit} from "effect/ai";
 import {HttpRouter, HttpServer} from "effect/http";
@@ -318,7 +318,8 @@ interface Options {
 /** Start the codex row in `copy`, open a session, and hand it to `body`. The adapter is stopped when `body` ends. */
 const drive = <A>(copy: string, options: Options, body: (d: Driven) => Effect.Effect<A, unknown>) =>
 	Effect.gen(function* () {
-		const row = harnessOf("codex", copy, null);
+		// The probes check that a write in the copy goes through and every other write does not.
+		const row = harnessOf({name: "codex", access: "write"}, copy, null);
 		if (row.prepare !== undefined) yield* row.prepare;
 		const harness = options.harness === undefined ? row : options.harness(row);
 		const log: Log[] = [];
@@ -616,7 +617,7 @@ const codexPids = (): number[] => {
 		.filter((p) => p.length >= 3)
 		.map(([pid, ppid, ...cmd]) => ({pid: Number(pid), ppid: Number(ppid), cmd: cmd.join(" ")}));
 	const mine = new Set([process.pid]);
-	for (let grew = true; grew; ) {
+	for (let grew = true; grew;) {
 		grew = false;
 		for (const r of rows)
 			if (mine.has(r.ppid) && !mine.has(r.pid)) {

@@ -13,7 +13,8 @@ import type {CriterionId} from "../../ids.ts";
 // and merge Cmds take nothing else (./machine.ts), and neither does the code
 // host's write (`CodeHostWrites`).
 //
-//   a new head        voids every row: they were judged at another commit
+//   a new head        voids every row: they were judged at another commit,
+//                     unless code carried that commit's diff to this one (`Hop`)
 //   a reworded one    voids its row: it judged the old words (`old_version`)
 //   a later fail      undoes an earlier pass at the same head
 //
@@ -39,6 +40,18 @@ export const Checks = Schema.Struct({
 });
 export type Checks = typeof Checks.Type;
 
+/**
+ * A head the rows were judged at, and a later one code found the diff they judged still stands
+ * at (a `carried` fact, from `carry`). A row judged at `from` counts at `to`, as if judged there.
+ * The checks never carry. See docs/direction/a-yes-binds-to-the-diff.md.
+ */
+export const Hop = Schema.Struct({from: Schema.String, to: Schema.String});
+export type Hop = typeof Hop.Type;
+
+/** Whether a row judged at `judged` counts at `head`: judged there, or carried there by one hop. */
+const standsAt = (judged: string, head: string, carried: readonly Hop[]): boolean =>
+	judged === head || carried.some((h) => h.from === judged && h.to === head);
+
 /** What `ReadyToMerge.of` needs. */
 export const Proof = Schema.Struct({
 	pr: Schema.String,
@@ -50,6 +63,8 @@ export const Proof = Schema.Struct({
 	criteria: Schema.NonEmptyArray(Criterion),
 	/** The verdict rows the ledger kept, oldest first, any head, any version. */
 	verdicts: Schema.Array(Row),
+	/** The heads code carried to `head`, each from the one its rows were judged at. None: only rows at `head` count. */
+	carried: Schema.optionalKey(Schema.Array(Hop)),
 	checks: Checks,
 });
 export type Proof = typeof Proof.Type;
@@ -60,7 +75,7 @@ export type Refusal =
 	| {readonly why: "no_verdict"; readonly id: CriterionId}
 	/** Its latest row on its current version at the head is a fail. */
 	| {readonly why: "not_met"; readonly id: CriterionId}
-	/** Rows for it, none at this head: the head moved since. */
+	/** Rows for it, none at this head or carried to it: the head moved since. */
 	| {readonly why: "other_head"; readonly id: CriterionId; readonly head: string}
 	/** Rows for it at this head, none on its current version: it was said again since. */
 	| {readonly why: "old_version"; readonly id: CriterionId; readonly version: number}
@@ -70,10 +85,10 @@ export type Readiness =
 	| {readonly ready: ReadyToMerge}
 	| {readonly refused: readonly [Refusal, ...Refusal[]]};
 
-/** The passing row for one criterion at the head, or why there is none. */
+/** The passing row for one criterion at the head, judged there or carried there, or why there is none. */
 function rowFor(c: Criterion, p: Proof): Met | Refusal {
 	const mine = p.verdicts.filter((v) => v.criterion === c.id);
-	const here = mine.filter((v) => v.head === p.head);
+	const here = mine.filter((v) => standsAt(v.head, p.head, p.carried ?? []));
 	const last = here.findLast((v) => v.version === c.version);
 	if (last === undefined) {
 		const older = here.at(-1);
@@ -108,6 +123,8 @@ export type ReadyToMerge = {
 	readonly tested: string;
 	readonly criteria: readonly [Criterion, ...Criterion[]];
 	readonly rows: readonly [Met, ...Met[]];
+	/** The hops that carry a row judged at another head to `head`. Left out when every row was judged there. */
+	readonly carried?: readonly Hop[];
 	readonly [proven]: true;
 };
 
@@ -128,12 +145,14 @@ const Shape = Schema.Struct({
 	tested: Schema.String,
 	criteria: Schema.NonEmptyArray(Criterion),
 	rows: Schema.NonEmptyArray(Row),
+	carried: Schema.optionalKey(Schema.Array(Hop)),
 });
 const isShaped = Schema.is(Shape);
 
 /**
  * Whether `u` is ready to merge: a pull request, a head, the criteria, and one
- * passing row per criterion, in order, on its version, at the head. What it
+ * passing row per criterion, in order, on its version, at the head or carried
+ * there by one of its own hops. What it
  * cannot see is the rows it was not given: whether a later fail stood beside
  * a pass is `of`'s to judge, from every row the ledger kept.
  */
@@ -145,7 +164,7 @@ function isReady(u: unknown): u is ReadyToMerge {
 			r !== undefined &&
 			r.criterion === c.id &&
 			r.version === c.version &&
-			r.head === u.head &&
+			standsAt(r.head, u.head, u.carried ?? []) &&
 			r.grade === "pass"
 		);
 	});
@@ -163,12 +182,21 @@ export const ReadyToMerge = {
 		const [why, ...more] = refused;
 		if (why !== undefined) return {refused: [why, ...more]};
 		if (!isMet(first)) return {refused: [first]};
+		const rows: readonly [Met, ...Met[]] = [first, ...rest.filter(isMet)];
+		// Only the hops a row stands on go in, so the proof says what each review saw and how it got here.
+		const carried = (p.carried ?? []).filter(
+			(h, i, all) =>
+				h.to === p.head &&
+				rows.some((r) => r.head === h.from) &&
+				all.findIndex((o) => o.from === h.from && o.to === h.to) === i,
+		);
 		const made = {
 			pr: p.pr,
 			head: p.head,
 			tested: p.tested,
 			criteria: p.criteria,
-			rows: [first, ...rest.filter(isMet)],
+			rows,
+			...(carried.length > 0 ? {carried} : {}),
 		};
 		// Every row was found met above, so the check holds: this is how the brand goes on, with no cast.
 		if (!isReady(made)) throw new Error("ReadyToMerge.of made a value its own check refuses");

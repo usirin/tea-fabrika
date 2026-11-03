@@ -1,7 +1,7 @@
 # Doc review: the default rubric
 
 fabrika ships this rubric. A repository uses its own instead by naming a
-folder in `fabrika.toml` (`[review] rubrics`), or a machine by naming one in
+folder in `.fabrika/fabrika.toml` (`[review] rubrics`), or a machine by naming one in
 `tsh.toml` (`rubrics`).
 
 ## Per criterion

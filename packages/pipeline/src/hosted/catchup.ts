@@ -11,7 +11,7 @@
 //            commits, the resolved files put in, the lockfile made again by pnpm, one commit with a
 //            fixed author and date. Keyed, from where the branch stood, never forced
 
-import type {Ledger, Self} from "@kampus/fabrika";
+import type {Ledger, Self} from "@kampus/fabrika-old";
 import {Effect, Exit, FileSystem, Option, type Path, Schema, Stream} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
 import {runLow} from "../child.ts";

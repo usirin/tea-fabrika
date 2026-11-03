@@ -1,8 +1,8 @@
+import {type Jobs, jobNamed} from "../host/jobs.ts";
 import {type Flag, fit, type Input, type Output} from "../program/shape.ts";
-import {own} from "./check.ts";
+import {hasTable, own} from "./check.ts";
 import {choices} from "./decode.ts";
-import {BUILTINS} from "./grammar.ts";
-import {type Jobs, jobNamed} from "./jobs.ts";
+import {ALL_WORD, BUILTINS, HELP_WORDS} from "./grammar.ts";
 import type {ProgramList} from "./programs.ts";
 import {type Token, words} from "./words.ts";
 
@@ -14,6 +14,8 @@ import {type Token, words} from "./words.ts";
 //   complete("ship --m", …)                 --mode               a flag ship declares
 //   complete("ship --mode ", …)             read write           the values its shape takes
 //   complete("ship --mode read p", …)       pr=                  an input, told on the line
+//   complete("ship --h", …)                 --help               every program's help
+//   complete("ship --help ", …)             --mode pr >found …   the parts it can show whole
 //   complete("seq --to 3 | ", …)            double tally         after a pipe: programs seq can feed
 //   complete("tell ", …)                    %1 tally:3f2a…       the jobs in the table
 //   complete("tell %1 ", …)                 add                  the inputs of the job's program
@@ -74,7 +76,7 @@ export function complete(line: string, list: ProgramList, jobs: Jobs): Completed
 
 	// A value after `--flag ` (the flag's word before this one, with no `=`).
 	const prior = rest.at(-1);
-	if (prior === "--describe") {
+	if (prior !== undefined && HELP_WORDS.has(prior)) {
 		const parts = [
 			...Object.keys(program.flags).map((f) => `--${f}`),
 			...Object.keys(program.inputs),
@@ -82,7 +84,8 @@ export function complete(line: string, list: ProgramList, jobs: Jobs): Completed
 		];
 		return {candidates: matching(typed, parts), word: raw};
 	}
-	if (prior?.startsWith("--") && !prior.includes("=") && prior !== "--describe") {
+	// `--all` takes no value: the word after it is any other.
+	if (prior?.startsWith("--") && prior !== ALL_WORD && !prior.includes("=")) {
 		const flag: Flag<unknown> | undefined = own(program.flags, prior.slice(2));
 		return {candidates: matching(typed, valuesOf(flag?.shape.json)), word: raw};
 	}
@@ -121,8 +124,10 @@ export function complete(line: string, list: ProgramList, jobs: Jobs): Completed
 		.filter((f) => !given.has(f))
 		.map((f) => `--${f}`);
 	const inputs = typed.startsWith("-") ? [] : Object.keys(program.inputs).map((i) => `${i}=`);
-	const describe = rest.length === 0 ? ["--describe"] : [];
-	return {candidates: matching(typed, [...flags, ...describe, ...inputs]), word: raw};
+	// `--help` on an empty command, or once a dash is typed: anywhere else it would only crowd the inputs.
+	const help = rest.length === 0 || typed.startsWith("-") ? ["--help"] : [];
+	const all = typed.startsWith("-") && hasTable(entry) && !given.has("all") ? [ALL_WORD] : [];
+	return {candidates: matching(typed, [...flags, ...all, ...help, ...inputs]), word: raw};
 }
 
 /**
@@ -173,6 +178,10 @@ function builtinWord(
 	list: ProgramList,
 	jobs: Jobs,
 ): Completed {
+	if (name === "help")
+		return rest.length === 0
+			? {candidates: matching(typed, list.keys()), word: typed}
+			: none(typed);
 	const onJob = name === "tell" || name === "close" || name === "stop" || name === "attach";
 	if (!onJob) return none(typed);
 	const [jobWord, inputWord] = rest;

@@ -50,7 +50,7 @@ export class Keys extends Context.Service<
 		/** Who goes by `name` now, and the keys that may sign for them; null: nobody does. */
 		readonly of: (name: string) => Effect.Effect<Signers | null, KeysUnreachable>;
 	}
->()("@kampus/fabrika/Keys") {}
+>()("@kampus/fabrika-old/Keys") {}
 
 /** Nobody has any id or name: for a door that asks nobody's keys (a local one, or a closed one). */
 export const layerNobody: Layer.Layer<Keys> = Layer.succeed(

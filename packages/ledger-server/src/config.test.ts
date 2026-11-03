@@ -1,4 +1,4 @@
-import {ledgerBindings} from "@kampus/fabrika/local";
+import {ledgerBindings} from "@kampus/fabrika-old/local";
 import {describe, expect, it} from "vitest";
 import {decodeConfig, serverDoor} from "./config.ts";
 

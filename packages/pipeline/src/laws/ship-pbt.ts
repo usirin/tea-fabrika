@@ -106,9 +106,11 @@ const mostly = <T>(usual: T, ...others: readonly [T, ...T[]]): fc.Arbitrary<T> =
 type VerdictRow = ShipFacts["verdicts"][number];
 /**
  * The verdict rows a read may find at `head`, by what they say: all met, the second failed,
- * judged only at another head, or judged on its old words.
+ * judged only at another head and not carried here, judged at another head and carried here, or
+ * judged on its old words. Self-fix PR 10: `other_head` is "moved, not carried", and `carried` is
+ * "moved, carried" (docs/direction/a-yes-binds-to-the-diff.md).
  */
-export const PROOFS = ["met", "failed", "other_head", "old_version"] as const;
+export const PROOFS = ["met", "failed", "other_head", "carried", "old_version"] as const;
 type ProofKind = (typeof PROOFS)[number];
 const rowsFor = (head: string, kind: ProofKind): readonly VerdictRow[] => {
 	switch (kind) {
@@ -117,10 +119,23 @@ const rowsFor = (head: string, kind: ProofKind): readonly VerdictRow[] => {
 		case "failed":
 			return filed([rowOn(C1, head), rowOn(C2, head, "fail")]);
 		case "other_head":
+		case "carried":
 			return metAt(`${head}-before`);
 		case "old_version":
 			return filed([rowOn(C1, head), rowOn(C2, head, "pass", 1)]);
 	}
+};
+
+type Hop = NonNullable<ShipFacts["carried"]>[number];
+/**
+ * The hops a read names, by its proof: the old head to this one when the rows were carried, and
+ * for rows that were not, none, a hop to another head, or one from this head back to the old.
+ */
+const hopsFor = (head: string, kind: ProofKind, miss: 0 | 1 | 2): readonly Hop[] => {
+	const before = `${head}-before`;
+	if (kind === "carried") return [{from: before, to: head}];
+	if (kind !== "other_head" || miss === 0) return [];
+	return miss === 1 ? [{from: before, to: `${head}-after`}] : [{from: head, to: before}];
 };
 
 const CLOSES: ShipFacts["ticket"] = {id: "o/r#1", link: "closes_it"};
@@ -154,12 +169,14 @@ export const facts: fc.Arbitrary<ShipFacts> = fc
 		mergeable: mostly<ShipFacts["mergeable"]>("clean", "conflicts", "unknown"),
 		comments: mostly<ShipFacts["comments"]>([], [{id: "c", by: "person"}], [{id: "c", by: "bot"}]),
 		criteria: mostly<ShipFacts["criteria"]>(CRITERIA, null),
-		proof: mostly<ProofKind>("met", "failed", "other_head", "old_version"),
+		proof: mostly<ProofKind>("met", "failed", "other_head", "carried", "old_version"),
+		miss: fc.constantFrom<0 | 1 | 2>(0, 1, 2),
 	})
-	.map(({proof, ...f}) => ({
+	.map(({proof, miss, ...f}) => ({
 		...f,
 		main: ON_TIP,
 		verdicts: f.criteria === null ? [] : rowsFor(f.head, proof),
+		carried: f.criteria === null ? [] : hopsFor(f.head, proof, miss),
 	}));
 
 // The Cmds an answer answers. The machine sends them; here they are made again from the head
@@ -200,15 +217,13 @@ export const table: MsgArbitraryTable<Msg> = {
 		),
 	ship_merge_err: heads.map((h) => merge.err(mergeOf(h), UNKNOWN, 0)),
 	ship_queue: fc.oneof(
-		heads.map(
-			(h): QueueMsg => ({
-				type: "ship_queue",
-				pr: PR,
-				head: h,
-				reading: "landed",
-				commit: `main-${h}`,
-			}),
-		),
+		heads.map((h): QueueMsg => ({
+			type: "ship_queue",
+			pr: PR,
+			head: h,
+			reading: "landed",
+			commit: `main-${h}`,
+		})),
 		heads.map((h): QueueMsg => ({type: "ship_queue", pr: PR, head: h, reading: "ejected"})),
 	),
 	ship_queue_overdue: arbRecordMsg("ship_queue_overdue", {pr, head: heads}),
@@ -350,9 +365,13 @@ const latest = (f: ShipFacts, criteria: readonly NonNullable<ShipFacts["criteria
 	criteria.map(
 		(c) =>
 			f.verdicts.findLast(
-				(v) => v.criterion === c.id && v.version === c.version && v.head === f.head,
+				(v) => v.criterion === c.id && v.version === c.version && standsHere(f, v.head),
 			) ?? null,
 	);
+
+/** A row judged at `judged` counts at the read's head: judged there, or carried there by one hop. */
+const standsHere = (f: ShipFacts, judged: string): boolean =>
+	judged === f.head || (f.carried ?? []).some((h) => h.from === judged && h.to === f.head);
 
 /** Each criterion with no passing row on its current version at its head, in words. */
 function unproven(f: ShipFacts): readonly string[] {
@@ -736,25 +755,23 @@ export const ready: fc.Arbitrary<ShipFacts> = fc
 		// Older rows first: a fail at another head, or on the old words, does not count.
 		before: fc.subarray([rowOn(C2, "Z", "fail"), rowOn(C2, "A", "fail", 1)]),
 	})
-	.map(
-		({head, ticket, approval, kinds, before}): ShipFacts => ({
-			head,
-			state: "open",
-			ours: true,
-			ticket,
-			approval,
-			reviews: [
-				{kind: "review-code", verdict: "passed"},
-				...kinds.map((kind) => ({kind, verdict: "passed" as const})),
-			],
-			checks: "green",
-			mergeable: "clean",
-			comments: [],
-			main: ON_TIP,
-			criteria: CRITERIA,
-			verdicts: filed([...before, rowOn(C1, head), rowOn(C2, head)]),
-		}),
-	);
+	.map(({head, ticket, approval, kinds, before}): ShipFacts => ({
+		head,
+		state: "open",
+		ours: true,
+		ticket,
+		approval,
+		reviews: [
+			{kind: "review-code", verdict: "passed"},
+			...kinds.map((kind) => ({kind, verdict: "passed" as const})),
+		],
+		checks: "green",
+		mergeable: "clean",
+		comments: [],
+		main: ON_TIP,
+		criteria: CRITERIA,
+		verdicts: filed([...before, rowOn(C1, head), rowOn(C2, head)]),
+	}));
 
 /** A ready pull request's run: which way it lands, how the tidy-up goes, and noise between. */
 export const readyRuns = fc.record({

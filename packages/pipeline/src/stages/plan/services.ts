@@ -1,4 +1,4 @@
-import type {DraftMsg, DraftRun} from "@kampus/fabrika/agents/claude";
+import type {DraftMsg, DraftRun} from "@kampus/fabrika-old/agents/claude";
 import {Context, Effect, Layer, Schema, type Stream} from "effect";
 import {ask, type Gh} from "../../code-host-github.ts";
 import {ticketOf} from "../build/ticket.ts";

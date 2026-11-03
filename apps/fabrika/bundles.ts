@@ -13,6 +13,16 @@ import type {BuildOptions} from "esbuild";
 const REQUIRE =
 	'import {createRequire as bannerRequire} from "node:module"; const require = bannerRequire(import.meta.url);';
 
+/**
+ * Left out of the host's bundle, and found in node_modules beside it: each finds its own files by
+ * where it is (Stryker's plugins and its child process, the Agent SDK's program, srt's own program).
+ */
+const FIND_THEMSELVES = [
+	"@stryker-mutator/*",
+	"@anthropic-ai/claude-agent-sdk",
+	"@anthropic-ai/sandbox-runtime",
+];
+
 /** The bundles. `at`: a path inside the app's folder, made whole. */
 export const bundlesOf = (at: (...parts: string[]) => string): readonly BuildOptions[] => [
 	{
@@ -25,13 +35,29 @@ export const bundlesOf = (at: (...parts: string[]) => string): readonly BuildOpt
 		banner: {js: REQUIRE},
 	},
 	{
-		entryPoints: [at("src/host/main.ts")],
-		outfile: at("dist/host.mjs"),
+		// Split, so a host's `import()` waits for real: the lane's code and FIND_THEMSELVES load when a
+		// lane starts. Without it esbuild lifts an external's import to the top of the one file, so
+		// every host would load Stryker as it starts. A chunk's name holds its hash, so a host that
+		// outlives a rebuild still finds its own.
+		entryPoints: {host: at("src/host/main.ts")},
+		outdir: at("dist"),
+		outExtension: {".js": ".mjs"},
+		chunkNames: "host-[hash]",
+		splitting: true,
 		platform: "node",
 		format: "esm",
 		target: "node24",
+		external: [...FIND_THEMSELVES],
 		// Run as plain Node: nothing of Electron is there to be imported.
 		banner: {js: REQUIRE},
+	},
+	{
+		// Stryker loads the mutation step's ignorer by path: a bundle has to keep it as a file.
+		entryPoints: [at("../../packages/pipeline/src/stages/mutation/ignorer.ts")],
+		outfile: at("dist/ignorer.mjs"),
+		platform: "node",
+		format: "esm",
+		target: "node24",
 	},
 	{
 		entryPoints: [at("src/preload.ts")],

@@ -16,7 +16,7 @@
 
 import {run} from "@demlik/tea/effect";
 import {NodeRuntime} from "@effect/platform-node";
-import {offer, start} from "@kampus/fabrika";
+import {offer, start} from "@kampus/fabrika-old";
 import {Config, Console, Duration, Effect, Exit, Queue, Schedule, Schema, Stream} from "effect";
 import {Count, counterProgram, type Increment, Journal, ZERO} from "../94-tea-host/counter.ts";
 import {createHost, type Host, type HostMsg} from "../94-tea-host/host-machine.ts";

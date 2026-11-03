@@ -2,8 +2,8 @@
   "data": {
     "repository": {
       "codeowners": { "text": "# The control plane.\n/.claude/         @example-org/control-plane\n/.github/         @example-org/control-plane\n/.fabrika.jsonc   @example-org/control-plane\n/biome.jsonc      @example-org/control-plane\n" },
-      "baseConfig": { "text": "{\n\t// The governed folders.\n\t\"governedRoots\": [\".claude/\", \".github/\", \".fabrika.jsonc\", \"biome.jsonc\"],\n}\n" },
-      "headConfig": { "text": "{\n\t// The governed folders.\n\t\"governedRoots\": [\".claude/\", \".github/\", \".fabrika.jsonc\", \"biome.jsonc\"],\n}\n" },
+      "baseConfig": { "text": "# The governed folders.\n[review]\ngoverned = [\".claude/\", \".github/\", \".fabrika/\", \"biome.jsonc\"]\n" },
+      "headConfig": { "text": "# The governed folders.\n[review]\ngoverned = [\".claude/\", \".github/\", \".fabrika/\", \"biome.jsonc\"]\n" },
       "pullRequest": {
         "state": "MERGED",
         "isDraft": false,

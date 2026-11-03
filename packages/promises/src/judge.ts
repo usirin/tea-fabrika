@@ -55,7 +55,7 @@ export interface Judged {
 	readonly entry: Entry;
 	readonly green: boolean;
 	readonly problems: readonly Problem[];
-	/** Changes to the exam the owner must say yes to. Empty: none, or no base to compare. */
+	/** Changes to the exam the owner must approve. Empty: none, or no base to compare. */
 	readonly exam: readonly ExamChange[];
 	/** The record was confirmed again in this change. */
 	readonly moved: boolean;

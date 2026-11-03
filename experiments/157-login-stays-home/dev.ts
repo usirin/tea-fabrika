@@ -1,6 +1,8 @@
 // Experiment 157's local twin: the two fakes on 127.0.0.1, and the Worker under `wrangler dev`
-// with Docker for the boxes. The Worker's log and its objects' data go to a folder the leak count
-// reads afterwards.
+// with Docker for the boxes. The boxes have open internet and reach the fakes straight, at
+// `host.docker.internal`, which Docker Desktop sends to this laptop. The Worker is told the fakes'
+// addresses only to point the programs at them. The Worker's log, its objects' data and every
+// call to the front door are kept for the leak count.
 //
 //   const dev = yield* startDev({dir});
 //   const key = yield* dev.key("a");                              // the person's app holds this
@@ -49,6 +51,11 @@ export interface Dev {
 	readonly anthropic: FakeAnthropic;
 	/** What wrangler printed so far: the Worker's log. */
 	readonly log: () => string;
+	/**
+	 * Every body sent to the front door but the person's app's `/login`, and every answer it gave
+	 * but the driver's `/peek` dumps: what our Worker handled from outside, for the leak count.
+	 */
+	readonly traffic: {readonly sent: string[]; readonly got: string[]};
 	/** The person's own key, as their app would hold it. */
 	readonly key: (who: string) => Effect.Effect<string, DevFailed>;
 	/** A call to the front door with a person's key: status and body. */
@@ -68,6 +75,9 @@ export interface Dev {
 // own default did not pull here ("cannot overwrite digest").
 const HELPER =
 	"cloudflare/proxy-everything@sha256:78c7910f4575a511d928d7824b1cbcaec6b7c4bf4dbb3fafaeeae3104030e73c";
+
+/** A fake's address as a box sees it. */
+export const inBox = (url: string) => url.replace("127.0.0.1", "host.docker.internal");
 
 export const startDev = Effect.fnUntraced(function* (o: {readonly dir: string}) {
 	const openai = yield* Effect.acquireRelease(
@@ -101,9 +111,9 @@ export const startDev = Effect.fnUntraced(function* (o: {readonly dir: string}) 
 					"--env-file",
 					envFile,
 					"--var",
-					`OPENAI_UP:${openai.url}`,
+					`CODEX_BASE:${inBox(openai.url)}`,
 					"--var",
-					`ANTHROPIC_UP:${anthropic.url}`,
+					`CLAUDE_BASE:${inBox(anthropic.url)}`,
 					"--show-interactive-dev-session=false",
 				],
 				{
@@ -157,12 +167,20 @@ export const startDev = Effect.fnUntraced(function* (o: {readonly dir: string}) 
 		}
 	});
 	const url = `http://127.0.0.1:${port}`;
-	const send = (key: string, path: string, body?: unknown) =>
-		fetch(`${url}${path}`, {
+	const traffic = {sent: [] as string[], got: [] as string[]};
+	const send = async (key: string, path: string, body?: unknown) => {
+		const raw = body === undefined ? undefined : JSON.stringify(body);
+		if (raw !== undefined && path !== "/login") traffic.sent.push(raw);
+		const r = await fetch(`${url}${path}`, {
 			method: body === undefined ? "GET" : "POST",
 			headers: {authorization: `Bearer ${key}`, "content-type": "application/json"},
-			...(body === undefined ? {} : {body: JSON.stringify(body)}),
+			...(raw === undefined ? {} : {body: raw}),
 		});
+		const back = new Uint8Array(await r.arrayBuffer());
+		// `/peek` is the driver's own look into a box, which holds its login by design: left out.
+		if (path !== "/peek") traffic.got.push(Buffer.from(back).toString("latin1"));
+		return {status: r.status, back};
+	};
 	const d: Dev = {
 		url,
 		persist,
@@ -171,6 +189,7 @@ export const startDev = Effect.fnUntraced(function* (o: {readonly dir: string}) 
 		openai,
 		anthropic,
 		log: () => text,
+		traffic,
 		key: (who) =>
 			attempt("mint", () =>
 				mint(secret, {kind: "person", person: who, until: Date.now() + 3_600_000}),
@@ -178,10 +197,9 @@ export const startDev = Effect.fnUntraced(function* (o: {readonly dir: string}) 
 		call: (key, path, body) =>
 			attempt(path, async () => {
 				const r = await send(key, path, body);
-				return {status: r.status, body: await r.text()};
+				return {status: r.status, body: new TextDecoder().decode(r.back)};
 			}),
-		bytes: (key, path, body) =>
-			attempt(path, async () => new Uint8Array(await (await send(key, path, body)).arrayBuffer())),
+		bytes: (key, path, body) => attempt(path, async () => (await send(key, path, body)).back),
 	};
 	return d;
 });

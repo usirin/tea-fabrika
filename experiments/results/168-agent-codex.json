@@ -1,0 +1,397 @@
+{
+	"agent": "codex",
+	"real": true,
+	"model": "gpt-6.1-sol",
+	"rows": [
+		{
+			"task": "show",
+			"ask": "Show me ticket 7, and the trace of its plan run.",
+			"try": 1,
+			"line": "ticket --ticket 7 & trace --ticket 7",
+			"said": "Opens ticket 7 and its timeline, which includes the plan run.",
+			"ms": 6720,
+			"tokens": {
+				"input": 9375,
+				"cached": 0,
+				"output": 121
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "checked, not run: ticket, map and trace need the app's ledger",
+			"ran": null
+		},
+		{
+			"task": "show",
+			"ask": "Show me ticket 7, and the trace of its plan run.",
+			"try": 2,
+			"line": "ticket --ticket 7 & trace --ticket 7",
+			"said": "Opens ticket 7 and its trace, which includes the plan run.",
+			"ms": 6715,
+			"tokens": {
+				"input": 9375,
+				"cached": 0,
+				"output": 131
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "checked, not run: ticket, map and trace need the app's ledger",
+			"ran": null
+		},
+		{
+			"task": "show",
+			"ask": "Show me ticket 7, and the trace of its plan run.",
+			"try": 3,
+			"line": "ticket --ticket 7 & trace --ticket 7",
+			"said": "Opens ticket 7 and its trace, which includes the plan run.",
+			"ms": 6474,
+			"tokens": {
+				"input": 9372,
+				"cached": 0,
+				"output": 113
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "checked, not run: ticket, map and trace need the app's ledger",
+			"ran": null
+		},
+		{
+			"task": "two",
+			"ask": "Run just build and review on ticket 7.",
+			"try": 1,
+			"line": "build --ticket 7 | review",
+			"said": "Build starts on ticket 7 and passes the built ticket to review.",
+			"ms": 4414,
+			"tokens": {
+				"input": 9367,
+				"cached": 0,
+				"output": 38
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"build#7",
+					"review#7"
+				]
+			}
+		},
+		{
+			"task": "two",
+			"ask": "Run just build and review on ticket 7.",
+			"try": 2,
+			"line": "build --ticket 7 | review",
+			"said": "Build starts on ticket 7 and passes it to review, with no other stages run.",
+			"ms": 4307,
+			"tokens": {
+				"input": 9362,
+				"cached": 0,
+				"output": 42
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"build#7",
+					"review#7"
+				]
+			}
+		},
+		{
+			"task": "two",
+			"ask": "Run just build and review on ticket 7.",
+			"try": 3,
+			"line": "build --ticket 7 | review",
+			"said": "Build starts on ticket 7 and passes it to review, with no other stages run.",
+			"ms": 4451,
+			"tokens": {
+				"input": 9363,
+				"cached": 0,
+				"output": 42
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"build#7",
+					"review#7"
+				]
+			}
+		},
+		{
+			"task": "all",
+			"ask": "Run the whole factory on every open ticket, from the tracker to ship.",
+			"try": 1,
+			"line": "tracker | triage | plan | build | review | ship",
+			"said": "The tracker feeds every open ticket through each factory stage to ship.",
+			"ms": 5173,
+			"tokens": {
+				"input": 9372,
+				"cached": 0,
+				"output": 42
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 130,
+				"ctrlC": true,
+				"runs": [
+					"triage#7",
+					"triage#8",
+					"triage#9",
+					"plan#7",
+					"plan#9",
+					"build#9"
+				]
+			}
+		},
+		{
+			"task": "all",
+			"ask": "Run the whole factory on every open ticket, from the tracker to ship.",
+			"try": 2,
+			"line": "tracker | triage | plan | build | review | ship",
+			"said": "The tracker feeds every open ticket through all five factory stages to ship.",
+			"ms": 4854,
+			"tokens": {
+				"input": 9373,
+				"cached": 0,
+				"output": 43
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 130,
+				"ctrlC": true,
+				"runs": [
+					"triage#7",
+					"triage#8",
+					"triage#9",
+					"plan#7",
+					"plan#9",
+					"build#9"
+				]
+			}
+		},
+		{
+			"task": "all",
+			"ask": "Run the whole factory on every open ticket, from the tracker to ship.",
+			"try": 3,
+			"line": "tracker | triage | plan | build | review | ship",
+			"said": "The tracker feeds every open ticket through all five stages to ship.",
+			"ms": 6044,
+			"tokens": {
+				"input": 9379,
+				"cached": 0,
+				"output": 42
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 130,
+				"ctrlC": true,
+				"runs": [
+					"triage#7",
+					"triage#8",
+					"triage#9",
+					"plan#7",
+					"plan#9",
+					"build#9"
+				]
+			}
+		},
+		{
+			"task": "one",
+			"ask": "Triage ticket 8 only. Do not plan or build it.",
+			"try": 1,
+			"line": "triage --ticket 8",
+			"said": "Triages only ticket 8 without piping it to plan or build.",
+			"ms": 4880,
+			"tokens": {
+				"input": 9370,
+				"cached": 0,
+				"output": 37
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"triage#8"
+				]
+			}
+		},
+		{
+			"task": "one",
+			"ask": "Triage ticket 8 only. Do not plan or build it.",
+			"try": 2,
+			"line": "triage --ticket 8",
+			"said": "Triages only ticket 8 without piping it to plan or build.",
+			"ms": 4468,
+			"tokens": {
+				"input": 9375,
+				"cached": 0,
+				"output": 37
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"triage#8"
+				]
+			}
+		},
+		{
+			"task": "one",
+			"ask": "Triage ticket 8 only. Do not plan or build it.",
+			"try": 3,
+			"line": "triage --ticket 8",
+			"said": "Triages only ticket 8 without starting plan or build.",
+			"ms": 4742,
+			"tokens": {
+				"input": 9375,
+				"cached": 0,
+				"output": 35
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 0,
+				"ctrlC": false,
+				"runs": [
+					"triage#8"
+				]
+			}
+		},
+		{
+			"task": "plan",
+			"ask": "Plan ticket 7, and if its plan is approved, build it, and stop there.",
+			"try": 1,
+			"line": "plan --ticket 7 | build",
+			"said": "Plan sends ticket 7 to build only after approval, and the pipeline stops after building.",
+			"ms": 5343,
+			"tokens": {
+				"input": 9372,
+				"cached": 0,
+				"output": 42
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 130,
+				"ctrlC": true,
+				"runs": [
+					"plan#7"
+				]
+			}
+		},
+		{
+			"task": "plan",
+			"ask": "Plan ticket 7, and if its plan is approved, build it, and stop there.",
+			"try": 2,
+			"line": "plan --ticket 7 | build",
+			"said": "Plan sends ticket 7 to build only after approval; no later stage runs.",
+			"ms": 4996,
+			"tokens": {
+				"input": 9383,
+				"cached": 0,
+				"output": 40
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 130,
+				"ctrlC": true,
+				"runs": [
+					"plan#7"
+				]
+			}
+		},
+		{
+			"task": "plan",
+			"ask": "Plan ticket 7, and if its plan is approved, build it, and stop there.",
+			"try": 3,
+			"line": "plan --ticket 7 | build",
+			"said": "Plan sends ticket 7 to build only if its plan is approved, and no further stage runs.",
+			"ms": 4675,
+			"tokens": {
+				"input": 9378,
+				"cached": 0,
+				"output": 44
+			},
+			"tools": 0,
+			"error": null,
+			"parses": true,
+			"checks": true,
+			"right": true,
+			"why": "",
+			"ran": {
+				"status": 130,
+				"ctrlC": true,
+				"runs": [
+					"plan#7"
+				]
+			}
+		}
+	]
+}

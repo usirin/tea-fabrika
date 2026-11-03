@@ -1,9 +1,17 @@
 import {Schema} from "effect";
 import {markOf} from "../../criteria/mark.ts";
 import type {CriterionId} from "../../ids.ts";
+import {inert} from "../build/body.ts";
 import type {Brief} from "./gate.ts";
 import {type Criterion, TextKind} from "./pack.ts";
-import type {Finding, From, Graded, Place, Sheet} from "./sheet.ts";
+import {
+	type Finding,
+	type From,
+	type Graded,
+	isAgainstDecision,
+	type Place,
+	type Sheet,
+} from "./sheet.ts";
 import type {KindVerdict} from "./verdict.ts";
 
 // The printout: the sheet as a comment a person can read, one per kind of
@@ -22,7 +30,7 @@ export const HEADINGS = {
 const NOTHING = "Nothing.";
 
 const placeOf = (place: Place) =>
-	`\`${place.file}:${place.first === place.last ? place.first : `${place.first}-${place.last}`}\``;
+	`\`${inert(place.file).replaceAll("`", "'")}:${place.first === place.last ? place.first : `${place.first}-${place.last}`}\``;
 const fromOf = (from: From) => {
 	switch (from.source) {
 		case "criterion":
@@ -33,14 +41,19 @@ const fromOf = (from: From) => {
 			return `deviation: ${from.about}`;
 		case "rule":
 			return `the repository's ${from.file}: ${from.rule}`;
+		case "decision":
+			return `a person's decision on the plan, question ${from.id}`;
 	}
 };
-/** A text on one line: a list item that breaks its line would break the list. */
-const flat = (text: string) => text.replace(/\s+/g, " ").trim();
+/**
+ * An agent's text, for a comment on a pull request: on one line, since a list item that breaks its
+ * line would break the list, and inert, so it pings nobody and closes nothing.
+ */
+const flat = (text: string) => inert(text.replace(/\s+/g, " ").trim());
 
 function findingLines(finding: Finding): string[] {
 	return [
-		`- **${finding.id}** ${finding.at === null ? "(nothing to point at)" : placeOf(finding.at)}, from ${flat(fromOf(finding.from))}`,
+		`- **${flat(finding.id)}** ${finding.at === null ? "(nothing to point at)" : placeOf(finding.at)}, from ${flat(fromOf(finding.from))}`,
 		`  - Fault: ${flat(finding.fault)}`,
 		`  - Proof: ${flat(finding.proof)}`,
 		`  - Wants: ${flat(finding.wants)}`,
@@ -57,9 +70,11 @@ function rowLines(row: Graded, criterion: Criterion | undefined): string[] {
 
 /** One kind's comment. */
 export function renderKind(brief: Brief, sheet: Sheet, {kind, verdict}: KindVerdict): string {
-	const open = sheet.findings.filter(
+	const found = sheet.findings.filter(
 		(finding) => finding.kind === kind && finding.state === "open",
 	);
+	const open = found.filter((finding) => !isAgainstDecision(finding));
+	const against = found.filter(isAgainstDecision);
 	const criterionOf = (id: CriterionId) => brief.criteria.find((criterion) => criterion.id === id);
 	const notLooked = [
 		...sheet.rows.flatMap((row) =>
@@ -78,6 +93,16 @@ export function renderKind(brief: Brief, sheet: Sheet, {kind, verdict}: KindVerd
 		"",
 		...(open.length === 0 ? [NOTHING] : open.flatMap(findingLines)),
 		"",
+		...(against.length === 0
+			? []
+			: [
+					"## Against a person's decision",
+					"",
+					"These fail nothing. The reviewer disagrees, and the call is the person's.",
+					"",
+					...against.flatMap(findingLines),
+					"",
+				]),
 		HEADINGS.rows,
 		"",
 		...sheet.rows.flatMap((row) => rowLines(row, criterionOf(row.id))),

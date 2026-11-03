@@ -1,5 +1,5 @@
 import {applyCell} from "@demlik/tea";
-import {ATTR, nowNanos, SERVICE_NAME} from "@kampus/fabrika";
+import {ATTR, nowNanos, SERVICE_NAME} from "@kampus/fabrika-old";
 import {Effect, Schema} from "effect";
 import type {CriteriaRecord} from "../../criteria/record.ts";
 import type {CodeHost} from "../../services.ts";

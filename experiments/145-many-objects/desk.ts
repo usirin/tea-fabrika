@@ -7,7 +7,7 @@
 //
 // Writing needs the lease on `desk`: the ledger lets only a fence write under a registered name.
 // So one app at a time writes a person's desk; a second one hears `Held`.
-import {Ledger, type Row} from "@kampus/fabrika";
+import {Ledger, type Row} from "@kampus/fabrika-old";
 import {Effect, Schema} from "effect";
 
 // ---------------------------------------------------------------- the app's shapes

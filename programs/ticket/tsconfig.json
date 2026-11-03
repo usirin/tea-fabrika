@@ -1,0 +1,9 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		// The program is plain; its window (src/window.tsx) is React, drawn in a browser.
+		"lib": ["ES2023", "DOM", "DOM.Iterable"],
+		"jsx": "react-jsx"
+	},
+	"include": ["src"]
+}

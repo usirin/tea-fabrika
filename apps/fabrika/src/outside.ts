@@ -52,7 +52,7 @@ export class NotOpened extends Schema.TaggedError<NotOpened>()("NotOpened", {
 export class Browser extends Context.Service<
 	Browser,
 	{readonly open: (url: Outside) => Effect.Effect<void, NotOpened>}
->()("@kampus/fabrika-app/Browser") {}
+>()("@kampus/fabrika-app-old/Browser") {}
 
 /** A page asks to open `url`, as a link's new window: from the desk page, http or https opens outside. */
 export const openOutside = (asked: {readonly url: string; readonly from: string}) =>

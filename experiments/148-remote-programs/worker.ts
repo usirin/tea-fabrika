@@ -274,7 +274,7 @@ interface JobRow extends BoxProps {
 /** One job: its box, started at `begin`, gone at its end or its timeout. */
 export class JobBox extends DurableObject<Env> {
 	private get box() {
-		// biome-ignore lint/style/noNonNullAssertion: a Durable Object with a container always has one.
+		// oxlint-disable-next-line typescript/no-non-null-assertion -- a Durable Object with a container always has one.
 		return this.ctx.container!;
 	}
 	private row() {

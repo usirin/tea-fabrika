@@ -225,15 +225,14 @@ export const ledgerLayer = (base: string, name: string, maxSockets = 8) =>
 				fence: number | undefined,
 			): Call<Appended, Stale | Fenced | Denied> =>
 				call("append", Wire.append, [stream, expected, event, fence ?? null]).pipe(
-					Effect.flatMap(
-						(r): Effect.Effect<Appended, Stale | Fenced | Denied> =>
-							r.ok
-								? Effect.succeed<Appended>({pos: r.pos, rev: r.rev, dup: r.dup})
-								: r.why === "stale"
-									? Effect.fail(new Stale({stream, rev: r.rev}))
-									: r.why === "fenced"
-										? Effect.fail(new Fenced({stream}))
-										: Effect.fail(new Denied({stream})),
+					Effect.flatMap((r): Effect.Effect<Appended, Stale | Fenced | Denied> =>
+						r.ok
+							? Effect.succeed<Appended>({pos: r.pos, rev: r.rev, dup: r.dup})
+							: r.why === "stale"
+								? Effect.fail(new Stale({stream, rev: r.rev}))
+								: r.why === "fenced"
+									? Effect.fail(new Fenced({stream}))
+									: Effect.fail(new Denied({stream})),
 					),
 				);
 			return {
@@ -245,15 +244,14 @@ export const ledgerLayer = (base: string, name: string, maxSockets = 8) =>
 					),
 				claim: (n, holder, expectedRev, ttlMs) =>
 					call("claim", Wire.claim, [n, holder, expectedRev, ttlMs]).pipe(
-						Effect.flatMap(
-							(r): Effect.Effect<Claimed, Held | Stale | Denied> =>
-								r.ok
-									? Effect.succeed<Claimed>({fence: r.fence, rev: r.rev, expiresAt: r.expiresAt})
-									: r.why === "held"
-										? Effect.fail(new Held({name: n, holder: r.holder, expiresAt: r.expiresAt}))
-										: r.why === "stale"
-											? Effect.fail(new Stale({stream: n, rev: r.rev}))
-											: Effect.fail(new Denied({stream: n})),
+						Effect.flatMap((r): Effect.Effect<Claimed, Held | Stale | Denied> =>
+							r.ok
+								? Effect.succeed<Claimed>({fence: r.fence, rev: r.rev, expiresAt: r.expiresAt})
+								: r.why === "held"
+									? Effect.fail(new Held({name: n, holder: r.holder, expiresAt: r.expiresAt}))
+									: r.why === "stale"
+										? Effect.fail(new Stale({stream: n, rev: r.rev}))
+										: Effect.fail(new Denied({stream: n})),
 						),
 					),
 				renew: (n, fence, ttlMs) =>

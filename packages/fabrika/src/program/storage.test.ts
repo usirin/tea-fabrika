@@ -4,8 +4,8 @@ import {join} from "node:path";
 import {Effect, Layer, Schema} from "effect";
 import {KeyValueStore} from "effect/persistence";
 import {afterEach, describe, expect, it} from "vitest";
-import {memoryStorage, RunRecord, type Storage, storageOf} from "./storage.ts";
 import {fileStorage} from "./storage-node.ts";
+import {memoryStorage, RunRecord, type Storage, storageOf} from "./storage.ts";
 
 // Storage keeps a run's record and its machine runs' states past the process.
 // Each kind is checked the same way: what one storage value kept, a second one

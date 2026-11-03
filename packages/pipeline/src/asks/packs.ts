@@ -13,17 +13,17 @@ import {
 	type Running,
 	type Storage,
 	start,
-} from "@kampus/fabrika";
+} from "@kampus/fabrika-old";
 import {Effect, type FileSystem, type Layer, type Path, Queue, Schema, type Scope} from "effect";
 import {AskId} from "../ids.ts";
 import {type Ask, Refused} from "./ask.ts";
 
 // Add-on packs, wired to a core program by the host, from names in the
-// repository's fabrika.toml (docs/direction/packs-are-programs.md,
+// repository's .fabrika/fabrika.toml (docs/direction/packs-are-programs.md,
 // ../settings.ts). The core program never sees this: it sends on its outputs
 // and is told on its inputs, as always.
 //
-//   packs = ["@acme/owner-desk", "@acme/ask-log"]    # fabrika.toml: the one line
+//   packs = ["@acme/owner-desk", "@acme/ask-log"]    # .fabrika/fabrika.toml: the one line
 //
 //   const packs = yield* loadPacks(settings.packs, folder);
 //   const wired = yield* startWithPacks({program: asksProgram, flags: {}}, packs, settings.pack, storage,

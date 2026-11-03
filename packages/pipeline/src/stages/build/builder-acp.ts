@@ -1,5 +1,5 @@
 import {fileURLToPath} from "node:url";
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import type {AgentSpans} from "@demlik/tea/otel";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {
@@ -14,10 +14,10 @@ import {
 	type PendingAsk,
 	type Spawnable,
 	seenOf,
-} from "@kampus/fabrika/agents/acp";
-import {noSpend} from "@kampus/fabrika/agents/claude";
-import {TOOLS, temps} from "@kampus/fabrika/agents/sandbox";
-import {agentTrace} from "@kampus/fabrika/agents/trace";
+} from "@kampus/fabrika-old/agents/acp";
+import {noSpend} from "@kampus/fabrika-old/agents/claude";
+import {TOOLS, temps} from "@kampus/fabrika-old/agents/sandbox";
+import {agentTrace} from "@kampus/fabrika-old/agents/trace";
 import {Clock, Context, Deferred, Effect, FileSystem, Layer, Queue, type Scope} from "effect";
 import {ChildProcessSpawner} from "effect/process";
 import type {Refused} from "../review/reviewer.ts";

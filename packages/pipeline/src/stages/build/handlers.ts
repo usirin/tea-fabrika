@@ -1,6 +1,6 @@
 import {Effect, Option, Schema, Stream} from "effect";
 import {bodyText, messageText} from "./body.ts";
-import {type BuildDrafted, Builder, Built, type Ran} from "./form.ts";
+import {type BuildDrafted, Builder, HeldBuilt, type Ran} from "./form.ts";
 import type {BuildMsg, copyTree, openPr, pushBranch, RunSub, readTicket} from "./machine.ts";
 import {BuildHost, BuildWrites} from "./services.ts";
 
@@ -57,7 +57,7 @@ export const msgOf =
 		const ran = ranOf(drafted);
 		switch (drafted.answer) {
 			case "built": {
-				const built = Schema.decodeUnknownOption(Built)(drafted.built);
+				const built = Schema.decodeUnknownOption(HeldBuilt)(drafted.built);
 				return Option.isSome(built)
 					? {type: "build_built", ...at, built: built.value, ran}
 					: {type: "build_failed", ...at, why: "misfit", error: null, ran};

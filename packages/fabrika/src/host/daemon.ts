@@ -11,22 +11,23 @@
 // started it is gone.
 //
 // Node at the edge, all of it: a process that `local.ts` signals, around Miniflare, a Node library.
-import {Redacted} from "effect";
+import {Config, Effect, Option} from "effect";
 import {Miniflare} from "miniflare";
 import {ledgerOptions} from "./worker-options.ts";
 
 const t0 = performance.now();
-const secret = process.env.DOOR_SECRET;
+// Read as a `Redacted` and kept one: an empty or missing secret is none.
+const secret = Effect.runSync(Config.option(Config.Redacted("DOOR_SECRET")));
 const mf = new Miniflare(
 	ledgerOptions({
 		persist: process.env.PERSIST ?? false,
-		...(secret === undefined || secret === ""
+		...(Option.isNone(secret)
 			? {}
 			: {
 					door: {
 						kind: "local" as const,
 						person: process.env.DOOR_PERSON ?? "owner",
-						secret: Redacted.make(secret),
+						secret: secret.value,
 					},
 				}),
 		graceMs: Number(process.env.GRACE_MS ?? "1000"),

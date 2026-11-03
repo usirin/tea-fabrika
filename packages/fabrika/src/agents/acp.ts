@@ -1,4 +1,4 @@
-// `@kampus/fabrika/agents/acp`: any harness that speaks the Agent Client
+// `@kampus/fabrika-old/agents/acp`: any harness that speaks the Agent Client
 // Protocol. The `acp` program, its client, and the harnesses it starts. Its
 // two machines (the session and the transcript) and its spans are here too,
 // for an app that runs a harness itself and holds the machines to laws.

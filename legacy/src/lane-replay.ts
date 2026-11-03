@@ -1,6 +1,6 @@
 import type {Sub} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
-import type {DraftRun, Spend} from "@kampus/fabrika/agents/claude";
+import type {DraftRun, Spend} from "@kampus/fabrika-old/agents/claude";
 import {type Reply, Thread} from "@kampus/pipeline/combos";
 import {Worktrees} from "@kampus/pipeline/worktrees";
 import {Effect, Layer, Stream} from "effect";
@@ -29,6 +29,7 @@ import {
 	stepTask,
 	type TaskState,
 } from "./lane-log.ts";
+import {operatorInterpret, operatorSubscribe} from "./operator-host.ts";
 import {
 	createOperator,
 	defaultKnobs,
@@ -37,7 +38,6 @@ import {
 	type Operator,
 	type OperatorMsg,
 } from "./operator.ts";
-import {operatorInterpret, operatorSubscribe} from "./operator-host.ts";
 import {scriptedJev} from "./scripted.ts";
 
 // A lane that already happened, served to the operator machine as its world.

@@ -1,4 +1,4 @@
-import {createDraft, type DraftMsg, noSpend} from "@kampus/fabrika/agents/claude";
+import {createDraft, type DraftMsg, noSpend} from "@kampus/fabrika-old/agents/claude";
 import {describe, expect, it} from "vitest";
 import {z} from "zod";
 import {

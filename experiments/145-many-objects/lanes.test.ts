@@ -1,5 +1,5 @@
-import type {Ledger} from "@kampus/fabrika";
-import {type LawResult, runLaws} from "@kampus/fabrika/laws";
+import type {Ledger} from "@kampus/fabrika-old";
+import {type LawResult, runLaws} from "@kampus/fabrika-old/laws";
 import {Effect, type Layer} from "effect";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
 import {door, httpLayer, layerObject, type Server} from "./client.ts";

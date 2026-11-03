@@ -1,12 +1,13 @@
 import {Duration, Effect, Schema} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
+import {HostJobs, openJobs, TABLE} from "../host/host-jobs.ts";
 import {ear} from "../program/ear.ts";
 import {start, tell} from "../program/program.ts";
 import {memoryStorage, type Storage} from "../program/storage.ts";
 import {SAVED_BY_OLDER_CODE} from "./execute.ts";
-import {JobStorage, Programs, programList} from "./programs.ts";
-import {type Printed, type Ready, TABLE, TABLE_REFUSED, tsh} from "./shell.ts";
+import {Programs, programList} from "./programs.ts";
+import {type Printed, type Ready, TABLE_REFUSED, tsh} from "./shell.ts";
 import {SMALL, tally} from "./small.ts";
 
 // tsh over kept state that older code saved, as laws over any set of jobs, any of them saved by
@@ -33,12 +34,13 @@ const session = (storage: Storage) =>
 		const printed = ear<Printed>();
 		const ready = ear<Ready>();
 		runs += 1;
+		const jobs = yield* openJobs(storage);
 		const started = yield* start(
 			tsh,
 			{show: "short"},
 			{printed: printed.hear, ready: ready.hear},
 			{id: `tsh:laws-${runs}`, storage},
-		).pipe(Effect.provideService(Programs, SMALL_LIST), Effect.provideService(JobStorage, storage));
+		).pipe(Effect.provideService(Programs, SMALL_LIST), Effect.provideService(HostJobs, jobs));
 		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
 		let told = 0;
 		const line = (text: string) =>

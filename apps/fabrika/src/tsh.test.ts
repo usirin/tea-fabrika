@@ -1,13 +1,30 @@
 import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
-import {Ledger, memoryStorage, type Storage} from "@kampus/fabrika";
-import {memoryService} from "@kampus/fabrika/memory";
-import {fileStorage} from "@kampus/fabrika/storage/node";
+import {
+	type Entry,
+	Ledger,
+	memoryStorage,
+	openJobs,
+	runTraceId,
+	Shell,
+	type Storage,
+	streams,
+	Traces,
+} from "@kampus/fabrika-old";
+import {memoryService} from "@kampus/fabrika-old/memory";
+import {fileStorage} from "@kampus/fabrika-old/storage/node";
+import {type CodeFact, nameOf} from "@kampus/pipeline/tickets/ticket";
+import {Tickets, ticketsOnLedger} from "@kampus/pipeline/tickets/tickets";
+import {memoryTraces} from "@tea-fabrika/trace/memory";
 import {Author, PullRequests, tracker} from "@tea-fabrika/tracker";
-import {Effect, FileSystem, Schema} from "effect";
+import {LANE, SEVEN, SEVEN_BODY, SEVEN_TITLE, SEVEN_TRACE} from "@tea-fabrika/tracker/seven";
+import {Effect, FileSystem, Layer, Schema} from "effect";
 import {describe, expect, it} from "vitest";
+import {BINDINGS, type Does, wordOf} from "./desk/keys.ts";
+import {deskWords} from "./desk/words.ts";
 import {gridOf} from "./editor/grid.ts";
 import {type History, memoryHistory, type SharedHistory, sharedHistory} from "./editor/history.ts";
-import {type Placed, type Runs, startTsh, type WindowScreen} from "./tsh.ts";
+import type {TileJobs} from "./tile-jobs.ts";
+import {appPrograms, type Placed, type Runs, startTsh, tshList, type WindowScreen} from "./tsh.ts";
 
 // One tile's tsh, with a fake terminal page and a fake tile and no Electron: what a person would see
 // in the terminal, read off its grid (editor/grid.ts), and what each program's view is shown.
@@ -17,18 +34,31 @@ import {type Placed, type Runs, startTsh, type WindowScreen} from "./tsh.ts";
 type Seen =
 	| {readonly kind: "open"; readonly run: string; readonly program: string; readonly placed: Placed}
 	| {readonly kind: "forward"; readonly run: string}
+	| {readonly kind: "line"; readonly runs: readonly string[]}
 	| {readonly kind: "view"; readonly run: string; readonly data: unknown}
 	| {readonly kind: "close"; readonly run: string}
-	| {readonly kind: "running"; readonly count: number};
+	| {readonly kind: "running"; readonly count: number; readonly jobs: TileJobs};
+
+/** Records nobody wrote: every trace id reads as an empty record. */
+const noTraces = Effect.runSync(
+	Effect.gen(function* () {
+		return yield* Traces;
+	}).pipe(Effect.provide(memoryTraces([]))),
+);
 
 const session = (
 	opts: {
+		/** Where the host keeps its job table, kept between hosts as the home's folder is. */
 		readonly jobs?: Storage;
 		/** Kept between hosts, as the history file is. Each host shares it with no other. */
 		readonly history?: History;
 		/** Shared with another host, as two tiles share it. */
 		readonly shared?: SharedHistory;
 		readonly ledger?: Ledger["Service"];
+		/** The desk's words, as a tile's tsh lists them (desk/words.ts); none by default. */
+		readonly words?: readonly Entry[];
+		/** The jobs' records `trace` reads. None written, unless a test hands its own. */
+		readonly traces?: Layer.Layer<Traces>;
 	} = {},
 ) =>
 	Effect.gen(function* () {
@@ -41,6 +71,7 @@ const session = (
 				screen.show((m) => seen.push({kind: "view", run, data: m.data}));
 			},
 			forward: (run) => seen.push({kind: "forward", run}),
+			line: (runs) => seen.push({kind: "line", runs}),
 			ended: (run) => {
 				const screen = screens.get(run);
 				if (screen === undefined) return;
@@ -49,17 +80,22 @@ const session = (
 				// As a real view does: taking it away says `closed`, whoever took it away.
 				screen.closed();
 			},
-			running: (count) => seen.push({kind: "running", count}),
+			jobs: (jobs) => seen.push({kind: "running", count: jobs.running.length, jobs}),
 		};
+		// Each session is a host of its own: it opens the host's table, on the storage it is handed.
+		const jobs = yield* openJobs(opts.jobs ?? memoryStorage());
 		const host = yield* startTsh({
-			jobs: opts.jobs ?? memoryStorage(),
+			tile: "t1",
+			jobs,
 			history: opts.shared ?? (yield* sharedHistory(opts.history ?? memoryHistory())),
 			runs,
+			words: opts.words ?? [],
 		}).pipe(
 			Effect.provideService(Ledger, opts.ledger ?? memoryService()),
 			Effect.provideService(Author, {kind: "user", id: "owner"}),
 			// No pull requests: no test reads GitHub.
 			Effect.provideService(PullRequests, {open: Effect.succeed([])}),
+			Effect.provide(opts.traces ?? memoryTraces([])),
 		);
 		let bytes = "";
 		host.terminal.show((m) => {
@@ -102,14 +138,34 @@ const session = (
 				show: () => () => {},
 				heard: () => ({kind: "refused", why: `no window for ${run}`}),
 				closed: () => {},
+				kill: Effect.void,
 			};
 		const press = (run: string, value: unknown) =>
 			window(run).heard({type: "msg", msg: {type: "press", value}});
-		return {host, rows, until, prompts, type, opened, viewed, closed, window, press, seen};
+		return {host, jobs, rows, until, prompts, type, opened, viewed, closed, window, press, seen};
 	});
+
+/** Ticket 7 on `ledger`, as a lane left it (@tea-fabrika/tracker/seven). */
+const seedSeven = (ledger: Ledger["Service"]) =>
+	Effect.gen(function* () {
+		yield* ledger.register(nameOf(7), "user:owner");
+		yield* ledger.send(streams(nameOf(7)).inbox, "filed", {
+			kind: "filed",
+			writer: "user:owner",
+			data: {type: "filed", title: SEVEN_TITLE, body: SEVEN_BODY},
+		});
+		const tickets = yield* Tickets;
+		for (const e of SEVEN.slice(1)) yield* tickets.write(7, `w/${e.pos}`, e.fact as CodeFact);
+	}).pipe(Effect.provide(ticketsOnLedger(LANE)), Effect.provide(Layer.succeed(Ledger, ledger)));
 
 const go = <A, E>(test: Effect.Effect<A, E, FileSystem.FileSystem>) =>
 	Effect.runPromise(test.pipe(Effect.provide(nodeFileSystem)));
+
+/** The last view the run's window was shown names `text`, wherever its data holds it. */
+const mentions = (seen: readonly Seen[], run: string, text: string): true | undefined => {
+	const last = seen.filter((x) => x.kind === "view" && x.run === run).at(-1);
+	return last?.kind === "view" && JSON.stringify(last.data).includes(text) ? true : undefined;
+};
 
 describe("the terminal", () => {
 	it("runs a typed line, and shows what tsh printed under it", async () => {
@@ -239,7 +295,7 @@ describe("a program's window", () => {
 					const empty = yield* s.until("the empty list", () => titles(s.seen, open.run));
 					const told = s.window(open.run).heard({
 						type: "msg",
-						msg: {type: "do", value: {kind: "file", title: "Login fails", body: ""}},
+						msg: {type: "file", value: {title: "Login fails", body: ""}},
 					});
 					const filed = yield* s.until("the ticket on the list", () =>
 						titles(s.seen, open.run)?.length === 1 ? titles(s.seen, open.run) : undefined,
@@ -328,8 +384,21 @@ describe("a program's window", () => {
 			}).pipe(Effect.scoped),
 		);
 		expect(seen.open.placed).toBe("background");
-		expect(seen.counted).toEqual({kind: "running", count: 1});
-		expect(seen.none).toEqual({kind: "running", count: 0});
+		expect(seen.counted.kind === "running" && seen.counted.jobs.running).toEqual([
+			{n: 1, text: "counter", since: expect.any(Number), foreground: false},
+		]);
+		// It ended on its own, after `done`: the tile is told so, in a job record's words.
+		expect(seen.none.kind === "running" && seen.none.jobs).toEqual({
+			running: [],
+			ended: {
+				n: 1,
+				text: "counter",
+				how: "done",
+				since: expect.any(Number),
+				at: expect.any(Number),
+				foreground: false,
+			},
+		});
 		expect(seen.back[0]).toBe("tsh$ counter &");
 		expect(seen.back.at(-1)).toBe("tsh$");
 		expect(seen.rows).toContain("meanwhile");
@@ -406,6 +475,41 @@ describe("a program's window", () => {
 		expect(still).toBe("None");
 	});
 
+	it("tells the tile a job it waits for with no view, and how each job ended: stopped, failed", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session();
+				// One program, no view, in the foreground: tsh `call`s it, and holds no handle to it.
+				s.type("sleep --ms 600000\r");
+				const waiting = yield* s.until("the sleep, waited for", () =>
+					s.seen.find((x) => x.kind === "running" && x.count === 1),
+				);
+				s.type("\x03");
+				const stopped = yield* s.until("the sleep, stopped", () =>
+					s.seen.find((x) => x.kind === "running" && x.jobs.ended?.how === "stopped"),
+				);
+				yield* s.prompts(2);
+				s.type("false &\r");
+				const failed = yield* s.until("false, failed", () =>
+					s.seen.find((x) => x.kind === "running" && x.jobs.ended?.how === "failed"),
+				);
+				return {waiting, stopped, failed};
+			}).pipe(Effect.scoped),
+		);
+		const jobsOf = (x: (typeof seen)["waiting"]) => (x.kind === "running" ? x.jobs : null);
+		expect(jobsOf(seen.waiting)?.running).toEqual([
+			{n: 1, text: "sleep --ms 600000", since: expect.any(Number), foreground: true},
+		]);
+		expect(jobsOf(seen.stopped)).toMatchObject({
+			running: [],
+			ended: {n: 1, text: "sleep --ms 600000", how: "stopped", foreground: true},
+		});
+		expect(jobsOf(seen.failed)).toMatchObject({
+			running: [],
+			ended: {n: 2, text: "false", how: "failed", foreground: false},
+		});
+	});
+
 	it("does not open for a line tsh refuses", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
@@ -419,6 +523,57 @@ describe("a program's window", () => {
 		expect(seen.rows[1]).toMatch(/^tsh: /);
 	});
 
+	it("carries the pick down `tracker | ticket | trace`, and one window closed ends its one process", async () => {
+		// Ticket 141: `trace` is the ticket's view, and `runs` is gone. The trace's view names a
+		// lane by its trace id, so a ticket with a lane shows that id once its facts are read.
+		const ledger = memoryService();
+		const got = await go(
+			Effect.gen(function* () {
+				yield* seedSeven(ledger);
+				const s = yield* session({ledger});
+				s.type("tracker | ticket | trace\r");
+				yield* s.opened(3);
+				// The windows open from the end of the line back: each found by its program.
+				const of = (program: string) =>
+					s.until(`${program}'s window`, () => {
+						const one = s.seen.find((x) => x.kind === "open" && x.program === program);
+						return one?.kind === "open" ? one : undefined;
+					});
+				const [picker, page, view] = [
+					yield* of("tracker"),
+					yield* of("ticket"),
+					yield* of("trace"),
+				];
+				const pick = (ticket: number) =>
+					s.window(picker.run).heard({type: "msg", msg: {type: "query", value: {ticket}}});
+				pick(7);
+				yield* s.until("trace shows ticket 7's lane", () =>
+					mentions(s.seen, view.run, SEVEN_TRACE),
+				);
+				// The ticket's window closes: that one process gets the end of its inputs, and ends.
+				s.window(page.run).closed();
+				yield* s.closed(page.run);
+				// Its input from the ticket ended, and the trace goes on showing the last ticket.
+				const traceOpen = !s.seen.some((x) => x.kind === "close" && x.run === view.run);
+				// The tracker's next pick goes down a pipe whose reader is gone: the send fails, and it ends.
+				// A second ticket, since the tracker sends only a new pick (`pickOf`).
+				pick(8);
+				yield* s.closed(picker.run);
+				// The last window closed: the line is over, and the prompt is back.
+				s.window(view.run).closed();
+				yield* s.closed(view.run);
+				const rows = yield* s.prompts(2);
+				return {programs: [picker.program, page.program, view.program], traceOpen, rows};
+			}).pipe(Effect.scoped),
+		);
+		expect(got).toMatchObject({programs: ["tracker", "ticket", "trace"], traceOpen: true});
+		// The ticket had ended, so the pipe answered `stopped`: tsh says why the tracker failed.
+		expect(got.rows).toEqual([
+			"tsh$ tracker | ticket | trace",
+			"tsh: tracker failed: tracker sent ticket down a pipe that answered stopped",
+			"tsh$",
+		]);
+	});
 	it("is the first stage of a pipe: closing it sends the count on", async () => {
 		const rows = await go(
 			Effect.gen(function* () {
@@ -432,6 +587,154 @@ describe("a program's window", () => {
 			}).pipe(Effect.scoped),
 		);
 		expect(rows).toEqual(["tsh$ counter | double", "double 2", "tsh$"]);
+	});
+
+	it("opens ticket 7 on `trace --ticket 7`: the lane its facts name shows", async () => {
+		const ledger = memoryService();
+		const seen = await go(
+			Effect.gen(function* () {
+				yield* seedSeven(ledger);
+				const s = yield* session({ledger});
+				s.type("trace --ticket 7\r");
+				const open = yield* s.opened(1);
+				yield* s.until("trace shows ticket 7's lane", () =>
+					mentions(s.seen, open.run, SEVEN_TRACE),
+				);
+				s.window(open.run).closed();
+				yield* s.prompts(2);
+				return {open};
+			}).pipe(Effect.scoped),
+		);
+		expect([seen.open.program, seen.open.placed]).toEqual(["trace", "foreground"]);
+	});
+
+	it("takes the ticket a pipe sends on `ticket --ticket 7 | trace`", async () => {
+		const ledger = memoryService();
+		await go(
+			Effect.gen(function* () {
+				yield* seedSeven(ledger);
+				const s = yield* session({ledger});
+				s.type("ticket --ticket 7 | trace\r");
+				yield* s.opened(2);
+				const view = s.seen.find((x) => x.kind === "open" && x.program === "trace");
+				if (view?.kind !== "open") return yield* Effect.die("trace did not open");
+				yield* s.until("trace shows ticket 7's lane", () =>
+					mentions(s.seen, view.run, SEVEN_TRACE),
+				);
+				for (const o of s.seen) if (o.kind === "open") s.window(o.run).closed();
+				yield* s.prompts(2);
+			}).pipe(Effect.scoped),
+		);
+	});
+
+	it("takes the tracker's pick on `tracker | trace`", async () => {
+		const ledger = memoryService();
+		await go(
+			Effect.gen(function* () {
+				yield* seedSeven(ledger);
+				const s = yield* session({ledger});
+				s.type("tracker | trace\r");
+				yield* s.opened(2);
+				const find = (program: string) => {
+					const one = s.seen.find((x) => x.kind === "open" && x.program === program);
+					return one?.kind === "open" ? one.run : "";
+				};
+				s.window(find("tracker")).heard({type: "msg", msg: {type: "query", value: {ticket: 7}}});
+				yield* s.until("trace shows ticket 7's lane", () =>
+					mentions(s.seen, find("trace"), SEVEN_TRACE),
+				);
+				for (const o of s.seen) if (o.kind === "open") s.window(o.run).closed();
+				yield* s.prompts(2);
+			}).pipe(Effect.scoped),
+		);
+	});
+	it("ends `seq --to 3 | tally | trace` on trace's window, showing that line's own job", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session();
+				s.type("seq --to 3 | tally | trace\r");
+				yield* s.opened(1);
+				const open = s.seen.find((x) => x.kind === "open");
+				if (open?.kind !== "open") return yield* Effect.die("trace did not open");
+				const read = yield* s.until("trace read its job's record", () =>
+					s.seen.find(
+						(x) =>
+							x.kind === "view" &&
+							x.run === open.run &&
+							(x.data as {read?: string}).read === "read",
+					),
+				);
+				const job = s.jobs.table.getState().jobs[0];
+				s.window(open.run).closed();
+				yield* s.prompts(2);
+				return {open, read, job};
+			}).pipe(Effect.scoped),
+		);
+		expect([seen.open.program, seen.open.placed]).toEqual(["trace", "foreground"]);
+		// tally's total fits no typed input of trace, so it went to `any`: the line is one job.
+		expect(seen.job?.stages.map((st) => st.program)).toEqual(["seq", "tally", "trace"]);
+		// Its trace id is its first run's, seq's: the record trace follows is the line's own.
+		const first = seen.job?.stages[0].run ?? "";
+		expect((seen.read as {data: {id: string}}).data.id).toBe(runTraceId(first));
+	});
+});
+
+describe("what a pipe can feed", () => {
+	const apps = appPrograms(
+		memoryService(),
+		{kind: "user", id: "owner"},
+		{open: Effect.succeed([])},
+		noTraces,
+	);
+	const list = tshList(apps);
+	const takes = (name: string) => {
+		const entry = apps.find((e) => e.program.name === name);
+		if (entry === undefined) throw new Error(`no program ${name}`);
+		return Shell.fedBy(entry.program, list);
+	};
+
+	it("is each program's data, never its commands: the frame's takes", () => {
+		expect(takes("tracker")).toEqual([]);
+		expect(takes("ticket")).toEqual(["ticket"]);
+		// `any` takes whatever no typed input does (`anyInput`): a pipe feeds it from anything.
+		// Ticket 141: trace takes a ticket too, and its window's inputs are no pipe's.
+		expect(takes("trace")).toEqual(expect.arrayContaining(["ticket", "any"]));
+		for (const own of ["toggle", "choose", "quit", "seek", "step"])
+			expect(takes("trace")).not.toContain(own);
+		expect(takes("map")).toEqual([]);
+	});
+
+	/** The input of trace a line feeds, as the shell's fit check wires it. */
+	const fedInto = (text: string, program: string) => {
+		const parsed = Shell.parse(text);
+		if (parsed.kind !== "parsed" || parsed.statements[0]?.kind !== "run") throw new Error(text);
+		const checked = Shell.check(parsed.statements[0].pipeline, Shell.programList(list), text);
+		if (checked.kind !== "line") throw new Error(`${text}: ${JSON.stringify(checked)}`);
+		return checked.line.stages.find((stage) => stage.entry.program.name === program)?.fed;
+	};
+
+	it("wires a ticket into trace's `ticket` input, never into `any` (J1)", () => {
+		expect(fedInto("tracker | trace", "trace")).toBe("ticket");
+		expect(fedInto("ticket | trace", "trace")).toBe("ticket");
+		expect(fedInto("pipeline --ticket 7 | trace", "trace")).toBe("ticket");
+		expect(fedInto("trace --ticket 7", "trace")).toBeNull();
+	});
+
+	it("keeps every line into trace that works today (J1)", () => {
+		// tally's total fits no typed input of trace: it goes to `any`, taken and let go.
+		expect(fedInto("seq --to 3 | tally | trace", "trace")).toBe("any");
+		// Alone on a line, it is fed by nothing: it checks as a line of its own.
+		expect(fedInto(`trace --id ${SEVEN_TRACE}`, "trace")).toBeNull();
+	});
+
+	it("is what a line wires each stage's pipe into", () => {
+		const text = "tracker | ticket | trace";
+		const parsed = Shell.parse(text);
+		if (parsed.kind !== "parsed" || parsed.statements[0]?.kind !== "run") throw new Error(text);
+		const checked = Shell.check(parsed.statements[0].pipeline, Shell.programList(list), text);
+		if (checked.kind !== "line") throw new Error(text);
+		for (const stage of checked.line.stages.slice(1))
+			expect(takes(stage.entry.program.name)).toContain(stage.fed);
 	});
 });
 
@@ -514,5 +817,54 @@ describe("what is kept for the next start", () => {
 		// Then it ends on its own, so it leaves the table: `jobs` lists nothing.
 		expect(seen.rows.slice(-2)).toEqual(["tsh$ jobs", "tsh$"]);
 		expect(seen.rows).toContain("2");
+	});
+});
+
+describe("the desk's words", () => {
+	it("runs each key's word, which tells the desk what that key does", async () => {
+		const said: Does[] = [];
+		const words = [...BINDINGS.map((b) => wordOf(b.does)), "focus --to t3", "workspace --to 12"];
+		await go(
+			Effect.gen(function* () {
+				const s = yield* session({
+					words: deskWords((does) => {
+						said.push(does);
+						return null;
+					}),
+				});
+				for (const [i, word] of words.entries()) {
+					s.type(`${word}\r`);
+					yield* s.prompts(i + 2);
+				}
+			}).pipe(Effect.scoped),
+		);
+		// C-b J's word is tsh's own `jobs`, which prints the list in the tile and tells the desk nothing.
+		const toDesk = BINDINGS.filter((b) => wordOf(b.does) !== "jobs");
+		expect(toDesk).toHaveLength(BINDINGS.length - 1);
+		expect(said).toEqual([
+			...toDesk.map((b) => b.does),
+			{kind: "go", tile: "t3"},
+			{kind: "pick", at: 12},
+		]);
+	});
+
+	it("prints why the desk did nothing, and tells it nothing of a word it cannot read", async () => {
+		const said: Does[] = [];
+		const rows = await go(
+			Effect.gen(function* () {
+				const s = yield* session({
+					words: deskWords((does) => {
+						said.push(does);
+						return does.kind === "go" ? `no tile ${does.tile}` : null;
+					}),
+				});
+				s.type("focus --to t9\r");
+				yield* s.prompts(2);
+				s.type("focus --to sideways\r");
+				return yield* s.prompts(3);
+			}).pipe(Effect.scoped),
+		);
+		expect(rows).toContain("tsh: focus failed: no tile t9");
+		expect(said).toEqual([{kind: "go", tile: "t9"}]);
 	});
 });

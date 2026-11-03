@@ -1,5 +1,5 @@
 import {structuralHash} from "@demlik/tea";
-import {noSpend, type Spend} from "@kampus/fabrika/agents/claude";
+import {noSpend, type Spend} from "@kampus/fabrika-old/agents/claude";
 import {planProblems} from "../stages/plan/check.ts";
 import {
 	MAX_RESTARTS,
@@ -102,16 +102,14 @@ export function planWorld(): World<PlanState, Msg, PlanCmd> {
 				{type: "resume"},
 				...ids.flatMap((id): Msg[] => [
 					{type: "plan_tool", key: KEY, id, tool: "Read"},
-					...Object.values(PLANS).map(
-						(output): Msg => ({
-							type: "plan_finished",
-							key: KEY,
-							id,
-							output,
-							session: "s",
-							spend: SPENT,
-						}),
-					),
+					...Object.values(PLANS).map((output): Msg => ({
+						type: "plan_finished",
+						key: KEY,
+						id,
+						output,
+						session: "s",
+						spend: SPENT,
+					})),
 					{type: "plan_failed", key: KEY, id, error: "boom", spend: SPENT},
 					{type: "plan_failed", key: KEY, id, error: "error_max_budget_usd", spend: SPENT},
 				]),

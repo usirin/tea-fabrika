@@ -1,6 +1,6 @@
 import {defineAgent, tool} from "@demlik/tea/agent";
-import {agentTrace, KEPT_OUT} from "@kampus/fabrika/agents/trace";
-import {memoryTracing} from "@kampus/fabrika/otel";
+import {agentTrace, KEPT_OUT} from "@kampus/fabrika-old/agents/trace";
+import {memoryTracing} from "@kampus/fabrika-old/otel";
 import type {ReadableSpan} from "@opentelemetry/sdk-trace-base";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";

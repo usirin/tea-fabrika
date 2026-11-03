@@ -251,6 +251,9 @@ const liveRow = (run: Started, beat: Beat | null, now: number): Row => ({
     machine.
   - Counting beats per run now decides only whether old beats are trimmed
     after a run ends. They are kept until then.
+  - *Decided 2026-10-28:* beats move into the job's own record, and nothing
+    in it is trimmed or deleted
+    ([a JobRecord holds each host job](./a-job-record-holds-its-trace.md)).
 
 ## 4. The bridge until our pipeline runs lanes (dropped)
 
@@ -364,7 +367,7 @@ const write = (writer: Writer, fact: unknown) =>
     word is never the ticket's state.
   - a user closes it before anything merged: **"closed by you"**, not done.
     Won't do, duplicate, or moved.
-  - triage thinks it is a duplicate: it **asks**. The owner's yes closes it.
+  - triage thinks it is a duplicate: it **asks**. The owner's approval closes it.
   - a user reopens a done ticket: open again, and a new lane starts. The old
     pull request stays in the timeline.
 - **Who can say it.** Nobody writes "done". It is a fold of two facts only
@@ -401,8 +404,10 @@ lineOf(head, when); // "waits on you: approve plan v2"
 
 - **Section 2: the nine fact kinds** are in the ticket's `Fact` union
   (`src/ticket.ts`), with the fields above.
-  - They keep the tracker's `type` key, not Effect's `_tag`, so the rows
-    already on a ledger still read. `Head` is not stored, so it uses `_tag`.
+  - In today's version, they keep the tracker's `type` key, not Effect's `_tag`,
+    so the rows already on a ledger still read. `Head` is not stored, so it uses
+    `_tag`. In `next/`, every union we define uses `_tag`, and the tracker there
+    is written new.
   - `asked` is flattened to `{ask, what, picks}`; `answered` is
     `{ask, pick, note}`. The pipeline's own `Ask` is richer; mapping it to
     these is for the pipeline lane that writes them.

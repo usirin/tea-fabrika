@@ -1,5 +1,5 @@
-import {Shell} from "@kampus/fabrika";
-import {acpEntry} from "@kampus/fabrika/agents/acp";
+import {Shell} from "@kampus/fabrika-old";
+import {acpEntry} from "@kampus/fabrika-old/agents/acp";
 import type {Layer} from "effect";
 import type {Ledger} from "../asks/ledger.ts";
 import type {Setup} from "../setup.ts";

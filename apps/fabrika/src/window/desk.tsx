@@ -4,6 +4,7 @@ import type {Ghostty} from "ghostty-web";
 import {
 	type ReactNode,
 	type PointerEvent as ReactPointerEvent,
+	useEffectEvent,
 	useLayoutEffect,
 	useRef,
 	useState,
@@ -11,6 +12,7 @@ import {
 } from "react";
 import {flushSync} from "react-dom";
 import {createRoot} from "react-dom/client";
+import type {AsksNow} from "../asks.ts";
 import {
 	activeOf,
 	type Desk,
@@ -21,23 +23,44 @@ import {
 	type Workspace,
 } from "../desk/desk.ts";
 import {type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key} from "../desk/hold.ts";
-import {keyName} from "../desk/keys.ts";
+import {keyName, keyOwner} from "../desk/keys.ts";
 import {
+	type ContainerNode,
 	findTile,
+	fold,
+	isFolded,
 	type LayoutNode,
-	type StackNode,
+	lineOf,
+	type NodeId,
+	openShares,
 	type TileId,
 	type TileNode,
+	tiles,
 } from "../desk/layout/index.ts";
 import {
 	type Attached,
 	type FromPage,
+	type HostNow,
 	type LinkNow,
 	readToPage,
 	readToWindow,
 	type ToApp,
 	type ToWindow,
 } from "../messages.ts";
+import {
+	type Bound,
+	EXPLAIN_ON,
+	FRAME,
+	type Frame,
+	type FrameMsg,
+	frameUpdate,
+	INFO,
+	keyGoesTo,
+	type MidKey,
+	type Shapes,
+	ticketsShown,
+} from "./frame.ts";
+import {Band, BottomArea, type FrameProps, Over, TopBar} from "./frame.tsx";
 import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
 import {WINDOWS} from "./windows.tsx";
 
@@ -50,6 +73,8 @@ import {WINDOWS} from "./windows.tsx";
 //   Ctrl-B l      the same: focus moves right
 //   counter       typed into t1's terminal, which sends it to t1's tsh in the host
 //   Ctrl-B x      "close t1? (y/n)" on the tile; y closes it, at once or once what runs in it ends
+//   title bar     a click focuses its tile; a double-click folds it into a strip, in its place;
+//                 a click on the strip opens it
 //
 // Every key is read in the capture phase, before ghostty-web or a program's view sees it. The
 // host says, with each desk, which keys the desk takes now (`takes`): those go to the host and no
@@ -62,27 +87,44 @@ import {WINDOWS} from "./windows.tsx";
 // Each tile's terminal is made once and moved into its slot as the layout changes (terminal.ts).
 // A program's view is plain React, drawn whole from the newest view its run sent (windows.tsx).
 //
-// When the link to the host drops, the app reconnects (reconnect.ts) and says so here: the desk
-// stays drawn, dimmed and out of reach, with a calm note in its corner. Nothing takes focus, and
-// no dialog opens. Once the app says the link is up again, the desk is in reach, and focus goes
-// back to the tile.
+// Around the desk is the window's frame (frame.tsx, its words in frame.ts): the top bar is the
+// whole desk (workspaces, the line, what asks you, the agents on the host, the ledger's sync and
+// the host), and the bottom line is the tile you are in and the key you just pressed. Cmd-K opens
+// the palette; C-b a the asks list, C-b ? every key, C-b i the info mode, C-b B hides both bars,
+// C-b A, S and H the agents', sync and host lines.
+//
+// When the link to the host drops, the app reconnects (reconnect.ts) and the top bar says so, in
+// a word: the desk stays drawn, dimmed and out of reach. Nothing takes focus, and no dialog opens.
+// Once the app says the link is up again, the desk is in reach, and focus goes back to the tile.
 //
 // What the window shows of the link is one value, `LinkNow` (messages.ts), and `linkView` has
 // one branch for each of its kinds, so a kind left out fails the typecheck:
 //
-//   up            the desk, nothing more
-//   build         the desk, with a banner: "the host runs older code", and the restart
+//   up            the desk: the top bar shows the host's quiet icon, and no word
+//   build         the desk: the top bar says host older, and its lines offer the restart
 //   version       no desk: both versions named, and the restart
-//   reconnecting  the desk dimmed, with a note in its corner
-//   stopped       the same, with Try again
-//   restarting    the desk dimmed: "Stopping the old host..."
+//   reconnecting  the desk dimmed: the top bar says host down, and its lines say why
+//   stopped       the same, and its lines offer Try again
+//   restarting    the desk dimmed: the top bar says host restarting
 
-/** The desk, the newest view of each run, and who to tell of a change. */
+/** The desk, the newest view of each run, the frame's own state, and who to tell of a change. */
 const store: {
 	/** `null` until the host sends the desk. */
 	desk: Desk | null;
+	/** A desk came once: a link down after it is the host down. */
+	attachedOnce: boolean;
 	/** The desk's Ctrl-B key, as the host's table says. */
 	prefix: string;
+	/** The desk's Ctrl-B table, each key with its name. */
+	table: readonly Bound[];
+	/** What each program takes and sends. */
+	shapes: Shapes;
+	/** What waits on the person, as the host counts it; `null` until it says. */
+	asks: AsksNow | null;
+	/** The host's own state: its process, its ledger, the agents on it; `null` until it says. */
+	host: HostNow | null;
+	/** What the frame shows over the desk, and its modes (frame.ts). */
+	frame: Frame;
 	/** What the window shows of the link, as the app said last. */
 	link: LinkNow;
 	readonly views: Map<string, ToWindow>;
@@ -90,7 +132,13 @@ const store: {
 	version: number;
 } = {
 	desk: null,
+	attachedOnce: false,
 	prefix: "",
+	table: [],
+	shapes: new Map(),
+	asks: null,
+	host: null,
+	frame: FRAME,
 	link: {kind: "up"},
 	views: new Map(),
 	listeners: new Set(),
@@ -117,6 +165,8 @@ let ghostty: Ghostty | null = null;
 const toHost = (m: FromPage) => window.fabrika.send("desk", m);
 /** What the page tells the app itself: on the desk's port, read by main and not passed on. */
 const toApp = (m: ToApp) => window.fabrika.send("desk", m);
+/** One of a run's own inputs, on its port, as its window sends them (View, below). */
+const toRun = (run: string, msg: unknown) => window.fabrika.send(`run:${run}`, {type: "msg", msg});
 
 /** Hear a run's view on its port, from now on. */
 const follow = (run: string) =>
@@ -128,12 +178,12 @@ const follow = (run: string) =>
 	});
 
 /**
- * Make what the desk shows, and let go of what it no longer does: a terminal for each tile, in
- * any workspace, and the view of each run covering one.
+ * Make what the desk shows, and let go of what it no longer does: a terminal for each tile with a
+ * tsh, in any workspace, and the view of each run shown in one. A line's window has no terminal.
  */
 const follows = (desk: Desk) => {
 	const all = desk.at === "open" ? desk.workspaces.flatMap((ws) => tilesOf(ws)) : [];
-	const tiles = new Set(all.map((t) => t.id));
+	const tiles = new Set(all.flatMap((t) => (t.shows.kind === "window" ? [] : [t.id])));
 	const runs = new Set(all.flatMap((t) => (t.shows.run === null ? [] : [t.shows.run.id])));
 	for (const tile of tiles)
 		if (!terminals.has(tile) && ghostty !== null) terminals.set(tile, terminalFor(ghostty, tile));
@@ -155,6 +205,34 @@ const follows = (desk: Desk) => {
 	}
 };
 
+/** The workspace's element, measured for the host, and the size it was last told. */
+let measured: HTMLElement | null = null;
+let told = "";
+
+/**
+ * Tell the host the workspace's size in px, when it changed: the desk opens a line's windows
+ * folded where they would be too small (layout/line.ts). `again` tells it even when it did not
+ * change, as to a host attached anew.
+ */
+const tellArea = (again = false) => {
+	if (measured === null) return;
+	const width = Math.round(measured.clientWidth);
+	const height = Math.round(measured.clientHeight);
+	const now = `${width}x${height}`;
+	if (now === told && !again) return;
+	told = now;
+	toHost({type: "area", width, height});
+};
+
+const sizes = new ResizeObserver(() => tellArea());
+
+/** The workspace's ref: measured while it is drawn. */
+const measure = (el: HTMLDivElement | null) => {
+	if (measured !== null) sizes.unobserve(measured);
+	measured = el;
+	if (el !== null) sizes.observe(el);
+};
+
 /** The keys while the host decides. */
 let hold: Hold = holdMachine.init(null, undefined)[0];
 /** A key held back is being pressed again: the page's own listener lets it go by. */
@@ -166,6 +244,38 @@ const editable = (el: Element | null): el is HTMLElement =>
 	el instanceof HTMLTextAreaElement ||
 	(el instanceof HTMLElement && el.isContentEditable && el.closest("[data-view]") !== null);
 
+/** With something over the desk, keep focus in it: answers whether focus was already there. */
+const focusOver = (target: EventTarget | null): "in" | "moved in" => {
+	const box = document.querySelector<HTMLElement>("[data-over]");
+	if (box === null || (target instanceof Element && box.contains(target))) return "in";
+	(box.querySelector<HTMLElement>("input") ?? box).focus();
+	return "moved in";
+};
+
+/**
+ * Is the desk mid-key: Ctrl-B armed, or its own question waiting? A key pressed while one is
+ * still out at the host (Ctrl-B, its answer not in yet) queues behind it in the hold, so it counts
+ * as armed: `C-b J` typed fast still reaches the desk and closes the list.
+ */
+const midKey = (): MidKey => {
+	const open = store.desk?.at === "open" ? store.desk : null;
+	return {
+		armed: (open?.prefix.armed ?? false) || hold.waiting !== null,
+		asking: open?.ask != null,
+	};
+};
+
+/**
+ * Who a key goes to, with what lies over the desk: the desk; the over, with focus in it; or the
+ * over with focus outside it, so the key is dropped, never reaches a tile, and focus has moved in.
+ * For a key pressed now and a key held for the host's answer alike: an over opens before that
+ * answer is in, so a key can be held while it is already open.
+ */
+const keyForOver = (name: string, target: EventTarget | null): "desk" | "in" | "moved in" => {
+	if (keyGoesTo(store.frame.over, name, store.prefix, midKey()) !== "over") return "desk";
+	return focusOver(target);
+};
+
 /**
  * Press a held key again, where focus is now: a character into a view's text box, as typing
  * does, or the key itself, which a tile's terminal reads as it reads the keyboard's.
@@ -173,6 +283,7 @@ const editable = (el: Element | null): el is HTMLElement =>
 const pressAgain = (key: Key) => {
 	const p = key.press;
 	const target = document.activeElement ?? document.body;
+	if (keyForOver(key.name, target) === "moved in") return;
 	replaying = true;
 	if (editable(target) && p.key.length === 1 && !p.ctrl && !p.alt && !p.meta)
 		document.execCommand("insertText", false, p.key);
@@ -205,6 +316,69 @@ const holdStep = (msg: HoldMsg): boolean => {
 	return live;
 };
 
+/** How long a note on the bottom line stays, as after the palette ran a command. */
+const NOTE_MS = 4000;
+let noteTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Step the frame's own state (frame.ts), and draw it. A note goes after a while. Answers whether
+ * the frame changed: a key it did not change goes on.
+ */
+const frameStep = (m: FrameMsg): boolean => {
+	const next = frameUpdate(store.frame, m);
+	if (next === store.frame) return false;
+	if (next.note !== null && next.note !== store.frame.note) {
+		clearTimeout(noteTimer);
+		noteTimer = setTimeout(() => frameStep({type: "unnote"}), NOTE_MS);
+	}
+	store.frame = next;
+	changed();
+	return true;
+};
+
+/** What info mode says of a part of the page: the words of the nearest `data-info`, or `null`. */
+const wordsAt = (at: EventTarget | null): string | null =>
+	at instanceof Element ? (at.closest<HTMLElement>("[data-info]")?.dataset.info ?? null) : null;
+
+/** A bottom-line item keyboard focus was on: its name (`data-item`) and its words in info mode. */
+interface KeyedFrom {
+	readonly item: string;
+	readonly words: string | null;
+}
+
+/**
+ * The bottom line's item keyboard focus was on when Ctrl-B was pressed, or `null`. While the desk
+ * is mid-key, the line's right side says `esc cancels` in place of its items, so focus on one falls
+ * to the page. It goes back to that item once the key is done (`focusBack`), and info mode, turned
+ * on in between, explains that item.
+ */
+let keyedFrom: KeyedFrom | null = null;
+
+/** What keyboard focus is on, in info mode's words: through the desk's key, the item it was on. */
+const focusWords = (): string | null =>
+	document.activeElement === document.body
+		? (keyedFrom?.words ?? null)
+		: wordsAt(document.activeElement);
+
+/** Ctrl-B pressed: note the bottom line's item focus is on, if any, before the key takes it away. */
+const noteKeyedFrom = (at: EventTarget | null) => {
+	if (at === document.body) return;
+	const item =
+		at instanceof Element
+			? at.closest<HTMLElement>(".bottomline [data-item]")?.dataset.item
+			: undefined;
+	keyedFrom = item === undefined ? null : {item, words: wordsAt(at)};
+};
+
+/** Focus goes back to the bottom line's item it fell from while the desk was mid-key. */
+const focusBack = () => {
+	const from = keyedFrom;
+	keyedFrom = null;
+	if (from === null || document.activeElement !== document.body) return;
+	const items = document.querySelectorAll<HTMLElement>(".bottomline [data-item]");
+	[...items].find((el) => el.dataset.item === from.item)?.focus();
+};
+
 /** What the host, or the app when the host is not there, tells the page on the desk's port. */
 const heard = (raw: unknown) => {
 	const read = readToPage(raw);
@@ -213,9 +387,24 @@ const heard = (raw: unknown) => {
 	switch (m.type) {
 		case "keys":
 			store.prefix = m.prefix;
+			store.table = m.table;
 			return changed();
+		case "programs":
+			store.shapes = new Map(m.programs.map((p) => [p.name, {takes: p.takes, sends: p.sends}]));
+			return changed();
+		case "asks":
+			store.asks = m.now;
+			return changed();
+		case "host":
+			store.host = m.now;
+			return changed();
+		case "show":
+			return m.what === "info"
+				? frameStep({type: "info", focus: focusWords()})
+				: frameStep({type: "show", what: m.what});
 		case "desk":
 			store.desk = m.desk;
+			store.attachedOnce = true;
 			follows(m.desk);
 			// Drawn now, so a key held for this answer lands on the tile the desk just focused.
 			flushSync(changed);
@@ -228,15 +417,65 @@ const heard = (raw: unknown) => {
 			store.link = m.now;
 			// Off a host, a key held for its answer gets none: the hold lets them go.
 			if (!attached(m.now)) holdStep({type: "down"});
+			// On one, it may be a host that never heard the workspace's size.
+			else tellArea(true);
 			return changed();
 	}
 };
 
-/** Every key, before anything else on the page sees it: the desk's, or the focused tile's. */
+/**
+ * On macOS, the window has no title bar of its own, so the top bar keeps room for its three
+ * buttons, and Command keys are the system's and the menu's.
+ */
+const MAC = /Mac/.test(navigator.userAgent);
+
+/** Take a key from the page: nothing else hears it. */
+const swallow = (e: KeyboardEvent) => {
+	e.preventDefault();
+	e.stopImmediatePropagation();
+};
+
+/**
+ * Every key, before anything else on the page sees it: the frame's own, the desk's, or the
+ * focused tile's. Cmd-K opens the palette, as in Linear and VS Code. Escape closes what lies over
+ * the desk; with nothing over it, it leaves info mode, unless the desk is mid-key, where it cancels
+ * the prefix or the question first; with neither, it goes on to the tile (frame.ts, `escaped`).
+ * While something lies over it, the keys it takes (frame.ts, `keyGoesTo`) go to it and
+ * never to a tile: if focus is not in it, the key is dropped and focus moves in.
+ *
+ * A key the system or the menu owns goes by all of that. Electron offers a key to the menu only if
+ * the page did not call `preventDefault` on it, and ghostty-web calls it on every Command key but
+ * Cmd-C and Cmd-V, and types the letter. Its custom key handler cannot help: answering true calls
+ * `preventDefault` too. So the key stops here, on its way down, before the terminal hears it. A
+ * program's view still hears it: a text box there may read Cmd-Enter.
+ *
+ * The menu's Paste and Cut act on whatever has focus. With something over the desk, focus goes back
+ * into it first, armed prefix or not, so such a key never reaches a tile nobody can see. Focus
+ * moving does not cancel the key, so Cmd-Q still quits.
+ *
+ * A key nobody owns is swallowed: nothing on the page hears it, and cancelling it is what keeps it
+ * from the menu, so Cmd-W does not reach Close Window.
+ */
 const onKey = (e: KeyboardEvent) => {
 	if (replaying) return;
-	const name = keyName({key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey});
+	const pressed = {key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey};
+	const owner = keyOwner(pressed, MAC);
+	if (owner === "nobody") return swallow(e);
+	if (owner === "system") {
+		if (e.target instanceof Element && e.target.closest(".term") !== null) e.stopPropagation();
+		if (store.frame.over.kind !== "none") focusOver(e.target);
+		return;
+	}
+	if (e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "k") {
+		swallow(e);
+		return frameStep({type: "palette"});
+	}
+	if (e.key === "Escape" && frameStep({type: "escape", desk: midKey()})) return swallow(e);
+	const name = keyName(pressed);
 	if (name === null) return;
+	const forOver = keyForOver(name, e.target);
+	if (forOver === "in") return;
+	if (forOver === "moved in") return swallow(e);
 	const press = {
 		key: e.key,
 		code: e.code,
@@ -245,17 +484,44 @@ const onKey = (e: KeyboardEvent) => {
 		meta: e.metaKey,
 		shift: e.shiftKey,
 	};
+	if (name === store.prefix) noteKeyedFrom(e.target);
 	if (holdStep({type: "key", key: {name, press}})) return;
-	e.preventDefault();
-	e.stopImmediatePropagation();
+	swallow(e);
+};
+
+/**
+ * In info mode, what the pointer is over or keyboard focus moved to, said on the bottom line
+ * (WCAG 2.1.1: what a pointer can learn, a keyboard can too).
+ */
+const explainAt = (e: Event) => {
+	if (store.frame.info.kind !== "on") return;
+	frameStep({type: "explain", text: wordsAt(e.target)});
 };
 
 /** The run a tile shows, if any: a run covering its tsh. */
 const runOf = (tile: TileNode) => tile.shows.run;
 
+/** What a strip or a title bar calls a node: its tile's program, or its tiles' programs in order. */
+const nameOf = (node: LayoutNode): string =>
+	[...tiles(node)].map((tile) => runOf(tile)?.program ?? "tsh").join(" · ");
+
+/**
+ * The tint a node is drawn with: its line's, when every tile under it shows a window of the one
+ * line, else none. The desk picks it (layout/line.ts); the page only mixes it in (window.css).
+ */
+const tintOf = (node: LayoutNode): number | undefined => {
+	const lines = [...tiles(node)].map((tile) => lineOf(tile));
+	const [first] = lines;
+	if (first == null || lines.some((line) => line?.id !== first.id)) return undefined;
+	return first.tint;
+};
+
+/** A press that takes no focus: the desk gives focus to a tile, and the page follows it. */
+const noFocus = (e: ReactPointerEvent) => e.preventDefault();
+
 function View({tile, run}: {readonly tile: TileId; readonly run: string}): ReactNode {
 	const view = store.views.get(run);
-	const send = (msg: unknown) => window.fabrika.send(`run:${run}`, {type: "msg", msg});
+	const send = (msg: unknown) => toRun(run, msg);
 	const known = view === undefined ? undefined : WINDOWS.get(view.program);
 	return (
 		// Focus sits here when the tile is focused: the keys a view takes go to it alone.
@@ -290,99 +556,161 @@ function Tile(props: {
 	/** The tile's question, as tmux's confirm-before asks it, or none. */
 	readonly asking: string | null;
 	readonly closing: boolean;
+	/** Does the desk let this tile fold: no for the last open tile of the workspace. */
+	readonly folds: boolean;
 }): ReactNode {
-	const {tile, focused, asking, closing} = props;
+	const {tile, focused, asking, closing, folds} = props;
 	const run = runOf(tile);
+	const line = lineOf(tile);
+	const of = line === null ? "" : `, a window of the line typed in ${line.from}`;
 	return (
 		<section
 			className={`tile${focused ? " focused" : ""}${closing ? " closing" : ""}`}
 			data-tile={tile.id}
-			aria-label={`tile ${tile.id}${run === null ? "" : `, ${run.program}`}${closing ? ", closing" : ""}`}
+			data-tint={tintOf(tile)}
+			aria-label={`tile ${tile.id}${run === null ? "" : `, ${run.program}`}${of}${closing ? ", closing" : ""}`}
 			aria-current={focused}
 			onPointerDownCapture={() => toHost({type: "click", tile: tile.id})}
 		>
-			<Slot tile={tile.id} />
+			{/* A press on the title bar focuses the tile, as anywhere on it; a double-click folds it,
+			    as on a device's title bar in Ableton Live. Not `disabled` when it cannot fold: a
+			    disabled button would swallow the press that focuses. */}
+			<button
+				type="button"
+				className="titlebar"
+				aria-label={`tile ${tile.id}: double-click to fold`}
+				aria-disabled={!folds}
+				data-info={INFO.titlebar}
+				onPointerDown={noFocus}
+				onDoubleClick={() => {
+					if (folds) toHost({type: "fold", tile: tile.id});
+				}}
+			>
+				<span>{nameOf(tile)}</span>
+				{/* The question itself is on the bottom line, where tmux asks it; the tile it is for
+				    says so too, so an eye on the tile does not miss it. */}
+				{asking !== null && <span className="asking">{asking}</span>}
+				<span className="tid">{tile.id}</span>
+			</button>
+			{tile.shows.kind !== "window" && <Slot tile={tile.id} />}
 			{run !== null && <View tile={tile.id} run={run.id} />}
 			{closing && (
 				<p className="closing-note" role="status">
 					closing
 				</p>
 			)}
-			{asking !== null && (
-				<div className="ask" role="alertdialog" aria-label={asking}>
-					<p>{asking}</p>
-				</div>
-			)}
 		</section>
 	);
 }
 
-/** The share of each child, after a drag of the border between `at` and the next child. */
-const dragged = (stack: StackNode, at: number, fraction: number) => {
-	const ids = stack.children.map((c) => c.id);
-	const a = ids[at];
-	const b = ids[at + 1];
-	if (a === undefined || b === undefined) return stack.sizes;
-	const before = ids.slice(0, at).reduce((sum, id) => sum + (stack.sizes[id] ?? 0), 0);
-	const pair = (stack.sizes[a] ?? 0) + (stack.sizes[b] ?? 0);
+/**
+ * The sizes after a drag of the border between two open children, `a` and `b`: they split their
+ * own two shares at `fraction` of the way across them, and no other child's share changes.
+ */
+const dragged = (
+	sizes: Readonly<Record<NodeId, number>>,
+	a: NodeId,
+	b: NodeId,
+	fraction: number,
+): Readonly<Record<NodeId, number>> => {
+	const pair = (sizes[a] ?? 0) + (sizes[b] ?? 0);
 	const MIN = Math.min(5, pair / 2);
-	const left = Math.min(pair - MIN, Math.max(MIN, fraction * 100 - before));
-	return {...stack.sizes, [a]: left, [b]: pair - left};
+	const left = Math.min(pair - MIN, Math.max(MIN, fraction * pair));
+	return {...sizes, [a]: left, [b]: pair - left};
 };
 
-function Stack(props: {
-	readonly stack: StackNode;
+/**
+ * A row or a column. An open child gets its share of the space the strips leave (`openShares`),
+ * with a border to drag between each two open children; a folded one is a strip in its place.
+ */
+function Container(props: {
+	readonly container: ContainerNode;
 	readonly ws: Workspace;
 	readonly desk: Open;
 }): ReactNode {
-	const {stack, ws, desk} = props;
+	const {container, ws, desk} = props;
 	const ref = useRef<HTMLDivElement>(null);
 	/** While a border is dragged, the sizes drawn: the desk is told once, when it is let go. */
 	const [drag, setDrag] = useState<Readonly<Record<string, number>> | null>(null);
-	const sizes = drag ?? stack.sizes;
-	const across = stack.orientation === "horizontal";
-	const border = (at: number) => (e: ReactPointerEvent<HTMLHRElement>) => {
+	const shares = openShares(drag === null ? container : {...container, sizes: drag});
+	const row = container.orientation === "horizontal";
+	const open = container.children.filter((child) => !isFolded(child)).map((child) => child.id);
+	const cell = (id: NodeId) =>
+		[...(ref.current?.children ?? [])].find(
+			(el) => el instanceof HTMLElement && el.dataset.cell === id,
+		);
+	const border = (a: NodeId, b: NodeId) => (e: ReactPointerEvent<HTMLHRElement>) => {
 		e.preventDefault();
 		e.stopPropagation();
-		const box = ref.current?.getBoundingClientRect();
-		if (box === undefined) return;
+		const [first, second] = [cell(a)?.getBoundingClientRect(), cell(b)?.getBoundingClientRect()];
+		if (first === undefined || second === undefined) return;
+		const [from, to] = row ? [first.left, second.right] : [first.top, second.bottom];
 		const target = e.currentTarget;
 		target.setPointerCapture(e.pointerId);
-		let last = stack.sizes;
+		let last = container.sizes;
 		const move = (m: PointerEvent) => {
-			const fraction = across
-				? (m.clientX - box.left) / box.width
-				: (m.clientY - box.top) / box.height;
-			last = dragged(stack, at, fraction);
+			const at = row ? m.clientX : m.clientY;
+			last = dragged(container.sizes, a, b, (at - from) / Math.max(1, to - from));
 			setDrag(last);
 		};
 		const up = () => {
 			target.removeEventListener("pointermove", move);
 			target.removeEventListener("pointerup", up);
 			setDrag(null);
-			toHost({type: "resize", stack: stack.id, sizes: last});
+			toHost({type: "resize", container: container.id, sizes: last});
 		};
 		target.addEventListener("pointermove", move);
 		target.addEventListener("pointerup", up);
 	};
 	return (
-		<div className={`stack ${stack.orientation}`} data-stack={stack.id} ref={ref}>
-			{stack.children.flatMap((child, i) => [
-				...(i === 0
-					? []
-					: [
-							<hr
-								key={`border-${child.id}`}
-								className="border"
-								aria-orientation={across ? "vertical" : "horizontal"}
-								onPointerDown={border(i - 1)}
-							/>,
-						]),
-				<div key={child.id} className="cell" style={{flexGrow: sizes[child.id] ?? 1}}>
-					<Node node={child} ws={ws} desk={desk} />
-				</div>,
-			])}
+		<div className={`container ${container.orientation}`} data-container={container.id} ref={ref}>
+			{container.children.flatMap((child) => {
+				if (isFolded(child)) return [<Strip key={child.id} node={child} />];
+				const before = open[open.indexOf(child.id) - 1];
+				return [
+					...(before === undefined
+						? []
+						: [
+								<hr
+									key={`border-${child.id}`}
+									className="border"
+									aria-orientation={row ? "vertical" : "horizontal"}
+									onPointerDown={border(before, child.id)}
+								/>,
+							]),
+					<div
+						key={child.id}
+						className="cell"
+						data-cell={child.id}
+						style={{flexGrow: shares[child.id] ?? 1}}
+					>
+						<Node node={child} ws={ws} desk={desk} />
+					</div>,
+				];
+			})}
 		</div>
+	);
+}
+
+/**
+ * A folded tile, or a container whose tiles are all folded: a thin strip in its place, along its
+ * parent's direction, named by its programs. A click opens every tile it stands for.
+ */
+function Strip({node}: {readonly node: LayoutNode}): ReactNode {
+	const name = nameOf(node);
+	return (
+		<button
+			type="button"
+			className="strip"
+			data-strip={node.id}
+			data-tint={tintOf(node)}
+			aria-label={`open ${name}, ${node.id}`}
+			data-info={INFO.strip}
+			onPointerDown={noFocus}
+			onClick={() => toHost({type: "unfold", node: node.id})}
+		>
+			<span className="strip-name">{name}</span>
+		</button>
 	);
 }
 
@@ -392,11 +720,11 @@ function Node(props: {
 	readonly desk: Open;
 }): ReactNode {
 	const {node, ws, desk} = props;
-	if (node.tag === "stack") return <Stack stack={node} ws={ws} desk={desk} />;
-	return <DeskTile tile={node} ws={ws} desk={desk} />;
+	if (node.tag === "tile") return <DeskTile tile={node} ws={ws} desk={desk} />;
+	return <Container container={node} ws={ws} desk={desk} />;
 }
 
-/** A tile as the desk has it now: focused or not, asking or not, closing or not. */
+/** A tile as the desk has it now: focused or not, asking or not, closing or not, able to fold or not. */
 function DeskTile(props: {
 	readonly tile: TileNode;
 	readonly ws: Workspace;
@@ -409,70 +737,16 @@ function DeskTile(props: {
 			focused={tile.id === ws.focused}
 			asking={desk.ask === tile.id ? questionOf(desk, tile.id) : null}
 			closing={desk.closing.includes(tile.id)}
+			folds={fold(ws.layout, tile.id) !== ws.layout}
 		/>
 	);
 }
 
-function Status({desk}: {readonly desk: Open}): ReactNode {
-	const tile = focusedOf(desk);
-	const running = tile === null ? 0 : (desk.running[tile.id] ?? 0);
-	return (
-		<footer className="status">
-			<ol className="workspaces" aria-label="workspaces">
-				{desk.workspaces.map((ws, i) => (
-					<li key={ws.id} aria-current={ws.id === desk.active}>
-						{i + 1}
-					</li>
-				))}
-			</ol>
-			<span className="focus">
-				{tile?.id ?? ""}
-				{running > 0 ? ` · ${running} running` : ""}
-			</span>
-			<span className={`prefix${desk.prefix.armed ? " armed" : ""}`}>
-				{desk.prefix.armed ? store.prefix : ""}
-			</span>
-		</footer>
-	);
-}
-
-/**
- * The link is down and the app is on it: said in a corner of the desk, as a status, not an alert.
- * Stopped, it offers Try again, which takes no focus until the person moves to it. Before the
- * first desk came, the app was never attached: it is connecting, not reconnecting.
- */
-function LostNote(props: {
-	readonly lost: Extract<LinkNow, {readonly kind: "reconnecting" | "stopped"}>;
-	readonly first: boolean;
-}): ReactNode {
-	const {lost, first} = props;
-	const stopped = lost.kind === "stopped";
-	const verb = first ? "connect" : "reconnect";
-	return (
-		<section className="lost-note" role="status" aria-label="the link to the host">
-			<h1>
-				{stopped
-					? `Could not ${verb} to the host`
-					: `${first ? "Connecting" : "Reconnecting"} to the host…`}
-			</h1>
-			<p>{lost.why}</p>
-			{stopped ? (
-				<>
-					<p>It stopped trying after five minutes.</p>
-					<button type="button" onClick={() => toApp({type: "again"})}>
-						Try again
-					</button>
-				</>
-			) : null}
-		</section>
-	);
-}
-
-/** What a restart does to the jobs, said before the person says yes. */
+/** What a restart does to the jobs, said before the person confirms. */
 const JOBS_STOP =
 	"Its running jobs stop. Their saved lists stay, and each comes back with attach %n.";
 
-/** The one way out of a host that runs older code: the person's yes, never the app's own. */
+/** The one way out of a host that runs older code: the person confirms it, never the app on its own. */
 function Restart(): ReactNode {
 	return (
 		<button type="button" onClick={() => toApp({type: "restart"})}>
@@ -484,38 +758,22 @@ function Restart(): ReactNode {
 /** Is the app on a host now: the desk is in reach. */
 const attached = (now: LinkNow): now is Attached => now.kind === "up" || now.kind === "build";
 
-/** What the window shows for the link: a page in place of the desk, or the desk with a note. */
+/**
+ * What the window shows for the link: a page in place of the desk, or the desk, dimmed and out
+ * of reach while the link is down. How the host is, and what to do about it, is the top bar's
+ * host item (frame.tsx): said in words, quietly, never as an alert.
+ */
 type Shown =
 	| {readonly kind: "instead"; readonly page: ReactNode}
 	/** `dim`: the desk is out of reach, as the link is down. */
-	| {readonly kind: "over"; readonly dim: boolean; readonly note: ReactNode};
+	| {readonly kind: "over"; readonly dim: boolean};
 
-/**
- * One branch for each kind of `LinkNow`: one left out does not compile. `first`: no desk came
- * yet, so the app was never attached.
- */
-const linkView = (now: LinkNow, first: boolean): Shown => {
+/** One branch for each kind of `LinkNow`: one left out does not compile. */
+const linkView = (now: LinkNow): Shown => {
 	switch (now.kind) {
 		case "up":
-			return {kind: "over", dim: false, note: null};
 		case "build":
-			// Attached, and the desk is in reach: a banner, not an alert.
-			return {
-				kind: "over",
-				dim: false,
-				note: (
-					<section className="older-note" role="status" aria-label="the host's build">
-						<h1>The host runs older code</h1>
-						<p>
-							{now.theirs === null
-								? `It names no build. This app is build ${now.ours}.`
-								: `It is build ${now.theirs}. This app is build ${now.ours}.`}{" "}
-							{JOBS_STOP}
-						</p>
-						<Restart />
-					</section>
-				),
-			};
+			return {kind: "over", dim: false};
 		case "version":
 			// Another version of the link: the app does not attach, so there is no desk to keep.
 			return {
@@ -533,18 +791,8 @@ const linkView = (now: LinkNow, first: boolean): Shown => {
 			};
 		case "reconnecting":
 		case "stopped":
-			return {kind: "over", dim: true, note: <LostNote lost={now} first={first} />};
 		case "restarting":
-			return {
-				kind: "over",
-				dim: true,
-				note: (
-					<section className="lost-note" role="status" aria-label="the link to the host">
-						<h1>Stopping the old host…</h1>
-						<p>Once it has stopped, this app starts its own and attaches.</p>
-					</section>
-				),
-			};
+			return {kind: "over", dim: true};
 		default:
 			return absurd(now);
 	}
@@ -553,45 +801,80 @@ const linkView = (now: LinkNow, first: boolean): Shown => {
 function App(): ReactNode {
 	useSyncExternalStore(subscribe, () => store.version);
 	const desk = store.desk;
-	const view = linkView(store.link, desk === null);
+	const view = linkView(store.link);
 	/** The desk is out of reach: the link is down, or there is no desk to reach. */
 	const away = view.kind === "instead" || view.dim;
-	const ws = desk?.at === "open" ? activeOf(desk) : null;
-	const focused = desk?.at === "open" ? focusedOf(desk) : null;
+	const open = desk?.at === "open" ? desk : null;
+	const ws = open === null ? null : activeOf(open);
+	const focused = open === null ? null : focusedOf(open);
+	const over = store.frame.over.kind;
 	const shown = focused === null ? "" : `${ws?.id}/${focused.id}/${runOf(focused)?.id ?? "tsh"}`;
 	// Focus follows the desk: to the focused tile's terminal, or to the view that covers it. Only
 	// when that changes, so a view's own input keeps focus while its view is drawn again. A layout
 	// effect, so focus has moved before a key held for the host's answer is pressed again. The
-	// desk is out of reach while the link is down, so focus goes back to it once the link is up.
-	useLayoutEffect(() => {
-		if (focused === null || away) return;
+	// desk is out of reach while the link is down, so focus goes back to it once the link is up,
+	// and while something lies over it, which takes focus (pop.tsx); it goes back once that closes.
+	const focusTile = useEffectEvent(() => {
+		if (focused === null) return;
 		const into = document.querySelector(`[data-tile="${focused.id}"]`);
 		if (into?.contains(document.activeElement) === true && document.activeElement !== into) return;
 		if (focused.shows.kind === "tsh" && focused.shows.run === null)
 			terminals.get(focused.id)?.focus();
 		else document.querySelector<HTMLElement>(`[data-view="${focused.id}"]`)?.focus();
-	}, [shown, away]);
-	if (view.kind === "instead") return view.page;
-	const note = view.note;
-	if (desk === null) return note ?? <p className="starting">starting</p>;
-	if (desk.at === "over" || ws === null) return note ?? <p className="starting">closing</p>;
-	const zoomed = ws.layout.zoomed;
+	});
+	useLayoutEffect(() => {
+		if (!away && over === "none") focusTile();
+	}, [shown, away, over]);
+	// The desk's key done, focus goes back to the bottom line's item it was on, if it fell.
+	const mid = (open?.prefix.armed ?? false) || open?.ask != null;
+	useLayoutEffect(() => {
+		if (!mid) focusBack();
+	}, [mid]);
+	const props: FrameProps = {
+		desk: open,
+		frame: store.frame,
+		asks: store.asks,
+		host: store.host,
+		link: store.link,
+		attachedOnce: store.attachedOnce,
+		prefix: store.prefix,
+		table: store.table,
+		shapes: store.shapes,
+		tickets: ticketsShown(store.views),
+		armed: open?.prefix.armed ?? false,
+		toHost,
+		toApp,
+		toRun,
+		step: frameStep,
+	};
+	const bare = store.frame.bare;
+	const zoomed = ws?.layout.zoomed ?? null;
 	return (
-		<div className={`desk${view.dim ? " lost" : ""}`}>
-			<div
-				className="workspace"
-				data-workspace={ws.id}
-				data-zoomed={zoomed ?? undefined}
-				inert={view.dim}
-			>
-				{zoomed !== null ? (
-					<ZoomedTile ws={ws} id={zoomed} desk={desk} />
-				) : (
-					<Node node={ws.layout.root} ws={ws} desk={desk} />
-				)}
-			</div>
-			<Status desk={desk} />
-			{note}
+		<div
+			className={`desk${view.kind === "over" && view.dim ? " lost" : ""}${MAC ? " mac" : ""}${bare ? " bare" : ""}`}
+		>
+			{bare || view.kind === "instead" ? <Band /> : <TopBar {...props} />}
+			{view.kind === "instead" ? (
+				view.page
+			) : open === null || ws === null ? (
+				<p className="starting">{desk === null ? "starting" : "closing"}</p>
+			) : (
+				<div
+					className="workspace"
+					ref={measure}
+					data-workspace={ws.id}
+					data-zoomed={zoomed ?? undefined}
+					inert={view.dim}
+				>
+					{zoomed !== null ? (
+						<ZoomedTile ws={ws} id={zoomed} desk={open} />
+					) : (
+						<Node node={ws.layout.root} ws={ws} desk={open} />
+					)}
+				</div>
+			)}
+			<BottomArea {...props} instead={view.kind === "instead"} />
+			<Over {...props} />
 		</div>
 	);
 }
@@ -610,6 +893,7 @@ function ZoomedTile(props: {
 const boot = Effect.gen(function* () {
 	ghostty = yield* loadGhostty;
 	window.addEventListener("keydown", onKey, {capture: true});
+	for (const on of EXPLAIN_ON) window.addEventListener(on, explainAt);
 	window.fabrika.onMessage("desk", heard);
 	const root = document.getElementById("root");
 	if (root !== null) createRoot(root).render(<App />);

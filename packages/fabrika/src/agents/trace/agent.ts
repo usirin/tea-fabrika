@@ -1,8 +1,9 @@
 import type {AgentEvent} from "@demlik/tea/agent";
-import {type AgentSpans, agentSpans} from "@demlik/tea/otel";
+import {type AgentSpans, agentSpans, maskBase64DataUris, type SpanMask} from "@demlik/tea/otel";
 import * as OtelTracer from "@effect/opentelemetry/OtelTracer";
 import {type Context, ROOT_CONTEXT, type Tracer, trace} from "@opentelemetry/api";
 import {Clock, Effect, Option} from "effect";
+import {ATTR} from "../../program/trace.ts";
 import {sdkRunner} from "../claude/draft.ts";
 import {sdkEvents} from "./sdk-events.ts";
 
@@ -21,17 +22,87 @@ import {sdkEvents} from "./sdk-events.ts";
 //
 // What `agentSpans` would export of the agent's words (the prompt, each turn,
 // each tool's input and result) is replaced before export: spans carry names
-// and ids, not what an agent read or wrote.
+// and ids, not what an agent read or wrote. A lane's runs are the exception
+// (docs/direction/an-agent-run-keeps-its-content.md): they keep their content,
+// with any text shaped like a key cut first, and a job's record keeps it apart
+// from the spans, where a person can delete it.
+//
+//   agentTrace("build")                     every input and output: "[not exported]"
+//   agentTrace("build", {content: "kept"})  each as it was, a key in it "[key cut]"
 
 /** What every value `agentSpans` would export becomes. */
 export const KEPT_OUT = "[not exported]";
 
-/** A tracer that starts any span `agentSpans` parents to its made-up remote parent under `parent` instead. */
-export const underParent = (tracer: Tracer, parent: Context): Tracer => {
+/** What a key-shaped string in kept content becomes. */
+const KEY_CUT = "[key cut]";
+
+/**
+ * Where a key starts: not inside a longer word, so the `sk-` in `task-list` stays whole. Right
+ * after JSON's `\n`, `\r` or `\t` is a start too: the mask reads a value as JSON text, where a key
+ * on its own line follows the `n` of `\n`.
+ */
+const START = String.raw`(?:(?<![A-Za-z0-9])|(?<=\\[nrt]))`;
+
+/** A key shape: `body` from a {@link START}. */
+const word = (body: string) => new RegExp(`${START}${body}`, "g");
+
+/**
+ * Text shaped like a key, as the makers write theirs: what a leak grep looks for. Each is the
+ * maker's published prefix, where a word starts, and the run of characters after it. A word that
+ * starts with a prefix and runs on long enough is still cut. Text fabrika gave an agent as a
+ * `Redacted` is not here: the content a lane keeps holds none yet.
+ */
+const KEY_SHAPES: readonly RegExp[] = [
+	// GitHub: classic tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`), and fine-grained ones.
+	word(String.raw`gh[pousr]_[A-Za-z0-9]{30,}`),
+	word(String.raw`github_pat_[A-Za-z0-9_]{30,}`),
+	// Anthropic (`sk-ant-`), and OpenAI's `sk-`, `sk-proj-` and the rest.
+	word(String.raw`sk-[A-Za-z0-9_-]{20,}`),
+	// AWS access key ids.
+	word(String.raw`(?:AKIA|ASIA)[0-9A-Z]{16}`),
+	// Slack.
+	word(String.raw`xox[abposr]-[A-Za-z0-9-]{10,}`),
+	// Google API keys.
+	word(String.raw`AIza[0-9A-Za-z_-]{35}`),
+	// Stripe secret and restricted keys.
+	word(String.raw`[rs]k_(?:live|test)_[0-9A-Za-z]{20,}`),
+	// npm access tokens.
+	word(String.raw`npm_[A-Za-z0-9]{36,}`),
+	// A JWT: a header and a payload, each JSON as base64url (`{"` is `eyJ`), and a signature.
+	word(String.raw`eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`),
+	// A private key, PEM or OpenSSH, whole, its line breaks as text or as JSON's `\n`.
+	/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+];
+
+/** `text` with every key-shaped string in it cut to {@link KEY_CUT}, and the rest as it was. Pure. */
+export const cutKeys = (text: string): string =>
+	KEY_SHAPES.reduce((out, shape) => out.replace(shape, KEY_CUT), text);
+
+/** What a run's content is: kept out, as every run's is, or kept, as a lane's runs are. */
+export type ContentIs = "kept_out" | "kept";
+
+/** The mask a kept run's content goes through: keys cut, then tea's own default. */
+const keptMask: SpanMask = ({data}) =>
+	maskBase64DataUris({data: typeof data === "string" ? cutKeys(data) : data});
+
+/**
+ * A tracer that starts any span `agentSpans` parents to its made-up remote parent under `parent`
+ * instead. `marks`: attributes every span it starts carries, as a kept run's `tea.agent.content`.
+ */
+export const underParent = (
+	tracer: Tracer,
+	parent: Context,
+	marks: Readonly<Record<string, string>> = {},
+): Tracer => {
 	const at = (context: Context | undefined) =>
 		context !== undefined && trace.getSpanContext(context)?.isRemote === true ? parent : context;
 	return {
-		startSpan: (name, options, context) => tracer.startSpan(name, options, at(context)),
+		startSpan: (name, options, context) =>
+			tracer.startSpan(
+				name,
+				{...options, attributes: {...options?.attributes, ...marks}},
+				at(context),
+			),
 		// `agentSpans` never makes a span current; this keeps the interface whole all the same.
 		startActiveSpan: tracer.startActiveSpan.bind(tracer),
 	};
@@ -40,9 +111,13 @@ export const underParent = (tracer: Tracer, parent: Context): Tracer => {
 /**
  * The span writer for one agent, under the Effect span current here. `null`
  * when nothing traces: no OpenTelemetry tracer was provided (tracing is off),
- * or there is no span to hang it under.
+ * or there is no span to hang it under. `content`: kept out unless a caller
+ * keeps it, as a lane does.
  */
-export const agentTrace = <R>(name: string): Effect.Effect<AgentSpans<R> | null> =>
+export const agentTrace = <R>(
+	name: string,
+	{content = "kept_out"}: {readonly content?: ContentIs} = {},
+): Effect.Effect<AgentSpans<R> | null> =>
 	Effect.gen(function* () {
 		const tracer = yield* Effect.serviceOption(OtelTracer.OtelTracer);
 		const current = yield* Effect.option(OtelTracer.currentOtelSpan);
@@ -50,9 +125,9 @@ export const agentTrace = <R>(name: string): Effect.Effect<AgentSpans<R> | null>
 		const parent = trace.setSpan(ROOT_CONTEXT, current.value);
 		const traceId = current.value.spanContext().traceId;
 		return agentSpans<R>({
-			tracer: underParent(tracer.value, parent),
+			tracer: underParent(tracer.value, parent, content === "kept" ? {[ATTR.content]: "kept"} : {}),
 			name,
-			mask: () => KEPT_OUT,
+			mask: content === "kept" ? keptMask : () => KEPT_OUT,
 			// The agent run's own made-up parent names the same trace, though nothing hangs off it.
 			traceIdOf: () => traceId,
 		});

@@ -1,0 +1,31 @@
+[
+ {
+  "id": "local:toy/slug-lab/pull/1",
+  "kind": "exam",
+  "ticket": 1,
+  "branch": "exam/1",
+  "head": "a802f4b5df923a42229b953f399d2d9abc19089e",
+  "tree": "<tmp>/run6/home/work/trees/exam-1",
+  "state": "merged",
+  "title": "Rule changes for ticket 1",
+  "body": "The rule changes the plan for ticket 1 lists. They land before the rest of its work.\n\n- `src/slug.laws.test.ts`: In T1's separate PR, change 40 to 80 in the law comment and length assertion. Preserve the trailing-hyphen assertion. Why: The current law rejects the longer slugs explicitly requested by the ticket.",
+  "verdicts": []
+ },
+ {
+  "id": "local:toy/slug-lab/pull/2",
+  "kind": "lane",
+  "ticket": 1,
+  "branch": "lane/1",
+  "head": "2f511929e838a4ea2a92d6e917074d59680e3e55",
+  "tree": "<tmp>/run6/home/work/trees/1",
+  "state": "merged",
+  "title": "Let slugs run to 80 characters",
+  "body": "From tracker ticket 1.\n\nAllow post slugs up to 80 characters while keeping trailing hyphens out. Update the law in a separate PR first.\n\nNo deviations.",
+  "verdicts": [
+   {
+    "kind": "review-code",
+    "verdict": "pass"
+   }
+  ]
+ }
+]

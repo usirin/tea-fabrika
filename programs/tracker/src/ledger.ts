@@ -1,7 +1,24 @@
-import {Ledger, MEMBERS, namesOf, streams, type Writer, writerText} from "@kampus/fabrika";
+import {
+	Ledger,
+	MEMBERS,
+	namesOf,
+	type Row,
+	streams,
+	type Writer,
+	writerText,
+} from "@kampus/fabrika-old";
+import {
+	type Entry,
+	fold,
+	mayWrite,
+	nameOf,
+	ROOT,
+	readRow,
+	writtenDuring,
+} from "@kampus/pipeline/tickets/ticket";
 import {Clock, Context, Duration, Effect, Stream} from "effect";
-import type {ClockSub, load, PollSub, save} from "./machine.ts";
-import {type Entry, factOf, mayWrite, nameOf, ROOT, readRow} from "./ticket.ts";
+import type {ClockSub, load, PollSub, save, saveHints} from "./machine.ts";
+import {factOf} from "./ticket.ts";
 
 // The tracker's cells and its poll: the only code that talks to the ledger. Through the `Ledger`
 // service, never the file under it, so the same tracker runs on memory in a test and on
@@ -71,6 +88,15 @@ const claim = (next: number, writer: string) =>
 		return yield* Effect.fail(refused(`${TRIES} ticket numbers from ${next}: every one was taken`));
 	});
 
+/** Ticket `n`'s timeline, folded from its inbox's rows, so a fact that does not fit is kept out. */
+const timelineOf = (n: number, rows: readonly Row[]): readonly Entry[] => {
+	const entries = rows.flatMap((row) => {
+		const read = readRow(row);
+		return read.kind === "entry" ? [read.entry] : [];
+	});
+	return fold([], entries).tickets.find((t) => t.number === n)?.timeline ?? [];
+};
+
 /** One write, as one fact in its ticket's inbox, under the write's message id. */
 export const saveCell = (cmd: ReturnType<typeof save>) =>
 	Effect.gen(function* () {
@@ -78,7 +104,7 @@ export const saveCell = (cmd: ReturnType<typeof save>) =>
 		const author = yield* Author;
 		const writer = writerText(author);
 		const {write} = cmd;
-		const fact = factOf(write);
+		const fact = yield* factOf(write);
 		// A ledger behind the door refuses this too; a ledger in this process does not, so it is here.
 		if (!mayWrite(author, fact.type))
 			return yield* Effect.fail({
@@ -86,12 +112,52 @@ export const saveCell = (cmd: ReturnType<typeof save>) =>
 				why: `only a person writes ${fact.type}, and this tracker writes as agent ${author.id}`,
 			});
 		const ticket = write.kind === "file" ? yield* claim(cmd.next, writer) : write.ticket;
-		yield* ledger.send(streams(nameOf(ticket)).inbox, cmd.id, {
-			kind: fact.type,
-			writer,
-			data: fact,
-		});
+		const inbox = streams(nameOf(ticket)).inbox;
+		// A comment names the run live as it is written, read off the ticket's own facts.
+		const data =
+			fact.type === "commented"
+				? writtenDuring(fact, timelineOf(ticket, yield* ledger.readStream(inbox, 0, -1)))
+				: fact;
+		yield* ledger.send(inbox, cmd.id, {kind: data.type, writer, data});
 		return {ticket};
+	}).pipe(
+		Effect.catchTags({
+			LedgerUnreachable: (e) => Effect.fail(unreachable(e)),
+			Denied: (e) => Effect.fail(refused(e.stream)),
+			Fenced: (e) => Effect.fail(refused(e.stream)),
+			UnknownName: (e) => Effect.fail(refused(e.stream)),
+		}),
+	);
+
+/**
+ * Who writes a duplicate hint: code, as the agent `duplicates` working for whoever sits at the
+ * window, never the person. On a ledger behind the door, the door stamps the row from the session
+ * instead, so there it reads as the session's writer until a host's agents sign in as their
+ * person.
+ */
+export const hinterOf = (author: Writer): Writer =>
+	author.kind === "user"
+		? {kind: "agent", id: "duplicates", for: author.id}
+		: "for" in author
+			? {kind: "agent", id: "duplicates", for: author.for}
+			: author;
+
+/** A ticket's duplicate hints, one fact each, under ids made from the ticket and the hint. */
+export const saveHintsCell = (cmd: ReturnType<typeof saveHints>) =>
+	Effect.gen(function* () {
+		const ledger = yield* Ledger;
+		const writer = writerText(hinterOf(yield* Author));
+		for (const hint of cmd.hints)
+			yield* ledger.send(
+				streams(nameOf(cmd.ticket)).inbox,
+				`maybe_duplicate/${cmd.ticket}/${hint.of}`,
+				{
+					kind: "maybe_duplicate",
+					writer,
+					data: {type: "maybe_duplicate", of: hint.of, yes: hint.yes},
+				},
+			);
+		return {};
 	}).pipe(
 		Effect.catchTags({
 			LedgerUnreachable: (e) => Effect.fail(unreachable(e)),

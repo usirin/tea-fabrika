@@ -7,6 +7,7 @@ import {
 } from "@opentelemetry/api";
 import {type Resource, resourceFromAttributes} from "@opentelemetry/resources";
 import type {ReadableSpan, SpanProcessor, TimedEvent} from "@opentelemetry/sdk-trace-base";
+import {CONTENT} from "../../host/otlp.ts";
 import {ATTR, SERVICE_NAME, traceParentIdOf} from "../../program/trace.ts";
 
 // What a trace viewer is shown: every span as it was made, changed on its way
@@ -20,7 +21,10 @@ import {ATTR, SERVICE_NAME, traceParentIdOf} from "../../program/trace.ts";
 //   root      a line's or a run's made-up parent (../program/trace.ts `traceOf`) is
 //             dropped, so the viewer does not look for a span that never comes
 //   agent     an agent run's turns and tool calls become events on one span,
-//             folded into the span it ran under: `builder · 14 turns`
+//             folded into the span it ran under: `builder · 14 turns`. A run that
+//             keeps its content (`tea.agent.content: kept`, a lane's) also shows
+//             each of them under that span, so a record keeps what each read and wrote,
+//             but only to a job's record, where a person can delete it (`ContentGoes`)
 //
 // Why fold the agent here and not where its spans are made: the spans stay
 // whole for any other reader (an LLM viewer wants every turn as a span), and
@@ -85,9 +89,11 @@ interface Folded {
 	readonly outputTokens: number;
 	readonly cachedTokens: number;
 	readonly events: readonly TimedEvent[];
+	/** Its turns and tool calls that kept their content: shown too, so a record can keep it. */
+	readonly kept: readonly ReadableSpan[];
 }
 
-/** An agent run's span and its turns and tool calls, as one. Nothing it read or wrote comes along. */
+/** An agent run's span and its turns and tool calls, as one. What it read or wrote comes along only in `kept`. */
 const fold = (agent: ReadableSpan, parts: readonly ReadableSpan[]): Folded => {
 	const tools = new Map<string, number>();
 	const events: TimedEvent[] = [];
@@ -119,7 +125,8 @@ const fold = (agent: ReadableSpan, parts: readonly ReadableSpan[]): Folded => {
 		}
 	}
 	events.sort((a, b) => ms(a.time) - ms(b.time));
-	return {span: agent, turns, tools, model, inputTokens, outputTokens, cachedTokens, events};
+	const kept = parts.filter((part) => part.attributes[ATTR.content] === "kept");
+	return {span: agent, turns, tools, model, inputTokens, outputTokens, cachedTokens, events, kept};
 };
 
 /** What an agent's span says once folded, without anything kept out or meant for an LLM viewer. */
@@ -168,10 +175,29 @@ const plain = (attributes: Attributes, keptOut: string | undefined): Attributes 
 	);
 
 /**
- * The processor in front of `next` that changes each span on its way out, as
- * the top of this file says, by what the host tells it (`Viewing`).
+ * What `next` does with an agent run's content. `kept`: it is a store a person can delete content
+ * from, as a job's record is (./otel.ts `recordTracing`), so a run that keeps its content sends its
+ * turns and tool calls too. `kept_out`: anywhere else, as a collector, where nothing can be
+ * deleted, so no content goes out at all.
  */
-export const view = (next: SpanProcessor, viewing: Viewing = {}): SpanProcessor => {
+export type ContentGoes = "kept" | "kept_out";
+
+/** A span's attributes without an agent's content: what a store that keeps none is sent. */
+const noContent = (attributes: Attributes): Attributes =>
+	Object.fromEntries(
+		Object.entries(attributes).filter(([key]) => key !== CONTENT.input && key !== CONTENT.output),
+	);
+
+/**
+ * The processor in front of `next` that changes each span on its way out, as
+ * the top of this file says, by what the host tells it (`Viewing`). `content`: what `next` does
+ * with an agent run's content.
+ */
+export const view = (
+	next: SpanProcessor,
+	viewing: Viewing = {},
+	content: ContentGoes = "kept_out",
+): SpanProcessor => {
 	const {wentWrong = () => false, keptOut, fallback = DEFAULT_SERVICE} = viewing;
 	const resources = new Map<string, Resource>();
 	/** An agent run's turns and tool calls, by its span id, until it ends. */
@@ -229,6 +255,26 @@ export const view = (next: SpanProcessor, viewing: Viewing = {}): SpanProcessor 
 			[agent],
 		);
 
+	/**
+	 * The turns and tool calls of `agents` that kept their content, each under `under`, the span
+	 * they were folded into, in its service: a record keeps what they read and wrote by their ids.
+	 * Only to a store that keeps content: anywhere else, the folded span says all that goes.
+	 */
+	const keptUnder = (under: ReadableSpan, agents: readonly Folded[]) => {
+		if (content === "kept_out") return;
+		for (const agent of agents)
+			for (const part of agent.kept)
+				next.onEnd(changed(part, {resource: under.resource}, under.spanContext()));
+	};
+
+	/** A turn or tool call of a run that never ended, as it was made: its content only if kept. */
+	const unfolded = (part: ReadableSpan): ReadableSpan =>
+		shown(
+			content === "kept"
+				? part
+				: changed(part, {attributes: noContent(part.attributes)}, part.parentSpanContext),
+		);
+
 	return {
 		onStart: (span, context) => next.onStart(span, context),
 		onEnd: (span) => {
@@ -247,14 +293,21 @@ export const view = (next: SpanProcessor, viewing: Viewing = {}): SpanProcessor 
 			}
 			const under = agents.get(id) ?? [];
 			agents.delete(id);
-			next.onEnd(shown(span, under));
+			const out = shown(span, under);
+			next.onEnd(out);
+			keptUnder(out, under);
 		},
 		forceFlush: () => next.forceFlush(),
 		shutdown: () => {
 			// What never found the span it would fold into: each agent run on its own, and
 			// the turns of a run that never ended as they were made.
-			for (const held of agents.values()) for (const agent of held) next.onEnd(alone(agent));
-			for (const held of parts.values()) for (const part of held) next.onEnd(shown(part));
+			for (const held of agents.values())
+				for (const agent of held) {
+					const out = alone(agent);
+					next.onEnd(out);
+					keptUnder(out, [agent]);
+				}
+			for (const held of parts.values()) for (const part of held) next.onEnd(unfolded(part));
 			agents.clear();
 			parts.clear();
 			return next.shutdown();

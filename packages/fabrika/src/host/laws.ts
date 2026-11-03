@@ -151,8 +151,8 @@ const okWord = (a: unknown) =>
 	typeof a === "object" && a !== null && "dup" in a && a.dup === true
 		? "dup"
 		: typeof a === "object" &&
-				a !== null &&
-				(("created" in a && a.created === false) || ("started" in a && a.started === false))
+			  a !== null &&
+			  (("created" in a && a.created === false) || ("started" in a && a.started === false))
 			? "existing"
 			: "ok";
 
@@ -160,12 +160,10 @@ const okWord = (a: unknown) =>
 type Said<A> = {readonly word: string; readonly value: A | null};
 /** One call's answer as a word: `ok`, `dup`, `existing`, or the refusal's (`stale`, `fenced`, ...). */
 export const say = <A, E extends {readonly _tag: string}>(e: Effect.Effect<A, E>) =>
-	Effect.map(
-		Effect.result(e),
-		(r): Said<A> =>
-			r._tag === "Success"
-				? {word: okWord(r.success), value: r.success}
-				: {word: WORDS[r.failure._tag] ?? r.failure._tag, value: null},
+	Effect.map(Effect.result(e), (r): Said<A> =>
+		r._tag === "Success"
+			? {word: okWord(r.success), value: r.success}
+			: {word: WORDS[r.failure._tag] ?? r.failure._tag, value: null},
 	);
 
 /**

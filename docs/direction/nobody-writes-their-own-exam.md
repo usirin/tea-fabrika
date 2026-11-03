@@ -57,7 +57,7 @@ if (touched.length > 0)
 ## What it costs
 
 - A real mistake in a law, found during a build, stops the build until the
-  owner says yes. Slower, on purpose.
+  owner approves. Slower, on purpose.
 - Some fixes need two pull requests: the exam first, then the code.
 
 ## What it does not stop

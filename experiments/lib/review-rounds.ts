@@ -339,17 +339,15 @@ export function loadRounds(opts: {
 		if (hit !== undefined) return hit;
 		const out = review.failed.flatMap((posted) => {
 			const stem = `${posted.commentId}.${Math.floor(posted.at / 1000)}`;
-			const found = findingsIn(posted.body).map(
-				(f, i): Item => ({
-					key: `${stem}#${i + 1}`,
-					level: "finding",
-					review,
-					posted,
-					blocking: f.blocking,
-					from: f.from,
-					whole: squeeze(f.text),
-				}),
-			);
+			const found = findingsIn(posted.body).map((f, i): Item => ({
+				key: `${stem}#${i + 1}`,
+				level: "finding",
+				review,
+				posted,
+				blocking: f.blocking,
+				from: f.from,
+				whole: squeeze(f.text),
+			}));
 			const detail = found.find((f) => f.blocking)?.whole ?? gistOf(posted.body);
 			const reason: Item = {
 				key: `${stem}#0`,

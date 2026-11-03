@@ -1,5 +1,5 @@
 import {defineMachine, type Sub, type TimerSub} from "@demlik/tea";
-import type {DraftRun} from "@kampus/fabrika/agents/claude";
+import type {DraftRun} from "@kampus/fabrika-old/agents/claude";
 import {
 	allOver,
 	type Children,

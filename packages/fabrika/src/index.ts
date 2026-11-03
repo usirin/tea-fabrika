@@ -1,8 +1,8 @@
-// `@kampus/fabrika`, the top level: the services and the code that runs
+// `@kampus/fabrika-old`, the top level: the services and the code that runs
 // anywhere, in a browser too. No platform is named here. Each platform's
 // implementation is a Layer on a subpath (`/memory`, `/sqlite`, `/http`,
 // `/local`, `/storage/node`, `/otel`, `/shell`, `/agents/claude`,
-// `/agents/sandbox`, `/agents/trace`, `/agents/acp`), and a program picks its
+// `/agents/sandbox`, `/agents/trace`, `/agents/acp`, `/sandbox/os`), and a program picks its
 // layers where it starts. `browser-check.ts` bundles this file for the browser
 // and fails on any `node:*`, Miniflare, Agent SDK, ACP or OpenTelemetry module
 // it pulls in (`pnpm lint` runs it).
@@ -45,8 +45,13 @@ export {
 	type Writes,
 } from "./host/door.ts";
 export * from "./host/host.ts";
+// A host's jobs: the one table a host keeps and every tsh on it shows. The table's own parts
+// (`Jobs`, `EMPTY`) are on `Shell`, where a line editor reads them.
+export {HostJobs, type JobsOnHost, type JobTable, openJobs} from "./host/host-jobs.ts";
+export {traceIdOf} from "./host/jobs.ts";
 // Where the door gets a person's keys: the service it asks, for a Layer written elsewhere.
 export * from "./host/keys.ts";
+export * from "./host/leader.ts";
 export * from "./host/ledger.ts";
 // Names in two places. The ledger's records win over the host's and the
 // rules' plain types of the same name, which they encode.
@@ -55,19 +60,27 @@ export * as Monitor from "./host/monitor.ts";
 // Moving a project: the plan on the laptop, the import window on the server's door.
 export * from "./host/move.ts";
 export * from "./host/observer.ts";
+// Where a host keeps its jobs' records, and how its table, steps and spans fill them.
+export * from "./host/records.ts";
 export * from "./host/rules.ts";
 export * from "./host/signer.ts";
 export {type KeyFile, keyFileOf, keyFileText, keyLineOf, keyOnly} from "./host/sshsig.ts";
 export * from "./host/supervisor.ts";
 export * from "./host/tail.ts";
+// A job's record, read: the shape the trace tile draws, `Traces`, and the `Storage` over it.
+export * from "./host/traces.ts";
 export * from "./host/writer.ts";
 // program: a tea machine as a program.
 export * from "./program/ear.ts";
+// What changed between two states, as a JSON Patch: the trace tile's diff of a step.
+export {diff as jsonPatchOf, type Json, type Op as JsonPatchOp} from "./program/json-patch.ts";
 // The kept run's types appear in what `defineProgram` hands back, so an app's
 // declarations name them (experiment 114: the pipeline's build needs them).
 export type {KeptFailed, KeptOptions} from "./program/kept.ts";
 export * from "./program/listed.ts";
 export * from "./program/mortal.ts";
+// How tsh shows an output's values to a person: one line each, a table, or nothing.
+export type {Hint, Person, TableCell, TableColumn, TableView, Tone} from "./program/person.ts";
 // A program's run, and how a host lists its flags, win over the supervisor's
 // and the storage's records of the same name.
 export type {Ended, Listed, Run, Started} from "./program/program.ts";
@@ -79,6 +92,11 @@ export * from "./program/storage.ts";
 // `StorageStale`. Its tag is still "Stale" (experiment 114).
 export {Stale as StorageStale} from "./program/storage.ts";
 export * from "./program/trace.ts";
+// A run's trace id: what names its job's record (`Traces.read`). `sha256Hex` is the hash under it,
+// at once and on any platform, for an id made from a key (an experiment's run id).
+export {runTraceId, sha256Hex} from "./program/trace-id.ts";
 export * from "./program/view.ts";
+// sandbox: the sandbox a program runs in, and its `none` version. The `os` one is on `/sandbox/os`.
+export * as Sandbox from "./sandbox/sandbox.ts";
 // shell: tsh's parts that run anywhere, as one module. Its launcher is on `/shell`.
 export * as Shell from "./shell/index.ts";

@@ -3,8 +3,8 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import type {Options, SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import type {Sub} from "@demlik/tea";
-import {type DraftRun, type Open, sdkRunner} from "@kampus/fabrika/agents/claude";
-import {agentEnv} from "@kampus/fabrika/agents/sandbox";
+import {type DraftRun, type Open, sdkRunner} from "@kampus/fabrika-old/agents/claude";
+import {agentEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Effect, Layer} from "effect";
 import {sortDraft} from "./machine.ts";
 import {type Settings, Sorter} from "./services.ts";
@@ -54,7 +54,7 @@ export const liveSorter = (config: SorterConfig = {}) =>
 					catch: () => ({_tag: "no_temp_folder" as const}),
 				}),
 				(made) =>
-					// biome-ignore lint/plugin: closing a scope has no way to fail with a typed error; a temp folder that cannot be removed is a bug
+					// oxlint-disable-next-line fabrika/no-effect-promise -- closing a scope has no way to fail with a typed error; a temp folder that cannot be removed is a bug
 					Effect.promise(() => rm(made, {recursive: true, force: true})),
 			);
 			return Sorter.of({

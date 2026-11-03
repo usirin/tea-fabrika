@@ -8,7 +8,15 @@ import {DatabaseSync} from "node:sqlite";
 import {pathToFileURL} from "node:url";
 import * as L from "./rules.ts";
 
+/** A ledger file: `connect`, then the ledger's tables made or moved to the newest. */
 export const openDb = (path: string): {db: L.Db; close(): void} => {
+	const opened = connect(path);
+	L.migrate(opened.db);
+	return opened;
+};
+
+/** One connection to a SQLite file, its tables left as they are: a ledger's, or a job's record. */
+export const connect = (path: string): {db: L.Db; close(): void} => {
 	const raw = new DatabaseSync(path);
 	// The wait first: switching to WAL takes a lock, and threads opening one file race for it.
 	raw.exec("PRAGMA busy_timeout = 10000");
@@ -46,7 +54,6 @@ export const openDb = (path: string): {db: L.Db; close(): void} => {
 			}
 		},
 	};
-	L.migrate(db);
 	return {db, close: () => raw.close()};
 };
 

@@ -15,7 +15,13 @@
 // The box lives in the caller's scope: when it closes, the box is taken away.
 
 import * as NodeStream from "@effect/platform-node/NodeStream";
-import {type AnyProgram, type BadShape, type Program, readFlags, type Word} from "@kampus/fabrika";
+import {
+	type AnyProgram,
+	type BadShape,
+	type Program,
+	readFlags,
+	type Word,
+} from "@kampus/fabrika-old";
 import {Deferred, Effect, Exit, type Scope, Stream} from "effect";
 import {type Box, boxed, type Started} from "./box.ts";
 import {answer, type Handlers, type Outside} from "./cmd-wall.ts";

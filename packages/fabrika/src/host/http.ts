@@ -25,7 +25,7 @@
 // and its timer late. So a 401 to a call, or a refused doorbell, logs in again too, once for
 // every caller holding the same ended token. A door that refuses the login itself (401, 403: the
 // person was removed) is kept as the answer, and every call fails with it from then on.
-import {NodeHttpClient} from "@effect/platform-node";
+import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import {
 	Clock,
 	Duration,
@@ -41,9 +41,11 @@ import {
 } from "effect";
 import {HttpClient, HttpClientRequest} from "effect/http";
 import {Socket} from "effect/socket";
+import {StorageBroken} from "../program/storage.ts";
 import {fromRaw, Ledger, LedgerUnreachable, type Raw, rawOf} from "./ledger.ts";
 import {type Moved, Progress, type Seal} from "./move.ts";
 import {Signer} from "./signer.ts";
+import {type JobCall, layerTraces, type RecordCalls} from "./traces.ts";
 import {Agent, User} from "./writer.ts";
 
 export interface HttpOptions {
@@ -184,6 +186,53 @@ export const layerHttp = (o: HttpOptions) =>
 		}),
 	).pipe(Layer.provide(clients(o.maxSockets ?? 8)));
 
+/**
+ * Calls to the jobs' records of a running ledger, through its door: `POST /<ledger>/job/<trace>`.
+ * What `jobStorage` and `layerTraces` (./traces.ts) take. The door stamps each write.
+ */
+export const recordsHttp = (o: HttpOptions): Effect.Effect<RecordCalls, never, Scope.Scope> =>
+	Effect.gen(function* () {
+		const http = yield* HttpClient.HttpClient;
+		const timeout = o.timeout ?? Duration.seconds(3);
+		const given = o.token;
+		const current = Redacted.isRedacted(given) ? Effect.succeed(given) : given.current;
+		const renew = Redacted.isRedacted(given) ? null : given.renew;
+		const send = (trace: string, call: JobCall, token: Redacted.Redacted<string>) =>
+			HttpClientRequest.post(`${o.url}/${o.ledger}/job/${trace}`).pipe(
+				HttpClientRequest.bearerToken(token),
+				HttpClientRequest.bodyJsonUnsafe(call),
+				http.execute,
+				Effect.flatMap((res) => Effect.map(res.text, (text) => ({status: res.status, text}))),
+				Effect.scoped,
+				Effect.timeout(timeout),
+				// A record's own writes are no part of the job's trace: traced, every save and step
+				// would come back to the record as a span of its own (25 of 31 in `seq --to 3 | tally`).
+				Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
+				Effect.provideService(HttpClient.TracerPropagationEnabled, false),
+			);
+		const calls: RecordCalls = (trace, call) =>
+			Effect.gen(function* () {
+				const token = yield* current;
+				const first = yield* send(trace, call, token);
+				const res =
+					first.status === 401 && renew !== null
+						? yield* send(trace, call, yield* renew(token))
+						: first;
+				if (res.status < 200 || res.status >= 300)
+					return yield* Effect.fail(new Error(`the record answered ${res.status}: ${res.text}`));
+				return yield* Effect.try(() => JSON.parse(res.text) as unknown);
+			}).pipe(
+				Effect.mapError(
+					(e) => new StorageBroken({message: `the record of ${trace} (${call.op})`, cause: e}),
+				),
+			);
+		return calls;
+	}).pipe(Effect.provide(clients(o.maxSockets ?? 8)));
+
+/** `Traces` over a running ledger's records, through its door. */
+export const layerTracesHttp = (o: HttpOptions) =>
+	Layer.unwrap(Effect.map(recordsHttp(o), layerTraces));
+
 /** Does anything answer HTTP on `url`: a ledger's door answers even with no credential. */
 export const answers = (url: string): Effect.Effect<boolean> =>
 	Effect.gen(function* () {
@@ -204,9 +253,12 @@ export class DoorRefused extends Schema.TaggedError<DoorRefused>()("DoorRefused"
 	why: Schema.String,
 }) {}
 
-/** A session the door gave: its token, who it is, and when it ends. */
+/**
+ * A session the door gave: its token, who it is, and when it ends. Read from the wire only: its
+ * encoding is refused, so no save or log through this schema writes the token's text.
+ */
 export const Session = Schema.Struct({
-	token: Schema.RedactedFromValue(Schema.String),
+	token: Schema.RedactedFromValue(Schema.String, {disallowEncode: true}),
 	who: Schema.Union([User, Agent]),
 	expires: Schema.Number,
 });

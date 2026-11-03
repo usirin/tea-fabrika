@@ -899,7 +899,7 @@ const supervisorProgram = (name: string, spec: SupervisorSpec) =>
 			inbox: input(envelope(Schema.Unknown), "An EXIT from a child or the parent, or a call."),
 		},
 		outputs: {},
-		main: ({inputs}) =>
+		main: ({serve}) =>
 			Effect.gen(function* () {
 				const self = yield* Self;
 				if (self.name !== name)
@@ -998,7 +998,7 @@ const supervisorProgram = (name: string, spec: SupervisorSpec) =>
 					},
 				);
 				const machine = yield* handle.ready;
-				yield* inputs.inbox.pipe(Stream.runForEach((e) => machine.dispatch(msgOf(e))));
+				yield* serve({inbox: (e) => machine.dispatch(msgOf(e))});
 			}).pipe(Effect.scoped),
 	});
 

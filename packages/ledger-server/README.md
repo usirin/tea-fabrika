@@ -30,7 +30,7 @@ Run it, then connect a home to it:
 
 ```sh
 pnpm --filter @kampus/ledger-server twin --name acme-ledger --founder github:7 --persist ~/.fabrika-twin
-pnpm --filter @kampus/fabrika-app cli connect http://127.0.0.1:8787/acme --login alice --key ~/.ssh/id_ed25519
+pnpm --filter @kampus/fabrika-app-old cli connect http://127.0.0.1:8787/acme --login alice --key ~/.ssh/id_ed25519
 ```
 
 The twin is Miniflare, not `alchemy dev`. Two reasons:

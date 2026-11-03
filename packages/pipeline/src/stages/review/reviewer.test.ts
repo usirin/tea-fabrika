@@ -13,8 +13,8 @@ import {
 import {tmpdir} from "node:os";
 import {join, relative, sep} from "node:path";
 import type {SDKMessage} from "@anthropic-ai/claude-agent-sdk";
-import {noSpend, type Open} from "@kampus/fabrika/agents/claude";
-import {refusal} from "@kampus/fabrika/agents/sandbox";
+import {noSpend, type Open} from "@kampus/fabrika-old/agents/claude";
+import {refusal} from "@kampus/fabrika-old/agents/sandbox";
 import {Effect, Stream} from "effect";
 import {afterAll, describe, expect, it, vi} from "vitest";
 import {initOf, resultOf, scriptedOpen, turnOf} from "../../draft-scripted.ts";
@@ -576,7 +576,7 @@ describe("the reviewer's answer", () => {
 		expect(reviewerDraft.name).toBe("reviewer");
 		expect(reviewerDraft.schema).toMatchObject({
 			type: "object",
-			required: ["rows", "findings", "skipped"],
+			required: ["rows", "findings", "skipped", "gaps"],
 			additionalProperties: false,
 		});
 	});

@@ -1,8 +1,8 @@
 import {describe, expect, it} from "vitest";
+import {EMPTY, type Jobs} from "../host/jobs.ts";
 import {check} from "./check.ts";
 import {complete} from "./complete.ts";
 import {parse} from "./grammar.ts";
-import {EMPTY, type Jobs} from "./jobs.ts";
 import {programList} from "./programs.ts";
 import {SMALL} from "./small.ts";
 
@@ -13,6 +13,7 @@ import {SMALL} from "./small.ts";
 
 const list = programList(SMALL);
 const TALLY: Jobs = {
+	next: 2,
 	jobs: [
 		{
 			n: 1,
@@ -20,6 +21,7 @@ const TALLY: Jobs = {
 			stages: [{program: "tally", flags: {}, run: "tally:0a1b2c3d", wire: null, ended: false}],
 			state: "running",
 			background: true,
+			owner: null,
 		},
 	],
 };

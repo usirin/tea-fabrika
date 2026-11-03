@@ -1,16 +1,19 @@
-import type {WindowProps} from "@kampus/fabrika";
+import type {WindowProps} from "@kampus/fabrika-old";
+import {type Text, textOf} from "@kampus/pipeline/tickets/approval";
+import {Kbd} from "@manti-ui/react";
 import {
 	type FormEvent,
 	type KeyboardEvent,
 	type ReactNode,
 	useEffect,
+	useEffectEvent,
 	useRef,
 	useState,
 } from "react";
 import {lineOf, waits} from "./head.ts";
 import type {
-	Do,
 	Head,
+	Hint,
 	OpenAsk,
 	Opened,
 	PullRequest,
@@ -23,10 +26,12 @@ import type {
 } from "./index.ts";
 import {piecesOf} from "./links.ts";
 
-// The tracker's window: plain React, keyboard first. It draws the view it is handed and sends
-// `do`. All it keeps is what a person is typing and which row is picked, so a half-written
-// ticket or comment survives a look at another page. Which tickets show, and the search, are the
-// machine's (`show`, `find`): this window only draws them and says when they change.
+// The tracker's window: plain React, keyboard first. It draws the view it is handed and sends one
+// of its inputs: a write, the query, or quit. All it keeps is what a person is typing and which row
+// is picked, so a half-written ticket or comment survives a look at another page. Which tickets
+// show, and the search, are the machine's (`show`, `find`): this window only draws them and sends
+// a query when they change, with the whole filter:
+// `{type: "query", value: {status: "closed", find: "login"}}`.
 //
 //   the list     ↑ ↓ or j k pick a row, Enter opens it, c goes to the new ticket's title,
 //                o x a show open, closed or all tickets, / goes to the search, q quits
@@ -38,7 +43,7 @@ import {piecesOf} from "./links.ts";
 // `target="_blank"`, which the app never makes: it hands an http or https URL to the person's own
 // browser instead.
 
-type Send = (d: Do) => void;
+type Send = WindowProps<typeof tracker>["send"];
 
 /** A write in words, for "saving" and "not saved". */
 const said = (w: Write): string => {
@@ -46,13 +51,15 @@ const said = (w: Write): string => {
 		case "file":
 			return `new ticket "${w.title}"`;
 		case "comment":
-			return `comment on #${w.ticket}`;
+			return w.asks === "changes" ? `changes asked on #${w.ticket}` : `comment on #${w.ticket}`;
 		case "close":
 			return `close #${w.ticket}`;
 		case "reopen":
 			return `reopen #${w.ticket}`;
 		case "answer":
 			return `answer "${w.pick}" on #${w.ticket}`;
+		case "rate_duplicate":
+			return `${w.says} the hint #${w.of} on #${w.ticket}`;
 	}
 };
 
@@ -82,7 +89,6 @@ const prRow = (pr: PullRequest) => `pr:${pr.url}`;
 const shortOf = (repo: string): string => repo.split("/").filter(Boolean).at(-1) ?? repo;
 
 export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
-	const act: Send = (value) => send({type: "do", value});
 	const [picked, setPicked] = useState<string | null>(null);
 	const [title, setTitle] = useState("");
 	const [body, setBody] = useState("");
@@ -104,10 +110,10 @@ export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
 						find={find}
 						setFind={(text) => {
 							setFind(text);
-							act({kind: "find", text});
+							send({type: "query", value: {status: view.filter.show, find: text}});
 						}}
 						draft={{title, body, setTitle, setBody}}
-						act={act}
+						act={send}
 					/>
 				) : (
 					<TicketPage
@@ -116,7 +122,8 @@ export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
 						saving={view.saving}
 						draft={comments[page.number] ?? ""}
 						setDraft={(text) => setComments((all) => ({...all, [page.number]: text}))}
-						act={act}
+						back={() => send({type: "query", value: {status: view.filter.show, find}})}
+						act={send}
 					/>
 				)}
 			</div>
@@ -206,24 +213,31 @@ function ListPage(props: {
 	};
 
 	// Where the focus goes on coming to the list: the row picked, or the title when there is none.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: only on coming to the list, not on every new view.
-	useEffect(() => {
+	// Once, on coming to the list: a new view must not pull the focus back.
+	const focusStart = useEffectEvent(() => {
 		if (picked === undefined) titleRef.current?.focus();
 		else rows.current.get(picked)?.focus();
+	});
+	useEffect(() => {
+		focusStart();
 	}, []);
 
 	// A filter that hides the row in focus leaves the focus nowhere: it goes back to the list.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: only when the rows shown change.
-	useEffect(() => {
+	// Checked when the rows shown change.
+	const shownRows = order.join("\n");
+	const refocus = useEffectEvent(() => {
 		const at = document.activeElement;
 		if (at === null || at === document.body) toList();
-	}, [order.join("\n")]);
+	});
+	useEffect(() => {
+		refocus();
+	}, [shownRows]);
 
 	const file = (e?: FormEvent) => {
 		e?.preventDefault();
 		const t = draft.title.trim();
 		if (t === "") return titleRef.current?.focus();
-		act({kind: "file", title: t, body: draft.body.trimEnd()});
+		act({type: "file", value: {title: t, body: draft.body.trimEnd()}});
 		draft.setTitle("");
 		draft.setBody("");
 		titleRef.current?.focus();
@@ -245,7 +259,7 @@ function ListPage(props: {
 		pick(next);
 		rows.current.get(next)?.focus();
 	};
-	const show = (s: Show) => act({kind: "show", show: s});
+	const show = (s: Show) => act({type: "query", value: {status: s, find: props.find}});
 	/** The list's own keys, anywhere on the page but in a box being typed in. */
 	const onListKey = (e: KeyboardEvent) => {
 		if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -261,7 +275,7 @@ function ListPage(props: {
 			o: () => show("open"),
 			x: () => show("closed"),
 			a: () => show("all"),
-			q: () => act({kind: "quit"}),
+			q: () => act({type: "quit", value: null}),
 		};
 		const key = keys[e.key];
 		if (key === undefined) return;
@@ -316,7 +330,7 @@ function ListPage(props: {
 						spellCheck={false}
 						autoComplete="off"
 					/>
-					<kbd>/</kbd>
+					<Kbd>/</Kbd>
 				</label>
 			</div>
 			<form className="tracker-composer" onSubmit={file} aria-label="new ticket">
@@ -349,7 +363,7 @@ function ListPage(props: {
 						/>
 						<div className="tracker-row">
 							<small>
-								<kbd>Ctrl</kbd> <kbd>Enter</kbd> files it
+								<Kbd>Ctrl</Kbd> <Kbd>Enter</Kbd> files it
 							</small>
 							<button
 								type="submit"
@@ -377,7 +391,7 @@ function ListPage(props: {
 										tabIndex={row === picked ? 0 : -1}
 										aria-current={row === picked}
 										onFocus={() => pick(row)}
-										onClick={() => act({kind: "open", ticket: t.number})}
+										onClick={() => act({type: "query", value: {ticket: t.number}})}
 									>
 										<StateGlyph state={t.state} />
 										<span className="tracker-number">{t.number}</span>
@@ -450,22 +464,22 @@ function ListPage(props: {
 			</div>
 			<footer className="tracker-keys">
 				<span>
-					<kbd>j</kbd> <kbd>k</kbd> pick
+					<Kbd>j</Kbd> <Kbd>k</Kbd> pick
 				</span>
 				<span>
-					<kbd>Enter</kbd> open
+					<Kbd>Enter</Kbd> open
 				</span>
 				<span>
-					<kbd>o</kbd> <kbd>x</kbd> <kbd>a</kbd> open, closed, all
+					<Kbd>o</Kbd> <Kbd>x</Kbd> <Kbd>a</Kbd> open, closed, all
 				</span>
 				<span>
-					<kbd>/</kbd> search
+					<Kbd>/</Kbd> search
 				</span>
 				<span>
-					<kbd>c</kbd> new ticket
+					<Kbd>c</Kbd> new ticket
 				</span>
 				<span>
-					<kbd>q</kbd> quit
+					<Kbd>q</Kbd> quit
 				</span>
 			</footer>
 		</section>
@@ -568,28 +582,34 @@ function TicketPage(props: {
 	readonly saving: readonly Write[];
 	readonly draft: string;
 	readonly setDraft: (text: string) => void;
+	/** Back to the list, with the filter it had. */
+	readonly back: () => void;
 	readonly act: Send;
 }) {
-	const {number, opened, saving, draft, setDraft, act} = props;
+	const {number, opened, saving, draft, setDraft, back, act} = props;
 	const ticket = opened?.ticket ?? null;
 	const boxRef = useRef<HTMLTextAreaElement>(null);
 	const backRef = useRef<HTMLButtonElement>(null);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: only on opening a ticket.
+	// The focus moves in on opening a ticket.
 	useEffect(() => {
 		(boxRef.current ?? backRef.current)?.focus();
 	}, [number]);
 
-	const back = () => act({kind: "list"});
 	/** Esc goes back to the list, from anywhere on the page. A comment half written stays. */
 	const onPageKey = (e: KeyboardEvent) => {
 		if (e.key !== "Escape") return;
 		e.preventDefault();
 		back();
 	};
-	const comment = (e?: FormEvent) => {
+	/** "Comment", or with `asks: "changes"`, "Request changes": the person says which, nothing guesses. */
+	const comment = (e?: FormEvent, asks?: "changes") => {
 		e?.preventDefault();
 		if (draft.trim() === "") return;
-		act({kind: "comment", ticket: number, body: draft.trimEnd()});
+		const body = draft.trimEnd();
+		act({
+			type: "comment",
+			value: asks === undefined ? {ticket: number, body} : {ticket: number, body, asks},
+		});
 		setDraft("");
 	};
 	const pending = saving.filter((w) => w.kind === "comment" && w.ticket === number);
@@ -606,7 +626,7 @@ function TicketPage(props: {
 				>
 					← Tickets
 				</button>
-				<kbd>Esc</kbd>
+				<Kbd>Esc</Kbd>
 			</div>
 			{opened === null || ticket === null ? (
 				<p className="tracker-empty">No ticket #{number} on the ledger.</p>
@@ -620,12 +640,24 @@ function TicketPage(props: {
 							<HeadLine head={opened.head} />
 						</p>
 					</header>
+					{opened.duplicates.map((hint) => (
+						<DuplicateHint
+							key={hint.of}
+							number={number}
+							hint={hint}
+							saving={saving.some(
+								(w) => w.kind === "rate_duplicate" && w.ticket === number && w.of === hint.of,
+							)}
+							act={act}
+							onKey={onPageKey}
+						/>
+					))}
 					<ol className="tracker-timeline" aria-label="timeline">
 						{opened.rows.map((row) => (
 							<TimelineRow key={row.pos} row={row} onKey={onPageKey} />
 						))}
 						{pending.map((w, i) => (
-							// biome-ignore lint/suspicious/noArrayIndexKey: two pending comments may say the same thing; their order is all that tells them apart.
+							// two pending comments may say the same thing; their order is all that tells them apart.
 							<li key={i} className="tracker-entry tracker-pending">
 								<p className="tracker-meta">saving…</p>
 								{"body" in w ? <Body text={w.body} onKey={onPageKey} /> : null}
@@ -637,6 +669,7 @@ function TicketPage(props: {
 							key={ask.ask}
 							number={number}
 							ask={ask}
+							saw={textOf(ticket)}
 							saving={saving.some(
 								(w) => w.kind === "answer" && w.ticket === number && w.ask === ask.ask,
 							)}
@@ -660,16 +693,24 @@ function TicketPage(props: {
 						/>
 						<div className="tracker-row">
 							<small>
-								<kbd>Ctrl</kbd> <kbd>Enter</kbd> comments
+								<Kbd>Ctrl</Kbd> <Kbd>Enter</Kbd> comments
 							</small>
 							<button
 								type="button"
 								onKeyDown={onPageKey}
 								onClick={() =>
-									act({kind: ticket.state === "open" ? "close" : "reopen", ticket: number})
+									act({type: ticket.state === "open" ? "close" : "reopen", value: {ticket: number}})
 								}
 							>
 								{ticket.state === "open" ? "Close ticket" : "Reopen ticket"}
+							</button>
+							<button
+								type="button"
+								disabled={draft.trim() === ""}
+								onKeyDown={onPageKey}
+								onClick={() => comment(undefined, "changes")}
+							>
+								Request changes
 							</button>
 							<button
 								type="submit"
@@ -704,7 +745,7 @@ const Body = ({
 			piece.kind === "text" ? (
 				piece.text
 			) : (
-				// biome-ignore lint/suspicious/noArrayIndexKey: the pieces are cut fresh from one body and never move; their order is all there is.
+				// the pieces are cut fresh from one body and never move; their order is all there is.
 				<a key={i} href={piece.url} target="_blank" rel="noreferrer" onKeyDown={onKey}>
 					{piece.url}
 				</a>
@@ -736,16 +777,18 @@ const TimelineRow = ({
 
 /**
  * An open ask's box: what it asks, a note, and one button per pick. A click sends `answer`, which
- * writes `answered`; a comment never does. While the answer is saving, the buttons wait.
+ * writes `answered`; a comment never does. `saw`: the ticket's text on the page, which the answer
+ * covers. While the answer is saving, the buttons wait.
  */
 function AskBox(props: {
 	readonly number: number;
 	readonly ask: OpenAsk;
+	readonly saw: Text;
 	readonly saving: boolean;
 	readonly act: Send;
 	readonly onKey: (e: KeyboardEvent) => void;
 }) {
-	const {number, ask, saving, act, onKey} = props;
+	const {number, ask, saw, saving, act, onKey} = props;
 	const [note, setNote] = useState("");
 	return (
 		<section className="tracker-ask" aria-label={`ask: ${ask.what}`}>
@@ -771,12 +814,77 @@ function AskBox(props: {
 						disabled={saving}
 						onKeyDown={onKey}
 						onClick={() =>
-							act({kind: "answer", ticket: number, ask: ask.ask, pick, note: note.trimEnd()})
+							act({
+								type: "answer",
+								value: {ticket: number, ask: ask.ask, pick, note: note.trimEnd(), saw},
+							})
 						}
 					>
 						{pick}
 					</button>
 				))}
+				{saving ? <small>saving…</small> : null}
+			</div>
+		</section>
+	);
+}
+
+/**
+ * A duplicate hint: "maybe the same as #4", the other ticket a link to its page, and accept and
+ * dismiss. Advice: neither button closes or hides a ticket. The person's newest word shows as the
+ * pressed button, and the other one changes it.
+ */
+function DuplicateHint(props: {
+	readonly number: number;
+	readonly hint: Hint;
+	readonly saving: boolean;
+	readonly act: Send;
+	readonly onKey: (e: KeyboardEvent) => void;
+}) {
+	const {number, hint, saving, act, onKey} = props;
+	const rate = (says: "accept" | "dismiss") =>
+		act({type: "rate_duplicate", value: {ticket: number, of: hint.of, says}});
+	return (
+		<section
+			className="tracker-hint"
+			data-says={hint.says ?? undefined}
+			aria-label={`maybe the same as #${hint.of}`}
+		>
+			<p className="tracker-hint-what">
+				Maybe the same as{" "}
+				<button
+					type="button"
+					className="tracker-hint-link"
+					onKeyDown={onKey}
+					onClick={() => act({type: "query", value: {ticket: hint.of}})}
+				>
+					#{hint.of}
+					{hint.title === null ? null : ` ${hint.title}`}
+				</button>
+				{hint.state === "closed" ? <span className="tracker-quiet"> (closed)</span> : null}
+			</p>
+			<div className="tracker-row">
+				<small className="tracker-quiet">
+					Jev {hint.yes.toFixed(2)}. A hint: nothing is closed.
+				</small>
+				<button
+					type="button"
+					aria-pressed={hint.says === "accept"}
+					disabled={saving}
+					onKeyDown={onKey}
+					onClick={() => rate("accept")}
+				>
+					Accept
+				</button>
+				<button
+					type="button"
+					aria-pressed={hint.says === "dismiss"}
+					disabled={saving}
+					onKeyDown={onKey}
+					onClick={() => rate("dismiss")}
+				>
+					Dismiss
+				</button>
 				{saving ? <small>saving…</small> : null}
 			</div>
 		</section>

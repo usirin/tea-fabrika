@@ -5,6 +5,7 @@ import {
 	mkdtempSync,
 	readFileSync,
 	realpathSync,
+	rmSync,
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
@@ -12,9 +13,10 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {describe, expect, it} from "vitest";
+import {JSONC_MOVED, SETTINGS_MOVED} from "../settings.ts";
 
 // The owner's desk in tsh, as the owner meets it: the real launcher (bin/tsh)
-// started in a project folder whose fabrika.toml names the packs, its lines
+// started in a project folder whose .fabrika/fabrika.toml names the packs, its lines
 // given with -c. One tsh is one session: the asks and the answers live as long
 // as it does. The desk's markdown pages are read back from disk after it ends.
 
@@ -32,13 +34,19 @@ const GIT_ENV = {
 	GIT_COMMITTER_EMAIL: "owner@example.com",
 };
 
-/** A project folder with the workspace's packages installed in it, its fabrika.toml, and a tsh.toml when given. */
+/** Write a repository's settings where they belong, in `folder`. */
+const putSettings = (folder: string, text: string) => {
+	mkdirSync(join(folder, ".fabrika"), {recursive: true});
+	writeFileSync(join(folder, ".fabrika", "fabrika.toml"), text);
+};
+
+/** A project folder with the workspace's packages installed in it, its .fabrika/fabrika.toml, and a tsh.toml when given. */
 const project = (fabrika: string, tsh?: string) => {
 	// Its real path: tsh reads the config from the folder it runs in, symlinks resolved. Short names,
 	// so a path tsh prints fits its line.
 	const folder = realpathSync(mkdtempSync(join(tmpdir(), "d-")));
 	symlinkSync(join(ROOT, "node_modules"), join(folder, "node_modules"));
-	writeFileSync(join(folder, "fabrika.toml"), fabrika);
+	putSettings(folder, fabrika);
 	if (tsh !== undefined) writeFileSync(join(folder, "tsh.toml"), tsh);
 	return {folder, home: realpathSync(mkdtempSync(join(tmpdir(), "h-")))};
 };
@@ -150,7 +158,7 @@ describe("the owner's desk in tsh", () => {
 		expect(pageOf(pages, ruling163)).toContain("Your last answer was not taken");
 	});
 
-	it("a real desk with nothing waiting: its pages go where the pack's settings say, from fabrika.toml's folder", async () => {
+	it("a real desk with nothing waiting: its pages go where the pack's settings say, from the repository's root", async () => {
 		const at = project(`packs = ["${DESK}"]\n\n[pack."${DESK}"]\ndir = "pages"\n`);
 		const run = await tsh(at, ["desk"]);
 		expect(run.out).toContain("Nothing waits on the owner.");
@@ -158,6 +166,7 @@ describe("the owner's desk in tsh", () => {
 		expect(run.out).toContain(`Pages: ${join(at.folder, "pages")}\n`);
 		expect(run.status).toBe(0);
 		expect(existsSync(join(at.folder, "pages", "inbox.md"))).toBe(true);
+		expect(existsSync(join(at.folder, ".fabrika", "pages"))).toBe(false);
 		expect(pageIds(join(at.folder, "pages"))).toEqual([]);
 	});
 
@@ -170,7 +179,7 @@ describe("the owner's desk in tsh", () => {
 		expect(run.status).toBe(1);
 	});
 
-	it("started deep in the repository, the desk takes its packs from the fabrika.toml at the root, and reads their paths from there", async () => {
+	it("started deep in the repository, the desk takes its packs from the root's .fabrika/fabrika.toml, and reads their paths from the root", async () => {
 		const at = project(`packs = ["${DESK}"]\n\n[pack."${DESK}"]\ndir = "pages"\n`);
 		mkdirSync(join(at.folder, ".git"));
 		const deep = join(at.folder, "packages", "app");
@@ -192,10 +201,7 @@ describe("the owner's desk in tsh", () => {
 		const clone = join(at.home, "clone");
 		git(at.home, ["init", "-q", "--bare", "-b", "main", bare]);
 		git(at.home, ["init", "-q", "-b", "main", owner]);
-		writeFileSync(
-			join(owner, "fabrika.toml"),
-			`packs = ["${DESK}"]\n\n[pack."${DESK}"]\ndir = "pages"\n`,
-		);
+		putSettings(owner, `packs = ["${DESK}"]\n\n[pack."${DESK}"]\ndir = "pages"\n`);
 		git(owner, ["add", "-A"]);
 		git(owner, ["commit", "-q", "--no-verify", "-m", "settings"]);
 		git(owner, ["push", "-q", "--no-verify", bare, "main:main"]);
@@ -204,7 +210,9 @@ describe("the owner's desk in tsh", () => {
 		writeFileSync(join(at.folder, "tsh.toml"), `clone = "${clone}"\n`);
 
 		const run = await tsh(at, ["desk"]);
-		expect(run.err.split("\n")[0]).toBe(`fabrika.toml: ${clone}@main (${commit.slice(0, 7)})`);
+		expect(run.err.split("\n")[0]).toBe(
+			`.fabrika/fabrika.toml: ${clone}@main (${commit.slice(0, 7)})`,
+		);
 		// It ended 1 once, with two whole suites side by side, and what tsh said was lost: say it.
 		expect(run.status, run.err).toBe(0);
 		// The pack is found, and its paths read, from the folder tsh starts in: never from the clone.
@@ -214,8 +222,50 @@ describe("the owner's desk in tsh", () => {
 
 	it("no target repository: the first line names the start folder's file", async () => {
 		const run = await tsh(project(""), ["programs"]);
-		expect(run.err.split("\n")[0]).toMatch(/^fabrika\.toml: \/.+\/fabrika\.toml$/);
+		expect(run.err.split("\n")[0]).toMatch(
+			/^\.fabrika\/fabrika\.toml: \/.+\/\.fabrika\/fabrika\.toml$/,
+		);
 		expect(run.status).toBe(0);
+	});
+
+	it("a .fabrika.jsonc in the start folder does not stop tsh, and the run says it is not read", async () => {
+		const at = project("");
+		writeFileSync(join(at.folder, ".fabrika.jsonc"), "{}\n");
+		const run = await tsh(at, ["programs"]);
+		expect(run.err).toContain(
+			".fabrika.jsonc at main is not read: review rules are [review] in .fabrika/fabrika.toml",
+		);
+		expect(run.status).toBe(0);
+	});
+
+	it("a .fabrika.jsonc with no .fabrika/fabrika.toml stops tsh and says to move it", async () => {
+		const at = project("");
+		rmSync(join(at.folder, ".fabrika"), {recursive: true});
+		writeFileSync(join(at.folder, ".fabrika.jsonc"), "{}\n");
+		const run = await tsh(at, ["programs"]);
+		expect(run.status, run.err).toBe(2);
+		expect(run.err).toContain(JSONC_MOVED);
+		expect(run.out).toBe("");
+	});
+
+	it("no .fabrika.jsonc: the run lists the review kinds and says where they are read", async () => {
+		const run = await tsh(project('[review]\ngoverned = [".github/"]\n'), ["programs"]);
+		expect(run.err).toContain("governed [.github/] and ui [] (from fabrika.toml)");
+		expect(run.err).not.toContain(".fabrika.jsonc");
+		expect(run.status).toBe(0);
+	});
+
+	it.each<[string, boolean]>([
+		["with none in the folder", false],
+		["beside the new one", true],
+	])("a fabrika.toml left at the root %s stops tsh and says to move it", async (_, keep) => {
+		const at = project("");
+		if (!keep) rmSync(join(at.folder, ".fabrika"), {recursive: true});
+		writeFileSync(join(at.folder, "fabrika.toml"), "");
+		const run = await tsh(at, ["programs"]);
+		expect(run.err).toContain(SETTINGS_MOVED);
+		expect(run.out).toBe("");
+		expect(run.status).toBe(2);
 	});
 
 	it.each([
@@ -223,13 +273,13 @@ describe("the owner's desk in tsh", () => {
 			"a tsh.toml that still lists packs",
 			"",
 			`packs = ["${DESK}"]\n`,
-			"add-on packs moved to fabrika.toml",
+			"add-on packs moved to .fabrika/fabrika.toml",
 		],
 		[
 			"a fabrika.toml with a value that does not fit",
 			`packs = "${DESK}"\n`,
 			undefined,
-			"fabrika.toml: packs: ",
+			".fabrika/fabrika.toml: packs: ",
 		],
 		[
 			"a fabrika.toml with an unknown table",

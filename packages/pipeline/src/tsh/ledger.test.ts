@@ -1,7 +1,7 @@
 import {mkdtempSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {Ledger} from "@kampus/fabrika";
+import {Ledger} from "@kampus/fabrika-old";
 import {Context, Effect, Exit, Layer, Scope} from "effect";
 import {describe, expect, it} from "vitest";
 import {ledgerNameOf, localLedger, portOf} from "./ledger.ts";

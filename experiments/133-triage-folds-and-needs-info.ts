@@ -36,15 +36,15 @@ import {existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync} from "n
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {query} from "@anthropic-ai/claude-agent-sdk";
-import {jsonSchema, reader} from "@kampus/fabrika/agents/claude";
+import {jsonSchema, reader} from "@kampus/fabrika-old/agents/claude";
 import {nextTry} from "@kampus/pipeline/combos";
 import {type Said, SortReply, saidOf} from "@kampus/pipeline/stages/sort/answer";
 import {type Brief, promptFor, sortProblems} from "@kampus/pipeline/stages/sort/brief";
 import type {OpenPlan} from "@kampus/pipeline/stages/sort/services";
 import {sorterOptions} from "@kampus/pipeline/stages/sort/sorter";
 import {Option, Schema} from "effect";
-import {firstVersion, REPO_NOTE, SONNET_IN, SONNET_OUT, Ticket} from "./lib/sort.ts";
 import {median, pct} from "./lib/sort-bar.ts";
+import {firstVersion, REPO_NOTE, SONNET_IN, SONNET_OUT, Ticket} from "./lib/sort.ts";
 
 const here = import.meta.dirname;
 const CACHE = process.env.CACHE ?? join(here, "..", "runs", "exp-133-cache");

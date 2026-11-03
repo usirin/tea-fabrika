@@ -17,7 +17,7 @@
 //   host -> box   {kind: "ok", id, value} | {kind: "err", id, tag} | {kind: "no", id, why}
 
 import {fileURLToPath} from "node:url";
-import type {AnyProgram} from "@kampus/fabrika";
+import type {AnyProgram} from "@kampus/fabrika-old";
 import {type Context, Effect, Layer, Queue, Schema} from "effect";
 import {type Rpc, RpcClient, type RpcGroup, RpcSerialization, RpcServer} from "effect/rpc";
 import type {Keyed} from "./cmd-wall.ts";
@@ -120,6 +120,7 @@ export const standIn = <Id, S, Rpcs extends Rpc.Any>(
 	routes: Routes,
 ): Layer.Layer<Id> => {
 	const protocol = RpcClient.Protocol.make(
+		// oxlint-disable-next-line eslint/require-yield -- `Effect.fnUntraced` asks for a generator, and this one has nothing to wait on.
 		Effect.fnUntraced(function* (answer, clients) {
 			routes.set(wall.name, (msg) =>
 				Effect.forEach(clients, (id) => answer(id, msg as never), {discard: true, concurrency: 1}),

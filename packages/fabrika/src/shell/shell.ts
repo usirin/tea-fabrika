@@ -1,24 +1,28 @@
-import {run as runMachine} from "@demlik/tea/effect";
 import {type Cause, Deferred, Effect, Fiber, PubSub, Queue, Schema, Stream} from "effect";
+import {HostJobs, TABLE} from "../host/host-jobs.ts";
+import {earlierFor, Jobs, jobsMachine, tableLine} from "../host/jobs.ts";
 import type {AnyRunning} from "../program/listed.ts";
-import {defineProgram, kind} from "../program/program.ts";
+import {defineProgram, end, fork, kind} from "../program/program.ts";
 import {flag, input, output} from "../program/shape.ts";
-import {describe, runBuiltin, type Said} from "./builtins.ts";
+import {runBuiltin, type Said} from "./builtins.ts";
 import {check} from "./check.ts";
 import {runLine, type Shell, type Watcher} from "./execute.ts";
 import {parse, type Refused} from "./grammar.ts";
-import {Jobs, jobsMachine, tableLine} from "./jobs.ts";
-import {JobStorage, Programs} from "./programs.ts";
+import {helpOf, partsHelp} from "./help.ts";
+import {Programs} from "./programs.ts";
+import {Table} from "./table.ts";
 
-// tsh: a shell that is itself a tea program. Lines in, lines out, and a job
-// table as its one machine, kept in its storage. Like bash is a program that
-// runs programs, and psql one that runs only SQL, tsh runs only tea programs:
-// typed flags, typed values, typed pipes with the fit check, all refused
-// before anything runs when they do not fit.
+// tsh: a shell that is itself a tea program. Lines in, lines out, and a view
+// on its host's job table. Like bash is a program that runs programs, and psql
+// one that runs only SQL, tsh runs only tea programs: typed flags, typed
+// values, typed pipes with the fit check, all refused before anything runs
+// when they do not fit.
 //
-//   const started = yield* start(tsh, {show: "short"}, {printed: draw, ready: prompt}, {id: yield* runIdOf("tsh"), storage: memoryStorage()});
+//   const jobs = yield* openJobs(memoryStorage());   // the host's, in the host's scope
+//   const started = yield* start(tsh, {show: "short"}, {printed: draw, ready: prompt}, {id: yield* runIdOf("tsh"), storage: memoryStorage()}).pipe(Effect.provideService(HostJobs, jobs));
 //   yield* tell(started.run, "line", "seq --to 3 | double");   // printed 2, 4, 6; then ready {status: 0}
 //   yield* tell(started.run, "line", "tally &");               // printed [1] tally:…; ready {status: 0}
+//   yield* tell(started.run, "line", "experiments");           // table {title: "Experiments", total: 171, rows: [20 rows]}
 //   yield* tell(started.run, "signal", "interrupt");           // Ctrl-C: stops the foreground job, if any
 //   started.close("line");                              // Ctrl-D: tsh ends; its jobs stay in the table, detached
 //
@@ -26,13 +30,15 @@ import {JobStorage, Programs} from "./programs.ts";
 // Node's readline, and does completion there, from the pure parser.
 //
 // It asks for two services: `Programs`, the list it starts programs from by
-// name, and `JobStorage`, where its jobs keep what must outlive it, and where
-// its job table is kept (at `TABLE`), for the next tsh on the same storage.
+// name, and `HostJobs`, its host's jobs (../host/host-jobs.ts): the table every
+// line becomes a job in, and the storage the jobs' runs keep what must outlive
+// them in. The job table is the host's, not tsh's: tsh shows it and sends it
+// Msgs, as a shell shows the kernel's process groups.
 //
 // Each tsh is a fresh run, under a fresh id. Storage keeps a closed input
 // closed, as it must for a program that resumes: so a tsh started again under
 // the last one's id would be born with `line` closed by the last Ctrl-D, and
-// end at once. What outlives one tsh is the table, not the run.
+// end at once. What outlives one tsh is the host's table, not the run.
 
 export const Printed = Schema.Struct({
 	to: Schema.Literals(["out", "err"]),
@@ -45,21 +51,14 @@ export const Ready = Schema.Struct({
 });
 export type Ready = typeof Ready.Type;
 
-/**
- * Where the job table is kept in the job storage: one run for every tsh that
- * uses the storage. Not under tsh's run id: each tsh is a run of its own. Each
- * tsh opens this run anew, so a tsh still running on the same storage has its
- * next table write fail `Stale`: two tsh never both write the table.
- */
-export const TABLE = {run: "tsh", machine: "jobs", key: "table"} as const;
-
-/** What tsh says when the job table it finds was saved by older code. */
+/** What tsh says when the host's job table was saved by older code. */
 export const TABLE_REFUSED =
 	"tsh: the job table was saved by older code, can't open it. Jobs started now are not kept.";
 
-/** What tsh says, in the order it says it: a line, or that a line is done. */
+/** What tsh says, in the order it says it: a line, a table, or that a line is done. */
 type Spoken =
 	| {readonly kind: "printed"; readonly printed: Printed}
+	| {readonly kind: "table"; readonly table: Table}
 	| {readonly kind: "ready"; readonly ready: Ready};
 
 /** A refusal as a shell shows it: why, the guess, and a caret under where. */
@@ -85,20 +84,26 @@ export const tsh = defineProgram({
 			Schema.String,
 			"One line, typed or read from a script: statements parted by ; or &. Closing it is Ctrl-D: tsh ends.",
 		),
+		// A control input: lines waiting behind a slow one never hold it up, and a full mailbox never refuses it.
 		signal: input(
 			Schema.Literals(["interrupt"]),
 			"Ctrl-C: stops what runs in the foreground, with its starter's stop. With nothing there, nothing happens.",
+			{control: true},
 		),
 	},
 	outputs: {
 		printed: output(Printed, "A line to show, on out or err."),
+		table: output(
+			Table,
+			"A table to show a person, on out: laid out by the terminal that shows it, at its own width (./table.ts).",
+		),
 		ready: output(
 			Ready,
 			"Once a line is done: the prompt comes back. status: how its last statement ended, as an exit status (0 ended, 1 failed, 130 stopped, 2 refused, 127 no such program).",
 		),
 	},
-	// The table is kept in the home's own run, not this one's: main loads it from there at every
-	// start, and only shows it here. No ref of this run ever starts it.
+	// The table is the host's, not this run's: main only shows it here. No ref of this run ever
+	// starts it.
 	machines: {
 		jobs: kind({
 			machine: jobsMachine,
@@ -109,32 +114,17 @@ export const tsh = defineProgram({
 			status: tableLine,
 		}),
 	},
-	main: ({flags, inputs, send, watch}) =>
+	main: ({flags, serve, send, watch}) =>
 		Effect.gen(function* () {
 			const list = yield* Programs;
-			const storage = yield* JobStorage;
+			// The host's jobs: its table, opened by the host, and the storage their runs keep in.
+			const {table, storage, kept, owner} = yield* HostJobs;
 			const scope = yield* Effect.scope;
-			// The table is the home's, not this run's: kept in one run of the job storage that every
-			// tsh on it finds. Not through a ref, which keeps by run id: each tsh is a new run, because
-			// storage keeps a closed input closed, and Ctrl-D closed the last one's `line` for good.
-			const home = yield* storage.open(TABLE.run, null).pipe(Effect.orDie);
-			// Read first through its schema: a table saved by older code is never opened, and never
-			// written over. tsh runs on with a table it does not keep, as tea says a host does when a
-			// store refuses (its `StoreRefusedError`), and says so.
-			const kept = yield* home.read(TABLE.machine, TABLE.key, Jobs).pipe(
-				Effect.as(true),
-				Effect.catchTag("StateRefused", () => Effect.succeed(false)),
-				Effect.orDie,
-			);
-			const table = yield* (yield* runMachine(jobsMachine, {
-				ctx: undefined,
-				...(kept ? {store: home.store(TABLE.machine, TABLE.key, Jobs)} : {}),
-			})).ready;
 			if (!kept) yield* send("printed", {to: "err", text: TABLE_REFUSED});
 			yield* watch("jobs", TABLE.key, table);
-			// Whatever ran in an earlier tsh does not run in this one: it waits to be attached.
-			yield* table.dispatch({type: "detached", n: null}).pipe(Effect.orDie);
-			const waiting = table.getState().jobs;
+			// What the host found from before it started runs nowhere now: it waits to be attached.
+			// Only this tsh's own are said; `jobs` lists every one.
+			const waiting = earlierFor(table.getState(), owner);
 			if (waiting.length > 0)
 				yield* send("printed", {
 					to: "err",
@@ -145,25 +135,30 @@ export const tsh = defineProgram({
 			const spoken = yield* Queue.unbounded<Spoken, Cause.Done>();
 			const speaker = yield* Stream.fromQueue(spoken).pipe(
 				Stream.runForEach((s) =>
-					s.kind === "printed" ? send("printed", s.printed) : send("ready", s.ready),
+					s.kind === "printed"
+						? send("printed", s.printed)
+						: s.kind === "table"
+							? send("table", s.table)
+							: send("ready", s.ready),
 				),
 				Effect.forkScoped,
 			);
 			const print = (to: "out" | "err", text: string) => {
 				Queue.offerUnsafe(spoken, {kind: "printed", printed: {to, text}});
 			};
+			const printTable = (table: Table) => {
+				Queue.offerUnsafe(spoken, {kind: "table", table});
+			};
 
 			const signals = yield* PubSub.unbounded<"interrupt">();
-			yield* inputs.signal.pipe(
-				Stream.runForEach((s) => PubSub.publish(signals, s)),
-				Effect.forkScoped,
-			);
 
 			const shell: Shell = {
 				list,
 				storage,
 				table,
+				owner,
 				print,
+				printTable,
 				show: flags.show,
 				signals,
 				live: new Map<string, AnyRunning>(),
@@ -189,8 +184,12 @@ export const tsh = defineProgram({
 							if (checked.kind === "refused") {
 								for (const l of refusalLines(text, checked)) print("err", l);
 								said = {status: checked.status, exit: false};
-							} else if (checked.kind === "describe") {
-								for (const l of describe(checked.entry, checked.parts)) print("out", l);
+							} else if (checked.kind === "help") {
+								const page =
+									checked.parts === null
+										? helpOf(checked.entry, list)
+										: partsHelp(checked.entry, checked.parts);
+								for (const l of page) print("out", l);
 								said = {status: 0, exit: false};
 							} else {
 								const done = yield* runLine(
@@ -208,13 +207,19 @@ export const tsh = defineProgram({
 					return said;
 				});
 
-			yield* Stream.runForEachWhile(inputs.line, (text) =>
-				oneLine(text).pipe(
-					Effect.map((said) => {
-						Queue.offerUnsafe(spoken, {kind: "ready", ready: {status: said.status}});
-						return !said.exit;
-					}),
-				),
+			// `line` in order, `signal` beside it. `line` is the lifeline, as stdin is: its close is Ctrl-D.
+			yield* serve(
+				{
+					line: (text) =>
+						oneLine(text).pipe(
+							Effect.flatMap((said) => {
+								Queue.offerUnsafe(spoken, {kind: "ready", ready: {status: said.status}});
+								return said.exit ? end : Effect.void;
+							}),
+						),
+					signal: fork((s) => PubSub.publish(signals, s)),
+				},
+				{until: ["line"]},
 			);
 
 			// A job whose last program just ended may still be saying so: let it finish, so its end is
@@ -230,14 +235,18 @@ export const tsh = defineProgram({
 				([, watcher]) => Deferred.await(watcher),
 				{concurrency: "unbounded"},
 			);
-			// tsh is leaving: its jobs stop with it, and stay in the table to be attached by the next one.
-			const left = table.getState().jobs.filter((job) => job.state === "running");
+			// tsh is leaving: the jobs it runs stop with it, and stay in the host's table to be attached
+			// by the next one. Only its own: a job another client of the host runs goes on.
+			const left = table
+				.getState()
+				.jobs.filter((job) => job.state === "running" && shell.watched.has(job.stages[0].run));
 			if (left.length > 0)
 				print(
 					"err",
 					`tsh: ${left.length} job${left.length === 1 ? "" : "s"} stop with tsh and stay in its table: ${left.map((j) => `%${j.n}`).join(" ")}. Start tsh again and attach them.`,
 				);
-			yield* table.dispatch({type: "detached", n: null}).pipe(Effect.ignore);
+			for (const job of left)
+				yield* table.dispatch({type: "detached", n: job.n}).pipe(Effect.ignore);
 			Queue.endUnsafe(spoken);
 			yield* Fiber.join(speaker);
 		}).pipe(Effect.scoped),

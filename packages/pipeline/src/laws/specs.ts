@@ -1,5 +1,5 @@
 import {msgKeysOf} from "@demlik/tea";
-import {session, transcript} from "@kampus/fabrika/agents/acp";
+import {session, transcript} from "@kampus/fabrika-old/agents/acp";
 import {checkRuns} from "../check-runs.ts";
 import {criteria} from "../criteria/book.ts";
 import {quiet} from "../hosted/agent.ts";

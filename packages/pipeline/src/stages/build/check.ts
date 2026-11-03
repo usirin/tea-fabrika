@@ -1,6 +1,6 @@
 import {realpathSync} from "node:fs";
 import {basename, dirname, isAbsolute, join, relative, resolve} from "node:path";
-import {refusal} from "@kampus/fabrika/agents/sandbox";
+import {refusal} from "@kampus/fabrika-old/agents/sandbox";
 
 // The builder's own check on one tool call, as a plain function. Kept apart
 // from ./builder.ts, which starts the Agent SDK, so a process that only checks
@@ -32,6 +32,17 @@ const fixedPart = (pattern: string): string => {
 	const wild = pattern.search(/[*?[{]/);
 	return wild === -1 ? pattern : dirname(`${pattern.slice(0, wild)}x`);
 };
+
+/**
+ * Which of a build's changed files are the exam's: the exact files the test writer's own commits
+ * touched, plus the rule files. An exact list, not a name pattern, so a helper the plan gave the
+ * builder is not caught by its name, and a test the writer put somewhere odd still is.
+ */
+export const examTouched = (
+	changed: readonly string[],
+	exam: readonly string[],
+	isRule: (file: string) => boolean,
+): readonly string[] => changed.filter((file) => exam.includes(file) || isRule(file));
 
 const READS = new Set(["Read", "Grep", "Glob"]);
 
@@ -82,7 +93,7 @@ export function builderRefusal(
 
 /**
  * The builder's whole check on one tool call: the shared Check (fabrika's
- * `refusal`, `@kampus/fabrika/agents/sandbox`), then the builder's own rule
+ * `refusal`, `@kampus/fabrika-old/agents/sandbox`), then the builder's own rule
  * above. The reason to refuse, or `null`. The SDK path runs the two as its
  * PreToolUse hooks (`builderOptions`, ./builder.ts); the ACP path runs this
  * as a command hook (./check-hook.ts) and on each permission ask

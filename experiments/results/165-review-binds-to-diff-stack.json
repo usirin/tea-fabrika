@@ -1,0 +1,194 @@
+{
+	"seed": 165,
+	"runs": 600,
+	"skipped": {
+		"nothing moved": 164,
+		"an edit 1 to 3 lines from a PR edit": 104,
+		"both sides made the same change": 29
+	},
+	"made": {
+		"same | 1a. parent got a new commit, child restacked with --update-refs": 68,
+		"same | 2. parent squash-merged, child restacked with --onto, after a parent fix": 66,
+		"changed | 3a. parent's new commit changed a child line; kept the child's side": 10,
+		"same | 2. parent squash-merged, child restacked with --onto": 63,
+		"same | 1b. main moved, the whole stack restacked with --update-refs": 53,
+		"changed | 3a. parent's new commit changed a child line; kept the parent's side": 4,
+		"changed | 3a. parent's new commit changed a child line; kept both": 8,
+		"changed | 3b. parent's last fix changed a child line, then squash-merged; kept both": 8,
+		"changed | 3b. parent's last fix changed a child line, then squash-merged; kept the child's side": 15,
+		"changed | 3b. parent's last fix changed a child line, then squash-merged; kept the parent's side": 8
+	},
+	"wrong": {
+		"sha": {
+			"same": {},
+			"stale": {
+				"1a. parent got a new commit, child restacked with --update-refs": 68,
+				"2. parent squash-merged, child restacked with --onto, after a parent fix": 66,
+				"2. parent squash-merged, child restacked with --onto": 63,
+				"1b. main moved, the whole stack restacked with --update-refs": 53
+			}
+		},
+		"stable (main)": {
+			"same": {
+				"3a. parent's new commit changed a child line; kept the child's side": 5
+			},
+			"stale": {
+				"1a. parent got a new commit, child restacked with --update-refs": 68,
+				"2. parent squash-merged, child restacked with --onto, after a parent fix": 66,
+				"2. parent squash-merged, child restacked with --onto": 63
+			}
+		},
+		"stable (branch)": {
+			"same": {},
+			"stale": {
+				"2. parent squash-merged, child restacked with --onto, after a parent fix": 1
+			}
+		},
+		"verbatim (main)": {
+			"same": {
+				"3a. parent's new commit changed a child line; kept the child's side": 5
+			},
+			"stale": {
+				"1a. parent got a new commit, child restacked with --update-refs": 68,
+				"2. parent squash-merged, child restacked with --onto, after a parent fix": 66,
+				"2. parent squash-merged, child restacked with --onto": 63
+			}
+		},
+		"verbatim (branch)": {
+			"same": {},
+			"stale": {
+				"2. parent squash-merged, child restacked with --onto, after a parent fix": 1
+			}
+		},
+		"u0 (main)": {
+			"same": {
+				"3a. parent's new commit changed a child line; kept the child's side": 5
+			},
+			"stale": {
+				"1a. parent got a new commit, child restacked with --update-refs": 68,
+				"2. parent squash-merged, child restacked with --onto, after a parent fix": 66,
+				"2. parent squash-merged, child restacked with --onto": 63
+			}
+		},
+		"u0 (branch)": {
+			"same": {},
+			"stale": {}
+		},
+		"u0v (main)": {
+			"same": {
+				"3a. parent's new commit changed a child line; kept the child's side": 5
+			},
+			"stale": {
+				"1a. parent got a new commit, child restacked with --update-refs": 68,
+				"2. parent squash-merged, child restacked with --onto, after a parent fix": 66,
+				"2. parent squash-merged, child restacked with --onto": 63
+			}
+		},
+		"u0v (branch)": {
+			"same": {},
+			"stale": {}
+		},
+		"fn (main)": {
+			"same": {
+				"3a. parent's new commit changed a child line; kept the child's side": 5
+			},
+			"stale": {
+				"1a. parent got a new commit, child restacked with --update-refs": 68,
+				"2. parent squash-merged, child restacked with --onto, after a parent fix": 66,
+				"2. parent squash-merged, child restacked with --onto": 63,
+				"1b. main moved, the whole stack restacked with --update-refs": 1
+			}
+		},
+		"fn (branch)": {
+			"same": {},
+			"stale": {
+				"2. parent squash-merged, child restacked with --onto, after a parent fix": 2,
+				"1a. parent got a new commit, child restacked with --update-refs": 3
+			}
+		},
+		"replay (main)": {
+			"same": {
+				"3a. parent's new commit changed a child line; kept the child's side": 5
+			},
+			"stale": {
+				"1a. parent got a new commit, child restacked with --update-refs": 68,
+				"2. parent squash-merged, child restacked with --onto, after a parent fix": 23,
+				"2. parent squash-merged, child restacked with --onto": 15
+			}
+		},
+		"replay (branch)": {
+			"same": {},
+			"stale": {}
+		},
+		"range-diff (main)": {
+			"same": {},
+			"stale": {
+				"1a. parent got a new commit, child restacked with --update-refs": 68,
+				"2. parent squash-merged, child restacked with --onto, after a parent fix": 66,
+				"2. parent squash-merged, child restacked with --onto": 63,
+				"1b. main moved, the whole stack restacked with --update-refs": 2
+			}
+		},
+		"range-diff (branch)": {
+			"same": {},
+			"stale": {
+				"2. parent squash-merged, child restacked with --onto, after a parent fix": 7,
+				"1a. parent got a new commit, child restacked with --update-refs": 4,
+				"1b. main moved, the whole stack restacked with --update-refs": 1
+			}
+		}
+	},
+	"saidSame": {
+		"stable (branch)|1a": 68,
+		"verbatim (branch)|1a": 68,
+		"u0 (branch)|1a": 68,
+		"u0v (branch)|1a": 68,
+		"fn (branch)|1a": 65,
+		"replay (branch)|1a": 68,
+		"range-diff (branch)|1a": 64,
+		"stable (branch)|2": 128,
+		"verbatim (branch)|2": 128,
+		"u0 (branch)|2": 129,
+		"u0v (branch)|2": 129,
+		"fn (branch)|2": 127,
+		"replay (main)|2": 91,
+		"replay (branch)|2": 129,
+		"range-diff (branch)|2": 122,
+		"stable (main)|3a": 5,
+		"verbatim (main)|3a": 5,
+		"u0 (main)|3a": 5,
+		"u0v (main)|3a": 5,
+		"fn (main)|3a": 5,
+		"replay (main)|3a": 5,
+		"stable (main)|1b": 53,
+		"stable (branch)|1b": 53,
+		"verbatim (main)|1b": 53,
+		"verbatim (branch)|1b": 53,
+		"u0 (main)|1b": 53,
+		"u0 (branch)|1b": 53,
+		"u0v (main)|1b": 53,
+		"u0v (branch)|1b": 53,
+		"fn (main)|1b": 52,
+		"fn (branch)|1b": 53,
+		"replay (main)|1b": 53,
+		"replay (branch)|1b": 53,
+		"range-diff (main)|1b": 51,
+		"range-diff (branch)|1b": 52
+	},
+	"notes": {
+		"1a: git restacked it cleanly": 68,
+		"2: git restacked it cleanly": 129,
+		"3a: git stopped on a conflict": 22,
+		"1b: git restacked it cleanly": 53,
+		"3b: git stopped on a conflict": 31
+	},
+	"smallest": {
+		"same: stable (main)": "should be: changed (3a. parent's new commit changed a child line; kept the child's side)\nparent PR, against main:\n@@ -1,4 +1,4 @@\n-function add(a, b) {\n+functionx add(a, b) {\n \treturn a + b;\n }\nchild PR as reviewed, against the parent:\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturn a + b;\n+\treturn a + b; // edited\n }\n \n function add(a, b) {\nthe parent's new commit:\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturn a + b;\n+\treturnx a + b;\n }\n \n function add(a, b) {\nchild's new head, against its base branch (parent):\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturnx a + b;\n+\treturn a + b; // edited\n }\n \n function add(a, b) {",
+		"same: verbatim (main)": "should be: changed (3a. parent's new commit changed a child line; kept the child's side)\nparent PR, against main:\n@@ -1,4 +1,4 @@\n-function add(a, b) {\n+functionx add(a, b) {\n \treturn a + b;\n }\nchild PR as reviewed, against the parent:\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturn a + b;\n+\treturn a + b; // edited\n }\n \n function add(a, b) {\nthe parent's new commit:\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturn a + b;\n+\treturnx a + b;\n }\n \n function add(a, b) {\nchild's new head, against its base branch (parent):\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturnx a + b;\n+\treturn a + b; // edited\n }\n \n function add(a, b) {",
+		"same: u0 (main)": "should be: changed (3a. parent's new commit changed a child line; kept the child's side)\nparent PR, against main:\n@@ -1,4 +1,4 @@\n-function add(a, b) {\n+functionx add(a, b) {\n \treturn a + b;\n }\nchild PR as reviewed, against the parent:\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturn a + b;\n+\treturn a + b; // edited\n }\n \n function add(a, b) {\nthe parent's new commit:\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturn a + b;\n+\treturnx a + b;\n }\n \n function add(a, b) {\nchild's new head, against its base branch (parent):\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturnx a + b;\n+\treturn a + b; // edited\n }\n \n function add(a, b) {",
+		"same: u0v (main)": "should be: changed (3a. parent's new commit changed a child line; kept the child's side)\nparent PR, against main:\n@@ -1,4 +1,4 @@\n-function add(a, b) {\n+functionx add(a, b) {\n \treturn a + b;\n }\nchild PR as reviewed, against the parent:\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturn a + b;\n+\treturn a + b; // edited\n }\n \n function add(a, b) {\nthe parent's new commit:\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturn a + b;\n+\treturnx a + b;\n }\n \n function add(a, b) {\nchild's new head, against its base branch (parent):\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturnx a + b;\n+\treturn a + b; // edited\n }\n \n function add(a, b) {",
+		"same: fn (main)": "should be: changed (3a. parent's new commit changed a child line; kept the child's side)\nparent PR, against main:\n@@ -1,4 +1,4 @@\n-function add(a, b) {\n+functionx add(a, b) {\n \treturn a + b;\n }\nchild PR as reviewed, against the parent:\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturn a + b;\n+\treturn a + b; // edited\n }\n \n function add(a, b) {\nthe parent's new commit:\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturn a + b;\n+\treturnx a + b;\n }\n \n function add(a, b) {\nchild's new head, against its base branch (parent):\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturnx a + b;\n+\treturn a + b; // edited\n }\n \n function add(a, b) {",
+		"same: replay (main)": "should be: changed (3a. parent's new commit changed a child line; kept the child's side)\nparent PR, against main:\n@@ -1,4 +1,4 @@\n-function add(a, b) {\n+functionx add(a, b) {\n \treturn a + b;\n }\nchild PR as reviewed, against the parent:\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturn a + b;\n+\treturn a + b; // edited\n }\n \n function add(a, b) {\nthe parent's new commit:\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturn a + b;\n+\treturnx a + b;\n }\n \n function add(a, b) {\nchild's new head, against its base branch (parent):\n@@ -1,5 +1,5 @@\n functionx add(a, b) {\n-\treturnx a + b;\n+\treturn a + b; // edited\n }\n \n function add(a, b) {",
+		"stale: verbatim (branch)": "should be: same (1a. parent got a new commit, child restacked with --update-refs)\nparent PR, against main:\n@@ -1,5 +1,4 @@\n function add(a, b) {\n-\treturn a + b;\n }\n \n function add(a, b) {\nchild PR as reviewed, against the parent:\n@@ -1,4 +1,4 @@\n-function add(a, b) {\n+functionx add(a, b) {\n }\n \n function add(a, b) {\nthe parent's new commit:\n@@ -1,7 +1,7 @@\n function add(a, b) {\n }\n \n-function add(a, b) {\n+functionx add(a, b) {\n \treturn a + b;\n }\nchild's new head, against its base branch (parent):\n@@ -1,4 +1,4 @@\n-function add(a, b) {\n+functionx add(a, b) {\n }\n \n functionx add(a, b) {"
+	}
+}

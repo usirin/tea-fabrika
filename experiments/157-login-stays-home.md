@@ -1,6 +1,348 @@
 # 157: The login lives in the person's own locker
 
-**Answer: it works on this laptop, with fake logins, built the way others
+**Answer, round 2 (2026-10-27): the ruled shape works on this laptop, with
+fake logins.** The locker lends the login to the job's box, and the box holds
+it, the GitHub Actions way. The box has open internet. No code of ours stands
+in a model call or a refresh call.
+
+- **Experiment 148's rule held.** The fake tokens showed up **0 times** in
+  anything our Worker handled: its log, its storage outside the sealed
+  locker, and 165 calls in and out of its front door. Inside the box they
+  are there by design: Claude's token in the job's environment, Codex's
+  `auth.json` in its folder.
+- **The loan end time works.** A box died mid-job and nothing told the
+  locker. The locker's alarm ended the loan at its time, and the person's
+  next Codex job got the login 13 ms later and ran. Without an end time, the
+  next job was still waiting after 20 s.
+- **Known cost: a box that dies right after a refresh kills the Codex
+  login.** Killed 38 ms after the refresh, the box took the new tokens with
+  it. The next job sent the old refresh token, the fake saw it used twice,
+  and the person must sign in again.
+
+```ts
+// The whole idea, from worker.ts, shortened.
+// Claude: the locker's token goes into the job's env, as anthropics/claude-code-action does.
+// OWN_RULES stands for rules.ts's ownRules as flags: --setting-sources project, --project-config-root /var/empty.
+const token = await locker.claude(box);
+await container.exec(["claude", "--print", ...OWN_RULES, prompt], {env: {CLAUDE_CODE_OAUTH_TOKEN: token}});
+
+// Codex: the login is lent before the box starts, for one job, until an end time.
+const lent = await locker.lend(box, {queue: true, ms: LOAN_MS}); // waits while another job holds it
+await files.writeFile(`${codexHome}/auth.json`, JSON.stringify(lent.auth));
+await container.exec(["codex", "exec", ...]);                    // may refresh inside the box
+const copy = await files.readFile(`${codexHome}/auth.json`);
+await container.destroy();                                       // the box stops first
+await locker.back(box, JSON.parse(await copy.text()));          // then the login goes home
+
+// Locker.alarm(): a loan past its end time is ended, its box stopped, the next job goes.
+```
+
+## Round 2: the box holds the login
+
+### What changed from round 1
+
+| | Round 1 (not taken) | Round 2 (ruled) |
+|---|---|---|
+| Claude token | added by our Outbound handler on the way out | in the job's env as `CLAUDE_CODE_OAUTH_TOKEN` |
+| Codex refresh | caught by our handler into the locker | only Codex sees it; the box's copy goes back after the job |
+| Box network | no internet, every call through our allow list | open internet, nothing of ours in between |
+| Pointing at the fakes | made-up names the handler caught | the programs' own settings: `ANTHROPIC_BASE_URL`, Codex's base URLs |
+| A box that dies holding the loan | the loan stayed held forever | an alarm ends it at its time |
+| Box user | root | `node` (uid 1000) |
+
+- **Claude Code reads the repo's rules and none of its settings,** with the
+  CLI form of `ownRules` from `packages/fabrika/src/agents/claude/rules.ts`:
+  `--setting-sources project --project-config-root /var/empty` and the
+  AGENTS.md plugin option in `--settings`. The lint rule
+  `no-project-settings` fires on those flags; the two lines carry a
+  `biome-ignore` that says they are `ownRules` written as flags.
+- **The Dockerfile makes `/var/empty`** (`mkdir -p -m 0555`) and runs as the
+  `node` user. From inside a box, writing in it failed with `EACCES`, and it
+  held nothing.
+- **A Codex job gets the login before its box starts.** A job waiting in
+  line holds no box. And the box is stopped before the take-back, so two
+  boxes never hold the same `auth.json` at once.
+- **The loan end time** is a Durable Object alarm, set when the loan is lent.
+  When it fires on a loan still held, it stops that box (it may still be
+  running), keeps what the locker has, and lets the next job in line go.
+
+```ts
+// worker.ts, Locker, shortened.
+type Loan = {readonly box: string; readonly until: number};
+
+async lend(box: string, o: {queue: boolean; ms: number}) {
+	while (o.queue && (await this.loan()) !== null) await new Promise((r) => this.line.push(r));
+	const until = Date.now() + o.ms;
+	await this.store.put("loan", {box, until});
+	await this.store.setAlarm(until);
+	return {auth: await this.get("codex"), waitedMs};
+}
+
+async alarm() {
+	const loan = await this.loan();
+	if (loan === null) return;
+	if (loan.until > Date.now()) return this.store.setAlarm(loan.until);
+	await this.env.BOX.getByName(loan.box).kill(); // so two boxes never hold the login
+	await this.release();                          // loan cleared, alarm gone, next job goes
+}
+```
+
+### Who did what
+
+- **This repo's code:** the Worker, the locker, the box object, the witness
+  (for one measuring step only), both fake servers and the driver.
+- **Real programs, unchanged, in the boxes:** Codex 0.163.0 and Claude Code
+  2.1.310, from npm.
+- **Cloudflare's local twin:** `wrangler dev` 4.153.0 (workerd) with Docker
+  for the boxes, through the container API that Sandbox SDK 1.0.3 uses.
+- **Today's fabrika:** none. No agent of today's fabrika, no ledger.
+- **Cost:** $0. Every login is fake. No call went to an OpenAI or Anthropic
+  host, nothing signed in, nothing was deployed.
+- **Run:** one full run of every step, about 2 min 30 s, one box at a time.
+  Four earlier runs found the bugs told below. The step that needs two boxes
+  at once ran in one of them, before the laptop's limit went to one box.
+
+### How the programs were pointed at the fakes
+
+The fakes listen on 127.0.0.1. Docker Desktop sends `host.docker.internal`
+from a box to this laptop, so the box reaches them straight. The Worker is
+told those addresses only to write them into the programs' settings. On
+Cloudflare both are left unset and the programs use their own hosts.
+
+```sh
+# Claude Code's job env.
+CLAUDE_CODE_OAUTH_TOKEN=<the person's token>
+ANTHROPIC_BASE_URL=http://host.docker.internal:<port>     # unset on Cloudflare
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+
+# Codex's job env, and CODEX_HOME/config.toml as in round 1, with these bases.
+CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://host.docker.internal:<port>/oauth/token  # unset on Cloudflare
+# chatgpt_base_url and model_providers.chatgpt.base_url: http://host.docker.internal:<port>/backend-api/...
+```
+
+- No CA and no `SSL_CERT_FILE`: nothing ends TLS in the box's path now.
+- Claude Code sent the OAuth beta header itself; round 1's handler had added
+  it. The fake checks for it.
+
+### What came back
+
+Every job worked on the same toy project (`fixtures/format-bytes`), and a job
+is right when its answer says what the check printed.
+
+**Claude.** One job, ok and right, 3.5 s. The fake saw a's token on both
+calls. The token was in the box while the job ran (1 copy, in Claude Code's
+environment) and in none of the box's files once the job ended.
+
+**Codex, a refresh in the box.** The first job refreshed inside the box (one
+refresh, ok), was right, 6.2 s, and the locker took back the refreshed copy:
+`"kept"`. The second job was right on the new access token, with no refresh,
+3.3 s. The new tokens lived only in the box for 5.3 s: from the refresh to
+the take-back. That is the window in which a dying box kills the login.
+
+**Codex, the box dies right after its refresh (the known cost).** The driver
+waits for the fake to answer the box's refresh, then kills the box.
+
+- Killed 38 ms after the refresh. The box object saw it die and dropped the
+  loan, so the next job did not wait.
+- The locker still held the old refresh token, already used.
+- The next job sent it: the fake saw a second use and killed the family.
+  Codex said "Your access token could not be refreshed because your refresh
+  token was revoked. Please log out and sign in again." and tried three more
+  times, refused each time.
+- **The login is dead; the person signs in again.** Round 1's catch fixed
+  this, and it is gone with the ruling. The window is open only in a job
+  that refreshes, from the refresh to the end of the job. How often a real
+  job refreshes is not measured here: the fake forces a refresh on purpose.
+
+**Codex, the loan end time.** The login does not run out in this case, so
+the dead box never refreshed and the next job can work.
+
+| | With an end time (8 s) | Without one (10 min) |
+|---|---|---|
+| The box | killed mid-job; its object planted to say nothing | the same |
+| The loan after the death | still held | still held |
+| The next job of the same person | waited 5.2 s, got the login 13 ms after the end time, ok and right | not started after 20 s |
+| The locker's counts | `ended: 1` | the loan still held at 20 s |
+
+- So a dead box costs that person's Codex jobs one loan length at most,
+  where before it cost them forever.
+- The planted "says nothing" stands for the box object dying with its box.
+  When the object lives, it sees the box die and drops the loan at once, as
+  the dead-login case shows.
+
+**Codex, a second job of the same person while the first runs.** Started
+300 ms after the first, it waited 9.2 s (the first ran 8.5 s) with no box
+started, then ran on the refreshed login. Both ok and right, one refresh,
+the login alive. With the queue switched off on purpose (the earlier run,
+two boxes at once): both boxes got the same `auth.json`, both refreshed with
+the same token, and both failed with the same "revoked" message. The login
+was dead, as in round 1.
+
+**Two people, two lockers.** a and b, each with Claude and Codex, one job
+after another. All four ok and right; each fake call carried its own
+person's token.
+
+| The wrong ask | Answer |
+|---|---|
+| a's key names b in the body | 403 |
+| b's key asks to run a's box | 403 |
+| a's box asks b's locker for both logins | both refused (b's locker counted 2) |
+| a's key sends a login marked for b | 403 |
+| no key | 401 |
+
+Round 1's last row, a box claiming to be b, has nothing to test now: a box
+holds only its own person's token, and no handler of ours adds one.
+
+**The allow list is gone for model calls. What a box reaches now:**
+
+- From inside a box: the fake Anthropic straight (401, the probe sent no
+  token), the fake OpenAI straight (404 on a path it does not serve),
+  `https://example.com` (200), and DNS resolves. It runs as uid 1000.
+- Our Worker's log got **0 lines** from all of it.
+- **What replaces the allow list:** nothing on the network. What still
+  limits a job is the command line our box object writes (the model, the
+  tools, the turns), the provider's own limits on the person's plan, private
+  repositories only, and the box's life and the loan's end time. An agent
+  in a box can call any host, and any model the login allows.
+
+**Which hosts the programs call, measured once in a caught box.** The
+witness step starts a box with no internet, points the programs at two
+made-up names, and writes down the host and path of every call, never a
+header or a body. It is for measuring, not the shape.
+
+- Claude Code: only `/v1/messages`.
+- Codex: `/oauth/token`, `/backend-api/codex/models`,
+  `/backend-api/wham/accounts/check`, `/backend-api/wham/settings/user`,
+  `/backend-api/codex/responses`. The two `wham` paths were not in round 1's
+  notes; the fake answers 404 and Codex goes on.
+- **0 calls to any other host,** HTTP or HTTPS.
+
+**Time.** A call from a box straight to a fake: median 4.2 ms over 20 tries.
+Round 1's catch path was 17.4 ms; our Worker is not in the path now, so its
+part is 0. Jobs took 3.3 to 8.5 s here, against 10 to 15 s in round 1. Why
+they got faster was not checked.
+
+### Leaks, counted, never printed
+
+| Where | What was looked for | Count |
+|---|---|---|
+| The Worker's log, 17 KB | any fake login; the Worker secret | 0; 0 |
+| The Worker's storage, 61 files, 5.9 MB | any fake login in the clear; the secret | 0; 0 |
+| 84 bodies sent to the front door (all but the app's `/login`) | any fake login | 0 |
+| 81 answers from the front door (all but the driver's box dumps) | any fake login | 0 |
+| A handler of ours on a box's calls, outside the witness step | its log lines | 0: there is none |
+| a's Claude box, during the job | a's Claude token | 1, by design |
+| a's Claude boxes, after the job | a's Claude token | 0 |
+| a's Codex box, during the job | a's Codex tokens | 3, by design |
+| b's boxes | a's tokens | 0 |
+| a's boxes | b's tokens | 0 |
+| Codex boxes; Claude boxes | the other program's tokens | 0; 0 |
+
+- **The token in the box is by design.** That is the ruled shape: the box
+  holds the login, as on a GitHub Actions runner. Anything in the box can
+  read its own person's token while the job runs, and with open internet it
+  could send it anywhere. Private repositories only.
+- **"Never sees" means on the wire, in logs and in storage.** The locker
+  opens the sealed token in memory to hand it to the box object, which puts
+  it in the job's env. Our code holds it for that moment.
+
+### Bugs found on the way
+
+- **Wrangler reloaded mid-run** when a file in its folder changed (an edit
+  of ours), and the run failed with "fetch failed". Round 1 warned about it.
+- **Locally the catch takes only port 80,** and `host.docker.internal` is in
+  the box's own hosts file. The first witness runs saw nothing: the calls
+  went around the catch, or were reset. The witness now uses made-up names
+  on port 80.
+- **The driver's own look after a Codex job finds no box** now, since the
+  box stops before the take-back. So the Codex box is dumped during its job.
+
+### The local twin and the cloud
+
+- **Open internet locally is Docker's,** and the fakes are reached through
+  Docker Desktop's `host.docker.internal`. On Cloudflare the box would reach
+  the real hosts the same way, with no name of ours in between. Not tried.
+- **The alarm ran in workerd.** Cloudflare's alarms were not tried.
+- **An idle object loses its memory.** The loan lives in storage, as round 1
+  learned. The waiting line is in memory, but each waiting job is an open
+  call, which keeps the locker alive.
+
+### Live-run steps, written, not run
+
+The deploy and the sign-ins are done later by hand with the owner.
+
+1. Deploy one Worker with the locker and the box, the box image as here, and
+   open internet for the box. No base URL is set, so the programs use their
+   own hosts. No witness. Set the secret with `wrangler secret put SECRET`.
+2. Each person makes logins of their own for it:
+   - `claude setup-token`, the token claude-code-action takes;
+   - `codex login` with `CODEX_HOME` set to a new empty folder and
+     `cli_auth_credentials_store = "file"` in its config. A sign-in of its
+     own, so the laptop's own Codex login never shares a refresh token with
+     the locker.
+3. The person's app sends both once, with the person's key, then deletes the
+   folder.
+4. One job of each, on a private toy repository only, with the same
+   count-only checks on the Worker's log, its storage and its front door.
+5. The loan end time: set it to a few minutes for this run, stop one Codex
+   box by hand mid-job, and check that the next job starts after the end.
+6. Clean up: delete the stored logins, revoke the setup token, sign out the
+   Codex sign-in made for this, delete the Worker.
+
+### Recommendation
+
+**Lean: build the live run on this shape.** Why: it is the ruled shape, 148's
+rule held with 0 tokens in anything the Worker handled, and the loan end time
+closes the one hang round 1 left open. Cost: an agent can read its own token
+and reach the whole internet, as on a laptop; a box that dies right after a
+refresh kills the Codex login; one Codex job per person at a time.
+Confidence 80% that it holds on the real servers. The doubt is how
+`auth.openai.com` treats a reused refresh token, and which hosts Codex calls
+there; the live run settles both.
+
+1. **Set the loan end time to the job's time limit plus a margin.** A job
+   still alive past it is stopped and its take-back refused, and if it had
+   refreshed, the login dies. Cost: built here, about 20 lines. Confidence
+   85%.
+2. **Keep stopping the box before the take-back.** Then two boxes never hold
+   the same `auth.json`, even with a late job. Cost: one line. Confidence
+   85%.
+3. **Take the dead login as a known cost, and say it plainly.** The person's
+   app should tell them "sign in to Codex again" with the reason, not a raw
+   error. A second Codex sign-in of their own would be a second lane. Cost:
+   a message. Confidence 75%: how often it happens depends on how often a
+   real job refreshes, which this run does not show.
+4. **Run the witness step before each Codex or Claude Code version bump.**
+   It lists every host the programs call, for about a minute. Cost: kept in
+   the driver. Confidence 80% that it is worth keeping.
+
+### What it cannot tell us
+
+- **The real servers.** Whether `auth.openai.com` kills a family on reuse
+  the way the fake does, whether it has a grace window, and which other
+  hosts Codex calls there.
+- **How often the dead-login case happens.** It needs a job that refreshes
+  and a box that dies in the seconds after. The fake forces every first job
+  to refresh; a real login refreshes far less often.
+- **What an agent does with its token and the open internet.** Not tested,
+  by design: the ruling takes it, with private repositories only.
+- **Whether the providers allow it.** The direction note reads Anthropic's
+  page as allowing an end user's own login in a hosted, unmodified Claude
+  Code. OpenAI's CI page is written for a trusted runner, and whether a
+  hosted box counts is OpenAI's call.
+- **The cloud.** No deploy. The network results are Docker's, and the alarm
+  is workerd's.
+- **Small numbers.** One full run, one job or two a case.
+- **The seal is only as good as the secret.** Anyone with the Worker's
+  secret, or the shared Cloudflare account, can open every login in it.
+
+## Round 1 (2026-10-26): the token swap and the refresh catch, the shape not taken
+
+Kept as it ran, numbers unchanged. Its saved answers are in
+`results/157-login-stays-home-round-1.json`. The code for it is in this
+repository's history, at the commit that added this experiment.
+
+**Round 1's answer: it works on this laptop, with fake logins, built the way others
 already do it.** Each person has a locker: one Durable Object holding their
 Claude token and their Codex `auth.json`, both sealed with a Worker secret.
 The box is a container started through Cloudflare's Sandbox SDK shape, with no
@@ -60,7 +402,7 @@ Worker never sees a real token, so experiment 148's rule stays. Recommendations
 here are not the shape that ships. See
 [where a person's login lives](../docs/direction/agents-behind-one-service.md#where-a-persons-login-lives).
 
-## Who did what
+## Round 1: who did what
 
 - **This repo's code:** the Worker, the locker, the box object, the Outbound
   handler, both fake servers and the driver.
@@ -75,7 +417,7 @@ here are not the shape that ships. See
   The first build takes about 2 to 3 minutes. Two earlier runs found the bugs
   told below.
 
-## The machine
+## Round 1: the machine
 
 Three parts in one Worker. The person's app talks to the front door with the
 person's own key. Everything else is inside.
@@ -139,7 +481,7 @@ if (route.kind === "token" && props.catch && res.ok) {
 }
 ```
 
-## How Codex was pointed at the fakes
+## Round 1: how Codex was pointed at the fakes
 
 Codex reads its ChatGPT login from `auth.json` in `CODEX_HOME`. Three settings
 and one environment variable send every call to a made-up name, which the
@@ -191,7 +533,7 @@ SSL_CERT_FILE=/etc/cloudflare/certs/cloudflare-containers-ca.crt   # the platfor
   `CLAUDE_CODE_OAUTH_TOKEN=box-holds-no-key` and the CA. On Cloudflare the
   catch would name `api.anthropic.com` and no base URL would be set.
 
-## What came back
+## Round 1: what came back
 
 Every job worked on the same toy project (`fixtures/format-bytes`): the fake
 model asks the agent to run a check, and the job is right when the answer
@@ -317,7 +659,7 @@ reads it from a file and writes the refreshed copy back. Anything in a Codex
 box can read its own person's ChatGPT login for as long as the job runs,
 refresh token included. The Claude box holds only the placeholder.
 
-## The local twin and the cloud
+## Round 1: the local twin and the cloud
 
 - **The box runs under emulation.** `wrangler dev` builds the image for
   `linux/amd64`, and this laptop is arm64. Jobs were slow: a Claude job took
@@ -342,7 +684,7 @@ refresh token included. The Claude box holds only the placeholder.
   run going at that moment fails with 503. Leave the folder alone during a
   run.
 
-## Live-run steps, written, not run
+## Round 1: live-run steps, replaced by round 2's
 
 The deploy waits for the owner's yes.
 
@@ -363,7 +705,7 @@ The deploy waits for the owner's yes.
 5. Clean up: delete the stored logins, revoke the setup token, sign out the
    Codex sign-in made for this, delete the Worker.
 
-## Recommendation
+## Round 1: recommendation, as written
 
 **Lean: take the proposed change, with four conditions.** Why: it is the
 shape Cloudflare and OpenAI document, it ran on the fakes, jobs no longer
@@ -398,7 +740,7 @@ token, and the live-run steps settle it.
 account. 4 not taken, 148's rule stays and the box holds the login. With no
 Worker on the refresh path, 1's catch goes too; the queue and 2 stay.
 
-## What it cannot tell us
+## Round 1: what it could not tell us, as written
 
 - **Whether the providers allow it.**
   - Anthropic: the
@@ -435,16 +777,23 @@ Worker on the refresh path, 1's catch goes too; the queue and 2 stay.
 
 ## Files and how to run
 
-- `157-login-stays-home.ts`: the driver. Steps: claude, codex, kill, killFixed,
-  queue, queuePlantedOff, two, allow, time, then the leak count.
-- `157-login-stays-home/`: `worker.ts` (locker, box, Outbound, front door),
-  `gate.ts` (the allow list), `seal.ts`, `ticket.ts` (the person's key),
-  `fake-openai.ts`, `fake-anthropic.ts`, `dev.ts` (the fakes and
-  `wrangler dev`), `Dockerfile`, `wrangler.jsonc`, its own `package.json`.
-- `results/157-login-stays-home.json`: every step's answer.
+Round 2's files. Round 1's `gate.ts` and its Outbound handler are gone;
+they are in this repository's history.
+
+- `157-login-stays-home.ts`: the driver. Steps: claude, codex, deadLogin,
+  loanEnds, loanNoEnd, queue, queuePlantedOff (only when named: it needs two
+  boxes at once), two, open, witness, time, then the leak count. One box runs
+  at a time otherwise.
+- `157-login-stays-home/`: `worker.ts` (locker, box, witness, front door),
+  `seal.ts`, `ticket.ts` (the person's key), `fake-openai.ts`,
+  `fake-anthropic.ts`, `dev.ts` (the fakes and `wrangler dev`),
+  `Dockerfile`, `wrangler.jsonc`, its own `package.json`.
+- `results/157-login-stays-home.json`: round 2's answers, every step.
+- `results/157-login-stays-home-round-1.json`: round 1's answers.
 
 ```sh
 # Once: pnpm install --ignore-workspace in experiments/157-login-stays-home. Needs Docker.
+# STEPS=<a,b> runs only those steps and writes no results file.
 env -u TYPESAFE_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY -u ANTHROPIC_API_KEY \
-  -u CLAUDE_CODE_OAUTH_TOKEN nice -n 15 node experiments/157-login-stays-home.ts
+  -u CLAUDE_CODE_OAUTH_TOKEN -u CLOUDFLARE_API_TOKEN nice -n 15 node experiments/157-login-stays-home.ts
 ```

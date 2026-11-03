@@ -4,11 +4,12 @@ import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import {gitHubCodeHost} from "@kampus/pipeline/code-host-github";
 import {GITHUB, gitHubPullRequests} from "@tea-fabrika/tracker/github";
 import {Effect, FileSystem, Layer, Logger} from "effect";
+import {hostJev} from "./jev.ts";
 import {runHost} from "./run.ts";
 import {pathsOf} from "./socket.ts";
 
 // The host process: the entry of dist/host.mjs. It holds every tile's tsh, every program, the
-// line editor's history, each tile's jobs, the ledger and the desk, and it outlives the app, as
+// line editor's history, one job table for every tile, the ledger and the desk, and it outlives the app, as
 // tmux's server outlives its clients. The app is a client of it (attach.ts): it starts the host
 // when none answers, and Cmd-Q quits the app only.
 //
@@ -17,14 +18,17 @@ import {pathsOf} from "./socket.ts";
 // It is the app's own Electron binary, run as plain Node (`ELECTRON_RUN_AS_NODE`): the app
 // already ships it, so the host runs the same Node, with the same node:sqlite, as the build was
 // tested on, and nothing else has to be found on the user's machine. The app starts it detached,
-// with no stdin, stdout or stderr: it logs to <home>/host/log.
+// with no stdin or stdout: it logs to <home>/host/log, and its stderr is appended there too, so a
+// host that dies before its logger is up still says why (start-host.ts).
 //
 // FABRIKA_HOME is always given: the host never guesses a home, so a host started by a test can
 // never be the owner's, and the owner's never a test's. With none, it does not start.
 //
 // It stops on SIGTERM or SIGINT (`NodeRuntime.runMain`): the scope closes, every tile's tsh stops
-// with it, their jobs stay for `attach` at the next start, and the socket and the pid file go.
-// There is no command for a person to stop it. A test stops its own by the pid in its home.
+// with it, the jobs stay in the host's table for `attach` at the next start, and the socket and
+// the pid file go.
+// A person stops it only through the window's restart, or `fabrika connect`, which stops it so the
+// app starts one on the new ledger (host/connection.ts). A test stops its own by the pid in its home.
 //
 // Node at its thinnest edge, said here: `process.env`, `process.pid`, and `process.umask`, set to
 // 0o077 before anything is made, so every file the host makes is the user's alone even before
@@ -51,7 +55,10 @@ const main = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
 	yield* fs.makeDirectory(paths.dir, {recursive: true, mode: 0o700});
 	const toFile = yield* Logger.toFile(Logger.formatSimple, paths.log, {flag: "a"});
-	return yield* runHost({home, pid: process.pid}).pipe(Effect.provide(Logger.layer([toFile])));
+	// Jev, for the tracker's duplicate hint, only when the home holds a key (jev.ts).
+	return yield* runHost({home, pid: process.pid}).pipe(
+		Effect.provide(Layer.merge(Logger.layer([toFile]), hostJev(home))),
+	);
 }).pipe(
 	Effect.scoped,
 	Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, pullRequests)),

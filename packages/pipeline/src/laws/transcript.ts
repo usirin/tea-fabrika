@@ -4,7 +4,7 @@ import {
 	type ToolStatus,
 	type Transcript,
 	transcript,
-} from "@kampus/fabrika/agents/acp";
+} from "@kampus/fabrika-old/agents/acp";
 import {
 	broke,
 	type Law,
@@ -52,12 +52,10 @@ export function transcriptWorld(): World<Transcript, Msg, Cmd> {
 						{type: "ended", ended: {n: s.turn, stop: "cancelled", usage: null}} as const,
 					]),
 			// The host numbers its asks: one open is never asked again.
-			...ASKS.filter((id) => !s.asks.some((a) => a.id === id)).map(
-				(id): Msg => ({
-					type: "asked",
-					ask: {id, tool: "Edit", title: "a", kind: "edit", options: ["allow_once"]},
-				}),
-			),
+			...ASKS.filter((id) => !s.asks.some((a) => a.id === id)).map((id): Msg => ({
+				type: "asked",
+				ask: {id, tool: "Edit", title: "a", kind: "edit", options: ["allow_once"]},
+			})),
 			...ASKS.map((ask): Msg => ({type: "answered", ask, answer: "allowed"})),
 			{type: "cancelling"},
 		],

@@ -1,0 +1,4121 @@
+{
+  "codex": "codex-cli 0.165.0",
+  "cases": [
+    {
+      "case": {
+        "name": "together",
+        "jobs": 4,
+        "serial": true,
+        "gapMs": 0
+      },
+      "round": 1,
+      "jobs": [
+        {
+          "run": "together-r1-1",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10223,
+          "asks": [
+            {
+              "at": 10217,
+              "answerMs": 4,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-397e8ba5dfce"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "together-r1-2",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10225,
+          "asks": [
+            {
+              "at": 10218,
+              "answerMs": 3,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-397e8ba5dfce"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "together-r1-3",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10223,
+          "asks": [
+            {
+              "at": 10212,
+              "answerMs": 8,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-397e8ba5dfce"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "together-r1-4",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10225,
+          "asks": [
+            {
+              "at": 10217,
+              "answerMs": 4,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-397e8ba5dfce"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        }
+      ],
+      "allOk": true,
+      "refreshes": [
+        {
+          "what": "ok",
+          "gen": 1,
+          "at": 10218
+        }
+      ],
+      "realRefreshes": 1,
+      "familyKilled": false,
+      "manager": {
+        "asks": 4,
+        "shared": 3,
+        "spends": [
+          {
+            "ok": true,
+            "ms": 6
+          }
+        ]
+      },
+      "model": [
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 109,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 112,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 113,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 114,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 114,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 115,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 115,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 115,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 132,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 133,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 133,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 133,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 144,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 144,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 144,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 144,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r1-2",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 158,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r1-3",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 159,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r1-1",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 160,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r1-4",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 160,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r1-3",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10211,
+          "heldMs": 9945
+        },
+        {
+          "run": "together-r1-4",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10212,
+          "heldMs": 9946
+        },
+        {
+          "run": "together-r1-1",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10216,
+          "heldMs": 9945
+        },
+        {
+          "run": "together-r1-2",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10217,
+          "heldMs": 9945
+        },
+        {
+          "run": "together-r1-1",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10226,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r1-3",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10227,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r1-2",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10229,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r1-4",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10230,
+          "heldMs": 0
+        }
+      ],
+      "addedMs": {
+        "each": [
+          10,
+          12,
+          16,
+          18
+        ],
+        "median": 12,
+        "max": 18
+      },
+      "trap": 0,
+      "leaks": {
+        "refreshInStdio": 0,
+        "refreshInHttp": 0,
+        "refreshOnDisk": 0,
+        "accessInStdio": 8,
+        "accessOnDisk": 0,
+        "files": [
+          65,
+          67,
+          69,
+          62
+        ],
+        "authJson": 0
+      }
+    },
+    {
+      "case": {
+        "name": "together",
+        "jobs": 4,
+        "serial": true,
+        "gapMs": 0
+      },
+      "round": 2,
+      "jobs": [
+        {
+          "run": "together-r2-1",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10215,
+          "asks": [
+            {
+              "at": 10207,
+              "answerMs": 1,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-b1f4e556da26"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "together-r2-2",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10215,
+          "asks": [
+            {
+              "at": 10207,
+              "answerMs": 1,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-b1f4e556da26"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "together-r2-3",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10214,
+          "asks": [
+            {
+              "at": 10208,
+              "answerMs": 0,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-b1f4e556da26"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "together-r2-4",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10213,
+          "asks": [
+            {
+              "at": 10206,
+              "answerMs": 2,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-b1f4e556da26"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        }
+      ],
+      "allOk": true,
+      "refreshes": [
+        {
+          "what": "ok",
+          "gen": 1,
+          "at": 10207
+        }
+      ],
+      "realRefreshes": 1,
+      "familyKilled": false,
+      "manager": {
+        "asks": 4,
+        "shared": 3,
+        "spends": [
+          {
+            "ok": true,
+            "ms": 2
+          }
+        ]
+      },
+      "model": [
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 97,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 99,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 99,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 100,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 103,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 103,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 103,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 104,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 119,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 120,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 120,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 120,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 129,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 129,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 131,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 131,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r2-1",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 139,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r2-2",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 139,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r2-3",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 141,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r2-4",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 141,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r2-4",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10205,
+          "heldMs": 9960
+        },
+        {
+          "run": "together-r2-1",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10206,
+          "heldMs": 9961
+        },
+        {
+          "run": "together-r2-2",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10206,
+          "heldMs": 9961
+        },
+        {
+          "run": "together-r2-3",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10207,
+          "heldMs": 9961
+        },
+        {
+          "run": "together-r2-1",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10213,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r2-3",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10214,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r2-4",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10214,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r2-2",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10215,
+          "heldMs": 0
+        }
+      ],
+      "addedMs": {
+        "each": [
+          7,
+          9,
+          7,
+          9
+        ],
+        "median": 7,
+        "max": 9
+      },
+      "trap": 0,
+      "leaks": {
+        "refreshInStdio": 0,
+        "refreshInHttp": 0,
+        "refreshOnDisk": 0,
+        "accessInStdio": 8,
+        "accessOnDisk": 0,
+        "files": [
+          61,
+          61,
+          64,
+          60
+        ],
+        "authJson": 0
+      }
+    },
+    {
+      "case": {
+        "name": "together",
+        "jobs": 4,
+        "serial": true,
+        "gapMs": 0
+      },
+      "round": 3,
+      "jobs": [
+        {
+          "run": "together-r3-1",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10250,
+          "asks": [
+            {
+              "at": 10216,
+              "answerMs": 2,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-a2aa7c307ff5"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "together-r3-2",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10249,
+          "asks": [
+            {
+              "at": 10218,
+              "answerMs": 0,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-a2aa7c307ff5"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "together-r3-3",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10248,
+          "asks": [
+            {
+              "at": 10218,
+              "answerMs": 0,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-a2aa7c307ff5"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "together-r3-4",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10247,
+          "asks": [
+            {
+              "at": 10217,
+              "answerMs": 1,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-a2aa7c307ff5"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        }
+      ],
+      "allOk": true,
+      "refreshes": [
+        {
+          "what": "ok",
+          "gen": 1,
+          "at": 10218
+        }
+      ],
+      "realRefreshes": 1,
+      "familyKilled": false,
+      "manager": {
+        "asks": 4,
+        "shared": 3,
+        "spends": [
+          {
+            "ok": true,
+            "ms": 2
+          }
+        ]
+      },
+      "model": [
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 104,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 112,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 134,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 143,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 165,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 227,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 245,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 246,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 277,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 287,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r3-1",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 295,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 295,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 295,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 296,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 308,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r3-3",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 317,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 319,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 322,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r3-4",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 334,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r3-2",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 335,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r3-1",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10208,
+          "heldMs": 9767
+        },
+        {
+          "run": "together-r3-4",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10208,
+          "heldMs": 9731
+        },
+        {
+          "run": "together-r3-3",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10214,
+          "heldMs": 9732
+        },
+        {
+          "run": "together-r3-2",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10214,
+          "heldMs": 9715
+        },
+        {
+          "run": "together-r3-1",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10249,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r3-3",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10250,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r3-2",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10250,
+          "heldMs": 0
+        },
+        {
+          "run": "together-r3-4",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10251,
+          "heldMs": 0
+        }
+      ],
+      "addedMs": {
+        "each": [
+          41,
+          36,
+          36,
+          43
+        ],
+        "median": 36,
+        "max": 43
+      },
+      "trap": 0,
+      "leaks": {
+        "refreshInStdio": 0,
+        "refreshInHttp": 0,
+        "refreshOnDisk": 0,
+        "accessInStdio": 8,
+        "accessOnDisk": 0,
+        "files": [
+          64,
+          66,
+          61,
+          69
+        ],
+        "authJson": 0
+      }
+    },
+    {
+      "case": {
+        "name": "staggered",
+        "jobs": 4,
+        "serial": true,
+        "gapMs": 400
+      },
+      "round": 1,
+      "jobs": [
+        {
+          "run": "staggered-r1-1",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10231,
+          "asks": [
+            {
+              "at": 10209,
+              "answerMs": 3,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-c9389c7a2f77"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "staggered-r1-2",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 11407,
+          "asks": [
+            {
+              "at": 11405,
+              "answerMs": 1,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-c9389c7a2f77"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "staggered-r1-3",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10995,
+          "asks": [
+            {
+              "at": 11004,
+              "answerMs": 0,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-c9389c7a2f77"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "staggered-r1-4",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10587,
+          "asks": [
+            {
+              "at": 10605,
+              "answerMs": 0,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-c9389c7a2f77"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        }
+      ],
+      "allOk": true,
+      "refreshes": [
+        {
+          "what": "ok",
+          "gen": 1,
+          "at": 10211
+        }
+      ],
+      "realRefreshes": 1,
+      "familyKilled": false,
+      "manager": {
+        "asks": 4,
+        "shared": 3,
+        "spends": [
+          {
+            "ok": true,
+            "ms": 2
+          }
+        ]
+      },
+      "model": [
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 174,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 177,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 197,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 200,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 208,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 209,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 231,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 234,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 242,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 243,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 244,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r1-3",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 250,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 255,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r1-1",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 262,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 271,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 294,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 295,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r1-2",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 306,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 311,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r1-4",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 318,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r1-1",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10208,
+          "heldMs": 9818
+        },
+        {
+          "run": "staggered-r1-1",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10228,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r1-4",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10604,
+          "heldMs": 10124
+        },
+        {
+          "run": "staggered-r1-4",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10609,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r1-3",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 11004,
+          "heldMs": 10483
+        },
+        {
+          "run": "staggered-r1-3",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 11006,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r1-2",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 11405,
+          "heldMs": 10857
+        },
+        {
+          "run": "staggered-r1-2",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 11408,
+          "heldMs": 0
+        }
+      ],
+      "addedMs": {
+        "each": [
+          20,
+          3,
+          2,
+          5
+        ],
+        "median": 3,
+        "max": 20
+      },
+      "trap": 0,
+      "leaks": {
+        "refreshInStdio": 0,
+        "refreshInHttp": 0,
+        "refreshOnDisk": 0,
+        "accessInStdio": 8,
+        "accessOnDisk": 0,
+        "files": [
+          67,
+          69,
+          65,
+          63
+        ],
+        "authJson": 0
+      }
+    },
+    {
+      "case": {
+        "name": "staggered",
+        "jobs": 4,
+        "serial": true,
+        "gapMs": 400
+      },
+      "round": 2,
+      "jobs": [
+        {
+          "run": "staggered-r2-1",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10216,
+          "asks": [
+            {
+              "at": 10208,
+              "answerMs": 4,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-962e12604f21"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "staggered-r2-2",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 11009,
+          "asks": [
+            {
+              "at": 11006,
+              "answerMs": 0,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-962e12604f21"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "staggered-r2-3",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 11437,
+          "asks": [
+            {
+              "at": 11411,
+              "answerMs": 0,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-962e12604f21"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "staggered-r2-4",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10656,
+          "asks": [
+            {
+              "at": 10616,
+              "answerMs": 1,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-962e12604f21"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        }
+      ],
+      "allOk": true,
+      "refreshes": [
+        {
+          "what": "ok",
+          "gen": 1,
+          "at": 10211
+        }
+      ],
+      "realRefreshes": 1,
+      "familyKilled": false,
+      "manager": {
+        "asks": 4,
+        "shared": 3,
+        "spends": [
+          {
+            "ok": true,
+            "ms": 4
+          }
+        ]
+      },
+      "model": [
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 135,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 154,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 167,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 168,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 168,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 173,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 174,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 174,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 174,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 183,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r2-1",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 192,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 194,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 196,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 198,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 213,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 214,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 216,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r2-4",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 223,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r2-3",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 225,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r2-2",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 225,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r2-1",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10206,
+          "heldMs": 9879
+        },
+        {
+          "run": "staggered-r2-1",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10217,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r2-4",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10604,
+          "heldMs": 10264
+        },
+        {
+          "run": "staggered-r2-4",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10634,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r2-2",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 11005,
+          "heldMs": 10665
+        },
+        {
+          "run": "staggered-r2-2",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 11010,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r2-3",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 11407,
+          "heldMs": 11065
+        },
+        {
+          "run": "staggered-r2-3",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 11425,
+          "heldMs": 0
+        }
+      ],
+      "addedMs": {
+        "each": [
+          11,
+          5,
+          18,
+          30
+        ],
+        "median": 11,
+        "max": 30
+      },
+      "trap": 0,
+      "leaks": {
+        "refreshInStdio": 0,
+        "refreshInHttp": 0,
+        "refreshOnDisk": 0,
+        "accessInStdio": 8,
+        "accessOnDisk": 0,
+        "files": [
+          68,
+          68,
+          69,
+          69
+        ],
+        "authJson": 0
+      }
+    },
+    {
+      "case": {
+        "name": "staggered",
+        "jobs": 4,
+        "serial": true,
+        "gapMs": 400
+      },
+      "round": 3,
+      "jobs": [
+        {
+          "run": "staggered-r3-1",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10224,
+          "asks": [
+            {
+              "at": 10215,
+              "answerMs": 3,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-c7f31ff4eb0c"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "staggered-r3-2",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 10611,
+          "asks": [
+            {
+              "at": 10608,
+              "answerMs": 0,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-c7f31ff4eb0c"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "staggered-r3-3",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 11009,
+          "asks": [
+            {
+              "at": 11008,
+              "answerMs": 0,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-c7f31ff4eb0c"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "staggered-r3-4",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 11443,
+          "asks": [
+            {
+              "at": 11422,
+              "answerMs": 0,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-c7f31ff4eb0c"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "item/agentMessage/delta",
+            "turn/completed"
+          ]
+        }
+      ],
+      "allOk": true,
+      "refreshes": [
+        {
+          "what": "ok",
+          "gen": 1,
+          "at": 10217
+        }
+      ],
+      "realRefreshes": 1,
+      "familyKilled": false,
+      "manager": {
+        "asks": 4,
+        "shared": 3,
+        "spends": [
+          {
+            "ok": true,
+            "ms": 2
+          }
+        ]
+      },
+      "model": [
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 162,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 167,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 175,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 176,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 179,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 183,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 186,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 187,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 208,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 209,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 209,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 221,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 222,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r3-1",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 230,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r3-2",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 236,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 240,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 247,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r3-3",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 250,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 276,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r3-4",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 285,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r3-1",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10208,
+          "heldMs": 9834
+        },
+        {
+          "run": "staggered-r3-1",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10225,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r3-2",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10607,
+          "heldMs": 10227
+        },
+        {
+          "run": "staggered-r3-2",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 10614,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r3-3",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 11007,
+          "heldMs": 10619
+        },
+        {
+          "run": "staggered-r3-3",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 11014,
+          "heldMs": 0
+        },
+        {
+          "run": "staggered-r3-4",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 11415,
+          "heldMs": 10996
+        },
+        {
+          "run": "staggered-r3-4",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 11439,
+          "heldMs": 0
+        }
+      ],
+      "addedMs": {
+        "each": [
+          17,
+          7,
+          7,
+          24
+        ],
+        "median": 7,
+        "max": 24
+      },
+      "trap": 0,
+      "leaks": {
+        "refreshInStdio": 0,
+        "refreshInHttp": 0,
+        "refreshOnDisk": 0,
+        "accessInStdio": 8,
+        "accessOnDisk": 0,
+        "files": [
+          62,
+          65,
+          68,
+          63
+        ],
+        "authJson": 0
+      }
+    },
+    {
+      "case": {
+        "name": "loose",
+        "jobs": 4,
+        "serial": false,
+        "gapMs": 0
+      },
+      "round": 1,
+      "jobs": [
+        {
+          "run": "loose-r1-1",
+          "ok": false,
+          "right": false,
+          "status": "failed",
+          "error": "{\"message\":\"auth refresh request failed: code=-32000\",\"codexErrorInfo\":\"other\",\"additionalDetails\":null,\"misalignment\":null}",
+          "ms": 10425,
+          "asks": [
+            {
+              "at": 10212,
+              "answerMs": 4,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-83e3e5562e8a"
+              }
+            },
+            {
+              "at": 10431,
+              "answerMs": 0,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-83e3e5562e8a"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "error",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "loose-r1-2",
+          "ok": false,
+          "right": false,
+          "status": "failed",
+          "error": "{\"message\":\"auth refresh request failed: code=-32000\",\"codexErrorInfo\":\"other\",\"additionalDetails\":null,\"misalignment\":null}",
+          "ms": 10419,
+          "asks": [
+            {
+              "at": 10211,
+              "answerMs": 5,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-83e3e5562e8a"
+              }
+            },
+            {
+              "at": 10429,
+              "answerMs": 1,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-83e3e5562e8a"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "error",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "loose-r1-3",
+          "ok": false,
+          "right": false,
+          "status": "failed",
+          "error": "{\"message\":\"auth refresh request failed: code=-32000\",\"codexErrorInfo\":\"other\",\"additionalDetails\":null,\"misalignment\":null}",
+          "ms": 10417,
+          "asks": [
+            {
+              "at": 10214,
+              "answerMs": 3,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-83e3e5562e8a"
+              }
+            },
+            {
+              "at": 10433,
+              "answerMs": 0,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-83e3e5562e8a"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "error",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "loose-r1-4",
+          "ok": false,
+          "right": false,
+          "status": "failed",
+          "error": "{\"message\":\"auth refresh request failed: code=-32000\",\"codexErrorInfo\":\"other\",\"additionalDetails\":null,\"misalignment\":null}",
+          "ms": 10411,
+          "asks": [
+            {
+              "at": 10210,
+              "answerMs": 4,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-83e3e5562e8a"
+              }
+            },
+            {
+              "at": 10434,
+              "answerMs": 0,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-83e3e5562e8a"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "error",
+            "turn/completed"
+          ]
+        }
+      ],
+      "allOk": false,
+      "refreshes": [
+        {
+          "what": "ok",
+          "gen": 1,
+          "at": 10213
+        },
+        {
+          "what": "reused",
+          "gen": 1,
+          "at": 10213
+        },
+        {
+          "what": "refused",
+          "gen": 1,
+          "at": 10214
+        },
+        {
+          "what": "refused",
+          "gen": 2,
+          "at": 10216
+        }
+      ],
+      "realRefreshes": 1,
+      "familyKilled": true,
+      "manager": {
+        "asks": 8,
+        "shared": 0,
+        "spends": [
+          {
+            "ok": true,
+            "ms": 4
+          },
+          {
+            "ok": false,
+            "ms": 4
+          },
+          {
+            "ok": false,
+            "ms": 4
+          },
+          {
+            "ok": false,
+            "ms": 3
+          }
+        ]
+      },
+      "model": [
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 229,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 231,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 235,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 244,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 252,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 255,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 255,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 259,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 352,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 354,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 370,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 371,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 376,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 381,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r1-4",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 383,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r1-2",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 386,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 393,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 397,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r1-1",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 403,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r1-3",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 405,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r1-4",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10208,
+          "heldMs": 9691
+        },
+        {
+          "run": "loose-r1-2",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10209,
+          "heldMs": 9690
+        },
+        {
+          "run": "loose-r1-1",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10211,
+          "heldMs": 9688
+        },
+        {
+          "run": "loose-r1-3",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10213,
+          "heldMs": 9684
+        },
+        {
+          "run": "loose-r1-4",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 2,
+          "at": 10218,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r1-2",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10428,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r1-1",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10429,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r1-3",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10432,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r1-4",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 2,
+          "at": 10433,
+          "heldMs": 0
+        }
+      ],
+      "addedMs": {
+        "each": [],
+        "median": null,
+        "max": null
+      },
+      "trap": 0,
+      "leaks": {
+        "refreshInStdio": 0,
+        "refreshInHttp": 0,
+        "refreshOnDisk": 0,
+        "accessInStdio": 5,
+        "accessOnDisk": 0,
+        "files": [
+          69,
+          69,
+          69,
+          69
+        ],
+        "authJson": 0
+      }
+    },
+    {
+      "case": {
+        "name": "loose",
+        "jobs": 4,
+        "serial": false,
+        "gapMs": 0
+      },
+      "round": 2,
+      "jobs": [
+        {
+          "run": "loose-r2-1",
+          "ok": false,
+          "right": false,
+          "status": "failed",
+          "error": "{\"message\":\"auth refresh request failed: code=-32000\",\"codexErrorInfo\":\"other\",\"additionalDetails\":null,\"misalignment\":null}",
+          "ms": 10407,
+          "asks": [
+            {
+              "at": 10213,
+              "answerMs": 3,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-ceb10eafcd84"
+              }
+            },
+            {
+              "at": 10408,
+              "answerMs": 0,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-ceb10eafcd84"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "error",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "loose-r2-2",
+          "ok": false,
+          "right": false,
+          "status": "failed",
+          "error": "{\"message\":\"auth refresh request failed: code=-32000\",\"codexErrorInfo\":\"other\",\"additionalDetails\":null,\"misalignment\":null}",
+          "ms": 10433,
+          "asks": [
+            {
+              "at": 10215,
+              "answerMs": 2,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-ceb10eafcd84"
+              }
+            },
+            {
+              "at": 10436,
+              "answerMs": 0,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-ceb10eafcd84"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "error",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "loose-r2-3",
+          "ok": false,
+          "right": false,
+          "status": "failed",
+          "error": "{\"message\":\"auth refresh request failed: code=-32000\",\"codexErrorInfo\":\"other\",\"additionalDetails\":null,\"misalignment\":null}",
+          "ms": 10410,
+          "asks": [
+            {
+              "at": 10212,
+              "answerMs": 4,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-ceb10eafcd84"
+              }
+            },
+            {
+              "at": 10414,
+              "answerMs": 0,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-ceb10eafcd84"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "error",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "loose-r2-4",
+          "ok": false,
+          "right": false,
+          "status": "failed",
+          "error": "{\"message\":\"auth refresh request failed: code=-32000\",\"codexErrorInfo\":\"other\",\"additionalDetails\":null,\"misalignment\":null}",
+          "ms": 10406,
+          "asks": [
+            {
+              "at": 10211,
+              "answerMs": 4,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-ceb10eafcd84"
+              }
+            },
+            {
+              "at": 10411,
+              "answerMs": 0,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-ceb10eafcd84"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "error",
+            "turn/completed"
+          ]
+        }
+      ],
+      "allOk": false,
+      "refreshes": [
+        {
+          "what": "ok",
+          "gen": 1,
+          "at": 10214
+        },
+        {
+          "what": "reused",
+          "gen": 1,
+          "at": 10214
+        },
+        {
+          "what": "refused",
+          "gen": 1,
+          "at": 10216
+        },
+        {
+          "what": "refused",
+          "gen": 2,
+          "at": 10216
+        }
+      ],
+      "realRefreshes": 1,
+      "familyKilled": true,
+      "manager": {
+        "asks": 8,
+        "shared": 0,
+        "spends": [
+          {
+            "ok": true,
+            "ms": 4
+          },
+          {
+            "ok": false,
+            "ms": 4
+          },
+          {
+            "ok": false,
+            "ms": 3
+          },
+          {
+            "ok": false,
+            "ms": 2
+          }
+        ]
+      },
+      "model": [
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 105,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 105,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 105,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 106,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 110,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 111,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 111,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 111,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 127,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 127,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 128,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 128,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 137,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 137,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 142,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 142,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r2-3",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 149,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r2-2",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 150,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r2-1",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 151,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r2-4",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 152,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r2-4",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10209,
+          "heldMs": 9948
+        },
+        {
+          "run": "loose-r2-3",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10210,
+          "heldMs": 9950
+        },
+        {
+          "run": "loose-r2-1",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10212,
+          "heldMs": 9950
+        },
+        {
+          "run": "loose-r2-2",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10214,
+          "heldMs": 9951
+        },
+        {
+          "run": "loose-r2-4",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 2,
+          "at": 10220,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r2-1",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10407,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r2-4",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 2,
+          "at": 10410,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r2-3",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10413,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r2-2",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10435,
+          "heldMs": 0
+        }
+      ],
+      "addedMs": {
+        "each": [],
+        "median": null,
+        "max": null
+      },
+      "trap": 0,
+      "leaks": {
+        "refreshInStdio": 0,
+        "refreshInHttp": 0,
+        "refreshOnDisk": 0,
+        "accessInStdio": 5,
+        "accessOnDisk": 0,
+        "files": [
+          64,
+          69,
+          69,
+          67
+        ],
+        "authJson": 0
+      }
+    },
+    {
+      "case": {
+        "name": "loose",
+        "jobs": 4,
+        "serial": false,
+        "gapMs": 0
+      },
+      "round": 3,
+      "jobs": [
+        {
+          "run": "loose-r3-1",
+          "ok": false,
+          "right": false,
+          "status": "failed",
+          "error": "{\"message\":\"auth refresh request failed: code=-32000\",\"codexErrorInfo\":\"other\",\"additionalDetails\":null,\"misalignment\":null}",
+          "ms": 10418,
+          "asks": [
+            {
+              "at": 10205,
+              "answerMs": 1,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-05b2a40dd964"
+              }
+            },
+            {
+              "at": 10420,
+              "answerMs": 0,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-05b2a40dd964"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "error",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "loose-r3-2",
+          "ok": false,
+          "right": false,
+          "status": "failed",
+          "error": "{\"message\":\"auth refresh request failed: code=-32000\",\"codexErrorInfo\":\"other\",\"additionalDetails\":null,\"misalignment\":null}",
+          "ms": 10412,
+          "asks": [
+            {
+              "at": 10204,
+              "answerMs": 2,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-05b2a40dd964"
+              }
+            },
+            {
+              "at": 10414,
+              "answerMs": 0,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-05b2a40dd964"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "error",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "loose-r3-3",
+          "ok": false,
+          "right": false,
+          "status": "failed",
+          "error": "{\"message\":\"auth refresh request failed: code=-32000\",\"codexErrorInfo\":\"other\",\"additionalDetails\":null,\"misalignment\":null}",
+          "ms": 10419,
+          "asks": [
+            {
+              "at": 10205,
+              "answerMs": 2,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-05b2a40dd964"
+              }
+            },
+            {
+              "at": 10422,
+              "answerMs": 0,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-05b2a40dd964"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "error",
+            "turn/completed"
+          ]
+        },
+        {
+          "run": "loose-r3-4",
+          "ok": false,
+          "right": false,
+          "status": "failed",
+          "error": "{\"message\":\"auth refresh request failed: code=-32000\",\"codexErrorInfo\":\"other\",\"additionalDetails\":null,\"misalignment\":null}",
+          "ms": 10414,
+          "asks": [
+            {
+              "at": 10206,
+              "answerMs": 0,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-05b2a40dd964"
+              }
+            },
+            {
+              "at": 10419,
+              "answerMs": 0,
+              "ok": false,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-05b2a40dd964"
+              }
+            }
+          ],
+          "told": 12,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "error",
+            "turn/completed"
+          ]
+        }
+      ],
+      "allOk": false,
+      "refreshes": [
+        {
+          "what": "ok",
+          "gen": 1,
+          "at": 10205
+        },
+        {
+          "what": "reused",
+          "gen": 1,
+          "at": 10205
+        },
+        {
+          "what": "refused",
+          "gen": 1,
+          "at": 10207
+        }
+      ],
+      "realRefreshes": 1,
+      "familyKilled": true,
+      "manager": {
+        "asks": 8,
+        "shared": 0,
+        "spends": [
+          {
+            "ok": true,
+            "ms": 2
+          },
+          {
+            "ok": false,
+            "ms": 1
+          },
+          {
+            "ok": false,
+            "ms": 2
+          }
+        ]
+      },
+      "model": [
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 100,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 101,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 101,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 102,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 105,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 107,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 107,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 107,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 121,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 122,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 122,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 122,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 130,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 131,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 132,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r3-2",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 138,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 139,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r3-1",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 140,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r3-3",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 140,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r3-4",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 147,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r3-2",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10203,
+          "heldMs": 9954
+        },
+        {
+          "run": "loose-r3-1",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10204,
+          "heldMs": 9952
+        },
+        {
+          "run": "loose-r3-3",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10205,
+          "heldMs": 9952
+        },
+        {
+          "run": "loose-r3-4",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10205,
+          "heldMs": 9951
+        },
+        {
+          "run": "loose-r3-2",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 2,
+          "at": 10208,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r3-2",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 2,
+          "at": 10414,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r3-4",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10418,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r3-1",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10419,
+          "heldMs": 0
+        },
+        {
+          "run": "loose-r3-3",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10422,
+          "heldMs": 0
+        }
+      ],
+      "addedMs": {
+        "each": [],
+        "median": null,
+        "max": null
+      },
+      "trap": 0,
+      "leaks": {
+        "refreshInStdio": 0,
+        "refreshInHttp": 0,
+        "refreshOnDisk": 0,
+        "accessInStdio": 5,
+        "accessOnDisk": 0,
+        "files": [
+          59,
+          68,
+          61,
+          67
+        ],
+        "authJson": 0
+      }
+    },
+    {
+      "case": {
+        "name": "slow",
+        "jobs": 1,
+        "serial": true,
+        "gapMs": 0,
+        "delayMs": 12000
+      },
+      "round": 1,
+      "jobs": [
+        {
+          "run": "slow-r1-1",
+          "ok": true,
+          "right": true,
+          "status": "completed",
+          "error": null,
+          "ms": 22216,
+          "asks": [
+            {
+              "at": 10207,
+              "answerMs": 12006,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-fa293f72f7ef"
+              }
+            },
+            {
+              "at": 20427,
+              "answerMs": 1786,
+              "ok": true,
+              "params": {
+                "reason": "unauthorized",
+                "previousAccountId": "acct-fa293f72f7ef"
+              }
+            }
+          ],
+          "told": 13,
+          "toldFirst": [
+            "remoteControl/status/changed",
+            "account/login/completed",
+            "thread/started",
+            "thread/settings/updated",
+            "thread/status/changed",
+            "turn/started",
+            "item/started",
+            "item/completed",
+            "thread/tokenUsage/updated",
+            "account/rateLimits/updated",
+            "error",
+            "item/agentMessage/delta"
+          ]
+        }
+      ],
+      "allOk": true,
+      "refreshes": [
+        {
+          "what": "ok",
+          "gen": 1,
+          "at": 22212
+        }
+      ],
+      "realRefreshes": 1,
+      "familyKilled": false,
+      "manager": {
+        "asks": 2,
+        "shared": 1,
+        "spends": [
+          {
+            "ok": true,
+            "ms": 2
+          }
+        ]
+      },
+      "model": [
+        {
+          "run": null,
+          "path": "/backend-api/wham/accounts/check",
+          "status": 404,
+          "gen": 1,
+          "at": 63,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 66,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/codex/models",
+          "status": 404,
+          "gen": 1,
+          "at": 79,
+          "heldMs": 0
+        },
+        {
+          "run": null,
+          "path": "/backend-api/wham/settings/user",
+          "status": 404,
+          "gen": 1,
+          "at": 87,
+          "heldMs": 0
+        },
+        {
+          "run": "slow-r1-1",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 1,
+          "at": 94,
+          "heldMs": 0
+        },
+        {
+          "run": "slow-r1-1",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 10206,
+          "heldMs": 10000
+        },
+        {
+          "run": "slow-r1-1",
+          "path": "/backend-api/codex/responses",
+          "status": 401,
+          "gen": 1,
+          "at": 20426,
+          "heldMs": 0
+        },
+        {
+          "run": "slow-r1-1",
+          "path": "/backend-api/codex/responses",
+          "status": 200,
+          "gen": 2,
+          "at": 22217,
+          "heldMs": 0
+        }
+      ],
+      "addedMs": {
+        "each": [
+          12011
+        ],
+        "median": 12011,
+        "max": 12011
+      },
+      "trap": 0,
+      "leaks": {
+        "refreshInStdio": 0,
+        "refreshInHttp": 0,
+        "refreshOnDisk": 0,
+        "accessInStdio": 3,
+        "accessOnDisk": 0,
+        "files": [
+          69
+        ],
+        "authJson": 0
+      }
+    }
+  ],
+  "otherPaths": [
+    "404 /backend-api/wham/accounts/check",
+    "404 /backend-api/codex/models",
+    "404 /backend-api/wham/settings/user"
+  ]
+}

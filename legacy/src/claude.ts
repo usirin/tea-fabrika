@@ -1,6 +1,6 @@
 import {spawn} from "node:child_process";
 import {randomUUID} from "node:crypto";
-import {agentEnv} from "@kampus/fabrika/agents/sandbox";
+import {agentEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Effect, Layer} from "effect";
 import {z} from "zod";
 import {AS_FILED} from "./enrichment.ts";
@@ -175,7 +175,7 @@ export async function turn(
 				"--output-format",
 				"json",
 				...conversationArgs(ask.session, continues),
-				// biome-ignore lint/plugin/no-project-settings: the first-generation factory's turn, kept as it ran; legacy only shrinks
+				// oxlint-disable-next-line fabrika/no-project-settings -- the first-generation factory's turn, kept as it ran; legacy only shrinks
 				"--setting-sources",
 				"project",
 				"--strict-mcp-config",

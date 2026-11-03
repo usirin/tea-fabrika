@@ -16,6 +16,8 @@ pnpm promises confirm <id>           # after the covered code changed and the pr
 - **Covered code is named, not numbered.** `file.ts#name` is every top-level statement that
   declares `name`; `file.ts` alone is the whole file. A print is the first 16 hex of the
   sha256 of that text. Code that moves up or down keeps its print.
+- **The confirmed commit is a pointer for people, and it may be gone.** Main lands by squash, so
+  the commit `confirm` ran at usually never reaches main. Only the prints bind.
 - **A check command** prints one `Verdict` as JSON, last on stdout. The runner asks for the
   planted break by running the same command with `PROMISE_PLANT=<name>`, so the plant can
   never be a different command.

@@ -113,7 +113,7 @@ type Host = {
 };
 const groups = new Set<number>();
 const signal = (pgid: number, sig: NodeJS.Signals) => {
-	// biome-ignore lint/plugin: node at the edge: signalling a process group that may be gone already
+	// oxlint-disable-next-line fabrika/no-raw-try-catch -- node at the edge: signalling a process group that may be gone already
 	try {
 		process.kill(-pgid, sig);
 	} catch {
@@ -483,7 +483,7 @@ const run = async (spec: RunSpec) => {
 		Effect.gen(function* () {
 			const l = yield* Ledger;
 			const out: string[] = [];
-			for (let from = 0; ; ) {
+			for (let from = 0; ;) {
 				const page = yield* l.read(from, 500, "pipeline");
 				for (const row of page) if (row.kind === "judged") out.push(row.writer);
 				if (page.length < 500) return out;

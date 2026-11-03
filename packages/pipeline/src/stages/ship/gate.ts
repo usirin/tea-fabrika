@@ -73,6 +73,8 @@ export function shipGate(pr: string, f: ShipFacts): ShipGate {
 					tested: f.main.tested,
 					criteria: f.criteria,
 					verdicts: f.verdicts,
+					// Rows carried here count as judged here. The checks are this head's own, always.
+					...(f.carried === undefined ? {} : {carried: f.carried}),
 					checks: {head: f.head, state: f.checks},
 				});
 	const refused = readiness !== null && "refused" in readiness ? readiness.refused : [];

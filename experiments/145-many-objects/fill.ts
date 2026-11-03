@@ -1,7 +1,7 @@
 // A server with something in every table, for question 5's move: projects with members, a counter
 // in each, a supervisor with a child, a monitor, a link and a spend; a lane; desks in many persons'
 // objects; and a lease that ends soon, so the move must carry its alarm too.
-import {Ledger} from "@kampus/fabrika";
+import {Ledger} from "@kampus/fabrika-old";
 import {Effect} from "effect";
 import {door, httpLayer, layerObject} from "./client.ts";
 import {deskOf, openDesk} from "./desk.ts";

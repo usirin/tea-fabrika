@@ -6,8 +6,8 @@
 // replay scripts do.
 import {execFile} from "node:child_process";
 import {type Options, query} from "@anthropic-ai/claude-agent-sdk";
-import {jsonSchema, reader} from "@kampus/fabrika/agents/claude";
-import {agentEnv} from "@kampus/fabrika/agents/sandbox";
+import {jsonSchema, reader} from "@kampus/fabrika-old/agents/claude";
+import {agentEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Option, Schema} from "effect";
 
 // ---------------------------------------------------------------- the answer
@@ -205,7 +205,7 @@ export const ROUTES = {
 } as const;
 
 /** The ticket text in a fence longer than any run of backticks inside it. */
-function fenced(text: string): string {
+export function fenced(text: string): string {
 	const longest = Math.max(2, ...[...text.matchAll(/`+/g)].map((run) => run[0].length));
 	const fence = "`".repeat(longest + 1);
 	return `${fence}markdown\n${text.replace(/\n+$/, "")}\n${fence}`;

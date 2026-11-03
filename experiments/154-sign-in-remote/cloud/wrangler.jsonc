@@ -1,0 +1,27 @@
+// Experiment 154's Worker, for `wrangler deploy --dry-run` only: nothing here is deployed.
+// No account id and no route: a real deploy would take them from its own environment.
+{
+	"name": "exp-154-sign-in-remote",
+	"main": "worker.ts",
+	"compatibility_date": "2026-10-01",
+	"observability": { "enabled": false },
+	"containers": [
+		{
+			"class_name": "SignInBox",
+			"image": "../box/Dockerfile",
+			"max_instances": 4
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{ "name": "BOXES", "class_name": "SignInBox" },
+			{ "name": "LEDGER", "class_name": "Ledger" }
+		]
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["SignInBox", "Ledger"] }],
+	"vars": {
+		"LEDGER_NAME": "exp154",
+		"MODEL": "",
+		"AUTH": "{\"authorize\":\"https://auth.openai.com/api/accounts/authorize\",\"token\":\"https://auth.openai.com/api/accounts/oauth/token\",\"revoke\":null,\"api\":\"https://api.openai.com/v1\"}"
+	}
+}

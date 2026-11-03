@@ -170,7 +170,7 @@ const tidy = (s: string): string =>
 	s
 		.replaceAll(WORK, "<work>")
 		.replaceAll(homedir(), "~")
-		// biome-ignore lint/suspicious/noControlCharactersInRegex: strips the colour codes of a terminal
+		// oxlint-disable-next-line eslint/no-control-regex -- strips the colour codes of a terminal
 		.replace(/\u001b\[[0-9;]*m/g, "");
 
 const dirOf = (n: string, kind: "base" | "merge" | "writer" | "mutate") => join(WORK, n, kind);

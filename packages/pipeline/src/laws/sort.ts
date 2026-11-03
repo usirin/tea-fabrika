@@ -1,5 +1,5 @@
 import {structuralHash} from "@demlik/tea";
-import {noSpend, type Spend} from "@kampus/fabrika/agents/claude";
+import {noSpend, type Spend} from "@kampus/fabrika-old/agents/claude";
 import type {SortReply} from "../stages/sort/answer.ts";
 import {type Brief, sortProblems} from "../stages/sort/brief.ts";
 import {
@@ -71,16 +71,14 @@ export function sortWorld(): World<SortState, Msg, SortCmd> {
 				{type: "resume"},
 				...ids.flatMap((id): Msg[] => [
 					{type: "sort_tool", key: KEY, id, tool: "t"},
-					...Object.values(REPLIES).map(
-						(output): Msg => ({
-							type: "sort_finished",
-							key: KEY,
-							id,
-							output,
-							session: "s",
-							spend: SPENT,
-						}),
-					),
+					...Object.values(REPLIES).map((output): Msg => ({
+						type: "sort_finished",
+						key: KEY,
+						id,
+						output,
+						session: "s",
+						spend: SPENT,
+					})),
 					{type: "sort_failed", key: KEY, id, error: "boom", spend: SPENT},
 					{type: "sort_failed", key: KEY, id, error: "error_max_budget_usd", spend: SPENT},
 				]),

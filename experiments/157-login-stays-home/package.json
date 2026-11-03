@@ -2,7 +2,7 @@
 	"name": "exp-157-login-stays-home",
 	"private": true,
 	"type": "module",
-	"description": "Experiment 157: each person's login in their own locker, a Durable Object; the box is a Cloudflare Sandbox under wrangler dev. Kept outside the workspace on purpose.",
+	"description": "Experiment 157: each person's login in their own locker, a Durable Object, lent to the job's box, which holds it; the box is a Cloudflare Sandbox under wrangler dev. Kept outside the workspace on purpose.",
 	"dependencies": {
 		"@cloudflare/sandbox": "1.0.3",
 		"wrangler": "4.153.0"

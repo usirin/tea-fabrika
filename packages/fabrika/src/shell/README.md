@@ -3,7 +3,9 @@
 A part of [`@kampus/fabrika`](../../README.md). It was the package `@tea-fabrika/tsh` until
 experiment 103.
 
-A shell that runs only tea programs. It is itself a tea program, with the job table as its one machine.
+A shell that runs only tea programs. It is itself a tea program, and a view on its host's job
+table: the host keeps the jobs, tsh shows them and asks for changes, as a shell shows the
+kernel's process groups (`../host/jobs.ts`, `../host/host-jobs.ts`).
 
 ```text
 $ packages/fabrika/bin/tsh-small -c 'seq --to 3 | double'
@@ -16,6 +18,38 @@ tsh: does not fit: seq's outputs (n: integer) fit no input of upper (text: strin
   seq --to 3 | upper
              ^
 ```
+
+Every program answers `--help` (or `-h`), read off its declaration: a usage line, what it does,
+its flags, inputs and outputs in aligned columns, pipes from the listed programs that fit, and
+its machines last. `help <program>` prints the same. `--help <name>` shows one part whole.
+
+```text
+$ packages/fabrika/bin/tsh-small -c 'seq --help'
+Usage: seq --to TO
+       seq --to TO | ...
+
+Counts from 1 up to a number, one value at a time, and ends.
+
+Flags:
+  --to    integer >= 0  The last number it sends.
+  --help                This help (or -h). One part whole: --help --to
+
+Outputs: printed, or sent into a pipe (>name picks one)
+  >n  integer  Each number, in order.
+
+Example pipes:
+  seq --to TO | double
+  seq --to TO | tally
+```
+
+- A flag the line must give is bare in the usage (`--to TO`). One with a default is in brackets,
+  and its default ends its text.
+- As GNU's `--help` does, once `--help` is in a command tsh reads none of its other words, so a
+  half-typed `ship --mode --help` still answers. The word for a text that is `--help` is
+  `--text=--help`.
+- A program may not declare a flag named `help`: `programList` refuses it.
+- The layout follows GNU's `--help`, cargo's and gh's help, clig.dev's help guidance, and
+  ripgrep's `command | rg` usage line for the pipe forms (`help.ts`).
 
 An app hands tsh its programs as the `Programs` service, and `runTsh` runs it. This is a whole
 bin, the one `fixtures/acp-tsh/tsh.ts` is:
@@ -45,6 +79,23 @@ not take it. `attach` says so, and the job stays in the table, detached, with it
 was. Every other job still opens. A job table saved by older code is left as it was too: tsh says
 so once, and runs on without keeping its jobs (`execute.test.ts`, `shell.test.ts`).
 
+Whatever starts tsh hands it the host's jobs, as the `HostJobs` service. `runTsh` opens them in
+the home (`openJobs`); a test opens its own; the fabrika app opens one for its host process and
+hands it to every tile's tsh, so a job is the same `%n` in every tile. Job numbers count up and
+are never given twice, as WezTerm's and tmux's ids:
+
+```ts
+const jobs = yield* openJobs(memoryStorage()); // the host's table, for the caller's scope
+const started = yield* start(tsh, {show: "short"}, outputs, {id, storage}).pipe(
+	Effect.provideService(Shell.Programs, programs),
+	Effect.provideService(HostJobs, jobs),
+);
+```
+
+When tsh leaves, it detaches only the jobs it runs. A line is one job and one trace: its first
+program's run id names the trace, and each program of the line has its run span there
+(`line-trace.laws.test.ts`).
+
 ```text
 tsh$ attach %1 &
 [1] attached tally:7f3a...
@@ -52,13 +103,62 @@ tsh$ attach %1 &
 [1] it stays in the table, detached; stop %1 drops it
 ```
 
-`Shell.Printed` and `Shell.Ready` are the schemas of tsh's two outputs, for an app that builds
-its own schemas on them.
+`Shell.Printed` and `Shell.Ready` are the schemas of two of tsh's outputs, for an app that
+builds its own schemas on them. The third, `table`, sends a `Shell.Table`: `Shell.tableLines`
+and `Shell.paint` lay it out and draw it, for an app that draws its own terminal.
+
+## What a person sees
+
+An output may say how a person reads its values, beside the value itself (`person` on
+`output`, `../program/person.ts`). A pipe, a `$( )` and `tsh --json` always get the value whole.
+
+```ts
+row: output(Experiment, "One experiment.", {person: {table: {
+	title: "Experiments", note: "newest first",
+	columns: [
+		{header: "#", cell: (row) => row.n, muted: true},
+		{header: "Title", cell: (row) => row.title},
+		{header: "Runs", cell: (row) => String(row.runs), align: "right", muted: true},
+	],
+	cut: "Title", // the one column cut with … to fit; a header above, or it does not type
+}}}),
+page: output(ExperimentPage, "One experiment.", {person: {line: ExperimentPage.toLine}}),
+markdown: output(Schema.String, "The page as markdown.", {person: "none"}),
+```
+
+| Form | What tsh prints, with nothing piped |
+|---|---|
+| `{table}` | One table once the run has ended, on tsh's `table` output: the terminal lays it out at its own width (`table.ts`). About one screen of rows, 20, then how many are left; `--all` prints every row |
+| `{line}` | The line, with no output's name before it |
+| `"none"` | Nothing: the output is for a pipe or a window |
+| left out | Its short form by its fields (`short.ts`), with the output's name when the program has several |
+
+- When a pipe or a `$( )` takes another output of the same run, a line or a table is not
+  printed: the person asked for the answer in that other form. `experiments | markdown` draws
+  the list in a window and prints no table under it.
+- The table is laid out as `gh pr list` lays one out on a terminal (cli/cli's
+  `internal/tableprinter`): a title line with the count, a header in capitals, muted secondary
+  columns, one column cut, and what to type for the rest. Not on a terminal, `runTsh` prints it
+  plain at 100 columns; on one, in the 16 colors, or none with `NO_COLOR` set. The fabrika app
+  draws it in its own colors, at the tile's width.
+
+```text
+tsh> experiments
+
+Experiments  171 · newest first
+
+  #     TITLE                                                         RUNS   UPDATED
+  171   Can the app host run the ledger as Alchemy's local runtime?      1   Oct 30
+  ...
+
+151 more.  experiments --all for every row, experiment --n 171 | markdown to read one.
+```
 
 ## Where it sits
 
 - One layer above `program` and `host` (`layer-rules.json`).
-- It imports only `../program` of this repo, plus `@demlik/tea`, `effect` and OpenTelemetry.
+- It imports only `../program` and the host's jobs (`../host/jobs.ts`, `../host/host-jobs.ts`) of this repo, plus
+  `@demlik/tea`, `effect` and OpenTelemetry.
 - It lists no program of its own beyond the small ones. Since experiment 114 the pipeline's
   programs are handed in by `@kampus/pipeline` (`packages/pipeline/src/tsh/`), through the public
   names below.
@@ -68,10 +168,11 @@ its own schemas on them.
 What an app needs is public, in two places:
 
 - `Shell`, a namespace on the top level (`./index.ts`): the program list (`programList`,
-  `Programs`, `JobStorage`, `SMALL`), tsh as a program (`tsh`), and the parts a test of a line
-  uses (`parse`, `check`, `complete`, `describe`, `EMPTY`, `shapeLines`, `typeOf`, `Shorten`).
-  `Search` is the Ctrl-R search (`search.ts`), for a line editor an app writes itself, as the
-  fabrika app does. None of it names a platform.
+  `Programs`, `SMALL`), tsh as a program (`tsh`), and the parts a test of a line
+  uses (`parse`, `check`, `complete`, `helpOf`, `partsHelp`, `EMPTY`, `shapeLines`, `typeOf`,
+  `Shorten`).  `Search` is the Ctrl-R search (`search.ts`), for a line editor an app writes itself, as the
+  fabrika app does. None of it names a platform. The jobs tsh shows are the host's: `HostJobs`
+  and `openJobs` are on the top level too (`../host/host-jobs.ts`).
 - `@kampus/fabrika/shell`: `runTsh` and `homeOf`. The launcher holds a terminal, files and
   OpenTelemetry, so it is a subpath, not the top level.
 
@@ -81,18 +182,19 @@ The trace files are on `@kampus/fabrika/otel`.
 |---|---|
 | `index.ts` | The `Shell` namespace: what the top level shows of this part |
 | `main.ts` | `runTsh(options)`: the launcher. A terminal, `-c '<lines>'`, a script file, or stdin |
-| `programs.ts` | `programList`, the `Programs` and `JobStorage` services, exit status from how a run ended |
+| `programs.ts` | `programList`, the `Programs` service, exit status from how a run ended |
 | `small.ts` | The small programs: `say`, `seq`, `double`, `upper`, `sleep`, `true`, `false`, `tally` |
-| `shell.ts` | `tsh` as a program: lines in, printed values out, no terminal in it |
+| `shell.ts` | `tsh` as a program: lines in, printed values and tables out, no terminal in it |
 | `grammar.ts` | The line grammar: statements, `;` `&` `&&` `\|\|`, pipes, `--flag value`, `input=value`, `$( )` |
-| `check.ts` | A parsed line checked against the program list before anything starts |
+| `check.ts` | A parsed line checked against the program list before anything starts; `fedBy`, the inputs of a program a pipe can feed |
 | `decode.ts` | A word on a line read as a value of a program's own shape |
-| `builtins.ts` | `jobs`, `ps`, `tell`, `close`, `stop`, `attach`, `programs`, `help`, `exit`, and `--describe` |
-| `jobs.ts` | The job table machine |
+| `builtins.ts` | `jobs`, `ps`, `tell`, `close`, `stop`, `attach`, `programs`, `help`, `exit` |
+| `help.ts` | What `<program> --help` prints, whole or one part, from the program's declaration |
 | `complete.ts` | Tab completion, from the line typed so far |
 | `search.ts` | Ctrl-R history search |
 | `launch.ts` | Command line and environment reading: `--json`, `-c`, `TSH_HOME`, `TSH_TRACE` |
 | `short.ts` | A sent value as one short line |
+| `table.ts` | A table for a person: made from an output's table view, laid out at a width, drawn plain or in color |
 | `title.ts` | What a typed line is called in a trace |
 | `trace/otel.ts` | Spans out over OTLP/HTTP. On `@kampus/fabrika/otel` |
 | `trace/view.ts` | What a trace viewer is shown. On `@kampus/fabrika/otel` |
@@ -122,9 +224,9 @@ word read as a value) and `launch.test.ts` (Ctrl-R and the command line).
 
 ## Not in it yet
 
-- Laws for the shell's two machines (`jobs.ts` and the small programs' machine in `small.ts`).
-  `packages/pipeline/src/laws/standard.test.ts` holds every machine in the pipeline and in
-  fabrika's `agents/` to its laws, and leaves this part out.
+- The standard laws for the job table (`../host/jobs.ts`) and the small programs' machine in
+  `small.ts`. `packages/pipeline/src/laws/standard.test.ts` holds every machine in the pipeline
+  and in fabrika's `agents/` to its laws, and leaves these out.
 
 ## See also
 

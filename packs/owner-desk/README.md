@@ -16,13 +16,13 @@ answerOf("/no not now: nobody needs this yet"); // {kind: "no", why: "not now: n
 answerOf("approve");                           // null: not an answer
 
 // Told to the desk's run, it goes out on `answer`, and the core checks it against the ask.
-yield* deskRun.tell("reply", {id: askId, answer: answerOf("/approve")});   // a full line fails Full
+yield* deskRun.tell("reply", {id: askId, answer: answerOf("/approve")});   // a full mailbox fails MailboxFull
 ```
 
 ## Where it sits
 
 - In `packs/`, the top layer of `layer-rules.json`. Nothing below it may import it.
-- It imports `@kampus/fabrika`, `@demlik/tea` and the pipeline, `@kampus/pipeline/*` (the ask and answer shapes, plan lines, criterion marks).
+- It imports `@kampus/fabrika-old`, `@demlik/tea` and the pipeline, `@kampus/pipeline/*` (the ask and answer shapes, plan lines, criterion marks).
 - The pipeline is its own package, in `packages/pipeline/`. `@kampus/pipeline` is a working name, from experiment 114.
 - The core imports nothing of it. The core finds it by name from config.
 - The root `package.json` lists it, so `loadPacks` can find it from the repo root.
@@ -53,17 +53,17 @@ The pack has a `shell` part, for a host with a shell:
 
 ## Settings
 
-Read from its own table in the repository's `fabrika.toml`:
+Read from its own table in the repository's `.fabrika/fabrika.toml`:
 
 ```toml
 packs = ["@tea-fabrika/owner-desk"]
 
 [pack."@tea-fabrika/owner-desk"]
 view = "markdown"   # or "comment"; "markdown" when left out
-dir = "desk"        # where the pages go, read from the fabrika.toml folder; the host's folder for this pack when left out
+dir = "desk"        # where the pages go, read from the repository's root; the host's folder for this pack when left out
 ```
 
-Fabrika's tsh starts this pack when the `packs` line of `fabrika.toml` names it: `desk`, `desk-demo` and `answer` (see `packages/pipeline/README.md`). The host's folder for it is `<TSH_HOME>/packs/owner-desk`, or `<TSH_HOME>/desk-demo/owner-desk` for the demo. `src/desk.test.ts` also wires it by hand, the way a host would.
+Fabrika's tsh starts this pack when the `packs` line of `.fabrika/fabrika.toml` names it: `desk`, `desk-demo` and `answer` (see `packages/pipeline/README.md`). The host's folder for it is `<TSH_HOME>/packs/owner-desk`, or `<TSH_HOME>/desk-demo/owner-desk` for the demo. `src/desk.test.ts` also wires it by hand, the way a host would.
 
 ## Commands
 

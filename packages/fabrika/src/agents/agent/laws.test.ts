@@ -31,6 +31,7 @@ const turnOf = (over: Partial<Turn<Answer>> = {}): Turn<Answer> => ({
 	session: "s-1",
 	folder: "/nowhere",
 	prompt: "do the job",
+	system: {_tag: "append", text: "You do the job."},
 	answer: Answer,
 	model: null,
 	effort: null,
@@ -325,10 +326,8 @@ const bent =
 
 const PLANTED: Readonly<Record<string, Make>> = {
 	"a turn ends exactly once, last; a stream with no end fails as broken": bent((s) =>
-		Stream.flatMap(
-			s,
-			(h): Stream.Stream<Heard<unknown>> =>
-				h._tag === "ended" ? Stream.make(h, h) : Stream.make(h),
+		Stream.flatMap(s, (h): Stream.Stream<Heard<unknown>> =>
+			h._tag === "ended" ? Stream.make(h, h) : Stream.make(h),
 		),
 	),
 	"the answer is the last message read by the schema, null on a misfit": (config) => {

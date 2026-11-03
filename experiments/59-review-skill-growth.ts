@@ -357,6 +357,7 @@ function pilesOf(repo: string): {rows: PileRow[]; fileLines: Record<string, numb
 		fileLines[file.name] = lines.length;
 		const ranges = readings.piles.files[file.name] ?? [];
 		let next = 1;
+		// oxlint-disable-next-line eslint/array-callback-return -- this callback returns nothing; oxlint 1.90 takes its `throw` for a return.
 		ranges.forEach(([from, to, pile, step, tag], i) => {
 			if (from < next || to < from || to > lines.length)
 				throw new Error(`${file.name}: the range ${from}-${to} is out of order or out of the file`);

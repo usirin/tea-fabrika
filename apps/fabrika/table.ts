@@ -11,7 +11,7 @@ import {tableOf} from "./src/editor/cells.ts";
 // answers them (src/editor/cells.probe.ts asks). Run it again when ghostty-web changes;
 // src/editor/cells.test.ts fails until then.
 //
-//   pnpm --filter @kampus/fabrika-app table      about 8 seconds
+//   pnpm --filter @kampus/fabrika-app-old table      about 8 seconds
 //
 // Node's `createRequire` finds the wasm in ghostty-web's package, as the laws find it.
 

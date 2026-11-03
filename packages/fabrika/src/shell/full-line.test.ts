@@ -1,17 +1,18 @@
 import {describe, expect, it} from "@effect/vitest";
-import {Deferred, Duration, Effect, Layer, Schema, Stream} from "effect";
+import {Deferred, Duration, Effect, Layer, Schema} from "effect";
+import {HostJobs, openJobs} from "../host/host-jobs.ts";
 import {ear} from "../program/ear.ts";
 import {listed} from "../program/listed.ts";
-import {CAPACITY, defineProgram, start, tell} from "../program/program.ts";
-import {input} from "../program/shape.ts";
+import {defineProgram, start, tell} from "../program/program.ts";
+import {CAPACITY, input} from "../program/shape.ts";
 import {memoryStorage} from "../program/storage.ts";
-import {JobStorage, Programs, programList} from "./programs.ts";
+import {Programs, programList} from "./programs.ts";
 import {type Printed, type Ready, tsh} from "./shell.ts";
 import {SMALL} from "./small.ts";
 
-// A full line, as a person meets it in `jobs` (after experiment 79): `seq`
+// A full mailbox, as a person meets it in `jobs` (after experiment 79): `seq`
 // piped into a program that has stopped reading. seq sleeps on the full
-// line, as a writer on a full Unix pipe does, and nothing is an error, so
+// mailbox, as a writer on a full Unix pipe does, and nothing is an error, so
 // `jobs` is the one place it shows. Once the reader reads again, the rows go.
 
 /** Reads nothing until `go`, then every number; then holds on until `hold`, so the job stays in the table. */
@@ -21,9 +22,9 @@ const lazyOf = (go: Deferred.Deferred<void>, hold: Deferred.Deferred<void>) =>
 		description: "Reads its numbers once it is let go, then waits.",
 		inputs: {n: input(Schema.Int, "A number.")},
 		outputs: {},
-		main: ({inputs}) =>
+		main: ({serve}) =>
 			Deferred.await(go).pipe(
-				Effect.andThen(inputs.n.pipe(Stream.runDrain)),
+				Effect.andThen(serve({n: () => Effect.void})),
 				Effect.andThen(Deferred.await(hold)),
 			),
 	});
@@ -34,12 +35,13 @@ const session = (go: Deferred.Deferred<void>, hold: Deferred.Deferred<void>) =>
 		const ready = ear<Ready>();
 		const storage = memoryStorage();
 		const list = programList([...SMALL, listed(lazyOf(go, hold), Layer.empty)]);
+		const jobs = yield* openJobs(storage);
 		const started = yield* start(
 			tsh,
 			{show: "short"},
 			{printed: printed.hear, ready: ready.hear},
 			{id: "tsh:full-line", storage},
-		).pipe(Effect.provideService(JobStorage, storage), Effect.provideService(Programs, list));
+		).pipe(Effect.provideService(HostJobs, jobs), Effect.provideService(Programs, list));
 		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
 		let told = 0;
 		const line = (text: string) =>
@@ -94,8 +96,8 @@ describe("jobs shows a full line", () => {
 				}).pipe(Effect.scoped);
 				expect(seen.stuck).toEqual([
 					"[1] running   seq --to 3000 | lazy",
-					"      seq   waiting for room: lazy's input n is full",
-					`      lazy  input n full: ${CAPACITY} unread, 1 waiting`,
+					"      seq   waiting for room: lazy's mailbox is full",
+					`      lazy  mailbox full: ${CAPACITY} unread, 1 waiting on n`,
 				]);
 				expect(seen.moving).toEqual(["[1] running   seq --to 3000 | lazy"]);
 			}),

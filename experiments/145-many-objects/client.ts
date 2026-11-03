@@ -4,11 +4,11 @@
 // program is handed the `Ledger` of one address (`layerObject`) and never sees the address: the
 // same program runs on a project's object or on a person's.
 //
-// Like the package's `layerHttp` (`@kampus/fabrika/http`), with two changes: every call carries a
+// Like the package's `layerHttp` (`@kampus/fabrika-old/http`), with two changes: every call carries a
 // session (`Authorization: Bearer`), and the doorbell's WebSocket carries it too, in its handshake
 // headers, which the `ws` client can set and Node's global WebSocket cannot.
 import {NodeHttpClient, NodeSocket} from "@effect/platform-node";
-import {fromRaw, Ledger, LedgerUnreachable, type Raw, rawOf} from "@kampus/fabrika";
+import {fromRaw, Ledger, LedgerUnreachable, type Raw, rawOf} from "@kampus/fabrika-old";
 import {Duration, Effect, Layer, Queue, Stream} from "effect";
 import {HttpClient, HttpClientRequest} from "effect/http";
 import {Socket} from "effect/socket";

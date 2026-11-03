@@ -118,7 +118,7 @@ describe("the reconnect machine", () => {
 		expect(noteOf(s)).toEqual({kind: "version", theirs: 0, ours: 1});
 	});
 
-	it("restarts a host of another version on the person's yes, and attaches to this build's", () => {
+	it("restarts a host of another version once the person confirms, and attaches to this build's", () => {
 		const {s, steps} = fold([version(1, 2), {type: "restart"}]);
 		expect(s).toEqual({at: "restarting"});
 		expect(steps[1]).toEqual([restart({})]);

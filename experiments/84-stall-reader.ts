@@ -156,19 +156,17 @@ const NOISE = /(^|\/)(pnpm-lock\.yaml|package-lock\.json|yarn\.lock)$|\.snap$/;
 
 const fromGit = (a: string, b: string) =>
 	attempt("git diff", () => run("git", ["-C", CLONE as string, "diff", "--no-color", a, b])).pipe(
-		Effect.map(
-			(text): Patch => ({
-				from: "git",
-				rebased: !gitSays(["merge-base", "--is-ancestor", a, b]),
-				files: text
-					.split(/^diff --git /m)
-					.slice(1)
-					.map((chunk) => ({
-						path: /^a\/(\S+)/.exec(chunk)?.[1] ?? "?",
-						patch: chunk.slice(chunk.indexOf("@@") < 0 ? chunk.length : chunk.indexOf("@@")),
-					})),
-			}),
-		),
+		Effect.map((text): Patch => ({
+			from: "git",
+			rebased: !gitSays(["merge-base", "--is-ancestor", a, b]),
+			files: text
+				.split(/^diff --git /m)
+				.slice(1)
+				.map((chunk) => ({
+					path: /^a\/(\S+)/.exec(chunk)?.[1] ?? "?",
+					patch: chunk.slice(chunk.indexOf("@@") < 0 ? chunk.length : chunk.indexOf("@@")),
+				})),
+		})),
 	);
 /** GitHub's compare, for commits the clone lacks; a commit GitHub lacks too gives no change. */
 const fromGitHub = (a: string, b: string) =>

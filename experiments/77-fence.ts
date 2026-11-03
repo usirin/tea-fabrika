@@ -31,9 +31,9 @@ import {homedir} from "node:os";
 import {join} from "node:path";
 import {query, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import type {Heard} from "@kampus/fabrika/agents/acp";
-import {claudeOptions} from "@kampus/fabrika/agents/acp";
-import {temps} from "@kampus/fabrika/agents/sandbox";
+import type {Heard} from "@kampus/fabrika-old/agents/acp";
+import {claudeOptions} from "@kampus/fabrika-old/agents/acp";
+import {temps} from "@kampus/fabrika-old/agents/sandbox";
 import {builderOptions} from "@kampus/pipeline/stages/build/builder";
 import {
 	builderHarness,
@@ -169,7 +169,7 @@ const CASES: readonly Case[] = [
 		what: "Bash, git push",
 		say: one(`use the Bash tool to run: git push origin HEAD:refs/heads/probe-${arm}`),
 		done: () => {
-			// biome-ignore lint/plugin: a probe's check outside any Effect: git exits non-zero when the branch is not there
+			// oxlint-disable-next-line fabrika/no-raw-try-catch -- a probe's check outside any Effect: git exits non-zero when the branch is not there
 			try {
 				git(remote, "rev-parse", "--verify", "-q", `refs/heads/probe-${arm}`);
 				return true;

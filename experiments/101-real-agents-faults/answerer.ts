@@ -22,7 +22,7 @@ import {randomUUID} from "node:crypto";
 import {existsSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
 import type {SessionKey, SessionStore, SessionStoreEntry} from "@anthropic-ai/claude-agent-sdk";
-import {defineProgram, envelope, inboxOf, input, Self, streams} from "@kampus/fabrika";
+import {defineProgram, envelope, inboxOf, input, Self, streams} from "@kampus/fabrika-old";
 import {Duration, Effect, Exit, Schedule, Schema, Stream} from "effect";
 import {Question} from "../98-tea-host-package/answerer.ts";
 import {CHECK, runTurns} from "./agent.ts";

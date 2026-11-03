@@ -10,8 +10,8 @@
 //
 // No outbound handler in any. No token, no key, no model: the box only knocks on each door.
 
-import {DurableObject} from "cloudflare:workers";
 import {Container, ContainerProxy, getContainer} from "@cloudflare/containers";
+import {DurableObject} from "cloudflare:workers";
 
 export {ContainerProxy};
 
@@ -25,7 +25,7 @@ const CA = "/etc/cloudflare/certs/cloudflare-containers-ca.crt";
  * do. So `start` gets `image` and nothing else; every network setting is the library's own.
  */
 const withImage = (box: Container, ctx: DurableObjectState, key: string) => {
-	// biome-ignore lint/style/noNonNullAssertion: a Durable Object with a container always has one.
+	// oxlint-disable-next-line typescript/no-non-null-assertion -- a Durable Object with a container always has one.
 	const c = ctx.container!;
 	const image = c.images[key];
 	// `container` is the library's private field: replaced with the same object, image added.
@@ -86,7 +86,7 @@ export class Open extends Container {
  */
 export class Raw extends DurableObject {
 	async run(o: {https: boolean; early: boolean; ip: string}) {
-		// biome-ignore lint/style/noNonNullAssertion: a Durable Object with a container always has one.
+		// oxlint-disable-next-line typescript/no-non-null-assertion -- a Durable Object with a container always has one.
 		const c = this.ctx.container!;
 		const image = c.images.Raw;
 		const proxy = this.ctx.exports.ContainerProxy({

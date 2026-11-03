@@ -1,5 +1,5 @@
 import {defineMachine, type Sub} from "@demlik/tea";
-import type {DraftMsg, DraftRun} from "@kampus/fabrika/agents/claude";
+import type {DraftMsg, DraftRun} from "@kampus/fabrika-old/agents/claude";
 import {Schema} from "effect";
 import {
 	createRefineLoop,
@@ -23,10 +23,11 @@ import {
 	testsOf,
 } from "./checked.ts";
 import type {TestWriterOutcome} from "./outcome.ts";
-import {File, problemsOf, testsWrite, Written} from "./written.ts";
+import type {Written} from "./written.ts";
+import {File, HeldWritten, problemsOf, testsWrite} from "./written.ts";
 
 // The test writer's first job (docs/direction/the-test-writer.md): after the
-// owner's yes to the plan and before build, one test per Property, run on the
+// owner approves the plan and before build, one test per Property, run on the
 // plan's base. One agent sits inside it, the writer; code does the rest:
 //
 //   reading     which files at the base `includes` covers. A Gather
@@ -53,6 +54,8 @@ export const TestsAsk = Schema.Struct({
 	pointers: Schema.Array(Pointer),
 	includes: Schema.Array(Schema.String),
 	tries: Schema.Finite,
+	/** A redo: the existing files the writer may write again (`writer`'s `rewrite`). Left out: new files only. */
+	rewrite: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 export type TestsAsk = typeof TestsAsk.Type;
 
@@ -104,7 +107,7 @@ export type TestWriterCmd = TakenCmd | CommitCmd | RunCmd | RecordCmd | ReadCmd;
 /** What a run leaves besides its outcome. */
 export const TestWriterReport = Schema.Struct({
 	/** The writer's answer: the one that passed, or the last one when the tries ran out. */
-	written: Schema.NullOr(Written),
+	written: Schema.NullOr(HeldWritten),
 	/** The tests' local commit on the base. `null`: none was made. */
 	commit: Schema.NullOr(Schema.String),
 	checked: Schema.Array(Checked),
@@ -290,7 +293,7 @@ export const testWriter = defineMachine({
 
 		tests_taken_ok: (s, m): Step => {
 			if (s.phase !== "reading") return stay(s);
-			const {ticket, plan, base, properties, pointers, includes} = s.ask;
+			const {ticket, plan, base, properties, pointers, includes, rewrite} = s.ask;
 			const brief = writer.fill({
 				ticket,
 				plan,
@@ -299,6 +302,7 @@ export const testWriter = defineMachine({
 				pointers,
 				includes,
 				taken: m.value,
+				...(rewrite === undefined ? {} : {rewrite}),
 			});
 			return writing(s, brief);
 		},

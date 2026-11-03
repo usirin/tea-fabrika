@@ -17,7 +17,7 @@
 // objects (`read` with no prefix is refused), and writes across names as messages (a fenced
 // write or an OTP call into another object is answered by that object as it is, which refuses).
 // Every answer below comes from an object, never from this file, except the refused `read`.
-import {fromRaw, Ledger, LedgerUnreachable, type Raw} from "@kampus/fabrika";
+import {fromRaw, Ledger, LedgerUnreachable, type Raw} from "@kampus/fabrika-old";
 import {Effect, Layer} from "effect";
 import {HttpClient} from "effect/http";
 import {httpLayer, rawObject, type Server} from "./client.ts";

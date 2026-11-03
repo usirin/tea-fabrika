@@ -3,8 +3,8 @@
 //   node experiments/148-remote-programs/build.ts
 //
 // esbuild bundles worker.ts for workerd: the host (host/session.ts), tsh and its programs from
-// @kampus/fabrika, the counter from programs/counter, and the ledger's Durable Object from
-// packages/fabrika. Effect, tea and @kampus/fabrika resolve from the repo's root, so there is one
+// @kampus/fabrika-old, the counter from programs/counter, and the ledger's Durable Object from
+// packages/fabrika. Effect, tea and @kampus/fabrika-old resolve from the repo's root, so there is one
 // copy of each. Anything the bundle still imports from node: is listed in dist/meta.json: that is
 // what in the host code does not fit a Durable Object as it is.
 import {mkdirSync, writeFileSync} from "node:fs";

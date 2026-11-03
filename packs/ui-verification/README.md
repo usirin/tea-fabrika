@@ -25,7 +25,7 @@ The owner's yes or no goes to the core, not to this pack. Whoever shows the ques
 ## Where it sits
 
 - In `packs/`, the top layer of `layer-rules.json`. Nothing below it may import it.
-- It imports `@kampus/fabrika` and the pipeline, `@kampus/pipeline/*` (the `Built`, `Cleared` and `Raise` shapes of the `asks` program, and the `Pack` type).
+- It imports `@kampus/fabrika-old` and the pipeline, `@kampus/pipeline/*` (the `Built`, `Cleared` and `Raise` shapes of the `asks` program, and the `Pack` type).
 - The pipeline is its own package, in `packages/pipeline/`. `@kampus/pipeline` is a working name, from experiment 114.
 - The core imports nothing of it. The core finds it by name from config.
 - The root `package.json` lists it, so `loadPacks` can find it from the repo root.
@@ -44,7 +44,7 @@ All in `src/index.ts`. The `exports` map has `.` and `./*`.
 
 ## Settings
 
-Read from its own table in the repository's `fabrika.toml`:
+Read from its own table in the repository's `.fabrika/fabrika.toml`:
 
 ```toml
 packs = ["@tea-fabrika/owner-desk", "@tea-fabrika/ui-verification"]
@@ -56,7 +56,7 @@ shots = "shots"                                  # where the pictures would go; 
 
 A pattern that is not a valid regular expression refuses the pack, and the core does not start.
 
-Fabrika's tsh starts this pack when the `packs` line of `fabrika.toml` names it: `desk`, `desk-demo` and `answer` (see `packages/pipeline/README.md`). It is handed the host's folder for it and does not use it: `shots` stays as given. `owner-desk`'s end-to-end test also wires it by hand.
+Fabrika's tsh starts this pack when the `packs` line of `.fabrika/fabrika.toml` names it: `desk`, `desk-demo` and `answer` (see `packages/pipeline/README.md`). It is handed the host's folder for it and does not use it: `shots` stays as given. `owner-desk`'s end-to-end test also wires it by hand.
 
 ## Commands
 

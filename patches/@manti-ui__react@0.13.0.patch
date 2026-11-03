@@ -1,0 +1,547 @@
+diff --git a/dist/components/Badge/Badge.d.ts b/dist/components/Badge/Badge.d.ts
+index 11f75dfea2d4ecf357eb86f544adc0c3a45d9688..83eb357161ffb0f957464b48bf437e1d9fad2ca9 100644
+--- a/dist/components/Badge/Badge.d.ts
++++ b/dist/components/Badge/Badge.d.ts
+@@ -1,6 +1,6 @@
+ import type { ElementType, ReactElement } from 'react';
+ import type { MantiBuiltinVariant } from '@manti-ui/tokens';
+-import type { PolymorphicProps, PolymorphicRef } from '../../internal/polymorphic';
++import type { PolymorphicProps, PolymorphicRef } from '../../internal/polymorphic.js';
+ export type BadgeVariant = Exclude<MantiBuiltinVariant, 'tertiary'>;
+ interface BadgeOwnProps {
+     /** Color variant — Badge intentionally omits the tertiary treatment. */
+diff --git a/dist/components/Button/Button.d.ts b/dist/components/Button/Button.d.ts
+index 9fec9f83af833968040f49d42f876d06bfa47f49..6e80c517c434efa71ef4cae80607fc7ac041d90d 100644
+--- a/dist/components/Button/Button.d.ts
++++ b/dist/components/Button/Button.d.ts
+@@ -1,6 +1,6 @@
+ import type { ElementType, ReactElement, ReactNode } from 'react';
+ import type { MantiVariant } from '@manti-ui/tokens';
+-import type { PolymorphicProps, PolymorphicRef } from '../../internal/polymorphic';
++import type { PolymorphicProps, PolymorphicRef } from '../../internal/polymorphic.js';
+ export type ButtonSize = 'sm' | 'md' | 'lg';
+ interface ButtonOwnProps {
+     /**
+diff --git a/dist/components/Card/Card.d.ts b/dist/components/Card/Card.d.ts
+index 8b36c6e6fea07b1a555a5fc466b378d4944be9e7..a5930843b3cde0142eca30bb942da317fc587ac5 100644
+--- a/dist/components/Card/Card.d.ts
++++ b/dist/components/Card/Card.d.ts
+@@ -1,5 +1,5 @@
+ import type { ElementType, HTMLAttributes, ReactElement } from 'react';
+-import type { PolymorphicProps, PolymorphicRef } from '../../internal/polymorphic';
++import type { PolymorphicProps, PolymorphicRef } from '../../internal/polymorphic.js';
+ interface CardOwnProps {
+     /** Strengthen the card's surface tint. */
+     elevated?: boolean;
+diff --git a/dist/components/ColorPicker/ColorPicker.d.ts b/dist/components/ColorPicker/ColorPicker.d.ts
+index 6aee0c839915496650e511a13fc29a963460c56b..36b70d20aab52abc1cde9a8cb762f66bfae53dd7 100644
+--- a/dist/components/ColorPicker/ColorPicker.d.ts
++++ b/dist/components/ColorPicker/ColorPicker.d.ts
+@@ -1,8 +1,8 @@
+ import type { ReactNode } from 'react';
+ import type { ColorSpaceId } from '@manti-ui/folds';
+-import type { Placement } from '../../internal/floating';
+-import { type ColorPickerFormat } from './color-utils';
+-export type { ColorPickerFormat } from './color-utils';
++import type { Placement } from '../../internal/floating.js';
++import { type ColorPickerFormat } from './color-utils.js';
++export type { ColorPickerFormat } from './color-utils.js';
+ export type { ColorSpaceId } from '@manti-ui/folds';
+ export interface ColorPickerProps {
+     /** Optional field label. */
+diff --git a/dist/components/ColorPicker/NativeColorPicker.d.ts b/dist/components/ColorPicker/NativeColorPicker.d.ts
+index 0c8f0c1ea810676a11f5d461fe82b5bbda448d58..61278739c4eac9ac07daa71f235dd30f2198a95c 100644
+--- a/dist/components/ColorPicker/NativeColorPicker.d.ts
++++ b/dist/components/ColorPicker/NativeColorPicker.d.ts
+@@ -1,4 +1,4 @@
+-import type { ColorPickerProps } from './ColorPicker';
++import type { ColorPickerProps } from './ColorPicker.js';
+ /**
+  * Color picker path for a native color space. The popover shell still uses
+  * Zag's focus, dismiss, and positioning behavior, while the value and channel
+diff --git a/dist/components/Combobox/Combobox.d.ts b/dist/components/Combobox/Combobox.d.ts
+index a35deaf4b1214b8a28f695366604fd48bac75870..b7b6b0cf40731a3452e4bfcdfb6cb7f92b5deee6 100644
+--- a/dist/components/Combobox/Combobox.d.ts
++++ b/dist/components/Combobox/Combobox.d.ts
+@@ -1,5 +1,5 @@
+ import type { ReactNode } from 'react';
+-import type { Placement } from '../../internal/floating';
++import type { Placement } from '../../internal/floating.js';
+ export interface ComboboxItem {
+     value: string;
+     label: string;
+diff --git a/dist/components/ContextMenu/ContextMenu.d.ts b/dist/components/ContextMenu/ContextMenu.d.ts
+index 60b1ab7370eadf9ab0dc4a0c98b713afdb94fc69..ea9d2c8d796d1db52d08ef811d5e56b7f7d00410 100644
+--- a/dist/components/ContextMenu/ContextMenu.d.ts
++++ b/dist/components/ContextMenu/ContextMenu.d.ts
+@@ -1,6 +1,6 @@
+ import type { HTMLAttributes, ReactNode } from 'react';
+-import type { MenuSize } from '../Menu/MenuParts';
+-import type { MenuGetItemProps, MenuItem } from '../Menu/MenuItems';
++import type { MenuSize } from '../Menu/MenuParts.js';
++import type { MenuGetItemProps, MenuItem } from '../Menu/MenuItems.js';
+ export interface ContextMenuProps {
+     /** Region that opens the menu on right-click or long-press. */
+     children: ReactNode;
+diff --git a/dist/components/DataTable/DataTable.d.ts b/dist/components/DataTable/DataTable.d.ts
+index 2d2e41ded43bf93e92bbd2581e0783d9b544ce46..146ae1eff265b77fb7c71b61b7f58cff4fa4f37e 100644
+--- a/dist/components/DataTable/DataTable.d.ts
++++ b/dist/components/DataTable/DataTable.d.ts
+@@ -1,6 +1,6 @@
+ import type { ComponentType, HTMLAttributes, ReactNode, TdHTMLAttributes } from 'react';
+ import { table as tableContract } from '@manti-ui/folds';
+-import type { WithDataAttributes } from '../../internal/props';
++import type { WithDataAttributes } from '../../internal/props.js';
+ /**
+  * A column definition — TanStack's `ColumnDef`, re-exported so consumers type
+  * their columns without depending on `@tanstack/*` directly. Set `meta.align`
+diff --git a/dist/components/DatePicker/DatePicker.d.ts b/dist/components/DatePicker/DatePicker.d.ts
+index f6daa01a829b7c6e89150be75bfa9eefe0ea0c0b..b6a84358359d2124e58fe9d1e8b639efaeac8a69 100644
+--- a/dist/components/DatePicker/DatePicker.d.ts
++++ b/dist/components/DatePicker/DatePicker.d.ts
+@@ -1,6 +1,6 @@
+ import type { ReactNode } from 'react';
+ import type { MantiVariant } from '@manti-ui/tokens';
+-import type { Placement } from '../../internal/floating';
++import type { Placement } from '../../internal/floating.js';
+ export interface DatePickerProps {
+     /** Optional field label. */
+     label?: ReactNode;
+diff --git a/dist/components/Heading/Heading.d.ts b/dist/components/Heading/Heading.d.ts
+index 03a3caca05c37942067f5d079ecf69a7a7f374ca..1daaf2eed57f7600005431674293ce98cfa36280 100644
+--- a/dist/components/Heading/Heading.d.ts
++++ b/dist/components/Heading/Heading.d.ts
+@@ -1,7 +1,7 @@
+ import type { ElementType, ReactElement } from 'react';
+ import type { MantiVariant } from '@manti-ui/tokens';
+-import type { PolymorphicProps, PolymorphicRef } from '../../internal/polymorphic';
+-import type { TextAlign, TextEmphasis, TextSize } from '../Text/Text';
++import type { PolymorphicProps, PolymorphicRef } from '../../internal/polymorphic.js';
++import type { TextAlign, TextEmphasis, TextSize } from '../Text/Text.js';
+ export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
+ interface HeadingOwnProps {
+     /** Semantic heading rank; picks the `h1`–`h6` element and the default size. */
+diff --git a/dist/components/HoverCard/HoverCard.d.ts b/dist/components/HoverCard/HoverCard.d.ts
+index 106357f56f67f3e03bd5117725bc18e26ebe59d2..bbc044381f04960156be6ea84f53ba29f0a588df 100644
+--- a/dist/components/HoverCard/HoverCard.d.ts
++++ b/dist/components/HoverCard/HoverCard.d.ts
+@@ -1,5 +1,5 @@
+ import type { ReactElement, ReactNode } from 'react';
+-import type { Placement } from '../../internal/floating';
++import type { Placement } from '../../internal/floating.js';
+ export interface HoverCardProps {
+     /** Element that reveals the card on hover/focus. Cloned with trigger props. */
+     trigger: ReactElement;
+diff --git a/dist/components/Menu/Menu.d.ts b/dist/components/Menu/Menu.d.ts
+index 0dc3d5bac2ad789ac28f6059296977f0fa73ba8f..c5b558fb436809c3835cc1ee7258e4f72aefb8a2 100644
+--- a/dist/components/Menu/Menu.d.ts
++++ b/dist/components/Menu/Menu.d.ts
+@@ -1,9 +1,9 @@
+ import type { HTMLAttributes, ReactElement } from 'react';
+-import type { Placement } from '../../internal/floating';
+-import type { MenuSize } from './MenuParts';
+-import type { MenuGetItemProps, MenuItem } from './MenuItems';
+-export type { MenuItemRootProps, MenuSize, MenuTone } from './MenuParts';
+-export type { MenuActionCommand, MenuCheckboxCommand, MenuCommand, MenuGroup, MenuItem, MenuRadioCommand, MenuSeparator, MenuSubmenu, } from './MenuItems';
++import type { Placement } from '../../internal/floating.js';
++import type { MenuSize } from './MenuParts.js';
++import type { MenuGetItemProps, MenuItem } from './MenuItems.js';
++export type { MenuItemRootProps, MenuSize, MenuTone } from './MenuParts.js';
++export type { MenuActionCommand, MenuCheckboxCommand, MenuCommand, MenuGroup, MenuItem, MenuRadioCommand, MenuSeparator, MenuSubmenu, } from './MenuItems.js';
+ export type MenuPlacement = Placement | 'bottom-center';
+ export interface MenuProps {
+     /** Element that opens the menu. Cloned with the machine trigger props. */
+diff --git a/dist/components/Menu/MenuItems.d.ts b/dist/components/Menu/MenuItems.d.ts
+index ea12b215110036176a6449047a357c7dc45f7464..1ed06ad82c0dd443fc62f867980cd3479168569c 100644
+--- a/dist/components/Menu/MenuItems.d.ts
++++ b/dist/components/Menu/MenuItems.d.ts
+@@ -1,5 +1,5 @@
+ import type { ReactNode } from 'react';
+-import type { MenuItemRootProps, MenuTone } from './MenuParts';
++import type { MenuItemRootProps, MenuTone } from './MenuParts.js';
+ interface MenuEntryBase {
+     /** Unique value reported to `onSelect`. */
+     value: string;
+diff --git a/dist/components/Menu/MenuParts.d.ts b/dist/components/Menu/MenuParts.d.ts
+index 20d806a88e58e6ba052d20dd1cdbbe09ba2ad53c..b9d0586606e8064ce2459de1f36cc548c6743b61 100644
+--- a/dist/components/Menu/MenuParts.d.ts
++++ b/dist/components/Menu/MenuParts.d.ts
+@@ -1,7 +1,7 @@
+ import type { HTMLAttributes, ReactNode } from 'react';
+ import type { menu } from '@manti-ui/folds';
+ import type { PropTypes } from '@zag-js/react';
+-import type { WithDataAttributes } from '../../internal/props';
++import type { WithDataAttributes } from '../../internal/props.js';
+ export type MenuApi = menu.Api<PropTypes>;
+ /** Semantic visual tone of a command, exposed as `data-tone` / `data-variant`. */
+ export type MenuTone = 'default' | 'danger';
+diff --git a/dist/components/NumberInput/NumberInput.d.ts b/dist/components/NumberInput/NumberInput.d.ts
+index c8439abbf5c90b47dd9e2e1bbd1a0c5142debf0b..7026f075a180db79685ec51d43d0cb50a208cfd4 100644
+--- a/dist/components/NumberInput/NumberInput.d.ts
++++ b/dist/components/NumberInput/NumberInput.d.ts
+@@ -1,6 +1,6 @@
+ import type { HTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
+ import type { MantiVariant } from '@manti-ui/tokens';
+-import type { WithDataAttributes } from '../../internal/props';
++import type { WithDataAttributes } from '../../internal/props.js';
+ export interface NumberInputProps {
+     /** Optional field label. */
+     label?: ReactNode;
+diff --git a/dist/components/Popover/Popover.d.ts b/dist/components/Popover/Popover.d.ts
+index 453e85eaa01c41a4044d88d100da8a6293802db2..06a0d72e5c705348c04da2a39d6fa410708c0f3a 100644
+--- a/dist/components/Popover/Popover.d.ts
++++ b/dist/components/Popover/Popover.d.ts
+@@ -1,5 +1,5 @@
+ import type { ReactElement, ReactNode } from 'react';
+-import type { Placement } from '../../internal/floating';
++import type { Placement } from '../../internal/floating.js';
+ export interface PopoverProps {
+     /** Element that toggles the popover. Cloned with the machine's trigger props. */
+     trigger: ReactElement;
+diff --git a/dist/components/Progress/Progress.d.ts b/dist/components/Progress/Progress.d.ts
+index 47950a482108df904148d58241f4e322d4f85c26..93541977947c6803c4cbaf94f5d3438fb72a3634 100644
+--- a/dist/components/Progress/Progress.d.ts
++++ b/dist/components/Progress/Progress.d.ts
+@@ -1,5 +1,5 @@
+ import type { HTMLAttributes, ReactNode, SVGAttributes } from 'react';
+-import type { WithDataAttributes } from '../../internal/props';
++import type { WithDataAttributes } from '../../internal/props.js';
+ export interface ProgressProps {
+     /** Linear bar or circular ring. */
+     variant?: 'linear' | 'circular';
+diff --git a/dist/components/Select/Select.d.ts b/dist/components/Select/Select.d.ts
+index 0ee11f85d95c293ce1d5c31132dfec854e088187..56f698c604c6bf531f809e98b16ebcdbcfe9f13b 100644
+--- a/dist/components/Select/Select.d.ts
++++ b/dist/components/Select/Select.d.ts
+@@ -1,5 +1,5 @@
+ import type { ReactNode } from 'react';
+-import type { Placement } from '../../internal/floating';
++import type { Placement } from '../../internal/floating.js';
+ export interface SelectItem {
+     value: string;
+     label: string;
+diff --git a/dist/components/Switch/Switch.d.ts b/dist/components/Switch/Switch.d.ts
+index b96af68a2da925dd6ac5c1d198f06a21238118aa..50c63f6f445335ebfc0bc7c93f69950e01ec2295 100644
+--- a/dist/components/Switch/Switch.d.ts
++++ b/dist/components/Switch/Switch.d.ts
+@@ -1,5 +1,5 @@
+ import type { InputHTMLAttributes, LabelHTMLAttributes, ReactNode } from 'react';
+-import type { WithDataAttributes } from '../../internal/props';
++import type { WithDataAttributes } from '../../internal/props.js';
+ export type SwitchRootProps = WithDataAttributes<Omit<LabelHTMLAttributes<HTMLLabelElement>, 'children'>>;
+ export type SwitchInputProps = WithDataAttributes<Omit<InputHTMLAttributes<HTMLInputElement>, 'checked' | 'defaultChecked' | 'disabled' | 'name' | 'readOnly' | 'required'>>;
+ export interface SwitchProps {
+diff --git a/dist/components/Text/Text.d.ts b/dist/components/Text/Text.d.ts
+index 94a07263755723b111436f175c3683ad59b076ac..5534b0d13ccd4399a7a8facc676ffc384a33bb12 100644
+--- a/dist/components/Text/Text.d.ts
++++ b/dist/components/Text/Text.d.ts
+@@ -1,6 +1,6 @@
+ import type { ElementType, ReactElement } from 'react';
+ import type { MantiVariant } from '@manti-ui/tokens';
+-import type { PolymorphicProps, PolymorphicRef } from '../../internal/polymorphic';
++import type { PolymorphicProps, PolymorphicRef } from '../../internal/polymorphic.js';
+ /** A stop on the shared type scale. */
+ export type TextScale = 'xs' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl';
+ export type TextWeight = 'regular' | 'medium' | 'semibold' | 'bold';
+diff --git a/dist/components/TimePicker/TimePicker.d.ts b/dist/components/TimePicker/TimePicker.d.ts
+index 60318b5c0a270a9490f2d9231df463046629f52d..47df4d07799b5202bdd32ba3e657a589b45c866c 100644
+--- a/dist/components/TimePicker/TimePicker.d.ts
++++ b/dist/components/TimePicker/TimePicker.d.ts
+@@ -1,6 +1,6 @@
+ import type { ReactNode } from 'react';
+ import type { MantiVariant } from '@manti-ui/tokens';
+-import type { Placement } from '../../internal/floating';
++import type { Placement } from '../../internal/floating.js';
+ export interface TimePickerProps {
+     /** Optional field label. */
+     label?: ReactNode;
+diff --git a/dist/components/ToggleGroup/ToggleGroup.d.ts b/dist/components/ToggleGroup/ToggleGroup.d.ts
+index 28b4919ee8339cdd684bb24db449b39e1d187c98..fac6d609d3fcd6b610205593445ad68193e4e7e7 100644
+--- a/dist/components/ToggleGroup/ToggleGroup.d.ts
++++ b/dist/components/ToggleGroup/ToggleGroup.d.ts
+@@ -1,6 +1,6 @@
+ import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from 'react';
+ import type { MantiVariant } from '@manti-ui/tokens';
+-import type { WithDataAttributes } from '../../internal/props';
++import type { WithDataAttributes } from '../../internal/props.js';
+ export interface ToggleGroupItem {
+     value: string;
+     label: ReactNode;
+diff --git a/dist/components/Tooltip/Tooltip.d.ts b/dist/components/Tooltip/Tooltip.d.ts
+index cceead94e55e7e35dc08f44325f293f907072b93..14080f5ddb362560accc027ec2e9ac9a765fd328 100644
+--- a/dist/components/Tooltip/Tooltip.d.ts
++++ b/dist/components/Tooltip/Tooltip.d.ts
+@@ -1,5 +1,5 @@
+ import type { ReactNode, RefObject } from 'react';
+-import type { Placement } from '../../internal/floating';
++import type { Placement } from '../../internal/floating.js';
+ export interface TooltipProps {
+     /** The tooltip content. */
+     content: ReactNode;
+diff --git a/dist/components/index.d.ts b/dist/components/index.d.ts
+index 50b5b53f268d1c14f1ce5c8aa74e6969752aac28..008698bfb697573461c87e6e48c22588ce334ae1 100644
+--- a/dist/components/index.d.ts
++++ b/dist/components/index.d.ts
+@@ -1,117 +1,117 @@
+-export { Accordion } from './Accordion/Accordion';
+-export type { AccordionItem, AccordionProps } from './Accordion/Accordion';
+-export { Alert } from './Alert/Alert';
+-export type { AlertProps, AlertVariant } from './Alert/Alert';
+-export { Avatar } from './Avatar/Avatar';
+-export type { AvatarProps } from './Avatar/Avatar';
+-export { Badge } from './Badge/Badge';
+-export type { BadgeProps, BadgeVariant } from './Badge/Badge';
+-export { Blockquote } from './Blockquote/Blockquote';
+-export type { BlockquoteProps, BlockquoteSize } from './Blockquote/Blockquote';
+-export { Button } from './Button/Button';
+-export type { ButtonProps, ButtonSize } from './Button/Button';
+-export { Calendar } from './Calendar/Calendar';
+-export type { CalendarDayValue, CalendarProps } from './Calendar/Calendar';
+-export { Card } from './Card/Card';
+-export type { CardProps } from './Card/Card';
+-export { Carousel } from './Carousel/Carousel';
+-export type { CarouselProps } from './Carousel/Carousel';
+-export { Checkbox } from './Checkbox/Checkbox';
+-export type { CheckboxProps } from './Checkbox/Checkbox';
+-export { Clipboard, useClipboard } from './Clipboard/Clipboard';
+-export type { ClipboardProps, UseClipboardOptions, UseClipboardReturn, } from './Clipboard/Clipboard';
+-export { Collapsible } from './Collapsible/Collapsible';
+-export type { CollapsibleProps } from './Collapsible/Collapsible';
+-export { Code } from './Code/Code';
+-export type { CodeProps, CodeSize } from './Code/Code';
+-export { ColorPicker } from './ColorPicker/ColorPicker';
+-export type { ColorPickerFormat, ColorPickerProps, ColorSpaceId, } from './ColorPicker/ColorPicker';
+-export { Combobox } from './Combobox/Combobox';
+-export type { ComboboxItem, ComboboxProps, ComboboxVariant, } from './Combobox/Combobox';
+-export { ContextMenu } from './ContextMenu/ContextMenu';
+-export type { ContextMenuProps } from './ContextMenu/ContextMenu';
+-export { DataTable } from './DataTable/DataTable';
+-export type { DataTableColumn, DataTableProps, DataTableRowComponentProps, DataTableSize, } from './DataTable/DataTable';
+-export { DatePicker } from './DatePicker/DatePicker';
+-export type { DatePickerProps } from './DatePicker/DatePicker';
+-export { Dialog } from './Dialog/Dialog';
+-export type { DialogProps, DialogRenderProps, DialogSize, } from './Dialog/Dialog';
+-export { Drawer } from './Drawer/Drawer';
+-export type { DrawerPlacement, DrawerProps, DrawerRenderProps, DrawerSize, } from './Drawer/Drawer';
+-export { Editable } from './Editable/Editable';
+-export type { EditableProps } from './Editable/Editable';
+-export { FileUpload } from './FileUpload/FileUpload';
+-export type { FileUploadProps } from './FileUpload/FileUpload';
+-export { FloatingPanel } from './FloatingPanel/FloatingPanel';
+-export type { FloatingPanelProps } from './FloatingPanel/FloatingPanel';
+-export { Heading } from './Heading/Heading';
+-export type { HeadingLevel, HeadingProps } from './Heading/Heading';
+-export { HoverCard } from './HoverCard/HoverCard';
+-export type { HoverCardProps } from './HoverCard/HoverCard';
+-export { Input } from './Input/Input';
+-export type { InputProps, InputVariant } from './Input/Input';
+-export { Kbd } from './Kbd/Kbd';
+-export type { KbdProps, KbdSize } from './Kbd/Kbd';
+-export { Listbox } from './Listbox/Listbox';
+-export type { ListboxItem, ListboxProps } from './Listbox/Listbox';
+-export { Marquee } from './Marquee/Marquee';
+-export type { MarqueeProps } from './Marquee/Marquee';
+-export { Menu } from './Menu/Menu';
+-export type { MenuActionCommand, MenuCheckboxCommand, MenuCommand, MenuGroup, MenuItem, MenuItemRootProps, MenuPlacement, MenuProps, MenuRadioCommand, MenuSeparator, MenuSubmenu, MenuTone, } from './Menu/Menu';
+-export { NavigationMenu } from './NavigationMenu/NavigationMenu';
+-export type { NavigationMenuItem, NavigationMenuLink, NavigationMenuProps, } from './NavigationMenu/NavigationMenu';
+-export { NumberInput } from './NumberInput/NumberInput';
+-export type { NumberInputProps } from './NumberInput/NumberInput';
+-export { Pagination } from './Pagination/Pagination';
+-export type { PaginationProps } from './Pagination/Pagination';
+-export { PinInput } from './PinInput/PinInput';
+-export type { PinInputProps } from './PinInput/PinInput';
+-export { Popover } from './Popover/Popover';
+-export type { PopoverProps } from './Popover/Popover';
+-export { Progress } from './Progress/Progress';
+-export type { ProgressProps } from './Progress/Progress';
+-export { RadioGroup } from './RadioGroup/RadioGroup';
+-export type { RadioGroupItem, RadioGroupProps } from './RadioGroup/RadioGroup';
+-export { RatingGroup } from './RatingGroup/RatingGroup';
+-export type { RatingGroupProps } from './RatingGroup/RatingGroup';
+-export { ScrollArea } from './ScrollArea/ScrollArea';
+-export type { ScrollAreaProps } from './ScrollArea/ScrollArea';
+-export { SegmentedControl } from './SegmentedControl/SegmentedControl';
+-export type { SegmentedControlItem, SegmentedControlProps, } from './SegmentedControl/SegmentedControl';
+-export { Select } from './Select/Select';
+-export type { SelectItem, SelectProps, SelectVariant } from './Select/Select';
+-export { SignaturePad } from './SignaturePad/SignaturePad';
+-export type { SignaturePadProps } from './SignaturePad/SignaturePad';
+-export { Slider } from './Slider/Slider';
+-export type { SliderProps } from './Slider/Slider';
+-export { Spinner } from './Spinner/Spinner';
+-export type { SpinnerProps } from './Spinner/Spinner';
+-export { Splitter } from './Splitter/Splitter';
+-export type { SplitterPanel, SplitterProps } from './Splitter/Splitter';
+-export { Steps } from './Steps/Steps';
+-export type { StepItem, StepsProps } from './Steps/Steps';
+-export { Switch } from './Switch/Switch';
+-export type { SwitchInputProps, SwitchProps, SwitchRootProps, } from './Switch/Switch';
+-export { Tabs } from './Tabs/Tabs';
+-export type { TabItem, TabsProps, TabsVariant } from './Tabs/Tabs';
+-export { TagsInput } from './TagsInput/TagsInput';
+-export type { TagsInputProps } from './TagsInput/TagsInput';
+-export { Text } from './Text/Text';
+-export type { TextAlign, TextEmphasis, TextProps, TextScale, TextSize, TextWeight, } from './Text/Text';
+-export { TimePicker } from './TimePicker/TimePicker';
+-export type { TimePickerProps } from './TimePicker/TimePicker';
+-export { TreeView } from './TreeView/TreeView';
+-export type { TreeNode, TreeNodeState, TreeViewProps, } from './TreeView/TreeView';
+-export { createToaster } from './Toast/Toast';
+-export type { CreateToasterOptions, MantiToaster, ToastTranslations, ToastPlacement, ToasterInstance, ToasterProps, } from './Toast/Toast';
+-export { Textarea } from './Textarea/Textarea';
+-export type { TextareaProps, TextareaVariant } from './Textarea/Textarea';
+-export { Toggle } from './Toggle/Toggle';
+-export type { ToggleProps } from './Toggle/Toggle';
+-export { ToggleGroup } from './ToggleGroup/ToggleGroup';
+-export type { ToggleGroupItem, ToggleGroupLegacyProps, ToggleGroupMultipleProps, ToggleGroupProps, ToggleGroupSingleProps, } from './ToggleGroup/ToggleGroup';
+-export { Tooltip } from './Tooltip/Tooltip';
+-export type { TooltipProps } from './Tooltip/Tooltip';
+-export { Tour } from './Tour/Tour';
+-export type { TourProps, TourStep, TourStepAction, TourStepActionType, } from './Tour/Tour';
++export { Accordion } from './Accordion/Accordion.js';
++export type { AccordionItem, AccordionProps } from './Accordion/Accordion.js';
++export { Alert } from './Alert/Alert.js';
++export type { AlertProps, AlertVariant } from './Alert/Alert.js';
++export { Avatar } from './Avatar/Avatar.js';
++export type { AvatarProps } from './Avatar/Avatar.js';
++export { Badge } from './Badge/Badge.js';
++export type { BadgeProps, BadgeVariant } from './Badge/Badge.js';
++export { Blockquote } from './Blockquote/Blockquote.js';
++export type { BlockquoteProps, BlockquoteSize } from './Blockquote/Blockquote.js';
++export { Button } from './Button/Button.js';
++export type { ButtonProps, ButtonSize } from './Button/Button.js';
++export { Calendar } from './Calendar/Calendar.js';
++export type { CalendarDayValue, CalendarProps } from './Calendar/Calendar.js';
++export { Card } from './Card/Card.js';
++export type { CardProps } from './Card/Card.js';
++export { Carousel } from './Carousel/Carousel.js';
++export type { CarouselProps } from './Carousel/Carousel.js';
++export { Checkbox } from './Checkbox/Checkbox.js';
++export type { CheckboxProps } from './Checkbox/Checkbox.js';
++export { Clipboard, useClipboard } from './Clipboard/Clipboard.js';
++export type { ClipboardProps, UseClipboardOptions, UseClipboardReturn, } from './Clipboard/Clipboard.js';
++export { Collapsible } from './Collapsible/Collapsible.js';
++export type { CollapsibleProps } from './Collapsible/Collapsible.js';
++export { Code } from './Code/Code.js';
++export type { CodeProps, CodeSize } from './Code/Code.js';
++export { ColorPicker } from './ColorPicker/ColorPicker.js';
++export type { ColorPickerFormat, ColorPickerProps, ColorSpaceId, } from './ColorPicker/ColorPicker.js';
++export { Combobox } from './Combobox/Combobox.js';
++export type { ComboboxItem, ComboboxProps, ComboboxVariant, } from './Combobox/Combobox.js';
++export { ContextMenu } from './ContextMenu/ContextMenu.js';
++export type { ContextMenuProps } from './ContextMenu/ContextMenu.js';
++export { DataTable } from './DataTable/DataTable.js';
++export type { DataTableColumn, DataTableProps, DataTableRowComponentProps, DataTableSize, } from './DataTable/DataTable.js';
++export { DatePicker } from './DatePicker/DatePicker.js';
++export type { DatePickerProps } from './DatePicker/DatePicker.js';
++export { Dialog } from './Dialog/Dialog.js';
++export type { DialogProps, DialogRenderProps, DialogSize, } from './Dialog/Dialog.js';
++export { Drawer } from './Drawer/Drawer.js';
++export type { DrawerPlacement, DrawerProps, DrawerRenderProps, DrawerSize, } from './Drawer/Drawer.js';
++export { Editable } from './Editable/Editable.js';
++export type { EditableProps } from './Editable/Editable.js';
++export { FileUpload } from './FileUpload/FileUpload.js';
++export type { FileUploadProps } from './FileUpload/FileUpload.js';
++export { FloatingPanel } from './FloatingPanel/FloatingPanel.js';
++export type { FloatingPanelProps } from './FloatingPanel/FloatingPanel.js';
++export { Heading } from './Heading/Heading.js';
++export type { HeadingLevel, HeadingProps } from './Heading/Heading.js';
++export { HoverCard } from './HoverCard/HoverCard.js';
++export type { HoverCardProps } from './HoverCard/HoverCard.js';
++export { Input } from './Input/Input.js';
++export type { InputProps, InputVariant } from './Input/Input.js';
++export { Kbd } from './Kbd/Kbd.js';
++export type { KbdProps, KbdSize } from './Kbd/Kbd.js';
++export { Listbox } from './Listbox/Listbox.js';
++export type { ListboxItem, ListboxProps } from './Listbox/Listbox.js';
++export { Marquee } from './Marquee/Marquee.js';
++export type { MarqueeProps } from './Marquee/Marquee.js';
++export { Menu } from './Menu/Menu.js';
++export type { MenuActionCommand, MenuCheckboxCommand, MenuCommand, MenuGroup, MenuItem, MenuItemRootProps, MenuPlacement, MenuProps, MenuRadioCommand, MenuSeparator, MenuSubmenu, MenuTone, } from './Menu/Menu.js';
++export { NavigationMenu } from './NavigationMenu/NavigationMenu.js';
++export type { NavigationMenuItem, NavigationMenuLink, NavigationMenuProps, } from './NavigationMenu/NavigationMenu.js';
++export { NumberInput } from './NumberInput/NumberInput.js';
++export type { NumberInputProps } from './NumberInput/NumberInput.js';
++export { Pagination } from './Pagination/Pagination.js';
++export type { PaginationProps } from './Pagination/Pagination.js';
++export { PinInput } from './PinInput/PinInput.js';
++export type { PinInputProps } from './PinInput/PinInput.js';
++export { Popover } from './Popover/Popover.js';
++export type { PopoverProps } from './Popover/Popover.js';
++export { Progress } from './Progress/Progress.js';
++export type { ProgressProps } from './Progress/Progress.js';
++export { RadioGroup } from './RadioGroup/RadioGroup.js';
++export type { RadioGroupItem, RadioGroupProps } from './RadioGroup/RadioGroup.js';
++export { RatingGroup } from './RatingGroup/RatingGroup.js';
++export type { RatingGroupProps } from './RatingGroup/RatingGroup.js';
++export { ScrollArea } from './ScrollArea/ScrollArea.js';
++export type { ScrollAreaProps } from './ScrollArea/ScrollArea.js';
++export { SegmentedControl } from './SegmentedControl/SegmentedControl.js';
++export type { SegmentedControlItem, SegmentedControlProps, } from './SegmentedControl/SegmentedControl.js';
++export { Select } from './Select/Select.js';
++export type { SelectItem, SelectProps, SelectVariant } from './Select/Select.js';
++export { SignaturePad } from './SignaturePad/SignaturePad.js';
++export type { SignaturePadProps } from './SignaturePad/SignaturePad.js';
++export { Slider } from './Slider/Slider.js';
++export type { SliderProps } from './Slider/Slider.js';
++export { Spinner } from './Spinner/Spinner.js';
++export type { SpinnerProps } from './Spinner/Spinner.js';
++export { Splitter } from './Splitter/Splitter.js';
++export type { SplitterPanel, SplitterProps } from './Splitter/Splitter.js';
++export { Steps } from './Steps/Steps.js';
++export type { StepItem, StepsProps } from './Steps/Steps.js';
++export { Switch } from './Switch/Switch.js';
++export type { SwitchInputProps, SwitchProps, SwitchRootProps, } from './Switch/Switch.js';
++export { Tabs } from './Tabs/Tabs.js';
++export type { TabItem, TabsProps, TabsVariant } from './Tabs/Tabs.js';
++export { TagsInput } from './TagsInput/TagsInput.js';
++export type { TagsInputProps } from './TagsInput/TagsInput.js';
++export { Text } from './Text/Text.js';
++export type { TextAlign, TextEmphasis, TextProps, TextScale, TextSize, TextWeight, } from './Text/Text.js';
++export { TimePicker } from './TimePicker/TimePicker.js';
++export type { TimePickerProps } from './TimePicker/TimePicker.js';
++export { TreeView } from './TreeView/TreeView.js';
++export type { TreeNode, TreeNodeState, TreeViewProps, } from './TreeView/TreeView.js';
++export { createToaster } from './Toast/Toast.js';
++export type { CreateToasterOptions, MantiToaster, ToastTranslations, ToastPlacement, ToasterInstance, ToasterProps, } from './Toast/Toast.js';
++export { Textarea } from './Textarea/Textarea.js';
++export type { TextareaProps, TextareaVariant } from './Textarea/Textarea.js';
++export { Toggle } from './Toggle/Toggle.js';
++export type { ToggleProps } from './Toggle/Toggle.js';
++export { ToggleGroup } from './ToggleGroup/ToggleGroup.js';
++export type { ToggleGroupItem, ToggleGroupLegacyProps, ToggleGroupMultipleProps, ToggleGroupProps, ToggleGroupSingleProps, } from './ToggleGroup/ToggleGroup.js';
++export { Tooltip } from './Tooltip/Tooltip.js';
++export type { TooltipProps } from './Tooltip/Tooltip.js';
++export { Tour } from './Tour/Tour.js';
++export type { TourProps, TourStep, TourStepAction, TourStepActionType, } from './Tour/Tour.js';
+ //# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 26c07d0b5676a57e3e6b9aea0c53fd811d00f8ad..21eaf3b75eae4f7a07a6d97e5ce3821ef748e054 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -1,7 +1,7 @@
+-export { mantiUi } from './meta';
+-export type { MantiUiMetadata } from './meta';
+-export * from './components';
+-export { useShortcut, useShortcuts } from './shortcut';
+-export type { ShortcutMap, ShortcutOptions, ShortcutScope, } from './shortcut';
++export { mantiUi } from './meta.js';
++export type { MantiUiMetadata } from './meta.js';
++export * from './components/index.js';
++export { useShortcut, useShortcuts } from './shortcut/index.js';
++export type { ShortcutMap, ShortcutOptions, ShortcutScope, } from './shortcut/index.js';
+ export type { MantiBuiltinVariant, MantiVariant } from '@manti-ui/tokens';
+ //# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
+diff --git a/dist/shortcut/index.d.ts b/dist/shortcut/index.d.ts
+index ce4c6c2e970df784613e659cd9cb7e0b6a682ece..7fe91c0bede9de22c5cb0a6f92b8247abc5f7835 100644
+--- a/dist/shortcut/index.d.ts
++++ b/dist/shortcut/index.d.ts
+@@ -1,3 +1,3 @@
+-export { useShortcut, useShortcuts } from './useShortcut';
+-export type { ShortcutMap, ShortcutOptions, ShortcutScope, } from './useShortcut';
++export { useShortcut, useShortcuts } from './useShortcut.js';
++export type { ShortcutMap, ShortcutOptions, ShortcutScope, } from './useShortcut.js';
+ //# sourceMappingURL=index.d.ts.map

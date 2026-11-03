@@ -32,8 +32,14 @@ const go = <A, E>(test: Effect.Effect<A, E, Scope.Scope | Platform>) =>
 /** How many hosts, or apps, start at once in a round. */
 const N = 6;
 
-/** How long a round waits for every host but one to exit. */
-const SETTLE_MS = 6000;
+/**
+ * How long a round may take to show every host but one gone, if it never does. A round that settles
+ * ends the moment it does, so this says how soon a broken round goes red, and nothing about how fast
+ * a host is: six at once on a busy CI machine took more than 6 s. It stays above `attach`'s own 10 s
+ * for a host to listen, as a host the app would wait for is not one to fail here, and four broken
+ * rounds fit in the test's 60 s, so the failure shows what each round saw.
+ */
+const SETTLE_MS = 12_000;
 
 /** A fresh home, with the host's paths in it. Short, as a socket path is 103 bytes at most. */
 const freshHome = Effect.gen(function* () {
@@ -216,7 +222,10 @@ describe("one host per home", () => {
 						(h) =>
 							h.exitCode.pipe(
 								Effect.as(true),
-								Effect.timeoutOrElse({duration: "5 seconds", orElse: () => Effect.succeed(false)}),
+								Effect.timeoutOrElse({
+									duration: `${SETTLE_MS} millis`,
+									orElse: () => Effect.succeed(false),
+								}),
 								Effect.orElseSucceed(() => false),
 							),
 						{concurrency: "unbounded"},

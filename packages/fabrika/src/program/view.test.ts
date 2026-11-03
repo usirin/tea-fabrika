@@ -1,7 +1,7 @@
 import {defineMachine} from "@demlik/tea";
-import {Effect, Schema, Stream} from "effect";
+import {Effect, Schema} from "effect";
 import {describe, expect, expectTypeOf, it} from "vitest";
-import {defineProgram, kind, viewOf} from "./program.ts";
+import {defineProgram, end, kind, viewOf} from "./program.ts";
 import {input, output} from "./shape.ts";
 import {type InputMsgOf, readInput, type WindowProps} from "./view.ts";
 
@@ -32,13 +32,13 @@ const clicks = defineProgram({
 		}),
 	},
 	view: {machine: "count", data: Schema.Struct({n: Schema.Int}), of: (s) => ({n: s.n})},
-	main: ({inputs, send, machines}) =>
+	main: ({serve, send, machines}) =>
 		Effect.gen(function* () {
 			const counted = yield* machines.count.get("count").start();
-			yield* inputs.press.pipe(
-				Stream.takeWhile((press) => press === "plus"),
-				Stream.runForEach(() => counted.dispatch({type: "plus"}).pipe(Effect.orDie)),
-			);
+			yield* serve({
+				press: (press) =>
+					press === "plus" ? counted.dispatch({type: "plus"}).pipe(Effect.orDie) : end,
+			});
 			yield* send("total", counted.getState().n);
 		}).pipe(Effect.scoped),
 });

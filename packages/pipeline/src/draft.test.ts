@@ -6,7 +6,7 @@ import {
 	extraTools,
 	noSpend,
 	sdkRunner,
-} from "@kampus/fabrika/agents/claude";
+} from "@kampus/fabrika-old/agents/claude";
 import {Effect, Schema, Stream} from "effect";
 import {afterEach, describe, expect, it, vi} from "vitest";
 import {initOf, resultOf, scriptedOpen, turnOf} from "./draft-scripted.ts";

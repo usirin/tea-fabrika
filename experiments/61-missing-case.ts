@@ -59,7 +59,7 @@ import {
 import {tmpdir} from "node:os";
 import {isAbsolute, join, relative, resolve} from "node:path";
 import {query} from "@anthropic-ai/claude-agent-sdk";
-import {jsonSchema, reader} from "@kampus/fabrika/agents/claude";
+import {jsonSchema, reader} from "@kampus/fabrika-old/agents/claude";
 import {
 	DEFAULT_EFFORT,
 	DEFAULT_MODEL,

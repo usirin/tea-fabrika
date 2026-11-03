@@ -33,7 +33,8 @@ const build = outcomesOf({
 	 * `over_budget`: it reached its limit in dollars first. `no_change`: the
 	 * first round changed nothing, so there is nothing to open a pull request
 	 * on. `push_failed`, `open_failed`: the branch could not be pushed, or the
-	 * pull request could not be opened or found.
+	 * pull request could not be opened or found. `exam_touched`: the change
+	 * reached a file the test writer wrote, or a rule file, so nothing was kept.
 	 */
 	stuck: [
 		"read_failed",
@@ -45,6 +46,7 @@ const build = outcomesOf({
 		"no_change",
 		"push_failed",
 		"open_failed",
+		"exam_touched",
 	],
 });
 

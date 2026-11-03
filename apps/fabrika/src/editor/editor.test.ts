@@ -1,5 +1,5 @@
 import {replay} from "@demlik/tea";
-import {listed, Shell} from "@kampus/fabrika";
+import {listed, Shell} from "@kampus/fabrika-old";
 import {counter} from "@tea-fabrika/counter";
 import {Layer} from "effect";
 import {describe, expect, it} from "vitest";
@@ -210,6 +210,50 @@ describe("text from tsh while the prompt is up", () => {
 	});
 });
 
+describe("a table from tsh", () => {
+	const table: Shell.Table = {
+		title: "Experiments",
+		note: "newest first",
+		total: 30,
+		columns: [
+			{header: "#", align: "left"},
+			{header: "TITLE", align: "left"},
+		],
+		cut: 1,
+		rows: [
+			[
+				{text: "171", tone: "muted"},
+				{text: "A title too long for a narrow tile, \x1b[2Jcut", tone: "plain"},
+			],
+		],
+		hints: [{line: "experiments --all", for: "for every row"}],
+	};
+
+	it("is laid out at the terminal's width, above the prompt, the title column cut", () => {
+		expect(seen([keys("ls"), {type: "table", table}], {cols: 40})).toEqual([
+			"",
+			"Experiments  30 · newest first",
+			"",
+			"  #     TITLE",
+			"  171   A title too long for a narrow t…",
+			"",
+			"29 more.  experiments --all for every",
+			"row.",
+			"",
+			"tsh$ ls|",
+		]);
+	});
+
+	// The colors themselves are the theme's, per look: screen.test.ts holds them.
+	it("is drawn in color, and no text in it can move the cursor or clear the screen", () => {
+		const {bytes} = run([{type: "table", table}], {cols: 80});
+		// oxlint-disable-next-line eslint/no-control-regex -- the color's escape is what it looks for.
+		expect(bytes).toMatch(/\x1b\[[\d;]+mExperiments\x1b\[0m/);
+		expect(bytes).toContain("^[[2Jcut");
+		expect(bytes).not.toContain("\x1b[2J");
+	});
+});
+
 describe("history", () => {
 	const history = ["seq --to 3", "say hi", "counter"];
 
@@ -283,7 +327,10 @@ describe("Tab", () => {
 	it("puts in a job by its number, from tsh's table", () => {
 		const run1 = {program: "counter", flags: {}, run: "counter:1a2b", wire: null, ended: false};
 		const jobs: Shell.Jobs = {
-			jobs: [{n: 1, text: "counter &", stages: [run1], state: "running", background: true}],
+			jobs: [
+				{n: 1, text: "counter &", stages: [run1], state: "running", background: true, owner: "t1"},
+			],
+			next: 2,
 		};
 		expect(seen([{type: "jobs", jobs}, keys("stop %\t")])).toEqual(["tsh$ stop %1 |"]);
 	});

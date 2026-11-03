@@ -15,7 +15,7 @@
 // ledger answers `dup` if the first landed. One id per (fence, rev) is enough: two saves at the
 // same rev cannot both land, and tea sends the same state again when it retries.
 import {type FencedStore, refuse, StoreConflictError} from "@demlik/tea";
-import type {Ledger, Row} from "@kampus/fabrika";
+import type {Ledger, Row} from "@kampus/fabrika-old";
 import {Cause, Duration, Effect, Exit, Schema} from "effect";
 
 /** What the host says about each save. */

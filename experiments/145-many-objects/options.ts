@@ -8,7 +8,7 @@ import {readFileSync} from "node:fs";
 import {stripTypeScriptTypes} from "node:module";
 import {basename, join} from "node:path";
 import {fileURLToPath} from "node:url";
-import {ledgerOptions} from "@kampus/fabrika/local";
+import {ledgerOptions} from "@kampus/fabrika-old/local";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 

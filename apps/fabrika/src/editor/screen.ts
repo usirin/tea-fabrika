@@ -1,3 +1,4 @@
+import {Shell} from "@kampus/fabrika-old";
 import {cells, spot} from "./cells.ts";
 
 // The bytes the line editor writes to the terminal: text, and a few VT100 cursor moves. Pure, so
@@ -95,6 +96,35 @@ export const shown = (text: string): string =>
 			return c;
 		})
 		.join("");
+
+/**
+ * A table's tones, named by the terminal's 16-color palette, never as 24-bit color: these bytes
+ * reach every viewer's terminal, and each draws them in its own look (docs/direction/themes.md,
+ * what a third-party program gets, point 6). Strong is the terminal's own ink, bold; muted and
+ * faint bright black (slate 11 in both built-ins); accent blue; warning yellow (amber). Plain text
+ * keeps the terminal's own ink. Each reads 4.5:1 on the terminal's background in fabrika and
+ * fabrika-light (screen.test.ts). This is Shell.ANSI with faint as muted: its `2;90` is drawn at
+ * half alpha, and reads under 3:1 in light.
+ */
+const PALETTE: Shell.Palette = {
+	strong: "1",
+	muted: "90",
+	faint: "90",
+	accent: "34",
+	warning: "33",
+};
+
+/**
+ * A table tsh printed, laid out at `cols` and painted in the app's palette. Every text goes
+ * through `shown` first, so a cell can no more move the cursor than a printed line can; the only
+ * escapes in it are the colors put here.
+ */
+export const table = (t: Shell.Table, cols: number): string =>
+	Shell.paint(
+		Shell.tableLines(t, cols).map((line) => line.map((s) => ({...s, text: shown(s.text)}))),
+		PALETTE,
+		NEWLINE,
+	);
 
 /**
  * Candidates in columns, down then across, as readline lists them on a second Tab. Each row ends

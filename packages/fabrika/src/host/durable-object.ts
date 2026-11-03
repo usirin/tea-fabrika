@@ -19,11 +19,24 @@
 import {DurableObject} from "cloudflare:workers";
 import {Layer, ManagedRuntime, Redacted} from "effect";
 import {FetchHttpClient} from "effect/http";
-import {configOf, Door, type DoorConfig, isWireMethod, type Stamp, trustedArgs} from "./door.ts";
-import {type Keys, layerNobody} from "./keys.ts";
+import {
+	configOf,
+	Door,
+	type DoorConfig,
+	isWireMethod,
+	type LoginAnswer,
+	type Stamp,
+	stampText,
+	trustedArgs,
+} from "./door.ts";
 import {KEYS_CACHE_MS, KEYS_FAIL_MS, layerGitHub} from "./keys-github.ts";
+import {type Keys, layerNobody} from "./keys.ts";
 import {importChunk, migrateMove, moveProgress, sealMove} from "./move.ts";
+import {spansOf} from "./otlp.ts";
 import * as L from "./rules.ts";
+
+// The Worker's second kind of object: one per host job, keyed by its trace id.
+export {JobRecord} from "./job-record.ts";
 
 type Cursor = {toArray(): L.SqlRow[]};
 type Storage = {
@@ -42,6 +55,8 @@ type Ctx = {
 };
 type Env = {
 	LEDGER: Namespace;
+	/** The jobs' records (`job-record.ts`). Left out: this ledger keeps none, and refuses their calls. */
+	JOB_RECORD?: Namespace;
 	EXPIRY_GRACE_MS?: string;
 	MAX_DELIVERIES?: string;
 	/**
@@ -99,10 +114,12 @@ export class Ledger extends DurableObject {
 	private readonly door: Door;
 	/** A shared door's founder, the one person who may import (`move.ts`); null on any other door. */
 	private readonly founder: string | null;
+	private readonly jobs: Namespace | null;
 
 	constructor(ctx: Ctx, env: Env) {
 		super(ctx, env);
 		this.ctx = ctx;
+		this.jobs = env.JOB_RECORD ?? null;
 		this.graceMs = Number(env.EXPIRY_GRACE_MS ?? "1000");
 		// "off": a poison message is never set aside (the run that shows OTP's intensity alone).
 		const max = env.MAX_DELIVERIES ?? String(L.MAX_DELIVERIES);
@@ -308,6 +325,8 @@ export class Ledger extends DurableObject {
 	 *   POST /<ledger>/door/move | import | seal                a person's: the move (`moveStep`)
 	 *   POST /<ledger>/<method>  [args, no writer]              any credential; the door stamps
 	 *   GET  /<ledger>/tail?stream=..  Upgrade: websocket       any credential
+	 *   POST /<ledger>/job/<trace id>  a `JobCall`              any credential: one job's record
+	 *   POST /<ledger>/v1/traces  OTLP JSON                     any credential: spans, to each one's record
 	 *
 	 * A credential is `Authorization: Bearer <token>`, or for a WebSocket, which cannot send that
 	 * header from a browser, the subprotocol `bearer.<token>` beside `fabrika` (Kubernetes carries
@@ -331,14 +350,17 @@ export class Ledger extends DurableObject {
 		const offered = (req.headers.get("sec-websocket-protocol") ?? "")
 			.split(",")
 			.map((p) => p.trim());
-		const bearer =
+		const said =
 			/^Bearer (\S+)$/.exec(req.headers.get("authorization") ?? "")?.[1] ??
 			offered.find((p) => p.startsWith("bearer."))?.slice("bearer.".length) ??
 			null;
+		const bearer = said === null ? null : Redacted.make(said);
 		if (method === "door") return this.doorStep(req, step, address, bearer);
 		const who = await this.door.who(bearer);
 		if (!who.ok) return refused(who);
 		if (method === "tail") return this.tail(req, url, offered);
+		if (method === "job") return this.job(req, ledger, step, who.value);
+		if (method === "v1" && step === "traces") return this.traces(req, ledger, who.value);
 		if (req.method !== "POST") return new Response("POST [args]", {status: 405});
 		const body: unknown = await req.json().catch(() => null);
 		const args = trustedArgs(method, body, who.value);
@@ -353,14 +375,19 @@ export class Ledger extends DurableObject {
 		}
 	}
 
-	private async doorStep(req: Request, step: string, address: string, bearer: string | null) {
+	private async doorStep(
+		req: Request,
+		step: string,
+		address: string,
+		bearer: Redacted.Redacted<string> | null,
+	) {
 		const body = (req.method === "POST" ? await req.json().catch(() => ({})) : {}) as Record<
 			string,
 			unknown
 		>;
 		if (step === "challenge") return answer(this.door.challenge(address));
-		if (step === "login") return answer(await this.door.login(body));
-		if (step === "agent-login") return answer(await this.door.agentLogin(address, body));
+		if (step === "login") return session(await this.door.login(body));
+		if (step === "agent-login") return session(await this.door.agentLogin(address, body));
 		const who = await this.door.who(bearer);
 		if (!who.ok) return refused(who);
 		const me: Stamp = who.value;
@@ -374,7 +401,7 @@ export class Ledger extends DurableObject {
 		}
 		if (step === "invite") return answer(await this.door.invite(me, body.name));
 		if (step === "remove") return answer(this.door.remove(me, body.id));
-		if (step === "agent") return answer(await this.door.addAgent(me, body.name));
+		if (step === "agent") return session(await this.door.addAgent(me, body.name));
 		if (step === "move" || step === "import" || step === "seal")
 			return this.moveStep(step, me, body);
 		return new Response("not found", {status: 404});
@@ -396,6 +423,49 @@ export class Ledger extends DurableObject {
 		if (!res.ok) return refused(res);
 		this.wakeAll(res.value.written);
 		return Response.json(res.value.progress);
+	}
+
+	/** One job's record, by its name: `<ledger>/<trace id>`, so each ledger's jobs are its own. */
+	private recordOf(ledger: string, trace: string): {name: string; stub: Stub} | null {
+		if (this.jobs === null) return null;
+		const name = `${ledger}/${trace}`;
+		return {name, stub: this.jobs.get(this.jobs.idFromName(name))};
+	}
+
+	/** `POST /<ledger>/job/<trace id>`: one call to one job's record, stamped with who sent it. */
+	private async job(req: Request, ledger: string, trace: string, me: Stamp) {
+		if (req.method !== "POST") return new Response("POST a call", {status: 405});
+		if (!TRACE_ID.test(trace)) return new Response("not a trace id", {status: 404});
+		const record = this.recordOf(ledger, trace);
+		if (record === null) return new Response("this ledger keeps no job records", {status: 501});
+		const body: unknown = await req.json().catch(() => null);
+		const text = await rpc(record.stub, "call")(record.name, body, stampText(me));
+		const answer = typeof text === "string" ? text : "null";
+		const refused = answer.startsWith('{"error":');
+		return new Response(answer, {
+			status: refused ? 400 : 200,
+			headers: {"content-type": "application/json"},
+		});
+	}
+
+	/**
+	 * `POST /<ledger>/v1/traces`: OTLP over HTTP, its JSON form. Each span goes to its trace's
+	 * record, stamped with who sent it. The protobuf form is refused (415) until it is read.
+	 */
+	private async traces(req: Request, ledger: string, me: Stamp) {
+		if (req.method !== "POST") return new Response("POST spans", {status: 405});
+		if (!(req.headers.get("content-type") ?? "").startsWith("application/json"))
+			return new Response("only OTLP's JSON form is read", {status: 415});
+		const got = spansOf(await req.json().catch(() => null));
+		if (!got.ok) return Response.json({error: got.why}, {status: 400});
+		const by = stampText(me);
+		for (const [trace, rows] of got.traces) {
+			const record = this.recordOf(ledger, trace);
+			if (record === null) return new Response("this ledger keeps no job records", {status: 501});
+			await rpc(record.stub, "spans")(record.name, rows, by);
+		}
+		// OTLP's answer: an ExportTraceServiceResponse, nothing refused.
+		return Response.json({});
 	}
 
 	/** A watcher: upgrade to a WebSocket the runtime holds while the object sleeps. */
@@ -462,10 +532,27 @@ export class Ledger extends DurableObject {
 	}
 }
 
+/** A trace's id as OpenTelemetry writes it. */
+const TRACE_ID = /^[0-9a-f]{32}$/;
+
+/** A method of an object's stub, by name; one it does not have fails the call. */
+const rpc =
+	(stub: Stub, method: string) =>
+	(...args: unknown[]): Promise<unknown> => {
+		const fn = stub[method];
+		return fn === undefined ? Promise.reject(new Error(`no method ${method}`)) : fn(...args);
+	};
+
 const refused = (r: {status: number; why: string}) =>
 	Response.json({error: r.why}, {status: r.status});
 const answer = (r: {ok: true; value: unknown} | {ok: false; status: number; why: string}) =>
 	r.ok ? Response.json(r.value) : refused(r);
+/**
+ * A session's answer, to the one who logged in: the one line where its token leaves its
+ * `Redacted`. Through `answer` it would go out as `"<redacted>"`.
+ */
+const session = (r: {ok: true; value: LoginAnswer} | {ok: false; status: number; why: string}) =>
+	r.ok ? Response.json({...r.value, token: Redacted.value(r.value.token)}) : refused(r);
 
 /**
  * `res`, once the rest of `req`'s body has been read and thrown away. workerd drops a kept-alive

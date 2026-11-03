@@ -10,8 +10,8 @@ import {
 	ship,
 } from "../stages/ship/machine.ts";
 import {CRITERIA, metAt, ON_TIP} from "../stages/ship/scripted.ts";
-import * as old from "./ship.ts";
 import * as pbt from "./ship-pbt.ts";
+import * as old from "./ship.ts";
 
 const OPTS = {numRuns: 2000, seed: 1};
 
@@ -80,9 +80,10 @@ describe("ship, as property tests", () => {
 			0,
 		);
 		const list = fc.constant([{type: "start" as const, pr: pbt.PR}, failedBeside]);
-		const once = pbt.TODAY.map(
-			(law): pbt.Property => ({name: law.name, run: (m, o) => pbt.holds(m, law, o, list)}),
-		);
+		const once = pbt.TODAY.map((law): pbt.Property => ({
+			name: law.name,
+			run: (m, o) => pbt.holds(m, law, o, list),
+		}));
 		expect(breaks(once, ship)).toEqual([]);
 		const [end] = applyCell<Ship, pbt.AnyShipMsg, ShipCmd>(
 			ship,
@@ -148,6 +149,65 @@ describe("ship, as property tests", () => {
 				: next,
 		);
 		expect(breaks(pbt.RUN_2, waitsForAQueue)).toEqual([pbt.LANDS_WHEN_READY.name]);
+	});
+
+	// Self-fix PR 10, Part 4: the `other_head` proof is now "moved, not carried", and "moved, carried"
+	// joins it (docs/direction/a-yes-binds-to-the-diff.md). Each plant changes only what the real
+	// machine is told, so the laws still read what the code host said.
+	describe("rows carried to the head", () => {
+		/** The real machine, told `change(facts)` in place of every read it gets. */
+		const told = (change: (f: ShipFacts) => ShipFacts): pbt.ShipLike<Ship, never> =>
+			pbt.planted<Ship>({phase: "idle"}, (s, m) =>
+				applyCell<Ship, pbt.AnyShipMsg, ShipCmd>(
+					ship,
+					s,
+					m.type === "ship_facts_ok" ? {...m, value: change(m.value)} : m,
+				),
+			);
+		/** What the real machine does with one read, from its first state. */
+		const onRead = (f: ShipFacts) => {
+			const [reading] = applyCell<Ship, pbt.AnyShipMsg, ShipCmd>(
+				ship,
+				{phase: "idle"},
+				{type: "start", pr: pbt.PR},
+			);
+			const [next, cmds] = applyCell<Ship, pbt.AnyShipMsg, ShipCmd>(
+				ship,
+				reading,
+				readShipFacts.ok(reads, f, 0),
+			);
+			return {phase: next.phase, cmds: cmds.map((c) => c.type)};
+		};
+
+		it("a head the rows were carried to goes on as one they were judged at does", () => {
+			const carried = {...READY, head: "B", verdicts: metAt("A"), carried: [{from: "A", to: "B"}]};
+			expect(onRead(carried)).toEqual(onRead({...READY, head: "B", verdicts: metAt("B")}));
+			expect(onRead({...carried, carried: []})).toMatchObject({phase: "over"});
+		});
+
+		it("a machine that drops every carry is caught: it sends a carried head back to a reviewer", () => {
+			const dropsCarries = told((f) => ({...f, carried: []}));
+			expect(breaks(pbt.RUN_2, dropsCarries)).toContain(pbt.GIVES_ITS_OUTCOME.name);
+		});
+
+		it("a machine that takes any carry from the rows' head, wherever it went, is caught: it merges what nobody carried", () => {
+			const anyHop = told((f) => ({
+				...f,
+				carried: (f.carried ?? []).map((h) => ({from: h.from, to: f.head})),
+			}));
+			const broken = breaks(pbt.RUN_2, anyHop);
+			expect(broken).toContain(pbt.GIVES_ITS_OUTCOME.name);
+			expect(broken).toContain(pbt.TODAY[0]?.name);
+		});
+
+		it("the generator draws rows carried here, and rows carried somewhere else", () => {
+			const moved = fc
+				.sample(pbt.facts, {numRuns: 4000, seed: 1})
+				.filter((f) => f.criteria !== null && f.verdicts[0]?.head !== f.head);
+			const here = (f: ShipFacts) => (f.carried ?? []).some((h) => h.to === f.head);
+			expect(moved.some(here)).toBe(true);
+			expect(moved.some((f) => (f.carried ?? []).length > 0 && !here(f))).toBe(true);
+		});
 	});
 
 	it("the generator reaches every phase, and a landing both whole and in part", () => {

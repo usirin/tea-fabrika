@@ -3,11 +3,11 @@ import {existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync} from
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {harnessOf, type PendingAsk} from "@kampus/fabrika/agents/acp";
-import {TOOLS} from "@kampus/fabrika/agents/sandbox";
-import {memoryTracing} from "@kampus/fabrika/otel";
+import {harnessOf, type PendingAsk} from "@kampus/fabrika-old/agents/acp";
+import {TOOLS} from "@kampus/fabrika-old/agents/sandbox";
+import {memoryTracing} from "@kampus/fabrika-old/otel";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import {FABRIKA_VIEWING} from "../../trace/viewing.ts";
@@ -41,7 +41,7 @@ const ACP_PARENT = fileURLToPath(
 const scratch = () => realpathSync(mkdtempSync(join(tmpdir(), "builder-acp-")));
 
 const alive = (pid: number) => {
-	// biome-ignore lint/plugin: signal 0 throws for a process that is gone; that is the answer
+	// oxlint-disable-next-line fabrika/no-raw-try-catch -- signal 0 throws for a process that is gone; that is the answer
 	try {
 		process.kill(pid, 0);
 		return true;
@@ -51,7 +51,7 @@ const alive = (pid: number) => {
 };
 
 const until = async (ok: () => boolean, ms: number) => {
-	for (const end = Date.now() + ms; Date.now() < end; ) {
+	for (const end = Date.now() + ms; Date.now() < end;) {
 		if (ok()) return true;
 		await new Promise((r) => setTimeout(r, 100));
 	}

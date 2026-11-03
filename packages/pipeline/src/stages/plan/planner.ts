@@ -9,8 +9,8 @@ import {
 	noSpend,
 	type Open,
 	sdkRunner,
-} from "@kampus/fabrika/agents/claude";
-import {agentEnv, guardHook, ownRules} from "@kampus/fabrika/agents/sandbox";
+} from "@kampus/fabrika-old/agents/claude";
+import {agentEnv, guardHook, ownRules} from "@kampus/fabrika-old/agents/sandbox";
 import {Effect, Layer, Schema, Stream} from "effect";
 import {sh} from "../../sh.ts";
 import {removeLinks} from "../review/reviewer.ts";
@@ -120,7 +120,7 @@ export function promptOf(brief: Brief): string {
 		"`summary`: what is wrong or missing, and what will be true after, in two or three plain sentences.",
 		"`stories`: who the ticket is for, in order, each with `id`, `who`, `want` and `why`.",
 		"`tasks`: in the order they are to be done. Each has a `title`, `ends` (`pr` or `answer`), its `job` (`when`, `result`, `fixture`, `check`, `serves`) and its other `criteria` (`when`, `result`, `check`, `serves`).",
-		"`goal`: only when there are two tasks or more. The whole plan's own `job` and `criteria`, in the same shape as a task's: what a user sees only once every task is in. All the tasks land in one pull request, and the last review judges the goal there.",
+		"`goal`: only when there are two tasks or more. The whole plan's own `job` and `criteria`, in the same shape as a task's: what a user sees only once every task is in. All the tasks land in one pull request, and a rule change in another of its own, first. The last review judges the goal in the tasks' one.",
 		"`pointers`: files, functions, tests and doc pages a builder may start from, each with why.",
 		"`questions`: the open product calls, each with `ask`, `options`, `lean` and `why`.",
 	].join("\n");
@@ -232,7 +232,7 @@ export const livePlanner = (config: PlannerConfig) =>
 					catch: () => ({_tag: "no_temp_folder" as const}),
 				}),
 				(made) =>
-					// biome-ignore lint/plugin: closing a scope has no way to fail with a typed error; a temp folder that cannot be removed is a bug
+					// oxlint-disable-next-line fabrika/no-effect-promise -- closing a scope has no way to fail with a typed error; a temp folder that cannot be removed is a bug
 					Effect.promise(() => rm(made, {recursive: true, force: true})),
 			);
 			const trees = new Map<string, string>();

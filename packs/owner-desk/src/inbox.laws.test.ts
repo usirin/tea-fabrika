@@ -7,7 +7,7 @@ import {
 	type Step,
 	stubCtxThrowingProxy,
 } from "@demlik/tea/pbt";
-import {type MsgOf, memoryStorage} from "@kampus/fabrika";
+import {type MsgOf, memoryStorage} from "@kampus/fabrika-old";
 import type {AnswerBody, Ask, RulingAsk} from "@kampus/pipeline/asks/ask";
 import {plans86b} from "@kampus/pipeline/asks/cases";
 import {checkId, planAskId, stuckId} from "@kampus/pipeline/asks/rules";

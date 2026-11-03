@@ -15,7 +15,7 @@ import {nameOf} from "./stages/outcome.ts";
 const rows = parseCodeowners(`
 # The control plane.
 /.github/          @example-org/control-plane
-/biome.jsonc       @example-org/control-plane   # lint rules
+/.oxlintrc.json    @example-org/control-plane   # lint rules
 **/lefthook*       @a-person
 docs/*             @example-org/writers
 /.github/README.md
@@ -25,7 +25,7 @@ describe("reading the file", () => {
 	it("keeps each row's pattern and owners, and drops comments and blank lines", () => {
 		expect(rows).toEqual([
 			{pattern: "/.github/", owners: ["@example-org/control-plane"]},
-			{pattern: "/biome.jsonc", owners: ["@example-org/control-plane"]},
+			{pattern: "/.oxlintrc.json", owners: ["@example-org/control-plane"]},
 			{pattern: "**/lefthook*", owners: ["@a-person"]},
 			{pattern: "docs/*", owners: ["@example-org/writers"]},
 			{pattern: "/.github/README.md", owners: []},
@@ -49,9 +49,9 @@ describe("reading the file", () => {
 describe("who owns a path", () => {
 	it.each<[string, readonly string[]]>([
 		[".github/workflows/build.yaml", ["@example-org/control-plane"]],
-		["biome.jsonc", ["@example-org/control-plane"]],
+		[".oxlintrc.json", ["@example-org/control-plane"]],
 		// Anchored at the root: a file of the same name deeper down is not it.
-		["packages/a/biome.jsonc", []],
+		["packages/a/.oxlintrc.json", []],
 		["lefthook.yml", ["@a-person"]],
 		["packages/a/lefthook.yml", ["@a-person"]],
 		// One level only.

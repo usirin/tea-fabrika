@@ -46,8 +46,8 @@ import {basename, join} from "node:path";
 import {run as runMachine} from "@demlik/tea/effect";
 import {JEV_ENDPOINT} from "@demlik/tea/jev";
 import {fileStore} from "@demlik/tea/node";
-import {start} from "@kampus/fabrika";
-import {fileStorage} from "@kampus/fabrika/storage/node";
+import {start} from "@kampus/fabrika-old";
+import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {gitHubCodeHost} from "@kampus/pipeline/code-host-github";
 import {gitHubCodeHostWrites} from "@kampus/pipeline/code-host-github-writes";
 import {memoryRecord} from "@kampus/pipeline/criteria/record";
@@ -57,8 +57,7 @@ import {createShipProgram} from "@kampus/pipeline/stages/ship/program";
 import {gitWorktrees, issueThread} from "@tea-fabrika/wip/operator-live";
 import {Effect, Layer} from "effect";
 import {cliFabrika} from "./fabrika-cli.ts";
-import {liveJev} from "./local.ts";
-import {createOperator, defaultKnobs, type Operator} from "./operator.ts";
+import {jevKey, liveJev} from "./local.ts";
 import {
 	fieldRows,
 	knobsOf,
@@ -68,6 +67,7 @@ import {
 	operatorShipSubscribe,
 	operatorSubscribe,
 } from "./operator-host.ts";
+import {createOperator, defaultKnobs, type Operator} from "./operator.ts";
 
 const need = (name: string) => {
 	const value = process.env[name];
@@ -120,7 +120,7 @@ const fabrika = cliFabrika({
 	},
 });
 
-const key = process.env.TYPESAFE_API_KEY;
+const key = jevKey();
 const jev =
 	key === undefined
 		? Layer.succeed(Jev, {

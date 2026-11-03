@@ -1,5 +1,5 @@
 import type {Machine} from "@demlik/tea";
-import {ATTR, type Drawing, type Tags} from "@kampus/fabrika";
+import {ATTR, type Drawing, type Tags} from "@kampus/fabrika-old";
 import type {build} from "./build/machine.ts";
 import type {loop} from "./operate/machine.ts";
 import {nameOf} from "./outcome.ts";
@@ -40,9 +40,74 @@ export const prAttributes = (url: string): Readonly<Record<string, string>> => {
 const short = (head: string | null | undefined): Tags =>
 	head === null || head === undefined ? {} : {[ATTR.head]: head.slice(0, 7)};
 
+/**
+ * The lane's own tag names (ticket 141): names only, never values a person typed. Only the lane
+ * writes them, so they live here, not in fabrika's `ATTR`. "run a step" ends with `run`, `step`,
+ * `tea.outcome` and, when a price is known, `tea.cost.usd`; "wait for the answer" ends with `ask`,
+ * `askFor`, `pick` and `by`, never the note. The wait says what it was for itself, so a view never
+ * has to tie it to the asking step by time.
+ */
+export const LANE = {
+	/** "r-plan-8" */
+	run: "tea.lane.run",
+	/** "plan" */
+	step: "tea.lane.step",
+	/** "a-approve-8" */
+	ask: "tea.ask.id",
+	/** "approve": what the ask was for, one of the lane's own kinds of ask. */
+	askFor: "tea.ask.for",
+	/** "approve": one of the ask's own picks, never free text. */
+	pick: "tea.answer.pick",
+	/** The answerer's id, as the ledger entry's `by.id` has it. */
+	by: "tea.answer.by",
+} as const;
+
 /** Dollars, when something was spent. */
 const cost = (usd: number | undefined): Tags =>
 	usd === undefined ? {} : {[ATTR.costUsd]: Math.round(usd * 10_000) / 10_000};
+
+/**
+ * The tags "run a step" ends with: its run, its step, its outcome's name, and, for a step an agent
+ * ran, the model and tokens by OpenTelemetry's GenAI names, and dollars only when known.
+ *
+ *   stepTags({run: "r-plan-8", step: "plan", outcome: "ask:owner:approval",
+ *     agent: {model: "gpt-6-astra", input: 1000, cached: 200, output: 100}, usd: null})
+ *   // {"tea.lane.run": "r-plan-8", "tea.lane.step": "plan", "tea.outcome": "ask:owner:approval",
+ *   //  "gen_ai.request.model": "gpt-6-astra", "gen_ai.usage.input_tokens": 1000, ...}: no cost
+ */
+export const stepTags = (o: {
+	readonly run: string;
+	readonly step: string;
+	readonly outcome: string;
+	readonly agent: {
+		readonly model: string;
+		readonly input: number;
+		readonly cached: number;
+		readonly output: number;
+	} | null;
+	readonly usd: number | null;
+}): Tags => ({
+	[LANE.run]: o.run,
+	[LANE.step]: o.step,
+	[ATTR.outcome]: o.outcome,
+	...(o.agent === null
+		? {}
+		: {
+				"gen_ai.request.model": o.agent.model,
+				"gen_ai.usage.input_tokens": o.agent.input,
+				"gen_ai.usage.output_tokens": o.agent.output,
+				"gen_ai.usage.cache_read.input_tokens": o.agent.cached,
+				...cost(o.usd ?? undefined),
+			}),
+});
+
+/** The tags "wait for the answer" ends with: the ask, what it was for, the pick and who picked. Never the note. */
+export const answerTags = (o: {
+	readonly ask: string;
+	readonly for: string;
+	readonly pick: string;
+	readonly by: string;
+}): Tags => ({[LANE.ask]: o.ask, [LANE.askFor]: o.for, [LANE.pick]: o.pick, [LANE.by]: o.by});
 
 /** One build round: the ticket, then the builder, then the push and the pull request. */
 export const buildDrawing = (ticket: string, round: number): DrawingOf<typeof build> => ({

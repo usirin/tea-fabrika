@@ -1,7 +1,7 @@
 import {mkdir, readFile, writeFile} from "node:fs/promises";
 import {join} from "node:path";
 import {JEV_ENDPOINT} from "@demlik/tea/jev";
-import {Effect, Layer} from "effect";
+import {Effect, Layer, type Redacted} from "effect";
 import {claudeBuilder, claudeEnricher, claudeReviewer} from "./claude.ts";
 import {localFacts} from "./code-facts.ts";
 import {answerFrom, drive, printEnd, printTriageEnd, untilFrom} from "./drive.ts";
@@ -9,6 +9,7 @@ import {saveEnrichment} from "./enrichment.ts";
 import {
 	checkoutToy,
 	fileTracker,
+	jevKey,
 	liveJev,
 	localRepo,
 	localWorkspace,
@@ -70,7 +71,7 @@ const slugifyTries = [
 `,
 ];
 
-const key = process.env.TYPESAFE_API_KEY || undefined;
+const key = jevKey();
 const useClaude = process.env.AGENT === "claude";
 const name = process.env.TOY || "slugify";
 if (!useClaude && name !== "slugify") {
@@ -108,7 +109,8 @@ const testing = {
 // What every Jev reader is built on: the call, and the floors and limits from CONFIG or today's.
 const settings =
 	process.env.CONFIG === undefined ? defaultSettings : settingsFile(process.env.CONFIG);
-const jevReading = (key: string) => Layer.mergeAll(liveJev(key, JEV_ENDPOINT), settings);
+const jevReading = (key: Redacted.Redacted<string>) =>
+	Layer.mergeAll(liveJev(key, JEV_ENDPOINT), settings);
 const workspace = localWorkspace(toy.dir, testing);
 const layers = Layer.mergeAll(
 	// What the code says about the names the ticket mentions: git and code-graph on the toy, never a model.

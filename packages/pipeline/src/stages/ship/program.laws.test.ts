@@ -1,5 +1,5 @@
 import {foldEvents, stubCtxThrowingProxy} from "@demlik/tea/pbt";
-import {memoryStorage} from "@kampus/fabrika";
+import {memoryStorage} from "@kampus/fabrika-old";
 import {Effect} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";

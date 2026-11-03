@@ -2,6 +2,7 @@ import {createHash} from "node:crypto";
 import {mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
+import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import {
@@ -13,18 +14,18 @@ import {
 	type Moved,
 	memoryStorage,
 	offer,
+	type PayloadOf,
 	type Row,
 	Rows,
 	start,
 	viewOf,
 	writerFor,
-} from "@kampus/fabrika";
-import {doorOf, layerHttp} from "@kampus/fabrika/http";
-import {layerSqliteSync} from "@kampus/fabrika/sqlite";
+} from "@kampus/fabrika-old";
+import {doorOf, layerHttp} from "@kampus/fabrika-old/http";
+import {layerSqliteSync} from "@kampus/fabrika-old/sqlite";
 import {startTwin} from "@kampus/ledger-server/twin";
 import {
 	Author,
-	type Do,
 	fold,
 	pullRequestsOf,
 	ROOT,
@@ -39,14 +40,25 @@ import {
 	FileSystem,
 	Layer,
 	Option,
-	type Path,
+	Path,
 	Schema,
 	Scope,
 	Stream,
 } from "effect";
+import {ChildProcess} from "effect/process";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
-import {CONNECTION_FILE, connect, hostLedger, invite, loginWith, members} from "./connection.ts";
+import {attach} from "../attach.ts";
+import {
+	CONNECTION_FILE,
+	connect,
+	connectAndRestart,
+	hostLedger,
+	invite,
+	loginWith,
+	members,
+} from "./connection.ts";
 import {move, readLaptop} from "./move.ts";
+import {pathsOf} from "./socket.ts";
 
 // Two people on one laptop, sharing one ledger server: its twin, in Miniflare, from the same
 // Worker and bindings a deploy uses (packages/ledger-server). Each person has their own app home
@@ -145,7 +157,11 @@ const trackerOn = <E>(
 		const {run: r} = started;
 		const view = viewOf(tracker);
 		if (view === undefined) return yield* Effect.die("the tracker has no view");
-		const say = (d: Do): Effect.Effect<unknown> => offer(r, "do", d);
+		type Inputs = (typeof tracker)["inputs"];
+		const say = <K extends keyof Inputs & string>(
+			input: K,
+			value: PayloadOf<Inputs[K]>,
+		): Effect.Effect<unknown> => offer(r, input, value);
 		const until = (ok: (shown: Shown) => boolean) =>
 			r.machines.tickets.changes.pipe(
 				Stream.filter((s) => s !== null),
@@ -219,15 +235,15 @@ describe("two people on one ledger server", () => {
 				const a = yield* trackerAt(person("alice").home, "tracker:alice");
 				const b = yield* trackerAt(person("bob").home, "tracker:bob");
 				yield* a.until((s) => s.ready);
-				yield* a.say({kind: "file", title: "Login fails", body: "On main."});
+				yield* a.say("file", {title: "Login fails", body: "On main."});
 
 				// Bob's tracker sees it on its own poll.
 				yield* b.until(
 					(s) => s.page.kind === "list" && s.page.tickets.some((t) => t.title === "Login fails"),
 				);
-				yield* b.say({kind: "comment", ticket: 1, body: "Seen it too."});
+				yield* b.say("comment", {ticket: 1, body: "Seen it too."});
 
-				yield* a.say({kind: "open", ticket: 1});
+				yield* a.say("query", {ticket: 1});
 				const shown = yield* a.until((s) => timelineOf(s).length === 2);
 				return timelineOf(shown);
 			}).pipe(Effect.scoped),
@@ -291,11 +307,11 @@ describe("moving alice's laptop ledger to the server, then bob", () => {
 			Effect.gen(function* () {
 				const me = yield* trackerAt(laptop, "tracker:owner");
 				yield* me.until((s) => s.ready);
-				yield* me.say({kind: "file", title: "Login fails", body: "On main."});
-				yield* me.say({kind: "file", title: "Slow build", body: ""});
-				yield* me.say({kind: "comment", ticket: 1, body: "Seen on main."});
-				yield* me.say({kind: "close", ticket: 2});
-				yield* me.say({kind: "open", ticket: 2});
+				yield* me.say("file", {title: "Login fails", body: "On main."});
+				yield* me.say("file", {title: "Slow build", body: ""});
+				yield* me.say("comment", {ticket: 1, body: "Seen on main."});
+				yield* me.say("close", {ticket: 2});
+				yield* me.say("query", {ticket: 2});
 				yield* me.until((s) => timelineOf(s).length === 2);
 			}).pipe(Effect.scoped),
 		);
@@ -309,9 +325,9 @@ describe("moving alice's laptop ledger to the server, then bob", () => {
 					"tracker:x",
 				);
 				yield* agent.until((s) => s.ready);
-				yield* agent.say({kind: "comment", ticket: 1, body: "Fixed in the next build."});
-				yield* agent.say({kind: "close", ticket: 1});
-				yield* agent.say({kind: "open", ticket: 1});
+				yield* agent.say("comment", {ticket: 1, body: "Fixed in the next build."});
+				yield* agent.say("close", {ticket: 1});
+				yield* agent.say("query", {ticket: 1});
 				yield* agent.until((s) => timelineOf(s).length === 4);
 			}).pipe(Effect.scoped),
 		);
@@ -343,7 +359,7 @@ describe("moving alice's laptop ledger to the server, then bob", () => {
 		const seen = await run(
 			Effect.gen(function* () {
 				const b = yield* trackerAt(bobs, "tracker:bob");
-				yield* b.say({kind: "open", ticket: 1});
+				yield* b.say("query", {ticket: 1});
 				return timelineOf(yield* b.until((s) => timelineOf(s).length === 4));
 			}).pipe(Effect.scoped),
 		);
@@ -502,5 +518,88 @@ describe("a host's session on the server", () => {
 			expect(e).toMatchObject({_tag: "LedgerUnreachable", method: "read"});
 			expect(e.message).toContain("the door gave no new session (401)");
 		}
+	});
+});
+
+// ---------------------------------------------------------------- connecting while the app runs
+//
+//   a host runs on alice's fresh home, on its own ledger.sqlite, and an app is attached to it
+//   `fabrika connect` (`connectAndRestart`): the connection is kept, and that host is stopped
+//   the app's link ends; its next try (reconnect.ts) finds no host and starts one
+//   that host logs in at the server as it starts: it uses the new ledger, with no restart by hand
+
+describe("connecting while the app runs", () => {
+	const spawner = NodeChildProcessSpawner.layer.pipe(
+		Layer.provideMerge(Layer.mergeAll(platform, pullRequestsOf([]))),
+	);
+	/** A host process on `home`, as the app starts one (host/stop.test.ts). Killed with the scope. */
+	const hostProcess = (home: string) =>
+		Effect.gen(function* () {
+			const main = yield* (yield* Path.Path).fromFileUrl(new URL("./main.ts", import.meta.url));
+			return yield* ChildProcess.make(process.execPath, [main], {
+				env: {FABRIKA_HOME: home},
+				extendEnv: true,
+				stdin: "ignore",
+				stdout: "ignore",
+				stderr: "ignore",
+				forceKillAfter: "3 seconds",
+			});
+		});
+	/** The pid in the home's pid file, or "" when there is none. */
+	const pidIn = (file: string) =>
+		Effect.gen(function* () {
+			const fs = yield* FileSystem.FileSystem;
+			return (yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => ""))).trim();
+		});
+
+	it("the running host is stopped, and the app's next try starts one on the new ledger", async () => {
+		const home = join(root, "alice", "live");
+		mkdirSync(home, {recursive: true});
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const paths = yield* pathsOf(home);
+				const started: number[] = [];
+				const start = Effect.gen(function* () {
+					const host = yield* hostProcess(home);
+					started.push(host.pid);
+					return host.exitCode;
+				});
+				const before = yield* attach({home, deliver: () => {}, start});
+				const old = yield* pidIn(paths.pid);
+				const logins = () => calls.filter((p) => p === "/user/7").length;
+				const connected = yield* connectAndRestart(home, {
+					address: `${base}/live`,
+					login: "alice",
+					key: person("alice").key,
+				});
+				const atConnect = logins();
+				const ended = yield* before.wire.ended.pipe(Effect.timeout("5 seconds"));
+				// What the reconnect machine's next try does: attach, which starts a host when none answers.
+				const after = yield* attach({home, deliver: () => {}, start});
+				return {
+					connected,
+					ended: typeof ended,
+					pids: [old, yield* pidIn(paths.pid)],
+					started: started.map(String),
+					found: after.found,
+					hostLogins: logins() - atConnect,
+				};
+			}).pipe(Effect.scoped, Effect.provide(spawner)),
+		);
+		expect(seen.connected).toEqual({who: {kind: "user", id: "github:7"}, host: "stopped"});
+		expect(seen.ended).toBe("string");
+		expect(seen.started).toHaveLength(2);
+		expect(seen.pids).toEqual(seen.started);
+		expect(seen.found).toEqual({kind: "up"});
+		// The new host logged in at the server as it started: it reads the new ledger.json.
+		expect(seen.hostLogins).toBe(1);
+	});
+
+	it("with no host running, nothing is stopped: the app uses it when it starts", async () => {
+		const home = join(root, "alice", "idle");
+		const connected = await run(
+			connectAndRestart(home, {address: `${base}/idle`, login: "alice", key: person("alice").key}),
+		);
+		expect(connected).toEqual({who: {kind: "user", id: "github:7"}, host: "none"});
 	});
 });

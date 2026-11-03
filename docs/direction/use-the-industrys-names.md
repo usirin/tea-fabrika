@@ -32,6 +32,8 @@ Decided 2026-10-18.
   the industry uses for it, mark where ours differs or where one word means
   two things, and propose a change. The owner picks, then one rename pass and
   a short glossary page.
+  Drafted for the pipeline stages on 2026-10-24 and widened to every new
+  package on 2026-10-28 (proposed): [the naming sweep](../naming-sweep/README.md).
 - `kind` in tea-program stays for now. It is the first name the sweep checks:
   it means "how a program keeps and runs instances of one machine", which
   Cloudflare calls a Durable Object namespace and Akka an entity type.

@@ -68,3 +68,36 @@ Measured in [experiment 51](../../experiments/51-jev-vs-opus.md): at 0.8 and
 above Jev matched the big model on every real case seen, at roughly 1/220 of
 the cost per answer. That is agreement on a small sample, not proof of
 correctness.
+
+## Changed 2026-10-28
+
+Two additions, decided with the first live use, the duplicate hint
+([experiment 167](../../experiments/167-duplicate-hint.md)).
+
+```ts
+// A new question asked at volume: no agent asks it today, so there is nothing to agree with.
+// Every filing, every open ticket the cheap filter keeps: about 20 calls, about $0.0006.
+const scores = yield* scoresOf(filed, candidatesOf(filed, openOf(tickets, filed.number)));
+hintsOf(scores); // [{of: 6, yes: 0.78}]: advice, with accept and dismiss
+```
+
+- **A Jev use may also be a new question asked at volume.** Some questions are
+  worth asking only because a call is cheap: "is this new ticket the same as
+  any of the 20 open ones?" on every filing. No agent asks it today, so there is
+  no agent answer to agree with. Such a use is measured against **hand labels
+  written before the run** (the hits) and **controls** (the false alarms),
+  not by agreement. The rest holds: a floor per question, advice and not an
+  action, never a person removed.
+- **The cost of an agent turn is also the person's plan quota**, not only
+  dollars. Each person runs agents on their own plan, on their own account,
+  never shared ([agents behind one service](./agents-behind-one-service.md)).
+  A turn spent on a narrow question is a turn that person cannot spend on
+  their own work that day. So the saving is counted twice: the dollars, and
+  the turns left in that person's plan.
+
+Why: the duplicate hint is the first live use, and it fits neither old line.
+It replaces no agent turn, and it is cheap only because Jev is (1,638 calls
+for $0.05 in experiment 167). 90% sure of the first line, since the measure
+it names is the industry's usual one for a classifier (precision and recall
+on labelled data). 80% sure of the second: plan limits are set by the
+provider and change, so how much a turn costs in quota is not measured here.

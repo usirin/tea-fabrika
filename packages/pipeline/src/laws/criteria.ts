@@ -49,12 +49,10 @@ export function criteriaWorld(): World<Book, Msg, Cmd> {
 				{type: "removed", id: e.id},
 				...Array.from({length: versionOf(e)}, (_, i) => i + 1).flatMap((version) =>
 					HEADS.flatMap((head) =>
-						(["pass", "fail"] as const).map(
-							(grade): Msg => ({
-								type: "judged",
-								row: {criterion: e.id, version, head, grade, proof: `review at ${head}`},
-							}),
-						),
+						(["pass", "fail"] as const).map((grade): Msg => ({
+							type: "judged",
+							row: {criterion: e.id, version, head, grade, proof: `review at ${head}`},
+						})),
 					),
 				),
 			]),

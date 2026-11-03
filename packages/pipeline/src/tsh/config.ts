@@ -1,7 +1,8 @@
-import {Crypto, Effect, FileSystem, Path, Schema} from "effect";
-import {Hex} from "effect/encoding";
+import {Effect, FileSystem, Path, Schema} from "effect";
+import {Digest} from "effect/crypto";
 import {parse, TomlError} from "smol-toml";
 import type {Where} from "../settings-source.ts";
+import {SETTINGS_FILE} from "../settings.ts";
 import type {Local} from "../setup.ts";
 import {cloneIn, urlOf} from "../stages/build/github.ts";
 import {DEFAULT_BUDGET, DEFAULT_EFFORT, DEFAULT_MODEL, EFFORTS} from "../stages/review/reviewer.ts";
@@ -144,7 +145,7 @@ export const configFrom = (
 		if (MOVED.some((key) => Object.hasOwn(raw, key)))
 			return yield* Effect.fail(
 				invalid(
-					'add-on packs moved to fabrika.toml, at the root of the repository fabrika works on: move the packs line and each [pack."<name>"] table there',
+					`add-on packs moved to ${SETTINGS_FILE}, in the repository fabrika works on: move the packs line and each [pack."<name>"] table there`,
 				),
 			);
 		for (const [key, why] of Object.entries(GONE))
@@ -182,7 +183,7 @@ export const configFrom = (
 	});
 
 /**
- * Where the repository's fabrika.toml is read from. A config that names a
+ * Where the repository's .fabrika/fabrika.toml is read from. A config that names a
  * repository to work on (`repo`, or only a `clone`): that repository's, from
  * its clone. None: the one in `start`, the root of the folder tsh starts in.
  */
@@ -216,17 +217,15 @@ export const settingsWhere = (config: Pick<Config, "repo" | "clone">, start: str
 export const ledgerFile = (
 	home: string,
 	where: Where,
-): Effect.Effect<string, never, Crypto.Crypto | Path.Path> =>
+): Effect.Effect<string, never, Digest.Digest | Path.Path> =>
 	Effect.gen(function* () {
 		const path = yield* Path.Path;
 		if (where.from === "repo" && where.target.url !== null)
 			return path.join(home, "ledgers", "github", `${where.target.name}.sqlite`);
 		const folder = path.resolve(where.from === "repo" ? where.target.clone : where.folder);
-		const crypto = yield* Crypto.Crypto;
-		const digest = yield* crypto
-			.digest("SHA-256", new TextEncoder().encode(folder))
-			.pipe(Effect.orDie);
-		const name = `${path.basename(folder)}-${Hex.encode(digest).slice(0, 12)}.sqlite`;
+		const digest = yield* Digest.Digest;
+		const hex = yield* digest.digestHex(Digest.sha256, new TextEncoder().encode(folder));
+		const name = `${path.basename(folder)}-${hex.slice(0, 12)}.sqlite`;
 		return path.join(home, "ledgers", "folders", name);
 	});
 

@@ -307,7 +307,7 @@ describe("status lines: declared, and typed", () => {
 		expect(listing(plain).status).toEqual([]);
 	});
 
-	it("listing names each machine that has a line, as --describe shows them", () => {
+	it("listing names each machine that has a line, as --help shows them", () => {
 		expect(listing(pair(counted).program).status).toEqual(["step"]);
 	});
 });

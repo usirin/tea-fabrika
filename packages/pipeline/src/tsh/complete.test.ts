@@ -1,4 +1,4 @@
-import {readFlags, Shell} from "@kampus/fabrika";
+import {readFlags, Shell} from "@kampus/fabrika-old";
 import {describe, expect, it} from "vitest";
 import {DEFAULT_SETTINGS} from "../settings.ts";
 import {HOLDS_NOTHING, setupOf} from "../setup.ts";
@@ -8,11 +8,12 @@ import {programsOf} from "./fabrika-list.ts";
 // What the launcher does from the line as typed, with no terminal: Tab
 // completion, and which programs the command line lists. The Ctrl-R search
 // and how the command line is read name no program of this package's: they
-// are the shell's own tests (`@kampus/fabrika`'s shell/launch.test.ts).
+// are the shell's own tests (`@kampus/fabrika-old`'s shell/launch.test.ts).
 
 const {complete, EMPTY} = Shell;
 const list = programsOf(defaultConfig("/tsh"));
 const JOBS: Shell.Jobs = {
+	next: 2,
 	jobs: [
 		{
 			n: 1,
@@ -20,6 +21,7 @@ const JOBS: Shell.Jobs = {
 			stages: [{program: "tally", flags: {}, run: "tally:0a1b2c3d", wire: null, ended: false}],
 			state: "running",
 			background: true,
+			owner: null,
 		},
 	],
 };
@@ -38,16 +40,17 @@ describe("Tab completion", () => {
 		["ship --mode=", ["--mode=read", "--mode=write"]],
 		["review-scripted --effort ", ["low", "medium", "high"]],
 		["ship --mode read p", ["pr="]],
-		["ship ", ["--mode", "--describe", "pr=", "ask=", "forget="]],
+		["ship ", ["--mode", "--help", "pr=", "ask=", "forget="]],
 		["ship --mode read ", ["pr=", "ask=", "forget="]],
+		["ship --mode read --h", ["--help"]],
+		["seq -", ["--to", "--help"]],
+		["help sh", ["ship"]],
 		["seq --to 3 | do", ["double"]],
 		["seq --to 3 | ", ["double", "tally"]],
 		["double n=$(se", ["seq"]],
 		["ship >f", [">found", ">forgot"]],
-		[
-			"ship --describe ",
-			["--mode", "pr", "ask", "forget", ">found", ">outcome", ">answer", ">forgot"],
-		],
+		["ship --help ", ["--mode", "pr", "ask", "forget", ">found", ">outcome", ">answer", ">forgot"]],
+		["ship -h >o", [">outcome"]],
 		["nope --", []],
 		[`say --text "a b`, []],
 	])("completes %j", (line, want) => {

@@ -11,7 +11,7 @@
 //   typing     30 keys into the focused tile: keydown to the echo in the tile's screen text, and
 //              to the frame after it
 //
-// No model, no key, no network. Needs the app built: `pnpm --filter @kampus/fabrika-app build`.
+// No model, no key, no network. Needs the app built: `pnpm --filter @kampus/fabrika-app-old build`.
 //
 //   node experiments/141-tiles-in-one-page.ts
 //

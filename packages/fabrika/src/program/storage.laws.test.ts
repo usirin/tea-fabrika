@@ -95,6 +95,7 @@ const place = () => {
 		remove: (key) => Effect.sync(() => void bytes.delete(key)),
 		clear: Effect.sync(() => bytes.clear()),
 		size: Effect.sync(() => bytes.size),
+		keys: Effect.sync(() => [...bytes.keys()]),
 	});
 	return {bytes, open: (): Storage => storageOf(Layer.succeed(KeyValueStore.KeyValueStore, kv))};
 };

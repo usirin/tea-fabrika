@@ -1,5 +1,5 @@
 import {applyCell} from "@demlik/tea";
-import {noSpend} from "@kampus/fabrika/agents/claude";
+import {noSpend} from "@kampus/fabrika-old/agents/claude";
 import type {Result} from "../../controls.ts";
 import {make} from "../../entity.ts";
 import {type Property, PropertyId} from "./brief.ts";

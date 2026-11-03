@@ -1,5 +1,6 @@
 import {structuralHash} from "@demlik/tea";
 import {Cause, Effect, Exit, Schema, SchemaAST} from "effect";
+import {type Person, personOf} from "./person.ts";
 
 // A shape: what a program's input or output carries. It only says yes or no,
 // and why not. It never hands on a converted value: the value that passes is
@@ -59,38 +60,65 @@ export interface Flag<T> extends Declared<"flag", T> {
 	/** What a run is started with when the flag is not given. Left out: it must be given, unless its shape takes `undefined`. */
 	readonly default?: {readonly value: T};
 }
+/** A flag a line must give: it has no default, and its shape does not take `undefined`. */
+export const mustBeGiven = (declared: Flag<unknown>): boolean =>
+	declared.default === undefined && declared.shape.problem(undefined) !== undefined;
 /**
  * When a value told to an input counts as taken: AMQP's two acknowledgement
- * modes. `auto`: once `main` reads it off the line. `manual`: once `main`
- * says so, after it has saved the value; a pipe into it keeps the value in
+ * modes. `auto`: once `serve` takes it out of the mailbox. `manual`: once its
+ * handler says so, after it has saved the value; a pipe into it keeps the value in
  * its sender's outbox until then (./outbox.ts).
  */
 export type Ack = "auto" | "manual";
 /** A value a running program can be told at any time, like a line on stdin. */
-export interface Input<T, A extends Ack = Ack> extends Declared<"input", T> {
+export interface Input<T, A extends Ack = Ack, C extends boolean = boolean> extends Declared<
+	"input",
+	T
+> {
 	readonly ack: A;
 	/**
-	 * How many values its line holds that `main` has not read yet, from every
-	 * writer: Akka's `mailbox-capacity`. A `tell` past it fails `Full`; `offer`,
-	 * a pipe and `call` wait for room. A whole number, 1 or more.
+	 * A control input, like Akka's `ControlMessage`: a Ctrl-C, a cancel. Its
+	 * values skip the run's mailbox. `main` handles each at once, beside the
+	 * order, with a `fork` handler, and they count against a small bound of
+	 * their own, so a full mailbox never refuses one. `false`: an ordinary
+	 * input, whose values wait their turn in the mailbox.
 	 */
-	readonly capacity: number;
+	readonly control: C;
+	/**
+	 * `false` (`{writes: false}`): a value told to it changes no data, only what the run shows, as
+	 * CQRS keeps a query apart from a command. Its MCP tool carries `readOnlyHint`.
+	 */
+	readonly writes: boolean;
+	/** `true` (`{personOnly: true}`): only a person tells it. An agent's MCP tools have none for it. */
+	readonly personOnly: boolean;
+	/**
+	 * `true`: it takes any value, and a pipe may feed it from any output that fits no typed
+	 * input of the program (`anyInput`). Only `anyInput` sets it, always with `Schema.Unknown`.
+	 */
+	readonly any?: true;
 }
 
 /**
- * An input's capacity when its program does not say one: the default
+ * A program's mailbox capacity when it says none: the default
  * `mailbox-capacity` of Akka's bounded mailbox (experiment 79).
  */
 export const CAPACITY = 1000;
 
-/** `capacity`, if it is one a line can hold: a whole number, 1 or more. Refused here otherwise, when the program is defined. */
+/** `capacity`, if it is one a mailbox can hold: a whole number, 1 or more. Refused here otherwise, when the program is defined. */
 export function capacityOf(capacity: number): number {
 	if (!Number.isInteger(capacity) || capacity < 1)
-		throw new Error(`an input's capacity is a whole number, 1 or more, not ${capacity}`);
+		throw new Error(`a mailbox's capacity is a whole number, 1 or more, not ${capacity}`);
 	return capacity;
 }
 /** A value a program sends while it runs. One-way: nothing comes back, but a pipe's ack into an input that acks. */
-export type Output<T> = Declared<"output", T>;
+export interface Output<T> extends Declared<"output", T> {
+	/**
+	 * How tsh shows its values to a person at a terminal (./person.ts): one line each, one table,
+	 * or nothing, as Rust's `Display` is to its `Debug`. Left out, tsh prints its short form
+	 * (`shortOf`), which knows only the value's fields. A pipe, `$( )` and `tsh --json` never use it.
+	 */
+	readonly person?: Person<T>;
+}
 
 /** The payload type a declaration carries. */
 export type PayloadOf<D> = D extends {readonly shape: Shape<infer T>} ? T : never;
@@ -192,35 +220,75 @@ export function defaulted<T>(declared: Flag<T>, value: T): Flag<T> {
 
 /**
  * Declare an input: a value a running program can be told at any time.
- * `{ack: "manual"}`: `main` reads each value with the way to say it is saved
- * (a `Delivery`), and says so once it is. `{capacity}`: how many unread
- * values its line holds, `CAPACITY` when left out; one that is not a whole
- * number, 1 or more, is refused here.
+ * `{ack: "manual"}`: `main` is handed each value with the way to say it is
+ * saved (a `Delivery`), and says so once it is. `{control: true}`: a control
+ * input, handled at once beside the order ({@link Input}'s `control`).
+ * `{writes: false}`: a query, which changes no data. `{personOnly: true}`: only a person tells it.
  *
- *   input(Line, "A line typed at the prompt.", {capacity: 16})   // the 17th unread tell fails `Full`
+ *   input(Line, "A line typed at the prompt.")                      // waits its turn in the mailbox
+ *   input(Signal, "Ctrl-C: stops the foreground job.", {control: true})   // never waits behind a line
+ *   input(Query, "Read tickets. Writes nothing.", {writes: false})        // its tool says it only reads
+ *   input(Answer, "Answer an ask. A person only.", {personOnly: true})    // an agent has no tool for it
  */
-export const input = <T, const A extends Ack = "auto">(
+export const input = <T, const A extends Ack = "auto", const C extends boolean = false>(
 	schema: ShapeSchema<T>,
 	description: string,
-	options?: {readonly ack?: A; readonly capacity?: number},
-): Input<T, A> => ({
+	options?: {
+		readonly ack?: A;
+		readonly control?: C;
+		readonly writes?: false;
+		readonly personOnly?: true;
+	},
+): Input<T, A, C> => ({
 	direction: "input",
 	description: described(description),
 	shape: shapeOf(schema),
-	// Left out, `A` is its default, "auto".
+	// Left out, `A` is its default, "auto", and `C` is `false`.
 	ack: options?.ack ?? ("auto" as A),
-	capacity: capacityOf(options?.capacity ?? CAPACITY),
+	control: options?.control ?? (false as C),
+	writes: options?.writes ?? true,
+	personOnly: options?.personOnly ?? false,
 });
 
-/** Declare an output: a value the program sends while it runs, to anyone who listens. */
-export const output = <T>(schema: ShapeSchema<T>, description: string): Output<T> => ({
+/**
+ * Declare an input that takes any value: Elm's `Json.Decode.value`, JSON Schema's `{}`. A pipe
+ * feeds it from an output that fits no typed input of the program, so a program can stand in a
+ * line without caring what flows in it, as `cat > /dev/null` does on Unix. Its shape is
+ * `Schema.Unknown`. A program that takes `Schema.Unknown` through `input` is fed only by an
+ * output of that same shape: a plain `input` never takes anything by accident. It writes no
+ * data, and no agent gets a tool for it: what it is sent goes unread.
+ *
+ *   inputs: {any: anyInput("Anything on a pipe. Being in the line is enough.")}
+ *   // tsh> seq --to 3 | tally | trace     tally's total fits no typed input of trace: wired total → any
+ */
+export const anyInput = (description: string): Input<unknown, "auto", false> => ({
+	...input(Schema.Unknown, description, {writes: false}),
+	any: true,
+});
+
+/**
+ * Declare an output: a value the program sends while it runs, to anyone who listens.
+ * `{person}`: how tsh shows its values to a person ({@link Output}'s `person`, ./person.ts).
+ *
+ *   output(Comparison, "Two runs.", {person: {line: Comparison.toLine}})   // 77b-5 against 77b-6: …
+ *   output(Schema.String, "The page as markdown.", {person: "none"})       // for a pipe or a window
+ */
+export const output = <T, const H extends string = never>(
+	schema: ShapeSchema<T>,
+	description: string,
+	options?: {readonly person?: Person<T, H>},
+): Output<T> => ({
 	direction: "output",
 	description: described(description),
 	shape: shapeOf(schema),
+	...(options?.person === undefined ? {} : {person: personOf(options.person)}),
 });
 
-/** What fit answers. */
-export type Fit = "fits" | "does_not_fit" | "cannot_tell";
+/**
+ * What fit answers. `takes_any`: the input takes any value (`anyInput`), and the output's shape
+ * is not its own. A wiring picks a `fits` first, and a `takes_any` only when nothing fits.
+ */
+export type Fit = "fits" | "takes_any" | "does_not_fit" | "cannot_tell";
 
 /** Keys that say something about a shape to people and never change what fits. */
 const NOTES = new Set(["description", "title", "examples", "default", "$comment", "documentation"]);
@@ -247,18 +315,20 @@ function bare(node: unknown): unknown {
  * once the notes for people are taken out, or the same as one member of an
  * input that is a union (`anyOf`), since a union takes each of its members,
  * as a TypeScript union takes each of its members. More fields does not fit,
- * fewer does not fit. A shape with no JSON Schema answers `cannot_tell`.
+ * fewer does not fit. A shape with no JSON Schema answers `cannot_tell`. An
+ * input made by `anyInput` answers `takes_any` for every other shape.
  */
 export function fit(
 	from: {readonly shape: Shape<unknown>},
-	into: {readonly shape: Shape<unknown>},
+	into: {readonly shape: Shape<unknown>; readonly any?: true},
 ): Fit {
 	const a = from.shape.json;
 	const b = into.shape.json;
-	if (a === undefined || b === undefined) return "cannot_tell";
+	if (a === undefined || b === undefined) return into.any === true ? "takes_any" : "cannot_tell";
 	const sent = structuralHash(bare(a));
 	const taken = [b, ...membersOf(b)];
-	return taken.some((shape) => structuralHash(bare(shape)) === sent) ? "fits" : "does_not_fit";
+	if (taken.some((shape) => structuralHash(bare(shape)) === sent)) return "fits";
+	return into.any === true ? "takes_any" : "does_not_fit";
 }
 
 /** The members of a union's JSON Schema; none for any other. */

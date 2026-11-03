@@ -9,21 +9,32 @@ lists it, so `tracker` typed in the app's tsh opens its window. The design is
 [Tickets start in our tracker](../../docs/direction/tickets-start-in-our-tracker.md).
 
 ```ts
-import {start, tell} from "@kampus/fabrika";
+import {start, tell} from "@kampus/fabrika-old";
 import {Author, tracker} from "@tea-fabrika/tracker";
 
-// What its window sends, on its one input `do`:
-yield* tell(run, "do", {kind: "file", title: "Login fails", body: "On main."});
-yield* tell(run, "do", {kind: "comment", ticket: 1, body: "Seen it too."});
-yield* tell(run, "do", {kind: "close", ticket: 1});
-yield* tell(run, "do", {kind: "show", show: "all"});      // open (the start), closed or all
-yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login", any case
+// What its window sends: one input per command, named by its verb, read in the order told across
+// all of them. Each write is one fact:
+yield* tell(run, "file", {title: "Login fails", body: "On main."});
+yield* tell(run, "comment", {ticket: 1, body: "Seen it too."});
+yield* tell(run, "close", {ticket: 1});
+// `reopen {ticket}`, and a person's only: `answer {ticket, ask, pick, note, saw}` and
+// `rate_duplicate {ticket, of, says}`.
+// The query writes nothing: the list by status and title, or one ticket.
+yield* tell(run, "query", {status: "all", find: "login"});  // open (the start), closed or all
+yield* tell(run, "query", {ticket: 1});                      // ticket 1's page
+yield* tell(run, "quit", null);
 
 // What lands on the ledger, as the user the `Author` service names:
 //   tracker/ticket/1            registered: the number is taken
 //   tracker/ticket/1/inbox      {type: "filed", title: "Login fails", body: "On main."}   user:owner
 //                               {type: "commented", body: "Seen it too."}                  user:owner
 //                               {type: "closed"}                                           user:owner
+
+// What it sends on its one output `ticket`: the ticket the person opens, by its number, each
+// time that changes. `tracker | trace` and `tracker | ticket | trace` follow it; `tracker` alone
+// prints each pick.
+yield* tell(run, "query", {ticket: 7});       // sends 7
+yield* tell(run, "query", {ticket: 7});       // sends nothing: the same pick
 
 // What its window is shown (`Shown`), once the facts are read back:
 // {ready: true, page: {kind: "list", tickets: [{number: 1, title: "Login fails", state: "closed",
@@ -36,10 +47,14 @@ yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login"
 
 | Import | File | What it gives |
 |---|---|---|
-| `@tea-fabrika/tracker` | `src/index.ts` | `tracker`, the program: input `do`, one machine `tickets`, and its `view`. `Author`, the service that says who it writes as. No React. |
-| | `src/ticket.ts` | The ticket, pure: `Fact` (the tracker's four and a lane's nine), `WRITTEN_BY` (only a person writes `answered`), `Entry`, `Ticket`, `readRow` (a ledger row to an entry, or why it is broken), `fold` (entries to tickets), `Write` and `factOf`. |
+| `@tea-fabrika/tracker` | `src/index.ts` | `tracker`, the program: one input per command (`file`, `comment`, `close`, `reopen`, `answer`, `rate_duplicate`, `query`, `quit`), each value that command's own struct, output `ticket` (the pick, `pickOf`), one machine `tickets`, and its `view`. `Author`, the service that says who it writes as. No React. |
+| | `src/ticket.ts` | What a person writes, pure: each command's struct (`File`, `Comment`, `OneTicket`, `Answer`, `RateDuplicate`), `Write`, the machine's tagged union of them (a comment can ask for changes, an answer carries the text it saw) and `factOf`, and `Summary`, a ticket on the list. The facts themselves, `WRITTEN_BY`, `Entry`, `Ticket`, `readRow` and `fold`, are the pipeline's, in `@kampus/pipeline/tickets/ticket`, so a lane writes the same facts this window shows. |
 | | `src/head.ts` | A ticket's top line, pure: `headOf(timeline, now)` (done, closed, asks, running, stuck, idle, next, in that order), `openAsksOf`, and `lineOf`, the line in words. |
 | | `src/rows.ts` | One short row per fact, `rowsOf`, made on the host with the pipeline's `endedAs`. |
+| | `src/steps.ts` | The plan's nine steps for one ticket, from its facts alone: `stepsOf`, `currentOf`, `STEPS`. The approval is the ask whose picks hold "approve". |
+| | `src/duplicates.ts` | The duplicate hint's cell, `duplicatesCell` (no `Jev` service: no call), and `hintsOn`, a ticket's hints with each one's newest word. |
+| | `src/one.ts` | `One` and `oneOf`: the open ticket's facts and the clock, the view the map program folds for itself. |
+| `@tea-fabrika/tracker/seven` | `src/seven.ts` | A stand-in: ticket #7 as a lane would leave it (`SEVEN`), and `trackerAtSeven()`, the machine's state with it read. For tests and the app's screenshots; the times, costs and ids are made up. |
 | | `src/machine.ts` | The tea machine: what was read, where the window is, the writes on their way. `shownOf` makes the window's view. |
 | | `src/ledger.ts` | The only code that talks to the ledger, through the `Ledger` service: `load`, `save`, and the poll. |
 | | `src/pull-requests.ts` | `PullRequest`, and the `PullRequests` service the program reads open pull requests through: `pull_requests`, and the wait between reads. `pullRequestsOf(list)` for a test. |
@@ -65,11 +80,19 @@ yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login"
   writes "done": it is a merged pull request, or a person's close once the asks are answered.
   "Idle" needs the time, so a `clock` Sub ticks once a minute into the state.
 - **An open ask has a box.** While an `asked` has no `answered`, the ticket's page shows it with
-  one button per pick and a note. A click sends `{kind: "answer", ...}`. A comment never answers.
+  one button per pick and a note. A click sends `answer`. A comment never answers.
   Only a person answers: a tracker whose `Author` is an agent refuses it, and the fold keeps an
   agent's `answered` out.
-- **Quit waits for writes.** `{kind: "quit"}` ends the program once every write asked for is on
-  the ledger.
+- **A pick goes down a pipe.** Opening a ticket sends its number on `ticket`, once per change,
+  so a pipe carries the latest pick. If the reader down the pipe has ended, that send fails and
+  the tracker ends with it, as a Unix writer does on a closed pipe.
+- **Quit waits for writes.** `quit` ends the program once every write asked for is on the
+  ledger. A run reads what it is told in the order told, across all its inputs, so a write told
+  before quit is always read before it, and a close told right after a file is read after it.
+- **An agent gets one tool per input, and none for `answer` or `rate_duplicate`.**
+  `@kampus/fabrika-old/mcp` makes `tracker_file`, `tracker_query`, and so on. The `answer` and
+  `rate_duplicate` inputs are `{personOnly: true}`, so there is no `tracker_answer` and no
+  `tracker_rate_duplicate`. The query is `{writes: false}`: its tool carries `readOnlyHint`.
 - **A URL in a body is a link.** Only http and https, and only in a ticket's or a comment's body,
   not in a title. Where a URL ends is GitHub's rule (`src/links.ts` has it whole): a trailing
   `.` `,` `:` `!` `?` `*` `_` `~` `'` `"` is left out, and so is a `)` that closes no `(`.
@@ -98,6 +121,26 @@ yield* tell(run, "do", {kind: "find", text: "login"});    // titles with "login"
   repositories are one list, `GITHUB.repos` in `src/github.ts`.
 - **A pull request's title is anyone's words.** On a public repository anyone can open one. The
   window only draws it; nothing reads it as an instruction.
+- **A new ticket may get a duplicate hint.** Once its filing lands, the cheap filter
+  (`candidatesOf` in `@kampus/pipeline/tickets/duplicates`) keeps up to 20 open tickets that
+  share a rare word with it, Jev answers one yes-or-no for each ("could the new one be closed
+  and #N worked without losing anything?"), and code keeps the answers at 0.7 or more, at most
+  three. Each is a `maybe_duplicate` fact on the new ticket, written as the agent `duplicates`
+  for the person who filed. The ticket's page shows "Maybe the same as #6", with Accept and
+  Dismiss. It is advice only: nothing closes, merges or hides a ticket.
+
+  ```ts
+  yield* tell(run, "rate_duplicate", {ticket: 9, of: 6, says: "dismiss"});
+  //   tracker/ticket/9/inbox   {type: "maybe_duplicate", of: 6, yes: 0.78}   agent:duplicates for:owner
+  //                            {type: "duplicate_rated", of: 6, says: "dismiss"}   user:owner
+  ```
+
+  Accept and dismiss are a person's facts (an agent's is refused, here and at the door), so the
+  false alarms can be counted; the newest word counts. With no `Jev` service there is no hint
+  and no call: in the app, Jev is on only when the home holds `jev.key`
+  (`apps/fabrika/src/host/jev.ts`). A Jev that fails leaves no hint and says so under the
+  problems; the filing stands. Measured in
+  [experiment 167](../../experiments/167-duplicate-hint.md).
 
 ## Keys
 

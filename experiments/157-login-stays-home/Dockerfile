@@ -6,6 +6,11 @@ FROM node:26.12.0-slim
 RUN npm install -g --allow-scripts=@anthropic-ai/claude-code \
 	@openai/codex@0.163.0 @anthropic-ai/claude-code@2.1.310 && npm cache clean --force
 COPY --from=docker.io/cloudflare/sandbox:1.0.3 /usr/local/bin/sandbox-shim /usr/local/bin/sandbox-shim
-RUN mkdir -p /work
+# Claude Code reads a project's settings from this empty folder instead of the working one
+# (experiment 155, MAKE_EMPTY_FOLDER in packages/fabrika/src/agents/claude/rules.ts).
+# Debian does not ship it. Root owns it and nobody may write in it.
+RUN mkdir -p -m 0555 /var/empty && mkdir -p /work && chown node:node /work
+# Not root: root may write in a read-only folder, so an agent run as root could put settings there.
+USER node
 WORKDIR /work
 CMD ["sleep", "infinity"]

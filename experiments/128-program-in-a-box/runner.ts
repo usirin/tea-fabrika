@@ -12,7 +12,7 @@
 import {pathToFileURL} from "node:url";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeStdio from "@effect/platform-node/NodeStdio";
-import {type AnyProgram, memoryStorage, start} from "@kampus/fabrika";
+import {type AnyProgram, memoryStorage, start} from "@kampus/fabrika-old";
 import {Cause, Effect, Exit, Fiber, Layer, Queue, Stdio, Stream} from "effect";
 import {outsideLayer, type Waiting} from "./cmd-wall.ts";
 import {type Boxable, line, type Routes, readDown, standIn, type Up} from "./wall.ts";

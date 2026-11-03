@@ -5,7 +5,7 @@ to a merged pull request, where code runs the steps and agents only do the writi
 on [`@demlik/tea`](https://github.com/kamp-us/demlik), the Elm architecture in TypeScript.
 
 - **It is an experiment.** Some parts are proven on real tickets. Others are still drafts.
-- **You get it by cloning this repository.** The package, `@kampus/fabrika`, is not on npm yet.
+- **You get it by cloning this repository.** The package, `@kampus/fabrika-old`, is not on npm yet.
   It is marked `"private": true` and has no license yet.
 - **It is for TypeScript developers** who want to run, study or build an agent pipeline, and for
   the people working on this one.
@@ -50,7 +50,7 @@ Every decision has a short note in [`docs/direction/`](./docs/direction/README.m
 
 ## Try it in two minutes
 
-You need Node 26 (the repository pins `26.12.0`), pnpm 10 and git. Nothing here needs an API key
+You need Node 26 (the repository pins `26.13.0`), pnpm 12 and git. Nothing here needs an API key
 or spends money. Run it with `TYPESAFE_API_KEY` unset.
 
 1. Clone this repository, open its folder, and install:
@@ -66,10 +66,10 @@ or spends money. Run it with `TYPESAFE_API_KEY` unset.
    ```
 
    tsh first prints where it read its settings from, and one line per setting it picked. With no
-   `fabrika.toml` every pick is a default:
+   `.fabrika/fabrika.toml` every pick is a default:
 
    ```text
-   fabrika.toml: <this folder>/fabrika.toml, not there: every default
+   .fabrika/fabrika.toml: <this folder>/.fabrika/fabrika.toml, not there: every default
      agents.plan: opus (default), effort medium (default), at most $2 a run (default)
      ...
      ledger.at: local (default)
@@ -117,8 +117,11 @@ and its local ledger in `~/.tsh` (set `TSH_HOME` to move it).
 
 ## Use it on a real repository
 
-This is the path as it stands today. **It is wired, but it has not yet taken a real ticket to a
-merged pull request.** Experiment 105 ran the same lane against a fake GitHub. Read
+**This is an older path, not the current way.** To run a ticket today, use
+[Run a ticket through the pipeline](./docs/how-to/run-a-pipeline-ticket.md). This section stays until
+`deliver` is deleted.
+
+**It is wired, but it has not yet taken a real ticket to a merged pull request.** Experiment 105 ran the same lane against a fake GitHub. Read
 [experiment 105](./experiments/105-the-plan-lane-dry-run.md) before you try it.
 
 - **It writes to the repository you name.** It pushes a branch and commits, and opens one pull
@@ -149,7 +152,7 @@ Steps:
    Every other key has a default. The keys are listed at the top of
    [`packages/pipeline/src/tsh/config.ts`](./packages/pipeline/src/tsh/config.ts).
 
-4. In the target repository, commit a `fabrika.toml` on its default branch that turns on the
+4. In the target repository, commit a `.fabrika/fabrika.toml` on its default branch that turns on the
    owner's desk. Without it, nothing can take your answers:
 
    ```toml
@@ -166,18 +169,18 @@ Steps:
    ../../bin/tsh
    ```
 
-   - tsh clones the repository under its home (`~/.tsh/work/`) and reads `fabrika.toml` from
+   - tsh clones the repository under its home (`~/.tsh/work/`) and reads `.fabrika/fabrika.toml` from
      its default branch, as committed.
    - Each pick is printed with why. Fix any line that warns you, for example a missing
      `.github/CODEOWNERS`, which stops ship at `approval_unknown`.
    - `programs` now lists three more: `review`, `plan` and `deliver`.
    - `deliver` is listed only when each review has a check to run: the install that the
-     repository's lockfile names, or a `[[checks.run]]` in its `fabrika.toml`.
+     repository's lockfile names, or a `[[checks.run]]` in its `.fabrika/fabrika.toml`.
 
 6. Look before you run. These only read:
 
    ```sh
-   deliver --describe
+   deliver --help
    ship --mode read pr=https://github.com/acme/widgets/pull/12
    ```
 
@@ -200,7 +203,7 @@ Steps:
 These still run, but they are not the way forward:
 
 - `operate ticket=<url>` in tsh: the older one-ticket loop (build, review, ship). It is going to
-  be deleted. Use `deliver`.
+  be deleted. Use [the pipeline](./docs/how-to/run-a-pipeline-ticket.md).
 - `pnpm demo`: the first-generation factory (`legacy/`) on a toy ticket, with scripted agents. It
   costs nothing and prints every step.
 - `pnpm demo:claude` and `pnpm demo:hard` (a harder toy): the same with real Claude Code. They
@@ -213,7 +216,9 @@ These still run, but they are not the way forward:
 
 | You want to | Go to |
 |---|---|
-| Write code with `@kampus/fabrika` | [`packages/fabrika/README.md`](./packages/fabrika/README.md) |
+| Know what is next, and who has the move | [`docs/plan/`](./docs/plan/README.md) |
+| Run a ticket through the pipeline | [`docs/how-to/run-a-pipeline-ticket.md`](./docs/how-to/run-a-pipeline-ticket.md) |
+| Write code with `@kampus/fabrika-old` | [`packages/fabrika/README.md`](./packages/fabrika/README.md) |
 | Change the work pipeline | [`packages/pipeline/README.md`](./packages/pipeline/README.md) |
 | Learn the host by doing it | Tutorial: [Two hosts, one ledger](./docs/tutorials/two-hosts/README.md), then [Agents on two hosts](./docs/tutorials/agents/README.md) |
 | Know why a choice was made | [`docs/direction/`](./docs/direction/README.md) |
@@ -227,7 +232,7 @@ These still run, but they are not the way forward:
 A pnpm workspace. A package may import the ones listed before it, never the ones after.
 `layer-rules.json` holds the order, and `pnpm lint` checks it.
 
-- [`packages/fabrika`](./packages/fabrika/README.md), `@kampus/fabrika`: the tools, in one
+- [`packages/fabrika`](./packages/fabrika/README.md), `@kampus/fabrika-old`: the tools, in one
   package. It names no pipeline. Its parts, bottom first:
   - [`program`](./packages/fabrika/src/program/README.md): programs.
   - [`host`](./packages/fabrika/src/host/README.md): the host and the ledger.
@@ -248,17 +253,23 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
     program with a window. It counts presses of +1 until done.
   - [`programs/tracker`](./programs/tracker/README.md), `@tea-fabrika/tracker`: tickets on the
     ledger, one stream of facts each, and a window to work them.
+  - [`programs/experiments`](./programs/experiments/README.md),
+    [`programs/experiment`](./programs/experiment/README.md) and
+    [`programs/compare`](./programs/compare/README.md): experiments on the ledger, the list, one
+    page, and two runs side by side (experiment 170).
+  - [`programs/markdown`](./programs/markdown/README.md), `@tea-fabrika/markdown`: draws any
+    markdown it is told, in a window, as `glow` or `less` does.
 - `wip`: the old operator's live wiring that `legacy` still uses. Nothing new goes here.
 - [`legacy`](./legacy/README.md): the first-generation factory and the old operator. Nothing new
   goes here.
-- `packs/`: add-on packs. A repository turns one on with one line in its `fabrika.toml`; the core
+- `packs/`: add-on packs. A repository turns one on with one line in its `.fabrika/fabrika.toml`; the core
   names none of them.
   - [`packs/owner-desk`](./packs/owner-desk/README.md): the owner's inbox, and their answers back.
   - [`packs/ask-log`](./packs/ask-log/README.md): one line per ask and answer, in a file.
   - [`packs/ui-verification`](./packs/ui-verification/README.md): holds a build that changes
     what a user sees, and asks the owner yes or no.
 - `apps/`: what a person opens, on top of everything else. Nothing imports an app.
-  - [`apps/fabrika`](./apps/fabrika/README.md), `@kampus/fabrika-app`: the fabrika app, a
+  - [`apps/fabrika`](./apps/fabrika/README.md), `@kampus/fabrika-app-old`: the fabrika app, a
     walking skeleton. One window, tiled like tmux; every tile runs its own tsh, with a line
     editor, and a program with a view runs inside a tile.
 - [`docs/tutorials/`](./docs/tutorials/): tutorials, with their finished files type-checked.
@@ -287,7 +298,7 @@ Other commands:
 
 | What | Command |
 |---|---|
-| Build the `dist/` of `@kampus/fabrika` and `@kampus/pipeline` (nothing in the repo needs it) | `pnpm build` |
+| Build the `dist/` of `@kampus/fabrika-old` and `@kampus/pipeline` (nothing in the repo needs it) | `pnpm build` |
 | tsh, the same as `bin/tsh` but without its check for missing packages | `pnpm tsh` |
 | tsh with only its small programs (fabrika installs no command) | `packages/fabrika/bin/tsh-small` |
 | Open the fabrika app: tsh in a window, with the small programs, `counter` and `tracker` | `pnpm fabrika` |

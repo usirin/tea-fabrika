@@ -5,7 +5,7 @@
 //
 //   node acp-parent.ts <folder> <lock>
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {harnessOf} from "@kampus/fabrika/agents/acp";
+import {harnessOf} from "@kampus/fabrika-old/agents/acp";
 import {runTurn, underGuard} from "@kampus/pipeline/stages/build/builder-acp";
 import {Effect} from "effect";
 

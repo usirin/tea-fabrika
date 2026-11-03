@@ -3,6 +3,7 @@ import {FitAddon, Ghostty, Terminal} from "ghostty-web";
 import wasm from "ghostty-web/ghostty-vt.wasm";
 import type {TileId} from "../desk/layout/index.ts";
 import {readToTerminal} from "../messages.ts";
+import {fabrika, fabrikaLight, terminalTheme} from "../themes.ts";
 
 // A tile's terminal: a terminal, and nothing more. ghostty-web draws it: Ghostty's terminal,
 // built to WebAssembly, on a canvas. It sends the keys pressed and its size on its tile's port,
@@ -14,7 +15,7 @@ import {readToTerminal} from "../messages.ts";
 //   term.focus();           // its keys go to t1's tsh
 //   term.dispose();         // the tile closed: its port goes
 //
-// It lives outside React on purpose: a split moves a tile into a new stack, and React would make
+// It lives outside React on purpose: a split moves a tile into a new container, and React would make
 // the tile's element again, and with it a fresh terminal. The element is made once here, and the
 // desk's page moves it into whichever slot the tile has now.
 //
@@ -25,8 +26,18 @@ import {readToTerminal} from "../messages.ts";
 // fetched (`Ghostty.load` fetches a data: url, which this page's policy refuses), once, and
 // every tile's terminal shares it.
 
-/** The app's own colors (window.css). */
-const THEME = {background: "#16181d", foreground: "#d8dce4", cursor: "#3b82f6"};
+const LIGHT = "(prefers-color-scheme: light)";
+/**
+ * The built-in theme for the system's look, as the window's stylesheet picks it with light-dark().
+ * Read when a terminal is made: ghostty-web 0.4 cannot change a terminal's colors once it is open.
+ */
+const themeNow = () => terminalTheme(window.matchMedia(LIGHT).matches ? fabrikaLight : fabrika);
+/**
+ * The most bytes a tile keeps to write again when its look changes, as experiment 177's spike kept
+ * (1 MiB a tile). A full reset (RIS) drops what came before it.
+ */
+const KEPT = 1024 * 1024;
+const FULL_RESET = "\x1bc";
 const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 /** Rows of the screen read back as text: the newest, as the draft's terminal reads them. */
 const MIRRORED = 200;
@@ -80,19 +91,41 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 	text.setAttribute("aria-label", `${tile} screen`);
 	element.append(screen, text);
 
-	const term = new Terminal({
-		ghostty,
-		fontSize: 13,
-		fontFamily: FONT,
-		// The cursor stays still, everywhere: no blink, and no redraw twice a second for it. Only an
-		// option turns blinking on in ghostty-web 0.4.0; a program's escape codes cannot.
-		cursorBlink: false,
-		scrollback: 1000,
-		theme: THEME,
-	});
-	const fit = new FitAddon();
-	term.loadAddon(fit);
+	const make = () => {
+		const made = new Terminal({
+			ghostty,
+			fontSize: 13,
+			fontFamily: FONT,
+			// The cursor stays still, everywhere: no blink, and no redraw twice a second for it. Only an
+			// option turns blinking on in ghostty-web 0.4.0; a program's escape codes cannot.
+			cursorBlink: false,
+			scrollback: 1000,
+			theme: themeNow(),
+		});
+		const fit = new FitAddon();
+		made.loadAddon(fit);
+		return {term: made, fit};
+	};
+	let {term, fit} = make();
 	let opened = false;
+
+	/**
+	 * The bytes drawn so far, the newest KEPT of them, from the last full reset on: what a terminal
+	 * made again in a new look is written again, so it shows what it showed.
+	 */
+	let kept: string[] = [];
+	let keptLength = 0;
+	const keep = (bytes: string) => {
+		const reset = bytes.lastIndexOf(FULL_RESET);
+		if (reset >= 0) {
+			kept = [];
+			keptLength = 0;
+		}
+		const part = reset >= 0 ? bytes.slice(reset) : bytes;
+		kept.push(part);
+		keptLength += part.length;
+		while (keptLength > KEPT && kept.length > 1) keptLength -= kept.shift()?.length ?? 0;
+	};
 
 	/**
 	 * The screen as text. It ends on the cursor's row, blank or not, as that is where the next
@@ -123,26 +156,103 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 	const size = (cols: number, rows: number) =>
 		window.fabrika.send(port, {type: "size", cols: cells(cols), rows: cells(rows)});
 
+	/**
+	 * Open the terminal in its screen, write what was kept, then send its keys and its size on the
+	 * tile's port. The kept bytes are written before the terminal is heard: answers to old
+	 * questions in them (where is the cursor?) must not reach tsh again, and ghostty-web answers as
+	 * it writes.
+	 *
+	 * Its wasm terminal is reset first, after the fit, below the terminal, so what is written stays
+	 * only what was kept. Every tile's terminal lives in one Ghostty, and ghostty-web 0.4's wasm
+	 * does not clear the memory it hands out again: a terminal made after another was freed starts
+	 * with the freed one's rows, and a look change frees and makes one per tile. Without the reset,
+	 * a tile showed another's `tsh$ tracker` line and broken symbols (terminal.replay.test.ts).
+	 *
+	 * It comes after the fit. Moved before it, "starts blank when a tile opens after another
+	 * closed" in terminal.replay.test.ts fails with " sh$ tracker" on the first row: that test reads
+	 * the screen as 0.4's renderer does (update, then getViewport) between the steps, and with those
+	 * reads the fit's resize takes up the freed terminal's rows again. Runs on the bare wasm, without
+	 * them, come out clean either way. The ghostty-web patch's constructor runs before the fit, so it
+	 * is the same failing order. The public `term.write` is not used, because terminal.test.ts checks
+	 * the replayed bytes exactly, and a reset there would show up as an extra write.
+	 */
+	const open = () => {
+		term.open(screen);
+		fit.fit();
+		term.wasmTerm?.write(FULL_RESET);
+		for (const bytes of kept) term.write(bytes);
+		fit.observeResize();
+		term.onData((data) => window.fabrika.send(port, {type: "keys", data}));
+		term.onResize(({cols, rows}) => size(cols, rows));
+		size(term.cols, term.rows);
+		mirrorSoon();
+	};
+
+	/**
+	 * The system's look changed. ghostty-web 0.4 does not draw a theme set after open(), so the
+	 * terminal is made again in the new one and opened with what it showed (themes.md, live
+	 * switching). Keys go to it as they went to the old one.
+	 *
+	 * Focus stays where it was. ghostty-web 0.4's open() focuses the terminal, at once and again
+	 * after a zero timeout, and a look change remakes every tile's terminal, so the last one would
+	 * take focus from the tile or the input a person is in. A remake that had focus keeps it;
+	 * otherwise focus goes back where it was, at once and after open()'s own timeout, and where
+	 * nothing had focus, the remade terminal lets go of it, so keys typed next reach no tile
+	 * nobody picked (terminal.focus.test.ts). A pnpm patch
+	 * that stops open() focusing would be cleaner, but every first open then needs its own focus(),
+	 * and the tests model 0.4's open() as it is.
+	 */
+	const remake = () => {
+		const old = term;
+		const active: unknown = document.activeElement;
+		const focused = [old.textarea, old.element].some((at) => at !== undefined && at === active);
+		({term, fit} = make());
+		old.dispose();
+		if (!opened) return;
+		open();
+		if (focused) {
+			term.focus();
+			return;
+		}
+		const remade = term;
+		const nowhere = active === null || active === document.body;
+		const back = () => {
+			if (nowhere) {
+				const held = document.activeElement;
+				for (const at of [remade.textarea, remade.element])
+					if (at !== undefined && at === held) at.blur();
+			} else if (
+				typeof active === "object" &&
+				active !== null &&
+				"focus" in active &&
+				typeof active.focus === "function"
+			)
+				active.focus();
+		};
+		back();
+		setTimeout(back, 0);
+	};
+	const look = window.matchMedia(LIGHT);
+	look.addEventListener("change", remake);
+
 	return {
 		attach: (slot) => {
 			if (element.parentElement !== slot) slot.append(element);
 			if (opened) return fit.fit();
 			opened = true;
-			term.open(screen);
-			fit.fit();
-			fit.observeResize();
-			term.onData((data) => window.fabrika.send(port, {type: "keys", data}));
-			term.onResize(({cols, rows}) => size(cols, rows));
-			size(term.cols, term.rows);
+			open();
 			// Heard only once it is open: the bytes that came before wait in the preload, in order.
 			window.fabrika.onMessage(port, (raw) => {
 				const read = readToTerminal(raw);
-				if (read.kind === "read") term.write(read.msg.data, mirrorSoon);
-				else console.warn(`fabrika: refused a message for ${tile}: ${read.why}`);
+				if (read.kind === "read") {
+					keep(read.msg.data);
+					term.write(read.msg.data, mirrorSoon);
+				} else console.warn(`fabrika: refused a message for ${tile}: ${read.why}`);
 			});
 		},
 		focus: () => term.focus(),
 		dispose: () => {
+			look.removeEventListener("change", remake);
 			window.fabrika.forget(port);
 			term.dispose();
 			element.remove();

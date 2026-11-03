@@ -1,0 +1,545 @@
+diff --git a/apps/fabrika/build.ts b/apps/fabrika/build.ts
+index a7459ff..72f0204 100644
+--- a/apps/fabrika/build.ts
++++ b/apps/fabrika/build.ts
+@@ -73,6 +73,7 @@ const program = Effect.gen(function* () {
+ 				bundle({...b, define: {...b.define, FABRIKA_BUILD: JSON.stringify(id)}}),
+ 			),
+ 			fs.copyFile(at("src/window/desk.html"), at("dist/desk.html")),
++			fs.copyFile(at("src/window/first-paint.js"), at("dist/first-paint.js")),
+ 			// One stylesheet, as the page's policy serves only that: Manti's, layered, then React
+ 			// Flow's own rules for the map program's canvas, then fabrika's theme, which sets Manti's
+ 			// tokens from the app's values, and the app's rules, which restyle the rest.
+diff --git a/apps/fabrika/src/files.ts b/apps/fabrika/src/files.ts
+index c4cc621..c63c602 100644
+--- a/apps/fabrika/src/files.ts
++++ b/apps/fabrika/src/files.ts
+@@ -35,6 +35,7 @@ export const DESK_CSP =
+ const FILES = {
+ 	"/desk.html": {type: "text/html; charset=utf-8", csp: DESK_CSP, page: true},
+ 	"/desk.js": {type: "text/javascript; charset=utf-8", csp: CSP, page: false},
++	"/first-paint.js": {type: "text/javascript; charset=utf-8", csp: CSP, page: false},
+ 	"/window.css": {type: "text/css; charset=utf-8", csp: CSP, page: false},
+ } as const satisfies Record<string, {type: string; csp: string; page: boolean}>;
+ 
+diff --git a/apps/fabrika/src/window/desk.html b/apps/fabrika/src/window/desk.html
+index 5636401..bf6ccc3 100644
+--- a/apps/fabrika/src/window/desk.html
++++ b/apps/fabrika/src/window/desk.html
+@@ -4,6 +4,7 @@
+ 		<meta charset="utf-8" />
+ 		<title>fabrika</title>
+ 		<link rel="stylesheet" href="window.css" />
++		<script src="first-paint.js"></script>
+ 		<script src="desk.js" defer></script>
+ 	</head>
+ 	<body>
+diff --git a/apps/fabrika/src/window/desk.tsx b/apps/fabrika/src/window/desk.tsx
+index 89f8c15..c017053 100644
+--- a/apps/fabrika/src/window/desk.tsx
++++ b/apps/fabrika/src/window/desk.tsx
+@@ -60,6 +60,7 @@ import {
+ } from "./frame.ts";
+ import {Band, BottomLine, type FrameProps, Over, TopBar} from "./frame.tsx";
+ import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
++import {applyTheme, contrast, decodeTheme, restoreTheme, tokensOf} from "./theme.ts";
+ import {WINDOWS} from "./windows.tsx";
+ 
+ // The desk's page: the app's one window, tiled like tmux. It draws the desk the host sends
+@@ -789,7 +790,23 @@ function ZoomedTile(props: {
+ 	return <DeskTile tile={tile} ws={ws} desk={desk} />;
+ }
+ 
++/**
++ * SPIKE (experiment 177): the run's way in. The pipe a theme would really come down is not built;
++ * the run hands the page what would have come down it, and it is decoded as it would be.
++ */
++const probe = {
++	set: (raw: unknown) => applyTheme(raw === null ? null : decodeTheme(raw)),
++	tokens: (raw: unknown) => tokensOf(decodeTheme(raw)),
++	contrast,
++	draw: (bytes: string) => {
++		for (const term of terminals.values()) term.draw(bytes);
++	},
++};
++
+ const boot = Effect.gen(function* () {
++	performance.mark("theme-boot");
++	Object.defineProperty(window, "fabrikaThemeProbe", {value: probe});
++	restoreTheme();
+ 	ghostty = yield* loadGhostty;
+ 	window.addEventListener("keydown", onKey, {capture: true});
+ 	window.addEventListener("pointerover", onPointerOver);
+diff --git a/apps/fabrika/src/window/first-paint.js b/apps/fabrika/src/window/first-paint.js
+new file mode 100644
+index 0000000..11e0a01
+--- /dev/null
++++ b/apps/fabrika/src/window/first-paint.js
+@@ -0,0 +1,14 @@
++// SPIKE for experiment 177. The page's first script, before its first paint: the tokens of the
++// last theme, read from this browser's own store, set before anything draws, so a start shows no
++// flash of the app's own look. VS Code restores its last colors the same way. Only a #rrggbb or a
++// percent is taken, so a changed store cannot put anything else in a token.
++const kept = localStorage.getItem("fabrika.theme.tokens");
++performance.mark("theme-first");
++if (kept !== null) {
++	const {look, tokens} = JSON.parse(kept);
++	const root = document.documentElement;
++	for (const [name, value] of Object.entries(tokens))
++		if (/^--[a-z0-9-]+$/.test(name) && /^(#[0-9a-f]{6}|\d{1,3}%)$/.test(value))
++			root.style.setProperty(name, value);
++	if (look === "dark" || look === "light") root.style.setProperty("color-scheme", look);
++}
+diff --git a/apps/fabrika/src/window/terminal.ts b/apps/fabrika/src/window/terminal.ts
+index fa28105..1840b02 100644
+--- a/apps/fabrika/src/window/terminal.ts
++++ b/apps/fabrika/src/window/terminal.ts
+@@ -3,6 +3,7 @@ import {FitAddon, Ghostty, Terminal} from "ghostty-web";
+ import wasm from "ghostty-web/ghostty-vt.wasm";
+ import type {TileId} from "../desk/layout/index.ts";
+ import {readToTerminal} from "../messages.ts";
++import {onTheme, type TerminalColors, terminalColors} from "./theme.ts";
+ 
+ // A tile's terminal: a terminal, and nothing more. ghostty-web draws it: Ghostty's terminal,
+ // built to WebAssembly, on a canvas. It sends the keys pressed and its size on its tile's port,
+@@ -27,6 +28,59 @@ import {readToTerminal} from "../messages.ts";
+ 
+ /** The app's own colors (window.css): a tile's surface (`--n-2`), and its second ink (`--n-11`). */
+ const THEME = {background: "#101113", foreground: "#bababc", cursor: "#bababc"};
++
++/** SPIKE (experiment 177): what ghostty-web's terminal takes as a theme. */
++const optionsOf = (c: TerminalColors) => ({
++	background: c.background,
++	foreground: c.foreground,
++	cursor: c.cursor,
++	selectionBackground: c.selectionBackground,
++	selectionForeground: c.selectionForeground,
++	black: c.palette[0],
++	red: c.palette[1],
++	green: c.palette[2],
++	yellow: c.palette[3],
++	blue: c.palette[4],
++	magenta: c.palette[5],
++	cyan: c.palette[6],
++	white: c.palette[7],
++	brightBlack: c.palette[8],
++	brightRed: c.palette[9],
++	brightGreen: c.palette[10],
++	brightYellow: c.palette[11],
++	brightBlue: c.palette[12],
++	brightMagenta: c.palette[13],
++	brightCyan: c.palette[14],
++	brightWhite: c.palette[15],
++});
++
++/**
++ * SPIKE: the bytes kept per tile, to draw again in new colors. ghostty-web 0.4 cannot change a live
++ * terminal's colors: the option warns "not yet fully supported", its WebAssembly has no export for
++ * it, and OSC 4, 10 and 11 come back "invalid OSC command". Its reset() makes a new terminal from
++ * the options, so the colors change by a reset and a replay.
++ */
++const KEPT = 1024 * 1024;
++const FULL_RESET = "\x1bc";
++
++/** SPIKE: the parts of ghostty-web's Terminal its types keep private, and the draw needs. */
++interface Inside {
++	readonly renderer?: {
++		readonly setTheme: (theme: object) => void;
++		readonly render: (
++			wasm: unknown,
++			all: boolean,
++			viewportY: number,
++			term: unknown,
++			scrollbarOpacity: number,
++		) => void;
++	};
++	readonly wasmTerm?: unknown;
++	readonly viewportY: number;
++	readonly scrollbarOpacity: number;
++}
++const isInside = (term: object): term is Inside => "viewportY" in term;
++
+ const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+ /** Rows of the screen read back as text: the newest, as the draft's terminal reads them. */
+ const MIRRORED = 200;
+@@ -64,6 +118,8 @@ export interface TileTerminal {
+ 	readonly focus: () => void;
+ 	/** The tile closed: the terminal goes, and so does its port. */
+ 	readonly dispose: () => void;
++	/** SPIKE (experiment 177): bytes drawn here and not sent to tsh, as the run's probe writes. */
++	readonly draw: (bytes: string) => void;
+ }
+ 
+ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
+@@ -80,6 +136,7 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
+ 	text.setAttribute("aria-label", `${tile} screen`);
+ 	element.append(screen, text);
+ 
++	const startColors = terminalColors();
+ 	const term = new Terminal({
+ 		ghostty,
+ 		fontSize: 13,
+@@ -88,12 +145,48 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
+ 		// option turns blinking on in ghostty-web 0.4.0; a program's escape codes cannot.
+ 		cursorBlink: false,
+ 		scrollback: 1000,
+-		theme: THEME,
++		theme: startColors === null ? THEME : optionsOf(startColors),
+ 	});
+ 	const fit = new FitAddon();
+ 	term.loadAddon(fit);
+ 	let opened = false;
+ 
++	/** SPIKE: a new theme, on a live terminal, with its screen and scrollback kept. */
++	const repaint = (colors: TerminalColors | null) => {
++		const inside: object = term;
++		if (!isInside(inside) || inside.renderer === undefined || inside.wasmTerm === undefined) return;
++		const theme = colors === null ? THEME : optionsOf(colors);
++		term.options.theme = theme;
++		inside.renderer.setTheme(theme);
++		term.reset();
++		// Answers to old questions in the bytes (where is the cursor?) must not reach tsh again.
++		replaying = true;
++		for (const bytes of log) term.write(bytes);
++		replaying = false;
++		inside.renderer.render(
++			inside.wasmTerm,
++			true,
++			inside.viewportY,
++			inside,
++			inside.scrollbarOpacity,
++		);
++	};
++	const stopHearing = onTheme(repaint);
++	let replaying = false;
++	let log: string[] = [];
++	let logged = 0;
++	const keep = (bytes: string) => {
++		const reset = bytes.lastIndexOf(FULL_RESET);
++		if (reset >= 0) {
++			log = [];
++			logged = 0;
++		}
++		const kept = reset >= 0 ? bytes.slice(reset) : bytes;
++		log.push(kept);
++		logged += kept.length;
++		while (logged > KEPT && log.length > 1) logged -= log.shift()?.length ?? 0;
++	};
++
+ 	/**
+ 	 * The screen as text. It ends on the cursor's row, blank or not, as that is where the next
+ 	 * text goes. Ghostty 0.4's `baseY` is always 0, so the screen's first row is found from the
+@@ -131,18 +224,27 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
+ 			term.open(screen);
+ 			fit.fit();
+ 			fit.observeResize();
+-			term.onData((data) => window.fabrika.send(port, {type: "keys", data}));
++			term.onData((data) => {
++				if (!replaying) window.fabrika.send(port, {type: "keys", data});
++			});
+ 			term.onResize(({cols, rows}) => size(cols, rows));
+ 			size(term.cols, term.rows);
+ 			// Heard only once it is open: the bytes that came before wait in the preload, in order.
+ 			window.fabrika.onMessage(port, (raw) => {
+ 				const read = readToTerminal(raw);
+-				if (read.kind === "read") term.write(read.msg.data, mirrorSoon);
+-				else console.warn(`fabrika: refused a message for ${tile}: ${read.why}`);
++				if (read.kind === "read") {
++					keep(read.msg.data);
++					term.write(read.msg.data, mirrorSoon);
++				} else console.warn(`fabrika: refused a message for ${tile}: ${read.why}`);
+ 			});
+ 		},
+ 		focus: () => term.focus(),
++		draw: (bytes) => {
++			keep(bytes);
++			term.write(bytes, mirrorSoon);
++		},
+ 		dispose: () => {
++			stopHearing();
+ 			window.fabrika.forget(port);
+ 			term.dispose();
+ 			element.remove();
+diff --git a/apps/fabrika/src/window/theme.ts b/apps/fabrika/src/window/theme.ts
+new file mode 100644
+index 0000000..297e24a
+--- /dev/null
++++ b/apps/fabrika/src/window/theme.ts
+@@ -0,0 +1,277 @@
++import {Schema} from "effect";
++
++// SPIKE for experiment 177, today's version. Not for main.
++//
++// A theme is the viewer's choice, and only data: names and hex colors. The page decodes it here,
++// works out the app's tokens from it in code, moves any text too faint to read, and sets the
++// tokens through the CSS object model. No CSS text is ever built from a theme.
++//
++//   const read = decodeTheme(raw);        // refused unless every color is a #rrggbb
++//   const made = tokensOf(read);          // {tokens: {"--n-1": "#11111b", ...}, moved: [...]}
++//   applyTheme(read);                     // one task: the page and every terminal, then a frame
++//   applyTheme(null);                     // the app's own look again
++
++/** A color, and nothing that is not one. No `url()`, no `var()`, no name. */
++const Hex = Schema.String.check(Schema.isPattern(/^#[0-9a-f]{6}$/));
++const Six = Schema.Tuple([Hex, Hex, Hex, Hex, Hex, Hex]);
++const Sixteen = Schema.Tuple([
++	Hex,
++	Hex,
++	Hex,
++	Hex,
++	Hex,
++	Hex,
++	Hex,
++	Hex,
++	Hex,
++	Hex,
++	Hex,
++	Hex,
++	Hex,
++	Hex,
++	Hex,
++	Hex,
++]);
++
++const Terminal = Schema.Struct({
++	foreground: Hex,
++	background: Hex,
++	cursor: Hex,
++	selectionBackground: Hex,
++	selectionForeground: Hex,
++	palette: Sixteen,
++});
++
++export const Theme = Schema.Struct({
++	format: Schema.Literal(1),
++	name: Schema.String.check(Schema.isPattern(/^[\p{L}\p{N} ._-]{1,60}$/u)),
++	by: Schema.String.check(Schema.isMaxLength(200)),
++	look: Schema.Literals(["dark", "light"]),
++	/** Where it came from: a format fabrika did not invent, and the hash of the file as read. */
++	from: Schema.Struct({
++		format: Schema.Literals(["base16", "base24", "ghostty", "fabrika"]),
++		hash: Schema.String.check(Schema.isPattern(/^sha256-[0-9a-f]{64}$/)),
++	}),
++	ground: Hex,
++	ink: Hex,
++	turn: Hex,
++	done: Hex,
++	running: Hex,
++	stuck: Hex,
++	lines: Six,
++	services: Six,
++	/** How much of a line's color goes into its tiles, in percent. */
++	tint: Schema.Int.check(Schema.isBetween({minimum: 0, maximum: 100})),
++	terminal: Terminal,
++});
++export type Theme = typeof Theme.Type;
++export type TerminalColors = typeof Terminal.Type;
++
++export const decodeTheme = Schema.decodeUnknownSync(Theme, {onExcessProperty: "error"});
++
++// Color math. OKLCH, the space the app's own palette is written in.
++
++interface Lch {
++	readonly l: number;
++	readonly c: number;
++	readonly h: number;
++}
++
++const toLinear = (u: number) => (u <= 0.04045 ? u / 12.92 : ((u + 0.055) / 1.055) ** 2.4);
++const fromLinear = (u: number) => (u <= 0.0031308 ? 12.92 * u : 1.055 * u ** (1 / 2.4) - 0.055);
++
++const rgbOf = (hex: string): readonly [number, number, number] => [
++	Number.parseInt(hex.slice(1, 3), 16) / 255,
++	Number.parseInt(hex.slice(3, 5), 16) / 255,
++	Number.parseInt(hex.slice(5, 7), 16) / 255,
++];
++
++const linearOf = (hex: string): readonly [number, number, number] => {
++	const [r, g, b] = rgbOf(hex);
++	return [toLinear(r), toLinear(g), toLinear(b)];
++};
++
++const lchOf = (hex: string): Lch => {
++	const [r, g, b] = linearOf(hex);
++	const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
++	const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
++	const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
++	const L = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
++	const A = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
++	const B = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
++	return {l: L, c: Math.hypot(A, B), h: Math.atan2(B, A)};
++};
++
++const rgbFrom = ({l: L, c, h}: Lch): readonly [number, number, number] => {
++	const A = c * Math.cos(h);
++	const B = c * Math.sin(h);
++	const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
++	const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
++	const s = (L - 0.0894841775 * A - 1.291485548 * B) ** 3;
++	return [
++		4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
++		-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
++		-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
++	];
++};
++
++const hexFrom = (lch: Lch): string => {
++	// Out of the screen's colors, chroma gives way and lightness and hue stay.
++	let c = lch.c;
++	let rgb = rgbFrom({...lch, c});
++	while (c > 0 && rgb.some((u) => u < -0.0005 || u > 1.0005)) {
++		c = Math.max(0, c - 0.002);
++		rgb = rgbFrom({...lch, c});
++	}
++	const part = (u: number) =>
++		Math.round(Math.min(1, Math.max(0, fromLinear(Math.max(0, u)))) * 255)
++			.toString(16)
++			.padStart(2, "0");
++	return `#${rgb.map(part).join("")}`;
++};
++
++const mix = (from: string, to: string, t: number): string => {
++	const a = lchOf(from);
++	const b = lchOf(to);
++	const turnBy = Math.atan2(Math.sin(b.h - a.h), Math.cos(b.h - a.h));
++	return hexFrom({
++		l: Math.min(1, Math.max(0, a.l + (b.l - a.l) * t)),
++		c: Math.max(0, a.c + (b.c - a.c) * t),
++		h: a.h + turnBy * t,
++	});
++};
++
++/** WCAG's contrast ratio of two colors. */
++export const contrast = (a: string, b: string): number => {
++	const lum = (hex: string) => {
++		const [r, g, bl] = linearOf(hex);
++		return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
++	};
++	const [x, y] = [lum(a), lum(b)];
++	return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
++};
++
++/**
++ * The ink moved along its own hue until it reads on `ground`, as iTerm2's minimum contrast moves
++ * text and never the background. It goes away from the ground first; if that side runs out, the
++ * other way.
++ */
++const readable = (ink: string, ground: string, least: number): string => {
++	if (contrast(ink, ground) >= least) return ink;
++	const lch = lchOf(ink);
++	const away = lchOf(ground).l > 0.6 ? -1 : 1;
++	for (const way of [away, -away]) {
++		for (let l = lch.l; l >= 0 && l <= 1; l += way * 0.005) {
++			const tried = hexFrom({...lch, l});
++			if (contrast(tried, ground) >= least) return tried;
++		}
++	}
++	return contrast("#000000", ground) > contrast("#ffffff", ground) ? "#000000" : "#ffffff";
++};
++
++/** Where the app's own 12 grays sit between its ground (--n-2) and its first ink (--n-12). */
++const RAMP = [-0.037, 0, 0.035, 0.071, 0.102, 0.134, 0.189, 0.29, 0.587, 0.679, 0.803, 1];
++
++/** Every token a theme sets: the names in window.css's :root that hold a color. */
++export const tokensOf = (theme: Theme) => {
++	const moved: {token: string; was: string; now: string; ratio: number}[] = [];
++	const {ground, ink, look} = theme;
++	const inkRead = readable(ink, ground, 7);
++	const tokens: Record<string, string> = {};
++	RAMP.forEach((t, i) => {
++		tokens[`--n-${i + 1}`] = mix(ground, inkRead, t);
++	});
++	if (look === "light") {
++		// A light theme's sunken ground is darker, and what is raised is lighter than the ground.
++		tokens["--n-1"] = mix(ground, inkRead, 0.05);
++		tokens["--n-3"] = mix(ground, "#ffffff", 0.5);
++	}
++	const text = (token: string, least: number) => {
++		const was = tokens[token] ?? ink;
++		const raised = tokens["--n-3"] ?? ground;
++		const worse = contrast(was, raised) < contrast(was, ground) ? raised : ground;
++		const now = readable(was, worse, least);
++		if (now !== was) moved.push({token, was, now, ratio: contrast(was, worse)});
++		tokens[token] = now;
++	};
++	for (const token of ["--n-9", "--n-10", "--n-11", "--n-12"]) text(token, 4.5);
++
++	const onGround = (name: string, hex: string, least = 4.5) => {
++		tokens[name] = hex;
++		text(name, least);
++	};
++	onGround("--a-11", theme.turn);
++	onGround("--done", theme.done);
++	onGround("--running", theme.running);
++	onGround("--stuck", theme.stuck);
++	onGround("--closed", theme.services[1]);
++	const fill = readable(theme.turn, ground, 3);
++	tokens["--a-9"] = fill;
++	tokens["--a-10"] = mix(fill, ink, 0.12);
++	tokens["--a-5"] = mix(ground, theme.turn, 0.3);
++	tokens["--a-3"] = mix(ground, theme.turn, 0.15);
++	tokens["--turn-fg"] =
++		contrast("#ffffff", fill) >= contrast("#000000", fill) ? "#ffffff" : "#000000";
++
++	theme.lines.forEach((hex, i) => {
++		tokens[`--line-${i}`] = hex;
++	});
++	theme.services.forEach((hex, i) => {
++		tokens[`--svc-${i}`] = hex;
++	});
++	tokens["--ty-fact"] = theme.services[2];
++	tokens["--ty-turn"] = theme.services[3];
++	tokens["--ty-step"] = theme.services[4];
++	tokens["--ty-checks"] = theme.services[5];
++	tokens["--line-strength"] = `${theme.tint}%`;
++	return {tokens, moved};
++};
++
++// Applying one. One task: every token, then every terminal, so a frame sees all of it or none.
++
++type Listener = (colors: TerminalColors | null) => void;
++const listeners = new Set<Listener>();
++let current: Theme | null = null;
++let setNames: readonly string[] = [];
++
++/** What a terminal draws with now; null is the app's own look. */
++export const terminalColors = (): TerminalColors | null => current?.terminal ?? null;
++
++/** Hear each change of theme. Answers how to stop hearing. */
++export const onTheme = (listener: Listener) => {
++	listeners.add(listener);
++	return () => {
++		listeners.delete(listener);
++	};
++};
++
++const CACHE = "fabrika.theme.tokens";
++const WHOLE = "fabrika.theme";
++
++export const applyTheme = (theme: Theme | null): void => {
++	const root = document.documentElement;
++	for (const name of setNames) root.style.removeProperty(name);
++	current = theme;
++	if (theme === null) {
++		setNames = [];
++		root.style.removeProperty("color-scheme");
++		delete root.dataset.theme;
++		localStorage.removeItem(CACHE);
++		localStorage.removeItem(WHOLE);
++	} else {
++		const {tokens} = tokensOf(theme);
++		for (const [name, value] of Object.entries(tokens)) root.style.setProperty(name, value);
++		root.style.setProperty("color-scheme", theme.look);
++		root.dataset.theme = theme.name;
++		setNames = Object.keys(tokens);
++		localStorage.setItem(CACHE, JSON.stringify({look: theme.look, tokens}));
++		localStorage.setItem(WHOLE, JSON.stringify(theme));
++	}
++	for (const listener of listeners) listener(terminalColors());
++};
++
++/** The last theme again, before any terminal is made: the store is read as any other input is. */
++export const restoreTheme = (): void => {
++	const kept = localStorage.getItem(WHOLE);
++	if (kept !== null) applyTheme(decodeTheme(JSON.parse(kept)));
++};

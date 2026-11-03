@@ -1,4 +1,4 @@
-import {hostEnv, runEnv} from "@kampus/fabrika/agents/sandbox";
+import {hostEnv, runEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {Effect, FileSystem, Path, Ref, Semaphore, Stream} from "effect";
 import {ChildProcessSpawner} from "effect/process";
 import {apply, checksAt, lastAt, NONE, type Ran, type Runs} from "./check-runs.ts";

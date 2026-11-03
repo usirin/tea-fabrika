@@ -52,6 +52,7 @@ import {
 } from "effect";
 import {type Inputs, type Program, start} from "../program/program.ts";
 import type {Input} from "../program/shape.ts";
+import {traceOf} from "../program/trace.ts";
 import {
 	createHost,
 	type ExitWord,
@@ -62,6 +63,7 @@ import {
 	type ProgramEnd,
 } from "./host-machine.ts";
 import {backoff, journalStore, lastStateOf, type WriteNote} from "./journal.ts";
+import {leaderOf} from "./leader.ts";
 import {
 	type Inbox,
 	Ledger,
@@ -303,7 +305,7 @@ export class Self extends Context.Service<
 			why: string,
 		) => Effect.Effect<"signalled" | "exited" | "noproc" | "denied" | Fenced>;
 	}
->()("@kampus/fabrika/Self") {}
+>()("@kampus/fabrika-old/Self") {}
 
 // ---------------------------------------------------------------- what the host says
 
@@ -657,9 +659,8 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 					Effect.map((x): Charging => ({how: "ok", dup: x.dup, over: x.over})),
 					Effect.retry({schedule: Schedule.spaced(Duration.millis(100)), while: isUnreachable}),
 					Effect.catchTag("LedgerUnreachable", () => Effect.die("charge: retry ended")),
-					Effect.catch(
-						(e): Effect.Effect<Charging> =>
-							Effect.succeed(e._tag === "Denied" ? {how: "denied"} : {how: "fenced"}),
+					Effect.catch((e): Effect.Effect<Charging> =>
+						Effect.succeed(e._tag === "Denied" ? {how: "denied"} : {how: "fenced"}),
 					),
 					Effect.uninterruptible,
 				),
@@ -746,7 +747,14 @@ export const serve = <I extends Inputs & {readonly inbox: Input<any>}, E, R>(
 						run: runUnder,
 						...calls(fence),
 					});
-					const started = yield* start(o.program, {}).pipe(Effect.provideService(Self, self));
+					// The run is in its job's trace: its leader's, read off the ledger's parents, as a forked
+					// child keeps its parent's process group. So a lane's stages and their agents land in the
+					// lane's trace on any host, and a program taken over goes on in the trace it began in.
+					const job = traceOf(yield* leaderOf(name).pipe(Effect.provideService(Ledger, ledger)));
+					const started = yield* start(o.program, {}).pipe(
+						Effect.provideService(Self, self),
+						Effect.withParentSpan(job),
+					);
 					if (started.kind !== "running")
 						return yield* Effect.die(`${name} refused its flags: ${started.why}`);
 					const r = started.run;

@@ -1,7 +1,8 @@
-import {createDraft} from "@kampus/fabrika/agents/claude";
+import {createDraft} from "@kampus/fabrika-old/agents/claude";
 import {Schema} from "effect";
 import {matcherFor} from "../../codeowners.ts";
 import type {Check} from "../../primitives.ts";
+import {maybe} from "../../schema.ts";
 import {PropertyId, type WriterBrief} from "./brief.ts";
 
 // What the test writer hands back, and the pure Check on it. The answer
@@ -29,8 +30,17 @@ export const Answer = Schema.Union([
 export type Answer = typeof Answer.Type;
 export type TestAnswer = Extract<Answer, {readonly kind: "test"}>;
 
-export const Written = Schema.Struct({files: Schema.Array(File), answers: Schema.Array(Answer)});
+export const Written = Schema.Struct({
+	files: Schema.Array(File),
+	answers: Schema.Array(Answer),
+	/** For each new test, the planted fault it was seen to catch, in the writer's words. */
+	plants: maybe(Schema.Array(Schema.String)),
+	gaps: maybe(Schema.Array(Schema.String)),
+});
 export type Written = typeof Written.Type;
+
+/** A writer's answer as a run holds and saves it, past the read. */
+export const HeldWritten = Schema.toType(Written);
 
 /** `[test_writer] includes` when a repo's `fabrika.toml` leaves it out. */
 export const DEFAULT_INCLUDES = ["**/*.test.ts", "fixtures/**"] as const;
@@ -47,9 +57,17 @@ export const includedBy = (includes: readonly string[]) => {
 const outside = (path: string) =>
 	path.startsWith("/") || path.split("/").some((part) => part === ".." || part === "");
 
-function fileProblems(files: readonly File[], brief: WriterBrief): readonly string[] {
+/**
+ * The box's wall: each file new, plain, once, and where `includes` lets it be. Both jobs' Checks start
+ * here. A redo (`rewrite`) may write the existing files it names again, and no other existing one.
+ */
+export function fileProblems(
+	files: readonly File[],
+	brief: Pick<WriterBrief, "includes" | "taken" | "rewrite">,
+): readonly string[] {
 	const included = includedBy(brief.includes);
-	const taken = new Set(brief.taken);
+	const rewrite = brief.rewrite === undefined ? null : new Set(brief.rewrite);
+	const taken = new Set(brief.taken.filter((path) => rewrite?.has(path) !== true));
 	const seen = new Set<string>();
 	return files.flatMap((f) => {
 		if (outside(f.path)) return [`\`${f.path}\` is not a plain path inside the repository.`];

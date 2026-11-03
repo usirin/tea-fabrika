@@ -7,9 +7,9 @@
 // It asks for every service the lane's children use through Effect's context. `liveDelivery` gives
 // them over GitHub and the Agent SDK, writing to the named repositories only; a test gives fakes.
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {defineProgram, flag, input, output} from "@kampus/fabrika";
-import {hostEnv} from "@kampus/fabrika/agents/sandbox";
-import {Duration, Effect, Layer, Random, Schema, Stream} from "effect";
+import {defineProgram, flag, input, output} from "@kampus/fabrika-old";
+import {hostEnv} from "@kampus/fabrika-old/agents/sandbox";
+import {Duration, Effect, Layer, Random, Schema} from "effect";
 import {gitHubCodeHost} from "../code-host-github.ts";
 import type {LocalCheck} from "../code-host-local.ts";
 import {planOf, readTicketId} from "../ids.ts";
@@ -74,7 +74,7 @@ const mostOneRun = (job: LaneJob): number =>
 export const deliverProgram = defineProgram({
 	name: "deliver",
 	description:
-		"Delivers plans, one after another: plans the ticket, builds each task on one branch in rounds (catch up with main by merge, build, review), opens ONE pull request that closes every ticket the plan covers, and ships it. It asks the owner on the desk where a plan needs a yes. Told a plan again after a crash, it goes on from where the lane stood.",
+		"Delivers plans, one after another: plans the ticket, builds each task on one branch in rounds (catch up with main by merge, build, review), opens ONE pull request that closes every ticket the plan covers, and ships it. It asks the owner on the desk where a plan needs approval. Told a plan again after a crash, it goes on from where the lane stood.",
 	flags: FLAGS,
 	inputs: {
 		plan: input(TicketUrl, "The ticket a plan is named by, as its url on GitHub."),
@@ -82,9 +82,9 @@ export const deliverProgram = defineProgram({
 	outputs: {
 		delivered: output(Delivered, "Once per plan: how its lane ended."),
 	},
-	main: ({flags, inputs, send}) =>
-		inputs.plan.pipe(
-			Stream.runForEach((url) =>
+	main: ({flags, serve, send}) =>
+		serve({
+			plan: (url) =>
 				Effect.gen(function* () {
 					const ticket = readTicketId(url);
 					if (ticket === null) return yield* Effect.die(`not a ticket: ${url}`);
@@ -115,8 +115,7 @@ export const deliverProgram = defineProgram({
 							: {plan, outcome: null, name: null},
 					);
 				}),
-			),
-		),
+		}),
 });
 
 /**

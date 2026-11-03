@@ -1,8 +1,8 @@
-# fabrika app: `@kampus/fabrika-app`
+# fabrika app: `@kampus/fabrika-app-old`
 
 The fabrika app, as a walking skeleton: the whole flow, thin. It is one window, tiled like
-tmux. Every tile runs its own tsh, with the small programs `counter` and `tracker` loaded. A
-program with a view runs inside a tile. The design is
+tmux. Every tile runs its own tsh, with the programs `counter`, `tracker`, `ticket`, `map`,
+`pipeline` and `trace` loaded. A program with a view runs inside a tile. The design is
 [The GUI is an Electron app first](../../docs/direction/the-gui-is-electron-first.md), section
 "Decided 2026-10-25: tiles, like tmux".
 
@@ -38,7 +38,9 @@ type Down = {type: "hello"; version: number; build?: string} | {type: "port" | "
 // Between the page and the host, each on its own port (src/messages.ts); main relays them.
 // "desk": the desk runs in the host. The page draws it, and sends the keys it takes and clicks.
 type FromPage = {type: "press"; id: number; key: string} | {type: "click"; tile: TileId}
-	| {type: "resize"; stack: string; sizes: Record<string, number>};
+	| {type: "resize"; container: string; sizes: Record<string, number>}
+	| {type: "fold"; tile: TileId} | {type: "unfold"; node: string}
+	| {type: "area"; width: number; height: number}; // the workspace's size, so a line can fold
 type ToPage = {type: "keys"; prefix: string; table: {key: string; repeats: boolean}[]}
 	| {type: "desk"; desk: Desk; takes: {all: boolean; keys: string[]}}
 	| {type: "answer"; id: number; took: boolean}
@@ -59,8 +61,8 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 
 ## Where it sits
 
-- The top layer of the workspace (`layer-rules.json`): it imports `@kampus/fabrika`,
-  `programs/counter` and `programs/tracker`, and nothing imports it.
+- The top layer of the workspace (`layer-rules.json`): it imports `@kampus/fabrika-old` and the
+  programs in `programs/`, and nothing imports it.
 - Electron is named only in `src/main.ts` and `src/preload.ts`. Node and
   `@effect/platform-node` are named at the edges: `src/main.ts`, `src/attach.ts`,
   `src/host/main.ts`, `src/host/run.ts`, `src/host/socket.ts`, `src/host/lock.ts` and
@@ -91,26 +93,29 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 
 | File | What it does |
 |---|---|
-| `src/main.ts` | The Electron edge, a thin relay. One copy at a time; at most one window, sandboxed, on the app's own scheme; every way out refused, and a link's URL handed to the person's own browser (`outside.ts`). Attaches to the host, or starts it. A port per tile, per run and one for the desk, handed only to the window's own top frame on its own page, and lines passed between them and the host. |
+| `src/main.ts` | The Electron edge, a thin relay. One copy at a time; at most one window, sandboxed, on the app's own scheme; every way out refused, and a link's URL handed to the person's own browser (`outside.ts`). Attaches to the host, or starts it. A port per tile, per run and one for the desk, handed only to the window's own top frame on its own page, and lines passed between them and the host. On macOS the window hides its title bar and keeps the system's buttons in the page's top bar. It sets the Dock badge to the asks count, and notifies a new ask only when the window is not focused. |
 | `src/outside.ts` | What leaves the window: a link's URL, to the person's own browser (`Browser`, which main gives `shell.openExternal`). Only http and https, and only from the desk page; any other scheme is refused. |
 | `src/launch.ts` | How this start shows itself, decided once from the environment: the owner's, quiet (a home of its own), or in the foreground on a home (`FABRIKA_FOREGROUND=1`). |
 | `src/attach.ts` | The app's side: reach the socket; if no host answers, start one and wait for it to listen; then the link and its handshake. A host that says no hello within 10 s fails the try (`NoHello`), and the try closes its socket. A host it started that steps aside for another is no failure: it attaches to the one that answers. |
-| `src/reconnect.ts` | When the app attaches again, a tea machine above the link: `reconnectMachine`, Model `Reconnect`, Msg `ReconnectMsg`, Cmds `ReconnectCmd`. A link that ends is tried again after a wait (AWS's full jitter, 0.5 s doubling to 30 s), the same way as at the start; five minutes on it stops and waits for Try again. A host of another version is never tried again; on the person's yes, it and a host of another build are stopped and this build's is started (`restart` in `attach.ts`). `noteOf` is what the window says meanwhile. |
+| `src/reconnect.ts` | When the app attaches again, a tea machine above the link: `reconnectMachine`, Model `Reconnect`, Msg `ReconnectMsg`, Cmds `ReconnectCmd`. A link that ends is tried again after a wait (AWS's full jitter, 0.5 s doubling to 30 s), the same way as at the start; five minutes on it stops and waits for Try again. A host of another version is never tried again; once the person confirms, it and a host of another build are stopped and this build's is started (`restart` in `attach.ts`). `noteOf` is what the window says meanwhile. |
 | `src/link.ts` | The link's two message types (`Up`, `Down`) and its handshake, a tea machine: `linkMachine`, Model `Link`, Msg `LinkMsg`, Cmds `LinkCmd`. |
 | `src/wire.ts` | One link on one socket for either side: NDJSON framing (Effect's `Ndjson`), the handshake stepped on every line, `Unattached` when it does not come up. |
-| `src/host/` | The host process. `main.ts` is the entry (`dist/host.mjs`). `run.ts` makes the folder, and under the start lock (`lock.ts`) cleans a stale socket, listens and writes the pid; then it opens the ledger, history and desk. `serve.ts` (no platform) runs the desk and the tiles, and serves every client. `socket.ts` reaches a socket: live, absent or stale. |
+| `src/host/` | The host process. `main.ts` is the entry (`dist/host.mjs`). `run.ts` makes the folder, and under the start lock (`lock.ts`) cleans a stale socket, listens and writes the pid; then it opens the ledger, history and desk. `serve.ts` (no platform) runs the desk and the tiles, and serves every client. `socket.ts` reaches a socket: live, absent or stale. `agents.ts` serves each agent's MCP bridge on `host/mcp` (see [An agent drives a program](#an-agent-drives-a-program)). `jev.ts` turns on Jev, for the tracker's duplicate hint, only when the home holds `jev.key`; a test's home never does, so no test spends. |
+| `src/cli.ts` | The command line: `connect`, `invite`, `members`, `move`, `post`, and `mcp`, the bridge an MCP client starts. |
 | `src/preload.ts` | Gives the page `send`, `onMessage` and `forget`, by port name, and nothing else. |
 | `src/bridge.ts` | Those names, as the page sees them, the port names it takes, and the IPC channel. |
-| `src/tiles.ts` | One tsh per tile, each in its own scope. It tells the desk (`TileNews`) when a run covers a tile, when it is over, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. |
-| `src/tsh.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. Each screen shows to every page that asks, starting with a terminal reset, so a page that still holds the screen draws it once. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`, and the tracker's `PullRequests`, which the host makes on the pipeline's `CodeHost` and the person's own `gh` login (`src/host/main.ts`). |
-| `src/desk/` | The desk, a tea machine (`desk.ts`): `deskMachine`, Model `Desk`, Msg `DeskMsg`, Cmds `DeskCmd`; `DeskSchema` sends it to a page, and `takenNow` says which keys it takes now. `hold.ts` is the page's key holder: `holdMachine`, Model `Hold`, Msg `HoldMsg`, Cmds `HoldCmd`. `keys.ts` is the prefix and its table. `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". |
+| `src/tiles.ts` | One tsh per tile, each in its own scope. It tells the desk (`TileNews`) when a run covers a tile, when it is over, the tile's jobs, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. `end` and `kill` do the same for one process of a line, by its pid: a window of the line closed. |
+| `src/tsh.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. Each screen shows to every page that asks, starting with a terminal reset, so a page that still holds the screen draws it once. It tells its tile its jobs (`src/tile-jobs.ts`): each job of the host's table it started that still runs, with when it began by the host's clock, and the last to end, with how (`done`, `failed`, `stopped`, read off its runs' ends). The table keeps neither. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`, and the tracker's `PullRequests`, which the host makes on the pipeline's `CodeHost` and the person's own `gh` login (`src/host/main.ts`). |
+| `src/desk/` | The desk, a tea machine (`desk.ts`): `deskMachine`, Model `Desk`, Msg `DeskMsg`, Cmds `DeskCmd`; `DeskSchema` sends it to a page, and `takenNow` says which keys it takes now. `hold.ts` is the page's key holder: `holdMachine`, Model `Hold`, Msg `HoldMsg`, Cmds `HoldCmd`. `keys.ts` is the prefix and its table. `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". A container runs `horizontal` or `vertical`, and nested containers alternate; any tile can fold into a strip, and a container whose tiles are all folded counts as folded (`isFolded`) ([fold, not tabs](../../docs/direction/fold-not-tabs.md)). `layout/line.ts` opens a tsh line's windows in place (`openLine`), folds them past `MIN_WINDOW`, and drops them from a kept desk (`quiet`). |
 | `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `cells.ts` lays text out in cells as ghostty-web does, from a table of its wasm's answers (`cells.table.ts`), `history.ts` keeps the history in a file, shared by every tile, `grid.ts` reads bytes back as rows for the tests. |
 | `src/messages.ts` | The seven message types as Effect Schemas, and their strict readers. |
 | `src/files.ts` | What the app's own scheme serves: one page, its script and one stylesheet, with a Content Security Policy. |
-| `src/window/` | `desk.tsx`, the page: the tiles, their borders, the question, the status line. `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. `window.css` holds the app's colour tokens at its top; a program's view uses them and has no theme of its own. |
-| `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. |
+| `src/asks.ts` | The one count of asks, a tea machine in the host (`asksMachine`): it reads the ledger's facts once a second when there is news and folds what waits on the person. Main reads the same value off the desk port for the Dock badge and the notification. The person's later and seen (`Marks`) come in as its flags from `asks.json`, and the host writes them back on each change (`src/host/serve.ts`). |
+| `src/window/` | `desk.tsx`, the page: the tiles, their title bars and borders, the strips of folded tiles. `frame.ts` and `frame.tsx`, the window's frame: the top bar, the bottom line, the asks list and the palette (see [The window's frame](#the-windows-frame)). `pop.ts` and `pop.tsx`, what opens over the desk: one raised box of rows for every popover (`Menu`, `Palette`, `Panel`, `useTip`), its keys as one pure function (`menuKey`), by [the popover rule](../../docs/direction/popovers.md). `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. `window.css` holds the app's color tokens at its top; a program's view uses them and has no theme of its own. The UI's parts are [Manti UI's](../../docs/direction/ui-on-manti.md): `theme.css` sets Manti's tokens from those same names, and keeps Manti's reset to Manti's own parts. |
+| `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. Its one stylesheet, `window.css`, is Manti's, then React Flow's base rules, then `src/window/theme.css`, then `src/window/window.css`. |
 | `table.ts` | Writes `src/editor/cells.table.ts`: asks ghostty-web's wasm the width and grapheme class of every code point (`cells.probe.ts`). Run it with `pnpm table` after a new ghostty-web; `cells.test.ts` fails until then. |
-| `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, a host of another version, and the link dropping: the socket cut, the host killed, and no host until Try again. It stops its own hosts by their pids and checks with `pgrep`. Not in `pnpm test`. macOS only. It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. |
+| `shots.ts` | The page alone in headless Chromium, with no Electron and no host: the built `dist/`, handed a desk and the tracker, ticket and map views of the stand-in ticket #7, the trace of that ticket's lanes, and the trace of `seq --to 3 | tally` (as it opens, and opened down to the step add 2), as the host would send them. Two of its desks come from the desk machine's own steps: `tracker | ticket | trace` opened beside the map, and in a spot too tight, its extra windows folded. Writes `docs/round-6/*.png`. No window, no network. Not in `pnpm test`. |
+| `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, the asks list and the palette (focus in, no key through to the tile under them, Escape and a click outside giving focus back, one open at a time), a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, a host of another version, one ask taking another's place with the asks list open, and the link dropping: the socket cut, the host killed, and no host until Try again. It stops its own hosts by their pids and checks with `pgrep`. Not in `pnpm test`. macOS only: CI runs it on a macOS runner (the check workflow's `e2e` job). It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. |
 
 ## Keys
 
@@ -119,12 +124,35 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
 | After Ctrl-B | What it does |
 |---|---|
 | `\|` or `-` | split the focused tile side by side, or top to bottom; the new tile runs a fresh tsh |
-| `h` `j` `k` `l`, or the arrows | focus left, down, up, right |
+| `h` `j` `k` `l`, or the arrows | focus left, down, up, right; focus on a strip opens it |
+| `Space` | turn the focused tile's container: horizontal, then vertical (tmux's next-layout) |
+| `f` | fold the focused tile into a strip; not the last open tile on the workspace |
 | `z` | zoom the focused tile; again to undo |
 | `x` | ask `close t2? (y/n)`, then close the focused tile; on a closing tile, ask `stop t2 now? (y/n)` |
 | `N` | a new workspace, with one tile |
+| `1` to `9` | go to that workspace |
 | `Ctrl-H`, `Ctrl-L` | the previous or next workspace; press again within 500 ms with no Ctrl-B |
+| `a` | open the asks list, or close it |
+| `J` | open the jobs list, or close it |
+| `?` | every key, with its name |
+| `i` | info mode: the bottom line explains whatever the pointer is over or keyboard focus is on, even with the bars hidden; again, or Escape, to stop |
+| `B` | hide both bars; again to show them |
+| `A`, `S`, `H` | open the agents', sync or host lines under the top bar; again to close them |
 | `Ctrl-B` | send one Ctrl-B on, to tsh or the program (tmux's `send-prefix`) |
+
+The three item keys are capitals on purpose. Lowercase `h` is focus left, `a` is the asks list,
+and in tmux `s` lists the sessions. Capital `A`, `S` and `H` are free in tmux's default table, so
+a tmux hand never opens one by mistake.
+
+`Cmd-K` (no prefix) opens the palette: every command by name, in groups (Tile, Focus,
+Workspace, Window), its tsh word in mono on the line under the name, and its keys as Mac
+keycaps (`⌃B` `Z`) at the right. Type to narrow it, by name or by word, the matched letters
+bold; Enter runs one as its key would, and the bottom line then says `next time: C-b z`.
+`C-b ?` opens the same list as "Keyboard shortcuts".
+This is the app-level palette that tracker ticket 71 asked about. Today it lists the window's
+commands; programs' inputs join it later, from the same list that makes the agent tools.
+Ghostty's own palette opens with Cmd-Shift-P and takes user entries (`command-palette-entry`);
+ours opens with Cmd-K, as Linear's does.
 
 - **The host decides keys.** It sends the page the Ctrl-B table, and with every desk the keys
   the desk takes now. The page reads keys first, in the keydown capture phase. A key the desk
@@ -132,19 +160,180 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
   Keys after it are held, in order, until the host answers (`hold.ts`), with no timer. An answer
   of `took: false` lets the key go on as it was. Any other key after the prefix does nothing, as
   in tmux.
+- **On a Mac, Command is the system's and the menu's.** Before any of that, a Command key goes by
+  the desk and the terminal, so Cmd-Q quits whatever has focus, the prefix armed or a popover open
+  (`keyOwner` in `keys.ts`). With a popover open, focus goes back into it first, so Cmd-V pastes
+  there and never into a tile under it. Cmd-K stays the app's palette. Cmd-W and Cmd-Shift-W do
+  nothing for now, the owner's choice: they type nothing and close nothing, and one line in
+  `keys.ts` changes that. On Windows and Linux the Ctrl keys stay with tsh, Ctrl-C and Ctrl-W too.
 - **Typing in a tile goes to the host,** on the tile's port, to its tsh. A text box in a program's
   view stays in the page; the program gets only the inputs it declares.
-- **A click focuses a tile. Dragging a border resizes** the two tiles beside it.
+- **A click focuses a tile. Dragging a border resizes** the two open tiles beside it. A
+  double-click on a tile's title bar folds it, as in Ableton Live; one click there only focuses.
+- **A folded tile is a thin strip in its place,** standing up in a row and lying down in a
+  column, named by its program. A column whose tiles are all folded is one strip with all their
+  names. A click on a strip opens it. A folded tile keeps its size; the open tiles share the
+  space. Focus is always on an open tile.
 - **Ctrl-B is readline's "back one character" too.** The prefix wins; the left arrow does the
   same, and Ctrl-B twice sends it on.
 
+### Every key is a tsh word too
+
+Each command after Ctrl-B is also a word in every tile's tsh (`src/desk/words.ts`), as tmux's
+keys are bound to its commands. A word does what its key does, from the tile it was typed in:
+that tile's workspace comes forward, the tile is focused, then the command runs.
+
+```text
+tsh$ split --to down            as C-b -
+tsh$ focus --to left            as C-b h; --to t3 goes to tile t3, as a click on it
+tsh$ workspace --to 2           as C-b 2; --to next, previous or new as C-b C-l, C-b C-h, C-b N
+tsh$ zoom                       as C-b z; turn, fold and close-tile as Space, f and x
+tsh$ agents                     as C-b A; sync, host, asks, keys, info and bars as the rest
+tsh$ focus --to t9
+tsh: focus failed: no tile t9
+```
+
+- **One table.** `wordOf` (`src/desk/keys.ts`) writes each binding's word. The palette, `C-b ?`
+  and every tooltip read it from the same table the host sends, and a test runs each word in a
+  real tsh and checks it tells the desk what its key does.
+- **A word that opens a part of the frame** (`agents`, `keys`, `info`) opens it on every app
+  attached, as a typed word has no window of its own.
+- **They are yours.** The agents' socket never lists them, so no agent moves the desk you look at.
+- `close-tile`, not `close`: tsh's own `close` takes a window away.
+- `C-b J`'s word is tsh's own `jobs`, which prints the same list in the tile. There is no second
+  `jobs`.
+
+## The window's frame
+
+Two plain lines around the tiles (`src/window/frame.ts` for the words, `frame.tsx` to draw them):
+
+```text
+● ● ●  1 #7   2 tsh   tracker | ticket | trace                                              ✓
+...tiles...
+t2 ticket #7 · takes ticket · sends ticket · from tracker → trace               C-b i info · C-b ? keys
+```
+
+That is the bar at rest. A word joins its right end only while it matters:
+
+```text
+                                                                      2 ask you • · 1 agent · ✓
+```
+
+When something is wrong, its word says so, in red where it is broken:
+
+```text
+                                               2 ask you · ledger unreachable · host down · try again
+```
+
+- **The top bar is the whole desk:** the workspaces, the focused workspace's line, then what
+  needs you. On macOS it is the window's title bar (`hiddenInset`): the system's three buttons
+  sit in its first 84 px, its empty stretch moves the window, and its items are buttons that
+  never do. Other platforms keep the system's own frame above it.
+- **A part that works says nothing.** Nothing asking you, no agent attached and a ledger in
+  sync draw no item at all, as Linear leaves a working sync unsaid and the Dock shows no `0`
+  badge. Each item is a word only while it matters, and its key opens its lines either way.
+  The one exception is the host: while it is up it keeps a small faint icon, the one quiet
+  anchor that is always there. The host runs on your laptop, not in a cloud, so it is the part
+  most worth one glance, and its icon is where `C-b H` and a click land. Every item's lines open
+  under the bar's right end, where that icon sits.
+
+  | Item | At rest | While it matters | Key, tsh word |
+  |---|---|---|---|
+  | asks | nothing | `1 asks you`, `3 ask you`, in the accent, a dot for one not seen | `C-b a`, `asks` |
+  | agents | nothing | `1 agent`, `2 agents` | `C-b A`, `agents` |
+  | sync | nothing | `syncing` before a ledger server's first read; `ledger unreachable` in red | `C-b S`, `sync` |
+  | host | a faint ring with a check | `connecting`, `host down`, `host older`... each with its own shape | `C-b H`, `host` |
+
+  - **asks:** the one count (below). At zero, `C-b a` opens the empty list.
+  - **agents:** the agents attached on the host's MCP socket now. Its lines name each one and
+    since when, and how to attach one; at zero they say none is attached, and how. A home
+    connected to a ledger server has no agents' socket; `C-b A` there opens lines that say why.
+    No cost: an agent's spend is billed by its own harness, and nothing in the app meters it
+    yet (ticket 91 is the one meter).
+  - **sync:** a home connected to a ledger server says `syncing` until the first read is in,
+    then nothing. Every write goes straight to the server, so nothing waits to be sent and there
+    is no `N to send` (ticket 101 owns an outbox). A home with its own `ledger.sqlite` has nothing
+    to sync. Either kind says `ledger unreachable`, in red, once a read failed. `C-b S` opens its
+    lines at any time: the file or the server, and why a read failed.
+  - **host:** up, a small gray ring with a check and no word (`✓` above), still and faint, named
+    `host up` for a screen reader. Else a word with a shape of its own: `connecting` and `host
+    restarting` with a dashed ring, `host older` and the other link version with `!`, `host down`
+    with `x`. Its lines give the host's pid, since when it runs, its build, and the tiles and
+    jobs it holds; when it is not up, the restart or Try again where one applies.
+
+  The agents and sync items need the host reached; the asks it last read stay, drawn faint
+  while the host is down. Before the first read, the bar says `reading the ledger`.
+- **The bottom line is where you are:** the focused tile, what it takes and sends, its
+  neighbors in its line, and its job. What it takes is the data a pipe can feed it,
+  by tsh's own rule (`Shell.fedBy`: an input some program's output fits), never its commands:
+  the ticket takes `ticket`, not `close` or `quit`. After Ctrl-B it lists the keys (`PREFIX`); your
+  own close question is asked here (and in the tile's title bar), as tmux asks it. An agent's
+  ask never shows here.
+- **The job item names the job the tile runs,** from the host's table: `%3 seq --to 9 | tally
+  2m`, and `+2` when two more run there. It is the job tsh waits for, as tmux's status line names
+  a pane's foreground command, or else the newest one, as bash's current job. How long it has
+  run is said calmly: seconds in the first minute (`14s`), then minutes (`2m`), then `1h 5m`.
+  A job that ended says so for 5 seconds (`done in 2m`, `failed after 14s`, `stopped after 1s`,
+  or `failed at once` within its first second), in plain words and never in red, then the item clears; one that ended in the foreground in
+  under 5 seconds is not said, as tsh printed how under the cursor. With nothing running there
+  is no item. There is no clock: the system's menu bar has one.
+- **A click on the job item, or `C-b J`, lists the jobs,** as tsh's `jobs` lists the table: a
+  menu over the bottom line, with focus in it. The tile's own jobs come first, then its last to
+  end (under Last ended), then each other tile's (under Other tiles). A row is the job's line as
+  typed, its `%n` and tile under it, and at the right how long it has run (or how long ago it
+  ended, `2m ago`). The head counts the running jobs it lists. A part with no rows is left out,
+  so a tile that runs nothing opens straight on Other tiles. `↑` `↓` or `J` `K` move, `↵`
+  focuses the tile the job runs in, `Esc` or a click outside closes it and gives focus back.
+  With nothing running anywhere, the head has no count and one calm line says so, with tsh's
+  `jobs` and `attach %n`. The host keeps each
+  job's record now, and `trace` at the end of a line follows its own, but a row here does not
+  open a job's trace yet: that is a change of its own.
+- **One count of asks.** The host folds the ledger's facts as the tracker does (`src/asks.ts`):
+  each open ask on an open ticket, and each run that ended stuck. The top bar, the Dock badge
+  and the asks list all read that one value. A click on the count, or `C-b a`, opens the list,
+  a menu with focus in it: one row per ask (what it asks, its ticket and tile under it, its
+  time), `↑` `↓` or `J` `K` to move, `↵` to open, `H` to set the ask aside (Later) or bring it
+  back, `Esc` or a click outside to close, focus back where it was. `↵` focuses the tile that
+  shows the ticket; when none does, it turns the tracker to the ticket and focuses the tracker;
+  with no tracker on the desk, the bottom line says so. You answer in the ticket's own tile. A
+  set-aside ask leaves the count and waits under Later, at the list's foot. While the list or
+  the palette is open, no key it reads reaches a tile. A new ask never moves focus; with the
+  window not focused, the system notifies once.
+  Later and seen are yours, not the ticket's: the host keeps them in your home's `asks.json`,
+  so a host restart keeps them, and two people on one shared ledger each keep their own. An
+  ask answered meanwhile drops out of the file at the host's first read. A file that does not
+  read starts with every ask counted and new, and the host's log says why.
+- **Every item is a button with a tooltip:** its name, its keys as keycaps, and its tsh word in
+  mono (`Host` `⌃B` `⇧H` `host`; `tracker` `focus --to t3` for a program in the line), after the
+  pointer rests 700 ms, at once within 300 ms of the last one, as Radix does; keyboard focus
+  shows it too. The bars themselves keep tmux's spelling, `C-b a`. Try again has no word: it
+  starts a host, and tsh runs in the host.
+- **Color is never alone.** The accent says "asks you" and red says "broken", each beside its
+  word; running and done are gray words.
+
 ## Tiles
 
-- **Every new tile runs a tsh of its own,** with its own job table, in
-  `storage/tiles/<tile>/` in the app home. History is one file, shared: a line typed in one tile
-  is the next tile's Up.
+- **Every new tile runs a tsh of its own,** on the host's one job table, in `storage/jobs/` in
+  the app home: a job is the same `%n` in every tile, and names the tile that began it, or last
+  attached it. After a host restart each tile's tsh says only its own jobs are waiting; `jobs`
+  lists every one, and `attach %n` works in any tile. History is one file, shared: a line typed
+  in one tile is the next tile's Up.
 - **A run in the foreground covers its tile.** tsh waits behind it. Ctrl-C stops it, and tsh is
   back. The other tiles stay as they were.
+- **A line with several windows opens in place,** in the tile it was typed in
+  ([a line opens in place](../../docs/direction/fold-not-tabs.md#a-line-opens-in-place)).
+  `tracker | ticket | trace` in t2: the tracker covers t2, and the ticket and the trace open as
+  new tiles beside it, in t2's place, each with a third of its space. In a row they become
+  siblings; in a column they nest as a row. Past 220 by 120 px a window, all but the first open
+  folded. Unfolding one takes space only from the line's other windows.
+- **The line carries the ticket picked.** Pick #7 in the tracker, and the ticket and the trace
+  both show #7; pick another, and both follow. Each sends the ticket it is on, by its number,
+  each time that changes ([the pipe the line carries](../../docs/direction/fold-not-tabs.md#the-pipe-the-line-carries)).
+  In the trace, a step of #7 opens to its job's spans in place.
+- **A line's tiles and strips share one faint tint,** one of six, the first no other line has.
+  A run alone has none.
+- **A line's other windows have no tsh.** Ctrl-C in one goes to the typed-in tile's tsh. A
+  window goes when its run ends, and a kept desk reads back without them.
 - **A run with `&` is a job in the background, and no tile opens.** The prompt is back at once.
   `attach %n` brings it into the tile, as bash's `fg` does.
 - **Ctrl-B x always asks, as tmux's `kill-pane` does:** `close t2? (y/n)`. Only y says yes; any
@@ -154,6 +343,12 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
     hung-up terminal gives a shell. It does not stop them. The tile shows "closing" until they
     have all ended, then it goes. There is no timer.
   - Ctrl-B x on a closing tile asks `stop t2 now? (y/n)`. y stops them, and the tile goes.
+  - On one window of a line, y ends that one process: it gets the end of its inputs (`end`), and
+    its window goes when it is over. Its neighbours follow the pipes. In
+    `tracker | ticket | trace`, closing the ticket's window leaves the trace on the last ticket,
+    and the tracker's next pick fails: `tsh: tracker failed: tracker sent ticket down a pipe that
+    answered stopped`. Asked again, `stop t3 now?`, y stops the process (`kill`).
+  - The typed-in tile of a line holds its tsh: closing it ends tsh and every process of the line.
   - Closing a tile ends only what that tile's tsh started. A run shown in another tile is left
     alone. Its folder is deleted once it goes.
   - Ctrl-D in a tile's tsh closes that tile.
@@ -256,7 +451,7 @@ Each key does what GNU Readline's emacs keys do, by readline's own command names
   compiles them. The cost: ghostty-web's own bundle holds the same bytes as base64, so they are
   in `desk.js` twice, about 1.1 MB of its 2 MB.
 - **Each terminal is made once, outside React,** and moved into its tile's slot. A split puts a
-  tile in a new stack, and React would make it again, with a fresh, empty terminal.
+  tile in a new container, and React would make it again, with a fresh, empty terminal.
 - **The screen is kept as text too,** in a visually hidden region labelled with the tile ("t1
   screen"): the last 200 rows, up to the cursor's. The canvas is blank to a screen reader and to
   a test. Ghostty 0.4 declares `onRender` and never fires it, so the text is read back once a
@@ -276,33 +471,72 @@ the keys message (64 KiB here, for a paste), and the test that tsh refuses a lin
 opens. Left: its pty (`node-pty` and a native shell, a different product), `Ghostty.load()` (it
 fetches a `data:` url), its React hook (this page holds no state), and its Esc and Ctrl-C buttons.
 
+## An agent drives a program
+
+Claude Code (or any MCP client) can drive the app's programs while you watch. Tell it once
+where the app's home is:
+
+```sh
+claude mcp add --transport stdio --env FABRIKA_HOME=<home> fabrika -- \
+  node <repo>/apps/fabrika/src/cli.ts mcp --as claude
+```
+
+- `fabrika mcp` is a stdio bridge: it passes MCP's lines to the running host on
+  `<home>/host/mcp`, a socket only you can open (mode 0600). The host serves MCP itself, with the
+  official SDK (`@kampus/fabrika-old/mcp`, spec 2026-07-28). With no host running, the bridge says so
+  on stderr and ends: open the app first.
+- **The tools are the programs' inputs.** One tool per input, named `<program>_<input>`, with
+  the input's own description and its schema as JSON Schema (`tracker_file`, `tracker_query`,
+  `ticket_comment`, `ticket_ticket`, `counter_press`). Each command is its own input, named by
+  its verb, so each is its own tool. An input declared `{writes: false}` carries MCP's
+  `readOnlyHint` (`tracker_query`, and `runs`). One more, `runs`, lists every program and its
+  tools, the agent's own runs, and what runs in your tiles.
+- **The agent writes as itself.** Its calls go to its own run of the program, started on first
+  use, whose writer is `agent:claude` for you. Nothing it sends can name you: the bridge's
+  handshake holds only an agent's name, and the host makes the writer. An agent has no
+  `tracker_answer`, `ticket_answer` or `tracker_rate_duplicate`: each is an input only a person
+  tells (`{personOnly: true}`), so no tool is made for it. Behind that, the tracker refuses an agent's answer, as it
+  refuses any agent's.
+
+What you see: type `tracker` in a tile. Ask Claude Code "file a ticket for X under #44". It calls
+`tracker_file` with `{value: {title: "X", body: "Under #44."}}`, and within a second the ticket
+is on your tile's list; its first row says `agent:claude`.
+
+Not yet: a home connected to a ledger server has no agents' socket (there the server's door
+would stamp what the host writes as you). The agent's runs end when its client goes.
+
 ## Commands
 
 ```sh
 pnpm fabrika                                  # build, then open the app
-pnpm --filter @kampus/fabrika-app build       # dist/ only
-pnpm --filter @kampus/fabrika-app e2e         # the flow end to end, screenshots in a temp folder
-SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
+pnpm --filter @kampus/fabrika-app-old build       # dist/ only
+pnpm --filter @kampus/fabrika-app-old e2e         # the flow end to end, screenshots in a temp folder
+SHOTS=<folder> pnpm --filter @kampus/fabrika-app-old e2e
 ```
 
 - The first run downloads Electron's binary, about 6 seconds. Electron 45 has no install script:
-  it downloads on first use, so pnpm needs no `onlyBuiltDependencies` entry for it.
+  it downloads on first use, so pnpm needs no `allowBuilds` entry for it.
 - `FABRIKA_HOME=<folder>` puts the app's own files there instead of Electron's folder:
-  `desk.json`, `storage/tiles/<tile>/`, `history`, `ledger.sqlite`, the one-copy lock, and the
-  host's `host/sock`, `host/pid`, `host/log`, and `host/lock` while a host starts. A test on its own home can never reach another
+  `desk.json`, `asks.json`, `storage/jobs/`, `history`, `ledger.sqlite`, the one-copy lock, and the
+  host's `host/sock`, `host/mcp` (agents, on a home with its own ledger), `host/pid`, `host/log`, and `host/lock` while a host starts. A test on its own home can never reach another
   home's host. macOS caps a socket's path at 103 bytes; a home too deep stops the host with a
   plain message.
 - **A start with `FABRIKA_HOME` is quiet** (`src/launch.ts`): no Dock icon, and its window shows
   without taking focus and keeps drawing when covered, so an agent's test never takes the
   person's keys. `FABRIKA_FOREGROUND=1` shows it as a normal window.
 - The ledger is `ledger.sqlite`, on one node:sqlite connection in the host
-  (`layerSqliteSync` from `@kampus/fabrika/sqlite`): the bundle has no worker file beside it, and
+  (`layerSqliteSync` from `@kampus/fabrika-old/sqlite`): the bundle has no worker file beside it, and
   a Miniflare child is more than one person's tickets need. Each call blocks the host while
   SQLite runs it. One host per home means one tsh writes each tile's job table. The end-to-end
   run uses a fresh home.
 - `experiments/141-tiles-in-one-page.ts` measures 1, 4, 8 and 16 tiles on the built app.
 
 ## What it does not do yet
+
+- **Few real lines.** `tracker | ticket | trace`, `tracker | trace` and `pipeline --ticket N |
+  trace` are the lines whose programs pipe a ticket. The map takes no ticket from a pipe yet.
+- **An upstream ends on its next send, not at once.** With the ticket's window closed, the
+  tracker in `tracker | ticket | trace` looks alive until the next pick, then fails.
 
 - **The cursor moves one code point at a time.** It can stop between a letter and its accent,
   which readline steps over, or inside an emoji made of several.
@@ -320,8 +554,16 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app e2e
 
 Left for later, from Tuval's keys and the build:
 
-- **The rest of Tuval's keys:** `w` (pick a tile from a list), `a` (focus the list), `:` (a
-  command line), `r` (reload the config), `p` (the process board).
+- **The rest of Tuval's keys:** `w` (pick a tile from a list), `:` (a command line), `r`
+  (reload the config), `p` (the process board). Tuval's `a` (focus the list) is the asks list
+  here.
+- **The frame's own gaps,** each a tracker ticket, built as its own change once it has a real
+  source: the outbox count, `N to send` (ticket 101); answering from the asks list (ticket
+  102); today's cost beside the agents, once one meter counts what agents spend (ticket 91).
+- **Later and seen are kept per home, not per person.** The same person on two machines sets an
+  ask aside on each. They move with the desk if the desk moves onto the ledger (ticket 3).
+- **The job item opening the job's trace.** The host keeps each job's record and the app's
+  `trace` reads it (`packages/fabrika/src/host/records.ts`). Today the item lists the jobs.
 - **Coming back after a host stop with the runs' state** (the ledger lane). Today a host that
   stops ends its runs; the next one finds their jobs for `attach`, not running.
 - **A way for a person to stop the host,** or to see that one runs.
@@ -332,7 +574,7 @@ Left for later, from Tuval's keys and the build:
   the same moment can both get through, as with Chromium's and proper-lockfile's own locks. A
   lock whose pid was given to another live process is waited on for 10 s, then the host stops
   and names the lock.
-- **A host of another version or build is stopped only on the person's yes,** and its running
+- **A host of another version or build is stopped only when the person confirms,** and its running
   jobs stop with it. They come back with `attach %n`. A job whose kind's `recovered` sends a
   call that was out sends it again
   ([an old host is named, then restarted](../../docs/direction/an-old-host-is-named-then-restarted.md)).

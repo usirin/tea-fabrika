@@ -10,9 +10,9 @@
 import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {Ledger} from "@kampus/fabrika";
-import {type LawResult, runLaws} from "@kampus/fabrika/laws";
-import {layerLocal} from "@kampus/fabrika/local";
+import {Ledger} from "@kampus/fabrika-old";
+import {type LawResult, runLaws} from "@kampus/fabrika-old/laws";
+import {layerLocal} from "@kampus/fabrika-old/local";
 import {Effect, type Layer} from "effect";
 import {accessLaws, type Law} from "./145-many-objects/access.ts";
 import {door, httpLayer, layerObject} from "./145-many-objects/client.ts";

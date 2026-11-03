@@ -1,6 +1,6 @@
 import {Cmd, type CmdInput} from "@demlik/tea";
 import type {CheckingSchema} from "@demlik/tea/effect";
-import {Schema} from "effect";
+import {Option, Schema, SchemaGetter} from "effect";
 import type {z} from "zod";
 
 // Schemas here are Effect Schema (docs/direction/data-first-markdown-is-a-view.md).
@@ -16,7 +16,7 @@ import type {z} from "zod";
 //
 // The other half that was here, how a Draft's answer is read (`reader`,
 // `jsonSchema`), is fabrika's since experiment 114, on
-// `@kampus/fabrika/agents/claude`, with the Draft that uses it.
+// `@kampus/fabrika-old/agents/claude`, with the Draft that uses it.
 
 /**
  * A schema a Cmd may carry: an Effect schema whose two sides are the same
@@ -65,3 +65,19 @@ export const zodCmd = <
 	name: N,
 	spec: Spec<I, O, T>,
 ) => Cmd.define(name, {input: standard(spec.input), ok: standard(spec.ok), err: spec.err});
+
+/**
+ * A key an agent's answer says "nothing" in by `null`, and the code reads as absent.
+ *
+ * Codex's strict mode takes only a schema whose every key is required, so what an
+ * agent may leave out is a required key that may be null. Past the read it is a
+ * plain optional key: one way to say nothing, and a saved answer reads as it did.
+ * What holds or saves an answer holds its type side, `Schema.toType(schema)`.
+ */
+export const maybe = <T, E>(schema: Schema.Codec<T, E>) =>
+	Schema.NullOr(schema).pipe(
+		Schema.decodeTo(Schema.optionalKey(Schema.toType(schema)), {
+			decode: SchemaGetter.transformOptional(Option.filter((given) => given !== null)),
+			encode: SchemaGetter.transformOptional((given) => Option.orElseSome(given, () => null)),
+		}),
+	);

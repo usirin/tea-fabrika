@@ -1,4 +1,4 @@
-import type {WindowProps} from "@kampus/fabrika";
+import type {WindowProps} from "@kampus/fabrika-old";
 import type {counter} from "./index.ts";
 
 // The counter's window: a React component that draws its view and sends its presses. It is

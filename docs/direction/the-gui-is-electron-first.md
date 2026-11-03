@@ -3,6 +3,9 @@
 Decided 2026-10-24. Replaces [The GUI is a local web page first](./the-gui-is-a-local-web-page-first.md)
 of 2026-10-22.
 
+*2026-11-01: this note is about today's version. For `next/`, see
+[the desktop layer](./the-desktop-layer.md).*
+
 *2026-10-25: the window is tiled, as tmux and Tuval are, and every new tile
 runs tsh. See [tiles, like tmux](#decided-2026-10-25-tiles-like-tmux).*
 

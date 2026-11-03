@@ -4,6 +4,9 @@ Decided 2026-10-24. Who picks a property's tool was decided 2026-10-25, from
 experiment 139: the planner, with `"tla"` only for a design with no code yet.
 Nothing here is built yet.
 
+Keys renamed 2026-11-03 (short words keep one meaning): a pointer's `at` became `path`. Today's
+code still says `at`.
+
 ```ts
 // A sketch: one plan in the names picked 2026-10-24, with the ids the fold gives.
 // The ticket: a child that exits with no outcome row leaves the hosted lane
@@ -54,7 +57,7 @@ const plan = {
 			],
 		},
 	],
-	pointers: [{at: "packages/pipeline/src/hosted/lane-ends.ts", why: "experiment 116's property test of this hang"}],
+	pointers: [{path: "packages/pipeline/src/hosted/lane-ends.ts", why: "experiment 116's property test of this hang"}],
 	questions: [],
 };
 ```
@@ -196,9 +199,10 @@ type Task = {id: TaskId; title: string; ends: "pr" | "answer"; scenario: Scenari
 
 - **`Revision` is kept.** Each `planned` fact stores one. The fold in
   `packages/pipeline/src/asks/rules.ts` gives it ids and makes the `Plan`.
-- **Held for a later glossary pass:** `pointers`, `goal`, `at`, `Claim`, and
+- **Held for a later glossary pass:** `pointers`, `goal`, `Claim`, and
   calling a revision's number `version`. Each has a weak lean in
-  [the naming sweep](../naming-sweep.md); none is picked or dropped.
+  [the naming sweep](../naming-sweep/pipeline.md); none is picked or dropped.
+  A pointer's `at` was held too; it became `path` on 2026-11-03.
 
 ### 7. Plan has no ask of its own
 
@@ -241,7 +245,7 @@ answer({plan_ticket: readTicketAndFetchMain}); // in the app, with its own key
   tracker's window, on the ticket's timeline
   ([The ticket is the lane's one view](./the-ticket-is-the-lane-view.md),
   [Data first; markdown is a view](./data-first-markdown-is-a-view.md)).
-- **The owner's yes records the plan version and a hash of the ticket's title
+- **The owner's approval records the plan version and a hash of the ticket's title
   and body.** The hash is over a JSON pair. Experiment 138 showed that a plain
   join lets "ab" + "c" and "a" + "bc" share a hash.
 
@@ -249,7 +253,7 @@ answer({plan_ticket: readTicketAndFetchMain}); // in the app, with its own key
 // A sketch: the tracker note's `approved` fact. A plan is named by its first ticket, as
 // ids.ts names plans, so it never reads like a property's id.
 {fact: "approved", ticket: "demlik-1", plan: "demlik-1", version: 2, text: "sha256:9c1f…"}
-const covers = (yes: Approved, now: Ticket) => yes.text === sha256(JSON.stringify([now.title, now.body]));
+const covers = (approval: Approved, now: Ticket) => approval.text === sha256(JSON.stringify([now.title, now.body]));
 ```
 
 ### 10. The ticket comes from our tracker
@@ -306,8 +310,8 @@ something runs proofs.
   copy behind a Claude Code hook (`guardHook` in `stages/plan/planner.ts`).
   The box note says no fence lives inside a harness, and nothing counts on
   one, so the box goes around the program.
-- **The yes must cover what the owner saw.** A version alone does not catch an
-  edit to the ticket after the yes. The hash does, and the JSON pair keeps two
+- **The approval must cover what the owner saw.** A version alone does not catch an
+  edit to the ticket after the approval. The hash does, and the JSON pair keeps two
   different tickets from sharing one (experiment 138).
 
 ## What it costs
@@ -342,14 +346,14 @@ About 80% that the split and the shapes hold once built. The doubts:
 - Where a task lists its other properties and criteria (the sketch's
   `properties` and `criteria` lists are a guess).
 - Whether the plan's `goal` gets a `scenario` too.
-- What the owner's answer to the questions is: a yes on this version, or the
+- What the owner's answer to the questions is: an approval of this version, or the
   start of a new one.
 - Whether the plan answer `no` stays beside approve, answer and change.
 - Whether a plan that ends `stuck:unfixed` still writes `planned` (today
   `factOf` in `asks/program.ts` writes it, with its problems).
 - The new name of the `PlanFacts` service.
 - Whether the naming rules for data keys also apply to a property's own words.
-- The held names: `pointers`, `goal`, `at`, `Claim`, and a revision's
+- The held names: `pointers`, `goal`, `Claim`, and a revision's
   `version`.
 
 ## Where today's code says otherwise
@@ -357,7 +361,7 @@ About 80% that the split and the shapes hold once built. The doubts:
 Nothing here is built. These parts of the code contradict a decision:
 
 - `stages/plan/plan.ts`: the `Check` type with four `how` words; `serves`;
-  the key `job`.
+  the key `job`; a `Pointer`'s `at`, which this note calls `path`.
 - `stages/plan/outcome.ts` and `machine.ts`: `ask:owner:questions` and
   `stuck:unchecked`.
 - `stages/plan/lines.ts`: a pointer's line key is `p1`, `p2`, ..., the same

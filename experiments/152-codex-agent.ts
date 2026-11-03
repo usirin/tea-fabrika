@@ -47,8 +47,8 @@ import {homedir, tmpdir} from "node:os";
 import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {query, type SDKMessage} from "@anthropic-ai/claude-agent-sdk";
-import {createDraft, jsonSchema, reader} from "@kampus/fabrika/agents/claude";
-import {runEnv} from "@kampus/fabrika/agents/sandbox";
+import {createDraft, jsonSchema, reader} from "@kampus/fabrika-old/agents/claude";
+import {runEnv} from "@kampus/fabrika-old/agents/sandbox";
 import {builderOptions} from "@kampus/pipeline/stages/build/builder";
 import {Option, Schema} from "effect";
 

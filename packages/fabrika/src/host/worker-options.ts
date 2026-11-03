@@ -8,7 +8,7 @@
 // request, and only code holding the binding reaches it (`inside.ts`, for tests).
 //
 // Node at the edge: esbuild's Node API, loaded with Node's `require` when the options are made (an
-// optional peer: `@kampus/fabrika/local` still loads without it), and node:crypto's SHA-256 (the
+// optional peer: `@kampus/fabrika-old/local` still loads without it), and node:crypto's SHA-256 (the
 // door keeps a hash of the local secret, never the secret).
 import {createHash} from "node:crypto";
 import {createRequire} from "node:module";
@@ -90,6 +90,8 @@ export interface LedgerOptions {
 	readonly graceMs?: number;
 	/** Crashes in a row on one message before it goes to `<name>/dead`; `null`: never. Default 3. */
 	readonly maxDeliveries?: number | null;
+	/** A job's record keeps a whole state every this many steps, and patches between. Default `KEYFRAME`. */
+	readonly keyframe?: number;
 	/** Serve on workerd's own socket at this port (0 picks one). */
 	readonly direct?: number;
 	/** The door. Left out: the HTTP face is closed. */
@@ -122,9 +124,10 @@ const doorBindings = (d: DoorOptions | undefined): Record<string, string> =>
  * same ones to Cloudflare (packages/ledger-server), so the twin and the server are set up alike.
  */
 export const ledgerBindings = (
-	o: Pick<LedgerOptions, "graceMs" | "maxDeliveries" | "door">,
+	o: Pick<LedgerOptions, "graceMs" | "maxDeliveries" | "door" | "keyframe">,
 ): Record<string, string> => ({
 	EXPIRY_GRACE_MS: String(o.graceMs ?? 1000),
+	...(o.keyframe === undefined ? {} : {STEP_KEYFRAME: String(o.keyframe)}),
 	...(o.maxDeliveries === undefined
 		? {}
 		: {MAX_DELIVERIES: o.maxDeliveries === null ? "off" : String(o.maxDeliveries)}),
@@ -140,7 +143,11 @@ export const ledgerOptions = (o: LedgerOptions) => ({
 	modules: modules(),
 	modulesRoot: fileURLToPath(new URL(".", import.meta.url)),
 	compatibilityDate: COMPATIBILITY_DATE,
-	durableObjects: {LEDGER: {className: "Ledger", useSQLite: true}},
+	// The ledger's objects (one per project, one per person) and the jobs' records (one per job).
+	durableObjects: {
+		LEDGER: {className: "Ledger", useSQLite: true},
+		JOB_RECORD: {className: "JobRecord", useSQLite: true},
+	},
 	durableObjectsPersist: o.persist,
 	bindings: ledgerBindings(o),
 	// Miniflare sends the Worker's own outgoing `fetch` here, so a test's GitHub is a fake.

@@ -9,10 +9,10 @@ Decided 2026-10-24, for the pipeline's first version.
 {fact: "commented", ticket: "demlik-1", by: "agent", body: "Plan ready. One open point: …"}
 {fact: "approved", ticket: "demlik-1", plan: "demlik-1", version: 2, text: "sha256:9c1f…"}
 
-// The yes names the text it saw. An edit after it is not covered.
+// The approval names the text it saw. An edit after it is not covered.
 // A JSON pair, so "ab" + "c" and "a" + "bc" do not share a hash (experiment 138).
-const covers = (yes: Approved, now: Ticket) =>
-	yes.text === sha256(JSON.stringify([now.title, now.body]));
+const covers = (approval: Approved, now: Ticket) =>
+	approval.text === sha256(JSON.stringify([now.title, now.body]));
 
 // The window: every fact, oldest first, then a box for each ask still open.
 const view = (facts: TicketFact[]) => [...facts.map(row), ...openAsks(facts).map(box)];
@@ -38,17 +38,17 @@ const view = (facts: TicketFact[]) => [...facts.map(row), ...openAsks(facts).map
     a decision box after the last entry. The owner answers there, not in a
     chat. The answer is a fact, and the agent reads it when it next runs. The
     work between the owner and the agents is async.
-  - Comments are part of it (decided 2026-10-24). A comment is talk. A yes or a
-    ruling is an answer in a box, a fact of its own, so a comment never
-    changes what a yes covers.
+  - Comments are part of it (decided 2026-10-24). A comment is talk. An approval
+    or a ruling is an answer in a box, a fact of its own, so a comment never
+    changes what an approval covers.
   - **A comment can also request changes** (decided 2026-10-24, in the first
     version). The comment form has two buttons, as GitHub's review box has
-    "Comment" and "Request changes". A user's "request changes" after a yes
-    stops build and asks for a new plan or a new yes; an agent's never does.
+    "Comment" and "Request changes". A user's "request changes" after an approval
+    stops build and asks for a new plan or a new approval; an agent's never does.
     The person says which it is, so nothing guesses.
     ```ts
     {fact: "commented", ticket: "demlik-1", by: "owner", body: "Skip part 2.", asks: "changes"}
-    // the yes before it no longer covers the lane; build waits for a new plan or a new yes
+    // the approval before it no longer covers the lane; build waits for a new plan or a new approval
     ```
   - Only a person in the window can answer a box. No agent writes an answer,
     as [AGENTS.md](../../AGENTS.md) already says.
@@ -60,8 +60,8 @@ const view = (facts: TicketFact[]) => [...facts.map(row), ...openAsks(facts).map
   plan and every later stage read it from the ledger.
 - **Only people on the ledger can file or edit a ticket.** A stranger has no
   way in. On a public GitHub repo, anyone can open an issue or comment on one.
-- **A yes covers the text it saw.** The owner's yes on the plan records a hash
-  of the ticket's text. An edit after the yes needs a new yes before build
+- **An approval covers the text it saw.** The owner's approval of the plan records a hash
+  of the ticket's text. An edit after the approval needs a new approval before build
   starts.
 - **GitHub stays the code host.** Pull requests, checks and the merge queue
   stay on demlik, through `CodeHost`, as
@@ -112,7 +112,7 @@ const pullRequests = Layer.provide(
     ([Meta](https://ai.meta.com/blog/practical-ai-agent-security/)).
   - Triage reads the ticket first, with nothing in its box. With the tracker,
     the ticket is no longer text from a stranger.
-- **Binding a yes to what it saw is common practice.**
+- **Binding an approval to what it saw is common practice.**
   - GitHub can mark an approval stale when a pull request's diff changes
     ([GitHub](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)).
   - Gerrit drops a vote on a new patch set unless the label's
@@ -134,9 +134,9 @@ run. What would settle it: building the form and seeing how small it is.
 
 - **A change of mind sent as a plain comment.** "Request changes" (above)
   covers it only when the person picks that button. A person who picks
-  "Comment" by habit leaves the yes in place. How often a user's plain
-  comment after a yes changes the ask would tell us if more is needed;
-  experiment 138 counted edits after the yes, not comments.
+  "Comment" by habit leaves the approval in place. How often a user's plain
+  comment after an approval changes the ask would tell us if more is needed;
+  experiment 138 counted edits after the approval, not comments.
 - **demlik asks each pull request to close a GitHub issue.** Its `CLAUDE.md`
   says to write `Closes #N`. Decided 2026-10-24: **no copy of a ticket goes to
   GitHub.** demlik's rule changes instead, since demlik is the test bed.

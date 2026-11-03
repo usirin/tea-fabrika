@@ -66,16 +66,15 @@ const Enqueued = Schema.Struct({
 
 /** What a reading of the pull request already answers. `null`: nothing yet. */
 const answered = (pr: Standing, head: string): "queued" | "head_moved" | "conflicts" | null =>
-	// Merged, or in the queue already: an enqueue sent a second time finds its own first write.
-	pr.state === "MERGED"
-		? "queued"
-		: pr.headRefOid !== head
-			? "head_moved"
-			: pr.isInMergeQueue
-				? "queued"
-				: pr.mergeable === "CONFLICTING"
-					? "conflicts"
-					: null;
+	// Another head, merged or not, is not this write's: the machine reads again.
+	pr.headRefOid !== head
+		? "head_moved"
+		: // Merged, or in the queue already: an enqueue sent a second time finds its own first write.
+			pr.state === "MERGED" || pr.isInMergeQueue
+			? "queued"
+			: pr.mergeable === "CONFLICTING"
+				? "conflicts"
+				: null;
 
 /**
  * Put `head` in the merge queue of its pull request.
@@ -162,9 +161,12 @@ const MergedNow = Schema.Struct({
 
 /** What a reading already answers. `null`: nothing yet. */
 const mergeAnswered = ({pullRequest: pr}: MergeStanding, head: string): Merged | null =>
-	// Merged already: a merge sent a second time finds its own first write.
+	// Merged already, at this head: a merge sent a second time finds its own first write. At another
+	// head it is no write of this one: the machine reads again, and finds what merged.
 	pr.state === "MERGED" && pr.mergeCommit !== null
-		? {reading: "merged", commit: pr.mergeCommit.oid}
+		? pr.headRefOid === head
+			? {reading: "merged", commit: pr.mergeCommit.oid}
+			: {reading: "head_moved"}
 		: pr.state !== "OPEN"
 			? null
 			: pr.headRefOid !== head

@@ -1,5 +1,5 @@
 import {randomUUID} from "node:crypto";
-import {type BadShape, type ListenersOf, memoryStorage, offer, start} from "@kampus/fabrika";
+import {type BadShape, type ListenersOf, memoryStorage, offer, start} from "@kampus/fabrika-old";
 import {Effect, Layer} from "effect";
 import {NOT_READ} from "../../code-host-github.ts";
 import type {CriteriaRecord} from "../../criteria/record.ts";

@@ -67,8 +67,25 @@ describe("the grammar", () => {
 		expect(c.told.map((t) => t.name)).toEqual(["pr"]);
 		expect(c.out?.name).toBe("found");
 		expect(command("double <n").into?.name).toBe("n");
-		expect(command("ship --describe").describe?.name).toBeNull();
-		expect(command("ship --describe >found").describe?.name?.name).toBe(">found");
+	});
+
+	it("reads --help and -h anywhere in a command, and leaves the rest of it unread", () => {
+		expect(command("ship --help").help?.name).toBeNull();
+		expect(command("ship -h >found").help?.name?.name).toBe(">found");
+		// GNU's rule: once --help is seen, the other words are not read, so a half-typed line answers.
+		const half = command("ship --mode --help");
+		expect(half.help?.name).toBeNull();
+		expect(half.flags).toEqual([]);
+		expect(command("ship bogus words --help mode").help?.name?.name).toBe("mode");
+		// The command ends at the pipe: the next one is read as ever.
+		const st = run("ship --help | double");
+		expect(st.pipeline.commands.map((c) => c.help === null)).toEqual([false, true]);
+		// A --help inside a $( ) is that inner command's, not the outer one's.
+		const outer = command("double n=$(seq --help)");
+		expect(outer.help).toBeNull();
+		const inner = outer.told[0]?.value;
+		expect(inner?.kind === "sub" && inner.pipeline.commands[0].help).not.toBeNull();
+		expect(command("say --text=--help").help).toBeNull();
 	});
 
 	it("reads pipes, jobs and $( ) values", () => {
@@ -129,6 +146,11 @@ describe("the grammar", () => {
 		if (parsed.kind !== "refused") return;
 		expect(parsed.at).toBe(at);
 		expect(parsed.why).toContain(why);
+	});
+
+	it("a flag with no value that is a slip for --help says so", () => {
+		expect(parse("map --hlep")).toMatchObject({why: "--hlep needs a value", didYouMean: "--help"});
+		expect(parse("seq --to")).not.toHaveProperty("didYouMean");
 	});
 });
 

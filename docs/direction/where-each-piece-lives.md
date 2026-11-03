@@ -8,8 +8,17 @@ pipeline became its own package on 2026-10-22, on top of `@kampus/fabrika`
 *Names replaced 2026-10-22: the library becomes `@kampus/libfabrika`, and
 `@kampus/fabrika` becomes the app people open, the way Ghostty and libghostty
 split. Tuval is the internal codename of the app's gui; people see "fabrika".
-The rename is not done yet, so below, and in the code, `@kampus/fabrika`
-still means the library.*
+Below, `@kampus/fabrika` still means today's library, as it did when this was written.*
+
+*Changed 2026-10-31: today's library is now `@kampus/fabrika-old` and today's app
+`@kampus/fabrika-app-old`, and each is deleted when `next/` takes its job over. So
+`next/` uses the real names from its first line, and no rename waits at the end.*
+
+*Changed 2026-11-01, for `next/`, from [Tier 1's plan](../plan/tier-1.md), approved the same
+day and not built: Tuval is not the app's gui. It is its own package, `@kampus/tuval`, and it holds
+everything a client does. fabrika is the logic, and Tuval is what is drawn from it. The app,
+`next/apps/fabrika`, is only wiring and the deploy stack. Tuval may import
+`@kampus/libfabrika`, never the other way. Each program is a package under `next/programs/`.*
 
 ```ts
 // After the rename, a sketch.

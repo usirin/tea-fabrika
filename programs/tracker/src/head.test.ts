@@ -1,7 +1,7 @@
+import {type Entry, type Fact, fold} from "@kampus/pipeline/tickets/ticket";
 import {describe, expect, it} from "vitest";
 import {HOUR, headOf, lineOf} from "./head.ts";
 import {rowsOf} from "./rows.ts";
-import {type Entry, type Fact, fold} from "./ticket.ts";
 
 // One lane on one ticket, fact by fact, as the note's sketch draws it: the top line after each
 // step, and the rows it shows. Nothing runs lanes yet, so the facts are written here.
@@ -12,9 +12,13 @@ const MINUTE = 60_000;
 
 /** A ticket from its facts, one minute apart, through the real fold. */
 const ticketOf = (...facts: readonly (readonly [Entry["by"], Fact])[]) => {
-	const entries = facts.map(
-		([by, fact], i): Entry => ({pos: i + 1, ticket: 3, by, at: i * MINUTE, fact}),
-	);
+	const entries = facts.map(([by, fact], i): Entry => ({
+		pos: i + 1,
+		ticket: 3,
+		by,
+		at: i * MINUTE,
+		fact,
+	}));
 	const {tickets, problems} = fold([], entries);
 	expect(problems).toEqual([]);
 	return tickets[0]?.timeline ?? [];
