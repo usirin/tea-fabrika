@@ -1,7 +1,10 @@
 # Programs: one job, an address, and the desk places the tile
 
-**Proposed 2026-11-02.** Nothing in it is decided yet. It stands on these, decided before it and not
-asked again: a process never knows where its tile is, and a tile shows one process
+**Proposed 2026-11-02, with one part decided.** [Composing programs, C1 to
+C11](#composing-programs-c1-to-c11) is **decided 2026-11-02**: the owner walked each rule and the
+audit's three splits. The seven principles G1 to G7 and the smaller calls 1 to 7 were not walked,
+so they stay proposed, with their leans. The walk changed two of them, G6 R2 and G7 R4, and their
+text says so. It stands on these, decided before it and not asked again: a process never knows where its tile is, and a tile shows one process
 ([the desktop layer](./the-desktop-layer.md), W3 and W4); every command is also a tsh word and a
 palette row (W5); a line opens in place and folds past 220 by 120
 ([fold, not tabs](./fold-not-tabs.md#a-line-opens-in-place)); a program declares its keys and modes
@@ -269,8 +272,9 @@ type Workspace = {layout: Split; focus: TileId; focused: ReadonlyArray<TileId>};
 - **What it means.** A program never imports, starts or calls another program. It sends an output;
   a line wires it. The ticket follows the asks on a pipe, `asks | ticket`. Each program also runs
   alone, from its flags.
-- **Rules.** R1 no calls between programs, lean 85%. R2 the ticket follows on a pipe, lean 80% (196's
-  "the ticket tile follows by pipe"). R3 one program runs alone and in a line, lean 85%
+- **Rules.** R1 no calls between programs, lean 85%. R2 the ticket follows on a pipe inside one line
+  only, lean 80% (196's "the ticket tile follows by pipe"); across lines, a ticket goes by `open`
+  (C6, decided 2026-11-02), since a pipe joins one chain and cannot fan in. R3 one program runs alone and in a line, lean 85%
   ([agents are programs](./agents-are-programs.md): `claude` opens a window by hand and prints in a
   pipe, as `isatty` splits it). Closing one window ends one process: decided
   ([fold, not tabs](./fold-not-tabs.md#a-lines-windows-close-one-by-one)).
@@ -283,12 +287,14 @@ type Workspace = {layout: Split; focus: TileId; focused: ReadonlyArray<TileId>};
   and meet through messages. tsh lines are the one named exception in [Elm first](./elm-first.md).
 - **Accessibility.** 1.3.1, relationships in words: the region's name says `pipe A, 1 of 2, sends to
   ticket` (tile guidelines).
-- **What holds it.** `layer-rules.json`: a program package imports no other program (`pnpm lint`).
-  The fit check refuses a pipe whose types do not match.
+- **What holds it.** It should be `layer-rules.json`: a program package imports no other program
+  (`pnpm lint`). Today it is not: the file has one `programs` layer, so nothing checks it (experiment
+  201's audit). The fit check refuses a pipe whose types do not match.
 - **Doubt and cost.** Closing the asks tile leaves the ticket tile, as the pipe rules say; a person
   who wanted both gone presses twice. Nothing new to build.
-- **Today: follows** for `tracker | ticket | runs` (`programs/ticket/src/index.ts:23`). The asks list
-  is on no pipe.
+- **Today: half.** The pipe follows for `tracker | ticket | runs` (`programs/ticket/src/index.ts:23`),
+  but `ticket`, `runs` and `map` import `@tea-fabrika/tracker` and run its whole machine (their
+  `package.json`s; experiment 201's audit, split 1). The asks list is on no pipe.
 
 ### G7: what every program gets for free
 
@@ -310,8 +316,9 @@ its machine               a run id, a trace, saved state, hot reload, a job to a
 
 - **Rules.** R1 the buttons come from `commands`, so a key and its button cannot drift: 196's P8, lean
   75%. R2 the desk's pieces are not the program's: lean 85%. R3 the kit holds view helpers, not parts
-  that keep state: list and detail, the row, the action bar, lean 75%. R4 two programs writing the same
-  piece means it moves into the kit, lean 80% ([reuse before special rules](./reuse-before-special-rules.md)).
+  that keep state: list and detail, the row, the action bar, lean 75%. R4 what two programs both need
+  moves below both: a view piece into the kit, and a fold into the domain package (C9, decided
+  2026-11-02), lean 80% ([reuse before special rules](./reuse-before-special-rules.md)).
 - **Why.** VS Code: "By default, commands show in the Command Palette", and a contributed key shows in
   the shortcuts list [x5]. Ableton's Key Map mode: "assignable elements of the interface become
   highlighted" [f1]. A cockpit's soft keys ring the page they act on [f4]. Elm: "Just write the helper
@@ -428,6 +435,259 @@ fabrika today     a popover is the only thing over the desk (popovers)
 - A peek would be a glance in a popover, never a tile; anything you work in is a tile. Taking Linear's
   peek means a second kind of thing over the desk, beside popovers.
 
+## Composing programs: C1 to C11
+
+**Decided 2026-11-02.** The owner walked each rule, the count's label and the audit's three splits,
+and took each lean. The confidence numbers stay as written, and each doubt names what settles it.
+
+Built from [experiment 201](../../experiments/201-composing-programs.md): an outline and a board,
+split into small programs joined by pipes and shot in today's app, and a read-only audit of where
+one of today's programs holds a second program's job. Neither is a measurement. The rules hold in
+both versions. Today's code moves to them only when a daily fix or a tryout touches it; `next/`
+builds them from the start.
+
+```text
+tracker --all | outline | ticket       a source sends rows, a drawer draws them, Enter sends a ticket on
+asks | board --by whose | ticket       another source, another drawer, the same row type and the same ticket
+tracker --all | notes | outline        notes is a filter here: rows in, rows out
+```
+
+### C1: one row type on the pipe, kept below the programs
+
+**Decided 2026-11-02. Lean, 80%.**
+
+```ts
+// A sketch. One Schema.Opaque per kind of row, each a Schema.TaggedStruct, joined in one Schema.Union.
+// Effect Schema writes `_tag`. Never `kind`. The tags are decided; the class names and the fields
+// (round 2's row, experiment 201) are not, and get settled when the code is written.
+class TicketRow extends Schema.Opaque<TicketRow>()(
+	Schema.TaggedStruct("ticket", {
+		key: Schema.String, up: Schema.NullOr(Schema.String), text: Schema.String,
+		ticket: TicketNumber, state: LineState, sub: Schema.String, meta: Schema.NullOr(Schema.String),
+	}),
+) {}
+class NoteRow extends Schema.Opaque<NoteRow>()(
+	Schema.TaggedStruct("note", {key: Schema.String, up: Schema.NullOr(Schema.String), text: Schema.String}),
+) {}
+const Row = Schema.Union([TicketRow, NoteRow /* , ask, lane, step: one case each */]);
+
+// A drawer matches every case. A new kind of row is a new case, so the compiler points at every drawer.
+const glyph = (row: typeof Row.Type) => Match.valueTags(row, {ticket: (t) => t.state, note: () => null});
+```
+
+- One type, so `tracker | board` and `asks | board` need one board, as Unix has text lines and
+  Eurorack has one volt per octave (G6). It lives below every program, so no program imports
+  another to get it.
+- A ticket row always has its number and a note row never has one: the cases make the wrong row
+  impossible to build.
+- **Doubt:** each new kind of row (a pull request, an agent) is a change every drawer must take.
+  The compiler finds each one; a busy week of new kinds would show the cost.
+
+### C2: a tree goes flat on a pipe
+
+**Decided 2026-11-02. Lean, 75%.**
+
+```ts
+// A sketch. On the pipe: rows, depth first, each naming the row above it in `up`.
+{_tag: "note", key: "note:ship", up: null, text: "Ship the pipeline: PR 10, then 11a and 11b, then ticket 141, then 117 resumes"}
+{_tag: "ticket", key: "ticket:141", up: "note:ship", text: "Trace becomes the ticket's view",
+	ticket: 141, state: "running", sub: "test_writer running", meta: "#141"}
+
+// In a program's memory it is a tree again. Statics on a Schema.Opaque, no `xOf` names.
+const tree = Tree.fromRows(rows); // each row with the rows under it; a row whose `up` is missing goes to the top
+const back = Tree.toRows(tree);   // depth first, ready to send
+```
+
+- Today's shape check (`fromEffect`, `packages/fabrika/src/program/shape.ts`) refuses a schema that
+  refers to itself, so a nested tree did not load on a pipe. OpenTelemetry spans go flat with a
+  parent id for the same reason, and so does today's trace program.
+- **Doubt:** the other way is to teach the shape check `Schema.suspend`. A second tree that wants
+  the pipe would settle it.
+
+### C3: a tree and a board are two programs, not two modes
+
+**Decided 2026-11-02. Lean, 85%.** This is G1 R1.
+
+```text
+tracker --all | outline              its own model: open, zoom, only
+tracker --all | board --by whose     its own model: only, and the done fold
+```
+
+- They share the row type and the kit's helpers, and no model. Want both? Put them side by side.
+- **Doubt:** a person who flips between tree and columns often may want one key, not two tiles.
+
+### C4: a drawer has nothing of its own
+
+**Decided 2026-11-02. Lean, 80%.** This sharpens G6 R2.
+
+```text
+outline | ticket                     "No lines yet. Pipe some in: tracker | outline."
+tracker --all | outline | ticket     Enter on 117 sends 117 on `ticket`; the ticket tile shows 117
+```
+
+- The line a person types has three stages: a source, a drawer, the ticket.
+- **Doubt:** three words is longer to type than one; a saved line or a palette row may be wanted.
+
+### C5: a filter is a program, rows in and rows out
+
+**Decided 2026-11-02. Lean, 80%; `asks` as a filter, 65%.** This is G6 R3.
+
+```text
+notes | outline                      notes alone: a source
+tracker --all | notes | outline      notes in a line: a filter that places the tickets in your notes
+tracker | asks | board               asks as a filter: keeps only the rows that wait, needs no ledger of its own
+```
+
+- **Doubt:** whether `asks` keeps a source of its own for the top bar's count, which runs with no
+  line. The `next/` asks program (Tier 5) settles it.
+
+### C6: across lines, a ticket goes by `open`
+
+**Decided 2026-11-02. Lean, 65%.** This changes G6 R2: the ticket follows on a pipe inside one line
+only.
+
+```ts
+// Inside one line: tracker --all | outline | ticket. Enter sends the number down the pipe.
+// Across lines: asks | board --by whose has no pipe to that ticket tile, so Enter asks the desk (G3).
+open({line: "ticket --ticket 176", from: "t2", via: {_tag: "key", keys: "enter"}});
+// {_tag: "opened", tile: "t3", how: "focused"}   the ticket tile already there, sent 176 as a query
+```
+
+- A pipe joins one chain and cannot fan in, so two lines cannot share a ticket tile by pipe.
+- **Doubt:** people may want one ticket tile per line. A day of real use settles it.
+
+### C7: a filter never reads around the pipe
+
+**Decided 2026-11-02. Lean, 75%.**
+
+```text
+tracker | notes | outline            143 is done and left upstream, so notes shows "Ticket 143", never a made-up title
+tracker --all | notes | outline      the whole row for 143 comes down, title and all
+```
+
+- A filter that read the ledger to fill the gap would be a second tracker (G1 R4).
+- **Doubt:** "Ticket 143" alone reads like a note heading in the shots. A ticket glyph on the stub
+  would say what it is.
+
+### C8: a source sends after each change
+
+**Decided 2026-11-02. Lean, 70%.**
+
+```ts
+// A sketch, today's version. tea's runtime has no state subscription, so a source sends after its own dispatch.
+yield* runtime.dispatch(msg);
+yield* send("lines", Tree.toRows(/* the tree in runtime.getState() */));
+```
+
+- `notes` did this in round 2. The tracker's `lines` output was declared there, but its main does not
+  send it yet.
+- **Doubt:** this may belong in fabrika's `serve`, sending a view of the state on every change, as a
+  window's `watch` does. The plan settles it.
+
+### C9: a fold two programs need moves below both
+
+**Decided 2026-11-02. Lean, 70%.** This changes G7 R4: folds move down too, not only view pieces.
+
+```ts
+// Today (apps/fabrika/src/asks.ts:13): the host's asks fold imports a program to learn what waits on you.
+import {headOf, words} from "@tea-fabrika/tracker";
+// Decided: the fold lives with the ticket facts in packages/pipeline/src/tickets/, and the tracker
+// and the asks both read it there. No program imports another.
+```
+
+- `headOf` is today's name. It gets a new name, as a static on the data it reads, when that code is
+  touched ([schema classes](./schema-classes-not-of-helpers.md)).
+- **Doubt:** where a fold that only two programs read should live, if not the domain package. The
+  first one that is not about tickets settles it.
+
+### C10: `notes` is the notepad, and its window is where you type
+
+**Decided 2026-11-02, option c. The lean was 55%; the owner picked.**
+
+```text
+notes                                its window is the tree you type in, drawn with the kit's shared tree piece
+notes | outline                      outline stays a drawer: it draws, it never writes
+tracker --all | notes | board        notes feeds other programs
+```
+
+- Pipes go one way, so writing happens in the program that owns the rows. The tree piece is the
+  kit's, so `notes` and `outline` draw a tree the same way (G7 R4).
+- **Doubt:** typing in `notes` and reading in `outline` is two tiles for some people. A week of
+  real notes settles it.
+
+### C11: the keys line comes from `commands`
+
+**Decided 2026-11-02. Lean, 80%.** This is G7 R1, in the shape of [modes](./modes.md#the-shape):
+`{send, keys, mode?}`. No new fields.
+
+```ts
+// A sketch, the board.
+commands: {
+	only: {send: {type: "only"}, keys: "y"},
+	done: {send: {type: "done"}, keys: "d"},
+},
+// keys line: "y only · d done". Each word is the command's name.
+// refuse(model, {type: "done"}) says no while there is no done column, so the line shows "y only".
+```
+
+- Round 2's board offered `d show done` with no done column. A line made from what the program
+  would take fixes it.
+- **Doubt:** a command's name must now read well as a word on screen. The first program with a
+  long name shows whether that holds.
+
+### The count's label
+
+**Decided 2026-11-02. Lean, 60%.**
+
+```text
+Waits on you · 3 asks, 1 note
+```
+
+- The outline counted 4 and the top bar and the board 3. The fourth was your own note marked
+  "you". It stays in the filter, and the label names the split.
+- **Doubt:** a second split (asks, notes, stuck runs) may make the label long. Real use settles it.
+
+### The audit's three splits
+
+The audit read today's version only and found 16 second jobs in 5 places
+([experiment 201](../../experiments/201-composing-programs.md#the-audit)). The owner took the top
+three.
+
+**Split 1: one read-only reader below the programs. Decided, 85%.** The tracker's folds and its
+steps list move to `packages/pipeline/src/tickets/`, and the steps come from the pipeline's own
+`STEPS`, not a copy.
+
+```text
+before   tracker | ticket | runs      ticket and runs each run the tracker's whole machine: the whole ledger, GitHub every 2 minutes, write power
+after    tracker | ticket | runs      the same line; ticket, runs and map read through one small read-only reader
+```
+
+- **Doubt:** the tracker's 9 steps against the pipeline's 11 may be on purpose. Then it is one
+  mapping in the domain package, and the split is smaller.
+
+**Split 2: the tracker's ticket page goes, after this note's tryout fix 1. Decided, 75%.**
+
+```text
+before   tracker                      Enter swaps the tile to the tracker's own ticket page
+after    tracker | ticket             Enter sends the number down the pipe; the ticket tile follows
+         tracker                      Enter, with no ticket tile: opens ticket --ticket N beside (fix 1)
+```
+
+- Before fix 1, this split is worse: Enter would do nothing you can see.
+- **Doubt:** a quick look in place, as Linear's Space peek (call 7), may beat a tile beside. A week
+  of use with fix 1 settles it.
+
+**Split 3: the asks list leaves the frame. Decided, 80%, in `next/` only; today gets fix 1.**
+
+```text
+before   (top bar) C-b a, Enter       the frame sends a query into a tile it finds by the name "tracker"
+after    asks | ticket                next/: the asks program, its glance in the top bar, the ticket on a pipe
+today    (top bar) C-b a, Enter       opens ticket --ticket N beside, through the desk's open (fix 1)
+```
+
+- **Doubt:** the Dock badge reads the count off the desk today, so it needs a new source when asks
+  leaves the frame.
+
 ## What the ledger records
 
 In `next/`, the desk is a program with its own log (Tier 1 detail, call 20), so these are its letters.
@@ -497,3 +757,6 @@ its own, as today's frame does for the asks.
 - **tmux's and i3's close rules come from their source,** read by a fetch tool, not run.
 - **Linear's app was not seen logged in,** and its peek page did not load.
 - **`next/` has no desk yet.** Every `next/` claim is a sketch on the decided notes.
+- **The composing rules ran in a stand-in host.** Round 2's pipes went through the real fit check
+  and each drawer's own step and view, but no program's main ran and nothing was typed in tsh. The
+  audit ran nothing at all (experiment 201).
