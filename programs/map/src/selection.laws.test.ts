@@ -1,9 +1,4 @@
-import {
-	arbConstantMsg,
-	arbRecordMsg,
-	propertyTrace,
-	stubCtxThrowingProxy,
-} from "@demlik/tea/pbt";
+import {arbConstantMsg, arbRecordMsg, propertyTrace, stubCtxThrowingProxy} from "@demlik/tea/pbt";
 import type {TrackerMsg} from "@tea-fabrika/tracker";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
