@@ -4512,6 +4512,132 @@ describe("the exam's pull request", () => {
 			expect(runs[1]?.prompt).not.toMatch(/\bon main\b/i);
 		},
 	);
+
+	// The owner's decision on PR 322 (option A): a redo on main is pushed over the exam branch, so
+	// before it does, the lane keeps the old exam head under a kept ref, as a restart does
+	// (`refs/kept/...`), and posts one line on the ticket that names the ref and the old commit. A
+	// commit a person pushed there is then never lost without a word. A redo that only adds to the
+	// branch keeps nothing and posts nothing.
+	/** The head an exam step's `ended` fact carries for the exam's pull request. */
+	const pullHead = (fact: Ran["facts"][number] | undefined) =>
+		(fact?.carry as {readonly examPull?: {readonly head: string}} | undefined)?.examPull?.head ??
+		"";
+	/** The lines on the ticket that name a kept ref. */
+	const keptLines = (ran: Ran) =>
+		ran.facts
+			.filter((f) => f.type === "commented" && String(f.body).includes("refs/kept/"))
+			.map((f) => String(f.body));
+	/** The kept ref a line names. */
+	const refIn = (line: string) => /refs\/kept\/[^\s`'"]*[^\s`'".,;:)]/.exec(line)?.[0] ?? "";
+	/** Where a kept ref may be: the lane's own clone, or the remote. */
+	const keptPlaces = (ran: Ran) => [
+		["-C", join(ran.dir, "home", "work", "clone")],
+		["--git-dir", ran.remote],
+	];
+	/** What `ref` points at, in the lane's own clone or else on the remote: `null` in neither. */
+	const keptAt = (ran: Ran, ref: string): string | null => {
+		for (const at of keptPlaces(ran)) {
+			try {
+				return execFileSync("git", [...at, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`], {
+					encoding: "utf8",
+					stdio: "pipe",
+				}).trim();
+			} catch {
+				// Not here: the other place may hold it.
+			}
+		}
+		return null;
+	};
+	/** Every kept ref, in the lane's own clone and on the remote. */
+	const keptRefs = (ran: Ran) =>
+		keptPlaces(ran).flatMap((at) =>
+			execFileSync("git", [...at, "for-each-ref", "--format=%(refname)", "refs/kept/"], {
+				encoding: "utf8",
+				stdio: "pipe",
+			})
+				.split("\n")
+				.filter((line) => line !== ""),
+		);
+	/** The old head is kept under the ref one ticket line names, and that line names the old commit. */
+	const keptOnce = (ran: Ran, old: string, said: string) => {
+		const lines = keptLines(ran);
+		expect(lines, `one line names the kept ref\n${said}`).toHaveLength(1);
+		const line = lines[0] ?? "";
+		expect(line, "the line names the old commit").toContain(old.slice(0, 7));
+		const ref = refIn(line);
+		expect(ref, line).toMatch(/^refs\/kept\/./);
+		expect(keptAt(ran, ref), `${ref} holds the old exam head`).toBe(old);
+	};
+
+	it(
+		"ship's conflicts at the exam's merge: before the redo on main replaces the exam branch, the old head is kept under a kept ref, and one ticket line names the ref and the old commit",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				title: RULES,
+				within: 200,
+				picks: {...YES, rounds_spent: "stop"},
+				fake: {see: [RULE]},
+				checksSay: mainTakesTheRule,
+			});
+			const said = ran.lines.join("\n");
+			const ends = ran.facts.filter((f) => f.type === "ended");
+			const refused = ends.findIndex((f) => f.stage === "exam_merge");
+			expect(ends[refused]?.outcome, said).toMatchObject({kind: "send", why: "conflicts"});
+			const old = pullHead(ends[refused]);
+			expect(old, said).toMatch(/^[0-9a-f]{40}$/);
+			const head = pullHead(ends.slice(refused).find((f) => f.stage === "exam"));
+			expect(head, said).toMatch(/^[0-9a-f]{40}$/);
+			// The redo's push replaced the branch: the old head is not in the new one's history.
+			expect(descends(ran.remote, old, head), "the redo replaced the exam branch").toBe(false);
+			keptOnce(ran, old, said);
+		},
+	);
+
+	it(
+		"main's conflicts at the exam's own review: before the redo on main replaces the exam branch, the head it found is kept under a kept ref, and one ticket line names it; the review's redo before it keeps nothing",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				title: RULES,
+				within: 200,
+				picks: {...YES, rounds_spent: "stop"},
+				fake: {answers: {review: [FAILS_E1]}, see: [RULE]},
+				checksSay: mainTakesTheRule,
+			});
+			const said = ran.lines.join("\n");
+			const ends = ran.facts.filter((f) => f.type === "ended");
+			const refused = ends.findIndex(
+				(f) =>
+					f.stage === "exam_review" && (f.outcome as {readonly why?: string}).why === "conflicts",
+			);
+			expect(refused, said).toBeGreaterThan(-1);
+			const old = pullHead(ends[refused]);
+			expect(old, said).toMatch(/^[0-9a-f]{40}$/);
+			const head = pullHead(ends.slice(refused).find((f) => f.stage === "exam"));
+			expect(head, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(descends(ran.remote, old, head), "the redo replaced the exam branch").toBe(false);
+			keptOnce(ran, old, said);
+		},
+	);
+
+	it(
+		"a review's redo on the exam head only adds to the branch: no kept ref, and no ticket line names one",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({title: RULES, picks: YES, fake: {answers: {review: [FAILS_E1]}}});
+			const said = ran.lines.join("\n");
+			expect(ran.lines.at(-1), said).toContain("ended: done");
+			const heads = ran.facts
+				.filter((f) => f.type === "ended" && f.stage === "exam")
+				.map((f) => pullHead(f));
+			expect(heads, said).toHaveLength(2);
+			const [first = "", second = ""] = heads;
+			expect(descends(ran.remote, first, second), "the redo adds to the exam branch").toBe(true);
+			expect(keptLines(ran)).toEqual([]);
+			expect(keptRefs(ran)).toEqual([]);
+		},
+	);
 });
 
 // Self-fix PR 10, Part 1: the side tree starts from main on the first landing of each plan version.
