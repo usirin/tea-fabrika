@@ -4680,10 +4680,10 @@ describe("a lane's waits and records (self-fix PR 11b)", () => {
 			expect(stops[0]).toMatchObject({
 				stage: "triage",
 				outcome: {kind: "stuck", why: "run_failed"},
-				stop: {kind: "stuck", why: "step_failed"},
-				at: {_tag: "run", step: "triage"},
+				lane: {kind: "stuck", why: "step_failed"},
+				from: {_tag: "run", step: "triage"},
 			});
-			expect(String(stops[0]?.cause)).toContain("the disk is on fire");
+			expect(String(stops[0]?.why)).toContain("the disk is on fire");
 		},
 	);
 
@@ -4701,8 +4701,8 @@ describe("a lane's waits and records (self-fix PR 11b)", () => {
 			expect(stops[0]).toMatchObject({
 				stage: "plan",
 				outcome: {kind: "stuck", why: "draft_failed"},
-				stop: {kind: "stuck", why: "step_stuck"},
-				at: {_tag: "run", step: "plan"},
+				lane: {kind: "stuck", why: "step_stuck"},
+				from: {_tag: "run", step: "plan"},
 			});
 		},
 	);

@@ -962,8 +962,8 @@ describe("a run of fixable rows, on any step (self-fix PR 11a)", () => {
 //
 //   build ends stuck:checks_not_run   lane_release { ..., stopped: {type: "stopped", stage: "build",
 //                                       outcome: {kind: "stuck", why: "checks_not_run"},
-//                                       stop: {kind: "stuck", why: "checks_not_run"},
-//                                       at: {_tag: "run", step: "build"}} }
+//                                       lane: {kind: "stuck", why: "checks_not_run"},
+//                                       from: {_tag: "run", step: "build"}} }
 
 /** The same value, its keys in one order, so two facts compare as text. */
 const canon = (value: unknown): string =>
@@ -1008,8 +1008,8 @@ const whyDropped =
 				type: "stopped",
 				stage: step,
 				outcome: {kind: "stuck", why: "step_stuck"},
-				stop: real.lane.phase === "releasing" ? real.lane.outcome : null,
-				at: real.lane.phase === "releasing" && "at" in real.lane ? real.lane.at : null,
+				lane: real.lane.phase === "releasing" ? real.lane.outcome : null,
+				from: real.lane.phase === "releasing" && "at" in real.lane ? real.lane.at : null,
 			},
 		};
 	};
@@ -1028,8 +1028,8 @@ const saysWhy = (at: Stopping): readonly string[] =>
 					type: "stopped",
 					stage: step,
 					outcome: own,
-					stop: found.lane.outcome,
-					at: found.lane.at,
+					lane: found.lane.outcome,
+					from: found.lane.at,
 				};
 				const said = Object.fromEntries(Object.entries(found.stopped ?? {}));
 				const hides = "why" in own ? HIDDEN.has(own.why) : false;
@@ -1073,8 +1073,8 @@ describe("a stop says why on the ticket (self-fix PR 11b)", () => {
 				type: "stopped",
 				stage: step,
 				outcome: {kind: "stuck", why: "run_failed"},
-				stop: {kind: "stuck", why: "step_failed"},
-				at: {_tag: "run", step},
+				lane: {kind: "stuck", why: "step_failed"},
+				from: {_tag: "run", step},
 			};
 			return canon(stoppedIn(cmds)) !== canon(want);
 		});

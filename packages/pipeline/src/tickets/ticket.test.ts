@@ -630,8 +630,8 @@ describe("a stop, on the ticket", () => {
 			type: "stopped",
 			stage: "plan",
 			outcome: {kind: "stuck", why: "draft_failed"},
-			stop: {kind: "stuck", why: "step_stuck"},
-			at: {_tag: "run", step: "plan"},
+			lane: {kind: "stuck", why: "step_stuck"},
+			from: {_tag: "run", step: "plan"},
 		};
 		const got = read(fact);
 		expect(got.kind === "entry" && got.entry.fact).toEqual(fact);
@@ -642,9 +642,9 @@ describe("a stop, on the ticket", () => {
 			type: "stopped",
 			stage: "triage",
 			outcome: {kind: "stuck", why: "run_failed"},
-			stop: {kind: "stuck", why: "step_failed"},
-			at: {_tag: "run", step: "triage"},
-			cause: "Error: the disk is on fire",
+			lane: {kind: "stuck", why: "step_failed"},
+			from: {_tag: "run", step: "triage"},
+			why: "Error: the disk is on fire",
 		};
 		const got = read(fact);
 		expect(got.kind === "entry" && got.entry.fact).toEqual(fact);
@@ -654,8 +654,8 @@ describe("a stop, on the ticket", () => {
 		const got = read({
 			type: "stopped",
 			stage: "plan",
-			stop: {kind: "stuck", why: "step_stuck"},
-			at: {_tag: "run", step: "plan"},
+			lane: {kind: "stuck", why: "step_stuck"},
+			from: {_tag: "run", step: "plan"},
 		});
 		expect(got.kind).toBe("broken");
 	});

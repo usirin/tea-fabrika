@@ -60,8 +60,8 @@ describe("the ticket's row for a stop", () => {
 			type: "stopped",
 			stage: "plan",
 			outcome,
-			stop: {kind: "stuck", why: "step_stuck"},
-			at: {_tag: "run", step: "plan"},
+			lane: {kind: "stuck", why: "step_stuck"},
+			from: {_tag: "run", step: "plan"},
 		});
 		const row = rowOf(entry, [entry]);
 		expect(row).toMatchObject({type: "stopped", by: LANE, at: entry.at});
@@ -74,9 +74,9 @@ describe("the ticket's row for a stop", () => {
 			type: "stopped",
 			stage: "triage",
 			outcome: {kind: "stuck", why: "run_failed"},
-			stop: {kind: "stuck", why: "step_failed"},
-			at: {_tag: "run", step: "triage"},
-			cause: "Error: the disk is on fire",
+			lane: {kind: "stuck", why: "step_failed"},
+			from: {_tag: "run", step: "triage"},
+			why: "Error: the disk is on fire",
 		});
 		expect(words(entry)).toContain("triage");
 		expect(rowOf(entry, [entry]).body).toContain("the disk is on fire");
