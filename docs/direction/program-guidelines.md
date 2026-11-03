@@ -1,10 +1,21 @@
-# Programs: one job, an address, and the desk places the tile
+# Programs: one job, a location, and the desk places the tile
 
-**Proposed 2026-11-02, with one part decided.** [Composing programs, C1 to
+**Proposed 2026-11-02, with two parts decided.** [Composing programs, C1 to
 C11](#composing-programs-c1-to-c11) is **decided 2026-11-02**: the owner walked each rule and the
-audit's three splits. The seven principles G1 to G7 and the smaller calls 1 to 7 were not walked,
-so they stay proposed, with their leans. The walk changed two of them, G6 R2 and G7 R4, and their
-text says so. It stands on these, decided before it and not asked again: a process never knows where its tile is, and a tile shows one process
+audit's three splits. [G1](#g1-one-job-one-model-and-every-size-draws-it) is **decided 2026-11-03**:
+the owner took the lean. G2 to G7 and the smaller calls 1 to 7 are not walked yet, so they stay
+proposed, with their leans. The composing walk changed two of them, G6 R2 and G7 R4, and their
+text says so.
+
+Names changed 2026-11-03 by the owner's naming pass: `at` became `location` (`AsksAt` became
+`AsksLocation`, `reuse: "address"` became `"location"`), `query` inside a tile became `navigate`,
+`Workspace.focused` became `recent`, `by: "history"` became `why: "recent"`, `left.to` and
+`closed.focus` both became `focus`, `move {by}` became `move {delta}`, `glanceOf` became an inline
+`select`, the row's `up` and `key` became `parent` and `id`, the `lines` output and `LineState`
+became `rows` and `RowState`, call 1's `Tile.from` became `opener`, and `heirOf` became the words
+"else reading order". `glance` stays.
+
+It stands on these, decided before it and not asked again: a process never knows where its tile is, and a tile shows one process
 ([the desktop layer](./the-desktop-layer.md), W3 and W4); every command is also a tsh word and a
 palette row (W5); a line opens in place and folds past 220 by 120
 ([fold, not tabs](./fold-not-tabs.md#a-line-opens-in-place)); a program declares its keys and modes
@@ -25,16 +36,16 @@ name, region, live regions, fold strip) is the [tile guidelines](./tile-guidelin
 about what runs in a tile, how one program reaches another tile, and how the person gets back.
 
 ```ts
-// A sketch, next/. The asks program in the new shape. Two fields are new: `at` and `reuse`.
+// A sketch, next/. The asks program in the new shape. Two fields are new: `location` and `reuse`.
 // The rest is Tier 1's Program, plus `commands` from modes and `glance` (call 6).
 const asks = defineProgram({
 	name: "asks",
 	machine, msg, view, refuse, inputs, outputs,     // Tier 1; outputs: {ticket}, for `| ticket`
-	at: {data: AsksAt, select: (m) => ({ask: m.selected})}, // its address: where it is now
+	location: {data: AsksLocation, select: (m) => ({ask: m.selected})}, // where it is now
 	reuse: "program",                                 // open or focus: one asks tile per workspace
-	glance: {data: Glance, select: glanceOf},         // its small view: the top bar's popup
+	glance: {data: Glance, select: (m) => ({count: m.queue.length, ask: m.selected})}, // the popup
 	commands: {
-		next: {send: {type: "move", by: 1}, keys: ["j", "down"]},
+		next: {send: {type: "move", delta: 1}, keys: ["j", "down"]},
 		rec: {send: {type: "answer", answer: {_tag: "rec"}}, keys: "y"},
 		not: {send: {type: "against"}, keys: "n"},
 		later: {send: {type: "later"}, keys: "h"},
@@ -70,8 +81,8 @@ C-b a, Enter again                                             opened {tile: "t5
   [PR 223](https://github.com/usirin/tea-fabrika/pull/223): name, machine, msg, view; Tier 1 adds
   refuse, inputs and outputs). The desk, which carries out `open`, `leave` and the way back, arrives
   as a program in Tier 2 ([tiers](../plan/tiers.md)). The asks program and its glance come in Tier 5.
-  So `at` and the focus history go in with Tier 2's desk, and every program written from then on
-  says its address.
+  So `location` and the focus history go in with Tier 2's desk, and every program written from then
+  on says its location.
 - **Today's version (`apps/fabrika`, `programs/*`):** not changed by this note. Today's asks popup
   and its `Enter` are the running example, read on main at `0be502bc`. Four small fixes are offered at
   [a tryout in today's version](#a-tryout-in-todays-version), none filed.
@@ -79,11 +90,11 @@ C-b a, Enter again                                             opened {tile: "t5
 ## The shape
 
 ```ts
-// A sketch, next/. What a program adds: an address, and how open or focus finds its tile.
-type Program<S, M, V, T, At> = {
+// A sketch, next/. What a program adds: a location, and how open or focus finds its tile.
+type Program<S, M, V, T, L> = {
 	// name, machine, msg, view, refuse, inputs, outputs: Tier 1. mode, commands: modes.
-	readonly at?: {readonly data: Schema.Codec<At, unknown>; readonly select: (tile: T) => At};
-	readonly reuse?: "program" | "address";            // left out: "program" (call 2)
+	readonly location?: {readonly data: Schema.Codec<L, unknown>; readonly select: (tile: T) => L};
+	readonly reuse?: "program" | "location";           // left out: "program" (call 2)
 	readonly glance?: {readonly data: Schema.Top; readonly select: (tile: T) => unknown}; // call 6
 };
 
@@ -97,15 +108,16 @@ const open = Cmd.define("open", {input: Open, ok: Opened, err: ["no_press", "bad
 const leave = Cmd.define("leave", {input: Schema.Struct({from: TileId}), ok: Schema.Null, err: []});
 
 // What the desk keeps, per workspace, to answer "back": the tiles in the order they were focused.
-type Workspace = {layout: Split; focus: TileId; focused: ReadonlyArray<TileId>}; // newest first
+type Workspace = {layout: Split; focus: TileId; recent: ReadonlyArray<TileId>}; // newest first
 ```
 
 - **Checked by reading, not by `tsc`.** `Via` is the keybindings note's (`key`, `palette`, `word`,
   `click`). `Line` is what tsh already types and checks. `Workspace` is the desktop layer's, with one
-  new list, `focused`, which `C-b ;` needs anyway (tile guidelines, "a fact stored from the first
+  new list, `recent`, which `C-b ;` needs anyway (tile guidelines, "a fact stored from the first
   build").
-- **`at` is read from the tile's own machine,** as a mode is ([modes](./modes.md), M2): which ask is
-  open is one window's fact, not the shared program's.
+- **`location` is read from the tile's own machine,** as a mode is ([modes](./modes.md), M2): which
+  ask is open is one window's fact, not the shared program's. Its type is always named for its
+  program, as `AsksLocation` is, never a bare `Location`, which is the DOM's global.
 - **`open` is a Cmd, not an output.** [Tracker views](./tracker-views-are-programs.md#8-the-views-the-facts-and-the-column)
   proposed an `open` output the desk hears. An output is "heard once, by whoever listens" and has no
   answer ([tea-program](./tea-program.md)); the desk must be able to say no, and the opener needs to
@@ -116,7 +128,7 @@ type Workspace = {layout: Split; focus: TileId; focused: ReadonlyArray<TileId>};
 
 ### G1: one job, one model, and every size draws it
 
-**Lean, 80%.**
+**Decided 2026-11-03. Lean, 80%.** The owner took the lean.
 
 - **What it means.** A program does one job and owns its model. Each of its views (a glance in the
   top bar, a full view in a tile, a box inside another program's view) is a `select` on that one
@@ -148,40 +160,42 @@ type Workspace = {layout: Split; focus: TileId; focused: ReadonlyArray<TileId>};
 
 **Lean, 80%.**
 
-- **What it means.** Every program has an address, `at`: a small value that says where it is, as a
-  URL does. Its flags start it there (`asks --ask a-approve-8`). Inside its tile it moves with a
-  `query`, and the tile keeps a back stack of addresses (ticket 7). To reach another tile it asks the
-  desk with `open`. It never names a tile, a size or a side.
-- **Rules.** R1 an address is data, lean 80%. R2 inside a tile, moving is a `query`, with back, lean
-  80% (tracker views, ticket 7). R3 across tiles, a program asks with `open`, and the desk answers in
-  words, lean 85%. R4 an open is a line the person could have typed, lean 75% (call 4).
+- **What it means.** Every program has a `location`: a small value that says where it is, as a URL
+  does. Its flags start it there (`asks --ask a-approve-8`). Inside its tile it moves with
+  `navigate`, and the tile keeps a back stack of locations (ticket 7). To reach another tile it asks
+  the desk with `open`. It never names a tile, a size or a side.
+- **Rules.** R1 a location is data, lean 80%. R2 inside a tile, a program moves with `navigate`, and
+  back returns, lean 80% (tracker views, ticket 7). R3 across tiles, a program asks with `open`,
+  and the desk answers in words, lean 85%. R4 an open is a line the person could have typed, lean
+  75% (call 4).
 - **Why.** Plan 9: "Most applications work fine in a plumbing environment without knowing about it at
   all" [x3]. Android sends an intent, not a window [x4]. Our desktop layer already says a process
   "never knows where its tile is".
 - **Linear as the builder.** Every Linear page has a URL, and one command menu opens "pages or run
-  actions" [l6]. On our pieces: every program has an address, so the palette, back, saved state and a
+  actions" [l6]. On our pieces: every program has a location, so the palette, back, saved state and a
   link in a comment can all reach it; and `open` is the one way a program asks for a tile. Where we
   differ: Linear's router owns the whole screen; our desk owns placement, and the program never sees
   a tile.
-- **Elm and OTP.** Elm's `Browser.application` turns a URL into a route and moves with `pushUrl`; `at`
-  is the route and `query` the push. OTP: send to a registered name, the desk, never to a pid you
-  guessed [o1].
-- **Accessibility.** The address names the tile for a screen reader: `asks, t5, ask 1 of 3`, beside
+- **Elm and OTP.** Elm's `Browser.application` turns a URL into a route and moves with `pushUrl`;
+  `location` is the route and `navigate` the push. OTP: send to a registered name, the desk, never
+  to a pid you guessed [o1].
+- **Accessibility.** The location names the tile for a screen reader: `asks, t5, ask 1 of 3`, beside
   the tile guidelines' `tileName`. WCAG 2.4.3, focus order keeps meaning.
 - **What holds it.** No tile id or pixel size in any program type. `open` takes a `Line`, so tsh's fit
   check refuses a line whose pipes do not fit before anything starts (`bad_line`).
-- **Doubt and cost.** Whether every program has an address worth keeping (a tsh tile's is its line).
-  One field per program and one schema.
-- **Today: half.** The tracker takes a `query` (`frame.tsx:452`), an address in all but name. The
-  frame, not the desk, picks the tile, and the asks list has no address.
+- **Doubt and cost.** Whether every program has a location worth keeping (a tsh tile's is its
+  line). One field per program and one schema.
+- **Today: half.** The tracker takes a `query` (`frame.tsx:452`), a location in all but name;
+  `next/` calls it `navigate`. The frame, not the desk, picks the tile, and the asks list has no
+  location.
 
 ### G3: open or focus, then land beside
 
 **Lean, 80% on open or focus; 65% on where it lands.**
 
 - **What it means.** The desk looks first: a tile on this workspace that shows the same program (or
-  the same address, by `reuse`) is focused, unfolded and taken out of a zoom, and sent the new address
-  as a `query`. Only if none is found does the line start, beside the focused tile.
+  the same location, by `reuse`) is focused, unfolded and taken out of a zoom, and sent the new
+  location with `navigate`. Only if none is found does the line start, beside the focused tile.
 - **Rules.** R1 open or focus: 196's P1, lean 90%. R2 what counts as the same: `reuse`, lean 65% (call
   2). R3 where it lands: half of the focused tile's share, after it; in a row a sibling, in a column a
   new nested row; a zoom ends first: 196's P2, lean 65% (call 3). R4 the one asked for stays open: past
@@ -243,7 +257,7 @@ type Workspace = {layout: Split; focus: TileId; focused: ReadonlyArray<TileId>};
 
 - **What it means.** `Esc` peels a program from the inside out: a note, then a picked part, then the
   one-pane detail. At its top level a program may send `leave`, and focus goes back. Between tiles,
-  `C-b ;` always returns to the tile focused before. Inside a tile, back walks its own addresses.
+  `C-b ;` always returns to the tile focused before. Inside a tile, back walks its own locations.
 - **Rules.** R1 `Esc` peels; at the top a program may bind `leave`: 196's P4, lean 70% (call 5). R2
   closing a tile: the clash, call 1. R3 `C-b ;`, the tile focused before: decided in the tile
   guidelines, and its history is recorded from the first build. R4 back inside a tile: ticket 7, lean
@@ -258,7 +272,7 @@ type Workspace = {layout: Split; focus: TileId; focused: ReadonlyArray<TileId>};
   focuses next is our rule.
 - **Accessibility.** 2.4.3, focus order [w2]; 2.1.2, no keyboard trap: the prefix and F6 work in every
   program (modes, M4).
-- **What holds it.** The `focused` list on a workspace, and one function that picks where focus goes.
+- **What holds it.** The `recent` list on a workspace, and one function that picks where focus goes.
   A law: a close never leaves focus on nothing.
 - **Doubt and cost.** Under 80%: a person who closes the asks tile after answering may want the ticket
   beside it, not the opener (196). About 40 lines for the list and `C-b ;`, 1 agent hour.
@@ -308,7 +322,7 @@ a program writes          it gets, written once for all
 commands                  the action bar's buttons with each key on them (P8), palette rows, tsh words,
                           rows in the key file, the keys panel, aria-keyshortcuts
 mode(state)               the mode's word on the bottom line and the title, its status line, Esc out (modes)
-at                        open or focus, back inside the tile, C-b ; between tiles, a saved place
+location                  open or focus, back inside the tile, C-b ; between tiles, a saved place
 its views                 the tile's frame, name, region, empty word and focus home (tile guidelines)
 its machine               a run id, a trace, saved state, hot reload, a job to attach to
                           (agents are programs, saved state, hot reload)
@@ -346,18 +360,18 @@ its machine               a run id, a trace, saved state, hot reload, a job to a
 
 ```ts
 // A: the opener. A new fact on the tile, written at open time.
-type Tile = {id: TileId; shows: Pid; from: TileId | null};
-closed("t5") // focus -> t5.from if open, else heirOf
+type Tile = {id: TileId; shows: Pid; opener: TileId | null};
+closed("t5") // focus -> t5.opener if open, else reading order
 
-// B: reading order, as decided in the tile guidelines (today's heirOf, desk.ts:415).
+// B: reading order, as decided in the tile guidelines (today's close, desk.ts:415).
 closed("t5") // focus -> the next open tile after t5, else the one before
 
 // C: the focus history, as tmux's window_lost_pane and i3's con_next_focused do.
-closed("t5") // focus -> the newest tile in workspace.focused that is still open, else heirOf
+closed("t5") // focus -> the newest tile in workspace.recent that is still open, else reading order
 ```
 
 - **A, the opener (196's P4).** APG's dialog rule and Emacs's `quit-restore` [w4][x1]. Cost: a second
-  close rule beside reading order, and a `from` that goes stale when the opener closes first.
+  close rule beside reading order, and an `opener` that goes stale when the opener closes first.
 - **B, reading order (decided 2026-11-01).** Predictable with no memory, one rule. Cost: after
   answering asks, focus lands on the tile after the asks tile: its ticket when that is open, else the
   next tile in the row. The line opens after the opener, so B never gives the opener back. The demo
@@ -375,11 +389,11 @@ closed("t5") // focus -> the newest tile in workspace.focused that is still open
 **Lean `reuse: "program"` by default, 65%.**
 
 ```ts
-reuse: "program"  // one tile of this program per workspace; a new address goes to it as a query
-reuse: "address"  // one tile per address: ticket #7 and ticket #8 side by side
+reuse: "program"   // one tile of this program per workspace; a new location goes to it by navigate
+reuse: "location"  // one tile per location: ticket #7 and ticket #8 side by side
 ```
 
-- "program" is Android's `singleTask` and i3's criteria focus [x4][k3]; "address" is Vim's
+- "program" is Android's `singleTask` and i3's criteria focus [x4][k3]; "location" is Vim's
   `useopen` per buffer [x2]. **Doubt:** reusing loses the old place, which Android warns about [x4];
   the tile's own back stack (G5 R4) keeps it. A person can always split and type a second.
 
@@ -393,13 +407,13 @@ column      the whole column the focused tile is in          a full list and det
 zoom        the new tile zoomed                              all of it; hides everything else
 ```
 
-### 4. An open is a line, or a program and an address
+### 4. An open is a line, or a program and a location
 
 **Lean "a line", 75%.**
 
 ```ts
 open({line: "asks --ask a-approve-8 | ticket", ...}) // a line: one fit check, one placement rule
-open({program: "asks", at: {ask: "a-approve-8"}, ...}) // simpler, but a second way to start programs
+open({program: "asks", location: {ask: "a-approve-8"}, ...}) // simpler, but a second way to start programs
 ```
 
 - A line reuses tsh's fit check and the decided "a line opens in place". **Doubt:** a line is text, so
@@ -462,12 +476,12 @@ tracker --all | notes | outline        notes is a filter here: rows in, rows out
 // (round 2's row, experiment 201) are not, and get settled when the code is written.
 class TicketRow extends Schema.Opaque<TicketRow>()(
 	Schema.TaggedStruct("ticket", {
-		key: Schema.String, up: Schema.NullOr(Schema.String), text: Schema.String,
-		ticket: TicketNumber, state: LineState, sub: Schema.String, meta: Schema.NullOr(Schema.String),
+		id: Schema.String, parent: Schema.NullOr(Schema.String), text: Schema.String,
+		ticket: TicketNumber, state: RowState, sub: Schema.String, meta: Schema.NullOr(Schema.String),
 	}),
 ) {}
 class NoteRow extends Schema.Opaque<NoteRow>()(
-	Schema.TaggedStruct("note", {key: Schema.String, up: Schema.NullOr(Schema.String), text: Schema.String}),
+	Schema.TaggedStruct("note", {id: Schema.String, parent: Schema.NullOr(Schema.String), text: Schema.String}),
 ) {}
 const Row = Schema.Union([TicketRow, NoteRow /* , ask, lane, step: one case each */]);
 
@@ -488,13 +502,13 @@ const glyph = (row: typeof Row.Type) => Match.valueTags(row, {ticket: (t) => t.s
 **Decided 2026-11-02. Lean, 75%.**
 
 ```ts
-// A sketch. On the pipe: rows, depth first, each naming the row above it in `up`.
-{_tag: "note", key: "note:ship", up: null, text: "Ship the pipeline: PR 10, then 11a and 11b, then ticket 141, then 117 resumes"}
-{_tag: "ticket", key: "ticket:141", up: "note:ship", text: "Trace becomes the ticket's view",
+// A sketch. On the pipe: rows, depth first, each naming the row above it in `parent`.
+{_tag: "note", id: "note:ship", parent: null, text: "Ship the pipeline: PR 10, then 11a and 11b, then ticket 141, then 117 resumes"}
+{_tag: "ticket", id: "ticket:141", parent: "note:ship", text: "Trace becomes the ticket's view",
 	ticket: 141, state: "running", sub: "test_writer running", meta: "#141"}
 
 // In a program's memory it is a tree again. Statics on a Schema.Opaque, no `xOf` names.
-const tree = Tree.fromRows(rows); // each row with the rows under it; a row whose `up` is missing goes to the top
+const tree = Tree.fromRows(rows); // each row with the rows under it; a row whose `parent` is missing goes to the top
 const back = Tree.toRows(tree);   // depth first, ready to send
 ```
 
@@ -521,7 +535,7 @@ tracker --all | board --by whose     its own model: only, and the done fold
 **Decided 2026-11-02. Lean, 80%.** This sharpens G6 R2.
 
 ```text
-outline | ticket                     "No lines yet. Pipe some in: tracker | outline."
+outline | ticket                     "No rows yet. Pipe some in: tracker | outline."
 tracker --all | outline | ticket     Enter on 117 sends 117 on `ticket`; the ticket tile shows 117
 ```
 
@@ -550,7 +564,7 @@ only.
 // Inside one line: tracker --all | outline | ticket. Enter sends the number down the pipe.
 // Across lines: asks | board --by whose has no pipe to that ticket tile, so Enter asks the desk (G3).
 open({line: "ticket --ticket 176", from: "t2", via: {_tag: "key", keys: "enter"}});
-// {_tag: "opened", tile: "t3", how: "focused"}   the ticket tile already there, sent 176 as a query
+// {_tag: "opened", tile: "t3", how: "focused"}   the ticket tile already there, sent 176 by navigate
 ```
 
 - A pipe joins one chain and cannot fan in, so two lines cannot share a ticket tile by pipe.
@@ -576,11 +590,11 @@ tracker --all | notes | outline      the whole row for 143 comes down, title and
 ```ts
 // A sketch, today's version. tea's runtime has no state subscription, so a source sends after its own dispatch.
 yield* runtime.dispatch(msg);
-yield* send("lines", Tree.toRows(/* the tree in runtime.getState() */));
+yield* send("rows", Tree.toRows(/* the tree in runtime.getState() */));
 ```
 
-- `notes` did this in round 2. The tracker's `lines` output was declared there, but its main does not
-  send it yet.
+- `notes` did this in round 2. The tracker's `rows` output was declared there (round 2 called it
+  `lines`), but its main does not send it yet.
 - **Doubt:** this may belong in fabrika's `serve`, sending a view of the state on every change, as a
   window's `watch` does. The plan settles it.
 
@@ -696,8 +710,8 @@ In `next/`, the desk is a program with its own log (Tier 1 detail, call 20), so 
 // A sketch, next/. Effect Schema writes each _tag. `said` is the window's own clock, never used to decide.
 {_tag: "open", line: "asks --ask a-approve-8 | ticket", from: "t1", via: {_tag: "key", keys: "enter"}, said}
 {_tag: "opened", tile: "t5", how: "new", beside: "t1", folded: ["t6"]}
-{_tag: "left", tile: "t5", to: "t1", by: "history"}
-{_tag: "closed", tile: "t5", focus: "t1", by: "history"}
+{_tag: "left", tile: "t5", focus: "t1", why: "recent"}
+{_tag: "closed", tile: "t5", focus: "t1", why: "recent"}
 {_tag: "refused", why: "no_press", from: "t1"}
 ```
 
@@ -724,7 +738,7 @@ Offered, not filed. Each is small and stands alone.
 - **[Popovers](./popovers.md), settled.** It says the asks list "never opens a new tile: the app has no
   path for that yet". This note is that path; the popover rules do not change.
 - **[Tracker views](./tracker-views-are-programs.md), proposed.** Its `open` output becomes a Cmd with
-  an answer, and its `query` becomes the way an address moves.
+  an answer, and its `query` becomes `navigate`, the way a location moves.
 - **[Fold, not tabs](./fold-not-tabs.md), decided.** A line opens in the tile it was typed in. An open
   from a popup has no such tile, so it lands after the focused tile, which keeps its program, and the
   tile asked for stays open while the others fold (196's P2).
@@ -737,7 +751,7 @@ In `next/`, spread over Tier 2 (the desk) and Tier 5 (the asks). Estimates from 
 
 | Piece | Lines | Agent hours |
 |---|---|---|
-| `at`, `reuse`, and `query` with a back stack per tile | 120 | 2.5 |
+| `location`, `reuse`, and `navigate` with a back stack per tile | 120 | 2.5 |
 | The desk's `open`, `leave`, open or focus and placement, with laws | 150 | 3 |
 | The focus history, `C-b ;` and the close rule | 40 | 1 |
 | The kit: list and detail, row, action bar from `commands` | 200 | 3 |

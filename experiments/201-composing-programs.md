@@ -44,17 +44,21 @@ ticket down the pipe, and the `ticket` tile beside shows it.
 
 | Program | Its one job | In | Out | Window |
 |---|---|---|---|---|
-| `tracker` (today's) | tickets on the ledger, and their rows (a new `lines` output and `--all` flag) | its query | `ticket`, `lines` | yes |
-| `asks` (new; not a program today) | what waits on you, one row per ask or stuck run | the host's asks fold | `lines` | no |
-| `notes` (new) | your own rows as a tree, with tickets placed where you put them | `lines`, `notes`, `place` | `lines` | no |
-| `outline` (new) | draw any rows as a tree: fold, zoom, only what waits on you | `lines` | `ticket` | yes |
-| `board` (new) | draw any rows as columns by whose move | `lines` | `ticket` | yes |
+| `tracker` (today's) | tickets on the ledger, and their rows (a new `rows` output and `--all` flag) | its query | `ticket`, `rows` | yes |
+| `asks` (new; not a program today) | what waits on you, one row per ask or stuck run | the host's asks fold | `rows` | no |
+| `notes` (new) | your own rows as a tree, with tickets placed where you put them | `rows`, `notes`, `place` | `rows` | no |
+| `outline` (new) | draw any rows as a tree: fold, zoom, only what waits on you | `rows` | `ticket` | yes |
+| `board` (new) | draw any rows as columns by whose move | `rows` | `ticket` | yes |
 | `ticket` (today's) | one ticket: its page, its ask, its activity | `ticket` | `ticket` | yes |
+
+The round 2 branch called the rows output `lines`, its row's state `LineState`, and the row's
+fields `key` and `up`. The owner's naming pass on 2026-11-03 renamed them `rows`, `RowState`, `id`
+and `parent`, and this write-up uses the new names. The shots still show the old empty text.
 
 A kit beside them, not a program, held the glyph, the bar and the keys line: view helpers with no
 state. The row type lived in `packages/pipeline`. Every pipe was checked with today's `fit()`
 (`packages/fabrika/src/program/shape.ts:321`): ten fit, and a wrong one (`outline`'s `ticket` into
-`board`'s `lines`) came back "does_not_fit".
+`board`'s `rows`) came back "does_not_fit".
 
 ### The six compositions
 
@@ -82,7 +86,7 @@ each.
   ran its own `step` and view, in the built app on Electron, at one tile, side by side, stacked,
   2x2 and 1024x700.
 - **Did not run:** the pipes went through a stand-in host on the app's socket, not today's host. No
-  program's main ran, and nothing was typed in tsh. The tracker's `lines` output was declared but
+  program's main ran, and nothing was typed in tsh. The tracker's `rows` output was declared but
   its main does not send it.
 - **Did not run as the brief wrote it:** `outline | ticket` and `board | ticket` with nothing
   upstream show an empty drawer, "No lines yet. Pipe some in: tracker | outline." The real lines
@@ -188,7 +192,7 @@ pipe inside one line only) and G7 R4 (a fold moves below both programs too).
 - **The steps drift may be on purpose.** If the tracker's 9 are a chosen view of the pipeline's 11,
   split 1 is one mapping, not a copy.
 - **No screen reader ran,** and the `next/` side was not read: every `next/` lesson leans on the
-  note's desk, `at` and `glance`.
+  note's desk, `location` and `glance`.
 
 ## Dollars
 

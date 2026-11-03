@@ -61,7 +61,7 @@ Linear     one command menu for pages and actions; peek with Space is a look, th
 Ableton    one set of tracks, two views; Key Map mode lights every mappable part; hot-swap, Esc back
 Eurorack   a tiny shared standard: power, 3U height, 1 V per octave; any module patches to any
 cockpit    the basic T: the same instrument in the same place; dark when fine; soft keys per page
-fabrika    today: the frame picks a tile; heirOf in reading order; no program opens a tile
+fabrika    today: the frame picks a tile; a close goes by reading order; no program opens a tile
 ```
 
 ## What was read
@@ -140,7 +140,7 @@ a source to lean on. It is not used.
 | Parents step children by hand; UI state lives in tea machines; a program may refuse | decided | [Elm first](../docs/direction/elm-first.md) |
 | The box decides what crosses, never the program | decided 2026-10-24 | [programs run in a box](../docs/direction/programs-run-in-a-box.md) |
 | Saved state and hot reload for every program, in `next/` | decided 2026-11-01 | [saved state](../docs/direction/saved-state.md), [hot reload](../docs/direction/hot-reload.md) |
-| A view moves inside its tile with `query`; across tiles it asks with `open`, the desk places it | proposed 2026-10-28 | [tracker views](../docs/direction/tracker-views-are-programs.md#8-the-views-the-facts-and-the-column) |
+| A view moves inside its tile with `query` (the note's `navigate`); across tiles it asks with `open`, the desk places it | proposed 2026-10-28 | [tracker views](../docs/direction/tracker-views-are-programs.md#8-the-views-the-facts-and-the-column) |
 | A program is flags, inputs, outputs, machines and `main` | proposed | [tea-program](../docs/direction/tea-program.md) |
 | An agent is a program; a run gets its id, trace, kept session and a job | proposed 2026-10-30 | [agents are programs](../docs/direction/agents-are-programs.md) |
 | Packs are programs in a package | proposed | [packs are programs](../docs/direction/packs-are-programs.md) |
@@ -148,7 +148,7 @@ a source to lean on. It is not used.
 | Programs live in `programs/`, not in the SDK; the SDK holds the tools | open, tracker ticket 93 | the tracker |
 | P1 to P8 | proposed 2026-11-02, on PR 326 | [196, patterns found](./196-ask-desk.md#patterns-found) |
 
-Untouched by anyone: an address for every program, who may open a tile and when, what counts as
+Untouched by anyone: a location for every program, who may open a tile and when, what counts as
 "the same tile", and the list of what a program gets for free.
 
 ## Today's asks popup and `Enter`
@@ -174,7 +174,7 @@ The same case, against each principle of the note:
 | Principle | Today |
 |---|---|
 | G1 one job, one model, every size draws it | **Breaks.** Two codes draw an ask: the frame's menu and the ticket's ask box. The menu cannot answer. |
-| G2 a program says where it is; the desk says where its tile is | **Half.** The tracker takes a `query`, an address in all but name. But the frame picks the tile, and the asks list has no address. |
+| G2 a program says where it is; the desk says where its tile is | **Half.** The tracker takes a `query`, a location in all but name; `next/` calls it `navigate`. But the frame picks the tile, and the asks list has no location. |
 | G3 open or focus, then land beside | **Half.** The focus half exists (`go`, and the tile that shows the ticket). The open half answers "nowhere". |
 | G4 only on a press; focus and selection travel together; say it once | **Half.** Only a press moves focus, and a new ask never steals it. But no selection travels, and `go` is not said. |
 | G5 the way back is one key | **Half.** A popover puts focus back. Between tiles there is no `C-b ;`, and a close goes by reading order. |
@@ -183,18 +183,18 @@ The same case, against each principle of the note:
 
 ## What this tells us for fabrika
 
-- **Give every program an address, now, in `next/`.** It is the one new field. Open, back, saved
-  state, the palette and a link all need it, and ticket 7 already asks for it.
+- **Give every program a location, now, in `next/`.** It is the one new field, `location`. Open,
+  back, saved state, the palette and a link all need it, and ticket 7 already asks for it.
 - **The desk is the router and the registry.** A program asks with `open`; the desk answers
-  `opened`, `focused` or `refused`, in words. This is Plan 9's plumber and OTP's `whereis` on our
-  pieces, and it keeps the box rule: the program asks, the app decides.
+  `opened` (with `how: "new"` or `how: "focused"`) or `refused`, in words. This is Plan 9's plumber
+  and OTP's `whereis` on our pieces, and it keeps the box rule: the program asks, the app decides.
 - **An open is a line the person could have typed.** So a tsh line and a program's `open` share one
   fit check and one placement rule.
 - **Write down where the person was, at the moment they move.** `from` on an open, and the focus
   history, exist only then. Every way back the owner might pick needs one of them.
 - **The P4 clash is wider than 196 saw.** Our declared defaults, tmux and i3, both return focus to
-  the tile focused before on a close. The decided `heirOf` does not. A third branch, focus history,
-  gives the opener back in the common case with no rule per program. It is the owner's call, since
+  the tile focused before on a close. The decided rule, reading order, does not. A third branch,
+  focus history, gives the opener back in the common case with no rule per program. It is the owner's call, since
   it reopens a decided rule.
 - **Linear clashes once.** Linear opens a look as a peek over the list; tmux and i3 split. The note
   keeps the split for work and leaves the popover glance for a look, and names it for the owner.
