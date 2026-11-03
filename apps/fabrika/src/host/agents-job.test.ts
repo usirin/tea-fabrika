@@ -1,0 +1,321 @@
+import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
+import * as NodePath from "@effect/platform-node/NodePath";
+import * as NodeSocket from "@effect/platform-node/NodeSocket";
+import {TAIL_MAX} from "@kampus/fabrika-old/mcp";
+import {Client} from "@modelcontextprotocol/client";
+import {getDefaultEnvironment, StdioClientTransport} from "@modelcontextprotocol/client/stdio";
+import {pullRequestsOf} from "@tea-fabrika/tracker";
+import {Effect, Exit, FileSystem, Layer, Logger, Path, Schedule, Scope} from "effect";
+import {afterEach, beforeEach, describe, expect, it} from "vitest";
+import type {Down} from "../link.ts";
+import {appWire} from "../wire.ts";
+import {runHost} from "./run.ts";
+import {pathsOf, reach} from "./socket.ts";
+
+// An agent reads the host: one tile job's state and its last lines, through the read-only `job`
+// tool beside `runs`, as tmux's `capture-pane` and `list-panes` read a pane. And the host's log
+// says what ran: one wide `key=value` line as each job begins and ends, and one when the host's
+// thread is starved. Today's version, on a home of the test's own, its host in this process.
+//
+//   tile t1     tsh$ seq --to 5          prints 1 to 5; the line is job %1, and it ends done
+//   agent       job {n: 1, tail: 2}
+//               {n: 1, text: "seq --to 5", tile: "t1", state: {_tag: "ended", how: "done"},
+//                lines: ["4", "5"]}
+//   host/log    timestamp=... level=INFO fiber=#.. message=job_began n=1 "text=seq --to 5" tile=t1
+//               timestamp=... level=INFO fiber=#.. message=job_ended n=1 ... tile=t1 how=done
+//
+// Every log line the host writes is caught here through Effect's own `Logger`, in the format the
+// host's file uses (`Logger.formatSimple`, host/main.ts). No real home and no real ledger.
+
+const platform = NodeChildProcessSpawner.layer.pipe(
+	Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, pullRequestsOf([]))),
+);
+
+const go = <A, E>(test: Effect.Effect<A, E, Scope.Scope | Layer.Success<typeof platform>>) =>
+	Effect.runPromise(test.pipe(Effect.scoped, Effect.provide(platform)));
+
+/** Wait for `check` to answer something, ten seconds at most. */
+const until = <T>(what: string, check: () => T | undefined) =>
+	Effect.gen(function* () {
+		for (let i = 0; i < 2000; i += 1) {
+			const got = check();
+			if (got !== undefined) return got;
+			yield* Effect.sleep("5 millis");
+		}
+		return yield* Effect.die(`waited for ${what}`);
+	});
+
+/** One log line's `key=value` fields, as `Logger.formatSimple` writes them, quotes taken off. */
+const fieldsOf = (line: string): Record<string, string> => {
+	const out: Record<string, string> = {};
+	for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g)) {
+		const [, key = "", raw = ""] = m;
+		out[key] = raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw;
+	}
+	return out;
+};
+
+/** The lines whose message is `message`, read as fields. */
+const said = (lines: readonly string[], message: string) =>
+	lines.map(fieldsOf).filter((f) => f.message === message);
+
+/** A host on `home`, its log caught in `lines`, and the app attached with its page loaded. */
+const hostOn = (home: string, lines: string[]) =>
+	Effect.gen(function* () {
+		const paths = yield* pathsOf(home);
+		const host = yield* Scope.make();
+		const caught = Logger.make((o) => {
+			lines.push(Logger.formatSimple.log(o));
+		});
+		yield* runHost({home, pid: process.pid}).pipe(
+			Effect.scoped,
+			Effect.provide(Logger.layer([caught])),
+			Effect.forkIn(host),
+		);
+		yield* reach(paths.mcp).pipe(
+			Effect.repeat({until: (r) => r === "live", schedule: Schedule.spaced("5 millis")}),
+			Effect.timeoutOrElse({duration: "5 seconds", orElse: () => Effect.die("no agents' socket")}),
+		);
+		const got: Down[] = [];
+		const wire = yield* appWire(yield* NodeSocket.makeNet({path: paths.sock}), (m) => got.push(m));
+		yield* wire.up;
+		wire.send({type: "page"});
+		yield* until("tile t1", () => got.find((m) => m.type === "port" && m.port === "tile:t1"));
+		/** Keys typed in tile t1's terminal. */
+		const type = (data: string) =>
+			wire.send({type: "on", port: "tile:t1", m: {type: "keys", data}});
+		return {paths, type, stop: Scope.close(host, Exit.void)};
+	});
+
+/** An MCP client, on the bridge Claude Code would start: `node cli.ts mcp --as <agent>`. */
+const agentOn = (home: string, agent: string) =>
+	Effect.gen(function* () {
+		const path = yield* Path.Path;
+		const cli = yield* path.fromFileUrl(new URL("../cli.ts", import.meta.url)).pipe(Effect.orDie);
+		const transport = new StdioClientTransport({
+			command: process.execPath,
+			args: [cli, "mcp", "--as", agent],
+			env: {...getDefaultEnvironment(), FABRIKA_HOME: home},
+			stderr: "pipe",
+		});
+		const client = new Client({name: "test", version: "0.0.0"});
+		yield* Effect.acquireRelease(
+			Effect.promise(() => client.connect(transport)),
+			() => Effect.promise(() => client.close()).pipe(Effect.ignore),
+		);
+		/** Every text the agent was answered, kept for the secrets check. */
+		const heard: string[] = [];
+		const call = (name: string, args: Record<string, unknown>) =>
+			Effect.promise(() => client.callTool({name, arguments: args})).pipe(
+				Effect.map((result) => {
+					const first = Array.isArray(result.content) ? result.content[0] : undefined;
+					const text = String(Reflect.get(Object(first), "text"));
+					heard.push(text);
+					return {error: result.isError === true, text};
+				}),
+			);
+		const tools = Effect.promise(() => client.listTools()).pipe(
+			Effect.tap((t) => Effect.sync(() => heard.push(JSON.stringify(t)))),
+		);
+		/** The job tool's answer once `ok` holds of it: the job runs on its own time. */
+		const jobWhen = (
+			args: Record<string, unknown>,
+			ok: (data: Record<string, unknown>) => boolean,
+		) =>
+			Effect.gen(function* () {
+				const listed = (yield* tools).tools.some((t) => t.name === "job");
+				if (!listed) return yield* Effect.die("the agent has no job tool");
+				for (let i = 0; i < 400; i += 1) {
+					const answer = yield* call("job", args);
+					if (!answer.error) {
+						const data = JSON.parse(answer.text) as Record<string, unknown>;
+						if (ok(data)) return data;
+					}
+					yield* Effect.sleep("25 millis");
+				}
+				return yield* Effect.die(`job ${JSON.stringify(args)} never came to what was waited for`);
+			});
+		return {client, call, tools, jobWhen, heard};
+	});
+
+const tagOf = (data: Record<string, unknown>) => Reflect.get(Object(data.state), "_tag");
+
+const freshHome = Effect.gen(function* () {
+	return yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped({prefix: "aj-"});
+});
+
+describe("the job tool: one tile job's state and its last lines", () => {
+	it("is listed beside runs, read-only, and takes a job's number and how many lines", async () => {
+		const tool = await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				yield* hostOn(home, []);
+				const agent = yield* agentOn(home, "claude");
+				return (yield* agent.tools).tools.find((t) => t.name === "job");
+			}),
+		);
+		expect(tool?.annotations?.readOnlyHint).toBe(true);
+		expect(tool?.inputSchema).toMatchObject({
+			type: "object",
+			required: ["n"],
+			properties: {n: {type: "integer"}, tail: {type: "integer", maximum: TAIL_MAX}},
+		});
+	});
+
+	it("gives an ended job's how and its last n lines, a running job's tile, and refuses what is not there", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				const host = yield* hostOn(home, []);
+				const agent = yield* agentOn(home, "claude");
+				host.type("seq --to 5\r");
+				const ended = yield* agent.jobWhen({n: 1, tail: 2}, (d) => tagOf(d) === "ended");
+				const all = yield* agent.jobWhen({n: 1}, (d) => tagOf(d) === "ended");
+				host.type("counter &\r");
+				const running = yield* agent.jobWhen({n: 2}, (d) => tagOf(d) === "running");
+				const unknown = yield* agent.call("job", {n: 99});
+				const tooMany = yield* agent.call("job", {n: 1, tail: TAIL_MAX + 1});
+				const none = yield* agent.call("job", {n: 1, tail: 0});
+				return {ended, all, running, unknown, tooMany, none};
+			}),
+		);
+		expect(seen.ended).toEqual({
+			n: 1,
+			text: "seq --to 5",
+			tile: "t1",
+			state: {_tag: "ended", how: "done"},
+			lines: ["4", "5"],
+		});
+		expect(seen.all.lines).toEqual(["1", "2", "3", "4", "5"]);
+		expect(seen.running).toMatchObject({
+			n: 2,
+			text: expect.stringMatching(/^counter/),
+			tile: "t1",
+			state: {_tag: "running"},
+		});
+		// A plain error, in words, for a job the host does not know.
+		expect(seen.unknown.error).toBe(true);
+		expect(seen.unknown.text).toMatch(/\b99\b/);
+		// The count of lines is bounded, and asked past it is refused by the tool's own schema.
+		expect(seen.tooMany.error).toBe(true);
+		expect(seen.tooMany.text).toMatch(/tail/);
+		expect(seen.none.error).toBe(true);
+	});
+
+	it("says a job from before the host restarted is detached", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				const first = yield* hostOn(home, []);
+				const before = yield* Effect.gen(function* () {
+					const agent = yield* agentOn(home, "claude");
+					first.type("counter &\r");
+					return yield* agent.jobWhen({n: 1}, (d) => tagOf(d) === "running");
+				}).pipe(Effect.scoped);
+				yield* first.stop;
+				yield* hostOn(home, []);
+				const agent = yield* agentOn(home, "claude");
+				const after = yield* agent.jobWhen({n: 1}, (d) => tagOf(d) !== "running");
+				return {before, after};
+			}),
+		);
+		expect(seen.before).toMatchObject({n: 1, state: {_tag: "running"}});
+		expect(seen.after).toMatchObject({
+			n: 1,
+			text: expect.stringMatching(/^counter/),
+			state: {_tag: "detached"},
+		});
+	});
+});
+
+describe("the host's wide log", () => {
+	it("writes one line as a job begins and one as it ends, with how", async () => {
+		const lines: string[] = [];
+		await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				const host = yield* hostOn(home, lines);
+				host.type("seq --to 3\r");
+				yield* until("the job's end in the log", () =>
+					said(lines, "job_ended").length > 0 ? true : undefined,
+				);
+			}),
+		);
+		const began = said(lines, "job_began");
+		const ended = said(lines, "job_ended");
+		expect(began).toHaveLength(1);
+		expect(ended).toHaveLength(1);
+		expect(began[0]).toMatchObject({level: "INFO", n: "1", text: "seq --to 3", tile: "t1"});
+		expect(ended[0]).toMatchObject({
+			level: "INFO",
+			n: "1",
+			text: "seq --to 3",
+			tile: "t1",
+			how: "done",
+		});
+		expect(began[0]?.timestamp).toMatch(/^\d{4}-\d\d-\d\dT/);
+	});
+
+	it("writes a lag line while the host's thread is starved", async () => {
+		const lines: string[] = [];
+		await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				yield* hostOn(home, lines);
+				// The thread is held 200 ms at a time for about three seconds, as the trace window's
+				// `childrenOf` held it: the lag sampler, about once a second, sees p99 far past its line.
+				const until3s = Date.now() + 3000;
+				while (Date.now() < until3s && said(lines, "lag").length === 0) {
+					const end = Date.now() + 200;
+					while (Date.now() < end) {
+						// busy: nothing else runs on this thread
+					}
+					yield* Effect.sleep("1 millis");
+				}
+				yield* until("a lag line", () => (said(lines, "lag").length > 0 ? true : undefined));
+			}),
+		);
+		const lag = said(lines, "lag")[0];
+		expect(lag?.level).toBe("WARN");
+		expect(Number(lag?.p99_ms)).toBeGreaterThan(50);
+		expect(Number(lag?.max_ms)).toBeGreaterThanOrEqual(Number(lag?.p99_ms));
+	});
+});
+
+describe("no secret in a tool's answer or a log line", () => {
+	const NAME = "FABRIKA_TEST_SECRET";
+	// Secret-shaped, made at run time, so no key-like text is written in this file.
+	const secret = ["sk", "ant", "api03", crypto.randomUUID().replaceAll("-", "")].join("-");
+	beforeEach(() => {
+		process.env[NAME] = secret;
+	});
+	afterEach(() => {
+		delete process.env[NAME];
+	});
+
+	it("never says an env value: tools, runs, a job's lines, the log", async () => {
+		const lines: string[] = [];
+		const heard = await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				const host = yield* hostOn(home, lines);
+				const agent = yield* agentOn(home, "claude");
+				host.type("seq --to 3\r");
+				yield* agent.jobWhen({n: 1}, (d) => tagOf(d) === "ended");
+				host.type("counter &\r");
+				yield* agent.jobWhen({n: 2}, (d) => tagOf(d) === "running");
+				yield* agent.call("runs", {});
+				yield* agent.call("job", {n: 99});
+				return agent.heard;
+			}),
+		);
+		// What is checked was said: the job tool answered, and the log has the jobs in it.
+		expect(heard.some((t) => t.includes('"lines"'))).toBe(true);
+		expect(said(lines, "job_began").length).toBeGreaterThan(0);
+		for (const text of [...heard, ...lines]) {
+			expect(text).not.toContain(secret);
+			expect(text).not.toContain(NAME);
+		}
+	});
+});
