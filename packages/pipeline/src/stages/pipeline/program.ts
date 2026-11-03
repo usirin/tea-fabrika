@@ -657,6 +657,20 @@ const notRunWords = (head: string, tail: string) =>
 	`The checks could not run at ${head}, so nothing says whether this work holds.${tail === "" ? "" : ` ${inert(tail)}`}`;
 
 /**
+ * Code's checks at `head`, for the carry: on red, each failing test is open too, so the builder the
+ * red goes back to is told them by name (self-fix PR 3).
+ */
+const checkedWithRed = (at: At, head: string) =>
+	Effect.gen(function* () {
+		const {checked, ran} = yield* recordChecks(at, head);
+		const carry =
+			checked.result === "red"
+				? {checked, open: withRed(at.cmd.carry.open, ran.failed, ran.tail)}
+				: {checked};
+		return {checked, ran, carry};
+	});
+
+/**
  * A later round whose builder changed nothing, by what code's checks say at the head.
  *
  *   green         go_on or stop: the work stands, and the mutation step still has to pass
@@ -672,8 +686,8 @@ const nothingChanged = (at: At, kept: StepEnd["carry"], says: string, moved: boo
 	Effect.gen(function* () {
 		const {round} = at.cmd;
 		const head = yield* need(kept.head, "no head to run the checks at");
-		const {checked, ran} = yield* recordChecks(at, head);
-		const carry = {...kept, checked};
+		const {checked, ran, carry: checks} = yield* checkedWithRed(at, head);
+		const carry = {...kept, ...checks};
 		if (checked.result === "not_run")
 			return ended({kind: "stuck", why: "checks_not_run"}, carry, [
 				`The builder changed nothing. ${notRunWords(head, ran.tail)} ${says}`,
@@ -700,18 +714,14 @@ const nothingChanged = (at: At, kept: StepEnd["carry"], says: string, moved: boo
 const builtAndChecked = (at: At, built: BodyEnd) =>
 	Effect.gen(function* () {
 		const head = yield* need(built.carry.head, "no head to run the checks at");
-		const {checked, ran} = yield* recordChecks(at, head);
-		const carry = {...built.carry, checked};
+		const {checked, ran, carry: checks} = yield* checkedWithRed(at, head);
+		const carry = {...built.carry, ...checks};
 		switch (checked.result) {
 			case "green":
 				return {...built, carry};
 			case "red":
 				return {
-					...ended(
-						{kind: "send", to: "builder", why: "checks_red"},
-						{...carry, open: withRed(at.cmd.carry.open, ran.failed, ran.tail)},
-						built.problems,
-					),
+					...ended({kind: "send", to: "builder", why: "checks_red"}, carry, built.problems),
 					failed: checked.failed,
 				};
 			case "not_run":
@@ -1235,7 +1245,8 @@ const bodies = {
 				files.length === 0 ? null : yield* formatExam(at.cmd.number, tree.tree, files);
 			const next = formatted ?? commit ?? head;
 			// A new head needs green checks of its own before the review reads it: the build's were not at it.
-			const checked = next === head ? {} : {checked: (yield* recordChecks(at, next)).checked};
+			// Red there goes back to the builder, a round up, with each failing test open (./routes.ts).
+			const checked = next === head ? {} : (yield* checkedWithRed(at, next)).carry;
 			const answers = end.report.answered?.answers ?? [];
 			return ended(
 				end.outcome,
@@ -1399,6 +1410,7 @@ const bodies = {
 			const pr = yield* need(at.cmd.carry.pr, "no pull request to merge");
 			const head = yield* need(at.cmd.carry.head, "no head to merge");
 			const outcome = yield* shipped(at, pr);
+			if (outcome.kind === "send") return ended(outcome, yield* theirsTakenIn(at, head));
 			if (outcome.kind !== "done") return ended(outcome);
 			const watch = yield* LaneWatch;
 			if (outcome.cleanup !== "not_run") {
@@ -1416,6 +1428,24 @@ const bodies = {
 					]);
 		}),
 };
+
+/**
+ * The lane's branch as the code host has it now, taken in when a person moved it on from `head`
+ * (jidoka rows 62 and 63): the step ship's send goes to works from their commit, and the next push
+ * keeps it. Only a fast-forward is taken in. A rewritten branch stays at `head`, and the next push
+ * keeps theirs under a kept ref (`LaneWork.pushTo`). Code's checks run at the head taken in, as after
+ * a build, since every step after build needs them there.
+ */
+const theirsTakenIn = (at: At, head: string) =>
+	Effect.gen(function* () {
+		const work = yield* LaneWork;
+		const {branch} = yield* work.tree(at.cmd.number);
+		const theirs = yield* work.remoteHead(branch);
+		if (theirs === null || theirs === head || (yield* work.mergeBase(head, theirs)) !== head)
+			return {};
+		yield* work.reset(at.cmd.number, theirs);
+		return {head: theirs, ...(yield* checkedWithRed(at, theirs)).carry};
+	});
 
 /** Ship, as it is, to its end. Its guards are its own. */
 const shipped = (at: At, pr: string) =>
