@@ -1,10 +1,12 @@
 import type {Inputs} from "../program/program.ts";
-import type {JsonSchema} from "../program/shape.ts";
+import {type JsonSchema, shapeOf} from "../program/shape.ts";
 import type {ProgramList} from "../shell/programs.ts";
+import {JOB, JobAsk} from "./job.ts";
 
 // A program list as MCP tools (spec 2026-07-28, "Tools"): one tool per input of each program, made
 // from the input's own schema, and one tool that lists what runs. No program has a tool written by
-// hand: a new input is a new tool, and a renamed input is a renamed tool.
+// hand: a new input is a new tool, and a renamed input is a renamed tool. The host's own tools
+// beside `runs` (`job`, ./job.ts) are the host's to list (./drive.ts); a call to one is read here.
 //
 //   toolsOf(programList([listed(tracker, ...)]))
 //   // [{name: "runs", ..., annotations: {readOnlyHint: true}},
@@ -26,7 +28,7 @@ import type {ProgramList} from "../shell/programs.ts";
 //
 // The name is `<program>_<input>`. A program's name has no `_` (programList holds it to small
 // letters, digits and -), so the first `_` splits it, and no tool of an input is ever named
-// `runs`. A dot would read better, but the Messages API takes a tool name of letters, digits, `_`
+// `runs` or `job`. A dot would read better, but the Messages API takes a tool name of letters, digits, `_`
 // and `-` only, and Claude Code hands MCP tools to it by their names.
 //
 // The value goes under `value`, never as the arguments themselves: the spec wants an object
@@ -57,6 +59,8 @@ const RUNS_TOOL: Tool = {
 	inputSchema: {type: "object", additionalProperties: false},
 	annotations: {readOnlyHint: true},
 };
+
+const jobAsk = shapeOf(JobAsk);
 
 /** The tool's name for one input of one program. */
 export const toolNameOf = (program: string, input: string): string => `${program}_${input}`;
@@ -106,9 +110,10 @@ export const toolsOf = (list: ProgramList): readonly Tool[] => {
 	return tools;
 };
 
-/** A tool call, read: `runs`, one input's value that fits it, or why not. */
+/** A tool call, read: `runs`, `job` with what it asks, one input's value that fits it, or why not. */
 export type Call =
 	| {readonly kind: "runs"}
+	| {readonly kind: "job"; readonly ask: JobAsk}
 	| {
 			readonly kind: "input";
 			readonly program: string;
@@ -120,6 +125,10 @@ export type Call =
 /** Read a call by the list's own schemas: the tool must be one of `toolsOf(list)`, its value must fit. */
 export const callOf = (list: ProgramList, name: string, args: unknown): Call => {
 	if (name === RUNS) return {kind: "runs"};
+	if (name === JOB)
+		return jobAsk.check(args)
+			? {kind: "job", ask: args}
+			: {kind: "refused", why: `${JOB} does not fit: ${jobAsk.problem(args)}`};
 	const at = name.indexOf("_");
 	const program = name.slice(0, at);
 	const input = name.slice(at + 1);

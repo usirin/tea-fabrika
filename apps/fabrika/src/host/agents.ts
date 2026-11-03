@@ -1,5 +1,5 @@
 import {Ledger, Shell, Traces} from "@kampus/fabrika-old";
-import {type InTile, serveAgent} from "@kampus/fabrika-old/mcp";
+import {type InTile, type JobAnswer, serveAgent} from "@kampus/fabrika-old/mcp";
 import {Author, PullRequests} from "@tea-fabrika/tracker";
 import {Effect, type Scope} from "effect";
 import type {SocketServer} from "effect/socket";
@@ -22,10 +22,19 @@ import {appPrograms} from "../tsh.ts";
 // tool is made for it. Behind that, the tracker still refuses an agent's `answered` as it refuses
 // any agent's (programs/tracker, `mayWrite`).
 //
-// Only on a home that keeps its own ledger file (host/run.ts). On a home connected to a ledger
-// server, the host's ledger is the person's session there, and the door stamps what it writes as
-// the person whatever the tracker names: an agent there needs its own session (host/post.ts,
-// `asAgent`). Not yet: that home has no agents' socket.
+// Beside `runs`, the host's own `job` tool: one job of the host's table, its state and its last
+// lines (`job`, job-lines.ts), as tmux's `capture-pane` reads a pane.
+//
+//   agent's chat     job {n: 1, last: 2}
+//                    {n: 1, text: "seq --to 5", tile: "t1", state: {_tag: "ended", how: "done"}, lines: ["4", "5"]}
+//
+// Every home has the socket. On a home that keeps its own ledger file, every tool. On a home
+// connected to a ledger server (`readOnly`), only the tools that write nothing: there the host's
+// ledger is the person's session, and the server's door stamps what it writes as the person
+// whatever the tracker names, so an agent's write would be credited to the person. A write tool is
+// not listed there, and one called anyway is refused before any run starts. A write there needs
+// the agent's own session (host/post.ts, `asAgent`), not built yet. Starting or stopping a lane
+// stays the person's, in a tile.
 
 /** A screen's port name, `run:<id>`, as a run in a tile; a run's id starts with its program's name. */
 const inTile = (port: string): InTile | null => {
@@ -35,17 +44,23 @@ const inTile = (port: string): InTile | null => {
 	return {run, program: at === -1 ? run : run.slice(0, at)};
 };
 
-/**
- * Serve every agent that attaches to `server`, until the host stops. `ports` are the screens'
- * names now. `attached` is said with each agent's name once its handshake is read, in the agent's
- * scope: the host lists who is attached by it, for the top bar's agents (host/serve.ts).
- */
-export const serveAgents = (
-	server: SocketServer.SocketServer["Service"],
-	ports: () => Iterable<string>,
-	attached: (name: string) => Effect.Effect<void, never, Scope.Scope>,
-) =>
+/** Serve every agent that attaches to `server`, until the host stops. */
+export const serveAgents = (options: {
+	readonly server: SocketServer.SocketServer["Service"];
+	/** The screens' names now. */
+	readonly ports: () => Iterable<string>;
+	/**
+	 * Said with each agent's name once its handshake is read, in the agent's scope: the host lists
+	 * who is attached by it, for the top bar's agents (host/serve.ts).
+	 */
+	readonly attached: (name: string) => Effect.Effect<void, never, Scope.Scope>;
+	/** Job n of the host's table now, with its lines (job-lines.ts), for the `job` tool. */
+	readonly job: (n: number) => JobAnswer | null;
+	/** Only the tools that write nothing: a home connected to a ledger server. */
+	readonly readOnly: boolean;
+}) =>
 	Effect.gen(function* () {
+		const {server, ports, attached, job, readOnly} = options;
 		const ledger = yield* Ledger;
 		const person = yield* Author;
 		const pullRequests = yield* PullRequests;
@@ -55,6 +70,8 @@ export const serveAgents = (
 				person: person.id,
 				programsFor: (who) => Shell.programList(appPrograms(ledger, who, pullRequests, traces)),
 				tiles: () => [...ports()].flatMap((port) => inTile(port) ?? []),
+				job,
+				readOnly,
 				attached: (who) => attached(who.id),
 			}).pipe(
 				Effect.catchCause((cause) =>

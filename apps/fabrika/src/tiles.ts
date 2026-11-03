@@ -6,6 +6,7 @@ import type {Does} from "./desk/keys.ts";
 import type {TileId} from "./desk/layout/index.ts";
 import {deskWords} from "./desk/words.ts";
 import type {SharedHistory} from "./editor/history.ts";
+import type {JobLines} from "./job-lines.ts";
 import type {ToTerminal} from "./messages.ts";
 import {type Placed, type Screen, startTsh, type Tsh, type WindowScreen} from "./tsh.ts";
 
@@ -107,9 +108,11 @@ export const startTiles = (options: {
 	/** The host's one job table, handed to every tile's tsh. */
 	readonly jobs: JobsOnHost;
 	readonly edge: Edge;
+	/** The host's job lines (job-lines.ts), handed to every tile's tsh with the table. */
+	readonly lines?: JobLines | undefined;
 }) =>
 	Effect.gen(function* () {
-		const {history, jobs, edge} = options;
+		const {history, jobs, edge, lines} = options;
 		const parent = yield* Effect.scope;
 		const ledger = yield* Ledger;
 		const author = yield* Author;
@@ -147,6 +150,7 @@ export const startTiles = (options: {
 				const host = yield* startTsh({
 					tile,
 					jobs,
+					lines,
 					history,
 					words: deskWords((does) => edge.said(tile, does)),
 					runs: {

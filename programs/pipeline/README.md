@@ -56,7 +56,9 @@ The same goes for what an agent loads by itself. In the copy of a head that the 
 mutants step and the review read, these are main's, or gone when main has none, at any depth and in any
 case or compatibility form of the name: `AGENTS.md`, `AGENTS.override.md`, `CLAUDE.md`,
 `CLAUDE.local.md`, `.mcp.json`, `.codex/`, `.agents/`, `.claude/`. A change to one still shows in the
-review's diff. The tests run in the head's own copy, so they see the head's files.
+review's diff. The tests run in the head's own copy, so they see the head's files. Code's checks run in
+a git worktree of the head, made and installed for that run alone and removed when it ends, so a check
+that asks git finds the repository, as it does in CI's checkout.
 
 **Run the lane only on work from agents you trust.** The judge's copy stops a head's files from telling
 its judge how to judge. It does not stop a head's running code. The install, the checks and the mutants
