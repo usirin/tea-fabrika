@@ -1,16 +1,24 @@
-import {mkdtempSync, realpathSync, rmSync} from "node:fs";
+import {execFileSync} from "node:child_process";
+import {mkdtempSync, realpathSync, rmSync, writeFileSync} from "node:fs";
 import {homedir, tmpdir} from "node:os";
 import {join} from "node:path";
+import {Ledger, streams} from "@kampus/fabrika-old";
 import {Effect, Layer} from "effect";
 import {afterEach, beforeEach, describe, expect, it} from "vitest";
+import {memoryLedger} from "../../asks/ledger.ts";
 import type {Settings} from "../../settings.ts";
+import {factsOf, nameOf} from "../../tickets/ticket.ts";
+import {Tickets, ticketsOnLedger} from "../../tickets/tickets.ts";
 import {placeIn} from "../mutation/mutant.ts";
 import {spansOf} from "../mutation/scope.ts";
 import {MutationRunner, MutationScope, type RunAsk} from "../mutation/services.ts";
+import {PushWork} from "../push/program.ts";
 import {TestsWork} from "../test-writer/program.ts";
 import {CheckRunner} from "./checks.ts";
-import {makeLaneHome} from "./lane-fixture.ts";
-import {laneCheckRunner, laneMutationScope, laneTestsWork} from "./tools.ts";
+import {ticketUrlOf} from "./hosts.ts";
+import {LANE_REPO, makeLaneHome} from "./lane-fixture.ts";
+import {LanePulls, PullWire} from "./pulls.ts";
+import {laneCheckRunner, laneMutationScope, lanePushWork, laneTestsWork} from "./tools.ts";
 import {LaneHome, LaneWork, laneWork} from "./work.ts";
 
 // Today's version. The mutation step's read of a change, on real git over a bare remote.
@@ -210,5 +218,87 @@ describe("code's checks, as the repository's settings name them", () => {
 			expect(checked.tail).toContain("[key cut]");
 			expect(checked.tail).not.toContain(key);
 		});
+	});
+});
+
+// The push stage's push, on real git over a bare remote, and its ticket on a ledger in memory. A push
+// that replaces the lane's branch keeps the head it replaces and says so on the ticket: one line a
+// replace, each naming its own head (docs/direction/read-fresh-run-alone.md).
+describe("the push stage's push of the lane's branch", () => {
+	let dir: string;
+	beforeEach(() => {
+		dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-push-")));
+	});
+	afterEach(() => rmSync(dir, {recursive: true, force: true}));
+
+	const NUMBER = 1;
+	const TICKET = ticketUrlOf(LANE_REPO, NUMBER);
+	const OWNER = "user:owner";
+	const git = (cwd: string, ...args: readonly string[]) =>
+		execFileSync("git", args, {
+			cwd,
+			encoding: "utf8",
+			env: {
+				...process.env,
+				GIT_AUTHOR_NAME: "person",
+				GIT_AUTHOR_EMAIL: "person@fabrika.invalid",
+				GIT_COMMITTER_NAME: "person",
+				GIT_COMMITTER_EMAIL: "person@fabrika.invalid",
+			},
+			stdio: "pipe",
+		}).trim();
+	/** A person's commit on top of the remote's lane branch, pushed from the seed: its sha. */
+	const personPushes = (seed: string, text: string) => {
+		git(seed, "fetch", "--quiet", "origin");
+		git(seed, "checkout", "--quiet", "--detach", `origin/lane/${NUMBER}`);
+		writeFileSync(join(seed, "person.md"), text);
+		git(seed, "add", "-A");
+		git(seed, "commit", "--quiet", "-m", "a person's push");
+		git(seed, "push", "--quiet", "origin", `HEAD:refs/heads/lane/${NUMBER}`);
+		return git(seed, "rev-parse", "HEAD");
+	};
+	const fileTicket = Effect.gen(function* () {
+		const ledger = yield* Ledger;
+		yield* ledger.register(nameOf(NUMBER), OWNER);
+		yield* ledger.send(streams(nameOf(NUMBER)).inbox, `file-${NUMBER}`, {
+			kind: "filed",
+			writer: OWNER,
+			data: {type: "filed", title: "Read names in one form", body: "Lower case."},
+		});
+	});
+
+	it("each push that replaces a person's push posts its own line, naming the head it kept", async () => {
+		const {home, seed} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+		const work = laneWork.pipe(
+			Layer.provide(Layer.succeed(LaneHome, {home, checkout: seed, briefs: "", person: "owner"})),
+		);
+		const tickets = ticketsOnLedger({kind: "agent", id: "lane", for: "owner"});
+		const all = Layer.provideMerge(
+			lanePushWork,
+			Layer.mergeAll(work, tickets, Layer.mock(LanePulls, {}), Layer.mock(PullWire, {})),
+		).pipe(Layer.provideMerge(Layer.fresh(memoryLedger().layer)));
+		const {persons, lines} = await Effect.runPromise(
+			Effect.gen(function* () {
+				yield* fileTicket;
+				const lane = yield* LaneWork;
+				const push = yield* PushWork;
+				const {tree} = yield* lane.tree(NUMBER);
+				const commit = (path: string) => lane.commit(tree, [{path, text: `${path}\n`}], path);
+				yield* push.push(TICKET, NUMBER, yield* commit("a.md"));
+				const persons: string[] = [];
+				for (const path of ["b.md", "c.md"]) {
+					persons.push(yield* Effect.sync(() => personPushes(seed, `before ${path}\n`)));
+					yield* push.push(TICKET, NUMBER, yield* commit(path));
+				}
+				const ticket = yield* (yield* Tickets).read(NUMBER);
+				const lines = factsOf(ticket.timeline, "commented")
+					.map((c) => String(c.body))
+					.filter((body) => body.includes("refs/kept/"));
+				return {persons, lines};
+			}).pipe(Effect.provide(all)),
+		);
+		expect(lines, "one line a replace").toHaveLength(2);
+		expect(lines[0]).toContain(persons[0]);
+		expect(lines[1]).toContain(persons[1]);
 	});
 });

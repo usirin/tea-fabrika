@@ -61,12 +61,32 @@ export const ExamChange = Schema.Struct({
 });
 export type ExamChange = typeof ExamChange.Type;
 
+/**
+ * Where a redo is written. `main`: main does not merge into the head it was sent back from, so the
+ * writer writes the files again on main. Left out: on that head.
+ */
+export const RedoOn = Schema.Literal("main");
+export type RedoOn = typeof RedoOn.Type;
+
 export const ExamAsk = Schema.Struct({
 	ticket: Schema.String,
 	number: Schema.Finite,
 	base: Schema.String,
 	changes: Schema.Array(ExamChange),
 	tries: Schema.Finite,
+	/**
+	 * A redo (self-fix PR 10): the exam's pull request at `head` was sent back, and `why` says what
+	 * for, a line each: the review's findings, the checks' failing names or the files that conflict.
+	 * `base` is then a copy of that head, or of main when `on` says so. Left out: the first writing,
+	 * from main.
+	 */
+	redo: Schema.optionalKey(
+		Schema.Struct({
+			head: Schema.String,
+			why: Schema.Array(Schema.String),
+			on: Schema.optionalKey(RedoOn),
+		}),
+	),
 });
 export type ExamAsk = typeof ExamAsk.Type;
 
@@ -75,7 +95,14 @@ const ExamFile = Schema.Struct({path: Schema.String, text: Schema.String});
 export const ExamWritten = Schema.Struct({files: Schema.Array(ExamFile)});
 export type ExamWritten = typeof ExamWritten.Type;
 
-const ExamBrief = Schema.Struct({ticket: Schema.String, changes: Schema.Array(ExamChange)});
+const ExamBrief = Schema.Struct({
+	ticket: Schema.String,
+	changes: Schema.Array(ExamChange),
+	/** What a redo was sent back for. Left out: the first writing. */
+	why: Schema.optionalKey(Schema.Array(Schema.String)),
+	/** Where the redo is written: main, or left out for the pull request's head. */
+	on: Schema.optionalKey(RedoOn),
+});
 type ExamBrief = typeof ExamBrief.Type;
 
 /** The Check: every listed file, and nothing else. None is a pass. */
@@ -92,13 +119,27 @@ export const examProblems: Check<ExamWritten, ExamBrief> = (written, brief) => {
 	];
 };
 
+/** The writer's first prompt: each change, and on a redo what it was sent back for. Pure. */
+const promptOf = (brief: ExamBrief): string =>
+	[
+		...brief.changes.map((c) => `${c.path}: ${c.change} (${c.why})`),
+		...(brief.why === undefined
+			? []
+			: [
+					"",
+					brief.on === "main"
+						? "Main changed these files, and it does not merge into the pull request. You are on main now, so write each change again on main's version:"
+						: "These files are on the pull request already. It was sent back for this, so fix it in the same files:",
+					...brief.why.map((line) => `- ${line}`),
+				]),
+	].join("\n");
+
 export const examWrite = createDraft({name: "exam_write", output: ExamWritten});
 
 const refine = createRefineLoop({
 	draft: examWrite,
 	check: examProblems,
-	prompt: (brief, note) =>
-		note ?? brief.changes.map((c) => `${c.path}: ${c.change} (${c.why})`).join("\n"),
+	prompt: (brief, note) => note ?? promptOf(brief),
 	agent: null,
 	folder: null,
 });
@@ -176,7 +217,13 @@ const end = (s: Held, outcome: ExamOutcome, report: Partial<ExamReport> = {}): S
 ];
 
 const writing = (s: Held, guard: CheckChange): Step => {
-	const brief: ExamBrief = {ticket: s.ask.ticket, changes: s.ask.changes};
+	const {redo} = s.ask;
+	const brief: ExamBrief = {
+		ticket: s.ask.ticket,
+		changes: s.ask.changes,
+		...(redo === undefined ? {} : {why: redo.why}),
+		...(redo?.on === undefined ? {} : {on: redo.on}),
+	};
 	return [
 		{
 			...held(s),
@@ -208,7 +255,11 @@ const drafted = (s: Exam, m: Exclude<ExamMsg, {type: "start" | "resume"}>): Step
 				base,
 				files: next.output.files,
 				changes,
-				intent: intentOf("exam", ticket, "land"),
+				// A redo lands again: its own intent, by the head it was sent back from.
+				intent:
+					s.ask.redo === undefined
+						? intentOf("exam", ticket, "land")
+						: intentOf("exam", ticket, "land", s.ask.redo.head),
 			});
 			return [{...held(s), phase: "landing", guard: s.guard, asked}, [asked]];
 		}

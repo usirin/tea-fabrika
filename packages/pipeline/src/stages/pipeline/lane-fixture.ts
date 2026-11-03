@@ -206,8 +206,11 @@ export interface GhStory {
 	readonly settleAfter?: number;
 	/** The base branch's rule. `refuses`: GitHub refuses the merge. `allows`: it merges by GitHub's own merge. */
 	readonly rule?: "none" | "refuses" | "allows";
-	/** A person pushes one more commit: at the first facts read, or just as the merge is about to be written. */
-	readonly moveHeadAt?: "facts" | "merge_read";
+	/**
+	 * A person pushes one more commit: at the first facts read, or just as the merge is about to be
+	 * written. `tree`: `same` keeps the code as it was (an empty commit), `changed` edits one file.
+	 */
+	readonly moveHead?: {readonly at: "facts" | "merge_read"; readonly tree: "same" | "changed"};
 	/**
 	 * A person merges by hand, on a new head of theirs when `newHead`. `next_read`: after the lane first
 	 * read the facts, before its next read. `merge_read`: just as the merge is about to be written.

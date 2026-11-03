@@ -26,9 +26,11 @@ import {Report, resultsOf} from "../test-writer/results.ts";
 import {includedBy, Written} from "../test-writer/written.ts";
 import {draftRunner, LaneAgents, LaneNow} from "./agents.ts";
 import {type CheckRun, CheckRunner, checkRunner, publicText} from "./checks.ts";
+import {examBook} from "./exam-pull.ts";
+import {NO_FORMATTER} from "./format.ts";
 import {ruleChangeLines} from "./found.ts";
 import {LanePulls, PullWire} from "./pulls.ts";
-import {LaneHome, LaneWork} from "./work.ts";
+import {LaneHome, LaneWork, pushBranch} from "./work.ts";
 
 // The steps' own work, on this machine: what the test writer, the exam, the mutation step, the push
 // and the build's writes do. Today's version. Each write finds its own first try, so an Act sent
@@ -300,12 +302,43 @@ export const laneExamWork = Layer.effect(
 		const tickets = yield* Tickets;
 		const lane = yield* LaneNow;
 		const agents = yield* LaneAgents;
+		/**
+		 * The side tree, at `base`: a redo's base is the head it was sent back from, where it is. A first
+		 * landing's is main, and so is a redo's after main would not merge: an older exam's tree, a plan's
+		 * older version's or the conflicting head starts again from main when main is no fast-forward of
+		 * it.
+		 */
+		const sideAt = (name: string, base: string) =>
+			Effect.gen(function* () {
+				const side = yield* work.side(name);
+				if ((yield* work.head(side.tree)) === base) return side;
+				return (yield* work.sideTo(name, base)) === "moved" ? side : yield* work.sideFresh(name);
+			});
 		return {
-			land: (_ticket, number, _base, files, changes) =>
+			land: (_ticket, number, base, files, changes) =>
 				Effect.gen(function* () {
-					const side = yield* work.side(`exam-${number}`);
-					const head = yield* work.commit(side.tree, files, `rule changes for ticket ${number}`);
-					yield* work.pushTo(side.tree, head, side.branch);
+					const side = yield* sideAt(`exam-${number}`, base);
+					// Through the repository's formatter first, as the test writer's tests go (self-fix PR 10).
+					yield* work.write(side.tree, files);
+					const formatted = yield* work.format(
+						side.tree,
+						files.map((file) => file.path),
+					);
+					if (formatted._tag === "none")
+						yield* tickets
+							.talk(number, "format-none", {type: "commented", body: NO_FORMATTER})
+							.pipe(Effect.ignore);
+					if (formatted._tag === "failed")
+						yield* tickets
+							.talk(number, `format-exam-pr-failed/${side.branch}`, {
+								type: "commented",
+								body: saidOf(
+									`The formatter failed on the rule changes, so they are kept as the exam writer wrote them. ${formatted.says}`,
+								),
+							})
+							.pipe(Effect.ignore);
+					const head = yield* work.commit(side.tree, [], `rule changes for ticket ${number}`);
+					yield* pushBranch({work, tickets}, number, side.tree, head, side.branch);
 					const title = `Rule changes for ticket ${number}`;
 					const body = saidOf(
 						[
@@ -320,7 +353,16 @@ export const laneExamWork = Layer.effect(
 						body,
 					});
 					const pr = yield* pulls.open(
-						{kind: "exam", ticket: number, branch: side.branch, head, tree: side.tree, title, body},
+						{
+							kind: "exam",
+							ticket: number,
+							branch: side.branch,
+							head,
+							tree: side.tree,
+							title,
+							body,
+							book: examBook(changes),
+						},
 						id ?? undefined,
 					);
 					return {pr, head};
@@ -348,7 +390,7 @@ export const lanePushWork = Layer.effect(
 			push: (_ticket, number, head) =>
 				Effect.gen(function* () {
 					const {tree, branch} = yield* work.tree(number);
-					yield* work.pushTo(tree, head, branch);
+					yield* pushBranch({work, tickets}, number, tree, head, branch);
 					return null;
 				}),
 			open: (_ticket, number, head, title, body) =>

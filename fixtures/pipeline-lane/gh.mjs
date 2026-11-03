@@ -130,10 +130,13 @@ class Refused extends Error {
 
 // ---------------------------------------------------------------- real git on the bare remote
 
-const gitRun = (state, ...args) =>
+const gitRun = (state, ...args) => gitWith(state, {}, ...args);
+/** git with more of its environment, and text on stdin when `input` is given. */
+const gitWith = (state, {env = {}, input}, ...args) =>
 	spawnSync("git", ["--git-dir", state.remote, ...args], {
 		encoding: "utf8",
-		env: {PATH: process.env.PATH, ...IDENTITY},
+		env: {PATH: process.env.PATH, ...IDENTITY, ...env},
+		input,
 	});
 const git = (state, ...args) => {
 	const ran = gitRun(state, ...args);
@@ -189,19 +192,38 @@ const findPull = (state, number) => {
 	return pr;
 };
 
-/** A person pushes one more commit, once, at the moment the story names. */
+/** `before`'s tree with one more line in the first file the pull request changes. */
+const treeWithAWord = (state, pr, before) => {
+	const path = lines(git(state, "diff", "--name-only", `${mainTip(state, pr.base)}...${before}`))[0];
+	if (path === undefined) throw new Error("a person has no changed file to edit");
+	const text = `${blob(state, `${before}:${path}`)?.text ?? ""}// A person changed a word here.\n`;
+	const wrote = gitWith(state, {input: text}, "hash-object", "-w", "--stdin");
+	if (wrote.status !== 0) throw new Error(`git hash-object: ${wrote.stderr}`);
+	const index = {env: {GIT_INDEX_FILE: join(dir, "person.index")}};
+	for (const args of [
+		["read-tree", before],
+		["update-index", "--cacheinfo", `100644,${wrote.stdout.trim()},${path}`],
+	]) {
+		const ran = gitWith(state, index, ...args);
+		if (ran.status !== 0) throw new Error(`git ${args.join(" ")}: ${ran.stderr}`);
+	}
+	const tree = gitWith(state, index, "write-tree");
+	if (tree.status !== 0) throw new Error(`git write-tree: ${tree.stderr}`);
+	return tree.stdout.trim();
+};
+
+/**
+ * A person pushes one more commit, once, at the moment the story names. It keeps the code as it was,
+ * unless the story's `moveHead` says the tree changed.
+ */
 const movedByAPerson = (state, pr) => {
 	if (state.moved || pr.state !== "OPEN") return;
 	const before = headNow(state, pr);
-	const moved = git(
-		state,
-		"commit-tree",
-		`${before}^{tree}`,
-		"-p",
-		before,
-		"-m",
-		"A person pushed one more commit.",
-	);
+	const tree =
+		state.story.moveHead?.tree === "changed"
+			? treeWithAWord(state, pr, before)
+			: `${before}^{tree}`;
+	const moved = git(state, "commit-tree", tree, "-p", before, "-m", "A person pushed one more commit.");
 	git(state, "update-ref", `refs/heads/${pr.branch}`, moved);
 	state.moved = true;
 };
@@ -263,7 +285,7 @@ const GRAPHQL = {
 	},
 	facts: (state, at) => {
 		const pr = findPull(state, at.number);
-		if (state.story.moveHeadAt === "facts") movedByAPerson(state, pr);
+		if (state.story.moveHead?.at === "facts") movedByAPerson(state, pr);
 		state.factsReads += 1;
 		const head = headNow(state, pr);
 		return {
@@ -332,7 +354,7 @@ const GRAPHQL = {
 	},
 	merge_read: (state, at) => {
 		const pr = findPull(state, at.number);
-		if (state.story.moveHeadAt === "merge_read") movedByAPerson(state, pr);
+		if (state.story.moveHead?.at === "merge_read") movedByAPerson(state, pr);
 		if (state.story.mergedByAPerson?.at === "merge_read") mergedByAPerson(state, pr);
 		return {
 			data: {
