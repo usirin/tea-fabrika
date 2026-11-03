@@ -4402,6 +4402,116 @@ describe("the exam's pull request", () => {
 			expect(descends(ran.remote, moved, head ?? ""), "the redo's head takes main").toBe(true);
 		},
 	);
+
+	// What the real exam writer reads first is the filled brief, `briefs/exam.md` (agents.ts
+	// `promptFor`): the fake logs it as `prompt`. On a redo written on main, that text must say so.
+	const MAIN_RULE = '{"main": 1}\n';
+	/** The rule file as the fake exam writer writes it (fixtures/pipeline-lane/codex.mjs). */
+	const WRITTEN_RULE = '{"rules": {}}\n';
+	/** The brief's words for a redo on the pull request's head: false on main. */
+	const ON_THE_HEAD =
+		"On a redo, your folder holds the pull request's head, with your last changes in it.";
+	/** Main changes the rule file under the exam review's checks, the lane's first, once. */
+	const mainTakesTheRule: NonNullable<Script["checksSay"]> = (_head, nth, where) => {
+		if (nth === 0) pushToMain(where, [{path: RULE, text: MAIN_RULE}]);
+		return null;
+	};
+
+	it(
+		"ship's conflicts at the exam's merge: the exam writer is first told its folder is on main, never that it holds the pull request's head",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				title: RULES,
+				within: 200,
+				picks: {...YES, rounds_spent: "stop"},
+				fake: {see: [RULE]},
+				checksSay: mainTakesTheRule,
+			});
+			const said = ran.lines.join("\n");
+			const runs = exams(ran);
+			expect(runs.length, said).toBeGreaterThan(1);
+			const redo = runs[1];
+			expect(redo?.seen[RULE], "the redo's folder is main").toBe(MAIN_RULE);
+			expect(redo?.prompt).toMatch(/\bon main\b/i);
+			expect(redo?.prompt).not.toContain(ON_THE_HEAD);
+		},
+	);
+
+	it(
+		"a review's findings, then main's conflicts at the exam's own review: the first redo is written on the exam head, the second on main",
+		{timeout: 300_000},
+		async () => {
+			let moved = "";
+			const ran = await lane({
+				title: RULES,
+				within: 200,
+				picks: {...YES, rounds_spent: "stop"},
+				fake: {answers: {review: [FAILS_E1]}, see: [RULE]},
+				checksSay: (head, nth, where) => {
+					const said = mainTakesTheRule(head, nth, where);
+					if (nth === 0) moved = onMainHead(where.remote);
+					return said;
+				},
+			});
+			const said = ran.lines.join("\n");
+			const reviews = ran.facts.filter((f) => f.type === "ended" && f.stage === "exam_review");
+			expect(
+				reviews.map((f) => f.outcome),
+				said,
+			).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({kind: "send", why: "review_failed"}),
+					expect.objectContaining({kind: "send", why: "conflicts"}),
+				]),
+			);
+			const runs = exams(ran);
+			expect(runs, said).toHaveLength(3);
+			// The review's redo: the exam head, with the writer's own rule file, and not told main.
+			expect(runs[1]?.seen[RULE], "the review's redo stands on the exam head").toBe(WRITTEN_RULE);
+			expect(runs[1]?.prompt).toContain(FAULT);
+			expect(runs[1]?.prompt).not.toMatch(/\bon main\b/i);
+			// The conflicts redo: main, with main's rule file, and what it lands takes main.
+			expect(runs[2]?.seen[RULE], "the conflicts redo stands on main").toBe(MAIN_RULE);
+			const ends = ran.facts.filter((f) => f.type === "ended" && f.stage === "exam");
+			const head = (ends[2]?.carry as {readonly examPull?: {readonly head: string}} | undefined)
+				?.examPull?.head;
+			expect(head, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(descends(ran.remote, moved, head ?? ""), "the redo's head takes main").toBe(true);
+		},
+	);
+
+	it(
+		"red checks at the exam's review: the redo is written on the exam head, with the failing name, and not told main",
+		{timeout: 300_000},
+		async () => {
+			const NAME = "src/rules.test.ts > rules > reads the list";
+			const ran = await lane({
+				title: RULES,
+				within: 200,
+				picks: {...YES, rounds_spent: "stop"},
+				fake: {see: [RULE]},
+				checksSay: (head, nth) =>
+					nth === 0
+						? {
+								head,
+								commands: [{command: "node_modules/.bin/vitest run", code: 1, ms: 3}],
+								result: "red",
+								failed: [NAME],
+								tail: `${NAME}: AssertionError`,
+							}
+						: null,
+			});
+			const said = ran.lines.join("\n");
+			const first = ran.facts.find((f) => f.type === "ended" && f.stage === "exam_review");
+			expect(first?.outcome, said).toMatchObject({kind: "send", why: "checks_red"});
+			const runs = exams(ran);
+			expect(runs.length, said).toBeGreaterThan(1);
+			expect(runs[1]?.seen[RULE], "the checks' redo stands on the exam head").toBe(WRITTEN_RULE);
+			expect(runs[1]?.prompt).toContain(NAME);
+			expect(runs[1]?.prompt).not.toMatch(/\bon main\b/i);
+		},
+	);
 });
 
 // Self-fix PR 10, Part 1: the side tree starts from main on the first landing of each plan version.
