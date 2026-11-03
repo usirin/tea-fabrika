@@ -1425,9 +1425,15 @@ importers:
       '@kampus/fabrika-old':
         specifier: workspace:*
         version: link:../../packages/fabrika
+      '@kampus/pipeline':
+        specifier: workspace:*
+        version: link:../../packages/pipeline
       '@manti-ui/react':
         specifier: 'catalog:'
         version: 0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@tea-fabrika/tracker':
+        specifier: workspace:*
+        version: link:../tracker
       effect:
         specifier: 'catalog:'
         version: 4.1.1
@@ -1438,12 +1444,18 @@ importers:
       '@types/react':
         specifier: 'catalog:'
         version: 19.3.0
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.3.0(@types/react@19.3.0)
       fast-check:
         specifier: 'catalog:'
         version: 4.10.2
       react:
         specifier: 'catalog:'
         version: 19.3.1
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.3.1(react@19.3.1)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

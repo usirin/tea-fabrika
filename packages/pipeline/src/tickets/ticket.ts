@@ -313,12 +313,17 @@ export const CodeFact = Schema.Union([
 		of: Count,
 		findings: Schema.Array(Body),
 	}),
-	/** A stage asks the owner something. `picks`: the buttons, at least one. */
+	/**
+	 * A stage asks the owner something. `picks`: the buttons, at least one. `trace`: the lane that
+	 * asked, its trace id as its `started` facts give it (ticket 141). Left out on an ask written
+	 * before the key: a view then places it by time.
+	 */
 	Schema.Struct({
 		type: Schema.Literal("asked"),
 		ask: Id,
 		what: Title,
 		picks: Schema.NonEmptyArray(Title),
+		trace: Schema.optionalKey(TraceId),
 	}),
 ]);
 export type CodeFact = typeof CodeFact.Type;

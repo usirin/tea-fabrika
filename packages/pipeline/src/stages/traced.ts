@@ -40,6 +40,27 @@ export const prAttributes = (url: string): Readonly<Record<string, string>> => {
 const short = (head: string | null | undefined): Tags =>
 	head === null || head === undefined ? {} : {[ATTR.head]: head.slice(0, 7)};
 
+/**
+ * The lane's own tag names (ticket 141): names only, never values a person typed. Only the lane
+ * writes them, so they live here, not in fabrika's `ATTR`. "run a step" ends with `run`, `step`,
+ * `tea.outcome` and, when a price is known, `tea.cost.usd`; "wait for the answer" ends with `ask`,
+ * `askFor`, `pick` and `by`, never the note.
+ */
+export const LANE = {
+	/** "r-plan-8" */
+	run: "tea.lane.run",
+	/** "plan" */
+	step: "tea.lane.step",
+	/** "a-approve-8" */
+	ask: "tea.ask.id",
+	/** "approval" | "questions" | "check_change": the outcome's `for`. */
+	askFor: "tea.ask.for",
+	/** "approve": one of the ask's own picks, never free text. */
+	pick: "tea.answer.pick",
+	/** The answerer's id, as the ledger entry's `by.id` has it. */
+	by: "tea.answer.by",
+} as const;
+
 /** Dollars, when something was spent. */
 const cost = (usd: number | undefined): Tags =>
 	usd === undefined ? {} : {[ATTR.costUsd]: Math.round(usd * 10_000) / 10_000};

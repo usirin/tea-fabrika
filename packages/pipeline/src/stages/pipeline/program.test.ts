@@ -12,17 +12,20 @@ import {
 import {tmpdir} from "node:os";
 import {basename, dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
-import {Ledger, streams} from "@kampus/fabrika-old";
+import {ATTR, Ledger, streams} from "@kampus/fabrika-old";
+import {memoryTracing} from "@kampus/fabrika-old/otel";
 import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {Duration, Effect, Exit, Fiber, Layer, Option, Schema} from "effect";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 import {memoryLedger} from "../../asks/ledger.ts";
 import {hashOf, textOf} from "../../tickets/approval.ts";
-import {type Entry, nameOf} from "../../tickets/ticket.ts";
+import {type Entry, type FactOf, nameOf} from "../../tickets/ticket.ts";
 import {Tickets, TicketsFailed, ticketsOnLedger} from "../../tickets/tickets.ts";
 import {BREAK} from "../build/body.ts";
 import {MutationRunner} from "../mutation/services.ts";
+import {nameOf as outcomeName} from "../outcome.ts";
 import {TestsWork} from "../test-writer/program.ts";
+import {LANE} from "../traced.ts";
 import {type CheckRun, CheckRunner} from "./checks.ts";
 import {Inputs, keyOf} from "./key.ts";
 import {fakeEnv, type GhStory, makeFakeGh, makeLaneHome} from "./lane-fixture.ts";
@@ -126,6 +129,10 @@ interface Ran {
 	readonly stages: readonly string[];
 	readonly names: Readonly<Record<string, string>>;
 	readonly facts: readonly {readonly type: string; readonly [key: string]: unknown}[];
+	/** The ticket's entries, each fact with who wrote it. */
+	readonly entries: readonly Entry[];
+	/** With `traced`: every span the lane made and ended, raw. Without: none. */
+	readonly spans: readonly Span[];
 	readonly dir: string;
 	readonly remote: string;
 	/** The stand-in `gh`, when the script played one. */
@@ -201,7 +208,12 @@ interface Script {
 	readonly beforeChecks?: boolean;
 	/** On every line typed again, the ticket reads as a lane from before self-fix PR 5 left it: no end kept its carry. */
 	readonly beforeCarries?: boolean;
+	/** Keep every span the lines make, raw, in memory (ticket 141). */
+	readonly traced?: boolean;
 }
+
+/** One span as the in-memory exporter keeps it. */
+type Span = ReturnType<typeof memoryTracing>["spans"][number];
 
 /** By step, as the fake names them. Each list goes by the step's runs, first run first. */
 interface FakeScript {
@@ -379,7 +391,9 @@ const lane = ({
 	readFailsAt,
 	beforeChecks = false,
 	beforeCarries = false,
+	traced = false,
 }: Script): Promise<Ran> => {
+	const tracing = traced ? memoryTracing({raw: true}) : null;
 	let checksRan = 0;
 	/** A ticket's facts, read on a line typed again, as the older code the script names left them. */
 	const olderThan = (timeline: readonly Entry[]): readonly Entry[] => {
@@ -545,6 +559,8 @@ const lane = ({
 				folds,
 				onBase,
 				facts,
+				entries: ticket.timeline,
+				spans: tracing?.spans ?? [],
 				dir,
 				remote,
 				gh,
@@ -553,7 +569,11 @@ const lane = ({
 					ends.map((f) => [String(f.stage), JSON.stringify(f.outcome)] as const),
 				),
 			} satisfies Ran;
-		}).pipe(Effect.scoped, Effect.provide(Layer.fresh(memoryLedger().layer))),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.fresh(memoryLedger().layer)),
+			Effect.provide(tracing?.layer ?? Layer.empty),
+		),
 	);
 };
 
@@ -663,7 +683,15 @@ describe("a lane, whole", () => {
 			});
 			expect(String(started[0]?.hash)).toMatch(/^[0-9a-f]{8,}$/);
 			const plan = ran.facts.find((f) => f.type === "ended" && f.stage === "plan");
-			expect(plan).toMatchObject({input: 1000, cached: 200, output: 100, listUsd: null, billed: 0});
+			// gpt-6-astra at OpenAI's list price, short context, read 2026-11-02: $10 a million in, $1
+			// cached, $50 out (ticket 141). 800 fresh, 200 cached, 100 out.
+			expect(plan).toMatchObject({
+				input: 1000,
+				cached: 200,
+				output: 100,
+				listUsd: expect.closeTo((10 * 800 + 1 * 200 + 50 * 100) / 1e6, 9),
+				billed: 0,
+			});
 
 			// The real adapter ran the fake: the model from `fabrika.toml`, read-only and no key in reach.
 			const runs = codexRuns(ran.dir);
@@ -679,6 +707,89 @@ describe("a lane, whole", () => {
 				expect(run.args).toContain("gpt-6-astra");
 				expect(run.keys).toEqual([]);
 			}
+		},
+	);
+
+	it(
+		"ties each ask to its lane's trace, and tags each step's span and each wait's span by name, never with a note (ticket 141, P1 to P3)",
+		{timeout: 300_000},
+		async () => {
+			const NOTE = "Looks right to me, go on";
+			const ran = await lane({picks: YES, notes: {approve: NOTE}, traced: true});
+			expect(ran.stages, ran.lines.join("\n")).toEqual(WHOLE);
+
+			// P1: every ask carries the trace id its lane's `started` facts carry, the one before it.
+			let lastTrace: string | undefined;
+			const pairs: [string | undefined, string | undefined][] = [];
+			for (const e of ran.entries) {
+				if (e.fact.type === "started") lastTrace = e.fact.trace;
+				if (e.fact.type === "asked") pairs.push([e.fact.trace, lastTrace]);
+			}
+			expect(pairs.length).toBeGreaterThan(0);
+			for (const [asked, started] of pairs) {
+				expect(started).toMatch(/^[0-9a-f]{32}$/);
+				expect(asked).toBe(started);
+			}
+
+			// P2: one "run a step" span per run that ended, tagged with its run, its step and its outcome's
+			// name; its model and tokens by the names a trace viewer reads; dollars only when known.
+			// The model and harness are on a run's `started`, not its `ended`.
+			const startedBy = new Map(
+				ran.entries.flatMap((e): [string, FactOf<"started">][] =>
+					e.fact.type === "started" ? [[e.fact.run, e.fact]] : [],
+				),
+			);
+			const stepSpans = ran.spans.filter((s) => s.name === "run a step");
+			let agentSteps = 0;
+			for (const e of ran.entries) {
+				if (e.fact.type !== "ended") continue;
+				const ended = e.fact;
+				const mine = stepSpans.filter((s) => s.attributes[LANE.run] === ended.run);
+				expect(mine, ended.run).toHaveLength(1);
+				const tags = mine[0]?.attributes ?? {};
+				expect(tags[LANE.step]).toBe(ended.stage);
+				expect(tags[ATTR.outcome]).toBe(outcomeName(ended.outcome));
+				const model = startedBy.get(ended.run)?.model;
+				// A code step names no model, and no tokens or price are said for it here.
+				if (model === undefined) continue;
+				agentSteps++;
+				// Known as L6 knows it: a list price, else what claude billed. Else none is written.
+				const known =
+					typeof ended.listUsd === "number"
+						? ended.listUsd
+						: startedBy.get(ended.run)?.harness === "claude" && typeof ended.billed === "number"
+							? ended.billed
+							: null;
+				if (known === null) expect(tags[ATTR.costUsd], ended.run).toBeUndefined();
+				else expect(tags[ATTR.costUsd], ended.run).toBeCloseTo(known, 4);
+				expect(tags["gen_ai.request.model"]).toBe(model);
+				expect(tags["gen_ai.usage.input_tokens"]).toBe(ended.input);
+				expect(tags["gen_ai.usage.output_tokens"]).toBe(ended.output);
+				expect(tags["gen_ai.usage.cache_read.input_tokens"]).toBe(ended.cached ?? 0);
+			}
+			// Astra's steps were seen, each at its list price once the table has it.
+			expect(agentSteps).toBeGreaterThan(0);
+
+			// P3: each answer's "wait for the answer" span names the ask, the pick and who answered.
+			const waitSpans = ran.spans.filter((s) => s.name === "wait for the answer");
+			const answers = ran.entries.flatMap((e) =>
+				e.fact.type === "answered" ? [{fact: e.fact, by: e.by.id}] : [],
+			);
+			expect(answers.length).toBeGreaterThan(0);
+			for (const {fact, by} of answers) {
+				const heard = waitSpans.filter(
+					(s) => s.attributes[LANE.ask] === fact.ask && s.attributes[LANE.pick] !== undefined,
+				);
+				expect(heard, fact.ask).toHaveLength(1);
+				expect(heard[0]?.attributes[LANE.pick]).toBe(fact.pick);
+				expect(heard[0]?.attributes[LANE.by]).toBe(by);
+			}
+			// The note is a value a person typed: no wait span, or event on one, holds it.
+			const values = waitSpans.flatMap((s) => [
+				...Object.values(s.attributes),
+				...s.events.flatMap((ev) => Object.values(ev.attributes ?? {})),
+			]);
+			expect(values.filter((v) => String(v).includes(NOTE))).toEqual([]);
 		},
 	);
 
@@ -790,7 +901,8 @@ describe("a lane, whole", () => {
 			expect(builds[0]?.prompt).not.toContain("--reporter=json");
 
 			// The question: asked once, with what is still red and what the rounds cost, then a stop. The
-			// fake's model has no known rate, and an unknown price never reads as free.
+			// fake's model, gpt-6-astra, has a list price since ticket 141; either way an unknown price
+			// never reads as free.
 			const asked = ran.facts.filter((f) => f.type === "asked");
 			const spent = asked.filter((f) => String(f.ask).includes("rounds_spent"));
 			expect(spent).toHaveLength(1);

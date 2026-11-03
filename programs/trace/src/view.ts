@@ -1,6 +1,6 @@
 import {Job, type Json, jsonPatchOf, type Span, type Step} from "@kampus/fabrika-old";
 import {Schema} from "effect";
-import {isRunning, type Model} from "./machine.ts";
+import {isRunning, type Model, type Read} from "./machine.ts";
 import {findOf, type Kind, type Node, nodesOf, treeOf} from "./tree.ts";
 
 // What the trace's window is shown: the rows that are open, flattened in order with their depth,
@@ -216,7 +216,7 @@ const stepDetail = (key: string, step: Step, before: Step | null, zero: number):
 
 const detailOf = (
 	node: Node,
-	trace: Extract<Model["read"], {readonly at: "read"}>["trace"],
+	trace: Extract<Read, {readonly at: "read"}>["trace"],
 	zero: number,
 ): Detail => {
 	const record = trace.runs.find((r) => r.run === node.note || `run:${r.run}` === node.key);
@@ -274,17 +274,20 @@ const waiting = {
 
 /** What the window is shown, from the machine's state alone. */
 export const shownOf = (s: Model): Shown => {
-	switch (s.read.at) {
+	// The ticket view's branch is not built yet (ticket 141).
+	if (s.shows.kind === "ticket") throw new Error("not built: ticket 141");
+	const read = s.shows.read;
+	switch (read.at) {
 		case "waiting":
 			return {read: "waiting", id: null, ...waiting};
 		case "reading":
-			return {read: "reading", id: s.read.id, ...waiting};
+			return {read: "reading", id: read.id, ...waiting};
 		case "unread":
-			return {read: "unread", id: s.read.id, ...waiting, why: s.read.why};
+			return {read: "unread", id: read.id, ...waiting, why: read.why};
 		case "read": {
-			const trace = s.read.trace;
+			const trace = read.trace;
 			const tree = treeOf(trace);
-			const {now} = s.read;
+			const {now} = read;
 			// While the job runs its row runs to now, and the axis with it.
 			const root = now === null ? tree : {...tree, to: Math.max(tree.to, now)};
 			const all = nodesOf(root);

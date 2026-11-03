@@ -94,7 +94,12 @@ describe("runs --ticket 7 | trace", () => {
 				yield* offer(p.runs, "choose", {run: "r-2"});
 				const read = yield* p.trace.machines.trace.changes.pipe(
 					Stream.filter((s) => s !== null),
-					Stream.filter((s) => s.read.at === "read" && s.read.trace.trace === SEVEN_TRACE),
+					Stream.filter(
+						(s) =>
+							s.shows.kind === "job" &&
+							s.shows.read.at === "read" &&
+							s.shows.read.trace.trace === SEVEN_TRACE,
+					),
 					Stream.runHead,
 					Effect.map(Option.getOrThrow),
 				);
@@ -107,15 +112,17 @@ describe("runs --ticket 7 | trace", () => {
 			}).pipe(Effect.scoped),
 		);
 		// Before a pick, trace follows its own trace: the job it runs in, not one runs sent.
-		const own = seen.first.read;
-		const ownId = own.at === "read" ? own.trace.trace : own.at === "waiting" ? null : own.id;
+		const own = seen.first.shows.kind === "job" ? seen.first.shows.read : null;
+		const ownId =
+			own === null || own.at === "waiting" ? null : own.at === "read" ? own.trace.trace : own.id;
 		expect(ownId).toMatch(/^[0-9a-f]{32}$/);
 		expect(ownId).not.toBe(SEVEN_TRACE);
 		expect(sent).toEqual([SEVEN_TRACE]);
-		expect(seen.read.read.at === "read" && seen.read.read.trace.trace).toBe(SEVEN_TRACE);
+		const read = seen.read.shows.kind === "job" ? seen.read.shows.read : null;
+		expect(read?.at === "read" && read.trace.trace).toBe(SEVEN_TRACE);
 		expect(seen.read.open).toEqual(["job"]);
 		expect(seen.runsEnded).toBe("ended");
-		expect(seen.after?.read.at).toBe("read");
+		expect(seen.after?.shows.kind === "job" && seen.after.shows.read.at).toBe("read");
 		expect(seen.traceEnded).toBe("ended");
 	});
 });

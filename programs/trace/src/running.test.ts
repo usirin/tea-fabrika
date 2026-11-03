@@ -71,7 +71,8 @@ const after = (...msgs: readonly TraceMsg[]): Model => replay(trace, {ctx: undef
 const look: TraceMsg = {type: "look", id: TALLY_ID};
 const got = (t: JobTrace): TraceMsg => ({type: "got", trace: t});
 const tick = (now: number): TraceMsg => ({type: "tick", now});
-const nowIn = (s: Model) => (s.read.at === "read" ? s.read.now : "not read");
+const nowIn = (s: Model) =>
+	s.shows.kind === "job" && s.shows.read.at === "read" ? s.shows.read.now : "not read";
 
 describe("the machine, on a job that has not ended", () => {
 	it("ticks while the record says it runs, and holds the time each tick brings", () => {
@@ -190,9 +191,14 @@ describe("the tick", () => {
 				yield* TestClock.adjust(every);
 				const next = yield* until(at(STARTED + every));
 				yield* Queue.offer(reads, ended);
-				const done = yield* until((s) => s.read.at === "read" && s.read.trace.job?.ended !== null);
+				const done = yield* until(
+					(s) =>
+						s.shows.kind === "job" &&
+						s.shows.read.at === "read" &&
+						s.shows.read.trace.job?.ended !== null,
+				);
 				yield* TestClock.adjust(every * 3);
-				const still = yield* until((s) => s.read.at === "read");
+				const still = yield* until((s) => s.shows.kind === "job" && s.shows.read.at === "read");
 				return [first, next, done, still].map(nowIn);
 			}).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
 		);
