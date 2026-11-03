@@ -556,7 +556,8 @@ describe("a program's window", () => {
 				// Its input from the ticket ended, and the trace goes on showing the last ticket.
 				const traceOpen = !s.seen.some((x) => x.kind === "close" && x.run === view.run);
 				// The tracker's next pick goes down a pipe whose reader is gone: the send fails, and it ends.
-				pick(7);
+				// A second ticket, since the tracker sends only a new pick (`pickOf`).
+				pick(8);
 				yield* s.closed(picker.run);
 				// The last window closed: the line is over, and the prompt is back.
 				s.window(view.run).closed();

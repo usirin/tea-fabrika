@@ -36,7 +36,12 @@ const session = (
 	traces: Layer.Layer<Traces> = memoryTraces(records),
 ) =>
 	Effect.gen(function* () {
-		const started = yield* start(trace, {id}, {}, {id: "trace:test", storage: memoryStorage()});
+		const started = yield* start(
+			trace,
+			{id, ticket: undefined},
+			{},
+			{id: "trace:test", storage: memoryStorage()},
+		);
 		if (started.kind !== "running") return yield* Effect.die("the trace program did not start");
 		const {run} = started;
 		const say = <K extends keyof Inputs & string>(

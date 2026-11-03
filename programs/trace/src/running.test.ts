@@ -171,7 +171,7 @@ describe("the tick", () => {
 				);
 				const started = yield* start(
 					program,
-					{id: TALLY_ID},
+					{id: TALLY_ID, ticket: undefined},
 					{},
 					{id: "trace:test", storage: memoryStorage()},
 				).pipe(Effect.provide(growing));
