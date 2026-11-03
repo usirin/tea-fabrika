@@ -77,6 +77,11 @@ version, a window uses `useMachine` from `@demlik/tea/react`, never React's
 `useSyncExternalStore` hook on the Effect engine, as [Tier 1's plan](../plan/tier-1.md)
 says, and a lint rule holds it. The sketch below is today's version.*
 
+*Changed 2026-11-02, for `next/`: tea 0.22.0 fixed `useMachine` under Strict Mode
+([demlik PR 774](https://github.com/kamp-us/demlik/pull/774)), so `next/` moves to tea's
+own hook once it takes the Effect engine ([demlik 852](https://github.com/kamp-us/demlik/issues/852)).
+Until then the one `useSyncExternalStore` hook stands in, in one file. The lint rule is dropped.*
+
 ```tsx
 // A sketch. A comment box: the draft is a machine, not a useState.
 const Draft = machine({

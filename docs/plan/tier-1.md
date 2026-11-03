@@ -127,7 +127,7 @@ Read [AGENTS.md](../../AGENTS.md#two-versions-side-by-side) first. It holds for 
 
 - **Effect all the way.** A Promise appears only in a one-line edge the platform demands ([no Promises](../direction/no-promises.md)).
 - **An object class stays thin:** what the platform gives it and a one-line handoff. The logic runs on Node in tests ([the note](../direction/object-classes-stay-thin.md)).
-- **A window reads state through one `useSyncExternalStore` hook.** State lives in a tea machine, never `useState`, and tea's `useMachine` is not used ([Elm first](../direction/elm-first.md)). PR 223's `window/main.tsx` still uses `useRuntime`, so this has to change.
+- **A window reads state through tea's own React hook.** State lives in a tea machine, never `useState` ([Elm first](../direction/elm-first.md)). *Changed 2026-11-02:* tea 0.22.0 fixed `useMachine` under Strict Mode ([demlik PR 774](https://github.com/kamp-us/demlik/pull/774)), so the reason for our own hook is gone. tea's hook does not take the Effect engine yet ([demlik 852](https://github.com/kamp-us/demlik/issues/852)). Until it does, one `useSyncExternalStore` hook in one file stands in, and it goes when tea's lands. PR 223's `window/main.tsx` still uses `useRuntime`, whose dispatch is a Promise, so this has to change.
 - **`_tag`, written by Effect Schema, for every union we define.** tea's Msgs and Cmds keep `type`. PR 223's `kind` and `is` move ([Tags](./tier-1-detail.md#tags)).
 - **No bare `of`, and no `xOf` names.** The copies bring about 55, so they get fixed on the way in.
 - **Words:** hands, a window and an agent dial the brain. `client` means any of them at the door, and `host` is a place hands can run ([the note](../direction/brain-hands-window-agent.md)). No `peer`, and no `node` for a thing that connects. PR 223's 53 `peer` lines go when it moves. The shell is `fabsh`.
@@ -280,7 +280,7 @@ main -> first `next/` lane, like any other
           builder      adds the product code, if its box can read those git objects
 ```
 
-**What lands.** PR 223 cannot land as it is. It breaks `no-promises` and `no-tea-react`, and p65 fires until the packages exist. The lane's checks run the whole of `pnpm lint`, so no slice carrying its old code gets through. And 3,323 lines do not fit a small pull request.
+**What lands.** PR 223 cannot land as it is. It breaks `no-promises`, and p65 fires until the packages exist. The lane's checks run the whole of `pnpm lint`, so no slice carrying its old code gets through. And 3,323 lines do not fit a small pull request.
 
 - **Lean, 60%: PR 223 is read, and each layer lands already fixed.** Data, then coordination, then transport, then app and desktop, each already on Effect, in packages, with its tests. Why: the rules hold from the first day, and each piece is small. Cost: rewriting done work, about five landings before the first demo, and that is a real strain on the walking-skeleton idea.
   - **Under this lean T0 goes away.** Nothing is moved. Each layer's first landing makes its package, and the desk never arrives. The T numbers and [the moves table](./tier-1-detail.md#packages) read as "where each thing ends up".
