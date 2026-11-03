@@ -398,6 +398,12 @@ Write-ups are read by busy people, some of them not native English speakers.
   new product. The PR says, per screen, what Linear would do, and where we
   differ and why. Tuval and tmux stay the defaults for tiling; where they clash
   with Linear's answer, name the clash for the owner to pick.
+  - **Linear as the builder, never as the template.** The question is how Linear's team
+    would build the feature if they were building it as fabrika programs, with
+    fabrika's own pieces: programs that compose in tiles, the desk, the top bar,
+    pipes between programs. Their taste and quality bar, on our primitive. Never
+    copy a Linear screen. Ask which program owns the job, what composes beside
+    what, and what becomes a piece every program gets for free.
 - **Show it running.** A PR that adds or changes a program's window carries
   screenshots from the real built app, saved in that program's `docs/` folder
   and shown in the PR body. Take them the way `apps/fabrika/e2e.ts` drives the
