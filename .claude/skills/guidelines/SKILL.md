@@ -10,8 +10,10 @@ with one experiment, one note, one private page, one docs-only pull request, and
 ends in a yes or a no.
 
 The models are themes (PR 281), keybindings (PR 282), hot reload (PR 286) and modes (PR 287).
-Themes came first; the other three set the page's shape, and modes is the closest to it all:
-copy modes. Pipeline guidelines (PR 290) drifted on structure (no demo, no Try it), so it is not a model, but its views and palette are a second reference.
+Themes came first; the other three set the note's shape and the views under the page's mockup,
+and modes is the closest to it all: copy modes for those. Pipeline guidelines (PR 290) drifted on structure (no demo, no Try it), so it is not a model, but its views and palette are a second reference.
+The page's first screen copies the mockup rounds instead (the tile, the pipe marker finalists, the
+chat window): there the mockup is the page, and the words fold under it.
 
 Read `AGENTS.md` first. Its rules on names, writing, version and the public repo all apply.
 
@@ -72,30 +74,46 @@ with real shots and the owner's yes.
   (programs that compose in tiles, the desk, the top bar, pipes)? Their taste and quality bar,
   on our pieces. Never copy a Linear screen. Ask which program owns the job, what sits beside
   what, and what becomes a piece every program gets for free. Write it as a row, or "No Linear
-  answer: <why>". Where we differ, say why.
+  answer: <why>". Where we differ, say why. Ask it again for each design in step 5: which program
+  owns each part of it?
 - **Elm or OTP.** Name the Elm answer (model, update, view, parents step children) or the
   Erlang/OTP one (mailbox, supervisor, `code_change`) where it fits. Say where we leave it.
 - **Accessibility.** Name the WCAG criterion a principle touches, and what needs a real screen
   reader run.
 
-### 5. Build the screen and look at it next to Linear
+### 5. Build 3 or 4 designs and look at them next to Linear
 
-The Linear row in step 4 is words. This step checks the look with eyes.
+The Linear row in step 4 is words. This step checks the look with eyes. It starts wide, as the
+pipe marker finalists did with four different designs, and only then refines one.
 
-- Build the area's screen for real in today's app, on a local branch, with the real tokens
-  (`apps/fabrika/src/themes.ts`) and the real chassis around it. Keys and mouse both work, as the
-  guidelines say. Read today's code for which jobs exist, not for how they look
+- Build **3 or 4 distinct designs** for real in today's app, on a local branch, with the real
+  tokens (`apps/fabrika/src/themes.ts`) and the real chassis around them. Each is a different
+  answer to the same job, such as a list, a card, a panel or inline, not a small change to one
+  design. Keys and mouse both work in each, as the guidelines say. Read today's code for which
+  jobs exist, not for how they look
   ([rethink, do not port](../../../docs/direction/rethink-do-not-port.md)).
+- **Each design writes its tsh pipe line first,** before it is built: `tracker --all | outline`,
+  or `outline | ticket`. Any part that is another program's job becomes its own tile, joined by a
+  pipe: a sidebar that opens a detail, a list another program owns, a mode that swaps the whole
+  view. The yardstick is program guidelines (PR 332, proposed): G1, one job per program, and G6,
+  programs meet on typed pipes.
 - Fewer boxes. If something already draws an edge, a second line, box or background goes. A
   selected row is a full-row fill and stronger text, never a colored bar on one side.
-- Shoot it with Playwright on Electron, as `apps/fabrika/e2e.ts` does, at five layouts: one tile
-  filling the window, two side by side, two stacked, a 2x2 grid, and about 1024x700. Put each shot
-  beside today's app and beside the closest Linear screen, from Linear's public docs or changelog.
-- For each shot, one line: would Linear's team ship this? What looks off: a box in a box, a gray
-  that fights, a line nobody needs, loud text, a cramped layout? Fix it and reshoot. Two or three
-  rounds is normal. Stop when you would ship it.
-- Show the owner the shots before the write-up. Their yes on the look comes first. On a no, go
-  round again.
+- Shoot each design with Playwright on Electron, as `apps/fabrika/e2e.ts` does, at five layouts:
+  one tile filling the window, two side by side, two stacked, a 2x2 grid, and about 1024x700. Put
+  each shot beside today's app and beside the closest Linear screen, from Linear's public docs or
+  changelog.
+- Show the owner the designs, each as a pressable page (step 9's demo rules) with its pipe line
+  above it. **The owner picks
+  one.** Each design that lost gets one or two plain lines on why, tied to a principle or a shot.
+- Then refine the pick in rounds. For each shot, one line: would Linear's team ship this? What
+  looks off: a box in a box, a gray that fights, a line nobody needs, loud text, a cramped
+  layout? Fix it and reshoot. Two or three rounds is normal. Stop when you would ship it.
+- Keep every design and every round. For each, the shoot presses the real build through every
+  key and click the screen takes and saves each state it reaches: the DOM
+  (`document.documentElement.outerHTML`, scripts dropped, a canvas kept as its pixels), which
+  press led where, and the built `window.css`. Step 9 lifts the page's demo from these files.
+- Their yes on the look comes before the write-up. On a no, go round again.
 - Each principle also gets a **kind**, so it is checked the right way: **law** (the test writer
   can check it), **lint** (`pnpm lint` can hold it) or **taste** (only a shot beside Linear checks
   it).
@@ -144,11 +162,34 @@ The Linear row in step 4 is words. This step checks the look with eyes.
 
 ### 9. Build and publish the page
 
+The page is a mockup with the guidelines folded under it, not a write-up with a demo in a corner.
+Pages built the other way came out as one design and a wall of text, and the redrawn demo drifted
+from the real screen (boxed buttons in a selected row, bigger type, a footer that wrapped).
+
 - Follow `references/page-structure.md`: the structure checklist, the page rules and the
   highlight snippet. Every box on its list is checked before publishing. View every page at
   1280 and 390 wide on a local copy first, then again after publishing.
-- Publish it as a private artifact titled "<Area> guidelines". Later changes republish to the
-  same URL. The page goes in no file in the repo.
+- **The demo is lifted, not redrawn.** Its CSS is the built `window.css` from step 5, copied
+  unchanged, or rules lifted from it by selector and printed as they are (the design system's
+  generator does this). Its markup is the DOM step 5 saved, copied once. Nobody retypes a rule, a
+  class or a word of the screen. Each design and layout is its own small document the page loads
+  in a frame, so today's CSS and the proposed CSS never mix.
+- **The demo is pressable.** A key or a click inside it moves to the saved state the real build
+  reached with that press. A press with no saved state says "not shot" and fakes nothing. Focus
+  shows, so a person can see where they are.
+- **Several designs, not one.** Today, each design from step 5 (at least 3, each with its why-not
+  line), the rounds of the pick, Proposed and Linear can be switched, and two can sit side by
+  side at the same layout. A round with no saved DOM shows its real shot.
+- **The blocking check.** Shoot each demo state a press can reach, at the size and scale of its
+  step 5 shot, and put the two side by side with a pixel diff. Any difference in words, boxes or
+  sizes blocks the publish: fix the lift, not the shot, and shoot again. Save the side-by-sides in
+  the scratch folder and name them in the walk. Shoot with scroll bars shown, as Electron draws
+  them. One drift is not a difference: when the check runs on a newer Chromium than the app's
+  Electron, a line can sit up to about 1px lower, so a long list creeps down a few pixels. Same
+  words, same boxes, same widths: say so in the walk and on the page.
+- Publish it from files as a private artifact titled "<Area> guidelines": the page, the frames,
+  the CSS and the shots. Later changes republish to the same URL. The page goes in no file in the
+  repo.
 
 ### 10. Open a docs-only pull request
 
