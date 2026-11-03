@@ -34,6 +34,8 @@
 	--text-muted: var(--text-faint);
 	--text-secondary: var(--text-faint);
 	--text-primary: light-dark(#1c2024, #edeef0); /* slate 12 */
+	/* Tryout, not decided: a third gray for meta only (numbers, times, the line under a title). */
+	--text-meta: light-dark(#80838d, #777b84); /* slate 10 */
 	--focus: light-dark(#00051d74, #dfebfd6d); /* slate a9: a8 is under 3:1 on the desk */
 	--tile-focus: light-dark(#00051d74, #d9edff5d); /* slate a9; slate a8 */
 	--turn: light-dark(#002bb7c5, #9eb1ff); /* indigo a11; indigo 11 */
@@ -996,13 +998,13 @@ main.program > [role="alert"] {
 
 .pop-row .s {
 	margin-top: 1px;
-	color: var(--text-muted);
+	color: var(--text-meta);
 	font-size: var(--fs-small);
 }
 
 .pop-row .side {
 	margin-top: 1px;
-	color: var(--text-faint);
+	color: var(--text-meta);
 	font-size: var(--fs-small);
 }
 
@@ -1913,7 +1915,7 @@ button:focus-visible {
 }
 
 .tracker-number {
-	color: var(--faint);
+	color: var(--text-meta);
 	font-variant-numeric: tabular-nums;
 	text-align: right;
 }
@@ -1930,7 +1932,7 @@ button:focus-visible {
 	display: flex;
 	gap: 12px;
 	align-items: center;
-	color: var(--faint);
+	color: var(--text-meta);
 	font-size: 12px;
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
@@ -2581,7 +2583,7 @@ main.program:has(> .view) {
 
 .ticket-view .turnc .sub {
 	font-size: var(--fs-small);
-	color: var(--text-muted);
+	color: var(--text-meta);
 	display: inline-flex;
 	flex-wrap: wrap;
 	align-items: center;
@@ -2708,7 +2710,7 @@ main.program:has(> .view) {
 
 .ticket-view .act-r time {
 	font-size: var(--fs-small);
-	color: var(--text-faint);
+	color: var(--text-meta);
 	white-space: nowrap;
 }
 
