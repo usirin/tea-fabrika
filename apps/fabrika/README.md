@@ -491,6 +491,13 @@ claude mcp add --transport stdio --env FABRIKA_HOME=<home> fabrika -- \
   its verb, so each is its own tool. An input declared `{writes: false}` carries MCP's
   `readOnlyHint` (`tracker_query`, and `runs`). One more, `runs`, lists every program and its
   tools, the agent's own runs, and what runs in your tiles.
+- **`job` reads one job of your tiles,** as tmux's `capture-pane` reads a pane: `job {n: 1, last:
+  2}` answers `{n: 1, text: "seq --to 5", tile: "t1", state: {_tag: "ended", how: "done"},
+  lines: ["4", "5"]}`. `n` is the job's `%n`; `state` is `running`, `detached` (from before the
+  host started again) or `ended` with how. `lines` are what tsh printed for it, out and err, its
+  `[n] ...` lines too, newest last: at most `last` (1,000 at most, `LAST_MAX`) and 25,000 bytes
+  (`BYTES_MAX`, `@kampus/fabrika-old/mcp`). The host keeps them in memory only, for the jobs in
+  its table and the newest 100 that ended (`src/job-lines.ts`). Read-only.
 - **The agent writes as itself.** Its calls go to its own run of the program, started on first
   use, whose writer is `agent:claude` for you. Nothing it sends can name you: the bridge's
   handshake holds only an agent's name, and the host makes the writer. An agent has no
@@ -502,8 +509,35 @@ What you see: type `tracker` in a tile. Ask Claude Code "file a ticket for X und
 `tracker_file` with `{value: {title: "X", body: "Under #44."}}`, and within a second the ticket
 is on your tile's list; its first row says `agent:claude`.
 
-Not yet: a home connected to a ledger server has no agents' socket (there the server's door
-would stamp what the host writes as you). The agent's runs end when its client goes.
+**On a home connected to a ledger server, the agent only reads.** There the server's door
+stamps what the host writes as you, so an agent's write would be credited to you. The socket
+lists only the tools that write nothing (`runs`, `job`, `tracker_query`, ...), and a write tool
+called anyway (`tracker_file`) is refused as a tool that is not there, before any run starts. A
+read goes through your own session, which you can already read. An agent writing there needs a
+session of its own (`host/post.ts`, `asAgent`), not built yet. Starting or stopping a lane stays
+yours, in a tile.
+
+The agent's runs end when its client goes.
+
+**What the host's log says** (`host/log`, `key=value`, as the log's other lines; `src/job-lines.ts`
+and `src/host/log.ts`):
+
+```text
+level=INFO message=job_began n=1 "text=seq --to 3" tile=t1
+level=INFO message=job_ended n=1 "text=seq --to 3" tile=t1 how=done
+level=INFO message=step_began run=r-build-3 step=build
+level=INFO message=step_ended run=r-build-3 step=build outcome=send:builder:checks_red
+level=WARN message=lag nodejs.eventloop.delay.p99=0.24 nodejs.eventloop.delay.max=0.4
+```
+
+- A job's lines: each tile job as it begins and as it ends, with how.
+- A lane step's lines: read off its "run a step" span, as it is tagged with its run and step, and
+  as it ends with its outcome. A step that broke before it said one ends with no `outcome`.
+- A lag line: the host reads the event loop's delay once a second (`monitorEventLoopDelay`) and
+  writes one when that second's p99 passes 0.05 s (`LAG_P99`: a long task is one over 50 ms, W3C
+  Long Tasks API). Fields are OpenTelemetry's Node.js runtime names, in seconds (marked
+  Development there). One long stall across a second's edge shows in `max` more than in p99.
+- No line and no tool answer holds an env value.
 
 ## Commands
 
@@ -518,7 +552,10 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app-old e2e
   it downloads on first use, so pnpm needs no `allowBuilds` entry for it.
 - `FABRIKA_HOME=<folder>` puts the app's own files there instead of Electron's folder:
   `desk.json`, `asks.json`, `storage/jobs/`, `history`, `ledger.sqlite`, the one-copy lock, and the
-  host's `host/sock`, `host/mcp` (agents, on a home with its own ledger), `host/pid`, `host/log`, and `host/lock` while a host starts. A test on its own home can never reach another
+  host's `host/sock`, `host/mcp` (agents; read-only on a home connected to a ledger server),
+  `host/pid`, `host/log` (`key=value` lines: what the host did, each job's begin and end, each
+  lane step's begin and end, and a lag line when its thread is starved), and `host/lock` while a
+  host starts. A test on its own home can never reach another
   home's host. macOS caps a socket's path at 103 bytes; a home too deep stops the host with a
   plain message.
 - **A start with `FABRIKA_HOME` is quiet** (`src/launch.ts`): no Dock icon, and its window shows

@@ -10,5 +10,6 @@
 export {BridgeStopped, bridge} from "./mcp/bridge.ts";
 export {type Answer, type Drive, driveFor, type InTile} from "./mcp/drive.ts";
 export {AGENTS_PROTOCOL, AgentName, Handshake, HostAnswer} from "./mcp/handshake.ts";
+export {JOB, JobAnswer, KeptLines, LAST_MAX} from "./mcp/job.ts";
 export {type AgentOptions, serveAgent} from "./mcp/serve.ts";
 export {type Call, callOf, RUNS, type Tool, toolNameOf, toolsOf} from "./mcp/tools.ts";

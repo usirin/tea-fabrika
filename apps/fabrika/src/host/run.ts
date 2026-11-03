@@ -1,3 +1,4 @@
+import {monitorEventLoopDelay} from "node:perf_hooks";
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
 import {keepJobs, layerRecordTraces, openJobs, stepsInto, writerText} from "@kampus/fabrika-old";
 import {recordTracing} from "@kampus/fabrika-old/otel";
@@ -9,20 +10,23 @@ import {SocketServer} from "effect/socket";
 import {fileHistory, sharedHistory} from "../editor/history.ts";
 import {connectionOf, hostLedger} from "./connection.ts";
 import {holdLock} from "./lock.ts";
+import {logSteps, sampleLag} from "./log.ts";
 import {serve} from "./serve.ts";
 import {pathsOf, reach} from "./socket.ts";
 
 // The host on a home: its socket, its files and its services, around the server (serve.ts).
 // host/main.ts runs it as a process of its own; a test runs it in its own process, on a home of
 // its own (host.test.ts). Node is named only through Effect's platform: `NodeSocketServer`, and
-// the ledger's node:sqlite and the storage's files from @kampus/fabrika-old.
+// the ledger's node:sqlite and the storage's files from @kampus/fabrika-old; and `node:perf_hooks`,
+// for the event loop's delay (log.ts).
 //
 //   yield* runHost({home, pid: process.pid})
 //   // <home>/host made, mode 0700; the start lock taken (host/lock.ts); a socket left by a crash
-//   // removed; <home>/host/sock listened on, mode 0600; on a home with its own ledger file,
-//   // <home>/host/mcp too, the agents' socket (host/agents.ts), mode 0600; the pid written; the
-//   // lock let go of; the desk read back from desk.json, the asks' marks from asks.json; until
-//   // the scope closes
+//   // removed; <home>/host/sock listened on, mode 0600; <home>/host/mcp too, the agents' socket
+//   // (host/agents.ts), mode 0600, read-only on a home connected to a ledger server; the pid
+//   // written; the lock let go of; the desk read back from desk.json, the asks' marks from
+//   // asks.json; the thread's lag read once a second, and each lane step's begin and end said
+//   // (log.ts); until the scope closes
 //
 // In the home, beside the host's own folder (host/socket.ts):
 //
@@ -69,9 +73,7 @@ export const runHost = (options: {
 		yield* fs.chmod(paths.dir, 0o700);
 		// Under the start lock (host/lock.ts), from the look at the socket until this host listens
 		// on it: a host started at the same moment waits, then finds this one answering.
-		// Agents get a socket only on a home that keeps its own ledger (host/agents.ts).
 		const connection = yield* connectionOf(home);
-		const ownLedger = Option.isNone(connection);
 		const {server, agents} = yield* Effect.scoped(
 			Effect.gen(function* () {
 				yield* holdLock(paths.lock, paths.dir);
@@ -82,10 +84,11 @@ export const runHost = (options: {
 				if (yield* fs.exists(paths.mcp)) yield* fs.remove(paths.mcp);
 				const made = yield* NodeSocketServer.make({path: paths.sock}).pipe(Scope.provide(outer));
 				yield* fs.chmod(paths.sock, 0o600);
-				const forAgents = ownLedger
-					? yield* NodeSocketServer.make({path: paths.mcp}).pipe(Scope.provide(outer))
-					: undefined;
-				if (forAgents !== undefined) yield* fs.chmod(paths.mcp, 0o600);
+				// Every home's agents' socket; on a connected one it is read-only (host/agents.ts).
+				const forAgents = yield* NodeSocketServer.make({path: paths.mcp}).pipe(
+					Scope.provide(outer),
+				);
+				yield* fs.chmod(paths.mcp, 0o600);
 				yield* fs.writeFileString(paths.pid, `${pid}\n`);
 				return {server: made, agents: forAgents};
 			}),
@@ -129,6 +132,15 @@ export const runHost = (options: {
 			"laptop",
 		);
 		yield* Effect.logInfo(`fabrika host: listening, pid ${pid}`);
+		// The thread's lag, one second at a time: a lag line in the log when it is starved (log.ts).
+		const delay = monitorEventLoopDelay({resolution: 10});
+		delay.enable();
+		yield* Effect.addFinalizer(() => Effect.sync(() => delay.disable()));
+		yield* Effect.sleep("1 second").pipe(
+			Effect.andThen(sampleLag(delay)),
+			Effect.forever,
+			Effect.forkScoped,
+		);
 		return yield* serve({
 			history,
 			ours,
@@ -168,6 +180,8 @@ export const runHost = (options: {
 		}).pipe(
 			Effect.provideService(SocketServer.SocketServer, server),
 			Effect.provideContext(ledger),
+			// Each lane step's begin and end in the log, read off the spans the records keep.
+			Effect.provide(logSteps),
 			Effect.provide(Layer.merge(layerRecordTraces(records), recordTracing(records))),
 		);
 	});

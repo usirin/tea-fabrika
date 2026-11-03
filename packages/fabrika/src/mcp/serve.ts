@@ -13,6 +13,7 @@ import type {Agent} from "../host/writer.ts";
 import type {ProgramList} from "../shell/programs.ts";
 import {type Answer, driveFor, type InTile} from "./drive.ts";
 import {AGENTS_PROTOCOL, Handshake, type HostAnswer, MAX_LINE} from "./handshake.ts";
+import type {JobAnswer} from "./job.ts";
 
 // One agent on the host's agents' socket: its handshake, then MCP, served with the official SDK's
 // `Server` (`@modelcontextprotocol/server`, v2, spec 2026-07-28). `serveStdio` decides the
@@ -41,6 +42,10 @@ export interface AgentOptions {
 	readonly person: string;
 	/** The runs in the person's tiles now, for `runs` to list. */
 	readonly tiles: () => readonly InTile[];
+	/** Job n of the host's table now, with every line kept of it, for the `job` tool (./job.ts). */
+	readonly job?: ((n: number) => JobAnswer | null) | undefined;
+	/** Each agent is served only the tools that write nothing (./drive.ts). */
+	readonly readOnly?: boolean | undefined;
 	/** The server's name and version, as the client is told. */
 	readonly server?: {readonly name: string; readonly version: string};
 	/**
@@ -79,7 +84,12 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
 		const begin = (handshake: Handshake) =>
 			Effect.gen(function* () {
 				const who = {kind: "agent", id: handshake.agent, for: person} as const;
-				const {drive, tools} = yield* driveFor({list: programsFor(who), tiles});
+				const {drive, tools} = yield* driveFor({
+					list: programsFor(who),
+					tiles,
+					job: options.job,
+					readOnly: options.readOnly,
+				});
 				if (options.attached !== undefined) yield* options.attached(who);
 				const server = new Server(info, {capabilities: {tools: {}}});
 				server.setRequestHandler("tools/list", () => ({tools: [...tools]}));

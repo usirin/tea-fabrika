@@ -61,7 +61,7 @@ import {
 	testsToTheEnd,
 } from "../test-writer/program.ts";
 import {DEFAULT_INCLUDES, includedBy} from "../test-writer/written.ts";
-import {answerTags, reviewDrawing, shipDrawing, stepTags} from "../traced.ts";
+import {answerTags, LANE, reviewDrawing, shipDrawing, stepTags} from "../traced.ts";
 import {LaneNow, pickedFor, type Picked, priceOf, stepStarted} from "./agents.ts";
 import {fenced, listed, loadBrief, type Brief} from "./briefs.ts";
 import type {Carried as Said} from "./carry.ts";
@@ -1548,6 +1548,9 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			const home = yield* LaneHome;
 			yield* work.servingLane(cmd.number);
 			const run = `r-${cmd.step}-${cmd.count}`;
+			// "run a step" says its run and step as it begins too, so a log reading its span can say
+			// the step began (apps/fabrika, host/log.ts); its end tags them again, with its outcome.
+			yield* Effect.annotateCurrentSpan({[LANE.run]: run, [LANE.step]: cmd.step});
 			const from = yield* Clock.currentTimeMillis;
 			const said = (line: string) => send("step", `${cmd.step}: ${line}`);
 			const seen = yield* Ref.make<Picked | null>(null);

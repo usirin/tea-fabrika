@@ -28,6 +28,7 @@ import {
 } from "../desk/desk.ts";
 import {BINDINGS, PREFIX, wordOf} from "../desk/keys.ts";
 import type {SharedHistory} from "../editor/history.ts";
+import {jobLines} from "../job-lines.ts";
 import {type Down, PROTOCOL, type Up} from "../link.ts";
 import {
 	type AgentOn,
@@ -136,7 +137,7 @@ export const serve = (options: {
 	 * `null` names none, as a host built before builds were named.
 	 */
 	readonly build?: string | null | undefined;
-	/** The agents' socket (host/agents.ts), on a home that keeps its own ledger; none elsewhere. */
+	/** The agents' socket (host/agents.ts): read-only on a home connected to a ledger server. */
 	readonly agents?: SocketServer.SocketServer["Service"] | undefined;
 	/** The host's process id, for the host's lines in the top bar. */
 	readonly pid: number;
@@ -312,9 +313,12 @@ export const serve = (options: {
 			}
 		};
 
+		// Each job's lines and end, beside the table, for the agents' `job` tool and the host's log.
+		const lines = yield* jobLines(jobs.table);
 		const tiles = yield* startTiles({
 			history,
 			jobs,
+			lines,
 			edge: {
 				tell: (m) => {
 					if (step(m)) shout();
@@ -369,7 +373,14 @@ export const serve = (options: {
 		begin(home.kept);
 		yield* Queue.take(queue).pipe(Effect.flatMap(carry), Effect.forever, Effect.forkScoped);
 		if (agents !== undefined)
-			yield* serveAgents(agents, () => screens.keys(), agentCame).pipe(
+			yield* serveAgents({
+				server: agents,
+				ports: () => screens.keys(),
+				attached: agentCame,
+				job: lines.job,
+				// The server's door stamps what this host writes as the person (host/agents.ts).
+				readOnly: options.ledger.kind === "server",
+			}).pipe(
 				Effect.catchCause((cause) =>
 					Effect.logError("fabrika host: the agents' socket failed", cause),
 				),

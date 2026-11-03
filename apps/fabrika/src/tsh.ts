@@ -34,6 +34,7 @@ import {Clock, Deferred, Effect, Layer, Queue, Stream} from "effect";
 import type {TileId} from "./desk/layout/index.ts";
 import {type EditorMsg, editor} from "./editor/editor.ts";
 import type {SharedHistory} from "./editor/history.ts";
+import type {JobLines} from "./job-lines.ts";
 import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "./messages.ts";
 import {type TileJobs, watchJobs} from "./tile-jobs.ts";
 
@@ -81,6 +82,10 @@ import {type TileJobs, watchJobs} from "./tile-jobs.ts";
 // `drop` takes them out. The next host on the same storage finds the jobs as "from an earlier
 // tsh, not running": each tile's tsh says so of its own only, and `attach %n` in any tile starts
 // one again where it left off, with its view.
+//
+// The host's job lines (`lines`, job-lines.ts), when it is handed them, hear each line tsh printed
+// for a job, by the job's `%n`, and each of this tile's jobs as it begins and ends: what the
+// agents' `job` tool reads, and the host's log says.
 //
 // tsh's own run stays in memory, on purpose, as in the terminal: what outlives one tsh is the
 // host's table, not its run.
@@ -304,9 +309,12 @@ export const startTsh = (options: {
 	readonly history: SharedHistory;
 	readonly runs: Runs;
 	readonly words: readonly Entry[];
+	/** The host's job lines, told what tsh prints for each job and this tile's begins and ends. */
+	readonly lines?: JobLines | undefined;
 }) =>
 	Effect.gen(function* () {
 		const {tile, history, runs, words} = options;
+		const jobLines = options.lines;
 		const jobs: JobsOnHost = {...options.jobs, owner: tile};
 		const scope = yield* Effect.scope;
 		const ledger = yield* Ledger;
@@ -329,7 +337,7 @@ export const startTsh = (options: {
 		const shownMine = {has: (run: string) => mine.has(run) || calls.has(run)};
 		/** This tile's jobs, with when each began and how the last one ended, told to the tile. */
 		const clock = yield* Clock.Clock;
-		const watch = watchJobs(() => clock.currentTimeMillisUnsafe(), runs.jobs);
+		const watch = watchJobs(() => clock.currentTimeMillisUnsafe(), runs.jobs, jobLines?.news(tile));
 		/**
 		 * Msgs to the host's table for each of this tile's jobs in `state`, one after another, as tsh
 		 * sends them. The table says which are the tile's, so a job an earlier host ran in this tile
@@ -475,7 +483,10 @@ export const startTsh = (options: {
 			Shell.tsh,
 			{show: "short"},
 			{
-				printed: (p) => toEditor({type: "printed", text: p.text}),
+				printed: (p) => {
+					if (p.n !== undefined) jobLines?.printed(p.n, p.text);
+					toEditor({type: "printed", text: p.text});
+				},
 				table: (table) => toEditor({type: "table", table}),
 				ready: () => toEditor({type: "ready"}),
 			},
