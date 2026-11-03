@@ -47,8 +47,12 @@ Read `AGENTS.md` first. Its rules on names, writing, version and the public repo
 
 ### 4. Test every guideline three ways
 
-- **Linear.** For every principle and every rule, not only screens: what would Linear do? Write
-  it as a row, or "No Linear answer: <why>". Where we differ, say why.
+- **Linear as the builder.** For every principle and every rule, not only screens: how would
+  Linear's team build this if they were building it as fabrika programs, with our pieces
+  (programs that compose in tiles, the desk, the top bar, pipes)? Their taste and quality bar,
+  on our pieces. Never copy a Linear screen. Ask which program owns the job, what sits beside
+  what, and what becomes a piece every program gets for free. Write it as a row, or "No Linear
+  answer: <why>". Where we differ, say why.
 - **Elm or OTP.** Name the Elm answer (model, update, view, parents step children) or the
   Erlang/OTP one (mailbox, supervisor, `code_change`) where it fits. Say where we leave it.
 - **Accessibility.** Name the WCAG criterion a principle touches, and what needs a real screen
