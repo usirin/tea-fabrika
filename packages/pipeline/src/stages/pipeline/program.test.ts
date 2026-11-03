@@ -4819,6 +4819,104 @@ describe("the exam's pull request", () => {
 			keptOnRemote(ran, pushed, old, said);
 		},
 	);
+
+	// The owner's rule (docs/direction/read-fresh-run-alone.md): a stage that must replace a branch
+	// keeps the old head under a kept ref first, and says so on the ticket. A redo on the exam head
+	// may instead push on top of a person's commit. These tests do not pick which: they pin that the
+	// person's commit is not lost, and that a replace is named on the ticket.
+	/** Does the remote hold `sha` under `ref`? */
+	const remoteHolds = (ran: Ran, ref: string, sha: string): boolean => {
+		try {
+			const tip = execFileSync(
+				"git",
+				["--git-dir", ran.remote, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`],
+				{encoding: "utf8", stdio: "pipe"},
+			).trim();
+			return descends(ran.remote, sha, tip);
+		} catch {
+			return false;
+		}
+	};
+	/**
+	 * After a redo on the exam head, the person's commit `pushed` is in the redo's head, or a ticket
+	 * line names it and a kept ref on the remote that holds it.
+	 */
+	const notLost = (ran: Ran, pushed: string, said: string) => {
+		const ends = ran.facts.filter((f) => f.type === "ended");
+		const sent = ends.findIndex(
+			(f) => f.stage === "exam_review" && (f.outcome as {readonly kind?: string}).kind === "send",
+		);
+		expect(sent, said).toBeGreaterThan(-1);
+		const old = pullHead(ends[sent]);
+		expect(old, said).toMatch(/^[0-9a-f]{40}$/);
+		expect(pushed, said).toMatch(/^[0-9a-f]{40}$/);
+		expect(descends(ran.remote, old, pushed), "the person pushed on top of the exam head").toBe(
+			true,
+		);
+		const head = pullHead(ends.slice(sent).find((f) => f.stage === "exam"));
+		expect(head, said).toMatch(/^[0-9a-f]{40}$/);
+		const onTop = descends(ran.remote, pushed, head);
+		const named = keptLines(ran).filter(
+			(line) => line.includes(pushed.slice(0, 7)) && remoteHolds(ran, refIn(line), pushed),
+		);
+		expect(
+			{onTop, named: named.length > 0},
+			`the person's commit ${pushed} is in the redo's head ${head}, or kept on the remote under a ref a ticket line names\n${keptLines(ran).join("\n")}`,
+		).not.toEqual({onTop: false, named: false});
+	};
+
+	it(
+		"a person pushes to the exam branch after its review read it, then the review's findings send it back: the redo on the exam head loses no commit, and a replace is named on the ticket",
+		{timeout: 300_000},
+		async () => {
+			let pushed = "";
+			const ran = await lane({
+				title: RULES,
+				within: 200,
+				picks: {...YES, rounds_spent: "stop"},
+				fake: {answers: {review: [FAILS_E1]}},
+				// Under the exam review's checks, the lane's first, after `examReady` read the branch.
+				checksSay: (head, nth, where) => {
+					if (nth === 0) pushed = pushOnTopOf(where, head, [PERSONS]);
+					return null;
+				},
+			});
+			const said = ran.lines.join("\n");
+			const sent = ran.facts.find((f) => f.type === "ended" && f.stage === "exam_review");
+			expect(sent?.outcome, said).toMatchObject({kind: "send", why: "review_failed"});
+			notLost(ran, pushed, said);
+		},
+	);
+
+	it(
+		"a person pushes to the exam branch after its review read it, then red checks send it back: the redo on the exam head loses no commit, and a replace is named on the ticket",
+		{timeout: 300_000},
+		async () => {
+			const NAME = "src/rules.test.ts > rules > reads the list";
+			let pushed = "";
+			const ran = await lane({
+				title: RULES,
+				within: 200,
+				picks: {...YES, rounds_spent: "stop"},
+				// The exam review's checks, the lane's first: a person pushes while they run, and they fail.
+				checksSay: (head, nth, where) => {
+					if (nth !== 0) return null;
+					pushed = pushOnTopOf(where, head, [PERSONS]);
+					return {
+						head,
+						commands: [{command: "node_modules/.bin/vitest run", code: 1, ms: 3}],
+						result: "red",
+						failed: [NAME],
+						tail: `${NAME}: AssertionError`,
+					};
+				},
+			});
+			const said = ran.lines.join("\n");
+			const sent = ran.facts.find((f) => f.type === "ended" && f.stage === "exam_review");
+			expect(sent?.outcome, said).toMatchObject({kind: "send", why: "checks_red"});
+			notLost(ran, pushed, said);
+		},
+	);
 });
 
 // Self-fix PR 10, Part 1: the side tree starts from main on the first landing of each plan version.
