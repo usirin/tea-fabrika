@@ -205,6 +205,11 @@ interface Script {
 	readonly checksSay?: (head: string, nth: number, where: Where) => CheckRun | null;
 	/** On the line typed again this many times, the first read of the ticket off the ledger fails. */
 	readonly readFailsAt?: number;
+	/**
+	 * A person closes or reopens the ticket, in turn, each once its step has ended: the lane's next read
+	 * of the ticket after that finds it so, and so does the step after it.
+	 */
+	readonly ticketAfter?: readonly {readonly step: string; readonly fact: "closed" | "reopened"}[];
 	/** On every line typed again, the ticket reads as a lane from before self-fix PR 4 left it: no `checked` facts. */
 	readonly beforeChecks?: boolean;
 	/** On every line typed again, the ticket reads as a lane from before self-fix PR 5 left it: no end kept its carry. */
@@ -492,6 +497,7 @@ const lane = ({
 	checksStopRunning,
 	checksSay,
 	readFailsAt,
+	ticketAfter = [],
 	beforeChecks = false,
 	beforeCarries = false,
 	formatter = false,
@@ -508,6 +514,28 @@ const lane = ({
 	let readFailed = false;
 	/** How many times the line was typed again. */
 	let typed = 0;
+	/** The run's ledger, for a person's `ticketAfter` writes. Set as the run starts. */
+	let ledgerOf: Ledger["Service"] | null = null;
+	/** How many of `ticketAfter` the person has written. */
+	let ticketMoved = 0;
+	/** The person's next `ticketAfter` write, once its step has ended on the ticket. */
+	const ticketMoves = (tickets: Tickets["Service"], n: number) =>
+		Effect.gen(function* () {
+			const move = ticketAfter[ticketMoved];
+			if (move === undefined || ledgerOf === null) return;
+			const {timeline} = yield* tickets.read(n);
+			const ended = timeline.some((e) => {
+				const fact = e.fact as Ran["facts"][number];
+				return fact.type === "ended" && fact.stage === move.step;
+			});
+			if (!ended) return;
+			ticketMoved++;
+			yield* ledgerOf.send(streams(nameOf(NUMBER)).inbox, `${move.fact}-${ticketMoved}`, {
+				kind: move.fact,
+				writer: OWNER,
+				data: {type: move.fact},
+			});
+		}).pipe(Effect.orDie);
 	const dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-")));
 	made.push(dir);
 	const red = join(dir, "red");
@@ -599,20 +627,27 @@ const lane = ({
 			Effect.updateService(Tickets, (tickets) => ({
 				...tickets,
 				read: (n) =>
-					Effect.suspend(() => {
-						if (typed !== readFailsAt || readFailed)
-							return tickets
-								.read(n)
-								.pipe(
-									Effect.map((ticket) =>
-										typed > 0 ? {...ticket, timeline: olderThan(ticket.timeline)} : ticket,
-									),
-								);
-						readFailed = true;
-						return Effect.fail(
-							new TicketsFailed({ticket: n, why: "unreachable", says: "the ledger did not answer"}),
-						);
-					}),
+					Effect.andThen(
+						ticketMoves(tickets, n),
+						Effect.suspend(() => {
+							if (typed !== readFailsAt || readFailed)
+								return tickets
+									.read(n)
+									.pipe(
+										Effect.map((ticket) =>
+											typed > 0 ? {...ticket, timeline: olderThan(ticket.timeline)} : ticket,
+										),
+									);
+							readFailed = true;
+							return Effect.fail(
+								new TicketsFailed({
+									ticket: n,
+									why: "unreachable",
+									says: "the ledger did not answer",
+								}),
+							);
+						}),
+					),
 			})),
 			Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
 			Effect.timeoutOption(Duration.seconds(within)),
@@ -622,6 +657,7 @@ const lane = ({
 		);
 	return Effect.runPromise(
 		Effect.gen(function* () {
+			ledgerOf = yield* Ledger;
 			yield* file(title, "Lower case, no spaces around.", writer);
 			const person = yield* Effect.forkScoped(
 				answering(picks, {
@@ -1297,6 +1333,112 @@ describe("a lane, whole", () => {
 		expect(
 			ran.facts.filter((f) => f.type === "asked" && String(f.ask).startsWith("a-approve")),
 		).toHaveLength(1);
+	});
+
+	// Self-fix PR 11a, jidoka row 62: ship's `behind` at merge reads main fresh, and a clean read runs
+	// merge again with no agent turn and no round. The pull request is the one ship reads, so the head
+	// with main merged in has to be on it before ship runs again.
+	it(
+		"row 62: main moves under the review, ship says behind, and the head with main in it is pushed and lands, with no build round",
+		{timeout: 300_000},
+		async () => {
+			const ELSEWHERE = {path: "docs/elsewhere.md", text: "Written elsewhere.\n"};
+			const ran = await lane({
+				within: 200,
+				picks: {...YES, step: "stop", rounds_spent: "stop"},
+				// Main moves once, as the first review starts: after the lane's head left it.
+				fake: {pushesAt: {review: {0: {branch: "main", ...ELSEWHERE}}}},
+			});
+			const said = ran.lines.join("\n");
+			const moved = codexRuns(ran.dir).find((r) => r.step === "review")?.pushed ?? null;
+			expect(moved, "main moved under the review").toMatch(/^[0-9a-f]{40}$/);
+			// Ship's first answer at merge: behind.
+			const merges = ran.facts.filter((f) => f.type === "ended" && f.stage === "merge");
+			expect(merges[0]?.outcome, said).toMatchObject({kind: "send", to: "builder", why: "behind"});
+			// It lands. What landed holds main's commit and the head the lane first pushed: the head with
+			// main merged in, pushed before ship ran again, since ship merges only what the pull request holds.
+			expect(ran.lines.at(-1), said).toContain("ended: done");
+			const landed = onMainHead(ran.remote);
+			expect(descends(ran.remote, moved ?? "", landed), "what landed takes main in").toBe(true);
+			expect(descends(ran.remote, pushedHead(ran), landed), "and the lane's own head").toBe(true);
+			expect(onMain(ran.remote, "src/lower.ts")).toContain("toLowerCase");
+			expect(onMain(ran.remote, ELSEWHERE.path)).toBe(ELSEWHERE.text);
+			// No agent turn and no round: the build ran once, in round 1, and nothing stopped.
+			const builds = ran.facts.filter((f) => f.type === "started" && f.stage === "build");
+			expect(builds.map((f) => f.round)).toEqual([1]);
+			expect(said).not.toContain("step_stuck");
+			expect(said).not.toContain("sent_back");
+		},
+	);
+
+	// Self-fix PR 11a, jidoka row 13: a step's `skip:closed` is a `host` row. The lane reads the ticket
+	// fresh and goes by what it says now, never by the step's word alone: closed ends the lane, open is
+	// a person's pause, saved at that step, and the same line goes on there.
+	describe("row 13: build's skip:closed reads the ticket fresh", () => {
+		/** The `ended` facts after build's. */
+		const endsAfterBuild = (ran: Ran) => {
+			const ends = ran.facts.filter((f) => f.type === "ended");
+			return ends.slice(ends.findIndex((f) => f.stage === "build") + 1);
+		};
+
+		it(
+			"the ticket still closed: the lane ends skip:closed, and no step runs after the build",
+			{timeout: 300_000},
+			async () => {
+				const ran = await lane({
+					within: 140,
+					picks: YES,
+					ticketAfter: [{step: "test_writer", fact: "closed"}],
+				});
+				const said = ran.lines.join("\n");
+				expect(ran.lines, said).not.toContain(TIMED_OUT);
+				// The build read the closed ticket and said so.
+				expect(ran.names.build, said).toBe(JSON.stringify({kind: "skip", why: "closed"}));
+				const built = ran.facts.findIndex((f) => f.type === "ended" && f.stage === "build");
+				expect(ran.facts.slice(built).filter((f) => f.type === "started")).toEqual([]);
+				expect(endsAfterBuild(ran)).toEqual([]);
+				expect(ran.lines.at(-1), said).toContain("ended: skip:closed");
+				expect(said).not.toContain("step_stuck");
+				expect(said).not.toContain("paused");
+			},
+		);
+
+		it(
+			"the ticket open again by the time the lane reads it: a saved pause at the build, never skip:closed, and the same line goes on from the build and lands",
+			{timeout: 300_000},
+			async () => {
+				const ran = await lane({
+					within: 140,
+					picks: YES,
+					ticketAfter: [
+						{step: "test_writer", fact: "closed"},
+						{step: "build", fact: "reopened"},
+					],
+					again: [{}],
+				});
+				const said = ran.lines.join("\n");
+				expect(ran.lines, said).not.toContain(TIMED_OUT);
+				// The build said closed, but the lane read the ticket after it, open, and used that.
+				const built = ran.facts.find((f) => f.type === "ended" && f.stage === "build");
+				expect(built?.outcome, said).toEqual({kind: "skip", why: "closed"});
+				const first = ran.lines.slice(0, ran.lines.indexOf(AGAIN));
+				expect(first.at(-1), said).toContain("ask:owner:paused");
+				expect(first.join("\n")).not.toContain("ended: skip:closed");
+				expect(heldAt(ran, 0), said).toMatchObject({
+					outcome: {kind: "ask", who: "owner", for: "paused"},
+					at: {_tag: "run", step: "build"},
+				});
+				// The same line goes on at the build, and lands.
+				const steps = ran.facts.filter((f) => f.type === "started").map((f) => f.stage);
+				expect(
+					steps.filter((step) => step === "build"),
+					said,
+				).toHaveLength(2);
+				expect(ran.lines.at(-1), said).toContain("ended: done");
+				expect(onMain(ran.remote, "src/lower.ts")).toContain("toLowerCase");
+				expect(said).not.toContain("step_stuck");
+			},
+		);
 	});
 });
 
