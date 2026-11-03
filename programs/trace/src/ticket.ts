@@ -1,7 +1,6 @@
-import {type JobTrace, Span} from "@kampus/fabrika-old";
+import type {JobTrace, Span} from "@kampus/fabrika-old";
 import {listUsdOf} from "@kampus/pipeline/stages/price";
 import type {Entry, FactOf} from "@kampus/pipeline/tickets/ticket";
-import {Schema} from "effect";
 
 // One ticket's lanes, folded from its facts: the fold the view and the laws share (ticket 141).
 // Today's version. Pure.
@@ -204,22 +203,15 @@ const STEP_SPAN = "run a step";
 const overlap = (a: number, b: number, from: number, to: number): number =>
 	Math.max(0, Math.min(b, to) - Math.max(a, from));
 
-/**
- * A lane's record, indexed once when it is read (ticket 182), so a redraw looks a step's spans up
- * and never walks the record. Built by `indexSpans`, read by `spansUnder`.
- *
- *   const index = indexSpans(record.spans);       // one pass, then one walk per step span
- *   spansUnder(index, "r-build-3", from, to);     // the spans under that step, in start order
- */
-export const SpanIndex = Schema.Struct({
+/** A record's spans, indexed so a step's spans are a lookup, not a walk of the record. */
+type SpanIndex = {
 	/** The first span tagged with each run, by the run. */
-	tagged: Schema.ReadonlyMap(Schema.String, Span),
+	readonly tagged: ReadonlyMap<string, Span>;
 	/** The "run a step" spans with no run tag, in record order: a step finds one by its time. */
-	untagged: Schema.Array(Span),
+	readonly untagged: readonly Span[];
 	/** Every span under each of those step spans, in start order, by the step span's id. */
-	under: Schema.ReadonlyMap(Schema.String, Schema.Array(Span)),
-});
-export type SpanIndex = typeof SpanIndex.Type;
+	readonly under: ReadonlyMap<string, readonly Span[]>;
+};
 
 /**
  * The index of a record's spans: one pass that pushes each span onto its parent's list, then one
@@ -227,7 +219,7 @@ export type SpanIndex = typeof SpanIndex.Type;
  * then sorted by start, which keeps that order for spans that start together. A span whose id is
  * already on the walk's path is not walked again, so a record whose parents loop still ends.
  */
-export const indexSpans = (spans: readonly Span[]): SpanIndex => {
+const indexSpans = (spans: readonly Span[]): SpanIndex => {
 	const tagged = new Map<string, Span>();
 	const untagged: Span[] = [];
 	const children = new Map<string, Span[]>();
@@ -264,16 +256,30 @@ export const indexSpans = (spans: readonly Span[]): SpanIndex => {
 };
 
 /**
- * The spans under one step, from its lane's indexed record: by `tea.lane.run` when a span has it,
- * else the first "run a step" span that overlaps [from, to] most. Every span under it, in start
- * order; the step's own span is the step row, so it is not one of them.
+ * Each record's index, by its spans array (ticket 182). A memo outside the tea Model, which stays
+ * plain data (docs/direction/saved-state.md, S2), the way a Redux selector or Elm's `Html.Lazy`
+ * skips work when its input is the same by reference. A newer read of a record brings a new spans
+ * array, so it is indexed again, and an old one is dropped with its record.
  */
-export const spansUnder = (
-	index: SpanIndex,
+const indexes = new WeakMap<readonly Span[], SpanIndex>();
+
+/**
+ * The spans under one step, from its lane's job record: by `tea.lane.run` when a span has it, else
+ * the first "run a step" span that overlaps [from, to] most. Every span under it, in start order;
+ * the step's own span is the step row, so it is not one of them. The record is indexed on the
+ * first call for its spans, so every later call, on any redraw, is a lookup.
+ */
+export const childrenOf = (
+	record: JobTrace,
 	run: string,
 	from: number,
 	to: number,
 ): readonly Span[] => {
+	let index = indexes.get(record.spans);
+	if (index === undefined) {
+		index = indexSpans(record.spans);
+		indexes.set(record.spans, index);
+	}
 	let root = index.tagged.get(run);
 	if (root === undefined) {
 		let most = 0;
@@ -287,14 +293,6 @@ export const spansUnder = (
 	}
 	return root === undefined ? [] : (index.under.get(root.span) ?? []);
 };
-
-/** The spans under one step, from its lane's job record, indexed for this one call. */
-export const childrenOf = (
-	record: JobTrace,
-	run: string,
-	from: number,
-	to: number,
-): readonly Span[] => spansUnder(indexSpans(record.spans), run, from, to);
 
 /**
  * What the lane line and the ticket line say. `usd`: the sum of the `usd` rows, `null` when no row

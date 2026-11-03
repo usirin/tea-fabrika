@@ -8,8 +8,8 @@ import {
 } from "@kampus/fabrika-old";
 import type {Entry} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
-import {isRunning, type LaneRead, type Model, type Read} from "./machine.ts";
-import {type Lane, type LaneRow, lanesOf, spansUnder, stopsOf, summaryOf} from "./ticket.ts";
+import {isRunning, type Model, type Read} from "./machine.ts";
+import {childrenOf, type Lane, type LaneRow, lanesOf, stopsOf, summaryOf} from "./ticket.ts";
 import {findOf, type Kind, type Node, nodesOf, treeOf} from "./tree.ts";
 
 // What the trace's window is shown: the rows that are open, flattened in order with their depth,
@@ -535,7 +535,8 @@ const isCall = (s: Span): boolean => s.tags["http.request.method"] !== undefined
 
 /**
  * The span rows under a step: its spans nested by parent, each span's HTTP calls folded into one
- * `calls` row, which opens to one row per call.
+ * `calls` row, which opens to one row per call. The spans are grouped by parent in one pass, in
+ * their order, so a step with many calls costs one look at each (ticket 182).
  */
 const spanRowsOf = (
 	under: readonly Span[],
@@ -544,13 +545,21 @@ const spanRowsOf = (
 	depth: number,
 ): TicketRow[] => {
 	const ids = new Set(under.map((s) => s.span));
-	const childrenIn = (parent: string | null): readonly Span[] =>
-		under.filter((s) =>
-			parent === null ? s.parent === null || !ids.has(s.parent) : s.parent === parent,
-		);
+	// The top spans: no parent, or a parent that is not under the step.
+	const top: Span[] = [];
+	const byParent = new Map<string, Span[]>();
+	for (const s of under) {
+		if (s.parent === null || !ids.has(s.parent)) {
+			top.push(s);
+			continue;
+		}
+		const list = byParent.get(s.parent);
+		if (list === undefined) byParent.set(s.parent, [s]);
+		else list.push(s);
+	}
 	const out: TicketRow[] = [];
 	const spanRow = (s: Span, d: number) => {
-		const kids = childrenIn(s.span);
+		const kids = byParent.get(s.span) ?? [];
 		const key = `span:${s.span}`;
 		const isOpen = kids.length > 0 && open.has(key);
 		out.push({
@@ -573,19 +582,25 @@ const spanRowsOf = (
 		if (parent === null || calls.length === 0) return;
 		const key = `calls:${parent}`;
 		const isOpen = open.has(key);
+		// A loop, not `Math.min(...)`: a spread puts every call on the stack.
+		let first = Infinity;
+		let last = -Infinity;
+		for (const c of calls) {
+			first = Math.min(first, c.start);
+			last = Math.max(last, c.end);
+		}
 		out.push({
 			kind: "calls",
 			key,
 			depth: d,
 			count: calls.length,
-			from: Math.min(...calls.map((c) => c.start)) - zero,
-			to: Math.max(...calls.map((c) => c.end)) - zero,
+			from: first - zero,
+			to: last - zero,
 			open: isOpen,
 		});
 		if (isOpen) for (const c of calls) spanRow(c, d + 1);
 	};
 	// The top spans hang off the step's own span: their calls fold under it.
-	const top = childrenIn(null);
 	level(top, depth, top[0]?.parent ?? null);
 	return out;
 };
@@ -594,7 +609,15 @@ const spanRowsOf = (
 const recordOf = (
 	shows: Extract<Model["shows"], {readonly kind: "ticket"}>,
 	trace: string,
-): LaneRead | null => shows.records.find((r) => r.id === trace)?.read ?? null;
+): Read | null => shows.records.find((r) => r.id === trace)?.read ?? null;
+
+/** How a lane's record stands, from how its `Read` does. */
+const recordWord: Readonly<Record<Read["at"], LaneShown["record"]>> = {
+	waiting: "reading",
+	reading: "reading",
+	read: "read",
+	unread: "unread",
+};
 
 /** Each lane shown, oldest first, with the rows of the open ones. */
 const lanesShown = (
@@ -608,7 +631,7 @@ const lanesShown = (
 		const opens = lane.trace !== "";
 		const isOpen = !opens || open.has(key);
 		const read = opens ? recordOf(shows, lane.trace) : null;
-		const index = read?.at === "read" ? read.index : null;
+		const record = read?.at === "read" ? read.trace : null;
 		const zero = lane.from;
 		const before = lanes[i - 1];
 		const rows: TicketRow[] = [];
@@ -627,7 +650,7 @@ const lanesShown = (
 					});
 					continue;
 				}
-				const under = index === null ? [] : spansUnder(index, row.run, row.from, row.to);
+				const under = record === null ? [] : childrenOf(record, row.run, row.from, row.to);
 				const stepKey = `run:${row.run}`;
 				const stepOpen = under.length > 0 && open.has(stepKey);
 				rows.push({
@@ -668,7 +691,7 @@ const lanesShown = (
 			length: Math.max(1, lane.to - lane.from),
 			...laneState(lane),
 			summary: summaryOf([lane]),
-			record: !opens ? "none" : read === null ? "reading" : read.at,
+			record: !opens ? "none" : read === null ? "reading" : recordWord[read.at],
 			bars: lane.rows.map((r) => ({
 				from: r.from - zero,
 				to: r.to - zero,

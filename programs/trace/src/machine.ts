@@ -2,7 +2,7 @@ import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
 import {JobTrace, TraceId} from "@kampus/fabrika-old";
 import {Entry, TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
-import {indexSpans, lanesOf, SpanIndex, stopsOf} from "./ticket.ts";
+import {lanesOf, stopsOf} from "./ticket.ts";
 import {findOf, groupsOf, JOB, treeOf} from "./tree.ts";
 
 // The trace's machine: what the tile shows (one job's record, or one ticket's lanes), which of its
@@ -37,8 +37,7 @@ import {findOf, groupsOf, JOB, treeOf} from "./tree.ts";
 //            Facts for another ticket are dropped
 //   unread   they could not be read: before the first read it says why, after it the last read
 //            stays shown
-//   got      a lane's record, read again, its spans indexed once beside it (./ticket.ts), so no
-//            redraw walks the record; one for an id that is no lane's is dropped
+//   got      a lane's record, read again; one for an id that is no lane's is dropped
 //   seek     the playhead: the ticket replayed up to a time, or `null` for live. Past the last
 //            fact is live
 //   step     ← and →: the stop before or after, a stop being a started, ended, asked, answered
@@ -80,8 +79,6 @@ export type TickSub = Sub<"tick", {readonly id: string} | {readonly number: numb
 /** A row of the tree, by its key (./tree.ts): what `toggle` and `choose` name. */
 export const RowKey = Schema.String.check(Schema.isMaxLength(512));
 
-const Unread = Schema.Struct({at: Schema.Literal("unread"), id: TraceId, why: Schema.String});
-
 /** Where the record stands: not asked yet, asked, read, or it could not be read. */
 export const Read = Schema.Union([
 	Schema.Struct({at: Schema.Literal("waiting")}),
@@ -92,20 +89,9 @@ export const Read = Schema.Union([
 		/** Unix ms, the latest tick told. `null`: its job ended or names no job, or no tick came yet. */
 		now: Schema.NullOr(Schema.Number),
 	}),
-	Unread,
+	Schema.Struct({at: Schema.Literal("unread"), id: TraceId, why: Schema.String}),
 ]);
 export type Read = typeof Read.Type;
-
-/**
- * A lane's record, as the ticket view holds it: read, with its spans indexed once beside it, as
- * Elm keeps costly derived data in the Model, or it could not be read. A lane not read yet has no
- * entry, and the ticket view's clock is its own `now`.
- */
-export const LaneRead = Schema.Union([
-	Schema.Struct({at: Schema.Literal("read"), trace: Kept, index: SpanIndex}),
-	Unread,
-]);
-export type LaneRead = typeof LaneRead.Type;
 
 /** A ticket's facts, as the `facts` Sub last read them. */
 export const Facts = Schema.Union([
@@ -125,7 +111,7 @@ export const Shows = Schema.Union([
 		kind: Schema.Literal("ticket"),
 		facts: Facts,
 		/** Each lane's record, by its trace id, as the `follow` Sub last read it. */
-		records: Schema.Array(Schema.Struct({id: TraceId, read: LaneRead})),
+		records: Schema.Array(Schema.Struct({id: TraceId, read: Read})),
 		/** The playhead. `null`: live, at now. A time: the ticket replayed up to it. */
 		at: Schema.NullOr(Schema.Number),
 		/** Unix ms, the latest tick told while a lane is open. `null`: no tick came yet. */
@@ -332,7 +318,7 @@ export const trace = defineMachine({
 				if (!lanesIn(timelineOf(s) ?? []).includes(m.trace.trace)) return [s, []];
 				const held = shows.records.find((r) => r.id === m.trace.trace);
 				const trace = held?.read.at === "read" ? keepingEnd(held.read.trace, m.trace) : m.trace;
-				const read: LaneRead = {at: "read", trace, index: indexSpans(trace.spans)};
+				const read: Read = {at: "read", trace, now: null};
 				const records =
 					held === undefined
 						? [...shows.records, {id: m.trace.trace, read}]
@@ -357,7 +343,7 @@ export const trace = defineMachine({
 				const shows = s.shows;
 				if (!lanesIn(timelineOf(s) ?? []).includes(m.id)) return [s, []];
 				if (shows.records.some((r) => r.id === m.id && r.read.at === "read")) return [s, []];
-				const read: LaneRead = {at: "unread", id: m.id, why: m.why};
+				const read: Read = {at: "unread", id: m.id, why: m.why};
 				const records = [...shows.records.filter((r) => r.id !== m.id), {id: m.id, read}];
 				return [inTicket(s, {...shows, records}), []];
 			}

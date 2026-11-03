@@ -51,18 +51,6 @@ type Read =
 	| {at: "read"; trace: JobTrace; now: number | null} // now: the latest tick, while the job runs
 	| {at: "unread"; id: TraceId; why: string};
 
-// A lane's record in the ticket view, its spans indexed once when it is read (src/ticket.ts):
-// a redraw looks a step's spans up and never walks the record.
-type LaneRead =
-	| {at: "read"; trace: JobTrace; index: SpanIndex}
-	| {at: "unread"; id: TraceId; why: string};
-
-type SpanIndex = {
-	tagged: Map<string, Span>;     // the first span tagged with each run
-	untagged: Span[];              // the "run a step" spans with no run tag, in record order
-	under: Map<string, Span[]>;    // every span under each of those, in start order
-};
-
 type Facts =
 	| {at: "reading"; number: TicketNumber}
 	| {at: "read"; number: TicketNumber; timeline: Entry[]}
@@ -70,7 +58,7 @@ type Facts =
 
 type Shows =
 	| {kind: "job"; read: Read}
-	| {kind: "ticket"; facts: Facts; records: {id: TraceId; read: LaneRead}[];
+	| {kind: "ticket"; facts: Facts; records: {id: TraceId; read: Read}[];
 	   at: number | null;   // the playhead: null is live
 	   now: number | null};
 
@@ -198,7 +186,7 @@ job   seq --to 3 | tally        the tsh line's span
 | `@tea-fabrika/trace` | `src/index.ts` | `trace`, the program: flags `id` and `ticket`, inputs `toggle`, `choose`, `seek`, `step`, `quit`, `id`, `ticket` and `any`, and the runners: `follow` over `Traces.watch`, `tick`, and `facts`, the poll over `Tickets.read`. Its view is `Shown`. |
 | | `src/machine.ts` | `trace`, the machine, and `followed` and `ticking`, the deps of its Subs. Pure. |
 | | `src/tree.ts` | `treeOf`, `nodesOf`, `groupsOf`, `findOf`: a job's record as rows. Pure. |
-| | `src/ticket.ts` | The ticket view's fold. `lanesOf`: the lanes from the facts up to a time. `stopsOf`: the times the stepper stops at. `indexSpans`: a lane's record indexed once, when it is read. `spansUnder`: the spans under one step, from that index. `childrenOf`: the same from a record, indexed for one call. `summaryOf`: what a lane's line and the ticket's line say. Pure. |
+| | `src/ticket.ts` | The ticket view's fold. `lanesOf`: the lanes from the facts up to a time. `stopsOf`: the times the stepper stops at. `childrenOf`: the spans under one step, from its lane's record, indexed once per record in a memo keyed on its spans, outside the Model. `summaryOf`: what a lane's line and the ticket's line say. Pure. |
 | | `src/ruler.ts` | `ticksOf`: the ruler's ticks, ranked, for both views. Rank 1 is at most 4 ticks, rank 2 at most 8, rank 3 at most 16. The CSS shows rank 2 from a 480px ruler and rank 3 from 960px, so each label has 60px. Pure. |
 | | `src/view.ts` | `shownOf`: the rows open, placed in time, and the chosen row's detail, for either view. `changesOf`: a JSON Patch of two states. Pure. |
 | | `src/t117.ts` | A made-up ticket in ticket 117's shape, for the ticket view's tests: three lanes, a restart, three waits. Ids, times and tokens are made up. |
