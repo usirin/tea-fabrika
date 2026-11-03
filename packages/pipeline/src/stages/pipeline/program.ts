@@ -64,6 +64,7 @@ import {DEFAULT_INCLUDES, includedBy} from "../test-writer/written.ts";
 import {reviewDrawing, shipDrawing} from "../traced.ts";
 import {LaneNow, pickedFor, type Picked, priceOf, stepStarted} from "./agents.ts";
 import {fenced, listed, loadBrief, type Brief} from "./briefs.ts";
+import type {Carried as Said} from "./carry.ts";
 import {CheckRunner} from "./checks.ts";
 import {examReady, sentBack} from "./exam-pull.ts";
 import {formatExam} from "./format.ts";
@@ -105,7 +106,7 @@ import {
 	type StepEnd,
 } from "./machine.ts";
 import {FINAL, isEnd, LANE_NAMES} from "./outcome.ts";
-import {examTarget, LanePulls, LaneWatch, PullWire, standsAt} from "./pulls.ts";
+import {carriedAt, examTarget, LanePulls, LaneWatch, PullWire, standsAt} from "./pulls.ts";
 import {fold, seenOf} from "./restart.ts";
 import {endTalk} from "./talk.ts";
 import {LaneHome, LaneWork} from "./work.ts";
@@ -370,8 +371,21 @@ const putOnMain = (cmd: ReturnType<typeof freshMain>, onto: string) =>
 				.pipe(Effect.ignore);
 			return answer({_tag: "exam_conflict", files: off, carry: {...moved, touched: off}});
 		}
-		return answer({_tag: pushed ? "merged" : "fresh", carry: moved});
+		if (pr === null) return answer({_tag: "fresh", carry: moved});
+		// What the review judged, at the merged head: kept, and it stands there; else it reads it again.
+		return answer({_tag: "merged", carry: moved, review: yield* reviewAt(number, pr, put.head)});
 	});
+
+/**
+ * What `carry` says of the verdicts posted on `pr` at `head`, with the `carried` fact for a kept one.
+ * None posted with what they judged (a lane from before), or a read that broke: stale, as before.
+ */
+const reviewAt = (number: number, pr: string, head: string) =>
+	Effect.gen(function* () {
+		const pull = yield* (yield* LanePulls).find(pr);
+		if (pull.posted === undefined) return {_tag: "stale"} as const;
+		return yield* carriedAt(number, pull.posted, head);
+	}).pipe(Effect.orElseSucceed((): Said => ({_tag: "stale"})));
 
 /**
  * The files of the test writer's tests that, run on `commit`, no longer do what the plan's Properties

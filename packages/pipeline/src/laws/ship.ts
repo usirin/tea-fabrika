@@ -106,16 +106,20 @@ const base: ShipFacts = {
 const allPassed = (reviews: ShipFacts["reviews"]): boolean =>
 	reviews?.every((k) => k.verdict === "passed") ?? false;
 
+/** A row judged at `judged` counts at the read's head: judged there, or carried there by one hop. */
+const standsHere = (f: ShipFacts, judged: string): boolean =>
+	judged === f.head || (f.carried ?? []).some((h) => h.from === judged && h.to === f.head);
+
 /**
  * Each criterion of a read with no passing row on its current version at its
  * head, in words. Worked out here, not with `ReadyToMerge.of`, so a slip there
- * shows. The latest row on that version at that head is the one that counts.
+ * shows. The latest row on that version at that head, or carried there, is the one that counts.
  */
 function unproven(f: ShipFacts): readonly string[] {
 	if (f.criteria === null) return ["the criteria are unread"];
 	return f.criteria.flatMap((c) => {
 		const last = f.verdicts.findLast(
-			(v) => v.criterion === c.id && v.version === c.version && v.head === f.head,
+			(v) => v.criterion === c.id && v.version === c.version && standsHere(f, v.head),
 		);
 		return last?.grade === "pass" ? [] : [`${c.id} v${c.version} is not met at ${f.head}`];
 	});
@@ -279,7 +283,7 @@ const wantedOf = (f: ShipFacts): Wanted => ({
 	rows: (f.criteria ?? []).map(
 		(c) =>
 			f.verdicts.findLast(
-				(v) => v.criterion === c.id && v.version === c.version && v.head === f.head,
+				(v) => v.criterion === c.id && v.version === c.version && standsHere(f, v.head),
 			) ?? null,
 	),
 });

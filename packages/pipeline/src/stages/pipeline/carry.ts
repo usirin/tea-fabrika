@@ -46,12 +46,16 @@ export interface Now {
 }
 
 /** Why a yes still stands. The same words the `carried` fact keeps, but a glance's. */
-export type Kept = "same_head" | "replayed" | "formatted";
+export const Kept = Schema.Literals(["same_head", "replayed", "formatted"]);
+export type Kept = typeof Kept.Type;
 
-export type Carried =
-	| {readonly _tag: "kept"; readonly why: Kept}
-	| {readonly _tag: "glance"; readonly range: string}
-	| {readonly _tag: "stale"};
+/** What `carry` says: kept, and why; a glance, with what it would read; or stale. */
+export const Carried = Schema.Union([
+	Schema.TaggedStruct("kept", {why: Kept}),
+	Schema.TaggedStruct("glance", {range: Schema.String}),
+	Schema.TaggedStruct("stale", {}),
+]);
+export type Carried = typeof Carried.Type;
 
 const kept = (why: Kept): Carried => ({_tag: "kept", why});
 

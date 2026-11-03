@@ -1,5 +1,5 @@
 import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {Context, Effect, Layer, Schema, Stream} from "effect";
+import {Context, Effect, Layer, Option, Schema, Stream} from "effect";
 import type {Ledger} from "../../asks/ledger.ts";
 import {codeHostWritesOn} from "../../code-host-github-writes.ts";
 import {answerOf, codeHostOn} from "../../code-host-github.ts";
@@ -9,6 +9,7 @@ import {Tickets} from "../../tickets/tickets.ts";
 import {ghOn, reviewWritesOn} from "../operate/writes.ts";
 import type {PrFacts} from "../ship/facts.ts";
 import {
+	carriedOf,
 	isExamTarget,
 	judgedAt,
 	laneBound,
@@ -172,7 +173,11 @@ export const laneGitHubHost = (
 						const ticket = yield* tickets.read(pull.ticket).pipe(Effect.mapError(() => failed));
 						const yes = yield* bound(yesAt(pull.ticket, yesOf(ticket, pull), facts.head));
 						const judged = yield* bound(judgedAt(pull, facts.head));
-						const over = laneFactsOver(facts, pull, repo, yes, judged);
+						// A head the posted verdicts were carried to names the hop, so ship counts their rows here.
+						const over = {
+							...laneFactsOver(facts, pull, repo, yes, Option.isSome(judged)),
+							...carriedOf(judged),
+						};
 						return (yield* counted) === "none"
 							? {...over, checks: yield* ownChecks(pr, pull, facts.head)}
 							: over;

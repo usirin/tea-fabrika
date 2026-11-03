@@ -8,7 +8,7 @@ import {Survived} from "../mutation/mutant.ts";
 import {Post} from "../operate/machine.ts";
 import {nameOf} from "../outcome.ts";
 import {HeldDraft, PlanQuestion} from "../plan/plan.ts";
-import {Given} from "./carry.ts";
+import {Carried, Given} from "./carry.ts";
 import {openWords, ruleChangeLines, throughWords} from "./found.ts";
 import {EndOutcome, isEnd, LaneOutcome, StopOutcome} from "./outcome.ts";
 import type {Folded} from "./restart.ts";
@@ -396,13 +396,15 @@ const Changed = StepEnd.fields.carry;
  * checks code ran at that head. `exam_conflict`: the test writer's files conflict with main.
  * `conflicts`: the builder's files do. On both, main's side was taken, and `carry`, when there, is
  * the branch on main with each such file open: the test writer, or the builder, redoes it.
- * `merged`: the branch was pushed, so main was merged into it, and its new head is one no review read
- * and the pull request does not show. `closed`: the ticket was closed while the lane was stopped.
+ * `merged`: the branch was pushed, so main was merged into it, and its new head is one the pull
+ * request does not show. `review` is what `carry` says of the review's diff at that head: kept, the
+ * review stands there and the push shows the head; a glance or stale, a review reads it first
+ * (docs/direction/a-yes-binds-to-the-diff.md). `closed`: the ticket was closed while the lane was stopped.
  * `not_yours`: it was not filed by the person running this, or an agent of theirs.
  */
 export const Fresh = Schema.Union([
 	Schema.TaggedStruct("fresh", {carry: Changed}),
-	Schema.TaggedStruct("merged", {carry: Changed}),
+	Schema.TaggedStruct("merged", {carry: Changed, review: Carried}),
 	Schema.TaggedStruct("exam_conflict", {
 		files: Schema.Array(Schema.String),
 		carry: Schema.optionalKey(Changed),
@@ -1409,10 +1411,11 @@ export const lane = defineMachine({
 				case "fresh":
 				case "merged": {
 					const on = withFresh(held, found.carry);
-					// A new head on a pushed branch: the review reads it and the push shows it, before a merge.
+					// A new head on a pushed branch: the push shows it before a merge, and a review reads it
+					// first unless what it judged stands there.
 					const at: Resume =
 						found._tag === "merged" && STEPS.indexOf(s.at.step) > STEPS.indexOf("review")
-							? {_tag: "run", step: "review"}
+							? {_tag: "run", step: found.review._tag === "kept" ? "push" : "review"}
 							: s.at;
 					// Code's checks at the head a step after the build goes on at are red: the builder gets
 					// them, a round up, as after a build's own red, or a person is asked past the bound.

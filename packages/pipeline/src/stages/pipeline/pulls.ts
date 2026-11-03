@@ -10,7 +10,8 @@ import type {PrFact} from "../../tickets/ticket.ts";
 import {Tickets, Watcher} from "../../tickets/tickets.ts";
 import type {TextKind} from "../review/pack.ts";
 import {type PrFacts, ReviewKind} from "../ship/facts.ts";
-import {carry, Given} from "./carry.ts";
+import type {Hop} from "../ship/ready.ts";
+import {type Carried, carry, Given} from "./carry.ts";
 import {LaneWork} from "./work.ts";
 
 // The lane's pull requests on a local code host: a file of them beside a bare remote. Today's
@@ -36,6 +37,10 @@ type Failed = {readonly _tag: "unknown"};
 const failed: Failed = {_tag: "unknown"};
 const need = <A>(value: A | null): Effect.Effect<A, Failed> =>
 	value === null ? Effect.fail(failed) : Effect.succeed(value);
+
+/** The same verdicts, kind by kind, in the same order. Pure. */
+const sameVerdicts = (a: Pull["verdicts"], b: Pull["verdicts"]): boolean =>
+	a.length === b.length && a.every((v, i) => v.kind === b[i]?.kind && v.verdict === b[i]?.verdict);
 
 /** A review's target that names an exam's pull request: `owner/repo#N/exam`. */
 export const examTarget = (plan: string): string => `${plan}/exam`;
@@ -185,9 +190,17 @@ export const lanePulls: Layer.Layer<LanePulls, never, LaneWork> = Layer.effect(
 					return pull === undefined ? Effect.fail(failed) : Effect.succeed(pull);
 				}),
 			// What they were given on is read now: `base` cannot be rebuilt later. A read that broke keeps
-			// none, and then the verdicts count at this exact head only.
+			// none, and then the verdicts count at this exact head only. The same verdicts posted again at a
+			// head their diff was carried to (a push after main was merged in) keep what they judged.
 			post: (id, head, verdicts) =>
 				Effect.gen(function* () {
+					const pull = (yield* all).find((p) => p.id === id);
+					const was = sameVerdicts(pull?.verdicts ?? [], verdicts) ? pull?.posted : undefined;
+					if (was !== undefined && was.head !== head) {
+						const now = yield* work.now(was, head).pipe(Effect.option);
+						if (Option.isSome(now) && carry(was, now.value)._tag === "kept")
+							return yield* change(id, (p) => ({...p, head, verdicts}));
+					}
 					const given = yield* work.given(head, "main").pipe(Effect.option);
 					yield* change(id, ({posted: _was, ...p}) => ({
 						...p,
@@ -321,12 +334,20 @@ export const pullFacts = (
  * it stands no more than a stale one. A read that broke stands nothing.
  */
 export const standsAt = (number: number, given: Given, head: string) =>
+	carriedAt(number, given, head).pipe(Effect.map((carried) => carried._tag === "kept"));
+
+/** What `carry` says of `given` at `head`, with the `carried` fact for a kept one. A read that broke is stale. */
+export const carriedAt = (
+	number: number,
+	given: Given,
+	head: string,
+): Effect.Effect<Carried, never, LaneWork | Tickets> =>
 	Effect.gen(function* () {
-		if (given.head === head) return true;
+		if (given.head === head) return {_tag: "kept", why: "same_head"} as const;
 		const work = yield* LaneWork;
 		const tickets = yield* Tickets;
 		const carried = carry(given, yield* work.now(given, head));
-		if (carried._tag !== "kept") return false;
+		if (carried._tag !== "kept") return carried;
 		yield* tickets
 			.write(number, `carried/${given.head}/${head}`, {
 				type: "carried",
@@ -335,8 +356,8 @@ export const standsAt = (number: number, given: Given, head: string) =>
 				why: carried.why,
 			})
 			.pipe(Effect.ignore);
-		return true;
-	}).pipe(Effect.orElseSucceed(() => false));
+		return carried;
+	}).pipe(Effect.orElseSucceed((): Carried => ({_tag: "stale"})));
 
 /** Whether a person's `merge` stands at `head`: as said, or carried there. */
 export const yesAt = (number: number, yes: Yes, head: string) =>
@@ -357,11 +378,30 @@ export const yesAt = (number: number, yes: Yes, head: string) =>
 		}
 	});
 
-/** Whether the verdicts posted on `pull` stand at `head`: posted there, or carried there. */
-export const judgedAt = (pull: Pull, head: string) =>
-	pull.posted === undefined || pull.posted.head === head
-		? Effect.succeed(pull.posted !== undefined || pull.head === head)
-		: standsAt(pull.ticket, pull.posted, head);
+/**
+ * Whether the verdicts posted on `pull` stand at `head`, and how. None: they do not. Some with no
+ * hop: posted there. Some with one hop: carried there from the head they were posted at, which is
+ * what ship's proof needs to count the criteria's rows kept at that head (../ship/ready.ts).
+ */
+export const judgedAt = (
+	pull: Pull,
+	head: string,
+): Effect.Effect<Option.Option<readonly Hop[]>, never, LaneWork | Tickets> => {
+	const posted = pull.posted;
+	if (posted === undefined || posted.head === head)
+		return Effect.succeed(
+			posted !== undefined || pull.head === head ? Option.some([]) : Option.none(),
+		);
+	return standsAt(pull.ticket, posted, head).pipe(
+		Effect.map((kept) => (kept ? Option.some([{from: posted.head, to: head}]) : Option.none())),
+	);
+};
+
+/** The facts' `carried`, from how the verdicts stand: left out when no hop carried them. Pure. */
+export const carriedOf = (judged: Option.Option<readonly Hop[]>): Pick<PrFacts, "carried"> => {
+	const hops = Option.getOrElse(judged, () => []);
+	return hops.length > 0 ? {carried: hops} : {};
+};
 
 /** An effect over the lane's work and tickets, with both given, as a host's call needs it. */
 export const laneBound =
@@ -548,7 +588,8 @@ export const laneLocalHost = (
 						return {
 							head: pull.head,
 							state: pull.state,
-							...pullFacts(pull, repo, yes, judged),
+							...pullFacts(pull, repo, yes, Option.isSome(judged)),
+							...carriedOf(judged),
 							checks: checks === "unknown" ? ("stuck" as const) : checks,
 							mergeable: yield* work.mergeable(pull.head),
 							comments: [],
