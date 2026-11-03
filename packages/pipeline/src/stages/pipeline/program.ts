@@ -832,12 +832,9 @@ const bodies = {
 				pull?.why === undefined || at.cmd.carry.examPr === null
 					? undefined
 					: {head: pull.head, why: pull.why, ...(pull.on === undefined ? {} : {on: pull.on})};
+			// A redo on main is pushed over the exam branch (the owner's pick on PR 322). The push keeps
+			// what it replaces, as the remote holds it then, and says so on the ticket (./work.ts, `pushBranch`).
 			const base = redo === undefined || redo.on === "main" ? main : redo.head;
-			// A redo on main is pushed over the exam branch (the owner's pick on PR 322): its old head is
-			// kept first, as a restart keeps the head it drops, so a commit a person pushed there stays.
-			const kept =
-				redo?.on === "main" ? {head: redo.head, ref: `refs/kept/${at.cmd.intent}`} : undefined;
-			if (kept !== undefined) yield* work.keep(kept.head, kept.ref);
 			yield* at.tell(yield* work.copy(base), "read", {
 				ticket: `${at.title}\n\n${at.body}`,
 				changes: listed(changes.map((c) => `${c.path}: ${c.change} (${c.why})`)),
@@ -854,16 +851,6 @@ const bodies = {
 				...(redo === undefined ? {} : {redo}),
 			});
 			const {head} = end.report;
-			// Said once, when the push did replace the branch.
-			if (kept !== undefined && head !== null)
-				yield* (yield* Tickets)
-					.talk(at.cmd.number, `${at.cmd.intent}/kept`, {
-						type: "commented",
-						body: saidOf(
-							`The rule changes were written again on main, and that push replaced the exam branch. Its old head, ${kept.head}, is kept under ${codeSpan(kept.ref)} in the lane's clone.`,
-						),
-					})
-					.pipe(Effect.ignore);
 			return ended(
 				end.outcome,
 				{examPr: end.report.pr ?? null, ...(head === null ? {} : {examPull: {head}})},
