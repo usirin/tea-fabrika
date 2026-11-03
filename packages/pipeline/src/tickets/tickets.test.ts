@@ -290,25 +290,31 @@ const flaky = (meets: Partial<Record<"readStream" | "send", readonly Meets[]>>) 
 			data: filed.fact,
 		});
 		const times = {readStream: [] as number[], send: [] as number[]};
-		const meeting = (method: "readStream" | "send", stream: string) =>
+		/** The clock time of this call, kept, and what it meets. */
+		const meeting = (method: "readStream" | "send") =>
 			Effect.gen(function* () {
 				times[method].push(yield* Clock.currentTimeMillis);
-				const meet = meets[method]?.[times[method].length - 1];
-				if (meet === "unreachable")
-					return yield* Effect.fail(new LedgerUnreachable({method, message: "no answer"}));
-				if (meet === "unknown_name") return yield* Effect.fail(new UnknownName({stream}));
+				return meets[method]?.[times[method].length - 1];
 			});
+		const silent = (method: "readStream" | "send") =>
+			new LedgerUnreachable({method, message: "no answer"});
 		const wrapped: Ledger["Service"] = {
 			...ledger,
 			readStream: (stream, fromRev, limit) =>
-				meeting("readStream", stream).pipe(
-					Effect.andThen(ledger.readStream(stream, fromRev, limit)),
+				Effect.flatMap(meeting("readStream"), (meet) =>
+					meet === "unreachable"
+						? Effect.fail(silent("readStream"))
+						: ledger.readStream(stream, fromRev, limit),
 				),
 			// The 404 is the ledger's own error, which only `send` declares.
-			send: ((inbox, id, event, fence) =>
-				meeting("send", inbox).pipe(
-					Effect.andThen(ledger.send(inbox, id, event, fence)),
-				)) as Ledger["Service"]["send"],
+			send: (inbox, id, event, fence) =>
+				Effect.flatMap(meeting("send"), (meet) =>
+					meet === "unreachable"
+						? Effect.fail(silent("send"))
+						: meet === "unknown_name"
+							? Effect.fail(new UnknownName({stream: inbox}))
+							: ledger.send(inbox, id, event, fence),
+				),
 		};
 		return {
 			ledger,
