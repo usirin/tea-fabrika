@@ -2,7 +2,7 @@
 
 The fabrika app, as a walking skeleton: the whole flow, thin. It is one window, tiled like
 tmux. Every tile runs its own tsh, with the programs `counter`, `tracker`, `ticket`, `map`,
-`pipeline`, `runs` and `trace` loaded. A program with a view runs inside a tile. The design is
+`pipeline` and `trace` loaded. A program with a view runs inside a tile. The design is
 [The GUI is an Electron app first](../../docs/direction/the-gui-is-electron-first.md), section
 "Decided 2026-10-25: tiles, like tmux".
 
@@ -114,7 +114,7 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/window/` | `desk.tsx`, the page: the tiles, their title bars and borders, the strips of folded tiles. `frame.ts` and `frame.tsx`, the window's frame: the top bar, the bottom line, the asks list and the palette (see [The window's frame](#the-windows-frame)). `pop.ts` and `pop.tsx`, what opens over the desk: one raised box of rows for every popover (`Menu`, `Palette`, `Panel`, `useTip`), its keys as one pure function (`menuKey`), by [the popover rule](../../docs/direction/popovers.md). `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. `window.css` holds the app's color tokens at its top; a program's view uses them and has no theme of its own. The UI's parts are [Manti UI's](../../docs/direction/ui-on-manti.md): `theme.css` sets Manti's tokens from those same names, and keeps Manti's reset to Manti's own parts. |
 | `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. Its one stylesheet, `window.css`, is Manti's, then React Flow's base rules, then `src/window/theme.css`, then `src/window/window.css`. |
 | `table.ts` | Writes `src/editor/cells.table.ts`: asks ghostty-web's wasm the width and grapheme class of every code point (`cells.probe.ts`). Run it with `pnpm table` after a new ghostty-web; `cells.test.ts` fails until then. |
-| `shots.ts` | The page alone in headless Chromium, with no Electron and no host: the built `dist/`, handed a desk and the tracker, ticket, map and runs views of the stand-in ticket #7 and the trace of `seq --to 3 | tally` (as it opens, and opened down to the step add 2), as the host would send them. Two of its desks come from the desk machine's own steps: `tracker | ticket | runs` opened beside the map, and in a spot too tight, its extra windows folded. Writes `docs/round-6/*.png`. No window, no network. Not in `pnpm test`. |
+| `shots.ts` | The page alone in headless Chromium, with no Electron and no host: the built `dist/`, handed a desk and the tracker, ticket and map views of the stand-in ticket #7, the trace of that ticket's lanes, and the trace of `seq --to 3 | tally` (as it opens, and opened down to the step add 2), as the host would send them. Two of its desks come from the desk machine's own steps: `tracker | ticket | trace` opened beside the map, and in a spot too tight, its extra windows folded. Writes `docs/round-6/*.png`. No window, no network. Not in `pnpm test`. |
 | `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, the asks list and the palette (focus in, no key through to the tile under them, Escape and a click outside giving focus back, one open at a time), a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, a host of another version, one ask taking another's place with the asks list open, and the link dropping: the socket cut, the host killed, and no host until Try again. It stops its own hosts by their pids and checks with `pgrep`. Not in `pnpm test`. macOS only: CI runs it on a macOS runner (the check workflow's `e2e` job). It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. |
 
 ## Keys
@@ -208,9 +208,9 @@ tsh: focus failed: no tile t9
 Two plain lines around the tiles (`src/window/frame.ts` for the words, `frame.tsx` to draw them):
 
 ```text
-● ● ●  1 #7   2 tsh   tracker | ticket | runs                                               ✓
+● ● ●  1 #7   2 tsh   tracker | ticket | trace                                              ✓
 ...tiles...
-t2 ticket #7 · takes ticket · sends ticket · from tracker → runs                C-b i info · C-b ? keys
+t2 ticket #7 · takes ticket · sends ticket · from tracker → trace               C-b i info · C-b ? keys
 ```
 
 That is the bar at rest. A word joins its right end only while it matters:
@@ -322,15 +322,14 @@ When something is wrong, its word says so, in red where it is broken:
   back. The other tiles stay as they were.
 - **A line with several windows opens in place,** in the tile it was typed in
   ([a line opens in place](../../docs/direction/fold-not-tabs.md#a-line-opens-in-place)).
-  `tracker | ticket | runs` in t2: the tracker covers t2, and the ticket and the runs open as
+  `tracker | ticket | trace` in t2: the tracker covers t2, and the ticket and the trace open as
   new tiles beside it, in t2's place, each with a third of its space. In a row they become
   siblings; in a column they nest as a row. Past 220 by 120 px a window, all but the first open
   folded. Unfolding one takes space only from the line's other windows.
-- **The line carries the ticket picked.** Pick #7 in the tracker, and the ticket and the runs
+- **The line carries the ticket picked.** Pick #7 in the tracker, and the ticket and the trace
   both show #7; pick another, and both follow. Each sends the ticket it is on, by its number,
   each time that changes ([the pipe the line carries](../../docs/direction/fold-not-tabs.md#the-pipe-the-line-carries)).
-  The line can go on: in `tracker | ticket | runs | trace`, a run picked in the runs opens its
-  job's trace in the fourth window.
+  In the trace, a step of #7 opens to its job's spans in place.
 - **A line's tiles and strips share one faint tint,** one of six, the first no other line has.
   A run alone has none.
 - **A line's other windows have no tsh.** Ctrl-C in one goes to the typed-in tile's tsh. A
@@ -346,7 +345,7 @@ When something is wrong, its word says so, in red where it is broken:
   - Ctrl-B x on a closing tile asks `stop t2 now? (y/n)`. y stops them, and the tile goes.
   - On one window of a line, y ends that one process: it gets the end of its inputs (`end`), and
     its window goes when it is over. Its neighbours follow the pipes. In
-    `tracker | ticket | runs`, closing the ticket's window leaves the runs on the last ticket,
+    `tracker | ticket | trace`, closing the ticket's window leaves the trace on the last ticket,
     and the tracker's next pick fails: `tsh: tracker failed: tracker sent ticket down a pipe that
     answered stopped`. Asked again, `stop t3 now?`, y stops the process (`kill`).
   - The typed-in tile of a line holds its tsh: closing it ends tsh and every process of the line.
@@ -534,11 +533,10 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app-old e2e
 
 ## What it does not do yet
 
-- **One real line only.** `tracker | ticket | runs` is the one line whose programs pipe a
-  ticket, and `runs | trace` the one that pipes a run's trace id. The map takes no ticket from
-  a pipe yet; `trace` takes a trace id, never a ticket.
+- **Few real lines.** `tracker | ticket | trace`, `tracker | trace` and `pipeline --ticket N |
+  trace` are the lines whose programs pipe a ticket. The map takes no ticket from a pipe yet.
 - **An upstream ends on its next send, not at once.** With the ticket's window closed, the
-  tracker in `tracker | ticket | runs` looks alive until the next pick, then fails.
+  tracker in `tracker | ticket | trace` looks alive until the next pick, then fails.
 
 - **The cursor moves one code point at a time.** It can stop between a letter and its accent,
   which readline steps over, or inside an emoji made of several.

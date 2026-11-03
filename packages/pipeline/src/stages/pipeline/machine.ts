@@ -488,6 +488,8 @@ export type LaneMsg =
 			readonly pick: string;
 			/** What they wrote beside it. */
 			readonly note?: string;
+			/** Who answered, as the ticket's entry names them. Left out: a Msg from before the key. */
+			readonly by?: string;
 	  };
 
 type Step_ = readonly [Lane, readonly LaneCmd[]];

@@ -6,9 +6,9 @@ ticket 117 is the first try.** The program's own reference is
 [`programs/pipeline/README.md`](../../programs/pipeline/README.md).
 
 ```text
-tsh> pipeline --ticket 117 | runs     start it: one row per run as it goes
+tsh> pipeline --ticket 117 | trace    start it: one row per step as it goes
 tsh> map --ticket 117                 another tile: the steps light up
-tsh> runs --ticket 117 | trace        pick a run, see its turns
+tsh> trace --ticket 117               another tile: open a step, see its spans
 tsh> ticket --ticket 117              the questions, answered here
 ```
 

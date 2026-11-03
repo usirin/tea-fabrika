@@ -37,7 +37,7 @@ const isFolded = (node: LayoutNode): boolean =>
   (`openShares`), so an unfold puts every size back as it was.
 - **A folded container is worked out.** When every tile in a container is
   folded, it draws as one strip labelled with its tiles' names, such as
-  "map · runs". A click on it unfolds them all.
+  "map · trace". A click on it unfolds them all.
 - **The last open tile cannot fold.** `fold` gives back the same tree when it
   would leave a workspace with only strips, and `checkTree` refuses a saved
   tree with nothing open. Closing the last open tile unfolds the first tile
@@ -61,15 +61,15 @@ focuses the tile, as a click anywhere on it does. A click on a strip opens it.
 One tree, before and after Ctrl-B f on `t3`, then on `t2`:
 
 ```ts
-// before: the ticket beside a column of the map over the runs
+// before: the ticket beside a column of the map over the ticket's trace
 {tag: "container", id: "c1", orientation: "horizontal", sizes: {t1: 42, c2: 58}, children: [
   t1,
   {tag: "container", id: "c2", orientation: "vertical", sizes: {t2: 50, t3: 50}, children: [t2, t3]},
 ]}
-// after f on t3: the map fills the column, the runs are a strip under it.
+// after f on t3: the map fills the column, the trace is a strip under it.
 // t3 is {tag: "tile", id: "t3", folded: true, ...}; no size changed.
 // after f on t2 too: isFolded(c2) is true, so the column draws as one upright strip,
-// "map · runs", and the ticket fills the row. c1's sizes are still {t1: 42, c2: 58}.
+// "map · trace", and the ticket fills the row. c1's sizes are still {t1: 42, c2: 58}.
 ```
 
 ## Why
@@ -119,7 +119,7 @@ that made it impossible would have to count open tiles, and TypeScript cannot.
 ## A line opens in place
 
 **Decided 2026-10-28.** A tsh line with several windowed programs, such as
-`tracker | ticket | runs`, opens its windows in the tile it was typed in, by
+`tracker | ticket | trace`, opens its windows in the tile it was typed in, by
 the split rule above. They share that tile's space evenly. When a window
 would be too small, all but the first open folded. One faint tint marks the
 line's tiles and strips.
@@ -136,7 +136,7 @@ type Shows =
 // apps/fabrika/src/desk/layout/line.ts
 const MIN_WINDOW = { width: 220, height: 120 };       // title bar included
 openLine(tree, "t2", {
-  runs: [tracker, ticket, runs],
+  runs: [tracker, ticket, trace],
   tint: freeTint(allTrees),                          // the first tint no line has
   orientation: "horizontal",                         // a line runs left to right
   ids: { tiles: ["t3", "t4"], container: "c3" },
@@ -181,9 +181,11 @@ the desk's own copy of the page's strip and border sizes to work out what fits
 
 - **The minimum.** 220 by 120 comes from the prototype. A desk on a laptop
   screen will show whether it folds too much.
-- **One line only so far.** `tracker | ticket | runs` is the one line whose
-  programs pipe a ticket (below), and it can go on to `| trace`. It ran in
-  the app on a test home, twice.
+- **One line only so far.** `tracker | ticket | runs` was the one line whose
+  programs piped a ticket (below), and it could go on to `| trace`. It ran in
+  the app on a test home, twice. (The `runs` program went in ticket 141; the
+  line is `tracker | ticket | trace` now, and `tracker | trace` pipes a ticket
+  too.)
 
 ## A line's windows close one by one
 
@@ -206,13 +208,13 @@ const windowYes = (s: Open, tile: TileId, process: string): Step => {
 // The tile goes when the process is over, as any window does.
 ```
 
-What the line `tracker | ticket | runs` does when the ticket's window closes:
+What the line `tracker | ticket | trace` does when the ticket's window closes:
 
 | Process | What happens |
 |---|---|
 | ticket | its inputs end; it ends on its own, and its window goes |
 | tracker (upstream) | goes on; its next pick fails: `tsh: tracker failed: tracker sent ticket down a pipe that answered stopped` |
-| runs (downstream) | its input from the ticket ends; it keeps showing the last ticket, and ends when its own window closes |
+| trace (downstream) | its input from the ticket ends; it keeps showing the last ticket, and ends when its own window closes |
 
 - **The typed-in tile is the line's.** Closing it ends tsh and every process
   of the line, as before. Closing a window never closes it.
@@ -243,15 +245,14 @@ ticket: output(TicketNumber, "The ticket the person picks, by its number ...")
 // programs/ticket: inputs and outputs
 inputs:  {do, ticket: input(TicketNumber, "A ticket to show now ...")}
 outputs: {ticket: output(TicketNumber, "The ticket it shows ...")}
-// programs/runs: inputs and outputs
-inputs:  {in, ticket: input(TicketNumber, "A ticket to lay out now ...")}
-outputs: {id: output(TraceId, "The trace id of each run picked ...")}   // for `| trace`
+// programs/trace: inputs (the `runs` program's job, since ticket 141)
+inputs:  {id: input(TraceId, "A job's trace id ..."), ticket: input(TicketNumber, "A ticket to show now ...")}
 ```
 
-Each still runs alone: `ticket --ticket 7` and `runs --ticket 7` take the
-ticket as a flag, and with no flag they wait for one on their input. `trace`
-takes no ticket: it takes a trace id, so `tracker | ticket | runs | trace`
-opens the trace of a run picked in the runs. A ticket's writes name their
+Each still runs alone: `ticket --ticket 7` and `trace --ticket 7` take the
+ticket as a flag, and with no flag they wait for one on their input. So
+`tracker | ticket | trace` shows the picked ticket's lanes, and a step there
+opens to its job's spans. A ticket's writes name their
 ticket (`{kind: "comment", ticket: 7, body}`), so a comment typed on #7 never
 lands on #3 picked after it.
 

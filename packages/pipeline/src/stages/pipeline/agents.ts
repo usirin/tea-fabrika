@@ -21,6 +21,7 @@ import {SortReply} from "../sort/answer.ts";
 import {sortDraft} from "../sort/machine.ts";
 import {Sorter} from "../sort/services.ts";
 import {type Brief, fenced, fill, listed} from "./briefs.ts";
+import {listUsdOf, type Tokens} from "./price.ts";
 import type {LaneHome} from "./work.ts";
 import {LaneWork} from "./work.ts";
 
@@ -66,26 +67,8 @@ export const pickedFor = (settings: Settings, step: AgentStep): Picked => ({
 	...settings.agents?.[step],
 });
 
-/** Dollars per million tokens, at API list price. A model not here has no price: never another's. */
-const LIST: Readonly<Record<string, {in: number; cached: number; out: number}>> = {
-	"gpt-6.1-sol": {in: 2, cached: 0.1, out: 10},
-};
-
-export interface Tokens {
-	readonly input: number;
-	readonly cached: number;
-	readonly output: number;
-}
-
-/** A run at list price. `null`: this model's price is not known. Pure. */
-export const listUsdOf = (model: string, t: Tokens): number | null => {
-	const rate = LIST[model];
-	if (rate === undefined) return null;
-	return (
-		(rate.in * Math.max(0, t.input - t.cached) + rate.cached * t.cached + rate.out * t.output) /
-		1_000_000
-	);
-};
+// The list prices live in ./price.ts, which names no platform, so a window's view can price a step.
+export {listUsdOf} from "./price.ts";
 
 /**
  * What a run cost: what the maker billed, and its list price. A run that spent tokens under no

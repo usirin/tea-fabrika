@@ -6,7 +6,7 @@ import {Context, Effect, Schema} from "effect";
 // version. The lane itself is `laneProgram` (@kampus/pipeline): this is the line a person types.
 //
 //   tsh> pipeline --ticket 117            one line per step as it ends
-//   tsh> pipeline --ticket 117 | runs     the runs window fills in as it goes
+//   tsh> pipeline --ticket 117 | trace    the ticket's lanes fill in as they go
 //
 // `ticket` goes out once, at the start: that is all a window needs, and it is why closing the window
 // never reaches the lane. The lane is kept under an id the ticket names, not this run's: typing the
@@ -32,7 +32,7 @@ export const pipeline = defineProgram({
 	},
 	inputs: {},
 	outputs: {
-		ticket: output(TicketNumber, "The ticket, once, at the start: for `runs` or `map` to open."),
+		ticket: output(TicketNumber, "The ticket, once, at the start: for `trace` or `map` to open."),
 		line: output(Schema.String, "One line per step as it ends, and per question as it is asked."),
 	},
 	machines: {},

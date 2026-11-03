@@ -14,9 +14,9 @@ import {type Cap, capsOf, type Icon, type Piece, type Row, type Section, sentenc
 // the app said of the link. Plain data, no React, so each word is tested (frame.test.ts); the
 // page draws it (frame.tsx).
 //
-//   top      1 #7  2 tsh   tracker | ticket | runs                    2 ask you • · 1 agent · ✓
-//   at rest  1 #7  2 tsh   tracker | ticket | runs                                          ✓
-//   bottom   t2 ticket #7 · takes ticket · sends ticket · from tracker → runs        C-b ? keys
+//   top      1 #7  2 tsh   tracker | ticket | trace                   2 ask you • · 1 agent · ✓
+//   at rest  1 #7  2 tsh   tracker | ticket | trace                                         ✓
+//   bottom   t2 ticket #7 · takes ticket · sends ticket · from tracker → trace       C-b ? keys
 //   a job    t1 tsh · %3 seq --to 9 | tally 2m +1                                  C-b ? keys
 //   Ctrl-B   PREFIX · N new · x close · z zoom · f fold · | split · ? keys        esc cancels
 //   Ctrl-B x close t2? (y/n)                                                 y closes · n keeps it

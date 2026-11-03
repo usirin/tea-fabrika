@@ -20,15 +20,15 @@ class DoesNotFit extends Schema.TaggedError<DoesNotFit>()("DoesNotFit", {
 error[T0103]: tally's output does not fit trace's input
   |
 1 | seq --to 3 | tally | trace
-  |              ----- ^ ----- takes: id (a trace id), do
+  |              ----- ^ ----- takes: id (a trace id), ticket (a ticket number), do
   |              |
   |              sends: total (integer), refused
   |
-  = note: nothing tally sends is a trace id
-  = help: a program that sends a trace id: runs
+  = note: nothing tally sends is a trace id or a ticket
+  = help: a program that sends a ticket: tracker
   |
-1 | runs --ticket 7 | trace
-  | ++++++++++++++++
+1 | tracker | trace
+  | ++++++++
   |
   = for more: explain T0103
 Nothing was started.
@@ -100,10 +100,10 @@ const Drawing: Context.Reference<Draw> = Context.Reference("@kampus/fabrika/Draw
  "message": "tally's output does not fit trace's input",
  "labels": [{"at": {"start": 19, "end": 20}, "text": "", "main": true},
             {"at": {"start": 13, "end": 18}, "text": "sends: total (integer), refused", "main": false},
-            {"at": {"start": 21, "end": 26}, "text": "takes: id (a trace id), do", "main": false}],
- "notes": ["nothing tally sends is a trace id"],
- "helps": ["a program that sends a trace id: runs"],
- "fixes": [{"line": "runs --ticket 7 | trace", "applies": "maybe"}]}
+            {"at": {"start": 21, "end": 26}, "text": "takes: id (a trace id), ticket (a ticket number), do", "main": false}],
+ "notes": ["nothing tally sends is a trace id or a ticket"],
+ "helps": ["a program that sends a ticket: tracker"],
+ "fixes": [{"line": "tracker | trace", "applies": "maybe"}]}
 ```
 
 ## What Effect already gives, and what is ours
