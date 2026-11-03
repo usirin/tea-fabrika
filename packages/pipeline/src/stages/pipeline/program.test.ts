@@ -2504,6 +2504,63 @@ describe("a lane, whole, on GitHub", () => {
 		},
 	);
 
+	// Self-fix PR 11, jidoka row 62: the lane takes a person's moved head in and runs code's checks
+	// there. Red there goes to build, the next round, with the failing names, as any red after a build
+	// does. It never stops at the review's guard.
+	it(
+		"row 62: red checks at a person's moved head go to build, the next round, told the failing test, and never stop at the review",
+		{timeout: 120_000},
+		async () => {
+			const NAME = "src/lower.test.ts > lowers capitals";
+			const VITEST = "node_modules/.bin/vitest run --reporter=json --outputFile={out}";
+			/** The head the stand-in's person pushed: its subject, as `movedByAPerson` writes it. */
+			const persons = (remote: string, head: string) => {
+				try {
+					return (
+						execFileSync("git", ["--git-dir", remote, "log", "-1", "--format=%s", head], {
+							encoding: "utf8",
+							stdio: "pipe",
+						}).trim() === "A person pushed one more commit."
+					);
+				} catch {
+					return false;
+				}
+			};
+			const story = {...PASSED_CI, moveHead: {at: "facts", tree: "changed"}} as const;
+			const ran = await onGitHub({
+				story,
+				within: 100,
+				picks: {...YES, rounds_spent: "stop", step: "stop"},
+				// Red only at the person's head; every other head runs the repo's tests for real.
+				checksSay: (head, _nth, where) =>
+					persons(where.remote, head)
+						? {
+								head,
+								commands: [{command: VITEST, code: 1, ms: 8_120}],
+								result: "red",
+								failed: [NAME],
+								tail: `${NAME}: boom`,
+							}
+						: null,
+			});
+			const said = ran.lines.join("\n");
+			// The person's head was taken in, and its checks were red.
+			const red = ran.facts.filter((f) => f.type === "checked" && f.result === "red");
+			expect(red.length, said).toBeGreaterThan(0);
+			expect(red[0]?.failed).toEqual([NAME]);
+			// Ship's send at merge, then the build: the next round, before any review reads that head.
+			const merged = ran.facts.findIndex((f) => f.type === "ended" && f.stage === "merge");
+			expect(merged, said).toBeGreaterThan(-1);
+			const next = ran.facts.slice(merged).find((f) => f.type === "started");
+			expect(next?.stage, said).toBe("build");
+			expect(next?.round, said).toBe(2);
+			// That build is told the failing test by name.
+			expect(codexRuns(ran.dir).filter((r) => r.step === "build")[1]?.prompt).toContain(NAME);
+			expect(said).not.toContain("stuck:checks_red");
+			expect(said).not.toContain("sent_back");
+		},
+	);
+
 	it(
 		"records the merge it made, when GitHub has not marked it merged by the end of the run",
 		{timeout: 60_000},
@@ -3349,6 +3406,39 @@ describe("a lane, on what the real agents answered", () => {
 				]);
 				expect(askedFor(ran, "step")).toHaveLength(1);
 				expect(ran.lines.join("\n")).not.toContain("unchecked");
+			},
+		);
+
+		// Self-fix PR 11, rows 28, 29 and 35, from round 2 on. A second round's writer adds its tests on a
+		// head, and its first try's commit is that head once it ends. Sent back once, it writes the same
+		// file again: that is its own file, never one that "exists already", so it is never a stop.
+		it(
+			"row 28 in round 2: a test writer sent back once may write its own file again on the head it first wrote on, and then it asks",
+			{timeout: 120_000},
+			async () => {
+				// The fake's round-2 writer writes `src/lower-again.test.ts`, which passes at once on the
+				// build's head; its redo, also plain, writes that same file again.
+				const ran = await lane({
+					title: "[review-once] Read names in one form",
+					within: 100,
+					picks: {approve: "approve", step: "stop"},
+				});
+				const said = ran.lines.join("\n");
+				const writers = ran.facts.filter((f) => f.type === "ended" && f.stage === "test_writer");
+				expect(
+					writers.slice(1).map((f) => JSON.stringify(f.outcome)),
+					said,
+				).toEqual([
+					'{"kind":"ask","who":"owner","for":"already_passes"}',
+					'{"kind":"ask","who":"owner","for":"already_passes"}',
+				]);
+				const started = ran.facts.filter((f) => f.type === "started" && f.stage === "test_writer");
+				expect(started.map((f) => f.round)).toEqual([1, 2, 2]);
+				// The redo stands on a head, as round 2 does: it is told of round 1's test there.
+				const redo = codexRuns(ran.dir).filter((r) => r.step === "tests")[2];
+				expect(redo?.taken).toContain("src/lower.test.ts");
+				expect(askedFor(ran, "step")).toHaveLength(1);
+				expect(said).not.toContain("unchecked");
 			},
 		);
 
