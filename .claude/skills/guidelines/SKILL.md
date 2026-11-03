@@ -10,8 +10,10 @@ with one experiment, one note, one private page, one docs-only pull request, and
 ends in a yes or a no.
 
 The models are themes (PR 281), keybindings (PR 282), hot reload (PR 286) and modes (PR 287).
-Themes came first; the other three set the page's shape, and modes is the closest to it all:
-copy modes. Pipeline guidelines (PR 290) drifted on structure (no demo, no Try it), so it is not a model, but its views and palette are a second reference.
+Themes came first; the other three set the note's shape and the views under the page's mockup,
+and modes is the closest to it all: copy modes for those. Pipeline guidelines (PR 290) drifted on structure (no demo, no Try it), so it is not a model, but its views and palette are a second reference.
+The page's first screen copies the mockup rounds instead (the tile, the pipe marker finalists, the
+chat window): there the mockup is the page, and the words fold under it.
 
 Read `AGENTS.md` first. Its rules on names, writing, version and the public repo all apply.
 
@@ -94,6 +96,9 @@ The Linear row in step 4 is words. This step checks the look with eyes.
 - For each shot, one line: would Linear's team ship this? What looks off: a box in a box, a gray
   that fights, a line nobody needs, loud text, a cramped layout? Fix it and reshoot. Two or three
   rounds is normal. Stop when you would ship it.
+- Keep every round. The shoot saves each state's DOM beside its shot
+  (`document.documentElement.outerHTML`, scripts dropped, a canvas kept as its pixels), and the
+  built `window.css` of that round beside them. Step 9 lifts the page's demo from these files.
 - Show the owner the shots before the write-up. Their yes on the look comes first. On a no, go
   round again.
 - Each principle also gets a **kind**, so it is checked the right way: **law** (the test writer
@@ -144,11 +149,27 @@ The Linear row in step 4 is words. This step checks the look with eyes.
 
 ### 9. Build and publish the page
 
+The page is a mockup with the guidelines folded under it, not a write-up with a demo in a corner.
+Pages built the other way came out as one design and a wall of text, and the redrawn demo drifted
+from the real screen (boxed buttons in a selected row, bigger type, a footer that wrapped).
+
 - Follow `references/page-structure.md`: the structure checklist, the page rules and the
   highlight snippet. Every box on its list is checked before publishing. View every page at
   1280 and 390 wide on a local copy first, then again after publishing.
-- Publish it as a private artifact titled "<Area> guidelines". Later changes republish to the
-  same URL. The page goes in no file in the repo.
+- **The demo is lifted, not redrawn.** Its CSS is the built `window.css` from step 5, copied
+  unchanged, or rules lifted from it by selector and printed as they are (the design system's
+  generator does this). Its markup is the DOM step 5 saved, copied once. Nobody retypes a rule, a
+  class or a word of the screen. Each design and layout is its own small document the page loads
+  in a frame, so today's CSS and the proposed CSS never mix.
+- **Several designs, not one.** Today, each round of step 5 and Proposed can be switched, and two
+  can sit side by side at the same layout. A round with no saved DOM shows its real shot.
+- **The blocking check.** Shoot each demo state the page offers, at the size and scale of its
+  step 5 shot, and put the two side by side with a pixel diff. Any difference in words, boxes or
+  sizes blocks the publish: fix the lift, not the shot, and shoot again. Save the side-by-sides in
+  the scratch folder and name them in the walk.
+- Publish it from files as a private artifact titled "<Area> guidelines": the page, the frames,
+  the CSS and the shots. Later changes republish to the same URL. The page goes in no file in the
+  repo.
 
 ### 10. Open a docs-only pull request
 

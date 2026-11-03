@@ -1,70 +1,108 @@
 # The guidelines page
 
-The private page "<Area> guidelines" is where the owner presses each principle. Its structure is
-the one keybindings, hot reload and modes share. Check every box before you publish.
+The private page "<Area> guidelines" is a mockup round first and a write-up second. Its first
+screen copies the mockup pages the owner liked: "Tile design guidelines", "Pipe marker: three
+finalists", "Pipe colors: how many", "Color principles" and "Chat window for claude and codex:
+mockup". The guidelines fold under the mockup, in the order keybindings, hot reload and modes
+share. Check every box before you publish.
 
-## Layout
+## Why the page looks like this
 
-- [ ] One top bar: the title, one line that says which version and "Proposed, not built", and a
-  link text naming the note, the experiment and the pull request. A "Skip to the guideline" link
-  comes first. Once the owner has decided the note, the line says "Decided DATE, not built"
-  instead of "Proposed, not built".
-- [ ] The screen first, full width: the clickable screen from step 5 of the skill, in today's app
-  frame, with a switch between "Proposed" and "Today". Under it, two columns at 1280 wide: the
-  list of views at the left and one view at the right. Every view drives the same screen.
-- [ ] The list of views: Overview, then the principles numbered 1 to N, then a view for today's
-  running example, then Your calls. The current view is marked with `aria-current`, and
-  ↑ ↓ or j k move through the list.
-- [ ] At 390 wide everything stacks: the screen, the list, then the view. Nothing is cut off.
+Measured on 2026-11-02, each page rendered at 1280x800 from its live source. The guideline pages
+that came out as text soup had one design, a small demo and the words on the first screen. The
+liked pages had several designs, a big real-looking screen and one line of words.
 
-## Overview
+| Page | Designs you can switch | Mockup's share of the first screen | Words on the first screen, outside the mockup |
+|---|---|---|---|
+| Pipe marker: three finalists | 4, keys 1 to 4, "1 Today" first | about 89% | one line: the design, where it came from, its doubt |
+| Tile design guidelines | 6 layouts in a list, 2 rare picks in menus | about 75% | the title and one caption line |
+| Pipe colors: how many | 3 counts in a list | about 66% | one line |
+| Chat window mockup | 10 states, 5 layouts, 2 programs, with keys | about 64% | one status line, and gap tags on the screen |
+| Ask desk guidelines, before | Proposed or Today | about 24%, popup closed | a 3-line heading, two paragraphs, a 6-row table |
+| Program guidelines | Proposed or Today | about 14% | a heading, a paragraph, a 7-row table, 16 buttons |
 
-- [ ] The heading is the whole idea in one sentence, as "Avoid a mode. If you keep one, say it in
-  words, and let Escape always leave."
-- [ ] A lede: how many principles, that each has one example and one thing to press, and the
-  running case by name.
-- [ ] The running example traced in steps, as short rows: the press or save, then what each part
-  does.
-- [ ] One card per principle: its number, its name, its mark, and one line.
-- [ ] A line pointing at today's view and at Your calls, with how many picks are open.
-- [ ] Three disclosures: "Decided by the owner, DATE" (each decided point), "Built on what is
-  settled" (the notes it stands on), "Made up for this page" (every name, number or screen that
-  is not real).
+The ask desk's demo was also redrawn by hand, and it drifted from the built screen: boxed buttons
+in the selected row where the build has quiet words, a different header, a made-up row, and a
+footer that wrapped to two lines. The chat window mockup took its tokens from the app's
+`window.css`. That is the start of the rule below: the demo is lifted, not redrawn.
 
-## One view per principle
+## The first screen
 
-- [ ] A kicker, "Principle N of M", with its mark.
-- [ ] The name as the heading, then one sentence that states it.
+- [ ] At 1280x800 the mockup fills about two thirds of the screen or more, opened in the state the
+  study is about (the popup open, not the screen before it).
+- [ ] Above it, one line only: the title at body size, "Proposed, not built" (or "Decided DATE, not
+  built"), and link text naming the note, the experiment and the pull request. No hero heading and
+  no lede. A "Skip to the guidelines" link comes first.
+- [ ] One caption line for the design on screen: what it is and its doubt, as the finalists page
+  writes "Today: tint only. From the fold note. Doubt: no cue but hue."
+- [ ] What the build cannot show yet is a gap on the page, named where it would be (the chat
+  window's dashed "gap G1" tags), never drawn as if it worked.
+
+## The switches
+
+They pass the Linear test: a list for what you change all the time, a menu for a rare change,
+keys to move, and long text closed until asked.
+
+- [ ] **Design:** Today, each round from step 5, then Proposed, as a list at the left. Keys 1 to N.
+- [ ] **Layout:** the five from step 5 (one tile, side by side, stacked, 2x2, about 1024x700), as a
+  list. `L` steps through them.
+- [ ] **State:** what the study opens, such as the popup or the card. `S` steps through them.
+- [ ] **Compare:** `C` puts two designs side by side at the same layout, as "Color principles" put
+  "too loud", "ours" and "ours, focused" in one row.
+- [ ] A rare change is a menu. No row holds more than about five buttons: rows of buttons were
+  called overwhelming.
+- [ ] Each view has a hash name, such as `#proposed-popup-side`, so a link opens that view. The
+  keys are printed once, in one quiet line.
+- [ ] At 390 wide the lists become menus above the mockup, and the mockup scales to the width as a
+  whole. Nothing is cut off.
+
+## The demo
+
+- [ ] Lifted, not redrawn (step 9 of the skill): the built `window.css`, unchanged, and the DOM
+  step 5 saved. Each design, layout and state is its own frame document. The page owns only what
+  sits around the frame.
+- [ ] Shown at its real size, scaled down as a whole. Never laid out again to fit the page.
+- [ ] A round with no saved DOM shows its real shot, marked "shot".
+- [ ] A frame is a still: say so in the caption, and give each pressed state from step 5 its own
+  state in the switch.
+- [ ] The blocking check passed: each frame beside its step 5 shot, at the same size and scale, with
+  no difference in words, boxes or sizes. The side-by-sides are saved and named in the walk.
+
+## Under the mockup: the guidelines, folded
+
+- [ ] The whole idea in one sentence, at body size and weight, as "Avoid a mode. If you keep one,
+  say it in words, and let Escape always leave."
+- [ ] One row per principle: its number, its name, its mark and one line. Its body is folded, and
+  opens on a click or `Enter`.
+- [ ] Then, each folded: the smaller calls ("Your calls", or "Decided" once decided), today's running
+  example, "Decided by the owner, DATE", "Built on what is settled" and "Made up for this page"
+  (every name, number or screen that is not real).
+- [ ] At most one table per section, and none on the first screen. Code sits only inside a fold.
+
+## Inside a principle's fold
+
+- [ ] One sentence that states it, and its mark.
 - [ ] At most one small real table or one code block, when the principle needs it.
-- [ ] **Try it:** what to press in the demo, with the keys or buttons named, and what to watch.
+- [ ] **Try it:** which design, layout or state of the mockup shows it, with the key named.
 - [ ] A **Today** verdict, a word and a glyph first ("follows", "breaks", "half"), then why.
 - [ ] **Rules:** each one as "Rule K <name>", its mark and one line. A "Why" disclosure holds
   labeled rows: Why, Source (a short quote), Measured, Linear, Elm or OTP, Holds it (the type, test or refusal
   that enforces the rule: poka-yoke), Cost, Doubt, Try.
   Every rule has a Linear row, or "No Linear answer" with the reason.
 
-## Today's running example
+## Today's running example, folded
 
 - [ ] A what, today, where table, with `file:line`.
 - [ ] The fixes offered, not filed (when the area has one), and the example in the new shape as code.
-- [ ] The demo can switch between "Proposed" and "Today", so the owner sees each break.
+- [ ] A line pointing at the mockup's Today design, so the owner sees each break.
 
-## Your calls
+## Your calls, folded
 
-- [ ] "N picks are open. Each has a lean and how sure it is." After the owner decides, this view
+- [ ] "N picks are open. Each has a lean and how sure it is." After the owner decides, this fold
   becomes "Decided": it shows each pick with the option chosen and its "Decided · NN%" mark, and
   no open count.
 - [ ] Each call: a numbered question, then "NN% Lean: <answer>" or "No lean, the owner picks", then the options side by side,
   each labeled in words (the lean says so), then Why, Cost and Doubt rows.
-- [ ] Previous and Next buttons through the calls.
-
-## The demo window
-
-- [ ] The screen from step 5, not a small toy drawn for the page: real tile, program and command
-  names, the real chassis around it, and Start over.
-- [ ] A log of what fired, as the ledger or the brain would write it, and a line for what a screen
-  reader is told.
-- [ ] When the area has one (a key file, a program's source), that file is shown and changes live.
 
 ## Marks
 
@@ -184,8 +222,9 @@ pre.code {
 
 The pipeline page (PR 290) now has views, the fabrika palette and highlighting, so its look is
 no longer the reason to avoid it. It is still not the model for the structure: it has no demo, no
-Try it and no disclosures. Build from the modes page's shape, and take the pipeline page's views
-and palette as a second reference.
+Try it and no disclosures. Fold the guidelines in the modes page's order, and take the pipeline
+page's palette as a second reference. Neither is the model for the first screen: the mockup
+pages above are.
 
 ## Test browser files
 
