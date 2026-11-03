@@ -4,6 +4,7 @@ import {LaneId} from "../../ids.ts";
 import {act, gather, intentOf, keptAct, keptCmd, listen} from "../../primitives.ts";
 import {Checked, Outcome, titleOf} from "../../tickets/ticket.ts";
 import {Item} from "../build/ticket.ts";
+import {RedoOn} from "../exam/machine.ts";
 import {Survived} from "../mutation/mutant.ts";
 import {Post} from "../operate/machine.ts";
 import {nameOf} from "../outcome.ts";
@@ -189,6 +190,8 @@ export const ExamPull = Schema.Struct({
 	yes: Schema.optionalKey(Given),
 	/** What it was last sent back to the exam writer for: the findings, or the failing names. */
 	why: Schema.optionalKey(Schema.Array(Schema.String)),
+	/** Where the exam writer writes it again: `main`, when main does not merge into `head`. */
+	on: Schema.optionalKey(RedoOn),
 });
 export type ExamPull = typeof ExamPull.Type;
 

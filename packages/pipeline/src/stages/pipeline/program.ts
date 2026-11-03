@@ -33,7 +33,7 @@ import {examTouched} from "../build/check.ts";
 import type {Built} from "../build/form.ts";
 import {buildKind as buildStage, buildToTheEnd} from "../build/program.ts";
 import type {Item} from "../build/ticket.ts";
-import {ruleFiles} from "../exam/machine.ts";
+import {type RedoOn, ruleFiles} from "../exam/machine.ts";
 import {examChild, examToTheEnd} from "../exam/program.ts";
 import {MAX_MUTANTS} from "../mutation/machine.ts";
 import {mutationChild, mutationToTheEnd} from "../mutation/program.ts";
@@ -825,13 +825,14 @@ const bodies = {
 			const work = yield* LaneWork;
 			const main = yield* work.main;
 			const changes = at.cmd.carry.plan?.exam ?? [];
-			// A redo (self-fix PR 10): the pull request was sent back, so the writer starts at its head.
+			// A redo (self-fix PR 10): the pull request was sent back, so the writer starts at its head,
+			// or on main when main does not merge into that head.
 			const pull = at.cmd.carry.examPull;
 			const redo =
 				pull?.why === undefined || at.cmd.carry.examPr === null
 					? undefined
-					: {head: pull.head, why: pull.why};
-			const base = redo?.head ?? main;
+					: {head: pull.head, why: pull.why, ...(pull.on === undefined ? {} : {on: pull.on})};
+			const base = redo === undefined || redo.on === "main" ? main : redo.head;
 			yield* at.tell(yield* work.copy(base), "read", {
 				ticket: `${at.title}\n\n${at.body}`,
 				changes: listed(changes.map((c) => `${c.path}: ${c.change} (${c.why})`)),
@@ -862,7 +863,9 @@ const bodies = {
 			const tickets = yield* Tickets;
 			const {carry} = at.cmd;
 			const pr = yield* need(carry.examPr, "the exam has no pull request");
-			const back = (why: readonly string[], head: string) => ({examPull: {head, why}});
+			const back = (why: readonly string[], head: string, on?: RedoOn) => ({
+				examPull: {head, why, ...(on === undefined ? {} : {on})},
+			});
 			const ready = yield* examReady(at.cmd.number, pr, carry.rules);
 			if (ready._tag === "moved")
 				return ended({kind: "stuck", why: "head_moved"}, {}, [
@@ -874,6 +877,7 @@ const bodies = {
 					back(
 						ready.files.map((file) => `\`${file}\` conflicts with main: write it again on main.`),
 						ready.head,
+						"main",
 					),
 					[`Main does not merge into the rule changes: ${ready.files.join(", ")}.`],
 				);
@@ -967,10 +971,15 @@ const bodies = {
 			const pr = yield* need(at.cmd.carry.examPr, "the exam has no pull request");
 			const outcome = yield* shipped(at, pr);
 			const pull = at.cmd.carry.examPull;
-			// A refusal the exam writer fixes goes to it with ship's words (./routes.ts).
+			// A refusal the exam writer fixes goes to it with ship's words (./routes.ts). Main does not
+			// merge into a head that conflicts, so that redo is written on main.
 			return outcome.kind === "send" && pull !== undefined
 				? ended(outcome, {
-						examPull: {...pull, why: [`Ship refused the merge: ${nameOf(outcome)}.`]},
+						examPull: {
+							...pull,
+							why: [`Ship refused the merge: ${nameOf(outcome)}.`],
+							...(outcome.why === "conflicts" ? {on: "main" as const} : {}),
+						},
 					})
 				: ended(outcome);
 		}),

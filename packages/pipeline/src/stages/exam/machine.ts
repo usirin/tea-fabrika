@@ -61,6 +61,13 @@ export const ExamChange = Schema.Struct({
 });
 export type ExamChange = typeof ExamChange.Type;
 
+/**
+ * Where a redo is written. `main`: main does not merge into the head it was sent back from, so the
+ * writer writes the files again on main. Left out: on that head.
+ */
+export const RedoOn = Schema.Literal("main");
+export type RedoOn = typeof RedoOn.Type;
+
 export const ExamAsk = Schema.Struct({
 	ticket: Schema.String,
 	number: Schema.Finite,
@@ -69,10 +76,17 @@ export const ExamAsk = Schema.Struct({
 	tries: Schema.Finite,
 	/**
 	 * A redo (self-fix PR 10): the exam's pull request at `head` was sent back, and `why` says what
-	 * for, a line each: the review's findings or the checks' failing names. `base` is then a copy of
-	 * that head. Left out: the first writing, from main.
+	 * for, a line each: the review's findings, the checks' failing names or the files that conflict.
+	 * `base` is then a copy of that head, or of main when `on` says so. Left out: the first writing,
+	 * from main.
 	 */
-	redo: Schema.optionalKey(Schema.Struct({head: Schema.String, why: Schema.Array(Schema.String)})),
+	redo: Schema.optionalKey(
+		Schema.Struct({
+			head: Schema.String,
+			why: Schema.Array(Schema.String),
+			on: Schema.optionalKey(RedoOn),
+		}),
+	),
 });
 export type ExamAsk = typeof ExamAsk.Type;
 
@@ -86,6 +100,8 @@ const ExamBrief = Schema.Struct({
 	changes: Schema.Array(ExamChange),
 	/** What a redo was sent back for. Left out: the first writing. */
 	why: Schema.optionalKey(Schema.Array(Schema.String)),
+	/** Where the redo is written: main, or left out for the pull request's head. */
+	on: Schema.optionalKey(RedoOn),
 });
 type ExamBrief = typeof ExamBrief.Type;
 
@@ -111,7 +127,9 @@ const promptOf = (brief: ExamBrief): string =>
 			? []
 			: [
 					"",
-					"These files are on the pull request already. It was sent back for this, so fix it in the same files:",
+					brief.on === "main"
+						? "Main changed these files, and it does not merge into the pull request. You are on main now, so write each change again on main's version:"
+						: "These files are on the pull request already. It was sent back for this, so fix it in the same files:",
 					...brief.why.map((line) => `- ${line}`),
 				]),
 	].join("\n");
@@ -204,6 +222,7 @@ const writing = (s: Held, guard: CheckChange): Step => {
 		ticket: s.ask.ticket,
 		changes: s.ask.changes,
 		...(redo === undefined ? {} : {why: redo.why}),
+		...(redo?.on === undefined ? {} : {on: redo.on}),
 	};
 	return [
 		{

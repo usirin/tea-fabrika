@@ -304,8 +304,9 @@ export const laneExamWork = Layer.effect(
 		const agents = yield* LaneAgents;
 		/**
 		 * The side tree, at `base`: a redo's base is the head it was sent back from, where it is. A first
-		 * landing's is main: an older exam's tree, or a plan's older version's, starts again from main
-		 * when main is no fast-forward of it.
+		 * landing's is main, and so is a redo's after main would not merge: an older exam's tree, a plan's
+		 * older version's or the conflicting head starts again from main when main is no fast-forward of
+		 * it.
 		 */
 		const sideAt = (name: string, base: string) =>
 			Effect.gen(function* () {
