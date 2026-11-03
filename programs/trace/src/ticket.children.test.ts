@@ -122,3 +122,21 @@ describe("the spans under a long step (childrenOf)", () => {
 		).toBeLessThan(3 * four);
 	}, 60_000);
 });
+
+describe("a record whose parents loop (childrenOf)", () => {
+	// Before e3dc0b85 a loop recursed until the stack ran out. The walk now stops at a span already
+	// on its path. Kills the mutation step's survivors at ./ticket.ts:246 and :249 (PR 351).
+	it("ends, and gives each span on the loop once: a step a under b under a gives [b, a]", () => {
+		const a = span("a".repeat(16), "b".repeat(16), "run a step", {[LANE.run]: RUN});
+		const b = span("b".repeat(16), a.span, "turn");
+		const record: JobTrace = {
+			trace: "d4".repeat(16),
+			job: null,
+			runs: [],
+			spans: [a, b],
+			steps: [],
+			opened: [],
+		};
+		expect(childrenOf(record, RUN, 0, 1).map((s) => s.span)).toEqual([b.span, a.span]);
+	});
+});

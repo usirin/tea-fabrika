@@ -109,3 +109,39 @@ describe("the spans under a step, as a law (childrenOf)", () => {
 		);
 	});
 });
+
+/**
+ * The same forests, with about a third of the spans' run tags a number or a boolean: `SpanTag`
+ * allows both. Such a span is neither tagged with a run nor untagged, in the plain walk and in
+ * `childrenOf` alike. Kills the mutation step's survivor at ./ticket.ts:238 (PR 351).
+ */
+const oddTags: fc.Arbitrary<JobTrace> = forest.chain((record) =>
+	fc
+		.array(
+			fc.oneof(
+				{arbitrary: fc.constant(null), weight: 2},
+				{arbitrary: fc.constantFrom<number | boolean>(3, 0, true, false), weight: 1},
+			),
+			{minLength: record.spans.length, maxLength: record.spans.length},
+		)
+		.map((odd): JobTrace => ({
+			...record,
+			spans: record.spans.map((s, i) => {
+				const tag = odd[i];
+				return tag === null || tag === undefined ? s : {...s, tags: {[LANE.run]: tag}};
+			}),
+		})),
+);
+
+describe("the spans under a step, with run tags that are not strings (childrenOf)", () => {
+	it("for any forest whose run tags may be numbers or booleans, gives what a plain walk gives", () => {
+		fc.assert(
+			fc.property(oddTags, query, (record, q) => {
+				const to = q.from + q.length;
+				const got = childrenOf(record, q.run, q.from, to).map((s) => s.span);
+				expect(got).toEqual(reference(record, q.run, q.from, to).map((s) => s.span));
+			}),
+			OPTS,
+		);
+	});
+});
