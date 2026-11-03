@@ -1,11 +1,12 @@
 # 196. How should fabrika show a person its asks, so most take one key, and learn from the answers?
 
-Read 2026-11-02, in two rounds. **This is reading, not a measurement.** No model was called. Round
+Read 2026-11-02, in three rounds. **This is reading, not a measurement.** No model was called. Round
 1 reads ticket 117's real asks off the tracker, today's asks list and ask box on `main` at
 `8742402f`, and about 18 outside sources. Round 2, the same day, after the owner's review, shoots
 today's asks popup from the built app, reads how Linear lays out triage and how its team builds, and
 checks the page's demo with 132 click and key checks in Chromium. Those checks test a drawing of
-the window, not the app. It feeds [the ask desk](../docs/direction/ask-desk.md), a proposed note,
+the window, not the app. Round 3, the same day, is the look step: the desk built in today's app on
+a local branch and shot in six rounds beside today's app and Linear, until the owner said yes. It feeds [the ask desk](../docs/direction/ask-desk.md), a proposed note,
 and a private page, "Ask desk guidelines", with a small desk you can click and key through.
 
 **Which version.** Every "today" claim is about today's version: `apps/fabrika`, `programs/tracker`
@@ -349,6 +350,69 @@ nests ([fold, not tabs](../docs/direction/fold-not-tabs.md)).
   - **Flag:** a line in the tile guidelines or [modes](../docs/direction/modes.md): the buttons come
     from `commands`, so a key and its button cannot drift.
 
+## Round 3: the look step
+
+The guidelines skill's step 5, on its first real use: build the screen in today's app, shoot it,
+put each shot beside today's app and the closest Linear screen, fix what looks off, and go again
+until the owner says yes. It ran on 2026-11-02, after round 2, in six rounds. The owner said yes to
+the look and decided five calls the same day; [the note's look](../docs/direction/ask-desk.md#the-look)
+holds them.
+
+**How it was shot.** Today's version (`apps/fabrika`, `programs/ticket`, `programs/tracker`),
+changed on a local branch that is not pushed, built, and driven on Electron the way
+`apps/fabrika/e2e.ts` does: a short temp `FABRIKA_HOME` of its own, a stand-in host on its socket,
+dark theme, the clock fixed. Five layouts: one tile, two side by side, two stacked and a 2x2 grid at
+1440x900, and two side by side at 1024x700. A script set each round's shot beside today's (built
+from `main`) and a Linear docs image: the triage list for the popup, Triage Intelligence for the
+card. The shots stay private.
+
+**Made up for the shots.** The ticket is the test fixture's ticket 7 (`@tea-fabrika/tracker/seven`).
+Every rec, and every ask but ticket 7's, is made up; their questions are ticket 117's real asks,
+and the ticket titles beside #117 and #141 are not those tickets' real titles.
+
+| Round | What it showed | What it fixed |
+|---|---|---|
+| Before | Round 2's page demo | Its selected row had a bar on the left, its meta was mono, and its boxes sat inside boxes. Nothing had made the agent look at it beside Linear. |
+| 1 | The popup and the card, two tiles side by side | Built in the app: the selected row became a full-row fill with stronger text, and the meta went sans. Every action, Later and Open included, still sat on the selected row. |
+| 2 | The same two layouts again | Shot again on the same shape. What changed is not written down, and the shots alone do not say. |
+| 3 | All five layouts, beside today and Linear | Later and Open moved to the popup's footer, so the selected row holds only the answer: Take rec, Not the rec, Every pick. |
+| 4 | The popup's final shots | The popup was done. The card still had no box at all, so the ask ran into the ticket's own text below it. |
+| 5 | The card with one quiet box, and with an edged box | One box, slate 3 fill, no edge, 8px corners. The edged box was tried beside it and dropped: the fill alone sets the card apart. |
+| 6 | The rec two ways, one tile and 2x2 | The label above the value, against the label and value in one row. The row won: Linear's Triage Intelligence shape. |
+
+The final shots, in words:
+
+| Screen | Today | Ask desk | Linear |
+|---|---|---|---|
+| The popup (round 4) | "Asks 4" under the top bar's count; each row the question, "#117" and a title, the time; Later `H` on the selected row | "Asks 4 wait on you"; the selected row one fill holding the question, the ticket line in sans, the rec in words, and Take rec `Y`, Not the rec `N`, Every pick `O`; other rows say "Rec approve" or "no rec" at the right; the stop has a red mark and a word; Later and Open in the footer | The triage list: a title, a meta line, the id and age at the right; the selected row a fill |
+| The card (round 6) | A bordered box: "Your turn · approve plan v1", a "No" button and an indigo "Approve plan v1" | One quiet box: "Your turn, lane asked at 10:09", the question, "Recommended Approve 95% sure", the reason on its own line, the plan folded under `Space`, one indigo "Take rec · approve" and two plain buttons | Triage Intelligence under an issue's title: one panel of labeled rows, the label gray on the left, the value on the right |
+
+**Decided 2026-11-02,** with their leans kept:
+
+- **The look.** A selected row is a full-row fill with stronger text, never a left bar; the meta is
+  sans. The "Your turn" card is one quiet box (slate 3 fill, no edge, 8px corners), with nothing
+  nested and one indigo button; the running, stuck and done cards share it. The rec is a labeled
+  row, "Recommended → Approve · 95% sure", the label in the low step, the value in step 12 at weight
+  600, the reason on its own line. Its exact type follows the typography roles a separate study is
+  defining on Manti `Text` and `Heading`; the row is the evidence. The chassis is unchanged.
+- **Q1, 75%.** Until tracker ticket 102 gives the popup a write, `y`, a note and a pick in the popup
+  open the ticket and finish there.
+- **Q2, 85%.** `Enter` on a popup row opens the asks tile, and the asks tile is built as part of the
+  ask desk.
+- **Q3.** Every card shares one box.
+- **Q4, 85%.** The selected row is announced with `aria-selected` (the listbox and grid patterns
+  [w1]), not `aria-current`. A VoiceOver run settles it.
+- **Q5, 80%.** The box around the ticket's properties goes too, in the same ask desk build: no extra
+  containers. Doubt: where the properties drop below the card in a narrow tile, the build's narrow
+  shots must show they still read as their own group without the box (spacing, the label and value
+  rows).
+
+**A wrong guess, kept in the record: a third text gray.** One round tried a quieter gray for the
+meta, below the low step. It failed contrast: dark slate 10 is 4.45:1 on a tile and 2.79:1 on a selected
+row, under the 4.5:1 WCAG 1.4.3 asks of body text. The mockup's `#8b8d98` is light slate 9, a step
+from the light scale, and fails on selected rows too. So the look keeps two text grays, step 12 and
+the low step, as [color principles](../docs/direction/color-principles.md) already said.
+
 ## What this tells us for fabrika
 
 - **Build the desk on the one ask** ([one ask, one meter](../docs/direction/one-ask-and-one-meter.md),
@@ -388,12 +452,17 @@ nests ([fold, not tabs](../docs/direction/fold-not-tabs.md)).
   since the stand-in host's views did not take.
 - **The outside docs as they are tomorrow.** Linear's keys came back paraphrased; Superhuman's help
   center could not be read.
+- **Whether the look holds on real asks.** Round 3's shots are a test fixture's ticket with made-up
+  recs. Whether `aria-selected` reads well needs a VoiceOver run (Q4), and whether the ticket's
+  properties read as a group without their box needs the build's narrow shots (Q5).
+- **What round 2 of the look step changed.** Nothing was written down at the time.
 
 ## Dollars
 
 $0. No model was called. The outside reading ran through a fetch tool in one agent session; no
 paid API was used. Round 2's shots and checks ran on the laptop: one Electron app at a time, then
-headless Chromium, under `nice -n 19`.
+headless Chromium, under `nice -n 19`. Round 3, the look step, was $0 too: builds and Electron shots
+on the laptop, no model call.
 
 ## Links
 

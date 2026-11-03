@@ -8,7 +8,10 @@ most asks are one key in one sitting ("approve", "do your rec", or "no, with a n
 that learns from the owner's answers so the system automates better over time. Folded in the same
 day, from [experiment 185](../../experiments/185-dsh-superagent-study.md)'s "steal 1": attention is
 a counted cost, per merged ticket, and a design that asks a person says what it costs them a week.
-It is data the desk records, not a budget that cuts asks.
+It is data the desk records, not a budget that cuts asks. **Decided 2026-11-02**, later the same day,
+after a look step of six rounds: [the look](#the-look) (the selected row, one quiet box, the rec as a
+labeled row, two text grays) and five calls, Q1 to Q5, with their leans' numbers kept. The rest of
+this note stays proposed.
 
 Built from [experiment 196](../../experiments/196-ask-desk.md), which read about 18 makers and
 papers and checked ticket 117's real asks against them, and a private page, "Ask desk guidelines",
@@ -180,6 +183,47 @@ yet". "Open all" is the first. It needs five rules, each tried in the page's dem
 | The way back: `Esc` at the tile's top level, or closing it, returns focus to the tile it was opened from. | 60% |
 | What is said: the focus move speaks for itself; an answer is a polite status; the bottom line names the tile. | 80% |
 
+## The look
+
+**Decided 2026-11-02.** The owner said yes after a look step
+([guidelines skill](../../.claude/skills/guidelines/SKILL.md), step 5): six rounds of shots of the
+desk built in today's app, each beside today's app and the closest Linear docs image
+([experiment 196, round 3](../../experiments/196-ask-desk.md#round-3-the-look-step)). The chassis (the
+top bar, the bottom line, each tile's title bar) is unchanged.
+
+```ts
+// A sketch of what the look holds, in words a test or a shot can check. Not a token file.
+const look = {
+	selectedRow: {mark: "full-row fill", text: "stronger"}, // never a colored bar on one side
+	meta: {font: "sans", gray: "low step"},                 // #117, the rec word, the time
+	card: {fill: "slate 3", edge: null, radius: 8, nested: 0, indigo: 1}, // every card, one box
+	rec: ["Recommended", "Approve", "95% sure"],            // a labeled row, then the reason's own line
+	textGrays: ["step 12", "low step"],                     // two, never a third
+};
+```
+
+- **The selected row** is a full-row fill with stronger text, in the popup and in the asks tile,
+  never a colored bar on one side. The meta line is sans: mono is only for what a person types
+  ([color principles](./color-principles.md)).
+- **The "Your turn" card** is one quiet box: slate 3 fill, no edge, 8px corners, nothing nested in
+  it, and one indigo button. The running, stuck and done cards share that box.
+- **The rec reads as a labeled row,** Linear's Triage Intelligence shape [l3]: "Recommended → Approve
+  · 95% sure". The label is the low text step, the value is step 12 at weight 600, and the reason is
+  on its own line. Its exact type follows the typography roles a separate study is defining on Manti
+  `Text` and `Heading`; the row is the evidence, not a set of fixed sizes.
+- **Two text grays only:** step 12 and the low step. A third, quieter gray for the meta was tried
+  and failed contrast (experiment 196 keeps it as a wrong guess).
+
+The five calls the look step raised, each decided 2026-11-02 with its lean kept:
+
+| Call | Decided | Lean |
+|---|---|---|
+| Q1. A press in the popup, today | Until tracker ticket 102 gives the popup a write, `y`, a note and a pick in the popup open the ticket and finish there. | 75% |
+| Q2. `Enter` on a popup row | Opens the asks tile, as [one asks program](#one-asks-program-two-views) says. The asks tile is built as part of the ask desk. | 85% |
+| Q3. The cards | Every card shares one box. | none recorded |
+| Q4. The selected row, to a screen reader | `aria-selected`, from the WAI-ARIA listbox and grid patterns [w1], not `aria-current`. A VoiceOver run settles it. | 85% |
+| Q5. The box around the ticket's properties | It goes too, in the same ask desk build, as AGENTS.md's "no extra containers" asks. Doubt: where the properties drop below the card in a narrow tile, they must still read as their own group without the box (spacing, the label and value rows); the pull request's narrow shots check it. | 80% |
+
 ## The six principles
 
 ### A1: one queue, a list beside the selected ask
@@ -213,8 +257,11 @@ long at the top. The queue is a list; the selected ask is drawn whole beside it.
   popup's, and both views draw the same `selected`.
 - **Accessibility.** The list's rows are buttons with one tab stop, the selected row (a roving
   tabindex: one element has `tabindex="0"`, "all other focusable elements contained in the composite
-  have `tabindex="-1"`" [w3]). The selected row is marked by `aria-current`, a bar and its weight,
-  never by color alone (1.4.1). After each answer, a polite status says what happened and what is
+  have `tabindex="-1"`" [w3]). The selected row is marked by `aria-selected`, a full-row fill and
+  its weight, never by color alone (1.4.1). **Changed 2026-11-02** (Q4, 85%, and [the look](#the-look)):
+  this line said `aria-current` and a bar. A list a person picks one row from is the listbox or grid
+  pattern's selection, which `aria-selected` names [w1]; and a bar on one side marks the row a second
+  time, when the fill already does. After each answer, a polite status says what happened and what is
   next, without moving focus (WCAG 4.1.3 [w2]); focus stays on the list (2.4.3).
 - **Doubt.** Same-kind grouping reorders a queue that [every wait is a queue](./every-wait-is-a-queue.md)
   says is first in, first out (call 4).
@@ -229,8 +276,9 @@ long at the top. The queue is a list; the selected ask is drawn whole beside it.
 **Lean, 85%.** The ask is one line. Beside it sits the step's rec: the pick, why, what it costs and
 how sure, in words. The evidence is folded under it, one press to open.
 
-- **What it means.** "Approve plan version 2?" then "Rec: approve · 95% · 3 open questions, each
-  with a lean · the exam step runs next, about 4 agent minutes". `space` unfolds the evidence (the
+- **What it means.** "Approve plan version 2?" then the rec as a labeled row, "Recommended → Approve
+  · 95% sure", and the reason on its own line: "3 open questions, each with a lean. The exam step
+  runs next, about 4 agent minutes" ([the look](#the-look), decided 2026-11-02). `space` unfolds the evidence (the
   plan's questions and leans, the diff, what each pick does) under the question, which stays in
   view. An ask with no rec says so in words ("No rec: the price is unknown"), and `y` is not offered.
 - **Why.** Linear: "Accept, decline, or view more information about why a suggestion was made" [l3].
@@ -486,6 +534,10 @@ content ([opening a tile](#opening-a-tile-with-content)), which [popovers](./pop
 not exist yet. Doubt: whether `y` from a small popup is answered too fast on a plan; a live week of
 `took.opened` says. In `next/`, the asks program is the same either way (Tier 2 for its tile).
 
+**Decided 2026-11-02, with Q1 and Q2 of [the look](#the-look).** How today's version gets to a: until
+ticket 102 gives the popup a write, `y`, a note and a pick in the popup open the ticket and finish
+there (Q1, 75%); `Enter` on a popup row opens the asks tile, built as part of the ask desk (Q2, 85%).
+
 ## What the ledger records
 
 | Fact | Field | Lost forever if not recorded now |
@@ -504,8 +556,10 @@ Small fixes offered, not filed. Sizes in lines and agent hours.
 
 1. **Answer from the asks list (ticket 102).** Rows carry `picks` and the rec; `y`, `n` and `h` on
    the active row, with a button for each, through the ask box's `answer` act. About 150 to 250
-   lines with tests, 2 to 3 agent hours. "Open all" as a tile is a second tryout, after the first
-   path that opens a tile with content: about 150 to 250 lines more, 2 to 3 agent hours.
+   lines with tests, 2 to 3 agent hours. Until it lands, a press in the popup opens the ticket and
+   the answer finishes there (Q1, decided 2026-11-02). The asks tile, opened by `Enter` or "Open
+   all", is built as part of the ask desk (Q2, decided 2026-11-02), on the first path that opens a
+   tile with content: about 150 to 250 lines more, 2 to 3 agent hours.
 2. **Record `took` on `answered`.** An optional field on the tracker's `answered`
    (`ticket.ts:347-353`): key, ms, opened. About 40 lines, 1 agent hour. Every answer before it
    loses these.
@@ -547,10 +601,13 @@ agent hours.
 - Whether kinds are narrow enough to match on. Nobody has counted agreement per kind.
 - How much a blind ask slows a person, or annoys them.
 - Whether a step's percent sure is calibrated: six leans at 95 to 99, all taken, is not a sample.
-- Any screen reader behavior. A real VoiceOver run is needed for: the question read before the rec;
+- Any screen reader behavior. A real VoiceOver run is needed for: the selected row read as
+  selected with `aria-selected` (Q4); the question read before the rec;
   the status after `y` read without a focus move; the note field reached right after `n`; the offer
   line read once.
 - Whether 30 is right for kinds whose wrong pick costs very different amounts.
+- Whether the ticket's properties still read as their own group without their box in a narrow tile
+  (Q5). The look step shot the card, not that case; the build's narrow shots settle it.
 - Whether the tile rules hold in the real desk. The page's demo is a drawing of the window in a
   browser, not the app: its layout tree, its folding and its focus moves are a sketch of today's
   rules, not today's code.
