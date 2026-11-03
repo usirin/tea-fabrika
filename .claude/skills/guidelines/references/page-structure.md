@@ -26,6 +26,11 @@ in the selected row where the build has quiet words, a different header, a made-
 footer that wrapped to two lines. The chat window mockup took its tokens from the app's
 `window.css`. That is the start of the rule below: the demo is lifted, not redrawn.
 
+The finalists page also showed four truly different designs. The ask desk and typography pages
+showed rounds of one design: versions of a single idea. Rounds refine a pick; they do not replace
+the choice between ideas. The liked pages could also be pressed: the tile page took clicks and
+keys, and the chat window moved between its states.
+
 ## The first screen
 
 - [ ] At 1280x800 the mockup fills about two thirds of the screen or more, opened in the state the
@@ -43,7 +48,11 @@ footer that wrapped to two lines. The chat window mockup took its tokens from th
 They pass the Linear test: a list for what you change all the time, a menu for a rare change,
 keys to move, and long text closed until asked.
 
-- [ ] **Design:** Today, each round from step 5, then Proposed, as a list at the left. Keys 1 to N.
+- [ ] **Design:** Today, then each distinct design from step 5, then the rounds of the one picked,
+  then Proposed and Linear, as a list at the left. Keys 1 to N.
+- [ ] At least 3 distinct designs, each lifted and pressable, each with a why-not line: one or two
+  plain lines on why it lost, tied to a principle or a shot ("lost on T2: the rec sits under the
+  question, see the 2x2 shot"). The pick says why it won in the same way.
 - [ ] **Layout:** the five from step 5 (one tile, side by side, stacked, 2x2, about 1024x700), as a
   list. `L` steps through them.
 - [ ] **State:** what the study opens, such as the popup or the card. `S` steps through them.
@@ -58,15 +67,28 @@ keys to move, and long text closed until asked.
 
 ## The demo
 
+- [ ] The screen from step 5, not a small toy drawn for the page: real tile, program and command
+  names, and the real chassis around it.
 - [ ] Lifted, not redrawn (step 9 of the skill): the built `window.css`, unchanged, and the DOM
   step 5 saved. Each design, layout and state is its own frame document. The page owns only what
-  sits around the frame.
+  sits around the frame and the small script that passes presses out of it.
+- [ ] Clickable. The keys and clicks the app takes work inside the demo, and each one moves to the
+  saved state the real app reaches with that press. The states come from pressing the real build
+  (step 5 saves each one), never from editing a saved DOM by hand.
+- [ ] **Not shot.** A press with no saved state shows a short caption, "↓: not shot", where the
+  result would be, and the screen stays as it is. A press the app ignores says "no change in the
+  app". Nothing is faked to fill the gap.
+- [ ] Focus shows: the demo has a ring when it takes the keys, and the app's own focus or selected
+  row shows inside it. Start over (`0`) goes back to the state the view opened in.
+- [ ] A log of what fired, one line per press (the key, the state it reached, or "not shot"), and a
+  line for what a screen reader is told about the focused part.
+- [ ] When the area has one (a key file, a program's source), that file is shown and changes live.
 - [ ] Shown at its real size, scaled down as a whole. Never laid out again to fit the page.
-- [ ] A round with no saved DOM shows its real shot, marked "shot".
-- [ ] A frame is a still: say so in the caption, and give each pressed state from step 5 its own
-  state in the switch.
-- [ ] The blocking check passed: each frame beside its step 5 shot, at the same size and scale, with
-  no difference in words, boxes or sizes. The side-by-sides are saved and named in the walk.
+- [ ] A round with no saved DOM shows its real shot, marked "shot". A shot takes no presses.
+- [ ] The blocking check passed for every state a press can reach that has a step 5 shot: each
+  frame beside its shot, at the same size and scale, with no difference in words, boxes or sizes.
+  A state with no step 5 shot is named as unchecked. The side-by-sides are saved and named in the
+  walk.
 
 ## Under the mockup: the guidelines, folded
 
@@ -83,7 +105,8 @@ keys to move, and long text closed until asked.
 
 - [ ] One sentence that states it, and its mark.
 - [ ] At most one small real table or one code block, when the principle needs it.
-- [ ] **Try it:** which design, layout or state of the mockup shows it, with the key named.
+- [ ] **Try it:** "press X in the demo, watch Y", with the key named, and the design, layout or
+  state it starts from.
 - [ ] A **Today** verdict, a word and a glyph first ("follows", "breaks", "half"), then why.
 - [ ] **Rules:** each one as "Rule K <name>", its mark and one line. A "Why" disclosure holds
   labeled rows: Why, Source (a short quote), Measured, Linear, Elm or OTP, Holds it (the type, test or refusal

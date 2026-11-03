@@ -80,27 +80,33 @@ with real shots and the owner's yes.
 - **Accessibility.** Name the WCAG criterion a principle touches, and what needs a real screen
   reader run.
 
-### 5. Build the screen and look at it next to Linear
+### 5. Build 3 or 4 designs and look at them next to Linear
 
-The Linear row in step 4 is words. This step checks the look with eyes.
+The Linear row in step 4 is words. This step checks the look with eyes. It starts wide, as the
+pipe marker finalists did with four different designs, and only then refines one.
 
-- Build the area's screen for real in today's app, on a local branch, with the real tokens
-  (`apps/fabrika/src/themes.ts`) and the real chassis around it. Keys and mouse both work, as the
-  guidelines say. Read today's code for which jobs exist, not for how they look
+- Build **3 or 4 distinct designs** for real in today's app, on a local branch, with the real
+  tokens (`apps/fabrika/src/themes.ts`) and the real chassis around them. Each is a different
+  answer to the same job, such as a list, a card, a panel or inline, not a small change to one
+  design. Keys and mouse both work in each, as the guidelines say. Read today's code for which
+  jobs exist, not for how they look
   ([rethink, do not port](../../../docs/direction/rethink-do-not-port.md)).
 - Fewer boxes. If something already draws an edge, a second line, box or background goes. A
   selected row is a full-row fill and stronger text, never a colored bar on one side.
-- Shoot it with Playwright on Electron, as `apps/fabrika/e2e.ts` does, at five layouts: one tile
-  filling the window, two side by side, two stacked, a 2x2 grid, and about 1024x700. Put each shot
-  beside today's app and beside the closest Linear screen, from Linear's public docs or changelog.
-- For each shot, one line: would Linear's team ship this? What looks off: a box in a box, a gray
-  that fights, a line nobody needs, loud text, a cramped layout? Fix it and reshoot. Two or three
-  rounds is normal. Stop when you would ship it.
-- Keep every round. The shoot saves each state's DOM beside its shot
-  (`document.documentElement.outerHTML`, scripts dropped, a canvas kept as its pixels), and the
-  built `window.css` of that round beside them. Step 9 lifts the page's demo from these files.
-- Show the owner the shots before the write-up. Their yes on the look comes first. On a no, go
-  round again.
+- Shoot each design with Playwright on Electron, as `apps/fabrika/e2e.ts` does, at five layouts:
+  one tile filling the window, two side by side, two stacked, a 2x2 grid, and about 1024x700. Put
+  each shot beside today's app and beside the closest Linear screen, from Linear's public docs or
+  changelog.
+- Show the owner the designs, each as a pressable page (step 9's demo rules). **The owner picks
+  one.** Each design that lost gets one or two plain lines on why, tied to a principle or a shot.
+- Then refine the pick in rounds. For each shot, one line: would Linear's team ship this? What
+  looks off: a box in a box, a gray that fights, a line nobody needs, loud text, a cramped
+  layout? Fix it and reshoot. Two or three rounds is normal. Stop when you would ship it.
+- Keep every design and every round. For each, the shoot presses the real build through every
+  key and click the screen takes and saves each state it reaches: the DOM
+  (`document.documentElement.outerHTML`, scripts dropped, a canvas kept as its pixels), which
+  press led where, and the built `window.css`. Step 9 lifts the page's demo from these files.
+- Their yes on the look comes before the write-up. On a no, go round again.
 - Each principle also gets a **kind**, so it is checked the right way: **law** (the test writer
   can check it), **lint** (`pnpm lint` can hold it) or **taste** (only a shot beside Linear checks
   it).
@@ -161,9 +167,13 @@ from the real screen (boxed buttons in a selected row, bigger type, a footer tha
   generator does this). Its markup is the DOM step 5 saved, copied once. Nobody retypes a rule, a
   class or a word of the screen. Each design and layout is its own small document the page loads
   in a frame, so today's CSS and the proposed CSS never mix.
-- **Several designs, not one.** Today, each round of step 5 and Proposed can be switched, and two
-  can sit side by side at the same layout. A round with no saved DOM shows its real shot.
-- **The blocking check.** Shoot each demo state the page offers, at the size and scale of its
+- **The demo is pressable.** A key or a click inside it moves to the saved state the real build
+  reached with that press. A press with no saved state says "not shot" and fakes nothing. Focus
+  shows, so a person can see where they are.
+- **Several designs, not one.** Today, each design from step 5 (at least 3, each with its why-not
+  line), the rounds of the pick, Proposed and Linear can be switched, and two can sit side by
+  side at the same layout. A round with no saved DOM shows its real shot.
+- **The blocking check.** Shoot each demo state a press can reach, at the size and scale of its
   step 5 shot, and put the two side by side with a pixel diff. Any difference in words, boxes or
   sizes blocks the publish: fix the lift, not the shot, and shoot again. Save the side-by-sides in
   the scratch folder and name them in the walk. Shoot with scroll bars shown, as Electron draws
