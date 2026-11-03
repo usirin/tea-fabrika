@@ -2464,7 +2464,7 @@ describe("a lane, whole, on GitHub", () => {
 				counted: "none",
 				killAt: "push: done",
 				redAfterKill: true,
-				picks: YES,
+				picks: {...YES, step: "stop"},
 			});
 			// It got to the merge's checks. The run before the kill was green, so this is the second one.
 			expect(ran.stages).toContain("merge");
