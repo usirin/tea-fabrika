@@ -1,7 +1,7 @@
-import type {WindowProps, Writer} from "@kampus/fabrika-old";
+import {textStyle, type WindowProps, type Writer} from "@kampus/fabrika-old";
 import {nameOf} from "@kampus/pipeline/stages/outcome";
 import type {Entry} from "@kampus/pipeline/tickets/ticket";
-import {Kbd} from "@manti-ui/react";
+import {Heading, Kbd, Text} from "@manti-ui/react";
 import {
 	type Head,
 	lineOf,
@@ -200,33 +200,50 @@ function AskCard(props: {
 	const plan = page.plan;
 	return (
 		<section ref={card} className="turnc you ask" aria-label={`Your turn: ${said(ask.what)}?`}>
-			<p className="tc-top">
-				<span className="w-you">Your turn</span>
+			{/*
+			 * Made only from the shared text styles. What the person acts on leads the block: the rec
+			 * takes the heading style, and the question, still the card's h2, steps down to strong.
+			 */}
+			<Text className="tc-top" {...textStyle.label}>
+				<Text as="span" {...textStyle.label} variant="primary">
+					Your turn
+				</Text>
+				<span aria-hidden="true">·</span>
 				<span>
-					<Who by={ask.by} /> asked at {whenOf(ask.at, now)}
+					{ask.by.id}
+					{ask.by.kind === "user" ? null : <span className="sr"> (an agent)</span>} asked at{" "}
+					{whenOf(ask.at, now)}
 				</span>
-			</p>
-			<h2 className="tc-q">{said(ask.what)}?</h2>
-			{/* The rec as a labeled row, as Linear's Triage Intelligence: the label low, the pick high. */}
+			</Text>
+			<Heading level={2} className="tc-q" {...textStyle.strong}>
+				{said(ask.what)}?
+			</Heading>
 			<dl className="tc-recrow">
-				<dt>Recommended</dt>
-				<dd>
+				<Text as="dt" {...textStyle.label}>
+					Recommended
+				</Text>
+				<Text as="dd" {...textStyle.heading}>
 					{rec !== null ? (
 						<>
-							<strong>{said(rec.pick)}</strong> <span className="sure">{rec.sure}% sure</span>
+							{said(rec.pick)}{" "}
+							<Text as="span" {...textStyle.label}>
+								{rec.sure}% sure
+							</Text>
 						</>
 					) : (
-						<span className="sure">none</span>
+						<Text as="span" {...textStyle.label}>
+							none
+						</Text>
 					)}
-				</dd>
+				</Text>
 			</dl>
-			<p className="tc-why">
+			<Text className="tc-why" {...textStyle.quiet}>
 				{rec !== null
 					? `${said(rec.why)}. ${said(rec.cost)}.`
 					: ask.rec?._tag === "none"
 						? `${said(ask.rec.why)}.`
 						: "The step that asked gave no rec."}
-			</p>
+			</Text>
 			{plan !== null && (
 				<div className="tc-ev">
 					<button
@@ -737,18 +754,18 @@ function OneTicket({view, send}: WindowProps<typeof ticket>) {
 				<div className="tk-main">
 					<div className="tk-col">
 						<div>
-							<div className="idl">
-								<span className="mono">#{number}</span>
+							<Text className="idl" {...textStyle.label}>
+								<span>#{number}</span>
 								{page.filed !== null && (
 									<span>
 										filed by {page.filed.by.id}, {whenOf(page.filed.at, now)}
 									</span>
 								)}
 								{opened.ticket.state === "closed" && <span className="tag">closed</span>}
-							</div>
-							<h1 className="tk-title">
+							</Text>
+							<Heading level={1} className="tk-title" {...textStyle.title}>
 								<Ticks text={opened.ticket.title} />
-							</h1>
+							</Heading>
 						</div>
 						{view.unreachable !== null && (
 							<p className="alert" role="alert">

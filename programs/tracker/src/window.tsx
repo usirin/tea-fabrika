@@ -1,6 +1,6 @@
-import type {WindowProps} from "@kampus/fabrika-old";
-import {type Text, textOf} from "@kampus/pipeline/tickets/approval";
-import {Kbd} from "@manti-ui/react";
+import {textStyle, type WindowProps} from "@kampus/fabrika-old";
+import {type Text as Saw, textOf} from "@kampus/pipeline/tickets/approval";
+import {Kbd, Text} from "@manti-ui/react";
 import {
 	type FormEvent,
 	type KeyboardEvent,
@@ -394,9 +394,13 @@ function ListPage(props: {
 										onClick={() => act({type: "query", value: {ticket: t.number}})}
 									>
 										<StateGlyph state={t.state} />
-										<span className="tracker-number">{t.number}</span>
-										<span className="tracker-title">{t.title}</span>
-										<span className="tracker-sub">
+										<Text as="span" className="tracker-number" {...textStyle.label}>
+											{t.number}
+										</Text>
+										<Text as="span" className="tracker-title" truncate {...textStyle.strong}>
+											<Ticks text={t.title} />
+										</Text>
+										<Text as="span" className="tracker-sub" {...textStyle.label}>
 											<HeadLine head={t.head} />
 											{t.comments === 0 ? null : (
 												<span title={`${t.comments} comment${t.comments === 1 ? "" : "s"}`}>
@@ -404,7 +408,7 @@ function ListPage(props: {
 												</span>
 											)}
 											<time>{whenOf(t.at, Date.now())}</time>
-										</span>
+										</Text>
 									</button>
 								</li>
 							);
@@ -444,15 +448,17 @@ function ListPage(props: {
 												onFocus={() => pick(row)}
 											>
 												<PullRequestGlyph draft={pr.draft} />
-												<span className="tracker-number">{pr.number}</span>
-												<span className="tracker-title">
+												<Text as="span" className="tracker-number" {...textStyle.label}>
+													{pr.number}
+												</Text>
+												<Text as="span" className="tracker-title" truncate {...textStyle.strong}>
 													{pr.title}
 													{pr.draft ? <span className="tracker-draft">Draft</span> : null}
-												</span>
-												<span className="tracker-sub">
+												</Text>
+												<Text as="span" className="tracker-sub" {...textStyle.label}>
 													<span>{shortOf(pr.repo)}</span>
 													<time>{whenOf(pr.at, Date.now())}</time>
-												</span>
+												</Text>
 											</a>
 										</li>
 									);
@@ -565,6 +571,13 @@ const StateBadge = ({state}: {readonly state: Summary["state"]}) => (
 		{state === "open" ? "Open" : "Closed"}
 	</span>
 );
+
+/** A title's backticked words drawn as typed, in mono: `fabrika post` prints … */
+const Ticks = ({text}: {readonly text: string}) =>
+	// A title's runs never move: their place is their key.
+	text
+		.split("`")
+		.map((run, i) => (i % 2 === 1 ? <code key={i}>{run}</code> : <span key={i}>{run}</span>));
 
 /** A ticket's top line, from its facts. A line that waits on the owner is marked so. */
 const HeadLine = ({head}: {readonly head: Head}) => (
@@ -783,7 +796,7 @@ const TimelineRow = ({
 function AskBox(props: {
 	readonly number: number;
 	readonly ask: OpenAsk;
-	readonly saw: Text;
+	readonly saw: Saw;
 	readonly saving: boolean;
 	readonly act: Send;
 	readonly onKey: (e: KeyboardEvent) => void;

@@ -1882,7 +1882,8 @@ button:focus-visible {
 .tracker .tracker-list button,
 .tracker-list a.tracker-pull-request {
 	display: grid;
-	grid-template-columns: 16px 3.5ch 1fr auto;
+	/* The title keeps its room; the quiet line on the right gives way first, cut with an ellipsis. */
+	grid-template-columns: 16px 3.5ch minmax(16ch, 1fr) minmax(0, max-content);
 	gap: 10px;
 	align-items: center;
 	width: 100%;
@@ -1912,26 +1913,26 @@ button:focus-visible {
 	box-shadow: inset 2px 0 0 var(--key);
 }
 
+/* The row's text is drawn by its text styles (label, strong, label); these rules only lay it out. */
 .tracker-number {
-	color: var(--faint);
 	font-variant-numeric: tabular-nums;
 	text-align: right;
 }
 
 .tracker-title {
-	overflow: hidden;
-	color: var(--text-primary);
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	font-size: 14px;
+	min-width: 0;
+}
+
+/* A typed word in a title, as the ticket's own title draws it. */
+.tracker-title code {
+	font-family: var(--mono);
+	font-size: 0.95em;
 }
 
 .tracker-sub {
 	display: flex;
 	gap: 12px;
 	align-items: center;
-	color: var(--faint);
-	font-size: 12px;
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
 }
@@ -1940,6 +1941,17 @@ button:focus-visible {
 	display: inline-flex;
 	gap: 4px;
 	align-items: center;
+}
+
+.tracker-sub {
+	min-width: 0;
+}
+
+.tracker-sub > .tracker-head-line {
+	display: block;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .tracker-glyph {
@@ -2142,15 +2154,9 @@ button:focus-visible {
 	border-top: 1px solid var(--line);
 }
 
-/* A ticket's top line: quiet, and in the key color when it waits on the owner. */
-.tracker-head-line {
-	color: var(--faint);
-	font-size: 12px;
-}
-
+/* A ticket's top line: its row's label style, in the turn color when it waits on the owner. */
 .tracker-head-line[data-waits] {
 	color: var(--turn);
-	font-weight: 600;
 }
 
 .tracker-fact-asked,
@@ -2526,22 +2532,10 @@ main.program:has(> .view) {
 	display: flex;
 	gap: 6px;
 	align-items: baseline;
-	font-size: var(--fs-small);
-	color: var(--text-faint);
 	margin-block-end: 6px;
 }
 
-.ticket-view .idl .mono {
-	color: var(--text-muted);
-}
-
 .ticket-view .tk-title {
-	font-size: var(--fs-title);
-	line-height: 1.3;
-	font-weight: 600;
-	letter-spacing: -0.012em;
-	color: var(--text-primary);
-	text-wrap: balance;
 	overflow-wrap: anywhere;
 }
 
@@ -4204,21 +4198,6 @@ main.program:has(> .view) {
 	display: flex;
 	gap: 8px;
 	align-items: baseline;
-	color: var(--text-faint);
-	font-size: var(--fs-small);
-}
-
-/* "Your turn" heads the box, as "Triage Intelligence" heads Linear's. */
-.ticket-view .tc-top .w-you {
-	font-size: var(--fs-body);
-	font-weight: 600;
-}
-
-.ticket-view .tc-q {
-	margin: 0;
-	color: var(--text-primary);
-	font: 600 var(--fs-head) / 1.35 var(--font);
-	letter-spacing: -0.01em;
 }
 
 /*
@@ -4232,43 +4211,15 @@ main.program:has(> .view) {
 	margin: 4px 0 0;
 }
 
-.ticket-view .tc-recrow dt {
-	color: var(--text-faint);
-	font-size: var(--fs-small);
-}
-
 .ticket-view .tc-recrow dd {
-	margin: 0;
 	display: flex;
 	flex-wrap: wrap;
 	align-items: baseline;
 	gap: 0 8px;
-	color: var(--text-primary);
-}
-
-.ticket-view .tc-recrow strong {
-	font-weight: 600;
-}
-
-.ticket-view .tc-recrow .sure {
-	color: var(--text-faint);
-	font-size: var(--fs-small);
 }
 
 .ticket-view .tc-why {
-	color: var(--text-faint);
-	line-height: 1.5;
 	max-inline-size: 68ch;
-}
-
-/* Variant B, for the pick: the rec as a subheading, its label above it and the pick at head size. */
-.ticket-view .turnc.ask.sub .tc-recrow {
-	grid-template-columns: minmax(0, 1fr);
-	gap: 2px;
-}
-
-.ticket-view .turnc.ask.sub .tc-recrow strong {
-	font-size: var(--fs-head);
 }
 
 .ticket-view .tc-fold {

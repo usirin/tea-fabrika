@@ -100,3 +100,5 @@ export * from "./program/view.ts";
 export * as Sandbox from "./sandbox/sandbox.ts";
 // shell: tsh's parts that run anywhere, as one module. Its launcher is on `/shell`.
 export * as Shell from "./shell/index.ts";
+// text styles: the named text roles every program's window draws with, on Manti's Text and Heading.
+export * from "./text-style.ts";

@@ -122,6 +122,14 @@
 	text-rendering: revert;
 }
 
+/*
+ * Text in the primary variant is "your turn", in the turn color, as the accent means nothing else.
+ * Manti's own primary text is its orange; on text and headings it is ours.
+ */
+:where([data-scope="text"], [data-scope="heading"])[data-variant="primary"] {
+	--variant-text: var(--turn);
+}
+
 /* A keycap: our size and border, in the UI's own sans, as Linear's are (popovers.md). */
 [data-scope="kbd"][data-part="root"] {
 	--manti-kbd-radius: var(--r-sm);
