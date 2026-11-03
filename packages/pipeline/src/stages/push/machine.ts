@@ -24,6 +24,8 @@ const outcomes = outcomesOf({
 });
 export const PushOutcome = outcomes.schema;
 export type PushOutcome = typeof PushOutcome.Type;
+/** Every name a push can end with, as the other stages export theirs. */
+export const PUSH_NAMES = outcomes.names;
 
 export const PushAsk = Schema.Struct({
 	ticket: Schema.String,
