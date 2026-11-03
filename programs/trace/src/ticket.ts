@@ -1,6 +1,7 @@
-import type {JobTrace, Span} from "@kampus/fabrika-old";
+import {type JobTrace, Span} from "@kampus/fabrika-old";
 import {listUsdOf} from "@kampus/pipeline/stages/price";
 import type {Entry, FactOf} from "@kampus/pipeline/tickets/ticket";
+import {Schema} from "effect";
 
 // One ticket's lanes, folded from its facts: the fold the view and the laws share (ticket 141).
 // Today's version. Pure.
@@ -204,38 +205,96 @@ const overlap = (a: number, b: number, from: number, to: number): number =>
 	Math.max(0, Math.min(b, to) - Math.max(a, from));
 
 /**
- * The spans under one step, from its lane's job record: by `tea.lane.run` when the span has it,
- * else the "run a step" span that overlaps [from, to] most. Every span under it, in start order;
- * the step's own span is the step row, so it is not one of them.
+ * A lane's record, indexed once when it is read (ticket 182), so a redraw looks a step's spans up
+ * and never walks the record. Built by `indexSpans`, read by `spansUnder`.
+ *
+ *   const index = indexSpans(record.spans);       // one pass, then one walk per step span
+ *   spansUnder(index, "r-build-3", from, to);     // the spans under that step, in start order
  */
+export const SpanIndex = Schema.Struct({
+	/** The first span tagged with each run, by the run. */
+	tagged: Schema.ReadonlyMap(Schema.String, Span),
+	/** The "run a step" spans with no run tag, in record order: a step finds one by its time. */
+	untagged: Schema.Array(Span),
+	/** Every span under each of those step spans, in start order, by the step span's id. */
+	under: Schema.ReadonlyMap(Schema.String, Schema.Array(Span)),
+});
+export type SpanIndex = typeof SpanIndex.Type;
+
+/**
+ * The index of a record's spans: one pass that pushes each span onto its parent's list, then one
+ * walk under each step span. Each walk goes depth first, a span's children in record order, and is
+ * then sorted by start, which keeps that order for spans that start together. A span whose id is
+ * already on the walk's path is not walked again, so a record whose parents loop still ends.
+ */
+export const indexSpans = (spans: readonly Span[]): SpanIndex => {
+	const tagged = new Map<string, Span>();
+	const untagged: Span[] = [];
+	const children = new Map<string, Span[]>();
+	for (const s of spans) {
+		const run = s.tags[RUN_TAG];
+		if (typeof run === "string") {
+			if (!tagged.has(run)) tagged.set(run, s);
+		} else if (run === undefined && s.name === STEP_SPAN) untagged.push(s);
+		if (s.parent === null) continue;
+		const list = children.get(s.parent);
+		if (list === undefined) children.set(s.parent, [s]);
+		else list.push(s);
+	}
+	const path = new Set<string>();
+	const walk = (id: string, out: Span[]) => {
+		path.add(id);
+		for (const child of children.get(id) ?? []) {
+			out.push(child);
+			if (!path.has(child.span)) walk(child.span, out);
+		}
+		path.delete(id);
+	};
+	const under = new Map<string, readonly Span[]>();
+	for (const root of [...tagged.values(), ...untagged]) {
+		if (under.has(root.span)) continue;
+		const out: Span[] = [];
+		walk(root.span, out);
+		under.set(
+			root.span,
+			out.sort((a, b) => a.start - b.start),
+		);
+	}
+	return {tagged, untagged, under};
+};
+
+/**
+ * The spans under one step, from its lane's indexed record: by `tea.lane.run` when a span has it,
+ * else the first "run a step" span that overlaps [from, to] most. Every span under it, in start
+ * order; the step's own span is the step row, so it is not one of them.
+ */
+export const spansUnder = (
+	index: SpanIndex,
+	run: string,
+	from: number,
+	to: number,
+): readonly Span[] => {
+	let root = index.tagged.get(run);
+	if (root === undefined) {
+		let most = 0;
+		for (const s of index.untagged) {
+			const shared = overlap(s.start, s.end, from, to);
+			if (shared > most) {
+				root = s;
+				most = shared;
+			}
+		}
+	}
+	return root === undefined ? [] : (index.under.get(root.span) ?? []);
+};
+
+/** The spans under one step, from its lane's job record, indexed for this one call. */
 export const childrenOf = (
 	record: JobTrace,
 	run: string,
 	from: number,
 	to: number,
-): readonly Span[] => {
-	const tagged = record.spans.find((s) => s.tags[RUN_TAG] === run);
-	const root =
-		tagged ??
-		record.spans
-			.filter((s) => s.name === STEP_SPAN && s.tags[RUN_TAG] === undefined)
-			.map((s) => ({s, shared: overlap(s.start, s.end, from, to)}))
-			.filter((x) => x.shared > 0)
-			.toSorted((a, b) => b.shared - a.shared)[0]?.s;
-	if (root === undefined) return [];
-	const under = new Map<string, Span[]>();
-	for (const s of record.spans)
-		if (s.parent !== null) under.set(s.parent, [...(under.get(s.parent) ?? []), s]);
-	const out: Span[] = [];
-	const walk = (id: string) => {
-		for (const child of under.get(id) ?? []) {
-			out.push(child);
-			walk(child.span);
-		}
-	};
-	walk(root.span);
-	return out.toSorted((a, b) => a.start - b.start);
-};
+): readonly Span[] => spansUnder(indexSpans(record.spans), run, from, to);
 
 /**
  * What the lane line and the ticket line say. `usd`: the sum of the `usd` rows, `null` when no row

@@ -8,8 +8,8 @@ import {
 } from "@kampus/fabrika-old";
 import type {Entry} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
-import {isRunning, type Model, type Read} from "./machine.ts";
-import {childrenOf, type Lane, type LaneRow, lanesOf, stopsOf, summaryOf} from "./ticket.ts";
+import {isRunning, type LaneRead, type Model, type Read} from "./machine.ts";
+import {type Lane, type LaneRow, lanesOf, spansUnder, stopsOf, summaryOf} from "./ticket.ts";
 import {findOf, type Kind, type Node, nodesOf, treeOf} from "./tree.ts";
 
 // What the trace's window is shown: the rows that are open, flattened in order with their depth,
@@ -594,15 +594,7 @@ const spanRowsOf = (
 const recordOf = (
 	shows: Extract<Model["shows"], {readonly kind: "ticket"}>,
 	trace: string,
-): Read | null => shows.records.find((r) => r.id === trace)?.read ?? null;
-
-/** How a lane's record stands, from how its `Read` does. */
-const recordWord: Readonly<Record<Read["at"], LaneShown["record"]>> = {
-	waiting: "reading",
-	reading: "reading",
-	read: "read",
-	unread: "unread",
-};
+): LaneRead | null => shows.records.find((r) => r.id === trace)?.read ?? null;
 
 /** Each lane shown, oldest first, with the rows of the open ones. */
 const lanesShown = (
@@ -616,7 +608,7 @@ const lanesShown = (
 		const opens = lane.trace !== "";
 		const isOpen = !opens || open.has(key);
 		const read = opens ? recordOf(shows, lane.trace) : null;
-		const record = read?.at === "read" ? read.trace : null;
+		const index = read?.at === "read" ? read.index : null;
 		const zero = lane.from;
 		const before = lanes[i - 1];
 		const rows: TicketRow[] = [];
@@ -635,7 +627,7 @@ const lanesShown = (
 					});
 					continue;
 				}
-				const under = record === null ? [] : childrenOf(record, row.run, row.from, row.to);
+				const under = index === null ? [] : spansUnder(index, row.run, row.from, row.to);
 				const stepKey = `run:${row.run}`;
 				const stepOpen = under.length > 0 && open.has(stepKey);
 				rows.push({
@@ -676,7 +668,7 @@ const lanesShown = (
 			length: Math.max(1, lane.to - lane.from),
 			...laneState(lane),
 			summary: summaryOf([lane]),
-			record: !opens ? "none" : read === null ? "reading" : recordWord[read.at],
+			record: !opens ? "none" : read === null ? "reading" : read.at,
 			bars: lane.rows.map((r) => ({
 				from: r.from - zero,
 				to: r.to - zero,
