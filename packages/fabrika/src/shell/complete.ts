@@ -1,4 +1,4 @@
-import type {Flag, Input} from "../program/shape.ts";
+import {type Flag, fit, type Input, type Output} from "../program/shape.ts";
 import {own} from "./check.ts";
 import {choices} from "./decode.ts";
 import {BUILTINS} from "./grammar.ts";
@@ -14,7 +14,7 @@ import {type Token, words} from "./words.ts";
 //   complete("ship --m", …)                 --mode               a flag ship declares
 //   complete("ship --mode ", …)             read write           the values its shape takes
 //   complete("ship --mode read p", …)       pr=                  an input, told on the line
-//   complete("seq --to 3 | do", …)          double               after a pipe: programs only
+//   complete("seq --to 3 | ", …)            double tally         after a pipe: programs seq can feed
 //   complete("tell ", …)                    %1 tally:3f2a…       the jobs in the table
 //   complete("tell %1 ", …)                 add                  the inputs of the job's program
 //
@@ -56,9 +56,12 @@ export function complete(line: string, list: ProgramList, jobs: Jobs): Completed
 	const [head, ...rest] = args;
 
 	if (head === undefined) {
-		// The program's own name. After `|` or `$(` a built-in cannot stand.
+		// The program's own name. After `|` or `$(` a built-in cannot stand,
+		// and after `|` only a program the stage before can feed.
 		const inPipe = opener?.kind === "op" && (opener.op === "|" || opener.op === "$(");
-		return {candidates: matching(typed, [...list.keys(), ...(inPipe ? [] : BUILTINS)]), word: raw};
+		const outs = opener?.kind === "op" && opener.op === "|" ? feeding(before, cut, list) : null;
+		const programs = [...list.keys()].filter((name) => outs === null || takes(list, name, outs));
+		return {candidates: matching(typed, [...programs, ...(inPipe ? [] : BUILTINS)]), word: raw};
 	}
 
 	if ((BUILTINS as readonly string[]).includes(head))
@@ -120,6 +123,46 @@ export function complete(line: string, list: ProgramList, jobs: Jobs): Completed
 	const inputs = typed.startsWith("-") ? [] : Object.keys(program.inputs).map((i) => `${i}=`);
 	const describe = rest.length === 0 ? ["--describe"] : [];
 	return {candidates: matching(typed, [...flags, ...describe, ...inputs]), word: raw};
+}
+
+/**
+ * The outputs the stage before the `|` at `bar` sends: its `>out` if it names
+ * one, or every output it declares. `null` when that stage is not a program
+ * the list knows, so nothing is ruled out.
+ *
+ *   seq --to 3 |                     seq's n
+ *   seq --to 3 >n |                  seq's n, named
+ *   upper text=$(say --text hi) |    upper's text: the `$( )` is skipped
+ */
+function feeding(
+	tokens: readonly Token[],
+	bar: number,
+	list: ProgramList,
+): readonly Output<unknown>[] | null {
+	const words: string[] = [];
+	let depth = 0;
+	for (const token of tokens.slice(0, bar).reverse()) {
+		if (token.kind === "word") {
+			if (depth === 0) words.unshift(token.text);
+		} else if (token.op === ")") depth += 1;
+		else if (token.op === "$(" && depth > 0) depth -= 1;
+		else if (depth === 0) break;
+	}
+	const program = words[0] === undefined ? undefined : list.get(words[0])?.program;
+	if (program === undefined) return null;
+	const named = words.find((w) => w.startsWith(">"))?.slice(1);
+	if (named === undefined) return Object.keys(program.outputs).map((o) => program.outputs[o]);
+	const out: Output<unknown> | undefined = own(program.outputs, named);
+	return out === undefined ? [] : [out];
+}
+
+/** Whether some input of the program could take one of `outs`: the pairs the checker's wiring does not rule out. */
+function takes(list: ProgramList, name: string, outs: readonly Output<unknown>[]): boolean {
+	const program = list.get(name)?.program;
+	if (program === undefined) return false;
+	return Object.keys(program.inputs).some((i) =>
+		outs.some((out) => fit(out, program.inputs[i]) !== "does_not_fit"),
+	);
 }
 
 /** A built-in's words: a job first, then (for tell and close) one of its program's inputs, then (for tell) values. */
