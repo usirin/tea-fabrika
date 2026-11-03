@@ -4,7 +4,7 @@
 //     nice -n 19 node experiments/195-oxc-toolchain.ts [--babel <dir>] [--bundle]
 //
 // PR 223's head first, read-only: `git fetch origin pull/223/head:pr-223`. `--next <ref>` names
-// another ref.
+// another ref. `--out <file>` writes the results somewhere else (part 4 of the write-up uses it).
 //
 // The native Compiler is `oxc-transform-react` 0.156.0, oxc's Rust port, from this experiment's
 // own workspace package (`195-oxc-toolchain/`), with Rolldown 1.2.13, Vite 8.3.2 and
@@ -47,6 +47,7 @@ const arg = (name: string) => {
 };
 const babelDir = arg("--babel");
 const bundleToo = process.argv.includes("--bundle");
+const outFile = arg("--out") ?? "experiments/results/195-oxc-toolchain.json";
 for (const key of ["TYPESAFE_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY"])
 	if (process.env[key] !== undefined) throw new Error(`run with ${key} unset`);
 
@@ -603,7 +604,7 @@ async function bundleTimes() {
 }
 
 writeFileSync(
-	"experiments/results/195-oxc-toolchain.json",
+	outFile,
 	`${JSON.stringify(
 		{
 			at: new Date().toISOString(),

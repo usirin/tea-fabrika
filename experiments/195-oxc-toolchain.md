@@ -10,6 +10,8 @@ model was called, nothing in the app changed. It answers the open question in ex
 and ran it, and measured 194's tile `memo` question on it.
 **[Part 3: a bigger desk, timed](#part-3-a-bigger-desk-timed)** tried a third way to draw tiles,
 on desks of 9, 30 and 60, and timed each patch.
+**[Part 4: a view never reads the clock](#part-4-a-view-never-reads-the-clock)** took the purity
+check's one false alarm away the Elm way, so the check can block.
 
 **Which version.** "Today" and "main" mean today's app (`apps/fabrika`, `programs/*`) at
 `d691f694`. `next/` means PR 223's branch at `7c1d0730`. **Decided before this study (the owner,
@@ -72,6 +74,10 @@ const bundle = await rolldown({input: "src/window/main.tsx", platform: "browser"
    works only once the top of the window stops reading the whole model too. Then only the tile
    that changed, its counter view and the status line run. Every way stays under 0.35 ms a patch
    at the median, so the case for it is renders and what a tile can reach, not time you can feel.
+9. **Part 4: with the clock out of the views, the purity check has 0 false alarms.** A view
+   dispatches a press with no time; the window machine asks for the time with a `now` Cmd, as Elm's
+   `Time.now` does, and stamps `said` when it comes back. `next/` goes from 1 finding (a false
+   alarm) to 0. `now-in-render.tsx` is still refused. Render counts do not move.
 
 **Lean for `next/`, 85% after part 2 (was 75%): Rolldown as a library in `next/build.ts`, with the
 Compiler as the 20-line plugin above, for the window and for the Workers. No Vite dev server and no
@@ -307,9 +313,14 @@ bundle.**
 1. **`next/`: Rolldown from code, or Vite 8?** Lean Rolldown, 85% after part 2, as above. Vite wins if
    the owner wants the dev server's hot reload over the brain's.
 2. **Purity: 194 gave it to the Compiler's own check, with 0 false alarms.** That was Babel's
-   check. The native one has the false alarm oxlint's `purity` had in 194 (1 of 9 findings, 11%). Lean: purity
-   advises and does not block, until oxc fixes the handler case, 70%. Filing that case with oxc
-   settles it.
+   check. The native one had the false alarm oxlint's `purity` had in 194 (1 of 9 findings, 11%).
+   The lean was "advises", 70%. **After part 4 the lean is: purity blocks, 80%.** With the clock
+   out of the views, the native check has 0 false alarms in 8 findings, under the 0% a block needs
+   (Google, CACM 2018). The false alarm is gone by the rule "a view never reads the clock", not by
+   a fix in oxc, so nothing waits on oxc. The doubt: the check is narrower than the rule. It let a
+   clock read written straight into a click handler pass (part 4), so a small lint rule ("no clock
+   in a view file") is what makes the rule whole. And today's app has 8 real findings, 6 of them in
+   functions that compile, so it blocks on `next/` first and on main once those 6 are fixed.
 3. **Keep `lint:compiler` beside oxlint's rules?** Lean yes, 85%: the rules say what might skip,
    the check says what did.
 4. **Which version is the yardstick?** oxc follows the Compiler's experimental release, Babel's
@@ -685,6 +696,116 @@ tea's hook on a narrow handle, each tile holds a send bound to itself, and there
 `env -u TYPESAFE_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY nice -n 19 node next/bench-195.ts
 --runs=5 --patches=40 --variants=<the 20 above>`, from a PR 223 checkout set up as the script's
 header says. Results: `results/195-oxc-toolchain-part3.json`. $0: no model, no deploy.
+
+## Part 4: a view never reads the clock
+
+Run 2026-11-02, the same day, on `next/` only. **The purity check's one false alarm is gone, and
+the check can block.** The alarm was `Desk` reading the clock in a click handler and passing that
+handler down through `Tile`; the check cannot prove the tile never calls it while drawing. The fix
+is Elm's: a view only sends a message, and `update` gets the time through a Cmd. After it, the
+native check finds 0 in `next/`, still refuses `now-in-render.tsx`, and the render counts do not
+move.
+
+```ts
+// The whole idea (a sketch; `writeLetter` stands for the cell's body). The view: a press, no time.
+dispatch({type: "press", pid: tile.shows, m});
+// update: keep the rev the person saw, and ask for the time. The Cmd carries the press.
+press: (model, msg) => [model, [now({pid: msg.pid, m: withSaw(model, msg.pid, msg.m)})]],
+// The answer writes the letter, with `said` from the clock.
+now_ok: (model, msg) => writeLetter(model, msg.cmd.pid, msg.cmd.m, msg.value),
+```
+
+### What changed
+
+All in the bench patch, on PR 223 at `7c1d0730`, as part 3 left it. The whole change is in
+`195-oxc-toolchain-window.patch`; nothing was pushed to PR 223.
+
+- **The view:** every `said: new Date().toISOString()` and the `said()` closure in `Desk` are gone,
+  in all five desk shapes and in way 3's tile handle. A press is `{type: "press", pid, m}`.
+- **The Cmd,** with tea's Effect `Cmd.define` and an Effect Schema:
+
+  ```ts
+  import {Cmd} from "@demlik/tea/effect";
+  export const now = Cmd.define("now", {
+  	input: Schema.Struct({
+  		pid: Schema.String,
+  		m: Schema.StructWithRest(Schema.Struct({type: Schema.String}), [
+  			Schema.Record(Schema.String, Schema.Unknown),
+  		]),
+  	}),
+  	ok: Schema.String, // the time, as ISO text
+  	err: [],
+  });
+  ```
+
+- **Where the clock is read:** once, in the window's interpret table, from Effect's `Clock`. No
+  Promise.
+
+  ```ts
+  // Shortened: send_text also checks the socket is open.
+  interpret: {
+  	send_text: (cmd) => Effect.sync(() => socket?.send(cmd.text)),
+  	now: () => Effect.map(DateTime.now, DateTime.formatIso),
+  },
+  ```
+
+- **One knock-on:** a machine that declares `cmds` returns only defined Cmds, so `send_text` moved
+  to `Cmd.define` too (`ok: Schema.Void`), and `update` takes `send_text_ok`, `send_text_err` and
+  `now_err`. `now_err` drops the press and sets `refused`; the clock has no way to fail here.
+- **The rev it saw** is taken at the press, not when the time comes back, so a patch landing in
+  between does not change what the letter says the person saw.
+- The window machine's two press tests now step the press and then `now.ok(cmd, time)`, and check
+  that the press alone sends nothing and leaves the model as it was.
+
+### Before and after
+
+| Code checked | Refused with the purity check | False alarms |
+|---|---|---|
+| `next/` on PR 223 (part 1) | `Desk` | 1 |
+| `next/` with part 3's bench patch | `Desk` | 1 |
+| `next/` after part 4 | none | 0 |
+| main, unchanged | the same 8 as part 1 | 0 |
+| planted `now-in-render.tsx` | `When` | 0: it reads the clock while drawing |
+| planted `said-in-handler.tsx` | `Desk` | 0 now: under the rule it is a real finding |
+
+- **8 findings, 0 false alarms,** where part 1 had 9 and 1. The 8 are today's app, and Babel's check
+  refuses the same 8.
+- **The check is narrower than the rule.** Part 3's bench tiles (`StableTile`, `FlatTile`) read
+  `new Date()` straight inside their own click handler, and the check let them pass both times. It
+  refuses only a clock read it cannot place outside the draw, such as a function handed to a child.
+  So "a view never reads the clock" needs a lint rule beside it to be whole: no `Date`,
+  `Date.now` or `performance.now` in a view file.
+- The planted `said-in-handler.tsx` keeps its row: it is now the test that the check refuses the
+  pattern the rule bans.
+
+### Does it run right, and do the counts move
+
+- `node next/e2e.ts` on the Rolldown build: 1 of 1, click to count 16 ms, as in part 2. vitest over
+  `next/`: 67 of 67.
+- 12 bench runs on the 9 desk, 2 of each shape, 0 console lines. **The counts do not move:**
+  `inline` 63, 21, 63 (esbuild and Rolldown), `stable` and `flat` 36, 13, 37, `flat` with memo 11,
+  5, 11, part 3's `narrow` 14, 3, 5. A press still commits 3 times: the press itself changes nothing
+  in the model, so asking for the time draws nothing.
+- The Compiler compiles the same 12 and 1 functions with no diagnostic, as in part 3.
+
+**Lean for open call 2, 80%: purity blocks.** Why, cost and doubt are in
+[open calls](#open-calls-with-leans). The cost here is about 40 lines in the window machine and 1
+in each view, about 0.3 agent hours, and it follows a settled note,
+[Elm first](../docs/direction/elm-first.md).
+
+### What part 4 cannot tell us
+
+- Whether 0 false alarms holds as `next/` grows. 2 files in `next/` and 6 planted ones is a small
+  set; the Google bar is about 0% over real use.
+- What the lint rule for the clock would flag on today's app. Not written or run.
+- Whether the brain should stamp the time instead. `said` is the writer's own clock on purpose
+  (AGENTS: a ledger entry keeps it as `said`); this keeps that, only from `update`, not the view.
+- How a real stage of the pipeline would run the check. Here the spike ran it by hand.
+
+`env -u TYPESAFE_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY nice -n 19 node
+experiments/195-oxc-toolchain.ts --next <commit> --out <file>`, once on a scratch commit of part 3's
+code and once on part 4's, both local and never pushed. Results:
+`results/195-oxc-toolchain-part4.json`. $0: no model, no deploy.
 
 ## Links
 

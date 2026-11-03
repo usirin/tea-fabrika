@@ -19,6 +19,8 @@ import {chromium, type Page} from "playwright";
 // `own`, where each tile reads its own view through `useRuntime` on a narrow handle, and `narrow`,
 // where `App` and `Status` read only their own parts too. Part 3 also times each commit, from the
 // store's first notify to React's commit hook, and takes desks of 9, 30 and 60 tiles.
+// Part 4's patch also takes the clock out of every view: a press goes in with no time, and the
+// window machine asks for it with a `now` Cmd.
 //
 //   node next/bench-195.ts --out=<file.json> [--runs=3] [--tiles=9] [--mode=production]
 //     [--patches=10] [--heavy=0]

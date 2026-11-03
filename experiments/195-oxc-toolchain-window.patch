@@ -189,23 +189,218 @@ index b9c5730b..78052f45 100644
  				dir: "row",
  				parts: [
  					{percent: 50, inner: {id: "t1", shows: "counter:1", keep: "failed"}},
+diff --git a/next/src/window/machine.test.ts b/next/src/window/machine.test.ts
+index 04dde49c..dde8da2e 100644
+--- a/next/src/window/machine.test.ts
++++ b/next/src/window/machine.test.ts
+@@ -1,7 +1,7 @@
+ import {applyCell} from "@demlik/tea";
+ import {describe, expect, it} from "vitest";
+ import {ask, news, ok} from "../transport/wire.ts";
+-import {type Model, type Msg, startWindow, windowMachine} from "./machine.ts";
++import {type Model, now, startWindow, type WindowMsg, windowMachine} from "./machine.ts";
+ 
+ const start = startWindow({peer: "w-1", ping: "30s", seed: 1, size: {w: 1280, h: 800}});
+ const machine = windowMachine(start);
+@@ -15,9 +15,19 @@ const texts = (cmd: unknown): readonly string[] => {
+ 	return [];
+ };
+ 
+-const step = (model: Model, msg: Msg) => {
++const step = (model: Model, msg: WindowMsg) => {
+ 	const [next, cmd] = applyCell(machine, model, msg);
+-	return {model: next, sent: texts(cmd)};
++	return {model: next, sent: texts(cmd), cmds: cmd};
++};
++
++/** A press asks for the time and sends nothing; the time's answer writes the letter. */
++const press = (model: Model, said: string) => {
++	const asked = step(model, {type: "press", pid: "counter:1", m: {type: "plus"}});
++	expect(asked.sent).toEqual([]);
++	expect(asked.model).toBe(model);
++	const [ask] = asked.cmds.filter((c): c is ReturnType<typeof now> => c.type === "now");
++	if (ask === undefined) throw new Error("a press asks for the time");
++	return step(asked.model, now.ok(ask, said));
+ };
+ 
+ const whenOnline = (): Model => {
+@@ -61,11 +71,12 @@ describe("window machine", () => {
+ 
+ 	it("sends a press with the rev it saw, and drops it from the outbox on the answer", () => {
+ 		const a = step(whenOnline(), {type: "frame", text: whole(4, 4)}).model;
+-		const press = step(a, {type: "press", pid: "counter:1", m: {type: "plus"}, said: "now"});
+-		expect(press.sent).toHaveLength(1);
+-		expect(press.sent[0]).toContain('"saw":4');
+-		expect(press.model.outbox).toHaveLength(1);
+-		const answered = step(press.model, {type: "frame", text: ok("w-1-1", {rev: 5})});
++		const pressed = press(a, "2026-11-02T10:00:00.000Z");
++		expect(pressed.sent).toHaveLength(1);
++		expect(pressed.sent[0]).toContain('"saw":4');
++		expect(pressed.sent[0]).toContain('"said":"2026-11-02T10:00:00.000Z"');
++		expect(pressed.model.outbox).toHaveLength(1);
++		const answered = step(pressed.model, {type: "frame", text: ok("w-1-1", {rev: 5})});
+ 		expect(answered.model.outbox).toHaveLength(0);
+ 	});
+ 
+@@ -73,10 +84,10 @@ describe("window machine", () => {
+ 		const online = whenOnline();
+ 		const lost = step(online, {type: "closed", dial: 1}).model;
+ 		expect(lost.link.is).toBe("waiting");
+-		const press = step(lost, {type: "press", pid: "counter:1", m: {type: "plus"}, said: "now"});
+-		expect(press.sent).toEqual([]);
++		const pressed = press(lost, "2026-11-02T10:00:00.000Z");
++		expect(pressed.sent).toEqual([]);
+ 
+-		const redial = step(press.model, {type: "retry", dial: 1}).model;
++		const redial = step(pressed.model, {type: "retry", dial: 1}).model;
+ 		expect(redial.link.dial).toBe(2);
+ 		const hello = step(redial, {type: "opened", dial: 2}).model;
+ 		const back = step(hello, {type: "frame", text: ok("hello", {version: 1, ping: "30s"})});
+diff --git a/next/src/window/machine.ts b/next/src/window/machine.ts
+index 58a2b1aa..6198074f 100644
+--- a/next/src/window/machine.ts
++++ b/next/src/window/machine.ts
+@@ -1,4 +1,5 @@
+-import {Cmd, defineMachine, type Sub} from "@demlik/tea";
++import {defineMachine, type Settled, type Sub} from "@demlik/tea";
++import {Cmd} from "@demlik/tea/effect";
+ import {Option, Schema} from "effect";
+ import {applyPatch, PatchOp} from "../app/patch.ts";
+ import {DESK, type Desktop, DesktopSchema, tilesIn} from "../desktop/desk.ts";
+@@ -51,12 +52,35 @@ export type Msg =
+ 			readonly type: "press";
+ 			readonly pid: string;
+ 			readonly m: {readonly type: string} & Readonly<Record<string, unknown>>;
+-			readonly said: string;
+ 	  }
+ 	| {readonly type: "resized"; readonly size: Size};
+ 
+-type SendText = Cmd<"send_text"> & {readonly text: string};
+-const sendText = (text: string): SendText => ({type: "send_text", text});
++/** Text out on the socket. */
++export const sendText = Cmd.define("send_text", {
++	input: Schema.Struct({text: Schema.String}),
++	ok: Schema.Void,
++	err: [],
++});
++type SendText = ReturnType<typeof sendText>;
++
++/**
++ * Experiment 195 part 4: the time, asked for as a Cmd, like Elm's `Time.now`. A view never reads
++ * the clock: a press goes in with no time, `update` asks for it, and the letter is written when
++ * the answer comes back. The Cmd carries the press, so the answer knows whose time it is.
++ */
++export const now = Cmd.define("now", {
++	input: Schema.Struct({
++		pid: Schema.String,
++		m: Schema.StructWithRest(Schema.Struct({type: Schema.String}), [
++			Schema.Record(Schema.String, Schema.Unknown),
++		]),
++	}),
++	ok: Schema.String,
++	err: [],
++});
++
++/** Every Msg the window's run takes: a view's, and the answers to its Cmds. */
++export type WindowMsg = Msg | Settled<typeof sendText | typeof now>;
+ 
+ type SocketSub = Sub<"socket", {readonly dial: number}>;
+ type SizeSub = Sub<"size", {readonly on: true}>;
+@@ -103,7 +127,7 @@ const openShown = (model: Model): readonly [Model, readonly SendText[]] => {
+ 	const fresh = [...new Set(shown)].filter((pid) => !model.opened.includes(pid));
+ 	return [
+ 		{...model, opened: [...model.opened, ...fresh]},
+-		fresh.map((pid) => sendText(openText(pid))),
++		fresh.map((pid) => sendText({text: openText(pid)})),
+ 	];
+ };
+ 
+@@ -125,7 +149,7 @@ const readPatch = (model: Model, params: unknown): readonly [Model, readonly Sen
+ 	// A patch it already has, from before its whole copy, does nothing.
+ 	if (shown !== undefined && rev <= shown.rev) return [model, []];
+ 	// A gap: something was missed, so ask for a whole copy again.
+-	if (shown === undefined || rev !== shown.rev + 1) return [model, [sendText(openText(pid))]];
++	if (shown === undefined || rev !== shown.rev + 1) return [model, [sendText({text: openText(pid)})]];
+ 	return openShown({
+ 		...model,
+ 		views: {...model.views, [pid]: {rev, data: applyPatch(shown.data, patch), ledger}},
+@@ -157,11 +181,11 @@ const readMsg = (model: Model, message: Message): readonly [Model, readonly Send
+ /** Step the link child by hand. Coming online: watch the desk again and send what waited (T7). */
+ const stepWithLink = (model: Model, msg: LinkMsg): readonly [Model, readonly SendText[]] => {
+ 	const stepped = stepLink(model.link, msg);
+-	const sends = stepped.send.map(sendText);
++	const sends = stepped.send.map((text) => sendText({text}));
+ 	if (!stepped.online) return [{...model, link: stepped.link}, sends];
+ 	return [
+ 		{...model, link: stepped.link, opened: [DESK]},
+-		[...sends, sendText(openText(DESK)), ...model.outbox.map((l) => sendText(letterText(l)))],
++		[...sends, sendText({text: openText(DESK)}), ...model.outbox.map((l) => sendText({text: letterText(l)}))],
+ 	];
+ };
+ 
+@@ -193,10 +217,10 @@ export const windowMachine = (start: Model) =>
+ 		types: {
+ 			model: {} as Model,
+ 			msg: {} as Msg,
+-			cmd: {} as SendText,
+ 			sub: {} as WindowSub,
+ 			ctx: undefined,
+ 		},
++		cmds: [sendText, now],
+ 		init: (loaded) => [loaded ?? start, Cmd.none],
+ 		subs: [
+ 			{type: "socket", deps: (model: Model) => ({dial: model.link.dial})},
+@@ -221,18 +245,24 @@ export const windowMachine = (start: Model) =>
+ 				}
+ 				return readMsg(model, message.value);
+ 			},
+-			press: (model, msg) => {
++			// The press keeps the rev the person saw now; its time comes back with `now_ok`.
++			press: (model, msg) => [model, [now({pid: msg.pid, m: withSaw(model, msg.pid, msg.m)})]],
++			now_ok: (model, msg) => {
+ 				const letter: Letter = {
+ 					id: `${model.peer}-${model.written + 1}`,
+-					pid: msg.pid,
+-					m: withSaw(model, msg.pid, msg.m),
+-					said: msg.said,
++					pid: msg.cmd.pid,
++					m: msg.cmd.m,
++					said: msg.value,
+ 				};
+ 				return [
+ 					{...model, written: model.written + 1, outbox: [...model.outbox, letter]},
+-					online(model) ? [sendText(letterText(letter))] : Cmd.none,
++					online(model) ? [sendText({text: letterText(letter)})] : Cmd.none,
+ 				];
+ 			},
++			// The clock does not fail; if it ever does, the press is dropped and the window says so.
++			now_err: (model) => [{...model, refused: "no time for a press"}, Cmd.none],
++			send_text_ok: (model) => [model, Cmd.none],
++			send_text_err: (model) => [model, Cmd.none],
+ 			resized: (model, msg) => [{...model, size: msg.size}, Cmd.none],
+ 		},
+ 	});
 diff --git a/next/src/window/main.tsx b/next/src/window/main.tsx
-index 02fac44f..eb6dbdd2 100644
+index 02fac44f..bd3135da 100644
 --- a/next/src/window/main.tsx
 +++ b/next/src/window/main.tsx
-@@ -1,9 +1,10 @@
+@@ -1,12 +1,13 @@
  import type {BootedRunHandle} from "@demlik/tea";
  import {run} from "@demlik/tea/effect";
  import {useRuntime} from "@demlik/tea/react";
 -import {Effect, Option, Queue, Stream} from "effect";
-+import {Effect, Option, Queue, Schema, Stream} from "effect";
++import {DateTime, Effect, Option, Queue, Schema, Stream} from "effect";
 +import {memo, StrictMode} from "react";
  import {createRoot} from "react-dom/client";
 -import {DESK, type Workspace} from "../desktop/desk.ts";
 +import {DESK, DesktopSchema, type Workspace} from "../desktop/desk.ts";
  import {fold, type Placed, type Size} from "../desktop/fold.ts";
  import {CounterView, countIn} from "../programs/counter/view.tsx";
- import {deskIn, type Model, type Msg, startWindow, windowMachine} from "./machine.ts";
+-import {deskIn, type Model, type Msg, startWindow, windowMachine} from "./machine.ts";
++import {deskIn, type Model, type Msg, startWindow, type WindowMsg, windowMachine} from "./machine.ts";
+ 
+ // The browser backend (W1): a tab that dials the brain, draws what it hears, and folds by its own
+ // size. All it keeps is in one tea machine, which runs on the Effect engine; `useRuntime` is how
 @@ -102,17 +103,69 @@ function Tile(props: {
  	);
  }
@@ -227,10 +422,10 @@ index 02fac44f..eb6dbdd2 100644
 +	const box = {left: tile.x, top: tile.y, width: tile.w, height: tile.h};
 +	const focus = () => {
 +		if (focused) return;
-+		dispatch({type: "press", pid: DESK, m: {type: "focus", n, tile: tile.id}, said: new Date().toISOString()});
++		dispatch({type: "press", pid: DESK, m: {type: "focus", n, tile: tile.id}});
 +	};
 +	const press = (m: {readonly type: "plus"}) =>
-+		dispatch({type: "press", pid: tile.shows, m, said: new Date().toISOString()});
++		dispatch({type: "press", pid: tile.shows, m});
 +	return (
 +		<div
 +			className={`tile${focused ? " focused" : ""}${tile.folded ? " folded" : ""}`}
@@ -290,7 +485,15 @@ index 02fac44f..eb6dbdd2 100644
  			<span className="faint" data-ledger={newest}>
  				ledger rev {newest}
  			</span>
-@@ -150,8 +203,18 @@ function Desk(props: {
+@@ -143,28 +196,381 @@ function Desk(props: {
+ 	readonly dispatch: (msg: Msg) => void;
+ }) {
+ 	const {model, workspace, dispatch} = props;
+-	const said = () => new Date().toISOString();
+ 	const focus = (tile: string) => {
+ 		if (workspace.focus === tile) return;
+-		dispatch({type: "press", pid: DESK, m: {type: "focus", n: workspace.n, tile}, said: said()});
++		dispatch({type: "press", pid: DESK, m: {type: "focus", n: workspace.n, tile}});
  	};
  	return (
  		<main className="desk" data-layout={JSON.stringify(workspace.layout)}>
@@ -311,10 +514,11 @@ index 02fac44f..eb6dbdd2 100644
  					key={tile.id}
  					tile={tile}
  					focused={workspace.focus === tile.id}
-@@ -159,11 +222,355 @@ function Desk(props: {
+ 					data={model.views[tile.shows]?.data}
  					focus={() => focus(tile.id)}
- 					press={(m) => dispatch({type: "press", pid: tile.shows, m, said: said()})}
- 				/>
+-					press={(m) => dispatch({type: "press", pid: tile.shows, m, said: said()})}
++					press={(m) => dispatch({type: "press", pid: tile.shows, m})}
++				/>
 +				),
 +			)}
 +		</main>
@@ -367,10 +571,10 @@ index 02fac44f..eb6dbdd2 100644
 +	const box = {left: props.x, top: props.y, width: props.w, height: props.h};
 +	const focus = () => {
 +		if (focused) return;
-+		dispatch({type: "press", pid: DESK, m: {type: "focus", n, tile: id}, said: new Date().toISOString()});
++		dispatch({type: "press", pid: DESK, m: {type: "focus", n, tile: id}});
 +	};
 +	const press = (m: {readonly type: "plus"}) =>
-+		dispatch({type: "press", pid: shows, m, said: new Date().toISOString()});
++		dispatch({type: "press", pid: shows, m});
 +	return (
 +		<div
 +			className={`tile${focused ? " focused" : ""}${folded ? " folded" : ""}`}
@@ -425,12 +629,13 @@ index 02fac44f..eb6dbdd2 100644
 +					data={model.views[tile.shows]?.data}
 +					n={workspace.n}
 +					dispatch={dispatch}
-+				/>
+ 				/>
  			))}
  		</main>
  	);
  }
  
+-function App({handle}: {readonly handle: BootedRunHandle<Model, Msg>}) {
 +/**
 + * Experiment 195 part 3: a narrow handle, so one part of the window reads only its own part of the
 + * model through the same `useRuntime`, and sends only its own messages (Elm's `Html.map`).
@@ -443,7 +648,7 @@ index 02fac44f..eb6dbdd2 100644
 + * cannot be, because a window Msg does not map back to the part's own.
 + */
 +const narrow = <A, N extends {readonly type: string}>(
-+	root: BootedRunHandle<Model, Msg>,
++	root: BootedRunHandle<Model, WindowMsg>,
 +	pick: (model: Model) => A,
 +	same: (a: A, b: A) => boolean,
 +	send: (msg: N) => Msg,
@@ -488,8 +693,8 @@ index 02fac44f..eb6dbdd2 100644
 + * Each tile's own handle: its view's data in, its own messages out. Made once per tile and kept in
 + * this map across patches and focus moves, so `send` is the same function on every draw.
 + */
-+const tileHandles = new WeakMap<BootedRunHandle<Model, Msg>, Map<string, BootedRunHandle<unknown, TileMsg>>>();
-+const tileHandle = (root: BootedRunHandle<Model, Msg>, n: number, id: string, shows: string) => {
++const tileHandles = new WeakMap<BootedRunHandle<Model, WindowMsg>, Map<string, BootedRunHandle<unknown, TileMsg>>>();
++const tileHandle = (root: BootedRunHandle<Model, WindowMsg>, n: number, id: string, shows: string) => {
 +	const mine = tileHandles.get(root) ?? new Map<string, BootedRunHandle<unknown, TileMsg>>();
 +	tileHandles.set(root, mine);
 +	const key = `${n}/${id}/${shows}`;
@@ -501,8 +706,8 @@ index 02fac44f..eb6dbdd2 100644
 +		Object.is,
 +		(m) =>
 +			m.type === "plus"
-+				? {type: "press", pid: shows, m, said: new Date().toISOString()}
-+				: {type: "press", pid: DESK, m: {type: "focus", n, tile: id}, said: new Date().toISOString()},
++				? {type: "press", pid: shows, m}
++				: {type: "press", pid: DESK, m: {type: "focus", n, tile: id}},
 +	);
 +	mine.set(key, made);
 +	return made;
@@ -571,7 +776,7 @@ index 02fac44f..eb6dbdd2 100644
 +function OwnDesk(props: {
 +	readonly workspace: Workspace;
 +	readonly size: Size;
-+	readonly root: BootedRunHandle<Model, Msg>;
++	readonly root: BootedRunHandle<Model, WindowMsg>;
 +}) {
 +	const {workspace, size, root} = props;
 +	return (
@@ -625,7 +830,7 @@ index 02fac44f..eb6dbdd2 100644
 +}
 +
 +function NarrowApp(props: {
-+	readonly root: BootedRunHandle<Model, Msg>;
++	readonly root: BootedRunHandle<Model, WindowMsg>;
 +	readonly top: BootedRunHandle<Top, never>;
 +	readonly line: BootedRunHandle<Line, never>;
 +}) {
@@ -646,7 +851,7 @@ index 02fac44f..eb6dbdd2 100644
 +	);
 +}
 +
-+const narrowParts = (root: BootedRunHandle<Model, Msg>) => ({
++const narrowParts = (root: BootedRunHandle<Model, WindowMsg>) => ({
 +	top: narrow<Top, never>(root, (m) => ({desk: m.views[DESK], size: m.size}), shallow, (m) => m),
 +	line: narrow<Line, never>(
 +		root,
@@ -664,10 +869,11 @@ index 02fac44f..eb6dbdd2 100644
 +
 +const DeskView = process.env.TILE_SHAPE === "hoisted" ? HoistedDesk : Desk;
 +
- function App({handle}: {readonly handle: BootedRunHandle<Model, Msg>}) {
++function App({handle}: {readonly handle: BootedRunHandle<Model, WindowMsg>}) {
  	const [model, dispatch] = useRuntime(handle);
  	const desk = deskIn(model);
-@@ -173,7 +580,13 @@ function App({handle}: {readonly handle: BootedRunHandle<Model, Msg>}) {
+ 	const workspace = Option.isSome(desk)
+@@ -173,7 +579,13 @@ function App({handle}: {readonly handle: BootedRunHandle<Model, Msg>}) {
  	return (
  		<>
  			{workspace !== undefined ? (
@@ -682,10 +888,20 @@ index 02fac44f..eb6dbdd2 100644
  			) : (
  				<main className="desk empty">waiting for the desk</main>
  			)}
-@@ -207,8 +620,23 @@ const program = Effect.gen(function* () {
+@@ -199,6 +611,8 @@ const program = Effect.gen(function* () {
+ 				Effect.sync(() => {
+ 					if (socket?.readyState === WebSocket.OPEN) socket.send(cmd.text);
+ 				}),
++			// Experiment 195 part 4: the one place the window reads the clock, from Effect's Clock.
++			now: () => Effect.map(DateTime.now, DateTime.formatIso),
+ 		},
+ 		subscribe: {
+ 			socket: (sub) => socketStream(sub.deps.dial),
+@@ -207,8 +621,23 @@ const program = Effect.gen(function* () {
  	});
  	const runtime = yield* booting.ready;
  	// The Effect engine's handle speaks Effect; `useRuntime` speaks Promise. Only the verbs differ.
+-	const handle: BootedRunHandle<Model, Msg> = {
 +	// Experiment 195 part 3: the bench's clock. The first notify of a change marks the time; the
 +	// probe's commit hook reads it. A mark no commit took (nothing drawn changed) is dropped.
 +	const mark = () => {
@@ -696,7 +912,7 @@ index 02fac44f..eb6dbdd2 100644
 +			if (Reflect.get(window, "__notifyAt") === at) Reflect.set(window, "__notifyAt", undefined);
 +		}, 0);
 +	};
- 	const handle: BootedRunHandle<Model, Msg> = {
++	const handle: BootedRunHandle<Model, WindowMsg> = {
  		...runtime,
 +		subscribe: (listener) =>
 +			runtime.subscribe(() => {
@@ -706,7 +922,7 @@ index 02fac44f..eb6dbdd2 100644
  		dispatch: (msg) => Effect.runPromise(runtime.dispatch(msg).pipe(Effect.ignore)),
  		stop: () => Effect.runPromise(runtime.stop()),
  		get ready() {
-@@ -216,7 +644,15 @@ const program = Effect.gen(function* () {
+@@ -216,7 +645,15 @@ const program = Effect.gen(function* () {
  		},
  	};
  	const root = document.getElementById("root");
