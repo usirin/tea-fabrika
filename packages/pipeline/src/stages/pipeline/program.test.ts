@@ -2208,7 +2208,9 @@ describe("a lane, whole, on GitHub", () => {
 	);
 
 	it("writes nothing when the head moves just before the merge", {timeout: 60_000}, async () => {
-		const ran = await onGitHub({story: {...PASSED_CI, moveHeadAt: "merge_read"}, picks: YES});
+		// The person changes the code: a same-tree commit would carry the review, and that is the next test.
+		const story = {...PASSED_CI, moveHead: {at: "merge_read", tree: "changed"}} as const;
+		const ran = await onGitHub({story, picks: YES});
 		// It got as far as the read that found the move.
 		expect(ran.kinds).toContain("merge_read");
 		expect(ran.wrote).toEqual([]);
@@ -2216,6 +2218,24 @@ describe("a lane, whole, on GitHub", () => {
 		expect(ran.pulls).toMatchObject([{state: "OPEN"}]);
 		expect(ran.lines.at(-1)).not.toContain("ended: done");
 	});
+
+	it(
+		"merges the moved head when a person's commit just before the merge keeps the code as it was",
+		{timeout: 60_000},
+		async () => {
+			const story = {...PASSED_CI, moveHead: {at: "merge_read", tree: "same"}} as const;
+			const ran = await onGitHub({story, picks: YES});
+			const pushed = pushedHead(ran);
+			expect(ran.lines.at(-1)).toContain("ended: done");
+			// The review carried: its agent ran once, for the lane's own head.
+			expect(codexRuns(ran.dir).filter((r) => r.step === "review")).toHaveLength(1);
+			expect(ran.pulls).toMatchObject([{state: "MERGED"}]);
+			const merged = ran.pulls[0]?.mergedHead ?? null;
+			expect(merged).not.toBeNull();
+			expect(merged).not.toBe(pushed);
+			expect(onMain(ran.remote, "src/lower.ts")).toContain("toLowerCase");
+		},
+	);
 
 	it(
 		"lands the exam's pull request on GitHub first, then the lane's",
@@ -2273,7 +2293,9 @@ describe("a lane, whole, on GitHub", () => {
 		"sends it back when a person moves the head before the facts are read",
 		{timeout: 60_000},
 		async () => {
-			const ran = await onGitHub({story: {...PASSED_CI, moveHeadAt: "facts"}, picks: YES});
+			// The person changes the code, so the lane's verdict cannot carry to their head.
+			const story = {...PASSED_CI, moveHead: {at: "facts", tree: "changed"}} as const;
+			const ran = await onGitHub({story, picks: YES});
 			const pushed = ran.calls.find((call) => call.kind === "facts");
 			// It read the moved head, and the lane's verdict was for the one before it.
 			expect(pushed).toBeDefined();
