@@ -18,6 +18,9 @@ const OPTS = {numRuns: 300, seed: 119120};
 const bytesOf = (lines: readonly string[]): number =>
 	lines.reduce((sum, line) => sum + Buffer.byteLength(line, "utf8") + 1, 0);
 
+/** A high surrogate with no low one after it, or a low one with no high one before it. */
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
 /** A printed line: short, and any text a program could print, a long code point included. */
 const arbLine = fc.string({maxLength: 80, unit: "binary"});
 
@@ -67,7 +70,7 @@ describe("a job's last lines", () => {
 					expect(bytesOf(got)).toBeLessThanOrEqual(BYTES_MAX);
 					// Something of the newest line always shows: a job that printed shows it printed.
 					if (printed.length > 0) expect(got.length).toBeGreaterThanOrEqual(1);
-					for (const line of got) expect(line.isWellFormed()).toBe(true);
+					for (const line of got) expect(line).not.toMatch(LONE_SURROGATE);
 					const from = printed.length - got.length;
 					if (got.length === 1) {
 						// Alone, the newest line may be cut at its end, as a terminal shows its start.
