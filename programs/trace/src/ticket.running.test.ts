@@ -44,7 +44,10 @@ const ticketOf = (facts: readonly (readonly [number, Fact])[]): readonly Entry[]
 		([at, fact], i) => ({
 			pos: i + 1,
 			ticket: NUMBER,
-			by: fact.type === "filed" || fact.type === "restarted" ? owner : laneWriter,
+			by:
+				fact.type === "filed" || fact.type === "restarted" || fact.type === "answered"
+					? owner
+					: laneWriter,
 			at,
 			fact,
 		}),
@@ -60,8 +63,8 @@ const started = (run: string, trace: string, model: string | null = ASTRA): Fact
 	...(model === null ? {} : {model, harness: "codex"}),
 });
 
-/** An astra step's end, with no list price written: the price comes back from its tokens. */
-const ended = (run: string): Fact => ({
+/** A step's end, with no list price written: the price comes back from its tokens, if the model has one. */
+const endedBy = (run: string, model: string): Fact => ({
 	type: "ended",
 	run,
 	stage: "build",
@@ -71,9 +74,12 @@ const ended = (run: string): Fact => ({
 	output: 100,
 	turns: 1,
 	cached: 0,
-	model: ASTRA,
+	model,
 	harness: "codex",
 });
+
+/** An astra step's end: its price comes back from its tokens. */
+const ended = (run: string): Fact => endedBy(run, ASTRA);
 
 const asked = (ask: string, trace: string): Fact => ({
 	type: "asked",
@@ -242,4 +248,118 @@ describe("a lane left without its end closes when a newer lane starts (review A1
 			expect(lanesOfShown(again)[0]?.length).toBe(lanesOfShown(ticked)[0]?.length);
 		});
 	}
+});
+
+// What a person sees and hears of a step or an ask that has not ended (the second review's R1).
+// These pin the words on screen and each row's accessible name, never the tags behind them, so a
+// rename of the tags to the settled note's "never ended" keeps them green.
+
+/** The text of the `tag` element a screen reader names `label`: tags out, spaces as one. */
+const named = (markup: string, tag: string, label: string): string | undefined => {
+	const at = markup.indexOf(`aria-label="${label}"`);
+	if (at < 0) return undefined;
+	const from = markup.lastIndexOf(`<${tag}`, at);
+	const to = markup.indexOf(`</${tag}>`, at);
+	return markup
+		.slice(from, to)
+		.replaceAll(/<[^>]*>/g, " ")
+		.replaceAll(/\s+/g, " ");
+};
+
+/** The text of the row a screen reader names `label`. */
+const rowText = (markup: string, label: string): string | undefined => named(markup, "tr", label);
+
+/** The text of the chosen row's detail. */
+const detailText = (markup: string): string | undefined => named(markup, "aside", "detail");
+
+const WHAT = "Do you approve plan version 1?";
+
+describe("the words a person sees and hears of what has not ended (review round 2, R1)", () => {
+	const cut = (more: readonly TraceMsg[] = []) =>
+		drawn(
+			shown(leftRunning, [
+				{type: "tick", now: LATER},
+				{type: "toggle", row: `lane:${LANE_A}`},
+				...more,
+			]),
+		);
+
+	it("a step a newer lane cut off reads never ended, on its lane's line and its own row", () => {
+		// Folded, the lane's line says how it was left; open, its step's row does.
+		const folded = drawn(shown(leftRunning, [{type: "tick", now: LATER}])).markup;
+		expect(rowText(folded, "lane 1, never ended")).toContain("never ended");
+		const {markup} = cut();
+		expect(markup).toContain('aria-label="step build, never ended"');
+		expect(rowText(markup, "step build, never ended")).toContain("never ended");
+	});
+
+	it("a cut step's detail says its price is none, as it never ended: never not yet", () => {
+		const said = detailText(cut([{type: "choose", row: "run:r-a"}]).markup);
+		expect(said).toContain("none: it never ended");
+		expect(said).not.toContain("not yet");
+	});
+
+	it("a running step's detail says its price is not yet: never that it never ended", () => {
+		const said = detailText(
+			drawn(
+				shown(runningAfterOne, [
+					{type: "tick", now: T0 + 2 * MIN},
+					{type: "choose", row: "run:r-b"},
+				]),
+			).markup,
+		);
+		expect(said).toContain("not yet: it has not ended");
+		expect(said).not.toContain("never ended");
+	});
+
+	it("a running step's row counts its time so far in whole seconds, as the clock ticks", () => {
+		const {text} = drawn(shown(runningAlone, [{type: "tick", now: T0 + 30 * SEC}]));
+		expect(text).toContain("30 s · running");
+		expect(text).not.toContain("30.0 s");
+	});
+
+	it("a lane over on an ask nobody answered reads never answered, though steps came first", () => {
+		const timeline = ticketOf([
+			[T0, started("r-a", LANE_A)],
+			[T0 + MIN, ended("r-a")],
+			[T0 + 2 * MIN, started("r-c", LANE_A)],
+			[T0 + 3 * MIN, ended("r-c")],
+			[T0 + 3 * MIN + SEC, asked("a-approve-1", LANE_A)],
+			[T0 + 3 * HOUR, restarted],
+			[T0 + 3 * HOUR + MIN, started("r-b", LANE_B)],
+			[T0 + 3 * HOUR + 2 * MIN, ended("r-b")],
+		]);
+		const {markup} = drawn(
+			shown(timeline, [
+				{type: "tick", now: LATER},
+				{type: "toggle", row: `lane:${LANE_A}`},
+			]),
+		);
+		expect(markup).toContain('aria-label="lane 1, never answered"');
+		expect(markup).toContain(`aria-label="wait on a person: ${WHAT}, never answered"`);
+	});
+
+	it("a wait's row names its pick once answered, and not answered while it waits", () => {
+		const timeline = ticketOf([
+			[T0, started("r-a", LANE_A)],
+			[T0 + MIN, ended("r-a")],
+			[T0 + MIN + SEC, asked("a-approve-1", LANE_A)],
+			[T0 + 2 * MIN, {type: "answered", ask: "a-approve-1", pick: "approve", note: ""}],
+			[T0 + 3 * MIN, started("r-c", LANE_A)],
+			[T0 + 4 * MIN, ended("r-c")],
+			[T0 + 4 * MIN + SEC, asked("a-approve-2", LANE_A)],
+		]);
+		const {markup} = drawn(shown(timeline, [{type: "tick", now: T0 + 5 * MIN}]));
+		expect(markup).toContain(`aria-label="wait on a person: ${WHAT}, approve"`);
+		expect(markup).toContain(`aria-label="wait on a person: ${WHAT}, not answered"`);
+	});
+
+	it("a lane whose model has no list price says so on its own line, not only the ticket's", () => {
+		const timeline = ticketOf([
+			[T0, started("r-a", LANE_A, "made-up-model")],
+			[T0 + MIN, endedBy("r-a", "made-up-model")],
+		]);
+		const {markup} = drawn(shown(timeline, [{type: "tick", now: T0 + 2 * MIN}]));
+		expect(rowText(markup, "lane 1, done")).toContain("no list price");
+	});
 });
