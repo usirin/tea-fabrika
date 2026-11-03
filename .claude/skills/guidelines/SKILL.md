@@ -74,7 +74,8 @@ with real shots and the owner's yes.
   (programs that compose in tiles, the desk, the top bar, pipes)? Their taste and quality bar,
   on our pieces. Never copy a Linear screen. Ask which program owns the job, what sits beside
   what, and what becomes a piece every program gets for free. Write it as a row, or "No Linear
-  answer: <why>". Where we differ, say why.
+  answer: <why>". Where we differ, say why. Ask it again for each design in step 5: which program
+  owns each part of it?
 - **Elm or OTP.** Name the Elm answer (model, update, view, parents step children) or the
   Erlang/OTP one (mailbox, supervisor, `code_change`) where it fits. Say where we leave it.
 - **Accessibility.** Name the WCAG criterion a principle touches, and what needs a real screen
@@ -91,13 +92,19 @@ pipe marker finalists did with four different designs, and only then refines one
   design. Keys and mouse both work in each, as the guidelines say. Read today's code for which
   jobs exist, not for how they look
   ([rethink, do not port](../../../docs/direction/rethink-do-not-port.md)).
+- **Each design writes its tsh pipe line first,** before it is built: `tracker --all | outline`,
+  or `outline | ticket`. Any part that is another program's job becomes its own tile, joined by a
+  pipe: a sidebar that opens a detail, a list another program owns, a mode that swaps the whole
+  view. The yardstick is program guidelines (PR 332, proposed): G1, one job per program, and G6,
+  programs meet on typed pipes.
 - Fewer boxes. If something already draws an edge, a second line, box or background goes. A
   selected row is a full-row fill and stronger text, never a colored bar on one side.
 - Shoot each design with Playwright on Electron, as `apps/fabrika/e2e.ts` does, at five layouts:
   one tile filling the window, two side by side, two stacked, a 2x2 grid, and about 1024x700. Put
   each shot beside today's app and beside the closest Linear screen, from Linear's public docs or
   changelog.
-- Show the owner the designs, each as a pressable page (step 9's demo rules). **The owner picks
+- Show the owner the designs, each as a pressable page (step 9's demo rules) with its pipe line
+  above it. **The owner picks
   one.** Each design that lost gets one or two plain lines on why, tied to a principle or a shot.
 - Then refine the pick in rounds. For each shot, one line: would Linear's team ship this? What
   looks off: a box in a box, a gray that fights, a line nobody needs, loud text, a cramped

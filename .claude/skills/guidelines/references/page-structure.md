@@ -53,6 +53,8 @@ keys to move, and long text closed until asked.
 - [ ] At least 3 distinct designs, each lifted and pressable, each with a why-not line: one or two
   plain lines on why it lost, tied to a principle or a shot ("lost on T2: the rec sits under the
   question, see the 2x2 shot"). The pick says why it won in the same way.
+- [ ] Each design's tsh pipe line sits above its mockup, such as `outline | ticket`: one program per
+  tile, each part that is another program's job in its own tile.
 - [ ] **Layout:** the five from step 5 (one tile, side by side, stacked, 2x2, about 1024x700), as a
   list. `L` steps through them.
 - [ ] **State:** what the study opens, such as the popup or the card. `S` steps through them.
