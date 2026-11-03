@@ -844,26 +844,28 @@ windowApp.pipe(Effect.provide(layer), runMain);
 
 **The window in React.** React 19.3.1, from a study with probes on Chromium 156. Strict Mode is on. One `useSyncExternalStore` hook reads the Effect engine, as a stand-in until tea's own hook takes the Effect engine ([demlik 852](https://github.com/kamp-us/demlik/issues/852)); then the file goes. *This once said "no tea `useMachine`: it dies under Strict Mode". tea 0.22.0 fixed that ([demlik PR 774](https://github.com/kamp-us/demlik/pull/774)). It also said `memo` per tile, which was dropped on 2026-11-02 for the React Compiler.*
 
-*Proposed 2026-11-02 in [React Compiler from day one](../direction/react-compiler.md), C6: the Compiler compiles every window file, so `memo` per tile goes, here and in T7, unless a measured need brings it back as `memo(TileView)`, a named const. The owner picks; until then the sketch stands.*
+*The desk is way 3b, decided 2026-11-02 in [experiment 195](../../experiments/195-oxc-toolchain.md#decided): each tile, `App` and `Status` read their own part through the hook with a selector, a tile gets plain values, and there is no hand `memo`. How the Compiler rules hold it is proposed in [React Compiler from day one](../direction/react-compiler.md), C6.*
 
 ```tsx
 // next/packages/tuval/src/window/use-model.ts, a sketch. All three arguments, or headless throws. Dispatch is a one-line edge.
-export const useModel = (h: Handle) => useSyncExternalStore(h.subscribe, h.getState, h.getState);
+// The selector returns the same object while its part holds (experiment 195, way 3b).
+export const useModel = <A,>(h: Handle, pick: (m: Model) => A) =>
+	useSyncExternalStore(h.subscribe, () => pick(h.getState()), () => pick(h.getState()));
 export const send = (h: Handle, m: Msg) => Effect.runFork(h.dispatch(m).pipe(Effect.ignore));
 
-const Tile = memo(TileView); // Elm's Html.Lazy
-<Tile key={t.id} tile={t} view={m.views[t.id]}>
-	{t.folded ? <Strip tile={t} /> : null}
+// No memo per tile: the Compiler memoizes. The tile reads its own view with useModel and a selector.
+<Tile key={t.id} id={t.id} shows={t.shows} folded={t.folded}>
+	{t.folded ? <Strip id={t.id} /> : null}
 	<Activity mode={t.folded ? "hidden" : "visible"}>   {/* mode comes from the model */}
-		<ProgramView tile={t} />
+		<ProgramView shows={t.shows} />
 	</Activity>
 </Tile>
 ```
 
 - **`useEffectEvent`** for reads an effect must not depend on. It ends the `exhaustive-deps` fight.
 - **`<Activity>` for hidden tiles.** A hidden tile keeps its state. Focus is not restored by React, so a layout effect sets it from the model on reveal. A socket stays a tea Sub, outside React.
-- **The model keeps references for parts that did not change,** or `memo` does nothing.
-- Why: the probe gave 1 tile render per patch against 16, and dispatch to DOM at p95 0.3 ms on a tiny model. It is the Elm answer. Cost: one small hook, and one wrapper per tile. Sure: 90% on the hook, 85% on `<Activity>`, whose memory with many hidden tiles is not measured.
+- **The model keeps references for parts that did not change,** or a selector sees a change on every patch.
+- Why: the probe gave 1 tile render per patch against 16, and dispatch to DOM at p95 0.3 ms on a tiny model. It is the Elm answer. Cost: one small hook, and one selector per tile. Sure: 90% on the hook, 85% on `<Activity>`, whose memory with many hidden tiles is not measured.
 - **Not decided:** native `<dialog>` and `popover` against Zag. Tier 1 needs neither, so it is left out and stays open for later.
 
 **New dependency:** `@effect/platform-browser` in the catalog. Not installed today; I read it by `npm pack`, outside the repo. Why: rely on Effect, not a handwritten socket. One gotcha from its source: every close fails the socket's reader with `SocketError`, so the Sub maps that to the `closed` Msg, which today's handwritten Stream does by hand.
@@ -1437,11 +1439,11 @@ Red to green, as plan-115: after the names of T1, T7, T15 and T16 everything com
 - **T3.** `ends`: local commit. Fixture: `ProgramRunner` with real `counter`. Scenario p22. Other: p14, p25, p35. Criteria c2, c3.
 - **T4.** `ends`: local commit. Fixture: `answerFrame` with a fake `admit`. Scenario p26, p23. Other: p15, p42, p43. Criterion c2.
 - **T5.** `ends`: local commit. Fixture: `sshsig` vectors made by real `ssh-keygen`, saved in `fixtures/next/` by the first exam PR, so the owner reads them ([answered 2026-11-02](./tier-1.md#open-questions); the test writer only adds `*.test.ts`). Scenario p27. Other: p29 (needs T6 to run). Strict Mode goes on here, with the hook in `window/use-model.ts` and `Effect.runFork`, on the exam's edge list; probes showed it working on tea's Effect engine, sure 90%. Spike first: does a non-extractable Ed25519 `CryptoKey` survive reload in IndexedDB in Chromium, on 127.0.0.1? The browser note says not tried. If not, stop and tell the owner; no fallback is planned, because the fallback is a key the page can read.
-- **T6.** `ends`: PR A. Fixture: whole tree, two Chromium contexts, real `dev.ts`. Scenario p17 on the stage. Other: p24, p32, p29. Criteria c4, c5, c6, c7. **First step: measure 4 runs of the bar on the new stage, on the base,** so caps are set from numbers. `build.ts`'s `forBrowser` runs the React Compiler on `.tsx` files only, through Babel in an esbuild `onLoad`, `target: "19"`, `panicThreshold: "none"`, with its purity check on ([the note](../direction/react-compiler.md#how-the-build-runs-the-compiler), proposed). The PR body gives the window bundle's build time with and without it.
+- **T6.** `ends`: PR A. Fixture: whole tree, two Chromium contexts, real `dev.ts`. Scenario p17 on the stage. Other: p24, p32, p29. Criteria c4, c5, c6, c7. **First step: measure 4 runs of the bar on the new stage, on the base,** so caps are set from numbers. `build.ts` moves from esbuild to Rolldown (lean 85%, [experiment 195](../../experiments/195-oxc-toolchain.md)), and runs the React Compiler on `.tsx` files only, through oxc's native port, `oxc-transform-react`, in a Rolldown plugin, with its purity check on. No Babel (owner, 2026-11-02). The build owns the check: one step compiles a file and returns its findings, and an `"error"` finding fails the build ([the note](../direction/react-compiler.md#how-the-build-runs-the-compiler), proposed). The PR body gives the window bundle's build time with and without it.
 
 ### PR B
 
-- **T7.** Scenario p30. Other: p50, p66's browser and headless half. Criterion c8. `window/main.tsx`: the Effect socket, `memo` per tile, `useEffectEvent` and `<Activity>`, on the hook T5 brought.
+- **T7.** Scenario p30. Other: p50, p66's browser and headless half. Criterion c8. `window/main.tsx`: the Effect socket, tiles that read their own part with a selector and no `memo` (way 3b), `useEffectEvent` and `<Activity>`, on the hook T5 brought.
 - **T8.** Scenario p46. Other: p44, p31 up to the keys, p66's Electron half. Spikes first, all on a dev build: (1) launchd on an unsigned build: start, app crash, Quit. If it fails, `childBrain`, and tell the owner. (2) `safeStorage` under Playwright in a temp home. (3) The self-made card: the owner opens the built app twice. If the Keychain asks on open, the window key moves to WebCrypto in a hidden local page, and tell the owner. (4) Touch ID from that build. If it cannot prompt, the plain click, and tell the owner.
 - **T15.** Scenario p45. Other: p49's pure half, p51's pure half, p66's grant half. A Tray and a panel, both drawn from `menuView`.
 - **T9.** Scenario p47, p31 whole. Other: p48, p49's live half, p51's live half. Criteria c5, c9, c13. `ends`: PR B. Screenshots from the real app. The owner's own finger is the last check, once, in the demo.
@@ -1696,7 +1698,7 @@ An agent that is not the builder writes it. The owner reads it. It lands first, 
 10. `pnpm-workspace.yaml`'s three globs, `vitest.config.ts`'s new globs, and a `next` job in `.github/workflows/check.yaml`: `pnpm exec vitest run next/`, Chromium, and `node next/apps/fabrika/e2e.ts`, a thin runner over each landing's `e2e/*.test.ts`, which passes while there are none. The file is the exam's. This once named one `e2e.test.ts`, which no later landing could have grown. Electron and launchd run on the laptop first; CI gets Electron once xvfb and the keychain are tried, and the PR says so. A check too long to block a pull request moves to the daily run, under the new direction.
 11. PR body: each rule's fire count on PR 223's tree, read by hand. No check blocks until its false alarms are measured.
 12. `fixtures/next/`'s `sshsig` vectors, made once by real `ssh-keygen`, for p27. They are in the exam so the owner reads them, as answered on 2026-11-02.
-13. **React Compiler, proposed in [its note](../direction/react-compiler.md).** `react/refs`, `react/immutability` and `react/display-name` as errors in `next/**/*.tsx` leaving out tests, and an oxlint JS plugin rule, `one-store-hook`: `useSyncExternalStore` is imported only by `window/use-model.ts`, and a store hook whose value is dropped fires. `lint:compiler`, run by `pnpm lint`: Babel with the Compiler over `next/**/*.tsx` as `build.ts` runs it, failing on any `CompileError` or `PipelineError` in a function that `compiler-ledger.json` does not name with `"use no memo"`, on a directive with no row, and on a stale row. An empty `compiler-ledger.json`; a row is the owner's call. `exam/compiler.test.ts` plants a skipped function, a named one, a directive with no row, a stale row, a clock read in render and a dropped store value. `babel-plugin-react-compiler` 1.0.0 and `@babel/core` 7.29.7 in the catalog. Experiment 194 found 0 fires of the three React rules and 0 skips on PR 223's two `.tsx` files; `react/purity` is left off after one false alarm there (`main.tsx:146`). Cost: about 170 lines. Sure: 75%.
+13. **React Compiler, proposed in [its note](../direction/react-compiler.md).** `react/refs`, `react/immutability` and `react/display-name` as errors in `next/**/*.tsx` leaving out tests, and an oxlint JS plugin rule, `one-store-hook`: `useSyncExternalStore` is imported only by `window/use-model.ts`, and a store hook whose value is dropped fires. `lint:compiler`, run by `pnpm lint`: the same compile step the build calls, oxc's native Compiler over `next/**/*.tsx` with `reportDiagnostics`, failing on any skipped function that `compiler-ledger.json` does not name with `"use no memo"`, on a directive with no row, on a stale row, and on an `"error"` purity finding. An empty `compiler-ledger.json`; a row is the owner's call. `exam/compiler.test.ts` plants a skipped function, a named one, a directive with no row, a stale row, a clock read in render, a clock read in a handler a view passes down, and a dropped store value. `oxc-transform-react` and `oxc-parser` pinned exact in the catalog. Experiments 194 and 195 found 0 fires of the three React rules and 0 skips on PR 223's two `.tsx` files; oxlint's `react/purity` is left off after one false alarm there (`main.tsx:146`). Cost: about 230 lines: the check and its test as 195 sizes them, and the rule as 194 does. Sure: 75%.
 
 **Where the exam lives: `next/apps/fabrika/src/exam/`,** since the app may see every package, so a bytes test can bundle by name. Why not a package of its own: one more `package.json` for no gain. Cost: the app's folder holds some files that are not the app. Sure: 80%. Saved letters and vectors stay in `fixtures/next/`, where toy data already lives.
 
