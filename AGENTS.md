@@ -68,6 +68,10 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   and its tests to learn what jobs exist and what was learned, then rethink. Never
   import it and never copy it across
   ([rethink, do not port](./docs/direction/rethink-do-not-port.md)).
+- **One exception: the design package is shared by both versions.** `@kampus/fabrika-design`
+  holds the colors, the Manti mapping and the text roles, and today's app and `next/` both
+  import it. Its contents come from settled notes, not today's shapes, and moving a file into it
+  means rethinking it against them ([one design package](./docs/direction/fabrika-design-package.md)).
 - **In `next/`, nothing is built on Promises.** It is Effect all the way. A Promise
   appears only in a one-line edge the platform demands
   ([no Promises](./docs/direction/no-promises.md)).
@@ -84,9 +88,11 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each
   part is small, never absent.
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
-- **In `next/`, a window reads state through one `useSyncExternalStore` hook.** State
-  lives in a tea machine, never `useState`, and tea's `useMachine` is not used: it dies
-  under Strict Mode ([Elm first](./docs/direction/elm-first.md)).
+- **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
+  machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). tea 0.22.0 fixed
+  `useMachine` under Strict Mode, but it does not take the Effect engine yet
+  ([demlik 852](https://github.com/kamp-us/demlik/issues/852)). Until it does, one
+  `useSyncExternalStore` hook in one file stands in, and goes when tea's lands.
 - **In `next/`, no bare `of` and no `xOf` names.** Today's `nameOf` and `outcomesOf`
   stay until that code goes.
 - **In today's version:** fixes that daily use or CI needs, the UX work the owner
@@ -398,6 +404,12 @@ Write-ups are read by busy people, some of them not native English speakers.
   new product. The PR says, per screen, what Linear would do, and where we
   differ and why. Tuval and tmux stay the defaults for tiling; where they clash
   with Linear's answer, name the clash for the owner to pick.
+  - **Linear as the builder, never as the template.** The question is how Linear's team
+    would build the feature if they were building it as fabrika programs, with
+    fabrika's own pieces: programs that compose in tiles, the desk, the top bar,
+    pipes between programs. Their taste and quality bar, on our primitive. Never
+    copy a Linear screen. Ask which program owns the job, what composes beside
+    what, and what becomes a piece every program gets for free.
 - **Show it running.** A PR that adds or changes a program's window carries
   screenshots from the real built app, saved in that program's `docs/` folder
   and shown in the PR body. Take them the way `apps/fabrika/e2e.ts` drives the
