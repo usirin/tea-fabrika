@@ -4,12 +4,15 @@ Decided 2026-10-24: all six are built now, before any stage needs them. This
 replaces the first proposal of the same day, which said to build each on its
 second use. That proposal stays below, marked as replaced.
 
+Keys renamed 2026-11-03 (short words keep one meaning): Poll's `by` became `select`, the part of
+a read that counts (RxJS calls it a key selector). Today's `poll.ts` still says `by`.
+
 ```ts
 // A sketch. Four new combos and two that grow, all made from the six moves.
 const mode = rate(rule, facts);                    // Rate: advise or block, from "fix" and "noise" counts
 const result = controls(onBad, onGood);            // Controls: red where it must fail, green where it must pass
 const brief = briefFor("reviewer", lane);          // Brief: one typed view per role
-const ci = poll("ci", {every: "1m", read: checksOf, by: (c) => c.state}); // Poll: a fact only on change
+const ci = poll("ci", {every: "1m", read: checksOf, select: (c) => c.state}); // Poll: a fact only on change
 const approval = ask(owner, plan);                 // ask, grown: the approval keeps a hash of what it saw
 const touched = guarded(diff, rows);               // guarded files, grown: a change to the exam asks the owner
 ```
@@ -140,10 +143,10 @@ const ReviewBrief = Schema.Struct({diff: Diff, criteria: Criteria, plan: Plan});
 
 ```ts
 // A sketch.
-// Built: packages/pipeline/src/poll.ts. `by` names the part of a read that counts;
+// Built: packages/pipeline/src/poll.ts, which still says `by`. `select` names the part of a read that counts;
 // `key` is already the child's id. The child hands back the change; the parent writes the fact.
 // `limit` bounds each read: a read that never answers counts as failed, so polling never stops.
-const ci = poll("ci", {every: "1m", limit: "20s", read: checksOf, by: (checks) => checks.state});
+const ci = poll("ci", {every: "1m", limit: "20s", read: checksOf, select: (checks) => checks.state});
 // tick 1: "pending", no fact yet  -> {fact: "pr", pr: 74, state: "pending"}
 // tick 2: "pending" again         -> nothing
 // tick 3: no answer in 20s        -> nothing, and tick 4 reads again

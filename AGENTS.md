@@ -194,6 +194,11 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   `reasonCode`. A key does not say again what its parent already says: inside
   an outcome, the reason is `why`, not `outcomeReason`. If a short word could
   mean two things, pick a clearer short word before you reach for a long one.
+  A short word that already means something here keeps that one meaning: `at` is a
+  time (the referee's), `by` is who wrote it, `said` is the writer's clock, `_tag` is
+  the case. A place, a path, a ref, a state, a reason or a total gets its own word
+  (`location`, `path`, `ref`, `state`, `why`, `total`). `rg` the word under
+  `docs/direction/` and `next/` before you use it.
 
   ```ts
   // Values as they read. In `next/`, Effect Schema writes the `_tag`; nobody types it.

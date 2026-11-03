@@ -3,6 +3,9 @@
 Proposed 2026-10-11. An idea being worked out, not a decision. It belongs to
 the review machine, which is not designed yet.
 
+Keys renamed 2026-11-03 (short words keep one meaning): a recheck's `by` became `_tag`, written
+by `Schema.TaggedStruct`.
+
 2026-10-11: the review stage is the next stage to be rethought, and it is
 treated as a test of how far a review can be done in code.
 
@@ -238,11 +241,11 @@ const Place = Schema.Struct({ file: Schema.String, line: Schema.String });
 
 // How code can ask "is it fixed?" with no reader. Absent: a reader answers.
 const Recheck = Schema.Union([
-  Schema.Struct({ by: Schema.Literal("check_run"), name: Schema.String }),
-  Schema.Struct({ by: Schema.Literal("merges_with_base") }),
-  Schema.Struct({ by: Schema.Literal("issue_state"), issue: Schema.Number, want: Schema.Literals(["open", "closed"]) }),
-  Schema.Struct({ by: Schema.Literal("path_exists"), path: Schema.String }),
-  Schema.Struct({ by: Schema.Literal("pattern_gone"), pattern: Schema.String, under: Schema.String }),
+  Schema.TaggedStruct("check_run", { name: Schema.String }),
+  Schema.TaggedStruct("merges_with_base", {}),
+  Schema.TaggedStruct("issue_state", { issue: Schema.Number, want: Schema.Literals(["open", "closed"]) }),
+  Schema.TaggedStruct("path_exists", { path: Schema.String }),
+  Schema.TaggedStruct("pattern_gone", { pattern: Schema.String, under: Schema.String }),
 ]);
 
 const Finding = Schema.Struct({
