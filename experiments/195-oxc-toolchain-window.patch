@@ -1,8 +1,8 @@
 diff --git a/next/build.ts b/next/build.ts
-index f7e11d45..5b2c506d 100644
+index f7e11d45..b18cae5e 100644
 --- a/next/build.ts
 +++ b/next/build.ts
-@@ -1,14 +1,67 @@
+@@ -1,14 +1,69 @@
  import {createHash} from "node:crypto";
  import {fileURLToPath} from "node:url";
  import {build} from "esbuild";
@@ -14,7 +14,8 @@ index f7e11d45..5b2c506d 100644
 +//
 +// Experiment 195 part 2 (scratch, not for PR 223): BUILD=rolldown builds every bundle with Rolldown
 +// and runs oxc's React Compiler on the window's .tsx files. TILE_MEMO=1 wraps the tile in a hand
-+// `memo`. MODE=development builds React's development copy, where Strict Mode runs twice.
++// `memo`. MODE=development builds React's development copy, where Strict Mode runs twice. Part 3:
++// TILE_SHAPE=own or narrow, and TILE_HEAVY=<loops> of work per tile draw.
  
  const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 +const BUILD = process.env.BUILD ?? "esbuild";
@@ -27,6 +28,7 @@ index f7e11d45..5b2c506d 100644
 +	"process.env.NODE_ENV": JSON.stringify(MODE),
 +	"process.env.TILE_MEMO": JSON.stringify(TILE_MEMO),
 +	"process.env.TILE_SHAPE": JSON.stringify(process.env.TILE_SHAPE ?? "inline"),
++	"process.env.TILE_HEAVY": JSON.stringify(process.env.TILE_HEAVY ?? "0"),
 +};
 +
 +/** What the Compiler did, per file: the bundle's report. */
@@ -70,7 +72,7 @@ index f7e11d45..5b2c506d 100644
  	const out = await build({
  		entryPoints: [here(entry)],
  		bundle: true,
-@@ -19,6 +72,7 @@ const forWorkerd = async (entry: string, minify: boolean): Promise<string> => {
+@@ -19,6 +74,7 @@ const forWorkerd = async (entry: string, minify: boolean): Promise<string> => {
  		mainFields: ["module", "main"],
  		conditions: ["workerd", "worker", "browser", "import"],
  		external: ["cloudflare:workers"],
@@ -78,7 +80,7 @@ index f7e11d45..5b2c506d 100644
  		minify,
  		legalComments: "none",
  		logLevel: "silent",
-@@ -27,6 +81,19 @@ const forWorkerd = async (entry: string, minify: boolean): Promise<string> => {
+@@ -27,6 +83,19 @@ const forWorkerd = async (entry: string, minify: boolean): Promise<string> => {
  };
  
  const forBrowser = async (entry: string): Promise<string> => {
@@ -98,7 +100,7 @@ index f7e11d45..5b2c506d 100644
  	const out = await build({
  		entryPoints: [here(entry)],
  		bundle: true,
-@@ -35,8 +102,9 @@ const forBrowser = async (entry: string): Promise<string> => {
+@@ -35,8 +104,9 @@ const forBrowser = async (entry: string): Promise<string> => {
  		platform: "browser",
  		target: "es2022",
  		jsx: "automatic",
@@ -110,7 +112,7 @@ index f7e11d45..5b2c506d 100644
  		legalComments: "none",
  		logLevel: "silent",
  	});
-@@ -55,11 +123,19 @@ export type Bundles = {
+@@ -55,11 +125,19 @@ export type Bundles = {
  };
  
  export const buildAll = async (): Promise<Bundles> => {
@@ -130,54 +132,86 @@ index f7e11d45..5b2c506d 100644
 +	}
  	return {brain, window, programs: {counter, desk}};
  };
+diff --git a/next/src/brain.ts b/next/src/brain.ts
+index 0a55b00c..378e80a6 100644
+--- a/next/src/brain.ts
++++ b/next/src/brain.ts
+@@ -85,8 +85,14 @@ export default {
+ 		}
+ 		const {pathname} = new URL(request.url);
+ 		if (pathname === "/") {
++			// Experiment 195 part 3: cross-origin isolated, so the bench's clock reads to 5 µs, not 100.
+ 			return new Response(PAGE, {
+-				headers: {"content-type": "text/html; charset=utf-8", "cache-control": "no-store"},
++				headers: {
++					"content-type": "text/html; charset=utf-8",
++					"cache-control": "no-store",
++					"cross-origin-opener-policy": "same-origin",
++					"cross-origin-embedder-policy": "require-corp",
++				},
+ 			});
+ 		}
+ 		if (pathname === "/window.js") {
 diff --git a/next/src/desktop/desk.ts b/next/src/desktop/desk.ts
-index b9c5730b..32acfb99 100644
+index b9c5730b..78052f45 100644
 --- a/next/src/desktop/desk.ts
 +++ b/next/src/desktop/desk.ts
-@@ -57,11 +57,26 @@ type DeskMsg = typeof DeskMsg.Type;
+@@ -57,11 +57,31 @@ type DeskMsg = typeof DeskMsg.Type;
  /** The desk's pid: one person's desk, with its numbered workspaces inside. */
  export const DESK = "desk:owner";
  
-+/** Experiment 195 part 2: DESK_TILES=9 starts a 3 by 3 desk, for the render bench. */
-+const grid = (side: number): Split => ({
++/**
++ * Experiment 195 parts 2 and 3: DESK_TILES=9, 30 or 60 starts a desk of that many tiles, in columns
++ * and rows, for the render bench.
++ */
++const GRIDS: Record<string, readonly [number, number]> = {"9": [3, 3], "30": [6, 5], "60": [10, 6]};
++const grid = ([cols, rows]: readonly [number, number]): Split => ({
 +	dir: "row",
-+	parts: Array.from({length: side}, (_, col) => ({
-+		percent: 100 / side,
++	parts: Array.from({length: cols}, (_, col) => ({
++		percent: 100 / cols,
 +		inner: {
 +			dir: "column" as const,
-+			parts: Array.from({length: side}, (_, row) => {
-+				const k = col * side + row + 1;
-+				return {percent: 100 / side, inner: {id: `t${k}`, shows: `counter:${k}`, keep: "failed" as const}};
++			parts: Array.from({length: rows}, (_, row) => {
++				const k = col * rows + row + 1;
++				return {percent: 100 / rows, inner: {id: `t${k}`, shows: `counter:${k}`, keep: "failed" as const}};
 +			}),
 +		},
 +	})),
 +});
++const benchGrid = GRIDS[process.env.DESK_TILES ?? ""];
 +
  const first: Desktop = {
  	workspaces: [
  		{
  			n: 1,
 -			layout: {
-+			layout: process.env.DESK_TILES === "9" ? grid(3) : {
++			layout: benchGrid !== undefined ? grid(benchGrid) : {
  				dir: "row",
  				parts: [
  					{percent: 50, inner: {id: "t1", shows: "counter:1", keep: "failed"}},
 diff --git a/next/src/window/main.tsx b/next/src/window/main.tsx
-index 02fac44f..291a7953 100644
+index 02fac44f..eb6dbdd2 100644
 --- a/next/src/window/main.tsx
 +++ b/next/src/window/main.tsx
-@@ -2,6 +2,7 @@ import type {BootedRunHandle} from "@demlik/tea";
+@@ -1,9 +1,10 @@
+ import type {BootedRunHandle} from "@demlik/tea";
  import {run} from "@demlik/tea/effect";
  import {useRuntime} from "@demlik/tea/react";
- import {Effect, Option, Queue, Stream} from "effect";
+-import {Effect, Option, Queue, Stream} from "effect";
++import {Effect, Option, Queue, Schema, Stream} from "effect";
 +import {memo, StrictMode} from "react";
  import {createRoot} from "react-dom/client";
- import {DESK, type Workspace} from "../desktop/desk.ts";
+-import {DESK, type Workspace} from "../desktop/desk.ts";
++import {DESK, DesktopSchema, type Workspace} from "../desktop/desk.ts";
  import {fold, type Placed, type Size} from "../desktop/fold.ts";
-@@ -102,6 +103,58 @@ function Tile(props: {
+ import {CounterView, countIn} from "../programs/counter/view.tsx";
+ import {deskIn, type Model, type Msg, startWindow, windowMachine} from "./machine.ts";
+@@ -102,17 +103,69 @@ function Tile(props: {
  	);
  }
  
+-const statusWords = (model: Model): string => {
+-	switch (model.link.is) {
 +/**
 + * Experiment 195 part 2: the same tile, given only stable props (the dispatch and the workspace's
 + * number), so it builds its own handlers. The shape a skip needs; the one above is the slice's own.
@@ -230,9 +264,32 @@ index 02fac44f..291a7953 100644
 +const TileView = process.env.TILE_MEMO === "1" ? memo(Tile) : Tile;
 +const StableView = process.env.TILE_MEMO === "1" ? memo(StableTile) : StableTile;
 +
- const statusWords = (model: Model): string => {
- 	switch (model.link.is) {
++const statusWords = (link: Model["link"]): string => {
++	switch (link.is) {
  		case "online":
+ 			return "connected";
+ 		case "waiting":
+-			return `link lost, reconnecting (try ${model.link.tries})`;
++			return `link lost, reconnecting (try ${link.tries})`;
+ 		case "dialing":
+ 		case "hello":
+-			return model.link.tries === 0
++			return link.tries === 0
+ 				? "connecting"
+-				: `link lost, reconnecting (try ${model.link.tries})`;
++				: `link lost, reconnecting (try ${link.tries})`;
+ 	}
+ };
+ 
+@@ -122,7 +175,7 @@ function Status({model}: {readonly model: Model}) {
+ 	return (
+ 		<footer className="status" data-link={model.link.is}>
+ 			<span className="dot" />
+-			<span data-status="">{statusWords(model)}</span>
++			<span data-status="">{statusWords(model.link)}</span>
+ 			<span className="faint" data-ledger={newest}>
+ 				ledger rev {newest}
+ 			</span>
 @@ -150,8 +203,18 @@ function Desk(props: {
  	};
  	return (
@@ -254,7 +311,7 @@ index 02fac44f..291a7953 100644
  					key={tile.id}
  					tile={tile}
  					focused={workspace.focus === tile.id}
-@@ -159,11 +222,123 @@ function Desk(props: {
+@@ -159,11 +222,355 @@ function Desk(props: {
  					focus={() => focus(tile.id)}
  					press={(m) => dispatch({type: "press", pid: tile.shows, m, said: said()})}
  				/>
@@ -306,6 +363,7 @@ index 02fac44f..291a7953 100644
 +	readonly dispatch: (msg: Msg) => void;
 +}) {
 +	const {id, shows, folded, focused, data, n, dispatch} = props;
++	const heat = spin(countIn(data));
 +	const box = {left: props.x, top: props.y, width: props.w, height: props.h};
 +	const focus = () => {
 +		if (focused) return;
@@ -319,6 +377,7 @@ index 02fac44f..291a7953 100644
 +			data-tile={id}
 +			data-folded={folded}
 +			data-focused={focused}
++			data-heat={heat}
 +			style={box}
 +			onClick={focus}
 +		>
@@ -372,29 +431,293 @@ index 02fac44f..291a7953 100644
  	);
  }
  
-+const DeskView =
-+	process.env.TILE_SHAPE === "hoisted" ? HoistedDesk : process.env.TILE_SHAPE === "flat" ? FlatDesk : Desk;
++/**
++ * Experiment 195 part 3: a narrow handle, so one part of the window reads only its own part of the
++ * model through the same `useRuntime`, and sends only its own messages (Elm's `Html.map`).
++ *
++ * tea 0.21.0's hook takes no selector: `useRuntime(handle)` is `useSyncExternalStore(subscribe,
++ * getState)` over the whole model, so any component that calls it runs on every change. A part is
++ * read by handing the same hook a handle whose `getState` returns only that part, the same object
++ * while it holds. The awkward bit is the type: `BootedRunHandle` has eight fields and the hook uses
++ * three (`subscribe`, `getState`, `dispatch`). The other five must still be filled, and `observe`
++ * cannot be, because a window Msg does not map back to the part's own.
++ */
++const narrow = <A, N extends {readonly type: string}>(
++	root: BootedRunHandle<Model, Msg>,
++	pick: (model: Model) => A,
++	same: (a: A, b: A) => boolean,
++	send: (msg: N) => Msg,
++): BootedRunHandle<A, N> => {
++	let seen: {readonly model: Model; readonly part: A} | undefined;
++	const getState = (): A => {
++		const model = root.getState();
++		if (seen?.model === model) return seen.part;
++		const next = pick(model);
++		const part = seen !== undefined && same(seen.part, next) ? seen.part : next;
++		seen = {model, part};
++		return part;
++	};
++	const part: BootedRunHandle<A, N> = {
++		getState,
++		subscribe: (listener) => root.subscribe(listener),
++		dispatch: (msg) => root.dispatch(send(msg)),
++		onBoot: (handler) => {
++			handler(getState());
++			return () => {};
++		},
++		on: () => () => {},
++		observe: () => {
++			throw new Error("a narrow handle cannot observe: a window Msg does not map back to a part's");
++		},
++		// The root owns the run; a part never stops it.
++		stop: () => Promise.resolve(),
++		get ready() {
++			return Promise.resolve(part);
++		},
++	};
++	return part;
++};
++
++const shallow = <A extends object>(a: A, b: A): boolean =>
++	Object.keys(a).every((k) => Object.is(Reflect.get(a, k), Reflect.get(b, k)));
++
++/** What a tile may say, about itself only. */
++type TileMsg = {readonly type: "plus"} | {readonly type: "focus"};
++
++/**
++ * Each tile's own handle: its view's data in, its own messages out. Made once per tile and kept in
++ * this map across patches and focus moves, so `send` is the same function on every draw.
++ */
++const tileHandles = new WeakMap<BootedRunHandle<Model, Msg>, Map<string, BootedRunHandle<unknown, TileMsg>>>();
++const tileHandle = (root: BootedRunHandle<Model, Msg>, n: number, id: string, shows: string) => {
++	const mine = tileHandles.get(root) ?? new Map<string, BootedRunHandle<unknown, TileMsg>>();
++	tileHandles.set(root, mine);
++	const key = `${n}/${id}/${shows}`;
++	const known = mine.get(key);
++	if (known !== undefined) return known;
++	const made = narrow<unknown, TileMsg>(
++		root,
++		(model) => model.views[shows]?.data,
++		Object.is,
++		(m) =>
++			m.type === "plus"
++				? {type: "press", pid: shows, m, said: new Date().toISOString()}
++				: {type: "press", pid: DESK, m: {type: "focus", n, tile: id}, said: new Date().toISOString()},
++	);
++	mine.set(key, made);
++	return made;
++};
++
++/** Experiment 195 part 3: work keyed on the tile's own data, for the heavy-tile runs. */
++const HEAVY = Number(process.env.TILE_HEAVY ?? "0");
++const spin = (seed: string): number => {
++	let h = 0;
++	for (let i = 0; i < HEAVY; i++) h = (h * 31 + seed.charCodeAt(i % seed.length)) | 0;
++	return h & 1;
++};
++
++/** Experiment 195 part 3: way 3, a tile that reads its own view and holds only its own send. */
++function OwnTile(props: {
++	readonly id: string;
++	readonly shows: string;
++	readonly x: number;
++	readonly y: number;
++	readonly w: number;
++	readonly h: number;
++	readonly folded: boolean;
++	readonly focused: boolean;
++	readonly own: BootedRunHandle<unknown, TileMsg>;
++}) {
++	const {id, shows, folded, focused} = props;
++	const [data, send] = useRuntime(props.own);
++	const heat = spin(countIn(data));
++	const box = {left: props.x, top: props.y, width: props.w, height: props.h};
++	const focus = () => {
++		if (!focused) send({type: "focus"});
++	};
++	return (
++		<div
++			className={`tile${focused ? " focused" : ""}${folded ? " folded" : ""}`}
++			data-tile={id}
++			data-folded={folded}
++			data-focused={focused}
++			data-heat={heat}
++			style={box}
++			onClick={focus}
++		>
++			{folded ? (
++				<>
++					<span className="strip-name">{id}</span>
++					<span className="strip-count" data-count="">
++						{countIn(data)}
++					</span>
++				</>
++			) : (
++				<>
++					<header className="tile-head">
++						<span>{id}</span>
++						<span className="tile-shows">{shows}</span>
++					</header>
++					<CounterView data={data} press={send} />
++				</>
++			)}
++		</div>
++	);
++}
++
++const OwnView = process.env.TILE_MEMO === "1" ? memo(OwnTile) : OwnTile;
++
++/** Way 3's desk: it reads the layout, the size and the focus, and never `model.views`. */
++function OwnDesk(props: {
++	readonly workspace: Workspace;
++	readonly size: Size;
++	readonly root: BootedRunHandle<Model, Msg>;
++}) {
++	const {workspace, size, root} = props;
++	return (
++		<main className="desk" data-layout={JSON.stringify(workspace.layout)}>
++			{fold(workspace.layout, size, workspace.focus).map((tile) => (
++				<OwnView
++					key={tile.id}
++					id={tile.id}
++					shows={tile.shows}
++					x={tile.x}
++					y={tile.y}
++					w={tile.w}
++					h={tile.h}
++					folded={tile.folded}
++					focused={workspace.focus === tile.id}
++					own={tileHandle(root, workspace.n, tile.id, tile.shows)}
++				/>
++			))}
++		</main>
++	);
++}
++
++/** Way 3 with the top narrowed too: `App` reads the desk's view and the size, nothing else. */
++type Top = {readonly desk: Model["views"][string] | undefined; readonly size: Size};
++type Line = {
++	readonly link: Model["link"];
++	readonly waiting: number;
++	readonly refused: string | null;
++	readonly peer: string;
++	readonly newest: number;
++};
++
++function NarrowStatus({line}: {readonly line: BootedRunHandle<Line, never>}) {
++	const [{link, waiting, refused, peer, newest}] = useRuntime(line);
++	return (
++		<footer className="status" data-link={link.is}>
++			<span className="dot" />
++			<span data-status="">{statusWords(link)}</span>
++			<span className="faint" data-ledger={newest}>
++				ledger rev {newest}
++			</span>
++			{waiting > 0 ? (
++				<span className="faint" data-waiting={waiting}>
++					{waiting} waiting to send
++				</span>
++			) : null}
++			{refused === null ? null : <span className="faint">refused: {refused}</span>}
++			<span className="faint right">{peer}</span>
++		</footer>
++	);
++}
++
++function NarrowApp(props: {
++	readonly root: BootedRunHandle<Model, Msg>;
++	readonly top: BootedRunHandle<Top, never>;
++	readonly line: BootedRunHandle<Line, never>;
++}) {
++	const [{desk, size}] = useRuntime(props.top);
++	const decoded = desk === undefined ? Option.none() : Schema.decodeUnknownOption(DesktopSchema)(desk.data);
++	const workspace = Option.isSome(decoded)
++		? decoded.value.workspaces.find((w) => w.n === WORKSPACE)
++		: undefined;
++	return (
++		<>
++			{workspace !== undefined ? (
++				<OwnDesk workspace={workspace} size={size} root={props.root} />
++			) : (
++				<main className="desk empty">waiting for the desk</main>
++			)}
++			<NarrowStatus line={props.line} />
++		</>
++	);
++}
++
++const narrowParts = (root: BootedRunHandle<Model, Msg>) => ({
++	top: narrow<Top, never>(root, (m) => ({desk: m.views[DESK], size: m.size}), shallow, (m) => m),
++	line: narrow<Line, never>(
++		root,
++		(m) => ({
++			link: m.link,
++			waiting: m.outbox.length,
++			refused: m.refused,
++			peer: m.peer,
++			newest: Math.max(0, ...Object.values(m.views).map((shown) => shown.ledger)),
++		}),
++		shallow,
++		(m) => m,
++	),
++});
++
++const DeskView = process.env.TILE_SHAPE === "hoisted" ? HoistedDesk : Desk;
 +
  function App({handle}: {readonly handle: BootedRunHandle<Model, Msg>}) {
  	const [model, dispatch] = useRuntime(handle);
  	const desk = deskIn(model);
-@@ -173,7 +348,7 @@ function App({handle}: {readonly handle: BootedRunHandle<Model, Msg>}) {
+@@ -173,7 +580,13 @@ function App({handle}: {readonly handle: BootedRunHandle<Model, Msg>}) {
  	return (
  		<>
  			{workspace !== undefined ? (
 -				<Desk model={model} workspace={workspace} dispatch={dispatch} />
-+				<DeskView model={model} workspace={workspace} dispatch={dispatch} />
++				process.env.TILE_SHAPE === "own" ? (
++					<OwnDesk workspace={workspace} size={model.size} root={handle} />
++				) : process.env.TILE_SHAPE === "flat" ? (
++					<FlatDesk model={model} workspace={workspace} dispatch={dispatch} />
++				) : (
++					<DeskView model={model} workspace={workspace} dispatch={dispatch} />
++				)
  			) : (
  				<main className="desk empty">waiting for the desk</main>
  			)}
-@@ -216,7 +391,11 @@ const program = Effect.gen(function* () {
+@@ -207,8 +620,23 @@ const program = Effect.gen(function* () {
+ 	});
+ 	const runtime = yield* booting.ready;
+ 	// The Effect engine's handle speaks Effect; `useRuntime` speaks Promise. Only the verbs differ.
++	// Experiment 195 part 3: the bench's clock. The first notify of a change marks the time; the
++	// probe's commit hook reads it. A mark no commit took (nothing drawn changed) is dropped.
++	const mark = () => {
++		if (Reflect.get(window, "__notifyAt") !== undefined) return;
++		const at = performance.now();
++		Reflect.set(window, "__notifyAt", at);
++		setTimeout(() => {
++			if (Reflect.get(window, "__notifyAt") === at) Reflect.set(window, "__notifyAt", undefined);
++		}, 0);
++	};
+ 	const handle: BootedRunHandle<Model, Msg> = {
+ 		...runtime,
++		subscribe: (listener) =>
++			runtime.subscribe(() => {
++				mark();
++				listener();
++			}),
+ 		dispatch: (msg) => Effect.runPromise(runtime.dispatch(msg).pipe(Effect.ignore)),
+ 		stop: () => Effect.runPromise(runtime.stop()),
+ 		get ready() {
+@@ -216,7 +644,15 @@ const program = Effect.gen(function* () {
  		},
  	};
  	const root = document.getElementById("root");
 -	if (root !== null) createRoot(root).render(<App handle={handle} />);
 +	if (root !== null) createRoot(root).render(
 +			<StrictMode>
-+				<App handle={handle} />
++				{process.env.TILE_SHAPE === "narrow" ? (
++					<NarrowApp root={handle} {...narrowParts(handle)} />
++				) : (
++					<App handle={handle} />
++				)}
 +			</StrictMode>,
 +		);
  	return yield* Effect.never;

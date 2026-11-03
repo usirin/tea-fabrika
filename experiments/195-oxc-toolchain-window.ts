@@ -15,10 +15,14 @@ import {chromium, type Page} from "playwright";
 // `195-oxc-toolchain-window.patch`, add `rolldown` 1.2.13 and `oxc-transform-react` 0.156.0 to
 // `next/package.json` (exact), copy this file to `next/bench-195.ts`, and run it from there.
 // Shapes: `inline` is the slice's own desk, `stable` passes the dispatch instead of handlers,
-// `hoisted` also puts the fold on its own line, `flat` passes the tile as plain values.
+// `hoisted` also puts the fold on its own line, `flat` passes the tile as plain values. Part 3 adds
+// `own`, where each tile reads its own view through `useRuntime` on a narrow handle, and `narrow`,
+// where `App` and `Status` read only their own parts too. Part 3 also times each commit, from the
+// store's first notify to React's commit hook, and takes desks of 9, 30 and 60 tiles.
 //
 //   node next/bench-195.ts --out=<file.json> [--runs=3] [--tiles=9] [--mode=production]
-//     [--variants=esbuild:inline:0,rolldown:inline:0,...]   build:shape:memo
+//     [--patches=10] [--heavy=0]
+//     [--variants=esbuild:inline:0,rolldown:inline:0,...]   build:shape:memo[:tiles[:heavy]]
 
 const flag = (name: string): string | undefined =>
 	process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
@@ -28,21 +32,23 @@ const RUNS = Number(flag("runs") ?? "3");
 const TILES = flag("tiles") ?? "9";
 const MODE = flag("mode") ?? "production";
 const SCRATCH = flag("scratch") ?? tmpdir();
+const PATCHES = Number(flag("patches") ?? "10");
+const HEAVY = flag("heavy") ?? "0";
 const VARIANTS = (
 	flag("variants") ??
 	"esbuild:inline:0,esbuild:inline:1,esbuild:stable:0,esbuild:stable:1,rolldown:inline:0,rolldown:inline:1,rolldown:stable:0,rolldown:stable:1"
 )
 	.split(",")
 	.map((v) => {
-		const [build = "", shape = "", memo = ""] = v.split(":");
-		return {build, shape, memo};
+		const [build = "", shape = "", memo = "", tiles = TILES, heavy = HEAVY] = v.split(":");
+		return {build, shape, memo, tiles, heavy};
 	});
 const MOVES = 10;
 
 /** Experiment 176's probe, cut down: renders per tile, from React's devtools hook. */
 const PROBE = String.raw`(() => {
 	const COMPONENT = new Set([0, 1, 11, 14, 15]);
-	const fresh = () => ({commits: 0, total: 0, outside: 0, perTile: {}, tileShell: {}});
+	const fresh = () => ({commits: 0, total: 0, outside: 0, perTile: {}, tileShell: {}, ms: []});
 	let now = fresh();
 	const visit = (f, tile, owner) => {
 		for (let c = f; c !== null; c = c.sibling) {
@@ -66,7 +72,12 @@ const PROBE = String.raw`(() => {
 	window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
 		isDisabled: false, supportsFiber: true, renderers: new Map(), inject: () => 1, checkDCE: () => {},
 		onScheduleFiberRoot: () => {}, onCommitFiberUnmount: () => {}, onPostCommitFiberRoot: () => {},
-		onCommitFiberRoot: (_id, root) => { now.commits += 1; visit(root.current, null, null); },
+		onCommitFiberRoot: (_id, root) => {
+			const at = window.__notifyAt;
+			if (at !== undefined) { now.ms.push(performance.now() - at); window.__notifyAt = undefined; }
+			now.commits += 1;
+			visit(root.current, null, null);
+		},
 	};
 	window.__probe = {reset: () => { now = fresh(); }, read: () => now};
 })();`;
@@ -114,11 +125,21 @@ type Probe = {
 	outside: number;
 	perTile: Record<string, number>;
 	tileShell: Record<string, number>;
+	ms: number[];
 };
 const reset = (page: Page) => page.evaluate(() => Reflect.get(window, "__probe").reset());
 const read = (page: Page) => page.evaluate(() => Reflect.get(window, "__probe").read() as Probe);
 
-const oneRun = async (variant: {build: string; shape: string; memo: string}, run: number) => {
+type Variant = {build: string; shape: string; memo: string; tiles: string; heavy: string};
+const name = (v: Variant) => `${v.build}:${v.shape}:${v.memo}:${v.tiles}:${v.heavy}`;
+/** Each tile at least 240 by 140 (fold.ts's MIN_W and MIN_H), so none folds. */
+const VIEWPORT: Record<string, {width: number; height: number}> = {
+	"9": {width: 1280, height: 800},
+	"30": {width: 1600, height: 900},
+	"60": {width: 2560, height: 1000},
+};
+
+const oneRun = async (variant: Variant, run: number) => {
 	const port = await freePort();
 	const data = mkdtempSync(join(SCRATCH, "b195-"));
 	const report = join(data, "build.json");
@@ -127,7 +148,8 @@ const oneRun = async (variant: {build: string; shape: string; memo: string}, run
 		BUILD: variant.build,
 		TILE_SHAPE: variant.shape,
 		TILE_MEMO: variant.memo,
-		DESK_TILES: TILES,
+		TILE_HEAVY: variant.heavy,
+		DESK_TILES: variant.tiles,
 		MODE,
 		BUILD_REPORT: report,
 	};
@@ -157,14 +179,19 @@ const oneRun = async (variant: {build: string; shape: string; memo: string}, run
 	try {
 		await until("brain up", async () => up);
 		const built = JSON.parse(readFileSync(report, "utf8"));
-		const context = await browser.newContext({viewport: {width: 1280, height: 800}});
+		const context = await browser.newContext({
+			viewport: VIEWPORT[variant.tiles] ?? {width: 1280, height: 800},
+		});
 		const a = await context.newPage();
 		a.on("console", (m) => {
 			if (m.type() === "error" || m.type() === "warning") logged.push(`${m.type()}: ${m.text()}`);
 		});
 		a.on("pageerror", (e) => logged.push(`pageerror: ${e.message}`));
 		await a.addInitScript(PROBE);
-		const tiles = TILES === "9" ? Array.from({length: 9}, (_, i) => `t${i + 1}`) : ["t1", "t2"];
+		const tiles =
+			VIEWPORT[variant.tiles] !== undefined
+				? Array.from({length: Number(variant.tiles)}, (_, i) => `t${i + 1}`)
+				: ["t1", "t2"];
 		const loadAt = Date.now();
 		await a.goto(`http://127.0.0.1:${port}/?ping=60s`);
 		await online(a);
@@ -174,6 +201,7 @@ const oneRun = async (variant: {build: string; shape: string; memo: string}, run
 			return true;
 		});
 		const firstDrawMs = Date.now() - loadAt;
+		const isolated = await a.evaluate(() => crossOriginIsolated);
 		const b = await context.newPage();
 		b.on("console", (m) => {
 			if (m.type() === "error" || m.type() === "warning") logged.push(`b ${m.type()}: ${m.text()}`);
@@ -200,16 +228,17 @@ const oneRun = async (variant: {build: string; shape: string; memo: string}, run
 
 		// A patch: the other window presses t1, this one only hears it.
 		await reset(a);
-		for (let i = 1; i <= MOVES; i++) {
+		for (let i = 1; i <= PATCHES; i++) {
 			await b.locator('[data-tile="t1"] .plus').click();
 			await countIs(a, "t1", i);
 			await pause(120);
 		}
 		const patch = await read(a);
+		const folded = await a.locator('[data-folded="true"]').count();
 
 		// A press in this window: outbox, answer and patch.
 		await reset(a);
-		for (let i = MOVES + 1; i <= 2 * MOVES; i++) {
+		for (let i = PATCHES + 1; i <= PATCHES + MOVES; i++) {
 			await a.locator('[data-tile="t1"] .plus').click();
 			await countIs(a, "t1", i);
 			await countIs(b, "t1", i);
@@ -233,12 +262,13 @@ const oneRun = async (variant: {build: string; shape: string; memo: string}, run
 		const keys = {enterAndSpace: true, focusedBefore: focusedClass, tabLandsIn: afterTab};
 
 		await context.close();
-		const per = (p: Probe) => ({
-			commits: p.commits / MOVES,
-			total: p.total / MOVES,
-			outside: p.outside / MOVES,
-			perTile: Object.fromEntries(tiles.map((t) => [t, (p.perTile[t] ?? 0) / MOVES])),
-			tileShell: Object.fromEntries(tiles.map((t) => [t, (p.tileShell[t] ?? 0) / MOVES])),
+		const per = (p: Probe, moves = MOVES) => ({
+			commits: p.commits / moves,
+			total: p.total / moves,
+			outside: p.outside / moves,
+			perTile: Object.fromEntries(tiles.map((t) => [t, (p.perTile[t] ?? 0) / moves])),
+			tileShell: Object.fromEntries(tiles.map((t) => [t, (p.tileShell[t] ?? 0) / moves])),
+			ms: p.ms,
 		});
 		return {
 			...variant,
@@ -251,8 +281,10 @@ const oneRun = async (variant: {build: string; shape: string; memo: string}, run
 			brainUpMs: upAt - spawned,
 			workerdReadyMs: up?.ms,
 			firstDrawMs,
+			isolated,
+			folded,
 			focusMove: per(focusMove),
-			patch: per(patch),
+			patch: per(patch, PATCHES),
 			press: per(press),
 			keys,
 			console: logged,
@@ -275,6 +307,11 @@ const oneRun = async (variant: {build: string; shape: string; memo: string}, run
 	}
 };
 
+const median = (xs: readonly number[]): number => {
+	const sorted = [...xs].sort((a, b) => a - b);
+	return sorted[Math.floor(sorted.length / 2)] ?? Number.NaN;
+};
+
 const results: unknown[] = [];
 for (let run = 1; run <= RUNS; run++) {
 	for (const variant of VARIANTS) {
@@ -282,13 +319,11 @@ for (let run = 1; run <= RUNS; run++) {
 			const r = await oneRun(variant, run);
 			results.push(r);
 			process.stdout.write(
-				`${variant.build}:${variant.shape}:${variant.memo} run ${run}: build ${r.buildMs} ms, up ${r.brainUpMs} ms, draw ${r.firstDrawMs} ms, focus ${r.focusMove.total}, patch ${r.patch.total}, press ${r.press.total}, console ${r.console.length}\n`,
+				`${name(variant)} run ${run}: build ${r.buildMs} ms, draw ${r.firstDrawMs} ms, isolated ${r.isolated}, folded ${r.folded}, focus ${r.focusMove.total}, patch ${r.patch.total}, press ${r.press.total}, patch ms ${median(r.patch.ms).toFixed(2)}, console ${r.console.length}\n`,
 			);
 		} catch (error) {
 			results.push({...variant, run, failed: String(error)});
-			process.stdout.write(
-				`${variant.build}:${variant.shape}:${variant.memo} run ${run}: FAIL ${String(error)}\n`,
-			);
+			process.stdout.write(`${name(variant)} run ${run}: FAIL ${String(error)}\n`);
 		}
 		writeFileSync(OUT, JSON.stringify(results, null, "\t"));
 	}

@@ -8,6 +8,8 @@ model was called, nothing in the app changed. It answers the open question in ex
 ([PR 320](https://github.com/usirin/tea-fabrika/pull/320)) after the owner ruled out Babel.
 **[Part 2: a real window](#part-2-a-real-window)**, the same day, built `next/`'s window this way
 and ran it, and measured 194's tile `memo` question on it.
+**[Part 3: a bigger desk, timed](#part-3-a-bigger-desk-timed)** tried a third way to draw tiles,
+on desks of 9, 30 and 60, and timed each patch.
 
 **Which version.** "Today" and "main" mean today's app (`apps/fabrika`, `programs/*`) at
 `d691f694`. `next/` means PR 223's branch at `7c1d0730`. **Decided before this study (the owner,
@@ -66,6 +68,10 @@ const bundle = await rolldown({input: "src/window/main.tsx", platform: "browser"
    skips what is inside a tile that did not change, but only once the tile gets stable props, and
    it never skips the tile function itself. A hand `memo` skips nothing until the tile's props are
    plain values. Details in [the tile memo](#the-tile-memo).
+8. **Part 3: tiles that read their own state cost 3 renders a patch, on any desk size.** It
+   works only once the top of the window stops reading the whole model too. Then only the tile
+   that changed, its counter view and the status line run. Every way stays under 0.35 ms a patch
+   at the median, so the case for it is renders and what a tile can reach, not time you can feel.
 
 **Lean for `next/`, 85% after part 2 (was 75%): Rolldown as a library in `next/build.ts`, with the
 Compiler as the 20-line plugin above, for the window and for the Workers. No Vite dev server and no
@@ -495,6 +501,190 @@ for whoever lists tiles: a tile gets plain values and `dispatch`, never a fresh 
 
 $0 again: no model, no deploy, no network beyond the npm registry for two packages. Rolldown and
 `oxc-transform-react` were added only in the scratch worktree; nothing changed on main.
+
+## Part 3: a bigger desk, timed
+
+Run 2026-11-02, the same day, on `next/` only, with Rolldown and the Compiler. **The cheapest way
+per patch is the third one: each tile reads its own view, and the top of the window reads only
+the desk and the size.** A patch then costs 3 renders on 9, 30 or 60 tiles: the tile that changed,
+its counter view, and the status line. Today's lean (`flat`, no `memo`) costs 13, 34 and 64. A
+hand `memo` costs 5. **In time, nothing here can be felt:** every median is between 0.14 and 0.31
+ms a patch, and every p95 is under 0.62 ms.
+
+```tsx
+// Way 3, the whole idea (a sketch): the tile holds its own handle, so it reads and sends its own.
+function OwnTile(props: {id; shows; x; y; w; h; folded; focused; own: TileHandle}) {
+	const [data, send] = useRuntime(props.own); // the same hook as App, on a narrow handle
+	// ... draws `data`, and sends {type: "plus"} or {type: "focus"} through `send`
+}
+```
+
+### What was run
+
+- The same scratch worktree setup as part 2: PR 223 at `7c1d0730`, detached, with
+  `195-oxc-toolchain-window.patch` applied and Rolldown 1.2.13 and `oxc-transform-react` 0.156.0
+  added. React 19.3.1 production build, tea 0.21.0, headless Chromium from Playwright 1.64.1.
+  Removed after.
+- `DESK_TILES` now takes 9 (3 by 3), 30 (6 by 5) and 60 (10 by 6). The page is sized so no tile
+  folds: 1280 by 800, 1600 by 900, 2560 by 1000. The bench checks it: 0 folded tiles in every run.
+- Five shapes, each a build switch. 5 runs of each shape on each desk, interleaved, 40 patches, 10
+  focus moves and 10 presses a run. 100 runs, 0 failures, 0 console lines, about 33 minutes.
+- **Time:** each commit, from the store's first notify to React's commit hook, read with
+  `performance.now()`. The page is cross-origin isolated for this (two headers on the page), so the
+  clock reads to 5 µs, not 100. That counts the hook's fan-out, React's render and its commit, not
+  the window machine's own `update`. 200 patches per cell.
+- A heavy-tile variant on the 30 desk: each tile draw spins 300,000 loops on its own data, about
+  1.9 ms.
+
+The five shapes, by what each tile gets:
+
+```tsx
+// 1. `flat`, Compiler, no memo (part 2's lean). Desk reads model.views, hands each tile its data.
+<FlatTile id x y w h folded focused data={model.views[tile.shows]?.data} n dispatch={dispatch} />
+// 2. `flat` with memo: the same props, and `memo(FlatTile)`, as Elm's Html.Lazy does.
+// 3a. `own`: the tile's own handle in place of data and dispatch. App still reads the whole model.
+<OwnTile id x y w h folded focused own={tileHandle(root, n, tile.id, tile.shows)} />
+// 3b. `narrow`: 3a, and App reads only {desk, size}, Status only its own line, each narrowed.
+// 3c. `narrow` with memo, to see what memo still adds.
+```
+
+### The numbers
+
+Renders per moment, summed over every component, the same in all 5 runs of each cell. Time is per
+patch heard from the other window, one commit each.
+
+| Shape | Desk | Renders: focus, patch, press | Patch ms, median | Patch ms, p95 |
+|---|---|---|---|---|
+| 1. `flat`, no memo | 9 | 36, 13, 37 | 0.16 | 0.33 |
+| 1. `flat`, no memo | 30 | 99, 34, 100 | 0.19 | 0.36 |
+| 1. `flat`, no memo | 60 | 189, 64, 190 | 0.27 | 0.55 |
+| 2. `flat`, memo | 9 | 11, 5, 11 | 0.17 | 0.33 |
+| 2. `flat`, memo | 30 | 11, 5, 11 | 0.19 | 0.30 |
+| 2. `flat`, memo | 60 | 11, 5, 11 | 0.27 | 0.55 |
+| 3a. `own`, App reads all | 9 | 36, 13, 37 | 0.18 | 0.34 |
+| 3a. `own`, App reads all | 30 | 99, 34, 100 | 0.21 | 0.41 |
+| 3a. `own`, App reads all | 60 | 189, 64, 190 | 0.31 | 0.62 |
+| 3b. `narrow`, no memo | 9 | 14, 3, 5 | 0.14 | 0.28 |
+| 3b. `narrow`, no memo | 30 | 35, 3, 5 | 0.14 | 0.26 |
+| 3b. `narrow`, no memo | 60 | 65, 3, 5 | 0.17 | 0.28 |
+| 3c. `narrow`, memo | 9 | 7, 3, 5 | 0.14 | 0.23 |
+| 3c. `narrow`, memo | 30 | 7, 3, 5 | 0.14 | 0.25 |
+| 3c. `narrow`, memo | 60 | 7, 3, 5 | 0.14 | 0.27 |
+
+- **Way 3 as first written saves nothing (3a).** `App` reads the whole model, so it runs on every
+  patch. It decodes the desk again, which hands `Desk` a new workspace object, and every tile runs.
+  It is a little slower than way 1: 60 narrow handles each answer the notify.
+- **With the top narrowed too (3b), a patch is 3 on every desk.** `App` and `Desk` do not run at
+  all. A focus move still costs every tile (65 at 60 tiles), since the desk view moves and `Desk`
+  makes new elements. Memo on top (3c) takes a focus move down to 7.
+- **Memo's 5 does not buy time on a big desk.** At 60 tiles, way 2 renders 5 and way 1 renders 64,
+  and both take 0.27 ms. Most likely the cost is in `Desk` (not timed apart): it runs `fold` and
+  builds 60 elements on every patch, and memo then compares 60 sets of props. Way 3b skips `Desk`,
+  and is the only way that gets faster than way 1, at 0.17 ms.
+- All of these differences are a tenth of a millisecond. A frame is 16.7 ms.
+
+### The floor, and do `App` and `Status` need to run
+
+**The floor is 3, not 5.** Part 2's 5 was one tile, one counter view, and `App`, `Desk` and
+`Status`. `App` and `Desk` ran only because they read the whole model; on a narrow handle they
+stop. **`Status` does need to run:** it prints the ledger's rev, and every patch moves it. A status
+line that showed no rev would bring the floor to 2.
+
+### What a tile can see and send
+
+| Way | What the tile sees | What the tile can send |
+|---|---|---|
+| 1 and 2, `flat` | its own view's data, as a prop; `Desk` holds every view | any window Msg, to any process: it holds the window's whole `dispatch` |
+| 3, `own` and `narrow` | its own view's data only, through its handle | `{type: "plus"}` or `{type: "focus"}`, about itself only |
+
+- The tile's send is bound to its own id, as Elm's `Html.map` does: the handle maps `plus` to a
+  press on the tile's own process, and `focus` to a focus on the desk naming this tile.
+- **How it stays the same function:** `tileHandle(root, n, id, shows)` makes each tile's handle once
+  and keeps it in a map, keyed by root handle, workspace, tile and process. A patch or a focus move
+  finds the same handle, so `send` is the same function on every draw. The Compiler sees a prop
+  that never changes.
+- The one leak: the handle's `subscribe` is the root's, so a tile hears that something changed
+  anywhere, with no data. That is how `useSyncExternalStore` works; the tile then reads only its
+  own part and stops.
+
+### What tea 0.21.0's hook makes awkward
+
+There is no selector. `useRuntime(handle)` is `useSyncExternalStore(subscribe, getState)` over the
+whole model, so any component that calls it runs on every change. The bench uses the same one hook
+and hands it a narrow handle instead:
+
+```ts
+// Shortened from the bench patch. The hook uses 3 of BootedRunHandle's 8 fields; 5 more are filled.
+const narrow = <A, N extends {readonly type: string}>(
+	root: BootedRunHandle<Model, Msg>,
+	pick: (model: Model) => A, // the part, the same object while it holds
+	same: (a: A, b: A) => boolean,
+	send: (msg: N) => Msg, // Html.map
+): BootedRunHandle<A, N> => ({
+	getState, // pick, cached on the root model and on `same`
+	subscribe: (listener) => root.subscribe(listener),
+	dispatch: (msg) => root.dispatch(send(msg)),
+	onBoot, on, stop, ready, // filled for the type; the hook never calls them
+	observe: () => { throw new Error("a window Msg does not map back to a part's"); },
+});
+```
+
+- `observe` cannot be honest: it would hand the part each window Msg, and a window Msg does not map
+  back to a tile's. So it throws.
+- tea 0.22.0, the version the plan moves to, has no selector either (read from its published
+  typings). The known way is a selector on the hook, as React's own
+  `useSyncExternalStoreWithSelector` and Redux's `useSelector` do. Then `narrow` shrinks to the
+  `send` mapping.
+
+### A heavy tile
+
+30 tiles, each tile draw spins 300,000 loops on its own data.
+
+| Shape | Renders: patch | Patch ms, median | Patch ms, p95 |
+|---|---|---|---|
+| 1. `flat`, no memo | 34 | 2.06 | 4.61 |
+| 2. `flat`, memo | 5 | 2.32 | 4.69 |
+| 3a. `own` | 34 | 2.33 | 4.72 |
+| 3b. `narrow` | 3 | 2.07 | 4.60 |
+| 3c. `narrow`, memo | 3 | 2.01 | 4.66 |
+
+**A heavy tile does not tip it to memo.** The Compiler caches the heavy work on the tile's data, so
+in every shape only the tile that changed redoes it. The 29 tiles that did not change still run
+in way 1, and only check their cache. The spread between runs (1.8 to 4.5 ms medians) is the
+machine, not the shape. Heavy work the Compiler cannot cache (a tile it skips) would act like part
+2's esbuild rows, where every tile runs; that was not timed.
+
+### The lean
+
+**Lean, 75%: way 3b for `next/`'s desk. Each tile, `App` and `Status` read their own part through
+tea's hook on a narrow handle, each tile holds a send bound to itself, and there is no hand memo.**
+
+- **Why:** a patch costs 3 renders whatever the desk size, and it is the only way that got faster
+  than today's lean. A tile sees only its own data and can send only about itself, which the other
+  ways cannot give. C6 holds as written: the Compiler memoizes, no hand `memo`.
+- **Cost:** about 60 lines in the file the store hook lives in (`narrow`, `tileHandle`), and the
+  desk passes a handle in place of data and `dispatch`. About 0.3 agent hours.
+- **What memo would add:** a focus move at 60 tiles drops from 65 renders to 7, at the same 0.15
+  ms. Not worth a rule.
+- **The doubt:** `narrow` is a hand adapter around tea's hook, with five fields filled only for the
+  type and one that throws. A selector in tea's hook settles it; a tea issue would ask for one. And
+  the time gaps are a tenth of a millisecond, so this rests on renders and on what a tile can
+  reach, not on speed anyone feels.
+
+### What part 3 cannot tell us
+
+- Time on a slow device. This was a laptop with another code agent running, and no CPU slowdown.
+  The gaps might grow on a slow phone; they start at a tenth of a millisecond.
+- The cost of the window machine's `update` on a patch. It runs before the notify, the same in
+  every shape, and was not timed. It decodes the desk on every patch.
+- Real tiles. These are counters. A tile with its own children, or one the Compiler skips, was not
+  run.
+- Electron, and React's development build. Production build only, in a Chromium tab.
+- Whether tea will take a selector. Not asked yet.
+
+`env -u TYPESAFE_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY nice -n 19 node next/bench-195.ts
+--runs=5 --patches=40 --variants=<the 20 above>`, from a PR 223 checkout set up as the script's
+header says. Results: `results/195-oxc-toolchain-part3.json`. $0: no model, no deploy.
 
 ## Links
 
