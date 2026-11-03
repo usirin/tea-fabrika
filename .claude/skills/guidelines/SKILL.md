@@ -40,6 +40,12 @@ Read `AGENTS.md` first. Its rules on names, writing, version and the public repo
 
 - Read about 10 to 15 makers and tools: the thinkers (papers, NN/g), the tools people use daily,
   apps with a pointer (Apple's HIG, Linear, Figma), and WCAG. Public docs and source, not memory.
+- Look outside software too. Name two or three tools from another field that solved the same
+  shape of problem for people who work fast all day: music tools (Ableton Live folds devices in
+  place and marks every part that takes a key in Key Map mode, which gave us
+  [fold, not tabs](../../../docs/direction/fold-not-tabs.md) and
+  [configurable keys](../../../docs/direction/keybindings-are-configurable.md)), video editors,
+  game tools, a cockpit, a kitchen. Say what each one teaches and what does not carry over.
 - Quote short, checked against the page as fetched. Mark a claim from a summary page
   **secondary**, and one found nowhere **guess**. Give each source a tag (`[t1]`, `[k3]`).
 - Write the plain way they agree on before any lean of ours. Where it clashes with a goal of
