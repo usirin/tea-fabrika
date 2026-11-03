@@ -1,6 +1,15 @@
-import {Job, type Json, jsonPatchOf, type Span, type Step} from "@kampus/fabrika-old";
+import {
+	Job,
+	type JobTrace,
+	type Json,
+	jsonPatchOf,
+	type Span,
+	type Step,
+} from "@kampus/fabrika-old";
+import type {Entry} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
-import {isRunning, type Model} from "./machine.ts";
+import {isRunning, type Model, type Read} from "./machine.ts";
+import {childrenOf, type Lane, type LaneRow, lanesOf, stopsOf, summaryOf} from "./ticket.ts";
 import {findOf, type Kind, type Node, nodesOf, treeOf} from "./tree.ts";
 
 // What the trace's window is shown: the rows that are open, flattened in order with their depth,
@@ -14,6 +23,13 @@ import {findOf, type Kind, type Node, nodesOf, treeOf} from "./tree.ts";
 //   //  after: {total: 3}, changes: [{op: "replace", path: "/total", before: 1, after: 3}], cmds: []}
 //
 // Times are milliseconds from the job's start, so the window places bars with no clock of its own.
+//
+// The ticket view (ticket 141) is `ticket`, and `rows` stays empty there: one section per lane,
+// oldest first, each on its own axis, in ms from the lane's start. A step row carries its tokens
+// and never a price: dollars are only in a lane's `usd` and the ticket's (the owner's decision 7).
+//
+//   shownOf(model).ticket?.lanes.map((l) => [l.n, l.open, l.rows.length])
+//   // ticket 117 as it first reads: [[1, false, 0], [2, false, 0], [3, true, 1]]
 
 export const RowKind = Schema.Literals(["job", "span", "run", "turns", "machine", "step"]);
 
@@ -64,6 +80,41 @@ export const Change = Schema.Union([
 	}),
 ]);
 export type Change = typeof Change.Type;
+
+/**
+ * How a lane's step or wait stands, for its colour and its word: a step still running, a wait
+ * still on a person, one a newer lane cut off (it never ended, or was never answered), or how a
+ * step ended. Never colour alone: each comes with its word.
+ */
+export const State = Schema.Literals([
+	"running",
+	"waiting",
+	"cut",
+	"done",
+	"send",
+	"ask",
+	"skip",
+	"stuck",
+]);
+export type State = typeof State.Type;
+
+/** How a wait on a person stands: still `waiting`, `done` once answered, `cut` when a newer lane began first. */
+export const WaitState = Schema.Literals(["waiting", "done", "cut"]);
+type WaitState = typeof WaitState.Type;
+
+/** A step's tokens, as its end says them: never a price (decision 7). */
+export const Tokens = Schema.Struct({
+	input: Schema.Number,
+	cached: Schema.Number,
+	output: Schema.Number,
+});
+export type Tokens = typeof Tokens.Type;
+
+/**
+ * A step's price, without the figure: known (in its lane's sum), unknown, none (code), pending
+ * (its model's step has not ended yet), or never (it never ended, so it has no tokens to price).
+ */
+export const Priced = Schema.Literals(["known", "unknown", "none", "pending", "never"]);
 
 /** The chosen row, opened: what Jaeger shows of a span, and Elm's debugger of a step. */
 export const Detail = Schema.Union([
@@ -122,15 +173,152 @@ export const Detail = Schema.Union([
 		run: Schema.NullOr(RunInfo),
 		job: Schema.NullOr(Job),
 	}),
+	/** A lane's step, from the ticket's facts: when, how it ended, what ran it, its tokens. */
+	Schema.Struct({
+		kind: Schema.Literal("run"),
+		key: Schema.String,
+		run: Schema.String,
+		stage: Schema.String,
+		/** Unix ms, and how long; `took` is so far while it runs. */
+		at: Schema.Number,
+		took: Schema.Number,
+		state: State,
+		outcome: Schema.String,
+		model: Schema.NullOr(Schema.String),
+		harness: Schema.NullOr(Schema.String),
+		tokens: Schema.NullOr(Tokens),
+		priced: Priced,
+	}),
+	/** A lane's wait on a person: what was asked, and who picked what, when. */
+	Schema.Struct({
+		kind: Schema.Literal("ask"),
+		key: Schema.String,
+		ask: Schema.String,
+		what: Schema.String,
+		/** Unix ms, and how long; `took` is so far while nobody has answered. */
+		at: Schema.Number,
+		took: Schema.Number,
+		pick: Schema.NullOr(Schema.String),
+		by: Schema.NullOr(Schema.String),
+		state: WaitState,
+	}),
 ]);
 export type Detail = typeof Detail.Type;
 
+/** One row of a lane, in ms from the lane's start. */
+export const TicketRow = Schema.Union([
+	Schema.Struct({
+		kind: Schema.Literal("step"),
+		key: Schema.String,
+		depth: Schema.Int,
+		stage: Schema.String,
+		run: Schema.String,
+		from: Schema.Number,
+		to: Schema.Number,
+		state: State,
+		outcome: Schema.String,
+		/** The model that ran it. `null`: code. */
+		model: Schema.NullOr(Schema.String),
+		/** `null`: no end yet, or code. */
+		tokens: Schema.NullOr(Tokens),
+		opens: Schema.Boolean,
+		open: Schema.Boolean,
+	}),
+	Schema.Struct({
+		kind: Schema.Literal("wait"),
+		key: Schema.String,
+		depth: Schema.Int,
+		what: Schema.String,
+		from: Schema.Number,
+		to: Schema.Number,
+		pick: Schema.NullOr(Schema.String),
+		state: WaitState,
+	}),
+	Schema.Struct({
+		kind: Schema.Literal("span"),
+		key: Schema.String,
+		depth: Schema.Int,
+		name: Schema.String,
+		service: Schema.String,
+		from: Schema.Number,
+		to: Schema.Number,
+		wrong: Schema.Boolean,
+		opens: Schema.Boolean,
+		open: Schema.Boolean,
+	}),
+	/** A span's HTTP client calls, folded into one row: one per call when it opens. */
+	Schema.Struct({
+		kind: Schema.Literal("calls"),
+		key: Schema.String,
+		depth: Schema.Int,
+		count: Schema.Int,
+		from: Schema.Number,
+		to: Schema.Number,
+		open: Schema.Boolean,
+	}),
+]);
+export type TicketRow = typeof TicketRow.Type;
+
+/** What the lane line and the ticket line say (./ticket.ts `summaryOf`). */
+export const Summary = Schema.Struct({
+	lanes: Schema.Int,
+	steps: Schema.Int,
+	waits: Schema.Int,
+	waited: Schema.Number,
+	usd: Schema.NullOr(Schema.Number),
+	unknown: Schema.Int,
+});
+
+/** One lane: its line, and its rows while it is open. */
+export const LaneShown = Schema.Struct({
+	key: Schema.String,
+	trace: Schema.String,
+	/** Its place, oldest first, from 1. */
+	n: Schema.Int,
+	/** Its rows show. */
+	open: Schema.Boolean,
+	/** A lane with no trace id cannot be named, so it shows open, with no fold. */
+	opens: Schema.Boolean,
+	/** A step not ended, or an ask not answered. */
+	live: Schema.Boolean,
+	/** It began on a restart: how long after the lane before it ended, and from which stage. */
+	restart: Schema.NullOr(Schema.Struct({after: Schema.Number, from: Schema.String})),
+	/** Unix ms, and its axis in ms. Never 0. */
+	at: Schema.Number,
+	length: Schema.Number,
+	state: State,
+	outcome: Schema.String,
+	summary: Summary,
+	/** Its record: none to read (no trace id), asked, read, or it could not be read. */
+	record: Schema.Literals(["none", "reading", "read", "unread"]),
+	/** Its steps and waits on its own axis, for the folded line. */
+	bars: Schema.Array(Schema.Struct({from: Schema.Number, to: Schema.Number, state: State})),
+	rows: Schema.Array(TicketRow),
+});
+export type LaneShown = typeof LaneShown.Type;
+
+/** One ticket's lanes, and where the replay stands. */
+export const TicketShown = Schema.Struct({
+	number: Schema.Int,
+	summary: Summary,
+	/** The playhead, Unix ms, `null` live; the stop it is on, from 1, of how many. */
+	replay: Schema.Struct({
+		at: Schema.NullOr(Schema.Number),
+		stop: Schema.Int,
+		stops: Schema.Int,
+	}),
+	lanes: Schema.Array(LaneShown),
+});
+export type TicketShown = typeof TicketShown.Type;
+
 export const Shown = Schema.Struct({
+	/** What the tile shows: one job's record, or one ticket's lanes. */
+	shows: Schema.Literals(["job", "ticket"]),
 	read: Schema.Literals(["waiting", "reading", "read", "unread"]),
 	/** Why it could not be read. */
 	why: Schema.NullOr(Schema.String),
 	id: Schema.NullOr(Schema.String),
-	/** The job's line, or its root span's name. */
+	/** The job's line, or its root span's name, or the ticket's title. */
 	title: Schema.String,
 	job: Schema.NullOr(Job),
 	/** Set while the job has not ended. `took`: how long so far, `null` before the first tick. */
@@ -145,6 +333,8 @@ export const Shown = Schema.Struct({
 	empty: Schema.Boolean,
 	rows: Schema.Array(Row),
 	chosen: Schema.NullOr(Detail),
+	/** The ticket view's lanes, once its facts are read. `null`: the job view, or not read yet. */
+	ticket: Schema.NullOr(TicketShown),
 });
 export type Shown = typeof Shown.Type;
 
@@ -214,9 +404,32 @@ const stepDetail = (key: string, step: Step, before: Step | null, zero: number):
 	cmds: step.cmds,
 });
 
+/** A span opened, Jaeger's way: its tags and events, with the run and the job it belongs to. */
+const spanDetail = (
+	key: string,
+	span: Span,
+	run: RunInfo | null,
+	job: JobTrace["job"],
+	zero: number,
+): Detail => ({
+	kind: "span",
+	key,
+	name: span.name,
+	service: span.service,
+	span: span.span,
+	parent: span.parent,
+	at: span.start - zero,
+	took: span.end - span.start,
+	status: span.status,
+	tags: tagsOf(span.tags),
+	events: span.events.map((e) => ({name: e.name, at: e.at - zero, tags: tagsOf(e.tags)})),
+	run,
+	job,
+});
+
 const detailOf = (
 	node: Node,
-	trace: Extract<Model["read"], {readonly at: "read"}>["trace"],
+	trace: Extract<Read, {readonly at: "read"}>["trace"],
 	zero: number,
 ): Detail => {
 	const record = trace.runs.find((r) => r.run === node.note || `run:${r.run}` === node.key);
@@ -226,21 +439,7 @@ const detailOf = (
 	const of = node.of;
 	switch (of.kind) {
 		case "span":
-			return {
-				kind: "span",
-				key: node.key,
-				name: of.span.name,
-				service: of.span.service,
-				span: of.span.span,
-				parent: of.span.parent,
-				at: of.span.start - zero,
-				took: of.span.end - of.span.start,
-				status: of.span.status,
-				tags: tagsOf(of.span.tags),
-				events: of.span.events.map((e) => ({name: e.name, at: e.at - zero, tags: tagsOf(e.tags)})),
-				run,
-				job,
-			};
+			return spanDetail(node.key, of.span, run, job, zero);
 		case "machine":
 			return {
 				kind: "machine",
@@ -259,6 +458,7 @@ const detailOf = (
 };
 
 const waiting = {
+	shows: "job",
 	why: null,
 	title: "",
 	job: null,
@@ -270,21 +470,329 @@ const waiting = {
 	empty: true,
 	rows: [],
 	chosen: null,
+	ticket: null,
 } as const;
+
+// The ticket view.
+
+type StepRow = Extract<LaneRow, {readonly kind: "step"}>;
+type WaitRow = Extract<LaneRow, {readonly kind: "wait"}>;
+type Outcome = NonNullable<StepRow["ended"]>["outcome"];
+
+/** A code's words: `checks_red` reads "checks red". */
+const words = (code: string): string => code.replaceAll("_", " ");
+
+/** How a step ended, in words, as a lane line says it. */
+const outcomeWords = (o: Outcome): string => {
+	switch (o.kind) {
+		case "done":
+			return o.part ? "done, in part" : "done";
+		case "send":
+			return `sent to ${words(o.to)}: ${words(o.why)}`;
+		case "ask":
+			return `asked ${words(o.who)}: ${words(o.for)}`;
+		case "skip":
+			return `skipped: ${words(o.why)}`;
+		case "stuck":
+			return `stuck: ${words(o.why)}`;
+	}
+};
+
+/** A step's state and words: how it ended, else running in an open lane, else cut off. */
+const stepShown = (row: StepRow, lane: Lane): {readonly state: State; readonly outcome: string} =>
+	row.ended !== null
+		? {state: row.ended.outcome.kind, outcome: outcomeWords(row.ended.outcome)}
+		: lane.open
+			? {state: "running", outcome: "running"}
+			: {state: "cut", outcome: "never ended"};
+
+/** A wait's state: answered, else waiting in an open lane, else cut off. */
+const waitState = (row: WaitRow, lane: Lane): WaitState =>
+	row.pick !== null ? "done" : lane.open ? "waiting" : "cut";
+
+/** A step's price, in words: a step a newer lane cut off never has one, as it has no tokens. */
+const pricedOf = (row: StepRow, lane: Lane): typeof Priced.Type =>
+	row.price.kind === "usd"
+		? "known"
+		: row.price.kind === "pending" && !lane.open
+			? "never"
+			: row.price.kind;
+
+/** A lane's state and its words: live, else as its last row was left, else as its last step ended. */
+const laneState = (lane: Lane): {readonly state: State; readonly outcome: string} => {
+	if (lane.open)
+		return lane.rows.some((r) => r.kind === "wait" && r.pick === null)
+			? {state: "waiting", outcome: "waiting on a person"}
+			: {state: "running", outcome: "running"};
+	const left = lane.rows.at(-1);
+	if (left?.kind === "wait" && left.pick === null) return {state: "cut", outcome: "never answered"};
+	const last = lane.rows.findLast((r): r is StepRow => r.kind === "step");
+	return last === undefined ? {state: "done", outcome: "done"} : stepShown(last, lane);
+};
+
+/** The HTTP client spans of a list: OpenTelemetry's `http.request.method` names one. */
+const isCall = (s: Span): boolean => s.tags["http.request.method"] !== undefined;
+
+/**
+ * The span rows under a step: its spans nested by parent, each span's HTTP calls folded into one
+ * `calls` row, which opens to one row per call.
+ */
+const spanRowsOf = (
+	under: readonly Span[],
+	open: ReadonlySet<string>,
+	zero: number,
+	depth: number,
+): TicketRow[] => {
+	const ids = new Set(under.map((s) => s.span));
+	const childrenIn = (parent: string | null): readonly Span[] =>
+		under.filter((s) =>
+			parent === null ? s.parent === null || !ids.has(s.parent) : s.parent === parent,
+		);
+	const out: TicketRow[] = [];
+	const spanRow = (s: Span, d: number) => {
+		const kids = childrenIn(s.span);
+		const key = `span:${s.span}`;
+		const isOpen = kids.length > 0 && open.has(key);
+		out.push({
+			kind: "span",
+			key,
+			depth: d,
+			name: s.name,
+			service: s.service,
+			from: s.start - zero,
+			to: s.end - zero,
+			wrong: s.status === "error",
+			opens: kids.length > 0,
+			open: isOpen,
+		});
+		if (isOpen) level(kids, d + 1, s.span);
+	};
+	const level = (spans: readonly Span[], d: number, parent: string | null) => {
+		const calls = spans.filter(isCall);
+		for (const s of spans) if (!isCall(s) || parent === null) spanRow(s, d);
+		if (parent === null || calls.length === 0) return;
+		const key = `calls:${parent}`;
+		const isOpen = open.has(key);
+		out.push({
+			kind: "calls",
+			key,
+			depth: d,
+			count: calls.length,
+			from: Math.min(...calls.map((c) => c.start)) - zero,
+			to: Math.max(...calls.map((c) => c.end)) - zero,
+			open: isOpen,
+		});
+		if (isOpen) for (const c of calls) spanRow(c, d + 1);
+	};
+	// The top spans hang off the step's own span: their calls fold under it.
+	const top = childrenIn(null);
+	level(top, depth, top[0]?.parent ?? null);
+	return out;
+};
+
+/** A lane's record, as the `follow` Sub last read it. */
+const recordOf = (
+	shows: Extract<Model["shows"], {readonly kind: "ticket"}>,
+	trace: string,
+): Read | null => shows.records.find((r) => r.id === trace)?.read ?? null;
+
+/** How a lane's record stands, from how its `Read` does. */
+const recordWord: Readonly<Record<Read["at"], LaneShown["record"]>> = {
+	waiting: "reading",
+	reading: "reading",
+	read: "read",
+	unread: "unread",
+};
+
+/** Each lane shown, oldest first, with the rows of the open ones. */
+const lanesShown = (
+	s: Model,
+	shows: Extract<Model["shows"], {readonly kind: "ticket"}>,
+	lanes: readonly Lane[],
+): readonly LaneShown[] => {
+	const open = new Set(s.open);
+	return lanes.map((lane, i): LaneShown => {
+		const key = `lane:${lane.trace}`;
+		const opens = lane.trace !== "";
+		const isOpen = !opens || open.has(key);
+		const read = opens ? recordOf(shows, lane.trace) : null;
+		const record = read?.at === "read" ? read.trace : null;
+		const zero = lane.from;
+		const before = lanes[i - 1];
+		const rows: TicketRow[] = [];
+		if (isOpen)
+			for (const row of lane.rows) {
+				if (row.kind === "wait") {
+					rows.push({
+						kind: "wait",
+						key: `ask:${row.ask}`,
+						depth: 1,
+						what: row.what,
+						from: row.from - zero,
+						to: row.to - zero,
+						pick: row.pick,
+						state: waitState(row, lane),
+					});
+					continue;
+				}
+				const under = record === null ? [] : childrenOf(record, row.run, row.from, row.to);
+				const stepKey = `run:${row.run}`;
+				const stepOpen = under.length > 0 && open.has(stepKey);
+				rows.push({
+					kind: "step",
+					key: stepKey,
+					depth: 1,
+					stage: row.stage,
+					run: row.run,
+					from: row.from - zero,
+					to: row.to - zero,
+					...stepShown(row, lane),
+					model: row.model,
+					tokens:
+						row.ended === null || row.model === null
+							? null
+							: {input: row.ended.input, cached: row.ended.cached ?? 0, output: row.ended.output},
+					opens: under.length > 0,
+					open: stepOpen,
+				});
+				if (stepOpen) rows.push(...spanRowsOf(under, open, zero, 2));
+			}
+		return {
+			key,
+			trace: lane.trace,
+			n: i + 1,
+			open: isOpen,
+			opens,
+			live: lane.open,
+			restart:
+				lane.restart === null
+					? null
+					: {
+							// Never below 0: a lane before it ends by its own last fact (./ticket.ts).
+							after: before === undefined ? 0 : Math.max(0, lane.restart.at - before.to),
+							from: lane.restart.from,
+						},
+			at: lane.from,
+			length: Math.max(1, lane.to - lane.from),
+			...laneState(lane),
+			summary: summaryOf([lane]),
+			record: !opens ? "none" : read === null ? "reading" : recordWord[read.at],
+			bars: lane.rows.map((r) => ({
+				from: r.from - zero,
+				to: r.to - zero,
+				state: r.kind === "wait" ? waitState(r, lane) : stepShown(r, lane).state,
+			})),
+			rows,
+		};
+	});
+};
+
+/** The chosen row of the ticket view, opened: a step, a wait, or a span of a lane's record. */
+const ticketDetail = (
+	shows: Extract<Model["shows"], {readonly kind: "ticket"}>,
+	lanes: readonly Lane[],
+	chosen: string,
+): Detail | null => {
+	const [kind, ...rest] = chosen.split(":");
+	const id = rest.join(":");
+	for (const lane of lanes)
+		for (const row of lane.rows) {
+			if (kind === "run" && row.kind === "step" && row.run === id)
+				return {
+					kind: "run",
+					key: chosen,
+					run: row.run,
+					stage: row.stage,
+					at: row.from,
+					took: row.to - row.from,
+					...stepShown(row, lane),
+					model: row.model,
+					harness: row.harness,
+					tokens:
+						row.ended === null
+							? null
+							: {input: row.ended.input, cached: row.ended.cached ?? 0, output: row.ended.output},
+					priced: pricedOf(row, lane),
+				};
+			if (kind === "ask" && row.kind === "wait" && row.ask === id)
+				return {
+					kind: "ask",
+					key: chosen,
+					ask: row.ask,
+					what: row.what,
+					at: row.from,
+					took: row.to - row.from,
+					pick: row.pick,
+					by: row.by,
+					state: waitState(row, lane),
+				};
+		}
+	if (kind !== "span") return null;
+	for (const lane of lanes) {
+		const read = recordOf(shows, lane.trace);
+		if (read?.at !== "read") continue;
+		const span = read.trace.spans.find((sp) => sp.span === id);
+		if (span !== undefined) return spanDetail(chosen, span, null, null, lane.from);
+	}
+	return null;
+};
+
+/** The ticket's title, as it was filed. */
+const titleOf = (timeline: readonly Entry[], number: number): string => {
+	for (const e of timeline) if (e.fact.type === "filed") return e.fact.title;
+	return `ticket ${number}`;
+};
+
+/** The ticket view, from the machine's state alone. */
+const ticketShownOf = (
+	s: Model,
+	shows: Extract<Model["shows"], {readonly kind: "ticket"}>,
+): Shown => {
+	const {facts} = shows;
+	const base = {...waiting, shows: "ticket", id: null, title: `ticket ${facts.number}`} as const;
+	if (facts.at === "reading") return {...base, read: "reading"};
+	if (facts.at === "unread") return {...base, read: "unread", why: facts.why};
+	const {timeline} = facts;
+	// Live, an open row runs to the latest tick, or to the newest fact before the first tick.
+	const newest = timeline.at(-1)?.at ?? 0;
+	const now = shows.at ?? Math.max(shows.now ?? newest, newest);
+	const lanes = lanesOf(timeline, now, shows.at ?? Infinity);
+	const stops = stopsOf(timeline);
+	const playhead = shows.at;
+	return {
+		...base,
+		read: "read",
+		title: titleOf(timeline, facts.number),
+		empty: lanes.length === 0,
+		chosen: s.chosen === null ? null : ticketDetail(shows, lanes, s.chosen),
+		ticket: {
+			number: facts.number,
+			summary: summaryOf(lanes),
+			replay: {
+				at: playhead,
+				stop: playhead === null ? stops.length : stops.filter((t) => t <= playhead).length,
+				stops: stops.length,
+			},
+			lanes: lanesShown(s, shows, lanes),
+		},
+	};
+};
 
 /** What the window is shown, from the machine's state alone. */
 export const shownOf = (s: Model): Shown => {
-	switch (s.read.at) {
+	if (s.shows.kind === "ticket") return ticketShownOf(s, s.shows);
+	const read = s.shows.read;
+	switch (read.at) {
 		case "waiting":
 			return {read: "waiting", id: null, ...waiting};
 		case "reading":
-			return {read: "reading", id: s.read.id, ...waiting};
+			return {read: "reading", id: read.id, ...waiting};
 		case "unread":
-			return {read: "unread", id: s.read.id, ...waiting, why: s.read.why};
+			return {read: "unread", id: read.id, ...waiting, why: read.why};
 		case "read": {
-			const trace = s.read.trace;
+			const trace = read.trace;
 			const tree = treeOf(trace);
-			const {now} = s.read;
+			const {now} = read;
 			// While the job runs its row runs to now, and the axis with it.
 			const root = now === null ? tree : {...tree, to: Math.max(tree.to, now)};
 			const all = nodesOf(root);
@@ -294,6 +802,7 @@ export const shownOf = (s: Model): Shown => {
 			const chosen = s.chosen === null ? undefined : findOf(root, s.chosen);
 			const rows = flatten(root, new Set(s.open), zero);
 			return {
+				shows: "job",
 				read: "read",
 				why: null,
 				id: trace.trace,
@@ -307,6 +816,7 @@ export const shownOf = (s: Model): Shown => {
 				empty: trace.runs.length + trace.spans.length + trace.steps.length === 0,
 				rows,
 				chosen: chosen === undefined ? null : detailOf(chosen, trace, zero),
+				ticket: null,
 			};
 		}
 	}

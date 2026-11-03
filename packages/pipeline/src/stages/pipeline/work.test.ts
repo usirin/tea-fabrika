@@ -876,3 +876,161 @@ describe("an exam's side tree", () => {
 		expect(git(side.tree, "status", "--porcelain")).toBe("");
 	});
 });
+
+// A push that replaces a lane's branch, on real git over a bare remote: the head it replaces is
+// kept under `refs/kept/<branch>/<sha>` first, and the push leases the head it read, so a person's
+// push that lands between the read and the push is never lost. Today's version.
+describe("a push that replaces a branch", () => {
+	let dir: string;
+	beforeEach(() => {
+		dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-lease-")));
+	});
+	afterEach(() => rmSync(dir, {recursive: true, force: true}));
+
+	const BRANCH = "lane/1";
+	const git = (cwd: string, ...args: readonly string[]) =>
+		execFileSync("git", args, {
+			cwd,
+			encoding: "utf8",
+			env: {...process.env, ...IDENTITY},
+			stdio: "pipe",
+		}).trim();
+	const run = <A, E>(home: string, effect: Effect.Effect<A, E, LaneWork>) =>
+		Effect.runPromise(effect.pipe(provideLane(home)));
+	/** What `ref` points at on the remote. */
+	const onRemote = (remote: string, ref: string) => git(remote, "rev-parse", "--verify", ref);
+	/** A person's commit on top of the remote's branch, pushed from the seed: its sha. */
+	const personPushes = (seed: string, text: string) => {
+		git(seed, "fetch", "--quiet", "origin");
+		git(seed, "checkout", "--quiet", "--detach", `origin/${BRANCH}`);
+		writeFileSync(join(seed, "person.md"), text);
+		git(seed, "add", "-A");
+		git(seed, "commit", "--quiet", "-m", "a person's push");
+		git(seed, "push", "--quiet", "origin", `HEAD:refs/heads/${BRANCH}`);
+		return git(seed, "rev-parse", "HEAD");
+	};
+	/**
+	 * A person who pushes again whenever the lane keeps a head, `times` times: the remote's own
+	 * `post-receive` hook moves the branch on by one commit each time a kept ref lands. The lane's
+	 * keep runs between its read of the branch and its push, so each of these pushes lands in that
+	 * window. Answers the file the hook writes each commit it made to, a line each.
+	 */
+	const pushesWhileKept = (remote: string, times: number) => {
+		const left = join(dir, "left");
+		const made = join(dir, "made");
+		writeFileSync(left, `${times}\n`);
+		writeFileSync(made, "");
+		const hook = join(remote, "hooks", "post-receive");
+		writeFileSync(
+			hook,
+			[
+				"#!/bin/sh",
+				"grep -q ' refs/kept/' || exit 0",
+				`left=$(cat ${JSON.stringify(left)})`,
+				'[ "$left" -gt 0 ] || exit 0',
+				`echo $((left - 1)) > ${JSON.stringify(left)}`,
+				`was=$(git rev-parse refs/heads/${BRANCH})`,
+				"export GIT_AUTHOR_NAME=person GIT_AUTHOR_EMAIL=person@fabrika.invalid",
+				"export GIT_COMMITTER_NAME=person GIT_COMMITTER_EMAIL=person@fabrika.invalid",
+				`now=$(echo "pushed again, $left" | git commit-tree -p "$was" "$was^{tree}")`,
+				`git update-ref refs/heads/${BRANCH} "$now" "$was"`,
+				`echo "$now" >> ${JSON.stringify(made)}`,
+				"",
+			].join("\n"),
+		);
+		chmodSync(hook, 0o755);
+		return () =>
+			readFileSync(made, "utf8")
+				.split("\n")
+				.filter((line) => line !== "");
+	};
+	/** The lane's branch pushed once, at a commit of its own: its tree, that commit, and what the push kept. */
+	const lanePushed = (home: string) =>
+		run(
+			home,
+			Effect.gen(function* () {
+				const work = yield* LaneWork;
+				const {tree} = yield* work.tree(1);
+				const first = yield* work.commit(tree, [{path: "a.md", text: "a\n"}], "the lane's first");
+				const pushed = yield* work.pushTo(tree, first, BRANCH);
+				return {tree, first, pushed};
+			}),
+		);
+	/** A second commit of the lane's, on its tree: its sha. */
+	const commitMore = (home: string, tree: string) =>
+		run(
+			home,
+			Effect.gen(function* () {
+				return yield* (yield* LaneWork).commit(
+					tree,
+					[{path: "b.md", text: "b\n"}],
+					"the lane's next",
+				);
+			}),
+		);
+	/** `head` pushed to the lane's branch: what it kept, or `failed`. */
+	const pushTo = (home: string, tree: string, head: string) =>
+		run(
+			home,
+			Effect.gen(function* () {
+				return yield* (yield* LaneWork).pushTo(tree, head, BRANCH);
+			}).pipe(Effect.orElseSucceed(() => "failed" as const)),
+		);
+
+	it("a person's push the lane's clone has not fetched is kept under the branch's own ref, and the push lands", async () => {
+		const {home, seed, remote} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+		const {tree, pushed} = await lanePushed(home);
+		expect(pushed, "a new branch replaces nothing").toBeNull();
+		const person = personPushes(seed, "the person's\n");
+		const next = await commitMore(home, tree);
+		const got = await pushTo(home, tree, next);
+		expect(got).toEqual({head: person, ref: `refs/kept/${BRANCH}/${person}`});
+		expect(onRemote(remote, `refs/heads/${BRANCH}`)).toBe(next);
+		expect(onRemote(remote, `refs/kept/${BRANCH}/${person}`)).toBe(person);
+	});
+
+	it("a person's push that lands between the read and the push: the lease refuses, the lane reads again, and keeps that push too", async () => {
+		const {home, seed, remote} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+		const {tree} = await lanePushed(home);
+		const person = personPushes(seed, "the person's\n");
+		const next = await commitMore(home, tree);
+		const made = pushesWhileKept(remote, 1);
+		const got = await pushTo(home, tree, next);
+		const [again] = made();
+		expect(made(), "the person pushed once, in the window").toHaveLength(1);
+		expect(got).toEqual({head: again, ref: `refs/kept/${BRANCH}/${again}`});
+		expect(onRemote(remote, `refs/heads/${BRANCH}`)).toBe(next);
+		expect(onRemote(remote, `refs/kept/${BRANCH}/${again}`), "the push in the window").toBe(again);
+		expect(onRemote(remote, `refs/kept/${BRANCH}/${person}`), "the push before the read").toBe(
+			person,
+		);
+	});
+
+	it("a branch that moves in every window: the lane tries three times, then fails, and the branch keeps the person's last push", async () => {
+		const {home, seed, remote} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+		const {tree} = await lanePushed(home);
+		personPushes(seed, "the person's\n");
+		const next = await commitMore(home, tree);
+		const made = pushesWhileKept(remote, 10);
+		const got = await pushTo(home, tree, next);
+		expect(got).toBe("failed");
+		expect(made(), "one push in each of the three windows").toHaveLength(3);
+		expect(onRemote(remote, `refs/heads/${BRANCH}`)).toBe(made().at(-1));
+	});
+
+	it("a kept ref is never moved off the commit it keeps: a second keep there with another commit fails", async () => {
+		const {home, remote} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+		const {first} = await lanePushed(home);
+		const REF = "refs/kept/lane/1/fresh/1/0";
+		const got = await run(
+			home,
+			Effect.gen(function* () {
+				const work = yield* LaneWork;
+				yield* work.keep(first, REF);
+				return yield* work.keep(yield* work.main, REF).pipe(Effect.result);
+			}),
+		);
+		expect(got._tag).toBe("Failure");
+		expect(onRemote(remote, REF)).toBe(first);
+	});
+});

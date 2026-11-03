@@ -179,7 +179,8 @@ export const laneBuildHost = Layer.effect(
 /**
  * A person's answer to `ask`, heard once, looked for each second as the tracker's own window does.
  * Only a person's counts: an agent's row is passed over. An `approve` counts only while it covers
- * the ticket's text as it reads now, so an edit after it is asked again.
+ * the ticket's text as it reads now, so an edit after it is asked again. `by`: who answered, as
+ * the entry's writer names them, for the wait's span.
  */
 export const answerHeard = (number: number, ask: string, picks: readonly string[]) =>
 	Stream.unwrap(
@@ -192,7 +193,7 @@ export const answerHeard = (number: number, ask: string, picks: readonly string[
 					if (entry.by.kind !== "user" || fact.type !== "answered" || fact.ask !== ask) continue;
 					if (!picks.includes(fact.pick)) continue;
 					if (fact.pick === "approve" && !(yield* covers(fact, ticket))) continue;
-					return {ask, pick: fact.pick, note: fact.note};
+					return {ask, pick: fact.pick, note: fact.note, by: entry.by.id};
 				}
 				return null;
 			}).pipe(Effect.orElseSucceed(() => null));
@@ -200,6 +201,7 @@ export const answerHeard = (number: number, ask: string, picks: readonly string[
 				readonly ask: string;
 				readonly pick: string;
 				readonly note: string;
+				readonly by: string;
 			}> = look.pipe(
 				Effect.flatMap((heard) =>
 					heard === null ? Effect.andThen(Effect.sleep("1 second"), wait) : Effect.succeed(heard),

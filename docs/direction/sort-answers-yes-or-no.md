@@ -2,6 +2,9 @@
 
 Decided 2026-10-18.
 
+Keys renamed 2026-11-03 (short words keep one meaning): a duplicate's `of` became `original`, the
+ticket it repeats. Today's code still says `of`.
+
 *Renamed 2026-10-24: in the new pipeline this step is called **triage**, the
 industry's word for it. It takes a ticket from the ledger and triages it to its
 next step. "Sort" had no written reason; it came from "triage only sorts" on
@@ -52,7 +55,7 @@ dropped on 2026-10-24 (below).*
   ticket, accept and escalate keep it.
 
   ```ts
-  const Duplicate = Schema.Struct({answer: Schema.Literal("duplicate"), of: Schema.Int, why: Why});
+  const Duplicate = Schema.Struct({answer: Schema.Literal("duplicate"), original: Schema.Int, why: Why});
   const Decline = Schema.Struct({answer: Schema.Literal("decline"), rule: Schema.Literals(DECLINE_RULE_IDS), reason: Schema.String, why: Why});
   const Accept = Schema.Struct({answer: Schema.Literal("accept"), to: Schema.Literals(["plan", "research"]), why: Why});
   const Escalate = Schema.Struct({answer: Schema.Literal("escalate"), ask: Schema.String, options: Schema.Array(Schema.String), why: Why});

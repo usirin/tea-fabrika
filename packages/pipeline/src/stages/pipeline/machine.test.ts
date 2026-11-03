@@ -275,7 +275,8 @@ describe("a lane saved while asking", () => {
 		const [same, cmds] = lane.update.resume(s, {type: "resume"});
 		expect(same).toEqual(s);
 		expect(cmds).toEqual([s.asked]);
-		expect(answerSub.deps(s)).toEqual({number: 7, ask: "a-step-5", picks: ["go_on", "stop"]});
+		// By its number, id and picks. The deps may carry what the ask is for too (review B1).
+		expect(answerSub.deps(s)).toMatchObject({number: 7, ask: "a-step-5", picks: ["go_on", "stop"]});
 	});
 
 	it("takes an answer to that id", () => {

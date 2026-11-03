@@ -15,9 +15,9 @@ import {_electron, type ElectronApplication, type Page} from "playwright";
 //   SHOTS=<folder> ...e2e:lane     the screenshots there: programs/pipeline/docs for the real ones
 //
 //   tracker                         the ticket is filed in its own window
-//   pipeline --ticket 1 | runs      the lane starts, and waits at the plan's question
-//   ticket --ticket 1, map, runs | trace in the other tiles, as a person watches it
-//   Ctrl-B x, y on the lane's tile  the runs window closes. The lane does not stop
+//   pipeline --ticket 1 | trace     the lane starts, and waits at the plan's question
+//   ticket --ticket 1, map, trace --ticket 1 in the other tiles, as a person watches it
+//   Ctrl-B x, y on the lane's tile  the trace window closes. The lane does not stop
 //   Ctrl-B x, y again               "stop now": this time it does
 //   pipeline --ticket 1             typed again: it goes on, and no step runs twice
 //   the ticket window               the person's merge yes, then the merge on the bare remote
@@ -213,7 +213,7 @@ try {
 		.first()
 		.waitFor();
 	const laneTile = await split(page, "|");
-	await typed(page, laneTile, "pipeline --ticket 1 | runs");
+	await typed(page, laneTile, "pipeline --ticket 1 | trace");
 	const approve = page.getByRole("button", {name: /^Approve plan/});
 	await approve.waitFor({timeout: 180_000});
 	check("the lane ran triage and the plan, then asked in the ticket window", true);
@@ -223,7 +223,7 @@ try {
 		codexSteps(),
 	);
 	await page
-		.getByLabel(/^runs of/)
+		.getByLabel(/^trace of ticket/)
 		.first()
 		.waitFor();
 	await shot(page, "plan-asked-side-by-side");
@@ -238,23 +238,23 @@ try {
 		.catch(() => {});
 	await shot(page, "plan-asked-three-tiles");
 
-	// ---- closing the runs window does not stop the lane
+	// ---- closing the trace window does not stop the lane
 	await tile(page, laneTile)
-		.getByLabel(/^runs of/)
+		.getByLabel(/^trace of ticket/)
 		.click({position: {x: 3, y: 3}})
 		.catch(() => {});
 	await prefixed(page, "x");
 	await page.keyboard.press("y");
 	await until(
-		"the runs window to close",
+		"the trace window to close",
 		() =>
 			tile(page, laneTile)
-				.getByLabel(/^runs of/)
+				.getByLabel(/^trace of ticket/)
 				.count(),
 		(n) => n === 0,
 		15_000,
 	);
-	check("Ctrl-B x, y closes the runs window", true);
+	check("Ctrl-B x, y closes the trace window", true);
 	const closing = await tile(page, laneTile).getByRole("status").count();
 	check("its tile says closing, since the lane still runs", closing > 0, closing);
 	await approve.click();
@@ -314,23 +314,21 @@ try {
 
 	// ---- the windows, all four
 	await prefixed(page, "l");
-	const runsTile = await split(page, "-");
-	await typed(page, runsTile, "runs --ticket 1 | trace");
-	const clips = page.locator(".runs-view button[aria-pressed]");
+	const traceTile = await split(page, "-");
+	await typed(page, traceTile, "trace --ticket 1");
+	// The ticket's lanes, the newest open: a row per step it ran so far.
+	const stepRows = tile(page, traceTile).locator('.trace-view [data-row^="run:"]');
 	await until(
-		"the runs window's clips",
-		() => clips.count(),
-		(n) => n >= 8,
+		"the trace window's steps",
+		() => stepRows.count(),
+		(n) => n >= 4,
 		20_000,
 	);
-	const labels = await clips.evaluateAll((all) =>
+	const labels = await stepRows.evaluateAll((all) =>
 		all.map((b) => b.getAttribute("aria-label") ?? ""),
 	);
-	console.log(`    clips:\n      ${labels.join("\n      ")}`);
-	await clips.nth(1).click();
-	// The line's second window opens folded where a quarter of the desk is too small for two.
-	const strip = page.locator("[data-strip]", {hasText: "trace"});
-	if ((await strip.count()) > 0) await strip.first().click();
+	console.log(`    steps:\n      ${labels.join("\n      ")}`);
+	await stepRows.nth(1).click();
 	await until(
 		"the trace window to fill",
 		() =>
@@ -380,11 +378,11 @@ try {
 	await until(
 		"the zoom to end",
 		() => tiles(page),
-		(t) => t.includes(runsTile) && t.includes(mapTile),
+		(t) => t.includes(traceTile) && t.includes(mapTile),
 		10_000,
 	);
 	// ---- the same lane, its windows closing one by one down to two stacked
-	for (const id of [runsTile, mapTile]) {
+	for (const id of [traceTile, mapTile]) {
 		await tile(page, id).click({position: {x: 3, y: 3}});
 		await prefixed(page, "x");
 		await page.keyboard.press("y");

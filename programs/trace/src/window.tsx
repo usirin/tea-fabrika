@@ -2,7 +2,18 @@ import type {WindowProps} from "@kampus/fabrika-old";
 import {Kbd} from "@manti-ui/react";
 import {Fragment, type KeyboardEvent, type ReactNode} from "react";
 import type {trace} from "./index.ts";
-import type {Change, Detail, Row, Shown} from "./view.ts";
+import {ticksOf} from "./ruler.ts";
+import type {
+	Change,
+	Detail,
+	LaneShown,
+	Row,
+	Shown,
+	State,
+	TicketRow,
+	TicketShown,
+	Tokens,
+} from "./view.ts";
 
 // The trace's window: a waterfall, as Jaeger draws a trace. Names on the left, nested by parent;
 // time runs right, one bar per span in its program's colour, red when it went wrong, its events
@@ -10,11 +21,23 @@ import type {Change, Detail, Row, Shown} from "./view.ts";
 // chosen row opens in place beneath itself: a span as Jaeger's span detail (its tags, its events),
 // a step as Elm's debugger and Redux DevTools show one (its Msg, what changed, the state before
 // and after, its Cmds). What is open and what is chosen is the program's state: this component
-// keeps none, and only sends `toggle` and `choose`.
+// keeps none, and only sends `toggle`, `choose`, `step` and `seek`.
+//
+// The ticket view (ticket 141): one section per lane, oldest first, each on its own axis. A
+// folded lane is one line: its steps drawn small in its own time, how it ended in words, and its
+// price at list price. An open lane shows its ruler, then a row per step and per wait on a person;
+// a step opens to its spans. A bar's colour is its state, never alone: its words are beside it.
+// The chosen row's detail sits at the side where the tile is wide, and under the lanes where it
+// is not (Honeycomb's sidebar, Datadog's bottom pane). A step row says its tokens, never dollars.
 //
 // The keys are the WAI-ARIA tree grid's: ↑ and ↓ move between rows, → opens a row (or moves into
 // it), ← closes it (or moves to its parent), Enter and Space do what a click does, Home and End
 // jump.
+
+const SEC = 1000;
+const MIN = 60 * SEC;
+const HOUR = 60 * MIN;
+const DAY = 24 * HOUR;
 
 /** How long, in a few characters: `0.8 ms`, `12 ms`, `3.4 s`, `2m 05s`. */
 export const took = (ms: number): string => {
@@ -28,14 +51,58 @@ export const took = (ms: number): string => {
 /** How long so far, in what one tick a second can show: `12 s`, `2m 05s`. */
 const soFar = (ms: number): string => (ms < 60_000 ? `${Math.floor(ms / 1000)} s` : took(ms));
 
-/** The ruler's ticks: a round step that gives at most six. */
-const ticksOf = (length: number): readonly number[] => {
-	const raw = length / 6;
-	const tens = 10 ** Math.floor(Math.log10(raw));
-	const step = ([1, 2, 5, 10].map((m) => m * tens).find((s) => s >= raw) ?? 10 * tens) || 1;
-	const out: number[] = [];
-	for (let t = 0; t <= length + 1e-9; t += step) out.push(t);
-	return out;
+/** A long gap, in its two largest units: `18 h 30 min`, `2 d 4 h`. Under an hour, as `took`. */
+const gap = (ms: number): string => {
+	if (ms < HOUR) return took(ms);
+	if (ms < DAY) {
+		const m = Math.round(ms / MIN);
+		return m % 60 === 0 ? `${m / 60} h` : `${Math.floor(m / 60)} h ${m % 60} min`;
+	}
+	const h = Math.round(ms / HOUR);
+	return h % 24 === 0 ? `${h / 24} d` : `${Math.floor(h / 24)} d ${h % 24} h`;
+};
+
+/** A tick's label, in the ruler's own round units: `0`, `500 ms`, `1.5 s`, `5 min`, `1 h 30 min`. */
+const tickLabel = (ms: number): string => {
+	if (ms === 0) return "0";
+	if (ms < SEC) return `${ms} ms`;
+	if (ms < MIN) return `${ms / SEC} s`;
+	if (ms < HOUR) {
+		const s = (ms % MIN) / SEC;
+		return s === 0 ? `${ms / MIN} min` : `${Math.floor(ms / MIN)} min ${s} s`;
+	}
+	if (ms < DAY) {
+		const m = (ms % HOUR) / MIN;
+		return m === 0 ? `${ms / HOUR} h` : `${Math.floor(ms / HOUR)} h ${m} min`;
+	}
+	return `${Math.round((ms / DAY) * 10) / 10} d`;
+};
+
+/** A clock time on this machine, to the minute. */
+const hhmm = (at: number): string =>
+	new Date(at).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", hour12: false});
+
+/** A clock time on this machine, to the second. */
+const hhmmss = (at: number): string =>
+	new Date(at).toLocaleTimeString([], {
+		hour: "2-digit",
+		minute: "2-digit",
+		second: "2-digit",
+		hour12: false,
+	});
+
+/** A count of tokens, short: `870`, `12k`, `1.2M`. */
+const count = (n: number): string => {
+	if (n < 1000) return String(n);
+	if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
+	return `${Math.round(n / 100_000) / 10}M`;
+};
+
+/** A known price, never `$0.00`: under a cent says so, and a known nothing is "no charge". */
+const dollars = (usd: number): string => {
+	if (usd === 0) return "no charge";
+	if (usd < 0.005) return "under $0.01";
+	return `$${usd.toFixed(2)}`;
 };
 
 /** A value as JSON: on one line when short, else indented. */
@@ -44,7 +111,9 @@ const json = (value: unknown): string => {
 	return one.length <= 64 ? one : (JSON.stringify(value, null, 2) ?? one);
 };
 
-const place = (at: number, length: number) => `${(at / length) * 100}%`;
+/** A place on an axis, as a share of its length, kept on the axis. */
+const place = (at: number, length: number) =>
+	`${(Math.min(length, Math.max(0, at)) / length) * 100}%`;
 
 /** A service's colour: its place in the trace's list, one of six. */
 const colourOf = (shown: Shown, service: string) =>
@@ -58,6 +127,23 @@ const KIND_WORD: Readonly<Record<Row["kind"], string>> = {
 	machine: "machine run",
 	step: "step",
 };
+
+/** The ruler: ranked ticks, the finer ranks shown only where the ruler is wide (window.css). */
+function Ruler({length}: {readonly length: number}) {
+	return (
+		<div className="wf-track wf-ruler">
+			{ticksOf(length).map((t) => (
+				<span
+					key={t.t}
+					className={`wf-tick r${t.rank}`}
+					style={{insetInlineStart: place(t.t, length)}}
+				>
+					{tickLabel(t.t)}
+				</span>
+			))}
+		</div>
+	);
+}
 
 function Bar({row, shown}: {readonly row: Row; readonly shown: Shown}) {
 	const colour = row.wrong ? "var(--stuck)" : colourOf(shown, row.service);
@@ -188,6 +274,15 @@ function RunFacts({run}: {readonly run: NonNullable<Extract<Detail, {kind: "span
 	);
 }
 
+/** What a step's price is, in words and never a figure: the figure is in its lane's line. */
+const PRICED: Readonly<Record<Extract<Detail, {kind: "run"}>["priced"], string>> = {
+	known: "known, in its lane's line, at list price",
+	unknown: "no list price for this model",
+	none: "none: code ran it, no model",
+	pending: "not yet: it has not ended",
+	never: "none: it never ended, so no tokens were counted",
+};
+
 function Opened({detail}: {readonly detail: Detail}) {
 	switch (detail.kind) {
 		case "step":
@@ -303,6 +398,83 @@ function Opened({detail}: {readonly detail: Detail}) {
 					{detail.run === null ? null : <RunFacts run={detail.run} />}
 				</section>
 			);
+		case "run":
+			return (
+				<section className="wf-detail" aria-label={`step ${detail.stage}`}>
+					<p className="wf-detail-h">
+						<b>{detail.stage}</b> {detail.outcome}{" "}
+						<span className="faint">
+							from {hhmmss(detail.at)}, {detail.state === "running" ? "so far " : ""}
+							{took(detail.took)}
+						</span>
+					</p>
+					<dl className="kv">
+						<dt>run</dt>
+						<dd className="mono">{detail.run}</dd>
+						<dt>ran by</dt>
+						<dd>
+							{detail.model === null ? (
+								"code"
+							) : (
+								<>
+									<span className="mono">{detail.model}</span>
+									{detail.harness === null ? null : (
+										<span className="faint"> on {detail.harness}</span>
+									)}
+								</>
+							)}
+						</dd>
+						{/* A step code ran spends no tokens: its zeros are no count, so no row. */}
+						{detail.tokens === null || detail.model === null ? null : (
+							<>
+								<dt>tokens</dt>
+								<dd>
+									{detail.tokens.input.toLocaleString("en-US")} in, of them{" "}
+									{detail.tokens.cached.toLocaleString("en-US")} cached;{" "}
+									{detail.tokens.output.toLocaleString("en-US")} out
+								</dd>
+							</>
+						)}
+						<dt>price</dt>
+						<dd>{PRICED[detail.priced]}</dd>
+					</dl>
+				</section>
+			);
+		case "ask":
+			return (
+				<section className="wf-detail" aria-label={`wait: ${detail.what}`}>
+					<p className="wf-detail-h">
+						<b>{detail.what}</b>
+					</p>
+					<dl className="kv">
+						<dt>asked</dt>
+						<dd>{hhmmss(detail.at)}</dd>
+						<dt>answer</dt>
+						<dd>
+							{detail.pick === null ? (
+								detail.state === "cut" ? (
+									"never answered: a newer lane began first"
+								) : (
+									`none yet, waiting ${took(detail.took)} so far`
+								)
+							) : (
+								<>
+									<b>{detail.pick}</b>
+									{detail.by === null ? null : (
+										<>
+											{" "}
+											by <span className="mono">{detail.by}</span>
+										</>
+									)}
+									, after {took(detail.took)}
+								</>
+							)}
+						</dd>
+						<dt>ask</dt>
+						<dd className="mono">{detail.ask}</dd>
+					</dl>
+				</section>
+			);
 	}
 }
 
@@ -333,12 +505,7 @@ function Head({view, drawn}: {readonly view: Shown; readonly drawn: boolean}) {
 				<b className="mono">{view.title}</b>
 			</span>
 			<span className="faint">
-				{parts.map((part, i) => (
-					<Fragment key={String(i)}>
-						{i === 0 ? null : " · "}
-						{part}
-					</Fragment>
-				))}
+				<Dotted parts={parts} />
 			</span>
 			{drawn ? (
 				<span className="legend" title="one colour per program">
@@ -355,7 +522,17 @@ function Head({view, drawn}: {readonly view: Shown; readonly drawn: boolean}) {
 	);
 }
 
-/** The word a running job carries, with the same quiet dot a live run has in the runs view. */
+/** Parts of a line, a middle dot between each. */
+function Dotted({parts}: {readonly parts: readonly ReactNode[]}) {
+	return parts.map((part, i) => (
+		<Fragment key={String(i)}>
+			{i === 0 ? null : " · "}
+			{part}
+		</Fragment>
+	));
+}
+
+/** The word a running job carries, with the same quiet dot a live run has elsewhere. */
 function RunningWord() {
 	return (
 		<span className="trace-running">
@@ -369,7 +546,69 @@ function RunningWord() {
 const rowsIn = (grid: Element | null): HTMLElement[] =>
 	grid === null ? [] : [...grid.querySelectorAll<HTMLElement>("[data-row]")];
 
+/** A tree grid's row, as its keys see it. */
+interface TreeRow {
+	readonly key: string;
+	readonly depth: number;
+	readonly opens: boolean;
+	readonly open: boolean;
+}
+
+/** The WAI-ARIA tree grid's keys on one row, among all the rows shown in order. */
+const onTreeKey = (
+	e: KeyboardEvent<HTMLTableRowElement>,
+	row: TreeRow,
+	rows: readonly TreeRow[],
+	toggle: (key: string) => void,
+	press: () => void,
+) => {
+	const all = rowsIn(e.currentTarget.closest("[role=treegrid]"));
+	const here = all.indexOf(e.currentTarget);
+	const go = (i: number) => all[Math.max(0, Math.min(all.length - 1, i))]?.focus();
+	switch (e.key) {
+		case "ArrowDown":
+			go(here + 1);
+			break;
+		case "ArrowUp":
+			go(here - 1);
+			break;
+		case "Home":
+			go(0);
+			break;
+		case "End":
+			go(all.length - 1);
+			break;
+		case "ArrowRight":
+			if (row.opens && !row.open) toggle(row.key);
+			else if (row.open) go(here + 1);
+			break;
+		case "ArrowLeft": {
+			if (row.open && row.opens) toggle(row.key);
+			else {
+				const at = rows.findIndex((r) => r.key === row.key);
+				const parent = rows.slice(0, at).findLast((r) => r.depth < row.depth);
+				if (parent !== undefined) go(rows.indexOf(parent));
+			}
+			break;
+		}
+		case "Enter":
+		case " ":
+			press();
+			break;
+		default:
+			return;
+	}
+	e.preventDefault();
+};
+
+type Send = WindowProps<typeof trace>["send"];
+
 export function TraceWindow({view, send}: WindowProps<typeof trace>) {
+	if (view.shows === "ticket") return <TicketWindow view={view} send={send} />;
+	return <JobWindow view={view} send={send} />;
+}
+
+function JobWindow({view, send}: {readonly view: Shown; readonly send: Send}) {
 	const chosen = view.chosen?.key ?? null;
 	const toggle = (row: string) => send({type: "toggle", value: {row}});
 	const choose = (row: string | null) => send({type: "choose", value: {row}});
@@ -379,50 +618,6 @@ export function TraceWindow({view, send}: WindowProps<typeof trace>) {
 			toggle(row.key);
 			if (chosen !== row.key) choose(row.key);
 		} else choose(chosen === row.key ? null : row.key);
-	};
-
-	const onKey = (e: KeyboardEvent<HTMLTableRowElement>, row: Row) => {
-		const all = rowsIn(e.currentTarget.closest("[role=treegrid]"));
-		const here = all.indexOf(e.currentTarget);
-		const go = (i: number) => all[Math.max(0, Math.min(all.length - 1, i))]?.focus();
-		switch (e.key) {
-			case "ArrowDown":
-				go(here + 1);
-				break;
-			case "ArrowUp":
-				go(here - 1);
-				break;
-			case "Home":
-				go(0);
-				break;
-			case "End":
-				go(all.length - 1);
-				break;
-			case "ArrowRight":
-				if (row.opens && !row.open) toggle(row.key);
-				else if (row.open) go(here + 1);
-				break;
-			case "ArrowLeft": {
-				if (row.open) toggle(row.key);
-				else {
-					const parent = view.rows
-						.slice(
-							0,
-							view.rows.findIndex((r) => r.key === row.key),
-						)
-						.findLast((r) => r.depth < row.depth);
-					if (parent !== undefined) go(view.rows.indexOf(parent));
-				}
-				break;
-			}
-			case "Enter":
-			case " ":
-				press(row);
-				break;
-			default:
-				return;
-		}
-		e.preventDefault();
 	};
 
 	if (view.read !== "read")
@@ -476,17 +671,7 @@ export function TraceWindow({view, send}: WindowProps<typeof trace>) {
 							name
 						</th>
 						<th scope="col" className="wf-lane">
-							<div className="wf-track">
-								{ticksOf(view.length).map((t) => (
-									<span
-										key={t}
-										className="wf-tick"
-										style={{insetInlineStart: place(t, view.length)}}
-									>
-										{took(t)}
-									</span>
-								))}
-							</div>
+							<Ruler length={view.length} />
 						</th>
 					</tr>
 				</thead>
@@ -502,7 +687,7 @@ export function TraceWindow({view, send}: WindowProps<typeof trace>) {
 								aria-label={`${KIND_WORD[row.kind]} ${row.name}${row.note === "" ? "" : `, ${row.note}`}`}
 								tabIndex={row.key === focusable ? 0 : -1}
 								onClick={() => press(row)}
-								onKeyDown={(e) => onKey(e, row)}
+								onKeyDown={(e) => onTreeKey(e, row, view.rows, toggle, () => press(row))}
 							>
 								<td className="wf-name">
 									<span
@@ -544,6 +729,437 @@ export function TraceWindow({view, send}: WindowProps<typeof trace>) {
 				Click a row, or use <Kbd>↑</Kbd> <Kbd>↓</Kbd> to move, <Kbd>→</Kbd> <Kbd>←</Kbd> to open and
 				close, and <Kbd>Enter</Kbd> to open a row's detail. Every step opens to its Msg, the state
 				before and after, and its Cmds.
+			</p>
+		</section>
+	);
+}
+
+// The ticket view.
+
+/** A ticket's rows as the keys see them: each lane, then its rows while it is open. */
+type Line =
+	| {readonly kind: "lane"; readonly lane: LaneShown; readonly tree: TreeRow}
+	| {
+			readonly kind: "row";
+			readonly lane: LaneShown;
+			readonly row: TicketRow;
+			readonly tree: TreeRow;
+	  };
+
+const linesOf = (ticket: TicketShown): readonly Line[] =>
+	ticket.lanes.flatMap((lane): Line[] => [
+		{kind: "lane", lane, tree: {key: lane.key, depth: 0, opens: lane.opens, open: lane.open}},
+		...lane.rows.map((row): Line => ({
+			kind: "row",
+			lane,
+			row,
+			tree: {
+				key: row.key,
+				depth: row.depth,
+				opens: row.kind === "step" || row.kind === "span" ? row.opens : row.kind === "calls",
+				open: row.kind === "wait" ? false : row.open,
+			},
+		})),
+	]);
+
+/** The ticket's line: its lanes, steps and waits, and its price at list price. */
+const summaryWords = (s: TicketShown["summary"]): readonly string[] => [
+	`${s.lanes} ${s.lanes === 1 ? "lane" : "lanes"}`,
+	`${s.steps} ${s.steps === 1 ? "step" : "steps"}`,
+	...(s.waits === 0
+		? []
+		: [`${s.waits} ${s.waits === 1 ? "wait" : "waits"} on a person, ${took(s.waited)} in all`]),
+	...(s.usd === null
+		? s.unknown === 0
+			? []
+			: ["no list price"]
+		: [
+				`${dollars(s.usd)} at list price${
+					s.unknown === 0
+						? ""
+						: `, and ${s.unknown} ${s.unknown === 1 ? "step" : "steps"} with no list price`
+				}`,
+			]),
+];
+
+/**
+ * A lane's price, for its line: its known prices summed, said in words to be at list price (decision
+ * 7), or why there is none. The words wrap under the dollars when the tile is narrow.
+ */
+function LanePrice({summary}: {readonly summary: LaneShown["summary"]}) {
+	if (summary.usd === null) return summary.unknown === 0 ? null : "no list price";
+	return (
+		<>
+			<span className="tv-usd">{dollars(summary.usd)}</span>{" "}
+			<span className="faint tv-usd">at list price</span>
+		</>
+	);
+}
+
+/**
+ * A lane that is one instant, as one whose only step never ended: a length or a ruler would say
+ * "1 ms", which nothing took, so it shows neither.
+ */
+const instant = (lane: LaneShown): boolean => !lane.live && lane.length <= 1;
+
+/** The replay: one fact back, one on, and back to live. */
+function Replay({ticket, send}: {readonly ticket: TicketShown; readonly send: Send}) {
+	const {at, stop, stops} = ticket.replay;
+	const live = at === null;
+	return (
+		<div className="tv-replay" role="group" aria-label="replay">
+			<span className="faint" role="status">
+				{live ? "live" : `fact ${stop} of ${stops}, ${hhmmss(at)}`}
+			</span>
+			<button
+				type="button"
+				className="btn sm quiet"
+				aria-label="one fact back"
+				disabled={stops === 0 || stop <= 1}
+				onClick={() => send({type: "step", value: {by: -1}})}
+			>
+				‹
+			</button>
+			<button
+				type="button"
+				className="btn sm quiet"
+				aria-label="one fact on"
+				disabled={live}
+				onClick={() => send({type: "step", value: {by: 1}})}
+			>
+				›
+			</button>
+			<button
+				type="button"
+				className="btn sm quiet"
+				aria-pressed={live}
+				disabled={live}
+				onClick={() => send({type: "seek", value: {at: null}})}
+			>
+				Live
+			</button>
+		</div>
+	);
+}
+
+/** Where a bar's words go: after it, before it, or inside it when it fills the axis. */
+const labelAt = (from: number, to: number, length: number): "after" | "before" | "inside" =>
+	to / length <= 0.62 ? "after" : from / length >= 0.38 ? "before" : "inside";
+
+/** A bar on a lane's axis, its state's colour, with its words beside it or inside it. */
+function LaneBar({
+	from,
+	to,
+	length,
+	state,
+	words,
+}: {
+	readonly from: number;
+	readonly to: number;
+	readonly length: number;
+	readonly state: State | "span" | "wrong";
+	readonly words: string;
+}) {
+	const where = labelAt(from, to, length);
+	const start = place(from, length);
+	const end = place(to, length);
+	return (
+		<>
+			<span
+				className={`tv-bar ${state}`}
+				style={{insetInlineStart: start, inlineSize: `max(2px, calc(${end} - ${start}))`}}
+				aria-hidden="true"
+			>
+				{where === "inside" ? <span className="tv-words in">{words}</span> : null}
+			</span>
+			{where === "inside" ? null : (
+				<span
+					className={`tv-words ${where}`}
+					style={
+						where === "after"
+							? {insetInlineStart: `calc(${end} + 6px)`}
+							: {insetInlineEnd: `calc(100% - ${start} + 6px)`}
+					}
+					aria-hidden="true"
+				>
+					{words}
+				</span>
+			)}
+		</>
+	);
+}
+
+/** A step's tokens, short, in the order in, cached, out. */
+function TokenCounts({tokens}: {readonly tokens: Tokens}) {
+	return (
+		<span
+			className="tv-tokens"
+			title={`${tokens.input.toLocaleString("en-US")} in, ${tokens.cached.toLocaleString("en-US")} cached, ${tokens.output.toLocaleString("en-US")} out`}
+		>
+			{count(tokens.input)} in <span className="tv-cached">· {count(tokens.cached)} cached </span>·{" "}
+			{count(tokens.output)} out
+		</span>
+	);
+}
+
+/** A row's name, words and bar, by kind. */
+const rowParts = (
+	row: TicketRow,
+): {
+	readonly label: string;
+	readonly name: ReactNode;
+	readonly words: string;
+	readonly state: State | "span" | "wrong";
+} => {
+	const length = row.to - row.from;
+	switch (row.kind) {
+		case "step":
+			return {
+				label: `step ${row.stage}, ${row.outcome}${row.state === "cut" ? "" : `, ${took(length)}`}`,
+				name: (
+					<>
+						<span className="tv-stage">{row.stage}</span>
+						<span className="faint tv-note">{row.model ?? "code"}</span>
+					</>
+				),
+				words:
+					row.state === "cut"
+						? row.outcome
+						: `${row.state === "running" ? soFar(length) : took(length)} · ${row.outcome}`,
+				state: row.state,
+			};
+		case "wait":
+			return {
+				label: `wait on a person: ${row.what}, ${row.pick ?? (row.state === "cut" ? "never answered" : "not answered")}`,
+				name: (
+					<>
+						<span className="tv-stage">wait</span>
+						<span className="faint tv-note">{row.what}</span>
+					</>
+				),
+				words:
+					row.state === "waiting"
+						? `waiting · ${soFar(length)}`
+						: row.state === "cut"
+							? "never answered"
+							: `${row.pick} · ${took(length)}`,
+				state: row.state,
+			};
+		case "span":
+			return {
+				label: `span ${row.name}, ${row.service}`,
+				name: (
+					<>
+						<span>{row.name}</span>
+						<span className="faint tv-note">{row.service}</span>
+					</>
+				),
+				words: took(length),
+				state: row.wrong ? "wrong" : "span",
+			};
+		case "calls":
+			return {
+				label: `${row.count} HTTP ${row.count === 1 ? "call" : "calls"}`,
+				name: <span>{`${row.count} ${row.count === 1 ? "call" : "calls"}`}</span>,
+				words: took(length),
+				state: "span",
+			};
+	}
+};
+
+function TicketWindow({view, send}: {readonly view: Shown; readonly send: Send}) {
+	const {ticket} = view;
+	if (view.read !== "read" || ticket === null)
+		return (
+			<section className="view trace-view" aria-label={view.title}>
+				<p className="empty">
+					{view.read === "unread"
+						? `The facts of ${view.title} cannot be read: ${view.why ?? "no reason given"}`
+						: `Reading the facts of ${view.title}.`}
+				</p>
+			</section>
+		);
+	const chosen = view.chosen?.key ?? null;
+	const toggle = (row: string) => send({type: "toggle", value: {row}});
+	const choose = (row: string | null) => send({type: "choose", value: {row}});
+	const lines = linesOf(ticket);
+	const trees = lines.map((l) => l.tree);
+	/** A lane folds; a step or a span opens and shows its detail; a wait shows its detail. */
+	const press = (line: Line) => {
+		if (line.kind === "lane") {
+			if (line.lane.opens) toggle(line.lane.key);
+			return;
+		}
+		const {row} = line;
+		if (row.kind === "calls") return toggle(row.key);
+		if ((row.kind === "step" || row.kind === "span") && row.opens) {
+			toggle(row.key);
+			if (chosen !== row.key) choose(row.key);
+		} else choose(chosen === row.key ? null : row.key);
+	};
+	const focusable = chosen ?? lines[0]?.tree.key ?? null;
+	const rowProps = (line: Line, label: string) => ({
+		"data-row": line.tree.key,
+		"aria-level": line.tree.depth + 1,
+		"aria-expanded": line.tree.opens ? line.tree.open : undefined,
+		"aria-selected": line.tree.key === chosen,
+		"aria-label": label,
+		tabIndex: line.tree.key === focusable ? 0 : -1,
+		onClick: () => press(line),
+		onKeyDown: (e: KeyboardEvent<HTMLTableRowElement>) =>
+			onTreeKey(e, line.tree, trees, toggle, () => press(line)),
+	});
+
+	return (
+		<section className="view trace-view" aria-label={`trace of ticket ${ticket.number}`}>
+			<div className="mapbar">
+				<span className="state">
+					<b>{ticket.number}</b> {view.title}
+				</span>
+			</div>
+			<div className="tv-line">
+				<span className="faint">
+					<Dotted parts={summaryWords(ticket.summary)} />
+				</span>
+				<Replay ticket={ticket} send={send} />
+			</div>
+			{ticket.lanes.length === 0 ? (
+				<p className="empty">
+					No lane has run on this ticket yet. Its steps show here as they start.
+				</p>
+			) : (
+				<div className="tv-body">
+					<table
+						className="wf tv"
+						// oxlint-disable-next-line jsx-a11y/no-noninteractive-element-to-interactive-role -- a tree grid is a table whose rows open and take the keys, as in the WAI-ARIA tree grid example.
+						role="treegrid"
+						aria-label="lanes, steps and waits"
+						aria-readonly="true"
+					>
+						<colgroup>
+							<col className="wf-c-name" />
+							<col />
+							<col className="tv-c-end" />
+						</colgroup>
+						<tbody>
+							{lines.map((line) => {
+								if (line.kind === "lane") {
+									const {lane} = line;
+									const restart =
+										lane.restart === null
+											? ""
+											: `${gap(lane.restart.after)} later, restarted from ${lane.restart.from}`;
+									return (
+										<Fragment key={lane.key}>
+											{restart === "" ? null : (
+												<tr className="tv-gap" aria-hidden="true">
+													<td colSpan={3}>{restart}</td>
+												</tr>
+											)}
+											<tr
+												className={`wf-row tv-lane${lane.open ? " open" : ""}`}
+												{...rowProps(
+													line,
+													`lane ${lane.n}, ${lane.outcome}${restart === "" ? "" : `, ${restart}`}`,
+												)}
+											>
+												<td className="wf-name">
+													<span className="wf-in" style={{paddingInlineStart: "6px"}}>
+														<span className="wf-caret" aria-hidden="true">
+															{lane.opens ? (lane.open ? "▾" : "▸") : ""}
+														</span>
+														<b>Lane {lane.n}</b>
+														<span className="faint tv-note">
+															{hhmm(lane.at)}
+															{instant(lane)
+																? ""
+																: ` · ${lane.live ? soFar(lane.length) : took(lane.length)}`}
+														</span>
+													</span>
+												</td>
+												<td className="wf-lane">
+													{lane.open ? (
+														instant(lane) ? null : (
+															<Ruler length={lane.length} />
+														)
+													) : (
+														<div className="wf-track">
+															<span className="tv-mini" aria-hidden="true">
+																{lane.bars.map((b, i) => (
+																	<span
+																		key={String(i)}
+																		className={`tv-bar ${b.state}`}
+																		style={{
+																			insetInlineStart: place(b.from, lane.length),
+																			inlineSize: `max(2px, ${place(b.to - b.from, lane.length)})`,
+																		}}
+																	/>
+																))}
+															</span>
+															<span className={`tv-words tv-out ${lane.state}`}>
+																{lane.outcome}
+															</span>
+														</div>
+													)}
+												</td>
+												<td className="tv-end">
+													<LanePrice summary={lane.summary} />
+												</td>
+											</tr>
+										</Fragment>
+									);
+								}
+								const {row, lane} = line;
+								const parts = rowParts(row);
+								return (
+									<tr
+										key={row.key}
+										className={`wf-row tv-${row.kind}${row.key === chosen ? " sel" : ""}`}
+										{...rowProps(line, parts.label)}
+									>
+										<td className="wf-name">
+											<span
+												className="wf-in"
+												style={{paddingInlineStart: `calc(${row.depth} * 14px + 6px)`}}
+											>
+												<span className="wf-caret" aria-hidden="true">
+													{line.tree.opens ? (line.tree.open ? "▾" : "▸") : ""}
+												</span>
+												{parts.name}
+											</span>
+										</td>
+										<td className="wf-lane">
+											<div className="wf-track">
+												<LaneBar
+													from={row.from}
+													to={row.to}
+													length={lane.length}
+													state={parts.state}
+													words={parts.words}
+												/>
+											</div>
+										</td>
+										<td className="tv-end">
+											{row.kind === "step" && row.tokens !== null ? (
+												<TokenCounts tokens={row.tokens} />
+											) : null}
+										</td>
+									</tr>
+								);
+							})}
+						</tbody>
+					</table>
+					{view.chosen === null ? null : (
+						<aside className="tv-detail" aria-label="detail">
+							<Opened detail={view.chosen} />
+						</aside>
+					)}
+				</div>
+			)}
+			<p className="note">
+				Click a lane to fold it, a step to open its spans. <Kbd>↑</Kbd> <Kbd>↓</Kbd> move,{" "}
+				<Kbd>→</Kbd> <Kbd>←</Kbd> open and close, <Kbd>Enter</Kbd> shows a row's detail. ‹ and ›
+				replay the ticket one fact at a time.
 			</p>
 		</section>
 	);

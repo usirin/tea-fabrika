@@ -9,6 +9,9 @@ refuses a mode with no way out (WCAG 2.1.2); and a command's field is called `mo
 as the program's `mode`. The shape, which the owner shaped and now approved: a program gets one
 new field, `commands`, and one `mode` read from state, and no mode is `null`.
 
+Keys renamed 2026-11-03 (short words keep one meaning): the info Msg's `on` became `active`, the
+word Zed's key binding docs use for a context that holds.
+
 Built from [experiment 184](../../experiments/184-modes.md), which read how about fifteen makers
 and tools do modes and checked today's info mode against them, and a private page, "Mode
 guidelines", with a mode you can enter and leave. Neither is a measurement. It builds on
@@ -17,7 +20,7 @@ guidelines", with a mode you can enter and leave. Neither is a measurement. It b
 ```ts
 // A sketch, next/, Tier 2. Today's info mode (C-b i), written with the two new fields.
 type Desk = {focus: TileId; info: {_tag: "off"} | {_tag: "on"; explained: string | null}};
-type DeskMsg = {type: "info"; on?: boolean} | {type: "split"}; // and the rest
+type DeskMsg = {type: "info"; active?: boolean} | {type: "split"}; // and the rest
 
 const desk = defineProgram({
 	name: "desk",
@@ -25,7 +28,7 @@ const desk = defineProgram({
 	mode: (d: Desk) => (d.info._tag === "on" ? "info" : null), // read from state, never a flag
 	commands: {
 		info: {send: {type: "info"}, keys: "<prefix>i", global: true}, // toggles; works in any mode
-		exit: {send: {type: "info", on: false}, keys: "escape", global: true, mode: "info"},
+		exit: {send: {type: "info", active: false}, keys: "escape", global: true, mode: "info"},
 		split: {send: {type: "split"}, keys: "<prefix>|", global: true},
 	},
 });

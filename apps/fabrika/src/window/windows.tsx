@@ -5,8 +5,6 @@ import {map} from "@tea-fabrika/map";
 import {MapWindow} from "@tea-fabrika/map/window";
 import {markdown} from "@tea-fabrika/markdown";
 import {MarkdownWindow} from "@tea-fabrika/markdown/window";
-import {runs} from "@tea-fabrika/runs";
-import {RunsWindow} from "@tea-fabrika/runs/window";
 import {ticket} from "@tea-fabrika/ticket";
 import {TicketWindow} from "@tea-fabrika/ticket/window";
 import {trace} from "@tea-fabrika/trace";
@@ -56,7 +54,6 @@ export const WINDOWS: ReadonlyMap<string, Known> = new Map([
 	known(tracker, TrackerWindow),
 	known(ticket, TicketWindow),
 	known(map, MapWindow),
-	known(runs, RunsWindow),
 	known(trace, TraceWindow),
 	known(markdown, MarkdownWindow),
 ]);

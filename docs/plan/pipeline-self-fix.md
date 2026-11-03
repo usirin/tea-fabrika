@@ -221,7 +221,7 @@ Read by a read-only agent on 2026-11-01, and checked against the code here.
 
 ## PR 5: a stuck lane restarts from the step that broke
 
-- **What the person types:** the same line, `pipeline --ticket 117 | runs`, after the fix has
+- **What the person types:** the same line, `pipeline --ticket 117 | trace`, after the fix has
   landed and the host runs main's code ([who starts it](../how-to/run-a-pipeline-ticket.md#who-starts-it)).
 - **What the tile prints** (a sketch):
 
@@ -339,7 +339,7 @@ fact) and the plan's text in its comment. It does not keep the plan's properties
 interface or its gaps, so the fold cannot prove `plan`, and names it (a sketch of the line):
 
 ```text
-pipeline --ticket 117 | runs
+pipeline --ticket 117 | trace
 restart: #117 from plan, which ended stuck:step_stuck (mutation: stuck:tests_red)
 ```
 
@@ -370,7 +370,7 @@ rule: the holes it found are fixed in the pipeline, never by hand. Changed by th
 fixes, it pauses there and restarts when PR 11 lands.
 
 ```text
-pipeline --ticket 117 | runs
+pipeline --ticket 117 | trace
 restart: #117 from exam_merge, which ended stuck:sent_back (exam_merge: send:reviewer:no_review)
 exam_merge   send:reviewer:no_review -> exam_review
 exam_review  exam/117 at 27bec63; main merged in; checks green; review passed
