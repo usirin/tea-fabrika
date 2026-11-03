@@ -1,10 +1,15 @@
-# The guidelines page
+# The guidelines canvas
 
-The private page "<Area> guidelines" is a mockup round first and a write-up second. Its first
-screen copies the mockup pages the owner liked: "Tile design guidelines", "Pipe marker: three
-finalists", "Pipe colors: how many", "Color principles" and "Chat window for claude and codex:
-mockup". The guidelines fold under the mockup, in the order keybindings, hot reload and modes
-share. Check every box before you publish.
+The private "<Area> guidelines" is a Design canvas with the design system installed
+([drawn on Claude Design](../../../../docs/direction/design-on-claude-design.md)). It is a mockup
+round first and a write-up second. It copies the mockup pages the owner liked: "Tile design
+guidelines", "Pipe marker: three finalists", "Pipe colors: how many", "Color principles" and "Chat
+window for claude and codex: mockup". The guidelines sit beside the mockup, in the order
+keybindings, hot reload and modes share. Check every box before you publish.
+
+A walk a person presses with the keyboard only stays a plain page, because the canvas takes keys
+only on a focused element. "The keyboard walk page" and every section after it are that page's
+checklist. "Marks" holds for both.
 
 ## Why the page looks like this
 
@@ -30,6 +35,55 @@ The finalists page also showed four truly different designs. The ask desk and ty
 showed rounds of one design: versions of a single idea. Rounds refine a pick; they do not replace
 the choice between ideas. The liked pages could also be pressed: the tile page took clicks and
 keys, and the chat window moved between its states.
+
+## The canvas
+
+Follow the canvas type's own instructions for every file. These boxes are ours, on top.
+
+- [ ] The design system is installed, as the canvas type says: its `tokens.json` copied in and its
+  record in the canvas's index. Each artboard loads the system's files after `support.js`, in the
+  order its README gives.
+- [ ] It opens on the state the study is about (the popup open, not the screen before it).
+- [ ] One title note above the rows: the title, "Proposed, not built" (or "Decided DATE, not
+  built"), and the names of the note, the experiment and the pull request. No hero heading and no
+  lede.
+- [ ] **Designs are rows:** Today, then each distinct design from step 5, then the rounds of the
+  one picked, then Proposed and Linear. Two designs at the same layout sit one above the other, so
+  they compare. Too many for one view: one canvas page per design.
+- [ ] At least 3 distinct designs, each with a why-not line in a sticky beside its row: one or two
+  plain lines on why it lost, tied to a principle or a shot ("lost on T2: the rec sits under the
+  question, see the 2x2 shot"). The pick says why it won in the same way.
+- [ ] Each design's tsh pipe line sits in its row's title, such as `outline | ticket`: one program
+  per tile, each part that is another program's job in its own tile.
+- [ ] **Layouts are columns:** the five from step 5 (one tile, side by side, stacked, 2x2, about
+  1024x700). **States** stack inside a design's rows, as the outline round's 4 states in 5 layouts.
+  Each artboard's title names its design, state and layout, such as `proposed-popup-side`.
+- [ ] One caption per design: what it is and its doubt, as the finalists page writes "Today: tint
+  only. From the fold note. Doubt: no cue but hue."
+- [ ] The screen from step 5, not a small toy drawn for the canvas: real tile, program and command
+  names, and the real chassis around it, at its real size. Its words, names and keys are copied
+  from step 5's saved DOM. A keys line comes from its program's `commands` table plus `refuse`.
+- [ ] Real parts: Manti's and ours, mounted from `window.Fabrika` by name. Layout is plain markup
+  on the system's tokens. No font size, color or `--manti-*` token is set by hand, and every text
+  takes one of the six text styles.
+- [ ] What the build or the bundle cannot show yet is a gap, named where it would be (the chat
+  window's dashed "gap G1" tags), never drawn as if it worked. Today an edit inside a `TreeView` row
+  is one: Manti's `TreeView` takes string labels only.
+- [ ] Clickable where it can be: an artboard whose controls work is marked interactive. A key works
+  only on its focused element, and focus shows. No page-wide key handler.
+- [ ] Each artboard sits beside its step 5 shot, uploaded as an image and marked "shot". A round
+  with no saved DOM shows only its shot.
+- [ ] The owner looked once at this round, each artboard beside its shot. The agent does not check
+  its own render.
+- [ ] **The guidelines, beside the rows:** the whole idea in one sentence, then one sticky per
+  principle with its number, its name, its mark and one line. The bodies live in the note, and on
+  the keyboard walk page when there is one.
+
+## The keyboard walk page
+
+A plain page, built only when the study has a walk pressed with the keyboard alone. When it shows
+one design, skip the Design and Compare switches: the canvas holds the designs and their why-not
+lines.
 
 ## The first screen
 
