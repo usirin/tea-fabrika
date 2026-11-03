@@ -84,9 +84,11 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each
   part is small, never absent.
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
-- **In `next/`, a window reads state through one `useSyncExternalStore` hook.** State
-  lives in a tea machine, never `useState`, and tea's `useMachine` is not used: it dies
-  under Strict Mode ([Elm first](./docs/direction/elm-first.md)).
+- **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
+  machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). tea 0.22.0 fixed
+  `useMachine` under Strict Mode, but it does not take the Effect engine yet
+  ([demlik 852](https://github.com/kamp-us/demlik/issues/852)). Until it does, one
+  `useSyncExternalStore` hook in one file stands in, and goes when tea's lands.
 - **In `next/`, no bare `of` and no `xOf` names.** Today's `nameOf` and `outcomesOf`
   stay until that code goes.
 - **In today's version:** fixes that daily use or CI needs, the UX work the owner
