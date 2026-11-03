@@ -650,7 +650,7 @@ describe("a line with several windows", () => {
 		const one = fold([{type: "covered", tile: "t2", runs: line}], beside(2400)).s;
 		const two = fold(
 			[
-				{type: "covered", tile: "t1", runs: [{id: "map:1", program: "map"}, runs]},
+				{type: "covered", tile: "t1", runs: [{id: "map:1", program: "map"}, trace]},
 				{type: "covered", tile: "t4", runs: [counter]},
 			],
 			one,

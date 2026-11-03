@@ -14,6 +14,7 @@ import {Built} from "../build/form.ts";
 import {PlanDraft} from "../plan/plan.ts";
 import {planDraft} from "../plan/planner.ts";
 import {Planner} from "../plan/services.ts";
+import {listUsdOf, type Tokens} from "../price.ts";
 import type {Brief as ReviewBrief} from "../review/gate.ts";
 import {type Drafted, noRun, Reviewer, type Said} from "../review/reviewer.ts";
 import {Form} from "../review/sheet.ts";
@@ -21,7 +22,6 @@ import {SortReply} from "../sort/answer.ts";
 import {sortDraft} from "../sort/machine.ts";
 import {Sorter} from "../sort/services.ts";
 import {type Brief, fenced, fill, listed} from "./briefs.ts";
-import {listUsdOf, type Tokens} from "./price.ts";
 import type {LaneHome} from "./work.ts";
 import {LaneWork} from "./work.ts";
 
@@ -67,8 +67,9 @@ export const pickedFor = (settings: Settings, step: AgentStep): Picked => ({
 	...settings.agents?.[step],
 });
 
-// The list prices live in ./price.ts, which names no platform, so a window's view can price a step.
-export {listUsdOf} from "./price.ts";
+// The list prices live in ../price.ts, which names no platform and is no lane's, so a window's view
+// can price a step and a host can load it as it starts.
+export {listUsdOf} from "../price.ts";
 
 /**
  * What a run cost: what the maker billed, and its list price. A run that spent tokens under no

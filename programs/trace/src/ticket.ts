@@ -1,5 +1,5 @@
 import type {JobTrace, Span} from "@kampus/fabrika-old";
-import {listUsdOf} from "@kampus/pipeline/stages/pipeline/price";
+import {listUsdOf} from "@kampus/pipeline/stages/price";
 import type {Entry, FactOf} from "@kampus/pipeline/tickets/ticket";
 
 // One ticket's lanes, folded from its facts: the fold the view and the laws share (ticket 141).
