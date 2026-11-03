@@ -9,7 +9,7 @@ import {Post} from "../operate/machine.ts";
 import {nameOf} from "../outcome.ts";
 import {HeldDraft, PlanQuestion} from "../plan/plan.ts";
 import {Given} from "./carry.ts";
-import {openWords, throughWords} from "./found.ts";
+import {openWords, ruleChangeLines, throughWords} from "./found.ts";
 import {EndOutcome, isEnd, LaneOutcome, StopOutcome} from "./outcome.ts";
 import type {Folded} from "./restart.ts";
 import {EXAM_MERGE_SENDS, type Move as Route} from "./routes.ts";
@@ -872,6 +872,14 @@ const examMergeWords = ({rules, examPull}: Carry): string => {
 		: `The review met ${reviewed.met} of ${reviewed.of}, and the checks passed at ${reviewed.head.slice(0, 7)}. ${asks}`;
 };
 
+/** What the rule changes' merge question has beside it: each change, and why. Pure. */
+const examMergeAlso = ({plan}: Carry): readonly string[] => {
+	const changes = plan?.exam ?? [];
+	return changes.length === 0
+		? []
+		: ["These rule changes are in a pull request of their own:", ...ruleChangeLines(changes)];
+};
+
 /** The rounds' question, by the step that sent the work back and whether the rounds ran out. Pure. */
 const spentQuestion = (s: Held, step: LaneStep): string => {
 	if (EXAM_STEPS.has(step))
@@ -997,6 +1005,8 @@ const asking = (s: Held, question: Question): Step_ => {
 		does: question.picks.map((pick) => pickLine(s, question, pick)),
 		...(question.for === "merge" ? {also: throughWords(s.carry.through)} : {}),
 		...(question.for === "rounds_spent" ? {also: openWords(s.carry.open), spent: true} : {}),
+		// What changes and why, beside the question: the exam step's own words came before its review.
+		...(question.for === "exam_merge" ? {also: examMergeAlso(s.carry)} : {}),
 		...headAsked(question.for, s.carry),
 		intent: intentOf("lane", s.number, question.ask),
 	});
