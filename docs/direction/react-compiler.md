@@ -227,8 +227,8 @@ same step.** Lean 85%, taken.
 a selector, with no hand `memo`.** Lean 75%, taken.
 
 - **What it means:** new code writes no `useMemo`, `useCallback` or `memo` by default. The desk has
-  no `memo` per tile. A tile's props are plain values, with no cast: never a fresh handler or
-  object made in render. Each tile, `App` and `Status` read their own part through the store hook
+  no `memo` per tile. A tile's props are plain values: never a fresh handler or object made
+  in render. Each tile, `App` and `Status` read their own part through the store hook
   with a selector, and each tile holds a send bound to itself, as Elm's `Html.map` does.
 
   ```tsx
