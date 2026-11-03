@@ -1,6 +1,11 @@
 # The ask desk: most asks are one key, and the desk learns from the answers
 
-**Proposed 2026-11-02.** Decided by the owner before this note, and not asked again: asks to the
+**Decided 2026-11-02.** The owner approved the whole note after a walk of each part: one asks
+program with two views, the five rules for opening a tile, the six principles A1 to A6 and the
+smaller calls 1 to 5, each with its lean. The leans' confidence numbers stay as written, and each
+doubt names what settles it.
+
+Decided by the owner before this note, and not asked again: asks to the
 owner are fine, even many; the owner's call of 2026-10-30 stands
 ([triage asks when worth is unclear](./triage-asks-when-worth-is-unclear.md): about 130 to 190 asks
 a week, with no ask budget set yet); the owner makes every decision the system thinks needs them. What is needed is a desk where
@@ -10,8 +15,7 @@ day, from [experiment 185](../../experiments/185-dsh-superagent-study.md)'s "ste
 a counted cost, per merged ticket, and a design that asks a person says what it costs them a week.
 It is data the desk records, not a budget that cuts asks. **Decided 2026-11-02**, later the same day,
 after a look step of six rounds: [the look](#the-look) (the selected row, one quiet box, the rec as a
-labeled row, two text grays) and five calls, Q1 to Q5, with their leans' numbers kept. The rest of
-this note stays proposed.
+labeled row, two text grays) and five calls, Q1 to Q5, with their leans' numbers kept.
 
 Built from [experiment 196](../../experiments/196-ask-desk.md), which read about 18 makers and
 papers and checked ticket 117's real asks against them, and a private page, "Ask desk guidelines",
