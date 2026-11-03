@@ -151,10 +151,16 @@ UNSHARE_OK
   the OS sandbox. In the box, that check ends `run_failed`, so `program.test.ts` fails 96 tests.
   Stryker's first test run includes them for `ship121`, and Stryker stops: "There were failed tests
   in the initial test run" (reproduced in local Docker, at Stryker's `info` log level).
-- **A fix to try next, untested:** drop the ambient capabilities before the tests run (for example
-  `setpriv --ambient-caps -all --inh-caps -all`), then probe bubblewrap again. A setuid bubblewrap
-  is not a way: Debian's build refuses it ("setuid use of bubblewrap is not supported", seen
-  locally). Until a fix holds, a box can mutate code whose tests need no sandbox, such as `lane139`.
+- **The next step: in a box, the tests run with no extra wall.** Decided by the owner on
+  2026-11-02. [Programs run in a box](../docs/direction/programs-run-in-a-box.md) names three layers
+  of the `Sandbox` service: `docker`, `os` and `none`. On a laptop the wall is bubblewrap, the `os`
+  layer. A Cloudflare box is already a container, so the box is the wall, and the code inside it
+  runs with `none`. We do not make bubblewrap work inside the box.
+- **Dropped: removing the ambient capabilities so bubblewrap starts.** This run first named it as
+  the fix to try (for example `setpriv --ambient-caps -all --inh-caps -all`). It is dropped because
+  it would put a second wall inside the first one, which buys nothing, and it could also take away
+  what lets `unshare -U` work. A setuid bubblewrap is no way either: Debian's build refuses it
+  ("setuid use of bubblewrap is not supported", seen locally).
 
 ## The whole suite in the box (run 1)
 
@@ -231,8 +237,7 @@ gained a prefix argument, so its listing and sweep could find this run's resourc
   one box, on a laptop under other agents' load. A quiet laptop would make the ratio higher. A box
   on a less busy host would make it lower. `ship121`'s slow mutants (up to 38 s) may scale
   differently.
-- **Whether the sandbox fix works.** Dropping the capabilities is untested on a box, and it may
-  take away what lets `unshare -U` work.
+- **Whether the tests pass in a box with `none`.** That is the next run's question.
 - **A real suite time in a box.** Run 1's suite mostly waited on tests that fail there.
 - **What a box hour costs at full load.** Neither run kept 4 vCPU busy.
 - **Run to run spread.** One run per set. Steal time shows the host was shared, and that will
