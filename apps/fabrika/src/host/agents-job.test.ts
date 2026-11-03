@@ -2,7 +2,7 @@ import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcess
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
-import {TAIL_MAX} from "@kampus/fabrika-old/mcp";
+import {LAST_MAX} from "@kampus/fabrika-old/mcp";
 import {Client} from "@modelcontextprotocol/client";
 import {getDefaultEnvironment, StdioClientTransport} from "@modelcontextprotocol/client/stdio";
 import {pullRequestsOf} from "@tea-fabrika/tracker";
@@ -19,7 +19,7 @@ import {pathsOf, reach} from "./socket.ts";
 // thread is starved. Today's version, on a home of the test's own, its host in this process.
 //
 //   tile t1     tsh$ seq --to 5          prints 1 to 5; the line is job %1, and it ends done
-//   agent       job {n: 1, tail: 2}
+//   agent       job {n: 1, last: 2}
 //               {n: 1, text: "seq --to 5", tile: "t1", state: {_tag: "ended", how: "done"},
 //                lines: ["4", "5"]}
 //   host/log    timestamp=... level=INFO fiber=#.. message=job_began n=1 "text=seq --to 5" tile=t1
@@ -159,7 +159,7 @@ describe("the job tool: one tile job's state and its last lines", () => {
 		expect(tool?.inputSchema).toMatchObject({
 			type: "object",
 			required: ["n"],
-			properties: {n: {type: "integer"}, tail: {type: "integer", maximum: TAIL_MAX}},
+			properties: {n: {type: "integer"}, last: {type: "integer", maximum: LAST_MAX}},
 		});
 	});
 
@@ -170,13 +170,13 @@ describe("the job tool: one tile job's state and its last lines", () => {
 				const host = yield* hostOn(home, []);
 				const agent = yield* agentOn(home, "claude");
 				host.type("seq --to 5\r");
-				const ended = yield* agent.jobWhen({n: 1, tail: 2}, (d) => tagOf(d) === "ended");
+				const ended = yield* agent.jobWhen({n: 1, last: 2}, (d) => tagOf(d) === "ended");
 				const all = yield* agent.jobWhen({n: 1}, (d) => tagOf(d) === "ended");
 				host.type("counter &\r");
 				const running = yield* agent.jobWhen({n: 2}, (d) => tagOf(d) === "running");
 				const unknown = yield* agent.call("job", {n: 99});
-				const tooMany = yield* agent.call("job", {n: 1, tail: TAIL_MAX + 1});
-				const none = yield* agent.call("job", {n: 1, tail: 0});
+				const tooMany = yield* agent.call("job", {n: 1, last: LAST_MAX + 1});
+				const none = yield* agent.call("job", {n: 1, last: 0});
 				return {ended, all, running, unknown, tooMany, none};
 			}),
 		);
@@ -199,7 +199,7 @@ describe("the job tool: one tile job's state and its last lines", () => {
 		expect(seen.unknown.text).toMatch(/\b99\b/);
 		// The count of lines is bounded, and asked past it is refused by the tool's own schema.
 		expect(seen.tooMany.error).toBe(true);
-		expect(seen.tooMany.text).toMatch(/tail/);
+		expect(seen.tooMany.text).toMatch(/last/);
 		expect(seen.none.error).toBe(true);
 	});
 
@@ -277,9 +277,12 @@ describe("the host's wide log", () => {
 			}),
 		);
 		const lag = said(lines, "lag")[0];
+		// OpenTelemetry's Node.js runtime names, in seconds (marked Development there).
+		const p99 = Number(lag?.["nodejs.eventloop.delay.p99"]);
+		const max = Number(lag?.["nodejs.eventloop.delay.max"]);
 		expect(lag?.level).toBe("WARN");
-		expect(Number(lag?.p99_ms)).toBeGreaterThan(50);
-		expect(Number(lag?.max_ms)).toBeGreaterThanOrEqual(Number(lag?.p99_ms));
+		expect(p99).toBeGreaterThan(0.05);
+		expect(max).toBeGreaterThanOrEqual(p99);
 	});
 });
 

@@ -1,14 +1,15 @@
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {BYTES_MAX, JOB, TAIL_MAX, tailOf} from "./job.ts";
+import {BYTES_MAX, JOB, LAST_MAX, lastLines} from "./job.ts";
 
 // The `job` tool's answer holds a job's last lines, as tmux's `capture-pane -S -<n>` and
-// `docker logs --tail <n>` give them: the newest last, never more than `tail`, and never more
-// bytes than `BYTES_MAX`, whatever the job printed. Today's version.
+// `docker logs --tail <n>` give them: the newest last, never more than `last`, and never more
+// bytes than `BYTES_MAX`, whatever the job printed. Today's version. The field is `last`, not
+// `tail`: here "the tail" already means the ledger's live stream.
 //
-//   tailOf(["1", "2", "3", "4", "5"], 2)    // ["4", "5"]
-//   tailOf([], 10)                          // []
-//   tailOf(["a".repeat(BYTES_MAX * 2)], 1)  // [the line's start, cut to fit]
+//   lastLines(["1", "2", "3", "4", "5"], 2)    // ["4", "5"]
+//   lastLines([], 10)                          // []
+//   lastLines(["a".repeat(BYTES_MAX * 2)], 1)  // [the line's start, cut to fit]
 //
 // The bytes are counted as the lines go out: UTF-8, one newline after each.
 
@@ -32,8 +33,8 @@ describe("a job's last lines", () => {
 		expect(Number.isInteger(BYTES_MAX)).toBe(true);
 		expect(BYTES_MAX).toBeGreaterThan(0);
 		expect(BYTES_MAX).toBeLessThanOrEqual(35_000);
-		expect(Number.isInteger(TAIL_MAX)).toBe(true);
-		expect(TAIL_MAX).toBeGreaterThan(0);
+		expect(Number.isInteger(LAST_MAX)).toBe(true);
+		expect(LAST_MAX).toBeGreaterThan(0);
 	});
 
 	it("is exactly the last n lines, in order, when they fit", () => {
@@ -42,9 +43,9 @@ describe("a job's last lines", () => {
 				fc.array(arbLine, {maxLength: 200}),
 				fc.integer({min: 1, max: 200}),
 				(printed, wanted) => {
-					const tail = Math.min(wanted, TAIL_MAX);
-					fc.pre(bytesOf(printed.slice(-tail)) <= BYTES_MAX);
-					expect(tailOf(printed, tail)).toEqual(printed.slice(-tail));
+					const last = Math.min(wanted, LAST_MAX);
+					fc.pre(bytesOf(printed.slice(-last)) <= BYTES_MAX);
+					expect(lastLines(printed, last)).toEqual(printed.slice(-last));
 				},
 			),
 			OPTS,
@@ -59,10 +60,10 @@ describe("a job's last lines", () => {
 		fc.assert(
 			fc.property(
 				fc.array(arbAny, {maxLength: 30}),
-				fc.integer({min: 1, max: TAIL_MAX}),
-				(printed, tail) => {
-					const got = tailOf(printed, tail);
-					expect(got.length).toBeLessThanOrEqual(Math.min(tail, printed.length));
+				fc.integer({min: 1, max: LAST_MAX}),
+				(printed, last) => {
+					const got = lastLines(printed, last);
+					expect(got.length).toBeLessThanOrEqual(Math.min(last, printed.length));
 					expect(bytesOf(got)).toBeLessThanOrEqual(BYTES_MAX);
 					// Something of the newest line always shows: a job that printed shows it printed.
 					if (printed.length > 0) expect(got.length).toBeGreaterThanOrEqual(1);
@@ -78,7 +79,7 @@ describe("a job's last lines", () => {
 					// It stopped only where the next older line would not fit.
 					if (
 						got.length >= 1 &&
-						got.length < Math.min(tail, printed.length) &&
+						got.length < Math.min(last, printed.length) &&
 						got[0] === printed[from]
 					)
 						expect(bytesOf([printed[from - 1] ?? "", ...got])).toBeGreaterThan(BYTES_MAX);
