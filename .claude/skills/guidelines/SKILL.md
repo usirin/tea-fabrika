@@ -166,7 +166,10 @@ from the real screen (boxed buttons in a selected row, bigger type, a footer tha
 - **The blocking check.** Shoot each demo state the page offers, at the size and scale of its
   step 5 shot, and put the two side by side with a pixel diff. Any difference in words, boxes or
   sizes blocks the publish: fix the lift, not the shot, and shoot again. Save the side-by-sides in
-  the scratch folder and name them in the walk.
+  the scratch folder and name them in the walk. Shoot with scroll bars shown, as Electron draws
+  them. One drift is not a difference: when the check runs on a newer Chromium than the app's
+  Electron, a line can sit up to about 1px lower, so a long list creeps down a few pixels. Same
+  words, same boxes, same widths: say so in the walk and on the page.
 - Publish it from files as a private artifact titled "<Area> guidelines": the page, the frames,
   the CSS and the shots. Later changes republish to the same URL. The page goes in no file in the
   repo.
