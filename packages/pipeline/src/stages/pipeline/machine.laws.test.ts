@@ -2057,6 +2057,33 @@ describe("the exam's pull request, step by step", () => {
 		expect(s.phase).toBe("over");
 	});
 
+	/** The `what` of each spent-rounds question the lane put, in turn. */
+	const spentWhats = (moves: readonly Moved[]) =>
+		cmdsOf(moves).flatMap((c) =>
+			c.type === "lane_ask" && askedFor(c.ask) === "rounds_spent" ? [c.what] : [],
+		);
+
+	it("`again` past the exam's bound runs the exam writer once more in the lane's own round", () => {
+		const failing = Array.from({length: 8}, () => ({...PASS, how: "review_failed" as const}));
+		const {moves} = examRun({reviews: failing, picks: ["approve", "again", "stop"]});
+		const exams = examsIn(moves);
+		// The bound, then the one `again` gave: never a lane round, which the test writer reads.
+		expect(exams).toHaveLength(MAX_ROUNDS + 1);
+		expect(exams.map((c) => c.round)).toEqual(exams.map(() => 1));
+	});
+
+	it("the spent rounds' question names the review or the checks after a review, the merge after a merge", () => {
+		const failing = Array.from({length: 8}, () => ({...PASS, how: "review_failed" as const}));
+		const reviewed = spentWhats(examRun({reviews: failing, picks: ["approve", "stop"]}).moves);
+		expect(reviewed).toHaveLength(1);
+		expect(reviewed[0]).toContain("the review or the checks still send them back");
+		const merges = Array.from({length: 8}, () => "send:builder:review_failed");
+		const picks = ["approve", ...Array.from({length: 8}, () => "stop")];
+		const merged = spentWhats(examRun({merges, picks}).moves);
+		expect(merged).toHaveLength(1);
+		expect(merged[0]).toContain("the merge still send them back");
+	});
+
 	/** The step ship's `send` at exam_merge runs next (./routes.ts). */
 	const NEXT_AFTER_SHIP: Readonly<Record<string, StepName>> = {
 		"send:reviewer:no_review": "exam_review",

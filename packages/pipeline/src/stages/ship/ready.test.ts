@@ -244,6 +244,31 @@ describe("readyToMerge, with rows carried to the head", () => {
 		).toEqual([]);
 	});
 
+	it("keeps both hops when rows judged at two heads are each carried to this one", () => {
+		// c1 was judged at B, c2 at C, and code carried each head to A: two hops into one head.
+		const hops = [carried, {from: "C", to: "A"}];
+		const r = readyToMerge(proof({rows: [pass(C1, "B"), pass(C2, "C")], carried: hops}));
+		if (!("ready" in r)) throw new Error(`not ready: ${JSON.stringify(r.refused)}`);
+		expect(r.ready.rows.map((row) => `${row.criterion}@${row.head}`)).toEqual(["c1@B", "c2@C"]);
+		expect(r.ready.carried).toEqual(hops);
+		// The same hop twice goes in once.
+		const twice = readyToMerge(
+			proof({rows: [pass(C1, "B"), pass(C2, "B")], carried: [carried, carried]}),
+		);
+		if (!("ready" in twice)) throw new Error("not ready");
+		expect(twice.ready.carried).toEqual([carried]);
+	});
+
+	it("leaves `carried` out of a proof whose rows were all judged at the head", () => {
+		const none = readyToMerge(proof());
+		if (!("ready" in none)) throw new Error("not ready");
+		expect("carried" in none.ready).toBe(false);
+		// A hop the rows do not stand on goes in no more than none at all.
+		const unused = readyToMerge(proof({carried: [carried]}));
+		if (!("ready" in unused)) throw new Error("not ready");
+		expect("carried" in unused.ready).toBe(false);
+	});
+
 	it("survives being kept, and a kept one is checked again, its carry too", () => {
 		const r = readyToMerge(proof({rows: [pass(C1, "B"), pass(C2, "B")], carried: [carried]}));
 		if (!("ready" in r)) throw new Error("not ready");

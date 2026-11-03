@@ -258,6 +258,20 @@ describe("a redo", () => {
 
 	it("puts every finding in its writer's first prompt", () => checkRedo(exam, redoSaysWhy));
 
+	it("tells the writer, above the findings, to fix them in the files already on the pull request", () => {
+		const promptFor = (a: ExamAsk) => {
+			const [s] = exam.update.start({phase: "idle"}, {type: "start", ask: a, key: "k"});
+			return examSub.deps(s)?.prompt ?? "";
+		};
+		const lines = promptFor(redo([RULE])).split("\n");
+		const heading =
+			"These files are on the pull request already. It was sent back for this, so fix it in the same files:";
+		expect(lines).toContain(heading);
+		expect(lines.slice(lines.indexOf(heading) + 1)).toEqual(WHY.map((w) => `- ${w}`));
+		// A first writing was sent back for nothing.
+		expect(promptFor(ask([RULE]))).not.toContain("sent back");
+	});
+
 	it("lands only what the plan listed, as the first writing does", () =>
 		checkRedo(exam, landsOnlyWhatIsListed));
 
