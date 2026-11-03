@@ -231,6 +231,18 @@ interface FakeScript {
 	readonly cannot?: string;
 	/** Each run's log keeps what its folder holds at these paths as it starts: `seen` in `codexRuns`. */
 	readonly see?: readonly string[];
+	/**
+	 * As one run of the step starts, by the run, the first being 0: a person pushes one commit to
+	 * `branch` on the remote, with `text` at `path`. Its sha is `pushed` in `codexRuns`.
+	 */
+	readonly pushesAt?: Readonly<
+		Record<
+			string,
+			Readonly<
+				Record<number, {readonly branch: string; readonly path: string; readonly text: string}>
+			>
+		>
+	>;
 }
 
 const TIMED_OUT = "-- timed out --";
@@ -313,6 +325,57 @@ const pushToMain = (
 	git("commit", "-qm", "Main moved elsewhere");
 	git("push", "-q", "origin", "HEAD:main");
 	rmSync(work, {recursive: true, force: true});
+};
+
+/**
+ * One commit on the remote branch whose tip is `head`, as a person would push it there, on top of
+ * what the lane left. Its sha.
+ */
+const pushOnTopOf = (
+	{dir, remote}: Where,
+	head: string,
+	files: readonly {readonly path: string; readonly text: string}[],
+): string => {
+	const branches = execFileSync(
+		"git",
+		[
+			"--git-dir",
+			remote,
+			"for-each-ref",
+			"--points-at",
+			head,
+			"--format=%(refname:lstrip=2)",
+			"refs/heads/",
+		],
+		{encoding: "utf8", stdio: "pipe"},
+	)
+		.split("\n")
+		.filter((name) => name !== "" && name !== "main");
+	const [branch] = branches;
+	if (branch === undefined || branches.length > 1)
+		throw new Error(`one branch should end at ${head}, not ${JSON.stringify(branches)}`);
+	const work = join(dir, "person");
+	const git = (...args: readonly string[]) =>
+		execFileSync(
+			"git",
+			["-c", "user.name=A person", "-c", "user.email=person@example.com", ...args],
+			{
+				cwd: work,
+				encoding: "utf8",
+				stdio: "pipe",
+			},
+		);
+	execFileSync("git", ["clone", "-q", "--branch", branch, remote, work], {stdio: "pipe"});
+	for (const {path, text} of files) {
+		mkdirSync(dirname(join(work, path)), {recursive: true});
+		writeFileSync(join(work, path), text);
+	}
+	git("add", "-A");
+	git("commit", "-qm", "A person's change");
+	git("push", "-q", "origin", `HEAD:refs/heads/${branch}`);
+	const sha = git("rev-parse", "HEAD").trim();
+	rmSync(work, {recursive: true, force: true});
+	return sha;
 };
 
 /** A person closes the ticket, in the window. */
@@ -448,7 +511,9 @@ const lane = ({
 	});
 	if (formatter) nameFormatter(seed);
 	if (noOrigin) execFileSync("git", ["remote", "remove", "origin"], {cwd: seed, stdio: "pipe"});
-	if (fake !== undefined) writeFileSync(join(dir, "script.json"), JSON.stringify(fake));
+	// The fake reads the remote from its script, for a person's push (`pushesAt`).
+	if (fake !== undefined)
+		writeFileSync(join(dir, "script.json"), JSON.stringify({...fake, remote}));
 	for (const [key, value] of Object.entries(fakeEnv(dir))) vi.stubEnv(key, value);
 	const gh = story === undefined ? null : makeFakeGh({dir, remote, story});
 	for (const [key, value] of Object.entries(gh?.env ?? {})) vi.stubEnv(key, value);
@@ -675,6 +740,8 @@ const codexRuns = (dir: string) =>
 							readonly taken: readonly string[] | null;
 							readonly loaded: Readonly<Record<string, string | null>>;
 							readonly seen: Readonly<Record<string, string | null>>;
+							/** The commit a person pushed as this run started (`pushesAt`), or `null`. */
+							readonly pushed: string | null;
 						},
 				)
 		: [];
@@ -4636,6 +4703,120 @@ describe("the exam's pull request", () => {
 			expect(descends(ran.remote, first, second), "the redo adds to the exam branch").toBe(true);
 			expect(keptLines(ran)).toEqual([]);
 			expect(keptRefs(ran)).toEqual([]);
+		},
+	);
+
+	// Option A is for a commit a person pushed to the exam branch. The lane's own head is never at
+	// risk: it is in the lane's carry. So what is kept is the branch as the remote holds it when the
+	// redo's push replaces it (docs/direction/read-fresh-run-alone.md), and it is kept on the remote,
+	// where a person can fetch it and a lost clone does not lose it.
+	/** A person's change, on a file no step of the lane writes. */
+	const PERSONS = {path: "docs/person.md", text: "A person's note on the rule changes.\n"};
+	/** One ticket line names the kept ref and the person's commit, and the remote keeps that commit under the ref. */
+	const keptOnRemote = (ran: Ran, pushed: string, old: string, said: string) => {
+		const lines = keptLines(ran);
+		expect(lines, `one line names the kept ref\n${said}`).toHaveLength(1);
+		const line = lines[0] ?? "";
+		expect.soft(line, "the line names the person's commit").toContain(pushed.slice(0, 7));
+		expect
+			.soft(line, "the line does not name the lane's older head")
+			.not.toContain(old.slice(0, 7));
+		const ref = refIn(line);
+		expect(ref, line).toMatch(/^refs\/kept\/./);
+		let tip: string | null = null;
+		try {
+			tip = execFileSync(
+				"git",
+				["--git-dir", ran.remote, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`],
+				{encoding: "utf8", stdio: "pipe"},
+			).trim();
+		} catch {
+			// Not on the remote.
+		}
+		expect.soft(tip, `${ref} is on the remote`).not.toBeNull();
+		expect
+			.soft(
+				descends(ran.remote, pushed, tip ?? ""),
+				`${ref} on the remote holds the person's commit`,
+			)
+			.toBe(true);
+	};
+
+	it(
+		"a person pushes to the exam branch after its review read it, then ship's conflicts at the exam's merge: the redo on main keeps the person's commit under a kept ref on the remote, and the ticket line names that commit",
+		{timeout: 300_000},
+		async () => {
+			let pushed = "";
+			const ran = await lane({
+				title: RULES,
+				within: 200,
+				picks: {...YES, rounds_spent: "stop"},
+				fake: {see: [RULE]},
+				// Under the exam review's checks, the lane's first, after `examReady` read the branch:
+				// main takes the rule file, and a person pushes on top of the exam head.
+				checksSay: (head, nth, where) => {
+					if (nth === 0) pushed = pushOnTopOf(where, head, [PERSONS]);
+					return mainTakesTheRule(head, nth, where);
+				},
+			});
+			const said = ran.lines.join("\n");
+			const ends = ran.facts.filter((f) => f.type === "ended");
+			const refused = ends.findIndex((f) => f.stage === "exam_merge");
+			expect(ends[refused]?.outcome, said).toMatchObject({kind: "send", why: "conflicts"});
+			const old = pullHead(ends[refused]);
+			expect(old, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(pushed, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(descends(ran.remote, old, pushed), "the person pushed on top of the exam head").toBe(
+				true,
+			);
+			const head = pullHead(ends.slice(refused).find((f) => f.stage === "exam"));
+			expect(head, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(
+				descends(ran.remote, pushed, head),
+				"the redo replaced the branch with the person's commit on it",
+			).toBe(false);
+			keptOnRemote(ran, pushed, old, said);
+		},
+	);
+
+	it(
+		"main's conflicts at the exam's own review, then a person pushes to the exam branch while the redo on main is written: the push keeps the person's commit under a kept ref on the remote, and the ticket line names that commit",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				title: RULES,
+				within: 200,
+				picks: {...YES, rounds_spent: "stop"},
+				fake: {
+					answers: {review: [FAILS_E1]},
+					see: [RULE],
+					// The third exam run is the redo on main: the first is the writing, the second the
+					// review's redo on the exam head.
+					pushesAt: {exam: {2: {branch: `exam/${NUMBER}`, ...PERSONS}}},
+				},
+				checksSay: mainTakesTheRule,
+			});
+			const said = ran.lines.join("\n");
+			const ends = ran.facts.filter((f) => f.type === "ended");
+			const refused = ends.findIndex(
+				(f) =>
+					f.stage === "exam_review" && (f.outcome as {readonly why?: string}).why === "conflicts",
+			);
+			expect(refused, said).toBeGreaterThan(-1);
+			const old = pullHead(ends[refused]);
+			expect(old, said).toMatch(/^[0-9a-f]{40}$/);
+			const pushed = exams(ran)[2]?.pushed ?? "";
+			expect(pushed, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(descends(ran.remote, old, pushed), "the person pushed on top of the exam head").toBe(
+				true,
+			);
+			const head = pullHead(ends.slice(refused).find((f) => f.stage === "exam"));
+			expect(head, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(
+				descends(ran.remote, pushed, head),
+				"the redo replaced the branch with the person's commit on it",
+			).toBe(false);
+			keptOnRemote(ran, pushed, old, said);
 		},
 	);
 });
