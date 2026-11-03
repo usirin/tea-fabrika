@@ -1,11 +1,15 @@
-# Which text roles should fabrika's programs share, and what does the ask desk's card teach?
+# Which text styles should fabrika's programs share, and what does the ask desk's card teach?
 
 Read 2026-11-02. **This is reading, not a measurement.** One look build ran on a local branch in
 today's version and was shot at five layouts beside today's app and Linear; it is not kept in the
-repo. It feeds [typography](../docs/direction/typography.md), a proposed note, and a private page,
-"Typography guidelines", where the card switches between today and the roles.
+repo. It feeds [typography](../docs/direction/typography.md), a note decided on 2026-11-02, and a
+private page, "Typography guidelines", where the card switches between today and the text styles.
 
-**The answer.** The makers agree. Name a few text roles by their job, set each one's size, weight
+This read first called them "roles". The owner's walk renamed them text styles, the word Apple
+[t2], Figma [t22], Panda [t23] and Chakra [t19] use; Material's roles are groups of styles. The
+names below follow the walk, and quotes keep their own words.
+
+**The answer.** The makers agree. Name a few text styles by their job, set each one's size, weight
 and color together, and let a screen use only those. Rank comes from size first, then weight, then
 one quieter gray. Keep the set small: Material says a product "will likely not need all 15", and
 NN/g says no more than three sizes. Apple's macOS styles and Linear's app use the same steps we
@@ -38,8 +42,8 @@ Manti 0.13   Text with size, weight and emphasis; Heading with level; no named s
 Which version: everything read about the makers is outside the repo. "Today" means today's version
 (`apps/fabrika`, `programs/`), read on main at `5e0d3fe7`, except the card, which is round 6 of the
 ask desk look on a local branch ([PR 326](https://github.com/usirin/tea-fabrika/pull/326) records
-that look as decided). `next/` has no window on main yet; it gets the roles through the shared
-design package.
+that look as decided). `next/` has no window on main yet; it gets the text styles through the
+shared design package.
 
 ## What was read
 
@@ -62,7 +66,7 @@ summary.
 | Chakra [t19] | "Text styles allows you to define textual css properties", used through one `textStyle` prop. |
 | Radix Data List [t20] | "Displays metadata as a list of key-value pairs", in four parts: Root, Item, Label, Value. |
 
-The plain way they agree on: a short list of named roles, each one size, weight, line height and
+The plain way they agree on: a short list of named text styles, each one size, weight, line height and
 color at once, and nothing set by hand. Body text in a dense tool is 13 or 14. A one-line label is
 12. A small heading is the body's size, heavier. Where it clashes with a goal of ours: Carbon and
 Primer use 14 for body, and we use 13, the macOS default, because programs share tiles.
@@ -95,14 +99,14 @@ Primer use 14 for body, and we use 13, the macOS default, because programs share
 
 - **The cockpit,** FAA AC 25-11B [t16]: "A text change by itself should not be used as an
   attention-getting cue". Size and contrast are named as the parameters of reading. It teaches: a
-  role is for reading order, and an alert needs more than bigger text. It does not carry over: its
+  text style is for reading order, and an alert needs more than bigger text. It does not carry over: its
   sizes are set for a fixed viewing distance.
 - **Road signs,** MUTCD 2A [t17]: "Word messages should be as brief as possible", and warnings
   "if used to excess, tend to lose their effectiveness." It teaches: few loud things, or none
   works. It does not carry over: a sign's size grows with speed, and a tile does not move.
 - **Ableton Live** [t18], **secondary**: one zoom scales the whole window and there is no font
-  setting. It teaches: a person who needs bigger text scales the roles together, never one size. It
-  does not carry over: Live has no text roles to name.
+  setting. It teaches: a person who needs bigger text scales the text styles together, never one
+  size. It does not carry over: Live has no text styles to name.
 
 ### Manti 0.13.0, as installed
 
@@ -114,6 +118,21 @@ Primer use 14 for body, and we use 13, the macOS default, because programs share
 - **What it lacks:** named styles (a `textStyle`, as Chakra has), a label and value list (as Radix
   has), and a `numeric` prop (as Polaris has). The `primary` variant is Manti's orange; our
   `theme.css` must map it to our accent.
+- **Added by a read of Manti's whole repo during the walk.** No `<dl>` appears anywhere in Manti's
+  packages. `Heading` picks its size from its level when it has none, and level 1 is 4xl; our
+  `theme.css` maps `xs` to `2xl` only, so `<Heading level={1}>` draws at 29.25px. Manti's
+  [issue 135](https://github.com/manti-ui/ui/issues/135), open, asks how a brand adds named styles
+  such as a label, and offers three options; the third is to compose them from existing tokens.
+
+### Read during the walk
+
+| Source | What it adds |
+|---|---|
+| Figma [t22] | A text style is one saved set of font, size, weight and line height, applied by name. |
+| Panda [t23] | `textStyles` in the theme config, applied through one `textStyle` prop. |
+| MDN [t24] | `<dl>`, `<dt>` and `<dd>`: a description list, its terms and their details. |
+| Tailwind Catalyst [t25] | `DescriptionList`, `DescriptionTerm` and `DescriptionDetails`, HTML's names as components. |
+| Shopify Polaris [t26] | A `DescriptionList` component for terms and their descriptions. |
 
 ## Today's card and its neighbors
 
@@ -131,21 +150,21 @@ Checked on main, except the card, which is round 6 of the ask desk look on a loc
 | Activity | an agent's id in mono, its cost and turns in mono | `window.css:2431`, `window.css:2700` |
 | Prose | 14 at line height 1.65, in the low gray | `window.css:2621` |
 
-The same card, checked against each principle the note proposes:
+The same card, checked against each principle the note sets:
 
 | Principle | Today's card |
 |---|---|
-| T1. Every size comes from a role | **Breaks.** Each of its eight text parts is sized in its own CSS rule. |
+| T1. Every size comes from a text style | **Breaks.** Each of its eight text parts is sized in its own CSS rule. |
 | T2. What you act on leads its block | **Breaks.** The rec is 13/600, smaller than the question at 15/600. |
 | T3. Rank by size, then weight, in two grays | **Half.** Two grays, but four parts at 600 compete. |
-| T4. The role sets the look, the element the meaning | **Passes.** The question is an `h2`. Nothing ties its look to that. |
+| T4. The text style sets the look, the element the meaning | **Passes.** The question is an `h2`. Nothing ties its look to that. |
 | T5. A label is one line; meta gives way first | **Half.** In the 1024x700 shot the tracker title squeezed to "`fabri…" before its meta did. |
 | T6. Mono only for typed words | **Breaks.** The agent's id `lane` and Activity's cost are mono. |
 
 ## The look build
 
-Today's version, on a local branch, not pushed. Six roles on Manti's `Text` and `Heading` were put
-on three places: the card, the tracker's rows and the ticket's heading. Their CSS lost its sizes,
+Today's version, on a local branch, not pushed. Six text styles on Manti's `Text` and `Heading` were
+put on three places: the card, the tracker's rows and the ticket's heading. Their CSS lost its sizes,
 weights and colors. Each place was shot with Playwright on Electron, the way `apps/fabrika/e2e.ts`
 drives the app, with its own short temp `FABRIKA_HOME`, at one tile, two side by side, two stacked,
 a 2x2 grid and 1024x700, and set beside round 6 and Linear's issue page, list and Triage
@@ -153,7 +172,7 @@ Intelligence.
 
 ```text
 round   what changed                                              the rec reads as
-A       the card from roles; rec at strong (13/500)               weaker than round 6
+A       the card from text styles; rec at strong (13/500)         weaker than round 6
 C       rec at heading (15/600)                                   the loudest text in the card
 CD      rec at heading; the question at strong (13/500), an h2    the loudest, and alone
 ```
@@ -165,19 +184,20 @@ before the title does. A title's backticked words became `<code>`, typed words i
 What it found that the note must fix:
 
 - **`themes.test.ts` reads colors from CSS selectors.** Four of its checks failed once color came
-  from Manti's props instead of `.tracker-title` and `.tk-title`. The law must read the role map.
+  from Manti's props instead of `.tracker-title` and `.tk-title`. The law must read the `textStyles` map.
 - **`primary` text was orange.** One line in `theme.css` maps it to our accent.
 
 ## What this tells us for fabrika
 
-- **Six roles cover every place read**: title, heading, strong, body, quiet, label. That is three
+- **Six text styles cover every place read**: title, heading, strong, body, quiet, label. That is three
   sizes in common use (12, 13, 15) and one title (22), inside NN/g's three, plus the title.
 - **The numbers we have are the known numbers.** Manti's scale at base 13 gives 12, 13, 15 and 22.
   macOS: Callout 12, Body 13, Title 3 15, Title 1 22. Linear: 12, 13, 15 and a 24 title.
-- **The card got better from roles alone.** No card-only size was needed; the rec found its rank
-  from the role list.
-- **Manti has the parts, not the names.** The role map lives in our code until Manti takes a
-  `textStyle`. It goes in the shared design package, so both versions use one list.
+- **The card got better from text styles alone.** No card-only size was needed; the rec found its
+  rank from the list of six.
+- **Manti has the parts, not the names.** The `textStyles` map lives in our code and is spread onto
+  Manti's own props. It goes in the shared design package, with the description list, so both
+  versions use one list. Manti's issue 135 gets our six as a real case.
 
 ## What it cannot tell us
 
@@ -186,9 +206,9 @@ What it found that the note must fix:
 - How a screen reader reads the card. No screen reader was run. The question stays an `h2`, so
   heading navigation should not change.
 - Whether 22 should be 24, as in Linear. Nothing measured that; it is a guess, 80% that 22 holds.
-- Whether the roles fit the trace waterfall, the asks popup and the trace's labels. They were read
-  and seem to fit; they were not built.
-- How often a program needs a seventh role. Only three places were built.
+- Whether the text styles fit the trace waterfall, the asks popup and the trace's labels. They were
+  read and seem to fit; they were not built.
+- How often a program needs a seventh text style. Only three places were built.
 
 $0. Reading only; no model ran.
 
@@ -215,3 +235,8 @@ $0. Reading only; no model ran.
 - [t19] [Chakra text styles](https://chakra-ui.com/docs/styling/text-styles)
 - [t20] [Radix Themes Data List](https://www.radix-ui.com/themes/docs/components/data-list)
 - [t21] `@manti-ui/react` 0.13.0, `Text` and `Heading`, as installed by the lockfile
+- [t22] [Figma, create and apply text styles](https://help.figma.com/hc/en-us/articles/360039957034)
+- [t23] [Panda CSS text styles](https://panda-css.com/docs/theming/text-styles)
+- [t24] [MDN, the `<dl>` element](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/dl)
+- [t25] [Tailwind Catalyst, description list](https://catalyst.tailwindui.com/docs/description-list)
+- [t26] [Shopify Polaris, description list](https://polaris.shopify.com/components/lists/description-list)
