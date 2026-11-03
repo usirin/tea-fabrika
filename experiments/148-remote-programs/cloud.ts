@@ -6,7 +6,8 @@ const REGISTRY = "registry.cloudflare.com";
 
 type App = {id: string; name: string};
 
-export const cloudOf = (account: string, token: string) => {
+/** `prefix`: whose run to list and sweep. Experiment 199 passes its own, tf-exp-199. */
+export const cloudOf = (account: string, token: string, prefix: string = PREFIX) => {
 	const cf = async (path: string, method = "GET", body?: unknown) => {
 		const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}${path}`, {
 			method,
@@ -25,7 +26,7 @@ export const cloudOf = (account: string, token: string) => {
 	};
 	const apps = async () =>
 		(((await cf("/containers/applications")).result ?? []) as App[]).filter((a) =>
-			a.name.startsWith(PREFIX),
+			a.name.startsWith(prefix),
 		);
 	/** The registry, as wrangler's `containers images` reads it: a short-lived login, then the catalog. */
 	const registry = async () => {
@@ -45,7 +46,7 @@ export const cloudOf = (account: string, token: string) => {
 			: {};
 		const strip = (r: string) => r.replace(/^\/+/, "").replace(`${account}/`, "");
 		const mine = Object.entries(repos)
-			.filter(([r]) => strip(r).startsWith(PREFIX))
+			.filter(([r]) => strip(r).startsWith(prefix))
 			.map(([r, tags]) => ({repo: strip(r), tags}));
 		return {auth, status: res.status, mine, others: Object.keys(repos).length - mine.length};
 	};
@@ -74,18 +75,18 @@ export const cloudOf = (account: string, token: string) => {
 		const ns = (n: {script: string | null; name: string}) => n.script ?? n.name ?? "";
 		const reg = await registry();
 		return {
-			scripts: scripts.filter((s) => s.startsWith(PREFIX)),
-			namespaces: spaces.filter((n) => ns(n).startsWith(PREFIX)).map((n) => n.name),
+			scripts: scripts.filter((s) => s.startsWith(prefix)),
+			namespaces: spaces.filter((n) => ns(n).startsWith(prefix)).map((n) => n.name),
 			containerApps: (await apps()).map((a) => a.name),
 			images: reg?.mine ?? "registry login failed",
-			otherScripts: scripts.filter((s) => !s.startsWith(PREFIX)).length,
-			otherNamespaces: spaces.filter((n) => !ns(n).startsWith(PREFIX)).length,
+			otherScripts: scripts.filter((s) => !s.startsWith(prefix)).length,
+			otherNamespaces: spaces.filter((n) => !ns(n).startsWith(prefix)).length,
 			otherRepos: reg?.others ?? null,
 		};
 	};
 	const sweepImages = async (reg: Awaited<ReturnType<typeof registry>>, swept: string[]) => {
 		for (const {repo, tags} of reg?.mine ?? []) {
-			if (!repo.startsWith(PREFIX)) continue;
+			if (!repo.startsWith(prefix)) continue;
 			for (const tag of tags) {
 				const url = `https://${REGISTRY}/v2/${account}/${repo}/manifests/${tag}`;
 				const accept =
@@ -111,18 +112,18 @@ export const cloudOf = (account: string, token: string) => {
 		}
 		return swept;
 	};
-	/** Delete by hand anything named tf-exp-148 that Alchemy left, found by listing, by prefix only. */
+	/** Delete by hand anything under the prefix that Alchemy left, found by listing, by prefix only. */
 	const sweep = async () => {
 		const swept: string[] = [];
 		for (const a of await apps()) {
-			if (!a.name.startsWith(PREFIX)) continue;
+			if (!a.name.startsWith(prefix)) continue;
 			swept.push(
 				`app ${a.name}: ${(await cf(`/containers/applications/${a.id}`, "DELETE")).status}`,
 			);
 		}
 		const found = await ours();
 		for (const s of found.scripts) {
-			if (!s.startsWith(PREFIX)) continue;
+			if (!s.startsWith(prefix)) continue;
 			swept.push(
 				`script ${s}: ${(await cf(`/workers/scripts/${s}?force=true`, "DELETE")).success}`,
 			);
