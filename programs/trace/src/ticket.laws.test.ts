@@ -14,7 +14,8 @@ import {STOPS, type Story, stories, type TrueLane} from "./timelines.ts";
 // What the plan leaves open, and these laws take as given:
 //   - "the lane running at its time", for an ask with no `trace`: the newest lane begun by then
 //   - an older lane is never open: the stories never leave one with a step not ended or an ask not
-//     answered, so the laws say nothing of one
+//     answered, so the laws say nothing of one. ./ticket.running.test.ts says what one does
+//     (review A1)
 
 const OPTS = {numRuns: 300, seed: 141};
 
@@ -210,11 +211,30 @@ describe("the ticket's lanes (L1 to L6)", () => {
 				const rows = new Map(
 					live(story).flatMap((l) => stepsIn(l).map((r): [string, Price] => [r.run, r.price])),
 				);
-				for (const step of story.lanes.flatMap((l) => l.steps))
-					expect(rounded(rows.get(step.run))).toEqual(rounded(step.price));
+				// A step not ended with a model has no price yet: the next law says what it is not.
+				const priced = story.lanes.flatMap((l) => l.steps).filter((s) => s.price !== null);
+				for (const step of priced)
+					expect(rounded(rows.get(step.run))).toEqual(rounded(step.price ?? undefined));
 			}),
 			OPTS,
 		);
+	});
+
+	it("L6: a step with a model that has not ended has no price yet: never unknown, usd or none (review B2)", () => {
+		let seen = 0;
+		fc.assert(
+			fc.property(stories, (story) => {
+				const rows = new Map(
+					live(story).flatMap((l) => stepsIn(l).map((r): [string, Price] => [r.run, r.price])),
+				);
+				const running = story.lanes.flatMap((l) => l.steps).filter((s) => s.price === null);
+				seen += running.length;
+				for (const step of running)
+					expect(["usd", "unknown", "none"], step.run).not.toContain(rows.get(step.run)?.kind);
+			}),
+			OPTS,
+		);
+		expect(seen).toBeGreaterThan(0);
 	});
 
 	it("L6: the summary sums usd rows only, null when none, and counts the unknown rows; per lane and for the ticket", () => {
@@ -223,7 +243,7 @@ describe("the ticket's lanes (L1 to L6)", () => {
 				const lanes = live(story);
 				const want = (truths: readonly TrueLane[]) => {
 					const prices = truths.flatMap((l) => l.steps.map((s) => s.price));
-					const usd = prices.flatMap((p) => (p.kind === "usd" ? [p.usd] : []));
+					const usd = prices.flatMap((p) => (p?.kind === "usd" ? [p.usd] : []));
 					const asks = truths.flatMap((l) => l.asks);
 					return {
 						lanes: truths.length,
@@ -231,7 +251,8 @@ describe("the ticket's lanes (L1 to L6)", () => {
 						waits: asks.length,
 						waited: asks.reduce((sum, a) => sum + ((a.answer?.at ?? story.now) - a.at), 0),
 						usd: usd.length === 0 ? null : usd.reduce((sum, u) => sum + u, 0),
-						unknown: prices.filter((p) => p.kind === "unknown").length,
+						// A step not ended yet is not counted as "no list price" (review B2).
+						unknown: prices.filter((p) => p?.kind === "unknown").length,
 					};
 				};
 				const check = (got: ReturnType<typeof summaryOf>, truths: readonly TrueLane[]) => {

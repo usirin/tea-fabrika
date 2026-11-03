@@ -30,7 +30,7 @@ import {type CheckRun, CheckRunner} from "./checks.ts";
 import {Inputs, keyOf} from "./key.ts";
 import {fakeEnv, type GhStory, makeFakeGh, makeLaneHome} from "./lane-fixture.ts";
 import {laneLayer, runLane} from "./layer.ts";
-import {Lane, PICKS} from "./machine.ts";
+import {askedFor as kindOfAsk, Lane, PICKS} from "./machine.ts";
 import {type Folded, fold, seenOf} from "./restart.ts";
 
 // One tracker ticket through the whole lane in this process: the real machines, the real Codex
@@ -770,7 +770,8 @@ describe("a lane, whole", () => {
 			// Astra's steps were seen, each at its list price once the table has it.
 			expect(agentSteps).toBeGreaterThan(0);
 
-			// P3: each answer's "wait for the answer" span names the ask, the pick and who answered.
+			// P3: each answer's "wait for the answer" span names the ask, what it was for, the pick and
+			// who answered. `tea.ask.for` is in the plan's span tags (section 1, review B1).
 			const waitSpans = ran.spans.filter((s) => s.name === "wait for the answer");
 			const answers = ran.entries.flatMap((e) =>
 				e.fact.type === "answered" ? [{fact: e.fact, by: e.by.id}] : [],
@@ -781,6 +782,9 @@ describe("a lane, whole", () => {
 					(s) => s.attributes[LANE.ask] === fact.ask && s.attributes[LANE.pick] !== undefined,
 				);
 				expect(heard, fact.ask).toHaveLength(1);
+				const what = kindOfAsk(fact.ask);
+				expect(what, fact.ask).not.toBeNull();
+				expect(heard[0]?.attributes["tea.ask.for"], fact.ask).toBe(what);
 				expect(heard[0]?.attributes[LANE.pick]).toBe(fact.pick);
 				expect(heard[0]?.attributes[LANE.by]).toBe(by);
 			}

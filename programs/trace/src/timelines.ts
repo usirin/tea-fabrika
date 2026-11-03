@@ -107,7 +107,11 @@ export interface TrueStep {
 	readonly to: number | null;
 	readonly model: string | null;
 	readonly harness: string | null;
-	readonly price: Price;
+	/**
+	 * `null`: a step with a model that has not ended, so it has no price yet. It is neither a price nor
+	 * "no list price", so the laws take any case for it but `usd`, `unknown` and `none`.
+	 */
+	readonly price: Price | null;
 }
 
 /** One ask as made. `lane`: the lane it belongs in, by its place. */
@@ -226,8 +230,9 @@ const storyOf = (shape: Shape): Story => {
 				if (noise === "pushed") put(LANE_WRITER, {type: "pushed", head: "abcdef0", commits: []});
 			}
 			if (final && shape.last === "running") {
-				// No `ended`: a step with a model has neither price, so L6 reads it `unknown`.
-				const price: Price = runner === null ? {kind: "none"} : {kind: "unknown"};
+				// No `ended`: a step with a model has no price yet. It is not `unknown`: that says the
+				// model has no list price, and astra has one (review B2). Code is still `none`.
+				const price: Price | null = runner === null ? {kind: "none"} : null;
 				steps.push({run, stage: step.stage, from, to: null, ...who(runner), price});
 				return;
 			}

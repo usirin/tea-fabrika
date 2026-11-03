@@ -59,9 +59,14 @@ describe("a review's span, at its end", () => {
 });
 
 describe("a lane's wait, at its end (ticket 141)", () => {
-	it("is tagged with the ask, the pick and who picked", () => {
-		expect(answerTags({ask: "a-approve-8", pick: "approve", by: "owner"})).toEqual({
+	// The plan's span tags (section 1) name four: `tea.ask.id`, `tea.ask.for`, `tea.answer.pick`,
+	// `tea.answer.by`. What the ask was for is on the wait's own span, so a view never has to match
+	// the wait to the asking step by time (review B1). Never the note.
+	it("is tagged with the ask, what it was for, the pick and who picked", () => {
+		const heard = {ask: "a-approve-8", for: "approve", pick: "approve", by: "owner"} as const;
+		expect(answerTags(heard)).toEqual({
 			[LANE.ask]: "a-approve-8",
+			"tea.ask.for": "approve",
 			[LANE.pick]: "approve",
 			[LANE.by]: "owner",
 		});
