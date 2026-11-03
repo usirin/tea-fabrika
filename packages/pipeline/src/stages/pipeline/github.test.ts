@@ -939,4 +939,48 @@ describe("the local host, when a pull's head moves", () => {
 			expect(facts.approval).toBe("given");
 		},
 	);
+
+	// Ship's own proof reads the criteria's rows, kept at the head the review saw (../ship/ready.ts).
+	// The facts name each head code carried here, so those rows count at the new head as well. Without
+	// it, a head that only moved by format or a clean replay still read as `send:reviewer:no_review`,
+	// and the review agent ran again: the stop on ticket 117's exam pull request.
+	it(
+		"a new head the verdict carried to: the facts name the carry, for ship's proof",
+		{timeout: 120_000},
+		async () => {
+			const {gitIn, mainMoves, reviewedAndSaidYes, run} = scene();
+			const {a, b, facts} = await run(
+				Effect.gen(function* () {
+					const {pr, a, tree, pushed} = yield* reviewedAndSaidYes;
+					mainMoves();
+					gitIn(tree, "fetch", "--quiet", "origin");
+					gitIn(tree, "rebase", "--quiet", "origin/main");
+					const b = gitIn(tree, "rev-parse", "HEAD");
+					yield* pushed(b);
+					return {a, b, facts: yield* (yield* CodeHost).prFacts(pr)};
+				}),
+			);
+			expect(facts.head).toBe(b);
+			expect(new Set((facts.carried ?? []).map((h) => `${h.from} -> ${h.to}`))).toEqual(
+				new Set([`${a} -> ${b}`]),
+			);
+		},
+	);
+
+	it(
+		"a new head that changes a word: the facts name no carry to it",
+		{timeout: 120_000},
+		async () => {
+			const {reviewedAndSaidYes, run} = scene();
+			const {b, facts} = await run(
+				Effect.gen(function* () {
+					const {pr, tree, pushed} = yield* reviewedAndSaidYes;
+					const b = yield* (yield* LaneWork).commit(tree, X('export const x = "two";\n'), "a word");
+					yield* pushed(b);
+					return {b, facts: yield* (yield* CodeHost).prFacts(pr)};
+				}),
+			);
+			expect((facts.carried ?? []).filter((h) => h.to === b)).toEqual([]);
+		},
+	);
 });

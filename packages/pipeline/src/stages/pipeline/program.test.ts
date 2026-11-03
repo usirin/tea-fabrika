@@ -2535,24 +2535,40 @@ describe("a lane, on what a real agent might answer", () => {
 			},
 		);
 
+		// Self-fix PR 10: `exam_review` is a step that runs an agent too. It runs the review stage, with
+		// the review's brief, so the fake answers both reviews as `review` runs: the exam's first (its
+		// misfit and its retry), then the lane's own (its misfit and its retry). Each gets one misfit.
 		it(
 			"on every step that runs an agent: one misfit each, and the lane still lands",
 			{timeout: 150_000},
 			async () => {
 				const MISFIT = "All done, see above.";
-				const STEPS = ["triage", "plan", "exam", "tests", "build", "mutants", "review"];
+				const ONCE = ["triage", "plan", "exam", "tests", "build", "mutants"];
 				const ran = await lane({
 					title: "[rules] Read names in one form",
 					within: 140,
 					picks: YES,
-					fake: {answers: Object.fromEntries(STEPS.map((step) => [step, [MISFIT]]))},
+					fake: {
+						answers: {
+							...Object.fromEntries(ONCE.map((step) => [step, [MISFIT]])),
+							// The exam's review, its retry, then the lane's review.
+							review: [MISFIT, null, MISFIT],
+						},
+					},
 				});
 				expect(ran.lines.at(-1)).toContain("ended: done");
-				for (const step of STEPS) {
+				for (const step of ONCE) {
 					const runs = runsOf(ran, step);
 					expect({step, runs: runs.length}).toEqual({step, runs: 2});
 					expect(runs[1]?.prompt).toContain(MISFIT);
 				}
+				const reviews = runsOf(ran, "review");
+				expect(reviews).toHaveLength(4);
+				// The first read the exam's criterion, made by code; the third the lane's pull request.
+				expect(reviews[0]?.prompt).toContain("- e1: ");
+				expect(reviews[2]?.prompt).not.toContain("- e1: ");
+				expect(reviews[1]?.prompt).toContain(MISFIT);
+				expect(reviews[3]?.prompt).toContain(MISFIT);
 			},
 		);
 	});

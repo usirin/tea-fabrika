@@ -180,3 +180,127 @@ describe("readyToMerge", () => {
 		expect({tried, wrong}).toEqual({tried: 5 * 6 * 4, wrong: []});
 	});
 });
+
+// Self-fix PR 10, Part 4 (docs/direction/a-yes-binds-to-the-diff.md). A proof may name hops: a head
+// the rows were judged at, and a later head code found the diff they judged still stands at (a
+// `carried` fact, from `carry`). A row counts at the head when it was judged there, or carried there.
+// It keeps the head it was judged at, so the proof says what a review saw. The checks never carry.
+
+describe("readyToMerge, with rows carried to the head", () => {
+	/** The hop that carries `B` to the head, `A`. */
+	const carried = {from: "B", to: "A"};
+
+	it("is ready on rows judged at another head, when that head was carried to this one", () => {
+		const r = readyToMerge(proof({rows: [pass(C1, "B"), pass(C2, "B")], carried: [carried]}));
+		if (!("ready" in r)) throw new Error(`not ready: ${JSON.stringify(r.refused)}`);
+		expect({pr: r.ready.pr, head: r.ready.head}).toEqual({pr: "P", head: "A"});
+		// A carried row keeps the head it was judged at.
+		expect(r.ready.rows.map((row) => `${row.criterion}@${row.head}`)).toEqual(["c1@B", "c2@B"]);
+	});
+
+	it("takes a carry only from the row's head to this one", () => {
+		const rows = [pass(C1, "B"), pass(C2, "B")];
+		expect(whys(proof({rows}))).toEqual(["other_head", "other_head"]);
+		expect(whys(proof({rows, carried: [{from: "B", to: "C"}]}))).toEqual([
+			"other_head",
+			"other_head",
+		]);
+		expect(whys(proof({rows, carried: [{from: "A", to: "B"}]}))).toEqual([
+			"other_head",
+			"other_head",
+		]);
+		expect(whys(proof({rows, carried: [{from: "C", to: "A"}]}))).toEqual([
+			"other_head",
+			"other_head",
+		]);
+	});
+
+	it("keeps every other reason: a carried fail, a carried old wording, and checks at another head", () => {
+		expect(whys(proof({rows: [pass(C1, "B"), fail(C2, "B")], carried: [carried]}))).toEqual([
+			"not_met",
+		]);
+		expect(whys(proof({rows: [pass(C1, "B"), pass(C2, "B", 1)], carried: [carried]}))).toEqual([
+			"old_version",
+		]);
+		expect(
+			whys(
+				proof({
+					rows: [pass(C1, "B"), pass(C2, "B")],
+					carried: [carried],
+					checks: {head: "B", state: "green"},
+				}),
+			),
+		).toEqual(["checks"]);
+	});
+
+	it("takes the latest row among those at the head and those carried there", () => {
+		// A review at the head itself, after the carried pass, failed it.
+		expect(
+			whys(proof({rows: [pass(C1, "B"), pass(C2, "B"), fail(C2, "A")], carried: [carried]})),
+		).toEqual(["not_met"]);
+		// A later review at the old head passed what had failed, and it was carried.
+		expect(
+			whys(proof({rows: [pass(C1), fail(C2, "B"), pass(C2, "B")], carried: [carried]})),
+		).toEqual([]);
+	});
+
+	it("survives being kept, and a kept one is checked again, its carry too", () => {
+		const r = readyToMerge(proof({rows: [pass(C1, "B"), pass(C2, "B")], carried: [carried]}));
+		if (!("ready" in r)) throw new Error("not ready");
+		const kept: unknown = JSON.parse(JSON.stringify(r.ready));
+		expect(ReadyToMerge.revive(kept)).toEqual(r.ready);
+		expect(Schema.is(Ready)(r.ready)).toBe(true);
+		// Moved to another head, its rows at B prove nothing there.
+		expect(Schema.is(Ready)({...r.ready, head: "C"})).toBe(false);
+		// A kept carry edited to point elsewhere proves nothing either.
+		const elsewhere = JSON.parse(JSON.stringify(r.ready).replaceAll('"to":"A"', '"to":"C"'));
+		expect(ReadyToMerge.revive(elsewhere)).toBeNull();
+	});
+
+	it("agrees on every small proof: a carried row counts as if it had been judged at the head", () => {
+		// Rows for two criteria at A or B, every set of hops among A, B and C that cannot chain into A
+		// through C, and two checks reads. The rule: move every row whose head is carried to A onto A,
+		// then the rule with no carry.
+		const rowsFor = (id: typeof C1): readonly (Judged | null)[] => [
+			null,
+			pass(id),
+			pass(id, "B"),
+			fail(id, "B"),
+			pass(id, "B", versionOf(id) + 1),
+		];
+		const HOPS = [
+			{from: "B", to: "A"},
+			{from: "A", to: "B"},
+			{from: "B", to: "C"},
+		];
+		const hopSets = HOPS.reduce<(typeof HOPS)[]>(
+			(sets, hop) => [...sets, ...sets.map((s) => [...s, hop])],
+			[[]],
+		);
+		const checks: readonly Checks[] = [green, {head: "A", state: "red"}];
+		let tried = 0;
+		const wrong: string[] = [];
+		for (const one of rowsFor(C1))
+			for (const two of rowsFor(C2))
+				for (const hops of hopSets)
+					for (const c of checks) {
+						const rows = [one, two].filter((v): v is Judged => v !== null);
+						const moved = rows.map((v) =>
+							hops.some((h) => h.from === v.head && h.to === "A") ? {...v, head: "A"} : v,
+						);
+						const rule =
+							CRITERIA.every(
+								(k) =>
+									moved.findLast(
+										(v) => v.criterion === k.id && v.version === k.version && v.head === "A",
+									)?.grade === "pass",
+							) &&
+							c.head === "A" &&
+							c.state === "green";
+						tried++;
+						const p = proof({rows, carried: hops, checks: c});
+						if ("ready" in readyToMerge(p) !== rule) wrong.push(JSON.stringify(p));
+					}
+		expect({tried, wrong}).toEqual({tried: 5 * 5 * 8 * 2, wrong: []});
+	});
+});
