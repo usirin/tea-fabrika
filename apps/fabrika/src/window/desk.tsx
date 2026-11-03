@@ -470,7 +470,10 @@ const onKey = (e: KeyboardEvent) => {
 		swallow(e);
 		return frameStep({type: "palette"});
 	}
-	if (e.key === "Escape" && frameStep({type: "escape", desk: midKey()})) return swallow(e);
+	// An overlay one step deep (the asks glance's note or picks) takes its own Escape back first.
+	const deep = e.target instanceof Element && e.target.closest("[data-deep]") !== null;
+	if (e.key === "Escape" && !deep && frameStep({type: "escape", desk: midKey()}))
+		return swallow(e);
 	const name = keyName(pressed);
 	if (name === null) return;
 	const forOver = keyForOver(name, e.target);

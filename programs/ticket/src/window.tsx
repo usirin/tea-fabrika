@@ -11,7 +11,7 @@ import {
 	stepWords,
 } from "@tea-fabrika/tracker";
 import {whenOf} from "@tea-fabrika/tracker/window";
-import {type KeyboardEvent, type ReactNode, useState} from "react";
+import {type KeyboardEvent, type ReactNode, useEffect, useEffectEvent, useRef, useState} from "react";
 import type {ticket} from "./index.ts";
 import type {Page} from "./view.ts";
 
@@ -108,10 +108,24 @@ const usd = (n: number) => `$${n.toFixed(2)}`;
 /** A pick as a button says it: the first letter up. */
 const said = (pick: string) => pick.slice(0, 1).toUpperCase() + pick.slice(1);
 
-/** The main button's words: the ask itself when it starts with its pick, "Approve plan v1". */
-const primaryWords = (ask: OpenAsk, pick: string) =>
-	ask.what.startsWith(`${pick} `) ? said(ask.what) : said(pick);
+/** What the ask card is in the middle of: looking, a note against the rec, or every pick open. */
+type Doing =
+	| {readonly _tag: "look"}
+	| {readonly _tag: "note"; readonly pick: string}
+	| {readonly _tag: "picks"};
 
+const LOOK: Doing = {_tag: "look"};
+
+/** A key the card takes, while focus is in this tile and not in a text field. */
+const typing = (t: EventTarget | null) =>
+	t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+
+/**
+ * The ask, as the ticket's card (docs/direction/ask-desk.md, PR 326): the question in one line,
+ * the rec in words under it, the evidence folded, and a button for each key. Look study r3: no box
+ * of its own; the tile's edge is the only one. `y` takes the rec, `n` says why not (required), `o`
+ * opens every pick, `space` the evidence; they work only while focus is in this tile.
+ */
 function AskCard(props: {
 	readonly ask: OpenAsk;
 	readonly page: Page;
@@ -119,77 +133,201 @@ function AskCard(props: {
 	readonly send: Send;
 }) {
 	const {ask, page, now, send} = props;
-	const [first, ...rest] = ask.picks;
-	const [other, setOther] = useState<string | null>(null);
+	const card = useRef<HTMLElement>(null);
+	const [doing, setDoing] = useState<Doing>(LOOK);
+	const [open, setOpen] = useState(false);
 	const [note, setNote] = useState("");
+	const [status, setSaid] = useState("");
 	const saw = {title: page.opened.ticket.title, body: page.body};
 	const ticket = page.opened.ticket.number;
+	const rec = ask.rec?._tag === "pick" ? ask.rec : null;
 	const answer = (pick: string, text: string) =>
 		send({type: "answer", value: {ticket, ask: ask.ask, pick, note: text, saw}});
+	const against = (pick: string) =>
+		rec === null || pick === rec.pick ? answer(pick, "") : setDoing({_tag: "note", pick});
+	const notRec = () => {
+		if (rec === null) return;
+		const others = ask.picks.filter((p) => p !== rec.pick);
+		const [only] = others;
+		setDoing(others.length === 1 && only !== undefined ? {_tag: "note", pick: only} : {_tag: "picks"});
+	};
+	/** Close the note, and give focus back to the tile, so the card's keys work again. */
+	const back = () => {
+		setDoing(LOOK);
+		const view = card.current?.closest("[data-view]") ?? card.current?.closest(".ticket-view");
+		if (view instanceof HTMLElement) view.focus();
+	};
+	const sendNote = () => {
+		if (doing._tag !== "note") return;
+		if (note.trim() === "") return setSaid("Say why, in a line: the next step reads it.");
+		answer(doing.pick, note.trim());
+		back();
+		setNote("");
+		setSaid("");
+	};
+	const onKey = useEffectEvent((e: globalThis.KeyboardEvent) => {
+		if (e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return;
+		const did = (() => {
+			switch (e.key) {
+				case "y":
+					return rec !== null && (answer(rec.pick, ""), true);
+				case "n":
+					return rec !== null && (notRec(), true);
+				case "o":
+					return setDoing(doing._tag === "picks" ? LOOK : {_tag: "picks"}), true;
+				case " ":
+					return page.plan !== null && (setOpen(!open), true);
+				case "Escape":
+					return doing._tag !== "look" && (setDoing(LOOK), true);
+			}
+			if (doing._tag === "picks" && /^[1-9]$/.test(e.key)) {
+				const pick = ask.picks[Number(e.key) - 1];
+				return pick !== undefined && (against(pick), true);
+			}
+			return false;
+		})();
+		if (did) e.preventDefault();
+	});
+	useEffect(() => {
+		// The tile's own view element holds focus when the tile is focused (the app's desk); in a
+		// plain page, the ticket's view does.
+		const view = card.current?.closest("[data-view]") ?? card.current?.closest(".ticket-view");
+		if (!(view instanceof HTMLElement)) return;
+		const listen = (e: globalThis.KeyboardEvent) => onKey(e);
+		view.addEventListener("keydown", listen);
+		return () => view.removeEventListener("keydown", listen);
+	}, []);
+	const plan = page.plan;
 	return (
-		<section className="turnc you" aria-label="Whose turn">
-			<span className="m p you lg" aria-hidden="true">
-				Y
-			</span>
-			<div className="what">
-				<span className="big">
-					<span className="w-you">Your turn</span> · {ask.what}
-				</span>
-				<span className="sub">
-					<Mark by={ask.by} />
+		<section ref={card} className="turnc you ask" aria-label={`Your turn: ${said(ask.what)}?`}>
+			<p className="tc-top">
+				<span className="w-you">Your turn</span>
+				<span>
 					<Who by={ask.by} /> asked at {whenOf(ask.at, now)}
-					{page.plan !== null && (
-						<>
-							<span aria-hidden="true">·</span>
-							{page.plan.tasks.length} task{page.plan.tasks.length === 1 ? "" : "s"}
-						</>
-					)}
 				</span>
-			</div>
-			<div className="acts">
-				{rest.map((pick) => (
+			</p>
+			<h2 className="tc-q">{said(ask.what)}?</h2>
+			{/* The rec as a labeled row, as Linear's Triage Intelligence: the label low, the pick high. */}
+			<dl className="tc-recrow">
+				<dt>Recommended</dt>
+				<dd>
+					{rec !== null ? (
+						<>
+							<strong>{said(rec.pick)}</strong> <span className="sure">{rec.sure}% sure</span>
+						</>
+					) : (
+						<span className="sure">none</span>
+					)}
+				</dd>
+			</dl>
+			<p className="tc-why">
+				{rec !== null
+					? `${said(rec.why)}. ${said(rec.cost)}.`
+					: ask.rec?._tag === "none"
+						? `${said(ask.rec.why)}.`
+						: "The step that asked gave no rec."}
+			</p>
+			{plan !== null && (
+				<div className="tc-ev">
 					<button
-						key={pick}
 						type="button"
-						className="btn quiet"
-						aria-expanded={other === pick}
-						onClick={() => setOther(other === pick ? null : pick)}
+						className="tc-fold"
+						aria-expanded={open}
+						onClick={() => setOpen(!open)}
 					>
-						{said(pick)}
+						<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+							<path
+								d="M4.5 3l3 3-3 3"
+								fill="none"
+								stroke="currentColor"
+								strokeWidth="1.4"
+								strokeLinecap="round"
+								strokeLinejoin="round"
+							/>
+						</svg>
+						Plan v{plan.version} · {plan.tasks.length} task{plan.tasks.length === 1 ? "" : "s"}
+						<Kbd>Space</Kbd>
 					</button>
-				))}
-				<button type="button" className="btn turn" onClick={() => answer(first, "")}>
-					{primaryWords(ask, first)}
-				</button>
-			</div>
-			{other !== null && (
+					{open && (
+						<ul className="tc-tasks">
+							{plan.tasks.map((t) => (
+								<li key={t}>
+									<code>{t}</code>
+								</li>
+							))}
+						</ul>
+					)}
+				</div>
+			)}
+			{doing._tag === "picks" && (
+				<ol className="tc-picks" aria-label="Every pick">
+					{ask.picks.map((pick, i) => (
+						<li key={pick}>
+							<button type="button" className="btn quiet" onClick={() => against(pick)}>
+								<Kbd>{String(i + 1)}</Kbd>
+								{said(pick)}
+								{rec?.pick === pick && <span className="faint">rec</span>}
+							</button>
+						</li>
+					))}
+				</ol>
+			)}
+			{doing._tag === "note" && (
 				<div className="noform">
 					<label className="sr" htmlFor="ticket-note">
-						Why {other}
+						Why {doing.pick}
 					</label>
 					<textarea
 						id="ticket-note"
 						rows={2}
-						placeholder={`Why ${other}? The note goes with your answer.`}
+						// oxlint-disable-next-line jsx-a11y/no-autofocus -- n opened this field to type in; focus goes where the key sent it.
+						autoFocus
+						placeholder={`Why ${doing.pick}, not ${rec?.pick ?? "the rec"}? The next step reads it.`}
 						value={note}
 						onChange={(e) => setNote(e.target.value)}
+						onKeyDown={(e) => {
+							if (e.key === "Escape") return back();
+							if (e.key !== "Enter" || e.shiftKey) return;
+							e.preventDefault();
+							sendNote();
+						}}
 					/>
 					<div className="row2">
-						<button type="button" className="btn quiet sm" onClick={() => setOther(null)}>
-							Cancel
+						<button type="button" className="btn quiet sm" onClick={back}>
+							Cancel <Kbd>Esc</Kbd>
 						</button>
-						<button
-							type="button"
-							className="btn sm"
-							onClick={() => {
-								answer(other, note.trim());
-								setOther(null);
-								setNote("");
-							}}
-						>
-							Send {other}
+						<button type="button" className="btn sm" onClick={sendNote}>
+							Send {doing.pick} <Kbd>↵</Kbd>
 						</button>
 					</div>
+				</div>
+			)}
+			{status !== "" && (
+				<p className="tc-said" role="status">
+					{status}
+				</p>
+			)}
+			{/* While a note is open, its own Send and Cancel stand where the answers were. */}
+			{doing._tag !== "note" && (
+				<div className="acts">
+					{rec !== null && (
+						<>
+							<button type="button" className="btn turn" onClick={() => answer(rec.pick, "")}>
+								Take rec · {rec.pick} <Kbd>Y</Kbd>
+							</button>
+							<button type="button" className="btn quiet" onClick={notRec}>
+								Not the rec <Kbd>N</Kbd>
+							</button>
+						</>
+					)}
+					<button
+						type="button"
+						className="btn quiet"
+						aria-expanded={doing._tag === "picks"}
+						onClick={() => setDoing(doing._tag === "picks" ? LOOK : {_tag: "picks"})}
+					>
+						Every pick <Kbd>O</Kbd>
+					</button>
 				</div>
 			)}
 		</section>

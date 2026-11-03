@@ -124,7 +124,7 @@ export function IconOf(props: {readonly icon: Icon}): ReactNode {
  * else. A press on the item that opened it (`aria-controls` its id) is left to that item, which
  * closes it as a menu button does.
  */
-const useOverlay = (
+export const useOverlay = (
 	box: RefObject<HTMLElement | null>,
 	id: string,
 	into: () => void,

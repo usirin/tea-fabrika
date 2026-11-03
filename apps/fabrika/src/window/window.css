@@ -3933,3 +3933,414 @@ main.program:has(> .view) {
 		display: none;
 	}
 }
+
+/*
+ * The asks list as the asks program's glance (asks-glance.tsx; docs/direction/ask-desk.md). Look
+ * study r3: two text steps only, rank by size and weight; the selected row is a full-row fill
+ * (slate a5, Radix's selected step) with stronger text, never a bar on one side; no box or line
+ * inside the popup's own edge.
+ */
+.pop.glance {
+	top: 38px;
+	right: var(--s-2);
+	width: 464px;
+	max-height: calc(100% - 76px);
+	overflow: auto;
+	padding: 6px;
+	color: var(--text-faint);
+}
+
+.gl-head {
+	display: flex;
+	align-items: baseline;
+	gap: var(--s-2);
+	padding: 6px 10px 8px;
+}
+
+.gl-name {
+	color: var(--text-primary);
+	font-weight: 600;
+}
+
+.gl-n {
+	color: var(--text-faint);
+	font-size: var(--fs-small);
+}
+
+.gl-empty {
+	margin: 0;
+	padding: var(--s-4) 10px;
+	font-size: var(--fs-small);
+}
+
+.gl-later {
+	display: flex;
+	gap: 6px;
+	padding: 12px 10px 4px;
+	font-size: var(--fs-small);
+	font-weight: 500;
+}
+
+.gl-row {
+	padding: 7px 10px;
+	border-radius: var(--r);
+	cursor: default;
+}
+
+@media (hover: hover) {
+	.gl-row:not(.on):hover {
+		background: var(--surface-hover);
+	}
+}
+
+.gl-row.on {
+	background: var(--surface-selected);
+}
+
+.gl-line {
+	display: grid;
+	grid-template-columns: 16px minmax(0, 1fr) auto;
+	grid-template-areas:
+		"lead t rec"
+		". s when";
+	column-gap: 10px;
+	row-gap: 1px;
+	align-items: baseline;
+}
+
+.gl-line .lead {
+	grid-area: lead;
+	align-self: center;
+	display: grid;
+	place-items: center;
+}
+
+.gl-line .t {
+	grid-area: t;
+	color: var(--text-primary);
+}
+
+.gl-row.on .gl-line .t {
+	font-weight: 500;
+}
+
+.gl-row.aside .gl-line .t {
+	color: var(--text-faint);
+}
+
+.gl-line .s {
+	grid-area: s;
+}
+
+.gl-line .rec {
+	grid-area: rec;
+}
+
+.gl-line .when {
+	grid-area: when;
+	justify-self: end;
+}
+
+.gl-line .t,
+.gl-line .s {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.gl-line .s,
+.gl-line .rec,
+.gl-line .when {
+	font-size: var(--fs-small);
+}
+
+/* The selected row says its rec in words under it, so the short one at its right goes. */
+.gl-row.on .gl-line .rec {
+	visibility: hidden;
+}
+
+.gl-more {
+	padding: 6px 0 2px 26px;
+	font-size: var(--fs-small);
+}
+
+.gl-rec,
+.gl-said {
+	margin: 0;
+	line-height: 1.45;
+}
+
+.gl-rec .k,
+.gl-picks .k {
+	color: var(--text-primary);
+	font-weight: 500;
+}
+
+.gl-said {
+	margin-top: 6px;
+	color: var(--text-primary);
+}
+
+.gl-acts {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 2px;
+	margin: 8px 0 0 -6px;
+}
+
+.gl-acts .gap,
+.gl-foot .gap {
+	flex: 1;
+}
+
+.gl-acts button,
+.gl-picks button,
+.gl-foot button {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 24px;
+	padding: 0 6px;
+	border: 0;
+	border-radius: var(--r-sm);
+	background: none;
+	color: var(--text-faint);
+	font: 500 var(--fs-small) / 1 var(--font);
+	cursor: pointer;
+}
+
+.gl-acts button.main {
+	color: var(--text-primary);
+}
+
+@media (hover: hover) {
+	.gl-acts button:hover,
+	.gl-picks button:hover,
+	.gl-foot button:hover {
+		background: var(--surface-hover);
+		color: var(--text-primary);
+	}
+}
+
+.gl-note {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	margin-top: 8px;
+}
+
+.gl-note input {
+	flex: 1;
+	min-width: 0;
+	height: 26px;
+	padding: 0 8px;
+	border: 0;
+	border-radius: var(--r-sm);
+	background: none;
+	box-shadow: inset 0 0 0 1px var(--border);
+	color: var(--text-primary);
+	font: 400 var(--fs-small) / 1 var(--font);
+}
+
+.gl-note input:focus {
+	outline: none;
+	box-shadow: inset 0 0 0 1px var(--focus);
+}
+
+.gl-note .hint,
+.gl-foot .hint {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 0 6px;
+}
+
+.gl-picks {
+	margin: 6px 0 0 -6px;
+	padding: 0;
+	list-style: none;
+}
+
+.gl-foot {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding: 8px 4px 0;
+	font-size: var(--fs-small);
+}
+
+/*
+ * The ticket's turn card, look study r5: one quiet box, the same for every turn (yours, running,
+ * stuck, done). A slate 3 fill and no edge: the box is told apart from the edged boxes near it
+ * (the inline properties, the comment field) by its ground, not by a second kind of line. No bar
+ * on its side; what the turn is comes from its words, and the indigo button when it is yours.
+ */
+.ticket-view {
+	--card-fill: light-dark(#f0f0f3, #212225); /* slate 3 */
+}
+
+.ticket-view .turnc,
+.ticket-view .turnc.you,
+.ticket-view .turnc.stuck {
+	padding: var(--s-3) var(--s-4);
+	border-radius: var(--r-lg);
+	background: var(--card-fill);
+	box-shadow: none;
+}
+
+.ticket-view .turnc.ask {
+	display: grid;
+	gap: 6px;
+	justify-items: start;
+	padding: var(--s-3) var(--s-4) var(--s-4);
+}
+
+.ticket-view .turnc.ask p {
+	margin: 0;
+}
+
+.ticket-view .tc-top {
+	display: flex;
+	gap: 8px;
+	align-items: baseline;
+	color: var(--text-faint);
+	font-size: var(--fs-small);
+}
+
+/* "Your turn" heads the box, as "Triage Intelligence" heads Linear's. */
+.ticket-view .tc-top .w-you {
+	font-size: var(--fs-body);
+	font-weight: 600;
+}
+
+.ticket-view .tc-q {
+	margin: 0;
+	color: var(--text-primary);
+	font: 600 var(--fs-head) / 1.35 var(--font);
+	letter-spacing: -0.01em;
+}
+
+/*
+ * The rec, look study r6: a labeled row as in Linear's Triage Intelligence. The label in the low
+ * step, the pick in step 12 at 600, its sureness a quiet word beside it; the reason on its own line.
+ */
+.ticket-view .tc-recrow {
+	display: grid;
+	grid-template-columns: 96px minmax(0, 1fr);
+	align-items: baseline;
+	margin: 4px 0 0;
+}
+
+.ticket-view .tc-recrow dt {
+	color: var(--text-faint);
+	font-size: var(--fs-small);
+}
+
+.ticket-view .tc-recrow dd {
+	margin: 0;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0 8px;
+	color: var(--text-primary);
+}
+
+.ticket-view .tc-recrow strong {
+	font-weight: 600;
+}
+
+.ticket-view .tc-recrow .sure {
+	color: var(--text-faint);
+	font-size: var(--fs-small);
+}
+
+.ticket-view .tc-why {
+	color: var(--text-faint);
+	line-height: 1.5;
+	max-inline-size: 68ch;
+}
+
+/* Variant B, for the pick: the rec as a subheading, its label above it and the pick at head size. */
+.ticket-view .turnc.ask.sub .tc-recrow {
+	grid-template-columns: minmax(0, 1fr);
+	gap: 2px;
+}
+
+.ticket-view .turnc.ask.sub .tc-recrow strong {
+	font-size: var(--fs-head);
+}
+
+.ticket-view .tc-fold {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 24px;
+	margin-left: -4px;
+	padding: 0 4px;
+	border: 0;
+	border-radius: var(--r-sm);
+	background: none;
+	color: var(--text-faint);
+	font: 500 var(--fs-small) / 1 var(--font);
+	cursor: pointer;
+}
+
+.ticket-view .tc-fold svg {
+	transition: transform var(--fast) var(--ease-out);
+}
+
+.ticket-view .tc-fold[aria-expanded="true"] svg {
+	transform: rotate(90deg);
+}
+
+@media (hover: hover) {
+	.ticket-view .tc-fold:hover {
+		color: var(--text-primary);
+	}
+}
+
+.ticket-view .tc-tasks,
+.ticket-view .tc-picks {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 12px;
+	margin: 0;
+	padding: 0 0 0 18px;
+	list-style: none;
+	font-size: var(--fs-small);
+}
+
+.ticket-view .tc-picks {
+	padding: 0;
+	gap: 2px;
+}
+
+.ticket-view .tc-said {
+	color: var(--text-primary);
+	font-size: var(--fs-small);
+}
+
+.ticket-view .turnc.ask .acts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--s-1);
+	margin: 6px 0 0;
+}
+
+.ticket-view .turnc.ask .noform {
+	inline-size: 100%;
+	max-inline-size: 560px;
+}
+
+.ticket-view .turnc.ask .btn.turn [data-scope="kbd"] {
+	background: #ffffff2e; /* white a4: a key on the indigo 9 fill */
+	box-shadow: none;
+	color: var(--turn-fg);
+}
+
+/* The note's own answers stand where the card's were: Send first, at the left. */
+.ticket-view .turnc.ask .noform .row2 {
+	flex-direction: row-reverse;
+	justify-content: flex-end;
+}

@@ -24,11 +24,28 @@ import {Schema} from "effect";
 /** How long a ticket waits with no new fact before its line says nobody is driving it. */
 export const HOUR = 60 * 60 * 1000;
 
+/**
+ * The asking step's own pick, written before the ask is shown (docs/direction/ask-desk.md, A2), or
+ * why it cannot say. Look study only: no fact on the ledger carries one yet, so today's fold never
+ * sets it, and a window draws it only when a view brings it.
+ */
+export const Rec = Schema.Union([
+	Schema.TaggedStruct("pick", {
+		pick: Title,
+		why: Schema.String,
+		cost: Schema.String,
+		sure: Schema.Finite,
+	}),
+	Schema.TaggedStruct("none", {why: Schema.String}),
+]);
+export type Rec = typeof Rec.Type;
+
 /** An ask with no answer yet: what its box shows. */
 export const OpenAsk = Schema.Struct({
 	ask: Id,
 	what: Title,
 	picks: Schema.NonEmptyArray(Title),
+	rec: Schema.optional(Rec),
 	by: Writer,
 	/** For an agent's ask: the name its person goes by on this ledger (the entry's `whose`). */
 	whose: Schema.optional(Schema.String),

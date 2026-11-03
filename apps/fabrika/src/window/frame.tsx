@@ -8,13 +8,12 @@ import {
 	useRef,
 	useState,
 } from "react";
-import type {AsksNow} from "../asks.ts";
+import type {Ask, AsksNow} from "../asks.ts";
 import {activeOf, focusedOf, type Open} from "../desk/desk.ts";
 import {type Group, wordOf} from "../desk/keys.ts";
 import type {FromPage, HostNow, LinkNow, ToApp} from "../messages.ts";
 import {
 	agentsWord,
-	asksSections,
 	asksWord,
 	type Bound,
 	bindingWord,
@@ -42,10 +41,12 @@ import {
 	type Shapes,
 	syncWord,
 	type TicketsShown,
+	tileOfTicket,
 	tileWord,
 	workspaceName,
 } from "./frame.ts";
 import {type Cap, capsOf, type Hint, type Row, sentence, type Words} from "./pop.ts";
+import {AsksGlance} from "./asks-glance.tsx";
 import {type Empty, IconOf, Lines, Menu, Palette, Panel, useTip, WordsOf} from "./pop.tsx";
 
 // The window's frame, drawn: the top bar, the bottom line, and what opens over the desk (the
@@ -417,14 +418,6 @@ export function Band(): ReactNode {
 	return <div className="band" data-info={INFO.drag} />;
 }
 
-/** The asks list's footer: the keys no row shows. */
-const ASKS_FOOT: readonly Hint[] = [
-	{caps: ["↑", "↓"], name: "Move"},
-	{caps: ["↵"], name: "Open"},
-	{caps: ["H"], name: "Later"},
-	{caps: ["Esc"], name: "Close"},
-];
-
 /**
  * The asks list, a menu: one row per ask, the ones set aside under `Later`. Enter opens the
  * ticket: its tile, else the tracker turned to it (frame.ts, `opensOf`). H sets an ask aside, or
@@ -440,9 +433,7 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 		sayAsksSeen();
 	}, [shown]);
 	const close = useCallback(() => step({type: "close"}), [step]);
-	const open = (row: Row) => {
-		const ask = [...asks.asks, ...asks.later].find((a) => a.key === row.id);
-		if (ask === undefined) return;
+	const open = (ask: Ask) => {
 		const to = opensOf(desk, ask.ticket, tickets);
 		switch (to.kind) {
 			case "tile":
@@ -456,23 +447,20 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 				return step({type: "say", note: nowhereNote(ask.ticket)});
 		}
 	};
-	const aside = (row: Row) =>
+	const aside = (ask: Ask) =>
 		toHost(
-			asks.later.some((a) => a.key === row.id)
-				? {type: "back", key: row.id}
-				: {type: "later", key: row.id},
+			asks.later.some((a) => a.key === ask.key)
+				? {type: "back", key: ask.key}
+				: {type: "later", key: ask.key},
 		);
 	return (
-		<Menu
+		<AsksGlance
 			id={POP.asks}
-			label="Asks"
-			from="top"
-			count={asks.asks.length}
-			sections={asksSections(asks, desk, tickets, Date.now())}
-			foot={ASKS_FOOT}
-			empty={{title: "Nothing waits on you", sub: "A new ask shows here and in the top bar."}}
-			onAct={open}
-			onSecond={aside}
+			asks={asks}
+			now={Date.now()}
+			tileOf={(ticket) => (desk === null ? undefined : tileOfTicket(desk, ticket, tickets))}
+			onOpen={open}
+			onLater={aside}
 			onClose={close}
 		/>
 	);

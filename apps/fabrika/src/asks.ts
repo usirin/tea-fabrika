@@ -10,7 +10,7 @@ import {
 	TicketNumber,
 	Title,
 } from "@kampus/pipeline/tickets/ticket";
-import {headOf, words} from "@tea-fabrika/tracker";
+import {headOf, Rec, words} from "@tea-fabrika/tracker";
 import {Cause, Clock, Duration, Effect, Exit, Schema, Stream} from "effect";
 
 // The asks: every ask on the ledger that waits on the person, folded in the host, once, for
@@ -55,6 +55,10 @@ export const Ask = Schema.Struct({
 	/** What it asks, in its own words, or why the run is stuck. */
 	what: Schema.String,
 	kind: Schema.Literals(["ask", "stuck"]),
+	/** An ask's picks, for the asks list's `o`. None on a stuck run. */
+	picks: Schema.optional(Schema.Array(Schema.String)),
+	/** The asking step's own pick, when the ask carries one (look study: none on the ledger yet). */
+	rec: Schema.optional(Rec),
 	/** When it was asked, or the run ended stuck. */
 	at: Schema.Finite,
 	/** The person has opened the list since it came. */
@@ -258,6 +262,8 @@ export const waitingOf = (tickets: readonly Ticket[], now: number): readonly Wai
 					key: `${ticket.number}/${a.ask}`,
 					what: a.what,
 					kind: "ask",
+					picks: a.picks,
+					...(a.rec === undefined ? {} : {rec: a.rec}),
 					at: a.at,
 				}));
 			if (head._tag !== "stuck") return [];
