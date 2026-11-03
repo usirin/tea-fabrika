@@ -9,7 +9,7 @@ the one keybindings, hot reload and modes share. Check every box before you publ
   link text naming the note, the experiment and the pull request. A "Skip to the guideline" link
   comes first. Once the owner has decided the note, the line says "Decided DATE, not built"
   instead of "Proposed, not built".
-- [ ] The screen first, full width: the clickable screen from step 3 of the skill, in today's app
+- [ ] The screen first, full width: the clickable screen from step 5 of the skill, in today's app
   frame, with a switch between "Proposed" and "Today". Under it, two columns at 1280 wide: the
   list of views at the left and one view at the right. Every view drives the same screen.
 - [ ] The list of views: Overview, then the principles numbered 1 to N, then a view for today's
@@ -60,7 +60,7 @@ the one keybindings, hot reload and modes share. Check every box before you publ
 
 ## The demo window
 
-- [ ] The screen from step 3, not a small toy drawn for the page: real tile, program and command
+- [ ] The screen from step 5, not a small toy drawn for the page: real tile, program and command
   names, the real chassis around it, and Start over.
 - [ ] A log of what fired, as the ledger or the brain would write it, and a line for what a screen
   reader is told.
