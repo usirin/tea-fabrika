@@ -13,7 +13,15 @@ import {Form} from "../review/sheet.ts";
 import {SortReply} from "../sort/answer.ts";
 import {Answered} from "../test-writer/mutants.ts";
 import {Written} from "../test-writer/written.ts";
-import {type Held, LaneAgents, laneBuilder, laneNow, LaneNow, stepStarted} from "./agents.ts";
+import {
+	type Held,
+	LaneAgents,
+	laneBuilder,
+	laneNow,
+	LaneNow,
+	listUsdOf,
+	stepStarted,
+} from "./agents.ts";
 
 // Today's version. A schema that strict mode would refuse is not handed to Codex at all, and the agent
 // is only asked in words. So each answer a lane's agent gives has to pass, or its step gets no
@@ -235,5 +243,34 @@ describe("a step's started and its session", () => {
 			}).pipe(Effect.provide(laneNow)),
 		);
 		expect(ids).toEqual(["first", "next"]);
+	});
+});
+
+// Ticket 141: gpt-6-astra's list price, so its steps stop reading "no price". OpenAI's pricing page
+// (https://developers.openai.com/api/docs/pricing), read 2026-11-02, standard tier, up to 272K
+// input: $10 in, $1 cached in, $50 out per 1M tokens. Past 272K it is $20 / $2 / $75, but a step
+// keeps only its token totals, never each request's size, so the long rate can never be applied:
+// the short rate is the floor, the same gap gpt-6.1-sol has.
+describe("a model's list price", () => {
+	const M = 1_000_000;
+
+	it("prices gpt-6-astra at its short-context rates: $10 in, $1 cached, $50 out per 1M", () => {
+		expect(listUsdOf("gpt-6-astra", {input: M, cached: 0, output: 0})).toBeCloseTo(10, 9);
+		expect(listUsdOf("gpt-6-astra", {input: M, cached: M, output: 0})).toBeCloseTo(1, 9);
+		expect(listUsdOf("gpt-6-astra", {input: 0, cached: 0, output: M})).toBeCloseTo(50, 9);
+		expect(listUsdOf("gpt-6-astra", {input: 120_000, cached: 100_000, output: 4_000})).toBeCloseTo(
+			(10 * 20_000 + 1 * 100_000 + 50 * 4_000) / M,
+			9,
+		);
+	});
+
+	it("keeps gpt-6.1-sol at $2 in, $0.10 cached, $10 out per 1M", () => {
+		expect(listUsdOf("gpt-6.1-sol", {input: M, cached: 0, output: 0})).toBeCloseTo(2, 9);
+		expect(listUsdOf("gpt-6.1-sol", {input: M, cached: M, output: 0})).toBeCloseTo(0.1, 9);
+		expect(listUsdOf("gpt-6.1-sol", {input: 0, cached: 0, output: M})).toBeCloseTo(10, 9);
+	});
+
+	it("gives a model the table does not hold no price, never another's and never $0", () => {
+		expect(listUsdOf("made-up-model", {input: M, cached: 0, output: M})).toBeNull();
 	});
 });

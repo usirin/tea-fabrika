@@ -166,7 +166,7 @@ The behavior side, from the standards:
 - **One font, one set of tokens** (settled 2026-10-30). Everything that opens
   over the desk uses `--font`, the `--fs-*` scale and the window colors. No
   token of its own for type or color.
-- **Mono only for typed things.** A tsh command (`runs --ticket 1`), a path, a
+- **Mono only for typed things.** A tsh command (`trace --ticket 1`), a path, a
   hash, a branch name, code. A ticket number (`#1`), a tile name (`t2`), a key
   and a time are not typed text: they use `--font` with tabular digits. Linear's
   keycaps take the UI sans too: its `kbd` inherits the font.

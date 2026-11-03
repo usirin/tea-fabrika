@@ -13,10 +13,10 @@ on `@kampus/fabrika`. A program here may use `@kampus/fabrika` and its subpaths,
   answers its open ask and comments. It runs the tracker's machine, opened on one ticket.
 - [`map`](./map/README.md): a React Flow map of today's programs, with their real inputs,
   outputs and wires, lit by one ticket's facts.
-- [`runs`](./runs/README.md): one ticket's runs in time, a track per step, with a playhead
-  that replays the facts. It was `trace` until the job record.
-- [`trace`](./trace/README.md): one job's trace from its record, a bar per span, and every
-  grouped row opening down to one step: its Msg, the state before and after, and its Cmds.
+- [`trace`](./trace/README.md): one job's trace from its record, or one ticket's lanes from its
+  facts. A job: a bar per span, and every grouped row opening down to one step: its Msg, the
+  state before and after, and its Cmds. A ticket: every lane oldest first, its steps and its waits
+  on a person, each step opening to its spans, with a stepper that replays the facts.
 - [`experiments`](./experiments/README.md): every experiment on the ledger, one row each, then
   the list as markdown. No window.
 - [`experiment`](./experiment/README.md): one experiment, its write-up drawn from data, and its

@@ -76,7 +76,8 @@ describe("a person's answer, as the lane hears it", () => {
 				return yield* heard;
 			}),
 		);
-		expect(got).toEqual({ask: ASK, pick: "stop", note: ""});
+		// Ticket 141: who answered, as the entry's writer names them, for the wait's span.
+		expect(got).toEqual({ask: ASK, pick: "stop", note: "", by: "owner"});
 	});
 
 	it(

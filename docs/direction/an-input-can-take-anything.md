@@ -10,13 +10,14 @@ inputs: {
 	toggle: input(Toggle, "Open or close a row that groups others."),
 	choose: input(Choose, "Show one row's detail, or none with `null`."),
 	quit: input(Schema.Null, "Stop."),
-	id: input(TraceId, "A job's trace id: its record replaces the one shown, as `runs` sends."),
+	id: input(TraceId, "A job's trace id: its record replaces what shows."),
+	ticket: input(TicketNumber, "A ticket to show now, by its number."),
 	any: anyInput("Anything else on a pipe, let go unread: being in the line is enough, as with `pv`."),
 },
 // main: one handler per input, in the run's one mailbox. `any`'s does nothing.
-serve({id: look, any: () => Effect.void, toggle, choose, quit: () => end}, {until: ["toggle", "choose", "quit"]})
+serve({id: look, ticket: show, any: () => Effect.void, toggle, choose, quit: () => end}, {until: ["toggle", "choose", "quit"]})
 
-// tsh> runs --ticket 7 | trace          runs' id fits trace's id: a typed fit wins
+// tsh> tracker | trace                  tracker's ticket fits trace's ticket: a typed fit wins
 // tsh> seq --to 3 | tally | trace       tally's total fits nothing typed: wired total → any
 // tsh> seq --to 3 | upper               refused, as before: upper has no `any`
 ```
@@ -44,7 +45,7 @@ export const anyInput = (description: string): Input<unknown, "auto", false> => 
 export type Fit = "fits" | "takes_any" | "does_not_fit" | "cannot_tell";
 
 fit(seq.outputs.n, trace.inputs.any)       // "takes_any"
-fit(runs.outputs.id, trace.inputs.id)      // "fits"
+fit(tracker.outputs.ticket, trace.inputs.ticket) // "fits"
 fit(seq.outputs.n, input(Schema.Unknown))  // "does_not_fit": a plain input never takes anything
 ```
 
@@ -57,7 +58,7 @@ const fitting = typed.length > 0 ? typed : firstOutput(pairs.filter((p) => p.fit
 
 - `any: true` is set only by `anyInput`. You cannot get it by writing `input(Schema.Unknown)`. So
   no program takes everything by mistake.
-- A typed fit always wins. So `runs | trace` still sends the trace id to `id`.
+- A typed fit always wins. So `tracker | trace` still sends the ticket to `ticket`.
 - `takes_any` only shows up when nothing else fits. If a program has two `anyInput`s and both
   could be fed, that is two ways to wire it, and tsh asks you to name one (`<b`).
 - A named wire (`tally >refused | trace`) still works. It sends what you named.
@@ -68,7 +69,8 @@ const fitting = typed.length > 0 ? typed : firstOutput(pairs.filter((p) => p.fit
   served one value at a time, in order with the window's inputs. It writes no data
   (`{writes: false}`).
 - The frame's bottom line says what a pipe can feed (`Shell.fedBy`). For trace that is now
-  `takes id, any`: true, since a pipe from anything feeds `any`.
+  `takes ticket, any`: true, since a pipe from anything feeds `any`. (It said `takes id, any`
+  while the `runs` program sent trace ids; that program went in ticket 141.)
 - It is not a window command, so the rule "one input per command, named by its verb" does not
   name it. Like `id`, it is named for what it takes.
 
@@ -77,8 +79,8 @@ const fitting = typed.length > 0 ? typed : firstOutput(pairs.filter((p) => p.fit
 One input could be "an id, or anything" (`Schema.Union([TraceId, Schema.Unknown])`). It was
 weighed and dropped:
 
-- A union with `Unknown` is just `Unknown`. The id's type would be gone, `runs | trace` would
-  fit by luck, and trace could no longer tell an id from a number.
+- A union with `Unknown` is just `Unknown`. The id's type would be gone, a pipe that sends an id
+  would fit by luck, and trace could no longer tell an id from a number.
 - Two inputs keep each type exact. `id` is read. `any` is drained and never read. The program's
   definition says which is which, and the wiring picks by fit, as everywhere else.
 
