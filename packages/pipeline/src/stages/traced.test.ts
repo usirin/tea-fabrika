@@ -5,7 +5,7 @@ import {describe, expect, it} from "vitest";
 import {gatherPack, type Review, type ReviewCmd, review} from "./review/machine.ts";
 import type {Ran} from "./review/reviewer.ts";
 import {WHOLE} from "./review/scripted.ts";
-import {reviewDrawing} from "./traced.ts";
+import {answerTags, LANE, reviewDrawing} from "./traced.ts";
 
 // What a review's span says when it ends, read from the machine's own state.
 
@@ -55,5 +55,15 @@ describe("a review's span, at its end", () => {
 		const tags = reviewDrawing("review", WHOLE.pr).tags?.(over) ?? {};
 		expect(tags[ATTR.outcome]).toBe("done");
 		expect(ATTR.problems in tags).toBe(false);
+	});
+});
+
+describe("a lane's wait, at its end (ticket 141)", () => {
+	it("is tagged with the ask, the pick and who picked", () => {
+		expect(answerTags({ask: "a-approve-8", pick: "approve", by: "owner"})).toEqual({
+			[LANE.ask]: "a-approve-8",
+			[LANE.pick]: "approve",
+			[LANE.by]: "owner",
+		});
 	});
 });

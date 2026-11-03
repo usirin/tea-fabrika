@@ -4,6 +4,7 @@ import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
 import {type Model, type TraceMsg, trace} from "./machine.ts";
 import {astra, LANE_1, LANE_2, T117, T117_MADE_UP} from "./t117.ts";
+import {stopsOf} from "./ticket.ts";
 import {shownOf} from "./view.ts";
 import {TraceWindow} from "./window.tsx";
 
@@ -76,5 +77,85 @@ describe("the ticket view's window: dollars only in the summaries (decision 7)",
 		const {text} = textOf(shown117(T117_MADE_UP));
 		expect(text).not.toMatch(/\$\s?0\.00(?!\d)/);
 		expect(text).not.toMatch(/\$\s?0(?![.\d])/);
+	});
+});
+
+/** Ticket 117 shown, then these Msgs: before its facts are read. */
+const at117 = (more: readonly TraceMsg[]): Model =>
+	foldEvents(trace, ctx, null, [{type: "ticket", number: 117}, ...more]).finalState;
+
+/** Ticket 117 with every lane open, then these Msgs. */
+const open117 = (more: readonly TraceMsg[]): Model =>
+	at117([
+		{type: "facts", number: 117, timeline: T117.timeline},
+		{type: "toggle", row: `lane:${LANE_1}`},
+		{type: "toggle", row: `lane:${LANE_2}`},
+		...more,
+	]);
+
+/** How many times `part` is in `markup`. */
+const timesIn = (markup: string, part: string): number => markup.split(part).length - 1;
+
+/** The "one fact back" button's tag. */
+const backButton = (markup: string): string =>
+	markup.match(/<button[^>]*aria-label="one fact back"[^>]*>/)?.[0] ?? "";
+
+describe("the ticket view's window: its words and its marks", () => {
+	it("says while its facts are read, and why they cannot be", () => {
+		expect(textOf(at117([])).text).toContain("Reading the facts of ticket 117.");
+		expect(textOf(at117([{type: "unread", number: 117, why: "gone"}])).text).toContain(
+			"The facts of ticket 117 cannot be read: gone",
+		);
+	});
+
+	it("labels a minute tick of a lane's ruler in minutes", () => {
+		const {markup} = textOf(shown117());
+		expect(markup).toContain(">5 min</span>");
+		expect(markup).not.toContain("300 s");
+	});
+
+	it("says a step row's tokens short: 120k in", () => {
+		expect(textOf(shown117()).text).toContain("120k in");
+	});
+
+	it("says a done step under a minute to a tenth of a second", () => {
+		expect(textOf(shown117()).text).toContain("6.0 s · sent to build: checks red");
+	});
+
+	it("puts a short bar's words after it", () => {
+		expect(textOf(shown117()).markup).toContain('class="tv-words after"');
+	});
+
+	it("draws one gap row, for lane 2's restart, and names it in lane 2's label", () => {
+		const {markup} = textOf(shown117());
+		expect(timesIn(markup, 'class="tv-gap"')).toBe(1);
+		expect(markup).toContain(
+			'aria-label="lane 2, sent to build: checks red, 18 h 30 min later, restarted from plan"',
+		);
+		expect(markup).toContain('aria-label="lane 1, stuck: tests red"');
+	});
+
+	it("draws an open lane's caret pointing down", () => {
+		expect(timesIn(textOf(shown117()).markup, "▾")).toBe(3);
+	});
+
+	it("lets one row alone take the focus, and marks the chosen row alone", () => {
+		const s = open117([{type: "choose", row: "run:r-plan-2"}]);
+		const {markup} = textOf(s);
+		expect(timesIn(markup, 'tabindex="0"')).toBe(1);
+		expect(timesIn(markup, " sel")).toBe(1);
+		expect(markup).toMatch(/class="wf-row tv-step sel" data-row="run:r-plan-2"/);
+	});
+
+	it("shows a chosen step's exact tokens", () => {
+		const s = open117([{type: "choose", row: "run:r-plan-2"}]);
+		expect(textOf(s).text).toContain("100,000 in, of them 60,000 cached; 5,000 out");
+	});
+
+	it("disables one fact back at the first fact, and enables it at the third", () => {
+		const stops = stopsOf(T117.timeline);
+		const seek = (k: number) => open117([{type: "seek", at: stops[k] ?? 0}]);
+		expect(backButton(textOf(seek(0)).markup)).toContain("disabled");
+		expect(backButton(textOf(seek(2)).markup)).not.toContain("disabled");
 	});
 });

@@ -182,4 +182,15 @@ describe("a step's spans (childrenOf)", () => {
 		expect(ids).toContain("2000000000000002");
 		expect(ids).not.toContain("1000000000000002");
 	});
+
+	it("in a record written before the tag, takes only a run a step span, though another overlaps the step more", () => {
+		const r = record([
+			span("1000000000000001", null, "run a step", at + MIN, at + 9 * MIN),
+			span("1000000000000002", "1000000000000001", "planner", at + 2 * MIN, at + 3 * MIN),
+			span("3000000000000001", null, "read the ticket", at, at + 10 * MIN),
+			span("3000000000000002", "3000000000000001", "GET", at + 4 * MIN, at + 5 * MIN),
+		]);
+		const ids = childrenOf(r, "r-plan-8", at, at + 10 * MIN).map((s) => s.span);
+		expect(ids).toEqual(["1000000000000002"]);
+	});
 });
