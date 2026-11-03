@@ -14,8 +14,10 @@ import {
 	settingsRefusal,
 } from "../../settings.ts";
 import {shippedRubrics} from "../../setup.ts";
-import {titleOf} from "../../tickets/ticket.ts";
+import {saidOf, titleOf} from "../../tickets/ticket.ts";
+import type {Tickets} from "../../tickets/tickets.ts";
 import type {Given, Now} from "./carry.ts";
+import {codeSpan} from "./found.ts";
 
 // Where a lane works, on the machine it runs on. The repository is the one the checkout's `origin`
 // names, the checkout the app was started from, as `gh` reads a repository off the folder it runs in.
@@ -183,6 +185,12 @@ export interface OnMain {
 	readonly conflicts: readonly string[];
 }
 
+/** A head a push replaced, and the ref on the remote it is kept under. */
+export interface Kept {
+	readonly head: string;
+	readonly ref: string;
+}
+
 export class LaneWork extends Context.Service<
 	LaneWork,
 	{
@@ -265,11 +273,20 @@ export class LaneWork extends Context.Service<
 		readonly rubrics: (name: string) => Effect.Effect<string, Failed, Scope.Scope>;
 		/** An empty folder: for an agent with no reason to see code. */
 		readonly empty: Effect.Effect<string, Failed>;
-		/** `head` on the remote's branch `branch`. Never main. */
-		readonly pushTo: (folder: string, head: string, branch: string) => Effect.Effect<void, Failed>;
+		/**
+		 * `head` on the remote's branch `branch`. Never main. The branch's head is read fresh just before
+		 * (docs/direction/read-fresh-run-alone.md). When `head` does not hold it, it is kept first, and
+		 * answered: a commit a person pushed there is never lost. The push leases what was read, so a
+		 * push that lands in between fails it, and it reads again. `null`: nothing was replaced.
+		 */
+		readonly pushTo: (
+			folder: string,
+			head: string,
+			branch: string,
+		) => Effect.Effect<Kept | null, Failed>;
 		/** `head` onto main, only when main is its parent line. `moved`: main went on, and nothing was written. */
 		readonly land: (head: string) => Effect.Effect<"landed" | "moved", Failed>;
-		/** A branch's commit on the remote. `null`: no such branch. */
+		/** A branch's commit on the remote, read there now. `null`: no such branch. */
 		readonly remoteHead: (branch: string) => Effect.Effect<string | null, Failed>;
 		readonly mergeBase: (a: string, b: string) => Effect.Effect<string, Failed>;
 		/** The text of `git diff --unified=0` from `from` to `to`. */
@@ -299,7 +316,10 @@ export class LaneWork extends Context.Service<
 		) => Effect.Effect<OnMain, Failed>;
 		/** Ticket `n`'s branch moved to `commit`, its working copy with it: nothing it held besides is kept. */
 		readonly reset: (n: number, commit: string) => Effect.Effect<void, Failed>;
-		/** `commit` kept under `ref` in the clone, so it stays reachable after its branch moves on. */
+		/**
+		 * `commit` kept under `ref` in the clone and on the remote, so it stays reachable after its branch
+		 * moves on: a person can fetch it, and a lost clone does not lose it.
+		 */
 		readonly keep: (commit: string, ref: string) => Effect.Effect<void, Failed>;
 		/**
 		 * On ticket `n`'s branch as it is, `files` as `from` has them, or gone where `from` has none,
@@ -889,6 +909,39 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			return yield* quiet(fs.realPath(folder));
 		});
 
+		// Asked of the remote itself: the clone's `origin/<branch>` outlives a branch deleted there.
+		const remoteHead = (branch: string) =>
+			Effect.gen(function* () {
+				yield* fetched;
+				const ref = `refs/heads/${branch}`;
+				const found = lines(yield* git(clone, ["ls-remote", "origin", ref]))
+					.map((line) => line.split("\t"))
+					.find(([, name]) => name === ref);
+				return found?.[0] ?? null;
+			});
+		const keep = (sha: string, ref: string) =>
+			Effect.gen(function* () {
+				yield* git(clone, ["update-ref", ref, sha]);
+				yield* git(clone, ["push", "--quiet", "origin", `${ref}:${ref}`]);
+			});
+		/** Whether `older` is in `newer`'s history. A commit the clone lacks is in none. */
+		const isAncestor = (older: string, newer: string) =>
+			inClone(["merge-base", "--is-ancestor", older, newer]).pipe(
+				Effect.map((ran) => ran.code === 0),
+			);
+		const pushTo = (folder: string, sha: string, branch: string) =>
+			Effect.gen(function* () {
+				const was = yield* remoteHead(branch);
+				const kept: Kept | null =
+					was === null || (yield* isAncestor(was, sha))
+						? null
+						: {head: was, ref: `refs/kept/${branch}/${was}`};
+				if (kept !== null) yield* keep(kept.head, kept.ref);
+				const lease = `--force-with-lease=refs/heads/${branch}:${was ?? ""}`;
+				yield* git(folder, ["push", "--quiet", lease, "origin", `${sha}:refs/heads/${branch}`]);
+				return kept;
+			}).pipe(Effect.retry({times: 2}));
+
 		return {
 			origin,
 			main,
@@ -948,22 +1001,14 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			judgedFiles,
 			rubrics,
 			empty,
-			pushTo: (folder, sha, branch) =>
-				git(folder, ["push", "--quiet", "--force", "origin", `${sha}:refs/heads/${branch}`]).pipe(
-					Effect.asVoid,
-				),
+			pushTo,
 			land: (sha) =>
 				Effect.gen(function* () {
 					yield* fetched;
 					const ran = yield* gitIn(clone, ["push", "--quiet", "origin", `${sha}:refs/heads/main`]);
 					return ran.code === 0 ? ("landed" as const) : ("moved" as const);
 				}),
-			remoteHead: (branch) =>
-				Effect.gen(function* () {
-					yield* fetched;
-					const ran = yield* gitIn(clone, ["rev-parse", "--verify", "--quiet", `origin/${branch}`]);
-					return ran.code === 0 ? ran.out.trim() : null;
-				}),
+			remoteHead,
 			mergeBase: (a, b) => git(clone, ["merge-base", a, b]),
 			changedFiles: (from, to) => names(clone, ["diff", "--no-renames", "--name-only", from, to]),
 			diff: (from, to, file) =>
@@ -993,7 +1038,7 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 					yield* git(tree, ["reset", "--quiet", "--hard", sha]);
 					yield* git(tree, ["clean", "--quiet", "-fd"]);
 				}),
-			keep: (sha, ref) => git(clone, ["update-ref", ref, sha]).pipe(Effect.asVoid),
+			keep,
 			putBack: (n, from, files, message) =>
 				Effect.gen(function* () {
 					const {tree} = yield* made(String(n), `lane/${n}`);
@@ -1024,3 +1069,28 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 		};
 	}),
 ).pipe(Layer.provide(nodeServices));
+
+/**
+ * `head` pushed to ticket `number`'s branch `branch`: how the lane pushes one. What the push replaces
+ * is kept on the remote first (`LaneWork.pushTo`), and one line on the ticket names it, as a stage
+ * that replaces a branch must (docs/direction/read-fresh-run-alone.md).
+ */
+export const pushBranch = (
+	{work, tickets}: {readonly work: LaneWork["Service"]; readonly tickets: Tickets["Service"]},
+	number: number,
+	folder: string,
+	head: string,
+	branch: string,
+) =>
+	Effect.gen(function* () {
+		const kept = yield* work.pushTo(folder, head, branch);
+		if (kept === null) return;
+		yield* tickets
+			.talk(number, `kept/${kept.ref}`, {
+				type: "commented",
+				body: saidOf(
+					`This push replaced the head of ${codeSpan(branch)}. That head, ${kept.head}, is kept on the remote under ${codeSpan(kept.ref)}, where it can be fetched.`,
+				),
+			})
+			.pipe(Effect.ignore);
+	});

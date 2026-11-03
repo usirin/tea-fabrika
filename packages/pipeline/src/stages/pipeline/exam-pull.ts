@@ -1,12 +1,13 @@
 import {Effect} from "effect";
 import type {Book} from "../../criteria/book.ts";
 import {type CriterionId, criterionId, PLAN} from "../../ids.ts";
+import {Tickets} from "../../tickets/tickets.ts";
 import type {ExamAsk, ExamChange} from "../exam/machine.ts";
 import {openItems} from "../operate/stop.ts";
 import type {Reviewed} from "../review/program.ts";
 import {formatAt} from "./format.ts";
 import {LanePulls} from "./pulls.ts";
-import {LaneWork} from "./work.ts";
+import {LaneWork, pushBranch} from "./work.ts";
 
 // The exam's pull request, reviewed before a person is asked to merge it (self-fix PR 10, Part 2).
 // Today's version.
@@ -107,7 +108,7 @@ export const examReady = (number: number, pr: string, rules: readonly string[]) 
 		});
 		const head = yield* work.head(side.tree);
 		if (head !== theirs) {
-			yield* work.pushTo(side.tree, head, side.branch);
+			yield* pushBranch({work, tickets: yield* Tickets}, number, side.tree, head, side.branch);
 			const {
 				id: _id,
 				state: _state,

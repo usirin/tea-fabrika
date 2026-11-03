@@ -30,7 +30,7 @@ import {examBook} from "./exam-pull.ts";
 import {NO_FORMATTER} from "./format.ts";
 import {ruleChangeLines} from "./found.ts";
 import {LanePulls, PullWire} from "./pulls.ts";
-import {LaneHome, LaneWork} from "./work.ts";
+import {LaneHome, LaneWork, pushBranch} from "./work.ts";
 
 // The steps' own work, on this machine: what the test writer, the exam, the mutation step, the push
 // and the build's writes do. Today's version. Each write finds its own first try, so an Act sent
@@ -338,7 +338,7 @@ export const laneExamWork = Layer.effect(
 							})
 							.pipe(Effect.ignore);
 					const head = yield* work.commit(side.tree, [], `rule changes for ticket ${number}`);
-					yield* work.pushTo(side.tree, head, side.branch);
+					yield* pushBranch({work, tickets}, number, side.tree, head, side.branch);
 					const title = `Rule changes for ticket ${number}`;
 					const body = saidOf(
 						[
@@ -390,7 +390,7 @@ export const lanePushWork = Layer.effect(
 			push: (_ticket, number, head) =>
 				Effect.gen(function* () {
 					const {tree, branch} = yield* work.tree(number);
-					yield* work.pushTo(tree, head, branch);
+					yield* pushBranch({work, tickets}, number, tree, head, branch);
 					return null;
 				}),
 			open: (_ticket, number, head, title, body) =>

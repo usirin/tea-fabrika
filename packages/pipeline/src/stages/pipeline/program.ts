@@ -832,6 +832,8 @@ const bodies = {
 				pull?.why === undefined || at.cmd.carry.examPr === null
 					? undefined
 					: {head: pull.head, why: pull.why, ...(pull.on === undefined ? {} : {on: pull.on})};
+			// A redo on main is pushed over the exam branch (the owner's pick on PR 322). The push keeps
+			// what it replaces, as the remote holds it then, and says so on the ticket (./work.ts, `pushBranch`).
 			const base = redo === undefined || redo.on === "main" ? main : redo.head;
 			yield* at.tell(yield* work.copy(base), "read", {
 				ticket: `${at.title}\n\n${at.body}`,
