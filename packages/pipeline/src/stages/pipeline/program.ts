@@ -423,7 +423,7 @@ interface Redo {
 const testsBase = (carry: Carry, round: number, main: string): string | null => {
 	if (round === 1) return main;
 	const {wrote, head} = carry;
-	return wrote !== undefined && wrote.commit === head ? wrote.on : head;
+	return wrote !== undefined && wrote.commit === head ? wrote.base : head;
 };
 
 /** The redo `carry` holds, if any. Pure. */
@@ -1059,7 +1059,7 @@ const bodies = {
 					head: commit ?? base,
 					exam: [...carry.exam, ...files],
 					cannot: untestedRows(properties, answers),
-					...(commit === null ? {} : {wrote: {on: base, commit}}),
+					...(commit === null ? {} : {wrote: {base, commit}}),
 					// The first writing is the one under the build: a restart runs its check again on main.
 					...(round === 1 && commit !== null
 						? {

@@ -220,11 +220,11 @@ const carried = {
 	 */
 	written: Schema.optionalKey(Written),
 	/**
-	 * The last test writer's commit, and the head it was written on. A test writer sent back while that
-	 * commit is still the head writes on that head again, so its own files are never ones that exist
-	 * already (jidoka row 28). Optional, as `left` is.
+	 * The last test writer's commit, and `base`, the head it started on. A test writer sent back while
+	 * that commit is still the head writes on that base again, so its own files are never ones that
+	 * exist already (jidoka row 28). Optional, as `left` is.
 	 */
-	wrote: Schema.optionalKey(Schema.Struct({on: Schema.String, commit: Schema.String})),
+	wrote: Schema.optionalKey(Schema.Struct({base: Schema.String, commit: Schema.String})),
 	/**
 	 * The test writer's files a build or main changed, waiting on a person's pick: the next build puts
 	 * them back as `written` has them, and the next test writer writes them again. Optional, as `left` is.
