@@ -66,7 +66,7 @@ import {LaneNow, pickedFor, type Picked, priceOf, stepStarted} from "./agents.ts
 import {fenced, listed, loadBrief, type Brief} from "./briefs.ts";
 import type {Carried as Said} from "./carry.ts";
 import {CheckRunner} from "./checks.ts";
-import {examReady, sentBack} from "./exam-pull.ts";
+import {examReady, folderWords, sentBack} from "./exam-pull.ts";
 import {formatExam} from "./format.ts";
 import {
 	againstWords,
@@ -837,6 +837,7 @@ const bodies = {
 				ticket: `${at.title}\n\n${at.body}`,
 				changes: listed(changes.map((c) => `${c.path}: ${c.change} (${c.why})`)),
 				sent_back: listed(redo?.why ?? []),
+				folder: folderWords(redo),
 				note: "",
 			});
 			const end = yield* examToTheEnd(at.stages.exam, at.cmd.intent, {

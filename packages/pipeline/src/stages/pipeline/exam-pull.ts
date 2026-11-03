@@ -1,7 +1,7 @@
 import {Effect} from "effect";
 import type {Book} from "../../criteria/book.ts";
 import {type CriterionId, criterionId, PLAN} from "../../ids.ts";
-import type {ExamChange} from "../exam/machine.ts";
+import type {ExamAsk, ExamChange} from "../exam/machine.ts";
 import {openItems} from "../operate/stop.ts";
 import type {Reviewed} from "../review/program.ts";
 import {formatAt} from "./format.ts";
@@ -59,6 +59,20 @@ export const sentBack = (reviewed: Pick<Reviewed, "outcome" | "criteria">): read
 	openItems(reviewed).map((item) =>
 		[item.says, ...item.wants.map((wants) => `It wants: ${wants}`)].join(" "),
 	);
+
+/**
+ * What the exam writer's folder holds, for its brief's `folder` slot, which its first turn reads. Pure.
+ *
+ *   folderWords(undefined)                  // the first writing: main
+ *   folderWords({head, why})                // a redo on the pull request's head, with its last changes
+ *   folderWords({head, why, on: "main"})    // a redo on main, without them: write each change again
+ */
+export const folderWords = (redo: ExamAsk["redo"]): string =>
+	redo === undefined
+		? "This is no redo. Your folder holds main."
+		: redo.on === "main"
+			? "This is a redo on main. Main changed under the pull request, and it does not merge into it, so your folder holds main, without your last changes. Write each listed change again on main's version, and hand each listed file back whole again."
+			: "This is a redo. Your folder holds the pull request's head, with your last changes in it. Fix what is listed here in the same files, and hand each listed file back whole again.";
 
 /**
  * The exam's pull request made ready for its review, by code:
