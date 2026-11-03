@@ -1,0 +1,499 @@
+# Programs: one job, an address, and the desk places the tile
+
+**Proposed 2026-11-02.** Nothing in it is decided yet. It stands on these, decided before it and not
+asked again: a process never knows where its tile is, and a tile shows one process
+([the desktop layer](./the-desktop-layer.md), W3 and W4); every command is also a tsh word and a
+palette row (W5); a line opens in place and folds past 220 by 120
+([fold, not tabs](./fold-not-tabs.md#a-line-opens-in-place)); a program declares its keys and modes
+beside its commands ([keybindings](./keybindings-are-configurable.md#keys-and-modes-come-from-programs-not-packs),
+[modes](./modes.md)); a closed tile's focus goes by reading order, and `C-b ;` returns to the tile
+focused before ([tile guidelines](./tile-guidelines.md#a-tile-is-a-region)); the box decides what
+crosses, never the program ([programs run in a box](./programs-run-in-a-box.md)).
+
+Built from [experiment 198](../../experiments/198-program-guidelines.md), which read about 20 makers
+and tools, four of them outside software, and checked today's asks popup against them, and a private
+page, "Program guidelines", with a small fabrika window you can key and click through. Neither is a
+measurement. It takes the eight patterns of [experiment 196](../../experiments/196-ask-desk.md#patterns-found)
+(the ask desk, on [PR 326](https://github.com/usirin/tea-fabrika/pull/326), not merged), P1 to P8,
+and makes them rules for every program.
+
+**Where this note stops.** At a tile's edge. What is inside one tile (its edge, focus mark, title bar,
+name, region, live regions, fold strip) is the [tile guidelines](./tile-guidelines.md)'. This note is
+about what runs in a tile, how one program reaches another tile, and how the person gets back.
+
+```ts
+// A sketch, next/. The asks program in the new shape. Two fields are new: `at` and `reuse`.
+// The rest is Tier 1's Program, plus `commands` from modes and `glance` (call 6).
+const asks = defineProgram({
+	name: "asks",
+	machine, msg, view, refuse, inputs, outputs,     // Tier 1; outputs: {ticket}, for `| ticket`
+	at: {data: AsksAt, select: (m) => ({ask: m.selected})}, // its address: where it is now
+	reuse: "program",                                 // open or focus: one asks tile per workspace
+	glance: {data: Glance, select: glanceOf},         // its small view: the top bar's popup
+	commands: {
+		next: {send: {type: "move", by: 1}, keys: ["j", "down"]},
+		rec: {send: {type: "answer", answer: {_tag: "rec"}}, keys: "y"},
+		not: {send: {type: "against"}, keys: "n"},
+		later: {send: {type: "later"}, keys: "h"},
+		leave: {send: {type: "leave"}, keys: "escape"}, // only at its top level: see G5
+	},
+});
+
+// The one way a program reaches another tile: a Cmd to the desk, as a line the person could type.
+open({line: "asks --ask a-approve-8 | ticket", from: "t1", via: {_tag: "key", keys: "enter"}});
+// the desk answers in words, never with a size
+// {_tag: "opened", tile: "t5", how: "new", beside: "t1", folded: ["t6"]}
+// {_tag: "opened", tile: "t5", how: "focused"}        a second open: no second tile
+// {_tag: "refused", why: "no_press"}                  nobody pressed anything
+```
+
+```text
+one sitting, traced (next/, a sketch)
+C-b a        the top bar's popup: the asks program's glance    focus moves in: "Asks, 3. Approve plan version 2?"
+  j          the glance moves the one selection                the asks tile, once open, shows the same ask
+  Enter      Cmd open {line: "asks --ask a-approve-8 | ticket", from: "t1", via: key}
+             the desk: no asks tile on workspace 1             starts the line; asks in t5 after t1, ticket in t6
+             t6 would be under 220px wide                      t6 folds to a strip; t5, the one asked for, stays open
+             opened {tile: "t5", how: "new"}                   focus to t5, on a-approve-8; the popup is gone
+             the bottom line                                   asks opened in t5, beside t1 · folded t6
+  y          answered {answer: {_tag: "rec"}}                  polite: "approve, the rec, for #117. 2 left."
+  Esc        at t5's top level: Cmd leave                      focus back, by the way back the owner picks (call 1)
+C-b a, Enter again                                             opened {tile: "t5", how: "focused"}
+```
+
+## Which version
+
+- **`next/`:** all of it. Programs exist from Tier 1 (`Program` on
+  [PR 223](https://github.com/usirin/tea-fabrika/pull/223): name, machine, msg, view; Tier 1 adds
+  refuse, inputs and outputs). The desk, which carries out `open`, `leave` and the way back, arrives
+  as a program in Tier 2 ([tiers](../plan/tiers.md)). The asks program and its glance come in Tier 5.
+  So `at` and the focus history go in with Tier 2's desk, and every program written from then on
+  says its address.
+- **Today's version (`apps/fabrika`, `programs/*`):** not changed by this note. Today's asks popup
+  and its `Enter` are the running example, read on main at `0be502bc`. Four small fixes are offered at
+  [a tryout in today's version](#a-tryout-in-todays-version), none filed.
+
+## The shape
+
+```ts
+// A sketch, next/. What a program adds: an address, and how open or focus finds its tile.
+type Program<S, M, V, T, At> = {
+	// name, machine, msg, view, refuse, inputs, outputs: Tier 1. mode, commands: modes.
+	readonly at?: {readonly data: Schema.Codec<At, unknown>; readonly select: (tile: T) => At};
+	readonly reuse?: "program" | "address";            // left out: "program" (call 2)
+	readonly glance?: {readonly data: Schema.Top; readonly select: (tile: T) => unknown}; // call 6
+};
+
+// The desk's Cmds, the same for every program. Each is granted, as any start power is (Tier 1, call 20).
+const Open = Schema.Struct({line: Line, from: TileId, via: Via});        // Line: what tsh's fit check takes
+const Opened = Schema.TaggedUnion({
+	opened: {tile: TileId, how: Schema.Literals(["new", "focused", "moved"]),
+		beside: Schema.optional(TileId), folded: Schema.optional(Schema.Array(TileId))},
+});
+const open = Cmd.define("open", {input: Open, ok: Opened, err: ["no_press", "bad_line", "not_allowed"]});
+const leave = Cmd.define("leave", {input: Schema.Struct({from: TileId}), ok: Schema.Null, err: []});
+
+// What the desk keeps, per workspace, to answer "back": the tiles in the order they were focused.
+type Workspace = {layout: Split; focus: TileId; focused: ReadonlyArray<TileId>}; // newest first
+```
+
+- **Checked by reading, not by `tsc`.** `Via` is the keybindings note's (`key`, `palette`, `word`,
+  `click`). `Line` is what tsh already types and checks. `Workspace` is the desktop layer's, with one
+  new list, `focused`, which `C-b ;` needs anyway (tile guidelines, "a fact stored from the first
+  build").
+- **`at` is read from the tile's own machine,** as a mode is ([modes](./modes.md), M2): which ask is
+  open is one window's fact, not the shared program's.
+- **`open` is a Cmd, not an output.** [Tracker views](./tracker-views-are-programs.md#8-the-views-the-facts-and-the-column)
+  proposed an `open` output the desk hears. An output is "heard once, by whoever listens" and has no
+  answer ([tea-program](./tea-program.md)); the desk must be able to say no, and the opener needs to
+  know which tile it got. A Cmd has an `ok` and an `err` (Elm: a one-shot action is a Cmd,
+  [Elm first](./elm-first.md)).
+
+## The seven principles
+
+### G1: one job, one model, and every size draws it
+
+**Lean, 80%.**
+
+- **What it means.** A program does one job and owns its model. Each of its views (a glance in the
+  top bar, a full view in a tile, a box inside another program's view) is a `select` on that one
+  model. Answering in one is answering in all, and moving the selection in one moves it in all.
+- **Rules.** R1 one job: the asks program owns the queue, the selection and the answer, and nothing
+  else (Unix). R2 one program, many sizes: 196's P6, lean 75%. R3 a list and a detail fold to one pane
+  under about 520px: 196's P7, lean 70%. R4 a second list of the same thing is a bug: it moves into the
+  program, lean 80%.
+- **Why.** "Write programs that do one thing and do it well" [x6]. Ableton: "The Session and
+  Arrangement share the same set of tracks" [f1]. Elm: "all modules should be built around a central
+  type" [e2].
+- **Linear as the builder.** They define "the behaviors of the main components of the app" once
+  [m8], so an issue reads the same in a list, a peek and its page. On our pieces that is one asks
+  program whose row, detail and action bar are the same in the popup, the tile and the ticket's ask
+  box, and a ticket drawn by the ticket program, never a copy inside asks.
+- **Elm.** One model, many views. A view is a function of the model; a smaller size is another
+  function, not another model.
+- **Accessibility.** WCAG 3.2.4: the same function is "identified consistently" [w2], so `y` is "Take
+  rec" in every size.
+- **What holds it.** `glance.select` and `view.select` take the same model type, so a glance cannot
+  keep a state of its own. A law: an answer in the glance shows in the tile's next view.
+- **Doubt and cost.** Whether `y` in a small popup is safe for a plan, as 196 asked. A program with
+  three views costs two more `select`s and their tests.
+- **Today: breaks.** The asks list is the frame's menu (`apps/fabrika/src/window/frame.tsx:433`); the
+  ask box is the tracker's (`programs/tracker/src/window.tsx:783-826`). Two codes, and the menu cannot
+  answer.
+
+### G2: a program says where it is; the desk says where its tile is
+
+**Lean, 80%.**
+
+- **What it means.** Every program has an address, `at`: a small value that says where it is, as a
+  URL does. Its flags start it there (`asks --ask a-approve-8`). Inside its tile it moves with a
+  `query`, and the tile keeps a back stack of addresses (ticket 7). To reach another tile it asks the
+  desk with `open`. It never names a tile, a size or a side.
+- **Rules.** R1 an address is data, lean 80%. R2 inside a tile, moving is a `query`, with back, lean
+  80% (tracker views, ticket 7). R3 across tiles, a program asks with `open`, and the desk answers in
+  words, lean 85%. R4 an open is a line the person could have typed, lean 75% (call 4).
+- **Why.** Plan 9: "Most applications work fine in a plumbing environment without knowing about it at
+  all" [x3]. Android sends an intent, not a window [x4]. Our desktop layer already says a process
+  "never knows where its tile is".
+- **Linear as the builder.** Every Linear page has a URL, and one command menu opens "pages or run
+  actions" [l6]. On our pieces: every program has an address, so the palette, back, saved state and a
+  link in a comment can all reach it; and `open` is the one way a program asks for a tile. Where we
+  differ: Linear's router owns the whole screen; our desk owns placement, and the program never sees
+  a tile.
+- **Elm and OTP.** Elm's `Browser.application` turns a URL into a route and moves with `pushUrl`; `at`
+  is the route and `query` the push. OTP: send to a registered name, the desk, never to a pid you
+  guessed [o1].
+- **Accessibility.** The address names the tile for a screen reader: `asks, t5, ask 1 of 3`, beside
+  the tile guidelines' `tileName`. WCAG 2.4.3, focus order keeps meaning.
+- **What holds it.** No tile id or pixel size in any program type. `open` takes a `Line`, so tsh's fit
+  check refuses a line whose pipes do not fit before anything starts (`bad_line`).
+- **Doubt and cost.** Whether every program has an address worth keeping (a tsh tile's is its line).
+  One field per program and one schema.
+- **Today: half.** The tracker takes a `query` (`frame.tsx:452`), an address in all but name. The
+  frame, not the desk, picks the tile, and the asks list has no address.
+
+### G3: open or focus, then land beside
+
+**Lean, 80% on open or focus; 65% on where it lands.**
+
+- **What it means.** The desk looks first: a tile on this workspace that shows the same program (or
+  the same address, by `reuse`) is focused, unfolded and taken out of a zoom, and sent the new address
+  as a `query`. Only if none is found does the line start, beside the focused tile.
+- **Rules.** R1 open or focus: 196's P1, lean 90%. R2 what counts as the same: `reuse`, lean 65% (call
+  2). R3 where it lands: half of the focused tile's share, after it; in a row a sibling, in a column a
+  new nested row; a zoom ends first: 196's P2, lean 65% (call 3). R4 the one asked for stays open: past
+  220px, the line's other windows fold first, then the others in its row, the opener last: 196's P2,
+  lean 70%. A folded window's space goes to the open tile before it, so the asks tile takes what its
+  ticket gave up. The demo's first draft spread that space over the whole row, and a side-by-side
+  desk then folded an unrelated tile too; giving it to the neighbor folds only the ticket, in every
+  layout the demo has, at 1440x900 and at 1024x700.
+- **Why.** Emacs's first try "tries to display buffer by finding a window that is already displaying
+  it" [x1]. OTP's start answers `already_started` with the pid [o1]. i3: "Get me to the next open VIM
+  instance" [k3], and a new window goes "beside the existing window" [k3].
+- **Linear as the builder.** Linear has one triage page per team, so it never makes two. On our pieces
+  open or focus is one piece of the desk that every program gets, with one field to say what counts
+  as the same. Placement is tmux's and i3's, not Linear's: Linear does not tile (W5). Where Linear's
+  answer clashes, see call 7.
+- **OTP.** `whereis` then `start_child`, in one step so two presses cannot race into two tiles [o1].
+  The desk is the registry.
+- **Accessibility.** WCAG 2.4.11: a focused tile "is not entirely hidden" [w2]: focus never lands on a
+  strip or under a zoom.
+- **What holds it.** Two laws on the desk: after any `open`, at most one tile per `(program, reuse
+  key)` on a workspace; and the focused tile is never folded or covered by a zoom.
+- **Doubt and cost.** 196's: side by side in a 2x2 gives a 355px tile, one pane. About 150 lines with
+  laws in the desk, 3 agent hours.
+- **Today: half.** The focus half exists: `go` focuses a tile and ends a zoom (`desk.ts:548-556`), and
+  `opensOf` finds the tile that shows the ticket (`frame.ts:365-374`). The open half says "nowhere".
+
+### G4: only on a press; focus and the selection travel together; say it once
+
+**Lean, 85%.**
+
+- **What it means.** Nothing opens or takes focus unless the person pressed or clicked something just
+  before. A new ask is a count in the top bar, never a tile. When a press does open, the popup closes,
+  the new tile takes focus on the same selection, and the person hears one thing.
+- **Rules.** R1 only on a press: an `open` carries the `via` of the press, and the desk refuses one
+  with none (`no_press`), lean 85%. R2 the handoff: 196's P3, lean 85%. R3 what is said: the focus move
+  speaks for itself; an answer is a polite status; the bottom line names the tile: 196's P5, lean 80%.
+  R4 one letter per move, with `from` and `via`, lean 85% (what the ledger records).
+- **Why.** WCAG 3.2.1, focus "does not initiate a change of context" [w2]. i3 gives a window out of view
+  "the urgency hint" instead of focus [k3]. The dark cockpit: when all is well, "all annunciators on
+  the overhead panel will be extinguished" [f4].
+- **Linear as the builder.** Linear's inbox counts and never opens on its own; Enter opens and Space
+  peeks (**secondary**, [l6]). On our pieces: the top bar's count is the only signal, `Enter` is the
+  only open, and the selection is one model, so there is nothing to hand over.
+- **Elm.** No Cmd without a Msg: an update runs only on a message, and the press is that message. The
+  desk checks that a press is behind the Cmd, since Msgs from a window may be late
+  ([Elm first](./elm-first.md), a program may say no).
+- **Accessibility.** 3.2.1, 3.2.2 and 3.2.5 (change on request, AAA) [w2]; 4.1.3 for the polite
+  status. Needs a real VoiceOver run: whether the new focus and the polite status are both read, and
+  in which order (196).
+- **What holds it.** `open`'s `err` has `no_press`. A law: no step that is not a press moves focus.
+- **Doubt and cost.** An agent asking to show its work in a tile (Tier 5) has no press behind it; it
+  asks through the top bar, like an ask. About 40 lines in the desk.
+- **Today: half.** Only a press moves focus, and a new ask is a dot (`frame.tsx:191,268`). But no
+  selection travels, and a `go` is not said.
+
+### G5: the way back is one key, and it works the same in every program
+
+**Lean, 70%, on the rules. The close is the owner's call (call 1).**
+
+- **What it means.** `Esc` peels a program from the inside out: a note, then a picked part, then the
+  one-pane detail. At its top level a program may send `leave`, and focus goes back. Between tiles,
+  `C-b ;` always returns to the tile focused before. Inside a tile, back walks its own addresses.
+- **Rules.** R1 `Esc` peels; at the top a program may bind `leave`: 196's P4, lean 70% (call 5). R2
+  closing a tile: the clash, call 1. R3 `C-b ;`, the tile focused before: decided in the tile
+  guidelines, and its history is recorded from the first build. R4 back inside a tile: ticket 7, lean
+  75%.
+- **Why.** Emacs's `display-buffer` "saves information about what it did in the window's quit-restore
+  parameter" [x1]. tmux: "Select the last (previously selected) pane" [k2]. APG: "When a dialog closes,
+  focus returns to the element that invoked the dialog" [w4].
+- **Linear as the builder.** Linear has one stack, the browser's, and `Esc` closes a peek back to the
+  list. On our pieces there are two scopes: back inside a tile (ticket 7) and back between tiles (`C-b
+  ;`), each one key, the same in every program, because the desk owns both.
+- **OTP.** No OTP answer for focus. The desk monitors a tile's process and hears `DOWN`; what it
+  focuses next is our rule.
+- **Accessibility.** 2.4.3, focus order [w2]; 2.1.2, no keyboard trap: the prefix and F6 work in every
+  program (modes, M4).
+- **What holds it.** The `focused` list on a workspace, and one function that picks where focus goes.
+  A law: a close never leaves focus on nothing.
+- **Doubt and cost.** Under 80%: a person who closes the asks tile after answering may want the ticket
+  beside it, not the opener (196). About 40 lines for the list and `C-b ;`, 1 agent hour.
+- **Today: half.** A popover puts focus back (popovers, rule 3). Between tiles, `C-b ;` is not built
+  (`apps/fabrika/src/desk/keys.ts:80-113`), and a close goes by reading order (`desk.ts:415`).
+
+### G6: programs meet on typed pipes, never by calling each other
+
+**Lean, 85%.**
+
+- **What it means.** A program never imports, starts or calls another program. It sends an output;
+  a line wires it. The ticket follows the asks on a pipe, `asks | ticket`. Each program also runs
+  alone, from its flags.
+- **Rules.** R1 no calls between programs, lean 85%. R2 the ticket follows on a pipe, lean 80% (196's
+  "the ticket tile follows by pipe"). R3 one program runs alone and in a line, lean 85%
+  ([agents are programs](./agents-are-programs.md): `claude` opens a window by hand and prints in a
+  pipe, as `isatty` splits it). Closing one window ends one process: decided
+  ([fold, not tabs](./fold-not-tabs.md#a-lines-windows-close-one-by-one)).
+- **Why.** "Write programs to work together" and the "Rule of Composition" [x6]. A Eurorack module
+  patches into any other because the standard is tiny: "1 volt" per "one octave" [f2].
+- **Linear as the builder.** Linear is one app with one model, so it has no pipes. Its issue view is
+  one component, used in triage, inbox and peek [m8]. On our pieces that is the ticket program on a
+  pipe beside the asks, not a second ticket view inside them.
+- **Elm and OTP.** Two Elm programs share nothing and meet through ports; OTP processes share nothing
+  and meet through messages. tsh lines are the one named exception in [Elm first](./elm-first.md).
+- **Accessibility.** 1.3.1, relationships in words: the region's name says `pipe A, 1 of 2, sends to
+  ticket` (tile guidelines).
+- **What holds it.** `layer-rules.json`: a program package imports no other program (`pnpm lint`).
+  The fit check refuses a pipe whose types do not match.
+- **Doubt and cost.** Closing the asks tile leaves the ticket tile, as the pipe rules say; a person
+  who wanted both gone presses twice. Nothing new to build.
+- **Today: follows** for `tracker | ticket | runs` (`programs/ticket/src/index.ts:23`). The asks list
+  is on no pipe.
+
+### G7: what every program gets for free
+
+**Lean, 80%.**
+
+- **What it means.** A program writes its model, its views and its commands. The rest comes from the
+  desk and the kit, the same in every program.
+
+```text
+a program writes          it gets, written once for all
+commands                  the action bar's buttons with each key on them (P8), palette rows, tsh words,
+                          rows in the key file, the keys panel, aria-keyshortcuts
+mode(state)               the mode's word on the bottom line and the title, its status line, Esc out (modes)
+at                        open or focus, back inside the tile, C-b ; between tiles, a saved place
+its views                 the tile's frame, name, region, empty word and focus home (tile guidelines)
+its machine               a run id, a trace, saved state, hot reload, a job to attach to
+                          (agents are programs, saved state, hot reload)
+```
+
+- **Rules.** R1 the buttons come from `commands`, so a key and its button cannot drift: 196's P8, lean
+  75%. R2 the desk's pieces are not the program's: lean 85%. R3 the kit holds view helpers, not parts
+  that keep state: list and detail, the row, the action bar, lean 75%. R4 two programs writing the same
+  piece means it moves into the kit, lean 80% ([reuse before special rules](./reuse-before-special-rules.md)).
+- **Why.** VS Code: "By default, commands show in the Command Palette", and a contributed key shows in
+  the shortcuts list [x5]. Ableton's Key Map mode: "assignable elements of the interface become
+  highlighted" [f1]. A cockpit's soft keys ring the page they act on [f4]. Elm: "Just write the helper
+  functions you need" [e2].
+- **Linear as the builder.** Linear's command menu lists every action with its key, and its main parts
+  behave one way everywhere [m8]. On our pieces that is `commands` feeding every surface, and the
+  list-and-detail, row and action bar as view helpers any program calls with its own model.
+- **Elm.** The kit is helpers around a type, not components with their own state [e2]. Where we leave
+  Elm: the desk gives open or focus and the keys from outside the program, as Elm's runtime gives
+  `Browser.application` its URL handling.
+- **Accessibility.** 2.1.1, every command by keyboard; 2.5.3, a button's name holds its visible text;
+  3.2.3, the same parts in the same place [w2]; `aria-keyshortcuts` only names the key [w5].
+- **What holds it.** No program writes a footer of keys by hand: the action bar takes `commands`. A law:
+  every command has a palette row and a tsh word.
+- **Doubt and cost.** Whether a program with many commands wants all on its bar: a `bar: true` per
+  command would pick. About 200 lines for the kit, 3 agent hours, in Tier 2.
+- **Today: half.** Every tile gets its frame and name. The popup's footer is typed by hand
+  (`frame.tsx:421-426`), and the palette lists the desk's commands only (`frame.tsx:968-973`).
+
+## The smaller calls
+
+### 1. Where focus goes when a tile you opened closes
+
+**Lean C, 65%. The owner picks: B is decided today, and A or C reopens it.**
+
+```ts
+// A: the opener. A new fact on the tile, written at open time.
+type Tile = {id: TileId; shows: Pid; from: TileId | null};
+closed("t5") // focus -> t5.from if open, else heirOf
+
+// B: reading order, as decided in the tile guidelines (today's heirOf, desk.ts:415).
+closed("t5") // focus -> the next open tile after t5, else the one before
+
+// C: the focus history, as tmux's window_lost_pane and i3's con_next_focused do.
+closed("t5") // focus -> the newest tile in workspace.focused that is still open, else heirOf
+```
+
+- **A, the opener (196's P4).** APG's dialog rule and Emacs's `quit-restore` [w4][x1]. Cost: a second
+  close rule beside reading order, and a `from` that goes stale when the opener closes first.
+- **B, reading order (decided 2026-11-01).** Predictable with no memory, one rule. Cost: after
+  answering asks, focus lands on the tile after the asks tile: its ticket when that is open, else the
+  next tile in the row. The line opens after the opener, so B never gives the opener back. The demo
+  shows it in all four layouts, at both window sizes.
+- **C, the focus history.** What our declared defaults do: tmux takes the front of `last_panes`, then
+  the pane before, then after [k5]; i3 walks its focus stack [k6]. It gives the opener back in the
+  common case with no rule per program, and it is the same list `C-b ;` reads. Cost: it changes a
+  decided rule for every close, and the history can point somewhere old after a long time in one tile.
+- **Why C.** It matches tmux and i3, which AGENTS.md names as the defaults for tiling, and it needs no
+  fact beyond the one the tile guidelines already store. **Doubt:** the owner chose reading order
+  knowing it; nobody has pressed the three. The page's demo has all three; a week of use settles it.
+
+### 2. What counts as the same tile
+
+**Lean `reuse: "program"` by default, 65%.**
+
+```ts
+reuse: "program"  // one tile of this program per workspace; a new address goes to it as a query
+reuse: "address"  // one tile per address: ticket #7 and ticket #8 side by side
+```
+
+- "program" is Android's `singleTask` and i3's criteria focus [x4][k3]; "address" is Vim's
+  `useopen` per buffer [x2]. **Doubt:** reusing loses the old place, which Android warns about [x4];
+  the tile's own back stack (G5 R4) keeps it. A person can always split and type a second.
+
+### 3. Where a new tile lands
+
+**Lean "beside, half the focused tile's share", 65%** (196's P2).
+
+```text
+beside      half of the focused tile's share, after it      keeps the rest of the desk as it was
+column      the whole column the focused tile is in          a full list and detail in a 2x2; hides more
+zoom        the new tile zoomed                              all of it; hides everything else
+```
+
+### 4. An open is a line, or a program and an address
+
+**Lean "a line", 75%.**
+
+```ts
+open({line: "asks --ask a-approve-8 | ticket", ...}) // a line: one fit check, one placement rule
+open({program: "asks", at: {ask: "a-approve-8"}, ...}) // simpler, but a second way to start programs
+```
+
+- A line reuses tsh's fit check and the decided "a line opens in place". **Doubt:** a line is text, so
+  a program builds a string; a typed `Line` value from tsh's parser would avoid that.
+
+### 5. `Esc` at a program's top level
+
+**Lean "a program may bind `leave`", 70%.**
+
+```text
+a program binds it     asks: Esc at the top goes back; a terminal keeps Esc for vim
+the desk always        breaks every terminal program that uses Esc
+never                  only C-b ; goes back; Esc at the top does nothing
+```
+
+### 6. A glance view in the top bar
+
+**Lean "any program may have one; the person picks which show", 65%** (196's flag).
+
+- It changes the program shape by one optional view. Tracker, runs and spend could each want one.
+  **Doubt:** a top bar with four glances is noise; one, the asks, may be all a person keeps.
+
+### 7. A look over the desk, or a tile beside
+
+**No lean, the owner picks. It is a clash with Linear.**
+
+```text
+Linear's answer   Space peeks over the list; Esc closes it; the list stays focused  [l6], secondary
+tmux and i3       a look is a split, or nothing                                      [k2][k3]
+fabrika today     a popover is the only thing over the desk (popovers)
+```
+
+- A peek would be a glance in a popover, never a tile; anything you work in is a tile. Taking Linear's
+  peek means a second kind of thing over the desk, beside popovers.
+
+## What the ledger records
+
+In `next/`, the desk is a program with its own log (Tier 1 detail, call 20), so these are its letters.
+
+```ts
+// A sketch, next/. Effect Schema writes each _tag. `said` is the window's own clock, never used to decide.
+{_tag: "open", line: "asks --ask a-approve-8 | ticket", from: "t1", via: {_tag: "key", keys: "enter"}, said}
+{_tag: "opened", tile: "t5", how: "new", beside: "t1", folded: ["t6"]}
+{_tag: "left", tile: "t5", to: "t1", by: "history"}
+{_tag: "closed", tile: "t5", focus: "t1", by: "history"}
+{_tag: "refused", why: "no_press", from: "t1"}
+```
+
+- **Lost if not recorded now:** `from` and `via` at the moment of the open, and which way back a person
+  used. Neither can be worked out later. They are what call 1 needs to be settled by data, not taste.
+- Derived later, from these: how often an open is a focus, which programs open which, time in a tile
+  before `leave`.
+
+## A tryout in today's version
+
+Offered, not filed. Each is small and stands alone.
+
+| Fix | What changes | Size |
+|---|---|---|
+| `Enter` with nowhere to go opens `ticket --ticket N` beside the focused tile | a desk Msg `open {line, from}` that reuses `openLine`; `opensOf` gains a fourth answer (ticket 102 is next to it) | about 90 lines with tests, 2 agent hours |
+| `C-b ;` and the focus history | decided in the tile guidelines, not built; a list on the workspace | about 40 lines, 1 agent hour |
+| The popup's footer and row keys from one table | `ASKS_FOOT` and the row's `H` from one list of commands | about 30 lines, 0.5 agent hours |
+| `go` is said | a polite "ticket #7, t2" on a focus move from the popup | about 15 lines, 0.25 agent hours |
+
+## Where this differs from settled notes
+
+- **[Tile guidelines](./tile-guidelines.md), decided.** Call 1's A or C changes its close rule. Its
+  `C-b ;` is used here as is. The tile's insides are its, not this note's.
+- **[Popovers](./popovers.md), settled.** It says the asks list "never opens a new tile: the app has no
+  path for that yet". This note is that path; the popover rules do not change.
+- **[Tracker views](./tracker-views-are-programs.md), proposed.** Its `open` output becomes a Cmd with
+  an answer, and its `query` becomes the way an address moves.
+- **[Fold, not tabs](./fold-not-tabs.md), decided.** A line opens in the tile it was typed in. An open
+  from a popup has no such tile, so it lands after the focused tile, which keeps its program, and the
+  tile asked for stays open while the others fold (196's P2).
+- **[Modes](./modes.md), decided.** `commands` is used as is; `leave` is one more command a program may
+  bind. A `glance` view would be one more optional field (call 6).
+
+## What it costs
+
+In `next/`, spread over Tier 2 (the desk) and Tier 5 (the asks). Estimates from reading, not a build.
+
+| Piece | Lines | Agent hours |
+|---|---|---|
+| `at`, `reuse`, and `query` with a back stack per tile | 120 | 2.5 |
+| The desk's `open`, `leave`, open or focus and placement, with laws | 150 | 3 |
+| The focus history, `C-b ;` and the close rule | 40 | 1 |
+| The kit: list and detail, row, action bar from `commands` | 200 | 3 |
+| The desk's letters and refusals | 40 | 0.75 |
+
+About 550 lines and 10 agent hours. The cost of not doing it: each program that opens a tile writes
+its own, as today's frame does for the asks.
+
+## What it cannot tell us
+
+- **Nothing ran in the app.** The page's demo is a browser sketch of the desk; its checks prove the
+  drawing, not `desk.ts`.
+- **No screen reader ran.** The order of a focus move and a polite status needs VoiceOver and NVDA.
+- **Which way back a person expects.** Three branches, on paper and in the demo. A week of use with
+  the letters above settles call 1.
+- **"The same tile" for programs other than the asks.** Only the asks were walked.
+- **tmux's and i3's close rules come from their source,** read by a fetch tool, not run.
+- **Linear's app was not seen logged in,** and its peek page did not load.
+- **`next/` has no desk yet.** Every `next/` claim is a sketch on the decided notes.
