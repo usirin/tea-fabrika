@@ -7,6 +7,9 @@ together so neither one's shape leaks into the other. A person runs one by
 hand and gets a chat window. A stage starts one by name as a child run, hands
 it a JSON Schema, and checks the answer with its own schema.
 
+Keys renamed 2026-11-03 (short words keep one meaning): the view's `of` became `select`. Today's
+`defineProgram` still says `of`.
+
 ```ts
 // programs/claude/src/index.ts. programs/codex/src/index.ts is the same, with "codex".
 export const claude = defineProgram({
@@ -14,7 +17,7 @@ export const claude = defineProgram({
 	description: "Claude Code as a program: each prompt is a turn on one session, ...",
 	flags, inputs, outputs,                  // shared, from @kampus/fabrika/agents/program
 	machines: {conversation: conversationKind},
-	view: {machine: "conversation", data: Conversation, of: (s: Conversation) => s},
+	view: {machine: "conversation", data: Conversation, select: (s: Conversation) => s},
 	main: (io) => chat("claude", io),        // the main both programs run
 });
 

@@ -7,13 +7,16 @@ ask, kept as facts on the ledger with one hash of what the person saw, and one
 meter, the ledger's own limits. A person's yes to a cost estimate is the only
 thing that can set a dollar limit.
 
+Keys renamed 2026-11-03 (short words keep one meaning): `via`'s `in` became `_tag`, and a spend's
+`of` became `total`.
+
 ```ts
 // The whole idea, as a sketch: the owner approves $0.40, and the run stops at $0.40.
 experiment/170/run/3/inbox
   {type: "asked", ask: "spend-1", for: "spend", who: ["github:42"],
-   shows: {run: "experiment/170/run/3", usd: 0.4, cases: 5, of: 120, model: "jev-1"},
+   shows: {run: "experiment/170/run/3", usd: 0.4, cases: 5, total: 120, model: "jev-1"},
    saw: "sha256:4be0…", picks: ["yes", "no", "never"], until: 1793400000000}     code
-  {type: "answered", ask: "spend-1", pick: "yes", note: "", saw: "sha256:4be0…", via: {in: "window"}}   a person, in the window or said in chat
+  {type: "answered", ask: "spend-1", pick: "yes", note: "", saw: "sha256:4be0…", via: {_tag: "window"}}   a person, in the window or said in chat
 ledger.setLimits("experiment/170/run/3", {usd: 0.4, answer: 812})   // refused unless row 812 is that yes
 ledger.hold(fence, "case-1", {usd: 0.1})    // "ok", or "limit": the money is not there
 ledger.charge(fence, "case-1", {usd: 0.07}) // what the case really cost; it replaces the hold
@@ -147,8 +150,8 @@ const AskFact = Schema.Union([
 		saw: Hash,
 		with: Schema.optionalKey(Schema.Unknown), // the extra a kind's answer takes, such as "keep going 2 rounds"
 		via: Schema.Union([                       // where the person said it; a chat answer always names its session
-			Schema.Struct({in: Schema.Literal("window")}),
-			Schema.Struct({in: Schema.Literal("chat"), session: Id}),
+			Schema.TaggedStruct("window", {}),
+			Schema.TaggedStruct("chat", {session: Id}),
 		]),
 	}),
 	/** Code takes the ask back: its run ended, its time ran out, or what it was about changed. */
@@ -178,7 +181,7 @@ const AskFact = Schema.Union([
 ```ts
 // A sketch, in the shape of Cmd.define: a kind names what it shows and what its answer takes.
 const spend = Ask.define("spend", {
-	shows: Schema.Struct({run: Name, usd: Usd, cases: Count, of: Count, model: Schema.String}),
+	shows: Schema.Struct({run: Name, usd: Usd, cases: Count, total: Count, model: Schema.String}),
 	picks: ["yes", "no", "never"],
 });
 const permission = Ask.define("permission", {
@@ -204,14 +207,14 @@ const plan = Ask.define("plan", {
 ```ts
 // A sketch. The person says yes to their agent session; the session writes it on their login.
 {type: "answered", ask: "spend-1", pick: "yes", note: "", saw: "sha256:4be0…",
- via: {in: "chat", session: "session-7f3a"}}
+ via: {_tag: "chat", session: "session-7f3a"}}
 // window and trace: "yes · said in chat · session-7f3a"
 ```
 
 - Decided by the owner on 2026-10-30. A person often answers in a chat with
   their own agent session, and that session writes the answer on the person's
   login. That stays.
-- The fact says `via: {in: "chat", session}`. The schema makes a chat answer
+- The fact says `via: {_tag: "chat", session}`. The schema makes a chat answer
   without its session impossible. The window and the trace show "said in chat".
 - `saw` must still match. The session shows the ask's `shows` in the chat and
   writes the hash of what it showed, so the same two hash checks apply.
@@ -259,7 +262,7 @@ type Asking<K extends Kind> =
 One example, the spend ask from the opening block:
 
 ```ts
-const [s0, cmds] = ask.start(spend, {run: "experiment/170/run/3", usd: 0.4, cases: 5, of: 120, model: "jev-1"},
+const [s0, cmds] = ask.start(spend, {run: "experiment/170/run/3", usd: 0.4, cases: 5, total: 120, model: "jev-1"},
 	{who: ["github:42"], until: in24h});
 // s0:   {phase: "asking", ask: {ask: "spend-1", saw: "sha256:4be0…", …}, write}
 // cmds: [ask_write {stream: "experiment/170/run/3/inbox", fact: {type: "asked", …}}]
@@ -267,7 +270,7 @@ const [s0, cmds] = ask.start(spend, {run: "experiment/170/run/3", usd: 0.4, case
 const s1 = ask.written(s0);
 // s1:   {phase: "waiting", ask}       listening on the run's inbox for `answer/spend-1`
 
-const s2 = ask.answered(s1, {type: "answered", ask: "spend-1", pick: "yes", note: "", saw: "sha256:4be0…", via: {in: "window"}});
+const s2 = ask.answered(s1, {type: "answered", ask: "spend-1", pick: "yes", note: "", saw: "sha256:4be0…", via: {_tag: "window"}});
 // s2:   {phase: "answered", ask, answer}
 // next: Act setLimits("experiment/170/run/3", {usd: 0.4, answer: 812}), through `remember`
 ```
@@ -335,7 +338,7 @@ const jev = liveJev(key, {calls: 2_000}, meter.of(self))   // the dollar cap is 
 | `tickets/approval.ts` `changesRequested` | **Kept** | A different rule: a person's "request changes" after a yes takes it back. It now also writes `withdrawn {why: "changed"}`. |
 | Asks program kinds and `answered` (`pipeline/src/asks/`) | **Folded**: four kinds of the one ask; its answers move to `answered` with `saw` | It answers by version number and covers nothing else. Its fold, its packs and the owner desk keep working; they read the one shape. |
 | `combos.ts` `createAsk`, `Thread`, `Reply`, `/choice`, Judge reading | **Removed** once legacy's operator is gone; no new caller until then | A comment on a thread is written by a bot, not on a person's session, so it can never be a person's `answered`. A model reading a person's words into a pick is code writing a person's answer. Its one caller is in `legacy/`, which only shrinks. |
-| A yes said in chat, written by the person's agent session | **Kept**, marked `via: {in: "chat", session}` | It is how people answer today. The mark makes it visible and checkable instead of looking like a window answer. |
+| A yes said in chat, written by the person's agent session | **Kept**, marked `via: {_tag: "chat", session}` | It is how people answer today. The mark makes it visible and checkable instead of looking like a window answer. |
 | `combos.ts` `hashOf`, `covers` (`node:crypto`) | **Removed** with `createAsk` | `node:crypto` cannot load in the window or a worker; Web Crypto can. |
 | `acp` program `ask` output, `allow`, `refuse`, `--permissions` | **Folded**: `--permissions ask` writes `asked {for: "permission"}` on the run's name and listens for `answered`. The `ask` output stays as a view. The `allow` and `refuse` inputs go. | An input can be told by any program in a pipe. Only a fact from a person's session is a person's answer. |
 | `Agents` event `asked {id, title}` | **Kept**, grown with `tool` and `input` | The person must see what the yes allows, and the hash must cover the call's input, not its title. |
@@ -372,7 +375,7 @@ limit mid-turn -> hold refused: the turn never starts; charge past it: the run e
 3x over        -> the trial ends limit:usd at the yes; a new ask shows the measured price
 3x under       -> the rest of the yes is never held; a new ask for the rest shows the measured price
 two people     -> the first answer is written; the second is a dup and is shown "answered by"
-said in chat   -> answered with via {in: "chat", session}; shown "said in chat"
+said in chat   -> answered with via {_tag: "chat", session}; shown "said in chat"
 late answer    -> the ask was withdrawn {why: "ended"}; the fold refuses the answer
 no person      -> no ask is written; the box's rules refuse the tool, reject_once
 ```

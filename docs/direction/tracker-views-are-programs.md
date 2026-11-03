@@ -7,6 +7,9 @@ model as facts) and [PR 153](https://github.com/usirin/tea-fabrika/pull/153)
 (every view a program). It starts from 153's text, folds in 135's, settles
 where they clash, and adds what a ticket shows at a glance. Tracker ticket 64.
 
+Keys renamed 2026-11-03 (short words keep one meaning): the glance's `of` became `total`, and
+`due`'s `on` became `date`.
+
 ```ts
 // A sketch. One ledger. Each view is its own small tea program that folds it.
 //
@@ -16,7 +19,7 @@ where they clash, and adds what a ticket shows at a glance. Tracker ticket 64.
 //
 // The first thing on a ticket's page is one sentence: what the person must do, if anything.
 Glance.fromTicket(ticket, prs, now);
-// {_tag: "review", pr: "https://github.com/usirin/tea-fabrika/pull/155", checks: {passed: 4, of: 4}}
+// {_tag: "review", pr: "https://github.com/usirin/tea-fabrika/pull/155", checks: {passed: 4, total: 4}}
 // "Ready for your review: PR #155, 4 of 4 checks passed"
 
 // Status is worked out from facts. Nobody writes "done".
@@ -612,7 +615,7 @@ Schema.Struct({type: Schema.Literal("unrelated"), to: TicketNumber, as: Schema.L
 Schema.Struct({type: Schema.Literal("edited"), title: Title, body: Body}), // a person; a yes's hash goes stale
 Schema.Struct({type: Schema.Literal("prioritized"), level: Schema.NullOr(Schema.Literals(["urgent", "high", "medium", "low"]))}), // a person
 Schema.Struct({type: Schema.Literal("labeled"), add: Schema.Array(Label), drop: Schema.Array(Label)}), // a person
-Schema.Struct({type: Schema.Literal("due"), on: Schema.NullOr(Day)}), // a person; a dated parent is a milestone
+Schema.Struct({type: Schema.Literal("due"), date: Schema.NullOr(Day)}), // a person; a dated parent is a milestone
 ```
 
 **What the fold refuses,** into `problems`, as it does today: a `nested` under
