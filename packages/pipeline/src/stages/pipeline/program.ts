@@ -415,6 +415,17 @@ interface Redo {
 	readonly written: NonNullable<Carry["written"]>;
 }
 
+/**
+ * Where a test writer adds its tests: main in round 1, and the head from round 2 on. One sent back
+ * while its own commit is still the head starts where that commit did, so its own files are never
+ * ones that exist already (jidoka row 28). `null`: no head to add tests on. Pure.
+ */
+const testsBase = (carry: Carry, round: number, main: string): string | null => {
+	if (round === 1) return main;
+	const {wrote, head} = carry;
+	return wrote !== undefined && wrote.commit === head ? wrote.on : head;
+};
+
 /** The redo `carry` holds, if any. Pure. */
 const redoOf = (carry: Carry): Redo | null => {
 	const files = carry.touched ?? [];
@@ -1005,7 +1016,7 @@ const bodies = {
 			const tree = yield* work.tree(at.cmd.number);
 			const redo = redoOf(carry);
 			if (redo !== null) return yield* writtenAgain(at, redo);
-			const base = round > 1 ? yield* need(carry.head, "no head to add tests on") : tree.base;
+			const base = yield* need(testsBase(carry, round, tree.base), "no head to add tests on");
 			const properties = propertiesOf(carry, round);
 			const includes = settings.test_writer?.includes ?? [...DEFAULT_INCLUDES];
 			const taken = (yield* work.judgedFiles(base)).filter(includedBy(includes));
@@ -1048,6 +1059,7 @@ const bodies = {
 					head: commit ?? base,
 					exam: [...carry.exam, ...files],
 					cannot: untestedRows(properties, answers),
+					...(commit === null ? {} : {wrote: {on: base, commit}}),
 					// The first writing is the one under the build: a restart runs its check again on main.
 					...(round === 1 && commit !== null
 						? {

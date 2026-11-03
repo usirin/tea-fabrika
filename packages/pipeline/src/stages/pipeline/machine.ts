@@ -220,6 +220,12 @@ const carried = {
 	 */
 	written: Schema.optionalKey(Written),
 	/**
+	 * The last test writer's commit, and the head it was written on. A test writer sent back while that
+	 * commit is still the head writes on that head again, so its own files are never ones that exist
+	 * already (jidoka row 28). Optional, as `left` is.
+	 */
+	wrote: Schema.optionalKey(Schema.Struct({on: Schema.String, commit: Schema.String})),
+	/**
 	 * The test writer's files a build or main changed, waiting on a person's pick: the next build puts
 	 * them back as `written` has them, and the next test writer writes them again. Optional, as `left` is.
 	 */
@@ -1093,15 +1099,17 @@ const running = (s: Held, step: LaneStep, round = s.round, restarted = false): S
 	const instead = step === "exam_merge" && !restarted ? examMergeFrom(s, round) : null;
 	if (instead !== null) return instead;
 	const unchecked = AFTER_BUILD.has(step) ? uncheckedAt(s.carry) : null;
-	// The mutants job's commit, the one head after build no builder made (experiment 193). Red: the
-	// builder gets the failing names, a round up, as after a build's own red (./routes.ts
-	// `back("build", "names")`). Not run, or none: main is read fresh, which runs them, as a restart
-	// does; still not run after that read, the lane stops and says why.
-	if (s.trail.at(-1)?.step === "mutants" && unchecked === "checks_red") {
+	const last = s.trail.at(-1)?.step;
+	// A head after build no builder made: the mutants job's commit (experiment 193), or a person's
+	// head the merge took in (jidoka rows 62 and 63). Red: the builder gets the failing names, a round
+	// up, as after a build's own red (./routes.ts `back("build", "names")`). The mutants job's, not
+	// run or none: main is read fresh, which runs them, as a restart does; still not run after that
+	// read, the lane stops and says why.
+	if ((last === "mutants" || last === "merge") && unchecked === "checks_red") {
 		const red: Outcome = {kind: "send", to: "builder", why: "checks_red"};
 		return move(s, "build", after("build", red, s.round, s), nameOf(red), askWords("build", red));
 	}
-	if (s.trail.at(-1)?.step === "mutants" && unchecked === "checks_not_run" && !restarted)
+	if (last === "mutants" && unchecked === "checks_not_run" && !restarted)
 		return refreshing(s, runAt(s, step, round));
 	if (unchecked !== null)
 		return releasing(s, {
