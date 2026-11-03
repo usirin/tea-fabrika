@@ -1,9 +1,9 @@
 # The ask desk: most asks are one key, and the desk learns from the answers
 
 **Proposed 2026-11-02.** Decided by the owner before this note, and not asked again: asks to the
-owner are fine, even many; the 10% to 30% call stands
-([triage asks when worth is unclear](./triage-asks-when-worth-is-unclear.md), about 105 to 190 asks
-a week); the owner makes every decision the system thinks needs them. What is needed is a desk where
+owner are fine, even many; the owner's call of 2026-10-30 stands
+([triage asks when worth is unclear](./triage-asks-when-worth-is-unclear.md): about 130 to 190 asks
+a week, with no ask budget set yet); the owner makes every decision the system thinks needs them. What is needed is a desk where
 most asks are one key in one sitting ("approve", "do your rec", or "no, with a note"), and a desk
 that learns from the owner's answers so the system automates better over time. Folded in the same
 day, from [experiment 185](../../experiments/185-dsh-superagent-study.md)'s "steal 1": attention is
@@ -12,7 +12,10 @@ It is data the desk records, not a budget that cuts asks.
 
 Built from [experiment 196](../../experiments/196-ask-desk.md), which read about 18 makers and
 papers and checked ticket 117's real asks against them, and a private page, "Ask desk guidelines",
-with a desk you answer with the keys. Neither is a measurement. It builds on
+with a small desk you can click and key through. Neither is a measurement. Round 2, the same day,
+after the owner's review: the desk is one asks program with two views, a glance in the top bar and a
+list and detail in a tile, not a second desk beside today's asks popup and not a card in the middle
+([one asks program, two views](#one-asks-program-two-views)). It builds on
 [one ask, one meter](./one-ask-and-one-meter.md) (proposed, tickets 90 and 91), whose `asked` and
 `answered` facts it grows.
 
@@ -33,7 +36,10 @@ with a desk you answer with the keys. Neither is a measurement. It builds on
 
 ```text
 one sitting, traced
-open the desk     4 asks, about 2 min                       header: count, and minutes per kind
+Ctrl-B a          the top bar's popup: 4 asks, about 2 min  the glance: each row has its rec
+  Enter           the asks tile opens beside the focused    the popup closes; focus is on the same ask
+                  tile, on the same ask; the ticket tile    in the tile; the ticket tile follows it
+                  follows by pipe
   ask 1 of 4      #117 Approve plan version 2?              rec: approve, 95%; evidence folded
   space           the three open questions unfold           took.opened gains "questions"
   y               takes the rec                             answered {answer: rec}; status "Approved. 3 left."
@@ -47,8 +53,8 @@ open the desk     4 asks, about 2 min                       header: count, and m
 
 ## Which version
 
-- **`next/`:** all of it, with the asks list in Tier 5 ([tiers](../plan/tiers.md)) and the desk as a
-  program from Tier 2. The facts land with the one ask (ticket 90) in whatever tier first asks a
+- **`next/`:** all of it, as one asks program: its tile from Tier 2, its glance in the top bar with
+  the asks list in Tier 5 ([tiers](../plan/tiers.md)). The facts land with the one ask (ticket 90) in whatever tier first asks a
   person; `rec` and `took` go on from that day, since what they hold exists only then.
 - **Today's version (`apps/fabrika`, `programs/tracker`, `packages/pipeline`):** not changed by this
   note. Ticket 117's asks are the running example, read on main. Four small tryouts are offered at
@@ -111,36 +117,112 @@ type Automatable = Exclude<Judgment,
   on. The lean from the owner's brief, a guess written before the ask, is the rec, sealed before the
   desk draws it.
 
+## One asks program, two views
+
+**Lean, 80%.** One program owns the asks: the queue, the selection and the answer. It has two views.
+The top bar's popup is its glance: every row shows its rec, and `y` and `n` answer from there.
+"Open all" (or `Enter` on a row) opens its full view as a tile, a list beside a detail. Both views
+draw one selection, so moving from one to the other keeps your place. The ticket tile takes the
+selection on a pipe, so the ticket you are answering about sits beside the ask. This replaces round
+1's single card in the middle of the desk.
+
+```ts
+// A sketch, next/. One program, one model, two views. Names are a sketch.
+type Asks = {
+	queue: ReadonlyArray<AskId>; // from the one asks machine: one source, as asks.ts is today
+	selected: AskId | null;      // one selection, drawn by both views
+	open: ReadonlyArray<Part>;   // evidence parts unfolded on the selected ask
+	note: Draft | null;          // the "not the rec" note being typed
+};
+const glance = (m: Asks) => popup(m.queue.map((id) => row(id, {rec: true, keys: ["y", "n", "h"]})));
+const full = (m: Asks, width: number) =>
+	width < 520 ? onePane(m) : listAndDetail(m); // the same rows, the same detail, at two sizes
+// out on the pipe: the selected ask's ticket, which the ticket tile shows
+const out = (m: Asks): TicketId | null => (m.selected ? ticketOf(m.selected) : null);
+```
+
+### How Linear would build it in fabrika
+
+Linear's own triage is one screen: a list "side by side with the focused issue" [l5], one key per
+action [l1], and an inbox where you "click into the notification to view the individual issue" [l2].
+We do not copy that screen. We ask how Linear's team builds: they pick "few things to do well" [m4],
+define "the behaviors of the main components of the app" once [m8], and keep "consistent,
+high-quality experiences" [m10]. Built on fabrika's own parts (programs in tiles, a top bar, pipes,
+one asks machine), that gives one program and reusable pieces, not a triage screen.
+
+| Screen | How Linear would build it in fabrika | Where it differs from Linear's triage, and why |
+|---|---|---|
+| The top bar's popup | The asks program's glance view: the rows of today's popup, plus the rec and `y`, `n`, `h` on the selected row. One component for a row. | Linear has no popup inbox: Triage and Inbox are pages. We keep the popup, since today's top bar already holds the count and the owner glances there between other work. |
+| The asks tile | Its full view: a list and a detail, from one reusable list-and-detail piece. It folds to one pane under about 520px. | Linear's split view is a page. Ours is a tile, so it sits beside a terminal or the map, under the desk's own split rules. |
+| The ticket tile on the pipe | The ticket program, unchanged, reading the asks program's output: `asks \| ticket`. | Linear draws the focused issue inside triage. We compose two programs, so the ticket view is the one you already know, not a second copy. |
+| An ask in a ticket | The same ask component, at its third size: the ticket's ask box. | Linear answers triage from triage only. Here any of the three answers, through the same `answered` fact. |
+
+- **Reusable, so other programs get it free.** The list-and-detail piece that folds to one pane, the
+  action bar built from a program's commands with each key shown on its button, and "open or focus"
+  for any program that opens a tile with content (the patterns below).
+- **Doubt.** Whether `y` in a small popup is safe for a plan ask, which wants the plan read first.
+  The popup shows the rec and its sure; `Enter` takes you to the full view. A live week says how
+  often a plan is answered from the glance.
+
+### Opening a tile with content
+
+Today nothing in the app opens a tile with content: the asks list only jumps to a tile that shows
+the ticket, turns the tracker to it, or says no tile shows it (`apps/fabrika/src/window/frame.ts:357-382`),
+and [popovers](./popovers.md) records that it "never opens a new tile: the app has no path for that
+yet". "Open all" is the first. It needs five rules, each tried in the page's demo and written up in
+[experiment 196's patterns found](../../experiments/196-ask-desk.md#patterns-found).
+
+| Rule | Lean |
+|---|---|
+| Open or focus: a second "open all" focuses the asks tile already open, never a second one. | 90% |
+| Where it lands: it takes half of the focused tile's share, after it, side by side. In a row it is a sibling; in a column it nests ([fold, not tabs](./fold-not-tabs.md)). A zoom ends first. If it would be under 220px wide, the others in its row fold, the tile it came from last. | 65% |
+| The handoff: the popup closes, the new tile is focused, on the same selected ask. | 85% |
+| The way back: `Esc` at the tile's top level, or closing it, returns focus to the tile it was opened from. | 60% |
+| What is said: the focus move speaks for itself; an answer is a polite status; the bottom line names the tile. | 80% |
+
 ## The six principles
 
-### A1: one queue, one ask at a time
+### A1: one queue, a list beside the selected ask
 
-**Lean, 85%.** Every ask a person owes is in one queue, oldest first, shown one at a time, with how
-many and about how long at the top.
+**Lean, 85%.** Every ask a person owes is in one queue, oldest first, with how many and about how
+long at the top. The queue is a list; the selected ask is drawn whole beside it.
 
-- **What it means.** The desk draws the head ask whole and the rest as a count: "4 asks, about 2
-  min". After an answer, the next ask is drawn in the same place, and focus stays. `j` and `k` move
-  through the queue; `h` sets one aside, as the asks list's `H` does today.
-- **Why.** Linear's triage is "a special inbox for your team" with one key per action [l1];
-  Superhuman: "Mark Done with E and keep triaging from the next conversation" [s1]. The minutes come
-  from the person's own past answers per kind (`took.ms`, below); until there are 20 of a kind, 30
-  seconds a kind, experiment 163's guess, marked "about".
-- **Linear.** One triage inbox per team, `J` and `K` to move, `H` to snooze [l1][l2]. We match it,
-  with one queue across every ticket and repository, since one person answers them all.
+- **What it means.** In the asks tile, the list on the left and the selected ask on the right; in the
+  popup, the rows with the selected one opened under its row. The header says "4 asks, 1 stop · about
+  2 min". After an answer, the next ask is selected, and focus stays where it was, on the list or in
+  the popup. `j` and `k` (or the arrows) move; a click on a row selects it; `h` sets one aside, as
+  the asks list's `H` does today. Under about 520px the tile shows one pane: the list, or the detail
+  with "All asks" (`Esc`) to go back.
+- **Why.** Linear's triage puts the list "side by side with the focused issue" [l5], with one key per
+  action [l1]; Superhuman: "Mark Done with E and keep triaging from the next conversation" [s1]. The
+  minutes come from the person's own past answers per kind (`took.ms`, below); until there are 20 of
+  a kind, 30 seconds a kind, experiment 163's guess, marked "about".
+- **Tried and replaced.** Round 1 drew the head ask whole as one card in the middle and the rest as
+  a count, closer to Superhuman than to Linear. The owner's review: it was not how Linear would build
+  it, a click on a row did nothing, and it was a second desk beside today's popup. The list beside
+  the detail lets a person see what is waiting and pick any of it with the mouse or the keys.
+- **Linear.** One triage list per team, `J` and `K` to move, `H` to snooze [l1][l2], in a split view
+  [l5]. We match the list and the split, with one queue across every ticket and repository, since
+  one person answers them all, and we build it as a program in a tile
+  ([one asks program](#one-asks-program-two-views)).
 - **Elm or OTP.** The queue is a view of a fold over the ledger, as today's asks machine is
   (`asks.ts:1-40`). Each ask is a parked `gen_server:call` waiting for one reply [o1]; the desk is
   where the reply is made.
-- **What holds it.** One source: the asks machine feeds the top bar, the badge and the desk alike,
-  so they cannot tell two stories (`asks.ts:15-20`). A law: the desk's count equals the asks list's.
-- **Accessibility.** After each answer, a polite status says what happened and how many are left
-  ("Approved. 3 left."), without moving focus (WCAG 4.1.3 [w2]). Focus stays on the ask region
-  (2.4.3).
+- **What holds it.** One source: the asks machine feeds the top bar, the badge, the popup and the
+  tile alike, so they cannot tell two stories (`asks.ts:15-20`). A law: the tile's count equals the
+  popup's, and both views draw the same `selected`.
+- **Accessibility.** The list's rows are buttons with one tab stop, the selected row (a roving
+  tabindex: one element has `tabindex="0"`, "all other focusable elements contained in the composite
+  have `tabindex="-1"`" [w3]). The selected row is marked by `aria-current`, a bar and its weight,
+  never by color alone (1.4.1). After each answer, a polite status says what happened and what is
+  next, without moving focus (WCAG 4.1.3 [w2]); focus stays on the list (2.4.3).
 - **Doubt.** Same-kind grouping reorders a queue that [every wait is a queue](./every-wait-is-a-queue.md)
   says is first in, first out (call 4).
-- **Cost.** In `next/`, the desk program's queue view, about 150 to 250 lines with laws, 2 agent
-  hours.
-- **Today.** **Half.** The asks list is one queue, oldest first (`asks.ts:250-276`), but an answer
-  means opening the ticket (`frame.tsx:431`), and the top bar says how many, not how long.
+- **Cost.** In `next/`, the asks program's list, both views and the list-and-detail piece, about 250
+  to 400 lines with laws, 3 to 4 agent hours.
+- **Today.** **Half.** The asks list is one queue, oldest first (`asks.ts:250-276`), in a popup from
+  the top bar, but an answer means opening the ticket (`frame.tsx:431`), nothing opens a list beside
+  the ask, and the top bar says how many, not how long.
 
 ### A2: the question in one line, the rec beside it, the evidence folded
 
@@ -154,8 +236,10 @@ how sure, in words. The evidence is folded under it, one press to open.
 - **Why.** Linear: "Accept, decline, or view more information about why a suggestion was made" [l3].
   Goddard: showing confidence beside advice and making the person accountable lower automation bias
   [a3]. SRE: "Every page should be actionable" [t1].
-- **Linear.** Triage Intelligence shows a suggestion with a "why" behind a press [l3]. We add cost
-  and how sure, which Linear does not show.
+- **Linear.** Triage Intelligence shows a suggestion; "Hover over the suggestion to see why it's
+  appearing" [l3], and auto-applied ones are "clearly marked in the suggestions header" [l9]. We add
+  cost and how sure, which Linear does not show, and the rec is a word on the popup row too, so the
+  glance already says it.
 - **Elm or OTP.** The fold is view state in the desk's own machine: `opened` is part of the model,
   never `useState` ([Elm first](./elm-first.md)).
 - **What holds it.** `Rec` is a union: an ask with a rec has all four parts, and one without has a
@@ -173,15 +257,21 @@ how sure, in words. The evidence is folded under it, one press to open.
   first pick is drawn primary with no why (`programs/tracker/src/window.tsx:813`), a default
   people take "simply because it's first" [n1]; and the card scrolls away from the plan.
 
-### A3: three keys, and only where focus is
+### A3: three keys, a button for each, and only where focus is
 
 **Lean, 80%.** `y` takes the rec. `n` refuses it and opens a note, which is required. `o` opens
-every pick. The keys work only while the desk has focus.
+every pick. Each key has a button with the key printed on it. The keys work only while the popup or
+the asks tile has focus.
 
 - **What it means.** One press for most asks. `n` means "not the rec": with two picks it takes the
   other one, with more it opens the rest; either way a one-line note says why, and it goes to the
   step that runs next. `o` lists every pick by number, rec included, for a person who wants to see
-  them all. A click does the same as each key.
+  them all. Every key has a click that does the same: a row, "Take rec · approve `y`", "Not the
+  rec… `n`", "Every pick `o`", each pick `1` `2`, "Evidence `space`", "Later `h`", "Open the lane
+  `↵`". The buttons come from the program's `commands` ([modes](./modes.md)), so a key
+  and its button cannot drift, and each carries `aria-keyshortcuts`, which only names the key: "the
+  keyboard behavior must be added via JavaScript event handlers" [w5]. The demo's 132 click and key checks pass in Chromium
+  (experiment 196).
 - **Why.** Linear: one key per action, and "Accepting an issue will offer the option to leave a
   comment" [l1]. A no carries a one-line reason, as
   [sort answers yes or no](./sort-answers-yes-or-no.md) decided and the old desk pack required
@@ -196,8 +286,9 @@ every pick. The keys work only while the desk has focus.
 - **What holds it.** `Answer` is a union: `against` has a `NonEmptyLine` note, so a refusal with no
   why does not decode. A law: on every ask kind, `y` gives the rec's pick.
 - **Accessibility.** Single letters pass WCAG 2.1.4 only "when that component has focus", or when a
-  person can turn them off or remap them [w2]. Both hold: the keys live on the desk's region, and
-  [keybindings](./keybindings-are-configurable.md) remaps them. Every key has a button (2.1.1).
+  person can turn them off or remap them [w2]. Both hold: the keys live on the popup and the asks
+  tile, and [keybindings](./keybindings-are-configurable.md) remaps them. Every key has a button
+  (2.1.1). A `y` pressed in a terminal tile or outside the window does nothing; the demo checks it.
 - **Doubt.** What `n` means when the rec is itself the pause (call 1).
 - **Cost.** The keys and the note, about 80 to 120 lines with tests, 1 agent hour.
 - **Today.** **Breaks.** No keys on an ask: a click on a pick. The note is optional on `no`
@@ -382,14 +473,18 @@ adds a timer, and a timer that acts on silence clashes with "silence is never a 
 ### 6. Where today's version tries it
 
 ```ts
-// a: the asks list answers, with y, n and o, through the ask box's same write (lean; ticket 102)
-// b: a desk tile, its own program
+// a: one asks program. Today's asks list is its glance: rows carry the rec, and y, n and h answer
+//    through the ask box's same write (ticket 102). "Open all" opens its tile. (lean)
+// b: two things: the asks list stays as it is, and a separate desk tile answers
 ```
 
-**Lean a, 75%.** Why: ticket 102 already leans it, one component and the same `answered` fact.
-Cost: the list's rows must carry picks (`asks.ts:49-66` has none). Doubt: whether a short popover
-gives a plan enough room; the fold (A2) is the test. In `next/`, the desk is a program (Tier 2), so
-b is where `next/` lands either way.
+**Lean a, 75%.** Why: the owner's review asked for one thing, not a second desk, and ticket 102
+already leans it: one component and the same `answered` fact. The popup answers the quick ones;
+`Enter` or "Open all" gives the full view when a plan needs reading. Cost: the list's rows must carry
+picks and a rec (`asks.ts:49-66` has none), and the app needs its first path that opens a tile with
+content ([opening a tile](#opening-a-tile-with-content)), which [popovers](./popovers.md) says does
+not exist yet. Doubt: whether `y` from a small popup is answered too fast on a plan; a live week of
+`took.opened` says. In `next/`, the asks program is the same either way (Tier 2 for its tile).
 
 ## What the ledger records
 
@@ -407,8 +502,10 @@ per merged ticket, the weekly cost of a kind.
 
 Small fixes offered, not filed. Sizes in lines and agent hours.
 
-1. **Answer from the asks list (ticket 102).** Rows carry `picks`; `y`, `n` and `o` on the active
-   row, through the ask box's `answer` act. About 150 to 250 lines with tests, 2 to 3 agent hours.
+1. **Answer from the asks list (ticket 102).** Rows carry `picks` and the rec; `y`, `n` and `h` on
+   the active row, with a button for each, through the ask box's `answer` act. About 150 to 250
+   lines with tests, 2 to 3 agent hours. "Open all" as a tile is a second tryout, after the first
+   path that opens a tile with content: about 150 to 250 lines more, 2 to 3 agent hours.
 2. **Record `took` on `answered`.** An optional field on the tracker's `answered`
    (`ticket.ts:347-353`): key, ms, opened. About 40 lines, 1 agent hour. Every answer before it
    loses these.
@@ -430,12 +527,19 @@ Small fixes offered, not filed. Sizes in lines and agent hours.
   [jidoka](./jidoka-and-andon.md) allows when a person says so.
 - **[Triage asks when worth is unclear](./triage-asks-when-worth-is-unclear.md)** is unchanged: A5
   lowers the load only through rules the owner makes, never through a cap.
+- **[Popovers](./popovers.md)** (settled 2026-10-30) says the asks list "never opens a new tile". "Open all"
+  does, so that line changes if this lands, with the five rules above.
+- **[Tile guidelines](./tile-guidelines.md)** (decided 2026-11-01) send focus, when a tile closes,
+  to the next open tile in reading order (`apps/fabrika/src/desk/desk.ts:415`, `heirOf`). The way back here sends it to the tile the asks tile
+  was opened from, as a popover returns focus where it was. One of the two must give; the
+  experiment's pattern P4 holds the case for each.
 
 ## What it costs
 
-About 700 to 1,100 lines across the facts, the desk view, the keys, the rules and their laws, and 10
-to 14 agent hours, most of it after the one ask (ticket 90) lands. The tryouts in today's version are
-about 270 to 370 lines and 5 agent hours.
+About 900 to 1,400 lines across the facts, the asks program's two views, the keys, the rules, the
+first path that opens a tile with content, and their laws, and 13 to 18 agent hours, most of it after
+the one ask (ticket 90) lands. The tryouts in today's version are about 420 to 620 lines and 7 to 8
+agent hours.
 
 ## What it cannot tell us
 
@@ -447,3 +551,6 @@ about 270 to 370 lines and 5 agent hours.
   the status after `y` read without a focus move; the note field reached right after `n`; the offer
   line read once.
 - Whether 30 is right for kinds whose wrong pick costs very different amounts.
+- Whether the tile rules hold in the real desk. The page's demo is a drawing of the window in a
+  browser, not the app: its layout tree, its folding and its focus moves are a sketch of today's
+  rules, not today's code.
