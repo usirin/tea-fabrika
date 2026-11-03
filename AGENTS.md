@@ -68,6 +68,10 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   and its tests to learn what jobs exist and what was learned, then rethink. Never
   import it and never copy it across
   ([rethink, do not port](./docs/direction/rethink-do-not-port.md)).
+- **One exception: the design package is shared by both versions.** `@kampus/fabrika-design`
+  holds the colors, the Manti mapping and the text roles, and today's app and `next/` both
+  import it. Its contents come from settled notes, not today's shapes, and moving a file into it
+  means rethinking it against them ([one design package](./docs/direction/fabrika-design-package.md)).
 - **In `next/`, nothing is built on Promises.** It is Effect all the way. A Promise
   appears only in a one-line edge the platform demands
   ([no Promises](./docs/direction/no-promises.md)).

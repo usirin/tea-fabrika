@@ -75,6 +75,8 @@ download time. Nobody has timed the start with and without it yet.
 points at it. So the type scale test still pins the px scale in one place, and
 now also pins that Manti's text sizes are those same names.
 
+One exception: `theme.css:66` sets `--manti-control-height-sm: 28px` as a raw value, not a name from `window.css`.
+
 ```css
 /* theme.css, abridged */
 :root {
