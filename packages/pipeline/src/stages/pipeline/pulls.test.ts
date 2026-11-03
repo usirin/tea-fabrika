@@ -1,12 +1,28 @@
+import {mkdtempSync, realpathSync, rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
 import {Effect, Layer, Option} from "effect";
-import {describe, expect, it} from "vitest";
+import {afterEach, beforeEach, describe, expect, it} from "vitest";
+import {Ledger} from "../../asks/ledger.ts";
+import {CriteriaRecord, heldOf} from "../../criteria/record.ts";
+import type {TicketId} from "../../ids.ts";
 import {Tickets} from "../../tickets/tickets.ts";
 import type {Given, Now} from "./carry.ts";
-import {carriedOf, judgedAt, type Pull, yesOf} from "./pulls.ts";
+import {examBook} from "./exam-pull.ts";
+import {
+	carriedOf,
+	examTicket,
+	judgedAt,
+	LanePulls,
+	lanePulls,
+	laneRecord,
+	type Pull,
+	yesOf,
+} from "./pulls.ts";
 import {LaneWork} from "./work.ts";
 
-// Today's version. Two reads of the lane's pull requests that need no git: what a person's `merge`
-// binds to, and how the verdicts posted on a pull stand at a head.
+// Today's version. Reads of the lane's pull requests that need no git: what a person's `merge`
+// binds to, how the verdicts posted on a pull stand at a head, and the book an exam's ticket reads.
 
 const PULL: Pull = {
 	id: "local:7",
@@ -81,5 +97,95 @@ describe("how the posted verdicts stand at a head", () => {
 		);
 		expect(at).toEqual(Option.some([{from: "A", to: "B"}]));
 		expect(carriedOf(at)).toEqual({carried: [{from: "A", to: "B"}]});
+	});
+});
+
+describe("verdicts posted again at a head their diff was carried to", () => {
+	let dir: string;
+	beforeEach(() => {
+		dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-pulls-")));
+	});
+	afterEach(() => rmSync(dir, {recursive: true, force: true}));
+
+	// Every head reads as given on the same diff, so a carry from one head to the next is kept.
+	const given = (head: string): Given => ({head, onto: "main", base: "M", diff: "d"});
+	const now: Now = {head: "B", tree: "T", replayed: "T", formatted: null, diff: "d", range: ""};
+	const pullsOn = () =>
+		lanePulls.pipe(
+			Layer.provide(
+				Layer.mock(LaneWork, {
+					at: (...parts) => join(dir, ...parts),
+					origin: Effect.succeed({repo: "o/r", remote: "", host: "local" as const}),
+					given: (head) => Effect.succeed(given(head)),
+					now: () => Effect.succeed(now),
+				}),
+			),
+		);
+	/** Ticket 7's pull row after a pass at `A`, then `second` at `B`. */
+	const postedTwice = (second: Pull["verdicts"]) =>
+		Effect.runPromise(
+			Effect.gen(function* () {
+				const pulls = yield* LanePulls;
+				const {id: _id, state: _state, verdicts: _verdicts, ...row} = PULL;
+				const id = yield* pulls.open(row);
+				yield* pulls.post(id, "A", [{kind: "review-code", verdict: "pass"}]);
+				yield* pulls.post(id, "B", second);
+				return yield* pulls.find(id);
+			}).pipe(Effect.provide(pullsOn())),
+		);
+
+	it("the same verdicts keep what they were given on at the first head", async () => {
+		const pull = await postedTwice([{kind: "review-code", verdict: "pass"}]);
+		expect(pull).toMatchObject({head: "B", posted: given("A")});
+	});
+
+	it("a fail of the same kind is not the same: it is given on the new head", async () => {
+		const pull = await postedTwice([{kind: "review-code", verdict: "fail"}]);
+		expect(pull).toMatchObject({
+			head: "B",
+			verdicts: [{kind: "review-code", verdict: "fail"}],
+			posted: given("B"),
+		});
+	});
+});
+
+describe("the record ship reads for an exam's ticket", () => {
+	const BOOK = examBook([{path: ".oxlintrc.json", change: "add a rule", why: "the plan needs it"}]);
+	const LANDED: Pull = {...PULL, state: "merged"};
+	const EXAM: Pull = {
+		...PULL,
+		id: "local:8",
+		kind: "exam",
+		branch: "exam/7",
+		state: "merged",
+		book: BOOK,
+	};
+
+	it("with none open, reads the book of the exam pull that landed, not the lane's", async () => {
+		const read = await Effect.runPromise(
+			Effect.gen(function* () {
+				return yield* (yield* CriteriaRecord).read(examTicket("o/r", 7) as TicketId);
+			}).pipe(
+				Effect.provide(
+					laneRecord.pipe(
+						Layer.provide(
+							Layer.mergeAll(
+								Layer.mock(Ledger, {}),
+								Layer.mock(LaneWork, {
+									at: () => "",
+									side: () => Effect.succeed({tree: "t", branch: "exam/7", base: "M"}),
+								}),
+								Layer.mock(LanePulls, {
+									onBranch: () => Effect.succeed(null),
+									landed: () => Effect.succeed([EXAM, LANDED]),
+								}),
+							),
+						),
+					),
+				),
+			),
+		);
+		expect(read).not.toBeNull();
+		expect(read).toEqual(heldOf(BOOK));
 	});
 });

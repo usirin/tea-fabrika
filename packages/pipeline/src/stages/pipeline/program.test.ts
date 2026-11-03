@@ -193,9 +193,9 @@ interface Script {
 	readonly checksStopRunning?: "at_second_writer" | "at_restart";
 	/**
 	 * What code's checks after a build answer at `head`, on their `nth` run, the first being 0. `null`:
-	 * they run for real.
+	 * they run for real. `where`: the run's folders, for a check that moves main while it runs.
 	 */
-	readonly checksSay?: (head: string, nth: number) => CheckRun | null;
+	readonly checksSay?: (head: string, nth: number, where: Where) => CheckRun | null;
 	/** On the line typed again this many times, the first read of the ticket off the ledger fails. */
 	readonly readFailsAt?: number;
 	/** On every line typed again, the ticket reads as a lane from before self-fix PR 4 left it: no `checked` facts. */
@@ -495,7 +495,7 @@ const lane = ({
 				...checks,
 				run: (head) =>
 					Effect.suspend(() => {
-						const said = checksSay?.(head, checksRan++) ?? null;
+						const said = checksSay?.(head, checksRan++, {dir, home, remote}) ?? null;
 						if (said !== null) return Effect.succeed(said);
 						return checksDown()
 							? Effect.succeed({
@@ -4324,6 +4324,31 @@ describe("the exam's pull request", () => {
 					f.type === "commented" && String(f.body).startsWith("This repository names no formatter"),
 			);
 			expect(lines).toHaveLength(1);
+		},
+	);
+
+	it(
+		"main moves while the exam's checks run: ship refuses its merge, and the exam's pull request keeps ship's words",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				title: RULES,
+				picks: YES,
+				// The exam review's checks are the lane's first: main moves under them, once.
+				checksSay: (_head, nth, where) => {
+					if (nth === 0)
+						pushToMain(where, [{path: "docs/elsewhere.md", text: "Written elsewhere.\n"}]);
+					return null;
+				},
+			});
+			const said = ran.lines.join("\n");
+			// Behind: main goes into the exam's branch, its review runs again, and it lands.
+			expect(ran.lines.at(-1), said).toContain("ended: done");
+			const refused = ran.facts.find((f) => f.type === "ended" && f.stage === "exam_merge");
+			expect(refused?.outcome, said).toMatchObject({kind: "send", to: "builder", why: "behind"});
+			expect(refused?.carry).toMatchObject({
+				examPull: {why: ["Ship refused the merge: send:builder:behind."]},
+			});
 		},
 	);
 });

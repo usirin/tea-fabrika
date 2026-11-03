@@ -775,3 +775,104 @@ describe("the settings a lane works by", () => {
 		});
 	});
 });
+
+// The exam's side tree, on real git: moved to the code host's branch only as a fast-forward, made
+// fresh from main, and merged with main, where a conflict gives up the merge. Today's version.
+describe("an exam's side tree", () => {
+	let dir: string;
+	beforeEach(() => {
+		dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-side-")));
+	});
+	afterEach(() => rmSync(dir, {recursive: true, force: true}));
+
+	const SIDE = "exam-1";
+	const git = (cwd: string, ...args: readonly string[]) =>
+		execFileSync("git", args, {
+			cwd,
+			encoding: "utf8",
+			env: {...process.env, ...IDENTITY},
+			stdio: "pipe",
+		}).trim();
+	/** One commit holding `path` on `from` in the seed, pushed to the remote's `to`: its sha. */
+	const pushed = (seed: string, from: string, to: string, path: string, text: string) => {
+		git(seed, "checkout", "--quiet", "--detach", from);
+		writeFileSync(join(seed, path), text);
+		git(seed, "add", "-A");
+		git(seed, "commit", "--quiet", "-m", `${path} on ${to}`);
+		git(seed, "push", "--quiet", "origin", `HEAD:refs/heads/${to}`);
+		return git(seed, "rev-parse", "HEAD");
+	};
+	const run = <A, E>(home: string, effect: Effect.Effect<A, E, LaneWork>) =>
+		Effect.runPromise(effect.pipe(provideLane(home)));
+	/** The side tree with one commit of its own on main: its folder and that commit. */
+	const sideWith = (home: string, path: string, text: string) =>
+		run(
+			home,
+			Effect.gen(function* () {
+				const work = yield* LaneWork;
+				const {tree} = yield* work.side(SIDE);
+				return {tree, head: yield* work.commit(tree, [{path, text}], "the side's change")};
+			}),
+		);
+
+	it("a host branch that moved apart from the side is behind, and the side's head stays", async () => {
+		const {home, seed} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+		const side = await sideWith(home, "side.md", "the side\n");
+		const apart = pushed(seed, "origin/main", "exam/1", "apart.md", "someone else\n");
+		const got = await run(
+			home,
+			Effect.gen(function* () {
+				return yield* (yield* LaneWork).sideTo(SIDE, apart);
+			}),
+		);
+		expect(got).toBe("behind");
+		expect(git(side.tree, "rev-parse", "HEAD")).toBe(side.head);
+	});
+
+	it("a host branch that follows the side moves it there", async () => {
+		const {home, seed} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+		const side = await sideWith(home, "side.md", "the side\n");
+		git(side.tree, "push", "--quiet", "origin", "HEAD:refs/heads/exam/1");
+		git(seed, "fetch", "--quiet", "origin");
+		const after = pushed(seed, "origin/exam/1", "exam/1", "more.md", "a person's push\n");
+		const got = await run(
+			home,
+			Effect.gen(function* () {
+				return yield* (yield* LaneWork).sideTo(SIDE, after);
+			}),
+		);
+		expect(got).toBe("moved");
+		expect(git(side.tree, "rev-parse", "HEAD")).toBe(after);
+	});
+
+	it("made fresh, a side with old commits sits on main's tip", async () => {
+		const {home, seed} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+		const side = await sideWith(home, "side.md", "version 1's rule change\n");
+		const tip = pushed(seed, "origin/main", "main", "later.md", "main moved\n");
+		const fresh = await run(
+			home,
+			Effect.gen(function* () {
+				const work = yield* LaneWork;
+				const made = yield* work.sideFresh(SIDE);
+				return {...made, head: yield* work.head(made.tree)};
+			}),
+		);
+		expect(fresh).toMatchObject({tree: side.tree, branch: "exam/1", base: tip, head: tip});
+		expect(existsSync(join(side.tree, "side.md"))).toBe(false);
+	});
+
+	it("main merged in over a file both changed: the conflicting files, and no merge left in progress", async () => {
+		const {home, seed} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+		const side = await sideWith(home, "rules.json", '{"side": true}\n');
+		pushed(seed, "origin/main", "main", "rules.json", '{"main": true}\n');
+		const got = await run(
+			home,
+			Effect.gen(function* () {
+				return yield* (yield* LaneWork).sideMerge(SIDE);
+			}),
+		);
+		expect(got).toEqual({_tag: "conflicts", files: ["rules.json"]});
+		expect(git(side.tree, "rev-parse", "HEAD")).toBe(side.head);
+		expect(git(side.tree, "status", "--porcelain")).toBe("");
+	});
+});

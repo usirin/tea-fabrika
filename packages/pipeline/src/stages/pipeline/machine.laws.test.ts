@@ -15,8 +15,10 @@ import {make} from "../../entity.ts";
 import {LaneId} from "../../ids.ts";
 import type {Outcome} from "../../tickets/ticket.ts";
 import {nameOf} from "../outcome.ts";
+import {HeldDraft} from "../plan/plan.ts";
 import {SHIP_NAMES} from "../ship/outcome.ts";
 import type {Carried} from "./carry.ts";
+import {ruleChangeLines} from "./found.ts";
 import {
 	AskFor,
 	askedFor,
@@ -2179,6 +2181,34 @@ describe("the exam's pull request, step by step", () => {
 		expect(s.phase).toBe("over");
 		expect(JSON.stringify(s)).toContain("ejected");
 		expect(JSON.stringify(s)).not.toContain('"sent_back"');
+	});
+
+	it("the exam's merge question has beside it that the rule changes stand alone, then each change", () => {
+		const changes = [
+			{path: RULE, change: "turn on no-floating-promises", why: "the plan needs it"},
+		];
+		const plan = Schema.decodeUnknownSync(HeldDraft)({
+			summary: "One form.",
+			stories: [{id: "reader", who: "a reader", want: "one form", why: "names match"}],
+			tasks: [],
+			pointers: [],
+			questions: [],
+			exam: changes,
+		});
+		const planned: StepEnd = {...ROUTE.plan, carry: {version: 1, plan}};
+		const {moves} = drive(
+			IDLE,
+			START,
+			stoppingAt("plan", planned, examWorld({})),
+			(s) => s.phase === "running" && s.step === "test_writer",
+		);
+		const asked = cmdsOf(moves).find(
+			(c) => c.type === "lane_ask" && askedFor(c.ask) === "exam_merge",
+		);
+		expect(asked?.type === "lane_ask" ? asked.also : undefined).toEqual([
+			"These rule changes are in a pull request of their own:",
+			...ruleChangeLines(changes),
+		]);
 	});
 });
 
