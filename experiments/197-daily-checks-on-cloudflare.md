@@ -363,6 +363,30 @@ The inputs, each with its source:
    about $6 to $42 a month at the last 14 days' pace, plus $2.40 to $19 once for the first pass.
 3. The one live run above, under $0.50, before Tier 6 plans the queue.
 
+**The owner's answers, 2026-11-02:**
+
+1. Yes. [Scheduled jobs](../docs/direction/scheduled-jobs-on-the-host.md) now says a job's hands
+   can be a box on Cloudflare.
+2. A daily box cap of 1 box hour, at most about $12 a month.
+3. Yes to the live run, under $0.50. Its numbers go in a follow-up experiment.
+
+**And one change to the lean: where a job runs is chosen, never balanced on its own.** "Laptop
+first, a box only when no laptop takes it" was automatic load balancing, and that brings its own
+problems. T3 Code does the same: auto balance is off by default, a person picks the machine when
+starting a thread, and if they turn balancing on, each machine is set to Prefer, Normal, Less
+often or Manual only, and "existing threads stay where they started"
+([remote access](https://raw.githubusercontent.com/pingdotgg/t3code/main/docs/user/remote-access.md),
+read 2026-11-02). So:
+
+- An agent started from a window: the person picks its machine when they start it.
+- A daily job has no start screen, so its config names where it runs: `laptop`, `box` or
+  `laptop first`. `laptop` is the default, since it is free. A box is opt-in, under the cap.
+- Every run records where it ran and who chose: `owner`, `config` or `auto`, so a later look at
+  automatic placement has data.
+
+The sketch's `tick` above offers idle hands first; with this change it reads the job's `runs`
+setting first, and only `laptop first` does what the sketch shows.
+
 ## Who did what
 
 Reading only. Cloudflare's docs were read on 2026-11-02, through its docs search and the pages
