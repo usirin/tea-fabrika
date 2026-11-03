@@ -37,6 +37,26 @@ const reactCompiler = {
 const bundle = await rolldown({input: "src/window/main.tsx", platform: "browser", plugins: [reactCompiler]});
 ```
 
+## Decided
+
+**Decided 2026-11-02, by the owner, on the open calls below. None of it is built yet.** Each lean
+keeps its number as written; the details are in [open calls](#open-calls-with-leans).
+
+- **The desk shape is 3b** ([open call 5](#open-calls-with-leans)): each tile, `App` and `Status`
+  read their own part through our stand-in hook with a selector. [demlik
+  853](https://github.com/kamp-us/demlik/issues/853) asks tea's hook for a selector.
+- **A view never reads the clock; the time comes through a Cmd, and the purity check can block**
+  ([open call 2](#open-calls-with-leans)). The 6 real findings on main, in functions that compile,
+  are fixed before the check blocks there.
+- **How strict is a setting in each repo's `fabrika.toml`,** under React's own rule name and ESLint's
+  severity words. The repo running the code decides.
+- **The build owns the check** ([open call 3](#open-calls-with-leans)). One function compiles a file
+  and returns its findings; the build and `pnpm lint:compiler` both call it.
+- **The yardstick is our planted files plus a real window run, not Babel**
+  ([open call 4](#open-calls-with-leans)).
+- **Today's app moves to Rolldown later,** in ticket 177 ([open call 6](#open-calls-with-leans)).
+  Rolldown for `next/` stays a lean, 85% ([open call 1](#open-calls-with-leans)).
+
 ## The answer
 
 1. **Ownership: right about the company, wrong about the projects.** On 2026-06-04 Cloudflare
@@ -311,7 +331,8 @@ bundle.**
 ## Open calls, with leans
 
 1. **`next/`: Rolldown from code, or Vite 8?** Lean Rolldown, 85% after part 2, as above. Vite wins if
-   the owner wants the dev server's hot reload over the brain's.
+   the owner wants the dev server's hot reload over the brain's. **Not decided 2026-11-02:** it
+   stays the lean, 85%, as written.
 2. **Purity: 194 gave it to the Compiler's own check, with 0 false alarms.** That was Babel's
    check. The native one had the false alarm oxlint's `purity` had in 194 (1 of 9 findings, 11%).
    The lean was "advises", 70%. **After part 4 the lean is: purity blocks, 80%.** With the clock
@@ -321,12 +342,53 @@ bundle.**
    clock read written straight into a click handler pass (part 4), so a small lint rule ("no clock
    in a view file") is what makes the rule whole. And today's app has 8 real findings, 6 of them in
    functions that compile, so it blocks on `next/` first and on main once those 6 are fixed.
+
+   **Decided 2026-11-02: a view never reads the clock; the time comes through a Cmd, and the purity
+   check can block.** The lean, 80%, is taken. The doubt stays: the check misses `new Date()`
+   written straight in a click handler. The 6 real findings on main are fixed before the check is
+   switched on to block there. **How strict is a setting, decided the same day,** in each repo's
+   `fabrika.toml` ([one `fabrika.toml` per repo](../docs/direction/one-fabrika-toml-per-repo.md)),
+   under React's own rule name ([`purity`](https://react.dev/reference/eslint-plugin-react-hooks/lints/purity))
+   and ESLint's severity words:
+
+   ```toml
+   [lint]
+   "react-hooks/purity" = "error"   # or "warn" or "off". "error" is the default.
+   ```
+
+   The repo running the code decides. A pack someone else wrote cannot turn your check off
+   ([nobody writes their own exam](../docs/direction/nobody-writes-their-own-exam.md)). Not built.
 3. **Keep `lint:compiler` beside oxlint's rules?** Lean yes, 85%: the rules say what might skip,
    the check says what did.
+
+   **Decided 2026-11-02: kept, and the build owns the check; `lint:compiler` calls the same step.**
+   One function compiles a file and returns its findings. The build calls it on every rebuild and
+   in CI, and an `"error"` finding fails the build. `pnpm lint` calls the same function with no
+   bundle, about 55 ms for main's window files. The industry way is the React Compiler's
+   [`panicThreshold`](https://react.dev/reference/react-compiler/panicThreshold) option, where
+   `"all_errors"` fails the build on any diagnostic. React's docs recommend `"none"` for production;
+   failing the build is our choice, so a finding is fixed or ledgered, never shipped quietly. The
+   doubt, 80%: whether oxc's native port supports `panicThreshold`. If not, our function reads the
+   skip list and fails the build itself. Not built.
 4. **Which version is the yardstick?** oxc follows the Compiler's experimental release, Babel's
    `latest` is 1.0.0. Lean: hold the native output against our own planted files and a window
    run, not against Babel, 70%. A rerun of part 1 against the experimental Babel release would
    show whether the three differences close.
+
+   **Decided 2026-11-02: our planted files plus a real window run, not Babel.** The lean, 70%, is
+   taken. The doubt stays: a rerun against Babel's experimental release would show whether the one
+   false alarm is a version lag.
+5. **`next/`'s desk: which shape?** [Part 3's lean](#the-lean), 75%: way 3b, narrow the hook all the
+   way up, so each tile, `App` and `Status` read their own part, with no hand memo.
+
+   **Decided 2026-11-02: 3b, through our stand-in hook with a selector.** The lean is taken. tea's
+   hook takes no selector yet; [demlik 853](https://github.com/kamp-us/demlik/issues/853) asks for
+   one, and the stand-in goes when tea's lands. Not built.
+6. **Today's app: esbuild with the Compiler in `onLoad`, or Rolldown?** The lean above was esbuild,
+   85%.
+
+   **Decided 2026-11-02, walked earlier: today's app moves to Rolldown later, in ticket 177.** Not
+   built.
 
 ## What this cannot tell us
 
