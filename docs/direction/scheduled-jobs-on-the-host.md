@@ -68,8 +68,13 @@ Jobs this could run, each a guess until it is tried:
 
 - Each job is a program to write and keep.
 - A job that reads code must run where the code is. On a laptop that is
-  fine. On Cloudflare there is no copy of the code, so those jobs run on a
-  person's own host, and only while it is up.
+  fine. ~~On Cloudflare there is no copy of the code, so those jobs run on a
+  person's own host, and only while it is up.~~ *Changed 2026-11-02 by the
+  owner ([experiment 197](../../experiments/197-daily-checks-on-cloudflare.md)):
+  on Cloudflare a job's hands can be a box that clones the public repo, one box
+  object per batch. Where each job runs is set in its config (`laptop`, `box`
+  or `laptop first`), `laptop` by default, and a box job runs under a daily box
+  cap, 1 box hour to start. Nothing balances jobs across machines on its own.*
 - Each job needs its false alarms measured before it files anything.
 
 **How sure: 70%.** The doubts: whether a laptop's host is up often enough for
@@ -81,7 +86,8 @@ on 600 runs, but of stand-in children; a week on real lanes would settle it.
 
 - Which job comes first. The PR watcher is already the lean for the first
   version.
-- Where a job that reads code runs for a team.
+- ~~Where a job that reads code runs for a team.~~ Answered 2026-11-02: on a
+  person's laptop, or in a box on Cloudflare, as its config says.
 - How often each one runs.
 
 ## What it cannot tell us

@@ -6,6 +6,8 @@
 # experiments/142-web-terminals: one experiment's harness, so its terminal libraries stay out of the app.
 # experiments/171-alchemy-local-twin: one experiment's harness, so it imports the ledger server's stack by name.
 # experiments/173-worker-loader: one experiment's harness, so it bundles a program with esbuild for Worker Loader.
+# experiments/174-effect-on-cloudflare: one experiment's harness, so Effect's plumbing can be bundled into a Durable Object.
+# experiments/195-oxc-toolchain: one experiment's harness, so the React Compiler's Rust port, Rolldown and Vite stay out of the app.
 # oxlint-plugins: this repo's own lint rules, type-checked and tested like the rest.
 packages:
   - apps/*
@@ -19,6 +21,8 @@ packages:
   - experiments/142-web-terminals
   - experiments/171-alchemy-local-twin
   - experiments/173-worker-loader
+  - experiments/174-effect-on-cloudflare
+  - experiments/195-oxc-toolchain
 
 catalog:
   '@agentclientprotocol/sdk': 2.2.0
@@ -30,7 +34,7 @@ catalog:
   '@anthropic-ai/sandbox-runtime': 0.0.81
   '@demlik/code-graph': 0.12.0
   '@demlik/structure-sweep': 0.3.9
-  '@demlik/tea': 0.21.0
+  '@demlik/tea': 0.22.0
   '@effect/opentelemetry': 4.1.1
   '@effect/platform-node': 4.1.1
   '@effect/tsgo': 0.63.0

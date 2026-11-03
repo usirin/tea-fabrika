@@ -11,7 +11,7 @@ import {
 } from "@tea-fabrika/trace";
 import {TALLY_TRACE} from "@tea-fabrika/trace/tally";
 import {One, oneOf, tracker} from "@tea-fabrika/tracker";
-import {SEVEN_NOW, trackerAtSeven} from "@tea-fabrika/tracker/seven";
+import {SEVEN, SEVEN_NOW, SEVEN_TRACE, trackerAtSeven} from "@tea-fabrika/tracker/seven";
 import {Schema} from "effect";
 import {chromium} from "playwright";
 import {type Desk, type DeskCmd, type DeskMsg, deskMachine} from "./src/desk/desk.ts";
@@ -20,23 +20,23 @@ import {readToPage, readToWindow} from "./src/messages.ts";
 
 // The desk's page with no Electron and no host: the built renderer (dist/) in headless Chromium,
 // handed a desk and its views as the host would send them. The views are the tracker, ticket,
-// map and runs programs' own, of the stand-in ticket #7 (@tea-fabrika/tracker/seven), and the trace
-// program's, of the `seq --to 3 | tally` record (@tea-fabrika/trace/tally). It opens no
+// map programs' own, of the stand-in ticket #7 (@tea-fabrika/tracker/seven), and the trace
+// program's, of that ticket's lanes and of the `seq --to 3 | tally` record (@tea-fabrika/trace/tally). It opens no
 // window, takes no focus and needs no network: the page's files are served from dist/ by the
 // browser's own request hook. Not part of `pnpm test`.
 //
 //   pnpm --filter @kampus/fabrika-app-old shots                writes docs/round-6/*.png
 //   SHOTS=<folder> pnpm --filter @kampus/fabrika-app-old shots  writes them there
 //
-//   ticket.png         the ticket, with the map and the runs folded into strips beside it
-//   folded-column.png  the ticket beside a column of the map over the runs, the column folded
-//   folded-runs.png    the same column open, the runs folded into a strip under the map
-//                      (folded-trace.png before the old trace view became `runs`)
-//   side-by-side.png   the ticket beside the map over the runs
-//   job-trace.png      the job's trace as it first opens, the ticket, map and runs folded beside it
+//   ticket.png         the ticket, with the map and the ticket's trace folded into strips beside it
+//   folded-column.png  the ticket beside a column of the map over the ticket's trace, the column folded
+//   folded-trace.png   the same column open, the ticket's trace folded into a strip under the map
+//                      (before ticket 141 that strip was the `runs` program)
+//   side-by-side.png   the ticket beside the map over the ticket's trace
+//   job-trace.png      the job's trace as it first opens, the ticket, map and ticket's trace folded beside it
 //   job-step.png       the same, the trace opened to tally, count total, add 2
-//   line-beside.png    `tracker | ticket | runs` typed in t2, beside the map: three windows, one tint
-//   line-tight.png     the same line typed in the third of three columns: the ticket and runs folded
+//   line-beside.png    `tracker | ticket | trace` typed in t2, beside the map: three windows, one tint
+//   line-tight.png     the same line typed in the third of three columns: the ticket and trace folded
 //
 // The round-6 pictures in docs/round-6 were made when the map and the runs were tabs, and the
 // runs view was named `trace`. The script now draws folds; run it with SHOTS set to keep those
@@ -63,7 +63,7 @@ const traceWith = (names: readonly string[]): Model => {
 		return found.key;
 	});
 	return {
-		read: {at: "read", trace: TALLY_TRACE, now: null},
+		shows: {kind: "job", read: {at: "read", trace: TALLY_TRACE, now: null}},
 		open: ["job", ...keys.slice(0, -1)],
 		chosen: keys.at(-1) ?? null,
 	};
@@ -77,8 +77,22 @@ const traceView = (model: Model) => ({
 const views = {
 	1: {type: "view", program: "ticket", data: Schema.encodeSync(Shown)(shownOf(state))},
 	2: {type: "view", program: "map", data: Schema.encodeSync(One)(oneOf(state))},
-	3: {type: "view", program: "runs", data: Schema.encodeSync(One)(oneOf(state))},
-	4: traceView({read: {at: "read", trace: TALLY_TRACE, now: null}, open: ["job"], chosen: null}),
+	3: traceView({
+		shows: {
+			kind: "ticket",
+			facts: {at: "read", number: 7, timeline: SEVEN},
+			records: [],
+			at: null,
+			now: SEVEN_NOW,
+		},
+		open: [`lane:${SEVEN_TRACE}`],
+		chosen: null,
+	}),
+	4: traceView({
+		shows: {kind: "job", read: {at: "read", trace: TALLY_TRACE, now: null}},
+		open: ["job"],
+		chosen: null,
+	}),
 	5: traceView(traceWith(["tally", "count total", "add 2"])),
 	6: {
 		type: "view",
@@ -95,7 +109,7 @@ for (const view of Object.values(views)) {
 const RUNS = {
 	t1: {id: "1", program: "ticket"},
 	t2: {id: "2", program: "map"},
-	t3: {id: "3", program: "runs"},
+	t3: {id: "3", program: "trace"},
 	t4: {id: "4", program: "trace"},
 	t5: {id: "5", program: "trace"},
 } as const;
@@ -105,20 +119,20 @@ type Tile = keyof typeof RUNS;
 const tilesOf = (names: readonly Tile[], folded: readonly Tile[]) =>
 	names.map((name) => createTile(name, {kind: "tsh", run: RUNS[name]}, folded.includes(name)));
 
-/** The ticket beside a column of the map over the runs. */
+/** The ticket beside a column of the map over the ticket's trace. */
 const column = (...folded: readonly Tile[]) => {
-	const [ticket, map, runs] = tilesOf(["t1", "t2", "t3"], folded);
-	if (ticket === undefined || map === undefined || runs === undefined)
+	const [ticket, map, lanes] = tilesOf(["t1", "t2", "t3"], folded);
+	if (ticket === undefined || map === undefined || lanes === undefined)
 		throw new Error("three tiles");
 	return createContainer(
 		"c1",
 		"horizontal",
-		[ticket, createContainer("c2", "vertical", [map, runs])],
+		[ticket, createContainer("c2", "vertical", [map, lanes])],
 		{t1: 42, c2: 58},
 	);
 };
 
-/** One trace tile filling the row, with the ticket, the map and the runs folded beside it. */
+/** One trace tile filling the row, with the ticket, the map and the ticket's trace folded beside it. */
 const traceRow = (trace: "t4" | "t5") =>
 	createContainer("c1", "horizontal", tilesOf(["t1", "t2", "t3", trace], ["t1", "t2", "t3"]));
 
@@ -149,12 +163,12 @@ const AREA: DeskMsg = {type: "area", width: 1432, height: 868};
 const LINE = [
 	{id: "6", program: "tracker"},
 	{id: "1", program: "ticket"},
-	{id: "3", program: "runs"},
+	{id: "3", program: "trace"},
 ] as const;
 
 /**
  * The desk message after these Msgs, from a fresh desk: the desk machine's own steps, so the
- * picture is what `tracker | ticket | runs` opens.
+ * picture is what `tracker | ticket | trace` opens.
  */
 const deskAfter = (msgs: readonly DeskMsg[]) => {
 	const [first] = deskMachine.init(null, undefined);
@@ -182,7 +196,7 @@ const shots = [
 		),
 	},
 	{name: "folded-column", desk: deskWith(column("t2", "t3"), "t1")},
-	{name: "folded-runs", desk: deskWith(column("t3"), "t2")},
+	{name: "folded-trace", desk: deskWith(column("t3"), "t2")},
 	{name: "side-by-side", desk: deskWith(column(), "t1")},
 	{name: "job-trace", desk: deskWith(traceRow("t4"), "t4")},
 	{name: "job-step", desk: deskWith(traceRow("t5"), "t5")},
@@ -197,7 +211,7 @@ const shots = [
 		]),
 	},
 	// Three columns; the line typed in the third would be under 220px a window: the ticket and the
-	// runs open folded, and the tracker has the column.
+	// trace open folded, and the tracker has the column.
 	{
 		name: "line-tight",
 		desk: deskAfter([

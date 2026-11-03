@@ -5,9 +5,9 @@ a real machine, the facts go on the ticket, and the app's own windows show them.
 
 ```text
 tsh> pipeline --ticket 117            prints one line per step
-tsh> pipeline --ticket 117 | runs     the runs window fills in as it goes
+tsh> pipeline --ticket 117 | trace    the trace's lanes fill in as it goes
 tsh> map --ticket 117                 another tile: the steps light up
-tsh> runs --ticket 117 | trace        pick a run, see its turns
+tsh> trace --ticket 117               another tile: open a step, see its spans
 tsh> ticket --ticket 117              the asks, answered here
 ```
 
@@ -136,7 +136,7 @@ own word, such as ship's `checks_stuck`, ends that step, and the lane then ends 
   those files again, with the person's note, on its own commit; its check runs, and the build goes on
   from the builder's work with the new files. Either pick is the next round, and adds one round to the
   bound, as a spent round's `again` does.
-- **Closing a window loses nothing.** Ctrl-B x, y closes the runs window and the lane goes on. A second
+- **Closing a window loses nothing.** Ctrl-B x, y closes the trace window and the lane goes on. A second
   Ctrl-B x, y stops it. Typing the line again goes on from the ticket, and no finished step runs twice.
 - **A decision is a person's.** What they decided at the plan reaches the test writer, the builder and
   the review. A review that thinks one is wrong can say so, and it fails nothing and makes no test. The
@@ -179,6 +179,9 @@ The lane's logic is in `packages/pipeline/src/stages/pipeline/`. The write-up is
 
 ## Shots
 
+These shots are from before ticket 141, so the `runs` window in them is gone: `trace --ticket` does
+its job now.
+
 | State and layout | What squeezes or looks wrong |
 |---|---|
 | ![](docs/filed-side-by-side.png) | The tracker says it could not read pull requests: a test home has no `gh`. |
@@ -193,7 +196,7 @@ The lane's logic is in `packages/pipeline/src/stages/pipeline/`. The write-up is
 
 ## How Linear would do it
 
-It adds no window. The lane is a tile line, and the ticket, runs, map and trace windows draw it, so
-the ticket stays the one place a person answers. Linear would put the step list in the issue's
-sidebar too; ours is the ticket window's step bar, with `runs` for the detail. Where we differ: a
+It adds no window. The lane is a tile line, and the ticket, map and trace windows draw it, so the
+ticket stays the one place a person answers. Linear would put the step list in the issue's sidebar
+too; ours is the ticket window's step bar, with `trace` for the detail. Where we differ: a
 person types a line to start it, not a button, because tsh is the app's way to start anything.

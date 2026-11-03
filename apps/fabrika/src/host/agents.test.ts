@@ -232,13 +232,14 @@ describe("an agent drives the app's programs through MCP", () => {
 			// A ticket to show: what a pipe from the tracker sends, an agent can send too.
 			"ticket_ticket",
 			"map_quit",
-			"runs_choose",
-			"runs_quit",
-			"runs_ticket",
+			// The trace: a job's rows, a ticket's replay, and a job or a ticket to show.
 			"trace_toggle",
 			"trace_choose",
+			"trace_seek",
+			"trace_step",
 			"trace_quit",
 			"trace_id",
+			"trace_ticket",
 			// The experiments programs take no input; markdown takes a text and a quit.
 			"markdown_text",
 			"markdown_quit",

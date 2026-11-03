@@ -101,7 +101,7 @@ const live = new Set<number>();
 export const runLane = (n: number, say: (line: string) => Effect.Effect<void>) =>
 	Effect.gen(function* () {
 		if (live.has(n)) {
-			yield* say(`#${n} is already running in this app. Watch it with: runs --ticket ${n}`);
+			yield* say(`#${n} is already running in this app. Watch it with: trace --ticket ${n}`);
 			return;
 		}
 		const {home} = yield* LaneHome;

@@ -61,7 +61,7 @@ import {
 	testsToTheEnd,
 } from "../test-writer/program.ts";
 import {DEFAULT_INCLUDES, includedBy} from "../test-writer/written.ts";
-import {reviewDrawing, shipDrawing} from "../traced.ts";
+import {answerTags, reviewDrawing, shipDrawing, stepTags} from "../traced.ts";
 import {LaneNow, pickedFor, type Picked, priceOf, stepStarted} from "./agents.ts";
 import {fenced, listed, loadBrief, type Brief} from "./briefs.ts";
 import type {Carried as Said} from "./carry.ts";
@@ -89,6 +89,7 @@ import {type Inputs, keyOf} from "./key.ts";
 import {leaveBehind} from "./leave.ts";
 import {
 	afterBuild,
+	type AnswerWait,
 	askedFor,
 	type askPerson,
 	type Carry,
@@ -1484,12 +1485,16 @@ const laneInterpret = ({send, machines}: Stages) => ({
 						),
 					})
 					.pipe(Effect.ignore);
+			// The lane that asks, by the trace id its `started` facts carry, so a view of a ticket with
+			// several lanes puts the ask in the right one.
+			const trace = yield* jobTraceId;
 			yield* tickets.write(cmd.number, cmd.ask, {
 				type: "asked",
 				ask: cmd.ask,
 				what: cmd.what,
 				...(cmd.head === undefined ? {} : {head: cmd.head}),
 				picks: cmd.picks as never,
+				...(trace === null ? {} : {trace}),
 			});
 			yield* send("step", `asks: ${cmd.what} Answer it in: ticket --ticket ${cmd.number}`);
 			return null;
@@ -1555,6 +1560,8 @@ const laneInterpret = ({send, machines}: Stages) => ({
 				const settings = yield* work.settings;
 				const agent = AGENT_STEPS[cmd.step];
 				const picked = agent === undefined ? null : pickedFor(settings, agent.step);
+				// Kept outside the body, so its end prices the run by its model even when it broke.
+				yield* Ref.set(seen, picked);
 				const brief = agent === undefined ? null : yield* loadBrief(home.briefs, agent.brief);
 				const ticket = yield* tickets.read(cmd.number);
 				const first = ticket.timeline[0]?.fact;
@@ -1643,10 +1650,31 @@ const laneInterpret = ({send, machines}: Stages) => ({
 					...(keyed === null ? {} : keyed),
 					carry: more.carry,
 				} as CodeFact);
+			// "run a step" ends tagged with what its `ended` says, so its spans tie to the run without
+			// matching times. Dollars only when known: a list price, else what claude billed.
+			const tagged = (outcome: Outcome) =>
+				Effect.annotateCurrentSpan(
+					stepTags({
+						run,
+						step: cmd.step,
+						outcome: nameOf(outcome),
+						agent:
+							picked === null
+								? null
+								: {
+										model: picked.model,
+										input: spent.input,
+										cached: spent.cached,
+										output: spent.output,
+									},
+						usd: listUsd ?? (picked?.harness === "claude" ? spent.usd : null),
+					}),
+				);
 			if (Exit.isSuccess(exit)) {
 				const {outcome, carry, problems, after: past} = exit.value;
 				yield* sessionLeft.pipe(Effect.ignore);
 				yield* write(outcome, exit.value);
+				yield* tagged(outcome);
 				yield* said(
 					[
 						nameOf(outcome),
@@ -1671,9 +1699,9 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			// A named end: the fact says it broke, and the line says what a person can do.
 			const stops = String(exit.cause).slice(0, 300);
 			yield* sessionLeft.pipe(Effect.ignore);
-			yield* write(factOutcome({kind: "stuck", why: "run_failed"}), {carry: {}}).pipe(
-				Effect.ignore,
-			);
+			const broke = factOutcome({kind: "stuck", why: "run_failed"});
+			yield* write(broke, {carry: {}}).pipe(Effect.ignore);
+			yield* tagged(broke);
 			yield* said(`could not run: ${stops}`);
 			return yield* Effect.fail(unknown);
 		}).pipe(Effect.mapError(() => unknown)),
@@ -1687,14 +1715,13 @@ const laneKind = kind({
 		ctx: undefined,
 		interpret: laneInterpret(stages),
 		subscribe: {
-			lane_answer: (sub: {
-				readonly deps: {
-					readonly number: number;
-					readonly ask: string;
-					readonly picks: readonly string[];
-				};
-			}) =>
+			lane_answer: (sub: {readonly deps: AnswerWait}) =>
+				// The wait's span ends tagged with the ask, what it was for, the pick and who picked: the
+				// stream runs inside it. The note is a value a person typed, so it stays off.
 				answerHeard(sub.deps.number, sub.deps.ask, sub.deps.picks).pipe(
+					Stream.tap((heard) =>
+						Effect.annotateCurrentSpan(answerTags({...heard, for: sub.deps.for})),
+					),
 					Stream.map((heard) => ({type: "lane_answered" as const, ...heard})),
 				),
 		},

@@ -520,6 +520,8 @@ export type LaneMsg =
 			readonly pick: string;
 			/** What they wrote beside it. */
 			readonly note?: string;
+			/** Who answered, as the ticket's entry names them. Left out: a Msg from before the key. */
+			readonly by?: string;
 	  };
 
 type Step_ = readonly [Lane, readonly LaneCmd[]];
@@ -1262,23 +1264,26 @@ const released = (s: Lane): Step_ => {
 	return [{...over, outcome: s.outcome, said: s.said}, []];
 };
 
+/** What the lane waits on while it asks: the ticket, the ask, what it is for, and the picks that count. */
+export interface AnswerWait {
+	readonly number: number;
+	readonly ask: string;
+	readonly for: AskFor;
+	readonly picks: readonly string[];
+}
+
 /** The Listen on a person's answer: on for as long as the lane is asking. */
-export const answerSub = listen<
-	Lane,
-	"lane_answer",
-	{readonly number: number; readonly ask: string; readonly picks: readonly string[]}
->("lane_answer", (s) =>
-	s.phase === "asking" ? {number: s.number, ask: s.question.ask, picks: s.question.picks} : null,
+export const answerSub = listen<Lane, "lane_answer", AnswerWait>("lane_answer", (s) =>
+	s.phase === "asking"
+		? {number: s.number, ask: s.question.ask, for: s.question.for, picks: s.question.picks}
+		: null,
 );
 
 export const lane = defineMachine({
 	types: {
 		model: {} as Lane,
 		msg: {} as LaneMsg,
-		sub: {} as Sub<
-			"lane_answer",
-			{readonly number: number; readonly ask: string; readonly picks: readonly string[]}
-		>,
+		sub: {} as Sub<"lane_answer", AnswerWait>,
 		ctx: undefined,
 	},
 	cmds: [readFiled, claimLane, releaseLane, runStep, askPerson, freshMain],

@@ -20,6 +20,10 @@ type Ticket = typeof Ticket.Type;
 - **Check what Effect has before building our own** (2026-10-18). For example,
   Effect's `Entity` was checked and not taken for machine refs; the design of
   its cluster `MessageStorage` was copied for pipe acks.
+- **One exception, in `next/`** (2026-11-02): a module that would replace a tea
+  machine, such as Effect's `Workflow` or cluster's `Entity`, does not come in.
+  Its ideas may be copied into a machine. See
+  [tea is the engine](./tea-is-the-engine.md).
 - **Types are inferred, not written by hand.** Having to spell out a type that
   the code already knows is a smell.
 

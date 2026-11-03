@@ -10,7 +10,7 @@ import {
 import type {JobTrace, MsgOf} from "@kampus/fabrika-old";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {type Model, trace} from "./machine.ts";
+import {type Model, type Read, trace} from "./machine.ts";
 import {TALLY_AT, TALLY_ID, TALLY_TRACE} from "./tally.ts";
 import {nodesOf, treeOf} from "./tree.ts";
 import {type Shown, shownOf} from "./view.ts";
@@ -35,6 +35,16 @@ import {type Shown, shownOf} from "./view.ts";
 type Machine = typeof trace;
 type Msg = MsgOf<Machine>;
 type TraceStep = Step<Model, Msg, never>;
+/** The job view's Msgs: these laws are today's, on the job view alone (ticket 141, M5). */
+type JobMsg = Extract<Msg, {readonly type: "look" | "got" | "lost" | "toggle" | "choose" | "tick"}>;
+
+/** The job view's record. These laws draw only the job view's Msgs, so a ticket view never shows. */
+const readOf = (s: Model): Read => {
+	if (s.shows.kind !== "job") throw new Error("a ticket view, from the job view's Msgs alone");
+	return s.shows.read;
+};
+/** A job view with this record. */
+const withRead = (s: Model, read: Read): Model => ({...s, shows: {kind: "job", read}});
 
 /** What a law runs on: the machine and the view, either of which a plant may change. */
 interface World {
@@ -83,7 +93,7 @@ const row = fc.constantFrom(...nodesOf(treeOf(TALLY_TRACE)).map((n) => n.key), "
 const moment = fc.integer({min: TALLY_AT - 1000, max: TALLY_AT + 2 * LATER});
 
 /** One entry per Msg type: leaving one out does not compile. */
-const table: MsgArbitraryTable<Msg> = {
+const table: MsgArbitraryTable<JobMsg> = {
 	look: arbRecordMsg("look", {id}),
 	got: fc.tuple(id, record).map(([i, r]) => ({type: "got" as const, trace: {...r, trace: i}})),
 	lost: arbRecordMsg("lost", {id, why: fc.constant("gone")}),
@@ -107,7 +117,10 @@ const OPTS = {numRuns: 300, seed: 1};
 const ctx = stubCtxThrowingProxy<undefined>();
 
 /** The record shown, or `null` while there is none. */
-const shown = (s: Model): JobTrace | null => (s.read.at === "read" ? s.read.trace : null);
+const shown = (s: Model): JobTrace | null => {
+	const read = readOf(s);
+	return read.at === "read" ? read.trace : null;
+};
 
 /** Read from the record itself, with none of the machine's helpers: its job has not ended. */
 const runs = (s: Model): boolean => {
@@ -115,11 +128,14 @@ const runs = (s: Model): boolean => {
 	return told !== null && told.ended === null;
 };
 
-const lastTick = (s: Model): number | null => (s.read.at === "read" ? s.read.now : null);
+const lastTick = (s: Model): number | null => {
+	const read = readOf(s);
+	return read.at === "read" ? read.now : null;
+};
 
 /** The state a record alone gives: no tick was ever told. */
 const fresh = (trace: JobTrace): Model => ({
-	read: {at: "read", trace, now: null},
+	shows: {kind: "job", read: {at: "read", trace, now: null}},
 	open: [],
 	chosen: null,
 });
@@ -189,17 +205,35 @@ const clockOnlyWhileRunning = every(
 	},
 );
 
-/** Nothing else can keep ticking. */
+/** The Sub types the machine may name: these two, and the ticket view's `facts` (ticket 141). */
+const SUB_TYPES: ReadonlySet<string> = new Set(["follow", "tick", "facts"]);
+
+/**
+ * Nothing else can keep ticking. Ticket 141 adds the ticket view's `facts` Sub, and may add more
+ * `follow` entries: in the job view, at most one follow and one clock are on, and nothing else.
+ */
 const onlyTwoSubs = every(
-	"the machine holds one follow Sub and one clock Sub, and no other",
-	(_, {machine}) =>
-		JSON.stringify((machine.subs ?? []).map((sub) => sub.type).toSorted()) ===
-		JSON.stringify(["follow", "tick"]),
+	"in the job view the machine runs one follow Sub and one clock Sub at most, and no other",
+	({next}, {machine}) => {
+		const subs = machine.subs ?? [];
+		const on = (type: string) =>
+			subs.filter((sub) => {
+				if (sub.type !== type) return false;
+				const deps: unknown = sub.deps(next);
+				return deps !== null && deps !== undefined;
+			}).length;
+		return (
+			subs.every((sub) => SUB_TYPES.has(sub.type)) &&
+			on("follow") <= 1 &&
+			on("tick") <= 1 &&
+			on("facts") === 0
+		);
+	},
 );
 
 const overHoldsNoTime = every(
 	"a record read whose job is not running holds no time",
-	({next}) => next.read.at !== "read" || runs(next) || next.read.now === null,
+	({next}) => runs(next) || lastTick(next) === null,
 );
 
 const finalFromRecord = every(
@@ -399,9 +433,8 @@ const PLANTS: readonly (readonly [Law, string, World])[] = [
 		inMachine({
 			got: (s, m) => {
 				const [next, cmds] = real.got(s, m);
-				return next.read.at === "read"
-					? [{...next, read: {...next.read, now: null}}, cmds]
-					: [next, cmds];
+				const read = readOf(next);
+				return read.at === "read" ? [withRead(next, {...read, now: null}), cmds] : [next, cmds];
 			},
 		}),
 	],
@@ -419,15 +452,20 @@ const PLANTS: readonly (readonly [Law, string, World])[] = [
 		tickNeverBack,
 		"a tick takes any time, later or earlier",
 		inMachine({
-			tick: (s, m) =>
-				s.read.at === "read" && runs(s) ? [{...s, read: {...s.read, now: m.now}}, []] : [s, []],
+			tick: (s, m) => {
+				const read = readOf(s);
+				return read.at === "read" && runs(s) ? [withRead(s, {...read, now: m.now}), []] : [s, []];
+			},
 		}),
 	],
 	[clockOnlyWhileRunning, "the clock is never on, so no tick ever comes", inClock(() => null)],
 	[
 		clockOnlyWhileRunning,
 		"the clock stays on for an ended job",
-		inClock((s) => (s.read.at === "read" ? {id: s.read.trace.trace} : null)),
+		inClock((s) => {
+			const record = shown(s);
+			return record === null ? null : {id: record.trace};
+		}),
 	],
 	[
 		onlyTwoSubs,
@@ -446,8 +484,9 @@ const PLANTS: readonly (readonly [Law, string, World])[] = [
 		inMachine({
 			got: (s, m) => {
 				const [next, cmds] = real.got(s, m);
-				return next.read.at === "read" && s.read.at === "read"
-					? [{...next, read: {...next.read, now: s.read.now}}, cmds]
+				const read = readOf(next);
+				return read.at === "read" && shown(s) !== null
+					? [withRead(next, {...read, now: lastTick(s)}), cmds]
 					: [next, cmds];
 			},
 		}),
@@ -484,18 +523,22 @@ const PLANTS: readonly (readonly [Law, string, World])[] = [
 		lateTickIsNothing,
 		"a tick lands on any record read, its job ended or not",
 		inMachine({
-			tick: (s, m) =>
-				s.read.at === "read" ? [{...s, read: {...s.read, now: m.now}}, []] : [s, []],
+			tick: (s, m) => {
+				const read = readOf(s);
+				return read.at === "read" ? [withRead(s, {...read, now: m.now}), []] : [s, []];
+			},
 		}),
 	],
 	[
 		endStays,
 		"each read of the id held replaces the record, whatever it says",
 		inMachine({
-			got: (s, m) =>
-				(s.read.at === "reading" ? s.read.id : shown(s)?.trace) === m.trace.trace
+			got: (s, m) => {
+				const read = readOf(s);
+				return (read.at === "reading" ? read.id : shown(s)?.trace) === m.trace.trace
 					? [fresh(m.trace), []]
-					: [s, []],
+					: [s, []];
+			},
 		}),
 	],
 	[
@@ -507,10 +550,12 @@ const PLANTS: readonly (readonly [Law, string, World])[] = [
 		timeMoves,
 		"the time stops at the first tick",
 		inMachine({
-			tick: (s, m) =>
-				s.read.at === "read" && runs(s) && s.read.now === null
-					? [{...s, read: {...s.read, now: m.now}}, []]
-					: [s, []],
+			tick: (s, m) => {
+				const read = readOf(s);
+				return read.at === "read" && runs(s) && read.now === null
+					? [withRead(s, {...read, now: m.now}), []]
+					: [s, []];
+			},
 		}),
 	],
 ];

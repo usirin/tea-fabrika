@@ -371,9 +371,9 @@ function Props(props: {readonly page: Page; readonly number: number; readonly no
 			<dd>
 				<span className="mono prim">{usd(page.usd)}</span>
 			</dd>
-			<dt>Runs</dt>
+			<dt>Trace</dt>
 			<dd>
-				<code className="cmd">runs --ticket {number}</code>
+				<code className="cmd">trace --ticket {number}</code>
 			</dd>
 		</dl>
 	);

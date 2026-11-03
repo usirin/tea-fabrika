@@ -7,6 +7,20 @@ installed or run, and no model was called. Written up 2026-11-01, with every cla
 repo checked again against `main` at `92740b7`, 27 commits later. Where `main` moved, the
 text says so.
 
+## Since this was written (2026-11-02)
+
+Walked with the owner. The findings below are unchanged; these are the calls.
+
+- **Steals 2 to 5 are tracker tickets:** tested briefs (169), each incoming event's fate as a
+  fact (170), watch mode before a new automatic act (171), and a spare slot for a person in
+  `next/` (172).
+- **Steal 1, attention as a counted cost, goes into the ask desk guidelines study.** The desk
+  records what each ask cost a person, and learns from their answers. It does not cut asks: the
+  10-30 call in [triage asks when worth is unclear](../docs/direction/triage-asks-when-worth-is-unclear.md)
+  stands. The answer to many asks is making each one cheap, not a cap.
+- **Tests 1 and 2 run,** as one experiment ticket (173).
+- **Test 3, triage under a hard ask cap, is dropped,** for the same reason as steal 1.
+
 ## The answer
 
 **dsh-superagent is a narrower neighbor, not a rival. It is an agent teammate for one

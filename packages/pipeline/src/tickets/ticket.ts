@@ -343,7 +343,9 @@ export const CodeFact = Schema.Union([
 	}),
 	/**
 	 * A stage asks the owner something. `picks`: the buttons, at least one. `head`: the commit the
-	 * person was shown, for a question about a pull request. Left out: any other question.
+	 * person was shown, for a question about a pull request. Left out: any other question. `trace`:
+	 * the lane that asked, its trace id as its `started` facts give it (ticket 141). Left out on an
+	 * ask written before the key: a view then places it by time.
 	 */
 	Schema.Struct({
 		type: Schema.Literal("asked"),
@@ -351,6 +353,7 @@ export const CodeFact = Schema.Union([
 		what: Title,
 		picks: Schema.NonEmptyArray(Title),
 		head: Schema.optionalKey(Sha),
+		trace: Schema.optionalKey(TraceId),
 	}),
 	/**
 	 * Code found a yes given at `from` still stands at `to` (stages/pipeline/carry.ts): the same head,

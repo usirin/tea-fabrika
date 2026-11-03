@@ -52,7 +52,7 @@ const run = fc.constantFrom(
 	{id: "counter:1", program: "counter"},
 	{id: "tracker:1", program: "tracker"},
 	{id: "ticket:1", program: "ticket"},
-	{id: "runs:1", program: "runs"},
+	{id: "trace:1", program: "trace"},
 );
 /** A line's runs with a view: mostly one, sometimes two or three, each run once. */
 const line = fc
@@ -171,7 +171,7 @@ const asked: readonly Msg[] = [
 		runs: [
 			{id: "tracker:1", program: "tracker"},
 			{id: "ticket:1", program: "ticket"},
-			{id: "runs:1", program: "runs"},
+			{id: "trace:1", program: "trace"},
 		],
 	},
 	{type: "click", tile: "t2"},

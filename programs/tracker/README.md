@@ -31,7 +31,8 @@ yield* tell(run, "quit", null);
 //                               {type: "closed"}                                           user:owner
 
 // What it sends on its one output `ticket`: the ticket the person opens, by its number, each
-// time that changes. `tracker | ticket | runs` follows it; `tracker` alone prints each pick.
+// time that changes. `tracker | trace` and `tracker | ticket | trace` follow it; `tracker` alone
+// prints each pick.
 yield* tell(run, "query", {ticket: 7});       // sends 7
 yield* tell(run, "query", {ticket: 7});       // sends nothing: the same pick
 
@@ -52,7 +53,7 @@ yield* tell(run, "query", {ticket: 7});       // sends nothing: the same pick
 | | `src/rows.ts` | One short row per fact, `rowsOf`, made on the host with the pipeline's `endedAs`. |
 | | `src/steps.ts` | The plan's nine steps for one ticket, from its facts alone: `stepsOf`, `currentOf`, `STEPS`. The approval is the ask whose picks hold "approve". |
 | | `src/duplicates.ts` | The duplicate hint's cell, `duplicatesCell` (no `Jev` service: no call), and `hintsOn`, a ticket's hints with each one's newest word. |
-| | `src/one.ts` | `One` and `oneOf`: the open ticket's facts and the clock, the view the map and runs programs fold for themselves. |
+| | `src/one.ts` | `One` and `oneOf`: the open ticket's facts and the clock, the view the map program folds for itself. |
 | `@tea-fabrika/tracker/seven` | `src/seven.ts` | A stand-in: ticket #7 as a lane would leave it (`SEVEN`), and `trackerAtSeven()`, the machine's state with it read. For tests and the app's screenshots; the times, costs and ids are made up. |
 | | `src/machine.ts` | The tea machine: what was read, where the window is, the writes on their way. `shownOf` makes the window's view. |
 | | `src/ledger.ts` | The only code that talks to the ledger, through the `Ledger` service: `load`, `save`, and the poll. |

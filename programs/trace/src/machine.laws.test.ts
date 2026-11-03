@@ -11,7 +11,16 @@ import {
 import type {MsgOf} from "@kampus/fabrika-old";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {firstOpen, followed, idOf, isRunning, type Model, ticking, trace} from "./machine.ts";
+import {
+	firstOpen,
+	followed,
+	idOf,
+	isRunning,
+	type Model,
+	type Read,
+	ticking,
+	trace,
+} from "./machine.ts";
 import {TALLY_ID, TALLY_TRACE} from "./tally.ts";
 import {findOf, groupsOf, JOB, nodesOf, treeOf} from "./tree.ts";
 
@@ -22,6 +31,35 @@ import {findOf, groupsOf, JOB, nodesOf, treeOf} from "./tree.ts";
 type Machine = typeof trace;
 type Msg = MsgOf<Machine>;
 type TraceStep = Step<Model, Msg, never>;
+/** The job view's Msgs: these laws are today's, on the job view alone (ticket 141, M5). */
+type JobMsg = Extract<Msg, {readonly type: "look" | "got" | "lost" | "toggle" | "choose" | "tick"}>;
+
+/**
+ * Today's Model, as these laws were written on it: the job view's record as `read`. The laws draw
+ * only the job view's Msgs, so the ticket view never shows; one that did would throw here.
+ */
+interface Flat {
+	readonly read: Read;
+	readonly open: readonly string[];
+	readonly chosen: string | null;
+}
+const flat = (s: Model): Flat => {
+	if (s.shows.kind !== "job") throw new Error("a ticket view, from the job view's Msgs alone");
+	return {read: s.shows.read, open: s.open, chosen: s.chosen};
+};
+const unflat = (f: Flat): Model => ({
+	shows: {kind: "job", read: f.read},
+	open: f.open,
+	chosen: f.chosen,
+});
+/** One step, as the laws read it. `same`: the step gave back the very state it was given. */
+interface FlatStep {
+	readonly prev: Flat;
+	readonly msg: Msg;
+	readonly next: Flat;
+	readonly cmds: TraceStep["cmds"];
+	readonly same: boolean;
+}
 
 const OTHER = "f".repeat(32);
 const id = fc.constantFrom(TALLY_ID, OTHER);
@@ -46,7 +84,7 @@ const record = fc.constantFrom(
 );
 
 /** One entry per Msg type: leaving one out does not compile. */
-const table: MsgArbitraryTable<Msg> = {
+const table: MsgArbitraryTable<JobMsg> = {
 	look: arbRecordMsg("look", {id}),
 	got: fc.tuple(id, record).map(([i, r]) => ({type: "got" as const, trace: {...r, trace: i}})),
 	lost: arbRecordMsg("lost", {id, why: fc.constant("gone")}),
@@ -64,14 +102,41 @@ interface Law {
 	readonly check: (machine: Machine) => void;
 }
 
-const every = (name: string, law: (step: TraceStep, machine: Machine) => boolean): Law => ({
+const every = (name: string, law: (step: FlatStep, machine: Machine) => boolean): Law => ({
 	name,
-	check: (machine) => propertyInvariant(machine, ctx, lists, (step) => law(step, machine), OPTS),
+	check: (machine) =>
+		propertyInvariant(
+			machine,
+			ctx,
+			lists,
+			(step) =>
+				law(
+					{
+						prev: flat(step.prev),
+						msg: step.msg,
+						next: flat(step.next),
+						cmds: step.cmds,
+						same: step.next === step.prev,
+					},
+					machine,
+				),
+			OPTS,
+		),
 });
 
-/** What one Sub asks for in a state. */
-const depsOf = (machine: Machine, type: "follow" | "tick", state: Model) =>
-	machine.subs?.find((sub) => sub.type === type)?.deps(state) ?? null;
+/**
+ * What every Sub entry of `type` asks for in a state: the deps of each one that is on. Gathered
+ * over all entries, so a second one of a type is seen (ticket 141 adds the ticket view's `facts`
+ * entry beside these two, and maybe more `follow` entries: in the job view they must all be off).
+ */
+const depsOf = (machine: Machine, type: string, state: Flat): readonly unknown[] =>
+	(machine.subs ?? []).flatMap((sub): unknown[] => {
+		if (sub.type !== type) return [];
+		const deps: unknown = sub.deps(unflat(state));
+		return deps === null || deps === undefined ? [] : [deps];
+	});
+/** The Sub types a machine may name: these two, and the ticket view's `facts` (ticket 141). */
+const SUB_TYPES: ReadonlySet<string> = new Set(["follow", "tick", "facts"]);
 
 const openAreGroups = every(
 	"only a row that groups others is ever open, and only in a record that was read",
@@ -93,12 +158,13 @@ const followsWhatItHolds = every(
 	"it asks for nothing by Cmd, and follows the id it holds while it reads or shows it, and nothing else",
 	({next, cmds}, machine) => {
 		const want =
-			next.read.at === "reading" || next.read.at === "read" ? {id: idOf(next.read)} : null;
-		const subs = (machine.subs ?? []).map((sub) => sub.type).toSorted();
+			next.read.at === "reading" || next.read.at === "read" ? [{id: idOf(next.read)}] : [];
+		const subs = (machine.subs ?? []).map((sub) => sub.type);
 		return (
 			cmds.length === 0 &&
-			JSON.stringify(subs) === JSON.stringify(["follow", "tick"]) &&
-			JSON.stringify(depsOf(machine, "follow", next)) === JSON.stringify(want)
+			subs.every((type) => SUB_TYPES.has(type)) &&
+			JSON.stringify(depsOf(machine, "follow", next)) === JSON.stringify(want) &&
+			depsOf(machine, "facts", next).length === 0
 		);
 	},
 );
@@ -107,7 +173,7 @@ const ticksWhileItRuns = every(
 	"the clock is on while the record read says its job has not ended, and off otherwise",
 	({next}, machine) => {
 		const want =
-			next.read.at === "read" && isRunning(next.read.trace) ? {id: idOf(next.read)} : null;
+			next.read.at === "read" && isRunning(next.read.trace) ? [{id: idOf(next.read)}] : [];
 		return JSON.stringify(depsOf(machine, "tick", next)) === JSON.stringify(want);
 	},
 );
@@ -125,8 +191,8 @@ const holdsTimeWhileItRuns = every(
 
 const lookAgainIsNothing = every(
 	"a look at the id it holds changes nothing, unless that record could not be read",
-	({prev, msg, next}) =>
-		msg.type !== "look" || idOf(prev.read) !== msg.id || prev.read.at === "unread" || next === prev,
+	({prev, msg, same}) =>
+		msg.type !== "look" || idOf(prev.read) !== msg.id || prev.read.at === "unread" || same,
 );
 
 const againKeepsRows = every(
@@ -154,7 +220,7 @@ const newestWins: Law = {
 			lists,
 			(steps, last) => {
 				const looked = steps.findLast((s) => s.msg.type === "look")?.msg;
-				const held = idOf(last.read);
+				const held = idOf(flat(last).read);
 				if (looked?.type !== "look") return held === null;
 				return held === looked.id;
 			},
@@ -205,10 +271,45 @@ const broken = (machine: Machine): readonly string[] =>
 
 // Planted mistakes: the real machine with one cell, or its Sub, changed.
 const real = trace.update;
-const plant = (update: Partial<Machine["update"]>): Machine => ({
+/** A cell as these plants were written: on the flat view. */
+type Cell<T extends JobMsg["type"]> = (
+	s: Flat,
+	m: Extract<JobMsg, {readonly type: T}>,
+) => readonly [Flat, readonly never[]];
+/** A flat cell as the machine's own: the very state back when the cell gave its own back. */
+const lift =
+	<T extends JobMsg["type"]>(cell: Cell<T>) =>
+	(s: Model, m: Extract<JobMsg, {readonly type: T}>): readonly [Model, readonly never[]] => {
+		const f = flat(s);
+		const [n, cmds] = cell(f, m);
+		return [n === f ? s : unflat(n), cmds];
+	};
+/** The real `got`, on the flat view. */
+const realGot: Cell<"got"> = (s, m) => {
+	const u = unflat(s);
+	const [n, cmds] = real.got(u, m);
+	return [n === u ? s : flat(n), cmds];
+};
+const plant = (cells: {readonly [T in JobMsg["type"]]?: Cell<T>}): Machine => ({
 	...trace,
-	update: {...real, ...update},
+	update: {
+		...real,
+		...(cells.look === undefined ? {} : {look: lift(cells.look)}),
+		...(cells.got === undefined ? {} : {got: lift(cells.got)}),
+		...(cells.lost === undefined ? {} : {lost: lift(cells.lost)}),
+		...(cells.toggle === undefined ? {} : {toggle: lift(cells.toggle)}),
+		...(cells.choose === undefined ? {} : {choose: lift(cells.choose)}),
+		...(cells.tick === undefined ? {} : {tick: lift(cells.tick)}),
+	},
 });
+
+const strangeSub: Machine = {
+	...trace,
+	subs: [
+		...(trace.subs ?? []),
+		{type: "timer", deps: () => ({ms: 1000, msg: {type: "tick", now: 0}})},
+	],
+};
 
 const PLANTS = {
 	/** A toggle takes any row, a step or one the record does not hold. */
@@ -232,7 +333,7 @@ const PLANTS = {
 						{read: {at: "read", trace: m.trace, now: null}, open: firstOpen(m.trace), chosen: null},
 						[],
 					]
-				: real.got(s, m),
+				: realGot(s, m),
 	}),
 	/** A newer id keeps the old record's open rows. */
 	keepsOldRows: plant({
@@ -254,7 +355,7 @@ const PLANTS = {
 	/** A job read first with nothing under it stays closed once its runs come in. */
 	staysClosed: plant({
 		got: (s, m) => {
-			const [next, cmds] = real.got(s, m);
+			const [next, cmds] = realGot(s, m);
 			if (s.read.at !== "read" || idOf(s.read) !== m.trace.trace) return [next, cmds];
 			const groups = groupsOf(treeOf(m.trace));
 			return [{...next, open: s.open.filter((k) => groups.has(k))}, cmds];
@@ -273,7 +374,10 @@ const PLANTS = {
 		subs: [
 			{
 				type: "follow",
-				deps: (s: Model) => (s.read.at === "waiting" ? null : {id: idOf(s.read) ?? ""}),
+				deps: (m: Model) => {
+					const s = flat(m);
+					return s.read.at === "waiting" ? null : {id: idOf(s.read) ?? ""};
+				},
 			},
 			{type: "tick", deps: ticking},
 		],
@@ -283,7 +387,13 @@ const PLANTS = {
 		...trace,
 		subs: [
 			{type: "follow", deps: followed},
-			{type: "tick", deps: (s: Model) => (s.read.at === "read" ? {id: s.read.trace.trace} : null)},
+			{
+				type: "tick",
+				deps: (m: Model) => {
+					const s = flat(m);
+					return s.read.at === "read" ? {id: s.read.trace.trace} : null;
+				},
+			},
 		],
 	} as Machine,
 	/** A tick that comes after the job's end still sets the time. */
@@ -309,10 +419,12 @@ const PLANTS = {
 		...trace,
 		subs: [...(trace.subs ?? []), {type: "tick", deps: () => ({id: OTHER})}],
 	} as Machine,
+	/** A Sub of a type no law names, always on. */
+	strangeSub,
 	/** The time held before the job's end stays after it. */
 	keepsTimeAfterEnd: plant({
 		got: (s, m) => {
-			const [next, cmds] = real.got(s, m);
+			const [next, cmds] = realGot(s, m);
 			return s.read.at === "read" && next.read.at === "read"
 				? [{...next, read: {...next.read, now: s.read.now}}, cmds]
 				: [next, cmds];
@@ -344,8 +456,9 @@ describe("the trace machine's laws", () => {
 		expect(broken(PLANTS.frozenClock)).toEqual([holdsTimeWhileItRuns.name]);
 	});
 
-	it("the follow law fails on any Sub beyond the two it names", () => {
+	it("the Sub laws fail on a second follow, a second clock, or a Sub they do not name", () => {
 		expect(broken(PLANTS.secondFollow)).toContain(followsWhatItHolds.name);
-		expect(broken(PLANTS.secondClock)).toContain(followsWhatItHolds.name);
+		expect(broken(PLANTS.secondClock)).toContain(ticksWhileItRuns.name);
+		expect(broken(PLANTS.strangeSub)).toContain(followsWhatItHolds.name);
 	});
 });

@@ -89,7 +89,7 @@ Three words to know. **Plan-115** is [ticket 115's plan](./ticket-115.md): laws 
 6  brain checks: the signature is good for this nonce, this url, this tab; the key hashes to the
    name it dialed. The key is unknown, so:  err {why: "not_granted", fingerprint}.
    Nothing is written. Every method but door.knock gets no_hello.
-7  tab says door.knock {label: "Chrome"}. Brain keeps the key and its has in memory and picks a code for it:
+7  tab says door.knock {label: "Chrome"}. Brain keeps the key and its has in a waiting row and picks a code for it:
    {method: "door.waiting", params: {code: "482109", until}}. A second tab with this key gets the
    same code, so both share one row.
 8  tab shows "This window is waiting for you. Code 482 109. Open fabrika in your menu bar to let it
@@ -117,7 +117,7 @@ It asks the door for the ledger's name, prints what it will sign, calls `ssh-key
 
 **Deny.** The row's Deny writes one `denied` fact and needs no finger, because saying no should be easy. It goes over the menu bar's own link as `door.deny`, so `by` comes from the checked key and no signature is needed. Only a person's own client can call it, so an unknown key cannot grow the log. The tab shows "Denied. [Ask again]".
 
-**The code.** The brain picks it fresh, per key. It is for eyes only and carries no power: the door checks the key, and `saw` records what the person looked at. Waiting keys are kept in the brain's memory, in the project object, with a small cap (64, a guess) that drops the oldest, and a 10-minute life, then a new code. Nothing is written for an unknown key.
+**The code.** The brain picks it fresh, per key. It is for eyes only and carries no power: the door checks the key, and `saw` records what the person looked at. Waiting keys are kept in the project object's own storage, outside the log, so they outlive its sleep ([a wait is data](#cloudflare)). They have a small cap (64, a guess) that drops the oldest, and a 10-minute life, then a new code. Nothing goes in the log for an unknown key.
 
 **The first Electron window.** It needs no approve. Electron's main process makes two keys when the app is first opened: a person key and a window key. The first window is named at founding. The private halves stay in the main process, and the page never sees them. A tab's grant does not carry over, because a window is its own client (the note's T3).
 
@@ -398,12 +398,12 @@ const Reading = ({body}: {readonly body: string}) => {
 | `index.ts` | 84 | Not copied. Notes is the program. |
 | `markdown.test.ts`, `highlight.test.ts` | 290, 77 | Ported by the test writer, as exam files. |
 | `index.laws.test.ts` | 99 | What applies, ported by the test writer. |
-| `.markdown*` in `apps/fabrika/src/window/window.css` | lines 1346 to 1560, 215 | Under the styling exception, into `window/style.css`. 11 of these lines read old names the styling copy drops, and an unknown CSS variable fails silently, so each is rewritten to a token that exists. p62 checks it. |
+| `.markdown*` in `apps/fabrika/src/window/window.css` | lines 1428 to 1642 at `25d1317`, 215 | Under the styling exception, into `window/style.css`, from the same commit as the tokens, after PR 308. 10 of these lines read old names the styling copy drops (11 at `2c29c13`), and an unknown CSS variable fails silently, so each is rewritten to a token that exists. p62 checks it. |
 
 **What each copy gives up.**
 
 - **`q` means nothing here.** In the markdown program it quits as `less` does. A notes tile does not end when a note is read, so it goes, and `e` joins `j`, `k`, space, `b`, `g` and `G`.
-- **`Kbd` from `@manti-ui/react` goes.** `next/` has no Manti, so the keys are in the bottom line as plain words, by the frame rules.
+- **`Kbd` from `@manti-ui/react` stays.** `next/` uses Manti, as today's app does (the owner, 2026-11-02), so the keys line keeps `Kbd`, with `e` where `q` was. *This once said `Kbd` goes, since `next/` had no Manti, which was wrong.*
 - **Names change.** Every `xOf` name is renamed as it lands, in the commit after the plain copy: `colorsOf` to `colors`, `spanOf` to `span`, `scrollOf` to `scroll`, `blockOf` to `block`, `inlineOf` to `inline`, `webOf` to `web`. `no-of` fails on any it misses. The `biome-ignore` comment takes oxlint's form, and `console.warn` goes.
 - **Links.** `target="_blank"` stays. In Electron, main hands an http or https URL to the person's browser and opens no window, which is the one change to "new windows denied".
 
@@ -424,10 +424,10 @@ Why: no module state, no function in a model, and the tile's laws run with no We
 
 **What was checked, and what it asks of the plan.**
 
-- **Dependencies.** All are already pinned exactly in the catalog, so `next/programs/notes/package.json` adds only `catalog:` lines: `@pierre/highlights` 0.3.0 (a beta, held exact), `mdast-util-from-markdown` 2.1.0, `mdast-util-gfm` 3.1.0, `micromark-extension-gfm` 3.0.0, `@types/mdast` 4.0.4. No new entry, and the `^19.0.0` range in `programs/markdown/package.json` does not come along. If a later highlighter breaks, code is plain, and nothing else depends on it.
+- **Dependencies.** All are already pinned exactly in the catalog, so `next/programs/notes/package.json` adds only `catalog:` lines: `@pierre/highlights` 0.3.0 (a beta, held exact), `mdast-util-from-markdown` 2.1.0, `mdast-util-gfm` 3.1.0, `micromark-extension-gfm` 3.0.0, `@types/mdast` 4.0.4, and `@manti-ui/react` 0.13.0 for `Kbd`, with the patch today's app uses. No new entry, and the `^19.0.0` range in `programs/markdown/package.json` does not come along. If a later highlighter breaks, code is plain, and nothing else depends on it.
 - **The page's content security policy.** `next/`'s page has none today, and agent-written text is drawn in a real tab, so PR D adds one, as a header from the brain, the same on both stages: `default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`. `'wasm-unsafe-eval'` lets in WebAssembly and nothing else. So `style.css` is served as a file, not put inline in the page. A span's color still works, since React sets it as a property. Today's `apps/fabrika/src/files.ts` shows the same policy without `connect-src`. Sure: 85%. The doubt is `connect-src 'self'` and the socket on a phone's browser; T19 tries it.
 - **The page script's size.** The slice's script was 664 KB, and today about 400 KiB of `programs/markdown`'s script is the highlighter. A phone should not fetch that for a note with no code. Lean: the highlighter is its own script, `/highlight.js`, kept in the one built file and fetched when the first code block with a language asks. It needs no third export on the package: the app's `build.ts` splits on the `import()` inside `@kampus/notes/window`. Why: today's own note says text draws first and colors come after anyway. Cost: esbuild splitting, one route, and p33's law covers two scripts. Sure: 75%. T20 prints both sizes in the PR. No size blocks, since no bar is measured.
-- **`no-tea-react` and the React rule.** `drawn.tsx` imports no tea React. Colors as data also remove its own `useSyncExternalStore`, so the one hook stays the one hook. React stays 19.3.1 from the catalog, and Strict Mode stays on, which `void loadColors()` in an effect would have run twice.
+- **The React rule.** `drawn.tsx` imports no tea React. Colors as data also remove its own `useSyncExternalStore`, so the one hook stays the one hook. React stays 19.3.1 from the catalog, and Strict Mode stays on, which `void loadColors()` in an effect would have run twice.
 - **`useState`, which A3 forbids.** Checked: `programs/markdown/src/window.tsx` has none. It uses `useMemo` for derived lines, and `useRef` and one `useEffect` to focus the page, which hold no state of ours. So the copy brings none in. Today's `frame.tsx`, `pop.tsx` and `desk.tsx` do use it, and they are not copied here.
 
 **Laws kept, because agent-written text is drawn in a real tab:** raw HTML is never drawn, links are only http or https, images show as alt text and load nothing, and code is text children. See p61.
@@ -842,7 +842,7 @@ windowApp.pipe(Effect.provide(layer), runMain);
 
 **The Elm answer.** Flags at start and ports: the machine knows `sign` and `send_text` as Cmds and socket and size as Subs. The Layers are the runtime that does them. No new tea abstraction, and tea stays small.
 
-**The window in React.** React 19.3.1, from a study with probes on Chromium 156. Strict Mode is on. One `useSyncExternalStore` hook reads the Effect engine, with `memo` per tile. No tea `useMachine`: it dies under Strict Mode.
+**The window in React.** React 19.3.1, from a study with probes on Chromium 156. Strict Mode is on. One `useSyncExternalStore` hook reads the Effect engine, as a stand-in until tea's own hook takes the Effect engine ([demlik 852](https://github.com/kamp-us/demlik/issues/852)); then the file goes. *This once said "no tea `useMachine`: it dies under Strict Mode". tea 0.22.0 fixed that ([demlik PR 774](https://github.com/kamp-us/demlik/pull/774)). It also said `memo` per tile, which was dropped on 2026-11-02 for the React Compiler.*
 
 ```tsx
 // next/packages/tuval/src/window/use-model.ts, a sketch. All three arguments, or headless throws. Dispatch is a one-line edge.
@@ -909,7 +909,43 @@ export default Alchemy.Stack("fabrika", {providers: Cloudflare.providers(), stat
 - **Does Worker Loader need anything on the account?** Yes, one thing: Cloudflare's plan must include Dynamic Workers ([docs](https://developers.cloudflare.com/dynamic-workers/)), and the account's plan does. Our `hash:pid` id is stable, so only a new build counts as a new one.
 - **The address:** Cloudflare's default address for a Worker. Why: no DNS to set up, and the door does the same job. Cost: a domain later means a new origin, so each browser asks again; the ledger's name stays a stable id, so grants stay good. Sure: 85%. Settled by my call, as the owner asked.
 - **The approval flow is the same here.** PR C gives the menu bar a second link, to the cloud stage, and each row says which stage it is from. `founded` on the cloud ledger names the same person key and window key, read from the app's home at deploy. The one-time link works here too. Remove works here too. When `stage.json` says `cloud`, the app starts no local brain and keeps only the cloud link.
-- **A waiting row and a sleeping object.** The project object sleeps after about 10 s, and waiting keys live in its memory. So a waiting tab repeats `door.knock` every 5 s, which keeps the object awake only while someone waits. Cost: a little object time on the cloud. Sure: 70%. T11 measures it.
+- **A wait is data, so every object can sleep under it.** Decided by the owner on 2026-11-02, from [experiment 174](../../experiments/174-effect-on-cloudflare.md). Objects sleep after about 10 s, in Miniflare too, and whatever sits in memory goes: plan-115's `bells` in `data/project.ts`, a `ledger.wait` Promise, the waiting rows. So a call that waits is never a fiber or a timer. The socket's attachment holds the gateway's half, and the project's own SQLite holds who to ring. A waiting tab no longer repeats `door.knock` every 5 s. It knocks once, and again only when its row's `until` passes, a Sub in its link machine. `door.knock` itself stays.
+
+```ts
+// A sketch. transport/answer.ts: Tier 1's Attached, grown. `Row` (waiting.ts) becomes a Schema.Struct, same fields.
+export const Wait = Schema.Struct({id: Schema.String, stream: Schema.String, after: Schema.Int}); // a ledger.wait not met yet
+export const Attached = Schema.TaggedUnion({
+	new: {client: Schema.String, nonce: Schema.String},
+	waiting: {client: Schema.String, key: Schema.String, nonce: Schema.String, row: Row}, // the row this tab was shown
+	online: {client: Schema.String, who: Who, waits: Schema.Array(Wait), watching: Schema.Boolean, busy: Schema.Boolean},
+});
+
+// data/project.ts: rings, in the object's own SQLite beside the log. Never a fact, never folded.
+//   ring {gateway, stream, after}   from ledger.wait; kept until `stream` passes `after`
+//   ring {gateway, rows: true}      from door.watch; rung whenever the waiting rows or the let-in list change
+// append(stream) -> rev: read the rings on `stream` with after < rev, call rung(stream, rev) on each gateway, drop them.
+
+// transport/gateway.ts: answer the waits now met, keep the rest. No fiber, no timer.
+const rung = (sockets: ReadonlyArray<BrainSocket>, stream: string, rev: number) => {
+	for (const ws of sockets) {
+		const a = attachmentFor(ws);
+		if (a._tag !== "online") continue; // a rows ring goes to rungRows, which sends door.rows to sockets with `watching`
+		const due = a.waits.filter((w) => w.stream === stream && w.after < rev);
+		if (due.length === 0) continue;
+		for (const w of due) ws.send(ok(w.id, rev));
+		ws.serializeAttachment(Attached.cases.online.make({...a, waits: a.waits.filter((w) => !due.includes(w))}));
+	}
+};
+// One value: tab asks ledger.wait {id: "7", stream: "notes:1", after: 4}. Head is 4, so no answer yet:
+// waits gains {id: "7", stream: "notes:1", after: 4}, the project keeps a ring, both sleep. An append makes rev 5:
+// the project wakes, rings gateway:<tab>, which wakes and sends {"jsonrpc":"2.0","id":"7","result":5}.
+```
+
+  - **The waiting rows** move from memory into the project's own SQLite, beside the rings: still `Waiting` from `waiting.ts`, at most `most` rows, each gone at `until` or when its last tab leaves. Never in the log, so "lost on purpose" below still holds. The gateway keeps the row it showed in `waiting.row`, so a socket that closes leaves its row with no lookup.
+  - **A call lost to an eviction.** `busy` is true while a call is being answered. A deploy or a crash can end the object mid-call. At the next wake, the gateway's constructor closes each socket still marked `busy` with 1012, so the client dials again and resends, and the id keeps it once. A ping never sets `busy`, since the runtime answers it. Alchemy's `RpcWebSocket.ts` does the same.
+  - **The attachment holds 16,384 bytes** ([Cloudflare docs](https://developers.cloudflare.com/durable-objects/api/websockets/)). A `Wait` is about 40 to 100 bytes, so a cap of 64 waits a socket (a guess, like the row cap) leaves room, and a 65th is refused with `too_many_waits`.
+  - **Held by:** p15 gains two cases on the stage. A tab waits, both objects sleep, an append answers it. A gateway aborted mid-call closes with 1012, and the resent call lands once. T4 builds the gateway half, T2 the rings. Plants: a wait kept only in memory; a ring not dropped after it rang.
+  - **Cost:** about 40 lines, 1 agent hour. Sure: 85%. The doubt: 174 parked a wait in one object, not across a gateway and the project, and nothing has run on Cloudflare. T11's run shows it there.
 - **Commands:** the app for a person, `node next/apps/fabrika/dev.ts` for agents and tests. For cloud, `alchemy plan --stage cloud`, the owner reads it, then deploy after their yes, and `drill` the same way. No builder runs either. Never `Alchemy.remote()`.
 - **Local wording.** Alchemy's local stage runs workerd through its own runtime and a TCP relay (exp 171), not the `miniflare` package. All wire tests spawn `dev.ts`, so one runtime is under test. Exp 171's lean was to keep tests on Miniflare; I argue against it, because the owner's rule is one stack. Cost: start 1.2 to 1.4 s, 395 MB against 0.3 to 0.4 s, 285 MB. Sure: 75%. Doubt: load on the laptop; run with `--maxWorkers=3`, and if a suite takes over 3 minutes, share one brain per file.
 - **Differences to expect, and where each is watched:**
@@ -945,7 +981,7 @@ export default Alchemy.Stack("fabrika", {providers: Cloudflare.providers(), stat
 
 **Can wait, since they rebuild from the log:** durations, recovery times, verdict tables, any view, a note's version number and name, the list's order, a diff between versions, a note's drawn blocks and code colors. `check` is itself a fold, so a better checker later re-judges old runs.
 
-**Written down as lost, on purpose:** who was refused or knocked and never got an answer. Their codes live in memory only, and a refusal count goes to the Worker's logs only. Why: writing it would let anyone grow the log. Sure: 80%. Also lost: a one-time link nobody used. It granted nothing, and a used one shows in its grant as `how: "link"`.
+**Written down as lost, on purpose:** who was refused or knocked and never got an answer. Their codes live only as long as their row, in the project object's own storage and never in the log, and a refusal count goes to the Worker's logs only. Why: writing it would let anyone grow the log. Sure: 80%. Also lost: a one-time link nobody used. It granted nothing, and a used one shows in its grant as `how: "link"`.
 
 **Also lost, on purpose, with notes:** a refused save, because a refused save writes nothing. Its text stays on that screen until the person keeps it or drops it. Text typed and never saved is lost if that window dies. Why: a keystroke log is a different program, and a person's half-typed words should not sit in a log forever. Which tab of a browser saved is not recorded, only the key. A tool call's own words are not recorded, only its save. Sure: 75%. The doubt is whether a count of stale refusals is wanted while it is in early use; it can go to `field/` by hand if the owner asks.
 
@@ -1103,7 +1139,7 @@ export const writeSshsig: <E>(a: {
 	readonly sign: (bytes: Uint8Array) => Effect.Effect<Uint8Array, E>;
 }) => Effect.Effect<string, E>;
 
-// next/packages/libfabrika/src/transport/waiting.ts (new). Pure. Kept in the brain's memory, never written.
+// next/packages/libfabrika/src/transport/waiting.ts (new). Pure. Kept in the project object's own storage, never in the log.
 export type Row = {
 	readonly key: string; readonly label: string; readonly where: string; readonly code: string;
 	readonly until: number; readonly tabs: number; readonly pass: string | null; readonly has: ReadonlyArray<string>;
@@ -1120,10 +1156,11 @@ export const leave: (w: Waiting, key: string) => Waiting;
 // next/packages/libfabrika/src/transport/answer.ts (new): plan-115's, with the door's states.
 export const Who = Schema.Struct({key: Schema.String, person: Schema.String, as: Schema.Literals(["window", "agent"])});
 export type Who = typeof Who.Type;
+export const Wait = Schema.Struct({id: Schema.String, stream: Schema.String, after: Schema.Int}); // a ledger.wait not met yet
 export const Attached = Schema.TaggedUnion({
 	new: {client: Schema.String, nonce: Schema.String},
-	waiting: {client: Schema.String, key: Schema.String, nonce: Schema.String},
-	online: {client: Schema.String, who: Who},
+	waiting: {client: Schema.String, key: Schema.String, nonce: Schema.String, row: Row}, // Row as a Schema.Struct
+	online: {client: Schema.String, who: Who, waits: Schema.Array(Wait), watching: Schema.Boolean, busy: Schema.Boolean}, // see Cloudflare: a wait is data
 });
 export type Attached = typeof Attached.Type;
 export type Admit<E> = (key: string) => Effect.Effect<Who | {readonly why: "not_granted"}, E>; // transport imports nothing, so E comes from wiring
@@ -1347,14 +1384,15 @@ export const menuView: (m: MenuModel) => ReadonlyArray<MenuItem>;
 
 ## Styling
 
-**Named exception to "never copy across," styling only, by the owner.** From `apps/fabrika/src/window/window.css` at origin/main (`ec7ef72`, which includes PR 225):
+**Named exception to "never copy across," styling only, by the owner.** From `apps/fabrika/src/window/window.css` at origin/main (`25d1317`, which includes PR 225 and [PR 308](https://github.com/usirin/tea-fabrika/pull/308)):
 
-- **The tile and color rules came after this exception.** [Tile guidelines](../direction/tile-guidelines.md), [color principles](../direction/color-principles.md) and [pipe colors](../direction/pipe-colors.md) were decided for today's version the same day, and `next/` reads them as lessons. Whether a plain tile's colors come from them or from this copy is [an open question](./tier-1.md#open-questions).
-- **Copy:** the `:root` block, lines 7 to 137 (graphite `--n-*`, accent `--a-*`, surfaces, text, spacing, radius, type at 22/15/14/13/12/11 px), without lines 118 to 131, the old names. Also the bottom line's rule, and the slot rule. *This once said lines 1 to 168, which was wrong.*
+- **The tile and color rules came after this exception.** [Tile guidelines](../direction/tile-guidelines.md), [color principles](../direction/color-principles.md) and [pipe colors](../direction/pipe-colors.md) were decided for today's version the same day, and `next/` reads them as lessons. Today's app took the Radix fabrika theme, dark and light, in PR 308 (ticket 144), so this copy brings the Radix steps the rules name, and the owner called [the question](./tier-1.md#open-questions) moot on 2026-11-02.
+- **Copy:** the `:root` block, lines 12 to 133 (Radix 3.0.0 steps as `light-dark()` pairs: slate surfaces, lines and text, indigo for the turn, grass, amber and red for done, running and stuck; then type at 22/15/14/13/12/11 px, spacing and radius), without lines 115 to 127, the old names. Also the bottom line's rule, and the slot rule. *This once said lines 1 to 168, which was wrong, and then lines 7 to 137 at `ec7ef72`, graphite `--n-*` and accent `--a-*`, which PR 308 replaced.*
+- **Manti, as today's app.** `next/` uses Manti (the owner, 2026-11-02; [UI on Manti](../direction/ui-on-manti.md)). So the copy also takes `apps/fabrika/src/window/theme.css`, 139 lines that set Manti's tokens from our names, and the style build puts `@manti-ui/styles/index.css` before it, as today's `build.ts` does. `@manti-ui/react` and `@manti-ui/styles` are `catalog:` lines, already pinned at 0.13.0, and the root `patchedDependencies` already patch `@manti-ui/react` for the whole workspace.
 - **Fit, not copy: `.tile`, `.tile.focused` and `.titlebar`.** Today `.tile` is `position: relative; flex: 1`, and `.titlebar` is an absolute `<button>`. In `next/`, `Tile` draws with `position: absolute` and pixels from `fold`, and the title bar is a `<header>`. So their colors, borders and type carry over, their position and size are written fresh, and the PR names each edit.
 - **Keep the meaning rule:** accent is "your turn" only; red stuck or broken; amber running; green done.
 - **Keep the frame rules from `frame.tsx`:** bars monospace, plain words joined by ` · `, no item backgrounds, no line under the top bar or over the bottom line.
-- **Where:** `next/packages/tuval/src/window/style.css`, embedded by esbuild's text loader, replacing `STYLE` in `page.ts`. Only the tokens and rules in use are copied, about 300 lines of 3,848, plus 215 for the `.markdown*` rules (lines 1346 to 1560 at `2c29c13`) in PR D, without `.markdown-keys`' keys, and with their 11 old-name lines rewritten to tokens that exist. The `compat` names are not copied. A comment gives the source path and commit.
+- **Where:** `next/packages/tuval/src/window/style.css`, embedded by esbuild's text loader, replacing `STYLE` in `page.ts`. Only the tokens and rules in use are copied, about 300 lines of 3,935, plus 139 for `theme.css`, plus 215 for the `.markdown*` rules (lines 1428 to 1642 at `25d1317`) in PR D, with `.markdown-keys` and its `Kbd` keys, `e` in place of `q`, and with their 10 old-name lines rewritten to tokens that exist. The `compat` names are not copied. A comment gives the source path and commit.
 - **Linear's question, per screen,** goes in each PR: the founding screen, the waiting screen ("how would Linear ask you to approve a device?"), the menu bar's panel, the counter tile, the chaos tile, and each notes screen, [answered as opinion in Notes](#notes). Screenshots: each key state in one tile, two side by side, two stacked, 2x2 and about 1024x700. The founding screen, waiting screen and panel come before any tile exists, so they are shot full, narrow and about 1024x700, and the PR says why.
 - **Other named exceptions:** the drawing and the MCP tools, each [marked the same way](#drawing-a-note).
 - **Notes' shots:** empty, reading a drawn doc with code and a table, editing, saving, no link, stale, too long, read failure and history, each in one tile, two side by side, two stacked, 2x2 and about 1024x700. The phone tab is in the demo, so each key state also gets one shot at phone width. The panel's let-in list and its Remove join PR B's panel shots, and an agent's row joins PR D's.
@@ -1396,7 +1434,7 @@ Red to green, as plan-115: after the names of T1, T7, T15 and T16 everything com
 - **T2.** `ends`: local commit. Fixture: `Ledger.sql` on node:sqlite. Scenario p18. Other: p10 to p13, p19 to p21, p28. Criterion c2.
 - **T3.** `ends`: local commit. Fixture: `ProgramRunner` with real `counter`. Scenario p22. Other: p14, p25, p35. Criteria c2, c3.
 - **T4.** `ends`: local commit. Fixture: `answerFrame` with a fake `admit`. Scenario p26, p23. Other: p15, p42, p43. Criterion c2.
-- **T5.** `ends`: local commit. Fixture: `sshsig` vectors made by real `ssh-keygen`, saved in `fixtures/next/` ([who writes them is open](./tier-1.md#open-questions), since the test writer only adds `*.test.ts`). Scenario p27. Other: p29 (needs T6 to run). Strict Mode goes on here, with the hook in `window/use-model.ts` and `Effect.runFork`, on the exam's edge list; probes showed it working on tea's Effect engine, sure 90%. Spike first: does a non-extractable Ed25519 `CryptoKey` survive reload in IndexedDB in Chromium, on 127.0.0.1? The browser note says not tried. If not, stop and tell the owner; no fallback is planned, because the fallback is a key the page can read.
+- **T5.** `ends`: local commit. Fixture: `sshsig` vectors made by real `ssh-keygen`, saved in `fixtures/next/` by the first exam PR, so the owner reads them ([answered 2026-11-02](./tier-1.md#open-questions); the test writer only adds `*.test.ts`). Scenario p27. Other: p29 (needs T6 to run). Strict Mode goes on here, with the hook in `window/use-model.ts` and `Effect.runFork`, on the exam's edge list; probes showed it working on tea's Effect engine, sure 90%. Spike first: does a non-extractable Ed25519 `CryptoKey` survive reload in IndexedDB in Chromium, on 127.0.0.1? The browser note says not tried. If not, stop and tell the owner; no fallback is planned, because the fallback is a key the page can read.
 - **T6.** `ends`: PR A. Fixture: whole tree, two Chromium contexts, real `dev.ts`. Scenario p17 on the stage. Other: p24, p32, p29. Criteria c4, c5, c6, c7. **First step: measure 4 runs of the bar on the new stage, on the base,** so caps are set from numbers.
 
 ### PR B
@@ -1646,7 +1684,7 @@ An agent that is not the builder writes it. The owner reads it. It lands first, 
 
 1. An oxlint JS plugin rule, `no-promises`, blocking in `next/**` leaving out tests. It refuses `async`, `await`, `new Promise`, `Promise.<anything>(...)`, `.then(...)`, `Effect.promise(...)`, and `.catch(...)` unless the object is an imported Effect module. JS plugins are alpha and not type-aware, so that check goes by import name: report any miss.
 2. An oxlint rule, `no-effect-run-outside-edge`, with edges, written as full paths in the rule: `data/project.ts`, `data/ledger.ts`, `app/process.ts`, `transport/gateway.ts`, `transport/hello.ts`, `transport/sshsig.ts`, `brain.ts`, `build.ts`, `window/use-model.ts`, `tuval/browser/key.ts`, `tuval/electron/preload.ts`, `tuval/electron/panel-preload.ts`, `tuval/electron/key.ts`, `tuval/electron/person-key.ts`, `tuval/electron/person-check.ts`, `launchd.ts`, `entry/electron-main.ts`, `alchemy.run.ts`. `dev.ts`, `grant.ts` and `chaos-drill.ts` use `NodeRuntime.runMain` and should need none.
-3. An oxlint rule, `no-tea-react`, blocking in `next/**`: no import of tea's `useMachine` or `useRuntime`. It dies under Strict Mode, so a written rule is not enough. Why: an import name has about no false alarms. Cost: a few lines. Sure: 90%.
+3. *Dropped 2026-11-02:* an oxlint rule, `no-tea-react`, blocking tea's `useMachine` and `useRuntime` in `next/**`. Its reason, the Strict Mode bug, was fixed in tea 0.22.0 ([demlik PR 774](https://github.com/kamp-us/demlik/pull/774)), and `next/` moves to tea's hook once it takes the Effect engine ([demlik 852](https://github.com/kamp-us/demlik/issues/852)). `useRuntime`'s Promise dispatch is still caught by `no-promises`.
 4. **An oxlint rule, `no-of`, blocking in `next/**`: no bare `of` and no `xOf` names.** It fires on a name this code declares: a variable, function, type, class, parameter or object key named `of`, or ending in `Of` after a lowercase letter or capital word (`colorsOf`, `IconOf`). It does not fire on a use, so `indexOf` and `for...of` pass. Why: it's a real rule that no check holds, and copies would bring about 55 such names. `next/` at `7c1d073` has none, so its false alarms should be about zero, and the fire count in the PR body measures that. Cost: about 30 lines. Sure: 90%.
 5. **An oxlint rule, `no-hand-tag`, blocking in `next/**` leaving out tests: no hand-written `_tag`.** It fires on any object key or type member named `_tag`, `Schema.Struct({_tag: ...})` included. It does not fire on a read, so `x._tag === "a"` and `const {_tag} = x` pass. One edge, by full path in the rule: `data/log.ts`, since the log stores any fact and knows no cases. Tests are left out because a test feeds raw frames. Why: the owner's pick asks for it, and a written rule alone holds nothing. `next/` at `7c1d073` holds no `_tag`, so the fire count there starts with nothing to misfire on. That is no measure of false alarms, and this plan claims no number. Cost: about 30 lines. Sure: 85%. The doubt is an edge beyond the log; a second one comes back to the owner.
 6. `next/apps/fabrika/src/exam/no-promises.test.ts`: planted lines, including `Effect.catch(...)`, which must not fire. `exam/no-of.test.ts`: planted `colorsOf`, `IconOf` and `{of: ...}`, which must fire, and `indexOf`, which must not. `exam/no-hand-tag.test.ts`: planted `{_tag: "x"}`, `type X = {readonly _tag: "x"}` and `Schema.Struct({_tag: Schema.Literal("x")})`, which must fire, and `Schema.TaggedUnion({x: {}})`, `Fault.cases.abort.make(...)`, `value._tag === "x"` and `{type: "plus"}`, which must not.
@@ -1655,6 +1693,7 @@ An agent that is not the builder writes it. The owner reads it. It lands first, 
 9. `exam/deps.test.ts`, with `exam/layers.test.ts`, for p65.
 10. `pnpm-workspace.yaml`'s three globs, `vitest.config.ts`'s new globs, and a `next` job in `.github/workflows/check.yaml`: `pnpm exec vitest run next/`, Chromium, and `node next/apps/fabrika/e2e.ts`, a thin runner over each landing's `e2e/*.test.ts`, which passes while there are none. The file is the exam's. This once named one `e2e.test.ts`, which no later landing could have grown. Electron and launchd run on the laptop first; CI gets Electron once xvfb and the keychain are tried, and the PR says so. A check too long to block a pull request moves to the daily run, under the new direction.
 11. PR body: each rule's fire count on PR 223's tree, read by hand. No check blocks until its false alarms are measured.
+12. `fixtures/next/`'s `sshsig` vectors, made once by real `ssh-keygen`, for p27. They are in the exam so the owner reads them, as answered on 2026-11-02.
 
 **Where the exam lives: `next/apps/fabrika/src/exam/`,** since the app may see every package, so a bytes test can bundle by name. Why not a package of its own: one more `package.json` for no gain. Cost: the app's folder holds some files that are not the app. Sure: 80%. Saved letters and vectors stay in `fixtures/next/`, where toy data already lives.
 
@@ -1669,7 +1708,7 @@ An agent that is not the builder writes it. The owner reads it. It lands first, 
 
 **Exam files for the builder.** On today's lane, a builder's diff here ends the lane `stuck` with `exam_touched`, and that is final. Nothing the build did is kept, and the owner hears why. Today's `RULES` list (`packages/pipeline/src/stages/exam/machine.ts`) does not yet name `next/**/*.test.ts`, `fixtures/next/**`, `next/apps/fabrika/src/exam/**`, `boundary-rules.json`, `vitest.config.ts` or `pnpm-workspace.yaml`. A small change to today's version (tracker ticket 122) adds them before PR A's lane starts, and until then those guards do not hold. The test writer only adds new `*.test.ts` files (`.fabrika/fabrika.toml`), so a test it needs elsewhere is new, not moved, and a fixture it cannot write comes from an exam PR. The files: `next/**/*.test.ts`, `fixtures/next/**`, `next/apps/fabrika/src/exam/**`, the oxlint and oxfmt config and plugin folder as PR 226 names them, `vitest.config.ts`, `.github/**`, `layer-rules.json`, `boundary-rules.json`, `pnpm-workspace.yaml`. A package's own `package.json` is the builder's, since its `exports` map says what is public, and p65 reads it. The test versions in `next/packages/tuval/src/headless/` are product code, not exam files; the tests read them only through the names in the interface block.
 
-**Order problems,** plan-115's stand: plan before exam, the exam sees nothing on main, PR 223 goes red when rebased on it, and that is intended. T0 turns p65 green. PR 223's `window/main.tsx` uses `useRuntime`, so `no-tea-react` is red until the hook lands. That is why the hook comes with T5, in PR A, which already changes that file. Later PRs extend the exam only through a small exam PR of their own. `tuval-*` rows are in the table and rules from the start, so B needs none for layers. It does need one for any new catalog entry. *This once said B needs none at all, which was wrong.*
+**Order problems,** plan-115's stand: plan before exam, the exam sees nothing on main, PR 223 goes red when rebased on it, and that is intended. T0 turns p65 green. PR 223's `window/main.tsx` uses `useRuntime`, whose dispatch is a Promise, so `no-promises` is red until the hook lands. That is why the hook comes with T5, in PR A, which already changes that file. Later PRs extend the exam only through a small exam PR of their own. `tuval-*` rows are in the table and rules from the start, so B needs none for layers. It does need one for any new catalog entry. *This once said B needs none at all, which was wrong.*
 
 ## Dropped from plan-115, and what can wait
 
@@ -1816,7 +1855,7 @@ Plan-115's list stands, with these added:
 - **Whether `safeStorage` is smooth** under Playwright, and whether a dev Electron signed by a self-made card still prompts for the Keychain. Only a run shows it, and the window key has a way out.
 - **Whether launchd takes a brain from an unsigned build,** whether Touch ID prompts from it, and whether IndexedDB holds a key in a local page. T8's spikes tell, and each has a way out.
 - **How the menu bar feels.** Nobody has built one here. No mockup and no run.
-- **How long a row lasts on Cloudflare,** where objects sleep. T11 measures it.
+- **Whether a wait parked as data works on Cloudflare,** across a gateway and the project. Experiment 174 saw it in one object, in Miniflare. T11's run shows it on the cloud.
 - **React's memory with many hidden tiles, and all of it on Safari.** The probes covered Chromium, part of Firefox, and toy trees.
 - **What Cloudflare really does to this shape:** isolate cold load, `abort_all`, a redeploy mid-run. All first seen at p41 and p39.
 - **What the stage does to the speed bar.** Alchemy's relay adds little by exp 171's number, but this exact flow has not been measured.
@@ -1859,5 +1898,6 @@ The owner approved what Tier 1 builds on 2026-11-01. What is still open is in [t
 - **Q13, where Tuval lives:** fabrika is the logic, and Tuval is the projection of it. `@kampus/tuval` holds all client logic and may import the library, never the other way. The app is only wiring and the deploy stack. The desk is a program in Tier 2, and Tier 1 has no desk process.
 - **Q14, hosts:** a host is a place hands can run: a Mac, a VM or a browser profile. Hands and window are jobs, not places. In Tier 1, `Backend` becomes `Host`, the hello's `has` carries each Layer's list, `saw` records it, and the menu bar shows hosts. The hello's `backend` and `Host`'s field becoming `platform` is my call, 80%. Tiers can be restructured, and size never pushes work out of one.
 - **Q15, the tag key:** `_tag` for every union we define, never by hand. tea's Msgs and Cmds keep `type`, and third-party shapes keep theirs. A lint rule holds it. See [Tags](#tags).
+- **2026-11-02, the brief's questions 5 to 8:** the styling copy question is moot since PR 308; `next/` uses Manti; saved vectors and letters come in the exam PRs; configurable keys needs no owner call. Each is in [the brief](./tier-1.md#open-questions).
 
 **Left open until Tier 6, as a proposal, no answer needed now:** native `<dialog>` and `popover` against Zag.

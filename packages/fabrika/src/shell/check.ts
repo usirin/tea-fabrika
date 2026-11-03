@@ -32,7 +32,7 @@ import type {At} from "./words.ts";
 //   tally | trace               tally's outputs fit no typed input of trace, and trace's `any`
 //                               takes any value (`anyInput`): wired total → any, tally's first
 //                               output, as a Unix pipe carries stdout and not stderr
-//   runs | trace                runs' id fits trace's input id: a typed fit wins over `any`
+//   tracker | trace             tracker's ticket fits trace's input ticket: a typed fit wins over `any`
 //   ship --mdoe read            refused at --mdoe: ship has no flag --mdoe. Did you mean --mode?
 
 /** Where a value comes from: the line, or the output of a `$( )` that runs first. */

@@ -70,7 +70,7 @@ ledger.charge(fence, "case-1", {usd: 0.07}) // what the case really cost; it rep
 | 3 | `experiments/lib/jev.ts` `MAX_CALLS`, `MAX_DOLLARS` | Calls, and dollars guessed at four characters a token, read from `process.env` | Yes: it throws | 33 experiment scripts |
 | 4 | `fabrika.toml` `[agents.*] usd` (`packages/pipeline/src/settings.ts`, `setup.ts` `budget`) | The most one agent run may cost | Yes, through 5 | Every stage's agent run |
 | 5 | `Agents` `Limits.usd` and `ended.usd` (`agents/agent/turn.ts`, `core.ts`, `acp/harness.ts` `maxBudgetUsd`) | The harness's own cap per turn, and what the turn reports | Claude yes; Codex no (`cannot_limit`) | `apps/fabrika/src/host/run.ts`, PR 192's `--usd` |
-| 6 | Tracker fact `ended {usd, input, output}` (`tickets/ticket.ts`) | What one run cost, as the ticket shows it | No | `programs/ticket`, `programs/runs` |
+| 6 | Tracker fact `ended {usd, input, output}` (`tickets/ticket.ts`) | What one run cost, as the ticket shows it | No | `programs/ticket`, `programs/trace` (`programs/runs` until ticket 141) |
 | 7 | `field/runs.jsonl` `costUsd`, `billed` | A hand-written row per agent run of today's fabrika | No | People and write-ups |
 
 - **Count: seven places, four that can stop spend** (1, 2, 3, and 4 through 5).
