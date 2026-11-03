@@ -239,16 +239,21 @@ all 20 repetitions of each row give:
 | Hand-built handle through useRuntime | `1` |
 
 The machine rows send a message whose reducer throws, unmount, then send again.
-The error summary contains the reducer's `reduce:Error` and the late send's
-`discard:DispatchDiscardedError`. The Effect-runtime row sends twice; the
+The error list holds every `onError` call in order, with no de-duplication: the
+reducer's throw reaches it exactly once, as `reduce:Error`, and the late send
+once, as `discard:DispatchDiscardedError`. The Effect-runtime row sends twice; the
 hand-built handle row sends once.
+
+These rows ran against kamp-us/demlik commit `10425bb` on `can/tea-react-send`,
+which sits on the engine fix in [demlik PR 855](https://github.com/kamp-us/demlik/pull/855)
+(`8a4e2cc`). A first run on the earlier prototype, before that fix, printed the
+error list through `new Set(errors)`; without the Set, the same throw also showed
+up a second time as `follow-up` ([demlik issue 854](https://github.com/kamp-us/demlik/issues/854)).
 
 **Meaning.** This prototype reaches the Effect run without asking React's event
 handler to execute an Effect. It also preserves the hand-built Promise handle
-path and routes a late send to `onError`. It is evidence for a patch, not behavior
-shipped in tea 0.22.0. The saved harness uses `new Set(errors)` when printing, so
-it establishes the error routes but cannot prove that the reducer error reached
-`onError` exactly once. A raw callback count is needed for that claim.
+path and routes a late send to `onError`, and each failure reaches it once. It is
+evidence for a patch, not behavior shipped in tea 0.22.0.
 
 ## Reproduce it
 
@@ -340,13 +345,9 @@ machine paths. No app or library source changed.
   send function, not pointer or keyboard events on a product button.
 - Whether P4 is a complete hook. It is a sketch with deliberate lifecycle and
   error-handling gaps, including Subs continuing while hidden.
-- Whether P6 will ship, or its exact saved source revision. It is an unmerged
-  prototype described as `can/tea-react-send`, not yet a pull request in the
-  supplied material; its saved rows carry no commit or patch hash. The local
-  source available while packaging has uncommitted changes, so its current
-  HEAD cannot identify the code that produced those rows.
-- Exactly-once error reporting in P6. Duplicate callbacks are hidden by its
-  saved summary. P5 also does not exercise a non-`Stopped` reporting case.
+- Whether P6 will ship. It ran on an unmerged branch (`10425bb`); review may
+  change it, and the saved rows hold no hash of their own beyond this note.
+- P5 does not exercise a non-`Stopped` reporting case.
 - Selector behavior from issue 853, production-build behavior, React releases
   beyond the pinned one, or a native Compiler port. P3 uses the pinned Babel
   plugin at PR 320's settings, in React's development build.

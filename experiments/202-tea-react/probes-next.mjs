@@ -64,8 +64,8 @@ async function machine(strict) {
 	await tick();
 	return {
 		probe: `P6 useMachine${strict ? " strict" : ""} activity`,
-		want: "returns undefined; 1, show 2; errors reduce+discard",
-		got: `returns ${returned}; ${one}, show ${two}; errors ${[...new Set(errors)].join(",")}`,
+		want: "returns undefined; 1, show 2; errors reduce:Error,discard:DispatchDiscardedError",
+		got: `returns ${returned}; ${one}, show ${two}; errors ${errors.join(",")}`,
 	};
 }
 
