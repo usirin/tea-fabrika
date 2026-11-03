@@ -617,3 +617,52 @@ describe("what a yes was given on", () => {
 		);
 	});
 });
+
+// Self-fix PR 11b, "waits and records" (docs/plan/pipeline-self-fix.md, PR 11, the record holes): a
+// stop says why on the ticket. One `stopped` fact: the step, the step's own outcome, the lane's stop,
+// where it goes on, and for a crash the cause's first lines, which exist only when it happens.
+describe("a stop, on the ticket", () => {
+	const read = (fact: object) =>
+		readRow(row({data: JSON.stringify(fact), kind: "stopped", writer: "agent:lane for:owner"}));
+
+	it("a `stopped` fact reads back as it was written, with the step's own why", () => {
+		const fact = {
+			type: "stopped",
+			stage: "plan",
+			outcome: {kind: "stuck", why: "draft_failed"},
+			stop: {kind: "stuck", why: "step_stuck"},
+			at: {_tag: "run", step: "plan"},
+		};
+		const got = read(fact);
+		expect(got.kind === "entry" && got.entry.fact).toEqual(fact);
+	});
+
+	it("a crash's `stopped` fact keeps its cause", () => {
+		const fact = {
+			type: "stopped",
+			stage: "triage",
+			outcome: {kind: "stuck", why: "run_failed"},
+			stop: {kind: "stuck", why: "step_failed"},
+			at: {_tag: "run", step: "triage"},
+			cause: "Error: the disk is on fire",
+		};
+		const got = read(fact);
+		expect(got.kind === "entry" && got.entry.fact).toEqual(fact);
+	});
+
+	it("a `stopped` fact with no step's own outcome is broken", () => {
+		const got = read({
+			type: "stopped",
+			stage: "plan",
+			stop: {kind: "stuck", why: "step_stuck"},
+			at: {_tag: "run", step: "plan"},
+		});
+		expect(got.kind).toBe("broken");
+	});
+
+	it("a `stopped` fact is code's to write", () => {
+		expect(mayWrite({kind: "agent", id: "lane", for: "owner"}, "stopped" as Fact["type"])).toBe(
+			true,
+		);
+	});
+});

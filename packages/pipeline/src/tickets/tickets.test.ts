@@ -1,6 +1,7 @@
-import {Ledger, streams, type Writer} from "@kampus/fabrika-old";
+import {Ledger, LedgerUnreachable, streams, UnknownName, type Writer} from "@kampus/fabrika-old";
 import {memoryService} from "@kampus/fabrika-old/memory";
-import {Effect, Layer} from "effect";
+import {Clock, Effect, Fiber, Layer} from "effect";
+import {TestClock} from "effect/testing";
 import {describe, expect, it} from "vitest";
 import type {Check, CodeFact, PrFact} from "./ticket.ts";
 import {
@@ -264,5 +265,122 @@ describe("Tickets", () => {
 		);
 		const expectedFailure = {why: "bad_fact", kinds: ["filed"]};
 		expect(seen).toEqual({ledger: expectedFailure, memory: expectedFailure});
+	});
+});
+
+// Self-fix PR 11b, "waits and records" (docs/plan/pipeline-self-fix.md, PR 11, `wait`). Tickets wraps
+// its transport in the one wait (../wait.ts): a ledger that does not answer is asked again, 1 second
+// after, then 2, then 4, with no cap. Only a write with its own key is sent again. A transient error
+// never reaches the lane. A refusal does, at once, with its real why.
+
+/** What one call of the ledger meets, in turn, before it answers: no answer, or the ledger's 404. */
+type Meets = "unreachable" | "unknown_name";
+
+/**
+ * Ticket 1, filed, on a ledger whose `readStream` and `send` meet `meets[method]` in turn, then answer
+ * as the memory ledger does. `times[method]`: the clock time of each call that reached it.
+ */
+const flaky = (meets: Partial<Record<"readStream" | "send", readonly Meets[]>>) =>
+	Effect.gen(function* () {
+		const ledger = memoryService();
+		yield* ledger.register("tracker/ticket/1", "user:owner");
+		yield* ledger.send(streams("tracker/ticket/1").inbox, "w1", {
+			kind: "filed",
+			writer: "user:owner",
+			data: filed.fact,
+		});
+		const times = {readStream: [] as number[], send: [] as number[]};
+		const meeting = (method: "readStream" | "send", stream: string) =>
+			Effect.gen(function* () {
+				times[method].push(yield* Clock.currentTimeMillis);
+				const meet = meets[method]?.[times[method].length - 1];
+				if (meet === "unreachable")
+					return yield* Effect.fail(new LedgerUnreachable({method, message: "no answer"}));
+				if (meet === "unknown_name") return yield* Effect.fail(new UnknownName({stream}));
+			});
+		const wrapped: Ledger["Service"] = {
+			...ledger,
+			readStream: (stream, fromRev, limit) =>
+				meeting("readStream", stream).pipe(
+					Effect.andThen(ledger.readStream(stream, fromRev, limit)),
+				),
+			// The 404 is the ledger's own error, which only `send` declares.
+			send: ((inbox, id, event, fence) =>
+				meeting("send", inbox).pipe(
+					Effect.andThen(ledger.send(inbox, id, event, fence)),
+				)) as Ledger["Service"]["send"],
+		};
+		return {
+			ledger,
+			times,
+			layer: ticketsOnLedger(lane).pipe(Layer.provide(Layer.succeed(Ledger, wrapped))),
+		};
+	});
+
+/**
+ * `program` on Tickets over `flaky(meets)`, under the TestClock, a second of virtual time at a time
+ * until it ends: how it ended, the clock time of each ledger call, and the ticket's rows after.
+ */
+const waited = <A>(
+	meets: Partial<Record<"readStream" | "send", readonly Meets[]>>,
+	program: Effect.Effect<A, unknown, Tickets>,
+) =>
+	Effect.gen(function* () {
+		const {ledger, times, layer} = yield* flaky(meets);
+		let over = false;
+		const fiber = yield* Effect.forkChild(
+			Effect.result(program.pipe(Effect.provide(layer))).pipe(
+				Effect.ensuring(Effect.sync(() => void (over = true))),
+			),
+		);
+		for (let s = 0; !over && s < 1_000; s++) {
+			yield* TestClock.adjust("1 second");
+			for (let k = 0; k < 5; k++) yield* Effect.yieldNow;
+		}
+		const result = yield* Fiber.join(fiber);
+		const rows = yield* ledger.readStream(streams("tracker/ticket/1").inbox);
+		return {result, times, kinds: rows.map((r) => r.kind)};
+	}).pipe(Effect.provide(TestClock.layer()), Effect.runPromise);
+
+const gapsIn = (times: readonly number[]) => times.slice(1).map((t, i) => t - (times[i] ?? 0));
+
+describe("Tickets, on a ledger that does not answer", () => {
+	it("a read that gets no answer three times, then answers: the ticket, after waits of 1, 2 and 4 seconds", async () => {
+		const seen = await waited(
+			{readStream: ["unreachable", "unreachable", "unreachable"]},
+			Tickets.use((t) => t.read(1)),
+		);
+		expect(seen.result._tag, JSON.stringify(seen.result)).toBe("Success");
+		if (seen.result._tag === "Success") expect(seen.result.success.number).toBe(1);
+		expect(gapsIn(seen.times.readStream)).toEqual([1_000, 2_000, 4_000]);
+	});
+
+	it("a write with its key that gets no answer twice, then lands: it lands once", async () => {
+		const seen = await waited(
+			{send: ["unreachable", "unreachable"]},
+			Tickets.use((t) => t.write(1, "r-1/started", started)),
+		);
+		expect(seen.result._tag, JSON.stringify(seen.result)).toBe("Success");
+		expect(gapsIn(seen.times.send)).toEqual([1_000, 2_000]);
+		expect(seen.kinds).toEqual(["filed", "started"]);
+	});
+
+	it("a write that gets no answer twice, then the ledger's 404: refused with its real why, and tried no more", async () => {
+		const seen = await waited(
+			{send: ["unreachable", "unreachable", "unknown_name"]},
+			Tickets.use((t) => t.write(1, "r-1/started", started)),
+		);
+		expect(seen.result).toMatchObject({_tag: "Failure", failure: {why: "no_ticket"}});
+		expect(seen.times.send).toHaveLength(3);
+		expect(seen.kinds).toEqual(["filed"]);
+	});
+
+	it("a read of a ticket nobody filed, after two reads with no answer: `no_ticket`, never `unreachable`", async () => {
+		const seen = await waited(
+			{readStream: ["unreachable", "unreachable"]},
+			Tickets.use((t) => t.read(2)),
+		);
+		expect(seen.result).toMatchObject({_tag: "Failure", failure: {why: "no_ticket"}});
+		expect(seen.times.readStream).toHaveLength(3);
 	});
 });

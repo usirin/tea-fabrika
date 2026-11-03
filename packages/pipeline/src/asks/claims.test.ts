@@ -1,5 +1,6 @@
 import {LedgerUnreachable} from "@kampus/fabrika-old";
-import {Duration, Effect, Layer} from "effect";
+import {Clock, Duration, Effect, Fiber, Layer} from "effect";
+import {TestClock} from "effect/testing";
 import {describe, expect, it} from "vitest";
 import {type LaneId, laneId, planOf, taskId, ticketId} from "../ids.ts";
 import {claim, holderOf, holding, Lanes, layerLanes, newLane, release} from "./claims.ts";
@@ -366,5 +367,43 @@ describe("a ledger that does not answer", () => {
 		);
 		expect(late._tag).toBe("Fenced");
 		expect(memory.read()).toEqual([]);
+	});
+});
+
+// Self-fix PR 11b, "waits and records" (docs/plan/pipeline-self-fix.md, PR 11, `wait`): the ledger's
+// claim takes the one wait (../wait.ts), as every service that owns a read or a keyed write does. From
+// 1 second, doubling, up to 100 seconds apart, with no cap: one schedule, in one place.
+describe("a claim the ledger does not answer", () => {
+	it("is asked again after 1, 2 and 4 seconds, the one wait's own gaps, and then takes the ticket", async () => {
+		const memory = memoryLedger();
+		const times: number[] = [];
+		const wrapped: Ledger["Service"] = {
+			...memory.service,
+			claim: (name, holder, rev, ttlMs) =>
+				Effect.gen(function* () {
+					times.push(yield* Clock.currentTimeMillis);
+					return yield* times.length <= 3
+						? Effect.fail(new LedgerUnreachable({method: "claim", message: "no answer"}))
+						: memory.service.claim(name, holder, rev, ttlMs);
+				}),
+		};
+		const took = await Effect.gen(function* () {
+			let over = false;
+			const fiber = yield* Effect.forkChild(
+				claim(T, L1).pipe(Effect.ensuring(Effect.sync(() => void (over = true)))),
+			);
+			for (let s = 0; !over && s < 60; s++) {
+				yield* TestClock.adjust("1 second");
+				for (let k = 0; k < 5; k++) yield* Effect.yieldNow;
+			}
+			return yield* Fiber.join(fiber);
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(layerLanes().pipe(Layer.provideMerge(Layer.succeed(Ledger, wrapped)))),
+			Effect.provide(TestClock.layer()),
+			Effect.runPromise,
+		);
+		expect(took).toBe(L1);
+		expect(times.slice(1).map((t, i) => t - (times[i] ?? 0))).toEqual([1_000, 2_000, 4_000]);
 	});
 });

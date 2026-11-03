@@ -24,6 +24,9 @@ const inputs: fc.Arbitrary<Inputs> = fc.record({
 	model: maybe(text),
 	effort: maybe(text),
 	settings: maybe(text),
+	// Self-fix PR 11b: the head of the exam's pull request and of the lane's own.
+	examHead: maybe(text),
+	prHead: maybe(text),
 });
 
 /** One field of `inputs`, changed to another value of its own kind. */
@@ -82,7 +85,38 @@ describe("a step's input key", () => {
 			model: "gpt-6-astra",
 			effort: "high",
 			settings: null,
+			examHead: null,
+			prHead: null,
 		};
 		expect(await key({...of, base: "null"})).not.toBe(await key(of));
+	});
+
+	// Self-fix PR 11b (docs/plan/pipeline-self-fix.md, PR 11, the record holes). Experiment 193: ticket
+	// 117's two `exam_merge` runs shared one key, though the exam's pull request had a new head.
+	describe("the pull requests' heads", () => {
+		const examMerge: Inputs = {
+			step: "exam_merge",
+			ticket: "sha256:1",
+			plan: 1,
+			base: "5d38d582",
+			exam: null,
+			head: "315df8e6",
+			brief: null,
+			harness: null,
+			model: null,
+			effort: null,
+			settings: "sha256:2",
+			examHead: "39041df",
+			prHead: null,
+		};
+
+		it("two `exam_merge` runs at different exam heads get different keys", async () => {
+			expect(await key({...examMerge, examHead: "27bec63"})).not.toBe(await key(examMerge));
+		});
+
+		it("two `merge` runs at different heads of the lane's pull request get different keys", async () => {
+			const merge: Inputs = {...examMerge, step: "merge", examHead: null, prHead: "a1b2c3d"};
+			expect(await key({...merge, prHead: "e4f5a6b"})).not.toBe(await key(merge));
+		});
 	});
 });

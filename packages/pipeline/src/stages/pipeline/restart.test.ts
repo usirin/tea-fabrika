@@ -380,3 +380,50 @@ describe("the fold, with the exam's pull request", () => {
 		expect(folded.held.carry).toMatchObject({examPull: {head: EXAM_HEAD, yes: {head: EXAM_HEAD}}});
 	});
 });
+
+// Self-fix PR 11b (docs/plan/pipeline-self-fix.md, PR 11, the record holes): a retry writes under its
+// own run id, `r-<step>-<count>-<try>`, try 1 keeping today's id. The ticket keeps both ends, and the
+// fold reads the last try's: the lane tried a step that could not run once more, as the same step.
+describe("the fold, with a step tried again after it could not run", () => {
+	const at = TIMELINE.findIndex((e) => e.fact.type === "started" && e.fact.stage === "build");
+	const run = (fact: Readonly<Record<string, unknown>>, i: number) =>
+		Schema.decodeUnknownSync(Entry)({
+			pos: at + i + 1,
+			ticket: 7,
+			by: LANE,
+			at: 1_762_000_000_000 + (at + i) * 1_000,
+			fact,
+		});
+	const end = {stage: "build", usd: 0, input: 0, output: 0, turns: 1};
+	const retried = [
+		{type: "started", run: "r-build-5", stage: "build", task: null, log: null},
+		{
+			...end,
+			type: "ended",
+			run: "r-build-5",
+			outcome: {kind: "stuck", why: "run_failed"},
+			carry: {},
+		},
+		{type: "started", run: "r-build-5-2", stage: "build", task: null, log: null},
+		{type: "checked", ...GREEN},
+		{
+			...end,
+			type: "ended",
+			run: "r-build-5-2",
+			outcome: DONE,
+			input: 41_000,
+			carry: {head: BUILT, checked: GREEN},
+		},
+	].map(run);
+	const seen = {...SEEN, timeline: [...SEEN.timeline.slice(0, at), ...retried]};
+
+	it("keeps one row in the trail for the build, its last try's `done`, and goes on after it", () => {
+		const folded = fold(seen);
+		const {trail} = folded.held;
+		expect(trail.filter((row) => row.step === "build")).toEqual([{step: "build", said: "done"}]);
+		expect(trail.map((row) => row.said)).not.toContain("stuck:run_failed");
+		expect(folded.missing).toEqual([]);
+		expect(folded.at).toEqual({_tag: "run", step: "mutation"});
+		expect(folded.held.carry).toMatchObject({head: BUILT, checked: GREEN});
+	});
+});

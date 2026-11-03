@@ -13,7 +13,7 @@ import {
 import {tmpdir} from "node:os";
 import {basename, dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
-import {Ledger, streams} from "@kampus/fabrika-old";
+import {Ledger, LedgerUnreachable, streams} from "@kampus/fabrika-old";
 import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {Duration, Effect, Exit, Fiber, Layer, Option, Schema} from "effect";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
@@ -204,6 +204,10 @@ interface Script {
 	readonly beforeCarries?: boolean;
 	/** Main names its formatter (`FORMATTER`) before the lane starts: `[format] run`, pushed. */
 	readonly formatter?: boolean;
+	/** The ledger does not answer the lane's first this many reads of the ticket's stream (self-fix PR 11b). */
+	readonly ledgerSilent?: number;
+	/** By fact type, the lane's first this many writes of it die, as a crash in the step's run (self-fix PR 11b). */
+	readonly dies?: Readonly<Partial<Record<string, number>>>;
 }
 
 /** By step, as the fake names them. Each list goes by the step's runs, first run first. */
@@ -420,8 +424,13 @@ const lane = ({
 	beforeChecks = false,
 	beforeCarries = false,
 	formatter = false,
+	ledgerSilent = 0,
+	dies = {},
 }: Script): Promise<Ran> => {
 	let checksRan = 0;
+	/** The lane's reads of the ticket's stream so far, and each step's `started` writes that died. */
+	let streamReads = 0;
+	const died: Record<string, number> = {};
 	/** A ticket's facts, read on a line typed again, as the older code the script names left them. */
 	const olderThan = (timeline: readonly Entry[]): readonly Entry[] => {
 		const checks = beforeChecks ? timeline.flatMap(withoutChecks) : timeline;
@@ -519,6 +528,13 @@ const lane = ({
 			})),
 			Effect.updateService(Tickets, (tickets) => ({
 				...tickets,
+				write: (n, id, fact) =>
+					Effect.suspend(() => {
+						const so = died[fact.type] ?? 0;
+						if (so >= (dies[fact.type] ?? 0)) return tickets.write(n, id, fact);
+						died[fact.type] = so + 1;
+						return Effect.die(new Error("the disk is on fire"));
+					}),
 				read: (n) =>
 					Effect.suspend(() => {
 						if (typed !== readFailsAt || readFailed)
@@ -536,6 +552,16 @@ const lane = ({
 					}),
 			})),
 			Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
+			// The ledger under the lane's own Tickets: its first `ledgerSilent` reads of the ticket get no answer.
+			Effect.updateService(Ledger, (ledger) => ({
+				...ledger,
+				readStream: (stream, fromRev, limit) =>
+					Effect.suspend(() =>
+						stream.startsWith("tracker/ticket/") && streamReads++ < ledgerSilent
+							? Effect.fail(new LedgerUnreachable({method: "readStream", message: "no answer"}))
+							: ledger.readStream(stream, fromRev, limit),
+					),
+			})),
 			Effect.timeoutOption(Duration.seconds(within)),
 			Effect.flatMap((ended) =>
 				Option.isNone(ended) ? Effect.sync(() => void lines.push(TIMED_OUT)) : Effect.void,
@@ -4583,6 +4609,101 @@ describe("the exam's side tree, after a plan restarts to a new version", () => {
 			expect(isAncestor(ran.remote, first, last), "version 2's exam stands on version 1's").toBe(
 				false,
 			);
+		},
+	);
+});
+
+// Self-fix PR 11b, "waits and records" (docs/plan/pipeline-self-fix.md, PR 11, `wait` and the record
+// holes), on the real lane. Today's version. A ledger that does not answer is waited out; a retry
+// writes under its own run id, so the ticket keeps both tries; a stop says why on the ticket.
+describe("a lane's waits and records (self-fix PR 11b)", () => {
+	beforeEach(() => {
+		vi.stubEnv("TYPESAFE_API_KEY", "");
+		vi.stubEnv("OPENAI_API_KEY", "");
+		vi.stubEnv("CODEX_API_KEY", "");
+	});
+	afterEach(() => {
+		vi.unstubAllEnvs();
+		for (const dir of made.splice(0)) rmSync(dir, {recursive: true, force: true});
+	});
+
+	const THE_PLANS_NO = {approve: "no"};
+	const ON_PLAN = "Done. The plan is above.";
+	const endsAt = (ran: Ran, stage: string) =>
+		ran.facts.filter((f) => f.type === "ended" && f.stage === stage);
+	const stopsOn = (ran: Ran) => ran.facts.filter((f) => f.type === "stopped");
+
+	it(
+		"a ticket read the ledger does not answer three times is waited out: the steps end as if nothing failed",
+		{timeout: 90_000},
+		async () => {
+			const ran = await lane({within: 80, picks: THE_PLANS_NO, ledgerSilent: 3});
+			const said = ran.lines.join("\n");
+			expect(ran.stages, said).toEqual(expect.arrayContaining(["triage", "plan"]));
+			expect(ran.names.plan, said).toContain('"done"');
+			expect(said).toMatch(/wait/i);
+			expect(stopsOn(ran).filter((f) => JSON.stringify(f).includes("read_failed"))).toEqual([]);
+		},
+	);
+
+	it(
+		"a step whose run dies once and then ends keeps both runs on the ticket, each under its own id",
+		{timeout: 90_000},
+		async () => {
+			const ran = await lane({
+				within: 80,
+				picks: THE_PLANS_NO,
+				dies: {planned: 1},
+			});
+			const said = ran.lines.join("\n");
+			const ends = endsAt(ran, "plan");
+			expect(ends, said).toHaveLength(2);
+			expect(JSON.stringify(ends[0]?.outcome)).toBe(
+				JSON.stringify({kind: "stuck", why: "run_failed"}),
+			);
+			expect(JSON.stringify(ends[1]?.outcome)).toContain('"done"');
+			const [first, second] = ends;
+			expect(second?.run).toBe(`${String(first?.run)}-2`);
+			expect(second?.carry).toBeDefined();
+			expect(Number(second?.input)).toBeGreaterThan(0);
+		},
+	);
+
+	it(
+		"a step that could not run twice stops with one `stopped` fact that names the crash's cause",
+		{timeout: 90_000},
+		async () => {
+			const ran = await lane({within: 80, dies: {started: 2}});
+			const said = ran.lines.join("\n");
+			const stops = stopsOn(ran);
+			expect(stops, said).toHaveLength(1);
+			expect(stops[0]).toMatchObject({
+				stage: "triage",
+				outcome: {kind: "stuck", why: "run_failed"},
+				stop: {kind: "stuck", why: "step_failed"},
+				at: {_tag: "run", step: "triage"},
+			});
+			expect(String(stops[0]?.cause)).toContain("the disk is on fire");
+		},
+	);
+
+	it(
+		"a once row's second arrival stops with one `stopped` fact holding the step's own why, not only step_stuck",
+		{timeout: 90_000},
+		async () => {
+			const ran = await lane({
+				within: 80,
+				fake: {answers: {plan: [ON_PLAN, ON_PLAN, ON_PLAN, ON_PLAN]}},
+			});
+			const said = ran.lines.join("\n");
+			const stops = stopsOn(ran);
+			expect(stops, said).toHaveLength(1);
+			expect(stops[0]).toMatchObject({
+				stage: "plan",
+				outcome: {kind: "stuck", why: "draft_failed"},
+				stop: {kind: "stuck", why: "step_stuck"},
+				at: {_tag: "run", step: "plan"},
+			});
 		},
 	);
 });
