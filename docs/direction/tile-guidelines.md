@@ -87,8 +87,9 @@ Where Linear and the tiling tools differ. Linear has no tiling, so tmux and Tuva
 - **A tile is ours, not a Manti part.** Manti 0.13.0's `Card` has radius and padding tokens and no
   edge states, so the tile's tokens point at Manti's names ([UI on Manti](./ui-on-manti.md)).
 - **Manti has no name for a resting edge.** It has `--manti-border` and `--manti-border-strong`. We
-  try `--manti-border-subtle` with a pnpm patch first, as `patches/@manti-ui__react@0.13.0.patch`
-  already does for types. A pull request to Manti brings evidence from that try, and asks the owner
+  try `--manti-border-subtle` with a pnpm patch first. Tokens live in `@manti-ui/styles`
+  (`tokens.css`), so this is a patch to `@manti-ui/styles`, not to the react patch
+  (`patches/@manti-ui__react@0.13.0.patch`), which only fixes types. A pull request to Manti brings evidence from that try, and asks the owner
   first.
 - **The resting edge is slate a4 on every tile, plain or pipe.** It is the one bend
   [color principles](./color-principles.md#the-steps-and-their-jobs) records. The box does not change
