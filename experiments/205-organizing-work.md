@@ -106,6 +106,14 @@ Toyota      daily kaizen on the standing line is the norm; a kaizen event is the
 | No backlog state: "a 'later' pile clashes with sort answers yes or no". | same note, :234 |
 | A milestone is a parent with a due date. 60% sure. | same note, :238 |
 
+### Measured before
+
+- [Experiment 60](./60-what-happens-to-filed-follow-ups.md) read 289 follow-ups that merged pull
+  requests filed on two repos in today's fabrika: 35% were built (median 9.9 hours), 41.5%
+  closed as not planned, 16% sat open at a median 25 days, "the same as any agent-filed issue".
+  It is from before experiment 107 and from GitHub issues, not our tracker, but it says what a
+  follow-up's life looks like: most are decided within days, and about one in six floats.
+
 ### Untouched
 
 - A long-lived grouping of any kind: area, component, team. No note names one.
