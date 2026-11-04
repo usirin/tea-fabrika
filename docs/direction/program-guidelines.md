@@ -1,8 +1,9 @@
 # Programs: one job, a location, and the desk places the tile
 
 **Decided 2026-11-03.** The owner approved G1 to G8 and calls 1 to 5 with their leans, after a walk
-of each part. The leans' confidence numbers stay as written. [Composing programs, C1 to
-C11](#composing-programs-c1-to-c11) was decided 2026-11-02. Calls 6 and 7 moved to experiment 206,
+of each part. Call 4 changed in its walk: both forms of `open` are the API, and the line form waits
+on a follow-up to experiment 204. The leans' confidence numbers stay as written.
+[Composing programs, C1 to C11](#composing-programs-c1-to-c11) was decided 2026-11-02. Calls 6 and 7 moved to experiment 206,
 the customization study, and call 8 to experiment 207, the layers study. The asks program is named
 **inbox** (G8 below, glossary walk); the sketches still say `asks`, which the rename pass changes.
 The composing walk changed two of the rules, G6 R2 and G7 R4, and their text says so.
@@ -99,12 +100,19 @@ type Program<S, M, V, T, L> = {
 };
 
 // The desk's Cmds, the same for every program. Each is granted, as any start power is (Tier 1, call 20).
-const Open = Schema.Struct({line: Line, from: TileId, via: Via});        // Line: what tsh's fit check takes
+// Two forms, one Cmd (call 4). The program form ships first; the line form waits on its follow-up.
+const Open = Schema.Union([
+	Schema.Struct({program: ProgramName, location: Schema.Unknown, from: TileId, via: Via}), // the program's own location.data decodes it
+	Schema.Struct({line: Line, from: TileId, via: Via}),        // Line: what tsh's fit check takes
+]);
 const Opened = Schema.TaggedUnion({
 	opened: {tile: TileId, how: Schema.Literals(["new", "focused", "moved"]),
 		beside: Schema.optional(TileId), folded: Schema.optional(Schema.Array(TileId))},
 });
-const open = Cmd.define("open", {input: Open, ok: Opened, err: ["no_press", "bad_line", "not_allowed"]});
+const open = Cmd.define("open", {
+	input: Open, ok: Opened,
+	err: ["no_press", "no_program", "bad_location", "bad_line", "not_allowed"],
+});
 const leave = Cmd.define("leave", {input: Schema.Struct({from: TileId}), ok: Schema.Null, err: []});
 
 // What the desk keeps, per workspace, to answer "back": the tiles in the order they were focused.
@@ -112,7 +120,9 @@ type Workspace = {layout: Split; focus: TileId; recent: ReadonlyArray<TileId>}; 
 ```
 
 - **Checked by reading, not by `tsc`.** `Via` is the keybindings note's (`key`, `palette`, `word`,
-  `click`). `Line` is what tsh already types and checks. `Workspace` is the desktop layer's, with one
+  `click`). `Line` is what tsh already types and checks. `ProgramName` is a name by G8's rules; the
+  desk refuses one it does not know (`no_program`) and a location the program's own `location.data`
+  does not decode (`bad_location`). `Workspace` is the desktop layer's, with one
   new list, `recent`, which `C-b ;` needs anyway (tile guidelines, "a fact stored from the first
   build").
 - **`location` is read from the tile's own machine,** as a mode is ([modes](./modes.md), M2): which
@@ -166,8 +176,8 @@ type Workspace = {layout: Split; focus: TileId; recent: ReadonlyArray<TileId>}; 
   the desk with `open`. It never names a tile, a size or a side.
 - **Rules.** R1 a location is data, lean 80%. R2 inside a tile, a program moves with `navigate`, and
   back returns, lean 80% (tracker views, ticket 7). R3 across tiles, a program asks with `open`,
-  and the desk answers in words, lean 85%. R4 an open is a line the person could have typed, lean
-  75% (call 4).
+  and the desk answers in words, lean 85%. R4 an open names a program and a location, or is a
+  line the person could have typed, checked the same as typing it (call 4, decided).
 - **Why.** Plan 9: "Most applications work fine in a plumbing environment without knowing about it at
   all" [x3]. Android sends an intent, not a window [x4]. Our desktop layer already says a process
   "never knows where its tile is".
@@ -181,7 +191,8 @@ type Workspace = {layout: Split; focus: TileId; recent: ReadonlyArray<TileId>}; 
   to a pid you guessed [o1].
 - **Accessibility.** The location names the tile for a screen reader: `asks, t5, ask 1 of 3`, beside
   the tile guidelines' `tileName`. WCAG 2.4.3, focus order keeps meaning.
-- **What holds it.** No tile id or pixel size in any program type. `open` takes a `Line`, so tsh's fit
+- **What holds it.** No tile id or pixel size in any program type. The program form's location is
+  decoded by that program's own schema (`bad_location`). The line form takes a `Line`, so tsh's fit
   check refuses a line whose pipes do not fit before anything starts (`bad_line`).
 - **Doubt and cost.** Whether every program has a location worth keeping (a tsh tile's is its
   line). One field per program and one schema.
@@ -354,7 +365,7 @@ its machine               a run id, a trace, saved state, hot reload, a job to a
 
 ### G8: a program's name
 
-**Decided 2026-11-03. Lean, 75%.**
+**Decided 2026-11-03. Lean, 75%.** The owner walked it on 2026-11-03 and took the lean.
 
 ```text
 where one name shows (both versions)
@@ -498,17 +509,23 @@ column      the whole column the focused tile is in          a full list and det
 zoom        the new tile zoomed                              all of it; hides everything else
 ```
 
-### 4. An open is a line, or a program and a location
+### 4. An open is a program and a location, or a line
 
-**Decided 2026-11-03. Lean "a line", 75%.**
+**Decided 2026-11-03: both forms are the API.** The lean was "a line", 75%; the owner kept both. An
+earlier draft here said the lean "a line" was taken, which was wrong.
 
 ```ts
-open({line: "asks --ask a-approve-8 | ticket", ...}) // a line: one fit check, one placement rule
-open({program: "asks", location: {ask: "a-approve-8"}, ...}) // simpler, but a second way to start programs
+open({program: "inbox", location: {ask: "a-approve-8"}, from, via}) // ships first
+open({line: "asks --ask a-approve-8 | ticket", from, via})          // ships when its bar is met
 ```
 
-- A line reuses tsh's fit check and the decided "a line opens in place". **Doubt:** a line is text, so
-  a program builds a string; a typed `Line` value from tsh's parser would avoid that.
+- **The line form's bar.** A typed line gets the same type check and the same error words as typing
+  it in tsh. A line built at run time goes through `unchecked(line)`, and the desk checks it.
+- **Where it stands.** [Experiment 204](../../experiments/204-typed-lines.md) got the same words on
+  37 of 40 fixed lines. The 3 gaps are checks the type cannot see: `ticket --ticket 0` and
+  `ticket --ticket 1.5` (an integer, at least 1) and `asks --ask a-approve-1.5` (the `AskId`
+  pattern). The compiler lets those through and the run-time check refuses them, never the other
+  way. A follow-up experiment closes them, and the line form waits on it to ship.
 
 ### 5. `Esc` at a program's top level
 
