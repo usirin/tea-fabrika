@@ -616,15 +616,6 @@ describe("what a kept run does with what tea reports", () => {
 		expect(seen.fails[0]?.cause).toBe(thrown);
 	});
 
-	it("the same error again as the run closes is dropped: broken is not called", () => {
-		const {seen, report} = reporting();
-		report(thrown, {phase: "reduce"});
-		seen.closing = true;
-		report(thrown, {phase: "follow-up"});
-		expect(seen.fails).toHaveLength(1);
-		expect(seen.brokens).toEqual([]);
-	});
-
 	it("another error as the run closes calls broken, once", () => {
 		const {seen, report} = reporting();
 		report(thrown, {phase: "reduce"});
@@ -653,21 +644,21 @@ describe("what a kept run does with what tea reports", () => {
 		expect(seen.brokens).toEqual([]);
 	});
 
-	it("tells apart two errors, and an error that is `undefined`", () => {
+	it("says an error that is not an Error in words, `undefined` too", () => {
 		const {seen, report} = reporting();
 		const where = {phase: "sub"} as const;
-		for (const error of [undefined, undefined, "the disk", "the disk", "the feed"])
-			report(error, where);
+		for (const error of [undefined, "the disk"]) report(error, where);
 		expect(seen.fails.map((ended) => ended.message)).toEqual([
 			`job run j failed (tea's "sub"): undefined`,
 			`job run j failed (tea's "sub"): the disk`,
-			`job run j failed (tea's "sub"): the feed`,
 		]);
 	});
 });
 
-describe("one failure tea reports twice", () => {
-	it.live("a reducer's throw on a Listen's answer: two reports of one error, told once", () =>
+describe("one failure, one report", () => {
+	// tea 0.22.0 told this throw twice, as "reduce" and again as "follow-up", and `failureReport`
+	// dropped the repeat. tea 0.23.0 tells it once (demlik PR 855), so nothing drops anything.
+	it.live("a reducer's throw on a Listen's answer is reported once", () =>
 		Effect.gen(function* () {
 			const reports: string[] = [];
 			const {seen, report} = reporting();
@@ -681,17 +672,18 @@ describe("one failure tea reports twice", () => {
 					report(error, where);
 				},
 			});
-			while (reports.length < 2) yield* Effect.sleep("1 millis");
-			// If tea ever stops repeating itself, this says the rule can go.
-			expect(reports).toEqual(["reduce: the throw", "follow-up: the throw"]);
+			while (reports.length < 1) yield* Effect.sleep("1 millis");
+			// tea 0.22.0's repeat came within a millisecond of the first report; give it 50.
+			yield* Effect.sleep("50 millis");
+			expect(reports).toEqual(["reduce: the throw"]);
 			expect(seen.fails.map((ended) => ended.cause)).toEqual([thrown]);
 		}).pipe(Effect.scoped, Effect.timeout("5 seconds")),
 	);
 
-	// `runKept` itself, with no clock. tea's own repeat never lands late in a toy, so the same error
-	// comes back here as the last save's failure: the one report tea makes once the run is closing.
+	// `runKept` itself, with no clock: the parent hears the reducer's throw through `done()`, and a
+	// last save that fails as the run closes is a failure of its own, so it ends the program run.
 	it.live(
-		"through runKept: an error the parent already heard, told again as the run closes, does not break the program",
+		"through runKept: a last save that fails as the run closes breaks the program, after the parent heard the throw",
 		() =>
 			Effect.gen(function* () {
 				const broken: Error[] = [];
@@ -733,7 +725,9 @@ describe("one failure tea reports twice", () => {
 					}),
 				);
 				expect(heard).toBe(`Error: job run j failed (tea's "reduce"): the reducer broke`);
-				expect(broken).toEqual([]);
+				expect(broken.map((ended) => ended.message)).toEqual([
+					`job run j failed (tea's "stop-save"): the reducer broke`,
+				]);
 			}).pipe(Effect.timeout("5 seconds")),
 	);
 });
