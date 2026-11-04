@@ -1,7 +1,9 @@
-import {Duration, Schema} from "effect";
+import {Duration, Effect, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {programList} from "../shell/programs.ts";
 import {SMALL} from "../shell/small.ts";
+import {driveFor} from "./drive.ts";
+import {LAST_MAX} from "./job.ts";
 // made up: `STOP` and `STOP_TOOL` follow job.ts's `JOB` and `JOB_TOOL`; the plan names neither.
 import {EXIT_WITHIN, STOP, STOP_TOOL, StopAnswer, StopAsk, Why} from "./stop.ts";
 import {callOf} from "./tools.ts";
@@ -103,5 +105,54 @@ describe("a stop call, read", () => {
 			expect(call.kind).toBe("refused");
 			expect(call.kind === "refused" ? call.why : "").toMatch(/\bn\b/);
 		}
+	});
+});
+
+describe("the door's stop, as the host hands it", () => {
+	/** A stopped job that printed `count` lines, as the host's `job` tool would show it. */
+	const stoppedWith = (count: number) =>
+		StopAnswer.cases.stopped.make({
+			job: {
+				n: 1,
+				text: "counter &",
+				tile: "t1",
+				state: {_tag: "ended", how: "stopped"},
+				lines: Array.from({length: count}, (_, i) => String(i + 1)),
+			},
+		});
+
+	it("lists no stop tool, and refuses a stop call, when the host hands no stop", async () => {
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {drive, tools} = yield* driveFor({list: LIST, tiles: () => [], job: () => null});
+				const called = yield* drive.call(STOP, {n: 1, why: "wrong ticket"});
+				return {names: tools.map((t) => t.name), called};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.names).toContain("job");
+		expect(seen.names).not.toContain(STOP);
+		expect(seen.called).toMatchObject({kind: "refused", why: expect.stringMatching(/stop/)});
+	});
+
+	it("cuts a stopped job's lines to the job tool's last LAST_MAX, newest last", async () => {
+		const answer = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {drive} = yield* driveFor({
+					list: LIST,
+					tiles: () => [],
+					job: () => null,
+					stop: () => Effect.succeed(stoppedWith(LAST_MAX + 1)),
+				});
+				return yield* drive.call(STOP, {n: 1, why: "wrong ticket"});
+			}).pipe(Effect.scoped),
+		);
+		expect(answer.kind).toBe("done");
+		const job = answer.kind === "done" ? Reflect.get(Object(answer.data), "job") : undefined;
+		const lines: unknown = Reflect.get(Object(job), "lines");
+		expect(lines).toHaveLength(LAST_MAX);
+		expect(Array.isArray(lines) ? [lines[0], lines.at(-1)] : []).toEqual([
+			"2",
+			String(LAST_MAX + 1),
+		]);
 	});
 });

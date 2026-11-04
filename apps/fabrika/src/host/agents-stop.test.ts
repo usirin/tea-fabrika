@@ -99,6 +99,9 @@ const hostOn = (home: string, lines: string[]) =>
 		/** Keys typed in tile t1's terminal. */
 		const type = (data: string) =>
 			wire.send({type: "on", port: "tile:t1", m: {type: "keys", data}});
+		/** Tile t1's terminal says its new size, as window/terminal.ts does on a resize. */
+		const resize = (cols: number, rows: number) =>
+			wire.send({type: "on", port: "tile:t1", m: {type: "size", cols, rows}});
 		/** What tile t1's terminal shows, as rows, wide enough that no line wraps. */
 		const rows = () =>
 			gridOf(
@@ -112,7 +115,7 @@ const hostOn = (home: string, lines: string[]) =>
 				200,
 				1000,
 			).rows;
-		return {paths, type, rows, stop: Scope.close(host, Exit.void)};
+		return {paths, type, resize, rows, stop: Scope.close(host, Exit.void)};
 	});
 
 /** An MCP client, on the bridge Claude Code would start: `node cli.ts mcp --as <agent>`. */
@@ -293,6 +296,56 @@ describe("the stop tool", () => {
 		// It is gone from the table, and nothing of it ran: the job tool knows no job 1 now.
 		expect(seen.after.error).toBe(true);
 		expect(said(lines, "job_stopped")[0]).toMatchObject({n: "1", by: AGENT, why: "an old run"});
+		// No key was pressed since this host started, so how long the person was away is not said:
+		// the field is left out, never written as null.
+		expect(said(lines, "job_stopped")[0]?.idle_ms).toBeUndefined();
+	});
+
+	it("says idle_ms as the time since the person's last key in a tile", async () => {
+		const lines: string[] = [];
+		const away = 600;
+		await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				const host = yield* hostOn(home, lines);
+				const agent = yield* agentOn(home, "claude");
+				host.type("counter &\r");
+				yield* agent.jobWhen(1, (d) => tagOf(d) === "running");
+				yield* Effect.sleep(`${away} millis`);
+				yield* agent.call("stop", {n: 1, why: "wrong ticket"});
+				yield* until("the stop in the log", () =>
+					said(lines, "job_stopped").length > 0 ? true : undefined,
+				);
+			}),
+		);
+		const idle = Number(said(lines, "job_stopped")[0]?.idle_ms);
+		// At least the wait since the last key, and nowhere near a clock's own reading.
+		expect(idle).toBeGreaterThanOrEqual(away);
+		expect(idle).toBeLessThan(away + 30_000);
+	});
+
+	it("does not count a tile's resize as the person's key", async () => {
+		const lines: string[] = [];
+		const away = 600;
+		await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				const host = yield* hostOn(home, lines);
+				const agent = yield* agentOn(home, "claude");
+				host.type("counter &\r");
+				yield* agent.jobWhen(1, (d) => tagOf(d) === "running");
+				yield* Effect.sleep(`${away} millis`);
+				host.resize(100, 30);
+				host.resize(120, 40);
+				yield* Effect.sleep("100 millis");
+				yield* agent.call("stop", {n: 1, why: "wrong ticket"});
+				yield* until("the stop in the log", () =>
+					said(lines, "job_stopped").length > 0 ? true : undefined,
+				);
+			}),
+		);
+		// The last key was before the wait: the resizes after it changed nothing.
+		expect(Number(said(lines, "job_stopped")[0]?.idle_ms)).toBeGreaterThanOrEqual(away);
 	});
 
 	it("refuses a job the host does not know, and one that already ended, in words", async () => {

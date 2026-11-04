@@ -212,6 +212,31 @@ describe("the stopper's line in the tile the job ran in", () => {
 		for (const stop of seen.stops) expect(stop).toEqual({by: AGENT, why: "wrong ticket"});
 	});
 
+	it("names the stopper of the job told, not another job's, with two jobs running", async () => {
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const t = yield* tshInT1;
+				yield* t.line(`${LONG} &`);
+				yield* t.line(`${LONG} &`);
+				// The host's stop is for %2 only: %1 has none.
+				yield* t.table.dispatch({type: "stopping", n: 2, by: AGENT, why: "wrong ticket"});
+				expect(yield* t.stop(2)).toBe("queued");
+				yield* until("job 2's end", () =>
+					t.table.getState().jobs.some((j) => j.n === 2) ? undefined : true,
+				);
+				yield* settled(t.table);
+				return {
+					printed: t.printed.values.map((p) => p.text),
+					left: t.table.getState().jobs.map((j) => j.n),
+				};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.printed).toContain(`[2] stopped by ${AGENT}: wrong ticket`);
+		expect(seen.printed.filter((text) => text.includes("stopped by"))).toHaveLength(1);
+		// %1 runs on.
+		expect(seen.left).toEqual([1]);
+	});
+
 	it("says no stopper when the tsh's own writer stopped it", async () => {
 		const printed = await Effect.runPromise(
 			Effect.gen(function* () {

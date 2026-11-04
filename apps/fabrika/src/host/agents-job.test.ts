@@ -344,6 +344,69 @@ describe("the host's wide log", () => {
 		});
 	});
 
+	it("writes agent_came with no client when the agent's first message is not initialize, and still answers it", async () => {
+		const lines: string[] = [];
+		const seen = await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				yield* hostOn(home, lines);
+				const path = yield* Path.Path;
+				const cli = yield* path
+					.fromFileUrl(new URL("../cli.ts", import.meta.url))
+					.pipe(Effect.orDie);
+				// The bridge with no MCP client on it: the test says each JSON-RPC message itself, as a
+				// client of spec 2026-07-28 does, with no `initialize` first.
+				const transport = new StdioClientTransport({
+					command: process.execPath,
+					args: [cli, "mcp", "--as", "claude"],
+					env: {...getDefaultEnvironment(), FABRIKA_HOME: home},
+					stderr: "pipe",
+				});
+				const heard: JSONRPCMessage[] = [];
+				transport.onmessage = (message) => {
+					heard.push(message);
+				};
+				yield* Effect.acquireRelease(
+					Effect.promise(() => transport.start()),
+					() => Effect.promise(() => transport.close()).pipe(Effect.ignore),
+				);
+				const answerTo = (id: number) =>
+					until(`the answer to ${id}`, () => heard.find((m) => "id" in m && m.id === id));
+				// JSON-RPC lets a request leave `params` out, and this one does.
+				yield* Effect.promise(() => transport.send({jsonrpc: "2.0", id: 1, method: "tools/list"}));
+				const listed = yield* answerTo(1);
+				yield* Effect.promise(() =>
+					transport.send({
+						jsonrpc: "2.0",
+						id: 2,
+						method: "tools/call",
+						params: {name: "runs", arguments: {}},
+					}),
+				);
+				const called = yield* answerTo(2);
+				yield* until("agent_came in the log", () =>
+					said(lines, "agent_came").length > 0 ? true : undefined,
+				);
+				yield* until("the call's line", () =>
+					said(lines, "tool_called").length > 0 ? true : undefined,
+				);
+				return {listed, called};
+			}),
+		);
+		// Both were answered: a list of tools, and the call's result.
+		expect(Reflect.get(Object(Reflect.get(Object(seen.listed), "result")), "tools")).toEqual(
+			expect.arrayContaining([expect.objectContaining({name: "runs"})]),
+		);
+		expect(Reflect.get(Object(seen.called), "result")).toMatchObject({content: [{type: "text"}]});
+		const came = said(lines, "agent_came");
+		expect(came).toHaveLength(1);
+		expect(came[0]).toMatchObject({level: "INFO", agent: "claude"});
+		// No initialize, so no client named itself: neither key is said.
+		expect(came[0]?.client).toBeUndefined();
+		expect(came[0]?.version).toBeUndefined();
+		expect(said(lines, "tool_called")[0]).toMatchObject({tool: "runs", call: "2", ok: "true"});
+	});
+
 	it("writes exactly one tool_called line per tool call, done or refused, with the call's JSON-RPC id", async () => {
 		const lines: string[] = [];
 		const seen = await go(
