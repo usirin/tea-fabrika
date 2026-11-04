@@ -10,7 +10,7 @@ import {
 	StopRefused,
 } from "@kampus/fabrika-old/mcp";
 import {Author, PullRequests, RepoTree} from "@tea-fabrika/tracker";
-import {Data, Deferred, Duration, Effect, Queue, Stream} from "effect";
+import {Data, Deferred, Duration, Effect, Queue, Ref, Stream} from "effect";
 import {type Socket, SocketServer} from "effect/socket";
 import {
 	type AsksMsg,
@@ -469,23 +469,26 @@ export const serve = (options: {
 
 		/** Done once a restart was answered: the host ends, as SIGTERM ends it, and sends no signal. */
 		const quit = yield* Deferred.make<void>();
-		let restarting = false;
+		/** One restart at a time: claimed before any file is written, let go of if the note fails. */
+		const restarting = yield* Ref.make(false);
 		/**
 		 * Restart the host for agent `who`, and why: the `restart` tool's host side. Only with an app
-		 * attached, since the app starts the next host. The note for the next host is left first, so a
-		 * restart that could not leave one is refused and changes nothing. Then its line, then the
-		 * answer, and the host ends `ANSWER_FIRST` on. Every job stays in the table, detached at the
-		 * next start, as after a SIGTERM.
+		 * attached, since the app starts the next host. The restart is claimed first, so of two agents
+		 * that ask at the same moment the second is refused and only one note is left. The note for the
+		 * next host is left next, so a restart that could not leave one is refused and changes nothing.
+		 * Then its line, then the answer, and the host ends `ANSWER_FIRST` on. Every job stays in the
+		 * table, detached at the next start, as after a SIGTERM.
 		 */
 		const restartFor =
 			(r: Restarts): NonNullable<AgentOptions["restart"]> =>
 			(who, ask) =>
 				Effect.gen(function* () {
-					if (restarting) return yield* new RestartRefused({why: "the host is restarting already"});
 					if (![...clients].some((client) => client.up()))
 						return yield* new RestartRefused({
 							why: "no app is attached to start a new host: the host would stay down",
 						});
+					if (yield* Ref.getAndSet(restarting, true))
+						return yield* new RestartRefused({why: "the host is restarting already"});
 					const table = jobs.table.getState().jobs;
 					const detached = table.map((job) => job.n);
 					const foreground = table.flatMap((job) =>
@@ -495,8 +498,9 @@ export const serve = (options: {
 					);
 					const by = writerText(who);
 					const at = clock.currentTimeMillisUnsafe();
-					yield* r.leave({by, why: ask.why, at, detached});
-					restarting = true;
+					yield* r
+						.leave({by, why: ask.why, at, detached})
+						.pipe(Effect.onError(() => Ref.set(restarting, false)));
 					const away = idle();
 					yield* Effect.logInfo("host_restart").pipe(
 						Effect.annotateLogs({
