@@ -86,9 +86,15 @@ export const settingsFile = <A>(
 			const saves = fs.watch(folder, {onReady: () => Deferred.doneUnsafe(ready, Effect.void)}).pipe(
 				Stream.filter((event) => path.basename(event.path) === name),
 				Stream.debounce(`${SETTLE_MS} millis`),
+				// A watch that fails before it is ready still lets the first read go, so the file is
+				// read once and the host never waits on a watch that will not start.
 				Stream.catchCause((cause) =>
 					Stream.fromEffect(
-						Effect.logWarning(`fabrika host: the watch on ${folder} ended`, cause),
+						Deferred.done(ready, Effect.void).pipe(
+							Effect.andThen(
+								Effect.logWarning(`fabrika host: the watch on ${folder} ended`, cause),
+							),
+						),
 					).pipe(Stream.drain),
 				),
 			);
