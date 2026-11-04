@@ -1,7 +1,7 @@
 import {Clock, Effect, Layer, Option, Schedule, Schema, Stream} from "effect";
 import {everyOwner, ownersOf, parseCodeowners, teamOf} from "./codeowners.ts";
 import {isMachines} from "./comments.ts";
-import {CodeHost, type PullRequest} from "./services.ts";
+import {CodeHost, CodeTree, type PullRequest} from "./services.ts";
 import {type Rules, reviewRules, SETTINGS_FILE} from "./settings.ts";
 import {sh} from "./sh.ts";
 import {type Change, criteriaIn, deviationsIn} from "./stages/review/pack.ts";
@@ -1188,3 +1188,51 @@ export const gitHubCodeHost = (
 		CodeHost,
 		codeHostOn((args) => sh(config.gh ?? "gh", args), config),
 	);
+
+/**
+ * A folder's path from the root, as a GraphQL text may hold it: plain parts, no quotes, and no
+ * part that is `.` or `..`, so a path never climbs out of the root.
+ */
+const FOLDER = /^(?!\.\.?(?:\/|$))[\w.-]+(?:\/(?!\.\.?(?:\/|$))[\w.-]+)*$/;
+
+/** The folders under one path, as GraphQL's `object(expression: "HEAD:<path>")` answers. */
+const TreeAt = Schema.NullOr(
+	Schema.Struct({
+		entries: Schema.optional(
+			Schema.Array(Schema.Struct({name: Schema.String, type: Schema.String})),
+		),
+	}),
+);
+const Trees = Schema.Struct({
+	data: Schema.Struct({
+		repository: Schema.Record(Schema.String, TreeAt),
+	}),
+});
+
+/**
+ * The folders right under each of `under`, at the default branch's head: one GraphQL call, one
+ * alias per path. A path that is not a plain folder path is a failure, not a guess.
+ */
+const readFolders = (gh: Gh) => (repo: string, under: readonly string[]) =>
+	Effect.gen(function* () {
+		const at = repoOf(repo);
+		if (at === null || !under.every((path) => FOLDER.test(path))) return yield* failed;
+		if (under.length === 0) return [];
+		const trees = under
+			.map(
+				(path, i) =>
+					`f${i}: object(expression: "HEAD:${path}") { ... on Tree { entries { name type } } }`,
+			)
+			.join(" ");
+		const query = `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${trees} } }`;
+		const {data} = yield* ask(gh, Trees, query, {owner: at.owner, name: at.name});
+		return under.flatMap((path, i) =>
+			(data.repository[`f${i}`]?.entries ?? [])
+				.filter((e) => e.type === "tree")
+				.map((e) => `${path}/${e.name}`),
+		);
+	});
+
+/** `CodeTree` on GitHub, through `gh`, the GitHub CLI to run (a test may stand one in). */
+export const gitHubCodeTree = (config: {readonly gh?: string}) =>
+	Layer.succeed(CodeTree, {folders: readFolders((args) => sh(config.gh ?? "gh", args))});

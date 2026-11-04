@@ -232,6 +232,38 @@ describe("what a request may say", () => {
 		});
 	});
 
+	// Areas PR 1 (docs/direction/areas.md, the plan's a3): the project's areas are a person's data.
+	// An agent's session never makes, renames or merges one. The stream is the tracker's
+	// `tracker/areas`, spelled out here: fabrika does not import the pipeline.
+	describe("an area fact", () => {
+		const AREA_KINDS = ["area_made", "area_renamed", "area_merged"] as const;
+		const AREAS_INBOX = "tracker/areas/inbox";
+		const fact = (kind: string) => ({kind, data: {_tag: kind, area: 1}, id: null});
+
+		it.each(AREA_KINDS)("is a kind only a person writes: %s", (kind) => {
+			expect(PERSON_KINDS).toContain(kind);
+		});
+
+		it.each(AREA_KINDS)("is refused when an agent writes %s on the areas stream", (kind) => {
+			const r = trustedArgs("append", [AREAS_INBOX, "any", fact(kind), null], agent);
+			expect(r).toMatchObject({ok: false, status: 403});
+		});
+
+		it.each(AREA_KINDS)("lands when a person writes %s, with the person as its writer", (kind) => {
+			const r = trustedArgs("append", [AREAS_INBOX, "any", fact(kind), null], person);
+			expect(r.ok ? r.value[2] : r).toEqual({...fact(kind), writer: "user:github:7"});
+		});
+
+		it("lets a program's table mark each area fact `person`", () => {
+			const table = {
+				area_made: "person",
+				area_renamed: "person",
+				area_merged: "person",
+			} as const satisfies Writes<(typeof AREA_KINDS)[number]>;
+			expect(Object.values(table)).toEqual(["person", "person", "person"]);
+		});
+	});
+
 	it("never writes under the door's own name, and still reads it", () => {
 		expect(
 			trustedArgs("append", [MEMBERS, "any", {kind: "joined", data: {id: 9}}, null], person),

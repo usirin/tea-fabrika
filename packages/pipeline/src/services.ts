@@ -76,6 +76,25 @@ export class CodeHost extends Context.Service<
 >()("CodeHost") {}
 
 /**
+ * A repository's files, as a tree: a read of its own, apart from `CodeHost`, so a reader that only
+ * lists folders is handed nothing else. GitHub is the first Layer behind it.
+ */
+export class CodeTree extends Context.Service<
+	CodeTree,
+	{
+		/**
+		 * The folders right under each of `under`, at the default branch's head, by path from the
+		 * root: `folders(repo, ["apps"])` is `["apps/fabrika"]`. One of `under` the repository
+		 * lacks has none. `repo`: its URL, `https://github.com/<owner>/<name>`.
+		 */
+		readonly folders: (
+			repo: string,
+			under: readonly string[],
+		) => Effect.Effect<readonly string[], {readonly _tag: "unknown"}>;
+	}
+>()("CodeTree") {}
+
+/**
  * The writes on where the code lives. Each one changes a real pull request,
  * so they are kept apart from the reads and handed out on purpose.
  */

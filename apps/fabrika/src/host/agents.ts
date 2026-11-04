@@ -1,6 +1,6 @@
 import {Ledger, Shell, Traces} from "@kampus/fabrika-old";
 import {type AgentOptions, type InTile, type JobAnswer, serveAgent} from "@kampus/fabrika-old/mcp";
-import {Author, PullRequests} from "@tea-fabrika/tracker";
+import {Author, PullRequests, RepoTree} from "@tea-fabrika/tracker";
 import {Context, Effect, type Scope} from "effect";
 import type {SocketServer} from "effect/socket";
 import {appPrograms} from "../tsh.ts";
@@ -87,9 +87,10 @@ export const serveAgents = (options: {
 		const ledger = yield* Ledger;
 		const person = yield* Author;
 		const pullRequests = yield* PullRequests;
+		const repoTree = yield* RepoTree;
 		const traces = yield* Traces;
 		const listOn = (on: Ledger["Service"], who: Author["Service"]) =>
-			Shell.programList(appPrograms(on, who, pullRequests, traces));
+			Shell.programList(appPrograms(on, who, pullRequests, traces, repoTree));
 		/** What agent `who` is served: its own session's programs, or the read-only door, with why. */
 		const programsFor: AgentOptions["programsFor"] = (who) =>
 			sessionFor === null

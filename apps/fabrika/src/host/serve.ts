@@ -2,7 +2,7 @@ import {applyCell} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {type Entry, type JobsOnHost, Ledger, Shell, Traces, writerText} from "@kampus/fabrika-old";
 import {type AgentOptions, EXIT_WITHIN, StopAnswer, StopRefused} from "@kampus/fabrika-old/mcp";
-import {Author, PullRequests} from "@tea-fabrika/tracker";
+import {Author, PullRequests, RepoTree} from "@tea-fabrika/tracker";
 import {Data, Deferred, Effect, Queue, Stream} from "effect";
 import {type Socket, SocketServer} from "effect/socket";
 import {
@@ -309,7 +309,7 @@ export const serve = (options: {
 		};
 		const ledger = yield* Ledger;
 		const programs = programsOf(
-			appPrograms(ledger, yield* Author, yield* PullRequests, yield* Traces),
+			appPrograms(ledger, yield* Author, yield* PullRequests, yield* Traces, yield* RepoTree),
 		);
 
 		// The host as it says of itself, for the top bar's host, sync and agents: said as a page
