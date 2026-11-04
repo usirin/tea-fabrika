@@ -6,6 +6,10 @@ settled check, one running example, the known way and the three tests. It will f
 "Organizing work", and a Design canvas, "Organizing work guidelines". Neither exists yet. The
 designs (step 5) wait for the owner's look at this draft.
 
+**The owner's picks, 2026-11-03,** after the walk's steps 1 to 4: record `from` now, and keep
+tickets without a type label for now ([a ticket says where it came from](../docs/direction/a-ticket-says-where-it-came-from.md)).
+Area and project wait for step 5.
+
 **The answer.** The makers agree on a plain shape, and it is close to the lean this study was
 handed, with three changes.
 
