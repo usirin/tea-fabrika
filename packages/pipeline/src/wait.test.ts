@@ -3,7 +3,7 @@ import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {ROUTES, Service} from "./stages/pipeline/routes.ts";
-import {WAITS, waitOut} from "./wait.ts";
+import {OnWait, WAITS, waitOut} from "./wait.ts";
 
 // Today's version. Self-fix PR 11b, "waits and records" (docs/plan/pipeline-self-fix.md, PR 11,
 // `wait`). One schedule, in one place: from 1 second, doubling, up to 100 seconds apart, and no cap on
@@ -110,5 +110,60 @@ describe("the services that wait", () => {
 		);
 		expect(named.length).toBeGreaterThan(0);
 		expect(named.filter((r) => r.in === undefined || !waiting().has(r.in))).toEqual([]);
+	});
+});
+
+// Self-fix PR 11b, test writer round 2 (the mutation step's first owed test): the words a wait puts on
+// the lane's tile, exact. What it waits on, by the service's own name, or `the service` when none is
+// named. What the try met: the service's own text when it answered with a status, else `no answer`,
+// whatever shape the error has.
+describe("what a wait says on the tile", () => {
+	/**
+	 * `waitOut` on a call that fails with each of `meets` in turn and then answers, every error waited
+	 * out, under the TestClock: each line the tile heard.
+	 */
+	const heardFor = (meets: readonly unknown[], on?: Service) =>
+		Effect.gen(function* () {
+			const heard: string[] = [];
+			let tries = 0;
+			const call = Effect.suspend(() =>
+				tries++ < meets.length ? Effect.fail(meets[tries - 1]) : Effect.succeed("read"),
+			);
+			let over = false;
+			const fiber = yield* Effect.forkChild(
+				waitOut(call, () => true, on).pipe(
+					Effect.provideService(OnWait, (line) => Effect.sync(() => void heard.push(line))),
+					Effect.ensuring(Effect.sync(() => void (over = true))),
+				),
+			);
+			for (let s = 0; !over && s < 60; s++) {
+				yield* TestClock.adjust("1 second");
+				for (let k = 0; k < 5; k++) yield* Effect.yieldNow;
+			}
+			expect(yield* Fiber.join(fiber)).toBe("read");
+			return heard;
+		}).pipe(Effect.provide(TestClock.layer()), Effect.runPromise);
+
+	const MEETS = [
+		{_tag: "LedgerUnreachable", message: "connection reset"},
+		{_tag: "LedgerUnreachable", status: 503, message: "the ledger answered 503: restarting"},
+		"a plain string",
+		null,
+	];
+
+	it("names the service it waits on, and what each try met: the ledger's text with a status, else no answer", async () => {
+		expect(await heardFor(MEETS, "ledger")).toEqual([
+			"waits on the ledger, for the claim: no answer on try 1, trying again in 1s",
+			"waits on the ledger, for the claim: the ledger answered 503: restarting on try 2, trying again in 2s",
+			"waits on the ledger, for the claim: no answer on try 3, trying again in 4s",
+			"waits on the ledger, for the claim: no answer on try 4, trying again in 8s",
+		]);
+	});
+
+	it("with no service named, it waits on the service", async () => {
+		expect(await heardFor(MEETS.slice(0, 2))).toEqual([
+			"waits on the service: no answer on try 1, trying again in 1s",
+			"waits on the service: the ledger answered 503: restarting on try 2, trying again in 2s",
+		]);
 	});
 });

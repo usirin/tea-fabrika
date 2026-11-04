@@ -3,6 +3,7 @@ import {Clock, Duration, Effect, Exit, Fiber, Layer} from "effect";
 import {TestClock} from "effect/testing";
 import {describe, expect, it} from "vitest";
 import {type LaneId, laneId, planOf, taskId, ticketId} from "../ids.ts";
+import {OnWait} from "../wait.ts";
 import {claim, holderOf, holding, Lanes, layerLanes, newLane, release} from "./claims.ts";
 import {factsOf, Ledger, memoryLedger, sendFact, ticketName} from "./ledger.ts";
 
@@ -415,11 +416,13 @@ describe("a claim the ledger does not answer", () => {
 describe("a claim the ledger answers with a refusal or a busy status", () => {
 	/**
 	 * `claim(T, L1)` on a ledger whose `claim` meets `meets` in turn, then answers, under the TestClock,
-	 * a second of virtual time at a time: how it ended (`StillWaiting` past 60 s), and each call's time.
+	 * a second of virtual time at a time: how it ended (`StillWaiting` past 60 s), each call's time, and
+	 * each line the lane's tile heard while it waited.
 	 */
 	const claimMeeting = (meets: readonly {readonly status: number; readonly says: string}[]) => {
 		const memory = memoryLedger();
 		const times: number[] = [];
+		const heard: string[] = [];
 		const wrapped: Ledger["Service"] = {
 			...memory.service,
 			claim: (name, holder, rev, ttlMs) =>
@@ -436,7 +439,10 @@ describe("a claim the ledger answers with a refusal or a busy status", () => {
 		return Effect.gen(function* () {
 			let over = false;
 			const fiber = yield* Effect.forkChild(
-				Effect.exit(claim(T, L1)).pipe(Effect.ensuring(Effect.sync(() => void (over = true)))),
+				Effect.exit(claim(T, L1)).pipe(
+					Effect.provideService(OnWait, (line) => Effect.sync(() => void heard.push(line))),
+					Effect.ensuring(Effect.sync(() => void (over = true))),
+				),
 			);
 			for (let s = 0; !over && s < 60; s++) {
 				yield* TestClock.adjust("1 second");
@@ -444,7 +450,7 @@ describe("a claim the ledger answers with a refusal or a busy status", () => {
 			}
 			if (!over) yield* Fiber.interrupt(fiber);
 			const exit = over ? yield* Fiber.join(fiber) : ("StillWaiting" as const);
-			return {exit, times};
+			return {exit, times, heard};
 		}).pipe(
 			Effect.scoped,
 			Effect.provide(layerLanes().pipe(Layer.provideMerge(Layer.succeed(Ledger, wrapped)))),
@@ -473,5 +479,18 @@ describe("a claim the ledger answers with a refusal or a busy status", () => {
 		]);
 		expect(exit !== "StillWaiting" && Exit.isSuccess(exit) ? exit.value : exit).toBe(L1);
 		expect(times.slice(1).map((t, i) => t - (times[i] ?? 0))).toEqual([1_000, 2_000]);
+	});
+
+	// Test writer, round 2 (the mutation step's first owed test): the tile names what the claim waits
+	// on, the ledger's claim (../wait.ts `WAITS.ledger`), and what each try met, in the ledger's words.
+	it("while it waits, the lane's tile says it waits on the ledger, for the claim, with what each try met", async () => {
+		const {heard} = await claimMeeting([
+			{status: 429, says: "the ledger answered 429: slow down"},
+			{status: 503, says: "the ledger answered 503: restarting"},
+		]);
+		expect(heard).toEqual([
+			"waits on the ledger, for the claim: the ledger answered 429: slow down on try 1, trying again in 1s",
+			"waits on the ledger, for the claim: the ledger answered 503: restarting on try 2, trying again in 2s",
+		]);
 	});
 });

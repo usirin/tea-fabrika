@@ -5929,4 +5929,78 @@ describe("a lane's waits and records (self-fix PR 11b)", () => {
 			expect(String(stops[0]?.why), said).toContain("the disk is on fire, crash 2");
 		},
 	);
+
+	// Test writer, round 2: what the mutation step found no test for, on the real lane.
+	it(
+		"a ticket read the ledger does not answer: the lane's tile says what it waits on, each try, in the wait's own words",
+		{timeout: 90_000},
+		async () => {
+			const ran = await lane({within: 80, picks: THE_PLANS_NO, ledgerSilent: 3});
+			const said = ran.lines.join("\n");
+			expect(ran.lines.slice(0, 3), said).toEqual([
+				"waits on the ledger, for the ticket: no answer on try 1, trying again in 1s",
+				"waits on the ledger, for the ticket: no answer on try 2, trying again in 2s",
+				"waits on the ledger, for the ticket: no answer on try 3, trying again in 4s",
+			]);
+		},
+	);
+
+	/** Each stage machine the line kept, as `<stage> <id>`, from the lane's storage under `dir`. */
+	const keptMachines = (dir: string) =>
+		readdirSync(join(dir, "home", "storage", "lanes")).flatMap((name) => {
+			const path = decodeURIComponent(name).split("/");
+			const at = path.indexOf("machine");
+			const [stage, id] = [path[at + 1], path[at + 2]];
+			return at === -1 || stage === "lane" || id === undefined || path.at(-1) !== "a"
+				? []
+				: [`${stage} ${decodeURIComponent(id)}`];
+		});
+
+	it(
+		"a step's first try keeps its machines under the step's own intent, as before; only a try after one that could not run adds its number",
+		{timeout: 90_000},
+		async () => {
+			const ran = await lane({within: 80, picks: THE_PLANS_NO, dies: {planned: 1}});
+			const said = ran.lines.join("\n");
+			expect(endsAt(ran, "plan"), said).toHaveLength(2);
+			expect(keptMachines(ran.dir).sort(), said).toEqual([
+				"plan lane/1/2/plan",
+				"plan lane/1/2/plan/2",
+				"triage lane/1/1/triage",
+			]);
+		},
+	);
+
+	it(
+		"a lane that stops, is typed again, and stops again: the ticket keeps both `stopped` facts",
+		{timeout: 120_000},
+		async () => {
+			const ran = await lane({within: 80, dies: {planned: 4}, again: [{}]});
+			const said = ran.lines.join("\n");
+			expect(crashedEnds(ran, "plan"), said).toHaveLength(4);
+			const stops = stopsOn(ran);
+			expect(stops, said).toHaveLength(2);
+			expect(String(stops[0]?.why), said).toContain("crash 2");
+			expect(String(stops[1]?.why), said).toContain("crash 4");
+		},
+	);
+
+	it(
+		"a lane with no pull request, its branch on the remote: each step's end keeps `prHead: null`",
+		{timeout: 120_000},
+		async () => {
+			// A branch `lane/1` on the remote, as an earlier push or a person could leave it, while the
+			// lane's carry names no pull request: the step does not read its head.
+			const pushBranch = ({remote}: Where) =>
+				Effect.sync(() =>
+					execFileSync("git", ["branch", `lane/${NUMBER}`, "main"], {cwd: remote, stdio: "pipe"}),
+				);
+			const ran = await lane({within: 80, picks: THE_PLANS_NO, again: [{between: pushBranch}]});
+			const said = ran.lines.join("\n");
+			const plans = endsAt(ran, "plan");
+			expect(plans, said).toHaveLength(2);
+			for (const end of plans)
+				expect(Schema.decodeUnknownSync(Inputs)(end.inputs).prHead, said).toBeNull();
+		},
+	);
 });
