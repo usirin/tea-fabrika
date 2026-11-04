@@ -120,7 +120,7 @@ export const tsh = defineProgram({
 		Effect.gen(function* () {
 			const list = yield* Programs;
 			// The host's jobs: its table, opened by the host, and the storage their runs keep in.
-			const {table, storage, kept, owner} = yield* HostJobs;
+			const {table, storage, kept, owner, by} = yield* HostJobs;
 			const scope = yield* Effect.scope;
 			if (!kept) yield* send("printed", {to: "err", text: TABLE_REFUSED});
 			yield* watch("jobs", TABLE.key, table);
@@ -162,6 +162,7 @@ export const tsh = defineProgram({
 				storage,
 				table,
 				owner,
+				by,
 				print,
 				printTable,
 				show: flags.show,

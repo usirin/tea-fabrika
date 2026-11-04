@@ -8,6 +8,7 @@ import {Author} from "@tea-fabrika/tracker";
 import {Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope} from "effect";
 import {SocketServer} from "effect/socket";
 import {fileHistory, sharedHistory} from "../editor/history.ts";
+import {agentSessions} from "./agent-session.ts";
 import {connectionOf, hostLedger} from "./connection.ts";
 import {holdLock} from "./lock.ts";
 import {logSteps, sampleLag} from "./log.ts";
@@ -23,7 +24,8 @@ import {pathsOf, reach} from "./socket.ts";
 //   yield* runHost({home, pid: process.pid})
 //   // <home>/host made, mode 0700; the start lock taken (host/lock.ts); a socket left by a crash
 //   // removed; <home>/host/sock listened on, mode 0600; <home>/host/mcp too, the agents' socket
-//   // (host/agents.ts), mode 0600, read-only on a home connected to a ledger server; the pid
+//   // (host/agents.ts), mode 0600, each agent on its own session on a home connected to a
+//   // ledger server (host/agent-session.ts); the pid
 //   // written; the lock let go of; the desk read back from desk.json, the asks' marks from
 //   // asks.json; the thread's lag read once a second, and each lane step's begin and end said
 //   // (log.ts); until the scope closes
@@ -84,7 +86,7 @@ export const runHost = (options: {
 				if (yield* fs.exists(paths.mcp)) yield* fs.remove(paths.mcp);
 				const made = yield* NodeSocketServer.make({path: paths.sock}).pipe(Scope.provide(outer));
 				yield* fs.chmod(paths.sock, 0o600);
-				// Every home's agents' socket; on a connected one it is read-only (host/agents.ts).
+				// Every home's agents' socket (host/agents.ts).
 				const forAgents = yield* NodeSocketServer.make({path: paths.mcp}).pipe(
 					Scope.provide(outer),
 				);
@@ -145,7 +147,10 @@ export const runHost = (options: {
 			history,
 			ours,
 			build,
-			agents,
+			agents: {
+				server: agents,
+				sessionFor: Option.isNone(connection) ? null : yield* agentSessions(home),
+			},
 			jobs,
 			pid,
 			ledger: Option.match(connection, {

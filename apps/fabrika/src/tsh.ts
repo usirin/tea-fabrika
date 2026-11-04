@@ -16,6 +16,7 @@ import {
 	Traces,
 	tell,
 	viewOf,
+	writerText,
 } from "@kampus/fabrika-old";
 import {experimentsOnLedger} from "@kampus/pipeline/experiments/experiments";
 import {ticketsOnLedger} from "@kampus/pipeline/tickets/tickets";
@@ -315,10 +316,11 @@ export const startTsh = (options: {
 	Effect.gen(function* () {
 		const {tile, history, runs, words} = options;
 		const jobLines = options.lines;
-		const jobs: JobsOnHost = {...options.jobs, owner: tile};
 		const scope = yield* Effect.scope;
 		const ledger = yield* Ledger;
 		const author = yield* Author;
+		// Every job this tsh begins is the tile's, and its writer's: the person at this tile.
+		const jobs: JobsOnHost = {...options.jobs, owner: tile, by: writerText(author)};
 		const pullRequests = yield* PullRequests;
 		const traces = yield* Traces;
 		/** Its scope is closing: the tile closes or the host stops, and every run stops with it. */
