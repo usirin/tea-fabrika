@@ -183,6 +183,69 @@ describe("the test writer", () => {
 		});
 	});
 
+	// Tracker 193: ticket 117's run on the base failed, and the stuck comment said nothing. The cause
+	// rides beside the `could_not_run` tag, and the rows the writer could not test are kept.
+	describe("a run on the base that fails", () => {
+		/** Ticket 117's failure, as the box would tell it. Made up: the cause and the code. */
+		const NO_REPORT = {why: "no_report", code: 1, ms: 726_000, tail: "Error: boom"} as const;
+
+		it("stays stuck `run_failed`, and keeps the cause the run gave", () => {
+			const {over} = drive({drafts: [GOOD], run: "fail", failure: NO_REPORT});
+			expect(over).toMatchObject({
+				outcome: {kind: "stuck", why: "run_failed"},
+				report: {commit: COMMIT, failure: {_tag: "could_not_run", ...NO_REPORT}},
+			});
+		});
+
+		it.each([
+			{why: "no_command", code: null, ms: 0, tail: "[test_writer] run is not set"},
+			{why: "copy_failed", code: null, ms: 12, tail: "fatal: no room left"},
+			{why: "box_failed", code: null, ms: 40, tail: "srt: could not start"},
+			{why: "no_report", code: 1, ms: 726_000, tail: "Error: boom"},
+			{why: "bad_report", code: 0, ms: 3_100, tail: ""},
+		])("keeps a `$why` cause whole, its code `$code` too", (failure) => {
+			const {over} = drive({drafts: [GOOD], run: "fail", failure});
+			expect(over).toMatchObject({
+				outcome: {why: "run_failed"},
+				report: {failure: {_tag: "could_not_run", ...failure}},
+			});
+		});
+
+		it("a bare `could_not_run`, as code from before this says it, keeps no cause and keeps the commit", () => {
+			expect(drive({drafts: [GOOD], run: "fail"}).over).toMatchObject({
+				outcome: {kind: "stuck", why: "run_failed"},
+				report: {commit: COMMIT, failure: null},
+			});
+		});
+
+		it("a run that does not fail keeps no cause", () => {
+			expect(drive({drafts: [GOOD]}).over).toMatchObject({
+				outcome: {kind: "done"},
+				report: {failure: null},
+			});
+		});
+
+		it("keeps no cause that is not one of the five, and stops all the same", () => {
+			const {over} = drive({
+				drafts: [GOOD],
+				run: "fail",
+				failure: {why: "made_up", code: 1, ms: 5, tail: "x"},
+			});
+			expect(over).toMatchObject({
+				outcome: {kind: "stuck", why: "run_failed"},
+				report: {commit: COMMIT, failure: null},
+			});
+		});
+
+		it("keeps one `cannot_test` row for each Property the writer said no test can check", () => {
+			const {over} = drive({drafts: [cannot], run: "fail", failure: NO_REPORT});
+			expect(over).toMatchObject({
+				outcome: {kind: "stuck", why: "run_failed"},
+				report: {found: [{property: "p2", for: "cannot_test"}]},
+			});
+		});
+	});
+
 	it("after a restart sends again what was in flight, the same write with the same intent", () => {
 		for (const phase of ["reading", "committing", "running", "recording"] as const) {
 			const {over, cmds} = drive({drafts: [GOOD], restartAt: phase});

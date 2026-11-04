@@ -34,6 +34,7 @@ import {laneLayer, runLane} from "./layer.ts";
 import {askedFor as kindOfAsk, Lane, PICKS} from "./machine.ts";
 import {Pull} from "./pulls.ts";
 import {type Folded, fold, seenOf} from "./restart.ts";
+import {LaneWork} from "./work.ts";
 
 // One tracker ticket through the whole lane in this process: the real machines, the real Codex
 // adapter over a fake `codex`, real git on a bare remote, real vitest and Stryker, the real box, and
@@ -172,6 +173,12 @@ interface Script {
 	}[];
 	/** The mutation step's Stryker run cannot run, on the first line only: the lane stops at mutation. */
 	readonly failMutation?: boolean;
+	/**
+	 * On the first line only, each test writer's run on the base fails with this beside its
+	 * `could_not_run` tag, as the box would say it (tracker 193): the test writer runs once more, and the
+	 * lane stops at it, round 1.
+	 */
+	readonly failOnBase?: Readonly<Record<string, unknown>>;
 	/** After each line, fold the lane's facts (./restart.ts), to set beside what it saved. */
 	readonly fold?: boolean;
 	/** Stop the lane when a line holding this is said, then type the line again. */
@@ -227,6 +234,11 @@ interface Script {
 	readonly formatter?: boolean;
 	/** Keep every span the lines make, raw, in memory (ticket 141). */
 	readonly traced?: boolean;
+	/**
+	 * The ticket's working copy is made from main before the first line, as an earlier line left ticket
+	 * 117's (tracker 194): its branch leaves main there, whatever main merges after.
+	 */
+	readonly treeFirst?: boolean;
 }
 
 /** One span as the in-memory exporter keeps it. */
@@ -492,6 +504,7 @@ const lane = ({
 	leave,
 	again = [],
 	failMutation = false,
+	failOnBase,
 	fold: folding = false,
 	killAt,
 	noOrigin = false,
@@ -512,6 +525,7 @@ const lane = ({
 	beforeCarries = false,
 	formatter = false,
 	traced = false,
+	treeFirst = false,
 }: Script): Promise<Ran> => {
 	const tracing = traced ? memoryTracing({raw: true}) : null;
 	let checksRan = 0;
@@ -644,7 +658,9 @@ const lane = ({
 				onBase: (commit, tests) =>
 					Effect.suspend(() => {
 						onBase.push({line: typed, commit, files: tests.map((test) => test.file)});
-						return work.onBase(commit, tests);
+						return failOnBase !== undefined && typed === 0
+							? Effect.fail({...failOnBase, _tag: "could_not_run"} as const)
+							: work.onBase(commit, tests);
 					}),
 			})),
 			Effect.updateService(Tickets, (tickets) => ({
@@ -692,6 +708,14 @@ const lane = ({
 				}),
 			);
 			const run = Effect.gen(function* () {
+				// The ticket's working copy, made from main as it is now, as an earlier line would leave it.
+				if (treeFirst)
+					yield* Effect.gen(function* () {
+						yield* (yield* LaneWork).tree(NUMBER);
+					}).pipe(
+						Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
+						Effect.orDie,
+					);
 				if (savedAsking !== undefined) {
 					const first = yield* Effect.forkScoped(line());
 					while (!lines.some((said) => savedAsking.at.test(said))) yield* Effect.sleep("20 millis");
@@ -2689,6 +2713,137 @@ const movedHeadLands = (ran: Awaited<ReturnType<typeof onGitHub>>) => {
 	);
 	expect(ran.lines.at(-1)).toContain("ended: done");
 };
+
+// Tracker 193 and 194, from ticket 117: its test writer's run on the base failed and said nothing,
+// and a restart there would have rebased the writer's commit onto a main that added the same file.
+describe("a test writer whose run on the base fails", () => {
+	beforeEach(() => {
+		vi.stubEnv("TYPESAFE_API_KEY", "");
+		vi.stubEnv("OPENAI_API_KEY", "");
+		vi.stubEnv("CODEX_API_KEY", "");
+	});
+	afterEach(() => {
+		vi.unstubAllEnvs();
+	});
+
+	/** Ticket 117's failure, as the box would tell it. Made up: the cause and the code. */
+	const NO_REPORT = {why: "no_report", code: 1, ms: 726_000, tail: "Error: boom"} as const;
+	/** The writer's ends on the ticket, in turn. */
+	const writerEnds = (ran: Ran) =>
+		ran.facts.filter((f) => f.type === "ended" && f.stage === "test_writer");
+
+	it(
+		"keeps the cause on its `ended`, and the stuck comment names the cause and each row it could not test",
+		{timeout: 300_000},
+		async () => {
+			const NEVER = "no test can build a name with no letters";
+			const SECOND = {
+				when: "a name has no letters",
+				result: "it comes back as it was",
+				why: "an empty form would match every other",
+				behavior: "new",
+				tool: "test",
+				code: [],
+			};
+			/** The fake writer's answer: one test, and one Property it says no test can check. */
+			const ONE_EACH = {
+				with: {
+					answers: [
+						{property: "p1", kind: "test", file: "src/lower.test.ts", name: "lowers capitals"},
+						{property: "p2", kind: "cannot", why: NEVER},
+					],
+				},
+			};
+			const ran = await lane({
+				within: 140,
+				picks: YES,
+				failOnBase: NO_REPORT,
+				fake: {
+					answers: {
+						plan: [
+							{
+								with: {
+									properties: [
+										{
+											when: "a name holds capitals",
+											result: "it comes back in lower case",
+											why: "two forms of one name would not match",
+											behavior: "new",
+											tool: "test",
+											code: [],
+										},
+										SECOND,
+									],
+								},
+							},
+						],
+						tests: [ONE_EACH, ONE_EACH, ONE_EACH, ONE_EACH],
+					},
+				},
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			const [first] = writerEnds(ran);
+			expect(first?.outcome, said).toEqual({kind: "stuck", why: "run_failed"});
+			expect(first?.failure).toEqual(NO_REPORT);
+			expect(first?.carry).toMatchObject({cannot: [{when: SECOND.when, why: NEVER}]});
+			const stuck = ran.facts
+				.filter((f) => f.type === "commented")
+				.map((f) => String(f.body))
+				.filter((body) => body.startsWith("test_writer is stuck."));
+			expect(stuck, said).not.toEqual([]);
+			expect(stuck[0]).toContain("no_report");
+			expect(stuck[0]).toContain(SECOND.when);
+			expect(stuck[0]).toContain(NEVER);
+		},
+	);
+
+	it(
+		"stopped at round 1 while main adds the writer's own file: the restart starts over from main, keeps the old commit, asks no exam_conflict, and the writer runs on main",
+		{timeout: 300_000},
+		async () => {
+			const ON_MAIN =
+				'import {expect, it} from "vitest";\n\nit("lowers on main", () => {\n\texpect("AB".toLowerCase()).toBe("ab");\n});\n';
+			const ran = await lane({
+				within: 140,
+				picks: {...YES, exam_conflict: "again"},
+				failOnBase: NO_REPORT,
+				again: [
+					{
+						between: (where) =>
+							Effect.sync(() => pushToMain(where, [{path: "src/lower.test.ts", text: ON_MAIN}])),
+					},
+				],
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			// The first line stopped at the test writer, in its first round.
+			expect(heldAt(ran, 0)?.at, said).toEqual({_tag: "run", step: "test_writer"});
+			expect(heldAt(ran, 0)?.held.round).toBe(1);
+
+			expect(askedFor(ran, "exam_conflict"), said).toEqual([]);
+			const restarted = ran.facts.filter((f) => f.type === "restarted");
+			expect(restarted, said).toHaveLength(1);
+			const [restart] = restarted;
+			expect(restart).toMatchObject({
+				from: "test_writer",
+				conflicts: [],
+				kept: expect.stringMatching(/^refs\/kept\//),
+			});
+			// The old commit stays under the kept ref, on the remote.
+			const kept = String(restart?.kept);
+			expect(remoteGit(ran.remote, "rev-parse", kept)).toBe(String(restart?.head));
+			// The writer after the restart starts on main as the restart read it.
+			const at = ran.facts.indexOf(restart ?? {type: ""});
+			const after = ran.facts
+				.slice(at)
+				.find((f) => f.type === "ended" && f.stage === "test_writer");
+			expect((after?.carry as {readonly base?: string} | undefined)?.base, said).toBe(
+				restart?.onto,
+			);
+		},
+	);
+});
 
 describe("a lane, whole, on GitHub", () => {
 	beforeEach(() => {
@@ -5223,6 +5378,34 @@ describe("the exam's pull request", () => {
 		if (nth === 0) pushToMain(where, [{path: RULE, text: MAIN_RULE}]);
 		return null;
 	};
+
+	// Tracker 194, ticket 117: the lane's tree was made before the exam merged, so the test writer was
+	// given the old main, never saw the exam, and wrote a test of its own for it. A tree made at the
+	// test writer, as on a first line, already starts on the new main: `treeFirst` makes it earlier.
+	it(
+		"once the exam's merge ends done, the test writer starts on main's tip, and its folder has the rule file as the exam head has it",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({title: RULES, picks: YES, fake: {see: [RULE]}, treeFirst: true});
+			const said = ran.lines.join("\n");
+			const merged = endOf(ran, "exam_merge");
+			expect(ran.facts[merged]?.outcome, said).toMatchObject({kind: "done"});
+			const writer = ran.facts.find((f) => f.type === "ended" && f.stage === "test_writer");
+			const base = (writer?.carry as {readonly base?: string} | undefined)?.base ?? "";
+			expect(base, said).toMatch(/^[0-9a-f]{40}$/);
+			// The base holds the exam's merge: the rule file is there as the exam writer wrote it.
+			const atBase = (() => {
+				try {
+					return remoteGit(ran.remote, "show", `${base}:${RULE}`);
+				} catch {
+					return null;
+				}
+			})();
+			expect(atBase, "the writer's base holds the merged exam").toBe(WRITTEN_RULE.trim());
+			const [tests] = codexRuns(ran.dir).filter((r) => r.step === "tests");
+			expect(tests?.seen[RULE], "the writer's folder holds the exam").toBe(WRITTEN_RULE);
+		},
+	);
 
 	it(
 		"ship's conflicts at the exam's merge: the exam writer is first told its folder is on main, never that it holds the pull request's head",

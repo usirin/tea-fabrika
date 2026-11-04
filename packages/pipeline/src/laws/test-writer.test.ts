@@ -60,4 +60,29 @@ describe("the test writer's laws", () => {
 			),
 		});
 	});
+
+	// Tracker 193.
+	it("catch a failed run that drops what the writer said no test can check", () => {
+		expect(caught(tw.dropsTheCannotRows, 5)).toMatchObject({
+			"a run that fails keeps every row the writer said no test can check": lines(
+				"start",
+				"tests_taken_ok",
+				'run k/1: draft "tests one, cannot one"',
+				"tests_commit_ok",
+				"on base failed: no cause",
+			),
+		});
+	});
+
+	it("catch a failed run that drops the cause it gave", () => {
+		expect(caught(tw.dropsTheCause, 5)).toMatchObject({
+			"a run that fails and says why keeps the cause, and one that says nothing keeps none": lines(
+				"start",
+				"tests_taken_ok",
+				'run k/1: draft "good"',
+				"tests_commit_ok",
+				"on base failed: no cause",
+			),
+		});
+	});
 });

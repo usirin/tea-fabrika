@@ -16,7 +16,7 @@ import {PushWork} from "../push/program.ts";
 import {TestsWork} from "../test-writer/program.ts";
 import {CheckRunner} from "./checks.ts";
 import {ticketUrlOf} from "./hosts.ts";
-import {LANE_REPO, makeLaneHome} from "./lane-fixture.ts";
+import {LANE_REPO, makeLaneHome, shWord} from "./lane-fixture.ts";
 import {LanePulls, PullWire} from "./pulls.ts";
 import {laneCheckRunner, laneMutationScope, lanePushWork, laneTestsWork} from "./tools.ts";
 import {LaneHome, LaneWork, laneWork} from "./work.ts";
@@ -218,6 +218,143 @@ describe("code's checks, as the repository's settings name them", () => {
 			expect(checked.tail).toContain("[key cut]");
 			expect(checked.tail).not.toContain(key);
 		});
+	});
+});
+
+// Tracker 193: a test writer's run on the base that fails says why, in the real box. Today every
+// failure is a bare `could_not_run`, and the box's stderr is drained and dropped, so ticket 117's
+// failed run left nothing to read.
+describe("the test writer's run on the base, when it fails", () => {
+	let dir: string;
+	beforeEach(() => {
+		dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-on-base-")));
+	});
+	afterEach(() => rmSync(dir, {recursive: true, force: true}));
+
+	type Writer = NonNullable<Settings["test_writer"]>;
+	/** The fixture's real lane work, with `change` made to it. */
+	const workWith = (change: (work: LaneWork["Service"]) => LaneWork["Service"]) => {
+		const {home, seed} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+		const real = laneWork.pipe(
+			Layer.provide(Layer.succeed(LaneHome, {home, checkout: seed, briefs: "", person: "owner"})),
+		);
+		return Layer.effect(
+			LaneWork,
+			Effect.gen(function* () {
+				return change(yield* LaneWork);
+			}),
+		).pipe(Layer.provide(real));
+	};
+	/** The settings' `[test_writer]` table, as `change` makes it. */
+	const writerWith =
+		(change: (writer: Writer) => Writer) =>
+		(work: LaneWork["Service"]): LaneWork["Service"] => ({
+			...work,
+			settings: Effect.map(work.settings, (s) => ({
+				...s,
+				test_writer: change(s.test_writer ?? {}),
+			})),
+		});
+	/** `[test_writer] run` as one shell line. */
+	const runs = (line: string) =>
+		writerWith((writer) => ({...writer, run: ["/bin/sh", "-c", line]}));
+	/** The error the run on ticket 1's base fails with, over `work`. */
+	const failureOver = (work: Layer.Layer<LaneWork>) =>
+		Effect.runPromise(
+			Effect.gen(function* () {
+				const {base} = yield* (yield* LaneWork).tree(1);
+				return yield* (yield* TestsWork)
+					.onBase(base, [{property: "p1", file: "src/slug.test.ts", name: "cuts on spaces"}])
+					.pipe(Effect.flip);
+			}).pipe(
+				Effect.provide(
+					Layer.provideMerge(laneTestsWork, Layer.merge(work, Layer.mock(MutationRunner, {}))),
+				),
+			),
+		);
+
+	// The control: the same box, with a report, answers. So a failure below is the run's, not this box's.
+	it("a box that writes a vitest report answers from it", {timeout: 60_000}, async () => {
+		const answered = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {base} = yield* (yield* LaneWork).tree(1);
+				return yield* (yield* TestsWork).onBase(base, []);
+			}).pipe(
+				Effect.provide(
+					Layer.provideMerge(
+						laneTestsWork,
+						Layer.merge(
+							workWith(runs(`echo '{"testResults": []}' > {out}`)),
+							Layer.mock(MutationRunner, {}),
+						),
+					),
+				),
+			),
+		);
+		expect(answered).toEqual([]);
+	});
+
+	it(
+		"a box that ends with no report says `no_report`, its exit code, how long it ran, and stderr's last line",
+		{timeout: 60_000},
+		async () => {
+			const failure = await failureOver(workWith(runs("echo first >&2; echo boom >&2; exit 1")));
+			expect(failure).toMatchObject({_tag: "could_not_run", why: "no_report", code: 1});
+			expect(failure).toHaveProperty("ms", expect.any(Number));
+			expect(Number((failure as {readonly ms?: unknown}).ms)).toBeGreaterThanOrEqual(0);
+			expect(String((failure as {readonly tail?: unknown}).tail).trimEnd()).toMatch(/boom$/);
+		},
+	);
+
+	it.each([
+		["a report that is not JSON", "echo not-json > {out}"],
+		["a report that is JSON, but not vitest's", "echo '{}' > {out}"],
+	])("%s says `bad_report`", {timeout: 60_000}, async (_, line) => {
+		const failure = await failureOver(workWith(runs(line)));
+		expect(failure).toMatchObject({_tag: "could_not_run", why: "bad_report", code: 0});
+	});
+
+	it.each([
+		["`[test_writer] run` is not set", writerWith(({run: _, ...writer}) => writer)],
+		[
+			"the settings could not be read",
+			(work: LaneWork["Service"]) => ({
+				...work,
+				settings: Effect.fail({_tag: "unknown", says: "a broken settings file"} as const),
+			}),
+		],
+	])("%s says `no_command`", {timeout: 60_000}, async (_, change) => {
+		const failure = await failureOver(workWith(change));
+		expect(failure).toMatchObject({_tag: "could_not_run", why: "no_command"});
+	});
+
+	it(
+		"a copy of the commit that could not be made says `copy_failed`",
+		{timeout: 60_000},
+		async () => {
+			const failure = await failureOver(
+				workWith((work) => ({
+					...work,
+					copy: () => Effect.fail({_tag: "unknown", says: "no room left"} as const),
+				})),
+			);
+			expect(failure).toMatchObject({_tag: "could_not_run", why: "copy_failed"});
+		},
+	);
+
+	// The tail goes on a public ticket, as a check's does (the checks' test above).
+	it("says no home path and no key in stderr's tail", {timeout: 60_000}, async () => {
+		const mine = join(homedir(), "code", "acme");
+		const key = `ghp_${"Ab3".repeat(12)}`;
+		const failure = await failureOver(
+			workWith(runs(`echo ${shWord(`fatal: could not read ${mine}/.git: ${key}`)} >&2; exit 1`)),
+		);
+		expect(failure).toMatchObject({_tag: "could_not_run", why: "no_report"});
+		const tail = String((failure as {readonly tail?: unknown}).tail);
+		expect(tail).toContain("~/code/acme");
+		expect(tail).not.toContain(homedir());
+		expect(tail).toContain("[key cut]");
+		expect(tail).not.toContain(key);
 	});
 });
 
