@@ -23,6 +23,8 @@ import {pathsOf} from "./socket.ts";
 //
 // FABRIKA_HOME is always given: the host never guesses a home, so a host started by a test can
 // never be the owner's, and the owner's never a test's. With none, it does not start.
+// FABRIKA_SETTINGS names the folder that holds keybindings.toml: `~/.fabrika` for the owner's
+// start, as the app passes it (start-host.ts). With none, the home holds it.
 //
 // It stops on SIGTERM or SIGINT (`NodeRuntime.runMain`): the scope closes, every tile's tsh stops
 // with it, the jobs stay in the host's table for `attach` at the next start, and the socket and
@@ -30,9 +32,9 @@ import {pathsOf} from "./socket.ts";
 // A person stops it only through the window's restart, or `fabrika connect`, which stops it so the
 // app starts one on the new ledger (host/connection.ts). A test stops its own by the pid in its home.
 //
-// Node at its thinnest edge, said here: `process.env`, `process.pid`, and `process.umask`, set to
-// 0o077 before anything is made, so every file the host makes is the user's alone even before
-// its mode is set.
+// Node at its thinnest edge, said here: `process.env`, `process.pid`, `process.platform`, and
+// `process.umask`, set to 0o077 before anything is made, so every file the host makes is the
+// user's alone even before its mode is set.
 
 const home = process.env.FABRIKA_HOME;
 
@@ -55,8 +57,15 @@ const main = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
 	yield* fs.makeDirectory(paths.dir, {recursive: true, mode: 0o700});
 	const toFile = yield* Logger.toFile(Logger.formatSimple, paths.log, {flag: "a"});
-	// Jev, for the tracker's duplicate hint, only when the home holds a key (jev.ts).
-	return yield* runHost({home, pid: process.pid}).pipe(
+	// The keys file's folder, as the app said; `mod` in it is Cmd on a Mac (host/settings.ts).
+	const settings = process.env.FABRIKA_SETTINGS;
+	return yield* runHost({
+		home,
+		pid: process.pid,
+		settings: settings === undefined || settings === "" ? undefined : settings,
+		mac: process.platform === "darwin",
+	}).pipe(
+		// Jev, for the tracker's duplicate hint, only when the home holds a key (jev.ts).
 		Effect.provide(Layer.merge(Logger.layer([toFile]), hostJev(home))),
 	);
 }).pipe(

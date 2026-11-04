@@ -14,6 +14,7 @@ import type {AsksNow, Marks} from "../asks.ts";
 import {attach, NoHost} from "../attach.ts";
 import type {Open} from "../desk/desk.ts";
 import {tilesOf} from "../desk/desk.ts";
+import {defaults} from "../desk/keymap.ts";
 import {gridOf} from "../editor/grid.ts";
 import type {Down, Up} from "../link.ts";
 import {readToPage, type ToPage} from "../messages.ts";
@@ -625,5 +626,248 @@ describe("attaching", () => {
 			}),
 		);
 		expect(failed).toBeInstanceOf(NoHost);
+	});
+});
+
+// ---------------------------------------------------------------- the keys file (ticket 174, PR 1)
+
+/** Every line the host logs while `test` runs, as host/log would hold it. */
+const goLogged = <A, E>(
+	test: (
+		lines: readonly string[],
+	) => Effect.Effect<A, E, Scope.Scope | Layer.Success<typeof platform>>,
+) => {
+	const lines: string[] = [];
+	const caught = Logger.make((o) => {
+		lines.push(Logger.formatSimple.log(o));
+	});
+	return Effect.runPromise(
+		test(lines).pipe(
+			Effect.scoped,
+			Effect.provide(Logger.layer([caught])),
+			Effect.provide(platform),
+		),
+	);
+};
+
+/** A log line's `key=value` fields, a quoted value unquoted. */
+const fieldsOf = (line: string): Record<string, string> => {
+	const out: Record<string, string> = {};
+	for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g)) {
+		const [, key = "", raw = ""] = m;
+		out[key] = raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw;
+	}
+	return out;
+};
+
+/** The person's keys file, in a home of its own: `$FABRIKA_HOME/keybindings.toml` (p11). */
+const saveKeys = (home: string, ...lines: readonly string[]) =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem;
+		yield* fs.writeFileString(join(home, "keybindings.toml"), lines.join("\n"));
+	});
+
+type App = Effect.Success<ReturnType<typeof appOn>>;
+const keysSent = (app: App) => app.page().flatMap((m) => (m.type === "keys" ? [m] : []));
+const lastKeys = (app: App) => keysSent(app).at(-1);
+const lastTakes = (app: App) => app.page().findLast((m) => m.type === "desk");
+
+describe("the host and the keys file", () => {
+	it("reads the keys file in its own home, and the desk arms on its prefix (p2, p11)", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const {home, paths} = yield* freshHome;
+				yield* saveKeys(home, 'prefix = "ctrl+a"');
+				const host = yield* hostOn(home);
+				const app = yield* appOn(paths.sock);
+				yield* app.wire.up;
+				app.send({type: "page"});
+				yield* until("the desk", app.desk);
+				const keys = lastKeys(app);
+				const takes = lastTakes(app);
+				const b = yield* app.press("<c-b>");
+				const a = yield* app.press("<c-a>");
+				const split = yield* app.press("|");
+				const two = yield* until("the split", () =>
+					tileIds(app.desk()).length === 2 ? true : undefined,
+				);
+				yield* host.stop;
+				return {keys, takes, b, a, split, two};
+			}),
+		);
+		expect(seen.keys).toMatchObject({type: "keys", prefix: "<c-a>", file: {_tag: "read"}});
+		expect(seen.takes).toMatchObject({
+			takes: {all: false, keys: expect.arrayContaining(["<c-a>"])},
+		});
+		expect(seen.b).toMatchObject({took: false});
+		expect(seen.a).toMatchObject({took: true});
+		expect(seen.split).toMatchObject({took: true});
+	});
+
+	it("starts on the defaults with a bad file, and keeps the last good table after a bad save (p8)", async () => {
+		const seen = await goLogged((lines) =>
+			Effect.gen(function* () {
+				const {home, paths} = yield* freshHome;
+				yield* saveKeys(home, 'tezgah.zom = "<prefix>m"');
+				const host = yield* hostOn(home);
+				const app = yield* appOn(paths.sock);
+				yield* app.wire.up;
+				app.send({type: "page"});
+				yield* until("the desk", app.desk);
+				const atStart = lastKeys(app);
+				yield* saveKeys(home, 'prefix = "ctrl+a"');
+				const good = yield* until("the good table", () =>
+					lastKeys(app)?.file._tag === "read" ? lastKeys(app) : undefined,
+				);
+				yield* saveKeys(home, 'prefix = "ctrl+a"', 'tezgah.zom = "<prefix>m"');
+				const bad = yield* until("the refusal", () =>
+					lastKeys(app)?.file._tag === "refused" ? lastKeys(app) : undefined,
+				);
+				// The desk kept the good table: C-a still arms, C-b is the tile's.
+				const a = yield* app.press("<c-a>");
+				const files = lines
+					.map(fieldsOf)
+					.filter((f) => f.message === "keys")
+					.map((f) => f.file);
+				yield* host.stop;
+				return {atStart, good, bad, a, files};
+			}),
+		);
+		expect(seen.atStart).toEqual({
+			type: "keys",
+			...defaults,
+			file: {_tag: "refused", line: 1, why: "tezgah.zom is not a command"},
+		});
+		expect(seen.good).toMatchObject({prefix: "<c-a>", rows: defaults.rows, file: {_tag: "read"}});
+		expect(seen.bad).toMatchObject({
+			prefix: "<c-a>",
+			rows: defaults.rows,
+			file: {_tag: "refused", line: 2, why: "tezgah.zom is not a command"},
+		});
+		expect(seen.a).toMatchObject({took: true});
+		// Each read is logged: what the file came to.
+		expect(seen.files).toEqual(["refused", "read", "refused"]);
+	});
+
+	it("swaps the table on both pages on a save, and disarms a prefix armed on one (p9)", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const {home, paths} = yield* freshHome;
+				const host = yield* hostOn(home);
+				const a = yield* appOn(paths.sock);
+				const b = yield* appOn(paths.sock);
+				yield* a.wire.up;
+				yield* b.wire.up;
+				a.send({type: "page"});
+				b.send({type: "page"});
+				yield* until("a's desk", a.desk);
+				yield* until("b's desk", b.desk);
+				const armed = yield* a.press("<c-b>");
+				yield* saveKeys(home, 'prefix = "ctrl+a"');
+				const onA = yield* until("a's new table", () =>
+					lastKeys(a)?.prefix === "<c-a>" ? lastKeys(a) : undefined,
+				);
+				const onB = yield* until("b's new table", () =>
+					lastKeys(b)?.prefix === "<c-a>" ? lastKeys(b) : undefined,
+				);
+				const disarmed = yield* until("the prefix disarmed", () =>
+					a.desk()?.prefix.armed === false ? lastTakes(a) : undefined,
+				);
+				// The next key uses the new table.
+				const bar = yield* a.press("|");
+				const prefix = yield* a.press("<c-a>");
+				const split = yield* a.press("|");
+				const two = yield* until("the split on b", () =>
+					tileIds(b.desk()).length === 2 ? tileIds(b.desk()) : undefined,
+				);
+				yield* host.stop;
+				return {armed, onA, onB, disarmed, bar, prefix, split, two};
+			}),
+		);
+		expect(seen.armed).toMatchObject({took: true});
+		expect(seen.onA).toEqual(seen.onB);
+		expect(seen.disarmed).toMatchObject({
+			takes: {all: false, keys: expect.arrayContaining(["<c-a>"])},
+		});
+		expect(seen.bar).toMatchObject({took: false});
+		expect(seen.prefix).toMatchObject({took: true});
+		expect(seen.split).toMatchObject({took: true});
+		expect(seen.two).toEqual(["t1", "t2"]);
+	});
+
+	it("logs each desk command it runs, with its word and how it was reached (p13)", async () => {
+		const did = await goLogged((lines) =>
+			Effect.gen(function* () {
+				const {home, paths} = yield* freshHome;
+				const host = yield* hostOn(home);
+				const app = yield* appOn(paths.sock);
+				yield* app.wire.up;
+				app.send({type: "page"});
+				yield* until("the desk", app.desk);
+				yield* until("t1's prompt", () => (app.rows("t1")[0] === "tsh$" ? true : undefined));
+				const done = (n: number) =>
+					until(`${n} did lines`, () =>
+						lines.filter((l) => fieldsOf(l).message === "did").length >= n ? true : undefined,
+					);
+				// The palette, by the command's word.
+				app.send({type: "on", port: "desk", m: {type: "run", does: "tezgah.split"}});
+				yield* done(1);
+				// A key: C-b, then z.
+				yield* app.press("<c-b>");
+				yield* app.press("z");
+				yield* done(2);
+				// A tsh word, typed in t1's tsh.
+				app.type("t1", "zoom\r");
+				yield* done(3);
+				// A click: a double-click on t2's title bar folds it.
+				app.send({type: "on", port: "desk", m: {type: "fold", tile: "t2"}});
+				yield* done(4);
+				yield* host.stop;
+				return lines
+					.map(fieldsOf)
+					.filter((f) => f.message === "did")
+					.map((f) => [f.does, JSON.parse(f.via ?? "null")]);
+			}),
+		);
+		expect(did).toEqual([
+			["tezgah.split", {_tag: "palette"}],
+			["tezgah.zoom", {_tag: "key", keys: "ctrl+b z"}],
+			["tezgah.zoom", {_tag: "word"}],
+			["tezgah.fold", {_tag: "click"}],
+		]);
+	});
+
+	it("logs a workspace clicked in the top bar by its number's word, and the palette opening not at all (p13)", async () => {
+		const did = await goLogged((lines) =>
+			Effect.gen(function* () {
+				const {home, paths} = yield* freshHome;
+				const host = yield* hostOn(home);
+				const app = yield* appOn(paths.sock);
+				yield* app.wire.up;
+				app.send({type: "page"});
+				const desk = yield* until("the desk", app.desk);
+				const done = (n: number) =>
+					until(`${n} did lines`, () =>
+						lines.filter((l) => fieldsOf(l).message === "did").length >= n ? true : undefined,
+					);
+				// A click on the first workspace in the top bar.
+				app.send({type: "on", port: "desk", m: {type: "pick", workspace: desk.workspaces[0].id}});
+				yield* done(1);
+				// The palette's own command runs no desk command, so it logs nothing; a split after it
+				// shows the host read it.
+				app.send({type: "on", port: "desk", m: {type: "run", does: "palette.open"}});
+				app.send({type: "on", port: "desk", m: {type: "run", does: "tezgah.split"}});
+				yield* done(2);
+				yield* host.stop;
+				return lines
+					.map(fieldsOf)
+					.filter((f) => f.message === "did")
+					.map((f) => [f.does, JSON.parse(f.via ?? "null")]);
+			}),
+		);
+		expect(did).toEqual([
+			['tezgah."workspace --to 1"', {_tag: "click"}],
+			["tezgah.split", {_tag: "palette"}],
+		]);
 	});
 });

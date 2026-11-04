@@ -41,7 +41,8 @@ type FromPage = {type: "press"; id: number; key: string} | {type: "click"; tile:
 	| {type: "resize"; container: string; sizes: Record<string, number>}
 	| {type: "fold"; tile: TileId} | {type: "unfold"; node: string}
 	| {type: "area"; width: number; height: number}; // the workspace's size, so a line can fold
-type ToPage = {type: "keys"; prefix: string; table: {key: string; repeats: boolean}[]}
+	| {type: "run"; does: Does} // a command from the palette, by its word in the keys file
+type ToPage = {type: "keys"} & Keys // the prefix, every command's keys, ignore, and the file's state
 	| {type: "desk"; desk: Desk; takes: {all: boolean; keys: string[]}}
 	| {type: "answer"; id: number; took: boolean}
 	// Main's own: what it found on attach, or how the link is lost (src/reconnect.ts).
@@ -100,13 +101,13 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/reconnect.ts` | When the app attaches again, a tea machine above the link: `reconnectMachine`, Model `Reconnect`, Msg `ReconnectMsg`, Cmds `ReconnectCmd`. A link that ends is tried again after a wait (AWS's full jitter, 0.5 s doubling to 30 s), the same way as at the start; five minutes on it stops and waits for Try again. A host of another version is never tried again; once the person confirms, it and a host of another build are stopped and this build's is started (`restart` in `attach.ts`). `noteOf` is what the window says meanwhile. |
 | `src/link.ts` | The link's two message types (`Up`, `Down`) and its handshake, a tea machine: `linkMachine`, Model `Link`, Msg `LinkMsg`, Cmds `LinkCmd`. |
 | `src/wire.ts` | One link on one socket for either side: NDJSON framing (Effect's `Ndjson`), the handshake stepped on every line, `Unattached` when it does not come up. |
-| `src/host/` | The host process. `main.ts` is the entry (`dist/host.mjs`). `run.ts` makes the folder, and under the start lock (`lock.ts`) cleans a stale socket, listens and writes the pid; then it opens the ledger, history and desk. `serve.ts` (no platform) runs the desk and the tiles, and serves every client. `socket.ts` reaches a socket: live, absent or stale. `agents.ts` serves each agent's MCP bridge on `host/mcp` (see [An agent drives a program](#an-agent-drives-a-program)). `jev.ts` turns on Jev, for the tracker's duplicate hint, only when the home holds `jev.key`; a test's home never does, so no test spends. |
+| `src/host/` | The host process. `main.ts` is the entry (`dist/host.mjs`). `run.ts` makes the folder, and under the start lock (`lock.ts`) cleans a stale socket, listens and writes the pid; then it opens the ledger, history and desk. `serve.ts` (no platform) runs the desk and the tiles, and serves every client. `socket.ts` reaches a socket: live, absent or stale. `settings.ts` is the one reader of the settings folder: it watches it and reads `keybindings.toml` again on each save. `agents.ts` serves each agent's MCP bridge on `host/mcp` (see [An agent drives a program](#an-agent-drives-a-program)). `jev.ts` turns on Jev, for the tracker's duplicate hint, only when the home holds `jev.key`; a test's home never does, so no test spends. |
 | `src/cli.ts` | The command line: `connect`, `invite`, `members`, `move`, `post`, and `mcp`, the bridge an MCP client starts. |
 | `src/preload.ts` | Gives the page `send`, `onMessage` and `forget`, by port name, and nothing else. |
 | `src/bridge.ts` | Those names, as the page sees them, the port names it takes, and the IPC channel. |
 | `src/tiles.ts` | One tsh per tile, each in its own scope. It tells the desk (`TileNews`) when a run covers a tile, when it is over, the tile's jobs, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. `end` and `kill` do the same for one process of a line, by its pid: a window of the line closed. |
 | `src/tsh.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. Each screen shows to every page that asks, starting with a terminal reset, so a page that still holds the screen draws it once. It tells its tile its jobs (`src/tile-jobs.ts`): each job of the host's table it started that still runs, with when it began by the host's clock, and the last to end, with how (`done`, `failed`, `stopped`, read off its runs' ends). The table keeps neither. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`, and the tracker's `PullRequests`, which the host makes on the pipeline's `CodeHost` and the person's own `gh` login (`src/host/main.ts`). |
-| `src/desk/` | The desk, a tea machine (`desk.ts`): `deskMachine`, Model `Desk`, Msg `DeskMsg`, Cmds `DeskCmd`; `DeskSchema` sends it to a page, and `takenNow` says which keys it takes now. `hold.ts` is the page's key holder: `holdMachine`, Model `Hold`, Msg `HoldMsg`, Cmds `HoldCmd`. `keys.ts` is the prefix and its table. `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". A container runs `horizontal` or `vertical`, and nested containers alternate; any tile can fold into a strip, and a container whose tiles are all folded counts as folded (`isFolded`) ([fold, not tabs](../../docs/direction/fold-not-tabs.md)). `layout/line.ts` opens a tsh line's windows in place (`openLine`), folds them past `MIN_WINDOW`, and drops them from a kept desk (`quiet`). |
+| `src/desk/` | The desk, a tea machine (`desk.ts`): `deskMachine`, Model `Desk`, Msg `DeskMsg`, Cmds `DeskCmd`; `DeskSchema` sends it to a page, and `takenNow` says which keys it takes now. `hold.ts` is the page's key holder: `holdMachine`, Model `Hold`, Msg `HoldMsg`, Cmds `HoldCmd`. `keys.ts` is the shipped table and who owns a press (`keyOwner`); `keymap.ts` reads the keys file and lays it over that table (see [Your keys](#your-keys-keybindingstoml)). `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". A container runs `horizontal` or `vertical`, and nested containers alternate; any tile can fold into a strip, and a container whose tiles are all folded counts as folded (`isFolded`) ([fold, not tabs](../../docs/direction/fold-not-tabs.md)). `layout/line.ts` opens a tsh line's windows in place (`openLine`), folds them past `MIN_WINDOW`, and drops them from a kept desk (`quiet`). |
 | `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `cells.ts` lays text out in cells as ghostty-web does, from a table of its wasm's answers (`cells.table.ts`), `history.ts` keeps the history in a file, shared by every tile, `grid.ts` reads bytes back as rows for the tests. |
 | `src/messages.ts` | The seven message types as Effect Schemas, and their strict readers. |
 | `src/files.ts` | What the app's own scheme serves: one page, its script and one stylesheet, with a Content Security Policy. |
@@ -154,7 +155,8 @@ commands; programs' inputs join it later, from the same list that makes the agen
 Ghostty's own palette opens with Cmd-Shift-P and takes user entries (`command-palette-entry`);
 ours opens with Cmd-K, as Linear's does.
 
-- **The host decides keys.** It sends the page the Ctrl-B table, and with every desk the keys
+- **The host decides keys.** It sends the page the keys table, yours over the defaults (see
+  [Your keys](#your-keys-keybindingstoml)), and with every desk the keys
   the desk takes now. The page reads keys first, in the keydown capture phase. A key the desk
   takes goes to the host as a `press`, and neither ghostty-web nor a program's view sees it.
   Keys after it are held, in order, until the host answers (`hold.ts`), with no timer. An answer
@@ -176,6 +178,48 @@ ours opens with Cmd-K, as Linear's does.
   space. Focus is always on an open tile.
 - **Ctrl-B is readline's "back one character" too.** The prefix wins; the left arrow does the
   same, and Ctrl-B twice sends it on.
+
+### Your keys: keybindings.toml
+
+Every key above can be changed in `~/.fabrika/keybindings.toml`
+([keybindings are configurable](../../docs/direction/keybindings-are-configurable.md)). The file
+holds only what you changed; the rest stays as shipped. A save is heard at once, with no restart.
+A start on a home of its own (a test or an agent, `FABRIKA_HOME` set) reads `keybindings.toml` in
+that home instead, so a test never reads your real file.
+
+```toml
+prefix                   = "ctrl+a"                     # the prefix: a setting, not a command
+tezgah.zoom              = ["<prefix>z", "<prefix>m"]   # a key, or a list
+tezgah.split             = "cmd+d"                      # pressed alone, no prefix
+tezgah."split --to down" = "<prefix>-"                  # a word with spaces, quoted after the dot
+tezgah.fold              = []                           # no key: still in the palette and in tsh
+palette.open             = "cmd+k"
+ignore                   = ["cmd+w"]                    # eaten: nothing hears it
+```
+
+- **A command's name is its tsh word,** under the program that owns it: `tezgah.zoom` is `zoom`
+  in tsh, `tezgah."focus --to left"` is `focus --to left`. `keys.open` is `C-b ?`, and
+  `palette.open` is `Cmd-K`. The palette's line under each name shows the same word.
+- **Keys are spelled as VS Code, Zed and Ghostty spell them:** `ctrl+a`, `cmd+k`, `alt+x`,
+  `shift+tab`, and `mod+k`, which is Cmd on a Mac and Ctrl elsewhere. `<prefix>` before a key
+  means after the prefix: `<prefix>z`, `<prefix>N`, `<prefix>left`, `<prefix>space`,
+  `<prefix>ctrl+h`.
+- **Your row wins.** A default that had your key loses it and keeps its others.
+- **The close question's `y` stays `y`.** So do the palette's own keys inside it.
+- **A file that does not read is refused whole.** The app keeps the last keys that read, the
+  bottom line says `keybindings.toml line N: <why>` in words, marked in the stuck color, and
+  `C-b ?` says the same above its list. It refuses:
+  - a file that is not TOML, or a name that is not a command (`tezgah.zom is not a command`);
+  - a key it cannot read, or a word in `<>` other than `<prefix>`;
+  - a Mac system key, such as `cmd+q` (`the system's, so the app never hears it`), and `ctrl+c`,
+    which is the program's in a tile;
+  - the prefix on a command or on `ignore`, or `<prefix>` then the prefix, which sends the prefix on;
+  - one key on two commands, or on `ignore` and a command;
+  - `palette.open` after the prefix, since the palette is the window's and opens from anywhere.
+- **The host reads the file and sends the keys on** (`host/settings.ts`, `desk/keymap.ts`); a
+  page never reads a file. The host's log says `keys file=read`, `file=none` or
+  `file=refused line=N`, and a `did` line for every command run, with `does` (its word) and `via`
+  (the key, the palette, the tsh word or a click), so later we can see which keys people use.
 
 ### Every key is a tsh word too
 

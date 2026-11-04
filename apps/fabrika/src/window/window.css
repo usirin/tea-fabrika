@@ -878,6 +878,27 @@ main.program > [role="alert"] {
 	white-space: nowrap;
 }
 
+/* A keys file that did not read: a broken part of the app, so the warning color, and its words
+   say the same (WCAG 1.4.1). */
+.bottomline .broken {
+	color: var(--stuck);
+}
+
+/* A long reason would push the right side's items off a small window, so the reason alone gives way,
+   cut with an ellipsis: the line stays one line, and the full reason shows on hover and above the
+   keys list. The other items keep their width. Its shrink weight dwarfs the left's, so the reason
+   gives way before the left's tile name is cut. */
+.bottomline .right:has(> .broken) {
+	flex: 0 1000 auto;
+	min-width: 0;
+}
+
+.bottomline .right > .broken {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
 .bottomline .info,
 .bottomline .note {
 	color: var(--text-secondary);
@@ -1282,6 +1303,14 @@ main.program > [role="alert"] {
 	color: var(--text-muted);
 	font-size: var(--fs-small);
 	font-weight: 500;
+}
+
+/* A broken part the list is about, as a keys file that did not read: in words, and the warning
+   color only marks it (WCAG 1.4.1). */
+.pop .pop-note {
+	margin: 8px 16px 0;
+	color: var(--stuck);
+	font-size: var(--fs-small);
 }
 
 .pop .find {

@@ -35,6 +35,7 @@ import {
 	tilesOf,
 	whereIs,
 } from "./desk.ts";
+import {defaults, Does} from "./keymap.ts";
 import {BINDINGS} from "./keys.ts";
 import {checkTree, findTile, quiet, tiles, unfold} from "./layout/index.ts";
 
@@ -132,7 +133,11 @@ const table: MsgArbitraryTable<Msg> = {
 		),
 	}),
 	pick: arbRecordMsg("pick", {workspace: fc.constantFrom("w1", "w2", "w3", "w9")}),
-	run: arbRecordMsg("run", {key: fc.constantFrom(...after, "1", "2", "a", "?", "q")}),
+	// The palette runs a command by its word, any the code lists, bound to a key or not.
+	run: arbRecordMsg("run", {does: fc.constantFrom(...Does.literals)}),
+	// The keys file saved: the defaults again, so the lists still press C-b. Other tables are
+	// keymap.laws.test.ts's.
+	keys: arbRecordMsg("keys", {keys: fc.constant(defaults)}),
 	show_ok: fc.constant(show.ok(showing, null, 0)),
 	show_err: failed(show.errType, showing),
 	open_ok: fc.constant(open.ok(opening, null, 0)),
@@ -602,13 +607,13 @@ describe("the desk's laws", () => {
 			forgetsToOpen: [opensAndStops.name, splitOpens.name],
 			closesTwice: [closesOnce.name],
 			// An id given twice makes a split that does not split, and a kept desk that does not read.
-			// Since the typed words (seed 1's lists changed), a tile with a twin id that ended stays too.
+			// The ended-tile law caught it too, by chance, until the keys Msgs (run, keys) changed which
+			// lists seed 1 makes; deafToEnded catches that law on any list.
 			mintsTwice: [
 				whole.name,
 				opensAndStops.name,
 				freshIds.name,
 				savesChanges.name,
-				endedGoes.name,
 				splitOpens.name,
 				comesBack.name,
 			],

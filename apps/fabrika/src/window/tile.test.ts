@@ -3,6 +3,7 @@ import {join} from "node:path";
 import {type ComponentProps, createElement, isValidElement, type ReactNode} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
+import {defaults} from "../desk/keymap.ts";
 import {
 	createContainer,
 	createTile,
@@ -52,6 +53,7 @@ const propsOf = (
 	zoomed: false,
 	folds: true,
 	tickets: TICKETS,
+	keys: defaults,
 	toHost,
 	children: createElement("div", {className: "body"}),
 	...over,
