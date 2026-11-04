@@ -1,18 +1,21 @@
 import {monitorEventLoopDelay} from "node:perf_hooks";
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
 import {keepJobs, layerRecordTraces, openJobs, stepsInto, writerText} from "@kampus/fabrika-old";
+import {RestartRefused} from "@kampus/fabrika-old/mcp";
 import {recordTracing} from "@kampus/fabrika-old/otel";
 import {sqliteRecords} from "@kampus/fabrika-old/records";
 import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {Author} from "@tea-fabrika/tracker";
 import {Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope, Stream} from "effect";
 import {SocketServer} from "effect/socket";
+import {BUILD} from "../build-id.ts";
 import {decodeKeys} from "../desk/keymap.ts";
 import {fileHistory, sharedHistory} from "../editor/history.ts";
 import {agentSessions} from "./agent-session.ts";
 import {connectionOf, hostLedger} from "./connection.ts";
 import {holdLock} from "./lock.ts";
 import {logSteps, sampleLag} from "./log.ts";
+import {leaveNote, takeNote} from "./restart.ts";
 import {serve} from "./serve.ts";
 import {settingsFile} from "./settings.ts";
 import {pathsOf, reach} from "./socket.ts";
@@ -30,7 +33,13 @@ import {pathsOf, reach} from "./socket.ts";
 //   // ledger server (host/agent-session.ts); the pid
 //   // written; the lock let go of; the desk read back from desk.json, the asks' marks from
 //   // asks.json; the thread's lag read once a second, and each lane step's begin and end said
-//   // (log.ts); until the scope closes
+//   // (log.ts); until the scope closes, or an agent's `restart` is answered (host/serve.ts):
+//   // then it ends of itself, with a success, as a SIGTERM ends it
+//
+// Each start takes the note a restart left (host/restart.ts) and logs its `host_began` line:
+//
+//   level=INFO message=host_began build=3f9a0c21
+//   level=INFO message=host_began build=3f9a0c21 after=restart "by=agent:claude for:owner" "why=pick up the new build"
 //
 // In the home, beside the host's own folder (host/socket.ts):
 //
@@ -44,6 +53,7 @@ import {pathsOf, reach} from "./socket.ts";
 //   history              the line editor's history, one for every tile
 //   ledger.sqlite        the ledger, when the home is connected to no server
 //   ledger.json          the ledger server it is connected to, if any (connection.ts)
+//   host/restart.json    who restarted the host before, why and when, read once (restart.ts)
 //
 // In the settings folder, `~/.fabrika` for the owner's start and the home for any other
 // (host/settings.ts): keybindings.toml, the keys the person changed (desk/keymap.ts), heard on
@@ -80,6 +90,8 @@ export const runHost = (options: {
 }) =>
 	Effect.gen(function* () {
 		const {home, pid, ours, build, settings = home, mac = false} = options;
+		/** The build this host names: `BUILD`, but in a test of an older host. */
+		const named = build === undefined ? BUILD : build;
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const paths = yield* pathsOf(home);
@@ -141,18 +153,38 @@ export const runHost = (options: {
 			dir: at("records"),
 			by: writerText(Context.get(ledger, Author)),
 		});
-		// One job table for the host process, for every tile's tsh, open until the host stops.
-		const jobs = keepJobs(
-			yield* openJobs(fileStorage(at("storage", "jobs"), stepsInto(records))),
-			records,
-			"laptop",
-		);
+		// The note a restart left (host/restart.ts), taken now that this host is the one that
+		// listens: a host that stepped aside above never reads it.
+		const before = yield* takeNote(paths);
+		// One job table for the host process, for every tile's tsh, open until the host stops. After
+		// a restart, each tile's tsh names who restarted it beside its jobs from an earlier tsh.
+		const jobs = {
+			...keepJobs(
+				yield* openJobs(fileStorage(at("storage", "jobs"), stepsInto(records))),
+				records,
+				"laptop",
+			),
+			...(before === null ? {} : {restarted: {by: before.by}}),
+		};
 		// The keys file, read now and again on each save, by the one reader of the settings folder.
 		const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 		const keys = settingsFile(settings, "keybindings.toml", (text) => decodeKeys(text, mac)).pipe(
 			Stream.provideContext(platform),
 		);
 		yield* Effect.logInfo(`fabrika host: listening, pid ${pid}`);
+		// Every start's line: its build, and after a restart who restarted the host before it, and why.
+		yield* Effect.logInfo("host_began").pipe(
+			Effect.annotateLogs({
+				build: named ?? "none",
+				...(before === null
+					? {}
+					: {
+							after: "restart",
+							by: before.by,
+							...(before.why === null ? {} : {why: before.why}),
+						}),
+			}),
+		);
 		// The thread's lag, one second at a time: a lag line in the log when it is starved (log.ts).
 		const delay = monitorEventLoopDelay({resolution: 10});
 		delay.enable();
@@ -166,8 +198,21 @@ export const runHost = (options: {
 			history,
 			keys,
 			ours,
-			build,
+			build: named,
 			agents: {server: agents},
+			restarts: {
+				before,
+				leave: (note) =>
+					leaveNote(paths, note).pipe(
+						Effect.provideContext(platform),
+						Effect.mapError(
+							(e) =>
+								new RestartRefused({
+									why: `the host could not leave its note for the next host: ${e.message}`,
+								}),
+						),
+					),
+			},
 			jobs,
 			pid,
 			ledger: Option.isNone(connection)

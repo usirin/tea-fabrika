@@ -63,6 +63,13 @@ export interface JobsOnHost {
 	 * `openJobs` answers `null`, not known; the app hands each tile's tsh its writer.
 	 */
 	readonly by: string | null;
+	/**
+	 * Who restarted the host that left these jobs, as a writer's text, when it was restarted on
+	 * purpose (an agent's `restart`, or the person's from the window): tsh names them beside the
+	 * jobs from an earlier tsh, so a restart never looks like a crash. Left out: the host started
+	 * fresh, or after a crash, or `openJobs`, which knows nothing of it.
+	 */
+	readonly restarted?: {readonly by: string} | undefined;
 }
 
 /** The host's jobs. Whoever runs a host opens them (`openJobs`) and hands them to tsh. */

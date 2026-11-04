@@ -41,6 +41,7 @@ import {
 	type Part,
 	prefixLine,
 	questionWord,
+	restartedWord,
 	type Shapes,
 	syncWord,
 	type TicketsShown,
@@ -699,6 +700,7 @@ function HostLines(props: {
 	readonly now: number;
 }): ReactNode {
 	const {link, first, host} = props;
+	const restarted = host === null ? null : restartedWord(host, props.now);
 	const restart = (
 		<Do onClick={() => props.toApp({type: "restart"})}>Stop the old host and start this one</Do>
 	);
@@ -718,6 +720,12 @@ function HostLines(props: {
 								</>
 							)}
 							.
+						</p>
+					)}
+					{restarted !== null && (
+						<p className="pop-text">
+							{sentence(restarted)}
+							{/[.!?]$/.test(restarted) ? "" : "."}
 						</p>
 					)}
 					{props.desk !== null && <p className="pop-text">{holdsWord(props.desk)}</p>}

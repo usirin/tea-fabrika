@@ -5,6 +5,13 @@ import {viewOf} from "../program/program.ts";
 import {memoryStorage} from "../program/storage.ts";
 import type {ProgramList} from "../shell/programs.ts";
 import {JOB_TOOL, type JobAnswer, LAST_MAX, lastLines} from "./job.ts";
+import {
+	RESTART,
+	RESTART_TOOL,
+	type RestartAnswer,
+	type RestartAsk,
+	type RestartRefused,
+} from "./restart.ts";
 import {STOP_TOOL, type StopAnswer, type StopAsk, type StopRefused} from "./stop.ts";
 import {type Call, callOf, RUNS, type Tool, toolNamesOf, toolsOf} from "./tools.ts";
 
@@ -39,6 +46,12 @@ import {type Call, callOf, RUNS, type Tool, toolNamesOf, toolsOf} from "./tools.
 //   // {kind: "done", data: {_tag: "stopped", job: {n: 1, ..., state: {_tag: "ended", how: "stopped"}, lines: [...]}}}
 //   yield* drive.call("stop", {n: 1})
 //   // {kind: "refused", why: "stop does not fit: ... [\"why\"]"}: the host is never asked
+//
+// And its restart (`restart`): then the `restart` tool is listed after `stop` (./restart.ts), and a
+// call that fits hands the host only its why. The host answers, then ends, or says why not.
+//
+//   yield* drive.call("restart", {why: "pick up the new build"})
+//   // {kind: "done", data: {_tag: "restarting", detached: [2]}}
 //
 // A read-only door (`readOnly`) lists only the tools that write nothing (MCP's `readOnlyHint`). A
 // call is read against the tools listed, so a write tool called anyway is refused as any tool that
@@ -101,6 +114,10 @@ export const driveFor = (options: {
 	readonly job?: ((n: number) => JobAnswer | null) | undefined;
 	/** Stop job n of the host's table, for this agent and why (./stop.ts); or why the host would not. */
 	readonly stop?: ((ask: StopAsk) => Effect.Effect<StopAnswer, StopRefused>) | undefined;
+	/** Restart the host, for this agent and why (./restart.ts); or why the host would not. */
+	readonly restart?:
+		| ((ask: RestartAsk) => Effect.Effect<RestartAnswer, RestartRefused>)
+		| undefined;
 	/**
 	 * Only the tools that write nothing are listed, and only a listed tool is called. With a why,
 	 * `runs` says it, so the agent knows why it cannot write.
@@ -108,12 +125,13 @@ export const driveFor = (options: {
 	readonly readOnly?: boolean | {readonly why: string} | undefined;
 }) =>
 	Effect.gen(function* () {
-		const {list, tiles, job, stop} = options;
+		const {list, tiles, job, stop, restart} = options;
 		const readOnly = options.readOnly ?? false;
 		/** The host's own tools, after `runs`: each one the host hands. */
 		const host: readonly Tool[] = [
 			...(job === undefined ? [] : [JOB_TOOL]),
 			...(stop === undefined ? [] : [STOP_TOOL]),
+			...(restart === undefined ? [] : [RESTART_TOOL]),
 		];
 		const tools = toolsOf(list)
 			.flatMap((tool) => (tool.name === RUNS ? [tool, ...host] : [tool]))
@@ -188,6 +206,16 @@ export const driveFor = (options: {
 									: answer,
 						})),
 						Effect.catchTag("StopRefused", ({why}) =>
+							Effect.succeed<Answer>({kind: "refused", why}),
+						),
+					);
+				case "restart":
+					// Listed only when the host hands its restart, and only a listed tool is read.
+					if (restart === undefined)
+						return Effect.succeed({kind: "refused", why: `there is no tool ${RESTART}`});
+					return restart(c.ask).pipe(
+						Effect.map((data): Answer => ({kind: "done", data})),
+						Effect.catchTag("RestartRefused", ({why}) =>
 							Effect.succeed<Answer>({kind: "refused", why}),
 						),
 					);

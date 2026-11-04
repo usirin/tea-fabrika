@@ -148,9 +148,11 @@ type Link = Data.TaggedEnum<{
 	Reconnecting: {readonly streak: TimedRetryState};
 	/**
 	 * A new host said its handshake and was sent the client's `initialize` again. Until it answers,
-	 * the client's lines wait in `queued`.
+	 * the client's lines wait in `queued`. It is still a try of `streak`: a host that ends before it
+	 * answers is one more failure, so a build that crashes in its start never begins a fresh streak
+	 * (tracker 220).
 	 */
-	Replaying: {readonly conn: Conn; readonly queued: unknown[]};
+	Replaying: {readonly conn: Conn; readonly queued: unknown[]; readonly streak: TimedRetryState};
 }>;
 const Link = Data.taggedEnum<Link>();
 
@@ -280,7 +282,7 @@ export const bridge = (
 					Queue.offerUnsafe(toClient, LIST_CHANGED);
 					return;
 				}
-				link = Link.Replaying({conn, queued: []});
+				link = Link.Replaying({conn, queued: [], streak: link.streak});
 				Queue.offerUnsafe(conn.toHost, kept.initialize.line);
 			});
 
@@ -310,8 +312,10 @@ export const bridge = (
 
 		/**
 		 * The socket ended, `why`: every call it held and every line waiting is answered, and the
-		 * streak of failed tries goes on, or begins. The first host, gone before its handshake, ends
-		 * the bridge, as it always did: there was never a host to outlive.
+		 * streak of failed tries goes on, or begins. It begins only after a host that was `Open`: one
+		 * that went while `Replaying` never answered the replayed initialize, so its try failed too.
+		 * The first host, gone before its handshake, ends the bridge, as it always did: there was
+		 * never a host to outlive.
 		 */
 		const ended = (why: string, now: number): Effect.Effect<TimedRetryState, BridgeStopped> => {
 			switch (link._tag) {
@@ -333,7 +337,9 @@ export const bridge = (
 						}
 					return Effect.logInfo("host_lost").pipe(
 						Effect.annotateLogs({agent, why}),
-						Effect.as(recordFailure(initRetry(), why, now)),
+						Effect.as(
+							recordFailure(link._tag === "Replaying" ? link.streak : initRetry(), why, now),
+						),
 					);
 				}
 			}

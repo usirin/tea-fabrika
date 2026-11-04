@@ -129,17 +129,19 @@ export const tsh = defineProgram({
 		Effect.gen(function* () {
 			const list = yield* Programs;
 			// The host's jobs: its table, opened by the host, and the storage their runs keep in.
-			const {table, storage, kept, owner, by} = yield* HostJobs;
+			const {table, storage, kept, owner, by, restarted} = yield* HostJobs;
 			const scope = yield* Effect.scope;
 			if (!kept) yield* send("printed", {to: "err", text: TABLE_REFUSED});
 			yield* watch("jobs", TABLE.key, table);
 			// What the host found from before it started runs nowhere now: it waits to be attached.
-			// Only this tsh's own are said; `jobs` lists every one.
+			// Only this tsh's own are said; `jobs` lists every one. A host restarted on purpose says
+			// who restarted it, as a stop says who stopped a job.
 			const waiting = earlierFor(table.getState(), owner);
+			const after = restarted === undefined ? "" : `, restarted by ${restarted.by}`;
 			if (waiting.length > 0)
 				yield* send("printed", {
 					to: "err",
-					text: `tsh: ${waiting.length} job${waiting.length === 1 ? "" : "s"} from an earlier tsh, not running: ${waiting.map((j) => `%${j.n}`).join(" ")}. attach %n starts one again; jobs lists them.`,
+					text: `tsh: ${waiting.length} job${waiting.length === 1 ? "" : "s"} from an earlier tsh${after}, not running: ${waiting.map((j) => `%${j.n}`).join(" ")}. attach %n starts one again; jobs lists them.`,
 				});
 
 			// Everything tsh says goes through one line, so a line's output is never passed by its `ready`.
