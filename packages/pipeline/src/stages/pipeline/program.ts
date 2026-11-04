@@ -20,6 +20,7 @@ import {hashOf, sha256, textOf} from "../../tickets/approval.ts";
 import {
 	type Checked,
 	type CodeFact,
+	crashCause,
 	type Entry,
 	FAILED_MOST,
 	factsOf,
@@ -1546,11 +1547,6 @@ const prHeadNow = (n: number) =>
 	}).pipe(Effect.orElseSucceed((): string | null => null));
 
 const laneInterpret = ({send, machines}: Stages) => {
-	/**
-	 * A crash's first lines, by ticket, from the step's run to the release that stops on it: the
-	 * `stopped` fact keeps them (self-fix PR 11b). The lane's state never holds the text.
-	 */
-	const crashes = new Map<number, string>();
 	/** A service that waits says so on the lane's tile, what it waits on (../../wait.ts). */
 	const onTile =
 		(prefix = "") =>
@@ -1584,19 +1580,23 @@ const laneInterpret = ({send, machines}: Stages) => {
 			Effect.gen(function* () {
 				// First: it never fails, and a kill before the release comes back here to finish both.
 				yield* leaveBehind(cmd.number, cmd.outcome);
-				// A stop right after a step's end says why on the ticket, a crash's cause with it.
+				// A stop right after a step's end says why on the ticket, a crash's cause with it, copied
+				// from the crashed try's `ended`: the log keeps it, so a kill before this loses nothing.
 				const {stopped} = cmd;
 				if (stopped !== undefined) {
-					const crashed = stopped.outcome.kind === "stuck" && stopped.outcome.why === "run_failed";
-					const why = crashed ? crashes.get(cmd.number) : undefined;
-					yield* (yield* Tickets)
+					const tickets = yield* Tickets;
+					// A read the ledger refuses still writes the stop, only without its cause.
+					const why = yield* tickets.read(cmd.number).pipe(
+						Effect.map((ticket) => crashCause(ticket.timeline, stopped.step)),
+						Effect.orElseSucceed(() => null),
+					);
+					yield* tickets
 						.write(cmd.number, `${cmd.intent}/stopped`, {
 							...stopped,
-							...(why === undefined ? {} : {why}),
+							...(why === null ? {} : {why}),
 						})
 						.pipe(Effect.ignore);
 				}
-				crashes.delete(cmd.number);
 				const {repo} = yield* (yield* LaneWork).origin;
 				yield* release(`${repo}#${cmd.number}` as TicketId, cmd.lane);
 				return "released" as const;
@@ -1802,7 +1802,11 @@ const laneInterpret = ({send, machines}: Stages) => {
 				const to = yield* Clock.currentTimeMillis;
 				const keyed = yield* Ref.get(keying);
 				// `carry`: what the step left, the change the lane lays on its carry, for the fold (./restart.ts).
-				const write = (outcome: Outcome, more: Pick<BodyEnd, "carry" | "failed" | "trusted">) =>
+				// `why`: a crash's cause, on the crashed try's own end, the one place it exists (self-fix PR 11b).
+				const write = (
+					outcome: Outcome,
+					more: Pick<BodyEnd, "carry" | "failed" | "trusted"> & {readonly why?: string},
+				) =>
 					tickets.write(cmd.number, `${run}/ended`, {
 						type: "ended",
 						run,
@@ -1824,6 +1828,7 @@ const laneInterpret = ({send, machines}: Stages) => {
 						...(more.trusted === undefined ? {} : {trusted: more.trusted}),
 						...(keyed === null ? {} : keyed),
 						carry: more.carry,
+						...(more.why === undefined ? {} : {why: more.why}),
 					} as CodeFact);
 				// "run a step" ends tagged with what its `ended` says, so its spans tie to the run without
 				// matching times. Dollars only when known: a list price, else what claude billed.
@@ -1858,7 +1863,6 @@ const laneInterpret = ({send, machines}: Stages) => {
 								: [`${picked.model}, ${spent.input + spent.output} tokens, ${money(listUsd)}`]),
 						].join("  "),
 					);
-					crashes.delete(cmd.number);
 					// A stuck the lane ends on says so. What comes before a question says what the step found,
 					// where the question can point at it.
 					const talk = endTalk(cmd.step, outcome, cmd.round, problems);
@@ -1876,10 +1880,11 @@ const laneInterpret = ({send, machines}: Stages) => {
 				const stops = String(exit.cause).slice(0, 300);
 				yield* sessionLeft.pipe(Effect.ignore);
 				const broke = factOutcome({kind: "stuck", why: "run_failed"});
-				yield* write(broke, {carry: {}}).pipe(Effect.ignore);
+				yield* write(broke, {carry: {}, ...(stops.trim() === "" ? {} : {why: stops})}).pipe(
+					Effect.ignore,
+				);
 				yield* tagged(broke);
 				yield* said(`could not run: ${stops}`);
-				crashes.set(cmd.number, stops);
 				return yield* Effect.fail(unknown);
 			}).pipe(
 				onTile(`${cmd.step}: `),

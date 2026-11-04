@@ -286,6 +286,12 @@ export const CodeFact = Schema.Union([
 		 * this one, so the fold decodes it. Left out: an end written before this key, or a run that broke.
 		 */
 		carry: Schema.optionalKey(Schema.Unknown),
+		/**
+		 * A crashed try's cause, its first lines (self-fix PR 11b): it exists only when the try crashes,
+		 * so it is kept here, on that try's own end. The lane's `stopped` fact copies it from here. Left
+		 * out: a try that did not crash, or an end written before this key.
+		 */
+		why: Schema.optionalKey(Said),
 	}),
 	/**
 	 * Code ran `[build] checks` at `head`, after a build: what it found there. `pr`: the pull request
@@ -376,16 +382,16 @@ export const CodeFact = Schema.Union([
 		why: Schema.Literals(["same_head", "replayed", "formatted", "glanced"]),
 	}),
 	/**
-	 * The lane stopped after a step (self-fix PR 11b): the step, the step's own outcome
-	 * (`stuck:tests_red`, never only the lane's `step_stuck`), the lane's stop, and where the same line
-	 * goes on. `why`: a crash's first lines, which exist only when it happens. Left out when nothing
-	 * crashed. Written once, as the lane lets the ticket go.
+	 * The lane stopped after a step (self-fix PR 11b): the `step`, the step's own `outcome`
+	 * (`stuck:tests_red`, never only the lane's `step_stuck`), the lane's stop it ended `as`, and where
+	 * the same line goes on `from`. `why`: a crash's first lines, copied from the crashed try's `ended`.
+	 * Left out when nothing crashed. Written once, as the lane lets the ticket go.
 	 */
 	Schema.Struct({
 		type: Schema.Literal("stopped"),
-		stage: Stage,
+		step: Stage,
 		outcome: Outcome,
-		lane: Outcome,
+		as: Outcome,
 		from: Resume,
 		why: Schema.optionalKey(Said),
 	}),
@@ -597,6 +603,15 @@ export const liveRun = (timeline: readonly Entry[]): string | null => {
 	if (last === undefined) return null;
 	return factsOf(timeline, "ended").some((e) => e.run === last.run) ? null : last.run;
 };
+
+/**
+ * A crash's cause for a stop after `stage`: the `why` on that stage's last `ended`, where the crashed
+ * try wrote it (self-fix PR 11b). `null`: its last try did not crash, or ended before the key. Pure.
+ *
+ *   crashCause([.., ended plan {why: "crash 1"}, ended plan {why: "crash 2"}], "plan") // "crash 2"
+ */
+export const crashCause = (timeline: readonly Entry[], stage: string): string | null =>
+	factsOf(timeline, "ended").findLast((e) => e.stage === stage)?.why ?? null;
 
 /** A comment as its writer gives it: never with `during`, which only code fills in. */
 export type Comment = Omit<FactOf<"commented">, "during">;

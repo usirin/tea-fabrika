@@ -49,10 +49,14 @@ import type {
 
 // ---------------------------------------------------------------- the errors
 
-/** No answer, a 500 or a timeout. Whether a write landed is unknown: send it again with its id. */
+/**
+ * No answer, a 500 or a timeout. Whether a write landed is unknown: send it again with its id.
+ * Over HTTP, an answer that is not a 2xx keeps its `status` (the door's own, when it refused a new
+ * session), so a caller can tell slowness (none, 408, 429, 5xx) from a refusal. No answer: no status.
+ */
 export class LedgerUnreachable extends Schema.TaggedError<LedgerUnreachable>()(
 	"LedgerUnreachable",
-	{method: Schema.String, message: Schema.String},
+	{method: Schema.String, message: Schema.String, status: Schema.optionalKey(Schema.Number)},
 ) {}
 /** EventStoreDB's WrongExpectedVersion: the stream ends at `rev`, not where the write said. */
 export class Stale extends Schema.TaggedError<Stale>()("Stale", {

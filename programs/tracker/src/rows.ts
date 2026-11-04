@@ -122,8 +122,8 @@ const saidOf = (fact: Fact, timeline: readonly Entry[]): Said => {
 		// The step's own outcome first, the lane's stop second: `step_stuck` alone says nothing (self-fix PR 11b).
 		case "stopped":
 			return said(
-				`stopped after ${fact.stage}: ${endedAs(fact.outcome, "done")}`,
-				`the lane: ${endedAs(fact.lane, "done")}, ${
+				`stopped after ${fact.step}: ${endedAs(fact.outcome, "done")}`,
+				`the lane: ${endedAs(fact.as, "done")}, ${
 					fact.from._tag === "run"
 						? `goes on at ${fact.from.step}`
 						: `goes on by asking ${words(fact.from.for)} about ${fact.from.step}`

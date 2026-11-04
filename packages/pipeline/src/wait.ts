@@ -7,7 +7,7 @@ import type {Service} from "./stages/pipeline/routes.ts";
 // default retry policy, at one point in the stack (AWS). A refusal reaches the caller at once, as it
 // was, and the lane stops with its real why.
 //
-//   waitOut(ledger.readStream(inbox), (e) => e._tag === "LedgerUnreachable", "tickets")
+//   waitOut(ledger.readStream(inbox), ledgerBusy, "tickets")
 //   // tries at 0 s, 1 s, 3 s, 7 s, ... 127 s, 227 s, ... until the ledger answers
 //
 // Nothing in the lane or a step tries again what a service waited out (P8).
@@ -37,6 +37,26 @@ export const OnWait = Context.Reference<(line: string) => Effect.Effect<void>>("
 });
 
 /**
+ * A ledger error worth waiting out: no answer at all (no `status`), or an answer that says "busy",
+ * a 408, a 429 or a 5xx. A refusal (a 400, a 401 after a failed renew, a 403, a 404, the door's
+ * refusal) is not, and reaches the caller at once with the ledger's own words.
+ */
+export const ledgerBusy = (e: {readonly _tag: string; readonly status?: number}): boolean =>
+	e._tag === "LedgerUnreachable" &&
+	(e.status === undefined || e.status === 408 || e.status === 429 || e.status >= 500);
+
+/** What a try met, in the tile's words: the service's own text when it answered, else `no answer`. */
+const met = (error: unknown): string =>
+	typeof error === "object" &&
+	error !== null &&
+	"status" in error &&
+	typeof error.status === "number" &&
+	"message" in error &&
+	typeof error.message === "string"
+		? error.message
+		: "no answer";
+
+/**
  * `effect`, tried again on each error `isTransient` names, on the one schedule, until it answers. Any
  * other error reaches the caller at once. `on`: the service that waits, for the words its tile says.
  */
@@ -48,14 +68,17 @@ export const waitOut = <A, E, R>(
 	Effect.gen(function* () {
 		const heard = yield* OnWait;
 		const what = on === undefined ? "the service" : WAITS[on];
-		return yield* Effect.retry(effect, {
-			while: isTransient,
-			schedule: GAPS.pipe(
-				Schedule.tap(({duration, attempt}) =>
+		// The schedule judges each error itself, so the tile hears only a try that is really waited out.
+		return yield* Effect.retry(
+			effect,
+			GAPS.pipe(
+				Schedule.setInputType<E>(),
+				Schedule.while(({input}) => isTransient(input)),
+				Schedule.tap(({duration, attempt, input}) =>
 					heard(
-						`waits on ${what}: no answer on try ${attempt}, trying again in ${Duration.format(duration)}`,
+						`waits on ${what}: ${met(input)} on try ${attempt}, trying again in ${Duration.format(duration)}`,
 					),
 				),
 			),
-		});
+		);
 	});

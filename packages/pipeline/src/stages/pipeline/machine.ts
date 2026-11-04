@@ -307,9 +307,9 @@ export type Resume = typeof Resume.Type;
  */
 const StopFact = Schema.Struct({
 	type: Schema.Literal("stopped"),
-	stage: LaneStep,
+	step: LaneStep,
 	outcome: Outcome,
-	lane: LaneOutcome,
+	as: LaneOutcome,
 	from: Resume,
 });
 export type StopFact = typeof StopFact.Type;
@@ -1214,17 +1214,11 @@ const releasing = (s: Held, close: End | Stop, stopped?: StopFact): Step_ => {
  */
 const sayingWhy = (step: LaneStep, outcome: Outcome, [next, cmds]: Step_): Step_ => {
 	if (next.phase !== "releasing" || !("at" in next)) return [next, cmds];
-	const {outcome: lane, said, at} = next;
+	const {outcome: as, said, at} = next;
 	return releasing(
 		heldOf(next),
-		{outcome: lane, said, at},
-		{
-			type: "stopped",
-			stage: step,
-			outcome,
-			lane,
-			from: at,
-		},
+		{outcome: as, said, at},
+		{type: "stopped", step, outcome, as, from: at},
 	);
 };
 
