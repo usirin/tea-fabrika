@@ -3,6 +3,7 @@ import {memoryService} from "@kampus/fabrika-old/memory";
 import {Clock, Effect, Fiber, Layer} from "effect";
 import {TestClock} from "effect/testing";
 import {describe, expect, it} from "vitest";
+import {OnWait} from "../wait.ts";
 import type {Check, CodeFact, PrFact} from "./ticket.ts";
 import {
 	memoryTickets,
@@ -273,8 +274,11 @@ describe("Tickets", () => {
 // after, then 2, then 4, with no cap. Only a write with its own key is sent again. A transient error
 // never reaches the lane. A refusal does, at once, with its real why.
 
-/** What one call of the ledger meets, in turn, before it answers: no answer, or the ledger's 404. */
-type Meets = "unreachable" | "unknown_name";
+/**
+ * What one call of the ledger meets, in turn, before it answers: no answer, the ledger's own 404, or
+ * an HTTP answer that is not a 2xx, as the ledger over HTTP gives it: its status and its text.
+ */
+type Meets = "unreachable" | "unknown_name" | {readonly status: number; readonly says: string};
 
 /**
  * Ticket 1, filed, on a ledger whose `readStream` and `send` meet `meets[method]` in turn, then answer
@@ -298,13 +302,18 @@ const flaky = (meets: Partial<Record<"readStream" | "send", readonly Meets[]>>) 
 			});
 		const silent = (method: "readStream" | "send") =>
 			new LedgerUnreachable({method, message: "no answer"});
+		/** The ledger over HTTP answered, but not with a 2xx: `LedgerUnreachable` with its status (http.ts). */
+		const answered = (method: "readStream" | "send", meet: {status: number; says: string}) =>
+			new LedgerUnreachable({method, message: meet.says, status: meet.status});
 		const wrapped: Ledger["Service"] = {
 			...ledger,
 			readStream: (stream, fromRev, limit) =>
 				Effect.flatMap(meeting("readStream"), (meet) =>
 					meet === "unreachable"
 						? Effect.fail(silent("readStream"))
-						: ledger.readStream(stream, fromRev, limit),
+						: typeof meet === "object"
+							? Effect.fail(answered("readStream", meet))
+							: ledger.readStream(stream, fromRev, limit),
 				),
 			// The 404 is the ledger's own error, which only `send` declares.
 			send: (inbox, id, event, fence) =>
@@ -313,7 +322,9 @@ const flaky = (meets: Partial<Record<"readStream" | "send", readonly Meets[]>>) 
 						? Effect.fail(silent("send"))
 						: meet === "unknown_name"
 							? Effect.fail(new UnknownName({stream: inbox}))
-							: ledger.send(inbox, id, event, fence),
+							: typeof meet === "object"
+								? Effect.fail(answered("send", meet))
+								: ledger.send(inbox, id, event, fence),
 				),
 		};
 		return {
@@ -325,27 +336,34 @@ const flaky = (meets: Partial<Record<"readStream" | "send", readonly Meets[]>>) 
 
 /**
  * `program` on Tickets over `flaky(meets)`, under the TestClock, a second of virtual time at a time
- * until it ends: how it ended, the clock time of each ledger call, and the ticket's rows after.
+ * until it ends: how it ended, the clock time of each ledger call, the ticket's rows after, and each
+ * line the wait said (`OnWait`). A program still waiting after 1,000 virtual seconds is stopped, and
+ * its result is `{_tag: "StillWaiting"}`.
  */
-const waited = <A>(
+const waited = <A, E>(
 	meets: Partial<Record<"readStream" | "send", readonly Meets[]>>,
-	program: Effect.Effect<A, unknown, Tickets>,
+	program: Effect.Effect<A, E, Tickets>,
 ) =>
 	Effect.gen(function* () {
 		const {ledger, times, layer} = yield* flaky(meets);
+		const heard: string[] = [];
 		let over = false;
 		const fiber = yield* Effect.forkChild(
-			Effect.result(program.pipe(Effect.provide(layer))).pipe(
-				Effect.ensuring(Effect.sync(() => void (over = true))),
-			),
+			Effect.result(
+				program.pipe(
+					Effect.provide(layer),
+					Effect.provideService(OnWait, (line) => Effect.sync(() => void heard.push(line))),
+				),
+			).pipe(Effect.ensuring(Effect.sync(() => void (over = true)))),
 		);
 		for (let s = 0; !over && s < 1_000; s++) {
 			yield* TestClock.adjust("1 second");
 			for (let k = 0; k < 5; k++) yield* Effect.yieldNow;
 		}
-		const result = yield* Fiber.join(fiber);
+		if (!over) yield* Fiber.interrupt(fiber);
+		const result = over ? yield* Fiber.join(fiber) : ({_tag: "StillWaiting"} as const);
 		const rows = yield* ledger.readStream(streams("tracker/ticket/1").inbox);
-		return {result, times, kinds: rows.map((r) => r.kind)};
+		return {result, times, heard, kinds: rows.map((r) => r.kind)};
 	}).pipe(Effect.provide(TestClock.layer()), Effect.runPromise);
 
 const gapsIn = (times: readonly number[]) => times.slice(1).map((t, i) => t - (times[i] ?? 0));
@@ -388,5 +406,71 @@ describe("Tickets, on a ledger that does not answer", () => {
 		);
 		expect(seen.result).toMatchObject({_tag: "Failure", failure: {why: "no_ticket"}});
 		expect(seen.times.readStream).toHaveLength(3);
+	});
+});
+
+// Self-fix PR 11b, round 2 (the review's first must-fix). The ledger over HTTP turns every answer that
+// is not a 2xx into `LedgerUnreachable` (packages/fabrika/src/host/http.ts), with the answer's status
+// beside its text. A refusal is not slowness: a 400, a 401 after a renew that failed, a 403, a 404, a
+// door that gave no new session. Each fails at once with the ledger's own words. Only no answer at
+// all (a timeout, a dropped connection), a 408, a 429 and a 5xx are waited out.
+describe("Tickets, on a ledger that answers with a refusal", () => {
+	const REFUSALS = [
+		{status: 400, says: "the ledger answered 400: bad arguments"},
+		{status: 401, says: "the ledger answered 401: the session ended"},
+		{status: 401, says: "the door gave no new session (401): wrong key"},
+		{status: 403, says: "the ledger answered 403: an agent may not cancel"},
+		{status: 404, says: "the ledger answered 404: no such ledger"},
+	] as const;
+
+	it("a read the ledger refuses fails at once, with the ledger's own words, and is never asked again", async () => {
+		for (const refusal of REFUSALS) {
+			const seen = await waited(
+				{readStream: [refusal]},
+				Tickets.use((t) => t.read(1)),
+			);
+			expect(seen.result, refusal.says).toMatchObject({_tag: "Failure"});
+			if (seen.result._tag === "Failure")
+				expect(seen.result.failure.says, refusal.says).toContain(refusal.says);
+			expect(seen.times.readStream, refusal.says).toHaveLength(1);
+			expect(seen.heard, refusal.says).toEqual([]);
+		}
+	});
+
+	it("a keyed write the ledger refuses fails at once, with the ledger's own words, and lands nothing", async () => {
+		for (const refusal of REFUSALS) {
+			const seen = await waited(
+				{send: [refusal]},
+				Tickets.use((t) => t.write(1, "r-1/started", started)),
+			);
+			expect(seen.result, refusal.says).toMatchObject({_tag: "Failure"});
+			if (seen.result._tag === "Failure")
+				expect(seen.result.failure.says, refusal.says).toContain(refusal.says);
+			expect(seen.times.send, refusal.says).toHaveLength(1);
+			expect(seen.kinds, refusal.says).toEqual(["filed"]);
+		}
+	});
+
+	it("a 408, a 429 and a 5xx are slowness: each is waited out, 1 second later the read answers", async () => {
+		for (const status of [408, 429, 500, 502, 503, 504]) {
+			const seen = await waited(
+				{readStream: [{status, says: `the ledger answered ${status}: busy`}]},
+				Tickets.use((t) => t.read(1)),
+			);
+			expect(seen.result._tag, String(status)).toBe("Success");
+			expect(gapsIn(seen.times.readStream), String(status)).toEqual([1_000]);
+		}
+	});
+
+	it("the wait line says what the ledger answered, not `no answer`, when it did answer", async () => {
+		const says = "the ledger answered 503: the object is restarting";
+		const seen = await waited(
+			{readStream: [{status: 503, says}]},
+			Tickets.use((t) => t.read(1)),
+		);
+		expect(seen.result._tag).toBe("Success");
+		expect(seen.heard).toHaveLength(1);
+		expect(seen.heard[0]).toContain(says);
+		expect(seen.heard[0]).not.toContain("no answer");
 	});
 });

@@ -81,4 +81,40 @@ describe("the ticket's row for a stop", () => {
 		expect(words(entry)).toContain("triage");
 		expect(rowOf(entry, [entry]).body).toContain("the disk is on fire");
 	});
+
+	// Round 2, the mutation step's gaps (`rows.ts:125-128`): the row's own words, and a stop that goes
+	// on by asking again.
+	it("says the step and its outcome on the row, and the lane's stop and the step it goes on at under it", () => {
+		const outcome = {kind: "stuck", why: "draft_failed"} as const;
+		const laneStop = {kind: "stuck", why: "step_stuck"} as const;
+		const entry = stopped({
+			type: "stopped",
+			stage: "plan",
+			outcome,
+			lane: laneStop,
+			from: {_tag: "run", step: "plan"},
+		});
+		const row = rowOf(entry, [entry]);
+		expect(row.text).toBe(`stopped after plan: ${endedAs(outcome, "done")}`);
+		expect(row.more).toBe(`the lane: ${endedAs(laneStop, "done")}, goes on at plan`);
+		expect(row.body).toBeNull();
+	});
+
+	it("a stop that goes on by asking again names the question and the step it is about", () => {
+		const outcome = {kind: "send", to: "build", why: "tests_red"} as const;
+		const laneStop = {kind: "stuck", why: "rounds_spent"} as const;
+		const entry = stopped({
+			type: "stopped",
+			stage: "build",
+			outcome,
+			lane: laneStop,
+			from: {_tag: "ask", for: "rounds_spent", step: "build"},
+		});
+		const row = rowOf(entry, [entry]);
+		expect(row.text).toBe(`stopped after build: ${endedAs(outcome, "done")}`);
+		expect(row.more).toBe(
+			`the lane: ${endedAs(laneStop, "done")}, goes on by asking rounds spent about build`,
+		);
+		expect(row.more).not.toContain("goes on at");
+	});
 });

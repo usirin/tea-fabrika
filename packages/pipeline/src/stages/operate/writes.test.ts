@@ -86,4 +86,51 @@ describe("posting a verdict", () => {
 		expect(calls.filter((c) => c.includes("--method"))).toEqual([]);
 		expect(calls.length).toBeGreaterThan(0);
 	});
+
+	// Round 2, the mutation step's gaps (`writes.ts:69-70`). The fake is `gh` as it runs: `api` first,
+	// or it fails. A comment is the verdict only when its first line is the marker.
+	/** `gh` that answers `api <path>?...` with `comments`, a POST with `{}`, and fails on anything else. */
+	const strictGh = (comments: readonly {readonly body: string}[]) => {
+		const calls: (readonly string[])[] = [];
+		const gh: Gh = (args) => {
+			calls.push(args);
+			if (args[0] !== "api") return Effect.fail({_tag: "unknown"} as const);
+			if (args[1] === "--method") return Effect.succeed("{}");
+			if (!/^repos\/acme\/widgets\/issues\/9\/comments\?/.test(args[1] ?? ""))
+				return Effect.fail({_tag: "unknown"} as const);
+			return Effect.succeed(JSON.stringify(comments));
+		};
+		return {gh, calls};
+	};
+	const posts = (calls: readonly (readonly string[])[]) =>
+		calls.filter((c) => c.includes("--method"));
+
+	it("asks `gh api` for the comments: every call it makes starts with `api`", async () => {
+		const {gh, calls} = strictGh([{body: `${markerOf(verdict(PR))}\n\nold`}]);
+		await Effect.runPromise(reviewWritesOn(gh).post(verdict(PR)));
+		expect(calls.length).toBeGreaterThan(0);
+		expect(calls.map((c) => c[0])).toEqual(calls.map(() => "api"));
+		expect(posts(calls)).toEqual([]);
+	});
+
+	it("posts once when the comments there are others' talk, none the verdict", async () => {
+		const {gh, calls} = strictGh([{body: "looks good"}, {body: "one nit\n\nsee line 4"}]);
+		await Effect.runPromise(reviewWritesOn(gh).post(verdict(PR)));
+		expect(posts(calls)).toHaveLength(1);
+	});
+
+	it("posts when the marker is only quoted inside another comment, not on its first line", async () => {
+		const {gh, calls} = strictGh([{body: `As the bot said:\n${markerOf(verdict(PR))}\n\nold`}]);
+		await Effect.runPromise(reviewWritesOn(gh).post(verdict(PR)));
+		expect(posts(calls)).toHaveLength(1);
+	});
+
+	it("does not post again when a longer comment opens with the marker, spaces after it", async () => {
+		const {gh, calls} = strictGh([
+			{body: "an earlier comment"},
+			{body: `${markerOf(verdict(PR))}  \n\nthe review\n\nmore lines\nand more`},
+		]);
+		await Effect.runPromise(reviewWritesOn(gh).post(verdict(PR)));
+		expect(posts(calls)).toEqual([]);
+	});
 });

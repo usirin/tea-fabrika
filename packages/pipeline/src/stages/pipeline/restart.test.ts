@@ -8,7 +8,7 @@ import {Entry} from "../../tickets/ticket.ts";
 import {HeldDraft} from "../plan/plan.ts";
 import {claimLane, EMPTY, freshMain, Lane, type LaneCmd, lane, readFiled} from "./machine.ts";
 import {LANE_NAMES} from "./outcome.ts";
-import {FINAL, type Folded, fold, Seen} from "./restart.ts";
+import {FINAL, type Folded, firstRun, fold, nextAttempt, runId, Seen} from "./restart.ts";
 
 // Self-fix PR 5: what may restart, and the carry from facts. Today's version.
 //
@@ -425,5 +425,53 @@ describe("the fold, with a step tried again after it could not run", () => {
 		expect(folded.missing).toEqual([]);
 		expect(folded.at).toEqual({_tag: "run", step: "mutation"});
 		expect(folded.held.carry).toMatchObject({head: BUILT, checked: GREEN});
+	});
+
+	// Round 2, the mutation step's gaps: a try's number and a run's count past 9, and a third try.
+	const tries = (count: number, outcomes: readonly unknown[]) =>
+		outcomes
+			.flatMap((outcome, i) => {
+				const id = runId("build", count, i + 1);
+				return [
+					{type: "started", run: id, stage: "build", task: null, log: null},
+					{...end, type: "ended", run: id, outcome, carry: outcome === DONE ? {head: BUILT} : {}},
+				];
+			})
+			.map(run);
+	const broke = {kind: "stuck", why: "run_failed"};
+
+	it("a run's first try is found under two-digit numbers too: r-build-12-2 and r-build-5-12", () => {
+		expect(firstRun("r-build-12-2")).toBe("r-build-12");
+		expect(firstRun("r-build-5-12")).toBe("r-build-5");
+		expect(firstRun("r-build-12")).toBe("r-build-12");
+		expect(firstRun("r-test_writer-10-3")).toBe("r-test_writer-10");
+	});
+
+	it("the next try of a step at a two-digit count counts that count's ends, and no other count's", () => {
+		const timeline = [...tries(12, [broke, broke]), ...tries(1, [broke])];
+		expect(nextAttempt(timeline, "build", 12)).toBe(3);
+		expect(nextAttempt(timeline, "build", 1)).toBe(2);
+		expect(nextAttempt(timeline, "build", 2)).toBe(1);
+	});
+
+	it("a build at count 12 tried again keeps one trail row, its last try's", () => {
+		const folded = fold({
+			...SEEN,
+			timeline: [...SEEN.timeline.slice(0, at), ...tries(12, [broke, DONE])],
+		});
+		expect(folded.held.trail.filter((row) => row.step === "build")).toEqual([
+			{step: "build", said: "done"},
+		]);
+	});
+
+	it("a third try of a run that already has its row takes that same row: one row, the third try's", () => {
+		const folded = fold({
+			...SEEN,
+			timeline: [...SEEN.timeline.slice(0, at), ...tries(5, [broke, broke, DONE])],
+		});
+		const {trail} = folded.held;
+		expect(trail.filter((row) => row.step === "build")).toEqual([{step: "build", said: "done"}]);
+		expect(trail.map((row) => row.said)).not.toContain("stuck:run_failed");
+		expect(folded.at).toEqual({_tag: "run", step: "mutation"});
 	});
 });

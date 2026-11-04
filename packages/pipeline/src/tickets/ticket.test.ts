@@ -294,6 +294,34 @@ describe("a lane's facts", () => {
 		});
 	});
 
+	// Self-fix PR 11b, round 2 (the review's second must-fix): a crash's cause exists only when it
+	// happens, so the end of the try that crashed keeps it, under `why`, where it happened. The lane's
+	// `stopped` fact copies it from there, never from a process's memory.
+	describe("the end of a try that crashed", () => {
+		const crashed = {
+			type: "ended",
+			run: "r-triage-1-2",
+			stage: "triage",
+			outcome: {kind: "stuck", why: "run_failed"},
+			usd: 0,
+			input: 0,
+			output: 0,
+			turns: 0,
+			carry: {},
+		};
+
+		it("keeps the crash's cause under `why`, as written", () => {
+			const fact = {...crashed, why: "Error: the disk is on fire\n    at write (tickets.ts:196)"};
+			const read = readRow(row({data: JSON.stringify(fact), kind: "ended"}));
+			expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
+		});
+
+		it("an end written before `why` still reads, with no `why`", () => {
+			const read = readRow(row({data: JSON.stringify(crashed), kind: "ended"}));
+			expect(read.kind === "entry" && read.entry.fact).toEqual(crashed);
+		});
+	});
+
 	// Self-fix PR 4: code runs `[build] checks` at the head after every build, and the ticket keeps
 	// what it found. The mutation step that skips its own suite run on a green one says so on its end.
 	describe("code's checks at a head", () => {

@@ -229,8 +229,16 @@ interface Script {
 	readonly traced?: boolean;
 	/** The ledger does not answer the lane's first this many reads of the ticket's stream (self-fix PR 11b). */
 	readonly ledgerSilent?: number;
-	/** By fact type, the lane's first this many writes of it die, as a crash in the step's run (self-fix PR 11b). */
+	/**
+	 * By fact type, the lane's first this many writes of it die, as a crash in the step's run (self-fix PR
+	 * 11b). Each death says its own number: `the disk is on fire, crash 1`, then `crash 2`.
+	 */
 	readonly dies?: Readonly<Partial<Record<string, number>>>;
+	/**
+	 * By fact type, the lane's first this many writes of it never come back, and the harness says
+	 * `HUNG` and the type on a line, so `killAt` can kill the line there (self-fix PR 11b, round 2).
+	 */
+	readonly hangs?: Readonly<Partial<Record<string, number>>>;
 }
 
 /** One span as the in-memory exporter keeps it. */
@@ -276,6 +284,7 @@ interface FakeScript {
 }
 
 const TIMED_OUT = "-- timed out --";
+const HUNG = "-- a write hangs --";
 const KILLED = "-- killed --";
 /** The same line, typed again. */
 const AGAIN = "-- the same line again --";
@@ -518,12 +527,15 @@ const lane = ({
 	traced = false,
 	ledgerSilent = 0,
 	dies = {},
+	hangs = {},
 }: Script): Promise<Ran> => {
 	const tracing = traced ? memoryTracing({raw: true}) : null;
 	let checksRan = 0;
 	/** The lane's reads of the ticket's stream so far, and each step's `started` writes that died. */
 	let streamReads = 0;
 	const died: Record<string, number> = {};
+	/** By fact type, the writes that hung so far. */
+	const hung: Record<string, number> = {};
 	/** A ticket's facts, read on a line typed again, as the older code the script names left them. */
 	const olderThan = (timeline: readonly Entry[]): readonly Entry[] => {
 		const checks = beforeChecks ? timeline.flatMap(withoutChecks) : timeline;
@@ -660,10 +672,16 @@ const lane = ({
 				...tickets,
 				write: (n, id, fact) =>
 					Effect.suspend(() => {
+						const held = hung[fact.type] ?? 0;
+						if (held < (hangs[fact.type] ?? 0)) {
+							hung[fact.type] = held + 1;
+							lines.push(`${HUNG} ${fact.type}`);
+							return Effect.never;
+						}
 						const so = died[fact.type] ?? 0;
 						if (so >= (dies[fact.type] ?? 0)) return tickets.write(n, id, fact);
 						died[fact.type] = so + 1;
-						return Effect.die(new Error("the disk is on fire"));
+						return Effect.die(new Error(`the disk is on fire, crash ${so + 1}`));
 					}),
 				read: (n) =>
 					Effect.andThen(
@@ -5818,15 +5836,17 @@ describe("a lane's waits and records (self-fix PR 11b)", () => {
 		"a step that could not run twice stops with one `stopped` fact that names the crash's cause",
 		{timeout: 90_000},
 		async () => {
-			const ran = await lane({within: 80, dies: {started: 2}});
+			// Round 2: the crash comes after the run's `started` landed, at the plan's `planned`. The stop
+			// copies its cause from the crashed try's `ended`, and an end with no start does not fold.
+			const ran = await lane({within: 80, dies: {planned: 2}});
 			const said = ran.lines.join("\n");
 			const stops = stopsOn(ran);
 			expect(stops, said).toHaveLength(1);
 			expect(stops[0]).toMatchObject({
-				stage: "triage",
+				stage: "plan",
 				outcome: {kind: "stuck", why: "run_failed"},
 				lane: {kind: "stuck", why: "step_failed"},
-				from: {_tag: "run", step: "triage"},
+				from: {_tag: "run", step: "plan"},
 			});
 			expect(String(stops[0]?.why)).toContain("the disk is on fire");
 		},
@@ -5849,6 +5869,64 @@ describe("a lane's waits and records (self-fix PR 11b)", () => {
 				lane: {kind: "stuck", why: "step_stuck"},
 				from: {_tag: "run", step: "plan"},
 			});
+		},
+	);
+
+	// Round 2 (the review's second must-fix): a crash's cause exists only when it happens, so the end of
+	// the try that crashed keeps it, under `why`. The release copies it from that end, never from the
+	// process's memory, so neither a second try nor a kill loses it.
+	const crashedEnds = (ran: Ran, stage: string) =>
+		endsAt(ran, stage).filter(
+			(f) => JSON.stringify(f.outcome) === JSON.stringify({kind: "stuck", why: "run_failed"}),
+		);
+
+	it(
+		"two crashes in a row: each try's own cause stays on its own `ended` row, and the stop copies the last one",
+		{timeout: 90_000},
+		async () => {
+			// A crash after the run's `started` landed: an end with no start does not fold.
+			const ran = await lane({within: 80, dies: {planned: 2}});
+			const said = ran.lines.join("\n");
+			const ends = crashedEnds(ran, "plan");
+			expect(ends, said).toHaveLength(2);
+			expect(String(ends[0]?.why), said).toContain("the disk is on fire, crash 1");
+			expect(String(ends[0]?.why)).not.toContain("crash 2");
+			expect(String(ends[1]?.why)).toContain("the disk is on fire, crash 2");
+			const stops = stopsOn(ran);
+			expect(stops, said).toHaveLength(1);
+			expect(stops[0]?.why).toBe(ends[1]?.why);
+		},
+	);
+
+	it(
+		"a crash, then a try that ends: the crash's cause stays on the first try's `ended` row",
+		{timeout: 90_000},
+		async () => {
+			const ran = await lane({within: 80, picks: THE_PLANS_NO, dies: {planned: 1}});
+			const said = ran.lines.join("\n");
+			const ends = endsAt(ran, "plan");
+			expect(ends, said).toHaveLength(2);
+			expect(String(ends[0]?.why), said).toContain("the disk is on fire, crash 1");
+			expect(ends[1], said).not.toHaveProperty("why");
+		},
+	);
+
+	it(
+		"killed between the step's crash and the release: the line typed again writes the stop with the cause, read from the ticket",
+		{timeout: 120_000},
+		async () => {
+			const ran = await lane({
+				within: 80,
+				dies: {planned: 2},
+				hangs: {stopped: 1},
+				killAt: `${HUNG} stopped`,
+			});
+			const said = ran.lines.join("\n");
+			expect(said).toContain(KILLED);
+			expect(crashedEnds(ran, "plan"), said).toHaveLength(2);
+			const stops = stopsOn(ran);
+			expect(stops, said).toHaveLength(1);
+			expect(String(stops[0]?.why), said).toContain("the disk is on fire, crash 2");
 		},
 	);
 });
