@@ -3,7 +3,7 @@
 **Proposed 2026-11-02, with two parts decided.** [Composing programs, C1 to
 C11](#composing-programs-c1-to-c11) is **decided 2026-11-02**: the owner walked each rule and the
 audit's three splits. [G1](#g1-one-job-one-model-and-every-size-draws-it) is **decided 2026-11-03**:
-the owner took the lean. G2 to G7 and the smaller calls 1 to 7 are not walked yet, so they stay
+the owner took the lean. G2 to G8 and the smaller calls 1 to 7 are not walked yet, so they stay
 proposed, with their leans. The composing walk changed two of them, G6 R2 and G7 R4, and their
 text says so.
 
@@ -124,7 +124,7 @@ type Workspace = {layout: Split; focus: TileId; recent: ReadonlyArray<TileId>}; 
   know which tile it got. A Cmd has an `ok` and an `err` (Elm: a one-shot action is a Cmd,
   [Elm first](./elm-first.md)).
 
-## The seven principles
+## The eight principles
 
 ### G1: one job, one model, and every size draws it
 
@@ -351,6 +351,100 @@ its machine               a run id, a trace, saved state, hot reload, a job to a
   command would pick. About 200 lines for the kit, 3 agent hours, in Tier 2.
 - **Today: half.** Every tile gets its frame and name. The popup's footer is typed by hand
   (`frame.tsx:421-426`), and the palette lists the desk's commands only (`frame.tsx:968-973`).
+
+### G8: a program's name
+
+**Lean, 75%.** Added 2026-11-03, not walked.
+
+```text
+where one name shows (both versions)
+tsh line          asks --ask a-approve-8 | ticket
+title bar         asks
+accessible name   asks, t5, pipe A, 1 of 2, sends to ticket       tile guidelines, tileName
+top bar item      3 asks                                          a phrase made from the noun
+```
+
+- **What it means.** The name is the word a person types, reads in the title bar and hears first on
+  entering the tile. It is one word with one meaning, and it says what is in the tile.
+- **Rules.** R1 a noun for what the tile shows (`jobs`, `runs`), plural for a list and singular for
+  one (`experiments`, `experiment`), or a verb for a tool that does one thing to its input
+  (`compare`, as Unix's `diff`), lean 80%. R2 short and whole: small letters, about 2 to 9 of them,
+  no abbreviation, lean 70%, advice only. R3 one meaning: no tsh built-in, stage, stream, state word
+  or Cmd already has it, checked with `rg` under `docs/direction/` and `next/`, lean 85%. R4 a phrase
+  around the name is written from the noun, never by gluing a number or a verb onto the name, lean
+  75%.
+- **Why.** POSIX: "Utility names should be between two and nine characters", in "lowercase letters"
+  and digits ([Utility Syntax Guidelines 1 and 2](https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap12.html)).
+  tmux names a window by what runs in it: its default rename format reads `#{pane_current_command}`
+  ([tmux(1)](https://man.openbsd.org/tmux.1), `automatic-rename`). A Neovim plugin sets "a custom
+  'filetype'" on its buffers ([lua-plugin](https://neovim.io/doc/user/lua-plugin/)), but plugins
+  often take brand names (Telescope) that say nothing, which R1 rules out. VS Code: "Keep the length
+  of names to a minimum" ([views](https://code.visualstudio.com/api/ux-guidelines/views)), and its
+  views are plain nouns, Explorer, Search, Extensions ([UI](https://code.visualstudio.com/docs/getstarted/userinterface)).
+  macOS names an app for what it holds: Reminders, "to track and organize your to-dos"
+  ([guide](https://support.apple.com/guide/reminders/welcome/mac)).
+- **Linear as the builder.** Its sidebar is plain nouns: "The Inbox is your notification center"
+  ([Inbox](https://linear.app/docs/inbox)); "Triage is a special inbox for your team"
+  ([Triage](https://linear.app/docs/triage)). On our pieces the program's name is that sidebar word
+  and the tsh word at once.
+- **Elm and OTP.** Elm: "Use human readable names", and a module name does not come back in its
+  functions ([design guidelines](https://package.elm-lang.org/help/design-guidelines)): asks'
+  commands are `next` and `rec`, never `askNext`. OTP's example registers a server under its
+  module's name, `gen_server:start_link({local, ch3}, ch3, [], [])`
+  ([gen_server](https://www.erlang.org/doc/system/gen_server_concepts.html)). Ours too: the tsh
+  word, the tile's name and the desk's `reuse` key are one word.
+- **Accessibility.** The name opens every tile's accessible name and its region label, so a landmark
+  list is a list of program names (tile guidelines). WCAG 2.4.6: labels "describe topic or purpose";
+  2.5.3: the visible name is inside the accessible name. An abbreviation is spelled out or said
+  wrong by a speech engine. Needs a VoiceOver run on `tsh` and `ps`.
+- **What holds it.** Code already refuses a built-in's name, two programs with one name, and any
+  letter but small letters, digits and `-` (`packages/fabrika/src/shell/programs.ts:23-33`). R1 to R4
+  are taste, checked on every pull request with the industry's names rule and `rg`.
+- **Doubt and cost.** R2's 9 is an old POSIX shell number, so it is advice: two names here break it.
+  Nothing to build.
+
+Today's names against it, one line each:
+
+```text
+compare       keep: a verb, as diff
+counter       keep: a demo
+experiment    doubt: 10 letters, and one letter from experiments, so a slip opens the other
+experiments   doubt: 11 letters; the pair is R1's own example, so R2 gives way here
+map           doubt: also Effect's map, a wayfinding map and a Map; it shows the programs' wires
+markdown      keep: the format is the job
+pipeline      doubt: also the package @kampus/pipeline and the whole chain of stages
+runs          keep
+ticket        keep
+trace         keep: OpenTelemetry's word
+tracker       keep: issue tracker; but its machine's drawing says tickets (src/index.ts:158)
+tsh built-ins keep: jobs, ps, tell, close, stop, attach, programs, help, exit; tell is ours
+asks          doubt: "an ask" is office slang, and the top bar glues a verb on it, "1 asks you"
+```
+
+**The running example: `asks`.** Today it is the frame's menu, not a program (G1); in `next/` it is
+the asks program (Tier 5). The item says `1 asks you` / `3 ask you` (`frame.ts:229`), which breaks R4
+whatever the name. No lean, since the best is under 60%: the owner picks.
+
+```text
+name       top bar         its accessible name        what the word already means here
+asks       1 ask, 3 asks   "3 asks wait on you"       the noun of the stage verb ask; one meaning
+questions  3 questions     "3 questions for you"      PR 353 proposes question for a tile's close y/n
+decisions  3 to decide     "3 decisions wait on you"  the review stage's decisions: rulings already made
+waiting    3 waiting       "3 wait on you"            a state word; the host item's "waiting" ring
+inbox      ruled out       none                       a ticket stream's write inbox, tracker/ticket/43/inbox
+```
+
+- **Keep `asks`, fix the item.** 45%. Why: `ask` is already a stage's verb and the ledger's word,
+  so the noun keeps one meaning and nothing is renamed. Cost: about 10 lines in `frame.ts` and its
+  tests. Doubt: a reader who is not a native speaker may not know "an ask".
+- **`questions`.** 25%. Why: the plainest word. Cost: one rename pass over the ask desk, this note,
+  the frame note and the app, a guess (`asks` is also a verb, so `rg` finds 60 notes); and PR 353's
+  `question` needs another word. Doubt: an approval is not a question.
+- **`decisions`.** 20%. Why: it says what is asked, as [ask for decisions, not
+  facts](./ask-for-decisions-not-facts.md) does. Cost: as `questions`, plus the review stage's
+  field. Doubt: a decision you made and one you owe would share a word.
+- **`waiting`.** 10%. Why: the count's label, decided 2026-11-02, is "Waits on you". Cost: as
+  `questions`. Doubt: an adjective breaks R1, and the title bar puts it beside a state word.
 
 ## The smaller calls
 
