@@ -607,13 +607,13 @@ describe("the desk's laws", () => {
 			forgetsToOpen: [opensAndStops.name, splitOpens.name],
 			closesTwice: [closesOnce.name],
 			// An id given twice makes a split that does not split, and a kept desk that does not read.
-			// Since the typed words (seed 1's lists changed), a tile with a twin id that ended stays too.
+			// The ended-tile law caught it too, by chance, until the keys Msgs (run, keys) changed which
+			// lists seed 1 makes; deafToEnded catches that law on any list.
 			mintsTwice: [
 				whole.name,
 				opensAndStops.name,
 				freshIds.name,
 				savesChanges.name,
-				endedGoes.name,
 				splitOpens.name,
 				comesBack.name,
 			],
