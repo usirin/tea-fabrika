@@ -2216,20 +2216,15 @@ describe("a stopped lane, typed again", () => {
 	const REDONE =
 		'import {expect, it} from "vitest";\nimport {lower} from "./lower.ts";\n\nit("lowers capitals", () => {\n\texpect(lower("AB")).toBe("ab");\n\texpect(lower("Ab")).toBe("ab");\n});\n';
 	const REDONE_MARK = 'lower("Ab")';
-	/** The second test writer's run writes `REDONE`, and nothing else. */
-	const REDO = {
-		tests: [
-			null,
-			{
-				with: {
-					files: [{path: "src/lower.test.ts", text: REDONE}],
-					answers: [
-						{property: "p1", kind: "test", file: "src/lower.test.ts", name: "lowers capitals"},
-					],
-				},
-			},
-		],
+	/** A test writer's run that writes `REDONE`, and nothing else. */
+	const WRITES_REDONE = {
+		with: {
+			files: [{path: "src/lower.test.ts", text: REDONE}],
+			answers: [{property: "p1", kind: "test", file: "src/lower.test.ts", name: "lowers capitals"}],
+		},
 	};
+	/** The second test writer's run writes `REDONE`, and nothing else. */
+	const REDO = {tests: [null, WRITES_REDONE]};
 	const SEE = ["src/lower.ts", "src/lower.test.ts"];
 
 	it(
@@ -2929,7 +2924,7 @@ describe("a stopped lane, typed again", () => {
 						// Every redo writes the touched file again, as a writer told to redo it does.
 						answers: {
 							...REDO,
-							tests: [null, ...Array.from({length: 6}, () => REDO.tests[1])],
+							tests: [null, ...Array.from({length: 6}, () => WRITES_REDONE)],
 							plan: [{with: {properties: [property(behavior)]}}],
 						},
 						see: SEE,
