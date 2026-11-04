@@ -7,22 +7,25 @@ import {Client} from "@modelcontextprotocol/client";
 import type {JSONRPCMessage, Transport} from "@modelcontextprotocol/client";
 import {
 	Cause,
+	Clock,
 	Effect,
 	Exit,
 	Fiber,
 	FileSystem,
 	Logger,
 	Queue,
+	Random,
 	Scope,
 	Sink,
 	Stdio,
 	Stream,
 } from "effect";
+import {TestClock} from "effect/testing";
 import {describe, expect, it} from "vitest";
 import {programList} from "../shell/programs.ts";
 import {SMALL} from "../shell/small.ts";
 import {bridge} from "./bridge.ts";
-import {AGENTS_PROTOCOL} from "./handshake.ts";
+import {AGENTS_PROTOCOL, MAX_LINE} from "./handshake.ts";
 import {serveAgent} from "./serve.ts";
 
 // The bridge outlives the host (tracker 185b, PR 4). Today's version. The window's restart and
@@ -77,10 +80,11 @@ const field = (m: unknown, key: string): unknown => Reflect.get(Object(m), key);
 
 /**
  * The client's end of the bridge: its stdin and stdout, as Claude Code holds them. `say` writes
- * one line to the bridge's stdin; `heard` is every line the bridge wrote to its stdout.
+ * one line to the bridge's stdin; `heard` is every line the bridge wrote to its stdout; `end`
+ * ends its stdin, as a client that quits does.
  */
 const clientEnd = Effect.gen(function* () {
-	const stdin = yield* Queue.make<Uint8Array, never>();
+	const stdin = yield* Queue.make<Uint8Array, Cause.Done>();
 	const heard: unknown[] = [];
 	let rest = "";
 	/** One chunk the bridge wrote: each whole line in it, read. */
@@ -99,33 +103,52 @@ const clientEnd = Effect.gen(function* () {
 	});
 	const say = (message: unknown) =>
 		Queue.offerUnsafe(stdin, new TextEncoder().encode(`${JSON.stringify(message)}\n`));
-	return {stdio, say, heard};
+	const end = () => Queue.endUnsafe(stdin);
+	return {stdio, say, heard, end};
 });
 
 /** The bridge on `path`, as agent claude, with the short wait: a fiber the test may await. */
-const bridgeOn = (path: string, stdio: Stdio.Stdio) =>
-	bridge(NodeSocket.makeNet({path}), "claude", WAIT).pipe(
+const bridgeOn = (path: string, stdio: Stdio.Stdio, wait: DurationRetryPolicy = WAIT) =>
+	bridge(NodeSocket.makeNet({path}), "claude", wait).pipe(
 		Effect.provideService(Stdio.Stdio, stdio),
 		Effect.forkScoped,
 	);
 
+/** How a recording host differs from one that answers everything at once. */
+interface HostOptions {
+	/** What it says back to the bridge's handshake: the agents' own by default; `null` closes the socket. */
+	readonly shake?: unknown;
+	/** A line it hears and does not answer: the test answers for it later, with `says`. */
+	readonly holds?: (m: unknown) => boolean;
+}
+
 /**
  * A host that keeps every line it hears, on its own unix socket at `path`: it says the agents'
  * handshake back, answers `initialize`, and answers each `tools/call` with its own name, so an
- * answer says which host gave it. `conns` holds each connection's lines, in order.
+ * answer says which host gave it. `conns` holds each connection's lines, in order; `says` writes a
+ * line of the test's own on that connection; `closed` says whether that connection's socket closed.
  */
-const recordingHost = (path: string, name: string) =>
+const recordingHost = (path: string, name: string, options: HostOptions = {}) =>
 	Effect.gen(function* () {
+		const {shake = {type: "handshake", version: AGENTS_PROTOCOL}, holds = () => false} = options;
 		const conns: unknown[][] = [];
+		const says: ((m: unknown) => void)[] = [];
+		const closed: boolean[] = [];
 		const open = new Set<NetSocket>();
 		const server = createServer((socket) => {
 			open.add(socket);
 			const lines: unknown[] = [];
+			const at = conns.length;
 			conns.push(lines);
+			closed.push(false);
 			const say = (m: unknown) => socket.write(`${JSON.stringify(m)}\n`);
+			says.push(say);
 			let rest = "";
 			socket.on("error", () => {});
-			socket.on("close", () => open.delete(socket));
+			socket.on("close", () => {
+				open.delete(socket);
+				closed[at] = true;
+			});
 			socket.on("data", (chunk) => {
 				rest += chunk.toString("utf8");
 				const parts = rest.split("\n");
@@ -134,8 +157,11 @@ const recordingHost = (path: string, name: string) =>
 					if (part.trim() === "") continue;
 					const m: unknown = JSON.parse(part);
 					lines.push(m);
-					if (field(m, "type") === "handshake") say({type: "handshake", version: AGENTS_PROTOCOL});
-					else if (field(m, "method") === "initialize")
+					if (holds(m)) continue;
+					if (field(m, "type") === "handshake") {
+						if (shake === null) socket.end();
+						else say(shake);
+					} else if (field(m, "method") === "initialize")
 						say({
 							jsonrpc: "2.0",
 							id: field(m, "id"),
@@ -162,7 +188,7 @@ const recordingHost = (path: string, name: string) =>
 			server.listen(path, () => resume(Effect.void));
 		});
 		yield* Effect.addFinalizer(() => (server.listening ? stop : Effect.void));
-		return {conns, stop};
+		return {conns, says, closed, stop};
 	});
 
 /** The client's own first two messages, as the SDK's `Client.connect` sends them (era 2025). */
@@ -191,6 +217,33 @@ const socketPath = Effect.gen(function* () {
 	const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped({prefix: "br-"});
 	return `${dir}/mcp.sock`;
 });
+
+/** A notification the client sends, which waits for no answer. */
+const ROOTS_CHANGED = {jsonrpc: "2.0", method: "notifications/roots/list_changed"};
+
+const isNotice = (m: unknown) => field(m, "method") === "notifications/tools/list_changed";
+const isError = (m: unknown) => field(m, "error") !== undefined;
+
+/** The client's opening, as the SDK says it: initialize, then, once answered, initialized. */
+const opened = (client: Effect.Success<typeof clientEnd>) =>
+	Effect.gen(function* () {
+		client.say(INITIALIZE);
+		yield* until("the answer to initialize", () => client.heard.find((m) => field(m, "id") === 0));
+		client.say(INITIALIZED);
+	});
+
+/** How the bridge ended, five seconds at most. */
+const endOf = <A, E>(running: Fiber.Fiber<A, E>) =>
+	Fiber.await(running).pipe(
+		Effect.timeoutOrElse({
+			duration: "5 seconds",
+			orElse: () => Effect.die("the bridge did not end"),
+		}),
+	);
+
+/** The why a bridge that stopped gave, or `undefined` for one that did not fail. */
+const whyOf = <A, E>(exit: Exit.Exit<A, E>) =>
+	Exit.isFailure(exit) ? field(Cause.squash(exit.cause), "why") : undefined;
 
 describe("the bridge, when the host ends and another listens (d20)", () => {
 	it(
@@ -303,7 +356,8 @@ describe("a call while no host answers (d21)", () => {
 			expect(seen.answer).toMatchObject({jsonrpc: "2.0", id: 2});
 			expect(field(seen.answer, "result")).toBeUndefined();
 			const error = field(seen.answer, "error");
-			expect(typeof field(error, "code")).toBe("number");
+			// -32000, the first of JSON-RPC 2.0's range for a server's own errors.
+			expect(field(error, "code")).toBe(-32000);
 			expect(String(field(error, "message"))).toContain("the host is restarting");
 			// The call was answered, so it is not sent again later: the next host hears only the one
 			// after it.
@@ -348,6 +402,492 @@ describe("no host within the wait (d21)", () => {
 			expect(error).toMatchObject({_tag: "BridgeStopped"});
 			// The why is what cli.ts writes to stderr: it says the host did not come back.
 			expect(String(field(error, "why"))).toMatch(/host/);
+		},
+		LONG,
+	);
+});
+
+describe("a call the host held when it ended (d21)", () => {
+	it(
+		"is told it may have run, and is never sent to the next host",
+		async () => {
+			const seen = await go(
+				Effect.gen(function* () {
+					const path = yield* socketPath;
+					const first = yield* recordingHost(path, "host 1", {
+						holds: (m) => field(m, "method") === "tools/call",
+					});
+					const client = yield* clientEnd;
+					yield* bridgeOn(path, client.stdio);
+					yield* opened(client);
+					client.say(call(1));
+					yield* until("host 1 to hear 1", () => first.conns[0]?.find((m) => field(m, "id") === 1));
+					yield* first.stop;
+					const answer = yield* until("the answer to 1", () =>
+						client.heard.find((m) => field(m, "id") === 1),
+					);
+					const second = yield* recordingHost(path, "host 2");
+					yield* until("the notice that the tools changed", () => client.heard.find(isNotice));
+					client.say(call(2));
+					yield* until("the answer to 2", () => client.heard.find((m) => field(m, "id") === 2));
+					return {answer, second: second.conns.flat()};
+				}),
+			);
+			expect(seen.answer).toEqual({
+				jsonrpc: "2.0",
+				id: 1,
+				error: {
+					code: -32000,
+					message:
+						"the host is restarting: it ended before it answered, so this call may have run.",
+				},
+			});
+			const calls = seen.second.filter((m) => field(m, "method") === "tools/call");
+			expect(calls.map((m) => field(m, "id"))).toEqual([2]);
+		},
+		LONG,
+	);
+});
+
+describe("a call before the new host answered the replayed initialize (d20)", () => {
+	/** Host 1 answers and ends; host 2 hears the replayed initialize and holds its answer. */
+	const replaying = Effect.gen(function* () {
+		const path = yield* socketPath;
+		const first = yield* recordingHost(path, "host 1");
+		const client = yield* clientEnd;
+		const running = yield* bridgeOn(path, client.stdio);
+		yield* opened(client);
+		yield* first.stop;
+		const second = yield* recordingHost(path, "host 2", {
+			holds: (m) => field(m, "method") === "initialize",
+		});
+		yield* until("host 2 to hear the replayed initialize", () =>
+			second.conns[0]?.find((m) => field(m, "method") === "initialize"),
+		);
+		return {client, second, running};
+	});
+
+	it(
+		"waits, and reaches the new host after initialized, in the order the client said it",
+		async () => {
+			const seen = await go(
+				Effect.gen(function* () {
+					const {client, second} = yield* replaying;
+					client.say(call(5));
+					client.say(ROOTS_CHANGED);
+					yield* Effect.sleep("50 millis");
+					const early = [...(second.conns[0] ?? [])];
+					const answeredEarly = client.heard.some((m) => field(m, "id") === 5);
+					second.says[0]?.({jsonrpc: "2.0", id: 0, result: {capabilities: {}}});
+					const answer = yield* until("the answer to 5", () =>
+						client.heard.find((m) => field(m, "id") === 5),
+					);
+					return {early, answeredEarly, answer, lines: second.conns[0] ?? []};
+				}),
+			);
+			// Before host 2 answered, it heard only the handshake and the replay, and 5 was not answered.
+			expect(seen.early).toEqual([
+				{type: "handshake", version: AGENTS_PROTOCOL, agent: "claude"},
+				INITIALIZE,
+			]);
+			expect(seen.answeredEarly).toBe(false);
+			// Then initialized, then the client's lines, as it said them.
+			expect(seen.lines.slice(2)).toEqual([INITIALIZED, call(5), ROOTS_CHANGED]);
+			expect(seen.answer).toMatchObject({result: {content: [{type: "text", text: "host 2"}]}});
+		},
+		LONG,
+	);
+
+	it(
+		"is told it did not reach the host, if that host ends first, and a notification is not answered",
+		async () => {
+			const seen = await go(
+				Effect.gen(function* () {
+					const {client, second} = yield* replaying;
+					client.say(call(5));
+					client.say(ROOTS_CHANGED);
+					yield* Effect.sleep("50 millis");
+					yield* second.stop;
+					yield* until("the answer to 5", () => client.heard.find((m) => field(m, "id") === 5));
+					// A moment more, so an answer to the notification said late is caught too.
+					yield* Effect.sleep("50 millis");
+					return client.heard.filter(isError);
+				}),
+			);
+			expect(seen).toEqual([
+				{
+					jsonrpc: "2.0",
+					id: 5,
+					error: {
+						code: -32000,
+						message: "the host is restarting: this call did not reach it. Call again in a moment.",
+					},
+				},
+			]);
+		},
+		LONG,
+	);
+
+	it(
+		"ends the bridge, with the host's message, when the new host refuses the replayed initialize",
+		async () => {
+			const exit = await go(
+				Effect.gen(function* () {
+					const {second, running} = yield* replaying;
+					second.says[0]?.({
+						jsonrpc: "2.0",
+						id: 0,
+						error: {code: -32602, message: "Unsupported protocol version"},
+					});
+					return yield* endOf(running);
+				}),
+			);
+			expect(whyOf(exit)).toBe(
+				"the new host refused the client's initialize: Unsupported protocol version",
+			);
+		},
+		LONG,
+	);
+});
+
+describe("a request from the host (d20)", () => {
+	it(
+		"reaches the client, whose answer goes back to that host; an answer after it ended is dropped",
+		async () => {
+			const seen = await go(
+				Effect.gen(function* () {
+					const path = yield* socketPath;
+					const first = yield* recordingHost(path, "host 1");
+					const client = yield* clientEnd;
+					yield* bridgeOn(path, client.stdio);
+					yield* opened(client);
+					first.says[0]?.({jsonrpc: "2.0", id: "h1", method: "ping"});
+					yield* until("host 1's ping", () => client.heard.find((m) => field(m, "id") === "h1"));
+					client.say({jsonrpc: "2.0", id: "h1", result: {}});
+					const back = yield* until("host 1 to hear the answer to its ping", () =>
+						first.conns[0]?.find((m) => field(m, "id") === "h1"),
+					);
+					// A second ping, which the client answers only once host 1 is gone.
+					first.says[0]?.({jsonrpc: "2.0", id: "h2", method: "ping"});
+					yield* until("host 1's second ping", () =>
+						client.heard.find((m) => field(m, "id") === "h2"),
+					);
+					yield* first.stop;
+					const second = yield* recordingHost(path, "host 2");
+					yield* until("the notice that the tools changed", () => client.heard.find(isNotice));
+					client.say({jsonrpc: "2.0", id: "h2", result: {}});
+					client.say(call(3));
+					yield* until("the answer to 3", () => client.heard.find((m) => field(m, "id") === 3));
+					return {back, second: second.conns.flat()};
+				}),
+			);
+			expect(seen.back).toEqual({jsonrpc: "2.0", id: "h1", result: {}});
+			// Host 2 never asked h2: it hears the replayed initialize and the call, and no answer.
+			const ids = seen.second.map((m) => field(m, "id")).filter((id) => id !== undefined);
+			expect(ids).toEqual([0, 3]);
+		},
+		LONG,
+	);
+});
+
+describe("a client that sent no initialize, across a restart (d20)", () => {
+	it(
+		"is told the tools changed, and the new host hears the handshake, then only what came after",
+		async () => {
+			const seen = await go(
+				Effect.gen(function* () {
+					const path = yield* socketPath;
+					const first = yield* recordingHost(path, "host 1");
+					const client = yield* clientEnd;
+					yield* bridgeOn(path, client.stdio);
+					client.say(call(1));
+					yield* until("the answer to 1", () => client.heard.find((m) => field(m, "id") === 1));
+					yield* first.stop;
+					const second = yield* recordingHost(path, "host 2");
+					yield* until("the notice that the tools changed", () => client.heard.find(isNotice));
+					client.say(call(2));
+					const answer = yield* until("the answer to 2", () =>
+						client.heard.find((m) => field(m, "id") === 2),
+					);
+					return {answer, lines: second.conns[0] ?? []};
+				}),
+			);
+			expect(seen.lines).toEqual([
+				{type: "handshake", version: AGENTS_PROTOCOL, agent: "claude"},
+				call(2),
+			]);
+			expect(seen.answer).toMatchObject({result: {content: [{type: "text", text: "host 2"}]}});
+		},
+		LONG,
+	);
+});
+
+describe("a notification while no host answers (d21)", () => {
+	it(
+		"gets no answer: only the call after it is told the host is restarting",
+		async () => {
+			const errors = await go(
+				Effect.gen(function* () {
+					const path = yield* socketPath;
+					const first = yield* recordingHost(path, "host 1");
+					const client = yield* clientEnd;
+					yield* bridgeOn(path, client.stdio);
+					yield* opened(client);
+					yield* first.stop;
+					yield* Effect.sleep("50 millis");
+					client.say(ROOTS_CHANGED);
+					client.say(call(2));
+					// The bridge answers in the order it heard: an answer to the notice would be first.
+					yield* until("the answer to 2", () => client.heard.find((m) => field(m, "id") === 2));
+					return client.heard.filter(isError);
+				}),
+			);
+			expect(errors.map((m) => field(m, "id"))).toEqual([2]);
+		},
+		LONG,
+	);
+});
+
+describe("a stdin line that is not an object", () => {
+	it(
+		"passes on as it is, and the bridge stays up",
+		async () => {
+			const seen = await go(
+				Effect.gen(function* () {
+					const path = yield* socketPath;
+					const first = yield* recordingHost(path, "host 1");
+					const client = yield* clientEnd;
+					const running = yield* bridgeOn(path, client.stdio);
+					yield* opened(client);
+					client.say(42);
+					client.say([]);
+					client.say(call(1));
+					yield* until("the answer to 1", () => client.heard.find((m) => field(m, "id") === 1));
+					return {lines: first.conns[0] ?? [], ended: running.pollUnsafe() !== undefined};
+				}),
+			);
+			expect(seen.lines.slice(3)).toEqual([42, [], call(1)]);
+			expect(seen.ended).toBe(false);
+		},
+		LONG,
+	);
+});
+
+describe("stdin's end", () => {
+	it(
+		"ends the bridge with success, and the host sees its socket close",
+		async () => {
+			const seen = await go(
+				Effect.gen(function* () {
+					const path = yield* socketPath;
+					const first = yield* recordingHost(path, "host 1");
+					const client = yield* clientEnd;
+					const running = yield* bridgeOn(path, client.stdio);
+					yield* opened(client);
+					client.end();
+					const exit = yield* endOf(running);
+					const closed = yield* until("host 1 to see the socket close", () =>
+						first.closed[0] === true ? true : undefined,
+					);
+					return {exit, closed};
+				}),
+			);
+			expect(Exit.isSuccess(seen.exit)).toBe(true);
+			expect(seen.closed).toBe(true);
+		},
+		LONG,
+	);
+
+	it(
+		"while the bridge waits to dial again ends it at once, with no next connection",
+		async () => {
+			// A wait far past the test's own, so a bridge that waited it out, or dialed again, shows.
+			const slow: DurationRetryPolicy = {
+				...WAIT,
+				baseMs: 10_000,
+				capMs: 10_000,
+				maxElapsedMs: 60_000,
+			};
+			const seen = await go(
+				Effect.gen(function* () {
+					const path = yield* socketPath;
+					const first = yield* recordingHost(path, "host 1");
+					const client = yield* clientEnd;
+					const running = yield* bridgeOn(path, client.stdio, slow);
+					yield* opened(client);
+					yield* first.stop;
+					yield* Effect.sleep("50 millis");
+					// A host listens again while the bridge waits; the client quits before it dials.
+					const second = yield* recordingHost(path, "host 2");
+					client.end();
+					const exit = yield* endOf(running);
+					yield* Effect.sleep("50 millis");
+					return {exit, conns: second.conns.length};
+				}),
+			);
+			expect(Exit.isSuccess(seen.exit)).toBe(true);
+			expect(seen.conns).toBe(0);
+		},
+		LONG,
+	);
+
+	it(
+		"before the first host's handshake ends the bridge, saying the host closed before it",
+		async () => {
+			const exit = await go(
+				Effect.gen(function* () {
+					const path = yield* socketPath;
+					const first = yield* recordingHost(path, "host 1", {
+						holds: (m) => field(m, "type") === "handshake",
+					});
+					const client = yield* clientEnd;
+					const running = yield* bridgeOn(path, client.stdio);
+					yield* until("host 1 to hear the handshake", () => first.conns[0]?.[0]);
+					client.end();
+					return yield* endOf(running);
+				}),
+			);
+			expect(whyOf(exit)).toBe("the host closed the socket before its handshake");
+		},
+		LONG,
+	);
+});
+
+describe("the first host, before or at its handshake", () => {
+	/** The bridge on a first host with `options`, until it ends: why it stopped. */
+	const stoppedBy = (
+		options: HostOptions,
+		after?: (host: {says: ((m: unknown) => void)[]}) => void,
+	) =>
+		go(
+			Effect.gen(function* () {
+				const path = yield* socketPath;
+				const first = yield* recordingHost(path, "host 1", options);
+				const client = yield* clientEnd;
+				const running = yield* bridgeOn(path, client.stdio);
+				if (after !== undefined) {
+					yield* opened(client);
+					after(first);
+				}
+				return whyOf(yield* endOf(running));
+			}),
+		);
+
+	it(
+		"that closes the socket before its handshake ends the bridge, saying so",
+		async () => {
+			// Red on bbc185a7 (main's code reads the same way): effect 4.1.1's socket fails a clean
+			// close with SocketCloseError 1000, so `run` gives "the socket ended: 1000", never CLOSED.
+			expect(await stoppedBy({shake: null})).toBe(
+				"the host closed the socket before its handshake",
+			);
+		},
+		LONG,
+	);
+
+	it(
+		"that says something else first ends the bridge: no handshake",
+		async () => {
+			expect(await stoppedBy({shake: {jsonrpc: "2.0", method: "hello"}})).toBe(
+				"the host sent no handshake",
+			);
+		},
+		LONG,
+	);
+
+	it(
+		"that sends a line past MAX_LINE ends the bridge: a line that does not read",
+		async () => {
+			const why = await stoppedBy({}, (host) => host.says[0]?.("x".repeat(MAX_LINE)));
+			expect(String(why)).toMatch(/^a line that does not read: /);
+		},
+		LONG,
+	);
+});
+
+describe("the log, across a restart", () => {
+	it(
+		"says host_lost with the agent and why, and host_back with the agent, how long and how many tries",
+		async () => {
+			const lines: string[] = [];
+			const caught = Logger.make((o) => {
+				lines.push(Logger.formatSimple.log(o));
+			});
+			await go(
+				Effect.gen(function* () {
+					const path = yield* socketPath;
+					const first = yield* recordingHost(path, "host 1");
+					const client = yield* clientEnd;
+					yield* bridgeOn(path, client.stdio);
+					yield* opened(client);
+					yield* first.stop;
+					yield* recordingHost(path, "host 2");
+					yield* until("the notice that the tools changed", () => client.heard.find(isNotice));
+				}).pipe(Effect.provide(Logger.layer([caught]))),
+			);
+			const lost = lines.filter((l) => l.includes("message=host_lost"));
+			expect(lost).toHaveLength(1);
+			expect(lost[0]).toContain("agent=claude");
+			expect(lost[0]).toMatch(/why=.*socket/);
+			const back = lines.filter((l) => l.includes("message=host_back"));
+			expect(back).toHaveLength(1);
+			expect(back[0]).toContain("agent=claude");
+			expect(back[0]).toMatch(/after_ms=\d+/);
+			expect(back[0]).toMatch(/tries=[1-9]/);
+		},
+		LONG,
+	);
+});
+
+describe("the wait between dials, on the app's own shape (full jitter)", () => {
+	// reconnect.ts POLICY's numbers, written out: this package may not import the app.
+	const FULL: DurationRetryPolicy = {
+		baseMs: 250,
+		factor: 2,
+		capMs: 30_000,
+		maxElapsedMs: 5 * 60_000,
+		jitter: "full",
+	};
+	/** A Random that always picks a half. */
+	const HALF: Random.Random = {nextIntUnsafe: () => 0, nextDoubleUnsafe: () => 0.5};
+
+	it(
+		"is the part its Random picked: half of 500 ms after the first failure, then it dials again",
+		async () => {
+			const seen = await go(
+				Effect.gen(function* () {
+					const path = yield* socketPath;
+					const first = yield* recordingHost(path, "host 1");
+					const client = yield* clientEnd;
+					// The bridge alone runs on a clock the test moves; the test's own waits stay real.
+					const clock = yield* TestClock.make();
+					let dials = 0;
+					const dial = Effect.sync(() => {
+						dials += 1;
+					}).pipe(Effect.andThen(NodeSocket.makeNet({path})));
+					yield* bridge(dial, "claude", FULL).pipe(
+						Effect.provideService(Stdio.Stdio, client.stdio),
+						Effect.provideService(Clock.Clock, clock),
+						Effect.provideService(Random.Random, HALF),
+						Effect.forkScoped,
+					);
+					yield* opened(client);
+					yield* first.stop;
+					// A short real window: the bridge waits on its own clock, which has not moved.
+					yield* Effect.sleep("100 millis");
+					const stopped = dials;
+					// One failure so far: the full wait is 250 ms doubled once, and the pick is half of it.
+					yield* clock.adjust(249);
+					yield* Effect.sleep("50 millis");
+					const before = dials;
+					yield* clock.adjust(1);
+					yield* until("a second dial", () => (dials >= 2 ? dials : undefined));
+					// The second dial finds no host; the next wait is half of 1000 ms, so no third yet.
+					yield* Effect.sleep("50 millis");
+					return {stopped, before, after: dials};
+				}),
+			);
+			expect(seen).toEqual({stopped: 1, before: 1, after: 2});
 		},
 		LONG,
 	);
