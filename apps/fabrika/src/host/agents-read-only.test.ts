@@ -6,10 +6,11 @@ import {Effect, type Scope} from "effect";
 import {describe, expect, it} from "vitest";
 import {appPrograms} from "../tsh.ts";
 
-// An agent's tools on a home whose writes the ledger server would stamp as the person: only the
+// An agent's tools when its own login failed (tracker 185): on a connected home, an agent whose
+// session could not be made is served the read-only door, never the person's session. Only the
 // tools that write nothing (MCP's `readOnlyHint`), and a write tool called anyway is refused as
 // any tool that is not there, before any run starts. Today's version. Nothing runs but the
-// programs on a memory ledger.
+// programs on a memory ledger; the fallback on a real host is in agents-shared.test.ts.
 //
 //   const {drive, tools} = yield* driveFor({list, tiles: () => [], readOnly: true});
 //   tools.map((t) => t.name)                       // ["runs", ..., "tracker_query"]: each readOnlyHint
@@ -35,7 +36,7 @@ const listOn = (ledger: ReturnType<typeof memoryService>) =>
 
 const go = <A, E>(test: Effect.Effect<A, E, Scope.Scope>) => Effect.runPromise(Effect.scoped(test));
 
-describe("an agent's tools on a read-only door", () => {
+describe("an agent whose login was refused is served the read-only door", () => {
 	it("are only the ones that write nothing", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
