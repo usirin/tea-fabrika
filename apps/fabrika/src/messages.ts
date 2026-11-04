@@ -281,8 +281,11 @@ export type Read<T> =
 	| {readonly kind: "read"; readonly msg: T}
 	| {readonly kind: "refused"; readonly why: string};
 
-/** A reader for one of the message types: strict, so a key the schema does not name is refused. */
-export const reader = <T>(schema: Schema.Codec<T, T>) => {
+/**
+ * A reader for one of the message types: strict, so a key the schema does not name is refused.
+ * What it reads may be older than what it answers: a desk from a host before letters (desk.ts).
+ */
+export const reader = <T, E>(schema: Schema.Codec<T, E>) => {
 	const decode = Schema.decodeUnknownExit(schema);
 	return (raw: unknown): Read<T> => {
 		const exit = decode(raw, {onExcessProperty: "error"});

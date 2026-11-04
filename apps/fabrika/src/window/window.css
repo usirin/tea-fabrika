@@ -60,15 +60,20 @@
 	--svc-3: oklch(0.72 0.075 340);
 	--svc-4: oklch(0.72 0.075 120);
 	--svc-5: oklch(0.72 0.075 60);
-	/* One colour per tsh line, as a Chrome tab group's: amber, blue, teal, violet, rose, green.
-	   A line's tiles and strips mix it in at --line-strength (window.css, [data-tint]). */
-	--line-0: oklch(0.78 0.12 80);
-	--line-1: oklch(0.72 0.11 250);
-	--line-2: oklch(0.76 0.1 185);
-	--line-3: oklch(0.72 0.12 300);
-	--line-4: oklch(0.74 0.12 15);
-	--line-5: oklch(0.76 0.11 145);
-	--line-strength: 30%;
+	/*
+	 * A tile's own names (docs/direction/tile-guidelines.md, decided 2026-11-01). Each points at a
+	 * theme token, so a brought theme repaints a tile; a pipe's rule ([data-pipe], below) sets its
+	 * own washes and edges. The rest wash is slate a2, which no theme name holds yet, so it is
+	 * written out here.
+	 */
+	--tile-edge: var(--border-faint); /* slate a4, on every tile, plain or pipe */
+	--tile-edge-on: var(--tile-focus); /* focus: slate a8 dark, a9 light */
+	--tile-edge-hover: var(--border-strong); /* slate a7 */
+	--tile-edge-loud: var(--text-faint); /* slate a11: focus under more contrast only */
+	--tile-text: var(--text-faint); /* slate a11 */
+	--tile-text-on: var(--text-primary); /* slate 12 */
+	--tile-wash: light-dark(#00005506, #d8f4f609); /* slate a2 */
+	--tile-wash-on: var(--surface-hover); /* slate a3 */
 
 	--font: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
 	--mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
@@ -196,38 +201,40 @@ body,
 
 /*
  * A folded tile, or a container whose tiles are all folded: a thin strip in its place, along its
- * parent's direction. Beside others in a row it stands up, its name written sideways; in a column
- * it lies down. A click opens what it stands for.
+ * parent's direction. Beside others in a row it stands up, its slot and name written sideways; in
+ * a column it lies down. It takes its tile's wash and letter, and its edge is a tile's edge. A
+ * click opens what it stands for.
  */
 .strip {
 	flex: none;
-	display: grid;
-	place-items: center;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--s-1);
 	margin: 0;
 	padding: 0;
 	overflow: hidden;
 	border: 0;
 	border-radius: var(--r-lg);
-	background: var(--surface);
-	box-shadow: inset 0 0 0 1px var(--border-faint);
-	color: var(--text-muted);
+	outline: 1px solid var(--tile-edge);
+	outline-offset: -1px;
+	background: var(--tile-wash);
+	color: var(--tile-text);
 	font: 400 var(--fs-small) var(--mono);
 	cursor: pointer;
 }
 
 .strip-name {
+	min-width: 0;
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
 }
 
+/* Standing up, the whole strip is written sideways, so the letter turns with the name. */
 .container.horizontal > .strip {
 	width: 22px;
 	margin: 0 2px;
-}
-
-.container.horizontal > .strip > .strip-name {
-	max-height: 100%;
 	writing-mode: vertical-rl;
 }
 
@@ -236,15 +243,17 @@ body,
 	margin: 2px 0;
 }
 
-.container.vertical > .strip > .strip-name {
-	max-width: 100%;
+/* A pointer over a strip lights its edge a7, in its pipe's color; a keyboard's focus is a 2px
+   ring at the focus step. Two rules, so a pipe's strip shows its ring too. */
+.strip:hover {
+	color: var(--tile-text-on);
+	outline-color: var(--tile-edge-hover);
 }
 
-.strip:hover,
 .strip:focus-visible {
-	color: var(--text-primary);
-	box-shadow: inset 0 0 0 1px var(--border-strong);
-	outline: none;
+	outline: 2px solid var(--tile-edge-on);
+	outline-offset: -2px;
+	color: var(--tile-text-on);
 }
 
 /* A child's share is its grow: the borders between them are a fixed few pixels. */
@@ -264,8 +273,9 @@ body,
 	touch-action: none;
 }
 
+/* Empty at rest, slate a7 under a pointer: the divider is outside any pipe, so it is slate. */
 .border:hover {
-	background: var(--border);
+	background: var(--tile-edge-hover);
 }
 
 .container.horizontal > .border {
@@ -284,17 +294,28 @@ body,
 	min-height: 0;
 	box-sizing: border-box;
 	border-radius: var(--r-lg);
+	outline: 1px solid var(--tile-edge);
+	outline-offset: -1px;
 	background: var(--surface);
-	box-shadow: inset 0 0 0 1px var(--border-faint);
 	overflow: hidden;
 }
 
+/* One focused tile a workspace: its edge lit, its title's wash brighter, its name at slate 12 and
+   500. The body stays plain. */
 .tile.focused {
-	box-shadow: inset 0 0 0 1px var(--tile-focus);
+	outline-color: var(--tile-edge-on);
 }
 
-/* A tile's title bar: its program and its id. A click focuses the tile; a double-click folds it
-   into a strip. */
+/* A closing tile keeps its step and its color: the dash and the word in its title bar say it. */
+.tile.closing {
+	outline-style: dashed;
+}
+
+/*
+ * A tile's title bar: the slot (its pipe's letter, or a dot), its program, its state word, then
+ * its id at the far right. Mono, 20px, and no line under it: the wash marks it. A click focuses
+ * the tile, as anywhere on it; a double-click folds it into a strip, and C-b f is the key way.
+ */
 .titlebar {
 	position: absolute;
 	inset: 0 0 auto 0;
@@ -304,102 +325,143 @@ body,
 	height: var(--bar);
 	margin: 0;
 	padding: 0 var(--s-3);
-	border: 0;
-	border-bottom: 1px solid var(--border-faint);
-	background: transparent;
-	color: var(--text-muted);
+	overflow: hidden;
+	background: var(--tile-wash);
+	color: var(--tile-text);
 	font: 400 var(--fs-small) var(--mono);
-	text-align: left;
-	cursor: pointer;
+	white-space: nowrap;
+	user-select: none;
+}
+
+.titlebar:hover {
+	color: var(--tile-text-on);
+}
+
+/* Focus lifts the wash and the bar's text to slate 12. The dot and the state word set their own
+   quiet step, so on a focused tile only the name rises. */
+.tile.focused .titlebar {
+	background: var(--tile-wash-on);
+	color: var(--tile-text-on);
+}
+
+/* The slot: a pipe's letter in slate 12, or a dot at the quiet step, one character wide either
+   way, so the name never moves when a tile joins or leaves a pipe. */
+.slot {
+	flex: none;
+}
+
+.titlebar .slot {
+	color: var(--tile-text);
+}
+
+[data-pipe] > .titlebar > .slot,
+.strip[data-pipe] > .slot {
+	color: var(--tile-text-on);
+}
+
+/* The name cuts first; the state word and the id are never cut. */
+.titlebar .name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.tile.focused .name {
+	color: var(--tile-text-on);
+	font-weight: 500;
+}
+
+.titlebar .state {
+	flex: none;
+	color: var(--tile-text);
+}
+
+.titlebar .state::before {
+	content: "·" / "";
+	padding-right: var(--s-2);
+	color: var(--tile-text);
+}
+
+/* The close question waits on the person, so it reads at the high step. */
+.titlebar .state.asking {
+	color: var(--tile-text-on);
 }
 
 .titlebar .tid {
+	flex: none;
 	margin-left: auto;
-	color: var(--text-faint);
-}
-
-.titlebar:hover:not([aria-disabled="true"]) {
-	color: var(--text-primary);
-}
-
-/* The last open tile of a workspace does not fold. */
-.titlebar[aria-disabled="true"] {
-	cursor: default;
-}
-
-.tile.focused .titlebar {
-	color: var(--text-primary);
+	color: var(--tile-text);
+	font-variant-numeric: tabular-nums;
 }
 
 /*
- * A line's tiles and strips: its tint mixed into the edge at --line-strength, and into the
- * ground at a sixth of that, a strip's at a third. Only a line of two windows or more has one.
+ * A pipe's tiles and strips: its own a2 and a3 on the title's wash, a7 for a strip's hover, a
+ * focus edge and a loud edge for more contrast. The resting edge and the text stay slate. Radix
+ * 3.0.0's alpha steps, light then dark (pipes.test.ts checks each against Radix's scales). A dark
+ * focus edge is a8, as pipe-colors.md has it. A light one is the first step from a8 up that reads
+ * 3:1 on the ground and on the focused wash (WCAG 1.4.11): a9 for pink, violet and plum; a10 for
+ * teal, whose a9 reads 3.00 on the ground and 2.73 on the wash. The loud edge is a11.
  */
-[data-tint="0"] {
-	--tint: var(--line-0);
+[data-pipe="sky"] {
+	--tile-wash: light-dark(#00a4db0e, #1171fb18);
+	--tile-wash-on: light-dark(#00b3ee1e, #1184fc33);
+	--tile-edge-hover: light-dark(#0089c172, #2badfe8b);
+	/* Light a11: sky's a8 to a10 are pale fills, 2.32, 1.46 and 1.57 on the ground (2.18, 1.38 and
+	   1.48 on the wash). a11 reads 5.13 on the ground and 4.59 on the wash. */
+	--tile-edge-on: light-dark(#00749e, #1db2fea9);
+	--tile-edge-loud: light-dark(#00749e, #7cd3ffef);
 }
 
-[data-tint="1"] {
-	--tint: var(--line-1);
+[data-pipe="pink"] {
+	--tile-wash: light-dark(#e0008008, #f420bb12);
+	--tile-wash-on: light-dark(#f4008c16, #fe37cc29);
+	--tile-edge-hover: light-dark(#b6006f53, #fd62c87b);
+	--tile-edge-on: light-dark(#c8007fbf, #ff68c8a2);
+	--tile-edge-loud: light-dark(#b60074d6, #ff8dcc);
 }
 
-[data-tint="2"] {
-	--tint: var(--line-2);
+[data-pipe="teal"] {
+	--tile-wash: light-dark(#00aa800c, #12fbe60c);
+	--tile-wash-on: light-dark(#00c69d1f, #00ffe61e);
+	--tile-edge-hover: light-dark(#0099807c, #2efde85f);
+	--tile-edge-on: light-dark(#009684f2, #32ffe775);
+	--tile-edge-loud: light-dark(#008573, #0afed5d6);
 }
 
-[data-tint="3"] {
-	--tint: var(--line-3);
+[data-pipe="violet"] {
+	--tile-wash: light-dark(#4900ff07, #853ff916);
+	--tile-wash-on: light-dark(#4400ee0f, #8354fe36);
+	--tile-edge-hover: light-dark(#2d01dd4a, #9879ff83);
+	--tile-edge-on: light-dark(#2400b7a9, #977dfea8);
+	--tile-edge-loud: light-dark(#1f0099af, #baa7ff);
 }
 
-[data-tint="4"] {
-	--tint: var(--line-4);
+[data-pipe="lime"] {
+	--tile-wash: light-dark(#6b95000c, #78f7000a);
+	--tile-wash-on: light-dark(#96c80029, #9bfd4c1a);
+	--tile-edge-hover: light-dark(#61990087, #b6ff6f57);
+	/* Light a11: lime's a8 to a10 are pale fills, 2.31, 1.33 and 1.44 on the ground (2.17, 1.24 and
+	   1.34 on the wash). a11 reads 4.69 on the ground and 4.37 on the wash. */
+	--tile-edge-on: light-dark(#375f00d0, #b6fd6d6c);
+	--tile-edge-loud: light-dark(#375f00d0, #d1fe77e4);
 }
 
-[data-tint="5"] {
-	--tint: var(--line-5);
+[data-pipe="plum"] {
+	--tile-wash: light-dark(#c000c008, #f22ff211);
+	--tile-wash-on: light-dark(#cc00cc14, #fd4cfd27);
+	--tile-edge-hover: light-dark(#9900a852, #f07cfd70);
+	--tile-edge-on: light-dark(#89009eb5, #ee84ff95);
+	--tile-edge-loud: light-dark(#730086c1, #f19cfef3);
 }
 
-/* The mix starts from the page's own ground and edge, written out (slate 1, slate a4): this rule
-   sets --surface and --border-faint, so it cannot read them. */
-.tile[data-tint] {
-	--surface: color-mix(
-		in oklch,
-		var(--tint) calc(var(--line-strength) / 6),
-		light-dark(#fcfcfd, #111113)
-	);
-	--ground: var(--surface);
-	--border-faint: color-mix(
-		in oklch,
-		var(--tint) var(--line-strength),
-		light-dark(#00002d17, #d3edf81d)
-	);
-	background: var(--surface);
-	box-shadow: inset 0 0 0 1px var(--border-faint);
-}
-
-.tile[data-tint].focused {
-	box-shadow: inset 0 0 0 1px
-		color-mix(in oklch, var(--tint) var(--line-strength), var(--tile-focus));
-}
-
-.tile[data-tint].closing {
-	box-shadow: none;
-}
-
-.strip[data-tint] {
-	background: color-mix(in oklch, var(--tint) calc(var(--line-strength) / 3), var(--surface));
-	box-shadow: inset 0 0 0 1px
-		color-mix(in oklch, var(--tint) var(--line-strength), var(--border-faint));
-}
-
-/* A tile's terminal fills its slot, under its title bar, with a small margin, as a terminal app's does. */
-.slot,
+/* A tile's terminal fills its body, under its title bar, with a small margin, as a terminal app's does. */
+.tile-body,
 .term {
 	position: absolute;
 	inset: 0;
 }
 
-.tile > .slot {
+.tile > .tile-body {
 	top: var(--bar);
 }
 
@@ -465,33 +527,52 @@ main.program > [role="alert"] {
 	border-radius: 0 0 var(--r-lg) var(--r-lg);
 }
 
-/* A closing tile: its programs were given the end of their inputs, and it waits for their end. */
-.tile.closing {
-	box-shadow: none;
-	outline: 1px dashed var(--border-strong);
-	outline-offset: -1px;
+/*
+ * More contrast (docs/direction/tile-guidelines.md): the resting edge goes to slate a8, the text to
+ * slate 12, and focus to its color's a11 at 2px. Only the tile's own names are set here: repairing
+ * a theme is the themes plan's.
+ */
+@media (prefers-contrast: more) {
+	.tile,
+	.strip {
+		--tile-edge: var(--wire); /* slate a8 */
+		--tile-text: var(--text-primary); /* slate 12 */
+	}
+
+	.tile.focused {
+		outline: 2px solid var(--tile-edge-loud);
+		outline-offset: -2px;
+	}
+
+	.tile.closing {
+		outline-style: dashed;
+	}
 }
 
-.closing-note {
-	position: absolute;
-	top: 0;
-	right: 0;
-	margin: 0;
-	padding: 2px 8px;
-	background: var(--surface-raised);
-	color: var(--faint);
-	font-size: 12px;
-}
+/*
+ * Forced colors drop every background, the wash with them: the edges become system colors, the
+ * letter, the dot and the words stay, and focus is a 2px Highlight.
+ */
+@media (forced-colors: active) {
+	.tile,
+	.strip {
+		outline-color: CanvasText;
+	}
 
-/* "close t2? (y/n)" in the title bar of the tile it is for; the bottom line asks it too. */
-.titlebar .asking {
-	color: var(--text-primary);
-}
+	.tile.focused,
+	.strip:focus-visible {
+		outline: 2px solid Highlight;
+		outline-offset: -2px;
+	}
 
-.titlebar .asking::before {
-	content: "·";
-	padding: 0 6px;
-	color: var(--text-faint);
+	.tile.closing {
+		outline-style: dashed;
+	}
+
+	.titlebar .slot,
+	.strip .slot {
+		color: CanvasText;
+	}
 }
 
 .starting {
