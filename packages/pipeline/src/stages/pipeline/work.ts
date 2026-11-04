@@ -211,9 +211,13 @@ export class LaneWork extends Context.Service<
 		readonly sideFresh: (name: string) => Effect.Effect<Tree, Failed>;
 		/**
 		 * The side's working copy moved to `to`, as the code host has its branch, only as a fast-forward.
-		 * `behind`: `to` is not one, so the copy stays where it was.
+		 * `behind`: `to` is not one, so the copy stays where it was. `ahead`: `to` is in the copy already,
+		 * under commits of its own, so the copy stays where it was too.
 		 */
-		readonly sideTo: (name: string, to: string) => Effect.Effect<"moved" | "behind", Failed>;
+		readonly sideTo: (
+			name: string,
+			to: string,
+		) => Effect.Effect<"moved" | "ahead" | "behind", Failed>;
 		/**
 		 * Main merged into the side's branch, as a pushed branch takes it: the new head, or the files that
 		 * conflict, with the merge given up and the copy where it was.
@@ -1003,7 +1007,10 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 				Effect.gen(function* () {
 					const {tree} = yield* made(name, name.replace(/-/, "/"));
 					const ran = yield* gitIn(tree, ["merge", "--quiet", "--ff-only", to]);
-					return ran.code === 0 ? ("moved" as const) : ("behind" as const);
+					if (ran.code !== 0) return "behind" as const;
+					// `--ff-only` also passes when `to` is in the copy already: then the copy is ahead of it.
+					const at = yield* git(tree, ["rev-parse", `${to}^{commit}`]);
+					return (yield* head(tree)) === at ? ("moved" as const) : ("ahead" as const);
 				}),
 			sideMerge: (name) =>
 				Effect.gen(function* () {

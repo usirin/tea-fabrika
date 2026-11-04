@@ -80,6 +80,11 @@ export interface Script {
 	readonly commit?: string | "fail";
 	/** The run on the base: a result per Property, or a failure. */
 	readonly run?: Readonly<Record<string, Result>> | "fail";
+	/**
+	 * What a failed run says, beside its tag (tracker 193): the cause, the box's exit code, how long it
+	 * ran and stderr's tail. Left out: a bare `could_not_run`, as code from before it says.
+	 */
+	readonly failure?: Readonly<Record<string, unknown>>;
 	readonly record?: "ok" | "fail";
 	/** What the ledger shows after the write. Default: what was written. */
 	readonly back?: (wrote: readonly Checked[]) => readonly Checked[];
@@ -92,10 +97,10 @@ const step = (s: TestWriter, msg: AnyMsg) =>
 	applyCell<TestWriter, AnyMsg, TestWriterCmd>(testWriter, s, msg);
 
 const ok = (cmd: TestWriterCmd, value: unknown): AnyMsg => ({type: `${cmd.type}_ok`, cmd, value});
-const err = (cmd: TestWriterCmd): AnyMsg => ({
+const err = (cmd: TestWriterCmd, failure?: Readonly<Record<string, unknown>>): AnyMsg => ({
 	type: `${cmd.type}_err`,
 	cmd,
-	error: {_tag: cmd.type === "tests_on_base" ? "could_not_run" : "unknown"},
+	error: cmd.type === "tests_on_base" ? {...failure, _tag: "could_not_run"} : {_tag: "unknown"},
 });
 
 /** `wrote`: the `checked` facts the last record wrote, which the read after it shows by default. */
@@ -106,7 +111,7 @@ function answer(cmd: TestWriterCmd, script: Script, wrote: readonly Checked[]): 
 		case "tests_commit":
 			return script.commit === "fail" ? err(cmd) : ok(cmd, script.commit ?? COMMIT);
 		case "tests_on_base": {
-			if (script.run === "fail") return err(cmd);
+			if (script.run === "fail") return err(cmd, script.failure);
 			const run = script.run ?? {p1: "red", p2: "green"};
 			return ok(
 				cmd,

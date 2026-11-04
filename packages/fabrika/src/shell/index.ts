@@ -20,8 +20,8 @@ export {shapeLines, typeOf} from "./decode.ts";
 export {parse} from "./grammar.ts";
 // What `<program> --help` prints: the whole help, or one part of it whole.
 export {helpOf, partsHelp} from "./help.ts";
-// What tsh starts.
-export {type ProgramList, Programs, programList, statusOf} from "./programs.ts";
+// What tsh starts, and what an agent may start (less every input only a person tells).
+export {forAgent, type ProgramList, Programs, programList, statusOf} from "./programs.ts";
 // Ctrl-R, bash's reverse-i-search: a key in, the search after it out. For a line editor of an
 // app's own (apps/fabrika's), so tsh searches its history the same way in both.
 export * as Search from "./search.ts";

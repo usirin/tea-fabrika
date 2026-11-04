@@ -19,7 +19,7 @@ const filed = (pos: number, ticket: number, title: string): Entry => ({
 	fact: {type: "filed", title, body: ""},
 });
 const loaded = (after: number, entries: readonly Entry[], last = entries.at(-1)?.pos ?? after) =>
-	load.ok(load({after}), {entries, broken: [], last});
+	load.ok(load({after}), {entries, broken: [], last, areas: []});
 
 const file: Write = {kind: "file", title: "Login fails", body: ""};
 const close: Write = {kind: "close", ticket: 1};

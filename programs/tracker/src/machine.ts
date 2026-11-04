@@ -1,6 +1,17 @@
 import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
 import {
+	AreaEntry,
+	areaAfter,
+	AreaFact,
+	AreaNumber,
+	Areas,
+	areasOf,
+	NO_AREAS,
+	Suggested,
+	suggestionsOf,
+} from "@kampus/pipeline/tickets/area";
+import {
 	Candidate,
 	candidatesOf,
 	hintsOf,
@@ -13,7 +24,7 @@ import {Hint, hintsOn} from "./duplicates.ts";
 import {Head, headOf, OpenAsk, openAsksOf} from "./head.ts";
 import {PullRequest} from "./pull-requests.ts";
 import {Row, rowsOf} from "./rows.ts";
-import {Summary, summaryOf, Write} from "./ticket.ts";
+import {areaFact, areaFactOf, isAreaWrite, Summary, summaryOf, Write} from "./ticket.ts";
 
 // The tracker's machine: the tickets as last read from the ledger, the ticket open in the window,
 // and the writes waiting their turn. Pure: the ledger is reached through its two Cmds and its Sub,
@@ -46,26 +57,62 @@ import {Summary, summaryOf, Write} from "./ticket.ts";
 //   // state.saving [{id: "w1", ...}], cmds [load {after: 0}, save {id: "w1", write, next: 1}]
 //
 // The state is not kept anywhere: the ledger is. A tracker started again loads it all again.
+//
+// The project's areas are in the state too, folded from `tracker/areas` beside the tickets
+// (`@kampus/pipeline/tickets/area`). While the ledger has none and the person has not skipped, the
+// list page holds the onboarding step: what the app suggests the first areas be made from. The
+// first time it shows, `folders` reads the connected repositories' top folders (./folders.ts),
+// once. Making them is one `make_area` write each. A skip is not a fact: the note puts it on the
+// person's desk, and it is this state's alone until the desk keeps a program's window state.
+//
+//   load_ok {entries: [3 titles "Lane: ..."], areas: []}   // cmds [folders {}]
+//   // page.onboarding [{_tag: "titles", word: "lane", tickets: 3}]
+//   folders_ok {folders: ["apps/fabrika"]}
+//   // page.onboarding [{_tag: "titles", ...}, {_tag: "folder", path: "apps/fabrika"}]
+//   skip_onboarding                                          // page.onboarding null, for good
+//
+// It reads its own writes, as Replicache and Linear keep pending writes. `areas` is folded from
+// the ledger's rows alone. A save that answers `{area}` puts its fact in `pending`, and what is
+// shown is `pending` folded on top of `areas` (`shownAreas`), with the step a load folds each row
+// with, so a rename or a merge of an area just made goes out before any load. The first load sent
+// after the answer has read past that save's row, so it ends the pending fact, whether the row
+// read or not; a load already out at the answer ends nothing. So the ledger's order always wins:
+//
+//   areas {1: "x"}; another renames 1 to "b" (row 3, unread)
+//   save_ok {area: 1} for rename_area 1 "a"   // pending [area_renamed 1 "a"], shown "a"
+//   load_ok {areas: [row 3 "b", row 4 "a"]}    // areas {1: "a"}, pending [], shown "a"
 
-/** Read the ledger after `after`: the facts found, the rows that did not read, and the last row's place. */
+/**
+ * Read the ledger after `after`: the facts found, the rows that did not read, the last row's
+ * place, and the area facts found beside the tickets.
+ */
 export const load = Cmd.define("load", {
 	input: Schema.Struct({after: Schema.Int}),
 	ok: Schema.Struct({
 		entries: Schema.Array(Entry),
 		broken: Schema.Array(Schema.String),
 		last: Schema.Int,
+		areas: Schema.Array(AreaEntry),
 	}),
 	err: ["unreachable"],
 });
 
 /**
  * Put one write on the ledger. `id`: the message id, so the same write sent twice lands once.
- * `next`: for a new ticket, the first number to try; a number taken already is passed over.
+ * `next`: for a new ticket, the first number to try; a number taken already is passed over. The
+ * answer names the ticket written, or the area for a write to the areas.
  */
 export const save = Cmd.define("save", {
 	input: Schema.Struct({id: Schema.String, write: Write, next: TicketNumber}),
-	ok: Schema.Struct({ticket: TicketNumber}),
+	ok: Schema.Union([Schema.Struct({ticket: TicketNumber}), Schema.Struct({area: AreaNumber})]),
 	err: ["unreachable", "refused"],
+});
+
+/** Read the connected repositories' top folders, for the onboarding step's suggestions. */
+export const folders = Cmd.define("folders", {
+	input: Schema.Struct({}),
+	ok: Schema.Struct({folders: Schema.Array(Schema.String)}),
+	err: ["unreachable"],
 });
 
 /** Read the open pull requests of every connected repository. */
@@ -104,6 +151,7 @@ type SaveCmd = ReturnType<typeof save>;
 type PullRequestsCmd = ReturnType<typeof pullRequests>;
 type DuplicatesCmd = ReturnType<typeof duplicates>;
 type SaveHintsCmd = ReturnType<typeof saveHints>;
+type FoldersCmd = ReturnType<typeof folders>;
 
 /** The poll, as its runner sees it: rows after `after` are news. */
 export type PollSub = Sub<"poll", {readonly after: number}>;
@@ -129,6 +177,17 @@ export const PullRequestsRead = Schema.Struct({
 	why: Schema.NullOr(Schema.String),
 });
 export type PullRequestsRead = typeof PullRequestsRead.Type;
+
+/**
+ * The folders the onboarding step suggests from: not asked for yet, asked for, or read. A read
+ * that failed reads as none: a missing suggestion is no news.
+ */
+export const FoldersRead = Schema.TaggedUnion({
+	unasked: {},
+	asking: {},
+	read: {folders: Schema.Array(Schema.String)},
+});
+export type FoldersRead = typeof FoldersRead.Type;
 
 /** A write asked for and not on the ledger yet, under its message id. */
 export const Saving = Schema.Struct({id: Schema.String, write: Write});
@@ -168,6 +227,21 @@ export const Tracker = Schema.Struct({
 	now: Schema.Finite,
 	/** Tickets this tracker filed whose duplicate hint is still out: asked of Jev, or saving. */
 	hinting: Schema.Array(TicketNumber),
+	/** The project's areas, folded from the rows of `tracker/areas` alone, as last read. */
+	areas: Areas,
+	/**
+	 * This tracker's own area facts, oldest answer first, that no load sent after their save
+	 * answered has come back yet. Shown folded on top of `areas`.
+	 */
+	pending: Schema.Array(AreaFact),
+	/**
+	 * How many of the newest `pending` facts were answered while the load now out was already out.
+	 * That load may not hold their rows, so it ends none of them. 0 while no load is out.
+	 */
+	late: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+	/** The person skipped the onboarding step: it does not ask again while this tracker runs. */
+	skipped: Schema.Boolean,
+	folders: FoldersRead,
 });
 export type Tracker = typeof Tracker.Type;
 
@@ -180,11 +254,12 @@ export type TrackerMsg =
 	| {readonly type: "show"; readonly show: Show}
 	| {readonly type: "find"; readonly text: string}
 	| {readonly type: "refresh"}
-	| {readonly type: "tick"; readonly now: number};
+	| {readonly type: "tick"; readonly now: number}
+	| {readonly type: "skip_onboarding"};
 
 type Step = readonly [
 	Tracker,
-	readonly (LoadCmd | SaveCmd | PullRequestsCmd | DuplicatesCmd | SaveHintsCmd)[],
+	readonly (LoadCmd | SaveCmd | PullRequestsCmd | DuplicatesCmd | SaveHintsCmd | FoldersCmd)[],
 ];
 
 /** The most problems kept. */
@@ -206,7 +281,62 @@ const start: Tracker = {
 	pullRequests: {ask: "busy", list: null, why: null},
 	now: 0,
 	hinting: [],
+	areas: NO_AREAS,
+	pending: [],
+	late: 0,
+	skipped: false,
+	folders: {_tag: "unasked"},
 };
+
+/**
+ * The areas as this tracker shows them: its `pending` facts folded on top of the ledger's, oldest
+ * first. A pending fact that does not fit (its row was read already, or read as broken) is left
+ * out, with no problem line: only the ledger's rows make problems.
+ */
+const shownAreas = (s: Tracker): Areas =>
+	s.pending.reduce((areas, fact) => {
+		const step = areaAfter(areas, fact);
+		return "areas" in step ? step.areas : areas;
+	}, s.areas);
+
+/**
+ * The onboarding step is owed: the tracker shows a ticket but no area yet, and the person has not
+ * skipped. With no ticket there is nothing to sort, and the empty list's own words come first.
+ */
+const onboarding = (s: Tracker) =>
+	s.tickets.length > 0 && shownAreas(s).live.size === 0 && !s.skipped;
+
+/** The folders, the first time the step is owed: asked for once, while this tracker runs. */
+const askFolders = (s: Tracker): Step =>
+	onboarding(s) && s.folders._tag === "unasked" && !s.quitting
+		? [{...s, folders: {_tag: "asking"}}, [folders({})]]
+		: [s, []];
+
+/** Why an area write does not fit the areas as shown, or `null`: it may go to the ledger. */
+const refusedOf = (s: Tracker, write: Write): string | null => {
+	if (!isAreaWrite(write)) return null;
+	const made = areaFactOf(write, shownAreas(s));
+	return "why" in made ? made.why : null;
+};
+
+/**
+ * An area write landed as `area`: its fact is pending until a load sent after this answer comes
+ * back. `out`: a load was already out at the answer, so that one ends nothing.
+ */
+const pendingArea = (s: Tracker, write: Write, area: AreaNumber, out: boolean): Tracker =>
+	isAreaWrite(write)
+		? {...s, pending: [...s.pending, areaFact(write, area)], late: out ? s.late + 1 : s.late}
+		: s;
+
+/**
+ * A load came back read. It was sent after every pending fact's answer but the `late` ones, so it
+ * read past their rows, and only the `late` ones stay pending.
+ */
+const readPast = (s: Tracker): Tracker => ({
+	...s,
+	pending: s.pending.slice(s.pending.length - s.late),
+	late: 0,
+});
 
 /** The number a new ticket tries first: one past the newest known. */
 const nextNumber = (s: Tracker) => (s.tickets.at(-1)?.number ?? 0) + 1;
@@ -264,7 +394,7 @@ export const tracker = defineMachine({
 		sub: {} as PollSub | PullRequestsSub | ClockSub,
 		ctx: undefined,
 	},
-	cmds: [load, save, pullRequests, duplicates, saveHints],
+	cmds: [load, save, pullRequests, duplicates, saveHints, folders],
 	init: (): Step => [start, [load({after: 0}), pullRequests({})]],
 	update: {
 		list: (s): Step => [{...s, open: null}, []],
@@ -286,29 +416,42 @@ export const tracker = defineMachine({
 		open: (s, m): Step => [{...s, open: m.ticket}, []],
 		write: (s, m): Step => {
 			if (s.quitting) return [s, []];
+			// An area write that does not fit the areas read is refused here, in words; the save
+			// checks it again against the stream, which may have moved since.
+			const refused = refusedOf(s, m.write);
+			if (refused !== null) return [{...s, failed: {write: m.write, why: refused}}, []];
 			const next = {...s, saving: [...s.saving, {id: m.id, write: m.write}], failed: null};
 			return [next, s.saving.length === 0 ? sendFirst(next) : []];
 		},
+		skip_onboarding: (s): Step => [{...s, skipped: true}, []],
+		folders_ok: (s, m): Step => [{...s, folders: {_tag: "read", folders: m.value.folders}}, []],
+		folders_err: (s): Step => [{...s, folders: {_tag: "read", folders: []}}, []],
 		quit: (s): Step => [{...s, quitting: true}, []],
 		moved: (s): Step =>
 			s.load === "idle" ? [{...s, load: "busy"}, [load({after: s.seen})]] : [s, []],
 
 		load_ok: (s, m): Step => {
 			const folded = fold(s.tickets, m.value.entries);
+			const areas = areasOf(m.value.areas, s.areas);
 			const next: Tracker = {
-				...s,
+				...readPast(s),
 				ready: true,
 				tickets: folded.tickets,
+				areas: areas.areas,
 				seen: Math.max(s.seen, m.value.last),
-				problems: [...s.problems, ...m.value.broken, ...folded.problems].slice(-PROBLEMS),
+				problems: [...s.problems, ...m.value.broken, ...folded.problems, ...areas.problems].slice(
+					-PROBLEMS,
+				),
 				unreachable: null,
 			};
+			const [asked, ask] = askFolders(next);
 			return s.load === "again"
-				? [{...next, load: "busy"}, [load({after: next.seen})]]
-				: [{...next, load: "idle"}, []];
+				? [{...asked, load: "busy"}, [load({after: next.seen}), ...ask]]
+				: [{...asked, load: "idle"}, ask];
 		},
 		load_err: (s, m): Step => {
-			const next: Tracker = {...s, ready: true, unreachable: why(m.error)};
+			// It read nothing, so it ends no pending fact; the next load is sent after every answer.
+			const next: Tracker = {...s, ready: true, unreachable: why(m.error), late: 0};
 			return s.load === "again"
 				? [{...next, load: "busy"}, [load({after: s.seen})]]
 				: [{...next, load: "idle"}, []];
@@ -318,6 +461,8 @@ export const tracker = defineMachine({
 			const [front, ...rest] = s.saving;
 			if (front === undefined || front.id !== m.cmd.id) return [s, []];
 			const [next, sent] = settled(s, rest);
+			if (!("ticket" in m.value))
+				return [pendingArea(next, front.write, m.value.area, s.load !== "idle"), sent];
 			const [asking, asked] = hintFor(next, front.write, m.value.ticket);
 			return [asking, [...sent, ...asked]];
 		},
@@ -363,12 +508,17 @@ export const tracker = defineMachine({
 /** It is over: asked to quit, with nothing left to save and no hint still out. */
 export const over = (s: Tracker) => s.quitting && s.saving.length === 0 && s.hinting.length === 0;
 
-/** Its status line, for a host's list of runs. */
+/**
+ * Its status line, for a host's list of runs (tsh's `tracker` line). The live areas follow the
+ * counts, by name, in the order made: `4 open, 0 closed; areas: lane, apps/fabrika`.
+ */
 export const statusOf = (s: Tracker): string => {
 	if (!s.ready) return "reading the ledger";
 	const open = s.tickets.filter((t) => t.state === "open").length;
 	const counts = `${open} open, ${s.tickets.length - open} closed`;
-	return s.saving.length === 0 ? counts : `${counts}, saving ${s.saving.length}`;
+	const line = s.saving.length === 0 ? counts : `${counts}, saving ${s.saving.length}`;
+	const areas = [...shownAreas(s).live.values()];
+	return areas.length === 0 ? line : `${line}; areas: ${areas.join(", ")}`;
 };
 
 // ---------------------------------------------------------------- what the window is shown
@@ -404,6 +554,8 @@ export const Page = Schema.Union([
 		tickets: Schema.Array(Listed),
 		pullRequests: Schema.Array(PullRequest),
 		counts: Schema.Struct({open: Schema.Int, closed: Schema.Int, pullRequests: Schema.Int}),
+		/** The onboarding step: what the app suggests the first areas be made from. `null`: no step. */
+		onboarding: Schema.NullOr(Schema.Array(Suggested)),
 	}),
 	Schema.Struct({
 		kind: Schema.Literal("ticket"),
@@ -450,6 +602,9 @@ const listOf = (s: Tracker): Shown["page"] => {
 			closed: found.filter((t) => t.state === "closed").length,
 			pullRequests: prsFound.length,
 		},
+		onboarding: onboarding(s)
+			? suggestionsOf(s.tickets, s.folders._tag === "read" ? s.folders.folders : [], shownAreas(s))
+			: null,
 	};
 };
 

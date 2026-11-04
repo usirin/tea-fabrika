@@ -59,7 +59,24 @@ export const DRAFTS: Readonly<Record<string, Written | null>> = {
 		],
 	},
 	"no fit": null,
+	// Ticket 117's shape (tracker 193): some Properties tested, one no test can check.
+	"tests one, cannot one": {
+		...GOOD,
+		answers: [
+			...GOOD.answers.slice(0, 1),
+			{property: pid("p2"), kind: "cannot", why: "a healthy exit leaves nothing to read"},
+		],
+	},
 };
+
+/** A run on the base that failed and said why, beside its tag (tracker 193). Made up: the cause. */
+const NO_REPORT = {
+	_tag: "could_not_run",
+	why: "no_report",
+	code: 1,
+	ms: 5,
+	tail: "Error: boom",
+} as const;
 
 const runIdOf = (s: TestWriter): string | null => runSub.deps(s)?.id ?? null;
 const FIRST_RUN = `${KEY}/1`;
@@ -103,6 +120,7 @@ export function testWriterWorld(): World<TestWriter, Msg, TestWriterCmd> {
 						onBase.ok(cmd, result("green", "red"), 0),
 						onBase.ok(cmd, result("red", "green").slice(1), 0),
 						onBase.err(cmd, {_tag: "could_not_run"}, 0),
+						onBase.err(cmd, NO_REPORT, 0),
 					];
 				case "tests_record":
 					return [recordFacts.ok(cmd, null, 0), recordFacts.err(cmd, {_tag: "unknown"}, 0)];
@@ -208,6 +226,31 @@ export function testWriterLaws<S extends TestWriter>(): readonly Law<S, Msg, Tes
 					: broke(`${now} spent, and the report says ${next.report.costUsd}`);
 			},
 		),
+		// Tracker 193: ticket 117's run failed, and its two rows never reached the stuck comment.
+		law<S, Msg, TestWriterCmd>(
+			"a run that fails keeps every row the writer said no test can check",
+			({prev, next}) => {
+				if (next.phase !== "over" || prev.phase === "over") return null;
+				if (next.outcome.kind !== "stuck" || next.outcome.why !== "run_failed") return null;
+				const said = (next.report.written?.answers ?? []).filter((a) => a.kind === "cannot");
+				const kept = next.report.found.filter((f) => f.for === "cannot_test");
+				return said.every((a) => kept.some((f) => f.property === a.property))
+					? null
+					: `run_failed with ${kept.length} cannot_test rows of ${said.length}`;
+			},
+		),
+		law<S, Msg, TestWriterCmd>(
+			"a run that fails and says why keeps the cause, and one that says nothing keeps none",
+			({prev, msg, next}) => {
+				if (msg.type !== "tests_on_base_err" || prev.phase !== "running") return null;
+				if (next.phase !== "over") return "a failed run did not end the writer";
+				const kept = next.report.failure;
+				const gave = "why" in msg.error ? msg.error : null;
+				return structuralHash(kept) === structuralHash(gave)
+					? null
+					: `the run said ${JSON.stringify(gave)}, and the report keeps ${JSON.stringify(kept)}`;
+			},
+		),
 		law<S, Msg, TestWriterCmd>("an ended run sends nothing", ({prev, cmds}) =>
 			prev.phase === "over" && cmds.length > 0
 				? `${cmds.map((c) => c.type).join(", ")} after the run ended`
@@ -232,6 +275,8 @@ export function showTestWriterMsg(m: Msg): string {
 			return `run ${m.id}: tool`;
 		case "tests_on_base_ok":
 			return `on base: ${m.value.map((r) => `${r.property} ${r.result}`).join(", ")}`;
+		case "tests_on_base_err":
+			return `on base failed: ${"why" in m.error ? String(m.error.why) : "no cause"}`;
 		case "resume":
 			return "restart, then resume";
 		default:
@@ -273,3 +318,15 @@ export const commitsAnotherDraft: Update<TestWriter, Msg, TestWriterCmd> = (s, m
 /** A failed run's spend is left out of the report. */
 export const dropsAFailedSpend: Update<TestWriter, Msg, TestWriterCmd> = (s, m) =>
 	m.type === "tests_write_failed" ? update(s, {...m, spend: noSpend}) : update(s, m);
+
+/** A failed run's report drops what the writer said no test can check. */
+export const dropsTheCannotRows: Update<TestWriter, Msg, TestWriterCmd> = (s, m) => {
+	const [next, cmds] = update(s, m);
+	return m.type === "tests_on_base_err" && next.phase === "over"
+		? [{...next, report: {...next.report, found: []}}, cmds]
+		: [next, cmds];
+};
+
+/** A failed run's report drops the cause the run gave. */
+export const dropsTheCause: Update<TestWriter, Msg, TestWriterCmd> = (s, m) =>
+	m.type === "tests_on_base_err" ? update(s, {...m, error: {_tag: "could_not_run"}}) : update(s, m);

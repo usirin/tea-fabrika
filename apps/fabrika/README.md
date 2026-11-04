@@ -361,6 +361,11 @@ When something is wrong, its word says so, in red where it is broken:
   attached it. After a host restart each tile's tsh says only its own jobs are waiting; `jobs`
   lists every one, and `attach %n` works in any tile. History is one file, shared: a line typed
   in one tile is the next tile's Up.
+- **A job keeps one writer for life.** `attach %n` goes on only as the writer the job began with:
+  your tile refuses an agent's job (`tsh: this job is agent:claude for:owner's: attach it in
+  claude's tile`), and an agent's tsh refuses yours. A job kept before jobs had a writer attaches
+  anywhere. You may `stop %n` any job; an agent's tsh refuses `stop %n` of your job, since only
+  its `stop` tool, with a why, stops a job of yours.
 - **A run in the foreground covers its tile.** tsh waits behind it. Ctrl-C stops it, and tsh is
   back. The other tiles stay as they were.
 - **A line with several windows opens in place,** in the tile it was typed in
@@ -562,8 +567,9 @@ claude mcp add --transport stdio --env FABRIKA_HOME=<home> fabrika -- \
   use, whose writer is `agent:claude` for you. Nothing it sends can name you: the bridge's
   handshake holds only an agent's name, and the host makes the writer. An agent has no
   `tracker_answer`, `ticket_answer` or `tracker_rate_duplicate`: each is an input only a person
-  tells (`{personOnly: true}`), so no tool is made for it. Behind that, the tracker refuses an agent's answer, as it
-  refuses any agent's.
+  tells (`{personOnly: true}`), and the agents' socket is handed the list with each such input
+  taken out (`Shell.forAgent`), so no tool is made for one. Behind that, the tracker refuses an
+  agent's answer, as it refuses any agent's.
 
 What you see: type `tracker` in a tile. Ask Claude Code "file a ticket for X under #44". It calls
 `tracker_file` with `{value: {title: "X", body: "Under #44."}}`, and within a second the ticket

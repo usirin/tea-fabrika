@@ -5,6 +5,7 @@ import {
 	type Called,
 	call,
 	type DoesNotFit,
+	defineProgram,
 	type Flags,
 	type Given,
 	type Inputs,
@@ -31,6 +32,10 @@ import {
 // let go when the run's scope closes. Fresh means fresh even when the host
 // starts the run inside a Layer of its own that built the same service. A host (tsh, or any other) keeps the
 // entries it can start and never sees a service.
+//
+// An entry is also packed as an agent may start it, on the same services (tracker 185b):
+//
+//   entry.forAgent().program.inputs     the tracker's, less `answer` and `rate_duplicate`
 
 /** A run's starter handle, of any program. */
 export type AnyRunning = Running<any, any, any, any, any>;
@@ -64,7 +69,29 @@ export interface Entry {
 			readonly stopOn: Effect.Effect<unknown>;
 		},
 	) => Effect.Effect<Called<any, unknown> | BadShape, never, Scope.Scope>;
+	/**
+	 * This entry as an agent may start it: its program with every input only a person tells
+	 * (`{personOnly: true}`) taken out, on the same services. The same entry when it has none. A
+	 * host wrapping an entry wraps this one too, or an agent's runs skip the wrapper.
+	 */
+	readonly forAgent: () => Entry;
 }
+
+/**
+ * `program` with every input only a person tells taken out, and the rest as it was: its `main`,
+ * flags, outputs, machines, capacity and view. Made by `defineProgram`, so a run takes it, and a
+ * window reads its view. `main` still names the inputs taken out; `serve` serves only the declared
+ * ones, so their handlers are never called.
+ */
+const withoutPersonOnly = (program: AnyProgram): AnyProgram => {
+	const inputs = Object.entries<Inputs[string]>(program.inputs);
+	if (!inputs.some(([, declared]) => declared.personOnly)) return program;
+	// `...program` carries its own `view` key, so the narrowed copy keeps the window.
+	return defineProgram({
+		...program,
+		inputs: Object.fromEntries(inputs.filter(([, declared]) => !declared.personOnly)),
+	});
+};
 
 /**
  * Pack a program with its services. `services` must give every service the
@@ -94,8 +121,16 @@ export function listed<
 	// and the values were read at run time.
 	const given = (flags: Readonly<Record<string, unknown>>) => flags as Given<F>;
 	const keepingOf = (keeping: Kept) => keeping as never;
-	return {
+	// Made once, on first ask: one program for agents, so a window finds its view by it.
+	let agents: Entry | undefined;
+	const entry: Entry = {
 		program,
+		forAgent: () => {
+			if (agents !== undefined) return agents;
+			const narrowed = withoutPersonOnly(program);
+			agents = narrowed === program ? entry : listed(narrowed, services as Layer.Layer<any>);
+			return agents;
+		},
 		start: (flags, listeners, keeping) =>
 			served(start(program, given(flags), listeners as Listeners<O>, keepingOf(keeping))),
 		pipe: (flags, listeners, keeping, output, to, input) =>
@@ -122,4 +157,5 @@ export function listed<
 				} as never),
 			),
 	};
+	return entry;
 }

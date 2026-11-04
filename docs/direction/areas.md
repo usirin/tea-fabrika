@@ -307,6 +307,24 @@ ones, Esc skips. Skipping leaves every ticket in "No area yet", and "New area ..
 menu. **Decided 2026-11-04 by the owner: a checklist in the list page.** The skip is window
 state on the person's desk, not a fact.
 
+As built in PR 1 (today's version): the desk keeps no window state for a program yet, so PR 1
+holds the skip in the tracker machine's own state, `skip_onboarding`, until the desk keeps window
+state. Tracker ticket 217 tracks that. Until then the skip lasts while that tracker runs, every
+window on it agrees, and a new tracker asks again. The
+step shows only when the ledger holds a ticket, since with none there is nothing to sort. A
+"type a name" box sits under the suggestions (the lead's call, 2026-11-04). The folders come from
+one GitHub call per connected repository, the first time the step shows; if it fails, the titles'
+suggestions stay and nothing is said.
+
+On this repository's own 15 top folders and 13 real pull request titles filed as tickets, the
+shots (`programs/tracker/docs/areas/`) show 14 suggestions: 2 from titles, 12 from folders. At
+1440 by 900 in one tile the whole step fits above the list. In a stacked pipe, a 2x2 or a 1024 by
+700 window it is taller than the tile, so its buttons stick to the tile's bottom edge and the rows
+scroll past under them, in the view's one scroll (no box in a view scrolls on its own). The list
+stays out of sight until the step goes. Once areas are made, the tracker's status line names them:
+`13 open, 0 closed; areas: direction, pipeline, desk`. The app's `jobs` does not print that line
+today, so on screen PR 1 still shows no area anywhere.
+
 ## What the ledger records
 
 | Fact | Lost if not written now? |
@@ -355,6 +373,7 @@ onboarding words, and every count in the trace.
 - Whether a "?" on most rows is calm or noisy. Only a shot of the build shows it.
 - Whether the filer's guess is often right. No agent has filed with a `guess` yet.
 - Whether the owner filters by area day to day. One person pressed a draft; a week of use answers it.
-- Whether the onboarding suggestions are good. None was built.
+- Whether the onboarding suggestions are good. PR 1 built them; on this repository most are
+  folders, and whether a person wants twelve folder rows is not known until one uses it.
 - No screen reader run: the menus, the group headings and a row's "a guess" need VoiceOver.
 - The shape ran only as a scratch fold; the tracker's own fold and door were not changed.

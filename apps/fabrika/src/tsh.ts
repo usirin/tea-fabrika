@@ -30,7 +30,7 @@ import {pipeline} from "@tea-fabrika/pipeline";
 import {laneRunner} from "@tea-fabrika/pipeline/node";
 import {ticket} from "@tea-fabrika/ticket";
 import {trace} from "@tea-fabrika/trace";
-import {Author, PullRequests, tracker} from "@tea-fabrika/tracker";
+import {Author, PullRequests, RepoTree, type RepoTreeShape, tracker} from "@tea-fabrika/tracker";
 import {Clock, Deferred, Effect, Layer, Queue, Stream} from "effect";
 import type {TileId} from "./desk/layout/index.ts";
 import {type EditorMsg, editor} from "./editor/editor.ts";
@@ -206,11 +206,14 @@ export const appPrograms = (
 	author: Author["Service"],
 	pullRequests: PullRequests["Service"],
 	traces: Traces["Service"],
+	repoTree?: RepoTreeShape,
 ): readonly Entry[] => {
 	const tickets = Layer.mergeAll(
 		Layer.succeed(Ledger, ledger),
 		Layer.succeed(Author, author),
 		Layer.succeed(PullRequests, pullRequests),
+		// None handed: the tracker's own default, no folders, so it suggests from titles only.
+		repoTree === undefined ? Layer.empty : Layer.succeed(RepoTree, repoTree),
 	);
 	const read = experimentsOnLedger(author).pipe(Layer.provide(Layer.succeed(Ledger, ledger)));
 	return [
@@ -249,6 +252,8 @@ interface Watch {
 /** An entry whose runs are watched as they start and, for a `call`, as they end. */
 const seenBy = (entry: Entry, watch: Watch): Entry => ({
 	...entry,
+	// Watched too: the spread's `forAgent` would hand back the entry under this one, unwatched.
+	forAgent: () => seenBy(entry.forAgent(), watch),
 	start: (flags, listeners, keeping) =>
 		entry
 			.start(flags, listeners, keeping)
@@ -327,6 +332,7 @@ export const startTsh = (options: {
 		// Every job this tsh begins is the tile's, and its writer's: the person at this tile.
 		const jobs: JobsOnHost = {...options.jobs, owner: tile, by: writerText(author)};
 		const pullRequests = yield* PullRequests;
+		const repoTree = yield* RepoTree;
 		const traces = yield* Traces;
 		/** Its scope is closing: the tile closes or the host stops, and every run stops with it. */
 		let closing = false;
@@ -475,15 +481,16 @@ export const startTsh = (options: {
 			});
 
 		const programs = Shell.programList(
-			[...tshList(appPrograms(ledger, author, pullRequests, traces)), ...words].map((entry) =>
-				seenBy(entry, {
-					seen,
-					called: (run) => {
-						calls.add(run);
-						recount(table());
-					},
-					ended: (run, end) => watch.ran(run, end),
-				}),
+			[...tshList(appPrograms(ledger, author, pullRequests, traces, repoTree)), ...words].map(
+				(entry) =>
+					seenBy(entry, {
+						seen,
+						called: (run) => {
+							calls.add(run);
+							recount(table());
+						},
+						ended: (run, end) => watch.ran(run, end),
+					}),
 			),
 		);
 		const started = yield* start(
