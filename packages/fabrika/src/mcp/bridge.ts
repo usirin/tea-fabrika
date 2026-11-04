@@ -83,8 +83,20 @@ const LOST = "the host is restarting: it ended before it answered, so this call 
 
 const LIST_CHANGED = {jsonrpc: "2.0", method: "notifications/tools/list_changed"};
 
-/** The socket ended with no error: the host closed it. */
+/** The socket closed cleanly: the host closed it. */
 const CLOSED = "the host closed the socket";
+
+/**
+ * Why a socket ended, in words. Effect's socket (effect 4.1.1, `Socket.ts`) never ends a read
+ * cleanly: "every termination, clean close included, fails with a `SocketError` wrapping the
+ * close reason", and "consumers that treat a close as normal catch it". A clean close is
+ * `SocketCloseError` with code 1000, the code its reader gives when the stream ends, so that one
+ * is the host closing the socket. Anything else is the socket's own error.
+ */
+const endedWhy = (e: Socket.SocketError): string =>
+	e.reason._tag === "SocketCloseError" && e.reason.code === 1000
+		? CLOSED
+		: `the socket ended: ${e.message}`;
 
 const Id = Schema.Union([Schema.String, Schema.Number]);
 type Id = typeof Id.Type;
@@ -289,7 +301,7 @@ export const bridge = (
 					),
 				),
 				Effect.as(CLOSED),
-				Effect.catchTag("SocketError", (e) => Effect.succeed(`the socket ended: ${e.message}`)),
+				Effect.catchTag("SocketError", (e) => Effect.succeed(endedWhy(e))),
 				Effect.catchTag("NdjsonError", (e) =>
 					Effect.fail(new BridgeStopped({why: `a line that does not read: ${e.message}`})),
 				),
