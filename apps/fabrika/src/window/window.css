@@ -300,8 +300,8 @@ body,
 	overflow: hidden;
 }
 
-/* One focused tile a workspace: its edge lit, its title brighter, its name at 500. The body stays
-   plain. */
+/* One focused tile a workspace: its edge lit, its title's wash brighter, its name at slate 12 and
+   500. The body stays plain. */
 .tile.focused {
 	outline-color: var(--tile-edge-on);
 }
@@ -337,6 +337,8 @@ body,
 	color: var(--tile-text-on);
 }
 
+/* Focus lifts the wash and the bar's text to slate 12. The dot and the state word set their own
+   quiet step, so on a focused tile only the name rises. */
 .tile.focused .titlebar {
 	background: var(--tile-wash-on);
 	color: var(--tile-text-on);
@@ -346,6 +348,10 @@ body,
    way, so the name never moves when a tile joins or leaves a pipe. */
 .slot {
 	flex: none;
+}
+
+.titlebar .slot {
+	color: var(--tile-text);
 }
 
 [data-pipe] > .titlebar > .slot,
@@ -367,6 +373,7 @@ body,
 
 .titlebar .state {
 	flex: none;
+	color: var(--tile-text);
 }
 
 .titlebar .state::before {

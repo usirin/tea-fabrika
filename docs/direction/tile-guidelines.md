@@ -1,6 +1,6 @@
 # A tile stays quiet, says every fact in words, and every part is reached by keys
 
-Decided 2026-11-01 by the owner, not built yet. This is about today's version, and `next/` reads it
+Decided 2026-11-01 by the owner. Tiles PR 1 builds it. This is about today's version, and `next/` reads it
 as a lesson. It holds the written rules for every part of a tile, each tested against how Linear
 would build it. [Pipe colors](./pipe-colors.md) and [color principles](./color-principles.md) came
 first, and this note applies them.
@@ -106,7 +106,7 @@ Where Linear and the tiling tools differ. Linear has no tiling, so tmux and Tuva
 :root {
 	--tile-edge: #d3edf81d;       /* slate a4: --manti-border-subtle (new) */
 	--tile-text: #f1f7feb5;       /* slate a11: --manti-text-muted, and --text-faint */
-	--tile-text-on: #fcfdffef;    /* slate a12: --manti-text, and the letter */
+	--tile-text-on: #edeef0;      /* slate 12: --manti-text, and the letter */
 	--tile-wash: #d8f4f609;       /* a2 */
 	--tile-wash-on: #ddeaf814;    /* a3 */
 	--tile-edge-hover: #d9edff40; /* a7: --manti-border */
@@ -143,7 +143,8 @@ Where Linear and the tiling tools differ. Linear has no tiling, so tmux and Tuva
 ## The wash, in numbers
 
 Computed from the package's hex, composited over `#111113`. The name at rest and the id are a11. The
-letter, and the name when focused, are a12. The bars are
+letter, and the name when focused, are slate 12. The code uses the theme's own `text`, slate 12,
+and not a12, so a brought theme repaints it. The bars are
 [1.4.3](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html), 4.5:1 for text, and
 [1.4.11](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html), 3:1 for a needed state.
 
@@ -406,7 +407,7 @@ touch.
 - **Job:** say this tile waits for y or n. **Linear:** not documented.
 - **Rule:** words in the bar's state slot and on the bottom line ([popovers](./popovers.md)), one
   announcement. `role="alert"`, not `alertdialog`: no dialog opens and no focus moves. No accent.
-- **Tokens:** `--tile-text-on`; separator slate a8.
+- **Tokens:** `--tile-text-on`; separator slate a11.
 - **Cue and keys:** words. `y`, `n` or a click answers. Assertive once. **Layouts:** fits at 506px. At
   220px the name cuts first and the question shows.
 - **Breaks:** `desk.tsx:502` sits inside a button whose `aria-label` hides it; `frame.tsx:736` uses
