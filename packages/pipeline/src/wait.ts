@@ -39,10 +39,16 @@ export const OnWait = Context.Reference<(line: string) => Effect.Effect<void>>("
 /**
  * A ledger error worth waiting out: no answer at all (no `status`), or an answer that says "busy",
  * a 408, a 429 or a 5xx. A refusal (a 400, a 401 after a failed renew, a 403, a 404, the door's
- * refusal) is not, and reaches the caller at once with the ledger's own words.
+ * refusal) is not, and reaches the caller at once with the ledger's own words. Nor is an answer the
+ * ledger would give again (a `why`: one this code cannot read, or its own store's error).
  */
-export const ledgerBusy = (e: {readonly _tag: string; readonly status?: number}): boolean =>
+export const ledgerBusy = (e: {
+	readonly _tag: string;
+	readonly status?: number;
+	readonly why?: string;
+}): boolean =>
 	e._tag === "LedgerUnreachable" &&
+	e.why === undefined &&
 	(e.status === undefined || e.status === 408 || e.status === 429 || e.status >= 500);
 
 /** What a try met, in the tile's words: the service's own text when it answered, else `no answer`. */

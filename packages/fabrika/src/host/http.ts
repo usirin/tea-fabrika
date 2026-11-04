@@ -160,7 +160,17 @@ export const layerHttp = (o: HttpOptions) =>
 							message: `the ledger answered ${res.status}: ${res.text}`,
 							status: res.status,
 						});
-					return yield* Effect.try(() => JSON.parse(res.text) as unknown);
+					// A 2xx whose body is not JSON (a proxy's page, another checkout's ledger) answers the same again.
+					return yield* Effect.try({
+						try: () => JSON.parse(res.text) as unknown,
+						catch: (e) =>
+							new LedgerUnreachable({
+								method,
+								message: `the ledger answered ${res.status} with a body that is not JSON: ${e instanceof Error ? e.message : String(e)}`,
+								status: res.status,
+								why: "unreadable",
+							}),
+					});
 				}).pipe(
 					Effect.mapError((e) =>
 						e instanceof LedgerUnreachable

@@ -82,17 +82,20 @@ export const layerSqlite = (o: SqliteOptions) =>
 					}).pipe(Effect.ignore),
 			);
 			const waiting = new Map<number, Deferred.Deferred<unknown, LedgerUnreachable>>();
-			// A thread that dies answers nothing again: every call waiting, and every call after, fails.
+			// A thread that dies answers nothing again: every call waiting, and every call after, fails,
+			// and `failed`, since no wait brings it back.
 			let dead: string | null = null;
+			const died = (message: string) =>
+				new LedgerUnreachable({method: "sqlite", message, why: "failed"});
 			for (const w of workers) {
 				// A thread can throw anything, not only an Error.
 				w.on("error", (e) => {
 					const message = e instanceof Error ? e.message : String(e);
 					dead = message;
-					for (const d of waiting.values())
-						Deferred.doneUnsafe(d, Effect.fail(new LedgerUnreachable({method: "sqlite", message})));
+					for (const d of waiting.values()) Deferred.doneUnsafe(d, Effect.fail(died(message)));
 					waiting.clear();
 				});
+				// The thread's store answered with an error: the same call meets it again.
 				w.on("message", (m: unknown) => {
 					if (!isAnswer(m)) return;
 					const d = waiting.get(m.id);
@@ -102,14 +105,16 @@ export const layerSqlite = (o: SqliteOptions) =>
 						d,
 						m.error === undefined
 							? Effect.succeed(m.ok)
-							: Effect.fail(new LedgerUnreachable({method: "sqlite", message: m.error})),
+							: Effect.fail(
+									new LedgerUnreachable({method: "sqlite", message: m.error, why: "failed"}),
+								),
 					);
 				});
 			}
 			let next = 0;
 			return yield* served(o, (method, args) =>
 				Effect.gen(function* () {
-					if (dead !== null) return yield* new LedgerUnreachable({method: "sqlite", message: dead});
+					if (dead !== null) return yield* died(dead);
 					const id = next++;
 					const d = yield* Deferred.make<unknown, LedgerUnreachable>();
 					waiting.set(id, d);
@@ -146,13 +151,21 @@ export const layerSqliteSync = (o: Omit<SqliteOptions, "threads">) =>
 									args,
 									maxDeliveries,
 								),
+							// The store's own error, as a worker's: the same call meets it again.
 							catch: (e) =>
 								new LedgerUnreachable({
 									method: "sqlite",
 									message: e instanceof Error ? e.message : String(e),
+									why: "failed",
 								}),
 						})
-					: Effect.fail(new LedgerUnreachable({method: "sqlite", message: `no call ${method}`})),
+					: Effect.fail(
+							new LedgerUnreachable({
+								method: "sqlite",
+								message: `no call ${method}`,
+								why: "failed",
+							}),
+						),
 			);
 		}),
 	);

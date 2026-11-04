@@ -183,7 +183,8 @@ const ticketIn = (n: number, entries: readonly Entry[]) => {
 
 /**
  * A `LedgerUnreachable` past the wait: never slowness, which `ledgerBusy` waits out (../wait.ts), so
- * the ledger answered with a refusal. It fails at once with the ledger's own words.
+ * the ledger answered: with a refusal, with what this code cannot read, or with its own store's error.
+ * It fails at once with the ledger's own words.
  */
 const refusal = (n: number, e: {readonly message: string}) => failed(n, "refused", e.message);
 
