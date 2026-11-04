@@ -193,7 +193,8 @@ describe("an agent's filing says where it came from", () => {
 				);
 				expect(answer).toMatchObject({_tag: "PostFailed", why: expect.stringMatching(/from/)});
 				const after = yield* post(person("bob").home, "triage", []);
-				expect(after.map((line) => line.slice(0, 2))).toEqual(["#1", "#2"]);
+				// The tracker lists newest first (programs/tracker/src/machine.ts:378): no #3 was filed.
+				expect(after.map((line) => line.slice(0, 2))).toEqual(["#2", "#1"]);
 			}),
 		));
 });
