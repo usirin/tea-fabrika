@@ -1,6 +1,7 @@
 import {applyCell} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
-import {type Entry, type JobsOnHost, Ledger, Shell, Traces} from "@kampus/fabrika-old";
+import {type Entry, type JobsOnHost, Ledger, Shell, Traces, writerText} from "@kampus/fabrika-old";
+import {type AgentOptions, EXIT_WITHIN, StopAnswer, StopRefused} from "@kampus/fabrika-old/mcp";
 import {Author, PullRequests} from "@tea-fabrika/tracker";
 import {Effect, Queue} from "effect";
 import {type Socket, SocketServer} from "effect/socket";
@@ -66,6 +67,8 @@ import {serveAgents} from "./agents.ts";
 //   host  to {port: "desk", m: {type: "host", now: {pid, since, build, ledger, agents}}}
 //                                          to every page, as an agent attaches on the MCP socket
 //                                          or goes: the top bar's agents, sync and host
+//   agent stop {n: 1, why: "wrong ticket"} on the agents' socket: the host says the agent's stop
+//                                          in the table, then tells t1's tsh to stop %1 (`stopFor`)
 //   app   away                             the window closed: nothing more is shown to it
 //
 // Every page attached is shown the same desk, and each tile's screen on all of them, as every
@@ -326,8 +329,12 @@ export const serve = (options: {
 			}
 		};
 
+		/** When the person last pressed a key, on the desk or in a tile, by the host's clock; `null`: none yet. */
+		let lastKey: number | null = null;
+		const idle = () => (lastKey === null ? null : clock.currentTimeMillisUnsafe() - lastKey);
+
 		// Each job's lines and end, beside the table, for the agents' `job` tool and the host's log.
-		const lines = yield* jobLines(jobs.table);
+		const lines = yield* jobLines(jobs.table, idle);
 		const tiles = yield* startTiles({
 			history,
 			jobs,
@@ -347,6 +354,43 @@ export const serve = (options: {
 				gone,
 			},
 		});
+
+		/**
+		 * Stop job n of the table for agent `who`, and why: the `stop` tool's host side. Its stop is
+		 * said first, and kept once, so the tsh's own ask after it changes nothing and the job's record
+		 * keeps the agent. A job that runs in an open tile is stopped by that tile's tsh, which alone
+		 * holds its runs; one that runs nowhere is dropped, as `stop %n` drops it.
+		 */
+		const stopFor: NonNullable<AgentOptions["stop"]> = (who, ask) =>
+			Effect.gen(function* () {
+				const {n, why} = ask;
+				const job = jobs.table.getState().jobs.find((one) => one.n === n);
+				if (job === undefined) {
+					const known = lines.job(n);
+					return yield* new StopRefused({
+						why:
+							known?.state._tag === "ended"
+								? `job ${n} ended already (${known.state.how}): there is nothing to stop`
+								: `there is no job ${n}: the host's table does not hold it, and no end of it is kept`,
+					});
+				}
+				const say = (msg: Shell.JobsMsg) => jobs.table.dispatch(msg).pipe(Effect.ignore);
+				yield* say({type: "stopping", n, by: writerText(who), why});
+				const told =
+					job.state === "running" && job.owner !== null && (yield* tiles.stopJob(job.owner, n));
+				if (!told) {
+					yield* say({type: "detached", n});
+					yield* say({type: "dropped", n});
+					return StopAnswer.cases.dropped.make({n, text: job.text});
+				}
+				return yield* lines.ended(n).pipe(
+					Effect.map((ended) => StopAnswer.cases.stopped.make({job: ended})),
+					Effect.timeoutOrElse({
+						duration: EXIT_WITHIN,
+						orElse: () => Effect.succeed(StopAnswer.cases.asked.make({n})),
+					}),
+				);
+			});
 
 		const carry = (c: DeskCmd): Effect.Effect<void> => {
 			switch (c.type) {
@@ -391,6 +435,7 @@ export const serve = (options: {
 				ports: () => screens.keys(),
 				attached: agentCame,
 				job: lines.job,
+				stop: stopFor,
 				sessionFor: options.ledger.kind === "server" ? options.ledger.sessionFor : null,
 			}).pipe(
 				Effect.catchCause((cause) =>
@@ -404,6 +449,7 @@ export const serve = (options: {
 			switch (m.type) {
 				case "press": {
 					const at = clock.currentTimeMillisUnsafe();
+					lastKey = at;
 					const took = claims(desk, m.key, at);
 					if (took) step({type: "key", key: m.key, at}, client);
 					// The desk first, so the page knows what the desk takes before it lets the next key go.
@@ -474,6 +520,9 @@ export const serve = (options: {
 					}
 					const heard = screens.get(m.port)?.heard(m.m);
 					if (heard?.kind === "refused") warn(`refused a message on ${m.port}: ${heard.why}`);
+					// Keys typed in a tile's terminal are the person's keys too; its size is not.
+					else if (m.port.startsWith("tile:") && Reflect.get(Object(m.m), "type") === "keys")
+						lastKey = clock.currentTimeMillisUnsafe();
 					return;
 				}
 			}

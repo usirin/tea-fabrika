@@ -6,7 +6,7 @@ import {defineProgram, end, fork, kind} from "../program/program.ts";
 import {flag, input, output} from "../program/shape.ts";
 import {runBuiltin, type Said} from "./builtins.ts";
 import {check} from "./check.ts";
-import {runLine, type Shell, type Watcher} from "./execute.ts";
+import {runLine, type Shell, stopJob, type Watcher} from "./execute.ts";
 import {parse, type Refused} from "./grammar.ts";
 import {helpOf, partsHelp} from "./help.ts";
 import {Programs} from "./programs.ts";
@@ -24,6 +24,7 @@ import {Table} from "./table.ts";
 //   yield* tell(started.run, "line", "tally &");               // printed [1] tally:…; ready {status: 0}
 //   yield* tell(started.run, "line", "experiments");           // table {title: "Experiments", total: 171, rows: [20 rows]}
 //   yield* tell(started.run, "signal", "interrupt");           // Ctrl-C: stops the foreground job, if any
+//   yield* tell(started.run, "stop", 1);                       // the host's word: stop %1, as `stop %1` does
 //   started.close("line");                              // Ctrl-D: tsh ends; its jobs stay in the table, detached
 //
 // It has no terminal in it. A launcher (./main.ts) connects it to one with
@@ -90,6 +91,14 @@ export const tsh = defineProgram({
 		signal: input(
 			Schema.Literals(["interrupt"]),
 			"Ctrl-C: stops what runs in the foreground, with its starter's stop. With nothing there, nothing happens.",
+			{control: true},
+		),
+		// Told by the host, for whoever asked it first (its `stopping` in the table): only the tsh that
+		// started a job holds its runs. A control input too, so a line queued behind the job never
+		// holds it up.
+		stop: input(
+			Schema.Int,
+			"Stop job n, as `stop %n` does: told by the host for whoever asked. A job not in the table changes nothing.",
 			{control: true},
 		),
 	},
@@ -168,6 +177,7 @@ export const tsh = defineProgram({
 				show: flags.show,
 				signals,
 				live: new Map<string, AnyRunning>(),
+				calls: new Map<string, Deferred.Deferred<void>>(),
 				watched: new Map<string, Watcher>(),
 				scope,
 			};
@@ -213,7 +223,15 @@ export const tsh = defineProgram({
 					return said;
 				});
 
-			// `line` in order, `signal` beside it. `line` is the lifeline, as stdin is: its close is Ctrl-D.
+			/** The host's word: stop job n, if the table holds it. */
+			const stopTold = (n: number) =>
+				Effect.suspend(() => {
+					const job = shell.table.getState().jobs.find((j) => j.n === n);
+					return job === undefined ? Effect.void : stopJob(shell, job);
+				});
+
+			// `line` in order, `signal` and `stop` beside it. `line` is the lifeline, as stdin is: its
+			// close is Ctrl-D.
 			yield* serve(
 				{
 					line: (text) =>
@@ -224,6 +242,7 @@ export const tsh = defineProgram({
 							}),
 						),
 					signal: fork((s) => PubSub.publish(signals, s)),
+					stop: fork(stopTold),
 				},
 				{until: ["line"]},
 			);

@@ -50,6 +50,12 @@ export interface Shell {
 	readonly signals: PubSub.PubSub<"interrupt">;
 	/** The starter's handle of each run this tsh started, by run id. */
 	readonly live: Map<string, AnyRunning>;
+	/**
+	 * The run this tsh waits for with no handle (`call`: a one-program line in the foreground), by
+	 * its run id, and the word that stops it: done, the run stops, as on Ctrl-C. Set before its job
+	 * is in the table, so a stop that finds the job finds this too.
+	 */
+	readonly calls: Map<string, Deferred.Deferred<void>>;
 	/** Each job's ends, once the table has heard them, by the run id of its first stage: what a foreground wait waits on. */
 	readonly watched: Map<string, Watcher>;
 	/** tsh's own scope: a job's scope is made under it, so every job stops when tsh does. */
@@ -80,8 +86,48 @@ const note = (shell: Shell, msg: JobsMsg) => shell.table.dispatch(msg).pipe(Effe
  * to the table before the runs are stopped, so the job's record keeps who stopped it. A tsh with
  * no writer says nothing: who asked is not known.
  */
-export const askStop = (shell: Shell, n: number) =>
+const askStop = (shell: Shell, n: number) =>
 	shell.by === null ? Effect.void : note(shell, {type: "stopping", n, by: shell.by, why: null});
+
+/**
+ * Say who stopped job n, when it was not this tsh's own writer: the host asked for an agent first
+ * (its `stopping`, kept once), then told this tsh. Said in the tile the job ran in, where the
+ * person was looking.
+ *
+ *   [3] stopped by agent:claude for:github:7: wrong ticket
+ */
+const sayStopper = (shell: Shell, n: number) => {
+	const stop = shell.table.getState().jobs.find((job) => job.n === n)?.stop ?? null;
+	if (stop === null || stop.by === shell.by) return;
+	shell.print("err", `[${n}] stopped by ${stop.by}${stop.why === null ? "" : `: ${stop.why}`}`, n);
+};
+
+/**
+ * Stop job n, as `stop %n` does and as tsh's `stop` input does for the host: a detached job is
+ * dropped; one this tsh runs is stopped with its starter's stop, in the foreground or not; another
+ * tile's runs nowhere here, so nothing is stopped, and no stop is kept. Who asked comes first, so
+ * the job's record keeps it with its end (host/records.ts).
+ */
+export const stopJob = (shell: Shell, job: Job) =>
+	Effect.gen(function* () {
+		if (job.state === "detached") {
+			yield* askStop(shell, job.n);
+			sayStopper(shell, job.n);
+			yield* note(shell, {type: "dropped", n: job.n});
+			shell.print("err", `[${job.n}] dropped  ${job.text}`);
+			return;
+		}
+		const stops = job.stages.flatMap((s) => {
+			const r = shell.live.get(s.run);
+			return r === undefined ? [] : [r.stop];
+		});
+		const called = shell.calls.get(job.stages[0].run);
+		if (stops.length === 0 && called === undefined) return;
+		yield* askStop(shell, job.n);
+		sayStopper(shell, job.n);
+		if (called !== undefined) yield* Deferred.succeed(called, undefined);
+		yield* Effect.forEach(stops, (stop) => stop, {concurrency: "unbounded", discard: true});
+	});
 
 /** What tsh says of a job whose kept state its machine's schema refuses. */
 export const SAVED_BY_OLDER_CODE = "this job was saved by older code, can't open it";
@@ -541,6 +587,16 @@ const runStages = (
 		const [head, ...tail] = records;
 		if (head === undefined) return {status: 0, values: []};
 		const background = mode.kind === "background";
+		// `call` closes every input at once: not for a program whose window tells them.
+		const [alone, ...others] = line.stages;
+		const calling =
+			!background &&
+			alone !== undefined &&
+			others.length === 0 &&
+			viewOf(alone.entry.program) === undefined;
+		// The word that stops a `call`, kept before its job is in the table (`Shell.calls`).
+		const asked = calling ? yield* Deferred.make<void>() : null;
+		if (asked !== null) shell.calls.set(head.run, asked);
 		yield* note(shell, {
 			type: "began",
 			text: line.text,
@@ -571,23 +627,21 @@ const runStages = (
 			};
 		});
 		const [only] = starting;
-		// `call` closes every input at once: not for a program whose window tells them.
-		if (
-			!background &&
-			starting.length === 1 &&
-			only !== undefined &&
-			viewOf(only.entry.program) === undefined
-		) {
-			// Heard before the run starts, so a Ctrl-C at its first instant is not lost.
+		if (asked !== null && only !== undefined) {
+			// Heard before the run starts, so a Ctrl-C at its first instant is not lost. A stop told
+			// to tsh (`stopJob`) said who asked already.
 			const called = yield* Effect.gen(function* () {
 				const signal = yield* PubSub.subscribe(shell.signals);
 				return yield* only.entry.call(only.record.flags, {
 					told: only.told,
 					listeners: only.listeners,
 					keeping: {id: only.record.run, storage: shell.storage},
-					stopOn: PubSub.take(signal).pipe(Effect.tap(() => askStop(shell, n))),
+					stopOn: Effect.raceFirst(
+						PubSub.take(signal).pipe(Effect.tap(() => askStop(shell, n))),
+						Deferred.await(asked),
+					),
 				});
-			}).pipe(Effect.scoped);
+			}).pipe(Effect.scoped, Effect.ensuring(Effect.sync(() => shell.calls.delete(head.run))));
 			yield* note(shell, {
 				type: "stage_ended",
 				run: only.record.run,

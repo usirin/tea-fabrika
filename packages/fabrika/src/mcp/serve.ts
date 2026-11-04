@@ -6,7 +6,17 @@ import {
 	type Transport,
 } from "@modelcontextprotocol/server";
 import {serveStdio} from "@modelcontextprotocol/server/stdio";
-import {type Cause, Deferred, Effect, Queue, Schema, type Scope, Stream} from "effect";
+import {
+	type Cause,
+	Deferred,
+	Duration,
+	Effect,
+	Option,
+	Queue,
+	Schema,
+	type Scope,
+	Stream,
+} from "effect";
 import {Ndjson} from "effect/encoding";
 import {Socket} from "effect/socket";
 import type {Agent} from "../host/writer.ts";
@@ -14,6 +24,7 @@ import type {ProgramList} from "../shell/programs.ts";
 import {type Answer, driveFor, type InTile} from "./drive.ts";
 import {AGENTS_PROTOCOL, Handshake, type HostAnswer, MAX_LINE} from "./handshake.ts";
 import type {JobAnswer} from "./job.ts";
+import type {StopAnswer, StopAsk, StopRefused} from "./stop.ts";
 
 // One agent on the host's agents' socket: its handshake, then MCP, served with the official SDK's
 // `Server` (`@modelcontextprotocol/server`, v2, spec 2026-07-28). `serveStdio` decides the
@@ -33,6 +44,15 @@ import type {JobAnswer} from "./job.ts";
 // writer. The host gives each program the writer it is handed, on the agent's own ledger session
 // where it has one (apps/fabrika, host/agents.ts). One whose writes could not be its own is served
 // only the tools that write nothing, and `runs` says why.
+//
+// Each agent's moves are lines in the host's log (record wide, as Stripe's canonical log lines):
+// one as its first message is heard, with the client its `initialize` named, and one per tool
+// call, done or refused, with the call's JSON-RPC id, so a line matches the agent's own transcript
+// later. A refused call leaves no other trace.
+//
+//   level=INFO message=agent_came agent=claude client=claude-code version=...
+//   level=INFO message=tool_called agent=claude tool=stop call=7 took_ms=41 ok=true
+//   level=INFO message=tool_called agent=claude tool=stop call=8 took_ms=0 "refused=there is no job 99 ..."
 //
 // No platform is named but the SDK's own: `serveStdio` reads Node's `process` through the SDK's
 // shims, which is why this is on the `/mcp` subpath.
@@ -60,6 +80,10 @@ export interface AgentOptions {
 	readonly tiles: () => readonly InTile[];
 	/** Job n of the host's table now, with every line kept of it, for the `job` tool (./job.ts). */
 	readonly job?: ((n: number) => JobAnswer | null) | undefined;
+	/** Stop job n of the host's table for agent `who`, and why, for the `stop` tool (./stop.ts). */
+	readonly stop?:
+		| ((who: typeof Agent.Type, ask: StopAsk) => Effect.Effect<StopAnswer, StopRefused>)
+		| undefined;
 	/** The server's name and version, as the client is told. */
 	readonly server?: {readonly name: string; readonly version: string};
 	/**
@@ -76,6 +100,45 @@ const resultOf = (answer: Answer): CallToolResult =>
 	answer.kind === "done"
 		? {content: [{type: "text", text: JSON.stringify(answer.data, null, 2)}]}
 		: {content: [{type: "text", text: answer.why}], isError: true};
+
+/** An `initialize` request, as far as the log reads it: the client's own name and version. */
+const Initialize = Schema.Struct({
+	method: Schema.Literal("initialize"),
+	params: Schema.Struct({clientInfo: Schema.Struct({name: Schema.String, version: Schema.String})}),
+});
+const decodeInitialize = Schema.decodeUnknownOption(Initialize);
+
+/**
+ * The agent's first message was heard: its line, with the client its `initialize` named. A client
+ * of 2026-07-28 sends no `initialize`, and its line names none.
+ */
+const agentCame = (who: typeof Agent.Type, first: JSONRPCMessage) => {
+	const client = Option.getOrNull(decodeInitialize(first))?.params.clientInfo ?? null;
+	return Effect.logInfo("agent_came").pipe(
+		Effect.annotateLogs({
+			agent: who.id,
+			...(client === null ? {} : {client: client.name, version: client.version}),
+		}),
+	);
+};
+
+/** One tool call's line: the tool, the call's JSON-RPC id, how long it took, and `ok` or the refusal. */
+const toolCalled = (
+	who: typeof Agent.Type,
+	tool: string,
+	call: string | number,
+	took: Duration.Duration,
+	answer: Answer,
+) =>
+	Effect.logInfo("tool_called").pipe(
+		Effect.annotateLogs({
+			agent: who.id,
+			tool,
+			call,
+			took_ms: Math.round(Duration.toMillis(took)),
+			...(answer.kind === "done" ? {ok: true} : {refused: answer.why}),
+		}),
+	);
 
 /** Serve one agent on `socket` until either side closes it. */
 export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
@@ -99,19 +162,29 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
 			Effect.gen(function* () {
 				const who = {kind: "agent", id: handshake.agent, for: person} as const;
 				const served = yield* programsFor(who);
+				const {stop} = options;
 				const {drive, tools} = yield* driveFor({
 					list: served.list,
 					tiles,
 					job: options.job,
+					stop: stop === undefined ? undefined : (ask) => stop(who, ask),
 					readOnly: served.readOnly ?? false,
 				});
 				if (options.attached !== undefined) yield* options.attached(who);
 				const server = new Server(info, {capabilities: {tools: {}}});
 				server.setRequestHandler("tools/list", () => ({tools: [...tools]}));
-				server.setRequestHandler("tools/call", (request) => {
+				server.setRequestHandler("tools/call", (request, ctx) => {
 					const {name, arguments: args} = request.params;
-					return Effect.runPromiseWith(services)(drive.call(name, args).pipe(Effect.map(resultOf)));
+					return Effect.runPromiseWith(services)(
+						drive.call(name, args).pipe(
+							Effect.timed,
+							Effect.tap(([took, answer]) => toolCalled(who, name, ctx.mcpReq.id, took, answer)),
+							Effect.map(([, answer]) => resultOf(answer)),
+						),
+					);
 				});
+				/** The first message was heard: the agent's `agent_came` line is said. */
+				let came = false;
 				const t: Transport & {readonly heard: (raw: unknown) => void} = {
 					start: async () => {},
 					send: async (message) => {
@@ -127,6 +200,10 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
 						} catch (cause) {
 							t.onerror?.(new Error(`a line that is not JSON-RPC: ${String(cause)}`));
 							return;
+						}
+						if (!came) {
+							came = true;
+							Effect.runForkWith(services)(agentCame(who, message));
 						}
 						t.onmessage?.(message);
 					},

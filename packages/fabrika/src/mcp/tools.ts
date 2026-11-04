@@ -2,11 +2,13 @@ import type {Inputs} from "../program/program.ts";
 import {type JsonSchema, shapeOf} from "../program/shape.ts";
 import type {ProgramList} from "../shell/programs.ts";
 import {JOB, JobAsk} from "./job.ts";
+import {STOP, StopAsk} from "./stop.ts";
 
 // A program list as MCP tools (spec 2026-07-28, "Tools"): one tool per input of each program, made
 // from the input's own schema, and one tool that lists what runs. No program has a tool written by
 // hand: a new input is a new tool, and a renamed input is a renamed tool. The host's own tools
-// beside `runs` (`job`, ./job.ts) are the host's to list (./drive.ts); a call to one is read here.
+// beside `runs` (`job`, ./job.ts; `stop`, ./stop.ts) are the host's to list (./drive.ts); a call to
+// one is read here.
 //
 //   toolsOf(programList([listed(tracker, ...)]))
 //   // [{name: "runs", ..., annotations: {readOnlyHint: true}},
@@ -28,7 +30,7 @@ import {JOB, JobAsk} from "./job.ts";
 //
 // The name is `<program>_<input>`. A program's name has no `_` (programList holds it to small
 // letters, digits and -), so the first `_` splits it, and no tool of an input is ever named
-// `runs` or `job`. A dot would read better, but the Messages API takes a tool name of letters, digits, `_`
+// `runs`, `job` or `stop`. A dot would read better, but the Messages API takes a tool name of letters, digits, `_`
 // and `-` only, and Claude Code hands MCP tools to it by their names.
 //
 // The value goes under `value`, never as the arguments themselves: the spec wants an object
@@ -44,9 +46,22 @@ export interface Tool {
 	readonly name: string;
 	readonly description: string;
 	/** Always an object, as the spec wants: an input's own schema is under `value`. */
-	readonly inputSchema: JsonSchema & {readonly type: "object"};
-	/** The spec's hints about what a call does. Here only `readOnlyHint`, on a tool that writes nothing. */
-	readonly annotations?: {readonly readOnlyHint: true};
+	readonly inputSchema: JsonSchema & {
+		readonly type: "object";
+		/** The fields a call must give, as JSON Schema says them. A plain array, as the SDK's type is. */
+		readonly required?: string[];
+	};
+	/**
+	 * The spec's hints about what a call does (spec 2025-11-25, "Tools"). A program's tool says only
+	 * `readOnlyHint: true`, on an input that writes nothing; one that writes says none, which the
+	 * spec reads as destructive. The host's `stop` says all four.
+	 */
+	readonly annotations?: {
+		readonly readOnlyHint: boolean;
+		readonly destructiveHint?: boolean;
+		readonly idempotentHint?: boolean;
+		readonly openWorldHint?: boolean;
+	};
 }
 
 /** The tool that says what runs and what can be started. */
@@ -61,6 +76,7 @@ const RUNS_TOOL: Tool = {
 };
 
 const jobAsk = shapeOf(JobAsk);
+const stopAsk = shapeOf(StopAsk);
 
 /** The tool's name for one input of one program. */
 export const toolNameOf = (program: string, input: string): string => `${program}_${input}`;
@@ -110,10 +126,11 @@ export const toolsOf = (list: ProgramList): readonly Tool[] => {
 	return tools;
 };
 
-/** A tool call, read: `runs`, `job` with what it asks, one input's value that fits it, or why not. */
+/** A tool call, read: `runs`, `job` or `stop` with what it asks, one input's value that fits it, or why not. */
 export type Call =
 	| {readonly kind: "runs"}
 	| {readonly kind: "job"; readonly ask: JobAsk}
+	| {readonly kind: "stop"; readonly ask: StopAsk}
 	| {
 			readonly kind: "input";
 			readonly program: string;
@@ -129,6 +146,10 @@ export const callOf = (list: ProgramList, name: string, args: unknown): Call => 
 		return jobAsk.check(args)
 			? {kind: "job", ask: args}
 			: {kind: "refused", why: `${JOB} does not fit: ${jobAsk.problem(args)}`};
+	if (name === STOP)
+		return stopAsk.check(args)
+			? {kind: "stop", ask: args}
+			: {kind: "refused", why: `${STOP} does not fit: ${stopAsk.problem(args)}`};
 	const at = name.indexOf("_");
 	const program = name.slice(0, at);
 	const input = name.slice(at + 1);
