@@ -90,7 +90,7 @@ export const settingsFile = <A>(
 				// read once and the host never waits on a watch that will not start.
 				Stream.catchCause((cause) =>
 					Stream.fromEffect(
-						Deferred.done(ready, Effect.void).pipe(
+						Deferred.succeed(ready, undefined).pipe(
 							Effect.andThen(
 								Effect.logWarning(`fabrika host: the watch on ${folder} ended`, cause),
 							),
