@@ -221,7 +221,10 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
 					readOnly: served.readOnly ?? false,
 				});
 				if (options.attached !== undefined) yield* options.attached(who);
-				const server = new Server(info, {capabilities: {tools: {}}});
+				// Its tools may change (spec 2025-11-25, "Tools", Capabilities: `listChanged`): a new host
+				// may serve the read-only door, or the other way. The bridge says so to the client after
+				// a new host (./bridge.ts); a client heeds the notice only from a server that declared it.
+				const server = new Server(info, {capabilities: {tools: {listChanged: true}}});
 				server.setRequestHandler("tools/list", () => ({tools: [...tools]}));
 				server.setRequestHandler("tools/call", (request, ctx) => {
 					const {name, arguments: args} = request.params;

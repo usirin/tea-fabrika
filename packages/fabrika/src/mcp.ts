@@ -7,7 +7,7 @@
 //   const programsFor = (who) => Effect.succeed({list: programList([...]), readOnly: null});
 //   yield* serveAgent(socket, {programsFor, person: "owner", tiles});
 //   // In the command an MCP client starts:
-//   yield* bridge(socket, "claude");
+//   yield* bridge(NodeSocket.makeNet({path}), "claude", POLICY);   dials again when the host ends
 export {BridgeStopped, bridge} from "./mcp/bridge.ts";
 export {type Answer, type Drive, driveFor, type InTile} from "./mcp/drive.ts";
 export {AGENTS_PROTOCOL, AgentName, Handshake, HostAnswer} from "./mcp/handshake.ts";
