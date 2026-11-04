@@ -375,6 +375,36 @@ const styleOf = (rules: ReturnType<typeof rulesOf>, selector: string) =>
 const BASE = rulesOf(outsideMedia(CSS));
 const ALL = rulesOf(CSS);
 
+/** What a title bar's part sits in, for a color it does not set itself. */
+const PARENT: Readonly<Record<string, string>> = {
+	slot: "titlebar",
+	name: "titlebar",
+	state: "titlebar",
+	tid: "titlebar",
+	titlebar: "tile",
+};
+
+/**
+ * The color a part is drawn in, outside any setting, when the tile and the part have these classes
+ * and nothing is hovered or in a pipe: the most specific rule that names only those classes, last
+ * wins a tie, else what the part sits in. A sketch of the cascade, enough for these few rules.
+ */
+const colorIn = (classes: readonly string[], part: string): string | undefined => {
+	const applies = (selector: string) =>
+		!/[[:]/.test(selector) &&
+		draws(selector, part) &&
+		(selector.match(/\.[\w-]+/g) ?? []).every((c) => classes.includes(c.slice(1)));
+	const found = BASE.flatMap((r, at) =>
+		r.says.has("color")
+			? r.selectors
+					.filter(applies)
+					.map((s) => ({at, weight: s.split(".").length - 1, color: r.says.get("color")}))
+			: [],
+	).sort((a, b) => a.weight - b.weight || a.at - b.at);
+	const parent = PARENT[part];
+	return found.at(-1)?.color ?? (parent === undefined ? undefined : colorIn(classes, parent));
+};
+
 /** The frame's tile parts: a tile, its title bar, a strip, and the divider between two tiles. */
 const PARTS = ["tile", "titlebar", "strip", "border", "divider"];
 
@@ -433,6 +463,30 @@ describe("a tile's edge in the stylesheet", () => {
 		expect(styleOf(BASE, ".titlebar").get("background")).toBe("var(--tile-wash)");
 		expect(styleOf(BASE, ".strip").get("background")).toBe("var(--tile-wash)");
 		expect(styleOf(BASE, ".tile.focused .titlebar").get("background")).toBe("var(--tile-wash-on)");
+	});
+
+	// Weight 500 is the one focus cue on a view tile that is not a color: a view has no cursor
+	// (tile guidelines, the focus; WCAG 1.4.1).
+	it("sets a focused tile's name at step 12 and weight 500, and the close question at step 12", () => {
+		const name = styleOf(BASE, ".tile.focused .name");
+		expect(name.get("font-weight")).toBe("500");
+		expect(name.get("color")).toBe("var(--tile-text-on)");
+		expect(styleOf(BASE, ".titlebar .name").get("font-weight")).toBeUndefined();
+		expect(colorIn(["tile", "titlebar", "name"], "name")).toBe("var(--tile-text)");
+		expect(colorIn(["tile", "focused", "titlebar", "name"], "name")).toBe("var(--tile-text-on)");
+		expect(styleOf(BASE, ".titlebar .state.asking").get("color")).toBe("var(--tile-text-on)");
+		expect(colorIn(["tile", "titlebar", "state", "asking"], "state")).toBe("var(--tile-text-on)");
+	});
+
+	// FAILING ON PURPOSE (test writer, round 2b), for the builder to fix in window.css. On a focused
+	// tile only the name rises to step 12: the dot and the `closing` or `zoomed` word stay at the
+	// quiet step (tile guidelines: the pipe mark's tokens, and the closing tile's). Today
+	// `.tile.focused .titlebar` sets `--tile-text-on` on the whole bar, so both inherit it.
+	it("keeps a focused plain tile's dot and its closing or zoomed word at the quiet step", () => {
+		expect(colorIn(["tile", "titlebar", "slot"], "slot")).toBe("var(--tile-text)");
+		expect(colorIn(["tile", "titlebar", "state"], "state")).toBe("var(--tile-text)");
+		expect(colorIn(["tile", "focused", "titlebar", "slot"], "slot")).toBe("var(--tile-text)");
+		expect(colorIn(["tile", "focused", "titlebar", "state"], "state")).toBe("var(--tile-text)");
 	});
 
 	it("lights a divider on hover at slate a7", () => {
