@@ -109,7 +109,7 @@ export const trackerAtSeven = (entries: readonly Entry[] = SEVEN, now = SEVEN_NO
 	replay(tracker, {
 		ctx: undefined,
 		msgs: [
-			load.ok(load({after: 0}), {entries, broken: [], last: entries.at(-1)?.pos ?? 0}),
+			load.ok(load({after: 0}), {entries, broken: [], last: entries.at(-1)?.pos ?? 0, areas: []}),
 			{type: "open", ticket: 7},
 			{type: "tick", now},
 		],

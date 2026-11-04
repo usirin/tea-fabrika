@@ -7,18 +7,18 @@ import {
 	type Writer,
 	writerText,
 } from "@kampus/fabrika-old";
+import {AREAS, type AreaEntry, areasOf, readAreaRow} from "@kampus/pipeline/tickets/area";
 import {
 	type Entry,
 	fold,
 	mayWrite,
 	nameOf,
-	ROOT,
 	readRow,
 	writtenDuring,
 } from "@kampus/pipeline/tickets/ticket";
 import {Clock, Context, Duration, Effect, Stream} from "effect";
 import type {ClockSub, load, PollSub, save, saveHints} from "./machine.ts";
-import {factOf} from "./ticket.ts";
+import {type AreaWrite, areaFactOf, factOf, isAreaWrite, type TicketWrite} from "./ticket.ts";
 
 // The tracker's cells and its poll: the only code that talks to the ledger. Through the `Ledger`
 // service, never the file under it, so the same tracker runs on memory in a test and on
@@ -28,6 +28,11 @@ import {factOf} from "./ticket.ts";
 //     register tracker/ticket/1                     taken already? then 2, 3, ... until one is new
 //     send tracker/ticket/1/inbox, id w1            {type: "filed", ...}, writer "user:owner"
 //     // {ticket: 1}
+//
+//   save {id: "w2", write: {kind: "make_area", name: "lane"}, next: 2}
+//     read tracker/areas/inbox, fold it              the next area is 1; is the name free?
+//     append tracker/areas/inbox at the rev read     {_tag: "area_made", area: 1, ...}; Stale? read again
+//     // {area: 1}
 //
 // Who writes is the `Author` service: the host says who sits at the window.
 
@@ -59,23 +64,33 @@ const named = (entry: Entry, names: ReadonlyMap<string, string>): Entry => {
 	return whose === undefined ? entry : {...entry, whose};
 };
 
-/** Every row after `after` under the tickets' prefix, read in pages. */
+/**
+ * The name the tickets (`tracker/ticket/<n>`) and the areas (`tracker/areas`) are both under. One
+ * read of it, with one place, so a row of either written while the other is read is never passed.
+ */
+const TRACKER = "tracker";
+
+/** Every row after `after` under the tracker's prefix, read in pages: the tickets' and the areas'. */
 export const loadCell = (cmd: ReturnType<typeof load>) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
 		const entries: Entry[] = [];
+		const areas: AreaEntry[] = [];
 		const broken: string[] = [];
 		let last = cmd.after;
 		const names = namesOf(yield* ledger.readStream(MEMBERS));
 		for (;;) {
-			const page = yield* ledger.read(last, PAGE, ROOT);
+			const page = yield* ledger.read(last, PAGE, TRACKER);
 			for (const row of page) {
 				const read = readRow(row);
 				if (read.kind === "entry") entries.push(named(read.entry, names));
 				if (read.kind === "broken") broken.push(read.why);
+				const area = readAreaRow(row);
+				if (area.kind === "entry") areas.push(area.entry);
+				if (area.kind === "broken") broken.push(area.why);
 			}
 			last = page.at(-1)?.pos ?? last;
-			if (page.length < PAGE) return {entries, broken, last};
+			if (page.length < PAGE) return {entries, broken, last, areas};
 		}
 	}).pipe(Effect.mapError(unreachable));
 
@@ -97,13 +112,73 @@ const timelineOf = (n: number, rows: readonly Row[]): readonly Entry[] => {
 	return fold([], entries).tickets.find((t) => t.number === n)?.timeline ?? [];
 };
 
-/** One write, as one fact in its ticket's inbox, under the write's message id. */
-export const saveCell = (cmd: ReturnType<typeof save>) =>
+/** The areas' inbox. */
+const AREAS_INBOX = streams(AREAS).inbox;
+
+/**
+ * One area write, as one fact on the areas' inbox, under the write's message id. The stream is
+ * read and folded first, and the fact goes at the place it was read to: a write that landed in
+ * between makes the ledger say `Stale`, and it is read and checked again. So two people who make
+ * an area at once get two numbers, and a name taken a moment ago is refused, in words.
+ */
+const saveArea = (id: string, write: AreaWrite) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
 		const author = yield* Author;
 		const writer = writerText(author);
+		// A ledger behind the door refuses this too; a ledger in this process does not, so it is here.
+		if (author.kind !== "user")
+			return yield* Effect.fail({
+				_tag: "refused" as const,
+				why: `only a person writes ${write.kind}, and this tracker writes as agent ${author.id}`,
+			});
+		yield* ledger.register(AREAS, writer);
+		for (let tries = 0; tries < TRIES; tries++) {
+			const rows = yield* ledger.readStream(AREAS_INBOX, 0, -1);
+			const entries = rows.flatMap((row) => {
+				const read = readAreaRow(row);
+				return read.kind === "entry" ? [{id: row.id, entry: read.entry}] : [];
+			});
+			// An earlier try of this same write landed: it is not written twice.
+			const landed = entries.find((e) => e.id === id);
+			if (landed !== undefined) return {area: landed.entry.fact.area};
+			const made = areaFactOf(write, areasOf(entries.map((e) => e.entry)).areas);
+			if ("why" in made) return yield* Effect.fail({_tag: "refused" as const, why: made.why});
+			const {fact} = made;
+			const wrote = yield* ledger
+				.append(AREAS_INBOX, rows.at(-1)?.rev ?? 0, {kind: fact._tag, writer, data: fact, id})
+				.pipe(
+					Effect.as(true),
+					Effect.catchTag("Stale", () => Effect.succeed(false)),
+				);
+			if (wrote) return {area: fact.area};
+		}
+		return yield* Effect.fail(refused(`${AREAS_INBOX}: ${TRIES} tries, each one stale`));
+	});
+
+/**
+ * One write: an area write on the areas' stream, any other as one fact in its ticket's inbox,
+ * under the write's message id.
+ */
+export const saveCell = (cmd: ReturnType<typeof save>) =>
+	Effect.gen(function* () {
 		const {write} = cmd;
+		return isAreaWrite(write) ? yield* saveArea(cmd.id, write) : yield* saveTicket(cmd, write);
+	}).pipe(
+		Effect.catchTags({
+			LedgerUnreachable: (e) => Effect.fail(unreachable(e)),
+			Denied: (e) => Effect.fail(refused(e.stream)),
+			Fenced: (e) => Effect.fail(refused(e.stream)),
+			UnknownName: (e) => Effect.fail(refused(e.stream)),
+		}),
+	);
+
+/** One ticket write, as one fact in its ticket's inbox. */
+const saveTicket = (cmd: ReturnType<typeof save>, write: TicketWrite) =>
+	Effect.gen(function* () {
+		const ledger = yield* Ledger;
+		const author = yield* Author;
+		const writer = writerText(author);
 		const fact = yield* factOf(write);
 		// A ledger behind the door refuses this too; a ledger in this process does not, so it is here.
 		if (!mayWrite(author, fact.type))
@@ -120,14 +195,7 @@ export const saveCell = (cmd: ReturnType<typeof save>) =>
 				: fact;
 		yield* ledger.send(inbox, cmd.id, {kind: data.type, writer, data});
 		return {ticket};
-	}).pipe(
-		Effect.catchTags({
-			LedgerUnreachable: (e) => Effect.fail(unreachable(e)),
-			Denied: (e) => Effect.fail(refused(e.stream)),
-			Fenced: (e) => Effect.fail(refused(e.stream)),
-			UnknownName: (e) => Effect.fail(refused(e.stream)),
-		}),
-	);
+	});
 
 /**
  * Who writes a duplicate hint: code, as the agent `duplicates` working for whoever sits at the
@@ -175,7 +243,7 @@ export const pollRunner = (sub: PollSub) =>
 	Stream.tick(POLL).pipe(
 		Stream.mapEffect(() =>
 			Effect.gen(function* () {
-				return yield* (yield* Ledger).read(sub.deps.after, 1, ROOT);
+				return yield* (yield* Ledger).read(sub.deps.after, 1, TRACKER);
 			}).pipe(Effect.orElseSucceed(() => [])),
 		),
 		Stream.filter((rows) => rows.length > 0),

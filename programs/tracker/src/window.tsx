@@ -1,12 +1,15 @@
 import type {WindowProps} from "@kampus/fabrika-old";
 import {type Text, textOf} from "@kampus/pipeline/tickets/approval";
+import {type Suggested, suggestedName} from "@kampus/pipeline/tickets/area";
 import {Kbd} from "@manti-ui/react";
 import {
 	type FormEvent,
 	type KeyboardEvent,
 	type ReactNode,
+	type RefObject,
 	useEffect,
 	useEffectEvent,
+	useId,
 	useRef,
 	useState,
 } from "react";
@@ -38,6 +41,11 @@ import {piecesOf} from "./links.ts";
 //   the search   typing narrows tickets and pull requests by title; Esc or ↓ goes to the list
 //   new ticket   Enter in the title goes to the body; Ctrl+Enter (⌘+Enter) files; Esc goes to the list
 //   a ticket     the comment box has the focus; Ctrl+Enter comments; Esc goes back to the list
+//   first areas  while the project has no area, the list opens on the suggestions: ↑ ↓ move,
+//                Space ticks, Enter makes the ticked ones and the typed name, Esc skips
+//
+// The step only suggests. Each area it makes is a `make_area` the person sent, in the order shown:
+// `{type: "make_area", value: {name: "lane", suggested: {_tag: "titles", word: "lane", tickets: 3}}}`.
 //
 // A URL in a body, and a pull request on the list, is a link. It opens a new window,
 // `target="_blank"`, which the app never makes: it hands an http or https URL to the person's own
@@ -60,6 +68,12 @@ const said = (w: Write): string => {
 			return `answer "${w.pick}" on #${w.ticket}`;
 		case "rate_duplicate":
 			return `${w.says} the hint #${w.of} on #${w.ticket}`;
+		case "make_area":
+			return `new area "${w.name}"`;
+		case "rename_area":
+			return `rename area ${w.area} to "${w.name}"`;
+		case "merge_area":
+			return `merge area ${w.area} into area ${w.into}`;
 	}
 };
 
@@ -202,6 +216,8 @@ function ListPage(props: {
 	const bodyRef = useRef<HTMLTextAreaElement>(null);
 	const findRef = useRef<HTMLInputElement>(null);
 	const rows = useRef(new Map<string, HTMLElement>());
+	const stepRef = useRef<HTMLFieldSetElement>(null);
+	const making = view.saving.some((w) => w.kind === "make_area");
 	// One list for the keys: the tickets, then the pull requests.
 	const order = [...tickets.map((t) => ticketRow(t.number)), ...pullRequests.map(prRow)];
 	const picked = order.find((r) => r === props.picked) ?? order[0];
@@ -212,15 +228,28 @@ function ListPage(props: {
 		else rows.current.get(picked)?.focus();
 	};
 
-	// Where the focus goes on coming to the list: the row picked, or the title when there is none.
-	// Once, on coming to the list: a new view must not pull the focus back.
+	// Where the focus goes on coming to the list: the first areas' first row while that step shows,
+	// else the row picked, or the title when there is none. Once, on coming to the list: a new view
+	// must not pull the focus back.
 	const focusStart = useEffectEvent(() => {
-		if (picked === undefined) titleRef.current?.focus();
+		if (stepRef.current !== null) stepRef.current.querySelector("input")?.focus();
+		else if (picked === undefined) titleRef.current?.focus();
 		else rows.current.get(picked)?.focus();
 	});
 	useEffect(() => {
 		focusStart();
 	}, []);
+
+	// The first areas made or skipped: the step goes, and the focus goes to the list, once.
+	const stepShows = page.onboarding !== null;
+	const shown = useRef(stepShows);
+	const stepGone = useEffectEvent(() => {
+		if (shown.current && !stepShows) toList();
+		shown.current = stepShows;
+	});
+	useEffect(() => {
+		stepGone();
+	}, [stepShows]);
 
 	// A filter that hides the row in focus leaves the focus nowhere: it goes back to the list.
 	// Checked when the rows shown change.
@@ -333,6 +362,15 @@ function ListPage(props: {
 					<Kbd>/</Kbd>
 				</label>
 			</div>
+			{page.onboarding === null ? null : (
+				<FirstAreas
+					suggestions={page.onboarding}
+					making={making}
+					stepRef={stepRef}
+					done={() => pageRef.current?.focus()}
+					act={act}
+				/>
+			)}
 			<form className="tracker-composer" onSubmit={file} aria-label="new ticket">
 				<input
 					ref={titleRef}
@@ -483,6 +521,145 @@ function ListPage(props: {
 				</span>
 			</footer>
 		</section>
+	);
+}
+
+/** Why the app suggests an area, in words: what it read. */
+const whyOf = (s: Suggested): string =>
+	s._tag === "titles"
+		? `${s.tickets} open titles start with "${s.word}:"`
+		: `the folder ${s.path} in the code`;
+
+/**
+ * The areas Enter makes: the ticked suggestions in the order shown, then the typed name unless a
+ * ticked one has it already, ignoring case. A typed name has no `suggested`: nothing suggested it.
+ *
+ *   firstAreasOf([lane, apps/fabrika], {"lane"}, "  desk ")
+ *   // [{name: "lane", suggested: lane}, {name: "desk"}]
+ */
+const firstAreasOf = (
+	suggestions: readonly Suggested[],
+	ticked: ReadonlySet<string>,
+	typed: string,
+): readonly {readonly name: string; readonly suggested?: Suggested}[] => {
+	const picked = suggestions
+		.filter((s) => ticked.has(suggestedName(s)))
+		.map((s) => ({name: suggestedName(s), suggested: s}));
+	const name = typed.trim();
+	const taken = picked.some((p) => p.name.toLowerCase() === name.toLowerCase());
+	return name === "" || taken ? picked : [...picked, {name}];
+};
+
+/**
+ * The first areas: the suggestions as a checklist, each with its why, and a box to type a name.
+ * Nothing is made until Enter, and then only what the person ticked or typed. Esc skips the step
+ * for as long as this tracker runs. Its buttons are plain: the accent is for "your turn" only.
+ */
+function FirstAreas(props: {
+	readonly suggestions: readonly Suggested[];
+	readonly making: boolean;
+	readonly stepRef: RefObject<HTMLFieldSetElement | null>;
+	readonly done: () => void;
+	readonly act: Send;
+}) {
+	const {suggestions, making, act} = props;
+	const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
+	const [typed, setTyped] = useState("");
+	// Two trackers can share a window, so the step's words get an id of their own.
+	const about = useId();
+	const made = firstAreasOf(suggestions, ticked, typed);
+	const tick = (name: string) =>
+		setTicked((all) => {
+			const next = new Set(all);
+			if (!next.delete(name)) next.add(name);
+			return next;
+		});
+	const make = () => {
+		if (made.length === 0) return;
+		for (const value of made) act({type: "make_area", value});
+		props.done();
+	};
+	const skip = () => {
+		act({type: "skip_onboarding", value: null});
+		props.done();
+	};
+	/** ↑ ↓ move between the rows and the box; Enter makes; Esc empties the box, then skips. */
+	const onKey = (e: KeyboardEvent<HTMLFieldSetElement>) => {
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
+		const target = e.target as HTMLElement;
+		if (target.tagName !== "INPUT") return;
+		const stops = [...e.currentTarget.querySelectorAll("input")];
+		const at = stops.indexOf(target as HTMLInputElement);
+		const by = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+		if (by !== 0) {
+			e.preventDefault();
+			stops[Math.min(stops.length - 1, Math.max(0, at + by))]?.focus();
+		} else if (e.key === "Enter") {
+			e.preventDefault();
+			make();
+		} else if (e.key === "Escape") {
+			e.preventDefault();
+			if (target.getAttribute("type") === "text" && typed !== "") setTyped("");
+			else skip();
+		}
+	};
+	return (
+		<fieldset
+			className="tracker-first-areas"
+			ref={props.stepRef}
+			disabled={making}
+			onKeyDown={onKey}
+			aria-describedby={about}
+		>
+			<legend>Pick your first areas</legend>
+			<p id={about}>
+				An area is a part of the project, such as the app or the lane. Tick the ones you want, or
+				type a name. Nothing is made until you press Enter.
+			</p>
+			{suggestions.length === 0 ? (
+				<p className="tracker-note">Nothing to suggest from the titles or the folders yet.</p>
+			) : (
+				<ul aria-label="suggested areas">
+					{suggestions.map((s) => {
+						const name = suggestedName(s);
+						return (
+							<li key={name}>
+								<label>
+									<input type="checkbox" checked={ticked.has(name)} onChange={() => tick(name)} />
+									<span className="tracker-title">{name}</span>
+									<small>{whyOf(s)}</small>
+								</label>
+							</li>
+						);
+					})}
+				</ul>
+			)}
+			<input
+				type="text"
+				aria-label="type an area's name"
+				placeholder="Or type a name"
+				value={typed}
+				maxLength={32}
+				onChange={(e) => setTyped(e.target.value)}
+				spellCheck={false}
+				autoComplete="off"
+			/>
+			<div className="tracker-row">
+				<small>
+					<Kbd>Space</Kbd> ticks <Kbd>Enter</Kbd> makes them <Kbd>Esc</Kbd> skips
+				</small>
+				<button type="button" onClick={skip}>
+					Skip
+				</button>
+				<button type="button" onClick={make} disabled={made.length === 0}>
+					{making
+						? "Making…"
+						: made.length === 0
+							? "Make areas"
+							: `Make ${made.length} area${made.length === 1 ? "" : "s"}`}
+				</button>
+			</div>
+		</fieldset>
 	);
 }
 

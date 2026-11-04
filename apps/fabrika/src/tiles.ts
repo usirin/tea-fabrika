@@ -1,5 +1,5 @@
 import {type JobsOnHost, Ledger, Traces} from "@kampus/fabrika-old";
-import {Author, PullRequests} from "@tea-fabrika/tracker";
+import {Author, PullRequests, RepoTree} from "@tea-fabrika/tracker";
 import {Effect, Exit, Scope} from "effect";
 import type {DeskMsg} from "./desk/desk.ts";
 import type {Does} from "./desk/keys.ts";
@@ -117,6 +117,7 @@ export const startTiles = (options: {
 		const ledger = yield* Ledger;
 		const author = yield* Author;
 		const pullRequests = yield* PullRequests;
+		const repoTree = yield* RepoTree;
 		const traces = yield* Traces;
 		const open = new Map<TileId, Running>();
 		const live = new Map<string, Live>();
@@ -174,6 +175,7 @@ export const startTiles = (options: {
 					Effect.provideService(Ledger, ledger),
 					Effect.provideService(Author, author),
 					Effect.provideService(PullRequests, pullRequests),
+					Effect.provideService(RepoTree, repoTree),
 					Effect.provideService(Traces, traces),
 				);
 				open.set(tile, {host, scope, state: "open"});

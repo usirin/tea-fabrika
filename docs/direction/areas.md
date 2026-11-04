@@ -304,8 +304,20 @@ tickets a person placed. v0 guesses from the filer and the source only.
 When the ledger has no area, the tracker's window opens on a list of suggestions, each with why
 ("21 titles start with Lane", "the folder `apps/fabrika`"). Space ticks, Enter makes the ticked
 ones, Esc skips. Skipping leaves every ticket in "No area yet", and "New area ..." stays in the
-menu. **Decided 2026-11-04 by the owner: a checklist in the list page.** The skip is window
-state on the person's desk, not a fact.
+menu. **Decided 2026-11-04 by the owner: a checklist in the list page.** The skip is not a fact.
+
+As built in PR 1 (today's version): the skip is the tracker machine's own state, `skip_onboarding`,
+so it lasts while that tracker runs and every window on it agrees; a new tracker asks again. The
+step shows only when the ledger holds a ticket, since with none there is nothing to sort. A
+"type a name" box sits under the suggestions (the lead's call, 2026-11-04). The folders come from
+one GitHub call per connected repository, the first time the step shows; if it fails, the titles'
+suggestions stay and nothing is said.
+
+On this repository's own 15 top folders and 13 real pull request titles filed as tickets, the
+shots (`programs/tracker/docs/areas/`) show 14 suggestions: 2 from titles, 12 from folders. At
+1440 by 900 in one tile the whole step fits above the list. In a stacked pipe or a 2x2 it fills
+the tile, and the buttons and the list are below the fold: the keys still work, but the list is
+out of sight until the step goes.
 
 ## What the ledger records
 
@@ -355,6 +367,7 @@ onboarding words, and every count in the trace.
 - Whether a "?" on most rows is calm or noisy. Only a shot of the build shows it.
 - Whether the filer's guess is often right. No agent has filed with a `guess` yet.
 - Whether the owner filters by area day to day. One person pressed a draft; a week of use answers it.
-- Whether the onboarding suggestions are good. None was built.
+- Whether the onboarding suggestions are good. PR 1 built them; on this repository most are
+  folders, and whether a person wants twelve folder rows is not known until one uses it.
 - No screen reader run: the menus, the group headings and a row's "a guess" need VoiceOver.
 - The shape ran only as a scratch fold; the tracker's own fold and door were not changed.

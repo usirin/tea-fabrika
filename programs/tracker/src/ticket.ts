@@ -1,5 +1,14 @@
 import {hashOf, Text} from "@kampus/pipeline/tickets/approval";
 import {
+	AreaName,
+	AreaNumber,
+	type AreaFact,
+	type Areas,
+	areaRefused,
+	nextArea,
+	Suggested,
+} from "@kampus/pipeline/tickets/area";
+import {
 	Asks,
 	Body,
 	type Fact,
@@ -22,6 +31,8 @@ import {Effect, Schema} from "effect";
 //   // tracker/ticket/3/inbox  {type: "commented", body: "Skip part 2.", asks: "changes"}
 //   answer {ticket: 3, ask: "a-1", pick: "approve", note: "", saw: {title, body}}
 //   // tracker/ticket/3/inbox  {type: "answered", ..., text: "sha256:…"}: the hash of what it saw
+//   make_area {name: "lane"}
+//   // tracker/areas/inbox  {_tag: "area_made", area: 1, name: "lane"}: the next number
 //
 // Each command is its own struct, the value of the tracker's input of the same name (./index.ts).
 // Inside the machine a write is one tagged union, `Write`, as an Elm Msg is: the input's name
@@ -60,8 +71,22 @@ export type Answer = typeof Answer.Type;
 export const RateDuplicate = Schema.Struct({ticket: TicketNumber, of: TicketNumber, says: Says});
 export type RateDuplicate = typeof RateDuplicate.Type;
 
-/** One change a person asks for, as the machine holds it: the command, tagged by its input's name. */
-export const Write = Schema.Union([
+/**
+ * A new area: its name, and the suggestion it came from when a person ticked one. Becomes one
+ * `area_made`, with the next number. A person only.
+ */
+export const MakeArea = Schema.Struct({name: AreaName, suggested: Schema.optionalKey(Suggested)});
+export type MakeArea = typeof MakeArea.Type;
+
+/** A live area's new name. Becomes one `area_renamed`; no ticket changes. A person only. */
+export const RenameArea = Schema.Struct({area: AreaNumber, name: AreaName});
+export type RenameArea = typeof RenameArea.Type;
+
+/** One live area into another: every ticket in `area` reads `into`. Becomes one `area_merged`. */
+export const MergeArea = Schema.Struct({area: AreaNumber, into: AreaNumber});
+export type MergeArea = typeof MergeArea.Type;
+
+const TicketWrite = Schema.Union([
 	Schema.Struct({kind: Schema.Literal("file"), ...File.fields}),
 	Schema.Struct({kind: Schema.Literal("comment"), ...Comment.fields}),
 	Schema.Struct({kind: Schema.Literal("close"), ...OneTicket.fields}),
@@ -69,10 +94,54 @@ export const Write = Schema.Union([
 	Schema.Struct({kind: Schema.Literal("answer"), ...Answer.fields}),
 	Schema.Struct({kind: Schema.Literal("rate_duplicate"), ...RateDuplicate.fields}),
 ]);
+/** A write to one ticket's stream. */
+export type TicketWrite = typeof TicketWrite.Type;
+
+const AreaWrite = Schema.Union([
+	Schema.Struct({kind: Schema.Literal("make_area"), ...MakeArea.fields}),
+	Schema.Struct({kind: Schema.Literal("rename_area"), ...RenameArea.fields}),
+	Schema.Struct({kind: Schema.Literal("merge_area"), ...MergeArea.fields}),
+]);
+/** A write to the project's areas, on their own stream. */
+export type AreaWrite = typeof AreaWrite.Type;
+
+/** One change a person asks for, as the machine holds it: the command, tagged by its input's name. */
+export const Write = Schema.Union([...TicketWrite.members, ...AreaWrite.members]);
 export type Write = typeof Write.Type;
 
-/** The fact a write puts on the ledger. An answer's text goes in as its hash. */
-export const factOf = (write: Write): Effect.Effect<Fact> => {
+export const isAreaWrite = (write: Write): write is AreaWrite =>
+	write.kind === "make_area" || write.kind === "rename_area" || write.kind === "merge_area";
+
+/**
+ * The fact an area write puts on the areas' stream, onto the areas as they stand, or why it does
+ * not fit them, in words. A new area takes the next number. Pure.
+ *
+ *   areaFactOf({kind: "make_area", name: "lane"}, {live: {1: "desk"}, into: {}})
+ *   // {fact: {_tag: "area_made", area: 2, name: "lane"}}
+ *   areaFactOf({kind: "make_area", name: "Desk"}, same)
+ *   // {why: 'the area "desk" has that name already'}
+ */
+export const areaFactOf = (
+	write: AreaWrite,
+	areas: Areas,
+): {readonly fact: AreaFact} | {readonly why: string} => {
+	const fact: AreaFact =
+		write.kind === "make_area"
+			? {
+					_tag: "area_made",
+					area: nextArea(areas),
+					name: write.name,
+					...(write.suggested === undefined ? {} : {suggested: write.suggested}),
+				}
+			: write.kind === "rename_area"
+				? {_tag: "area_renamed", area: write.area, name: write.name}
+				: {_tag: "area_merged", area: write.area, into: write.into};
+	const why = areaRefused(areas, fact);
+	return why === null ? {fact} : {why};
+};
+
+/** The fact a write puts on a ticket's stream. An answer's text goes in as its hash. */
+export const factOf = (write: TicketWrite): Effect.Effect<Fact> => {
 	switch (write.kind) {
 		case "file":
 			return Effect.succeed({

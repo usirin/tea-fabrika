@@ -1,8 +1,8 @@
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
-import {gitHubCodeHost} from "@kampus/pipeline/code-host-github";
-import {GITHUB, gitHubPullRequests} from "@tea-fabrika/tracker/github";
+import {gitHubCodeHost, gitHubCodeTree} from "@kampus/pipeline/code-host-github";
+import {GITHUB, gitHubPullRequests, gitHubRepoTree} from "@tea-fabrika/tracker/github";
 import {Effect, FileSystem, Layer, Logger} from "effect";
 import {hostJev} from "./jev.ts";
 import {runHost} from "./run.ts";
@@ -46,6 +46,12 @@ const pullRequests = Layer.provide(
 	gitHubCodeHost({own: [], reviewers: []}),
 );
 
+/**
+ * The connected repositories' top folders, for the tracker's first-areas suggestions: one GitHub
+ * call per repository on the same `gh` login, kept for the session once one comes back.
+ */
+const repoTree = Layer.provide(gitHubRepoTree(GITHUB), gitHubCodeTree({}));
+
 const main = Effect.gen(function* () {
 	if (home === undefined || home === "")
 		return yield* Effect.die("fabrika host: FABRIKA_HOME is not set; the host starts on no home");
@@ -61,7 +67,7 @@ const main = Effect.gen(function* () {
 	);
 }).pipe(
 	Effect.scoped,
-	Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, pullRequests)),
+	Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, pullRequests, repoTree)),
 );
 
 NodeRuntime.runMain(main);
