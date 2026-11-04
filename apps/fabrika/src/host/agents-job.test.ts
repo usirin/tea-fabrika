@@ -3,7 +3,7 @@ import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
 import {LAST_MAX} from "@kampus/fabrika-old/mcp";
-import {Client} from "@modelcontextprotocol/client";
+import {Client, type JSONRPCMessage} from "@modelcontextprotocol/client";
 import {getDefaultEnvironment, StdioClientTransport} from "@modelcontextprotocol/client/stdio";
 import {pullRequestsOf} from "@tea-fabrika/tracker";
 import {Effect, Exit, FileSystem, Layer, Logger, Path, Schedule, Scope} from "effect";
@@ -29,6 +29,15 @@ import {pathsOf, reach} from "./socket.ts";
 //
 //   tile t1     tsh$ counter &   then   tsh$ stop %1
 //   host/log    message=job_stopped n=1 by=user:owner        a person's own stop gives no why
+//
+// And each agent's own moves (tracker 185b, PR 1, record wide): one line as an agent comes, with
+// the client its `initialize` named, and one line per tool call, done or refused, with the call's
+// JSON-RPC id, so a line matches the agent's own transcript later. A refused call leaves no other
+// trace.
+//
+//   host/log    message=agent_came agent=claude client=test version=0.0.0
+//               message=tool_called agent=claude tool=runs call=2 took_ms=3 ok=true
+//               message=tool_called agent=claude tool=job call=3 took_ms=0 "refused=there is no job 99 ..."
 //
 // Every log line the host writes is caught here through Effect's own `Logger`, in the format the
 // host's file uses (`Logger.formatSimple`, host/main.ts). No real home and no real ledger.
@@ -104,6 +113,13 @@ const agentOn = (home: string, agent: string) =>
 			env: {...getDefaultEnvironment(), FABRIKA_HOME: home},
 			stderr: "pipe",
 		});
+		/** Each JSON-RPC message the client sent, as it went: a tool call's id is the log line's `call`. */
+		const sent: JSONRPCMessage[] = [];
+		const send = transport.send.bind(transport);
+		transport.send = (message, options) => {
+			sent.push(message);
+			return send(message, options);
+		};
 		const client = new Client({name: "test", version: "0.0.0"});
 		yield* Effect.acquireRelease(
 			Effect.promise(() => client.connect(transport)),
@@ -141,7 +157,12 @@ const agentOn = (home: string, agent: string) =>
 				}
 				return yield* Effect.die(`job ${JSON.stringify(args)} never came to what was waited for`);
 			});
-		return {client, call, tools, jobWhen, heard};
+		/** The ids of the tool calls the client sent, in order. */
+		const callIds = () =>
+			sent.flatMap((m) =>
+				"method" in m && m.method === "tools/call" && "id" in m ? [String(m.id)] : [],
+			);
+		return {client, call, tools, jobWhen, heard, callIds};
 	});
 
 const tagOf = (data: Record<string, unknown>) => Reflect.get(Object(data.state), "_tag");
@@ -299,6 +320,79 @@ describe("the host's wide log", () => {
 		expect(at("job_stopped")).toBeLessThan(at("job_ended"));
 	});
 
+	it("writes one agent_came line as an agent comes, with the client its initialize named", async () => {
+		const lines: string[] = [];
+		await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				yield* hostOn(home, lines);
+				const agent = yield* agentOn(home, "claude");
+				yield* agent.tools;
+				yield* until("agent_came in the log", () =>
+					said(lines, "agent_came").length > 0 ? true : undefined,
+				);
+			}),
+		);
+		const came = said(lines, "agent_came");
+		expect(came).toHaveLength(1);
+		// The test's client names itself {name: "test", version: "0.0.0"}, as Claude Code names itself.
+		expect(came[0]).toMatchObject({
+			level: "INFO",
+			agent: "claude",
+			client: "test",
+			version: "0.0.0",
+		});
+	});
+
+	it("writes exactly one tool_called line per tool call, done or refused, with the call's JSON-RPC id", async () => {
+		const lines: string[] = [];
+		const seen = await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				yield* hostOn(home, lines);
+				const agent = yield* agentOn(home, "claude");
+				const calls: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
+					["runs", {}],
+					["job", {n: 99}],
+					["job", {n: 1, last: 0}],
+					["stop", {n: 99, why: "nothing there"}],
+					["nope", {}],
+				];
+				const answers: Array<{
+					readonly tool: string;
+					readonly error: boolean;
+					readonly text: string;
+				}> = [];
+				for (const [tool, args] of calls) answers.push({tool, ...(yield* agent.call(tool, args))});
+				yield* until("a line for each call", () =>
+					said(lines, "tool_called").length >= calls.length ? true : undefined,
+				);
+				// A moment more, so a second line for any call would be caught too.
+				yield* Effect.sleep("200 millis");
+				return {answers, ids: agent.callIds()};
+			}),
+		);
+		const called = said(lines, "tool_called");
+		expect(seen.ids).toHaveLength(seen.answers.length);
+		expect(called).toHaveLength(seen.answers.length);
+		expect(new Set(called.map((f) => f.call)).size).toBe(called.length);
+		seen.answers.forEach((answer, i) => {
+			const line = called.find((f) => f.call === seen.ids[i]);
+			expect(line).toMatchObject({level: "INFO", agent: "claude", tool: answer.tool});
+			expect(line?.took_ms).toMatch(/^\d+$/);
+			if (answer.error) {
+				// Refused: the why as the agent was told it, and no `ok`.
+				expect(line?.refused).toBe(answer.text);
+				expect(line?.ok).toBeUndefined();
+			} else {
+				expect(line?.ok).toBe("true");
+				expect(line?.refused).toBeUndefined();
+			}
+		});
+		// Only runs went; every other call was refused.
+		expect(seen.answers.map((a) => a.error)).toEqual([false, true, true, true, true]);
+	});
+
 	it("writes a lag line while the host's thread is starved", async () => {
 		const lines: string[] = [];
 		await go(
@@ -339,7 +433,7 @@ describe("no secret in a tool's answer or a log line", () => {
 		delete process.env[NAME];
 	});
 
-	it("never says an env value: tools, runs, a job's lines, the log", async () => {
+	it("never says an env value: tools, runs, a job's lines, a stop, the log", async () => {
 		const lines: string[] = [];
 		const heard = await go(
 			Effect.gen(function* () {
@@ -352,12 +446,21 @@ describe("no secret in a tool's answer or a log line", () => {
 				yield* agent.jobWhen({n: 2}, (d) => tagOf(d) === "running");
 				yield* agent.call("runs", {});
 				yield* agent.call("job", {n: 99});
+				yield* agent.call("stop", {n: 2, why: "the secrets check"});
+				yield* agent.call("stop", {n: 99, why: "the secrets check"});
+				yield* until("the stop in the log", () =>
+					said(lines, "job_stopped").length > 0 ? true : undefined,
+				);
 				return agent.heard;
 			}),
 		);
-		// What is checked was said: the job tool answered, and the log has the jobs in it.
+		// What is checked was said: the job and stop tools answered, and the log has the jobs, the
+		// agent's coming and its tool calls in it.
 		expect(heard.some((t) => t.includes('"lines"'))).toBe(true);
+		expect(heard.some((t) => t.includes('"stopped"'))).toBe(true);
 		expect(said(lines, "job_began").length).toBeGreaterThan(0);
+		expect(said(lines, "agent_came").length).toBeGreaterThan(0);
+		expect(said(lines, "tool_called").length).toBeGreaterThan(0);
 		for (const text of [...heard, ...lines]) {
 			expect(text).not.toContain(secret);
 			expect(text).not.toContain(NAME);
