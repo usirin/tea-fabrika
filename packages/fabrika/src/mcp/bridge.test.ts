@@ -891,6 +891,126 @@ describe("the wait between dials, on the app's own shape (full jitter)", () => {
 		},
 		LONG,
 	);
+
+	/**
+	 * A host whose first connection answers as `recordingHost`'s does, and whose every connection
+	 * after it says the handshake, then closes its socket as the replayed `initialize` comes: a
+	 * build that starts, then crashes before it answers. `drop` closes the first connection;
+	 * `shaken` counts the handshakes it answered, one per dial that reached it.
+	 */
+	const crashingHost = (path: string) =>
+		Effect.gen(function* () {
+			let shaken = 0;
+			let first: NetSocket | null = null;
+			const open = new Set<NetSocket>();
+			const server = createServer((socket) => {
+				const at = first === null ? 0 : 1;
+				if (at === 0) first = socket;
+				open.add(socket);
+				socket.on("error", () => {});
+				socket.on("close", () => open.delete(socket));
+				const say = (m: unknown) => socket.write(`${JSON.stringify(m)}\n`);
+				let rest = "";
+				socket.on("data", (chunk) => {
+					rest += chunk.toString("utf8");
+					const parts = rest.split("\n");
+					rest = parts.pop() ?? "";
+					for (const part of parts) {
+						if (part.trim() === "") continue;
+						const m: unknown = JSON.parse(part);
+						if (field(m, "type") === "handshake") {
+							shaken += 1;
+							say({type: "handshake", version: AGENTS_PROTOCOL});
+						} else if (field(m, "method") === "initialize") {
+							if (at !== 0) {
+								socket.destroy();
+								return;
+							}
+							say({
+								jsonrpc: "2.0",
+								id: field(m, "id"),
+								result: {
+									protocolVersion: field(field(m, "params"), "protocolVersion"),
+									capabilities: {tools: {listChanged: true}},
+									serverInfo: {name: "crashing", version: "0.0.0"},
+								},
+							});
+						}
+					}
+				});
+			});
+			yield* Effect.callback<void>((resume) => {
+				server.listen(path, () => resume(Effect.void));
+			});
+			yield* Effect.addFinalizer(() =>
+				Effect.callback<void>((resume) => {
+					for (const socket of open) socket.destroy();
+					if (server.listening) server.close(() => resume(Effect.void));
+					else resume(Effect.void);
+				}),
+			);
+			return {shaken: () => shaken, drop: () => first?.destroy()};
+		});
+
+	// Tracker 220, from PR 4's review: the streak of failed tries began again whenever a host
+	// passed the handshake, so a build that handshakes and then crashes was dialed for ever, about
+	// 4 times a second, and the five minutes never ran out. A host that dies before it answers the
+	// replayed initialize is a failed try: the streak goes on until that answer comes.
+	it(
+		"ends within the five minutes when every new host says its handshake, then closes before it answers the replayed initialize",
+		async () => {
+			const lines: string[] = [];
+			const caught = Logger.make((o) => {
+				lines.push(Logger.formatSimple.log(o));
+			});
+			/** How far the bridge's clock moves at a time, and the furthest it is moved in all. */
+			const STEP = 2_500;
+			const PAST = FULL.maxElapsedMs + 2 * FULL.capMs;
+			const seen = await go(
+				Effect.gen(function* () {
+					const path = yield* socketPath;
+					const host = yield* crashingHost(path);
+					const client = yield* clientEnd;
+					// The bridge alone runs on a clock the test moves; the test's own waits stay real.
+					const clock = yield* TestClock.make();
+					const running = yield* bridge(NodeSocket.makeNet({path}), "claude", FULL).pipe(
+						Effect.provideService(Stdio.Stdio, client.stdio),
+						Effect.provideService(Clock.Clock, clock),
+						Effect.provideService(Random.Random, HALF),
+						Effect.provide(Logger.layer([caught])),
+						Effect.forkScoped,
+					);
+					yield* opened(client);
+					host.drop();
+					let moved = 0;
+					while (moved < PAST && running.pollUnsafe() === undefined) {
+						yield* clock.adjust(STEP);
+						moved += STEP;
+						// A short real window for the dial, the handshake and the close.
+						yield* Effect.sleep("20 millis");
+					}
+					return {exit: running.pollUnsafe(), moved, shaken: host.shaken()};
+				}),
+			);
+			// It dialed again and again, and each new host crashed in the replay.
+			expect(seen.shaken).toBeGreaterThan(3);
+			// Then it stopped, within the five minutes and one longest wait, with why.
+			expect(seen.exit, "the bridge still ran past its five minutes").toBeDefined();
+			expect(seen.moved).toBeLessThanOrEqual(FULL.maxElapsedMs + FULL.capMs + STEP);
+			const exit = seen.exit;
+			expect(exit !== undefined && Exit.isFailure(exit)).toBe(true);
+			const error = exit !== undefined && Exit.isFailure(exit) ? Cause.squash(exit.cause) : null;
+			expect(error).toMatchObject({_tag: "BridgeStopped"});
+			expect(String(field(error, "why"))).toMatch(/host/);
+			// One streak: each host_back counts one try more than the last, never one from nothing.
+			const tries = lines
+				.filter((l) => l.includes("message=host_back"))
+				.map((l) => Number(/tries=(\d+)/.exec(l)?.[1]));
+			expect(tries.length).toBeGreaterThan(3);
+			for (const [i, n] of tries.entries()) if (i > 0) expect(n).toBeGreaterThan(tries[i - 1] ?? 0);
+		},
+		LONG,
+	);
 });
 
 /**
