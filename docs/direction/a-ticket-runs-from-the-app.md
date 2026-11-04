@@ -4,6 +4,9 @@
 calls: push and merge are two steps, one review per plan, the cloud host in
 v1, stage agents on Codex, and every stage in a box. Nothing here is built.
 
+Keys renamed 2026-11-03 (short words keep one meaning): the lane's `at` became `state`, and its
+schema `At` became `State`.
+
 A person files a ticket in the app. Our own pipeline takes it all the way to a
 merged pull request, and writes each step onto the ticket so the person can
 watch it go.
@@ -134,7 +137,7 @@ has four states.
 ```ts
 // A sketch, in Effect Schema. The lane's state: where it is, and the one child running now.
 const Child = Schema.Literals(["triage", "plan", "test_writer", "build", "mutation", "review", "push", "merge"]);
-const At = Schema.Union([
+const State = Schema.Union([
 	Schema.TaggedStruct("reading", {}),
 	Schema.TaggedStruct("running", {child: Child, run: RunId}), // a Sub hears the child's end
 	Schema.TaggedStruct("asking", {ask: AskId}), // a Listen on the ticket: a person's `answered` only
@@ -142,7 +145,7 @@ const At = Schema.Union([
 ]);
 const Lane = Schema.Struct({
 	ticket: TicketNumber,
-	at: At,
+	state: State,
 	plan: Schema.NullOr(PlanRef), // the version the owner approved, and the hash of the text that approval saw
 	tests: Schema.NullOr(Sha), // the test writer's local commit on the plan's base
 	head: Schema.NullOr(Sha), // the local commit review read; nothing pushed before it passed
@@ -171,14 +174,14 @@ const update = (s: Lane, m: LaneMsg): [Lane, Cmd[]] => {
 	switch (m.type) {
 		case "read": {
 			const go = next(m.ticket, m.facts);
-			if (go.kind === "over") return [{...s, at: {_tag: "over", outcome: go.outcome}}, [write(s.ticket, ended(go))]];
-			if (go.kind === "ask") return [{...s, at: {_tag: "asking", ask: go.ask.ask}}, [write(s.ticket, go.ask)]];
-			return [{...s, at: {_tag: "running", child: go.child, run: m.run}}, [write(s.ticket, started(go.child, m.run))]];
+			if (go.kind === "over") return [{...s, state: {_tag: "over", outcome: go.outcome}}, [write(s.ticket, ended(go))]];
+			if (go.kind === "ask") return [{...s, state: {_tag: "asking", ask: go.ask.ask}}, [write(s.ticket, go.ask)]];
+			return [{...s, state: {_tag: "running", child: go.child, run: m.run}}, [write(s.ticket, started(go.child, m.run))]];
 		}
 		case "child_ended": // one of the five verbs, from the child; then read again, fresh
-			return [{...s, at: {_tag: "reading"}}, [write(s.ticket, endedFact(m)), readTicket(s.ticket)]];
+			return [{...s, state: {_tag: "reading"}}, [write(s.ticket, endedFact(m)), readTicket(s.ticket)]];
 		case "answered": // only a person's `answered` reaches here (the Listen filters by writer)
-			return [{...s, at: {_tag: "reading"}}, [readTicket(s.ticket)]];
+			return [{...s, state: {_tag: "reading"}}, [readTicket(s.ticket)]];
 	}
 };
 ```

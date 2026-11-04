@@ -43,6 +43,8 @@ import {Table} from "./table.ts";
 export const Printed = Schema.Struct({
 	to: Schema.Literals(["out", "err"]),
 	text: Schema.String,
+	/** The job it was printed for, `%n`: its program's values and tsh's `[n] ...` lines of it. None for tsh's own. */
+	n: Schema.optionalKey(Schema.Int),
 });
 export type Printed = typeof Printed.Type;
 
@@ -143,8 +145,11 @@ export const tsh = defineProgram({
 				),
 				Effect.forkScoped,
 			);
-			const print = (to: "out" | "err", text: string) => {
-				Queue.offerUnsafe(spoken, {kind: "printed", printed: {to, text}});
+			const print = (to: "out" | "err", text: string, n?: number) => {
+				Queue.offerUnsafe(spoken, {
+					kind: "printed",
+					printed: n === undefined ? {to, text} : {to, text, n},
+				});
 			};
 			const printTable = (table: Table) => {
 				Queue.offerUnsafe(spoken, {kind: "table", table});

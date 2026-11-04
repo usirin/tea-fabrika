@@ -538,8 +538,8 @@ The owner approved each lean below on 2026-11-01. The numbers stay as written.
 
 ## A tryout in today's version
 
-Not filed. A tryout the owner may pick: today's `apps/fabrika` reads `~/.fabrika/keybindings.toml`
-at start.
+Picked by the owner on 2026-11-02: tracker ticket 174, after ticket 117. Today's `apps/fabrika`
+reads `~/.fabrika/keybindings.toml` at start.
 
 - What it touches: `desk/keys.ts` takes the table as a value instead of a constant;
   `window/desk.tsx`, `window/pop.ts` and `window/frame.ts` stop hardcoding Cmd-K, the popover keys

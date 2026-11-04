@@ -23,11 +23,14 @@ import {RunRecord, type Storage, StorageBroken, storageOf} from "../program/stor
 // written by the run's own storage into this record, behind the door, never sent to a viewer
 // elsewhere. A step's state never holds a secret: storage refuses one (../program/secrets.ts).
 
+// The `u` flag is what lets Effect write the pattern into the JSON Schema; without it the shape
+// is a bare string, and any string output would fit a trace id input.
+
 /** A trace's id: 32 lowercase hex characters, as OpenTelemetry writes it. */
-export const TraceId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{32}$/));
+export const TraceId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{32}$/u));
 
 /** A span's id: 16 lowercase hex characters. */
-export const SpanId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{16}$/));
+export const SpanId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{16}$/u));
 
 /** How a job ended. */
 export const JobEnd = Schema.Literals(["done", "failed", "stopped"]);

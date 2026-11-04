@@ -2,6 +2,9 @@
 
 Proposed 2026-10-29.
 
+Keys renamed 2026-11-03 (short words keep one meaning): a label's `at` became `span`, rustc's
+word for a label's place (LSP says `range`).
+
 ```ts
 // An error is a TaggedError with its facts as fields. It knows how to describe itself
 // as a Diagnostic. Drawing is a service: the terminal, a window and an agent each get
@@ -20,15 +23,15 @@ class DoesNotFit extends Schema.TaggedError<DoesNotFit>()("DoesNotFit", {
 error[T0103]: tally's output does not fit trace's input
   |
 1 | seq --to 3 | tally | trace
-  |              ----- ^ ----- takes: id (a trace id), do
+  |              ----- ^ ----- takes: id (a trace id), ticket (a ticket number), do
   |              |
   |              sends: total (integer), refused
   |
-  = note: nothing tally sends is a trace id
-  = help: a program that sends a trace id: runs
+  = note: nothing tally sends is a trace id or a ticket
+  = help: a program that sends a ticket: tracker
   |
-1 | runs --ticket 7 | trace
-  | ++++++++++++++++
+1 | tracker | trace
+  | ++++++++
   |
   = for more: explain T0103
 Nothing was started.
@@ -73,7 +76,7 @@ type Diagnostic = {
 	code: string; // "T0103": T tsh, H host, P a program
 	level: "error" | "warning";
 	message: string; // one line, names the person's own things
-	labels: ReadonlyArray<{at: Span; text: string; main: boolean}>; // main: ^^^, others: ---
+	labels: ReadonlyArray<{span: Span; text: string; main: boolean}>; // main: ^^^, others: ---
 	notes: ReadonlyArray<string>; // why
 	helps: ReadonlyArray<string>; // what to do
 	fixes: ReadonlyArray<{line: string; applies: "safe" | "maybe" | "holes"}>;
@@ -98,12 +101,12 @@ const Drawing: Context.Reference<Draw> = Context.Reference("@kampus/fabrika/Draw
 // What an agent gets through MCP for the line above: the same facts, no parsing.
 {"_tag": "DoesNotFit", "code": "T0103",
  "message": "tally's output does not fit trace's input",
- "labels": [{"at": {"start": 19, "end": 20}, "text": "", "main": true},
-            {"at": {"start": 13, "end": 18}, "text": "sends: total (integer), refused", "main": false},
-            {"at": {"start": 21, "end": 26}, "text": "takes: id (a trace id), do", "main": false}],
- "notes": ["nothing tally sends is a trace id"],
- "helps": ["a program that sends a trace id: runs"],
- "fixes": [{"line": "runs --ticket 7 | trace", "applies": "maybe"}]}
+ "labels": [{"span": {"start": 19, "end": 20}, "text": "", "main": true},
+            {"span": {"start": 13, "end": 18}, "text": "sends: total (integer), refused", "main": false},
+            {"span": {"start": 21, "end": 26}, "text": "takes: id (a trace id), ticket (a ticket number), do", "main": false}],
+ "notes": ["nothing tally sends is a trace id or a ticket"],
+ "helps": ["a program that sends a ticket: tracker"],
+ "fixes": [{"line": "tracker | trace", "applies": "maybe"}]}
 ```
 
 ## What Effect already gives, and what is ours

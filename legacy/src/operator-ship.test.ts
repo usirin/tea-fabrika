@@ -1,3 +1,4 @@
+import type {UnfencedStore} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {memoryStore} from "@demlik/tea/mem";
 import {CodeHost, CodeHostWrites} from "@kampus/pipeline/services";
@@ -157,7 +158,7 @@ function runOn(
 	fake: Fake,
 	host: Host,
 	first: OperatorMsg,
-	o: {until?: (s: Operator) => boolean; store?: ReturnType<typeof memoryStore<Operator>>} = {},
+	o: {until?: (s: Operator) => boolean; store?: UnfencedStore<Operator>} = {},
 ) {
 	const program = Effect.gen(function* () {
 		const handle = yield* run(createOperator(2, {ship: "machine"}), {

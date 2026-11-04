@@ -682,7 +682,6 @@ describe("text takes Radix's two text steps, and a title is step 12, in both loo
 		"a map node's name": [".map-view .node-h .n"],
 		"a map frame's name": [".map-view .frame-h .n"],
 		"a map chip's name": [".map-view .chip .n"],
-		"a runs track's name": [".runs-view .trk-h .n"],
 		"a markdown heading": [".markdown h1"],
 	};
 
@@ -771,8 +770,6 @@ describe("text takes Radix's two text steps, and a title is step 12, in both loo
 		".tracker button:disabled": "a disabled button: an inactive part",
 		".desk.lost .workspace": "the link is down: the desk is out of reach till it is back",
 		".desk.lost .topbar .right > .fb": "the link is down: the top bar's asks are out of reach",
-		".runs-view .wait": "a waiting bar's striped fill, no text",
-		".runs-view .wait.done": "a waiting bar's striped fill, no text",
 		".trace-view .wf-span": "a trace bar's fill, aria-hidden, no text",
 	};
 
@@ -872,8 +869,8 @@ describe("the accent fill says your turn and nothing else", () => {
 		".ticket-view .turnc.you": "the turn card when the turn is yours",
 		".ticket-view .meter i.you": "your share of the turn meter",
 		".map-view .spot.you": "the map's spot that waits on you",
-		".runs-view .ruler .mk": "a person's answer on the runs ruler: a turn taken",
-		".runs-view .wait": "a bar that waits on you",
+		".trace-view .tv-bar.waiting":
+			"a lane's wait on a person, not yet answered: a bar that waits on you",
 	};
 
 	it("finds the accent's names, --key among them", () => {

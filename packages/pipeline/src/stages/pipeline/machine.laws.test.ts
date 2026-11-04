@@ -1511,6 +1511,12 @@ describe("every pick of every question goes on at the step its definition names 
 			const world: World = {...ROUTED, fresh: CONFLICT};
 			return {...reach("exam_conflict", world, over, RESTART), world};
 		},
+		// Self-fix PR 11, rows 18, 23, 40 and 57: a step over its budget asks `spend`.
+		spend: () =>
+			reach(
+				"spend",
+				stoppingAt("build", {outcome: {kind: "stuck", why: "over_budget"}, carry: {}}),
+			),
 	};
 
 	for (const kind of AskFor.literals)
@@ -1564,14 +1570,12 @@ describe("every pick of every question goes on at the step its definition names 
 					}),
 				),
 		],
-		// A build's own question: a build run again is the next round.
+		// A build's own question: a build run again is the next round. Self-fix PR 11: `still_red` now
+		// goes back to build (row 46), so build's own question comes from row 41, `no_change` twice in a row.
 		[
 			"step, at the build",
 			() =>
-				reach(
-					"step",
-					stoppingAt("build", {outcome: {kind: "ask", who: "owner", for: "still_red"}, carry: {}}),
-				),
+				reach("step", stoppingAt("build", {outcome: {kind: "stuck", why: "no_change"}, carry: {}})),
 		],
 	];
 

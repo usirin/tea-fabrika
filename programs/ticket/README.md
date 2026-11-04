@@ -17,9 +17,9 @@ shownOf(trackerAtSeven()).page?.steps.find((s) => s.state === "you");
 // {ticket: 7, ask: "a-1", pick: "approve", note: "", saw: {title, body}}
 // tracker/ticket/7/inbox gets {type: "answered", ask: "a-1", pick: "approve", ...} by user:owner
 
-// tsh> tracker | ticket | runs
+// tsh> tracker | ticket | trace
 // input `ticket` takes the tracker's pick: 7, then 3. The window shows #7, then #3.
-// output `ticket` sends what it shows, once per change: 7, then 3, on to the runs.
+// output `ticket` sends what it shows, once per change: 7, then 3, on to the trace's lanes.
 ```
 
 ## What's in it
@@ -38,7 +38,7 @@ shownOf(trackerAtSeven()).page?.steps.find((s) => s.state === "you");
   ticket, and its window still writes there.
 - Only a person answers. The tracker's save cell refuses an `answered` written by an agent, and
   this program uses that same cell.
-- The panel's Runs and Made of rows name a command to type (`runs --ticket 7`,
+- The panel's Runs and Made of rows name a command to type (`trace --ticket 7`,
   `map --ticket 7`), since a window cannot open a tile yet.
 
 ## Not done

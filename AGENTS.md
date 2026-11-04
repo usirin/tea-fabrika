@@ -18,7 +18,7 @@ was decided are all kept here on purpose, so they can be analysed later.
 |---|---|---|
 | Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) there | That README, in the same pull request or the same day, when the plan or its state changes. |
 | Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), one note per decision | A note there, the same day a direction is set or changed, plus its row in that folder's README. Mark it **proposed** until it is settled. |
-| Write guidelines for one design area | [`.claude/skills/guidelines/SKILL.md`](./.claude/skills/guidelines/SKILL.md), the steps in order, and its page checklist | One experiment, one proposed note, their two index rows and one private page, in the shape that skill gives. |
+| Write guidelines for one design area | [`.claude/skills/guidelines/SKILL.md`](./.claude/skills/guidelines/SKILL.md), the steps in order, and its page checklist | One experiment, one proposed note, their two index rows and one Design canvas ([drawn on Claude Design](./docs/direction/design-on-claude-design.md)), in the shape that skill gives. |
 | Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up and `experiments/NN-name.ts` for its script, with the next free number, plus one row in the index. Shared helpers go in `experiments/lib/`, saved answers in `experiments/results/`. |
 | Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes.jsonl` and `field/runs.jsonl` | One row per agent run in `runs.jsonl` and one note per thing that broke, cost too much, needed a person or worked well in `notes.jsonl`, the same day, in the schema the README gives. |
 | Check a change against old tickets | [`replay/README.md`](./replay/README.md) | New replay cases under `replay/`, as that README describes. |
@@ -68,6 +68,10 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   and its tests to learn what jobs exist and what was learned, then rethink. Never
   import it and never copy it across
   ([rethink, do not port](./docs/direction/rethink-do-not-port.md)).
+- **One exception: the design package is shared by both versions.** `@kampus/fabrika-design`
+  holds the colors, the Manti mapping and the text roles, and today's app and `next/` both
+  import it. Its contents come from settled notes, not today's shapes, and moving a file into it
+  means rethinking it against them ([one design package](./docs/direction/fabrika-design-package.md)).
 - **In `next/`, nothing is built on Promises.** It is Effect all the way. A Promise
   appears only in a one-line edge the platform demands
   ([no Promises](./docs/direction/no-promises.md)).
@@ -84,9 +88,11 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each
   part is small, never absent.
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
-- **In `next/`, a window reads state through one `useSyncExternalStore` hook.** State
-  lives in a tea machine, never `useState`, and tea's `useMachine` is not used: it dies
-  under Strict Mode ([Elm first](./docs/direction/elm-first.md)).
+- **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
+  machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). tea 0.22.0 fixed
+  `useMachine` under Strict Mode, but it does not take the Effect engine yet
+  ([demlik 852](https://github.com/kamp-us/demlik/issues/852)). Until it does, one
+  `useSyncExternalStore` hook in one file stands in, and goes when tea's lands.
 - **In `next/`, no bare `of` and no `xOf` names.** Today's `nameOf` and `outcomesOf`
   stay until that code goes.
 - **In today's version:** fixes that daily use or CI needs, the UX work the owner
@@ -188,6 +194,11 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   `reasonCode`. A key does not say again what its parent already says: inside
   an outcome, the reason is `why`, not `outcomeReason`. If a short word could
   mean two things, pick a clearer short word before you reach for a long one.
+  A short word that already means something here keeps that one meaning: `at` is a
+  time (the referee's), `by` is who wrote it, `said` is the writer's clock, `_tag` is
+  the case. A place, a path, a ref, a state, a reason or a total gets its own word
+  (`location`, `path`, `ref`, `state`, `why`, `total`). `rg` the word under
+  `docs/direction/` and `next/` before you use it.
 
   ```ts
   // Values as they read. In `next/`, Effect Schema writes the `_tag`; nobody types it.
@@ -398,6 +409,12 @@ Write-ups are read by busy people, some of them not native English speakers.
   new product. The PR says, per screen, what Linear would do, and where we
   differ and why. Tuval and tmux stay the defaults for tiling; where they clash
   with Linear's answer, name the clash for the owner to pick.
+  - **Linear as the builder, never as the template.** The question is how Linear's team
+    would build the feature if they were building it as fabrika programs, with
+    fabrika's own pieces: programs that compose in tiles, the desk, the top bar,
+    pipes between programs. Their taste and quality bar, on our primitive. Never
+    copy a Linear screen. Ask which program owns the job, what composes beside
+    what, and what becomes a piece every program gets for free.
 - **Show it running.** A PR that adds or changes a program's window carries
   screenshots from the real built app, saved in that program's `docs/` folder
   and shown in the PR body. Take them the way `apps/fabrika/e2e.ts` drives the

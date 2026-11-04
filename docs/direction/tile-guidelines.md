@@ -87,8 +87,9 @@ Where Linear and the tiling tools differ. Linear has no tiling, so tmux and Tuva
 - **A tile is ours, not a Manti part.** Manti 0.13.0's `Card` has radius and padding tokens and no
   edge states, so the tile's tokens point at Manti's names ([UI on Manti](./ui-on-manti.md)).
 - **Manti has no name for a resting edge.** It has `--manti-border` and `--manti-border-strong`. We
-  try `--manti-border-subtle` with a pnpm patch first, as `patches/@manti-ui__react@0.13.0.patch`
-  already does for types. A pull request to Manti brings evidence from that try, and asks the owner
+  try `--manti-border-subtle` with a pnpm patch first. Tokens live in `@manti-ui/styles`
+  (`tokens.css`), so this is a patch to `@manti-ui/styles`, not to the react patch
+  (`patches/@manti-ui__react@0.13.0.patch`), which only fixes types. A pull request to Manti brings evidence from that try, and asks the owner
   first.
 - **The resting edge is slate a4 on every tile, plain or pipe.** It is the one bend
   [color principles](./color-principles.md#the-steps-and-their-jobs) records. The box does not change
@@ -498,7 +499,7 @@ It is decided. These say what would change it, for each pick under 80%.
 | F6 does not stop on strips | 70% | Finding folded tiles from a terminal | A keyboard run with a screen reader |
 | Resize by keys only | 70% | APG expects a separator | A keyboard run with a screen reader |
 | Strip ring a8 | 75% | 3.03 is thin on a 22px strip, and it shares its step with the focused tile's edge | A look at the built app, with both in view |
-| Title bar in mono | 70% | [Popovers](./popovers.md) puts `t2` in sans | A shot beside a popover |
+| Title bar in mono | 70%, then settled | [Popovers](./popovers.md) puts `t2` in sans | Settled 2026-11-02 by the owner, from a shot of the title bars in sans: the title bars stay mono, as do the top bar and the bottom line. A study of one program never changes them. |
 | `C-b [` for a terminal's text | 70% | Reading one long block of text | A VoiceOver run |
 
 The rest stand at 80% or more: `--text-faint` at a11 85%, `header` not `button` 85%, one `main` 90%, F6 with

@@ -14,8 +14,10 @@ import {
 	settingsRefusal,
 } from "../../settings.ts";
 import {shippedRubrics} from "../../setup.ts";
-import {titleOf} from "../../tickets/ticket.ts";
+import {saidOf, titleOf} from "../../tickets/ticket.ts";
+import type {Tickets} from "../../tickets/tickets.ts";
 import type {Given, Now} from "./carry.ts";
+import {codeSpan} from "./found.ts";
 
 // Where a lane works, on the machine it runs on. The repository is the one the checkout's `origin`
 // names, the checkout the app was started from, as `gh` reads a repository off the folder it runs in.
@@ -25,10 +27,13 @@ import type {Given, Now} from "./carry.ts";
 //   <checkout>               git's `remote.origin.url`: the repository, its remote and which host
 //   <home>/work/clone        the repository, fetched before each read
 //   <home>/work/trees/<n>    ticket n's working copy, on branch lane/<n>: tests, then the build
+//   <home>/work/trees/<t>.installed   beside a working copy, once its install ran
 //   <home>/work/copies/<c>   the code at commit c, plain files with no .git: what tests run in
 //   <home>/work/judges/<c>   the same, with what an agent loads by itself put back as main has it:
 //                            what a read-only agent sees
 //   <home>/work/<place>/<c>.done   beside a copy, once it is whole: a head's files cannot write it
+//   <home>/work/checks/<run> a detached git worktree of one commit, installed, for one run of the
+//                            checks alone: git answers there as in CI's checkout. Gone when it ends
 //   <home>/work/main-<name>  main's tip, with nothing installed, while rubrics are read from it
 //   <home>/work/pulls.json   the pull requests of the lane
 //   <home>/work/holds/<n>    what lane n uses that other lanes may share, a path a line: a lane that
@@ -183,6 +188,12 @@ export interface OnMain {
 	readonly conflicts: readonly string[];
 }
 
+/** A head a push replaced, and the ref on the remote it is kept under. */
+export interface Kept {
+	readonly head: string;
+	readonly ref: string;
+}
+
 export class LaneWork extends Context.Service<
 	LaneWork,
 	{
@@ -250,6 +261,12 @@ export class LaneWork extends Context.Service<
 		/** The code at `commit`, as plain files with no history and no links, installed once. Where its tests run. */
 		readonly copy: (commit: string) => Effect.Effect<string, Failed>;
 		/**
+		 * A detached git worktree of the clone at `commit`, installed, in a folder no other run shares:
+		 * where the checks run, so a check that asks git finds the repository. Removed and pruned when the
+		 * scope closes, however it ends.
+		 */
+		readonly worktree: (commit: string) => Effect.Effect<string, Failed, Scope.Scope>;
+		/**
 		 * The same, for an agent that reads a head: every file an agent loads by itself is main's, or
 		 * gone when main has none. So the head's files cannot tell its judge how to judge. A change to one
 		 * still shows in the diff, which comes from git. It does not hold back the head's running code.
@@ -265,11 +282,20 @@ export class LaneWork extends Context.Service<
 		readonly rubrics: (name: string) => Effect.Effect<string, Failed, Scope.Scope>;
 		/** An empty folder: for an agent with no reason to see code. */
 		readonly empty: Effect.Effect<string, Failed>;
-		/** `head` on the remote's branch `branch`. Never main. */
-		readonly pushTo: (folder: string, head: string, branch: string) => Effect.Effect<void, Failed>;
+		/**
+		 * `head` on the remote's branch `branch`. Never main. The branch's head is read fresh just before
+		 * (docs/direction/read-fresh-run-alone.md). When `head` does not hold it, it is kept first, and
+		 * answered: a commit a person pushed there is never lost. The push leases what was read, so a
+		 * push that lands in between fails it, and it reads again. `null`: nothing was replaced.
+		 */
+		readonly pushTo: (
+			folder: string,
+			head: string,
+			branch: string,
+		) => Effect.Effect<Kept | null, Failed>;
 		/** `head` onto main, only when main is its parent line. `moved`: main went on, and nothing was written. */
 		readonly land: (head: string) => Effect.Effect<"landed" | "moved", Failed>;
-		/** A branch's commit on the remote. `null`: no such branch. */
+		/** A branch's commit on the remote, read there now. `null`: no such branch. */
 		readonly remoteHead: (branch: string) => Effect.Effect<string | null, Failed>;
 		readonly mergeBase: (a: string, b: string) => Effect.Effect<string, Failed>;
 		/** The text of `git diff --unified=0` from `from` to `to`. */
@@ -299,7 +325,10 @@ export class LaneWork extends Context.Service<
 		) => Effect.Effect<OnMain, Failed>;
 		/** Ticket `n`'s branch moved to `commit`, its working copy with it: nothing it held besides is kept. */
 		readonly reset: (n: number, commit: string) => Effect.Effect<void, Failed>;
-		/** `commit` kept under `ref` in the clone, so it stays reachable after its branch moves on. */
+		/**
+		 * `commit` kept under `ref` in the clone and on the remote, so it stays reachable after its branch
+		 * moves on: a person can fetch it, and a lost clone does not lose it.
+		 */
 		readonly keep: (commit: string, ref: string) => Effect.Effect<void, Failed>;
 		/**
 		 * On ticket `n`'s branch as it is, `files` as `from` has them, or gone where `from` has none,
@@ -520,6 +549,22 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 					return yield* Effect.fail(failed(`[build] install: ${ran.err.trim().slice(0, 300)}`));
 			});
 
+		/**
+		 * A working copy off the clone, as `made` gives it, with the install run in it once: its mark lies
+		 * beside it. The exam's side tree needs it as the lane's does, since a formatter such as this
+		 * repo's `oxlint-plugins/format.ts` starts from `node_modules` and ends with 2 when it is not there.
+		 */
+		const installedTree = (name: string, branch: string) =>
+			Effect.gen(function* () {
+				const made_ = yield* made(name, branch);
+				const mark = at("trees", `${name}.installed`);
+				if (!(yield* fs.exists(mark).pipe(Effect.orElseSucceed(() => false)))) {
+					yield* install(made_.tree);
+					yield* quiet(fs.writeFileString(mark, ""));
+				}
+				return made_;
+			});
+
 		/** `paths` at `sha`, or all of it when none are named, unpacked into `tree`. Its tar goes either way. */
 		const unpacked = (tree: string, sha: string, paths: readonly string[] = []) => {
 			const packed = `${tree}.tar`;
@@ -652,6 +697,25 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 		};
 
 		const copy = (sha: string) => copyTo("copies", sha, install);
+
+		// Each run makes its own folder, so two lanes, or one lane twice, at one commit never share one.
+		// The release runs each step whatever the one before did: git's remove, then the folder itself
+		// (a head's install can leave one shut), then a prune, so git keeps no entry for a folder gone.
+		const worktree = (sha: string) =>
+			Effect.gen(function* () {
+				yield* quiet(fs.makeDirectory(at("checks"), {recursive: true}));
+				const folder = yield* Effect.acquireRelease(
+					quiet(fs.makeTempDirectory({directory: at("checks"), prefix: `${sha.slice(0, 12)}-`})),
+					(folder) =>
+						Effect.ignore(gitIn(clone, ["worktree", "remove", "--force", folder])).pipe(
+							Effect.andThen(Effect.ignore(cleared(folder))),
+							Effect.andThen(Effect.ignore(gitIn(clone, ["worktree", "prune"]))),
+						),
+				);
+				yield* git(clone, ["worktree", "add", "--detach", "--quiet", folder, sha]);
+				yield* install(folder);
+				return yield* quiet(fs.realPath(folder));
+			});
 
 		/** `git diff -U0 base head | git patch-id --verbatim`, its first word: a diff's id, whitespace kept. */
 		const diffId = (base: string, head: string) =>
@@ -889,27 +953,51 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			return yield* quiet(fs.realPath(folder));
 		});
 
+		// Asked of the remote itself: the clone's `origin/<branch>` outlives a branch deleted there.
+		const remoteHead = (branch: string) =>
+			Effect.gen(function* () {
+				yield* fetched;
+				const ref = `refs/heads/${branch}`;
+				const found = lines(yield* git(clone, ["ls-remote", "origin", ref]))
+					.map((line) => line.split("\t"))
+					.find(([, name]) => name === ref);
+				return found?.[0] ?? null;
+			});
+		const keep = (sha: string, ref: string) =>
+			Effect.gen(function* () {
+				yield* git(clone, ["update-ref", ref, sha]);
+				yield* git(clone, ["push", "--quiet", "origin", `${ref}:${ref}`]);
+			});
+		/** Whether `older` is in `newer`'s history. A commit the clone lacks is in none. */
+		const isAncestor = (older: string, newer: string) =>
+			inClone(["merge-base", "--is-ancestor", older, newer]).pipe(
+				Effect.map((ran) => ran.code === 0),
+			);
+		const pushTo = (folder: string, sha: string, branch: string) =>
+			Effect.gen(function* () {
+				const was = yield* remoteHead(branch);
+				const kept: Kept | null =
+					was === null || (yield* isAncestor(was, sha))
+						? null
+						: {head: was, ref: `refs/kept/${branch}/${was}`};
+				if (kept !== null) yield* keep(kept.head, kept.ref);
+				const lease = `--force-with-lease=refs/heads/${branch}:${was ?? ""}`;
+				yield* git(folder, ["push", "--quiet", lease, "origin", `${sha}:refs/heads/${branch}`]);
+				return kept;
+			}).pipe(Effect.retry({times: 2}));
+
 		return {
 			origin,
 			main,
 			settings,
-			tree: (n) =>
-				Effect.gen(function* () {
-					const made_ = yield* made(String(n), `lane/${n}`);
-					const mark = at("trees", `${n}.installed`);
-					if (!(yield* fs.exists(mark).pipe(Effect.orElseSucceed(() => false)))) {
-						yield* install(made_.tree);
-						yield* quiet(fs.writeFileString(mark, ""));
-					}
-					return made_;
-				}),
-			side: (name) => made(name, name.replace(/-/, "/")),
+			tree: (n) => installedTree(String(n), `lane/${n}`),
+			side: (name) => installedTree(name, name.replace(/-/, "/")),
 			sideFresh: (name) =>
 				Effect.gen(function* () {
 					const {tree, branch} = yield* made(name, name.replace(/-/, "/"));
 					yield* git(tree, ["checkout", "--quiet", "-B", branch, "origin/main"]);
 					yield* git(tree, ["clean", "--quiet", "-fd"]);
-					return yield* made(name, branch);
+					return yield* installedTree(name, branch);
 				}),
 			sideTo: (name, to) =>
 				Effect.gen(function* () {
@@ -944,26 +1032,19 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			listAt: (folder, sha) => names(folder, ["ls-tree", "-r", "--name-only", sha]),
 			show,
 			copy,
+			worktree,
 			judgeCopy,
 			judgedFiles,
 			rubrics,
 			empty,
-			pushTo: (folder, sha, branch) =>
-				git(folder, ["push", "--quiet", "--force", "origin", `${sha}:refs/heads/${branch}`]).pipe(
-					Effect.asVoid,
-				),
+			pushTo,
 			land: (sha) =>
 				Effect.gen(function* () {
 					yield* fetched;
 					const ran = yield* gitIn(clone, ["push", "--quiet", "origin", `${sha}:refs/heads/main`]);
 					return ran.code === 0 ? ("landed" as const) : ("moved" as const);
 				}),
-			remoteHead: (branch) =>
-				Effect.gen(function* () {
-					yield* fetched;
-					const ran = yield* gitIn(clone, ["rev-parse", "--verify", "--quiet", `origin/${branch}`]);
-					return ran.code === 0 ? ran.out.trim() : null;
-				}),
+			remoteHead,
 			mergeBase: (a, b) => git(clone, ["merge-base", a, b]),
 			changedFiles: (from, to) => names(clone, ["diff", "--no-renames", "--name-only", from, to]),
 			diff: (from, to, file) =>
@@ -993,7 +1074,7 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 					yield* git(tree, ["reset", "--quiet", "--hard", sha]);
 					yield* git(tree, ["clean", "--quiet", "-fd"]);
 				}),
-			keep: (sha, ref) => git(clone, ["update-ref", ref, sha]).pipe(Effect.asVoid),
+			keep,
 			putBack: (n, from, files, message) =>
 				Effect.gen(function* () {
 					const {tree} = yield* made(String(n), `lane/${n}`);
@@ -1024,3 +1105,28 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 		};
 	}),
 ).pipe(Layer.provide(nodeServices));
+
+/**
+ * `head` pushed to ticket `number`'s branch `branch`: how the lane pushes one. What the push replaces
+ * is kept on the remote first (`LaneWork.pushTo`), and one line on the ticket names it, as a stage
+ * that replaces a branch must (docs/direction/read-fresh-run-alone.md).
+ */
+export const pushBranch = (
+	{work, tickets}: {readonly work: LaneWork["Service"]; readonly tickets: Tickets["Service"]},
+	number: number,
+	folder: string,
+	head: string,
+	branch: string,
+) =>
+	Effect.gen(function* () {
+		const kept = yield* work.pushTo(folder, head, branch);
+		if (kept === null) return;
+		yield* tickets
+			.talk(number, `kept/${kept.ref}`, {
+				type: "commented",
+				body: saidOf(
+					`This push replaced the head of ${codeSpan(branch)}. That head, ${kept.head}, is kept on the remote under ${codeSpan(kept.ref)}, where it can be fetched.`,
+				),
+			})
+			.pipe(Effect.ignore);
+	});

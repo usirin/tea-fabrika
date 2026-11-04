@@ -3,6 +3,8 @@
 **A vision**, written down 2026-10-19. Not planned, not sized. It is here so
 that what gets built now does not close the door on it.
 
+Keys renamed 2026-11-03 (short words keep one meaning): `at` became `location`.
+
 *Changed 2026-10-31: the layers under it are decided. fabrika has five
 layers: transport, data, coordination, app and desktop. The lower three are
 written down here, in
@@ -178,7 +180,7 @@ them. The desktop has a note of its own. Config for every layer is one
   {_tag: "send", to: "counter:1/inbox", id: "m-17", m: {type: "plus"}}
   // ephemeral: at-most-once, may be lost, nothing breaks
   {_tag: "poke", stream: "counter:1/inbox", rev: 41}
-  {_tag: "presence", client, at: "tile:t1"}
+  {_tag: "presence", client, location: "tile:t1"}
   {_tag: "bytes", port: "tile:t1", data: "l"}
   ```
 

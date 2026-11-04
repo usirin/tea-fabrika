@@ -1,4 +1,5 @@
 import {randomUUID} from "node:crypto";
+import {type FencedStore, RuntimeDiscardNotice} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {fileStore} from "@demlik/tea/node";
 import {Effect} from "effect";
@@ -237,27 +238,21 @@ const holdAll = <H extends Record<string, unknown>>(handlers: H, reached: () => 
 		]),
 	) as {readonly [K in keyof H]: () => Effect.Effect<never>};
 
-/**
- * tea's own sink, except that it says nothing of Cmds a stop leaves in
- * flight: held work is left there on purpose. Anything else is thrown, as tea
- * throws it.
- */
-const quietAboutHeld = (error: unknown, context: {readonly phase: string}) => {
-	if (context.phase === "discard") return;
-	setTimeout(() => {
-		throw error;
-	}, 0);
-};
-
 /** Start the factory, kept in `store` if there is one. `held` is called when `until` stops lane or ship work. */
-const start = (
-	store: ReturnType<typeof fileStore<Factory>> | undefined,
-	until: Until,
-	held: () => void,
-) =>
-	run(factory, {
+const start = (store: FencedStore<Factory> | undefined, until: Until, held: () => void) => {
+	const options = {
 		ctx: undefined,
-		...(store === undefined ? {} : {store}),
+		onError: (error: unknown, context: {readonly phase: string}) => {
+			// Held work stays in flight on purpose; a full run keeps tea's default reporting.
+			if (until === "triage" && context.phase === "discard") return;
+			if (until !== "triage" && error instanceof RuntimeDiscardNotice) {
+				console.warn(error);
+				return;
+			}
+			setTimeout(() => {
+				throw error;
+			}, 0);
+		},
 		// Triage's work runs; stopping at triage, the lane's and ship's is held, so nothing touches the repo.
 		...(until === "triage"
 			? {
@@ -266,10 +261,11 @@ const start = (
 						...holdAll(interpret, held),
 						...holdAll(shipInterpret, held),
 					},
-					onError: quietAboutHeld,
 				}
 			: {interpret: factoryInterpret}),
-	});
+	};
+	return store === undefined ? run(factory, options) : run(factory, {...options, store});
+};
 
 /** A message as the runtime's observers get it: the factory's own, and every command's result. */
 export type Observed = Parameters<

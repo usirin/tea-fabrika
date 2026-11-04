@@ -13,22 +13,26 @@ import {
 import {tmpdir} from "node:os";
 import {basename, dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
-import {Ledger, LedgerUnreachable, streams} from "@kampus/fabrika-old";
+import {ATTR, Ledger, LedgerUnreachable, streams} from "@kampus/fabrika-old";
+import {memoryTracing} from "@kampus/fabrika-old/otel";
 import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {Duration, Effect, Exit, Fiber, Layer, Option, Schema} from "effect";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 import {memoryLedger} from "../../asks/ledger.ts";
 import {hashOf, textOf} from "../../tickets/approval.ts";
-import {type Entry, nameOf} from "../../tickets/ticket.ts";
+import {type Entry, type FactOf, nameOf} from "../../tickets/ticket.ts";
 import {Tickets, TicketsFailed, ticketsOnLedger} from "../../tickets/tickets.ts";
 import {BREAK} from "../build/body.ts";
 import {MutationRunner} from "../mutation/services.ts";
+import {nameOf as outcomeName} from "../outcome.ts";
 import {TestsWork} from "../test-writer/program.ts";
+import {LANE} from "../traced.ts";
 import {type CheckRun, CheckRunner} from "./checks.ts";
 import {Inputs, keyOf} from "./key.ts";
-import {fakeEnv, type GhStory, makeFakeGh, makeLaneHome} from "./lane-fixture.ts";
+import {fakeEnv, type GhStory, makeFakeGh, makeLaneHome, shWord} from "./lane-fixture.ts";
 import {laneLayer, runLane} from "./layer.ts";
-import {Lane, PICKS} from "./machine.ts";
+import {askedFor as kindOfAsk, Lane, PICKS} from "./machine.ts";
+import {Pull} from "./pulls.ts";
 import {type Folded, fold, seenOf} from "./restart.ts";
 
 // One tracker ticket through the whole lane in this process: the real machines, the real Codex
@@ -127,6 +131,10 @@ interface Ran {
 	readonly stages: readonly string[];
 	readonly names: Readonly<Record<string, string>>;
 	readonly facts: readonly {readonly type: string; readonly [key: string]: unknown}[];
+	/** The ticket's entries, each fact with who wrote it. */
+	readonly entries: readonly Entry[];
+	/** With `traced`: every span the lane made and ended, raw. Without: none. */
+	readonly spans: readonly Span[];
 	readonly dir: string;
 	readonly remote: string;
 	/** The stand-in `gh`, when the script played one. */
@@ -198,17 +206,35 @@ interface Script {
 	readonly checksSay?: (head: string, nth: number, where: Where) => CheckRun | null;
 	/** On the line typed again this many times, the first read of the ticket off the ledger fails. */
 	readonly readFailsAt?: number;
+	/**
+	 * A person closes or reopens the ticket, in turn, each once its step has ended: the lane's next read
+	 * of the ticket after that finds it so, and so does the step after it.
+	 */
+	readonly ticketAfter?: readonly {readonly step: string; readonly fact: "closed" | "reopened"}[];
+	/**
+	 * A person pushes one commit with `files` on top of the head the lane last pushed, on the remote,
+	 * once `step` has ended on the ticket: the lane's next read of the ticket after that finds it there.
+	 */
+	readonly branchAfter?: {
+		readonly step: string;
+		readonly files: readonly {readonly path: string; readonly text: string}[];
+	};
 	/** On every line typed again, the ticket reads as a lane from before self-fix PR 4 left it: no `checked` facts. */
 	readonly beforeChecks?: boolean;
 	/** On every line typed again, the ticket reads as a lane from before self-fix PR 5 left it: no end kept its carry. */
 	readonly beforeCarries?: boolean;
 	/** Main names its formatter (`FORMATTER`) before the lane starts: `[format] run`, pushed. */
 	readonly formatter?: boolean;
+	/** Keep every span the lines make, raw, in memory (ticket 141). */
+	readonly traced?: boolean;
 	/** The ledger does not answer the lane's first this many reads of the ticket's stream (self-fix PR 11b). */
 	readonly ledgerSilent?: number;
 	/** By fact type, the lane's first this many writes of it die, as a crash in the step's run (self-fix PR 11b). */
 	readonly dies?: Readonly<Partial<Record<string, number>>>;
 }
+
+/** One span as the in-memory exporter keeps it. */
+type Span = ReturnType<typeof memoryTracing>["spans"][number];
 
 /** By step, as the fake names them. Each list goes by the step's runs, first run first. */
 interface FakeScript {
@@ -235,6 +261,18 @@ interface FakeScript {
 	readonly cannot?: string;
 	/** Each run's log keeps what its folder holds at these paths as it starts: `seen` in `codexRuns`. */
 	readonly see?: readonly string[];
+	/**
+	 * As one run of the step starts, by the run, the first being 0: a person pushes one commit to
+	 * `branch` on the remote, with `text` at `path`. Its sha is `pushed` in `codexRuns`.
+	 */
+	readonly pushesAt?: Readonly<
+		Record<
+			string,
+			Readonly<
+				Record<number, {readonly branch: string; readonly path: string; readonly text: string}>
+			>
+		>
+	>;
 }
 
 const TIMED_OUT = "-- timed out --";
@@ -317,6 +355,57 @@ const pushToMain = (
 	git("commit", "-qm", "Main moved elsewhere");
 	git("push", "-q", "origin", "HEAD:main");
 	rmSync(work, {recursive: true, force: true});
+};
+
+/**
+ * One commit on the remote branch whose tip is `head`, as a person would push it there, on top of
+ * what the lane left. Its sha.
+ */
+const pushOnTopOf = (
+	{dir, remote}: Where,
+	head: string,
+	files: readonly {readonly path: string; readonly text: string}[],
+): string => {
+	const branches = execFileSync(
+		"git",
+		[
+			"--git-dir",
+			remote,
+			"for-each-ref",
+			"--points-at",
+			head,
+			"--format=%(refname:lstrip=2)",
+			"refs/heads/",
+		],
+		{encoding: "utf8", stdio: "pipe"},
+	)
+		.split("\n")
+		.filter((name) => name !== "" && name !== "main");
+	const [branch] = branches;
+	if (branch === undefined || branches.length > 1)
+		throw new Error(`one branch should end at ${head}, not ${JSON.stringify(branches)}`);
+	const work = join(dir, "person");
+	const git = (...args: readonly string[]) =>
+		execFileSync(
+			"git",
+			["-c", "user.name=A person", "-c", "user.email=person@example.com", ...args],
+			{
+				cwd: work,
+				encoding: "utf8",
+				stdio: "pipe",
+			},
+		);
+	execFileSync("git", ["clone", "-q", "--branch", branch, remote, work], {stdio: "pipe"});
+	for (const {path, text} of files) {
+		mkdirSync(dirname(join(work, path)), {recursive: true});
+		writeFileSync(join(work, path), text);
+	}
+	git("add", "-A");
+	git("commit", "-qm", "A person's change");
+	git("push", "-q", "origin", `HEAD:refs/heads/${branch}`);
+	const sha = git("rev-parse", "HEAD").trim();
+	rmSync(work, {recursive: true, force: true});
+	return sha;
 };
 
 /** A person closes the ticket, in the window. */
@@ -421,12 +510,16 @@ const lane = ({
 	checksStopRunning,
 	checksSay,
 	readFailsAt,
+	ticketAfter = [],
+	branchAfter,
 	beforeChecks = false,
 	beforeCarries = false,
 	formatter = false,
+	traced = false,
 	ledgerSilent = 0,
 	dies = {},
 }: Script): Promise<Ran> => {
+	const tracing = traced ? memoryTracing({raw: true}) : null;
 	let checksRan = 0;
 	/** The lane's reads of the ticket's stream so far, and each step's `started` writes that died. */
 	let streamReads = 0;
@@ -440,6 +533,28 @@ const lane = ({
 	let readFailed = false;
 	/** How many times the line was typed again. */
 	let typed = 0;
+	/** The run's ledger, for a person's `ticketAfter` writes. Set as the run starts. */
+	let ledgerOf: Ledger["Service"] | null = null;
+	/** How many of `ticketAfter` the person has written. */
+	let ticketMoved = 0;
+	/** The person's next `ticketAfter` write, once its step has ended on the ticket. */
+	const ticketMoves = (tickets: Tickets["Service"], n: number) =>
+		Effect.gen(function* () {
+			const move = ticketAfter[ticketMoved];
+			if (move === undefined || ledgerOf === null) return;
+			const {timeline} = yield* tickets.read(n);
+			const ended = timeline.some((e) => {
+				const fact = e.fact as Ran["facts"][number];
+				return fact.type === "ended" && fact.stage === move.step;
+			});
+			if (!ended) return;
+			ticketMoved++;
+			yield* ledgerOf.send(streams(nameOf(NUMBER)).inbox, `${move.fact}-${ticketMoved}`, {
+				kind: move.fact,
+				writer: OWNER,
+				data: {type: move.fact},
+			});
+		}).pipe(Effect.orDie);
 	const dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-")));
 	made.push(dir);
 	const red = join(dir, "red");
@@ -453,11 +568,26 @@ const lane = ({
 		...(mainFiles === undefined && !formatter
 			? {}
 			: {mainFiles: [...(mainFiles ?? []), ...(formatter ? [FORMATTER] : [])]}),
-		...(redAfterKill ? {alsoCheck: `test ! -e ${JSON.stringify(red)}`} : {}),
+		...(redAfterKill ? {alsoCheck: `test ! -e ${shWord(red)}`} : {}),
 	});
+	/** Whether the person pushed `branchAfter`'s commit. */
+	let branchMoved = false;
+	/** The person's `branchAfter` push, once its step has ended on the ticket. */
+	const branchMoves = (tickets: Tickets["Service"], n: number) =>
+		Effect.gen(function* () {
+			if (branchAfter === undefined || branchMoved) return;
+			const facts = (yield* tickets.read(n)).timeline.map((e) => e.fact as Ran["facts"][number]);
+			if (!facts.some((f) => f.type === "ended" && f.stage === branchAfter.step)) return;
+			const head = facts.filter((f) => f.type === "pushed").at(-1)?.head;
+			if (typeof head !== "string") return;
+			branchMoved = true;
+			yield* Effect.sync(() => pushOnTopOf({dir, home, remote}, head, branchAfter.files));
+		}).pipe(Effect.orDie);
 	if (formatter) nameFormatter(seed);
 	if (noOrigin) execFileSync("git", ["remote", "remove", "origin"], {cwd: seed, stdio: "pipe"});
-	if (fake !== undefined) writeFileSync(join(dir, "script.json"), JSON.stringify(fake));
+	// The fake reads the remote from its script, for a person's push (`pushesAt`).
+	if (fake !== undefined)
+		writeFileSync(join(dir, "script.json"), JSON.stringify({...fake, remote}));
 	for (const [key, value] of Object.entries(fakeEnv(dir))) vi.stubEnv(key, value);
 	const gh = story === undefined ? null : makeFakeGh({dir, remote, story});
 	for (const [key, value] of Object.entries(gh?.env ?? {})) vi.stubEnv(key, value);
@@ -536,20 +666,27 @@ const lane = ({
 						return Effect.die(new Error("the disk is on fire"));
 					}),
 				read: (n) =>
-					Effect.suspend(() => {
-						if (typed !== readFailsAt || readFailed)
-							return tickets
-								.read(n)
-								.pipe(
-									Effect.map((ticket) =>
-										typed > 0 ? {...ticket, timeline: olderThan(ticket.timeline)} : ticket,
-									),
-								);
-						readFailed = true;
-						return Effect.fail(
-							new TicketsFailed({ticket: n, why: "unreachable", says: "the ledger did not answer"}),
-						);
-					}),
+					Effect.andThen(
+						Effect.andThen(ticketMoves(tickets, n), branchMoves(tickets, n)),
+						Effect.suspend(() => {
+							if (typed !== readFailsAt || readFailed)
+								return tickets
+									.read(n)
+									.pipe(
+										Effect.map((ticket) =>
+											typed > 0 ? {...ticket, timeline: olderThan(ticket.timeline)} : ticket,
+										),
+									);
+							readFailed = true;
+							return Effect.fail(
+								new TicketsFailed({
+									ticket: n,
+									why: "unreachable",
+									says: "the ledger did not answer",
+								}),
+							);
+						}),
+					),
 			})),
 			Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
 			// The ledger under the lane's own Tickets: its first `ledgerSilent` reads of the ticket get no answer.
@@ -569,6 +706,7 @@ const lane = ({
 		);
 	return Effect.runPromise(
 		Effect.gen(function* () {
+			ledgerOf = yield* Ledger;
 			yield* file(title, "Lower case, no spaces around.", writer);
 			const person = yield* Effect.forkScoped(
 				answering(picks, {
@@ -615,6 +753,8 @@ const lane = ({
 				folds,
 				onBase,
 				facts,
+				entries: ticket.timeline,
+				spans: tracing?.spans ?? [],
 				dir,
 				remote,
 				gh,
@@ -623,7 +763,11 @@ const lane = ({
 					ends.map((f) => [String(f.stage), JSON.stringify(f.outcome)] as const),
 				),
 			} satisfies Ran;
-		}).pipe(Effect.scoped, Effect.provide(Layer.fresh(memoryLedger().layer))),
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(Layer.fresh(memoryLedger().layer)),
+			Effect.provide(tracing?.layer ?? Layer.empty),
+		),
 	);
 };
 
@@ -701,6 +845,8 @@ const codexRuns = (dir: string) =>
 							readonly taken: readonly string[] | null;
 							readonly loaded: Readonly<Record<string, string | null>>;
 							readonly seen: Readonly<Record<string, string | null>>;
+							/** The commit a person pushed as this run started (`pushesAt`), or `null`. */
+							readonly pushed: string | null;
 						},
 				)
 		: [];
@@ -749,7 +895,15 @@ describe("a lane, whole", () => {
 			});
 			expect(String(started[0]?.hash)).toMatch(/^[0-9a-f]{8,}$/);
 			const plan = ran.facts.find((f) => f.type === "ended" && f.stage === "plan");
-			expect(plan).toMatchObject({input: 1000, cached: 200, output: 100, listUsd: null, billed: 0});
+			// gpt-6-astra at OpenAI's list price, short context, read 2026-11-02: $10 a million in, $1
+			// cached, $50 out (ticket 141). 800 fresh, 200 cached, 100 out.
+			expect(plan).toMatchObject({
+				input: 1000,
+				cached: 200,
+				output: 100,
+				listUsd: expect.closeTo((10 * 800 + 1 * 200 + 50 * 100) / 1e6, 9),
+				billed: 0,
+			});
 
 			// The real adapter ran the fake: the model from `fabrika.toml`, read-only and no key in reach.
 			const runs = codexRuns(ran.dir);
@@ -765,6 +919,93 @@ describe("a lane, whole", () => {
 				expect(run.args).toContain("gpt-6-astra");
 				expect(run.keys).toEqual([]);
 			}
+		},
+	);
+
+	it(
+		"ties each ask to its lane's trace, and tags each step's span and each wait's span by name, never with a note (ticket 141, P1 to P3)",
+		{timeout: 300_000},
+		async () => {
+			const NOTE = "Looks right to me, go on";
+			const ran = await lane({picks: YES, notes: {approve: NOTE}, traced: true});
+			expect(ran.stages, ran.lines.join("\n")).toEqual(WHOLE);
+
+			// P1: every ask carries the trace id its lane's `started` facts carry, the one before it.
+			let lastTrace: string | undefined;
+			const pairs: [string | undefined, string | undefined][] = [];
+			for (const e of ran.entries) {
+				if (e.fact.type === "started") lastTrace = e.fact.trace;
+				if (e.fact.type === "asked") pairs.push([e.fact.trace, lastTrace]);
+			}
+			expect(pairs.length).toBeGreaterThan(0);
+			for (const [asked, started] of pairs) {
+				expect(started).toMatch(/^[0-9a-f]{32}$/);
+				expect(asked).toBe(started);
+			}
+
+			// P2: one "run a step" span per run that ended, tagged with its run, its step and its outcome's
+			// name; its model and tokens by the names a trace viewer reads; dollars only when known.
+			// The model and harness are on a run's `started`, not its `ended`.
+			const startedBy = new Map(
+				ran.entries.flatMap((e): [string, FactOf<"started">][] =>
+					e.fact.type === "started" ? [[e.fact.run, e.fact]] : [],
+				),
+			);
+			const stepSpans = ran.spans.filter((s) => s.name === "run a step");
+			let agentSteps = 0;
+			for (const e of ran.entries) {
+				if (e.fact.type !== "ended") continue;
+				const ended = e.fact;
+				const mine = stepSpans.filter((s) => s.attributes[LANE.run] === ended.run);
+				expect(mine, ended.run).toHaveLength(1);
+				const tags = mine[0]?.attributes ?? {};
+				expect(tags[LANE.step]).toBe(ended.stage);
+				expect(tags[ATTR.outcome]).toBe(outcomeName(ended.outcome));
+				const model = startedBy.get(ended.run)?.model;
+				// A code step names no model, and no tokens or price are said for it here.
+				if (model === undefined) continue;
+				agentSteps++;
+				// Known as L6 knows it: a list price, else what claude billed. Else none is written.
+				const known =
+					typeof ended.listUsd === "number"
+						? ended.listUsd
+						: startedBy.get(ended.run)?.harness === "claude" && typeof ended.billed === "number"
+							? ended.billed
+							: null;
+				if (known === null) expect(tags[ATTR.costUsd], ended.run).toBeUndefined();
+				else expect(tags[ATTR.costUsd], ended.run).toBeCloseTo(known, 4);
+				expect(tags["gen_ai.request.model"]).toBe(model);
+				expect(tags["gen_ai.usage.input_tokens"]).toBe(ended.input);
+				expect(tags["gen_ai.usage.output_tokens"]).toBe(ended.output);
+				expect(tags["gen_ai.usage.cache_read.input_tokens"]).toBe(ended.cached ?? 0);
+			}
+			// Astra's steps were seen, each at its list price once the table has it.
+			expect(agentSteps).toBeGreaterThan(0);
+
+			// P3: each answer's "wait for the answer" span names the ask, what it was for, the pick and
+			// who answered. `tea.ask.for` is in the plan's span tags (section 1, review B1).
+			const waitSpans = ran.spans.filter((s) => s.name === "wait for the answer");
+			const answers = ran.entries.flatMap((e) =>
+				e.fact.type === "answered" ? [{fact: e.fact, by: e.by.id}] : [],
+			);
+			expect(answers.length).toBeGreaterThan(0);
+			for (const {fact, by} of answers) {
+				const heard = waitSpans.filter(
+					(s) => s.attributes[LANE.ask] === fact.ask && s.attributes[LANE.pick] !== undefined,
+				);
+				expect(heard, fact.ask).toHaveLength(1);
+				const what = kindOfAsk(fact.ask);
+				expect(what, fact.ask).not.toBeNull();
+				expect(heard[0]?.attributes["tea.ask.for"], fact.ask).toBe(what);
+				expect(heard[0]?.attributes[LANE.pick]).toBe(fact.pick);
+				expect(heard[0]?.attributes[LANE.by]).toBe(by);
+			}
+			// The note is a value a person typed: no wait span, or event on one, holds it.
+			const values = waitSpans.flatMap((s) => [
+				...Object.values(s.attributes),
+				...s.events.flatMap((ev) => Object.values(ev.attributes ?? {})),
+			]);
+			expect(values.filter((v) => String(v).includes(NOTE))).toEqual([]);
 		},
 	);
 
@@ -878,7 +1119,8 @@ describe("a lane, whole", () => {
 			expect(builds[0]?.prompt).not.toContain("--reporter=json");
 
 			// The question: asked once, with what is still red and what the rounds cost, then a stop. The
-			// fake's model has no known rate, and an unknown price never reads as free.
+			// fake's model, gpt-6-astra, has a list price since ticket 141; either way an unknown price
+			// never reads as free.
 			const asked = ran.facts.filter((f) => f.type === "asked");
 			const spent = asked.filter((f) => String(f.ask).includes("rounds_spent"));
 			expect(spent).toHaveLength(1);
@@ -1016,16 +1258,19 @@ describe("a lane, whole", () => {
 	);
 
 	// Self-fix PR 4: the mutants job's commit is a new head, and code runs the checks there too. Red
-	// there is kept as red: the review never reads that head, and the lane stops, never done.
+	// there is kept as red: the review never reads that head, and the lane is never done. Self-fix PR
+	// 11, the guard after the mutants job: red there is `back("build", "names")`, so the builder gets
+	// the failing test, a round up, and the lane does not stop there.
 	it(
-		"runs the checks again on the mutants job's commit, and red there stops the lane before the review",
+		"runs the checks again on the mutants job's commit, and red there goes back to the build, a round up, with the failing test, before any review",
 		{timeout: 300_000},
 		async () => {
 			const NAME = "src/lower-spaces.test.ts > lower > cuts spaces";
 			const VITEST = "node_modules/.bin/vitest run --reporter=json --outputFile={out}";
 			const ran = await lane({
 				within: 200,
-				picks: YES,
+				// Every head after the first is red, so the rounds run out: the person stops there.
+				picks: {...YES, rounds_spent: "stop"},
 				checksSay: (head, nth) =>
 					nth === 0
 						? {
@@ -1045,20 +1290,27 @@ describe("a lane, whole", () => {
 			});
 			const said = ran.lines.join("\n");
 			expect(ran.lines, said).not.toContain(TIMED_OUT);
-			expect(ran.stages.slice(4), said).toEqual(["build", "mutation", "mutants"]);
+			expect(ran.stages.slice(4, 8), said).toEqual(["build", "mutation", "mutants", "build"]);
+			// No review ever reads a red head.
+			expect(ran.stages, said).not.toContain("review");
 			const checked = ran.facts.filter((f) => f.type === "checked");
-			expect(checked.map((f) => f.result)).toEqual(["green", "red"]);
+			expect(checked.slice(0, 2).map((f) => f.result)).toEqual(["green", "red"]);
 			expect(checked[1]?.failed).toEqual([NAME]);
 			expect(checked[1]?.head).not.toBe(checked[0]?.head);
-			// One red comment, for the red head alone, naming its test.
+			// The red comment for the mutants job's head names its test.
 			const red = ran.facts
 				.filter((f) => f.type === "commented")
 				.map((f) => String(f.body))
 				.filter((body) => body.includes("The repository's own tests fail at this head:"));
-			expect(red).toHaveLength(1);
 			expect(red[0]).toContain(`\`${NAME}\``);
-			// The PR 4 review: red, by that name. Checks that ran and failed are not checks that could not run.
-			expect(ran.lines.at(-1)).toContain("stuck:checks_red");
+			// The build after it is the next round, and is told the test that fails.
+			const builds = ran.facts.filter((f) => f.type === "started" && f.stage === "build");
+			expect(builds[1]?.round, said).toBe(2);
+			expect(codexRuns(ran.dir).filter((r) => r.step === "build")[1]?.prompt).toContain(NAME);
+			// Red is red, never `checks_not_run`, and the lane does not stop on it: only the spent rounds ask.
+			expect(said).not.toContain("checks_not_run");
+			expect(said).not.toContain("stuck:checks_red");
+			expect(askedFor(ran, "rounds_spent")).toHaveLength(1);
 			expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
 		},
 	);
@@ -1131,6 +1383,265 @@ describe("a lane, whole", () => {
 			ran.facts.filter((f) => f.type === "asked" && String(f.ask).startsWith("a-approve")),
 		).toHaveLength(1);
 	});
+
+	// Self-fix PR 11a, jidoka row 62: ship's `behind` at merge reads main fresh, and a clean read runs
+	// merge again with no agent turn and no round. The pull request is the one ship reads, so the head
+	// with main merged in has to be on it before ship runs again.
+	it(
+		"row 62: main moves under the review, ship says behind, and the head with main in it is pushed and lands, with no build round",
+		{timeout: 300_000},
+		async () => {
+			const ELSEWHERE = {path: "docs/elsewhere.md", text: "Written elsewhere.\n"};
+			const ran = await lane({
+				within: 200,
+				picks: {...YES, step: "stop", rounds_spent: "stop"},
+				// Main moves once, as the first review starts: after the lane's head left it.
+				fake: {pushesAt: {review: {0: {branch: "main", ...ELSEWHERE}}}},
+			});
+			const said = ran.lines.join("\n");
+			const moved = codexRuns(ran.dir).find((r) => r.step === "review")?.pushed ?? null;
+			expect(moved, "main moved under the review").toMatch(/^[0-9a-f]{40}$/);
+			// Ship's first answer at merge: behind.
+			const merges = ran.facts.filter((f) => f.type === "ended" && f.stage === "merge");
+			expect(merges[0]?.outcome, said).toMatchObject({kind: "send", to: "builder", why: "behind"});
+			// It lands. What landed holds main's commit and the head the lane first pushed: the head with
+			// main merged in, pushed before ship ran again, since ship merges only what the pull request holds.
+			expect(ran.lines.at(-1), said).toContain("ended: done");
+			const landed = onMainHead(ran.remote);
+			expect(descends(ran.remote, moved ?? "", landed), "what landed takes main in").toBe(true);
+			expect(descends(ran.remote, pushedHead(ran), landed), "and the lane's own head").toBe(true);
+			expect(onMain(ran.remote, "src/lower.ts")).toContain("toLowerCase");
+			expect(onMain(ran.remote, ELSEWHERE.path)).toBe(ELSEWHERE.text);
+			// No agent turn and no round: the build ran once, in round 1, and nothing stopped.
+			const builds = ran.facts.filter((f) => f.type === "started" && f.stage === "build");
+			expect(builds.map((f) => f.round)).toEqual([1]);
+			expect(said).not.toContain("step_stuck");
+			expect(said).not.toContain("sent_back");
+			// The route's read pushed the head with main in it itself: after ship's `behind`, the only step
+			// is merge again. No push step runs, and the merge is not asked a second time.
+			const behind = ran.facts.findIndex((f) => f.type === "ended" && f.stage === "merge");
+			expect(
+				ran.facts
+					.slice(behind)
+					.filter((f) => f.type === "started")
+					.map((f) => f.stage),
+				said,
+			).toEqual(["merge"]);
+			expect(askedFor(ran, "merge"), said).toHaveLength(1);
+			const read = ran.facts.find((f) => f.type === "restarted" && f.from === "merge");
+			expect(
+				ran.facts.filter((f) => f.type === "pushed").map((f) => f.head),
+				said,
+			).toEqual([pushedHead(ran), read?.to]);
+		},
+	);
+
+	// Self-fix PR 11a, round 3, review finding 1: a person's commit is taken in at ship's `behind`, so
+	// the review does not stand at the head with main merged in. The route's read pushes nothing there:
+	// no pull request body and no verdict at a head no review read. The review reads it first, and
+	// here it stops, so the pull request and its row stay at the head the lane pushed.
+	it(
+		"row 62, with a person's commit taken in at ship's behind: nothing is pushed or posted at the head with main in it before a review reads it",
+		{timeout: 300_000},
+		async () => {
+			const ELSEWHERE = {path: "docs/elsewhere.md", text: "Written elsewhere.\n"};
+			const PERSONS = {path: "docs/person.md", text: "A person's note.\n"};
+			const MISFIT = "I read the diff and it looks right.";
+			const ran = await lane({
+				within: 200,
+				picks: {...YES, step: "stop", rounds_spent: "stop"},
+				fake: {
+					// Main moves once, as the first review starts: after the lane's head left it.
+					pushesAt: {review: {0: {branch: "main", ...ELSEWHERE}}},
+					// Every review after the first answers what does not fit, so the lane stops there.
+					answers: {review: [null, MISFIT, MISFIT, MISFIT, MISFIT]},
+				},
+				// A person pushes one commit on top of the lane's head once it is on the pull request.
+				branchAfter: {step: "push", files: [PERSONS]},
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			const merges = ran.facts.filter((f) => f.type === "ended" && f.stage === "merge");
+			expect(merges[0]?.outcome, said).toMatchObject({kind: "send", to: "builder", why: "behind"});
+			// The route's read went on from the person's commit, taken in, and merged main into it.
+			const read = ran.facts.find((f) => f.type === "restarted" && f.from === "merge");
+			expect(read, said).toBeDefined();
+			const theirs = String(read?.head);
+			const fresh = String(read?.to);
+			expect(remoteGit(ran.remote, "log", "-1", "--format=%s", theirs), said).toBe(
+				"A person's change",
+			);
+			expect(fresh, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(fresh).not.toBe(theirs);
+			// Its checks there were green, so only the review's standing keeps it from pushing.
+			expect(
+				ran.facts.filter((f) => f.type === "checked" && f.head === fresh).map((f) => f.result),
+				said,
+			).toEqual(["green"]);
+			// The review read that head again: the person's commit is in what it was shown.
+			const reviews = codexRuns(ran.dir).filter((r) => r.step === "review");
+			expect(reviews.length, said).toBeGreaterThan(1);
+			expect(reviews[1]?.diff ?? "", said).toContain(PERSONS.path);
+			// Nothing was pushed at that head: one `pushed` fact, the lane's own head.
+			expect(
+				ran.facts.filter((f) => f.type === "pushed").map((f) => f.head),
+				said,
+			).toEqual([pushedHead(ran)]);
+			// And the pull request's row never shows it, or keeps a verdict given on it.
+			const rows = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Pull)))(
+				readFileSync(join(ran.dir, "home", "work", "pulls.json"), "utf8"),
+			);
+			const row = rows.find((r) => r.kind === "lane");
+			expect(row?.head, said).toBe(pushedHead(ran));
+			expect(row?.posted?.head, said).toBe(pushedHead(ran));
+			expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
+			expect(ran.lines.at(-1), said).not.toContain("ended: done");
+		},
+	);
+
+	// Self-fix PR 11a, round 3, mutation M2: red checks at the head with main merged in push nothing.
+	// The build runs the next round, told the failing test, as any red after a build does.
+	it(
+		"row 62, with red checks at the head with main in it: the route's read pushes nothing, and the build runs the next round, told the failing test",
+		{timeout: 300_000},
+		async () => {
+			const ELSEWHERE = {path: "docs/elsewhere.md", text: "Written elsewhere.\n"};
+			const NAME = "src/lower.test.ts > lowers capitals";
+			const VITEST = "node_modules/.bin/vitest run --reporter=json --outputFile={out}";
+			/** Whether `head`, in the lane's own clone, holds main's moved file. */
+			const takesMainIn = ({dir}: Where, head: string) => {
+				try {
+					execFileSync(
+						"git",
+						[
+							"-C",
+							join(dir, "home", "work", "clone"),
+							"cat-file",
+							"-e",
+							`${head}:${ELSEWHERE.path}`,
+						],
+						{stdio: "pipe"},
+					);
+					return true;
+				} catch {
+					return false;
+				}
+			};
+			let saidRed = false;
+			const ran = await lane({
+				within: 200,
+				picks: {...YES, step: "stop", rounds_spent: "stop"},
+				fake: {pushesAt: {review: {0: {branch: "main", ...ELSEWHERE}}}},
+				// Red once: at the first head with main in it, the route's read's. Every other run is real.
+				checksSay: (head, _nth, where) => {
+					if (saidRed || !takesMainIn(where, head)) return null;
+					saidRed = true;
+					return {
+						head,
+						commands: [{command: VITEST, code: 1, ms: 8_120}],
+						result: "red",
+						failed: [NAME],
+						tail: `${NAME}: boom`,
+					};
+				},
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			const behind = ran.facts.findIndex((f) => f.type === "ended" && f.stage === "merge");
+			expect(ran.facts[behind]?.outcome, said).toMatchObject({
+				kind: "send",
+				to: "builder",
+				why: "behind",
+			});
+			const read = ran.facts.find((f) => f.type === "restarted" && f.from === "merge");
+			const red = ran.facts.filter((f) => f.type === "checked" && f.result === "red");
+			expect(
+				red.map((f) => f.head),
+				said,
+			).toEqual([read?.to]);
+			// From ship's `behind` to the next step, nothing is pushed, and that step is the build, round 2.
+			const after = ran.facts.slice(behind);
+			const next = after.findIndex((f) => f.type === "started");
+			expect(after[next]?.stage, said).toBe("build");
+			expect(after[next]?.round, said).toBe(2);
+			expect(
+				after.slice(0, next).filter((f) => f.type === "pushed"),
+				said,
+			).toEqual([]);
+			expect(codexRuns(ran.dir).filter((r) => r.step === "build")[1]?.prompt).toContain(NAME);
+			expect(said).not.toContain("stuck:checks_red");
+		},
+	);
+
+	// Self-fix PR 11a, jidoka row 13: a step's `skip:closed` is a `host` row. The lane reads the ticket
+	// fresh and goes by what it says now, never by the step's word alone: closed ends the lane, open is
+	// a person's pause, saved at that step, and the same line goes on there.
+	describe("row 13: build's skip:closed reads the ticket fresh", () => {
+		/** The `ended` facts after build's. */
+		const endsAfterBuild = (ran: Ran) => {
+			const ends = ran.facts.filter((f) => f.type === "ended");
+			return ends.slice(ends.findIndex((f) => f.stage === "build") + 1);
+		};
+
+		it(
+			"the ticket still closed: the lane ends skip:closed, and no step runs after the build",
+			{timeout: 300_000},
+			async () => {
+				const ran = await lane({
+					within: 140,
+					picks: YES,
+					ticketAfter: [{step: "test_writer", fact: "closed"}],
+				});
+				const said = ran.lines.join("\n");
+				expect(ran.lines, said).not.toContain(TIMED_OUT);
+				// The build read the closed ticket and said so.
+				expect(ran.names.build, said).toBe(JSON.stringify({kind: "skip", why: "closed"}));
+				const built = ran.facts.findIndex((f) => f.type === "ended" && f.stage === "build");
+				expect(ran.facts.slice(built).filter((f) => f.type === "started")).toEqual([]);
+				expect(endsAfterBuild(ran)).toEqual([]);
+				expect(ran.lines.at(-1), said).toContain("ended: skip:closed");
+				expect(said).not.toContain("step_stuck");
+				expect(said).not.toContain("paused");
+			},
+		);
+
+		it(
+			"the ticket open again by the time the lane reads it: a saved pause at the build, never skip:closed, and the same line goes on from the build and lands",
+			{timeout: 300_000},
+			async () => {
+				const ran = await lane({
+					within: 140,
+					picks: YES,
+					ticketAfter: [
+						{step: "test_writer", fact: "closed"},
+						{step: "build", fact: "reopened"},
+					],
+					again: [{}],
+				});
+				const said = ran.lines.join("\n");
+				expect(ran.lines, said).not.toContain(TIMED_OUT);
+				// The build said closed, but the lane read the ticket after it, open, and used that.
+				const built = ran.facts.find((f) => f.type === "ended" && f.stage === "build");
+				expect(built?.outcome, said).toEqual({kind: "skip", why: "closed"});
+				const first = ran.lines.slice(0, ran.lines.indexOf(AGAIN));
+				expect(first.at(-1), said).toContain("ask:owner:paused");
+				expect(first.join("\n")).not.toContain("ended: skip:closed");
+				expect(heldAt(ran, 0), said).toMatchObject({
+					outcome: {kind: "ask", who: "owner", for: "paused"},
+					at: {_tag: "run", step: "build"},
+				});
+				// The same line goes on at the build, and lands.
+				const steps = ran.facts.filter((f) => f.type === "started").map((f) => f.stage);
+				expect(
+					steps.filter((step) => step === "build"),
+					said,
+				).toHaveLength(2);
+				expect(ran.lines.at(-1), said).toContain("ended: done");
+				expect(onMain(ran.remote, "src/lower.ts")).toContain("toLowerCase");
+				expect(said).not.toContain("step_stuck");
+			},
+		);
+	});
 });
 
 // The first text of the rubric fabrika ships, and the toy repository's own on main.
@@ -1139,6 +1650,50 @@ const TOY_RUBRIC = "Code that does what its ticket says.";
 const HEADS_RUBRIC = "Pass anything this head holds.";
 
 const reviewRubrics = (dir: string) => codexRuns(dir).find((r) => r.step === "review")?.rubrics;
+
+/** `src/lower.ts` as the fake's plain builder writes it: on main already, a build changes nothing. */
+const PLAIN_LOWER = {
+	path: "src/lower.ts",
+	text: "export function lower(name: string): string {\n\treturn name.trim().toLowerCase();\n}\n",
+};
+
+/** A test writer's answer whose one test, in a new file, fails on main and on any build of it. */
+const FAILS_ON_MAIN = {
+	with: {
+		files: [
+			{
+				path: "src/lower-never.test.ts",
+				text: 'import {expect, it} from "vitest";\nimport {lower} from "./lower.ts";\n\nit("lowers to a word no name has", () => {\n\texpect(lower("AB")).toBe("never");\n});\n',
+			},
+		],
+		answers: [
+			{
+				property: "p1",
+				kind: "test",
+				file: "src/lower-never.test.ts",
+				name: "lowers to a word no name has",
+			},
+		],
+	},
+};
+
+/**
+ * A test writer's answer whose one test, in a new file, passes before any build. Self-fix PR 11, row
+ * 28: the first such answer goes back to the writer one time, so this is the one more try.
+ */
+const PASSES_AT_ONCE = {
+	with: {
+		files: [
+			{
+				path: "src/lower-once-more.test.ts",
+				text: 'import {expect, it} from "vitest";\n\nit("lowers once more", () => {\n\texpect("ab").toBe("ab");\n});\n',
+			},
+		],
+		answers: [
+			{property: "p1", kind: "test", file: "src/lower-once-more.test.ts", name: "lowers once more"},
+		],
+	},
+};
 
 const remoteGit = (remote: string, ...args: readonly string[]) =>
 	execFileSync("git", ["--git-dir", remote, ...args], {encoding: "utf8", stdio: "pipe"}).trim();
@@ -1234,12 +1789,16 @@ describe("which rubrics judge a change, on the local host", () => {
 				],
 				rubrics: null,
 				within: 100,
-				// The second round's writer is all this needs: the fake's second test passes at once, and it asks.
+				// The second round's writer is all this needs: the fake's second test passes at once. Self-fix
+				// PR 11, row 28: that goes back to the writer one time, and a second test that passes at once
+				// asks.
 				picks: {approve: "approve", step: "stop"},
+				fake: {answers: {tests: [null, null, PASSES_AT_ONCE]}},
 			});
 			const writers = codexRuns(ran.dir).filter((r) => r.step === "tests");
-			// Two rounds really ran, and the head holds what the second must not read or be told of.
-			expect(writers).toHaveLength(2);
+			// Two rounds really ran, the second with its one more try, and the head holds what the second
+			// must not read or be told of.
+			expect(writers).toHaveLength(3);
 			const atHead = (path: string) =>
 				execFileSync("git", ["show", `HEAD:${path}`], {
 					cwd: join(ran.dir, "home", "work", "trees", "1"),
@@ -1898,6 +2457,15 @@ describe("a stopped lane, typed again", () => {
 			expect(after, said).not.toContain("review");
 			expect(after.indexOf("push"), said).toBeGreaterThan(-1);
 			expect(after.indexOf("push")).toBeLessThan(after.indexOf("merge"));
+			// Self-fix PR 11a, round 3, mutation M2: a restart's read pushes nothing itself. The push step
+			// after it puts the merged head on the pull request.
+			const pushStarted = ran.facts.findIndex(
+				(f, i) => i > restarted && f.type === "started" && f.stage === "push",
+			);
+			expect(
+				ran.facts.slice(restarted, pushStarted).filter((f) => f.type === "pushed"),
+				said,
+			).toEqual([]);
 			const pushed = ran.facts.filter((f) => f.type === "pushed").map((f) => String(f.head));
 			expect(pushed, said).toHaveLength(2);
 			expect(
@@ -2124,6 +2692,30 @@ const onGitHub = async (script: Script) => {
 	};
 };
 
+/**
+ * A person moved the pull request's head, with the code changed, after the lane's review (self-fix PR
+ * 11, jidoka row 63): the review runs again, at that head, the person is asked again, and what merges
+ * is that head, with their commit in it. Nothing the person pushed is written over.
+ */
+const movedHeadLands = (ran: Awaited<ReturnType<typeof onGitHub>>) => {
+	const said = ran.lines.join("\n");
+	expect(ran.names.merge, said).toContain("done");
+	expect(
+		codexRuns(ran.dir).filter((r) => r.step === "review"),
+		said,
+	).toHaveLength(2);
+	expect(askedFor(ran, "merge")).toHaveLength(2);
+	const merged = ran.pulls[0]?.mergedHead ?? "nothing merged";
+	expect(merged).not.toBe(pushedHead(ran));
+	expect(remoteGit(ran.remote, "log", "--format=%s", "main")).toContain(
+		"A person pushed one more commit.",
+	);
+	expect(ran.pulls[0]?.comments.map((c) => c.body.split("\n")[0]).join("\n")).toContain(
+		`review-code: PASS @ ${merged}`,
+	);
+	expect(ran.lines.at(-1)).toContain("ended: done");
+};
+
 describe("a lane, whole, on GitHub", () => {
 	beforeEach(() => {
 		vi.stubEnv("TYPESAFE_API_KEY", "");
@@ -2204,35 +2796,58 @@ describe("a lane, whole, on GitHub", () => {
 		expect(ran.lines.at(-1)).not.toContain("ended: done");
 	});
 
-	it("does not merge after a check fails", {timeout: 60_000}, async () => {
-		const ran = await onGitHub({
-			story: {checks: [{name: "ci", ends: "FAILURE"}], settleAfter: 1},
-			picks: YES,
-		});
-		// It asked GitHub, and only one run again before it sends the work back.
-		expect(ran.kinds.filter((kind) => kind === "rerun")).toHaveLength(1);
-		expect(ran.names.merge).toContain("checks_red");
-		expect(ran.wrote).toEqual([]);
-		expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
-		expect(ran.pulls).toMatchObject([{state: "OPEN"}]);
-		expect(ran.lines.at(-1)).toContain("sent_back");
-	});
+	// Self-fix PR 11, jidoka row 62: ship's `checks_red` at merge goes to build, the next round, and
+	// never stops `sent_back` (row 9). GitHub's check fails every time, so the rounds run out.
+	it(
+		"does not merge after a check fails: the build runs a round up each time, and only the spent rounds ask",
+		{timeout: 120_000},
+		async () => {
+			const ran = await onGitHub({
+				story: {checks: [{name: "ci", ends: "FAILURE"}], settleAfter: 1},
+				within: 100,
+				picks: {...YES, rounds_spent: "stop"},
+			});
+			const said = ran.lines.join("\n");
+			const merges = ran.stages.filter((stage) => stage === "merge");
+			// Each merge asked GitHub, and ran it only once again before it sent the work back.
+			expect(merges.length, said).toBeGreaterThan(1);
+			expect(ran.kinds.filter((kind) => kind === "rerun")).toHaveLength(merges.length);
+			expect(ran.names.merge).toContain("checks_red");
+			// After each merge, the build: one round up, until the rounds are spent.
+			const builds = ran.facts.filter((f) => f.type === "started" && f.stage === "build");
+			expect(builds.map((f) => f.round)).toEqual([1, 2, 3]);
+			expect(askedFor(ran, "rounds_spent")).toHaveLength(1);
+			expect(said).not.toContain("sent_back");
+			expect(ran.wrote).toEqual([]);
+			expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
+			expect(ran.pulls).toMatchObject([{state: "OPEN"}]);
+		},
+	);
 
-	it("stops and says so when a branch rule refuses the merge", {timeout: 60_000}, async () => {
-		const ran = await onGitHub({story: {...PASSED_CI, rule: "refuses"}, picks: YES});
-		const head = remoteGit(ran.remote, "rev-parse", "refs/heads/lane/1");
-		const refused = ran.calls.filter((call) => call.kind === "merge_write");
-		expect(refused).toHaveLength(1);
-		expect(refused[0]).toMatchObject({refused: true});
-		expect(fieldsIn(refused[0]?.args ?? [], "head")).toEqual([head]);
-		expect(ran.kinds).not.toContain("ref_move");
-		expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
-		expect(ran.pulls).toMatchObject([{state: "OPEN"}]);
-		// What ship can say: it does not know why. It never reads a refusal's words.
-		expect(ran.names.merge).toContain("merge_failed");
-		expect(ran.lines.at(-1)).toContain("merge_failed");
-		expect(ran.lines.at(-1)).not.toContain("ended: done");
-	});
+	// Self-fix PR 11: ship's `merge_failed` is a `once` row. The lane ships again as a new run, and a
+	// second refusal in a row stops it there.
+	it(
+		"tries once more, then stops and says so, when a branch rule refuses the merge",
+		{timeout: 60_000},
+		async () => {
+			const ran = await onGitHub({story: {...PASSED_CI, rule: "refuses"}, picks: YES});
+			const head = remoteGit(ran.remote, "rev-parse", "refs/heads/lane/1");
+			const refused = ran.calls.filter((call) => call.kind === "merge_write");
+			expect(refused).toHaveLength(2);
+			for (const call of refused) {
+				expect(call).toMatchObject({refused: true});
+				expect(fieldsIn(call.args, "head")).toEqual([head]);
+			}
+			expect(ran.stages.filter((stage) => stage === "merge")).toHaveLength(2);
+			expect(ran.kinds).not.toContain("ref_move");
+			expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
+			expect(ran.pulls).toMatchObject([{state: "OPEN"}]);
+			// What ship can say: it does not know why. It never reads a refusal's words.
+			expect(ran.names.merge).toContain("merge_failed");
+			expect(ran.lines.at(-1)).toContain("merge_failed");
+			expect(ran.lines.at(-1)).not.toContain("ended: done");
+		},
+	);
 
 	it(
 		"merges through GitHub's own merge on a ruled branch, bound to the head",
@@ -2249,17 +2864,18 @@ describe("a lane, whole, on GitHub", () => {
 		},
 	);
 
-	it("writes nothing when the head moves just before the merge", {timeout: 60_000}, async () => {
-		// The person changes the code: a same-tree commit would carry the review, and that is the next test.
-		const story = {...PASSED_CI, moveHead: {at: "merge_read", tree: "changed"}} as const;
-		const ran = await onGitHub({story, picks: YES});
-		// It got as far as the read that found the move.
-		expect(ran.kinds).toContain("merge_read");
-		expect(ran.wrote).toEqual([]);
-		expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
-		expect(ran.pulls).toMatchObject([{state: "OPEN"}]);
-		expect(ran.lines.at(-1)).not.toContain("ended: done");
-	});
+	// Self-fix PR 11, jidoka row 63: the review runs again at the pull request's head, the person is
+	// asked at that head, and only then does it merge. What lands is the person's head, their commit in it.
+	it(
+		"when the head moves just before the merge, it writes nothing until the review and the person's yes stand at the new head, and what lands keeps the person's commit",
+		{timeout: 60_000},
+		async () => {
+			// The person changes the code: a same-tree commit would carry the review, and that is the next test.
+			const story = {...PASSED_CI, moveHead: {at: "merge_read", tree: "changed"}} as const;
+			const ran = await onGitHub({story, picks: YES});
+			movedHeadLands(ran);
+		},
+	);
 
 	it(
 		"merges the moved head when a person's commit just before the merge keeps the code as it was",
@@ -2317,12 +2933,19 @@ describe("a lane, whole, on GitHub", () => {
 				counted: "none",
 				killAt: "push: done",
 				redAfterKill: true,
-				picks: YES,
+				picks: {...YES, step: "stop"},
 			});
 			// It got to the merge's checks. The run before the kill was green, so this is the second one.
 			expect(ran.stages).toContain("merge");
 			expect(ran.names.merge).toContain("checks_red");
-			expect(ran.lines.at(-1)).toContain("sent_back");
+			// Self-fix PR 11, jidoka rows 62 and 9: it goes back to the build, a round up, never `sent_back`.
+			const merged = ran.facts.findIndex((f) => f.type === "ended" && f.stage === "merge");
+			expect(
+				ran.facts.slice(merged).find((f) => f.type === "started")?.stage,
+				ran.lines.join("\n"),
+			).toBe("build");
+			expect(ran.facts.slice(merged).find((f) => f.type === "started")?.round).toBe(2);
+			expect(ran.lines.join("\n")).not.toContain("sent_back");
 			expect(ran.kinds).not.toContain("runs");
 			expect(ran.kinds).not.toContain("rerun");
 			expect(ran.wrote).toEqual([]);
@@ -2331,8 +2954,10 @@ describe("a lane, whole, on GitHub", () => {
 		},
 	);
 
+	// Self-fix PR 11, jidoka row 63: ship's `no_review` at merge runs the review again, at the pull
+	// request's head, in the same round. It no longer stops `sent_back`.
 	it(
-		"sends it back when a person moves the head before the facts are read",
+		"reviews the person's head again when they move it before the facts are read, and lands it with their commit",
 		{timeout: 60_000},
 		async () => {
 			// The person changes the code, so the lane's verdict cannot carry to their head.
@@ -2341,11 +2966,67 @@ describe("a lane, whole, on GitHub", () => {
 			const pushed = ran.calls.find((call) => call.kind === "facts");
 			// It read the moved head, and the lane's verdict was for the one before it.
 			expect(pushed).toBeDefined();
-			expect(ran.names.merge).toContain("no_review");
-			expect(ran.lines.at(-1)).toContain("sent_back");
-			expect(ran.wrote).toEqual([]);
-			expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
-			expect(ran.pulls).toMatchObject([{state: "OPEN"}]);
+			const merges = ran.facts.filter((f) => f.type === "ended" && f.stage === "merge");
+			expect(JSON.stringify(merges[0]?.outcome)).toContain("no_review");
+			expect(ran.lines.join("\n")).not.toContain("sent_back");
+			movedHeadLands(ran);
+		},
+	);
+
+	// Self-fix PR 11, jidoka row 62: the lane takes a person's moved head in and runs code's checks
+	// there. Red there goes to build, the next round, with the failing names, as any red after a build
+	// does. It never stops at the review's guard.
+	it(
+		"row 62: red checks at a person's moved head go to build, the next round, told the failing test, and never stop at the review",
+		{timeout: 120_000},
+		async () => {
+			const NAME = "src/lower.test.ts > lowers capitals";
+			const VITEST = "node_modules/.bin/vitest run --reporter=json --outputFile={out}";
+			/** The head the stand-in's person pushed: its subject, as `movedByAPerson` writes it. */
+			const persons = (remote: string, head: string) => {
+				try {
+					return (
+						execFileSync("git", ["--git-dir", remote, "log", "-1", "--format=%s", head], {
+							encoding: "utf8",
+							stdio: "pipe",
+						}).trim() === "A person pushed one more commit."
+					);
+				} catch {
+					return false;
+				}
+			};
+			const story = {...PASSED_CI, moveHead: {at: "facts", tree: "changed"}} as const;
+			const ran = await onGitHub({
+				story,
+				within: 100,
+				picks: {...YES, rounds_spent: "stop", step: "stop"},
+				// Red only at the person's head; every other head runs the repo's tests for real.
+				checksSay: (head, _nth, where) =>
+					persons(where.remote, head)
+						? {
+								head,
+								commands: [{command: VITEST, code: 1, ms: 8_120}],
+								result: "red",
+								failed: [NAME],
+								tail: `${NAME}: boom`,
+							}
+						: null,
+			});
+			const said = ran.lines.join("\n");
+			// The person's head was taken in, and its checks were red.
+			const red = ran.facts.filter((f) => f.type === "checked" && f.result === "red");
+			expect(red.length, said).toBeGreaterThan(0);
+			expect(red[0]?.failed).toEqual([NAME]);
+			// Ship's send at merge, then the build: the next round, before any review reads that head.
+			const merged = ran.facts.findIndex((f) => f.type === "ended" && f.stage === "merge");
+			expect(merged, said).toBeGreaterThan(-1);
+			const next = ran.facts.slice(merged).find((f) => f.type === "started");
+			expect(next?.stage, said).toBe("build");
+			expect(next?.round, said).toBe(2);
+			// That build is told the failing test by name.
+			expect(codexRuns(ran.dir).filter((r) => r.step === "build")[1]?.prompt).toContain(NAME);
+			expect(said).not.toContain("stuck:checks_red");
+			expect(said).not.toContain("sent_back");
 		},
 	);
 
@@ -2601,14 +3282,37 @@ describe("a lane, on what a real agent might answer", () => {
 			},
 		);
 
+		// Self-fix PR 11: `draft_failed` is a `once` row. The lane runs the plan once more as a new run,
+		// with its own two tries, and a second `draft_failed` in a row stops it there.
 		it(
-			"on plan: a second misfit ends draft_failed, with no third try",
+			"on plan: a second misfit ends draft_failed; the lane runs it once more, and a second draft_failed stops it, with no fifth try",
 			{timeout: 60_000},
 			async () => {
-				const ran = await lane({within: 50, fake: {answers: {plan: [ON_PLAN, ON_PLAN]}}});
-				expect(runsOf(ran, "plan")).toHaveLength(2);
-				expect(ran.names.plan).toContain("draft_failed");
+				const misfits = [ON_PLAN, ON_PLAN, ON_PLAN, ON_PLAN];
+				const ran = await lane({within: 50, fake: {answers: {plan: misfits}}});
+				expect(runsOf(ran, "plan")).toHaveLength(4);
+				const plans = ran.facts.filter((f) => f.type === "ended" && f.stage === "plan");
+				expect(plans.map((f) => JSON.stringify(f.outcome))).toEqual([
+					'{"kind":"stuck","why":"draft_failed"}',
+					'{"kind":"stuck","why":"draft_failed"}',
+				]);
 				expect(ran.stages).not.toContain("build");
+				expect(ran.lines.at(-1)).toContain("draft_failed");
+			},
+		);
+
+		it(
+			"on plan: after a draft_failed, the run the lane starts once more fits, and the lane goes on to the plan's yes",
+			{timeout: 60_000},
+			async () => {
+				const ran = await lane({
+					within: 50,
+					picks: THE_PLANS_NO,
+					fake: {answers: {plan: [ON_PLAN, ON_PLAN]}},
+				});
+				expect(runsOf(ran, "plan")).toHaveLength(3);
+				expect(ran.names.plan).toContain('"done"');
+				expect(askedOf(ran).some((f) => String(f.ask).startsWith("a-approve"))).toBe(true);
 			},
 		);
 
@@ -2625,17 +3329,24 @@ describe("a lane, on what a real agent might answer", () => {
 			},
 		);
 
+		// Self-fix PR 11: the same `once` row at build.
 		it(
-			"on build: a second misfit ends draft_failed, with no third try",
+			"on build: a second misfit ends draft_failed; the lane runs it once more, and a second draft_failed stops it, with no fifth try",
 			{timeout: 60_000},
 			async () => {
 				const ran = await lane({
 					within: 50,
 					picks: {approve: "approve"},
-					fake: {answers: {build: [ON_BUILD, ON_BUILD]}},
+					fake: {answers: {build: [ON_BUILD, ON_BUILD, ON_BUILD, ON_BUILD]}},
 				});
-				expect(runsOf(ran, "build")).toHaveLength(2);
-				expect(ran.names.build).toContain("draft_failed");
+				expect(runsOf(ran, "build")).toHaveLength(4);
+				const builds = ran.facts.filter((f) => f.type === "ended" && f.stage === "build");
+				expect(builds.map((f) => JSON.stringify(f.outcome))).toEqual([
+					'{"kind":"stuck","why":"draft_failed"}',
+					'{"kind":"stuck","why":"draft_failed"}',
+				]);
+				expect(ran.stages).not.toContain("mutation");
+				expect(ran.lines.at(-1)).toContain("draft_failed");
 				expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
 			},
 		);
@@ -3112,6 +3823,8 @@ describe("a lane, on what the real agents answered", () => {
 									],
 								},
 							},
+							// Self-fix PR 11, row 28: it goes back to the writer one time, so it asks on the second.
+							PASSES_AT_ONCE,
 						],
 					},
 				},
@@ -3128,6 +3841,73 @@ describe("a lane, on what the real agents answered", () => {
 			async (_name, fake, words) => {
 				const ran = await lane({within: 90, picks: {approve: "approve", step: "stop"}, fake});
 				reads(ran, "a-step", words);
+			},
+		);
+
+		// Self-fix PR 11, row 28: a test that already passes goes back to the writer one time, with its
+		// names, so it can fix that test. Its fix is the same file, written again: never a stop.
+		it(
+			"a test writer sent back once for a test that already passes may write that test again, and then it asks",
+			{timeout: 100_000},
+			async () => {
+				const PASSING = {
+					with: {
+						files: [
+							{
+								path: "src/lower.test.ts",
+								text: 'import {expect, it} from "vitest";\n\nit("lowers capitals", () => {\n\texpect("ab").toBe("ab");\n});\n',
+							},
+						],
+					},
+				};
+				const ran = await lane({
+					within: 90,
+					picks: {approve: "approve", step: "stop"},
+					fake: {answers: {tests: [PASSING, PASSING]}},
+				});
+				const writers = ran.facts.filter((f) => f.type === "ended" && f.stage === "test_writer");
+				expect(
+					writers.map((f) => JSON.stringify(f.outcome)),
+					ran.lines.join("\n"),
+				).toEqual([
+					'{"kind":"ask","who":"owner","for":"already_passes"}',
+					'{"kind":"ask","who":"owner","for":"already_passes"}',
+				]);
+				expect(askedFor(ran, "step")).toHaveLength(1);
+				expect(ran.lines.join("\n")).not.toContain("unchecked");
+			},
+		);
+
+		// Self-fix PR 11, rows 28, 29 and 35, from round 2 on. A second round's writer adds its tests on a
+		// head, and its first try's commit is that head once it ends. Sent back once, it writes the same
+		// file again: that is its own file, never one that "exists already", so it is never a stop.
+		it(
+			"row 28 in round 2: a test writer sent back once may write its own file again on the head it first wrote on, and then it asks",
+			{timeout: 120_000},
+			async () => {
+				// The fake's round-2 writer writes `src/lower-again.test.ts`, which passes at once on the
+				// build's head; its redo, also plain, writes that same file again.
+				const ran = await lane({
+					title: "[review-once] Read names in one form",
+					within: 100,
+					picks: {approve: "approve", step: "stop"},
+				});
+				const said = ran.lines.join("\n");
+				const writers = ran.facts.filter((f) => f.type === "ended" && f.stage === "test_writer");
+				expect(
+					writers.slice(1).map((f) => JSON.stringify(f.outcome)),
+					said,
+				).toEqual([
+					'{"kind":"ask","who":"owner","for":"already_passes"}',
+					'{"kind":"ask","who":"owner","for":"already_passes"}',
+				]);
+				const started = ran.facts.filter((f) => f.type === "started" && f.stage === "test_writer");
+				expect(started.map((f) => f.round)).toEqual([1, 2, 2]);
+				// The redo stands on a head, as round 2 does: it is told of round 1's test there.
+				const redo = codexRuns(ran.dir).filter((r) => r.step === "tests")[2];
+				expect(redo?.taken).toContain("src/lower.test.ts");
+				expect(askedFor(ran, "step")).toHaveLength(1);
+				expect(said).not.toContain("unchecked");
 			},
 		);
 
@@ -3241,7 +4021,8 @@ describe("a lane, on what the real agents answered", () => {
 				async () => {
 					const ran = await lane({
 						within: 90,
-						picks: {approve: "approve", step: "stop"},
+						// Self-fix PR 11, row 46: round 2's red goes another round, so the rounds run out.
+						picks: {approve: "approve", step: "stop", rounds_spent: "stop"},
 						fake: RUN_3,
 					});
 					const steps: readonly (readonly [string, number])[] = [
@@ -3371,38 +4152,46 @@ describe("a lane, on what the real agents answered", () => {
 				},
 			);
 
-			// P22: run 3's other line, where the reviewer marked nothing.
+			// P22: run 3's other line, where the reviewer marked nothing. Self-fix PR 11, jidoka row 46: a
+			// builder that changed nothing while the new test is red goes another round, with the failing
+			// test, until the rounds are spent. Only then is a person asked, and never stuck.
 			it(
-				"a builder that changes nothing in round 2 asks the person, with its own reason, and does not end stuck",
+				"a builder that changes nothing in round 2 goes another round with the failing test, and the person is asked only when the rounds are spent",
 				{timeout: 100_000},
 				async () => {
 					const ran = await lane({
 						within: 90,
-						picks: {approve: "approve", step: "stop"},
+						picks: {approve: "approve", rounds_spent: "stop"},
 						fake: RUN_3,
 					});
-					expect(ran.names.build).toContain('"ask"');
-					reads(ran, "a-step", [RUN3_LEFT]);
-					const {what, picks} = readBy(ran, "a-step");
-					// Its own reason: not the words any step falls back on.
-					expect(what).not.toMatch(/stopped and needs your call/);
-					expect(picks).toEqual(["again", "stop"]);
+					const said = ran.lines.join("\n");
+					const builds = ran.facts.filter((f) => f.type === "ended" && f.stage === "build");
+					expect(JSON.stringify(builds[1]?.outcome), said).toBe(
+						'{"kind":"ask","who":"owner","for":"still_red"}',
+					);
+					const started = ran.facts.filter((f) => f.type === "started" && f.stage === "build");
+					expect(started.map((f) => f.round)).toEqual([1, 2, 3]);
+					expect(runsOf(ran, "build")[2]?.prompt).toContain(RUN3_NAME);
+					// Nobody is asked at the build: the one question past the plan's yes is the spent rounds.
+					expect(askedFor(ran, "step")).toEqual([]);
+					expect(askedFor(ran, "rounds_spent")).toHaveLength(1);
 					// Self-fix PR 5: the person's `stop` is a saved pause, not `skip:owner_no`.
 					expect(heldAt(ran, 0), bye(ran)).not.toBeNull();
 				},
 			);
 
-			// P28: the words are true on run 3's own case, where the new test really stays red.
+			// P28: the words are true on run 3's own case, where the new test really stays red. Self-fix PR
+			// 11, row 46: the question run 3 meets is the spent rounds now.
 			it(
-				"that question says the new test is still failing, and that a note beside `again` goes to the builder",
+				"the question run 3 meets says the new test is still failing, and that a note beside `again` goes to the builder",
 				{timeout: 100_000},
 				async () => {
 					const ran = await lane({
 						within: 90,
-						picks: {approve: "approve", step: "stop"},
+						picks: {approve: "approve", rounds_spent: "stop"},
 						fake: RUN_3,
 					});
-					const {text} = readBy(ran, "a-step");
+					const {text} = readBy(ran, "a-rounds_spent");
 					expect(text).toMatch(/still failing/i);
 					expect(text).not.toMatch(/checks pass\b/i);
 					const again = text.split("\n").filter((line) => /`?again`?/.test(line));
@@ -3422,40 +4211,47 @@ describe("a lane, on what the real agents answered", () => {
 					cannot: REAL_MUTANT,
 					answers: {
 						review: [found(RUN3_FINDING)],
+						// Round 2's writer goes back to itself one time (self-fix PR 11, row 28), and its one
+						// more test passes at once too: the person lets it through.
+						tests: [null, null, PASSES_AT_ONCE],
 						build: [null, {with: {summary: "Nothing is left to change.", left: []}}],
 					},
 				},
 			};
-			/** The question the last build ended on, as a person reads it. */
+			/** Each step the lane started after the last build ended, in turn. */
 			const afterLastBuild = (ran: Ran) => {
 				const built = ran.facts.findLastIndex((f) => f.type === "ended" && f.stage === "build");
-				const asked = ran.facts
-					.slice(built)
-					.find((f) => f.type === "asked" && String(f.ask).startsWith("a-step"));
-				return readBy(ran, String(asked?.ask));
+				return ran.facts.slice(built).filter((f) => f.type === "started" || f.type === "asked");
 			};
 
+			// Self-fix PR 11, jidoka row 45: green, and the builder changed nothing. A fresh review reads
+			// what it disputes, and nobody is asked at the build.
 			it(
-				"the checks pass at the head: it offers go_on and stop, says so, and does not say failing",
+				"the checks pass at the head and the builder changed nothing: the review runs again, and nobody is asked at the build",
 				{timeout: 100_000},
 				async () => {
 					const ran = await lane(ALL_GREEN);
-					expect(ran.names.build).toContain('"ask"');
-					const {text, picks} = afterLastBuild(ran);
-					expect(picks).toEqual(["go_on", "stop"]);
-					expect(text).toMatch(/changed nothing/i);
-					expect(text).toMatch(/checks pass\b/i);
-					expect(text).not.toMatch(/still failing/i);
+					const said = ran.lines.join("\n");
+					const builds = ran.facts.filter((f) => f.type === "ended" && f.stage === "build");
+					expect(JSON.stringify(builds.at(-1)?.outcome), said).toBe(
+						'{"kind":"ask","who":"owner","for":"no_change"}',
+					);
+					const next = afterLastBuild(ran);
+					expect(next[0]?.type === "started" && next[0].stage, said).toBe("review");
+					expect(
+						next.filter((f) => f.type === "asked" && String(f.ask).startsWith("a-step")),
+					).toEqual([]);
 				},
 			);
 
 			it(
-				"the checks pass at the head: go_on carries on to the mutation step, and the lane lands",
+				"the checks pass at the head and the builder changed nothing: after the review runs again, the lane lands",
 				{timeout: 100_000},
 				async () => {
 					const ran = await lane({...ALL_GREEN, picks: {...YES, step: "go_on"}});
 					expect(runsOf(ran, "build")).toHaveLength(2);
-					expect(ran.stages.slice(ran.stages.lastIndexOf("build"))).toContain("mutation");
+					const next = afterLastBuild(ran).filter((f) => f.type === "started");
+					expect(next.map((f) => f.stage)).toEqual(["review", "push", "merge"]);
 					expect(bye(ran)).toContain("ended: done");
 					expect(onMain(ran.remote, "src/lower.ts")).not.toBeNull();
 				},
@@ -3488,8 +4284,9 @@ describe("a lane, on what the real agents answered", () => {
 
 			// P28: no question comes if the checks are down when the builder ends, so to hold a go_on on
 			// offer the lane was asked with them up, and they went down while it waited. Self-fix PR 4: the
-			// checks code ran at that head were red, so the go_on has no green checks to carry on with, and
-			// the mutation step never starts.
+			// go_on has no green checks to carry on with, and the mutation step never starts. Self-fix PR
+			// 11, row 46: run 3's red no longer asks at the build, so the build's own question here is row
+			// 41's, a builder that changed nothing twice in round 1.
 			it(
 				"a lane saved with go_on on offer, picked once the checks can't run, lands nothing: green is never guessed",
 				{timeout: 100_000},
@@ -3498,7 +4295,10 @@ describe("a lane, on what the real agents answered", () => {
 						within: 90,
 						steps: ["go_on"],
 						picks: {approve: "approve"},
-						fake: RUN_3,
+						// The plain builder writes just this, so round 1's diff is empty. The writer's test fails
+						// on main, so the build's is the first question past the plan's yes.
+						mainFiles: [PLAIN_LOWER],
+						fake: {answers: {tests: [FAILS_ON_MAIN]}},
 						checksStopRunning: "at_restart",
 						savedAsking: {at: /asks: (?!Do you approve)/, offers: ["go_on", "stop"]},
 					});
@@ -3506,7 +4306,8 @@ describe("a lane, on what the real agents answered", () => {
 					expect(ran.lines).not.toContain(TIMED_OUT);
 					expect(ran.stages.slice(ran.stages.lastIndexOf("build"))).not.toContain("mutation");
 					expect(bye(ran)).toContain("stuck");
-					expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
+					// `src/lower.ts` is on main from the start: the lane's own file is what never lands.
+					expect(onMain(ran.remote, "src/lower-never.test.ts")).toBeNull();
 				},
 			);
 
@@ -3627,25 +4428,31 @@ describe("a lane, on what the real agents answered", () => {
 				},
 			);
 
-			// P28: a first round has no work to go on with, so nobody is asked.
+			// P28: a first round has no work to go on with, so nothing goes on past the build. Self-fix PR
+			// 11, jidoka row 41: the builder runs once more, told it changed nothing, and a second time in
+			// a row the build asks its own question. The person's `stop` is a saved pause.
 			it(
-				"a builder that changes nothing in round 1 still ends stuck, with nothing asked of it",
+				"a builder that changes nothing in round 1 runs once more, then asks, and nothing after the build runs",
 				{timeout: 100_000},
 				async () => {
 					const ran = await lane({
 						within: 90,
-						picks: {approve: "approve", step: "go_on"},
-						// The plain builder writes just this, so round 1's diff is empty.
-						mainFiles: [
-							{
-								path: "src/lower.ts",
-								text: "export function lower(name: string): string {\n\treturn name.trim().toLowerCase();\n}\n",
-							},
-						],
+						picks: {approve: "approve", step: "stop"},
+						// The plain builder writes just this, so round 1's diff is empty. The writer's test fails
+						// on main, so the build's is the one question past the plan's yes.
+						mainFiles: [PLAIN_LOWER],
+						fake: {answers: {tests: [FAILS_ON_MAIN]}},
 					});
-					expect(ran.names.build).toContain("no_change");
-					expect(runsOf(ran, "build")).toHaveLength(1);
-					expect(bye(ran)).toContain("stuck");
+					const said = ran.lines.join("\n");
+					const builds = ran.facts.filter((f) => f.type === "ended" && f.stage === "build");
+					expect(
+						builds.map((f) => JSON.stringify(f.outcome)),
+						said,
+					).toEqual(['{"kind":"stuck","why":"no_change"}', '{"kind":"stuck","why":"no_change"}']);
+					const started = ran.facts.filter((f) => f.type === "started" && f.stage === "build");
+					expect(started.map((f) => f.round)).toEqual([1, 1]);
+					expect(askedFor(ran, "step")).toHaveLength(1);
+					expect(heldAt(ran, 0), said).not.toBeNull();
 					expect(ran.stages).not.toContain("mutation");
 				},
 			);
@@ -4536,6 +5343,344 @@ describe("the exam's pull request", () => {
 			expect(runs[1]?.seen[RULE], "the checks' redo stands on the exam head").toBe(WRITTEN_RULE);
 			expect(runs[1]?.prompt).toContain(NAME);
 			expect(runs[1]?.prompt).not.toMatch(/\bon main\b/i);
+		},
+	);
+
+	// The owner's decision on PR 322 (option A): a redo on main is pushed over the exam branch, so
+	// before it does, the lane keeps the old exam head under a kept ref, as a restart does
+	// (`refs/kept/...`), and posts one line on the ticket that names the ref and the old commit. A
+	// commit a person pushed there is then never lost without a word. A redo that only adds to the
+	// branch keeps nothing and posts nothing.
+	/** The head an exam step's `ended` fact carries for the exam's pull request. */
+	const pullHead = (fact: Ran["facts"][number] | undefined) =>
+		(fact?.carry as {readonly examPull?: {readonly head: string}} | undefined)?.examPull?.head ??
+		"";
+	/** The lines on the ticket that name a kept ref. */
+	const keptLines = (ran: Ran) =>
+		ran.facts
+			.filter((f) => f.type === "commented" && String(f.body).includes("refs/kept/"))
+			.map((f) => String(f.body));
+	/** The kept ref a line names. */
+	const refIn = (line: string) => /refs\/kept\/[^\s`'"]*[^\s`'".,;:)]/.exec(line)?.[0] ?? "";
+	/** Where a kept ref may be: the lane's own clone, or the remote. */
+	const keptPlaces = (ran: Ran) => [
+		["-C", join(ran.dir, "home", "work", "clone")],
+		["--git-dir", ran.remote],
+	];
+	/** What `ref` points at, in the lane's own clone or else on the remote: `null` in neither. */
+	const keptAt = (ran: Ran, ref: string): string | null => {
+		for (const at of keptPlaces(ran)) {
+			try {
+				return execFileSync("git", [...at, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`], {
+					encoding: "utf8",
+					stdio: "pipe",
+				}).trim();
+			} catch {
+				// Not here: the other place may hold it.
+			}
+		}
+		return null;
+	};
+	/** Every kept ref, in the lane's own clone and on the remote. */
+	const keptRefs = (ran: Ran) =>
+		keptPlaces(ran).flatMap((at) =>
+			execFileSync("git", [...at, "for-each-ref", "--format=%(refname)", "refs/kept/"], {
+				encoding: "utf8",
+				stdio: "pipe",
+			})
+				.split("\n")
+				.filter((line) => line !== ""),
+		);
+	/** The old head is kept under the ref one ticket line names, and that line names the old commit. */
+	const keptOnce = (ran: Ran, old: string, said: string) => {
+		const lines = keptLines(ran);
+		expect(lines, `one line names the kept ref\n${said}`).toHaveLength(1);
+		const line = lines[0] ?? "";
+		expect(line, "the line names the old commit").toContain(old.slice(0, 7));
+		const ref = refIn(line);
+		expect(ref, line).toMatch(/^refs\/kept\/./);
+		expect(keptAt(ran, ref), `${ref} holds the old exam head`).toBe(old);
+	};
+
+	it(
+		"ship's conflicts at the exam's merge: before the redo on main replaces the exam branch, the old head is kept under a kept ref, and one ticket line names the ref and the old commit",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				title: RULES,
+				within: 200,
+				picks: {...YES, rounds_spent: "stop"},
+				fake: {see: [RULE]},
+				checksSay: mainTakesTheRule,
+			});
+			const said = ran.lines.join("\n");
+			const ends = ran.facts.filter((f) => f.type === "ended");
+			const refused = ends.findIndex((f) => f.stage === "exam_merge");
+			expect(ends[refused]?.outcome, said).toMatchObject({kind: "send", why: "conflicts"});
+			const old = pullHead(ends[refused]);
+			expect(old, said).toMatch(/^[0-9a-f]{40}$/);
+			const head = pullHead(ends.slice(refused).find((f) => f.stage === "exam"));
+			expect(head, said).toMatch(/^[0-9a-f]{40}$/);
+			// The redo's push replaced the branch: the old head is not in the new one's history.
+			expect(descends(ran.remote, old, head), "the redo replaced the exam branch").toBe(false);
+			keptOnce(ran, old, said);
+		},
+	);
+
+	it(
+		"main's conflicts at the exam's own review: before the redo on main replaces the exam branch, the head it found is kept under a kept ref, and one ticket line names it; the review's redo before it keeps nothing",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				title: RULES,
+				within: 200,
+				picks: {...YES, rounds_spent: "stop"},
+				fake: {answers: {review: [FAILS_E1]}, see: [RULE]},
+				checksSay: mainTakesTheRule,
+			});
+			const said = ran.lines.join("\n");
+			const ends = ran.facts.filter((f) => f.type === "ended");
+			const refused = ends.findIndex(
+				(f) =>
+					f.stage === "exam_review" && (f.outcome as {readonly why?: string}).why === "conflicts",
+			);
+			expect(refused, said).toBeGreaterThan(-1);
+			const old = pullHead(ends[refused]);
+			expect(old, said).toMatch(/^[0-9a-f]{40}$/);
+			const head = pullHead(ends.slice(refused).find((f) => f.stage === "exam"));
+			expect(head, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(descends(ran.remote, old, head), "the redo replaced the exam branch").toBe(false);
+			keptOnce(ran, old, said);
+		},
+	);
+
+	it(
+		"a review's redo on the exam head only adds to the branch: no kept ref, and no ticket line names one",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({title: RULES, picks: YES, fake: {answers: {review: [FAILS_E1]}}});
+			const said = ran.lines.join("\n");
+			expect(ran.lines.at(-1), said).toContain("ended: done");
+			const heads = ran.facts
+				.filter((f) => f.type === "ended" && f.stage === "exam")
+				.map((f) => pullHead(f));
+			expect(heads, said).toHaveLength(2);
+			const [first = "", second = ""] = heads;
+			expect(descends(ran.remote, first, second), "the redo adds to the exam branch").toBe(true);
+			expect(keptLines(ran)).toEqual([]);
+			expect(keptRefs(ran)).toEqual([]);
+		},
+	);
+
+	// Option A is for a commit a person pushed to the exam branch. The lane's own head is never at
+	// risk: it is in the lane's carry. So what is kept is the branch as the remote holds it when the
+	// redo's push replaces it (docs/direction/read-fresh-run-alone.md), and it is kept on the remote,
+	// where a person can fetch it and a lost clone does not lose it.
+	/** A person's change, on a file no step of the lane writes. */
+	const PERSONS = {path: "docs/person.md", text: "A person's note on the rule changes.\n"};
+	/** One ticket line names the kept ref and the person's commit, and the remote keeps that commit under the ref. */
+	const keptOnRemote = (ran: Ran, pushed: string, old: string, said: string) => {
+		const lines = keptLines(ran);
+		expect(lines, `one line names the kept ref\n${said}`).toHaveLength(1);
+		const line = lines[0] ?? "";
+		expect.soft(line, "the line names the person's commit").toContain(pushed.slice(0, 7));
+		expect
+			.soft(line, "the line does not name the lane's older head")
+			.not.toContain(old.slice(0, 7));
+		const ref = refIn(line);
+		expect(ref, line).toMatch(/^refs\/kept\/./);
+		let tip: string | null = null;
+		try {
+			tip = execFileSync(
+				"git",
+				["--git-dir", ran.remote, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`],
+				{encoding: "utf8", stdio: "pipe"},
+			).trim();
+		} catch {
+			// Not on the remote.
+		}
+		expect.soft(tip, `${ref} is on the remote`).not.toBeNull();
+		expect
+			.soft(
+				descends(ran.remote, pushed, tip ?? ""),
+				`${ref} on the remote holds the person's commit`,
+			)
+			.toBe(true);
+	};
+
+	it(
+		"a person pushes to the exam branch after its review read it, then ship's conflicts at the exam's merge: the redo on main keeps the person's commit under a kept ref on the remote, and the ticket line names that commit",
+		{timeout: 300_000},
+		async () => {
+			let pushed = "";
+			const ran = await lane({
+				title: RULES,
+				within: 200,
+				picks: {...YES, rounds_spent: "stop"},
+				fake: {see: [RULE]},
+				// Under the exam review's checks, the lane's first, after `examReady` read the branch:
+				// main takes the rule file, and a person pushes on top of the exam head.
+				checksSay: (head, nth, where) => {
+					if (nth === 0) pushed = pushOnTopOf(where, head, [PERSONS]);
+					return mainTakesTheRule(head, nth, where);
+				},
+			});
+			const said = ran.lines.join("\n");
+			const ends = ran.facts.filter((f) => f.type === "ended");
+			const refused = ends.findIndex((f) => f.stage === "exam_merge");
+			expect(ends[refused]?.outcome, said).toMatchObject({kind: "send", why: "conflicts"});
+			const old = pullHead(ends[refused]);
+			expect(old, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(pushed, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(descends(ran.remote, old, pushed), "the person pushed on top of the exam head").toBe(
+				true,
+			);
+			const head = pullHead(ends.slice(refused).find((f) => f.stage === "exam"));
+			expect(head, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(
+				descends(ran.remote, pushed, head),
+				"the redo replaced the branch with the person's commit on it",
+			).toBe(false);
+			keptOnRemote(ran, pushed, old, said);
+		},
+	);
+
+	it(
+		"main's conflicts at the exam's own review, then a person pushes to the exam branch while the redo on main is written: the push keeps the person's commit under a kept ref on the remote, and the ticket line names that commit",
+		{timeout: 300_000},
+		async () => {
+			const ran = await lane({
+				title: RULES,
+				within: 200,
+				picks: {...YES, rounds_spent: "stop"},
+				fake: {
+					answers: {review: [FAILS_E1]},
+					see: [RULE],
+					// The third exam run is the redo on main: the first is the writing, the second the
+					// review's redo on the exam head.
+					pushesAt: {exam: {2: {branch: `exam/${NUMBER}`, ...PERSONS}}},
+				},
+				checksSay: mainTakesTheRule,
+			});
+			const said = ran.lines.join("\n");
+			const ends = ran.facts.filter((f) => f.type === "ended");
+			const refused = ends.findIndex(
+				(f) =>
+					f.stage === "exam_review" && (f.outcome as {readonly why?: string}).why === "conflicts",
+			);
+			expect(refused, said).toBeGreaterThan(-1);
+			const old = pullHead(ends[refused]);
+			expect(old, said).toMatch(/^[0-9a-f]{40}$/);
+			const pushed = exams(ran)[2]?.pushed ?? "";
+			expect(pushed, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(descends(ran.remote, old, pushed), "the person pushed on top of the exam head").toBe(
+				true,
+			);
+			const head = pullHead(ends.slice(refused).find((f) => f.stage === "exam"));
+			expect(head, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(
+				descends(ran.remote, pushed, head),
+				"the redo replaced the branch with the person's commit on it",
+			).toBe(false);
+			keptOnRemote(ran, pushed, old, said);
+		},
+	);
+
+	// The owner's rule (docs/direction/read-fresh-run-alone.md): a stage that must replace a branch
+	// keeps the old head under a kept ref first, and says so on the ticket. A redo on the exam head
+	// may instead push on top of a person's commit. These tests do not pick which: they pin that the
+	// person's commit is not lost, and that a replace is named on the ticket.
+	/** Does the remote hold `sha` under `ref`? */
+	const remoteHolds = (ran: Ran, ref: string, sha: string): boolean => {
+		try {
+			const tip = execFileSync(
+				"git",
+				["--git-dir", ran.remote, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`],
+				{encoding: "utf8", stdio: "pipe"},
+			).trim();
+			return descends(ran.remote, sha, tip);
+		} catch {
+			return false;
+		}
+	};
+	/**
+	 * After a redo on the exam head, the person's commit `pushed` is in the redo's head, or a ticket
+	 * line names it and a kept ref on the remote that holds it.
+	 */
+	const notLost = (ran: Ran, pushed: string, said: string) => {
+		const ends = ran.facts.filter((f) => f.type === "ended");
+		const sent = ends.findIndex(
+			(f) => f.stage === "exam_review" && (f.outcome as {readonly kind?: string}).kind === "send",
+		);
+		expect(sent, said).toBeGreaterThan(-1);
+		const old = pullHead(ends[sent]);
+		expect(old, said).toMatch(/^[0-9a-f]{40}$/);
+		expect(pushed, said).toMatch(/^[0-9a-f]{40}$/);
+		expect(descends(ran.remote, old, pushed), "the person pushed on top of the exam head").toBe(
+			true,
+		);
+		const head = pullHead(ends.slice(sent).find((f) => f.stage === "exam"));
+		expect(head, said).toMatch(/^[0-9a-f]{40}$/);
+		const onTop = descends(ran.remote, pushed, head);
+		const named = keptLines(ran).filter(
+			(line) => line.includes(pushed.slice(0, 7)) && remoteHolds(ran, refIn(line), pushed),
+		);
+		expect(
+			{onTop, named: named.length > 0},
+			`the person's commit ${pushed} is in the redo's head ${head}, or kept on the remote under a ref a ticket line names\n${keptLines(ran).join("\n")}`,
+		).not.toEqual({onTop: false, named: false});
+	};
+
+	it(
+		"a person pushes to the exam branch after its review read it, then the review's findings send it back: the redo on the exam head loses no commit, and a replace is named on the ticket",
+		{timeout: 300_000},
+		async () => {
+			let pushed = "";
+			const ran = await lane({
+				title: RULES,
+				within: 200,
+				picks: {...YES, rounds_spent: "stop"},
+				fake: {answers: {review: [FAILS_E1]}},
+				// Under the exam review's checks, the lane's first, after `examReady` read the branch.
+				checksSay: (head, nth, where) => {
+					if (nth === 0) pushed = pushOnTopOf(where, head, [PERSONS]);
+					return null;
+				},
+			});
+			const said = ran.lines.join("\n");
+			const sent = ran.facts.find((f) => f.type === "ended" && f.stage === "exam_review");
+			expect(sent?.outcome, said).toMatchObject({kind: "send", why: "review_failed"});
+			notLost(ran, pushed, said);
+		},
+	);
+
+	it(
+		"a person pushes to the exam branch after its review read it, then red checks send it back: the redo on the exam head loses no commit, and a replace is named on the ticket",
+		{timeout: 300_000},
+		async () => {
+			const NAME = "src/rules.test.ts > rules > reads the list";
+			let pushed = "";
+			const ran = await lane({
+				title: RULES,
+				within: 200,
+				picks: {...YES, rounds_spent: "stop"},
+				// The exam review's checks, the lane's first: a person pushes while they run, and they fail.
+				checksSay: (head, nth, where) => {
+					if (nth !== 0) return null;
+					pushed = pushOnTopOf(where, head, [PERSONS]);
+					return {
+						head,
+						commands: [{command: "node_modules/.bin/vitest run", code: 1, ms: 3}],
+						result: "red",
+						failed: [NAME],
+						tail: `${NAME}: AssertionError`,
+					};
+				},
+			});
+			const said = ran.lines.join("\n");
+			const sent = ran.facts.find((f) => f.type === "ended" && f.stage === "exam_review");
+			expect(sent?.outcome, said).toMatchObject({kind: "send", why: "checks_red"});
+			notLost(ran, pushed, said);
 		},
 	);
 });
