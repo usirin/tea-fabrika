@@ -178,6 +178,16 @@ const Given = Schema.Struct({
 	diff: Schema.optionalKey(Sha),
 });
 
+/**
+ * Where a stopped lane goes on: the lane's `Resume` (stages/pipeline/machine.ts), which this file
+ * cannot name, with its steps and question kinds as plain stage names. A step it runs, or a question
+ * it asks again about a step.
+ */
+const Resume = Schema.Union([
+	Schema.TaggedStruct("run", {step: Stage, round: Schema.optionalKey(Schema.Literal("next"))}),
+	Schema.TaggedStruct("ask", {for: Stage, step: Stage}),
+]);
+
 /** The tracker's own four: a ticket filed, talked about, closed and opened again. */
 export const TicketFact = Schema.Union([
 	Schema.Struct({type: Schema.Literal("filed"), title: Title, body: Body}),
@@ -365,6 +375,20 @@ export const CodeFact = Schema.Union([
 		to: Sha,
 		why: Schema.Literals(["same_head", "replayed", "formatted", "glanced"]),
 	}),
+	/**
+	 * The lane stopped after a step (self-fix PR 11b): the step, the step's own outcome
+	 * (`stuck:tests_red`, never only the lane's `step_stuck`), the lane's stop, and where the same line
+	 * goes on. `why`: a crash's first lines, which exist only when it happens. Left out when nothing
+	 * crashed. Written once, as the lane lets the ticket go.
+	 */
+	Schema.Struct({
+		type: Schema.Literal("stopped"),
+		stage: Stage,
+		outcome: Outcome,
+		lane: Outcome,
+		from: Resume,
+		why: Schema.optionalKey(Said),
+	}),
 ]);
 export type CodeFact = typeof CodeFact.Type;
 
@@ -467,6 +491,7 @@ export const WRITTEN_BY = {
 	pr: "anyone",
 	asked: "anyone",
 	carried: "anyone",
+	stopped: "anyone",
 	answered: "person",
 	rated: "anyone",
 	maybe_duplicate: "anyone",

@@ -119,6 +119,17 @@ const saidOf = (fact: Fact, timeline: readonly Entry[]): Said => {
 				`what was said at ${short(fact.from)} still stands at ${short(fact.to)}`,
 				CARRIED[fact.why],
 			);
+		// The step's own outcome first, the lane's stop second: `step_stuck` alone says nothing (self-fix PR 11b).
+		case "stopped":
+			return said(
+				`stopped after ${fact.stage}: ${endedAs(fact.outcome, "done")}`,
+				`the lane: ${endedAs(fact.lane, "done")}, ${
+					fact.from._tag === "run"
+						? `goes on at ${fact.from.step}`
+						: `goes on by asking ${words(fact.from.for)} about ${fact.from.step}`
+				}`,
+				fact.why ?? null,
+			);
 		case "pr":
 			return said(`PR ${prRefOf(fact.url)} ${fact.state}`, checksLine(fact.checks));
 		case "asked":
