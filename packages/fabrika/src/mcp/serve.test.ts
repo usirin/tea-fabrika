@@ -108,3 +108,55 @@ describe("a tool call whose handler crashed", () => {
 		expect(crashed[0]?.ok).toBeUndefined();
 	});
 });
+
+// The bridge outlives the host (tracker 185b, PR 4): after a new host, the bridge tells the client
+// `notifications/tools/list_changed`, as a new host may serve other tools (the read-only door, or
+// the other way). A client takes that notice only from a server that declared it may send it
+// (spec 2025-11-25, "Tools", Capabilities: `listChanged`), as the SDK's own `Client` does: its
+// `listChanged` handlers are set only when the server's `initialize` answer says so.
+describe("an agent's initialize", () => {
+	it("is answered with tools that may change, so the bridge's notice after a new host is heard", async () => {
+		const answer = await Effect.runPromise(
+			Effect.gen(function* () {
+				const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped({prefix: "sv-"});
+				const path = `${dir}/mcp.sock`;
+				const server = yield* NodeSocketServer.make({path});
+				yield* server
+					.run((socket) =>
+						serveAgent(socket, {
+							person: "owner",
+							programsFor: () => Effect.succeed({list: programList(SMALL), readOnly: null}),
+							tiles: () => [],
+						}).pipe(Effect.ignore),
+					)
+					.pipe(Effect.forkScoped);
+				const got: unknown[] = [];
+				const client = createConnection(path);
+				let rest = "";
+				client.on("data", (chunk) => {
+					rest += chunk.toString("utf8");
+					const parts = rest.split("\n");
+					rest = parts.pop() ?? "";
+					for (const part of parts) if (part.trim() !== "") got.push(JSON.parse(part));
+				});
+				yield* Effect.addFinalizer(() => Effect.sync(() => client.destroy()));
+				const say = (message: unknown) => client.write(`${JSON.stringify(message)}\n`);
+				say({type: "handshake", version: AGENTS_PROTOCOL, agent: "claude"});
+				say({
+					jsonrpc: "2.0",
+					id: 1,
+					method: "initialize",
+					params: {
+						protocolVersion: "2025-11-25",
+						capabilities: {},
+						clientInfo: {name: "claude-code", version: "2.1.0"},
+					},
+				});
+				return yield* until("the answer to initialize", () =>
+					got.find((m) => Reflect.get(Object(m), "id") === 1),
+				);
+			}).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
+		);
+		expect(answer).toMatchObject({result: {capabilities: {tools: {listChanged: true}}}});
+	});
+});
