@@ -138,8 +138,8 @@ export type LedgerLink = typeof LedgerLink.Type;
 
 /**
  * The host, as it says of itself (host/serve.ts): its process, when it started, its build, its
- * ledger, and the agents attached now. `agents` is `null` on a home with no agents' socket: one
- * connected to a ledger server (host/agents.ts).
+ * ledger, and the agents attached now. `agents` is `null` on a host with no agents' socket: a
+ * test's, or one built before every home had one (host/agents.ts).
  */
 export const HostNow = Schema.Struct({
 	pid: Schema.Int.check(Schema.isGreaterThan(0)),

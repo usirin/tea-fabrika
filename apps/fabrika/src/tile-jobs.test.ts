@@ -15,6 +15,8 @@ const job = (n: number, text: string, runs: readonly string[], over: Partial<She
 		state: "running" as const,
 		background: false,
 		owner: null,
+		by: null,
+		stop: null,
 		...over,
 	};
 };

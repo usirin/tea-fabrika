@@ -129,6 +129,8 @@ const mutants = outcomesOf({
 });
 export const MutantsOutcome = mutants.schema;
 export type MutantsOutcome = typeof MutantsOutcome.Type;
+/** Every name the mutants job can end with, as the other stages export theirs. */
+export const MUTANTS_NAMES = mutants.names;
 
 /**
  * Start one Controls child per `test` answer, keyed by its mutant. The Elm

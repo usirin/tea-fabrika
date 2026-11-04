@@ -27,10 +27,13 @@ import {codeSpan} from "./found.ts";
 //   <checkout>               git's `remote.origin.url`: the repository, its remote and which host
 //   <home>/work/clone        the repository, fetched before each read
 //   <home>/work/trees/<n>    ticket n's working copy, on branch lane/<n>: tests, then the build
+//   <home>/work/trees/<t>.installed   beside a working copy, once its install ran
 //   <home>/work/copies/<c>   the code at commit c, plain files with no .git: what tests run in
 //   <home>/work/judges/<c>   the same, with what an agent loads by itself put back as main has it:
 //                            what a read-only agent sees
 //   <home>/work/<place>/<c>.done   beside a copy, once it is whole: a head's files cannot write it
+//   <home>/work/checks/<run> a detached git worktree of one commit, installed, for one run of the
+//                            checks alone: git answers there as in CI's checkout. Gone when it ends
 //   <home>/work/main-<name>  main's tip, with nothing installed, while rubrics are read from it
 //   <home>/work/pulls.json   the pull requests of the lane
 //   <home>/work/holds/<n>    what lane n uses that other lanes may share, a path a line: a lane that
@@ -257,6 +260,12 @@ export class LaneWork extends Context.Service<
 		readonly show: (commit: string, path: string) => Effect.Effect<string | null, Failed>;
 		/** The code at `commit`, as plain files with no history and no links, installed once. Where its tests run. */
 		readonly copy: (commit: string) => Effect.Effect<string, Failed>;
+		/**
+		 * A detached git worktree of the clone at `commit`, installed, in a folder no other run shares:
+		 * where the checks run, so a check that asks git finds the repository. Removed and pruned when the
+		 * scope closes, however it ends.
+		 */
+		readonly worktree: (commit: string) => Effect.Effect<string, Failed, Scope.Scope>;
 		/**
 		 * The same, for an agent that reads a head: every file an agent loads by itself is main's, or
 		 * gone when main has none. So the head's files cannot tell its judge how to judge. A change to one
@@ -540,6 +549,22 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 					return yield* Effect.fail(failed(`[build] install: ${ran.err.trim().slice(0, 300)}`));
 			});
 
+		/**
+		 * A working copy off the clone, as `made` gives it, with the install run in it once: its mark lies
+		 * beside it. The exam's side tree needs it as the lane's does, since a formatter such as this
+		 * repo's `oxlint-plugins/format.ts` starts from `node_modules` and ends with 2 when it is not there.
+		 */
+		const installedTree = (name: string, branch: string) =>
+			Effect.gen(function* () {
+				const made_ = yield* made(name, branch);
+				const mark = at("trees", `${name}.installed`);
+				if (!(yield* fs.exists(mark).pipe(Effect.orElseSucceed(() => false)))) {
+					yield* install(made_.tree);
+					yield* quiet(fs.writeFileString(mark, ""));
+				}
+				return made_;
+			});
+
 		/** `paths` at `sha`, or all of it when none are named, unpacked into `tree`. Its tar goes either way. */
 		const unpacked = (tree: string, sha: string, paths: readonly string[] = []) => {
 			const packed = `${tree}.tar`;
@@ -672,6 +697,25 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 		};
 
 		const copy = (sha: string) => copyTo("copies", sha, install);
+
+		// Each run makes its own folder, so two lanes, or one lane twice, at one commit never share one.
+		// The release runs each step whatever the one before did: git's remove, then the folder itself
+		// (a head's install can leave one shut), then a prune, so git keeps no entry for a folder gone.
+		const worktree = (sha: string) =>
+			Effect.gen(function* () {
+				yield* quiet(fs.makeDirectory(at("checks"), {recursive: true}));
+				const folder = yield* Effect.acquireRelease(
+					quiet(fs.makeTempDirectory({directory: at("checks"), prefix: `${sha.slice(0, 12)}-`})),
+					(folder) =>
+						Effect.ignore(gitIn(clone, ["worktree", "remove", "--force", folder])).pipe(
+							Effect.andThen(Effect.ignore(cleared(folder))),
+							Effect.andThen(Effect.ignore(gitIn(clone, ["worktree", "prune"]))),
+						),
+				);
+				yield* git(clone, ["worktree", "add", "--detach", "--quiet", folder, sha]);
+				yield* install(folder);
+				return yield* quiet(fs.realPath(folder));
+			});
 
 		/** `git diff -U0 base head | git patch-id --verbatim`, its first word: a diff's id, whitespace kept. */
 		const diffId = (base: string, head: string) =>
@@ -946,23 +990,14 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			origin,
 			main,
 			settings,
-			tree: (n) =>
-				Effect.gen(function* () {
-					const made_ = yield* made(String(n), `lane/${n}`);
-					const mark = at("trees", `${n}.installed`);
-					if (!(yield* fs.exists(mark).pipe(Effect.orElseSucceed(() => false)))) {
-						yield* install(made_.tree);
-						yield* quiet(fs.writeFileString(mark, ""));
-					}
-					return made_;
-				}),
-			side: (name) => made(name, name.replace(/-/, "/")),
+			tree: (n) => installedTree(String(n), `lane/${n}`),
+			side: (name) => installedTree(name, name.replace(/-/, "/")),
 			sideFresh: (name) =>
 				Effect.gen(function* () {
 					const {tree, branch} = yield* made(name, name.replace(/-/, "/"));
 					yield* git(tree, ["checkout", "--quiet", "-B", branch, "origin/main"]);
 					yield* git(tree, ["clean", "--quiet", "-fd"]);
-					return yield* made(name, branch);
+					return yield* installedTree(name, branch);
 				}),
 			sideTo: (name, to) =>
 				Effect.gen(function* () {
@@ -997,6 +1032,7 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			listAt: (folder, sha) => names(folder, ["ls-tree", "-r", "--name-only", sha]),
 			show,
 			copy,
+			worktree,
 			judgeCopy,
 			judgedFiles,
 			rubrics,

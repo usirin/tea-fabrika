@@ -208,7 +208,7 @@ describe("code's checks, as the repository's settings name them", () => {
 			],
 			[
 				"the copy of the head could not be made",
-				(work: LaneWork["Service"]) => ({...work, copy: () => Effect.fail(failed)}),
+				(work: LaneWork["Service"]) => ({...work, worktree: () => Effect.fail(failed)}),
 			],
 		])("%s", async (_, change) => {
 			const checked = await checkedOver(workWith(change));

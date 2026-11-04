@@ -753,9 +753,10 @@ describe("code's checks after the build", () => {
 		expect(stepsIn(cmds)[0]?.carry.checked).toEqual(GREEN_AT(OTHER_HEAD));
 	});
 
-	// The PR 4 review: red checks are no checks that could not run. A lane that stops on them says
-	// red, so the record holds what code found.
-	it("red checks on the mutants job's commit end the lane `stuck:checks_red`, and the review does not run", () => {
+	// The PR 4 review: red checks are no checks that could not run. Self-fix PR 11, the guard after
+	// the mutants job: red there is `back("build", "names")`, so the build runs the next round, with
+	// the red checks and their names, and the lane does not stop.
+	it("red checks on the mutants job's commit run the build, the next round, with those checks, and the review does not run", () => {
 		const [mutation] = firstBuildEnds(BUILT);
 		const [mutants] = ended(mutation, {
 			outcome: {kind: "send", to: "test_writer", why: "mutant_survived"},
@@ -766,7 +767,10 @@ describe("code's checks after the build", () => {
 			carry: {head: OTHER_HEAD, checked: RED_AT(OTHER_HEAD)},
 		});
 		expect(afterBuildIn(cmds)).toEqual([]);
-		expect(s.phase === "releasing" && nameOf(s.outcome)).toBe("stuck:checks_red");
+		expect(running(s)).toMatchObject({step: "build", round: 2});
+		const [step] = stepsIn(cmds);
+		expect(step).toMatchObject({step: "build", round: 2});
+		expect(step?.carry.checked).toEqual(RED_AT(OTHER_HEAD));
 	});
 
 	it.each([
@@ -818,11 +822,32 @@ describe("the exam's rounds and ship's sends, by step", () => {
 		return {kind: "send", to, why} as const;
 	};
 
-	it("a send ship can end with, from a step that is not the exam's merge, has no route: stuck:sent_back", () => {
+	it("a send ship can end with, from a step that cannot say it, has no route: stuck:sent_back", () => {
 		for (const name of Object.keys(EXAM_MERGE_SENDS))
-			for (const step of ["merge", "push", "plan"] as const)
+			for (const step of ["push", "plan"] as const)
 				expect(after(step, sendOf(name), 1), `${name} from ${step}`).toEqual({
 					end: {kind: "stuck", why: "sent_back"},
 				});
+	});
+
+	// Self-fix PR 11, jidoka rows 62 and 63: each send ship ends with at merge goes to the step that
+	// fixes it, and none stops `sent_back` (row 9).
+	it("each send ship can end with at merge goes to its step: build next round, main read fresh, review, or merge once more", () => {
+		const AT_MERGE: Readonly<Record<keyof typeof EXAM_MERGE_SENDS, unknown>> = {
+			// Row 62: to build, the next round.
+			"send:builder:review_failed": {to: "build", round: 2},
+			"send:builder:checks_red": {to: "build", round: 2},
+			"send:builder:bot_comment": {to: "build", round: 2},
+			// Row 62: main taken in first; a clean catch-up goes back to ship, with no round.
+			"send:builder:conflicts": {fresh: "merge"},
+			"send:builder:behind": {fresh: "merge"},
+			// The `once` rows: ship again, as a new run.
+			"send:builder:ejected": {to: "merge"},
+			// Row 63: the review again, in the same round.
+			"send:reviewer:no_review": {to: "review"},
+		};
+		// The record's type holds every send, so a new one does not compile until it is here.
+		for (const [name, move] of Object.entries(AT_MERGE))
+			expect(after("merge", sendOf(name), 1), name).toEqual(move);
 	});
 });

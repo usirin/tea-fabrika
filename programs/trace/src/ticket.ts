@@ -203,10 +203,71 @@ const STEP_SPAN = "run a step";
 const overlap = (a: number, b: number, from: number, to: number): number =>
 	Math.max(0, Math.min(b, to) - Math.max(a, from));
 
+/** A record's spans, indexed so a step's spans are a lookup, not a walk of the record. */
+type SpanIndex = {
+	/** The first span tagged with each run, by the run. */
+	readonly tagged: ReadonlyMap<string, Span>;
+	/** The "run a step" spans with no run tag, in record order: a step finds one by its time. */
+	readonly untagged: readonly Span[];
+	/** Every span under each of those step spans, in start order, by the step span's id. */
+	readonly under: ReadonlyMap<string, readonly Span[]>;
+};
+
 /**
- * The spans under one step, from its lane's job record: by `tea.lane.run` when the span has it,
- * else the "run a step" span that overlaps [from, to] most. Every span under it, in start order;
- * the step's own span is the step row, so it is not one of them.
+ * The index of a record's spans: one pass that pushes each span onto its parent's list, then one
+ * walk under each step span. Each walk goes depth first, a span's children in record order, and is
+ * then sorted by start, which keeps that order for spans that start together. A span whose id is
+ * already on the walk's path is not walked again, so a record whose parents loop still ends.
+ */
+const indexSpans = (spans: readonly Span[]): SpanIndex => {
+	const tagged = new Map<string, Span>();
+	const untagged: Span[] = [];
+	const children = new Map<string, Span[]>();
+	for (const s of spans) {
+		const run = s.tags[RUN_TAG];
+		if (typeof run === "string") {
+			if (!tagged.has(run)) tagged.set(run, s);
+		} else if (run === undefined && s.name === STEP_SPAN) untagged.push(s);
+		if (s.parent === null) continue;
+		const list = children.get(s.parent);
+		if (list === undefined) children.set(s.parent, [s]);
+		else list.push(s);
+	}
+	const path = new Set<string>();
+	const walk = (id: string, out: Span[]) => {
+		path.add(id);
+		for (const child of children.get(id) ?? []) {
+			out.push(child);
+			if (!path.has(child.span)) walk(child.span, out);
+		}
+		path.delete(id);
+	};
+	const under = new Map<string, readonly Span[]>();
+	for (const root of [...tagged.values(), ...untagged]) {
+		if (under.has(root.span)) continue;
+		const out: Span[] = [];
+		walk(root.span, out);
+		under.set(
+			root.span,
+			out.sort((a, b) => a.start - b.start),
+		);
+	}
+	return {tagged, untagged, under};
+};
+
+/**
+ * Each record's index, by its spans array (ticket 182). A memo outside the tea Model, which stays
+ * plain data (docs/direction/saved-state.md, S2), the way a Redux selector or Elm's `Html.Lazy`
+ * skips work when its input is the same by reference. A newer read of a record brings a new spans
+ * array, so it is indexed again, and an old one is dropped with its record.
+ */
+const indexes = new WeakMap<readonly Span[], SpanIndex>();
+
+/**
+ * The spans under one step, from its lane's job record: by `tea.lane.run` when a span has it, else
+ * the first "run a step" span that overlaps [from, to] most. Every span under it, in start order;
+ * the step's own span is the step row, so it is not one of them. The record is indexed on the
+ * first call for its spans, so every later call, on any redraw, is a lookup.
  */
 export const childrenOf = (
 	record: JobTrace,
@@ -214,27 +275,23 @@ export const childrenOf = (
 	from: number,
 	to: number,
 ): readonly Span[] => {
-	const tagged = record.spans.find((s) => s.tags[RUN_TAG] === run);
-	const root =
-		tagged ??
-		record.spans
-			.filter((s) => s.name === STEP_SPAN && s.tags[RUN_TAG] === undefined)
-			.map((s) => ({s, shared: overlap(s.start, s.end, from, to)}))
-			.filter((x) => x.shared > 0)
-			.toSorted((a, b) => b.shared - a.shared)[0]?.s;
-	if (root === undefined) return [];
-	const under = new Map<string, Span[]>();
-	for (const s of record.spans)
-		if (s.parent !== null) under.set(s.parent, [...(under.get(s.parent) ?? []), s]);
-	const out: Span[] = [];
-	const walk = (id: string) => {
-		for (const child of under.get(id) ?? []) {
-			out.push(child);
-			walk(child.span);
+	let index = indexes.get(record.spans);
+	if (index === undefined) {
+		index = indexSpans(record.spans);
+		indexes.set(record.spans, index);
+	}
+	let root = index.tagged.get(run);
+	if (root === undefined) {
+		let most = 0;
+		for (const s of index.untagged) {
+			const shared = overlap(s.start, s.end, from, to);
+			if (shared > most) {
+				root = s;
+				most = shared;
+			}
 		}
-	};
-	walk(root.span);
-	return out.toSorted((a, b) => a.start - b.start);
+	}
+	return root === undefined ? [] : (index.under.get(root.span) ?? []);
 };
 
 /**
