@@ -2957,6 +2957,91 @@ describe("a stopped lane, typed again", () => {
 				expect(heldAt(ran, 0)?.at, said).toEqual({_tag: "run", step: "test_writer"});
 			},
 		);
+
+		// The other way through `writtenAgain`'s `passed`: a redo that tests one Property and says no
+		// test can check the other ends `cannot_test`, and every test it wrote did as the plan says.
+		// The person lets the rest through, and the redo goes on the head as a `done` one does.
+		it(
+			"exam_touched, `test_wrong`, and the redo ends ask:owner:cannot_test: after the owner's `go_on`, the redo is on the build's head and nothing is touched",
+			{timeout: 300_000},
+			async () => {
+				const SECOND = {
+					...property("new"),
+					when: "a name is in lower case already",
+					result: "it comes back as it was",
+				};
+				/** The first writer's file: one test for each Property. */
+				const BOTH =
+					'import {expect, it} from "vitest";\nimport {lower} from "./lower.ts";\n\nit("lowers capitals", () => {\n\texpect(lower("AB")).toBe("ab");\n});\n\nit("keeps lower case", () => {\n\texpect(lower("ab")).toBe("ab");\n});\n';
+				const ran = await lane({
+					within: 140,
+					picks: YES,
+					queues: {exam_touched: ["test_wrong"], step: ["go_on"]},
+					onBaseSays: (_, tests) => tests.map((t) => ({property: t.property, result: "red"})),
+					fake: {
+						writesAt: {build: {0: [{path: "src/lower.test.ts", text: TOUCHED}]}},
+						answers: {
+							tests: [
+								{
+									with: {
+										files: [{path: "src/lower.test.ts", text: BOTH}],
+										answers: [
+											{
+												property: "p1",
+												kind: "test",
+												file: "src/lower.test.ts",
+												name: "lowers capitals",
+											},
+											{
+												property: "p2",
+												kind: "test",
+												file: "src/lower.test.ts",
+												name: "keeps lower case",
+											},
+										],
+									},
+								},
+								{
+									with: {
+										...WRITES_REDONE.with,
+										answers: [
+											...WRITES_REDONE.with.answers,
+											{property: "p2", kind: "cannot", why: "no test can tell it from a copy"},
+										],
+									},
+								},
+							],
+							plan: [{with: {properties: [property("new"), SECOND]}}],
+						},
+						see: SEE,
+					},
+				});
+				const said = ran.lines.join("\n");
+				expect(ran.lines, said).not.toContain(TIMED_OUT);
+				const asked = ran.facts.findIndex(
+					(f) => f.type === "asked" && String(f.ask).startsWith("a-exam_touched-"),
+				);
+				expect(asked, said).toBeGreaterThan(-1);
+				const redo = ran.facts
+					.slice(asked)
+					.find((f) => f.type === "ended" && f.stage === "test_writer");
+				expect(redo?.outcome, said).toEqual({kind: "ask", who: "owner", for: "cannot_test"});
+				expect(
+					ran.facts.filter((f) => f.type === "answered" && f.pick === "go_on"),
+					said,
+				).toHaveLength(1);
+				const {head, touched} = Schema.decodeUnknownSync(
+					Schema.Struct({head: Schema.String, touched: Schema.Array(Schema.String)}),
+				)(redo?.carry);
+				expect(touched).toEqual([]);
+				expect(inClone(ran, "show", `${head}:src/lower.test.ts`)).toContain(REDONE_MARK);
+				// The build goes on from that head, as its next round.
+				const builds = codexRuns(ran.dir).filter((r) => r.step === "build");
+				expect(builds, said).toHaveLength(2);
+				expect(builds[1]?.seen["src/lower.test.ts"]).toContain(REDONE_MARK);
+				expect(roundsOf(ran, "build"), said).toEqual([1, 2]);
+			},
+		);
 	});
 });
 
@@ -6243,8 +6328,9 @@ describe("the exam's side tree, after a plan restarts to a new version", () => {
 			const said = ran.lines.join("\n");
 			const versions = ran.facts.filter((f) => f.type === "planned").map((f) => f.version);
 			expect(versions, said).toEqual([1, 2]);
-			// Only the exam's reviews carry `pr` (program.ts:1098); the lane's own review (:1480) does not,
-			// and since 194 that one stands on the main that merged the exam.
+			// Only the exam's reviews carry `pr` (`bodies.exam_review` in program.ts); the lane's own
+			// review (`bodies.review`) does not, and since 194 that one stands on the main that merged the
+			// exam.
 			const heads = ran.facts
 				.filter((f) => f.type === "reviewed" && "pr" in f && f.pr !== undefined)
 				.map((f) => String(f.head));
