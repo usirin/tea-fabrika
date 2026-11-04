@@ -1,6 +1,8 @@
+import {execFile} from "node:child_process";
 import {mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
+import {fileURLToPath} from "node:url";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import {keyFileText, keyLineOf, memoryStorage, offer, start, viewOf} from "@kampus/fabrika-old";
@@ -197,4 +199,90 @@ describe("an agent's filing says where it came from", () => {
 				expect(after.map((line) => line.slice(0, 2))).toEqual(["#2", "#1"]);
 			}),
 		));
+});
+
+/** What `node cli.ts <args>` ended with on `home`, and all it printed, out and err together. */
+const cliOn = (home: string, args: readonly string[]) =>
+	new Promise<{readonly code: number; readonly said: string}>((resolve) => {
+		const cli = fileURLToPath(new URL("../cli.ts", import.meta.url));
+		execFile(
+			process.execPath,
+			[cli, ...args],
+			{env: {...process.env, FABRIKA_HOME: home}},
+			(error, stdout, stderr) =>
+				resolve({code: error === null ? 0 : Number(error.code ?? 1), said: stdout + stderr}),
+		);
+	});
+
+// Ticket 196: the command line an agent runs, `fabrika post file --from '<json>'`, in a process of
+// its own on bob's home, as an agent's shell would start it. Runs after the tests above: #1 and #2
+// are filed. PR 352 and its mutation step are ticket 188's.
+describe("`fabrika post file` on the command line", () => {
+	const from = {
+		_tag: "pr",
+		url: "https://github.com/usirin/tea-fabrika/pull/352",
+		step: "mutation",
+	} as const;
+	const bodyFile = () => {
+		const file = join(root, "note.md");
+		writeFileSync(file, "\n  It links node_modules.  \n\n");
+		return file;
+	};
+	const fileArgs = (title: string) => [
+		"post",
+		"file",
+		title,
+		"--as",
+		"triage",
+		"--body-file",
+		bodyFile(),
+	];
+
+	// p3, the good side
+	it("files with `--from` read as JSON, and the body file's text trimmed", async () => {
+		const done = await cliOn(person("bob").home, [
+			...fileArgs("Mutation runner"),
+			"--from",
+			JSON.stringify(from),
+		]);
+		expect(done).toMatchObject({
+			code: 0,
+			said: expect.stringContaining("#3 open c0 Mutation runner"),
+		});
+		const [filed] = await run(entriesAt(person("alice").home, 3));
+		expect(filed?.fact).toStrictEqual({
+			type: "filed",
+			title: "Mutation runner",
+			body: "It links node_modules.",
+			from,
+		});
+	}, 60_000);
+
+	it("files with no `from` when none is given", async () => {
+		const done = await cliOn(person("bob").home, fileArgs("No from"));
+		expect(done.code).toBe(0);
+		const [filed] = await run(entriesAt(person("alice").home, 4));
+		expect(filed?.fact).toStrictEqual({
+			type: "filed",
+			title: "No from",
+			body: "It links node_modules.",
+		});
+	}, 60_000);
+
+	// p3
+	it("refuses a `--from` that is not JSON, or does not fit, with why, and files nothing", async () => {
+		const notJson = await cliOn(person("bob").home, [...fileArgs("Not JSON"), "--from", "pr 352"]);
+		expect(notJson.code).not.toBe(0);
+		expect(notJson.said).toMatch(/Invalid value for flag --from/);
+		const issue = {_tag: "pr", url: "https://github.com/usirin/tea-fabrika/issues/352"};
+		const misfit = await cliOn(person("bob").home, [
+			...fileArgs("An issue"),
+			"--from",
+			JSON.stringify(issue),
+		]);
+		expect(misfit.code).not.toBe(0);
+		expect(misfit.said).toMatch(/Invalid value for flag --from[\s\S]*\["url"\]/);
+		const after = await run(post(person("bob").home, "triage", []));
+		expect(after.map((line) => line.slice(0, 2))).toEqual(["#4", "#3", "#2", "#1"]);
+	}, 60_000);
 });

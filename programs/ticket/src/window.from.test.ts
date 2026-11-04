@@ -5,10 +5,11 @@ import {
 	fold,
 	type Ticket,
 } from "@kampus/pipeline/tickets/ticket";
+import {Schema} from "effect";
 import {createElement} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
-import {pageOf, type Shown} from "./view.ts";
+import {pageOf, runTicketOf, Shown} from "./view.ts";
 import {TicketWindow} from "./window.tsx";
 
 // Ticket 196: the ticket's window says where a ticket came from (plan 196, "Traced: ticket 188").
@@ -35,19 +36,23 @@ const filed = (from?: FactOf<"filed">["from"]): Fact => ({
 	...(from === undefined ? {} : {from}),
 });
 
+/** What the window is shown for one ticket, opened. */
+const viewOf = (ticket: Ticket): Shown => ({
+	ready: true,
+	number: ticket.number,
+	page: pageOf(ticket, NOW, [ticket]),
+	saving: [],
+	failed: null,
+	unreachable: null,
+	now: NOW,
+});
+
+/** The window's markup for `view`. */
+const drawn = (view: Shown): string =>
+	renderToStaticMarkup(createElement(TicketWindow, {view, send: () => {}}));
+
 /** The window's markup for one ticket, opened. */
-const markupOf = (ticket: Ticket): string => {
-	const view: Shown = {
-		ready: true,
-		number: ticket.number,
-		page: pageOf(ticket, NOW, [ticket]),
-		saving: [],
-		failed: null,
-		unreachable: null,
-		now: NOW,
-	};
-	return renderToStaticMarkup(createElement(TicketWindow, {view, send: () => {}}));
-};
+const markupOf = (ticket: Ticket): string => drawn(viewOf(ticket));
 
 /**
  * What each From row holds, in markup: one in the inline properties, one in the side column. The
@@ -111,6 +116,39 @@ describe("a ticket's page says where it came from", () => {
 		}
 	});
 
+	// p5
+	it("a walk of a pull request reads `walk of PR 332`", () => {
+		const url = `${REPO}/pull/332`;
+		const ticket = filedAs(191, filed({_tag: "walk", url}));
+		expect(pageOf(ticket, NOW).from).toStrictEqual({text: "walk of PR 332", url});
+		for (const row of fromRows(markupOf(ticket))) expect(textOf(row)).toBe("walk of PR 332");
+	});
+
+	// p5. A walk of a note or an experiment has no pull request in its address: it reads by the
+	// address, without its `https://`. The address is made up.
+	it("a walk of an address that is no pull request reads by the address, still linked", () => {
+		const url = "https://example.com/notes/flaky-lane-writes";
+		const ticket = filedAs(195, filed({_tag: "walk", url}));
+		expect(pageOf(ticket, NOW).from).toStrictEqual({
+			text: "walk of example.com/notes/flaky-lane-writes",
+			url,
+		});
+		const rows = fromRows(markupOf(ticket));
+		expect(rows).toHaveLength(2);
+		for (const row of rows) {
+			expect(row).toContain(`href="${url}"`);
+			expect(textOf(row)).toBe("walk of example.com/notes/flaky-lane-writes");
+		}
+	});
+
+	// p5
+	it("a pull request with no step reads `PR 352`, with nothing after it", () => {
+		const url = `${REPO}/pull/352`;
+		const ticket = filedAs(188, filed({_tag: "pr", url}));
+		expect(pageOf(ticket, NOW).from).toStrictEqual({text: "PR 352", url});
+		for (const row of fromRows(markupOf(ticket))) expect(textOf(row)).toBe("PR 352");
+	});
+
 	// p6
 	it("a lane run reads `#117 · r-test_writer-26`, with the line that opens ticket 117", () => {
 		const ticket = filedAs(193, filed({_tag: "run", ticket: 117, run: "r-test_writer-26"}));
@@ -123,5 +161,55 @@ describe("a ticket's page says where it came from", () => {
 			expect(textOf(row)).toContain("#117 · r-test_writer-26");
 			expect(row).toMatch(/<code class="cmd">ticket 117<\/code>/);
 		}
+	});
+
+	// p6. Ticket 194's run, at its head; the sha's last 32 characters are made up.
+	it("a lane run at a head reads the head's first 8 characters after the run", () => {
+		const head = "b5b969a0c3d4e5f60718293a4b5c6d7e8f901234";
+		const ticket = filedAs(194, filed({_tag: "run", ticket: 117, run: "r-test_writer-25", head}));
+		expect(pageOf(ticket, NOW).from).toStrictEqual({
+			text: "#117 · r-test_writer-25 · b5b969a0",
+			url: null,
+		});
+		for (const row of fromRows(markupOf(ticket)))
+			expect(textOf(row)).toContain("#117 · r-test_writer-25 · b5b969a0");
+	});
+
+	// p1. Every ticket filed before the key has no `from`: its window draws, with no From row.
+	it("the window of a ticket filed with no `from` draws, with no From row", () => {
+		const markup = markupOf(filedAs(7, filed()));
+		expect(markup).toContain("Mutation runner: sandbox links node_modules");
+		expect(fromRows(markup)).toEqual([]);
+	});
+
+	// The window is sent its view through the program's view schema (index.ts, `view.data`), as
+	// JSON over the app's socket, and the app reads it by that schema before it draws
+	// (apps/fabrika/src/window/windows.tsx): the From row comes through whole, and a row the window
+	// could not draw is refused there, never handed to it.
+	it("comes through the view's schema whole, and the window draws it", () => {
+		const url = `${REPO}/pull/352`;
+		const ticket = filedAs(188, filed({_tag: "pr", url, step: "mutation"}));
+		const sent = JSON.parse(JSON.stringify(viewOf(ticket)));
+		const read = Schema.decodeUnknownSync(Shown)(sent);
+		expect(read.page?.from).toStrictEqual({text: "PR 352 · mutation", url});
+		const rows = fromRows(drawn(read));
+		expect(rows).toHaveLength(2);
+		for (const row of rows) expect(textOf(row)).toBe("PR 352 · mutation");
+
+		const readWith = (from: unknown) => () =>
+			Schema.decodeUnknownSync(Shown)({...sent, page: {...sent.page, from}});
+		expect(readWith({url})).toThrow(/text/);
+		expect(readWith({text: "PR 352 · mutation"})).toThrow(/url/);
+		expect(readWith({text: 352, url})).toThrow(/text/);
+	});
+});
+
+describe("the ticket a filing's run opens", () => {
+	it("is the run's ticket, and none for a filing from a pull request, a walk or nothing", () => {
+		const url = `${REPO}/pull/352`;
+		expect(runTicketOf(filedAs(193, filed({_tag: "run", ticket: 117, run: "r-1"})))).toBe(117);
+		expect(runTicketOf(filedAs(188, filed({_tag: "pr", url, step: "mutation"})))).toBeNull();
+		expect(runTicketOf(filedAs(191, filed({_tag: "walk", url})))).toBeNull();
+		expect(runTicketOf(filedAs(7, filed()))).toBeNull();
 	});
 });

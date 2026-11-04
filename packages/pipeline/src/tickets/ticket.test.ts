@@ -688,6 +688,12 @@ describe("a filing that says where it came from", () => {
 		["a `walk` with no url", {_tag: "walk", pr: 332}],
 		["a `walk` url that is not https", {_tag: "walk", url: "http://example.com/x"}],
 		["no `_tag`", {url: `${REPO}/pull/352`}],
+		// Each pattern holds the whole value: nothing before the address, nothing after it.
+		["a `pr` url with words before it", {_tag: "pr", url: `see ${REPO}/pull/352`}],
+		["a `pr` url with words after it", {_tag: "pr", url: `${REPO}/pull/352 and more`}],
+		["a `pr` number run on into letters", {_tag: "pr", url: `${REPO}/pull/352abc`}],
+		["a `walk` url with words before it", {_tag: "walk", url: "see https://example.com/x"}],
+		["a `walk` url with words after it", {_tag: "walk", url: "https://example.com/x and more"}],
 	];
 	it.each(bad)("with %s is a broken row, and says where", (_, from) => {
 		const read = readRow(filedRow({from}));
