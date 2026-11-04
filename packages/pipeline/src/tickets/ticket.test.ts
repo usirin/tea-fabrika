@@ -656,9 +656,9 @@ describe("a stop, on the ticket", () => {
 	it("a `stopped` fact reads back as it was written, with the step's own why", () => {
 		const fact = {
 			type: "stopped",
-			stage: "plan",
+			step: "plan",
 			outcome: {kind: "stuck", why: "draft_failed"},
-			lane: {kind: "stuck", why: "step_stuck"},
+			as: {kind: "stuck", why: "step_stuck"},
 			from: {_tag: "run", step: "plan"},
 		};
 		const got = read(fact);
@@ -668,9 +668,9 @@ describe("a stop, on the ticket", () => {
 	it("a crash's `stopped` fact keeps its cause", () => {
 		const fact = {
 			type: "stopped",
-			stage: "triage",
+			step: "triage",
 			outcome: {kind: "stuck", why: "run_failed"},
-			lane: {kind: "stuck", why: "step_failed"},
+			as: {kind: "stuck", why: "step_failed"},
 			from: {_tag: "run", step: "triage"},
 			why: "Error: the disk is on fire",
 		};
@@ -681,8 +681,8 @@ describe("a stop, on the ticket", () => {
 	it("a `stopped` fact with no step's own outcome is broken", () => {
 		const got = read({
 			type: "stopped",
-			stage: "plan",
-			lane: {kind: "stuck", why: "step_stuck"},
+			step: "plan",
+			as: {kind: "stuck", why: "step_stuck"},
 			from: {_tag: "run", step: "plan"},
 		});
 		expect(got.kind).toBe("broken");

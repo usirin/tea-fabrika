@@ -58,9 +58,9 @@ describe("the ticket's row for a stop", () => {
 		const outcome = {kind: "stuck", why: "draft_failed"} as const;
 		const entry = stopped({
 			type: "stopped",
-			stage: "plan",
+			step: "plan",
 			outcome,
-			lane: {kind: "stuck", why: "step_stuck"},
+			as: {kind: "stuck", why: "step_stuck"},
 			from: {_tag: "run", step: "plan"},
 		});
 		const row = rowOf(entry, [entry]);
@@ -72,9 +72,9 @@ describe("the ticket's row for a stop", () => {
 	it("shows a crash's cause under the row", () => {
 		const entry = stopped({
 			type: "stopped",
-			stage: "triage",
+			step: "triage",
 			outcome: {kind: "stuck", why: "run_failed"},
-			lane: {kind: "stuck", why: "step_failed"},
+			as: {kind: "stuck", why: "step_failed"},
 			from: {_tag: "run", step: "triage"},
 			why: "Error: the disk is on fire",
 		});
@@ -89,9 +89,9 @@ describe("the ticket's row for a stop", () => {
 		const laneStop = {kind: "stuck", why: "step_stuck"} as const;
 		const entry = stopped({
 			type: "stopped",
-			stage: "plan",
+			step: "plan",
 			outcome,
-			lane: laneStop,
+			as: laneStop,
 			from: {_tag: "run", step: "plan"},
 		});
 		const row = rowOf(entry, [entry]);
@@ -105,9 +105,9 @@ describe("the ticket's row for a stop", () => {
 		const laneStop = {kind: "stuck", why: "rounds_spent"} as const;
 		const entry = stopped({
 			type: "stopped",
-			stage: "build",
+			step: "build",
 			outcome,
-			lane: laneStop,
+			as: laneStop,
 			from: {_tag: "ask", for: "rounds_spent", step: "build"},
 		});
 		const row = rowOf(entry, [entry]);

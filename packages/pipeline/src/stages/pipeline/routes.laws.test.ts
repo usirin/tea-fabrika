@@ -960,9 +960,9 @@ describe("a run of fixable rows, on any step (self-fix PR 11a)", () => {
 // its release the `stopped` fact the ticket gets: the step, the step's own outcome, the lane's stop, and
 // where it goes on.
 //
-//   build ends stuck:checks_not_run   lane_release { ..., stopped: {type: "stopped", stage: "build",
+//   build ends stuck:checks_not_run   lane_release { ..., stopped: {type: "stopped", step: "build",
 //                                       outcome: {kind: "stuck", why: "checks_not_run"},
-//                                       lane: {kind: "stuck", why: "checks_not_run"},
+//                                       as: {kind: "stuck", why: "checks_not_run"},
 //                                       from: {_tag: "run", step: "build"}} }
 
 /** The same value, its keys in one order, so two facts compare as text. */
@@ -1006,9 +1006,9 @@ const whyDropped =
 			...real,
 			stopped: {
 				type: "stopped",
-				stage: step,
+				step,
 				outcome: {kind: "stuck", why: "step_stuck"},
-				lane: real.lane.phase === "releasing" ? real.lane.outcome : null,
+				as: real.lane.phase === "releasing" ? real.lane.outcome : null,
 				from: real.lane.phase === "releasing" && "at" in real.lane ? real.lane.at : null,
 			},
 		};
@@ -1026,9 +1026,9 @@ const saysWhy = (at: Stopping): readonly string[] =>
 				const own = outcomeOf(name);
 				const want = {
 					type: "stopped",
-					stage: step,
+					step,
 					outcome: own,
-					lane: found.lane.outcome,
+					as: found.lane.outcome,
 					from: found.lane.at,
 				};
 				const said = Object.fromEntries(Object.entries(found.stopped ?? {}));
@@ -1071,9 +1071,9 @@ describe("a stop says why on the ticket (self-fix PR 11b)", () => {
 			if (stop.phase !== "releasing" || !("at" in stop)) return true;
 			const want = {
 				type: "stopped",
-				stage: step,
+				step,
 				outcome: {kind: "stuck", why: "run_failed"},
-				lane: {kind: "stuck", why: "step_failed"},
+				as: {kind: "stuck", why: "step_failed"},
 				from: {_tag: "run", step},
 			};
 			return canon(stoppedIn(cmds)) !== canon(want);

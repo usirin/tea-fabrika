@@ -5843,9 +5843,9 @@ describe("a lane's waits and records (self-fix PR 11b)", () => {
 			const stops = stopsOn(ran);
 			expect(stops, said).toHaveLength(1);
 			expect(stops[0]).toMatchObject({
-				stage: "plan",
+				step: "plan",
 				outcome: {kind: "stuck", why: "run_failed"},
-				lane: {kind: "stuck", why: "step_failed"},
+				as: {kind: "stuck", why: "step_failed"},
 				from: {_tag: "run", step: "plan"},
 			});
 			expect(String(stops[0]?.why)).toContain("the disk is on fire");
@@ -5864,9 +5864,9 @@ describe("a lane's waits and records (self-fix PR 11b)", () => {
 			const stops = stopsOn(ran);
 			expect(stops, said).toHaveLength(1);
 			expect(stops[0]).toMatchObject({
-				stage: "plan",
+				step: "plan",
 				outcome: {kind: "stuck", why: "draft_failed"},
-				lane: {kind: "stuck", why: "step_stuck"},
+				as: {kind: "stuck", why: "step_stuck"},
 				from: {_tag: "run", step: "plan"},
 			});
 		},
