@@ -280,3 +280,43 @@ describe("an area write refused in the machine", () => {
 		expect(next.failed?.write).toEqual(typed("PIPELINE"));
 	});
 });
+
+// Round 2, the lead's call: read your own writes. Once a save answers `{area}`, the machine knows
+// that area, as Elm's update folds its own landed write into the model, and a rename or a merge of
+// it goes out at once, with no load in between.
+describe("an area this tracker just made (read your own writes)", () => {
+	const write = (id: string, w: Write): Msg => ({type: "write", id, write: w});
+	const landed = (id: string, w: Write, area: number): Msg =>
+		save.ok(save({id, write: w, next: 5}), {area}, 0);
+
+	it("takes a rename of it right after its save answers, before any load", () => {
+		const lane = typed("lane");
+		const renamed: Write = {kind: "rename_area", area: 1, name: "lane work"};
+		const s = steps(
+			loaded(0, LANE),
+			write("w0", lane),
+			landed("w0", lane, 1),
+			write("w1", renamed),
+		);
+		expect(s.state.failed).toBeNull();
+		expect(s.state.saving).toEqual([{id: "w1", write: renamed}]);
+		expect(s.cmds.filter((c) => c.type === "save").map((c) => c.id)).toEqual(["w0", "w1"]);
+	});
+
+	it("takes a merge of two it just made, before any load", () => {
+		const lane = typed("lane");
+		const desk = typed("desk");
+		const merged: Write = {kind: "merge_area", area: 2, into: 1};
+		const s = steps(
+			loaded(0, LANE),
+			write("w0", lane),
+			write("w1", desk),
+			landed("w0", lane, 1),
+			landed("w1", desk, 2),
+			write("w2", merged),
+		);
+		expect(s.state.failed).toBeNull();
+		expect(s.state.saving).toEqual([{id: "w2", write: merged}]);
+		expect(s.cmds.filter((c) => c.type === "save").map((c) => c.id)).toEqual(["w0", "w1", "w2"]);
+	});
+});
