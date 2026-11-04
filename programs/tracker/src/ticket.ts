@@ -3,6 +3,7 @@ import {
 	Asks,
 	Body,
 	type Fact,
+	From,
 	Id,
 	Said,
 	Says,
@@ -26,8 +27,8 @@ import {Effect, Schema} from "effect";
 // Inside the machine a write is one tagged union, `Write`, as an Elm Msg is: the input's name
 // becomes the tag there, and only there.
 
-/** A new ticket: its title and body. Becomes its `filed`. */
-export const File = Schema.Struct({title: Title, body: Body});
+/** A new ticket: its title and body, and where it came from if the filer knows. Becomes its `filed`. */
+export const File = Schema.Struct({title: Title, body: Body, from: Schema.optionalKey(From)});
 export type File = typeof File.Type;
 
 /** A comment. `asks: "changes"`: the "Request changes" button, not "Comment". Becomes one `commented`. */
@@ -74,7 +75,12 @@ export type Write = typeof Write.Type;
 export const factOf = (write: Write): Effect.Effect<Fact> => {
 	switch (write.kind) {
 		case "file":
-			return Effect.succeed({type: "filed", title: write.title, body: write.body});
+			return Effect.succeed({
+				type: "filed",
+				title: write.title,
+				body: write.body,
+				...(write.from === undefined ? {} : {from: write.from}),
+			});
 		case "comment":
 			return Effect.succeed({
 				type: "commented",

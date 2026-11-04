@@ -93,6 +93,10 @@ yield* tell(run, "query", {ticket: 7});       // sends nothing: the same pick
   `@kampus/fabrika-old/mcp` makes `tracker_file`, `tracker_query`, and so on. The `answer` and
   `rate_duplicate` inputs are `{personOnly: true}`, so there is no `tracker_answer` and no
   `tracker_rate_duplicate`. The query is `{writes: false}`: its tool carries `readOnlyHint`.
+- **A filing can say where it came from.** `file` takes an optional `from`, the pipeline's
+  `From`: `{_tag: "pr", url, step?}`, `{_tag: "run", ticket, run, head?}` or `{_tag: "walk", url}`.
+  It goes onto the `filed` fact as written. A `from` that does not fit refuses the whole call,
+  with the field that is wrong; the window's own file form has none.
 - **A URL in a body is a link.** Only http and https, and only in a ticket's or a comment's body,
   not in a title. Where a URL ends is GitHub's rule (`src/links.ts` has it whole): a trailing
   `.` `,` `:` `!` `?` `*` `_` `~` `'` `"` is left out, and so is a `)` that closes no `(`.

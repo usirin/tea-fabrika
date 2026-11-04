@@ -175,7 +175,10 @@ export const tracker = defineProgram({
 	description:
 		"Tickets on the ledger, one stream of facts each: lists them with the open pull requests beside them, files one, shows one's timeline and top line, comments, answers an open ask, closes and reopens. It has a window.",
 	inputs: {
-		file: input(File, "File a new ticket: its title and body. Writes its `filed`."),
+		file: input(
+			File,
+			'File a new ticket: its title and body, and from: the PR and step, the lane run, or the walk it came out of; leave it out only if none. {_tag: "pr", url, step?} | {_tag: "run", ticket, run, head?} | {_tag: "walk", url}. Writes its `filed`.',
+		),
 		comment: input(
 			Comment,
 			'Comment on a ticket. `asks: "changes"` requests changes. Writes one `commented`.',

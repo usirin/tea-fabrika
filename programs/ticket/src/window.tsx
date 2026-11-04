@@ -13,7 +13,7 @@ import {
 import {whenOf} from "@tea-fabrika/tracker/window";
 import {type KeyboardEvent, type ReactNode, useState} from "react";
 import type {ticket} from "./index.ts";
-import type {Page} from "./view.ts";
+import {type Page, runTicketOf} from "./view.ts";
 
 // The ticket's window, drawn as Linear draws an issue: the title, one card that says whose turn
 // it is, the body, the activity with each row opening in place, a comment box, and the
@@ -330,6 +330,7 @@ function Props(props: {readonly page: Page; readonly number: number; readonly no
 					</>
 				)}
 			</dd>
+			<From page={page} />
 			<dt>Step</dt>
 			<dd>
 				<Meter steps={page.steps} />
@@ -376,6 +377,35 @@ function Props(props: {readonly page: Page; readonly number: number; readonly no
 				<code className="cmd">trace --ticket {number}</code>
 			</dd>
 		</dl>
+	);
+}
+
+/**
+ * Where it came from, when its filing says: a pull request or a walk links to its address, and the
+ * person's browser opens it; a run is on this ledger, so it reads with the line that opens its
+ * ticket, as Trace reads with `trace --ticket N`. No row when the filing names none.
+ */
+function From(props: {readonly page: Page}) {
+	const {page} = props;
+	if (page.from === null) return null;
+	const run = runTicketOf(page.opened.ticket);
+	return (
+		<>
+			<dt>From</dt>
+			{page.from.url !== null ? (
+				<dd>
+					<a className="from trunc" href={page.from.url} target="_blank" rel="noreferrer">
+						{page.from.text}
+					</a>
+				</dd>
+			) : (
+				// The run's id is the part that says which: it wraps, the line under it, never cut.
+				<dd className="from-run">
+					<span className="mono prim">{page.from.text}</span>
+					{run !== null && <code className="cmd">ticket {run}</code>}
+				</dd>
+			)}
+		</>
 	);
 }
 
