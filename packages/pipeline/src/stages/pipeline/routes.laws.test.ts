@@ -952,3 +952,132 @@ describe("a run of fixable rows, on any step (self-fix PR 11a)", () => {
 		);
 	});
 });
+
+// ---------------------------------------------------------------------------------------------
+// Self-fix PR 11b, "waits and records" (docs/plan/pipeline-self-fix.md, PR 11, the record holes): a
+// stop says why on the ticket. Today a stop writes nothing there, so a stop the lane names
+// `stuck:step_stuck` or `stuck:sent_back` hides the step's own why (`stuck:tests_red`). The lane hands
+// its release the `stopped` fact the ticket gets: the step, the step's own outcome, the lane's stop, and
+// where it goes on.
+//
+//   build ends stuck:checks_not_run   lane_release { ..., stopped: {type: "stopped", step: "build",
+//                                       outcome: {kind: "stuck", why: "checks_not_run"},
+//                                       as: {kind: "stuck", why: "checks_not_run"},
+//                                       from: {_tag: "run", step: "build"}} }
+
+/** The same value, its keys in one order, so two facts compare as text. */
+const canon = (value: unknown): string =>
+	JSON.stringify(value, (_, v: unknown) =>
+		v !== null && typeof v === "object" && !Array.isArray(v)
+			? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)))
+			: v,
+	);
+
+/** The `stopped` fact the lane's release carries, if it sent one. */
+const stoppedIn = (cmds: readonly LaneCmd[]): unknown => {
+	const release = cmds.find((cmd) => cmd.type === "lane_release");
+	return release === undefined ? undefined : Object.fromEntries(Object.entries(release)).stopped;
+};
+
+/** A stop the lane made after `step` said `name`, and what it sent, or null when it did not stop there. */
+type Stopping = (
+	step: LaneStep,
+	name: string,
+	mode: Mode,
+	arrival: 1 | 2,
+) => {readonly lane: Lane; readonly stopped: unknown} | null;
+
+const stopping: Stopping = (step, name, mode, arrival) => {
+	const [first, sent] = ended(runningAt(step, mode), name);
+	const again = arrival === 2 && first.phase === "running" && first.step === step;
+	if (arrival === 2 && !again) return null;
+	const [s, cmds] = again ? ended(first, name) : [first, sent];
+	if (s.phase !== "releasing" || !("at" in s)) return null;
+	return {lane: s, stopped: stoppedIn(cmds)};
+};
+
+/** A stopping with one key's why dropped: the planted break the law must catch first. */
+const whyDropped =
+	(key: string): Stopping =>
+	(step, name, mode, arrival) => {
+		const real = stopping(step, name, mode, arrival);
+		if (real === null || `${step} ${name}` !== key) return real;
+		return {
+			...real,
+			stopped: {
+				type: "stopped",
+				step,
+				outcome: {kind: "stuck", why: "step_stuck"},
+				as: real.lane.phase === "releasing" ? real.lane.outcome : null,
+				from: real.lane.phase === "releasing" && "at" in real.lane ? real.lane.at : null,
+			},
+		};
+	};
+
+const HIDDEN: ReadonlySet<string> = new Set(["step_stuck", "sent_back"]);
+
+/** Every stop whose `stopped` fact is missing, wrong, or hides the step's own why behind the lane's. */
+const saysWhy = (at: Stopping): readonly string[] =>
+	PAIRS.flatMap(({step, name}) =>
+		MODES.flatMap((mode) =>
+			([1, 2] as const).flatMap((arrival) => {
+				const found = at(step, name, mode, arrival);
+				if (found === null || found.lane.phase !== "releasing" || !("at" in found.lane)) return [];
+				const own = outcomeOf(name);
+				const want = {
+					type: "stopped",
+					step,
+					outcome: own,
+					as: found.lane.outcome,
+					from: found.lane.at,
+				};
+				const said = Object.fromEntries(Object.entries(found.stopped ?? {}));
+				const hides = "why" in own ? HIDDEN.has(own.why) : false;
+				const wrong =
+					found.stopped === undefined ||
+					hides ||
+					canon(said) !== canon(want) ||
+					(typeof said.outcome === "object" &&
+						said.outcome !== null &&
+						"why" in said.outcome &&
+						typeof said.outcome.why === "string" &&
+						HIDDEN.has(said.outcome.why));
+				return wrong ? [`${step} ${name} (${mode}, arrival ${arrival})`] : [];
+			}),
+		),
+	);
+
+describe("a stop says why on the ticket (self-fix PR 11b)", () => {
+	it("the law catches its planted break: build's checks_not_run with its why dropped", () => {
+		expect(saysWhy(whyDropped("build stuck:checks_not_run"))).toContain(
+			"build stuck:checks_not_run (round 1, arrival 1)",
+		);
+	});
+
+	it("law: every stop after a step's end hands its release a `stopped` fact with the step's own outcome", () => {
+		expect(saysWhy(stopping)).toEqual([]);
+	});
+
+	it("a step that could not run twice stops with a `stopped` fact that says run_failed", () => {
+		const wrong = STEPS.filter((step) => {
+			const s = runningAt(step);
+			if (s.phase !== "running") return true;
+			const [again] = lane.update.lane_step_err(s, runStep.err(s.asked, {_tag: "unknown"}, 0));
+			if (again.phase !== "running") return true;
+			const [stop, cmds] = lane.update.lane_step_err(
+				again,
+				runStep.err(again.asked, {_tag: "unknown"}, 0),
+			);
+			if (stop.phase !== "releasing" || !("at" in stop)) return true;
+			const want = {
+				type: "stopped",
+				step,
+				outcome: {kind: "stuck", why: "run_failed"},
+				as: {kind: "stuck", why: "step_failed"},
+				from: {_tag: "run", step},
+			};
+			return canon(stoppedIn(cmds)) !== canon(want);
+		});
+		expect(wrong).toEqual([]);
+	});
+});

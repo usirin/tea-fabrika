@@ -1,6 +1,7 @@
 import {HOST_GRACE_MS, hostOf, Ledger} from "@kampus/fabrika-old";
 import {Context, Duration, Effect, FiberMap, Layer} from "effect";
 import {type LaneId, laneId, readLaneId, type TicketId} from "../ids.ts";
+import {ledgerBusy, waitOut} from "../wait.ts";
 import {appendFact, ensureName, type Hold, sendFact, steady, ticketName} from "./ledger.ts";
 
 // One lane works a ticket at a time. A lane takes its ticket with the ledger's lease on the
@@ -134,9 +135,13 @@ export const layerLanes = (o: LanesOptions = {}) =>
 					let rev = (yield* steady("read a registry", ledger.readLast(name, 1)))[0]?.rev ?? 0;
 					for (;;) {
 						const sentAt = Date.now();
-						const r = yield* steady("claim", ledger.claim(name, lane, rev, ttlMs)).pipe(
-							Effect.result,
-						);
+						// The one wait (../wait.ts): a claim the ledger does not answer, or answers busy, is asked
+						// again, from 1 s. A refusal ends the claim at once, below, with the ledger's own words.
+						const r = yield* waitOut(
+							ledger.claim(name, lane, rev, ttlMs),
+							ledgerBusy,
+							"ledger",
+						).pipe(Effect.result);
 						if (r._tag === "Success") {
 							held.set(ticket, {lane, fence: r.success.fence});
 							yield* FiberMap.run(
@@ -158,6 +163,8 @@ export const layerLanes = (o: LanesOptions = {}) =>
 								yield* Effect.sleep(Duration.millis(Math.max(1, e.expiresAt - Date.now() + 1)));
 								continue;
 							}
+							case "LedgerUnreachable":
+								return yield* Effect.die(`claim on ${name}: ${e.message}`);
 							default:
 								return yield* Effect.die(`claim on ${name}: ${e._tag}`);
 						}

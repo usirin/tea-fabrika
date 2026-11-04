@@ -49,10 +49,24 @@ import type {
 
 // ---------------------------------------------------------------- the errors
 
-/** No answer, a 500 or a timeout. Whether a write landed is unknown: send it again with its id. */
+/**
+ * No answer, a 500 or a timeout. Whether a write landed is unknown: send it again with its id.
+ * Over HTTP, an answer that is not a 2xx keeps its `status` (the door's own, when it refused a new
+ * session), so a caller can tell slowness (none, 408, 429, 5xx) from a refusal. No answer: no status.
+ *
+ * `why`, when the ledger did answer but asking again gets the same answer: `unreadable`, what it
+ * said does not decode (the client and the ledger disagree on the wire, or a proxy answered);
+ * `failed`, its own store failed on the call (a SQLite error, or a dead SQLite thread). A caller that
+ * waits out slowness stops at once on either.
+ */
 export class LedgerUnreachable extends Schema.TaggedError<LedgerUnreachable>()(
 	"LedgerUnreachable",
-	{method: Schema.String, message: Schema.String},
+	{
+		method: Schema.String,
+		message: Schema.String,
+		status: Schema.optionalKey(Schema.Number),
+		why: Schema.optionalKey(Schema.Literals(["unreadable", "failed"])),
+	},
 ) {}
 /** EventStoreDB's WrongExpectedVersion: the stream ends at `rev`, not where the write said. */
 export class Stale extends Schema.TaggedError<Stale>()("Stale", {
@@ -831,7 +845,10 @@ export type WireCall = (
 	args: readonly unknown[],
 ) => Effect.Effect<unknown, LedgerUnreachable>;
 
-/** The `Raw` face of a ledger behind a wire: every answer decoded; one that does not decode is unreachable. */
+/**
+ * The `Raw` face of a ledger behind a wire: every answer decoded. One that does not decode is
+ * unreachable and `unreadable`: the ledger answered, and would answer the same again.
+ */
 export const rawOf = (call: WireCall, watch: Raw["watch"]): Raw => {
 	const decoded =
 		<A>(schema: Schema.ConstraintDecoder<A>) =>
@@ -839,7 +856,9 @@ export const rawOf = (call: WireCall, watch: Raw["watch"]): Raw => {
 			call(method, args).pipe(
 				Effect.flatMap((json) =>
 					Schema.decodeUnknownEffect(schema)(json).pipe(
-						Effect.mapError((e) => new LedgerUnreachable({method, message: e.message})),
+						Effect.mapError(
+							(e) => new LedgerUnreachable({method, message: e.message, why: "unreadable"}),
+						),
 					),
 				),
 			);

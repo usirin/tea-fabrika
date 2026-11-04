@@ -153,21 +153,38 @@ export const layerHttp = (o: HttpOptions) =>
 						first.status === 401 && renew !== null
 							? yield* send(method, args, yield* renew(token))
 							: first;
+					// The ledger answered: its status goes with its text, so a caller tells a refusal from slowness.
 					if (res.status < 200 || res.status >= 300)
-						return yield* Effect.fail(new Error(`the ledger answered ${res.status}: ${res.text}`));
-					return yield* Effect.try(() => JSON.parse(res.text) as unknown);
-				}).pipe(
-					Effect.mapError(
-						(e) =>
+						return yield* new LedgerUnreachable({
+							method,
+							message: `the ledger answered ${res.status}: ${res.text}`,
+							status: res.status,
+						});
+					// A 2xx whose body is not JSON (a proxy's page, another checkout's ledger) answers the same again.
+					return yield* Effect.try({
+						try: () => JSON.parse(res.text) as unknown,
+						catch: (e) =>
 							new LedgerUnreachable({
 								method,
-								message:
-									e instanceof DoorRefused
-										? `the door gave no new session (${e.status}): ${e.why}`
-										: e instanceof Error
-											? e.message
-											: String(e),
+								message: `the ledger answered ${res.status} with a body that is not JSON: ${e instanceof Error ? e.message : String(e)}`,
+								status: res.status,
+								why: "unreadable",
 							}),
+					});
+				}).pipe(
+					Effect.mapError((e) =>
+						e instanceof LedgerUnreachable
+							? e
+							: e instanceof DoorRefused
+								? new LedgerUnreachable({
+										method,
+										message: `the door gave no new session (${e.status}): ${e.why}`,
+										status: e.status,
+									})
+								: new LedgerUnreachable({
+										method,
+										message: e instanceof Error ? e.message : String(e),
+									}),
 					),
 				);
 			// A doorbell refused may be an ended session: the door's `who` says, and a 401 renews.

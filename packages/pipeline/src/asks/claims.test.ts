@@ -1,7 +1,9 @@
 import {LedgerUnreachable} from "@kampus/fabrika-old";
-import {Duration, Effect, Layer} from "effect";
+import {Clock, Duration, Effect, Exit, Fiber, Layer} from "effect";
+import {TestClock} from "effect/testing";
 import {describe, expect, it} from "vitest";
 import {type LaneId, laneId, planOf, taskId, ticketId} from "../ids.ts";
+import {OnWait} from "../wait.ts";
 import {claim, holderOf, holding, Lanes, layerLanes, newLane, release} from "./claims.ts";
 import {factsOf, Ledger, memoryLedger, sendFact, ticketName} from "./ledger.ts";
 
@@ -366,5 +368,129 @@ describe("a ledger that does not answer", () => {
 		);
 		expect(late._tag).toBe("Fenced");
 		expect(memory.read()).toEqual([]);
+	});
+});
+
+// Self-fix PR 11b, "waits and records" (docs/plan/pipeline-self-fix.md, PR 11, `wait`): the ledger's
+// claim takes the one wait (../wait.ts), as every service that owns a read or a keyed write does. From
+// 1 second, doubling, up to 100 seconds apart, with no cap: one schedule, in one place.
+describe("a claim the ledger does not answer", () => {
+	it("is asked again after 1, 2 and 4 seconds, the one wait's own gaps, and then takes the ticket", async () => {
+		const memory = memoryLedger();
+		const times: number[] = [];
+		const wrapped: Ledger["Service"] = {
+			...memory.service,
+			claim: (name, holder, rev, ttlMs) =>
+				Effect.gen(function* () {
+					times.push(yield* Clock.currentTimeMillis);
+					return yield* times.length <= 3
+						? Effect.fail(new LedgerUnreachable({method: "claim", message: "no answer"}))
+						: memory.service.claim(name, holder, rev, ttlMs);
+				}),
+		};
+		const took = await Effect.gen(function* () {
+			let over = false;
+			const fiber = yield* Effect.forkChild(
+				claim(T, L1).pipe(Effect.ensuring(Effect.sync(() => void (over = true)))),
+			);
+			for (let s = 0; !over && s < 60; s++) {
+				yield* TestClock.adjust("1 second");
+				for (let k = 0; k < 5; k++) yield* Effect.yieldNow;
+			}
+			return yield* Fiber.join(fiber);
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(layerLanes().pipe(Layer.provideMerge(Layer.succeed(Ledger, wrapped)))),
+			Effect.provide(TestClock.layer()),
+			Effect.runPromise,
+		);
+		expect(took).toBe(L1);
+		expect(times.slice(1).map((t, i) => t - (times[i] ?? 0))).toEqual([1_000, 2_000, 4_000]);
+	});
+});
+
+// Self-fix PR 11b, round 2 (the review's first must-fix). Over HTTP every answer that is not a 2xx is
+// `LedgerUnreachable`, with the answer's status (packages/fabrika/src/host/http.ts). A claim waits only
+// on slowness: no answer at all, a 408, a 429 or a 5xx. A refusal (a 401 after a renew that failed, a
+// 403) ends the claim at once with the ledger's own words, and the lane stops with its real why.
+describe("a claim the ledger answers with a refusal or a busy status", () => {
+	/**
+	 * `claim(T, L1)` on a ledger whose `claim` meets `meets` in turn, then answers, under the TestClock,
+	 * a second of virtual time at a time: how it ended (`StillWaiting` past 60 s), each call's time, and
+	 * each line the lane's tile heard while it waited.
+	 */
+	const claimMeeting = (meets: readonly {readonly status: number; readonly says: string}[]) => {
+		const memory = memoryLedger();
+		const times: number[] = [];
+		const heard: string[] = [];
+		const wrapped: Ledger["Service"] = {
+			...memory.service,
+			claim: (name, holder, rev, ttlMs) =>
+				Effect.gen(function* () {
+					times.push(yield* Clock.currentTimeMillis);
+					const meet = meets[times.length - 1];
+					return yield* meet === undefined
+						? memory.service.claim(name, holder, rev, ttlMs)
+						: Effect.fail(
+								new LedgerUnreachable({method: "claim", message: meet.says, status: meet.status}),
+							);
+				}),
+		};
+		return Effect.gen(function* () {
+			let over = false;
+			const fiber = yield* Effect.forkChild(
+				Effect.exit(claim(T, L1)).pipe(
+					Effect.provideService(OnWait, (line) => Effect.sync(() => void heard.push(line))),
+					Effect.ensuring(Effect.sync(() => void (over = true))),
+				),
+			);
+			for (let s = 0; !over && s < 60; s++) {
+				yield* TestClock.adjust("1 second");
+				for (let k = 0; k < 5; k++) yield* Effect.yieldNow;
+			}
+			if (!over) yield* Fiber.interrupt(fiber);
+			const exit = over ? yield* Fiber.join(fiber) : ("StillWaiting" as const);
+			return {exit, times, heard};
+		}).pipe(
+			Effect.scoped,
+			Effect.provide(layerLanes().pipe(Layer.provideMerge(Layer.succeed(Ledger, wrapped)))),
+			Effect.provide(TestClock.layer()),
+			Effect.runPromise,
+		);
+	};
+
+	it("a 403 or a 401 after a failed renew ends the claim at once, with the ledger's words: never asked again", async () => {
+		for (const refusal of [
+			{status: 403, says: "the ledger answered 403: not a member of this ledger"},
+			{status: 401, says: "the door gave no new session (401): wrong key"},
+		]) {
+			const {exit, times} = await claimMeeting([refusal]);
+			expect(exit === "StillWaiting" ? exit : exit._tag, refusal.says).toBe("Failure");
+			if (exit !== "StillWaiting" && Exit.isFailure(exit))
+				expect(String(exit.cause), refusal.says).toContain(refusal.says);
+			expect(times, refusal.says).toHaveLength(1);
+		}
+	});
+
+	it("a 429, then a 503, is waited out on the one wait's gaps, and then takes the ticket", async () => {
+		const {exit, times} = await claimMeeting([
+			{status: 429, says: "the ledger answered 429: slow down"},
+			{status: 503, says: "the ledger answered 503: restarting"},
+		]);
+		expect(exit !== "StillWaiting" && Exit.isSuccess(exit) ? exit.value : exit).toBe(L1);
+		expect(times.slice(1).map((t, i) => t - (times[i] ?? 0))).toEqual([1_000, 2_000]);
+	});
+
+	// Test writer, round 2 (the mutation step's first owed test): the tile names what the claim waits
+	// on, the ledger's claim (../wait.ts `WAITS.ledger`), and what each try met, in the ledger's words.
+	it("while it waits, the lane's tile says it waits on the ledger, for the claim, with what each try met", async () => {
+		const {heard} = await claimMeeting([
+			{status: 429, says: "the ledger answered 429: slow down"},
+			{status: 503, says: "the ledger answered 503: restarting"},
+		]);
+		expect(heard).toEqual([
+			"waits on the ledger, for the claim: the ledger answered 429: slow down on try 1, trying again in 1s",
+			"waits on the ledger, for the claim: the ledger answered 503: restarting on try 2, trying again in 2s",
+		]);
 	});
 });

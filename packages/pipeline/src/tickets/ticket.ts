@@ -178,6 +178,16 @@ const Given = Schema.Struct({
 	diff: Schema.optionalKey(Sha),
 });
 
+/**
+ * Where a stopped lane goes on: the lane's `Resume` (stages/pipeline/machine.ts), which this file
+ * cannot name, with its steps and question kinds as plain stage names. A step it runs, or a question
+ * it asks again about a step.
+ */
+const Resume = Schema.Union([
+	Schema.TaggedStruct("run", {step: Stage, round: Schema.optionalKey(Schema.Literal("next"))}),
+	Schema.TaggedStruct("ask", {for: Stage, step: Stage}),
+]);
+
 /** A pull request's address on GitHub, or an address under it, such as a review comment's. */
 const PullUrl = Schema.String.check(
 	Schema.isPattern(/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/[1-9]\d*(?:[/?#]\S*)?$/),
@@ -305,6 +315,12 @@ export const CodeFact = Schema.Union([
 		 * this one, so the fold decodes it. Left out: an end written before this key, or a run that broke.
 		 */
 		carry: Schema.optionalKey(Schema.Unknown),
+		/**
+		 * A crashed try's cause, its first lines (self-fix PR 11b): it exists only when the try crashes,
+		 * so it is kept here, on that try's own end. The lane's `stopped` fact copies it from here. Left
+		 * out: a try that did not crash, or an end written before this key.
+		 */
+		why: Schema.optionalKey(Said),
 	}),
 	/**
 	 * Code ran `[build] checks` at `head`, after a build: what it found there. `pr`: the pull request
@@ -393,6 +409,20 @@ export const CodeFact = Schema.Union([
 		from: Sha,
 		to: Sha,
 		why: Schema.Literals(["same_head", "replayed", "formatted", "glanced"]),
+	}),
+	/**
+	 * The lane stopped after a step (self-fix PR 11b): the `step`, the step's own `outcome`
+	 * (`stuck:tests_red`, never only the lane's `step_stuck`), the lane's stop it ended `as`, and where
+	 * the same line goes on `from`. `why`: a crash's first lines, copied from the crashed try's `ended`.
+	 * Left out when nothing crashed. Written once, as the lane lets the ticket go.
+	 */
+	Schema.Struct({
+		type: Schema.Literal("stopped"),
+		step: Stage,
+		outcome: Outcome,
+		as: Outcome,
+		from: Resume,
+		why: Schema.optionalKey(Said),
 	}),
 ]);
 export type CodeFact = typeof CodeFact.Type;
@@ -496,6 +526,7 @@ export const WRITTEN_BY = {
 	pr: "anyone",
 	asked: "anyone",
 	carried: "anyone",
+	stopped: "anyone",
 	answered: "person",
 	rated: "anyone",
 	maybe_duplicate: "anyone",
@@ -601,6 +632,15 @@ export const liveRun = (timeline: readonly Entry[]): string | null => {
 	if (last === undefined) return null;
 	return factsOf(timeline, "ended").some((e) => e.run === last.run) ? null : last.run;
 };
+
+/**
+ * A crash's cause for a stop after `stage`: the `why` on that stage's last `ended`, where the crashed
+ * try wrote it (self-fix PR 11b). `null`: its last try did not crash, or ended before the key. Pure.
+ *
+ *   crashCause([.., ended plan {why: "crash 1"}, ended plan {why: "crash 2"}], "plan") // "crash 2"
+ */
+export const crashCause = (timeline: readonly Entry[], stage: string): string | null =>
+	factsOf(timeline, "ended").findLast((e) => e.stage === stage)?.why ?? null;
 
 /** A comment as its writer gives it: never with `during`, which only code fills in. */
 export type Comment = Omit<FactOf<"commented">, "during">;

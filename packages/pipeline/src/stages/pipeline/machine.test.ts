@@ -851,3 +851,27 @@ describe("the exam's rounds and ship's sends, by step", () => {
 			expect(after("merge", sendOf(name), 1), name).toEqual(move);
 	});
 });
+
+// Self-fix PR 11b, test writer round 2 (the mutation step's owed test 4): a release has its own
+// intent, by the lane's count and trail, so the `stopped` fact of a lane that stops again after a
+// restart is written under an id of its own. The words of that id are pinned here.
+describe("the release's intent", () => {
+	it("a lane stuck at triage lets its ticket go under `lane/<number>/release/<count>/<trail>`", () => {
+		const [read] = lane.update.start({phase: "idle"}, {type: "start", number: 7, lane: ID});
+		const [claiming] = lane.update.lane_read_ok(
+			read,
+			readFiled.ok(READ, {state: "open", mine: true}, 0),
+		);
+		const [triaged] = lane.update.lane_claim_ok(claiming, claimLane.ok(CLAIM, ID, 0));
+		const [releasing, cmds] = lane.update.lane_step_ok(
+			triaged,
+			runStep.ok(RUN, {outcome: {kind: "stuck", why: "step_failed"}, carry: {}}, 0),
+		);
+		if (releasing.phase !== "releasing") throw new Error(releasing.phase);
+		const released = cmds.filter((c: LaneCmd) => c.type === "lane_release");
+		expect(released.map((c) => c.intent)).toEqual([
+			`lane/7/release/${releasing.count}/${releasing.trail.length}`,
+		]);
+		expect(released[0]?.intent).toBe("lane/7/release/1/1");
+	});
+});

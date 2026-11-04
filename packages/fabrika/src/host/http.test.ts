@@ -1,7 +1,10 @@
-import {Clock, Deferred, Effect, Exit, Fiber, Redacted, Ref, type Scope} from "effect";
+import {createServer} from "node:http";
+import type {AddressInfo} from "node:net";
+import {Clock, Deferred, Duration, Effect, Exit, Fiber, Redacted, Ref, type Scope} from "effect";
 import {TestClock} from "effect/testing";
 import {describe, expect, it} from "vitest";
-import {DoorRefused, renewing, type Session} from "./http.ts";
+import {DoorRefused, layerHttp, type Renewing, renewing, type Session} from "./http.ts";
+import {Ledger} from "./ledger.ts";
 
 // A session that renews (`renewing`), against a login that is a fake: it counts, and answers
 // what the test says. The clock is Effect's TestClock, moved by hand, so 4 hours take no time.
@@ -142,5 +145,70 @@ describe("a session that renews", () => {
 			}),
 		);
 		expect(seen).toBe(0);
+	});
+});
+
+// Self-fix PR 11b, round 2 (the review's first must-fix). Every answer that is not a 2xx reaches the
+// caller as `LedgerUnreachable`, and the pipeline's one wait (packages/pipeline/src/wait.ts) must tell
+// slowness from a refusal. So the error keeps the answer's `status`: the HTTP status, or the door's
+// own when it refused a new session after a 401. A call with no answer at all has none. The ledger
+// here is a plain Node server that answers every call with one status.
+
+/** A Node server on a free port that answers every call `answer()` says: a status, or nothing at all. */
+const answering = (answer: () => number | null) =>
+	Effect.acquireRelease(
+		Effect.callback<ReturnType<typeof createServer>>((resume) => {
+			const server = createServer((req, res) => {
+				req.resume();
+				const status = answer();
+				if (status === null) return;
+				res.writeHead(status, {"content-type": "text/plain"});
+				res.end(status < 300 ? "[]" : `refused with ${status}`);
+			});
+			server.listen(0, "127.0.0.1", () => resume(Effect.succeed(server)));
+		}),
+		(server) =>
+			Effect.sync(() => {
+				server.closeAllConnections();
+				server.close();
+			}),
+	).pipe(Effect.map((server) => `http://127.0.0.1:${(server.address() as AddressInfo).port}`));
+
+/** The error one `readStream` over HTTP fails with, on a server that answers as `answer` says. */
+const refusedWith = (
+	answer: () => number | null,
+	token: Redacted.Redacted<string> | Renewing = Redacted.make("fabrika_a_test"),
+) =>
+	Effect.gen(function* () {
+		const url = yield* answering(answer);
+		return yield* Ledger.use((l) => l.readStream("t/inbox")).pipe(
+			Effect.flip,
+			Effect.provide(layerHttp({url, ledger: "x", token, timeout: Duration.millis(200)})),
+		);
+	}).pipe(Effect.scoped, Effect.runPromise);
+
+describe("a call the ledger over HTTP does not answer with a 2xx", () => {
+	it("keeps the answer's status on `LedgerUnreachable`: 400, 401, 403, 404, 408, 429, 500 and 503 each", async () => {
+		for (const status of [400, 401, 403, 404, 408, 429, 500, 503]) {
+			const e = await refusedWith(() => status);
+			expect(e, String(status)).toMatchObject({_tag: "LedgerUnreachable", status});
+			expect(e.message, String(status)).toContain(`refused with ${status}`);
+		}
+	});
+
+	it("a 401 whose renew the door refused keeps the door's status, not the 401", async () => {
+		const removed: Renewing = {
+			current: Effect.succeed(Redacted.make("t1")),
+			renew: () => Effect.fail(new DoorRefused({status: 403, why: "not a member any more"})),
+		};
+		const e = await refusedWith(() => 401, removed);
+		expect(e).toMatchObject({_tag: "LedgerUnreachable", status: 403});
+		expect(e.message).toContain("not a member any more");
+	});
+
+	it("a call with no answer in its time has no status: slowness, not a refusal", async () => {
+		const e = await refusedWith(() => null);
+		expect(e._tag).toBe("LedgerUnreachable");
+		expect(e).not.toHaveProperty("status");
 	});
 });

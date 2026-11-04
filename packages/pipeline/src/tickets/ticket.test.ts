@@ -294,6 +294,34 @@ describe("a lane's facts", () => {
 		});
 	});
 
+	// Self-fix PR 11b, round 2 (the review's second must-fix): a crash's cause exists only when it
+	// happens, so the end of the try that crashed keeps it, under `why`, where it happened. The lane's
+	// `stopped` fact copies it from there, never from a process's memory.
+	describe("the end of a try that crashed", () => {
+		const crashed = {
+			type: "ended",
+			run: "r-triage-1-2",
+			stage: "triage",
+			outcome: {kind: "stuck", why: "run_failed"},
+			usd: 0,
+			input: 0,
+			output: 0,
+			turns: 0,
+			carry: {},
+		};
+
+		it("keeps the crash's cause under `why`, as written", () => {
+			const fact = {...crashed, why: "Error: the disk is on fire\n    at write (tickets.ts:196)"};
+			const read = readRow(row({data: JSON.stringify(fact), kind: "ended"}));
+			expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
+		});
+
+		it("an end written before `why` still reads, with no `why`", () => {
+			const read = readRow(row({data: JSON.stringify(crashed), kind: "ended"}));
+			expect(read.kind === "entry" && read.entry.fact).toEqual(crashed);
+		});
+	});
+
 	// Self-fix PR 4: code runs `[build] checks` at the head after every build, and the ticket keeps
 	// what it found. The mutation step that skips its own suite run on a green one says so on its end.
 	describe("code's checks at a head", () => {
@@ -614,6 +642,55 @@ describe("what a yes was given on", () => {
 	it("a carried yes to a head that is not a sha is broken", () => {
 		expect(read({type: "carried", from: HEAD, to: "main", why: "replayed"}, "carried").kind).toBe(
 			"broken",
+		);
+	});
+});
+
+// Self-fix PR 11b, "waits and records" (docs/plan/pipeline-self-fix.md, PR 11, the record holes): a
+// stop says why on the ticket. One `stopped` fact: the step, the step's own outcome, the lane's stop,
+// where it goes on, and for a crash the cause's first lines, which exist only when it happens.
+describe("a stop, on the ticket", () => {
+	const read = (fact: object) =>
+		readRow(row({data: JSON.stringify(fact), kind: "stopped", writer: "agent:lane for:owner"}));
+
+	it("a `stopped` fact reads back as it was written, with the step's own why", () => {
+		const fact = {
+			type: "stopped",
+			step: "plan",
+			outcome: {kind: "stuck", why: "draft_failed"},
+			as: {kind: "stuck", why: "step_stuck"},
+			from: {_tag: "run", step: "plan"},
+		};
+		const got = read(fact);
+		expect(got.kind === "entry" && got.entry.fact).toEqual(fact);
+	});
+
+	it("a crash's `stopped` fact keeps its cause", () => {
+		const fact = {
+			type: "stopped",
+			step: "triage",
+			outcome: {kind: "stuck", why: "run_failed"},
+			as: {kind: "stuck", why: "step_failed"},
+			from: {_tag: "run", step: "triage"},
+			why: "Error: the disk is on fire",
+		};
+		const got = read(fact);
+		expect(got.kind === "entry" && got.entry.fact).toEqual(fact);
+	});
+
+	it("a `stopped` fact with no step's own outcome is broken", () => {
+		const got = read({
+			type: "stopped",
+			step: "plan",
+			as: {kind: "stuck", why: "step_stuck"},
+			from: {_tag: "run", step: "plan"},
+		});
+		expect(got.kind).toBe("broken");
+	});
+
+	it("a `stopped` fact is code's to write", () => {
+		expect(mayWrite({kind: "agent", id: "lane", for: "owner"}, "stopped" as Fact["type"])).toBe(
+			true,
 		);
 	});
 });

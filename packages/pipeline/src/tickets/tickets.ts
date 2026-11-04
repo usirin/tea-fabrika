@@ -1,5 +1,6 @@
 import {Ledger, streams, type Writer, writerText} from "@kampus/fabrika-old";
 import {Clock, Context, Effect, Layer, Ref, Schema} from "effect";
+import {ledgerBusy, waitOut} from "../wait.ts";
 import {
 	CodeFact,
 	type Comment,
@@ -46,7 +47,10 @@ type WriteId = string;
 // lane's Layer never hands out `Watcher`; only the watcher's host provides it (slice 7).
 //
 // Two Layers each: on the ledger, for a host, and in memory, for a test with no ledger. The two
-// memory Layers share one `MemoryTickets`, so a test can play the lane and the watcher at once.
+// memory Layers share one `MemoryTickets`, so a test can play the lane and the watcher at once. On
+// the ledger, every read and every keyed write waits out a ledger that does not answer or says it is
+// busy (../wait.ts, self-fix PR 11b), so `unreachable` never reaches the lane; a refusal does, at
+// once, as `refused` with the ledger's own words.
 //
 // Left for the slices that need them: `answers`, the Listen on a person's answer (slice 3), and
 // `tail`, every new fact on every ticket for `lanes` (slice 4).
@@ -57,7 +61,7 @@ export const Why = Schema.Literals([
 	"unreachable",
 	/** No ticket has that number: nobody filed it, or its facts do not fold. */
 	"no_ticket",
-	/** The ledger refused the write. */
+	/** The ledger refused the call: a refused write, or a read or write it answered with a 4xx. */
 	"refused",
 	/** The fact is not this writer's: a person's `answered`, the watcher's `pr`, a tracker fact. */
 	"not_yours",
@@ -177,16 +181,27 @@ const ticketIn = (n: number, entries: readonly Entry[]) => {
 		: Effect.succeed(ticket);
 };
 
-/** A checked fact onto ticket `n`'s inbox on the ledger, as `writer`, under `id`. */
+/**
+ * A `LedgerUnreachable` past the wait: never slowness, which `ledgerBusy` waits out (../wait.ts), so
+ * the ledger answered: with a refusal, with what this code cannot read, or with its own store's error.
+ * It fails at once with the ledger's own words.
+ */
+const refusal = (n: number, e: {readonly message: string}) => failed(n, "refused", e.message);
+
+/**
+ * A checked fact onto ticket `n`'s inbox on the ledger, as `writer`, under `id`. Sent again while the
+ * ledger does not answer: under its own key, it lands once.
+ */
 const sendOn =
 	(ledger: Ledger["Service"], writer: Writer) =>
 	(n: number, id: WriteId, fact: Effect.Effect<Checked, TicketsFailed>) =>
 		Effect.gen(function* () {
 			const {kind, data} = yield* fact;
-			yield* ledger.send(streams(nameOf(n)).inbox, id, {kind, writer: writerText(writer), data});
+			const event = {kind, writer: writerText(writer), data};
+			yield* waitOut(ledger.send(streams(nameOf(n)).inbox, id, event), ledgerBusy, "tickets");
 		}).pipe(
 			Effect.catchTags({
-				LedgerUnreachable: (e) => Effect.fail(failed(n, "unreachable", e.message)),
+				LedgerUnreachable: (e) => Effect.fail(refusal(n, e)),
 				Denied: (e) => Effect.fail(failed(n, "refused", `the ledger refused ${e.stream}`)),
 				Fenced: (e) => Effect.fail(failed(n, "refused", `the ledger refused ${e.stream}`)),
 				UnknownName: () => Effect.fail(failed(n, "no_ticket", `no ticket #${n} on the ledger`)),
@@ -201,8 +216,8 @@ export const ticketsOnLedger = (writer: Writer): Layer.Layer<Tickets, never, Led
 			const ledger = yield* Ledger;
 			const send = sendOn(ledger, writer);
 			const read = (n: TicketNumber) =>
-				ledger.readStream(streams(nameOf(n)).inbox, 0, -1).pipe(
-					Effect.mapError((e) => failed(n, "unreachable", e.message)),
+				waitOut(ledger.readStream(streams(nameOf(n)).inbox, 0, -1), ledgerBusy, "tickets").pipe(
+					Effect.mapError((e) => refusal(n, e)),
 					Effect.flatMap((rows) =>
 						ticketIn(
 							n,

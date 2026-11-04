@@ -82,8 +82,10 @@ export type With = typeof With.Type;
 
 /**
  * The services that wait out a read or a keyed write that broke (the jidoka table's `wait`): the
- * tickets, the ledger's claim, the work service, the code host and the review pack. Self-fix PR 11b
- * makes each wait; until then a `wait` row stops the lane, as it did.
+ * tickets, the ledger's claim, the work service, the code host and the review pack. The tickets and
+ * the ledger's claim wait now (../../wait.ts, self-fix PR 11b), so their outcome is a refusal by the
+ * time it reaches the lane. The work service, the code host and the review pack name no error that
+ * is only a slow answer yet: their `wait` rows still stop the lane, as they did.
  */
 export const Service = Schema.Literals(["tickets", "ledger", "work", "code_host", "review_pack"]);
 export type Service = typeof Service.Type;

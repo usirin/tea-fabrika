@@ -93,8 +93,23 @@ export const layerInside = (mf: Pick<Miniflare, "getDurableObjectNamespace">, le
 				}).pipe(
 					Effect.flatMap((text) =>
 						typeof text === "string"
-							? Effect.try({try: (): unknown => JSON.parse(text), catch: unreachable(method)})
-							: Effect.fail(unreachable(method)(`${method} gave no text`)),
+							? Effect.try({
+									try: (): unknown => JSON.parse(text),
+									// The object answered, with text that is not JSON: it answers the same again.
+									catch: (e) =>
+										new LedgerUnreachable({
+											method,
+											message: e instanceof Error ? e.message : String(e),
+											why: "unreadable",
+										}),
+								})
+							: Effect.fail(
+									new LedgerUnreachable({
+										method,
+										message: `${method} gave no text`,
+										why: "unreadable",
+									}),
+								),
 					),
 				);
 			const watch = () => Stream.tick(Duration.millis(50));

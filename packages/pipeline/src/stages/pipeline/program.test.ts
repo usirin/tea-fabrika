@@ -13,7 +13,7 @@ import {
 import {tmpdir} from "node:os";
 import {basename, dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
-import {ATTR, Ledger, streams} from "@kampus/fabrika-old";
+import {ATTR, Ledger, LedgerUnreachable, streams} from "@kampus/fabrika-old";
 import {memoryTracing} from "@kampus/fabrika-old/otel";
 import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {Duration, Effect, Exit, Fiber, Layer, Option, Schema} from "effect";
@@ -227,6 +227,18 @@ interface Script {
 	readonly formatter?: boolean;
 	/** Keep every span the lines make, raw, in memory (ticket 141). */
 	readonly traced?: boolean;
+	/** The ledger does not answer the lane's first this many reads of the ticket's stream (self-fix PR 11b). */
+	readonly ledgerSilent?: number;
+	/**
+	 * By fact type, the lane's first this many writes of it die, as a crash in the step's run (self-fix PR
+	 * 11b). Each death says its own number: `the disk is on fire, crash 1`, then `crash 2`.
+	 */
+	readonly dies?: Readonly<Partial<Record<string, number>>>;
+	/**
+	 * By fact type, the lane's first this many writes of it never come back, and the harness says
+	 * `HUNG` and the type on a line, so `killAt` can kill the line there (self-fix PR 11b, round 2).
+	 */
+	readonly hangs?: Readonly<Partial<Record<string, number>>>;
 }
 
 /** One span as the in-memory exporter keeps it. */
@@ -272,6 +284,7 @@ interface FakeScript {
 }
 
 const TIMED_OUT = "-- timed out --";
+const HUNG = "-- a write hangs --";
 const KILLED = "-- killed --";
 /** The same line, typed again. */
 const AGAIN = "-- the same line again --";
@@ -512,9 +525,17 @@ const lane = ({
 	beforeCarries = false,
 	formatter = false,
 	traced = false,
+	ledgerSilent = 0,
+	dies = {},
+	hangs = {},
 }: Script): Promise<Ran> => {
 	const tracing = traced ? memoryTracing({raw: true}) : null;
 	let checksRan = 0;
+	/** The lane's reads of the ticket's stream so far, and each step's `started` writes that died. */
+	let streamReads = 0;
+	const died: Record<string, number> = {};
+	/** By fact type, the writes that hung so far. */
+	const hung: Record<string, number> = {};
 	/** A ticket's facts, read on a line typed again, as the older code the script names left them. */
 	const olderThan = (timeline: readonly Entry[]): readonly Entry[] => {
 		const checks = beforeChecks ? timeline.flatMap(withoutChecks) : timeline;
@@ -649,6 +670,19 @@ const lane = ({
 			})),
 			Effect.updateService(Tickets, (tickets) => ({
 				...tickets,
+				write: (n, id, fact) =>
+					Effect.suspend(() => {
+						const held = hung[fact.type] ?? 0;
+						if (held < (hangs[fact.type] ?? 0)) {
+							hung[fact.type] = held + 1;
+							lines.push(`${HUNG} ${fact.type}`);
+							return Effect.never;
+						}
+						const so = died[fact.type] ?? 0;
+						if (so >= (dies[fact.type] ?? 0)) return tickets.write(n, id, fact);
+						died[fact.type] = so + 1;
+						return Effect.die(new Error(`the disk is on fire, crash ${so + 1}`));
+					}),
 				read: (n) =>
 					Effect.andThen(
 						Effect.andThen(ticketMoves(tickets, n), branchMoves(tickets, n)),
@@ -673,6 +707,16 @@ const lane = ({
 					),
 			})),
 			Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
+			// The ledger under the lane's own Tickets: its first `ledgerSilent` reads of the ticket get no answer.
+			Effect.updateService(Ledger, (ledger) => ({
+				...ledger,
+				readStream: (stream, fromRev, limit) =>
+					Effect.suspend(() =>
+						stream.startsWith("tracker/ticket/") && streamReads++ < ledgerSilent
+							? Effect.fail(new LedgerUnreachable({method: "readStream", message: "no answer"}))
+							: ledger.readStream(stream, fromRev, limit),
+					),
+			})),
 			Effect.timeoutOption(Duration.seconds(within)),
 			Effect.flatMap((ended) =>
 				Option.isNone(ended) ? Effect.sync(() => void lines.push(TIMED_OUT)) : Effect.void,
@@ -5728,6 +5772,235 @@ describe("the exam's side tree, after a plan restarts to a new version", () => {
 			expect(isAncestor(ran.remote, first, last), "version 2's exam stands on version 1's").toBe(
 				false,
 			);
+		},
+	);
+});
+
+// Self-fix PR 11b, "waits and records" (docs/plan/pipeline-self-fix.md, PR 11, `wait` and the record
+// holes), on the real lane. Today's version. A ledger that does not answer is waited out; a retry
+// writes under its own run id, so the ticket keeps both tries; a stop says why on the ticket.
+describe("a lane's waits and records (self-fix PR 11b)", () => {
+	beforeEach(() => {
+		vi.stubEnv("TYPESAFE_API_KEY", "");
+		vi.stubEnv("OPENAI_API_KEY", "");
+		vi.stubEnv("CODEX_API_KEY", "");
+	});
+	afterEach(() => {
+		vi.unstubAllEnvs();
+		for (const dir of made.splice(0)) rmSync(dir, {recursive: true, force: true});
+	});
+
+	const THE_PLANS_NO = {approve: "no"};
+	const ON_PLAN = "Done. The plan is above.";
+	const endsAt = (ran: Ran, stage: string) =>
+		ran.facts.filter((f) => f.type === "ended" && f.stage === stage);
+	const stopsOn = (ran: Ran) => ran.facts.filter((f) => f.type === "stopped");
+
+	it(
+		"a ticket read the ledger does not answer three times is waited out: the steps end as if nothing failed",
+		{timeout: 90_000},
+		async () => {
+			const ran = await lane({within: 80, picks: THE_PLANS_NO, ledgerSilent: 3});
+			const said = ran.lines.join("\n");
+			expect(ran.stages, said).toEqual(expect.arrayContaining(["triage", "plan"]));
+			expect(ran.names.plan, said).toContain('"done"');
+			expect(said).toMatch(/wait/i);
+			expect(stopsOn(ran).filter((f) => JSON.stringify(f).includes("read_failed"))).toEqual([]);
+		},
+	);
+
+	it(
+		"a step whose run dies once and then ends keeps both runs on the ticket, each under its own id",
+		{timeout: 90_000},
+		async () => {
+			const ran = await lane({
+				within: 80,
+				picks: THE_PLANS_NO,
+				dies: {planned: 1},
+			});
+			const said = ran.lines.join("\n");
+			const ends = endsAt(ran, "plan");
+			expect(ends, said).toHaveLength(2);
+			expect(JSON.stringify(ends[0]?.outcome)).toBe(
+				JSON.stringify({kind: "stuck", why: "run_failed"}),
+			);
+			expect(JSON.stringify(ends[1]?.outcome)).toContain('"done"');
+			const [first, second] = ends;
+			expect(second?.run).toBe(`${String(first?.run)}-2`);
+			expect(second?.carry).toBeDefined();
+			expect(Number(second?.input)).toBeGreaterThan(0);
+		},
+	);
+
+	it(
+		"a step that could not run twice stops with one `stopped` fact that names the crash's cause",
+		{timeout: 90_000},
+		async () => {
+			// Round 2: the crash comes after the run's `started` landed, at the plan's `planned`. The stop
+			// copies its cause from the crashed try's `ended`, and an end with no start does not fold.
+			const ran = await lane({within: 80, dies: {planned: 2}});
+			const said = ran.lines.join("\n");
+			const stops = stopsOn(ran);
+			expect(stops, said).toHaveLength(1);
+			expect(stops[0]).toMatchObject({
+				step: "plan",
+				outcome: {kind: "stuck", why: "run_failed"},
+				as: {kind: "stuck", why: "step_failed"},
+				from: {_tag: "run", step: "plan"},
+			});
+			expect(String(stops[0]?.why)).toContain("the disk is on fire");
+		},
+	);
+
+	it(
+		"a once row's second arrival stops with one `stopped` fact holding the step's own why, not only step_stuck",
+		{timeout: 90_000},
+		async () => {
+			const ran = await lane({
+				within: 80,
+				fake: {answers: {plan: [ON_PLAN, ON_PLAN, ON_PLAN, ON_PLAN]}},
+			});
+			const said = ran.lines.join("\n");
+			const stops = stopsOn(ran);
+			expect(stops, said).toHaveLength(1);
+			expect(stops[0]).toMatchObject({
+				step: "plan",
+				outcome: {kind: "stuck", why: "draft_failed"},
+				as: {kind: "stuck", why: "step_stuck"},
+				from: {_tag: "run", step: "plan"},
+			});
+		},
+	);
+
+	// Round 2 (the review's second must-fix): a crash's cause exists only when it happens, so the end of
+	// the try that crashed keeps it, under `why`. The release copies it from that end, never from the
+	// process's memory, so neither a second try nor a kill loses it.
+	const crashedEnds = (ran: Ran, stage: string) =>
+		endsAt(ran, stage).filter(
+			(f) => JSON.stringify(f.outcome) === JSON.stringify({kind: "stuck", why: "run_failed"}),
+		);
+
+	it(
+		"two crashes in a row: each try's own cause stays on its own `ended` row, and the stop copies the last one",
+		{timeout: 90_000},
+		async () => {
+			// A crash after the run's `started` landed: an end with no start does not fold.
+			const ran = await lane({within: 80, dies: {planned: 2}});
+			const said = ran.lines.join("\n");
+			const ends = crashedEnds(ran, "plan");
+			expect(ends, said).toHaveLength(2);
+			expect(String(ends[0]?.why), said).toContain("the disk is on fire, crash 1");
+			expect(String(ends[0]?.why)).not.toContain("crash 2");
+			expect(String(ends[1]?.why)).toContain("the disk is on fire, crash 2");
+			const stops = stopsOn(ran);
+			expect(stops, said).toHaveLength(1);
+			expect(stops[0]?.why).toBe(ends[1]?.why);
+		},
+	);
+
+	it(
+		"a crash, then a try that ends: the crash's cause stays on the first try's `ended` row",
+		{timeout: 90_000},
+		async () => {
+			const ran = await lane({within: 80, picks: THE_PLANS_NO, dies: {planned: 1}});
+			const said = ran.lines.join("\n");
+			const ends = endsAt(ran, "plan");
+			expect(ends, said).toHaveLength(2);
+			expect(String(ends[0]?.why), said).toContain("the disk is on fire, crash 1");
+			expect(ends[1], said).not.toHaveProperty("why");
+		},
+	);
+
+	it(
+		"killed between the step's crash and the release: the line typed again writes the stop with the cause, read from the ticket",
+		{timeout: 120_000},
+		async () => {
+			const ran = await lane({
+				within: 80,
+				dies: {planned: 2},
+				hangs: {stopped: 1},
+				killAt: `${HUNG} stopped`,
+			});
+			const said = ran.lines.join("\n");
+			expect(said).toContain(KILLED);
+			expect(crashedEnds(ran, "plan"), said).toHaveLength(2);
+			const stops = stopsOn(ran);
+			expect(stops, said).toHaveLength(1);
+			expect(String(stops[0]?.why), said).toContain("the disk is on fire, crash 2");
+		},
+	);
+
+	// Test writer, round 2: what the mutation step found no test for, on the real lane.
+	it(
+		"a ticket read the ledger does not answer: the lane's tile says what it waits on, each try, in the wait's own words",
+		{timeout: 90_000},
+		async () => {
+			const ran = await lane({within: 80, picks: THE_PLANS_NO, ledgerSilent: 3});
+			const said = ran.lines.join("\n");
+			expect(ran.lines.slice(0, 3), said).toEqual([
+				"waits on the ledger, for the ticket: no answer on try 1, trying again in 1s",
+				"waits on the ledger, for the ticket: no answer on try 2, trying again in 2s",
+				"waits on the ledger, for the ticket: no answer on try 3, trying again in 4s",
+			]);
+		},
+	);
+
+	/** Each stage machine the line kept, as `<stage> <id>`, from the lane's storage under `dir`. */
+	const keptMachines = (dir: string) =>
+		readdirSync(join(dir, "home", "storage", "lanes")).flatMap((name) => {
+			const path = decodeURIComponent(name).split("/");
+			const at = path.indexOf("machine");
+			const [stage, id] = [path[at + 1], path[at + 2]];
+			return at === -1 || stage === "lane" || id === undefined || path.at(-1) !== "a"
+				? []
+				: [`${stage} ${decodeURIComponent(id)}`];
+		});
+
+	it(
+		"a step's first try keeps its machines under the step's own intent, as before; only a try after one that could not run adds its number",
+		{timeout: 90_000},
+		async () => {
+			const ran = await lane({within: 80, picks: THE_PLANS_NO, dies: {planned: 1}});
+			const said = ran.lines.join("\n");
+			expect(endsAt(ran, "plan"), said).toHaveLength(2);
+			expect(keptMachines(ran.dir).sort(), said).toEqual([
+				"plan lane/1/2/plan",
+				"plan lane/1/2/plan/2",
+				"triage lane/1/1/triage",
+			]);
+		},
+	);
+
+	it(
+		"a lane that stops, is typed again, and stops again: the ticket keeps both `stopped` facts",
+		{timeout: 120_000},
+		async () => {
+			const ran = await lane({within: 80, dies: {planned: 4}, again: [{}]});
+			const said = ran.lines.join("\n");
+			expect(crashedEnds(ran, "plan"), said).toHaveLength(4);
+			const stops = stopsOn(ran);
+			expect(stops, said).toHaveLength(2);
+			expect(String(stops[0]?.why), said).toContain("crash 2");
+			expect(String(stops[1]?.why), said).toContain("crash 4");
+		},
+	);
+
+	it(
+		"a lane with no pull request, its branch on the remote: each step's end keeps `prHead: null`",
+		{timeout: 120_000},
+		async () => {
+			// A branch `lane/1` on the remote, as an earlier push or a person could leave it, while the
+			// lane's carry names no pull request: the step does not read its head.
+			const pushBranch = ({remote}: Where) =>
+				Effect.sync(() =>
+					execFileSync("git", ["branch", `lane/${NUMBER}`, "main"], {cwd: remote, stdio: "pipe"}),
+				);
+			const ran = await lane({within: 80, picks: THE_PLANS_NO, again: [{between: pushBranch}]});
+			const said = ran.lines.join("\n");
+			const plans = endsAt(ran, "plan");
+			expect(plans, said).toHaveLength(2);
+			for (const end of plans)
+				expect(Schema.decodeUnknownSync(Inputs)(end.inputs).prHead, said).toBeNull();
 		},
 	);
 });
