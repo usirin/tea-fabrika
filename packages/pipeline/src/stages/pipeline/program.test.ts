@@ -5903,7 +5903,11 @@ describe("the exam's side tree, after a plan restarts to a new version", () => {
 			const said = ran.lines.join("\n");
 			const versions = ran.facts.filter((f) => f.type === "planned").map((f) => f.version);
 			expect(versions, said).toEqual([1, 2]);
-			const heads = ran.facts.filter((f) => f.type === "reviewed").map((f) => String(f.head));
+			// Only the exam's reviews carry `pr` (program.ts:1098); the lane's own review (:1480) does not,
+			// and since 194 that one stands on the main that merged the exam.
+			const heads = ran.facts
+				.filter((f) => f.type === "reviewed" && "pr" in f && f.pr !== undefined)
+				.map((f) => String(f.head));
 			expect(heads.length, said).toBeGreaterThan(3);
 			const first = heads[0] ?? "";
 			const last = heads.at(-1) ?? "";

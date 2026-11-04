@@ -81,7 +81,8 @@ describe("the test writer's laws", () => {
 				"tests_taken_ok",
 				'run k/1: draft "good"',
 				"tests_commit_ok",
-				"on base failed: no cause",
+				// A bare tag keeps no cause either way, so the first run the law can catch is one that gave a why.
+				"on base failed: no_report",
 			),
 		});
 	});
