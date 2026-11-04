@@ -5,11 +5,16 @@ description: Run this repo's guidelines study for one design area, from settled 
 
 # A guidelines study
 
-One design area becomes a few principles the owner can press, read and decide on. A study ends
-with one experiment, one note, one Design canvas, one docs-only pull request, and a walk that
-ends in a yes or a no. The canvas is a Design canvas in Claude Design with the design system
-installed ([drawn on Claude Design](../../../docs/direction/design-on-claude-design.md)). A
-keyboard-only walk stays a plain page beside it.
+One design area becomes a few principles the owner can press, read and decide on, and then a
+build in the app. A study ends with one experiment, one note, one guidelines page, one Design
+canvas, one docs-only pull request, a walk that ends in a yes or a no, and, on a yes, a build plan
+the same day. The page is the front door: a pressable demo on top, the principles folded under
+it. The canvas sits behind it for every artboard side by side; it is a Design canvas in Claude
+Design with the design system installed
+([drawn on Claude Design](../../../docs/direction/design-on-claude-design.md)). A canvas alone was
+hard to use: nothing on it said what to look at or why (2026-11-03). And a decided note with no
+build step stayed a note: from 2026-11-01 to 2026-11-03, tile guidelines, keybindings, modes and
+typography were decided for today's app and none was built.
 
 The models are themes (PR 281), keybindings (PR 282), hot reload (PR 286) and modes (PR 287).
 Themes came first; the other three set the note's shape and the views under the page's mockup,
@@ -162,7 +167,18 @@ pipe marker finalists did with four different designs, and only then refines one
 - One row in `docs/direction/README.md`: what the note says, then its status, `proposed`.
 - One row in `experiments/README.md`: number, question, files, date, the answer, $.
 
-### 9. Build and publish the canvas
+### 9. Build and publish the page and the canvas
+
+**The page comes first.** A private artifact titled "<Area> guidelines". On top, one plain
+paragraph: what the page asks the owner, and how to use it. Then the pressable demo, lifted, not
+redrawn: each design and layout is its own small document in a frame, its CSS the built
+`window.css` copied unchanged, its markup step 5's saved DOM; a key or click moves to the saved
+state the real build reached, and a press with no saved state says "not shot". Switches for
+today, each design, each round and Linear, and the five layouts; two can sit side by side. Under
+the demo, folded: the principles with kinds and leans, why each losing design lost, what changed
+per round, what still looks off, the made-up list. Last, a link to the canvas as "every artboard
+side by side". The page keeps the pixel check below. Shots and demos are in dark mode first, as
+the owner runs it.
 
 The canvas is a mockup with the guidelines beside it, not a write-up with a demo in a corner.
 Pages built the other way came out as one design and a wall of text, and the redrawn demo drifted
@@ -228,3 +244,21 @@ from the real screen (boxed buttons in a selected row, bigger type, a footer tha
   owner approved the N principles, the shape and the smaller calls below with their leans, after
   a walk of each part. The leans' confidence numbers stay as written." Its README row says
   `decided DATE`, and the canvas's marks change to match.
+
+### 12. Plan the build, the same day
+
+A decided note is not done until the app shows it. The owner decided on 2026-11-03 that every
+study ends here.
+
+- **The same day as the merge,** write the build plan for the version the note names, in the shape
+  of an approved plan (the whole idea in one code block, the shape, one value traced, a table of
+  properties a test checks, a files table with lines, screenshots at five layouts, size in agent
+  hours with how sure, what it cannot tell us, open questions with leans). A big note splits into
+  two or three pull requests that each land whole, ordered by what the owner sees first.
+- **Today's version is in scope.** A note about today's app, or one whose tryout the owner took,
+  is the owner's pick by that yes; it needs no second ask before it is planned.
+- **Bring it to the owner as one yes or no:** approve the plan? On a yes, the test writer starts
+  as soon as a slot is free (AGENTS.md's caps), then the build, mutation and one review, as every
+  pull request does. File the build as a tracker ticket with `from` set to the note's pull request.
+- **A `next/`-only note** gets its plan written too, filed against the tier it lands in, so the
+  build is waiting when that tier opens.
