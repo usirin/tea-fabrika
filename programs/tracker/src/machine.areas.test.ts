@@ -222,19 +222,19 @@ describe("a name typed in the onboarding step (round 1b)", () => {
 });
 
 // Round 1c. The plan: "PR 1 shows the onboarding, and the areas it makes show in tsh's `tracker`
-// output." The tracker's line in tsh is its `statusOf`.
-// made up: how the line names the areas. Only that each live one's name is in it is held here.
+// output." The tracker's line in tsh is its `statusOf`. Round 2: the builder's words, held exactly.
 describe("after Enter on the onboarding, the areas made show (round 1c)", () => {
 	it("names each area made in the tracker's line in tsh, once the ledger has them", () => {
+		// A folder makes the name of its last part, as Enter does.
 		const ticked: readonly Write[] = [
 			{kind: "make_area", name: "lane", suggested: {_tag: "titles", word: "lane", tickets: 3}},
-			{kind: "make_area", name: "apps/fabrika", suggested: {_tag: "folder", path: "apps/fabrika"}},
+			{kind: "make_area", name: "fabrika", suggested: {_tag: "folder", path: "apps/fabrika"}},
 		];
 		// Enter: one write each, in the order ticked; each save answers with its area.
 		const answered = (i: number, area: number): Msg =>
 			save.ok(save({id: `w${i}`, write: ticked[i] as Write, next: 5}), {area}, 0);
 		const before = steps(loaded(0, LANE), foldersOk(["apps/fabrika"])).state;
-		expect(statusOf(before)).not.toMatch(/lane|apps\/fabrika/);
+		expect(statusOf(before)).toBe("4 open, 0 closed");
 		const after = steps(
 			loaded(0, LANE),
 			foldersOk(["apps/fabrika"]),
@@ -242,11 +242,41 @@ describe("after Enter on the onboarding, the areas made show (round 1c)", () => 
 			answered(0, 1),
 			answered(1, 2),
 			{type: "moved"},
-			loaded(4, [], [made(5, 1, "lane"), made(6, 2, "apps/fabrika")]),
+			loaded(4, [], [made(5, 1, "lane"), made(6, 2, "fabrika")]),
 		).state;
 		expect(after.saving).toEqual([]);
 		expect(onboardingOf(after)).toBeNull();
-		expect(statusOf(after)).toContain("lane");
-		expect(statusOf(after)).toContain("apps/fabrika");
+		expect(statusOf(after)).toBe("4 open, 0 closed; areas: lane, fabrika");
+	});
+
+	it("names only the live areas: a merged one is gone from the line", () => {
+		const s = steps(
+			loaded(0, LANE, [
+				made(5, 1, "lane"),
+				made(6, 2, "desk"),
+				{pos: 7, by: owner, at: 7, fact: {_tag: "area_merged", area: 2, into: 1}},
+			]),
+		).state;
+		expect(statusOf(s)).toBe("4 open, 0 closed; areas: lane");
+	});
+});
+
+// Round 2, from the mutation step: a write refused in the machine asks for nothing at all.
+describe("an area write refused in the machine", () => {
+	it("gives no Cmd, and the write already out stays the one out", () => {
+		const filing: Write = {kind: "file", title: "Login fails", body: ""};
+		const ready = steps(loaded(0, [], [made(1, 1, "pipeline")]), {
+			type: "write",
+			id: "f1",
+			write: filing,
+		}).state;
+		const [next, cmds] = tracker.update.write(ready, {
+			type: "write",
+			id: "t1",
+			write: typed("PIPELINE"),
+		});
+		expect(cmds).toEqual([]);
+		expect(next.saving).toEqual([{id: "f1", write: filing}]);
+		expect(next.failed?.write).toEqual(typed("PIPELINE"));
 	});
 });

@@ -4,8 +4,8 @@ import {AREAS, type AreaEntry, areasOf} from "@kampus/pipeline/tickets/area";
 import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import {tracker} from "./index.ts";
-import {Author, saveCell} from "./ledger.ts";
-import type {save} from "./machine.ts";
+import {Author, loadCell, saveCell} from "./ledger.ts";
+import type {load, save} from "./machine.ts";
 import type {Write} from "./ticket.ts";
 
 // Areas PR 1, today's version (docs/direction/areas.md, the plan's a3 and a4): the tracker's save
@@ -195,6 +195,137 @@ describe("a typed name", () => {
 		expect(why).toMatchObject({_tag: "refused"});
 		expect(String((why as {why?: unknown}).why)).toMatch(/pipeline/i);
 		expect(madeOn(rows).map(([n, name]) => [n, name])).toEqual([[1, "pipeline"]]);
+	});
+});
+
+// Round 2, from the mutation step: what a save keeps on the row, what it answers, and what a load
+// makes of a row that does not read.
+const loaded = (ledger: Ledgers) =>
+	loadCell({after: 0} as ReturnType<typeof load>).pipe(Effect.provideService(Ledger, ledger));
+
+describe("a ticked suggestion, saved", () => {
+	it.each([
+		["the titles' word", {_tag: "titles", word: "lane", tickets: 21} as const],
+		["a folder", {_tag: "folder", path: "apps/fabrika"} as const],
+	])(
+		"keeps %s on the row as `suggested`, and the load reads it back whole",
+		async (_, suggested) => {
+			const ledger = memoryService();
+			const write: Write = {kind: "make_area", name: "lane", suggested};
+			const {rows, read} = await Effect.runPromise(
+				Effect.gen(function* () {
+					yield* saved(ledger, OWNER, "w1", write);
+					return {rows: yield* rowsOn(ledger), read: yield* loaded(ledger)};
+				}),
+			);
+			// What the person was shown and took is written once, at the save: lost here, it is lost for good.
+			expect(rows.map((r) => JSON.parse(r.data))).toStrictEqual([
+				{_tag: "area_made", area: 1, name: "lane", suggested},
+			]);
+			expect(read.areas.map((e) => e.fact)).toStrictEqual([
+				{_tag: "area_made", area: 1, name: "lane", suggested},
+			]);
+		},
+	);
+});
+
+describe("what an area save answers", () => {
+	it("answers the area made, and the same write sent twice answers it again and lands once", async () => {
+		const ledger = memoryService();
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const first = yield* saved(ledger, OWNER, "w1", make("lane"));
+				const again = yield* saved(ledger, OWNER, "w1", make("lane"));
+				const next = yield* saved(ledger, OWNER, "w2", make("desk"));
+				return {first, again, next, rows: yield* rowsOn(ledger)};
+			}),
+		);
+		expect(seen.first).toEqual({area: 1});
+		expect(seen.again).toEqual({area: 1});
+		expect(seen.next).toEqual({area: 2});
+		expect(madeOn(seen.rows).map(([n, name]) => [n, name])).toEqual([
+			[1, "lane"],
+			[2, "desk"],
+		]);
+	});
+
+	it("answers the area renamed or merged", async () => {
+		const ledger = memoryService();
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				yield* saved(ledger, OWNER, "w1", make("lane"));
+				yield* saved(ledger, OWNER, "w2", make("desk"));
+				return [
+					yield* saved(ledger, OWNER, "w3", rename(1, "lane work")),
+					yield* saved(ledger, OWNER, "w4", merge(2, 1)),
+				];
+			}),
+		);
+		expect(seen).toEqual([{area: 1}, {area: 2}]);
+	});
+});
+
+describe("a load of many areas", () => {
+	it("reads past one page: 501 areas, every one, and the last row's place", async () => {
+		const ledger = memoryService();
+		const read = await Effect.runPromise(
+			Effect.gen(function* () {
+				yield* ledger.register(AREAS, "user:github:7");
+				for (let n = 1; n <= 501; n++)
+					yield* ledger.send(INBOX, `w${n}`, {
+						kind: "area_made",
+						writer: "user:github:7",
+						data: {_tag: "area_made", area: n, name: `area ${n}`},
+					});
+				const rows = yield* rowsOn(ledger);
+				return {load: yield* loaded(ledger), last: rows.at(-1)?.pos};
+			}),
+		);
+		expect(read.load.areas).toHaveLength(501);
+		expect(read.load.areas.at(-1)?.fact).toEqual({_tag: "area_made", area: 501, name: "area 501"});
+		expect(read.load.last).toBe(read.last);
+		expect(areasOf(read.load.areas).areas.live.size).toBe(501);
+	});
+});
+
+describe("a row on the areas that does not read", () => {
+	/** A row on the areas' inbox, written by hand: its data is not an area fact. */
+	const brokenRow = (ledger: Ledgers) =>
+		Effect.gen(function* () {
+			yield* ledger.register(AREAS, "user:github:7");
+			yield* ledger.send(INBOX, "x1", {kind: "area_made", writer: "user:github:7", data: "lane"});
+		});
+
+	it("is in the load's `broken`, one line naming its row, and a clean load has none", async () => {
+		const clean = memoryService();
+		const dirty = memoryService();
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				yield* saved(clean, OWNER, "w1", make("lane"));
+				yield* brokenRow(dirty);
+				return {clean: yield* loaded(clean), dirty: yield* loaded(dirty)};
+			}),
+		);
+		expect(seen.clean.broken).toEqual([]);
+		expect(seen.clean.areas).toHaveLength(1);
+		expect(seen.dirty.areas).toEqual([]);
+		expect(seen.dirty.broken).toHaveLength(1);
+		expect(seen.dirty.broken[0]).toMatch(/^row \d+ on the areas: /);
+	});
+
+	it("does not stop a save: the next area is still 1, and it lands", async () => {
+		const ledger = memoryService();
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				yield* brokenRow(ledger);
+				const answer = yield* saved(ledger, OWNER, "w1", make("lane"));
+				return {answer, read: yield* loaded(ledger)};
+			}),
+		);
+		expect(seen.answer).toEqual({area: 1});
+		expect(seen.read.areas.map((e) => e.fact)).toEqual([
+			{_tag: "area_made", area: 1, name: "lane"},
+		]);
 	});
 });
 

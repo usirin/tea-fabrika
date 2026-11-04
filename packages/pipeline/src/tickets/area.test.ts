@@ -1,4 +1,4 @@
-import type {Writer} from "@kampus/fabrika-old";
+import type {Row, Writer} from "@kampus/fabrika-old";
 import {Schema} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
@@ -9,8 +9,11 @@ import {
 	AreaName,
 	AreaNumber,
 	type Areas,
+	areaRefused,
 	areasOf,
 	liveOf,
+	readAreaRow,
+	suggestedName,
 	suggestionsOf,
 } from "./area.ts";
 import type {Ticket} from "./ticket.ts";
@@ -384,5 +387,143 @@ describe("suggestionsOf (a5)", () => {
 		const got = suggestionsOf(ticketsOf([]), ["programs/tracker", "apps/fabrika"], NO_AREAS);
 		const paths = got.flatMap((s) => (s._tag === "folder" ? [s.path] : []));
 		expect(paths.sort()).toEqual(["apps/fabrika", "programs/tracker"]);
+	});
+
+	// Round 2, from the mutation step: the order shown, and one suggestion per name.
+	it("puts the words most first, a tie by name, then the folders in the order given", () => {
+		const tickets = ticketsOf([
+			...["a", "b", "c"].map((x): [string, Ticket["state"]] => [`Lane: ${x}`, "open"]),
+			...["a", "b", "c", "d"].map((x): [string, Ticket["state"]] => [`Desk: ${x}`, "open"]),
+			...["a", "b", "c"].map((x): [string, Ticket["state"]] => [`App: ${x}`, "open"]),
+		]);
+		expect(suggestionsOf(tickets, ["programs/tracker", "apps/fabrika"], NO_AREAS)).toEqual([
+			{_tag: "titles", word: "desk", tickets: 4},
+			{_tag: "titles", word: "app", tickets: 3},
+			{_tag: "titles", word: "lane", tickets: 3},
+			{_tag: "folder", path: "programs/tracker"},
+			{_tag: "folder", path: "apps/fabrika"},
+		]);
+	});
+
+	it("gives one suggestion per name: a folder whose name a word or an earlier folder has is left out", () => {
+		const tickets = ticketsOf(
+			["a", "b", "c"].map((x): [string, Ticket["state"]] => [`Tracker: ${x}`, "open"]),
+		);
+		expect(
+			suggestionsOf(tickets, ["programs/tracker", "apps/fabrika", "packages/Fabrika"], NO_AREAS),
+		).toEqual([
+			{_tag: "titles", word: "tracker", tickets: 3},
+			{_tag: "folder", path: "apps/fabrika"},
+		]);
+	});
+
+	it("leaves out a folder whose name a live area has, ignoring case", () => {
+		const areas: Areas = {live: new Map([[1, "Fabrika"]]), into: new Map()};
+		expect(suggestionsOf(ticketsOf([]), ["apps/fabrika", "apps/desk"], areas)).toEqual([
+			{_tag: "folder", path: "apps/desk"},
+		]);
+	});
+});
+
+describe("suggestedName", () => {
+	it("is the word for the titles, and a folder's last part", () => {
+		expect(suggestedName({_tag: "titles", word: "lane", tickets: 3})).toBe("lane");
+		expect(suggestedName({_tag: "folder", path: "apps/fabrika"})).toBe("fabrika");
+		expect(suggestedName({_tag: "folder", path: "apps/fabrika/"})).toBe("fabrika");
+		expect(suggestedName({_tag: "folder", path: "desk"})).toBe("desk");
+	});
+});
+
+describe("an area fact from an agent", () => {
+	const agent: Writer = {kind: "agent", id: "triage", for: "owner"};
+	it.each([
+		["area_made", [made(1, "lane")], made(2, "desk")],
+		["area_renamed", [made(1, "lane")], {_tag: "area_renamed", area: 1, name: "desk"} as Fact],
+		[
+			"area_merged",
+			[made(1, "lane"), made(2, "desk")],
+			{_tag: "area_merged", area: 2, into: 1} as Fact,
+		],
+	])(
+		"is kept out of the fold: an agent's %s changes nothing, one problem says so",
+		(tag, before, fact) => {
+			const people = entriesOf(before);
+			const {areas, problems} = areasOf([
+				...people,
+				{pos: people.length + 1, by: agent, at: 0, fact},
+			]);
+			expect(areas).toEqual(areasOf(people).areas);
+			expect(problems).toEqual([
+				`row ${people.length + 1} on the areas: ${tag} written by an agent, but only a person writes it`,
+			]);
+		},
+	);
+});
+
+describe("why a fact does not fit (areaRefused)", () => {
+	const two: Areas = {
+		live: new Map([
+			[1, "lane"],
+			[3, "desk"],
+		]),
+		into: new Map([[2, 1]]),
+	};
+	it.each([
+		[made(3, "app"), "area 3 made, but the next number is 4"],
+		[made(4, ""), "an area's name is 1 to 32 characters, with no space at either end"],
+		[made(4, " app"), "an area's name is 1 to 32 characters, with no space at either end"],
+		[made(4, "x".repeat(33)), "an area's name is 1 to 32 characters, with no space at either end"],
+		[made(4, "Lane"), 'the area "lane" has that name already'],
+		[made(4, "app"), null],
+		[{_tag: "area_renamed", area: 2, name: "app"}, "a rename of area 2, which is not live"],
+		[{_tag: "area_renamed", area: 1, name: "DESK"}, 'the area "desk" has that name already'],
+		[{_tag: "area_renamed", area: 1, name: "Lane"}, null],
+		[{_tag: "area_merged", area: 1, into: 1}, "area 1 merged into itself"],
+		[{_tag: "area_merged", area: 2, into: 1}, "a merge of area 2, which is not live"],
+		[{_tag: "area_merged", area: 1, into: 2}, "a merge into area 2, which is not live"],
+		[{_tag: "area_merged", area: 3, into: 1}, null],
+	] as const)("%o: %s", (fact, why) => {
+		expect(areaRefused(two, fact as Fact)).toBe(why);
+	});
+});
+
+describe("an area row read back (readAreaRow)", () => {
+	const row = (data: unknown, kind = "area_made"): Row => ({
+		pos: 4,
+		stream: `${AREAS}/inbox`,
+		rev: 1,
+		writer: "user:owner",
+		kind,
+		at: 1000,
+		data: JSON.stringify(data),
+		id: "w1",
+	});
+
+	it.each([
+		{_tag: "folder", path: "apps/fabrika"},
+		{_tag: "titles", word: "lane", tickets: 21},
+	] as const)("keeps a suggestion whole: %o", (suggested) => {
+		const fact = {...made(1, "fabrika"), suggested};
+		expect(readAreaRow(row(fact))).toStrictEqual({
+			kind: "entry",
+			entry: {pos: 4, by: owner, at: 1000, fact},
+		});
+	});
+
+	it("is broken when its data is not an area fact, or is kept under another kind", () => {
+		expect(readAreaRow(row("lane"))).toEqual({
+			kind: "broken",
+			why: "row 4 on the areas: its data is not an area fact",
+		});
+		expect(readAreaRow(row(made(1, "lane"), "area_renamed"))).toEqual({
+			kind: "broken",
+			why: "row 4 on the areas: an area_made fact kept as area_renamed",
+		});
+	});
+
+	it("is another stream's when it is not on the areas' inbox", () => {
+		expect(readAreaRow({...row(made(1, "lane")), stream: "tracker/ticket/1/inbox"})).toEqual({
+			kind: "other",
+		});
 	});
 });

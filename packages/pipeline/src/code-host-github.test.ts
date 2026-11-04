@@ -1,13 +1,16 @@
-import {readFileSync} from "node:fs";
+import {chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
 import {run} from "@demlik/tea/effect";
 import {Effect, Layer, Stream} from "effect";
-import {describe, expect, expectTypeOf, it} from "vitest";
+import {afterEach, describe, expect, expectTypeOf, it} from "vitest";
 import type {readChange, reviewKindsOf} from "./code-host-github.ts";
 import {
 	type Accounts,
 	type Declared,
 	codeHostOn,
 	type Gh,
+	gitHubCodeTree,
 	kindsNeeded,
 	prOf,
 	readPrFacts,
@@ -19,7 +22,7 @@ import {
 	verdictsAt,
 } from "./code-host-github.ts";
 import {type CriteriaRecord, memoryRecord} from "./criteria/record.ts";
-import {CodeHost} from "./services.ts";
+import {CodeHost, CodeTree} from "./services.ts";
 import type {PrFacts, ReviewKind} from "./stages/ship/facts.ts";
 import {shipReadInterpret} from "./stages/ship/handlers.ts";
 import {look} from "./stages/ship/look.ts";
@@ -1150,5 +1153,106 @@ describe("a repository's open pull requests", () => {
 		const failed = await Effect.runPromise(Effect.flip(readPullRequests(gh)(repo)));
 
 		expect(failed).toEqual({_tag: "unknown"});
+	});
+});
+
+// Areas PR 1, round 2: `CodeTree` on GitHub, the onboarding step's folders. A `gh` stood in on
+// disk, as `gitHubCodeTree` runs one by its path: it keeps each call's arguments and answers one
+// recorded GraphQL text, or fails.
+describe("the folders under a repository's paths", () => {
+	const made: string[] = [];
+	afterEach(() => {
+		for (const dir of made.splice(0)) rmSync(dir, {recursive: true, force: true});
+	});
+
+	/** A `gh` that answers `answer`, or exits 1 when it is `"breaks"`, and the calls it got. */
+	const fakeGhOnDisk = (answer: unknown) => {
+		const dir = mkdtempSync(join(tmpdir(), "gh-"));
+		made.push(dir);
+		writeFileSync(join(dir, "answer.json"), JSON.stringify(answer));
+		writeFileSync(
+			join(dir, "gh"),
+			[
+				"#!/bin/sh",
+				`for arg in "$@"; do printf '%s\\n' "$arg" >> "${dir}/calls"; done`,
+				`printf -- '--\\n' >> "${dir}/calls"`,
+				answer === "breaks" ? "exit 1" : `exec cat "${dir}/answer.json"`,
+				"",
+			].join("\n"),
+		);
+		chmodSync(join(dir, "gh"), 0o755);
+		const calls = () =>
+			existsSync(join(dir, "calls"))
+				? readFileSync(join(dir, "calls"), "utf8")
+						.split("--\n")
+						.filter((c) => c !== "")
+						.map((c) => c.split("\n").filter((a) => a !== ""))
+				: [];
+		return {gh: join(dir, "gh"), calls};
+	};
+	const foldersOn = (gh: string, repo: string, under: readonly string[]) =>
+		Effect.gen(function* () {
+			const tree = yield* CodeTree;
+			return yield* tree.folders(repo, under);
+		}).pipe(Effect.provide(gitHubCodeTree({gh})));
+
+	const REPO = "https://github.com/example/repo";
+	const TREES = {
+		data: {
+			repository: {
+				f0: {
+					entries: [
+						{name: "tracker", type: "tree"},
+						{name: "README.md", type: "blob"},
+						{name: "map", type: "tree"},
+					],
+				},
+				f1: null,
+				f2: {entries: [{name: "fabrika", type: "tree"}]},
+			},
+		},
+	};
+
+	it("are one GraphQL call, one alias per path, and only the folders come back, by path from the root", async () => {
+		const {gh, calls} = fakeGhOnDisk(TREES);
+		const got = await Effect.runPromise(foldersOn(gh, REPO, ["programs", "packages", "apps"]));
+		expect(got).toEqual(["programs/tracker", "programs/map", "apps/fabrika"]);
+		const [call, ...more] = calls();
+		expect(more).toEqual([]);
+		expect(call?.slice(0, 6)).toEqual(["api", "graphql", "-f", "owner=example", "-f", "name=repo"]);
+		const query = call?.find((a) => a.startsWith("query=")) ?? "";
+		expect(query).toContain('f0: object(expression: "HEAD:programs")');
+		expect(query).toContain('f1: object(expression: "HEAD:packages")');
+		expect(query).toContain('f2: object(expression: "HEAD:apps")');
+	});
+
+	it("asks nothing for no paths, and gives none", async () => {
+		const {gh, calls} = fakeGhOnDisk(TREES);
+		expect(await Effect.runPromise(foldersOn(gh, REPO, []))).toEqual([]);
+		expect(calls()).toEqual([]);
+	});
+
+	it.each([
+		["a path that climbs out", REPO, ["../secrets"]],
+		["a path with a quote", REPO, ['apps" } } evil']],
+		["a path from the root", REPO, ["/apps"]],
+		["a path with a space", REPO, ["my apps"]],
+		["a repository that is not a GitHub link", "https://example.com/a/b", ["apps"]],
+	])("fails on %s, and asks nothing", async (_, repo, under) => {
+		const {gh, calls} = fakeGhOnDisk(TREES);
+		expect(await Effect.runPromise(Effect.flip(foldersOn(gh, repo, under)))).toEqual({
+			_tag: "unknown",
+		});
+		expect(calls()).toEqual([]);
+	});
+
+	it.each([
+		["gh fails", "breaks"],
+		["the answer is not the shape", {data: {nothing: true}}],
+	])("fails when %s", async (_, answer) => {
+		const {gh} = fakeGhOnDisk(answer);
+		expect(await Effect.runPromise(Effect.flip(foldersOn(gh, REPO, ["apps"])))).toEqual({
+			_tag: "unknown",
+		});
 	});
 });
