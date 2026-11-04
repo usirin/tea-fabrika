@@ -2,6 +2,8 @@
 
 Decided 2026-10-26 by the owner.
 
+Keys renamed 2026-11-03 (short words keep one meaning): `at` became `ref`.
+
 ```ts
 // A sketch. The builder starts in the working copy and its agent reads the
 // rule files itself, the nearest AGENTS.md winning, as the standard says.
@@ -9,7 +11,7 @@ const built = yield* Agents.run({ prompt, folder: workingCopy, provider }); // l
                                                                             // packages/x/AGENTS.md, ...
 // The reviewer reads them the same way, and is also handed main's copy, marked as the
 // rules the pull request is judged by. A pull request cannot loosen its own rules.
-const rules = yield* readRules({ repo, at: "main" });      // today's Gather in stages/rules.ts
+const rules = yield* readRules({ repo, ref: "main" });     // today's Gather in stages/rules.ts
 const verdict = yield* Agents.run({ prompt: reviewBrief(pr, rules), folder: prCopy, provider });
 ```
 

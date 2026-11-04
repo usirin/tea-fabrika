@@ -259,3 +259,124 @@ describe("a lane saved before its stop kept a Held, sent `restart` with its fold
 		expect(first?.type === "lane_step" && first.step).toBe("plan");
 	});
 });
+
+// Self-fix PR 10: the exam's pull request is reviewed, then merged, before the test writer. The fold of
+// a lane's facts gives the `Held` the lane saved at each point the new step can stop, and an exam
+// head's own checks are never the lane's.
+describe("the fold, with the exam's pull request", () => {
+	const decodeEntry = Schema.decodeUnknownSync(Entry);
+	const EXAM_PR = "local:example/lane/pull/1";
+	const EXAM_HEAD = "3".repeat(40);
+	const RULE = ".oxlintrc.json";
+	const REVIEWED = {head: EXAM_HEAD, onto: "main", base: BASE, diff: "d".repeat(40), met: 1, of: 1};
+	const EXAM_GREEN = {...GREEN, head: EXAM_HEAD, pr: EXAM_PR};
+	const ASK_MERGE = "a-exam_merge-6";
+
+	/** Ticket 7's facts up to the plan's yes, then `more`, each by the lane unless it says. */
+	const timelineWith = (
+		more: readonly (readonly [unknown, Readonly<Record<string, unknown>>])[],
+	) => {
+		const yes = TIMELINE.findIndex((e) => (e.fact as {type: string}).type === "answered");
+		const head = TIMELINE.slice(0, yes + 1);
+		return [
+			...head,
+			...more.map(([by, fact], i) => ({
+				pos: head.length + i + 1,
+				ticket: 7,
+				by,
+				at: 1_762_000_100_000 + i * 1_000,
+				fact,
+			})),
+		].map((e) => decodeEntry(e));
+	};
+	const ran = (
+		stage: string,
+		run: string,
+		outcome: unknown,
+		carry: unknown,
+		between: readonly Readonly<Record<string, unknown>>[] = [],
+	): readonly (readonly [unknown, Readonly<Record<string, unknown>>])[] => [
+		[LANE, {type: "started", run, stage, task: null, log: null}],
+		...between.map((fact) => [LANE, fact] as const),
+		[LANE, {type: "ended", run, stage, outcome, usd: 0, input: 0, output: 0, turns: 1, carry}],
+	];
+	const EXAM_END = ran(
+		"exam",
+		"r3",
+		{kind: "ask", who: "owner", for: "check_change"},
+		{rules: [RULE], examPr: EXAM_PR, examPull: {head: EXAM_HEAD}},
+	);
+	const REVIEW_END = ran(
+		"exam_review",
+		"r4",
+		DONE,
+		{examPull: {head: EXAM_HEAD, reviewed: REVIEWED}},
+		[{type: "checked", ...EXAM_GREEN}],
+	);
+	const ASKED = [
+		LANE,
+		{
+			type: "asked",
+			ask: ASK_MERGE,
+			what: "Do you want to merge these rule changes: .oxlintrc.json?",
+			picks: ["merge", "no"],
+			head: EXAM_HEAD,
+		},
+	] as const;
+	const seenWith = (more: Parameters<typeof timelineWith>[0]) =>
+		Schema.decodeUnknownSync(Seen)({...SEEN, timeline: timelineWith(more), commits: []});
+
+	it("stopped at exam_review, goes on there, with the exam's pull request in its carry", () => {
+		const folded = fold(
+			seenWith([
+				...EXAM_END,
+				...ran("exam_review", "r4", {kind: "stuck", why: "run_failed"}, undefined),
+			]),
+		);
+		expect(folded.at).toEqual({_tag: "run", step: "exam_review"});
+		expect(folded.held.carry).toMatchObject({examPr: EXAM_PR, examPull: {head: EXAM_HEAD}});
+	});
+
+	it("stopped on the exam's merge question, asks it again, with the review the lane held", () => {
+		const folded = fold(seenWith([...EXAM_END, ...REVIEW_END, ASKED]));
+		expect(folded.at).toMatchObject({_tag: "ask", for: "exam_merge"});
+		expect(folded.held.carry).toMatchObject({
+			examPr: EXAM_PR,
+			examPull: {head: EXAM_HEAD, reviewed: REVIEWED},
+		});
+		expect(folded.held.trail.map((row) => row.step)).toContain("exam_review");
+	});
+
+	it("an exam head's checks, with its pull request, are never the lane's own", () => {
+		const folded = fold(
+			seenWith([...EXAM_END, ...REVIEW_END, [LANE, {type: "checked", ...EXAM_GREEN}]]),
+		);
+		expect(folded.held.carry.head).not.toBe(EXAM_HEAD);
+		expect(folded.held.carry.checked).toBeUndefined();
+	});
+
+	it("a person's merge at the exam head goes on at exam_merge, with their yes at that head", () => {
+		const folded = fold(
+			seenWith([
+				...EXAM_END,
+				...REVIEW_END,
+				ASKED,
+				[
+					OWNER,
+					{
+						type: "answered",
+						ask: ASK_MERGE,
+						pick: "merge",
+						note: "",
+						head: EXAM_HEAD,
+						onto: "main",
+						base: BASE,
+						diff: "d".repeat(40),
+					},
+				],
+			]),
+		);
+		expect(folded.at).toEqual({_tag: "run", step: "exam_merge"});
+		expect(folded.held.carry).toMatchObject({examPull: {head: EXAM_HEAD, yes: {head: EXAM_HEAD}}});
+	});
+});

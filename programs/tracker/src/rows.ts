@@ -52,6 +52,14 @@ export const checksLine = (checks: readonly Check[]): string => {
 
 const short = (sha: string) => sha.slice(0, 7);
 
+/** Why a yes still stands at a new head, in words (packages/pipeline/src/stages/pipeline/carry.ts). */
+const CARRIED = {
+	same_head: "the same head",
+	replayed: "the same change, on a moved main",
+	formatted: "only the formatter changed it",
+	glanced: "a glance found the meaning the same",
+} as const;
+
 type Said = Pick<Row, "text" | "more" | "body">;
 
 const said = (text: string, more = "", body: string | null = null): Said => ({text, more, body});
@@ -105,6 +113,11 @@ const saidOf = (fact: Fact, timeline: readonly Entry[]): Said => {
 			return said(
 				`review at ${short(fact.head)}: ${fact.met} of ${fact.of} met`,
 				counted(fact.findings.length, "finding"),
+			);
+		case "carried":
+			return said(
+				`what was said at ${short(fact.from)} still stands at ${short(fact.to)}`,
+				CARRIED[fact.why],
 			);
 		case "pr":
 			return said(`PR ${prRefOf(fact.url)} ${fact.state}`, checksLine(fact.checks));

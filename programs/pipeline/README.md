@@ -5,18 +5,25 @@ a real machine, the facts go on the ticket, and the app's own windows show them.
 
 ```text
 tsh> pipeline --ticket 117            prints one line per step
-tsh> pipeline --ticket 117 | runs     the runs window fills in as it goes
+tsh> pipeline --ticket 117 | trace    the trace's lanes fill in as it goes
 tsh> map --ticket 117                 another tile: the steps light up
-tsh> runs --ticket 117 | trace        pick a run, see its turns
+tsh> trace --ticket 117               another tile: open a step, see its spans
 tsh> ticket --ticket 117              the asks, answered here
 ```
 
 The order, in `packages/pipeline/src/stages/pipeline/machine.ts`:
 
 ```text
-triage -> plan -> the person approves -> exam, when rules change -> test writer
+triage -> plan -> the person approves -> exam, when rules change -> the exam's review
+       -> the person's yes on the rule changes -> their merge -> test writer
        -> build -> mutation -> one review -> push -> the person's yes -> merge
 ```
+
+The exam's review (`exam_review`) is code first, then one agent: it formats the rule files, runs the
+checks, and runs the review step over the exam's own pull request, against one criterion per rule
+change the plan lists. A failed review or red checks go back to the exam writer, at most 3 rounds.
+A yes said at one head counts at a later one only when the diff it judged replays there
+([a yes binds to the diff](../../docs/direction/a-yes-binds-to-the-diff.md)).
 
 ## What it needs
 
@@ -49,7 +56,9 @@ The same goes for what an agent loads by itself. In the copy of a head that the 
 mutants step and the review read, these are main's, or gone when main has none, at any depth and in any
 case or compatibility form of the name: `AGENTS.md`, `AGENTS.override.md`, `CLAUDE.md`,
 `CLAUDE.local.md`, `.mcp.json`, `.codex/`, `.agents/`, `.claude/`. A change to one still shows in the
-review's diff. The tests run in the head's own copy, so they see the head's files.
+review's diff. The tests run in the head's own copy, so they see the head's files. Code's checks run in
+a git worktree of the head, made and installed for that run alone and removed when it ends, so a check
+that asks git finds the repository, as it does in CI's checkout.
 
 **Run the lane only on work from agents you trust.** The judge's copy stops a head's files from telling
 its judge how to judge. It does not stop a head's running code. The install, the checks and the mutants
@@ -72,7 +81,10 @@ are written from what the code expects.
 - **The review stays local.** It reads the head on this machine, and its checks are `[[checks.run]]`.
   The push step then opens the pull request and posts the verdicts as comments.
 - **The lane's own verdicts count.** No GitHub approval and no reviewers list is read. A verdict counts
-  only at the head it was posted for. If a person pushes after that, the lane ends `stuck: sent_back`.
+  only at the head it was posted for. If a person pushes after that, ship sends the work to the review.
+  When their commit builds on the lane's head, the lane takes it in and runs code's checks there. The
+  review runs again in the same round, then the push, then you are asked again. A rewritten branch is
+  not taken in: the lane goes on from its own head, and the push keeps theirs under a `refs/kept/` ref.
 - **The yes is yours, on the ticket.** A GitHub approval does not stand in for it.
 
 Which checks ship waits on, from `[checks] github` at main, read on each call:
@@ -83,28 +95,45 @@ Which checks ship waits on, from `[checks] github` at main, read on each call:
 | `required` | The same as `every`: ship still waits on every check, and a failed one sends the work back. |
 | `none` | Never waits on GitHub. It runs `[[checks.run]]` on this machine at the head it pushed, and those decide. A file with no `[[checks.run]]` is refused. |
 
-Stuck words come at two levels. The lane has seven of its own (`stages/pipeline/outcome.ts`). A step's
-own word, such as ship's `checks_stuck`, ends that step, and the lane then ends `stuck: step_stuck`.
+Stuck words come at two levels. The lane has ten of its own (`stages/pipeline/outcome.ts`). A step's
+own word, such as ship's `checks_stuck`, goes where its row in `stages/pipeline/routes.ts` says. Most of
+ship's own stops run ship once more, and the lane ends `stuck: step_stuck` when the same word comes
+twice in a row. A read the code host fails still ends it at once. Waiting on the host comes in self-fix
+PR 11b.
 
 - **A repository with no CI.** Under `every`, no check ever reports. Ship waits 15 minutes and ends
-  `stuck: checks_stuck`, so the lane ends `stuck: step_stuck`. Set `github = "none"` in `[checks]` to get
-  past this.
+  `stuck: checks_stuck`. The lane runs ship once more, so it waits 15 minutes again, then ends
+  `stuck: step_stuck`. Set `github = "none"` in `[checks]` to get past this.
 - **A branch rule that wants a GitHub review.** GitHub refuses the merge. Ship ends
-  `stuck: merge_failed`, so the lane ends `stuck: step_stuck`. The ticket does not say which rule refused it: ship never reads the refusal's
+  `stuck: merge_failed`. The lane runs ship once more, and a second refusal ends it
+  `stuck: step_stuck`. The ticket does not say which rule refused it: ship never reads the refusal's
   words.
-- **Hold other merges during a run.** A commit on main that ship's last read before the merge sees means
-  `behind`, even one that touches nothing of this change. The lane then ends `stuck: sent_back`, and that
-  is final. After that read, the two kinds of branch differ. On a branch with no rule the merge is pinned
-  to the main it read, so a commit that lands in between still means `behind`. On a branch with a rule,
-  ship's merge names only the head, so ship itself does not stop on that commit. A rule that requires
+- **Other merges during a run cost one more pass.** A commit on main that ship's last read before the
+  merge sees means `behind`, even one that touches nothing of this change. The lane then reads main
+  fresh and merges it into the branch, and code's checks run at the new head.
+  - Green: the push stage puts that head on the pull request, and ship runs again. No agent runs, and
+    no round is added.
+  - Red: the build runs the next round, told the failing tests.
+  - A conflict in the builder's files sends the build round again. One in the test writer's files asks
+    you `exam_conflict`.
+  - If the review no longer stands at the new head, the review and the push run again, and you are
+    asked again.
+  - If ship says `behind` again right after a clean read, the lane ends `stuck: step_stuck`. Typing the
+    line again goes on from there.
+
+  After that read, the two kinds of branch differ. On a branch with no rule the merge is pinned to the
+  main it read, so a commit that lands in between still means `behind`. On a branch with a rule, ship's
+  merge names only the head, so ship itself does not stop on that commit. A rule that requires
   up-to-date branches may refuse the merge. A real run is what will settle that.
-- **`mergeable: UNKNOWN` ends it.** If GitHub has not worked out whether the head merges when ship looks,
-  ship ends `stuck: merge_unknown`, so the lane ends `stuck: step_stuck`. It does not wait and look again.
-- **A flaky check can end it.** A red check's failed jobs run again once per head, if they are GitHub
-  Actions runs. Under `none`, or with no such run, there is no second try. Red again sends the work back:
-  `stuck: sent_back`. The pull request and its branch stay open. Typing the line again restarts the lane
-  at the step that stopped, after a fresh read of main (see "A stopped lane goes on" below). Inside a live
-  run nothing but ship merges.
+- **`mergeable: UNKNOWN` costs one more look.** If GitHub has not worked out whether the head merges
+  when ship looks, ship ends `stuck: merge_unknown`. The lane runs ship once more. Unknown again ends
+  the lane `stuck: step_stuck`.
+- **A flaky check sends the work back.** A red check's failed jobs run again once per head, if they are
+  GitHub Actions runs. Under `none`, or with no such run, there is no second try. Red again sends the
+  work to the build, the next round. Once the rounds are spent, you are asked `rounds_spent`. The pull
+  request and its branch stay open. A lane that stops can be typed again: it restarts at the step that
+  stopped, after a fresh read of main (see "A stopped lane goes on" below). Inside a live run nothing
+  but ship merges.
 - **The ticket shows the merge the lane made.** The ticket's `pr` fact and the row in `pulls.json` say
   `merged` from the lane's own merge, not from a read that can lag behind it. A new head on that branch
   is a new pull request.
@@ -117,11 +146,12 @@ own word, such as ship's `checks_stuck`, ends that step, and the lane then ends 
 ## What it holds to
 
 - **A ticket must be yours.** One filed by someone else is refused before any agent starts.
-- **No agent approves.** The lane asks a person seven kinds of question, each answered in the ticket
+- **No agent approves.** The lane asks a person eight kinds of question, each answered in the ticket
   window: `approve` (the plan), `exam_merge` (the exam's own pull request), `merge` (the merge yes),
   `step` (a step ended on `ask`, and may be run again), `rounds_spent` (the rounds are used up),
-  `exam_touched` (the builder changed the test writer's files) and `exam_conflict` (main changed them
-  while the lane was stopped). Merge is `ship`, with its guards.
+  `exam_touched` (the builder changed the test writer's files), `exam_conflict` (main changed them
+  while the lane was stopped) and `spend` (a step spent its limit: `more` runs it again, `stop`
+  pauses). Merge is `ship`, with its guards.
 - **The builder cannot touch the exam.** A change to a file the test writer's commits touched, or to
   a rule file, ends the build in `stuck: exam_touched`. Its work is held as a commit of its own, and the
   lane asks the person which side was wrong. `builder_wrong` puts those files back as the test writer
@@ -129,13 +159,15 @@ own word, such as ship's `checks_stuck`, ends that step, and the lane then ends 
   those files again, with the person's note, on its own commit; its check runs, and the build goes on
   from the builder's work with the new files. Either pick is the next round, and adds one round to the
   bound, as a spent round's `again` does.
-- **Closing a window loses nothing.** Ctrl-B x, y closes the runs window and the lane goes on. A second
+- **Closing a window loses nothing.** Ctrl-B x, y closes the trace window and the lane goes on. A second
   Ctrl-B x, y stops it. Typing the line again goes on from the ticket, and no finished step runs twice.
 - **A decision is a person's.** What they decided at the plan reaches the test writer, the builder and
   the review. A review that thinks one is wrong can say so, and it fails nothing and makes no test. The
   person reads both sides, and picks whether the decision stands or the lane stops.
-- **A later round with no change is a question.** The person picks whether the work goes on as it is,
-  with code's checks still ahead of it, or the lane stops. A first round with no change stays stuck.
+- **A build that changes nothing runs again.** In round 1 it runs once more, told it changed nothing,
+  and a second time in a row asks `step`. In a later round, code's checks at the head decide. Green: a
+  fresh review reads what the builder disputes, once. Red: the build goes another round, told the
+  failing tests, until the rounds are spent. Not run: the lane stops `stuck: checks_not_run`.
 - **Each run records its brief.** Its name and hash go on `started`, as it starts.
 - **A stopped lane goes on.** A stop saves what the lane held and the step it goes on at. Typing the
   same line again claims the ticket, reads the ticket and main fresh, and goes on at that step: no step
@@ -155,8 +187,12 @@ own word, such as ship's `checks_stuck`, ends that step, and the lane then ends 
 - **A person's `no` or `stop` pauses.** It ends the line `ask: owner: paused` (or `stuck: rounds_spent`
   for a stop on the spent rounds), saved where the pick goes on. A `no` on the plan writes it again with
   the person's note; a `no` on a merge asks again; a `stop` on the rounds runs the build as the next round.
-- **Some ends are final.** `done`, `skip` (closed, research, a no at triage), and `stuck: not_yours`.
-  Typing the line again on one says how it ended, and runs nothing.
+- **Some ends are final.** `done`, `skip` (closed, research, a no at triage, or `claimed`: another lane
+  holds the ticket, and the line names it), `stuck: not_yours` and `stuck: merged_elsewhere`. Typing
+  the line again on one says how it ended, and runs nothing.
+- **A step's `closed`, `merged` or `draft` reads the ticket fresh.** The step's word alone ends nothing.
+  A closed ticket ends the lane `skip: closed`. An open one pauses it `ask: owner: paused`, saved at
+  that step, and the same line goes on there.
 
 ## What's in it
 
@@ -172,6 +208,9 @@ The lane's logic is in `packages/pipeline/src/stages/pipeline/`. The write-up is
 
 ## Shots
 
+These shots are from before ticket 141, so the `runs` window in them is gone: `trace --ticket` does
+its job now.
+
 | State and layout | What squeezes or looks wrong |
 |---|---|
 | ![](docs/filed-side-by-side.png) | The tracker says it could not read pull requests: a test home has no `gh`. |
@@ -186,7 +225,7 @@ The lane's logic is in `packages/pipeline/src/stages/pipeline/`. The write-up is
 
 ## How Linear would do it
 
-It adds no window. The lane is a tile line, and the ticket, runs, map and trace windows draw it, so
-the ticket stays the one place a person answers. Linear would put the step list in the issue's
-sidebar too; ours is the ticket window's step bar, with `runs` for the detail. Where we differ: a
+It adds no window. The lane is a tile line, and the ticket, map and trace windows draw it, so the
+ticket stays the one place a person answers. Linear would put the step list in the issue's sidebar
+too; ours is the ticket window's step bar, with `trace` for the detail. Where we differ: a
 person types a line to start it, not a button, because tsh is the app's way to start anything.

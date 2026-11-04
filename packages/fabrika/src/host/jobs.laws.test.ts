@@ -34,6 +34,8 @@ const stage: fc.Arbitrary<StageRecord> = fc.record({
 const n = fc.integer({min: 1, max: 4});
 /** Two tiles' tsh, and a tsh with no name. */
 const owner = fc.constantFrom("t1", "t2", null);
+/** An agent, a person, and a tsh with no writer. */
+const writer = fc.constantFrom("agent:claude for:github:7", "user:github:7", null);
 
 /** One entry per Msg type: leaving one out does not compile. */
 const table: MsgArbitraryTable<Msg> = {
@@ -44,6 +46,7 @@ const table: MsgArbitraryTable<Msg> = {
 			.map(([first, rest]) => [first, ...rest] as const),
 		background: fc.boolean(),
 		owner,
+		by: writer,
 	}),
 	stage_ended: arbRecordMsg("stage_ended", {
 		run,
@@ -53,6 +56,11 @@ const table: MsgArbitraryTable<Msg> = {
 	attached: arbRecordMsg("attached", {n, background: fc.boolean(), owner}),
 	foreground: arbRecordMsg("foreground", {n}),
 	dropped: arbRecordMsg("dropped", {n}),
+	stopping: arbRecordMsg("stopping", {
+		n,
+		by: fc.constantFrom("agent:claude for:github:7", "user:github:7"),
+		why: fc.constantFrom("wrong ticket", null),
+	}),
 };
 /** Long lists, so jobs pile up, leave and come back. Not tea's `arbMsgSequence`: its lists come out about ten long. */
 const lists = fc.array(arbMsg(table, {weights: {began: 3, stage_ended: 4, detached: 1}}), {
@@ -99,6 +107,8 @@ const KEPT: Jobs = {
 			state: "detached",
 			background: false,
 			owner: "t1",
+			by: null,
+			stop: null,
 		},
 		{
 			n: 3,
@@ -107,6 +117,8 @@ const KEPT: Jobs = {
 			state: "running",
 			background: true,
 			owner: "t2",
+			by: null,
+			stop: null,
 		},
 	],
 };
@@ -132,6 +144,8 @@ const numbered = everyStep(
 			state: "running",
 			background: msg.background,
 			owner: msg.owner,
+			by: msg.by,
+			stop: null,
 		};
 		return (
 			next.next === prev.next + 1 &&
@@ -512,6 +526,7 @@ const keptTable: MsgArbitraryTable<Msg> = {
 			.map(([first, rest]) => [first, ...rest] as const),
 		background: fc.boolean(),
 		owner,
+		by: writer,
 	}),
 };
 const keptLists = fc.array(arbMsg(keptTable, {weights: {began: 3, stage_ended: 4, detached: 1}}), {
@@ -566,6 +581,7 @@ describe("the job table is kept", () => {
 					stages: [{program: "counter", flags: {}, run: "r9", wire: null, ended: false}],
 					background: false,
 					owner: "t1",
+					by: null,
 				});
 				return {kept: host.kept, table: host.table.getState()};
 			}).pipe(Effect.scoped),

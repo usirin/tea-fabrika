@@ -602,8 +602,8 @@ function AgentsLines(props: {readonly host: HostNow; readonly now: number}): Rea
 			<>
 				<h2 className="pop-title">No agents attach here</h2>
 				<p className="pop-text">
-					This home reads a ledger server, and its host has no agents' socket. Agents attach only on
-					a home that keeps its own ledger.
+					This host has no agents' socket, so no agent can attach to it. Only a host built before
+					every home had one says so.
 				</p>
 			</>
 		);

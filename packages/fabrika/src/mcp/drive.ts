@@ -4,7 +4,8 @@ import type {AnyRun} from "../program/program.ts";
 import {viewOf} from "../program/program.ts";
 import {memoryStorage} from "../program/storage.ts";
 import type {ProgramList} from "../shell/programs.ts";
-import {type Call, callOf, toolNamesOf, toolsOf} from "./tools.ts";
+import {JOB_TOOL, type JobAnswer, LAST_MAX, lastLines} from "./job.ts";
+import {type Call, callOf, RUNS, toolNamesOf, toolsOf} from "./tools.ts";
 
 // One agent's runs, as its MCP tools drive them: a tool call on an input goes to the agent's own
 // run of that program, started on its first call, as `post.ts` starts one tracker for a post.
@@ -23,6 +24,24 @@ import {type Call, callOf, toolNamesOf, toolsOf} from "./tools.ts";
 // on the ledger, so nothing is lost.
 //
 // Calls go one at a time, so two first calls never start two runs.
+//
+// The host may hand its jobs too (`job`): then the `job` tool is listed beside `runs` (./job.ts),
+// and it answers job n as the host knows it, its lines cut to what was asked.
+//
+//   yield* drive.call("job", {n: 1, last: 2})
+//   // {kind: "done", data: {n: 1, text: "seq --to 5", tile: "t1", state: {_tag: "ended", how: "done"}, lines: ["4", "5"]}}
+//
+// A read-only door (`readOnly`) lists only the tools that write nothing (MCP's `readOnlyHint`). A
+// call is read against the tools listed, so a write tool called anyway is refused as any tool that
+// is not there, before a run starts: an agent whose own session could not be made, on a home
+// connected to a ledger server, where the only session left is the person's (apps/fabrika,
+// host/agents.ts). Its why, when given, is in `runs`.
+//
+//   const {drive, tools} = yield* driveFor({list, tiles, readOnly: {why: "the key ...: not a key"}});
+//   yield* drive.call("tracker_file", {value: {title: "x", body: ""}})
+//   // {kind: "refused", why: "there is no tool tracker_file"}
+//   yield* drive.call("runs", {})
+//   // {kind: "done", data: {programs, yours, tiles, readOnly: {why: "the key ...: not a key"}}}
 
 /** A run in a tile: listed for the agent to see, never driven. */
 export interface InTile {
@@ -69,9 +88,21 @@ export const driveFor = (options: {
 	/** The programs the agent drives, each packed with the agent's own services. */
 	readonly list: ProgramList;
 	readonly tiles: () => readonly InTile[];
+	/** Job n of the host's table now, with every line kept of it; `null`: the host knows none. */
+	readonly job?: ((n: number) => JobAnswer | null) | undefined;
+	/**
+	 * Only the tools that write nothing are listed, and only a listed tool is called. With a why,
+	 * `runs` says it, so the agent knows why it cannot write.
+	 */
+	readonly readOnly?: boolean | {readonly why: string} | undefined;
 }) =>
 	Effect.gen(function* () {
-		const {list, tiles} = options;
+		const {list, tiles, job} = options;
+		const readOnly = options.readOnly ?? false;
+		const tools = toolsOf(list)
+			.flatMap((tool) => (tool.name === RUNS && job !== undefined ? [tool, JOB_TOOL] : [tool]))
+			.filter((tool) => readOnly === false || tool.annotations?.readOnlyHint === true);
+		const listed = new Set(tools.map((tool) => tool.name));
 		const scope = yield* Effect.scope;
 		const one = yield* Semaphore.make(1);
 		const mine = new Map<string, AnyRunning>();
@@ -106,6 +137,7 @@ export const driveFor = (options: {
 			})),
 			yours: [...mine].map(([program, r]) => ({program, run: r.run.id, view: viewNow(r.run)})),
 			tiles: tiles(),
+			...(typeof readOnly === "object" ? {readOnly} : {}),
 		});
 
 		const call = (c: Call): Effect.Effect<Answer> => {
@@ -114,6 +146,19 @@ export const driveFor = (options: {
 					return Effect.succeed(c);
 				case "runs":
 					return Effect.sync(() => ({kind: "done", data: runs()}));
+				case "job":
+					return Effect.sync((): Answer => {
+						const found = job?.(c.ask.n) ?? null;
+						if (found === null)
+							return {
+								kind: "refused",
+								why: `there is no job ${c.ask.n}: the host's table does not hold it, and no end of it is kept`,
+							};
+						return {
+							kind: "done",
+							data: {...found, lines: lastLines(found.lines, c.ask.last ?? LAST_MAX)},
+						};
+					});
 				case "input":
 					return Effect.gen(function* () {
 						const running = yield* runOf(c.program);
@@ -137,6 +182,15 @@ export const driveFor = (options: {
 			}
 		};
 
-		const drive: Drive = {call: (name, args) => one.withPermit(call(callOf(list, name, args)))};
-		return {drive, tools: toolsOf(list)};
+		const drive: Drive = {
+			call: (name, args) =>
+				one.withPermit(
+					call(
+						listed.has(name)
+							? callOf(list, name, args)
+							: {kind: "refused", why: `there is no tool ${name}`},
+					),
+				),
+		};
+		return {drive, tools};
 	});

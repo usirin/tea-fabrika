@@ -200,7 +200,61 @@ after, and no Cmds.
   same way, with Jaeger stopped.
 - **The trace tile reuses the view rules that exist**
   (`packages/fabrika/src/shell/trace/view.ts`): one colour per service, red
-  when a run went wrong, an agent's turns folded into one row.
+  when a run went wrong, an agent's turns folded into one row. One color per
+  service holds in the job view only. The ticket view (below) colors by state.
+
+## The ticket's view, too (ticket 141, today's version)
+
+Added 2026-11-02. The `runs` program is gone, and `trace` does its job: a
+ticket's view is the trace of each of its lanes, read through the facts that
+name them.
+
+```ts
+// tsh> trace --ticket 117          every lane of 117, oldest first; the newest opens
+// tsh> tracker | trace             the ticket the tracker picks
+// tsh> pipeline --ticket 117 | trace
+// tsh> trace --id <trace id>       one job, as before
+
+// One section per trace id, each on its own axis from the lane's start. Made up, in ticket
+// 117's shape (programs/trace/src/t117.ts):
+// lane 1  sort, plan, ask (71 s), exam, test_writer, build, exam_merge   stuck: tests red
+// lane 2  restarted from plan; plan, ask, exam, ask, exam_merge
+// lane 3  exam_merge                                                     running
+// A step opens to its spans, from that lane's JobRecord.
+```
+
+- **Steps and waits come from the ticket's facts. Spans come from the lane's
+  record.** A `started` fact names its trace id, so each lane finds its record.
+- **A step row shows tokens, never dollars.** Dollars show only in each lane's
+  line and the ticket's line, labeled "at list price". A price nobody knows is
+  "no list price", never $0.00.
+- **The ticket view colors by state,** each with its words beside it: running
+  in amber, done in green, stuck in red, and an open wait in the turn accent.
+- **A fact stepper replays the ticket** one fact at a time (‹ › Live), as Elm's
+  debugger replays a history.
+
+Three facts are recorded from now on, so the view can join the facts to the
+spans. Each one is lost for a lane that ran before it, so it goes in now:
+
+```ts
+// The `asked` fact names its lane, so a wait sits in the right lane:
+{type: "asked", ask: "a-3", what: "approve", trace: "b2b2…b2b2", ...}
+
+// A "run a step" span, tagged when it ends:
+{name: "run a step", tags: {
+	"tea.lane.run": "r-plan-8", "tea.lane.step": "plan", "tea.outcome": "ask:owner:approval",
+	"tea.cost.usd": 0.41,                  // only when a list price is known
+	"gen_ai.request.model": "gpt-6-astra",
+	"gen_ai.usage.input_tokens": 1000, "gen_ai.usage.output_tokens": 200,
+	"gen_ai.usage.cache_read.input_tokens": 600,
+}}
+
+// A "wait for the answer" span: who answered and what they picked, never the note's text.
+{name: "wait for the answer", tags: {"tea.ask.id": "a-3", "tea.answer.pick": "approve", "tea.answer.by": "owner"}}
+```
+
+A step written before these tags finds its spans by time: the "run a step"
+span that overlaps it most.
 
 ## Why
 

@@ -4,11 +4,13 @@
 // writes as the agent. On a subpath: it names the MCP SDK, whose stdio part reads Node's process.
 //
 //   // In a host, on its agents' socket:
-//   yield* serveAgent(socket, {programsFor: (who) => programList([...]), person: "owner", tiles});
+//   const programsFor = (who) => Effect.succeed({list: programList([...]), readOnly: null});
+//   yield* serveAgent(socket, {programsFor, person: "owner", tiles});
 //   // In the command an MCP client starts:
 //   yield* bridge(socket, "claude");
 export {BridgeStopped, bridge} from "./mcp/bridge.ts";
 export {type Answer, type Drive, driveFor, type InTile} from "./mcp/drive.ts";
 export {AGENTS_PROTOCOL, AgentName, Handshake, HostAnswer} from "./mcp/handshake.ts";
+export {JOB, JobAnswer, KeptLines, LAST_MAX} from "./mcp/job.ts";
 export {type AgentOptions, serveAgent} from "./mcp/serve.ts";
 export {type Call, callOf, RUNS, type Tool, toolNameOf, toolsOf} from "./mcp/tools.ts";

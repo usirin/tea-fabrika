@@ -15,12 +15,14 @@ import {
 	type LaneCmd,
 	lane,
 	MAX_ROUNDS,
+	type Question,
 	readFiled,
 	releaseLane,
 	resumeOf,
 	runStep,
 	type StepEnd,
 } from "./machine.ts";
+import {EXAM_MERGE_SENDS} from "./routes.ts";
 
 // Today's version. The question a lane puts on a ticket, on the real reducer. A question that does not
 // fit a `Title` cannot be written, and the lane ends `step_failed`.
@@ -58,16 +60,43 @@ const questionFor = (rules: readonly string[]) => {
 		ask: approve.ask,
 		pick: "approve",
 	});
-	const [, cmds] = ended(examining, {
+	const [reviewing] = ended(examining, {
 		outcome: {kind: "ask", who: "owner", for: "check_change"},
-		carry: {},
+		carry: {examPr: EXAM_PR, examPull: {head: EXAM_HEAD}},
+	});
+	// Self-fix PR 10: the exam's pull request gets the lane's own review before the person is asked.
+	const [, cmds] = ended(reviewing, {
+		outcome: {kind: "done", part: false},
+		carry: {examPull: {head: EXAM_HEAD, reviewed: REVIEWED_AT(EXAM_HEAD)}},
 	});
 	const asked = cmds.find((cmd: LaneCmd) => cmd.type === "lane_ask");
 	if (asked?.type !== "lane_ask") throw new Error("the rule change's merge was not asked");
 	return asked;
 };
 
+/** The exam's pull request, and its head as the exam step landed it. */
+const EXAM_PR = "local:example/lane/pull/1";
+const EXAM_HEAD = "3".repeat(40);
+/** What the exam review read at `head`, and what it met: what `carry` needs (self-fix PR 10, Part 4). */
+const REVIEWED_AT = (head: string) => ({
+	head,
+	onto: "main",
+	base: "9".repeat(40),
+	diff: "d".repeat(40),
+	met: 1,
+	of: 1,
+});
+
 describe("the question a lane asks", () => {
+	// Self-fix PR 10: the person sees the review's count and the head the checks passed at.
+	it("on the exam's pull request, says what the review met and where the checks passed", () => {
+		const {what} = questionFor([".oxlintrc.json"]);
+		expect(what).toContain("The review met 1 of 1, and the checks passed at");
+		expect(what).toContain(EXAM_HEAD.slice(0, 7));
+		expect(what).toContain("Do you want to merge these rule changes:");
+		expect(what).toContain(".oxlintrc.json");
+	});
+
 	it("is a Title when a rule file's name holds a line break", () => {
 		expect(Schema.is(Title)(questionFor([".oxlintrc.json\nand more"]).what)).toBe(true);
 	});
@@ -246,7 +275,8 @@ describe("a lane saved while asking", () => {
 		const [same, cmds] = lane.update.resume(s, {type: "resume"});
 		expect(same).toEqual(s);
 		expect(cmds).toEqual([s.asked]);
-		expect(answerSub.deps(s)).toEqual({number: 7, ask: "a-step-5", picks: ["go_on", "stop"]});
+		// By its number, id and picks. The deps may carry what the ask is for too (review B1).
+		expect(answerSub.deps(s)).toMatchObject({number: 7, ask: "a-step-5", picks: ["go_on", "stop"]});
 	});
 
 	it("takes an answer to that id", () => {
@@ -543,6 +573,36 @@ describe("a head whose tests fail goes back to the builder", () => {
 		expect(stepsIn(cmds).map((c) => c.step)).toEqual(["test_writer"]);
 	});
 
+	it("`again` says the build follows only when the step it runs is not the build", () => {
+		const againIn = (cmds: readonly LaneCmd[]) => {
+			const asked = cmds.find((c: LaneCmd) => c.type === "lane_ask");
+			if (asked?.type !== "lane_ask") throw new Error("nothing was asked");
+			return (asked.does ?? []).find((line) => line.startsWith("`again`")) ?? "";
+		};
+		const review = againIn(reviewRounds().cmds);
+		expect(review).toContain("The test writer step runs once more, then the build, as round");
+		const red = againIn(redRounds(MAX_ROUNDS).cmds);
+		expect(red).toContain("The build step runs once more, as round");
+		expect(red).not.toContain("then the build");
+	});
+
+	// Self-fix PR 10: only a merge's question says which head the person was asked about.
+	it("the `asked` head goes on a merge's question only, never on the rounds' question", () => {
+		const {cmds} = redRounds(MAX_ROUNDS);
+		const spent = cmds.find((c: LaneCmd) => c.type === "lane_ask");
+		if (spent?.type !== "lane_ask") throw new Error("nothing was asked");
+		// The lane holds a head here, the build's, and the rounds' question still names none.
+		expect("head" in spent).toBe(false);
+		const [push] = ended(atReview(), DONE);
+		expect(running(push).step).toBe("push");
+		const [, merging] = ended(push, DONE);
+		const merge = merging.find((c: LaneCmd) => c.type === "lane_ask");
+		if (merge?.type !== "lane_ask") throw new Error("the merge was not asked");
+		expect(merge.ask).toMatch(/^a-merge-/);
+		expect(merge.head).toBe(HEAD);
+		expect(questionFor([".oxlintrc.json"]).head).toBe(EXAM_HEAD);
+	});
+
 	it("the question says why the rounds ran out: the review, red tests, or `send_back` off", () => {
 		const review = whatIn(reviewRounds().cmds);
 		expect(review).toContain(`Round ${MAX_ROUNDS} of ${MAX_ROUNDS} is spent`);
@@ -693,9 +753,10 @@ describe("code's checks after the build", () => {
 		expect(stepsIn(cmds)[0]?.carry.checked).toEqual(GREEN_AT(OTHER_HEAD));
 	});
 
-	// The PR 4 review: red checks are no checks that could not run. A lane that stops on them says
-	// red, so the record holds what code found.
-	it("red checks on the mutants job's commit end the lane `stuck:checks_red`, and the review does not run", () => {
+	// The PR 4 review: red checks are no checks that could not run. Self-fix PR 11, the guard after
+	// the mutants job: red there is `back("build", "names")`, so the build runs the next round, with
+	// the red checks and their names, and the lane does not stop.
+	it("red checks on the mutants job's commit run the build, the next round, with those checks, and the review does not run", () => {
 		const [mutation] = firstBuildEnds(BUILT);
 		const [mutants] = ended(mutation, {
 			outcome: {kind: "send", to: "test_writer", why: "mutant_survived"},
@@ -706,7 +767,10 @@ describe("code's checks after the build", () => {
 			carry: {head: OTHER_HEAD, checked: RED_AT(OTHER_HEAD)},
 		});
 		expect(afterBuildIn(cmds)).toEqual([]);
-		expect(s.phase === "releasing" && nameOf(s.outcome)).toBe("stuck:checks_red");
+		expect(running(s)).toMatchObject({step: "build", round: 2});
+		const [step] = stepsIn(cmds);
+		expect(step).toMatchObject({step: "build", round: 2});
+		expect(step?.carry.checked).toEqual(RED_AT(OTHER_HEAD));
 	});
 
 	it.each([
@@ -724,5 +788,66 @@ describe("code's checks after the build", () => {
 		const [s] = firstBuildEnds(BUILT);
 		expect(running(s).carry.checked).toEqual(GREEN_AT(HEAD));
 		expect(read(Schema.encodeSync(Lane)(s))).toEqual(s);
+	});
+});
+
+// Self-fix PR 10, round 2 of its tests: what the mutation step found no test held.
+describe("the exam's rounds and ship's sends, by step", () => {
+	const spentAt = (step: Question["step"]): Question => ({
+		ask: "a-rounds_spent-9",
+		what: "w",
+		picks: ["again", "stop"],
+		for: "rounds_spent",
+		step,
+	});
+
+	// The plan: the exam's rounds are its rows on the trail, and never touch the lane's `round`.
+	it("a pick at the spent rounds on the exam step counts no lane round, either pick", () => {
+		expect(resumeOf(spentAt("exam"), "again")).toEqual({_tag: "run", step: "exam"});
+		expect(resumeOf(spentAt("exam"), "stop")).toEqual({_tag: "run", step: "exam"});
+	});
+
+	it("on a lane step, `again` is the next round and `stop` is not", () => {
+		expect(resumeOf(spentAt("build"), "again")).toEqual({
+			_tag: "run",
+			step: "build",
+			round: "next",
+		});
+		expect(resumeOf(spentAt("build"), "stop")).toEqual({_tag: "run", step: "build"});
+	});
+
+	/** Ship's end, from its name: `send:builder:conflicts`. */
+	const sendOf = (name: string) => {
+		const [, to = "", why = ""] = name.split(":");
+		return {kind: "send", to, why} as const;
+	};
+
+	it("a send ship can end with, from a step that cannot say it, has no route: stuck:sent_back", () => {
+		for (const name of Object.keys(EXAM_MERGE_SENDS))
+			for (const step of ["push", "plan"] as const)
+				expect(after(step, sendOf(name), 1), `${name} from ${step}`).toEqual({
+					end: {kind: "stuck", why: "sent_back"},
+				});
+	});
+
+	// Self-fix PR 11, jidoka rows 62 and 63: each send ship ends with at merge goes to the step that
+	// fixes it, and none stops `sent_back` (row 9).
+	it("each send ship can end with at merge goes to its step: build next round, main read fresh, review, or merge once more", () => {
+		const AT_MERGE: Readonly<Record<keyof typeof EXAM_MERGE_SENDS, unknown>> = {
+			// Row 62: to build, the next round.
+			"send:builder:review_failed": {to: "build", round: 2},
+			"send:builder:checks_red": {to: "build", round: 2},
+			"send:builder:bot_comment": {to: "build", round: 2},
+			// Row 62: main taken in first; a clean catch-up goes back to ship, with no round.
+			"send:builder:conflicts": {fresh: "merge"},
+			"send:builder:behind": {fresh: "merge"},
+			// The `once` rows: ship again, as a new run.
+			"send:builder:ejected": {to: "merge"},
+			// Row 63: the review again, in the same round.
+			"send:reviewer:no_review": {to: "review"},
+		};
+		// The record's type holds every send, so a new one does not compile until it is here.
+		for (const [name, move] of Object.entries(AT_MERGE))
+			expect(after("merge", sendOf(name), 1), name).toEqual(move);
 	});
 });

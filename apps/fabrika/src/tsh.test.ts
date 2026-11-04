@@ -161,6 +161,12 @@ const seedSeven = (ledger: Ledger["Service"]) =>
 const go = <A, E>(test: Effect.Effect<A, E, FileSystem.FileSystem>) =>
 	Effect.runPromise(test.pipe(Effect.provide(nodeFileSystem)));
 
+/** The last view the run's window was shown names `text`, wherever its data holds it. */
+const mentions = (seen: readonly Seen[], run: string, text: string): true | undefined => {
+	const last = seen.filter((x) => x.kind === "view" && x.run === run).at(-1);
+	return last?.kind === "view" && JSON.stringify(last.data).includes(text) ? true : undefined;
+};
+
 describe("the terminal", () => {
 	it("runs a typed line, and shows what tsh printed under it", async () => {
 		const rows = await go(
@@ -517,19 +523,15 @@ describe("a program's window", () => {
 		expect(seen.rows[1]).toMatch(/^tsh: /);
 	});
 
-	it("carries the pick down `tracker | ticket | runs`, and one window closed ends its one process", async () => {
-		/** The ticket number the run's window was shown last, once it had read the ledger. */
-		const numberOf = (seen: readonly Seen[], run: string) => {
-			const last = seen.filter((s) => s.kind === "view" && s.run === run).at(-1);
-			const data: unknown = last?.kind === "view" ? last.data : undefined;
-			return typeof data === "object" && data !== null && "number" in data
-				? data.number
-				: undefined;
-		};
+	it("carries the pick down `tracker | ticket | trace`, and one window closed ends its one process", async () => {
+		// Ticket 141: `trace` is the ticket's view, and `runs` is gone. The trace's view names a
+		// lane by its trace id, so a ticket with a lane shows that id once its facts are read.
+		const ledger = memoryService();
 		const got = await go(
 			Effect.gen(function* () {
-				const s = yield* session();
-				s.type("tracker | ticket | runs\r");
+				yield* seedSeven(ledger);
+				const s = yield* session({ledger});
+				s.type("tracker | ticket | trace\r");
 				yield* s.opened(3);
 				// The windows open from the end of the line back: each found by its program.
 				const of = (program: string) =>
@@ -537,75 +539,41 @@ describe("a program's window", () => {
 						const one = s.seen.find((x) => x.kind === "open" && x.program === program);
 						return one?.kind === "open" ? one : undefined;
 					});
-				const [picker, page, trail] = [
+				const [picker, page, view] = [
 					yield* of("tracker"),
 					yield* of("ticket"),
-					yield* of("runs"),
+					yield* of("trace"),
 				];
 				const pick = (ticket: number) =>
 					s.window(picker.run).heard({type: "msg", msg: {type: "query", value: {ticket}}});
-				const both = (n: number) =>
-					s.until(`ticket and runs on #${n}`, () =>
-						numberOf(s.seen, page.run) === n && numberOf(s.seen, trail.run) === n
-							? [n, n]
-							: undefined,
-					);
-				// Two tickets to pick from, filed in the tracker's own window.
-				for (const title of ["Login fails", "Logout fails"])
-					s.window(picker.run).heard({
-						type: "msg",
-						msg: {type: "file", value: {title, body: ""}},
-					});
-				const waiting = yield* s.until("ticket and runs shown", () =>
-					numberOf(s.seen, page.run) !== undefined && numberOf(s.seen, trail.run) !== undefined
-						? [numberOf(s.seen, page.run), numberOf(s.seen, trail.run)]
-						: undefined,
+				pick(7);
+				yield* s.until("trace shows ticket 7's lane", () =>
+					mentions(s.seen, view.run, SEVEN_TRACE),
 				);
-				pick(1);
-				const first = yield* both(1);
-				pick(2);
-				const second = yield* both(2);
 				// The ticket's window closes: that one process gets the end of its inputs, and ends.
 				s.window(page.run).closed();
 				yield* s.closed(page.run);
-				// Its input from the ticket ended, and the runs go on showing the last ticket.
-				const kept = numberOf(s.seen, trail.run);
-				const runsOpen = !s.seen.some((x) => x.kind === "close" && x.run === trail.run);
+				// Its input from the ticket ended, and the trace goes on showing the last ticket.
+				const traceOpen = !s.seen.some((x) => x.kind === "close" && x.run === view.run);
 				// The tracker's next pick goes down a pipe whose reader is gone: the send fails, and it ends.
-				pick(1);
+				// A second ticket, since the tracker sends only a new pick (`pickOf`).
+				pick(8);
 				yield* s.closed(picker.run);
 				// The last window closed: the line is over, and the prompt is back.
-				s.window(trail.run).closed();
-				yield* s.closed(trail.run);
+				s.window(view.run).closed();
+				yield* s.closed(view.run);
 				const rows = yield* s.prompts(2);
-				return {
-					programs: [picker.program, page.program, trail.program],
-					waiting,
-					first,
-					second,
-					kept,
-					runsOpen,
-					rows,
-				};
+				return {programs: [picker.program, page.program, view.program], traceOpen, rows};
 			}).pipe(Effect.scoped),
 		);
-		expect(got).toMatchObject({
-			programs: ["tracker", "ticket", "runs"],
-			// Started with no ticket, each waits on its input.
-			waiting: [null, null],
-			first: [1, 1],
-			second: [2, 2],
-			kept: 2,
-			runsOpen: true,
-		});
+		expect(got).toMatchObject({programs: ["tracker", "ticket", "trace"], traceOpen: true});
 		// The ticket had ended, so the pipe answered `stopped`: tsh says why the tracker failed.
 		expect(got.rows).toEqual([
-			"tsh$ tracker | ticket | runs",
+			"tsh$ tracker | ticket | trace",
 			"tsh: tracker failed: tracker sent ticket down a pipe that answered stopped",
 			"tsh$",
 		]);
 	});
-
 	it("is the first stage of a pipe: closing it sends the count on", async () => {
 		const rows = await go(
 			Effect.gen(function* () {
@@ -621,55 +589,65 @@ describe("a program's window", () => {
 		expect(rows).toEqual(["tsh$ counter | double", "double 2", "tsh$"]);
 	});
 
-	it("is one of two on `runs --ticket 7 | trace`: both open in the foreground, and a run picked in runs opens its trace", async () => {
+	it("opens ticket 7 on `trace --ticket 7`: the lane its facts name shows", async () => {
 		const ledger = memoryService();
 		const seen = await go(
 			Effect.gen(function* () {
 				yield* seedSeven(ledger);
 				const s = yield* session({ledger});
-				s.type("runs --ticket 7 | trace\r");
-				yield* s.opened(2);
-				const opens = s.seen.flatMap((x) => (x.kind === "open" ? [x] : []));
-				const of = (program: string) => opens.find((o) => o.program === program)?.run ?? "";
-				// Picked once runs has drawn ticket 7, as a person can only click a drawn clip.
-				yield* s.until("runs drew ticket 7", () =>
-					s.seen.find(
-						(x) =>
-							x.kind === "view" &&
-							x.run === of("runs") &&
-							JSON.stringify(x.data).includes(SEVEN_TRACE),
-					),
+				s.type("trace --ticket 7\r");
+				const open = yield* s.opened(1);
+				yield* s.until("trace shows ticket 7's lane", () =>
+					mentions(s.seen, open.run, SEVEN_TRACE),
 				);
-				const picked = s
-					.window(of("runs"))
-					.heard({type: "msg", msg: {type: "choose", value: {run: "r-2"}}});
-				// Before the pick, trace shows its own line's job; the pick replaces it.
-				const read = yield* s.until("trace read #7's record", () =>
-					s.seen.find(
-						(x) =>
-							x.kind === "view" &&
-							x.run === of("trace") &&
-							(x.data as {read?: string; id?: string}).read === "read" &&
-							(x.data as {id?: string}).id === SEVEN_TRACE,
-					),
-				);
-				s.window(of("runs")).closed();
-				s.window(of("trace")).closed();
+				s.window(open.run).closed();
 				yield* s.prompts(2);
-				return {opens, picked, read};
+				return {open};
 			}).pipe(Effect.scoped),
 		);
-		// tsh tells the tile of both windows, each in the foreground, the last stage first, as tsh
-		// starts a line's stages. Once both are shown it tells the tile the whole line, and the desk
-		// opens the two in place, runs in the typed-in tile and trace beside it (desk/layout/line.ts).
-		expect(seen.opens.map((o) => [o.program, o.placed])).toEqual([
-			["trace", "foreground"],
-			["runs", "foreground"],
-		]);
-		expect(seen.picked).toEqual({kind: "read"});
-		expect((seen.read as {data: {id: string}}).data.id).toBe(SEVEN_TRACE);
+		expect([seen.open.program, seen.open.placed]).toEqual(["trace", "foreground"]);
 	});
 
+	it("takes the ticket a pipe sends on `ticket --ticket 7 | trace`", async () => {
+		const ledger = memoryService();
+		await go(
+			Effect.gen(function* () {
+				yield* seedSeven(ledger);
+				const s = yield* session({ledger});
+				s.type("ticket --ticket 7 | trace\r");
+				yield* s.opened(2);
+				const view = s.seen.find((x) => x.kind === "open" && x.program === "trace");
+				if (view?.kind !== "open") return yield* Effect.die("trace did not open");
+				yield* s.until("trace shows ticket 7's lane", () =>
+					mentions(s.seen, view.run, SEVEN_TRACE),
+				);
+				for (const o of s.seen) if (o.kind === "open") s.window(o.run).closed();
+				yield* s.prompts(2);
+			}).pipe(Effect.scoped),
+		);
+	});
+
+	it("takes the tracker's pick on `tracker | trace`", async () => {
+		const ledger = memoryService();
+		await go(
+			Effect.gen(function* () {
+				yield* seedSeven(ledger);
+				const s = yield* session({ledger});
+				s.type("tracker | trace\r");
+				yield* s.opened(2);
+				const find = (program: string) => {
+					const one = s.seen.find((x) => x.kind === "open" && x.program === program);
+					return one?.kind === "open" ? one.run : "";
+				};
+				s.window(find("tracker")).heard({type: "msg", msg: {type: "query", value: {ticket: 7}}});
+				yield* s.until("trace shows ticket 7's lane", () =>
+					mentions(s.seen, find("trace"), SEVEN_TRACE),
+				);
+				for (const o of s.seen) if (o.kind === "open") s.window(o.run).closed();
+				yield* s.prompts(2);
+			}).pipe(Effect.scoped),
+		);
+	});
 	it("ends `seq --to 3 | tally | trace` on trace's window, showing that line's own job", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
@@ -718,14 +696,38 @@ describe("what a pipe can feed", () => {
 	it("is each program's data, never its commands: the frame's takes", () => {
 		expect(takes("tracker")).toEqual([]);
 		expect(takes("ticket")).toEqual(["ticket"]);
-		expect(takes("runs")).toEqual(["ticket"]);
 		// `any` takes whatever no typed input does (`anyInput`): a pipe feeds it from anything.
-		expect(takes("trace")).toEqual(["id", "any"]);
-		expect(takes("map")).toEqual([]);
+		// Ticket 141: trace takes a ticket too, and its window's inputs are no pipe's.
+		expect(takes("trace")).toEqual(expect.arrayContaining(["ticket", "any"]));
+		for (const own of ["toggle", "choose", "quit", "seek", "step"])
+			expect(takes("trace")).not.toContain(own);
+	});
+
+	/** The input of trace a line feeds, as the shell's fit check wires it. */
+	const fedInto = (text: string, program: string) => {
+		const parsed = Shell.parse(text);
+		if (parsed.kind !== "parsed" || parsed.statements[0]?.kind !== "run") throw new Error(text);
+		const checked = Shell.check(parsed.statements[0].pipeline, Shell.programList(list), text);
+		if (checked.kind !== "line") throw new Error(`${text}: ${JSON.stringify(checked)}`);
+		return checked.line.stages.find((stage) => stage.entry.program.name === program)?.fed;
+	};
+
+	it("wires a ticket into trace's `ticket` input, never into `any` (J1)", () => {
+		expect(fedInto("tracker | trace", "trace")).toBe("ticket");
+		expect(fedInto("ticket | trace", "trace")).toBe("ticket");
+		expect(fedInto("pipeline --ticket 7 | trace", "trace")).toBe("ticket");
+		expect(fedInto("trace --ticket 7", "trace")).toBeNull();
+	});
+
+	it("keeps every line into trace that works today (J1)", () => {
+		// tally's total fits no typed input of trace: it goes to `any`, taken and let go.
+		expect(fedInto("seq --to 3 | tally | trace", "trace")).toBe("any");
+		// Alone on a line, it is fed by nothing: it checks as a line of its own.
+		expect(fedInto(`trace --id ${SEVEN_TRACE}`, "trace")).toBeNull();
 	});
 
 	it("is what a line wires each stage's pipe into", () => {
-		const text = "tracker | ticket | runs | trace";
+		const text = "tracker | ticket | trace";
 		const parsed = Shell.parse(text);
 		if (parsed.kind !== "parsed" || parsed.statements[0]?.kind !== "run") throw new Error(text);
 		const checked = Shell.check(parsed.statements[0].pipeline, Shell.programList(list), text);

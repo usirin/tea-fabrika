@@ -16,6 +16,7 @@ import {
 	resumeAfter,
 	resumeOf,
 	STEPS,
+	saidYes,
 	StepEnd,
 	withNote,
 } from "./machine.ts";
@@ -198,6 +199,8 @@ export const fold = (seen: Seen): Folded => {
 				if (STEPS.indexOf(fact.stage) > STEPS.indexOf("plan")) pastPlan = true;
 				break;
 			case "checked":
+				// An exam head's, with its pull request: never the lane's own (self-fix PR 10).
+				if (fact.pr !== undefined) break;
 				// In a run: the run's own. Out of one: a restart's, at the head main's new base gave.
 				if (inRun !== undefined) inRun = fact;
 				else carry = {...carry, head: fact.head, checked: checksOf(fact)};
@@ -232,7 +235,9 @@ export const fold = (seen: Seen): Folded => {
 				if (kind === undefined) break;
 				kinds.delete(fact.ask);
 				trail = [...trail, {step: fact.ask, said: fact.pick}];
-				const noted = withNote(carry, fact.note);
+				// A `merge` on the exam's pull request is a yes on what its review read, as the lane lays it.
+				const said = kind === "exam_merge" && fact.pick === "merge" ? saidYes(carry) : carry;
+				const noted = withNote(said, fact.note);
 				carry = fact.pick === "go_on" ? letThrough(noted) : noted;
 				if (kind === "approve" && fact.pick === "approve") approved = true;
 				const step = askedStep(kind, last);

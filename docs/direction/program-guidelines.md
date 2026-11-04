@@ -3,8 +3,12 @@
 **Proposed 2026-11-02, with two parts decided.** [Composing programs, C1 to
 C11](#composing-programs-c1-to-c11) is **decided 2026-11-02**: the owner walked each rule and the
 audit's three splits. [G1](#g1-one-job-one-model-and-every-size-draws-it) is **decided 2026-11-03**:
-the owner took the lean. G2 to G8 and the smaller calls 1 to 7 are not walked yet, so they stay
-proposed, with their leans. The composing walk changed two of them, G6 R2 and G7 R4, and their
+the owner took the lean. G2 to G8 and the smaller calls 1 to 5 are not walked yet, so they stay
+proposed, with their leans. The asks program is named **inbox**, **decided 2026-11-03** in the
+glossary walk (G8 below); the sketches still say `asks`, which the rename pass changes. Calls 6 and
+7 moved to the customization study (experiment 206) and call 8 to the layers study (experiment
+207), so none of the three is decided here. Call 1, where focus goes on a close, stays open for the
+owner. The composing walk changed two of them, G6 R2 and G7 R4, and their
 text says so.
 
 Names changed 2026-11-03 by the owner's naming pass: `at` became `location` (`AsksAt` became
@@ -37,7 +41,7 @@ about what runs in a tile, how one program reaches another tile, and how the per
 
 ```ts
 // A sketch, next/. The asks program in the new shape. Two fields are new: `location` and `reuse`.
-// The rest is Tier 1's Program, plus `commands` from modes and `glance` (call 6).
+// The rest is Tier 1's Program, plus `commands` from modes and `glance` (call 6, moved to experiment 206).
 const asks = defineProgram({
 	name: "asks",
 	machine, msg, view, refuse, inputs, outputs,     // Tier 1; outputs: {ticket}, for `| ticket`
@@ -210,7 +214,7 @@ type Workspace = {layout: Split; focus: TileId; recent: ReadonlyArray<TileId>}; 
 - **Linear as the builder.** Linear has one triage page per team, so it never makes two. On our pieces
   open or focus is one piece of the desk that every program gets, with one field to say what counts
   as the same. Placement is tmux's and i3's, not Linear's: Linear does not tile (W5). Where Linear's
-  answer clashes, see call 7.
+  answer clashes, see call 7, moved to experiment 206.
 - **OTP.** `whereis` then `start_child`, in one step so two presses cannot race into two tiles [o1].
   The desk is the registry.
 - **Accessibility.** WCAG 2.4.11: a focused tile "is not entirely hidden" [w2]: focus never lands on a
@@ -418,33 +422,30 @@ ticket        keep
 trace         keep: OpenTelemetry's word
 tracker       keep: issue tracker; but its machine's drawing says tickets (src/index.ts:158)
 tsh built-ins keep: jobs, ps, tell, close, stop, attach, programs, help, exit; tell is ours
-asks          doubt: "an ask" is office slang, and the top bar glues a verb on it, "1 asks you"
+asks          now `inbox` (decided 2026-11-03, below); the top bar glued a verb on it, "1 asks you"
 ```
 
-**The running example: `asks`.** Today it is the frame's menu, not a program (G1); in `next/` it is
-the asks program (Tier 5). The item says `1 asks you` / `3 ask you` (`frame.ts:229`), which breaks R4
-whatever the name. No lean, since the best is under 60%: the owner picks.
+**The running example: `inbox`.** Today it is the frame's menu, not a program (G1); in `next/` it is
+the inbox program (Tier 5). **Decided 2026-11-03** in the glossary walk
+([`.glossary/TERMS.md`](../../.glossary/TERMS.md), inbox in the tracker): the asks program is named
+**inbox**, as Linear's Inbox, "your notification center" ([Inbox](https://linear.app/docs/inbox)).
+It is a person's list of things waiting, the open asks first, and the owner's desk is the inbox.
+This reverses this note's earlier ruling that `inbox` was out because a ledger stream is called an
+inbox: [We follow DDD](./we-follow-ddd.md) decided that a word has one meaning inside its own
+context, so the ledger keeps `inbox` for the stream and the tracker uses it for the list, and the
+context map names the boundary. The count's item is written from the noun (R4).
 
 ```text
-name       top bar         its accessible name        what the word already means here
-asks       1 ask, 3 asks   "3 asks wait on you"       the noun of the stage verb ask; one meaning
-questions  3 questions     "3 questions for you"      PR 353 proposes question for a tile's close y/n
-decisions  3 to decide     "3 decisions wait on you"  the review stage's decisions: rulings already made
-waiting    3 waiting       "3 wait on you"            a state word; the host item's "waiting" ring
-inbox      ruled out       none                       a ticket stream's write inbox, tracker/ticket/43/inbox
+name    top bar     its accessible name        what the word means here
+inbox   3 in inbox  "inbox, 3 wait on you"     tracker: a person's list of things waiting; ledger: a stream
 ```
 
-- **Keep `asks`, fix the item.** 45%. Why: `ask` is already a stage's verb and the ledger's word,
-  so the noun keeps one meaning and nothing is renamed. Cost: about 10 lines in `frame.ts` and its
-  tests. Doubt: a reader who is not a native speaker may not know "an ask".
-- **`questions`.** 25%. Why: the plainest word. Cost: one rename pass over the ask desk, this note,
-  the frame note and the app, a guess (`asks` is also a verb, so `rg` finds 60 notes); and PR 353's
-  `question` needs another word. Doubt: an approval is not a question.
-- **`decisions`.** 20%. Why: it says what is asked, as [ask for decisions, not
-  facts](./ask-for-decisions-not-facts.md) does. Cost: as `questions`, plus the review stage's
-  field. Doubt: a decision you made and one you owe would share a word.
-- **`waiting`.** 10%. Why: the count's label, decided 2026-11-02, is "Waits on you". Cost: as
-  `questions`. Doubt: an adjective breaks R1, and the title bar puts it beside a state word.
+- **Why not `asks`, `questions`, `decisions` or `waiting`.** `asks` was the first lean (45%), but
+  "an ask" is office slang, and an ask is what an agent or a step puts to a person, which the inbox
+  lists. `questions` would clash with the close question, `decisions` with the review stage's
+  rulings, and `waiting` is an adjective that breaks R1.
+- **What it costs.** Words and one rename pass over the ask desk, this note and the app; the item's
+  label gets its R4 fix whatever the name. Nothing is built.
 
 ## The smaller calls
 
@@ -525,12 +526,16 @@ never                  only C-b ; goes back; Esc at the top does nothing
 
 ### 6. A glance view in the top bar
 
+**Moved to experiment 206, the customization study (2026-11-03). Not decided here.**
+
 **Lean "any program may have one; the person picks which show", 65%** (196's flag).
 
 - It changes the program shape by one optional view. Tracker, runs and spend could each want one.
   **Doubt:** a top bar with four glances is noise; one, the asks, may be all a person keeps.
 
 ### 7. A look over the desk, or a tile beside
+
+**Moved to experiment 206, the customization study (2026-11-03). Not decided here.**
 
 **No lean, the owner picks. It is a clash with Linear.**
 
@@ -544,6 +549,8 @@ fabrika today     a popover is the only thing over the desk (popovers)
   peek means a second kind of thing over the desk, beside popovers.
 
 ### 8. Is a side panel a program?
+
+**Moved to experiment 207, the layers study (2026-11-03). Not decided here.**
 
 **Lean, 65%, a guess until it is walked:** a block about the same thing is a section of that
 program's view; a block about another thing is another program's tile.
@@ -560,7 +567,7 @@ live agent panel       another thing (a run, trace's job)      ticket | trace, t
   a properties panel (5.2) and a live agent panel (5.4) inside the ticket's view. Under this lean
   the first stays as a section and the second becomes a tile.
 - **The word:** no part of the frame is called a panel (the glossary walk, PR 362). Whether
-  "panel" names anything inside a view waits on this call.
+  "panel" names anything inside a view waits on this call, now experiment 207.
 - **Doubt:** a ticket that always opens with its run beside it is two tiles every time. A day of
   use with `ticket | trace` would settle whether that is noise.
 
@@ -803,7 +810,7 @@ after    tracker | ticket             Enter sends the number down the pipe; the 
 ```
 
 - Before fix 1, this split is worse: Enter would do nothing you can see.
-- **Doubt:** a quick look in place, as Linear's Space peek (call 7), may beat a tile beside. A week
+- **Doubt:** a quick look in place, as Linear's Space peek (call 7, moved to experiment 206), may beat a tile beside. A week
   of use with fix 1 settles it.
 
 **Split 3: the asks list leaves the frame. Decided, 80%, in `next/` only; today gets fix 1.**
@@ -858,7 +865,7 @@ Offered, not filed. Each is small and stands alone.
   from a popup has no such tile, so it lands after the focused tile, which keeps its program, and the
   tile asked for stays open while the others fold (196's P2).
 - **[Modes](./modes.md), decided.** `commands` is used as is; `leave` is one more command a program may
-  bind. A `glance` view would be one more optional field (call 6).
+  bind. A `glance` view would be one more optional field (call 6, moved to experiment 206).
 
 ## What it costs
 

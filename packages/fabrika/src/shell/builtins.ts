@@ -3,7 +3,7 @@ import {type Job, jobNamed} from "../host/jobs.ts";
 import {copyRows, fullRows} from "./copies.ts";
 import {readValue} from "./decode.ts";
 import {didYouMean} from "./did-you-mean.ts";
-import {reattach, type Shell, waitForJob} from "./execute.ts";
+import {askStop, reattach, type Shell, waitForJob} from "./execute.ts";
 import type {Named, Statement} from "./grammar.ts";
 import {columns, helpOf} from "./help.ts";
 
@@ -181,19 +181,20 @@ export const runBuiltin = (
 			case "stop": {
 				const job = named(shell, first, "stop");
 				if (typeof job === "string") return refuse(job);
+				// Who asked comes first, so the job's record keeps it with its end (host/records.ts).
 				if (job.state === "detached") {
+					yield* askStop(shell, job.n);
 					yield* shell.table.dispatch({type: "dropped", n: job.n}).pipe(Effect.ignore);
 					shell.print("err", `[${job.n}] dropped  ${job.text}`);
 					return ok;
 				}
-				yield* Effect.forEach(
-					job.stages.flatMap((s) => {
-						const r = shell.live.get(s.run);
-						return r === undefined ? [] : [r.stop];
-					}),
-					(stop) => stop,
-					{concurrency: "unbounded"},
-				);
+				const stops = job.stages.flatMap((s) => {
+					const r = shell.live.get(s.run);
+					return r === undefined ? [] : [r.stop];
+				});
+				// Another tile's job: nothing of it runs here, so nothing is stopped, and no stop is kept.
+				if (stops.length > 0) yield* askStop(shell, job.n);
+				yield* Effect.forEach(stops, (stop) => stop, {concurrency: "unbounded"});
 				return ok;
 			}
 			case "attach": {

@@ -32,6 +32,10 @@
 //                              in it is that mutant's id, so each can have a reason of its own
 //   see       [path]           each run's log line keeps what its folder holds at these paths as it
 //                              starts, under `seen`: `null` where there is no such file
+//   pushesAt  {step: {run: {branch, path, text}}}  as that run starts, a person pushes one commit to
+//                              `branch` on `remote`, writing `text` at `path`. Its sha is in the run's
+//                              log line, under `pushed`; `null` for a run with no push
+//   remote    path             the toy remote, for `pushesAt`
 //
 // A later try that resumes a thread names the step by its thread. One that does not, whose prompt is
 // only what the last try got wrong, is the step that ran last.
@@ -39,7 +43,16 @@
 // Under `--output-schema` every key the schema names is in the answer, `null` where the answer has
 // nothing to say, as strict mode makes a real agent write it.
 
-import {appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
+import {execFileSync} from "node:child_process";
+import {
+	appendFileSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import {dirname, join} from "node:path";
 
 const args = process.argv.slice(2);
@@ -92,6 +105,30 @@ const brief = briefOf(prompt, step);
 const scriptFile = LOG === undefined ? null : join(dirname(LOG), "script.json");
 const script = scriptFile !== null && existsSync(scriptFile) ? JSON.parse(readFileSync(scriptFile, "utf8")) : {};
 
+/** A person's commit, pushed to the script's branch while this run works: its sha, or `null`. */
+const pushed = (() => {
+	const push = script.pushesAt?.[step]?.[nth];
+	if (push === undefined || LOG === undefined) return null;
+	const work = mkdtempSync(join(dirname(LOG), "person-"));
+	const git = (...rest) =>
+		execFileSync("git", ["-c", "user.name=A person", "-c", "user.email=person@example.com", ...rest], {
+			cwd: work,
+			encoding: "utf8",
+			stdio: "pipe",
+		});
+	try {
+		git("clone", "-q", "--branch", push.branch, script.remote, ".");
+		mkdirSync(dirname(join(work, push.path)), {recursive: true});
+		writeFileSync(join(work, push.path), push.text);
+		git("add", "-A");
+		git("commit", "-qm", "A person's change");
+		git("push", "-q", "origin", `HEAD:refs/heads/${push.branch}`);
+		return git("rev-parse", "HEAD").trim();
+	} finally {
+		rmSync(work, {recursive: true, force: true});
+	}
+})();
+
 if (LOG !== undefined)
 	appendFileSync(
 		LOG,
@@ -116,6 +153,7 @@ if (LOG !== undefined)
 					return [path, existsSync(at) ? readFileSync(at, "utf8") : null];
 				}),
 			),
+			pushed,
 		})}\n`,
 	);
 
@@ -279,7 +317,8 @@ const ANSWERS = {
 		};
 	},
 	review: () => {
-		const ids = [...new Set(brief.match(/^- (c\d+):/gm) ?? [])].map((row) => row.slice(2, -1));
+		// `c1`: a ticket's criteria. `e1`: an exam pull request's, one per rule change (self-fix PR 10).
+		const ids = [...new Set(brief.match(/^- ([a-z]\d+):/gm) ?? [])].map((row) => row.slice(2, -1));
 		if (script.unseen !== undefined)
 			return {
 				rows: ids.map((id) => ({id, grade: "unseen", says: script.unseen})),
@@ -308,7 +347,11 @@ const ANSWERS = {
 			rows: ids.map((id) => ({
 				id,
 				grade: "pass",
-				where: [{file: "src/lower.ts", first: 2, last: 2}],
+				where: [
+					id.startsWith("e")
+						? {file: ".oxlintrc.json", first: 1, last: 1}
+						: {file: "src/lower.ts", first: 2, last: 2},
+				],
 				says: "The test and the code both show it.",
 				limit: null,
 			})),

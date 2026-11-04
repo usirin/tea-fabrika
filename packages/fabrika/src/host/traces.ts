@@ -23,15 +23,22 @@ import {RunRecord, type Storage, StorageBroken, storageOf} from "../program/stor
 // written by the run's own storage into this record, behind the door, never sent to a viewer
 // elsewhere. A step's state never holds a secret: storage refuses one (../program/secrets.ts).
 
+// The `u` flag is what lets Effect write the pattern into the JSON Schema; without it the shape
+// is a bare string, and any string output would fit a trace id input.
+
 /** A trace's id: 32 lowercase hex characters, as OpenTelemetry writes it. */
-export const TraceId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{32}$/));
+export const TraceId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{32}$/u));
 
 /** A span's id: 16 lowercase hex characters. */
-export const SpanId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{16}$/));
+export const SpanId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{16}$/u));
 
 /** How a job ended. */
 export const JobEnd = Schema.Literals(["done", "failed", "stopped"]);
 export type JobEnd = typeof JobEnd.Type;
+
+/** A stop someone asked for: who, as a writer's text, and why. A person's Ctrl-C gives no why. */
+export const JobStop = Schema.Struct({by: Schema.String, why: Schema.NullOr(Schema.String)});
+export type JobStop = typeof JobStop.Type;
 
 /** What was started and how it ended. Written by the host (#72): `null` in a record until it does. */
 export const Job = Schema.Struct({
@@ -186,8 +193,19 @@ export const JobCall = Schema.Union([
 		text: Schema.String,
 		host: Schema.String,
 		at: Schema.Number,
+		/**
+		 * Who started the job, as its table says (./jobs.ts): the sender, or an agent working for
+		 * the sender. Left out, or naming anyone else, the record keeps the sender (./job-rules.ts).
+		 */
+		by: Schema.optionalKey(Schema.String),
 	}),
-	Schema.Struct({op: Schema.Literal("ended"), how: JobEnd, at: Schema.Number}),
+	Schema.Struct({
+		op: Schema.Literal("ended"),
+		how: JobEnd,
+		at: Schema.Number,
+		/** Who asked the job to stop, and why, as its table kept it. Left out: it ended on its own. */
+		stop: Schema.optionalKey(JobStop),
+	}),
 	Schema.Struct({
 		op: Schema.Literal("opened"),
 		run: Schema.String,
@@ -306,8 +324,11 @@ export const jobWrites = (calls: RecordCalls, trace: string) => ({
 		readonly text: string;
 		readonly host: string;
 		readonly at: number;
+		readonly by?: string;
 	}) => calls(trace, {op: "began", ...job}).pipe(Effect.asVoid),
-	ended: (how: JobEnd, at: number) => calls(trace, {op: "ended", how, at}).pipe(Effect.asVoid),
+	/** `stop`: who asked it to stop, and why; `null`, it ended on its own. */
+	ended: (how: JobEnd, at: number, stop: JobStop | null = null) =>
+		calls(trace, {op: "ended", how, at, ...(stop === null ? {} : {stop})}).pipe(Effect.asVoid),
 	/** Keep the span `run`'s work hangs under. Kept before it returns. */
 	opened: (run: string, span: string, at: number) =>
 		calls(trace, {op: "opened", run, span, at}).pipe(Effect.asVoid),

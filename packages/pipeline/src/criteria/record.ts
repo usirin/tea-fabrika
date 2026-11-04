@@ -1,7 +1,7 @@
 import {Context, Effect, Layer, Ref} from "effect";
 import {Ledger, readFacts, sendFact} from "../asks/ledger.ts";
 import {bookOf, firstTaskOf, foldLedger, planFor} from "../asks/rules.ts";
-import {type TaskId, type TicketId, taskId} from "../ids.ts";
+import {type Owner, type TicketId, taskId} from "../ids.ts";
 import {
 	apply,
 	type Book,
@@ -93,7 +93,7 @@ export function kept(book: Book, judgement: Judgement): readonly Row[] {
 }
 
 /** A judgement, folded into a book: its kept rows, and what it found, under `task`. Pure. */
-export const keep = (book: Book, judgement: Judgement, task: TaskId): Book =>
+export const keep = (book: Book, judgement: Judgement, task: Owner): Book =>
 	withRound(book, {...judgement, rows: kept(book, judgement), task});
 
 /** The one task a ticket no plan holds has: every criterion it learns goes under it. */

@@ -23,9 +23,10 @@ const lane = outcomesOf({
 	ask: {owner: ["paused"]},
 	/**
 	 * Nothing more to do, on someone's decision. `closed`: the ticket is closed. `owner_no`: the
-	 * person answered no. `research`: triage says this ends in a finding, not a change.
+	 * person answered no. `research`: triage says this ends in a finding, not a change. `claimed`:
+	 * another lane holds the ticket, and `said` names it, as operate does (jidoka row 3).
 	 */
-	skip: ["closed", "owner_no", "research"],
+	skip: ["closed", "owner_no", "research", "claimed"],
 	/**
 	 * Stop, never guess. `not_yours`: the ticket was not filed by the person running the lane, or by
 	 * an agent of theirs, so no agent reads it on their login. `no_ticket`: it could not be read.
@@ -33,7 +34,8 @@ const lane = outcomesOf({
 	 * `step_stuck`: a step ended stuck. `rounds_spent`: review kept sending it back.
 	 * `sent_back`: a step sent it somewhere this lane has no way to go. `checks_not_run`: code's checks
 	 * after the build could not run at its head, or a step after build had no green ones there.
-	 * `checks_red`: code's checks failed at a head no builder goes back to, the mutants job's commit.
+	 * `checks_red`: code's checks failed at the head a step after build was to run on, and the builder
+	 * said that head was done. Red on the mutants job's commit goes back to the builder instead.
 	 * `merged_elsewhere`: someone else merged the pull request, at a head this lane did not push.
 	 */
 	stuck: [

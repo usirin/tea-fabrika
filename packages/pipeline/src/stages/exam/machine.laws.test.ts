@@ -10,7 +10,15 @@ import type {MsgOf} from "@kampus/fabrika-old";
 import {noSpend} from "@kampus/fabrika-old/agents/claude";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {type Exam, type ExamAsk, type ExamCmd, exam, landExam, ruleFiles} from "./machine.ts";
+import {
+	type Exam,
+	type ExamAsk,
+	type ExamCmd,
+	exam,
+	examSub,
+	landExam,
+	ruleFiles,
+} from "./machine.ts";
 
 // The exam step's laws on its real reducer, from its real `init`, each seen to fail on a planted
 // mistake. Today's version.
@@ -192,5 +200,91 @@ describe("each law fails on a planted mistake", () => {
 			start: (s, m) => exam.update.start(s.phase === "over" ? {phase: "idle"} : s, m),
 		});
 		expect(() => check(planted, overStays)).toThrow();
+	});
+});
+
+// ---------------------------------------------------------------- a redo (self-fix PR 10, Part 2)
+//
+// A failed exam review goes back to the exam step, never the builder. The redo starts from the exam
+// head, its writer's prompt holds the findings or the failing names, and its Check is the same: it may
+// still write only the files the plan lists.
+
+interface Redo {
+	readonly head: string;
+	readonly why: readonly string[];
+}
+/** The redo an ask holds, if any. */
+const redoOf = (a: ExamAsk): Redo | undefined => (a as {readonly redo?: Redo}).redo;
+const EXAM_HEAD = "3".repeat(40);
+const WHY = ["e1: the rule turns on no-floating-promises in `src/` only", "checks: lint"];
+const redo = (paths: readonly string[]): ExamAsk =>
+	({...ask(paths), redo: {head: EXAM_HEAD, why: WHY}}) as ExamAsk;
+
+const redoArbs: MsgArbitraryTable<Msg> = {
+	...arbs,
+	start: arbRecordMsg("start", {
+		ask: fc.constantFrom(ask([RULE]), redo([RULE]), redo([])),
+		key: fc.constant("k"),
+	}),
+};
+const redoLists = fc.array(arbMsg(redoArbs), {minLength: 1, maxLength: 40});
+
+const checkRedo = (machine: Machine, law: (t: ExamStep) => void) =>
+	propertyInvariant(
+		onItsRun(machine),
+		undefined,
+		redoLists,
+		(t: ExamStep) => {
+			law(t);
+			return true;
+		},
+		{numRuns: 400, seed: 9},
+	);
+
+/** A redo's first prompt holds every finding it was sent back with. */
+const redoSaysWhy = ({prev, msg, next}: ExamStep) => {
+	if (msg.type !== "start" || prev.phase !== "idle") return;
+	const why = redoOf(msg.ask)?.why ?? [];
+	if (why.length === 0 || next.phase !== "writing") return;
+	const prompt = examSub.deps(next)?.prompt ?? "";
+	for (const finding of why) expect(prompt).toContain(finding);
+};
+
+describe("a redo", () => {
+	it("keeps its head and findings on the ask it holds", () => {
+		const [s] = exam.update.start({phase: "idle"}, {type: "start", ask: redo([RULE]), key: "k"});
+		expect(s.phase === "idle" ? undefined : redoOf(s.ask)).toEqual({head: EXAM_HEAD, why: WHY});
+	});
+
+	it("puts every finding in its writer's first prompt", () => checkRedo(exam, redoSaysWhy));
+
+	it("tells the writer, above the findings, to fix them in the files already on the pull request", () => {
+		const promptFor = (a: ExamAsk) => {
+			const [s] = exam.update.start({phase: "idle"}, {type: "start", ask: a, key: "k"});
+			return examSub.deps(s)?.prompt ?? "";
+		};
+		const lines = promptFor(redo([RULE])).split("\n");
+		const heading =
+			"These files are on the pull request already. It was sent back for this, so fix it in the same files:";
+		expect(lines).toContain(heading);
+		expect(lines.slice(lines.indexOf(heading) + 1)).toEqual(WHY.map((w) => `- ${w}`));
+		// A first writing was sent back for nothing.
+		expect(promptFor(ask([RULE]))).not.toContain("sent back");
+	});
+
+	it("lands only what the plan listed, as the first writing does", () =>
+		checkRedo(exam, landsOnlyWhatIsListed));
+
+	it("asks the person when it lands, as the first writing does", () =>
+		checkRedo(exam, asksThePerson));
+
+	it("that law catches its plant: start drops the redo", () => {
+		const planted = plant({
+			start: (s, m) => {
+				const {redo: _dropped, ...rest} = m.ask as ExamAsk & {readonly redo?: Redo};
+				return exam.update.start(s, {...m, ask: rest});
+			},
+		});
+		expect(() => checkRedo(planted, redoSaysWhy)).toThrow();
 	});
 });
