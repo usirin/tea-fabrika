@@ -102,8 +102,11 @@ const hostOn = (home: string, lines: string[]) =>
 		return {paths, type, stop: Scope.close(host, Exit.void)};
 	});
 
-/** An MCP client, on the bridge Claude Code would start: `node cli.ts mcp --as <agent>`. */
-const agentOn = (home: string, agent: string) =>
+/**
+ * An MCP client, on the bridge Claude Code would start: `node cli.ts mcp --as <agent>`. `named`:
+ * the name and version its `initialize` gives.
+ */
+const agentOn = (home: string, agent: string, named = {name: "test", version: "0.0.0"}) =>
 	Effect.gen(function* () {
 		const path = yield* Path.Path;
 		const cli = yield* path.fromFileUrl(new URL("../cli.ts", import.meta.url)).pipe(Effect.orDie);
@@ -120,7 +123,7 @@ const agentOn = (home: string, agent: string) =>
 			sent.push(message);
 			return send(message);
 		};
-		const client = new Client({name: "test", version: "0.0.0"});
+		const client = new Client(named);
 		yield* Effect.acquireRelease(
 			Effect.promise(() => client.connect(transport)),
 			() => Effect.promise(() => client.close()).pipe(Effect.ignore),
@@ -405,6 +408,36 @@ describe("the host's wide log", () => {
 		expect(came[0]?.client).toBeUndefined();
 		expect(came[0]?.version).toBeUndefined();
 		expect(said(lines, "tool_called")[0]).toMatchObject({tool: "runs", call: "2", ok: "true"});
+	});
+
+	it("keeps an agent's lines one line each in the host's log, whatever its tool name or its client's name holds", async () => {
+		const lines: string[] = [];
+		// Text the agent chooses, each with a newline and a forged line after it.
+		const named = {
+			name: "test\nlevel=INFO message=agent_came agent=root",
+			version: "0.0.0\nlevel=INFO message=tool_called agent=root tool=stop call=1 ok=true",
+		};
+		const tool = "runs\nlevel=INFO message=tool_called agent=claude tool=stop call=99 ok=true";
+		await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				yield* hostOn(home, lines);
+				const agent = yield* agentOn(home, "claude", named);
+				yield* agent.call(tool, {});
+				yield* until("agent_came in the log", () =>
+					said(lines, "agent_came").length > 0 ? true : undefined,
+				);
+				yield* until("the call's line", () =>
+					said(lines, "tool_called").length > 0 ? true : undefined,
+				);
+			}),
+		);
+		// The host's file, as host/main.ts writes it with `Logger.toFile`: each line, then a newline.
+		const file = lines.join("\n").split("\n");
+		expect(file.filter((line) => line.includes("message=agent_came"))).toHaveLength(1);
+		expect(file.filter((line) => line.includes("message=tool_called"))).toHaveLength(1);
+		// No line of the file is one the agent began: each forged one starts with `level=`.
+		expect(file.filter((line) => line.startsWith("level="))).toEqual([]);
 	});
 
 	it("writes exactly one tool_called line per tool call, done or refused, with the call's JSON-RPC id", async () => {

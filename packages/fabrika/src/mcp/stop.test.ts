@@ -99,6 +99,24 @@ describe("a stop call, read", () => {
 		}
 	});
 
+	it("is refused when its why holds a newline or another control character, and the refusal names why", () => {
+		// A why is shown in the person's tile and written in the host's log: one line, nothing that
+		// moves the cursor or starts a line of its own (table.ts's `oneLine` takes the same out).
+		for (const why of [
+			"wrong ticket\nlevel=INFO message=job_stopped n=2",
+			"wrong ticket\r[1] done",
+			"wrong\u001b[2K ticket",
+			"wrong\u0000ticket",
+			"wrong\u007fticket",
+		]) {
+			const call = callOf(LIST, STOP, {n: 3, why});
+			expect(call.kind, JSON.stringify(why)).toBe("refused");
+			expect(call.kind === "refused" ? call.why : "").toMatch(/\bwhy\b/);
+		}
+		// Plain words in any script still fit.
+		expect(callOf(LIST, STOP, {n: 3, why: "yanlış bilet: PR 7"}).kind).toBe("stop");
+	});
+
 	it("is refused when it names no job, and the refusal names n", () => {
 		for (const args of [{why: "wrong ticket"}, {n: "3", why: "wrong ticket"}, {n: 1.5, why: "x"}]) {
 			const call = callOf(LIST, STOP, args);

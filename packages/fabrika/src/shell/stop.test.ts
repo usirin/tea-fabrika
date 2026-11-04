@@ -5,7 +5,7 @@ import {HostJobs, type JobTable, openJobs} from "../host/host-jobs.ts";
 import type {Jobs} from "../host/jobs.ts";
 import {ear} from "../program/ear.ts";
 import {start, tell} from "../program/program.ts";
-import {memoryStorage} from "../program/storage.ts";
+import {memoryStorage, type Storage} from "../program/storage.ts";
 import {Programs, programList} from "./programs.ts";
 import {type Printed, type Ready, tsh} from "./shell.ts";
 import {SMALL} from "./small.ts";
@@ -29,34 +29,51 @@ const AGENT = "agent:claude for:github:7";
 const LIST = programList(SMALL);
 const LONG = "sleep --ms 60000";
 
+/** A tsh in tile t1, as `PERSON`, on a table of its own, its storage as `wrap` makes it. */
+const tshOn = (wrap: (storage: Storage) => Storage) =>
+	Effect.gen(function* () {
+		const storage = wrap(memoryStorage());
+		const jobs = yield* openJobs(storage);
+		const printed = ear<Printed>();
+		const ready = ear<Ready>();
+		const started = yield* start(
+			tsh,
+			{show: "short"},
+			{printed: printed.hear, ready: ready.hear},
+			{id: "tsh:stop", storage},
+		).pipe(
+			Effect.provideService(HostJobs, {...jobs, owner: "t1", by: PERSON}),
+			Effect.provideService(Programs, LIST),
+		);
+		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+		let told = 0;
+		/** One line, and its `ready`. */
+		const line = (text: string) =>
+			Effect.gen(function* () {
+				expect(yield* tell(started.run, "line", text)).toBe("queued");
+				told += 1;
+				const all = yield* ready.upTo(told);
+				return all[told - 1];
+			});
+		/** The host's word to this tsh: stop job n. */
+		const stop = (n: number): Effect.Effect<string, unknown> => tell(started.run, "stop", n);
+		return {table: jobs.table, run: started.run, printed, ready, line, stop};
+	});
+
 /** A tsh in tile t1, as `PERSON`, on a table of its own. */
-const tshInT1 = Effect.gen(function* () {
-	const storage = memoryStorage();
-	const jobs = yield* openJobs(storage);
-	const printed = ear<Printed>();
-	const ready = ear<Ready>();
-	const started = yield* start(
-		tsh,
-		{show: "short"},
-		{printed: printed.hear, ready: ready.hear},
-		{id: "tsh:stop", storage},
-	).pipe(
-		Effect.provideService(HostJobs, {...jobs, owner: "t1", by: PERSON}),
-		Effect.provideService(Programs, LIST),
-	);
-	if (started.kind !== "running") return yield* Effect.die("tsh did not start");
-	let told = 0;
-	/** One line, and its `ready`. */
-	const line = (text: string) =>
-		Effect.gen(function* () {
-			expect(yield* tell(started.run, "line", text)).toBe("queued");
-			told += 1;
-			const all = yield* ready.upTo(told);
-			return all[told - 1];
-		});
-	/** The host's word to this tsh: stop job n. */
-	const stop = (n: number): Effect.Effect<string, unknown> => tell(started.run, "stop", n);
-	return {table: jobs.table, run: started.run, printed, ready, line, stop};
+const tshInT1 = tshOn((storage) => storage);
+
+/**
+ * A storage whose `sleep` runs take 100 ms to open, as a slow disk would: the job is in the table
+ * that long before tsh holds its runs.
+ */
+const slowSleep = (storage: Storage): Storage => ({
+	record: (run) => storage.record(run),
+	remove: (run) => storage.remove(run),
+	open: (run, flags) =>
+		run.startsWith("sleep")
+			? Effect.sleep("100 millis").pipe(Effect.andThen(storage.open(run, flags)))
+			: storage.open(run, flags),
 });
 
 /** Wait for `check` to answer something, three seconds at most. */
@@ -179,6 +196,29 @@ describe("tsh's stop input does what stop %n does", () => {
 		// 130: stopped, as Ctrl-C's end is.
 		expect(seen).toEqual({word: "queued", status: 130});
 	});
+
+	it("stops a job told while it is in the table but before tsh holds its runs", async () => {
+		// The host sees a job running as soon as the table has it, and an agent's stop can come then:
+		// here, while its run is still opening on a slow storage. The stop must still end it.
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const t = yield* tshOn(slowSleep);
+				expect(yield* tell(t.run, "line", `${LONG} &`)).toBe("queued");
+				yield* until("job 1 in the table", () =>
+					t.table.getState().jobs.some((j) => j.n === 1) ? true : undefined,
+				);
+				// What the host does for the agent: its stop first, then the word to the tsh that runs it.
+				yield* t.table.dispatch({type: "stopping", n: 1, by: AGENT, why: "wrong ticket"});
+				expect(yield* t.stop(1)).toBe("queued");
+				yield* until("the job's end", () =>
+					t.table.getState().jobs.some((j) => j.n === 1) ? undefined : true,
+				).pipe(Effect.exit);
+				return t.table.getState().jobs.map((j) => ({n: j.n, state: j.state}));
+			}).pipe(Effect.scoped),
+		);
+		// Job 1 left the table: it was stopped, and did not run on.
+		expect(seen).toEqual([]);
+	});
 });
 
 describe("the stopper's line in the tile the job ran in", () => {
@@ -235,6 +275,27 @@ describe("the stopper's line in the tile the job ran in", () => {
 		expect(seen.printed.filter((text) => text.includes("stopped by"))).toHaveLength(1);
 		// %1 runs on.
 		expect(seen.left).toEqual([1]);
+	});
+
+	it("says the stopper once when one job is stopped twice: the host's word, then stop %1", async () => {
+		const printed = await Effect.runPromise(
+			Effect.gen(function* () {
+				const t = yield* tshInT1;
+				yield* t.line(`${LONG} &`);
+				yield* t.table.dispatch({type: "stopping", n: 1, by: AGENT, why: "wrong ticket"});
+				expect(yield* t.stop(1)).toBe("queued");
+				// The person's own stop of the same job, at once: the table keeps the agent's stop.
+				expect(yield* tell(t.run, "line", "stop %1")).toBe("queued");
+				yield* until("the job's end", () =>
+					t.table.getState().jobs.some((j) => j.n === 1) ? undefined : true,
+				);
+				yield* settled(t.table);
+				return t.printed.values.map((p) => p.text);
+			}).pipe(Effect.scoped),
+		);
+		expect(printed.filter((text) => text.includes("stopped by"))).toEqual([
+			`[1] stopped by ${AGENT}: wrong ticket`,
+		]);
 	});
 
 	it("says no stopper when the tsh's own writer stopped it", async () => {

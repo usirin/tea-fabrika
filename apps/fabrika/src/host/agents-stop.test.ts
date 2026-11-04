@@ -368,6 +368,40 @@ describe("the stop tool", () => {
 		expect(seen.ended.text).toMatch(/ended/);
 	});
 
+	it("lets nothing a why holds add a row to the person's tile", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				const host = yield* hostOn(home, []);
+				const agent = yield* agentOn(home, "claude");
+				host.type("counter &\r");
+				yield* agent.jobWhen(1, (d) => tagOf(d) === "running");
+				host.type("counter &\r");
+				yield* agent.jobWhen(2, (d) => tagOf(d) === "running");
+				// A newline starts a row of its own; a carriage return writes over the stopper's row.
+				const answers = [
+					yield* agent.call("stop", {n: 1, why: "wrong ticket\nfake row one"}),
+					yield* agent.call("stop", {n: 2, why: "wrong ticket\rfake row two"}),
+				];
+				// Whatever each stop came to, the tile has said all it will about it a moment on.
+				for (const [i, answer] of answers.entries())
+					if (!answer.error)
+						yield* until(`the stopper's line for ${i + 1}`, () =>
+							host
+								.rows()
+								.some((row) => row.includes(`[${i + 1}] stopped by`) || row.includes("fake row"))
+								? true
+								: undefined,
+						);
+				yield* Effect.sleep("300 millis");
+				return {answers, rows: host.rows()};
+			}),
+		);
+		// No row of its own: a why refused, or kept on the stopper's row, never starts one.
+		expect(seen.rows.filter((row) => row.trimStart().startsWith("fake row"))).toEqual([]);
+		for (const answer of seen.answers) if (answer.error) expect(answer.text).toMatch(/\bwhy\b/);
+	});
+
 	it("refuses a stop with no why, an empty why or one past 500 characters, and the job runs on", async () => {
 		const lines: string[] = [];
 		const seen = await go(
