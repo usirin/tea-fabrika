@@ -1,14 +1,28 @@
 # Where does long-lived work live in our tracker, and where do bugs and follow-ups go?
 
-Read 2026-11-03. **This is reading, not a measurement.** Nothing ran but read-only lists of
-today's tracker. It is phase 1 of a guidelines study (steps 1 to 4 of the guidelines skill): the
-settled check, one running example, the known way and the three tests. It will feed a note,
-"Organizing work", and a Design canvas, "Organizing work guidelines". Neither exists yet. The
-designs (step 5) wait for the owner's look at this draft.
+Read 2026-11-03; designs built and shot 2026-11-03 and 2026-11-04. **This is reading, plus four
+designs and three rounds built on a local branch of today's app and shot on Electron. It is not a
+measurement.** Phase 1 (steps 1 to 4 of the guidelines skill) is the reading below. Phase 2 (step
+5) is [the designs](#step-5-four-designs-then-three-rounds). It feeds the note
+[areas](../docs/direction/areas.md) and a Design canvas, "Area guidelines", which is not published
+yet.
 
 **The owner's picks, 2026-11-03,** after the walk's steps 1 to 4: record `from` now, and keep
 tickets without a type label for now ([a ticket says where it came from](../docs/direction/a-ticket-says-where-it-came-from.md)).
 Area and project wait for step 5.
+
+**The owner's picks after step 5:**
+
+- **2026-11-03:** design B3 is the default (narrow the list by an `--area` flag, a filter chip, the
+  `f` menu and view tabs), with B1's grouping kept as a Display option inside it.
+- **2026-11-04, call 5:** an area is data in the project's ledger, made, renamed and merged in the
+  app or tsh, as Linear labels or Jira components are. It is never a list in the program and
+  never read from folders. The app suggests areas (from folders, pull request files, past tickets)
+  but never sets one, and picking the first areas is a step of the tracker's onboarding. Which
+  area a ticket is in stays a guess, shown as a guess, and a person's pick wins.
+- **2026-11-04:** ship round 3, with call 5 and [two fixes](#two-fixes-found-in-the-walk).
+- Project is untouched by the designs. It stays as decided, a parent plan that ends, and the
+  glossary settled the word on 2026-11-03: a project ends, an area does not.
 
 **The answer.** The makers agree on a plain shape, and it is close to the lean this study was
 handed, with three changes.
@@ -40,6 +54,18 @@ handed, with three changes.
 - **Why they float is not only where.** 186 to 191 were filed by an agent and nothing has
   triaged them. An area gives them a home; it does not say whether each is worth doing. That
   is triage's job, and today it is skipped for agent-filed follow-ups.
+- **Phase 2: one filter with three doors won.** Four designs ran in today's tracker, each from its
+  own tsh line: B1 groups the list by area, B2 adds an `areas` program on a pipe, B3 narrows the
+  list with a flag, a chip, the `f` menu and view tabs, and C keeps no area and saves title
+  searches. B3 won: it is the closest to Linear's filters and view tabs, and it keeps the tracker
+  to one job. Three rounds then fixed what B3 broke: the area word said 21 times under its own
+  view, the "how we know it" in a hover title only, a keys line that wrapped.
+- **Call 5 moved where an area is defined.** The designs worked areas out from a fixed list of
+  folders in the program. The owner's call 5 made an area a person's data on the ledger, as
+  Linear's labels and Jira's components are. Jira shows the shape for a merge: deleting a
+  component in use offers to "select any other active component to substitute the one you're
+  deleting" [j2]. A ticket's area is then a guess (the filer's, or its source's) until a person
+  picks, as Linear's triage suggestions are accepted or declined [l6].
 
 Today's tracker follows the shape in one way and breaks it in three. It follows it: every
 ticket's facts say who wrote them. It breaks it: the area exists, but only as a word typed at
@@ -57,6 +83,8 @@ Plane       project (long-lived) + module (dated, ends) + required type + Intake
 Asana       a project with no end date for ongoing work; goals and portfolios above
 Shape Up    no backlog, no area; bugs wait for cool-down or a bet
 Agents      Copilot, Devin, Factory, Cursor, Codex: one issue, one session, one PR; none files its own follow-ups
+Linear UI   filters by F or a menu; grouping and shown properties are Display options; views save filters
+Jira admin  a component is renamed in place; deleting one in use substitutes another or clears it
 Kanban      a service is the standing unit; type and class of service are separate; a backlog is "options"
 CMMS        a request against an asset, approved into a work order; a follow-up order points back at its source
 Hospital    a ward is a place, an episode of care is bounded and optional, a visit is one act
@@ -155,8 +183,12 @@ marked **secondary**. One found nowhere is marked **guess**.
 | [l7] Linear, sub-issues | "too large to be a single issue but too small to be a project" | A size between a ticket and a project. |
 | [l8] Linear, cycles | "time-boxed periods" | Time is its own axis. |
 | [l9] Linear, agents | "Delegate an issue to an agent while keeping a human teammate as the assignee" | The agent is a delegate; a person stays accountable. |
+| [l10] Linear, filters (read 2026-11-04) | "Open the filter menu or type `F` shortcut to choose the criteria you want to apply."; "To filter for no labels, you'll have to select all labels and then switch the operator to does not include." | A filter has a key and a menu. "No label" is not one press in Linear: our "No area yet" goes past it. |
+| [l11] Linear, display options (read 2026-11-04) | "No grouping removes all categorization and is especially useful when applying ordering and filters."; "Choose what issue properties are displayed on individual issues on lists or the board." | Grouping and which properties a row shows are display choices of one list, not other screens. |
+| [l6b] Linear, triage intelligence (read again 2026-11-04) | "Accept, decline, or view more information about why a suggestion was made before making a decision." | A suggestion says why, and a person takes it or not. It does not say how a suggestion looks beside a set value. |
 | [j1] Jira, components | "group work items in your space around product features, departments, or workstreams" | A native, long-lived area. |
-| [j2] Jira, managing components | "The component lead is a Jira user who owns the component"; a default assignee "will override the project's default assignee" | An area has an owner and routes new work. Many per issue, so Jira needs a tiebreak. |
+| [j2] Jira, managing components | "The component lead is a Jira user who owns the component"; a default assignee "will override the project's default assignee"; read again 2026-11-04: "You can change the component's name, lead, description, and default assignee."; on delete, "select any other active component to substitute the one you're deleting in the issues", or "remove the component you're deleting from all issues that have it" | An area has an owner and routes new work. Many per issue, so Jira needs a tiebreak. A rename is an edit in place, and a merge is a delete that substitutes. |
+| [g8] Kubernetes `label_sync` README (read 2026-11-04) | for a renamed label, "previous labels should be migrated to it"; a retired label "will be deleted after" a date | Even a labels-as-code setup keeps the old name and moves its items, rather than losing them. |
 | [j3] Jira, issue types | Bug: "a problem which impairs or prevents the functions of a product"; epics are "bigger pieces of work" | Jira mixes type and level: an epic is a type one level up. |
 | [j4] Jira, labels or components (**secondary**, community) | components for stable ownership, labels for free tags | No official page found. |
 | [g1] GitHub, issue types | "up to 25 issue types"; defaults task, bug, feature | Type is its own org-wide field, with our three. |
@@ -448,6 +480,99 @@ Each starts with its pipe line. None is built; the owner picks which to build an
    `tracker --from pr:352 | ticket`. Only `from` is added. Areas stay title words, and a saved
    view on a person's desk groups by them.
 
+## Step 5: four designs, then three rounds
+
+Today's version. Built on a local branch of `programs/tracker`, `programs/ticket` and
+`apps/fabrika` at `d60a005e`, never pushed. Kept as two patches in `205-organizing-work/`:
+`designs.patch` (the four designs, on `d60a005e`) and `round-3.patch` (rounds 1 to 3 of B3, on top
+of the first). Both apply in that order. The shots are in `205-organizing-work/shots/`: today, B1,
+B2, B3 and C in the light look, and round 3 in dark (`r3-dark/`, with `presses.json`: which press
+reached which state, at which size). Rounds 1 and 2, round 3's light shots, and the saved page of
+each state stay outside the repo.
+
+The designs' working shape, before call 5: one area per ticket, worked out from the code. Its own
+pull request's files said it first, then the filer's guess, then its source's area through `from`.
+The 14 areas came from a fixed list of top folders in the program (`FOLDERS` and `AREAS` in the
+patch). Call 5 replaced that shape; [areas](../docs/direction/areas.md) has the new one.
+
+| Design | Its tsh line | Closest Linear screen | Why it lost, or won |
+|---|---|---|---|
+| Today | `tracker \| ticket` | none: a title search | A title search misses 18 of the 21 tickets B3 counts as pipeline, and finds one that is not (on the made-up guesses). No filter, no "no area". |
+| B1 | `tracker --group area \| ticket` | Display options, grouping [l11] | Grouping is a display choice, not a way to narrow: a pipe cannot say "only pipeline". 13 groups is a long walk by keyboard. Kept as a Display option. |
+| B2 | `areas \| tracker \| ticket` | a view's side panel with counts | A whole tile for 13 words. At 2x2 and at 1024x700 it squeezes the ticket; its 2x2 shot needs three program tiles plus a shell. |
+| B3 | `tracker --area pipeline \| ticket` | filters [l10] and view tabs | **Won.** One filter with three doors, and the tracker keeps one job. As built it said "Pipeline" on 21 rows under the Pipeline view, and kept "how we know it" in a hover title only (WCAG 2.1.1). |
+| C | `tracker --saved pipeline \| ticket` | a saved custom view | Title words, not areas: its Pipeline view finds 28 where the area finds 21, and nobody can check a word match. Its tabs live on, over B3, as saved filters. |
+
+### The rounds on B3
+
+- **Round 1:** a row drops the area word when the view names the area. The Filter and Display
+  buttons are menu buttons with arrow keys, as the ARIA authoring practices give them. "How we know
+  it" moved from a hover title into the row's accessible name, and into words on the ticket.
+  Still off: on All open (134 rows) the view tabs, the filter row and the keys line scrolled away;
+  "Area" alone in the Display menu was unclear; a focused group heading drew a ring box inside the
+  list, a box in a box.
+- **Round 2:** the tabs, the filter row and the keys line stay put on a long list. The Display item
+  says "Group by area", with "Fold all" and "Unfold all" under it and their keys (Opt+Left,
+  Opt+Right). A focused heading takes the row fill, no ring. Still off: in a half-width tile the
+  keys line wrapped to two lines.
+- **Round 3:** the keys line never wraps. Under 680px the fold-all hint goes (the Display menu still
+  shows it), and under 560px the view hint goes. This is the round the owner said yes to.
+
+### What still looks off in round 3
+
+- The tab "Pipeline" and the chip "Area is pipeline" say the same thing. Kept on purpose: a view
+  shows the filter it stands for (the note's A7).
+- Zoom (`C-b z`) rebuilds the window and drops the picked row and the folds, in every design.
+  Tracker ticket 197; not fixed here.
+- A row's "how we know it" reaches only a screen reader. No screen reader has run.
+- Once focus leaves the list, nothing marks which row's ticket the ticket tile shows.
+
+### Two fixes found in the walk
+
+1. **The status bar names a filter that is not on.** On the "All open" and "No area yet" views the
+   job item still says `%1 tracker --area pipeline | ticket`, the line as typed
+   (`shots/r3-dark/all-open-one.jpg`, `no-area-yet-one.jpg`).
+2. **The menu's area names are a fixed list in the program** (`AREAS` in the patch's `ticket.ts`).
+   Call 5 replaces it with the ledger's areas.
+
+### Today and round 3 against the area principles
+
+| Principle ([areas](../docs/direction/areas.md)) | Today | Round 3 |
+|---|---|---|
+| A1: an area is a person's data on the ledger | breaks: no area; a title word | breaks: a fixed list in the program (fix 2) |
+| A2: a guess until a person picks, shown as a guess | breaks: no area | half: the ticket says "the filer's guess"; a row does not mark it; no pick |
+| A3: one filter, three doors, "no area" one of its values | breaks: a title search only | follows, but the status bar names the typed line (fix 1) |
+| A4: grouping is a Display option | half: nothing to group | follows |
+| A5: don't say it twice | half: no area word | follows |
+| A6: the area picker is a menu, not a program | follows: no extra program | follows |
+| A7: a saved view is a named filter | half: no saved views | follows, on a made-up list of tabs |
+
+### Guesses that were wrong
+
+- **"No label" is a filter value in Linear.** The draft principles said so. Linear's filters page
+  says the opposite: "select all labels and then switch the operator to does not include" [l10].
+  So "No area yet" as one press goes past Linear, not with it.
+- **Folding groups in Linear.** The draft cited T, a double-click and Opt to fold groups, from a
+  2025 changelog entry. The display options page read on 2026-11-04 does not mention folding, and
+  the changelog was not read again: **secondary**.
+
+### Made up in the builds
+
+- 37 `from` values read from filing bodies, 50 area guesses from title words, 4 `pr` facts, and a
+  baked-in table of pull request files (`pr-files.ts` in the patch).
+- The flags `--area`, `--group` and `--saved`, the `areas` program and its "shown" mark, the view
+  tabs' list (`AREA_VIEWS`) and C's saved views (`SAVED`).
+- Today's shots were taken on the branch, so their status bar says "takes area". Main does not.
+
+### How the designs were checked
+
+Each design was pressed through every key and click it takes, with Playwright on Electron as
+`apps/fabrika/e2e.ts` drives the app, at five layouts: one tile, two side by side, two stacked, a
+2x2 grid and 1024x700. Each state's page and the built `window.css` were saved. A draft page
+lifted from those saved pages and shot again matched every one of 107 frames in words, boxes and
+sizes. In 13 of them a line sat up to about 1px lower, the known drift of a newer Chromium. The
+page and the canvas are not published yet.
+
 ## What this tells us for fabrika
 
 - The lean holds in shape: area, project, type is what the makers agree on [l4] [j1] [g7].
@@ -463,6 +588,12 @@ Each starts with its pipe line. None is built; the owner picks which to build an
   [o4]. With `from` recorded, that is a fold, not a field someone types.
 - Keep areas few. A small kitchen merges stations (**secondary**, [o13]); ISO 14224 picks one
   level (**secondary**, [o6]).
+- From the designs: narrow with one filter that a flag, a chip, a key and a tab all set (B3), and
+  keep grouping as a display choice of the same list (B1). A third program for a list of names
+  (B2) costs a tile and earns nothing yet. A view of title words (C) cannot be checked.
+- From call 5: an area is a person's data with a stable number, so a rename touches no ticket and
+  a merge moves every ticket at once, as Jira's substitute does [j2]. The app may suggest, never
+  set. The filer's guess is the one fact here lost if not written at filing.
 
 ## What it cannot tell us
 
@@ -483,11 +614,22 @@ Each starts with its pipe line. None is built; the owner picks which to build an
   through summaries.
 - **What the closed tickets look like.** The list read shows open tickets only, so 62 closed
   ones were not counted.
+- **Whether the designs' counts hold.** "21 in pipeline", "28 by title words" and "misses 18"
+  rest on 50 made-up area guesses from title words. Under call 5 a person sets the areas, so the
+  numbers change.
+- **How a guess should look in a row.** Round 3 marks a guess only on the ticket page. Linear's
+  docs do not say how a suggestion looks beside a set value [l6b]. A shot of the build settles it.
+- **Whether onboarding's suggestions are good.** No suggestion was built or shown. How many of
+  the folder and title suggestions a person takes is unmeasured.
+- **Whether the owner filters by area day to day.** One person looked at shots and pressed a draft
+  page. A week of use on the real build answers it.
+- **No screen reader ran** on the menus, the group headings or a row's accessible name.
 
 ## Dollars
 
-$0. Reading only: public pages, today's code, and read-only lists of today's tracker. No model
-call, no Jev, no test run.
+$0. Reading, public pages, today's code, read-only lists of today's tracker, and a design branch
+shot on Electron on this laptop. No model call beyond the session's plan, no Jev. The designs'
+branch itself is not kept; only the patches and the shots are.
 
 ## Links
 
@@ -502,6 +644,9 @@ Trackers:
 - [l7] https://linear.app/docs/parent-and-sub-issues
 - [l8] https://linear.app/docs/use-cycles
 - [l9] https://linear.app/docs/agents-in-linear
+- [l10] https://linear.app/docs/filters
+- [l11] https://linear.app/docs/display-options
+- [l6b] https://linear.app/docs/triage-intelligence, read again on 2026-11-04
 - [j1] https://support.atlassian.com/jira-software-cloud/docs/what-are-jira-components/
 - [j2] https://confluence.atlassian.com/adminjiraserver/managing-components-938847187.html
 - [j3] https://support.atlassian.com/jira-cloud-administration/docs/what-are-issue-types/
@@ -512,6 +657,7 @@ Trackers:
 - [g4] https://docs.github.com/en/issues/planning-and-tracking-with-projects/understanding-fields/about-iteration-fields
 - [g6] https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-issue-forms
 - [g7] https://github.com/kubernetes/test-infra/blob/master/label_sync/labels.md
+- [g8] https://github.com/kubernetes/test-infra/blob/master/label_sync/README.md
 - [p1] https://docs.plane.so/core-concepts/modules
 - [p2] https://docs.plane.so/core-concepts/issues/issue-types
 - [p3] https://docs.plane.so/core-concepts/intake
