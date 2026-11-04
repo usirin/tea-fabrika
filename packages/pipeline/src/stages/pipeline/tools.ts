@@ -3,7 +3,7 @@ import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Sandbox} from "@kampus/fabrika-old";
 import type {DraftRun} from "@kampus/fabrika-old/agents/claude";
 import {layerOs} from "@kampus/fabrika-old/sandbox/os";
-import {Duration, Effect, FileSystem, Layer, Path, Schema, Stream} from "effect";
+import {Clock, Duration, Effect, FileSystem, Layer, Path, Schema, Stream} from "effect";
 import {bookTarget} from "../../code-host-local.ts";
 import {planOf, readTicketId} from "../../ids.ts";
 import {CHECKS_WITHIN} from "../../settings.ts";
@@ -20,12 +20,13 @@ import {type Added, hashOf} from "../mutation/scope.ts";
 import {MutationRunner, MutationScope} from "../mutation/services.ts";
 import {strykerRunner} from "../mutation/stryker.ts";
 import {PushWork} from "../push/program.ts";
+import type {RunFailure, RunWhy} from "../test-writer/checked.ts";
 import {Answered} from "../test-writer/mutants.ts";
 import {TestsAgents, TestsWork} from "../test-writer/program.ts";
 import {Report, resultsOf} from "../test-writer/results.ts";
 import {includedBy, Written} from "../test-writer/written.ts";
 import {draftRunner, LaneAgents, LaneNow} from "./agents.ts";
-import {type CheckRun, CheckRunner, checkRunner, publicText} from "./checks.ts";
+import {type CheckRun, CheckRunner, checkRunner, publicText, TAIL_LINES} from "./checks.ts";
 import {examBook} from "./exam-pull.ts";
 import {NO_FORMATTER} from "./format.ts";
 import {ruleChangeLines} from "./found.ts";
@@ -124,9 +125,9 @@ export const laneBuildWrites = Layer.effect(
 );
 
 /**
- * The test command in a box with no login and no key, and vitest's report read back. srt hands its
- * program `/tmp/claude` as TMPDIR, which the box closes, unless this name says where (experiment 127):
- * here, a folder inside the throwaway copy.
+ * The test command in a box with no login and no key: its exit code, and stderr's last lines. srt
+ * hands its program `/tmp/claude` as TMPDIR, which the box closes, unless this name says where
+ * (experiment 127): here, a folder inside the throwaway copy.
  */
 const inBox = (folder: string, tmp: string, command: readonly string[], reads: readonly string[]) =>
 	Effect.scoped(
@@ -141,11 +142,19 @@ const inBox = (folder: string, tmp: string, command: readonly string[], reads: r
 				mount: {_tag: "worktree", folder},
 				credential: {_tag: "none"},
 			});
-			const drained = yield* Effect.all(
-				[Stream.runDrain(handle.stdout), Stream.runDrain(handle.stderr), handle.exitCode],
+			const [, tail, code] = yield* Effect.all(
+				[
+					Stream.runDrain(handle.stdout),
+					Stream.runFold(
+						handle.stderr.pipe(Stream.decodeText(), Stream.splitLines),
+						(): readonly string[] => [],
+						(kept, line) => [...kept.slice(1 - TAIL_LINES), line],
+					),
+					handle.exitCode,
+				],
 				{concurrency: "unbounded"},
 			);
-			return Number(drained[2]);
+			return {code: Number(code), tail: tail.join("\n")};
 		}),
 	);
 
@@ -157,28 +166,64 @@ export const laneTestsWork = Layer.effect(
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const box = Layer.provide(layerOs({parent: process.env}), nodeServices);
+		/**
+		 * The test command on `commit`, and vitest's report read back. A run that could not run fails with
+		 * its cause (tracker 193): why, the box's exit code, how long it went, and stderr's tail as a
+		 * public ticket may show it.
+		 */
 		const tested = (commit: string) =>
 			Effect.gen(function* () {
-				const settings = yield* work.settings;
+				const from = yield* Clock.currentTimeMillis;
+				const failing = (
+					why: RunWhy,
+					code: number | null,
+					tail: string,
+					folders: readonly string[] = [],
+				) =>
+					Effect.flatMap(Clock.currentTimeMillis, (to) =>
+						Effect.fail({
+							_tag: "could_not_run",
+							why,
+							code,
+							ms: to - from,
+							tail: publicText(tail, folders),
+						} satisfies RunFailure),
+					);
+				const settings = yield* work.settings.pipe(
+					Effect.catch((e) =>
+						failing("no_command", null, e.says ?? "the settings could not be read"),
+					),
+				);
 				const run = settings.test_writer?.run;
 				if (run === undefined)
-					return yield* Effect.fail({
-						_tag: "unknown" as const,
-						says: "[test_writer] run is not set",
-					});
-				const folder = yield* work.copy(commit);
+					return yield* failing("no_command", null, "[test_writer] run is not set");
+				const folder = yield* work
+					.copy(commit)
+					.pipe(
+						Effect.catch((e) => failing("copy_failed", null, e.says ?? `no copy of ${commit}`)),
+					);
 				const out = path.join(folder, ".lane-report.json");
 				yield* fs.remove(out, {force: true}).pipe(Effect.ignore);
 				const tmp = path.join(folder, ".lane-tmp");
-				yield* fs.makeDirectory(tmp, {recursive: true});
-				const code = yield* inBox(
+				yield* fs
+					.makeDirectory(tmp, {recursive: true})
+					.pipe(Effect.catch((e) => failing("copy_failed", null, e.message, [folder])));
+				const ran = yield* inBox(
 					folder,
 					tmp,
 					run.map((word) => word.replaceAll("{out}", out)),
 					settings.test_writer?.reads ?? [],
-				).pipe(Effect.provide(box));
-				const text = yield* fs.readFileString(out);
-				return {code, report: yield* Schema.decodeEffect(Schema.fromJsonString(Report))(text)};
+				).pipe(
+					Effect.provide(box),
+					Effect.catch((e) => failing("box_failed", null, e.message, [folder])),
+				);
+				const text = yield* fs
+					.readFileString(out)
+					.pipe(Effect.catch(() => failing("no_report", ran.code, ran.tail, [folder])));
+				const report = yield* Schema.decodeEffect(Schema.fromJsonString(Report))(text).pipe(
+					Effect.catch(() => failing("bad_report", ran.code, ran.tail, [folder])),
+				);
+				return {code: ran.code, report};
 			});
 		const records = (ticket: string) => work.at("checked", `${encodeURIComponent(ticket)}.json`);
 		return {
@@ -200,10 +245,7 @@ export const laneTestsWork = Layer.effect(
 					return yield* work.commit(tree, [], `tests for ${ticket}`);
 				}).pipe(Effect.mapError(() => failed)),
 			onBase: (commit, tests) =>
-				tested(commit).pipe(
-					Effect.map(({report}) => resultsOf(report, tests)),
-					Effect.mapError(() => couldNotRun),
-				),
+				tested(commit).pipe(Effect.map(({report}) => resultsOf(report, tests))),
 			record: (ticket, _written, checked) =>
 				Effect.gen(function* () {
 					yield* fs.makeDirectory(work.at("checked"), {recursive: true});

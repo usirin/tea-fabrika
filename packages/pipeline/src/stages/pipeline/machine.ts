@@ -216,9 +216,10 @@ const carried = {
 	/**
 	 * The test writer's own commit under the build, and the tests its check ran there (self-fix PR 5): a
 	 * restart runs that check again with the commit put on main, and a redo writes on it. Optional: a
-	 * lane saved before this key still reads, and has no check to run again.
+	 * lane saved before this key still reads, and has no check to run again. `null`: the branch started
+	 * over from main, so no commit of the test writer's is under the build (tracker 194).
 	 */
-	written: Schema.optionalKey(Written),
+	written: Schema.optionalKey(Schema.NullOr(Written)),
 	/**
 	 * The last test writer's commit, and `base`, the head it started on. A test writer sent back while
 	 * that commit is still the head writes on that base again, so its own files are never ones that
@@ -367,12 +368,14 @@ export type Resume = typeof Resume.Type;
 /**
  * A fresh read of main: where the lane goes on, and what it held then. `routed`: a route's `fresh`
  * sent it (./routes.ts), so a clean read runs `from` itself, and a merged head with green checks is
- * pushed first. Left out: a restart's read, or the guard's.
+ * pushed first. Left out: a restart's read, or the guard's. `round`: the round the lane held, so a
+ * first test writer starts over from main (tracker 194). Left out: a read sent before this key.
  */
 const FreshIn = Schema.Struct({
 	number: Schema.Finite,
 	from: Resume,
 	carry: Carry,
+	round: Schema.optionalKey(Schema.Finite),
 	routed: Schema.optionalKey(Schema.Literal(true)),
 });
 
@@ -1148,6 +1151,7 @@ const refreshing = (s: Held, at: Resume, routed = false): Step_ => {
 		number: s.number,
 		from: at,
 		carry: s.carry,
+		round: s.round,
 		...(routed ? {routed: true} : {}),
 		intent: intentOf("lane", s.number, "fresh", s.count, s.trail.length),
 	});
