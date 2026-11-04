@@ -543,6 +543,27 @@ fabrika today     a popover is the only thing over the desk (popovers)
 - A peek would be a glance in a popover, never a tile; anything you work in is a tile. Taking Linear's
   peek means a second kind of thing over the desk, beside popovers.
 
+### 8. Is a side panel a program?
+
+**Lean, 65%, a guess until it is walked:** a block about the same thing is a section of that
+program's view; a block about another thing is another program's tile.
+
+```text
+ticket's properties    same thing (this ticket's own folds)    a section of ticket's view
+live agent panel       another thing (a run, trace's job)      ticket | trace, two tiles
+```
+
+- **Why:** G1 (one job per program) and G6 (programs meet on typed pipes). The guidelines skill
+  already turns a sidebar that opens a detail into its own tile. Linear's issue sidebar holds that
+  issue's own properties, which is the same thing.
+- **Where it meets a note:** [tracker views](./tracker-views-are-programs.md) (proposed) puts both
+  a properties panel (5.2) and a live agent panel (5.4) inside the ticket's view. Under this lean
+  the first stays as a section and the second becomes a tile.
+- **The word:** no part of the frame is called a panel (the glossary walk, PR 362). Whether
+  "panel" names anything inside a view waits on this call.
+- **Doubt:** a ticket that always opens with its run beside it is two tiles every time. A day of
+  use with `ticket | trace` would settle whether that is noise.
+
 ## Composing programs: C1 to C11
 
 **Decided 2026-11-02.** The owner walked each rule, the count's label and the audit's three splits,
