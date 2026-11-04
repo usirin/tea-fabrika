@@ -348,7 +348,8 @@ describe("the line tool", {timeout: 30_000}, () => {
 				const typed = yield* agent.line("tracker answer=1");
 				yield* agent.line("tracker &");
 				const told = yield* agent.line("tell %1 answer 1");
-				const piped = yield* agent.line("seq --to 1 | tracker answer");
+				// A pipe into a named input is `<name`, as shell/agent.test.ts writes it.
+				const piped = yield* agent.line("seq --to 1 | tracker <answer &");
 				const zoom = yield* agent.line("zoom");
 				return {typed, told, piped, zoom, desk: host.desk()};
 			}),

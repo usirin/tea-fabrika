@@ -922,13 +922,17 @@ describe("an agent's tsh", () => {
 				const second = yield* s.host.line("tally").pipe(Effect.flip);
 				const behind = yield* s.host.line("tally &");
 				s.type("\x03");
-				yield* s.until("the foreground job stopped", () =>
-					s.jobs.table.getState().jobs.find((j) => j.n === 1 && j.state !== "running"),
+				// Stopped, not ended on its own: the screen says so. A job that ended leaves the table.
+				const stopped = yield* s.until("the foreground job stopped, and left the table", () =>
+					s.jobs.table.getState().jobs.some((j) => j.n === 1)
+						? undefined
+						: s.rows().find((r) => r === "[stopped] counter"),
 				);
 				const after = yield* s.host.line("jobs");
-				return {first, second, behind, after};
+				return {first, second, behind, stopped, after};
 			}).pipe(Effect.scoped),
 		);
+		expect(seen.stopped).toBe("[stopped] counter");
 		expect(seen.first).toMatchObject({_tag: "job", job: {n: 1, text: "counter"}});
 		expect(seen.second).toMatchObject({
 			_tag: "LineRefused",

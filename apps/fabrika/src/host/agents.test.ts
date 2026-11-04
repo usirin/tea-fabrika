@@ -219,6 +219,7 @@ describe("an agent drives the app's programs through MCP", () => {
 			"runs",
 			"job",
 			"stop",
+			"line",
 			"counter_press",
 			"tracker_file",
 			"tracker_comment",

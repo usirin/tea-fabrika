@@ -86,6 +86,7 @@ const servedTo = (sessionFor: AgentSessions | null) =>
 			attached: () => Effect.void,
 			job: () => null,
 			stop: () => Effect.die("no stop is asked here"),
+			line: () => Effect.die("no line is asked here"),
 			sessionFor,
 		}).pipe(Effect.forkScoped);
 		const client = createConnection(path);

@@ -124,10 +124,13 @@ const write = fc.record({
 });
 
 /** The tool call that asks for `what`, with `mark` in it. */
-const callFor = (what: "file" | "comment" | "line", mark: string) => {
-	if (what === "file") return ["tracker_file", {value: {title: mark, body: ""}}] as const;
-	if (what === "comment") return ["tracker_comment", {value: {ticket: 1, body: mark}}] as const;
-	return ["line", {line: `tracker file='{"title":"${mark}","body":""}' &`}] as const;
+const callFor = (
+	what: "file" | "comment" | "line",
+	mark: string,
+): readonly [tool: string, args: Record<string, unknown>] => {
+	if (what === "file") return ["tracker_file", {value: {title: mark, body: ""}}];
+	if (what === "comment") return ["tracker_comment", {value: {ticket: 1, body: mark}}];
+	return ["line", {line: `tracker file='{"title":"${mark}","body":""}' &`}];
 };
 
 /** The writer of each job the host began, from its log, as `Logger.formatSimple` writes it. */
