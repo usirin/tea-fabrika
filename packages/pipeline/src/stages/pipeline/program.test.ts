@@ -184,6 +184,14 @@ interface Script {
 	 * on the first line; each run after it there fails too. Left out: 0.
 	 */
 	readonly failOnBaseFrom?: number;
+	/**
+	 * What the test writer's run on the base answers for `tests` on its `nth` run, counted over every
+	 * line, the first being 0. `null`: it runs for real.
+	 */
+	readonly onBaseSays?: (
+		nth: number,
+		tests: readonly {readonly property: string; readonly file: string; readonly name: string}[],
+	) => readonly {readonly property: string; readonly result: "red" | "green"}[] | null;
 	/** After each line, fold the lane's facts (./restart.ts), to set beside what it saved. */
 	readonly fold?: boolean;
 	/** Stop the lane when a line holding this is said, then type the line again. */
@@ -536,6 +544,7 @@ const lane = ({
 	failMutation = false,
 	failOnBase,
 	failOnBaseFrom = 0,
+	onBaseSays,
 	fold: folding = false,
 	killAt,
 	noOrigin = false,
@@ -690,9 +699,10 @@ const lane = ({
 				onBase: (commit, tests) =>
 					Effect.suspend(() => {
 						onBase.push({line: typed, commit, files: tests.map((test) => test.file)});
-						return failOnBase !== undefined && typed === 0 && onBase.length > failOnBaseFrom
-							? Effect.fail({...failOnBase, _tag: "could_not_run"} as const)
-							: work.onBase(commit, tests);
+						if (failOnBase !== undefined && typed === 0 && onBase.length > failOnBaseFrom)
+							return Effect.fail({...failOnBase, _tag: "could_not_run"} as const);
+						const says = onBaseSays?.(onBase.length - 1, tests) ?? null;
+						return says === null ? work.onBase(commit, tests) : Effect.succeed(says);
 					}),
 			})),
 			Effect.updateService(Tickets, (tickets) => ({
@@ -2859,6 +2869,92 @@ describe("a stopped lane, typed again", () => {
 					said,
 				).toHaveLength(1);
 				expect(ran.lines.at(-1)).toContain("ended: done");
+			},
+		);
+	});
+
+	// Tracker 193: a redo that keeps its commit but is sent back to the writer, by the route (rows 28,
+	// 29 and 35, ./routes.ts) or by the owner's `again`, stays owed. Each run after it is the redo
+	// again, of the touched file alone, and no build starts on tests the base never passed.
+	describe("a redo sent back to the writer", () => {
+		/** The plain plan's one Property, as `behavior` says it. */
+		const property = (behavior: "new" | "existing") => ({
+			when: "a name holds capitals",
+			result: "it comes back in lower case",
+			why: "two forms of one name would not match",
+			behavior,
+			tool: "test",
+			code: [],
+		});
+
+		it.each([
+			{
+				name: "ask:owner:fails_on_base",
+				outcome: {kind: "ask", who: "owner", for: "fails_on_base"},
+				behavior: "existing",
+				first: "green",
+				redo: "red",
+			},
+			{
+				name: "ask:owner:already_passes",
+				outcome: {kind: "ask", who: "owner", for: "already_passes"},
+				behavior: "new",
+				first: "red",
+				redo: "green",
+			},
+			{
+				name: "stuck:no_result",
+				outcome: {kind: "stuck", why: "no_result"},
+				behavior: "new",
+				first: "red",
+				redo: null,
+			},
+		] as const)(
+			"exam_touched, `test_wrong`, and the redo ends $name each time: the route's rerun and the owner's `again` are the redo again, never `skip:no_properties`, and no build starts",
+			{timeout: 300_000},
+			async ({outcome, behavior, first, redo}) => {
+				const ran = await lane({
+					within: 140,
+					picks: YES,
+					queues: {exam_touched: ["test_wrong"], step: ["again", "stop"]},
+					onBaseSays: (nth, tests) =>
+						nth > 0 && redo === null
+							? []
+							: tests.map((t) => ({
+									property: t.property,
+									result: nth === 0 ? first : (redo ?? first),
+								})),
+					fake: {
+						writesAt: {build: {0: [{path: "src/lower.test.ts", text: TOUCHED}]}},
+						answers: {...REDO, plan: [{with: {properties: [property(behavior)]}}]},
+						see: SEE,
+					},
+				});
+				const said = ran.lines.join("\n");
+				expect(ran.lines, said).not.toContain(TIMED_OUT);
+				const asked = ran.facts.findIndex(
+					(f) => f.type === "asked" && String(f.ask).startsWith("a-exam_touched-"),
+				);
+				expect(asked, said).toBeGreaterThan(-1);
+				// Every writer's end after the owner's `test_wrong` is the redo's: none skips.
+				const ends = ran.facts
+					.slice(asked)
+					.filter((f) => f.type === "ended" && f.stage === "test_writer");
+				expect(
+					ends.map((f) => f.outcome),
+					said,
+				).toEqual(ends.map(() => outcome));
+				expect(ends.length, said).toBeGreaterThanOrEqual(3);
+				// Each of them ran the touched file's test on the base, and nothing else.
+				const redos = ran.onBase.slice(1);
+				expect(
+					redos.map((r) => r.files),
+					said,
+				).toEqual(ends.map(() => ["src/lower.test.ts"]));
+				// The route's one rerun asks the owner; `again` runs the redo, and `stop` stops at it.
+				expect(askedFor(ran, "step"), said).toHaveLength(2);
+				expect(roundsOf(ran, "build"), said).toEqual([1]);
+				expect(heldAt(ran, 0)?.at, said).toEqual({_tag: "run", step: "test_writer"});
 			},
 		);
 	});
