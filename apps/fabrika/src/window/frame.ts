@@ -3,7 +3,7 @@ import {whenOf} from "@tea-fabrika/tracker/window";
 import {Option, Schema} from "effect";
 import type {Ask, AsksNow} from "../asks.ts";
 import {activeOf, focusedOf, type Open, questionOf, tilesOf, type Workspace} from "../desk/desk.ts";
-import {bindingFor, type Does, type File, type Key, type Keys} from "../desk/keymap.ts";
+import {bindingFor, defaults, type Does, type File, type Key, type Keys} from "../desk/keymap.ts";
 import {type Group, groupOf, type Show, wordOf} from "../desk/keys.ts";
 import type {TileId, TileNode} from "../desk/layout/index.ts";
 import type {HostNow, LedgerLink, LinkNow, ToWindow} from "../messages.ts";
@@ -659,9 +659,17 @@ export const jobsList = (desk: Open, now: number): JobsList => {
 export const questionWord = (desk: Open): string | null =>
 	desk.ask === null ? null : questionOf(desk, desk.ask);
 
-/** What info mode says of each part of the frame, in plain words. */
-export const INFO = {
-	workspace: "a workspace, named by what it holds. C-b 1 to 9 goes to one, C-b N makes one.",
+/**
+ * A command's first key in the table, as the frame writes it (`C-a z`, `M-p`), or what runs it
+ * when no key does.
+ */
+const keyIn = (keys: Keys, does: Does, otherwise: string): string => {
+	const first = keys.rows.find((row) => row.does === does)?.keys[0];
+	return first === undefined ? otherwise : keyText(keys.prefix, first);
+};
+
+/** What info mode says of each part of the frame that names no key, in plain words. */
+const SAID = {
 	segment: "a program in this workspace's line, shown in the tile named. A click focuses it.",
 	pipe: "a pipe: what the program before it sends goes into the one after it.",
 	asks: "asks: what agents ask you, and runs that are stuck. One count, the same as the Dock badge. A dot is one you have not seen. A click opens the list.",
@@ -674,12 +682,26 @@ export const INFO = {
 	drag: "an empty stretch to move the window by. A double-click zooms the window, as macOS does.",
 	here: "the tile you are in: what it takes in, what it sends out, and its neighbors in its line.",
 	job: "a job in this tile: its number, its line, and how long it has run. +2 is two more. A job that ended says how, for a few seconds. A click lists them, as tsh's jobs does.",
-	keys: "keys: press Ctrl-B, then one key. C-b ? lists them all. Cmd-K finds any command by name.",
-	info: "info: explains what the pointer or focus is on. Escape or C-b i leaves.",
-	titlebar:
-		"title bar: a click focuses the tile, a double-click folds it into a strip. C-b f folds too.",
 	strip: "a folded tile: a click opens it again.",
 } as const;
+
+/**
+ * What info mode says of each part of the frame. A part that names a key names it from the table
+ * in use, so a key you moved is said on its new key, and none is a literal here (p10).
+ */
+export const infoFor = (keys: Keys) => ({
+	...SAID,
+	workspace: `a workspace, named by what it holds. ${keyIn(keys, 'tezgah."workspace --to 1"', "workspace --to 1 in tsh")} goes to the first, and so on to 9; ${keyIn(keys, 'tezgah."workspace --to new"', "workspace --to new in tsh")} makes one.`,
+	keys: `keys: press ${keyWord(keys.prefix)}, then one key. ${keyIn(keys, "keys.open", "keys in tsh")} lists them all. ${keyIn(keys, "palette.open", "The palette")} finds any command by name.`,
+	info: `info: explains what the pointer or focus is on. Escape or ${keyIn(keys, "tezgah.info", "info in tsh")} leaves.`,
+	titlebar: `title bar: a click focuses the tile, a double-click folds it into a strip. ${keyIn(keys, "tezgah.fold", "fold in tsh")} folds too.`,
+});
+
+/**
+ * Info mode's words with the shipped keys. A part that names no key reads the same in any table;
+ * a part that names one is drawn from `infoFor` and the table in use.
+ */
+export const INFO = infoFor(defaults);
 
 // ---------------------------------------------------------------- the page's own frame state
 

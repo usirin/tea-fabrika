@@ -55,6 +55,7 @@ import {
 	type FrameMsg,
 	frameUpdate,
 	INFO,
+	infoFor,
 	keyGoesTo,
 	type MidKey,
 	type Shapes,
@@ -579,7 +580,7 @@ function Tile(props: {
 				className="titlebar"
 				aria-label={`tile ${tile.id}: double-click to fold`}
 				aria-disabled={!folds}
-				data-info={INFO.titlebar}
+				data-info={infoFor(store.keys).titlebar}
 				onPointerDown={noFocus}
 				onDoubleClick={() => {
 					if (folds) toHost({type: "fold", tile: tile.id});

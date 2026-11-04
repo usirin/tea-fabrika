@@ -234,6 +234,22 @@ const readPress = (spelled: string, mac: boolean): Result.Result<Pressed, string
 	return Result.succeed({name: `<${letters.join("")}${bare}>`, printable: false});
 };
 
+/**
+ * The named keys that type or move in a tile, with no modifier: Enter, Escape, Backspace, Tab and
+ * the arrows. Never pressed alone, never the prefix (WCAG 2.1.4), as a bare letter is not; after
+ * the prefix each is fine. The F keys are not here: an F key alone is the way out of a tile.
+ */
+const BARE: ReadonlySet<string> = new Set([
+	"<enter>",
+	"<escape>",
+	"<backspace>",
+	"<tab>",
+	"<arrowleft>",
+	"<arrowright>",
+	"<arrowup>",
+	"<arrowdown>",
+]);
+
 /** A key that is never ours to bind: the Mac's own, or Ctrl-C, which a tile's program owns. */
 const notOurs = (name: string, spelled: string): string | null => {
 	if (THE_MACS.has(name)) return `${spelled} is the system's, so the app never hears it`;
@@ -252,12 +268,22 @@ const readKey = (spelled: string, mac: boolean): Result.Result<Key, string> => {
 			return Result.fail(`${spelled} names no key after the prefix, such as <prefix>z`);
 		return Result.flatMap(readPress(rest, mac), (p) => {
 			const no = notOurs(p.name, rest);
-			return no === null ? Result.succeed(after(p.name)) : Result.fail(no);
+			if (no !== null) return Result.fail(no);
+			// On a Mac the menu takes a Cmd key before the app sees it, prefix or not (keyOwner).
+			if (mac && /^<(?:[ca]-)*m-/.test(p.name))
+				return Result.fail(
+					`${rest} after the prefix goes to the Mac's menu first, so it never reaches the app`,
+				);
+			return Result.succeed(after(p.name));
 		});
 	}
 	return Result.flatMap(readPress(spelled, mac), (p) => {
 		const no = notOurs(p.name, spelled);
 		if (no !== null) return Result.fail(no);
+		if (BARE.has(p.name))
+			return Result.fail(
+				`${spelled} pressed alone would stop it typing or moving in a tile: write <prefix>${spelled}, or add ctrl, alt or cmd`,
+			);
 		// A bare character pressed alone would stop typing in tsh (WCAG 2.1.4).
 		if (p.printable)
 			return Result.fail(
@@ -380,9 +406,9 @@ const readPrefix = (
 	return Result.flatMap(readPress(value, mac), (p) => {
 		const no = notOurs(p.name, value);
 		if (no !== null) return Result.fail(no);
-		if (p.printable)
+		if (p.printable || BARE.has(p.name))
 			return Result.fail(
-				`${value} would type in every tile: the prefix needs a modifier, such as ctrl+a`,
+				`${value} would ${p.printable ? "type" : "stop it typing or moving"} in every tile: the prefix needs a modifier, such as ctrl+a`,
 			);
 		return Result.succeed({name: p.name, spelled: value});
 	});
@@ -502,9 +528,12 @@ export const decodeKeys = (text: string, mac: boolean): Result.Result<Keys, Refu
 	const ignore = (set.ignore?.names ?? defaults.ignore).filter(
 		(name) => name !== prefix && !taken.some((k) => k._tag === "alone" && k.key === name),
 	);
+	// A default loses a key you took, the prefix pressed alone (it arms), the prefix after itself
+	// (that sends the prefix on, so the row could never run), and an ignored key.
 	const lost = (key: Key) =>
 		taken.some((k) => sameKey(k, key)) ||
-		(key._tag === "alone" && (key.key === prefix || ignore.includes(key.key)));
+		key.key === prefix ||
+		(key._tag === "alone" && ignore.includes(key.key));
 	const rows = defaults.rows.map((row) => {
 		const yours = set.rows.find((r) => r.does === row.does);
 		return yours === undefined

@@ -803,6 +803,21 @@ main.program > [role="alert"] {
 	color: var(--stuck);
 }
 
+/* A long reason would push the right side's items off a small window, so the reason alone gives way,
+   cut with an ellipsis: the line stays one line, and the full reason shows on hover and above the
+   keys list. The other items keep their width. Its shrink weight dwarfs the left's, so the reason
+   gives way before the left's tile name is cut. */
+.bottomline .right:has(> .broken) {
+	flex: 0 1000 auto;
+	min-width: 0;
+}
+
+.bottomline .right > .broken {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
 .bottomline .info,
 .bottomline .note {
 	color: var(--text-secondary);

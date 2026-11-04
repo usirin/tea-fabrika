@@ -28,6 +28,7 @@ import {
 	holdsWord,
 	hostWord,
 	INFO,
+	infoFor,
 	type JobItem,
 	jobItem,
 	jobsList,
@@ -214,7 +215,7 @@ export function TopBar(props: FrameProps): ReactNode {
 							caps={i < 9 ? capsFor(props, `workspace ${i + 1}`) : []}
 							word={wordOf({kind: "pick", at: i + 1})}
 							quiet={quiet}
-							info={INFO.workspace}
+							info={infoFor(props.keys).workspace}
 							current={w.id === desk.active}
 							onClick={() => props.toHost({type: "pick", workspace: w.id})}
 						>
@@ -845,6 +846,7 @@ export function BottomLine(props: FrameProps): ReactNode {
 		const quiet = quietOf(frame);
 		const on = frame.info.kind === "on";
 		const file = fileWord(props.keys.file);
+		const said = infoFor(props.keys);
 		return (
 			<>
 				{/* The way out, named first: the right side is pinned to the window's right edge, so a
@@ -860,7 +862,9 @@ export function BottomLine(props: FrameProps): ReactNode {
 				    as they were (WCAG 1.4.1: the words say it, the color only marks it). */}
 				{file !== null && (
 					<>
-						<span className="broken">{file}</span>
+						<span className="broken" title={file}>
+							{file}
+						</span>
 						<Sep />
 					</>
 				)}
@@ -871,9 +875,9 @@ export function BottomLine(props: FrameProps): ReactNode {
 					caps={capsFor(props, "info")}
 					word={wordFor(props, "info")}
 					quiet={quiet}
-					info={INFO.info}
+					info={said.info}
 					pressed={on}
-					onClick={() => props.step({type: "info", focus: INFO.info})}
+					onClick={() => props.step({type: "info", focus: said.info})}
 				>
 					{info ?? ""} info
 				</Item>
@@ -883,7 +887,7 @@ export function BottomLine(props: FrameProps): ReactNode {
 					caps={capsFor(props, "keys")}
 					word={wordFor(props, "keys")}
 					quiet={quiet}
-					info={INFO.keys}
+					info={said.keys}
 					opens={{
 						popup: "dialog",
 						id: POP.palette,
