@@ -528,6 +528,15 @@ claude mcp add --transport stdio --env FABRIKA_HOME=<home> fabrika -- \
   `<home>/host/mcp`, a socket only you can open (mode 0600). The host serves MCP itself, with the
   official SDK (`@kampus/fabrika-old/mcp`, spec 2026-07-28). With no host running, the bridge says so
   on stderr and ends: open the app first.
+- **The bridge outlives the host.** When the host ends (the window's "Stop the old host and start
+  this one", or `fabrika connect`), the bridge dials again on the window's own wait: at most half a
+  second at first, doubling, up to 30 s apart, for 5 minutes (`src/reconnect.ts`, `POLICY`). A call while
+  no host answers gets a JSON-RPC error at once, code -32000, "the host is restarting: this call
+  did not reach it"; one the host held when it ended is told it may have run. Neither is sent to
+  the next host. The new host hears the client's `initialize` and `notifications/initialized`
+  again, its answer goes no further, and the client is told `notifications/tools/list_changed`,
+  so it lists the tools again. No host within the 5 minutes: the bridge says so on stderr and
+  ends. Its stderr says `host_lost why=...` and `host_back after_ms=... tries=...`.
 - **The tools are the programs' inputs.** One tool per input, named `<program>_<input>`, with
   the input's own description and its schema as JSON Schema (`tracker_file`, `tracker_query`,
   `ticket_comment`, `ticket_ticket`, `counter_press`). Each command is its own input, named by
