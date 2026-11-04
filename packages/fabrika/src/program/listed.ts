@@ -18,7 +18,6 @@ import {
 	type Running,
 	type Started,
 	start,
-	viewOf,
 } from "./program.ts";
 
 // A program packed with the services it asks for, so a host can start it
@@ -87,12 +86,10 @@ export interface Entry {
 const withoutPersonOnly = (program: AnyProgram): AnyProgram => {
 	const inputs = Object.entries<Inputs[string]>(program.inputs);
 	if (!inputs.some(([, declared]) => declared.personOnly)) return program;
-	const view = viewOf(program);
+	// `...program` carries its own `view` key, so the narrowed copy keeps the window.
 	return defineProgram({
 		...program,
 		inputs: Object.fromEntries(inputs.filter(([, declared]) => !declared.personOnly)),
-		// Its machine's types are past here: the view was checked when the program was first made.
-		...(view === undefined ? {} : {view: view as never}),
 	});
 };
 

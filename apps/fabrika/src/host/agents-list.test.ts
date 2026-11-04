@@ -47,11 +47,18 @@ const PERSON = {kind: "user", id: "owner"} as const;
 const CLAUDE = {kind: "agent", id: "claude", for: "owner"} as const;
 const noPullRequests = {open: Effect.succeed([])};
 
+/** Whether a declared input is one only a person tells (`{personOnly: true}`). */
+const isPersonOnly = (declared: unknown): boolean =>
+	typeof declared === "object" &&
+	declared !== null &&
+	"personOnly" in declared &&
+	declared.personOnly === true;
+
 /** Every input only a person tells, in `list`, as `<program>.<input>`. */
 const personOnlyIn = (list: Shell.ProgramList) =>
 	[...list.values()].flatMap((entry) =>
 		Object.entries(entry.program.inputs)
-			.filter(([, declared]) => declared.personOnly)
+			.filter(([, declared]) => isPersonOnly(declared))
 			.map(([name]) => `${entry.program.name}.${name}`),
 	);
 
