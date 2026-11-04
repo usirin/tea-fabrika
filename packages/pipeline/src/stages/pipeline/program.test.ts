@@ -2926,7 +2926,12 @@ describe("a stopped lane, typed again", () => {
 								})),
 					fake: {
 						writesAt: {build: {0: [{path: "src/lower.test.ts", text: TOUCHED}]}},
-						answers: {...REDO, plan: [{with: {properties: [property(behavior)]}}]},
+						// Every redo writes the touched file again, as a writer told to redo it does.
+						answers: {
+							...REDO,
+							tests: [null, ...Array.from({length: 6}, () => REDO.tests[1])],
+							plan: [{with: {properties: [property(behavior)]}}],
+						},
 						see: SEE,
 					},
 				});
