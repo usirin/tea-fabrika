@@ -5,7 +5,8 @@ import {viewOf} from "../program/program.ts";
 import {memoryStorage} from "../program/storage.ts";
 import type {ProgramList} from "../shell/programs.ts";
 import {JOB_TOOL, type JobAnswer, LAST_MAX, lastLines} from "./job.ts";
-import {type Call, callOf, RUNS, toolNamesOf, toolsOf} from "./tools.ts";
+import {STOP_TOOL, type StopAnswer, type StopAsk, type StopRefused} from "./stop.ts";
+import {type Call, callOf, RUNS, type Tool, toolNamesOf, toolsOf} from "./tools.ts";
 
 // One agent's runs, as its MCP tools drive them: a tool call on an input goes to the agent's own
 // run of that program, started on its first call, as `post.ts` starts one tracker for a post.
@@ -30,6 +31,14 @@ import {type Call, callOf, RUNS, toolNamesOf, toolsOf} from "./tools.ts";
 //
 //   yield* drive.call("job", {n: 1, last: 2})
 //   // {kind: "done", data: {n: 1, text: "seq --to 5", tile: "t1", state: {_tag: "ended", how: "done"}, lines: ["4", "5"]}}
+//
+// And its stop (`stop`): then the `stop` tool is listed after `job` (./stop.ts), and a call that
+// fits is handed to the host, which stops job n for this agent, or says why not.
+//
+//   yield* drive.call("stop", {n: 1, why: "wrong ticket"})
+//   // {kind: "done", data: {_tag: "stopped", job: {n: 1, ..., state: {_tag: "ended", how: "stopped"}, lines: [...]}}}
+//   yield* drive.call("stop", {n: 1})
+//   // {kind: "refused", why: "stop does not fit: ... [\"why\"]"}: the host is never asked
 //
 // A read-only door (`readOnly`) lists only the tools that write nothing (MCP's `readOnlyHint`). A
 // call is read against the tools listed, so a write tool called anyway is refused as any tool that
@@ -90,6 +99,8 @@ export const driveFor = (options: {
 	readonly tiles: () => readonly InTile[];
 	/** Job n of the host's table now, with every line kept of it; `null`: the host knows none. */
 	readonly job?: ((n: number) => JobAnswer | null) | undefined;
+	/** Stop job n of the host's table, for this agent and why (./stop.ts); or why the host would not. */
+	readonly stop?: ((ask: StopAsk) => Effect.Effect<StopAnswer, StopRefused>) | undefined;
 	/**
 	 * Only the tools that write nothing are listed, and only a listed tool is called. With a why,
 	 * `runs` says it, so the agent knows why it cannot write.
@@ -97,10 +108,15 @@ export const driveFor = (options: {
 	readonly readOnly?: boolean | {readonly why: string} | undefined;
 }) =>
 	Effect.gen(function* () {
-		const {list, tiles, job} = options;
+		const {list, tiles, job, stop} = options;
 		const readOnly = options.readOnly ?? false;
+		/** The host's own tools, after `runs`: each one the host hands. */
+		const host: readonly Tool[] = [
+			...(job === undefined ? [] : [JOB_TOOL]),
+			...(stop === undefined ? [] : [STOP_TOOL]),
+		];
 		const tools = toolsOf(list)
-			.flatMap((tool) => (tool.name === RUNS && job !== undefined ? [tool, JOB_TOOL] : [tool]))
+			.flatMap((tool) => (tool.name === RUNS ? [tool, ...host] : [tool]))
 			.filter((tool) => readOnly === false || tool.annotations?.readOnlyHint === true);
 		const listed = new Set(tools.map((tool) => tool.name));
 		const scope = yield* Effect.scope;
@@ -159,6 +175,22 @@ export const driveFor = (options: {
 							data: {...found, lines: lastLines(found.lines, c.ask.last ?? LAST_MAX)},
 						};
 					});
+				case "stop":
+					// Listed only when the host hands its stop, and only a listed tool is read.
+					if (stop === undefined)
+						return Effect.succeed({kind: "refused", why: "there is no tool stop"});
+					return stop(c.ask).pipe(
+						Effect.map((answer): Answer => ({
+							kind: "done",
+							data:
+								answer._tag === "stopped"
+									? {...answer, job: {...answer.job, lines: lastLines(answer.job.lines, LAST_MAX)}}
+									: answer,
+						})),
+						Effect.catchTag("StopRefused", ({why}) =>
+							Effect.succeed<Answer>({kind: "refused", why}),
+						),
+					);
 				case "input":
 					return Effect.gen(function* () {
 						const running = yield* runOf(c.program);

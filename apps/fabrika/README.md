@@ -541,6 +541,14 @@ claude mcp add --transport stdio --env FABRIKA_HOME=<home> fabrika -- \
   `[n] ...` lines too, newest last: at most `last` (1,000 at most, `LAST_MAX`) and 25,000 bytes
   (`BYTES_MAX`, `@kampus/fabrika-old/mcp`). The host keeps them in memory only, for the jobs in
   its table and the newest 100 that ended (`src/job-lines.ts`). Read-only.
+- **`stop` stops one job, yours too, and must say why.** `stop {n: 1, why: "wrong ticket"}`
+  answers `{_tag: "stopped", job: {...}}`, the job as `job` shows it, ended `stopped`. The tile
+  it ran in prints `[1] stopped by agent:claude for:owner: wrong ticket`, and the job's record
+  keeps `ended_by` and `why`. A detached job is dropped (`{_tag: "dropped", n, text}`), as `stop
+  %n` drops one; one that has not ended 10 s on answers `{_tag: "asked", n}`. A job the host does
+  not know, or one that ended, is refused in words. `why` is 1 to 500 characters, never none. Its
+  hints say it writes, may destroy, is the same twice, and stays in the host
+  (`src/host/serve.ts`, `stopFor`).
 - **The agent writes as itself.** Its calls go to its own run of the program, started on first
   use, whose writer is `agent:claude` for you. Nothing it sends can name you: the bridge's
   handshake holds only an agent's name, and the host makes the writer. An agent has no
@@ -565,7 +573,7 @@ not fit fails the post, with why, and nothing is filed.
 If that login fails, the agent only reads, and nothing it calls writes on your session: the socket lists
 only the tools that write nothing (`runs`, `job`, `tracker_query`, ...), a write tool called
 anyway (`tracker_file`) is refused as a tool that is not there, before any run starts, and `runs`
-says why (`readOnly: {why}`). Starting or stopping a lane stays yours, in a tile.
+says why (`readOnly: {why}`), and there is no `stop`. Starting a lane stays yours, in a tile.
 
 The agent's runs end when its client goes.
 
@@ -574,8 +582,11 @@ and `src/host/log.ts`):
 
 ```text
 level=INFO message=job_began n=1 "text=seq --to 3" tile=t1 by=user:owner
-level=INFO message=job_stopped n=1 by=user:owner
+level=INFO message=job_stopped n=1 by=user:owner whose=user:owner idle_ms=0
 level=INFO message=job_ended n=1 "text=seq --to 3" tile=t1 how=stopped by=user:owner
+level=INFO message=agent_came agent=claude client=claude-code version=...
+level=INFO message=tool_called agent=claude tool=stop call=7 took_ms=41 ok=true
+level=INFO message=tool_called agent=claude tool=job call=8 took_ms=0 "refused=there is no job 99: ..."
 level=INFO message=agent_session agent=claude expires=1767225600000
 level=WARN message=agent_refused agent=claude "why=the key .../agent_ed25519: ..."
 level=INFO message=step_began run=r-build-3 step=build
@@ -584,8 +595,13 @@ level=WARN message=lag nodejs.eventloop.delay.p99=0.24 nodejs.eventloop.delay.ma
 ```
 
 - A job's lines: each tile job as it begins and as it ends, with how, and `by`, who started it.
-  A stop says who asked it, before the end it asks for, and why when one was given.
-- An agent's lines: its own session on a ledger server, when it ends, or why it could not be made.
+  A stop says who asked it, before the end it asks for, and why when one was given; `whose` the
+  job was; and `idle_ms`, how long since your last key on the desk or in a tile (none said before
+  your first key since the host started).
+- An agent's lines: as it comes, with the client its MCP `initialize` named; one per tool call,
+  done or refused, with the call's JSON-RPC id (`call`), `took_ms`, and `ok=true` or the why it
+  was told (`refused`); its own session on a ledger server, when it ends, or why it could not be
+  made.
 - A lane step's lines: read off its "run a step" span, as it is tagged with its run and step, and
   as it ends with its outcome. A step that broke before it said one ends with no `outcome`.
 - A lag line: the host reads the event loop's delay once a second (`monitorEventLoopDelay`) and
