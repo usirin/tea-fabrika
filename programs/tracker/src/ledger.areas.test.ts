@@ -169,6 +169,35 @@ describe("an area write from a person", () => {
 	});
 });
 
+// Round 1b: the onboarding step's "type a name" box. A typed name is the same write as a ticked
+// one, with no `suggested`. The save reads the stream before it writes, so a name someone else
+// took a moment ago is refused here even when the window had not seen it yet.
+describe("a typed name", () => {
+	it("makes an `area_made` with that name, and no `suggested`", async () => {
+		const ledger = memoryService();
+		const rows = await Effect.runPromise(
+			saved(ledger, OWNER, "t1", make("lane work")).pipe(Effect.andThen(rowsOn(ledger))),
+		);
+		expect(rows.map((r) => JSON.parse(r.data))).toStrictEqual([
+			{_tag: "area_made", area: 1, name: "lane work"},
+		]);
+	});
+
+	it("is refused when a live area has it, in any case, says which, and nothing lands", async () => {
+		const ledger = memoryService();
+		const {why, rows} = await Effect.runPromise(
+			Effect.gen(function* () {
+				yield* saved(ledger, OWNER, "w1", make("pipeline"));
+				const why = yield* Effect.flip(saved(ledger, SECOND, "t1", make("Pipeline")));
+				return {why, rows: yield* rowsOn(ledger)};
+			}),
+		);
+		expect(why).toMatchObject({_tag: "refused"});
+		expect(String((why as {why?: unknown}).why)).toMatch(/pipeline/i);
+		expect(madeOn(rows).map(([n, name]) => [n, name])).toEqual([[1, "pipeline"]]);
+	});
+});
+
 describe("two people make an area at once (a4)", () => {
 	/** Both made, numbered n and n+1, each by its own writer, and the fold refuses neither. */
 	const bothLand = (rows: readonly Row[]) => {

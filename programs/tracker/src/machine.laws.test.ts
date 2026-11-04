@@ -18,6 +18,7 @@ import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {
 	duplicates,
+	folders,
 	load,
 	over,
 	PROBLEMS,
@@ -87,6 +88,12 @@ const table: MsgArbitraryTable<Msg> = {
 	write: arbRecordMsg("write", {id, write}),
 	quit: arbConstantMsg("quit"),
 	moved: arbConstantMsg("moved"),
+	// Areas PR 1. made up: the skip, and the folders read for the onboarding step's suggestions.
+	skip_onboarding: arbConstantMsg("skip_onboarding"),
+	folders_ok: fc
+		.constantFrom([], ["programs/tracker", "apps/fabrika"])
+		.map((list) => folders.ok(folders({}), {folders: list}, 0)),
+	folders_err: fc.constant(folders.err(folders({}), {_tag: "unreachable"}, 0)),
 	// The filter and the pull requests have laws of their own (filter.laws.test.ts). They are drawn
 	// here too, so the laws of the ledger hold with them in the list.
 	show: arbRecordMsg("show", {
@@ -104,6 +111,8 @@ const table: MsgArbitraryTable<Msg> = {
 			// Up to ten rows that do not read, so a few reads go past the most problems kept.
 			broken: fc.array(fc.constant("row 9: broken"), {maxLength: 10}),
 			last: fc.nat({max: 30}),
+			// Areas PR 1: the rows of `tracker/areas` read beside the tickets. None here.
+			areas: fc.constant([]),
 		})
 		.map(({after: a, ...value}) => load.ok(load({after: a}), value, 0)),
 	load_err: after.map((a) => load.err(load({after: a}), {_tag: "unreachable"}, 0)),
@@ -275,7 +284,11 @@ const newsIsRead: Law = {
 			(_, last) => {
 				let s = last;
 				for (let i = 0; i < 3 && s.load !== "idle"; i += 1) {
-					const back = load.ok(load({after: s.seen}), {entries: [], broken: [], last: s.seen}, 0);
+					const back = load.ok(
+						load({after: s.seen}),
+						{entries: [], broken: [], last: s.seen, areas: []},
+						0,
+					);
 					s = drive(machine, s, [back]).s;
 				}
 				const moved = drive(machine, s, [{type: "moved"}]);

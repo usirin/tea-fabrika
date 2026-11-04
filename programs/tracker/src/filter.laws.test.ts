@@ -15,6 +15,7 @@ import {describe, expect, it} from "vitest";
 import {headOf} from "./head.ts";
 import {
 	duplicates,
+	folders,
 	load,
 	pullRequests,
 	type Show,
@@ -121,6 +122,12 @@ const table: MsgArbitraryTable<Msg> = {
 	write: arbRecordMsg("write", {id, write}),
 	quit: arbConstantMsg("quit"),
 	moved: arbConstantMsg("moved"),
+	// Areas PR 1. made up: the skip, and the folders read for the onboarding step's suggestions.
+	skip_onboarding: arbConstantMsg("skip_onboarding"),
+	folders_ok: fc
+		.constantFrom([], ["programs/tracker", "apps/fabrika"])
+		.map((list) => folders.ok(folders({}), {folders: list}, 0)),
+	folders_err: fc.constant(folders.err(folders({}), {_tag: "unreachable"}, 0)),
 	show: arbRecordMsg("show", {show}),
 	find: arbRecordMsg("find", {text: find}),
 	refresh: arbConstantMsg("refresh"),
@@ -131,6 +138,8 @@ const table: MsgArbitraryTable<Msg> = {
 			entries: fc.array(entry, {maxLength: 6}),
 			broken: fc.constant([]),
 			last: fc.nat({max: 30}),
+			// Areas PR 1: the rows of `tracker/areas` read beside the tickets. None here.
+			areas: fc.constant([]),
 		})
 		.map(({after: a, ...value}) => load.ok(load({after: a}), value, 0)),
 	load_err: after.map((a) => load.err(load({after: a}), {_tag: "unreachable"}, 0)),
@@ -484,6 +493,7 @@ describe("the tracker's filters and pull requests", () => {
 				],
 				broken: [],
 				last: 4,
+				areas: [],
 			},
 			0,
 		);

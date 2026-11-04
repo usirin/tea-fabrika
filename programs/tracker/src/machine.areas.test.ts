@@ -3,7 +3,7 @@ import type {MsgOf} from "@kampus/fabrika-old";
 import type {AreaEntry} from "@kampus/pipeline/tickets/area";
 import type {Entry} from "@kampus/pipeline/tickets/ticket";
 import {describe, expect, it} from "vitest";
-import {load, shownOf, type Tracker, tracker} from "./machine.ts";
+import {folders, load, shownOf, type Tracker, tracker} from "./machine.ts";
 import type {Write} from "./ticket.ts";
 
 // Areas PR 1, today's version (docs/direction/areas.md, call 7; the plan's a6): the tracker's
@@ -17,6 +17,13 @@ import type {Write} from "./ticket.ts";
 //   // page.onboarding  [{_tag: "titles", word: "lane", tickets: 3}]
 //   skip_onboarding
 //   // page.onboarding  null, and it stays null
+//
+// Round 1b, the lead's two calls: the folders come through a read-only folder service (no folders
+// by default), asked for once, with a `folders` Cmd, the first time the step shows; and the step
+// has a box to type a name, since a fresh ledger may have nothing to suggest.
+//
+//   folders_ok {folders: ["apps/fabrika"]}
+//   // page.onboarding  [..., {_tag: "folder", path: "apps/fabrika"}]
 
 type Msg = MsgOf<typeof tracker>;
 const steps = (...msgs: readonly Msg[]) => replay(tracker, {ctx: undefined, msgs});
@@ -133,5 +140,83 @@ describe("the first open, with no area on the ledger (a6)", () => {
 		);
 		expect(onboardingOf(later.state)).toBeNull();
 		expect(later.state.areas.live.size).toBe(0);
+	});
+});
+
+// made up: the `folders` Cmd, its input `{}`, its answer `{folders}`, its error `unreachable`.
+const foldersOk = (list: readonly string[]): Msg => folders.ok(folders({}), {folders: list}, 0);
+const foldersErr: Msg = folders.err(folders({}), {_tag: "unreachable", why: "no network"}, 0);
+const foldersAsked = (msgs: readonly Msg[]) =>
+	steps(...msgs).cmds.filter((c) => c.type === "folders");
+
+describe("the onboarding step's folders (round 1b)", () => {
+	it("asks for the folders once, the first time the step shows", () => {
+		expect(foldersAsked([])).toEqual([]);
+		expect(foldersAsked([loaded(0, LANE)])).toHaveLength(1);
+		expect(
+			foldersAsked([loaded(0, LANE), {type: "moved"}, loaded(4, [filed(5, 5, "Lane: more")])]),
+		).toHaveLength(1);
+	});
+
+	it("does not ask when the ledger already has an area", () => {
+		expect(foldersAsked([loaded(0, LANE, [made(5, 1, "pipeline")])])).toEqual([]);
+	});
+
+	it("shows a folder suggestion for each folder read, beside the titles'", () => {
+		const shown = onboardingOf(steps(loaded(0, LANE), foldersOk(["apps/fabrika"])).state);
+		expect(shown).toContainEqual({_tag: "folder", path: "apps/fabrika"});
+		expect(shown).toContainEqual({_tag: "titles", word: "lane", tickets: 3});
+	});
+
+	it("keeps the step working when the folders cannot be read, and says nothing of it", () => {
+		const before = shownOf(steps(loaded(0, LANE)).state);
+		const after = shownOf(steps(loaded(0, LANE), foldersErr).state);
+		// Nothing new in the problems, the alerts or the failed write: a missing suggestion is no news.
+		expect(after).toEqual(before);
+		expect(onboardingOf(steps(loaded(0, LANE), foldersErr).state)).toContainEqual({
+			_tag: "titles",
+			word: "lane",
+			tickets: 3,
+		});
+	});
+});
+
+// made up: a typed name is the same `make_area` write as a ticked one, with no `suggested`.
+const typed = (name: string): Write => ({kind: "make_area", name});
+
+describe("a name typed in the onboarding step (round 1b)", () => {
+	it("makes an area with that name", () => {
+		const s = steps(loaded(0, []), {type: "write", id: "t1", write: typed("lane work")});
+		expect(s.cmds.filter((c) => c.type === "save")).toEqual([
+			expect.objectContaining({id: "t1", write: typed("lane work")}),
+		]);
+		const back = steps(
+			loaded(0, []),
+			{type: "moved"},
+			loaded(0, [], [made(1, 1, "lane work")]),
+		).state;
+		expect([...back.areas.live]).toEqual([[1, "lane work"]]);
+	});
+
+	it.each([
+		["an empty name", ""],
+		["a name of spaces", "   "],
+	])("refuses %s, saves nothing, and says why", (_, name) => {
+		const s = steps(loaded(0, []), {type: "write", id: "t1", write: typed(name)});
+		expect(s.cmds.filter((c) => c.type === "save")).toEqual([]);
+		expect(s.state.saving).toEqual([]);
+		expect(s.state.failed?.write).toEqual(typed(name));
+		expect(s.state.failed?.why).toMatch(/\S/);
+	});
+
+	it("refuses a name a live area has, in any case, and says which", () => {
+		const s = steps(loaded(0, [], [made(1, 1, "pipeline")]), {
+			type: "write",
+			id: "t1",
+			write: typed("Pipeline"),
+		});
+		expect(s.cmds.filter((c) => c.type === "save")).toEqual([]);
+		expect(s.state.failed?.write).toEqual(typed("Pipeline"));
+		expect(s.state.failed?.why).toMatch(/pipeline/i);
 	});
 });
