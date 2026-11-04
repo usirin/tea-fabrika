@@ -49,7 +49,9 @@ keeps its number as written; the details are in [open calls](#open-calls-with-le
   ([open call 2](#open-calls-with-leans)). The 6 real findings on main, in functions that compile,
   are fixed before the check blocks there.
 - **How strict is a setting in each repo's `fabrika.toml`,** under React's own rule name and ESLint's
-  severity words. The repo running the code decides.
+  severity words. The repo running the code decides. *Replaced 2026-11-03: the owner set the
+  Compiler rules strict, so there is no knob; every finding fails the build, and the only exit is
+  an owner-approved `compiler-ledger.json` row ([the note](../docs/direction/react-compiler.md)).*
 - **The build owns the check** ([open call 3](#open-calls-with-leans)). One function compiles a file
   and returns its findings; the build and `pnpm lint:compiler` both call it.
 - **The yardstick is our planted files plus a real window run, not Babel**
