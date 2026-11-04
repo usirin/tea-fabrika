@@ -6,8 +6,14 @@ that is pressed with the keyboard only stays a plain page. Before this, every mo
 HTML page built by hand, in the shape the [guidelines skill](../../.claude/skills/guidelines/SKILL.md)
 gave.
 
+**Changed later on 2026-11-03 by the owner:** a canvas alone was hard to use, since nothing on it
+said what to look at or why. A guidelines study's front door is the plain page again (a pressable
+demo on top, the principles folded under it), and the canvas sits behind it for every artboard
+side by side.
+
 ```text
-guidelines, explorations, prototypes   a Design canvas, the design system installed
+guidelines                             a plain page first, then a Design canvas behind it
+explorations, prototypes               a Design canvas, the design system installed
 a keyboard-only walk                   a plain page, as before
 the decision and its why               docs/direction/, as before
 shots of the real app in a PR          the real built app, as before
