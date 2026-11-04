@@ -1,3 +1,4 @@
+import {createConnection} from "node:net";
 import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
@@ -6,7 +7,9 @@ import {Client} from "@modelcontextprotocol/client";
 import {getDefaultEnvironment, StdioClientTransport} from "@modelcontextprotocol/client/stdio";
 import {pullRequestsOf} from "@tea-fabrika/tracker";
 import {Effect, Exit, Fiber, FileSystem, Layer, Logger, Path, Schedule, Scope} from "effect";
+import {ChildProcess} from "effect/process";
 import {afterEach, beforeEach, describe, expect, it} from "vitest";
+import {BUILD} from "../build-id.ts";
 import {gridOf} from "../editor/grid.ts";
 import type {Down} from "../link.ts";
 import {readToPage, type ToPage} from "../messages.ts";
@@ -85,10 +88,10 @@ const noteIn = (home: string) =>
 	});
 
 /**
- * A host on `home` in this process, of build `build`, its log caught in `lines`. `ended` is its
- * fiber: done when the host ends of itself, as a restart ends it.
+ * A host on `home` in this process, of build `build` (none given: `runHost`'s own), its log caught
+ * in `lines`. `ended` is its fiber: done when the host ends of itself, as a restart ends it.
  */
-const hostOn = (home: string, lines: string[], build: string) =>
+const hostOn = (home: string, lines: string[], build?: string) =>
 	Effect.gen(function* () {
 		const paths = yield* pathsOf(home);
 		const host = yield* Scope.make();
@@ -299,7 +302,8 @@ describe("the restart tool", () => {
 		expect(restart[0]).toMatchObject({level: "INFO", by: AGENT, why: WHY, build: OLD});
 		expect(restart[0]?.detached).toMatch(/\b2\b/);
 		expect(restart[0]?.detached).not.toMatch(/\b1\b/);
-		expect(restart[0]?.foreground).toMatch(/t1:%2/);
+		// Only the job in front: %1 ended, so none other runs.
+		expect(restart[0]?.foreground).toBe("t1:%2");
 		// A key was typed in t1 before the restart: how long the person has been away is said.
 		expect(restart[0]?.idle_ms).toMatch(/^\d+$/);
 		// Every host's start line says its build; only one after a restart says after=restart.
@@ -329,12 +333,13 @@ describe("the restart tool", () => {
 	});
 
 	it("is said once: the host after the next one says nothing of the restart", async () => {
+		const first: string[] = [];
 		const third: string[] = [];
 		const seen = await go(
 			Effect.gen(function* () {
 				const fs = yield* FileSystem.FileSystem;
 				const home = yield* freshHome;
-				const old = yield* hostOn(home, [], OLD);
+				const old = yield* hostOn(home, first, OLD);
 				const app = yield* appOn(old.paths.sock);
 				const agent = yield* agentOn(home, "claude");
 				app.type("counter &\r");
@@ -357,6 +362,8 @@ describe("the restart tool", () => {
 				return {now, line, kept: yield* fs.exists(yield* noteIn(home))};
 			}),
 		);
+		// The job ran in the background: none ran in front.
+		expect(said(first, "host_restart")[0]?.foreground).toBe("");
 		// None, as null or left out.
 		expect(
 			seen.now.type === "host" ? (Reflect.get(seen.now.now, "restarted") ?? null) : "no host",
@@ -432,6 +439,215 @@ describe("the restart tool", () => {
 	});
 });
 
+// Tests owed by the mutation step on PR 382: each one pins a line no test above reached.
+describe("the restart tool, at its edges", () => {
+	it("is refused while the only app on the socket has not said hello, and the host runs on", async () => {
+		const lines: string[] = [];
+		const seen = await go(
+			Effect.gen(function* () {
+				const fs = yield* FileSystem.FileSystem;
+				const home = yield* freshHome;
+				const host = yield* hostOn(home, lines, OLD);
+				// Connected, but it never says hello: on the host's list of apps, and not up.
+				const raw = yield* Effect.acquireRelease(
+					Effect.sync(() => createConnection(host.paths.sock)),
+					(socket) => Effect.sync(() => socket.destroy()),
+				);
+				yield* Effect.callback<void>((resume) => {
+					raw.once("connect", () => resume(Effect.void));
+				});
+				yield* Effect.sleep("200 millis");
+				const agent = yield* agentOn(home, "claude");
+				const refused = yield* agent.call("restart", {why: WHY});
+				yield* Effect.sleep("400 millis");
+				const sock = yield* reach(host.paths.sock);
+				const runs = yield* agent.call("runs", {});
+				return {refused, sock, runs, note: yield* fs.exists(yield* noteIn(home))};
+			}),
+		);
+		expect(seen.refused.error).toBe(true);
+		expect(seen.refused.text).toMatch(/\bapp\b/);
+		expect(seen.sock).toBe("live");
+		expect(seen.runs.error).toBe(false);
+		expect(seen.note).toBe(false);
+		expect(said(lines, "host_restart")).toEqual([]);
+	});
+
+	it("refuses a second restart while the first is under way: one note, one line, the first why", async () => {
+		const lines: string[] = [];
+		const seen = await go(
+			Effect.gen(function* () {
+				const fs = yield* FileSystem.FileSystem;
+				const home = yield* freshHome;
+				const old = yield* hostOn(home, lines, OLD);
+				yield* appOn(old.paths.sock);
+				const agent = yield* agentOn(home, "claude");
+				const first = yield* agent.call("restart", {why: WHY});
+				const second = yield* agent.call("restart", {why: "a second why"});
+				yield* old.ended;
+				return {first, second, left: yield* fs.readFileString(yield* noteIn(home))};
+			}),
+		);
+		expect(seen.first.error).toBe(false);
+		expect(seen.second.error).toBe(true);
+		expect(seen.second.text).toMatch(/restarting already/);
+		expect(JSON.parse(seen.left)).toMatchObject({by: AGENT, why: WHY});
+		expect(said(lines, "host_restart")).toHaveLength(1);
+		expect(said(lines, "host_restart")[0]).toMatchObject({why: WHY});
+	});
+
+	// Red at 2d1bfa64: `restarting` is set only once the note is written, so both calls get past
+	// it. Both write restart.json.new; the second's rename finds it gone, and that agent is told
+	// "could not leave its note" instead of "restarting already".
+	it("restarts once for two agents that ask at the same moment", async () => {
+		const lines: string[] = [];
+		const seen = await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				const old = yield* hostOn(home, lines, OLD);
+				yield* appOn(old.paths.sock);
+				// Two agents: each one's calls go one at a time, but not the two agents' together.
+				const claude = yield* agentOn(home, "claude");
+				const lead = yield* agentOn(home, "lead");
+				const answers = yield* Effect.all(
+					[claude.call("restart", {why: "one"}), lead.call("restart", {why: "two"})],
+					{concurrency: "unbounded"},
+				);
+				yield* old.ended;
+				return answers;
+			}),
+		);
+		expect(seen.filter((a) => !a.error)).toHaveLength(1);
+		const refused = seen.filter((a) => a.error);
+		expect(refused).toHaveLength(1);
+		expect(refused[0]?.text).toMatch(/restarting already/);
+		expect(said(lines, "host_restart")).toHaveLength(1);
+	});
+
+	it("is refused when its note cannot be written, and changes nothing", async () => {
+		const lines: string[] = [];
+		const seen = await go(
+			Effect.gen(function* () {
+				const fs = yield* FileSystem.FileSystem;
+				const home = yield* freshHome;
+				const host = yield* hostOn(home, lines, OLD);
+				yield* appOn(host.paths.sock);
+				// The note is written beside, then moved over: a folder where it is written beside.
+				const note = yield* noteIn(home);
+				yield* fs.makeDirectory(`${note}.new`);
+				const agent = yield* agentOn(home, "claude");
+				const refused = yield* agent.call("restart", {why: WHY});
+				yield* Effect.sleep("400 millis");
+				const sock = yield* reach(host.paths.sock);
+				const runs = yield* agent.call("runs", {});
+				return {refused, sock, runs, note: yield* fs.exists(note)};
+			}),
+		);
+		expect(seen.refused.error).toBe(true);
+		expect(seen.refused.text).toMatch(/could not leave its note/);
+		expect(seen.sock).toBe("live");
+		expect(seen.runs.error).toBe(false);
+		expect(seen.note).toBe(false);
+		expect(said(lines, "host_restart")).toEqual([]);
+	});
+
+	it("refuses a call that says its own `by`: who restarts is only the agent its handshake named", async () => {
+		const lines: string[] = [];
+		const seen = await go(
+			Effect.gen(function* () {
+				const fs = yield* FileSystem.FileSystem;
+				const home = yield* freshHome;
+				const host = yield* hostOn(home, lines, OLD);
+				yield* appOn(host.paths.sock);
+				const agent = yield* agentOn(home, "claude");
+				const refused = yield* agent.call("restart", {why: WHY, by: "user:owner"});
+				yield* Effect.sleep("400 millis");
+				const sock = yield* reach(host.paths.sock);
+				return {refused, sock, note: yield* fs.exists(yield* noteIn(home))};
+			}),
+		);
+		// Today the call is refused for the field it should not have, before the host is asked.
+		expect(seen.refused.error).toBe(true);
+		expect(seen.refused.text).toMatch(/\bby\b/);
+		expect(seen.sock).toBe("live");
+		expect(seen.note).toBe(false);
+		expect(said(lines, "host_restart")).toEqual([]);
+		// The person's name the call said reaches no line the host wrote.
+		const refusal = said(lines, "tool_called").filter((f) => f.tool === "restart");
+		expect(refusal).toHaveLength(1);
+		for (const line of lines) expect(line).not.toContain("user:owner");
+	});
+
+	it("logs this build's own id at the start of a host given none", async () => {
+		const lines: string[] = [];
+		await go(
+			Effect.gen(function* () {
+				const host = yield* hostOn(yield* freshHome, lines);
+				yield* until("the start line", () => said(lines, "host_began")[0]);
+				yield* host.stop;
+			}),
+		);
+		expect(said(lines, "host_began")).toHaveLength(1);
+		expect(said(lines, "host_began")[0]).toMatchObject({build: BUILD});
+	});
+});
+
+/**
+ * A host process on `home`, as the app starts one (host/main.ts, run as plain Node), with a timer
+ * that never ends loaded before it: something left open, which would keep a host that only lets
+ * its loop run dry alive. Killed with the scope, if it still runs.
+ */
+const hostProcess = (home: string) =>
+	Effect.gen(function* () {
+		const path = yield* Path.Path;
+		const main = yield* path.fromFileUrl(new URL("./main.ts", import.meta.url));
+		const open = "data:text/javascript,setInterval(() => {}, 1e9)";
+		return yield* ChildProcess.make(process.execPath, ["--import", open, main], {
+			env: {FABRIKA_HOME: home},
+			extendEnv: true,
+			stdin: "ignore",
+			stdout: "ignore",
+			stderr: "ignore",
+			forceKillAfter: "3 seconds",
+		});
+	});
+
+describe("a real host process, restarted by an agent", () => {
+	it("exits with 0 of itself, though something is left open, and its pid file goes", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const fs = yield* FileSystem.FileSystem;
+				const home = yield* freshHome;
+				const paths = yield* pathsOf(home);
+				// This test's own child: the only process it ever stops, by its scope.
+				const host = yield* hostProcess(home);
+				yield* reach(paths.mcp).pipe(
+					Effect.repeat({until: (r) => r === "live", schedule: Schedule.spaced("20 millis")}),
+					Effect.timeoutOrElse({
+						duration: "10 seconds",
+						orElse: () => Effect.die("the host process did not listen"),
+					}),
+				);
+				const app = yield* appWire(yield* NodeSocket.makeNet({path: paths.sock}), () => {});
+				yield* app.up;
+				const agent = yield* agentOn(home, "claude");
+				const answer = yield* agent.call("restart", {why: WHY});
+				if (answer.error) return yield* Effect.die(`the restart was refused: ${answer.text}`);
+				const code = yield* host.exitCode.pipe(
+					Effect.timeoutOrElse({
+						duration: "10 seconds",
+						orElse: () => Effect.succeed("still running"),
+					}),
+				);
+				const pid = yield* fs.readFileString(paths.pid).pipe(Effect.orElseSucceed(() => ""));
+				return {code, pid: pid.trim()};
+			}),
+		);
+		expect(seen.code).toBe(0);
+		expect(seen.pid).toBe("");
+	});
+});
+
 describe("a restart.json that does not read", () => {
 	it("starts the host all the same, and it says no restart", async () => {
 		const seen = await go(
@@ -441,20 +657,29 @@ describe("a restart.json that does not read", () => {
 				const {dir} = yield* pathsOf(home);
 				yield* fs.makeDirectory(dir, {recursive: true, mode: 0o700});
 				const answers = [];
-				for (const text of ["{not json", JSON.stringify({by: 3, why: ["a"]})]) {
+				for (const text of [
+					"{not json",
+					JSON.stringify({by: 3, why: ["a"]}),
+					// Every field the right type, but `by` names no writer.
+					JSON.stringify({by: "nobody", why: null, at: 1}),
+				]) {
 					yield* fs.writeFileString(yield* noteIn(home), text);
 					const lines: string[] = [];
 					const host = yield* hostOn(home, lines, NEW);
 					const app = yield* appOn(host.paths.sock);
 					const now = yield* until("the host's own state", () => app.hostNow());
-					answers.push({now, began: said(lines, "host_began")[0]});
+					const kept = yield* fs.exists(yield* noteIn(home));
+					answers.push({now, began: said(lines, "host_began")[0], kept});
 					yield* app.leave;
 					yield* host.stop;
 				}
 				return answers;
 			}),
 		);
-		for (const {now, began} of seen) {
+		expect(seen).toHaveLength(3);
+		for (const {now, began, kept} of seen) {
+			// The file is taken all the same, so no later host reads it either.
+			expect(kept).toBe(false);
 			// None, as null or left out.
 			expect(
 				now.type === "host" ? (Reflect.get(now.now, "restarted") ?? null) : "no host",

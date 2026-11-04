@@ -352,6 +352,11 @@ describe("the top bar", () => {
 		// A person's restart from the window has no why: the line ends at the time.
 		const person = restartedWord(restarted("user:owner", null, 1_000), 5_000);
 		expect(person).toMatch(/^restarted by \S.* 4s ago$/);
+		// The person at the window is "you", whatever their login (owed by PR 382's mutation step).
+		expect(person).toBe("restarted by you 4s ago");
+		expect(restartedWord(restarted("user:ana", null, 1_000), 5_000)).toBe(
+			"restarted by you 4s ago",
+		);
 		// A host that started fresh, or one of an older build that says nothing of it.
 		expect(restartedWord({...host, restarted: null} as HostNow, 5_000)).toBeNull();
 		expect(restartedWord(host, 5_000)).toBeNull();
