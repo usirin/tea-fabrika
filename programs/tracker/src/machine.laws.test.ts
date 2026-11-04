@@ -42,7 +42,8 @@ type Cmd =
 	| ReturnType<typeof save>
 	| ReturnType<typeof pullRequests>
 	| ReturnType<typeof duplicates>
-	| ReturnType<typeof saveHints>;
+	| ReturnType<typeof saveHints>
+	| ReturnType<typeof folders>;
 type TrackerStep = Step<Tracker, Msg, Cmd>;
 
 // ---------------------------------------------------------------- generators
@@ -306,11 +307,13 @@ const hintsOnlyOwnFiling = every(
 		const {prev, msg} = step;
 		const filing =
 			msg.type === "save_ok" && answeredFront(step) && prev.saving[0]?.write.kind === "file";
+		// A save's answer names a ticket, or an area for a write to the areas: only a ticket is hinted.
+		const ticket = filing && "ticket" in msg.value ? msg.value.ticket : null;
 		return (
-			filing &&
+			ticket !== null &&
 			asks.length === 1 &&
-			asks[0]?.ticket === msg.value.ticket &&
-			step.next.hinting.includes(msg.value.ticket)
+			asks[0]?.ticket === ticket &&
+			step.next.hinting.includes(ticket)
 		);
 	},
 );
@@ -406,7 +409,7 @@ const PLANTS = {
 	hintsEveryWrite: plant({
 		save_ok: (s, m) => {
 			const [next, cmds] = real.save_ok(s, m);
-			if (cmds.some((c) => c.type === "duplicates")) return [next, cmds];
+			if (cmds.some((c) => c.type === "duplicates") || !("ticket" in m.value)) return [next, cmds];
 			const t = m.value.ticket;
 			return [{...next, hinting: [...next.hinting, t]}, [...cmds, asked(t)]];
 		},
@@ -479,7 +482,8 @@ describe("the tracker's state is kept", () => {
 		const keepsTheAnswer = plant({
 			load_ok: (s, m) => {
 				const [next, cmds] = real.load_ok(s, m);
-				return [{...next, ...m.value}, cmds];
+				// The read's rows ride along; its areas stay folded, as the machine folds them.
+				return [{...next, ...m.value, areas: next.areas}, cmds];
 			},
 		});
 		await expect(keepsEvery(keepsTheAnswer, 20)).rejects.toThrow(/Counterexample/);

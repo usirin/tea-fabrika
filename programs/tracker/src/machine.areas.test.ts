@@ -3,7 +3,7 @@ import type {MsgOf} from "@kampus/fabrika-old";
 import type {AreaEntry} from "@kampus/pipeline/tickets/area";
 import type {Entry} from "@kampus/pipeline/tickets/ticket";
 import {describe, expect, it} from "vitest";
-import {folders, load, shownOf, type Tracker, tracker} from "./machine.ts";
+import {folders, load, save, shownOf, statusOf, type Tracker, tracker} from "./machine.ts";
 import type {Write} from "./ticket.ts";
 
 // Areas PR 1, today's version (docs/direction/areas.md, call 7; the plan's a6): the tracker's
@@ -218,5 +218,35 @@ describe("a name typed in the onboarding step (round 1b)", () => {
 		expect(s.cmds.filter((c) => c.type === "save")).toEqual([]);
 		expect(s.state.failed?.write).toEqual(typed("Pipeline"));
 		expect(s.state.failed?.why).toMatch(/pipeline/i);
+	});
+});
+
+// Round 1c. The plan: "PR 1 shows the onboarding, and the areas it makes show in tsh's `tracker`
+// output." The tracker's line in tsh is its `statusOf`.
+// made up: how the line names the areas. Only that each live one's name is in it is held here.
+describe("after Enter on the onboarding, the areas made show (round 1c)", () => {
+	it("names each area made in the tracker's line in tsh, once the ledger has them", () => {
+		const ticked: readonly Write[] = [
+			{kind: "make_area", name: "lane", suggested: {_tag: "titles", word: "lane", tickets: 3}},
+			{kind: "make_area", name: "apps/fabrika", suggested: {_tag: "folder", path: "apps/fabrika"}},
+		];
+		// Enter: one write each, in the order ticked; each save answers with its area.
+		const answered = (i: number, area: number): Msg =>
+			save.ok(save({id: `w${i}`, write: ticked[i] as Write, next: 5}), {area}, 0);
+		const before = steps(loaded(0, LANE), foldersOk(["apps/fabrika"])).state;
+		expect(statusOf(before)).not.toMatch(/lane|apps\/fabrika/);
+		const after = steps(
+			loaded(0, LANE),
+			foldersOk(["apps/fabrika"]),
+			...ticked.map((write, i): Msg => ({type: "write", id: `w${i}`, write})),
+			answered(0, 1),
+			answered(1, 2),
+			{type: "moved"},
+			loaded(4, [], [made(5, 1, "lane"), made(6, 2, "apps/fabrika")]),
+		).state;
+		expect(after.saving).toEqual([]);
+		expect(onboardingOf(after)).toBeNull();
+		expect(statusOf(after)).toContain("lane");
+		expect(statusOf(after)).toContain("apps/fabrika");
 	});
 });

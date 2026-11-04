@@ -353,7 +353,14 @@ describe("the person-only rule on an agent's session", () => {
 				return out;
 			}),
 		);
-		expect(seen.map((s) => s.kind)).toEqual(["answered", "duplicate_rated"]);
+		// Areas PR 1: the three area facts are a person's too (docs/direction/areas.md).
+		expect(seen.map((s) => s.kind)).toEqual([
+			"answered",
+			"duplicate_rated",
+			"area_made",
+			"area_renamed",
+			"area_merged",
+		]);
 		for (const s of seen) {
 			expect(s.refused).toContain("403");
 			expect(s.refused).toContain(`only a person writes ${s.kind}`);

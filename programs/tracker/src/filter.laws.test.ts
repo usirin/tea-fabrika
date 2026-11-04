@@ -40,7 +40,8 @@ type Cmd =
 	| ReturnType<typeof save>
 	| ReturnType<typeof pullRequests>
 	| ReturnType<typeof duplicates>
-	| ReturnType<typeof saveHints>;
+	| ReturnType<typeof saveHints>
+	| ReturnType<typeof folders>;
 type TrackerStep = Step<Tracker, Msg, Cmd>;
 
 // ---------------------------------------------------------------- generators
