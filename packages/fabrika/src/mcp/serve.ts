@@ -51,7 +51,8 @@ import type {StopAnswer, StopAsk, StopRefused} from "./stop.ts";
 // one as its first message is heard, with the client its `initialize` named, and one per tool
 // call, done, refused or crashed, with the call's JSON-RPC id, so a line matches the agent's own
 // transcript later. A refused call leaves no other trace. What the agent chose (its client's name
-// and version, a tool's name, a refusal that echoes it) is one line first (../shell/one-line.ts).
+// and version, a call's id when it is a string, a tool's name, a refusal that echoes it) is one
+// line first (../shell/one-line.ts). Only the log's copy: the answer goes back under the real id.
 //
 //   level=INFO message=agent_came agent=claude client=claude-code version=...
 //   level=INFO message=tool_called agent=claude tool=stop call=7 took_ms=41 ok=true
@@ -136,7 +137,8 @@ const failureOf = (cause: Cause.Cause<unknown>): string => {
 /**
  * One tool call's line, said as the call ends however it ends: the tool, the call's JSON-RPC id,
  * how long it took, and `ok`, the refusal, or `failed` for a call that crashed and answered
- * nothing of its own. The agent chose the tool's name: it is one line here.
+ * nothing of its own. The agent chose the tool's name and the call's id, which JSON-RPC lets be
+ * any string: both are one line here.
  */
 const toolCalled = (
 	who: typeof Agent.Type,
@@ -150,7 +152,13 @@ const toolCalled = (
 			? {ok: true}
 			: {refused: exit.value.why}
 		: {failed: failureOf(exit.cause)};
-	const line = {agent: who.id, tool: oneLine(tool), call, took_ms: took, ...end};
+	const line = {
+		agent: who.id,
+		tool: oneLine(tool),
+		call: typeof call === "string" ? oneLine(call) : call,
+		took_ms: took,
+		...end,
+	};
 	return (
 		Exit.isSuccess(exit) ? Effect.logInfo("tool_called") : Effect.logError("tool_called")
 	).pipe(Effect.annotateLogs(line));

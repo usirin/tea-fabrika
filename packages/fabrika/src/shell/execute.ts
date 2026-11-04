@@ -145,6 +145,8 @@ export const stopJob = (shell: Shell, job: Job) =>
 		}
 		const stop = shell.stops.get(job.stages[0].run);
 		if (stop === undefined || stop.asked) return;
+		// Marked before the first yield: the host's stop and a `stop %n` run side by side, and the
+		// second must find this one already asked, or both say the stopper.
 		stop.asked = true;
 		yield* askStop(shell, job.n);
 		sayStopper(shell, job.n);
