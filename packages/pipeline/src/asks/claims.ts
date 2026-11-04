@@ -1,6 +1,7 @@
 import {HOST_GRACE_MS, hostOf, Ledger} from "@kampus/fabrika-old";
 import {Context, Duration, Effect, FiberMap, Layer} from "effect";
 import {type LaneId, laneId, readLaneId, type TicketId} from "../ids.ts";
+import {waitOut} from "../wait.ts";
 import {appendFact, ensureName, type Hold, sendFact, steady, ticketName} from "./ledger.ts";
 
 // One lane works a ticket at a time. A lane takes its ticket with the ledger's lease on the
@@ -134,9 +135,12 @@ export const layerLanes = (o: LanesOptions = {}) =>
 					let rev = (yield* steady("read a registry", ledger.readLast(name, 1)))[0]?.rev ?? 0;
 					for (;;) {
 						const sentAt = Date.now();
-						const r = yield* steady("claim", ledger.claim(name, lane, rev, ttlMs)).pipe(
-							Effect.result,
-						);
+						// The one wait (../wait.ts): a claim the ledger does not answer is asked again, from 1 s.
+						const r = yield* waitOut(
+							ledger.claim(name, lane, rev, ttlMs),
+							(e) => e._tag === "LedgerUnreachable",
+							"ledger",
+						).pipe(Effect.result);
 						if (r._tag === "Success") {
 							held.set(ticket, {lane, fence: r.success.fence});
 							yield* FiberMap.run(
