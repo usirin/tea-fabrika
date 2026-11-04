@@ -22,8 +22,13 @@ import {pathsOf, reach} from "./socket.ts";
 //   agent       job {n: 1, last: 2}
 //               {n: 1, text: "seq --to 5", tile: "t1", state: {_tag: "ended", how: "done"},
 //                lines: ["4", "5"]}
-//   host/log    timestamp=... level=INFO fiber=#.. message=job_began n=1 "text=seq --to 5" tile=t1
-//               timestamp=... level=INFO fiber=#.. message=job_ended n=1 ... tile=t1 how=done
+//   host/log    timestamp=... level=INFO fiber=#.. message=job_began n=1 "text=seq --to 5" tile=t1 by=user:owner
+//               timestamp=... level=INFO fiber=#.. message=job_ended n=1 ... tile=t1 how=done by=user:owner
+//
+// Each line says who started the job (`by`, tracker 185), and a stop says who asked it:
+//
+//   tile t1     tsh$ counter &   then   tsh$ stop %1
+//   host/log    message=job_stopped n=1 by=user:owner        a person's own stop gives no why
 //
 // Every log line the host writes is caught here through Effect's own `Logger`, in the format the
 // host's file uses (`Logger.formatSimple`, host/main.ts). No real home and no real ledger.
@@ -230,7 +235,7 @@ describe("the job tool: one tile job's state and its last lines", () => {
 });
 
 describe("the host's wide log", () => {
-	it("writes one line as a job begins and one as it ends, with how", async () => {
+	it("writes one line as a job begins and one as it ends, with how and who started it", async () => {
 		const lines: string[] = [];
 		await go(
 			Effect.gen(function* () {
@@ -246,15 +251,52 @@ describe("the host's wide log", () => {
 		const ended = said(lines, "job_ended");
 		expect(began).toHaveLength(1);
 		expect(ended).toHaveLength(1);
-		expect(began[0]).toMatchObject({level: "INFO", n: "1", text: "seq --to 3", tile: "t1"});
+		// A home with its own file: its one person is the owner, and the line in tile t1 is theirs.
+		expect(began[0]).toMatchObject({
+			level: "INFO",
+			n: "1",
+			text: "seq --to 3",
+			tile: "t1",
+			by: "user:owner",
+		});
 		expect(ended[0]).toMatchObject({
 			level: "INFO",
 			n: "1",
 			text: "seq --to 3",
 			tile: "t1",
 			how: "done",
+			by: "user:owner",
 		});
 		expect(began[0]?.timestamp).toMatch(/^\d{4}-\d\d-\d\dT/);
+		// It ended on its own: nobody asked it to stop.
+		expect(said(lines, "job_stopped")).toEqual([]);
+	});
+
+	it("writes one line as a person stops a job: its number and who asked", async () => {
+		const lines: string[] = [];
+		await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				const host = yield* hostOn(home, lines);
+				host.type("counter &\r");
+				yield* until("the job's start in the log", () =>
+					said(lines, "job_began").length > 0 ? true : undefined,
+				);
+				host.type("stop %1\r");
+				yield* until("the job's end in the log", () =>
+					said(lines, "job_ended").length > 0 ? true : undefined,
+				);
+			}),
+		);
+		const stopped = said(lines, "job_stopped");
+		expect(stopped).toHaveLength(1);
+		expect(stopped[0]).toMatchObject({level: "INFO", n: "1", by: "user:owner"});
+		// A person's own stop gives no reason: `why` is not known, so it says none.
+		expect(stopped[0]?.why === undefined || stopped[0]?.why === "null").toBe(true);
+		expect(said(lines, "job_ended")[0]).toMatchObject({n: "1", how: "stopped", by: "user:owner"});
+		// The stop is said before the end it asked for.
+		const at = (message: string) => lines.findIndex((l) => fieldsOf(l).message === message);
+		expect(at("job_stopped")).toBeLessThan(at("job_ended"));
 	});
 
 	it("writes a lag line while the host's thread is starved", async () => {

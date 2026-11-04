@@ -1,9 +1,10 @@
 import {Ledger, Shell, Traces} from "@kampus/fabrika-old";
-import {type InTile, type JobAnswer, serveAgent} from "@kampus/fabrika-old/mcp";
+import {type AgentOptions, type InTile, type JobAnswer, serveAgent} from "@kampus/fabrika-old/mcp";
 import {Author, PullRequests} from "@tea-fabrika/tracker";
-import {Effect, type Scope} from "effect";
+import {Context, Effect, type Scope} from "effect";
 import type {SocketServer} from "effect/socket";
 import {appPrograms} from "../tsh.ts";
+import type {AgentSessions} from "./agent-session.ts";
 
 // The host's agents' socket, `<home>/host/mcp`: each agent's MCP bridge attaches here (the app's
 // `fabrika mcp --as <name>`), and is served the app's programs as tools (`@kampus/fabrika-old/mcp`).
@@ -28,13 +29,21 @@ import {appPrograms} from "../tsh.ts";
 //   agent's chat     job {n: 1, last: 2}
 //                    {n: 1, text: "seq --to 5", tile: "t1", state: {_tag: "ended", how: "done"}, lines: ["4", "5"]}
 //
-// Every home has the socket. On a home that keeps its own ledger file, every tool. On a home
-// connected to a ledger server (`readOnly`), only the tools that write nothing: there the host's
-// ledger is the person's session, and the server's door stamps what it writes as the person
-// whatever the tracker names, so an agent's write would be credited to the person. A write tool is
-// not listed there, and one called anyway is refused before any run starts. A write there needs
-// the agent's own session (host/post.ts, `asAgent`), not built yet. Starting or stopping a lane
-// stays the person's, in a tile.
+// Every home has the socket, and every agent gets every tool. On a home that keeps its own ledger
+// file, an agent's programs write on the host's ledger, as the agent. On a home connected to a
+// ledger server, each agent writes on its own session (`sessionFor`, host/agent-session.ts): the
+// server's door stamps what it writes `agent:<name>` for the person, never as the person.
+//
+//   agent attaches   its session, made as its handshake is read, kept while the agent stays
+//   host/log         message=agent_session agent=claude expires=1767225600000
+//
+// An agent whose session could not be made gets the read-only door, never the person's session:
+// only the tools that write nothing are listed, a write tool called anyway is refused before any
+// run starts, and `runs` says why (`@kampus/fabrika-old/mcp`, drive.ts).
+//
+//   host/log         message=agent_refused agent=claude "why=the key .../agent_ed25519: ..."
+//
+// Starting or stopping a lane stays the person's, in a tile.
 
 /** A screen's port name, `run:<id>`, as a run in a tile; a run's id starts with its program's name. */
 const inTile = (port: string): InTile | null => {
@@ -56,22 +65,43 @@ export const serveAgents = (options: {
 	readonly attached: (name: string) => Effect.Effect<void, never, Scope.Scope>;
 	/** Job n of the host's table now, with its lines (job-lines.ts), for the `job` tool. */
 	readonly job: (n: number) => JobAnswer | null;
-	/** Only the tools that write nothing: a home connected to a ledger server. */
-	readonly readOnly: boolean;
+	/**
+	 * Agent `name`'s own session on the home's ledger server, held in the agent's scope
+	 * (host/agent-session.ts); `null`: the home keeps its own ledger file, and each agent writes on
+	 * the host's.
+	 */
+	readonly sessionFor: AgentSessions | null;
 }) =>
 	Effect.gen(function* () {
-		const {server, ports, attached, job, readOnly} = options;
+		const {server, ports, attached, job, sessionFor} = options;
 		const ledger = yield* Ledger;
 		const person = yield* Author;
 		const pullRequests = yield* PullRequests;
 		const traces = yield* Traces;
+		const listOn = (on: Ledger["Service"], who: Author["Service"]) =>
+			Shell.programList(appPrograms(on, who, pullRequests, traces));
+		/** What agent `who` is served: its own session's programs, or the read-only door, with why. */
+		const programsFor: AgentOptions["programsFor"] = (who) =>
+			sessionFor === null
+				? Effect.succeed({list: listOn(ledger, who), readOnly: null})
+				: sessionFor(who.id).pipe(
+						Effect.map((session) => ({
+							list: listOn(Context.get(session, Ledger), Context.get(session, Author)),
+							readOnly: null,
+						})),
+						Effect.catchTag("ConnectFailed", ({why}) =>
+							Effect.logWarning("agent_refused").pipe(
+								Effect.annotateLogs({agent: who.id, why}),
+								Effect.as({list: listOn(ledger, who), readOnly: {why}}),
+							),
+						),
+					);
 		return yield* server.run((socket) =>
 			serveAgent(socket, {
 				person: person.id,
-				programsFor: (who) => Shell.programList(appPrograms(ledger, who, pullRequests, traces)),
+				programsFor,
 				tiles: () => [...ports()].flatMap((port) => inTile(port) ?? []),
 				job,
-				readOnly,
 				attached: (who) => attached(who.id),
 			}).pipe(
 				Effect.catchCause((cause) =>

@@ -54,6 +54,22 @@ wash.
 
 Plain tiles use slate: `#d8f4f609` at rest and `#ddeaf814` focused.
 
+The light look, over the ground `#fcfcfd`, from Radix 3.0.0's light alpha scales (added by tile
+guidelines PR 1). The focus edge is the lowest step from a8 up that reads 3:1 on both the ground and
+the focused wash. Light sky's and lime's a8 to a10 are pale fills, 1.3 to 2.3, so they take a11.
+Teal's a9 reads 3.00 on the ground but 2.73 on the wash, so it takes a10.
+
+| Color | Rest | Focused | Focus edge | Step | On ground | On wash |
+|---|---|---|---|---|---|---|
+| sky | `#00a4db0e` | `#00b3ee1e` | `#00749e` | a11 | 5.13 | 4.59 |
+| pink | `#e0008008` | `#f4008c16` | `#c8007fbf` | a9 | 4.06 | 3.60 |
+| teal | `#00aa800c` | `#00c69d1f` | `#009684f2` | a10 | 3.37 | 3.03 |
+| violet | `#4900ff07` | `#4400ee0f` | `#2400b7a9` | a9 | 5.32 | 5.02 |
+| lime | `#6b95000c` | `#96c80029` | `#375f00d0` | a11 | 4.69 | 4.37 |
+| plum | `#c000c008` | `#cc00cc14` | `#89009eb5` | a9 | 4.69 | 4.28 |
+
+Plain light tiles use slate: `#00005506` at rest and `#0000330f` focused.
+
 ## Why
 
 - **Why a wash.** It was picked by eye on real desks, over a colored line and a shape with a hue. It

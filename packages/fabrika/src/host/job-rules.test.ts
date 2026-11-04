@@ -123,3 +123,49 @@ describe("a job's record keeps an agent run's content", () => {
 		]);
 	});
 });
+
+// Who started a job and who stopped it (tracker 185a). A call may name a writer, `began.by` and
+// `ended.stop.by`, but the record keeps it only when the sender may name it: the sender itself,
+// or, from a person, an agent working for that person. Anyone else: the sender, as the door
+// stamped it. This rule is all that stops a sender from forging a job's writer.
+//
+//   sender user:github:7, began.by agent:claude for:github:7   job.by = the agent
+//   sender user:github:7, began.by user:github:8               job.by = user:github:7
+//   sender agent:claude for:github:7, began.by user:github:7   job.by = the agent
+
+const PERSON = "user:github:7";
+const OWN_AGENT = "agent:claude for:github:7";
+
+/** Each claim a sender makes, and the writer the record keeps for it. */
+const CLAIMS = [
+	{what: "a person names their own agent", sender: PERSON, claim: OWN_AGENT, kept: OWN_AGENT},
+	{what: "a person names another person", sender: PERSON, claim: "user:github:8", kept: PERSON},
+	{
+		what: "a person names another person's agent",
+		sender: PERSON,
+		claim: "agent:claude for:github:8",
+		kept: PERSON,
+	},
+	{what: "an agent names its person", sender: OWN_AGENT, claim: PERSON, kept: OWN_AGENT},
+] as const;
+
+describe("a job's record keeps only a writer its sender may name", () => {
+	for (const {what, sender, claim, kept} of CLAIMS) {
+		it(`began: ${what}, and the record keeps ${kept}`, () => {
+			const {db, close, call} = record();
+			call({op: "began", n: 1, text: "counter", host: "laptop", at: 10, by: claim}, sender);
+			const row = db.all(`SELECT by FROM job`)[0];
+			close();
+			expect(row?.by).toBe(kept);
+		});
+
+		it(`ended's stop: ${what}, and the record keeps ${kept}`, () => {
+			const {db, close, call} = record();
+			call({op: "began", n: 1, text: "counter", host: "laptop", at: 10}, sender);
+			call({op: "ended", how: "stopped", at: 20, stop: {by: claim, why: "wrong ticket"}}, sender);
+			const row = db.all(`SELECT by, ended_by, why FROM job`)[0];
+			close();
+			expect(row).toEqual({by: sender, ended_by: kept, why: "wrong ticket"});
+		});
+	}
+});

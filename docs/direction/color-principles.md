@@ -72,7 +72,8 @@ low step, since that is a state and not a rank, and its dashed ring carries it t
 resting tile edge, and the light focus edge (slate a9 as a line, since a8 reads 1.90 on the desk).
 The one that needs a word here is the edge. Radix gives borders steps 6 to 8. Our resting tile edge
 is step 4, because a higher one was too loud on a desk full of tiles. It is 1.31:1 on the ground, so
-it cannot carry a needed fact. The title bar and the focus edge do that.
+it cannot carry a needed fact. The title bar and the focus edge do that. A pipe's light focus edge
+bends too, from a9 to a11 by color; [pipe colors](./pipe-colors.md) gives each one and its reason.
 
 **A line or a fill is never text (added 2026-11-01, approved by the owner from the design review).**
 Principle 5 holds for each use, not only for each value. A token made from a border step (4 to 8)

@@ -18,6 +18,7 @@ was decided are all kept here on purpose, so they can be analysed later.
 |---|---|---|
 | Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) there | That README, in the same pull request or the same day, when the plan or its state changes. |
 | Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), one note per decision | A note there, the same day a direction is set or changed, plus its row in that folder's README. Mark it **proposed** until it is settled. |
+| Know what a word means | [`.glossary/TERMS.md`](./.glossary/TERMS.md): `next/`'s words, one section per bounded context, one row per word in it, with what it is not; its last section translates today's code's words | A row there, in the same pull request that coins or renames a word. |
 | Write guidelines for one design area | [`.claude/skills/guidelines/SKILL.md`](./.claude/skills/guidelines/SKILL.md), the steps in order, and its page checklist | One experiment, one proposed note, their two index rows and one Design canvas ([drawn on Claude Design](./docs/direction/design-on-claude-design.md)), in the shape that skill gives. |
 | Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up and `experiments/NN-name.ts` for its script, with the next free number, plus one row in the index. Shared helpers go in `experiments/lib/`, saved answers in `experiments/results/`. |
 | Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes.jsonl` and `field/runs.jsonl` | One row per agent run in `runs.jsonl` and one note per thing that broke, cost too much, needed a person or worked well in `notes.jsonl`, the same day, in the schema the README gives. |
@@ -82,7 +83,10 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   plan, test writer, build, mutation step, one review, each by its own agent, with
   laws. A step that cannot run yet goes by hand for that pull request and is logged in
   `field/`. No builder starts before an approved plan and tests that exist
-  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). No merged pull request
+  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). A plan that only builds a
+  decided note is approved by the agent leading the session, which writes "Approved by the lead
+  agent, builds <note>" in it; a plan that raises a new design call goes to the owner (owner,
+  2026-11-03). No merged pull request
   has been built this way yet ([where we are](./docs/plan/README.md#where-we-are-now)).
   A step is a program, and a prompt you would have typed is its first source: a rule in
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each
@@ -163,15 +167,15 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   the work in a way we can measure, and it never holds a secret. Content a person may want gone
   stays deletable ([an agent run keeps its content](./docs/direction/an-agent-run-keeps-its-content.md)).
   The industry's name is wide events (Honeycomb; Stripe's canonical log lines).
-- **Use the six moves.** Gather (code reads), Act (code writes), Listen (code
+- **Use the six pipeline primitives.** Gather (code reads), Act (code writes), Listen (code
   waits on an outside event), Draft (an agent produces within limits), Check
   (code judges an output), Judge (a small classifier answers one narrow
   question). They are in `packages/pipeline/src/primitives.ts`; the combos
   built from them are in `packages/pipeline/src/combos.ts`.
-- **New schemas are Effect Schema.** Define a Cmd through one of the moves, or
+- **New schemas are Effect Schema.** Define a Cmd through one of the primitives, or
   through tea's own `Cmd.define` from `@demlik/tea/effect`. Both take Effect
   schemas as they are, so nobody writes `Schema.toStandardSchemaV1`. zod stays
-  only in code not yet moved. A move takes either; tea's Effect `Cmd.define`
+  only in code not yet moved. A primitive takes either; tea's Effect `Cmd.define`
   takes Effect schemas only. See
   [`docs/direction/data-first-markdown-is-a-view.md`](./docs/direction/data-first-markdown-is-a-view.md).
 
@@ -194,7 +198,8 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   `reasonCode`. A key does not say again what its parent already says: inside
   an outcome, the reason is `why`, not `outcomeReason`. If a short word could
   mean two things, pick a clearer short word before you reach for a long one.
-  A short word that already means something here keeps that one meaning: `at` is a
+  A short word that already means something here keeps that one meaning inside its
+  [bounded context](./docs/direction/we-follow-ddd.md): `at` is a
   time (the referee's), `by` is who wrote it, `said` is the writer's clock, `_tag` is
   the case. A place, a path, a ref, a state, a reason or a total gets its own word
   (`location`, `path`, `ref`, `state`, `why`, `total`). `rg` the word under
@@ -218,8 +223,8 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   too, settled when the owner approved [Tier 1](./docs/plan/tier-1-detail.md#tags) on 2026-11-01,
   and ticket 32 tracks it. Today's code is not changed by this, so its `kind` on an entry or an outcome stays until that code goes
   ([schema classes](./docs/direction/schema-classes-not-of-helpers.md)).
-- **A stage answers in five verbs.** `done`, `send`, `ask`, `skip`, `stuck`.
-  A new stage machine writes only its own words, with `outcomesOf` in
+- **A step answers in five verbs.** `done`, `send`, `ask`, `skip`, `stuck`.
+  Today's code still says stage for a step. A new step machine writes only its own words, with `outcomesOf` in
   `packages/pipeline/src/stages/outcome.ts`, and prints an outcome's name with `nameOf`. See
   [`docs/direction/outcome-names.md`](./docs/direction/outcome-names.md).
 - **Rethink, do not port.** Today's fabrika and the older machines here show
@@ -289,7 +294,13 @@ brief carries these caps. Each one came from a laptop that became unusable.
   work, the full suite once at the end. With two or more code agents running:
   `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at the very end. `tsgo` takes
   about 8 cores, so small jobs add up.
-- "Under load" means at most 2 CPU burners, one test loop, and one Docker box.
+- "Under load" means at most 5 code agents, one `pnpm typecheck` at a time across all of
+  them (wait while `pgrep -x tsgo` finds one; `pgrep -f tsgo` also matches the shell running
+  the wait, so that loop never ends), one Electron test app at a time, and one Docker
+  box. Raised from 2 to 4 on 2026-11-03, the owner asking for more speed: on a 12-core laptop
+  with 3 code agents running, the load average sat near 5.5 with 45 GB free. Raised to 5 the
+  same day, the owner asking again, with 4 running and the load near 9. Two type checks at
+  once, not the agent count, is what froze it before. If it feels slow, drop back to 4.
 - Never run the sandbox runtime or a shimmed tool with `env -i` or `HOME` unset while a
   version-manager shim is on `PATH`: one run made about 7,000 processes. Set `ulimit -u`
   in a subshell first.

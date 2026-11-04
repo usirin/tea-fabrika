@@ -26,6 +26,8 @@ const TALLY: Jobs = {
 			state: "running",
 			background: true,
 			owner: null,
+			by: null,
+			stop: null,
 		},
 	],
 };

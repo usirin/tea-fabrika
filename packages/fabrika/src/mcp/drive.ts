@@ -33,12 +33,15 @@ import {type Call, callOf, RUNS, toolNamesOf, toolsOf} from "./tools.ts";
 //
 // A read-only door (`readOnly`) lists only the tools that write nothing (MCP's `readOnlyHint`). A
 // call is read against the tools listed, so a write tool called anyway is refused as any tool that
-// is not there, before a run starts: a home connected to a ledger server, where the server's door
-// would stamp what the agent's run writes as the person (apps/fabrika, host/agents.ts).
+// is not there, before a run starts: an agent whose own session could not be made, on a home
+// connected to a ledger server, where the only session left is the person's (apps/fabrika,
+// host/agents.ts). Its why, when given, is in `runs`.
 //
-//   const {drive, tools} = yield* driveFor({list, tiles, readOnly: true});
+//   const {drive, tools} = yield* driveFor({list, tiles, readOnly: {why: "the key ...: not a key"}});
 //   yield* drive.call("tracker_file", {value: {title: "x", body: ""}})
 //   // {kind: "refused", why: "there is no tool tracker_file"}
+//   yield* drive.call("runs", {})
+//   // {kind: "done", data: {programs, yours, tiles, readOnly: {why: "the key ...: not a key"}}}
 
 /** A run in a tile: listed for the agent to see, never driven. */
 export interface InTile {
@@ -87,14 +90,18 @@ export const driveFor = (options: {
 	readonly tiles: () => readonly InTile[];
 	/** Job n of the host's table now, with every line kept of it; `null`: the host knows none. */
 	readonly job?: ((n: number) => JobAnswer | null) | undefined;
-	/** Only the tools that write nothing are listed, and only a listed tool is called. */
-	readonly readOnly?: boolean | undefined;
+	/**
+	 * Only the tools that write nothing are listed, and only a listed tool is called. With a why,
+	 * `runs` says it, so the agent knows why it cannot write.
+	 */
+	readonly readOnly?: boolean | {readonly why: string} | undefined;
 }) =>
 	Effect.gen(function* () {
 		const {list, tiles, job} = options;
+		const readOnly = options.readOnly ?? false;
 		const tools = toolsOf(list)
 			.flatMap((tool) => (tool.name === RUNS && job !== undefined ? [tool, JOB_TOOL] : [tool]))
-			.filter((tool) => options.readOnly !== true || tool.annotations?.readOnlyHint === true);
+			.filter((tool) => readOnly === false || tool.annotations?.readOnlyHint === true);
 		const listed = new Set(tools.map((tool) => tool.name));
 		const scope = yield* Effect.scope;
 		const one = yield* Semaphore.make(1);
@@ -130,6 +137,7 @@ export const driveFor = (options: {
 			})),
 			yours: [...mine].map(([program, r]) => ({program, run: r.run.id, view: viewNow(r.run)})),
 			tiles: tiles(),
+			...(typeof readOnly === "object" ? {readOnly} : {}),
 		});
 
 		const call = (c: Call): Effect.Effect<Answer> => {

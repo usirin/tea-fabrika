@@ -246,9 +246,8 @@ When something is wrong, its word says so, in red where it is broken:
 
   - **asks:** the one count (below). At zero, `C-b a` opens the empty list.
   - **agents:** the agents attached on the host's MCP socket now. Its lines name each one and
-    since when, and how to attach one; at zero they say none is attached, and how. A home
-    connected to a ledger server has no agents' socket; `C-b A` there opens lines that say why.
-    No cost: an agent's spend is billed by its own harness, and nothing in the app meters it
+    since when, and how to attach one; at zero they say none is attached, and how. Every home
+    has the socket, one connected to a ledger server too. No cost: an agent's spend is billed by its own harness, and nothing in the app meters it
     yet (ticket 91 is the one meter).
   - **sync:** a home connected to a ledger server says `syncing` until the first read is in,
     then nothing. Every write goes straight to the server, so nothing waits to be sent and there
@@ -509,13 +508,20 @@ What you see: type `tracker` in a tile. Ask Claude Code "file a ticket for X und
 `tracker_file` with `{value: {title: "X", body: "Under #44."}}`, and within a second the ticket
 is on your tile's list; its first row says `agent:claude`.
 
-**On a home connected to a ledger server, the agent only reads.** There the server's door
-stamps what the host writes as you, so an agent's write would be credited to you. The socket
-lists only the tools that write nothing (`runs`, `job`, `tracker_query`, ...), and a write tool
-called anyway (`tracker_file`) is refused as a tool that is not there, before any run starts. A
-read goes through your own session, which you can already read. An agent writing there needs a
-session of its own (`host/post.ts`, `asAgent`), not built yet. Starting or stopping a lane stays
-yours, in a tile.
+**On a home connected to a ledger server, each agent writes on its own session.** The host
+makes one per agent name as it attaches (`src/host/agent-session.ts`): the home's agent key
+`<home>/agent_ed25519` (made once, mode 0600), a grant for that name signed with your key file,
+and the agent's login, renewed 5 minutes before its end and on a 401. The server's door stamps
+every row it writes `agent:claude` for you, whatever the row says, and refuses your answers from
+it. `fabrika post` writes on the same session. `fabrika post file` takes `--from '<json>'`, where
+the ticket came from (`{"_tag":"pr","url":"https://github.com/usirin/tea-fabrika/pull/352","step":"mutation"}`),
+and `post` checks every write against the tracker's own input before it tells it: one that does
+not fit fails the post, with why, and nothing is filed.
+
+If that login fails, the agent only reads, and nothing it calls writes on your session: the socket lists
+only the tools that write nothing (`runs`, `job`, `tracker_query`, ...), a write tool called
+anyway (`tracker_file`) is refused as a tool that is not there, before any run starts, and `runs`
+says why (`readOnly: {why}`). Starting or stopping a lane stays yours, in a tile.
 
 The agent's runs end when its client goes.
 
@@ -523,14 +529,19 @@ The agent's runs end when its client goes.
 and `src/host/log.ts`):
 
 ```text
-level=INFO message=job_began n=1 "text=seq --to 3" tile=t1
-level=INFO message=job_ended n=1 "text=seq --to 3" tile=t1 how=done
+level=INFO message=job_began n=1 "text=seq --to 3" tile=t1 by=user:owner
+level=INFO message=job_stopped n=1 by=user:owner
+level=INFO message=job_ended n=1 "text=seq --to 3" tile=t1 how=stopped by=user:owner
+level=INFO message=agent_session agent=claude expires=1767225600000
+level=WARN message=agent_refused agent=claude "why=the key .../agent_ed25519: ..."
 level=INFO message=step_began run=r-build-3 step=build
 level=INFO message=step_ended run=r-build-3 step=build outcome=send:builder:checks_red
 level=WARN message=lag nodejs.eventloop.delay.p99=0.24 nodejs.eventloop.delay.max=0.4
 ```
 
-- A job's lines: each tile job as it begins and as it ends, with how.
+- A job's lines: each tile job as it begins and as it ends, with how, and `by`, who started it.
+  A stop says who asked it, before the end it asks for, and why when one was given.
+- An agent's lines: its own session on a ledger server, when it ends, or why it could not be made.
 - A lane step's lines: read off its "run a step" span, as it is tagged with its run and step, and
   as it ends with its outcome. A step that broke before it said one ends with no `outcome`.
 - A lag line: the host reads the event loop's delay once a second (`monitorEventLoopDelay`) and
@@ -551,9 +562,9 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app-old e2e
 - The first run downloads Electron's binary, about 6 seconds. Electron 45 has no install script:
   it downloads on first use, so pnpm needs no `allowBuilds` entry for it.
 - `FABRIKA_HOME=<folder>` puts the app's own files there instead of Electron's folder:
-  `desk.json`, `asks.json`, `storage/jobs/`, `history`, `ledger.sqlite`, the one-copy lock, and the
-  host's `host/sock`, `host/mcp` (agents; read-only on a home connected to a ledger server),
-  `host/pid`, `host/log` (`key=value` lines: what the host did, each job's begin and end, each
+  `desk.json`, `asks.json`, `storage/jobs/`, `history`, `ledger.sqlite`, `agent_ed25519` (the
+  agents' key, on a home connected to a ledger server), the one-copy lock, and the host's
+  `host/sock`, `host/mcp` (agents), `host/pid`, `host/log` (`key=value` lines: what the host did, each job's begin and end, each
   lane step's begin and end, and a lag line when its thread is starved), and `host/lock` while a
   host starts. A test on its own home can never reach another
   home's host. macOS caps a socket's path at 103 bytes; a home too deep stops the host with a

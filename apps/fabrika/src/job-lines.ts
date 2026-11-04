@@ -20,8 +20,13 @@ import type {JobEnded, JobNews} from "./tile-jobs.ts";
 //
 // Each begin and end is one line in the host's log, `key=value`, as the log's other lines:
 //
-//   level=INFO message=job_began n=1 "text=seq --to 5" tile=t1
-//   level=INFO message=job_ended n=1 "text=seq --to 5" tile=t1 how=done
+//   level=INFO message=job_began n=1 "text=seq --to 5" tile=t1 by=user:owner
+//   level=INFO message=job_ended n=1 "text=seq --to 5" tile=t1 how=done by=user:owner
+//
+// `by` is who started the job, as the table keeps it (tracker 185). A stop says who asked it, and
+// why, as it is asked, before the end it asks for; a person's own Ctrl-C or `stop %n` gives no why:
+//
+//   level=INFO message=job_stopped n=2 by=user:owner
 //
 // In memory only: a host started again knows its table's jobs, never their lines. Bounded: each
 // job's lines are the newest any answer could show (`KeptLines`, about 25 KB at most), kept for
@@ -44,13 +49,44 @@ export interface JobLines {
 	readonly job: (n: number) => JobAnswer | null;
 }
 
-/** The host's job lines, beside its `table`. Its log lines go to the loggers it is made with. */
+/**
+ * The host's job lines, beside its `table`, until the scope closes. Its log lines go to the
+ * loggers it is made with.
+ */
 export const jobLines = (table: JobTable) =>
 	Effect.gen(function* () {
 		const services = yield* Effect.context<never>();
 		const log = (message: string, fields: Readonly<Record<string, unknown>>) => {
 			Effect.runForkWith(services)(Effect.logInfo(message).pipe(Effect.annotateLogs(fields)));
 		};
+		/** Who started each job this host saw begin, by `%n`, until its end is said. */
+		const writers = new Map<number, string>();
+		/** `by=`, when the table knows who: a job kept before jobs had a writer says none. */
+		const byOf = (by: string | null | undefined) => (by == null ? {} : {by});
+
+		// A stop as it is asked, before the end it asks for: once per job. The stops already in the
+		// table when the host starts were said by the host that took them.
+		const stopped = new Set(
+			table
+				.getState()
+				.jobs.filter((job) => job.stop !== null)
+				.map((job) => job.n),
+		);
+		const stops = () => {
+			const jobs = table.getState().jobs;
+			for (const job of jobs) {
+				if (job.stop === null || stopped.has(job.n)) continue;
+				stopped.add(job.n);
+				log("job_stopped", {
+					n: job.n,
+					by: job.stop.by,
+					...(job.stop.why === null ? {} : {why: job.stop.why}),
+				});
+			}
+			for (const n of stopped) if (!jobs.some((job) => job.n === n)) stopped.delete(n);
+		};
+		const unsubscribe = table.subscribe(stops);
+		yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
 		/** Each job's lines, by `%n`, oldest job first: numbers only grow. */
 		const kept = new Map<number, KeptLines>();
 		/** How each job ended, as its tile saw it, oldest first. */
@@ -71,11 +107,17 @@ export const jobLines = (table: JobTable) =>
 
 		const lines: JobLines = {
 			news: (tile) => ({
-				began: (job) => log("job_began", {n: job.n, text: job.text, tile}),
+				began: (job) => {
+					const by = table.getState().jobs.find((row) => row.n === job.n)?.by ?? null;
+					if (by !== null) writers.set(job.n, by);
+					log("job_began", {n: job.n, text: job.text, tile, ...byOf(by)});
+				},
 				ended: (job) => {
 					ended.set(job.n, {tile, job});
 					forget();
-					log("job_ended", {n: job.n, text: job.text, tile, how: job.how});
+					const by = writers.get(job.n);
+					writers.delete(job.n);
+					log("job_ended", {n: job.n, text: job.text, tile, how: job.how, ...byOf(by)});
 				},
 			}),
 			printed: (n, text) => {

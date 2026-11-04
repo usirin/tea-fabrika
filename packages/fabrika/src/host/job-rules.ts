@@ -36,10 +36,16 @@ import {writerOf} from "./writer.ts";
 export const KEYFRAME = 100;
 
 export const migrateJob = (db: Db) => {
+	// `ended_by` and `why`: who asked the job to stop, and why. Both null: it ended on its own, or
+	// the record was made before they were kept, so who is not known.
 	db.all(`CREATE TABLE IF NOT EXISTS job (
 		one INTEGER PRIMARY KEY CHECK (one = 1),
 		n INTEGER NOT NULL, text TEXT NOT NULL, host TEXT NOT NULL, by TEXT NOT NULL,
-		started REAL NOT NULL, how TEXT, ended REAL)`);
+		started REAL NOT NULL, how TEXT, ended REAL, ended_by TEXT, why TEXT)`);
+	// A record made before tracker 185 has neither column: added once, its row kept with nulls.
+	const columns = new Set(db.all(`PRAGMA table_info(job)`).map((c) => String(c.name)));
+	for (const column of ["ended_by", "why"])
+		if (!columns.has(column)) db.all(`ALTER TABLE job ADD COLUMN ${column} TEXT`);
 	db.all(`CREATE TABLE IF NOT EXISTS state (
 		key TEXT PRIMARY KEY, value TEXT, by TEXT NOT NULL, at REAL NOT NULL)`);
 	db.all(`CREATE TABLE IF NOT EXISTS steps (
@@ -231,6 +237,24 @@ const contentOf = (db: Db): Content[] =>
 const isPerson = (by: string) => writerOf(by)?.kind === "user";
 
 /**
+ * The writer a call names, if its sender may name them: the sender itself, or, from a person, an
+ * agent working for that person, as a host's records name the agent whose line a job is. Anyone
+ * else, or none: the sender, as the door stamped it. So a call only ever narrows who wrote it.
+ *
+ *   named("user:github:7", "agent:claude for:github:7")   // "agent:claude for:github:7"
+ *   named("user:github:7", "user:github:8")               // "user:github:7"
+ *   named("agent:claude for:github:7", "user:github:7")   // "agent:claude for:github:7"
+ */
+const named = (by: string, claimed: string | undefined): string => {
+	if (claimed === undefined || claimed === by) return by;
+	const sender = writerOf(by);
+	const writer = writerOf(claimed);
+	return sender?.kind === "user" && writer !== null && "for" in writer && writer.for === sender.id
+		? claimed
+		: by;
+};
+
+/**
  * One call, as one transaction. `by`: who the door said sent it. `now`: the record's clock.
  * `keyframe`: at most this many steps of one machine run from one whole state to the next.
  */
@@ -313,12 +337,18 @@ export const callJob = (
 					call.n,
 					call.text,
 					call.host,
-					by,
+					named(by, call.by),
 					call.at,
 				);
 				return null;
 			case "ended":
-				db.all(`UPDATE job SET how = ?, ended = ? WHERE how IS NULL`, call.how, call.at);
+				db.all(
+					`UPDATE job SET how = ?, ended = ?, ended_by = ?, why = ? WHERE how IS NULL`,
+					call.how,
+					call.at,
+					call.stop === undefined ? null : named(by, call.stop.by),
+					call.stop?.why ?? null,
+				);
 				return null;
 			case "opened":
 				db.all(

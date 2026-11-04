@@ -12,9 +12,10 @@ Decided 2026-10-18.
   in the doc comment and the package README.
 - **One word per idea.** Two names for one thing, or one name for two things,
   is a bug to fix.
-- **A word may lean a little differently in two domains** (decided
-  2026-10-24), as long as it holds inside each one and carries over at the
-  boundary without misleading. One meaning everywhere still comes first.
+- **A word may mean different things in two bounded contexts** (decided
+  2026-10-24, changed 2026-11-03: [we follow DDD](./we-follow-ddd.md)). The
+  bullet above holds inside one context. Across two, the glossary's context
+  map names the boundary and how the word translates at it.
 
   ```ts
   // Fine: both mean "take it in", each in its own world.
