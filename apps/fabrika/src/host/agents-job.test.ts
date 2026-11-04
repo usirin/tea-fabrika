@@ -434,8 +434,15 @@ describe("the host's wide log", () => {
 		);
 		// The host's file, as host/main.ts writes it with `Logger.toFile`: each line, then a newline.
 		const file = lines.join("\n").split("\n");
-		expect(file.filter((line) => line.includes("message=agent_came"))).toHaveLength(1);
-		expect(file.filter((line) => line.includes("message=tool_called"))).toHaveLength(1);
+		// A line's own message is its first `message=` field; one inside a quoted value is the
+		// agent's words, kept as words.
+		const messageOf = (line: string): string | undefined => {
+			for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g))
+				if (m[1] === "message") return m[2];
+			return undefined;
+		};
+		expect(file.filter((line) => messageOf(line) === "agent_came")).toHaveLength(1);
+		expect(file.filter((line) => messageOf(line) === "tool_called")).toHaveLength(1);
 		// No line of the file is one the agent began: each forged one starts with `level=`.
 		expect(file.filter((line) => line.startsWith("level="))).toEqual([]);
 	});
