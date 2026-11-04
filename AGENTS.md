@@ -83,7 +83,10 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   plan, test writer, build, mutation step, one review, each by its own agent, with
   laws. A step that cannot run yet goes by hand for that pull request and is logged in
   `field/`. No builder starts before an approved plan and tests that exist
-  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). No merged pull request
+  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). A plan that only builds a
+  decided note is approved by the agent leading the session, which writes "Approved by the lead
+  agent, builds <note>" in it; a plan that raises a new design call goes to the owner (owner,
+  2026-11-03). No merged pull request
   has been built this way yet ([where we are](./docs/plan/README.md#where-we-are-now)).
   A step is a program, and a prompt you would have typed is its first source: a rule in
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each

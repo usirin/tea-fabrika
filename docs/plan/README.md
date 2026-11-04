@@ -47,6 +47,13 @@ Dated 2026-11-02. **No merged pull request has been built by the pipeline yet, s
 has not really started. `next/` has not moved since 2026-10-31.** Each line is about
 today's version unless it says `next/`. The arrow says who has the next move.
 
+**Product foundations are built now, not after ticket 117 (owner, 2026-11-03).** Decided notes
+for today's app (tile guidelines and pipe colors, the design package and typography, themes,
+keybindings, the inbox, the move to Manti) go to plan and build in parallel with the pipeline
+work, so what is wrong shows early. Every "after ticket 117" below that holds one of them back no
+longer holds. A plan that only builds a decided note is approved by the lead agent; one that
+raises a new design call goes to the owner.
+
 - **Pipeline v0.** Built and merged ([259](https://github.com/usirin/tea-fabrika/pull/259), [260](https://github.com/usirin/tea-fabrika/pull/260), [264](https://github.com/usirin/tea-fabrika/pull/264)). Two rehearsals on a throwaway repo, then ticket 117 (below). → the self-fix plan
 - **[PR 267](https://github.com/usirin/tea-fabrika/pull/267), real answers.** Merged 2026-11-01. Its leftovers are ticket 125. → nothing
 - **First real run, ticket 117.** Ran, and ended `stuck:step_stuck` at the mutation step: one stale test outside the exam (`tsh.test.ts` still expects `takes("map")` to be `[]`) made the suite red. The builder's own checks had died in its Codex box (`spawnSync git EPERM`) and it still said `done`; nothing in code checks a build before `done`, every `stuck` ends the lane, and no test output was kept. Its working copy `lane/117` is still on the machine; nothing was pushed, and the claim is released. → PRs 1, 3, 4, 5 and 7 of [the self-fix plan](./pipeline-self-fix.md) landed, and ticket 117 restarted; it is saved at `exam_merge` until PR 10 lands, and pauses at any hole PR 11 fixes until that lands too (owner, 2026-11-03). It was planned before PR 7, so its plan's properties, interface and gaps are not in the ledger. It reruns plan, the owner's yes, the test writer and build on a fresh branch from main, and the old build is kept under a ref (owner's yes 2026-11-02, on the walk of [311](https://github.com/usirin/tea-fabrika/pull/311))
