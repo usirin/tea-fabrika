@@ -513,7 +513,10 @@ makes one per agent name as it attaches (`src/host/agent-session.ts`): the home'
 `<home>/agent_ed25519` (made once, mode 0600), a grant for that name signed with your key file,
 and the agent's login, renewed 5 minutes before its end and on a 401. The server's door stamps
 every row it writes `agent:claude` for you, whatever the row says, and refuses your answers from
-it. `fabrika post` writes on the same session.
+it. `fabrika post` writes on the same session. `fabrika post file` takes `--from '<json>'`, where
+the ticket came from (`{"_tag":"pr","url":"https://github.com/usirin/tea-fabrika/pull/352","step":"mutation"}`),
+and `post` checks every write against the tracker's own input before it tells it: one that does
+not fit fails the post, with why, and nothing is filed.
 
 If that login fails, the agent only reads, and nothing it calls writes on your session: the socket lists
 only the tools that write nothing (`runs`, `job`, `tracker_query`, ...), a write tool called

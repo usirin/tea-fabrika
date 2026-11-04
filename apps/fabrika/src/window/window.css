@@ -2833,6 +2833,29 @@ main.program:has(> .view) {
 	color: var(--text-secondary);
 }
 
+/* Where it came from: a link that reads as the row's text, underlined so color is not its only cue. */
+.ticket-view .props a.from {
+	color: var(--text-primary);
+	text-decoration: underline;
+	text-decoration-color: var(--wire);
+	text-underline-offset: 3px;
+}
+
+.ticket-view .props a.from:hover {
+	text-decoration-color: var(--text-primary);
+}
+
+/* A run's From: its id whole, and the line that opens its ticket under it when the column is narrow. */
+.ticket-view .props dd.from-run {
+	flex-wrap: wrap;
+	row-gap: 4px;
+	padding-block: 4px;
+}
+
+.ticket-view .props dd.from-run .mono {
+	overflow-wrap: anywhere;
+}
+
 .ticket-view .meter {
 	display: inline-flex;
 	gap: 2px;

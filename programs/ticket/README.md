@@ -40,6 +40,10 @@ shownOf(trackerAtSeven()).page?.steps.find((s) => s.state === "you");
   this program uses that same cell.
 - The panel's Runs and Made of rows name a command to type (`trace --ticket 7`,
   `map --ticket 7`), since a window cannot open a tile yet.
+- The From row says where the ticket came from, when its filing says: `PR 352 · mutation` or
+  `walk of PR 332` links to its address, opened in the person's browser; a lane run reads
+  `#117 · r-test_writer-26` with the line that opens its ticket, `ticket 117`. A filing that names
+  none has no From row.
 
 ## Not done
 

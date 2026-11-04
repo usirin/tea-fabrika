@@ -16,6 +16,10 @@
 //   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app-old cli post comment 9 --as triage \
 //     --body-file note.md
 //   // as agent:triage, for the home's person (host/post.ts); then the tickets, one line each
+//   FABRIKA_HOME=<home> pnpm --filter @kampus/fabrika-app-old cli post file "Mutation runner" \
+//     --as review --body-file note.md \
+//     --from '{"_tag":"pr","url":"https://github.com/usirin/tea-fabrika/pull/352","step":"mutation"}'
+//   // filed with where it came from (@kampus/pipeline/tickets/ticket, `From`)
 //   FABRIKA_HOME=<home> node apps/fabrika/src/cli.ts mcp --as claude
 //   // the MCP bridge an agent's client starts (host/agents.ts): stdin and stdout to the running
 //   // host's agents' socket, as agent:claude, for the home's person
@@ -25,7 +29,8 @@
 import {NodeRuntime, NodeServices, NodeSocket} from "@effect/platform-node";
 import {writerText} from "@kampus/fabrika-old";
 import {BridgeStopped, bridge} from "@kampus/fabrika-old/mcp";
-import {Config, Console, Effect, Logger, Option} from "effect";
+import {From} from "@kampus/pipeline/tickets/ticket";
+import {Config, Console, Effect, Logger, Option, Schema} from "effect";
 import {Argument, Command, Flag} from "effect/cli";
 import {addressOf, connectAndRestart, invite, members} from "./host/connection.ts";
 import {dryRun, MoveStopped, move, reportOf} from "./host/move.ts";
@@ -141,6 +146,14 @@ const as = Flag.String("as").pipe(
 );
 const body = Flag.FileText("body-file").pipe(Flag.withDescription("the text, in a file"));
 const ticket = Argument.Int("ticket").pipe(Argument.withDescription("the ticket's number"));
+const from = Flag.optional(
+	Flag.String("from").pipe(
+		Flag.withSchema(Schema.fromJsonString(From)),
+		Flag.withDescription(
+			'where it came from, as JSON: {"_tag":"pr","url":...,"step":...}, {"_tag":"run","ticket":...,"run":...} or {"_tag":"walk","url":...}',
+		),
+	),
+);
 
 /** One post, then the tickets after it. */
 const posting = (a: {readonly home: string; readonly as: string}, writes: ReadonlyArray<Post>) =>
@@ -152,8 +165,24 @@ const postCmd = Command.make("post").pipe(
 	Command.withSubcommands([
 		Command.make(
 			"file",
-			{home, as, body, title: Argument.String("title").pipe(Argument.withDescription("its title"))},
-			(a) => posting(a, [{type: "file", value: {title: a.title, body: a.body.trim()}}]),
+			{
+				home,
+				as,
+				body,
+				from,
+				title: Argument.String("title").pipe(Argument.withDescription("its title")),
+			},
+			(a) =>
+				posting(a, [
+					{
+						type: "file",
+						value: {
+							title: a.title,
+							body: a.body.trim(),
+							...Option.match(a.from, {onNone: () => ({}), onSome: (f) => ({from: f})}),
+						},
+					},
+				]),
 		),
 		Command.make("comment", {home, as, body, ticket}, (a) =>
 			posting(a, [{type: "comment", value: {ticket: a.ticket, body: a.body.trim()}}]),

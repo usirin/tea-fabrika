@@ -2,6 +2,7 @@ import {Writer} from "@kampus/fabrika-old";
 import {textOf} from "@kampus/pipeline/tickets/approval";
 import {
 	Body,
+	type From,
 	factsOf,
 	Id,
 	PrState,
@@ -27,13 +28,55 @@ import {Schema} from "effect";
 //   shownOf(state)   // state.open = 7, read from the ledger
 //   // {ready: true, number: 7, page: {opened: {ticket, head: {_tag: "asks", ...}, rows, asks},
 //   //   body: "Every line ...", steps: [...nine], plan: {version: 1, tasks: ["t-1", "t-2"]},
-//   //   pr: null, usd: 0.49, filed: {by: user:owner, at}}, saving: [], ...}
+//   //   pr: null, usd: 0.49, filed: {by: user:owner, at}, from: null}, saving: [], ...}
 
 /** The newest plan: its version and its tasks. */
 export const Plan = Schema.Struct({version: Schema.Int, tasks: Schema.Array(Id)});
 
 /** The newest pull request fact: where it is, its state, and its checks in one line. */
 export const Pr = Schema.Struct({url: Schema.String, state: PrState, checks: Schema.String});
+
+/** Where it came from, in words, and the address to open: `null` for a run, which is on this ledger. */
+export const FromRow = Schema.Struct({text: Schema.String, url: Schema.NullOr(Schema.String)});
+export type FromRow = typeof FromRow.Type;
+
+/** A pull request's number, read off its address or one under it: `.../pull/352#discussion_r1` is 352. */
+const pullOf = (url: string): string | undefined => /\/pull\/(\d+)/.exec(url)?.[1];
+
+/**
+ * A filing's `from`, as the From row reads it.
+ *
+ *   fromOf({_tag: "pr", url: ".../pull/352", step: "mutation"})  // {text: "PR 352 · mutation", url}
+ *   fromOf({_tag: "run", ticket: 117, run: "r-test_writer-26"}) // {text: "#117 · r-test_writer-26", url: null}
+ *   fromOf({_tag: "walk", url: ".../pull/332"})                  // {text: "walk of PR 332", url}
+ */
+export const fromOf = (from: From): FromRow => {
+	switch (from._tag) {
+		case "pr":
+			return {
+				text: [`PR ${pullOf(from.url)}`, ...(from.step === undefined ? [] : [from.step])].join(
+					" · ",
+				),
+				url: from.url,
+			};
+		case "run":
+			return {
+				text: [
+					`#${from.ticket}`,
+					from.run,
+					...(from.head === undefined ? [] : [from.head.slice(0, 8)]),
+				].join(" · "),
+				url: null,
+			};
+		case "walk": {
+			const pull = pullOf(from.url);
+			return {
+				text: `walk of ${pull === undefined ? from.url.replace(/^https:\/\//, "") : `PR ${pull}`}`,
+				url: from.url,
+			};
+		}
+	}
+};
 
 export const Page = Schema.Struct({
 	opened: Opened,
@@ -47,6 +90,8 @@ export const Page = Schema.Struct({
 	pr: Schema.NullOr(Pr),
 	/** What every run on it cost, from each `ended`. */
 	usd: Schema.Finite,
+	/** Where it came from, as its `filed` says. `null`: it names none. */
+	from: Schema.NullOr(FromRow),
 });
 export type Page = typeof Page.Type;
 
@@ -66,12 +111,22 @@ export const Shown = Schema.Struct({
 });
 export type Shown = typeof Shown.Type;
 
+/** What `ticket` was filed with as its `from`, if anything. */
+const filedFrom = (ticket: Ticket): From | undefined => factsOf(ticket.timeline, "filed")[0]?.from;
+
+/** The ticket of the run `ticket` came from, for the line that opens it: `null` unless it came from a run. */
+export const runTicketOf = (ticket: Ticket): number | null => {
+	const from = filedFrom(ticket);
+	return from?._tag === "run" ? from.ticket : null;
+};
+
 /** One ticket's page, at `now`. `tickets`: every ticket read, for its duplicate hints' titles. */
 export const pageOf = (ticket: Ticket, now: number, tickets: readonly Ticket[] = []): Page => {
 	const timeline = ticket.timeline;
 	const plan = factsOf(timeline, "planned").at(-1);
 	const pr = factsOf(timeline, "pr").at(-1);
 	const first = timeline[0];
+	const from = filedFrom(ticket);
 	return {
 		opened: openedOf(ticket, now, tickets),
 		body: textOf(ticket).body,
@@ -80,6 +135,7 @@ export const pageOf = (ticket: Ticket, now: number, tickets: readonly Ticket[] =
 		plan: plan === undefined ? null : {version: plan.version, tasks: plan.tasks},
 		pr: pr === undefined ? null : {url: pr.url, state: pr.state, checks: checksLine(pr.checks)},
 		usd: factsOf(timeline, "ended").reduce((sum, e) => sum + e.usd, 0),
+		from: from === undefined ? null : fromOf(from),
 	};
 };
 
