@@ -15,6 +15,7 @@ import type {folders} from "./machine.ts";
 /** The folders could not be read, and why in words. */
 export type FoldersUnreachable = {readonly _tag: "unreachable"; readonly why: string};
 
+/** What a folder service gives: the folders, or why they could not be read. */
 export interface RepoTreeShape {
 	readonly folders: Effect.Effect<readonly string[], FoldersUnreachable>;
 }

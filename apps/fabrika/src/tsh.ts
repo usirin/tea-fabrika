@@ -30,7 +30,7 @@ import {pipeline} from "@tea-fabrika/pipeline";
 import {laneRunner} from "@tea-fabrika/pipeline/node";
 import {ticket} from "@tea-fabrika/ticket";
 import {trace} from "@tea-fabrika/trace";
-import {Author, PullRequests, RepoTree, tracker} from "@tea-fabrika/tracker";
+import {Author, PullRequests, RepoTree, type RepoTreeShape, tracker} from "@tea-fabrika/tracker";
 import {Clock, Deferred, Effect, Layer, Queue, Stream} from "effect";
 import type {TileId} from "./desk/layout/index.ts";
 import {type EditorMsg, editor} from "./editor/editor.ts";
@@ -201,7 +201,7 @@ export const appPrograms = (
 	author: Author["Service"],
 	pullRequests: PullRequests["Service"],
 	traces: Traces["Service"],
-	repoTree?: RepoTree["Service"],
+	repoTree?: RepoTreeShape,
 ): readonly Entry[] => {
 	const tickets = Layer.mergeAll(
 		Layer.succeed(Ledger, ledger),

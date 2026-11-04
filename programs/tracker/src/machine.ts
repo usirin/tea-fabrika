@@ -449,12 +449,17 @@ export const tracker = defineMachine({
 /** It is over: asked to quit, with nothing left to save and no hint still out. */
 export const over = (s: Tracker) => s.quitting && s.saving.length === 0 && s.hinting.length === 0;
 
-/** Its status line, for a host's list of runs. */
+/**
+ * Its status line, for a host's list of runs (tsh's `tracker` line). The live areas follow the
+ * counts, by name, in the order made: `4 open, 0 closed; areas: lane, apps/fabrika`.
+ */
 export const statusOf = (s: Tracker): string => {
 	if (!s.ready) return "reading the ledger";
 	const open = s.tickets.filter((t) => t.state === "open").length;
 	const counts = `${open} open, ${s.tickets.length - open} closed`;
-	return s.saving.length === 0 ? counts : `${counts}, saving ${s.saving.length}`;
+	const line = s.saving.length === 0 ? counts : `${counts}, saving ${s.saving.length}`;
+	const areas = [...s.areas.live.values()];
+	return areas.length === 0 ? line : `${line}; areas: ${areas.join(", ")}`;
 };
 
 // ---------------------------------------------------------------- what the window is shown

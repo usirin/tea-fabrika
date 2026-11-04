@@ -97,7 +97,7 @@ export type {Fact, Ticket} from "@kampus/pipeline/tickets/ticket";
 export {fold, ROOT, readRow} from "@kampus/pipeline/tickets/ticket";
 export {Hint, hintsOn} from "./duplicates.ts";
 export {Head, headOf, lineOf, OpenAsk, openAsksOf, prRefOf, waits, words} from "./head.ts";
-export {RepoTree} from "./folders.ts";
+export {RepoTree, type RepoTreeShape} from "./folders.ts";
 export {Author} from "./ledger.ts";
 export {
 	Failed,

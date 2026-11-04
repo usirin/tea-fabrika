@@ -315,9 +315,12 @@ suggestions stay and nothing is said.
 
 On this repository's own 15 top folders and 13 real pull request titles filed as tickets, the
 shots (`programs/tracker/docs/areas/`) show 14 suggestions: 2 from titles, 12 from folders. At
-1440 by 900 in one tile the whole step fits above the list. In a stacked pipe or a 2x2 it fills
-the tile, and the buttons and the list are below the fold: the keys still work, but the list is
-out of sight until the step goes.
+1440 by 900 in one tile the whole step fits above the list. In a stacked pipe, a 2x2 or a 1024 by
+700 window it is taller than the tile, so its buttons stick to the tile's bottom edge and the rows
+scroll past under them, in the view's one scroll (no box in a view scrolls on its own). The list
+stays out of sight until the step goes. Once areas are made, the tracker's status line names them:
+`13 open, 0 closed; areas: direction, pipeline, desk`. The app's `jobs` does not print that line
+today, so on screen PR 1 still shows no area anywhere.
 
 ## What the ledger records
 

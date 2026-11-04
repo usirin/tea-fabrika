@@ -1954,8 +1954,23 @@ button:focus-visible {
 	border-color: var(--focus);
 }
 
+/*
+ * The step's buttons stay in view in any tile: the row sticks to the bottom of the view's one
+ * scroll (scroll.test.ts: nothing in a view scrolls on its own), and the rows and the box scroll
+ * past under it. A row moved to by ↑ ↓ stops above it, not behind it.
+ */
 .tracker-first-areas .tracker-row {
+	position: sticky;
+	bottom: 0;
 	flex-wrap: wrap;
+	margin: 0 calc(-1 * var(--s-4)) calc(-1 * var(--s-3));
+	padding: var(--s-2) var(--s-4) var(--s-3);
+	border-radius: 0 0 var(--r-lg) var(--r-lg);
+	background: var(--raised);
+}
+
+.tracker-first-areas input {
+	scroll-margin-bottom: 64px;
 }
 
 /* The composer: one line until there is something in it. */
