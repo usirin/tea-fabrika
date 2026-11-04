@@ -1,7 +1,16 @@
 import {join} from "node:path";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
-import {Effect, FileSystem, Layer, type Path, Result, type Scope, Stream} from "effect";
+import {
+	Effect,
+	FileSystem,
+	Layer,
+	type Path,
+	PlatformError,
+	Result,
+	type Scope,
+	Stream,
+} from "effect";
 import {describe, expect, it} from "vitest";
 import {settingsFile, settingsFolder} from "./settings.ts";
 
@@ -152,5 +161,81 @@ describe("a settings file", () => {
 			}),
 		);
 		expect(seen.every((tag) => tag === "read")).toBe(true);
+	});
+});
+
+describe("a settings file, when the folder cannot be watched", () => {
+	/** The machine's FileSystem, with a watch that fails before it is ready. */
+	const watchFails = Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem;
+		return FileSystem.FileSystem.of({
+			...fs,
+			watch: () =>
+				Stream.fail(
+					PlatformError.systemError({
+						_tag: "PermissionDenied",
+						module: "FileSystem",
+						method: "watch",
+						description: "a watch that never starts",
+					}),
+				),
+		});
+	});
+
+	it("still answers once from the file, and does not wait on the watch", async () => {
+		const got = await go(
+			Effect.gen(function* () {
+				const {fs, dir} = yield* folder;
+				yield* fs.writeFileString(join(dir, "keybindings.toml"), "ctrl+a");
+				const broken = yield* watchFails;
+				return yield* settingsFile(dir, "keybindings.toml", decode).pipe(
+					Stream.runCollect,
+					Effect.provideService(FileSystem.FileSystem, broken),
+					Effect.timeout("3 seconds"),
+				);
+			}),
+		);
+		expect(got).toEqual([{_tag: "read", value: "ctrl+a"}]);
+	});
+
+	it("answers once from the file when the folder is under a file, and ends", async () => {
+		const got = await go(
+			Effect.gen(function* () {
+				const {fs, dir} = yield* folder;
+				// A file where the folder should be: no folder can be made there.
+				yield* fs.writeFileString(join(dir, "not-a-folder"), "");
+				return yield* settingsFile(join(dir, "not-a-folder"), "keybindings.toml", decode).pipe(
+					Stream.runCollect,
+					Effect.timeout("3 seconds"),
+				);
+			}),
+		);
+		expect(got).toEqual([{_tag: "none"}]);
+	});
+});
+
+describe("a settings file, saved with the same text", () => {
+	it("answers once, not again for each save", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const {fs, dir} = yield* folder;
+				const path = join(dir, "keybindings.toml");
+				const got = yield* watching(dir, "keybindings.toml");
+				yield* until("the first answer", () => got.length > 0);
+				yield* fs.writeFileString(path, "one");
+				yield* until("one", () => last(got)?.value === "one");
+				// The same text saved again, then a new one, so the test knows the second was heard.
+				yield* fs.writeFileString(path, "one");
+				yield* Effect.sleep("200 millis");
+				yield* fs.writeFileString(path, "two");
+				yield* until("two", () => last(got)?.value === "two");
+				return [...got];
+			}),
+		);
+		expect(seen).toEqual([
+			{_tag: "none"},
+			{_tag: "read", value: "one"},
+			{_tag: "read", value: "two"},
+		]);
 	});
 });

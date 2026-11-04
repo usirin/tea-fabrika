@@ -1,6 +1,6 @@
 import {Result} from "effect";
 import {describe, expect, it} from "vitest";
-import {commandOn, decodeKeys, defaults, Does, type Key, type Keys} from "./keymap.ts";
+import {commandOn, decodeKeys, defaults, Does, type Key, type Keys, spell} from "./keymap.ts";
 
 // The keybindings file, read: ~/.fabrika/keybindings.toml, laid over the defaults that ship with
 // the app (docs/direction/keybindings-are-configurable.md, K5, K6, K9). Today's version, ticket
@@ -309,5 +309,190 @@ describe("a file that is refused, with its line (p7)", () => {
 			line: 2,
 			why: "tezgah.detach is not a command",
 		});
+	});
+
+	it.each([
+		[
+			"Ctrl-C pressed alone, the program's in a tile",
+			'tezgah.zoom = "ctrl+c"',
+			1,
+			"ctrl+c is the program's in a tile, so it cannot be bound",
+		],
+		[
+			"Ctrl-C after the prefix",
+			'tezgah.zoom = "<prefix>ctrl+c"',
+			1,
+			"ctrl+c is the program's in a tile, so it cannot be bound",
+		],
+		[
+			"Cmd-Q after the prefix",
+			'tezgah.zoom = "<prefix>cmd+q"',
+			1,
+			"cmd+q is the system's, so the app never hears it",
+		],
+		[
+			"Ctrl-C as the prefix",
+			'prefix = "ctrl+c"',
+			1,
+			"ctrl+c is the program's in a tile, so it cannot be bound",
+		],
+		[
+			"Cmd-Q as the prefix",
+			'prefix = "cmd+q"',
+			1,
+			"cmd+q is the system's, so the app never hears it",
+		],
+		[
+			"the palette after the prefix, since the palette is the window's",
+			'palette.open = "<prefix>p"',
+			1,
+			"palette.open is the window's, so it takes a key pressed alone, such as cmd+k, not <prefix>p",
+		],
+		[
+			"the prefix after itself",
+			'tezgah.zoom = "<prefix>ctrl+b"',
+			1,
+			"<prefix>ctrl+b is the prefix twice, which sends the prefix to the tile",
+		],
+		[
+			"your prefix after itself",
+			file('prefix = "ctrl+a"', 'tezgah.zoom = "<prefix>ctrl+a"'),
+			2,
+			"<prefix>ctrl+a is the prefix twice, which sends the prefix to the tile",
+		],
+		[
+			"the prefix inside ignore",
+			file('prefix = "ctrl+a"', 'ignore = ["ctrl+a"]'),
+			2,
+			"ctrl+a is your prefix, so it cannot also be ignored",
+		],
+		[
+			"the prefix inside ignore, ignore written first",
+			file('ignore = ["ctrl+a"]', 'prefix = "ctrl+a"'),
+			2,
+			"ctrl+a is your prefix, so it cannot also be ignored",
+		],
+		[
+			"a row on an ignored key",
+			file('ignore = ["cmd+d"]', 'tezgah.split = "cmd+d"'),
+			2,
+			"cmd+d is on both ignore and tezgah.split",
+		],
+		[
+			"a row on an ignored key, ignore written last",
+			file('tezgah.split = "cmd+d"', 'ignore = ["cmd+d"]'),
+			2,
+			"cmd+d is on both ignore and tezgah.split",
+		],
+	] as const)("refuses %s in plain words", (_, text, line, why) => {
+		expect(refused(text)).toEqual({line, why});
+	});
+
+	it.each([
+		["with no comment", "[tezgah]"],
+		["with a comment after it", "[tezgah] # mine"],
+	])("names a refused row's own line under a [tezgah] header %s", (_, header) => {
+		const text = file("# my keys", header, 'zoom = "<prefix>m"', 'zom = "<prefix>x"');
+		expect(refused(text)).toEqual({line: 4, why: "tezgah.zom is not a command"});
+	});
+
+	it("says why a file is not TOML in the parser's words, not its first letter", () => {
+		const no = refused(file('prefix = "ctrl+a"', "tezgah.zoom = "));
+		expect(no.why).toMatch(/^not TOML: \S.{8,}$/);
+	});
+});
+
+describe("ignore, after your rows (p6)", () => {
+	it("frees Cmd-W from the default ignore once a row binds it", () => {
+		const keys = read('tezgah.close = "cmd+w"');
+		expect(keys.ignore).toEqual([]);
+		expect(commandOn(keys, alone("<m-w>"))).toBe("tezgah.close");
+	});
+
+	it("frees Cmd-W from the default ignore once it is the prefix", () => {
+		const keys = read('prefix = "cmd+w"');
+		expect(keys.prefix).toBe("<m-w>");
+		expect(keys.ignore).toEqual([]);
+	});
+
+	it("keeps Cmd-W ignored when a row binds another key alone", () => {
+		expect(read('tezgah.split = "cmd+d"').ignore).toEqual(["<m-w>"]);
+	});
+
+	it("takes a key you ignore off the default that had it: Cmd-K off the palette", () => {
+		const keys = read('ignore = ["cmd+k"]');
+		expect(keys.ignore).toEqual(["<m-k>"]);
+		expect(rowOf(keys, "palette.open")?.keys).toEqual([]);
+		expect(commandOn(keys, alone("<m-k>"))).toBeUndefined();
+	});
+});
+
+describe("a few keys the spelling allows", () => {
+	it("reads <prefix>shift+n as N, the character typed", () => {
+		expect(rowOf(read('tezgah.zoom = "<prefix>shift+n"'), "tezgah.zoom")?.keys).toEqual([
+			after("N"),
+		]);
+	});
+
+	it("reads + as a key, after the prefix and with a modifier", () => {
+		expect(rowOf(read('tezgah.zoom = "<prefix>+"'), "tezgah.zoom")?.keys).toEqual([after("+")]);
+		expect(rowOf(read('palette.open = "ctrl++"'), "palette.open")?.keys).toEqual([alone("<c-+>")]);
+	});
+
+	it("tells a key alone from the same key after the prefix: ctrl+h alone leaves C-b C-h", () => {
+		const keys = read('tezgah.zoom = "ctrl+h"');
+		expect(commandOn(keys, alone("<c-h>"))).toBe("tezgah.zoom");
+		expect(rowOf(keys, 'tezgah."workspace --to previous"')?.keys).toEqual([after("<c-h>")]);
+	});
+});
+
+describe("spell, the file's words for a key", () => {
+	/** The key a spelling reads to, after the prefix. */
+	const keyOf = (spelled: string) =>
+		rowOf(read(`tezgah.zoom = "<prefix>${spelled}"`), "tezgah.zoom")?.keys[0];
+
+	/** Every named key and f-key, and each modifier, in the words `spell` gives back. */
+	const SPELLINGS = [
+		...[
+			"left",
+			"right",
+			"up",
+			"down",
+			"tab",
+			"backspace",
+			"delete",
+			"home",
+			"end",
+			"pageup",
+			"pagedown",
+		],
+		...Array.from({length: 24}, (_, i) => `f${i + 1}`),
+		"space",
+		"ctrl+x",
+		"alt+x",
+		"cmd+x",
+		"ctrl+alt+cmd+x",
+		"ctrl+space",
+		"alt+left",
+		"cmd+f5",
+	];
+
+	it.each(SPELLINGS)("gives %s back from the key it reads to", (spelled) => {
+		const key = keyOf(spelled);
+		expect(key?._tag).toBe("after_prefix");
+		expect(spell(key?.key ?? "")).toBe(spelled);
+	});
+
+	it.each(["enter", "return", "escape", "esc"])(
+		"spells %s, a key with two words, as a word that reads back to the same key",
+		(spelled) => {
+			const key = keyOf(spelled);
+			expect(keyOf(spell(key?.key ?? ""))).toEqual(key);
+		},
+	);
+
+	it("spells the prefix as the file writes it", () => {
+		expect(spell("<c-b>")).toBe("ctrl+b");
+		expect(spell("<c- >")).toBe("ctrl+space");
 	});
 });

@@ -857,6 +857,29 @@ describe("the desk, on the keys file", () => {
 		expect(opened(repeating).prefix.armed).toBe(true);
 		expect(opened(fold([swap("")], repeating).s).prefix).toEqual({armed: false});
 	});
+
+	it.each([
+		["Alt-A", "alt+a", "<a-a>"],
+		["F12", "f12", "<f12>"],
+	])("takes a %s prefix pressed twice, and sends no byte, since it has none", (_, spelled, key) => {
+		const s = fold([swap(`prefix = "${spelled}"`)]).s;
+		const twice = fold(
+			[
+				{type: "key", key, at: 0},
+				{type: "key", key, at: 1},
+			],
+			s,
+		);
+		expect(twice.cmds).toEqual([]);
+		expect(opened(twice.s).prefix).toEqual({armed: false});
+	});
+
+	it("sends no prefix byte to a tile a program covers, when the prefix is pressed twice", () => {
+		const covered = fold([{type: "covered", tile: "t1", runs: [counter]}]).s;
+		const twice = fold(prefixed("<c-b>"), covered);
+		expect(twice.cmds).toEqual([]);
+		expect(opened(twice.s).prefix).toEqual({armed: false});
+	});
 });
 
 describe("keyName", () => {

@@ -836,4 +836,38 @@ describe("the host and the keys file", () => {
 			["tezgah.fold", {_tag: "click"}],
 		]);
 	});
+
+	it("logs a workspace clicked in the top bar by its number's word, and the palette opening not at all (p13)", async () => {
+		const did = await goLogged((lines) =>
+			Effect.gen(function* () {
+				const {home, paths} = yield* freshHome;
+				const host = yield* hostOn(home);
+				const app = yield* appOn(paths.sock);
+				yield* app.wire.up;
+				app.send({type: "page"});
+				const desk = yield* until("the desk", app.desk);
+				const done = (n: number) =>
+					until(`${n} did lines`, () =>
+						lines.filter((l) => fieldsOf(l).message === "did").length >= n ? true : undefined,
+					);
+				// A click on the first workspace in the top bar.
+				app.send({type: "on", port: "desk", m: {type: "pick", workspace: desk.workspaces[0].id}});
+				yield* done(1);
+				// The palette's own command runs no desk command, so it logs nothing; a split after it
+				// shows the host read it.
+				app.send({type: "on", port: "desk", m: {type: "run", does: "palette.open"}});
+				app.send({type: "on", port: "desk", m: {type: "run", does: "tezgah.split"}});
+				yield* done(2);
+				yield* host.stop;
+				return lines
+					.map(fieldsOf)
+					.filter((f) => f.message === "did")
+					.map((f) => [f.does, JSON.parse(f.via ?? "null")]);
+			}),
+		);
+		expect(did).toEqual([
+			['tezgah."workspace --to 1"', {_tag: "click"}],
+			["tezgah.split", {_tag: "palette"}],
+		]);
+	});
 });

@@ -119,6 +119,25 @@ describe("keyOwner, from the keys file (ticket 174)", () => {
 		expect(keyOwner(cmd("q"), true, table("ignore = []"))).toBe("system");
 	});
 
+	it("gives the app a Cmd prefix, so the desk can arm on it", () => {
+		const keys = table('prefix = "cmd+b"');
+		expect(keyOwner(cmd("b"), true, keys)).toBe("app");
+		// Ctrl-B is no longer the prefix, and is the tile's, as every Ctrl key is.
+		expect(keyOwner(press("b", {ctrl: true}), true, keys)).toBe("app");
+	});
+
+	it("never gives the app one of the Mac's keys, even from a table no file could write", () => {
+		const keys: Keys = {
+			...defaults,
+			prefix: "<m-h>",
+			rows: defaults.rows.map((row) =>
+				row.does === "palette.open" ? {...row, keys: [{_tag: "alone", key: "<m-q>"}]} : row,
+			),
+		};
+		expect(keyOwner(cmd("q"), true, keys)).toBe("system");
+		expect(keyOwner(cmd("h"), true, keys)).toBe("system");
+	});
+
 	it("changes nothing off a Mac, where Ctrl is the shell's", () => {
 		const keys = table(['palette.open = "cmd+p"', "ignore = []"].join("\n"));
 		expect(keyOwner(cmd("w"), false, keys)).toBe("app");
