@@ -26,6 +26,7 @@ import type {ProgramList} from "../shell/programs.ts";
 import {type Answer, driveFor, type InTile} from "./drive.ts";
 import {AGENTS_PROTOCOL, Handshake, type HostAnswer, MAX_LINE} from "./handshake.ts";
 import type {JobAnswer} from "./job.ts";
+import type {LineAnswer, LineAsk, LineRefused} from "./line.ts";
 import type {StopAnswer, StopAsk, StopRefused} from "./stop.ts";
 
 // One agent on the host's agents' socket: its handshake, then MCP, served with the official SDK's
@@ -88,6 +89,10 @@ export interface AgentOptions {
 	/** Stop job n of the host's table for agent `who`, and why, for the `stop` tool (./stop.ts). */
 	readonly stop?:
 		| ((who: typeof Agent.Type, ask: StopAsk) => Effect.Effect<StopAnswer, StopRefused>)
+		| undefined;
+	/** Run one line in agent `who`'s own tile, for the `line` tool (./line.ts). */
+	readonly line?:
+		| ((who: typeof Agent.Type, ask: LineAsk) => Effect.Effect<LineAnswer, LineRefused>)
 		| undefined;
 	/** The server's name and version, as the client is told. */
 	readonly server?: {readonly name: string; readonly version: string};
@@ -212,12 +217,13 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
 			Effect.gen(function* () {
 				const who = {kind: "agent", id: handshake.agent, for: person} as const;
 				const served = yield* programsFor(who);
-				const {stop} = options;
+				const {stop, line} = options;
 				const {drive, tools} = yield* driveFor({
 					list: served.list,
 					tiles,
 					job: options.job,
 					stop: stop === undefined ? undefined : (ask) => stop(who, ask),
+					line: line === undefined ? undefined : (ask) => line(who, ask),
 					readOnly: served.readOnly ?? false,
 				});
 				if (options.attached !== undefined) yield* options.attached(who);

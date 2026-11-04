@@ -1,14 +1,16 @@
 import {type JobsOnHost, Ledger, Traces} from "@kampus/fabrika-old";
+import {type LineAnswer, LineRefused} from "@kampus/fabrika-old/mcp";
 import {Author, PullRequests, RepoTree} from "@tea-fabrika/tracker";
-import {Effect, Exit, Scope} from "effect";
-import type {DeskMsg} from "./desk/desk.ts";
+import {Context, Effect, Exit, Scope} from "effect";
+import type {AgentName, DeskMsg} from "./desk/desk.ts";
 import type {Does} from "./desk/keys.ts";
 import type {TileId} from "./desk/layout/index.ts";
 import {deskWords} from "./desk/words.ts";
 import type {SharedHistory} from "./editor/history.ts";
+import type {AgentSessions} from "./host/agent-session.ts";
 import type {JobLines} from "./job-lines.ts";
 import type {ToTerminal} from "./messages.ts";
-import {type Placed, type Screen, startTsh, type Tsh, type WindowScreen} from "./tsh.ts";
+import {type Placed, RESET, type Screen, startTsh, type Tsh, type WindowScreen} from "./tsh.ts";
 
 // The tiles in the host process: one tsh (tsh.ts) per tile the desk opened, as tmux runs one
 // shell per pane. The jobs are the host's: one table for the host process (host/run.ts opens it),
@@ -36,6 +38,17 @@ import {type Placed, type Screen, startTsh, type Tsh, type WindowScreen} from ".
 //   yield* tiles.kill("ticket:9c1d")  the same window, "stop now": that process stops
 //   yield* tiles.stopJob("t1", 3) t1's tsh is told to stop %3, as `stop %3` there does: true. A
 //                                 tile not open answers false
+//
+// An agent's tile (tracker 185b): opened with the agent's name, its tsh runs as that agent. On a
+// connected home its services are the agent's own session (`sessionFor`), held as long as the
+// tile; on a home's own file, the host's ledger with `agent:<name> for:<person>` as its Author. It
+// fails closed: when the session cannot be made, no tsh starts, the tile says why, and a line is
+// refused with that why. An agent's line never runs on the person's session.
+//
+//   yield* tiles.open("t2", "claude")        t2's tsh starts as agent:claude for:owner
+//   yield* tiles.line("t2", "tally &")       "$ tally &" on t2; {_tag: "job", job: {n: 1, tile: "t2", ...}}
+//   yield* tiles.line("t1", "tally &")       refused: t1 is the person's
+//   // sessionFor fails "no room":           t2 shows why; tiles.line("t2", ...) refused with it
 //
 // Closing is tmux's kill-pane, made soft: a tile owns its tsh as a pane owns its shell, and the
 // programs are given the end of their inputs before anything is stopped. The desk says when to
@@ -67,11 +80,16 @@ export interface Edge {
 	readonly view: (run: string, screen: WindowScreen) => void;
 	/** The port of that name goes: its tile closed, or its run ended. */
 	readonly gone: (name: string) => void;
+	/** The person typed a line in this agent's tile, and was told it runs nothing there. */
+	readonly typed?: ((tile: TileId) => void) | undefined;
 }
 
 export interface Tiles {
-	/** Start the tile's tsh, or show the one that runs on a fresh port. */
-	readonly open: (tile: TileId) => Effect.Effect<void>;
+	/**
+	 * Start the tile's tsh, or show the one that runs on a fresh port. With an agent's name, its tsh
+	 * runs as that agent, or, when its session cannot be made, the tile says why.
+	 */
+	readonly open: (tile: TileId, agent?: AgentName) => Effect.Effect<void>;
 	/**
 	 * Give the tile's tsh and every program it started the end of their inputs, with `close`, not
 	 * `stop`. The desk is told `ended` once tsh has ended. A tile not open changes nothing.
@@ -92,6 +110,11 @@ export interface Tiles {
 	 * a job holds its runs. `false`: the tile is not open, so no tsh here runs it.
 	 */
 	readonly stopJob: (tile: TileId, n: number) => Effect.Effect<boolean>;
+	/**
+	 * Run one line in an agent's tile, as its agent (`Tsh.line`). Refused in a tile not open, in a
+	 * person's tile, and in one whose agent's session could not be made, with why.
+	 */
+	readonly line: (tile: TileId, text: string) => Effect.Effect<LineAnswer, LineRefused>;
 }
 
 /** A run with a view, as the tiles hold it while it runs. */
@@ -106,6 +129,8 @@ interface Live {
 interface Running {
 	readonly host: Tsh;
 	readonly scope: Scope.Closeable;
+	/** The agent whose tile it is, or `null`: the person's. */
+	readonly agent: AgentName | null;
 	/** `open` until `close`; `closing` while its programs end; `ended` once its tsh has. */
 	state: "open" | "closing" | "ended";
 }
@@ -117,9 +142,14 @@ export const startTiles = (options: {
 	readonly edge: Edge;
 	/** The host's job lines (job-lines.ts), handed to every tile's tsh with the table. */
 	readonly lines?: JobLines | undefined;
+	/**
+	 * An agent's own session on a connected home, for its tile. None: the home's own file, where an
+	 * agent's tile writes on the host's ledger, as its agents' socket does.
+	 */
+	readonly sessionFor?: AgentSessions | undefined;
 }) =>
 	Effect.gen(function* () {
-		const {history, jobs, edge, lines} = options;
+		const {history, jobs, edge, lines, sessionFor} = options;
 		const parent = yield* Effect.scope;
 		const ledger = yield* Ledger;
 		const author = yield* Author;
@@ -128,6 +158,32 @@ export const startTiles = (options: {
 		const traces = yield* Traces;
 		const open = new Map<TileId, Running>();
 		const live = new Map<string, Live>();
+		/** The agents' tiles whose tsh could not start, and why: no line runs there. */
+		const failed = new Map<TileId, string>();
+		/** Who an agent works for: the person the host's own Author is. */
+		const person = author.kind === "user" ? author.id : "for" in author ? author.for : author.id;
+
+		/**
+		 * An agent's services for its tile: its own session, held in the tile's scope, or the host's
+		 * ledger with the agent as its Author.
+		 */
+		const servicesOf = (agent: AgentName, scope: Scope.Scope) =>
+			sessionFor === undefined
+				? Effect.succeed(
+						Context.make(Ledger, ledger).pipe(
+							Context.add(Author, {kind: "agent", id: agent, for: person}),
+						),
+					)
+				: sessionFor(agent).pipe(Scope.provide(scope));
+
+		/** A tile whose tsh could not start: it says why, and takes no key. */
+		const blank = (agent: AgentName, why: string): Screen<ToTerminal> => ({
+			show: (page) => {
+				page({type: "write", data: `${RESET}${agent}'s tile could not start:\r\n${why}\r\n`});
+				return () => {};
+			},
+			heard: () => ({kind: "refused", why: `${agent}'s tile could not start: ${why}`}),
+		});
 
 		/**
 		 * A line in the foreground covers its tile: the desk is told its runs with a view, still
@@ -152,15 +208,22 @@ export const startTiles = (options: {
 			edge.tell({type: "over", run});
 		};
 
-		const startOne = (tile: TileId) =>
+		const startOne = (tile: TileId, agent: AgentName | null) =>
 			Effect.gen(function* () {
 				const scope = yield* Scope.fork(parent);
+				const services =
+					agent === null
+						? Context.make(Ledger, ledger).pipe(Context.add(Author, author))
+						: yield* servicesOf(agent, scope).pipe(
+								Effect.tapError(() => Scope.close(scope, Exit.void)),
+							);
 				const host = yield* startTsh({
 					tile,
 					jobs,
 					lines,
 					history,
 					words: deskWords((does) => edge.said(tile, does)),
+					typed: () => edge.typed?.(tile),
 					runs: {
 						began: (run, program, placed, screen) => {
 							const one: Live = {tile, program, placed, screen};
@@ -179,13 +242,13 @@ export const startTiles = (options: {
 					},
 				}).pipe(
 					Scope.provide(scope),
-					Effect.provideService(Ledger, ledger),
-					Effect.provideService(Author, author),
+					Effect.provideService(Ledger, Context.get(services, Ledger)),
+					Effect.provideService(Author, Context.get(services, Author)),
 					Effect.provideService(PullRequests, pullRequests),
 					Effect.provideService(RepoTree, repoTree),
 					Effect.provideService(Traces, traces),
 				);
-				open.set(tile, {host, scope, state: "open"});
+				open.set(tile, {host, scope, agent, state: "open"});
 				// tsh ended: `exit`, Ctrl-D, or after `close`. The desk takes the tile away, and asks to stop it here.
 				yield* host.ended.pipe(
 					Effect.andThen(
@@ -201,12 +264,26 @@ export const startTiles = (options: {
 			});
 
 		const tiles: Tiles = {
-			// A tsh that cannot start leaves the tile blank, and says why in the host's log.
-			open: (tile) =>
+			// A tsh that cannot start leaves the tile blank, and says why in the host's log. An agent's
+			// tile says why on its screen too, and refuses its lines with it.
+			open: (tile, agent) =>
 				Effect.gen(function* () {
-					const host = open.get(tile)?.host ?? (yield* startOne(tile));
+					const why = failed.get(tile);
+					if (agent !== undefined && why !== undefined)
+						return edge.terminal(tile, blank(agent, why));
+					const host = open.get(tile)?.host ?? (yield* startOne(tile, agent ?? null));
 					edge.terminal(tile, host.terminal);
-				}).pipe(Effect.catch((e) => Effect.logError(`fabrika: ${tile}'s tsh could not start`, e))),
+				}).pipe(
+					Effect.catchTag("ConnectFailed", ({why}) =>
+						Effect.gen(function* () {
+							const name = agent ?? tile;
+							failed.set(tile, why);
+							edge.terminal(tile, blank(name, why));
+							yield* Effect.logError(`fabrika: ${name}'s tile could not start: ${why}`);
+						}),
+					),
+					Effect.catch((e) => Effect.logError(`fabrika: ${tile}'s tsh could not start`, e)),
+				),
 			close: (tile) =>
 				Effect.suspend(() => {
 					const one = open.get(tile);
@@ -216,6 +293,8 @@ export const startTiles = (options: {
 				}),
 			stop: (tile) =>
 				Effect.gen(function* () {
+					// An agent's tile that never started goes with its port, and nothing else.
+					if (failed.delete(tile)) edge.gone(`tile:${tile}`);
 					const one = open.get(tile);
 					if (one === undefined) return;
 					open.delete(tile);
@@ -233,6 +312,24 @@ export const startTiles = (options: {
 				Effect.suspend(() => {
 					const one = open.get(tile);
 					return one === undefined ? Effect.succeed(false) : one.host.stop(n).pipe(Effect.as(true));
+				}),
+			line: (tile, text) =>
+				Effect.suspend(() => {
+					const why = failed.get(tile);
+					if (why !== undefined)
+						return Effect.fail(new LineRefused({why: `${tile} could not start: ${why}`}));
+					const one = open.get(tile);
+					if (one === undefined)
+						return Effect.fail(new LineRefused({why: `${tile} is not open: no tsh runs there`}));
+					if (one.agent === null)
+						return Effect.fail(
+							new LineRefused({
+								why: `${tile} is the person's tile: an agent's line runs only in its own`,
+							}),
+						);
+					if (one.state !== "open")
+						return Effect.fail(new LineRefused({why: `${tile} is closing: its tsh takes no line`}));
+					return one.host.line(text);
 				}),
 		};
 		return tiles;

@@ -1,4 +1,5 @@
 import type {PointerEvent as ReactPointerEvent, ReactNode} from "react";
+import type {Open} from "../desk/desk.ts";
 import type {Keys} from "../desk/keymap.ts";
 import {type LayoutNode, type Line, lineOf, type TileNode, tiles} from "../desk/layout/index.ts";
 import type {FromPage} from "../messages.ts";
@@ -17,6 +18,11 @@ import {INFO, infoFor, type TicketsShown, tileWord} from "./frame.ts";
 // A pipe is marked by `data-pipe`, its color's name, which window.css washes the title bar with,
 // and by its letter in the slot. Color is never the only cue: a tile in no pipe shows a dot in the
 // same slot, so its name sits where a pipe's does.
+//
+// An agent's own tile (tracker 185b) is named by its agent, in text on its title bar and its strip
+// and in what a screen reader hears, never by color alone (WCAG 1.4.1):
+//
+//   agents {claude: "t4"}   t4's title bar: "• claude · tsh ... t4"; its strip: "claude · tsh"
 
 /** The dot in a plain tile's slot: one character, as a letter is, and no word. */
 const DOT = "•";
@@ -36,9 +42,22 @@ const pipeOf = (node: LayoutNode): Line | null => {
 const colorOf = (line: Line | null): Pipe | undefined =>
 	line === null ? undefined : PIPES[line.tint];
 
+/** The desk's agents' tiles, by agent: the tile each agent's lines run in. */
+type Agents = Open["agents"];
+
+/** The agent whose own tile this is, or none: a person's tile. */
+const agentIn = (agents: Agents, tile: string): string | undefined =>
+	Object.keys(agents).find((agent) => agents[agent] === tile);
+
+/** A tile's word with its agent's name before it, when it is an agent's tile. */
+const owned = (word: string, agent: string | undefined): string =>
+	agent === undefined ? word : `${agent} · ${word}`;
+
 /** What a strip calls a node: its tile's program, or its tiles' programs in order. */
-const nameOf = (node: LayoutNode): string =>
-	[...tiles(node)].map((tile) => tile.shows.run?.program ?? "tsh").join(" · ");
+const nameOf = (node: LayoutNode, agents: Agents): string =>
+	[...tiles(node)]
+		.map((tile) => owned(tile.shows.run?.program ?? "tsh", agentIn(agents, tile.id)))
+		.join(" · ");
 
 /** A press that takes no focus: the desk gives focus to a tile, and the page follows it. */
 const noFocus = (e: ReactPointerEvent) => e.preventDefault();
@@ -81,6 +100,8 @@ export function Tile(props: {
 	readonly tickets: TicketsShown;
 	/** The key table in use, so info mode names the keys the person has. */
 	readonly keys: Keys;
+	/** The desk's agents' tiles, so an agent's own tile is named by its agent. */
+	readonly agents?: Agents;
 	readonly toHost: (msg: FromPage) => void;
 	/** The body: the tile's terminal, or the view over it. */
 	readonly children: ReactNode;
@@ -90,12 +111,13 @@ export function Tile(props: {
 	const line = lineOf(tile);
 	const of = line === null ? "" : `, a window of the line typed in ${line.from}`;
 	const state = stateOf(props);
+	const agent = agentIn(props.agents ?? {}, tile.id);
 	return (
 		<section
 			className={`tile${focused ? " focused" : ""}${closing ? " closing" : ""}`}
 			data-tile={tile.id}
 			data-pipe={colorOf(line)}
-			aria-label={`tile ${tile.id}${run === null ? "" : `, ${run.program}`}${of}${closing ? ", closing" : ""}`}
+			aria-label={`tile ${tile.id}${agent === undefined ? "" : `, ${agent}'s`}${run === null ? "" : `, ${run.program}`}${of}${closing ? ", closing" : ""}`}
 			aria-current={focused}
 			onPointerDownCapture={() => toHost({type: "click", tile: tile.id})}
 		>
@@ -111,7 +133,7 @@ export function Tile(props: {
 				}}
 			>
 				<Slot line={line} />
-				<span className="name">{tileWord(tile, props.tickets)}</span>
+				<span className="name">{owned(tileWord(tile, props.tickets), agent)}</span>
 				{/* The question itself is on the status bar too, where tmux asks it; the tile it is
 				    for says so as well, so an eye on the tile does not miss it. */}
 				{state !== null && (
@@ -132,9 +154,11 @@ export function Tile(props: {
 export function Strip(props: {
 	readonly node: LayoutNode;
 	readonly toHost: (msg: FromPage) => void;
+	/** The desk's agents' tiles, so an agent's own tile is named by its agent. */
+	readonly agents?: Agents;
 }): ReactNode {
 	const {node, toHost} = props;
-	const name = nameOf(node);
+	const name = nameOf(node, props.agents ?? {});
 	const line = pipeOf(node);
 	return (
 		<button

@@ -1,4 +1,4 @@
-import {Cause, Exit, Schema} from "effect";
+import {Cause, Effect, Exit, Schema} from "effect";
 import {AskKey, AsksNow} from "./asks.ts";
 import {DeskSchema, TileIdSchema} from "./desk/desk.ts";
 import {Does, KeyName, Keys} from "./desk/keymap.ts";
@@ -121,7 +121,15 @@ export type LinkNow = typeof LinkNow.Type;
 const Millis = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 /** An agent attached to the host's agents' socket now (host/agents.ts): its name, and since when. */
-export const AgentOn = Schema.Struct({name: Schema.String, since: Millis});
+export const AgentOn = Schema.Struct({
+	name: Schema.String,
+	since: Millis,
+	/**
+	 * The agent's own tile, or `null`: it ran no line yet. A host from before agents had tiles
+	 * sends none.
+	 */
+	tile: Schema.NullOr(TileIdSchema).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+});
 export type AgentOn = typeof AgentOn.Type;
 
 /**

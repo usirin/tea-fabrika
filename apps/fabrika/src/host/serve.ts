@@ -1,7 +1,13 @@
 import {applyCell} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {type Entry, type JobsOnHost, Ledger, Shell, Traces, writerText} from "@kampus/fabrika-old";
-import {type AgentOptions, EXIT_WITHIN, StopAnswer, StopRefused} from "@kampus/fabrika-old/mcp";
+import {
+	type AgentOptions,
+	EXIT_WITHIN,
+	LineRefused,
+	StopAnswer,
+	StopRefused,
+} from "@kampus/fabrika-old/mcp";
 import {Author, PullRequests, RepoTree} from "@tea-fabrika/tracker";
 import {Data, Deferred, Effect, Queue, Stream} from "effect";
 import {type Socket, SocketServer} from "effect/socket";
@@ -25,10 +31,12 @@ import {
 	forPage,
 	type Open,
 	refusedOf,
+	agentOf,
 	restore,
 	route,
 	type Saved,
 	takenNow,
+	tilesOf,
 } from "../desk/desk.ts";
 import {
 	commandFor,
@@ -80,6 +88,10 @@ import type {Setting} from "./settings.ts";
 //                                          or goes: the top bar's agents, sync and host
 //   agent stop {n: 1, why: "wrong ticket"} on the agents' socket: the host says the agent's stop
 //                                          in the table, then tells t1's tsh to stop %1 (`stopFor`)
+//   agent line {line: "tally &"}           on the agents' socket: the agent's first line has the
+//                                          desk open its tile (`launch`), folded beside the focused
+//                                          one; once the tile's tsh is open, it runs the line there
+//                                          as the agent (`lineFor`)
 //   app   away                             the window closed: nothing more is shown to it
 //
 // Every page attached is shown the same desk, and each tile's screen on all of them, as every
@@ -112,6 +124,9 @@ export interface AsksHome {
 	readonly kept: string | null;
 	readonly save: (marks: Marks) => Effect.Effect<void>;
 }
+
+/** The desk's Cmds as the one fiber carries them, and a fence: done once every Cmd before it is. */
+type Carried = DeskCmd | {readonly type: "fence"; readonly done: Deferred.Deferred<void>};
 
 /** One app attached. */
 interface Client {
@@ -223,7 +238,7 @@ export const serve = (options: {
 		const toPage = (client: Client, m: ToPage) => client.send({type: "to", port: "desk", m});
 
 		// The desk, and its Cmds, carried out one after another.
-		const queue = yield* Queue.unbounded<DeskCmd>();
+		const queue = yield* Queue.unbounded<Carried>();
 		let desk: Desk = {at: "over"};
 		const deskNow = (): ToPage => ({
 			type: "desk",
@@ -239,6 +254,32 @@ export const serve = (options: {
 				Effect.logInfo("did").pipe(Effect.annotateLogs({does, via: JSON.stringify(via)})),
 			);
 		};
+		/** Each agent's own tile, as the desk keeps it. */
+		const agentsOf = (d: Desk): Open["agents"] => (d.at === "open" ? d.agents : {});
+		/**
+		 * The agents' tiles launched and not yet seen by the person, and when each was launched: once
+		 * the person unfolds or focuses one, the log says how long that took, once.
+		 */
+		const launched = new Map<string, {readonly agent: string; readonly at: number}>();
+		const seenNow = () => {
+			if (desk.at !== "open" || launched.size === 0) return;
+			const open = desk;
+			const active = open.workspaces.find((ws) => ws.id === open.active);
+			for (const [tile, {agent, at}] of launched) {
+				const found = open.workspaces.flatMap((ws) => tilesOf(ws).filter((t) => t.id === tile))[0];
+				if (found === undefined) {
+					launched.delete(tile);
+					continue;
+				}
+				if (found.folded && active?.focused !== tile) continue;
+				launched.delete(tile);
+				Effect.runForkWith(services)(
+					Effect.logInfo("agent_tile_opened").pipe(
+						Effect.annotateLogs({agent, tile, after_ms: clock.currentTimeMillisUnsafe() - at}),
+					),
+				);
+			}
+		};
 		const shout = () => {
 			const now = deskNow();
 			for (const client of clients) if (client.page) toPage(client, now);
@@ -251,12 +292,17 @@ export const serve = (options: {
 		const step = (msg: DeskMsg, from?: Client | "every") => {
 			const [next, cmds] = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, desk, msg);
 			const changed = next !== desk;
+			const agentsBefore = agentsOf(desk);
 			desk = next;
 			for (const c of cmds) {
 				if (c.type !== "show") Queue.offerUnsafe(queue, c);
 				else
 					for (const to of from === "every" ? clients : from === undefined ? [] : [from])
 						if (to.page) toPage(to, {type: "show", what: c.what});
+			}
+			if (changed) {
+				if (JSON.stringify(agentsOf(desk)) !== JSON.stringify(agentsBefore)) tellHost();
+				seenNow();
 			}
 			return changed;
 		};
@@ -313,9 +359,9 @@ export const serve = (options: {
 		);
 
 		// The host as it says of itself, for the top bar's host, sync and agents: said as a page
-		// loads, and to every page as an agent attaches or goes. Each agent on the socket is one
-		// entry, by a number of its own, so two of one name are two.
-		const attached = new Map<number, AgentOn>();
+		// loads, and to every page as an agent attaches or goes, or its tile comes or goes. Each
+		// agent on the socket is one entry, by a number of its own, so two of one name are two.
+		const attached = new Map<number, Omit<AgentOn, "tile">>();
 		let nextAgent = 0;
 		const hostNow = (): ToPage => ({
 			type: "host",
@@ -325,7 +371,11 @@ export const serve = (options: {
 				build,
 				ledger: link,
 				agents:
-					agents === undefined ? null : [...attached.values()].sort((a, b) => a.since - b.since),
+					agents === undefined
+						? null
+						: [...attached.values()]
+								.sort((a, b) => a.since - b.since)
+								.map((a) => ({...a, tile: agentsOf(desk)[a.name] ?? null})),
 			},
 		});
 		const tellHost = () => {
@@ -390,7 +440,15 @@ export const serve = (options: {
 				terminal: (tile, screen) => add(`tile:${tile}`, screen),
 				view: (run, screen) => add(`run:${run}`, screen),
 				gone,
+				// The person's line is theirs: the log says one came, never what it said.
+				typed: (tile) => {
+					const agent = desk.at === "open" ? agentOf(desk, tile) : null;
+					Effect.runForkWith(services)(
+						Effect.logInfo("agent_tile_typed").pipe(Effect.annotateLogs({agent, tile})),
+					);
+				},
 			},
+			sessionFor: options.ledger.kind === "server" ? options.ledger.sessionFor : undefined,
 		});
 
 		/**
@@ -430,10 +488,37 @@ export const serve = (options: {
 				);
 			});
 
-		const carry = (c: DeskCmd): Effect.Effect<void> => {
+		/**
+		 * Run one line in agent `who`'s own tile: the `line` tool's host side. Its first line has the
+		 * desk open the tile, folded beside the focused one, and waits for the desk's Cmds to be
+		 * carried, so the tile's tsh is open, as the agent, before the line is handed to it. Only the
+		 * agent's own tile is ever named: a line never reaches a person's tile or another agent's.
+		 */
+		const lineFor: NonNullable<AgentOptions["line"]> = (who, ask) =>
+			Effect.gen(function* () {
+				let tile = agentsOf(desk)[who.id];
+				if (tile === undefined) {
+					if (step({type: "launch", agent: who.id})) shout();
+					tile = agentsOf(desk)[who.id];
+					if (tile === undefined)
+						return yield* new LineRefused({
+							why: `the desk could not open a tile for ${who.id}: it is not open`,
+						});
+					launched.set(tile, {agent: who.id, at: clock.currentTimeMillisUnsafe()});
+					yield* Effect.logInfo("agent_tile").pipe(Effect.annotateLogs({agent: who.id, tile}));
+				}
+				const done = yield* Deferred.make<void>();
+				Queue.offerUnsafe(queue, {type: "fence", done});
+				yield* Deferred.await(done);
+				return yield* tiles.line(tile, ask.line);
+			});
+
+		const carry = (c: Carried): Effect.Effect<void> => {
 			switch (c.type) {
+				case "fence":
+					return Deferred.succeed(c.done, undefined).pipe(Effect.asVoid);
 				case "open":
-					return tiles.open(c.tile);
+					return tiles.open(c.tile, c.agent);
 				case "close":
 					return tiles.close(c.tile);
 				case "stop":
@@ -510,6 +595,7 @@ export const serve = (options: {
 				attached: agentCame,
 				job: lines.job,
 				stop: stopFor,
+				line: lineFor,
 				sessionFor: options.ledger.kind === "server" ? options.ledger.sessionFor : null,
 			}).pipe(
 				Effect.catchCause((cause) =>
