@@ -1189,8 +1189,11 @@ export const gitHubCodeHost = (
 		codeHostOn((args) => sh(config.gh ?? "gh", args), config),
 	);
 
-/** A folder's path from the root, as a GraphQL text may hold it: plain parts, no quotes. */
-const FOLDER = /^[\w.-]+(?:\/[\w.-]+)*$/;
+/**
+ * A folder's path from the root, as a GraphQL text may hold it: plain parts, no quotes, and no
+ * part that is `.` or `..`, so a path never climbs out of the root.
+ */
+const FOLDER = /^(?!\.\.?(?:\/|$))[\w.-]+(?:\/(?!\.\.?(?:\/|$))[\w.-]+)*$/;
 
 /** The folders under one path, as GraphQL's `object(expression: "HEAD:<path>")` answers. */
 const TreeAt = Schema.NullOr(

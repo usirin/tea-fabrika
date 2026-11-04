@@ -537,7 +537,7 @@ const whyOf = (s: Suggested): string =>
  *   firstAreasOf([lane, apps/fabrika], {"lane"}, "  desk ")
  *   // [{name: "lane", suggested: lane}, {name: "desk"}]
  */
-const firstAreasOf = (
+export const firstAreasOf = (
 	suggestions: readonly Suggested[],
 	ticked: ReadonlySet<string>,
 	typed: string,

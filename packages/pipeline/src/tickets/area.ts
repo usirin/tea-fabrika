@@ -145,6 +145,18 @@ const after = (areas: Areas, fact: AreaFact): Areas => {
 };
 
 /**
+ * `areas` after one fact, or why it does not fit: the step `areasOf` takes for each row, and the
+ * one a writer takes for its own fact once the ledger has it (read your own writes).
+ */
+export const areaAfter = (
+	areas: Areas,
+	fact: AreaFact,
+): {readonly areas: Areas} | {readonly why: string} => {
+	const why = areaRefused(areas, fact);
+	return why === null ? {areas: after(areas, fact)} : {why};
+};
+
+/**
  * Fold area entries, in the ledger's order, onto `from`: the areas after them, and what did not
  * fit, in words, one problem each. A merged area's old name is free again; a merge into a merged
  * area is refused, so `into` never closes a loop.
@@ -156,11 +168,11 @@ export const areasOf = (
 	let areas = from;
 	const problems: string[] = [];
 	for (const {pos, by, fact} of entries) {
-		const why = mayWriteArea(by, fact._tag)
-			? areaRefused(areas, fact)
-			: `${fact._tag} written by an agent, but only a person writes it`;
-		if (why === null) areas = after(areas, fact);
-		else problems.push(`row ${pos} on the areas: ${why}`);
+		const step = mayWriteArea(by, fact._tag)
+			? areaAfter(areas, fact)
+			: {why: `${fact._tag} written by an agent, but only a person writes it`};
+		if ("areas" in step) areas = step.areas;
+		else problems.push(`row ${pos} on the areas: ${step.why}`);
 	}
 	return {areas, problems};
 };

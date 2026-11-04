@@ -2,6 +2,8 @@ import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
 import {
 	AreaEntry,
+	areaAfter,
+	AreaFact,
 	AreaNumber,
 	Areas,
 	areasOf,
@@ -67,6 +69,14 @@ import {areaFactOf, isAreaWrite, Summary, summaryOf, Write} from "./ticket.ts";
 //   folders_ok {folders: ["apps/fabrika"]}
 //   // page.onboarding [{_tag: "titles", ...}, {_tag: "folder", path: "apps/fabrika"}]
 //   skip_onboarding                                          // page.onboarding null, for good
+//
+// It reads its own writes. A save that answers `{area}` folds that fact into `areas` at once, with
+// the step the load folds each row with, so a rename or a merge of an area just made goes out
+// before any load. The fact waits in `landed` until a load reads it back, which then skips it:
+//
+//   save_ok {area: 1} for make_area "lane"   // areas.live {1: "lane"}, landed [area_made 1]
+//   write rename_area {area: 1, ...}           // taken, saved
+//   load_ok {areas: [area_made 1 "lane"]}      // skipped, landed []
 
 /**
  * Read the ledger after `after`: the facts found, the rows that did not read, the last row's
@@ -213,8 +223,10 @@ export const Tracker = Schema.Struct({
 	now: Schema.Finite,
 	/** Tickets this tracker filed whose duplicate hint is still out: asked of Jev, or saving. */
 	hinting: Schema.Array(TicketNumber),
-	/** The project's areas, folded from `tracker/areas` as last read. */
+	/** The project's areas: `tracker/areas` as last read, and this tracker's own landed writes. */
 	areas: Areas,
+	/** Area facts this tracker wrote and folded in on their save's answer, not yet read back. */
+	landed: Schema.Array(AreaFact),
 	/** The person skipped the onboarding step: it does not ask again while this tracker runs. */
 	skipped: Schema.Boolean,
 	folders: FoldersRead,
@@ -258,6 +270,7 @@ const start: Tracker = {
 	now: 0,
 	hinting: [],
 	areas: NO_AREAS,
+	landed: [],
 	skipped: false,
 	folders: {_tag: "unasked"},
 };
@@ -279,6 +292,37 @@ const refusedOf = (s: Tracker, write: Write): string | null => {
 	if (!isAreaWrite(write)) return null;
 	const made = areaFactOf(write, s.areas);
 	return "why" in made ? made.why : null;
+};
+
+const sameFact = Schema.toEquivalence(AreaFact);
+
+/**
+ * An area write landed as `area`: its fact folds in now, as a load would fold it. A fact that does
+ * not fit the areas this tracker knows (another person's write came first, unread) waits for the
+ * load instead.
+ */
+const landedArea = (s: Tracker, write: Write, area: AreaNumber): Tracker => {
+	if (!isAreaWrite(write)) return s;
+	const made = areaFactOf(write, s.areas);
+	if (!("fact" in made)) return s;
+	const fact: AreaFact = made.fact._tag === "area_made" ? {...made.fact, area} : made.fact;
+	const step = areaAfter(s.areas, fact);
+	return "areas" in step ? {...s, areas: step.areas, landed: [...s.landed, fact]} : s;
+};
+
+/** The rows a load read, less those that are this tracker's landed facts, each skipped once. */
+const readBack = (
+	landed: readonly AreaFact[],
+	read: readonly AreaEntry[],
+): {readonly entries: readonly AreaEntry[]; readonly landed: readonly AreaFact[]} => {
+	const waiting = [...landed];
+	const entries = read.filter((e) => {
+		const at = waiting.findIndex((f) => sameFact(f, e.fact));
+		if (at === -1) return true;
+		waiting.splice(at, 1);
+		return false;
+	});
+	return {entries, landed: waiting};
 };
 
 /** The number a new ticket tries first: one past the newest known. */
@@ -375,12 +419,14 @@ export const tracker = defineMachine({
 
 		load_ok: (s, m): Step => {
 			const folded = fold(s.tickets, m.value.entries);
-			const areas = areasOf(m.value.areas, s.areas);
+			const read = readBack(s.landed, m.value.areas);
+			const areas = areasOf(read.entries, s.areas);
 			const next: Tracker = {
 				...s,
 				ready: true,
 				tickets: folded.tickets,
 				areas: areas.areas,
+				landed: read.landed,
 				seen: Math.max(s.seen, m.value.last),
 				problems: [...s.problems, ...m.value.broken, ...folded.problems, ...areas.problems].slice(
 					-PROBLEMS,
@@ -403,7 +449,7 @@ export const tracker = defineMachine({
 			const [front, ...rest] = s.saving;
 			if (front === undefined || front.id !== m.cmd.id) return [s, []];
 			const [next, sent] = settled(s, rest);
-			if (!("ticket" in m.value)) return [next, sent];
+			if (!("ticket" in m.value)) return [landedArea(next, front.write, m.value.area), sent];
 			const [asking, asked] = hintFor(next, front.write, m.value.ticket);
 			return [asking, [...sent, ...asked]];
 		},
