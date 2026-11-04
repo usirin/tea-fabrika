@@ -244,6 +244,8 @@ type Workspace = {layout: Split; focus: TileId; recent: ReadonlyArray<TileId>}; 
   with none (`no_press`), lean 85%. R2 the handoff: 196's P3, lean 85%. R3 what is said: the focus move
   speaks for itself; an answer is a polite status; the bottom line names the tile: 196's P5, lean 80%.
   R4 one letter per move, with `from` and `via`, lean 85% (what the ledger records).
+  One exception to R2, decided 2026-11-03 in the [layers](./layers.md) walk (call 2): a peek opens
+  the tile beside and leaves focus on the list; Enter still moves focus in.
 - **Why.** WCAG 3.2.1, focus "does not initiate a change of context" [w2]. i3 gives a window out of view
   "the urgency hint" instead of focus [k3]. The dark cockpit: when all is well, "all annunciators on
   the overhead panel will be extinguished" [f4].
@@ -564,6 +566,8 @@ fabrika today     a popover is the only thing over the desk (popovers)
 ### 8. Is a side panel a program?
 
 **Moved to experiment 207, the layers study (2026-11-03). Not decided here.**
+[Layers](./layers.md#8-is-a-side-panel-a-program) records it as still open; it waits on a day of use
+with `ticket | trace`.
 
 **Lean, 65%, a guess until it is walked:** a block about the same thing is a section of that
 program's view; a block about another thing is another program's tile.

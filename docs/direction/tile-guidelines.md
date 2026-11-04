@@ -1,6 +1,6 @@
 # A tile stays quiet, says every fact in words, and every part is reached by keys
 
-Decided 2026-11-01 by the owner, not built yet. This is about today's version, and `next/` reads it
+Decided 2026-11-01 by the owner. Tiles PR 1 builds it. This is about today's version, and `next/` reads it
 as a lesson. It holds the written rules for every part of a tile, each tested against how Linear
 would build it. [Pipe colors](./pipe-colors.md) and [color principles](./color-principles.md) came
 first, and this note applies them.
@@ -23,9 +23,11 @@ first, and this note applies them.
 - **Tuval (layer 5).** `next/` is not in the tree yet, so carry-over rests on
   [the desktop layer](./the-desktop-layer.md). The rules name roles, tokens and facts, never
   Electron. A tile kept after a crash (`keep: "failed"`) follows the empty state's rule.
-- **Not yet shot.** `apps/fabrika/shots.ts:235` only shoots 1440x900. Layout claims come from CSS
-  arithmetic at 1024x700: one tile 1016x632, side by side 506x632, stacked 1016x314, 2x2 506x314.
-  Nobody has looked at them in the built app.
+- **Shot in the built app since PR 1.** `apps/fabrika/e2e.ts`'s tiles stage (`-- --tiles`) shoots
+  one tile, a pipe side by side, a pipe stacked, a 2x2 in each state and a 2x2 at 1024x700, dark and
+  light, into `apps/fabrika/docs/tiles/`. At 1024x700 a tile an eighth of the window wide keeps its
+  id and cuts its name to `ticket …`. The other layout claims still come from CSS arithmetic at
+  1024x700: one tile 1016x632, side by side 506x632, stacked 1016x314, 2x2 506x314.
 
 ## The bar
 
@@ -104,7 +106,7 @@ Where Linear and the tiling tools differ. Linear has no tiling, so tmux and Tuva
 :root {
 	--tile-edge: #d3edf81d;       /* slate a4: --manti-border-subtle (new) */
 	--tile-text: #f1f7feb5;       /* slate a11: --manti-text-muted, and --text-faint */
-	--tile-text-on: #fcfdffef;    /* slate a12: --manti-text, and the letter */
+	--tile-text-on: #edeef0;      /* slate 12: --manti-text, and the letter */
 	--tile-wash: #d8f4f609;       /* a2 */
 	--tile-wash-on: #ddeaf814;    /* a3 */
 	--tile-edge-hover: #d9edff40; /* a7: --manti-border */
@@ -141,7 +143,8 @@ Where Linear and the tiling tools differ. Linear has no tiling, so tmux and Tuva
 ## The wash, in numbers
 
 Computed from the package's hex, composited over `#111113`. The name at rest and the id are a11. The
-letter, and the name when focused, are a12. The bars are
+letter, and the name when focused, are slate 12. The code uses the theme's own `text`, slate 12,
+and not a12, so a brought theme repaints it. The bars are
 [1.4.3](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html), 4.5:1 for text, and
 [1.4.11](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html), 3:1 for a needed state.
 
@@ -404,7 +407,7 @@ touch.
 - **Job:** say this tile waits for y or n. **Linear:** not documented.
 - **Rule:** words in the bar's state slot and on the bottom line ([popovers](./popovers.md)), one
   announcement. `role="alert"`, not `alertdialog`: no dialog opens and no focus moves. No accent.
-- **Tokens:** `--tile-text-on`; separator slate a8.
+- **Tokens:** `--tile-text-on`; separator slate a11.
 - **Cue and keys:** words. `y`, `n` or a click answers. Assertive once. **Layouts:** fits at 506px. At
   220px the name cuts first and the question shows.
 - **Breaks:** `desk.tsx:502` sits inside a button whose `aria-label` hides it; `frame.tsx:736` uses
@@ -552,8 +555,9 @@ moves, so it is stored from the first build.
   whether 8 and 16 regions are noise.
 - **No keyboard run.** Tab and Enter on a strip, the Tab mismatch, and the ring beside a lit edge all come
   from reading code.
-- **Layouts were not shot in the built app.** Only 1440x900 was. AGENTS.md asks for stacked, 2x2 and
-  small-window shots, and forced colors can be emulated. The tiles here were judged on a mockup.
+- **The tiles were judged on a mockup.** The built app was shot only after, in PR 1
+  (`apps/fabrika/docs/tiles/`), with forced colors and more contrast emulated, not set on a real
+  system.
 - **Contrast is computed from Radix's sRGB hex.** P3 values may differ a little, and a8's 3.02 has almost
   no room. Today's numbers are worked out from `window.css`'s oklch, not read from a screen. The color-blind
   figures are a simulation on one thin band.

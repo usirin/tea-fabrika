@@ -3,11 +3,13 @@ import {
 	type ContainerNode,
 	createTile,
 	isFolded,
+	type KeptLine,
 	type LayoutNode,
 	type LayoutTree,
 	type Line,
 	type Orientation,
 	openShares,
+	type Shows,
 	type Shown,
 	TINTS,
 	type TileId,
@@ -23,8 +25,9 @@ import {findTile, fold, remove, setShows, spread, tiles, unzoom} from "./tree.ts
 // windows are tiles of their own beside it, with no tsh. When they would be too small to read,
 // they open folded, and only the first is open.
 //
-//   openLine(tree, "t1", {runs: [tracker, ticket, runs], tint: 0, orientation: "horizontal",
-//     ids: {tiles: ["t4", "t5"], container: "c4"}, area: {width: 1440, height: 860}})
+//   openLine(tree, "t1", {runs: [tracker, ticket, runs], tint: 0, letter: "A",
+//     orientation: "horizontal", ids: {tiles: ["t4", "t5"], container: "c4"},
+//     area: {width: 1440, height: 860}})
 //   // t1 in a row: t1 (tracker), t4 (ticket), t5 (runs), each a third of t1's old share
 //   // the same in a 300px column: t4 and t5 folded into strips, t1 open with the whole share
 
@@ -58,6 +61,8 @@ export interface Opening {
 	/** The line's windows, in its order. */
 	readonly runs: readonly [Shown, ...Shown[]];
 	readonly tint: Tint;
+	/** The pipe's letter: the first free in its workspace (`freeLetter`). */
+	readonly letter: string;
 	/** Which way the line runs: left to right, or top to bottom. */
 	readonly orientation: Orientation;
 	readonly ids: LineIds;
@@ -78,7 +83,7 @@ export function openLine(tree: LayoutTree, at: TileId, opening: Opening): Layout
 	if (tile === null || tile.shows.kind === "window") return tree;
 	const [first, ...rest] = opening.runs;
 	if (rest.length === 0) return setShows(tree, at, {kind: "tsh", run: first});
-	const line: Line = {id: first.id, from: at, tint: opening.tint};
+	const line: Line = {id: first.id, from: at, tint: opening.tint, letter: opening.letter};
 	const others: TileNode[] = [];
 	for (const [i, run] of rest.entries()) {
 		const id = opening.ids.tiles[i];
@@ -170,4 +175,55 @@ export const freeTint = (trees: readonly LayoutTree[]): Tint => {
 	const lines = [...linesIn(trees).values()];
 	const taken = new Set(lines.map((line) => line.tint));
 	return TINTS.find((tint) => !taken.has(tint)) ?? TINTS[lines.length % TINTS.length] ?? 0;
+};
+
+/** The `n`th letter, from 0: `A` to `Z`, then `AA`, `AB`, as a spreadsheet names its columns. */
+const letterAt = (n: number): string =>
+	(n >= 26 ? letterAt(Math.floor(n / 26) - 1) : "") + String.fromCharCode(65 + (n % 26));
+
+/** The first letter not in `taken`. Letters never run out, so none is ever given twice. */
+const firstFree = (taken: ReadonlySet<string>): string => {
+	let n = 0;
+	while (taken.has(letterAt(n))) n += 1;
+	return letterAt(n);
+};
+
+/**
+ * The letter a new line takes: the first no line shown in these trees has. Unlike a tint, a
+ * letter never goes round again, so a seventh pipe repeats a color and never a letter, and a
+ * closed pipe's letter is free for the next.
+ */
+export const freeLetter = (trees: readonly LayoutTree[]): string =>
+	firstFree(new Set([...linesIn(trees).values()].map((line) => line.letter)));
+
+/**
+ * A kept tree with a letter on every line. A desk kept before pipes had letters, or sent by a
+ * host from before them, has none on its lines: each such line takes the first letter free in its
+ * tree, in reading order, so that desk still reads back whole and is never refused for it. A line
+ * that has a letter keeps it, and every tile of one line gets the same one.
+ *
+ *   withLetters(tree)  // lines tracker:1 (no letter) and tracker:5 ("A"): tracker:1 gets "B"
+ */
+export const withLetters = (kept: LayoutTree<KeptLine>): LayoutTree => {
+	const taken = new Set<string>();
+	const note = (node: LayoutNode<KeptLine>): void => {
+		if (node.tag === "container") node.children.forEach(note);
+		else if (node.shows.kind !== "tsh" && node.shows.line.letter !== undefined)
+			taken.add(node.shows.line.letter);
+	};
+	note(kept.root);
+	const given = new Map<string, string>();
+	const letterOf = (line: KeptLine): string => {
+		const letter = line.letter ?? given.get(line.id) ?? firstFree(taken);
+		taken.add(letter);
+		given.set(line.id, letter);
+		return letter;
+	};
+	const shows = (s: Shows<KeptLine>): Shows =>
+		s.kind === "tsh" ? s : {...s, line: {...s.line, letter: letterOf(s.line)}};
+	const lettered = (node: LayoutNode<KeptLine>): LayoutNode =>
+		node.tag === "tile"
+			? {...node, shows: shows(node.shows)}
+			: {...node, children: node.children.map(lettered)};
+	return {root: {...kept.root, children: kept.root.children.map(lettered)}, zoomed: kept.zoomed};
 };

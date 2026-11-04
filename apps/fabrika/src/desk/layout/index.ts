@@ -4,6 +4,7 @@ export {
 	BORDER,
 	extents,
 	fits,
+	freeLetter,
 	freeTint,
 	type LineIds,
 	linesIn,
@@ -12,6 +13,7 @@ export {
 	openLine,
 	quiet,
 	STRIP,
+	withLetters,
 } from "./line.ts";
 export {
 	across,
@@ -25,10 +27,12 @@ export {
 	freeShare,
 	isContainerNode,
 	isFolded,
+	isKeptTree,
 	isLayoutNode,
 	isLayoutTree,
 	isShows,
 	isTileNode,
+	type KeptLine,
 	type LayoutNode,
 	type LayoutTree,
 	type Line,

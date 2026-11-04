@@ -32,11 +32,18 @@ const lineOf = (t: {number: number; state: string; comments: number; title: stri
 
 /**
  * Tell the tracker `writes` as agent `name`, then answer the tickets, one line each. A run ends
- * only when every write is on the ledger, so the list after it shows them. The first write the
- * ledger refused fails the post, with why.
+ * only when every write is on the ledger, so the list after it shows them. Each write is checked
+ * against its input's own shape first, as an agent's tool call is (mcp/tools.ts): one that does
+ * not fit fails the post, with why, before anything is told. The first write the ledger refused
+ * fails it too.
  */
 export const post = (home: string, name: string, writes: ReadonlyArray<Post>) =>
 	Effect.gen(function* () {
+		for (const w of writes) {
+			const misfit = tracker.inputs[w.type].shape.problem(w.value);
+			if (misfit !== undefined)
+				return yield* new PostFailed({why: `${w.type} does not fit: ${misfit}`});
+		}
 		const services = yield* Layer.build(Layer.merge(agentLedger(home, name), pullRequestsOf([])));
 		const view = viewOf(tracker);
 		if (view === undefined) return yield* Effect.die("the tracker has no view");

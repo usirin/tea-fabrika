@@ -1,6 +1,6 @@
 import {defineMachine, noop} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
-import {Schema} from "effect";
+import {Schema, SchemaTransformation} from "effect";
 import {TileJobs} from "../tile-jobs.ts";
 import {bindingFor, type Does as Command, commandOn, defaults, Key, type Keys} from "./keymap.ts";
 import {type Does, REPEAT_MS, SHOWS} from "./keys.ts";
@@ -14,8 +14,11 @@ import {
 	findSibling,
 	findTile,
 	fold,
+	freeLetter,
 	freeTint,
+	isKeptTree,
 	isLayoutTree,
+	type KeptLine,
 	type LayoutTree,
 	type NodeId,
 	type Orientation,
@@ -33,6 +36,7 @@ import {
 	turn,
 	unfold,
 	unzoom,
+	withLetters,
 	zoom,
 } from "./layout/index.ts";
 
@@ -218,18 +222,34 @@ export const TileIdSchema = Schema.String.check(Schema.isPattern(/^t[0-9]{1,9}$/
 const Done = Schema.Null;
 const Tile = Schema.Struct({tile: TileIdSchema});
 
-/** The desk as it is kept between starts: its workspaces, the active one, and the next number. */
-export const Saved = Schema.Struct({
-	workspaces: Schema.Array(
-		Schema.Struct({
-			id: Schema.String,
-			layout: Schema.declare(isLayoutTree),
-			focused: Schema.String,
+/** A workspace's layout, as it is kept: every line has its letter. */
+const LayoutSchema = Schema.declare(isLayoutTree);
+
+/**
+ * A workspace's layout, as `restore` and the page read it. A desk kept before pipes had letters,
+ * or sent by a host from before them, has none on its lines: each takes the first letter free in
+ * its workspace (`withLetters`), so no such desk is refused for it. It is written with its letters.
+ */
+const KeptLayoutSchema = Schema.declare(isKeptTree).pipe(
+	Schema.decodeTo(
+		LayoutSchema,
+		SchemaTransformation.transform({
+			decode: withLetters,
+			encode: (tree): LayoutTree<KeptLine> => tree,
 		}),
 	),
-	active: Schema.String,
-	next: Schema.Int,
-});
+);
+
+/** The kept desk's shape, over the layout read in it. */
+const savedWith = <S extends Schema.Top>(layout: S) =>
+	Schema.Struct({
+		workspaces: Schema.Array(Schema.Struct({id: Schema.String, layout, focused: Schema.String})),
+		active: Schema.String,
+		next: Schema.Int,
+	});
+
+/** The desk as it is kept between starts: its workspaces, the active one, and the next number. */
+export const Saved = savedWith(LayoutSchema);
 export type Saved = typeof Saved.Type;
 
 /** The prefix, as it is sent to a page. */
@@ -238,9 +258,10 @@ const PrefixSchema = Schema.Union([
 	Schema.Struct({armed: Schema.Literal(true), until: Schema.NullOr(Schema.Number)}),
 ]);
 
+/** A workspace as the page reads it. A host from before letters sends lines with none. */
 const WorkspaceSchema = Schema.Struct({
 	id: Schema.String,
-	layout: Schema.declare(isLayoutTree),
+	layout: KeptLayoutSchema,
 	focused: TileIdSchema,
 });
 
@@ -791,9 +812,12 @@ const covered = (s: Open, tile: TileId, runs: readonly [Shown, ...Shown[]]): Ste
 	const node = ws === undefined ? null : findTile(ws.layout, tile);
 	if (ws === undefined || node === null || node.shows.kind === "window") return [s, []];
 	const more = runs.length - 1;
+	// Colors and letters are counted per workspace (docs/direction/pipe-colors.md), so a repeat
+	// needs seven pipes in one.
 	const layout = openLine(ws.layout, tile, {
 		runs,
-		tint: freeTint(s.workspaces.map((w) => w.layout)),
+		tint: freeTint([ws.layout]),
+		letter: freeLetter([ws.layout]),
 		orientation: LINE,
 		ids: {tiles: Array.from({length: more}, (_, k) => `t${s.next + k}`), container: `c${s.next}`},
 		area: s.area,
@@ -903,7 +927,8 @@ export const deskMachine = defineMachine({
 });
 
 const TILE_ID = /^t([0-9]{1,9})$/;
-const decodeSaved = Schema.decodeUnknownOption(Saved);
+/** A kept desk as it reads back: as `Saved`, with a letter given to any line kept without one. */
+const decodeSaved = Schema.decodeUnknownOption(savedWith(KeptLayoutSchema));
 
 /**
  * A kept desk, read back for the next start, or `null`: it does not read, or breaks a law of the
