@@ -364,8 +364,17 @@ export const Resume = Schema.Union([
 ]);
 export type Resume = typeof Resume.Type;
 
-/** A restart's fresh read of main: where the lane stopped, and what it held then. */
-const FreshIn = Schema.Struct({number: Schema.Finite, from: Resume, carry: Carry});
+/**
+ * A fresh read of main: where the lane goes on, and what it held then. `routed`: a route's `fresh`
+ * sent it (./routes.ts), so a clean read runs `from` itself, and a merged head with green checks is
+ * pushed first. Left out: a restart's read, or the guard's.
+ */
+const FreshIn = Schema.Struct({
+	number: Schema.Finite,
+	from: Resume,
+	carry: Carry,
+	routed: Schema.optionalKey(Schema.Literal(true)),
+});
 
 /** What a fresh read of main changed in the carry: the branch's base and head, the checks there. */
 const Changed = StepEnd.fields.carry;
@@ -376,9 +385,10 @@ const Changed = StepEnd.fields.carry;
  * checks code ran at that head. `exam_conflict`: the test writer's files conflict with main.
  * `conflicts`: the builder's files do. On both, main's side was taken, and `carry`, when there, is
  * the branch on main with each such file open: the test writer, or the builder, redoes it.
- * `merged`: the branch was pushed, so main was merged into it, and its new head is one the pull
- * request does not show. `review` is what `carry` says of the review's diff at that head: kept, the
- * review stands there and the push shows the head; a glance or stale, a review reads it first
+ * `merged`: the branch was pushed, so main was merged into it. A routed read pushes that head once
+ * its checks are green; else the pull request does not show it yet. `review` is what `carry` says of
+ * the review's diff at that head: kept, the review stands there and the push shows the head; a
+ * glance or stale, a review reads it first
  * (docs/direction/a-yes-binds-to-the-diff.md). `closed`: the ticket was closed while the lane was stopped.
  * `not_yours`: it was not filed by the person running this, or an agent of theirs.
  */
@@ -470,8 +480,6 @@ export const Lane = Schema.Union([
 		...Held.fields,
 		at: Resume,
 		phase: Schema.Literal("refreshing"),
-		/** A route's `fresh` sent it: a clean read runs `at` itself, with what the review judged kept. */
-		routed: Schema.optionalKey(Schema.Literal(true)),
 		asked: keptAct(freshMain, FreshIn),
 	}),
 	Schema.Struct({...Releasing, ...Stop.fields}),
@@ -1133,25 +1141,24 @@ const running = (s: Held, step: LaneStep, round = s.round, restarted = false): S
 
 /**
  * Main is read fresh, and the lane's branch stands on it, before the lane goes on at `at`. `routed`:
- * a route's `fresh` sent it, so a clean read runs `at` itself. Left out: a restart's, or the guard's.
+ * a route's `fresh` sent it, as `FreshIn` says. Left out: a restart's, or the guard's.
  */
 const refreshing = (s: Held, at: Resume, routed = false): Step_ => {
 	const asked = freshMain({
 		number: s.number,
 		from: at,
 		carry: s.carry,
+		...(routed ? {routed: true} : {}),
 		intent: intentOf("lane", s.number, "fresh", s.count, s.trail.length),
 	});
-	return [
-		{...heldOf(s), at, phase: "refreshing", ...(routed ? {routed: true} : {}), asked},
-		[asked],
-	];
+	return [{...heldOf(s), at, phase: "refreshing", asked}, [asked]];
 };
 
 /**
- * Where a clean fresh read of main goes on. A new head on a pushed branch: the push shows it before a
- * merge, and a review reads it first unless what it judged stands there. A route's read runs its own
- * step, with no agent turn (jidoka row 62), unless the review does not stand there. Pure.
+ * Where a clean fresh read of main goes on. A new head on a pushed branch: the push step shows it
+ * before a merge, and a review reads it first unless what it judged stands there. A route's read has
+ * pushed it already, so it runs its own step, with no agent turn and no round (jidoka row 62),
+ * unless the review does not stand there. Pure.
  */
 const freshAt = (
 	s: Extract<Lane, {phase: "refreshing"}>,
@@ -1159,7 +1166,7 @@ const freshAt = (
 ): Resume => {
 	if (found._tag === "fresh" || STEPS.indexOf(s.at.step) <= STEPS.indexOf("review")) return s.at;
 	if (found.review._tag !== "kept") return {_tag: "run", step: "review"};
-	return s.routed === true ? s.at : {_tag: "run", step: "push"};
+	return s.asked.routed === true ? s.at : {_tag: "run", step: "push"};
 };
 
 /** The lane lets the ticket go: on an end, with nothing kept; on a stop, with its `Held` and where it goes on. */
