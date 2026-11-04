@@ -26,6 +26,11 @@ One word, two meanings, two contexts, and one line that says how they meet. That
   long as the context map names the boundary and says how the word translates across it.
 - **The contexts and the map live in the glossary,** `.glossary/TERMS.md`: one section per
   context, then a context map section, then the clashes still open inside one context.
+- **The glossary is `next/`'s language, split by version.** Its sections hold `next/`'s words,
+  from the decided notes, and a word that means the same in both versions lives only there. Its
+  last section, "Today's version says", is the anticorruption layer for today's code: one row per
+  place where today's code says another word, deleted with that code. It is a section, not a
+  file, because `fabrika glossary check` reads only `TERMS.md` and `LANGUAGE.md`.
 - **First case: inbox keeps both meanings.** In the ledger context it is a stream others write to
   (`build:7/inbox`, the transactional inbox pattern). In the tracker context it is a person's list
   of things waiting (Linear's Inbox). The asks program is named `inbox`, and the owner's desk is
@@ -69,12 +74,16 @@ One word, two meanings, two contexts, and one line that says how they meet. That
 
   ```text
   packages/pipeline, programs/pipeline                    pipeline
-  programs/tracker, programs/ticket, packs/owner-desk     tracker
-  packages/fabrika (host, tea-program), programs/*, tsh   runtime
-  packages/fabrika (Ledger), packages/ledger-server       ledger
-  apps/fabrika, @kampus/fabrika-design, Tuval             frame
+  next/'s tracker programs (today: programs/tracker)      tracker
+  next/'s app layer (layer 4), fabsh                      runtime
+  next/'s data and coordination (layers 2 and 3)          ledger
+  next/'s transport (layer 1), the hands                  clients
+  next/'s Tuval (layer 5), @kampus/fabrika-design         frame
   docs/, experiments/, field/, replay/, singles/          records
   ```
+
+  The borders follow `next/`'s layers where today's code draws them elsewhere: today's one
+  `Ledger` service mixes layers 2 to 4, and `next/` splits it.
 
 - **The package.** A package belongs to one context, or to the shared names.
 - **The glossary section.** A row sits in the section of the context that owns the word. A word
