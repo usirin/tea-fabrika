@@ -245,9 +245,17 @@ export const fold = (seen: Seen): Folded => {
 				break;
 			}
 			case "restarted":
-				// The branch started again from main: nothing built before stands on it.
+				// The branch started again from main: nothing built or written before stands on it.
 				if (fact.kept !== undefined)
-					carry = {...carry, base: fact.onto, head: fact.to ?? fact.onto, exam: []};
+					carry = {
+						...carry,
+						base: fact.onto,
+						head: fact.to ?? fact.onto,
+						exam: [],
+						written: null,
+						touched: [],
+						cannot: [],
+					};
 				// Main moved under a working copy: the lane's commits now stand on it, at the head the restart
 				// kept, or else the branch's last.
 				else if (fact.base !== null && fact.base !== fact.onto) {

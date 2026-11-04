@@ -286,6 +286,20 @@ export const CodeFact = Schema.Union([
 		 */
 		trusted: Schema.optionalKey(Trusted),
 		/**
+		 * Why a test writer's run on the base could not run, as the run said it (tracker 193): the cause,
+		 * the box's exit code (`null`: it never ended), how long it went, and stderr's last lines, with
+		 * no home path and no key. The cause exists only now. Left out: any other end. Its `why` is
+		 * `stages/test-writer/checked.ts`'s `RunWhy`, which this file cannot name.
+		 */
+		failure: Schema.optionalKey(
+			Schema.Struct({
+				why: Schema.String,
+				code: Schema.NullOr(Schema.Finite),
+				ms: Schema.Finite,
+				tail: Schema.String,
+			}),
+		),
+		/**
 		 * The step's input key (self-fix PR 5, P7): a hash of what it read
 		 * (`stages/pipeline/key.ts`). Only known now. Left out: an end written before the key.
 		 */

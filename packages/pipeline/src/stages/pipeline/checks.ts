@@ -44,8 +44,8 @@ export interface CheckSetup {
 	readonly within: Duration.Duration;
 }
 
-/** The last lines a red command with no test named shows. */
-const TAIL_LINES = 40;
+/** The last lines a red command with no test named shows, and a test writer's run that could not run (./tools.ts). */
+export const TAIL_LINES = 40;
 
 /** How long a stopped command's processes have after SIGTERM before SIGKILL. */
 const KILL_AFTER = Duration.seconds(5);

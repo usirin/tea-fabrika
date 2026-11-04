@@ -191,6 +191,74 @@ describe("the fold of a lane's facts", () => {
 		expect(carry.untested).toEqual([ROW]);
 		expect(carry.cannot ?? []).toEqual([]);
 	});
+
+	// Tracker 194: a first test writer that stopped is started over from main, so its commit is not
+	// under the build any more. Ticket 117: a restart kept f39fd993 and moved the branch to main's tip.
+	it("a restart that started the branch over from main drops the test writer's commit, what it touched and what it could not test", () => {
+		const ONTO = "3".repeat(40);
+		const ROW = {when: "a name has no letters", why: "no test can build such a name"};
+		const writer = SEEN.timeline.findIndex(
+			(e) => e.fact.type === "started" && e.fact.stage === "test_writer",
+		);
+		const more: readonly (readonly [unknown, Readonly<Record<string, unknown>>])[] = [
+			[LANE, {type: "started", run: "r4", stage: "test_writer", task: null, log: null}],
+			[
+				LANE,
+				{
+					type: "ended",
+					run: "r4",
+					stage: "test_writer",
+					outcome: {kind: "stuck", why: "run_failed"},
+					usd: 0,
+					input: 0,
+					output: 0,
+					turns: 1,
+					carry: {
+						base: BASE,
+						head: EXAM_COMMIT,
+						exam: ["src/lower.test.ts"],
+						cannot: [ROW],
+						wrote: {base: BASE, commit: EXAM_COMMIT},
+						written: {
+							commit: EXAM_COMMIT,
+							tests: [{property: "p1", file: "src/lower.test.ts", name: "lowers capitals"}],
+						},
+						touched: ["src/lower.test.ts"],
+					},
+				},
+			],
+			[
+				LANE,
+				{
+					type: "restarted",
+					from: "test_writer",
+					base: BASE,
+					onto: ONTO,
+					head: EXAM_COMMIT,
+					to: ONTO,
+					conflicts: [],
+					kept: "refs/kept/lane/7/fresh/8",
+				},
+			],
+		];
+		const timeline = [
+			...SEEN.timeline.slice(0, writer),
+			...more.map(([by, fact], i) =>
+				decodeEntry({
+					pos: writer + i + 1,
+					ticket: 7,
+					by,
+					at: 1_762_000_000_000 + (writer + i) * 1_000,
+					fact,
+				}),
+			),
+		];
+		const {carry} = fold({...SEEN, timeline}).held;
+		expect(carry).toMatchObject({base: ONTO, head: ONTO, exam: []});
+		expect(carry.written).toBeNull();
+		expect(carry.touched).toEqual([]);
+		expect(carry.cannot).toEqual([]);
+	});
 });
 
 describe("a lane saved before its stop kept a Held, sent `restart` with its fold", () => {

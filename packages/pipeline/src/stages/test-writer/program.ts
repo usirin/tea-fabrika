@@ -54,7 +54,10 @@ export class TestsWork extends Context.Service<
 			base: string,
 			files: readonly File[],
 		) => Effect.Effect<string, Failed>;
-		/** Each test, run on the commit, in a box with no login. */
+		/**
+		 * Each test, run on the commit, in a box with no login. A failure says why beside its tag, as
+		 * `RunFailure` (./checked.ts) has it; a bare tag says nothing more.
+		 */
 		readonly onBase: (
 			commit: string,
 			tests: readonly {readonly property: string; readonly file: string; readonly name: string}[],
