@@ -1,4 +1,5 @@
 import {applyCell} from "@demlik/tea";
+import {Result} from "effect";
 import {describe, expect, it} from "vitest";
 import type {TileJobs} from "../tile-jobs.ts";
 import {
@@ -13,8 +14,10 @@ import {
 	refusedOf,
 	restore,
 	savedOf,
+	takenNow,
 	tilesOf,
 } from "./desk.ts";
+import {decodeKeys, type Keys} from "./keymap.ts";
 import {keyName} from "./keys.ts";
 import {findTile} from "./layout/index.ts";
 
@@ -259,12 +262,16 @@ describe("the desk, moved by the window's frame", () => {
 		expect(fold([{type: "go", tile: "t9"}], zoomed).s).toBe(zoomed);
 	});
 
-	it("runs a key's command from the palette as Ctrl-B and that key would", () => {
-		const viaPalette = fold([{type: "run", key: "|"}]);
+	it("runs a command from the palette by its word, as Ctrl-B and its key would", () => {
+		const viaPalette = fold([{type: "run", does: "tezgah.split"}]);
 		const viaKeys = fold(prefixed("|"));
 		expect(viaPalette.s).toEqual(viaKeys.s);
 		expect(viaPalette.cmds).toEqual(viaKeys.cmds);
-		expect(fold([{type: "run", key: "q"}]).s).toBe(start);
+		expect(fold([{type: "run", does: "keys.open"}]).cmds).toEqual([{type: "show", what: "keys"}]);
+		// The palette is the page's own: the desk has nothing to run for it.
+		const palette = fold([{type: "run", does: "palette.open"}]);
+		expect(palette.s).toBe(start);
+		expect(palette.cmds).toEqual([]);
 	});
 
 	it("asks the frame to show the asks, the keys, the info mode and an item's lines, and changes nothing else", () => {
@@ -669,6 +676,186 @@ describe("a line with several windows", () => {
 		expect(back === null ? null : sizes(back).t2).toBeCloseTo(50);
 		const [, cmds] = deskMachine.init(back, undefined);
 		expect(cmds.map((c) => (c.type === "open" ? c.tile : c.type))).toEqual(["t1", "t2"]);
+	});
+});
+
+// ---------------------------------------------------------------- the keys file (ticket 174, PR 1)
+
+/** The keybindings file's table, as the host decodes it; a refusal fails the test. */
+const table = (text: string): Keys => {
+	const answer = decodeKeys(text, true);
+	if (Result.isFailure(answer)) throw new Error(`refused: ${answer.failure.why}`);
+	return answer.success;
+};
+/** The host swaps the desk's table: the file was saved. */
+const swap = (text: string): DeskMsg => ({type: "keys", keys: table(text)});
+
+/**
+ * Today's table, frozen from desk/keys.ts `BINDINGS` before this change: each key after the
+ * prefix, what it does, and whether it repeats.
+ */
+const TODAY = [
+	["|", {kind: "split", orientation: "horizontal"}, false],
+	["-", {kind: "split", orientation: "vertical"}, false],
+	["h", {kind: "focus", to: "left"}, false],
+	["j", {kind: "focus", to: "down"}, false],
+	["k", {kind: "focus", to: "up"}, false],
+	["l", {kind: "focus", to: "right"}, false],
+	["<arrowleft>", {kind: "focus", to: "left"}, false],
+	["<arrowdown>", {kind: "focus", to: "down"}, false],
+	["<arrowup>", {kind: "focus", to: "up"}, false],
+	["<arrowright>", {kind: "focus", to: "right"}, false],
+	[" ", {kind: "turn"}, false],
+	["f", {kind: "fold"}, false],
+	["z", {kind: "zoom"}, false],
+	["x", {kind: "close"}, false],
+	["N", {kind: "new"}, false],
+	["<c-h>", {kind: "step", to: "previous"}, true],
+	["<c-l>", {kind: "step", to: "next"}, true],
+	...Array.from({length: 9}, (_, i) => [String(i + 1), {kind: "pick", at: i + 1}, false] as const),
+	["a", {kind: "show", what: "asks"}, false],
+	["J", {kind: "show", what: "jobs"}, false],
+	["?", {kind: "show", what: "keys"}, false],
+	["i", {kind: "show", what: "info"}, false],
+	["B", {kind: "show", what: "bars"}, false],
+	["A", {kind: "show", what: "agents"}, false],
+	["S", {kind: "show", what: "sync"}, false],
+	["H", {kind: "show", what: "host"}, false],
+] as const;
+
+/** Three tiles in w1 and two in w2, w1 in front: every key has something to move. */
+const busy = fold([
+	...prefixed("|"),
+	...prefixed("-", 10),
+	...prefixed("N", 20),
+	...prefixed("|", 30),
+	...prefixed("1", 40),
+]).s;
+
+/** A desk without its prefix, to compare two ways to one command. */
+const unprefixed = (s: Desk) => (s.at === "open" ? {...s, prefix: null} : s);
+
+/** A key's name in a test's title: the space is Space. */
+const titled = (key: string) => (key === " " ? "Space" : key);
+
+describe("the desk, on the keys file", () => {
+	it.each(TODAY.map(([key, does, repeats]) => [titled(key), key, does, repeats] as const))(
+		"does with no file what C-b %s does today (p1)",
+		(_, key, does, repeats) => {
+			for (const from of [busy, fold([swap("")], busy).s]) {
+				const viaKey = fold(prefixed(key, 100), from);
+				const viaWord = fold([{type: "typed", tile: focus(from), does}], from);
+				expect(unprefixed(viaKey.s)).toEqual(unprefixed(viaWord.s));
+				expect(viaKey.cmds).toEqual(viaWord.cmds);
+				expect(opened(viaKey.s).prefix).toEqual(
+					repeats ? {armed: true, until: 101 + 500} : {armed: false},
+				);
+			}
+		},
+	);
+
+	it("arms on your prefix, and Ctrl-B goes to the tile (p2)", () => {
+		const s = fold([swap('prefix = "ctrl+a"')]).s;
+		expect(takenNow(s, 0).keys).toContain("<c-a>");
+		expect(takenNow(s, 0).keys).not.toContain("<c-b>");
+		expect(claims(s, "<c-b>", 0)).toBe(false);
+		expect(claims(s, "<c-a>", 0)).toBe(true);
+		const split = fold(
+			[
+				{type: "key", key: "<c-a>", at: 0},
+				{type: "key", key: "|", at: 1},
+			],
+			s,
+		);
+		expect(ids(split.s)).toEqual(["t1", "t2"]);
+		// tmux's send-prefix sends the prefix itself on: Ctrl-A is byte 1.
+		const twice = fold(
+			[
+				{type: "key", key: "<c-a>", at: 0},
+				{type: "key", key: "<c-a>", at: 1},
+			],
+			s,
+		);
+		expect(twice.cmds).toEqual([{type: "send", tile: "t1", data: "\x01"}]);
+	});
+
+	it.each(TODAY.map(([key]) => [titled(key), key] as const))(
+		"moves C-b %s to C-a with the prefix (p2)",
+		(_, key) => {
+			const moved = fold([swap('prefix = "ctrl+a"')], busy).s;
+			const viaA = fold(
+				[
+					{type: "key", key: "<c-a>", at: 100},
+					{type: "key", key, at: 101},
+				],
+				moved,
+			);
+			const viaB = fold(prefixed(key, 100), busy);
+			expect({...opened(viaA.s), keys: null}).toEqual({...opened(viaB.s), keys: null});
+			expect(viaA.cmds).toEqual(viaB.cmds);
+		},
+	);
+
+	it("runs a command on your key, and its old key after the prefix does nothing (p3)", () => {
+		const s = fold([swap('tezgah.zoom = "<prefix>m"')], busy).s;
+		const zoomed = fold(prefixed("m", 100), s).s;
+		expect(activeOf(opened(zoomed)).layout.zoomed).toBe(focus(s));
+		// z is bound to nothing now: swallowed after the prefix, as tmux does.
+		const armed = fold([{type: "key", key: "<c-b>", at: 100}], s).s;
+		expect(claims(armed, "z", 101)).toBe(true);
+		const z = fold([{type: "key", key: "z", at: 101}], armed);
+		expect(z.cmds).toEqual([]);
+		expect(z.s).toEqual(s);
+	});
+
+	it("runs your command on a default's key, and the default no longer does (p3)", () => {
+		const s = fold([swap('tezgah.zoom = "<prefix>x"')], busy).s;
+		const {s: after} = fold(prefixed("x", 100), s);
+		expect(activeOf(opened(after)).layout.zoomed).toBe(focus(s));
+		expect(opened(after).ask).toBeNull();
+	});
+
+	it("runs an unbound command from the palette and from its tsh word, and from no key (p4)", () => {
+		const s = fold([swap("tezgah.zoom = []")], busy).s;
+		expect(fold(prefixed("z", 100), s).s).toEqual(s);
+		const viaPalette = fold([{type: "run", does: "tezgah.zoom"}], s).s;
+		expect(activeOf(opened(viaPalette)).layout.zoomed).toBe(focus(s));
+		const viaWord = fold([{type: "typed", tile: focus(s), does: {kind: "zoom"}}], s).s;
+		expect(activeOf(opened(viaWord)).layout.zoomed).toBe(focus(s));
+	});
+
+	it("takes a tezgah key pressed alone, and leaves the palette's key to the page (p5, p6)", () => {
+		const s = fold([swap(['tezgah.split = "cmd+d"', 'palette.open = "cmd+p"'].join("\n"))]).s;
+		expect(takenNow(s, 0).keys).toContain("<m-d>");
+		expect(takenNow(s, 0).keys).not.toContain("<m-p>");
+		expect(claims(s, "<m-p>", 0)).toBe(false);
+		const split = fold([{type: "key", key: "<m-d>", at: 0}], s);
+		expect(ids(split.s)).toEqual(["t1", "t2"]);
+		expect(opened(split.s).prefix).toEqual({armed: false});
+		// Split's old key went with the move.
+		expect(ids(fold(prefixed("|", 10), s).s)).toEqual(["t1"]);
+	});
+
+	it("swaps the table at the next key: an armed prefix is disarmed, nothing is asked for or kept (p9)", () => {
+		const armed = fold([{type: "key", key: "<c-b>", at: 0}], busy).s;
+		const swapped = fold([swap('prefix = "ctrl+a"')], armed);
+		expect(opened(swapped.s).prefix).toEqual({armed: false});
+		expect(swapped.cmds).toEqual([]);
+		expect(savedOf(opened(swapped.s))).toEqual(savedOf(opened(armed)));
+		// The next key uses the new table: | is the tile's, C-a | splits.
+		expect(claims(swapped.s, "|", 1)).toBe(false);
+		const split = fold(
+			[
+				{type: "key", key: "<c-a>", at: 2},
+				{type: "key", key: "|", at: 3},
+			],
+			swapped.s,
+		).s;
+		expect(ids(split)).toHaveLength(ids(busy).length + 1);
+		// In the repeat window too.
+		const repeating = fold(prefixed("<c-l>", 10), busy).s;
+		expect(opened(repeating).prefix.armed).toBe(true);
+		expect(opened(fold([swap("")], repeating).s).prefix).toEqual({armed: false});
 	});
 });
 
