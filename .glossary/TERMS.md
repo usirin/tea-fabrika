@@ -10,8 +10,8 @@ follow it fully ([we follow DDD](../docs/direction/we-follow-ddd.md)). Inside on
 word has exactly one meaning. The same word may mean something else in another context; the
 [context map](#context-map) names the boundary and how the word translates across it. A word with
 two meanings inside one context is a bug, listed under [open clashes](#open-clashes) until fixed.
-The rule is decided; the eight contexts below are proposed
-([PR 362](https://github.com/usirin/tea-fabrika/pull/362)) and may move.
+The rule, the eight contexts below and the context map are decided (decided Nov 3,
+[PR 362](https://github.com/usirin/tea-fabrika/pull/362)).
 
 Today's version (the code in daily use) gets one short list at the end,
 [today's version says](#todays-version-says): only the places where today's code says another
@@ -49,7 +49,7 @@ means one thing everywhere. Paths: every `package.json` name.
 | fabrika | The product: project management where code holds the loop and an agent does one bounded job inside it. `@kampus/fabrika` is the app and `@kampus/libfabrika` the library. The only name people see. [Control lives in code](../docs/direction/control-in-code.md), [where each piece lives](../docs/direction/where-each-piece-lives.md) | Not today's `@kampus/fabrika-old` (last section). |
 | fabrika.toml | The settings file: `.fabrika/fabrika.toml` for a repo, `~/.fabrika/fabrika.toml` for a person. Knobs only; the step order stays in code. An unknown key fails. [One fabrika.toml per repo](../docs/direction/one-fabrika-toml-per-repo.md) | Not `ledger.json` or `tsh.toml`, which it replaces. |
 | fabsh | The shell, a regular program with local echo. [The desktop layer](../docs/direction/the-desktop-layer.md) | Not `tsh`, today's shell (last section). |
-| Jev | A cheap model service that answers one narrow question (the Judge move). Measured by how often it agrees with the big model, never trusted to remove a person. [Jev](../docs/direction/jev-same-answer-cheaper.md) | Not an agent: it does no open-ended work. |
+| Jev | A cheap model service that answers one narrow question (the Judge pipeline primitive). Measured by how often it agrees with the big model, never trusted to remove a person. [Jev](../docs/direction/jev-same-answer-cheaper.md) | Not an agent: it does no open-ended work. |
 | Manager (service) | An Effect service that holds many of one thing is named `<Thing>Manager`: `LeaseManager`, `ProcessManager`, `LimitManager`. A service name is never plural. [The five layers](../docs/direction/a-local-first-sync-engine.md) (D6) | Not a plural service name such as `Leases`. |
 | Manti | Manti UI (`@manti-ui/react`, `@manti-ui/styles`): the component library every part of the app's UI is built on, with our own tokens. A better way goes into Manti by pull request. Inside Manti, Manti's own words hold. [UI on Manti](../docs/direction/ui-on-manti.md) | Never "Manti or native". |
 | pack | An add-on: programs in a package, turned on by one `[pack.<name>]` line in `fabrika.toml` and pinned in `.fabrika/fabrika.lock`. The core never knows it exists. Industry: a plugin. [Packs are programs](../docs/direction/packs-are-programs.md) | Not a "catalog": that word was dropped. |
@@ -81,13 +81,13 @@ Paths: `next/`'s tracker programs; today's are `programs/tracker`, `programs/tic
 
 | Term | Definition | Not |
 |---|---|---|
-| area | (proposed, experiment 205, [PR 361](https://github.com/usirin/tea-fabrika/pull/361)) A long-lived grouping of tickets by part of the product or the code, which never ends, as Jira's components or Kubernetes' `area/` labels. Waits for that experiment's designs. See Open clashes. | Not a project, which ends. Not a label that gates a build. |
-| ask | What an agent or a step asks a person, for a decision or an act, never for a fact. It is the `asked` and `answered` facts, with a hash of what the person saw; the first answer wins. Also the stage verb `ask`. "Ask" means only this (decided Nov 3). [Ask for decisions, not facts](../docs/direction/ask-for-decisions-not-facts.md), [one ask and one meter](../docs/direction/one-ask-and-one-meter.md) | Not the close question (Frame). Not "popup". |
+| area | (the word decided Nov 3; its shape proposed) A long-lived grouping of tickets by part of the product or the code, often with an owner who routes new work. It never ends, as Jira's components or Kubernetes' `area/` labels. How an area shows waits on a design pick still open in [experiment 205](../experiments/205-organizing-work.md). | Not a project, which ends. Not a label that gates a build. |
+| ask | What an agent or a step asks a person, for a decision or an act, never for a fact. It is the `asked` and `answered` facts, with a hash of what the person saw; the first answer wins. Also a step's outcome verb `ask`. "Ask" means only this (decided Nov 3). [Ask for decisions, not facts](../docs/direction/ask-for-decisions-not-facts.md), [one ask and one meter](../docs/direction/one-ask-and-one-meter.md) | Not the close question (Frame). Not "popup". |
 | criterion | A promise a reviewer reads, which ends with the ticket. Open or met; a builder may not shrink one, and "cannot meet as written" is its honest exit. [Done is per criterion](../docs/direction/done-is-per-criterion.md), [the plan stage](../docs/direction/the-plan-stage.md) | Not a property, which a tool checks and which lasts. |
 | inbox (tracker) | A person's list of things waiting, as Linear's Inbox: the open asks first. The owner's desk is the inbox. The program that shows it is `inbox` (decided Nov 3, Tier 5): a tile beside the selected ask, and a glance in the top bar. [The ask desk](../docs/direction/ask-desk.md), [every wait is a queue](../docs/direction/every-wait-is-a-queue.md) | Not `asks`, the program's old name, nor "the ask desk", the note's title: G8 (proposed, [PR 332](https://github.com/usirin/tea-fabrika/pull/332)) ruled "inbox" out over the stream clash, and the context map now settles that. Not the ledger's inbox stream: see the context map. |
 | judgment | A decision only a person can make. It is the only thing the pipeline asks a person for; everything else code fixes, retries or prevents. [Jidoka and andon](../docs/direction/jidoka-and-andon.md), [pipeline guidelines](../docs/direction/pipeline-guidelines.md) | |
 | plan | The plan step's answer for one ticket: tasks, criteria and properties, approved by the owner by version and a hash of the ticket's text. An epic is a plan with many tasks. [The plan stage](../docs/direction/the-plan-stage.md), [a free-form plan goes to the planner](../docs/direction/free-form-plan-to-planner.md) | |
-| project | A parent plan: a group of tickets, as in Linear ([a project is a parent plan](../docs/direction/a-project-is-a-parent-plan.md)). Experiment 205 ([PR 361](https://github.com/usirin/tea-fabrika/pull/361)) proposes a project as a grouping that ends, beside an area that does not. See Open clashes. | Not the ledger's project object: see the context map. Not a repo. |
+| project | A parent plan: a group of tickets, as in Linear ([a project is a parent plan](../docs/direction/a-project-is-a-parent-plan.md)). It ends: it closes when its children are done and its check passes. One meaning in the tracker (decided Nov 3). | Not an area, the long-lived grouping with an owner. Not the ledger's project object: see the context map. Not a repo. |
 | property | A promise a tool checks, kept as a test after the ticket ends: `{when, result, why, behavior, tool, stories, code}`, id `p<n>`. [The plan stage](../docs/direction/the-plan-stage.md) | Not "promise", the older note's word. Not a criterion. |
 | rec | The step's recommendation on an ask, written before the ask, with its why, cost and how sure. `y` takes it, `n` refuses it with a note. [The ask desk](../docs/direction/ask-desk.md) | |
 | Status | (decided Nov 3) The one line at the top of a ticket: what a person must do, if anything, as Linear's status. [Tracker views are programs](../docs/direction/tracker-views-are-programs.md) (proposed) | Not `Glance`, the word in that note's sketch. Not today's `Head` (last section). Not the frame's glance. |
@@ -106,23 +106,22 @@ today's for now: `packages/pipeline`, `programs/pipeline`.
 | agent | A model doing one bounded job inside code's loop. No agent approves a pull request or answers a question put to a person. [Control lives in code](../docs/direction/control-in-code.md) | Not Jev, which answers one narrow question. An agent is also a client: see the context map. |
 | box | The sandbox a program runs in: the `Sandbox` service, with a layer per box (Docker, sandbox-runtime, none). No real key goes in. [Programs run in a box](../docs/direction/programs-run-in-a-box.md) | |
 | build | The step where an agent writes code until every check is green. It ends with a local commit and pushes nothing. [Nothing is pushed before review](../docs/direction/push-after-review.md) | |
-| combo | A shape built from moves that keeps coming back: refine, gate, ask, remember, spawn (`packages/pipeline/src/combos.ts`). No new move without a reason. [Reuse before special rules](../docs/direction/reuse-before-special-rules.md), [new combos](../docs/direction/new-combos.md) | |
+| combo | A shape built from primitives that keeps coming back: refine, gate, ask, remember, spawn (`packages/pipeline/src/combos.ts`). No new primitive without a reason. [Reuse before special rules](../docs/direction/reuse-before-special-rules.md), [new combos](../docs/direction/new-combos.md) | |
 | exam | What code is checked against: a machine's laws, the checker, a ticket's criteria, CI and lint rules. An agent that writes code never changes it; the owner does, in its own pull request (the `exam` steps). [Nobody writes their own exam](../docs/direction/nobody-writes-their-own-exam.md) | |
 | finding | One thing a reviewer, a mutant or a scheduled job found. A person rates it `fix` or `noise`; one never rated counts as noise once its change ships. Industry: a SARIF result. [Every finding is rated](../docs/direction/every-finding-is-rated.md) | |
-| helper | A small agent a stage asks for a fact it lacks, never another stage. Also called a scout. [Helpers, and one supervisor](../docs/direction/helpers-and-the-supervisor.md) | Not a supervisor: fabrika has none for stages. |
+| helper | A small agent a step asks for a fact it lacks, never another step. Also called a scout. [Helpers, and one supervisor](../docs/direction/helpers-and-the-supervisor.md) | Not a supervisor: fabrika has none for steps. |
 | kept, glance, stale | How a review verdict or a person's yes carries to a new head: `kept` (same head, a clean replay or a format-only change), `glance` (only the patch-id matches), `stale` (otherwise). [A yes binds to the diff](../docs/direction/a-yes-binds-to-the-diff.md) (proposed) | This `glance` is not the frame's glance: see the context map. |
 | lane | One ticket's run through the pipeline on its assignee's host, claimed on the ledger. The parent machine `lane` steps each step in turn. [A ticket runs from the app](../docs/direction/a-ticket-runs-from-the-app.md) | Not the ephemeral lane (Clients): see the context map. |
 | laws | A machine's rules, which a checker walks through every message order of its real reducer. A machine with no laws, or a message never sent, fails the suite. [Every machine has laws](../docs/direction/every-machine-has-laws.md) | |
-| move | One of the six building blocks of every step: Gather (code reads), Act (code writes), Listen (code waits), Draft (an agent produces), Check (code judges), Judge (Jev answers one narrow question). `packages/pipeline/src/primitives.ts`. | The file says primitives; the notes say moves. See Open clashes. |
 | mutation | The `mutation` step: Stryker makes small breaks (mutants) the tests must catch. In the `mutants` step each survivor gets `test`, `cannot` or `noise`. [A fast check per pull request](../docs/direction/fast-and-daily-mutation.md) | Not our own search engine: Stryker is the grader. |
-| outcome | How a stage ends, in five verbs: `done`, `send`, `ask`, `skip`, `stuck`. Passing it on is `verb:who:why`, ending here is `verb:why`. [Outcome names](../docs/direction/outcome-names.md) | |
+| outcome | How a step ends, in five verbs: `done`, `send`, `ask`, `skip`, `stuck`. Passing it on is `verb:who:why`, ending here is `verb:why`. [Outcome names](../docs/direction/outcome-names.md) | The note and today's code say "a stage answers" (last section). |
 | pipeline | The steps a ticket goes through from filed to merged, each run by its own agent, with laws. Every pull request goes through it. Also the package `@kampus/pipeline` and the `pipeline` program, named for what they hold. [Every pull request goes through the steps](../docs/direction/next-is-a-pipeline-pre-run.md) | G8 (proposed, [PR 332](https://github.com/usirin/tea-fabrika/pull/332)) flags the `pipeline` program's name: it also means the package and the whole chain. |
-| resume point | `Resume` (`packages/pipeline/src/stages/pipeline/machine.ts`): where a stopped lane goes on, `{_tag: "run", step}` or `{_tag: "ask", for, step}`. A restart keeps finished steps and never starts over. | Its `run` is "run this step", not an agent run. See Open clashes. |
+| primitive | (decided Nov 3) One of the six building blocks of every step: Gather (code reads), Act (code writes), Listen (code waits), Draft (an agent produces), Check (code judges), Judge (Jev answers one narrow question). `packages/pipeline/src/primitives.ts`. From outside the pipeline context, say pipeline primitive. | Not "move", the notes' older word, which is vague. Not "Cmd kind". |
+| resume point | `Resume` (`packages/pipeline/src/stages/pipeline/machine.ts`): where a stopped lane goes on, `{_tag: "start", step}` or `{_tag: "ask", for, step}`. `start` reads with the `started` fact: `{_tag: "start", step: "mutation"}` (decided Nov 3). A restart keeps finished steps and never starts over. | Not `_tag: "run"`, which today's code still says until the rename lands (last section). |
 | review | One review of the whole diff, by a different agent from the builder. The reviewer only finds; code works out pass or fail. [Nobody grades their own work](../docs/direction/nobody-grades-their-own-work.md), [one review a plan](../docs/direction/one-review-a-plan-and-the-cloud-in-v1.md) | Not an approval: no agent approves a pull request. |
-| run (pipeline) | Two live meanings here: an agent run a step starts (Records), and the resume point's `_tag: "run"`, "run this step". See Open clashes. | Not a process, a running program (Runtime). |
+| run (pipeline) | An agent run a step starts, as in Records. Only a noun here: the resume point says `start` (decided Nov 3). | Not a process, a running program (Runtime). Not today's resume tag `run` (last section). |
 | ship | The merge: the ship code, the one merge authority. A person's comment goes to that person, a bot's back to the builder. [Ship stage rules](../docs/direction/ship-stage-rules.md) | Not a merge by hand, and never auto-merge. |
-| stage | A step seen as its own machine, which answers in the five outcome verbs. Notes and code use stage and step for one thing: a fact's `stage` holds a lane step (`packages/pipeline/src/stages/pipeline/restart.ts`). [One parent, stages as slots](../docs/direction/one-parent-stages-as-slots.md) | Not a separate thing from a step. See Open clashes. |
-| step | One place in a lane, in this order: `triage`, `plan`, `exam`, `exam_review`, `exam_merge`, `test_writer`, `build`, `mutation`, `mutants`, `review`, `push`, `merge` (`STEPS`, `packages/pipeline/src/stages/pipeline/routes.ts`). | The code uses "stage" for the same thing in places (`fact.stage`). |
+| step | (decided Nov 3) One place in a lane, in this order: `triage`, `plan`, `exam`, `exam_review`, `exam_merge`, `test_writer`, `build`, `mutation`, `mutants`, `review`, `push`, `merge` (`STEPS`, `packages/pipeline/src/stages/pipeline/routes.ts`). Each step is its own machine, which answers in the five outcome verbs. [One parent, stages as slots](../docs/direction/one-parent-stages-as-slots.md) | Not "stage", the older word for the same thing. Today's code and notes keep it until renamed: `fact.stage`, the `stages/` folder, "a stage answers in five verbs" (last section). |
 | stop | Where a lane halts itself, with its reason, on what code cannot fix (Toyota's andon). Every stop saves where the lane goes on; a person's `stop` is a saved pause. [Jidoka and andon](../docs/direction/jidoka-and-andon.md) | Not the `stuck` verb alone. Not the shell's built-in `stop` (Runtime). |
 | test writer | The agent that writes one test per property after the owner's approval, red first for a new one, and answers each surviving mutant. [The test writer](../docs/direction/the-test-writer.md) | Not "verify writer", its old name. Not the builder. |
 | triage | The first step. It answers duplicate, decline, accept or escalate, and asks the owner when worth is unclear. No priority and no "later". [Sort answers yes or no](../docs/direction/sort-answers-yes-or-no.md), [triage asks when worth is unclear](../docs/direction/triage-asks-when-worth-is-unclear.md) | Not "sort", its old name. |
@@ -134,7 +133,7 @@ shell. Paths: `next/`'s app layer and `fabsh`.
 
 | Term | Definition | Not |
 |---|---|---|
-| Cmd | A request for an effect, with typed `input`, `ok` and `err`, defined through a move or tea's `Cmd.define`. Elm's Cmd. | |
+| Cmd | A request for an effect, with typed `input`, `ok` and `err`, defined through a pipeline primitive or tea's `Cmd.define`. Elm's Cmd. | |
 | commands | A program's `commands` field: each a Msg with its keys, and each also a shell word and a palette row. [Modes](../docs/direction/modes.md), [keybindings are configurable](../docs/direction/keybindings-are-configurable.md) | |
 | input | What a program is told while it runs, like stdin. Told at any time, never waiting, served in order. One input per command, apart from the one `query` (CQRS). [tea-program](../docs/direction/tea-program.md), [tracker views are programs](../docs/direction/tracker-views-are-programs.md) | |
 | job | What one start made: a root and everything under it, like a process group (a shell line, a lane). [A JobRecord holds its trace](../docs/direction/a-job-record-holds-its-trace.md) | Not the hands' job, work taken from a queue (Clients): see the context map. |
@@ -295,22 +294,16 @@ Each word that crosses a border, one line each:
   the merge queue; no ticket copy goes to GitHub Issues.
 - **stop:** the pipeline's stop is a lane halting itself; the shell's built-in `stop` (runtime) is
   a shell word, not a lane's halt.
+- **primitive:** the pipeline's word. From any other context, write "pipeline primitive".
 
 ## Open clashes
 
-Only a word with two meanings, or one meaning with two words, inside one context. Each line says
-what would settle it.
+Only a word with two meanings, or one meaning with two words, inside one context, with what would
+settle it.
 
-- **run, in the pipeline.** An agent run a step starts, and the resume point's `_tag: "run"`
-  ("run this step"). Settles when the restart work picks a tag that is not a noun already in use.
-- **project, in the tracker.** A parent plan (decided), and experiment 205's grouping that ends,
-  with an area beside it that does not. Settles with that experiment's designs
-  ([PR 361](https://github.com/usirin/tea-fabrika/pull/361)), which must say whether the two are
-  one.
-- **stage and step, in the pipeline.** Two words for one thing; the code's `fact.stage` holds a
-  step. Settles when one word is picked and the code renamed.
-- **move and primitive, in the pipeline.** Two words for one thing: the notes say moves, the code
-  says primitives. Settles with the naming sweep's pick.
+None open. The four this file's walk found were settled on Nov 3, and each answer is in its row:
+the resume tag is `start`, a project ends and an area does not, the word is step and not stage,
+and primitive and not move.
 
 ## Today's version says
 The translation list for today's version (`packages/`, `programs/`, `packs/`, `apps/`), and only
@@ -338,6 +331,8 @@ not its own, because `fabrika glossary check` reads only `TERMS.md` and `LANGUAG
 | pos (today) | An entry's place in the whole log, `packages/fabrika/src/host/memory.ts` | `rev` (Ledger) |
 | rev (today) | An entry's place in its stream, `packages/fabrika/src/host/memory.ts` | `pos` (Ledger) |
 | run | One start of a program, with a run handle and one span ([tea-program](../docs/direction/tea-program.md)) | process (Runtime) |
+| `run` (resume tag) | The resume point's tag, `Resume` in `packages/pipeline/src/stages/pipeline/machine.ts` and `restart.ts` | `start`, `{_tag: "start", step}` (Pipeline) |
+| stage | A step and its machine: `fact.stage` (`packages/pipeline/src/tickets/ticket.ts`), `Stage` (`packages/pipeline/src/sandboxes.ts`), the `packages/pipeline/src/stages/` folder and the docs in `stages/outcome.ts` | step (Pipeline) |
 | tsh | Today's shell, `packages/fabrika/src/shell/` ([tsh](../docs/direction/tsh-a-shell-for-tea-programs.md)) | fabsh (Shared names) |
 | tsh line | What a person types in tsh | line (Runtime) |
 | windows (of a line) | "A line's windows", `apps/fabrika/src/desk/desk.ts` and `apps/fabrika/src/desk/layout/` | tiles (Frame) |

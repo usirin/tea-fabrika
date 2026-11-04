@@ -1,8 +1,8 @@
 # We follow Domain-Driven Design
 
-**Decided 2026-11-03 by the owner.** Both versions. The rule is decided. The contexts drawn in
-[the glossary](../../.glossary/TERMS.md) are proposed in the same pull request
-([PR 362](https://github.com/usirin/tea-fabrika/pull/362)) and may move.
+**Decided 2026-11-03 by the owner.** Both versions. The rule, the eight contexts drawn in
+[the glossary](../../.glossary/TERMS.md) and its context map are all decided, in the same pull
+request ([PR 362](https://github.com/usirin/tea-fabrika/pull/362)).
 
 ```text
 ledger context    inbox   a stream others write to: build:7/inbox

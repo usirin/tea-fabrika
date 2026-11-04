@@ -164,15 +164,15 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   the work in a way we can measure, and it never holds a secret. Content a person may want gone
   stays deletable ([an agent run keeps its content](./docs/direction/an-agent-run-keeps-its-content.md)).
   The industry's name is wide events (Honeycomb; Stripe's canonical log lines).
-- **Use the six moves.** Gather (code reads), Act (code writes), Listen (code
+- **Use the six pipeline primitives.** Gather (code reads), Act (code writes), Listen (code
   waits on an outside event), Draft (an agent produces within limits), Check
   (code judges an output), Judge (a small classifier answers one narrow
   question). They are in `packages/pipeline/src/primitives.ts`; the combos
   built from them are in `packages/pipeline/src/combos.ts`.
-- **New schemas are Effect Schema.** Define a Cmd through one of the moves, or
+- **New schemas are Effect Schema.** Define a Cmd through one of the primitives, or
   through tea's own `Cmd.define` from `@demlik/tea/effect`. Both take Effect
   schemas as they are, so nobody writes `Schema.toStandardSchemaV1`. zod stays
-  only in code not yet moved. A move takes either; tea's Effect `Cmd.define`
+  only in code not yet moved. A primitive takes either; tea's Effect `Cmd.define`
   takes Effect schemas only. See
   [`docs/direction/data-first-markdown-is-a-view.md`](./docs/direction/data-first-markdown-is-a-view.md).
 
@@ -220,8 +220,8 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   too, settled when the owner approved [Tier 1](./docs/plan/tier-1-detail.md#tags) on 2026-11-01,
   and ticket 32 tracks it. Today's code is not changed by this, so its `kind` on an entry or an outcome stays until that code goes
   ([schema classes](./docs/direction/schema-classes-not-of-helpers.md)).
-- **A stage answers in five verbs.** `done`, `send`, `ask`, `skip`, `stuck`.
-  A new stage machine writes only its own words, with `outcomesOf` in
+- **A step answers in five verbs.** `done`, `send`, `ask`, `skip`, `stuck`.
+  Today's code still says stage for a step. A new step machine writes only its own words, with `outcomesOf` in
   `packages/pipeline/src/stages/outcome.ts`, and prints an outcome's name with `nameOf`. See
   [`docs/direction/outcome-names.md`](./docs/direction/outcome-names.md).
 - **Rethink, do not port.** Today's fabrika and the older machines here show
