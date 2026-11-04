@@ -50,6 +50,8 @@ export class ReviewWrites extends Context.Service<
 >()("ReviewWrites") {}
 
 const Comments = Schema.Array(Schema.Struct({body: Schema.String}));
+/** GitHub's most comments in one page. */
+const PAGE = 100;
 
 /** `ReviewWrites` over one `gh`. */
 export const reviewWritesOn = (gh: Gh): ReviewWrites["Service"] => ({
@@ -59,8 +61,15 @@ export const reviewWritesOn = (gh: Gh): ReviewWrites["Service"] => ({
 			if (at === null) return yield* Effect.fail<Failed>({_tag: "unknown"});
 			const path = `repos/${at.owner}/${at.name}/issues/${at.number}/comments`;
 			const marker = markerOf(v);
-			const there = yield* answerOf(gh, Comments, ["api", `${path}?per_page=100`]);
-			if (there.some((comment) => comment.body.split("\n")[0]?.trim() === marker)) return;
+			// Every page, not just the first: past 100 comments one page missed the marker and the verdict
+			// went up twice (experiment 193). A page shorter than 100 is the last. The first page is
+			// asked as before, with no `page`, which GitHub reads as page 1.
+			for (let page = 1; ; page++) {
+				const query = page === 1 ? `per_page=${PAGE}` : `per_page=${PAGE}&page=${page}`;
+				const there = yield* answerOf(gh, Comments, ["api", `${path}?${query}`]);
+				if (there.some((comment) => comment.body.split("\n")[0]?.trim() === marker)) return;
+				if (there.length < PAGE) break;
+			}
 			yield* gh(["api", "--method", "POST", path, "-f", `body=${commentOf(v)}`]);
 		}),
 });
