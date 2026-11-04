@@ -116,9 +116,9 @@ const agentOn = (home: string, agent: string) =>
 		/** Each JSON-RPC message the client sent, as it went: a tool call's id is the log line's `call`. */
 		const sent: JSONRPCMessage[] = [];
 		const send = transport.send.bind(transport);
-		transport.send = (message, options) => {
+		transport.send = (message) => {
 			sent.push(message);
-			return send(message, options);
+			return send(message);
 		};
 		const client = new Client({name: "test", version: "0.0.0"});
 		yield* Effect.acquireRelease(
