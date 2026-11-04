@@ -1,7 +1,7 @@
 import {CodeTree} from "@kampus/pipeline/services";
 import {Effect, Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import {RepoTree} from "./folders.ts";
+import {FoldersUnreachable, RepoTree} from "./folders.ts";
 import {gitHubRepoTree} from "./github.ts";
 
 // Areas PR 1, round 2 (from the mutation step): the tracker's folders on GitHub, over the
@@ -76,12 +76,23 @@ describe("the folders of the connected repositories", () => {
 	it("fails, naming the repository, when one cannot be read, and the next ask reads again", async () => {
 		const {layer, calls} = fakeTree({[A]: ["apps/fabrika"]}, new Set([B]));
 		const got = await read(2, layer);
-		expect(got).toEqual([
-			{err: {_tag: "unreachable", why: "could not read tools's folders"}},
-			{err: {_tag: "unreachable", why: "could not read tools's folders"}},
-		]);
+		const failed = expect.objectContaining({
+			_tag: "unreachable",
+			why: "could not read tools's folders",
+		});
+		expect(got).toEqual([{err: failed}, {err: failed}]);
 		// Not kept: each ask read both again.
 		expect(calls).toHaveLength(4);
+	});
+
+	// Round 4, the review's finding 7: the error's `_tag` is written by Effect Schema, as a
+	// `TaggedError`, not by hand.
+	it("fails with a `FoldersUnreachable`, an Effect Schema tagged error", async () => {
+		const {layer} = fakeTree({}, new Set([A]));
+		const [got] = await read(1, layer, [A]);
+		const err = got !== undefined && "err" in got ? got.err : undefined;
+		expect(err).toBeInstanceOf(FoldersUnreachable);
+		expect(err).toMatchObject({_tag: "unreachable", why: "could not read app's folders"});
 	});
 
 	it("has no folders with no repository connected, and asks nothing", async () => {

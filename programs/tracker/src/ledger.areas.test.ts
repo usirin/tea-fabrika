@@ -1,4 +1,4 @@
-import {Ledger, type Row, streams, type Writer, writerOf} from "@kampus/fabrika-old";
+import {Denied, Ledger, type Row, Stale, streams, type Writer, writerOf} from "@kampus/fabrika-old";
 import {memoryService} from "@kampus/fabrika-old/memory";
 import {AREAS, type AreaEntry, areasOf} from "@kampus/pipeline/tickets/area";
 import {Effect} from "effect";
@@ -374,4 +374,56 @@ describe("two people make an area at once (a4)", () => {
 			bothLand(rows);
 		},
 	);
+});
+
+// Round 4, owed by the mutation step: what an area save says when the ledger will not take its
+// row. Each is a `refused` in words, and nothing lands.
+describe("an area save the ledger will not take", () => {
+	/** `raw`, with every `append` failing with `error`, and how many appends it got. */
+	const appendFails = (raw: Ledgers, error: () => Denied | Stale) => {
+		let appends = 0;
+		const ledger = new Proxy(raw, {
+			get(target, key, receiver) {
+				const value: unknown = Reflect.get(target, key, receiver);
+				if (typeof value !== "function") return value;
+				if (key !== "append") return (...args: unknown[]) => value.apply(target, args);
+				return () =>
+					Effect.suspend(() => {
+						appends++;
+						return Effect.fail(error());
+					});
+			},
+		});
+		return {ledger, appends: () => appends};
+	};
+
+	it("is refused, naming the stream, when the ledger denies the write", async () => {
+		const raw = memoryService();
+		const {ledger} = appendFails(raw, () => new Denied({stream: INBOX}));
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const why = yield* Effect.flip(saved(ledger, OWNER, "w1", make("lane")));
+				return {why, rows: yield* rowsOn(raw)};
+			}),
+		);
+		expect(seen.why).toEqual({_tag: "refused", why: "the ledger refused tracker/areas/inbox"});
+		expect(seen.rows).toEqual([]);
+	});
+
+	it("is refused after 1,000 tries when every one is stale, and tries no more", async () => {
+		const raw = memoryService();
+		const {ledger, appends} = appendFails(raw, () => new Stale({stream: INBOX, rev: 0}));
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const why = yield* Effect.flip(saved(ledger, OWNER, "w1", make("lane")));
+				return {why, rows: yield* rowsOn(raw)};
+			}),
+		);
+		expect(seen.why).toEqual({
+			_tag: "refused",
+			why: "the ledger refused tracker/areas/inbox: 1000 tries, each one stale",
+		});
+		expect(appends()).toBe(1000);
+		expect(seen.rows).toEqual([]);
+	});
 });

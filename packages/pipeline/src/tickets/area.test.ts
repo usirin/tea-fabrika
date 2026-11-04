@@ -423,6 +423,57 @@ describe("suggestionsOf (a5)", () => {
 			{_tag: "folder", path: "apps/desk"},
 		]);
 	});
+
+	// Round 4, the review's finding 5: a suggestion a person ticks must make an area the fold takes,
+	// so its name is one `AreaName` lets through.
+	it("never suggests a name `AreaName` refuses, from a title's word or a folder", () => {
+		const part = fc.oneof(
+			fc.constantFrom("tracker", "desk", " desk", "desk "),
+			fc.integer({min: 30, max: 34}).map((n) => "x".repeat(n)),
+		);
+		const words = fc.oneof(
+			fc.constantFrom("Lane", "Desk"),
+			fc.integer({min: 30, max: 34}).map((n) => "w".repeat(n)),
+		);
+		const tickets = fc
+			.array(words, {maxLength: 6})
+			.map((ws) =>
+				ticketsOf(
+					ws.flatMap((w) =>
+						["a", "b", "c"].map((x): [string, Ticket["state"]] => [`${w}: ${x}`, "open"]),
+					),
+				),
+			);
+		const folders = fc.array(
+			fc.tuple(fc.constantFrom("apps", "programs"), part).map(([under, p]) => `${under}/${p}`),
+			{maxLength: 6},
+		);
+		fc.assert(
+			fc.property(tickets, folders, anyAreas, (t, f, areas) => {
+				for (const s of suggestionsOf(t, f, areas))
+					expect(Schema.is(AreaName)(suggestedName(s)), JSON.stringify(s)).toBe(true);
+			}),
+			{numRuns: 300},
+		);
+	});
+
+	it("leaves out a folder or a word over 32 characters, or with a space at an end, and keeps the rest", () => {
+		const long = "x".repeat(33);
+		const word = "w".repeat(33);
+		const tickets = ticketsOf(
+			["a", "b", "c"].map((x): [string, Ticket["state"]] => [`${word}: ${x}`, "open"]),
+		);
+		expect(
+			suggestionsOf(
+				tickets,
+				[`apps/${long}`, `apps/${"y".repeat(32)}`, "apps/desk ", "apps/tracker"],
+				NO_AREAS,
+			),
+		).toEqual([
+			{_tag: "folder", path: `apps/${"y".repeat(32)}`},
+			{_tag: "folder", path: "apps/tracker"},
+		]);
+	});
 });
 
 describe("suggestedName", () => {
@@ -505,25 +556,41 @@ describe("an area row read back (readAreaRow)", () => {
 	] as const)("keeps a suggestion whole: %o", (suggested) => {
 		const fact = {...made(1, "fabrika"), suggested};
 		expect(readAreaRow(row(fact))).toStrictEqual({
-			kind: "entry",
+			_tag: "entry",
 			entry: {pos: 4, by: owner, at: 1000, fact},
 		});
 	});
 
 	it("is broken when its data is not an area fact, or is kept under another kind", () => {
 		expect(readAreaRow(row("lane"))).toEqual({
-			kind: "broken",
+			_tag: "broken",
 			why: "row 4 on the areas: its data is not an area fact",
 		});
 		expect(readAreaRow(row(made(1, "lane"), "area_renamed"))).toEqual({
-			kind: "broken",
+			_tag: "broken",
 			why: "row 4 on the areas: an area_made fact kept as area_renamed",
 		});
 	});
 
 	it("is another stream's when it is not on the areas' inbox", () => {
 		expect(readAreaRow({...row(made(1, "lane")), stream: "tracker/ticket/1/inbox"})).toEqual({
-			kind: "other",
+			_tag: "other",
 		});
+	});
+
+	// Round 4, the review's finding 7: a union we define is told apart by `_tag`, which Effect Schema
+	// writes, never by a hand-written `kind`.
+	it("tells its three cases apart by `_tag`, and has no `kind`", () => {
+		const reads = [
+			readAreaRow(row(made(1, "lane"))),
+			readAreaRow(row("lane")),
+			readAreaRow({...row(made(1, "lane")), stream: "tracker/ticket/1/inbox"}),
+		];
+		expect(reads.map((r) => (r as {readonly _tag?: unknown})._tag)).toEqual([
+			"entry",
+			"broken",
+			"other",
+		]);
+		for (const r of reads) expect(r).not.toHaveProperty("kind");
 	});
 });

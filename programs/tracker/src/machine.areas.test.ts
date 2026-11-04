@@ -320,3 +320,150 @@ describe("an area this tracker just made (read your own writes)", () => {
 		expect(s.cmds.filter((c) => c.type === "save").map((c) => c.id)).toEqual(["w0", "w1", "w2"]);
 	});
 });
+
+// Round 4, the lead's call on the review's findings 1, 2 and 4: pending writes, as Replicache and
+// Linear keep them. The areas are folded from the ledger's rows alone; this tracker's own saves
+// that no load has read back yet are `pending`, shown folded on top. Each load drops the pending
+// ones it read back and folds the rest on top again, so the ledger's order always wins.
+//
+//   knows {1: "x"}; another person renames 1 to "b" (row 3, unread); this tracker renames 1 to "a" (row 4)
+//   save_ok {area: 1}           // shows "a", pending [area_renamed 1 "a"]
+//   load_ok {areas: [row 3, row 4]}
+//   // the ledger folds to "a"; shows "a", pending [], no problem line
+describe("this tracker's own area writes, pending until a load reads them back", () => {
+	const other = {kind: "user", id: "other"} as const;
+	const ask = (id: string, w: Write): Msg => ({type: "write", id, write: w});
+	const answered = (id: string, w: Write, area: number): Msg =>
+		save.ok(save({id, write: w, next: 5}), {area}, 0);
+	const renamedRow = (pos: number, by: AreaEntry["by"], name: string): AreaEntry => ({
+		pos,
+		by,
+		at: pos,
+		fact: {_tag: "area_renamed", area: 1, name},
+	});
+	/** A load back from the ledger with rows on the areas that did not read. */
+	const loadedBroken = (after: number, broken: readonly string[], last: number) =>
+		load.ok(load({after}), {entries: [], broken, last, areas: []});
+
+	const ONE = [filed(1, 1, "Login fails")];
+	const toA: Write = {kind: "rename_area", area: 1, name: "a"};
+	const KNOWN = [loaded(0, ONE, [made(2, 1, "x")]), ask("w1", toA)];
+
+	it("shows its rename at once, and keeps it after a load reads another's rename before it", () => {
+		const now = steps(...KNOWN, answered("w1", toA, 1)).state;
+		expect(statusOf(now)).toBe("1 open, 0 closed; areas: a");
+		const after = steps(
+			...KNOWN,
+			answered("w1", toA, 1),
+			loaded(2, [], [renamedRow(3, other, "b"), renamedRow(4, owner, "a")]),
+		).state;
+		// The ledger holds "b" then "a": it ends "a", and so does the tracker.
+		expect(statusOf(after)).toBe("1 open, 0 closed; areas: a");
+		expect(after.problems).toEqual(now.problems);
+		// made up: `pending`, this tracker's area facts not read back yet (the lead's name for it).
+		expect(now.pending).toEqual([{_tag: "area_renamed", area: 1, name: "a"}]);
+		expect(after.pending).toEqual([]);
+	});
+
+	it("shows another's rename when the ledger puts it after this tracker's own", () => {
+		const after = steps(
+			...KNOWN,
+			answered("w1", toA, 1),
+			loaded(2, [], [renamedRow(3, owner, "a"), renamedRow(4, other, "b")]),
+		).state;
+		expect(statusOf(after)).toBe("1 open, 0 closed; areas: b");
+		expect(after.problems).toEqual([]);
+		expect(after.pending).toEqual([]);
+	});
+
+	it("keeps its rename on top when a load that was out reads only another's, then drops it once read", () => {
+		// The load goes out before the save answers, so it may come back without this tracker's row.
+		const before = [...KNOWN, {type: "moved"} as const, answered("w1", toA, 1)];
+		const half = steps(...before, loaded(2, [], [renamedRow(3, other, "b")]));
+		expect(statusOf(half.state)).toBe("1 open, 0 closed; areas: a");
+		expect(half.cmds.filter((c) => c.type === "load").at(-1)).toMatchObject({after: 3});
+		const whole = steps(
+			...before,
+			loaded(2, [], [renamedRow(3, other, "b")]),
+			loaded(3, [], [renamedRow(4, owner, "a")]),
+		).state;
+		expect(statusOf(whole)).toBe("1 open, 0 closed; areas: a");
+		expect(whole.problems).toEqual([]);
+		expect(half.state.pending).toEqual([{_tag: "area_renamed", area: 1, name: "a"}]);
+		expect(whole.pending).toEqual([]);
+	});
+
+	// Finding 2: the read-back, with a ticked suggestion kept whole on the row.
+	it("reads its own made area back once: nothing pending, no problem line, the area shown once", () => {
+		const suggested = {_tag: "titles", word: "lane", tickets: 3} as const;
+		const lane: Write = {kind: "make_area", name: "lane", suggested};
+		const asked = [loaded(0, LANE), ask("w1", lane), answered("w1", lane, 1)];
+		const row: AreaEntry = {
+			pos: 5,
+			by: owner,
+			at: 5,
+			fact: {_tag: "area_made", area: 1, name: "lane", suggested},
+		};
+		const now = steps(...asked).state;
+		const back = steps(...asked, loaded(4, [], [row])).state;
+		expect(back.problems).toEqual(now.problems);
+		expect(statusOf(back)).toBe("4 open, 0 closed; areas: lane");
+		const later = steps(...asked, loaded(4, [], [row]), {type: "moved"}, loaded(5, [], [])).state;
+		expect(later.problems).toEqual(now.problems);
+		expect(statusOf(later)).toBe("4 open, 0 closed; areas: lane");
+		expect(now.pending).toEqual([{_tag: "area_made", area: 1, name: "lane", suggested}]);
+		expect(back.pending).toEqual([]);
+		expect(later.pending).toEqual([]);
+	});
+
+	it("leaves nothing pending when a load read its row before its save answered", () => {
+		// The load was out while the save landed, and read the row; the answer comes after it.
+		const lane = typed("lane");
+		const s = steps(
+			loaded(0, LANE),
+			ask("w1", lane),
+			{type: "moved"},
+			loaded(4, [], [made(5, 1, "lane")]),
+			answered("w1", lane, 1),
+			loaded(5, [], []),
+		).state;
+		expect(s.problems).toEqual([]);
+		expect(statusOf(s)).toBe("4 open, 0 closed; areas: lane");
+		expect(s.pending).toEqual([]);
+	});
+
+	// Finding 4. Pinned the way Replicache drops a pending mutation: a load sent after the save
+	// answered has read past the save's row, whether that row read or not, so it ends the pending
+	// fact. A load already out when the save answered may not hold the row, so it ends nothing.
+	describe("a pending fact whose row reads as broken", () => {
+		const lane = typed("lane");
+		const BROKEN = "row 5 on the areas: its data is not an area fact";
+
+		it("is pending no more after the load sent once its save answered, and is not shown", () => {
+			const s = steps(
+				loaded(0, LANE),
+				ask("w1", lane),
+				answered("w1", lane, 1),
+				loadedBroken(4, [BROKEN], 5),
+			).state;
+			expect(statusOf(s)).toBe("4 open, 0 closed");
+			expect(s.problems).toContain(BROKEN);
+			expect(s.pending).toEqual([]);
+		});
+
+		it("stays pending through a load that was out before the answer, and goes with the next", () => {
+			const before = [loaded(0, LANE), ask("w1", lane), {type: "moved"} as const];
+			const half = steps(...before, answered("w1", lane, 1), loaded(4, [], [])).state;
+			expect(statusOf(half)).toBe("4 open, 0 closed; areas: lane");
+			const whole = steps(
+				...before,
+				answered("w1", lane, 1),
+				loaded(4, [], []),
+				loadedBroken(4, [BROKEN], 5),
+			).state;
+			expect(statusOf(whole)).toBe("4 open, 0 closed");
+			expect(half.pending).toEqual([{_tag: "area_made", area: 1, name: "lane"}]);
+			expect(whole.pending).toEqual([]);
+		});
+	});
+});

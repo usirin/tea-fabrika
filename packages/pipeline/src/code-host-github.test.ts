@@ -1234,6 +1234,11 @@ describe("the folders under a repository's paths", () => {
 
 	it.each([
 		["a path that climbs out", REPO, ["../secrets"]],
+		// Round 4, the review's finding 6: a `.` or `..` part anywhere, and an empty part.
+		["a path that climbs out in the middle", REPO, ["a/../b"]],
+		["a bare climb", REPO, [".."]],
+		["a path that starts with a dot part", REPO, ["./a"]],
+		["a path with an empty part", REPO, ["a//b"]],
 		["a path with a quote", REPO, ['apps" } } evil']],
 		["a path from the root", REPO, ["/apps"]],
 		["a path with a space", REPO, ["my apps"]],
@@ -1244,6 +1249,16 @@ describe("the folders under a repository's paths", () => {
 			_tag: "unknown",
 		});
 		expect(calls()).toEqual([]);
+	});
+
+	it("asks for a folder whose name starts with a dot, such as `.github`", async () => {
+		const {gh, calls} = fakeGhOnDisk(TREES);
+		expect(await Effect.runPromise(foldersOn(gh, REPO, [".github"]))).toEqual([
+			".github/tracker",
+			".github/map",
+		]);
+		const query = calls()[0]?.find((a) => a.startsWith("query=")) ?? "";
+		expect(query).toContain('f0: object(expression: "HEAD:.github")');
 	});
 
 	it.each([
