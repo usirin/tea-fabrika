@@ -103,6 +103,19 @@ tsh$ attach %1 &
 [1] it stays in the table, detached; stop %1 drops it
 ```
 
+A job keeps one writer for life (tracker 185b). `attach %n` refuses a job whose writer
+is known and is not this tsh's, both ways, and a tsh whose writer is an agent refuses `stop %n` of
+another writer's job. A job with no writer known (`by: null`) attaches and drops anywhere.
+`forAgent(list)` is the list an agent's tsh and the MCP door are handed: each program with every
+input only a person tells taken out, so neither a line, a `tell` nor a pipe reaches one.
+
+```text
+t1, as user:github:7     tsh$ attach %1 &
+                         tsh: this job is agent:claude for:github:7's: attach it in claude's tile
+claude's tsh             tsh$ stop %2
+                         tsh: %2 is user:github:7's: the stop tool asks why
+```
+
 `Shell.Printed` and `Shell.Ready` are the schemas of two of tsh's outputs, for an app that
 builds its own schemas on them. The third, `table`, sends a `Shell.Table`: `Shell.tableLines`
 and `Shell.paint` lay it out and draw it, for an app that draws its own terminal.

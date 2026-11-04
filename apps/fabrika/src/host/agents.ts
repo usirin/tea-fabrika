@@ -19,9 +19,10 @@ import type {AgentSessions} from "./agent-session.ts";
 // the person. Its writer is the agent the handshake named, for the host's person; `appPrograms` packs
 // every program with that writer, the same function a tile's tsh packs them with as the person.
 // So an agent's tool call has no path to the person's writer. An agent has no `tracker_answer`
-// at all: the tracker's `answer` is an input only a person tells (`{personOnly: true}`), so no
-// tool is made for it. Behind that, the tracker still refuses an agent's `answered` as it refuses
-// any agent's (programs/tracker, `mayWrite`).
+// at all: the tracker's `answer` is an input only a person tells (`{personOnly: true}`), and the
+// door is handed `forAgent` of the list, so its programs have no such input, and no tool is made
+// for one. Behind that, the tracker still refuses an agent's `answered` as it refuses any
+// agent's (programs/tracker, `mayWrite`).
 //
 // Beside `runs`, the host's own `job` tool: one job of the host's table, its state and its last
 // lines (`job`, job-lines.ts), as tmux's `capture-pane` reads a pane.
@@ -88,8 +89,9 @@ export const serveAgents = (options: {
 		const person = yield* Author;
 		const pullRequests = yield* PullRequests;
 		const traces = yield* Traces;
+		/** An agent's list: the app's programs as `who` writes, with every person-only input taken out. */
 		const listOn = (on: Ledger["Service"], who: Author["Service"]) =>
-			Shell.programList(appPrograms(on, who, pullRequests, traces));
+			Shell.forAgent(Shell.programList(appPrograms(on, who, pullRequests, traces)));
 		/** What agent `who` is served: its own session's programs, or the read-only door, with why. */
 		const programsFor: AgentOptions["programsFor"] = (who) =>
 			sessionFor === null

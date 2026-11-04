@@ -2,6 +2,7 @@ import {Cause, Deferred, Effect, Exit, Option, PubSub, Random, Scope} from "effe
 import type {JobTable} from "../host/host-jobs.ts";
 import type {Job, JobsMsg, Owner, StageRecord} from "../host/jobs.ts";
 import type {JobEnd} from "../host/traces.ts";
+import {writerOf} from "../host/writer.ts";
 import type {AnyRunning, Entry} from "../program/listed.ts";
 import type {TableView} from "../program/person.ts";
 import {type Ended, type Listeners, type Unread, viewOf} from "../program/program.ts";
@@ -754,9 +755,22 @@ export const waitForJob = (shell: Shell, job: Job) =>
  * Values told on the line at its first start are not told again. `typed`:
  * the line that asked for it, the root span of the job's trace again, so the
  * runs started again write into the trace they wrote into before.
+ *
+ * A job keeps one writer for life (tracker 185b): one whose writer is known goes on only as that
+ * writer, so a person's lane never goes on as an agent, nor an agent's as the person. A job kept
+ * before jobs had a writer (`by: null`) attaches anywhere.
+ *
+ *   t1's tsh, as user:github:7     tsh$ attach %1 &
+ *                                  tsh: this job is agent:claude for:github:7's: attach it in claude's tile
  */
 export const reattach = (shell: Shell, job: Job, background: boolean, typed: string) =>
 	Effect.gen(function* () {
+		if (job.by !== null && job.by !== shell.by) {
+			const writer = writerOf(job.by);
+			const where = writer?.kind === "agent" ? `${writer.id}'s tile` : "their own tile";
+			shell.print("err", `tsh: this job is ${job.by}'s: attach it in ${where}`);
+			return 2;
+		}
 		const missing = job.stages.find((st) => !shell.list.has(st.program));
 		if (missing !== undefined) {
 			shell.print("err", `tsh: ${missing.program} is not on the program list any more`);

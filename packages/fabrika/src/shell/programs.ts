@@ -38,6 +38,17 @@ export function programList(entries: readonly Entry[]): ProgramList {
 }
 
 /**
+ * The list an agent is handed (tracker 185b): every program, by the same name, with each input
+ * only a person tells taken out (`Entry.forAgent`). The MCP door is handed it, and so is an
+ * agent's tsh, so no path an agent has reaches `answer` or `rate_duplicate`: not a tool, a
+ * `tell`, a pipe, or a window's press.
+ *
+ *   forAgent(list).get("tracker")?.program.inputs     {query, file, ...}: no answer
+ */
+export const forAgent = (list: ProgramList): ProgramList =>
+	new Map([...list].map(([name, entry]) => [name, entry.forAgent()]));
+
+/**
  * The program list tsh starts programs from. Whoever starts tsh provides it,
  * beside the host's jobs (`HostJobs`, ../host/host-jobs.ts): where its jobs are kept,
  * and their runs' storage, like a daemon handed its spool directory.
