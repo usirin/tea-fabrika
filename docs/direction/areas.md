@@ -304,10 +304,13 @@ tickets a person placed. v0 guesses from the filer and the source only.
 When the ledger has no area, the tracker's window opens on a list of suggestions, each with why
 ("21 titles start with Lane", "the folder `apps/fabrika`"). Space ticks, Enter makes the ticked
 ones, Esc skips. Skipping leaves every ticket in "No area yet", and "New area ..." stays in the
-menu. **Decided 2026-11-04 by the owner: a checklist in the list page.** The skip is not a fact.
+menu. **Decided 2026-11-04 by the owner: a checklist in the list page.** The skip is window
+state on the person's desk, not a fact.
 
-As built in PR 1 (today's version): the skip is the tracker machine's own state, `skip_onboarding`,
-so it lasts while that tracker runs and every window on it agrees; a new tracker asks again. The
+As built in PR 1 (today's version): the desk keeps no window state for a program yet, so PR 1
+holds the skip in the tracker machine's own state, `skip_onboarding`, until the desk keeps window
+state. Tracker ticket 217 tracks that. Until then the skip lasts while that tracker runs, every
+window on it agrees, and a new tracker asks again. The
 step shows only when the ledger holds a ticket, since with none there is nothing to sort. A
 "type a name" box sits under the suggestions (the lead's call, 2026-11-04). The folders come from
 one GitHub call per connected repository, the first time the step shows; if it fails, the titles'

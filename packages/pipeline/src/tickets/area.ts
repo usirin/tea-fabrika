@@ -188,24 +188,24 @@ const decodeFact = Schema.decodeUnknownOption(Schema.fromJsonString(AreaFact));
 const AREAS_INBOX = `${AREAS}/inbox`;
 
 /** What one ledger row is to the areas: one of their facts, a row of another stream, or broken. */
-export type AreaRead =
-	| {readonly kind: "entry"; readonly entry: AreaEntry}
-	| {readonly kind: "other"}
-	| {readonly kind: "broken"; readonly why: string};
+export const AreaRead = Schema.TaggedUnion({
+	entry: {entry: AreaEntry},
+	other: {},
+	broken: {why: Schema.String},
+});
+export type AreaRead = typeof AreaRead.Type;
 
 /** Read one row. A row on the areas' inbox must hold an area fact, kept under its own tag. */
 export const readAreaRow = (row: Row): AreaRead => {
-	if (row.stream !== AREAS_INBOX) return {kind: "other"};
-	const broken = (why: string): AreaRead => ({
-		kind: "broken",
-		why: `row ${row.pos} on the areas: ${why}`,
-	});
+	if (row.stream !== AREAS_INBOX) return AreaRead.cases.other.make({});
+	const broken = (why: string) =>
+		AreaRead.cases.broken.make({why: `row ${row.pos} on the areas: ${why}`});
 	const by = writerOf(row.writer);
 	if (by === null) return broken(`its writer "${row.writer}" is neither a user nor an agent`);
 	const fact = Option.getOrNull(decodeFact(row.data));
 	if (fact === null) return broken("its data is not an area fact");
 	if (fact._tag !== row.kind) return broken(`an ${fact._tag} fact kept as ${row.kind}`);
-	return {kind: "entry", entry: {pos: row.pos, by, at: row.at, fact}};
+	return AreaRead.cases.entry.make({entry: {pos: row.pos, by, at: row.at, fact}});
 };
 
 // ---------------------------------------------------------------- suggestions, never facts
@@ -228,8 +228,9 @@ export const suggestedName = (s: Suggested): string =>
 /**
  * What the app suggests a person makes their first areas from. Each first word before a colon
  * that three or more open titles share, with how many share it, most first; then each folder, in
- * the order given. A suggestion whose name a live area has, or an earlier suggestion's, is left
- * out, ignoring case. Pure.
+ * the order given. A suggestion whose name `AreaName` refuses (over 32 characters, or with a space
+ * at an end) is left out, since ticking it could make no area; so is one whose name a live area
+ * has, or an earlier suggestion's, ignoring case. Pure.
  *
  *   suggestionsOf([{title: "Lane: a run hangs", ...} x3], ["apps/fabrika"], NO_AREAS)
  *   // [{_tag: "titles", word: "lane", tickets: 3}, {_tag: "folder", path: "apps/fabrika"}]
@@ -251,9 +252,11 @@ export const suggestionsOf = (
 	const all = [...words, ...folders.map((path): Suggested => ({_tag: "folder", path}))];
 	const taken = new Set([...areas.live.values()].map((n) => n.toLowerCase()));
 	return all.filter((s) => {
-		const name = suggestedName(s).toLowerCase();
-		if (taken.has(name)) return false;
-		taken.add(name);
+		const name = suggestedName(s);
+		if (!Schema.is(AreaName)(name)) return false;
+		const key = name.toLowerCase();
+		if (taken.has(key)) return false;
+		taken.add(key);
 		return true;
 	});
 };

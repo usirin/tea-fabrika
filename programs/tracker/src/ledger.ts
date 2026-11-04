@@ -86,8 +86,8 @@ export const loadCell = (cmd: ReturnType<typeof load>) =>
 				if (read.kind === "entry") entries.push(named(read.entry, names));
 				if (read.kind === "broken") broken.push(read.why);
 				const area = readAreaRow(row);
-				if (area.kind === "entry") areas.push(area.entry);
-				if (area.kind === "broken") broken.push(area.why);
+				if (area._tag === "entry") areas.push(area.entry);
+				if (area._tag === "broken") broken.push(area.why);
 			}
 			last = page.at(-1)?.pos ?? last;
 			if (page.length < PAGE) return {entries, broken, last, areas};
@@ -137,7 +137,7 @@ const saveArea = (id: string, write: AreaWrite) =>
 			const rows = yield* ledger.readStream(AREAS_INBOX, 0, -1);
 			const entries = rows.flatMap((row) => {
 				const read = readAreaRow(row);
-				return read.kind === "entry" ? [{id: row.id, entry: read.entry}] : [];
+				return read._tag === "entry" ? [{id: row.id, entry: read.entry}] : [];
 			});
 			// An earlier try of this same write landed: it is not written twice.
 			const landed = entries.find((e) => e.id === id);

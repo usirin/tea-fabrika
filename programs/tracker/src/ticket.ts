@@ -113,6 +113,24 @@ export const isAreaWrite = (write: Write): write is AreaWrite =>
 	write.kind === "make_area" || write.kind === "rename_area" || write.kind === "merge_area";
 
 /**
+ * The fact an area write puts on the areas' stream, a new area numbered `next`. Not checked: the
+ * save's answer gives the number a new area landed as, and the ledger checked it.
+ *
+ *   areaFact({kind: "make_area", name: "lane"}, 2)   // {_tag: "area_made", area: 2, name: "lane"}
+ */
+export const areaFact = (write: AreaWrite, next: AreaNumber): AreaFact =>
+	write.kind === "make_area"
+		? {
+				_tag: "area_made",
+				area: next,
+				name: write.name,
+				...(write.suggested === undefined ? {} : {suggested: write.suggested}),
+			}
+		: write.kind === "rename_area"
+			? {_tag: "area_renamed", area: write.area, name: write.name}
+			: {_tag: "area_merged", area: write.area, into: write.into};
+
+/**
  * The fact an area write puts on the areas' stream, onto the areas as they stand, or why it does
  * not fit them, in words. A new area takes the next number. Pure.
  *
@@ -125,17 +143,7 @@ export const areaFactOf = (
 	write: AreaWrite,
 	areas: Areas,
 ): {readonly fact: AreaFact} | {readonly why: string} => {
-	const fact: AreaFact =
-		write.kind === "make_area"
-			? {
-					_tag: "area_made",
-					area: nextArea(areas),
-					name: write.name,
-					...(write.suggested === undefined ? {} : {suggested: write.suggested}),
-				}
-			: write.kind === "rename_area"
-				? {_tag: "area_renamed", area: write.area, name: write.name}
-				: {_tag: "area_merged", area: write.area, into: write.into};
+	const fact = areaFact(write, nextArea(areas));
 	const why = areaRefused(areas, fact);
 	return why === null ? {fact} : {why};
 };

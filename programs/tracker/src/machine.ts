@@ -24,7 +24,7 @@ import {Hint, hintsOn} from "./duplicates.ts";
 import {Head, headOf, OpenAsk, openAsksOf} from "./head.ts";
 import {PullRequest} from "./pull-requests.ts";
 import {Row, rowsOf} from "./rows.ts";
-import {areaFactOf, isAreaWrite, Summary, summaryOf, Write} from "./ticket.ts";
+import {areaFact, areaFactOf, isAreaWrite, Summary, summaryOf, Write} from "./ticket.ts";
 
 // The tracker's machine: the tickets as last read from the ledger, the ticket open in the window,
 // and the writes waiting their turn. Pure: the ledger is reached through its two Cmds and its Sub,
@@ -62,7 +62,8 @@ import {areaFactOf, isAreaWrite, Summary, summaryOf, Write} from "./ticket.ts";
 // (`@kampus/pipeline/tickets/area`). While the ledger has none and the person has not skipped, the
 // list page holds the onboarding step: what the app suggests the first areas be made from. The
 // first time it shows, `folders` reads the connected repositories' top folders (./folders.ts),
-// once. Making them is one `make_area` write each; a skip is this state's alone, not a fact.
+// once. Making them is one `make_area` write each. A skip is not a fact: the note puts it on the
+// person's desk, and it is this state's alone until the desk keeps a program's window state.
 //
 //   load_ok {entries: [3 titles "Lane: ..."], areas: []}   // cmds [folders {}]
 //   // page.onboarding [{_tag: "titles", word: "lane", tickets: 3}]
@@ -70,13 +71,16 @@ import {areaFactOf, isAreaWrite, Summary, summaryOf, Write} from "./ticket.ts";
 //   // page.onboarding [{_tag: "titles", ...}, {_tag: "folder", path: "apps/fabrika"}]
 //   skip_onboarding                                          // page.onboarding null, for good
 //
-// It reads its own writes. A save that answers `{area}` folds that fact into `areas` at once, with
-// the step the load folds each row with, so a rename or a merge of an area just made goes out
-// before any load. The fact waits in `landed` until a load reads it back, which then skips it:
+// It reads its own writes, as Replicache and Linear keep pending writes. `areas` is folded from
+// the ledger's rows alone. A save that answers `{area}` puts its fact in `pending`, and what is
+// shown is `pending` folded on top of `areas` (`shownAreas`), with the step a load folds each row
+// with, so a rename or a merge of an area just made goes out before any load. The first load sent
+// after the answer has read past that save's row, so it ends the pending fact, whether the row
+// read or not; a load already out at the answer ends nothing. So the ledger's order always wins:
 //
-//   save_ok {area: 1} for make_area "lane"   // areas.live {1: "lane"}, landed [area_made 1]
-//   write rename_area {area: 1, ...}           // taken, saved
-//   load_ok {areas: [area_made 1 "lane"]}      // skipped, landed []
+//   areas {1: "x"}; another renames 1 to "b" (row 3, unread)
+//   save_ok {area: 1} for rename_area 1 "a"   // pending [area_renamed 1 "a"], shown "a"
+//   load_ok {areas: [row 3 "b", row 4 "a"]}    // areas {1: "a"}, pending [], shown "a"
 
 /**
  * Read the ledger after `after`: the facts found, the rows that did not read, the last row's
@@ -223,10 +227,18 @@ export const Tracker = Schema.Struct({
 	now: Schema.Finite,
 	/** Tickets this tracker filed whose duplicate hint is still out: asked of Jev, or saving. */
 	hinting: Schema.Array(TicketNumber),
-	/** The project's areas: `tracker/areas` as last read, and this tracker's own landed writes. */
+	/** The project's areas, folded from the rows of `tracker/areas` alone, as last read. */
 	areas: Areas,
-	/** Area facts this tracker wrote and folded in on their save's answer, not yet read back. */
-	landed: Schema.Array(AreaFact),
+	/**
+	 * This tracker's own area facts, oldest answer first, that no load sent after their save
+	 * answered has come back yet. Shown folded on top of `areas`.
+	 */
+	pending: Schema.Array(AreaFact),
+	/**
+	 * How many of the newest `pending` facts were answered while the load now out was already out.
+	 * That load may not hold their rows, so it ends none of them. 0 while no load is out.
+	 */
+	late: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 	/** The person skipped the onboarding step: it does not ask again while this tracker runs. */
 	skipped: Schema.Boolean,
 	folders: FoldersRead,
@@ -270,16 +282,29 @@ const start: Tracker = {
 	now: 0,
 	hinting: [],
 	areas: NO_AREAS,
-	landed: [],
+	pending: [],
+	late: 0,
 	skipped: false,
 	folders: {_tag: "unasked"},
 };
 
 /**
- * The onboarding step is owed: the ledger holds a ticket but no area yet, and the person has not
+ * The areas as this tracker shows them: its `pending` facts folded on top of the ledger's, oldest
+ * first. A pending fact that does not fit (its row was read already, or read as broken) is left
+ * out, with no problem line: only the ledger's rows make problems.
+ */
+const shownAreas = (s: Tracker): Areas =>
+	s.pending.reduce((areas, fact) => {
+		const step = areaAfter(areas, fact);
+		return "areas" in step ? step.areas : areas;
+	}, s.areas);
+
+/**
+ * The onboarding step is owed: the tracker shows a ticket but no area yet, and the person has not
  * skipped. With no ticket there is nothing to sort, and the empty list's own words come first.
  */
-const onboarding = (s: Tracker) => s.tickets.length > 0 && s.areas.live.size === 0 && !s.skipped;
+const onboarding = (s: Tracker) =>
+	s.tickets.length > 0 && shownAreas(s).live.size === 0 && !s.skipped;
 
 /** The folders, the first time the step is owed: asked for once, while this tracker runs. */
 const askFolders = (s: Tracker): Step =>
@@ -287,43 +312,31 @@ const askFolders = (s: Tracker): Step =>
 		? [{...s, folders: {_tag: "asking"}}, [folders({})]]
 		: [s, []];
 
-/** Why an area write does not fit the areas as last read, or `null`: it may go to the ledger. */
+/** Why an area write does not fit the areas as shown, or `null`: it may go to the ledger. */
 const refusedOf = (s: Tracker, write: Write): string | null => {
 	if (!isAreaWrite(write)) return null;
-	const made = areaFactOf(write, s.areas);
+	const made = areaFactOf(write, shownAreas(s));
 	return "why" in made ? made.why : null;
 };
 
-const sameFact = Schema.toEquivalence(AreaFact);
+/**
+ * An area write landed as `area`: its fact is pending until a load sent after this answer comes
+ * back. `out`: a load was already out at the answer, so that one ends nothing.
+ */
+const pendingArea = (s: Tracker, write: Write, area: AreaNumber, out: boolean): Tracker =>
+	isAreaWrite(write)
+		? {...s, pending: [...s.pending, areaFact(write, area)], late: out ? s.late + 1 : s.late}
+		: s;
 
 /**
- * An area write landed as `area`: its fact folds in now, as a load would fold it. A fact that does
- * not fit the areas this tracker knows (another person's write came first, unread) waits for the
- * load instead.
+ * A load came back read. It was sent after every pending fact's answer but the `late` ones, so it
+ * read past their rows, and only the `late` ones stay pending.
  */
-const landedArea = (s: Tracker, write: Write, area: AreaNumber): Tracker => {
-	if (!isAreaWrite(write)) return s;
-	const made = areaFactOf(write, s.areas);
-	if (!("fact" in made)) return s;
-	const fact: AreaFact = made.fact._tag === "area_made" ? {...made.fact, area} : made.fact;
-	const step = areaAfter(s.areas, fact);
-	return "areas" in step ? {...s, areas: step.areas, landed: [...s.landed, fact]} : s;
-};
-
-/** The rows a load read, less those that are this tracker's landed facts, each skipped once. */
-const readBack = (
-	landed: readonly AreaFact[],
-	read: readonly AreaEntry[],
-): {readonly entries: readonly AreaEntry[]; readonly landed: readonly AreaFact[]} => {
-	const waiting = [...landed];
-	const entries = read.filter((e) => {
-		const at = waiting.findIndex((f) => sameFact(f, e.fact));
-		if (at === -1) return true;
-		waiting.splice(at, 1);
-		return false;
-	});
-	return {entries, landed: waiting};
-};
+const readPast = (s: Tracker): Tracker => ({
+	...s,
+	pending: s.pending.slice(s.pending.length - s.late),
+	late: 0,
+});
 
 /** The number a new ticket tries first: one past the newest known. */
 const nextNumber = (s: Tracker) => (s.tickets.at(-1)?.number ?? 0) + 1;
@@ -419,14 +432,12 @@ export const tracker = defineMachine({
 
 		load_ok: (s, m): Step => {
 			const folded = fold(s.tickets, m.value.entries);
-			const read = readBack(s.landed, m.value.areas);
-			const areas = areasOf(read.entries, s.areas);
+			const areas = areasOf(m.value.areas, s.areas);
 			const next: Tracker = {
-				...s,
+				...readPast(s),
 				ready: true,
 				tickets: folded.tickets,
 				areas: areas.areas,
-				landed: read.landed,
 				seen: Math.max(s.seen, m.value.last),
 				problems: [...s.problems, ...m.value.broken, ...folded.problems, ...areas.problems].slice(
 					-PROBLEMS,
@@ -439,7 +450,8 @@ export const tracker = defineMachine({
 				: [{...asked, load: "idle"}, ask];
 		},
 		load_err: (s, m): Step => {
-			const next: Tracker = {...s, ready: true, unreachable: why(m.error)};
+			// It read nothing, so it ends no pending fact; the next load is sent after every answer.
+			const next: Tracker = {...s, ready: true, unreachable: why(m.error), late: 0};
 			return s.load === "again"
 				? [{...next, load: "busy"}, [load({after: s.seen})]]
 				: [{...next, load: "idle"}, []];
@@ -449,7 +461,8 @@ export const tracker = defineMachine({
 			const [front, ...rest] = s.saving;
 			if (front === undefined || front.id !== m.cmd.id) return [s, []];
 			const [next, sent] = settled(s, rest);
-			if (!("ticket" in m.value)) return [landedArea(next, front.write, m.value.area), sent];
+			if (!("ticket" in m.value))
+				return [pendingArea(next, front.write, m.value.area, s.load !== "idle"), sent];
 			const [asking, asked] = hintFor(next, front.write, m.value.ticket);
 			return [asking, [...sent, ...asked]];
 		},
@@ -504,7 +517,7 @@ export const statusOf = (s: Tracker): string => {
 	const open = s.tickets.filter((t) => t.state === "open").length;
 	const counts = `${open} open, ${s.tickets.length - open} closed`;
 	const line = s.saving.length === 0 ? counts : `${counts}, saving ${s.saving.length}`;
-	const areas = [...s.areas.live.values()];
+	const areas = [...shownAreas(s).live.values()];
 	return areas.length === 0 ? line : `${line}; areas: ${areas.join(", ")}`;
 };
 
@@ -590,7 +603,7 @@ const listOf = (s: Tracker): Shown["page"] => {
 			pullRequests: prsFound.length,
 		},
 		onboarding: onboarding(s)
-			? suggestionsOf(s.tickets, s.folders._tag === "read" ? s.folders.folders : [], s.areas)
+			? suggestionsOf(s.tickets, s.folders._tag === "read" ? s.folders.folders : [], shownAreas(s))
 			: null,
 	};
 };

@@ -154,7 +154,10 @@ yield* tell(run, "query", {ticket: 7});       // sends nothing: the same pick
   in one step: if another write landed in between, the ledger says `Stale` and the tracker reads
   and tries again, so two people who make an area at once get two numbers. A name a live area has
   already, in any case, is refused in words. All three are `{personOnly: true}`, refused from an
-  agent here and at the door.
+  agent here and at the door. The tracker shows its own saves at once: the areas fold from the
+  ledger's rows alone, and its saves no load has read back yet are `pending`, folded on top, as
+  Replicache and Linear keep pending writes. The first load sent after a save answers has read
+  past that save's row, so it ends that pending fact, whether the row read or not.
 
   ```ts
   yield* tell(run, "make_area", {name: "lane"});

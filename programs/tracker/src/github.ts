@@ -1,6 +1,6 @@
 import {CodeHost, CodeTree} from "@kampus/pipeline/services";
 import {Effect, Layer} from "effect";
-import {type FoldersUnreachable, RepoTree} from "./folders.ts";
+import {FoldersUnreachable, RepoTree} from "./folders.ts";
 import {
 	nameOf,
 	type PullRequest,
@@ -54,12 +54,13 @@ export const gitHubRepoTree = (settings: GitHubSettings) =>
 			const read = Effect.forEach(
 				settings.repos,
 				(repo) =>
-					tree.folders(repo, settings.under).pipe(
-						Effect.mapError((): FoldersUnreachable => ({
-							_tag: "unreachable",
-							why: `could not read ${nameOf(repo)}'s folders`,
-						})),
-					),
+					tree
+						.folders(repo, settings.under)
+						.pipe(
+							Effect.mapError(
+								() => new FoldersUnreachable({why: `could not read ${nameOf(repo)}'s folders`}),
+							),
+						),
 				{concurrency: 1},
 			).pipe(
 				Effect.map((lists) => lists.flat()),
