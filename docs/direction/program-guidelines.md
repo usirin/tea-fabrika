@@ -1,15 +1,11 @@
 # Programs: one job, a location, and the desk places the tile
 
-**Proposed 2026-11-02, with two parts decided.** [Composing programs, C1 to
-C11](#composing-programs-c1-to-c11) is **decided 2026-11-02**: the owner walked each rule and the
-audit's three splits. [G1](#g1-one-job-one-model-and-every-size-draws-it) is **decided 2026-11-03**:
-the owner took the lean. G2 to G8 and the smaller calls 1 to 5 are not walked yet, so they stay
-proposed, with their leans. The asks program is named **inbox**, **decided 2026-11-03** in the
-glossary walk (G8 below); the sketches still say `asks`, which the rename pass changes. Calls 6 and
-7 moved to the customization study (experiment 206) and call 8 to the layers study (experiment
-207), so none of the three is decided here. Call 1, where focus goes on a close, stays open for the
-owner. The composing walk changed two of them, G6 R2 and G7 R4, and their
-text says so.
+**Decided 2026-11-03.** The owner approved G1 to G8 and calls 1 to 5 with their leans, after a walk
+of each part. The leans' confidence numbers stay as written. [Composing programs, C1 to
+C11](#composing-programs-c1-to-c11) was decided 2026-11-02. Calls 6 and 7 moved to experiment 206,
+the customization study, and call 8 to experiment 207, the layers study. The asks program is named
+**inbox** (G8 below, glossary walk); the sketches still say `asks`, which the rename pass changes.
+The composing walk changed two of the rules, G6 R2 and G7 R4, and their text says so.
 
 Names changed 2026-11-03 by the owner's naming pass: `at` became `location` (`AsksAt` became
 `AsksLocation`, `reuse: "address"` became `"location"`), `query` inside a tile became `navigate`,
@@ -75,7 +71,7 @@ C-b a        the top bar's popup: the asks program's glance    focus moves in: "
              opened {tile: "t5", how: "new"}                   focus to t5, on a-approve-8; the popup is gone
              the bottom line                                   asks opened in t5, beside t1 · folded t6
   y          answered {answer: {_tag: "rec"}}                  polite: "approve, the rec, for #117. 2 left."
-  Esc        at t5's top level: Cmd leave                      focus back, by the way back the owner picks (call 1)
+  Esc        at t5's top level: Cmd leave                      focus back, by the focus history (call 1, decided C)
 C-b a, Enter again                                             opened {tile: "t5", how: "focused"}
 ```
 
@@ -162,7 +158,7 @@ type Workspace = {layout: Split; focus: TileId; recent: ReadonlyArray<TileId>}; 
 
 ### G2: a program says where it is; the desk says where its tile is
 
-**Lean, 80%.**
+**Decided 2026-11-03. Lean, 80%.**
 
 - **What it means.** Every program has a `location`: a small value that says where it is, as a URL
   does. Its flags start it there (`asks --ask a-approve-8`). Inside its tile it moves with
@@ -195,7 +191,7 @@ type Workspace = {layout: Split; focus: TileId; recent: ReadonlyArray<TileId>}; 
 
 ### G3: open or focus, then land beside
 
-**Lean, 80% on open or focus; 65% on where it lands.**
+**Decided 2026-11-03. Lean, 80% on open or focus; 65% on where it lands.**
 
 - **What it means.** The desk looks first: a tile on this workspace that shows the same program (or
   the same location, by `reuse`) is focused, unfolded and taken out of a zoom, and sent the new
@@ -228,7 +224,7 @@ type Workspace = {layout: Split; focus: TileId; recent: ReadonlyArray<TileId>}; 
 
 ### G4: only on a press; focus and the selection travel together; say it once
 
-**Lean, 85%.**
+**Decided 2026-11-03. Lean, 85%.**
 
 - **What it means.** Nothing opens or takes focus unless the person pressed or clicked something just
   before. A new ask is a count in the top bar, never a tile. When a press does open, the popup closes,
@@ -257,7 +253,7 @@ type Workspace = {layout: Split; focus: TileId; recent: ReadonlyArray<TileId>}; 
 
 ### G5: the way back is one key, and it works the same in every program
 
-**Lean, 70%, on the rules. The close is the owner's call (call 1).**
+**Decided 2026-11-03. Lean, 70%, on the rules. The close is call 1.**
 
 - **What it means.** `Esc` peels a program from the inside out: a note, then a picked part, then the
   one-pane detail. At its top level a program may send `leave`, and focus goes back. Between tiles,
@@ -285,7 +281,7 @@ type Workspace = {layout: Split; focus: TileId; recent: ReadonlyArray<TileId>}; 
 
 ### G6: programs meet on typed pipes, never by calling each other
 
-**Lean, 85%.**
+**Decided 2026-11-03. Lean, 85%.**
 
 - **What it means.** A program never imports, starts or calls another program. It sends an output;
   a line wires it. The ticket follows the asks on a pipe, `asks | ticket`. Each program also runs
@@ -316,7 +312,7 @@ type Workspace = {layout: Split; focus: TileId; recent: ReadonlyArray<TileId>}; 
 
 ### G7: what every program gets for free
 
-**Lean, 80%.**
+**Decided 2026-11-03. Lean, 80%.**
 
 - **What it means.** A program writes its model, its views and its commands. The rest comes from the
   desk and the kit, the same in every program.
@@ -358,7 +354,7 @@ its machine               a run id, a trace, saved state, hot reload, a job to a
 
 ### G8: a program's name
 
-**Lean, 75%.** Added 2026-11-03, not walked.
+**Decided 2026-11-03. Lean, 75%.**
 
 ```text
 where one name shows (both versions)
@@ -451,7 +447,7 @@ inbox   3 in inbox  "inbox, 3 wait on you"     tracker: a person's list of thing
 
 ### 1. Where focus goes when a tile you opened closes
 
-**Lean C, 65%. The owner picks: B is decided today, and A or C reopens it.**
+**Decided 2026-11-03: C, the focus history. Lean C, 65%.** It reopens the 2026-11-01 reading-order rule (B) for every close; A and B stay as the options weighed.
 
 ```ts
 // A: the opener. A new fact on the tile, written at open time.
@@ -481,7 +477,7 @@ closed("t5") // focus -> the newest tile in workspace.recent that is still open,
 
 ### 2. What counts as the same tile
 
-**Lean `reuse: "program"` by default, 65%.**
+**Decided 2026-11-03. Lean `reuse: "program"` by default, 65%.**
 
 ```ts
 reuse: "program"   // one tile of this program per workspace; a new location goes to it by navigate
@@ -494,7 +490,7 @@ reuse: "location"  // one tile per location: ticket #7 and ticket #8 side by sid
 
 ### 3. Where a new tile lands
 
-**Lean "beside, half the focused tile's share", 65%** (196's P2).
+**Decided 2026-11-03. Lean "beside, half the focused tile's share", 65%** (196's P2).
 
 ```text
 beside      half of the focused tile's share, after it      keeps the rest of the desk as it was
@@ -504,7 +500,7 @@ zoom        the new tile zoomed                              all of it; hides ev
 
 ### 4. An open is a line, or a program and a location
 
-**Lean "a line", 75%.**
+**Decided 2026-11-03. Lean "a line", 75%.**
 
 ```ts
 open({line: "asks --ask a-approve-8 | ticket", ...}) // a line: one fit check, one placement rule
@@ -516,7 +512,7 @@ open({program: "asks", location: {ask: "a-approve-8"}, ...}) // simpler, but a s
 
 ### 5. `Esc` at a program's top level
 
-**Lean "a program may bind `leave`", 70%.**
+**Decided 2026-11-03. Lean "a program may bind `leave`", 70%.**
 
 ```text
 a program binds it     asks: Esc at the top goes back; a terminal keeps Esc for vim
