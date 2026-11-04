@@ -616,7 +616,11 @@ const writtenAgain = (at: At, redo: Redo) =>
 		const problems = [...end.report.problems, ...foundWords(properties, end.report.found, answers)];
 		// Back on the builder's work, which the build goes on from.
 		yield* work.reset(number, head);
-		if (commit === null) return withFailure(ended(end.outcome, {}, problems), end.report.failure);
+		// A run on the base that failed keeps its commit, but nothing it wrote goes on the head: the redo
+		// stays owed, so the lane runs it again, as it runs a first writer again (test-writer/machine.ts).
+		const failed = end.outcome.kind === "stuck" && end.outcome.why === "run_failed";
+		if (commit === null || failed)
+			return withFailure(ended(end.outcome, {}, problems), end.report.failure);
 		const files = yield* work.filesOf(work.at("clone"), commit);
 		const next = yield* work.putBack(
 			number,
