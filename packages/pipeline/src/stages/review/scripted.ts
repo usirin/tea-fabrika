@@ -43,6 +43,11 @@ export const recorded = (name: string): string =>
 export const RUBRICS = fileURLToPath(
 	new URL("../../../../../fixtures/review/rubrics/", import.meta.url),
 );
+/**
+ * `RUBRICS` as one word on a tsh line: quoted, so a checkout whose path has a space, such as one
+ * under the app home in Library/Application Support, still names one folder (tracker 190).
+ */
+export const RUBRICS_WORD = `'${RUBRICS.replaceAll("'", `'\\''`)}'`;
 
 const asTicket = (body: string) => JSON.stringify({data: {repository: {issue: {body}}}});
 
