@@ -244,6 +244,60 @@ describe("the test writer", () => {
 				report: {found: [{property: "p2", for: "cannot_test"}]},
 			});
 		});
+
+		// The stuck comment says each cause in words: the five, with the code and the time each gave.
+		it.each([
+			{
+				failure: {why: "no_command", code: null, ms: 0, tail: "[test_writer] run is not set"},
+				words:
+					"The run on the base failed (no_command): no test command could be read from the settings, with no exit code, after 0.0 s.",
+			},
+			{
+				failure: {why: "copy_failed", code: null, ms: 12, tail: "fatal: no room left"},
+				words:
+					"The run on the base failed (copy_failed): no copy of the commit could be made to run the tests in, with no exit code, after 0.0 s.",
+			},
+			{
+				failure: {why: "box_failed", code: null, ms: 40, tail: "srt: could not start"},
+				words:
+					"The run on the base failed (box_failed): the box the tests run in failed, with no exit code, after 0.0 s.",
+			},
+			{
+				failure: NO_REPORT,
+				words:
+					"The run on the base failed (no_report): the box ended and wrote no report, with exit code 1, after 726.0 s.",
+			},
+			{
+				failure: {why: "bad_report", code: 0, ms: 3_100, tail: ""},
+				words:
+					"The run on the base failed (bad_report): the report the box wrote is not vitest's, with exit code 0, after 3.1 s.",
+			},
+		])("names a `$failure.why` cause in words among its problems", ({failure, words}) => {
+			const {over} = drive({drafts: [GOOD], run: "fail", failure});
+			if (over.phase !== "over") throw new Error("over");
+			expect(over.report.problems).toEqual([words]);
+		});
+
+		it("a bare `could_not_run` has no cause to put in words: its problems are empty", () => {
+			const {over} = drive({drafts: [GOOD], run: "fail"});
+			if (over.phase !== "over") throw new Error("over");
+			expect(over.report.problems).toEqual([]);
+		});
+
+		// A late answer, as after a restart that already moved on: only a run in flight is stopped by it.
+		it("a failed run's answer outside `running` changes nothing and sends nothing", () => {
+			type Msg = {readonly type: string; readonly [field: string]: unknown};
+			const step = (s: TestWriter, m: Msg) =>
+				applyCell<TestWriter, Msg, TestWriterCmd>(testWriter, s, m);
+			const late: Msg = {
+				type: onBase.errType,
+				cmd: onBase({commit: COMMIT, tests: []}),
+				error: {_tag: "could_not_run", ...NO_REPORT},
+			};
+			const [reading] = step({phase: "idle"}, {type: "start", ask: ASK, key: "k"});
+			const {over} = drive({drafts: [GOOD]});
+			for (const s of [reading, over]) expect(step(s, late)).toEqual([s, []]);
+		});
 	});
 
 	it("after a restart sends again what was in flight, the same write with the same intent", () => {

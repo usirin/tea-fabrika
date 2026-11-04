@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest";
-import type {TestWriter, TestWriterCmd} from "../stages/test-writer/machine.ts";
-import {explore, pathText, type Update} from "./explore.ts";
+import {type TestWriter, type TestWriterCmd, testWriter} from "../stages/test-writer/machine.ts";
+import {explore, pathText, stepOf, type Update} from "./explore.ts";
 import * as tw from "./test-writer.ts";
 
 // The test writer's laws, each shown to catch a planted mistake.
@@ -83,6 +83,49 @@ describe("the test writer's laws", () => {
 				"tests_commit_ok",
 				// A bare tag keeps no cause either way, so the first run the law can catch is one that gave a why.
 				"on base failed: no_report",
+			),
+		});
+	});
+
+	const update = stepOf<TestWriter, tw.AnyTestWriterMsg, TestWriterCmd>(testWriter);
+
+	it("catch a failed run that keeps the writer running", () => {
+		const keepsRunning: Update<TestWriter, tw.AnyTestWriterMsg, TestWriterCmd> = (s, m) =>
+			m.type === "tests_on_base_err" ? [s, []] : update(s, m);
+		expect(caught(keepsRunning, 5)).toMatchObject({
+			"a run that fails and says why keeps the cause, and one that says nothing keeps none": lines(
+				"start",
+				"tests_taken_ok",
+				'run k/1: draft "good"',
+				"tests_commit_ok",
+				"on base failed: no cause",
+			),
+		});
+	});
+
+	it("catch a failed run that keeps the writer's row but names it as another surprise", () => {
+		const renames: Update<TestWriter, tw.AnyTestWriterMsg, TestWriterCmd> = (s, m) => {
+			const [next, cmds] = update(s, m);
+			return m.type === "tests_on_base_err" && next.phase === "over"
+				? [
+						{
+							...next,
+							report: {
+								...next.report,
+								found: next.report.found.map((f) => ({...f, for: "already_passes" as const})),
+							},
+						},
+						cmds,
+					]
+				: [next, cmds];
+		};
+		expect(caught(renames, 5)).toMatchObject({
+			"a run that fails keeps every row the writer said no test can check": lines(
+				"start",
+				"tests_taken_ok",
+				'run k/1: draft "tests one, cannot one"',
+				"tests_commit_ok",
+				"on base failed: no cause",
 			),
 		});
 	});

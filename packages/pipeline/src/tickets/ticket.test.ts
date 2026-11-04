@@ -3,6 +3,7 @@ import {Schema} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {
+	CodeFact,
 	type Entry,
 	type Fact,
 	fold,
@@ -291,6 +292,41 @@ describe("a lane's facts", () => {
 		it("an end from before the key still reads", () => {
 			const {failed: _, ...before} = ended([]);
 			expect(readRow(row({data: JSON.stringify(before), kind: "ended"})).kind).toBe("entry");
+		});
+	});
+
+	// Tracker 193: the cause of a test writer's failed run on the base exists only as it fails.
+	describe("a test writer's end whose run on the base failed", () => {
+		const ended = (failure: unknown) => ({
+			type: "ended",
+			run: "r-test_writer-5",
+			stage: "test_writer",
+			outcome: {kind: "stuck", why: "run_failed"},
+			usd: 0,
+			input: 0,
+			output: 0,
+			turns: 0,
+			failure,
+		});
+
+		it.each([
+			{why: "no_report", code: 1, ms: 726_000, tail: "Error: boom"},
+			{why: "box_failed", code: null, ms: 40, tail: "srt: could not start"},
+		])("keeps the cause `$why` whole, its code, its time and its tail", (failure) => {
+			const fact = ended(failure);
+			expect(Schema.decodeUnknownSync(CodeFact)(fact)).toEqual(fact);
+			const read = readRow(row({data: JSON.stringify(fact), kind: "ended"}));
+			expect(read.kind === "entry" && read.entry.fact).toEqual(fact);
+		});
+
+		it.each([
+			["no tail", {why: "no_report", code: 1, ms: 5}],
+			["no time", {why: "no_report", code: 1, tail: ""}],
+			["a code that is words", {why: "no_report", code: "one", ms: 5, tail: ""}],
+		])("a cause with %s is broken", (_, failure) => {
+			expect(readRow(row({data: JSON.stringify(ended(failure)), kind: "ended"})).kind).toBe(
+				"broken",
+			);
 		});
 	});
 

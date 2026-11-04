@@ -31,7 +31,7 @@ import {type CheckRun, CheckRunner} from "./checks.ts";
 import {Inputs, keyOf} from "./key.ts";
 import {fakeEnv, type GhStory, makeFakeGh, makeLaneHome, shWord} from "./lane-fixture.ts";
 import {laneLayer, runLane} from "./layer.ts";
-import {askedFor as kindOfAsk, Lane, PICKS} from "./machine.ts";
+import {askedFor as kindOfAsk, Lane, PICKS, type Resume} from "./machine.ts";
 import {Pull} from "./pulls.ts";
 import {type Folded, fold, seenOf} from "./restart.ts";
 import {LaneWork} from "./work.ts";
@@ -179,6 +179,11 @@ interface Script {
 	 * lane stops at it, round 1.
 	 */
 	readonly failOnBase?: Readonly<Record<string, unknown>>;
+	/**
+	 * With `failOnBase`: the first of the test writer's runs on the base that fails, the first being 0,
+	 * on the first line; each run after it there fails too. Left out: 0.
+	 */
+	readonly failOnBaseFrom?: number;
 	/** After each line, fold the lane's facts (./restart.ts), to set beside what it saved. */
 	readonly fold?: boolean;
 	/** Stop the lane when a line holding this is said, then type the line again. */
@@ -239,6 +244,11 @@ interface Script {
 	 * 117's (tracker 194): its branch leaves main there, whatever main merges after.
 	 */
 	readonly treeFirst?: boolean;
+	/**
+	 * With `treeFirst`: one commit of these files on the working copy's branch, which main lacks, as a
+	 * line that built on it before would leave it.
+	 */
+	readonly treeHolds?: readonly {readonly path: string; readonly text: string}[];
 }
 
 /** One span as the in-memory exporter keeps it. */
@@ -340,6 +350,26 @@ const keptAsLegacy = (home: string) =>
 			return yield* Effect.die(new Error("the lane was not saved over"));
 		const {phase, number, trail, outcome, said} = raw;
 		yield* Effect.promise(() => store.save({phase, number, trail, outcome, said}));
+	}).pipe(Effect.orDie);
+
+/**
+ * The stopped lane, saved again to go on at `at`, in `round`, as a stop there would keep it. Left
+ * out: as it was saved.
+ */
+const keptGoingOn = (home: string, {at, round}: {readonly at?: Resume; readonly round?: number}) =>
+	Effect.gen(function* () {
+		const handle = yield* fileStorage(join(home, "storage", "lanes")).open(`lane-${NUMBER}`, {});
+		const store = handle.store("lane", `lane/${NUMBER}`, Lane);
+		const saved = store.migrate(yield* Effect.promise(() => store.load()));
+		if (!Schema.is(Lane)(saved) || saved.phase !== "over" || !("held" in saved))
+			return yield* Effect.die(new Error("the lane was not saved stopped"));
+		yield* Effect.promise(() =>
+			store.save({
+				...saved,
+				...(at === undefined ? {} : {at}),
+				...(round === undefined ? {} : {held: {...saved.held, round}}),
+			}),
+		);
 	}).pipe(Effect.orDie);
 
 /** One commit on the remote's main, as someone working elsewhere would push it. */
@@ -505,6 +535,7 @@ const lane = ({
 	again = [],
 	failMutation = false,
 	failOnBase,
+	failOnBaseFrom = 0,
 	fold: folding = false,
 	killAt,
 	noOrigin = false,
@@ -526,6 +557,7 @@ const lane = ({
 	formatter = false,
 	traced = false,
 	treeFirst = false,
+	treeHolds,
 }: Script): Promise<Ran> => {
 	const tracing = traced ? memoryTracing({raw: true}) : null;
 	let checksRan = 0;
@@ -658,7 +690,7 @@ const lane = ({
 				onBase: (commit, tests) =>
 					Effect.suspend(() => {
 						onBase.push({line: typed, commit, files: tests.map((test) => test.file)});
-						return failOnBase !== undefined && typed === 0
+						return failOnBase !== undefined && typed === 0 && onBase.length > failOnBaseFrom
 							? Effect.fail({...failOnBase, _tag: "could_not_run"} as const)
 							: work.onBase(commit, tests);
 					}),
@@ -711,7 +743,10 @@ const lane = ({
 				// The ticket's working copy, made from main as it is now, as an earlier line would leave it.
 				if (treeFirst)
 					yield* Effect.gen(function* () {
-						yield* (yield* LaneWork).tree(NUMBER);
+						const work = yield* LaneWork;
+						const {tree} = yield* work.tree(NUMBER);
+						if (treeHolds !== undefined)
+							yield* work.commit(tree, treeHolds, "a commit main lacks, from an earlier line");
 					}).pipe(
 						Effect.provide(laneLayer({home, checkout: seed, briefs: BRIEFS, person: "owner"})),
 						Effect.orDie,
@@ -2653,6 +2688,180 @@ describe("a stopped lane, typed again", () => {
 			expect(codexRuns(ran.dir).filter((r) => r.step === "triage")).toHaveLength(1);
 		},
 	);
+
+	// Tracker 194: only a restart before the test writer, or at a first one, starts the branch over.
+	// Any other keeps the work on it: the restart names no kept ref, and the branch goes on from its head.
+	describe("a restart past a first test writer", () => {
+		/** Ticket 117's failure, as the box would tell it. Made up: the cause and the code. */
+		const NO_REPORT = {why: "no_report", code: 1, ms: 726_000, tail: "Error: boom"} as const;
+		/** The restarts on the ticket, in turn. */
+		const restartsOf = (ran: Ran) => ran.facts.filter((f) => f.type === "restarted");
+		/** A restart that put the branch on main as it was: no kept ref, and its head goes on. */
+		const keptItsBranch = (restart: Ran["facts"][number] | undefined, said: string) => {
+			expect(restart, said).toBeDefined();
+			expect(restart?.head, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(restart?.head, "the branch held work main lacks").not.toBe(restart?.onto);
+			expect(restart, said).not.toHaveProperty("kept");
+			expect(restart?.to, said).not.toBe(restart?.onto);
+		};
+
+		// A run on the base that fails is stuck, never let through, so no build starts on tests that never
+		// ran there (stages/test-writer/machine.ts). A redo's run is no different.
+		it(
+			"exam_touched, `test_wrong`, and every run of the redo on the base fails: it ends stuck `run_failed` with the cause, and the lane stops at the test writer in round 2, with no build on the redo",
+			{timeout: 300_000},
+			async () => {
+				const ran = await lane({
+					within: 140,
+					picks: YES,
+					queues: {exam_touched: ["test_wrong"]},
+					failOnBase: NO_REPORT,
+					failOnBaseFrom: 1,
+					fake: {
+						writesAt: {build: {0: [{path: "src/lower.test.ts", text: TOUCHED}]}},
+						answers: REDO,
+						see: SEE,
+					},
+				});
+				const said = ran.lines.join("\n");
+				expect(ran.lines, said).not.toContain(TIMED_OUT);
+				// The redo's run failed: its end says why, beside `run_failed`.
+				const asked = ran.facts.findIndex(
+					(f) => f.type === "asked" && String(f.ask).startsWith("a-exam_touched-"),
+				);
+				expect(asked, said).toBeGreaterThan(-1);
+				const redo = ran.facts
+					.slice(asked)
+					.find((f) => f.type === "ended" && f.stage === "test_writer");
+				expect(redo?.outcome, said).toEqual({kind: "stuck", why: "run_failed"});
+				expect(redo?.failure).toEqual(NO_REPORT);
+				// The lane stops there, in the round exam_touched's `test_wrong` sent it to.
+				expect(roundsOf(ran, "build"), said).toEqual([1]);
+				expect(heldAt(ran, 0)?.at, said).toEqual({_tag: "run", step: "test_writer"});
+				expect(heldAt(ran, 0)?.held.round).toBe(2);
+			},
+		);
+
+		it(
+			"stopped at the test writer in round 2, typed again: the branch goes on from its head",
+			{timeout: 300_000},
+			async () => {
+				const ran = await lane({
+					within: 140,
+					picks: YES,
+					failOnBase: NO_REPORT,
+					again: [
+						{
+							between: ({home}) =>
+								keptGoingOn(home, {at: {_tag: "run", step: "test_writer"}, round: 2}),
+						},
+					],
+				});
+				const said = ran.lines.join("\n");
+				expect(ran.lines, said).not.toContain(TIMED_OUT);
+				expect(heldAt(ran, 0)?.at, said).toEqual({_tag: "run", step: "test_writer"});
+				const restarts = restartsOf(ran);
+				expect(restarts, said).toHaveLength(1);
+				expect(restarts[0]).toMatchObject({from: "test_writer"});
+				keptItsBranch(restarts[0], said);
+				expect(restarts[0]?.to).toBe(restarts[0]?.head);
+			},
+		);
+
+		it(
+			"a `stop` on exam_conflict in round 1, typed again: the restart at that ask keeps the branch, and asks again",
+			{timeout: 300_000},
+			async () => {
+				const ON_MAIN =
+					'import {expect, it} from "vitest";\n\nit("lowers on main", () => {\n\texpect("AB".toLowerCase()).toBe("ab");\n});\n';
+				const ran = await lane({
+					within: 140,
+					picks: {...YES, exam_conflict: "stop"},
+					failMutation: true,
+					again: [
+						{
+							between: (where) =>
+								Effect.sync(() => pushToMain(where, [{path: "src/lower.test.ts", text: ON_MAIN}])),
+						},
+						{},
+					],
+				});
+				const said = ran.lines.join("\n");
+				expect(ran.lines, said).not.toContain(TIMED_OUT);
+				expect(heldAt(ran, 1)?.at, said).toEqual({
+					_tag: "ask",
+					for: "exam_conflict",
+					step: "test_writer",
+				});
+				expect(heldAt(ran, 1)?.held.round).toBe(1);
+				const restarts = restartsOf(ran);
+				expect(restarts, said).toHaveLength(2);
+				expect(restarts[1]).toMatchObject({from: "test_writer"});
+				keptItsBranch(restarts[1], said);
+				expect(askedFor(ran, "exam_conflict"), said).toHaveLength(2);
+				expect(codexRuns(ran.dir).filter((r) => r.step === "tests")).toHaveLength(1);
+			},
+		);
+
+		it(
+			"a stop that goes on at the test writer as the next round, in round 1, typed again: the branch goes on from its head",
+			{timeout: 300_000},
+			async () => {
+				const ran = await lane({
+					within: 140,
+					picks: YES,
+					failOnBase: NO_REPORT,
+					again: [
+						{
+							between: ({home}) =>
+								keptGoingOn(home, {at: {_tag: "run", step: "test_writer", round: "next"}}),
+						},
+					],
+				});
+				const said = ran.lines.join("\n");
+				expect(ran.lines, said).not.toContain(TIMED_OUT);
+				expect(heldAt(ran, 0)?.held.round, said).toBe(1);
+				const restarts = restartsOf(ran);
+				expect(restarts, said).toHaveLength(1);
+				expect(restarts[0]).toMatchObject({from: "test_writer"});
+				keptItsBranch(restarts[0], said);
+				expect(restarts[0]?.to).toBe(restarts[0]?.head);
+			},
+		);
+
+		it(
+			"stopped at the build in round 1 while main moves: the restart rebases the test writer's commit onto main, and the writer does not run again",
+			{timeout: 300_000},
+			async () => {
+				const ran = await lane({
+					within: 140,
+					picks: YES,
+					ticketAfter: [
+						{step: "test_writer", fact: "closed"},
+						{step: "build", fact: "reopened"},
+					],
+					again: [{between: moveMain}],
+				});
+				const said = ran.lines.join("\n");
+				expect(ran.lines, said).not.toContain(TIMED_OUT);
+				expect(heldAt(ran, 0)?.at, said).toEqual({_tag: "run", step: "build"});
+				expect(heldAt(ran, 0)?.held.round).toBe(1);
+				const restarts = restartsOf(ran);
+				expect(restarts, said).toHaveLength(1);
+				expect(restarts[0]).toMatchObject({from: "build", head: headBefore(ran), conflicts: []});
+				keptItsBranch(restarts[0], said);
+				const to = String(restarts[0]?.to);
+				expect(to).not.toBe(restarts[0]?.head);
+				expect(holds(ran, to, "docs/elsewhere.md")).toBe(true);
+				expect(holds(ran, to, "src/lower.test.ts")).toBe(true);
+				expect(
+					codexRuns(ran.dir).filter((r) => r.step === "tests"),
+					said,
+				).toHaveLength(1);
+				expect(ran.lines.at(-1)).toContain("ended: done");
+			},
+		);
+	});
 });
 
 // The proof that matters. The whole lane on the GitHub host, from a checkout whose origin is on
@@ -5404,6 +5613,41 @@ describe("the exam's pull request", () => {
 			expect(atBase, "the writer's base holds the merged exam").toBe(WRITTEN_RULE.trim());
 			const [tests] = codexRuns(ran.dir).filter((r) => r.step === "tests");
 			expect(tests?.seen[RULE], "the writer's folder holds the exam").toBe(WRITTEN_RULE);
+		},
+	);
+
+	// Tracker 194: the branch moves onto main as the exam's merge left it, and its end says so, so a
+	// fold or a restart reads the new base. A commit on the branch that main lacks is never lost.
+	it(
+		"once the exam's merge ends done, its end carries main's tip as base and head, and a commit on the lane's branch that main lacks stays under a kept ref the step's intent names",
+		{timeout: 300_000},
+		async () => {
+			const EARLIER = {path: "docs/earlier.md", text: "From an earlier line.\n"};
+			const ran = await lane({
+				title: RULES,
+				picks: YES,
+				fake: {see: [RULE]},
+				treeFirst: true,
+				treeHolds: [EARLIER],
+			});
+			const said = ran.lines.join("\n");
+			const merged = ran.facts[endOf(ran, "exam_merge")];
+			expect(merged?.outcome, said).toMatchObject({kind: "done"});
+			const {base, head} = Schema.decodeUnknownSync(
+				Schema.Struct({base: Schema.String, head: Schema.String}),
+			)(merged?.carry);
+			expect(base, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(head).toBe(base);
+			// Main's tip as the merge left it: on main, with the exam's rule file in it.
+			expect(remoteGit(ran.remote, "rev-list", "main").split("\n")).toContain(base);
+			expect(remoteGit(ran.remote, "show", `${base}:${RULE}`)).toBe(WRITTEN_RULE.trim());
+			// The branch's own commit stays on the remote, under the ref the exam's merge names.
+			const kept = remoteGit(ran.remote, "for-each-ref", "--format=%(refname)", "refs/kept/")
+				.split("\n")
+				.filter((ref) => ref.endsWith("/exam_merge"));
+			expect(kept, said).toHaveLength(1);
+			expect(kept[0]).toMatch(new RegExp(`^refs/kept/lane/${NUMBER}/\\d+/exam_merge$`));
+			expect(remoteGit(ran.remote, "show", `${kept[0]}:${EARLIER.path}`)).toBe(EARLIER.text.trim());
 		},
 	);
 

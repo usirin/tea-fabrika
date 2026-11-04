@@ -14,7 +14,7 @@ import {spansOf} from "../mutation/scope.ts";
 import {MutationRunner, MutationScope, type RunAsk} from "../mutation/services.ts";
 import {PushWork} from "../push/program.ts";
 import {TestsWork} from "../test-writer/program.ts";
-import {CheckRunner} from "./checks.ts";
+import {CheckRunner, TAIL_LINES} from "./checks.ts";
 import {ticketUrlOf} from "./hosts.ts";
 import {LANE_REPO, makeLaneHome, shWord} from "./lane-fixture.ts";
 import {LanePulls, PullWire} from "./pulls.ts";
@@ -356,6 +356,106 @@ describe("the test writer's run on the base, when it fails", () => {
 		expect(tail).toContain("[key cut]");
 		expect(tail).not.toContain(key);
 	});
+
+	/** The tail a failed run kept, as its lines. */
+	const tailOf = (failure: unknown) =>
+		String((failure as {readonly tail?: unknown}).tail)
+			.trimEnd()
+			.split("\n");
+
+	it("keeps both of stderr's two lines, in order", {timeout: 60_000}, async () => {
+		const failure = await failureOver(workWith(runs("echo first >&2; echo boom >&2; exit 1")));
+		expect(tailOf(failure)).toEqual(["first", "boom"]);
+	});
+
+	it("past its limit, keeps only stderr's last lines, in order", {timeout: 60_000}, async () => {
+		const many = TAIL_LINES + 5;
+		const failure = await failureOver(
+			workWith(
+				runs(`i=1; while [ $i -le ${many} ]; do echo "line $i" >&2; i=$((i+1)); done; exit 1`),
+			),
+		);
+		expect(tailOf(failure)).toEqual(
+			Array.from({length: TAIL_LINES}, (_, i) => `line ${many - TAIL_LINES + 1 + i}`),
+		);
+	});
+
+	// The box refuses to start when what it may read opens the home.
+	it(
+		"a box that cannot start says `box_failed`, with no exit code",
+		{timeout: 60_000},
+		async () => {
+			const failure = await failureOver(
+				workWith(writerWith((writer) => ({...writer, reads: [homedir()]}))),
+			);
+			expect(failure).toMatchObject({_tag: "could_not_run", why: "box_failed", code: null});
+		},
+	);
+
+	it("cuts the copy's own folder out of stderr's tail", {timeout: 60_000}, async () => {
+		const copies: string[] = [];
+		const failure = await failureOver(
+			workWith((work) =>
+				runs(`echo "fatal: could not read $PWD/src/slug.ts" >&2; exit 1`)({
+					...work,
+					copy: (commit) =>
+						Effect.tap(work.copy(commit), (folder) => Effect.sync(() => copies.push(folder))),
+				}),
+			),
+		);
+		expect(failure).toMatchObject({_tag: "could_not_run", why: "no_report"});
+		const [folder = ""] = copies;
+		expect(folder).not.toBe("");
+		const tail = String((failure as {readonly tail?: unknown}).tail);
+		expect(tail).toContain("src/slug.ts");
+		expect(tail).not.toContain(folder);
+	});
+
+	it.each([
+		[
+			"`[test_writer] run` is not set",
+			writerWith(({run: _, ...writer}) => writer),
+			"[test_writer] run is not set",
+		],
+		[
+			"the settings could not be read",
+			(work: LaneWork["Service"]) => ({
+				...work,
+				settings: Effect.fail({_tag: "unknown", says: "a broken settings file"} as const),
+			}),
+			"a broken settings file",
+		],
+		[
+			"a copy of the commit could not be made",
+			(work: LaneWork["Service"]) => ({
+				...work,
+				copy: () => Effect.fail({_tag: "unknown", says: "no room left"} as const),
+			}),
+			"no room left",
+		],
+	])(
+		"when %s, the tail says the cause's own words",
+		{timeout: 60_000},
+		async (_, change, words) => {
+			const failure = await failureOver(workWith(change));
+			expect(String((failure as {readonly tail?: unknown}).tail)).toContain(words);
+		},
+	);
+
+	it(
+		"a copy with no room for the run's own folder says `copy_failed`, and its tail does not name the copy",
+		{timeout: 60_000},
+		async () => {
+			// A file where the copy's folder should be: no folder can be made inside it.
+			const file = join(dir, "not-a-folder");
+			writeFileSync(file, "a file\n");
+			const failure = await failureOver(
+				workWith((work) => ({...work, copy: () => Effect.succeed(file)})),
+			);
+			expect(failure).toMatchObject({_tag: "could_not_run", why: "copy_failed", code: null});
+			expect(String((failure as {readonly tail?: unknown}).tail)).not.toContain(file);
+		},
+	);
 });
 
 // The push stage's push, on real git over a bare remote, and its ticket on a ledger in memory. A push
