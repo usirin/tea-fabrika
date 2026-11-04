@@ -9,7 +9,7 @@ import {pullRequestsOf, type Shown, tracker} from "@tea-fabrika/tracker";
 import {Effect, Exit, type FileSystem, Layer, Option, type Path, Scope, Stream} from "effect";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
 import {connect, hostLedger, invite} from "./connection.ts";
-import {AGENT_KEY, post} from "./post.ts";
+import {AGENT_KEY, type Post, post} from "./post.ts";
 
 // An agent posts to the tracker for its person, on a ledger server's twin (as shared.test.ts):
 // alice founds it and invites bob; bob's agent `triage` files a ticket and comments on it. The
@@ -74,31 +74,31 @@ afterAll(async () => {
 const run = <A, E>(e: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path | Scope.Scope>) =>
 	Effect.runPromise(e.pipe(Effect.scoped, Effect.provide(platform)));
 
+/** Ticket `n`'s entries as alice's host reads them, oldest first. */
+const entriesAt = (home: string, n: number) =>
+	Effect.gen(function* () {
+		const services = yield* Layer.build(Layer.merge(hostLedger(home), pullRequestsOf([])));
+		const started = yield* start(tracker, {}, {}, {id: "read", storage: memoryStorage()}).pipe(
+			Effect.provideContext(services),
+		);
+		if (started.kind !== "running") return yield* Effect.die("the tracker did not start");
+		const view = viewOf(tracker);
+		if (view === undefined) return yield* Effect.die("the tracker has no view");
+		yield* offer(started.run, "query", {ticket: n});
+		const shown = yield* started.run.machines.tickets.changes.pipe(
+			Stream.filter((s) => s !== null),
+			Stream.map((s) => view.of(s) as Shown),
+			Stream.filter((s) => s.page.kind === "ticket" && s.page.opened !== null),
+			Stream.runHead,
+			Effect.map(Option.getOrThrow),
+		);
+		yield* offer(started.run, "quit", null);
+		return shown.page.kind === "ticket" ? (shown.page.opened?.ticket.timeline ?? []) : [];
+	});
+
 /** Ticket `n`'s timeline as alice's host reads it: who wrote each fact, and its type. */
 const timelineAt = (home: string, n: number) =>
-	run(
-		Effect.gen(function* () {
-			const services = yield* Layer.build(Layer.merge(hostLedger(home), pullRequestsOf([])));
-			const started = yield* start(tracker, {}, {}, {id: "read", storage: memoryStorage()}).pipe(
-				Effect.provideContext(services),
-			);
-			if (started.kind !== "running") return yield* Effect.die("the tracker did not start");
-			const view = viewOf(tracker);
-			if (view === undefined) return yield* Effect.die("the tracker has no view");
-			yield* offer(started.run, "query", {ticket: n});
-			const shown = yield* started.run.machines.tickets.changes.pipe(
-				Stream.filter((s) => s !== null),
-				Stream.map((s) => view.of(s) as Shown),
-				Stream.filter((s) => s.page.kind === "ticket" && s.page.opened !== null),
-				Stream.runHead,
-				Effect.map(Option.getOrThrow),
-			);
-			yield* offer(started.run, "quit", null);
-			return shown.page.kind === "ticket"
-				? (shown.page.opened?.ticket.timeline.map((e) => [e.by, e.fact.type]) ?? [])
-				: [];
-		}),
-	);
+	run(entriesAt(home, n).pipe(Effect.map((es) => es.map((e) => [e.by, e.fact.type]))));
 
 describe("an agent posts for its person", () => {
 	it("as agent:<name> for that person, with a key made once and kept", async () => {
@@ -138,4 +138,62 @@ describe("an agent posts for its person", () => {
 		expect(none).toMatchObject({_tag: "ConnectFailed", why: expect.stringContaining("connect")});
 		expect(() => statSync(join(lone, AGENT_KEY))).toThrow();
 	});
+});
+
+// Ticket 196: `fabrika post file --from '<json>'` files through `post`, so `post` is the door a
+// bad `from` must not get past. Runs after the tests above: bob is connected, and #1 is filed.
+// PR 352 and its mutation step are ticket 188's.
+describe("an agent's filing says where it came from", () => {
+	const from = {
+		_tag: "pr",
+		url: "https://github.com/usirin/tea-fabrika/pull/352",
+		step: "mutation",
+	} as const;
+
+	// p3, the good side
+	it("puts its `from` on the ledger as written", () =>
+		run(
+			Effect.gen(function* () {
+				const lines = yield* post(person("bob").home, "triage", [
+					{type: "file", value: {title: "Mutation runner", body: "It links.", from}},
+				]);
+				expect(lines).toHaveLength(2);
+				const [filed] = yield* entriesAt(person("alice").home, 2);
+				expect(filed?.fact).toStrictEqual({
+					type: "filed",
+					title: "Mutation runner",
+					body: "It links.",
+					from,
+				});
+			}),
+		));
+
+	// p3
+	it("is refused with a `from` that does not fit, with why, and nothing is filed", () =>
+		run(
+			Effect.gen(function* () {
+				// Read from text, as the CLI's `--from` is: the types cannot see what is in it.
+				const writes: ReadonlyArray<Post> = JSON.parse(
+					JSON.stringify([
+						{
+							type: "file",
+							value: {
+								title: "Bad from",
+								body: "",
+								from: {_tag: "pr", url: "https://github.com/usirin/tea-fabrika/issues/352"},
+							},
+						},
+					]),
+				);
+				const answer = yield* post(person("bob").home, "triage", writes).pipe(
+					Effect.match({
+						onFailure: (e) => e,
+						onSuccess: (lines) => ({_tag: "posted", lines}),
+					}),
+				);
+				expect(answer).toMatchObject({_tag: "PostFailed", why: expect.stringMatching(/from/)});
+				const after = yield* post(person("bob").home, "triage", []);
+				expect(after.map((line) => line.slice(0, 2))).toEqual(["#1", "#2"]);
+			}),
+		));
 });

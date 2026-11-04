@@ -617,3 +617,81 @@ describe("what a yes was given on", () => {
 		);
 	});
 });
+
+// Ticket 196: a filing records where it came from (docs/direction/a-ticket-says-where-it-came-from.md).
+// Each case is the shape one of tickets 186 to 195 needed. The run ids and PR numbers are the real
+// ones; the comment anchors and the exam_review run's id are made up.
+describe("a filing that says where it came from", () => {
+	const REPO = "https://github.com/usirin/tea-fabrika";
+	const filedRow = (data: object) =>
+		row({
+			kind: "filed",
+			data: JSON.stringify({type: "filed", title: "Login fails", body: "", ...data}),
+		});
+	const factRead = (data: object) => {
+		const read = readRow(filedRow(data));
+		return read.kind === "entry" ? read.entry.fact : read;
+	};
+
+	// p1
+	it("with no `from` reads and folds as it did before the key, with no `from` made up", () => {
+		const fact = factRead({});
+		expect(fact).toStrictEqual({type: "filed", title: "Login fails", body: ""});
+		const read = readRow(filedRow({}));
+		const {tickets, problems} = fold([], read.kind === "entry" ? [read.entry] : []);
+		expect(problems).toEqual([]);
+		expect(tickets.map((t) => [t.number, t.title, t.timeline[0]?.fact])).toEqual([
+			[1, "Login fails", {type: "filed", title: "Login fails", body: ""}],
+		]);
+	});
+
+	// p2
+	const cases: readonly (readonly [string, object])[] = [
+		["a pull request's step (188)", {_tag: "pr", url: `${REPO}/pull/352`, step: "mutation"}],
+		[
+			"a review comment on a pull request (186)",
+			{_tag: "pr", url: `${REPO}/pull/357#discussion_r1001`, step: "review"},
+		],
+		["a pull request, no step named", {_tag: "pr", url: `${REPO}/pull/352`}],
+		["a lane run (193)", {_tag: "run", ticket: 117, run: "r-test_writer-26"}],
+		[
+			"a lane run at a head (194)",
+			{_tag: "run", ticket: 117, run: "r-test_writer-25", head: "b5b969a0"},
+		],
+		["a walk of a pull request (191)", {_tag: "walk", url: `${REPO}/pull/332`}],
+	];
+	it.each(cases)("from %s reads back as written, `_tag` and all", (_, from) => {
+		expect(factRead({from})).toStrictEqual({type: "filed", title: "Login fails", body: "", from});
+	});
+
+	it("keeps its `from` on the ticket the fold makes", () => {
+		const from = {_tag: "walk", url: `${REPO}/pull/361`};
+		const read = readRow(filedRow({from}));
+		const [ticket] = fold([], read.kind === "entry" ? [read.entry] : []).tickets;
+		expect(ticket?.timeline[0]?.fact).toStrictEqual({
+			type: "filed",
+			title: "Login fails",
+			body: "",
+			from,
+		});
+	});
+
+	// p4
+	const bad: readonly (readonly [string, object])[] = [
+		["an unknown case", {_tag: "job", url: `${REPO}/pull/352`}],
+		["a `pr` url that is an issue, not a pull request", {_tag: "pr", url: `${REPO}/issues/352`}],
+		["a `pr` url on another host", {_tag: "pr", url: "https://gitlab.com/a/b/pull/3"}],
+		["a `pr` step that is no stage's name", {_tag: "pr", url: `${REPO}/pull/352`, step: "Re view"}],
+		["a `run` on ticket 0", {_tag: "run", ticket: 0, run: "r-1"}],
+		["a `run` with no run id", {_tag: "run", ticket: 117}],
+		["a `run` at a short sha", {_tag: "run", ticket: 117, run: "r-1", head: "b5b96"}],
+		["a `walk` with no url", {_tag: "walk", pr: 332}],
+		["a `walk` url that is not https", {_tag: "walk", url: "http://example.com/x"}],
+		["no `_tag`", {url: `${REPO}/pull/352`}],
+	];
+	it.each(bad)("with %s is a broken row, and says where", (_, from) => {
+		const read = readRow(filedRow({from}));
+		expect(read.kind).toBe("broken");
+		expect(read.kind === "broken" && read.why).toMatch(/^row 1 on #1: its data is not a fact/);
+	});
+});
