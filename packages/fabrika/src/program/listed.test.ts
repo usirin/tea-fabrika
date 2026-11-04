@@ -1,7 +1,8 @@
+import {defineMachine} from "@demlik/tea";
 import {Context, Effect, Layer, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {type Entry, listed} from "./listed.ts";
-import {defineProgram} from "./program.ts";
+import {defineProgram, kind, viewOf} from "./program.ts";
 import {flag, input, output} from "./shape.ts";
 import {memoryStorage} from "./storage.ts";
 
@@ -177,5 +178,63 @@ describe("listed: a host that is not tsh", () => {
 		await Effect.runPromise(Effect.scoped(Layer.build(boot)));
 		// One for the boot, one for the run started inside it.
 		expect(built).toBe(2);
+	});
+});
+
+// An entry as an agent may start it (tracker 185b, PR 2). Today's version.
+//
+//   listed(count, base).forAgent()           the same entry: count has no input only a person tells
+//   listed(asks, Layer.empty).forAgent()     one entry for agents, made once: asks less `answer`,
+//                                            with its view as it was
+
+const tally = defineMachine({
+	types: {model: {} as {readonly n: number}, msg: {} as {readonly type: "plus"}, ctx: undefined},
+	cmds: [],
+	init: (loaded) => [loaded ?? {n: 0}, []],
+	update: {plus: (s) => [{n: s.n + 1}, []]},
+});
+
+/** A program with a window, one input only a person tells, and one anyone may. */
+const asks = defineProgram({
+	name: "asks",
+	description: "Counts each number it is told, and takes a person's answer.",
+	inputs: {
+		answer: input(Schema.Int, "An answer. A person only.", {personOnly: true}),
+		n: input(Schema.Int, "A number."),
+	},
+	outputs: {},
+	machines: {
+		tally: kind({
+			machine: tally,
+			state: Schema.Struct({n: Schema.Int}),
+			parent: "main",
+			options: () => ({ctx: undefined}),
+			drawing: () => ({name: "tally", steps: {}}),
+			status: (s) => `${s.n} told`,
+		}),
+	},
+	view: {machine: "tally", data: Schema.Struct({n: Schema.Int}), of: (s) => ({n: s.n})},
+	main: () => Effect.void,
+});
+
+describe("forAgent: an entry as an agent may start it", () => {
+	it("is the entry itself when its program has no input only a person tells", () => {
+		const {entries} = packed();
+		for (const entry of entries.values()) expect(entry.forAgent()).toBe(entry);
+	});
+
+	it("is made once for a program with one: the same entry on every ask, and not the person's", () => {
+		const entry = listed(asks, Layer.empty);
+		const first = entry.forAgent();
+		expect(first).not.toBe(entry);
+		expect(first.forAgent()).toBe(first);
+		expect(entry.forAgent()).toBe(first);
+		expect(Object.keys(first.program.inputs)).toEqual(["n"]);
+	});
+
+	it("keeps the program's view, so a window finds it on the agent's program too", () => {
+		const view = viewOf(asks);
+		expect(view).toBeDefined();
+		expect(viewOf(listed(asks, Layer.empty).forAgent().program)).toBe(view);
 	});
 });

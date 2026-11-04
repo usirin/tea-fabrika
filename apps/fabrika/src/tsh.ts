@@ -252,6 +252,8 @@ interface Watch {
 /** An entry whose runs are watched as they start and, for a `call`, as they end. */
 const seenBy = (entry: Entry, watch: Watch): Entry => ({
 	...entry,
+	// Watched too: the spread's `forAgent` would hand back the entry under this one, unwatched.
+	forAgent: () => seenBy(entry.forAgent(), watch),
 	start: (flags, listeners, keeping) =>
 		entry
 			.start(flags, listeners, keeping)

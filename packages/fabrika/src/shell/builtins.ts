@@ -1,5 +1,6 @@
 import {Effect} from "effect";
 import {type Job, jobNamed} from "../host/jobs.ts";
+import {writerOf} from "../host/writer.ts";
 import {copyRows, fullRows} from "./copies.ts";
 import {readValue} from "./decode.ts";
 import {didYouMean} from "./did-you-mean.ts";
@@ -181,6 +182,11 @@ export const runBuiltin = (
 			case "stop": {
 				const job = named(shell, first, "stop");
 				if (typeof job === "string") return refuse(job);
+				// An agent's tsh drops no one else's job (tracker 185b): the `stop` tool, with its why,
+				// is how an agent stops a person's job. Refused before any stop is asked, so the
+				// record keeps no stopper. A person's tsh may stop any job.
+				if (writerOf(shell.by ?? "")?.kind === "agent" && job.by !== null && job.by !== shell.by)
+					return refuse(`%${job.n} is ${job.by}'s: the stop tool asks why`);
 				yield* stopJob(shell, job);
 				return ok;
 			}
