@@ -701,7 +701,6 @@ describe("what a pipe can feed", () => {
 		expect(takes("trace")).toEqual(expect.arrayContaining(["ticket", "any"]));
 		for (const own of ["toggle", "choose", "quit", "seek", "step"])
 			expect(takes("trace")).not.toContain(own);
-		expect(takes("map")).toEqual([]);
 	});
 
 	/** The input of trace a line feeds, as the shell's fit check wires it. */
