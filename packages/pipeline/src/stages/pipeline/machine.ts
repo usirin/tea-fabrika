@@ -284,8 +284,45 @@ const AskIn = Schema.Struct({
 	/** The head a merge's question is about, as the person sees it: the `asked` fact keeps it (self-fix PR 10). */
 	head: Schema.optionalKey(Schema.String),
 });
-/** How the lane ended, for what it takes with it. Left out: a lane saved before this key still reads. */
-const ReleaseIn = Schema.Struct({...LaneIn.fields, outcome: Schema.optionalKey(LaneOutcome)});
+/**
+ * Where a stopped lane goes on when the same line is typed again (self-fix PR 5, P6 and P10): a step
+ * it runs, or a question it asks again. `round: "next"`: the step runs as the round after the one
+ * the lane held, as a person's `again` would run it. Left out: the round it held. `step`, on an ask:
+ * the step the question is about.
+ *
+ *   {_tag: "run", step: "mutation"}                  // a stuck mutation step runs again
+ *   {_tag: "run", step: "build", round: "next"}      // a `stop` on the spent rounds
+ *   {_tag: "ask", for: "merge", step: "push"}        // a `no` on the merge asks it again
+ */
+export const Resume = Schema.Union([
+	Schema.TaggedStruct("run", {step: LaneStep, round: Schema.optionalKey(Schema.Literal("next"))}),
+	Schema.TaggedStruct("ask", {for: AskFor, step: LaneStep}),
+]);
+export type Resume = typeof Resume.Type;
+
+/**
+ * The `stopped` fact a stop right after a step's end writes on the ticket (self-fix PR 11b,
+ * ../../tickets/ticket.ts): the step, its own outcome, the lane's stop, and where the same line goes
+ * on. A crash's cause is code's to add as it writes it: the lane never holds the text.
+ */
+const StopFact = Schema.Struct({
+	type: Schema.Literal("stopped"),
+	stage: LaneStep,
+	outcome: Outcome,
+	lane: LaneOutcome,
+	from: Resume,
+});
+export type StopFact = typeof StopFact.Type;
+
+/**
+ * How the lane ended, for what it takes with it. Left out: a lane saved before this key still reads.
+ * `stopped`: a stop right after a step's end, for the ticket. Left out: any other release.
+ */
+const ReleaseIn = Schema.Struct({
+	...LaneIn.fields,
+	outcome: Schema.optionalKey(LaneOutcome),
+	stopped: Schema.optionalKey(StopFact),
+});
 
 /** Who filed it, as the lane reads it. */
 export const Filed = Schema.Struct({
@@ -347,22 +384,6 @@ export const Held = Schema.Struct({
 	trail: Schema.Array(Row),
 });
 export type Held = typeof Held.Type;
-
-/**
- * Where a stopped lane goes on when the same line is typed again (self-fix PR 5, P6 and P10): a step
- * it runs, or a question it asks again. `round: "next"`: the step runs as the round after the one
- * the lane held, as a person's `again` would run it. Left out: the round it held. `step`, on an ask:
- * the step the question is about.
- *
- *   {_tag: "run", step: "mutation"}                  // a stuck mutation step runs again
- *   {_tag: "run", step: "build", round: "next"}      // a `stop` on the spent rounds
- *   {_tag: "ask", for: "merge", step: "push"}        // a `no` on the merge asks it again
- */
-export const Resume = Schema.Union([
-	Schema.TaggedStruct("run", {step: LaneStep, round: Schema.optionalKey(Schema.Literal("next"))}),
-	Schema.TaggedStruct("ask", {for: AskFor, step: LaneStep}),
-]);
-export type Resume = typeof Resume.Type;
 
 /**
  * A fresh read of main: where the lane goes on, and what it held then. `routed`: a route's `fresh`
@@ -664,7 +685,8 @@ export const after = (
 					? "checks_not_run"
 					: "step_stuck",
 			);
-		// Self-fix PR 11b makes the service wait: until then, the lane stops as it did.
+		// The service waited before it answered (../../wait.ts): what reaches the lane is a refusal, or a
+		// service that does not wait yet, and the lane stops.
 		case "wait":
 		// The law says it never arrives. If it does, the law is wrong: stop, never guess.
 		case "cannot":
@@ -1169,15 +1191,41 @@ const freshAt = (
 	return s.asked.routed === true ? s.at : {_tag: "run", step: "push"};
 };
 
-/** The lane lets the ticket go: on an end, with nothing kept; on a stop, with its `Held` and where it goes on. */
-const releasing = (s: Held, close: End | Stop): Step_ => {
+/**
+ * The lane lets the ticket go: on an end, with nothing kept; on a stop, with its `Held` and where it
+ * goes on. Each release has its own intent, by the count and the trail, so the `stopped` fact of a
+ * lane that stops again after a restart is written too. `stopped`: as `ReleaseIn` says.
+ */
+const releasing = (s: Held, close: End | Stop, stopped?: StopFact): Step_ => {
 	const cmd = releaseLane({
 		number: s.number,
 		lane: s.lane,
 		outcome: close.outcome,
-		intent: intentOf("lane", s.number, "release"),
+		...(stopped === undefined ? {} : {stopped}),
+		intent: intentOf("lane", s.number, "release", s.count, s.trail.length),
 	});
 	return [{...heldOf(s), ...close, phase: "releasing", asked: cmd}, [cmd]];
+};
+
+/**
+ * Where a step's end took the lane, and the `stopped` fact for the ticket if it stopped there
+ * (self-fix PR 11b): the step and its own outcome beside the lane's stop, so a `step_stuck` never
+ * hides the step's `draft_failed`. Any other move is as it was. Pure.
+ */
+const sayingWhy = (step: LaneStep, outcome: Outcome, [next, cmds]: Step_): Step_ => {
+	if (next.phase !== "releasing" || !("at" in next)) return [next, cmds];
+	const {outcome: lane, said, at} = next;
+	return releasing(
+		heldOf(next),
+		{outcome: lane, said, at},
+		{
+			type: "stopped",
+			stage: step,
+			outcome,
+			lane,
+			from: at,
+		},
+	);
 };
 
 /** `said`: what the trail and the end say. `asks`: the question, if this move asks one. `call`: if that question is a call. */
@@ -1568,28 +1616,37 @@ export const lane = defineMachine({
 				trail: [...s.trail, {step: s.step, said}],
 			};
 			const {outcome, after: past} = m.value;
-			return move(
-				held,
+			return sayingWhy(
 				s.step,
-				after(s.step, outcome, s.round, s),
-				said,
-				askWords(s.step, outcome),
-				outcome.kind === "ask" && past !== undefined
-					? {about: outcome.for, after: past}
-					: undefined,
+				outcome,
+				move(
+					held,
+					s.step,
+					after(s.step, outcome, s.round, s),
+					said,
+					askWords(s.step, outcome),
+					outcome.kind === "ask" && past !== undefined
+						? {about: outcome.for, after: past}
+						: undefined,
+				),
 			);
 		},
-		// A step that could not run is run once more, as the same Act (P8). Twice: the lane stops there.
+		// A step that could not run is run once more, as the same Act (P8). Twice: the lane stops there,
+		// and the ticket says it could not run.
 		lane_step_err: (s): Step_ => {
 			if (s.phase !== "running") return [s, []];
 			if (s.again !== true) return [{...s, again: true}, [s.asked]];
-			return releasing(
-				{...heldOf(s), trail: [...s.trail, {step: s.step, said: RUN_FAILED}]},
-				{
-					outcome: {kind: "stuck", why: "step_failed"},
-					said: `${s.step}: could not run`,
-					at: {_tag: "run", step: s.step},
-				},
+			return sayingWhy(
+				s.step,
+				{kind: "stuck", why: "run_failed"},
+				releasing(
+					{...heldOf(s), trail: [...s.trail, {step: s.step, said: RUN_FAILED}]},
+					{
+						outcome: {kind: "stuck", why: "step_failed"},
+						said: `${s.step}: could not run`,
+						at: {_tag: "run", step: s.step},
+					},
+				),
 			);
 		},
 		// The question is on the ticket. The Listen goes on hearing for the answer.

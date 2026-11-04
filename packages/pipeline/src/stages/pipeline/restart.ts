@@ -122,11 +122,36 @@ const checksOf = ({head, commands, result, failed}: FactOf<"checked">): Checked 
 	failed,
 });
 
+/**
+ * The id a step's run writes under, on its `attempt` (self-fix PR 11b): the first try keeps today's
+ * `r-<step>-<count>`, so old tickets read the same, and a try after one that could not run adds its
+ * number. The ledger keeps a key's first write, so each try's end and cost stay. Pure.
+ *
+ *   runId("build", 5)      // "r-build-5"
+ *   runId("build", 5, 2)   // "r-build-5-2"
+ */
+export const runId = (step: LaneStep, count: number, attempt = 1): string =>
+	attempt === 1 ? `r-${step}-${count}` : `r-${step}-${count}-${attempt}`;
+
+const RETRIED = /^(r-[a-z_]+-\d+)-\d+$/;
+
+/** The first try's id of the run `run` is a try of: `r-build-5-2` is `r-build-5`. Pure. */
+export const firstRun = (run: string): string => RETRIED.exec(run)?.[1] ?? run;
+
+/** The try the step run at `count` is on now: one past each of its tries that ended on `timeline`. Pure. */
+export const nextAttempt = (timeline: readonly Entry[], step: LaneStep, count: number): number => {
+	const run = runId(step, count);
+	return 1 + timeline.filter((e) => e.fact.type === "ended" && firstRun(e.fact.run) === run).length;
+};
+
 /** The fold of a lane's facts. Pure. */
 export const fold = (seen: Seen): Folded => {
 	const missing = new Set<Field>();
 	const commits = [...seen.commits];
+	/** Each run, by its first try's id: a step tried again is one run (self-fix PR 11b). */
 	const runs = new Set<string>();
+	/** Where each run's end is on the trail: a later try's end takes its place. */
+	const rows = new Map<string, number>();
 	const kinds = new Map<string, AskFor>();
 	let carry: Carry = EMPTY;
 	let trail: Held["trail"] = [];
@@ -193,7 +218,7 @@ export const fold = (seen: Seen): Folded => {
 		switch (fact.type) {
 			case "started":
 				if (!isStep(fact.stage)) break;
-				runs.add(fact.run);
+				runs.add(firstRun(fact.run));
 				round = fact.round ?? 1;
 				inRun = null;
 				if (STEPS.indexOf(fact.stage) > STEPS.indexOf("plan")) pastPlan = true;
@@ -210,7 +235,11 @@ export const fold = (seen: Seen): Folded => {
 				break;
 			case "ended": {
 				if (!isStep(fact.stage)) break;
-				trail = [...trail, {step: fact.stage, said: nameOf(fact.outcome)}];
+				const row = {step: fact.stage, said: nameOf(fact.outcome)};
+				const tried = rows.get(firstRun(fact.run));
+				if (tried === undefined) rows.set(firstRun(fact.run), trail.length);
+				trail =
+					tried === undefined ? [...trail, row] : trail.map((was, i) => (i === tried ? row : was));
 				const change = fact.carry === undefined ? Option.none() : changeOf(fact.carry);
 				carry = Option.isSome(change)
 					? {...carry, ...change.value}

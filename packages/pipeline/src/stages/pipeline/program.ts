@@ -14,6 +14,7 @@ import {foldLedger} from "../../asks/rules.ts";
 import {bookTarget} from "../../code-host-local.ts";
 import {mustFail, mustPass} from "../../controls.ts";
 import {planOf, readTicketId, type TicketId, ticketOf} from "../../ids.ts";
+import {intentOf} from "../../primitives.ts";
 import type {AgentStep} from "../../settings.ts";
 import {hashOf, sha256, textOf} from "../../tickets/approval.ts";
 import {
@@ -28,6 +29,7 @@ import {
 	TicketNumber,
 } from "../../tickets/ticket.ts";
 import {Tickets} from "../../tickets/tickets.ts";
+import {OnWait} from "../../wait.ts";
 import {inert} from "../build/body.ts";
 import {examTouched} from "../build/check.ts";
 import type {Built} from "../build/form.ts";
@@ -109,7 +111,7 @@ import {
 } from "./machine.ts";
 import {FINAL, isEnd, LANE_NAMES} from "./outcome.ts";
 import {carriedAt, examTarget, LanePulls, LaneWatch, PullWire, standsAt} from "./pulls.ts";
-import {fold, seenOf} from "./restart.ts";
+import {fold, nextAttempt, runId, seenOf} from "./restart.ts";
 import {endTalk} from "./talk.ts";
 import {LaneHome, LaneWork} from "./work.ts";
 
@@ -1535,295 +1537,356 @@ const shipped = (at: At, pr: string) =>
 		return end.outcome;
 	}).pipe(Effect.scoped);
 
-const laneInterpret = ({send, machines}: Stages) => ({
-	lane_read: (cmd: ReturnType<typeof readFiled>) =>
-		Effect.gen(function* () {
-			const tickets = yield* Tickets;
-			const {person} = yield* LaneHome;
-			const ticket = yield* tickets.read(cmd.number);
-			return {
-				state: ticket.state === "closed" ? ("closed" as const) : ("open" as const),
-				mine: filedBy(ticket.timeline[0]?.by, person),
-			};
-		}).pipe(Effect.mapError(() => unknown)),
+/** The ticket and the lane's branch, as the code host has the branch now. `null`: it could not be read. */
+const prHeadNow = (n: number) =>
+	Effect.gen(function* () {
+		const work = yield* LaneWork;
+		const {branch} = yield* work.tree(n);
+		return yield* work.remoteHead(branch);
+	}).pipe(Effect.orElseSucceed((): string | null => null));
 
-	lane_claim: (cmd: ReturnType<typeof claimLane>) =>
-		Effect.gen(function* () {
-			const {repo} = yield* (yield* LaneWork).origin;
-			return yield* claim(`${repo}#${cmd.number}` as TicketId, cmd.lane);
-		}).pipe(Effect.mapError(() => unknown)),
-
-	lane_release: (cmd: ReturnType<typeof releaseLane>) =>
-		Effect.gen(function* () {
-			// First: it never fails, and a kill before the release comes back here to finish both.
-			yield* leaveBehind(cmd.number, cmd.outcome);
-			const {repo} = yield* (yield* LaneWork).origin;
-			yield* release(`${repo}#${cmd.number}` as TicketId, cmd.lane);
-			return "released" as const;
-		}).pipe(Effect.mapError(() => unknown)),
-
-	lane_ask: (cmd: ReturnType<typeof askPerson>) =>
-		Effect.gen(function* () {
-			const tickets = yield* Tickets;
-			const spent =
-				cmd.spent === true
-					? [
-							yield* tickets.read(cmd.number).pipe(
-								Effect.map((ticket) => spentWords(factsOf(ticket.timeline, "ended"))),
-								Effect.orElseSucceed(
-									() => "What the runs on this ticket have cost could not be read: price unknown.",
-								),
-							),
-						]
-					: [];
-			// Before the question, so a person who sees it finds this already there.
-			if ((cmd.does ?? []).length > 0)
-				yield* tickets
-					.talk(cmd.number, `${cmd.ask}/picks`, {
-						type: "commented",
-						body: saidOf(
-							[
-								...(cmd.also ?? []),
-								...spent,
-								"What each answer does:",
-								listed(cmd.does ?? []),
-							].join("\n"),
-						),
-					})
-					.pipe(Effect.ignore);
-			// The lane that asks, by the trace id its `started` facts carry, so a view of a ticket with
-			// several lanes puts the ask in the right one.
-			const trace = yield* jobTraceId;
-			yield* tickets.write(cmd.number, cmd.ask, {
-				type: "asked",
-				ask: cmd.ask,
-				what: cmd.what,
-				...(cmd.head === undefined ? {} : {head: cmd.head}),
-				picks: cmd.picks as never,
-				...(trace === null ? {} : {trace}),
-			});
-			yield* send("step", `asks: ${cmd.what} Answer it in: ticket --ticket ${cmd.number}`);
-			return null;
-		}).pipe(Effect.mapError(() => unknown)),
-
-	// A fresh read of main, a restart's (self-fix PR 5) or a route's (PR 11): the ticket first, then
-	// main, then the lane's branch put on it (`putOnMain`). The ticket's row says from where, main then
-	// and now, and what changed. A route's read pushes a merged head with green checks (`pushedIfRouted`).
-	lane_fresh: (cmd: ReturnType<typeof freshMain>) =>
-		Effect.gen(function* () {
-			const tickets = yield* Tickets;
-			const work = yield* LaneWork;
-			const {person} = yield* LaneHome;
-			yield* work.servingLane(cmd.number);
-			const ticket = yield* tickets.read(cmd.number);
-			if (ticket.state === "closed") return {_tag: "closed"} as const;
-			if (!filedBy(ticket.timeline[0]?.by, person)) return {_tag: "not_yours"} as const;
-			const onto = yield* work.main;
-			const put = startsOver(cmd.from) ? yield* startOver(cmd, onto) : yield* putOnMain(cmd, onto);
-			const {found} = put;
-			const head = cmd.carry.head;
-			const to = found.carry?.head ?? head;
-			yield* tickets.write(cmd.number, cmd.intent, {
-				type: "restarted",
-				from: cmd.from.step,
-				base: cmd.carry.base,
-				onto,
-				head,
-				to,
-				conflicts: put.conflicts,
-				...(put.kept === undefined ? {} : {kept: put.kept}),
-			});
-			if (found._tag === "conflicts" || found._tag === "exam_conflict") return found;
-			// A step after the build runs only on green checks at its head: code runs them now, if the head
-			// has none, so a red one goes back to the builder and one that could not run stops the lane.
-			const checked = found.carry.checked ?? cmd.carry.checked;
-			const green = checked !== undefined && checked.head === to && checked.result === "green";
-			if (!afterBuild(cmd.from.step) || to === null || green)
-				return yield* pushedIfRouted(machines.push, cmd, ticket, found, green);
-			const ran = yield* recordChecks({run: cmd.intent, cmd}, to);
-			const red =
-				ran.checked.result === "red"
-					? {open: withRed(found.carry.open ?? cmd.carry.open, ran.ran.failed, ran.ran.tail)}
-					: {};
-			const read = {...found, carry: {...found.carry, checked: ran.checked, ...red}};
-			return yield* pushedIfRouted(
-				machines.push,
-				cmd,
-				ticket,
-				read,
-				ran.checked.result === "green",
-			);
-		}).pipe(Effect.mapError(() => unknown)),
-
-	lane_step: (cmd: Carried) =>
-		Effect.gen(function* () {
-			const tickets = yield* Tickets;
-			const work = yield* LaneWork;
-			const now = yield* LaneNow;
-			const home = yield* LaneHome;
-			yield* work.servingLane(cmd.number);
-			const run = `r-${cmd.step}-${cmd.count}`;
-			// "run a step" says its run and step as it begins too, so a log reading its span can say
-			// the step began (apps/fabrika, host/log.ts); its end tags them again, with its outcome.
-			yield* Effect.annotateCurrentSpan({[LANE.run]: run, [LANE.step]: cmd.step});
-			const from = yield* Clock.currentTimeMillis;
-			const said = (line: string) => send("step", `${cmd.step}: ${line}`);
-			const seen = yield* Ref.make<Picked | null>(null);
-			const keying = yield* Ref.make<{readonly key: Hash; readonly inputs: Inputs} | null>(null);
-
-			const body = Effect.gen(function* () {
-				const {repo} = yield* work.origin;
-				const url = ticketUrlOf(repo, cmd.number);
-				const id = yield* need(readTicketId(url), `${url} names no ticket`);
-				const settings = yield* work.settings;
-				const agent = AGENT_STEPS[cmd.step];
-				const picked = agent === undefined ? null : pickedFor(settings, agent.step);
-				// Kept outside the body, so its end prices the run by its model even when it broke.
-				yield* Ref.set(seen, picked);
-				const brief = agent === undefined ? null : yield* loadBrief(home.briefs, agent.brief);
+const laneInterpret = ({send, machines}: Stages) => {
+	/**
+	 * A crash's first lines, by ticket, from the step's run to the release that stops on it: the
+	 * `stopped` fact keeps them (self-fix PR 11b). The lane's state never holds the text.
+	 */
+	const crashes = new Map<number, string>();
+	/** A service that waits says so on the lane's tile, what it waits on (../../wait.ts). */
+	const onTile =
+		(prefix = "") =>
+		<A, E, R>(effect: Effect.Effect<A, E, R>) =>
+			Effect.provideService(effect, OnWait, (line: string) => send("step", `${prefix}${line}`));
+	return {
+		lane_read: (cmd: ReturnType<typeof readFiled>) =>
+			Effect.gen(function* () {
+				const tickets = yield* Tickets;
+				const {person} = yield* LaneHome;
 				const ticket = yield* tickets.read(cmd.number);
-				const first = ticket.timeline[0]?.fact;
-				// What the step reads, as its input key (P7): only known now. The end keeps the inputs too, the
-				// same value the key is made of, so a later reader can say which one changed.
-				const inputs: Inputs = {
-					step: cmd.step,
-					ticket: yield* hashOf(textOf(ticket)),
-					plan: cmd.carry.version,
-					base: cmd.carry.base,
-					exam: examHeadOf(ticket.timeline),
-					head: cmd.carry.head,
-					brief: brief?.hash ?? null,
-					harness: picked?.harness ?? null,
-					model: picked?.model ?? null,
-					effort: picked?.effort ?? null,
-					settings: yield* sha256(JSON.stringify(settings)),
+				return {
+					state: ticket.state === "closed" ? ("closed" as const) : ("open" as const),
+					mine: filedBy(ticket.timeline[0]?.by, person),
 				};
-				yield* Ref.set(keying, {key: yield* keyOf(inputs), inputs});
-				yield* now.exam.set(cmd.carry.exam);
-				const trace = yield* jobTraceId;
-				// Before any setup: the ticket shows the step running, and a crash leaves `started` behind.
-				// Its agent's session id comes as a fact of its own, when the session opens.
-				yield* stepStarted(cmd.number, {
-					type: "started",
-					run,
-					stage: cmd.step,
-					task: null,
-					log: null,
-					round: cmd.round,
-					...(trace === null ? {} : {trace}),
-					...(brief === null ? {} : {brief: brief.name, hash: brief.hash}),
-					...(picked === null
-						? {}
-						: {harness: picked.harness, model: picked.model, effort: picked.effort}),
-				});
-				const at: At = {
-					cmd,
-					repo,
-					url,
-					id,
-					run,
-					picked,
-					brief,
-					title: ticket.title,
-					body: first?.type === "filed" ? first.body : "",
-					stages: machines,
-					tell: (folder, access, slots) =>
-						brief === null || picked === null
-							? Effect.void
-							: now.set({picked, brief, slots, folder, access}),
-				};
-				return yield* bodies[cmd.step](at) as Effect.Effect<BodyEnd, Broke>;
-			}).pipe(Effect.scoped);
+			}).pipe(
+				onTile(),
+				Effect.mapError(() => unknown),
+			),
 
-			const exit = yield* Effect.exit(body);
-			// The session id a write could not land when it opened, written now, so it is never lost.
-			const sessionLeft = now.session.left;
-			const spent = yield* now.take;
-			// Who ran it, even when the step broke after it was picked: a price is never guessed as free.
-			const picked = yield* Ref.get(seen);
-			const {usd, listUsd} = priceOf(picked, spent);
-			const to = yield* Clock.currentTimeMillis;
-			const keyed = yield* Ref.get(keying);
-			// `carry`: what the step left, the change the lane lays on its carry, for the fold (./restart.ts).
-			const write = (outcome: Outcome, more: Pick<BodyEnd, "carry" | "failed" | "trusted">) =>
-				tickets.write(cmd.number, `${run}/ended`, {
-					type: "ended",
-					run,
-					stage: cmd.step,
-					outcome,
-					usd,
-					input: spent.input,
-					output: spent.output,
-					turns: spent.turns,
-					misfits: spent.misfits,
-					cached: spent.cached,
-					billed: spent.usd,
-					listUsd,
-					minutes: (to - from) / 60_000,
-					...(picked === null
-						? {}
-						: {harness: picked.harness, model: picked.model, effort: picked.effort}),
-					...(more.failed === undefined ? {} : {failed: more.failed}),
-					...(more.trusted === undefined ? {} : {trusted: more.trusted}),
-					...(keyed === null ? {} : keyed),
-					carry: more.carry,
-				} as CodeFact);
-			// "run a step" ends tagged with what its `ended` says, so its spans tie to the run without
-			// matching times. Dollars only when known: a list price, else what claude billed.
-			const tagged = (outcome: Outcome) =>
-				Effect.annotateCurrentSpan(
-					stepTags({
-						run,
-						step: cmd.step,
-						outcome: nameOf(outcome),
-						agent:
-							picked === null
-								? null
-								: {
-										model: picked.model,
-										input: spent.input,
-										cached: spent.cached,
-										output: spent.output,
-									},
-						usd: listUsd ?? (picked?.harness === "claude" ? spent.usd : null),
-					}),
-				);
-			if (Exit.isSuccess(exit)) {
-				const {outcome, carry, problems, after: past} = exit.value;
-				yield* sessionLeft.pipe(Effect.ignore);
-				yield* write(outcome, exit.value);
-				yield* tagged(outcome);
-				yield* said(
-					[
-						nameOf(outcome),
-						...(picked === null
-							? []
-							: [`${picked.model}, ${spent.input + spent.output} tokens, ${money(listUsd)}`]),
-					].join("  "),
-				);
-				// A stuck the lane ends on says so. What comes before a question says what the step found,
-				// where the question can point at it.
-				const talk = endTalk(cmd.step, outcome, cmd.round, problems);
-				if (talk?.kind === "stuck") yield* said(`why: ${problems.join(" ").slice(0, 2_000)}`);
-				if (talk !== null)
-					yield* tickets
-						.talk(cmd.number, `${run}/${talk.kind === "stuck" ? "why" : "found"}`, {
-							type: "commented",
-							body: saidOf(talk.body),
+		lane_claim: (cmd: ReturnType<typeof claimLane>) =>
+			Effect.gen(function* () {
+				const {repo} = yield* (yield* LaneWork).origin;
+				return yield* claim(`${repo}#${cmd.number}` as TicketId, cmd.lane);
+			}).pipe(
+				onTile(),
+				Effect.mapError(() => unknown),
+			),
+
+		lane_release: (cmd: ReturnType<typeof releaseLane>) =>
+			Effect.gen(function* () {
+				// First: it never fails, and a kill before the release comes back here to finish both.
+				yield* leaveBehind(cmd.number, cmd.outcome);
+				// A stop right after a step's end says why on the ticket, a crash's cause with it.
+				const {stopped} = cmd;
+				if (stopped !== undefined) {
+					const crashed = stopped.outcome.kind === "stuck" && stopped.outcome.why === "run_failed";
+					const why = crashed ? crashes.get(cmd.number) : undefined;
+					yield* (yield* Tickets)
+						.write(cmd.number, `${cmd.intent}/stopped`, {
+							...stopped,
+							...(why === undefined ? {} : {why}),
 						})
 						.pipe(Effect.ignore);
-				return {outcome, carry, ...(past === undefined ? {} : {after: past})};
-			}
-			// A named end: the fact says it broke, and the line says what a person can do.
-			const stops = String(exit.cause).slice(0, 300);
-			yield* sessionLeft.pipe(Effect.ignore);
-			const broke = factOutcome({kind: "stuck", why: "run_failed"});
-			yield* write(broke, {carry: {}}).pipe(Effect.ignore);
-			yield* tagged(broke);
-			yield* said(`could not run: ${stops}`);
-			return yield* Effect.fail(unknown);
-		}).pipe(Effect.mapError(() => unknown)),
-});
+				}
+				crashes.delete(cmd.number);
+				const {repo} = yield* (yield* LaneWork).origin;
+				yield* release(`${repo}#${cmd.number}` as TicketId, cmd.lane);
+				return "released" as const;
+			}).pipe(
+				onTile(),
+				Effect.mapError(() => unknown),
+			),
+
+		lane_ask: (cmd: ReturnType<typeof askPerson>) =>
+			Effect.gen(function* () {
+				const tickets = yield* Tickets;
+				const spent =
+					cmd.spent === true
+						? [
+								yield* tickets.read(cmd.number).pipe(
+									Effect.map((ticket) => spentWords(factsOf(ticket.timeline, "ended"))),
+									Effect.orElseSucceed(
+										() =>
+											"What the runs on this ticket have cost could not be read: price unknown.",
+									),
+								),
+							]
+						: [];
+				// Before the question, so a person who sees it finds this already there.
+				if ((cmd.does ?? []).length > 0)
+					yield* tickets
+						.talk(cmd.number, `${cmd.ask}/picks`, {
+							type: "commented",
+							body: saidOf(
+								[
+									...(cmd.also ?? []),
+									...spent,
+									"What each answer does:",
+									listed(cmd.does ?? []),
+								].join("\n"),
+							),
+						})
+						.pipe(Effect.ignore);
+				// The lane that asks, by the trace id its `started` facts carry, so a view of a ticket with
+				// several lanes puts the ask in the right one.
+				const trace = yield* jobTraceId;
+				yield* tickets.write(cmd.number, cmd.ask, {
+					type: "asked",
+					ask: cmd.ask,
+					what: cmd.what,
+					...(cmd.head === undefined ? {} : {head: cmd.head}),
+					picks: cmd.picks as never,
+					...(trace === null ? {} : {trace}),
+				});
+				yield* send("step", `asks: ${cmd.what} Answer it in: ticket --ticket ${cmd.number}`);
+				return null;
+			}).pipe(Effect.mapError(() => unknown)),
+
+		// A fresh read of main, a restart's (self-fix PR 5) or a route's (PR 11): the ticket first, then
+		// main, then the lane's branch put on it (`putOnMain`). The ticket's row says from where, main then
+		// and now, and what changed. A route's read pushes a merged head with green checks (`pushedIfRouted`).
+		lane_fresh: (cmd: ReturnType<typeof freshMain>) =>
+			Effect.gen(function* () {
+				const tickets = yield* Tickets;
+				const work = yield* LaneWork;
+				const {person} = yield* LaneHome;
+				yield* work.servingLane(cmd.number);
+				const ticket = yield* tickets.read(cmd.number);
+				if (ticket.state === "closed") return {_tag: "closed"} as const;
+				if (!filedBy(ticket.timeline[0]?.by, person)) return {_tag: "not_yours"} as const;
+				const onto = yield* work.main;
+				const put = startsOver(cmd.from)
+					? yield* startOver(cmd, onto)
+					: yield* putOnMain(cmd, onto);
+				const {found} = put;
+				const head = cmd.carry.head;
+				const to = found.carry?.head ?? head;
+				yield* tickets.write(cmd.number, cmd.intent, {
+					type: "restarted",
+					from: cmd.from.step,
+					base: cmd.carry.base,
+					onto,
+					head,
+					to,
+					conflicts: put.conflicts,
+					...(put.kept === undefined ? {} : {kept: put.kept}),
+				});
+				if (found._tag === "conflicts" || found._tag === "exam_conflict") return found;
+				// A step after the build runs only on green checks at its head: code runs them now, if the head
+				// has none, so a red one goes back to the builder and one that could not run stops the lane.
+				const checked = found.carry.checked ?? cmd.carry.checked;
+				const green = checked !== undefined && checked.head === to && checked.result === "green";
+				if (!afterBuild(cmd.from.step) || to === null || green)
+					return yield* pushedIfRouted(machines.push, cmd, ticket, found, green);
+				const ran = yield* recordChecks({run: cmd.intent, cmd}, to);
+				const red =
+					ran.checked.result === "red"
+						? {open: withRed(found.carry.open ?? cmd.carry.open, ran.ran.failed, ran.ran.tail)}
+						: {};
+				const read = {...found, carry: {...found.carry, checked: ran.checked, ...red}};
+				return yield* pushedIfRouted(
+					machines.push,
+					cmd,
+					ticket,
+					read,
+					ran.checked.result === "green",
+				);
+			}).pipe(Effect.mapError(() => unknown)),
+
+		lane_step: (cmd: Carried) =>
+			Effect.gen(function* () {
+				const tickets = yield* Tickets;
+				const work = yield* LaneWork;
+				const now = yield* LaneNow;
+				const home = yield* LaneHome;
+				yield* work.servingLane(cmd.number);
+				// A try after one that could not run is a run of its own (self-fix PR 11b): its own id, and its
+				// own machines under the step, so the first try's end and cost stay on the ticket.
+				const attempt = nextAttempt(
+					(yield* tickets.read(cmd.number)).timeline,
+					cmd.step,
+					cmd.count,
+				);
+				const run = runId(cmd.step, cmd.count, attempt);
+				const tried: Carried =
+					attempt === 1 ? cmd : {...cmd, intent: intentOf(cmd.intent, attempt)};
+				// "run a step" says its run and step as it begins too, so a log reading its span can say
+				// the step began (apps/fabrika, host/log.ts); its end tags them again, with its outcome.
+				yield* Effect.annotateCurrentSpan({[LANE.run]: run, [LANE.step]: cmd.step});
+				const from = yield* Clock.currentTimeMillis;
+				const said = (line: string) => send("step", `${cmd.step}: ${line}`);
+				const seen = yield* Ref.make<Picked | null>(null);
+				const keying = yield* Ref.make<{readonly key: Hash; readonly inputs: Inputs} | null>(null);
+
+				const body = Effect.gen(function* () {
+					const {repo} = yield* work.origin;
+					const url = ticketUrlOf(repo, cmd.number);
+					const id = yield* need(readTicketId(url), `${url} names no ticket`);
+					const settings = yield* work.settings;
+					const agent = AGENT_STEPS[cmd.step];
+					const picked = agent === undefined ? null : pickedFor(settings, agent.step);
+					// Kept outside the body, so its end prices the run by its model even when it broke.
+					yield* Ref.set(seen, picked);
+					const brief = agent === undefined ? null : yield* loadBrief(home.briefs, agent.brief);
+					const ticket = yield* tickets.read(cmd.number);
+					const first = ticket.timeline[0]?.fact;
+					// What the step reads, as its input key (P7): only known now. The end keeps the inputs too, the
+					// same value the key is made of, so a later reader can say which one changed.
+					const inputs: Inputs = {
+						step: cmd.step,
+						ticket: yield* hashOf(textOf(ticket)),
+						plan: cmd.carry.version,
+						base: cmd.carry.base,
+						exam: examHeadOf(ticket.timeline),
+						head: cmd.carry.head,
+						brief: brief?.hash ?? null,
+						harness: picked?.harness ?? null,
+						model: picked?.model ?? null,
+						effort: picked?.effort ?? null,
+						settings: yield* sha256(JSON.stringify(settings)),
+						examHead: cmd.carry.examPull?.head ?? null,
+						prHead: cmd.carry.pr === null ? null : yield* prHeadNow(cmd.number),
+					};
+					yield* Ref.set(keying, {key: yield* keyOf(inputs), inputs});
+					yield* now.exam.set(cmd.carry.exam);
+					const trace = yield* jobTraceId;
+					// Before any setup: the ticket shows the step running, and a crash leaves `started` behind.
+					// Its agent's session id comes as a fact of its own, when the session opens.
+					yield* stepStarted(cmd.number, {
+						type: "started",
+						run,
+						stage: cmd.step,
+						task: null,
+						log: null,
+						round: cmd.round,
+						...(trace === null ? {} : {trace}),
+						...(brief === null ? {} : {brief: brief.name, hash: brief.hash}),
+						...(picked === null
+							? {}
+							: {harness: picked.harness, model: picked.model, effort: picked.effort}),
+					});
+					const at: At = {
+						cmd: tried,
+						repo,
+						url,
+						id,
+						run,
+						picked,
+						brief,
+						title: ticket.title,
+						body: first?.type === "filed" ? first.body : "",
+						stages: machines,
+						tell: (folder, access, slots) =>
+							brief === null || picked === null
+								? Effect.void
+								: now.set({picked, brief, slots, folder, access}),
+					};
+					return yield* bodies[cmd.step](at) as Effect.Effect<BodyEnd, Broke>;
+				}).pipe(Effect.scoped);
+
+				const exit = yield* Effect.exit(body);
+				// The session id a write could not land when it opened, written now, so it is never lost.
+				const sessionLeft = now.session.left;
+				const spent = yield* now.take;
+				// Who ran it, even when the step broke after it was picked: a price is never guessed as free.
+				const picked = yield* Ref.get(seen);
+				const {usd, listUsd} = priceOf(picked, spent);
+				const to = yield* Clock.currentTimeMillis;
+				const keyed = yield* Ref.get(keying);
+				// `carry`: what the step left, the change the lane lays on its carry, for the fold (./restart.ts).
+				const write = (outcome: Outcome, more: Pick<BodyEnd, "carry" | "failed" | "trusted">) =>
+					tickets.write(cmd.number, `${run}/ended`, {
+						type: "ended",
+						run,
+						stage: cmd.step,
+						outcome,
+						usd,
+						input: spent.input,
+						output: spent.output,
+						turns: spent.turns,
+						misfits: spent.misfits,
+						cached: spent.cached,
+						billed: spent.usd,
+						listUsd,
+						minutes: (to - from) / 60_000,
+						...(picked === null
+							? {}
+							: {harness: picked.harness, model: picked.model, effort: picked.effort}),
+						...(more.failed === undefined ? {} : {failed: more.failed}),
+						...(more.trusted === undefined ? {} : {trusted: more.trusted}),
+						...(keyed === null ? {} : keyed),
+						carry: more.carry,
+					} as CodeFact);
+				// "run a step" ends tagged with what its `ended` says, so its spans tie to the run without
+				// matching times. Dollars only when known: a list price, else what claude billed.
+				const tagged = (outcome: Outcome) =>
+					Effect.annotateCurrentSpan(
+						stepTags({
+							run,
+							step: cmd.step,
+							outcome: nameOf(outcome),
+							agent:
+								picked === null
+									? null
+									: {
+											model: picked.model,
+											input: spent.input,
+											cached: spent.cached,
+											output: spent.output,
+										},
+							usd: listUsd ?? (picked?.harness === "claude" ? spent.usd : null),
+						}),
+					);
+				if (Exit.isSuccess(exit)) {
+					const {outcome, carry, problems, after: past} = exit.value;
+					yield* sessionLeft.pipe(Effect.ignore);
+					yield* write(outcome, exit.value);
+					yield* tagged(outcome);
+					yield* said(
+						[
+							nameOf(outcome),
+							...(picked === null
+								? []
+								: [`${picked.model}, ${spent.input + spent.output} tokens, ${money(listUsd)}`]),
+						].join("  "),
+					);
+					crashes.delete(cmd.number);
+					// A stuck the lane ends on says so. What comes before a question says what the step found,
+					// where the question can point at it.
+					const talk = endTalk(cmd.step, outcome, cmd.round, problems);
+					if (talk?.kind === "stuck") yield* said(`why: ${problems.join(" ").slice(0, 2_000)}`);
+					if (talk !== null)
+						yield* tickets
+							.talk(cmd.number, `${run}/${talk.kind === "stuck" ? "why" : "found"}`, {
+								type: "commented",
+								body: saidOf(talk.body),
+							})
+							.pipe(Effect.ignore);
+					return {outcome, carry, ...(past === undefined ? {} : {after: past})};
+				}
+				// A named end: the fact says it broke, and the line says what a person can do.
+				const stops = String(exit.cause).slice(0, 300);
+				yield* sessionLeft.pipe(Effect.ignore);
+				const broke = factOutcome({kind: "stuck", why: "run_failed"});
+				yield* write(broke, {carry: {}}).pipe(Effect.ignore);
+				yield* tagged(broke);
+				yield* said(`could not run: ${stops}`);
+				crashes.set(cmd.number, stops);
+				return yield* Effect.fail(unknown);
+			}).pipe(
+				onTile(`${cmd.step}: `),
+				Effect.mapError(() => unknown),
+			),
+	};
+};
 
 const laneKind = kind({
 	machine: lane,
