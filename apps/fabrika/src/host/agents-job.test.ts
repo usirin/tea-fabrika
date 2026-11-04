@@ -70,6 +70,19 @@ const fieldsOf = (line: string): Record<string, string> => {
 	return out;
 };
 
+/** The host's file, as host/main.ts writes it with `Logger.toFile`: each line, then a newline. */
+const fileOf = (lines: readonly string[]) => lines.join("\n").split("\n");
+
+/**
+ * A line's own message: its first `message=` field. One inside a quoted value is the agent's
+ * words, kept as words.
+ */
+const messageOf = (line: string): string | undefined => {
+	for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g))
+		if (m[1] === "message") return m[2];
+	return undefined;
+};
+
 /** The lines whose message is `message`, read as fields. */
 const said = (lines: readonly string[], message: string) =>
 	lines.map(fieldsOf).filter((f) => f.message === message);
@@ -432,19 +445,66 @@ describe("the host's wide log", () => {
 				);
 			}),
 		);
-		// The host's file, as host/main.ts writes it with `Logger.toFile`: each line, then a newline.
-		const file = lines.join("\n").split("\n");
-		// A line's own message is its first `message=` field; one inside a quoted value is the
-		// agent's words, kept as words.
-		const messageOf = (line: string): string | undefined => {
-			for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g))
-				if (m[1] === "message") return m[2];
-			return undefined;
-		};
+		const file = fileOf(lines);
 		expect(file.filter((line) => messageOf(line) === "agent_came")).toHaveLength(1);
 		expect(file.filter((line) => messageOf(line) === "tool_called")).toHaveLength(1);
-		// No line of the file is one the agent began: each forged one starts with `level=`.
-		expect(file.filter((line) => line.startsWith("level="))).toEqual([]);
+		// Every line of the file is one the host began, whatever key a forged one starts with.
+		expect(file.filter((line) => !line.startsWith("timestamp="))).toEqual([]);
+	});
+
+	it("keeps a tool call's line one line in the host's log, whatever its JSON-RPC id holds", async () => {
+		const lines: string[] = [];
+		// JSON-RPC lets an id be any string: this one holds a newline and a forged line after it.
+		const id = "7\nlevel=INFO message=job_stopped n=1 by=user:owner";
+		const answer = await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				yield* hostOn(home, lines);
+				const path = yield* Path.Path;
+				const cli = yield* path
+					.fromFileUrl(new URL("../cli.ts", import.meta.url))
+					.pipe(Effect.orDie);
+				// The bridge with no MCP client on it: the test says the JSON-RPC message itself.
+				const transport = new StdioClientTransport({
+					command: process.execPath,
+					args: [cli, "mcp", "--as", "claude"],
+					env: {...getDefaultEnvironment(), FABRIKA_HOME: home},
+					stderr: "pipe",
+				});
+				const heard: JSONRPCMessage[] = [];
+				transport.onmessage = (message) => {
+					heard.push(message);
+				};
+				yield* Effect.acquireRelease(
+					Effect.promise(() => transport.start()),
+					() => Effect.promise(() => transport.close()).pipe(Effect.ignore),
+				);
+				yield* Effect.promise(() =>
+					transport.send({
+						jsonrpc: "2.0",
+						id,
+						method: "tools/call",
+						params: {name: "runs", arguments: {}},
+					}),
+				);
+				const got = yield* until("the answer to the call", () =>
+					heard.find((m) => "id" in m && m.id === id),
+				);
+				yield* until("the call's line", () =>
+					said(lines, "tool_called").length > 0 ? true : undefined,
+				);
+				// A moment more, so a second line for the call would be caught too.
+				yield* Effect.sleep("200 millis");
+				return got;
+			}),
+		);
+		// The call went, and was answered under its own id.
+		expect(Reflect.get(Object(answer), "result")).toMatchObject({content: [{type: "text"}]});
+		const file = fileOf(lines);
+		expect(file.filter((line) => messageOf(line) === "tool_called")).toHaveLength(1);
+		expect(file.filter((line) => messageOf(line) === "job_stopped")).toEqual([]);
+		// Every line of the file is one the host began, whatever key a forged one starts with.
+		expect(file.filter((line) => !line.startsWith("timestamp="))).toEqual([]);
 	});
 
 	it("writes exactly one tool_called line per tool call, done or refused, with the call's JSON-RPC id", async () => {
