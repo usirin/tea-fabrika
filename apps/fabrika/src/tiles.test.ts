@@ -2,10 +2,12 @@ import {Ledger, memoryStorage, openJobs} from "@kampus/fabrika-old";
 import {memoryService} from "@kampus/fabrika-old/memory";
 import {memoryTraces} from "@tea-fabrika/trace/memory";
 import {Author, PullRequests} from "@tea-fabrika/tracker";
-import {Effect} from "effect";
+import {Context, Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import {gridOf} from "./editor/grid.ts";
 import {memoryHistory, sharedHistory} from "./editor/history.ts";
+import type {AgentSessions} from "./host/agent-session.ts";
+import {ConnectFailed} from "./host/connection.ts";
 import type {ToTerminal} from "./messages.ts";
 import {startTiles, type TileNews} from "./tiles.ts";
 import type {Screen} from "./tsh.ts";
@@ -13,23 +15,62 @@ import type {Screen} from "./tsh.ts";
 // The tiles, with fake ports, the host's one job table in memory, and no Electron: what the desk
 // is told, what each tile's terminal shows, and what is in the host's table.
 
-/** The tiles of one start of the host. `storage` outlives it, as the home's folder does. */
-const desk = (storage = memoryStorage()) =>
+/** The ledger's calls that write, by name: a watched ledger counts each. */
+const WRITES = new Set([
+	"register",
+	"append",
+	"send",
+	"claim",
+	"renew",
+	"cancel",
+	"exit",
+	"monitor",
+]);
+
+/** A ledger in memory that keeps the name of every call made to it that writes. */
+const watched = () => {
+	const writes: string[] = [];
+	const inner = memoryService();
+	const ledger = new Proxy(inner, {
+		get: (target, key, receiver) => {
+			const value: unknown = Reflect.get(target, key, receiver);
+			if (typeof key !== "string" || !WRITES.has(key) || typeof value !== "function") return value;
+			return (...args: unknown[]) => {
+				writes.push(key);
+				return Reflect.apply(value, target, args);
+			};
+		},
+	});
+	return {ledger, writes};
+};
+
+/**
+ * The tiles of one start of the host. `storage` outlives it, as the home's folder does.
+ * `sessionFor` is an agent's session on a connected home; without it, an agent's tile writes on
+ * the host's ledger, as a home's own file does.
+ */
+const desk = (storage = memoryStorage(), more: {readonly sessionFor?: AgentSessions} = {}) =>
 	Effect.gen(function* () {
 		const told: TileNews[] = [];
 		const gone: string[] = [];
 		const views: string[] = [];
+		const said: string[] = [];
 		const bytes = new Map<string, string>();
 		const screens = new Map<string, Screen<ToTerminal>>();
+		const host = watched();
 		// One table for the host, as host/run.ts opens it, handed to every tile.
 		const jobs = yield* openJobs(storage);
 		/** The host's table now: each job's number and state. */
 		const table = () => jobs.table.getState().jobs.map((job) => [job.n, job.state] as const);
 		/** Whose each job in the host's table is: its number and its tile. */
 		const owners = () => jobs.table.getState().jobs.map((job) => [job.n, job.owner] as const);
+		/** Who wrote each job in the host's table: its number and its writer. */
+		const writers = () => jobs.table.getState().jobs.map((job) => [job.n, job.by] as const);
 		const tiles = yield* startTiles({
 			history: yield* sharedHistory(memoryHistory()),
 			jobs,
+			// made up: the option that makes an agent's session for its tile (tracker 185b, PR 3).
+			...(more.sessionFor === undefined ? {} : {sessionFor: more.sessionFor}),
 			edge: {
 				tell: (m) => told.push(m),
 				terminal: (tile, screen) => {
@@ -39,10 +80,13 @@ const desk = (storage = memoryStorage()) =>
 				},
 				view: (run) => views.push(run),
 				gone: (name) => gone.push(name),
-				said: () => null,
+				said: (tile) => {
+					said.push(tile);
+					return null;
+				},
 			},
 		}).pipe(
-			Effect.provideService(Ledger, memoryService()),
+			Effect.provideService(Ledger, host.ledger),
 			Effect.provideService(Author, {kind: "user", id: "owner"}),
 			Effect.provideService(PullRequests, {open: Effect.succeed([])}),
 			Effect.provide(memoryTraces([])),
@@ -67,7 +111,22 @@ const desk = (storage = memoryStorage()) =>
 			});
 		const heard = (check: (m: TileNews) => boolean) =>
 			until("a message for the desk", () => told.find(check));
-		return {tiles, told, gone, table, owners, views, rows, type, until, prompts, heard};
+		return {
+			tiles,
+			told,
+			gone,
+			table,
+			owners,
+			writers,
+			views,
+			said,
+			hostWrites: host.writes,
+			rows,
+			type,
+			until,
+			prompts,
+			heard,
+		};
 	});
 
 const go = <A, E>(test: Effect.Effect<A, E>) => Effect.runPromise(test);
@@ -369,5 +428,112 @@ describe("the tiles", {timeout: 20_000}, () => {
 		);
 		// t1's counter left the table with t1; t2's tally waits there still.
 		expect(table).toEqual([[2, "t2"]]);
+	});
+});
+
+// An agent's tile (tracker 185b, PR 3). Today's version. The host opens it as the agent's first
+// `line` comes, and its tsh runs as that agent: on a connected home, on the agent's own session;
+// on a home's own file, as `agent:<name> for:<person>` on the host's ledger. It lists no desk word,
+// and takes `forAgent`'s list. If the agent's session cannot be made, the tsh does not start, and
+// the tile and the line both say why: an agent's line never runs on the person's session.
+//
+//   tiles.open("t2", "claude")              t2's tsh starts as agent:claude for:owner
+//   tiles.line("t2", "tally &")             "$ tally &" on t2's screen; {_tag: "job", job: {n: 1, tile: "t2", ...}}
+//   tiles.line("t2", "jobs")                {_tag: "said", lines: ["[1] running   tally"], status: 0}
+//   sessionFor fails "no room"              t2 says why; tiles.line("t2", ...) refused "... no room"
+
+const AGENT_BY = "agent:claude for:owner";
+const MARK = `tracker file='{"title":"mark","body":""}' &`;
+
+describe("an agent's tile", {timeout: 20_000}, () => {
+	it("runs the agent's lines as the agent, shows each as typed, and answers with the job", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const d = yield* desk();
+				// made up: `tiles.open`'s second argument, the tile's agent, and `tiles.line`.
+				yield* d.tiles.open("t2", "claude");
+				const answer = yield* d.tiles.line("t2", "tally &");
+				yield* d.until("the line on t2's screen", () =>
+					d.rows("t2").some((r) => r.includes("$ tally &")) ? true : undefined,
+				);
+				const listed = yield* d.tiles.line("t2", "jobs");
+				// A desk word is no word in an agent's tile: the desk is the person's.
+				const zoom = yield* d.tiles.line("t2", "zoom");
+				return {answer, listed, zoom, writers: d.writers(), said: [...d.said]};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.answer).toMatchObject({
+			_tag: "job",
+			job: {n: 1, text: "tally &", tile: "t2", state: {_tag: "running"}},
+		});
+		expect(seen.writers).toEqual([[1, AGENT_BY]]);
+		expect(seen.listed).toEqual({_tag: "said", lines: ["[1] running   tally"], status: 0});
+		expect(seen.zoom).toMatchObject({_tag: "said"});
+		expect(seen.zoom._tag === "said" ? seen.zoom.status : 0).not.toBe(0);
+		expect(seen.said).toEqual([]);
+	});
+
+	it("writes on the agent's own session on a connected home, and never on the host's", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const session = watched();
+				const asked: string[] = [];
+				const sessionFor: AgentSessions = (name) =>
+					Effect.sync(() => {
+						asked.push(name);
+						return Context.make(Ledger, session.ledger).pipe(
+							Context.add(Author, {kind: "agent", id: name, for: "github:7"}),
+						);
+					});
+				const d = yield* desk(memoryStorage(), {sessionFor});
+				yield* d.tiles.open("t2", "claude");
+				yield* d.tiles.line("t2", MARK);
+				yield* d.until("the agent's row", () => (session.writes.length > 0 ? true : undefined));
+				return {asked, writers: d.writers(), host: [...d.hostWrites]};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.asked).toEqual(["claude"]);
+		expect(seen.writers).toEqual([[1, "agent:claude for:github:7"]]);
+		expect(seen.host).toEqual([]);
+	});
+
+	it("does not start when the agent's session cannot be made: the tile says why, the line is refused with it, and nothing runs or is written (d14)", async () => {
+		const why = "the agent's key could not be kept: no room";
+		const seen = await go(
+			Effect.gen(function* () {
+				const sessionFor: AgentSessions = () => Effect.fail(new ConnectFailed({why}));
+				const d = yield* desk(memoryStorage(), {sessionFor});
+				yield* d.tiles.open("t2", "claude");
+				const shown = yield* d.until("the why on t2", () =>
+					d.rows("t2").find((r) => r.includes("no room")),
+				);
+				const refused = yield* d.tiles.line("t2", "tally &").pipe(Effect.flip);
+				// The person's own tile is the person's, as before.
+				yield* d.tiles.open("t1");
+				yield* d.prompts("t1", 1);
+				return {shown, refused, table: d.table(), host: [...d.hostWrites]};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.shown).toContain(why);
+		expect(seen.refused).toMatchObject({_tag: "LineRefused"});
+		expect(seen.refused.why).toContain(why);
+		expect(seen.table).toEqual([]);
+		expect(seen.host).toEqual([]);
+	});
+
+	it("refuses a line in a tile that is not open, or is the person's", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const d = yield* desk();
+				const none = yield* d.tiles.line("t9", "tally &").pipe(Effect.flip);
+				yield* d.tiles.open("t1");
+				yield* d.prompts("t1", 1);
+				const person = yield* d.tiles.line("t1", "tally &").pipe(Effect.flip);
+				return {none, person, table: d.table()};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.none).toMatchObject({_tag: "LineRefused"});
+		expect(seen.person).toMatchObject({_tag: "LineRefused"});
+		expect(seen.table).toEqual([]);
 	});
 });

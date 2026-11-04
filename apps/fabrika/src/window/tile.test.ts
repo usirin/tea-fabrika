@@ -574,3 +574,39 @@ describe("a tile with the bars hidden", () => {
 		expect(hidden).toEqual([]);
 	});
 });
+
+// An agent's tile (tracker 185b, PR 3), drawn in today's version. The desk's `agents` (name to
+// tile) goes to the page, and both the title bar and the strip name the tile by its agent as text:
+// `claude · tsh`. Color is never the only cue (WCAG 1.4.1), and a screen reader hears the name.
+//
+//   agents {claude: "t4"}    t4's title bar: "· claude · tsh ... t4"; its strip: "claude · tsh"
+//   agents {claude: "t9"}    t4 is the person's, as before: "tsh"
+
+describe("an agent's tile and strip", () => {
+	// made up: the `agents` prop, the desk's `agents` as the page is sent it.
+	const CLAUDE_T4 = {claude: "t4"} as const;
+	const folded = (tile: TileNode): TileNode => ({...tile, folded: true});
+	const labelOf = (html: string, tag: string) =>
+		new RegExp(`<${tag}[^>]*aria-label="([^"]*)"`).exec(html)?.[1] ?? null;
+
+	it("names the agent in the title bar and in what a screen reader hears, and leaves a person's tile as it was", () => {
+		const html = drawn(t4, {agents: CLAUDE_T4});
+		expect(partOf(html, "name")?.words).toBe("claude · tsh");
+		expect(labelOf(html, "section")).toContain("claude");
+		const theirs = drawn(t4, {agents: {claude: "t9"}});
+		expect(partOf(theirs, "name")?.words).toBe("tsh");
+		expect(labelOf(theirs, "section")).toBe("tile t4");
+	});
+
+	it("names the agent on its strip, in text and in the strip's label", () => {
+		const html = renderToStaticMarkup(
+			createElement(Strip, {node: folded(t4), toHost: () => {}, agents: CLAUDE_T4}),
+		);
+		expect(partOf(html, "strip-name")?.words).toBe("claude · tsh");
+		expect(labelOf(html, "button")).toBe("open claude · tsh, t4");
+		const theirs = renderToStaticMarkup(
+			createElement(Strip, {node: folded(t4), toHost: () => {}, agents: {}}),
+		);
+		expect(partOf(theirs, "strip-name")?.words).toBe("tsh");
+	});
+});

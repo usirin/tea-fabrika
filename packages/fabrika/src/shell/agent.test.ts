@@ -28,6 +28,12 @@ import {SMALL} from "./small.ts";
 //   claude's tsh                    tsh$ stop %1           (job 1 is user:github:7's)
 //                                   tsh: %1 is user:github:7's: the stop tool asks why
 //
+// The check fails closed (tracker 219, folded into PR 3): only a person's tsh, or the tsh of the
+// job's own writer, drops it. A job with `by: null` is a person's, so an agent's tsh refuses it too:
+//
+//   claude's tsh                    tsh$ stop %2           (job 2 was kept before jobs had a writer)
+//                                   tsh: %2 has no writer kept: the stop tool asks why
+//
 // And a tsh handed `forAgent(list)` (d8, the path through tsh) reaches no input only a person
 // tells: not on the line, not by `tell`, not by a pipe. Its other inputs are told as before.
 
@@ -36,6 +42,8 @@ const AGENT = "agent:claude for:github:7";
 const OTHER_PERSON = "user:github:8";
 const OTHER_AGENT = "agent:review for:github:7";
 const WRITERS = [PERSON, AGENT, OTHER_PERSON, OTHER_AGENT] as const;
+/** A writer text that names neither a person nor an agent (`writerOf` reads it as `null`). */
+const SOMEONE = "someone";
 /** Where `attach` says each writer's job goes on: an agent's tile by its name, a person's own. */
 const TILE: Readonly<Record<(typeof WRITERS)[number], string>> = {
 	[PERSON]: "their own tile",
@@ -260,12 +268,18 @@ describe("an agent's tsh drops no one else's job (d10)", () => {
 		expect(seen.after).toBeUndefined();
 	});
 
-	it("drops a detached job unless the tsh is an agent's and the job another known writer's, for any two writers", async () => {
+	// Changed in PR 3 (tracker 219, from PR 2's review). This law said "a `by: null` job is not
+	// refused" in an agent's tsh. The check fails closed now: a tsh drops a job only when its writer
+	// is a person, or when the job is its own writer's. A job with `by: null` was always a person's,
+	// since before 185a every job was, so an agent's tsh no longer drops one. A tsh whose writer text
+	// names neither a person nor an agent drops none but its own.
+	it("drops a detached job only in a person's tsh, or in the tsh of the job's own writer, for any two writers", async () => {
 		await fc.assert(
 			fc.asyncProperty(
-				fc.constantFrom(...WRITERS),
-				// `null`: a job kept before jobs had a writer, which any tsh may drop.
-				fc.constantFrom<string | null>(...WRITERS, null),
+				// "someone": a writer text that names neither a person nor an agent.
+				fc.constantFrom<string>(...WRITERS, SOMEONE),
+				// `null`: a job kept before jobs had a writer, a person's.
+				fc.constantFrom<string | null>(...WRITERS, SOMEONE, null),
 				(mine, theirs) =>
 					Effect.runPromise(
 						Effect.gen(function* () {
@@ -273,11 +287,15 @@ describe("an agent's tsh drops no one else's job (d10)", () => {
 							const n = yield* detachedJob(t.table, theirs);
 							const said = yield* t.line(`stop %${n}`);
 							const after = jobIn(t.table, n);
-							const refused = mine.startsWith("agent:") && theirs !== null && theirs !== mine;
+							const refused = !mine.startsWith("user:") && theirs !== mine;
+							const why =
+								theirs === null
+									? `tsh: %${n} has no writer kept: the stop tool asks why`
+									: `tsh: %${n} is ${theirs}'s: the stop tool asks why`;
 							expect({
 								dropped: said.status === 0,
 								left: after === undefined ? null : {state: after.state, stop: after.stop},
-								why: said.err.includes(`tsh: %${n} is ${theirs}'s: the stop tool asks why`),
+								why: said.err.includes(why),
 							}).toEqual({
 								dropped: !refused,
 								// Refused: still in the table, detached, with no stop asked of it.
@@ -287,10 +305,61 @@ describe("an agent's tsh drops no one else's job (d10)", () => {
 						}).pipe(Effect.scoped),
 					),
 			),
-			// Tried first, always: an agent's tsh and a job with no writer known, not refused.
-			{numRuns: 20, seed: 119120, examples: [[AGENT, null]]},
+			// Tried first, always: an agent's tsh and a job with no writer kept, now refused; a tsh
+			// that names no writer, and a person's job.
+			{
+				numRuns: 30,
+				seed: 119120,
+				examples: [
+					[AGENT, null],
+					[SOMEONE, PERSON],
+				],
+			},
 		);
 	}, 60_000);
+
+	it("refuses an agent's stop %n of a job with no writer kept, and asks no stop of it (tracker 219)", async () => {
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const t = yield* tshAs(AGENT);
+				const n = yield* detachedJob(t.table, null);
+				const before = jobIn(t.table, n);
+				const said = yield* t.line(`stop %${n}`);
+				// The tsh still answers a line after it.
+				const next = yield* t.line("jobs");
+				return {n, said, next, before, after: jobIn(t.table, n)};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.said.status).toBe(2);
+		expect(seen.said.err).toContain(`tsh: %${seen.n} has no writer kept: the stop tool asks why`);
+		expect(seen.after).toEqual(seen.before);
+		expect(seen.after?.stop).toBeNull();
+		expect(seen.next.status).toBe(0);
+	});
+
+	it("fails closed in a tsh whose writer names no person: it refuses a person's job, and drops its own (tracker 219)", async () => {
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const t = yield* tshAs(SOMEONE);
+				const theirs = yield* detachedJob(t.table, PERSON);
+				const own = yield* detachedJob(t.table, SOMEONE);
+				const refused = yield* t.line(`stop %${theirs}`);
+				const dropped = yield* t.line(`stop %${own}`);
+				return {
+					theirs,
+					refused,
+					dropped,
+					left: t.table.getState().jobs.map((job) => job.n),
+				};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.refused.status).toBe(2);
+		expect(seen.refused.err).toContain(
+			`tsh: %${seen.theirs} is ${PERSON}'s: the stop tool asks why`,
+		);
+		expect(seen.dropped.status).toBe(0);
+		expect(seen.left).toEqual([seen.theirs]);
+	});
 });
 
 // A program with one input only a person tells, and one anyone may: what the tracker's `answer`

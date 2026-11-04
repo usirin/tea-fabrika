@@ -9,7 +9,7 @@ import {startTwin} from "@kampus/ledger-server/twin";
 import {Client} from "@modelcontextprotocol/client";
 import {getDefaultEnvironment, StdioClientTransport} from "@modelcontextprotocol/client/stdio";
 import {pullRequestsOf} from "@tea-fabrika/tracker";
-import {Context, Effect, Exit, Layer, Path, Schedule, Scope} from "effect";
+import {Context, Effect, Exit, Layer, Logger, Path, Schedule, Scope} from "effect";
 import * as fc from "fast-check";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
 import {connect, hostLedger} from "./connection.ts";
@@ -20,10 +20,14 @@ import {pathsOf, reach} from "./socket.ts";
 // person's. On a home connected to the ledger server's twin, two agents, `claude` and `lead`, each
 // on the bridge Claude Code would start, make any sequence of tracker writes. Every row any of
 // them wrote is stamped `agent:<its name> for:github:7` by the door: never alice's own writer, and
-// never the other agent's. Today's version; the `line` and `stop` tools join this law in 185b.
+// never the other agent's. Today's version. A line in the agent's own tile joins it in 185b, PR 3
+// (d13): its tsh runs on that agent's session, so its rows are the agent's too, and so is its job.
 //
 //   claude   tracker_file    {value: {title: "m-3", body: ""}}      row: agent:claude for:github:7
 //   lead     tracker_comment {value: {ticket: 1, body: "m-4"}}      row: agent:lead for:github:7
+//   claude   line {line: `tracker file='{"title":"m-5","body":""}' &`}
+//                                                                   row: agent:claude for:github:7
+//                                                                   job_began by=agent:claude for:github:7
 //
 // The server is its twin in Miniflare (packages/ledger-server); GitHub is a fake that lists
 // alice's key, made here at test time. No call leaves the laptop.
@@ -110,11 +114,28 @@ const agentOn = (home: string, name: Name) =>
 		};
 	});
 
-/** One write an agent asks for: a ticket, or a comment on ticket 1. Its mark is its title or body. */
+/**
+ * One write an agent asks for: a ticket, a comment on ticket 1, or a ticket filed by a line in the
+ * agent's own tile. Its mark is its title or body.
+ */
 const write = fc.record({
 	who: fc.constantFrom<Name>(...NAMES),
-	what: fc.constantFrom("file", "comment"),
+	what: fc.constantFrom("file", "comment", "line"),
 });
+
+/** The tool call that asks for `what`, with `mark` in it. */
+const callFor = (what: "file" | "comment" | "line", mark: string) => {
+	if (what === "file") return ["tracker_file", {value: {title: mark, body: ""}}] as const;
+	if (what === "comment") return ["tracker_comment", {value: {ticket: 1, body: mark}}] as const;
+	return ["line", {line: `tracker file='{"title":"${mark}","body":""}' &`}] as const;
+};
+
+/** The writer of each job the host began, from its log, as `Logger.formatSimple` writes it. */
+const jobWriters = (lines: readonly string[]) =>
+	lines
+		.filter((l) => l.includes("message=job_began"))
+		.map((l) => /\bby="([^"]*)"|\bby=(\S+)/.exec(l))
+		.map((m) => m?.[1] ?? m?.[2] ?? "");
 
 describe("law: no write from the agents' socket is the person's", () => {
 	it("any sequence of tracker writes by two agents lands as each agent's own, for alice", async () => {
@@ -125,7 +146,15 @@ describe("law: no write from the agents' socket is the person's", () => {
 				yield* connect(home, {address, login: "alice", key: join(root, "key")});
 				const paths = yield* pathsOf(home);
 				const host = yield* Scope.make();
-				yield* runHost({home, pid: process.pid}).pipe(Effect.scoped, Effect.forkIn(host));
+				const lines: string[] = [];
+				const caught = Logger.make((o) => {
+					lines.push(Logger.formatSimple.log(o));
+				});
+				yield* runHost({home, pid: process.pid}).pipe(
+					Effect.scoped,
+					Effect.provide(Logger.layer([caught])),
+					Effect.forkIn(host),
+				);
 				yield* Effect.addFinalizer(() => Scope.close(host, Exit.void));
 				yield* reach(paths.mcp).pipe(
 					Effect.repeat({until: (r) => r === "live", schedule: Schedule.spaced("10 millis")}),
@@ -166,10 +195,7 @@ describe("law: no write from the agents' socket is the person's", () => {
 									return {...w, mark: `mark-${count}-${w.who}`};
 								});
 								for (const w of asked) {
-									const answer =
-										w.what === "file"
-											? await calls[w.who]("tracker_file", {value: {title: w.mark, body: ""}})
-											: await calls[w.who]("tracker_comment", {value: {ticket: 1, body: w.mark}});
+									const answer = await calls[w.who](...callFor(w.what, w.mark));
 									if (answer.error) {
 										failures.push(`${w.who} ${w.what} was refused: ${answer.text}`);
 										return false;
@@ -196,13 +222,18 @@ describe("law: no write from the agents' socket is the person's", () => {
 					(r) => r.data.includes("mark-") || r.data.includes("base-ticket"),
 				);
 				const writers = [...new Set(marked.map((r) => r.writer))].sort();
-				return {failures, writers, count};
+				// A line in an agent's tile is a job, and the job is the agent's as its rows are.
+				return {failures, writers, count, jobs: jobWriters(lines)};
 			}).pipe(Effect.scoped, Effect.provide(platform)),
 		);
 		expect(seen.failures).toEqual([]);
 		expect(seen.count).toBeGreaterThan(0);
 		expect(seen.writers).toContain("agent:claude for:github:7");
 		for (const writer of seen.writers)
+			expect(["agent:claude for:github:7", "agent:lead for:github:7"]).toContain(writer);
+		// Seed 119120 draws lines from its second run on, so a job began, and each one is an agent's.
+		expect(seen.jobs.length).toBeGreaterThan(0);
+		for (const writer of seen.jobs)
 			expect(["agent:claude for:github:7", "agent:lead for:github:7"]).toContain(writer);
 	});
 });
