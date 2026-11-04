@@ -30,6 +30,8 @@ const spelled = fc.constantFrom(
 	"<prefix>space",
 	"<prefix>ctrl+h",
 	"<prefix>N",
+	"<prefix>cmd+z",
+	"<prefix>enter",
 	"<leader>z",
 	"cmd+d",
 	"cmd+k",
@@ -40,6 +42,9 @@ const spelled = fc.constantFrom(
 	"ctrl+b",
 	"cmd+q",
 	"alt+x",
+	"enter",
+	"left",
+	"f6",
 	"z",
 	"",
 );
@@ -52,7 +57,7 @@ const line = fc.oneof(
 	{arbitrary: fc.tuple(word, value).map(([w, v]) => `${w} = ${v}`), weight: 6},
 	{
 		arbitrary: fc
-			.constantFrom("ctrl+a", "ctrl+b", "ctrl+space", "a", "cmd+k")
+			.constantFrom("ctrl+a", "ctrl+b", "ctrl+h", "ctrl+l", "ctrl+space", "a", "cmd+k", "escape")
 			.map((p) => `prefix = ${quoted(p)}`),
 		weight: 1,
 	},
@@ -74,6 +79,24 @@ const table = fc
 	.map(([text, onMac]) => decodeKeys(text, onMac))
 	.filter(Result.isSuccess)
 	.map((answer) => answer.success);
+
+/** The tables that read on a Mac, from `keysFile`. */
+const macTable = keysFile
+	.map((text) => decodeKeys(text, true))
+	.filter(Result.isSuccess)
+	.map((answer) => answer.success);
+
+/** The named keys that type or move in tsh, with no modifier: never pressed alone, never the prefix. */
+const BARE = new Set([
+	"<enter>",
+	"<escape>",
+	"<backspace>",
+	"<tab>",
+	"<arrowleft>",
+	"<arrowright>",
+	"<arrowup>",
+	"<arrowdown>",
+]);
 
 const placeOf = (keys: Keys) => {
 	const alone = new Map<string, string[]>();
@@ -111,8 +134,30 @@ describe("the file's laws", () => {
 				return (
 					// One command's list may name a key twice; two commands may never share one.
 					[...alone.values(), ...after.values()].every((on) => new Set(on).size === 1) &&
-					!alone.has(keys.prefix)
+					// Pressed alone it arms; after itself it is send-prefix: a row on it never runs.
+					!alone.has(keys.prefix) &&
+					!after.has(keys.prefix)
 				);
+			}),
+			OPTS,
+		);
+	});
+
+	it("puts no Cmd key after the prefix on a Mac, where the menu takes it first", () => {
+		fc.assert(
+			fc.property(macTable, (keys) => {
+				const {after} = placeOf(keys);
+				return [...after.keys()].every((key) => !/^<(?:[ca]-)*m-/.test(key));
+			}),
+			OPTS,
+		);
+	});
+
+	it("puts no bare named key alone or as the prefix, in any file that reads", () => {
+		fc.assert(
+			fc.property(table, (keys) => {
+				const {alone} = placeOf(keys);
+				return !BARE.has(keys.prefix) && [...alone.keys()].every((key) => !BARE.has(key));
 			}),
 			OPTS,
 		);

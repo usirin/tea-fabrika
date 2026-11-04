@@ -35,6 +35,7 @@ import {
 	hostWord,
 	INFO,
 	type InfoMode,
+	infoFor,
 	jobItem,
 	jobsList,
 	keyGoesTo,
@@ -1095,5 +1096,43 @@ describe("info mode", () => {
 		expect(area(bare, {desk: asking}).line).toBe(true);
 		// A page in place of the desk (another link version): no bottom line, the region still there.
 		expect(area(on, {instead: true})).toEqual({line: false, said: "Info mode on. Escape leaves."});
+	});
+});
+
+// Round 2b, PR 373 (p10): info mode names the keys of the table in use, so none is a literal in
+// frame.ts. `infoFor(keys)` is a made-up name for INFO built from the table; rename it freely.
+
+describe("info mode's words, from the keys file (p10)", () => {
+	/** The parts of the frame whose words name a key. */
+	const NAMING = ["workspace", "keys", "info", "titlebar"] as const;
+
+	it("names your prefix, and never Ctrl-B, once the prefix is ctrl+a", () => {
+		const said = infoFor(table('prefix = "ctrl+a"'));
+		for (const part of NAMING) {
+			expect(said[part], part).toContain(keyWord("<c-a>"));
+			expect(said[part], part).not.toContain(keyWord(PREFIX));
+			expect(said[part], part).not.toContain("Ctrl-B");
+		}
+	});
+
+	it("names your palette key, and never Cmd-K, once the palette is on cmd+p", () => {
+		const said = infoFor(table('palette.open = "cmd+p"'));
+		expect(said.keys).toContain(keyWord("<m-p>"));
+		expect(said.keys).not.toContain("Cmd-K");
+		expect(said.keys).not.toContain(keyWord("<m-k>"));
+	});
+
+	it("names a moved command on its new key: info mode and fold", () => {
+		const said = infoFor(table('tezgah.info = "<prefix>o"', 'tezgah.fold = "<prefix>g"'));
+		expect(said.info).toContain(`${keyWord(PREFIX)} o`);
+		expect(said.info).not.toContain(`${keyWord(PREFIX)} i`);
+		expect(said.titlebar).toContain(`${keyWord(PREFIX)} g`);
+		expect(said.titlebar).not.toContain(`${keyWord(PREFIX)} f`);
+	});
+
+	it("says each part in words with the defaults, as today's info mode does", () => {
+		const said = infoFor(defaults);
+		for (const part of NAMING) expect(said[part], part).toContain(keyWord(PREFIX));
+		expect(Object.values(said).every((text) => text.length > 0)).toBe(true);
 	});
 });

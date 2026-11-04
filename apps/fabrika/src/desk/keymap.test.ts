@@ -447,9 +447,9 @@ describe("a few keys the spelling allows", () => {
 });
 
 describe("spell, the file's words for a key", () => {
-	/** The key a spelling reads to, after the prefix. */
+	/** The key a spelling reads to, after the prefix, off a Mac, where a Cmd key may follow it. */
 	const keyOf = (spelled: string) =>
-		rowOf(read(`tezgah.zoom = "<prefix>${spelled}"`), "tezgah.zoom")?.keys[0];
+		rowOf(read(`tezgah.zoom = "<prefix>${spelled}"`, false), "tezgah.zoom")?.keys[0];
 
 	/** Every named key and f-key, and each modifier, in the words `spell` gives back. */
 	const SPELLINGS = [
@@ -494,5 +494,99 @@ describe("spell, the file's words for a key", () => {
 	it("spells the prefix as the file writes it", () => {
 		expect(spell("<c-b>")).toBe("ctrl+b");
 		expect(spell("<c- >")).toBe("ctrl+space");
+	});
+});
+
+// Round 2b: the review's fixes, and the lead's two decisions on PR 373.
+
+describe("a default the prefix makes unreachable", () => {
+	it.each([
+		["ctrl+h", "<c-h>", 'tezgah."workspace --to previous"'],
+		["ctrl+l", "<c-l>", 'tezgah."workspace --to next"'],
+	])(
+		"drops C-h C-h style rows: prefix = %s leaves its default row no key",
+		(spelled, key, does) => {
+			// The second press of the prefix sends the prefix on (send-prefix), so the row could never
+			// run, and the lists would show a key that does nothing.
+			const keys = read(`prefix = "${spelled}"`);
+			expect(keys.prefix).toBe(key);
+			expect(rowOf(keys, does)?.keys).toEqual([]);
+			expect(commandOn(keys, after(key))).toBeUndefined();
+		},
+	);
+});
+
+describe("a Cmd key after the prefix (the lead's decision)", () => {
+	it.each([
+		["cmd+z", 'tezgah.zoom = "<prefix>cmd+z"'],
+		["cmd+w", 'tezgah.close = "<prefix>cmd+w"'],
+		["mod+d", 'tezgah.split = "<prefix>mod+d"'],
+		["ctrl+cmd+x", 'tezgah.zoom = "<prefix>ctrl+cmd+x"'],
+	])("is refused on a Mac, %s, since the Mac's menu takes it first", (spelled, text) => {
+		const no = refused(file("# mine", text));
+		expect(no.line).toBe(2);
+		expect(no.why).toContain(spelled);
+	});
+
+	it("is read off a Mac, where every key is the app's", () => {
+		expect(rowOf(read('tezgah.zoom = "<prefix>cmd+z"', false), "tezgah.zoom")?.keys).toEqual([
+			after("<m-z>"),
+		]);
+		expect(rowOf(read('tezgah.split = "<prefix>mod+d"', false), "tezgah.split")?.keys).toEqual([
+			after("<c-d>"),
+		]);
+	});
+});
+
+describe("a named key with no modifier (the lead's decision)", () => {
+	/** Each would stop typing in tsh, as a bare letter would (WCAG 2.1.4). */
+	const BARE = [
+		"enter",
+		"return",
+		"escape",
+		"esc",
+		"backspace",
+		"tab",
+		"left",
+		"right",
+		"up",
+		"down",
+	];
+
+	it.each(BARE)("refuses %s pressed alone", (spelled) => {
+		const no = refused(file("# mine", `tezgah.zoom = "${spelled}"`));
+		expect(no.line).toBe(2);
+		expect(no.why).toContain(spelled);
+	});
+
+	it.each(BARE)(
+		"refuses %s for the palette, which would keep Escape from closing it",
+		(spelled) => {
+			const no = refused(`palette.open = "${spelled}"`);
+			expect(no.line).toBe(1);
+			expect(no.why).toContain(spelled);
+		},
+	);
+
+	it.each(BARE)("refuses %s as the prefix", (spelled) => {
+		const no = refused(file("# mine", `prefix = "${spelled}"`));
+		expect(no.line).toBe(2);
+		expect(no.why).toContain(spelled);
+	});
+
+	it.each(BARE)("reads %s after the prefix", (spelled) => {
+		expect(rowOf(read(`tezgah.zoom = "<prefix>${spelled}"`), "tezgah.zoom")?.keys).toHaveLength(1);
+	});
+
+	it("reads an F key alone and as the prefix, the way out of a tile", () => {
+		expect(rowOf(read('tezgah.zoom = "f6"'), "tezgah.zoom")?.keys).toEqual([alone("<f6>")]);
+		expect(read('prefix = "f12"').prefix).toBe("<f12>");
+		expect(read('prefix = "f1"').prefix).toBe("<f1>");
+	});
+
+	it("reads a named key alone with a modifier", () => {
+		expect(rowOf(read('tezgah.zoom = "alt+left"'), "tezgah.zoom")?.keys).toEqual([
+			alone("<a-arrowleft>"),
+		]);
 	});
 });
