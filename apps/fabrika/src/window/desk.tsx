@@ -464,7 +464,8 @@ const onKey = (e: KeyboardEvent) => {
 		return;
 	}
 	const name = keyName(pressed);
-	const alone = name === null ? undefined : commandOn(store.keys, KeyCase.cases.alone.make({key: name}));
+	const alone =
+		name === null ? undefined : commandOn(store.keys, KeyCase.cases.alone.make({key: name}));
 	if (alone === "palette.open") {
 		swallow(e);
 		return frameStep({type: "palette"});
