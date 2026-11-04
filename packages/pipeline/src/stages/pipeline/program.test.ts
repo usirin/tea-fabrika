@@ -32,6 +32,7 @@ import {Inputs, keyOf} from "./key.ts";
 import {fakeEnv, type GhStory, makeFakeGh, makeLaneHome} from "./lane-fixture.ts";
 import {laneLayer, runLane} from "./layer.ts";
 import {askedFor as kindOfAsk, Lane, PICKS} from "./machine.ts";
+import {Pull} from "./pulls.ts";
 import {type Folded, fold, seenOf} from "./restart.ts";
 
 // One tracker ticket through the whole lane in this process: the real machines, the real Codex
@@ -210,6 +211,14 @@ interface Script {
 	 * of the ticket after that finds it so, and so does the step after it.
 	 */
 	readonly ticketAfter?: readonly {readonly step: string; readonly fact: "closed" | "reopened"}[];
+	/**
+	 * A person pushes one commit with `files` on top of the head the lane last pushed, on the remote,
+	 * once `step` has ended on the ticket: the lane's next read of the ticket after that finds it there.
+	 */
+	readonly branchAfter?: {
+		readonly step: string;
+		readonly files: readonly {readonly path: string; readonly text: string}[];
+	};
 	/** On every line typed again, the ticket reads as a lane from before self-fix PR 4 left it: no `checked` facts. */
 	readonly beforeChecks?: boolean;
 	/** On every line typed again, the ticket reads as a lane from before self-fix PR 5 left it: no end kept its carry. */
@@ -498,6 +507,7 @@ const lane = ({
 	checksSay,
 	readFailsAt,
 	ticketAfter = [],
+	branchAfter,
 	beforeChecks = false,
 	beforeCarries = false,
 	formatter = false,
@@ -551,6 +561,19 @@ const lane = ({
 			: {mainFiles: [...(mainFiles ?? []), ...(formatter ? [FORMATTER] : [])]}),
 		...(redAfterKill ? {alsoCheck: `test ! -e ${JSON.stringify(red)}`} : {}),
 	});
+	/** Whether the person pushed `branchAfter`'s commit. */
+	let branchMoved = false;
+	/** The person's `branchAfter` push, once its step has ended on the ticket. */
+	const branchMoves = (tickets: Tickets["Service"], n: number) =>
+		Effect.gen(function* () {
+			if (branchAfter === undefined || branchMoved) return;
+			const facts = (yield* tickets.read(n)).timeline.map((e) => e.fact as Ran["facts"][number]);
+			if (!facts.some((f) => f.type === "ended" && f.stage === branchAfter.step)) return;
+			const head = facts.filter((f) => f.type === "pushed").at(-1)?.head;
+			if (typeof head !== "string") return;
+			branchMoved = true;
+			yield* Effect.sync(() => pushOnTopOf({dir, home, remote}, head, branchAfter.files));
+		}).pipe(Effect.orDie);
 	if (formatter) nameFormatter(seed);
 	if (noOrigin) execFileSync("git", ["remote", "remove", "origin"], {cwd: seed, stdio: "pipe"});
 	// The fake reads the remote from its script, for a person's push (`pushesAt`).
@@ -628,7 +651,7 @@ const lane = ({
 				...tickets,
 				read: (n) =>
 					Effect.andThen(
-						ticketMoves(tickets, n),
+						Effect.andThen(ticketMoves(tickets, n), branchMoves(tickets, n)),
 						Effect.suspend(() => {
 							if (typed !== readFailsAt || readFailed)
 								return tickets
@@ -1368,6 +1391,159 @@ describe("a lane, whole", () => {
 			expect(builds.map((f) => f.round)).toEqual([1]);
 			expect(said).not.toContain("step_stuck");
 			expect(said).not.toContain("sent_back");
+			// The route's read pushed the head with main in it itself: after ship's `behind`, the only step
+			// is merge again. No push step runs, and the merge is not asked a second time.
+			const behind = ran.facts.findIndex((f) => f.type === "ended" && f.stage === "merge");
+			expect(
+				ran.facts
+					.slice(behind)
+					.filter((f) => f.type === "started")
+					.map((f) => f.stage),
+				said,
+			).toEqual(["merge"]);
+			expect(askedFor(ran, "merge"), said).toHaveLength(1);
+			const read = ran.facts.find((f) => f.type === "restarted" && f.from === "merge");
+			expect(
+				ran.facts.filter((f) => f.type === "pushed").map((f) => f.head),
+				said,
+			).toEqual([pushedHead(ran), read?.to]);
+		},
+	);
+
+	// Self-fix PR 11a, round 3, review finding 1: a person's commit is taken in at ship's `behind`, so
+	// the review does not stand at the head with main merged in. The route's read pushes nothing there:
+	// no pull request body and no verdict at a head no review read. The review reads it first, and
+	// here it stops, so the pull request and its row stay at the head the lane pushed.
+	it(
+		"row 62, with a person's commit taken in at ship's behind: nothing is pushed or posted at the head with main in it before a review reads it",
+		{timeout: 300_000},
+		async () => {
+			const ELSEWHERE = {path: "docs/elsewhere.md", text: "Written elsewhere.\n"};
+			const PERSONS = {path: "docs/person.md", text: "A person's note.\n"};
+			const MISFIT = "I read the diff and it looks right.";
+			const ran = await lane({
+				within: 200,
+				picks: {...YES, step: "stop", rounds_spent: "stop"},
+				fake: {
+					// Main moves once, as the first review starts: after the lane's head left it.
+					pushesAt: {review: {0: {branch: "main", ...ELSEWHERE}}},
+					// Every review after the first answers what does not fit, so the lane stops there.
+					answers: {review: [null, MISFIT, MISFIT, MISFIT, MISFIT]},
+				},
+				// A person pushes one commit on top of the lane's head once it is on the pull request.
+				branchAfter: {step: "push", files: [PERSONS]},
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			const merges = ran.facts.filter((f) => f.type === "ended" && f.stage === "merge");
+			expect(merges[0]?.outcome, said).toMatchObject({kind: "send", to: "builder", why: "behind"});
+			// The route's read went on from the person's commit, taken in, and merged main into it.
+			const read = ran.facts.find((f) => f.type === "restarted" && f.from === "merge");
+			expect(read, said).toBeDefined();
+			const theirs = String(read?.head);
+			const fresh = String(read?.to);
+			expect(remoteGit(ran.remote, "log", "-1", "--format=%s", theirs), said).toBe(
+				"A person's change",
+			);
+			expect(fresh, said).toMatch(/^[0-9a-f]{40}$/);
+			expect(fresh).not.toBe(theirs);
+			// Its checks there were green, so only the review's standing keeps it from pushing.
+			expect(
+				ran.facts.filter((f) => f.type === "checked" && f.head === fresh).map((f) => f.result),
+				said,
+			).toEqual(["green"]);
+			// The review read that head again: the person's commit is in what it was shown.
+			const reviews = codexRuns(ran.dir).filter((r) => r.step === "review");
+			expect(reviews.length, said).toBeGreaterThan(1);
+			expect(reviews[1]?.diff ?? "", said).toContain(PERSONS.path);
+			// Nothing was pushed at that head: one `pushed` fact, the lane's own head.
+			expect(
+				ran.facts.filter((f) => f.type === "pushed").map((f) => f.head),
+				said,
+			).toEqual([pushedHead(ran)]);
+			// And the pull request's row never shows it, or keeps a verdict given on it.
+			const rows = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Pull)))(
+				readFileSync(join(ran.dir, "home", "work", "pulls.json"), "utf8"),
+			);
+			const row = rows.find((r) => r.kind === "lane");
+			expect(row?.head, said).toBe(pushedHead(ran));
+			expect(row?.posted?.head, said).toBe(pushedHead(ran));
+			expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
+			expect(ran.lines.at(-1), said).not.toContain("ended: done");
+		},
+	);
+
+	// Self-fix PR 11a, round 3, mutation M2: red checks at the head with main merged in push nothing.
+	// The build runs the next round, told the failing test, as any red after a build does.
+	it(
+		"row 62, with red checks at the head with main in it: the route's read pushes nothing, and the build runs the next round, told the failing test",
+		{timeout: 300_000},
+		async () => {
+			const ELSEWHERE = {path: "docs/elsewhere.md", text: "Written elsewhere.\n"};
+			const NAME = "src/lower.test.ts > lowers capitals";
+			const VITEST = "node_modules/.bin/vitest run --reporter=json --outputFile={out}";
+			/** Whether `head`, in the lane's own clone, holds main's moved file. */
+			const takesMainIn = ({dir}: Where, head: string) => {
+				try {
+					execFileSync(
+						"git",
+						[
+							"-C",
+							join(dir, "home", "work", "clone"),
+							"cat-file",
+							"-e",
+							`${head}:${ELSEWHERE.path}`,
+						],
+						{stdio: "pipe"},
+					);
+					return true;
+				} catch {
+					return false;
+				}
+			};
+			let saidRed = false;
+			const ran = await lane({
+				within: 200,
+				picks: {...YES, step: "stop", rounds_spent: "stop"},
+				fake: {pushesAt: {review: {0: {branch: "main", ...ELSEWHERE}}}},
+				// Red once: at the first head with main in it, the route's read's. Every other run is real.
+				checksSay: (head, _nth, where) => {
+					if (saidRed || !takesMainIn(where, head)) return null;
+					saidRed = true;
+					return {
+						head,
+						commands: [{command: VITEST, code: 1, ms: 8_120}],
+						result: "red",
+						failed: [NAME],
+						tail: `${NAME}: boom`,
+					};
+				},
+			});
+			const said = ran.lines.join("\n");
+			expect(ran.lines, said).not.toContain(TIMED_OUT);
+			const behind = ran.facts.findIndex((f) => f.type === "ended" && f.stage === "merge");
+			expect(ran.facts[behind]?.outcome, said).toMatchObject({
+				kind: "send",
+				to: "builder",
+				why: "behind",
+			});
+			const read = ran.facts.find((f) => f.type === "restarted" && f.from === "merge");
+			const red = ran.facts.filter((f) => f.type === "checked" && f.result === "red");
+			expect(
+				red.map((f) => f.head),
+				said,
+			).toEqual([read?.to]);
+			// From ship's `behind` to the next step, nothing is pushed, and that step is the build, round 2.
+			const after = ran.facts.slice(behind);
+			const next = after.findIndex((f) => f.type === "started");
+			expect(after[next]?.stage, said).toBe("build");
+			expect(after[next]?.round, said).toBe(2);
+			expect(
+				after.slice(0, next).filter((f) => f.type === "pushed"),
+				said,
+			).toEqual([]);
+			expect(codexRuns(ran.dir).filter((r) => r.step === "build")[1]?.prompt).toContain(NAME);
+			expect(said).not.toContain("stuck:checks_red");
 		},
 	);
 
@@ -2255,6 +2431,15 @@ describe("a stopped lane, typed again", () => {
 			expect(after, said).not.toContain("review");
 			expect(after.indexOf("push"), said).toBeGreaterThan(-1);
 			expect(after.indexOf("push")).toBeLessThan(after.indexOf("merge"));
+			// Self-fix PR 11a, round 3, mutation M2: a restart's read pushes nothing itself. The push step
+			// after it puts the merged head on the pull request.
+			const pushStarted = ran.facts.findIndex(
+				(f, i) => i > restarted && f.type === "started" && f.stage === "push",
+			);
+			expect(
+				ran.facts.slice(restarted, pushStarted).filter((f) => f.type === "pushed"),
+				said,
+			).toEqual([]);
 			const pushed = ran.facts.filter((f) => f.type === "pushed").map((f) => String(f.head));
 			expect(pushed, said).toHaveLength(2);
 			expect(
