@@ -291,7 +291,11 @@ brief carries these caps. Each one came from a laptop that became unusable.
   work, the full suite once at the end. With two or more code agents running:
   `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at the very end. `tsgo` takes
   about 8 cores, so small jobs add up.
-- "Under load" means at most 2 CPU burners, one test loop, and one Docker box.
+- "Under load" means at most 4 code agents, one `pnpm typecheck` at a time across all of
+  them (wait while `pgrep -f tsgo` shows one), one Electron test app at a time, and one Docker
+  box. Raised from 2 on 2026-11-03, the owner asking for more speed: on a 12-core laptop with
+  3 code agents running, the load average sat near 5.5 with 45 GB free. Two type checks at
+  once, not the agent count, is what froze it before. If it feels slow, drop back to 3.
 - Never run the sandbox runtime or a shimmed tool with `env -i` or `HOME` unset while a
   version-manager shim is on `PATH`: one run made about 7,000 processes. Set `ulimit -u`
   in a subshell first.
