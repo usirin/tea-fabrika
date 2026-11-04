@@ -1,13 +1,27 @@
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {checkTree} from "./invariants.ts";
-import {extents, freeLetter, freeTint, linesIn, type Opening, openLine, quiet} from "./line.ts";
 import {
+	extents,
+	freeLetter,
+	freeTint,
+	linesIn,
+	type Opening,
+	openLine,
+	quiet,
+	withLetters,
+} from "./line.ts";
+import {
+	type ContainerNode,
 	createContainer,
 	createTile,
 	createTree,
+	isLayoutTree,
+	type KeptLine,
+	type LayoutNode,
 	type LayoutTree,
 	type Line,
+	type TileNode,
 	TINTS,
 	TSH,
 } from "./node.ts";
@@ -203,6 +217,23 @@ describe("freeLetter", () => {
 		expect(lettersOf(tree).sort()).toEqual(["A", "B", "C"]);
 	});
 
+	it("goes on past Z to AA, then AB, as a spreadsheet names its columns", () => {
+		let tree = createTree(
+			createContainer(
+				"c1",
+				"horizontal",
+				Array.from({length: 28}, (_, i) => createTile(`a${i}`)),
+			),
+		);
+		for (let n = 0; n < 26; n += 1) tree = openPipe(tree, `a${n}`, n);
+		expect(lettersOf(tree)).toEqual([...ABC]);
+		expect(freeLetter([tree])).toBe("AA");
+		tree = openPipe(tree, "a26", 26);
+		expect(freeLetter([tree])).toBe("AB");
+		tree = openPipe(tree, "a27", 27);
+		expect(lettersOf(tree).slice(-2)).toEqual(["AA", "AB"]);
+	});
+
 	it("never gives two open pipes one letter, whatever opens and closes", () => {
 		const step = fc.record({open: fc.boolean(), at: fc.nat({max: 9})});
 		fc.assert(
@@ -224,5 +255,68 @@ describe("freeLetter", () => {
 			}),
 			{seed: 119120, numRuns: 200},
 		);
+	});
+});
+
+// A desk kept before pipes had letters (withLetters): its lines come back with none, and each
+// takes the first letter free in its tree, in reading order. Built by hand, as JSON gives it back.
+
+/** A line as such a desk kept it: no letter, unless `letter` is given. */
+const keptLine = (id: string, letter?: string): KeptLine =>
+	letter === undefined ? {id, from: "a", tint: 0} : {id, from: "a", tint: 0, letter};
+
+const keptTile = (id: string, line: KeptLine | null): TileNode<KeptLine> => ({
+	tag: "tile",
+	id,
+	shows: line === null ? {kind: "tsh", run: null} : {kind: "window", run: ticket, line},
+	folded: false,
+});
+
+const keptRow = (children: readonly LayoutNode<KeptLine>[]): ContainerNode<KeptLine> => ({
+	tag: "container",
+	id: "c1",
+	orientation: "horizontal",
+	children,
+	sizes: {},
+});
+
+/** Each tile's letter, in reading order, and none for a plain tsh. */
+const lettersBy = (tree: LayoutTree) =>
+	[...tiles(tree.root)].map((t) => [t.id, t.shows.kind === "tsh" ? null : t.shows.line.letter]);
+
+describe("withLetters", () => {
+	it("gives a line with no letter the first one free, past a letter kept deeper in the tree", () => {
+		const column: ContainerNode<KeptLine> = {
+			...keptRow([keptTile("c", keptLine("tracker:5", "A"))]),
+			id: "c2",
+			orientation: "vertical",
+		};
+		const tree = withLetters({
+			root: keptRow([keptTile("a", null), keptTile("b", keptLine("tracker:1")), column]),
+			zoomed: "b",
+		});
+		expect(lettersBy(tree)).toEqual([
+			["a", null],
+			["b", "B"],
+			["c", "A"],
+		]);
+		expect(tree.zoomed).toBe("b");
+		expect(isLayoutTree(tree)).toBe(true);
+	});
+
+	it("gives two lines with none two letters in reading order, and every tile of one line the same", () => {
+		const tree = withLetters({
+			root: keptRow([
+				keptTile("a", keptLine("tracker:1")),
+				keptTile("b", keptLine("tracker:2")),
+				keptTile("c", keptLine("tracker:1")),
+			]),
+			zoomed: null,
+		});
+		expect(lettersBy(tree)).toEqual([
+			["a", "A"],
+			["b", "B"],
+			["c", "A"],
+		]);
 	});
 });

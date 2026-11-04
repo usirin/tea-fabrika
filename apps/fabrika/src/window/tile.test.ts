@@ -156,6 +156,40 @@ describe("a tile's title bar", () => {
 		for (const html of [closing, drawn(t2, {zoomed: true}), drawn(t2, {asking: "close t2? (y/n)"})])
 			expect(orderOf(html).at(-1)).toBe("tid");
 	});
+
+	it("marks only the close question as asking, never closing or zoomed", () => {
+		const classOf = (html: string) =>
+			/class="([^"]*)"/.exec(partOf(titlebarOf(html).inner, "state")?.attrs ?? "")?.[1];
+		expect(classOf(drawn(t2, {asking: "close t2? (y/n)"}))).toBe("state asking");
+		expect(classOf(drawn(t2, {closing: true}))).toBe("state");
+		expect(classOf(drawn(t2, {zoomed: true}))).toBe("state");
+	});
+});
+
+describe("a tile's section", () => {
+	const sectionOf = (html: string, attr: string) =>
+		new RegExp(`<section[^>]*\\s${attr}="([^"]*)"`).exec(html)?.[1];
+
+	it("is a tile, then focused and closing only when it is", () => {
+		expect(sectionOf(drawn(t2), "class")).toBe("tile");
+		expect(sectionOf(drawn(t2, {focused: true}), "class")).toBe("tile focused");
+		expect(sectionOf(drawn(t2, {closing: true}), "class")).toBe("tile closing");
+		expect(sectionOf(drawn(t2, {focused: true, closing: true}), "class")).toBe(
+			"tile focused closing",
+		);
+	});
+
+	it("tells a screen reader its id, its program, the line it is a window of, and closing", () => {
+		expect(sectionOf(drawn(t4), "aria-label")).toBe("tile t4");
+		const run = createTile("t6", {kind: "tsh", run: tracker});
+		expect(sectionOf(drawn(run), "aria-label")).toBe("tile t6, tracker");
+		expect(sectionOf(drawn(t2), "aria-label")).toBe(
+			"tile t2, ticket, a window of the line typed in t1",
+		);
+		expect(sectionOf(drawn(t2, {closing: true}), "aria-label")).toBe(
+			"tile t2, ticket, a window of the line typed in t1, closing",
+		);
+	});
 });
 
 /** The handlers a tile gives its section and its title bar, read inside a render so hooks run. */
@@ -234,6 +268,16 @@ describe("a strip", () => {
 		expect(partOf(strip(one), "slot")?.words).toBe("A");
 		const mixed = createContainer("c3", "vertical", [folded(t2), folded(t4)]);
 		expect(strip(mixed)).not.toContain("data-pipe");
+	});
+
+	it("is named by its programs in order, tsh for a plain tile, and says so to a screen reader", () => {
+		const labelOf = (html: string) => /<button[^>]*\saria-label="([^"]*)"/.exec(html)?.[1];
+		expect(partOf(strip(folded(t2)), "strip-name")?.words).toBe("ticket");
+		expect(labelOf(strip(folded(t2)))).toBe("open ticket, t2");
+		expect(partOf(strip(folded(t4)), "strip-name")?.words).toBe("tsh");
+		const column = createContainer("c3", "vertical", [folded(t1), folded(t2), folded(t4)]);
+		expect(partOf(strip(column), "strip-name")?.words).toBe("tracker · ticket · tsh");
+		expect(labelOf(strip(column))).toBe("open tracker · ticket · tsh, c3");
 	});
 
 	it("opens what it stands for on a click", () => {
