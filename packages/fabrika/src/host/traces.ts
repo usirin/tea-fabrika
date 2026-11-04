@@ -36,6 +36,10 @@ export const SpanId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{16}$/u));
 export const JobEnd = Schema.Literals(["done", "failed", "stopped"]);
 export type JobEnd = typeof JobEnd.Type;
 
+/** A stop someone asked for: who, as a writer's text, and why. A person's Ctrl-C gives no why. */
+export const JobStop = Schema.Struct({by: Schema.String, why: Schema.NullOr(Schema.String)});
+export type JobStop = typeof JobStop.Type;
+
 /** What was started and how it ended. Written by the host (#72): `null` in a record until it does. */
 export const Job = Schema.Struct({
 	/** The host's number for it: `%1`. */
@@ -189,8 +193,19 @@ export const JobCall = Schema.Union([
 		text: Schema.String,
 		host: Schema.String,
 		at: Schema.Number,
+		/**
+		 * Who started the job, as its table says (./jobs.ts): the sender, or an agent working for
+		 * the sender. Left out, or naming anyone else, the record keeps the sender (./job-rules.ts).
+		 */
+		by: Schema.optionalKey(Schema.String),
 	}),
-	Schema.Struct({op: Schema.Literal("ended"), how: JobEnd, at: Schema.Number}),
+	Schema.Struct({
+		op: Schema.Literal("ended"),
+		how: JobEnd,
+		at: Schema.Number,
+		/** Who asked the job to stop, and why, as its table kept it. Left out: it ended on its own. */
+		stop: Schema.optionalKey(JobStop),
+	}),
 	Schema.Struct({
 		op: Schema.Literal("opened"),
 		run: Schema.String,
@@ -309,8 +324,11 @@ export const jobWrites = (calls: RecordCalls, trace: string) => ({
 		readonly text: string;
 		readonly host: string;
 		readonly at: number;
+		readonly by?: string;
 	}) => calls(trace, {op: "began", ...job}).pipe(Effect.asVoid),
-	ended: (how: JobEnd, at: number) => calls(trace, {op: "ended", how, at}).pipe(Effect.asVoid),
+	/** `stop`: who asked it to stop, and why; `null`, it ended on its own. */
+	ended: (how: JobEnd, at: number, stop: JobStop | null = null) =>
+		calls(trace, {op: "ended", how, at, ...(stop === null ? {} : {stop})}).pipe(Effect.asVoid),
 	/** Keep the span `run`'s work hangs under. Kept before it returns. */
 	opened: (run: string, span: string, at: number) =>
 		calls(trace, {op: "opened", run, span, at}).pipe(Effect.asVoid),

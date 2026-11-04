@@ -24,28 +24,42 @@ import type {JobAnswer} from "./job.ts";
 //   yield* serveAgent(socket, {programsFor, person: "owner", tiles})
 //   // bridge  {"type":"handshake","version":1,"agent":"claude"}
 //   // host    {"type":"handshake","version":1}
-//   // client  tools/list                    toolsOf(programsFor({kind: "agent", id: "claude", for: "owner"}))
+//   // client  tools/list                    toolsOf(programsFor({kind: "agent", id: "claude", for: "owner"}).list)
 //   // client  tools/call tracker_file {value: {title: "Login fails", body: ""}}
 //   //         the agent's own tracker files it, as agent:claude for:owner
 //
 // Who the agent is comes from the handshake alone, and the writer is made here, as an `Agent`:
 // `programsFor` is handed nothing else, so no list it makes for an agent can hold the person's
-// writer. The host gives each program the writer it is handed (apps/fabrika, host/serve.ts).
+// writer. The host gives each program the writer it is handed, on the agent's own ledger session
+// where it has one (apps/fabrika, host/agents.ts). One whose writes could not be its own is served
+// only the tools that write nothing, and `runs` says why.
 //
 // No platform is named but the SDK's own: `serveStdio` reads Node's `process` through the SDK's
 // shims, which is why this is on the `/mcp` subpath.
 
+/**
+ * What one agent is served: the programs it drives, each packed with services that write as it,
+ * and, when its writes could not be its own, why it is served only the tools that write nothing.
+ */
+export interface AgentPrograms {
+	readonly list: ProgramList;
+	readonly readOnly: {readonly why: string} | null;
+}
+
 export interface AgentOptions {
-	/** The programs an agent drives, each packed with services that write as `who`. */
-	readonly programsFor: (who: typeof Agent.Type) => ProgramList;
+	/**
+	 * What agent `who` is served, made as its handshake is read, in the agent's own scope: a
+	 * session made for it there lasts as long as the agent stays.
+	 */
+	readonly programsFor: (
+		who: typeof Agent.Type,
+	) => Effect.Effect<AgentPrograms, never, Scope.Scope>;
 	/** The person the host works for: each agent works for them (`for`). */
 	readonly person: string;
 	/** The runs in the person's tiles now, for `runs` to list. */
 	readonly tiles: () => readonly InTile[];
 	/** Job n of the host's table now, with every line kept of it, for the `job` tool (./job.ts). */
 	readonly job?: ((n: number) => JobAnswer | null) | undefined;
-	/** Each agent is served only the tools that write nothing (./drive.ts). */
-	readonly readOnly?: boolean | undefined;
 	/** The server's name and version, as the client is told. */
 	readonly server?: {readonly name: string; readonly version: string};
 	/**
@@ -84,11 +98,12 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
 		const begin = (handshake: Handshake) =>
 			Effect.gen(function* () {
 				const who = {kind: "agent", id: handshake.agent, for: person} as const;
+				const served = yield* programsFor(who);
 				const {drive, tools} = yield* driveFor({
-					list: programsFor(who),
+					list: served.list,
 					tiles,
 					job: options.job,
-					readOnly: options.readOnly,
+					readOnly: served.readOnly ?? false,
 				});
 				if (options.attached !== undefined) yield* options.attached(who);
 				const server = new Server(info, {capabilities: {tools: {}}});

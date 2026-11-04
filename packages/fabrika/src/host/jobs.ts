@@ -1,7 +1,7 @@
 import {defineMachine} from "@demlik/tea";
 import {Effect, Schema, SchemaTransformation} from "effect";
 import {runTraceId} from "../program/trace-id.ts";
-import type {JobEnd} from "./traces.ts";
+import {type JobEnd, JobStop} from "./traces.ts";
 
 // A host's job table (./host-jobs.ts opens it; tsh shows it). It holds what a
 // job is (its line, and for each program in it the program's name, its flags,
@@ -16,6 +16,14 @@ import type {JobEnd} from "./traces.ts";
 //   attached    a detached job was started again under its run ids
 //   foreground  a job running in the background was brought to the foreground, as bash's `fg`
 //   dropped    a detached job was stopped for good: it leaves the table
+//   stopping    someone asked a job to stop, and why: kept once, before its runs are stopped
+//
+// Each job keeps who wrote it (`by`) for life: the writer of the tsh that began it, set at `began`
+// and never changed, not by an `attached` in another tile nor by a stop. A stop keeps who asked it
+// and why (`stop`), set once (tracker 185):
+//
+//   began     {..., by: "agent:claude for:github:7"}           the job's `by`
+//   stopping  {n: 1, by: "user:github:7", why: "wrong ticket"}  the job's `stop`; a second ask keeps the first
 //
 // A job that ended is gone from the table, as a finished job is gone from a
 // shell's `jobs`. What it said was printed while it ran.
@@ -57,6 +65,13 @@ export const Job = Schema.Struct({
 	 * with `null`: whose it was is not known.
 	 */
 	owner: Owner.pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+	/**
+	 * Who started it, as a writer's text: `agent:claude for:github:7`, `user:owner`. Set at `began`,
+	 * never changed. `null`: not known, as a table kept before jobs had one, or a tsh with no writer.
+	 */
+	by: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+	/** Who asked it to stop, and why (`null`: none given). Set once, as the stop is asked. */
+	stop: Schema.NullOr(JobStop).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
 });
 export type Job = typeof Job.Type;
 
@@ -99,6 +114,8 @@ export type JobsMsg =
 			readonly stages: readonly [StageRecord, ...StageRecord[]];
 			readonly background: boolean;
 			readonly owner: Owner;
+			/** Who began it: the tsh's writer. The job keeps it for life. */
+			readonly by: string | null;
 	  }
 	/** `how`: how that program's run ended, which the job's record keeps (./records.ts). */
 	| {readonly type: "stage_ended"; readonly run: string; readonly how: JobEnd}
@@ -114,7 +131,14 @@ export type JobsMsg =
 	/** A running job tsh now waits for, as bash's `fg`: the prompt waits for its end. */
 	| {readonly type: "foreground"; readonly n: number}
 	/** A detached job its owner stopped: it will not be started again. */
-	| {readonly type: "dropped"; readonly n: number};
+	| {readonly type: "dropped"; readonly n: number}
+	/** `by` asked job n to stop, and why: said before its runs are stopped. Only the first is kept. */
+	| {
+			readonly type: "stopping";
+			readonly n: number;
+			readonly by: string;
+			readonly why: string | null;
+	  };
 
 export const EMPTY: Jobs = {jobs: [], next: 1};
 
@@ -145,6 +169,8 @@ export const jobsMachine = defineMachine({
 						state: "running",
 						background: m.background,
 						owner: m.owner,
+						by: m.by,
+						stop: null,
 					},
 				],
 				next: s.next + 1,
@@ -192,6 +218,13 @@ export const jobsMachine = defineMachine({
 			}),
 		dropped: (s, m) =>
 			step({...s, jobs: s.jobs.filter((job) => job.n !== m.n || job.state !== "detached")}),
+		stopping: (s, m) =>
+			step({
+				...s,
+				jobs: s.jobs.map((job) =>
+					job.n === m.n && job.stop === null ? {...job, stop: {by: m.by, why: m.why}} : job,
+				),
+			}),
 	},
 });
 

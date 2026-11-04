@@ -888,6 +888,8 @@ const job: Shell.Jobs = {
 			state: "running",
 			background: true,
 			owner: "t1",
+			by: null,
+			stop: null,
 		},
 	],
 };

@@ -38,6 +38,8 @@ export interface Shell {
 	readonly table: JobTable;
 	/** Whom this tsh is for: each job it begins or attaches is this owner's in the table. */
 	readonly owner: Owner;
+	/** Who this tsh writes as: each job it begins is theirs, and each stop it asks says them. */
+	readonly by: string | null;
 	/** A line to show; `n`: the job it was printed for, so a host keeps a job's lines (Printed's `n`). */
 	readonly print: (to: "out" | "err", text: string, n?: number) => void;
 	/** A table for a person, on out: its terminal lays it out (./table.ts). */
@@ -72,6 +74,14 @@ export type Mode =
 const show = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
 
 const note = (shell: Shell, msg: JobsMsg) => shell.table.dispatch(msg).pipe(Effect.ignore);
+
+/**
+ * This tsh's writer asks job n to stop, as a person does with Ctrl-C or `stop %n`: no why. Said
+ * to the table before the runs are stopped, so the job's record keeps who stopped it. A tsh with
+ * no writer says nothing: who asked is not known.
+ */
+export const askStop = (shell: Shell, n: number) =>
+	shell.by === null ? Effect.void : note(shell, {type: "stopping", n, by: shell.by, why: null});
 
 /** What tsh says of a job whose kept state its machine's schema refuses. */
 export const SAVED_BY_OLDER_CODE = "this job was saved by older code, can't open it";
@@ -325,10 +335,11 @@ const startStages = (shell: Shell, stages: readonly Starting[], close: boolean) 
  * Wait for a job (by its watcher, so the table already says it ended), or for
  * Ctrl-C, which stops every run with its starter's `stop`. Answers each run's end.
  */
-const waitFor = (shell: Shell, runs: readonly AnyRunning[], watcher: Watcher) =>
+const waitFor = (shell: Shell, n: number, runs: readonly AnyRunning[], watcher: Watcher) =>
 	Effect.gen(function* () {
 		const signal = yield* PubSub.subscribe(shell.signals);
 		const stopped = PubSub.take(signal).pipe(
+			Effect.andThen(askStop(shell, n)),
 			Effect.andThen(Effect.forEach(runs, (r) => r.stop, {concurrency: "unbounded"})),
 			Effect.andThen(Deferred.await(watcher)),
 		);
@@ -536,6 +547,7 @@ const runStages = (
 			stages: [head, ...tail],
 			background,
 			owner: shell.owner,
+			by: shell.by,
 		});
 		const n = numberOf(shell, head.run);
 		const values: unknown[] = [];
@@ -573,7 +585,7 @@ const runStages = (
 					told: only.told,
 					listeners: only.listeners,
 					keeping: {id: only.record.run, storage: shell.storage},
-					stopOn: PubSub.take(signal),
+					stopOn: PubSub.take(signal).pipe(Effect.tap(() => askStop(shell, n))),
 				});
 			}).pipe(Effect.scoped);
 			yield* note(shell, {
@@ -617,7 +629,7 @@ const runStages = (
 			shell.print("err", `[${n}] ${records.map((r) => r.run).join(" ")}`, n);
 			return {status: 0, values: []};
 		}
-		const ends = yield* waitFor(shell, started.runs, watcher);
+		const ends = yield* waitFor(shell, n, started.runs, watcher);
 		sayEnd(shell, n, line.text, ends, names);
 		return {status: statusOfJob(ends), values};
 	});
@@ -635,7 +647,7 @@ export const waitForJob = (shell: Shell, job: Job) =>
 		// In the table before the wait, as bash's `fg` moves the job first: whoever reads the table
 		// (a terminal drawing a program's window) sees the job in the foreground while tsh waits.
 		yield* note(shell, {type: "foreground", n: job.n});
-		const ends = yield* waitFor(shell, runs, watcher);
+		const ends = yield* waitFor(shell, job.n, runs, watcher);
 		sayEnd(
 			shell,
 			job.n,
@@ -703,7 +715,7 @@ export const reattach = (shell: Shell, job: Job, background: boolean, typed: str
 			shell.print("err", `[${job.n}] attached ${job.stages.map((s) => s.run).join(" ")}`, job.n);
 			return 0;
 		}
-		return statusOfJob(yield* waitFor(shell, started.runs, watcher));
+		return statusOfJob(yield* waitFor(shell, job.n, started.runs, watcher));
 	}).pipe(
 		Effect.withSpan(
 			attachTitleOf(job.stages.map((s) => s.program)),

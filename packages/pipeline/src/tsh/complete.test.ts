@@ -22,6 +22,8 @@ const JOBS: Shell.Jobs = {
 			state: "running",
 			background: true,
 			owner: null,
+			by: null,
+			stop: null,
 		},
 	],
 };
