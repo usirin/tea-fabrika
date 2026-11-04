@@ -21,6 +21,7 @@ import {
 	type CodeFact,
 	type Entry,
 	FAILED_MOST,
+	type FactOf,
 	factsOf,
 	type Hash,
 	type Outcome,
@@ -53,7 +54,7 @@ import {Ship, ship} from "../ship/machine.ts";
 import {sortChild, sortToTheEnd} from "../sort/program.ts";
 import {reviewLine, shipLine} from "../status.ts";
 import type {PropertyId} from "../test-writer/brief.ts";
-import {testsOf} from "../test-writer/checked.ts";
+import {type RunFailure, testsOf} from "../test-writer/checked.ts";
 import {
 	answersChild,
 	answersToTheEnd,
@@ -271,8 +272,10 @@ interface Put {
 
 /**
  * The lane goes on at a step before the test writer, such as an old save whose fold names `plan`
- * (self-fix PR 5): nothing on its branch stands, so the branch starts again from `onto`, and the old
- * head stays under a ref the restart names. Nothing built: the branch moves to `onto` as it is.
+ * (self-fix PR 5), or at a first test writer (tracker 194): nothing on its branch stands, so the
+ * branch starts again from `onto`, and the old head stays under a ref the restart names. Nothing
+ * built: the branch moves to `onto` as it is, and what the test writer wrote, touched and could not
+ * test goes with it.
  */
 const startOver = (cmd: ReturnType<typeof freshMain>, onto: string) =>
 	Effect.gen(function* () {
@@ -282,16 +285,44 @@ const startOver = (cmd: ReturnType<typeof freshMain>, onto: string) =>
 		if (head !== null && kept !== undefined) yield* work.keep(head, kept);
 		yield* work.reset(cmd.number, onto);
 		const put: Put = {
-			found: {_tag: "fresh", carry: {base: onto, head: onto, exam: []}},
+			found: {
+				_tag: "fresh",
+				carry: {base: onto, head: onto, exam: [], written: null, touched: [], cannot: []},
+			},
 			conflicts: [],
 			...(kept === undefined ? {} : {kept}),
 		};
 		return put;
 	});
 
-/** Whether a restart that goes on from `from` starts the branch again from main: before the test writer. Pure. */
-const startsOver = (from: Resume): boolean =>
-	STEPS.indexOf(from.step) < STEPS.indexOf("test_writer");
+/**
+ * Whether a restart that goes on from `from` starts the branch again from main: before the test
+ * writer, or at a first test writer (tracker 194). That writer's commit was never checked on main,
+ * and it writes every test again anyway, so its commit is kept under a ref and never rebased: a
+ * rebase onto a main that added the same file would ask `exam_conflict`, and a redo of that file
+ * alone leaves the rest unproven. A run as the next round is no first. `round` left out: a read sent
+ * before it, as before. Pure.
+ */
+const startsOver = (from: Resume, round: number | undefined): boolean =>
+	STEPS.indexOf(from.step) < STEPS.indexOf("test_writer") ||
+	(from._tag === "run" && from.step === "test_writer" && from.round === undefined && round === 1);
+
+/**
+ * Ticket `cmd.number`'s branch moved to main's tip, read fresh, once the exam's pull request merged
+ * (tracker 194). A commit on the branch that main lacks stays under a ref named by the step's intent
+ * first. Answers the tip.
+ */
+const onNewMain = (cmd: Carried) =>
+	Effect.gen(function* () {
+		const work = yield* LaneWork;
+		const tip = yield* work.main;
+		const {tree} = yield* work.tree(cmd.number);
+		const head = yield* work.head(tree);
+		if ((yield* work.mergeBase(head, tip)) !== head)
+			yield* work.keep(head, `refs/kept/${cmd.intent}`);
+		yield* work.reset(cmd.number, tip);
+		return tip;
+	});
 
 /**
  * The lane's branch put on `onto` (self-fix PR 5). Never pushed: the test writer's own commit is
@@ -304,7 +335,8 @@ const putOnMain = (cmd: ReturnType<typeof freshMain>, onto: string) =>
 		const work = yield* LaneWork;
 		const tickets = yield* Tickets;
 		const {number, carry} = cmd;
-		const {base, head, pr, exam, open, written} = carry;
+		const {base, head, pr, exam, open} = carry;
+		const written = carry.written ?? undefined;
 		const answer = (f: Found, conflicts: readonly string[] = []): Put => ({found: f, conflicts});
 		if (base === null || head === null || base === onto) return answer({_tag: "fresh", carry: {}});
 		const pushed = pr !== null;
@@ -525,14 +557,15 @@ const testsBase = (carry: Carry, round: number, main: string): string | null => 
 /** The redo `carry` holds, if any. Pure. */
 const redoOf = (carry: Carry): Redo | null => {
 	const files = carry.touched ?? [];
-	return files.length === 0 || carry.written === undefined ? null : {files, written: carry.written};
+	const written = carry.written ?? null;
+	return files.length === 0 || written === null ? null : {files, written};
 };
 
 /**
  * The test writer writes the files a person sent back again, on its own commit and never on the
  * builder's work (self-fix PR 5): only those files, for the Properties tested in them, told what the
- * person wrote. Its check runs there. Then the new files are laid on the builder's head, where the
- * build goes on.
+ * person wrote. Its check runs there. When that check passes, the new files are laid on the builder's
+ * head, where the build goes on.
  */
 const writtenAgain = (at: At, redo: Redo) =>
 	Effect.gen(function* () {
@@ -583,7 +616,16 @@ const writtenAgain = (at: At, redo: Redo) =>
 		const problems = [...end.report.problems, ...foundWords(properties, end.report.found, answers)];
 		// Back on the builder's work, which the build goes on from.
 		yield* work.reset(number, head);
-		if (commit === null) return ended(end.outcome, {}, problems);
+		// The redo goes on the head only when its check on the base came out as the plan says: `done`,
+		// or `cannot_test`, where every test it wrote did and a person lets the rest through. Any other
+		// end, an ask or a stop, keeps the carry as it was, so the redo stays owed: the route's rerun
+		// and a person's `again` are the redo again, on the commit it started from, and no build starts
+		// on tests the base never passed (test-writer/machine.ts).
+		const passed =
+			end.outcome.kind === "done" ||
+			(end.outcome.kind === "ask" && end.outcome.for === "cannot_test");
+		if (commit === null || !passed)
+			return withFailure(ended(end.outcome, {}, problems), end.report.failure);
 		const files = yield* work.filesOf(work.at("clone"), commit);
 		const next = yield* work.putBack(
 			number,
@@ -591,7 +633,7 @@ const writtenAgain = (at: At, redo: Redo) =>
 			files,
 			`the test writer's files, written again, for ${at.url}`,
 		);
-		return ended(
+		const done = ended(
 			end.outcome,
 			{
 				head: next,
@@ -608,6 +650,7 @@ const writtenAgain = (at: At, redo: Redo) =>
 			},
 			problems,
 		);
+		return withFailure(done, end.report.failure);
 	});
 
 const AGENT_STEPS: Partial<
@@ -668,6 +711,17 @@ type BodyEnd = StepEnd & {
 	readonly failed?: readonly string[];
 	/** The green checks the step trusted in place of a run of its own: the mutation step's skip. */
 	readonly trusted?: Checked;
+	/** Why a test writer's run on the base could not run, for the step's `ended` fact (tracker 193). */
+	readonly failure?: Failure;
+};
+
+type Failure = NonNullable<FactOf<"ended">["failure"]>;
+
+/** A test writer's end, with the cause its run on the base gave, if it gave one. Pure. */
+const withFailure = (end: BodyEnd, failure: RunFailure | null): BodyEnd => {
+	if (failure === null) return end;
+	const {why, code, ms, tail} = failure;
+	return {...end, failure: {why, code, ms, tail}};
 };
 
 const ended = (
@@ -1091,6 +1145,13 @@ const bodies = {
 			const pr = yield* need(at.cmd.carry.examPr, "the exam has no pull request");
 			const outcome = yield* shipped(at, pr);
 			const pull = at.cmd.carry.examPull;
+			// Merged: the lane's branch moves onto main as it is now, so the test writer sees the exam it
+			// was given (tracker 194). Here and not in the writer's body: a writer resumed after a kill
+			// keeps the base it was asked on, and its base and its commit must agree.
+			if (outcome.kind === "done") {
+				const tip = yield* onNewMain(at.cmd);
+				return ended(outcome, {base: tip, head: tip});
+			}
 			// A refusal the exam writer fixes goes to it with ship's words (./routes.ts). Main does not
 			// merge into a head that conflicts, so that redo is written on main.
 			return outcome.kind === "send" && pull !== undefined
@@ -1148,7 +1209,7 @@ const bodies = {
 			const commit = end.report.commit;
 			const files = commit === null ? [] : yield* work.filesOf(tree.tree, commit);
 			const answers = end.report.written?.answers ?? [];
-			return ended(
+			const done = ended(
 				end.outcome,
 				{
 					base: round > 1 ? carry.base : base,
@@ -1168,6 +1229,7 @@ const bodies = {
 				},
 				[...end.report.problems, ...foundWords(properties, end.report.found, answers)],
 			);
+			return withFailure(done, end.report.failure);
 		}),
 
 	build: (at: At) =>
@@ -1179,8 +1241,9 @@ const bodies = {
 			// A person said the builder was wrong to change the test writer's files: they go back as it
 			// wrote them, on top of the builder's work, and this round builds there (self-fix PR 5).
 			const touched = carry.touched ?? [];
+			const written = carry.written ?? null;
 			const restored =
-				touched.length === 0 || carry.written === undefined || carry.head === null
+				touched.length === 0 || written === null || carry.head === null
 					? null
 					: yield* work
 							.reset(at.cmd.number, carry.head)
@@ -1188,7 +1251,7 @@ const bodies = {
 								Effect.andThen(
 									work.putBack(
 										at.cmd.number,
-										carry.written.commit,
+										written.commit,
 										touched,
 										"put the test writer's files back",
 									),
@@ -1619,7 +1682,9 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			if (ticket.state === "closed") return {_tag: "closed"} as const;
 			if (!filedBy(ticket.timeline[0]?.by, person)) return {_tag: "not_yours"} as const;
 			const onto = yield* work.main;
-			const put = startsOver(cmd.from) ? yield* startOver(cmd, onto) : yield* putOnMain(cmd, onto);
+			const put = startsOver(cmd.from, cmd.round)
+				? yield* startOver(cmd, onto)
+				: yield* putOnMain(cmd, onto);
 			const {found} = put;
 			const head = cmd.carry.head;
 			const to = found.carry?.head ?? head;
@@ -1745,7 +1810,10 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			const to = yield* Clock.currentTimeMillis;
 			const keyed = yield* Ref.get(keying);
 			// `carry`: what the step left, the change the lane lays on its carry, for the fold (./restart.ts).
-			const write = (outcome: Outcome, more: Pick<BodyEnd, "carry" | "failed" | "trusted">) =>
+			const write = (
+				outcome: Outcome,
+				more: Pick<BodyEnd, "carry" | "failed" | "trusted" | "failure">,
+			) =>
 				tickets.write(cmd.number, `${run}/ended`, {
 					type: "ended",
 					run,
@@ -1765,6 +1833,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 						: {harness: picked.harness, model: picked.model, effort: picked.effort}),
 					...(more.failed === undefined ? {} : {failed: more.failed}),
 					...(more.trusted === undefined ? {} : {trusted: more.trusted}),
+					...(more.failure === undefined ? {} : {failure: more.failure}),
 					...(keyed === null ? {} : keyed),
 					carry: more.carry,
 				} as CodeFact);

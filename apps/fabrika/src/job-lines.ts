@@ -26,7 +26,14 @@ import type {JobEnded, JobNews} from "./tile-jobs.ts";
 // `by` is who started the job, as the table keeps it (tracker 185). A stop says who asked it, and
 // why, as it is asked, before the end it asks for; a person's own Ctrl-C or `stop %n` gives no why:
 //
-//   level=INFO message=job_stopped n=2 by=user:owner
+//   level=INFO message=job_stopped n=2 by=user:owner whose=user:owner idle_ms=0
+//
+// `whose` is the job's own writer, beside `by`, who asked the stop: an agent's `stop` tool stops
+// the person's jobs too. `idle_ms` is how long since the person's last key, a key on the desk or
+// in a tile, so the log can say whether an agent stops work the person is in the middle of. With
+// no key since the host started, it is not said.
+//
+//   level=INFO message=job_stopped n=1 "by=agent:claude for:owner" "why=wrong ticket" whose=user:owner idle_ms=8000
 //
 // In memory only: a host started again knows its table's jobs, never their lines. Bounded: each
 // job's lines are the newest any answer could show (`KeptLines`, about 25 KB at most), kept for
@@ -47,13 +54,16 @@ export interface JobLines {
 	readonly printed: (n: number, text: string) => void;
 	/** Job n now, with every line kept of it; `null`: the host knows none. */
 	readonly job: (n: number) => JobAnswer | null;
+	/** Done with job n as `job` answers it once its tile has said it ended: at once, if it has. */
+	readonly ended: (n: number) => Effect.Effect<JobAnswer>;
 }
 
 /**
  * The host's job lines, beside its `table`, until the scope closes. Its log lines go to the
- * loggers it is made with.
+ * loggers it is made with. `idle`: how long since the person's last key, for a stop's line;
+ * `null`: no key since the host started.
  */
-export const jobLines = (table: JobTable) =>
+export const jobLines = (table: JobTable, idle: () => number | null = () => null) =>
 	Effect.gen(function* () {
 		const services = yield* Effect.context<never>();
 		const log = (message: string, fields: Readonly<Record<string, unknown>>) => {
@@ -77,10 +87,15 @@ export const jobLines = (table: JobTable) =>
 			for (const job of jobs) {
 				if (job.stop === null || stopped.has(job.n)) continue;
 				stopped.add(job.n);
+				const since = idle();
 				log("job_stopped", {
 					n: job.n,
 					by: job.stop.by,
 					...(job.stop.why === null ? {} : {why: job.stop.why}),
+					// Whose it was beside who stopped it, and how long the person had been away: does an
+					// agent stop work the person is in the middle of?
+					...(job.by === null ? {} : {whose: job.by}),
+					...(since === null ? {} : {idle_ms: since}),
 				});
 			}
 			for (const n of stopped) if (!jobs.some((job) => job.n === n)) stopped.delete(n);
@@ -92,6 +107,8 @@ export const jobLines = (table: JobTable) =>
 		/** How each job ended, as its tile saw it, oldest first. */
 		const ended = new Map<number, {readonly tile: TileId; readonly job: JobEnded}>();
 		const inTable = (n: number) => table.getState().jobs.some((job) => job.n === n);
+		/** Who waits for each job's end (`ended`), by `%n`: each is told once, as the tile says it. */
+		const waiting = new Map<number, Set<(job: JobAnswer) => void>>();
 
 		/** Forget the oldest jobs past `JOBS_KEPT`, but none the table still holds. */
 		const forget = () => {
@@ -118,6 +135,10 @@ export const jobLines = (table: JobTable) =>
 					const by = writers.get(job.n);
 					writers.delete(job.n);
 					log("job_ended", {n: job.n, text: job.text, tile, how: job.how, ...byOf(by)});
+					const heard = waiting.get(job.n);
+					const now = lines.job(job.n);
+					waiting.delete(job.n);
+					if (now !== null) for (const tell of heard ?? []) tell(now);
 				},
 			}),
 			printed: (n, text) => {
@@ -152,6 +173,19 @@ export const jobLines = (table: JobTable) =>
 					lines: shown,
 				};
 			},
+			ended: (n) =>
+				Effect.callback<JobAnswer>((resume) => {
+					const now = lines.job(n);
+					if (now?.state._tag === "ended") return resume(Effect.succeed(now));
+					const one = (job: JobAnswer) => resume(Effect.succeed(job));
+					const all = waiting.get(n) ?? new Set();
+					all.add(one);
+					waiting.set(n, all);
+					return Effect.sync(() => {
+						all.delete(one);
+						if (all.size === 0 && waiting.get(n) === all) waiting.delete(n);
+					});
+				}),
 		};
 		return lines;
 	});

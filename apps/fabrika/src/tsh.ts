@@ -167,6 +167,11 @@ export interface Tsh {
 	 * detached: the tile is gone. An earlier host's job in this tile goes too. Other tiles' stay.
 	 */
 	readonly drop: Effect.Effect<void>;
+	/**
+	 * Tell tsh to stop job n, as `stop %n` does: the host's word, for whoever asked it first (an
+	 * agent's `stop` tool). A control input, so a line waiting behind the job never holds it up.
+	 */
+	readonly stop: (n: number) => Effect.Effect<void>;
 }
 
 /** tsh's run. In memory, so each tile's tsh has the same id with no clash. */
@@ -510,10 +515,11 @@ export const startTsh = (options: {
 			}),
 		);
 
-		/** tsh's own inputs end: its line, as Ctrl-D, and Ctrl-C's. Every job of it has ended by now. */
+		/** tsh's own inputs end: its line, as Ctrl-D, Ctrl-C's, and the host's stop. Every job of it has ended by now. */
 		const endTsh = () => {
 			started.close("line");
 			started.close("signal");
+			started.close("stop");
 		};
 		/** The tile is told its jobs; after `close`, tsh ends once none runs. */
 		const recount = (now: Shell.Jobs | null) => {
@@ -606,6 +612,13 @@ export const startTsh = (options: {
 			}),
 			ended: Deferred.await(over),
 			drop: toOwn("detached", (n) => ({type: "dropped", n})),
+			// As Ctrl-C's: when its small bound is full, this one is let go, and the host's wait for the
+			// job's end answers that the stop was asked, not that it ended.
+			stop: (n) =>
+				tell(started.run, "stop", n).pipe(
+					Effect.catchTag("MailboxFull", () => Effect.void),
+					Effect.asVoid,
+				),
 		};
 		return tsh;
 	});

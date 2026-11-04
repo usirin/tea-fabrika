@@ -1,8 +1,9 @@
 import type {PointerEvent as ReactPointerEvent, ReactNode} from "react";
+import type {Keys} from "../desk/keymap.ts";
 import {type LayoutNode, type Line, lineOf, type TileNode, tiles} from "../desk/layout/index.ts";
 import type {FromPage} from "../messages.ts";
 import {PIPES, type Pipe} from "../pipes.ts";
-import {INFO, type TicketsShown, tileWord} from "./frame.ts";
+import {INFO, infoFor, type TicketsShown, tileWord} from "./frame.ts";
 
 // A tile and a strip, as the desk's page draws them (docs/direction/tile-guidelines.md, decided
 // 2026-11-01). They take the desk's messages as `toHost`, so a test draws them with no page around
@@ -78,6 +79,8 @@ export function Tile(props: {
 	readonly folds: boolean;
 	/** The tickets the views on the desk show, so a ticket's title bar says its number. */
 	readonly tickets: TicketsShown;
+	/** The key table in use, so info mode names the keys the person has. */
+	readonly keys: Keys;
 	readonly toHost: (msg: FromPage) => void;
 	/** The body: the tile's terminal, or the view over it. */
 	readonly children: ReactNode;
@@ -101,7 +104,7 @@ export function Tile(props: {
 			    in it presses, so it is a header, with no tab stop. */}
 			<header
 				className="titlebar"
-				data-info={INFO.titlebar}
+				data-info={infoFor(props.keys).titlebar}
 				onPointerDown={noFocus}
 				onDoubleClick={() => {
 					if (folds) toHost({type: "fold", tile: tile.id});

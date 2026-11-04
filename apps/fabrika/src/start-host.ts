@@ -25,6 +25,11 @@ export interface HostStart {
 	readonly entry: string;
 	readonly home: string;
 	readonly paths: HostPaths;
+	/**
+	 * The person's settings folder, which holds keybindings.toml (host/settings.ts,
+	 * `settingsFolder`), passed as `FABRIKA_SETTINGS`. Not said: the host reads the home's own.
+	 */
+	readonly settings?: string | undefined;
 }
 
 /** The host could not be started at all, and why in words. */
@@ -44,7 +49,12 @@ export const startHost = (s: HostStart): Effect.Effect<Effect.Effect<number | nu
 			const log = openSync(s.paths.log, "a", 0o600);
 			try {
 				const child = spawn(s.binary, [s.entry], {
-					env: {...process.env, ELECTRON_RUN_AS_NODE: "1", FABRIKA_HOME: s.home},
+					env: {
+						...process.env,
+						ELECTRON_RUN_AS_NODE: "1",
+						FABRIKA_HOME: s.home,
+						...(s.settings === undefined ? {} : {FABRIKA_SETTINGS: s.settings}),
+					},
 					detached: true,
 					stdio: ["ignore", "ignore", log],
 				});

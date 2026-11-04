@@ -29,6 +29,14 @@ import type {AgentSessions} from "./agent-session.ts";
 //   agent's chat     job {n: 1, last: 2}
 //                    {n: 1, text: "seq --to 5", tile: "t1", state: {_tag: "ended", how: "done"}, lines: ["4", "5"]}
 //
+// And its `stop` tool: an agent stops a job of the host's table, the person's too, and must say
+// why (the owner's call, tracker 185). The tile the job ran in says who and why, and its record
+// and the host's log keep the agent (host/serve.ts, `stopFor`).
+//
+//   agent's chat     stop {n: 1, why: "wrong ticket"}
+//                    {_tag: "stopped", job: {n: 1, ..., state: {_tag: "ended", how: "stopped"}}}
+//   person's tile    [1] stopped by agent:claude for:owner: wrong ticket
+//
 // Every home has the socket, and every agent gets every tool. On a home that keeps its own ledger
 // file, an agent's programs write on the host's ledger, as the agent. On a home connected to a
 // ledger server, each agent writes on its own session (`sessionFor`, host/agent-session.ts): the
@@ -43,7 +51,7 @@ import type {AgentSessions} from "./agent-session.ts";
 //
 //   host/log         message=agent_refused agent=claude "why=the key .../agent_ed25519: ..."
 //
-// Starting or stopping a lane stays the person's, in a tile.
+// Starting a lane stays the person's, in a tile.
 
 /** A screen's port name, `run:<id>`, as a run in a tile; a run's id starts with its program's name. */
 const inTile = (port: string): InTile | null => {
@@ -65,6 +73,8 @@ export const serveAgents = (options: {
 	readonly attached: (name: string) => Effect.Effect<void, never, Scope.Scope>;
 	/** Job n of the host's table now, with its lines (job-lines.ts), for the `job` tool. */
 	readonly job: (n: number) => JobAnswer | null;
+	/** Stop job n for an agent, and why (host/serve.ts), for the `stop` tool. */
+	readonly stop: NonNullable<AgentOptions["stop"]>;
 	/**
 	 * Agent `name`'s own session on the home's ledger server, held in the agent's scope
 	 * (host/agent-session.ts); `null`: the home keeps its own ledger file, and each agent writes on
@@ -73,7 +83,7 @@ export const serveAgents = (options: {
 	readonly sessionFor: AgentSessions | null;
 }) =>
 	Effect.gen(function* () {
-		const {server, ports, attached, job, sessionFor} = options;
+		const {server, ports, attached, job, stop, sessionFor} = options;
 		const ledger = yield* Ledger;
 		const person = yield* Author;
 		const pullRequests = yield* PullRequests;
@@ -103,6 +113,7 @@ export const serveAgents = (options: {
 				programsFor,
 				tiles: () => [...ports()].flatMap((port) => inTile(port) ?? []),
 				job,
+				stop,
 				attached: (who) => attached(who.id),
 			}).pipe(
 				Effect.catchCause((cause) =>

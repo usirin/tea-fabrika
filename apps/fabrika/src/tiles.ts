@@ -34,6 +34,8 @@ import {type Placed, type Screen, startTsh, type Tsh, type WindowScreen} from ".
 //                                 inputs. Its neighbours follow the pipes: the tracker's next send
 //                                 fails and it ends; the runs' input ends, and it shows the last
 //   yield* tiles.kill("ticket:9c1d")  the same window, "stop now": that process stops
+//   yield* tiles.stopJob("t1", 3) t1's tsh is told to stop %3, as `stop %3` there does: true. A
+//                                 tile not open answers false
 //
 // Closing is tmux's kill-pane, made soft: a tile owns its tsh as a pane owns its shell, and the
 // programs are given the end of their inputs before anything is stopped. The desk says when to
@@ -85,6 +87,11 @@ export interface Tiles {
 	readonly end: (process: string) => Effect.Effect<void>;
 	/** Stop one process with a view now, and wait for its end. A process not running changes nothing. */
 	readonly kill: (process: string) => Effect.Effect<void>;
+	/**
+	 * Tell the tile's tsh to stop job n, as `stop %n` does (`Tsh.stop`): only the tsh that started
+	 * a job holds its runs. `false`: the tile is not open, so no tsh here runs it.
+	 */
+	readonly stopJob: (tile: TileId, n: number) => Effect.Effect<boolean>;
 }
 
 /** A run with a view, as the tiles hold it while it runs. */
@@ -222,6 +229,11 @@ export const startTiles = (options: {
 				}),
 			end: (process) => Effect.sync(() => live.get(process)?.screen.closed()),
 			kill: (process) => Effect.suspend(() => live.get(process)?.screen.kill ?? Effect.void),
+			stopJob: (tile, n) =>
+				Effect.suspend(() => {
+					const one = open.get(tile);
+					return one === undefined ? Effect.succeed(false) : one.host.stop(n).pipe(Effect.as(true));
+				}),
 		};
 		return tiles;
 	});

@@ -1,4 +1,4 @@
-import {Schema} from "effect";
+import {Option, Schema} from "effect";
 import {mustFail, mustPass, Result} from "../../controls.ts";
 import {type Property, PropertyId} from "./brief.ts";
 import {Surprise} from "./outcome.ts";
@@ -46,6 +46,63 @@ export const cannotOf = (answers: readonly Answer[]): readonly Found[] =>
 
 export const testsOf = (answers: readonly Answer[]): readonly TestAnswer[] =>
 	answers.flatMap((a) => (a.kind === "test" ? [a] : []));
+
+/**
+ * Why a run on the base could not run (tracker 193):
+ *
+ *   no_command    the settings could not be read, or `[test_writer] run` is not set
+ *   copy_failed   no copy of the commit, or no folder in it, could be made to run in
+ *   box_failed    the box did not start, or its streams broke. `code: null`
+ *   no_report     the box ended, and `{out}` is not there
+ *   bad_report    `{out}` is not JSON, or not vitest's report
+ */
+export const RunWhy = Schema.Literals([
+	"no_command",
+	"copy_failed",
+	"box_failed",
+	"no_report",
+	"bad_report",
+]);
+export type RunWhy = typeof RunWhy.Type;
+
+/**
+ * A run on the base that could not run, and why. The detail rides beside tea's `could_not_run` tag,
+ * as tea's tagged error allows, so a run that says nothing more still reads as a bare tag.
+ */
+export const RunFailure = Schema.TaggedStruct("could_not_run", {
+	why: RunWhy,
+	/** The box's exit code. `null`: the box never ended, or never started. */
+	code: Schema.NullOr(Schema.Finite),
+	/** How long the run went before it failed. */
+	ms: Schema.Finite,
+	/** Stderr's last lines, with no home path and no key: it goes on a public ticket. */
+	tail: Schema.String,
+});
+export type RunFailure = typeof RunFailure.Type;
+
+const decodeFailure = Schema.decodeUnknownOption(RunFailure);
+
+/** The cause a failed run gave beside its tag. `null`: a bare tag, or one that is not of the five. Pure. */
+export const failureOf = (error: unknown): RunFailure | null =>
+	Option.getOrNull(decodeFailure(error));
+
+const RUN_WORDS: Readonly<Record<RunWhy, string>> = {
+	no_command: "no test command could be read from the settings",
+	copy_failed: "no copy of the commit could be made to run the tests in",
+	box_failed: "the box the tests run in failed",
+	no_report: "the box ended and wrote no report",
+	bad_report: "the report the box wrote is not vitest's",
+};
+
+/** A failed run's cause in words, for the stuck comment. A bare tag: nothing more to say. Pure. */
+export const runWords = (failure: RunFailure | null): readonly string[] =>
+	failure === null
+		? []
+		: [
+				`The run on the base failed (${failure.why}): ${RUN_WORDS[failure.why]}, ${
+					failure.code === null ? "with no exit code" : `with exit code ${failure.code}`
+				}, after ${(failure.ms / 1_000).toFixed(1)} s.`,
+			];
 
 /** What the run means, or the tests it said nothing for. */
 export type Read =

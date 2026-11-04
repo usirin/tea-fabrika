@@ -1,4 +1,5 @@
 import {applyCell} from "@demlik/tea";
+import {Result} from "effect";
 import {createElement, isValidElement, type ReactNode} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
@@ -11,7 +12,7 @@ import {
 	deskMachine,
 	type Open,
 } from "../desk/desk.ts";
-import {BINDINGS, PREFIX, wordOf} from "../desk/keys.ts";
+import {decodeKeys, defaults, Does, type Keys} from "../desk/keymap.ts";
 import type {HostNow} from "../messages.ts";
 import type {JobEnded} from "../tile-jobs.ts";
 import {
@@ -25,6 +26,7 @@ import {
 	ENDED_SHOWN_MS,
 	EXPLAIN_ON,
 	FRAME,
+	fileWord,
 	type Frame,
 	type FrameMsg,
 	frameUpdate,
@@ -33,6 +35,7 @@ import {
 	hostWord,
 	INFO,
 	type InfoMode,
+	infoFor,
 	jobItem,
 	jobsList,
 	keyGoesTo,
@@ -52,7 +55,8 @@ import {
 } from "./frame.ts";
 import {BottomArea, BottomLine, type FrameProps, ModeStatus} from "./frame.tsx";
 
-// The frame's words, from a real desk folded by the real machine, and the host's real table.
+// The frame's words, from a real desk folded by the real machine, and the keys file's real
+// table (desk/keymap.ts): the defaults, or a file's.
 
 const fold = (msgs: readonly DeskMsg[]): Open => {
 	let s: Desk = deskMachine.init(null, undefined)[0];
@@ -60,12 +64,14 @@ const fold = (msgs: readonly DeskMsg[]): Open => {
 	if (s.at !== "open") throw new Error("the desk is over");
 	return s;
 };
-const TABLE = BINDINGS.map((b) => ({
-	key: b.key,
-	repeats: b.repeats,
-	name: b.name,
-	tsh: wordOf(b.does),
-}));
+/** The default prefix, as keyName spells it. */
+const PREFIX = "<c-b>";
+/** The keybindings file's table, one line per argument; a refusal fails the test. */
+const table = (...lines: readonly string[]): Keys => {
+	const answer = decodeKeys(lines.join("\n"), true);
+	if (Result.isFailure(answer)) throw new Error(`refused: ${answer.failure.why}`);
+	return answer.success;
+};
 const SHAPES = new Map([
 	["tracker", {takes: [], sends: ["ticket"]}],
 	["ticket", {takes: ["ticket"], sends: ["ticket"]}],
@@ -114,30 +120,32 @@ describe("the frame's keys", () => {
 	});
 
 	it("lists every command once, by the desk's own table, and only the workspaces there are", () => {
-		const commands = commandsOf(PREFIX, TABLE, 2);
+		const commands = commandsOf(defaults, 2);
 		const names = commands.map((c) => c.name);
 		expect(new Set(names).size).toBe(names.length);
 		expect(names).toContain("zoom");
 		expect(names).toContain("workspace 2");
 		expect(names).not.toContain("workspace 3");
 		expect(commands.find((c) => c.name === "focus left")?.key).toBe("C-b h");
+		// The palette runs a command by its word, not by its key (ticket 174).
 		expect(commands.find((c) => c.name === "zoom")).toEqual({
 			name: "zoom",
 			group: "tile",
 			key: "C-b z",
 			caps: ["⌃B", "Z"],
 			tsh: "zoom",
-			runs: "z",
+			runs: "tezgah.zoom",
 		});
 		expect(commands.find((c) => c.name === "new")?.caps).toEqual(["⌃B", "⇧N"]);
-		expect(commands.find((c) => c.name === "agents")).toEqual({
+		expect(commands.find((c) => c.name === "agents")).toMatchObject({
 			name: "agents",
 			group: "window",
 			key: "C-b A",
 			caps: ["⌃B", "⇧A"],
 			tsh: "agents",
-			runs: "A",
 		});
+		const words: readonly string[] = Does.literals;
+		expect(commands.every((c) => words.includes(c.runs))).toBe(true);
 		expect(matching(commands, "zo").map((c) => c.name)).toEqual(["zoom"]);
 		expect(matching(commands, "workspace 2").map((c) => c.name)).toEqual(["workspace 2"]);
 		// The tsh word finds it too: `--to down` is split down's and focus down's.
@@ -148,7 +156,7 @@ describe("the frame's keys", () => {
 	});
 
 	it("groups the commands as the palette shows them: tile, focus, workspace, then the window's own", () => {
-		const commands = commandsOf(PREFIX, TABLE, 1);
+		const commands = commandsOf(defaults, 1);
 		expect(commands.map((c) => c.name)).toEqual([
 			"split",
 			"split down",
@@ -173,17 +181,10 @@ describe("the frame's keys", () => {
 			"sync",
 			"host",
 		]);
-		// A key this page's table does not know, from a newer host, is still listed, with the window's own.
-		const newer = commandsOf(
-			PREFIX,
-			[...TABLE, {key: "w", repeats: false, name: "pick", tsh: "pick"}],
-			1,
-		);
-		expect(newer.at(-1)).toMatchObject({name: "pick", group: "window", caps: ["⌃B", "W"]});
 	});
 
 	it("shows the real keys after Ctrl-B", () => {
-		expect(prefixLine(TABLE)).toEqual([
+		expect(prefixLine(defaults)).toEqual([
 			{key: "N", name: "new"},
 			{key: "x", name: "close"},
 			{key: "z", name: "zoom"},
@@ -191,6 +192,108 @@ describe("the frame's keys", () => {
 			{key: "|", name: "split"},
 			{key: "?", name: "keys"},
 		]);
+	});
+});
+
+describe("the frame's keys, from the keys file (ticket 174)", () => {
+	/**
+	 * Today's palette with no file, frozen before this change: each command's name, group, key
+	 * as the bottom line writes it, keycaps and tsh word, with nine workspaces (p1).
+	 */
+	const TODAY = [
+		["split", "tile", "C-b |", ["⌃B", "|"], "split"],
+		["split down", "tile", "C-b -", ["⌃B", "-"], "split --to down"],
+		["turn", "tile", "C-b Space", ["⌃B", "Space"], "turn"],
+		["fold", "tile", "C-b f", ["⌃B", "F"], "fold"],
+		["zoom", "tile", "C-b z", ["⌃B", "Z"], "zoom"],
+		["close", "tile", "C-b x", ["⌃B", "X"], "close-tile"],
+		["focus left", "focus", "C-b h", ["⌃B", "H"], "focus --to left"],
+		["focus down", "focus", "C-b j", ["⌃B", "J"], "focus --to down"],
+		["focus up", "focus", "C-b k", ["⌃B", "K"], "focus --to up"],
+		["focus right", "focus", "C-b l", ["⌃B", "L"], "focus --to right"],
+		["new", "workspace", "C-b N", ["⌃B", "⇧N"], "workspace --to new"],
+		["previous workspace", "workspace", "C-b C-h", ["⌃B", "⌃H"], "workspace --to previous"],
+		["next workspace", "workspace", "C-b C-l", ["⌃B", "⌃L"], "workspace --to next"],
+		...Array.from(
+			{length: 9},
+			(_, i) =>
+				[
+					`workspace ${i + 1}`,
+					"workspace",
+					`C-b ${i + 1}`,
+					["⌃B", `${i + 1}`],
+					`workspace --to ${i + 1}`,
+				] as const,
+		),
+		["asks", "window", "C-b a", ["⌃B", "A"], "asks"],
+		["jobs", "window", "C-b J", ["⌃B", "⇧J"], "jobs"],
+		["keys", "window", "C-b ?", ["⌃B", "?"], "keys"],
+		["info", "window", "C-b i", ["⌃B", "I"], "info"],
+		["bars", "window", "C-b B", ["⌃B", "⇧B"], "bars"],
+		["agents", "window", "C-b A", ["⌃B", "⇧A"], "agents"],
+		["sync", "window", "C-b S", ["⌃B", "⇧S"], "sync"],
+		["host", "window", "C-b H", ["⌃B", "⇧H"], "host"],
+	];
+	const shown = (keys: Keys, workspaces = 9) =>
+		commandsOf(keys, workspaces).map((c) => [c.name, c.group, c.key, c.caps, c.tsh]);
+	const zoomOf = (keys: Keys) => commandsOf(keys, 1).find((c) => c.name === "zoom");
+
+	it("lists with no file the palette it lists today (p1)", () => {
+		expect(shown(defaults)).toEqual(TODAY);
+		expect(shown(table(""))).toEqual(TODAY);
+	});
+
+	it("writes your prefix in every key and keycap of the palette (p2, p10)", () => {
+		const keys = table('prefix = "ctrl+a"');
+		expect(zoomOf(keys)).toMatchObject({key: "C-a z", caps: ["⌃A", "Z"]});
+		expect(commandsOf(keys, 1).every((c) => !c.key.includes("C-b"))).toBe(true);
+	});
+
+	it("shows a moved command on its new key, in the palette and after the prefix (p10)", () => {
+		const keys = table('tezgah.zoom = "<prefix>m"');
+		expect(zoomOf(keys)).toMatchObject({key: "C-b m", caps: ["⌃B", "M"], runs: "tezgah.zoom"});
+		expect(prefixLine(keys)).toContainEqual({key: "m", name: "zoom"});
+		expect(prefixLine(keys)).not.toContainEqual({key: "z", name: "zoom"});
+		// The prefix line goes by command, not by key: none of its six is a literal key.
+		const moved = table('tezgah.close = "<prefix>q"', 'tezgah.split = "<prefix>s"');
+		expect(prefixLine(moved)).toEqual([
+			{key: "N", name: "new"},
+			{key: "q", name: "close"},
+			{key: "z", name: "zoom"},
+			{key: "f", name: "fold"},
+			{key: "s", name: "split"},
+			{key: "?", name: "keys"},
+		]);
+	});
+
+	it("still lists an unbound command, with no keycaps, and runs it by its word (p4)", () => {
+		const keys = table("tezgah.zoom = []");
+		expect(zoomOf(keys)).toMatchObject({
+			name: "zoom",
+			group: "tile",
+			caps: [],
+			tsh: "zoom",
+			runs: "tezgah.zoom",
+		});
+		expect(matching(commandsOf(keys, 1), "zoom").map((c) => c.name)).toEqual(["zoom"]);
+		// The bottom line after the prefix shows only keys there are.
+		expect(prefixLine(keys).map((k) => k.name)).not.toContain("zoom");
+	});
+
+	it("shows a command pressed alone with its own keycap, and no prefix (p5)", () => {
+		const keys = table('tezgah.split = "cmd+d"');
+		const split = commandsOf(keys, 1).find((c) => c.name === "split");
+		expect(split?.caps).toEqual(["⌘D"]);
+		expect(split?.runs).toBe("tezgah.split");
+		expect(prefixLine(keys).map((k) => k.name)).not.toContain("split");
+	});
+
+	it("names the bad line of a refused file, and says nothing of one that read (p8)", () => {
+		expect(fileWord({_tag: "refused", line: 2, why: "tezgah.zom is not a command"})).toBe(
+			"keybindings.toml line 2: tezgah.zom is not a command",
+		);
+		expect(fileWord({_tag: "read"})).toBeNull();
+		expect(fileWord({_tag: "none"})).toBeNull();
 	});
 });
 
@@ -572,7 +675,7 @@ describe("the job item and the jobs list", () => {
 		const open = frameUpdate(FRAME, {type: "show", what: "jobs"});
 		expect(open.over).toEqual({kind: "jobs"});
 		expect(frameUpdate(open, {type: "show", what: "jobs"}).over).toEqual({kind: "none"});
-		expect(TABLE.find((b) => b.name === "jobs")?.key).toBe("J");
+		expect(commandsOf(defaults, 1).find((c) => c.name === "jobs")?.key).toBe("C-b J");
 	});
 });
 
@@ -692,8 +795,7 @@ describe("info mode", () => {
 		host: null,
 		link: {kind: "up"},
 		attachedOnce: true,
-		prefix: PREFIX,
-		table: TABLE,
+		keys: defaults,
 		shapes: SHAPES,
 		tickets: SHOWN,
 		armed: false,
@@ -762,6 +864,22 @@ describe("info mode", () => {
 		expect(html).toContain('role="status"');
 		return words(html);
 	};
+
+	it("says a refused keys file's line on the bottom line, and the prefix line by your keys (p8, p10)", () => {
+		const bad = {
+			...defaults,
+			file: {_tag: "refused", line: 2, why: "tezgah.zom is not a command"},
+		} as const satisfies Keys;
+		const html = renderToStaticMarkup(createElement(BottomLine, {...props(FRAME), keys: bad}));
+		expect(words(html)).toContain("keybindings.toml line 2: tezgah.zom is not a command");
+		expect(words(line(FRAME))).not.toContain("keybindings.toml");
+		const moved = table('tezgah.zoom = "<prefix>m"');
+		const armed = renderToStaticMarkup(
+			createElement(BottomLine, {...props(FRAME), keys: moved, armed: true}),
+		);
+		expect(words(armed)).toContain("m zoom");
+		expect(words(armed)).not.toContain("z zoom");
+	});
 
 	it("keeps the bottom line with the bars hidden while it is on, as the armed prefix does", () => {
 		expect(bottomLineShows(FRAME, quiet)).toBe(true);
@@ -978,5 +1096,43 @@ describe("info mode", () => {
 		expect(area(bare, {desk: asking}).line).toBe(true);
 		// A page in place of the desk (another link version): no bottom line, the region still there.
 		expect(area(on, {instead: true})).toEqual({line: false, said: "Info mode on. Escape leaves."});
+	});
+});
+
+// Round 2b, PR 373 (p10): info mode names the keys of the table in use, so none is a literal in
+// frame.ts. `infoFor(keys)` is a made-up name for INFO built from the table; rename it freely.
+
+describe("info mode's words, from the keys file (p10)", () => {
+	/** The parts of the frame whose words name a key. */
+	const NAMING = ["workspace", "keys", "info", "titlebar"] as const;
+
+	it("names your prefix, and never Ctrl-B, once the prefix is ctrl+a", () => {
+		const said = infoFor(table('prefix = "ctrl+a"'));
+		for (const part of NAMING) {
+			expect(said[part], part).toContain(keyWord("<c-a>"));
+			expect(said[part], part).not.toContain(keyWord(PREFIX));
+			expect(said[part], part).not.toContain("Ctrl-B");
+		}
+	});
+
+	it("names your palette key, and never Cmd-K, once the palette is on cmd+p", () => {
+		const said = infoFor(table('palette.open = "cmd+p"'));
+		expect(said.keys).toContain(keyWord("<m-p>"));
+		expect(said.keys).not.toContain("Cmd-K");
+		expect(said.keys).not.toContain(keyWord("<m-k>"));
+	});
+
+	it("names a moved command on its new key: info mode and fold", () => {
+		const said = infoFor(table('tezgah.info = "<prefix>o"', 'tezgah.fold = "<prefix>g"'));
+		expect(said.info).toContain(`${keyWord(PREFIX)} o`);
+		expect(said.info).not.toContain(`${keyWord(PREFIX)} i`);
+		expect(said.titlebar).toContain(`${keyWord(PREFIX)} g`);
+		expect(said.titlebar).not.toContain(`${keyWord(PREFIX)} f`);
+	});
+
+	it("says each part in words with the defaults, as today's info mode does", () => {
+		const said = infoFor(defaults);
+		for (const part of NAMING) expect(said[part], part).toContain(keyWord(PREFIX));
+		expect(Object.values(said).every((text) => text.length > 0)).toBe(true);
 	});
 });

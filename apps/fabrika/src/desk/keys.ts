@@ -1,13 +1,20 @@
+import type {Does as Command, Keys} from "./keymap.ts";
 import type {Direction, Orientation, TileId} from "./layout/index.ts";
 
-// The desk's keys: the prefix, and what each key after it does. tmux's shape, and Tuval's table
-// (kamp-us/phoenix, packages/tuval-ui/src/shell/keys/table.ts): with the prefix not armed, every
-// key belongs to the focused tile. Plain data; the desk machine reads it (desk.ts).
+// The desk's keys: what each command does, and the key after the prefix it ships on. tmux's
+// shape, and Tuval's table (kamp-us/phoenix, packages/tuval-ui/src/shell/keys/table.ts): with the
+// prefix not armed, every key belongs to the focused tile. Plain data.
 //
 //   keyName({key: "b", ctrl: true, alt: false, meta: false})    "<c-b>"
 //   keyName({key: "|", ctrl: false, alt: false, meta: false})   "|"
 //   keyName({key: "Shift", ...})                                null: a modifier alone is no key
-//   bindingOf("|")                                              {key: "|", does: {kind: "split", ...}}
+//   BINDINGS[0]          {key: "|", command: "tezgah.split", does: {kind: "split", ...}, ...}
+//
+// Each command has its word in the keys file, `<program>.<word>` (docs/direction/keybindings-
+// are-configurable.md, K9). The desk is tezgah, and its word is its tsh word, quoted after the
+// dot when it has spaces: `tezgah.zoom`, `tezgah."split --to down"`. Two differ, as the note names
+// them: the tile's close is `tezgah.close` (tsh's word is `close-tile`), and C-b ? is
+// `keys.open`. The table the desk reads is keymap.ts's: these, with keybindings.toml laid over.
 //
 // Every command has a tsh word too, the line that does the same from a tile's tsh, as each tmux
 // key is bound to a tmux command (`bind z resize-pane -Z`). `wordOf` writes it from what the
@@ -20,9 +27,6 @@ import type {Direction, Orientation, TileId} from "./layout/index.ts";
 // Left out of Tuval's table for now, and listed in the README as later: `w` (pick a tile),
 // `:` (a command line), `r` (reload the config), `p` (the process board). Tuval's `a` focused its
 // list; here it opens the asks list, the frame's nearest thing to it.
-
-/** The key that arms the desk, as tmux's `prefix`. */
-export const PREFIX = "<c-b>";
 
 /** How long a repeatable key leaves the prefix armed, as tmux's `repeat-time`, in milliseconds. */
 export const REPEAT_MS = 500;
@@ -55,64 +59,89 @@ export type Does =
 	| {readonly kind: "show"; readonly what: Show};
 
 /**
- * One binding: the key after the prefix, what it does, whether it repeats (tmux's `bind -r`), and
- * its name: the one word the frame, the palette and a tooltip call it by.
+ * One default binding: the key after the prefix it ships on, the command's word in the keys file,
+ * what it does, whether it repeats (tmux's `bind -r`), and its name: the one word the frame, the
+ * palette and a tooltip call it by. Two keys with one command are one command (h and the left
+ * arrow): the file and the palette list it once.
  */
 export interface Binding {
 	readonly key: string;
+	readonly command: Command;
 	readonly does: Does;
 	readonly repeats: boolean;
 	readonly name: string;
 }
 
-const once = (key: string, name: string, does: Does): Binding => ({
+const once = (key: string, command: Command, name: string, does: Does): Binding => ({
 	key,
+	command,
 	does,
 	repeats: false,
 	name,
 });
 
 /** `C-b 1` to `C-b 9`: the workspace in that place. */
-const PICKS: readonly Binding[] = Array.from({length: 9}, (_, i) =>
-	once(String(i + 1), `workspace ${i + 1}`, {kind: "pick", at: i + 1}),
-);
+const PICKS = [
+	'tezgah."workspace --to 1"',
+	'tezgah."workspace --to 2"',
+	'tezgah."workspace --to 3"',
+	'tezgah."workspace --to 4"',
+	'tezgah."workspace --to 5"',
+	'tezgah."workspace --to 6"',
+	'tezgah."workspace --to 7"',
+	'tezgah."workspace --to 8"',
+	'tezgah."workspace --to 9"',
+] as const satisfies readonly Command[];
 
+/** Every key the desk ships with after the prefix, today's table. */
 export const BINDINGS: readonly Binding[] = [
 	// `|` puts the two side by side: a row, "horizontal" in the tree. `-` puts one over the other.
-	once("|", "split", {kind: "split", orientation: "horizontal"}),
-	once("-", "split down", {kind: "split", orientation: "vertical"}),
-	once("h", "focus left", {kind: "focus", to: "left"}),
-	once("j", "focus down", {kind: "focus", to: "down"}),
-	once("k", "focus up", {kind: "focus", to: "up"}),
-	once("l", "focus right", {kind: "focus", to: "right"}),
-	once("<arrowleft>", "focus left", {kind: "focus", to: "left"}),
-	once("<arrowdown>", "focus down", {kind: "focus", to: "down"}),
-	once("<arrowup>", "focus up", {kind: "focus", to: "up"}),
-	once("<arrowright>", "focus right", {kind: "focus", to: "right"}),
+	once("|", "tezgah.split", "split", {kind: "split", orientation: "horizontal"}),
+	once("-", 'tezgah."split --to down"', "split down", {kind: "split", orientation: "vertical"}),
+	once("h", 'tezgah."focus --to left"', "focus left", {kind: "focus", to: "left"}),
+	once("j", 'tezgah."focus --to down"', "focus down", {kind: "focus", to: "down"}),
+	once("k", 'tezgah."focus --to up"', "focus up", {kind: "focus", to: "up"}),
+	once("l", 'tezgah."focus --to right"', "focus right", {kind: "focus", to: "right"}),
+	once("<arrowleft>", 'tezgah."focus --to left"', "focus left", {kind: "focus", to: "left"}),
+	once("<arrowdown>", 'tezgah."focus --to down"', "focus down", {kind: "focus", to: "down"}),
+	once("<arrowup>", 'tezgah."focus --to up"', "focus up", {kind: "focus", to: "up"}),
+	once("<arrowright>", 'tezgah."focus --to right"', "focus right", {kind: "focus", to: "right"}),
 	// Space turns the container, as AeroSpace's `layout horizontal vertical`. `f` folds the tile.
-	once(" ", "turn", {kind: "turn"}),
-	once("f", "fold", {kind: "fold"}),
-	once("z", "zoom", {kind: "zoom"}),
-	once("x", "close", {kind: "close"}),
-	once("N", "new", {kind: "new"}),
-	{key: "<c-h>", does: {kind: "step", to: "previous"}, repeats: true, name: "previous workspace"},
-	{key: "<c-l>", does: {kind: "step", to: "next"}, repeats: true, name: "next workspace"},
-	...PICKS,
+	once(" ", "tezgah.turn", "turn", {kind: "turn"}),
+	once("f", "tezgah.fold", "fold", {kind: "fold"}),
+	once("z", "tezgah.zoom", "zoom", {kind: "zoom"}),
+	once("x", "tezgah.close", "close", {kind: "close"}),
+	once("N", 'tezgah."workspace --to new"', "new", {kind: "new"}),
+	{
+		key: "<c-h>",
+		command: 'tezgah."workspace --to previous"',
+		does: {kind: "step", to: "previous"},
+		repeats: true,
+		name: "previous workspace",
+	},
+	{
+		key: "<c-l>",
+		command: 'tezgah."workspace --to next"',
+		does: {kind: "step", to: "next"},
+		repeats: true,
+		name: "next workspace",
+	},
+	...PICKS.map((command, i) =>
+		once(String(i + 1), command, `workspace ${i + 1}`, {kind: "pick", at: i + 1}),
+	),
 	// The frame's own: not a bare `?` or `i`, which would go into tsh.
-	once("a", "asks", {kind: "show", what: "asks"}),
+	once("a", "tezgah.asks", "asks", {kind: "show", what: "asks"}),
 	// `J`, as `N` and `B`: the bare `j` is focus down.
-	once("J", "jobs", {kind: "show", what: "jobs"}),
-	once("?", "keys", {kind: "show", what: "keys"}),
-	once("i", "info", {kind: "show", what: "info"}),
-	once("B", "bars", {kind: "show", what: "bars"}),
+	once("J", "tezgah.jobs", "jobs", {kind: "show", what: "jobs"}),
+	once("?", "keys.open", "keys", {kind: "show", what: "keys"}),
+	once("i", "tezgah.info", "info", {kind: "show", what: "info"}),
+	once("B", "tezgah.bars", "bars", {kind: "show", what: "bars"}),
 	// The top bar's agents, sync and host: capitals, as `N` and `B`. `h` is focus left, and `s`
 	// is tmux's session list, a key a tmux hand presses without looking.
-	once("A", "agents", {kind: "show", what: "agents"}),
-	once("S", "sync", {kind: "show", what: "sync"}),
-	once("H", "host", {kind: "show", what: "host"}),
+	once("A", "tezgah.agents", "agents", {kind: "show", what: "agents"}),
+	once("S", "tezgah.sync", "sync", {kind: "show", what: "sync"}),
+	once("H", "tezgah.host", "host", {kind: "show", what: "host"}),
 ];
-
-export const bindingOf = (key: string): Binding | undefined => BINDINGS.find((b) => b.key === key);
 
 /** What a key acts on: the focused tile, focus, the workspaces, or the window's frame. */
 export type Group = "tile" | "focus" | "workspace" | "window";
@@ -197,28 +226,39 @@ export const keyName = (press: Press): string | null => {
 export type KeyOwner = "system" | "app" | "nobody";
 
 /**
- * The Command keys that are not the Mac's. Cmd-K is the app's palette. Cmd-W is nobody's for now,
- * by the owner's choice: it types nothing and closes nothing. Its name has no Shift, so Cmd-Shift-W
- * goes with it. To give it what it should close later, change this one line.
+ * The Mac's own keys, which no file can take: Cmd-Q quits, Cmd-H hides, Cmd-Tab and Cmd-Space
+ * are the system's, and Option-Cmd-Esc force quits (docs/direction/keybindings-are-configurable.md,
+ * "Keys that cannot be taken away"). The keys file refuses them (keymap.ts); `keyOwner` checks
+ * them first all the same, so no table can give one to the app.
  */
-const NOT_THE_MACS: ReadonlyMap<string, KeyOwner> = new Map([
-	["<m-k>", "app"],
-	["<m-w>", "nobody"],
+export const THE_MACS: ReadonlySet<string> = new Set([
+	"<m-q>",
+	"<m-h>",
+	"<m-tab>",
+	"<m- >",
+	"<a-m-escape>",
 ]);
 
 /**
  * Who a key belongs to. On a Mac, Command is the system's and the menu's, as in Terminal: Cmd-Q
- * quits, whatever has focus. Everywhere else the menu's keys are Ctrl keys, and a shell needs
- * those: Ctrl-C and Ctrl-W stay with tsh.
+ * quits, whatever has focus. A Command key the keys file binds is the app's (by default Cmd-K,
+ * the palette), and one it ignores is nobody's (by default Cmd-W, by the owner's choice: it types
+ * nothing and closes nothing; its name has no Shift, so Cmd-Shift-W goes with it). Everywhere else
+ * the menu's keys are Ctrl keys, and a shell needs those: Ctrl-C and Ctrl-W stay with tsh.
  *
- *   keyOwner({key: "q", ctrl: false, alt: false, meta: true}, true)    "system"
- *   keyOwner({key: "k", ctrl: false, alt: false, meta: true}, true)    "app": the palette
- *   keyOwner({key: "w", ctrl: false, alt: false, meta: true}, true)    "nobody"
- *   keyOwner({key: "c", ctrl: true, alt: false, meta: false}, true)    "app": tsh's
- *   keyOwner({key: "w", ctrl: false, alt: false, meta: true}, false)   "app": not a Mac
+ *   keyOwner({key: "q", ctrl: false, alt: false, meta: true}, true, defaults)    "system"
+ *   keyOwner({key: "k", ctrl: false, alt: false, meta: true}, true, defaults)    "app": the palette
+ *   keyOwner({key: "w", ctrl: false, alt: false, meta: true}, true, defaults)    "nobody"
+ *   keyOwner({key: "c", ctrl: true, alt: false, meta: false}, true, defaults)    "app": tsh's
+ *   keyOwner({key: "w", ctrl: false, alt: false, meta: true}, false, defaults)   "app": not a Mac
  */
-export const keyOwner = (press: Press, mac: boolean): KeyOwner => {
+export const keyOwner = (press: Press, mac: boolean, keys: Keys): KeyOwner => {
 	if (!mac || !press.meta) return "app";
 	const name = keyName(press);
-	return (name === null ? undefined : NOT_THE_MACS.get(name)) ?? "system";
+	if (name === null || THE_MACS.has(name)) return "system";
+	const bound =
+		name === keys.prefix ||
+		keys.rows.some((row) => row.keys.some((k) => k._tag === "alone" && k.key === name));
+	if (bound) return "app";
+	return keys.ignore.includes(name) ? "nobody" : "system";
 };

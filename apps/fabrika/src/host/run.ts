@@ -5,14 +5,16 @@ import {recordTracing} from "@kampus/fabrika-old/otel";
 import {sqliteRecords} from "@kampus/fabrika-old/records";
 import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {Author} from "@tea-fabrika/tracker";
-import {Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope} from "effect";
+import {Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope, Stream} from "effect";
 import {SocketServer} from "effect/socket";
+import {decodeKeys} from "../desk/keymap.ts";
 import {fileHistory, sharedHistory} from "../editor/history.ts";
 import {agentSessions} from "./agent-session.ts";
 import {connectionOf, hostLedger} from "./connection.ts";
 import {holdLock} from "./lock.ts";
 import {logSteps, sampleLag} from "./log.ts";
 import {serve} from "./serve.ts";
+import {settingsFile} from "./settings.ts";
 import {pathsOf, reach} from "./socket.ts";
 
 // The host on a home: its socket, its files and its services, around the server (serve.ts).
@@ -43,6 +45,10 @@ import {pathsOf, reach} from "./socket.ts";
 //   ledger.sqlite        the ledger, when the home is connected to no server
 //   ledger.json          the ledger server it is connected to, if any (connection.ts)
 //
+// In the settings folder, `~/.fabrika` for the owner's start and the home for any other
+// (host/settings.ts): keybindings.toml, the keys the person changed (desk/keymap.ts), heard on
+// each save.
+//
 // One host per home: a host that finds another answering on the socket does not start, and
 // hosts started at the same moment take turns under the start lock, so exactly one listens. The
 // ledger and who the host writes as are `hostLedger`'s: with no `ledger.json`, one node:sqlite
@@ -63,9 +69,17 @@ export const runHost = (options: {
 	readonly ours?: number | undefined;
 	/** The build this host's hello names, for a test of an older host; `null` names none. */
 	readonly build?: string | null | undefined;
+	/**
+	 * The person's settings folder, which holds keybindings.toml (host/settings.ts,
+	 * `settingsFolder`): `~/.fabrika` for the owner's start. The home itself when not said, as for
+	 * a test's or an agent's start, so none reads the person's real file.
+	 */
+	readonly settings?: string | undefined;
+	/** The host runs on a Mac: `mod` in the keys file is Cmd there, and Ctrl elsewhere. */
+	readonly mac?: boolean | undefined;
 }) =>
 	Effect.gen(function* () {
-		const {home, pid, ours, build} = options;
+		const {home, pid, ours, build, settings = home, mac = false} = options;
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const paths = yield* pathsOf(home);
@@ -133,6 +147,11 @@ export const runHost = (options: {
 			records,
 			"laptop",
 		);
+		// The keys file, read now and again on each save, by the one reader of the settings folder.
+		const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+		const keys = settingsFile(settings, "keybindings.toml", (text) => decodeKeys(text, mac)).pipe(
+			Stream.provideContext(platform),
+		);
 		yield* Effect.logInfo(`fabrika host: listening, pid ${pid}`);
 		// The thread's lag, one second at a time: a lag line in the log when it is starved (log.ts).
 		const delay = monitorEventLoopDelay({resolution: 10});
@@ -145,6 +164,7 @@ export const runHost = (options: {
 		);
 		return yield* serve({
 			history,
+			keys,
 			ours,
 			build,
 			agents: {server: agents},
