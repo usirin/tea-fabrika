@@ -36,6 +36,13 @@ const AGENT = "agent:claude for:github:7";
 const OTHER_PERSON = "user:github:8";
 const OTHER_AGENT = "agent:review for:github:7";
 const WRITERS = [PERSON, AGENT, OTHER_PERSON, OTHER_AGENT] as const;
+/** Where `attach` says each writer's job goes on: an agent's tile by its name, a person's own. */
+const TILE: Readonly<Record<(typeof WRITERS)[number], string>> = {
+	[PERSON]: "their own tile",
+	[AGENT]: "claude's tile",
+	[OTHER_PERSON]: "their own tile",
+	[OTHER_AGENT]: "review's tile",
+};
 const LONG = "sleep --ms 60000";
 const LIST = programList(SMALL);
 
@@ -132,8 +139,28 @@ describe("attach keeps a job's one writer (d9)", () => {
 			}).pipe(Effect.scoped),
 		);
 		expect(seen.said.status).not.toBe(0);
-		expect(seen.said.err.some((text) => text.includes(`this job is ${PERSON}'s`))).toBe(true);
+		expect(seen.said.err).toContain(`tsh: this job is ${PERSON}'s: attach it in their own tile`);
 		expect(seen.after).toEqual(seen.before);
+	});
+
+	it("refuses a job whose by names no writer in any tsh, says their own tile, and goes on", async () => {
+		for (const by of [PERSON, AGENT]) {
+			const seen = await Effect.runPromise(
+				Effect.gen(function* () {
+					const t = yield* tshAs(by);
+					const n = yield* detachedJob(t.table, "someone");
+					const before = jobIn(t.table, n);
+					const said = yield* t.line(`attach %${n} &`);
+					// The tsh still answers a line after it.
+					const next = yield* t.line("jobs");
+					return {said, next, before, after: jobIn(t.table, n)};
+				}).pipe(Effect.scoped),
+			);
+			expect(seen.said.status).toBe(2);
+			expect(seen.said.err).toContain("tsh: this job is someone's: attach it in their own tile");
+			expect(seen.after).toEqual(seen.before);
+			expect(seen.next.status).toBe(0);
+		}
 	});
 
 	it("attaches a job with no writer known in any tsh, as before, and keeps its by", async () => {
@@ -155,7 +182,7 @@ describe("attach keeps a job's one writer (d9)", () => {
 		await fc.assert(
 			fc.asyncProperty(
 				fc.constantFrom(...WRITERS),
-				fc.constantFrom<string | null>(...WRITERS, null),
+				fc.constantFrom<(typeof WRITERS)[number] | null>(...WRITERS, null),
 				(mine, theirs) =>
 					Effect.runPromise(
 						Effect.gen(function* () {
@@ -168,13 +195,17 @@ describe("attach keeps a job's one writer (d9)", () => {
 								attached: said.status === 0,
 								state: after?.state,
 								by: after?.by,
-								named: said.err.some((text) => text.includes(`this job is ${theirs}'s`)),
+								refusal: said.err.find((text) => text.startsWith("tsh: this job is")) ?? null,
 							}).toEqual({
 								attached: may,
 								state: may ? "running" : "detached",
 								// Whoever attached it, or not, the job keeps the writer it began with.
 								by: theirs,
-								named: !may,
+								// The whole line: whose job it is, and where it goes on.
+								refusal:
+									theirs === null || may
+										? null
+										: `tsh: this job is ${theirs}'s: attach it in ${TILE[theirs]}`,
 							});
 						}).pipe(Effect.scoped),
 					),
@@ -229,30 +260,35 @@ describe("an agent's tsh drops no one else's job (d10)", () => {
 		expect(seen.after).toBeUndefined();
 	});
 
-	it("drops a detached job unless the tsh is an agent's and the job another writer's, for any two writers", async () => {
+	it("drops a detached job unless the tsh is an agent's and the job another known writer's, for any two writers", async () => {
 		await fc.assert(
-			fc.asyncProperty(fc.constantFrom(...WRITERS), fc.constantFrom(...WRITERS), (mine, theirs) =>
-				Effect.runPromise(
-					Effect.gen(function* () {
-						const t = yield* tshAs(mine);
-						const n = yield* detachedJob(t.table, theirs);
-						const said = yield* t.line(`stop %${n}`);
-						const after = jobIn(t.table, n);
-						const refused = mine.startsWith("agent:") && theirs !== mine;
-						expect({
-							dropped: said.status === 0,
-							left: after === undefined ? null : {state: after.state, stop: after.stop},
-							why: said.err.includes(`tsh: %${n} is ${theirs}'s: the stop tool asks why`),
-						}).toEqual({
-							dropped: !refused,
-							// Refused: still in the table, detached, with no stop asked of it.
-							left: refused ? {state: "detached", stop: null} : null,
-							why: refused,
-						});
-					}).pipe(Effect.scoped),
-				),
+			fc.asyncProperty(
+				fc.constantFrom(...WRITERS),
+				// `null`: a job kept before jobs had a writer, which any tsh may drop.
+				fc.constantFrom<string | null>(...WRITERS, null),
+				(mine, theirs) =>
+					Effect.runPromise(
+						Effect.gen(function* () {
+							const t = yield* tshAs(mine);
+							const n = yield* detachedJob(t.table, theirs);
+							const said = yield* t.line(`stop %${n}`);
+							const after = jobIn(t.table, n);
+							const refused = mine.startsWith("agent:") && theirs !== null && theirs !== mine;
+							expect({
+								dropped: said.status === 0,
+								left: after === undefined ? null : {state: after.state, stop: after.stop},
+								why: said.err.includes(`tsh: %${n} is ${theirs}'s: the stop tool asks why`),
+							}).toEqual({
+								dropped: !refused,
+								// Refused: still in the table, detached, with no stop asked of it.
+								left: refused ? {state: "detached", stop: null} : null,
+								why: refused,
+							});
+						}).pipe(Effect.scoped),
+					),
 			),
-			{numRuns: 20, seed: 119120},
+			// Tried first, always: an agent's tsh and a job with no writer known, not refused.
+			{numRuns: 20, seed: 119120, examples: [[AGENT, null]]},
 		);
 	}, 60_000);
 });
