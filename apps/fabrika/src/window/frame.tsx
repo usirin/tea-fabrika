@@ -10,17 +10,18 @@ import {
 } from "react";
 import type {AsksNow} from "../asks.ts";
 import {activeOf, focusedOf, type Open} from "../desk/desk.ts";
+import type {Keys} from "../desk/keymap.ts";
 import {type Group, wordOf} from "../desk/keys.ts";
 import type {FromPage, HostNow, LinkNow, ToApp} from "../messages.ts";
 import {
 	agentsWord,
 	asksSections,
 	asksWord,
-	type Bound,
-	bindingWord,
 	bottomLineShows,
+	type Command,
 	clockWord,
 	commandsOf,
+	fileWord,
 	type Frame,
 	type FrameMsg,
 	hereWord,
@@ -45,7 +46,7 @@ import {
 	tileWord,
 	workspaceName,
 } from "./frame.ts";
-import {type Cap, capsOf, type Hint, type Row, sentence, type Words} from "./pop.ts";
+import {type Cap, type Hint, type Row, sentence, type Words} from "./pop.ts";
 import {type Empty, IconOf, Lines, Menu, Palette, Panel, useTip, WordsOf} from "./pop.tsx";
 
 // The window's frame, drawn: the top bar, the bottom line, and what opens over the desk (the
@@ -73,8 +74,8 @@ export interface FrameProps {
 	readonly link: LinkNow;
 	/** A desk came once: a link down after it is the host down, not a first connect. */
 	readonly attachedOnce: boolean;
-	readonly prefix: string;
-	readonly table: readonly Bound[];
+	/** The keys file's table, as the host sent it (desk/keymap.ts): the defaults until it says. */
+	readonly keys: Keys;
 	readonly shapes: Shapes;
 	readonly tickets: TicketsShown;
 	readonly armed: boolean;
@@ -88,21 +89,23 @@ export interface FrameProps {
 /** ` · `, between two words of the frame. */
 const Sep = () => <span className="sep">·</span>;
 
-/** The key bound to a name, as the bars write it, or `null`. */
+/** The palette's command by its name, with every workspace there could be. */
+const commandNamed = (props: FrameProps, name: string): Command | undefined =>
+	commandsOf(props.keys, 9).find((c) => c.name === name);
+
+/** The key a name's command is on, as the bars write it, or `null`: no key runs it. */
 const keyFor = (props: FrameProps, name: string): string | null => {
-	const bound = props.table.find((b) => b.name === name);
-	return bound === undefined ? null : bindingWord(props.prefix, bound.key);
+	const command = commandNamed(props, name);
+	return command === undefined || command.caps.length === 0 ? null : command.key;
 };
 
-/** The key bound to a name, as keycaps for its tooltip: `⌃B` `A`. None when nothing is bound. */
-const capsFor = (props: FrameProps, name: string): readonly Cap[] => {
-	const bound = props.table.find((b) => b.name === name);
-	return bound === undefined ? [] : capsOf(props.prefix, bound.key);
-};
+/** The key a name's command is on, as keycaps for its tooltip: `⌃B` `A`. None when nothing is bound. */
+const capsFor = (props: FrameProps, name: string): readonly Cap[] =>
+	commandNamed(props, name)?.caps ?? [];
 
-/** The tsh word of a name's binding, or `null`. */
+/** The tsh word of a name's command, or `null`. */
 const wordFor = (props: FrameProps, name: string): string | null =>
-	props.table.find((b) => b.name === name)?.tsh ?? null;
+	commandNamed(props, name)?.tsh ?? null;
 
 /** No tooltip shows while something lies over the desk, or while info mode explains the item. */
 const quietOf = (frame: Frame): boolean => frame.over.kind !== "none" || frame.info.kind === "on";
@@ -208,7 +211,7 @@ export function TopBar(props: FrameProps): ReactNode {
 						<Item
 							key={w.id}
 							name={`workspace ${i + 1}`}
-							caps={i < 9 ? capsOf(props.prefix, String(i + 1)) : []}
+							caps={i < 9 ? capsFor(props, `workspace ${i + 1}`) : []}
 							word={wordOf({kind: "pick", at: i + 1})}
 							quiet={quiet}
 							info={INFO.workspace}
@@ -802,7 +805,7 @@ export function BottomLine(props: FrameProps): ReactNode {
 			return (
 				<span className="keying">
 					<b>PREFIX</b>
-					{prefixLine(props.table).map((k) => (
+					{prefixLine(props.keys).map((k) => (
 						<span key={k.key}>
 							<Sep />
 							<b>{k.key}</b> {k.name}
@@ -841,6 +844,7 @@ export function BottomLine(props: FrameProps): ReactNode {
 		const info = keyFor(props, "info");
 		const quiet = quietOf(frame);
 		const on = frame.info.kind === "on";
+		const file = fileWord(props.keys.file);
 		return (
 			<>
 				{/* The way out, named first: the right side is pinned to the window's right edge, so a
@@ -849,6 +853,14 @@ export function BottomLine(props: FrameProps): ReactNode {
 				{on && (
 					<>
 						<span className="quiet">esc leaves</span>
+						<Sep />
+					</>
+				)}
+				{/* A keys file that did not read: in words, with the warning color, while the keys go on
+				    as they were (WCAG 1.4.1: the words say it, the color only marks it). */}
+				{file !== null && (
+					<>
+						<span className="broken">{file}</span>
 						<Sep />
 					</>
 				)}
@@ -987,18 +999,17 @@ function CommandPalette(props: FrameProps): ReactNode {
 	if (frame.over.kind !== "palette") return null;
 	const {title, query, at} = frame.over;
 	const keys = title === "keys";
-	const shown = matching(
-		commandsOf(props.prefix, props.table, desk?.workspaces.length ?? 0),
-		query,
-	);
+	const shown = matching(commandsOf(props.keys, desk?.workspaces.length ?? 0), query);
 	const run = (i: number) => {
 		const c = shown[i];
 		if (c === undefined) return;
-		props.toHost({type: "run", key: c.runs});
+		props.toHost({type: "run", does: c.runs});
 		step({type: "ran", key: c.key});
 	};
 	const focused = desk === null ? null : focusedOf(desk);
 	const groups = [...new Set(shown.map((c) => c.group))];
+	// The shortcuts list says a keys file that did not read on top, until it reads again.
+	const file = keys ? fileWord(props.keys.file) : null;
 	return (
 		<Palette
 			id={POP.palette}
@@ -1008,6 +1019,7 @@ function CommandPalette(props: FrameProps): ReactNode {
 					? "Keyboard shortcuts"
 					: `${focused.id} · ${tileWord(focused, props.tickets)}`
 			}
+			note={file ?? undefined}
 			query={query}
 			sections={groups.map((g) => ({
 				title: GROUP_TITLE[g],

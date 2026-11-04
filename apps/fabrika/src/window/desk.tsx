@@ -23,6 +23,7 @@ import {
 	type Workspace,
 } from "../desk/desk.ts";
 import {type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key} from "../desk/hold.ts";
+import {commandOn, defaults, Key as KeyCase, type Keys} from "../desk/keymap.ts";
 import {keyName, keyOwner} from "../desk/keys.ts";
 import {
 	type ContainerNode,
@@ -48,7 +49,6 @@ import {
 	type ToWindow,
 } from "../messages.ts";
 import {
-	type Bound,
 	EXPLAIN_ON,
 	FRAME,
 	type Frame,
@@ -113,10 +113,8 @@ const store: {
 	desk: Desk | null;
 	/** A desk came once: a link down after it is the host down. */
 	attachedOnce: boolean;
-	/** The desk's Ctrl-B key, as the host's table says. */
-	prefix: string;
-	/** The desk's Ctrl-B table, each key with its name. */
-	table: readonly Bound[];
+	/** The keys file's table, as the host sent it last (desk/keymap.ts); the defaults until then. */
+	keys: Keys;
 	/** What each program takes and sends. */
 	shapes: Shapes;
 	/** What waits on the person, as the host counts it; `null` until it says. */
@@ -133,8 +131,7 @@ const store: {
 } = {
 	desk: null,
 	attachedOnce: false,
-	prefix: "",
-	table: [],
+	keys: defaults,
 	shapes: new Map(),
 	asks: null,
 	host: null,
@@ -272,7 +269,7 @@ const midKey = (): MidKey => {
  * answer is in, so a key can be held while it is already open.
  */
 const keyForOver = (name: string, target: EventTarget | null): "desk" | "in" | "moved in" => {
-	if (keyGoesTo(store.frame.over, name, store.prefix, midKey()) !== "over") return "desk";
+	if (keyGoesTo(store.frame.over, name, store.keys.prefix, midKey()) !== "over") return "desk";
 	return focusOver(target);
 };
 
@@ -386,8 +383,7 @@ const heard = (raw: unknown) => {
 	const m = read.msg;
 	switch (m.type) {
 		case "keys":
-			store.prefix = m.prefix;
-			store.table = m.table;
+			store.keys = {prefix: m.prefix, rows: m.rows, ignore: m.ignore, file: m.file};
 			return changed();
 		case "programs":
 			store.shapes = new Map(m.programs.map((p) => [p.name, {takes: p.takes, sends: p.sends}]));
@@ -437,7 +433,8 @@ const swallow = (e: KeyboardEvent) => {
 
 /**
  * Every key, before anything else on the page sees it: the frame's own, the desk's, or the
- * focused tile's. Cmd-K opens the palette, as in Linear and VS Code. Escape closes what lies over
+ * focused tile's. The palette's key opens it: Cmd-K, as in Linear and VS Code, unless the keys file
+ * moved it (`palette.open`). Escape closes what lies over
  * the desk; with nothing over it, it leaves info mode, unless the desk is mid-key, where it cancels
  * the prefix or the question first; with neither, it goes on to the tile (frame.ts, `escaped`).
  * While something lies over it, the keys it takes (frame.ts, `keyGoesTo`) go to it and
@@ -459,19 +456,20 @@ const swallow = (e: KeyboardEvent) => {
 const onKey = (e: KeyboardEvent) => {
 	if (replaying) return;
 	const pressed = {key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey};
-	const owner = keyOwner(pressed, MAC);
+	const owner = keyOwner(pressed, MAC, store.keys);
 	if (owner === "nobody") return swallow(e);
 	if (owner === "system") {
 		if (e.target instanceof Element && e.target.closest(".term") !== null) e.stopPropagation();
 		if (store.frame.over.kind !== "none") focusOver(e.target);
 		return;
 	}
-	if (e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "k") {
+	const name = keyName(pressed);
+	const alone = name === null ? undefined : commandOn(store.keys, KeyCase.cases.alone.make({key: name}));
+	if (alone === "palette.open") {
 		swallow(e);
 		return frameStep({type: "palette"});
 	}
 	if (e.key === "Escape" && frameStep({type: "escape", desk: midKey()})) return swallow(e);
-	const name = keyName(pressed);
 	if (name === null) return;
 	const forOver = keyForOver(name, e.target);
 	if (forOver === "in") return;
@@ -484,7 +482,7 @@ const onKey = (e: KeyboardEvent) => {
 		meta: e.metaKey,
 		shift: e.shiftKey,
 	};
-	if (name === store.prefix) noteKeyedFrom(e.target);
+	if (name === store.keys.prefix) noteKeyedFrom(e.target);
 	if (holdStep({type: "key", key: {name, press}})) return;
 	swallow(e);
 };
@@ -837,8 +835,7 @@ function App(): ReactNode {
 		host: store.host,
 		link: store.link,
 		attachedOnce: store.attachedOnce,
-		prefix: store.prefix,
-		table: store.table,
+		keys: store.keys,
 		shapes: store.shapes,
 		tickets: ticketsShown(store.views),
 		armed: open?.prefix.armed ?? false,

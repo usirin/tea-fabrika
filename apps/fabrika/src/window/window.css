@@ -797,6 +797,12 @@ main.program > [role="alert"] {
 	white-space: nowrap;
 }
 
+/* A keys file that did not read: a broken part of the app, so the warning color, and its words
+   say the same (WCAG 1.4.1). */
+.bottomline .broken {
+	color: var(--stuck);
+}
+
 .bottomline .info,
 .bottomline .note {
 	color: var(--text-secondary);
@@ -1201,6 +1207,14 @@ main.program > [role="alert"] {
 	color: var(--text-muted);
 	font-size: var(--fs-small);
 	font-weight: 500;
+}
+
+/* A broken part the list is about, as a keys file that did not read: in words, and the warning
+   color only marks it (WCAG 1.4.1). */
+.pop .pop-note {
+	margin: 8px 16px 0;
+	color: var(--stuck);
+	font-size: var(--fs-small);
 }
 
 .pop .find {

@@ -3,11 +3,21 @@ import {whenOf} from "@tea-fabrika/tracker/window";
 import {Option, Schema} from "effect";
 import type {Ask, AsksNow} from "../asks.ts";
 import {activeOf, focusedOf, type Open, questionOf, tilesOf, type Workspace} from "../desk/desk.ts";
-import {bindingOf, type Group, groupOf, type Show} from "../desk/keys.ts";
+import {bindingFor, type Does, type File, type Key, type Keys} from "../desk/keymap.ts";
+import {type Group, groupOf, type Show, wordOf} from "../desk/keys.ts";
 import type {TileId, TileNode} from "../desk/layout/index.ts";
 import type {HostNow, LedgerLink, LinkNow, ToWindow} from "../messages.ts";
 import type {JobEnded, TileJobs} from "../tile-jobs.ts";
-import {type Cap, capsOf, type Icon, type Piece, type Row, type Section, sentence} from "./pop.ts";
+import {
+	type Cap,
+	capOf,
+	capsOf,
+	type Icon,
+	type Piece,
+	type Row,
+	type Section,
+	sentence,
+} from "./pop.ts";
 
 // The window's frame, in words: what the top bar, the bottom line, the asks list and the palette
 // say, worked out from what the host sent (the desk, the keys, the programs, the asks) and what
@@ -57,14 +67,6 @@ export interface Shape {
 }
 export type Shapes = ReadonlyMap<string, Shape>;
 
-/** One binding of the desk's Ctrl-B table, as the host sent it, with the tsh word that does the same. */
-export interface Bound {
-	readonly key: string;
-	readonly repeats: boolean;
-	readonly name: string;
-	readonly tsh: string;
-}
-
 /** The ticket a tile's run shows, by the run's id: what the ticket program's view said. */
 export type TicketsShown = ReadonlyMap<string, number>;
 
@@ -105,63 +107,91 @@ export const keyWord = (key: string): string => {
 export const bindingWord = (prefix: string, key: string): string =>
 	`${keyWord(prefix)} ${keyWord(key)}`;
 
-/** The keys the bottom line shows after Ctrl-B: the ones used most, then `?` for all of them. */
-const SHOWN_AFTER_PREFIX = ["N", "x", "z", "f", "|", "?"];
+/**
+ * The commands the bottom line shows after the prefix, the ones used most and then `?` for all of
+ * them: by command, so a command you moved shows on its new key, and one you unbound not at all.
+ */
+const SHOWN_AFTER_PREFIX: readonly Does[] = [
+	'tezgah."workspace --to new"',
+	"tezgah.close",
+	"tezgah.zoom",
+	"tezgah.fold",
+	"tezgah.split",
+	"keys.open",
+];
 
-/** The bottom line while Ctrl-B is down: each of the keys used most and its name. */
-export const prefixLine = (table: readonly Bound[]): readonly {key: string; name: string}[] =>
-	SHOWN_AFTER_PREFIX.flatMap((key) => {
-		const bound = table.find((b) => b.key === key);
-		return bound === undefined ? [] : [{key: keyWord(key), name: bound.name}];
+/** The bottom line while the prefix is down: each of the commands used most, on its first key after it. */
+export const prefixLine = (keys: Keys): readonly {key: string; name: string}[] =>
+	SHOWN_AFTER_PREFIX.flatMap((does) => {
+		const name = bindingFor(does)?.name;
+		const key = keys.rows
+			.find((row) => row.does === does)
+			?.keys.find((k) => k._tag === "after_prefix");
+		return name === undefined || key === undefined ? [] : [{key: keyWord(key.key), name}];
 	});
 
 /** The palette's groups, in the order it shows them (desk/keys.ts, `groupOf`). */
 const GROUPS: readonly Group[] = ["tile", "focus", "workspace", "window"];
 
-/** One command of the palette: its name, its group, its key, its tsh word, and the binding it runs. */
+/** One command of the palette: its name, its group, its key, its tsh word, and its file word. */
 export interface Command {
 	readonly name: string;
 	readonly group: Group;
-	/** As the bottom line writes it, after the palette ran it: `C-b z`. */
+	/**
+	 * As the bottom line writes it, after the palette ran it: `C-b z`, or `M-d` pressed alone. A
+	 * command no key runs says its tsh word instead: `zoom in tsh`.
+	 */
 	readonly key: string;
-	/** As keycaps, in the palette: `⌃B` `Z`. */
+	/** As keycaps, in the palette: `⌃B` `Z`, or `⌘D`. None for a command no key runs. */
 	readonly caps: readonly Cap[];
 	/** What to type in a tile's tsh for the same: `zoom`, `split --to down`. */
 	readonly tsh: string;
-	/** The binding's key: the palette runs it as Ctrl-B and this key would. */
-	readonly runs: string;
+	/** The command's word in the keys file: the palette runs it by this, bound to a key or not. */
+	readonly runs: Does;
 }
 
+/** A key of the table as the frame writes it, after the prefix or alone. */
+const keyText = (prefix: string, key: Key): string =>
+	key._tag === "after_prefix" ? bindingWord(prefix, key.key) : keyWord(key.key);
+
+/** A key of the table as keycaps, after the prefix or alone. */
+const keyCaps = (prefix: string, key: Key): readonly Cap[] =>
+	key._tag === "after_prefix" ? capsOf(prefix, key.key) : [capOf(key.key)];
+
 /**
- * Every command there is, once each, by the desk's own table, grouped: a name bound to two keys
- * (h and the left arrow) is listed by its first. A workspace that is not there is not listed. A
- * key this page's table does not know (a newer host's) goes with the window's own.
+ * Every command there is, once each, by the keys file's table, grouped, on its first key: h and
+ * the left arrow are one command. A workspace that is not there is not listed. A command no key
+ * runs is listed still, as the palette and its tsh word run it. The palette's own is not: it is
+ * what is open.
  */
-export const commandsOf = (
-	prefix: string,
-	table: readonly Bound[],
-	workspaces: number,
-): readonly Command[] => {
-	const seen = new Set<string>();
-	const all = table.flatMap((b) => {
-		const at = /^workspace (\d+)$/.exec(b.name);
+export const commandsOf = (keys: Keys, workspaces: number): readonly Command[] => {
+	const all = keys.rows.flatMap((row): Command[] => {
+		const binding = bindingFor(row.does);
+		if (binding === undefined) return [];
+		const at = /^workspace (\d+)$/.exec(binding.name);
 		if (at !== null && Number(at[1]) > workspaces) return [];
-		if (seen.has(b.name)) return [];
-		seen.add(b.name);
-		const does = bindingOf(b.key)?.does;
+		const tsh = wordOf(binding.does);
+		const [first] = row.keys;
 		return [
 			{
-				name: b.name,
-				group: does === undefined ? "window" : groupOf(does),
-				key: bindingWord(prefix, b.key),
-				caps: capsOf(prefix, b.key),
-				tsh: b.tsh,
-				runs: b.key,
+				name: binding.name,
+				group: groupOf(binding.does),
+				key: first === undefined ? `${tsh} in tsh` : keyText(keys.prefix, first),
+				caps: first === undefined ? [] : keyCaps(keys.prefix, first),
+				tsh,
+				runs: row.does,
 			},
 		];
 	});
 	return GROUPS.flatMap((g) => all.filter((c) => c.group === g));
 };
+
+/**
+ * What the frame says of the keys file: nothing while it reads, or there is none; the line to look
+ * at and why, while it is refused, as the keys go on as they were.
+ */
+export const fileWord = (file: File): string | null =>
+	file._tag === "refused" ? `keybindings.toml line ${file.line}: ${file.why}` : null;
 
 /** The commands whose name or tsh word holds every word typed, in the table's order. */
 export const matching = (commands: readonly Command[], query: string): readonly Command[] => {

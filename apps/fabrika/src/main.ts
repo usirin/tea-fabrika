@@ -22,6 +22,7 @@ import {type AsksNow, keysOf, newAsks, noticeOf} from "./asks.ts";
 import {attach, NoHello, NoHost, restart} from "./attach.ts";
 import {isPortName, PORT_CHANNEL} from "./bridge.ts";
 import {answer, DESK, isDesk, isOurs, SCHEME} from "./files.ts";
+import {settingsFolder} from "./host/settings.ts";
 import {pathsOf} from "./host/socket.ts";
 import {NotStopped} from "./host/stop.ts";
 import {type Launch, launchOf, QUIET_SWITCHES} from "./launch.ts";
@@ -389,6 +390,7 @@ const main = Effect.gen(function* () {
 			entry: path.join(DIST, "host.mjs"),
 			home,
 			paths,
+			settings: settingsFolder(launch, app.getPath("home")),
 		});
 	});
 	/**

@@ -2,7 +2,7 @@ import {applyCell} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {type Entry, type JobsOnHost, Ledger, Shell, Traces} from "@kampus/fabrika-old";
 import {Author, PullRequests} from "@tea-fabrika/tracker";
-import {Effect, Queue} from "effect";
+import {Data, Deferred, Effect, Queue, Stream} from "effect";
 import {type Socket, SocketServer} from "effect/socket";
 import {
 	type AsksMsg,
@@ -21,12 +21,22 @@ import {
 	type DeskCmd,
 	type DeskMsg,
 	deskMachine,
+	forPage,
+	type Open,
 	refusedOf,
 	restore,
+	route,
 	type Saved,
 	takenNow,
 } from "../desk/desk.ts";
-import {BINDINGS, PREFIX, wordOf} from "../desk/keys.ts";
+import {
+	commandFor,
+	type Does as Command,
+	defaults,
+	File,
+	type Keys,
+	spell,
+} from "../desk/keymap.ts";
 import type {SharedHistory} from "../editor/history.ts";
 import {jobLines} from "../job-lines.ts";
 import {type Down, PROTOCOL, type Up} from "../link.ts";
@@ -42,6 +52,7 @@ import {appPrograms, type Screen, tshList} from "../tsh.ts";
 import {hostWire} from "../wire.ts";
 import type {AgentSessions} from "./agent-session.ts";
 import {serveAgents} from "./agents.ts";
+import type {Setting} from "./settings.ts";
 
 // The host's server: what the host process does with each app that attaches, as tmux's server
 // does with each client. It names no platform: it takes Effect's `SocketServer`, which
@@ -54,7 +65,7 @@ import {serveAgents} from "./agents.ts";
 //
 //   app   hello {version: 1}               link.ts: the handshake; another version is refused. The
 //                                          host's hello back names its build, for the app to compare
-//   app   page                             a page loaded: it is sent the Ctrl-B table, the host's
+//   app   page                             a page loaded: it is sent the keys table, the host's
 //                                          own state, the desk, then a port for each tile's
 //                                          terminal and each run shown
 //   app   on {port: "desk", m: {type: "press", id: 0, key: "<c-b>"}}
@@ -74,6 +85,14 @@ import {serveAgents} from "./agents.ts";
 // done before the close after it.
 //
 // A key's time is the host's clock: the repeat window (keys.ts) is the desk's, not a page's.
+//
+// The keys file (desk/keymap.ts, read by host/settings.ts) is heard here: each answer is logged
+// (`keys file=read yours=2`), swapped into the desk and sent to every page. A file that does not
+// read keeps the last table that did, and every page is told the line and why. Each desk command
+// run is logged with its word and how it was reached, by key, palette, tsh word or click:
+//
+//   did does=tezgah.zoom via={"_tag":"key","keys":"ctrl+b z"}
+//   did does=tezgah.split via={"_tag":"palette"}
 
 /** Where the desk is kept between starts of the host: desk.json in the app's home, for now. */
 export interface DeskHome {
@@ -100,12 +119,14 @@ interface Client {
 	readonly shown: Map<string, () => void>;
 }
 
-/** What the page is sent first: the desk's Ctrl-B table, each key with its name and its tsh word. */
-const KEYS: ToPage = {
-	type: "keys",
-	prefix: PREFIX,
-	table: BINDINGS.map((b) => ({key: b.key, repeats: b.repeats, name: b.name, tsh: wordOf(b.does)})),
-};
+/** How a desk command was reached, for the `did` log: a key, as the file spells it, the palette, a tsh word, a click. */
+type Via = Data.TaggedEnum<{
+	key: {readonly keys: string};
+	palette: Record<never, never>;
+	word: Record<never, never>;
+	click: Record<never, never>;
+}>;
+const Via = Data.taggedEnum<Via>();
 
 /**
  * Each of the app's programs, with the inputs a pipe can feed and the outputs it sends, for the
@@ -131,6 +152,11 @@ export const serve = (options: {
 	readonly jobs: JobsOnHost;
 	readonly desk: DeskHome;
 	readonly asks: AsksHome;
+	/**
+	 * The keys file's answers (host/settings.ts): one as the host starts, then one each save. The
+	 * host serves no page before the first.
+	 */
+	readonly keys: Stream.Stream<Setting<Keys>>;
 	/** The link's version this host speaks: `PROTOCOL`, but in a test of an old host. */
 	readonly ours?: number | undefined;
 	/**
@@ -198,9 +224,18 @@ export const serve = (options: {
 		let desk: Desk = {at: "over"};
 		const deskNow = (): ToPage => ({
 			type: "desk",
-			desk,
+			desk: forPage(desk),
 			takes: takenNow(desk, clock.currentTimeMillisUnsafe()),
 		});
+		/** The keys file's table: the last that read, or the defaults, with what came of the file now. */
+		let table: Keys = defaults;
+		const keysNow = (): ToPage => ({type: "keys", ...table});
+		/** A desk command ran: its word, and how it was reached. */
+		const did = (does: Command, via: Via) => {
+			Effect.runForkWith(services)(
+				Effect.logInfo("did").pipe(Effect.annotateLogs({does, via: JSON.stringify(via)})),
+			);
+		};
 		const shout = () => {
 			const now = deskNow();
 			for (const client of clients) if (client.page) toPage(client, now);
@@ -224,7 +259,8 @@ export const serve = (options: {
 		};
 		const begin = (kept: unknown) => {
 			const [first, cmds] = deskMachine.init(restore(kept), undefined);
-			desk = first;
+			// A desk read back, or begun again, is on the keys file's table too.
+			desk = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, first, {type: "keys", keys: table})[0];
 			for (const c of cmds) Queue.offerUnsafe(queue, c);
 		};
 
@@ -339,6 +375,8 @@ export const serve = (options: {
 				said: (tile, does) => {
 					const why = refusedOf(desk, tile, does);
 					if (why !== null) return why;
+					const word = commandFor(does);
+					if (word !== undefined) did(word, Via.word());
 					if (step({type: "typed", tile, does}, "every")) shout();
 					return null;
 				},
@@ -385,6 +423,42 @@ export const serve = (options: {
 		};
 		begin(home.kept);
 		yield* Queue.take(queue).pipe(Effect.flatMap(carry), Effect.forever, Effect.forkScoped);
+
+		// The keys file, heard: the first answer before any page is served, then one each save.
+		const heardKeys = yield* Deferred.make<void>();
+		const swap = (answer: Setting<Keys>) => {
+			if (answer._tag === "refused") {
+				// The last table that read stays, on the desk and on the pages; only the file's word changes.
+				table = {...table, file: File.cases.refused.make({line: answer.line, why: answer.why})};
+			} else {
+				table = answer._tag === "read" ? answer.value : defaults;
+				step({type: "keys", keys: table});
+			}
+			for (const client of clients) if (client.page) toPage(client, keysNow());
+			shout();
+		};
+		yield* options.keys.pipe(
+			Stream.runForEach((answer) =>
+				Effect.logInfo("keys").pipe(
+					Effect.annotateLogs(
+						answer._tag === "refused"
+							? {file: "refused", line: answer.line, why: answer.why}
+							: answer._tag === "read"
+								? {
+										file: "read",
+										yours: answer.value.rows.filter((r) => r.source === "yours").length,
+									}
+								: {file: "none"},
+					),
+					Effect.andThen(Effect.sync(() => swap(answer))),
+					Effect.andThen(Deferred.succeed(heardKeys, undefined)),
+				),
+			),
+			// A reader that ends or fails still lets the host serve, on the table it had.
+			Effect.ensuring(Deferred.succeed(heardKeys, undefined)),
+			Effect.forkScoped,
+		);
+		yield* Deferred.await(heardKeys);
 		if (agents !== undefined)
 			yield* serveAgents({
 				server: agents.server,
@@ -399,12 +473,24 @@ export const serve = (options: {
 				Effect.forkScoped,
 			);
 
+		/** A key the desk takes: logged when it runs a command, as the person spells it in the file. */
+		const pressed = (s: Open, key: string, at: number) => {
+			const routed = route(s, key, at);
+			if (routed.kind !== "desk" || routed.ran === null) return;
+			const {does, key: on} = routed.ran;
+			// The desk's prefix is the table's: a refused file changes neither.
+			const keys =
+				on._tag === "after_prefix" ? `${spell(table.prefix)} ${spell(on.key)}` : spell(on.key);
+			did(does, Via.key({keys}));
+		};
+
 		/** What the page sent on the desk's port. */
 		const fromPage = (client: Client, m: FromPage) => {
 			switch (m.type) {
 				case "press": {
 					const at = clock.currentTimeMillisUnsafe();
 					const took = claims(desk, m.key, at);
+					if (took && desk.at === "open") pressed(desk, m.key, at);
 					if (took) step({type: "key", key: m.key, at}, client);
 					// The desk first, so the page knows what the desk takes before it lets the next key go.
 					shout();
@@ -418,6 +504,7 @@ export const serve = (options: {
 					if (step({type: "resize", container: m.container, sizes: m.sizes})) shout();
 					return;
 				case "fold":
+					did("tezgah.fold", Via.click());
 					if (step({type: "fold", tile: m.tile})) shout();
 					return;
 				case "unfold":
@@ -430,11 +517,18 @@ export const serve = (options: {
 				case "go":
 					if (step({type: "go", tile: m.tile})) shout();
 					return;
-				case "pick":
+				case "pick": {
+					// A workspace clicked in the top bar: the command its number runs, from the first nine.
+					const at =
+						desk.at === "open" ? desk.workspaces.findIndex((w) => w.id === m.workspace) : -1;
+					const word = at < 0 ? undefined : commandFor({kind: "pick", at: at + 1});
+					if (word !== undefined) did(word, Via.click());
 					if (step({type: "pick", workspace: m.workspace})) shout();
 					return;
+				}
 				case "run":
-					if (step({type: "run", key: m.key}, client)) shout();
+					if (m.does !== "palette.open") did(m.does, Via.palette());
+					if (step({type: "run", does: m.does}, client)) shout();
 					return;
 				case "later":
 				case "back":
@@ -454,7 +548,7 @@ export const serve = (options: {
 				case "page":
 					hide(client);
 					client.page = true;
-					toPage(client, KEYS);
+					toPage(client, keysNow());
 					toPage(client, programs);
 					toPage(client, hostNow());
 					toPage(client, saidAsks);
