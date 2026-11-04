@@ -17,7 +17,7 @@ import {Effect, Layer, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {headOf, lineOf} from "./head.ts";
 import {Author, type PullRequest, pickOf, pullRequestsOf, tracker} from "./index.ts";
-import {type Shown, shownOf} from "./machine.ts";
+import {type Shown, shownOf, statusOf, type Tracker} from "./machine.ts";
 
 /** The tracker's inputs, by name: what a test tells it. */
 type Inputs = (typeof tracker)["inputs"];
@@ -426,6 +426,104 @@ describe("the tracker", () => {
 		const changes = {ticket: 1, body: "Skip part 2.", asks: "changes"};
 		expect(read("comment", changes)).toBe("read");
 		expect(read("comment", {...changes, asks: "merge"})).toBe("refused");
+	});
+});
+
+// Areas PR 1, round 2 (from the mutation step): the area inputs driven through the program, as tsh
+// and the window send them. Each lands as one fact on `tracker/areas`, and the list shows it.
+describe("the tracker's areas, through its inputs", () => {
+	const AREAS_INBOX = streams("tracker/areas").inbox;
+	const onboarding = (s: Shown) => (s.page.kind === "list" ? s.page.onboarding : undefined);
+	const lanes = ["Lane: a run hangs", "Lane tests: one is flaky", "Lane checks: red on main"];
+
+	/** One session's ledger state, as its machine holds it, once `ok` says so. */
+	const state =
+		(run: {machines: {tickets: {changes: Stream.Stream<Tracker | null>}}}) =>
+		(ok: (s: Tracker) => boolean) =>
+			run.machines.tickets.changes.pipe(
+				Stream.filter((s): s is Tracker => s !== null && ok(s)),
+				Stream.runHead,
+				Effect.map(Option.getOrThrow),
+			);
+
+	it("makes, renames and merges, one fact each by the person, and the onboarding goes", async () => {
+		const ledger = memoryService();
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {run, say, until} = yield* session(ledger, "tracker:areas");
+				yield* until((s) => s.ready);
+				for (const title of lanes) yield* say("file", {title, body: ""});
+				const shown = onboarding(yield* until((s) => (onboarding(s)?.length ?? 0) > 0));
+				const suggested = {_tag: "titles", word: "lane", tickets: 3} as const;
+				yield* say("make_area", {name: "lane", suggested});
+				yield* say("make_area", {name: "desk"});
+				// The machine checks a rename against the areas it has read, so both are read back first.
+				yield* state(run)((s) => s.areas.live.size === 2);
+				yield* say("rename_area", {area: 1, name: "lane work"});
+				yield* say("merge_area", {area: 2, into: 1});
+				const done = yield* state(run)((s) => s.areas.into.size === 1);
+				const rows = yield* ledger.readStream(AREAS_INBOX, 0, -1);
+				return {
+					shown,
+					live: [...done.areas.live],
+					after: onboarding(shownOf(done)),
+					status: statusOf(done),
+					rows: rows.map((r) => [r.kind, r.writer, JSON.parse(r.data)]),
+				};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.shown).toEqual([{_tag: "titles", word: "lane", tickets: 3}]);
+		expect(seen.rows).toEqual([
+			[
+				"area_made",
+				"user:owner",
+				{_tag: "area_made", area: 1, name: "lane", suggested: seen.shown?.[0]},
+			],
+			["area_made", "user:owner", {_tag: "area_made", area: 2, name: "desk"}],
+			["area_renamed", "user:owner", {_tag: "area_renamed", area: 1, name: "lane work"}],
+			["area_merged", "user:owner", {_tag: "area_merged", area: 2, into: 1}],
+		]);
+		expect(seen.live).toEqual([[1, "lane work"]]);
+		expect(seen.after).toBeNull();
+		expect(seen.status).toBe("3 open, 0 closed; areas: lane work");
+	});
+
+	it("skips the onboarding, writes nothing, and its input is marked as writing nothing", async () => {
+		const ledger = memoryService();
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {run, say, until} = yield* session(ledger, "tracker:skip");
+				yield* until((s) => s.ready);
+				for (const title of lanes) yield* say("file", {title, body: ""});
+				yield* until((s) => (onboarding(s)?.length ?? 0) > 0);
+				yield* say("skip_onboarding", null);
+				const skipped = yield* state(run)((s) => s.skipped);
+				const rows = yield* ledger
+					.readStream(AREAS_INBOX, 0, -1)
+					.pipe(Effect.orElseSucceed(() => []));
+				return {after: onboarding(shownOf(skipped)), rows: rows.length};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.after).toBeNull();
+		expect(seen.rows).toBe(0);
+		expect(tracker.inputs.skip_onboarding.writes).toBe(false);
+		expect(tracker.inputs.skip_onboarding.personOnly).toBe(true);
+	});
+
+	it("reads an area's inputs, and refuses a blank or too long name", () => {
+		const read = (type: string, value: unknown) => readInput(tracker, {type, value}).kind;
+		expect(read("make_area", {name: "lane"})).toBe("read");
+		expect(
+			read("make_area", {name: "fabrika", suggested: {_tag: "folder", path: "apps/fabrika"}}),
+		).toBe("read");
+		expect(read("make_area", {name: ""})).toBe("refused");
+		expect(read("make_area", {name: " lane"})).toBe("refused");
+		expect(read("make_area", {name: "x".repeat(33)})).toBe("refused");
+		expect(read("rename_area", {area: 1, name: "lane work"})).toBe("read");
+		expect(read("rename_area", {area: 0, name: "lane work"})).toBe("refused");
+		expect(read("merge_area", {area: 2, into: 1})).toBe("read");
+		expect(read("merge_area", {area: 2})).toBe("refused");
+		expect(read("skip_onboarding", null)).toBe("read");
 	});
 });
 

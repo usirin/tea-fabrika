@@ -3,6 +3,7 @@ import {defineProgram, end, input, kind, output} from "@kampus/fabrika-old";
 import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {Effect, Schema} from "effect";
 import {duplicatesCell} from "./duplicates.ts";
+import {foldersCell} from "./folders.ts";
 import {clockRunner, loadCell, pollRunner, saveCell, saveHintsCell} from "./ledger.ts";
 import {
 	Find,
@@ -16,7 +17,17 @@ import {
 	tracker as tickets,
 } from "./machine.ts";
 import {pullRequestsCell, pullRequestsWaitRunner} from "./pull-requests.ts";
-import {Answer, Comment, File, OneTicket, RateDuplicate, type Write} from "./ticket.ts";
+import {
+	Answer,
+	Comment,
+	File,
+	MakeArea,
+	MergeArea,
+	OneTicket,
+	RateDuplicate,
+	RenameArea,
+	type Write,
+} from "./ticket.ts";
 
 // The tracker: tickets on the ledger, one stream of facts each (`@kampus/pipeline/tickets/ticket`,
 // so a lane writes the same facts), and a window to work
@@ -24,8 +35,9 @@ import {Answer, Comment, File, OneTicket, RateDuplicate, type Write} from "./tic
 // its cells (./ledger.ts) are the only code that reads or writes the ledger. No React here.
 //
 // It has one input per command, named by its verb, as CQRS names each command by what it does:
-// `file`, `comment`, `close`, `reopen`, `answer` and `rate_duplicate`, each one fact; `query`,
-// which writes nothing; and `quit`. Each value is that command's own struct. Its run's one mailbox
+// `file`, `comment`, `close`, `reopen`, `answer`, `rate_duplicate`, `make_area`, `rename_area`
+// and `merge_area`, each one fact; `query` and `skip_onboarding`, which write nothing; and `quit`.
+// Each value is that command's own struct. Its run's one mailbox
 // reads what is told in the order it was told, across every input: a close told right after a file
 // is read after it, and a quit after the last write.
 //
@@ -63,8 +75,19 @@ import {Answer, Comment, File, OneTicket, RateDuplicate, type Write} from "./tic
 //
 // It needs three services: `Ledger`, `Author` (./ledger.ts), who it writes as, and
 // `PullRequests` (./pull-requests.ts), the open pull requests shown beside the tickets: GitHub's,
-// through `@tea-fabrika/tracker/github`, or a fixed list. Its machine's state is kept nowhere:
+// through `@tea-fabrika/tracker/github`, or a fixed list. `RepoTree` it may be given; without one,
+// the onboarding step suggests from titles only. Its machine's state is kept nowhere:
 // started again, it reads the ledger again.
+//
+// Areas are the project's parts, on their own stream (`@kampus/pipeline/tickets/area`). A person
+// makes, renames and merges them; each of `make_area`, `rename_area` and `merge_area` is
+// `{personOnly: true}`. While a project with tickets has no area, the list opens with a step that
+// suggests some, from the open titles and the connected repositories' folders (`RepoTree`,
+// ./folders.ts, none by default). It suggests; only a person's pick makes one. `skip_onboarding`
+// puts the step away until the tracker starts again; it writes nothing.
+//
+//   make_area {name: "lane", suggested: {_tag: "titles", word: "lane", tickets: 3}}
+//   // tracker/areas/inbox gets {_tag: "area_made", area: 1, name: "lane", ...} by user:owner
 //
 // A lane writes its facts through the pipeline's `Tickets` service, on the same streams, and the
 // poll shows them. Left for later: linking a pull request to a ticket, and the PR watcher.
@@ -74,6 +97,7 @@ export type {Fact, Ticket} from "@kampus/pipeline/tickets/ticket";
 export {fold, ROOT, readRow} from "@kampus/pipeline/tickets/ticket";
 export {Hint, hintsOn} from "./duplicates.ts";
 export {Head, headOf, lineOf, OpenAsk, openAsksOf, prRefOf, waits, words} from "./head.ts";
+export {RepoTree, type RepoTreeShape} from "./folders.ts";
 export {Author} from "./ledger.ts";
 export {
 	Failed,
@@ -91,7 +115,18 @@ export {One, oneOf} from "./one.ts";
 export {type PullRequest, PullRequests, pullRequestsOf} from "./pull-requests.ts";
 export {checksLine, Row} from "./rows.ts";
 export {currentOf, STEPS, StepName, StepNow, StepState, stepsOf, stepWords} from "./steps.ts";
-export {Answer, Comment, File, OneTicket, RateDuplicate, type Summary, Write} from "./ticket.ts";
+export {
+	Answer,
+	Comment,
+	File,
+	MakeArea,
+	MergeArea,
+	OneTicket,
+	RateDuplicate,
+	RenameArea,
+	type Summary,
+	Write,
+} from "./ticket.ts";
 /**
  * The tracker's machine, for a program that reads the same tickets another way: the ticket,
  * map and runs programs run it with `ticketsOptions`, open one ticket, and show that.
@@ -140,6 +175,7 @@ export const ticketsOptions = {
 		pull_requests: pullRequestsCell,
 		duplicates: duplicatesCell,
 		save_hints: saveHintsCell,
+		folders: foldersCell,
 	},
 	subscribe: {poll: pollRunner, pull_requests_wait: pullRequestsWaitRunner, clock: clockRunner},
 	terminal: over,
@@ -165,6 +201,7 @@ export const ticketsKind = kind({
 			clock: "keep the time",
 			duplicates: "ask Jev for a duplicate",
 			save_hints: "write the duplicate hints",
+			folders: "read the repositories' folders",
 		},
 	}),
 	status: statusOf,
@@ -173,7 +210,7 @@ export const ticketsKind = kind({
 export const tracker = defineProgram({
 	name: "tracker",
 	description:
-		"Tickets on the ledger, one stream of facts each: lists them with the open pull requests beside them, files one, shows one's timeline and top line, comments, answers an open ask, closes and reopens. It has a window.",
+		"Tickets on the ledger, one stream of facts each: lists them with the open pull requests beside them, files one, shows one's timeline and top line, comments, answers an open ask, closes and reopens. Holds the project's areas, which a person makes, renames and merges. It has a window.",
 	inputs: {
 		file: input(
 			File,
@@ -194,6 +231,26 @@ export const tracker = defineProgram({
 			RateDuplicate,
 			"Accept or dismiss a duplicate hint: is the ticket the same as `of`? A person only. Writes one `duplicate_rated`.",
 			{personOnly: true},
+		),
+		make_area: input(
+			MakeArea,
+			'Make an area, a part of the project: its name, and the suggestion it came from if a person ticked one. {_tag: "titles", word, tickets} | {_tag: "folder", path}. A person only. Writes one `area_made`, with the next number.',
+			{personOnly: true},
+		),
+		rename_area: input(
+			RenameArea,
+			"Rename a live area. No ticket changes. A person only. Writes one `area_renamed`.",
+			{personOnly: true},
+		),
+		merge_area: input(
+			MergeArea,
+			"Merge a live area into another: its tickets then read `into`. A person only. Writes one `area_merged`.",
+			{personOnly: true},
+		),
+		skip_onboarding: input(
+			Schema.Null,
+			"Skip the step that suggests the first areas, for as long as this tracker runs. A person only. Writes nothing.",
+			{writes: false, personOnly: true},
 		),
 		query: input(
 			Query,
@@ -224,6 +281,10 @@ export const tracker = defineProgram({
 				reopen: (v) => write({kind: "reopen", ...v}),
 				answer: (v) => write({kind: "answer", ...v}),
 				rate_duplicate: (v) => write({kind: "rate_duplicate", ...v}),
+				make_area: (v) => write({kind: "make_area", ...v}),
+				rename_area: (v) => write({kind: "rename_area", ...v}),
+				merge_area: (v) => write({kind: "merge_area", ...v}),
+				skip_onboarding: () => runtime.dispatch({type: "skip_onboarding"}).pipe(Effect.orDie),
 				query: (q) =>
 					Effect.gen(function* () {
 						// One message after another: a list query's `list`, `show` and `find` land in that order.

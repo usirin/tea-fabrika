@@ -18,7 +18,8 @@ yield* tell(run, "file", {title: "Login fails", body: "On main."});
 yield* tell(run, "comment", {ticket: 1, body: "Seen it too."});
 yield* tell(run, "close", {ticket: 1});
 // `reopen {ticket}`, and a person's only: `answer {ticket, ask, pick, note, saw}` and
-// `rate_duplicate {ticket, of, says}`.
+// `rate_duplicate {ticket, of, says}`. The project's areas, a person's only too:
+// `make_area {name, suggested?}`, `rename_area {area, name}`, `merge_area {area, into}`.
 // The query writes nothing: the list by status and title, or one ticket.
 yield* tell(run, "query", {status: "all", find: "login"});  // open (the start), closed or all
 yield* tell(run, "query", {ticket: 1});                      // ticket 1's page
@@ -47,8 +48,8 @@ yield* tell(run, "query", {ticket: 7});       // sends nothing: the same pick
 
 | Import | File | What it gives |
 |---|---|---|
-| `@tea-fabrika/tracker` | `src/index.ts` | `tracker`, the program: one input per command (`file`, `comment`, `close`, `reopen`, `answer`, `rate_duplicate`, `query`, `quit`), each value that command's own struct, output `ticket` (the pick, `pickOf`), one machine `tickets`, and its `view`. `Author`, the service that says who it writes as. No React. |
-| | `src/ticket.ts` | What a person writes, pure: each command's struct (`File`, `Comment`, `OneTicket`, `Answer`, `RateDuplicate`), `Write`, the machine's tagged union of them (a comment can ask for changes, an answer carries the text it saw) and `factOf`, and `Summary`, a ticket on the list. The facts themselves, `WRITTEN_BY`, `Entry`, `Ticket`, `readRow` and `fold`, are the pipeline's, in `@kampus/pipeline/tickets/ticket`, so a lane writes the same facts this window shows. |
+| `@tea-fabrika/tracker` | `src/index.ts` | `tracker`, the program: one input per command (`file`, `comment`, `close`, `reopen`, `answer`, `rate_duplicate`, `make_area`, `rename_area`, `merge_area`, `skip_onboarding`, `query`, `quit`), each value that command's own struct, output `ticket` (the pick, `pickOf`), one machine `tickets`, and its `view`. `Author`, the service that says who it writes as. No React. |
+| | `src/ticket.ts` | What a person writes, pure: each command's struct (`File`, `Comment`, `OneTicket`, `Answer`, `RateDuplicate`, `MakeArea`, `RenameArea`, `MergeArea`), `Write`, the machine's tagged union of them (a comment can ask for changes, an answer carries the text it saw), `factOf` and `areaFactOf`, and `Summary`, a ticket on the list. The facts themselves, `WRITTEN_BY`, `Entry`, `Ticket`, `readRow` and `fold`, are the pipeline's, in `@kampus/pipeline/tickets/ticket`, so a lane writes the same facts this window shows. |
 | | `src/head.ts` | A ticket's top line, pure: `headOf(timeline, now)` (done, closed, asks, running, stuck, idle, next, in that order), `openAsksOf`, and `lineOf`, the line in words. |
 | | `src/rows.ts` | One short row per fact, `rowsOf`, made on the host with the pipeline's `endedAs`. |
 | | `src/steps.ts` | The plan's nine steps for one ticket, from its facts alone: `stepsOf`, `currentOf`, `STEPS`. The approval is the ask whose picks hold "approve". |
@@ -58,7 +59,8 @@ yield* tell(run, "query", {ticket: 7});       // sends nothing: the same pick
 | | `src/machine.ts` | The tea machine: what was read, where the window is, the writes on their way. `shownOf` makes the window's view. |
 | | `src/ledger.ts` | The only code that talks to the ledger, through the `Ledger` service: `load`, `save`, and the poll. |
 | | `src/pull-requests.ts` | `PullRequest`, and the `PullRequests` service the program reads open pull requests through: `pull_requests`, and the wait between reads. `pullRequestsOf(list)` for a test. |
-| `@tea-fabrika/tracker/github` | `src/github.ts` | The GitHub integration: `gitHubPullRequests(settings)`, `PullRequests` on the pipeline's `CodeHost`, and `GITHUB`, the connected repositories. |
+| | `src/folders.ts` | `RepoTree`, the service the first-areas step reads the connected repositories' top folders through, with `folders`, its cell. Its default is no folders, so a test or a tracker with no GitHub suggests from titles only. |
+| `@tea-fabrika/tracker/github` | `src/github.ts` | The GitHub integration: `gitHubPullRequests(settings)`, `PullRequests` on the pipeline's `CodeHost`; `gitHubRepoTree(settings)`, `RepoTree` on the pipeline's `CodeTree`; and `GITHUB`, the connected repositories and the folders whose folders it suggests. |
 | `@tea-fabrika/tracker/window` | `src/window.tsx` | `TrackerWindow`: the filter and search, the list, the pull requests, the composer, a ticket's timeline. Plain React. |
 | | `src/links.ts` | `piecesOf`: a body cut into text and links, by GitHub's autolink rule, for http and https. Pure. |
 
@@ -146,17 +148,45 @@ yield* tell(run, "query", {ticket: 7});       // sends nothing: the same pick
   problems; the filing stands. Measured in
   [experiment 167](../../experiments/167-duplicate-hint.md).
 
+- **Areas are the project's parts, and a person makes them.** They live on their own stream,
+  `tracker/areas`, as `area_made`, `area_renamed` and `area_merged`
+  ([areas](../../docs/direction/areas.md)). A new area takes the next number, read and written
+  in one step: if another write landed in between, the ledger says `Stale` and the tracker reads
+  and tries again, so two people who make an area at once get two numbers. A name a live area has
+  already, in any case, is refused in words. All three are `{personOnly: true}`, refused from an
+  agent here and at the door. The tracker shows its own saves at once: the areas fold from the
+  ledger's rows alone, and its saves no load has read back yet are `pending`, folded on top, as
+  Replicache and Linear keep pending writes. The first load sent after a save answers has read
+  past that save's row, so it ends that pending fact, whether the row read or not.
+
+  ```ts
+  yield* tell(run, "make_area", {name: "lane"});
+  //   tracker/areas/inbox   {_tag: "area_made", area: 1, name: "lane"}   user:owner
+  ```
+
+- **The first areas are suggested, never set.** While the ledger holds a ticket but no area, the
+  list opens on "Pick your first areas": each first word before a colon that three or more open
+  titles share (6 open titles start with "lane:"), then each top folder under `programs/`,
+  `packages/` and `apps/` of the connected repositories (the folder apps/fabrika in the code),
+  read once through `RepoTree` when the step first shows. A name shows once. A person ticks some,
+  or types a name, and Enter makes them in the order shown, one `make_area` each; Esc
+  (`skip_onboarding`) puts the step away until the tracker starts again, and writes nothing. If
+  the folders cannot be read, the step shows the titles' suggestions and says nothing of it.
+
 ## Keys
 
 The common path needs no mouse. The focus goes where the next step is.
 
 | Where | Keys |
 |---|---|
+| The first areas | ↑ ↓ move between the suggestions and the name box, Space ticks one, Enter makes the ticked ones and the typed name, Esc empties the name box, then skips the step |
 | The list | ↑ ↓ or j k pick a ticket or a pull request, Enter opens it, o x a show open, closed or all tickets, / goes to the search, c goes to the new ticket's title, q quits |
 | The search | typing narrows tickets and pull requests by title; Esc, ↓ or Enter goes back to the list |
 | New ticket | Enter in the title goes to the body, Ctrl+Enter (or ⌘+Enter) files it, Esc goes to the list |
 | A ticket | the comment box has the focus, Ctrl+Enter comments, an open ask's buttons answer it, Esc goes back to the list |
 
+- While the first areas show, their first row has the focus. Once they are made or skipped, the
+  focus goes to the list.
 - With no tickets, the title has the focus, and the list says what to do.
 - After filing, the composer is empty and its title still has the focus, for the next one.
 - A half-written ticket or comment stays while you look at another page.
@@ -172,6 +202,9 @@ The common path needs no mouse. The focus goes where the next step is.
 - Editing a title, a body or a comment. A fact is never changed; an edit would be a new fact.
 - Labels, assignees, milestones, and a ticket key per project. Not needed to file and follow
   tickets yet.
+- A ticket's area, filtering by area and grouping by area: the next three pull requests of
+  [areas](../../docs/direction/areas.md). Renaming and merging an area from the window, too:
+  for now they are tsh's `rename_area` and `merge_area`.
 - Going back to the page you were on after a restart. The list is one key away.
 - Retrying a failed write. Its text is shown in full, to copy back.
 - Anything that writes a lane's facts for real: the pipeline's lanes, ticket sync with GitHub and

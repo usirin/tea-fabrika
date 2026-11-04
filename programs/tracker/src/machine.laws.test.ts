@@ -18,6 +18,7 @@ import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {
 	duplicates,
+	folders,
 	load,
 	over,
 	PROBLEMS,
@@ -41,7 +42,8 @@ type Cmd =
 	| ReturnType<typeof save>
 	| ReturnType<typeof pullRequests>
 	| ReturnType<typeof duplicates>
-	| ReturnType<typeof saveHints>;
+	| ReturnType<typeof saveHints>
+	| ReturnType<typeof folders>;
 type TrackerStep = Step<Tracker, Msg, Cmd>;
 
 // ---------------------------------------------------------------- generators
@@ -87,6 +89,12 @@ const table: MsgArbitraryTable<Msg> = {
 	write: arbRecordMsg("write", {id, write}),
 	quit: arbConstantMsg("quit"),
 	moved: arbConstantMsg("moved"),
+	// Areas PR 1. made up: the skip, and the folders read for the onboarding step's suggestions.
+	skip_onboarding: arbConstantMsg("skip_onboarding"),
+	folders_ok: fc
+		.constantFrom([], ["programs/tracker", "apps/fabrika"])
+		.map((list) => folders.ok(folders({}), {folders: list}, 0)),
+	folders_err: fc.constant(folders.err(folders({}), {_tag: "unreachable"}, 0)),
 	// The filter and the pull requests have laws of their own (filter.laws.test.ts). They are drawn
 	// here too, so the laws of the ledger hold with them in the list.
 	show: arbRecordMsg("show", {
@@ -104,6 +112,8 @@ const table: MsgArbitraryTable<Msg> = {
 			// Up to ten rows that do not read, so a few reads go past the most problems kept.
 			broken: fc.array(fc.constant("row 9: broken"), {maxLength: 10}),
 			last: fc.nat({max: 30}),
+			// Areas PR 1: the rows of `tracker/areas` read beside the tickets. None here.
+			areas: fc.constant([]),
 		})
 		.map(({after: a, ...value}) => load.ok(load({after: a}), value, 0)),
 	load_err: after.map((a) => load.err(load({after: a}), {_tag: "unreachable"}, 0)),
@@ -275,7 +285,11 @@ const newsIsRead: Law = {
 			(_, last) => {
 				let s = last;
 				for (let i = 0; i < 3 && s.load !== "idle"; i += 1) {
-					const back = load.ok(load({after: s.seen}), {entries: [], broken: [], last: s.seen}, 0);
+					const back = load.ok(
+						load({after: s.seen}),
+						{entries: [], broken: [], last: s.seen, areas: []},
+						0,
+					);
 					s = drive(machine, s, [back]).s;
 				}
 				const moved = drive(machine, s, [{type: "moved"}]);
@@ -293,11 +307,13 @@ const hintsOnlyOwnFiling = every(
 		const {prev, msg} = step;
 		const filing =
 			msg.type === "save_ok" && answeredFront(step) && prev.saving[0]?.write.kind === "file";
+		// A save's answer names a ticket, or an area for a write to the areas: only a ticket is hinted.
+		const ticket = filing && "ticket" in msg.value ? msg.value.ticket : null;
 		return (
-			filing &&
+			ticket !== null &&
 			asks.length === 1 &&
-			asks[0]?.ticket === msg.value.ticket &&
-			step.next.hinting.includes(msg.value.ticket)
+			asks[0]?.ticket === ticket &&
+			step.next.hinting.includes(ticket)
 		);
 	},
 );
@@ -393,7 +409,7 @@ const PLANTS = {
 	hintsEveryWrite: plant({
 		save_ok: (s, m) => {
 			const [next, cmds] = real.save_ok(s, m);
-			if (cmds.some((c) => c.type === "duplicates")) return [next, cmds];
+			if (cmds.some((c) => c.type === "duplicates") || !("ticket" in m.value)) return [next, cmds];
 			const t = m.value.ticket;
 			return [{...next, hinting: [...next.hinting, t]}, [...cmds, asked(t)]];
 		},
@@ -466,7 +482,8 @@ describe("the tracker's state is kept", () => {
 		const keepsTheAnswer = plant({
 			load_ok: (s, m) => {
 				const [next, cmds] = real.load_ok(s, m);
-				return [{...next, ...m.value}, cmds];
+				// The read's rows ride along; its areas stay folded, as the machine folds them.
+				return [{...next, ...m.value, areas: next.areas}, cmds];
 			},
 		});
 		await expect(keepsEvery(keepsTheAnswer, 20)).rejects.toThrow(/Counterexample/);

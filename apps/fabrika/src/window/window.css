@@ -1922,6 +1922,86 @@ button:focus-visible {
 	display: none;
 }
 
+/*
+ * The first areas: one bordered group while the project has none. Plain grays only, the box ticked
+ * in slate 12: the accent says "your turn", and this step is the person's to skip.
+ */
+.tracker-first-areas {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+	min-width: 0;
+	margin: 0;
+	padding: var(--s-3) var(--s-4);
+	border: 1px solid var(--line);
+	border-radius: var(--r-lg);
+	background: var(--raised);
+}
+
+.tracker-first-areas legend {
+	padding: 0 var(--s-1);
+	color: var(--text-primary);
+	font-size: var(--fs-head);
+	font-weight: 500;
+}
+
+.tracker-first-areas ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.tracker-first-areas label {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 2px var(--s-2);
+	padding: var(--s-1) 0;
+}
+
+.tracker-first-areas input[type="checkbox"] {
+	align-self: center;
+	margin: 0;
+	accent-color: var(--text-primary);
+}
+
+.tracker-first-areas .tracker-title {
+	color: var(--text-primary);
+}
+
+.tracker .tracker-first-areas input[type="text"] {
+	font: inherit;
+	color: var(--text-primary);
+	background: var(--ground);
+	border: 1px solid var(--line);
+	border-radius: var(--r);
+	padding: 5px var(--s-2);
+	outline: none;
+}
+
+.tracker .tracker-first-areas input[type="text"]:focus {
+	border-color: var(--focus);
+}
+
+/*
+ * The step's buttons stay in view in any tile: the row sticks to the bottom of the view's one
+ * scroll (scroll.test.ts: nothing in a view scrolls on its own), and the rows and the box scroll
+ * past under it. A row moved to by ↑ ↓ stops above it, not behind it.
+ */
+.tracker-first-areas .tracker-row {
+	position: sticky;
+	bottom: 0;
+	flex-wrap: wrap;
+	margin: 0 calc(-1 * var(--s-4)) calc(-1 * var(--s-3));
+	padding: var(--s-2) var(--s-4) var(--s-3);
+	border-radius: 0 0 var(--r-lg) var(--r-lg);
+	background: var(--raised);
+}
+
+.tracker-first-areas input {
+	scroll-margin-bottom: 64px;
+}
+
 /* The composer: one line until there is something in it. */
 .tracker-composer {
 	display: flex;

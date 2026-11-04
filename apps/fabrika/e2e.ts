@@ -390,7 +390,7 @@ const infoMode = async (page: Page) => {
 	);
 	const right = await textsOf(bottomLine(page).locator(".right"));
 	await bottomLine(page).getByRole("button", {name: /keys$/}).focus();
-	await explained(page, "keys: press Ctrl-B");
+	await explained(page, "keys: press C-b");
 	check(
 		"while something is explained, the right side keeps its items",
 		(await textsOf(bottomLine(page).locator(".right"))).join() === right.join(),

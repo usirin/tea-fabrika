@@ -111,11 +111,19 @@ export const isDoorStream = (s: string): boolean => s === DOOR || s.startsWith(`
  *              approval, a ruling, a stuck task's way on, a yes or a no on a build
  *   duplicate_rated   a person's accept or dismiss on a duplicate hint
  *              (packages/pipeline/src/tickets/duplicates.ts): an agent's would hide a false alarm
+ *   area_made, area_renamed, area_merged   the project's areas, a person's data
+ *              (packages/pipeline/src/tickets/area.ts): an agent may suggest one, never make one
  *
  * The one list. A program says who writes each of its facts in a `Writes` table, and the type holds
  * that table to this list: a fact marked `person` does not compile until its kind is here.
  */
-export const PERSON_KINDS = ["answered", "duplicate_rated"] as const;
+export const PERSON_KINDS = [
+	"answered",
+	"duplicate_rated",
+	"area_made",
+	"area_renamed",
+	"area_merged",
+] as const;
 export type PersonKind = (typeof PERSON_KINDS)[number];
 
 export const isPersonKind = (kind: string): kind is PersonKind =>

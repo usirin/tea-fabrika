@@ -845,6 +845,21 @@ describe("an exam's side tree", () => {
 		expect(git(side.tree, "rev-parse", "HEAD")).toBe(after);
 	});
 
+	// `--ff-only` passes on a commit the side holds already, so a merge that passes is not a move.
+	it("a host branch the side holds already, under a commit of its own, is ahead, and the side's head stays", async () => {
+		const {home} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
+		const side = await sideWith(home, "side.md", "the side\n");
+		const under = git(side.tree, "rev-parse", "HEAD~1");
+		const got = await run(
+			home,
+			Effect.gen(function* () {
+				return yield* (yield* LaneWork).sideTo(SIDE, under);
+			}),
+		);
+		expect(got).toBe("ahead");
+		expect(git(side.tree, "rev-parse", "HEAD")).toBe(side.head);
+	});
+
 	it("made fresh, a side with old commits sits on main's tip", async () => {
 		const {home, seed} = makeLaneHome({dir, nodeModules: join(dir, "no-modules")});
 		const side = await sideWith(home, "side.md", "version 1's rule change\n");

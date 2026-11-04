@@ -15,9 +15,12 @@ import {
 	Checked,
 	cannotOf,
 	Found,
+	failureOf,
 	firstOf,
 	Results,
+	RunFailure,
 	readRun,
+	runWords,
 	shows,
 	TestsWritten,
 	testsOf,
@@ -117,6 +120,8 @@ export const TestWriterReport = Schema.Struct({
 	problems: Schema.Array(Schema.String),
 	tries: Schema.Finite,
 	costUsd: Schema.Finite,
+	/** Why the run on the base could not run, as it said (tracker 193). `null`: it ran, or said nothing more. */
+	failure: Schema.NullOr(RunFailure),
 });
 export type TestWriterReport = typeof TestWriterReport.Type;
 
@@ -189,6 +194,7 @@ const blank: TestWriterReport = {
 	problems: [],
 	tries: 0,
 	costUsd: 0,
+	failure: null,
 };
 const end = (s: Held, outcome: TestWriterOutcome, report: Partial<TestWriterReport> = {}): Step => [
 	{...held(s), phase: "over", outcome, report: {...blank, ...report}},
@@ -368,10 +374,23 @@ export const testWriter = defineMachine({
 				cmds,
 			];
 		},
-		tests_on_base_err: (s): Step =>
-			s.phase === "running"
-				? end(s, {kind: "stuck", why: "run_failed"}, {...spent(s), commit: s.commit})
-				: stay(s),
+		// Stuck, never an ask: a `go_on` would let the build start on tests that never ran on the base.
+		// The cause and what the writer said no test can check are kept for the stuck comment.
+		tests_on_base_err: (s, m): Step => {
+			if (s.phase !== "running") return stay(s);
+			const failure = failureOf(m.error);
+			return end(
+				s,
+				{kind: "stuck", why: "run_failed"},
+				{
+					...spent(s),
+					commit: s.commit,
+					found: cannotOf(s.written.answers),
+					failure,
+					problems: runWords(failure),
+				},
+			);
+		},
 
 		tests_record_ok: (s): Step => {
 			if (s.phase !== "recording" || s.remember.step !== "writing") return stay(s);
