@@ -45,6 +45,12 @@ export const fakeEnv = (dir: string) => ({
 	PATH: `${join(dir, "bin")}:${process.env.PATH ?? ""}`,
 });
 
+/**
+ * One word for `sh`, quoted, so a path with a space or a `$` in it stays one word as it is. A lane's
+ * checkout may sit under the app home in Library/Application Support (tracker 190).
+ */
+export const shWord = (text: string): string => `'${text.replaceAll("'", `'\\''`)}'`;
+
 /** The checkout a lane on a home `makeLaneHome` made starts from: the seed beside it. */
 export const checkoutFor = (home: string) => join(dirname(home), "seed");
 
@@ -90,7 +96,7 @@ export function makeLaneHome({
 	const codex = join(dir, "bin", "codex");
 	writeFileSync(
 		codex,
-		`#!/bin/sh\nFAKE_CODEX_LOG=${JSON.stringify(join(dir, "codex.log"))} exec ${JSON.stringify(process.execPath)} ${JSON.stringify(FAKE_CODEX)} "$@"\n`,
+		`#!/bin/sh\nFAKE_CODEX_LOG=${shWord(join(dir, "codex.log"))} exec ${shWord(process.execPath)} ${shWord(FAKE_CODEX)} "$@"\n`,
 	);
 	chmodSync(codex, 0o755);
 
@@ -101,7 +107,7 @@ export function makeLaneHome({
 		mkdirSync(join(to, ".."), {recursive: true});
 		writeFileSync(to, text);
 	};
-	const link = `ln -s ${nodeModules} node_modules`;
+	const link = `ln -s ${shWord(nodeModules)} node_modules`;
 	put(".gitignore", "node_modules\n");
 	put(
 		"tsconfig.json",
@@ -289,7 +295,7 @@ export function makeFakeGh({
 	writeFileSync(calls, "");
 	writeFileSync(
 		gh,
-		`#!/bin/sh\nFAKE_GH_DIR=${JSON.stringify(folder)} exec ${JSON.stringify(process.execPath)} ${JSON.stringify(FAKE_GH)} "$@"\n`,
+		`#!/bin/sh\nFAKE_GH_DIR=${shWord(folder)} exec ${shWord(process.execPath)} ${shWord(FAKE_GH)} "$@"\n`,
 	);
 	chmodSync(gh, 0o755);
 	return {

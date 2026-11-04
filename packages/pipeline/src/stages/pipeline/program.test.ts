@@ -29,7 +29,7 @@ import {TestsWork} from "../test-writer/program.ts";
 import {LANE} from "../traced.ts";
 import {type CheckRun, CheckRunner} from "./checks.ts";
 import {Inputs, keyOf} from "./key.ts";
-import {fakeEnv, type GhStory, makeFakeGh, makeLaneHome} from "./lane-fixture.ts";
+import {fakeEnv, type GhStory, makeFakeGh, makeLaneHome, shWord} from "./lane-fixture.ts";
 import {laneLayer, runLane} from "./layer.ts";
 import {askedFor as kindOfAsk, Lane, PICKS} from "./machine.ts";
 import {type Folded, fold, seenOf} from "./restart.ts";
@@ -521,7 +521,7 @@ const lane = ({
 		...(mainFiles === undefined && !formatter
 			? {}
 			: {mainFiles: [...(mainFiles ?? []), ...(formatter ? [FORMATTER] : [])]}),
-		...(redAfterKill ? {alsoCheck: `test ! -e ${JSON.stringify(red)}`} : {}),
+		...(redAfterKill ? {alsoCheck: `test ! -e ${shWord(red)}`} : {}),
 	});
 	if (formatter) nameFormatter(seed);
 	if (noOrigin) execFileSync("git", ["remote", "remove", "origin"], {cwd: seed, stdio: "pipe"});

@@ -46,7 +46,7 @@ describe("Tab completion", () => {
 		["seq -", ["--to", "--help"]],
 		["help sh", ["ship"]],
 		["seq --to 3 | do", ["double"]],
-		["seq --to 3 | ", [...list.keys()]],
+		["seq --to 3 | ", ["double", "tally"]],
 		["double n=$(se", ["seq"]],
 		["ship >f", [">found", ">forgot"]],
 		["ship --help ", ["--mode", "pr", "ask", "forget", ">found", ">outcome", ">answer", ">forgot"]],
