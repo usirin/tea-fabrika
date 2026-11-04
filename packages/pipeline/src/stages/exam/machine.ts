@@ -28,6 +28,8 @@ const outcomes = outcomesOf({
 });
 export const ExamOutcome = outcomes.schema;
 export type ExamOutcome = typeof ExamOutcome.Type;
+/** Every name the exam can end with, as the other stages export theirs. */
+export const EXAM_NAMES = outcomes.names;
 
 /**
  * What counts as the exam, with no list from a repo: laws, lint rules, CI rules, ownership, and

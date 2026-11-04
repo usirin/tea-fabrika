@@ -217,6 +217,7 @@ describe("an agent drives the app's programs through MCP", () => {
 		// The programs' inputs and no more: no desk word (split, zoom, agents) moves the person's desk.
 		expect(seen.tools.tools.map((t) => t.name)).toEqual([
 			"runs",
+			"job",
 			"counter_press",
 			"tracker_file",
 			"tracker_comment",

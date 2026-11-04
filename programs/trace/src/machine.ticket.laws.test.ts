@@ -298,3 +298,15 @@ describe("the owner's answer 1: lanes oldest first, only the newest opens", () =
 		}
 	});
 });
+
+describe("the trace machine's model is plain data (docs/direction/saved-state.md, S2)", () => {
+	// S2: "a model that holds a function, a Date or a cache would fail it, rightly". Today's version
+	// has no sync-test helper (experiment 190's is a script), so this law asks the part every save
+	// needs: each state reads back the same through text. A Map, a Set or a class instance does not.
+	// Red on e3dc0b85: a lane's read record holds its span index as two Maps.
+	it("every state reads back equal through JSON.stringify and JSON.parse", () => {
+		every(({next}) => {
+			expect(JSON.parse(JSON.stringify(next))).toEqual(next);
+		});
+	});
+});

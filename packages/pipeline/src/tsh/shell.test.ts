@@ -22,7 +22,7 @@ import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../code-host-github.ts";
 import {listen} from "../primitives.ts";
 import {CodeHost} from "../services.ts";
-import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/scripted.ts";
+import {changed, HEADS, RUBRICS_WORD, recorded, recordedGh} from "../stages/review/scripted.ts";
 import type {PrFacts} from "../stages/ship/facts.ts";
 import {defaultConfig} from "./config.ts";
 import {fabrikaEntries} from "./fabrika.ts";
@@ -371,7 +371,7 @@ describe("tsh: review | ship", () => {
 			Effect.gen(function* () {
 				const {line} = yield* session(list, memoryStorage(), "json");
 				const prs = [1, 2, 3].map((n) => `pr=${url(n)}`).join(" ");
-				const text = `review-scripted --rubrics ${RUBRICS} --model opus --effort medium --budget 1 ${prs} | ship --mode read`;
+				const text = `review-scripted --rubrics ${RUBRICS_WORD} --model opus --effort medium --budget 1 ${prs} | ship --mode read`;
 				const done = yield* line(text);
 				expect(done.status).toBe(0);
 				const verdicts = done.out.filter((l) => l.startsWith("review-scripted verdict "));

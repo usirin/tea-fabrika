@@ -3,7 +3,7 @@ import {Deferred, Duration, Effect, Layer, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../code-host-github.ts";
 import {CodeHost} from "../services.ts";
-import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/scripted.ts";
+import {changed, HEADS, RUBRICS_WORD, recorded, recordedGh} from "../stages/review/scripted.ts";
 import type {PrFacts} from "../stages/ship/facts.ts";
 import {defaultConfig} from "./config.ts";
 import {fabrikaEntries} from "./fabrika.ts";
@@ -115,7 +115,7 @@ const recordedGitHub = () => {
 	};
 };
 
-const REVIEW = `review-scripted --rubrics ${RUBRICS} --model opus --effort medium --budget 1`;
+const REVIEW = `review-scripted --rubrics ${RUBRICS_WORD} --model opus --effort medium --budget 1`;
 
 describe("status lines: the user's job", () => {
 	it("jobs shows one row per pull request under the review job: the stuck one and the skipped one stay while the third waits, and each row changes as its copy moves", async () => {

@@ -535,7 +535,8 @@ const isCall = (s: Span): boolean => s.tags["http.request.method"] !== undefined
 
 /**
  * The span rows under a step: its spans nested by parent, each span's HTTP calls folded into one
- * `calls` row, which opens to one row per call.
+ * `calls` row, which opens to one row per call. The spans are grouped by parent in one pass, in
+ * their order, so a step with many calls costs one look at each (ticket 182).
  */
 const spanRowsOf = (
 	under: readonly Span[],
@@ -544,13 +545,21 @@ const spanRowsOf = (
 	depth: number,
 ): TicketRow[] => {
 	const ids = new Set(under.map((s) => s.span));
-	const childrenIn = (parent: string | null): readonly Span[] =>
-		under.filter((s) =>
-			parent === null ? s.parent === null || !ids.has(s.parent) : s.parent === parent,
-		);
+	// The top spans: no parent, or a parent that is not under the step.
+	const top: Span[] = [];
+	const byParent = new Map<string, Span[]>();
+	for (const s of under) {
+		if (s.parent === null || !ids.has(s.parent)) {
+			top.push(s);
+			continue;
+		}
+		const list = byParent.get(s.parent);
+		if (list === undefined) byParent.set(s.parent, [s]);
+		else list.push(s);
+	}
 	const out: TicketRow[] = [];
 	const spanRow = (s: Span, d: number) => {
-		const kids = childrenIn(s.span);
+		const kids = byParent.get(s.span) ?? [];
 		const key = `span:${s.span}`;
 		const isOpen = kids.length > 0 && open.has(key);
 		out.push({
@@ -573,19 +582,25 @@ const spanRowsOf = (
 		if (parent === null || calls.length === 0) return;
 		const key = `calls:${parent}`;
 		const isOpen = open.has(key);
+		// A loop, not `Math.min(...)`: a spread puts every call on the stack.
+		let first = Infinity;
+		let last = -Infinity;
+		for (const c of calls) {
+			first = Math.min(first, c.start);
+			last = Math.max(last, c.end);
+		}
 		out.push({
 			kind: "calls",
 			key,
 			depth: d,
 			count: calls.length,
-			from: Math.min(...calls.map((c) => c.start)) - zero,
-			to: Math.max(...calls.map((c) => c.end)) - zero,
+			from: first - zero,
+			to: last - zero,
 			open: isOpen,
 		});
 		if (isOpen) for (const c of calls) spanRow(c, d + 1);
 	};
 	// The top spans hang off the step's own span: their calls fold under it.
-	const top = childrenIn(null);
 	level(top, depth, top[0]?.parent ?? null);
 	return out;
 };

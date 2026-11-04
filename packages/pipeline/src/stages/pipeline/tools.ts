@@ -455,8 +455,10 @@ export const laneMutationScope = Layer.effect(
 );
 
 /**
- * Code's own `[build] checks`, as the repo's settings name them at each run, in the head's installed
- * copy: the one the mutation step's tests run in. What could not be set up is `not_run`, never green.
+ * Code's own `[build] checks`, as the repo's settings name them at each run, in a git worktree of the
+ * head made and installed for this run alone (`LaneWork.worktree`), as CI checks a checkout. Not a
+ * `git archive` copy: a check that asks git, as `pnpm lint` does, finds no repository in one (tracker
+ * ticket 184). What could not be set up is `not_run`, never green.
  */
 export const laneCheckRunner = Layer.effect(
 	CheckRunner,
@@ -481,21 +483,25 @@ export const laneCheckRunner = Layer.effect(
 						);
 					const build = settings.success.build;
 					const commands = build?.checks ?? [];
-					const copy = yield* Effect.result(work.copy(head));
-					if (copy._tag === "Failure")
-						return notRun(
-							commands.map((command) => command.join(" ")),
-							`The copy of ${head} could not be made, so no check ran there. ${copy.failure.says ?? ""}`.trim(),
-						);
-					const folder = copy.success;
-					return yield* Effect.provide(
+					return yield* Effect.scoped(
 						Effect.gen(function* () {
-							return yield* (yield* CheckRunner).run(head);
-						}),
-						checkRunner({
-							folder: () => folder,
-							commands,
-							within: Duration.seconds(build?.checks_within ?? CHECKS_WITHIN),
+							const worktree = yield* Effect.result(work.worktree(head));
+							if (worktree._tag === "Failure")
+								return notRun(
+									commands.map((command) => command.join(" ")),
+									`The worktree of ${head} could not be made, so no check ran there. ${worktree.failure.says ?? ""}`.trim(),
+								);
+							const folder = worktree.success;
+							return yield* Effect.provide(
+								Effect.gen(function* () {
+									return yield* (yield* CheckRunner).run(head);
+								}),
+								checkRunner({
+									folder: () => folder,
+									commands,
+									within: Duration.seconds(build?.checks_within ?? CHECKS_WITHIN),
+								}),
+							);
 						}),
 					);
 				}),

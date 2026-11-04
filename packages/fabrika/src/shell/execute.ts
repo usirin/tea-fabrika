@@ -38,7 +38,10 @@ export interface Shell {
 	readonly table: JobTable;
 	/** Whom this tsh is for: each job it begins or attaches is this owner's in the table. */
 	readonly owner: Owner;
-	readonly print: (to: "out" | "err", text: string) => void;
+	/** Who this tsh writes as: each job it begins is theirs, and each stop it asks says them. */
+	readonly by: string | null;
+	/** A line to show; `n`: the job it was printed for, so a host keeps a job's lines (Printed's `n`). */
+	readonly print: (to: "out" | "err", text: string, n?: number) => void;
 	/** A table for a person, on out: its terminal lays it out (./table.ts). */
 	readonly printTable: (table: Table) => void;
 	/** How a value a program sends is printed: short for a person, or its JSON whole. */
@@ -71,6 +74,14 @@ export type Mode =
 const show = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
 
 const note = (shell: Shell, msg: JobsMsg) => shell.table.dispatch(msg).pipe(Effect.ignore);
+
+/**
+ * This tsh's writer asks job n to stop, as a person does with Ctrl-C or `stop %n`: no why. Said
+ * to the table before the runs are stopped, so the job's record keeps who stopped it. A tsh with
+ * no writer says nothing: who asked is not known.
+ */
+export const askStop = (shell: Shell, n: number) =>
+	shell.by === null ? Effect.void : note(shell, {type: "stopping", n, by: shell.by, why: null});
 
 /** What tsh says of a job whose kept state its machine's schema refuses. */
 export const SAVED_BY_OLDER_CODE = "this job was saved by older code, can't open it";
@@ -226,9 +237,9 @@ function printers(
 		if (output === skip) return (value) => taken?.(value);
 		const person = outputs[output]?.person;
 		if (shell.show === "json" || person === undefined)
-			return (value) => shell.print("out", `${prefix(output)}${shown(value, shell.show)}`);
+			return (value) => shell.print("out", `${prefix(output)}${shown(value, shell.show)}`, at.n);
 		if (person === "none" || skip !== null) return () => {};
-		if ("line" in person) return (value) => shell.print("out", `${job}${person.line(value)}`);
+		if ("line" in person) return (value) => shell.print("out", `${job}${person.line(value)}`, at.n);
 		const table = {view: person.table, rows: [] as unknown[]};
 		tables.push(table);
 		return (value) => table.rows.push(value);
@@ -324,10 +335,11 @@ const startStages = (shell: Shell, stages: readonly Starting[], close: boolean) 
  * Wait for a job (by its watcher, so the table already says it ended), or for
  * Ctrl-C, which stops every run with its starter's `stop`. Answers each run's end.
  */
-const waitFor = (shell: Shell, runs: readonly AnyRunning[], watcher: Watcher) =>
+const waitFor = (shell: Shell, n: number, runs: readonly AnyRunning[], watcher: Watcher) =>
 	Effect.gen(function* () {
 		const signal = yield* PubSub.subscribe(shell.signals);
 		const stopped = PubSub.take(signal).pipe(
+			Effect.andThen(askStop(shell, n)),
 			Effect.andThen(Effect.forEach(runs, (r) => r.stop, {concurrency: "unbounded"})),
 			Effect.andThen(Deferred.await(watcher)),
 		);
@@ -415,12 +427,12 @@ const sayJobEnd = (
 ) =>
 	Effect.gen(function* () {
 		if (ends.some(refusedEnd)) {
-			shell.print("err", `[${n}] ${SAVED_BY_OLDER_CODE}  ${text}`);
-			shell.print("err", `[${n}] it stays in the table, detached; stop %${n} drops it`);
+			shell.print("err", `[${n}] ${SAVED_BY_OLDER_CODE}  ${text}`, n);
+			shell.print("err", `[${n}] it stays in the table, detached; stop %${n} drops it`, n);
 			return;
 		}
 		const status = statusOfJob(ends);
-		shell.print("err", `[${n}] ${status === 0 ? "ended" : `ended ${status}`}  ${text}`);
+		shell.print("err", `[${n}] ${status === 0 ? "ended" : `ended ${status}`}  ${text}`, n);
 		for (const [i, r] of runs.entries()) {
 			const ended = ends[i];
 			if (ended === undefined) continue;
@@ -430,11 +442,12 @@ const sayJobEnd = (
 				shell.print(
 					"err",
 					`[${n}] ${name} ${whyOf(ended)}${left === null ? "" : `, with ${left}`}`,
+					n,
 				);
 				continue;
 			}
 			const record = yield* shell.storage.record(r.run.id).pipe(Effect.orElseSucceed(() => null));
-			shell.print("err", `[${n}] ${name} ended: ${onItsOwn(record?.closed ?? [], left)}`);
+			shell.print("err", `[${n}] ${name} ended: ${onItsOwn(record?.closed ?? [], left)}`, n);
 		}
 	});
 
@@ -455,19 +468,20 @@ const onItsOwn = (closed: readonly string[], left: string | null): string => {
 		: `${inputs} closed, and it stopped reading, with ${left}`;
 };
 
-/** Say how a foreground job ended, when it did not end well: on err, like a shell. */
+/** Say how foreground job `n` ended, when it did not end well: on err, like a shell. */
 const sayEnd = (
 	shell: Shell,
+	n: number,
 	text: string,
 	ends: readonly Ended<unknown>[],
 	names: readonly string[],
 ) => {
 	ends.forEach((ended, i) => {
-		if (ended.kind === "failed") shell.print("err", `tsh: ${names[i] ?? "?"} ${whyOf(ended)}`);
+		if (ended.kind === "failed") shell.print("err", `tsh: ${names[i] ?? "?"} ${whyOf(ended)}`, n);
 		const left = unreadWords(ended.unread);
-		if (left !== null) shell.print("err", `tsh: ${names[i] ?? "?"} ended with ${left}`);
+		if (left !== null) shell.print("err", `tsh: ${names[i] ?? "?"} ended with ${left}`, n);
 	});
-	if (ends.some((e) => e.kind === "stopped")) shell.print("err", `[stopped] ${text}`);
+	if (ends.some((e) => e.kind === "stopped")) shell.print("err", `[stopped] ${text}`, n);
 };
 
 /**
@@ -533,6 +547,7 @@ const runStages = (
 			stages: [head, ...tail],
 			background,
 			owner: shell.owner,
+			by: shell.by,
 		});
 		const n = numberOf(shell, head.run);
 		const values: unknown[] = [];
@@ -570,7 +585,7 @@ const runStages = (
 					told: only.told,
 					listeners: only.listeners,
 					keeping: {id: only.record.run, storage: shell.storage},
-					stopOn: PubSub.take(signal),
+					stopOn: PubSub.take(signal).pipe(Effect.tap(() => askStop(shell, n))),
 				});
 			}).pipe(Effect.scoped);
 			yield* note(shell, {
@@ -582,11 +597,12 @@ const runStages = (
 				shell.print(
 					"err",
 					`tsh: ${only.entry.program.name}: ${called.name} does not fit: ${called.why}`,
+					n,
 				);
 				return {status: 2, values: []};
 			}
 			only.flush(called.ended.kind === "ended");
-			sayEnd(shell, line.text, [called.ended], [only.entry.program.name]);
+			sayEnd(shell, n, line.text, [called.ended], [only.entry.program.name]);
 			return {status: statusOf(called.ended), values};
 		}
 		const jobScope = yield* Scope.fork(shell.scope);
@@ -597,7 +613,7 @@ const runStages = (
 			// The job leaves the table now: the stages that never started never end.
 			for (const record of records)
 				yield* note(shell, {type: "stage_ended", run: record.run, how: "failed"});
-			shell.print("err", `tsh: ${started.why}`);
+			shell.print("err", `tsh: ${started.why}`, n);
 			return {status: 1, values: []};
 		}
 		for (const r of started.runs) shell.live.set(r.run.id, r);
@@ -610,11 +626,11 @@ const runStages = (
 			),
 		);
 		if (background) {
-			shell.print("err", `[${n}] ${records.map((r) => r.run).join(" ")}`);
+			shell.print("err", `[${n}] ${records.map((r) => r.run).join(" ")}`, n);
 			return {status: 0, values: []};
 		}
-		const ends = yield* waitFor(shell, started.runs, watcher);
-		sayEnd(shell, line.text, ends, names);
+		const ends = yield* waitFor(shell, n, started.runs, watcher);
+		sayEnd(shell, n, line.text, ends, names);
 		return {status: statusOfJob(ends), values};
 	});
 
@@ -631,9 +647,10 @@ export const waitForJob = (shell: Shell, job: Job) =>
 		// In the table before the wait, as bash's `fg` moves the job first: whoever reads the table
 		// (a terminal drawing a program's window) sees the job in the foreground while tsh waits.
 		yield* note(shell, {type: "foreground", n: job.n});
-		const ends = yield* waitFor(shell, runs, watcher);
+		const ends = yield* waitFor(shell, job.n, runs, watcher);
 		sayEnd(
 			shell,
+			job.n,
 			job.text,
 			ends,
 			job.stages.map((s) => s.program),
@@ -683,7 +700,7 @@ export const reattach = (shell: Shell, job: Job, background: boolean, typed: str
 			yield* Effect.forEach(started.runs, (r) => r.stop, {concurrency: "unbounded"});
 			yield* Scope.close(jobScope, Exit.void);
 			yield* note(shell, {type: "detached", n: job.n});
-			shell.print("err", `tsh: ${started.why}`);
+			shell.print("err", `tsh: ${started.why}`, job.n);
 			return 1;
 		}
 		for (const r of started.runs) shell.live.set(r.run.id, r);
@@ -695,10 +712,10 @@ export const reattach = (shell: Shell, job: Job, background: boolean, typed: str
 			),
 		);
 		if (background) {
-			shell.print("err", `[${job.n}] attached ${job.stages.map((s) => s.run).join(" ")}`);
+			shell.print("err", `[${job.n}] attached ${job.stages.map((s) => s.run).join(" ")}`, job.n);
 			return 0;
 		}
-		return statusOfJob(yield* waitFor(shell, started.runs, watcher));
+		return statusOfJob(yield* waitFor(shell, job.n, started.runs, watcher));
 	}).pipe(
 		Effect.withSpan(
 			attachTitleOf(job.stages.map((s) => s.program)),

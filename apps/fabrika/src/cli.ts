@@ -175,7 +175,7 @@ const mcpCmd = Command.make("mcp", {home, as}, (a) =>
 		const {mcp} = yield* pathsOf(a.home);
 		if ((yield* reach(mcp)) !== "live")
 			return yield* new BridgeStopped({
-				why: `no fabrika host serves agents on ${a.home}: open the app on it (a home connected to a ledger server has no agents' socket yet)`,
+				why: `no fabrika host serves agents on ${a.home}: open the app on it`,
 			});
 		yield* bridge(yield* NodeSocket.makeNet({path: mcp}), a.as);
 	}).pipe(
