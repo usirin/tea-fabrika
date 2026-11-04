@@ -380,9 +380,10 @@ const putOnMain = (cmd: ReturnType<typeof freshMain>, onto: string) =>
 
 /**
  * A route's fresh read (jidoka row 62): the head with main merged in goes through the push stage once
- * its checks are green, as the push step would put it there, since the step the route runs next is
- * ship, and ship merges only what the pull request holds. A restart's read, or the guard's, pushes
- * nothing: the push step runs after it. A push that does not end done fails the read.
+ * its checks are green and the review stands there, as the push step would put it there, since the
+ * step the route runs next is ship, and ship merges only what the pull request holds. A restart's
+ * read, the guard's, or one where the review does not stand pushes nothing: the push step runs after
+ * it. A push that does not end done fails the read.
  */
 const pushedIfRouted = <F extends Found>(
 	refs: Stages["machines"]["push"],
@@ -394,6 +395,9 @@ const pushedIfRouted = <F extends Found>(
 	Effect.gen(function* () {
 		const head = found.carry?.head;
 		if (cmd.routed !== true || found._tag !== "merged" || !green) return found;
+		// Where the review does not stand, it reads the head first: the push would post its old
+		// verdicts at a head it never judged. The push step puts the head there after (`freshAt`).
+		if (found.review._tag !== "kept") return found;
 		if (head === undefined || head === null) return found;
 		const {repo} = yield* (yield* LaneWork).origin;
 		const carry: Carry = {...cmd.carry, ...found.carry};
