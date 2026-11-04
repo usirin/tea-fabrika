@@ -23,9 +23,11 @@ first, and this note applies them.
 - **Tuval (layer 5).** `next/` is not in the tree yet, so carry-over rests on
   [the desktop layer](./the-desktop-layer.md). The rules name roles, tokens and facts, never
   Electron. A tile kept after a crash (`keep: "failed"`) follows the empty state's rule.
-- **Not yet shot.** `apps/fabrika/shots.ts:235` only shoots 1440x900. Layout claims come from CSS
-  arithmetic at 1024x700: one tile 1016x632, side by side 506x632, stacked 1016x314, 2x2 506x314.
-  Nobody has looked at them in the built app.
+- **Shot in the built app since PR 1.** `apps/fabrika/e2e.ts`'s tiles stage (`-- --tiles`) shoots
+  one tile, a pipe side by side, a pipe stacked, a 2x2 in each state and a 2x2 at 1024x700, dark and
+  light, into `apps/fabrika/docs/tiles/`. At 1024x700 a tile an eighth of the window wide keeps its
+  id and cuts its name to `ticket …`. The other layout claims still come from CSS arithmetic at
+  1024x700: one tile 1016x632, side by side 506x632, stacked 1016x314, 2x2 506x314.
 
 ## The bar
 
@@ -552,8 +554,9 @@ moves, so it is stored from the first build.
   whether 8 and 16 regions are noise.
 - **No keyboard run.** Tab and Enter on a strip, the Tab mismatch, and the ring beside a lit edge all come
   from reading code.
-- **Layouts were not shot in the built app.** Only 1440x900 was. AGENTS.md asks for stacked, 2x2 and
-  small-window shots, and forced colors can be emulated. The tiles here were judged on a mockup.
+- **The tiles were judged on a mockup.** The built app was shot only after, in PR 1
+  (`apps/fabrika/docs/tiles/`), with forced colors and more contrast emulated, not set on a real
+  system.
 - **Contrast is computed from Radix's sRGB hex.** P3 values may differ a little, and a8's 3.02 has almost
   no room. Today's numbers are worked out from `window.css`'s oklch, not read from a screen. The color-blind
   figures are a simulation on one thin band.
