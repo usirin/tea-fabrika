@@ -1,5 +1,5 @@
 import {Schema} from "effect";
-import {Criterion, Row} from "./ready.ts";
+import {Criterion, Hop, Row} from "./ready.ts";
 
 /** One kind of review a pull request needs, and how it stands at the head commit. The kinds are today's fabrika's. */
 export const ReviewKind = Schema.Struct({
@@ -66,6 +66,12 @@ export const PrFacts = Schema.Struct({
 	reviews: Schema.NullOr(Schema.NonEmptyArray(ReviewKind)),
 	checks: Schema.Literals(["green", "red", "pending", "stuck"]),
 	mergeable: Schema.Literals(["clean", "conflicts", "unknown"]),
+	/**
+	 * Each earlier head code found the diff it judged still stands at this one: a format-only
+	 * commit or a clean replay onto a newer main (`carry`). A verdict row at `from` counts here.
+	 * Left out: none, and only rows at this head count.
+	 */
+	carried: Schema.optionalKey(Schema.Array(Hop)),
 	/** Unresolved only. */
 	comments: Schema.Array(
 		Schema.Struct({id: Schema.String, by: Schema.Literals(["person", "bot"])}),

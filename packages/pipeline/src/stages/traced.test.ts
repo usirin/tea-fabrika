@@ -5,7 +5,7 @@ import {describe, expect, it} from "vitest";
 import {gatherPack, type Review, type ReviewCmd, review} from "./review/machine.ts";
 import type {Ran} from "./review/reviewer.ts";
 import {WHOLE} from "./review/scripted.ts";
-import {reviewDrawing} from "./traced.ts";
+import {answerTags, LANE, reviewDrawing} from "./traced.ts";
 
 // What a review's span says when it ends, read from the machine's own state.
 
@@ -55,5 +55,20 @@ describe("a review's span, at its end", () => {
 		const tags = reviewDrawing("review", WHOLE.pr).tags?.(over) ?? {};
 		expect(tags[ATTR.outcome]).toBe("done");
 		expect(ATTR.problems in tags).toBe(false);
+	});
+});
+
+describe("a lane's wait, at its end (ticket 141)", () => {
+	// The plan's span tags (section 1) name four: `tea.ask.id`, `tea.ask.for`, `tea.answer.pick`,
+	// `tea.answer.by`. What the ask was for is on the wait's own span, so a view never has to match
+	// the wait to the asking step by time (review B1). Never the note.
+	it("is tagged with the ask, what it was for, the pick and who picked", () => {
+		const heard = {ask: "a-approve-8", for: "approve", pick: "approve", by: "owner"} as const;
+		expect(answerTags(heard)).toEqual({
+			[LANE.ask]: "a-approve-8",
+			"tea.ask.for": "approve",
+			[LANE.pick]: "approve",
+			[LANE.by]: "owner",
+		});
 	});
 });

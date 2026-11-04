@@ -4,6 +4,9 @@ Decided 2026-10-24. Who picks a property's tool was decided 2026-10-25, from
 experiment 139: the planner, with `"tla"` only for a design with no code yet.
 Nothing here is built yet.
 
+Keys renamed 2026-11-03 (short words keep one meaning): a pointer's `at` became `path`. Today's
+code still says `at`.
+
 ```ts
 // A sketch: one plan in the names picked 2026-10-24, with the ids the fold gives.
 // The ticket: a child that exits with no outcome row leaves the hosted lane
@@ -54,7 +57,7 @@ const plan = {
 			],
 		},
 	],
-	pointers: [{at: "packages/pipeline/src/hosted/lane-ends.ts", why: "experiment 116's property test of this hang"}],
+	pointers: [{path: "packages/pipeline/src/hosted/lane-ends.ts", why: "experiment 116's property test of this hang"}],
 	questions: [],
 };
 ```
@@ -196,9 +199,10 @@ type Task = {id: TaskId; title: string; ends: "pr" | "answer"; scenario: Scenari
 
 - **`Revision` is kept.** Each `planned` fact stores one. The fold in
   `packages/pipeline/src/asks/rules.ts` gives it ids and makes the `Plan`.
-- **Held for a later glossary pass:** `pointers`, `goal`, `at`, `Claim`, and
+- **Held for a later glossary pass:** `pointers`, `goal`, `Claim`, and
   calling a revision's number `version`. Each has a weak lean in
   [the naming sweep](../naming-sweep/pipeline.md); none is picked or dropped.
+  A pointer's `at` was held too; it became `path` on 2026-11-03.
 
 ### 7. Plan has no ask of its own
 
@@ -349,7 +353,7 @@ About 80% that the split and the shapes hold once built. The doubts:
   `factOf` in `asks/program.ts` writes it, with its problems).
 - The new name of the `PlanFacts` service.
 - Whether the naming rules for data keys also apply to a property's own words.
-- The held names: `pointers`, `goal`, `at`, `Claim`, and a revision's
+- The held names: `pointers`, `goal`, `Claim`, and a revision's
   `version`.
 
 ## Where today's code says otherwise
@@ -357,7 +361,7 @@ About 80% that the split and the shapes hold once built. The doubts:
 Nothing here is built. These parts of the code contradict a decision:
 
 - `stages/plan/plan.ts`: the `Check` type with four `how` words; `serves`;
-  the key `job`.
+  the key `job`; a `Pointer`'s `at`, which this note calls `path`.
 - `stages/plan/outcome.ts` and `machine.ts`: `ask:owner:questions` and
   `stuck:unchecked`.
 - `stages/plan/lines.ts`: a pointer's line key is `p1`, `p2`, ..., the same

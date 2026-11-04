@@ -67,8 +67,9 @@ const holding = (jobs: readonly Job[], run: string) =>
 
 /**
  * The host's jobs, with each job's record written as the table moves: `began` when tsh notes a
- * job, before its runs start, and `ended` when it leaves the table, with the worst way one of its
- * runs ended, or `stopped` when it was dropped. `host`: the name the record keeps for this host.
+ * job, before its runs start, with the job's own writer (`by`), and `ended` when it leaves the
+ * table, with the worst way one of its runs ended, or `stopped` when it was dropped, and who asked
+ * it to stop and why, if anyone did (`stop`). `host`: the name the record keeps for this host.
  * A write that fails is logged and let go: the table, and the job, go on without it.
  */
 export const keepJobs = (jobs: JobsOnHost, records: Records, host: string): JobsOnHost => {
@@ -89,10 +90,12 @@ export const keepJobs = (jobs: JobsOnHost, records: Records, host: string): Jobs
 				const job = holding(now, msg.stages[0].run);
 				if (job === undefined) return;
 				const trace = traceIdOf(job);
+				// The job's own writer, not the records' one: a line an agent typed is the agent's.
+				const by = job.by === null ? {} : {by: job.by};
 				yield* write(
 					"its start",
 					trace,
-					jobWrites(records.calls, trace).began({n: job.n, text: job.text, host, at}),
+					jobWrites(records.calls, trace).began({n: job.n, text: job.text, host, at, ...by}),
 				);
 				return;
 			}
@@ -111,7 +114,8 @@ export const keepJobs = (jobs: JobsOnHost, records: Records, host: string): Jobs
 				return;
 			}
 			ends.delete(trace);
-			yield* write("its end", trace, jobWrites(records.calls, trace).ended(how, at));
+			// Who asked it to stop, and why, as the table kept it: none for a job that ended on its own.
+			yield* write("its end", trace, jobWrites(records.calls, trace).ended(how, at, job.stop));
 		});
 	// One Msg and its record write at a time, so each sees the table as its own Msg left it.
 	const one = Semaphore.makeUnsafe(1).withPermits(1);

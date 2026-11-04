@@ -1,8 +1,9 @@
 import {type Jobs, jobNamed} from "../host/jobs.ts";
+import type {Entry} from "../program/listed.ts";
 import type {Flag, Input} from "../program/shape.ts";
-import {hasTable, own} from "./check.ts";
+import {hasTable, own, wire} from "./check.ts";
 import {choices} from "./decode.ts";
-import {ALL_WORD, BUILTINS, HELP_WORDS} from "./grammar.ts";
+import {ALL_WORD, BUILTINS, HELP_WORDS, parse} from "./grammar.ts";
 import type {ProgramList} from "./programs.ts";
 import {type Token, words} from "./words.ts";
 
@@ -16,7 +17,7 @@ import {type Token, words} from "./words.ts";
 //   complete("ship --mode read p", …)       pr=                  an input, told on the line
 //   complete("ship --h", …)                 --help               every program's help
 //   complete("ship --help ", …)             --mode pr >found …   the parts it can show whole
-//   complete("seq --to 3 | do", …)          double               after a pipe: programs only
+//   complete("seq --to 3 | ", …)            double tally         after a pipe: programs seq can feed
 //   complete("tell ", …)                    %1 tally:3f2a…       the jobs in the table
 //   complete("tell %1 ", …)                 add                  the inputs of the job's program
 //
@@ -58,9 +59,15 @@ export function complete(line: string, list: ProgramList, jobs: Jobs): Completed
 	const [head, ...rest] = args;
 
 	if (head === undefined) {
-		// The program's own name. After `|` or `$(` a built-in cannot stand.
-		const inPipe = opener?.kind === "op" && (opener.op === "|" || opener.op === "$(");
-		return {candidates: matching(typed, [...list.keys(), ...(inPipe ? [] : BUILTINS)]), word: raw};
+		// The program's own name. After `|` or `$(` a built-in cannot stand,
+		// and after `|` only a program the stage before can feed.
+		const op = opener?.kind === "op" ? opener.op : null;
+		const feeds = op === "|" ? feeding(line, before, cut, list) : null;
+		const programs = [...list.values()]
+			.filter((b) => feeds === null || canWire(feeds, b))
+			.map((b) => b.program.name);
+		const inPipe = op === "|" || op === "$(";
+		return {candidates: matching(typed, [...programs, ...(inPipe ? [] : BUILTINS)]), word: raw};
 	}
 
 	if ((BUILTINS as readonly string[]).includes(head))
@@ -126,6 +133,51 @@ export function complete(line: string, list: ProgramList, jobs: Jobs): Completed
 	const all = typed.startsWith("-") && hasTable(entry) && !given.has("all") ? [ALL_WORD] : [];
 	return {candidates: matching(typed, [...flags, ...all, ...help, ...inputs]), word: raw};
 }
+
+/** The stage before a `|`: its program, and the output it names with `>out`, if any. */
+interface Feeds {
+	readonly entry: Entry;
+	readonly out: string | null;
+}
+
+/**
+ * The stage before the `|` at `bar`, read by the grammar itself from the
+ * stage's own text. `null` when it is not one command of a program the list
+ * knows: nothing is ruled out then.
+ *
+ *   seq --to 3 |                     seq, every output
+ *   seq --to 3 >n |                  seq, n
+ *   upper text=$(say --text hi) |    upper: the `$( )` is part of the stage
+ */
+function feeding(
+	line: string,
+	tokens: readonly Token[],
+	bar: number,
+	list: ProgramList,
+): Feeds | null {
+	// Where the stage starts: back from the bar to the operator before it, a `$( )` inside the
+	// stage passed over whole.
+	let start = tokens[bar]?.start ?? 0;
+	let depth = 0;
+	for (const token of tokens.slice(0, bar).reverse()) {
+		if (token.kind === "op" && token.op === ")") depth += 1;
+		else if (token.kind === "op" && token.op === "$(" && depth > 0) depth -= 1;
+		else if (token.kind === "op" && depth === 0) break;
+		start = token.start;
+	}
+	const parsed = parse(line.slice(start, tokens[bar]?.start));
+	const [statement] = parsed.kind === "parsed" ? parsed.statements : [];
+	const [command, ...more] = statement?.kind === "run" ? statement.pipeline.commands : [];
+	const entry = command === undefined ? undefined : list.get(command.program.name);
+	if (entry === undefined || more.length > 0) return null;
+	return {entry, out: command?.out?.name ?? null};
+}
+
+/** Whether `b` can follow the `|`: `wire` wires it as typed, or once its `<in` is named. */
+const canWire = ({entry, out}: Feeds, b: Entry): boolean =>
+	[null, ...Object.keys(b.program.inputs)].some(
+		(into) => wire(entry, out, b, into).kind === "wired",
+	);
 
 /** A built-in's words: a job first, then (for tell and close) one of its program's inputs, then (for tell) values. */
 function builtinWord(

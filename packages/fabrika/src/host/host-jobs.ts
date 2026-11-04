@@ -57,6 +57,12 @@ export interface JobsOnHost {
 	 * the app hands each tile's tsh `{...jobs, owner: "t2"}`.
 	 */
 	readonly owner: Owner;
+	/**
+	 * Who that tsh writes as, as a writer's text (`user:owner`, `agent:claude for:github:7`): every
+	 * job it begins is theirs for life (./jobs.ts's `by`), and every stop it asks says them.
+	 * `openJobs` answers `null`, not known; the app hands each tile's tsh its writer.
+	 */
+	readonly by: string | null;
 }
 
 /** The host's jobs. Whoever runs a host opens them (`openJobs`) and hands them to tsh. */
@@ -83,5 +89,5 @@ export const openJobs = (storage: Storage): Effect.Effect<JobsOnHost, StoreFaile
 			...(kept ? {store: home.store(TABLE.machine, TABLE.key, Jobs)} : {}),
 		})).ready;
 		yield* table.dispatch({type: "detached", n: null}).pipe(Effect.orDie);
-		return {table, storage, kept, owner: null};
+		return {table, storage, kept, owner: null, by: null};
 	});

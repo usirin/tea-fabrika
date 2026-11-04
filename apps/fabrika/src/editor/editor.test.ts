@@ -328,7 +328,16 @@ describe("Tab", () => {
 		const run1 = {program: "counter", flags: {}, run: "counter:1a2b", wire: null, ended: false};
 		const jobs: Shell.Jobs = {
 			jobs: [
-				{n: 1, text: "counter &", stages: [run1], state: "running", background: true, owner: "t1"},
+				{
+					n: 1,
+					text: "counter &",
+					stages: [run1],
+					state: "running",
+					background: true,
+					owner: "t1",
+					by: null,
+					stop: null,
+				},
 			],
 			next: 2,
 		};

@@ -529,3 +529,91 @@ describe("what a person may write", () => {
 		expect([isSaid("ok"), isSaid("  \n "), isSaid("")]).toEqual([true, false, false]);
 	});
 });
+
+// Self-fix PR 10, Part 4: a yes binds to the diff, not the commit. Each of these exists only when it
+// happens, so it is written then: what the person saw, and what the review read.
+describe("what a yes was given on", () => {
+	const HEAD = "a".repeat(40);
+	const ONTO = "main";
+	const BASE = "b".repeat(40);
+	const DIFF = "d".repeat(40);
+	const EXAM_PR = "local:example/lane/pull/1";
+	const read = (fact: object, kind: string, writer = "agent:lane") =>
+		readRow(row({data: JSON.stringify(fact), kind, writer}));
+	const kept = (fact: object, kind: string, writer?: string) => {
+		const got = read(fact, kind, writer);
+		expect(got.kind === "entry" && got.entry.fact).toEqual(fact);
+	};
+
+	it("an ask keeps the head the person was shown", () => {
+		kept(
+			{
+				type: "asked",
+				ask: "a-exam_merge-9",
+				what: "Merge the rule changes?",
+				picks: ["merge", "no"],
+				head: HEAD,
+			},
+			"asked",
+		);
+	});
+
+	it("a review keeps its pull request, the branch it went onto, its base and its diff's id", () => {
+		kept(
+			{
+				type: "reviewed",
+				head: HEAD,
+				met: 1,
+				of: 1,
+				findings: [],
+				pr: EXAM_PR,
+				onto: ONTO,
+				base: BASE,
+				diff: DIFF,
+			},
+			"reviewed",
+		);
+	});
+
+	it("a person's merge keeps the head, branch, base and diff's id they said yes to", () => {
+		kept(
+			{
+				type: "answered",
+				ask: "a-exam_merge-9",
+				pick: "merge",
+				note: "",
+				head: HEAD,
+				onto: ONTO,
+				base: BASE,
+				diff: DIFF,
+			},
+			"answered",
+			"user:owner",
+		);
+	});
+
+	it("an exam head's checks keep its pull request, so the lane never reads them as its own", () => {
+		kept(
+			{type: "checked", head: HEAD, commands: [], result: "green", failed: [], pr: EXAM_PR},
+			"checked",
+		);
+	});
+
+	it("a carried yes is a fact of its own: from which head, to which, and why", () => {
+		for (const why of ["same_head", "replayed", "formatted", "glanced"])
+			kept({type: "carried", from: HEAD, to: "c".repeat(40), why}, "carried");
+	});
+
+	it("a carried yes is code's to write, never only a person's", () => {
+		expect(mayWrite({kind: "agent", id: "lane", for: "owner"}, "carried" as Fact["type"])).toBe(
+			true,
+		);
+		expect((WRITTEN_BY as Record<string, string>)["carried"]).toBe("anyone");
+	});
+
+	it("a carried yes to a head that is not a sha is broken", () => {
+		expect(read({type: "carried", from: HEAD, to: "main", why: "replayed"}, "carried").kind).toBe(
+			"broken",
+		);
+	});
+});

@@ -22,7 +22,14 @@ import {Duration, Effect, Layer, Option, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {codeHostOn} from "../code-host-github.ts";
 import {CodeHost} from "../services.ts";
-import {changed, HEADS, RUBRICS, recorded, recordedGh} from "../stages/review/scripted.ts";
+import {
+	changed,
+	HEADS,
+	RUBRICS,
+	RUBRICS_WORD,
+	recorded,
+	recordedGh,
+} from "../stages/review/scripted.ts";
 import type {PrFacts} from "../stages/ship/facts.ts";
 import {refOf} from "../stages/traced.ts";
 import {FABRIKA_VIEWING} from "../trace/viewing.ts";
@@ -158,7 +165,7 @@ describe("tracing: the user's job", () => {
 		const {spans, layer} = memoryTracing({viewing: FABRIKA_VIEWING});
 		const list = recordedGitHub();
 		const prs = [1, 2, 3].map((n) => `pr=${url(n)}`).join(" ");
-		const text = `review-scripted --rubrics ${RUBRICS} --model opus --effort medium --budget 1 ${prs} | ship --mode read`;
+		const text = `review-scripted --rubrics ${RUBRICS_WORD} --model opus --effort medium --budget 1 ${prs} | ship --mode read`;
 		const said = await Effect.runPromise(
 			Effect.gen(function* () {
 				const {line, started} = yield* session(list, memoryStorage());
@@ -275,7 +282,7 @@ describe("tracing: off", () => {
 	it("off as tsh runs it, the line does the same, and no OpenTelemetry tracer is there", async () => {
 		const list = recordedGitHub();
 		const prs = [1, 2, 3].map((n) => `pr=${url(n)}`).join(" ");
-		const text = `review-scripted --rubrics ${RUBRICS} --model opus --effort medium --budget 1 ${prs} | ship --mode read`;
+		const text = `review-scripted --rubrics ${RUBRICS_WORD} --model opus --effort medium --budget 1 ${prs} | ship --mode read`;
 		const {said, agent, tracer} = await Effect.runPromise(
 			Effect.gen(function* () {
 				const {line} = yield* session(list, memoryStorage());

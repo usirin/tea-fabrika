@@ -75,8 +75,21 @@ export interface JobWatch {
 	readonly ran: (run: string, ended: Ended<unknown>) => void;
 }
 
-/** Watch one tile's jobs: `tell` hears them each time they change, by `clock`'s time. */
-export const watchJobs = (clock: () => number, tell: (jobs: TileJobs) => void): JobWatch => {
+/** Each job of the tile as it begins and as it ends, once each: the host's job lines hear them (job-lines.ts). */
+export interface JobNews {
+	readonly began: (job: JobNow) => void;
+	readonly ended: (job: JobEnded) => void;
+}
+
+/**
+ * Watch one tile's jobs: `tell` hears them each time they change, by `clock`'s time, and `news`
+ * each job's begin and end.
+ */
+export const watchJobs = (
+	clock: () => number,
+	tell: (jobs: TileJobs) => void,
+	news?: JobNews,
+): JobWatch => {
 	const seen = new Map<number, Seen>();
 	const ends = new Map<string, Ended<unknown>["kind"]>();
 	let ended: JobEnded | null = null;
@@ -111,6 +124,7 @@ export const watchJobs = (clock: () => number, tell: (jobs: TileJobs) => void): 
 				at: clock(),
 				foreground: job.foreground,
 			};
+			news?.ended(ended);
 		}
 	};
 	return {
@@ -120,15 +134,22 @@ export const watchJobs = (clock: () => number, tell: (jobs: TileJobs) => void): 
 				if (job.state !== "running") continue;
 				const known = seen.get(job.n);
 				if (known === undefined || known.left) {
-					seen.set(job.n, {
+					const begun: Seen = {
 						n: job.n,
 						text: job.text,
 						runs: job.stages.map((st) => st.run),
 						since: clock(),
 						foreground: !job.background,
 						left: false,
-					});
+					};
+					seen.set(job.n, begun);
 					for (const st of job.stages) ends.delete(st.run);
+					news?.began({
+						n: begun.n,
+						text: begun.text,
+						since: begun.since,
+						foreground: begun.foreground,
+					});
 				} else known.foreground = !job.background;
 			}
 			// A job of this tile no longer running in the table has ended, or was detached as tsh

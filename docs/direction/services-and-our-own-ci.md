@@ -5,6 +5,9 @@ even one with a single Layer, and `Ci` leaves `CodeHost`** (the next section
 after the sketch). Our own machines as CI hosts are still proposed. Nothing
 here is built.
 
+Keys renamed 2026-11-03 (short words keep one meaning): a result's `at` became `head`, and its
+`for` became `digest`. Today's `check-runs.ts` still says `at`.
+
 ```ts
 // A sketch. Every edge fabrika crosses, as one Effect service. A repo picks a Layer for each.
 Ledger          // the record: facts, leases, inboxes, the tail       built (tea-host)
@@ -247,18 +250,19 @@ ledger.renew(name, fence, 60_000);                             // every 20 s whi
 ```ts
 // A sketch. Under its lease, the runner writes, and signs.
 {type: "started", job: "j-41", by: "linux-1", box: "docker+gvisor", sig: "…"}
-{type: "finished", job: "j-41", for: "sha256:<the queued fact>", asked: "a1b2c3", at: "a1b2c3",
+{type: "finished", job: "j-41", digest: "sha256:<the queued fact>", asked: "a1b2c3", head: "a1b2c3",
  state: "red", why: "failed", took: 84_000, log: "sha256:5d1e…", by: "linux-1", sig: "…"}
 
 // How the pipeline reads it: the same fold as today's local checks (check-runs.ts).
 checksAt(runs, "a1b2c3", ["test"]); // {state: "red", required: [{name: "test", state: "red"}]}
 ```
 
-- **`for` names the exact job it answers**, by the hash of the `queued` fact.
-  A result cannot be moved to another job or another commit.
-- **`at` is the commit the box's copy stood at from start to end**, read from
-  the copy, as `check-runs.ts` does today. `null` when it moved. Only `at` says
-  what the result is about.
+- **`digest` names the exact job it answers**: the hash of the `queued` fact,
+  OCI's word for a content address. A result cannot be moved to another job or
+  another commit.
+- **`head` is the commit the box's copy stood at from start to end**, read from
+  the copy, as `check-runs.ts` does today. `null` when it moved. Only `head` says
+  what the result is about. Today's `check-runs.ts` still calls it `at`.
 - **`state` is green or red; `why` says what kind of red:** `failed` (a
   command did not answer 0), `timed_out`, or `no_box` (the box would not
   start). GitHub's statuses split `failure` from `error` the same way.

@@ -16,8 +16,10 @@ import {
 	Traces,
 	tell,
 	viewOf,
+	writerText,
 } from "@kampus/fabrika-old";
 import {experimentsOnLedger} from "@kampus/pipeline/experiments/experiments";
+import {ticketsOnLedger} from "@kampus/pipeline/tickets/tickets";
 import {compare} from "@tea-fabrika/compare";
 import {counter} from "@tea-fabrika/counter";
 import {experiment} from "@tea-fabrika/experiment";
@@ -26,7 +28,6 @@ import {map} from "@tea-fabrika/map";
 import {markdown} from "@tea-fabrika/markdown";
 import {pipeline} from "@tea-fabrika/pipeline";
 import {laneRunner} from "@tea-fabrika/pipeline/node";
-import {runs} from "@tea-fabrika/runs";
 import {ticket} from "@tea-fabrika/ticket";
 import {trace} from "@tea-fabrika/trace";
 import {Author, PullRequests, tracker} from "@tea-fabrika/tracker";
@@ -34,6 +35,7 @@ import {Clock, Deferred, Effect, Layer, Queue, Stream} from "effect";
 import type {TileId} from "./desk/layout/index.ts";
 import {type EditorMsg, editor} from "./editor/editor.ts";
 import type {SharedHistory} from "./editor/history.ts";
+import type {JobLines} from "./job-lines.ts";
 import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "./messages.ts";
 import {type TileJobs, watchJobs} from "./tile-jobs.ts";
 
@@ -67,7 +69,7 @@ import {type TileJobs, watchJobs} from "./tile-jobs.ts";
 //     then tsh's line closes, and tsh ends. `ended` says when.
 //
 // Which programs tsh comes with is fixed here for now: the small ones, the counter, the tracker,
-// one ticket's three windows: `ticket`, `map` and `runs`, and `trace`, one job's record. Every
+// one ticket's windows: `ticket` and `map`, and `trace`, one job's record or one ticket's lanes. Every
 // run is seen as it starts (`seenBy`), so `close` can reach it. A run of one with a view is drawn: it tells its tile, shows the view its data on each change, and reads
 // what the view sends by that program's inputs. Whether the run is in the foreground is read off
 // the host's job table, which tsh writes before the run starts, and again when `attach` moves it.
@@ -82,11 +84,15 @@ import {type TileJobs, watchJobs} from "./tile-jobs.ts";
 // tsh, not running": each tile's tsh says so of its own only, and `attach %n` in any tile starts
 // one again where it left off, with its view.
 //
+// The host's job lines (`lines`, job-lines.ts), when it is handed them, hear each line tsh printed
+// for a job, by the job's `%n`, and each of this tile's jobs as it begins and ends: what the
+// agents' `job` tool reads, and the host's log says.
+//
 // tsh's own run stays in memory, on purpose, as in the terminal: what outlives one tsh is the
 // host's table, not its run.
 //
 // The ledger: it is handed one, as the `Ledger` service, and gives it to the four that read
-// tickets. The host
+// tickets: the tracker, the ticket, the map and the trace. The host
 // process hands it its home's ledger (host/connection.ts); a test hands it memory. The tracker
 // writes as the `Author` it is handed: the host's, which is the person its ledger's door let in,
 // or the owner on a home's own file. It is handed the tracker's
@@ -179,12 +185,13 @@ export const SCREEN_KEPT = 256 * 1024;
 export const RESET = "\x1bc";
 
 /**
- * The app's own programs: the counter, the four that read tickets (the tracker, and one
- * ticket's page, map and runs), packed to write as `author`: a tile's tsh lists
+ * The app's own programs: the counter, the three that read and write tickets (the tracker, and
+ * one ticket's page and map), packed to write as `author`: a tile's tsh lists
  * them as the person, and the agents' socket as each agent (host/serve.ts). Who writes is only
  * ever the `author` handed here. And `trace`, one job's record, read through the `traces` handed
  * here: the host's own records of its jobs (host/run.ts), so `seq --to 3 | tally | trace` shows
- * that line's job as it goes. The three that read experiments (the list, one experiment, two runs
+ * that line's job as it goes; or one ticket's lanes, its facts read on the same ledger and each
+ * lane's record through `traces` (`tracker | trace`). The three that read experiments (the list, one experiment, two runs
  * compared), on the same ledger, read-only, and `markdown`, which draws what it is told
  * (experiment 170). `pipeline`, which runs one ticket's lane for `author`, on the host's home
  * (experiment 175).
@@ -206,9 +213,14 @@ export const appPrograms = (
 		listed(tracker, tickets),
 		listed(ticket, tickets),
 		listed(map, tickets),
-		listed(runs, tickets),
 		listed(pipeline, Layer.provide(laneRunner(author), Layer.succeed(Ledger, ledger))),
-		listed(trace, Layer.succeed(Traces, traces)),
+		listed(
+			trace,
+			Layer.mergeAll(
+				Layer.succeed(Traces, traces),
+				ticketsOnLedger(author).pipe(Layer.provide(Layer.succeed(Ledger, ledger))),
+			),
+		),
 		listed(experiments, read),
 		listed(experiment, read),
 		listed(compare, read),
@@ -298,13 +310,17 @@ export const startTsh = (options: {
 	readonly history: SharedHistory;
 	readonly runs: Runs;
 	readonly words: readonly Entry[];
+	/** The host's job lines, told what tsh prints for each job and this tile's begins and ends. */
+	readonly lines?: JobLines | undefined;
 }) =>
 	Effect.gen(function* () {
 		const {tile, history, runs, words} = options;
-		const jobs: JobsOnHost = {...options.jobs, owner: tile};
+		const jobLines = options.lines;
 		const scope = yield* Effect.scope;
 		const ledger = yield* Ledger;
 		const author = yield* Author;
+		// Every job this tsh begins is the tile's, and its writer's: the person at this tile.
+		const jobs: JobsOnHost = {...options.jobs, owner: tile, by: writerText(author)};
 		const pullRequests = yield* PullRequests;
 		const traces = yield* Traces;
 		/** Its scope is closing: the tile closes or the host stops, and every run stops with it. */
@@ -323,7 +339,7 @@ export const startTsh = (options: {
 		const shownMine = {has: (run: string) => mine.has(run) || calls.has(run)};
 		/** This tile's jobs, with when each began and how the last one ended, told to the tile. */
 		const clock = yield* Clock.Clock;
-		const watch = watchJobs(() => clock.currentTimeMillisUnsafe(), runs.jobs);
+		const watch = watchJobs(() => clock.currentTimeMillisUnsafe(), runs.jobs, jobLines?.news(tile));
 		/**
 		 * Msgs to the host's table for each of this tile's jobs in `state`, one after another, as tsh
 		 * sends them. The table says which are the tile's, so a job an earlier host ran in this tile
@@ -469,7 +485,10 @@ export const startTsh = (options: {
 			Shell.tsh,
 			{show: "short"},
 			{
-				printed: (p) => toEditor({type: "printed", text: p.text}),
+				printed: (p) => {
+					if (p.n !== undefined) jobLines?.printed(p.n, p.text);
+					toEditor({type: "printed", text: p.text});
+				},
 				table: (table) => toEditor({type: "table", table}),
 				ready: () => toEditor({type: "ready"}),
 			},

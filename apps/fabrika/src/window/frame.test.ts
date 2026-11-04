@@ -69,9 +69,9 @@ const TABLE = BINDINGS.map((b) => ({
 const SHAPES = new Map([
 	["tracker", {takes: [], sends: ["ticket"]}],
 	["ticket", {takes: ["ticket"], sends: ["ticket"]}],
-	["runs", {takes: ["ticket"], sends: ["run"]}],
+	["trace", {takes: ["ticket"], sends: []}],
 ]);
-/** `tracker | ticket | runs` typed in t1, its windows in t2 and t3, t2 focused, showing #7. */
+/** `tracker | ticket | trace` typed in t1, its windows in t2 and t3, t2 focused, showing #7. */
 const lined = fold([
 	{
 		type: "covered",
@@ -79,7 +79,7 @@ const lined = fold([
 		runs: [
 			{id: "tracker:1", program: "tracker"},
 			{id: "ticket:1", program: "ticket"},
-			{id: "runs:1", program: "runs"},
+			{id: "trace:1", program: "trace"},
 		],
 	},
 	{type: "click", tile: "t2"},
@@ -202,7 +202,7 @@ describe("the top bar", () => {
 		expect(lineIn(ws)).toEqual([
 			{program: "tracker", tile: "t1", focused: false},
 			{program: "ticket", tile: "t2", focused: true},
-			{program: "runs", tile: "t3", focused: false},
+			{program: "trace", tile: "t3", focused: false},
 		]);
 		const plain = fold([]);
 		expect(workspaceName(activeOf(plain), SHOWN)).toBe("tsh");
@@ -290,7 +290,7 @@ describe("the top bar", () => {
 describe("the bottom line and the asks list", () => {
 	it("says the focused tile, what it takes and sends, and its neighbors", () => {
 		expect(hereWord(lined, SHAPES, SHOWN)).toBe(
-			"t2 ticket #7 · takes ticket · sends ticket · from tracker → runs",
+			"t2 ticket #7 · takes ticket · sends ticket · from tracker → trace",
 		);
 		expect(hereWord(fold([]), SHAPES, SHOWN)).toBe("t1 tsh");
 	});

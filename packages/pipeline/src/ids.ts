@@ -69,8 +69,12 @@ export const PLAN = "plan" as const;
 export const Owner = Schema.Union([TaskId, Schema.Literal(PLAN)]);
 export type Owner = typeof Owner.Type;
 
-/** A criterion: `c1`, `c2`, ... Only the book gives one (`added`); a place in a list never is one. */
-export const CriterionId = Id("CriterionId", /^c[1-9][0-9]*$/);
+/**
+ * A criterion: `c1`, `c2`, ... Only the book gives one (`added`); a place in a list never is one. An
+ * exam pull request's own are `e1`, `e2`, ...: code makes them from the plan's rule changes, in the
+ * plan's order, and no book holds them (self-fix PR 10, stages/pipeline/exam-pull.ts).
+ */
+export const CriterionId = Id("CriterionId", /^[ce][1-9][0-9]*$/);
 export type CriterionId = typeof CriterionId.Type;
 /** An id from its text, as a person or a log wrote it. Throws on anything the book could not have given. */
 export const criterionId = make(CriterionId);

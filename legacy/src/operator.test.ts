@@ -1,4 +1,4 @@
-import {applyCell} from "@demlik/tea";
+import {applyCell, type UnfencedStore} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {memoryStore} from "@demlik/tea/mem";
 import type {Reply} from "@kampus/pipeline/combos";
@@ -63,7 +63,7 @@ function runOn(
 	first: OperatorMsg,
 	o: {
 		until?: (s: Operator) => boolean;
-		store?: ReturnType<typeof memoryStore<Operator>>;
+		store?: UnfencedStore<Operator>;
 		jev?: readonly unknown[];
 		handlers?: Partial<Handlers>;
 	} = {},

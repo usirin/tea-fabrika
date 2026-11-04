@@ -6,9 +6,9 @@ ticket 117 is the first try.** The program's own reference is
 [`programs/pipeline/README.md`](../../programs/pipeline/README.md).
 
 ```text
-tsh> pipeline --ticket 117 | runs     start it: one row per run as it goes
+tsh> pipeline --ticket 117 | trace    start it: one row per step as it goes
 tsh> map --ticket 117                 another tile: the steps light up
-tsh> runs --ticket 117 | trace        pick a run, see its turns
+tsh> trace --ticket 117               another tile: open a step, see its spans
 tsh> ticket --ticket 117              the questions, answered here
 ```
 
@@ -44,11 +44,14 @@ An agent goes through this list and tells the owner what is missing.
    proved way to read that row without typing in the owner's app. The app's MCP tools might give one, and
    nobody has checked. The lane makes the same check when it starts. If the ticket is not theirs, it ends
    `stuck:not_yours` before any agent starts.
-6. **No other merges to main during the run.** A commit on main before a pinned merge (a merge that names
-   the main it read) sends the lane back, and that is final. The agent preparing the run tells the owner
-   and any other agent session that pushes to main.
+6. **Few other merges to main during the run.** A commit on main before a pinned merge (a merge that
+   names the main it read) costs one more pass. The lane merges main into its branch, runs the checks,
+   pushes that head and runs ship again, with no agent and no new round. A second commit that lands
+   right after that stops the lane `stuck: step_stuck`, and typing the line again goes on. The agent
+   preparing the run tells the owner and any other agent session that pushes to main.
 7. **Main has no branch rule, ruleset or CODEOWNERS that blocks the merge.** A rule that wants a review
-   ends ship `stuck: merge_failed`. This one has none as of 2026-11-01. To check:
+   ends ship `stuck: merge_failed`. The lane runs ship once more, then stops `stuck: step_stuck`. This
+   one has none as of 2026-11-01. To check:
 
    ```sh
    gh api repos/<owner>/<repo>/rules/branches/main --jq length   # 0: no rule applies to main
@@ -99,7 +102,8 @@ An agent goes through this list and tells the owner what is missing.
 ## The steps
 
 ```text
-triage -> plan -> the person approves -> exam, when rules change -> test writer
+triage -> plan -> the person approves -> exam, when rules change -> the exam's review
+       -> the person's yes on the rule changes -> their merge -> test writer
        -> build -> mutation -> one review -> push -> the person's yes -> merge
 ```
 
@@ -110,20 +114,21 @@ Every step answers in the same five verbs, and the lane does too:
 | `done` | The step finished, and the lane goes on. For the lane: merged, or triage closed the ticket. |
 | `send` | It goes to someone else, such as back to the builder. |
 | `ask` | It waits for a person. Answer in the `ticket` window. |
-| `skip` | Nothing more to do, on someone's decision: `closed`, `owner_no`, `research`. |
+| `skip` | Nothing more to do, on someone's decision: `closed`, `owner_no`, `research`, or `claimed` (another lane holds the ticket). |
 | `stuck` | It stopped and did not guess. The word after it says why. |
 
-The lane asks a person seven kinds of question (`packages/pipeline/src/stages/pipeline/machine.ts`):
+The lane asks a person eight kinds of question (`packages/pipeline/src/stages/pipeline/routes.ts`):
 
 | Ask | What it is about |
 |---|---|
 | `approve` | The plan. Open questions in the plan are read here too. |
-| `exam_merge` | The exam's own pull request is open, and rules are the person's call. |
+| `exam_merge` | The exam's own pull request is open and its review passed, and rules are the person's call. The question says what the review met, and the head the checks passed at. |
 | `merge` | The merge yes, after the push. |
 | `step` | A step ended on `ask`, and it may be run again. |
 | `rounds_spent` | Review sent the build back too many times. `again` runs one more round; `stop` pauses. |
 | `exam_touched` | The builder changed the test writer's files. `builder_wrong` puts them back on the builder's work and runs the build there; `test_wrong` has the test writer write only them again, then the build goes on. Either adds one round to the bound. |
 | `exam_conflict` | Main changed the test writer's files while the lane was stopped. `again` runs the test writer, then the build; `stop` pauses. |
+| `spend` | A step spent the limit it was given. The cost so far is beside the question. `more` runs the step again; `stop` pauses there. |
 
 ## When a lane is stuck
 
@@ -132,12 +137,27 @@ claims the ticket again, reads the ticket and main fresh, and runs no step that 
 Only `done`, a `skip`, `stuck: not_yours` and `stuck: merged_elsewhere` are final: on those, typing the line again says how it
 ended and runs nothing.
 
+**Most of a step's outcomes do not stop the lane.** Each one has a row in
+`packages/pipeline/src/stages/pipeline/routes.ts`. The row sends the work to the step that can fix
+it, runs the same step once more, reads main or the ticket fresh, asks a person, stops or ends. For
+example:
+
+- Ship's `behind` at the merge: main is merged in, the checks run, the head is pushed, and ship runs
+  again. Red checks there send the build round again.
+- Ship's `no_review` at the merge: the review runs again, in the same round.
+- A `once` row, such as ship's `merge_failed`: the step runs once more. The same word twice in a row
+  stops the lane `stuck: step_stuck`.
+- A step's `closed`: the lane reads the ticket. Still closed, it ends `skip: closed`. Open again, it
+  pauses `ask: owner: paused` at that step.
+
+A read that fails still stops the lane at once. Waiting on a service comes in self-fix PR 11b.
+
 Stuck words come at two levels. The ticket shows both.
 
 | Level | Words | Where |
 |---|---|---|
 | The lane, ten words | `not_yours`, `no_ticket`, `claim_held`, `step_failed`, `step_stuck`, `rounds_spent`, `sent_back`, `checks_not_run`, `checks_red`, `merged_elsewhere` | `stages/pipeline/outcome.ts` |
-| One step, under a lane's `step_stuck` | Such as `checks_stuck`, `merge_failed`, `merge_unknown` (ship) | That step's own outcome, in the line it printed |
+| One step, under a lane's `step_stuck` | A step's own word whose row stops, or a `once` word twice in a row, such as ship's `checks_stuck`, `merge_failed`, `merge_unknown` | That step's own outcome, in the line it printed |
 
 A person's `no` or `stop` is a pause, not an end: the line ends `ask: owner: paused` (a `stop` on the
 spent rounds ends `stuck: rounds_spent`), and the same line goes on where the pick goes.
@@ -150,8 +170,8 @@ spent rounds ends `stuck: rounds_spent`), and the same line goes on where the pi
 3. If main changed a file the lane also changed, main's side stands. A test writer's file asks you
    `exam_conflict`, and so does a test whose check no longer holds on main: `again` has the test
    writer write only those files again, then the build goes on. Any other file sends the build round
-   again. A pull request already pushed takes main in by a merge, and its new head is reviewed and
-   pushed again before the merge question.
+   again. A pull request already pushed takes main in by a merge. Its new head is pushed again before
+   the merge question, after a fresh review if the old one does not stand there.
 4. **Inside a live run nothing but ship merges.** If the lane cannot go on, what is left is a by-hand
    change, under [the by-hand rule](../plan/README.md#how-a-change-lands): the owner's yes, green CI,
    and an agent merges after a leak grep. The other choice is a new ticket. Say exactly what is left:

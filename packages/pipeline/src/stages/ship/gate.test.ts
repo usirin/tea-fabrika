@@ -219,6 +219,56 @@ describe("the ship gate, line by line", () => {
 	});
 });
 
+// Self-fix PR 10, Part 4 (docs/direction/a-yes-binds-to-the-diff.md). The facts read names each head
+// the rows were carried from to this one: code found the diff they judged still stands here (a
+// `carried` fact). Those rows count at this head, and `other_head` now means "no row carried here".
+// On ticket 117 a format-only commit moved the exam's head, and this line sent it to a reviewer.
+describe("the ship gate, when the head moved and the rows were carried", () => {
+	it("goes on rows judged at the old head, when they were carried to this one", () => {
+		const go = shipGate(facts({verdicts: OTHER_HEAD, carried: [{from: "0ld0000", to: "abc1234"}]}));
+		expect(go).toMatchObject({answer: "go", ready: {pr: PR, head: "abc1234"}, landing: "whole"});
+	});
+
+	it("still owes a review when the rows were carried to another head, or from this one", () => {
+		for (const carried of [
+			[],
+			[{from: "0ld0000", to: "fff0000"}],
+			[{from: "abc1234", to: "0ld0000"}],
+		])
+			expect(outcomeOf({verdicts: OTHER_HEAD, carried})).toEqual({
+				kind: "send",
+				to: "reviewer",
+				why: "no_review",
+			});
+	});
+
+	it("a carried fail is still a fail, and a carried row on old words is still old", () => {
+		const hop = [{from: "0ld0000", to: "abc1234"}];
+		expect(
+			outcomeOf({
+				verdicts: filed([rowOn(C1, "0ld0000"), rowOn(C2, "0ld0000", "fail")]),
+				carried: hop,
+			}),
+		).toEqual({kind: "send", to: "builder", why: "review_failed"});
+		expect(
+			outcomeOf({
+				verdicts: filed([rowOn(C1, "0ld0000"), rowOn(C2, "0ld0000", "pass", 1)]),
+				carried: hop,
+			}),
+		).toEqual({kind: "send", to: "reviewer", why: "no_review"});
+	});
+
+	it("never stands in for the checks: they are read at this head, carried rows or not", () => {
+		const carried = [{from: "0ld0000", to: "abc1234"}];
+		expect(outcomeOf({verdicts: OTHER_HEAD, carried, checks: "red"})).toEqual({
+			kind: "send",
+			to: "builder",
+			why: "checks_red",
+		});
+		expect(outcomeOf({verdicts: OTHER_HEAD, carried, checks: "pending"})).toBe("wait_for_checks");
+	});
+});
+
 describe("the order of the lines", () => {
 	it("an earlier line wins over every later one", () => {
 		const checked: string[] = [];

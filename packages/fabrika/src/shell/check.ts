@@ -32,7 +32,7 @@ import type {At} from "./words.ts";
 //   tally | trace               tally's outputs fit no typed input of trace, and trace's `any`
 //                               takes any value (`anyInput`): wired total → any, tally's first
 //                               output, as a Unix pipe carries stdout and not stderr
-//   runs | trace                runs' id fits trace's input id: a typed fit wins over `any`
+//   tracker | trace             tracker's ticket fits trace's input ticket: a typed fit wins over `any`
 //   ship --mdoe read            refused at --mdoe: ship has no flag --mdoe. Did you mean --mode?
 
 /** Where a value comes from: the line, or the output of a `$( )` that runs first. */
@@ -272,8 +272,49 @@ export const fedBy = (program: Entry["program"], list: readonly Entry[]): readon
 function wireOf(from: Command, a: Entry, to: Command, b: Entry, bar: At) {
 	const outs = namedOr(from.out, a.program.outputs, a.program.name, "output");
 	const ins = namedOr(to.into, b.program.inputs, b.program.name, "input");
-	const pairs = outs.flatMap((output) =>
-		ins.map((input) => ({
+	const wired = wire(a, from.out?.name ?? null, b, to.into?.name ?? null);
+	if (wired.kind === "wired") return {output: wired.output, input: wired.input};
+	const show = (program: Entry["program"], kind: "outputs" | "inputs", names: readonly string[]) =>
+		names.map((n) => `${n}: ${typeOf(program[kind][n].shape.json)}`).join("; ");
+	if (wired.kind === "several")
+		return stop(
+			no(
+				bar.start,
+				`more than one way to wire ${a.program.name} into ${b.program.name}: ${wired.ways.map((p) => `${p.output} → ${p.input}`).join(", ")}. Name one with >output or <input`,
+			),
+		);
+	return stop(
+		no(
+			bar.start,
+			`does not fit: ${a.program.name}'s ${from.out === null ? "outputs" : "output"} (${show(a.program, "outputs", outs)}) fit no ${to.into === null ? "input" : "such input"} of ${b.program.name} (${show(b.program, "inputs", ins)}). Nothing was started`,
+		),
+	);
+}
+
+/** How a pipe from `a` into `b` is wired: one way, more than one, or none. */
+export type Wired =
+	| {readonly kind: "wired"; readonly output: string; readonly input: string}
+	| {
+			readonly kind: "several";
+			readonly ways: readonly {readonly output: string; readonly input: string}[];
+	  }
+	| {readonly kind: "none"};
+
+/**
+ * The one rule a pipe is wired by, for the checker and for Tab completion. `out` and `into` are
+ * the names given with `>out` and `<in`, or `null` for every one declared; a name not declared
+ * wires nothing.
+ *
+ *   wire(seq, null, double, null)    wired n → n
+ *   wire(seq, null, upper, null)     none
+ */
+export function wire(a: Entry, out: string | null, b: Entry, into: string | null): Wired {
+	const pick = (declared: Readonly<Record<string, unknown>>, name: string | null) => {
+		const all = Object.keys(declared);
+		return name === null ? all : all.filter((n) => n === name);
+	};
+	const pairs = pick(a.program.outputs, out).flatMap((output) =>
+		pick(b.program.inputs, into).map((input) => ({
 			output,
 			input,
 			fit: fit(a.program.outputs[output], b.program.inputs[input]),
@@ -284,29 +325,16 @@ function wireOf(from: Command, a: Entry, to: Command, b: Entry, bar: At) {
 	const typed = pairs.filter((p) => p.fit === "fits");
 	const fitting =
 		typed.length > 0 ? typed : firstOutput(pairs.filter((p) => p.fit === "takes_any"));
-	const named = from.out !== null && to.into !== null;
+	const named = out !== null && into !== null;
 	const chosen =
 		fitting.length === 1
 			? fitting[0]
 			: named && pairs[0]?.fit === "cannot_tell"
 				? pairs[0]
 				: undefined;
-	if (chosen !== undefined) return {output: chosen.output, input: chosen.input};
-	const show = (program: Entry["program"], kind: "outputs" | "inputs", names: readonly string[]) =>
-		names.map((n) => `${n}: ${typeOf(program[kind][n].shape.json)}`).join("; ");
-	if (fitting.length > 1)
-		return stop(
-			no(
-				bar.start,
-				`more than one way to wire ${a.program.name} into ${b.program.name}: ${fitting.map((p) => `${p.output} → ${p.input}`).join(", ")}. Name one with >output or <input`,
-			),
-		);
-	return stop(
-		no(
-			bar.start,
-			`does not fit: ${a.program.name}'s ${from.out === null ? "outputs" : "output"} (${show(a.program, "outputs", outs)}) fit no ${to.into === null ? "input" : "such input"} of ${b.program.name} (${show(b.program, "inputs", ins)}). Nothing was started`,
-		),
-	);
+	if (chosen !== undefined) return {kind: "wired", output: chosen.output, input: chosen.input};
+	if (fitting.length > 1) return {kind: "several", ways: fitting};
+	return {kind: "none"};
 }
 
 /**

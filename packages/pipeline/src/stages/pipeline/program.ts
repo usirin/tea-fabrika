@@ -33,7 +33,7 @@ import {examTouched} from "../build/check.ts";
 import type {Built} from "../build/form.ts";
 import {buildKind as buildStage, buildToTheEnd} from "../build/program.ts";
 import type {Item} from "../build/ticket.ts";
-import {ruleFiles} from "../exam/machine.ts";
+import {type RedoOn, ruleFiles} from "../exam/machine.ts";
 import {examChild, examToTheEnd} from "../exam/program.ts";
 import {MAX_MUTANTS} from "../mutation/machine.ts";
 import {mutationChild, mutationToTheEnd} from "../mutation/program.ts";
@@ -43,6 +43,7 @@ import {nameOf} from "../outcome.ts";
 import {revisionOfDraft} from "../plan/plan.ts";
 import {planKind as planStage, planToTheEnd} from "../plan/program.ts";
 import {planMarkdown, questionLines} from "../plan/render.ts";
+import type {PushAsk} from "../push/machine.ts";
 import {pushChild, pushToTheEnd} from "../push/program.ts";
 import {reviewReadInterpret, reviewSubscribe} from "../review/handlers.ts";
 import {Review, review} from "../review/machine.ts";
@@ -61,10 +62,12 @@ import {
 	testsToTheEnd,
 } from "../test-writer/program.ts";
 import {DEFAULT_INCLUDES, includedBy} from "../test-writer/written.ts";
-import {reviewDrawing, shipDrawing} from "../traced.ts";
+import {answerTags, LANE, reviewDrawing, shipDrawing, stepTags} from "../traced.ts";
 import {LaneNow, pickedFor, type Picked, priceOf, stepStarted} from "./agents.ts";
 import {fenced, listed, loadBrief, type Brief} from "./briefs.ts";
+import type {Carried as Said} from "./carry.ts";
 import {CheckRunner} from "./checks.ts";
+import {examReady, folderWords, sentBack} from "./exam-pull.ts";
 import {formatExam} from "./format.ts";
 import {
 	againstWords,
@@ -87,6 +90,7 @@ import {type Inputs, keyOf} from "./key.ts";
 import {leaveBehind} from "./leave.ts";
 import {
 	afterBuild,
+	type AnswerWait,
 	askedFor,
 	type askPerson,
 	type Carry,
@@ -104,7 +108,7 @@ import {
 	type StepEnd,
 } from "./machine.ts";
 import {FINAL, isEnd, LANE_NAMES} from "./outcome.ts";
-import {LaneWatch} from "./pulls.ts";
+import {carriedAt, examTarget, LanePulls, LaneWatch, PullWire, standsAt} from "./pulls.ts";
 import {fold, seenOf} from "./restart.ts";
 import {endTalk} from "./talk.ts";
 import {LaneHome, LaneWork} from "./work.ts";
@@ -369,8 +373,115 @@ const putOnMain = (cmd: ReturnType<typeof freshMain>, onto: string) =>
 				.pipe(Effect.ignore);
 			return answer({_tag: "exam_conflict", files: off, carry: {...moved, touched: off}});
 		}
-		return answer({_tag: pushed ? "merged" : "fresh", carry: moved});
+		if (pr === null) return answer({_tag: "fresh", carry: moved});
+		// What the review judged, at the merged head: kept, and it stands there; else it reads it again.
+		return answer({_tag: "merged", carry: moved, review: yield* reviewAt(number, pr, put.head)});
 	});
+
+/**
+ * A route's fresh read (jidoka row 62): the head with main merged in goes through the push stage once
+ * its checks are green and the review stands there, as the push step would put it there, since the
+ * step the route runs next is ship, and ship merges only what the pull request holds. A restart's
+ * read, the guard's, or one where the review does not stand pushes nothing: the push step runs after
+ * it. A push that does not end done fails the read.
+ */
+const pushedIfRouted = <F extends Found>(
+	refs: Stages["machines"]["push"],
+	cmd: ReturnType<typeof freshMain>,
+	ticket: {readonly title: string},
+	found: F,
+	green: boolean,
+) =>
+	Effect.gen(function* () {
+		const head = found.carry?.head;
+		if (cmd.routed !== true || found._tag !== "merged" || !green) return found;
+		// Where the review does not stand, it reads the head first: the push would post its old
+		// verdicts at a head it never judged. The push step puts the head there after (`freshAt`).
+		if (found.review._tag !== "kept") return found;
+		if (head === undefined || head === null) return found;
+		const {repo} = yield* (yield* LaneWork).origin;
+		const carry: Carry = {...cmd.carry, ...found.carry};
+		const on = {url: ticketUrlOf(repo, cmd.number), number: cmd.number, title: ticket.title};
+		const outcome = yield* pushedBy(refs, cmd.intent, `${cmd.intent}/pushed`, {
+			ask: pushAsk(on, head, carry),
+			base: carry.base ?? head,
+		});
+		if (outcome.kind !== "done")
+			return yield* Effect.fail({
+				_tag: "unknown",
+				says: `the head with main in it was not pushed: ${nameOf(outcome)}`,
+			});
+		return found;
+	});
+
+/** What the push stage is asked for `head`: the pull request's words, from what the carry says. Pure. */
+const pushAsk = (
+	ticket: {readonly url: string; readonly number: number; readonly title: string},
+	head: string,
+	carry: Carry,
+): PushAsk => {
+	const passed = [...untestedWords(carry.untested ?? []), ...throughWords(carry.through)];
+	return {
+		ticket: ticket.url,
+		number: ticket.number,
+		head,
+		title: ticket.title,
+		// Named in words: this text must not close a number on the code host. Nor may an agent's.
+		body: saidOf(
+			[
+				`From tracker ticket ${ticket.number}.`,
+				"",
+				inert(carry.plan?.summary ?? ""),
+				"",
+				// "No deviations" would read as all clear, beside what a person let through.
+				...(carry.deviations.length > 0
+					? [listed(carry.deviations.map(inert))]
+					: passed.length === 0
+						? ["No deviations."]
+						: []),
+				...((carry.left ?? []).length === 0
+					? []
+					: ["", "What the builder could not do:", listed((carry.left ?? []).map(inert))]),
+				...(passed.length === 0 ? [] : ["", ...passed]),
+			].join("\n"),
+		),
+		posts: carry.posts,
+	};
+};
+
+/**
+ * `ask.head` put on the remote by the push stage, under `intent`: the branch, the pull request, and
+ * the review's verdicts on it. Done: the ticket says what was pushed since `base`, under `key`, and
+ * the lane watches the pull request.
+ */
+const pushedBy = (
+	refs: Stages["machines"]["push"],
+	intent: string,
+	key: string,
+	{ask, base}: {readonly ask: PushAsk; readonly base: string},
+) =>
+	Effect.gen(function* () {
+		const end = yield* pushToTheEnd(refs, intent, ask);
+		if (end.outcome.kind !== "done") return end.outcome;
+		yield* (yield* Tickets).write(ask.number, key, {
+			type: "pushed",
+			head: ask.head,
+			commits: yield* (yield* LaneWork).commits(base, ask.head),
+		});
+		yield* (yield* LaneWatch).look(ask.number, end.outcome.pr);
+		return end.outcome;
+	});
+
+/**
+ * What `carry` says of the verdicts posted on `pr` at `head`, with the `carried` fact for a kept one.
+ * None posted with what they judged (a lane from before), or a read that broke: stale, as before.
+ */
+const reviewAt = (number: number, pr: string, head: string) =>
+	Effect.gen(function* () {
+		const pull = yield* (yield* LanePulls).find(pr);
+		if (pull.posted === undefined) return {_tag: "stale"} as const;
+		return yield* carriedAt(number, pull.posted, head);
+	}).pipe(Effect.orElseSucceed((): Said => ({_tag: "stale"})));
 
 /**
  * The files of the test writer's tests that, run on `commit`, no longer do what the plan's Properties
@@ -399,6 +510,17 @@ interface Redo {
 	readonly files: readonly string[];
 	readonly written: NonNullable<Carry["written"]>;
 }
+
+/**
+ * Where a test writer adds its tests: main in round 1, and the head from round 2 on. One sent back
+ * while its own commit is still the head starts where that commit did, so its own files are never
+ * ones that exist already (jidoka row 28). `null`: no head to add tests on. Pure.
+ */
+const testsBase = (carry: Carry, round: number, main: string): string | null => {
+	if (round === 1) return main;
+	const {wrote, head} = carry;
+	return wrote !== undefined && wrote.commit === head ? wrote.base : head;
+};
 
 /** The redo `carry` holds, if any. Pure. */
 const redoOf = (carry: Carry): Redo | null => {
@@ -498,6 +620,8 @@ const AGENT_STEPS: Partial<
 	mutants: {step: "test_writer", brief: "test-writer-mutants.md"},
 	build: {step: "build", brief: "build.md"},
 	review: {step: "review", brief: "review.md"},
+	// The exam's pull request gets the same review, with the same brief, over its own criteria.
+	exam_review: {step: "review", brief: "review.md"},
 };
 
 type Carried = ReturnType<typeof runStep>;
@@ -603,11 +727,13 @@ const propertiesOf = (carry: Carry, round: number) => {
  * Code's own `[build] checks` at `head`, after a build (self-fix PR 4), and what the ticket keeps of
  * them: the `checked` fact, and on red, a comment with each failing test by name and the first lines
  * of why. Both exist only now. The carry gets `checked`; the run's own words come back beside it.
- * `at.run`: the ids the facts go under, a step's run or a restart's fresh read of main.
+ * `at.run`: the ids the facts go under, a step's run or a restart's fresh read of main. `pr`: the pull
+ * request whose head it is, when that is not the lane's own (the exam's).
  */
 const recordChecks = (
 	at: Pick<At, "run"> & {readonly cmd: {readonly number: number}},
 	head: string,
+	pr?: string,
 ) =>
 	Effect.gen(function* () {
 		const tickets = yield* Tickets;
@@ -618,7 +744,11 @@ const recordChecks = (
 			result: ran.result,
 			failed: ran.failed.slice(0, FAILED_MOST),
 		};
-		yield* tickets.write(at.cmd.number, `${at.run}/checked`, {type: "checked", ...checked});
+		yield* tickets.write(at.cmd.number, `${at.run}/checked`, {
+			type: "checked",
+			...checked,
+			...(pr === undefined ? {} : {pr}),
+		});
 		if (ran.result === "red")
 			yield* tickets
 				.talk(at.cmd.number, `${at.run}/red`, {
@@ -632,6 +762,20 @@ const recordChecks = (
 /** Why the checks could not run at a head, in words for the ticket. Pure. */
 const notRunWords = (head: string, tail: string) =>
 	`The checks could not run at ${head}, so nothing says whether this work holds.${tail === "" ? "" : ` ${inert(tail)}`}`;
+
+/**
+ * Code's checks at `head`, for the carry: on red, each failing test is open too, so the builder the
+ * red goes back to is told them by name (self-fix PR 3).
+ */
+const checkedWithRed = (at: At, head: string) =>
+	Effect.gen(function* () {
+		const {checked, ran} = yield* recordChecks(at, head);
+		const carry =
+			checked.result === "red"
+				? {checked, open: withRed(at.cmd.carry.open, ran.failed, ran.tail)}
+				: {checked};
+		return {checked, ran, carry};
+	});
 
 /**
  * A later round whose builder changed nothing, by what code's checks say at the head.
@@ -649,8 +793,8 @@ const nothingChanged = (at: At, kept: StepEnd["carry"], says: string, moved: boo
 	Effect.gen(function* () {
 		const {round} = at.cmd;
 		const head = yield* need(kept.head, "no head to run the checks at");
-		const {checked, ran} = yield* recordChecks(at, head);
-		const carry = {...kept, checked};
+		const {checked, ran, carry: checks} = yield* checkedWithRed(at, head);
+		const carry = {...kept, ...checks};
 		if (checked.result === "not_run")
 			return ended({kind: "stuck", why: "checks_not_run"}, carry, [
 				`The builder changed nothing. ${notRunWords(head, ran.tail)} ${says}`,
@@ -677,18 +821,14 @@ const nothingChanged = (at: At, kept: StepEnd["carry"], says: string, moved: boo
 const builtAndChecked = (at: At, built: BodyEnd) =>
 	Effect.gen(function* () {
 		const head = yield* need(built.carry.head, "no head to run the checks at");
-		const {checked, ran} = yield* recordChecks(at, head);
-		const carry = {...built.carry, checked};
+		const {checked, ran, carry: checks} = yield* checkedWithRed(at, head);
+		const carry = {...built.carry, ...checks};
 		switch (checked.result) {
 			case "green":
 				return {...built, carry};
 			case "red":
 				return {
-					...ended(
-						{kind: "send", to: "builder", why: "checks_red"},
-						{...carry, open: withRed(at.cmd.carry.open, ran.failed, ran.tail)},
-						built.problems,
-					),
+					...ended({kind: "send", to: "builder", why: "checks_red"}, carry, built.problems),
 					failed: checked.failed,
 				};
 			case "not_run":
@@ -802,31 +942,166 @@ const bodies = {
 			const work = yield* LaneWork;
 			const main = yield* work.main;
 			const changes = at.cmd.carry.plan?.exam ?? [];
-			yield* at.tell(yield* work.copy(main), "read", {
+			// A redo (self-fix PR 10): the pull request was sent back, so the writer starts at its head,
+			// or on main when main does not merge into that head.
+			const pull = at.cmd.carry.examPull;
+			const redo =
+				pull?.why === undefined || at.cmd.carry.examPr === null
+					? undefined
+					: {head: pull.head, why: pull.why, ...(pull.on === undefined ? {} : {on: pull.on})};
+			// A redo on main is pushed over the exam branch (the owner's pick on PR 322). The push keeps
+			// what it replaces, as the remote holds it then, and says so on the ticket (./work.ts, `pushBranch`).
+			const base = redo === undefined || redo.on === "main" ? main : redo.head;
+			yield* at.tell(yield* work.copy(base), "read", {
 				ticket: `${at.title}\n\n${at.body}`,
 				changes: listed(changes.map((c) => `${c.path}: ${c.change} (${c.why})`)),
+				sent_back: listed(redo?.why ?? []),
+				folder: folderWords(redo),
 				note: "",
 			});
 			const end = yield* examToTheEnd(at.stages.exam, at.cmd.intent, {
 				ticket: at.url,
 				number: at.cmd.number,
-				base: main,
+				base,
 				changes,
 				tries: 3,
+				...(redo === undefined ? {} : {redo}),
 			});
+			const {head} = end.report;
 			return ended(
 				end.outcome,
-				{examPr: end.report.pr ?? null},
+				{examPr: end.report.pr ?? null, ...(head === null ? {} : {examPull: {head}})},
 				end.outcome.kind === "ask"
 					? ["These rule changes are in a pull request of their own:", ...ruleChangeLines(changes)]
 					: end.report.problems,
 			);
 		}),
 
+	exam_review: (at: At) =>
+		Effect.gen(function* () {
+			const work = yield* LaneWork;
+			const tickets = yield* Tickets;
+			const {carry} = at.cmd;
+			const pr = yield* need(carry.examPr, "the exam has no pull request");
+			const back = (why: readonly string[], head: string, on?: RedoOn) => ({
+				examPull: {head, why, ...(on === undefined ? {} : {on})},
+			});
+			const ready = yield* examReady(at.cmd.number, pr, carry.rules);
+			if (ready._tag === "moved")
+				return ended({kind: "stuck", why: "head_moved"}, {}, [
+					`The rule changes' branch on the code host is at ${ready.theirs}, which does not follow ${ready.ours}, where the lane left it. Someone rewrote it, so the lane does not guess which stands.`,
+				]);
+			if (ready._tag === "conflicts")
+				return ended(
+					{kind: "send", to: "builder", why: "conflicts"},
+					back(
+						ready.files.map((file) => `\`${file}\` conflicts with main: write it again on main.`),
+						ready.head,
+						"main",
+					),
+					[`Main does not merge into the rule changes: ${ready.files.join(", ")}.`],
+				);
+			const {head} = ready;
+			const {checked, ran} = yield* recordChecks(at, head, pr);
+			if (checked.result === "not_run")
+				return ended({kind: "stuck", why: "checks_not_run"}, {examPull: {head}}, [
+					notRunWords(head, ran.tail),
+				]);
+			if (checked.result === "red")
+				return {
+					...ended(
+						{kind: "send", to: "builder", why: "checks_red"},
+						back(
+							checked.failed.map((name) => `This check fails: ${name}`),
+							head,
+						),
+						[`The checks fail on the rule changes at ${head}.`],
+					),
+					failed: checked.failed,
+				};
+			yield* at.tell(yield* work.judgeCopy(head), "read", {
+				body: ticketWords(at),
+				tools: [
+					"This review is of the rule changes' own pull request: the plan lists them, and they land before any of the ticket's own work. Judge each criterion below against them.",
+					"A shell, in a read-only copy of the code at this head: your box refuses a write there.",
+				].join("\n\n"),
+				checked: "The checks below ran at this head.",
+				decided: "None.",
+			});
+			const target = examTarget(planOf(at.id));
+			const reviewed: Reviewed = yield* Effect.gen(function* () {
+				const rubrics = yield* work.rubrics(`${at.cmd.number}-${at.run}`);
+				const runtime = yield* at.stages.review.get(at.cmd.intent).start(
+					{
+						type: "start",
+						ask: {pr: target, head: null, rubrics, decisions: []},
+						settings: budgetOf(at),
+					},
+					{conflict: "use_existing"},
+				);
+				const end = yield* runtime.done();
+				if (end.phase !== "over") return yield* Effect.die(`the review stopped in ${end.phase}`);
+				yield* keepRows(end.report, target);
+				return {pr: target, outcome: end.outcome, name: nameOf(end.outcome), ...end.report};
+			}).pipe(Effect.scoped);
+			const open = reviewed.criteria.filter((c) => c.state === "open");
+			const met = reviewed.criteria.length - open.length;
+			const of = reviewed.criteria.length;
+			// What it read, at the side tree's head, only known now: what a yes on it is given on (./carry.ts).
+			const given = yield* work.given(head, "main");
+			yield* tickets.write(at.cmd.number, `${at.run}/reviewed`, {
+				type: "reviewed",
+				head,
+				met,
+				of,
+				findings: open.map((c) => saidOf(c.text)),
+				pr,
+				onto: given.onto,
+				base: given.base,
+				diff: given.diff,
+			});
+			// Posted on the exam's pull request at that head, as the push step posts the lane's own.
+			const posts = postsOf(reviewed);
+			yield* (yield* PullWire).post(pr, head, posts);
+			yield* (yield* LanePulls).post(
+				pr,
+				head,
+				posts.map((p) => ({kind: p.kind, verdict: p.verdict})),
+			);
+			if (reviewed.outcome.kind !== "done")
+				return ended(
+					reviewed.outcome,
+					reviewed.outcome.kind === "send" ? back(sentBack(reviewed), head) : {examPull: {head}},
+					reviewed.problems,
+				);
+			// A person's earlier `merge` stands here only if what they saw carries to this head.
+			const yes = carry.examPull?.yes;
+			const kept = yes !== undefined && (yield* standsAt(at.cmd.number, yes, head));
+			return ended(reviewed.outcome, {
+				examPull: {
+					head,
+					reviewed: {...given, met, of},
+					...(kept ? {yes: given} : {}),
+				},
+			});
+		}),
+
 	exam_merge: (at: At) =>
 		Effect.gen(function* () {
 			const pr = yield* need(at.cmd.carry.examPr, "the exam has no pull request");
-			return ended(yield* shipped(at, pr));
+			const outcome = yield* shipped(at, pr);
+			const pull = at.cmd.carry.examPull;
+			// A refusal the exam writer fixes goes to it with ship's words (./routes.ts). Main does not
+			// merge into a head that conflicts, so that redo is written on main.
+			return outcome.kind === "send" && pull !== undefined
+				? ended(outcome, {
+						examPull: {
+							...pull,
+							why: [`Ship refused the merge: ${nameOf(outcome)}.`],
+							...(outcome.why === "conflicts" ? {on: "main" as const} : {}),
+						},
+					})
+				: ended(outcome);
 		}),
 
 	test_writer: (at: At) =>
@@ -837,7 +1112,7 @@ const bodies = {
 			const tree = yield* work.tree(at.cmd.number);
 			const redo = redoOf(carry);
 			if (redo !== null) return yield* writtenAgain(at, redo);
-			const base = round > 1 ? yield* need(carry.head, "no head to add tests on") : tree.base;
+			const base = yield* need(testsBase(carry, round, tree.base), "no head to add tests on");
 			const properties = propertiesOf(carry, round);
 			const includes = settings.test_writer?.includes ?? [...DEFAULT_INCLUDES];
 			const taken = (yield* work.judgedFiles(base)).filter(includedBy(includes));
@@ -880,6 +1155,7 @@ const bodies = {
 					head: commit ?? base,
 					exam: [...carry.exam, ...files],
 					cannot: untestedRows(properties, answers),
+					...(commit === null ? {} : {wrote: {base, commit}}),
 					// The first writing is the one under the build: a restart runs its check again on main.
 					...(round === 1 && commit !== null
 						? {
@@ -1077,7 +1353,8 @@ const bodies = {
 				files.length === 0 ? null : yield* formatExam(at.cmd.number, tree.tree, files);
 			const next = formatted ?? commit ?? head;
 			// A new head needs green checks of its own before the review reads it: the build's were not at it.
-			const checked = next === head ? {} : {checked: (yield* recordChecks(at, next)).checked};
+			// Red there goes back to the builder, a round up, with each failing test open (./routes.ts).
+			const checked = next === head ? {} : (yield* checkedWithRed(at, next)).carry;
 			const answers = end.report.answered?.answers ?? [];
 			return ended(
 				end.outcome,
@@ -1194,46 +1471,15 @@ const bodies = {
 
 	push: (at: At) =>
 		Effect.gen(function* () {
-			const work = yield* LaneWork;
-			const tickets = yield* Tickets;
 			const {carry} = at.cmd;
 			const base = yield* need(carry.base, "no base to push from");
 			const head = yield* need(carry.head, "no head to push");
-			const passed = [...untestedWords(carry.untested ?? []), ...throughWords(carry.through)];
-			const end = yield* pushToTheEnd(at.stages.push, at.cmd.intent, {
-				ticket: at.url,
-				number: at.cmd.number,
-				head,
-				title: at.title,
-				// Named in words: this text must not close a number on the code host. Nor may an agent's.
-				body: saidOf(
-					[
-						`From tracker ticket ${at.cmd.number}.`,
-						"",
-						inert(carry.plan?.summary ?? ""),
-						"",
-						// "No deviations" would read as all clear, beside what a person let through.
-						...(carry.deviations.length > 0
-							? [listed(carry.deviations.map(inert))]
-							: passed.length === 0
-								? ["No deviations."]
-								: []),
-						...((carry.left ?? []).length === 0
-							? []
-							: ["", "What the builder could not do:", listed((carry.left ?? []).map(inert))]),
-						...(passed.length === 0 ? [] : ["", ...passed]),
-					].join("\n"),
-				),
-				posts: carry.posts,
+			const ticket = {url: at.url, number: at.cmd.number, title: at.title};
+			const outcome = yield* pushedBy(at.stages.push, at.cmd.intent, `${at.run}/pushed`, {
+				ask: pushAsk(ticket, head, carry),
+				base,
 			});
-			if (end.outcome.kind !== "done") return ended(end.outcome);
-			yield* tickets.write(at.cmd.number, `${at.run}/pushed`, {
-				type: "pushed",
-				head,
-				commits: yield* work.commits(base, head),
-			});
-			yield* (yield* LaneWatch).look(at.cmd.number, end.outcome.pr);
-			return ended(end.outcome, {pr: end.outcome.pr});
+			return outcome.kind === "done" ? ended(outcome, {pr: outcome.pr}) : ended(outcome);
 		}),
 
 	merge: (at: At) =>
@@ -1241,6 +1487,7 @@ const bodies = {
 			const pr = yield* need(at.cmd.carry.pr, "no pull request to merge");
 			const head = yield* need(at.cmd.carry.head, "no head to merge");
 			const outcome = yield* shipped(at, pr);
+			if (outcome.kind === "send") return ended(outcome, yield* theirsTakenIn(at, head));
 			if (outcome.kind !== "done") return ended(outcome);
 			const watch = yield* LaneWatch;
 			if (outcome.cleanup !== "not_run") {
@@ -1258,6 +1505,24 @@ const bodies = {
 					]);
 		}),
 };
+
+/**
+ * The lane's branch as the code host has it now, taken in when a person moved it on from `head`
+ * (jidoka rows 62 and 63): the step ship's send goes to works from their commit, and the next push
+ * keeps it. Only a fast-forward is taken in. A rewritten branch stays at `head`, and the next push
+ * keeps theirs under a kept ref (`LaneWork.pushTo`). Code's checks run at the head taken in, as after
+ * a build, since every step after build needs them there.
+ */
+const theirsTakenIn = (at: At, head: string) =>
+	Effect.gen(function* () {
+		const work = yield* LaneWork;
+		const {branch} = yield* work.tree(at.cmd.number);
+		const theirs = yield* work.remoteHead(branch);
+		if (theirs === null || theirs === head || (yield* work.mergeBase(head, theirs)) !== head)
+			return {};
+		yield* work.reset(at.cmd.number, theirs);
+		return {head: theirs, ...(yield* checkedWithRed(at, theirs)).carry};
+	});
 
 /** Ship, as it is, to its end. Its guards are its own. */
 const shipped = (at: At, pr: string) =>
@@ -1326,18 +1591,24 @@ const laneInterpret = ({send, machines}: Stages) => ({
 						),
 					})
 					.pipe(Effect.ignore);
+			// The lane that asks, by the trace id its `started` facts carry, so a view of a ticket with
+			// several lanes puts the ask in the right one.
+			const trace = yield* jobTraceId;
 			yield* tickets.write(cmd.number, cmd.ask, {
 				type: "asked",
 				ask: cmd.ask,
 				what: cmd.what,
+				...(cmd.head === undefined ? {} : {head: cmd.head}),
 				picks: cmd.picks as never,
+				...(trace === null ? {} : {trace}),
 			});
 			yield* send("step", `asks: ${cmd.what} Answer it in: ticket --ticket ${cmd.number}`);
 			return null;
 		}).pipe(Effect.mapError(() => unknown)),
 
-	// A restart's fresh read of main (self-fix PR 5): the ticket first, then main, then the lane's branch
-	// put on it (`putOnMain`). The ticket's row says from where, main then and now, and what changed.
+	// A fresh read of main, a restart's (self-fix PR 5) or a route's (PR 11): the ticket first, then
+	// main, then the lane's branch put on it (`putOnMain`). The ticket's row says from where, main then
+	// and now, and what changed. A route's read pushes a merged head with green checks (`pushedIfRouted`).
 	lane_fresh: (cmd: ReturnType<typeof freshMain>) =>
 		Effect.gen(function* () {
 			const tickets = yield* Tickets;
@@ -1367,13 +1638,21 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			// has none, so a red one goes back to the builder and one that could not run stops the lane.
 			const checked = found.carry.checked ?? cmd.carry.checked;
 			const green = checked !== undefined && checked.head === to && checked.result === "green";
-			if (!afterBuild(cmd.from.step) || to === null || green) return found;
+			if (!afterBuild(cmd.from.step) || to === null || green)
+				return yield* pushedIfRouted(machines.push, cmd, ticket, found, green);
 			const ran = yield* recordChecks({run: cmd.intent, cmd}, to);
 			const red =
 				ran.checked.result === "red"
 					? {open: withRed(found.carry.open ?? cmd.carry.open, ran.ran.failed, ran.ran.tail)}
 					: {};
-			return {...found, carry: {...found.carry, checked: ran.checked, ...red}};
+			const read = {...found, carry: {...found.carry, checked: ran.checked, ...red}};
+			return yield* pushedIfRouted(
+				machines.push,
+				cmd,
+				ticket,
+				read,
+				ran.checked.result === "green",
+			);
 		}).pipe(Effect.mapError(() => unknown)),
 
 	lane_step: (cmd: Carried) =>
@@ -1384,6 +1663,9 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			const home = yield* LaneHome;
 			yield* work.servingLane(cmd.number);
 			const run = `r-${cmd.step}-${cmd.count}`;
+			// "run a step" says its run and step as it begins too, so a log reading its span can say
+			// the step began (apps/fabrika, host/log.ts); its end tags them again, with its outcome.
+			yield* Effect.annotateCurrentSpan({[LANE.run]: run, [LANE.step]: cmd.step});
 			const from = yield* Clock.currentTimeMillis;
 			const said = (line: string) => send("step", `${cmd.step}: ${line}`);
 			const seen = yield* Ref.make<Picked | null>(null);
@@ -1396,6 +1678,8 @@ const laneInterpret = ({send, machines}: Stages) => ({
 				const settings = yield* work.settings;
 				const agent = AGENT_STEPS[cmd.step];
 				const picked = agent === undefined ? null : pickedFor(settings, agent.step);
+				// Kept outside the body, so its end prices the run by its model even when it broke.
+				yield* Ref.set(seen, picked);
 				const brief = agent === undefined ? null : yield* loadBrief(home.briefs, agent.brief);
 				const ticket = yield* tickets.read(cmd.number);
 				const first = ticket.timeline[0]?.fact;
@@ -1484,10 +1768,31 @@ const laneInterpret = ({send, machines}: Stages) => ({
 					...(keyed === null ? {} : keyed),
 					carry: more.carry,
 				} as CodeFact);
+			// "run a step" ends tagged with what its `ended` says, so its spans tie to the run without
+			// matching times. Dollars only when known: a list price, else what claude billed.
+			const tagged = (outcome: Outcome) =>
+				Effect.annotateCurrentSpan(
+					stepTags({
+						run,
+						step: cmd.step,
+						outcome: nameOf(outcome),
+						agent:
+							picked === null
+								? null
+								: {
+										model: picked.model,
+										input: spent.input,
+										cached: spent.cached,
+										output: spent.output,
+									},
+						usd: listUsd ?? (picked?.harness === "claude" ? spent.usd : null),
+					}),
+				);
 			if (Exit.isSuccess(exit)) {
 				const {outcome, carry, problems, after: past} = exit.value;
 				yield* sessionLeft.pipe(Effect.ignore);
 				yield* write(outcome, exit.value);
+				yield* tagged(outcome);
 				yield* said(
 					[
 						nameOf(outcome),
@@ -1512,9 +1817,9 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			// A named end: the fact says it broke, and the line says what a person can do.
 			const stops = String(exit.cause).slice(0, 300);
 			yield* sessionLeft.pipe(Effect.ignore);
-			yield* write(factOutcome({kind: "stuck", why: "run_failed"}), {carry: {}}).pipe(
-				Effect.ignore,
-			);
+			const broke = factOutcome({kind: "stuck", why: "run_failed"});
+			yield* write(broke, {carry: {}}).pipe(Effect.ignore);
+			yield* tagged(broke);
 			yield* said(`could not run: ${stops}`);
 			return yield* Effect.fail(unknown);
 		}).pipe(Effect.mapError(() => unknown)),
@@ -1528,14 +1833,13 @@ const laneKind = kind({
 		ctx: undefined,
 		interpret: laneInterpret(stages),
 		subscribe: {
-			lane_answer: (sub: {
-				readonly deps: {
-					readonly number: number;
-					readonly ask: string;
-					readonly picks: readonly string[];
-				};
-			}) =>
+			lane_answer: (sub: {readonly deps: AnswerWait}) =>
+				// The wait's span ends tagged with the ask, what it was for, the pick and who picked: the
+				// stream runs inside it. The note is a value a person typed, so it stays off.
 				answerHeard(sub.deps.number, sub.deps.ask, sub.deps.picks).pipe(
+					Stream.tap((heard) =>
+						Effect.annotateCurrentSpan(answerTags({...heard, for: sub.deps.for})),
+					),
 					Stream.map((heard) => ({type: "lane_answered" as const, ...heard})),
 				),
 		},

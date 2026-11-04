@@ -205,12 +205,24 @@ describe("the exam's pull request", () => {
 		expect(laneFactsOver(FACTS, EXAM, "o/r", true).ticket).toEqual(own.ticket);
 	});
 
-	it("reads as a passed governance review: a person's answer is its one criterion", () => {
-		expect(pullFacts(EXAM, "o/r", false).reviews).toEqual([
-			{kind: "governance", verdict: "passed"},
+	// Self-fix PR 10: the exam's pull request gets a real review, and its verdicts are posted like the
+	// lane's. Before, a person's answer stood in as a passed governance review, with no review at all.
+	it("with no verdict posted yet, reads no review to ship, never a passed one", () => {
+		expect(pullFacts(EXAM, "o/r", false).reviews).toBeNull();
+		expect(laneFactsOver(FACTS, EXAM, "o/r", false).reviews).toBeNull();
+	});
+
+	it("with its review's verdicts posted, reads them, as the lane's own pull request does", () => {
+		const reviewed: Pull = {...EXAM, verdicts: [{kind: "review-code", verdict: "pass"}]};
+		expect(pullFacts(reviewed, "o/r", false).reviews).toEqual([
+			{kind: "review-code", verdict: "passed"},
 		]);
-		expect(laneFactsOver(FACTS, EXAM, "o/r", false).reviews).toEqual([
-			{kind: "governance", verdict: "passed"},
+		expect(laneFactsOver(FACTS, reviewed, "o/r", false).reviews).toEqual([
+			{kind: "review-code", verdict: "passed"},
+		]);
+		const failed: Pull = {...EXAM, verdicts: [{kind: "review-code", verdict: "fail"}]};
+		expect(pullFacts(failed, "o/r", false).reviews).toEqual([
+			{kind: "review-code", verdict: "failed"},
 		]);
 	});
 
@@ -771,4 +783,204 @@ describe("the GitHub host, over a stand-in gh", () => {
 			expect(await settledThenFacts(home, failing)).toBe("red");
 		});
 	});
+});
+
+// ---------------------------------------------------------------- the local host, when a pull's head moves
+//
+// Self-fix PR 10, Part 4, the holes the other way. Today the local host's `open` moves a pull's head and
+// keeps its verdicts, and a person's `merge` binds to no head. Both now go through `carry`: a row or a
+// yes said at `A` counts at `B` only when the diff it judged replays there (docs/direction/a-yes-binds-to-the-diff.md).
+
+describe("the local host, when a pull's head moves", () => {
+	const dirs: string[] = [];
+	afterEach(() => {
+		for (const dir of dirs.splice(0)) rmSync(dir, {recursive: true, force: true});
+	});
+
+	const X = (text: string) => [{path: "src/x.ts", text}];
+	const LANE_WRITER = "agent:lane for:owner";
+
+	/** The toy repository on the local host, and a lane's pull request on it, reviewed and said yes at `A`. */
+	const scene = () => {
+		const dir = realpathSync(mkdtempSync(join(tmpdir(), "lane-moves-")));
+		dirs.push(dir);
+		const {home, seed} = makeLaneHome({dir, nodeModules: MODULES});
+		const gitIn = (cwd: string, ...args: readonly string[]) =>
+			execFileSync("git", args, {cwd, env: {...process.env, ...IDENTITY}, stdio: "pipe"})
+				.toString()
+				.trim();
+		/** One commit on main, in another file, as someone working elsewhere would push it. */
+		const mainMoves = () => {
+			gitIn(seed, "checkout", "--quiet", "main");
+			gitIn(seed, "pull", "--quiet", "origin", "main");
+			writeFileSync(join(seed, "ELSEWHERE.md"), "Main moved elsewhere.\n");
+			gitIn(seed, "add", "-A");
+			gitIn(seed, "commit", "--quiet", "-m", "main moved elsewhere");
+			gitIn(seed, "push", "--quiet", "origin", "main");
+		};
+		const said = (key: string, writer: string, data: Readonly<Record<string, unknown>>) =>
+			Effect.gen(function* () {
+				yield* (yield* Ledger).send(streams(nameOf(NUMBER)).inbox, key, {
+					kind: String(data["type"]),
+					writer,
+					data,
+				});
+			});
+		/** The pull, reviewed passed and said `merge` to, both at `A`. */
+		const reviewedAndSaidYes = Effect.gen(function* () {
+			yield* (yield* Ledger).register(nameOf(NUMBER), "user:owner");
+			yield* said(`file-${NUMBER}`, "user:owner", {
+				type: "filed",
+				title: "A change",
+				body: "It changes one thing.",
+			});
+			const work = yield* LaneWork;
+			const pulls = yield* LanePulls;
+			const tree = yield* work.tree(NUMBER);
+			const a = yield* work.commit(tree.tree, X('export const x = "one";\n'), "the change");
+			yield* work.pushTo(tree.tree, a, tree.branch);
+			const pull = {
+				kind: "lane" as const,
+				ticket: NUMBER,
+				branch: tree.branch,
+				tree: tree.tree,
+				title: "A change",
+				body: "From tracker ticket 7.",
+			};
+			const pr = yield* pulls.open({...pull, head: a});
+			yield* pulls.post(pr, a, [{kind: "review-code", verdict: "pass"}]);
+			const base = gitIn(tree.tree, "merge-base", "origin/main", a);
+			const diff = execFileSync("git", ["patch-id", "--verbatim"], {
+				cwd: tree.tree,
+				input: execFileSync("git", ["diff", "-U0", base, a], {cwd: tree.tree}),
+			})
+				.toString()
+				.split(" ")[0];
+			yield* said("ask-merge", LANE_WRITER, {
+				type: "asked",
+				ask: "a-merge-9",
+				what: "Do you want to merge this?",
+				picks: ["merge", "no"],
+				head: a,
+			});
+			yield* said("answer-merge", "user:owner", {
+				type: "answered",
+				ask: "a-merge-9",
+				pick: "merge",
+				note: "",
+				head: a,
+				onto: "main",
+				base,
+				diff,
+			});
+			/** The lane's push of a new head `b`, as its push step opens the same pull again. */
+			const pushed = (b: string) =>
+				Effect.gen(function* () {
+					gitIn(
+						tree.tree,
+						"push",
+						"--quiet",
+						"--force",
+						"origin",
+						`${b}:refs/heads/${tree.branch}`,
+					);
+					yield* pulls.open({...pull, head: b});
+				});
+			return {pr, a, tree: tree.tree, pushed};
+		});
+		const run = <A, E>(
+			effect: Effect.Effect<A, E, Layer.Success<ReturnType<typeof laneLayer>> | Ledger>,
+		) =>
+			Effect.runPromise(
+				effect.pipe(
+					Effect.provide(laneLayer({home, checkout: seed, briefs: "", person: "owner"})),
+					Effect.provide(Layer.fresh(memoryLedger().layer)),
+				),
+			);
+		return {gitIn, mainMoves, reviewedAndSaidYes, run};
+	};
+
+	it(
+		"a new head that changes a word: the old verdict reads missing, and the old yes is no yes",
+		{timeout: 120_000},
+		async () => {
+			const {reviewedAndSaidYes, run} = scene();
+			const facts = await run(
+				Effect.gen(function* () {
+					const {pr, tree, pushed} = yield* reviewedAndSaidYes;
+					const work = yield* LaneWork;
+					yield* pushed(yield* work.commit(tree, X('export const x = "two";\n'), "a new word"));
+					return yield* (yield* CodeHost).prFacts(pr);
+				}),
+			);
+			expect(facts.reviews).toEqual([{kind: "review-code", verdict: "missing"}]);
+			expect(facts.approval).toBe("missing");
+		},
+	);
+
+	it(
+		"a new head that only replays the same change onto a moved main: the verdict and the yes still count",
+		{timeout: 120_000},
+		async () => {
+			const {gitIn, mainMoves, reviewedAndSaidYes, run} = scene();
+			const facts = await run(
+				Effect.gen(function* () {
+					const {pr, a, tree, pushed} = yield* reviewedAndSaidYes;
+					mainMoves();
+					gitIn(tree, "fetch", "--quiet", "origin");
+					gitIn(tree, "rebase", "--quiet", "origin/main");
+					const b = gitIn(tree, "rev-parse", "HEAD");
+					expect(b).not.toBe(a);
+					yield* pushed(b);
+					return yield* (yield* CodeHost).prFacts(pr);
+				}),
+			);
+			expect(facts.reviews).toEqual([{kind: "review-code", verdict: "passed"}]);
+			expect(facts.approval).toBe("given");
+		},
+	);
+
+	// Ship's own proof reads the criteria's rows, kept at the head the review saw (../ship/ready.ts).
+	// The facts name each head code carried here, so those rows count at the new head as well. Without
+	// it, a head that only moved by format or a clean replay still read as `send:reviewer:no_review`,
+	// and the review agent ran again: the stop on ticket 117's exam pull request.
+	it(
+		"a new head the verdict carried to: the facts name the carry, for ship's proof",
+		{timeout: 120_000},
+		async () => {
+			const {gitIn, mainMoves, reviewedAndSaidYes, run} = scene();
+			const {a, b, facts} = await run(
+				Effect.gen(function* () {
+					const {pr, a, tree, pushed} = yield* reviewedAndSaidYes;
+					mainMoves();
+					gitIn(tree, "fetch", "--quiet", "origin");
+					gitIn(tree, "rebase", "--quiet", "origin/main");
+					const b = gitIn(tree, "rev-parse", "HEAD");
+					yield* pushed(b);
+					return {a, b, facts: yield* (yield* CodeHost).prFacts(pr)};
+				}),
+			);
+			expect(facts.head).toBe(b);
+			expect(new Set((facts.carried ?? []).map((h) => `${h.from} -> ${h.to}`))).toEqual(
+				new Set([`${a} -> ${b}`]),
+			);
+		},
+	);
+
+	it(
+		"a new head that changes a word: the facts name no carry to it",
+		{timeout: 120_000},
+		async () => {
+			const {reviewedAndSaidYes, run} = scene();
+			const {b, facts} = await run(
+				Effect.gen(function* () {
+					const {pr, tree, pushed} = yield* reviewedAndSaidYes;
+					const b = yield* (yield* LaneWork).commit(tree, X('export const x = "two";\n'), "a word");
+					yield* pushed(b);
+					return {b, facts: yield* (yield* CodeHost).prFacts(pr)};
+				}),
+			);
+			expect((facts.carried ?? []).filter((h) => h.to === b)).toEqual([]);
+		},
+	);
 });

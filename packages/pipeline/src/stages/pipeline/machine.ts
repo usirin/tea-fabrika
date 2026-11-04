@@ -4,13 +4,18 @@ import {LaneId} from "../../ids.ts";
 import {act, gather, intentOf, keptAct, keptCmd, listen} from "../../primitives.ts";
 import {Checked, Outcome, titleOf} from "../../tickets/ticket.ts";
 import {Item} from "../build/ticket.ts";
+import {RedoOn} from "../exam/machine.ts";
 import {Survived} from "../mutation/mutant.ts";
 import {Post} from "../operate/machine.ts";
 import {nameOf} from "../outcome.ts";
 import {HeldDraft, PlanQuestion} from "../plan/plan.ts";
-import {openWords, throughWords} from "./found.ts";
+import {Carried, Given} from "./carry.ts";
+import {openWords, ruleChangeLines, throughWords} from "./found.ts";
 import {EndOutcome, isEnd, LaneOutcome, StopOutcome} from "./outcome.ts";
 import type {Folded} from "./restart.ts";
+import {AskFor, LaneStep, ROUTES, type Move as Route, STEPS} from "./routes.ts";
+
+export {AskFor, LaneStep, STEPS};
 
 // The lane: one tracker ticket through every step, in order. Plain tea. Each step is a machine of
 // its own, and the lane starts each as one Act and reads its outcome, as `operate` does; it never
@@ -25,8 +30,17 @@ import type {Folded} from "./restart.ts";
 //   releasing  the lane has its outcome, and lets the ticket go
 //   over       the outcome, and the step outcome that ended it
 //
-// `ticket -> triage -> plan -> yes -> exam -> (yes -> exam_merge) -> test_writer -> build ->
-//  mutation -> review -> push -> yes -> merge`.
+// `ticket -> triage -> plan -> yes -> exam -> (exam_review -> yes -> exam_merge) -> test_writer ->
+//  build -> mutation -> review -> push -> yes -> merge`.
+//
+// Where a step's outcome takes the lane is one row of `ROUTES` (./routes.ts, self-fix PR 11): a step,
+// the same step once more, a fresh read of main or of the ticket, a person, a stop or an end.
+//
+// The exam's pull request (self-fix PR 10): code formats it, runs the checks and one fresh review
+// (`exam_review`) before the person is asked. A failed review, and a ship refusal there, goes back to
+// the step that can fix it (./routes.ts), counted in the exam's own rounds: one per `exam` row on the
+// trail, never the lane's `round`. `exam_merge` starts only where the review and the person's yes
+// both stand at the exam head (`examPull`), checked in `running`.
 //
 // `after` is the whole order, as data the laws read. A step's own `skip` moves on where the lane
 // can go on without it, and the fact that says so is written by the Act all the same.
@@ -35,8 +49,11 @@ import type {Folded} from "./restart.ts";
 // decides nothing. Red goes back to the build, a round up, with each failing test open: so does a
 // head the mutation step finds red. Checks that could not run end the lane `stuck:checks_not_run`.
 // No step after build runs on a head without green checks code ran at that very head: the carry's
-// `checked` says which head they were at, and `running` is the one place a step starts. Red there,
-// as at the mutants job's commit, ends the lane `stuck:checks_red`; none, or not run, `checks_not_run`.
+// `checked` says which head they were at, and `running` is the one place a step starts. At the
+// mutants job's commit, the one head no builder made, red goes back to the build as a red build
+// does (experiment 193); none, or not run, and the guard runs them, as a restart does, by a fresh
+// read of main. Still none after that, or at a head the builder said was done: the lane stops and
+// says why.
 //
 // A review's finding goes to the test writer, a round up. Both count in the same rounds, and once
 // `MAX_ROUNDS` are spent a person is asked `rounds_spent`: `again` runs one more round, `stop` ends
@@ -53,23 +70,6 @@ import type {Folded} from "./restart.ts";
 
 const Unknown = ["unknown"] as const;
 
-/** Every step that runs a machine, in the order a ticket meets them. */
-export const STEPS = [
-	"triage",
-	"plan",
-	"exam",
-	"exam_merge",
-	"test_writer",
-	"build",
-	"mutation",
-	"mutants",
-	"review",
-	"push",
-	"merge",
-] as const;
-export const LaneStep = Schema.Literals(STEPS);
-export type LaneStep = typeof LaneStep.Type;
-
 /** The steps after build: each runs only on a head with green checks code ran there. */
 const AFTER_BUILD: ReadonlySet<LaneStep> = new Set(STEPS.slice(STEPS.indexOf("build") + 1));
 /** Whether `step` runs only on a head with green checks: a restart that goes on there runs them first. Pure. */
@@ -83,25 +83,6 @@ const stopsAt = (step: LaneStep, end: LaneOutcome): Resume =>
 	step === "build" && end.kind === "stuck" && end.why === "checks_not_run"
 		? {_tag: "run", step: "mutation"}
 		: {_tag: "run", step};
-
-/**
- * What the questions are about. `step`: a step that ended on `ask`, and may be run again.
- * `rounds_spent`: the work went back as often as it may, and a person says whether once more.
- * `exam_touched`: a build changed the test writer's files, and a person says which was wrong.
- * `exam_conflict`: main changed the test writer's files while the lane was stopped, and a person says
- * whether the test writer writes them again.
- */
-const ASKS = [
-	"approve",
-	"exam_merge",
-	"merge",
-	"step",
-	"rounds_spent",
-	"exam_touched",
-	"exam_conflict",
-] as const;
-export const AskFor = Schema.Literals(ASKS);
-export type AskFor = typeof AskFor.Type;
 
 /**
  * The most builds a ticket gets on its own: the first, and each one a red head or a review sent it
@@ -169,6 +150,22 @@ const WrittenTest = Schema.Struct({
 /** The test writer's own commit, and the tests its check ran there. */
 const Written = Schema.Struct({commit: Schema.String, tests: Schema.Array(WrittenTest)});
 
+/** The exam's pull request as the lane last read it (self-fix PR 10). */
+export const ExamPull = Schema.Struct({
+	head: Schema.String,
+	/** The review that passed, and what it read: what `carry` needs (./carry.ts). */
+	reviewed: Schema.optionalKey(
+		Schema.Struct({...Given.fields, met: Schema.Finite, of: Schema.Finite}),
+	),
+	/** A person's `merge`, and what they saw: or the review's Gather found one that still stands here. */
+	yes: Schema.optionalKey(Given),
+	/** What it was last sent back to the exam writer for: the findings, or the failing names. */
+	why: Schema.optionalKey(Schema.Array(Schema.String)),
+	/** Where the exam writer writes it again: `main`, when main does not merge into `head`. */
+	on: Schema.optionalKey(RedoOn),
+});
+export type ExamPull = typeof ExamPull.Type;
+
 /** What one step leaves for the steps after it. */
 const carried = {
 	/** The plan as data, once it is written. Every later step reads it. */
@@ -183,6 +180,8 @@ const carried = {
 	rules: Schema.Array(Schema.String),
 	/** The exam's own pull request. `null`: none. */
 	examPr: Schema.NullOr(Schema.String),
+	/** Its head, the review there and a person's yes. Optional: a lane saved before this key still reads. */
+	examPull: Schema.optionalKey(ExamPull),
 	/** The exact files the test writer's commits touched: the builder may not change them. */
 	exam: Schema.Array(Schema.String),
 	/** The commit the lane started from: what the mutation step and the review diff against. */
@@ -220,6 +219,12 @@ const carried = {
 	 * lane saved before this key still reads, and has no check to run again.
 	 */
 	written: Schema.optionalKey(Written),
+	/**
+	 * The last test writer's commit, and `base`, the head it started on. A test writer sent back while
+	 * that commit is still the head writes on that base again, so its own files are never ones that
+	 * exist already (jidoka row 28). Optional, as `left` is.
+	 */
+	wrote: Schema.optionalKey(Schema.Struct({base: Schema.String, commit: Schema.String})),
 	/**
 	 * The test writer's files a build or main changed, waiting on a person's pick: the next build puts
 	 * them back as `written` has them, and the next test writer writes them again. Optional, as `left` is.
@@ -276,6 +281,8 @@ const AskIn = Schema.Struct({
 	also: Schema.optionalKey(Schema.Array(Schema.String)),
 	/** The rounds' question: what the runs on the ticket cost is added from its facts, which the lane does not hold. */
 	spent: Schema.optionalKey(Schema.Literal(true)),
+	/** The head a merge's question is about, as the person sees it: the `asked` fact keeps it (self-fix PR 10). */
+	head: Schema.optionalKey(Schema.String),
 });
 /** How the lane ended, for what it takes with it. Left out: a lane saved before this key still reads. */
 const ReleaseIn = Schema.Struct({...LaneIn.fields, outcome: Schema.optionalKey(LaneOutcome)});
@@ -357,8 +364,17 @@ export const Resume = Schema.Union([
 ]);
 export type Resume = typeof Resume.Type;
 
-/** A restart's fresh read of main: where the lane stopped, and what it held then. */
-const FreshIn = Schema.Struct({number: Schema.Finite, from: Resume, carry: Carry});
+/**
+ * A fresh read of main: where the lane goes on, and what it held then. `routed`: a route's `fresh`
+ * sent it (./routes.ts), so a clean read runs `from` itself, and a merged head with green checks is
+ * pushed first. Left out: a restart's read, or the guard's.
+ */
+const FreshIn = Schema.Struct({
+	number: Schema.Finite,
+	from: Resume,
+	carry: Carry,
+	routed: Schema.optionalKey(Schema.Literal(true)),
+});
 
 /** What a fresh read of main changed in the carry: the branch's base and head, the checks there. */
 const Changed = StepEnd.fields.carry;
@@ -369,13 +385,16 @@ const Changed = StepEnd.fields.carry;
  * checks code ran at that head. `exam_conflict`: the test writer's files conflict with main.
  * `conflicts`: the builder's files do. On both, main's side was taken, and `carry`, when there, is
  * the branch on main with each such file open: the test writer, or the builder, redoes it.
- * `merged`: the branch was pushed, so main was merged into it, and its new head is one no review read
- * and the pull request does not show. `closed`: the ticket was closed while the lane was stopped.
+ * `merged`: the branch was pushed, so main was merged into it. A routed read pushes that head once
+ * its checks are green; else the pull request does not show it yet. `review` is what `carry` says of
+ * the review's diff at that head: kept, the review stands there and the push shows the head; a
+ * glance or stale, a review reads it first
+ * (docs/direction/a-yes-binds-to-the-diff.md). `closed`: the ticket was closed while the lane was stopped.
  * `not_yours`: it was not filed by the person running this, or an agent of theirs.
  */
 export const Fresh = Schema.Union([
 	Schema.TaggedStruct("fresh", {carry: Changed}),
-	Schema.TaggedStruct("merged", {carry: Changed}),
+	Schema.TaggedStruct("merged", {carry: Changed, review: Carried}),
 	Schema.TaggedStruct("exam_conflict", {
 		files: Schema.Array(Schema.String),
 		carry: Schema.optionalKey(Changed),
@@ -411,6 +430,17 @@ export type Stopped = typeof Stopped.Type;
 
 export const Lane = Schema.Union([
 	Schema.Struct({phase: Schema.Literal("idle")}),
+	// A step said the ticket or its pull request is closed, merged or a draft (jidoka row 13): the
+	// ticket is read fresh, and the lane ends or pauses by what it says. First, so a saved one never
+	// reads as the start's read below with its `Held` dropped.
+	Schema.Struct({
+		...Held.fields,
+		phase: Schema.Literal("reading"),
+		step: LaneStep,
+		/** The step's outcome, by its name: what the lane says if it pauses. */
+		said: Schema.String,
+		asked: keptCmd(readFiled, ReadIn),
+	}),
 	Schema.Struct({
 		phase: Schema.Literal("reading"),
 		number: Schema.Finite,
@@ -444,7 +474,8 @@ export const Lane = Schema.Union([
 		phase: Schema.Literal("restarting"),
 		asked: keptAct(claimLane, LaneIn),
 	}),
-	// Claimed: main and the ticket are read fresh, and the lane's branch stands on main.
+	// Claimed: main and the ticket are read fresh, and the lane's branch stands on main. Also a route's
+	// `fresh` (./routes.ts), and the guard on the step after the mutants job, when its head has no checks.
 	Schema.Struct({
 		...Held.fields,
 		at: Resume,
@@ -488,15 +519,22 @@ export type LaneMsg =
 			readonly pick: string;
 			/** What they wrote beside it. */
 			readonly note?: string;
+			/** Who answered, as the ticket's entry names them. Left out: a Msg from before the key. */
+			readonly by?: string;
 	  };
 
 type Step_ = readonly [Lane, readonly LaneCmd[]];
 
-/** What a state moves to, after a step's outcome. */
+/**
+ * What a state moves to, after a step's outcome. `fresh`: main is taken in first, then that step runs.
+ * `host`: the ticket is read fresh, and the lane ends or pauses by what it says.
+ */
 export type Move =
 	| {readonly to: LaneStep; readonly round?: number}
-	| {readonly ask: (typeof ASKS)[number]}
-	| {readonly end: LaneOutcome};
+	| {readonly ask: AskFor}
+	| {readonly end: LaneOutcome}
+	| {readonly fresh: LaneStep}
+	| {readonly host: true};
 
 const stuck = (why: Extract<LaneOutcome, {kind: "stuck"}>["why"]): Move => ({
 	end: {kind: "stuck", why},
@@ -508,6 +546,7 @@ const NEXT: Readonly<Record<LaneStep, Move>> = {
 	triage: {to: "plan"},
 	plan: {ask: "approve"},
 	exam: {to: "test_writer"},
+	exam_review: {to: "exam_merge"},
 	exam_merge: {to: "test_writer"},
 	test_writer: {to: "build"},
 	build: {to: "mutation"},
@@ -522,10 +561,65 @@ const NEXT: Readonly<Record<LaneStep, Move>> = {
 const back = (to: LaneStep, round: number, bound: number): Move =>
 	round >= bound ? {ask: "rounds_spent"} : {to, round: round + 1};
 
+/** The steps of the exam's pull request: their rounds are the exam's own, never the lane's `round`. */
+const EXAM_STEPS: ReadonlySet<LaneStep> = new Set(["exam", "exam_review", "exam_merge"]);
+
+/** The exam's rounds so far: one per `exam` row on the trail, the first writing included. Pure. */
+export const examRounds = (trail: Held["trail"]): number =>
+	trail.filter((row) => row.step === "exam").length;
+
+/** The exam writer once more, if the exam's rounds allow it: else a person is asked. Pure. */
+const examBack = (trail: Held["trail"]): Move =>
+	examRounds(trail) >= boundOf(trail) ? {ask: "rounds_spent"} : {to: "exam"};
+
+/** The route `step` has for the outcome named `name` (./routes.ts). `undefined`: none. Pure. */
+const routeOf = (step: LaneStep, name: string): Route | undefined => {
+	const rows: Readonly<Record<string, Route>> = ROUTES[step];
+	return Object.hasOwn(rows, name) ? rows[name] : undefined;
+};
+
+/**
+ * Whether the row the trail ends with is `step`'s own, by a route `same` holds: the step's second
+ * arrival in a row, which a `once` stops on and a `back` bound once asks on. Pure.
+ */
+const inARow = (step: LaneStep, trail: Held["trail"], same: (route: Route) => boolean): boolean => {
+	const last = trail.at(-1);
+	if (last === undefined || last.step !== step) return false;
+	const route = routeOf(step, last.said);
+	return route !== undefined && same(route);
+};
+
+/**
+ * Where a `back` goes: the step that can fix it, with what it must. Bound `once`: one time in the same
+ * round, and the second time in a row the step's own question. The exam's: counted in its own rounds.
+ * A red head to the builder: as `[build] send_back` says. Else: a round up, or a person past the bound.
+ * Pure.
+ */
+const backTo = (
+	step: LaneStep,
+	route: Extract<Route, {readonly _tag: "back"}>,
+	round: number,
+	lane: {readonly sendBack?: boolean; readonly trail: Held["trail"]},
+): Move => {
+	if (route.bound === "once")
+		return inARow(step, lane.trail, (r) => r._tag === "back" && r.bound === "once")
+			? {ask: "step"}
+			: {to: route.step};
+	if (route.step === "exam") return examBack(lane.trail);
+	if (route.step === "build" && route.with === "names" && lane.sendBack === false)
+		return {ask: "rounds_spent"};
+	return back(route.step, round, boundOf(lane.trail));
+};
+
 /**
  * The whole order, as one pure function: where a lane goes when `step` ends with `outcome` in
- * `round`. `lane.sendBack`: `[build] send_back`; left out, a red head goes back. `lane.trail`: the
- * answers that grant rounds past the bound (`boundOf`); left out, none.
+ * `round`, by its row in `ROUTES` (./routes.ts). `lane.sendBack`: `[build] send_back`; left out, a
+ * red head goes back. `lane.trail`: the answers that grant rounds past the bound (`boundOf`), and
+ * the step's last end, for a second arrival in a row; left out, none.
+ *
+ *   after("merge", {kind: "send", to: "reviewer", why: "no_review"}, 1)   // {to: "review"}
+ *   after("mutation", {kind: "stuck", why: "run_failed"}, 1)              // {to: "mutation"}
+ *   // ...and with the trail ending on mutation's `stuck:run_failed`:  {end: stuck:step_stuck}
  */
 export const after = (
 	step: LaneStep,
@@ -533,46 +627,48 @@ export const after = (
 	round: number,
 	lane: {readonly sendBack?: boolean; readonly trail?: Held["trail"]} = {},
 ): Move => {
-	const bound = boundOf(lane.trail ?? []);
-	switch (outcome.kind) {
-		case "stuck":
-			// A build that changed the test writer's files: the person says which was wrong.
-			if (step === "build" && outcome.why === "exam_touched") return {ask: "exam_touched"};
-			// A builder that changed nothing in a round at the cap: the same question as any spent round.
-			if (step === "build" && outcome.why === "rounds_spent") return {ask: "rounds_spent"};
-			// Code's checks after the build could not run, after one more try: never guessed green.
-			if (step === "build" && outcome.why === "checks_not_run") return stuck("checks_not_run");
-			// Someone else merged the pull request: what landed is theirs, and the lane ends on it.
-			if (step === "merge" && outcome.why === "merged_elsewhere") return stuck("merged_elsewhere");
-			return stuck("step_stuck");
-		case "ask":
-			// A plan with open questions goes to the same yes: the person reads them there.
-			if (step === "plan") return {ask: "approve"};
-			// The exam's `check_change`: its pull request is open, and the rules are the person's.
-			if (step === "exam") return {ask: "exam_merge"};
-			return {ask: "step"};
-		case "skip":
-			if (step === "triage" || step === "plan")
-				return {end: {kind: "skip", why: outcome.why === "closed" ? "closed" : "owner_no"}};
-			// Build's `not_ready` and `closed`, and ship's `closed`, `draft` and `not_ours`, stop the lane:
-			// only these steps may pass with nothing done.
-			if (step === "exam" || step === "test_writer" || step === "mutation") return NEXT[step];
-			return stuck("step_stuck");
-		case "send":
-			if (step === "triage")
-				return outcome.to === "research" ? {end: {kind: "skip", why: "research"}} : NEXT.triage;
-			if (step === "mutation" && outcome.to === "test_writer") return {to: "mutants"};
-			// The head's own tests fail, by code's checks after the build or by the mutation step's run:
-			// the builder gets them by name, unless the repository says ask.
-			if ((step === "build" || step === "mutation") && outcome.to === "builder")
-				return lane.sendBack === false ? {ask: "rounds_spent"} : back("build", round, bound);
-			// A finding needs a test, and the builder cannot add one: the writer goes first.
-			if (step === "review" && outcome.to === "builder") return back("test_writer", round, bound);
-			return stuck("sent_back");
-		case "done":
-			// Triage closed it, as a no or a duplicate. Done, and nobody is next.
-			if (step === "triage") return merged;
+	const trail = lane.trail ?? [];
+	const name = nameOf(outcome);
+	const route = routeOf(step, name);
+	switch (route?._tag) {
+		// A name no step can say, read back from somewhere: the lane has no way to go. An ask the step
+		// has no row for is still its own question, as before the table.
+		case undefined:
+			if (outcome.kind === "ask") return {ask: "step"};
+			return stuck(outcome.kind === "send" ? "sent_back" : "step_stuck");
+		case "next":
 			return NEXT[step];
+		case "run":
+			return {to: route.step};
+		case "back":
+			return backTo(step, route, round, {...lane, trail});
+		case "fresh":
+			// `exam_review` takes main in itself, before its checks (./exam-pull.ts `examReady`).
+			if (EXAM_STEPS.has(route.step)) return {to: route.step};
+			// A clean read of main that the step still refuses the same way: once is enough.
+			return trail.at(-1)?.step === step && trail.at(-1)?.said === name
+				? stuck("step_stuck")
+				: {fresh: route.step};
+		case "once":
+			return inARow(step, trail, (r) => r._tag === "once") ? stuck("step_stuck") : {to: step};
+		case "host":
+			return {host: true};
+		case "ask":
+			return {ask: route.for};
+		case "end":
+			return {end: route.outcome};
+		case "stop":
+			// Code's checks could not run, after one more try: the lane's own word for it.
+			return stuck(
+				outcome.kind === "stuck" && outcome.why === "checks_not_run"
+					? "checks_not_run"
+					: "step_stuck",
+			);
+		// Self-fix PR 11b makes the service wait: until then, the lane stops as it did.
+		case "wait":
+		// The law says it never arrives. If it does, the law is wrong: stop, never guess.
+		case "cannot":
+			return stuck("step_stuck");
 	}
 };
 
@@ -585,6 +681,7 @@ export const PICKS = {
 	rounds_spent: ["again", "stop"],
 	exam_touched: ["builder_wrong", "test_wrong"],
 	exam_conflict: ["again", "stop"],
+	spend: ["more", "stop"],
 } as const;
 
 /**
@@ -599,13 +696,19 @@ const PAUSES: Readonly<Record<AskFor, readonly string[]>> = {
 	rounds_spent: ["stop"],
 	exam_touched: [],
 	exam_conflict: ["stop"],
+	spend: ["stop"],
 };
 
-/** Where the lane goes on when `m` is where it moves. No question's `go_on` ends a lane. Pure. */
+/**
+ * Where the lane goes on when `m` is where it moves. No question's `go_on` ends a lane. A fresh read,
+ * of main or of the ticket, goes on at the step it reads for. Pure.
+ */
 const resumeOfMove = (m: Move, step: LaneStep): Resume => {
 	if ("to" in m)
 		return {_tag: "run", step: m.to, ...(m.round === undefined ? {} : {round: "next"})};
 	if ("ask" in m) return {_tag: "ask", for: m.ask, step};
+	if ("fresh" in m) return {_tag: "run", step: m.fresh};
+	if ("host" in m) return {_tag: "run", step};
 	return stopsAt(step, m.end);
 };
 
@@ -620,6 +723,7 @@ const resumeOfMove = (m: Move, step: LaneStep): Resume => {
  *                  it as the next round, by the stop's own outcome: `goesOnFrom`)
  *   exam_touched   builder_wrong: the build, next round   test_wrong: the test writer, then the build
  *   exam_conflict  again: the test writer, then the build, next round   stop: the same question
+ *   spend          more: the step again, in its round   stop: the step again
  *
  * A `go_on` goes where the step's end goes: a call's end, as in a round with rounds left (the lane
  * asks the rounds' question itself when none are).
@@ -648,11 +752,14 @@ export const resumeOf = (question: Question, pick: string): Resume => {
 			// A build run again is a round: the builder gets another try, and the tries are counted.
 			return run(step, step === "build");
 		case "rounds_spent":
-			return run(step, pick === "again");
+			// The exam's rounds are its rows on the trail, never the lane's `round`.
+			return run(step, pick === "again" && !EXAM_STEPS.has(step));
 		case "exam_touched":
 			return pick === "test_wrong" ? run("test_writer", true) : run("build", true);
 		case "exam_conflict":
 			return pick === "again" ? run("test_writer", true) : again;
+		case "spend":
+			return run(step);
 	}
 };
 
@@ -661,7 +768,10 @@ export const resumeOf = (question: Question, pick: string): Resume => {
  * rounds as the round after them, as the person's `again` would have. Pure.
  */
 const goesOnFrom = (at: Resume, outcome: LaneOutcome): Resume =>
-	at._tag === "run" && outcome.kind === "stuck" && outcome.why === "rounds_spent"
+	at._tag === "run" &&
+	!EXAM_STEPS.has(at.step) &&
+	outcome.kind === "stuck" &&
+	outcome.why === "rounds_spent"
 		? {...at, round: "next"}
 		: at;
 
@@ -679,7 +789,8 @@ const pausedAt = (question: Question, pick: string): Resume =>
 	goesOnFrom(resumeOf(question, pick), pausedBy(question));
 
 /** Where a spent round's `again` goes: the writer first after a review, as a review's send-back does. */
-const againTo = (step: LaneStep): LaneStep => (step === "review" ? "test_writer" : "build");
+const againTo = (step: LaneStep): LaneStep =>
+	EXAM_STEPS.has(step) ? "exam" : step === "review" ? "test_writer" : "build";
 
 /**
  * The step a question of `kind` comes back to, asked after `step` ended. The rounds' question comes
@@ -700,7 +811,8 @@ export const resumeAfter = (
 ): Resume => resumeOfMove(after(step, outcome, round, {trail}), step);
 
 /** The step that sent the work back, for the rounds' question asked again: the inverse of `againTo`. */
-const sentFrom = (to: LaneStep): LaneStep => (to === "test_writer" ? "review" : "build");
+const sentFrom = (to: LaneStep): LaneStep =>
+	to === "exam" ? "exam_review" : to === "test_writer" ? "review" : "build";
 
 /** A person's call: what is there stands or stops. Nothing would change by running the step again. */
 const CALL_PICKS = ["go_on", "stop"] as const;
@@ -715,13 +827,21 @@ const picksFor = (kind: AskFor, step: LaneStep): readonly string[] =>
  * and a build asks plainly only of a head whose tests fail, which the mutation step sends back.
  * A person's call on what is there (`Call`) is its own question, with its own picks.
  */
-const NO_GO_ON: ReadonlySet<LaneStep> = new Set(["push", "merge", "exam_merge", "review", "build"]);
+const NO_GO_ON: ReadonlySet<LaneStep> = new Set([
+	"push",
+	"merge",
+	"exam_merge",
+	"exam_review",
+	"review",
+	"build",
+]);
 
 /** A step, as a person says it. */
 const STEP_WORDS: Readonly<Record<LaneStep, string>> = {
 	triage: "triage",
 	plan: "plan",
 	exam: "rule change",
+	exam_review: "rule change's review",
 	exam_merge: "rule change's merge",
 	test_writer: "test writer",
 	build: "build",
@@ -776,8 +896,30 @@ const mergeWords = (carry: Carry): string => {
 		: `The review met ${reviewed.met} of ${reviewed.of}${throughCount(carry)}, and the repository's checks passed at its head. Do you want to merge "${reviewed.title}"?`;
 };
 
+/**
+ * The exam merge's question: what the review met and the head the checks passed at first, as the
+ * merge's question does, then the rule files. Pure.
+ */
+const examMergeWords = ({rules, examPull}: Carry): string => {
+	const asks = `Do you want to merge these rule changes: ${rules.join(", ")}?`;
+	const reviewed = examPull?.reviewed;
+	return reviewed === undefined || reviewed.head !== examPull?.head
+		? asks
+		: `The review met ${reviewed.met} of ${reviewed.of}, and the checks passed at ${reviewed.head.slice(0, 7)}. ${asks}`;
+};
+
+/** What the rule changes' merge question has beside it: each change, and why. Pure. */
+const examMergeAlso = ({plan}: Carry): readonly string[] => {
+	const changes = plan?.exam ?? [];
+	return changes.length === 0
+		? []
+		: ["These rule changes are in a pull request of their own:", ...ruleChangeLines(changes)];
+};
+
 /** The rounds' question, by the step that sent the work back and whether the rounds ran out. Pure. */
 const spentQuestion = (s: Held, step: LaneStep): string => {
+	if (EXAM_STEPS.has(step))
+		return `The rule changes went to the exam writer ${examRounds(s.trail)} of ${boundOf(s.trail)} times, and ${step === "exam_merge" ? "the merge" : "the review or the checks"} still send them back. Should the exam writer go once more?`;
 	const still =
 		step === "review"
 			? "the review still sends the work back"
@@ -797,7 +939,7 @@ const questionFor = (
 ): Question => {
 	const what = {
 		approve: `Do you approve plan version ${s.carry.version ?? 1}?`,
-		exam_merge: titleOf(`Do you want to merge these rule changes: ${s.carry.rules.join(", ")}?`),
+		exam_merge: titleOf(examMergeWords(s.carry)),
 		merge: titleOf(mergeWords(s.carry)),
 		step: titleOf(asks),
 		rounds_spent: titleOf(spentQuestion(s, step)),
@@ -805,6 +947,9 @@ const questionFor = (
 			`The build changed the test writer's files${(s.carry.touched ?? []).length === 0 ? "" : `: ${(s.carry.touched ?? []).join(", ")}`}. Which was wrong: the builder, or the test?`,
 		),
 		exam_conflict: titleOf(asks),
+		spend: titleOf(
+			`The ${STEP_WORDS[step]} step spent the limit it was given and stopped. Should it run again, with more?`,
+		),
 	}[kind];
 	// The trail gains a row with every answer, so no two questions share a number. A lane saved under
 	// the old count is safe too: that count was never more than the trail, and its answer added a row.
@@ -822,6 +967,9 @@ const conflictWords = (files: readonly string[]): string =>
 /** Where the lane goes on a `go_on`, in words. Pure. */
 const goOnWords = (next: Move): string => {
 	if ("to" in next) return `The lane moves on to the ${STEP_WORDS[next.to]} step.`;
+	if ("fresh" in next)
+		return `The lane takes main in, then moves on to the ${STEP_WORDS[next.fresh]} step.`;
+	if ("host" in next) return "The lane reads the ticket again, and ends or pauses by what it says.";
 	return "ask" in next ? "The lane moves on, and asks you what comes next." : "The lane ends here.";
 };
 
@@ -857,11 +1005,13 @@ const pickLine = (s: Held, question: Question, pick: string): string => {
 		again:
 			question.for === "exam_conflict"
 				? `The test writer writes those tests again on main's version, then the build runs, as round ${s.round + 1}.`
-				: spent
-					? `The ${words} step runs once more${question.step === "build" ? "" : ", then the build"}, as round ${s.round + 1}, past the ${MAX_ROUNDS} rounds a ticket gets on its own. A note you write beside this answer goes to the builder.`
-					: question.step === "build"
-						? `The build step runs once more, and a note you write beside this answer goes to the builder. It counts as round ${s.round + 1} of ${boundOf(s.trail)}.`
-						: `The ${words} step runs once more, from the start.`,
+				: spent && EXAM_STEPS.has(question.step)
+					? `The exam writer redoes the rule changes once more, past the ${MAX_ROUNDS} rounds they get on their own. A note you write beside this answer goes to the exam writer.`
+					: spent
+						? `The ${words} step runs once more${question.step === "build" ? "" : ", then the build"}, as round ${s.round + 1}, past the ${MAX_ROUNDS} rounds a ticket gets on its own. A note you write beside this answer goes to the builder.`
+						: question.step === "build"
+							? `The build step runs once more, and a note you write beside this answer goes to the builder. It counts as round ${s.round + 1} of ${boundOf(s.trail)}.`
+							: `The ${words} step runs once more, from the start.`,
 		go_on:
 			call === undefined
 				? [
@@ -876,9 +1026,17 @@ const pickLine = (s: Held, question: Question, pick: string): string => {
 					].join(" "),
 		builder_wrong: `The test writer's files go back as it wrote them, on top of the builder's work, and the build runs again there, as round ${s.round + 1}. A note you write beside this answer goes to the builder.`,
 		test_wrong: `The test writer writes those files again, and only those, with the note you write beside this answer. Then the build goes on from the builder's work, as round ${s.round + 1}.`,
+		more: `The ${words} step runs again, with one more of the limit it was given.`,
 		...(PAUSES[question.for].includes(pick) ? pauses : {}),
 	};
 	return `\`${pick}\`: ${says[pick] ?? "The lane takes this answer as it stands."}`;
+};
+
+/** The head a merge's question is about, for the `asked` fact: what the person saw. Pure. */
+const headAsked = (kind: AskFor, carry: Carry): {readonly head?: string} => {
+	const head =
+		kind === "exam_merge" ? carry.examPull?.head : kind === "merge" ? carry.head : undefined;
+	return head === undefined || head === null ? {} : {head};
 };
 
 const asking = (s: Held, question: Question): Step_ => {
@@ -890,6 +1048,11 @@ const asking = (s: Held, question: Question): Step_ => {
 		does: question.picks.map((pick) => pickLine(s, question, pick)),
 		...(question.for === "merge" ? {also: throughWords(s.carry.through)} : {}),
 		...(question.for === "rounds_spent" ? {also: openWords(s.carry.open), spent: true} : {}),
+		// What the runs on the ticket cost so far, beside the spend question (jidoka row 18).
+		...(question.for === "spend" ? {spent: true} : {}),
+		// What changes and why, beside the question: the exam step's own words came before its review.
+		...(question.for === "exam_merge" ? {also: examMergeAlso(s.carry)} : {}),
+		...headAsked(question.for, s.carry),
 		intent: intentOf("lane", s.number, question.ask),
 	});
 	return [{...s, phase: "asking", question, asked: cmd}, [cmd]];
@@ -922,9 +1085,42 @@ const runAt = (s: Held, step: LaneStep, round: number): Resume => ({
 	...(round > s.round ? {round: "next" as const} : {}),
 });
 
-/** The one place a step starts: one after build only on a head with green checks there. */
-const running = (s: Held, step: LaneStep, round = s.round): Step_ => {
+/**
+ * Where the exam's merge goes instead, at the head its pull request has now: `null`, nowhere, since
+ * the review and a person's yes both stand there. A review at another head, or none: the review
+ * again. A yes at another head, or none: the person is asked. Pure.
+ */
+const examMergeFrom = (s: Held, round: number): Step_ | null => {
+	const pull = s.carry.examPull;
+	if (pull === undefined || pull.reviewed?.head !== pull.head)
+		return running(s, "exam_review", round);
+	if (pull.yes?.head !== pull.head)
+		return asking(s, questionFor(s, "exam_merge", "exam_review", ""));
+	return null;
+};
+
+/**
+ * The one place a step starts: one after build only on a head with green checks there, and the
+ * exam's merge only where its review and a person's yes stand at its head. `restarted`: a restart
+ * goes on in the merge it stopped in, as it held it. Ship's own gate reads the review and the yes at
+ * the head the host has now, and its `no_review` comes back to the review (./routes.ts).
+ */
+const running = (s: Held, step: LaneStep, round = s.round, restarted = false): Step_ => {
+	const instead = step === "exam_merge" && !restarted ? examMergeFrom(s, round) : null;
+	if (instead !== null) return instead;
 	const unchecked = AFTER_BUILD.has(step) ? uncheckedAt(s.carry) : null;
+	const last = s.trail.at(-1)?.step;
+	// A head after build no builder made: the mutants job's commit (experiment 193), or a person's
+	// head the merge took in (jidoka rows 62 and 63). Red: the builder gets the failing names, a round
+	// up, as after a build's own red (./routes.ts `back("build", "names")`). The mutants job's, not
+	// run or none: main is read fresh, which runs them, as a restart does; still not run after that
+	// read, the lane stops and says why.
+	if ((last === "mutants" || last === "merge") && unchecked === "checks_red") {
+		const red: Outcome = {kind: "send", to: "builder", why: "checks_red"};
+		return move(s, "build", after("build", red, s.round, s), nameOf(red), askWords("build", red));
+	}
+	if (last === "mutants" && unchecked === "checks_not_run" && !restarted)
+		return refreshing(s, runAt(s, step, round));
 	if (unchecked !== null)
 		return releasing(s, {
 			outcome: {kind: "stuck", why: unchecked},
@@ -943,6 +1139,36 @@ const running = (s: Held, step: LaneStep, round = s.round): Step_ => {
 	return [{...heldOf(at), phase: "running", step, asked: cmd}, [cmd]];
 };
 
+/**
+ * Main is read fresh, and the lane's branch stands on it, before the lane goes on at `at`. `routed`:
+ * a route's `fresh` sent it, as `FreshIn` says. Left out: a restart's, or the guard's.
+ */
+const refreshing = (s: Held, at: Resume, routed = false): Step_ => {
+	const asked = freshMain({
+		number: s.number,
+		from: at,
+		carry: s.carry,
+		...(routed ? {routed: true} : {}),
+		intent: intentOf("lane", s.number, "fresh", s.count, s.trail.length),
+	});
+	return [{...heldOf(s), at, phase: "refreshing", asked}, [asked]];
+};
+
+/**
+ * Where a clean fresh read of main goes on. A new head on a pushed branch: the push step shows it
+ * before a merge, and a review reads it first unless what it judged stands there. A route's read has
+ * pushed it already, so it runs its own step, with no agent turn and no round (jidoka row 62),
+ * unless the review does not stand there. Pure.
+ */
+const freshAt = (
+	s: Extract<Lane, {phase: "refreshing"}>,
+	found: Extract<Fresh, {_tag: "fresh" | "merged"}>,
+): Resume => {
+	if (found._tag === "fresh" || STEPS.indexOf(s.at.step) <= STEPS.indexOf("review")) return s.at;
+	if (found.review._tag !== "kept") return {_tag: "run", step: "review"};
+	return s.asked.routed === true ? s.at : {_tag: "run", step: "push"};
+};
+
 /** The lane lets the ticket go: on an end, with nothing kept; on a stop, with its `Held` and where it goes on. */
 const releasing = (s: Held, close: End | Stop): Step_ => {
 	const cmd = releaseLane({
@@ -958,6 +1184,11 @@ const releasing = (s: Held, close: End | Stop): Step_ => {
 const move = (s: Held, step: LaneStep, m: Move, said: string, asks = said, call?: Call): Step_ => {
 	if ("to" in m) return running(s, m.to, m.round);
 	if ("ask" in m) return asking(s, questionFor(s, m.ask, step, asks, call));
+	if ("fresh" in m) return refreshing(s, {_tag: "run", step: m.fresh}, true);
+	if ("host" in m) {
+		const asked = readFiled({number: s.number});
+		return [{...heldOf(s), phase: "reading", step, said, asked}, [asked]];
+	}
 	// A stop goes on at the step that stopped: the same line runs it again.
 	return isEnd(m.end)
 		? releasing(s, {outcome: m.end, said})
@@ -970,9 +1201,10 @@ const askedAgain = (s: Held, kind: Exclude<AskFor, "step">, step: LaneStep): Que
 		? questionFor(s, kind, sentFrom(step), "")
 		: questionFor(s, kind, step, kind === "exam_conflict" ? conflictWords(s.carry.exam) : "");
 
-/** The lane goes on where `at` says: a step it runs, or a question it asks again. */
-const goOn = (s: Held, at: Resume): Step_ => {
-	if (at._tag === "run") return running(s, at.step, at.round === "next" ? s.round + 1 : s.round);
+/** The lane goes on where `at` says: a step it runs, or a question it asks again. `restarted`: as `running`'s. */
+const goOn = (s: Held, at: Resume, restarted = false): Step_ => {
+	if (at._tag === "run")
+		return running(s, at.step, at.round === "next" ? s.round + 1 : s.round, restarted);
 	// A step's own question is asked by the step: it runs again, and asks again if it still has to.
 	if (at.for === "step") return running(s, at.step);
 	return asking(s, askedAgain(s, at.for, at.step));
@@ -1040,11 +1272,26 @@ const heldOf = (s: Held): Held => ({
 const withFresh = (s: Held, carry: StepEnd["carry"] | undefined): Held =>
 	carry === undefined ? s : {...s, carry: {...s.carry, ...carry}};
 
+/**
+ * A person's `merge` on the exam's pull request: a yes on what the review read, at its head. A review
+ * at another head gives none, and the merge asks again. Pure.
+ */
+export const saidYes = (carry: Carry): Carry => {
+	const pull = carry.examPull;
+	const reviewed = pull?.reviewed;
+	if (pull === undefined || reviewed === undefined || reviewed.head !== pull.head) return carry;
+	const {head, onto, base, diff} = reviewed;
+	return {...carry, examPull: {...pull, yes: {head, onto, base, diff}}};
+};
+
 const answered = (s: Extract<Lane, {phase: "asking"}>, pick: string, note: string): Step_ => {
 	const {question} = s;
 	const held: Held = {
 		...heldOf(s),
-		carry: withNote(s.carry, note),
+		carry: withNote(
+			question.for === "exam_merge" && pick === "merge" ? saidYes(s.carry) : s.carry,
+			note,
+		),
 		trail: [...s.trail, {step: question.ask, said: pick}],
 	};
 	if (pick === "go_on") {
@@ -1102,23 +1349,51 @@ const released = (s: Lane): Step_ => {
 	return [{...over, outcome: s.outcome, said: s.said}, []];
 };
 
+/**
+ * A step said the ticket or its pull request is closed, merged or a draft, and the ticket was read
+ * fresh (jidoka row 13). Closed: the lane ends `skip:closed`. Open: what the step saw is a person's to
+ * settle, so the lane pauses at that step, saved, and the same line goes on there. Not filed by the
+ * person running it: it ends, as at the start. Pure.
+ */
+const hostRead = (s: Extract<Lane, {phase: "reading"; step: LaneStep}>, filed: Filed): Step_ => {
+	const held = heldOf(s);
+	if (!filed.mine)
+		return releasing(held, {
+			outcome: {kind: "stuck", why: "not_yours"},
+			said: `#${s.number} was not filed by you or an agent of yours`,
+		});
+	if (filed.state === "closed")
+		return releasing(held, {
+			outcome: {kind: "skip", why: "closed"},
+			said: `#${s.number} is closed`,
+		});
+	return releasing(held, {
+		outcome: {kind: "ask", who: "owner", for: "paused"},
+		said: `${s.step}: ${s.said}, on an open ticket`,
+		at: {_tag: "run", step: s.step},
+	});
+};
+
+/** What the lane waits on while it asks: the ticket, the ask, what it is for, and the picks that count. */
+export interface AnswerWait {
+	readonly number: number;
+	readonly ask: string;
+	readonly for: AskFor;
+	readonly picks: readonly string[];
+}
+
 /** The Listen on a person's answer: on for as long as the lane is asking. */
-export const answerSub = listen<
-	Lane,
-	"lane_answer",
-	{readonly number: number; readonly ask: string; readonly picks: readonly string[]}
->("lane_answer", (s) =>
-	s.phase === "asking" ? {number: s.number, ask: s.question.ask, picks: s.question.picks} : null,
+export const answerSub = listen<Lane, "lane_answer", AnswerWait>("lane_answer", (s) =>
+	s.phase === "asking"
+		? {number: s.number, ask: s.question.ask, for: s.question.for, picks: s.question.picks}
+		: null,
 );
 
 export const lane = defineMachine({
 	types: {
 		model: {} as Lane,
 		msg: {} as LaneMsg,
-		sub: {} as Sub<
-			"lane_answer",
-			{readonly number: number; readonly ask: string; readonly picks: readonly string[]}
-		>,
+		sub: {} as Sub<"lane_answer", AnswerWait>,
 		ctx: undefined,
 	},
 	cmds: [readFiled, claimLane, releaseLane, runStep, askPerson, freshMain],
@@ -1157,6 +1432,7 @@ export const lane = defineMachine({
 		},
 		lane_read_ok: (s, m): Step_ => {
 			if (s.phase !== "reading") return [s, []];
+			if ("step" in s) return hostRead(s, m.value);
 			const held: Held = {
 				number: s.number,
 				lane: s.lane,
@@ -1182,41 +1458,45 @@ export const lane = defineMachine({
 			return [{...held, phase: "claiming", asked}, [asked]];
 		},
 		lane_read_err: (s): Step_ =>
-			s.phase === "reading"
-				? stopped(
-						{
-							number: s.number,
-							lane: s.lane,
-							...(s.sendBack === undefined ? {} : {sendBack: s.sendBack}),
-							count: 0,
-							round: 1,
-							carry: EMPTY,
-							trail: [],
-						},
-						{kind: "stuck", why: "no_ticket"},
-						`#${s.number} could not be read`,
-						{_tag: "run", step: "triage"},
-					)
-				: [s, []],
+			s.phase === "reading" && "step" in s
+				? releasing(heldOf(s), {
+						outcome: {kind: "stuck", why: "no_ticket"},
+						said: `#${s.number} could not be read, after ${s.step}'s ${s.said}`,
+						at: {_tag: "run", step: s.step},
+					})
+				: s.phase === "reading"
+					? stopped(
+							{
+								number: s.number,
+								lane: s.lane,
+								...(s.sendBack === undefined ? {} : {sendBack: s.sendBack}),
+								count: 0,
+								round: 1,
+								carry: EMPTY,
+								trail: [],
+							},
+							{kind: "stuck", why: "no_ticket"},
+							`#${s.number} could not be read`,
+							{_tag: "run", step: "triage"},
+						)
+					: [s, []],
 		lane_claim_ok: (s, m): Step_ => {
-			if (s.phase === "restarting") {
-				if (m.value !== s.lane)
-					return stopped(s, {kind: "stuck", why: "claim_held"}, `lane ${m.value} holds it`, s.at);
-				const asked = freshMain({
-					number: s.number,
-					from: s.at,
-					carry: s.carry,
-					intent: intentOf("lane", s.number, "fresh", s.count, s.trail.length),
-				});
-				return [{...heldOf(s), at: s.at, phase: "refreshing", asked}, [asked]];
+			if (s.phase !== "restarting" && s.phase !== "claiming") return [s, []];
+			// Another lane holds the ticket: this one ends and names it, as operate does (jidoka row 3).
+			if (m.value !== s.lane) {
+				const outcome = {kind: "skip", why: "claimed"} as const;
+				return [
+					{
+						phase: "over",
+						number: s.number,
+						trail: s.trail,
+						outcome,
+						said: `lane ${m.value} holds it`,
+					},
+					[],
+				];
 			}
-			if (s.phase !== "claiming") return [s, []];
-			if (m.value !== s.lane)
-				return stopped(s, {kind: "stuck", why: "claim_held"}, `lane ${m.value} holds it`, {
-					_tag: "run",
-					step: "triage",
-				});
-			return running(heldOf(s), "triage");
+			return s.phase === "restarting" ? refreshing(s, s.at) : running(heldOf(s), "triage");
 		},
 		lane_claim_err: (s): Step_ => {
 			const said = "the claim could not be made";
@@ -1254,15 +1534,11 @@ export const lane = defineMachine({
 				case "fresh":
 				case "merged": {
 					const on = withFresh(held, found.carry);
-					// A new head on a pushed branch: the review reads it and the push shows it, before a merge.
-					const at: Resume =
-						found._tag === "merged" && STEPS.indexOf(s.at.step) > STEPS.indexOf("review")
-							? {_tag: "run", step: "review"}
-							: s.at;
+					const at = freshAt(s, found);
 					// Code's checks at the head a step after the build goes on at are red: the builder gets
 					// them, a round up, as after a build's own red, or a person is asked past the bound.
 					if (!AFTER_BUILD.has(at.step) || uncheckedAt(on.carry) !== "checks_red")
-						return goOn(on, at);
+						return goOn(on, at, true);
 					const red: Outcome = {kind: "send", to: "builder", why: "checks_red"};
 					return move(
 						on,

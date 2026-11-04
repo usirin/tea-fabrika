@@ -3,7 +3,7 @@ import {Miniflare} from "miniflare";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
 import {newToken} from "../host/door.ts";
 import {layerTracesHttp, recordsHttp} from "../host/http.ts";
-import {recordInside} from "../host/inside.ts";
+import {recordInside, recordsInside} from "../host/inside.ts";
 import {type JobTrace, jobStorage, jobWrites, Traces} from "../host/traces.ts";
 import {ledgerOptions} from "../host/worker-options.ts";
 import {pipe, start} from "../program/program.ts";
@@ -215,5 +215,34 @@ describe("a job's record, on the Miniflare twin", () => {
 		// Each ledger's records are its own: the same trace under another ledger is empty.
 		const other = (await recordInside(mf, "other", trace).dump()) as {spans: unknown[]};
 		expect(other.spans).toEqual([]);
+	});
+
+	// Tracker 185a: a call may name who started the job and who stopped it, but the record keeps
+	// only a writer its sender may name, the sender or the sender's own agent. The same rule as
+	// host/job-rules.test.ts, here in the Durable Object, past the door, with the sender it gives.
+	it("keeps only a writer its sender may name, in began and in a stop", async () => {
+		const person = "user:github:7";
+		const agent = "agent:claude for:github:7";
+		const claims = [
+			{run: "claim-own-agent", sender: person, claim: agent, kept: agent},
+			{run: "claim-other-person", sender: person, claim: "user:github:8", kept: person},
+			{run: "claim-other-agent", sender: person, claim: "agent:claude for:github:8", kept: person},
+			{run: "claim-its-person", sender: agent, claim: person, kept: agent},
+		];
+		for (const {run, sender, claim, kept} of claims) {
+			const trace = runTraceId(run);
+			await Effect.runPromise(
+				Effect.gen(function* () {
+					const job = jobWrites(recordsInside(mf, LEDGER, sender), trace);
+					yield* job.began({n: 1, text: "counter", host: "laptop", at: 10, by: claim});
+					yield* job.ended("stopped", 20, {by: claim, why: "wrong ticket"});
+				}),
+			);
+			const dump = (await recordInside(mf, LEDGER, trace).dump()) as {job: unknown[]};
+			expect({run, job: dump.job}).toMatchObject({
+				run,
+				job: [{by: kept, ended_by: kept, why: "wrong ticket"}],
+			});
+		}
 	});
 });

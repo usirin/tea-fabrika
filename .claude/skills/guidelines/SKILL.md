@@ -6,12 +6,16 @@ description: Run this repo's guidelines study for one design area, from settled 
 # A guidelines study
 
 One design area becomes a few principles the owner can press, read and decide on. A study ends
-with one experiment, one note, one private page, one docs-only pull request, and a walk that
-ends in a yes or a no.
+with one experiment, one note, one Design canvas, one docs-only pull request, and a walk that
+ends in a yes or a no. The canvas is a Design canvas in Claude Design with the design system
+installed ([drawn on Claude Design](../../../docs/direction/design-on-claude-design.md)). A
+keyboard-only walk stays a plain page beside it.
 
 The models are themes (PR 281), keybindings (PR 282), hot reload (PR 286) and modes (PR 287).
-Themes came first; the other three set the page's shape, and modes is the closest to it all:
-copy modes. Pipeline guidelines (PR 290) drifted on structure (no demo, no Try it), so it is not a model, but its views and palette are a second reference.
+Themes came first; the other three set the note's shape and the views under the page's mockup,
+and modes is the closest to it all: copy modes for those. Pipeline guidelines (PR 290) drifted on structure (no demo, no Try it), so it is not a model, but its views and palette are a second reference.
+The canvas copies the mockup rounds instead (the tile, the pipe marker finalists, the chat window,
+the outline round): there the mockup is the page, and the words sit beside it.
 
 Read `AGENTS.md` first. Its rules on names, writing, version and the public repo all apply.
 
@@ -45,8 +49,8 @@ with real shots and the owner's yes.
 
 - One real case from today's code, read on main, with `file:line` for each claim. Modes used
   info mode (`C-b i`). Pipeline used ticket 117's real run. Keybindings used today's key code.
-- It runs through the experiment, the note, the code block that opens the note, and the page's
-  demo. Every principle says whether today's case follows it or breaks it, and where.
+- It runs through the experiment, the note, the code block that opens the note, and the
+  canvas. Every principle says whether today's case follows it or breaks it, and where.
 - Say which version each claim is about: today's version (`apps/`, `packages/`, `programs/`) or
   `next/`.
 
@@ -72,30 +76,46 @@ with real shots and the owner's yes.
   (programs that compose in tiles, the desk, the top bar, pipes)? Their taste and quality bar,
   on our pieces. Never copy a Linear screen. Ask which program owns the job, what sits beside
   what, and what becomes a piece every program gets for free. Write it as a row, or "No Linear
-  answer: <why>". Where we differ, say why.
+  answer: <why>". Where we differ, say why. Ask it again for each design in step 5: which program
+  owns each part of it?
 - **Elm or OTP.** Name the Elm answer (model, update, view, parents step children) or the
   Erlang/OTP one (mailbox, supervisor, `code_change`) where it fits. Say where we leave it.
 - **Accessibility.** Name the WCAG criterion a principle touches, and what needs a real screen
   reader run.
 
-### 5. Build the screen and look at it next to Linear
+### 5. Build 3 or 4 designs and look at them next to Linear
 
-The Linear row in step 4 is words. This step checks the look with eyes.
+The Linear row in step 4 is words. This step checks the look with eyes. It starts wide, as the
+pipe marker finalists did with four different designs, and only then refines one.
 
-- Build the area's screen for real in today's app, on a local branch, with the real tokens
-  (`apps/fabrika/src/themes.ts`) and the real chassis around it. Keys and mouse both work, as the
-  guidelines say. Read today's code for which jobs exist, not for how they look
+- Build **3 or 4 distinct designs** for real in today's app, on a local branch, with the real
+  tokens (`apps/fabrika/src/themes.ts`) and the real chassis around them. Each is a different
+  answer to the same job, such as a list, a card, a panel or inline, not a small change to one
+  design. Keys and mouse both work in each, as the guidelines say. Read today's code for which
+  jobs exist, not for how they look
   ([rethink, do not port](../../../docs/direction/rethink-do-not-port.md)).
+- **Each design writes its tsh pipe line first,** before it is built: `tracker --all | outline`,
+  or `outline | ticket`. Any part that is another program's job becomes its own tile, joined by a
+  pipe: a sidebar that opens a detail, a list another program owns, a mode that swaps the whole
+  view. The yardstick is program guidelines (PR 332, proposed): G1, one job per program, and G6,
+  programs meet on typed pipes.
 - Fewer boxes. If something already draws an edge, a second line, box or background goes. A
   selected row is a full-row fill and stronger text, never a colored bar on one side.
-- Shoot it with Playwright on Electron, as `apps/fabrika/e2e.ts` does, at five layouts: one tile
-  filling the window, two side by side, two stacked, a 2x2 grid, and about 1024x700. Put each shot
-  beside today's app and beside the closest Linear screen, from Linear's public docs or changelog.
-- For each shot, one line: would Linear's team ship this? What looks off: a box in a box, a gray
-  that fights, a line nobody needs, loud text, a cramped layout? Fix it and reshoot. Two or three
-  rounds is normal. Stop when you would ship it.
-- Show the owner the shots before the write-up. Their yes on the look comes first. On a no, go
-  round again.
+- Shoot each design with Playwright on Electron, as `apps/fabrika/e2e.ts` does, at five layouts:
+  one tile filling the window, two side by side, two stacked, a 2x2 grid, and about 1024x700. Put
+  each shot beside today's app and beside the closest Linear screen, from Linear's public docs or
+  changelog.
+- Show the owner the designs on the canvas (step 9), each with its pipe line above it. **The owner
+  picks one.** Each design that lost gets one or two plain lines on why, tied to a principle or a shot.
+- Then refine the pick in rounds. For each shot, one line: would Linear's team ship this? What
+  looks off: a box in a box, a gray that fights, a line nobody needs, loud text, a cramped
+  layout? Fix it and reshoot. Two or three rounds is normal. Stop when you would ship it.
+- Keep every design and every round. For each, the shoot presses the real build through every
+  key and click the screen takes and saves each state it reaches: the DOM
+  (`document.documentElement.outerHTML`, scripts dropped, a canvas kept as its pixels), which
+  press led where, and the built `window.css`. Step 9 takes the canvas's words and keys, and a
+  plain page's demo, from these files.
+- Their yes on the look comes before the write-up. On a no, go round again.
 - Each principle also gets a **kind**, so it is checked the right way: **law** (the test writer
   can check it), **lint** (`pnpm lint` can hold it) or **taste** (only a shot beside Linear checks
   it).
@@ -105,8 +125,8 @@ The Linear row in step 4 is words. This step checks the look with eyes.
 `experiments/NN-<area>.md`, the next free number. Shape, from 182, 183 and 184:
 
 - The title is the question. Line one: the date read, and **"This is reading, not a
-  measurement."** unless something ran. It names the note and the private page "<Area>
-  guidelines" by title. Never put a page link in the repo.
+  measurement."** unless something ran. It names the note and the Design canvas "<Area>
+  guidelines" by title. Never put a canvas or page link in the repo.
 - **The answer** first: what the makers agree on, then how today's example follows and breaks it.
 - One small `text` block: how each tool does it, one line each.
 - `## What was read`, then one section per group of sources, at most one table each.
@@ -120,7 +140,7 @@ The Linear row in step 4 is words. This step checks the look with eyes.
 `docs/direction/<area>.md`. Shape, from modes and hot reload:
 
 - **Status line first:** **Proposed DATE.**, then each point the owner already decided, named.
-- Built from experiment NN and the private page, "Neither is a measurement."
+- Built from experiment NN and the Design canvas, "Neither is a measurement."
 - **A code block first:** the running example in the new shape, marked as a sketch, then a short
   `text` trace of one press or one save, step by step.
 - `## Which version`: `next/` and today's version, one bullet each.
@@ -142,13 +162,48 @@ The Linear row in step 4 is words. This step checks the look with eyes.
 - One row in `docs/direction/README.md`: what the note says, then its status, `proposed`.
 - One row in `experiments/README.md`: number, question, files, date, the answer, $.
 
-### 9. Build and publish the page
+### 9. Build and publish the canvas
 
-- Follow `references/page-structure.md`: the structure checklist, the page rules and the
-  highlight snippet. Every box on its list is checked before publishing. View every page at
-  1280 and 390 wide on a local copy first, then again after publishing.
-- Publish it as a private artifact titled "<Area> guidelines". Later changes republish to the
-  same URL. The page goes in no file in the repo.
+The canvas is a mockup with the guidelines beside it, not a write-up with a demo in a corner.
+Pages built the other way came out as one design and a wall of text, and the redrawn demo drifted
+from the real screen (boxed buttons in a selected row, bigger type, a footer that wrapped).
+
+- Follow `references/page-structure.md`: the structure checklist, the canvas rules and, for a plain
+  page, the page rules and the highlight snippet. Every box on its list is checked before
+  publishing.
+- **A Design canvas titled "<Area> guidelines",** with the design system installed: its
+  `tokens.json` copied in and its record in the canvas's index, as the canvas type says. Follow the
+  type's own instructions for every file. Later rounds revise the same canvas.
+- **Real parts, not redrawn.** Mount Manti's parts and ours from the system's bundle
+  (`window.Fabrika`) by name, never a look-alike. Layout is plain markup on the system's tokens.
+  Every word, name and key comes from the DOM step 5 saved, copied once: nobody retypes a word of
+  the screen. A keys line comes from its program's `commands` table plus `refuse`, as the outline
+  round's did. A part the bundle cannot draw yet, such as an edit inside a `TreeView` row, is a
+  named gap, never drawn as if it worked.
+- **Several designs, not one.** Today, each design from step 5 (at least 3, each with its why-not
+  line), the rounds of the pick, Proposed and Linear each get a row of artboards, one per state
+  and layout, so two sit side by side at the same layout. A round with no saved DOM shows its real
+  shot.
+- **Pressable where the canvas allows.** An artboard whose controls work is marked interactive: it
+  takes clicks, and keys on a focused element. A walk that needs keys from anywhere goes on a plain
+  page, since the canvas allows no page-wide key handler. That page keeps the old demo rules:
+  lifted from the built `window.css` and step 5's DOM, pressable, and "not shot" for a press with
+  no saved state ("The keyboard walk page" in the checklist).
+- **The blocking check is a person's look.** The canvas type tells an agent not to check its own
+  render. So each artboard sits beside its step 5 shot, uploaded as an image, and the owner looks
+  once per round. Any difference in words, boxes or sizes sends the round back: fix the artboard,
+  not the shot. Name the side-by-sides in the walk.
+- **A plain page keeps the pixel check.** Shoot each demo state a press can reach, at the size and
+  scale of its step 5 shot, and put the two side by side with a pixel diff. Any difference in
+  words, boxes or sizes blocks the publish: fix the lift, not the shot, and shoot again. Save the
+  side-by-sides in the scratch folder and name them in the walk. Shoot with scroll bars shown, as
+  Electron draws them. One drift is not a difference: when the check runs on a newer Chromium than
+  the app's Electron, a line can sit up to about 1px lower, so a long list creeps down a few
+  pixels. Same words, same boxes, same widths: say so in the walk and on the page.
+- **Publish one file at a time,** as the canvas type asks: the index with the first artboard, then
+  one artboard per call. List the round's artboards first, so none is sent twice. A plain page
+  publishes from files as a private artifact titled "<Area> guidelines: keys". Neither link goes in
+  any file in the repo.
 
 ### 10. Open a docs-only pull request
 
@@ -167,9 +222,9 @@ The Linear row in step 4 is words. This step checks the look with eyes.
   step per principle, then the smaller calls.
 - 3 to 5 short bullets per step, each with its lean and how sure, or "No lean, the owner picks". Then one everyday comparison.
   End with "Say next." and wait.
-- The owner's answer on a lean changes the page first, then the note, then the pull request.
+- The owner's answer on a lean changes the canvas first, then the note, then the pull request.
 - The last step asks one yes or no: merge it?
 - **Before the merge,** mark the note decided. Its status line becomes "**Decided DATE.** The
   owner approved the N principles, the shape and the smaller calls below with their leans, after
   a walk of each part. The leans' confidence numbers stay as written." Its README row says
-  `decided DATE`, and the page's marks change to match.
+  `decided DATE`, and the canvas's marks change to match.

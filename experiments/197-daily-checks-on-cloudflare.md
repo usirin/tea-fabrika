@@ -321,6 +321,8 @@ The inputs, each with its source:
 | Daily, 2 to 7 worker hours | free while the laptop is up | about $0.20 to $0.70 a day, $6 to $21 a month | $0.40 to $1.40 a day, $12 to $42 a month |
 | Daily with a 1 box hour cap | free | at most $0.40 a day, about $12 a month; the rest waits | the same cap; more waits |
 
+Measured later in [experiment 199](./199-box-live-run.md): a box worker is about 2.3x slower than a laptop worker, and setup is about 1 minute. At 2.3x: first pass about $11 ($5.50 to $22), daily about $14 to $48 a month.
+
 - **The plan covers little of it.** What the plan includes is worth about $0.73 a month, and agent
   boxes share it.
 - **The laptop takes cost off.** Each batch a person's hands take is free, and the queue offers

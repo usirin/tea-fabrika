@@ -69,7 +69,12 @@ return yield* writes.enqueue(door.write);   // the proof made just now
     merge commit was made; the merge answered `behind`, the builder took
     main in, and the next round merged onto the new main.
   - **Build takes main in** when ship sent it back as `behind`: a merge of
-    `origin/main` into the branch, never a rebase or a force-push.
+    `origin/main` into the branch, not a rebase or a force-push. Since
+    [a yes binds to the diff](./a-yes-binds-to-the-diff.md) (2026-11-02), a
+    rebase no longer throws the reviews away. The merge stays because a
+    force-push can drop a commit someone else pushed to the branch. A stage
+    that must replace a branch keeps the old head under a kept ref first and
+    says so on the ticket (PR 322's exam redo on main).
 - **Still open:**
   - On a protected branch with no merge queue, GitHub's merge call still
     pins the head only, so a push to main between the door's read and the
