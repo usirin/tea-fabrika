@@ -1,17 +1,28 @@
 # React Compiler from day one
 
-**Proposed 2026-11-02.** Decided before this note, by the owner on 2026-11-02, and not asked again:
-`next/` is React Compiler compatible from day one, with the guidelines and rules that takes; and
-today's app follows the same guidelines too, as a tryout whose lessons go to `next/` rethought.
-Decided the same day, after this note's first version: **no Babel in the build**, and the calls in
+**Decided 2026-11-03.** The owner approved the six principles, the shape and the smaller calls
+below, after a walk, and set them strict: every compiler finding blocks, and the only exit is an
+owner-approved ledger row. The leans' confidence numbers stay as written.
+
+Decided before this note, by the owner on 2026-11-02, and not asked again: `next/` is React
+Compiler compatible from day one, with the guidelines and rules that takes; and today's app follows
+the same guidelines too, as a tryout whose lessons go to `next/` rethought. Decided the same day,
+after this note's first version: **no Babel in the build**, and the calls in
 [experiment 195's "Decided"](../../experiments/195-oxc-toolchain.md#decided). This note is how.
-This version takes those calls in, and it stays proposed until the owner walks it. Settled notes it
-stands on: [Elm first](./elm-first.md) (state in tea machines, no `useState`; tea's own hook once it takes
-the Effect engine, and until then one `useSyncExternalStore` stand-in),
-[UI on Manti](./ui-on-manti.md), [oxlint and oxfmt](./oxlint-and-oxfmt.md),
-[one `fabrika.toml` per repo](./one-fabrika-toml-per-repo.md),
-[nobody writes their own exam](./nobody-writes-their-own-exam.md), and the block bar in
-`AGENTS.md`: about 0% false alarms, measured, to block; up to 10% to advise.
+
+**Strict, decided 2026-11-03.** We follow React's Compiler rules as written, the same as React's
+own Rules of React [r24], with no advice level. Every finding the Compiler, its checks or the React
+rules below give is an error that fails the build, in every repo, always. There is no setting to
+loosen it. The one way out is C5's: `"use no memo"` in the function plus an owner-approved row in
+`compiler-ledger.json`. A false alarm is a bug to fix, in the rule or in the code, and never a
+reason to make a rule advice. This replaces two things: the per-repo strictness knob in
+`fabrika.toml` from experiment 195's call 2 (C1), and the block bar's path to advice for these
+rules ([where this differs](#where-this-differs-from-settled-notes)).
+
+Settled notes it stands on: [Elm first](./elm-first.md) (state in tea machines, no `useState`;
+tea's own hook once it takes the Effect engine, and until then one `useSyncExternalStore`
+stand-in), [UI on Manti](./ui-on-manti.md), [oxlint and oxfmt](./oxlint-and-oxfmt.md), and
+[nobody writes their own exam](./nobody-writes-their-own-exam.md).
 
 Built from [experiment 194](../../experiments/194-react-compiler.md), which read React's docs and
 the tools and ran oxlint's React rules and the Compiler over today's window code;
@@ -60,8 +71,8 @@ holds each one. C1 to C3 are React's own rules; C4 is ours; C5 and C6 are how we
 
 ### C1: render is pure, and a view never reads the clock
 
-**Decided 2026-11-02 (195, open call 2): a view never reads the clock; the time comes through a
-Cmd, and the purity check can block.** Lean 80%, taken.
+**Decided 2026-11-03.** A view never reads the clock; the time comes through a Cmd, and the purity
+check blocks, with no setting. First decided 2026-11-02 (195, open call 2). Lean 80%, taken.
 
 - **What it means:** the same props and the same model give the same output. No `Date.now()`,
   `new Date()`, `performance.now()` or `Math.random()` in a view, not in render and not in a
@@ -86,18 +97,14 @@ Cmd, and the purity check can block.** Lean 80%, taken.
 - **Elm:** `view : Model -> Html Msg` is pure by type, and `Time.now` is a Task: `update` asks for
   it.
 - **What holds it:** the Compiler's own purity check, `validateNoImpureFunctionsInRender: true`, in
-  the build's compile step (C5). How strict is a setting in each repo's `fabrika.toml`, under
-  React's own rule name ([`purity`](https://react.dev/reference/eslint-plugin-react-hooks/lints/purity))
-  and ESLint's severity words:
-
-  ```toml
-  [lint]
-  "react-hooks/purity" = "error"   # or "warn" or "off". "error" is the default.
-  ```
-
-  The repo running the code decides, never a pack: a pack someone else wrote cannot turn your check
-  off ([nobody writes their own exam](./nobody-writes-their-own-exam.md)). Not built. oxlint's
-  `react/purity` stays off, as 194 had it; whether it now matches the build's check was not run.
+  the build's compile step (C5). Every purity finding is an error that fails the build, in every
+  repo, always; the only exit is C5's ledger row. Not built. oxlint's `react/purity` stays off, as
+  194 had it, because the build's check covers it; that is not advice. Whether it now matches the
+  build's check was not run.
+- **Changed 2026-11-03: no strictness knob.** Experiment 195's call 2 (2026-11-02) put how strict
+  this check is in each repo's `fabrika.toml`, `"error"` by default, with `"warn"` and `"off"`
+  allowed. That knob is gone. The owner set the Compiler rules strict, with no advice, so there is
+  nothing for a repo to set.
 - **Doubt:** the check is narrower than the rule. 195's part 4 bench tiles read `new Date()`
   straight in their own click handler, and the check let them pass. A small lint rule, no `Date`,
   `Date.now` or `performance.now` in a view file, would make the rule whole; not written. Also,
@@ -113,7 +120,7 @@ Cmd, and the purity check can block.** Lean 80%, taken.
 
 ### C2: refs only in effects and handlers
 
-**Lean, 85%.**
+**Decided 2026-11-03.** Lean, 85%.
 
 - **What it means:** a ref holds something for later. Render never reads or writes `.current`. An
   id comes from `useId`.
@@ -124,14 +131,14 @@ Cmd, and the purity check can block.** Lean 80%, taken.
 - **What holds it:** `react/refs` blocks, in `next/**` and today's window and program `.tsx`
   files. 194: 1 of 1 right on main; 176: 1 of 1. The skip check holds it too: oxc's port skips
   `useTip` for it, as Babel's did (195).
-- **Doubt:** n is 2. Every fire in the first `next/` landings is read by hand; one false alarm
-  sends it to advice.
+- **Doubt:** n is 2. Every fire in the first `next/` landings is read by hand. A false alarm is a
+  bug to fix in the rule or the code; the rule keeps blocking.
 - **Cost:** none in `next/`. Today, one line.
 - **Today:** **breaks** at `pop.tsx:678`.
 
 ### C3: nothing changes after render
 
-**Lean, 85%.**
+**Decided 2026-11-03.** Lean, 85%.
 
 - **What it means:** props, the model, a hook's value and anything passed to JSX are never changed
   once drawn. A render does not keep a counter that its callbacks bump.
@@ -146,7 +153,7 @@ Cmd, and the purity check can block.** Lean 80%, taken.
 
 ### C4: one store hook, and its value is what you draw
 
-**Lean, 85%.**
+**Decided 2026-11-03.** Lean, 85%.
 
 - **What it means:** a window reads its model only through the one store hook (`useModel`, the
   stand-in until tea's own hook takes the Effect engine), and draws from the value it returns.
@@ -172,16 +179,17 @@ Cmd, and the purity check can block.** Lean 80%, taken.
 
 ### C5: the Compiler skips nothing that is not named, and the build owns the check
 
-**Decided 2026-11-02 (195, open call 3): the build owns the check; `pnpm lint:compiler` calls the
-same step.** Lean 85%, taken.
+**Decided 2026-11-03.** The build owns the check; `pnpm lint:compiler` calls the same step; every
+finding fails, and the ledger row is the only exit. First decided 2026-11-02 (195, open call 3).
+Lean 85%, taken.
 
 - **What it means:** one function compiles a file with oxc's Compiler and returns its findings:
   each function compiled or skipped, with the reason and the place, and each purity finding. The
-  build calls it on every rebuild and in CI, and an `"error"` finding fails the build. `pnpm lint`
-  calls the same function with no bundle. The one way out of a skip is `"use no memo"` in that
-  function, with a row in `compiler-ledger.json` that says why. The check fails on a directive
-  with no row, and on a row with no directive. Adding a row is the owner's call, in a change of
-  its own; the ledger only shrinks, as `unreachable-ledger.json` does.
+  build calls it on every rebuild and in CI, and any finding fails the build. `pnpm lint` calls the
+  same function with no bundle. The one way out of a finding is `"use no memo"` in that function,
+  with a row in `compiler-ledger.json` that says why. The check fails on a directive with no row,
+  and on a row with no directive. Adding a row is the owner's call, in a change of its own; the
+  ledger starts empty and only shrinks, as `unreachable-ledger.json` does.
 
   ```ts
   // compiler-ledger.json: empty to start; a row is the owner's call, and rows only go away
@@ -194,8 +202,10 @@ same step.** Lean 85%, taken.
   the Compiler's [`panicThreshold`](https://react.dev/reference/react-compiler/panicThreshold)
   [r6], where `"all_errors"` fails the build on any diagnostic. Failing the build is our choice,
   so a finding is fixed or ledgered, never shipped quietly.
-- **The clash, left for the owner:** React's `panicThreshold` docs recommend `"none"` for
-  production builds, and this fails the build on an `"error"` finding. Not settled here.
+- **The clash, settled 2026-11-03:** React's `panicThreshold` docs recommend `"none"` for
+  production builds. We fail every build, production too, on any finding, because the owner set
+  the Compiler rules strict. Cost: a Compiler "Todo" blocks a merge until the code changes or the
+  owner adds a row.
 - **How it reads skips with no Babel (195, part 3):** the native port has no `logger`. With
   `reportDiagnostics: true` it returns each skip with its place. A function compiled if its body
   starts with `const $ = _c(n)`; a skip is the outermost function holding a diagnostic. The port
@@ -212,7 +222,8 @@ same step.** Lean 85%, taken.
 - **The false-alarm bar:** 2 of 2 skips on main were real breaks, each with a right lint finding
   inside, the same 2 in Babel's Compiler and oxc's (195). A Compiler "Todo" (syntax it cannot
   handle yet) would be a skip with nothing wrong in our code; none on main. That is the case the
-  ledger is for. Sure of 0% false alarms: 70%, n is 2.
+  ledger is for. Sure of 0% false alarms: 70%, n is 2. A false alarm does not make the check
+  advice: it is fixed in the check or the code, or the owner adds a row.
 - **The check must read the directive itself:** a function with `"use no memo"` still gives a
   diagnostic and is not compiled (194 on Babel, 195 on oxc's port).
 - **Doubt, 80% (195):** whether oxc's port supports `panicThreshold`. If not, our function reads
@@ -223,8 +234,8 @@ same step.** Lean 85%, taken.
 
 ### C6: memoizing is the Compiler's job
 
-**Decided 2026-11-02 (195, open call 5): `next/`'s desk is way 3b, through our stand-in hook with
-a selector, with no hand `memo`.** Lean 75%, taken.
+**Decided 2026-11-03.** `next/`'s desk is way 3b, through our stand-in hook with a selector, with
+no hand `memo`. First decided 2026-11-02 (195, open call 5). Lean 75%, taken.
 
 - **What it means:** new code writes no `useMemo`, `useCallback` or `memo` by default. The desk has
   no `memo` per tile. A tile's props are plain values: never a fresh handler or object made
@@ -284,7 +295,7 @@ const reactCompiler = {
 	transform: {
 		filter: {id: {include: /\.tsx$/, exclude: /node_modules/}},
 		handler(code: string, id: string) {
-			const out = compile(id, code); // an "error" finding, per fabrika.toml, fails here too
+			const out = compile(id, code); // any finding fails here too; no knob, only a ledger row
 			if (out.fatal) throw new Error(out.errors.map((e) => e.message).join("\n"));
 			return {code: out.code, moduleType: "js"};
 		},
@@ -314,7 +325,10 @@ const reactCompiler = {
 - **Today's app moves to Rolldown later, in ticket 177** (owner, 2026-11-02; 195, open call 6).
 - The Compiler's defaults otherwise; no pick.
 
-### Which rules block, which advise
+### Which rules are on
+
+Every rule that is on blocks; no rule is set to `warn`. Each runs in oxlint 1.90.0, the version in
+the lockfile.
 
 | Rule | 194 on main, then 176 | Lean |
 |---|---|---|
@@ -327,11 +341,12 @@ const reactCompiler = {
 | `react/exhaustive-effect-dependencies` | 0 of 7 | off; `react/exhaustive-deps` already blocks |
 | the other Compiler-powered rules | no finding | off; the skip check holds what they find |
 
-**Lean, 75%.** Why: block only what is measured; the skip check already fails on every skip, so a
-rule with no data adds a second voice and no new catch. Since both now come from oxc, the rules
-say what might skip, in the editor, and the check says what did (195). Cost: a skip shows as a
-check failure, not as a squiggle on the line. Doubt: the counts are tiny. Each fire in the first
-`next/` landings is read by hand, and a rule moves when its count says so.
+**Decided 2026-11-03.** Lean, 75%. Why: the skip check already fails on every skip, so a rule with
+no data adds a second voice and no new catch. Since both now come from oxc, the rules say what
+might skip, in the editor, and the check says what did (195). A rule that is off is off, never
+advice; turning one on is a change of its own, as an error. Cost: a skip shows as a check failure,
+not as a squiggle on the line. Doubt: the counts are tiny. Each fire in the first `next/` landings
+is read by hand, and a false alarm is fixed in the rule or the code, never moved to advice.
 
 ### Where the rules apply today
 
@@ -368,7 +383,7 @@ is outside the repo until the owner files it.
 
 ## What changes in Tier 1
 
-Proposed with this note; the plan files say so in place.
+Decided with this note on 2026-11-03; the plan files say so in place.
 
 - **The exam PR** gains the rules (`react/refs`, `react/immutability`, `react/display-name` and
   `one-store-hook`, blocking in `next/**/*.tsx`), `lint:compiler` on the compile step with its
@@ -377,13 +392,19 @@ Proposed with this note; the plan files say so in place.
   tree: 194 found 0 for the three React rules, and 0 skips among 5 functions, which 195 repeated on
   oxc's port. `one-store-hook` is not written yet; PR 223 has no store hook to fire on.
 - **PR A, T5:** the first `useModel`, under the rules, with a selector. **T6:** `build.ts` on
-  Rolldown with the Compiler plugin, an `"error"` finding failing the build, and the bundle time
+  Rolldown with the Compiler plugin, any finding failing the build, and the bundle time
   before and after in the PR body.
 - **The window sketch** in Tier 1's detail has no `memo` per tile; the desk is way 3b (C6). PR B's
   T7 does not add `memo`.
 
 ## Where this differs from settled notes
 
+- **The block bar in `AGENTS.md`** says a check needs about 0% false alarms, measured, to block,
+  and up to 10% to advise. For the Compiler and the React rules here, the owner's 2026-11-03 call
+  overrides it: they block from the start, as React's own rules, with no advice level. Their fires
+  are still counted and read by hand; a false alarm is a bug to fix, not a step down to advice.
+- **Experiment 195's call 2** (2026-11-02) set the purity check's strictness per repo in
+  `fabrika.toml`. Replaced on 2026-11-03: no knob, every finding fails (C1).
 - **Tier 1's window sketch** (`tier-1-detail.md`, "The window in React") had `memo` per tile,
   "Elm's Html.Lazy", approved with Tier 1 on 2026-11-01. It was dropped on 2026-11-02, and 195's
   way 3b takes its place.
@@ -410,7 +431,9 @@ Proposed with this note; the plan files say so in place.
 
 - Whether a compiled window is faster to a person. 176 and 195 counted renders; every way 195 timed
   stayed under 0.35 ms a patch at the median.
-- False alarms past tiny counts: 2 skips, 8 purity findings, 1 or 2 fires per blocking rule.
+- False alarms past tiny counts: 2 skips, 8 purity findings, 1 or 2 fires per blocking rule. With
+  no advice level, each false alarm blocks a merge until it is fixed or ledgered; how often that
+  bites is not known.
 - How often a weekly 0.x port is wrong on code bigger than 5 functions in a real window.
 - Whether oxc's port supports `panicThreshold`.
 - How the window behaves in Electron, and hot reload with the native Compiler: 195 ran a Chromium
