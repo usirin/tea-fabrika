@@ -36,6 +36,10 @@ export const Inputs = Schema.Struct({
 	effort: Schema.NullOr(Schema.String),
 	/** The repository's settings, hashed. */
 	settings: Schema.NullOr(Schema.String),
+	/** The head of the exam's pull request (self-fix PR 11b): two `exam_merge` runs at two heads differ. */
+	examHead: Schema.NullOr(Schema.String),
+	/** The head of the lane's own pull request, as the code host has it when the step starts. */
+	prHead: Schema.NullOr(Schema.String),
 });
 export type Inputs = typeof Inputs.Type;
 
