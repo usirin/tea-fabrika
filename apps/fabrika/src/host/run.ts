@@ -147,16 +147,17 @@ export const runHost = (options: {
 			history,
 			ours,
 			build,
-			agents: {
-				server: agents,
-				sessionFor: Option.isNone(connection) ? null : yield* agentSessions(home),
-			},
+			agents: {server: agents},
 			jobs,
 			pid,
-			ledger: Option.match(connection, {
-				onNone: () => ({kind: "own"}) as const,
-				onSome: (c) => ({kind: "server", address: `${c.url}/${c.ledger}`, login: c.login}) as const,
-			}),
+			ledger: Option.isNone(connection)
+				? ({kind: "own"} as const)
+				: ({
+						kind: "server",
+						address: `${connection.value.url}/${connection.value.ledger}`,
+						login: connection.value.login,
+						sessionFor: yield* agentSessions(home),
+					} as const),
 			desk: {
 				kept,
 				save: (saved) =>

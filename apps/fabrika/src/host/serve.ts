@@ -138,20 +138,19 @@ export const serve = (options: {
 	 * `null` names none, as a host built before builds were named.
 	 */
 	readonly build?: string | null | undefined;
-	/**
-	 * The agents' socket (host/agents.ts), and, on a home connected to a ledger server, each
-	 * agent's own session there (host/agent-session.ts); `null`: the home keeps its own file.
-	 */
-	readonly agents?:
-		| {
-				readonly server: SocketServer.SocketServer["Service"];
-				readonly sessionFor: AgentSessions | null;
-		  }
-		| undefined;
+	/** The agents' socket (host/agents.ts). */
+	readonly agents?: {readonly server: SocketServer.SocketServer["Service"]} | undefined;
 	/** The host's process id, for the host's lines in the top bar. */
 	readonly pid: number;
-	/** Which ledger the home reads and writes, for the sync lines (host/connection.ts). */
-	readonly ledger: LedgerLink;
+	/**
+	 * Which ledger the home reads and writes, for the sync lines (host/connection.ts). A ledger
+	 * server comes with each agent's own session there (host/agent-session.ts), so there is no
+	 * server ledger without them, and no agent can write on the person's session. The sessions stay
+	 * in the host; the page is told the link only.
+	 */
+	readonly ledger:
+		| Extract<LedgerLink, {kind: "own"}>
+		| (Extract<LedgerLink, {kind: "server"}> & {readonly sessionFor: AgentSessions});
 }) =>
 	Effect.gen(function* () {
 		const {
@@ -163,6 +162,11 @@ export const serve = (options: {
 			build = BUILD,
 			agents,
 		} = options;
+		/** The ledger as the page is told it: the agents' sessions stay in the host. */
+		const link: LedgerLink =
+			options.ledger.kind === "server"
+				? {kind: "server", address: options.ledger.address, login: options.ledger.login}
+				: {kind: "own"};
 		const server = yield* SocketServer.SocketServer;
 		const services = yield* Effect.context<never>();
 		const clock = yield* Effect.clockWith(Effect.succeed);
@@ -280,7 +284,7 @@ export const serve = (options: {
 				pid: options.pid,
 				since,
 				build,
-				ledger: options.ledger,
+				ledger: link,
 				agents:
 					agents === undefined ? null : [...attached.values()].sort((a, b) => a.since - b.since),
 			},
@@ -387,7 +391,7 @@ export const serve = (options: {
 				ports: () => screens.keys(),
 				attached: agentCame,
 				job: lines.job,
-				sessionFor: agents.sessionFor,
+				sessionFor: options.ledger.kind === "server" ? options.ledger.sessionFor : null,
 			}).pipe(
 				Effect.catchCause((cause) =>
 					Effect.logError("fabrika host: the agents' socket failed", cause),
