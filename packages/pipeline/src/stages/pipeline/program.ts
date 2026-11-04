@@ -564,8 +564,8 @@ const redoOf = (carry: Carry): Redo | null => {
 /**
  * The test writer writes the files a person sent back again, on its own commit and never on the
  * builder's work (self-fix PR 5): only those files, for the Properties tested in them, told what the
- * person wrote. Its check runs there. Then the new files are laid on the builder's head, where the
- * build goes on.
+ * person wrote. Its check runs there. When that check passes, the new files are laid on the builder's
+ * head, where the build goes on.
  */
 const writtenAgain = (at: At, redo: Redo) =>
 	Effect.gen(function* () {
@@ -616,10 +616,15 @@ const writtenAgain = (at: At, redo: Redo) =>
 		const problems = [...end.report.problems, ...foundWords(properties, end.report.found, answers)];
 		// Back on the builder's work, which the build goes on from.
 		yield* work.reset(number, head);
-		// A run on the base that failed keeps its commit, but nothing it wrote goes on the head: the redo
-		// stays owed, so the lane runs it again, as it runs a first writer again (test-writer/machine.ts).
-		const failed = end.outcome.kind === "stuck" && end.outcome.why === "run_failed";
-		if (commit === null || failed)
+		// The redo goes on the head only when its check on the base came out as the plan says: `done`,
+		// or `cannot_test`, where every test it wrote did and a person lets the rest through. Any other
+		// end, an ask or a stop, keeps the carry as it was, so the redo stays owed: the route's rerun
+		// and a person's `again` are the redo again, on the commit it started from, and no build starts
+		// on tests the base never passed (test-writer/machine.ts).
+		const passed =
+			end.outcome.kind === "done" ||
+			(end.outcome.kind === "ask" && end.outcome.for === "cannot_test");
+		if (commit === null || !passed)
 			return withFailure(ended(end.outcome, {}, problems), end.report.failure);
 		const files = yield* work.filesOf(work.at("clone"), commit);
 		const next = yield* work.putBack(
