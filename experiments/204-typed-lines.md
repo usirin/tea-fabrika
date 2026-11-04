@@ -146,7 +146,9 @@ of answers, so the type side does check.
 **The gaps are checks the type cannot see.** "An integer" and "at least 1" live in the schema's
 checks, and the type of `TicketNumber` is a branded `number`. So the compiler reads the value as
 `${number}`, and lets `0` through. That is the safe side: the compiler never refuses a line the desk
-would take, so a gap costs a `bad_line` at run time, as today. A number is the text `${number}`
+would take, so a gap costs a `bad_line` at run time, as today. (Wrong: on a generated list,
+[experiment 208](./208-typed-line-gaps.md) found 31 lines that differ, and on 3 of them, such as
+`asks --ask a--1-0`, the compiler refuses what the run time takes.) A number is the text `${number}`
 accepts, which the run-time reader matches exactly (`text !== "" && Number.isFinite(Number(text))`):
 `1e3` and `0x10` pass both, `1_0` and `Infinity` fail both. A first guess, `JSON.parse`, would have
 refused `0x10` where the compiler took it; the probe caught it before the law was written.
