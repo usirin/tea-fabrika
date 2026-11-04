@@ -1,6 +1,13 @@
+import {mkdtempSync} from "node:fs";
+import {createServer} from "node:http";
+import type {AddressInfo} from "node:net";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
 import {Ledger, LedgerUnreachable, streams, UnknownName, type Writer} from "@kampus/fabrika-old";
+import {layerHttp} from "@kampus/fabrika-old/http";
 import {memoryService} from "@kampus/fabrika-old/memory";
-import {Clock, Effect, Fiber, Layer} from "effect";
+import {layerSqlite, openDb} from "@kampus/fabrika-old/sqlite";
+import {Clock, Duration, Effect, Fiber, Layer, Option, Redacted} from "effect";
 import {TestClock} from "effect/testing";
 import {describe, expect, it} from "vitest";
 import {OnWait} from "../wait.ts";
@@ -472,5 +479,100 @@ describe("Tickets, on a ledger that answers with a refusal", () => {
 		expect(seen.heard).toHaveLength(1);
 		expect(seen.heard[0]).toContain(says);
 		expect(seen.heard[0]).not.toContain("no answer");
+	});
+});
+
+// Self-fix PR 11b, round 2b (the review's must-fix 1). A ledger that answers, but with something this
+// code cannot read, will never heal: the client and the ledger disagree on the wire (two checkouts, or
+// a proxy's page). So Tickets fails at once, with the cause, as for a refusal. It never waits on it as
+// `no answer`, which has no cap. On the real ledgers: over HTTP (http.ts and ledger.ts's `rawOf`) and
+// on SQLite (a worker's error, sqlite.ts).
+
+/**
+ * `Tickets.read(1)` on `ledger`, in real time, given 2.5 seconds: the one wait's second try is at 1 s
+ * and its third at 3 s, so a read that waits is still waiting then (`StillWaiting`). Each line the
+ * wait said comes back too.
+ */
+const readWithin = (ledger: Layer.Layer<Ledger>) =>
+	Effect.gen(function* () {
+		const heard: string[] = [];
+		const ended = yield* Tickets.use((t) => t.read(1)).pipe(
+			Effect.provide(ticketsOnLedger(lane).pipe(Layer.provide(ledger))),
+			Effect.provideService(OnWait, (line) => Effect.sync(() => void heard.push(line))),
+			Effect.result,
+			Effect.timeoutOption(Duration.millis(2_500)),
+		);
+		return {result: Option.getOrElse(ended, () => ({_tag: "StillWaiting"}) as const), heard};
+	});
+
+/** A Node server on a free port that answers every `readStream` 200 with `body`, and counts them. */
+const answering200 = (body: string) =>
+	Effect.gen(function* () {
+		const calls = {readStream: 0};
+		const server = yield* Effect.acquireRelease(
+			Effect.callback<ReturnType<typeof createServer>>((resume) => {
+				const s = createServer((req, res) => {
+					req.resume();
+					if (req.url?.endsWith("/readStream") === true) calls.readStream++;
+					res.writeHead(200, {"content-type": "application/json"});
+					res.end(body);
+				});
+				s.listen(0, "127.0.0.1", () => resume(Effect.succeed(s)));
+			}),
+			(s) =>
+				Effect.sync(() => {
+					s.closeAllConnections();
+					s.close();
+				}),
+		);
+		const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+		return {calls, url};
+	});
+
+describe("Tickets, on a ledger that answers with what this code cannot read", () => {
+	it.each([
+		["a body that is not JSON, such as a proxy's page", "<html><body>Sign in</body></html>"],
+		["JSON in a shape the wire does not have", '{"rows":"not a list"}'],
+	])(
+		"over HTTP, a 200 with %s: the read fails at once, refused with the cause, asked once and never waited on",
+		async (_, body) => {
+			const seen = await Effect.gen(function* () {
+				const {calls, url} = yield* answering200(body);
+				const ledger = layerHttp({
+					url,
+					ledger: "x",
+					token: Redacted.make("fabrika_a_test"),
+					timeout: Duration.millis(500),
+				});
+				return {...(yield* readWithin(ledger)), calls: calls.readStream};
+			}).pipe(Effect.scoped, Effect.runPromise);
+			expect(seen.result, JSON.stringify(seen)).toMatchObject({
+				_tag: "Failure",
+				failure: {why: "refused"},
+			});
+			expect(seen.calls).toBe(1);
+			expect(seen.heard).toEqual([]);
+		},
+	);
+
+	it("on SQLite, an error its worker reports (here its file lost its table): the read fails at once, refused with the cause, never waited on", async () => {
+		const file = join(mkdtempSync(join(tmpdir(), "tickets-sqlite-")), "ledger.sqlite");
+		const seen = await Effect.gen(function* () {
+			const ledger = yield* Layer.build(layerSqlite({path: file}));
+			yield* Ledger.use((l) => l.register("tracker/ticket/1", "user:owner")).pipe(
+				Effect.provide(ledger),
+			);
+			// The file's own driver, past the ledger's rules, as a bad tool or a torn copy would leave it.
+			const {db, close} = openDb(file);
+			db.all("DROP TABLE events");
+			close();
+			return yield* readWithin(Layer.succeedContext(ledger));
+		}).pipe(Effect.scoped, Effect.runPromise);
+		expect(seen.result, JSON.stringify(seen)).toMatchObject({
+			_tag: "Failure",
+			failure: {why: "refused"},
+		});
+		expect(JSON.stringify(seen.result)).toContain("events");
+		expect(seen.heard).toEqual([]);
 	});
 });
