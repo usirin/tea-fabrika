@@ -252,9 +252,9 @@ tsh       tracker takes make_area {name}, rename_area {area, name}, merge_area {
 window    the f menu: each area row takes r (rename) and m (merge into ...); the last row is "New area ..."
 ```
 
-Lean: both, 55%. The tsh inputs are the program's inputs, so they exist anyway. The menu is where
-a person already looks. Doubt: keys inside a menu row are new here; a sheet over the tile
-([layers](./layers.md), L2) is the other way. **No lean on the look: the owner picks.**
+**Decided 2026-11-04 by the owner: both.** The tsh inputs are the program's inputs, so they exist
+anyway. The menu is where a person already looks. Keys inside a menu row are new here; a sheet
+over the tile ([layers](./layers.md), L2) was the other way.
 
 ### 2. An area is never deleted, only merged
 
@@ -269,15 +269,18 @@ row        Pipeline?          accessible name: "area pipeline, a guess: the file
 ticket     Area  pipeline?  a guess: the filer's   [Pick]
 ```
 
-Lean, 55%. A "?" is a shape cue, not color. Doubt: it may read as noise on a list where most rows
-are guesses. A shot of the build at five layouts settles it.
+**Decided 2026-11-04 by the owner.** A "?" is a shape cue, not color, and it goes once a person
+picks. Still to check in the build's shots: noise on a list where most rows are guesses.
 
 ### 4. Which areas get a view tab
 
-Lean, 60%: All open, then each area in the ledger's order while the tab row fits, then "No area
-yet"; the rest are in the `f` menu. Saved views on the person's desk
-([tracker views are programs](./tracker-views-are-programs.md), section 4) come later and replace
-the area tabs with the person's own.
+**Decided 2026-11-04 by the owner, against the lean.** A tab only for an area a person pinned:
+All open, the pinned areas, then "No area yet". Every other area is reached through the `f`
+filter. Pins are each person's own, as Linear's favorites are, so nobody's tabs change because
+someone else pinned. Two person facts, `area_pinned {area}` and `area_unpinned {area}`; the
+ledger's `by` says whose, and the tracker folds only the reader's. "Pin as tab" and "Unpin" sit
+on an `f` menu row. The lean was every area while the row fits, which lets ledger order decide
+what a person sees.
 
 ### 5. The status bar's line follows the filter (fix 1)
 
@@ -286,9 +289,9 @@ a   the tracker tells the host its line as the filter changes; the job item show
 b   the job item keeps the typed line, as tsh's jobs table does; only the tab row shows the filter
 ```
 
-Lean a, 65%: the line is our URL (A3). Doubt: the job item is the frame's, and the frame note
-leaves it to nobody yet ([the frame](./the-frame.md)); `a` changes what tsh's `jobs` prints.
-**For the owner.**
+**Decided 2026-11-04 by the owner: a.** The line is our URL (A3). It changes what tsh's `jobs`
+prints: a job's line means how to get back to where it is now, not what was typed. The job item
+is the frame's, and the frame note leaves it to nobody yet ([the frame](./the-frame.md)).
 
 ### 6. No guess from a pull request's files yet
 
@@ -301,7 +304,8 @@ tickets a person placed. v0 guesses from the filer and the source only.
 When the ledger has no area, the tracker's window opens on a list of suggestions, each with why
 ("21 titles start with Lane", "the folder `apps/fabrika`"). Space ticks, Enter makes the ticked
 ones, Esc skips. Skipping leaves every ticket in "No area yet", and "New area ..." stays in the
-menu. Lean, 60%. **No lean on the look: the owner picks.**
+menu. **Decided 2026-11-04 by the owner: a checklist in the list page.** The skip is window
+state on the person's desk, not a fact.
 
 ## What the ledger records
 
