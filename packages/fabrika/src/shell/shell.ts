@@ -6,7 +6,7 @@ import {defineProgram, end, fork, kind} from "../program/program.ts";
 import {flag, input, output} from "../program/shape.ts";
 import {runBuiltin, type Said} from "./builtins.ts";
 import {check} from "./check.ts";
-import {runLine, type Shell, stopJob, type Watcher} from "./execute.ts";
+import {type JobStop, runLine, type Shell, stopJob, type Watcher} from "./execute.ts";
 import {parse, type Refused} from "./grammar.ts";
 import {helpOf, partsHelp} from "./help.ts";
 import {Programs} from "./programs.ts";
@@ -177,7 +177,7 @@ export const tsh = defineProgram({
 				show: flags.show,
 				signals,
 				live: new Map<string, AnyRunning>(),
-				calls: new Map<string, Deferred.Deferred<void>>(),
+				stops: new Map<string, JobStop>(),
 				watched: new Map<string, Watcher>(),
 				scope,
 			};

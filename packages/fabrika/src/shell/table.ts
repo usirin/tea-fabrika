@@ -1,5 +1,6 @@
 import {Schema} from "effect";
 import {type TableCell, type TableView, Tone} from "../program/person.ts";
+import {oneLine} from "./one-line.ts";
 
 // A table for a person, as `gh pr list` prints one on a terminal (cli/cli's
 // internal/tableprinter, on go-gh's): a title line with the count, a muted
@@ -74,18 +75,6 @@ export const Table = Schema.Struct({
 	),
 );
 export type Table = typeof Table.Type;
-
-/**
- * A text as one line in a cell: every run of white space one space, as gh's
- * `RemoveExcessiveWhitespace` does to a title, and any other control character
- * a replacement character, so no text can move the cursor or color the screen.
- */
-const oneLine = (text: string): string =>
-	text
-		.replace(/\s+/g, " ")
-		.trim()
-		// oxlint-disable-next-line eslint/no-control-regex -- control characters are what it takes out.
-		.replace(/[\u0000-\u001f\u007f-\u009f]/g, "\u{fffd}");
 
 /**
  * The table of `rows`, as `view` declares it: about one screen of them, or all with `all`.

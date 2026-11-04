@@ -51,11 +51,11 @@ export interface Shell {
 	/** The starter's handle of each run this tsh started, by run id. */
 	readonly live: Map<string, AnyRunning>;
 	/**
-	 * The run this tsh waits for with no handle (`call`: a one-program line in the foreground), by
-	 * its run id, and the word that stops it: done, the run stops, as on Ctrl-C. Set before its job
-	 * is in the table, so a stop that finds the job finds this too.
+	 * The stop of each job this tsh began or attached, by the run id of its first stage. Set before
+	 * its job is in the table and kept until it ends, so a stop that finds the job finds this too,
+	 * even before tsh holds its runs (`live`).
 	 */
-	readonly calls: Map<string, Deferred.Deferred<void>>;
+	readonly stops: Map<string, JobStop>;
 	/** Each job's ends, once the table has heard them, by the run id of its first stage: what a foreground wait waits on. */
 	readonly watched: Map<string, Watcher>;
 	/** tsh's own scope: a job's scope is made under it, so every job stops when tsh does. */
@@ -64,6 +64,31 @@ export interface Shell {
 
 /** Every end of a job's runs, once the job table has heard each. */
 export type Watcher = Deferred.Deferred<readonly Ended<unknown>[]>;
+
+/**
+ * One job's stop. `asked`: a stop was asked of it, said to the table and in the tile, so a second
+ * stop asks nothing again. `go`: done once it was said: a `call` (a one-program line in the
+ * foreground, with no handle) stops on it, as on Ctrl-C, and a job whose runs were still starting
+ * stops as soon as tsh holds them.
+ */
+export interface JobStop {
+	asked: boolean;
+	readonly go: Deferred.Deferred<void>;
+}
+
+/** A job's stop, kept in `Shell.stops` under its first run id until `ends` is done. */
+const keepStop = (shell: Shell, run: string) =>
+	Effect.map(Deferred.make<void>(), (go) => {
+		const stop: JobStop = {asked: false, go};
+		shell.stops.set(run, stop);
+		return stop;
+	});
+
+/** The runs of a job whose stop was asked while they were starting: stopped now tsh holds them. */
+const stopIfAsked = (stop: JobStop, runs: readonly AnyRunning[]) =>
+	Deferred.isDoneUnsafe(stop.go)
+		? Effect.forEach(runs, (r) => r.stop, {concurrency: "unbounded", discard: true})
+		: Effect.void;
 
 /** How a line ended, as a shell's exit status, and the values a `$( )` took. */
 export interface Done {
@@ -104,9 +129,10 @@ const sayStopper = (shell: Shell, n: number) => {
 
 /**
  * Stop job n, as `stop %n` does and as tsh's `stop` input does for the host: a detached job is
- * dropped; one this tsh runs is stopped with its starter's stop, in the foreground or not; another
- * tile's runs nowhere here, so nothing is stopped, and no stop is kept. Who asked comes first, so
- * the job's record keeps it with its end (host/records.ts).
+ * dropped; one this tsh runs is stopped with its starter's stop, in the foreground or not, or as
+ * soon as tsh holds its runs; another tile's runs nowhere here, so nothing is stopped, and no stop
+ * is kept. Who asked comes first, so the job's record keeps it with its end (host/records.ts). A
+ * job stopped already is not asked again: its stopper is said once.
  */
 export const stopJob = (shell: Shell, job: Job) =>
 	Effect.gen(function* () {
@@ -117,16 +143,17 @@ export const stopJob = (shell: Shell, job: Job) =>
 			shell.print("err", `[${job.n}] dropped  ${job.text}`);
 			return;
 		}
-		const stops = job.stages.flatMap((s) => {
-			const r = shell.live.get(s.run);
-			return r === undefined ? [] : [r.stop];
-		});
-		const called = shell.calls.get(job.stages[0].run);
-		if (stops.length === 0 && called === undefined) return;
+		const stop = shell.stops.get(job.stages[0].run);
+		if (stop === undefined || stop.asked) return;
+		stop.asked = true;
 		yield* askStop(shell, job.n);
 		sayStopper(shell, job.n);
-		if (called !== undefined) yield* Deferred.succeed(called, undefined);
-		yield* Effect.forEach(stops, (stop) => stop, {concurrency: "unbounded", discard: true});
+		yield* Deferred.succeed(stop.go, undefined);
+		const runs = job.stages.flatMap((s) => {
+			const r = shell.live.get(s.run);
+			return r === undefined ? [] : [r];
+		});
+		yield* Effect.forEach(runs, (r) => r.stop, {concurrency: "unbounded", discard: true});
 	});
 
 /** What tsh says of a job whose kept state its machine's schema refuses. */
@@ -439,7 +466,13 @@ const watchEnds = (
 			Effect.tap(after),
 			Effect.tap(() => Scope.close(jobScope, Exit.void)),
 			Effect.flatMap((ends) => Deferred.succeed(watcher, ends)),
-			Effect.ensuring(Effect.sync(() => first !== undefined && shell.watched.delete(first.run.id))),
+			Effect.ensuring(
+				Effect.sync(() => {
+					if (first === undefined) return;
+					shell.watched.delete(first.run.id);
+					shell.stops.delete(first.run.id);
+				}),
+			),
 			Effect.forkIn(shell.scope),
 		);
 		return watcher;
@@ -594,9 +627,8 @@ const runStages = (
 			alone !== undefined &&
 			others.length === 0 &&
 			viewOf(alone.entry.program) === undefined;
-		// The word that stops a `call`, kept before its job is in the table (`Shell.calls`).
-		const asked = calling ? yield* Deferred.make<void>() : null;
-		if (asked !== null) shell.calls.set(head.run, asked);
+		// Its stop, kept before its job is in the table (`Shell.stops`).
+		const stop = yield* keepStop(shell, head.run);
 		yield* note(shell, {
 			type: "began",
 			text: line.text,
@@ -627,7 +659,7 @@ const runStages = (
 			};
 		});
 		const [only] = starting;
-		if (asked !== null && only !== undefined) {
+		if (calling && only !== undefined) {
 			// Heard before the run starts, so a Ctrl-C at its first instant is not lost. A stop told
 			// to tsh (`stopJob`) said who asked already.
 			const called = yield* Effect.gen(function* () {
@@ -638,10 +670,10 @@ const runStages = (
 					keeping: {id: only.record.run, storage: shell.storage},
 					stopOn: Effect.raceFirst(
 						PubSub.take(signal).pipe(Effect.tap(() => askStop(shell, n))),
-						Deferred.await(asked),
+						Deferred.await(stop.go),
 					),
 				});
-			}).pipe(Effect.scoped, Effect.ensuring(Effect.sync(() => shell.calls.delete(head.run))));
+			}).pipe(Effect.scoped, Effect.ensuring(Effect.sync(() => shell.stops.delete(head.run))));
 			yield* note(shell, {
 				type: "stage_ended",
 				run: only.record.run,
@@ -662,6 +694,7 @@ const runStages = (
 		const jobScope = yield* Scope.fork(shell.scope);
 		const started = yield* startStages(shell, starting, !background).pipe(Scope.provide(jobScope));
 		if (!started.ok) {
+			shell.stops.delete(head.run);
 			yield* Effect.forEach(started.runs, (r) => r.stop, {concurrency: "unbounded"});
 			yield* Scope.close(jobScope, Exit.void);
 			// The job leaves the table now: the stages that never started never end.
@@ -679,6 +712,7 @@ const runStages = (
 				),
 			),
 		);
+		yield* stopIfAsked(stop, started.runs);
 		if (background) {
 			shell.print("err", `[${n}] ${records.map((r) => r.run).join(" ")}`, n);
 			return {status: 0, values: []};
@@ -726,6 +760,8 @@ export const reattach = (shell: Shell, job: Job, background: boolean, typed: str
 			shell.print("err", `tsh: ${missing.program} is not on the program list any more`);
 			return 1;
 		}
+		// Its stop, kept before the table says it runs again (`Shell.stops`).
+		const stop = yield* keepStop(shell, job.stages[0].run);
 		yield* note(shell, {type: "attached", n: job.n, background, owner: shell.owner});
 		const starting = job.stages.map((record, i): Starting => {
 			const entry = shell.list.get(record.program) as Entry;
@@ -751,6 +787,7 @@ export const reattach = (shell: Shell, job: Job, background: boolean, typed: str
 		const jobScope = yield* Scope.fork(shell.scope);
 		const started = yield* startStages(shell, starting, !background).pipe(Scope.provide(jobScope));
 		if (!started.ok) {
+			shell.stops.delete(job.stages[0].run);
 			yield* Effect.forEach(started.runs, (r) => r.stop, {concurrency: "unbounded"});
 			yield* Scope.close(jobScope, Exit.void);
 			yield* note(shell, {type: "detached", n: job.n});
@@ -765,6 +802,7 @@ export const reattach = (shell: Shell, job: Job, background: boolean, typed: str
 				Effect.andThen(sayJobEnd(shell, job.n, job.text, started.runs, ends)),
 			),
 		);
+		yield* stopIfAsked(stop, started.runs);
 		if (background) {
 			shell.print("err", `[${job.n}] attached ${job.stages.map((s) => s.run).join(" ")}`, job.n);
 			return 0;

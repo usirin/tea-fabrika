@@ -1,5 +1,6 @@
 import {Duration, Schema} from "effect";
 import {jsonSchemaOf} from "../program/shape.ts";
+import {isOneLine} from "../shell/one-line.ts";
 import {JobAnswer} from "./job.ts";
 import type {Tool} from "./tools.ts";
 
@@ -31,8 +32,18 @@ export const STOP = "stop";
  */
 export const EXIT_WITHIN = Duration.seconds(10);
 
-/** Why a stop was asked, in the agent's words: 1 to 500 characters, never none. */
-export const Why = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(500));
+/**
+ * Why a stop was asked, in the agent's words: 1 to 500 characters on one line, never none. The
+ * person's tile shows it and the host's log writes it, so it holds no control character: no
+ * newline or carriage return could start a line of its own there (../shell/one-line.ts).
+ */
+export const Why = Schema.String.check(
+	Schema.isMinLength(1),
+	Schema.isMaxLength(500),
+	Schema.makeFilter(
+		(why) => isOneLine(why) || "one line, with no newline, tab or other control character",
+	),
+);
 
 /** What the tool takes: the job's number, `%n` on a line, and why. */
 export const StopAsk = Schema.Struct({n: Schema.Int, why: Why});
@@ -57,7 +68,7 @@ export class StopRefused extends Schema.TaggedError<StopRefused>()("StopRefused"
 
 export const STOP_TOOL: Tool = {
 	name: STOP,
-	description: `Stop one job of the host's table, by its number (%n on a line, as jobs and runs show it), the person's or yours. why: what made you stop it, 1 to 500 characters; the tile it ran in shows it to the person, and the job's record keeps it. A detached job (from before the host started again) is dropped. Answers stopped, with the job as the job tool shows it; dropped; or asked, when it has not ended ${Duration.toSeconds(EXIT_WITHIN)} s on: read it with job.`,
+	description: `Stop one job of the host's table, by its number (%n on a line, as jobs and runs show it), the person's or yours. why: what made you stop it, 1 to 500 characters on one line; the tile it ran in shows it to the person, and the job's record keeps it. A detached job (from before the host started again) is dropped. Answers stopped, with the job as the job tool shows it; dropped; or asked, when it has not ended ${Duration.toSeconds(EXIT_WITHIN)} s on: read it with job.`,
 	inputSchema: {...jsonSchemaOf(StopAsk), type: "object"},
 	annotations: {
 		readOnlyHint: false,
