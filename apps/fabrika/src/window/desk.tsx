@@ -23,6 +23,7 @@ import {
 	type Workspace,
 } from "../desk/desk.ts";
 import {type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key} from "../desk/hold.ts";
+import {commandOn, defaults, Key as KeyCase, type Keys} from "../desk/keymap.ts";
 import {keyName, keyOwner} from "../desk/keys.ts";
 import {
 	type ContainerNode,
@@ -30,12 +31,10 @@ import {
 	fold,
 	isFolded,
 	type LayoutNode,
-	lineOf,
 	type NodeId,
 	openShares,
 	type TileId,
 	type TileNode,
-	tiles,
 } from "../desk/layout/index.ts";
 import {
 	type Attached,
@@ -48,13 +47,11 @@ import {
 	type ToWindow,
 } from "../messages.ts";
 import {
-	type Bound,
 	EXPLAIN_ON,
 	FRAME,
 	type Frame,
 	type FrameMsg,
 	frameUpdate,
-	INFO,
 	keyGoesTo,
 	type MidKey,
 	type Shapes,
@@ -62,6 +59,7 @@ import {
 } from "./frame.ts";
 import {Band, BottomArea, type FrameProps, Over, TopBar} from "./frame.tsx";
 import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
+import {Strip, Tile} from "./tile.tsx";
 import {WINDOWS} from "./windows.tsx";
 
 // The desk's page: the app's one window, tiled like tmux. It draws the desk the host sends
@@ -84,7 +82,8 @@ import {WINDOWS} from "./windows.tsx";
 // tile's port; typing in a view's text box stays in the view, which sends only its program's
 // declared inputs.
 //
-// Each tile's terminal is made once and moved into its slot as the layout changes (terminal.ts).
+// Each tile's terminal is made once and moved into its body as the layout changes (terminal.ts).
+// A tile and a strip are drawn by tile.tsx.
 // A program's view is plain React, drawn whole from the newest view its run sent (windows.tsx).
 //
 // Around the desk is the window's frame (frame.tsx, its words in frame.ts): the top bar is the
@@ -113,10 +112,8 @@ const store: {
 	desk: Desk | null;
 	/** A desk came once: a link down after it is the host down. */
 	attachedOnce: boolean;
-	/** The desk's Ctrl-B key, as the host's table says. */
-	prefix: string;
-	/** The desk's Ctrl-B table, each key with its name. */
-	table: readonly Bound[];
+	/** The keys file's table, as the host sent it last (desk/keymap.ts); the defaults until then. */
+	keys: Keys;
 	/** What each program takes and sends. */
 	shapes: Shapes;
 	/** What waits on the person, as the host counts it; `null` until it says. */
@@ -133,8 +130,7 @@ const store: {
 } = {
 	desk: null,
 	attachedOnce: false,
-	prefix: "",
-	table: [],
+	keys: defaults,
 	shapes: new Map(),
 	asks: null,
 	host: null,
@@ -272,7 +268,7 @@ const midKey = (): MidKey => {
  * answer is in, so a key can be held while it is already open.
  */
 const keyForOver = (name: string, target: EventTarget | null): "desk" | "in" | "moved in" => {
-	if (keyGoesTo(store.frame.over, name, store.prefix, midKey()) !== "over") return "desk";
+	if (keyGoesTo(store.frame.over, name, store.keys.prefix, midKey()) !== "over") return "desk";
 	return focusOver(target);
 };
 
@@ -386,8 +382,7 @@ const heard = (raw: unknown) => {
 	const m = read.msg;
 	switch (m.type) {
 		case "keys":
-			store.prefix = m.prefix;
-			store.table = m.table;
+			store.keys = {prefix: m.prefix, rows: m.rows, ignore: m.ignore, file: m.file};
 			return changed();
 		case "programs":
 			store.shapes = new Map(m.programs.map((p) => [p.name, {takes: p.takes, sends: p.sends}]));
@@ -437,7 +432,8 @@ const swallow = (e: KeyboardEvent) => {
 
 /**
  * Every key, before anything else on the page sees it: the frame's own, the desk's, or the
- * focused tile's. Cmd-K opens the palette, as in Linear and VS Code. Escape closes what lies over
+ * focused tile's. The palette's key opens it: Cmd-K, as in Linear and VS Code, unless the keys file
+ * moved it (`palette.open`). Escape closes what lies over
  * the desk; with nothing over it, it leaves info mode, unless the desk is mid-key, where it cancels
  * the prefix or the question first; with neither, it goes on to the tile (frame.ts, `escaped`).
  * While something lies over it, the keys it takes (frame.ts, `keyGoesTo`) go to it and
@@ -459,19 +455,21 @@ const swallow = (e: KeyboardEvent) => {
 const onKey = (e: KeyboardEvent) => {
 	if (replaying) return;
 	const pressed = {key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey};
-	const owner = keyOwner(pressed, MAC);
+	const owner = keyOwner(pressed, MAC, store.keys);
 	if (owner === "nobody") return swallow(e);
 	if (owner === "system") {
 		if (e.target instanceof Element && e.target.closest(".term") !== null) e.stopPropagation();
 		if (store.frame.over.kind !== "none") focusOver(e.target);
 		return;
 	}
-	if (e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "k") {
+	const name = keyName(pressed);
+	const alone =
+		name === null ? undefined : commandOn(store.keys, KeyCase.cases.alone.make({key: name}));
+	if (alone === "palette.open") {
 		swallow(e);
 		return frameStep({type: "palette"});
 	}
 	if (e.key === "Escape" && frameStep({type: "escape", desk: midKey()})) return swallow(e);
-	const name = keyName(pressed);
 	if (name === null) return;
 	const forOver = keyForOver(name, e.target);
 	if (forOver === "in") return;
@@ -484,7 +482,7 @@ const onKey = (e: KeyboardEvent) => {
 		meta: e.metaKey,
 		shift: e.shiftKey,
 	};
-	if (name === store.prefix) noteKeyedFrom(e.target);
+	if (name === store.keys.prefix) noteKeyedFrom(e.target);
 	if (holdStep({type: "key", key: {name, press}})) return;
 	swallow(e);
 };
@@ -500,24 +498,6 @@ const explainAt = (e: Event) => {
 
 /** The run a tile shows, if any: a run covering its tsh. */
 const runOf = (tile: TileNode) => tile.shows.run;
-
-/** What a strip or a title bar calls a node: its tile's program, or its tiles' programs in order. */
-const nameOf = (node: LayoutNode): string =>
-	[...tiles(node)].map((tile) => runOf(tile)?.program ?? "tsh").join(" · ");
-
-/**
- * The tint a node is drawn with: its line's, when every tile under it shows a window of the one
- * line, else none. The desk picks it (layout/line.ts); the page only mixes it in (window.css).
- */
-const tintOf = (node: LayoutNode): number | undefined => {
-	const lines = [...tiles(node)].map((tile) => lineOf(tile));
-	const [first] = lines;
-	if (first == null || lines.some((line) => line?.id !== first.id)) return undefined;
-	return first.tint;
-};
-
-/** A press that takes no focus: the desk gives focus to a tile, and the page follows it. */
-const noFocus = (e: ReactPointerEvent) => e.preventDefault();
 
 function View({tile, run}: {readonly tile: TileId; readonly run: string}): ReactNode {
 	const view = store.views.get(run);
@@ -542,65 +522,13 @@ function View({tile, run}: {readonly tile: TileId; readonly run: string}): React
 	);
 }
 
-function Slot({tile}: {readonly tile: TileId}): ReactNode {
+/** A tile's terminal, moved into its body under the title bar (terminal.ts, `attach`). */
+function Body({tile}: {readonly tile: TileId}): ReactNode {
 	const ref = useRef<HTMLDivElement>(null);
 	useLayoutEffect(() => {
 		if (ref.current !== null) terminals.get(tile)?.attach(ref.current);
 	});
-	return <div className="slot" ref={ref} />;
-}
-
-function Tile(props: {
-	readonly tile: TileNode;
-	readonly focused: boolean;
-	/** The tile's question, as tmux's confirm-before asks it, or none. */
-	readonly asking: string | null;
-	readonly closing: boolean;
-	/** Does the desk let this tile fold: no for the last open tile of the workspace. */
-	readonly folds: boolean;
-}): ReactNode {
-	const {tile, focused, asking, closing, folds} = props;
-	const run = runOf(tile);
-	const line = lineOf(tile);
-	const of = line === null ? "" : `, a window of the line typed in ${line.from}`;
-	return (
-		<section
-			className={`tile${focused ? " focused" : ""}${closing ? " closing" : ""}`}
-			data-tile={tile.id}
-			data-tint={tintOf(tile)}
-			aria-label={`tile ${tile.id}${run === null ? "" : `, ${run.program}`}${of}${closing ? ", closing" : ""}`}
-			aria-current={focused}
-			onPointerDownCapture={() => toHost({type: "click", tile: tile.id})}
-		>
-			{/* A press on the title bar focuses the tile, as anywhere on it; a double-click folds it,
-			    as on a device's title bar in Ableton Live. Not `disabled` when it cannot fold: a
-			    disabled button would swallow the press that focuses. */}
-			<button
-				type="button"
-				className="titlebar"
-				aria-label={`tile ${tile.id}: double-click to fold`}
-				aria-disabled={!folds}
-				data-info={INFO.titlebar}
-				onPointerDown={noFocus}
-				onDoubleClick={() => {
-					if (folds) toHost({type: "fold", tile: tile.id});
-				}}
-			>
-				<span>{nameOf(tile)}</span>
-				{/* The question itself is on the bottom line, where tmux asks it; the tile it is for
-				    says so too, so an eye on the tile does not miss it. */}
-				{asking !== null && <span className="asking">{asking}</span>}
-				<span className="tid">{tile.id}</span>
-			</button>
-			{tile.shows.kind !== "window" && <Slot tile={tile.id} />}
-			{run !== null && <View tile={tile.id} run={run.id} />}
-			{closing && (
-				<p className="closing-note" role="status">
-					closing
-				</p>
-			)}
-		</section>
-	);
+	return <div className="tile-body" ref={ref} />;
 }
 
 /**
@@ -665,7 +593,7 @@ function Container(props: {
 	return (
 		<div className={`container ${container.orientation}`} data-container={container.id} ref={ref}>
 			{container.children.flatMap((child) => {
-				if (isFolded(child)) return [<Strip key={child.id} node={child} />];
+				if (isFolded(child)) return [<Strip key={child.id} node={child} toHost={toHost} />];
 				const before = open[open.indexOf(child.id) - 1];
 				return [
 					...(before === undefined
@@ -692,28 +620,6 @@ function Container(props: {
 	);
 }
 
-/**
- * A folded tile, or a container whose tiles are all folded: a thin strip in its place, along its
- * parent's direction, named by its programs. A click opens every tile it stands for.
- */
-function Strip({node}: {readonly node: LayoutNode}): ReactNode {
-	const name = nameOf(node);
-	return (
-		<button
-			type="button"
-			className="strip"
-			data-strip={node.id}
-			data-tint={tintOf(node)}
-			aria-label={`open ${name}, ${node.id}`}
-			data-info={INFO.strip}
-			onPointerDown={noFocus}
-			onClick={() => toHost({type: "unfold", node: node.id})}
-		>
-			<span className="strip-name">{name}</span>
-		</button>
-	);
-}
-
 function Node(props: {
 	readonly node: LayoutNode;
 	readonly ws: Workspace;
@@ -724,21 +630,32 @@ function Node(props: {
 	return <Container container={node} ws={ws} desk={desk} />;
 }
 
-/** A tile as the desk has it now: focused or not, asking or not, closing or not, able to fold or not. */
+/**
+ * A tile as the desk has it now: focused or not, asking or not, closing or not, zoomed or not,
+ * able to fold or not, with its terminal and the view over it as its body.
+ */
 function DeskTile(props: {
 	readonly tile: TileNode;
 	readonly ws: Workspace;
 	readonly desk: Open;
 }): ReactNode {
 	const {tile, ws, desk} = props;
+	const run = runOf(tile);
 	return (
 		<Tile
 			tile={tile}
 			focused={tile.id === ws.focused}
 			asking={desk.ask === tile.id ? questionOf(desk, tile.id) : null}
 			closing={desk.closing.includes(tile.id)}
+			zoomed={ws.layout.zoomed === tile.id}
 			folds={fold(ws.layout, tile.id) !== ws.layout}
-		/>
+			tickets={ticketsShown(store.views)}
+			keys={store.keys}
+			toHost={toHost}
+		>
+			{tile.shows.kind !== "window" && <Body tile={tile.id} />}
+			{run !== null && <View tile={tile.id} run={run.id} />}
+		</Tile>
 	);
 }
 
@@ -837,8 +754,7 @@ function App(): ReactNode {
 		host: store.host,
 		link: store.link,
 		attachedOnce: store.attachedOnce,
-		prefix: store.prefix,
-		table: store.table,
+		keys: store.keys,
 		shapes: store.shapes,
 		tickets: ticketsShown(store.views),
 		armed: open?.prefix.armed ?? false,

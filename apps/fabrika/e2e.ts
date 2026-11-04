@@ -82,6 +82,10 @@ import {_electron, type ElectronApplication, type Locator, type Page} from "play
 //                    again, which takes no focus. The folder back, a click on it starts a host,
 //                    and the desk is back
 //
+// Then the tiles' look, on a home of its own (`tilesLook`): one tile, a pipe side by side, a pipe
+// stacked, a 2x2 in each state, and a small window, each in `tiles/` as `<state>-<layout>-<look>`.
+// `pnpm --filter @kampus/fabrika-app-old e2e -- --tiles` runs that stage alone.
+//
 // Last, as no person ever does (there is no stop command), the run stops the host it started by
 // its pid, and the fake one too, and checks with pgrep that nothing of either home is left.
 //
@@ -185,7 +189,14 @@ const noQuestion = (page: Page) =>
 		() => page.getByRole("alertdialog").count(),
 		(n) => n === 0,
 	);
-const closingIn = (page: Page, id: string) => tile(page, id).getByRole("status").count();
+/** The word in a tile's state slot, or "" for none. */
+const stateIn = async (page: Page, id: string) => {
+	const state = tile(page, id).locator(".titlebar .state");
+	return (await state.count()) === 0 ? "" : ((await state.textContent({timeout: 2000})) ?? "");
+};
+/** 1 when a tile's title bar says it is closing, else 0. */
+const closingIn = async (page: Page, id: string) =>
+	(await stateIn(page, id)) === "closing" ? 1 : 0;
 
 const countIn = (page: Page, id: string) => tile(page, id).getByLabel("count", {exact: true});
 const windowCount = (app: ElectronApplication) =>
@@ -379,7 +390,7 @@ const infoMode = async (page: Page) => {
 	);
 	const right = await textsOf(bottomLine(page).locator(".right"));
 	await bottomLine(page).getByRole("button", {name: /keys$/}).focus();
-	await explained(page, "keys: press Ctrl-B");
+	await explained(page, "keys: press C-b");
 	check(
 		"while something is explained, the right side keeps its items",
 		(await textsOf(bottomLine(page).locator(".right"))).join() === right.join(),
@@ -1816,48 +1827,287 @@ const reconnect = async () => {
 	}
 };
 
-const first = await launch(home);
-let left = "";
-try {
-	try {
-		left = await flow(first);
-		await reopen(first, left);
-	} finally {
-		// With counter up, at 1: `close` asks Electron's `app.quit()`, as Cmd-Q does.
-		await first.close();
-	}
-	const pid = await hostPid(home);
-	check("the app quit, and the host it started runs on", pid !== null && alive(pid), pid);
-	const kept = (await keptJobs(home)).map((job) => [job.n, job.text, job.owner]);
-	check(
-		"the host's one job table keeps one job, the counter of the tile left, and no closed tile's",
-		kept.length === 1 && kept[0]?.[1] === "counter" && kept[0]?.[2] === left,
-		kept,
+/**
+ * The system's look, as a person sets it: Electron's nativeTheme, for the window's frame, and the
+ * page's own, which Playwright holds and so sets apart.
+ */
+const lookIs = async (app: ElectronApplication, page: Page, look: "dark" | "light") => {
+	await app.evaluate(({nativeTheme}, to) => {
+		nativeTheme.themeSource = to;
+	}, look);
+	await page.emulateMedia({colorScheme: look});
+	await until(
+		`the ${look} look`,
+		() => page.evaluate(() => matchMedia("(prefers-color-scheme: light)").matches),
+		(light) => light === (look === "light"),
 	);
-	const desk = await readFile(join(home, "desk.json"), "utf8").catch(() => "");
-	check("the host kept the desk in the home", desk.includes(`"${left}"`), desk);
-	const history = await readFile(join(home, "history"), "utf8").catch(() => "");
-	check("the host kept the history in the home", history.endsWith("counter\n"), history);
+};
+/** The tile a title bar's slot, name and state belong to, as the page draws them. */
+const titleOf = (page: Page, id: string) =>
+	tile(page, id)
+		.locator(".titlebar")
+		.evaluate((bar) => ({
+			pipe: bar.parentElement?.getAttribute("data-pipe") ?? null,
+			slot: bar.querySelector(".slot")?.textContent ?? "",
+			name: bar.querySelector(".name")?.textContent ?? "",
+		}));
+/** A click on a tile's title bar: it focuses the tile and presses nothing in its body. */
+const focusOn = async (page: Page, id: string) => {
+	await tile(page, id).locator(".titlebar").click();
+	await focusIs(page, id);
+};
 
-	const next = await launch(home);
+/**
+ * The stage's one ticket, picked in a tracker: the pick goes down the pipe, and the tracker shows
+ * the ticket, not the repository's pull requests, which change from run to run.
+ */
+const pickIn = (tracker: Locator) => tracker.getByRole("button", {name: /Tiles, the look/}).click();
+
+/**
+ * The tile guidelines' look (docs/direction/tile-guidelines.md), on a home of its own: one tile,
+ * a pipe side by side, a pipe stacked with a strip lying under it, a 2x2 in every state, and a
+ * 2x2 in a 1024 by 700 window with a pipe folded. Each picture is `<state>-<layout>-<look>.png`,
+ * in `tiles/` under the screenshots' folder; the look is the system's, as nativeTheme sets it.
+ *
+ *   SHOTS=docs pnpm --filter @kampus/fabrika-app-old e2e -- --tiles    only this, into docs/tiles
+ */
+const tilesLook = async () => {
+	const own = await mkdtemp(join(tmpdir(), "fabrika-tiles-"));
+	const out = join(shots, "tiles");
+	await mkdir(out, {recursive: true});
+	const app = await launch(own);
 	try {
-		await again(next, left);
-	} finally {
-		await next.close().catch(() => {});
-	}
-	check(
-		"then the app quits, and the same host runs on",
-		(await hostPid(home)) === pid && pid !== null && alive(pid),
-	);
+		const page = await app.firstWindow();
+		await prompted(page, "t1");
+		await lookIs(app, page, "dark");
+		/** One picture, with the pointer off every tile unless `hovered` says it is on one. */
+		const snap = async (name: string, hovered = false) => {
+			if (!hovered) await page.mouse.move(1, 1);
+			await page.waitForTimeout(250);
+			const file = join(out, `${name}.png`);
+			await page.screenshot({path: file});
+			saved.push(file);
+		};
+		/** The picture in the dark look, then in the light, and back to dark. */
+		const both = async (name: string) => {
+			await snap(`${name}-dark`);
+			await lookIs(app, page, "light");
+			await snap(`${name}-light`);
+			await lookIs(app, page, "dark");
+		};
 
-	await mismatch();
-	await asksSwap();
-	await reconnect();
-} finally {
-	// No person stops the host: there is no command for it. The run stops its own, by its pid.
-	const pid = await hostPid(home);
-	if (pid !== null) await stop(pid);
-}
+		const plain = await titleOf(page, "t1");
+		check(
+			"a plain tile: no pipe, a dot in its slot, and its name, tsh",
+			plain.pipe === null && plain.slot === "•" && plain.name === "tsh",
+			plain,
+		);
+		await both("plain-focused-one");
+
+		// A pipe of two, side by side: the tracker in t1, where it was typed, the ticket beside it.
+		await run(page, "t1", "tracker | ticket");
+		await tilesAre(page, ["t1", "t2"]);
+		const tracker = tile(page, "t1").getByLabel("tracker view");
+		await tracker.waitFor();
+		await tracker.getByLabel("new ticket title").fill("Tiles, the look");
+		await tracker.getByRole("button", {name: "File ticket"}).click();
+		await pickIn(tracker);
+		await tile(page, "t2").getByText("Tiles, the look").first().waitFor();
+		await focusOn(page, "t1");
+		const piped = [await titleOf(page, "t1"), await titleOf(page, "t2")];
+		check(
+			"a pipe of two: both tiles sky, with the letter A",
+			piped.every((t) => t.pipe === "sky" && t.slot === "A"),
+			piped,
+		);
+		await both("pipe-focused-side");
+
+		// A 2x2: a tsh under each window of the pipe.
+		await prefixed(page, "-");
+		await tilesAre(page, ["t1", "t3", "t2"]);
+		await prompted(page, "t3");
+		await focusOn(page, "t2");
+		await prefixed(page, "-");
+		await tilesAre(page, ["t1", "t3", "t2", "t4"]);
+		await prompted(page, "t4");
+		await snap("plain-focused-2x2-dark");
+		await focusOn(page, "t1");
+		await snap("pipe-focused-2x2-dark");
+		await lookIs(app, page, "light");
+		await snap("pipe-focused-2x2-light");
+		await lookIs(app, page, "dark");
+
+		await prefixed(page, "z");
+		await tilesAre(page, ["t1"]);
+		check("a zoomed tile says so in its state slot", (await stateIn(page, "t1")) === "zoomed");
+		await snap("zoomed-2x2-dark");
+		await prefixed(page, "z");
+		await tilesAre(page, ["t1", "t3", "t2", "t4"]);
+
+		// Two strips lying: t3, plain, under t1; the ticket, in the pipe, over t4. The pointer on
+		// the plain one, the keyboard's ring on the pipe's.
+		await focusOn(page, "t3");
+		await prefixed(page, "f");
+		await focusOn(page, "t2");
+		await prefixed(page, "f");
+		await tilesAre(page, ["t1", "t4"]);
+		await page.locator('[data-strip="t2"]').focus();
+		await page.locator('[data-strip="t3"]').hover();
+		await snap("strips-2x2-dark", true);
+		await page.locator('[data-strip="t3"]').click();
+		await page.locator('[data-strip="t2"]').click();
+		await tilesAre(page, ["t1", "t3", "t2", "t4"]);
+
+		await focusOn(page, "t1");
+		await prefixed(page, "B");
+		await snap("bars-hidden-2x2-dark");
+		await prefixed(page, "B");
+		await page.emulateMedia({forcedColors: "active"});
+		await snap("forced-colors-2x2-dark");
+		await page.emulateMedia({forcedColors: "none", contrast: "more"});
+		await snap("more-contrast-2x2-dark");
+		await page.emulateMedia({contrast: "no-preference"});
+
+		// Closing: a job that does not end on its inputs' end, then the close question beside it.
+		await focusOn(page, "t3");
+		await run(page, "t3", "sleep --ms 600000 &");
+		await prompted(page, "t3");
+		await prefixed(page, "x");
+		await askedIs(page, "close t3? (y/n)");
+		await page.keyboard.press("y");
+		await until(
+			"t3 closing",
+			() => closingIn(page, "t3"),
+			(n) => n === 1,
+		);
+		await snap("closing-2x2-dark");
+		await focusOn(page, "t4");
+		await prefixed(page, "x");
+		await askedIs(page, "close t4? (y/n)");
+		check(
+			"the close question is in the tile's state slot too",
+			(await stateIn(page, "t4")) === "close t4? (y/n)",
+		);
+		await snap("asking-2x2-dark");
+		await page.keyboard.press("n");
+		await noQuestion(page);
+
+		// Stacked, in a workspace of its own: a pipe of three turned into a column, its last
+		// window folded into a strip lying under the other two.
+		await prefixed(page, "N");
+		await tilesAre(page, ["t5"]);
+		await prompted(page, "t5");
+		await run(page, "t5", "tracker | ticket | trace");
+		await tilesAre(page, ["t5", "t6", "t7"]);
+		await pickIn(tile(page, "t5").getByLabel("tracker view"));
+		await tile(page, "t6").getByText("Tiles, the look").first().waitFor();
+		await prefixed(page, " ");
+		await focusOn(page, "t7");
+		await prefixed(page, "f");
+		await tilesAre(page, ["t5", "t6"]);
+		await focusOn(page, "t5");
+		await both("pipe-focused-stacked");
+
+		// The small window: a 2x2 with a pipe of three in one quarter, too narrow for three
+		// windows, so two open folded; and four narrow tiles in another, one named `ticket #1`.
+		const cdp = await page.context().newCDPSession(page);
+		await cdp.send("Emulation.setDeviceMetricsOverride", {
+			width: 1024,
+			height: 700,
+			deviceScaleFactor: 0,
+			mobile: false,
+		});
+		await until(
+			"the window at 1024 by 700",
+			() => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
+			(size) => size === "1024x700",
+		);
+		await prefixed(page, "N");
+		await tilesAre(page, ["t8"]);
+		await prompted(page, "t8");
+		await prefixed(page, "|");
+		await prompted(page, "t9");
+		await prefixed(page, "-");
+		await prompted(page, "t10");
+		await focusOn(page, "t8");
+		await prefixed(page, "-");
+		await prompted(page, "t11");
+		// The ticket first, while its prompt is wide enough for the line; then its tile split
+		// twice, to an eighth of the window.
+		await focusOn(page, "t9");
+		await run(page, "t9", "ticket --ticket 1");
+		await tile(page, "t9").getByText("Tiles, the look").first().waitFor();
+		for (const id of ["t12", "t13"]) {
+			await focusOn(page, "t9");
+			await prefixed(page, "|");
+			await prompted(page, id);
+		}
+		await focusOn(page, "t8");
+		await run(page, "t8", "tracker | ticket | trace");
+		await pickIn(tile(page, "t8").getByLabel("tracker view"));
+		const folds = await page.locator("[data-strip]").count();
+		check(
+			"a pipe of three in a quarter of 1024 by 700: two windows open folded",
+			folds === 2,
+			folds,
+		);
+		await both("pipe-folded-small");
+	} finally {
+		await app.close().catch(() => {});
+		const pid = await hostPid(own);
+		if (pid !== null) await stop(pid);
+	}
+};
+
+const all = async () => {
+	const first = await launch(home);
+	let left = "";
+	try {
+		try {
+			left = await flow(first);
+			await reopen(first, left);
+		} finally {
+			// With counter up, at 1: `close` asks Electron's `app.quit()`, as Cmd-Q does.
+			await first.close();
+		}
+		const pid = await hostPid(home);
+		check("the app quit, and the host it started runs on", pid !== null && alive(pid), pid);
+		const kept = (await keptJobs(home)).map((job) => [job.n, job.text, job.owner]);
+		check(
+			"the host's one job table keeps one job, the counter of the tile left, and no closed tile's",
+			kept.length === 1 && kept[0]?.[1] === "counter" && kept[0]?.[2] === left,
+			kept,
+		);
+		const desk = await readFile(join(home, "desk.json"), "utf8").catch(() => "");
+		check("the host kept the desk in the home", desk.includes(`"${left}"`), desk);
+		const history = await readFile(join(home, "history"), "utf8").catch(() => "");
+		check("the host kept the history in the home", history.endsWith("counter\n"), history);
+
+		const next = await launch(home);
+		try {
+			await again(next, left);
+		} finally {
+			await next.close().catch(() => {});
+		}
+		check(
+			"then the app quits, and the same host runs on",
+			(await hostPid(home)) === pid && pid !== null && alive(pid),
+		);
+
+		await mismatch();
+		await asksSwap();
+		await reconnect();
+		await tilesLook();
+	} finally {
+		// No person stops the host: there is no command for it. The run stops its own, by its pid.
+		const pid = await hostPid(home);
+		if (pid !== null) await stop(pid);
+	}
+};
+
+// `-- --tiles` takes the tiles' pictures alone, with no other stage.
+if (process.argv.includes("--tiles")) await tilesLook();
+else await all();
 const after = await pgrep(here);
 check(
 	"the host stopped by its pid: pgrep finds nothing of this app left",

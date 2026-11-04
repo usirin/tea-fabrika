@@ -1,8 +1,9 @@
 import {defineMachine, noop} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
-import {Schema} from "effect";
+import {Schema, SchemaTransformation} from "effect";
 import {TileJobs} from "../tile-jobs.ts";
-import {bindingOf, type Does, PREFIX, REPEAT_MS, SHOWS} from "./keys.ts";
+import {bindingFor, type Does as Command, commandOn, defaults, Key, type Keys} from "./keymap.ts";
+import {type Does, REPEAT_MS, SHOWS} from "./keys.ts";
 import {
 	type Area,
 	checkTree,
@@ -13,8 +14,11 @@ import {
 	findSibling,
 	findTile,
 	fold,
+	freeLetter,
 	freeTint,
+	isKeptTree,
 	isLayoutTree,
+	type KeptLine,
 	type LayoutTree,
 	type NodeId,
 	type Orientation,
@@ -32,12 +36,14 @@ import {
 	turn,
 	unfold,
 	unzoom,
+	withLetters,
 	zoom,
 } from "./layout/index.ts";
 
 // The desk: the one window's tiles, as a tea machine. Pure, so a test folds Msgs through it and a
 // property test checks its laws after every step (desk.test.ts). Its keys are tmux's and Tuval's
-// (keys.ts); its layout is Tuval's tree (layout/). Tuval's own desk machine (kamp-us/phoenix,
+// (keys.ts), unless the keys file moved them (keymap.ts); its layout is Tuval's tree (layout/).
+// Tuval's own desk machine (kamp-us/phoenix,
 // apps/tuval/src/shell/core/machine.ts) is the evidence; this one is smaller.
 //
 //   [desk] = init(null)                                    one workspace, one tile t1: open {tile: "t1"}
@@ -103,7 +109,14 @@ import {
 //   {type: "go", tile: "t7"}           a tile anywhere, as an ask in the asks list is picked:
 //                                      its workspace comes forward and it is focused
 //   {type: "pick", workspace: "w2"}    a workspace clicked in the top bar
-//   {type: "run", key: "z"}            the palette ran a command: as Ctrl-B, then that key
+//   {type: "run", does: "tezgah.zoom"} the palette ran a command by its word: as its key, bound
+//                                      or not. `palette.open` is the page's, and does nothing here
+//
+// And the host swaps its table when the keys file is saved (host/settings.ts), as tmux's
+// `source-file` does: the next key reads the new one. An armed prefix is put down, nothing is
+// asked for, and nothing kept changes.
+//
+//   {type: "keys", keys}               the keys file's table (keymap.ts), the defaults without one
 //
 // And a tile's tsh moves it, by a command's tsh word (desk/words.ts), as `tmux resize-pane -Z`
 // typed in a pane zooms that pane:
@@ -149,6 +162,11 @@ export interface Open {
 	readonly next: number;
 	/** The workspace's size in px, as the page last said, or `null` before any page has. */
 	readonly area: Area | null;
+	/**
+	 * The keys file's table, as the host last swapped it in, or none: the defaults (keymap.ts). It is
+	 * not kept, as the file is: a desk read back starts on the defaults until the host swaps again.
+	 */
+	readonly keys?: Keys;
 }
 
 /** Which way a line's windows run, for now always: left to right, as a pipe reads. */
@@ -191,8 +209,10 @@ export type DeskMsg =
 	| {readonly type: "go"; readonly tile: TileId}
 	/** This workspace comes forward. */
 	| {readonly type: "pick"; readonly workspace: string}
-	/** What this key does after the prefix, with no prefix pressed: the palette ran it. */
-	| {readonly type: "run"; readonly key: string}
+	/** A command, by its word, with no key pressed: the palette ran it. */
+	| {readonly type: "run"; readonly does: Command}
+	/** The keys file's table: the file was saved, or the host started. */
+	| {readonly type: "keys"; readonly keys: Keys}
 	/** A command's tsh word, typed in this tile's tsh: it does what its key does, from this tile. */
 	| {readonly type: "typed"; readonly tile: TileId; readonly does: Does};
 
@@ -202,18 +222,34 @@ export const TileIdSchema = Schema.String.check(Schema.isPattern(/^t[0-9]{1,9}$/
 const Done = Schema.Null;
 const Tile = Schema.Struct({tile: TileIdSchema});
 
-/** The desk as it is kept between starts: its workspaces, the active one, and the next number. */
-export const Saved = Schema.Struct({
-	workspaces: Schema.Array(
-		Schema.Struct({
-			id: Schema.String,
-			layout: Schema.declare(isLayoutTree),
-			focused: Schema.String,
+/** A workspace's layout, as it is kept: every line has its letter. */
+const LayoutSchema = Schema.declare(isLayoutTree);
+
+/**
+ * A workspace's layout, as `restore` and the page read it. A desk kept before pipes had letters,
+ * or sent by a host from before them, has none on its lines: each takes the first letter free in
+ * its workspace (`withLetters`), so no such desk is refused for it. It is written with its letters.
+ */
+const KeptLayoutSchema = Schema.declare(isKeptTree).pipe(
+	Schema.decodeTo(
+		LayoutSchema,
+		SchemaTransformation.transform({
+			decode: withLetters,
+			encode: (tree): LayoutTree<KeptLine> => tree,
 		}),
 	),
-	active: Schema.String,
-	next: Schema.Int,
-});
+);
+
+/** The kept desk's shape, over the layout read in it. */
+const savedWith = <S extends Schema.Top>(layout: S) =>
+	Schema.Struct({
+		workspaces: Schema.Array(Schema.Struct({id: Schema.String, layout, focused: Schema.String})),
+		active: Schema.String,
+		next: Schema.Int,
+	});
+
+/** The desk as it is kept between starts: its workspaces, the active one, and the next number. */
+export const Saved = savedWith(LayoutSchema);
 export type Saved = typeof Saved.Type;
 
 /** The prefix, as it is sent to a page. */
@@ -222,9 +258,10 @@ const PrefixSchema = Schema.Union([
 	Schema.Struct({armed: Schema.Literal(true), until: Schema.NullOr(Schema.Number)}),
 ]);
 
+/** A workspace as the page reads it. A host from before letters sends lines with none. */
 const WorkspaceSchema = Schema.Struct({
 	id: Schema.String,
-	layout: Schema.declare(isLayoutTree),
+	layout: KeptLayoutSchema,
 	focused: TileIdSchema,
 });
 
@@ -257,12 +294,33 @@ export interface Takes {
 	readonly keys: readonly string[];
 }
 
-/** What the desk takes at `now`, by `claims`: the prefix and Ctrl-C over a program, or every key. */
+/**
+ * What the desk takes at `now`, by `claims`: the prefix, each desk key pressed alone, and Ctrl-C
+ * over a program, or every key. The palette's key is the page's own, and never the desk's.
+ */
 export const takenNow = (s: Desk, now: number): Takes => {
 	if (s.at === "over") return {all: false, keys: []};
 	const armed = s.prefix.armed && (s.prefix.until === null || now <= s.prefix.until);
 	if (s.ask !== null || armed) return {all: true, keys: []};
-	return {all: false, keys: [PREFIX, "<c-c>"].filter((key) => claims(s, key, now))};
+	const keys = inUse(s);
+	const alone = keys.rows.flatMap((row) =>
+		row.does === "palette.open" ? [] : row.keys.flatMap((k) => (k._tag === "alone" ? [k.key] : [])),
+	);
+	const asked = [...new Set([keys.prefix, "<c-c>", ...alone])];
+	return {all: false, keys: asked.filter((key) => claims(s, key, now))};
+};
+
+/** The table in use: the keys file's, or the defaults. */
+const inUse = (s: Open): Keys => s.keys ?? defaults;
+
+/**
+ * The desk as a page draws it (`DeskSchema`): without its table, which the page is sent on its
+ * own (messages.ts, `keys`) and not again with every key.
+ */
+export const forPage = (s: Desk): Desk => {
+	if (s.at === "over" || s.keys === undefined) return s;
+	const {keys: _table, ...drawn} = s;
+	return drawn;
 };
 
 export const open = Cmd.define("open", {input: Tile, ok: Done, err: []});
@@ -555,12 +613,21 @@ const went = (s: Open, tile: TileId): readonly [Open, readonly DeskCmd[]] => {
 	return [next, keep(next)];
 };
 
-/** The palette ran a key's command: as after the prefix, with the prefix put down and no question up. */
-const ran = (s: Open, key: string): Step => {
-	const binding = bindingOf(key);
+/**
+ * The palette ran a command by its word: as its key, bound or not, with the prefix put down and no
+ * question up. `palette.open` is the page's, so there is nothing to run.
+ */
+const ran = (s: Open, does: Command): Step => {
+	const binding = bindingFor(does);
 	if (binding === undefined) return [s, []];
 	return act({...s, prefix: DISARMED, ask: null}, binding.does);
 };
+
+/**
+ * The keys file's table, swapped in: the next key reads it. A prefix armed on the old table is put
+ * down, as its next key may mean something else now; nothing is asked for, nothing kept changes.
+ */
+const swapped = (s: Open, keys: Keys): Step => [{...s, keys, prefix: DISARMED}, []];
 
 /**
  * Why a tsh word typed in `tile` would do nothing it was asked to, or `null`: it names a tile or a
@@ -596,22 +663,61 @@ const typed = (s: Open, tile: TileId, does: Does): Step => {
 	return [next, saved ? [...others, ...keep(next)] : others];
 };
 
-/** What a key comes to: the desk's (with its step), or the focused tile's, as if the desk were not there. */
-export type Routed = {readonly kind: "desk"; readonly step: Step} | {readonly kind: "tile"};
+/**
+ * What a key comes to: the desk's (with its step), or the focused tile's, as if the desk were not
+ * there. The desk's names the command the key ran and the key it ran on, as the table holds it, or
+ * `null`: the key armed the prefix, answered a question, or was swallowed. The host logs it.
+ */
+export type Routed =
+	| {
+			readonly kind: "desk";
+			readonly step: Step;
+			readonly ran: {readonly does: Command; readonly key: Key} | null;
+	  }
+	| {readonly kind: "tile"};
 
-const desk = (step: Step): Routed => ({kind: "desk", step});
+const desk = (step: Step, ran: {does: Command; key: Key} | null = null): Routed => ({
+	kind: "desk",
+	step,
+	ran: ran === null ? null : {does: ran.does, key: ran.key},
+});
 
-/** The byte Ctrl-B and Ctrl-C send a terminal. */
-const CTRL_B = "\x02";
+/** The byte Ctrl-C sends a terminal. */
 const CTRL_C = "\x03";
+
+/**
+ * The byte a prefix sends a terminal, pressed twice, as tmux's send-prefix: Ctrl and a letter is
+ * that letter's control code (Ctrl-B is 2), Ctrl-Space is 0. Any other prefix has no byte.
+ */
+const byteOf = (prefix: string): string | null => {
+	if (prefix === "<c- >") return "\x00";
+	const letter = /^<c-([a-z])>$/.exec(prefix)?.[1];
+	return letter === undefined ? null : String.fromCharCode(letter.charCodeAt(0) - 96);
+};
+
+/**
+ * The desk's command on a key, pressed alone or after the prefix, with what it does: none for a
+ * key bound to nothing, or to the palette, which is the page's own.
+ */
+const boundOn = (keys: Keys, key: Key) => {
+	const does = commandOn(keys, key);
+	const binding = does === undefined ? undefined : bindingFor(does);
+	return does === undefined || binding === undefined ? null : {does, key, binding};
+};
 
 /** The tile whose tsh runs what this tile shows: its own, or the one its line was typed in. */
 export const tshOf = (tile: TileNode): TileId =>
 	tile.shows.kind === "window" ? tile.shows.line.from : tile.id;
 
-/** A key with the prefix not armed: Ctrl-B arms it; Ctrl-C over a program goes to its tile's tsh. */
+/**
+ * A key with the prefix not armed: the prefix arms it; a desk key pressed alone runs its command;
+ * Ctrl-C over a program goes to its tile's tsh.
+ */
 const unarmed = (s: Open, key: string): Routed => {
-	if (key === PREFIX) return desk([{...s, prefix: {armed: true, until: null}}, []]);
+	const keys = inUse(s);
+	if (key === keys.prefix) return desk([{...s, prefix: {armed: true, until: null}}, []]);
+	const alone = boundOn(keys, Key.cases.alone.make({key}));
+	if (alone !== null) return desk(act(s, alone.binding.does), alone);
 	const tile = focusedOf(s);
 	// The program covers the terminal, so its tsh would never see Ctrl-C: the desk hands it on, to
 	// the tsh the line was typed in when the tile is one of its windows.
@@ -634,32 +740,37 @@ export const route = (s: Open, key: string, at: number): Routed => {
 	const {prefix} = s;
 	if (!prefix.armed) return unarmed(s, key);
 	const disarmed: Open = {...s, prefix: DISARMED};
-	const binding = bindingOf(key);
+	const keys = inUse(s);
+	const bound = boundOn(keys, Key.cases.after_prefix.make({key}));
 	if (prefix.until !== null) {
 		// The repeat window: a repeatable key repeats; anything else, or a key after it, is the tile's.
-		if (at > prefix.until || binding === undefined || !binding.repeats)
+		if (at > prefix.until || bound === null || !bound.binding.repeats)
 			return unarmed(disarmed, key);
-		const [next, cmds] = act(disarmed, binding.does);
-		return desk([
-			next.at === "open" ? {...next, prefix: {armed: true, until: at + REPEAT_MS}} : next,
-			cmds,
-		]);
+		const [next, cmds] = act(disarmed, bound.binding.does);
+		return desk(
+			[next.at === "open" ? {...next, prefix: {armed: true, until: at + REPEAT_MS}} : next, cmds],
+			bound,
+		);
 	}
-	if (key === PREFIX) {
-		// tmux's send-prefix: Ctrl-B twice sends one Ctrl-B on, to a tsh that is not covered.
+	if (key === keys.prefix) {
+		// tmux's send-prefix: the prefix twice sends it on, to a tsh that is not covered.
 		const tile = focusedOf(s);
-		const to = tile !== null && tile.shows.run === null;
-		return desk([disarmed, to ? [send({tile: tile.id, data: CTRL_B})] : []]);
+		const data = byteOf(key);
+		const to = tile !== null && tile.shows.run === null && data !== null;
+		return desk([disarmed, to ? [send({tile: tile.id, data})] : []]);
 	}
 	// A key with no binding after the prefix is swallowed, as tmux does.
-	if (binding === undefined) return desk([disarmed, []]);
-	const [next, cmds] = act(disarmed, binding.does);
-	return desk([
-		next.at === "open" && binding.repeats
-			? {...next, prefix: {armed: true, until: at + REPEAT_MS}}
-			: next,
-		cmds,
-	]);
+	if (bound === null) return desk([disarmed, []]);
+	const [next, cmds] = act(disarmed, bound.binding.does);
+	return desk(
+		[
+			next.at === "open" && bound.binding.repeats
+				? {...next, prefix: {armed: true, until: at + REPEAT_MS}}
+				: next,
+			cmds,
+		],
+		bound,
+	);
 };
 
 /** Does the desk take this key? The page asks before the terminal or the program sees it. */
@@ -701,9 +812,12 @@ const covered = (s: Open, tile: TileId, runs: readonly [Shown, ...Shown[]]): Ste
 	const node = ws === undefined ? null : findTile(ws.layout, tile);
 	if (ws === undefined || node === null || node.shows.kind === "window") return [s, []];
 	const more = runs.length - 1;
+	// Colors and letters are counted per workspace (docs/direction/pipe-colors.md), so a repeat
+	// needs seven pipes in one.
 	const layout = openLine(ws.layout, tile, {
 		runs,
-		tint: freeTint(s.workspaces.map((w) => w.layout)),
+		tint: freeTint([ws.layout]),
+		letter: freeLetter([ws.layout]),
 		orientation: LINE,
 		ids: {tiles: Array.from({length: more}, (_, k) => `t${s.next + k}`), container: `c${s.next}`},
 		area: s.area,
@@ -788,7 +902,8 @@ export const deskMachine = defineMachine({
 		ended: onOpen((s, m) => goneTile(s, m.tile)),
 		go: onOpen((s, m) => went(s, m.tile)),
 		pick: onOpen((s, m) => picked(s, m.workspace)),
-		run: onOpen((s, m) => ran(s, m.key)),
+		run: onOpen((s, m) => ran(s, m.does)),
+		keys: onOpen((s, m) => swapped(s, m.keys)),
 		typed: onOpen((s, m) => typed(s, m.tile, m.does)),
 		show_ok: noop,
 		show_err: noop,
@@ -812,7 +927,8 @@ export const deskMachine = defineMachine({
 });
 
 const TILE_ID = /^t([0-9]{1,9})$/;
-const decodeSaved = Schema.decodeUnknownOption(Saved);
+/** A kept desk as it reads back: as `Saved`, with a letter given to any line kept without one. */
+const decodeSaved = Schema.decodeUnknownOption(savedWith(KeptLayoutSchema));
 
 /**
  * A kept desk, read back for the next start, or `null`: it does not read, or breaks a law of the

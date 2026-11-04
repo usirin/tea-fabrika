@@ -88,7 +88,11 @@ describe("Ctrl-C reaches a foreground job however many lines wait behind it", ()
 			words: {queued: 999},
 			behind: {
 				length: 999,
-				inputs: {line: {length: 999, waiting: 0}, signal: {length: 0, waiting: 0}},
+				inputs: {
+					line: {length: 999, waiting: 0},
+					signal: {length: 0, waiting: 0},
+					stop: {length: 0, waiting: 0},
+				},
 			},
 			signal: "queued",
 			status: 130,
@@ -101,7 +105,11 @@ describe("Ctrl-C reaches a foreground job however many lines wait behind it", ()
 			words: {queued: CAPACITY, MailboxFull: 1},
 			behind: {
 				length: CAPACITY,
-				inputs: {line: {length: CAPACITY, waiting: 0}, signal: {length: 0, waiting: 0}},
+				inputs: {
+					line: {length: CAPACITY, waiting: 0},
+					signal: {length: 0, waiting: 0},
+					stop: {length: 0, waiting: 0},
+				},
 			},
 			signal: "queued",
 			status: 130,

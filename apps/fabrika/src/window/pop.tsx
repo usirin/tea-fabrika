@@ -489,6 +489,11 @@ export interface PaletteProps {
 	readonly label: string;
 	/** What its commands act on, named on top: `t2 · ticket #1`. */
 	readonly chip: string;
+	/**
+	 * A broken part the list is about, said on top in words: `keybindings.toml line 2: tezgah.zom
+	 * is not a command`, while the keys go on as they were. None when nothing is broken.
+	 */
+	readonly note?: string | undefined;
 	readonly query: string;
 	/** The commands that match, in sections; `at` counts down all of them. */
 	readonly sections: readonly {readonly title: string; readonly options: readonly Option[]}[];
@@ -538,6 +543,7 @@ export function Palette(props: PaletteProps): ReactNode {
 				<div className="chip-row">
 					<span className="chip">{props.chip}</span>
 				</div>
+				{props.note !== undefined && <p className="pop-note">{props.note}</p>}
 				<input
 					ref={input}
 					className="find"

@@ -178,9 +178,38 @@ const Given = Schema.Struct({
 	diff: Schema.optionalKey(Sha),
 });
 
+/** A pull request's address on GitHub, or an address under it, such as a review comment's. */
+const PullUrl = Schema.String.check(
+	Schema.isPattern(/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/[1-9]\d*(?:[/?#]\S*)?$/),
+);
+
+/**
+ * Where a filing came from (docs/direction/a-ticket-says-where-it-came-from.md). Each key keeps the
+ * one meaning it has elsewhere here: `url` as on {@link PrFact}, `run` as on `started`, `head` a
+ * {@link Sha}. `pr`: a step of a pull request, or a comment on it. `run`: a lane run on this ledger;
+ * its `started` fact names the step, so it carries none. `walk`: a person's walk of a pull request,
+ * a note or an experiment.
+ *
+ *   {_tag: "pr", url: "https://github.com/usirin/tea-fabrika/pull/352", step: "mutation"}
+ *   {_tag: "run", ticket: 117, run: "r-test_writer-26"}
+ *   {_tag: "walk", url: "https://github.com/usirin/tea-fabrika/pull/332"}
+ */
+export const From = Schema.TaggedUnion({
+	pr: {url: PullUrl, step: Schema.optionalKey(Stage)},
+	run: {ticket: TicketNumber, run: Id, head: Schema.optionalKey(Sha)},
+	walk: {url: Schema.String.check(Schema.isPattern(/^https:\/\/\S+$/))},
+});
+export type From = typeof From.Type;
+
 /** The tracker's own four: a ticket filed, talked about, closed and opened again. */
 export const TicketFact = Schema.Union([
-	Schema.Struct({type: Schema.Literal("filed"), title: Title, body: Body}),
+	Schema.Struct({
+		type: Schema.Literal("filed"),
+		title: Title,
+		body: Body,
+		/** Where it came from. Missing: the filer named none, or it was filed before the key. */
+		from: Schema.optionalKey(From),
+	}),
 	Schema.Struct({
 		type: Schema.Literal("commented"),
 		body: Said,

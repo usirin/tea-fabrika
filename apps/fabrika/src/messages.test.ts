@@ -1,5 +1,7 @@
+import {Result} from "effect";
 import {describe, expect, it} from "vitest";
 import {fresh, takenNow} from "./desk/desk.ts";
+import {decodeKeys} from "./desk/keymap.ts";
 import {
 	readFromPage,
 	readFromTerminal,
@@ -81,6 +83,32 @@ describe("the desk's port", () => {
 		expect(readFromPage({type: "open", tile: "t2"}).kind).toBe("refused");
 		expect(readFromPage({type: "stop", tile: "t2"}).kind).toBe("refused");
 		expect(readFromPage({type: "save", desk: {}}).kind).toBe("refused");
+	});
+
+	it("sends the page the keys file's table, and takes a palette run by its command word (ticket 174)", () => {
+		const read = decodeKeys('prefix = "ctrl+a"', true);
+		if (Result.isFailure(read)) throw new Error(read.failure.why);
+		const sent = {type: "keys", ...read.success};
+		expect(readToPage(sent)).toEqual({kind: "read", msg: sent});
+		const refused = {
+			...sent,
+			file: {_tag: "refused", line: 2, why: "tezgah.zom is not a command"},
+		};
+		expect(readToPage(refused)).toEqual({kind: "read", msg: refused});
+		// A row names a command the code lists, never a free string.
+		const typo = {...sent, rows: [{does: "tezgah.zom", keys: [], source: "yours"}]};
+		expect(readToPage(typo).kind).toBe("refused");
+		// The old table, one row per key, is not read.
+		expect(
+			readToPage({
+				type: "keys",
+				prefix: "<c-b>",
+				table: [{key: "|", repeats: false, name: "split", tsh: "split"}],
+			}).kind,
+		).toBe("refused");
+		expect(readFromPage({type: "run", does: "tezgah.zoom"}).kind).toBe("read");
+		expect(readFromPage({type: "run", does: "tezgah.zom"}).kind).toBe("refused");
+		expect(readFromPage({type: "run", key: "z"}).kind).toBe("refused");
 	});
 
 	it("tells the page what it shows of the link: what the app found, or how it is lost", () => {

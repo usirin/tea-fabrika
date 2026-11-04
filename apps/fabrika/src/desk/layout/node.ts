@@ -40,7 +40,11 @@ export interface Shown {
 	readonly program: string;
 }
 
-/** One colour of the line palette (window.css, `--line-0` to `--line-5`). */
+/**
+ * A pipe's color, by its place in the six (src/pipes.ts names them: sky, pink, teal, violet,
+ * lime, plum). A kept desk holds the number, so a pipe kept before the six were picked comes back
+ * in the color its number names now.
+ */
 export type Tint = 0 | 1 | 2 | 3 | 4 | 5;
 
 /** Every tint, in the order a new line takes the first one free. */
@@ -48,14 +52,20 @@ export const TINTS: readonly Tint[] = [0, 1, 2, 3, 4, 5];
 
 /**
  * A tsh line whose windows opened together, as `tracker | ticket | trace`: its id (its first
- * window's run), the tile it was typed in, and its tint. Only a line of two windows or more has
- * one: a run alone gets no tint.
+ * window's run), the tile it was typed in, its tint and its letter. Only a line of two windows or
+ * more has one: a run alone gets no tint. The letter (`A`, `B`...) is the pipe's second cue, so
+ * color is never the only one (docs/direction/pipe-colors.md). It is kept, not worked out from
+ * reading order, so closing pipe A never renames B while a person looks at it.
  */
 export interface Line {
 	readonly id: string;
 	readonly from: TileId;
 	readonly tint: Tint;
+	readonly letter: string;
 }
+
+/** A line as a desk kept before pipes had letters holds it: with no letter (layout/line.ts, `withLetters`). */
+export type KeptLine = Omit<Line, "letter"> & {readonly letter?: string};
 
 /**
  * What a tile shows.
@@ -65,11 +75,13 @@ export interface Line {
  * - `line`: its own tsh, covered by the first window of a line typed in it.
  * - `window`: one more window of a line typed in another tile. It has no tsh of its own, and it
  *   goes when its run ends.
+ *
+ * `L` is the line's shape: a `Line` everywhere but in a tree just read back (`KeptLine`).
  */
-export type Shows =
+export type Shows<L extends KeptLine = Line> =
 	| {readonly kind: "tsh"; readonly run: Shown | null}
-	| {readonly kind: "line"; readonly run: Shown; readonly line: Line}
-	| {readonly kind: "window"; readonly run: Shown; readonly line: Line};
+	| {readonly kind: "line"; readonly run: Shown; readonly line: L}
+	| {readonly kind: "window"; readonly run: Shown; readonly line: L};
 
 /** The line a tile shows a window of, or none. */
 export const lineOf = (node: LayoutNode): Line | null =>
@@ -80,10 +92,10 @@ export const lineOf = (node: LayoutNode): Line | null =>
  * share in `sizes` stays, so it comes back at the size it had; the open tiles beside it share the
  * space while it is folded.
  */
-export interface TileNode {
+export interface TileNode<L extends KeptLine = Line> {
 	readonly tag: "tile";
 	readonly id: TileId;
-	readonly shows: Shows;
+	readonly shows: Shows<L>;
 	readonly folded: boolean;
 }
 
@@ -93,19 +105,19 @@ export interface TileNode {
  * folded children included, and leaves a nested container the other orientation from its parent's
  * (`checkTree` says so).
  */
-export interface ContainerNode {
+export interface ContainerNode<L extends KeptLine = Line> {
 	readonly tag: "container";
 	readonly id: ContainerId;
 	readonly orientation: Orientation;
-	readonly children: readonly LayoutNode[];
+	readonly children: readonly LayoutNode<L>[];
 	readonly sizes: Readonly<Record<NodeId, number>>;
 }
 
-export type LayoutNode = TileNode | ContainerNode;
+export type LayoutNode<L extends KeptLine = Line> = TileNode<L> | ContainerNode<L>;
 
 /** `zoomed` names the one tile drawn alone. Zooming never writes `sizes`, so unzoom restores. */
-export interface LayoutTree {
-	readonly root: ContainerNode;
+export interface LayoutTree<L extends KeptLine = Line> {
+	readonly root: ContainerNode<L>;
 	readonly zoomed: TileId | null;
 }
 
@@ -144,32 +156,42 @@ export const isFolded = (node: LayoutNode): boolean =>
 const isShown = (value: unknown): value is Shown =>
 	Predicate.isObject(value) && typeof value.id === "string" && typeof value.program === "string";
 
-const isLine = (value: unknown): value is Line =>
+/** A pipe's letter: `A` to `Z`, then `AA`, as a spreadsheet names its columns (layout/line.ts). */
+const isLetter = (value: unknown): value is string =>
+	typeof value === "string" && /^[A-Z]+$/.test(value);
+
+const isKeptLine = (value: unknown): value is KeptLine =>
 	Predicate.isObject(value) &&
 	typeof value.id === "string" &&
 	typeof value.from === "string" &&
-	(TINTS as readonly unknown[]).includes(value.tint);
+	(TINTS as readonly unknown[]).includes(value.tint) &&
+	(value.letter === undefined || isLetter(value.letter));
 
-export function isShows(value: unknown): value is Shows {
-	if (!Predicate.isObject(value)) return false;
-	if (value.kind === "tsh") return value.run === null || isShown(value.run);
-	return (
-		(value.kind === "line" || value.kind === "window") && isShown(value.run) && isLine(value.line)
-	);
-}
+const isLine = (value: unknown): value is Line => isKeptLine(value) && isLetter(value.letter);
 
-export function isTileNode(value: unknown): value is TileNode {
-	return (
+/**
+ * The guards of a tree whose lines `isLineOf` reads: total over the union and recursive through
+ * `children`, because a saved layout comes back as `unknown` and every reader here walks it
+ * without a guard of its own. `sizes` is checked for number values and not for its sum:
+ * `resolveSizes` works that out again.
+ */
+const guardsOf = <L extends KeptLine>(isLineOf: (value: unknown) => value is L) => {
+	const isShows = (value: unknown): value is Shows<L> => {
+		if (!Predicate.isObject(value)) return false;
+		if (value.kind === "tsh") return value.run === null || isShown(value.run);
+		return (
+			(value.kind === "line" || value.kind === "window") &&
+			isShown(value.run) &&
+			isLineOf(value.line)
+		);
+	};
+	const isTileNode = (value: unknown): value is TileNode<L> =>
 		Predicate.isObject(value) &&
 		value.tag === "tile" &&
 		typeof value.id === "string" &&
 		isShows(value.shows) &&
-		typeof value.folded === "boolean"
-	);
-}
-
-export function isContainerNode(value: unknown): value is ContainerNode {
-	return (
+		typeof value.folded === "boolean";
+	const isContainerNode = (value: unknown): value is ContainerNode<L> =>
 		Predicate.isObject(value) &&
 		value.tag === "container" &&
 		typeof value.id === "string" &&
@@ -177,26 +199,23 @@ export function isContainerNode(value: unknown): value is ContainerNode {
 		Array.isArray(value.children) &&
 		value.children.every(isLayoutNode) &&
 		Predicate.isObject(value.sizes) &&
-		Object.values(value.sizes).every((size) => typeof size === "number")
-	);
-}
-
-/**
- * Is this a node of the tree? Total over the union and recursive through `children`, because a
- * saved layout comes back as `unknown` and every reader here walks it without a guard of its own.
- */
-export function isLayoutNode(value: unknown): value is LayoutNode {
-	return isTileNode(value) || isContainerNode(value);
-}
-
-/** `sizes` is checked for number values and not for its sum: `resolveSizes` works that out again. */
-export function isLayoutTree(value: unknown): value is LayoutTree {
-	return (
+		Object.values(value.sizes).every((size) => typeof size === "number");
+	const isLayoutNode = (value: unknown): value is LayoutNode<L> =>
+		isTileNode(value) || isContainerNode(value);
+	const isLayoutTree = (value: unknown): value is LayoutTree<L> =>
 		Predicate.isObject(value) &&
 		isContainerNode(value.root) &&
-		(value.zoomed === null || typeof value.zoomed === "string")
-	);
-}
+		(value.zoomed === null || typeof value.zoomed === "string");
+	return {isShows, isTileNode, isContainerNode, isLayoutNode, isLayoutTree};
+};
+
+export const {isShows, isTileNode, isContainerNode, isLayoutNode, isLayoutTree} = guardsOf(isLine);
+
+/**
+ * A tree as a desk kept it, where a line kept before pipes had letters has none. Read a kept tree
+ * with this, then give its lines their letters (layout/line.ts, `withLetters`).
+ */
+export const isKeptTree = guardsOf(isKeptLine).isLayoutTree;
 
 /** Percent values may not sum exactly after division. */
 export const SIZE_TOLERANCE = 0.01;

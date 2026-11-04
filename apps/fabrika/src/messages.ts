@@ -1,6 +1,7 @@
 import {Cause, Exit, Schema} from "effect";
 import {AskKey, AsksNow} from "./asks.ts";
 import {DeskSchema, TileIdSchema} from "./desk/desk.ts";
+import {Does, KeyName, Keys} from "./desk/keymap.ts";
 import {SHOWS} from "./desk/keys.ts";
 
 // What the app's one window and the host say to each other. The window draws the desk
@@ -64,9 +65,6 @@ export const FromWindow = Schema.Struct({
 	msg: Schema.Unknown,
 });
 export type FromWindow = typeof FromWindow.Type;
-
-/** A key's name, as `keyName` spells it (desk/keys.ts): short, always. */
-const KeyName = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64));
 
 /** A number the page gives each key it sends the host, so the answer names the key it is for. */
 const PressId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -153,14 +151,17 @@ export type HostNow = typeof HostNow.Type;
 
 /**
  * What the host tells the page, on the desk's port. The desk runs in the host (host/serve.ts);
- * the page draws what it is sent and nothing else. `keys` is the desk's Ctrl-B table, sent once
- * as the page loads. `desk` is the whole desk, after every change, with the keys the desk takes
- * now (`takes`): the page sends those keys to the host and no further. `answer` says whether the
+ * the page draws what it is sent and nothing else. `keys` is the keys file's table (desk/keymap.ts):
+ * the prefix, one row per command, the keys eaten and what came of the file, sent as the page
+ * loads and again each time the file is saved. `desk` is the whole desk, after every change,
+ * with the keys the desk takes now (`takes`): the page sends those keys to the host and no
+ * further. `answer` says whether the
  * host took the key sent with that id; a key it did not take goes on to the tile, in order.
  * `link` is the app's own, not the host's: what the window shows of the link `now`
  * (reconnect.ts), sent each time that changes, and again as a page loads.
  *
- *   {type: "keys", prefix: "<c-b>", table: [{key: "|", repeats: false, name: "split"}, ...]}
+ *   {type: "keys", prefix: "<c-b>", rows: [{does: "tezgah.split", keys: [{_tag: "after_prefix",
+ *    key: "|"}], source: "default"}, ...], ignore: ["<m-w>"], file: {_tag: "none"}}
  *   {type: "desk", desk: {at: "open", ...}, takes: {all: false, keys: ["<c-b>"]}}
  *   {type: "answer", id: 3, took: true}
  *   {type: "link", now: {kind: "reconnecting", why: "The link to the host ended: the other side closed."}}
@@ -181,22 +182,7 @@ export type HostNow = typeof HostNow.Type;
  *    ledger: {kind: "own"}, agents: [{name: "claude", since: 1793400060000}]}}
  */
 export const ToPage = Schema.Union([
-	Schema.Struct({
-		type: Schema.Literal("keys"),
-		prefix: KeyName,
-		/**
-		 * `name`: the one word the frame calls the binding by; `tsh`: the line that does the same
-		 * from a tile's tsh (desk/keys.ts, `wordOf`).
-		 */
-		table: Schema.Array(
-			Schema.Struct({
-				key: KeyName,
-				repeats: Schema.Boolean,
-				name: Schema.String,
-				tsh: Schema.String,
-			}),
-		),
-	}),
+	Schema.Struct({type: Schema.Literal("keys"), ...Keys.fields}),
 	Schema.Struct({type: Schema.Literal("host"), now: HostNow}),
 	Schema.Struct({
 		type: Schema.Literal("programs"),
@@ -251,7 +237,7 @@ export type ToApp = typeof ToApp.Type;
  *
  *   {type: "go", tile: "t7"}          an ask picked in the asks list: its tile, wherever it is
  *   {type: "pick", workspace: "w2"}   a workspace clicked in the top bar
- *   {type: "run", key: "z"}           the palette ran a binding, as Ctrl-B and that key
+ *   {type: "run", does: "tezgah.zoom"}   the palette ran a command by its word, bound or not
  *   {type: "later", key: "7/a-1"}     an ask set aside: out of the count, at the list's foot
  *   {type: "back", key: "7/a-1"}      and counted again
  *   {type: "seen"}                    the asks list was opened: no ask is new any more
@@ -269,7 +255,7 @@ export const FromPage = Schema.Union([
 	Schema.Struct({type: Schema.Literal("area"), width: Pixels, height: Pixels}),
 	Schema.Struct({type: Schema.Literal("go"), tile: TileIdSchema}),
 	Schema.Struct({type: Schema.Literal("pick"), workspace: Schema.String}),
-	Schema.Struct({type: Schema.Literal("run"), key: KeyName}),
+	Schema.Struct({type: Schema.Literal("run"), does: Does}),
 	Schema.Struct({type: Schema.Literal("later"), key: AskKey}),
 	Schema.Struct({type: Schema.Literal("back"), key: AskKey}),
 	Schema.Struct({type: Schema.Literal("seen")}),
@@ -281,8 +267,11 @@ export type Read<T> =
 	| {readonly kind: "read"; readonly msg: T}
 	| {readonly kind: "refused"; readonly why: string};
 
-/** A reader for one of the message types: strict, so a key the schema does not name is refused. */
-export const reader = <T>(schema: Schema.Codec<T, T>) => {
+/**
+ * A reader for one of the message types: strict, so a key the schema does not name is refused.
+ * What it reads may be older than what it answers: a desk from a host before letters (desk.ts).
+ */
+export const reader = <T, E>(schema: Schema.Codec<T, E>) => {
 	const decode = Schema.decodeUnknownExit(schema);
 	return (raw: unknown): Read<T> => {
 		const exit = decode(raw, {onExcessProperty: "error"});
