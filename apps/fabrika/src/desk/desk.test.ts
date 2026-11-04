@@ -1,5 +1,6 @@
 import {applyCell} from "@demlik/tea";
 import {describe, expect, it} from "vitest";
+import {PIPES} from "../pipes.ts";
 import type {TileJobs} from "../tile-jobs.ts";
 import {
 	activeOf,
@@ -431,6 +432,28 @@ describe("folds", () => {
 });
 
 describe("a kept desk", () => {
+	// A desk kept before pipes had letters: its lines have none, and their tints are the old six's
+	// numbers. It still comes back, so nobody loses a desk to the change, and its pipes go as any
+	// kept line's do, since nothing runs after a restart.
+	it("comes back when it was kept before pipes had letters", () => {
+		const tracker = {id: "tracker:1", program: "tracker"};
+		const ticket = {id: "ticket:1", program: "ticket"};
+		const piped = fold([
+			...prefixed("|"),
+			{type: "covered", tile: "t2", runs: [tracker, ticket]},
+		]).s;
+		const before = JSON.parse(JSON.stringify(savedOf(opened(piped))), (key, value: unknown) =>
+			key === "letter" ? undefined : key === "tint" ? 4 : value,
+		);
+		expect(JSON.stringify(before)).not.toContain("letter");
+		const back = restore(before);
+		expect(back === null ? null : ids(back)).toEqual(["t1", "t2"]);
+		expect(back === null ? null : findTile(activeOf(back).layout, "t2")?.shows).toEqual({
+			kind: "tsh",
+			run: null,
+		});
+	});
+
 	it("comes back as it was, and opens each tile's tsh", () => {
 		const kept = fold([...prefixed("|"), ...prefixed("-", 10), ...prefixed("N", 20)]).s;
 		const back = restore(JSON.parse(JSON.stringify(savedOf(opened(kept)))));
@@ -516,7 +539,7 @@ describe("a line with several windows", () => {
 		expect(layout(s).root.orientation).toBe("horizontal");
 		expect(sizes(s).t1).toBeCloseTo(50);
 		for (const id of ["t2", "t3", "t4"]) expect(sizes(s)[id]).toBeCloseTo(50 / 3);
-		const own = {id: "tracker:1", from: "t2", tint: 0};
+		const own = {id: "tracker:1", from: "t2", tint: 0, letter: "A"};
 		expect(tile(s, "t2")?.shows).toEqual({kind: "line", run: tracker, line: own});
 		expect(tile(s, "t3")?.shows).toEqual({kind: "window", run: ticket, line: own});
 		expect(tile(s, "t4")?.shows).toEqual({kind: "window", run: trace, line: own});
@@ -646,7 +669,7 @@ describe("a line with several windows", () => {
 		expect(opened(s.s).closing).toEqual(["t2"]);
 	});
 
-	it("gives each line its own tint, and a run alone none", () => {
+	it("gives each line its own tint and letter, and a run alone none", () => {
 		const one = fold([{type: "covered", tile: "t2", runs: line}], beside(2400)).s;
 		const two = fold(
 			[
@@ -656,10 +679,75 @@ describe("a line with several windows", () => {
 			one,
 		).s;
 		const t1 = tile(two, "t1")?.shows;
-		expect(t1?.kind === "line" ? t1.line.tint : null).toBe(1);
+		expect(t1?.kind === "line" ? [t1.line.tint, t1.line.letter] : null).toEqual([1, "B"]);
 		expect(tile(two, "t4")?.shows.kind).toBe("window");
 		const alone = fold([{type: "covered", tile: "t1", runs: [counter]}], beside(1440)).s;
 		expect(tile(alone, "t1")?.shows).toEqual({kind: "tsh", run: counter});
+	});
+
+	// pipe-colors.md: colors are counted per workspace, sky first. A pipe in another workspace takes
+	// none of this one's colors or letters.
+	it("gives pipes in one workspace sky, pink, teal, violet, lime, plum in order, and each workspace its own count", () => {
+		const splits = Array.from({length: 5}, (_, i) => prefixed("|", 10 * i)).flat();
+		const six = fold(splits).s;
+		expect(ids(six)).toEqual(["t1", "t2", "t3", "t4", "t5", "t6"]);
+		const pipes = fold(
+			["t1", "t2", "t3", "t4", "t5", "t6"].map((at, n): DeskMsg => ({
+				type: "covered",
+				tile: at,
+				runs: [
+					{id: `tracker:${n}`, program: "tracker"},
+					{id: `ticket:${n}`, program: "ticket"},
+				],
+			})),
+			six,
+		).s;
+		const lineAt = (s: Desk, at: string) => {
+			const shows = tile(s, at)?.shows;
+			return shows?.kind === "line" ? shows.line : null;
+		};
+		const opened6 = ["t1", "t2", "t3", "t4", "t5", "t6"].map((at) => lineAt(pipes, at));
+		expect(opened6.map((l) => (l === null ? null : PIPES[l.tint]))).toEqual([
+			"sky",
+			"pink",
+			"teal",
+			"violet",
+			"lime",
+			"plum",
+		]);
+		expect(opened6.map((l) => l?.letter)).toEqual(["A", "B", "C", "D", "E", "F"]);
+		// A new workspace starts its own count: its first pipe is sky and A, though the first
+		// workspace already has a sky pipe A. Counted across workspaces, it would be pink.
+		const onePipe = fold(
+			[
+				{
+					type: "covered",
+					tile: "t1",
+					runs: [
+						{id: "tracker:8", program: "tracker"},
+						{id: "ticket:8", program: "ticket"},
+					],
+				},
+			],
+			six,
+		).s;
+		const other = fold(prefixed("N", 100), onePipe).s;
+		const here = focus(other);
+		const there = fold(
+			[
+				{
+					type: "covered",
+					tile: here,
+					runs: [
+						{id: "tracker:9", program: "tracker"},
+						{id: "ticket:9", program: "ticket"},
+					],
+				},
+			],
+			other,
+		).s;
+		const first = lineAt(there, here);
+		expect(first === null ? null : [PIPES[first.tint], first.letter]).toEqual(["sky", "A"]);
 	});
 
 	it("is not kept: a desk read back has the tile it was typed in, at its whole share", () => {
