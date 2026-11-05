@@ -1058,6 +1058,11 @@ const Talk = Schema.Struct({
   notion of "works on" the ledger does not have.
 - **A list per agent, kept by its person** → later, if a person wants it.
 - The door stamps the sender, so a talk cannot claim another sender.
+- **You may talk to another person's agent, never start it** → lean, the owner
+  agreed 2026-11-05. Starting an agent costs money on its person's account
+  and gets their permissions, so only its person starts it. If it is not
+  running, the talk waits in its inbox until it is. In a text box's `@` menu,
+  another person's agent has no "summon here" row.
 - **How sure: 75%.** The doubt is a loop: two agents answering each other
   for ever. A limit on talks per thread, counted by the ledger as spend is,
   would stop it.
