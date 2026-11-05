@@ -9,6 +9,7 @@ import {Effect, Exit, FileSystem, Layer, Logger, Path, Schedule, Scope} from "ef
 import {afterEach, beforeEach, describe, expect, it} from "vitest";
 import type {Open} from "../desk/desk.ts";
 import {tilesOf} from "../desk/desk.ts";
+import {isContainerNode, type LayoutNode} from "../desk/layout/index.ts";
 import {gridOf} from "../editor/grid.ts";
 import type {Down} from "../link.ts";
 import {type HostNow, readToPage, type ToPage} from "../messages.ts";
@@ -122,6 +123,9 @@ const hostOn = (home: string, lines: string[]) =>
 			wire.send({type: "on", port: `tile:${tile}`, m: {type: "keys", data}});
 		/** A click on a tile, as the page sends it: it focuses the tile, and opens it if folded. */
 		const click = (tile: string) => wire.send({type: "on", port: "desk", m: {type: "click", tile}});
+		/** A folded tile's strip opened, or a container's, as the page sends it. */
+		const unfold = (node: string) =>
+			wire.send({type: "on", port: "desk", m: {type: "unfold", node}});
 		/** What a tile's terminal shows, as rows, wide enough that no line wraps. */
 		const rows = (tile: string) =>
 			gridOf(
@@ -144,6 +148,7 @@ const hostOn = (home: string, lines: string[]) =>
 			now,
 			type,
 			click,
+			unfold,
 			rows,
 			ports,
 			stop: Scope.close(app, Exit.void).pipe(Effect.andThen(Scope.close(host, Exit.void))),
@@ -484,6 +489,90 @@ describe("the line tool", {timeout: 30_000}, () => {
 		expect(seen.running).toMatchObject({n: 1, tile: "t2"});
 		// It goes on as the agent: the job keeps the writer that began it.
 		expect(said(lines, "job_began").filter((f) => f.by !== AGENT)).toEqual([]);
+	});
+});
+
+// Owed by PR 3's mutation step (tracker 185b). Today's version: how long the person took to open
+// the agent's tile, logged once, and the agents in the top bar in the order they came.
+//
+//   line {line: "tally &"}        t2 folded: no agent_tile_opened yet, whatever else changes
+//   the person opens t2's strip   host/log agent_tile_opened agent=claude tile=t2 after_ms=<since the launch>
+//   the person clicks t2, t1      nothing more is logged
+
+/** The container `tile` sits in, in the first workspace: unfolding it opens its tiles and focuses the first. */
+const parentOf = (desk: Open | undefined, tile: string): string | undefined => {
+	const walk = (node: LayoutNode): string | undefined => {
+		if (!isContainerNode(node)) return undefined;
+		if (node.children.some((child) => child.id === tile)) return node.id;
+		return node.children.map(walk).find((id) => id !== undefined);
+	};
+	const root = desk?.workspaces[0]?.layout.root;
+	return root === undefined ? undefined : walk(root);
+};
+
+describe("the line tool: what the mutation step found untested", {timeout: 30_000}, () => {
+	it("logs agent_tile_opened once, when the person opens the folded tile, even with focus elsewhere, with the time since it opened", async () => {
+		const lines: string[] = [];
+		const seen = await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				const host = yield* hostOn(home, lines);
+				const agent = yield* agentOn(home, "claude");
+				const from = Date.now();
+				yield* agent.line("tally &");
+				yield* until("claude's tile", () =>
+					host.desk()?.agents?.claude === "t2" ? true : undefined,
+				);
+				// A change to the desk while t2 is folded: the person's own tile, clicked.
+				host.click("t1");
+				yield* Effect.sleep("200 millis");
+				const folded = said(lines, "agent_tile_opened").length;
+				// The column holding t2 opened: t2 is open, and focus goes to its first tile, t1.
+				const column = parentOf(host.desk(), "t2");
+				if (column === undefined) return yield* Effect.die("no container holds t2");
+				host.unfold(column);
+				const opened = yield* until("the tile opened in the log", () =>
+					said(lines, "agent_tile_opened").at(0),
+				);
+				const within = Date.now() - from;
+				const focused = host.desk()?.workspaces[0]?.focused;
+				host.click("t2");
+				host.click("t1");
+				yield* Effect.sleep("200 millis");
+				return {folded, opened, within, focused, all: said(lines, "agent_tile_opened").length};
+			}),
+		);
+		expect(seen.folded).toBe(0);
+		expect(seen.focused).toBe("t1");
+		expect(seen.opened).toMatchObject({agent: "claude", tile: "t2"});
+		expect(Number(seen.opened.after_ms)).toBeGreaterThanOrEqual(200);
+		expect(Number(seen.opened.after_ms)).toBeLessThanOrEqual(seen.within);
+		expect(seen.all).toBe(1);
+	});
+
+	it("lists the agents attached in the order they came, each with its own tile", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				const host = yield* hostOn(home, []);
+				const claude = yield* agentOn(home, "claude");
+				yield* until("claude in the top bar", () =>
+					host.now()?.agents?.length === 1 ? true : undefined,
+				);
+				const lead = yield* agentOn(home, "lead");
+				yield* lead.line("tally &");
+				yield* claude.line("tally &");
+				return yield* until("both tiles in the top bar", () => {
+					const agents = host.now()?.agents ?? [];
+					return agents.every((a) => a.tile !== null) && agents.length === 2 ? agents : undefined;
+				});
+			}),
+		);
+		expect(seen.map((a) => [a.name, a.tile])).toEqual([
+			["claude", "t3"],
+			["lead", "t2"],
+		]);
+		expect(seen[0]?.since ?? 0).toBeLessThanOrEqual(seen[1]?.since ?? 0);
 	});
 });
 

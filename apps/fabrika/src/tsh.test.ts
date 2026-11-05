@@ -18,7 +18,7 @@ import {memoryTraces} from "@tea-fabrika/trace/memory";
 import {Author, PullRequests, tracker} from "@tea-fabrika/tracker";
 import {LANE, SEVEN, SEVEN_BODY, SEVEN_TITLE, SEVEN_TRACE} from "@tea-fabrika/tracker/seven";
 import {Effect, FileSystem, Layer, Schema} from "effect";
-import {describe, expect, it} from "vitest";
+import {describe, expect, it, vi} from "vitest";
 import {BINDINGS, type Does, wordOf} from "./desk/keys.ts";
 import {deskWords} from "./desk/words.ts";
 import {gridOf} from "./editor/grid.ts";
@@ -29,6 +29,19 @@ import {appPrograms, type Placed, type Runs, startTsh, tshList, type WindowScree
 // One tile's tsh, with a fake terminal page and a fake tile and no Electron: what a person would see
 // in the terminal, read off its grid (editor/grid.ts), and what each program's view is shown.
 // The ledger is in memory.
+
+/** How many times tsh was told `signal`: one Ctrl-C is one interrupt, whichever path it took. */
+const signals = vi.hoisted(() => ({told: 0}));
+
+// `tell` as it is, counted when it tells tsh's `signal`. Nothing else changes.
+vi.mock("@kampus/fabrika-old", async (importOriginal) => {
+	const real = await importOriginal<typeof import("@kampus/fabrika-old")>();
+	const tell: typeof real.tell = (run, name, value) => {
+		if (name === "signal") signals.told += 1;
+		return real.tell(run, name, value);
+	};
+	return {...real, tell};
+});
 
 /** What the fake tile saw, in order. */
 type Seen =
@@ -974,6 +987,151 @@ describe("an agent's tsh", () => {
 		expect(
 			said._tag === "said" &&
 				said.lines.some((l) => l.includes("tracker has no input named answer")),
+		).toBe(true);
+	});
+});
+
+// Owed by PR 3's mutation step (tracker 185b). Today's version. Each pins one rule of an agent's
+// line that no test above reached: the line's own shape, a person's tsh, Ctrl-C on either tile, a
+// line beside the foreground that names no program, and a table's rows.
+//
+//   tsh.line("")                       refused: a line is 1 to 4096 characters on one line, ...
+//   person's tsh.line("tally &")       refused: t1 is the person's tile: an agent's line runs only in its own
+//   counter runs; tsh.line("nosuch &") {_tag: "said", lines: [...], status: 127}
+//   tsh.line("experiments")            the table on the person's screen, its rows as text for the agent
+
+/** What `Tsh.line` refuses for the line's own shape (packages/fabrika/src/mcp/line.ts). */
+const SHAPE = "a line is 1 to 4096 characters on one line, with no control character";
+
+describe("an agent's tsh: what the mutation step found untested", () => {
+	it("refuses a line that is empty, has a newline, is past 4096 characters or holds a control character, and writes nothing; 4096 is taken", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session({author: CLAUDE});
+				yield* s.prompts(1);
+				const refused = [];
+				for (const text of ["", "a\nb", "x".repeat(4097), "\x1b[2J"])
+					refused.push(yield* s.host.line(text).pipe(Effect.flip));
+				const before = s.rows().filter((r) => r.startsWith("$ "));
+				const jobs = s.jobs.table.getState().jobs.length;
+				const longest = yield* s.host.line("x".repeat(4096));
+				return {refused, before, jobs, longest};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.refused).toEqual(Array(4).fill(expect.objectContaining({why: SHAPE})));
+		expect(seen.refused.map((r) => r._tag)).toEqual(Array(4).fill("LineRefused"));
+		expect(seen.before).toEqual([]);
+		expect(seen.jobs).toBe(0);
+		// Taken: no program has that name, so tsh says so, and the line is done.
+		expect(seen.longest).toMatchObject({_tag: "said", status: 127});
+	});
+
+	it("refuses a line in a person's tsh, and prints and starts nothing", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session();
+				yield* s.prompts(1);
+				const refused = yield* s.host.line("tally &").pipe(Effect.flip);
+				yield* Effect.sleep("50 millis");
+				return {refused, rows: s.rows(), jobs: s.jobs.table.getState().jobs.length};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.refused).toMatchObject({
+			_tag: "LineRefused",
+			why: "t1 is the person's tile: an agent's line runs only in its own",
+		});
+		expect(seen.rows).toEqual(["tsh$"]);
+		expect(seen.jobs).toBe(0);
+	});
+
+	it("reads a resize in an agent's tile, and the person's Ctrl-C there stops the foreground job with one interrupt", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session({author: CLAUDE});
+				yield* s.prompts(1);
+				const resized = s.host.terminal.heard({type: "size", cols: 100, rows: 30});
+				yield* s.host.line("counter");
+				yield* s.opened();
+				const before = signals.told;
+				s.type("\x03");
+				const stopped = yield* s.until("counter stopped", () =>
+					s.rows().find((r) => r === "[stopped] counter"),
+				);
+				yield* Effect.sleep("50 millis");
+				return {resized, stopped, interrupts: signals.told - before};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.resized).toEqual({kind: "read"});
+		expect(seen.stopped).toBe("[stopped] counter");
+		expect(seen.interrupts).toBe(1);
+	});
+
+	it("tells tsh one interrupt for one Ctrl-C in a person's tile, as the editor sends it while busy", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session();
+				s.type("counter\r");
+				yield* s.opened();
+				const before = signals.told;
+				s.type("\x03");
+				const stopped = yield* s.until("counter stopped", () =>
+					s.rows().find((r) => r === "[stopped] counter"),
+				);
+				yield* Effect.sleep("50 millis");
+				return {stopped, interrupts: signals.told - before};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.stopped).toBe("[stopped] counter");
+		expect(seen.interrupts).toBe(1);
+	});
+
+	it("answers a line beside the foreground that names no program with its status, and does not hang", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session({author: CLAUDE});
+				yield* s.prompts(1);
+				yield* s.host.line("counter");
+				yield* s.opened();
+				return yield* s.host
+					.line("nosuch &")
+					.pipe(Effect.timeoutOrElse({duration: "3 seconds", orElse: () => Effect.die("it hung")}));
+			}).pipe(Effect.scoped),
+		);
+		expect(seen).toMatchObject({_tag: "said", status: 127});
+		expect(seen._tag === "said" && seen.lines.some((l) => l.includes("nosuch"))).toBe(true);
+	});
+
+	it("shows a program's table, run by the agent's line, on the person's screen", async () => {
+		const shown = await go(
+			Effect.gen(function* () {
+				const s = yield* session({author: CLAUDE});
+				yield* s.prompts(1);
+				yield* s.host.line("experiments");
+				return yield* s.until("the table on the screen", () =>
+					s.rows().find((r) => r.includes("Experiments")),
+				);
+			}).pipe(Effect.scoped),
+		);
+		expect(shown).toContain("Experiments");
+	});
+
+	// Red on PR 3a's build: the line's program begins a job, so the answer is `job` with no lines,
+	// and the table's rows, which tsh keeps for the line's `said`, never reach the agent.
+	it("answers the agent with a table's rows as text", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session({author: CLAUDE});
+				yield* s.prompts(1);
+				const answer = yield* s.host.line("experiments");
+				yield* s.until("the table on the screen", () =>
+					s.rows().find((r) => r.includes("Experiments")),
+				);
+				return {answer};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.answer).toMatchObject({_tag: "said", status: 0});
+		expect(
+			seen.answer._tag === "said" && seen.answer.lines.some((l) => l.includes("Experiments")),
 		).toBe(true);
 	});
 });

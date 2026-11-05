@@ -131,6 +131,30 @@ describe("the desk's port", () => {
 		expect(readToPage({type: "down", why, now: "reconnecting"}).kind).toBe("refused");
 	});
 
+	it("tells the page each agent attached, since when, and its own tile; a host that names no tile reads as none (tracker 185b)", () => {
+		const now = (agents: unknown) => ({
+			type: "host",
+			now: {pid: 4121, since: 1793400000000, build: null, ledger: {kind: "own"}, agents},
+		});
+		expect(
+			readToPage(
+				now([
+					{name: "claude", since: 1793400060000, tile: "t2"},
+					{name: "lead", since: 1793400070000},
+				]),
+			),
+		).toEqual({
+			kind: "read",
+			msg: now([
+				{name: "claude", since: 1793400060000, tile: "t2"},
+				{name: "lead", since: 1793400070000, tile: null},
+			]),
+		});
+		expect(readToPage(now([{name: "claude", since: 1793400060000, tile: "../t2"}])).kind).toBe(
+			"refused",
+		);
+	});
+
 	it("takes Try again and the restart from the page for the app itself, and nothing more", () => {
 		expect(readToApp({type: "again"})).toEqual({kind: "read", msg: {type: "again"}});
 		expect(readToApp({type: "restart"})).toEqual({kind: "read", msg: {type: "restart"}});

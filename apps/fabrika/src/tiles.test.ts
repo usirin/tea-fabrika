@@ -10,7 +10,7 @@ import type {AgentSessions} from "./host/agent-session.ts";
 import {ConnectFailed} from "./host/connection.ts";
 import type {ToTerminal} from "./messages.ts";
 import {startTiles, type TileNews} from "./tiles.ts";
-import type {Screen} from "./tsh.ts";
+import {RESET, type Screen} from "./tsh.ts";
 
 // The tiles, with fake ports, the host's one job table in memory, and no Electron: what the desk
 // is told, what each tile's terminal shows, and what is in the host's table.
@@ -56,6 +56,8 @@ const desk = (storage = memoryStorage(), more: {readonly sessionFor?: AgentSessi
 		const views: string[] = [];
 		const said: string[] = [];
 		const bytes = new Map<string, string>();
+		/** Every message each tile's terminal was shown, in order. */
+		const shown = new Map<string, ToTerminal[]>();
 		const screens = new Map<string, Screen<ToTerminal>>();
 		const host = watched();
 		// One table for the host, as host/run.ts opens it, handed to every tile.
@@ -76,7 +78,11 @@ const desk = (storage = memoryStorage(), more: {readonly sessionFor?: AgentSessi
 				terminal: (tile, screen) => {
 					screens.set(tile, screen);
 					bytes.set(tile, "");
-					screen.show((m) => bytes.set(tile, (bytes.get(tile) ?? "") + m.data));
+					shown.set(tile, []);
+					screen.show((m) => {
+						bytes.set(tile, (bytes.get(tile) ?? "") + m.data);
+						shown.get(tile)?.push(m);
+					});
 				},
 				view: (run) => views.push(run),
 				gone: (name) => gone.push(name),
@@ -121,6 +127,7 @@ const desk = (storage = memoryStorage(), more: {readonly sessionFor?: AgentSessi
 			views,
 			said,
 			hostWrites: host.writes,
+			shown: (tile: string) => [...(shown.get(tile) ?? [])],
 			rows,
 			type,
 			until,
@@ -535,5 +542,67 @@ describe("an agent's tile", {timeout: 20_000}, () => {
 		expect(seen.none).toMatchObject({_tag: "LineRefused"});
 		expect(seen.person).toMatchObject({_tag: "LineRefused"});
 		expect(seen.table).toEqual([]);
+	});
+});
+
+// Owed by PR 3's mutation step (tracker 185b). Today's version: an agent's tile that is closing,
+// one whose session could not be made, and the whole answer a line gets.
+
+describe("an agent's tile: what the mutation step found untested", {timeout: 20_000}, () => {
+	it("answers a line with the whole job: its number, the line, the tile, running, and no lines yet", async () => {
+		const answer = await go(
+			Effect.gen(function* () {
+				const d = yield* desk();
+				yield* d.tiles.open("t2", "claude");
+				return yield* d.tiles.line("t2", "tally &");
+			}).pipe(Effect.scoped),
+		);
+		expect(answer).toEqual({
+			_tag: "job",
+			job: {n: 1, text: "tally &", tile: "t2", state: {_tag: "running"}, lines: []},
+		});
+	});
+
+	it("refuses a line in an agent's tile that is closing", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const d = yield* desk();
+				yield* d.tiles.open("t2", "claude");
+				yield* d.tiles.line("t2", "tally &");
+				yield* d.tiles.close("t2");
+				const refused = yield* d.tiles.line("t2", "seq --to 3 &").pipe(Effect.flip);
+				return {refused, table: d.table()};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.refused).toMatchObject({
+			_tag: "LineRefused",
+			why: "t2 is closing: its tsh takes no line",
+		});
+		expect(seen.table.map(([n]) => n)).toEqual([1]);
+	});
+
+	it("says why on the tile when the agent's session cannot be made, refuses typing with it, and asks for the session once (d14)", async () => {
+		const why = "the agent's key could not be kept: no room";
+		const seen = await go(
+			Effect.gen(function* () {
+				let asked = 0;
+				const sessionFor: AgentSessions = () =>
+					Effect.suspend(() => {
+						asked += 1;
+						return Effect.fail(new ConnectFailed({why}));
+					});
+				const d = yield* desk(memoryStorage(), {sessionFor});
+				yield* d.tiles.open("t2", "claude");
+				// Opened again, as on the next page's port: the tile says why again, and no session is made.
+				yield* d.tiles.open("t2", "claude");
+				const typed = d.type("t2", "x");
+				return {shown: d.shown("t2"), typed, asked};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.shown).toEqual([
+			{type: "write", data: `${RESET}claude's tile could not start:\r\n${why}\r\n`},
+		]);
+		expect(seen.typed).toEqual({kind: "refused", why: `claude's tile could not start: ${why}`});
+		expect(seen.asked).toBe(1);
 	});
 });

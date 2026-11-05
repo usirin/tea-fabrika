@@ -926,6 +926,27 @@ describe("an agent's tile on the desk (tracker 185b, PR 3)", () => {
 		expect(back?.workspaces).toEqual(workspaces);
 	});
 
+	it("keeps one name for a tile two kept names point at", () => {
+		const {workspaces, active, next} = fresh();
+		const back = restore(
+			JSON.parse(JSON.stringify({workspaces, active, next, agents: {claude: "t1", lead: "t1"}})),
+		);
+		expect(back?.agents).toEqual({claude: "t1"});
+		expect(back?.workspaces).toEqual(workspaces);
+	});
+
+	it.each([
+		["a number", 5],
+		["a tile that is not a tile's id", {claude: 7}],
+		["a list", ["t1"]],
+	])("reads a desk whose agents are %s back whole, with agents empty", (_, agents) => {
+		const {workspaces, active, next} = fresh();
+		const back = restore(JSON.parse(JSON.stringify({workspaces, active, next, agents})));
+		expect(back).not.toBeNull();
+		expect(back?.agents).toEqual({});
+		expect(back?.workspaces).toEqual(workspaces);
+	});
+
 	it("sends the page the desk's agents, so the window names each agent's tile", () => {
 		const [first] = deskMachine.init(null, undefined);
 		const [s] = launched(deskMachine, first, "claude");
