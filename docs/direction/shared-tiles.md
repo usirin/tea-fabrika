@@ -207,9 +207,9 @@ line by its sender. A plan that reads `packages/fabrika/src/host/` settles it.
 
 ## Made up here
 
-`summon` as a Msg and its fields, the "starting it · this starts a paid run" line, `writing`, `Mark`, `Swatch` and its four names, "away", "claude
-stopped by owner", job `%12`, the id `in-3f9a12c0-41`, and the account number `42` in the writer
-text.
+`summon` as a Msg and its fields, the "starting it · this starts a paid run" line, `writing`,
+`Mark`, `Swatch` and its four names, "away", "claude stopped by owner", job `%12`, the id
+`in-3f9a12c0-41`, and the account number `42` in the writer text.
 
 ## What it cannot tell us
 
