@@ -115,8 +115,7 @@ const run = <A, E>(
 	);
 
 describe("tsh prints for a person", () => {
-	// Red on PR 3a's build, this test and the next: `table` sends the table alone, and its job's `n`
-	// goes on a second output, `jobTable`, till the builder folds that one into `table`.
+	// A table output names the job that printed it, `{table, n}`, as `printed` does.
 	it("a table once the run has ended, with no output's name, and not the text meant for a pipe", async () => {
 		const seen = await run("short", (line) => line("list --to 3"));
 		expect(seen.out).toEqual([]);
