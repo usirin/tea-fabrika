@@ -20,13 +20,18 @@ claude `@claude` starts may do in the person's repo. It is not a measurement.
 A sketch, both versions. What one agent commit carries. The host writes every line below the
 subject; the agent never names itself.
 
-author     fabrika[bot] <APP_ID+fabrika[bot]@users.noreply.github.com>
+author     fabrika[bot] <BOT_USER_ID+fabrika[bot]@users.noreply.github.com>
 subject    map: take a ticket from a pipe
 
 Co-authored-by: <the person> <their noreply address>
 Fabrika-Agent: agents/github:<member>/claude
 Fabrika-Input: in-3f9a12c0-41
+Fabrika-Input: in-3f9a12c0-44
 ```
+
+The email's number is the bot user's id, not the app's id, and a commit made from two inputs
+carries one `Fabrika-Input` line for each
+([experiment 212](../../experiments/212-fabrika-bot-commits.md)).
 
 ## Why
 
