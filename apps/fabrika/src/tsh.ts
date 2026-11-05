@@ -582,6 +582,24 @@ export const startTsh = (options: {
 				}),
 			);
 		};
+		/**
+		 * `attach %n` with no &: a job of this tile from before the line came to the foreground. It
+		 * keeps its number, so it never begins since the line: its coming forward is the answer, as a
+		 * new job's start is, and the call never waits on its end.
+		 */
+		const fronted = (now: Shell.Jobs) => {
+			if (asked === null || asked.via !== "line") return;
+			const since = asked.since;
+			const job = now.jobs.find(
+				(j) => j.n < since && j.owner === tile && j.state === "running" && !j.background,
+			);
+			if (job === undefined) return;
+			answer(
+				LineAnswer.cases.job.make({
+					job: {n: job.n, text: job.text, tile, state: {_tag: "running"}, lines: []},
+				}),
+			);
+		};
 		/** A run began: its job, if the host's table holds one for it. */
 		const beganBy = (run: string) => {
 			const job = jobOf(jobs.table.getState(), run);
@@ -673,6 +691,7 @@ export const startTsh = (options: {
 							if (job !== undefined) moved.add(job);
 						}
 					for (const job of moved) together(job);
+					fronted(now);
 					recount(now);
 				}),
 			),
