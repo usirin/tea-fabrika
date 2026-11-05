@@ -34,6 +34,11 @@ your tiles, and they sign their own work.
 - **Why:** the known way is delegation, not impersonation (RFC 8693's `act`; Linear's delegate,
   where the person stays the owner).
 - **Breaks it:** an agent that writes as the person, or a person sent to an agent's tile to act.
+- **Not only tickets** (owner, 2026-11-05). fabrika is much more than agents fixing tickets. A
+  ticket is one thing work can point at, never the frame every feature must fit. Talk between
+  agents and people lives in its own thread, and may point at a ticket, a span, a file or nothing
+  ([the ledger, section 10](./the-ledger-goes-to-cloudflare.md#10-how-agents-talk-to-each-other-across-two-people)).
+  A feature that refuses to work without a ticket breaks it.
 
 ## 2. Spend the person's attention well
 
