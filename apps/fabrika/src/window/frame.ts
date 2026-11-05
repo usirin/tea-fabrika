@@ -1,3 +1,4 @@
+import {writerOf} from "@kampus/fabrika-old";
 import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {whenOf} from "@tea-fabrika/tracker/window";
 import {Option, Schema} from "effect";
@@ -277,6 +278,22 @@ export interface Said {
 export const agentsWord = (host: HostNow): string | null => {
 	const n = host.agents?.length ?? 0;
 	return n === 0 ? null : `${n} agent${n === 1 ? "" : "s"}`;
+};
+
+/**
+ * Who restarted the host before this one, how long ago and why, for the host's lines (C-b H):
+ * `restarted by claude 4s ago: pick up the new build`. An agent goes by its name, as the agents'
+ * lines name it; the person at the window is `you`, as the asks say it. The person's own restart,
+ * from the window, has no why, and the line ends at the time. A host that started fresh, or one
+ * of an older build that says nothing of it: `null`.
+ */
+export const restartedWord = (host: HostNow, now: number): string | null => {
+	const restarted = host.restarted ?? null;
+	if (restarted === null) return null;
+	const writer = writerOf(restarted.by);
+	const who = writer === null ? restarted.by : writer.kind === "agent" ? writer.id : "you";
+	const why = restarted.why === null ? "" : `: ${restarted.why}`;
+	return `restarted by ${who} ${agoWord(Math.max(0, now - restarted.at))}${why}`;
 };
 
 /**

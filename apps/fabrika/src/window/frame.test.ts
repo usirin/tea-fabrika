@@ -47,6 +47,7 @@ import {
 	opensOf,
 	prefixLine,
 	questionWord,
+	restartedWord,
 	syncWord,
 	ticketsShown,
 	tileOfTicket,
@@ -337,6 +338,28 @@ describe("the top bar", () => {
 				]),
 			),
 		).toBe("2 agents");
+	});
+
+	it("says in the host's lines who restarted the host, how long ago and why, and nothing for a host that just started (185b PR 5)", () => {
+		const host: HostNow = {pid: 4242, since: 0, build: null, ledger: {kind: "own"}, agents: []};
+		// made up: `restartedWord`, beside `agentsWord`; `HostNow.restarted` is the plan's name, its
+		// fields restart.json's `{by, why, at}`. The ago is `agoWord`'s, as the jobs list says it.
+		const restarted = (by: string, why: string | null, at: number) =>
+			({...host, restarted: {by, why, at}}) as HostNow;
+		expect(
+			restartedWord(restarted("agent:claude for:owner", "pick up the new build", 1_000), 5_000),
+		).toBe("restarted by claude 4s ago: pick up the new build");
+		// A person's restart from the window has no why: the line ends at the time.
+		const person = restartedWord(restarted("user:owner", null, 1_000), 5_000);
+		expect(person).toMatch(/^restarted by \S.* 4s ago$/);
+		// The person at the window is "you", whatever their login (owed by PR 382's mutation step).
+		expect(person).toBe("restarted by you 4s ago");
+		expect(restartedWord(restarted("user:ana", null, 1_000), 5_000)).toBe(
+			"restarted by you 4s ago",
+		);
+		// A host that started fresh, or one of an older build that says nothing of it.
+		expect(restartedWord({...host, restarted: null} as HostNow, 5_000)).toBeNull();
+		expect(restartedWord(host, 5_000)).toBeNull();
 	});
 
 	it("says a server's ledger syncing until read, nothing once in sync, and a failed read broken", () => {

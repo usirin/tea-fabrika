@@ -143,9 +143,21 @@ export const LedgerLink = Schema.Union([
 export type LedgerLink = typeof LedgerLink.Type;
 
 /**
+ * Who restarted the host before this one, as a writer's text, why, and when (host/restart.ts): an
+ * agent's `restart` says why; the person's, from the window, says none.
+ */
+const Restarted = Schema.Struct({
+	by: Schema.String,
+	why: Schema.NullOr(Schema.String),
+	at: Millis,
+});
+
+/**
  * The host, as it says of itself (host/serve.ts): its process, when it started, its build, its
- * ledger, and the agents attached now. `agents` is `null` on a host with no agents' socket: a
- * test's, or one built before every home had one (host/agents.ts).
+ * ledger, the agents attached now, and who restarted the host before it. `agents` is `null` on a
+ * host with no agents' socket: a test's, or one built before every home had one (host/agents.ts).
+ * `restarted` is `null` on a host that started fresh, or after a crash. A host of an older build
+ * sends none, and the app still attaches to it, so a `HostNow` without it reads.
  */
 export const HostNow = Schema.Struct({
 	pid: Schema.Int.check(Schema.isGreaterThan(0)),
@@ -154,6 +166,7 @@ export const HostNow = Schema.Struct({
 	build: Schema.NullOr(Schema.String),
 	ledger: LedgerLink,
 	agents: Schema.NullOr(Schema.Array(AgentOn)),
+	restarted: Schema.optionalKey(Schema.NullOr(Restarted)),
 });
 export type HostNow = typeof HostNow.Type;
 

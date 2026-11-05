@@ -533,6 +533,15 @@ claude mcp add --transport stdio --env FABRIKA_HOME=<home> fabrika -- \
   `<home>/host/mcp`, a socket only you can open (mode 0600). The host serves MCP itself, with the
   official SDK (`@kampus/fabrika-old/mcp`, spec 2026-07-28). With no host running, the bridge says so
   on stderr and ends: open the app first.
+- **The bridge outlives the host.** When the host ends (the window's "Stop the old host and start
+  this one", or `fabrika connect`), the bridge dials again on the window's own wait: at most half a
+  second at first, doubling, up to 30 s apart, for 5 minutes (`src/reconnect.ts`, `POLICY`). A call while
+  no host answers gets a JSON-RPC error at once, code -32000, "the host is restarting: this call
+  did not reach it"; one the host held when it ended is told it may have run. Neither is sent to
+  the next host. The new host hears the client's `initialize` and `notifications/initialized`
+  again, its answer goes no further, and the client is told `notifications/tools/list_changed`,
+  so it lists the tools again. No host within the 5 minutes: the bridge says so on stderr and
+  ends. Its stderr says `host_lost why=...` and `host_back after_ms=... tries=...`.
 - **The tools are the programs' inputs.** One tool per input, named `<program>_<input>`, with
   the input's own description and its schema as JSON Schema (`tracker_file`, `tracker_query`,
   `ticket_comment`, `ticket_ticket`, `counter_press`). Each command is its own input, named by
@@ -554,6 +563,18 @@ claude mcp add --transport stdio --env FABRIKA_HOME=<home> fabrika -- \
   not know, or one that ended, is refused in words. `why` is 1 to 500 characters, never none. Its
   hints say it writes, may destroy, is the same twice, and stays in the host
   (`src/host/serve.ts`, `stopFor`).
+- **`restart` restarts the host, and must say why.** `restart {why: "pick up the new build"}`
+  answers `{_tag: "restarting", detached: [2]}`, the jobs left in the table. A quarter second on
+  the host ends as a SIGTERM ends it, with no signal sent: every job stays, detached. The app
+  attached sees its link end and starts a host of its own build, and the bridge dials it. So with
+  no app attached it is refused, "no app is attached to start a new host", and the host runs on.
+  Before it ends, the host leaves `host/restart.json` (`{by, why, at, detached}`,
+  `src/host/restart.ts`). The next host reads it once and removes it: the top bar's host lines
+  (C-b H) say `Restarted by claude 4s ago: pick up the new build.`, and each tile's tsh says `tsh:
+  1 job from an earlier tsh, restarted by agent:claude for:owner, not running: %2. ...`. Your own
+  "Stop the old host and start this one" leaves the same note, with you as `by` and no why. `why`
+  is as `stop`'s. Its hints say it writes, may destroy, is not the same twice, and stays in the
+  host (`src/host/serve.ts`, `restartFor`).
 - **The agent writes as itself.** Its calls go to its own run of the program, started on first
   use, whose writer is `agent:claude` for you. Nothing it sends can name you: the bridge's
   handshake holds only an agent's name, and the host makes the writer. An agent has no
@@ -579,7 +600,7 @@ not fit fails the post, with why, and nothing is filed.
 If that login fails, the agent only reads, and nothing it calls writes on your session: the socket lists
 only the tools that write nothing (`runs`, `job`, `tracker_query`, ...), a write tool called
 anyway (`tracker_file`) is refused as a tool that is not there, before any run starts, and `runs`
-says why (`readOnly: {why}`), and there is no `stop`. Starting a lane stays yours, in a tile.
+says why (`readOnly: {why}`), and there is no `stop` or `restart`. Starting a lane stays yours, in a tile.
 
 The agent's runs end when its client goes.
 
@@ -593,6 +614,8 @@ level=INFO message=job_ended n=1 "text=seq --to 3" tile=t1 how=stopped by=user:o
 level=INFO message=agent_came agent=claude client=claude-code version=...
 level=INFO message=tool_called agent=claude tool=stop call=7 took_ms=41 ok=true
 level=INFO message=tool_called agent=claude tool=job call=8 took_ms=0 "refused=there is no job 99: ..."
+level=INFO message=host_restart "by=agent:claude for:owner" "why=pick up the new build" detached=2 foreground=t1:%2 idle_ms=8000 build=3f9a0c21
+level=INFO message=host_began build=3f9a0c21 after=restart "by=agent:claude for:owner" "why=pick up the new build"
 level=INFO message=agent_session agent=claude expires=1767225600000
 level=WARN message=agent_refused agent=claude "why=the key .../agent_ed25519: ..."
 level=INFO message=step_began run=r-build-3 step=build
@@ -608,6 +631,9 @@ level=WARN message=lag nodejs.eventloop.delay.p99=0.24 nodejs.eventloop.delay.ma
   done or refused, with the call's JSON-RPC id (`call`), `took_ms`, and `ok=true` or the why it
   was told (`refused`); its own session on a ledger server, when it ends, or why it could not be
   made.
+- A restart's lines: the old host's, as it answers an agent's `restart`, with who, why, the jobs
+  it leaves detached, which tile ran which in front, `idle_ms` and its build; and every host's
+  start, with its build, and after a restart who restarted the host before it and why.
 - A lane step's lines: read off its "run a step" span, as it is tagged with its run and step, and
   as it ends with its outcome. A step that broke before it said one ends with no `outcome`.
 - A lag line: the host reads the event loop's delay once a second (`monitorEventLoopDelay`) and
@@ -631,8 +657,8 @@ SHOTS=<folder> pnpm --filter @kampus/fabrika-app-old e2e
   `desk.json`, `asks.json`, `storage/jobs/`, `history`, `ledger.sqlite`, `agent_ed25519` (the
   agents' key, on a home connected to a ledger server), the one-copy lock, and the host's
   `host/sock`, `host/mcp` (agents), `host/pid`, `host/log` (`key=value` lines: what the host did, each job's begin and end, each
-  lane step's begin and end, and a lag line when its thread is starved), and `host/lock` while a
-  host starts. A test on its own home can never reach another
+  lane step's begin and end, and a lag line when its thread is starved), `host/restart.json`
+  between a restart and the next host's start, and `host/lock` while a host starts. A test on its own home can never reach another
   home's host. macOS caps a socket's path at 103 bytes; a home too deep stops the host with a
   plain message.
 - **A start with `FABRIKA_HOME` is quiet** (`src/launch.ts`): no Dock icon, and its window shows

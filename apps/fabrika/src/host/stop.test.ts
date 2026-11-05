@@ -6,6 +6,8 @@ import {Effect, Exit, FileSystem, Layer, Path, Schedule, Scope} from "effect";
 import {ChildProcess} from "effect/process";
 import {describe, expect, it} from "vitest";
 import {attach, restart} from "../attach.ts";
+import type {Down} from "../link.ts";
+import {readToPage, type ToPage} from "../messages.ts";
 import {runHost} from "./run.ts";
 import {pathsOf, reach} from "./socket.ts";
 import {NotStopped, stopHost} from "./stop.ts";
@@ -96,6 +98,111 @@ describe("stopping the old host", () => {
 		expect(seen.found).toEqual({kind: "up"});
 		// The app on the old host saw its link end, as the host went.
 		expect(seen.ended).toBeTypeOf("string");
+	});
+
+	// Tracker 185b, PR 5: every restart reads the same. The person's, from the window, leaves the
+	// note an agent's restart leaves (host/restart.json), with the person as who and no why; the
+	// next host shows it once in the top bar's host lines.
+	it("leaves the person's restart for the next host to say, with who and no why, once", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const fs = yield* FileSystem.FileSystem;
+				const {home, paths} = yield* freshHome;
+				const start = Effect.gen(function* () {
+					const host = yield* hostProcess(home);
+					return host.exitCode;
+				});
+				yield* attach({home, deliver: () => {}, start});
+				const got: Down[] = [];
+				const again = yield* restart({home, deliver: (m) => got.push(m), start});
+				again.wire.send({type: "page"});
+				/** The host as it last said of itself, for the top bar. */
+				const hostNow = () =>
+					got
+						.flatMap((m): ToPage[] => {
+							if (m.type !== "to" || m.port !== "desk") return [];
+							const read = readToPage(m.m);
+							return read.kind === "read" ? [read.msg] : [];
+						})
+						.findLast((m) => m.type === "host");
+				let now: ToPage | undefined;
+				for (let i = 0; i < 400 && now === undefined; i += 1) {
+					now = hostNow();
+					if (now === undefined) yield* Effect.sleep("25 millis");
+				}
+				const kept = yield* fs.exists(`${paths.dir}/restart.json`);
+				return {now, kept};
+			}),
+		);
+		// made up: `HostNow.restarted`'s fields, restart.json's `{by, why, at}`.
+		const restarted = seen.now?.type === "host" ? Reflect.get(seen.now.now, "restarted") : null;
+		expect(restarted).toMatchObject({by: "user:owner", why: null});
+		expect(seen.kept).toBe(false);
+	});
+
+	// Owed by the mutation step on PR 382.
+	it("takes the person's note back when the stop fails: no restart happened", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const fs = yield* FileSystem.FileSystem;
+				const {home, paths} = yield* freshHome;
+				// A host in this test's process: its pid file names this process, so the stop is refused.
+				const scope = yield* Scope.make();
+				yield* runHost({home, pid: process.pid}).pipe(Effect.scoped, Effect.forkIn(scope));
+				yield* live(paths.sock);
+				const failed = yield* restart({
+					home,
+					deliver: () => {},
+					start: Effect.die("no host is started when the stop fails"),
+				}).pipe(Effect.flip);
+				const kept = yield* fs.exists(`${paths.dir}/restart.json`);
+				const after = yield* reach(paths.sock);
+				yield* Scope.close(scope, Exit.void);
+				return {failed, kept, after};
+			}),
+		);
+		expect(seen.failed).toBeInstanceOf(NotStopped);
+		expect(seen.kept).toBe(false);
+		expect(seen.after).toBe("live");
+	});
+
+	it("restarts all the same when the person's note cannot be written, and the next host names no restart", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const fs = yield* FileSystem.FileSystem;
+				const {home, paths} = yield* freshHome;
+				const started: number[] = [];
+				const start = Effect.gen(function* () {
+					const host = yield* hostProcess(home);
+					started.push(host.pid);
+					return host.exitCode;
+				});
+				yield* attach({home, deliver: () => {}, start});
+				// The note is written beside, then moved over: a folder where it is written beside.
+				yield* fs.makeDirectory(`${paths.dir}/restart.json.new`);
+				const got: Down[] = [];
+				const again = yield* restart({home, deliver: (m) => got.push(m), start});
+				again.wire.send({type: "page"});
+				let now: ToPage | undefined;
+				for (let i = 0; i < 400 && now === undefined; i += 1) {
+					now = got
+						.flatMap((m): ToPage[] => {
+							if (m.type !== "to" || m.port !== "desk") return [];
+							const read = readToPage(m.m);
+							return read.kind === "read" ? [read.msg] : [];
+						})
+						.findLast((m) => m.type === "host");
+					if (now === undefined) yield* Effect.sleep("25 millis");
+				}
+				return {started: started.length, state: again.wire.state().at, now};
+			}),
+		);
+		expect(seen.started).toBe(2);
+		expect(seen.state).toBe("up");
+		expect(seen.now?.type).toBe("host");
+		// None, as null or left out.
+		const restarted = seen.now?.type === "host" ? Reflect.get(seen.now.now, "restarted") : "none";
+		expect(restarted ?? null).toBeNull();
 	});
 
 	it("sends nothing when no host answers, though a pid file names a live process", async () => {

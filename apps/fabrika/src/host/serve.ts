@@ -5,11 +5,13 @@ import {
 	type AgentOptions,
 	EXIT_WITHIN,
 	LineRefused,
+	RestartAnswer,
+	RestartRefused,
 	StopAnswer,
 	StopRefused,
 } from "@kampus/fabrika-old/mcp";
 import {Author, PullRequests, RepoTree} from "@tea-fabrika/tracker";
-import {Data, Deferred, Effect, Queue, Stream} from "effect";
+import {Data, Deferred, Duration, Effect, Queue, Ref, Stream} from "effect";
 import {type Socket, SocketServer} from "effect/socket";
 import {
 	type AsksMsg,
@@ -61,6 +63,7 @@ import {appPrograms, type Screen, tshList} from "../tsh.ts";
 import {hostWire} from "../wire.ts";
 import type {AgentSessions} from "./agent-session.ts";
 import {serveAgents} from "./agents.ts";
+import type {RestartNote} from "./restart.ts";
 import type {Setting} from "./settings.ts";
 
 // The host's server: what the host process does with each app that attaches, as tmux's server
@@ -88,6 +91,9 @@ import type {Setting} from "./settings.ts";
 //                                          or goes: the top bar's agents, sync and host
 //   agent stop {n: 1, why: "wrong ticket"} on the agents' socket: the host says the agent's stop
 //                                          in the table, then tells t1's tsh to stop %1 (`stopFor`)
+//   agent restart {why: "..."}             an app is attached: the host leaves its note for the
+//                                          next host, answers, and ends a moment on, as SIGTERM
+//                                          ends it; the app starts the next (`restartFor`)
 //   agent line {line: "tally &"}           on the agents' socket: the agent's first line has the
 //                                          desk open its tile (`launch`), folded beside the focused
 //                                          one; once the tile's tsh is open, it runs the line there
@@ -128,9 +134,28 @@ export interface AsksHome {
 /** The desk's Cmds as the one fiber carries them, and a fence: done once every Cmd before it is. */
 type Carried = DeskCmd | {readonly type: "fence"; readonly done: Deferred.Deferred<void>};
 
+/**
+ * Where a restart is kept between hosts (host/restart.ts): the note the host before this one left,
+ * if any, and how an agent's restart leaves one for the next. A host handed none has no `restart`
+ * tool.
+ */
+export interface Restarts {
+	readonly before: RestartNote | null;
+	readonly leave: (note: RestartNote) => Effect.Effect<void, RestartRefused>;
+}
+
+/**
+ * How long the host runs on after it answered a restart, so the answer goes out on the agent's
+ * socket before the host closes it. A local socket's write is well under a millisecond; this is
+ * room for a loaded laptop. Our own number.
+ */
+const ANSWER_FIRST = Duration.millis(250);
+
 /** One app attached. */
 interface Client {
 	send: (m: Down) => void;
+	/** Its link is up: it said hello with our version, so it is an app that will start a host again. */
+	up: () => boolean;
 	/** A page is loaded in its window, to be shown everything. */
 	page: boolean;
 	/** The screens shown on its page, by port name, and how to stop showing each. */
@@ -195,6 +220,8 @@ export const serve = (options: {
 	readonly ledger:
 		| Extract<LedgerLink, {kind: "own"}>
 		| (Extract<LedgerLink, {kind: "server"}> & {readonly sessionFor: AgentSessions});
+	/** The restart before this host, and where the next is left; none, no `restart` tool. */
+	readonly restarts?: Restarts | undefined;
 }) =>
 	Effect.gen(function* () {
 		const {
@@ -205,6 +232,7 @@ export const serve = (options: {
 			ours = PROTOCOL,
 			build = BUILD,
 			agents,
+			restarts,
 		} = options;
 		/** The ledger as the page is told it: the agents' sessions stay in the host. */
 		const link: LedgerLink =
@@ -212,6 +240,7 @@ export const serve = (options: {
 				? {kind: "server", address: options.ledger.address, login: options.ledger.login}
 				: {kind: "own"};
 		const server = yield* SocketServer.SocketServer;
+		const scope = yield* Effect.scope;
 		const services = yield* Effect.context<never>();
 		const clock = yield* Effect.clockWith(Effect.succeed);
 		const since = clock.currentTimeMillisUnsafe();
@@ -363,6 +392,8 @@ export const serve = (options: {
 		// agent on the socket is one entry, by a number of its own, so two of one name are two.
 		const attached = new Map<number, Omit<AgentOn, "tile">>();
 		let nextAgent = 0;
+		/** Who restarted the host before this one, said once: in its log, here, and in each tile's tsh. */
+		const before = restarts?.before ?? null;
 		const hostNow = (): ToPage => ({
 			type: "host",
 			now: {
@@ -376,6 +407,7 @@ export const serve = (options: {
 						: [...attached.values()]
 								.sort((a, b) => a.since - b.since)
 								.map((a) => ({...a, tile: agentsOf(desk)[a.name] ?? null})),
+				restarted: before === null ? null : {by: before.by, why: before.why, at: before.at},
 			},
 		});
 		const tellHost = () => {
@@ -513,6 +545,58 @@ export const serve = (options: {
 				return yield* tiles.line(tile, ask.line);
 			});
 
+		/** Done once a restart was answered: the host ends, as SIGTERM ends it, and sends no signal. */
+		const quit = yield* Deferred.make<void>();
+		/** One restart at a time: claimed before any file is written, let go of if the note fails. */
+		const restarting = yield* Ref.make(false);
+		/**
+		 * Restart the host for agent `who`, and why: the `restart` tool's host side. Only with an app
+		 * attached, since the app starts the next host. The restart is claimed first, so of two agents
+		 * that ask at the same moment the second is refused and only one note is left. The note for the
+		 * next host is left next, so a restart that could not leave one is refused and changes nothing.
+		 * Then its line, then the answer, and the host ends `ANSWER_FIRST` on. Every job stays in the
+		 * table, detached at the next start, as after a SIGTERM.
+		 */
+		const restartFor =
+			(r: Restarts): NonNullable<AgentOptions["restart"]> =>
+			(who, ask) =>
+				Effect.gen(function* () {
+					if (![...clients].some((client) => client.up()))
+						return yield* new RestartRefused({
+							why: "no app is attached to start a new host: the host would stay down",
+						});
+					if (yield* Ref.getAndSet(restarting, true))
+						return yield* new RestartRefused({why: "the host is restarting already"});
+					const table = jobs.table.getState().jobs;
+					const detached = table.map((job) => job.n);
+					const foreground = table.flatMap((job) =>
+						job.state === "running" && !job.background && job.owner !== null
+							? [`${job.owner}:%${job.n}`]
+							: [],
+					);
+					const by = writerText(who);
+					const at = clock.currentTimeMillisUnsafe();
+					yield* r
+						.leave({by, why: ask.why, at, detached})
+						.pipe(Effect.onError(() => Ref.set(restarting, false)));
+					const away = idle();
+					yield* Effect.logInfo("host_restart").pipe(
+						Effect.annotateLogs({
+							by,
+							why: ask.why,
+							detached: detached.join(","),
+							foreground: foreground.join(","),
+							...(away === null ? {} : {idle_ms: away}),
+							build: build ?? "none",
+						}),
+					);
+					yield* Deferred.succeed(quit, undefined).pipe(
+						Effect.delay(ANSWER_FIRST),
+						Effect.forkIn(scope),
+					);
+					return RestartAnswer.make({detached});
+				});
+
 		const carry = (c: Carried): Effect.Effect<void> => {
 			switch (c.type) {
 				case "fence":
@@ -595,6 +679,7 @@ export const serve = (options: {
 				attached: agentCame,
 				job: lines.job,
 				stop: stopFor,
+				restart: restarts === undefined ? undefined : restartFor(restarts),
 				line: lineFor,
 				sessionFor: options.ledger.kind === "server" ? options.ledger.sessionFor : null,
 			}).pipe(
@@ -710,9 +795,10 @@ export const serve = (options: {
 
 		const attach = (socket: Socket.Socket) =>
 			Effect.gen(function* () {
-				const client: Client = {send: () => {}, page: false, shown: new Map()};
+				const client: Client = {send: () => {}, up: () => false, page: false, shown: new Map()};
 				const wire = yield* hostWire(socket, (m) => fromApp(client, m), ours, build);
 				client.send = wire.send;
+				client.up = () => wire.state().at === "up";
 				clients.add(client);
 				const why = yield* wire.ended;
 				hide(client);
@@ -720,5 +806,7 @@ export const serve = (options: {
 				yield* Effect.logDebug(`fabrika host: an app went: ${why}`);
 			}).pipe(Effect.scoped);
 
-		return yield* server.run(attach);
+		// Until the scope closes, or a restart's answer is out: then the host ends of itself, with a
+		// success, and its scope closes as a SIGTERM closes it.
+		return yield* server.run(attach).pipe(Effect.raceFirst(Deferred.await(quit)));
 	});

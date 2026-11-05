@@ -27,6 +27,7 @@ import {type Answer, driveFor, type InTile} from "./drive.ts";
 import {AGENTS_PROTOCOL, Handshake, type HostAnswer, MAX_LINE} from "./handshake.ts";
 import type {JobAnswer} from "./job.ts";
 import type {LineAnswer, LineAsk, LineRefused} from "./line.ts";
+import type {RestartAnswer, RestartAsk, RestartRefused} from "./restart.ts";
 import type {StopAnswer, StopAsk, StopRefused} from "./stop.ts";
 
 // One agent on the host's agents' socket: its handshake, then MCP, served with the official SDK's
@@ -89,6 +90,13 @@ export interface AgentOptions {
 	/** Stop job n of the host's table for agent `who`, and why, for the `stop` tool (./stop.ts). */
 	readonly stop?:
 		| ((who: typeof Agent.Type, ask: StopAsk) => Effect.Effect<StopAnswer, StopRefused>)
+		| undefined;
+	/**
+	 * Restart the host for agent `who`, and why, for the `restart` tool (./restart.ts). Who is the
+	 * agent its handshake named: the tool takes only `why`.
+	 */
+	readonly restart?:
+		| ((who: typeof Agent.Type, ask: RestartAsk) => Effect.Effect<RestartAnswer, RestartRefused>)
 		| undefined;
 	/** Run one line in agent `who`'s own tile, for the `line` tool (./line.ts). */
 	readonly line?:
@@ -217,17 +225,21 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
 			Effect.gen(function* () {
 				const who = {kind: "agent", id: handshake.agent, for: person} as const;
 				const served = yield* programsFor(who);
-				const {stop, line} = options;
+				const {stop, restart, line} = options;
 				const {drive, tools} = yield* driveFor({
 					list: served.list,
 					tiles,
 					job: options.job,
 					stop: stop === undefined ? undefined : (ask) => stop(who, ask),
+					restart: restart === undefined ? undefined : (ask) => restart(who, ask),
 					line: line === undefined ? undefined : (ask) => line(who, ask),
 					readOnly: served.readOnly ?? false,
 				});
 				if (options.attached !== undefined) yield* options.attached(who);
-				const server = new Server(info, {capabilities: {tools: {}}});
+				// Its tools may change (spec 2025-11-25, "Tools", Capabilities: `listChanged`): a new host
+				// may serve the read-only door, or the other way. The bridge says so to the client after
+				// a new host (./bridge.ts); a client heeds the notice only from a server that declared it.
+				const server = new Server(info, {capabilities: {tools: {listChanged: true}}});
 				server.setRequestHandler("tools/list", () => ({tools: [...tools]}));
 				server.setRequestHandler("tools/call", (request, ctx) => {
 					const {name, arguments: args} = request.params;

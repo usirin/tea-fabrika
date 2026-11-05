@@ -3,12 +3,13 @@ import {type JsonSchema, shapeOf} from "../program/shape.ts";
 import type {ProgramList} from "../shell/programs.ts";
 import {JOB, JobAsk} from "./job.ts";
 import {LINE, LineAsk} from "./line.ts";
+import {RESTART, RestartAsk} from "./restart.ts";
 import {STOP, StopAsk} from "./stop.ts";
 
 // A program list as MCP tools (spec 2026-07-28, "Tools"): one tool per input of each program, made
 // from the input's own schema, and one tool that lists what runs. No program has a tool written by
 // hand: a new input is a new tool, and a renamed input is a renamed tool. The host's own tools
-// beside `runs` (`job`, ./job.ts; `stop`, ./stop.ts; `line`, ./line.ts) are the host's to list (./drive.ts); a call to
+// beside `runs` (`job`, ./job.ts; `stop`, ./stop.ts; `restart`, ./restart.ts; `line`, ./line.ts) are the host's to list (./drive.ts); a call to
 // one is read here.
 //
 //   toolsOf(programList([listed(tracker, ...)]))
@@ -31,7 +32,7 @@ import {STOP, StopAsk} from "./stop.ts";
 //
 // The name is `<program>_<input>`. A program's name has no `_` (programList holds it to small
 // letters, digits and -), so the first `_` splits it, and no tool of an input is ever named
-// `runs`, `job` or `stop`. A dot would read better, but the Messages API takes a tool name of letters, digits, `_`
+// `runs`, `job`, `stop` or `restart`. A dot would read better, but the Messages API takes a tool name of letters, digits, `_`
 // and `-` only, and Claude Code hands MCP tools to it by their names.
 //
 // The value goes under `value`, never as the arguments themselves: the spec wants an object
@@ -55,7 +56,7 @@ export interface Tool {
 	/**
 	 * The spec's hints about what a call does (spec 2025-11-25, "Tools"). A program's tool says only
 	 * `readOnlyHint: true`, on an input that writes nothing; one that writes says none, which the
-	 * spec reads as destructive. The host's `stop` says all four.
+	 * spec reads as destructive. The host's `stop` and `restart` say all four.
 	 */
 	readonly annotations?: {
 		readonly readOnlyHint: boolean;
@@ -78,6 +79,7 @@ const RUNS_TOOL: Tool = {
 
 const jobAsk = shapeOf(JobAsk);
 const stopAsk = shapeOf(StopAsk);
+const restartAsk = shapeOf(RestartAsk);
 const lineAsk = shapeOf(LineAsk);
 
 /** The tool's name for one input of one program. */
@@ -128,11 +130,12 @@ export const toolsOf = (list: ProgramList): readonly Tool[] => {
 	return tools;
 };
 
-/** A tool call, read: `runs`, `job`, `stop` or `line` with what it asks, one input's value that fits it, or why not. */
+/** A tool call, read: `runs`, `job`, `stop`, `restart` or `line` with what it asks, one input's value that fits it, or why not. */
 export type Call =
 	| {readonly kind: "runs"}
 	| {readonly kind: "job"; readonly ask: JobAsk}
 	| {readonly kind: "stop"; readonly ask: StopAsk}
+	| {readonly kind: "restart"; readonly ask: RestartAsk}
 	| {readonly kind: "line"; readonly ask: LineAsk}
 	| {
 			readonly kind: "input";
@@ -153,6 +156,10 @@ export const callOf = (list: ProgramList, name: string, args: unknown): Call => 
 		return stopAsk.check(args)
 			? {kind: "stop", ask: args}
 			: {kind: "refused", why: `${STOP} does not fit: ${stopAsk.problem(args)}`};
+	if (name === RESTART)
+		return restartAsk.check(args)
+			? {kind: "restart", ask: args}
+			: {kind: "refused", why: `${RESTART} does not fit: ${restartAsk.problem(args)}`};
 	if (name === LINE)
 		return lineAsk.check(args)
 			? {kind: "line", ask: args}

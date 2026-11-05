@@ -5,7 +5,7 @@ import * as NodeSocket from "@effect/platform-node/NodeSocket";
 import {Shell, Traces} from "@kampus/fabrika-old";
 import {callOf, toolsOf} from "@kampus/fabrika-old/mcp";
 import {memoryService} from "@kampus/fabrika-old/memory";
-import {Client} from "@modelcontextprotocol/client";
+import {Client, type ClientOptions} from "@modelcontextprotocol/client";
 import {getDefaultEnvironment, StdioClientTransport} from "@modelcontextprotocol/client/stdio";
 import {memoryTraces} from "@tea-fabrika/trace/memory";
 import {pullRequestsOf} from "@tea-fabrika/tracker";
@@ -88,8 +88,11 @@ const trackerInTile = Effect.gen(function* () {
 	return {home, paths, shown, click, agentsNow};
 });
 
-/** An MCP client, on the bridge Claude Code would start: `node cli.ts mcp --as <agent>`. */
-const agentOn = (home: string, agent: string) =>
+/**
+ * An MCP client, on the bridge Claude Code would start: `node cli.ts mcp --as <agent>`, with the
+ * SDK client's own `options`, such as what it does when the tools change.
+ */
+const agentOn = (home: string, agent: string, options?: ClientOptions) =>
 	Effect.gen(function* () {
 		const path = yield* Path.Path;
 		const cli = yield* path.fromFileUrl(new URL("../cli.ts", import.meta.url)).pipe(Effect.orDie);
@@ -103,7 +106,7 @@ const agentOn = (home: string, agent: string) =>
 		transport.stderr?.on("data", (chunk: Buffer) => {
 			stderr += chunk.toString();
 		});
-		const client = new Client({name: "test", version: "0.0.0"});
+		const client = new Client({name: "test", version: "0.0.0"}, options);
 		// A bridge that ends before MCP is up fails with what it said on stderr.
 		yield* Effect.acquireRelease(
 			Effect.tryPromise({try: () => client.connect(transport), catch: () => ({stderr})}),
@@ -219,6 +222,7 @@ describe("an agent drives the app's programs through MCP", () => {
 			"runs",
 			"job",
 			"stop",
+			"restart",
 			"line",
 			"counter_press",
 			"tracker_file",
@@ -341,4 +345,63 @@ describe("an agent drives the app's programs through MCP", () => {
 		expect(seen.two).toEqual(["claude", "codex"]);
 		expect(seen.after).toEqual([]);
 	});
+});
+
+/** A host on a fresh home's path, with no app, in its own scope: closed, it stops. */
+const hostOn = (home: string) =>
+	Effect.gen(function* () {
+		const paths = yield* pathsOf(home);
+		const host = yield* Scope.make();
+		yield* runHost({home, pid: process.pid}).pipe(Effect.scoped, Effect.forkIn(host));
+		yield* Effect.addFinalizer(() => Scope.close(host, Exit.void));
+		yield* reach(paths.mcp).pipe(
+			Effect.repeat({until: (r) => r === "live", schedule: Schedule.spaced("5 millis")}),
+			Effect.timeoutOrElse({duration: "5 seconds", orElse: () => Effect.die("no agents' socket")}),
+		);
+		return {stop: Scope.close(host, Exit.void)};
+	});
+
+// The bridge outlives the host (tracker 185b, PR 4). The window's "Stop the old host and start this
+// one" and `fabrika connect` each end the host; the bridge Claude Code started (`cli.ts mcp`) stays,
+// dials `<home>/host/mcp` again on the app's own wait (reconnect.ts POLICY), and tells the client
+// its tools changed. A call while no host answers is a JSON-RPC error that says why: the spec's
+// protocol error for a server error (2025-11-25, "Tools", Error Handling), so the client does not
+// wait out its timeout. Here the host stops and starts again in this process, on the same home.
+describe("the bridge Claude Code started, across a host restart", () => {
+	it("keeps the agent's tools: a call in the gap says why, the tools are listed again, and calls go on", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const fs = yield* FileSystem.FileSystem;
+				const home = yield* fs.makeTempDirectoryScoped({prefix: "ag-"});
+				const first = yield* hostOn(home);
+				const changed: unknown[][] = [];
+				const agent = yield* agentOn(home, "claude", {
+					listChanged: {tools: {debounceMs: 0, onChanged: (_, tools) => changed.push(tools ?? [])}},
+				});
+				const before = yield* agent.call("runs", {});
+
+				yield* first.stop;
+				// A moment for the bridge to see the socket end.
+				yield* Effect.sleep("100 millis");
+				const gap = yield* Effect.tryPromise({
+					try: () => agent.client.callTool({name: "runs", arguments: {}}),
+					catch: (e) => String(Reflect.get(Object(e), "message")),
+				}).pipe(
+					Effect.flip,
+					Effect.timeoutOrElse({
+						duration: "5 seconds",
+						orElse: () => Effect.die("the call in the gap was not answered"),
+					}),
+				);
+				yield* hostOn(home);
+				const tools = yield* until("the client's new list of tools", () => changed[0]);
+				const after = yield* agent.call("runs", {});
+				return {before, gap, tools, after};
+			}),
+		);
+		expect(seen.before.isError).toBeFalsy();
+		expect(seen.gap).toContain("the host is restarting");
+		expect(seen.tools.map((t) => Reflect.get(Object(t), "name"))).toContain("runs");
+		expect(seen.after.isError).toBeFalsy();
+	}, 30_000);
 });

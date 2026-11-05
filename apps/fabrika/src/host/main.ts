@@ -3,7 +3,7 @@ import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import {gitHubCodeHost, gitHubCodeTree} from "@kampus/pipeline/code-host-github";
 import {GITHUB, gitHubPullRequests, gitHubRepoTree} from "@tea-fabrika/tracker/github";
-import {Effect, FileSystem, Layer, Logger} from "effect";
+import {Effect, FileSystem, Layer, Logger, Runtime} from "effect";
 import {hostJev} from "./jev.ts";
 import {runHost} from "./run.ts";
 import {pathsOf} from "./socket.ts";
@@ -28,7 +28,8 @@ import {pathsOf} from "./socket.ts";
 //
 // It stops on SIGTERM or SIGINT (`NodeRuntime.runMain`): the scope closes, every tile's tsh stops
 // with it, the jobs stay in the host's table for `attach` at the next start, and the socket and
-// the pid file go.
+// the pid file go. An agent's `restart` ends it the same way from inside, with no signal sent
+// (host/serve.ts), after it leaves its note for the next host (host/restart.ts).
 // A person stops it only through the window's restart, or `fabrika connect`, which stops it so the
 // app starts one on the new ledger (host/connection.ts). A test stops its own by the pid in its home.
 //
@@ -79,4 +80,8 @@ const main = Effect.gen(function* () {
 	Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, pullRequests, repoTree)),
 );
 
-NodeRuntime.runMain(main);
+// An agent's restart ends the host with a success (host/serve.ts): it exits then, as on SIGTERM,
+// and nothing left open can keep the process alive with no socket.
+NodeRuntime.runMain(main, {
+	teardown: (exit) => Runtime.defaultTeardown(exit, (code) => process.exit(code)),
+});

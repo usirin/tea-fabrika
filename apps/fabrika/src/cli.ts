@@ -22,7 +22,8 @@
 //   // filed with where it came from (@kampus/pipeline/tickets/ticket, `From`)
 //   FABRIKA_HOME=<home> node apps/fabrika/src/cli.ts mcp --as claude
 //   // the MCP bridge an agent's client starts (host/agents.ts): stdin and stdout to the running
-//   // host's agents' socket, as agent:claude, for the home's person
+//   // host's agents' socket, as agent:claude, for the home's person. When the host ends, it dials
+//   // again on the app's own wait (reconnect.ts POLICY), so the client keeps its tools
 //
 // FABRIKA_HOME is always given, as for the host (host/main.ts): this never guesses a home, so a
 // test's home is never the owner's. The owner names theirs.
@@ -36,6 +37,7 @@ import {addressOf, connectAndRestart, invite, members} from "./host/connection.t
 import {dryRun, MoveStopped, move, reportOf} from "./host/move.ts";
 import {type Post, post} from "./host/post.ts";
 import {pathsOf, reach} from "./host/socket.ts";
+import {POLICY} from "./reconnect.ts";
 
 const home = Flag.String("home").pipe(
 	Flag.withDescription("the app's home: FABRIKA_HOME"),
@@ -197,7 +199,9 @@ const postCmd = Command.make("post").pipe(
 /**
  * The MCP bridge an agent's client starts: the agents' socket of the home's running host, on
  * stdin and stdout. Stdout is the client's alone, so every word of ours goes to stderr. It starts
- * no host: with none, it says so and ends.
+ * no host: with none, it says so and ends. A host that ends after it is up is waited for as the
+ * window waits for one (`POLICY`), so a restart from the window or `fabrika connect` does not
+ * take the agent's tools with it.
  */
 const mcpCmd = Command.make("mcp", {home, as}, (a) =>
 	Effect.gen(function* () {
@@ -206,7 +210,7 @@ const mcpCmd = Command.make("mcp", {home, as}, (a) =>
 			return yield* new BridgeStopped({
 				why: `no fabrika host serves agents on ${a.home}: open the app on it`,
 			});
-		yield* bridge(yield* NodeSocket.makeNet({path: mcp}), a.as);
+		yield* bridge(NodeSocket.makeNet({path: mcp}), a.as, POLICY);
 	}).pipe(
 		Effect.scoped,
 		Effect.catch((e) =>
