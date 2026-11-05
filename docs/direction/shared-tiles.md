@@ -13,6 +13,14 @@ guidelines" on 2026-11-04, and each is marked decided below:
 - **Decided, follow is out.** Design B (follow the agent's tile, Zed's way) keeps the split: you
   watch in your tile and act only by leaving it.
 - **Decided, how writes are signed:** [inputs carry their sender](./inputs-carry-their-sender.md).
+- **Decided 2026-11-05, `@claude` is how you summon.** There is no `summon claude` word. A plain line
+  in tsh is a command; `@claude <words>` talks to claude. With no claude on the desk, the `@` starts it
+  first and says so, since that starts a paid run.
+- **Decided 2026-11-05, no presence label on a card a step writes.** The plan step runs its own agent,
+  not the summoned claude, so a "✦ claude" tag on the plan card names the wrong writer. The label goes
+  only where claude itself writes: its lines in tsh, a button it presses. The intent stays: claude's
+  presence (its avatar, or the label on its own line) opens a box to talk to it, like a doc comment
+  ([talk where you work](./talk-where-you-work.md)).
 - **Decided 2026-11-05, no arrow pointer.** It is dropped everywhere. Agents have no cursor, so the
   presence label alone marks where an agent's job writes.
 
@@ -33,11 +41,13 @@ desk.step({type: "summon", agent: "claude", tile: "t1"}); // a tea Msg keeps `ty
 
 ```text
 One sitting, traced (today's version, after the build):
-1. The owner types `summon claude` in t1's tsh. t1's title bar gains a 12px rounded square with a ✦.
+1. The owner types `@claude run the pipeline for #7` in t1's tsh. claude is not on the desk, so t1
+   says it is starting it and that this starts a paid run. t1's title bar gains a 12px rounded square
+   with a ✦.
 2. claude sends `pipeline --ticket 7 | ticket`. It shows whole in t1, after a "✦ claude" label.
    The owner's half-typed line stays where it was.
 3. The lane asks "approve plan v1". The ticket window shows "Your turn" and the Approve button.
-   claude's job is writing the plan card, so a small "✦ claude" label sits on the card, then fades.
+   The plan card has no "✦ claude" label: the plan step's own agent writes it, not claude.
 4. The owner presses Approve, there. The row lands by the owner (cause
    in-3f9a12c0-41). claude cannot press
    it: it has no `answer` tool.
@@ -93,7 +103,8 @@ leaned in the walk (proposed).
 - **No glow and no ring.** The canvas drew a ring while the agent works. The presence label already
   says where work happens, so the ring goes.
 - **The presence label.** A small "✦ claude" name tag on the thing an agent's job is writing now: a
-  line it sent, a card its job writes. It fades after. Lean: once it fades, the name stays as plain
+  line it sent, a button it presses. Never a card a step's own agent writes (decided 2026-11-05). It
+  fades after. Lean: once it fades, the name stays as plain
   gray text beside the write, so who wrote it still shows, and the log keeps the signer either way.
   The owner's word, picked for being plain. Not "flag": a flag is already a command option, such as
   `--all`.
@@ -136,9 +147,9 @@ const Mark = Schema.TaggedUnion({
 
 ## The smaller calls (leans)
 
-1. **How the person summons.** The palette's "Summon claude here" and the tsh word `summon claude`.
-   A key later, from the keys file. 70%; the doubt is whether a word or a key comes first in daily
-   use.
+1. **How the person summons.** Decided 2026-11-05: `@claude <words>` in tsh, or the `@` menu in a
+   shared text field. Still a lean: the palette's "Summon claude here" too, and a key later, from the
+   keys file. 70%; the doubt is whether the palette row earns its place once `@` exists.
 2. **An agent's line with no summon.** It opens an ordinary shared tile beside, never a special
    kind. The agent never waits on the person to start. 70%; the doubt is a stray tile the person did
    not ask for.
@@ -196,9 +207,9 @@ line by its sender. A plan that reads `packages/fabrika/src/host/` settles it.
 
 ## Made up here
 
-`summon` as a Msg and its fields, `writing`, `Mark`, `Swatch` and its four names, "away", "claude
-stopped by owner", job `%12`, the id `in-3f9a12c0-41`, and the account number `42` in the writer
-text.
+`summon` as a Msg and its fields, the "starting it · this starts a paid run" line, `writing`,
+`Mark`, `Swatch` and its four names, "away", "claude stopped by owner", job `%12`, the id
+`in-3f9a12c0-41`, and the account number `42` in the writer text.
 
 ## What it cannot tell us
 
