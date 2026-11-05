@@ -363,22 +363,41 @@ export const holdsWord = (desk: Open): string => {
 
 // ---------------------------------------------------------------- the bottom line
 
-/** The tile a ticket is shown in, if any: an ask names it, and picking the ask focuses it. */
+/**
+ * The person's tiles in `tiles`: not an agent's own tile, nor a window of a line typed there. An
+ * agent's run takes no answer, and its tracker types nothing for the person (185b, call C), so an
+ * ask never opens in one.
+ */
+const personsOf = (desk: Open, tiles: readonly TileNode[]): readonly TileNode[] => {
+	const theirs = new Set<TileId>(Object.values(desk.agents));
+	return tiles.filter(
+		(t) => !theirs.has(t.id) && !(t.shows.kind === "window" && theirs.has(t.shows.line.from)),
+	);
+};
+
+/** The person's tile a ticket is shown in, if any: an ask names it, and picking the ask focuses it. */
 export const tileOfTicket = (
 	desk: Open,
 	ticket: number,
 	tickets: TicketsShown,
 ): TileId | undefined =>
-	desk.workspaces
-		.flatMap((ws) => tilesOf(ws))
-		.find((t) => t.shows.run !== null && tickets.get(t.shows.run.id) === ticket)?.id;
+	personsOf(
+		desk,
+		desk.workspaces.flatMap((ws) => tilesOf(ws)),
+	).find((t) => t.shows.run !== null && tickets.get(t.shows.run.id) === ticket)?.id;
 
-/** The tracker on the desk, to turn to a ticket no tile shows: the active workspace's first, else any. */
+/**
+ * The person's tracker on the desk, to turn to a ticket no tile shows: the active workspace's
+ * first, else any.
+ */
 const trackerOn = (desk: Open): TileNode | undefined => {
 	const isTracker = (t: TileNode) => t.shows.run?.program === "tracker";
 	return (
-		tilesOf(activeOf(desk)).find(isTracker) ??
-		desk.workspaces.flatMap((ws) => tilesOf(ws)).find(isTracker)
+		personsOf(desk, tilesOf(activeOf(desk))).find(isTracker) ??
+		personsOf(
+			desk,
+			desk.workspaces.flatMap((ws) => tilesOf(ws)),
+		).find(isTracker)
 	);
 };
 

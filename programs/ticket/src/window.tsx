@@ -1,4 +1,4 @@
-import type {WindowProps, Writer} from "@kampus/fabrika-old";
+import {runTakes, type WindowProps, type Writer} from "@kampus/fabrika-old";
 import {nameOf} from "@kampus/pipeline/stages/outcome";
 import type {Entry} from "@kampus/pipeline/tickets/ticket";
 import {Kbd} from "@manti-ui/react";
@@ -10,7 +10,7 @@ import {
 	type StepNow,
 	stepWords,
 } from "@tea-fabrika/tracker";
-import {whenOf} from "@tea-fabrika/tracker/window";
+import {OnlyYou, whenOf} from "@tea-fabrika/tracker/window";
 import {type KeyboardEvent, type ReactNode, useState} from "react";
 import type {ticket} from "./index.ts";
 import {type Page, runTicketOf} from "./view.ts";
@@ -21,6 +21,8 @@ import {type Page, runTicketOf} from "./view.ts";
 // It holds only what a person is in the middle of: the rows they opened, what they typed.
 
 type Send = WindowProps<typeof ticket>["send"];
+/** Opens a ticket in a tile of the person's (`WindowProps.mine`). */
+type Mine = WindowProps<typeof ticket>["mine"];
 
 const SPARK = (
 	<svg viewBox="0 0 10 10" aria-hidden="true">
@@ -112,13 +114,19 @@ const said = (pick: string) => pick.slice(0, 1).toUpperCase() + pick.slice(1);
 const primaryWords = (ask: OpenAsk, pick: string) =>
 	ask.what.startsWith(`${pick} `) ? said(ask.what) : said(pick);
 
+/**
+ * The ask, with its picks. A run that does not take `answer`, as in an agent's tile, draws no
+ * pick: `OnlyYou` stands in their place, its link to the person's own tile.
+ */
 function AskCard(props: {
 	readonly ask: OpenAsk;
 	readonly page: Page;
 	readonly now: number;
 	readonly send: Send;
+	readonly answers: boolean;
+	readonly mine: Mine;
 }) {
-	const {ask, page, now, send} = props;
+	const {ask, page, now, send, answers, mine} = props;
 	const [first, ...rest] = ask.picks;
 	const [other, setOther] = useState<string | null>(null);
 	const [note, setNote] = useState("");
@@ -147,22 +155,28 @@ function AskCard(props: {
 				</span>
 			</div>
 			<div className="acts">
-				{rest.map((pick) => (
-					<button
-						key={pick}
-						type="button"
-						className="btn quiet"
-						aria-expanded={other === pick}
-						onClick={() => setOther(other === pick ? null : pick)}
-					>
-						{said(pick)}
-					</button>
-				))}
-				<button type="button" className="btn turn" onClick={() => answer(first, "")}>
-					{primaryWords(ask, first)}
-				</button>
+				{answers ? (
+					<>
+						{rest.map((pick) => (
+							<button
+								key={pick}
+								type="button"
+								className="btn quiet"
+								aria-expanded={other === pick}
+								onClick={() => setOther(other === pick ? null : pick)}
+							>
+								{said(pick)}
+							</button>
+						))}
+						<button type="button" className="btn turn" onClick={() => answer(first, "")}>
+							{primaryWords(ask, first)}
+						</button>
+					</>
+				) : (
+					<OnlyYou ticket={ticket} mine={mine} />
+				)}
 			</div>
-			{other !== null && (
+			{answers && other !== null && (
 				<div className="noform">
 					<label className="sr" htmlFor="ticket-note">
 						Why {other}
@@ -202,12 +216,23 @@ function TurnCard(props: {
 	readonly page: Page;
 	readonly now: number;
 	readonly send: Send;
+	readonly answers: boolean;
+	readonly mine: Mine;
 }) {
-	const {head, page, now, send} = props;
+	const {head, page, now, send, answers, mine} = props;
 	const line = lineOf(head, (at) => whenOf(at, now));
 	switch (head._tag) {
 		case "asks":
-			return <AskCard ask={head.asks[0]} page={page} now={now} send={send} />;
+			return (
+				<AskCard
+					ask={head.asks[0]}
+					page={page}
+					now={now}
+					send={send}
+					answers={answers}
+					mine={mine}
+				/>
+			);
 		case "running":
 			return (
 				<section className="turnc" aria-label="Whose turn">
@@ -599,7 +624,8 @@ export function TicketWindow(props: WindowProps<typeof ticket>) {
 	return <OneTicket key={props.view.number ?? 0} {...props} />;
 }
 
-function OneTicket({view, send}: WindowProps<typeof ticket>) {
+function OneTicket(props: WindowProps<typeof ticket>) {
+	const {view, send} = props;
 	const {number, page, now} = view;
 	if (!view.ready)
 		return (
@@ -652,7 +678,14 @@ function OneTicket({view, send}: WindowProps<typeof ticket>) {
 								A write did not land: {view.failed.why}
 							</p>
 						)}
-						<TurnCard head={opened.head} page={page} now={now} send={send} />
+						<TurnCard
+							head={opened.head}
+							page={page}
+							now={now}
+							send={send}
+							answers={runTakes<typeof ticket>(props, "answer")}
+							mine={props.mine}
+						/>
 						<section className="props-inline" aria-label="Properties">
 							<Props page={page} number={number} now={now} />
 						</section>

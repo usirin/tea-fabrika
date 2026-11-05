@@ -32,11 +32,29 @@ export type InputMsgOf<P> =
 /** What a program's window is shown: its view's data. `never`: it has no window. */
 export type ViewDataOf<P> = P extends {readonly view: View<any, infer V>} ? V : never;
 
-/** What a program's window component is handed: what it shows, and the way to send. */
+/**
+ * What a program's window component is handed: what it shows, and the way to send. `takes` is the
+ * inputs its run takes, as its tsh gave them: an agent's run has no input only a person tells, so
+ * its window draws no control for one (`runTakes`). None said: every input, as from a host that
+ * says none. `mine` opens ticket n in a tile of the person's, where they can answer it.
+ *
+ *   {view, send}                                          a person's tile: every control
+ *   {view, send, takes: {"comment", "close"}, mine}       an agent's: no answer, and a line
+ *                                                         that calls mine(7) in its place
+ */
 export interface WindowProps<P> {
 	readonly view: ViewDataOf<P>;
 	readonly send: (msg: InputMsgOf<P>) => void;
+	readonly takes?: ReadonlySet<string>;
+	readonly mine?: (ticket: number) => void;
 }
+
+/**
+ * Whether a window's run takes the input `name`: yes when its host said nothing of what it takes.
+ * Name the program, as `runTakes<typeof tracker>(props, "answer")`, so a misspelled input fails.
+ */
+export const runTakes = <P>(props: WindowProps<P>, name: InputMsgOf<P>["type"]): boolean =>
+	props.takes?.has(name) ?? true;
 
 /** A message from a program's window, read: one of its inputs, or why it was refused. */
 export type ReadInput<P> =

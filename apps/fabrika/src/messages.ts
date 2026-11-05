@@ -24,7 +24,7 @@ import {SHOWS} from "./desk/keys.ts";
 // view sends. Its port is that run's: a message on it can only be for that run. Its types keep
 // the word "window", as the programs' own `WindowProps` do.
 //
-//   to a window          {type: "view", program: "counter", data: {n: 0}}
+//   to a window          {type: "view", program: "counter", data: {n: 0}, takes: ["press"]}
 //   from a window        {type: "msg", msg: {type: "press", value: "plus"}}
 //
 // A window's `msg` is one of its run's inputs, and only the run's program reads it: the host
@@ -56,6 +56,11 @@ export const ToWindow = Schema.Struct({
 	program: Schema.String,
 	/** Its view's data, which only its own schema reads. */
 	data: Schema.Unknown,
+	/**
+	 * The inputs its run takes, as its tsh gave them: an agent's run has none only a person tells,
+	 * so its window draws no control for one. A host from before 3b says none: every control draws.
+	 */
+	takes: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 export type ToWindow = typeof ToWindow.Type;
 
@@ -249,6 +254,10 @@ export type ToApp = typeof ToApp.Type;
  *   {type: "later", key: "7/a-1"}     an ask set aside: out of the count, at the list's foot
  *   {type: "back", key: "7/a-1"}      and counted again
  *   {type: "seen"}                    the asks list was opened: no ask is new any more
+ *   {type: "mine", ticket: 7}         the line in an agent's tile, "Only you can answer this.
+ *                                     Open #7 in your own tile.", pressed with no tile of the
+ *                                     person's to go to: the desk opens one beside the focused
+ *                                     tile, as theirs, showing #7. Only a ticket's number passes.
  */
 export const FromPage = Schema.Union([
 	Schema.Struct({type: Schema.Literal("press"), id: PressId, key: KeyName}),
@@ -267,6 +276,7 @@ export const FromPage = Schema.Union([
 	Schema.Struct({type: Schema.Literal("later"), key: AskKey}),
 	Schema.Struct({type: Schema.Literal("back"), key: AskKey}),
 	Schema.Struct({type: Schema.Literal("seen")}),
+	Schema.Struct({type: Schema.Literal("mine"), ticket: Schema.Int.check(Schema.isGreaterThan(0))}),
 ]);
 export type FromPage = typeof FromPage.Type;
 

@@ -1,4 +1,4 @@
-import type {WindowProps} from "@kampus/fabrika-old";
+import {type InputMsgOf, runTakes, type WindowProps} from "@kampus/fabrika-old";
 import {type Text, textOf} from "@kampus/pipeline/tickets/approval";
 import {type Suggested, suggestedName} from "@kampus/pipeline/tickets/area";
 import {Kbd} from "@manti-ui/react";
@@ -52,6 +52,10 @@ import {piecesOf} from "./links.ts";
 // browser instead.
 
 type Send = WindowProps<typeof tracker>["send"];
+/** Whether the window's run takes this input: an agent's has none only a person tells. */
+type May = (input: InputMsgOf<typeof tracker>["type"]) => boolean;
+/** Opens a ticket in a tile of the person's (`WindowProps.mine`). */
+type Mine = WindowProps<typeof tracker>["mine"];
 
 /** A write in words, for "saving" and "not saved". */
 const said = (w: Write): string => {
@@ -102,7 +106,9 @@ const prRow = (pr: PullRequest) => `pr:${pr.url}`;
 /** A repository's short name: the last part of its link. */
 const shortOf = (repo: string): string => repo.split("/").filter(Boolean).at(-1) ?? repo;
 
-export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
+export function TrackerWindow(props: WindowProps<typeof tracker>) {
+	const {view, send, mine} = props;
+	const may: May = (input) => runTakes<typeof tracker>(props, input);
 	const [picked, setPicked] = useState<string | null>(null);
 	const [title, setTitle] = useState("");
 	const [body, setBody] = useState("");
@@ -127,6 +133,7 @@ export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
 							send({type: "query", value: {status: view.filter.show, find: text}});
 						}}
 						draft={{title, body, setTitle, setBody}}
+						may={may}
 						act={send}
 					/>
 				) : (
@@ -137,6 +144,8 @@ export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
 						draft={comments[page.number] ?? ""}
 						setDraft={(text) => setComments((all) => ({...all, [page.number]: text}))}
 						back={() => send({type: "query", value: {status: view.filter.show, find}})}
+						may={may}
+						mine={mine}
 						act={send}
 					/>
 				)}
@@ -207,9 +216,14 @@ function ListPage(props: {
 	readonly find: string;
 	readonly setFind: (text: string) => void;
 	readonly draft: Draft;
+	readonly may: May;
 	readonly act: Send;
 }) {
-	const {view, page, pick, draft, act} = props;
+	const {view, pick, draft, may, act} = props;
+	// The first areas are all the person's: in an agent's tile the step is not drawn, and the list
+	// opens as if it were skipped. It is about no ticket, so there is no line to open one.
+	const firstAreas = may("make_area") && may("skip_onboarding");
+	const page = firstAreas ? props.page : {...props.page, onboarding: null};
 	const {tickets, pullRequests, counts} = page;
 	const pageRef = useRef<HTMLElement>(null);
 	const titleRef = useRef<HTMLInputElement>(null);
@@ -761,9 +775,11 @@ function TicketPage(props: {
 	readonly setDraft: (text: string) => void;
 	/** Back to the list, with the filter it had. */
 	readonly back: () => void;
+	readonly may: May;
+	readonly mine: Mine;
 	readonly act: Send;
 }) {
-	const {number, opened, saving, draft, setDraft, back, act} = props;
+	const {number, opened, saving, draft, setDraft, back, may, mine, act} = props;
 	const ticket = opened?.ticket ?? null;
 	const boxRef = useRef<HTMLTextAreaElement>(null);
 	const backRef = useRef<HTMLButtonElement>(null);
@@ -825,6 +841,7 @@ function TicketPage(props: {
 							saving={saving.some(
 								(w) => w.kind === "rate_duplicate" && w.ticket === number && w.of === hint.of,
 							)}
+							rates={may("rate_duplicate")}
 							act={act}
 							onKey={onPageKey}
 						/>
@@ -850,6 +867,8 @@ function TicketPage(props: {
 							saving={saving.some(
 								(w) => w.kind === "answer" && w.ticket === number && w.ask === ask.ask,
 							)}
+							answers={may("answer")}
+							mine={mine}
 							act={act}
 							onKey={onPageKey}
 						/>
@@ -955,25 +974,40 @@ const TimelineRow = ({
 /**
  * An open ask's box: what it asks, a note, and one button per pick. A click sends `answer`, which
  * writes `answered`; a comment never does. `saw`: the ticket's text on the page, which the answer
- * covers. While the answer is saving, the buttons wait.
+ * covers. While the answer is saving, the buttons wait. A run that does not take `answer`, as in
+ * an agent's tile, draws no note and no pick: the ask's words, and `OnlyYou` in their place.
  */
 function AskBox(props: {
 	readonly number: number;
 	readonly ask: OpenAsk;
 	readonly saw: Text;
 	readonly saving: boolean;
+	readonly answers: boolean;
+	readonly mine: Mine;
 	readonly act: Send;
 	readonly onKey: (e: KeyboardEvent) => void;
 }) {
-	const {number, ask, saw, saving, act, onKey} = props;
+	const {number, ask, saw, saving, answers, mine, act, onKey} = props;
 	const [note, setNote] = useState("");
-	return (
-		<section className="tracker-ask" aria-label={`ask: ${ask.what}`}>
+	const asks = (
+		<>
 			<p className="tracker-meta">
 				<Who of={ask} /> asks you{" "}
 				<time className="tracker-quiet">{whenOf(ask.at, Date.now())}</time>
 			</p>
 			<p className="tracker-ask-what">{ask.what}</p>
+		</>
+	);
+	if (!answers)
+		return (
+			<section className="tracker-ask" aria-label={`ask: ${ask.what}`}>
+				{asks}
+				<OnlyYou ticket={number} mine={mine} />
+			</section>
+		);
+	return (
+		<section className="tracker-ask" aria-label={`ask: ${ask.what}`}>
+			{asks}
 			<textarea
 				aria-label="note with the answer"
 				placeholder="A note with your answer, if it needs one"
@@ -1009,16 +1043,18 @@ function AskBox(props: {
 /**
  * A duplicate hint: "maybe the same as #4", the other ticket a link to its page, and accept and
  * dismiss. Advice: neither button closes or hides a ticket. The person's newest word shows as the
- * pressed button, and the other one changes it.
+ * pressed button, and the other one changes it. A run that does not take `rate_duplicate`, as in
+ * an agent's tile, keeps the hint and its link, with neither button.
  */
 function DuplicateHint(props: {
 	readonly number: number;
 	readonly hint: Hint;
 	readonly saving: boolean;
+	readonly rates: boolean;
 	readonly act: Send;
 	readonly onKey: (e: KeyboardEvent) => void;
 }) {
-	const {number, hint, saving, act, onKey} = props;
+	const {number, hint, saving, rates, act, onKey} = props;
 	const rate = (says: "accept" | "dismiss") =>
 		act({type: "rate_duplicate", value: {ticket: number, of: hint.of, says}});
 	return (
@@ -1044,27 +1080,57 @@ function DuplicateHint(props: {
 				<small className="tracker-quiet">
 					Jev {hint.yes.toFixed(2)}. A hint: nothing is closed.
 				</small>
-				<button
-					type="button"
-					aria-pressed={hint.says === "accept"}
-					disabled={saving}
-					onKeyDown={onKey}
-					onClick={() => rate("accept")}
-				>
-					Accept
-				</button>
-				<button
-					type="button"
-					aria-pressed={hint.says === "dismiss"}
-					disabled={saving}
-					onKeyDown={onKey}
-					onClick={() => rate("dismiss")}
-				>
-					Dismiss
-				</button>
-				{saving ? <small>saving…</small> : null}
+				{rates ? (
+					<>
+						<button
+							type="button"
+							aria-pressed={hint.says === "accept"}
+							disabled={saving}
+							onKeyDown={onKey}
+							onClick={() => rate("accept")}
+						>
+							Accept
+						</button>
+						<button
+							type="button"
+							aria-pressed={hint.says === "dismiss"}
+							disabled={saving}
+							onKeyDown={onKey}
+							onClick={() => rate("dismiss")}
+						>
+							Dismiss
+						</button>
+						{saving ? <small>saving…</small> : null}
+					</>
+				) : null}
 			</div>
 		</section>
+	);
+}
+
+/**
+ * In place of what only a person answers, in an agent's tile: one line, and with `mine` a link
+ * that opens the same ticket in a tile of the person's. It moves the person's focus and writes
+ * nothing. The ticket's window draws it too, so both say the same words.
+ *
+ *   <OnlyYou ticket={7} mine={mine} />    "Only you can answer this. Open #7 in your own tile."
+ */
+export function OnlyYou(props: {
+	readonly ticket: number;
+	readonly mine?: ((ticket: number) => void) | undefined;
+}): ReactNode {
+	const {ticket, mine} = props;
+	const words = <>Only you can answer this. Open #{ticket} in your own tile.</>;
+	return (
+		<p className="only-you">
+			{mine === undefined ? (
+				words
+			) : (
+				<button type="button" className="only-you-link" onClick={() => mine(ticket)}>
+					{words}
+				</button>
+			)}
+		</p>
 	);
 }
 

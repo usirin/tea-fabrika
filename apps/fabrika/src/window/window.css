@@ -2395,6 +2395,28 @@ button:focus-visible {
 	cursor: pointer;
 }
 
+/*
+ * In an agent's tile, the line in place of what only a person answers (tracker 185b, call C), in
+ * the tracker's window and the ticket's. The whole line is the link to the person's own tile,
+ * underlined, so color is not the only cue (WCAG 1.4.1).
+ */
+.only-you {
+	color: var(--text-secondary);
+}
+
+.only-you .only-you-link,
+.only-you .only-you-link:hover {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--text-primary);
+	font: inherit;
+	text-align: start;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
+
 .tracker .tracker-hint button[aria-pressed="true"] {
 	border-color: var(--key);
 	color: var(--text-primary);

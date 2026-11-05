@@ -139,6 +139,15 @@ import {
 //                                                                 open {tile: "t7", agent: "claude"}, save
 //   agents {claude: "t7"}     {type: "launch", agent: "claude"}   nothing
 //   agents {claude: "t7"}     {type: "ended", tile: "t7"}         t7 goes, and agents is {} again
+//
+// And the person presses the line in an agent's tile, "Only you can answer this. Open #7 in your
+// own tile.", with no tile of theirs to go to (window/frame.ts, `opensOf`). The desk opens one
+// beside the focused tile, as C-b | splits, and focuses it: the person clicked to go there. Its
+// tsh is the person's, and the line that shows the ticket goes to it as if typed, so the job is
+// theirs. A question up is answered no, as a click answers it.
+//
+//   t7 claude's, focused      {type: "mine", ticket: 7}           t8 beside t7, focused: open {tile: "t8"},
+//                                                                 send {tile: "t8", data: "ticket --ticket 7\r"}, save
 
 /**
  * A workspace: a layout, and the tile focus sits in. `focused` always names a tile of `layout`,
@@ -234,7 +243,9 @@ export type DeskMsg =
 	/** A command's tsh word, typed in this tile's tsh: it does what its key does, from this tile. */
 	| {readonly type: "typed"; readonly tile: TileId; readonly does: Does}
 	/** The host asks for this agent's own tile: its first `line` came. A name with a tile changes nothing. */
-	| {readonly type: "launch"; readonly agent: AgentName};
+	| {readonly type: "launch"; readonly agent: AgentName}
+	/** The person asks for a tile of their own that shows this ticket: from the line in an agent's tile. */
+	| {readonly type: "mine"; readonly ticket: number};
 
 /** An agent's name, as the host's agents' socket names it (`isAgentName`). */
 export type AgentName = string;
@@ -580,16 +591,30 @@ const windowYes = (s: Open, tile: TileId, process: string): Step => {
 	return [next, [kill({process}), ...cmds]];
 };
 
+/**
+ * A fresh tile beside the focused one in the active workspace, focused, as C-b | or C-b - makes:
+ * the desk after, and the tile's id. `null`: the layout had no room for it.
+ */
+const splitFocused = (
+	s: Open,
+	orientation: Orientation,
+): {readonly next: Open; readonly tile: TileId} | null => {
+	const ws = activeOf(s);
+	const ids = {tile: `t${s.next}`, container: `c${s.next}`};
+	const layout = split(unzoom(ws.layout), ws.focused, orientation, ids);
+	if (layout === ws.layout || findTile(layout, ids.tile) === null) return null;
+	const next = {...withWorkspace(s, {...ws, layout, focused: ids.tile}), next: s.next + 1};
+	return {next, tile: ids.tile};
+};
+
 /** What a key after the prefix does. */
 const act = (s: Open, does: Does): Step => {
 	const ws = activeOf(s);
 	switch (does.kind) {
 		case "split": {
-			const ids = {tile: `t${s.next}`, container: `c${s.next}`};
-			const layout = split(unzoom(ws.layout), ws.focused, does.orientation, ids);
-			if (layout === ws.layout || findTile(layout, ids.tile) === null) return [s, []];
-			const next = {...withWorkspace(s, {...ws, layout, focused: ids.tile}), next: s.next + 1};
-			return [next, [open({tile: ids.tile}), ...keep(next)]];
+			const made = splitFocused(s, does.orientation);
+			if (made === null) return [s, []];
+			return [made.next, [open({tile: made.tile}), ...keep(made.next)]];
 		}
 		case "focus": {
 			const to = findSibling(ws.layout, ws.focused, does.to);
@@ -666,6 +691,19 @@ const launched = (s: Open, agent: AgentName): Step => {
 		agents: {...s.agents, [agent]: ids.tile},
 	};
 	return [next, [open({tile: ids.tile, agent}), ...keep(next)]];
+};
+
+/**
+ * The person asks for a tile of their own that shows `ticket`: one beside the focused tile, as
+ * C-b | splits, focused, opened as the person's (no agent), and sent the line that shows it. A
+ * question up is answered no. Only a ticket's number makes the line, so nothing else is typed.
+ */
+const mined = (s: Open, ticket: number): Step => {
+	if (!Number.isSafeInteger(ticket) || ticket < 1) return [s, []];
+	const made = splitFocused({...s, ask: null}, "horizontal");
+	if (made === null) return [s, []];
+	const {next, tile} = made;
+	return [next, [open({tile}), send({tile, data: `ticket --ticket ${ticket}\r`}), ...keep(next)]];
 };
 
 /** This workspace comes forward. One not there, or the one forward already, changes nothing. */
@@ -983,6 +1021,7 @@ export const deskMachine = defineMachine({
 		keys: onOpen((s, m) => swapped(s, m.keys)),
 		typed: onOpen((s, m) => typed(s, m.tile, m.does)),
 		launch: onOpen((s, m) => launched(s, m.agent)),
+		mine: onOpen((s, m) => mined(s, m.ticket)),
 		show_ok: noop,
 		show_err: noop,
 		open_ok: noop,
