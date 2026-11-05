@@ -186,8 +186,9 @@ is not designed.
 
 ## Made up here
 
-The `C-b @` key, `TextField` and its props, the `@` menu's row words, `Said` and its cases, `Spot` and its fields, the refusal's words, the span names
-past the lane's real steps, claude's words, the ids, and the vitest path.
+The `C-b @` key, `TextField` and its props, the `@` menu's row words, `Said` and its cases, `Spot`
+and its fields, the refusal's words, the span names past the lane's real steps, claude's words, the
+ids, and the vitest path.
 
 ## What it cannot tell us
 
