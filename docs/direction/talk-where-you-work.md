@@ -20,13 +20,21 @@ two more on 2026-11-05, each marked decided below:
 - **Decided 2026-11-05, its network is an allow list.** Not fully off: it reaches the hosts the
   repo's `.fabrika/fabrika.toml` names (the package registry, GitHub, docs) and nothing else, the
   way GitHub's coding agent has a firewall. The agent cannot write `.fabrika/`, so it cannot widen
-  its own list; a change to the list is a person's. Still open: hiding `.env`-style files, and
-  whether it may start a paid run from its own line.
+  its own list; a change to the list is a person's. Still open: whether it may start a paid run
+  from its own line.
+- **Decided 2026-11-05, hidden files are a list too.** The same file names paths the agent cannot
+  read, with `.env` and `.env.*` hidden by default, and a repo may change the list. The sandbox
+  hides them, so claude cannot read them by any tool, not a rule it is asked to keep. The industry
+  does this as config too (Claude Code's deny rules, Copilot's paths to exclude), but none hides
+  `.env` unless asked; ours runs while nobody watches, so the default is on.
 
   ```toml
   # A sketch: the key names are not settled.
   [agent.network]
   allow = ["registry.npmjs.org", "github.com", "api.github.com", "docs.github.com"]
+
+  [agent.files]
+  hide = [".env", ".env.*"] # the default; a repo may change it
   ```
 
 Proposed: clicking a presence label as one way to talk at a spot, the syntax, the frame owning the

@@ -1,8 +1,9 @@
-# Principles: what fabrika is for, in four lines
+# Principles: what fabrika is for, in five lines
 
 **Proposed 2026-11-05.** A first draft of the principles page the design language lacks
-([design language](./design-language.md)). The owner named the first three on 2026-11-05 and the
-fourth, agent accessibility, the same day. None is settled. Both versions.
+([design language](./design-language.md)). The owner named the first three on 2026-11-05, the
+fourth, agent accessibility, the same day, and the fifth, unsure is a setting, the same evening.
+None is settled. Both versions.
 
 ```ts
 // A sketch. Each principle as a check a design or a pull request can be read against.
@@ -11,6 +12,7 @@ const Principle = Schema.TaggedUnion({
 	attention: {test: Schema.Literal("does it show only what needs the person, with context kept?")},
 	where_they_are: {test: Schema.Literal("does it start where the person is, then bring them in?")},
 	two_readers: {test: Schema.Literal("can an agent do and read all of it, through tools and data?")},
+	unsure_is_a_setting: {test: Schema.Literal("if we are not sure, is it a setting with a safe default?")},
 });
 ```
 
@@ -78,6 +80,29 @@ The running list. Each rule has its WCAG twin:
 | Every input is described, in words a model reads | Name, role, value, [4.1.2](https://www.w3.org/WAI/WCAG22/Understanding/name-role-value.html) | A test-kit check, as an a11y linter is for people |
 | A change says itself once, as a fact | Status messages, [4.1.3](https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html) | A program's outputs are facts on the ledger, never only pixels |
 
+## 5. Unsure is a setting
+
+When we are not sure of a choice, it goes in a setting, not in code everyone must live with. A
+setting has a safe default, so we can try both ways, measure, and decide. Different people and
+repos can choose differently, and we do not force our beliefs on them.
+
+- **Means:** a choice short of sure lives in the repo's `fabrika.toml`
+  ([one fabrika.toml per repo](./one-fabrika-toml-per-repo.md)) or as a feature flag in it, with a
+  default that is the safe side. Which value each person runs, and what came of it, is recorded
+  ([record wide](../../AGENTS.md)), so the data can decide later. First use: the started claude's
+  network allow list and hidden files ([talk where you work](./talk-where-you-work.md)).
+- **Why:** the industry's way. Martin Fowler's
+  [feature toggles](https://martinfowler.com/articles/feature-toggles.html) name four kinds:
+  release, experiment, ops and permission. Claude Code's deny rules and Copilot's paths to exclude
+  are settings for the same reason.
+- **Two kinds, kept apart.** An experiment flag, which waits on a decision, comes out once the data
+  decides: Fowler calls a flag left behind debt. A preference, where people truly differ, stays.
+- **A wall is never a setting an agent can turn off.** A setting comes from a person: an agent
+  cannot write `.fabrika/`. And a person-only wall (no agent answers or approves) is not a setting
+  at all.
+- **Breaks it:** a guess hard-coded for everyone, a setting with no default or an unsafe one, or a
+  flag nobody records the use of.
+
 ## Other candidates
 
 The design-language draft offers five lines for the design system itself, in fabrika's words. They
@@ -93,14 +118,15 @@ sit one level down from the four above, and the owner picks which stay:
 
 - **Why:** every later argument points at a line. The rules in AGENTS.md's "Changing the product"
   (the daily moment first, keep the platform's defaults, Linear as the builder) stay there as
-  product rules; these four say what the product is for.
-- **Cost:** this page, about 100 lines, and one test-kit check per row in principle 4 when built.
-- **How sure:** 70% on the four. The doubt is whether "multiplayer" is the right first word for a
-  product two people use today; a month of daily use says.
+  product rules; these five say what the product is for.
+- **Cost:** this page, about 130 lines, and one test-kit check per row in principle 4 when built.
+- **How sure:** 70% on the five. The doubt is whether "multiplayer" is the right first word for a
+  product two people use today; a month of daily use says. On the fifth, the doubt is how many
+  settings grow before they need their own page.
 
 ## What it cannot tell us
 
-- Whether these four settle real arguments. Only the next few design walks show it.
+- Whether these five settle real arguments. Only the next few design walks show it.
 - Whether "agent accessibility" holds as a set of rules. We found no published guidelines of this
   kind, and the twins above are our mapping, not a standard.
 - Whether a test-kit check can tell a good description from a bad one. Words a model reads well are
