@@ -15,8 +15,19 @@ two more on 2026-11-05, each marked decided below:
   ([experiment 210](../../experiments/210-at-claude-wrapper-or-primitive.md)). A Claude Code the
   person started themselves is out: reaching it would need a new push.
 - **Decided 2026-11-05, the started claude works in the repo.** The agent `@claude` starts gets the
-  person's repo folder and the fabrika connection, not today's scratch folder. Still open: what its
-  sandbox blocks once it is in the repo. It still has no `answer` tool.
+  person's repo folder and the fabrika connection, not today's scratch folder. It still has no
+  `answer` tool ([experiment 211](../../experiments/211-started-claude-sandbox.md)).
+- **Decided 2026-11-05, its network is an allow list.** Not fully off: it reaches the hosts the
+  repo's `.fabrika/fabrika.toml` names (the package registry, GitHub, docs) and nothing else, the
+  way GitHub's coding agent has a firewall. The agent cannot write `.fabrika/`, so it cannot widen
+  its own list; a change to the list is a person's. Still open: hiding `.env`-style files, and
+  whether it may start a paid run from its own line.
+
+  ```toml
+  # A sketch: the key names are not settled.
+  [agent.network]
+  allow = ["registry.npmjs.org", "github.com", "api.github.com", "docs.github.com"]
+  ```
 
 Proposed: clicking a presence label as one way to talk at a spot, the syntax, the frame owning the
 box, the keys, and the accessibility wiring.
