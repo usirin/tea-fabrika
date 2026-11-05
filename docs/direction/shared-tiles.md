@@ -13,6 +13,8 @@ guidelines" on 2026-11-04, and each is marked decided below:
 - **Decided, follow is out.** Design B (follow the agent's tile, Zed's way) keeps the split: you
   watch in your tile and act only by leaving it.
 - **Decided, how writes are signed:** [inputs carry their sender](./inputs-carry-their-sender.md).
+- **Decided 2026-11-05, no arrow pointer.** It is dropped everywhere. Agents have no cursor, so the
+  presence label alone marks where an agent's job writes.
 
 Proposed, leaned in the walk but not settled: the presence design (P2 plus P4, below), its
 color, and the per-writer swatch.
@@ -95,8 +97,10 @@ leaned in the walk (proposed).
   gray text beside the write, so who wrote it still shows, and the log keeps the signer either way.
   The owner's word, picked for being plain. Not "flag": a flag is already a command option, such as
   `--all`.
-- **No cursor.** Agents send whole writes, so we never draw a moving pointer. Liveblocks' examples
-  draw an agent cursor from presence data; we chose not to fake one.
+- **No cursor, no arrow pointer (decided 2026-11-05).** The arrow pointer is dropped everywhere.
+  Agents send whole writes and have no cursor, so the presence label alone marks where an agent's
+  job writes. Liveblocks' examples draw an agent cursor from presence data; we chose not to fake
+  one.
 - **Shown once.** The presence label replaces the `claude>` writer label on a line, so the name
   shows once. A tile where claude's job writes, but claude is not, gets the label and no avatar.
 

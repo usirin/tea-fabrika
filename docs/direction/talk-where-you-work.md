@@ -45,7 +45,8 @@ tsh$ git log --oneline -3                          you keep working; your prompt
   and ships a denylist for commands it wrongly took for English
   ([Warp](https://docs.warp.dev/terminal/input/universal-input/)). `@` never guesses.
 - **In a program with a text box,** such as a ticket's comment, `@claude` works there too, as
-  Linear's agent mentions do ([Linear agents](https://linear.app/developers/agents)).
+  Linear's agent mentions do ([Linear agents](https://linear.app/developers/agents)). See
+  [every text box can summon](#every-text-box-can-summon) below.
 - **In the data:** your `@` line is an input by you (`in-3f9a0c21-50`). Each line claude runs is
   its own input, by claude, so its writes are signed by claude. The open lean adds your message as
   its stated reason, recorded and never deciding
@@ -57,6 +58,35 @@ const Said = Schema.TaggedUnion({
 	to: {agent: Schema.String, words: Schema.String}, // @claude why ...
 	only: {words: Schema.String}, // @ why ...  -> the one agent here, or refused
 });
+```
+
+## Every text box can summon
+
+Proposed 2026-11-05 (the owner leaned for it). Every text box is a place to call in your agents,
+not only tsh.
+
+- **The `@` menu lists agents already on your desk first,** then a "summon <name> here" row for one
+  that is not.
+- **Picking that row is the summon, said in words.** It starts a paid run and gets permissions, so
+  it is never a silent side effect of finishing a name.
+- **A program opts in with one prop.** It builds its box from fabrika's shared text field in the
+  design package ([one design package](./fabrika-design-package.md)) instead of a plain textarea.
+  The field does the `@` list and the summon, sends the words as the person's input, and shows the
+  reply. A plain box stays plain text.
+- **A program with no text box** gets the frame's spot box instead (below).
+- **In the data:** the person's words are their input. The reply is the agent's own write, signed
+  by the agent; under the open lean, the person's words are its stated reason
+  ([inputs carry their sender](./inputs-carry-their-sender.md#open-an-agents-stated-reason)).
+
+```tsx
+// A sketch, today's version. `TextField` and its props are made up.
+// Before: a plain box, plain text.
+<textarea value={m.draft} onInput={draftChanged} />
+// After: the shared field. `agents` is the whole opt-in.
+<TextField value={m.draft} onInput={draftChanged} agents />
+// The @ menu it opens in ticket #7's comment box, claude on the desk, codex not:
+//   ✦ claude                 on your desk
+//   ✦ summon codex here      starts a run
 ```
 
 ## Talking at a spot
@@ -156,7 +186,7 @@ is not designed.
 
 ## Made up here
 
-The `C-b @` key, `Said` and its cases, `Spot` and its fields, the refusal's words, the span names
+The `C-b @` key, `TextField` and its props, the `@` menu's row words, `Said` and its cases, `Spot` and its fields, the refusal's words, the span names
 past the lane's real steps, claude's words, the ids, and the vitest path.
 
 ## What it cannot tell us
