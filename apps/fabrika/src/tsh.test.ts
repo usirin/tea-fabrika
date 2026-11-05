@@ -18,17 +18,31 @@ import {memoryTraces} from "@tea-fabrika/trace/memory";
 import {Author, PullRequests, tracker} from "@tea-fabrika/tracker";
 import {LANE, SEVEN, SEVEN_BODY, SEVEN_TITLE, SEVEN_TRACE} from "@tea-fabrika/tracker/seven";
 import {Effect, FileSystem, Layer, Schema} from "effect";
-import {describe, expect, it} from "vitest";
+import {describe, expect, it, vi} from "vitest";
 import {BINDINGS, type Does, wordOf} from "./desk/keys.ts";
 import {deskWords} from "./desk/words.ts";
 import {gridOf} from "./editor/grid.ts";
 import {type History, memoryHistory, type SharedHistory, sharedHistory} from "./editor/history.ts";
+import {jobLines} from "./job-lines.ts";
 import type {TileJobs} from "./tile-jobs.ts";
 import {appPrograms, type Placed, type Runs, startTsh, tshList, type WindowScreen} from "./tsh.ts";
 
 // One tile's tsh, with a fake terminal page and a fake tile and no Electron: what a person would see
 // in the terminal, read off its grid (editor/grid.ts), and what each program's view is shown.
 // The ledger is in memory.
+
+/** How many times tsh was told `signal`: one Ctrl-C is one interrupt, whichever path it took. */
+const signals = vi.hoisted(() => ({told: 0}));
+
+// `tell` as it is, counted when it tells tsh's `signal`. Nothing else changes.
+vi.mock("@kampus/fabrika-old", async (importOriginal) => {
+	const real = await importOriginal<typeof import("@kampus/fabrika-old")>();
+	const tell: typeof real.tell = (run, name, value) => {
+		if (name === "signal") signals.told += 1;
+		return real.tell(run, name, value);
+	};
+	return {...real, tell};
+});
 
 /** What the fake tile saw, in order. */
 type Seen =
@@ -59,6 +73,8 @@ const session = (
 		readonly words?: readonly Entry[];
 		/** The jobs' records `trace` reads. None written, unless a test hands its own. */
 		readonly traces?: Layer.Layer<Traces>;
+		/** Who the tsh runs as: the person, unless a test hands an agent (tracker 185b, PR 3). */
+		readonly author?: Author["Service"];
 	} = {},
 ) =>
 	Effect.gen(function* () {
@@ -84,15 +100,18 @@ const session = (
 		};
 		// Each session is a host of its own: it opens the host's table, on the storage it is handed.
 		const jobs = yield* openJobs(opts.jobs ?? memoryStorage());
+		// The host's job lines, as the host hands them to each tile: what the agents' `job` tool reads.
+		const lines = yield* jobLines(jobs.table);
 		const host = yield* startTsh({
 			tile: "t1",
 			jobs,
 			history: opts.shared ?? (yield* sharedHistory(opts.history ?? memoryHistory())),
 			runs,
 			words: opts.words ?? [],
+			lines,
 		}).pipe(
 			Effect.provideService(Ledger, opts.ledger ?? memoryService()),
-			Effect.provideService(Author, {kind: "user", id: "owner"}),
+			Effect.provideService(Author, opts.author ?? {kind: "user", id: "owner"}),
 			// No pull requests: no test reads GitHub.
 			Effect.provideService(PullRequests, {open: Effect.succeed([])}),
 			Effect.provide(opts.traces ?? memoryTraces([])),
@@ -142,7 +161,21 @@ const session = (
 			};
 		const press = (run: string, value: unknown) =>
 			window(run).heard({type: "msg", msg: {type: "press", value}});
-		return {host, jobs, rows, until, prompts, type, opened, viewed, closed, window, press, seen};
+		return {
+			host,
+			jobs,
+			lines,
+			rows,
+			until,
+			prompts,
+			type,
+			opened,
+			viewed,
+			closed,
+			window,
+			press,
+			seen,
+		};
 	});
 
 /** Ticket 7 on `ledger`, as a lane left it (@tea-fabrika/tracker/seven). */
@@ -865,5 +898,317 @@ describe("the desk's words", () => {
 		);
 		expect(rows).toContain("tsh: focus failed: no tile t9");
 		expect(said).toEqual([{kind: "go", tile: "t9"}]);
+	});
+});
+
+// An agent's tsh (tracker 185b, PR 3). Today's version. Its Author is the agent's, so it lists only
+// `forAgent`'s inputs and runs the lines the agent hands it with `Tsh.line`. Each line is written
+// on the screen first, as typed, so the person sees what ran, and none goes in the shared history:
+// the person's Up and Ctrl-R stay theirs. A line the person types there is refused with one line,
+// and runs nothing: a person's line never runs as the agent. Ctrl-C is still the person's.
+//
+//   tsh.line("tally &")           "$ tally &"; {_tag: "job", job: {n: 1, tile: "t1", ...}}
+//   tsh.line("counter")           {_tag: "job", ...}: it answers as the job begins
+//   tsh.line("tally")             refused: claude's tile runs %2 in the foreground: stop it, or end the line with &
+//   the person: "ls" Enter        lines here run as claude: split for your own tile (C-b |)
+
+const CLAUDE = {kind: "agent", id: "claude", for: "owner"} as const;
+const AS_CLAUDE = "agent:claude for:owner";
+
+describe("an agent's tsh", () => {
+	it("runs a line the agent hands it, shows it as typed, and keeps it out of the person's history", async () => {
+		const history = memoryHistory(["git log --oneline -3"]);
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session({author: CLAUDE, history});
+				yield* s.prompts(1);
+				// made up: `Tsh.line`, answering the tool's `LineAnswer`.
+				const job = yield* s.host.line("tally &");
+				const shown = yield* s.until("the line as typed", () =>
+					s.rows().find((r) => r.includes("$ tally &")),
+				);
+				const said = yield* s.host.line("jobs");
+				return {
+					job,
+					shown,
+					said,
+					by: s.jobs.table.getState().jobs.map((j) => [j.n, j.by]),
+				};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.job).toMatchObject({_tag: "job", job: {n: 1, text: "tally &", tile: "t1"}});
+		expect(seen.shown).toContain("$ tally &");
+		expect(seen.said).toEqual({_tag: "said", lines: ["[1] running   tally"], status: 0});
+		expect(seen.by).toEqual([[1, AS_CLAUDE]]);
+		expect(history.kept()).toEqual(["git log --oneline -3"]);
+	});
+
+	it("refuses a second line while one runs in the foreground, and the person's Ctrl-C stops that one", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session({author: CLAUDE});
+				yield* s.prompts(1);
+				const first = yield* s.host.line("counter");
+				yield* s.opened();
+				const second = yield* s.host.line("tally").pipe(Effect.flip);
+				const behind = yield* s.host.line("tally &");
+				s.type("\x03");
+				// Stopped, not ended on its own: the screen says so. A job that ended leaves the table.
+				const stopped = yield* s.until("the foreground job stopped, and left the table", () =>
+					s.jobs.table.getState().jobs.some((j) => j.n === 1)
+						? undefined
+						: s.rows().find((r) => r === "[stopped] counter"),
+				);
+				const after = yield* s.host.line("jobs");
+				return {first, second, behind, stopped, after};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.stopped).toBe("[stopped] counter");
+		expect(seen.first).toMatchObject({_tag: "job", job: {n: 1, text: "counter"}});
+		expect(seen.second).toMatchObject({
+			_tag: "LineRefused",
+			why: "claude's tile runs %1 in the foreground: stop it, or end the line with &",
+		});
+		// A line in the background is no line in the foreground: it runs beside it.
+		expect(seen.behind).toMatchObject({_tag: "job", job: {n: 2, text: "tally &"}});
+		expect(seen.after).toMatchObject({_tag: "said", status: 0});
+	});
+
+	it("refuses a line the person types there, with one line, and runs nothing", async () => {
+		const history = memoryHistory();
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session({author: CLAUDE, history});
+				yield* s.prompts(1);
+				s.type("tally &\r");
+				const note = yield* s.until("the note", () =>
+					s.rows().find((r) => r.includes("lines here run as claude")),
+				);
+				return {note, jobs: s.jobs.table.getState().jobs.length};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.note).toBe("lines here run as claude: split for your own tile (C-b |)");
+		expect(seen.jobs).toBe(0);
+		expect(history.kept()).toEqual([]);
+	});
+
+	it("takes no person-only input: tracker's answer is no input here (d16)", async () => {
+		const said = await go(
+			Effect.gen(function* () {
+				const s = yield* session({author: CLAUDE});
+				yield* s.prompts(1);
+				return yield* s.host.line("tracker answer=1");
+			}).pipe(Effect.scoped),
+		);
+		expect(said._tag).toBe("said");
+		expect(said._tag === "said" ? said.status : 0).not.toBe(0);
+		expect(
+			said._tag === "said" &&
+				said.lines.some((l) => l.includes("tracker has no input named answer")),
+		).toBe(true);
+	});
+});
+
+// Owed by PR 3's mutation step (tracker 185b). Today's version. Each pins one rule of an agent's
+// line that no test above reached: the line's own shape, a person's tsh, Ctrl-C on either tile, a
+// line beside the foreground that names no program, and a table's rows.
+//
+//   tsh.line("")                       refused: a line is 1 to 4096 characters on one line, ...
+//   person's tsh.line("tally &")       refused: t1 is the person's tile: an agent's line runs only in its own
+//   counter runs; tsh.line("nosuch &") {_tag: "said", lines: [...], status: 127}
+//   tsh.line("experiments")            the table on the person's screen, its rows as text for the agent
+
+/** What `Tsh.line` refuses for the line's own shape (packages/fabrika/src/mcp/line.ts). */
+const SHAPE = "a line is 1 to 4096 characters on one line, with no control character";
+
+describe("an agent's tsh: what the mutation step found untested", () => {
+	it("refuses a line that is empty, has a newline, is past 4096 characters or holds a control character, and writes nothing; 4096 is taken", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session({author: CLAUDE});
+				yield* s.prompts(1);
+				const refused = [];
+				for (const text of ["", "a\nb", "x".repeat(4097), "\x1b[2J"])
+					refused.push(yield* s.host.line(text).pipe(Effect.flip));
+				const before = s.rows().filter((r) => r.startsWith("$ "));
+				const jobs = s.jobs.table.getState().jobs.length;
+				const longest = yield* s.host.line("x".repeat(4096));
+				return {refused, before, jobs, longest};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.refused).toEqual(Array(4).fill(expect.objectContaining({why: SHAPE})));
+		expect(seen.refused.map((r) => r._tag)).toEqual(Array(4).fill("LineRefused"));
+		expect(seen.before).toEqual([]);
+		expect(seen.jobs).toBe(0);
+		// Taken: no program has that name, so tsh says so, and the line is done.
+		expect(seen.longest).toMatchObject({_tag: "said", status: 127});
+	});
+
+	it("refuses a line in a person's tsh, and prints and starts nothing", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session();
+				yield* s.prompts(1);
+				const refused = yield* s.host.line("tally &").pipe(Effect.flip);
+				yield* Effect.sleep("50 millis");
+				return {refused, rows: s.rows(), jobs: s.jobs.table.getState().jobs.length};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.refused).toMatchObject({
+			_tag: "LineRefused",
+			why: "t1 is the person's tile: an agent's line runs only in its own",
+		});
+		expect(seen.rows).toEqual(["tsh$"]);
+		expect(seen.jobs).toBe(0);
+	});
+
+	it("reads a resize in an agent's tile, and the person's Ctrl-C there stops the foreground job with one interrupt", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session({author: CLAUDE});
+				yield* s.prompts(1);
+				const resized = s.host.terminal.heard({type: "size", cols: 100, rows: 30});
+				yield* s.host.line("counter");
+				yield* s.opened();
+				const before = signals.told;
+				s.type("\x03");
+				const stopped = yield* s.until("counter stopped", () =>
+					s.rows().find((r) => r === "[stopped] counter"),
+				);
+				yield* Effect.sleep("50 millis");
+				return {resized, stopped, interrupts: signals.told - before};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.resized).toEqual({kind: "read"});
+		expect(seen.stopped).toBe("[stopped] counter");
+		expect(seen.interrupts).toBe(1);
+	});
+
+	it("tells tsh one interrupt for one Ctrl-C in a person's tile, as the editor sends it while busy", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session();
+				s.type("counter\r");
+				yield* s.opened();
+				const before = signals.told;
+				s.type("\x03");
+				const stopped = yield* s.until("counter stopped", () =>
+					s.rows().find((r) => r === "[stopped] counter"),
+				);
+				yield* Effect.sleep("50 millis");
+				return {stopped, interrupts: signals.told - before};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.stopped).toBe("[stopped] counter");
+		expect(seen.interrupts).toBe(1);
+	});
+
+	it("answers a line beside the foreground that names no program with its status, and does not hang", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session({author: CLAUDE});
+				yield* s.prompts(1);
+				yield* s.host.line("counter");
+				yield* s.opened();
+				return yield* s.host
+					.line("nosuch &")
+					.pipe(Effect.timeoutOrElse({duration: "3 seconds", orElse: () => Effect.die("it hung")}));
+			}).pipe(Effect.scoped),
+		);
+		expect(seen).toMatchObject({_tag: "said", status: 127});
+		expect(seen._tag === "said" && seen.lines.some((l) => l.includes("nosuch"))).toBe(true);
+	});
+
+	it("shows a program's table, run by the agent's line, on the person's screen", async () => {
+		const shown = await go(
+			Effect.gen(function* () {
+				const s = yield* session({author: CLAUDE});
+				yield* s.prompts(1);
+				yield* s.host.line("experiments");
+				return yield* s.until("the table on the screen", () =>
+					s.rows().find((r) => r.includes("Experiments")),
+				);
+			}).pipe(Effect.scoped),
+		);
+		expect(shown).toContain("Experiments");
+	});
+
+	// The line's program begins a job, so its answer is `job` (the plan, PR 3), and the agent reads
+	// the table as the job's lines, with the `job` tool (`lines.job`, job-lines.ts).
+	// Red on PR 3a's build: tsh keeps a table's rows only for the line's `said` (`speaking()`), never
+	// as the job's lines, so the job's lines never hold them.
+	it("answers the agent with a table's rows as text", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session({author: CLAUDE});
+				yield* s.prompts(1);
+				const answer = yield* s.host.line("experiments");
+				const row = yield* s.until("the table in job 1's lines", () =>
+					s.lines.job(1)?.lines.find((l) => l.includes("Experiments")),
+				);
+				return {answer, row};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.answer).toMatchObject({_tag: "job", job: {n: 1}});
+		expect(seen.row).toContain("Experiments");
+	});
+});
+
+// `attach %n` with no & (PR 381's review, finding 1). Today's version. The job keeps the number it
+// had, so it never begins since the line was sent: the line answers with that job as it comes to
+// the foreground, as a fresh foreground line answers at its job's start, so the call never waits on
+// the job's end and the next line is not held behind it.
+//
+//   tsh.line("counter &"); tsh.line("attach %1")   {_tag: "job", job: {n: 1, text: "counter", ...}}
+//   the next host: tsh.line("attach %1")           the same answer, for the detached job
+
+/** The `line` call's own bound in these cases: a hang fails here, not at the test's timeout. */
+const answered = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+	effect.pipe(Effect.timeoutOrElse({duration: "3 seconds", orElse: () => Effect.die("it hung")}));
+
+describe("an agent's tsh: attach %n in the foreground", () => {
+	it("answers with the job as a job of the background comes to the foreground, and takes the next line", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session({author: CLAUDE});
+				yield* s.prompts(1);
+				yield* s.host.line("counter &");
+				yield* s.opened();
+				const attached = yield* answered(s.host.line("attach %1"));
+				const next = yield* answered(s.host.line("tally &"));
+				return {attached, next};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.attached).toEqual({
+			_tag: "job",
+			job: {n: 1, text: "counter", tile: "t1", state: {_tag: "running"}, lines: []},
+		});
+		expect(seen.next).toMatchObject({_tag: "job", job: {n: 2, text: "tally &"}});
+	});
+
+	it("answers with the job as a detached job is attached again, and takes the next line", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped();
+				// The first host: the agent's counter, left running as the host stops.
+				yield* Effect.gen(function* () {
+					const s = yield* session({author: CLAUDE, jobs: fileStorage(dir)});
+					yield* s.prompts(1);
+					yield* s.host.line("counter &");
+					yield* s.opened();
+				}).pipe(Effect.scoped);
+
+				const s = yield* session({author: CLAUDE, jobs: fileStorage(dir)});
+				yield* s.until("the earlier job", () => s.rows().find((r) => r.startsWith("tsh: 1 job")));
+				const attached = yield* answered(s.host.line("attach %1"));
+				const next = yield* answered(s.host.line("tally &"));
+				return {attached, next};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.attached).toEqual({
+			_tag: "job",
+			job: {n: 1, text: "counter", tile: "t1", state: {_tag: "running"}, lines: []},
+		});
+		expect(seen.next).toMatchObject({_tag: "job", job: {n: 2, text: "tally &"}});
 	});
 });

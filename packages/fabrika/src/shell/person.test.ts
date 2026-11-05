@@ -62,10 +62,19 @@ const one = defineProgram({
 
 const PROGRAMS = programList([...SMALL, listed(list, Layer.empty), listed(one, Layer.empty)]);
 
+/**
+ * What tsh's `table` output sends: the table, and `n`, the job that printed it, as `printed` says
+ * its job. With no job, no `n`.
+ */
+interface Shown {
+	readonly table: Table;
+	readonly n?: number;
+}
+
 const session = (show: "short" | "json") =>
 	Effect.gen(function* () {
 		const printed = ear<Printed>();
-		const tables = ear<Table>();
+		const tables = ear<Shown>();
 		const ready = ear<Ready>();
 		const storage = memoryStorage();
 		const started = yield* start(
@@ -106,24 +115,28 @@ const run = <A, E>(
 	);
 
 describe("tsh prints for a person", () => {
+	// A table output names the job that printed it, `{table, n}`, as `printed` does.
 	it("a table once the run has ended, with no output's name, and not the text meant for a pipe", async () => {
 		const seen = await run("short", (line) => line("list --to 3"));
 		expect(seen.out).toEqual([]);
 		expect(seen.tables).toEqual([
 			{
-				title: "Rows",
-				note: null,
-				total: 3,
-				columns: [
-					{header: "#", align: "right"},
-					{header: "TITLE", align: "left"},
-				],
-				cut: 1,
-				rows: [3, 2, 1].map((n, i) => [
-					{text: String(n), tone: "muted"},
-					{text: `row ${i}`, tone: "plain"},
-				]),
-				hints: [],
+				n: 1,
+				table: {
+					title: "Rows",
+					note: null,
+					total: 3,
+					columns: [
+						{header: "#", align: "right"},
+						{header: "TITLE", align: "left"},
+					],
+					cut: 1,
+					rows: [3, 2, 1].map((n, i) => [
+						{text: String(n), tone: "muted"},
+						{text: `row ${i}`, tone: "plain"},
+					]),
+					hints: [],
+				},
 			},
 		]);
 	});
@@ -132,8 +145,11 @@ describe("tsh prints for a person", () => {
 		const seen = await run("short", (line) =>
 			Effect.all([line("list --to 25"), line("list --to 25 --all")], {concurrency: 1}),
 		);
-		expect(seen.map((s) => s.tables[0]?.rows.length)).toEqual([20, 25]);
-		expect(seen[0]?.tables[0]?.hints).toEqual([{line: "list --to 25 --all", for: "for every row"}]);
+		expect(seen.map((s) => s.tables[0]?.n)).toEqual([1, 2]);
+		expect(seen.map((s) => s.tables[0]?.table.rows.length)).toEqual([20, 25]);
+		expect(seen[0]?.tables[0]?.table.hints).toEqual([
+			{line: "list --to 25 --all", for: "for every row"},
+		]);
 	});
 
 	it("refuses `--all` on a program with no table", async () => {

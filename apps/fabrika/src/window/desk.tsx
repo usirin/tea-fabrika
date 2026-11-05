@@ -593,7 +593,8 @@ function Container(props: {
 	return (
 		<div className={`container ${container.orientation}`} data-container={container.id} ref={ref}>
 			{container.children.flatMap((child) => {
-				if (isFolded(child)) return [<Strip key={child.id} node={child} toHost={toHost} />];
+				if (isFolded(child))
+					return [<Strip key={child.id} node={child} toHost={toHost} agents={desk.agents} />];
 				const before = open[open.indexOf(child.id) - 1];
 				return [
 					...(before === undefined
@@ -651,6 +652,7 @@ function DeskTile(props: {
 			folds={fold(ws.layout, tile.id) !== ws.layout}
 			tickets={ticketsShown(store.views)}
 			keys={store.keys}
+			agents={desk.agents}
 			toHost={toHost}
 		>
 			{tile.shows.kind !== "window" && <Body tile={tile.id} />}

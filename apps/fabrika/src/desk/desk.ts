@@ -1,6 +1,7 @@
 import {defineMachine, noop} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
-import {Schema, SchemaTransformation} from "effect";
+import {isAgentName} from "@kampus/fabrika-old";
+import {Effect, Option, Schema, SchemaTransformation} from "effect";
 import {TileJobs} from "../tile-jobs.ts";
 import {bindingFor, type Does as Command, commandOn, defaults, Key, type Keys} from "./keymap.ts";
 import {type Does, REPEAT_MS, SHOWS} from "./keys.ts";
@@ -127,6 +128,17 @@ import {
 //
 // Time is in the Msg (`at`), not read here: the repeat window is a deadline in the state, so no
 // timer is needed, and a key after the deadline is the tile's again.
+//
+// And the host asks for an agent's own tile, as the agent's first `line` comes (tracker 185b): one
+// tile per agent's name, kept in `agents`, a map, so two tiles for one name cannot be written
+// down. It opens folded beside the focused tile, in the active workspace, and no focus moves, as
+// tmux's `split-window -d` leaves the current pane current. Its tsh opens as the agent. When the
+// tile goes, its name goes with it, and a kept desk opens it as the agent's again.
+//
+//   agents {}                 {type: "launch", agent: "claude"}   t7 beside the focused t3, folded:
+//                                                                 open {tile: "t7", agent: "claude"}, save
+//   agents {claude: "t7"}     {type: "launch", agent: "claude"}   nothing
+//   agents {claude: "t7"}     {type: "ended", tile: "t7"}         t7 goes, and agents is {} again
 
 /**
  * A workspace: a layout, and the tile focus sits in. `focused` always names a tile of `layout`,
@@ -162,6 +174,12 @@ export interface Open {
 	readonly next: number;
 	/** The workspace's size in px, as the page last said, or `null` before any page has. */
 	readonly area: Area | null;
+	/**
+	 * Each agent's own tile, by the agent's name: its tsh runs as that agent. Every tile named is
+	 * on the desk, and no tile is named twice. Only `launch` adds a name; a tile that goes takes its
+	 * name with it.
+	 */
+	readonly agents: Readonly<Record<AgentName, TileId>>;
 	/**
 	 * The keys file's table, as the host last swapped it in, or none: the defaults (keymap.ts). It is
 	 * not kept, as the file is: a desk read back starts on the defaults until the host swaps again.
@@ -214,13 +232,31 @@ export type DeskMsg =
 	/** The keys file's table: the file was saved, or the host started. */
 	| {readonly type: "keys"; readonly keys: Keys}
 	/** A command's tsh word, typed in this tile's tsh: it does what its key does, from this tile. */
-	| {readonly type: "typed"; readonly tile: TileId; readonly does: Does};
+	| {readonly type: "typed"; readonly tile: TileId; readonly does: Does}
+	/** The host asks for this agent's own tile: its first `line` came. A name with a tile changes nothing. */
+	| {readonly type: "launch"; readonly agent: AgentName};
+
+/** An agent's name, as the host's agents' socket names it (`isAgentName`). */
+export type AgentName = string;
 
 /** A tile's id: `t` and a number. The host names a folder by it, so nothing else passes. */
 export const TileIdSchema = Schema.String.check(Schema.isPattern(/^t[0-9]{1,9}$/));
 
+/** An agent's name: small letters, digits, dots, dashes and underscores. */
+const AgentNameSchema = Schema.String.check(
+	Schema.makeFilter(
+		(name) =>
+			isAgentName(name) || "an agent's name: small letters, digits, dots, dashes, underscores",
+	),
+);
+
+/** Each agent's own tile, by its name. */
+const AgentsSchema = Schema.Record(AgentNameSchema, TileIdSchema);
+
 const Done = Schema.Null;
 const Tile = Schema.Struct({tile: TileIdSchema});
+/** A tile to open: its tsh runs as the person, or, with `agent`, as that agent. */
+const Opening = Schema.Struct({tile: TileIdSchema, agent: Schema.optionalKey(AgentNameSchema)});
 
 /** A workspace's layout, as it is kept: every line has its letter. */
 const LayoutSchema = Schema.declare(isLayoutTree);
@@ -240,16 +276,20 @@ const KeptLayoutSchema = Schema.declare(isKeptTree).pipe(
 	),
 );
 
-/** The kept desk's shape, over the layout read in it. */
-const savedWith = <S extends Schema.Top>(layout: S) =>
+/** The kept desk's shape, over the layout read in it, and its agents as they are read. */
+const savedWith = <S extends Schema.Top, A extends Schema.Top>(layout: S, agents: A) =>
 	Schema.Struct({
 		workspaces: Schema.Array(Schema.Struct({id: Schema.String, layout, focused: Schema.String})),
 		active: Schema.String,
 		next: Schema.Int,
+		agents,
 	});
 
-/** The desk as it is kept between starts: its workspaces, the active one, and the next number. */
-export const Saved = savedWith(LayoutSchema);
+/**
+ * The desk as it is kept between starts: its workspaces, the active one, the next number, and
+ * each agent's tile, so a host started again opens it as the agent's again.
+ */
+export const Saved = savedWith(LayoutSchema, AgentsSchema);
 export type Saved = typeof Saved.Type;
 
 /** The prefix, as it is sent to a page. */
@@ -280,6 +320,8 @@ export const DeskSchema = Schema.Union([
 		closing: Schema.Array(TileIdSchema),
 		next: Schema.Int,
 		area: Schema.NullOr(Schema.Struct({width: Schema.Number, height: Schema.Number})),
+		// A host from before agents had tiles sends none: no tile is an agent's.
+		agents: AgentsSchema.pipe(Schema.withDecodingDefaultKey(Effect.succeed({}))),
 	}),
 	Schema.Struct({at: Schema.Literal("over")}),
 ]);
@@ -323,7 +365,7 @@ export const forPage = (s: Desk): Desk => {
 	return drawn;
 };
 
-export const open = Cmd.define("open", {input: Tile, ok: Done, err: []});
+export const open = Cmd.define("open", {input: Opening, ok: Done, err: []});
 export const close = Cmd.define("close", {input: Tile, ok: Done, err: []});
 export const stop = Cmd.define("stop", {input: Tile, ok: Done, err: []});
 export const send = Cmd.define("send", {
@@ -370,6 +412,7 @@ export const fresh = (): Open => ({
 	closing: [],
 	next: 2,
 	area: null,
+	agents: {},
 });
 
 const blank = (n: number): Workspace => ({
@@ -400,7 +443,18 @@ export const savedOf = (s: Open): Saved => ({
 	workspaces: s.workspaces,
 	active: s.active,
 	next: s.next,
+	agents: s.agents,
 });
+
+/** The agent whose own tile this is, or `null`: the person's. */
+export const agentOf = (s: Open, tile: TileId): AgentName | null =>
+	Object.entries(s.agents).find(([, t]) => t === tile)?.[0] ?? null;
+
+/** The Cmd that opens a tile's tsh: as its agent, for an agent's tile, else as the person. */
+const opening = (s: Open, tile: TileId) => {
+	const agent = agentOf(s, tile);
+	return agent === null ? open({tile}) : open({tile, agent});
+};
 
 /**
  * The desk with this workspace in it. Its focused tile is unfolded on the way in, so focus is
@@ -427,6 +481,10 @@ const drop = (s: Open, ws: Workspace, doomed: readonly TileId[]): Desk => {
 	);
 	const closing = s.closing.filter((tile) => !doomed.includes(tile));
 	const ask = s.ask !== null && doomed.includes(s.ask) ? null : s.ask;
+	// A tile that goes takes its agent's name with it: the next `line` opens a fresh one.
+	const agents = Object.fromEntries(
+		Object.entries(s.agents).filter(([, tile]) => !doomed.includes(tile)),
+	);
 	if (left.length === 0) {
 		const at = s.workspaces.findIndex((w) => w.id === ws.id);
 		const [first, ...rest] = s.workspaces.filter((w) => w.id !== ws.id);
@@ -434,11 +492,11 @@ const drop = (s: Open, ws: Workspace, doomed: readonly TileId[]): Desk => {
 		const workspaces: Open["workspaces"] = [first, ...rest];
 		const active =
 			s.active !== ws.id ? s.active : (workspaces[Math.min(at, workspaces.length - 1)] ?? first).id;
-		return {...s, workspaces, active, jobs, closing, ask};
+		return {...s, workspaces, active, jobs, closing, ask, agents};
 	}
 	const layout = doomed.reduce(remove, ws.layout);
 	const focused = left.includes(ws.focused) ? ws.focused : heirOf(all, openIn(layout), ws.focused);
-	return {...withWorkspace(s, {...ws, layout, focused}), jobs, closing, ask};
+	return {...withWorkspace(s, {...ws, layout, focused}), jobs, closing, ask, agents};
 };
 
 /** The open tiles of a layout, in reading order. */
@@ -589,6 +647,25 @@ const act = (s: Open, does: Does): Step => {
 		case "show":
 			return [s, [show({what: does.what})]];
 	}
+};
+
+/**
+ * The host asks for an agent's own tile. A name with a tile already changes nothing. Else a fresh
+ * tile, beside the focused one in the active workspace, as C-b | splits, but folded, and focus
+ * stays where it was, as tmux's `split-window -d`. A zoom stays too: the person's view is theirs.
+ */
+const launched = (s: Open, agent: AgentName): Step => {
+	if (s.agents[agent] !== undefined || !isAgentName(agent)) return [s, []];
+	const ws = activeOf(s);
+	const ids = {tile: `t${s.next}`, container: `c${s.next}`};
+	const beside = split(ws.layout, ws.focused, "horizontal", ids);
+	if (findTile(beside, ids.tile) === null) return [s, []];
+	const next: Open = {
+		...withWorkspace(s, {...ws, layout: fold(beside, ids.tile)}),
+		next: s.next + 1,
+		agents: {...s.agents, [agent]: ids.tile},
+	};
+	return [next, [open({tile: ids.tile, agent}), ...keep(next)]];
 };
 
 /** This workspace comes forward. One not there, or the one forward already, changes nothing. */
@@ -869,7 +946,7 @@ export const deskMachine = defineMachine({
 			return [
 				loaded,
 				loaded.workspaces.flatMap((ws) =>
-					tilesOf(ws).flatMap((t) => (t.shows.kind === "window" ? [] : [open({tile: t.id})])),
+					tilesOf(ws).flatMap((t) => (t.shows.kind === "window" ? [] : [opening(loaded, t.id)])),
 				),
 			];
 		const s = fresh();
@@ -905,6 +982,7 @@ export const deskMachine = defineMachine({
 		run: onOpen((s, m) => ran(s, m.does)),
 		keys: onOpen((s, m) => swapped(s, m.keys)),
 		typed: onOpen((s, m) => typed(s, m.tile, m.does)),
+		launch: onOpen((s, m) => launched(s, m.agent)),
 		show_ok: noop,
 		show_err: noop,
 		open_ok: noop,
@@ -927,8 +1005,36 @@ export const deskMachine = defineMachine({
 });
 
 const TILE_ID = /^t([0-9]{1,9})$/;
-/** A kept desk as it reads back: as `Saved`, with a letter given to any line kept without one. */
-const decodeSaved = Schema.decodeUnknownOption(savedWith(KeptLayoutSchema));
+/**
+ * A kept desk as it reads back: as `Saved`, with a letter given to any line kept without one. Its
+ * agents are read on their own (`agentsBack`), so a desk kept before agents had tiles, or with a
+ * name that does not read, still comes back whole.
+ */
+const decodeSaved = Schema.decodeUnknownOption(
+	savedWith(KeptLayoutSchema, Schema.optionalKey(Schema.Unknown)),
+);
+const decodeAgents = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.String));
+
+/**
+ * The kept agents whose tile is still a tsh's tile of the desk, each tile named once. Any other
+ * entry is dropped, and the tile it named is the person's. The person's desk is never lost for it.
+ */
+const agentsBack = (raw: unknown, workspaces: readonly Workspace[]): Open["agents"] => {
+	const kept = Option.getOrElse(decodeAgents(raw ?? {}), () => ({}));
+	const shells = new Set(
+		workspaces.flatMap((ws) =>
+			tilesOf(ws).flatMap((t) => (t.shows.kind === "window" ? [] : [t.id])),
+		),
+	);
+	const named = new Set<TileId>();
+	const agents: Record<AgentName, TileId> = {};
+	for (const [name, tile] of Object.entries(kept)) {
+		if (!isAgentName(name) || !shells.has(tile) || named.has(tile)) continue;
+		named.add(tile);
+		agents[name] = tile;
+	}
+	return agents;
+};
 
 /**
  * A kept desk, read back for the next start, or `null`: it does not read, or breaks a law of the
@@ -973,5 +1079,6 @@ export const restore = (raw: unknown): Open | null => {
 		closing: [],
 		next: Math.max(saved.next, top + 1),
 		area: null,
+		agents: agentsBack(saved.agents, workspaces),
 	};
 };

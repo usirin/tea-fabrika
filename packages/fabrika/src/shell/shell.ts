@@ -25,6 +25,7 @@ import {Table} from "./table.ts";
 //   yield* tell(started.run, "line", "experiments");           // table {title: "Experiments", total: 171, rows: [20 rows]}
 //   yield* tell(started.run, "signal", "interrupt");           // Ctrl-C: stops the foreground job, if any
 //   yield* tell(started.run, "stop", 1);                       // the host's word: stop %1, as `stop %1` does
+//   yield* tell(started.run, "background", "tally &");         // beside a foreground line: printed [2] tally:…; backgrounded {status: 0}
 //   started.close("line");                              // Ctrl-D: tsh ends; its jobs stay in the table, detached
 //
 // It has no terminal in it. A launcher (./main.ts) connects it to one with
@@ -61,8 +62,9 @@ export const TABLE_REFUSED =
 /** What tsh says, in the order it says it: a line, a table, or that a line is done. */
 type Spoken =
 	| {readonly kind: "printed"; readonly printed: Printed}
-	| {readonly kind: "table"; readonly table: Table}
-	| {readonly kind: "ready"; readonly ready: Ready};
+	| {readonly kind: "table"; readonly table: Table; readonly n: number}
+	| {readonly kind: "ready"; readonly ready: Ready}
+	| {readonly kind: "backgrounded"; readonly ready: Ready};
 
 /** A refusal as a shell shows it: why, the guess, and a caret under where. */
 export function refusalLines(line: string, refused: Refused): readonly string[] {
@@ -101,16 +103,32 @@ export const tsh = defineProgram({
 			"Stop job n, as `stop %n` does: told by the host for whoever asked. A job not in the table changes nothing.",
 			{control: true},
 		),
+		// A control input: a line that runs beside the one in the foreground, as a person's second
+		// line would if a shell took one while a job held the prompt. So only jobs: every statement
+		// a program's line ending with &, and nothing that waits, writes the table or ends tsh.
+		background: input(
+			Schema.String,
+			"A line whose every statement is a program's line ending with &: its jobs begin at once, beside what runs in the foreground. Any other line is refused, with status 2.",
+			{control: true},
+		),
 	},
 	outputs: {
 		printed: output(Printed, "A line to show, on out or err."),
 		table: output(
-			Table,
-			"A table to show a person, on out: laid out by the terminal that shows it, at its own width (./table.ts).",
+			Schema.Struct({
+				table: Table,
+				/** The job that printed it, `%n`, as `printed` says its job. */
+				n: Schema.optionalKey(Schema.Int),
+			}),
+			"A table to show a person, on out: laid out by the terminal that shows it, at its own width (./table.ts). n: the job that printed it, so a host keeps it in that job's lines.",
 		),
 		ready: output(
 			Ready,
 			"Once a line is done: the prompt comes back. status: how its last statement ended, as an exit status (0 ended, 1 failed, 130 stopped, 2 refused, 127 no such program).",
+		),
+		backgrounded: output(
+			Ready,
+			"Once a line told on background is done: its jobs began, or it was refused. status: as ready's. The prompt is not the line's.",
 		),
 	},
 	// The table is the host's, not this run's: main only shows it here. No ref of this run ever
@@ -151,8 +169,10 @@ export const tsh = defineProgram({
 					s.kind === "printed"
 						? send("printed", s.printed)
 						: s.kind === "table"
-							? send("table", s.table)
-							: send("ready", s.ready),
+							? send("table", {table: s.table, n: s.n})
+							: s.kind === "ready"
+								? send("ready", s.ready)
+								: send("backgrounded", s.ready),
 				),
 				Effect.forkScoped,
 			);
@@ -162,8 +182,8 @@ export const tsh = defineProgram({
 					printed: n === undefined ? {to, text} : {to, text, n},
 				});
 			};
-			const printTable = (table: Table) => {
-				Queue.offerUnsafe(spoken, {kind: "table", table});
+			const printTable = (table: Table, n: number) => {
+				Queue.offerUnsafe(spoken, {kind: "table", table, n});
 			};
 
 			const signals = yield* PubSub.unbounded<"interrupt">();
@@ -225,6 +245,23 @@ export const tsh = defineProgram({
 					return said;
 				});
 
+			/**
+			 * A line told on `background`: run as a typed one, if each statement is a program's line
+			 * with &. A built-in is refused, `jobs &` too: one may wait, write the table or end tsh, and
+			 * the foreground line is the one that does.
+			 */
+			const besideLine = (text: string): Effect.Effect<Said> => {
+				const parsed = parse(text);
+				if (parsed.kind === "refused") return oneLine(text);
+				const first = parsed.statements.find((st) => st.kind !== "run" || !st.background);
+				if (first === undefined) return oneLine(text);
+				print(
+					"err",
+					`tsh: ${first.text.trim()} must run in the foreground: a line told beside one runs only programs, each ending with &`,
+				);
+				return Effect.succeed({status: 2, exit: false});
+			};
+
 			/** The host's word: stop job n, if the table holds it. */
 			const stopTold = (n: number) =>
 				Effect.suspend(() => {
@@ -232,7 +269,7 @@ export const tsh = defineProgram({
 					return job === undefined ? Effect.void : stopJob(shell, job);
 				});
 
-			// `line` in order, `signal` and `stop` beside it. `line` is the lifeline, as stdin is: its
+			// `line` in order, `signal`, `stop` and `background` beside it. `line` is the lifeline, as stdin is: its
 			// close is Ctrl-D.
 			yield* serve(
 				{
@@ -245,6 +282,13 @@ export const tsh = defineProgram({
 						),
 					signal: fork((s) => PubSub.publish(signals, s)),
 					stop: fork(stopTold),
+					background: fork((text) =>
+						besideLine(text).pipe(
+							Effect.flatMap((said) =>
+								Queue.offer(spoken, {kind: "backgrounded", ready: {status: said.status}}),
+							),
+						),
+					),
 				},
 				{until: ["line"]},
 			);

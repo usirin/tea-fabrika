@@ -46,6 +46,13 @@ import type {AgentSessions} from "./agent-session.ts";
 //                    {_tag: "restarting", detached: [2]}
 //   person's tile    tsh: 1 job from an earlier tsh, restarted by agent:claude for:owner, not running: %2. ...
 //
+// And its `line` tool: an agent runs one line in its own tile, which its first line opens beside
+// the person's, and whose tsh runs as the agent (host/serve.ts, `lineFor`; tiles.ts).
+//
+//   agent's chat     line {line: "tally &"}
+//                    {_tag: "job", job: {n: 2, text: "tally &", tile: "t2", state: {_tag: "running"}, lines: []}}
+//   agent's tile     $ tally &
+//
 // Every home has the socket, and every agent gets every tool. On a home that keeps its own ledger
 // file, an agent's programs write on the host's ledger, as the agent. On a home connected to a
 // ledger server, each agent writes on its own session (`sessionFor`, host/agent-session.ts): the
@@ -86,6 +93,8 @@ export const serveAgents = (options: {
 	readonly stop: NonNullable<AgentOptions["stop"]>;
 	/** Restart the host for an agent, and why (host/serve.ts), for the `restart` tool; none, no tool. */
 	readonly restart?: AgentOptions["restart"];
+	/** Run one line in an agent's own tile (host/serve.ts), for the `line` tool. */
+	readonly line: NonNullable<AgentOptions["line"]>;
 	/**
 	 * Agent `name`'s own session on the home's ledger server, held in the agent's scope
 	 * (host/agent-session.ts); `null`: the home keeps its own ledger file, and each agent writes on
@@ -94,7 +103,7 @@ export const serveAgents = (options: {
 	readonly sessionFor: AgentSessions | null;
 }) =>
 	Effect.gen(function* () {
-		const {server, ports, attached, job, stop, restart, sessionFor} = options;
+		const {server, ports, attached, job, stop, restart, line, sessionFor} = options;
 		const ledger = yield* Ledger;
 		const person = yield* Author;
 		const pullRequests = yield* PullRequests;
@@ -127,6 +136,7 @@ export const serveAgents = (options: {
 				job,
 				stop,
 				restart,
+				line,
 				attached: (who) => attached(who.id),
 			}).pipe(
 				Effect.catchCause((cause) =>

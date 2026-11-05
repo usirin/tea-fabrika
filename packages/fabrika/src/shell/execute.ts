@@ -43,8 +43,8 @@ export interface Shell {
 	readonly by: string | null;
 	/** A line to show; `n`: the job it was printed for, so a host keeps a job's lines (Printed's `n`). */
 	readonly print: (to: "out" | "err", text: string, n?: number) => void;
-	/** A table for a person, on out: its terminal lays it out (./table.ts). */
-	readonly printTable: (table: Table) => void;
+	/** A table for a person, on out: its terminal lays it out (./table.ts). `n`: the job that printed it. */
+	readonly printTable: (table: Table, n: number) => void;
 	/** How a value a program sends is printed: short for a person, or its JSON whole. */
 	readonly show: Show;
 	/** Ctrl-C, as it comes. Heard by the foreground wait only. */
@@ -325,7 +325,7 @@ function printers(
 		flush: (ok) => {
 			for (const table of tables) {
 				if (ok || table.rows.length > 0)
-					shell.printTable(tableOf(table.view, table.rows, {all: at.all, typed: at.typed}));
+					shell.printTable(tableOf(table.view, table.rows, {all: at.all, typed: at.typed}), at.n);
 				// Printed once: a second end said of the same run prints nothing more.
 				table.rows = [];
 			}

@@ -9,6 +9,7 @@ import {
 	stubCtxThrowingProxy,
 } from "@demlik/tea/pbt";
 import type {MsgOf} from "@kampus/fabrika-old";
+import {Schema} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {
@@ -16,10 +17,12 @@ import {
 	close,
 	type Desk,
 	type DeskCmd,
+	DeskSchema,
 	deskMachine,
 	empty,
 	end,
 	focusedOf,
+	forPage,
 	fresh,
 	kill,
 	type Open,
@@ -138,6 +141,8 @@ const table: MsgArbitraryTable<Msg> = {
 	// The keys file saved: the defaults again, so the lists still press C-b. Other tables are
 	// keymap.laws.test.ts's.
 	keys: arbRecordMsg("keys", {keys: fc.constant(defaults)}),
+	// The host asks for an agent's tile, as its `line` tool's first call does (tracker 185b, PR 3).
+	launch: arbRecordMsg("launch", {agent: fc.constantFrom("claude", "lead")}),
 	show_ok: fc.constant(show.ok(showing, null, 0)),
 	show_err: failed(show.errType, showing),
 	open_ok: fc.constant(open.ok(opening, null, 0)),
@@ -162,7 +167,11 @@ const table: MsgArbitraryTable<Msg> = {
  * come out about ten long (demlik#744), too short to make a few workspaces and close them again.
  */
 const random = fc.array(
-	arbMsg(table, {weights: {key: 24, click: 2, covered: 3, over: 2, jobs: 2, closing: 1, area: 1}}),
+	// `launch` weighs nothing here, so these lists stay the lists seed 1 made before it: the
+	// planted mistakes below are caught as they were. The agents' lists (`agentLists`) have it.
+	arbMsg(table, {
+		weights: {key: 24, click: 2, covered: 3, over: 2, jobs: 2, closing: 1, area: 1, launch: 0},
+	}),
 	{maxLength: 60, size: "max"},
 );
 /**
@@ -193,6 +202,16 @@ const windowFirst = fc.constantFrom<readonly Msg[]>(
 const lists = fc
 	.tuple(windowFirst, random)
 	.map(([first, rest]): readonly Msg[] => [...first, ...rest]);
+/**
+ * Lists with agents' tiles in them: the same Msgs, and now and then the host asks for claude's or
+ * lead's tile, before, between and after the person's keys (tracker 185b, PR 3).
+ */
+const agentLists = fc.array(
+	arbMsg(table, {
+		weights: {key: 24, click: 2, covered: 3, over: 2, jobs: 2, closing: 1, area: 1, launch: 3},
+	}),
+	{maxLength: 60, size: "max"},
+);
 const OPTS = {numRuns: 400, seed: 1};
 const ctx = stubCtxThrowingProxy<undefined>();
 
@@ -200,17 +219,29 @@ interface Law {
 	readonly name: string;
 	/** Throws when `machine` breaks the law, with the shortest list that does. */
 	readonly check: (machine: Machine) => void;
+	/** The same law, over other lists of Msgs: the agents' lists, with `launch` in them. */
+	readonly over: (on: fc.Arbitrary<readonly Msg[]>) => Law;
 }
 
-const everyStep = (name: string, holds: (step: DeskStep) => boolean): Law => ({
+const everyStep = (
+	name: string,
+	holds: (step: DeskStep) => boolean,
+	on: fc.Arbitrary<readonly Msg[]> = lists,
+): Law => ({
 	name,
-	check: (machine) => propertyInvariant(machine, ctx, lists, holds, OPTS),
+	check: (machine) => propertyInvariant(machine, ctx, on, holds, OPTS),
+	over: (other) => everyStep(name, holds, other),
 });
 
 /** A law of where a list left the desk. */
-const atTheEnd = (name: string, holds: (machine: Machine, last: Desk) => boolean): Law => ({
+const atTheEnd = (
+	name: string,
+	holds: (machine: Machine, last: Desk) => boolean,
+	on: fc.Arbitrary<readonly Msg[]> = lists,
+): Law => ({
 	name,
-	check: (machine) => propertyTrace(machine, ctx, lists, (_, last) => holds(machine, last), OPTS),
+	check: (machine) => propertyTrace(machine, ctx, on, (_, last) => holds(machine, last), OPTS),
+	over: (other) => atTheEnd(name, holds, other),
 });
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -635,5 +666,291 @@ describe("the desk's laws", () => {
 		});
 		// Every law is caught by at least one plant.
 		expect(LAWS.filter((law) => !Object.values(caught).flat().includes(law.name))).toEqual([]);
+	});
+});
+
+// ---------------------------------------------------------------- an agent's tile (tracker 185b, PR 3)
+//
+// One tile per agent's name, kept in the desk's `agents`, a map, so two tiles for one name cannot
+// be written down. The host asks for it as an agent's first `line` comes (`launch`): it opens
+// folded beside the person's focused tile, in the active workspace, and moves no focus, as tmux's
+// `split-window -d` leaves the current pane current. Its tsh is opened as the agent. When the tile
+// goes, its name goes with it, so the next `line` opens a fresh one. The desk keeps `agents` in
+// desk.json, so a host started again opens the tile as the agent's again (the owner's call D).
+//
+//   agents {}                     launch {agent: "claude"}   t7 beside the focused t3, folded:
+//                                                             open {tile: "t7", agent: "claude"}, save
+//   agents {claude: "t7"}         launch {agent: "claude"}   nothing
+//   agents {claude: "t7"}         ended {tile: "t7"}         t7 goes; agents {}
+//   desk.json {agents: {claude: "t7"}}   init                open {tile: "t7", agent: "claude"}, ...
+
+const NAMES = ["claude", "lead"] as const;
+
+/** The desk after the host asks for `agent`'s tile, and what it asks for. */
+const launched = (machine: Machine, from: Desk, agent: string) =>
+	applyCell<Desk, Msg, DeskCmd>(machine, from, {type: "launch", agent});
+
+/** Each tile of the desk, by id: its workspace, whether it is folded, and what it shows. */
+const nodesOf = (s: Open) =>
+	new Map(
+		s.workspaces.flatMap((ws) =>
+			tilesOf(ws).map((t) => [t.id, {ws: ws.id, folded: t.folded, shows: t.shows}] as const),
+		),
+	);
+
+/** What the desk's opens ask, as `[tile, agent]`; the agent is `null` for a person's tile. */
+const opensIn = (cmds: readonly DeskCmd[]) =>
+	cmds.flatMap((c) => (c.type === "open" ? [[c.tile, c.agent ?? null] as const] : []));
+
+/** Each tile an agent has, to its name. */
+const agentOfTile = (s: Open): ReadonlyMap<string, string> =>
+	new Map(Object.entries(s.agents).map(([name, tile]) => [tile, name]));
+
+const launchFolds = atTheEnd(
+	"wherever it is, the host's launch for a name with no tile makes one tile, folded, in the active workspace, moves no focus and changes no other tile; launched again, nothing changes",
+	(machine, last) => {
+		if (last.at === "over") return true;
+		return NAMES.every((agent) => {
+			const [s, cmds] = launched(machine, last, agent);
+			if (last.agents[agent] !== undefined) return same(s, last) && cmds.length === 0;
+			if (s.at !== "open") return false;
+			const id = `t${last.next}`;
+			const before = nodesOf(last);
+			const after = nodesOf(s);
+			const made = [...after.keys()].filter((t) => !before.has(t));
+			const [again, more] = launched(machine, s, agent);
+			return (
+				same(made, [id]) &&
+				after.get(id)?.ws === last.active &&
+				after.get(id)?.folded === true &&
+				s.active === last.active &&
+				same(
+					s.workspaces.map((ws) => [ws.id, ws.focused]),
+					last.workspaces.map((ws) => [ws.id, ws.focused]),
+				) &&
+				[...before].every(([t, was]) => same(after.get(t), was)) &&
+				same(s.agents, {...last.agents, [agent]: id}) &&
+				s.next === last.next + 1 &&
+				same(opensIn(cmds), [[id, agent]]) &&
+				same(cmds.map((c) => c.type).sort(), ["open", "save"]) &&
+				cmds.every((c) => c.type !== "save" || same(c.desk, savedOf(s))) &&
+				same(again, s) &&
+				more.length === 0
+			);
+		});
+	},
+	agentLists,
+);
+
+const agentTilesThere = everyStep(
+	"an agent's tile is always a tile of the desk, no tile is two names', and only a launch gives a name a tile: a tile that goes takes its name with it",
+	({prev, msg, next}) => {
+		if (next.at === "over") return true;
+		const tiles = Object.values(next.agents);
+		const was = prev.at === "open" ? prev.agents : {};
+		return (
+			tiles.every((t) => whereIs(next, t) !== undefined) &&
+			new Set(tiles).size === tiles.length &&
+			Object.entries(next.agents).every(
+				([name, tile]) =>
+					was[name] === tile || (msg.type === "launch" && msg.agent === name && !(name in was)),
+			)
+		);
+	},
+	agentLists,
+);
+
+const freshAfterGone = atTheEnd(
+	"after an agent's tile goes, the next launch for its name opens a fresh tile, as that agent",
+	(machine, last) => {
+		if (last.at === "over") return true;
+		return Object.entries(last.agents).every(([agent, tile]) => {
+			const [gone] = applyCell<Desk, Msg, DeskCmd>(machine, last, {type: "ended", tile});
+			// The agent's tile was the last: the desk is over, and the host begins it again.
+			if (gone.at === "over") return true;
+			if (agent in gone.agents) return false;
+			const [s, cmds] = launched(machine, gone, agent);
+			const id = `t${gone.next}`;
+			return (
+				s.at === "open" &&
+				s.agents[agent] === id &&
+				id !== tile &&
+				same(opensIn(cmds), [[id, agent]])
+			);
+		});
+	},
+	agentLists,
+);
+
+const opensAsAgent = everyStep(
+	"it opens an agent's tile as that agent, and every other tile as the person: a split from an agent's tile is the person's",
+	({next, cmds}) => {
+		const opens = opensIn(cmds);
+		if (next.at === "over") return opens.length === 0;
+		const whose = agentOfTile(next);
+		return opens.every(([tile, agent]) => (whose.get(tile) ?? null) === agent);
+	},
+	agentLists,
+);
+
+const comesBackAsAgents = atTheEnd(
+	"a kept desk comes back with its agents' tiles, and opens each as its agent again, every other tile as the person (call D)",
+	(machine, last) => {
+		if (last.at === "over") return true;
+		const back = restore(JSON.parse(JSON.stringify(savedOf(last))));
+		if (back === null) return false;
+		const [s, cmds] = machine.init(back, undefined);
+		if (s.at !== "open") return false;
+		const whose = agentOfTile(last);
+		const all = back.workspaces.flatMap((ws) =>
+			tilesOf(ws).map((t) => [t.id, whose.get(t.id) ?? null] as const),
+		);
+		return same(s.agents, last.agents) && same(savedOf(s), kept(last)) && same(opensIn(cmds), all);
+	},
+	agentLists,
+);
+
+const AGENT_LAWS = [launchFolds, agentTilesThere, freshAfterGone, opensAsAgent, comesBackAsAgents];
+
+/** Every law the desk kept before agents had tiles, over the agents' lists: launch breaks none. */
+const KEPT_ON_AGENTS = [
+	whole,
+	focusOpen,
+	booksTidy,
+	opensAndStops,
+	closesOnce,
+	freshIds,
+	savesChanges,
+	takesWhatItSays,
+	overStays,
+	emptiesAtTheEnd,
+	yesCloses,
+	endedGoes,
+	ctrlCReaches,
+	splitOpens,
+].map((law) => law.over(agentLists));
+
+/** The names of the agents' laws `machine` breaks. */
+const brokenOfAgents = (machine: Machine): readonly string[] =>
+	AGENT_LAWS.filter((law) => {
+		try {
+			law.check(machine);
+			return false;
+		} catch {
+			return true;
+		}
+	}).map((law) => law.name);
+
+const AGENT_PLANTS = {
+	/** The agent's tile opens with focus on it: the person's typing goes to the agent's tile. */
+	focusesTheAgent: plant({
+		launch: (s, m) => {
+			const [next, cmds] = real.launch(s, m);
+			if (s.at !== "open" || next.at !== "open" || s.agents[m.agent] !== undefined)
+				return [next, cmds];
+			const back = focusOn(next, `t${s.next}`);
+			return [back, cmds.map((c) => (c.type === "save" ? save({desk: savedOf(back)}) : c))];
+		},
+	}),
+	/** A tile goes and its agent's name still points at it. */
+	keepsTheGone: plant({
+		ended: (s, m) => {
+			const [next, cmds] = real.ended(s, m);
+			if (s.at !== "open" || next.at !== "open") return [next, cmds];
+			return [{...next, agents: s.agents}, cmds];
+		},
+	}),
+	/** The agent's tile is opened as the person: its lines would write as the person. */
+	opensAsThePerson: plant({
+		launch: (s, m) => {
+			const [next, cmds] = real.launch(s, m);
+			return [next, cmds.map((c) => (c.type === "open" ? open({tile: c.tile}) : c))];
+		},
+	}),
+	/** A desk started again opens every tile as the person. */
+	forgetsTheAgents: {
+		...deskMachine,
+		init: (loaded) => {
+			const [s, cmds] = deskMachine.init(loaded, undefined);
+			return [s, cmds.map((c) => (c.type === "open" ? open({tile: c.tile}) : c))];
+		},
+	},
+} satisfies Record<string, Machine>;
+
+describe("an agent's tile on the desk (tracker 185b, PR 3)", () => {
+	it.each(AGENT_LAWS.map((law) => [law.name, law] as const))("%s", (_, law) => {
+		law.check(deskMachine);
+	});
+
+	it.each(KEPT_ON_AGENTS.map((law) => [law.name, law] as const))(
+		"with agents' tiles too: %s",
+		(_, law) => {
+			law.check(deskMachine);
+		},
+	);
+
+	it("each agent's law is seen to fail on a planted mistake", () => {
+		const caught = Object.fromEntries(
+			Object.entries(AGENT_PLANTS).map(([name, machine]) => [name, brokenOfAgents(machine)]),
+		);
+		expect(caught).toMatchObject({
+			focusesTheAgent: expect.arrayContaining([launchFolds.name]),
+			keepsTheGone: expect.arrayContaining([agentTilesThere.name, freshAfterGone.name]),
+			opensAsThePerson: expect.arrayContaining([launchFolds.name, opensAsAgent.name]),
+			forgetsTheAgents: expect.arrayContaining([comesBackAsAgents.name]),
+		});
+		expect(AGENT_LAWS.filter((law) => !Object.values(caught).flat().includes(law.name))).toEqual(
+			[],
+		);
+	});
+
+	it("begins a fresh desk with no agent's tile", () => {
+		const [s] = deskMachine.init(null, undefined);
+		expect(s.at === "open" ? s.agents : null).toEqual({});
+	});
+
+	it("reads a desk.json from before agents had tiles, with agents empty (d19)", () => {
+		const {workspaces, active, next} = fresh();
+		const back = restore(JSON.parse(JSON.stringify({workspaces, active, next})));
+		expect(back).not.toBeNull();
+		expect(back?.agents).toEqual({});
+		expect(back?.workspaces).toEqual(workspaces);
+	});
+
+	it("keeps a kept agent whose tile is on the desk, and drops one whose tile is not: the person's desk is never lost for it", () => {
+		const {workspaces, active, next} = fresh();
+		const back = restore(
+			JSON.parse(JSON.stringify({workspaces, active, next, agents: {claude: "t1", lead: "t9"}})),
+		);
+		expect(back?.agents).toEqual({claude: "t1"});
+		expect(back?.workspaces).toEqual(workspaces);
+	});
+
+	it("keeps one name for a tile two kept names point at", () => {
+		const {workspaces, active, next} = fresh();
+		const back = restore(
+			JSON.parse(JSON.stringify({workspaces, active, next, agents: {claude: "t1", lead: "t1"}})),
+		);
+		expect(back?.agents).toEqual({claude: "t1"});
+		expect(back?.workspaces).toEqual(workspaces);
+	});
+
+	it.each([
+		["a number", 5],
+		["a tile that is not a tile's id", {claude: 7}],
+		["a list", ["t1"]],
+	])("reads a desk whose agents are %s back whole, with agents empty", (_, agents) => {
+		const {workspaces, active, next} = fresh();
+		const back = restore(JSON.parse(JSON.stringify({workspaces, active, next, agents})));
+		expect(back).not.toBeNull();
+		expect(back?.agents).toEqual({});
+		expect(back?.workspaces).toEqual(workspaces);
+	});
+
+	it("sends the page the desk's agents, so the window names each agent's tile", () => {
+		const [first] = deskMachine.init(null, undefined);
+		const [s] = launched(deskMachine, first, "claude");
+		const read = Schema.decodeUnknownSync(DeskSchema)(JSON.parse(JSON.stringify(forPage(s))));
+		expect(read.at === "open" ? read.agents : null).toEqual({claude: "t2"});
 	});
 });

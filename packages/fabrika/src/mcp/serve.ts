@@ -26,6 +26,7 @@ import type {ProgramList} from "../shell/programs.ts";
 import {type Answer, driveFor, type InTile} from "./drive.ts";
 import {AGENTS_PROTOCOL, Handshake, type HostAnswer, MAX_LINE} from "./handshake.ts";
 import type {JobAnswer} from "./job.ts";
+import type {LineAnswer, LineAsk, LineRefused} from "./line.ts";
 import type {RestartAnswer, RestartAsk, RestartRefused} from "./restart.ts";
 import type {StopAnswer, StopAsk, StopRefused} from "./stop.ts";
 
@@ -96,6 +97,10 @@ export interface AgentOptions {
 	 */
 	readonly restart?:
 		| ((who: typeof Agent.Type, ask: RestartAsk) => Effect.Effect<RestartAnswer, RestartRefused>)
+		| undefined;
+	/** Run one line in agent `who`'s own tile, for the `line` tool (./line.ts). */
+	readonly line?:
+		| ((who: typeof Agent.Type, ask: LineAsk) => Effect.Effect<LineAnswer, LineRefused>)
 		| undefined;
 	/** The server's name and version, as the client is told. */
 	readonly server?: {readonly name: string; readonly version: string};
@@ -220,13 +225,14 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
 			Effect.gen(function* () {
 				const who = {kind: "agent", id: handshake.agent, for: person} as const;
 				const served = yield* programsFor(who);
-				const {stop, restart} = options;
+				const {stop, restart, line} = options;
 				const {drive, tools} = yield* driveFor({
 					list: served.list,
 					tiles,
 					job: options.job,
 					stop: stop === undefined ? undefined : (ask) => stop(who, ask),
 					restart: restart === undefined ? undefined : (ask) => restart(who, ask),
+					line: line === undefined ? undefined : (ask) => line(who, ask),
 					readOnly: served.readOnly ?? false,
 				});
 				if (options.attached !== undefined) yield* options.attached(who);

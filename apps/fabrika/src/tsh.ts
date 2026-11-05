@@ -18,6 +18,7 @@ import {
 	viewOf,
 	writerText,
 } from "@kampus/fabrika-old";
+import {LineAnswer, LineAsk, LineRefused} from "@kampus/fabrika-old/mcp";
 import {experimentsOnLedger} from "@kampus/pipeline/experiments/experiments";
 import {ticketsOnLedger} from "@kampus/pipeline/tickets/tickets";
 import {compare} from "@tea-fabrika/compare";
@@ -31,7 +32,7 @@ import {laneRunner} from "@tea-fabrika/pipeline/node";
 import {ticket} from "@tea-fabrika/ticket";
 import {trace} from "@tea-fabrika/trace";
 import {Author, PullRequests, RepoTree, type RepoTreeShape, tracker} from "@tea-fabrika/tracker";
-import {Clock, Deferred, Effect, Layer, Queue, Stream} from "effect";
+import {Clock, Deferred, Effect, Exit, Layer, Queue, Schema, Semaphore, Stream} from "effect";
 import type {TileId} from "./desk/layout/index.ts";
 import {type EditorMsg, editor} from "./editor/editor.ts";
 import type {SharedHistory} from "./editor/history.ts";
@@ -101,6 +102,23 @@ import {type TileJobs, watchJobs} from "./tile-jobs.ts";
 //
 // A screen shows on any number of pages at once, as a tmux pane shows in every client attached:
 // `show` adds one, and the function it answers takes it away again.
+//
+// An agent's tsh (tracker 185b): handed an agent's `Author`, tsh runs as that agent. It lists no
+// desk word, and its programs are `forAgent`'s, so no input only a person tells is there. Its
+// lines come from the agent, by `line`, never from the editor: each is written on the screen as
+// `$ <line>` first, so the person sees what ran, and none goes in the shared history.
+//
+//   const tsh = yield* startTsh({tile: "t2", ...}).pipe(Effect.provideService(Author, claude));
+//   yield* tsh.line("tally &")    "$ tally &" on the screen; {_tag: "job", job: {n: 1, text: "tally &", tile: "t2", ...}}
+//   yield* tsh.line("counter")    {_tag: "job", ...}: answered as the job begins, while it runs
+//   yield* tsh.line("tally")      refused: claude's tile runs %2 in the foreground: stop it, or end the line with &
+//   yield* tsh.line("seq &")      beside it, on tsh's `background` input: {_tag: "job", job: {n: 3, ...}}
+//   yield* tsh.line("jobs")       {_tag: "said", lines: [...], status: 0}: no job began
+//   the person: "ls" Enter        lines here run as claude: split for your own tile (C-b |)
+//
+// The person at an agent's tile still has Ctrl-C, which stops what runs in its foreground, and
+// the desk's keys, which the desk takes first. A line they type runs nothing: a person's line
+// never runs as the agent.
 
 /** What became of a message from a page: read, and on its way, or refused, and why. */
 export type Heard = {readonly kind: "read"} | {readonly kind: "refused"; readonly why: string};
@@ -172,7 +190,39 @@ export interface Tsh {
 	 * agent's `stop` tool). A control input, so a line waiting behind the job never holds it up.
 	 */
 	readonly stop: (n: number) => Effect.Effect<void>;
+	/**
+	 * Run one line the agent hands it, in an agent's tsh, written on the screen as typed first.
+	 * Answers `job` as the first job it began begins, or `said`, with what it printed and its
+	 * status, once it is done with no job begun. A line in the foreground holds the line for the
+	 * next: while one runs, only a line whose every statement ends with & is taken, beside it.
+	 * Refused in a person's tsh.
+	 */
+	readonly line: (text: string) => Effect.Effect<LineAnswer, LineRefused>;
 }
+
+/** What a person who types a line in an agent's tile is told: it runs nothing. */
+const typedHere = (agent: string) => `lines here run as ${agent}: split for your own tile (C-b |)`;
+
+/** The line the agent handed, until it answers: what tsh printed of its own for it. */
+interface Asked {
+	readonly text: string;
+	/** The host's next job number as it was sent: a job of this tile from it on began of it. */
+	readonly since: number;
+	/** Which of tsh's inputs it went to, and so which output says it is done. */
+	readonly via: "line" | "background";
+	readonly lines: string[];
+	readonly answer: Deferred.Deferred<LineAnswer>;
+}
+
+const fits = Schema.is(LineAsk);
+
+/** Every statement of the line is a program's line ending with &: it may run beside one in the foreground. */
+const behind = (text: string): boolean => {
+	const parsed = Shell.parse(text);
+	return (
+		parsed.kind !== "refused" && parsed.statements.every((st) => st.kind === "run" && st.background)
+	);
+};
 
 /** tsh's run. In memory, so each tile's tsh has the same id with no clash. */
 export const TSH = "tsh:p1";
@@ -278,6 +328,8 @@ const seenBy = (entry: Entry, watch: Watch): Entry => ({
 /** What was heard, read already, for the line editor or for one run with a view. */
 type Told =
 	| {readonly to: "editor"; readonly msg: EditorMsg}
+	/** Ctrl-C in an agent's tile: for tsh, at once. */
+	| {readonly to: "tsh"}
 	| {
 			readonly to: "window";
 			readonly run: AnyRun;
@@ -322,6 +374,8 @@ export const startTsh = (options: {
 	readonly words: readonly Entry[];
 	/** The host's job lines, told what tsh prints for each job and this tile's begins and ends. */
 	readonly lines?: JobLines | undefined;
+	/** In an agent's tsh: the person typed a line here, and was told it runs nothing. */
+	readonly typed?: (() => void) | undefined;
 }) =>
 	Effect.gen(function* () {
 		const {tile, history, runs, words} = options;
@@ -329,8 +383,13 @@ export const startTsh = (options: {
 		const scope = yield* Effect.scope;
 		const ledger = yield* Ledger;
 		const author = yield* Author;
-		// Every job this tsh begins is the tile's, and its writer's: the person at this tile.
+		// Every job this tsh begins is the tile's, and its writer's: the person at this tile, or
+		// the agent whose tile it is.
 		const jobs: JobsOnHost = {...options.jobs, owner: tile, by: writerText(author)};
+		/** The agent this tsh runs as, or `null`: the person's. */
+		const agent = author.kind === "agent" ? author.id : null;
+		/** The agent's lines, one at a time. */
+		const turn = yield* Semaphore.make(1);
 		const pullRequests = yield* PullRequests;
 		const repoTree = yield* RepoTree;
 		const traces = yield* Traces;
@@ -469,6 +528,7 @@ export const startTsh = (options: {
 				all.set(running.run.id, running);
 				// tsh notes a job in the table before its runs start: only now is it known to be this tile's.
 				mine.add(running.run.id);
+				beganBy(running.run.id);
 				recount(table());
 				yield* running.run.ended.pipe(
 					Effect.tap((end) => Effect.sync(() => watch.ran(running.run.id, end))),
@@ -480,29 +540,105 @@ export const startTsh = (options: {
 				yield* opened(running);
 			});
 
-		const programs = Shell.programList(
-			[...tshList(appPrograms(ledger, author, pullRequests, traces, repoTree)), ...words].map(
-				(entry) =>
-					seenBy(entry, {
-						seen,
-						called: (run) => {
-							calls.add(run);
-							recount(table());
-						},
-						ended: (run, end) => watch.ran(run, end),
-					}),
+		const apps = tshList(appPrograms(ledger, author, pullRequests, traces, repoTree));
+		// An agent's tsh lists no desk word, and only the inputs an agent may tell.
+		const watched = Shell.programList(
+			(agent === null ? [...apps, ...words] : apps).map((entry) =>
+				seenBy(entry, {
+					seen,
+					called: (run) => {
+						calls.add(run);
+						beganBy(run);
+						recount(table());
+					},
+					ended: (run, end) => watch.ran(run, end),
+				}),
 			),
 		);
+		const programs = agent === null ? watched : Shell.forAgent(watched);
+
+		/** The agent's line not answered yet: one at a time. */
+		let asked: Asked | null = null;
+		/**
+		 * The agent's lines on tsh's `line` input, in order, each until its `ready`: the first is the
+		 * one tsh runs now. One answered at its first job stays here until it is done.
+		 */
+		const ran: Asked[] = [];
+		const answer = (a: LineAnswer) => {
+			const now = asked;
+			if (now === null) return;
+			// Cleared first: the answer may run the agent's next line before `doneUnsafe` returns.
+			asked = null;
+			Deferred.doneUnsafe(now.answer, Exit.succeed(a));
+		};
+		/** Job n of this tile began: the first one since the agent's line was sent is its answer. */
+		const began = (n: number) => {
+			if (asked === null || n < asked.since) return;
+			const job = jobs.table.getState().jobs.find((j) => j.n === n);
+			if (job !== undefined && job.owner !== tile) return;
+			answer(
+				LineAnswer.cases.job.make({
+					job: {n, text: asked.text, tile, state: {_tag: "running"}, lines: []},
+				}),
+			);
+		};
+		/**
+		 * `attach %n` with no &: a job of this tile from before the line came to the foreground. It
+		 * keeps its number, so it never begins since the line: its coming forward is the answer, as a
+		 * new job's start is, and the call never waits on its end.
+		 */
+		const fronted = (now: Shell.Jobs) => {
+			if (asked === null || asked.via !== "line") return;
+			const since = asked.since;
+			const job = now.jobs.find(
+				(j) => j.n < since && j.owner === tile && j.state === "running" && !j.background,
+			);
+			if (job === undefined) return;
+			answer(
+				LineAnswer.cases.job.make({
+					job: {n: job.n, text: job.text, tile, state: {_tag: "running"}, lines: []},
+				}),
+			);
+		};
+		/** A run began: its job, if the host's table holds one for it. */
+		const beganBy = (run: string) => {
+			const job = jobOf(jobs.table.getState(), run);
+			if (job !== undefined) began(job.n);
+		};
+		/** The agent's line `done` is over with no job begun: what tsh printed of its own, and how it ended. */
+		const said = (done: Asked | null | undefined, status: number) => {
+			if (done == null || done !== asked) return;
+			answer(LineAnswer.cases.said.make({lines: [...done.lines], status}));
+		};
+		/** A table as an agent reads it: its rows as plain text, 100 columns wide. */
+		const asText = (table: Shell.Table) =>
+			Shell.tableLines(table, 100).map((line) => line.map((s) => s.text).join(""));
+		/** The line tsh's own words are for now: one beside the foreground, or the one it runs. */
+		const speaking = () => (asked?.via === "background" ? asked : ran[0]);
 		const started = yield* start(
 			Shell.tsh,
 			{show: "short"},
 			{
 				printed: (p) => {
 					if (p.n !== undefined) jobLines?.printed(p.n, p.text);
+					if (p.n === undefined) speaking()?.lines.push(p.text);
+					else began(p.n);
 					toEditor({type: "printed", text: p.text});
 				},
-				table: (table) => toEditor({type: "table", table}),
-				ready: () => toEditor({type: "ready"}),
+				table: ({table, n}) => {
+					const text = asText(table);
+					// A job's table is that job's lines, as its printed lines are: what the agent's `job` tool reads.
+					if (n !== undefined) for (const line of text) jobLines?.printed(n, line);
+					speaking()?.lines.push(...text);
+					toEditor({type: "table", table});
+				},
+				ready: (r) => {
+					said(ran.shift(), r.status);
+					toEditor({type: "ready"});
+				},
+				backgrounded: (r) => {
+					if (asked?.via === "background") said(asked, r.status);
+				},
 			},
 			{id: TSH, storage: memoryStorage()},
 		).pipe(Effect.provideService(Shell.Programs, programs), Effect.provideService(HostJobs, jobs));
@@ -522,6 +658,7 @@ export const startTsh = (options: {
 			started.close("line");
 			started.close("signal");
 			started.close("stop");
+			started.close("background");
 		};
 		/** The tile is told its jobs; after `close`, tsh ends once none runs. */
 		const recount = (now: Shell.Jobs | null) => {
@@ -532,6 +669,8 @@ export const startTsh = (options: {
 		const over = yield* Deferred.make<void>();
 		yield* started.run.ended.pipe(
 			Effect.andThen(Effect.sync(() => toEditor({type: "ended"}))),
+			// `exit`: tsh ended with the agent's line, and that is its answer.
+			Effect.andThen(Effect.sync(() => said(asked, 0))),
 			Effect.andThen(Deferred.succeed(over, undefined)),
 			Effect.forkScoped,
 		);
@@ -552,6 +691,7 @@ export const startTsh = (options: {
 							if (job !== undefined) moved.add(job);
 						}
 					for (const job of moved) together(job);
+					fronted(now);
 					recount(now);
 				}),
 			),
@@ -563,8 +703,17 @@ export const startTsh = (options: {
 			ctx: {programs, history: lines},
 			interpret: {
 				write: (c) => Effect.sync(() => write(c.data)).pipe(Effect.as(null)),
-				// Offered, not told: a line a person typed is never dropped, even on a full mailbox.
-				line: (c) => offer(started.run, "line", c.text).pipe(Effect.as(null)),
+				// Offered, not told: a line a person typed is never dropped, even on a full mailbox. In an
+				// agent's tile it runs nothing, and the person is told so.
+				line: (c) =>
+					agent === null
+						? offer(started.run, "line", c.text).pipe(Effect.as(null))
+						: Effect.sync(() => {
+								toEditor({type: "printed", text: typedHere(agent)});
+								toEditor({type: "ready"});
+								options.typed?.();
+								return null;
+							}),
 				// `signal` is a control input with its own small bound: when that is full, interrupts tsh
 				// has not handled are already waiting, and this one is let go.
 				interrupt: () =>
@@ -573,7 +722,9 @@ export const startTsh = (options: {
 						Effect.as(null),
 					),
 				close: () => Effect.sync(() => started.close("line")).pipe(Effect.as(null)),
-				keep: (c) => history.save(c.lines).pipe(Effect.as(null)),
+				// The person's history is theirs: nothing typed in an agent's tile goes in it.
+				keep: (c) =>
+					agent === null ? history.save(c.lines).pipe(Effect.as(null)) : Effect.succeed(null),
 			},
 		})).ready;
 		// Every tile's editor hears each save, its own too, so a line typed anywhere is in its Ctrl-R.
@@ -584,9 +735,15 @@ export const startTsh = (options: {
 		const tellOne = (told: Told) =>
 			told.to === "editor"
 				? editing.dispatch(told.msg).pipe(Effect.orDie)
-				: // Offered, not told: a press is never dropped on a full input. A run that ended
-					// meanwhile answers `stopped`, and the press goes nowhere, as it should.
-					told.run.offer(told.msg.type, told.msg.value).pipe(Effect.asVoid);
+				: told.to === "tsh"
+					? // As the editor's Ctrl-C: when the signal's small bound is full, this one is let go.
+						tell(started.run, "signal", "interrupt").pipe(
+							Effect.catchTag("MailboxFull", () => Effect.void),
+							Effect.asVoid,
+						)
+					: // Offered, not told: a press is never dropped on a full input. A run that ended
+						// meanwhile answers `stopped`, and the press goes nowhere, as it should.
+						told.run.offer(told.msg.type, told.msg.value).pipe(Effect.asVoid);
 		yield* Queue.take(inbox).pipe(Effect.flatMap(tellOne), Effect.forever, Effect.forkScoped);
 
 		const tsh: Tsh = {
@@ -602,6 +759,10 @@ export const startTsh = (options: {
 					const read = readFromTerminal(raw);
 					if (read.kind === "refused") return read;
 					const {msg} = read;
+					// The agent's lines never pass the editor, so it never knows one runs: in an agent's
+					// tile, the person's Ctrl-C goes to tsh at once, as the editor sends it while busy.
+					if (agent !== null && msg.type === "keys" && msg.data.includes("\x03"))
+						Queue.offerUnsafe(inbox, {to: "tsh"});
 					toEditor(msg.type === "keys" ? msg : {type: "size", cols: msg.cols});
 					return {kind: "read"};
 				},
@@ -620,6 +781,55 @@ export const startTsh = (options: {
 				tell(started.run, "stop", n).pipe(
 					Effect.catchTag("MailboxFull", () => Effect.void),
 					Effect.asVoid,
+				),
+			line: (text) =>
+				turn.withPermits(1)(
+					Effect.gen(function* () {
+						if (agent === null)
+							return yield* new LineRefused({
+								why: `${tile} is the person's tile: an agent's line runs only in its own`,
+							});
+						if (!fits({line: text}))
+							return yield* new LineRefused({
+								why: "a line is 1 to 4096 characters on one line, with no control character",
+							});
+						if (yield* Deferred.isDone(over))
+							return yield* new LineRefused({why: `${agent}'s tile has ended: its tsh is gone`});
+						// A job in the foreground holds tsh's line, as it holds a person's prompt: a line with
+						// & runs beside it, and any other is refused, so no call waits on the job's end.
+						const front = jobs.table
+							.getState()
+							.jobs.find((j) => j.owner === tile && j.state === "running" && !j.background);
+						const via = front === undefined ? "line" : "background";
+						if (front !== undefined && !behind(text))
+							return yield* new LineRefused({
+								why: `${agent}'s tile runs %${front.n} in the foreground: stop it, or end the line with &`,
+							});
+						const done = yield* Deferred.make<LineAnswer>();
+						const one: Asked = {
+							text,
+							since: jobs.table.getState().next,
+							via,
+							lines: [],
+							answer: done,
+						};
+						asked = one;
+						toEditor({type: "printed", text: `$ ${text}`});
+						if (via === "line") ran.push(one);
+						const word = yield* offer(started.run, via, text);
+						if (word !== "queued") {
+							asked = null;
+							if (via === "line") ran.pop();
+							return yield* new LineRefused({why: `${agent}'s tsh took nothing: ${word}`});
+						}
+						// tsh may end meanwhile, even with its scope: then the line is done, as `exit` is.
+						return yield* Effect.raceFirst(
+							Deferred.await(done),
+							Deferred.await(over).pipe(
+								Effect.as(LineAnswer.cases.said.make({lines: [], status: 0})),
+							),
+						);
+					}),
 				),
 		};
 		return tsh;

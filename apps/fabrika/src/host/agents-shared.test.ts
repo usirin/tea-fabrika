@@ -235,6 +235,8 @@ describe("an agent on a home connected to a ledger server", () => {
 		expect(names).toEqual(
 			expect.arrayContaining(["runs", "job", "tracker_query", "tracker_file", "tracker_comment"]),
 		);
+		// The agent's own session is made, so its tile can run lines on it (tracker 185b, PR 3).
+		expect(names).toContain("line");
 		// The tracker's person-only input is still no tool: no agent answers what was asked of alice.
 		expect(names).not.toContain("tracker_answer");
 		expect(seen.tools.find((t) => t.name === "tracker_file")?.annotations?.readOnlyHint).not.toBe(
@@ -277,13 +279,23 @@ describe("an agent on a home connected to a ledger server", () => {
 				const query = yield* Effect.promise(() =>
 					client.callTool({name: "tracker_query", arguments: {value: {status: "open"}}}),
 				);
+				// d14: no session, so no tile of the agent's, and no line on the person's session.
+				const line = yield* Effect.promise(() =>
+					client.callTool({
+						name: "line",
+						arguments: {line: `tracker file='{"title":"Not on this door","body":""}' &`},
+					}),
+				);
 				const after = yield* rowsOn(home);
-				return {tools, before, after, filed, runs, query, agents: yield* topBar};
+				return {tools, before, after, filed, runs, query, line, agents: yield* topBar};
 			}).pipe(Effect.scoped, Effect.provide(platform)),
 		);
 		const names = seen.tools.map((t) => t.name);
 		expect(names).toEqual(expect.arrayContaining(["runs", "job", "tracker_query"]));
 		expect(names).not.toContain("tracker_file");
+		expect(names).not.toContain("line");
+		expect(seen.line.isError).toBe(true);
+		expect(JSON.stringify(seen.line.content)).toMatch(/line/);
 		for (const tool of seen.tools) expect(tool.annotations?.readOnlyHint).toBe(true);
 		expect(seen.filed.isError).toBe(true);
 		expect(JSON.stringify(seen.filed.content)).toMatch(/tracker_file/);

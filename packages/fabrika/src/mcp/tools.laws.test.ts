@@ -7,6 +7,8 @@ import {input} from "../program/shape.ts";
 import {BUILTINS} from "../shell/grammar.ts";
 import {programList} from "../shell/programs.ts";
 import {JOB_TOOL} from "./job.ts";
+// made up: `LINE_TOOL`, as stop.ts's `STOP_TOOL` (tracker 185b, PR 3).
+import {LINE_TOOL} from "./line.ts";
 // made up: `RESTART_TOOL`, as stop.ts's `STOP_TOOL` (185b PR 5).
 import {RESTART_TOOL} from "./restart.ts";
 // made up: `STOP_TOOL`, as job.ts's `JOB_TOOL`.
@@ -17,7 +19,7 @@ import {type Tool, toolNameOf, toolsOf} from "./tools.ts";
 // program list:
 //
 // - an input only a person tells (`{personOnly: true}`) has no tool;
-// - no host tool (`runs`, `job`, `stop`, `restart`) is named as a `<program>_<input>` tool could be: a host
+// - no host tool (`runs`, `job`, `stop`, `restart`, `line`) is named as a `<program>_<input>` tool could be: a host
 //   tool's name has no `_`;
 // - every tool that is not read-only is destructive, by MCP's hints (spec 2025-11-25, "Tools"):
 //   `destructiveHint` true, or left out, which the spec reads as true. No tool that writes says it
@@ -69,12 +71,13 @@ const listOf = (specs: readonly Spec[]) =>
 		),
 	);
 
-/** Every tool an agent could be served: each program's, `runs`, and the host's `job`, `stop` and `restart`. */
+/** Every tool an agent could be served: each program's, `runs`, and the host's `job`, `stop`, `restart` and `line`. */
 const everyTool = (specs: readonly Spec[]): readonly Tool[] => [
 	...toolsOf(listOf(specs)),
 	JOB_TOOL,
 	STOP_TOOL,
 	RESTART_TOOL,
+	LINE_TOOL,
 ];
 
 describe("the tools an agent is served, for any program list", () => {
@@ -101,7 +104,7 @@ describe("the tools an agent is served, for any program list", () => {
 					(t) => !specs.some((spec) => t.name.startsWith(`${spec.name}_`)),
 				);
 				expect(host.map((t) => t.name)).toEqual(
-					expect.arrayContaining(["runs", "job", "stop", "restart"]),
+					expect.arrayContaining(["runs", "job", "stop", "restart", "line"]),
 				);
 				for (const tool of host) {
 					expect(tool.name).not.toContain("_");
@@ -116,9 +119,9 @@ describe("the tools an agent is served, for any program list", () => {
 		fc.assert(
 			fc.property(arbSpecs, (specs) => {
 				const writes = everyTool(specs).filter((tool) => tool.annotations?.readOnlyHint !== true);
-				// `stop` and `restart` at least: the host's own tools that write.
+				// `stop`, `restart` and `line` at least: the host's own tools that write.
 				expect(writes.map((tool) => tool.name)).toEqual(
-					expect.arrayContaining(["stop", "restart"]),
+					expect.arrayContaining(["stop", "restart", "line"]),
 				);
 				// Left out, `destructiveHint` is true by the spec's default.
 				expect(

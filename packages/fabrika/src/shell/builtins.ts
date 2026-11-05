@@ -182,11 +182,18 @@ export const runBuiltin = (
 			case "stop": {
 				const job = named(shell, first, "stop");
 				if (typeof job === "string") return refuse(job);
-				// An agent's tsh drops no one else's job (tracker 185b): the `stop` tool, with its why,
-				// is how an agent stops a person's job. Refused before any stop is asked, so the
-				// record keeps no stopper. A person's tsh may stop any job.
-				if (writerOf(shell.by ?? "")?.kind === "agent" && job.by !== null && job.by !== shell.by)
-					return refuse(`%${job.n} is ${job.by}'s: the stop tool asks why`);
+				// Only a person's tsh may stop any job (tracker 185b). Any other tsh, an agent's or one
+				// whose writer does not read as a person, stops only its own writer's: the `stop` tool,
+				// with its why, is how an agent stops anyone else's. It fails closed (tracker 219): a job
+				// with no writer kept is a person's from before jobs kept one. Refused before any stop is
+				// asked, so the record keeps no stopper.
+				const mine = shell.by ?? null;
+				if (writerOf(mine ?? "")?.kind !== "user" && job.by !== mine)
+					return refuse(
+						job.by === null
+							? `%${job.n} has no writer kept: the stop tool asks why`
+							: `%${job.n} is ${job.by}'s: the stop tool asks why`,
+					);
 				yield* stopJob(shell, job);
 				return ok;
 			}

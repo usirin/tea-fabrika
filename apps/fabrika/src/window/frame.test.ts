@@ -329,12 +329,12 @@ describe("the top bar", () => {
 		});
 		expect(agentsWord(host([]))).toBeNull();
 		expect(agentsWord(host(null))).toBeNull();
-		expect(agentsWord(host([{name: "claude", since: 0}]))).toBe("1 agent");
+		expect(agentsWord(host([{name: "claude", since: 0, tile: null}]))).toBe("1 agent");
 		expect(
 			agentsWord(
 				host([
-					{name: "claude", since: 0},
-					{name: "codex", since: 1},
+					{name: "claude", since: 0, tile: "t2"},
+					{name: "codex", since: 1, tile: null},
 				]),
 			),
 		).toBe("2 agents");

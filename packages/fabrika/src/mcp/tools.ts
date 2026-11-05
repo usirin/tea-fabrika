@@ -2,13 +2,14 @@ import type {Inputs} from "../program/program.ts";
 import {type JsonSchema, shapeOf} from "../program/shape.ts";
 import type {ProgramList} from "../shell/programs.ts";
 import {JOB, JobAsk} from "./job.ts";
+import {LINE, LineAsk} from "./line.ts";
 import {RESTART, RestartAsk} from "./restart.ts";
 import {STOP, StopAsk} from "./stop.ts";
 
 // A program list as MCP tools (spec 2026-07-28, "Tools"): one tool per input of each program, made
 // from the input's own schema, and one tool that lists what runs. No program has a tool written by
 // hand: a new input is a new tool, and a renamed input is a renamed tool. The host's own tools
-// beside `runs` (`job`, ./job.ts; `stop`, ./stop.ts; `restart`, ./restart.ts) are the host's to list (./drive.ts); a call to
+// beside `runs` (`job`, ./job.ts; `stop`, ./stop.ts; `restart`, ./restart.ts; `line`, ./line.ts) are the host's to list (./drive.ts); a call to
 // one is read here.
 //
 //   toolsOf(programList([listed(tracker, ...)]))
@@ -79,6 +80,7 @@ const RUNS_TOOL: Tool = {
 const jobAsk = shapeOf(JobAsk);
 const stopAsk = shapeOf(StopAsk);
 const restartAsk = shapeOf(RestartAsk);
+const lineAsk = shapeOf(LineAsk);
 
 /** The tool's name for one input of one program. */
 export const toolNameOf = (program: string, input: string): string => `${program}_${input}`;
@@ -128,12 +130,13 @@ export const toolsOf = (list: ProgramList): readonly Tool[] => {
 	return tools;
 };
 
-/** A tool call, read: `runs`, `job`, `stop` or `restart` with what it asks, one input's value that fits it, or why not. */
+/** A tool call, read: `runs`, `job`, `stop`, `restart` or `line` with what it asks, one input's value that fits it, or why not. */
 export type Call =
 	| {readonly kind: "runs"}
 	| {readonly kind: "job"; readonly ask: JobAsk}
 	| {readonly kind: "stop"; readonly ask: StopAsk}
 	| {readonly kind: "restart"; readonly ask: RestartAsk}
+	| {readonly kind: "line"; readonly ask: LineAsk}
 	| {
 			readonly kind: "input";
 			readonly program: string;
@@ -157,6 +160,10 @@ export const callOf = (list: ProgramList, name: string, args: unknown): Call => 
 		return restartAsk.check(args)
 			? {kind: "restart", ask: args}
 			: {kind: "refused", why: `${RESTART} does not fit: ${restartAsk.problem(args)}`};
+	if (name === LINE)
+		return lineAsk.check(args)
+			? {kind: "line", ask: args}
+			: {kind: "refused", why: `${LINE} does not fit: ${lineAsk.problem(args)}`};
 	const at = name.indexOf("_");
 	const program = name.slice(0, at);
 	const input = name.slice(at + 1);
