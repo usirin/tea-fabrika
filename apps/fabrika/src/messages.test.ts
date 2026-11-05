@@ -131,6 +131,23 @@ describe("the desk's port", () => {
 		expect(readToPage({type: "down", why, now: "reconnecting"}).kind).toBe("refused");
 	});
 
+	it("tells the page who restarted the host and why, and still reads a host that says nothing of it (185b PR 5)", () => {
+		const host = {pid: 4242, since: 0, build: null, ledger: {kind: "own"}, agents: []};
+		const read = (now: unknown) => readToPage({type: "host", now}).kind;
+		// made up: `restarted` and its fields; the plan names `HostNow.restarted` and restart.json's
+		// `{by, why, at}`. An agent's restart says why; a person's, from the window, says none.
+		const by = (who: string, why: string | null) => ({
+			...host,
+			restarted: {by: who, why, at: 1_767_225_600_000},
+		});
+		expect(read(by("agent:claude for:owner", "pick up the new build"))).toBe("read");
+		expect(read(by("user:owner", null))).toBe("read");
+		expect(read({...host, restarted: null})).toBe("read");
+		// A host of an older build sends no `restarted`: the app attaches to it, so it still reads.
+		expect(read(host)).toBe("read");
+		expect(read({...host, restarted: {why: "pick up the new build", at: 0}})).toBe("refused");
+	});
+
 	it("takes Try again and the restart from the page for the app itself, and nothing more", () => {
 		expect(readToApp({type: "again"})).toEqual({kind: "read", msg: {type: "again"}});
 		expect(readToApp({type: "restart"})).toEqual({kind: "read", msg: {type: "restart"}});

@@ -38,6 +38,14 @@ import type {AgentSessions} from "./agent-session.ts";
 //                    {_tag: "stopped", job: {n: 1, ..., state: {_tag: "ended", how: "stopped"}}}
 //   person's tile    [1] stopped by agent:claude for:owner: wrong ticket
 //
+// And its `restart` tool: an agent restarts the host, and must say why. The host answers, leaves
+// its note for the next host (host/restart.ts), and ends; the app attached starts the next one, so
+// with no app attached it is refused (host/serve.ts, `restartFor`).
+//
+//   agent's chat     restart {why: "pick up the new build"}
+//                    {_tag: "restarting", detached: [2]}
+//   person's tile    tsh: 1 job from an earlier tsh, restarted by agent:claude for:owner, not running: %2. ...
+//
 // Every home has the socket, and every agent gets every tool. On a home that keeps its own ledger
 // file, an agent's programs write on the host's ledger, as the agent. On a home connected to a
 // ledger server, each agent writes on its own session (`sessionFor`, host/agent-session.ts): the
@@ -76,6 +84,8 @@ export const serveAgents = (options: {
 	readonly job: (n: number) => JobAnswer | null;
 	/** Stop job n for an agent, and why (host/serve.ts), for the `stop` tool. */
 	readonly stop: NonNullable<AgentOptions["stop"]>;
+	/** Restart the host for an agent, and why (host/serve.ts), for the `restart` tool; none, no tool. */
+	readonly restart?: AgentOptions["restart"];
 	/**
 	 * Agent `name`'s own session on the home's ledger server, held in the agent's scope
 	 * (host/agent-session.ts); `null`: the home keeps its own ledger file, and each agent writes on
@@ -84,7 +94,7 @@ export const serveAgents = (options: {
 	readonly sessionFor: AgentSessions | null;
 }) =>
 	Effect.gen(function* () {
-		const {server, ports, attached, job, stop, sessionFor} = options;
+		const {server, ports, attached, job, stop, restart, sessionFor} = options;
 		const ledger = yield* Ledger;
 		const person = yield* Author;
 		const pullRequests = yield* PullRequests;
@@ -116,6 +126,7 @@ export const serveAgents = (options: {
 				tiles: () => [...ports()].flatMap((port) => inTile(port) ?? []),
 				job,
 				stop,
+				restart,
 				attached: (who) => attached(who.id),
 			}).pipe(
 				Effect.catchCause((cause) =>

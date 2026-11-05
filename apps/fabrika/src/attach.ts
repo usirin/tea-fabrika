@@ -1,6 +1,7 @@
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
-import {Effect, Exit, Schedule, Schema, Scope} from "effect";
+import {Clock, Effect, Exit, Schedule, Schema, Scope} from "effect";
 import {BUILD} from "./build-id.ts";
+import {forgetNote, leaveNote, personOn} from "./host/restart.ts";
 import {pathsOf, reach} from "./host/socket.ts";
 import {stopHost} from "./host/stop.ts";
 import {type Down, foundOf, PROTOCOL, type Up} from "./link.ts";
@@ -24,8 +25,9 @@ import {appWire, type Wire} from "./wire.ts";
 //   wire.send({type: "page"});
 //
 //   const again = yield* restart({home, deliver: relay, start});
-//   // the person confirmed "Stop the old host and start this one": the host is stopped by its
-//   // pid (host/stop.ts) and waited for, then `attach`, which finds none and starts this build's
+//   // the person confirmed "Stop the old host and start this one": the person's note is left
+//   // for the next host (host/restart.ts), the host is stopped by its pid (host/stop.ts) and
+//   // waited for, then `attach`, which finds none and starts this build's
 //
 // `attach` never stops a host. A host of another version runs on with its jobs, and the app says
 // so plainly (main.ts) instead of attaching; only `restart`, asked by the person, stops it. A try
@@ -113,7 +115,24 @@ export const attach = <E, R>(options: AttachOptions<E, R>) =>
 
 /**
  * Stop the host on the home and wait for it to exit (host/stop.ts), then attach: no host answers
- * now, so `attach` starts one of this build. Asked only by the person, from the window.
+ * now, so `attach` starts one of this build. Asked only by the person, from the window. Before the
+ * stop, a host that answers is left the person's note (host/restart.ts): who, no why, and when, so
+ * the next host says who restarted it, as after an agent's restart. A stop that fails takes the
+ * note back: no restart happened.
  */
 export const restart = <E, R>(options: AttachOptions<E, R>) =>
-	stopHost(options.home).pipe(Effect.andThen(attach(options)));
+	Effect.gen(function* () {
+		const paths = yield* pathsOf(options.home);
+		if ((yield* reach(paths.sock)) === "live") {
+			const by = yield* personOn(options.home);
+			const at = yield* Clock.currentTimeMillis;
+			if (by !== null)
+				yield* leaveNote(paths, {by, why: null, at}).pipe(
+					Effect.catch((e) =>
+						Effect.logWarning(`fabrika: the restart's note could not be left: ${e.message}`),
+					),
+				);
+		}
+		yield* stopHost(options.home).pipe(Effect.tapError(() => forgetNote(paths)));
+		return yield* attach(options);
+	});
