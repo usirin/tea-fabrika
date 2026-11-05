@@ -1,13 +1,22 @@
 # Talk where you work: `@claude` in tsh, and talking at a spot
 
-**Proposed 2026-11-04.** Leaned in the walk on 2026-11-04, where the owner set three points, each
-marked decided below:
+**Proposed 2026-11-04.** Leaned in the walk on 2026-11-04, where the owner set three points, and
+two more on 2026-11-05, each marked decided below:
 
 - **Decided, no chat program.** tsh is the chat. You summon different agents and talk to them in
   tsh, so they learn to compose with your programs. It also makes the first day easy.
 - **Decided, a spot's reply stays at the spot.** It is not copied back into tsh.
 - **Decided, the word:** the name tag on what an agent is writing is a presence label
   ([shared tiles](./shared-tiles.md)).
+- **Decided 2026-11-05, `@claude` is a wrapper.** It is tsh's own `tell` to an agent the host
+  started, and with none running, the line that starts one. It is read off the line before tsh's
+  shell words, like Claude Code's `!`. The log keeps the line as typed, the job the name meant then,
+  and that the cost line was shown
+  ([experiment 210](../../experiments/210-at-claude-wrapper-or-primitive.md)). A Claude Code the
+  person started themselves is out: reaching it would need a new push.
+- **Decided 2026-11-05, the started claude works in the repo.** The agent `@claude` starts gets the
+  person's repo folder and the fabrika connection, not today's scratch folder. Still open: what its
+  sandbox blocks once it is in the repo. It still has no `answer` tool.
 
 Proposed: clicking a presence label as one way to talk at a spot, the syntax, the frame owning the
 box, the keys, and the accessibility wiring.
