@@ -62,7 +62,7 @@ export const TABLE_REFUSED =
 /** What tsh says, in the order it says it: a line, a table, or that a line is done. */
 type Spoken =
 	| {readonly kind: "printed"; readonly printed: Printed}
-	| {readonly kind: "table"; readonly table: Table}
+	| {readonly kind: "table"; readonly table: Table; readonly n: number}
 	| {readonly kind: "ready"; readonly ready: Ready}
 	| {readonly kind: "backgrounded"; readonly ready: Ready};
 
@@ -118,6 +118,11 @@ export const tsh = defineProgram({
 			Table,
 			"A table to show a person, on out: laid out by the terminal that shows it, at its own width (./table.ts).",
 		),
+		// `table`'s value stays the table alone, for whoever only shows it; this one says whose it is.
+		jobTable: output(
+			Schema.Struct({n: Schema.Int, table: Table}),
+			"Each table as `table` sends it, right after, with n: the job that printed it, so a host keeps it in that job's lines.",
+		),
 		ready: output(
 			Ready,
 			"Once a line is done: the prompt comes back. status: how its last statement ended, as an exit status (0 ended, 1 failed, 130 stopped, 2 refused, 127 no such program).",
@@ -163,7 +168,9 @@ export const tsh = defineProgram({
 					s.kind === "printed"
 						? send("printed", s.printed)
 						: s.kind === "table"
-							? send("table", s.table)
+							? send("table", s.table).pipe(
+									Effect.andThen(send("jobTable", {n: s.n, table: s.table})),
+								)
 							: s.kind === "ready"
 								? send("ready", s.ready)
 								: send("backgrounded", s.ready),
@@ -176,8 +183,8 @@ export const tsh = defineProgram({
 					printed: n === undefined ? {to, text} : {to, text, n},
 				});
 			};
-			const printTable = (table: Table) => {
-				Queue.offerUnsafe(spoken, {kind: "table", table});
+			const printTable = (table: Table, n: number) => {
+				Queue.offerUnsafe(spoken, {kind: "table", table, n});
 			};
 
 			const signals = yield* PubSub.unbounded<"interrupt">();

@@ -592,6 +592,9 @@ export const startTsh = (options: {
 			if (done == null || done !== asked) return;
 			answer(LineAnswer.cases.said.make({lines: [...done.lines], status}));
 		};
+		/** A table as an agent reads it: its rows as plain text, 100 columns wide. */
+		const asText = (table: Shell.Table) =>
+			Shell.tableLines(table, 100).map((line) => line.map((s) => s.text).join(""));
 		/** The line tsh's own words are for now: one beside the foreground, or the one it runs. */
 		const speaking = () => (asked?.via === "background" ? asked : ran[0]);
 		const started = yield* start(
@@ -605,10 +608,12 @@ export const startTsh = (options: {
 					toEditor({type: "printed", text: p.text});
 				},
 				table: (table) => {
-					speaking()?.lines.push(
-						...Shell.tableLines(table, 100).map((line) => line.map((s) => s.text).join("")),
-					);
+					speaking()?.lines.push(...asText(table));
 					toEditor({type: "table", table});
+				},
+				// The same table, as the lines of the job that printed it: what the agent's `job` tool reads.
+				jobTable: ({n, table}) => {
+					for (const line of asText(table)) jobLines?.printed(n, line);
 				},
 				ready: (r) => {
 					said(ran.shift(), r.status);
