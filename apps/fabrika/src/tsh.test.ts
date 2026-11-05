@@ -961,6 +961,51 @@ describe("an agent's tsh", () => {
 		expect(history.kept()).toEqual([]);
 	});
 
+	// 185b PR 3b, call C: each view says the inputs its run takes, as this tsh gave them, so a
+	// window in an agent's tile draws no control for one it dropped. Made up here: `ToWindow.takes`.
+	it("says with each view the inputs its run takes: the person's every one, the agent's no answer", async () => {
+		type Session = Effect.Success<ReturnType<typeof session>>;
+		/** The newest view of the first window a line opens, with the inputs it says its run takes. */
+		const takesIn = (
+			author: Author["Service"],
+			run: (s: Session) => Effect.Effect<unknown, unknown>,
+		) =>
+			Effect.gen(function* () {
+				const ledger = memoryService();
+				yield* seedSeven(ledger);
+				const s = yield* session({author, ledger});
+				yield* s.prompts(1);
+				yield* run(s);
+				const open = yield* s.opened();
+				if (open.kind !== "open") return yield* Effect.die("no window opened");
+				yield* s.until("the ticket's first view", () =>
+					s.seen.find((x) => x.kind === "view" && x.run === open.run),
+				);
+				let newest: unknown;
+				s.window(open.run).show((m) => {
+					newest = m;
+				})();
+				s.window(open.run).closed();
+				return newest;
+			}).pipe(Effect.scoped);
+		const [person, agent] = await go(
+			Effect.all(
+				[
+					takesIn({kind: "user", id: "owner"}, (s) =>
+						Effect.sync(() => s.type("ticket --ticket 7\r")),
+					),
+					takesIn(CLAUDE, (s) => s.host.line("ticket --ticket 7")),
+				],
+				// One host at a time: the two must not share the machine's ports and timers.
+				{concurrency: 1},
+			),
+		);
+		const sorted = (view: unknown) =>
+			[...((view as {takes?: readonly string[]}).takes ?? ["(no takes said)"])].sort();
+		expect(sorted(person)).toEqual(["answer", "close", "comment", "quit", "reopen", "ticket"]);
+		expect(sorted(agent)).toEqual(["close", "comment", "quit", "reopen", "ticket"]);
+	});
+
 	it("takes no person-only input: tracker's answer is no input here (d16)", async () => {
 		const said = await go(
 			Effect.gen(function* () {

@@ -11,6 +11,7 @@
 		"start": "node build.ts && electron .",
 		"e2e": "node build.ts && node e2e.ts",
 		"e2e:lane": "node build.ts && node lane-e2e.ts",
+		"e2e:agents": "node build.ts && node agents-e2e.ts",
 		"shots": "node build.ts && node shots.ts",
 		"table": "node table.ts",
 		"cli": "node src/cli.ts",

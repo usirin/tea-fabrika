@@ -137,6 +137,11 @@ const hostOn = (home: string, lines: string[]) =>
 			).rows;
 		/** Every port the app was told of, in order. */
 		const ports = () => got.flatMap((m) => (m.type === "port" ? [m.port] : []));
+		/** What the page itself sends on the desk's port, as a click in the frame or a window does. */
+		const toDesk = (m: unknown) => wire.send({type: "on", port: "desk", m});
+		/** Every message a run's window was sent on its port (`run:<id>`), in order. */
+		const views = (port: string): unknown[] =>
+			got.flatMap((m) => (m.type === "to" && m.port === port ? [m.m] : []));
 		return {
 			paths,
 			page,
@@ -146,6 +151,8 @@ const hostOn = (home: string, lines: string[]) =>
 			click,
 			rows,
 			ports,
+			toDesk,
+			views,
 			stop: Scope.close(app, Exit.void).pipe(Effect.andThen(Scope.close(host, Exit.void))),
 		};
 	});
@@ -484,6 +491,95 @@ describe("the line tool", {timeout: 30_000}, () => {
 		expect(seen.running).toMatchObject({n: 1, tile: "t2"});
 		// It goes on as the agent: the job keeps the writer that began it.
 		expect(said(lines, "job_began").filter((f) => f.by !== AGENT)).toEqual([]);
+	});
+});
+
+// 185b PR 3b, call C and d18. Today's version. A window in the agent's tile draws no control for
+// an input its run does not take: the host says, with each view, the inputs the run's tsh gave it.
+// In the agent's tile, the line "Only you can answer this. Open #7 in your own tile." opens #7 in
+// a tile of the person's. When no tile of theirs shows #7 and no tracker of theirs is open, the
+// page asks the desk for one.
+//
+//   claude: line {line: "ticket --ticket 7"}   run:<id>'s view {..., takes: [no "answer"]}
+//   the person types "ticket --ticket 7" in t1   run:<id>'s view {..., takes: [..., "answer"]}
+//   the page: on desk {type: "mine", ticket: 7}  t3 beside the focused tile, focused, the person's:
+//                                                its tsh runs "ticket --ticket 7";
+//                                                host/log job_began tile=t3 by=user:owner
+//
+// Made up here: `ToWindow.takes` and the page's `mine` message.
+
+/** The person, on a home of its own file. */
+const OWNER = "user:owner";
+
+/** The inputs the first view on `port` says its run takes, sorted; `null` while none came. */
+const takesOn = (views: readonly unknown[]): readonly string[] | null | undefined => {
+	const first = views[0];
+	if (first === undefined) return undefined;
+	const takes = Reflect.get(Object(first), "takes");
+	return Array.isArray(takes) ? takes.map(String).sort() : null;
+};
+
+describe("what only a person answers, in an agent's tile (185b PR 3b)", {timeout: 30_000}, () => {
+	it("says with each view the inputs its run takes: the agent's ticket has no answer, the person's has", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				const host = yield* hostOn(home, []);
+				const agent = yield* agentOn(home, "claude");
+				const runPorts = () => host.ports().filter((p) => p.startsWith("run:"));
+				yield* agent.line("ticket --ticket 7");
+				const theirs = yield* until("the agent's ticket window", () => runPorts()[0]);
+				const agents = yield* until("the agent's first view", () =>
+					takesOn(host.views(theirs)) === undefined ? undefined : takesOn(host.views(theirs)),
+				);
+				host.type("t1", "ticket --ticket 7\r");
+				const mine = yield* until("the person's ticket window", () => runPorts()[1]);
+				const persons = yield* until("the person's first view", () =>
+					takesOn(host.views(mine)) === undefined ? undefined : takesOn(host.views(mine)),
+				);
+				return {agents, persons};
+			}),
+		);
+		expect(seen.agents).toEqual(["close", "comment", "quit", "reopen", "ticket"]);
+		expect(seen.persons).toEqual(["answer", "close", "comment", "quit", "reopen", "ticket"]);
+	});
+
+	it("opens the ticket in a tile of the person's when the page asks: beside the focused tile, focused, its line the person's", async () => {
+		const lines: string[] = [];
+		const seen = await go(
+			Effect.gen(function* () {
+				const home = yield* freshHome;
+				const host = yield* hostOn(home, lines);
+				const agent = yield* agentOn(home, "claude");
+				yield* agent.line("ticket --ticket 7");
+				yield* until("claude's tile", () =>
+					host.desk()?.agents?.claude === "t2" ? true : undefined,
+				);
+				// The person opens claude's tile and presses the line's link.
+				host.click("t2");
+				yield* until("t2 focused", () =>
+					host.desk()?.workspaces[0]?.focused === "t2" ? true : undefined,
+				);
+				host.toDesk({type: "mine", ticket: 7});
+				const desk = yield* until("a tile of the person's, focused", () => {
+					const d = host.desk();
+					return d?.workspaces[0]?.focused === "t3" ? d : undefined;
+				});
+				const began = yield* until("the person's job in t3", () =>
+					said(lines, "job_began").find((f) => f.tile === "t3"),
+				);
+				return {desk, began, ports: host.ports()};
+			}),
+		);
+		expect(seen.desk.agents).toEqual({claude: "t2"});
+		expect(nodesOf(seen.desk)).toEqual(
+			expect.arrayContaining([
+				["t2", "w1", false],
+				["t3", "w1", false],
+			]),
+		);
+		expect(seen.ports).toContain("tile:t3");
+		expect(seen.began).toMatchObject({text: "ticket --ticket 7", tile: "t3", by: OWNER});
 	});
 });
 

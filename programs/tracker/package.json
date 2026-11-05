@@ -26,8 +26,10 @@
 	"devDependencies": {
 		"@types/node": "catalog:",
 		"@types/react": "catalog:",
+		"@types/react-dom": "catalog:",
 		"fast-check": "catalog:",
 		"react": "catalog:",
+		"react-dom": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	}

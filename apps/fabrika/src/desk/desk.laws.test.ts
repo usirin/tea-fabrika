@@ -143,6 +143,8 @@ const table: MsgArbitraryTable<Msg> = {
 	keys: arbRecordMsg("keys", {keys: fc.constant(defaults)}),
 	// The host asks for an agent's tile, as its `line` tool's first call does (tracker 185b, PR 3).
 	launch: arbRecordMsg("launch", {agent: fc.constantFrom("claude", "lead")}),
+	// The line in an agent's tile asks for a tile of the person's that shows a ticket (185b PR 3b).
+	mine: arbRecordMsg("mine", {ticket: fc.integer({min: 1, max: 99})}),
 	show_ok: fc.constant(show.ok(showing, null, 0)),
 	show_err: failed(show.errType, showing),
 	open_ok: fc.constant(open.ok(opening, null, 0)),
@@ -169,8 +171,19 @@ const table: MsgArbitraryTable<Msg> = {
 const random = fc.array(
 	// `launch` weighs nothing here, so these lists stay the lists seed 1 made before it: the
 	// planted mistakes below are caught as they were. The agents' lists (`agentLists`) have it.
+	// `mine` weighs nothing here either, for the same reason; `mineLists` have it.
 	arbMsg(table, {
-		weights: {key: 24, click: 2, covered: 3, over: 2, jobs: 2, closing: 1, area: 1, launch: 0},
+		weights: {
+			key: 24,
+			click: 2,
+			covered: 3,
+			over: 2,
+			jobs: 2,
+			closing: 1,
+			area: 1,
+			launch: 0,
+			mine: 0,
+		},
 	}),
 	{maxLength: 60, size: "max"},
 );
@@ -208,7 +221,38 @@ const lists = fc
  */
 const agentLists = fc.array(
 	arbMsg(table, {
-		weights: {key: 24, click: 2, covered: 3, over: 2, jobs: 2, closing: 1, area: 1, launch: 3},
+		weights: {
+			key: 24,
+			click: 2,
+			covered: 3,
+			over: 2,
+			jobs: 2,
+			closing: 1,
+			area: 1,
+			launch: 3,
+			mine: 0,
+		},
+	}),
+	{maxLength: 60, size: "max"},
+);
+/**
+ * Lists where the line in an agent's tile is pressed too: the agents' lists, and now and then a
+ * `mine` for a ticket, before, between and after the person's keys and the host's launches (185b
+ * PR 3b).
+ */
+const mineLists = fc.array(
+	arbMsg(table, {
+		weights: {
+			key: 24,
+			click: 2,
+			covered: 3,
+			over: 2,
+			jobs: 2,
+			closing: 1,
+			area: 1,
+			launch: 3,
+			mine: 3,
+		},
 	}),
 	{maxLength: 60, size: "max"},
 );
@@ -931,5 +975,164 @@ describe("an agent's tile on the desk (tracker 185b, PR 3)", () => {
 		const [s] = launched(deskMachine, first, "claude");
 		const read = Schema.decodeUnknownSync(DeskSchema)(JSON.parse(JSON.stringify(forPage(s))));
 		expect(read.at === "open" ? read.agents : null).toEqual({claude: "t2"});
+	});
+});
+
+// ---------------------------------------------------------------- the person's own tile (185b PR 3b)
+//
+// The line in an agent's tile, "Only you can answer this. Open #7 in your own tile.", asks the
+// desk for a tile of the person's that shows #7 when the page finds none (window/frame.ts,
+// `opensOf`). The desk splits beside the focused tile, as C-b | does, and focuses the new tile:
+// the person clicked to go there. Its tsh is the person's, and the line `ticket --ticket 7` goes
+// to it as if typed, so the job is the person's own. A question up is answered no, as a pick in
+// the asks list does. Made up here: the `mine` Msg, "open this ticket in a tile of mine".
+//
+//   agents {claude: "t4"}, t4 focused   mine {ticket: 7}   t5 beside t4, focused, open:
+//                                                          open {tile: "t5"}, send {tile: "t5",
+//                                                          data: "ticket --ticket 7\r"}, save
+
+/** The desk after the line asks for the person's own tile for `ticket`, and what it asks for. */
+const mineFor = (machine: Machine, from: Desk, ticket: number) =>
+	applyCell<Desk, Msg, DeskCmd>(machine, from, {type: "mine", ticket});
+
+const mineOpens = atTheEnd(
+	"wherever it is, mine for a ticket makes one tile of the person's, beside the focused one in the active workspace, focused and open, and sends it the line that shows the ticket; no other tile changes, and no agent gets a tile",
+	(machine, last) => {
+		if (last.at === "over") return true;
+		const [s, cmds] = mineFor(machine, last, 7);
+		if (s.at !== "open") return false;
+		const id = `t${last.next}`;
+		const before = nodesOf(last);
+		const after = nodesOf(s);
+		const made = [...after.keys()].filter((t) => !before.has(t));
+		return (
+			same(made, [id]) &&
+			after.get(id)?.ws === last.active &&
+			after.get(id)?.folded === false &&
+			s.active === last.active &&
+			activeOf(s).focused === id &&
+			s.ask === null &&
+			[...before].every(([t, was]) => same(after.get(t), was)) &&
+			same(s.agents, last.agents) &&
+			s.next === last.next + 1 &&
+			same(
+				cmds.map((c) => c.type),
+				["open", "send", "save"],
+			) &&
+			same(opensIn(cmds), [[id, null]]) &&
+			cmds.some((c) => c.type === "send" && c.tile === id && c.data === "ticket --ticket 7\r") &&
+			cmds.every((c) => c.type !== "save" || same(c.desk, savedOf(s)))
+		);
+	},
+	mineLists,
+);
+
+/** The laws a `mine` must keep: every law over the agents' lists, now over lists with `mine` in them. */
+const KEPT_ON_MINE = [
+	whole,
+	focusOpen,
+	booksTidy,
+	opensAndStops,
+	closesOnce,
+	freshIds,
+	savesChanges,
+	overStays,
+	emptiesAtTheEnd,
+	splitOpens,
+	agentTilesThere,
+	opensAsAgent,
+].map((law) => law.over(mineLists));
+
+const MINE_LAWS = [mineOpens, ...KEPT_ON_MINE];
+
+/** The names of the mine laws `machine` breaks. */
+const brokenOfMine = (machine: Machine): readonly string[] =>
+	MINE_LAWS.filter((law) => {
+		try {
+			law.check(machine);
+			return false;
+		} catch {
+			return true;
+		}
+	}).map((law) => law.name);
+
+const MINE_PLANTS = {
+	/** The tile opens and focus stays where it was, maybe on the agent's tile. */
+	mineKeepsFocus: plant({
+		mine: (s, m) => {
+			const [next, cmds] = real.mine(s, m);
+			if (s.at !== "open" || next.at !== "open") return [next, cmds];
+			const back = focusOn(next, activeOf(s).focused);
+			return [back, cmds.map((c) => (c.type === "save" ? save({desk: savedOf(back)}) : c))];
+		},
+	}),
+	/** The tile opens as the agent whose tile was focused: the person's answer would be the agent's. */
+	mineOpensAsTheAgent: plant({
+		mine: (s, m) => {
+			const [next, cmds] = real.mine(s, m);
+			return [
+				next,
+				cmds.map((c) => (c.type === "open" ? open({tile: c.tile, agent: "claude"}) : c)),
+			];
+		},
+	}),
+	/** The tile opens and the line is never sent: the person sees a bare prompt. */
+	mineForgetsTheLine: plant({
+		mine: (s, m) => {
+			const [next, cmds] = real.mine(s, m);
+			return [next, cmds.filter((c) => c.type !== "send")];
+		},
+	}),
+	/** The new tile is written down as the agent's. */
+	mineGivesItToTheAgent: plant({
+		mine: (s, m) => {
+			const [next, cmds] = real.mine(s, m);
+			if (s.at !== "open" || next.at !== "open") return [next, cmds];
+			const back: Open = {...next, agents: {...next.agents, claude: activeOf(next).focused}};
+			return [back, cmds.map((c) => (c.type === "save" ? save({desk: savedOf(back)}) : c))];
+		},
+	}),
+} satisfies Record<string, Machine>;
+
+describe("the person's own tile, from the line in an agent's tile (185b PR 3b)", () => {
+	it.each(MINE_LAWS.map((law) => [law.name, law] as const))("with mine too: %s", (_, law) => {
+		law.check(deskMachine);
+	});
+
+	it("opens #7 beside claude's focused tile, as the person, and focuses it", () => {
+		const [first] = deskMachine.init(null, undefined);
+		const [withClaude] = launched(deskMachine, first, "claude");
+		if (withClaude.at !== "open") throw new Error("the desk is over");
+		const claude = withClaude.agents["claude"] ?? "";
+		const [there] = applyCell<Desk, Msg, DeskCmd>(deskMachine, withClaude, {
+			type: "click",
+			tile: claude,
+		});
+		const [s, cmds] = mineFor(deskMachine, there, 7);
+		expect(s.at === "open" ? activeOf(s).focused : null).toBe("t3");
+		expect(s.at === "open" ? s.agents : null).toEqual({claude});
+		expect(cmds.slice(0, 2)).toEqual([
+			open({tile: "t3"}),
+			send({tile: "t3", data: "ticket --ticket 7\r"}),
+		]);
+	});
+
+	it("changes nothing on a desk that is over", () => {
+		const over: Desk = {at: "over"};
+		expect(mineFor(deskMachine, over, 7)).toEqual([over, []]);
+	});
+
+	it("each mine law is seen to fail on a planted mistake", () => {
+		const caught = Object.fromEntries(
+			Object.entries(MINE_PLANTS).map(([name, machine]) => [name, brokenOfMine(machine)]),
+		);
+		expect(caught).toMatchObject({
+			mineKeepsFocus: expect.arrayContaining([mineOpens.name]),
+			mineOpensAsTheAgent: expect.arrayContaining([mineOpens.name, opensAsAgent.name]),
+			mineForgetsTheLine: expect.arrayContaining([mineOpens.name]),
+			mineGivesItToTheAgent: expect.arrayContaining([mineOpens.name, agentTilesThere.name]),
+		});
+		// No plant breaks every law: each is caught for what it did, not for a cell that is missing.
+		for (const names of Object.values(caught)) expect(names.length).toBeLessThan(MINE_LAWS.length);
 	});
 });
