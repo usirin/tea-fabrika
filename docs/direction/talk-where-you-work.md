@@ -1,7 +1,7 @@
 # Talk where you work: `@claude` in tsh, and talking at a spot
 
 **Proposed 2026-11-04.** Leaned in the walk on 2026-11-04, where the owner set three points, and
-two more on 2026-11-05, each marked decided below:
+more on 2026-11-05, each marked decided below:
 
 - **Decided, no chat program.** tsh is the chat. You summon different agents and talk to them in
   tsh, so they learn to compose with your programs. It also makes the first day easy.
@@ -20,8 +20,7 @@ two more on 2026-11-05, each marked decided below:
 - **Decided 2026-11-05, its network is an allow list.** Not fully off: it reaches the hosts the
   repo's `.fabrika/fabrika.toml` names (the package registry, GitHub, docs) and nothing else, the
   way GitHub's coding agent has a firewall. The agent cannot write `.fabrika/`, so it cannot widen
-  its own list; a change to the list is a person's. Still open: whether it may start a paid run
-  from its own line.
+  its own list; a change to the list is a person's.
 - **Decided 2026-11-05, hidden files are a list too.** The same file names paths the agent cannot
   read, with `.env` and `.env.*` hidden by default, and a repo may change the list. The sandbox
   hides them, so claude cannot read them by any tool, not a rule it is asked to keep. The industry
@@ -35,6 +34,29 @@ two more on 2026-11-05, each marked decided below:
 
   [agent.files]
   hide = [".env", ".env.*"] # the default; a repo may change it
+  ```
+
+- **Decided 2026-11-05, each harness's own permission words pass through.** The same file carries
+  one block per harness, in that harness's own words: Claude Code's permission mode and its
+  `allow`, `ask` and `deny` rules, Codex's approval policy. Fabrika does not make up a shared set
+  of words to translate, so nothing breaks when a harness changes, and any example in a harness's
+  docs can be copied in. That settles the paid run: by default, the tool that starts a pipeline is
+  in `ask`, so a run the agent wants shows on the person's tile and waits for Enter. A repo that
+  moves it to `allow` gets runs without a prompt, and the log keeps that the repo chose it
+  ([principle 5](./principles.md)). The host still refuses a rule that would open one of its own
+  walls, such as allowing an `answer` tool: a wall is never a setting.
+
+  ```toml
+  # A sketch: the block names are not settled. The values are each harness's own words.
+  [agent.claude]
+  mode = "default"                 # Claude Code's permission mode, such as "auto"
+  allow = ["Bash(pnpm test *)"]
+  ask = ["mcp__fabrika__line"]     # starting a pipeline asks first; the tool name is unchecked
+  deny = ["Bash(git push *)"]
+
+  [agent.codex]
+  approval_policy = "on-request"   # codex-cli 0.165.0 offers "on-request" and "never"
+  sandbox = "workspace-write"      # or "read-only", "danger-full-access"
   ```
 
 Proposed: clicking a presence label as one way to talk at a spot, the syntax, the frame owning the
