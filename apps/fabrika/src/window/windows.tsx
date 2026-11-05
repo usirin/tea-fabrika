@@ -19,9 +19,19 @@ import {reader} from "../messages.ts";
 // that data reads by the program's own view schema; data that does not read is shown as refused,
 // never handed to the window.
 
+/**
+ * What the page hands a window beside its data: the inputs its run takes, as the host said them
+ * with the view (messages.ts, `ToWindow.takes`), and the way to open a ticket in a tile of the
+ * person's. A view from a host that says no `takes` is drawn with neither: every control.
+ */
+interface Drawn {
+	readonly takes: readonly string[];
+	readonly mine: (ticket: number) => void;
+}
+
 /** A program's window as the app holds it: its data read, then drawn, with the way to send. */
 export interface Known {
-	readonly draw: (data: unknown, send: (msg: unknown) => void) => ReactNode;
+	readonly draw: (data: unknown, send: (msg: unknown) => void, drawn?: Drawn) => ReactNode;
 }
 
 /** A program with a view, as `defineProgram` types one. */
@@ -35,10 +45,14 @@ const known = <P extends Windowed>(
 	return [
 		program.name,
 		{
-			draw: (data, send) => {
+			draw: (data, send, drawn) => {
 				const got = read(data);
 				return got.kind === "read" ? (
-					<Window view={got.msg} send={send} />
+					drawn === undefined ? (
+						<Window view={got.msg} send={send} />
+					) : (
+						<Window view={got.msg} send={send} takes={new Set(drawn.takes)} mine={drawn.mine} />
+					)
 				) : (
 					<p role="alert">
 						refused what {program.name} sent its window: {got.why}

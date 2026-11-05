@@ -474,6 +474,77 @@ describe("the bottom line and the asks list", () => {
 		expect(opensOf(null, 7, SHOWN)).toEqual({kind: "none"});
 		expect(nowhereNote(8)).toBe("no tile shows #8 · the tracker opens it");
 	});
+
+	// 185b PR 3b, call C: an agent's tile is not the person's. Its ticket window has no answer
+	// (an agent's tsh drops it), and its tracker types nothing for the person, so an ask, and the
+	// line "Only you can answer this. Open #7 in your own tile.", never open there. Today's
+	// version.
+	//
+	//   claude's t4 shows #7, the person's t2 shows #8   #7 opens in the person's tracker, t1
+	//   only claude's tracker is open                    #7 opens nowhere yet: the line asks the desk
+	describe("with an agent's tile on the desk", () => {
+		/** The desk after `msgs` and claude's launch, and the tile claude was given. */
+		const launchedAfter = (msgs: readonly DeskMsg[]) => {
+			const msg: DeskMsg = {type: "launch", agent: "claude"};
+			const tile = fold([...msgs, msg]).agents["claude"];
+			if (tile === undefined) throw new Error("claude has no tile");
+			return {msgs: [...msgs, msg], tile};
+		};
+		/** `lined`, and claude's own tile beside t2, its line `ticket --ticket 7` in it. */
+		const withClaude = (() => {
+			const {msgs, tile} = launchedAfter([
+				{
+					type: "covered",
+					tile: "t1",
+					runs: [
+						{id: "tracker:1", program: "tracker"},
+						{id: "ticket:1", program: "ticket"},
+						{id: "trace:1", program: "trace"},
+					],
+				},
+				{type: "click", tile: "t2"},
+			]);
+			const desk = fold([
+				...msgs,
+				{type: "covered", tile, runs: [{id: "ticket:2", program: "ticket"}]},
+			]);
+			return {desk, tile};
+		})();
+		/** The person's t2 shows #8; claude's tile shows #7. */
+		const shown = new Map([
+			["ticket:1", 8],
+			["ticket:2", 7],
+		]);
+
+		it("finds no tile for a ticket only an agent's tile shows", () => {
+			expect(withClaude.desk.agents).toEqual({claude: withClaude.tile});
+			expect(tileOfTicket(withClaude.desk, 8, shown)).toBe("t2");
+			expect(tileOfTicket(withClaude.desk, 7, shown)).toBeUndefined();
+		});
+
+		it("turns the person's tracker to it, and never the agent's tile", () => {
+			expect(opensOf(withClaude.desk, 7, shown)).toEqual({
+				kind: "tracker",
+				tile: "t1",
+				run: "tracker:1",
+			});
+		});
+
+		it("names no agent's tile under an ask in the asks list", () => {
+			const at = new Date(2026, 9, 30, 11, 13).getTime();
+			const [live] = asksSections(now({asks: [ask({at})]}), withClaude.desk, shown, at);
+			expect(live?.rows[0]?.sub).toBe("#7 Login fails");
+		});
+
+		it("opens nowhere when only an agent's tracker is open: the line asks the desk instead", () => {
+			const {msgs, tile} = launchedAfter([]);
+			const theirs = fold([
+				...msgs,
+				{type: "covered", tile, runs: [{id: "tracker:2", program: "tracker"}]},
+			]);
+			expect(opensOf(theirs, 7, new Map())).toEqual({kind: "none"});
+		});
+	});
 });
 
 describe("keys while something lies over the desk", () => {

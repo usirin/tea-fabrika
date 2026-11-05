@@ -54,6 +54,7 @@ import {
 	frameUpdate,
 	keyGoesTo,
 	type MidKey,
+	opensOf,
 	type Shapes,
 	ticketsShown,
 } from "./frame.ts";
@@ -499,6 +500,26 @@ const explainAt = (e: Event) => {
 /** The run a tile shows, if any: a run covering its tsh. */
 const runOf = (tile: TileNode) => tile.shows.run;
 
+/**
+ * The line in an agent's tile, "Only you can answer this. Open #7 in your own tile.", pressed:
+ * the person's tile that shows #7; else their tracker, turned to it; else the desk opens a tile of
+ * theirs for it (`mine`). An agent's own tile is never one of these (frame.ts, `opensOf`). It
+ * moves the person's focus, and writes nothing.
+ */
+const mine = (ticket: number) => {
+	const desk = store.desk?.at === "open" ? store.desk : null;
+	const to = opensOf(desk, ticket, ticketsShown(store.views));
+	switch (to.kind) {
+		case "tile":
+			return toHost({type: "go", tile: to.tile});
+		case "tracker":
+			toRun(to.run, {type: "query", value: {ticket}});
+			return toHost({type: "go", tile: to.tile});
+		case "none":
+			return toHost({type: "mine", ticket});
+	}
+};
+
 function View({tile, run}: {readonly tile: TileId; readonly run: string}): ReactNode {
 	const view = store.views.get(run);
 	const send = (msg: unknown) => toRun(run, msg);
@@ -516,7 +537,11 @@ function View({tile, run}: {readonly tile: TileId; readonly run: string}): React
 			) : known === undefined ? (
 				<p role="alert">no view for {view.program} in this app</p>
 			) : (
-				known.draw(view.data, send)
+				known.draw(
+					view.data,
+					send,
+					view.takes === undefined ? undefined : {takes: view.takes, mine},
+				)
 			)}
 		</main>
 	);

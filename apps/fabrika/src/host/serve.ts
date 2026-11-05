@@ -23,6 +23,7 @@ import {
 } from "../asks.ts";
 import {BUILD} from "../build-id.ts";
 import {
+	activeOf,
 	claims,
 	type Desk,
 	type DeskCmd,
@@ -669,6 +670,17 @@ export const serve = (options: {
 				case "seen":
 					toAsks({type: "seen"});
 					return;
+				case "mine": {
+					// The line in an agent's tile: a tile of the person's that shows the ticket. Only a
+					// page sends it, and it opens as the person's, focused, as a click focuses.
+					if (!step({type: "mine", ticket: m.ticket})) return;
+					shout();
+					const tile = desk.at === "open" ? activeOf(desk).focused : null;
+					Effect.runForkWith(services)(
+						Effect.logInfo("mine_tile").pipe(Effect.annotateLogs({ticket: m.ticket, tile})),
+					);
+					return;
+				}
 			}
 		};
 

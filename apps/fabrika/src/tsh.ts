@@ -494,6 +494,9 @@ export const startTsh = (options: {
 					},
 					kill: running.stop.pipe(Effect.asVoid),
 				};
+				// The inputs this run takes, said with each view: in an agent's tsh its program has none
+				// only a person tells (`forAgent`), so its window draws no control for one (call C).
+				const takes = Object.keys(r.program.inputs);
 				const placed = placedIn(table(), r.id);
 				shown.set(r.id, {placed});
 				runs.began(r.id, r.program.name, placed, window);
@@ -506,6 +509,7 @@ export const startTsh = (options: {
 								type: "view",
 								program: r.program.name,
 								data: declared.of(state),
+								takes,
 							};
 							newest = view;
 							for (const page of shownOn) page(view);

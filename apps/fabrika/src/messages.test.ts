@@ -52,6 +52,17 @@ describe("a program's window", () => {
 		expect(readFromWindow({type: "msg", to: "tsh:p1", msg: null}).kind).toBe("refused");
 		expect(readToWindow({type: "view", data: {n: 0}}).kind).toBe("refused");
 	});
+
+	// 185b PR 3b, call C: a view says which inputs its run takes, so a window in an agent's tile
+	// draws no control for one the agent's tsh dropped. A view with no `takes` is from a host
+	// before 3b, and still reads. Made up here: `ToWindow.takes`.
+	it("reads a view with the inputs its run takes, and one with none said", () => {
+		const view = {type: "view", program: "ticket", data: {}, takes: ["comment", "close"]};
+		expect(readToWindow(view)).toEqual({kind: "read", msg: view});
+		expect(readToWindow({type: "view", program: "ticket", data: {}}).kind).toBe("read");
+		expect(readToWindow({...view, takes: "comment"}).kind).toBe("refused");
+		expect(readToWindow({...view, takes: [7]}).kind).toBe("refused");
+	});
 });
 
 describe("the desk's port", () => {
@@ -140,5 +151,22 @@ describe("the desk's port", () => {
 		// The host does not read them: neither reaches it as a message of its own.
 		expect(readFromPage({type: "again"}).kind).toBe("refused");
 		expect(readFromPage({type: "restart"}).kind).toBe("refused");
+	});
+
+	// 185b PR 3b, call C: the line in an agent's tile, "Only you can answer this. Open #7 in your
+	// own tile.", asks the desk for a tile of the person's that shows #7, when no tile of theirs
+	// shows it and no tracker of theirs is open. Made up here: the `mine` message, "open this
+	// ticket in a tile of mine" (`own` already names the home's own ledger).
+	it("takes a ticket to open in the person's own tile, by its number, and nothing more", () => {
+		expect(readFromPage({type: "mine", ticket: 7})).toEqual({
+			kind: "read",
+			msg: {type: "mine", ticket: 7},
+		});
+		expect(readFromPage({type: "mine", ticket: 0}).kind).toBe("refused");
+		expect(readFromPage({type: "mine", ticket: 7.5}).kind).toBe("refused");
+		expect(readFromPage({type: "mine", ticket: "7"}).kind).toBe("refused");
+		expect(readFromPage({type: "mine", ticket: 7, tile: "t2"}).kind).toBe("refused");
+		expect(readFromPage({type: "mine", ticket: 7, agent: "claude"}).kind).toBe("refused");
+		expect(readFromPage({type: "mine"}).kind).toBe("refused");
 	});
 });
