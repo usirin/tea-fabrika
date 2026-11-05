@@ -23,6 +23,7 @@ import {BINDINGS, type Does, wordOf} from "./desk/keys.ts";
 import {deskWords} from "./desk/words.ts";
 import {gridOf} from "./editor/grid.ts";
 import {type History, memoryHistory, type SharedHistory, sharedHistory} from "./editor/history.ts";
+import {jobLines} from "./job-lines.ts";
 import type {TileJobs} from "./tile-jobs.ts";
 import {appPrograms, type Placed, type Runs, startTsh, tshList, type WindowScreen} from "./tsh.ts";
 
@@ -99,12 +100,15 @@ const session = (
 		};
 		// Each session is a host of its own: it opens the host's table, on the storage it is handed.
 		const jobs = yield* openJobs(opts.jobs ?? memoryStorage());
+		// The host's job lines, as the host hands them to each tile: what the agents' `job` tool reads.
+		const lines = yield* jobLines(jobs.table);
 		const host = yield* startTsh({
 			tile: "t1",
 			jobs,
 			history: opts.shared ?? (yield* sharedHistory(opts.history ?? memoryHistory())),
 			runs,
 			words: opts.words ?? [],
+			lines,
 		}).pipe(
 			Effect.provideService(Ledger, opts.ledger ?? memoryService()),
 			Effect.provideService(Author, opts.author ?? {kind: "user", id: "owner"}),
@@ -157,7 +161,21 @@ const session = (
 			};
 		const press = (run: string, value: unknown) =>
 			window(run).heard({type: "msg", msg: {type: "press", value}});
-		return {host, jobs, rows, until, prompts, type, opened, viewed, closed, window, press, seen};
+		return {
+			host,
+			jobs,
+			lines,
+			rows,
+			until,
+			prompts,
+			type,
+			opened,
+			viewed,
+			closed,
+			window,
+			press,
+			seen,
+		};
 	});
 
 /** Ticket 7 on `ledger`, as a lane left it (@tea-fabrika/tracker/seven). */
@@ -1115,23 +1133,23 @@ describe("an agent's tsh: what the mutation step found untested", () => {
 		expect(shown).toContain("Experiments");
 	});
 
-	// Red on PR 3a's build: the line's program begins a job, so the answer is `job` with no lines,
-	// and the table's rows, which tsh keeps for the line's `said`, never reach the agent.
+	// The line's program begins a job, so its answer is `job` (the plan, PR 3), and the agent reads
+	// the table as the job's lines, with the `job` tool (`lines.job`, job-lines.ts).
+	// Red on PR 3a's build: tsh keeps a table's rows only for the line's `said` (`speaking()`), never
+	// as the job's lines, so the job's lines never hold them.
 	it("answers the agent with a table's rows as text", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
 				const s = yield* session({author: CLAUDE});
 				yield* s.prompts(1);
 				const answer = yield* s.host.line("experiments");
-				yield* s.until("the table on the screen", () =>
-					s.rows().find((r) => r.includes("Experiments")),
+				const row = yield* s.until("the table in job 1's lines", () =>
+					s.lines.job(1)?.lines.find((l) => l.includes("Experiments")),
 				);
-				return {answer};
+				return {answer, row};
 			}).pipe(Effect.scoped),
 		);
-		expect(seen.answer).toMatchObject({_tag: "said", status: 0});
-		expect(
-			seen.answer._tag === "said" && seen.answer.lines.some((l) => l.includes("Experiments")),
-		).toBe(true);
+		expect(seen.answer).toMatchObject({_tag: "job", job: {n: 1}});
+		expect(seen.row).toContain("Experiments");
 	});
 });
