@@ -115,13 +115,12 @@ export const tsh = defineProgram({
 	outputs: {
 		printed: output(Printed, "A line to show, on out or err."),
 		table: output(
-			Table,
-			"A table to show a person, on out: laid out by the terminal that shows it, at its own width (./table.ts).",
-		),
-		// `table`'s value stays the table alone, for whoever only shows it; this one says whose it is.
-		jobTable: output(
-			Schema.Struct({n: Schema.Int, table: Table}),
-			"Each table as `table` sends it, right after, with n: the job that printed it, so a host keeps it in that job's lines.",
+			Schema.Struct({
+				table: Table,
+				/** The job that printed it, `%n`, as `printed` says its job. */
+				n: Schema.optionalKey(Schema.Int),
+			}),
+			"A table to show a person, on out: laid out by the terminal that shows it, at its own width (./table.ts). n: the job that printed it, so a host keeps it in that job's lines.",
 		),
 		ready: output(
 			Ready,
@@ -168,9 +167,7 @@ export const tsh = defineProgram({
 					s.kind === "printed"
 						? send("printed", s.printed)
 						: s.kind === "table"
-							? send("table", s.table).pipe(
-									Effect.andThen(send("jobTable", {n: s.n, table: s.table})),
-								)
+							? send("table", {table: s.table, n: s.n})
 							: s.kind === "ready"
 								? send("ready", s.ready)
 								: send("backgrounded", s.ready),

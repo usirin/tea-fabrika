@@ -96,7 +96,7 @@ const startTsh = (
 			{show},
 			{
 				printed: (printed) => Queue.offerUnsafe(said, {kind: "printed", printed}),
-				table: (table) => Queue.offerUnsafe(said, {kind: "table", table}),
+				table: ({table}) => Queue.offerUnsafe(said, {kind: "table", table}),
 				ready: (ready) => Queue.offerUnsafe(said, {kind: "ready", ready}),
 			},
 			{id, storage: memoryStorage()},

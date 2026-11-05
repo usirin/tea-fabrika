@@ -117,8 +117,9 @@ claude's tsh             tsh$ stop %2
 ```
 
 `Shell.Printed` and `Shell.Ready` are the schemas of two of tsh's outputs, for an app that
-builds its own schemas on them. The third, `table`, sends a `Shell.Table`: `Shell.tableLines`
-and `Shell.paint` lay it out and draw it, for an app that draws its own terminal.
+builds its own schemas on them. The third, `table`, sends `{table, n}`: a `Shell.Table`, and `n`,
+the job that printed it, as `Printed` says its job. `Shell.tableLines` and `Shell.paint` lay the
+table out and draw it, for an app that draws its own terminal.
 
 ## What a person sees
 

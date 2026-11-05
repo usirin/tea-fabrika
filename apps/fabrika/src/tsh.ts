@@ -607,13 +607,12 @@ export const startTsh = (options: {
 					else began(p.n);
 					toEditor({type: "printed", text: p.text});
 				},
-				table: (table) => {
-					speaking()?.lines.push(...asText(table));
+				table: ({table, n}) => {
+					const text = asText(table);
+					// A job's table is that job's lines, as its printed lines are: what the agent's `job` tool reads.
+					if (n !== undefined) for (const line of text) jobLines?.printed(n, line);
+					speaking()?.lines.push(...text);
 					toEditor({type: "table", table});
-				},
-				// The same table, as the lines of the job that printed it: what the agent's `job` tool reads.
-				jobTable: ({n, table}) => {
-					for (const line of asText(table)) jobLines?.printed(n, line);
 				},
 				ready: (r) => {
 					said(ran.shift(), r.status);
