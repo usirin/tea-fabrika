@@ -1153,3 +1153,62 @@ describe("an agent's tsh: what the mutation step found untested", () => {
 		expect(seen.row).toContain("Experiments");
 	});
 });
+
+// `attach %n` with no & (PR 381's review, finding 1). Today's version. The job keeps the number it
+// had, so it never begins since the line was sent: the line answers with that job as it comes to
+// the foreground, as a fresh foreground line answers at its job's start, so the call never waits on
+// the job's end and the next line is not held behind it.
+//
+//   tsh.line("counter &"); tsh.line("attach %1")   {_tag: "job", job: {n: 1, text: "counter", ...}}
+//   the next host: tsh.line("attach %1")           the same answer, for the detached job
+
+/** The `line` call's own bound in these cases: a hang fails here, not at the test's timeout. */
+const answered = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+	effect.pipe(Effect.timeoutOrElse({duration: "3 seconds", orElse: () => Effect.die("it hung")}));
+
+describe("an agent's tsh: attach %n in the foreground", () => {
+	it("answers with the job as a job of the background comes to the foreground, and takes the next line", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const s = yield* session({author: CLAUDE});
+				yield* s.prompts(1);
+				yield* s.host.line("counter &");
+				yield* s.opened();
+				const attached = yield* answered(s.host.line("attach %1"));
+				const next = yield* answered(s.host.line("tally &"));
+				return {attached, next};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.attached).toEqual({
+			_tag: "job",
+			job: {n: 1, text: "counter", tile: "t1", state: {_tag: "running"}, lines: []},
+		});
+		expect(seen.next).toMatchObject({_tag: "job", job: {n: 2, text: "tally &"}});
+	});
+
+	it("answers with the job as a detached job is attached again, and takes the next line", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const dir = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped();
+				// The first host: the agent's counter, left running as the host stops.
+				yield* Effect.gen(function* () {
+					const s = yield* session({author: CLAUDE, jobs: fileStorage(dir)});
+					yield* s.prompts(1);
+					yield* s.host.line("counter &");
+					yield* s.opened();
+				}).pipe(Effect.scoped);
+
+				const s = yield* session({author: CLAUDE, jobs: fileStorage(dir)});
+				yield* s.until("the earlier job", () => s.rows().find((r) => r.startsWith("tsh: 1 job")));
+				const attached = yield* answered(s.host.line("attach %1"));
+				const next = yield* answered(s.host.line("tally &"));
+				return {attached, next};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.attached).toEqual({
+			_tag: "job",
+			job: {n: 1, text: "counter", tile: "t1", state: {_tag: "running"}, lines: []},
+		});
+		expect(seen.next).toMatchObject({_tag: "job", job: {n: 2, text: "tally &"}});
+	});
+});
