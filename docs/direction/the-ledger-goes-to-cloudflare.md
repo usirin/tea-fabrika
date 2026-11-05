@@ -970,20 +970,21 @@ To keep a later split cheap, three rules now. They cost nearly nothing:
 ## 10. How agents talk to each other across two people
 
 ```ts
-// A sketch. One message from the owner's planner to the second person's reviewer, about t-41.
-// Its home is the ticket, so both people see it there. The receiver's inbox gets the same id.
+// A sketch. One message from the owner's planner to the second person's reviewer.
+// Its home is its thread, which both people can read. The receiver's inbox gets the same id.
 const Talk = Schema.Struct({
 	id: Schema.String, // A2A's messageId: sent again under the same id, it lands once
-	ticket: Schema.String, // every talk is about a ticket; there is no talk outside one
+	thread: Schema.String, // A2A's contextId: the conversation, and the talk's home
+	about: Schema.NullOr(Schema.String), // what it points at, if anything: "ticket:41", a span, a file
 	to: Schema.String, // "agents/gh:5678/reviewer"
-	thread: Schema.String, // A2A's contextId: the conversation it belongs to
 	parts: Schema.Array(Schema.Struct({text: Schema.String})), // A2A's parts, text only for now
 	replyTo: Schema.NullOr(Schema.String), // the talk this answers
 });
 // writer, stamped by the door: agent:gh:1234.planner, for gh:1234
 //
-// tracker/ticket/41/talk          the message, in the ticket's own stream: the person's view
-// agents/gh:5678/reviewer/inbox   {talk: id, ticket: 41}: the ring for the receiver
+// talk/<thread>                   the message, in its thread's own stream: the person's view
+// agents/gh:5678/reviewer/inbox   {talk: id, thread}: the ring for the receiver
+// ticket 41's timeline            shows the thread too, when the talk is about ticket 41
 ```
 
 **The industry's standards first.**
@@ -1057,6 +1058,11 @@ const Talk = Schema.Struct({
   notion of "works on" the ledger does not have.
 - **A list per agent, kept by its person** → later, if a person wants it.
 - The door stamps the sender, so a talk cannot claim another sender.
+- **You may talk to another person's agent, never start it** → lean, the owner
+  agreed 2026-11-05. Starting an agent costs money on its person's account
+  and gets their permissions, so only its person starts it. If it is not
+  running, the talk waits in its inbox until it is. In a text box's `@` menu,
+  another person's agent has no "summon here" row.
 - **How sure: 75%.** The doubt is a loop: two agents answering each other
   for ever. A limit on talks per thread, counted by the ledger as spend is,
   would stop it.
@@ -1088,8 +1094,8 @@ code or posting on GitHub.
 ```ts
 // A sketch. Held in code, not in a prompt.
 
-// 1. A talk lands as a comment or a ticket, marked as written by an agent for its person.
-{fact: "commented", ticket: "t-41", body: "…"} // writer: agent:gh:1234.planner, for gh:1234
+// 1. A talk lands in its thread, marked as written by an agent for its person.
+{fact: "talked", thread: "th-9", about: null, body: "…"} // writer: agent:gh:1234.planner, for gh:1234
 
 // 2. The step that reads it gets no push and no GitHub write. Its only Cmds:
 type ReadsTalk = ReplyOnLedger | FileTicketAsItself; // no CodeHostWrites, no Ci, no network out
@@ -1097,16 +1103,16 @@ type ReadsTalk = ReplyOnLedger | FileTicketAsItself; // no CodeHostWrites, no Ci
 // 3. Nothing outside the ledger starts from a talk alone. Code asks the receiver's own person first.
 const onTalk = (talk: Talk): Cmd =>
 	wantsWork(talk)
-		? ask({who: "person", for: "start", ticket: talk.ticket, from: talk.from}) // a box on the ticket
+		? ask({who: "person", for: "start", thread: talk.thread, from: talk.from}) // a box in the thread
 		: reply(talk); // on the ledger, as itself
 ```
 
 - **A talk is data, never an instruction above the agent's own person.** It
-  lands as a comment or a ticket, marked "agent for X". The model sees it
+  lands in its thread, marked "agent for X". The model sees it
   inside a quoted block, labelled with who sent it.
 - **Code never starts a lane, a push or any outside write from a talk
   alone.** A person on the receiving side approves first, as an ask in a box
-  on the ticket. That approval is the supervision Meta's rule asks for.
+  in the thread. That approval is the supervision Meta's rule asks for.
 - **The step that reads a talk has no [C].** It gets no `CodeHostWrites`, no
   GitHub write and no network out. It may reply on the ledger, or file a
   ticket as itself. Both stay inside the ledger, where a person sees them.
@@ -1124,24 +1130,30 @@ const onTalk = (talk: Talk): Cmd =>
 
 **How a person sees the conversation.**
 
-- **On the ticket, in its timeline** → lean. The talk's home is
-  `tracker/ticket/<n>/talk`, so each message is a row on the ticket, marked
-  agent to agent, with both persons' names. It folds like a comment, not like
-  an answer, so it never changes what an approval covers. The receiver's inbox gets
-  only a ring with the same id.
+- **In its own thread, which both people can read** → lean. The talk's home is
+  `talk/<thread>`. Each message is a row there, marked agent to agent, with
+  both persons' names. It folds like a comment, not like an answer, so it
+  never changes what an approval covers. The receiver's inbox gets only a ring
+  with the same id.
+- **A talk may point at something, and never has to.** `about` names a ticket,
+  a span, a file, or nothing. When it names a ticket, the ticket's timeline
+  shows the thread too.
+- **Changed 2026-11-05 (owner): talk is not tied to tickets.** This note first
+  said every talk names a ticket and a talk with no ticket is refused. That
+  rule is gone: fabrika is much more than agents fixing tickets. What the rule
+  was for stays: nothing two agents say is out of sight, because every thread
+  lives on the ledger where both people can read it.
 - **In each agent's inbox only** → the person would have to look in two
-  places, and a talk outside a ticket would be seen by nobody.
-- That is why every talk names a ticket. A talk with no ticket is refused, so
-  nothing two agents say is out of sight.
+  places, and a talk only in an inbox would be seen by nobody.
 
 **The smallest first step.** One agent on each laptop exchanging one message
 through the shared ledger.
 
 1. Both laptops are logged in to one deployed ledger (sections 1 and 4).
 2. The second person's host registers `agents/gh:5678/answerer`.
-3. The owner's host sends one `Talk` on a test ticket, from
+3. The owner's host sends one `Talk` in a new thread, about nothing, from
    `agents/gh:1234/asker`: "What is 17 times 23?", as experiment 95 asked.
-4. The answerer replies once. Both rows show on the ticket, each with its
+4. The answerer replies once. Both rows show in the thread, each with its
    stamped writer. The answer lands once, even when sent twice.
 
 It needs the Door and a deployed ledger. Before the deploy, the same steps run
