@@ -85,6 +85,7 @@ describe("the sandbox's environment", () => {
 			LANG: "C",
 			HOME: "/b/home",
 			TMPDIR: "/b/tmp",
+			CLAUDE_CODE_TMPDIR: "/b/tmp",
 		});
 	});
 
@@ -199,6 +200,23 @@ describe.skipIf(!osRuns)("the os sandbox's fence", () => {
 		expect(exit.value.err).toMatch(/not permitted|denied|no such file/i);
 		expect(exit.value.code).not.toBe(0);
 		expect(readFileSync(join(copy, "code.txt"), "utf8")).toBe("changed\n");
+	});
+
+	// srt refuses writes to `.git/hooks` and `.git/config` anywhere under the folder a program starts
+	// in. A test that makes a throwaway repository in its temp folder needs that folder elsewhere:
+	// ticket 117's base run failed this way inside the copy (`.lane-tmp`).
+	it("lets a program make a git repository in its temp folder, outside the worktree", async () => {
+		prepare();
+		const exit = await run(
+			"os",
+			sh(`cd "$TMPDIR" && git init -q throwaway && git -C throwaway config a.b c && echo made`, {
+				mount: {_tag: "worktree", folder: copy},
+			}),
+		);
+		if (!Exit.isSuccess(exit)) throw new Error("did not start");
+		expect(exit.value.err).toBe("");
+		expect(exit.value.out).toBe("made\n");
+		expect(exit.value.code).toBe(0);
 	});
 
 	it("reads a commit mounted in it and cannot change it", async () => {

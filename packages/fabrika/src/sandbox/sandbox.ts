@@ -159,6 +159,11 @@ export const envOf = (job: Job, workspace: Workspace, parent: Env): Record<strin
 		...toolHome(parent),
 		HOME: workspace.home,
 		TMPDIR: workspace.tmp,
+		// srt hands its program `/tmp/claude` as TMPDIR, which the box closes, unless this name says
+		// where (experiment 127). The sandbox's own temp folder, outside the worktree: srt refuses
+		// `.git/hooks` and `.git/config` under the folder a program starts in, so a test's throwaway
+		// repository there would fail (ticket 117).
+		CLAUDE_CODE_TMPDIR: workspace.tmp,
 		...credentialEnv(job.credential, workspace),
 	};
 };

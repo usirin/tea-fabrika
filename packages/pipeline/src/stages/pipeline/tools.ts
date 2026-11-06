@@ -125,11 +125,10 @@ export const laneBuildWrites = Layer.effect(
 );
 
 /**
- * The test command in a box with no login and no key: its exit code, and stderr's last lines. srt
- * hands its program `/tmp/claude` as TMPDIR, which the box closes, unless this name says where
- * (experiment 127): here, a folder inside the throwaway copy.
+ * The test command in a box with no login and no key: its exit code, and stderr's last lines. Its
+ * temp folder is the box's own, outside the copy, where a test may make a throwaway repository.
  */
-const inBox = (folder: string, tmp: string, command: readonly string[], reads: readonly string[]) =>
+const inBox = (folder: string, command: readonly string[], reads: readonly string[]) =>
 	Effect.scoped(
 		Effect.gen(function* () {
 			const sandbox = yield* Sandbox.Sandbox;
@@ -138,7 +137,7 @@ const inBox = (folder: string, tmp: string, command: readonly string[], reads: r
 				command: program,
 				args,
 				reads,
-				env: {CLAUDE_CODE_TMPDIR: tmp},
+				env: {},
 				mount: {_tag: "worktree", folder},
 				credential: {_tag: "none"},
 			});
@@ -202,15 +201,17 @@ export const laneTestsWork = Layer.effect(
 					.pipe(
 						Effect.catch((e) => failing("copy_failed", null, e.says ?? `no copy of ${commit}`)),
 					);
+				// The box starts its program in the copy, so a copy that is not a folder fails here, by name.
+				const kind = yield* fs.stat(folder).pipe(
+					Effect.map((info) => info.type),
+					Effect.catch((e) => failing("copy_failed", null, e.message, [folder])),
+				);
+				if (kind !== "Directory")
+					return yield* failing("copy_failed", null, "the copy is not a folder", [folder]);
 				const out = path.join(folder, ".lane-report.json");
 				yield* fs.remove(out, {force: true}).pipe(Effect.ignore);
-				const tmp = path.join(folder, ".lane-tmp");
-				yield* fs
-					.makeDirectory(tmp, {recursive: true})
-					.pipe(Effect.catch((e) => failing("copy_failed", null, e.message, [folder])));
 				const ran = yield* inBox(
 					folder,
-					tmp,
 					run.map((word) => word.replaceAll("{out}", out)),
 					settings.test_writer?.reads ?? [],
 				).pipe(
