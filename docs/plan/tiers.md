@@ -6,7 +6,7 @@ layers, and each ends with something a person can use. No layer gets finished al
 Tier 1 is committed. It started 2026-11-05 with its exam. *Changed 2026-11-05 by the owner:* `next/` no
 longer waits on today's pipeline, which is paused. Tier 1 is built now by the lead
 session's agents, by hand, with the pipeline's steps for each pull request, in
-[41 small pull requests](./tier-1.md#the-pull-requests-one-at-a-time), each exam change in its own
+[32 small pull requests](./tier-1.md#the-pull-requests-one-at-a-time)
 ([where we are](./README.md#where-we-are-now)). P1 to P4, the exam and two spikes, are done. *It said: today's pipeline finishes first
 and builds ticket 117, then Tier 1's plan goes through the planner and the pipeline builds
 its tickets.* A tier is a project. The approval of 2026-11-01 covers what Tier 1 builds,

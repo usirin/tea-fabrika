@@ -1,0 +1,111 @@
+# A unit of work is a commit
+
+**Decided by the owner, 2026-11-05.** Both versions, built for `next/` first. It answers Tier 1's
+open question 18, and it replaces the CI half of
+[nobody writes their own exam](./nobody-writes-their-own-exam.md), which was proposed at 75% and
+doubted by its own note. That note's core stays: the builder never touches the exam, and changing
+the exam is the owner's call. *Added the same day (owner):* each step's agent signs its commits with
+its own key, and CI decides from the signature.
+
+```text
+// A sketch. Tier 1's P6, one pull request, two step commits, oldest first, each signed.
+a1f0c3e  signed by tests  boundary-rules.json, next/packages/libfabrika/package.json, src/data/log.test.ts
+b72d9e4  signed by build  next/packages/libfabrika/src/data/log.ts, src/data/ledger.ts
+```
+
+```ts
+// What each step's run records, one entry per commit it made. Kept wide; CI does not read it.
+{_tag: "committed", step: "tests", sha: "a1f0c3e", by: "agent:test-writer", arrivedAt: "21:02:11", cause: "in-3f9a0c21-7"}
+{_tag: "committed", step: "build", sha: "b72d9e4", by: "agent:builder",     arrivedAt: "21:40:56", cause: "in-3f9a0c21-9"}
+
+// CI walks the pull request's commits and decides from each signature, never from the message.
+// `stepKeys` is the repo's allowed-signers file: one public key per step role.
+const check = (commit: Commit, stepKeys: StepKeys): Outcome => {
+	const step = stepKeys.verify(commit); // ssh-keygen -Y verify on the commit; the key names its step
+	if (step === undefined) return {_tag: "stuck", why: "unsigned_commit", sha: commit.sha};
+	if (step === "build" && commit.files.some(isExam))
+		return {_tag: "stuck", why: "build_touched_exam", sha: commit.sha};
+	return {_tag: "done"};
+};
+// And the pull request as a whole: any exam path touched asks the owner to read it.
+// {_tag: "ask", who: "owner", for: "exam_read", paths: ["boundary-rules.json"]}
+```
+
+- **The unit is the commit, not the pull request.** An exam change is its own commit, made by an
+  agent that is not the builder, inside the same pull request.
+- **The test writer's commit comes first on the branch,** and it may touch exam paths: a boundary
+  row, a ledger line, a catalog line a test needs, an exam test moved to a new bundler.
+- **Each step's agent signs its commits with its own key:** git's SSH signing
+  (`gpg.format=ssh`), the same SSHSIG shape the door checks. [A key per
+  client](./a-key-per-client-and-no-github-trust.md) already gives every client a key; a step is
+  one more.
+- **CI verifies each commit's signature and maps the key to its step.** A commit with no valid
+  signature from a known step key is `stuck: unsigned_commit`. A `build` commit that touches an exam
+  path is `stuck: build_touched_exam`.
+- **Every step's run still records the commit it made,** as a `committed` entry: `step`, `sha`,
+  `by`, `arrivedAt` and `cause` ([record wide](../../AGENTS.md#before-you-design-anything)). It is
+  not what CI decides from. In Tier 1, while the steps run by hand, the step's `field/` row stands
+  in.
+- **A trailer is for people.** `Step: tests` or `Step: build` at the end of a commit message helps
+  someone reading `git log`. Anyone can type one, so CI never reads it.
+- **Any pull request that touches an exam path asks the owner to read it,** flagged by path, from
+  the one list of exam paths.
+
+## What Tier 1 needs
+
+- **A key per step role that commits:** `tests`, `build`, and `lead` for the lead agent's own
+  commits, such as a merge from main. Ed25519, made once.
+- **Where the private halves live:** in the lead session's home on the laptop, one file per role,
+  never in the repo. Each step's agent is started with its own role's key as git's signing key.
+- **How CI knows the public halves:** one file in the repo in git's allowed-signers format, the
+  role as each key's name. It is an exam path, so a change to it asks the owner.
+- **Tier 1's P32 builds it,** with planted commits for each answer.
+
+## Why
+
+- **Small changes need fewer pull requests, not more.** Splitting every exam change into its own
+  pull request put ten tiny pull requests into Tier 1's plan, each waiting on a read. The commit
+  keeps the same line between who wrote what, with no extra merge.
+- **A signature can be checked; a claim cannot.** A commit's author and message are whatever the
+  committer typed. A signature from the step's own key is checked against a file the owner reads,
+  the way the door checks a client's key and never trusts params.
+- **The known way.** [in-toto](https://in-toto.io/) has each step of a supply chain sign what it
+  produced, and a layout says which step's key may change which files; a verifier checks the
+  signatures, not the claims. [SLSA](https://slsa.dev/spec/v1.0/provenance) calls such a record
+  provenance. Git has signed commits with SSH keys since 2.34, and its allowed-signers file is the
+  same one `ssh-keygen -Y verify` reads. Our check is a small in-toto layout: three keys, one list
+  of paths.
+
+## What it changes
+
+- **[Nobody writes their own exam](./nobody-writes-their-own-exam.md):** its CI half ("an exam
+  change goes in a pull request of its own"; "a pull request that changes code and its exam together
+  fails") is replaced by this check. The build stage's own half, `ask:owner:check_change` on a draft
+  that touches the exam, and the one list of exam paths both stay.
+- **Tier 1:** the small exam rows fold back into their build pull requests as the test writer's
+  commit, and P32 builds this check for `next/` ([the plan](../plan/tier-1.md#how-it-is-built-now)).
+- **Today's version:** nothing yet. Its lane already ends `stuck` with `exam_touched` when a builder
+  touches the exam. Moving its CI to this check is a later change.
+
+## What it costs
+
+The check: a CI script that lists the pull request's commits, verifies each signature, reads the
+exam paths, and answers. A guess at 200 to 300 lines with its tests, planted commits and keys
+included, about 0.5 to 0.8 agent hours at 600 lines an hour. Three keys, made once.
+
+How sure: 85%. The owner decided it. The doubts are in the next section.
+
+## What it cannot tell us
+
+- **A key on the laptop is only as private as the agent's reach.** In Tier 1 every agent of the
+  session runs as the same user, so a builder with a shell could read the test writer's key and sign
+  as it. The signature proves which key, not which agent, until each step runs in its own box
+  (Tier 5). The owner's read of every exam path is what holds the gap meanwhile.
+- **A rebase re-signs every commit with one key.** A branch rebased onto a newer main would come
+  out signed by whoever rebased. A lean, not tried: update a branch by merging main in, as a `lead`
+  commit, and never rebase a step's commits. P32's plan settles it.
+- **Squash merges.** This repo squashes pull requests, so the step commits leave `main` at merge.
+  The check runs before the merge and still holds; GitHub keeps the commits under the pull
+  request. Whether to keep them on `main` with a merge commit is the owner's call.
+- **Gaming in the test writer's commit.** The test writer may now change the exam in the same
+  pull request it writes tests for. The owner's read of every exam path is what holds that.

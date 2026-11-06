@@ -74,7 +74,8 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   import it. Its contents come from settled notes, not today's shapes, and moving a file into it
   means rethinking it against them ([one design package](./docs/direction/fabrika-design-package.md)).
 - **In `next/`, nothing is built on Promises.** It is Effect all the way. A Promise
-  appears only in a one-line edge the platform demands
+  appears only in a one-line edge the platform demands, marked where it stands with
+  `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the owner reads
   ([no Promises](./docs/direction/no-promises.md)).
 - **In `next/`, an object class stays thin.** It holds what the platform gives it and
   a one-line handoff. The logic is plain code that also runs on Node in tests
