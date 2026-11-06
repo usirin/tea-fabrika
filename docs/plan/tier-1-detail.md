@@ -1,6 +1,6 @@
 # Tier 1, the detail
 
-**Reference for [Tier 1's brief](./tier-1.md). Start there.** The brief says who it is for, what done looks like, what is out, what binds and what is open. This file holds the design, the laws and the reasons. Its PR letters and T numbers are a starting guess the planner may change. What it builds was approved on 2026-11-01. Nothing here is built.
+**Reference for [Tier 1's brief](./tier-1.md). Start there.** The brief says who it is for, what done looks like, what is out, what binds and what is open. This file holds the design, the laws and the reasons. Its PR letters and T numbers are a starting guess; since 2026-11-05 [the brief's split](./tier-1.md#the-pull-requests-one-at-a-time) cuts them into pull requests P1 to P29, built by hand. What it builds was approved on 2026-11-01. Nothing here is built.
 
 Every claim here is about `next/` at PR 223's head (`7c1d073`), unless it says "today's version". A path with no `next/` in front starts inside its package: see [Packages](#packages). Where a section's sketch and [The public interface](#the-public-interface) differ, the interface holds, and tea code uses `@demlik/tea/effect`.
 
@@ -1676,11 +1676,11 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 
 ## The mutation step
 
-- **New direction, not yet in a note on main:** mutation on a pull request must be very fast, and a long run does not block a pull request. It runs daily and files tickets. No number is set. What follows is the older shape. Today's lane still runs it, and what changes it is [an open question](./tier-1.md#open-questions).
+- **Decided 2026-11-01 in [fast and daily mutation](../direction/fast-and-daily-mutation.md):** the check on each pull request takes changed lines first, stops at 5 minutes, and only advises; a long run never blocks a pull request, and `next/`'s mutation queue comes in Tier 6. Tier 1's pull requests run that check ([Rules that bind](./tier-1.md#rules-that-bind)). What follows is the older shape: its tool, covers and skip list still hold, and its sample and its time do not. *This bullet said "new direction, not yet in a note on main", which was wrong from 2026-11-01.*
 - **Tool:** as plan-115. Stryker 10.1.1 through today's `MutationRunner`, from outside; `next/` imports none of it. Fixed sample per PR: seed 115, at most 150 (AGENTS.md's shared seed is 119120; either is fixed, so the choice is free). `nice -n 15`, `--maxWorkers=3`, concurrency 2. Typecheck on. Survivors go back to the test writer.
 - **Covers:** plan-115's list plus `transport/hello.ts`, `transport/sshsig.ts`, `transport/waiting.ts`, `coordination/client-manager.ts`, `desktop/menu.ts`, `programs/chaos/program.ts`, `app/nemesis.ts#check`, `app/nemesis.ts#chaosFrom`, `app/runner.ts`'s Cmd path, and for PR D `programs/notes/program.ts`, `programs/notes/tile.ts`, `programs/notes/root.ts`, `programs/notes/drawn.tsx`, `programs/notes/highlight.ts#colors`, `mcp/tools.ts`, `transport/answer.ts`'s `agentMay`, and `app/runner.ts`'s id, refuse and fold steps. Copied code gets no pass, since it runs here.
 - **Skip list by file, my decision:** plan-115's Q2 list, without `brain-host.ts`, plus `alchemy.run.ts`, `grant.ts`, `chaos-drill.ts`, `tuval/browser/*`, `tuval/electron/*`, `tuval/dom/*`, `launchd.ts`, `entry/*`, `programs/chaos/view.tsx`, `programs/notes/view.tsx`, `next/apps/fabrika/mcp.ts`, `mcp/serve.ts`, `mcp/drive.ts`, `mcp/client.ts`, and the live Nemesis in `brain.ts`. Why: none can be mutated in the test's process. p15, p17, p29, p31, p37, p39, p46, p47, p48, p51, p58, p59, p62 and p63 cover them. Cost: a wrong line in `brain.ts`'s door is only caught if a wire test sees it. That is why the logic lives in `answer.ts` and `client-manager.ts`. Sure: 80%.
-- **Cost, a guess:** 10 to 25 machine minutes per PR. That is not "very fast", so this shape does not meet the new direction.
+- **Cost, a guess:** 10 to 25 machine minutes per PR. That is not "very fast", so this shape does not meet the note; the note's 5-minute cap replaces it.
 
 ## The exam PR, not in this plan
 

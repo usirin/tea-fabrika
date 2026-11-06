@@ -1,7 +1,22 @@
 # A local-first sync engine is the base
 
-**A vision**, written down 2026-10-19. Not planned, not sized. It is here so
-that what gets built now does not close the door on it.
+**Part decided, part a vision. Not built.**
+
+- **Decided 2026-10-19:** [one ledger, a Durable Object, everywhere](#decided-2026-10-19),
+  and the local host around it.
+- **Decided 2026-10-30 and 2026-10-31:** [the five layers](#decided-2026-10-30-and-2026-10-31-five-layers-central-first),
+  and layers 1 to 3 written down here: transport (2026-10-30, T3 changed 2026-10-31),
+  data (2026-10-30) and coordination (2026-10-31). They are planned: Tier 1 builds them
+  ([Tier 1](../plan/tier-1.md)).
+- **Still a vision, not planned and not sized:** [the picture](#the-picture) of hosts
+  that sync by gossip, [why the design already allows it](#why-the-design-already-allows-it)
+  and [open](#open). [The hard part](#the-hard-part-a-claim)'s leases were decided
+  central first, as layer 3's C3. The first pass's W3C `traceparent` stays proposed.
+
+*Written 2026-11-05: this header said the whole note was "a vision ... not planned,
+not sized", which was wrong for the parts above since 2026-10-19 and 2026-10-31.* It
+was written down 2026-10-19 as a vision, so that what gets built now does not close
+the door on it.
 
 Keys renamed 2026-11-03 (short words keep one meaning): `at` became `location`.
 

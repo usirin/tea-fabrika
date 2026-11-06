@@ -33,7 +33,9 @@ desktop (Tuval)   one core, with browser, Electron and headless on subpaths of
 - **"Every layer" has one way out.** If a layer gets nothing new in a tier, the tier
   says so and says why ([the tiers](../plan/tiers.md)).
 - **A pass can land as several pull requests.** Each one is whole, and its demo
-  works. More than 9,700 lines in one review is not a review, so Tier 1 is six.
+  works. More than 9,700 lines in one review is not a review, so Tier 1 is six
+  pieces, and since 2026-11-05 [29 smaller pull requests](../plan/tier-1.md#the-pull-requests-one-at-a-time)
+  inside them.
 - **Debugging tools come in the first pass, not after.** A program that breaks
   things on purpose is part of the foundation, so failures are seen from day one.
   It runs on a throwaway ledger by default, never on real notes.
@@ -48,8 +50,9 @@ smallest version that really works end to end, before any part gets thick.
 ## Where this stands
 
 The first-pass plan was approved 2026-11-01. Nothing from it is built, and
-nothing from `next/` is on main. Today's pipeline comes first
-([the plan](../plan/README.md)).
+nothing from `next/` is on main. *Changed 2026-11-05:* it no longer waits on today's
+pipeline; it is built now, by hand, one small pull request at a time
+([the plan](../plan/README.md), [Tier 1's split](../plan/tier-1.md#the-pull-requests-one-at-a-time)).
 
 ## Why
 
@@ -65,9 +68,12 @@ nothing from `next/` is on main. Today's pipeline comes first
 
 ## What it costs
 
-- More at once. The first pass is 5,360 to 7,440 lines of product code, 4,940 to
-  7,200 lines of tests, and 44 to 70 builder agent hours, 50% sure. Its first pull
-  request will give real numbers.
+- More at once. The first pass is 5,360 to 7,440 lines of product code and 4,940 to
+  7,200 lines of tests, 50% sure. The hours are [Tier 1's](../plan/tier-1.md): about 17
+  to 24 agent hours at the measured 600 lines an agent hour, restated 2026-11-01 by
+  [agent hours](./agent-hours.md), and its split into pull requests adds up to more. Its
+  first pull request will give real numbers. *Old guess, wrong: 44 to 70 builder agent
+  hours.*
 - Six landings and six reviews instead of one.
 - A change in one layer can touch all of them while the shapes are still moving.
 

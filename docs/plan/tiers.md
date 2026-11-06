@@ -3,11 +3,14 @@
 **Tier 1 approved 2026-11-01. Tiers 2 to 7 proposed. Order of work set 2026-11-01.** All
 the work on `next/` is one plan of seven tiers. Each tier is one pass across all five
 layers, and each ends with something a person can use. No layer gets finished alone. Only
-Tier 1 is committed. It has not started: today's pipeline finishes first and builds
-ticket 117. Then Tier 1's free-form plan goes through the planner, the owner approves that
-plan, an agent files its tasks as tickets by hand, once, and the pipeline builds them
-([where we are](./README.md#where-we-are-now), [the flow](../direction/free-form-plan-to-planner.md)).
-A tier is a project. The approval of 2026-11-01 covers what Tier 1 builds, not its breakdown.
+Tier 1 is committed. It has not started. *Changed 2026-11-05 by the owner:* `next/` no
+longer waits on today's pipeline, which is paused. Tier 1 is built now by the lead
+session's agents, by hand, with the pipeline's steps for each pull request, in
+[29 small pull requests](./tier-1.md#the-pull-requests-one-at-a-time)
+([where we are](./README.md#where-we-are-now)). *It said: today's pipeline finishes first
+and builds ticket 117, then Tier 1's plan goes through the planner and the pipeline builds
+its tickets.* A tier is a project. The approval of 2026-11-01 covers what Tier 1 builds,
+not its breakdown.
 
 ```text
                 transport   data   coordination   app   desktop
@@ -48,7 +51,8 @@ free-form plan in an artifact -> reported as a ticket -> the planner writes the 
 a rerun after a partial filing files nothing twice
 ```
 
-Tier 1's split goes by hand, once, as [a named exception](../direction/free-form-plan-to-planner.md).
+Tier 1's split goes by hand, once, as [a named exception](../direction/free-form-plan-to-planner.md);
+since 2026-11-05 it is in [Tier 1's plan](./tier-1.md#the-pull-requests-one-at-a-time).
 Tiers 2 to 5 come first and each is a project, so each needs the owner's yes to split by hand,
 or this moves up. That is the cost of placing it here.
 

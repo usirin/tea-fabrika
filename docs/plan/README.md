@@ -16,35 +16,47 @@ everything else   what we use today, and a map of which jobs exist
 
 ## Where we want to go
 
-Order set 2026-11-01: finish the pipeline, watch it build a real ticket, then switch to
-`next/`.
+Order changed 2026-11-05 by the owner: `next/` no longer waits on today's pipeline. *It was,
+from 2026-11-01: finish the pipeline, watch it build a real ticket, then switch to `next/`.*
 
 1. **Land [PR 267](https://github.com/usirin/tea-fabrika/pull/267).** Today's pipeline
    learns to handle what real agents answer. Done 2026-11-01.
-2. **Run ticket 117 for real.** The pipeline builds it, and the owner watches in the app.
-   It is a small change to `map`. The first try ended stuck. The pull requests of
-   [the self-fix plan](./pipeline-self-fix.md) it waited on landed, and it restarted. It is saved
-   at the exam's merge step until self-fix PRs 10 and 11 land.
-3. **Switch to `next/`.** The owner approved what [Tier 1](./tier-1.md) builds on 2026-11-01.
-   After ticket 117, that text goes through the planner as
-   [a free-form plan](../direction/free-form-plan-to-planner.md), and the owner approves
-   that plan before builders start. An agent then files each task as a ticket by hand, once, as
-   a named exception. [PR 223](https://github.com/usirin/tea-fabrika/pull/223) and the rest get
-   built through the pipeline, with one tracker ticket per pull request.
+2. **Ticket 117 waits.** Today's pipeline is paused. Tickets 117, 213 and 159 stay saved at
+   their asks, and nothing is lost by the wait.
+3. **Build `next/` now.** The owner approved what [Tier 1](./tier-1.md) builds on 2026-11-01.
+   The lead session's agents build it by hand, in
+   [29 small pull requests](./tier-1.md#the-pull-requests-one-at-a-time), each with the steps
+   the pipeline enforces: a plan, tests written first and red, the build, the fast mutation
+   check, one review by a separate agent, and the lead agent's read of the diff, green CI and a
+   leak grep before merge. Each step that goes by hand is logged in `field/`.
+   [PR 223](https://github.com/usirin/tea-fabrika/pull/223) is read, and each layer lands
+   already fixed.
 
-Also right after ticket 117, on today's version and beside Tier 1: remove `runs`, so `trace` becomes the ticket's view (ticket 141, which now holds 86, in build), then the performance program (ticket 114). They and Tier 1 do not
-wait for each other. Past Tier 1, [seven tiers](./tiers.md) in all, the rest proposed.
+On today's version, beside Tier 1: `runs` is gone and `trace` is the ticket's view (ticket 141,
+[PR 338](https://github.com/usirin/tea-fabrika/pull/338), 2026-11-03); then the performance
+program (ticket 114). They and Tier 1 do not wait for each other. Past Tier 1,
+[seven tiers](./tiers.md) in all, the rest proposed.
 
 Ticket numbers are this project's own tracker, not GitHub issues.
 
 **The deal, decided 2026-10-31:** every pull request, `next/` or today's, goes through
 today's pipeline programs. A step that cannot run yet goes by hand for that pull request
 and is logged in `field/` ([the note](../direction/next-is-a-pipeline-pre-run.md)).
+*Changed 2026-11-05 for `next/`:* with today's pipeline paused, every step of a `next/` pull
+request goes by hand, by its own agent, and is logged. A separate pull request records this in
+`docs/direction` and `AGENTS.md`.
 
 ## Where we are now
 
-Dated 2026-11-02. **No merged pull request has been built by the pipeline yet, so the deal
-has not really started. `next/` has not moved since 2026-10-31.** Each line is about
+Dated 2026-11-05. **Today's pipeline is paused, and `next/` starts now, by hand (owner,
+2026-11-05; [the steps](../direction/next-is-a-pipeline-pre-run.md)).** No merged pull request has been built by the pipeline yet. Since 2026-11-02,
+self-fix PR 10 ([322](https://github.com/usirin/tea-fabrika/pull/322)) and PR 11a
+([345](https://github.com/usirin/tea-fabrika/pull/345)) landed, ticket 117's rule changes
+landed ([313](https://github.com/usirin/tea-fabrika/pull/313)), and an agent's own tile and
+`line` landed ([381](https://github.com/usirin/tea-fabrika/pull/381)). Ticket 117 then stopped
+twice at the test writer on a box temp folder bug; its fix,
+[394](https://github.com/usirin/tea-fabrika/pull/394), landed late 2026-11-05. Tier 1's first wave of five can
+start now ([the split](./tier-1.md#the-pull-requests-one-at-a-time)). Each line is about
 today's version unless it says `next/`. The arrow says who has the next move.
 
 **Product foundations are built now, not after ticket 117 (owner, 2026-11-03).** Decided notes
@@ -56,10 +68,10 @@ raises a new design call goes to the owner.
 
 - **Pipeline v0.** Built and merged ([259](https://github.com/usirin/tea-fabrika/pull/259), [260](https://github.com/usirin/tea-fabrika/pull/260), [264](https://github.com/usirin/tea-fabrika/pull/264)). Two rehearsals on a throwaway repo, then ticket 117 (below). → the self-fix plan
 - **[PR 267](https://github.com/usirin/tea-fabrika/pull/267), real answers.** Merged 2026-11-01. Its leftovers are ticket 125. → nothing
-- **First real run, ticket 117.** Ran, and ended `stuck:step_stuck` at the mutation step: one stale test outside the exam (`tsh.test.ts` still expects `takes("map")` to be `[]`) made the suite red. The builder's own checks had died in its Codex box (`spawnSync git EPERM`) and it still said `done`; nothing in code checks a build before `done`, every `stuck` ends the lane, and no test output was kept. Its working copy `lane/117` is still on the machine; nothing was pushed, and the claim is released. → PRs 1, 3, 4, 5 and 7 of [the self-fix plan](./pipeline-self-fix.md) landed, and ticket 117 restarted; it is saved at `exam_merge` until PR 10 lands, and pauses at any hole PR 11 fixes until that lands too (owner, 2026-11-03). It was planned before PR 7, so its plan's properties, interface and gaps are not in the ledger. It reruns plan, the owner's yes, the test writer and build on a fresh branch from main, and the old build is kept under a ref (owner's yes 2026-11-02, on the walk of [311](https://github.com/usirin/tea-fabrika/pull/311))
-- **The lane fixes itself, and a stuck lane restarts.** Decided 2026-11-01 ([jidoka and andon](../direction/jidoka-and-andon.md)): a person is asked only for a judgment, and a stuck or crashed lane restarts from the step that broke. The "after ticket 117" deferral is over. [The plan](./pipeline-self-fix.md) was nine by-hand pull requests, about 5 to 7 agent hours at the measured full-lane rate of 600 lines an agent hour (2 to 2.5 at this repo's 1,660), 4 to 5.5 of them before ticket 117 restarts ([agent hours](../direction/agent-hours.md), restated 2026-11-01; *old guess, wrong: 29 to 41.5, 22.5 to 32 before the restart*), with the rebase on restart from tracker ticket 130. It follows [the pipeline guidelines](../direction/pipeline-guidelines.md) ([PR 290](https://github.com/usirin/tea-fabrika/pull/290)): a restart that cannot prove a field goes back only to the step that writes it, every stop and every pick says where the lane goes on, a person's `stop` is a saved pause, a person may steer by a plain comment, red goes back by default, and the lane records wide from its first pull request. → approved 2026-11-01. Merged 2026-11-02: PR 1 ([301](https://github.com/usirin/tea-fabrika/pull/301)), PR 2 ([298](https://github.com/usirin/tea-fabrika/pull/298)) and PR 7 ([302](https://github.com/usirin/tea-fabrika/pull/302)). PR 3 merged 2026-11-02 ([304](https://github.com/usirin/tea-fabrika/pull/304)). PR 4 ([310](https://github.com/usirin/tea-fabrika/pull/310)) and PR 5 ([311](https://github.com/usirin/tea-fabrika/pull/311)) merged 2026-11-02. Ticket 117 restarted 2026-11-02 and is saved at `exam_merge`, where its exam pull request showed new holes. PRs 10 (the exam pull request, and a yes binds to the diff) and 11 (a route for every outcome, from [experiment 193](../../experiments/193-lane-holes.md)) build every row of the jidoka table still open, about 6 to 8 more agent hours. It restarts again once PR 10 lands, without waiting for PR 11 (owner, 2026-11-03). Next: the owner's yes on their text, then PR 10.
-- **Tier 1 plan for `next/`.** What it builds was approved by the owner 2026-11-01, not started. About 17 to 24 agent hours at the measured rate of 600 lines an agent hour (6 to 9 at 1,660), restated 2026-11-01; *old guess, wrong: 63 to 92*. Later tiers stay proposed. After ticket 117 its text goes through the planner as [a free-form plan](../direction/free-form-plan-to-planner.md). The old approval does not cover the new breakdown. After the owner's yes, an agent files each task as [its own ticket](./tier-1.md#one-ticket-per-pull-request) by hand, logged in `field/`, and the owner approves each ticket's plan. → the owner approves the planner's plan, then builders start
-- **[PR 223](https://github.com/usirin/tea-fabrika/pull/223), the first slice of `next/`.** Paused since 2026-10-31. Nothing from `next/` is on main. → it waits for the planner's output on Tier 1, which takes [Tier 1's order of work](./tier-1.md#the-order-of-work) as input. How it reaches the lane is [still open](./tier-1.md#still-open-how-next-reaches-the-lane)
+- **First real run, ticket 117.** Ran, and ended `stuck:step_stuck` at the mutation step: one stale test outside the exam (`tsh.test.ts` still expects `takes("map")` to be `[]`) made the suite red. The builder's own checks had died in its Codex box (`spawnSync git EPERM`) and it still said `done`; nothing in code checks a build before `done`, every `stuck` ends the lane, and no test output was kept. Its working copy `lane/117` is still on the machine; nothing was pushed, and the claim is released. → PRs 1, 3, 4, 5 and 7 of [the self-fix plan](./pipeline-self-fix.md) landed, and ticket 117 restarted; it is saved at `exam_merge` until PR 10 lands, and pauses at any hole PR 11 fixes until that lands too (owner, 2026-11-03). It was planned before PR 7, so its plan's properties, interface and gaps are not in the ledger. It reruns plan, the owner's yes, the test writer and build on a fresh branch from main, and the old build is kept under a ref (owner's yes 2026-11-02, on the walk of [311](https://github.com/usirin/tea-fabrika/pull/311)). *Since:* PR 10 landed 2026-11-03 and its rule changes on 2026-11-04 ([313](https://github.com/usirin/tea-fabrika/pull/313)); it then stopped at the test writer twice with `bad_report`, since `git init` could not write into `.git/hooks` inside the box. The fix, [394](https://github.com/usirin/tea-fabrika/pull/394), landed late 2026-11-05. → paused with the pipeline (owner, 2026-11-05), saved at its ask with tickets 213 and 159
+- **The lane fixes itself, and a stuck lane restarts.** Decided 2026-11-01 ([jidoka and andon](../direction/jidoka-and-andon.md)): a person is asked only for a judgment, and a stuck or crashed lane restarts from the step that broke. The "after ticket 117" deferral is over. [The plan](./pipeline-self-fix.md) was nine by-hand pull requests, about 5 to 7 agent hours at the measured full-lane rate of 600 lines an agent hour (2 to 2.5 at this repo's 1,660), 4 to 5.5 of them before ticket 117 restarts ([agent hours](../direction/agent-hours.md), restated 2026-11-01; *old guess, wrong: 29 to 41.5, 22.5 to 32 before the restart*), with the rebase on restart from tracker ticket 130. It follows [the pipeline guidelines](../direction/pipeline-guidelines.md) ([PR 290](https://github.com/usirin/tea-fabrika/pull/290)): a restart that cannot prove a field goes back only to the step that writes it, every stop and every pick says where the lane goes on, a person's `stop` is a saved pause, a person may steer by a plain comment, red goes back by default, and the lane records wide from its first pull request. → approved 2026-11-01. Merged 2026-11-02: PR 1 ([301](https://github.com/usirin/tea-fabrika/pull/301)), PR 2 ([298](https://github.com/usirin/tea-fabrika/pull/298)) and PR 7 ([302](https://github.com/usirin/tea-fabrika/pull/302)). PR 3 merged 2026-11-02 ([304](https://github.com/usirin/tea-fabrika/pull/304)). PR 4 ([310](https://github.com/usirin/tea-fabrika/pull/310)) and PR 5 ([311](https://github.com/usirin/tea-fabrika/pull/311)) merged 2026-11-02. Ticket 117 restarted 2026-11-02 and is saved at `exam_merge`, where its exam pull request showed new holes. PRs 10 (the exam pull request, and a yes binds to the diff) and 11 (a route for every outcome, from [experiment 193](../../experiments/193-lane-holes.md)) build every row of the jidoka table still open, about 6 to 8 more agent hours. It restarts again once PR 10 lands, without waiting for PR 11 (owner, 2026-11-03). PR 10 merged 2026-11-03 ([322](https://github.com/usirin/tea-fabrika/pull/322)) and PR 11a, the routes and their law, 2026-11-04 ([345](https://github.com/usirin/tea-fabrika/pull/345)). PR 11b, waits and records, is not built. → paused with the pipeline (owner, 2026-11-05)
+- **Tier 1 for `next/`, built now by hand.** What it builds was approved by the owner 2026-11-01. Refreshed 2026-11-05: [29 small pull requests](./tier-1.md#the-pull-requests-one-at-a-time), about 21.5 to 31.5 agent hours by their own sizes, against the approved 17 to 24 that left out hot reload, keys, the exams and the spikes (*old guess, wrong: 63 to 92*). The notes of 2026-11-03 to 2026-11-05 change little ([the list](./tier-1.md#what-the-notes-of-2026-11-03-to-2026-11-05-change)). The planner gap and how `next/` reaches the lane no longer block anything. Later tiers stay proposed. → the lead agent starts wave 1 (two exams, two spikes, the backup's design pass); the owner reads the exams and answers [questions 9 to 12](./tier-1.md#open-questions) before the pull requests that need them
+- **[PR 223](https://github.com/usirin/tea-fabrika/pull/223), the first slice of `next/`.** Paused since 2026-10-31. Nothing from `next/` is on main. → read, not landed: each layer lands already fixed, from P6 on ([the lean](./tier-1.md#still-open-how-next-reaches-the-lane), 60%)
 - **[PR 258](https://github.com/usirin/tea-fabrika/pull/258), update everything.** Effect 4.1.1, pnpm 12. Merged 2026-11-01.
 - **Test windows.** Merged: [257](https://github.com/usirin/tea-fabrika/pull/257) made them see-through, then [271](https://github.com/usirin/tea-fabrika/pull/271) made them show again, without focus. → nothing
 - **App icon and top bar.** Merged ([274](https://github.com/usirin/tea-fabrika/pull/274), [275](https://github.com/usirin/tea-fabrika/pull/275)). → nothing
@@ -81,7 +93,7 @@ raises a new design call goes to the owner.
 | Your job | Read |
 |---|---|
 | Fix today's version | [AGENTS.md](../../AGENTS.md), the [package list](../../README.md#what-is-in-this-repository), then that part's own README |
-| Build in `next/` | [Tier 1](./tier-1.md) and [ticket 115's plan](./ticket-115.md), [the steps](../direction/next-is-a-pipeline-pre-run.md), the [Start here list](../direction/README.md#start-here). No builder starts before an approved plan and tests that exist |
+| Build in `next/` | [Tier 1](./tier-1.md), [its pull requests and waves](./tier-1.md#the-pull-requests-one-at-a-time) and [ticket 115's plan](./ticket-115.md), [the steps](../direction/next-is-a-pipeline-pre-run.md), the [Start here list](../direction/README.md#start-here). No builder starts before an approved plan and tests that exist |
 | Run a real ticket | [Run a ticket through the pipeline](../how-to/run-a-pipeline-ticket.md), [AGENTS.md's rules](../../AGENTS.md#running-the-machine-on-a-real-ticket), then [field/](../../field/README.md) for what past runs hit |
 | Write down a decision | A note in [docs/direction](../direction/README.md), the same day, plus its row. Mark it **proposed** until it is settled |
 | Log a run | [field/README.md](../../field/README.md) for the schema: one row per agent run, one note per thing that broke, cost too much, needed a person or worked well |
@@ -90,9 +102,9 @@ raises a new design call goes to the owner.
 
 **Only the owner:**
 
-- Approves a plan, in `next/` or today's, before any builder starts.
-- Approves a pull request, and answers a question the machine put to a person. No agent does either. Rows that only record what happened need no yes: see [how a change lands](#how-a-change-lands).
-- Answers [how `next/` reaches the lane](./tier-1.md#still-open-how-next-reaches-the-lane), before PR A's plan step (lean 65%).
+- Approves a plan that raises a new design call, in `next/` or today's, before any builder starts. A plan that only builds a decided note is approved by the lead agent (owner, 2026-11-03; [AGENTS.md](../../AGENTS.md#two-versions-side-by-side)).
+- Approves a pull request on GitHub, and answers a question the machine put to a person. No agent does either. A merge does not wait on that yes: see [how a change lands](#how-a-change-lands).
+- *Changed 2026-11-05:* how `next/` reaches the lane no longer needs an answer before Tier 1 starts ([why](./tier-1.md#still-open-how-next-reaches-the-lane)). *It said: answers it before PR A's plan step (lean 65%).*
 - Settles a **proposed** note.
 - Reads each exam pull request. On today's lane, since [the self-fix plan](./pipeline-self-fix.md)'s PR 5 landed, a builder's diff to the exam files asks the owner, with two picks: the builder was wrong (the touched files go back, and build runs again on the builder's head) or the test is wrong (the test writer redoes those files with the owner's note). Either way every finished step is kept.
 - Adds an entry to `unreachable-ledger.json`, in a change of its own.
@@ -104,7 +116,7 @@ raises a new design call goes to the owner.
 
 - Decides which version a job is in when the brief says, or the rule in [AGENTS.md](../../AGENTS.md#two-versions-side-by-side) answers it. If it still cannot tell, it asks.
 - Writes a note marked **proposed**, an experiment, or a field log.
-- Files Tier 1's ticket, for the owner's GitHub id, after ticket 117 lands, and each task of its plan as a ticket once the owner approves that plan, with the existing tracker command, logged in `field/`: the agent running this project session does it. A named exception, once; no second project gets split by hand without the owner's yes.
+- Splits Tier 1 by hand, once, as a named exception: done 2026-11-05 as [29 pull requests](./tier-1.md#the-pull-requests-one-at-a-time). Whether each also gets a tracker ticket is [open question 12](./tier-1.md#open-questions). No second project gets split by hand without the owner's yes. *It said: files Tier 1's ticket after ticket 117 lands, and each task of the planner's plan as a ticket.*
 - Fixes a dead-code finding it checked by hand. If the finding is wrong, it stops and tells the owner.
 - Makes calls inside an approved plan, marked as its own call, with why, cost and how sure. The owner may overturn them.
 - Adds a lint exception on a line where the code is right and the rule does not fit, with the reason in plain words. It never switches a rule off to pass.
@@ -114,7 +126,7 @@ In a live run on a target repository, never, by anyone's agent: merge by hand, a
 ## How a change lands
 
 - **A live run on a target repository:** inside the run, nothing but ship merges. Once a lane is finished and stuck, what is left is a by-hand change, under the next rule.
-- **A pull request that went by hand:** the owner's yes, with CI green for code. Then an agent runs the merge, after a leak grep.
+- **A pull request that went by hand:** one review by a separate agent says merge-ready, CI is green for code, and the lead agent reads the diff and runs a leak grep. Then the lead agent merges and writes a MergeRow. A merge never waits on the owner ([autonomy is measured trust](../direction/autonomy-is-measured-trust.md), decided 2026-11-03). The owner still reads exam pull requests and says yes after `alchemy plan`. *It said: the owner's yes, with CI green for code.*
 - **Rows that only record what happened (field logs, index rows):** they merge after the leak grep, with no yes.
 - **Direction notes and plans:** they still get the owner's yes.
 - **A pull request that changes only Markdown or images:** no CI wait, since nothing in CI reads them. A broken relative link can slip through.
