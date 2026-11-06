@@ -12,6 +12,12 @@ a recovery takes effect, no passphrase on top, one question on recovery ("Is you
 stolen?", default yes), a dropped key drops everything it let in, a sheet works once, and a new sheet
 kills the old one.
 
+*Later, 2026-11-06:* the owner decided the note, now titled
+[Account recovery: a sheet of 12 words, and email for the cloud](../docs/direction/recovery-key.md).
+It takes this write-up's leans: print first with a PDF allowed, two words back plus "Check my sheet",
+numbered slots and a public label, and the old Mac told at once. The open point in step 3, where a
+check is written, is decided: a `checked` fact on the ledger, signed by the device, never the words.
+
 ```text
 What the best ones share, as fabrika's sheet would do it (a sketch):
 
