@@ -210,9 +210,10 @@ dial localhost, the VM's hands dial the Mac.
 The wire has four steps. Any client speaks it.
 
 ```jsonc
-// 1. Hello (T1, T2, T4, T5). The client dials its own gateway, like LSP's initialize.
+// 1. Hello (T1, T2, T4, T5). The client dials its own gateway. The method is `initialize`, as LSP's
+// and MCP's first request is (owner, 2026-11-05; this sketch said "hello"). "Hello" stays the plain word.
 // client -> brain
-{"jsonrpc": "2.0", "id": 1, "method": "hello", "params": {
+{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
   "versions": [1, 2],          // every version it speaks
   "key": "ed25519:...",
   "signed": "...",             // the hello, signed with that key
@@ -284,7 +285,9 @@ connect.pipe(Effect.retry(reconnect));
 - **T5, identity:** one key pair per client signs the hello. The person's key
   grants each new client, as `fabrika post` grants agent keys today; revoking is
   one ledger entry. Nothing joins without its person saying so (Signal's
-  linked devices, Tailscale's node approval).
+  linked devices, Tailscale's node approval). *Added 2026-11-05 (owner):* the person key
+  signs each grant in SSHSIG's shape, and no key is ever let in because GitHub lists it
+  ([a key per client](./a-key-per-client-and-no-github-trust.md)).
 - **T6, liveness:** a text ping every 30 s, answered by the gateway's
   auto-response. The brain never checks on a timer; presence reads the last
   ping when asked, away after 75 s.
@@ -331,14 +334,15 @@ interface Data {
 }
 
 // D3: one entry, EventStoreDB's fields in our short words, plus the writer's own time.
+// The two clocks renamed by the owner 2026-11-05: `at` became `arrivedAt`, `said` became `sentAt`.
 {
 	id: "e-91",        // the writer's id: a resend is saved once
 	stream: "build:7",
 	pos: 3,            // place in its stream
 	rev: 412,          // place in the whole log
-	at: "23:12:04",    // the referee's clock: leases, limits and order use only this
+	arrivedAt: "23:12:04", // the referee's clock, when it reached the ledger: leases, limits and order use only this
 	by: "mac@owner",   // stamped by the door from the signed-in key
-	said: "23:10:01",  // the writer's own clock: shown, never used to decide
+	sentAt: "23:10:01",    // the writer's own clock, when it wrote it: shown, never used to decide
 	_tag: "claimed",   // `kind` until Tier 1's approval, 2026-11-01; today's code keeps `kind`
 	body: {lease: "30s"},
 }
@@ -354,7 +358,7 @@ interface Data {
   (`build:7`, `desk`). Claims and inboxes are streams too.
 - **D3, one entry:** as above. Each kind has its own Effect Schema and grows
   additively (T4); a reader skips a kind it does not know and keeps it.
-  `said` is in from day one, since a fact not recorded at write time is lost
+  `sentAt` is in from day one, since a fact not recorded at write time is lost
   for good. The referee's code gets entries without it, so nothing can decide
   with it.
 - **D4, hearing news:** poke, then pull (Replicache's shape). The brain sends

@@ -161,8 +161,9 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   things (durations, views, summaries) can wait, since they rebuild from the
   log. Before you say "add it later", say whether later loses data. If a fact
   is recorded but must not be trusted, keep it out of the deciding code's
-  types. Example: a ledger entry keeps the writer's own clock as `said` from day
-  one, but leases and limits use only the referee's `at`.
+  types. Example: in `next/`, a ledger entry keeps the writer's own clock as `sentAt`
+  from day one, but leases and limits use only the referee's `arrivedAt` (today's code
+  says `said` and `at`).
 - **Record wide, read later.** Decided by the owner on 2026-11-01: record every measure we
   can, even if nothing reads it yet, because we cannot know which question we will ask later.
   A measure nobody reads costs little; one we wish we had is gone. The limits: it must not slow
@@ -202,8 +203,10 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   mean two things, pick a clearer short word before you reach for a long one.
   A short word that already means something here keeps that one meaning inside its
   [bounded context](./docs/direction/we-follow-ddd.md): `at` is a
-  time (the referee's), `by` is who wrote it, `said` is the writer's clock, `_tag` is
-  the case. A place, a path, a ref, a state, a reason or a total gets its own word
+  time, `by` is who wrote it, `_tag` is the case. An entry's two clocks have their own
+  names in `next/` (owner, 2026-11-05): `arrivedAt` is the referee's, when the entry reached
+  the ledger, and `sentAt` is the writer's own, when it wrote it (Kafka's LogAppendTime and
+  CreateTime). Today's code says `at` and `said`. A place, a path, a ref, a state, a reason or a total gets its own word
   (`location`, `path`, `ref`, `state`, `why`, `total`). `rg` the word under
   `docs/direction/` and `next/` before you use it.
 

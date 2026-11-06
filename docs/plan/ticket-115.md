@@ -2,7 +2,7 @@
 
 **Replaced as a plan by [Tier 1](./tier-1.md), and kept because Tier 1 builds on it.** Tier 1 carries over its laws p1 to p24, its criteria c1 to c6, and part of its public interface. Where the two differ, Tier 1 wins. It was never built. Added here 2026-11-01, so an agent with only this repo can read it.
 
-Old words, kept as written: `peer` is `client` now, Biome is oxlint, and `next/src/` is real packages under `next/`. "The owner approves" below was about this plan, and Tier 1's questions replace them.
+Old words, kept as written: `peer` is `client` now, Biome is oxlint, and `next/src/` is real packages under `next/`. An entry's `at` is `arrivedAt` now and its `said` is `sentAt` (owner, 2026-11-05), so p19 reads "`arrivedAt` is the Clock" in Tier 1. "The owner approves" below was about this plan, and Tier 1's questions replace them.
 
 Every claim here is about `next/` at PR 223's head, unless it says "today's version".
 

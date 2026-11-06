@@ -6,7 +6,11 @@ marked decided below:
 - **Decided, the direction:** inputs carry their sender, and the host ties each write to the input
   that caused it. This is design D of the shared tile study. The cause rides in the data, not in
   the call stack.
-- **Decided, the shape:** the stamped input is `Envelope<A> = {id, by, at, input}`.
+- **Decided, the shape:** the stamped input is `Envelope<A> = {id, by, at, input}`. In `next/` it is
+  `{id, by, arrivedAt, input}`, since `next/` renamed the referee's clock (owner, 2026-11-05).
+- **Decided, `cause` in `next/` (owner, 2026-11-05):** `next/`'s ledger `Entry` gets `cause` in
+  Tier 1's P6, and the rest of this note lands in P10 and P11 ([where it
+  lands](../plan/tier-1.md#where-inputs-carry-their-sender-lands)).
 - **Decided, traces:** a trace mirrors the cause with an OpenTelemetry span link. A trace never
   decides who signs.
 - **Decided, what goes:** the shared tile study's other way, a press in an agent's job running as
@@ -15,7 +19,7 @@ marked decided below:
   uses it.
 
 Not walked yet: the signing service, the test-kit law, and the open point on an agent's stated
-reason (below).
+reason (below). Tier 1 lists all three as its open questions 15 to 17.
 
 Built from [experiment 209](../../experiments/209-talking-to-agents-in-place.md) and the shared
 tile study behind it, and the Design canvas "Shared tile guidelines". Neither is a measurement.
@@ -47,8 +51,11 @@ interface Envelope<A> {
   tracker writes gain `cause`. Today's rows still say `kind`.
 - **`next/`:** the same rule, at its door. Its ledger `Entry` (`next/src/data/log.ts` on
   [PR 223](https://github.com/usirin/tea-fabrika/pull/223)) has `at`, `by` and `said`, and no
-  `cause`. Adding it now is proposed in [the plan](../plan/README.md#where-we-are-now): an entry
-  written without it never gets it back.
+  `cause`. **Decided by the owner, 2026-11-05: `cause` is added in Tier 1's P6,** since an entry
+  written without it never gets it back. In `next/` the clocks are `arrivedAt` and `sentAt`
+  (renamed the same day), so its envelope is `{id, by, arrivedAt, input}`. In `next/`'s words this
+  note's host is the brain's door, a run is a process, and the cell is the runner. Each part's row
+  and law are in [Tier 1's plan](../plan/tier-1.md#where-inputs-carry-their-sender-lands).
 
 ## The shape
 
@@ -79,7 +86,7 @@ const Write = Schema.TaggedUnion({
   assignment (OWASP API Security Top 10 2023, API3).
 - **`at` and not `said`.** `at` is the referee's clock, as the [glossary](../../.glossary/TERMS.md)
   says. No sender gives its own clock today; if one does later, it goes in `said`, kept out of the
-  deciding code's types.
+  deciding code's types. In `next/` the two are `arrivedAt` and `sentAt`.
 - **The cause is carried by the program, in its Msg, in any queue in its Model, and in the Cmd's
   input.** The program never carries the sender. The cell asks the host to sign "as whoever sent
   input X". The host looks X up in its own table.
@@ -175,7 +182,7 @@ value is logged through its schema, with a `Redacted` value hidden
 ## Name clash: two envelopes
 
 [Saved state](./saved-state.md) already says "envelope" for a ledger entry's wrapper (D3's `by`,
-`said`, `at`, and `seen`). That is the Ledger context. This envelope is a stamped input at the
+`said`, `at`, and `seen`; in `next/`, `by`, `sentAt`, `arrivedAt`, `seen` and now `cause`). That is the Ledger context. This envelope is a stamped input at the
 host's door, the Runtime context. The glossary keys it `envelope (runtime)`, and the context map
 says how the two meet: an input's envelope causes a write; the write's entry has its own envelope,
 which now names the cause.
