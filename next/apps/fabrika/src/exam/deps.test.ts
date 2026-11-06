@@ -88,11 +88,12 @@ const importsIn = (text: string): ReadonlyArray<string> =>
 	IMPORTS.flatMap((pattern) =>
 		[...text.matchAll(pattern)].flatMap((m) => (m[1] === undefined ? [] : [m[1]])),
 	);
-const importsOf = (file: string): ReadonlyArray<string> => importsIn(readFileSync(file, "utf8"));
+const importsInFile = (file: string): ReadonlyArray<string> =>
+	importsIn(readFileSync(file, "utf8"));
 const isRelative = (spec: string): boolean => spec.startsWith(".");
 
 /** `@kampus/libfabrika/transport` is `{name: "@kampus/libfabrika", subpath: "./transport"}`. */
-const packageOf = (spec: string): {readonly name: string; readonly subpath: string} => {
+const packageAt = (spec: string): {readonly name: string; readonly subpath: string} => {
 	const parts = spec.split("/");
 	const size = spec.startsWith("@") ? 2 : 1;
 	const rest = parts.slice(size);
@@ -132,7 +133,7 @@ const exportMap = (pkg: Package): ReadonlyMap<string, string | undefined> => {
 	return new Map(entries.map(([key, value]) => [key, target(value)]));
 };
 
-const ownerOf = (packages: ReadonlyArray<Package>, file: string): Package | undefined =>
+const ownerAt = (packages: ReadonlyArray<Package>, file: string): Package | undefined =>
 	packages.find((pkg) => file.startsWith(`${pkg.dir}${sep}`));
 
 /** A path as the messages show it: relative to `from`, with `/`. */
@@ -207,10 +208,10 @@ const importFaults = (next: string): ReadonlyArray<string> => {
 	const byName = new Map(packages.map((pkg) => [pkg.manifest.name, pkg]));
 	return codeFiles(next).flatMap((file) => {
 		const where = shown(next, file);
-		const pkg = ownerOf(packages, file);
+		const pkg = ownerAt(packages, file);
 		if (pkg === undefined) return EXAM.test(where) ? [] : [`${where}: sits in no package`];
 		const names = listed(pkg.manifest);
-		return importsOf(file).flatMap((spec) => {
+		return importsInFile(file).flatMap((spec) => {
 			const found: Array<string> = [];
 			if (isRelative(spec)) {
 				if (!pointsAt(file, spec).startsWith(`${pkg.dir}${sep}`)) {
@@ -219,7 +220,7 @@ const importFaults = (next: string): ReadonlyArray<string> => {
 				return found;
 			}
 			if (isPlatform(spec)) return found;
-			const {name, subpath} = packageOf(spec);
+			const {name, subpath} = packageAt(spec);
 			if (name !== pkg.manifest.name && !names.has(name)) {
 				found.push(`${where} imports "${spec}": ${name} is not in its package.json`);
 			}

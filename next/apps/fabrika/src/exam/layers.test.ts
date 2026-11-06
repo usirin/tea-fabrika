@@ -92,11 +92,12 @@ const importsIn = (text: string): ReadonlyArray<string> =>
 	IMPORTS.flatMap((pattern) =>
 		[...text.matchAll(pattern)].flatMap((m) => (m[1] === undefined ? [] : [m[1]])),
 	);
-const importsOf = (file: string): ReadonlyArray<string> => importsIn(readFileSync(file, "utf8"));
+const importsInFile = (file: string): ReadonlyArray<string> =>
+	importsIn(readFileSync(file, "utf8"));
 const isRelative = (spec: string): boolean => spec.startsWith(".");
 
 /** `@kampus/libfabrika/transport` is `{name: "@kampus/libfabrika", subpath: "./transport"}`. */
-const packageOf = (spec: string): {readonly name: string; readonly subpath: string} => {
+const packageAt = (spec: string): {readonly name: string; readonly subpath: string} => {
 	const parts = spec.split("/");
 	const size = spec.startsWith("@") ? 2 : 1;
 	const rest = parts.slice(size);
@@ -136,7 +137,7 @@ const exportMap = (pkg: Package): ReadonlyMap<string, string | undefined> => {
 	return new Map(entries.map(([key, value]) => [key, target(value)]));
 };
 
-const ownerOf = (packages: ReadonlyArray<Package>, file: string): Package | undefined =>
+const ownerAt = (packages: ReadonlyArray<Package>, file: string): Package | undefined =>
 	packages.find((pkg) => file.startsWith(`${pkg.dir}${sep}`));
 
 /** A path as the messages show it: relative to `from`, with `/`. */
@@ -195,12 +196,12 @@ const FOLDERS: Readonly<Record<string, ReadonlyArray<string>>> = {
 };
 
 /** The files a program's `.` export reaches by relative imports: what the box loads. */
-const boxOf = (pkg: Package): ReadonlySet<string> => {
+const boxFor = (pkg: Package): ReadonlySet<string> => {
 	const seen = new Set<string>();
 	const walk = (file: string): void => {
 		if (seen.has(file)) return;
 		seen.add(file);
-		for (const spec of importsOf(file).filter(isRelative)) {
+		for (const spec of importsInFile(file).filter(isRelative)) {
 			const next = pointsAt(file, spec);
 			if (existsSync(next) && statSync(next).isFile()) walk(next);
 		}
@@ -211,7 +212,7 @@ const boxOf = (pkg: Package): ReadonlySet<string> => {
 };
 
 /** The folder under `src/` a library file sits in, or null for an entry file at `src/` itself. */
-const folderOf = (pkg: Package, file: string): string | null => {
+const folderAt = (pkg: Package, file: string): string | null => {
 	const src = join(pkg.dir, "src");
 	if (!file.startsWith(`${src}${sep}`)) return null;
 	const inside = file.slice(src.length + 1).split(sep);
@@ -219,9 +220,9 @@ const folderOf = (pkg: Package, file: string): string | null => {
 };
 
 /** The part a file of `pkg` belongs to, or null when the table has no row for it. */
-const partOf = (pkg: Package, box: ReadonlySet<string>, file: string): string | null => {
+const partAt = (pkg: Package, box: ReadonlySet<string>, file: string): string | null => {
 	if (pkg.group === "programs") return box.has(file) ? "program" : "program-window";
-	const folder = folderOf(pkg, file);
+	const folder = folderAt(pkg, file);
 	return folder !== null && FOLDERS[pkg.manifest.name]?.includes(folder) === true ? folder : null;
 };
 
@@ -234,36 +235,36 @@ const faults = (next: string): ReadonlyArray<string> => {
 			.map((pkg) => pkg.manifest.name),
 	);
 	return codeFiles(next).flatMap((file) => {
-		const pkg = ownerOf(packages, file);
+		const pkg = ownerAt(packages, file);
 		if (pkg === undefined) return [];
 		const where = shown(next, file);
 		const found: Array<string> = [];
 		// Across the whole library, tests included: nothing imports tuval, a program or the app.
 		if (pkg.manifest.name === LIBRARY) {
-			for (const spec of importsOf(file).filter((s) => !isRelative(s))) {
-				if (above.has(packageOf(spec).name))
+			for (const spec of importsInFile(file).filter((s) => !isRelative(s))) {
+				if (above.has(packageAt(spec).name))
 					found.push(`${where} imports "${spec}": the library imports nothing above it`);
 			}
 		}
 		if (isTest(file)) return found;
 		const folders = FOLDERS[pkg.manifest.name];
-		const folder = folderOf(pkg, file);
+		const folder = folderAt(pkg, file);
 		if (folders !== undefined && folder !== null && !folders.includes(folder)) {
 			return [...found, `${where}: the folder "${folder}" has no row in the exam's table`];
 		}
-		const part = partOf(pkg, pkg.group === "programs" ? boxOf(pkg) : new Set(), file);
+		const part = partAt(pkg, pkg.group === "programs" ? boxFor(pkg) : new Set(), file);
 		if (part === null) return found; // the wiring, or an entry file at src/
 		const may = allowed[part] ?? [];
-		for (const spec of importsOf(file)) {
+		for (const spec of importsInFile(file)) {
 			if (isRelative(spec)) {
 				if (pkg.group === "programs") continue; // a program's own files, box and window alike
 				const target = pointsAt(file, spec);
 				if (!target.startsWith(`${pkg.dir}${sep}`)) continue; // leaving the package: deps.test.ts
-				const there = partOf(pkg, new Set(), target) ?? "an entry file";
+				const there = partAt(pkg, new Set(), target) ?? "an entry file";
 				if (there !== part && !may.includes(there)) {
 					found.push(`${where} imports "${spec}": ${part} may not import ${there}`);
 				}
-			} else if (packageOf(spec).name.startsWith("@kampus/") && !may.includes(spec)) {
+			} else if (packageAt(spec).name.startsWith("@kampus/") && !may.includes(spec)) {
 				found.push(`${where} imports "${spec}": ${part} may not import it`);
 			}
 		}
