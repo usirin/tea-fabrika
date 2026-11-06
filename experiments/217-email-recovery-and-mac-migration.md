@@ -13,6 +13,18 @@ It is for `next/` only, for the backup's design pass: the proposed note
 **both** ways back: email recovery and the recovery sheet. This write-up asks what each needs. It
 changes no note.
 
+**What the owner decided after reading this, 2026-11-06** (in
+[account recovery](../docs/direction/recovery-key.md)). Where a lean below differs, the decision wins,
+and the lean stays here as written:
+
+- **The wait is 24 hours,** not the "3 days" placeholder, and any live device cancels it with no finger.
+- **No third way.** "Sheet and email together skip the wait" is dropped: the sheet alone is instant.
+- **Every device the person owns is a master.** The rule "a person key may not add or drop another
+  person key", which this kept at 65%, is dropped. Devices are equal roots in the grant tree.
+- **The facts are `verified`, `requested` and `canceled`.** The sketch's `asked`, `stopped` and
+  `waitUntil` are not used: the brain's email key signs the final `added` only after the wait.
+- **The code is good for 10 minutes and 5 tries,** only its hash kept, never in the ledger.
+
 ```text
 The two ways back, as fabrika could hold them (a sketch):
 
