@@ -79,10 +79,12 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
 - **In `next/`, an object class stays thin.** It holds what the platform gives it and
   a one-line handoff. The logic is plain code that also runs on Node in tests
   ([an object class stays thin](./docs/direction/object-classes-stay-thin.md)).
-- **Every pull request, `next/` or today's, goes through today's pipeline programs:**
+- **Every pull request, `next/` or today's, goes through the pipeline's steps:**
   plan, test writer, build, mutation step, one review, each by its own agent, with
-  laws. A step that cannot run yet goes by hand for that pull request and is logged in
-  `field/`. No builder starts before an approved plan and tests that exist
+  laws. Since 2026-11-05 today's pipeline programs are paused, so the lead session's agents
+  run the steps by hand, each logged in `field/`, and the lead agent reads every diff, CI
+  and the leak grep before a merge. `next/` does not wait on the pipeline. No builder starts
+  before an approved plan and tests that exist
   ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). A plan that only builds a
   decided note is approved by the agent leading the session, which writes "Approved by the lead
   agent, builds <note>" in it; a plan that raises a new design call goes to the owner (owner,

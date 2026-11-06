@@ -8,8 +8,20 @@ steps by hand.
 programs. A step that cannot run yet goes by hand for that pull request, and that is logged
 in `field/`.
 
-**The order.** Finish the pipeline, run ticket 117 for real, then switch to `next/`
-([the plan](../plan/README.md)).
+**The order, changed 2026-11-05: `next/` no longer waits on the pipeline.** Today's
+pipeline programs pause, and tickets 117, 213 and 159 stay saved at their asks. Tier 1 is
+built now by the lead session's agents, each pull request through the same steps by hand: a
+plan, tests written first, the build, one review by a separate agent, and the lead agent
+reading every diff, CI and the leak grep before it merges. Each step that goes by hand is
+logged in `field/`. The pipeline gets its turn again, rebuilt top down from what `next/`
+teaches, not patched step by step. The product talk runs beside Tier 1, not after it.
+
+```text
+before   finish the pipeline -> ticket 117 for real -> next/
+now      next/ Tier 1, steps by hand  |  pipeline paused, saved  |  product talk alongside
+```
+
+*Replaced 2026-11-05:* "Finish the pipeline, run ticket 117 for real, then switch to `next/`."
 
 **Where it stands, 2026-11-01: no merged pull request has been built by the pipeline yet.**
 Every one so far went by hand or outside the steps. The first real one is ticket 117.
@@ -52,6 +64,11 @@ ticket -> triage -> plan (the owner approves its Properties)
   the programs. The by-hand steps are now the exception for a step that cannot run yet.
 - *Changed 2026-11-01:* ticket 115 is no longer the first full try. Its plan was replaced by
   [Tier 1](../plan/tier-1.md), which waits for the pipeline.
+- *Changed 2026-11-05 (owner):* Tier 1 no longer waits for the pipeline. Ticket 117 ran
+  eight lanes in five days ($35.37) and stopped at the test writer twice; four steps after it
+  have never met real code. The pipeline does not follow the program guidelines the rest of
+  the app now does, and it is hard to watch even with tracing. Its pieces were built one at a
+  time, each with that day's context. So it pauses, and the steps go by hand for `next/`.
 
 ## Why
 
