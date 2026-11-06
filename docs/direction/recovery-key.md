@@ -1,17 +1,23 @@
 # Account recovery: a sheet of 12 words, and email for the cloud
 
-**Proposed 2026-11-05. Most calls decided by the owner on 2026-11-05 and 2026-11-06.** This is
-about `next/`. It is Tier 1's P5, the backup's design pass ([the plan](../plan/tier-1.md)), and the
-owner reads it before anyone writes a test for P28. Nothing here is built. Each call below says
-**decided** or **open**. The research behind several calls is experiment 216, how products do
-recovery kits ([PR 405](https://github.com/usirin/tea-fabrika/pull/405)).
+**Proposed 2026-11-05. Decided by the owner, 2026-11-06, except two unknowns on the email path.**
+This is about `next/`. It is Tier 1's P5, the backup's design pass ([the plan](../plan/tier-1.md)),
+and the owner reads it before anyone writes a test for P28. Nothing here is built. The research
+behind several calls is experiment 216, how products do recovery kits
+([PR 405](https://github.com/usirin/tea-fabrika/pull/405)), and experiment 217, email recovery and
+what a new Mac gets back ([PR 406](https://github.com/usirin/tea-fabrika/pull/406)).
 
 The industry calls this account recovery. Two ways back in are offered, and the person picks:
 
 - **The sheet:** a recovery key kept as 12 words on paper or in a PDF. No email needed, and the way
-  back for a local setup restored from Time Machine. This note designs it in full.
-- **Email:** for the Cloudflare setup. **Open:** a study is running, and this note only says what
-  is known so far ([below](#email-recovery-open)).
+  back for a local setup restored from Time Machine. It works at once.
+- **Email:** for the Cloudflare setup. A 6-digit code to the person's checked address, then a
+  24-hour wait that any live device can cancel ([below](#email-recovery-decided-two-unknowns-open)).
+  Decided too. Two unknowns stay open: whether the no-domain route works, and whether the code
+  reaches the inbox.
+
+A calm move to a new Mac needs neither. Migration Assistant most likely carries the keys across
+(experiment 217), and any device the person owns can let in another ([call 7](#7-who-may-sign-what-decided)).
 
 *Retitled 2026-11-06. It was "A lost Mac comes back with a recovery key on paper", until the owner
 decided both ways are offered. The file name stays, so links hold.*
@@ -43,10 +49,15 @@ decided both ways are offered. The file name stays, so links hold.*
   joins `founded.keys` through an `added` fact. The door never sees the words.
 - **A recovery key does one thing, once:** it lets in one new Mac (a person key and its window key)
   and drops the keys the person picks. Then it is spent. Making a new sheet kills the old one.
+- **Every device the person owns is an equal person key,** as on Apple and Keybase. Any one may let
+  in tabs, agents and other devices, and remove any of them. The sheet is the backstop. An agent is
+  never one, and a browser tab cannot approve others (lean, 70%).
+- **A Mac whose keys did not come across goes to the recovery screen,** never to a new founding.
 - **Recovery asks once: "Is your old Mac lost or stolen?"** The default is yes. Yes drops the old
   Mac and everything it let in, all the way down. The old Mac is told at once if online.
 - **No wait and no passphrase,** for the sheet, ever. A stolen sheet stays the known hole. This
-  matches products whose recovery secret is a strong key (experiment 216).
+  matches products whose recovery secret is a strong key (experiment 216). Email is weak proof, so
+  it waits 24 hours.
 - **The person meets the sheet twice in the life of a Mac:** once to make it, once to use it. "Check
   my sheet" is there any time, offline, and never nags.
 - **No GitHub.** The owner decided on 2026-11-05 that no GitHub trust is automatic, ever.
@@ -67,16 +78,27 @@ Cloudflare in the cloud.
 
 | Setup | Way back after a lost Mac | What the person is told at setup |
 |---|---|---|
-| Cloudflare | Email (open), or the sheet | Both are offered |
-| Local, with Time Machine | Restore the Mac's files, then the sheet lets the new Mac's keys in | The sheet is offered |
+| Cloudflare | The sheet, at once; or email, after a 24-hour wait any live device can cancel | Both are offered |
+| Local, with Time Machine | Restore the Mac from it. If the keys did not come across, the sheet lets the new Mac's keys in | The sheet is offered |
 | Local, no copy | None. A ledger that is gone cannot come back | "Your notes live only on this Mac." A plain warning, once, at setup |
 
-**Local with Time Machine, step by step, a guess not yet run:** Time Machine brings back the app's
-home, the local ledger's storage inside it. The sealed keys may or may not come across with the
-login Keychain. If they do, nothing more is needed. If they do not, the app says so in plain words
-and offers "I have a backup sheet", and never makes new keys by itself (the plan's rule). The sheet
-then lets the new Mac's keys in on the restored ledger, the same as on Cloudflare. For a local
-setup, the sheet's address line reads "local, on <the Mac's name>".
+**A move or a restore, from experiment 217** (75% sure, since nobody has moved a Mac yet; one real
+move settles it):
+
+- **Migration Assistant and Time Machine most likely carry the keys.** `safeStorage` keeps its
+  "<app> Safe Storage" item in the login Keychain file, and that file moves with Migration
+  Assistant, from the old Mac or from a Time Machine backup. iCloud Keychain never carries it, and a
+  Keychain copied by hand fails on macOS 26.4 and later. So a calm move needs no sheet, and the
+  local stage's ledger comes back with the app's home. The sheet's help says so: "Moving to a new
+  Mac? Migration Assistant brings fabrika with it."
+- **If the item did not come across,** Chromium quietly makes a new one, and every sealed key fails
+  to open. **Then the app goes to the recovery screen, never to a new founding (decided):** "This
+  Mac's keys did not come across. [I have a backup sheet]". It never makes new keys by itself, as
+  the plan already says. The sheet then lets the new Mac's keys in on the restored ledger, the same
+  as on Cloudflare.
+- **A restored Mac after a recovery is refused,** since its keys were dropped. Experiment 217 shows
+  a restore really does bring the old keys back, so this case is real.
+- For a local setup, the sheet's address line reads "local, on <the Mac's name>".
 
 ## The known way
 
@@ -117,9 +139,12 @@ What exists only at the moment it happens, and is lost forever if not written th
 - **Written down as lost, on purpose:** a wrong sheet at the door. It is refused with the same
   answer as any unknown key, and only a count goes to the Worker's logs. Why: as with a knock,
   writing it would let anyone grow the log. Sure: 80%.
-- **Open:** whether a "Check my sheet" is recorded (when, which label, which answer, never the
-  words). Experiment 216 leans yes: "when did they last know they had it" is what a lockout story
-  asks later. Where it would go, the ledger or the Mac's own log, is open too.
+- **At email setup:** which address, and when it was checked (`verified`, in the
+  [email section](#email-recovery-decided-two-unknowns-open)).
+- **A lean, not an owner call:** whether a "Check my sheet" is recorded (when, which label, which
+  answer, never the words). Experiment 216 leans yes: "when did they last know they had it" is
+  what a lockout story asks later. Where it would go, the ledger or the Mac's own log, is not
+  settled.
 
 ```ts
 // A sketch. The new parts of next/packages/libfabrika/src/coordination/client-manager.ts.
@@ -127,7 +152,8 @@ What exists only at the moment it happens, and is lost forever if not written th
 
 /** What the person saw when a key was added. In the signed text, as a grant's `saw` is. */
 export const AddSaw = Schema.Struct({
-	how: Schema.Literals(["sheet", "recovery", "command"]), // made a sheet; used one; developer path
+	// made a sheet; used one; a device let in by another device; by email; developer path
+	how: Schema.Literals(["sheet", "recovery", "device", "email", "command"]),
 	check: Schema.Literals(["touch", "click", "none"]),
 	where: Schema.String,                 // recorded, never trusted
 	has: Schema.Array(Schema.String),     // recorded, never trusted
@@ -138,7 +164,7 @@ export const AddSaw = Schema.Struct({
 
 /** What joins. A union, so a sheet with a window key cannot be said. */
 export const Adds = Schema.TaggedUnion({
-	person: {key: Schema.String, window: Schema.String}, // a new Mac: its person key and window key
+	person: {key: Schema.String, window: Schema.String}, // a new device: its person key and window key
 	recovery: {key: Schema.String, v: Schema.Literal(1)}, // a new sheet: the public half only
 });
 
@@ -167,7 +193,8 @@ facts grow it.
 
 ## The calls
 
-Each call is answered as branches: the case, then what happens.
+Each call is answered as branches: the case, then what happens. **Every call in this section is
+decided by the owner, 2026-11-06,** whether or not its heading says so.
 
 ### 1. What is on the sheet, and in what form (decided)
 
@@ -254,7 +281,8 @@ everything it let in** picked by default, and **No, I still have it** beside it.
   live recovery key. They stop at once and forever, and everything they let in goes with them
   (call 9).
 - **No (`old: "kept"`)** → `drops` is empty. The old Mac keeps working, and the person has two
-  Macs. This is how someone with a new Mac and a working old one moves over in Tier 1.
+  Macs. A calm move rarely comes here: Migration Assistant carries the keys, or the old Mac lets
+  the new one in (call 7), and neither spends the sheet.
 
 Why ask, and why default yes: the person knows which case they are in, and most people reach this
 screen because the old Mac is gone. No product in experiment 216 asks this; Keybase and Tailscale
@@ -306,40 +334,55 @@ Every refusal writes nothing. The words never leave the Mac in any branch.
   Keybase and Tailscale all do this (experiment 216). Copies of one sheet are fine, since they are
   the same words.
 
-### 7. Who may sign what (open)
+### 7. Who may sign what (decided)
+
+**Decided by the owner, 2026-11-06: every device the person owns is a master, an equal person key.
+Any one may let in tabs, agents and other devices, and remove any of them, as Apple and Keybase
+do. The sheet is the backstop: a recovery drops the lost device and everything it let in.**
 
 The door already checks a grant: SSHSIG, Ed25519 only, namespace `fabrika-client`, text decoded
 through the schema, `to` is this ledger, the signer is a live key of the person named in `for`.
 `added` goes through the same function, on the same `/grant` route. The new part is who may sign
-what. **This stays proposed:** the email study also checks how other products rank their keys.
+what.
 
 ```ts
 // A sketch. One pure check, beside foldMembers. A key's rank comes from the fact that added it.
-type Rank = "person" | "window" | "recovery";
+type Rank = "person" | "window" | "agent" | "recovery" | "email"; // "email": the brain's own key
 
 export const mayAdd = (members: Members, signer: string, add: Add):
 	{readonly ok: true} | {readonly why: "not_member" | "used" | "replaced" | "not_allowed"} => {
-	// adds.person:   signer must be a live recovery key of `for`, not spent, not replaced.
-	//                drops may name any key of `for`.
-	// adds.recovery: signer must be a live person key of `for`.
-	//                drops may name only recovery keys.
-	// A window key never signs an `added`. A recovery key never signs a grant or a revoke.
+	// signer is a live person key of `for`:  may add a person (a device) or a recovery key (a sheet).
+	//                                        drops may name any key of `for` but its own.
+	// signer is a live recovery key of `for`, not spent, not replaced:
+	//                                        may add a person (one new device), once.
+	//                                        drops may name any key of `for`.
+	// A window key or an agent's key never signs an `added`, a grant or a revoke.
+	// A recovery key never signs a grant or a revoke.
 };
 ```
 
-- **A person key may** let in tabs, agents and its own Mac's window key, remove them, and make a
-  new sheet.
-- **A person key may not** add or drop another person key. Why: a thief who gets one Mac's person
-  key cannot lock out the person's other Macs. Linking a second Mac while the first lives goes
-  through the sheet in Tier 1 (call 3, No).
-- **A recovery key may** let in one new Mac and drop keys, once.
-- **A recovery key may not** grant a tab or an agent. The sheet's only job is to bring a Mac back.
+- **A person key may** let in tabs, agents and other devices, remove any of them, and make a new
+  sheet. Each device has its own person key, and they are equal.
+- **An agent is never a master.** Already decided: an agent can never let anyone in.
+- **A browser tab joins and works, but cannot approve others.** A tab holds only a window key.
+  Why: browser storage is weaker than a sealed key, and a phone's browser may clear it after 7 days
+  without a visit. **Lean, 70%,** not yet settled. What would settle it: a phone as approver, which
+  the plan puts later.
+- **A recovery key may** let in one new device and drop keys, once. It never grants a tab or an
+  agent. The sheet's only job is to bring a device back.
 - **Anyone can re-check it later** with `ssh-keygen -Y verify`, since the signed text and the
   signature are kept whole, as for a grant.
 
-Lean: these rules. Sure: 75%. The doubt is "a person key may not add a person key", which makes a
-calm move to a new Mac spend the sheet. Keybase lets any device add any device. What would settle
-it: the email study's look at other products, and Tier 3's invites.
+**Dropped: "a person key may not add or drop another person key".** The first draft had it, so a
+thief who got one Mac's person key could not lock out the person's other Macs. It was over-caution:
+a stolen device is already a master in every way that matters, since it can read and let in. The
+answer to a stolen device is the sheet, which drops it and everything it let in. The rule also made
+a calm second Mac spend the sheet, and no peer product has it (Keybase, Apple and Tailscale's
+signing nodes all let a peer add a peer; experiment 217).
+
+**Letting in a second device while the first lives** goes the way a tab does: the new Mac knocks
+with its person key and window key, the old Mac's menu bar shows a row, and Approve with Touch ID
+signs one `added` with `saw.how: "device"`. How it looks is P21's and P28's to draw.
 
 ### 8. How `founded.keys` folds with `added`, and the grant tree
 
@@ -359,19 +402,25 @@ type Members = {
 	}>;
 	readonly spent: ReadonlySet<string>;             // recovery keys that signed once
 };
-// founded            -> each of keys as a "person" root; window under them
-// added (recovery)   -> the new key as "recovery", under its signer; each of drops not live
-// added (person)     -> key as a "person" root, window under it; signer spent; each of drops not live
-// granted            -> the key, under the person key that signed it
-// revoked            -> the key not live
-// admitted(key)      -> the key and every key above it are live
+// founded                      -> each of keys as a "person" root; window under them
+// added (recovery)             -> the new key as "recovery", under its signer; each of drops not live
+// added (person), by a device  -> key as "person" under its signer, window under it; each of drops not live
+// added (person), by a sheet   -> key as a "person" root, window under it; signer spent; each of drops not live
+// granted                      -> the key, under the person key that signed it
+// revoked                      -> the key not live
+// admitted(key)                -> the key and every key above it are live
 ```
 
-- **A person key is a root,** whether `founded` named it or a sheet let it in. So when the old
-  Mac's person key drops, the sheet it made and the new Mac that sheet let in do not drop with it.
-  A spent sheet is not dropped: it signs nothing more, and what it let in stays.
-- **In Tier 1 the tree is two deep:** a person key, then its windows, agents and sheet. The rule is
-  written for any depth, so a phone as approver or an invite later needs no new rule.
+- **Roots are the keys nobody can take back from above:** `founded`'s keys, and a device a sheet
+  let in. So when the old Mac drops, the sheet it made is gone, but the new Mac that sheet let in
+  stays. A spent sheet is not dropped: it signs nothing more, and what it let in stays.
+- **A device let in by another device hangs under it.** So if the lost Mac had let in a second Mac,
+  that Mac drops too when the lost one is dropped. That follows the decided rule as written. The
+  recovery screen names each device it will drop before Touch ID, so it is never a surprise.
+- **A sheet hangs under the device that made it.** If that device is removed, its sheet stops too,
+  and the menu bar shows "No backup sheet. [Make one]" on the devices left.
+- **The rule is written for any depth,** so a phone as approver or an invite later needs no new
+  rule.
 
 The laws P28 adds to p28, all property-based, over any list of facts:
 
@@ -379,8 +428,9 @@ The laws P28 adds to p28, all property-based, over any list of facts:
 - A dropped key stays out forever, as a revoked one does. A later `added` cannot bring it back.
 - A key is admitted only while every key above it is live. Removing one drops all below it.
 - A recovery key that signed once never signs again. A spent key's children stay admitted.
-- An `added` of a person signed by a person key changes nothing. An `added` signed by a window key
-  changes nothing. A `granted` signed by a recovery key changes nothing.
+- An `added`, a grant or a revoke signed by a window key or an agent's key changes nothing. A
+  `granted` signed by a recovery key changes nothing.
+- Any live person key may add and drop another; the result is the same whichever device signed.
 - The same `added` twice changes nothing.
 - A good thing happens: after a recovery, the new person key and window key are admitted, and
   `person` and `name` are the same as before.
@@ -450,36 +500,89 @@ Each says what the attacker gets in Tier 1.
 - **A stolen Mac, awake and unlocked.** An open window keeps working, since the window key signs
   each `initialize` silently, by design. So the thief can read notes until you recover. Approve,
   Remove and making a sheet need Touch ID. Reading the sealed key outside the app makes macOS ask
-  for the login password. **With the login password,** the thief can sign as the person key: let
-  their own tabs in, and make a new sheet, which kills yours. Then you cannot recover with the
-  sheet. This hole needs both the Mac and its password. Tier 1 accepts it, as most products do once
-  a device's login is known. Whether email recovery closes it depends on the email study.
+  for the login password. **With the login password,** the thief can sign as the person key. Since
+  every device is a master (call 7), they can let in their own tabs and devices, remove your other
+  devices, and make a new sheet, which kills yours. If they have not made a new sheet yet, your
+  sheet drops the stolen Mac and everything it let in, their devices included. If they have, you
+  cannot recover with the sheet. This hole needs both the Mac and its password. Tier 1 accepts it,
+  as Apple and Keybase do once a device's login is known. Email recovery does not help here: the
+  thief can cancel it from the stolen Mac.
+- **Someone in your mailbox.** They can ask for a code and start an email recovery. Every live
+  device is told at once and can cancel within 24 hours. If all your devices are off for a day,
+  they get in. That is the cost of offering email, and why it waits.
+- **A Time Machine disk.** It is a sealed copy of the person key, opened by the login password
+  (experiment 217). A stolen disk plus the password is the story above. Experiment 217 leans
+  toward "encrypt your Time Machine backup" in the sheet's help rather than keeping the key out of
+  backups, since that would make every restore need the sheet. 60%, not decided.
 - **Someone on the network.** The words never cross the wire, only a public key and a signature. A
   replayed `added` is the same `id` (one fact), or for another ledger (`to`), or from a spent sheet.
 - **Guessing the words.** 128 bits, against a public key members can read. Not doable.
 - **Malware on the new Mac while the sheet is typed.** It gets the words. Nothing in this design
   stops that. A clean Mac is the only answer, as for every product above.
 
-## Email recovery (open)
+## Email recovery (decided, two unknowns open)
 
-**Decided by the owner on 2026-11-05: both ways are offered.** Email is for the Cloudflare setup;
-the sheet is the way with no email. Everything else about email is open, and a study is running on
-three questions: how a Worker sends email on Cloudflare, how Tailscale does it (the lead
-reference), and what a new Mac gets back after an email recovery. Its write-up lands as an
-experiment, and this section is rewritten from it.
+**Decided by the owner, 2026-11-05 and 2026-11-06,** after walking experiment 217
+([PR 406](https://github.com/usirin/tea-fabrika/pull/406)). Email recovery is offered for the
+Cloudflare setup. The sheet stays the way with no email, and the way for a local setup.
 
-What is known now:
+```text
+On a new device:  "Email me a code" -> a 6-digit code to the checked address -> typed on this device
+                  -> "Is your old Mac lost or stolen?" -> Touch ID
+Every live device, at once:  "A new device asked to get in by email. It gets in at 14:02 tomorrow.
+                              [Cancel it]"
+24 hours later, if nobody canceled:  the new device is in, and the drops apply.
+```
 
-- **Email is weak proof.** Anyone who gets into the mailbox gets the code. Experiment 216 found
-  that products put a wait or a second check exactly where the proof is weak (Apple's account
-  recovery waits "several days or longer"; 1Password adds an email code to its recovery code). So
-  email recovery likely needs a short wait that a live Mac can stop, or a second check. The sheet's
-  no-wait rule does not carry over.
-- **It must not lean on GitHub,** and nothing outside the ledger decides who belongs. An email code
-  would be one more way to sign an `added` of a person, and the door would still write the fact.
-- **The data shape is open,** but one fact cannot wait: the email address and when it was checked,
-  written at setup. A later recovery can only trust an address that was on the ledger before the
-  Mac was lost.
+- **Sent free through Cloudflare.** Email Routing's `send_email` binding sends to the person's own
+  verified address at no cost, on the account the brain already runs on. It needs a domain whose
+  DNS is on Cloudflare. With no domain, the fallback is Cloudflare Access's one-time PIN (open,
+  below).
+- **A 6-digit code, not a link,** typed on the device that asked. A link opened on another device,
+  or by a mail scanner, would let in the wrong device.
+- **Every live device is told at once,** with a Cancel button.
+- **A 24-hour wait that any live device can cancel.** Email is weak proof: anyone who gets into the
+  mailbox gets the code. The products in experiments 216 and 217 whose proof is weak wait or ask
+  for a second secret (Apple's account recovery waits "several days or longer"; 1Password blocks
+  for 24 hours after a recent sign-in). Cancel needs no finger, as Deny needs none: saying no
+  should be easy.
+- **The sheet stays instant.** There is no third way, sheet plus email: the sheet alone is already
+  instant, so adding email to it buys nothing.
+- **At setup, record which email and when it was checked.** A later recovery can only trust an
+  address that was on the ledger before the Mac was lost. This fact exists only at that moment.
+- **The drops wait too.** The "lost or stolen?" answer is asked at once and applies only when the
+  wait ends, so a cancel also keeps the old Mac in.
+- **No GitHub.** The person's mail account is an outside party, but it never decides alone: the
+  wait and every live device stand between it and the ledger.
+
+```ts
+// A sketch of the facts. Names are proposals ("Made up here").
+// At setup: the person types their address, gets a code, types it back. A person key signs:
+{_tag: "verified", email: "<address>", signed: sshsig(personKey)}       // its arrivedAt is "when checked"
+// On a new device, after the code is right. The door writes it; nothing is let in yet:
+{_tag: "requested", id: "rq-1", email: "<address>", adds: {_tag: "person", key: "...p2", window: "...w2"},
+  drops: ["...p1", "...w1"], saw: {how: "email", check: "touch", old: "lost"}}
+// Any live device, within 24 hours. A person key signs; no finger needed:
+{_tag: "canceled", request: "rq-1", signed: sshsig(personKey)}
+// 24 hours after `requested`, with no `canceled`, on the project object's alarm:
+{_tag: "added", add: {..., saw: {how: "email", ...}}, signed: sshsig(emailKey)}   // cause: "rq-1"
+```
+
+- **Who signs the last `added`:** a key the brain holds for this one job, its public half on the
+  ledger with the rank `email`. It signs only an `added` of a device, only after the wait, and
+  never leaves the brain (experiment 217's lesson from Matrix, which handed its top key to every
+  device). So the door keeps its one signature check. A lean, 75%, for P28's plan to confirm.
+- **The code:** good for 10 minutes and 5 tries, then a new one. Only its hash is kept, and never
+  in the ledger. Both numbers are guesses.
+- **Who it stops:** someone with the mailbox and no device waits 24 hours, and any of your devices
+  cancels them. A thief who holds a stolen Mac with its password can cancel your email recovery;
+  the sheet is instant and is the answer there.
+
+**Open, and the first build tries both:**
+
+- **Whether the no-domain route works:** Access's one-time PIN on a Worker with no domain of its
+  own. Untried, 50%.
+- **Whether the code reaches the inbox,** and not spam, from Cloudflare's sending.
 
 ## How it would be tested
 
@@ -488,9 +591,10 @@ builder and read by the owner, holds:
 
 - **p28's new laws** (call 8), property-based, on Node.
 - **Real `ssh-keygen` vectors** for `added`, as p27 has for grants: a recovery key rebuilt from
-  fixed test words, written to a temp file, signs; it passes. A spent sheet, a replaced sheet, a
-  person key adding a person, a window key signing, a recovery key signing a grant, drops naming
-  another person's key, and another ledger's `to` are each refused, with the answers in call 5.
+  fixed test words, written to a temp file, signs; it passes. A person key adding a device passes.
+  A spent sheet, a replaced sheet, a window key or an agent's key signing, a recovery key signing a
+  grant, drops naming another person's key, and another ledger's `to` are each refused, with the
+  answers in call 5.
 - **The sheet's pure laws:** words to key and back. One changed word fails the checksum or gives
   another key. The label matches only the right key. "Check my sheet" answers live, old or wrong,
   and makes no network call.
@@ -511,9 +615,22 @@ builder and read by the owner, holds:
      sheet. [Make one]".
   6. Home C with no sheet: the waiting screen and nothing else.
   7. A local setup with no copy shows the warning once at setup, and never again.
-- **Plants:** spent rule skipped; rank rule skipped (a person key adds a person); drops not applied;
-  the tree not walked (a removed window's children stay); words sent in the request; the label
-  ignored; the old Mac not told.
+  8. A home whose sealed keys will not open (the stand-in fails to unseal) goes to the recovery
+     screen, never to the founding screen, and makes no new keys.
+  9. Home B lets in home D as a second device. Removing D from B's menu bar drops D and the tab D
+     let in.
+- **Email, on a stand-in sender and a test clock:** a right code starts a `requested` and tells
+  every live device at once; nothing is let in before 24 hours; one `canceled` from any live device
+  stops it, and its drops never apply; with no cancel, the alarm writes one `added`. A wrong code,
+  an old code, a sixth try, and an address not `verified` before the request each let in nothing.
+  The code is never in the ledger. The brain's email key signs nothing but that `added`.
+- **The two unknowns,** in the first build, on a real account: one code through `send_email` to
+  a real inbox, and one through Access with no domain. Each logged in `field/`.
+- **Plants:** spent rule skipped; a window key or an agent's key accepted as a signer; a recovery
+  key used twice; drops not applied; the tree not walked (a removed device's children stay); a
+  sheet-made device hung under the dropped Mac; a key that will not open sent to founding; words
+  sent in the request; the label ignored; the old Mac not told; the email wait skipped; a cancel
+  ignored.
 - **Only a person can pass:** a real print and a real recovery on a second home, with a real finger,
   logged in `field/`. A Time Machine restore on a real Mac, once, if the owner wants that path
   proven in Tier 1.
@@ -522,7 +639,10 @@ builder and read by the owner, holds:
 
 For the sheet only: about 10 files, product 500 to 800 lines, tests 500 to 800 lines, 1.5 to 2
 builder agent hours, plus the exam. 55% sure: the plan guessed 0.5 to 1, and the screens are where
-it grows. Email recovery is not sized; it waits on its study.
+it grows.
+
+Email recovery, on top: about 6 files, product 300 to 500 lines, tests 300 to 500 lines, 1 to 2
+builder agent hours, 45% sure, since its two unknowns can change the sending part.
 
 - **P9** (`MemberFact`, `foldMembers`, p28): `added`, `Adds`, `AddSaw`, the rank and `under` on
   each key, the spent set, and `admitted` walking the tree. The tree rule also changes how a
@@ -531,10 +651,13 @@ it grows. Email recovery is not sized; it waits on its study.
 - **P10** (the door): `/grant` takes `added`, and `mayAdd` gives `used`, `replaced` and
   `not_allowed`. The same SSHSIG check.
 - **P19** (the app): the founding screen gains "I have a backup sheet", the local warning, and the
-  removed Mac's screen in plain words. It never makes new keys by itself.
-- **P21** (the menu bar): the "No backup sheet" row, the live sheet's label, "Check my sheet", and
-  the making flow behind Touch ID. Remove drops the subtree.
+  removed Mac's screen in plain words. A sealed key that will not open goes to the recovery screen.
+  It never makes new keys by itself.
+- **P21** (the menu bar): the "No backup sheet" row, the live sheet's label, "Check my sheet", the
+  making flow behind Touch ID, and a row for a device asking to join. Remove drops the subtree.
 - **P28** (the backup): all of the above, on top of P26's cloud notes, with its own exam first.
+  Email may be its own row after P28; the plan decides.
+- **P26** (Cloudflare): the `send_email` binding, or Access, and the alarm that ends the wait.
 - **The plan's s13 and check 6** get their words from "How it would be tested" above.
 
 New files, a guess: `tuval/src/desktop/sheet.ts` (pure), `tuval/electron/sheet.*` (the screens,
@@ -545,6 +668,8 @@ print and PDF), `tuval/electron/recover.*` (the founding screen's second path), 
 ## What is decided, and what is open
 
 Decided by the owner, 2026-11-05 and 2026-11-06:
+
+The sheet, all of it. The calls the owner made on it:
 
 1. No wait before a sheet recovery takes effect, ever. A stolen sheet stays the known hole.
 2. No passphrase on top of the sheet.
@@ -558,14 +683,27 @@ Decided by the owner, 2026-11-05 and 2026-11-06:
 8. `@scure/bip39` 2.4.0, exact, with `@noble/hashes`.
 9. The end screen counts what was removed, offers "Make a new sheet", and the old Mac is told.
 10. Both ways are offered: email for the Cloudflare setup, the sheet without email and for local
-    with Time Machine, and a plain warning for local with no copy.
+    with Time Machine, and a plain warning for local with no copy. No third way, sheet plus email.
+11. Every device the person owns is an equal person key; an agent never is. The "a person key may
+    not add a person key" rule is dropped.
+12. A Mac whose keys did not come across goes to the recovery screen, never to a new founding.
+13. Email recovery for the Cloudflare setup, sent free through Cloudflare (`send_email`, or
+    Access's one-time PIN with no domain); a 6-digit code typed on the device that asked; every
+    live device told at once; a 24-hour wait any live device can cancel. Which email and when it
+    was checked are recorded at setup.
 
-Open:
+Inside the decided part, still a lean:
 
-- **Who may sign what** (call 7). Lean as written, 75%, until the email study looks at other
-  products.
-- **Email recovery,** all of it, until its study lands.
-- **Whether a "Check my sheet" is recorded,** and where. Experiment 216 leans yes.
+- **A browser tab cannot approve others.** 70% (call 7).
+- **Whether a "Check my sheet" is recorded,** and where. Experiment 216 leans yes. No call was
+  made on it.
+- **The brain's own email key signs the last `added`,** and the code's 10 minutes and 5 tries.
+  For P28's plan.
+
+Open, and the first build tries both:
+
+- **Whether the no-domain route works** (Access's one-time PIN, untried, 50%).
+- **Whether the code reaches the inbox.**
 
 ## What it cannot tell us
 
@@ -574,11 +712,12 @@ Open:
 - **Whether Touch ID really guards the person key** against someone at an unlocked Mac. P4 found
   `canPromptTouchID()` true on an unsigned build, but `promptTouchID` itself was never called, and
   nobody tried reading the `safeStorage` item from another process.
-- **Whether Time Machine or Migration Assistant carry the sealed keys,** and whether the local
-  ledger restores whole. Not run.
+- **Whether Migration Assistant and Time Machine really carry the sealed keys.** Experiment 217
+  says most likely, 75%, from docs and one careful blog. Nobody has moved a Mac. Whether the new
+  password Migration Assistant asks for keeps the login Keychain open was not researched.
 - **Where the owner's files sync,** which decides how real the PDF risk is.
 - **Whether the cascade's cost is small.** It is a handful of Approves with Tier 1's few clients.
-  With many tabs and agents it could be a chore.
+  With many tabs and agents, or a second Mac let in by the lost one, it could be a chore.
 - **Whether the new Mac's first `initialize` works before the menu bar is up.** The order of the
   screens is a guess until P19 exists.
 
@@ -586,8 +725,10 @@ Open:
 
 These are proposals, not settled words or numbers:
 
-- The field names `adds`, `drops`, `typed`, `kept`, `old`, `v`, `under`, the struct names `Add`,
-  `Adds`, `AddSaw`, the `Rank` type, and the function `mayAdd`.
+- The field names `adds`, `drops`, `typed`, `kept`, `old`, `v`, `under`, the `how` words `device`
+  and `email`, the struct names `Add`, `Adds`, `AddSaw`, the `Rank` type, and the function `mayAdd`.
+- The email facts `verified`, `requested` and `canceled`, the rank `email`, and the brain's email key.
+- The code's 10 minutes and 5 tries.
 - The `why` words `used`, `replaced` and `not_allowed`.
 - The HKDF label and the choice of HKDF over BIP39's own seed.
 - The label's shape, `r1-7f3a`.
