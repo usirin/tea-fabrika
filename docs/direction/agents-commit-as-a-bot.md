@@ -22,8 +22,23 @@
   a second GitHub account ([experiment 212](../../experiments/212-fabrika-bot-commits.md),
   calls 2 and 4).
 
-Not walked yet: how one shared app keeps one person's key from pushing to another's repos, and the
-branch rules a bot needs (under Open, below).
+- **Decided 2026-11-06, the bot is `fabrikalfa`,** owned by the kamp-us organization and public.
+  It is one bot for every project its owner runs fabrika on, not one bot for everyone; this
+  replaces "one shared bot" above. A self-hoster makes their own app.
+- **Decided 2026-11-06, one key, in the brain.** The app's key sits in the brain, on Cloudflare in
+  its Secrets Store, shared by every worker in one account. A person invited to a project gets a
+  token through that project's brain, after it checks its member list. Nobody else holds a key.
+- **Decided 2026-11-06, pull requests as me or as the bot.** A setting per person. Commits are
+  always the bot's. "As me" opens the pull request with a sign-in token of the person's that the
+  app gets once through GitHub's own sign-in, kept in the brain like the app's key.
+- **Decided 2026-11-06, the repo's rules hold the bot to its own branches.** `main` only through a
+  pull request; outside `fabrikalfa/*` only people may push. Any owner of kamp-us can make a key, so
+  these rules are what limit a key.
+- **Step proofs go in git notes,** not in the commit's signature slot, so GitHub shows no
+  "Unverified" (the Tier 1 plan's P32). [Experiment 212](../../experiments/212-fabrika-bot-commits.md)
+  section 10 has what the first real app showed.
+
+Not walked yet: the branch rules on a repo other than this one (under Open, below).
 
 Built from [experiment 211](../../experiments/211-started-claude-sandbox.md), which asked what the
 claude `@claude` starts may do in the person's repo. It is not a measurement.
@@ -73,19 +88,16 @@ keys are a sketch until a plan checks them against git's trailer rules and the i
 
 ## Open
 
-1. **One shared app, each person's own reach.** Two people sharing a ledger each answer for their
-   own agents. One app can hold several private keys, but a key may be able to mint a token for
-   any install of the app. How each person's host stays inside their own repos is a study that
-   reads GitHub's App docs.
+1. **The box's edge and a remote brain.** The stand-in token is swapped at the box's edge, which
+   asks the brain for a real token. How the edge reaches a brain on Cloudflare, and proves which
+   agent asks, is not designed.
 2. **Who writes the trailers.** With plain `git push`, the commit is made in the box, so
    `Fabrika-Agent` and `Fabrika-Input` are no longer written by the host when it builds the
    commit. How the host still stamps them, and checks them at the proxy, is open.
 3. **Branch rules.** A rule that blocks a bot's push or wants a review must let the bot through,
    and no agent approves (AGENTS.md).
-4. **The step signatures on GitHub.** Each step's commit is signed with its own key
-   (decided in the Tier 1 recheck, pull request 397), and GitHub does not know
-   those keys. Whether GitHub then labels branch commits "Unverified" rather than showing nothing
-   is untested; one test push shows it.
+4. **Pull requests as the person.** Whether GitHub marks a pull request the app opens for a person
+   with the app's name is not checked.
 
 ## What would change it
 

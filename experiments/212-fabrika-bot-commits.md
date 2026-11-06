@@ -336,6 +336,39 @@ Fabrika-Input: in-3f9a12c0-44
 - Each id leads to its envelope, which names its sender. If the other person sent one of them, the
   envelope says so; `Co-authored-by` still names the person the agent works for, as decided.
 
+## 10. The first real app, 2026-11-06
+
+The owner made the app that day, so the doubts above could be tried. It is `fabrikalfa` (fabrika
+and kalfa, a journeyman), owned by the kamp-us organization and public, with `contents` and
+`pull_requests` write and nothing else. It was made through GitHub's manifest flow: a local page
+filled in the settings, the owner clicked Create, and a script traded the one-time code for the
+app and put its private key in the keychain without printing it. The test key stays in the
+keychain until the brain holds it.
+
+| What was tried | What came back |
+|---|---|
+| A token from the app's key, for one repo | 1 hour, that repo only |
+| The bot pushes a `fabrikalfa/test` branch | allowed |
+| The bot pushes any other branch, or main | refused by the repo's rules (`GH013`) |
+| Who GitHub says made the commit | `fabrikalfa[bot]`, from the bot user's id in the email |
+| An unsigned bot commit | `unsigned`, no badge |
+| A bot commit signed with a key GitHub does not know | `unknown_key`, shown "Unverified" |
+| `main`'s latest squash commit | Verified, committed by GitHub |
+| A step's signature in a git note, read back by a fresh clone with no login | the signature checks; one word changed fails |
+| A rebase | drops the note; `notes.rewriteRef` carries it, but the signature names the old commit |
+
+The repo's rules, added that day: `main` changes only through a pull request and is never
+force-pushed or deleted, and outside `fabrikalfa/*` only people with the admin or write role may
+push. A GitHub App is not covered by a role, so the bot is held to its own branches. The rules do
+not cover `refs/notes/*`, so the bot can rewrite a note; without a step key it cannot forge one.
+
+*Wrong guess, kept:* "the `fabrika[bot]` login looked free". GitHub reserves an app's name for the
+user account of the same name, and a user named `fabrika` exists.
+
+*A first try pushed as the person, not the bot:* git's own credential helpers answered before the
+bot's token did. The second try ran git with no global or system config and the token in one
+header. A host that pushes for an agent has to do the same.
+
 ## Data shape
 
 A fact that exists only at push time goes in the ledger now, on the push entry: the agent, the
@@ -348,6 +381,10 @@ host's own word, so it is recorded, never used to decide. The token itself is ne
 
 1. Own the shared bot by a free organization both people own, and make the app public so it
    installs on personal repos? Yes or no.
+   **Answered (owner, 2026-11-06): kamp-us, public.** Not an organization of only two people:
+   kamp-us has more owners, and any owner can make a key. The repo's rules hold what such a key can
+   do to the bot's own branches. One bot serves every project the owner runs fabrika on, not
+   everyone; a self-hoster makes their own app.
 2. Build every bot commit through GitHub's API so it shows Verified, not `git push`? Yes or no.
    **No, for the first version (owner, 2026-11-06).** Agents use plain `git push` (call 4). Main
    still shows Verified, because what lands there is GitHub's own squash commit, which GitHub
@@ -357,6 +394,7 @@ host's own word, so it is recorded, never used to decide. The token itself is ne
    second GitHub account and a long-lived token. API commits stay possible later, if branch
    badges come to matter.
 3. Leave the `workflows` permission out, so the person commits CI changes? Yes or no.
+   *Built without it on 2026-11-06; the owner has not ruled.*
 4. Keep the app's private key in the system keychain, read only by the host? Yes or no.
    **Changed to a stand-in token (owner, 2026-11-06).** The real key stays with the host (in
    `next/`, the brain), outside every box. Inside the box, `git` and `gh` see a fake token; a
@@ -368,8 +406,7 @@ host's own word, so it is recorded, never used to decide. The token itself is ne
 ## Made up here
 
 The keychain item name, the `fabrika/<run>` branch prefix, `push` and its fields, `CLIENT_ID`,
-`MY_INSTALLATION`, the app slug `fabrika` (the `fabrika[bot]` login looked free today, but a
-private app's name does not show), and the shape of the push entry.
+`MY_INSTALLATION`, the app slug `fabrika` (wrong: the name was taken, see section 10), and the shape of the push entry.
 
 ## What it cannot tell us
 
