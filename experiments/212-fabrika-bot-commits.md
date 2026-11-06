@@ -349,8 +349,20 @@ host's own word, so it is recorded, never used to decide. The token itself is ne
 1. Own the shared bot by a free organization both people own, and make the app public so it
    installs on personal repos? Yes or no.
 2. Build every bot commit through GitHub's API so it shows Verified, not `git push`? Yes or no.
+   **No, for the first version (owner, 2026-11-06).** Agents use plain `git push` (call 4). Main
+   still shows Verified, because what lands there is GitHub's own squash commit, which GitHub
+   signs. Commits on a pull request's branch carry no GitHub badge. Two ways to badge them were
+   turned down: replaying each push through the API, since it rewrites the agent's commits under
+   new hashes, and a machine user holding the signing keys, since every person would need a
+   second GitHub account and a long-lived token. API commits stay possible later, if branch
+   badges come to matter.
 3. Leave the `workflows` permission out, so the person commits CI changes? Yes or no.
 4. Keep the app's private key in the system keychain, read only by the host? Yes or no.
+   **Changed to a stand-in token (owner, 2026-11-06).** The real key stays with the host (in
+   `next/`, the brain), outside every box. Inside the box, `git` and `gh` see a fake token; a
+   proxy at the box's network edge swaps it for a real 1-hour token limited to one repo and one
+   branch. Agents keep plain `git push` and `gh`, so people whose agent skills already use them
+   move over without change. Section 6's "the agent asks the host to push" is replaced by this.
 5. One `Fabrika-Input` line for every input since the branch's last commit? Yes or no.
 
 ## Made up here

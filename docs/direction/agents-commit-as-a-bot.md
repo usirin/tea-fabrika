@@ -10,8 +10,20 @@
 - **Decided, one shared bot.** There is one fabrika bot for everyone, not one per person. Which
   agent and whose it is ride in the commit, stamped by the host.
 
-Not walked yet: how one shared app keeps one person's key from pushing to another's repos, where
-the app's key lives, and the branch rules a bot needs (all under Open, below).
+- **Decided 2026-11-06, a stand-in token in the box.** The app's key stays with the host (in
+  `next/`, the brain), outside every box. In the box, `git` and `gh` see a fake token; a proxy at
+  the box's network edge swaps it for a real 1-hour token limited to one repo and one branch.
+  Agents keep plain `git push` and `gh`, so people whose agent skills already use them move over
+  without change.
+- **Decided 2026-11-06, Verified on main only, for the first version.** What lands on main is
+  GitHub's squash commit, which GitHub signs. Commits on a pull request's branch carry no GitHub
+  badge. Replaying pushes through GitHub's API was turned down, since it rewrites the agent's
+  commits under new hashes; so was a machine user holding the keys, since every person would need
+  a second GitHub account ([experiment 212](../../experiments/212-fabrika-bot-commits.md),
+  calls 2 and 4).
+
+Not walked yet: how one shared app keeps one person's key from pushing to another's repos, and the
+branch rules a bot needs (under Open, below).
 
 Built from [experiment 211](../../experiments/211-started-claude-sandbox.md), which asked what the
 claude `@claude` starts may do in the person's repo. It is not a measurement.
@@ -65,11 +77,15 @@ keys are a sketch until a plan checks them against git's trailer rules and the i
    own agents. One app can hold several private keys, but a key may be able to mint a token for
    any install of the app. How each person's host stays inside their own repos is a study that
    reads GitHub's App docs.
-2. **Where the app's private key lives.** The host holds it, outside any agent's sandbox, the way
-   it holds the person's login today.
+2. **Who writes the trailers.** With plain `git push`, the commit is made in the box, so
+   `Fabrika-Agent` and `Fabrika-Input` are no longer written by the host when it builds the
+   commit. How the host still stamps them, and checks them at the proxy, is open.
 3. **Branch rules.** A rule that blocks a bot's push or wants a review must let the bot through,
    and no agent approves (AGENTS.md).
-4. **Signing.** Whether the bot's commits show as verified on GitHub, and how.
+4. **The step signatures on GitHub.** Each step's commit is signed with its own key
+   (decided in the Tier 1 recheck, pull request 397), and GitHub does not know
+   those keys. Whether GitHub then labels branch commits "Unverified" rather than showing nothing
+   is untested; one test push shows it.
 
 ## What would change it
 
