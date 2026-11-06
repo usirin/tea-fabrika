@@ -67,9 +67,9 @@ decided both ways are offered. The file name stays, so links hold.*
 `next/` only. Today's version has no person key on a Mac and keeps its keys on GitHub
 ([the ledger goes to Cloudflare](./the-ledger-goes-to-cloudflare.md)). Nothing here changes it.
 
-The sketches use the owner's 2026-11-05 words, which are not in the plan or the other notes yet:
-`initialize` for the first message (the plan says `hello` in places), and `sentAt` and `arrivedAt`
-for an entry's two clocks (the plan says `said` and `at`). `sentAt` is the writer's clock, shown and
+The sketches use the owner's 2026-11-05 words, which the plan uses too since its refresh
+([PR 397](https://github.com/usirin/tea-fabrika/pull/397)): `initialize` for the first message, and
+`sentAt` and `arrivedAt` for an entry's two clocks (today's code says `said` and `at`). `sentAt` is the writer's clock, shown and
 never used to decide. `arrivedAt` is the referee's. Every entry carries `cause`, the id of the
 input the door stamped. There is one ledger, a Durable Object everywhere: Miniflare on the laptop,
 Cloudflare in the cloud.
@@ -474,7 +474,7 @@ Sheet r1-7f3a is used up.  [Make a new sheet]
 |---|---|---|
 | Any normal day | Nothing. No reminder, no nag | Never asked |
 | No sheet yet | A quiet row in the menu bar: "No backup sheet. [Make one]". Never a prompt on open | Until one exists |
-| Making a sheet | Touch ID, print or save or write 12 words, type two of them back | Once per Mac, and after each recovery, about 2 minutes |
+| Making a sheet | Touch ID, print or save or write 12 words, type two of them back | Once per person, and after each recovery, about 2 minutes |
 | Checking a sheet | "Check my sheet" in the menu bar: type all 12 into numbered slots, offline. It answers "This is your live sheet, r1-7f3a", "Word N looks wrong" or "This is an old sheet. It no longer works" | Only when they choose |
 | Using a sheet | On a new Mac's first screen: "I have a backup sheet". Type the address and 12 words, answer once, Touch ID | Once in years |
 | After a recovery that dropped the old Mac | Each browser and agent that was let in asks again, one Approve each | Once, a handful of times |
@@ -572,7 +572,7 @@ Every live device, at once:  "A new device asked to get in by email. It gets in 
 // Any live device, within 24 hours. A person key signs; no finger needed:
 {_tag: "canceled", request: "rq-1", signed: sshsig(personKey)}
 // 24 hours after `requested`, with no `canceled`, on the project object's alarm:
-{_tag: "added", add: {..., saw: {how: "email", ...}}, signed: sshsig(emailKey)}   // cause: "rq-1"
+{_tag: "added", add: {..., saw: {how: "email", ...}}, signed: sshsig(emailKey)}   // cause: the request's input id
 ```
 
 - **Who signs the last `added`:** a key the brain holds for this one job, its public half on the
@@ -665,7 +665,7 @@ builder agent hours, 45% sure, since its two unknowns can change the sending par
 - **P21** (the menu bar): the "No backup sheet" row, the live sheet's label, "Check my sheet", the
   making flow behind Touch ID, and a row for a device asking to join. Remove drops the subtree.
 - **P28** (the backup): all of the above, on top of P26's cloud notes, with its own exam first.
-  Email may be its own row after P28; the plan decides.
+  Email is its own row, P36, after P28 (the plan, 2026-11-06).
 - **P26** (Cloudflare): the `send_email` binding, or Access, and the alarm that ends the wait.
 - **The plan's s13 and check 6** get their words from "How it would be tested" above.
 
