@@ -1,7 +1,7 @@
 # Tracker views are programs
 
-**Proposed 2026-10-28.** Not settled, except one part marked decided (section
-7). This note replaces two studies of 2026-10-27, both left open and not
+**Proposed 2026-10-28.** Not settled, except two parts marked decided: section 7, and one
+program per view (section 10, decided 2026-11-06). This note replaces two studies of 2026-10-27, both left open and not
 merged: [PR 135](https://github.com/usirin/tea-fabrika/pull/135) (Linear's
 model as facts) and [PR 153](https://github.com/usirin/tea-fabrika/pull/153)
 (every view a program). It starts from 153's text, folds in 135's, settles
@@ -745,8 +745,10 @@ Small first. Each step is one pull request and costs $0 in agent runs.
 - **How sure: 70%.** A week of the board on v1's slices would show whether the
   jump annoys.
 
-### One program per view, sharing only the ledger
+### One program per view, sharing only the ledger (decided 2026-11-06)
 
+- **Decided** by the owner on 2026-11-06, in the product talk: board and list views are their own
+  programs. The rest of this note stays proposed.
 - **Why:** CQRS and Elm Land's shared model, both known. Each view starts
   alone from tsh and is tested alone.
 - **Cost:** each view folds the whole ledger and polls it. Small at hundreds
