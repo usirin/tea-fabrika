@@ -1,8 +1,10 @@
 # The ledger goes to Cloudflare, for two people
 
 *Changed 2026-11-01, for `next/`, from [the tiers](../plan/tiers.md), proposed. This note
-is built in today's version, invites included. In `next/`, invite and join are Tier 3, and
-so is GitHub as a keys source. Tier 1 has one person: a new client comes in by the menu bar's
+is built in today's version, invites included. In `next/`, invite and join are Tier 3. GitHub
+is never a keys source there: no key is let in because GitHub lists it, and a second person joins
+by invite and approval ([a key per client](./a-key-per-client-and-no-github-trust.md), decided by
+the owner 2026-11-05; this said GitHub as a keys source came in Tier 3). Tier 1 has one person: a new client comes in by the menu bar's
 Approve, and real notes live on the Cloudflare copy, with chaos on a throwaway ledger.*
 
 **Decided 2026-10-25: two people share one fabrika.** They work the same

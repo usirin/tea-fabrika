@@ -3,7 +3,7 @@
 **Decided 2026-11-01 by the owner.** After a walk, the owner approved all six principles and the
 five smaller calls, each with its lean, S3's branch A included. Each lean keeps its number: one
 under 80% is decided but still names its doubt and what would settle it. It stands on points the
-owner already decided, each named where it is used: D3's entry with `said` and `at` (2026-10-30), A3's
+owner already decided, each named where it is used: D3's entry with `said` and `at` (2026-10-30; renamed `sentAt` and `arrivedAt` by the owner on 2026-11-05), A3's
 `saw` on window Msgs (2026-10-31), hot reload's H2 and H3 (2026-11-01), "no version number on each
 machine" ([an old host is named, then restarted](./an-old-host-is-named-then-restarted.md),
 2026-10-25), the pipeline guidelines' P4 to P7 (2026-11-01), and record wide (2026-11-01). The
@@ -18,8 +18,8 @@ experiment 190's links.
 ```ts
 // A sketch, next/. Ticket 117's lane, kept the way this note proposes.
 // S1: every entry says the last rev its writer had folded. Code fills it; the referee bounds it.
-{id: "c-3", stream: "ticket:117", pos: 9, rev: 412, at: "23:12:04", by: "mac@owner",
- said: "23:10:01", seen: 409, _tag: "commented", body: {text: "also fix the label"}}
+{id: "c-3", stream: "ticket:117", pos: 9, rev: 412, arrivedAt: "23:12:04", by: "mac@owner",
+ sentAt: "23:10:01", seen: 409, _tag: "commented", body: {text: "also fix the label"}}
 // S2: one law every machine runs. Stop at any step, load, go on: the same run as no stop.
 syncTest(lane, {state: Lane, msgs: laneMsgs, seed: 190});
 // S3, branch A: a saved model carries its shape's number and a chain of named upgrades.
@@ -55,15 +55,15 @@ export const Entry = Schema.Struct({
 	stream: Schema.String,
 	pos: Rev, // place in its stream
 	rev: Rev, // place in the whole log
-	at: Schema.String, // the referee's clock: decides
+	arrivedAt: Schema.String, // the referee's clock: decides
 	by: Schema.String, // stamped by the door
-	said: Schema.String, // the writer's clock: shown, never decides
+	sentAt: Schema.String, // the writer's clock: shown, never decides
 	seen: Rev, // the last rev the writer had folded: bounded by the referee, may refuse a stale act
 	_tag: Schema.String,
 	body: Schema.Unknown,
 });
 // What a writer hands in. `seen` is required, so a writer cannot forget it.
-export type Line = {readonly by: string; readonly said: string; readonly seen: number; readonly _tag: string; readonly body: unknown};
+export type Line = {readonly by: string; readonly sentAt: string; readonly seen: number; readonly _tag: string; readonly body: unknown};
 
 // The referee, inside the one call that appends (D1): one check, nothing else.
 const place = (head: number, line: Line) =>
@@ -94,10 +94,10 @@ what the writer acted from.
   one key may run several windows, and a reload starts low.
 - **What it may decide:** a bounded claim, not a proven one. A writer can claim any number up to
   the head. So a program may refuse a stale act with it, as A3's `saw` does now; leases, limits,
-  money and grants use `at` and fences only. That is why it may sit in deciding code's types,
-  where `said` may not.
-- **Against `said` and `at` (D3):** three facts of one entry. `at` is the referee's clock and
-  decides. `said` is the writer's clock, unchecked, shown. `seen` is the writer's place in the log,
+  money and grants use `arrivedAt` and fences only. That is why it may sit in deciding code's types,
+  where `sentAt` may not.
+- **Against `sentAt` and `arrivedAt` (D3, `said` and `at` until 2026-11-05):** three facts of one
+  entry. `arrivedAt` is the referee's clock and decides. `sentAt` is the writer's clock, unchecked, shown. `seen` is the writer's place in the log,
   bounded by the referee.
 - **Against P5's `during`:** in `next/`, `during` is a fold: the run live at `seen`. So `next/`
   stores `seen` and derives `during`, which also answers "what the person saw", P5's own reason.

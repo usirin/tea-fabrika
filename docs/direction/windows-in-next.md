@@ -28,7 +28,9 @@ already work against the cloud brain,** which is what "a browser is always a cli
   verification"); this note first said `check`, which the Tier 1 plan already uses for three
   other things. A menu may still show the vendor's name, such as Touch ID or Windows Hello:
   that is a label, not a fact.
-- **A `next-windows` CI job in the exam pull request.** Not blocking until its first green.
+- **A `next-windows` CI job.** *Changed 2026-11-05: Tier 1's plan does not build it.* P1 built
+  one `next` job, on Linux; this job waits on the owner's word on Windows. What follows is the
+  proposal as it was. Not blocking until its first green.
   Standard runners cost nothing in public repositories, and this one skips typecheck and
   lint, whose results do not depend on the OS. 70% on green by PR A. The doubt is Alchemy's
   local stage and Worker Loader on Windows, and the job's first run settles it.
@@ -44,14 +46,17 @@ already work against the cloud brain,** which is what "a browser is always a cli
 - **Today's version:** fix only what daily use needs. Most of the trial's issues go away
   when `next/` replaces those parts.
 
-**Where it lands, a first sorting:** the words, the CI job, the attributes and the stop in
-Tier 1. A Windows person's own check and Electron in Tier 3, if the second person uses
+**Where it lands, a first sorting:** in Tier 1, the words and the OS on the hello (P10) and the
+attributes (P1, done). The CI job and the stop wait on the owner's word on Windows. *Changed
+2026-11-05: this put all four in Tier 1.* A Windows person's own check and Electron in Tier 3, if the second person uses
 Windows. Windows hands in Tier 4. Agents in Tier 5.
 
 **Why:** old hellos never get the OS back, and a law can pass while checking nothing. The
 slice's `layers.test.ts` does exactly that on Windows paths, in a simulation.
 
-**What it costs:** about 320 lines and 3 to 5 agent hours in Tier 1, a guess at 50%.
+**What it costs:** about 320 lines, a guess at 50%, which is about 0.5 agent hours at 600 lines an
+hour, the number [Tier 1's plan](../plan/tier-1.md#open-questions) uses. *Old guess, wrong: 3 to
+5 agent hours.* What is left in Tier 1 is the words and the OS field, a few lines inside P10.
 
 **How sure:** 70% on the shape. The doubt is everything a real run would show.
 

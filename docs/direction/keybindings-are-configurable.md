@@ -433,7 +433,7 @@ Two facts, and both are small.
   Nothing else knows it later, and it is the only way to learn which keys people use and which
   commands nobody finds. It is the client's claim, so no deciding code reads it.
 - **Who changed a binding, when and how:** each change to a person's keys is written with `by`,
-  the referee's `at`, the writer's own `said`, the window it came from, and `how` (`"pressed"` or
+  the referee's `arrivedAt`, the writer's own `sentAt` (`at` and `said` until 2026-11-05), the window it came from, and `how` (`"pressed"` or
   `"file"`). The file alone keeps only the result.
 
 The table itself loses nothing: it rebuilds from the file or the person's object.

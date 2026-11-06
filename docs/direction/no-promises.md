@@ -20,7 +20,10 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
 - **"Simplest shape" never covers it.** A brief for `next/` says so. An agent's
   shortcut against this is a bug in the change, not a tradeoff to list at the end.
 - **It is checked, not only written down.** Lint rules refuse Promises in `next/`
-  outside tests and a named list of edge files. They arrive in Tier 1's exam
+  outside tests, except on a line marked as an edge: `// oxlint-disable-next-line
+  fabrika/no-promises -- edge: <why>`. A build that adds one asks the owner, one line
+  at a time. *Changed 2026-11-05 (owner): this said a named list of edge files.* Before
+  that change, it said: refuse Promises outside tests and a named list of edge files. They arrive in Tier 1's exam
   pull request, along with planted lines that must fire. Until then, this note and
   [AGENTS.md](../../AGENTS.md) are the only guard.
 
@@ -45,7 +48,9 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
   engine showed one `useSyncExternalStore` hook working, 90% sure, and
   [Tier 1's plan](../plan/tier-1.md) uses it. Nothing is built yet.
 
-**How sure: 95%** on the rule. **80%** on the edge list, which ticket 115 sets.
+**How sure: 95%** on the rule. The edge list is gone: an edge is a line with an edge comment,
+and the owner reads each new one (owner, 2026-11-05; Tier 1's P35 builds it). *It said: 80% on
+the edge list, which ticket 115 sets.*
 
 ## What it cannot tell us
 
