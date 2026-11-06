@@ -3,12 +3,13 @@
 **Proposed 2026-11-05.** The owner decided the direction on 2026-11-05, marked decided below:
 
 - **Decided, agents commit and push as a bot.** An agent's commit is authored by a GitHub App's
-  bot identity (a name such as `fabrika[bot]`), never by the person's account. GitHub itself then
+  bot identity (`fabrikalfa[bot]`, named 2026-11-06), never by the person's account. GitHub itself then
   shows a person's work apart from an agent's.
 - **Decided, the person rides along.** The person the agent works for is named in a
   `Co-authored-by` trailer, so the commit still shows up as theirs too.
-- **Decided, one shared bot.** There is one fabrika bot for everyone, not one per person. Which
-  agent and whose it is ride in the commit, stamped by the host.
+- **Decided, one shared bot.** *Narrowed 2026-11-06, below: one bot for every project its owner
+  runs fabrika on, not one for everyone.* Which agent and whose it is ride in the commit, stamped by
+  the host.
 
 - **Decided 2026-11-06, a stand-in token in the box.** The app's key stays with the host (in
   `next/`, the brain), outside every box. In the box, `git` and `gh` see a fake token; a proxy at
@@ -47,7 +48,7 @@ claude `@claude` starts may do in the person's repo. It is not a measurement.
 A sketch, both versions. What one agent commit carries. The host writes every line below the
 subject; the agent never names itself.
 
-author     fabrika[bot] <BOT_USER_ID+fabrika[bot]@users.noreply.github.com>
+author     fabrikalfa[bot] <353269643+fabrikalfa[bot]@users.noreply.github.com>
 subject    map: take a ticket from a pipe
 
 Co-authored-by: <the person> <their noreply address>
@@ -106,5 +107,6 @@ new paid accounts, and nothing that needs a second server to start.
 
 ## What it cannot tell us
 
-Nothing here was run. Whether `Co-authored-by` with the bot as author shows the person on the
-commit the way the owner expects is a guess until one test commit shows it.
+The first pushes with the real app ran on 2026-11-06 ([experiment 212](../../experiments/212-fabrika-bot-commits.md)
+section 10). Whether `Co-authored-by` with the bot as author shows the person on the commit page
+the way the owner expects was not looked at on the page yet.
