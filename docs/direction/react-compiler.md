@@ -21,7 +21,7 @@ rules ([where this differs](#where-this-differs-from-settled-notes)).
 
 Settled notes it stands on: [Elm first](./elm-first.md) (state in tea machines, no `useState`;
 tea's own hook once it takes the Effect engine, and until then one `useSyncExternalStore`
-stand-in), [UI on Manti](./ui-on-manti.md), [oxlint and oxfmt](./oxlint-and-oxfmt.md), and
+stand-in; tea 0.23.0's `useRuntime` took it, so there is no stand-in), [UI on Manti](./ui-on-manti.md), [oxlint and oxfmt](./oxlint-and-oxfmt.md), and
 [nobody writes their own exam](./nobody-writes-their-own-exam.md).
 
 Built from [experiment 194](../../experiments/194-react-compiler.md), which read React's docs and
@@ -155,6 +155,13 @@ check blocks, with no setting. First decided 2026-11-02 (195, open call 2). Lean
 
 **Decided 2026-11-03.** Lean, 85%.
 
+*Changed 2026-11-05:* tea 0.23.0's `useRuntime` takes the Effect engine and a selector
+([demlik PR 856](https://github.com/kamp-us/demlik/pull/856), [PR 859](https://github.com/kamp-us/demlik/pull/859)), so the one store hook is tea's
+`useRuntime` and no `useModel` is written, as this note said it would go. `one-store-hook`'s import
+half becomes: in `next/**`, `useSyncExternalStore` is imported nowhere. Its other half, a store
+hook whose value is dropped, is unchanged and fires on `useRuntime`. `no-tea-react` was dropped on
+2026-11-02, so the words below that it refuses tea's hooks are wrong.
+
 - **What it means:** a window reads its model only through the one store hook (`useModel`, the
   stand-in until tea's own hook takes the Effect engine), and draws from the value it returns.
   Each part reads its own slice through a selector (C6). Never a module object read during render.
@@ -236,6 +243,12 @@ Lean 85%, taken.
 
 **Decided 2026-11-03.** `next/`'s desk is way 3b, through our stand-in hook with a selector, with
 no hand `memo`. First decided 2026-11-02 (195, open call 5). Lean 75%, taken.
+
+*Changed 2026-11-05:* way 3b goes through tea 0.23.0's `useRuntime` with a selector, not a stand-in
+([demlik 853](https://github.com/kamp-us/demlik/issues/853) closed). [Experiment
+213](../../experiments/213-tea-react-select.md) ran it under Babel's Compiler on both engines:
+three tiles, tile b clicked three times, drew a0 b3 c0, in 400 of 400 trials. The cost below, about
+60 lines in the hook's file, is gone.
 
 - **What it means:** new code writes no `useMemo`, `useCallback` or `memo` by default. The desk has
   no `memo` per tile. A tile's props are plain values: never a fresh handler or object made
@@ -391,7 +404,8 @@ Decided with this note on 2026-11-03; the plan files say so in place.
   `oxc-transform-react` and `oxc-parser` in the catalog. Its PR body counts each fire on PR 223's
   tree: 194 found 0 for the three React rules, and 0 skips among 5 functions, which 195 repeated on
   oxc's port. `one-store-hook` is not written yet; PR 223 has no store hook to fire on.
-- **PR A, T5:** the first `useModel`, under the rules, with a selector. **T6:** `build.ts` on
+- **PR A, T5:** the first `useModel`, under the rules, with a selector. *Changed 2026-11-05:* the
+  first `useRuntime` from tea, with a selector; no `useModel`. **T6:** `build.ts` on
   Rolldown with the Compiler plugin, any finding failing the build, and the bundle time
   before and after in the PR body.
 - **The window sketch** in Tier 1's detail has no `memo` per tile; the desk is way 3b (C6). PR B's

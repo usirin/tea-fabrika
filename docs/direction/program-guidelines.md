@@ -846,8 +846,8 @@ today    (top bar) C-b a, Enter       opens ticket --ticket N beside, through th
 In `next/`, the desk is a program with its own log (Tier 1 detail, call 20), so these are its letters.
 
 ```ts
-// A sketch, next/. Effect Schema writes each _tag. `said` is the window's own clock, never used to decide.
-{_tag: "open", line: "asks --ask a-approve-8 | ticket", from: "t1", via: {_tag: "key", keys: "enter"}, said}
+// A sketch, next/. Effect Schema writes each _tag. `sentAt` is the window's own clock, never used to decide (`said` until 2026-11-05).
+{_tag: "open", line: "asks --ask a-approve-8 | ticket", from: "t1", via: {_tag: "key", keys: "enter"}, sentAt}
 {_tag: "opened", tile: "t5", how: "new", beside: "t1", folded: ["t6"]}
 {_tag: "left", tile: "t5", focus: "t1", why: "recent"}
 {_tag: "closed", tile: "t5", focus: "t1", why: "recent"}

@@ -82,6 +82,14 @@ says, and a lint rule holds it. The sketch below is today's version.*
 own hook once it takes the Effect engine ([demlik 852](https://github.com/kamp-us/demlik/issues/852)).
 Until then the one `useSyncExternalStore` hook stands in, in one file. The lint rule is dropped.*
 
+*Changed 2026-11-03, for `next/`: tea 0.23.0's `useRuntime` takes the Effect engine, so the
+stand-in goes. It takes a run booted outside React, returns `[state, send]` with
+`send: (msg) => void` ([demlik PR 856](https://github.com/kamp-us/demlik/pull/856)), and reads
+one part through a selector ([demlik PR 859](https://github.com/kamp-us/demlik/pull/859)).
+[Experiment 213](../../experiments/213-tea-react-select.md) ran it under the React Compiler.
+A component that boots its own Effect run through `useMachine` is still open
+([demlik 852](https://github.com/kamp-us/demlik/issues/852)); `next/` hands a window its run.*
+
 ```tsx
 // A sketch. A comment box: the draft is a machine, not a useState.
 const Draft = machine({
