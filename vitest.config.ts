@@ -27,6 +27,11 @@ export default defineConfig({
 			"wip/src/**/*.test.ts",
 			"legacy/src/**/*.test.ts",
 			"oxlint-plugins/*.test.ts",
+			// next/, the new version. Its end-to-end tests sit outside `src/`, in
+			// `next/apps/fabrika/e2e/`, and run through `node next/apps/fabrika/e2e.ts`.
+			"next/packages/*/src/**/*.test.{ts,tsx}",
+			"next/programs/*/src/**/*.test.{ts,tsx}",
+			"next/apps/*/src/**/*.test.{ts,tsx}",
 		],
 		// One time limit for every test, chosen from measured times, not vitest's 5 s default,
 		// which turned main red 6 times for slow tests and found no bug (experiment 125).

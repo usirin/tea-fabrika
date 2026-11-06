@@ -310,6 +310,49 @@
 			// Jev's authorization header (the old factory).
 			"files": ["legacy/src/local.ts"],
 			"rules": { "fabrika/no-redacted-value": "off" }
+		},
+		{
+			// The new version's exam rules (Tier 1, P2). They block from the start, and their fires on PR
+			// 223's tree were read by hand (oxlint-plugins/README.md). Each edge is written whole inside
+			// its rule, so no line here can make a file one.
+			"files": ["next/**"],
+			"rules": {
+				"fabrika/no-promises": "error",
+				"fabrika/no-effect-run-outside-edge": "error",
+				"fabrika/no-of": "error",
+				"fabrika/no-hand-tag": "error",
+				"fabrika/one-store-hook": "error"
+			}
+		},
+		{
+			// React's own rules, blocking as the owner set them (docs/direction/react-compiler.md). The
+			// skip check, `pnpm lint:compiler`, holds the rest of the Compiler's rules.
+			"files": ["next/**/*.tsx"],
+			"rules": {
+				"react/refs": "error",
+				"react/immutability": "error",
+				"react/display-name": "error",
+				// React's purity rule refuses a clock read in render; ours refuses it in a handler too
+				// (owner, 2026-11-05).
+				"react/purity": "error",
+				"fabrika/no-clock-in-view": "error"
+			}
+		},
+		{
+			// Tests are left out: they await vitest, feed raw frames and may plant a broken view.
+			// `no-of` stays on, since a test names its helpers too.
+			"files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
+			"rules": {
+				"fabrika/no-promises": "off",
+				"fabrika/no-effect-run-outside-edge": "off",
+				"fabrika/no-hand-tag": "off",
+				"fabrika/one-store-hook": "off",
+				"react/refs": "off",
+				"react/immutability": "off",
+				"react/display-name": "off",
+				"react/purity": "off",
+				"fabrika/no-clock-in-view": "off"
+			}
 		}
 	]
 }

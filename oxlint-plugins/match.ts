@@ -70,6 +70,28 @@ export const grouped = (source: Source, node: Node): number => {
 	return pairs;
 };
 
+/**
+ * The linted file's path from where oxlint runs, with `/` between folders: `next/apps/fabrika/brain.ts`.
+ * `pnpm lint` runs at the top of the repo, so a rule's edge list names a file by its whole path
+ * there. Run from anywhere else, no file is an edge, so the rule fires more, never less.
+ */
+export const pathIn = (context: Context): string => {
+	const from = context.cwd.endsWith("/") ? context.cwd : `${context.cwd}/`;
+	return context.filename.startsWith(from) ? context.filename.slice(from.length) : context.filename;
+};
+
+/** The local names a file imports from Effect: `Effect` in `import {Effect} from "effect"`. */
+export const effectNames = (program: ESTree.Program): ReadonlySet<string> => {
+	const names = new Set<string>();
+	for (const statement of program.body) {
+		if (statement.type !== "ImportDeclaration") continue;
+		const from = statement.source.value;
+		if (from !== "effect" && !from.startsWith("effect/") && !from.startsWith("@effect/")) continue;
+		for (const spec of statement.specifiers) names.add(spec.local.name);
+	}
+	return names;
+};
+
 /** Each ancestor of a node, nearest first. */
 export function* ancestors(node: Node): Generator<Node> {
 	let at = (node as Node & {readonly parent?: Node | null}).parent;

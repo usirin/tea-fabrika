@@ -1,0 +1,2 @@
+signer@fabrika.test namespaces="fabrika-client" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHQDHHt14HpMZJhZBSEL6x+AgdnPQqbZY73pK98Bse4i
+ecdsa@fabrika.test namespaces="fabrika-client" ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBLKa35Qn06bPJsf/dRj143wXab62AJuAb+YjcoPNsZGJqkr1V+jIS0JTAPl13B+F8//Xx8uk36dufBd43Ni6Bew=

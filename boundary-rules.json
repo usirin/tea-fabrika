@@ -1,8 +1,17 @@
 {
 	"libraryTypes": {
 		"library": { "imports": [], "pure": false },
-		"app": { "imports": ["library"], "pure": false }
+		"app": { "imports": ["library"], "pure": false },
+		"next-library": { "imports": [], "pure": false },
+		"next-tuval": { "imports": ["next-library"], "pure": false },
+		"next-program": { "imports": ["next-library", "next-tuval"], "pure": false },
+		"next-app": { "imports": ["next-library", "next-tuval", "next-program"], "pure": false }
 	},
-	"libraries": { "packages/fabrika": "library", "packages/pipeline": "app" },
+	"libraries": {
+		"packages/fabrika": "library",
+		"packages/pipeline": "app",
+		"next/apps/fabrika": "next-app"
+	},
+	"libraryRoots": ["next"],
 	"acrossDeployables": ["relative-import-crosses-workspace"]
 }

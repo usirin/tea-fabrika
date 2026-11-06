@@ -39,3 +39,30 @@ The other is `no-bare-tell.grit`. A `tell` or `offer` to a program's input is an
 `pnpm typecheck` catches every other dropped Effect statement through Effect's own `floatingEffect` check (`@effect/tsgo`, set up in `tsconfig.base.json`). That check does not look inside callbacks, so the callback shape stays this rule's job.
 
 `plants.test.ts` plants one line per rule that no other test plants, and the built-in rules that must not be lost (unused imports and variables, non-null, ts-ignore), and sees each fire. It also runs `lint.ts`: advice alone exits 0 and still prints; a blocking fire exits 1.
+
+## The new version's exam rules
+
+Six rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests live with the rest of the exam, in `next/apps/fabrika/src/exam/`, and lint each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file.
+
+| Rule | Refuses | Edges, whole paths in the rule | Tests |
+|---|---|---|---|
+| `no-promises` | `async`, `await`, `for await`, `new Promise`, `Promise.x(...)`, `.then`, `Effect.promise`, `import()`, and `.catch` on anything not imported from Effect | none yet | left out |
+| `no-effect-run-outside-edge` | any of Effect's twelve run functions, on `Effect` or a runtime; `NodeRuntime.runMain` passes | the plan's 18 | left out |
+| `no-of` | a declared name `of` or ending in `Of`; a use passes | none | on |
+| `no-hand-tag` | an object key, class field or type member named `_tag`; a read passes | the log, `next/packages/libfabrika/src/data/log.ts` | left out |
+| `one-store-hook` | `useSyncExternalStore` outside `next/packages/tuval/src/window/use-model.ts`; a store hook's value dropped | that file, for the first half | left out |
+| `no-clock-in-view` | `Date.now()`, `new Date()`, `Date()`, `performance.now()`, `Math.random()`, `crypto.randomUUID()` in a `.tsx` file, handlers included | none | left out |
+
+React's own `react/refs`, `react/immutability`, `react/display-name` and `react/purity` block in `next/**/*.tsx`, tests left out (`docs/direction/react-compiler.md`). `react/purity` refuses a clock or random read in render and lets a handler pass, as React means it; `no-clock-in-view` refuses the same reads anywhere in a `next/` `.tsx` file, handlers included, since the time comes through a Cmd (C1; owner, 2026-11-05). oxc-transform-react 0.157.0 stopped refusing a clock read in a handler a view passes down, which 0.156.0 did, so this rule holds that case now. `pnpm lint:compiler` runs the Compiler's compile step, `next/apps/fabrika/src/exam/compiler.ts`, over every `.tsx` file in `next/`, against `compiler-ledger.json`, which starts empty.
+
+None of these rules sees types. A `.catch` is told apart by the name it is called on, `Effect.promise` and the run functions by their written names, so an Effect module under another name, or a Promise reached through a helper, passes. `no-hand-tag` misses `x._tag = "a"`, which the plan does not name. Report any miss.
+
+Their count on PR 223's tree at `7c1d073` (33 files), each fire read by hand, on 2026-11-05:
+
+- `no-promises`: 225 fires on 195 lines, none false. 63 fires on 57 lines are the slice's own Promise plumbing (`app/process.ts` 26, `brain.ts` 13, `build.ts` 9, `data/project.ts` 4, `transport/gateway.ts` 4, `app/entry.ts` 2, `coordination/process-manager.ts` 2, `window/main.tsx`, `brain-host.ts` and `dev.ts` 1 each). The other 162 are in `e2e.ts`, the slice's Playwright script: true by the rule's words, and test code by role. The plan's thin runner moves those laws into `e2e/*.test.ts`, which the rule leaves out.
+- `no-effect-run-outside-edge`: 3, none false, all in `window/main.tsx` (two `Effect.runPromise` in the `useRuntime` handle, one `Effect.runFork`). They move to the hook's edge file with T5. Placed at the plan's package paths, no slice file lands on an edge, so the count is the same.
+- `no-of`: 1, none false: `sizeOf` in `desktop/fold.ts:63`.
+- `react/purity`: 1, `window/main.tsx:146`, a clock read in a helper made in render that only a click handler calls. False by React's own reading (experiment 194 found the same), true by C1.
+- `no-clock-in-view`: 2, none false by its words: `window/main.tsx:146` (the same read) and `main.tsx:19`, a module-level `crypto.randomUUID()` naming the tab. That one is not in a view function, only in a view file; whether a read at a view file's top level should pass is a later call.
+- `no-hand-tag`, `one-store-hook`, `react/refs`, `react/immutability`, `react/display-name`: 0. The slice holds no `_tag` and no store hook, so for those two a zero measures nothing.
+- `lint:compiler`: 0 findings on the slice's two `.tsx` files.
