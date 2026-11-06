@@ -331,7 +331,11 @@
 			"rules": {
 				"react/refs": "error",
 				"react/immutability": "error",
-				"react/display-name": "error"
+				"react/display-name": "error",
+				// React's purity rule refuses a clock read in render; ours refuses it in a handler too
+				// (owner, 2026-11-05).
+				"react/purity": "error",
+				"fabrika/no-clock-in-view": "error"
 			}
 		},
 		{
@@ -345,7 +349,9 @@
 				"fabrika/one-store-hook": "off",
 				"react/refs": "off",
 				"react/immutability": "off",
-				"react/display-name": "off"
+				"react/display-name": "off",
+				"react/purity": "off",
+				"fabrika/no-clock-in-view": "off"
 			}
 		}
 	]

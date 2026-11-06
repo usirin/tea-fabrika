@@ -253,6 +253,7 @@ describe("each rule refuses what it is there to refuse", () => {
 			"no-of",
 			"no-hand-tag",
 			"one-store-hook",
+			"no-clock-in-view",
 		];
 		const missing = Object.keys(plugin.rules).filter(
 			(rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),

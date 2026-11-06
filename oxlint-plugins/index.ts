@@ -3,6 +3,7 @@
 import type {Plugin} from "@oxlint/plugins";
 import {noBareDisable} from "./no-bare-disable.ts";
 import {noBareTell} from "./no-bare-tell.ts";
+import {noClockInView} from "./no-clock-in-view.ts";
 import {noContextTag} from "./no-context-tag.ts";
 import {noDataTaggederror} from "./no-data-taggederror.ts";
 import {noEffectPromise} from "./no-effect-promise.ts";
@@ -27,6 +28,7 @@ const plugin: Plugin = {
 	rules: {
 		"no-bare-disable": noBareDisable,
 		"no-bare-tell": noBareTell,
+		"no-clock-in-view": noClockInView,
 		"no-context-tag": noContextTag,
 		"no-data-taggederror": noDataTaggederror,
 		"no-effect-promise": noEffectPromise,

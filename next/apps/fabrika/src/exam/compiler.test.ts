@@ -69,25 +69,6 @@ describe("the compile step's check", () => {
 		]);
 	});
 
-	// A tripwire, not a guard. C1 says a view reads no clock in a handler it makes either, and
-	// experiment 195 saw oxc-transform-react 0.156.0 refuse this. 0.157.0, the version pinned here,
-	// compiles it with no word, as Babel's Compiler does. So no check holds that half of C1 now: the
-	// pull request says so for the owner. If a later version refuses it again, this fails loudly.
-	it("compiles a clock read in a handler a view passes down, on 0.157.0", () => {
-		// Experiment 195's plant: the same shape as the slice's desk before part 4.
-		const text = [
-			"const Tile = (props: {readonly focus: () => void}) => (",
-			'\t<button type="button" onClick={props.focus} />',
-			");",
-			"export const Desk = (props: {readonly tiles: readonly string[]; readonly go: (s: string) => void}) => {",
-			"\tconst said = () => new Date().toISOString();",
-			"\tconst focus = (tile: string) => props.go(tile + said());",
-			"\treturn <main>{props.tiles.map((t) => <Tile key={t} focus={() => focus(t)} />)}</main>;",
-			"};",
-		].join("\n");
-		expect(at("next/a.tsx", text)).toEqual([]);
-	});
-
 	it("counts lines in characters, not bytes, past non-ASCII text", () => {
 		const text = ["// Görünüm: çok satırlı bir açıklama ✨", REF_IN_RENDER].join("\n");
 		expect(at("next/a.tsx", text)).toEqual(["Tip:5 Cannot access refs during render"]);
