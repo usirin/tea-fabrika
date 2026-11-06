@@ -61,6 +61,7 @@
 		"@demlik/structure-sweep": "catalog:",
 		"@effect/tsgo": "catalog:",
 		"@types/node": "catalog:",
+		"esbuild": "catalog:",
 		"fast-check": "catalog:",
 		"miniflare": "catalog:",
 		"oxfmt": "catalog:",

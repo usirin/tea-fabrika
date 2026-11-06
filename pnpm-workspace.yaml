@@ -24,6 +24,9 @@ packages:
   - experiments/173-worker-loader
   - experiments/174-effect-on-cloudflare
   - experiments/195-oxc-toolchain
+  # next/: the new version (docs/plan/tier-1.md). Real packages, one lockfile, this catalog.
+  - next/packages/*
+  - next/programs/*
   - next/apps/*
 
 catalog:

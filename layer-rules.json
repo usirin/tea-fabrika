@@ -1,6 +1,54 @@
 {
 	"layers": [
 		{
+			"name": "next-apps",
+			"paths": ["next/apps"]
+		},
+		{
+			"name": "next-programs",
+			"paths": ["next/programs"]
+		},
+		{
+			"name": "next-tuval",
+			"paths": [
+				"next/packages/tuval/src/browser",
+				"next/packages/tuval/src/electron",
+				"next/packages/tuval/src/headless"
+			]
+		},
+		{
+			"name": "next-tuval-shared",
+			"paths": ["next/packages/tuval/src/dom"]
+		},
+		{
+			"name": "next-window",
+			"paths": ["next/packages/tuval/src/window"]
+		},
+		{
+			"name": "next-desktop",
+			"paths": ["next/packages/tuval/src/desktop"]
+		},
+		{
+			"name": "next-mcp",
+			"paths": ["next/packages/libfabrika/src/mcp"]
+		},
+		{
+			"name": "next-app",
+			"paths": ["next/packages/libfabrika/src/app"]
+		},
+		{
+			"name": "next-coordination",
+			"paths": ["next/packages/libfabrika/src/coordination"]
+		},
+		{
+			"name": "next-data",
+			"paths": ["next/packages/libfabrika/src/data"]
+		},
+		{
+			"name": "next-transport",
+			"paths": ["next/packages/libfabrika/src/transport"]
+		},
+		{
 			"name": "apps",
 			"paths": ["apps"]
 		},
