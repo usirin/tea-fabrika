@@ -49,7 +49,7 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
   [Tier 1's plan](../plan/tier-1.md) uses it. Nothing is built yet.
 
 **How sure: 95%** on the rule. The edge list is gone: an edge is a line with an edge comment,
-and the owner reads each new one (owner, 2026-11-05; Tier 1's P8 builds it). *It said: 80% on
+and the owner reads each new one (owner, 2026-11-05; Tier 1's P35 builds it). *It said: 80% on
 the edge list, which ticket 115 sets.*
 
 ## What it cannot tell us

@@ -5,7 +5,8 @@ open question 18, and it replaces the CI half of
 [nobody writes their own exam](./nobody-writes-their-own-exam.md), which was proposed at 75% and
 doubted by its own note. That note's core stays: the builder never touches the exam, and changing
 the exam is the owner's call. *Added the same day (owner):* each step's agent signs its commits with
-its own key, and CI decides from the signature.
+its own key, and CI decides from the signature; squash merges stay, and each step signs a link
+from tree to tree that survives the squash.
 
 ```text
 // A sketch. Tier 1's P6, one pull request, two step commits, oldest first, each signed.
@@ -61,6 +62,52 @@ const check = (commit: Commit, stepKeys: StepKeys): Outcome => {
   role as each key's name. It is an exam path, so a change to it asks the owner.
 - **Tier 1's P32 builds it,** with planted commits for each answer.
 
+## Squash merges stay: each step signs a link from tree to tree
+
+**Decided by the owner, 2026-11-05.** This repo squashes each pull request into one commit on
+`main`, and that stays. A squash drops the step commits, and their signatures with them. So each
+step also signs a small statement of what it changed, in in-toto's shape (in-toto calls it a link),
+and CI checks the chain of links from `main`'s tree to the squash commit's tree.
+
+```ts
+// A sketch. What a step signs: the tree before it and the tree after it. The ledger's words.
+{_tag: "attested", step: "tests", from: "4b1d0e7", to: "9e02a1c", by: "agent:test-writer",
+ key: "SHA256:Tq3...", sig: "-----BEGIN SSH SIGNATURE-----...", arrivedAt: "21:02:11", cause: "in-3f9a0c21-7"}
+{_tag: "attested", step: "build", from: "9e02a1c", to: "c7a8f55", by: "agent:builder",
+ key: "SHA256:Bx9...", sig: "-----BEGIN SSH SIGNATURE-----...", arrivedAt: "21:40:56", cause: "in-3f9a0c21-9"}
+
+// CI: the first link starts at main's tree, each link starts where the last one ended, the last
+// ends at the squash commit's tree, and every `sig` checks against a known step key.
+// A gap or a bad signature: {_tag: "stuck", why: "broken_chain"}. A `build` link whose change
+// touches an exam path: {_tag: "stuck", why: "build_touched_exam"}.
+```
+
+- **A tree, not a commit.** A tree's id depends only on the files, so it survives a squash. The
+  commit ids do not.
+- **When `main` moved.** The branch is brought up to date by merging `main` in, as a `lead` link from
+  the old tree to the merged one. The squash's tree must equal the last link's `to`, so a pull
+  request merges only when it is up to date.
+- **No transparency-log server.** in-toto's links often go to a Sigstore Rekor server. Ours go to the
+  ledger, which is already an append-only log with a referee, the way traces dropped Jaeger for the
+  job record ([a job record holds its trace](./a-job-record-holds-its-trace.md)).
+- **Commit signatures stay too,** as how git carries each step's key while the branch is open. The
+  chain is what survives the merge.
+
+**In Tier 1, until `next/`'s ledger exists, each link sits in the step's `field/` row.** Tracker
+tickets 227 and 228 (a program that shows where a change came from, and one that shows everything
+that went into `main`, Tier 2 or later) will read them back, so each row keeps every field the
+ledger entry will have, and nothing a later reader would need to trust us for:
+
+| Field | Why a later reader needs it |
+|---|---|
+| `step`, `from`, `to` | The link itself: which step, which tree before, which tree after |
+| `by`, `key` | Who signed, and the key's fingerprint, so it maps to a role in the keys file |
+| `sig` | The whole SSHSIG text, with its namespace, so anyone re-checks it with `ssh-keygen -Y verify` and trusts no one |
+| `arrivedAt` | When the row was written, the referee's clock while `field/` stands in |
+| `cause` | The input that started the step, or null in Tier 1, where the lead session starts steps by hand |
+| `commit`, `pr`, `base`, `squash` | The step's commit sha, the pull request, `main`'s commit at the start, and the squash commit, so the chain can be walked from `main` |
+| `keys` | The commit of the keys file the check used, since a key can be dropped later |
+
 ## Why
 
 - **Small changes need fewer pull requests, not more.** Splitting every exam change into its own
@@ -104,8 +151,8 @@ How sure: 85%. The owner decided it. The doubts are in the next section.
 - **A rebase re-signs every commit with one key.** A branch rebased onto a newer main would come
   out signed by whoever rebased. A lean, not tried: update a branch by merging main in, as a `lead`
   commit, and never rebase a step's commits. P32's plan settles it.
-- **Squash merges.** This repo squashes pull requests, so the step commits leave `main` at merge.
-  The check runs before the merge and still holds; GitHub keeps the commits under the pull
-  request. Whether to keep them on `main` with a merge commit is the owner's call.
+- **Whether a tree-to-tree link says enough.** It says what changed, not which tests ran. A link
+  that also names the checks it ran is a later field, and adding it later loses those runs.
+  *Squash merges were a doubt here; the owner kept them on 2026-11-05, with the links above.*
 - **Gaming in the test writer's commit.** The test writer may now change the exam in the same
   pull request it writes tests for. The owner's read of every exam path is what holds that.

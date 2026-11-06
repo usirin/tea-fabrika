@@ -18,13 +18,24 @@ layer             what the first pass gives it
 transport         signed hello, unknown keys refused, a code and Approve, a one-time link
 data              the ledger behind a service; each grant keeps what the person saw;
                   each note's saved versions, with a check against a stale save
-coordination      mailbox, who belongs, window and agent grants
+coordination      mailbox, who belongs, window and agent grants; a slice of C2 to C5:
+                  dead letters, one crashed program restarted with a brake, exit,
+                  monitors, a run number per start, who is online, the brain restarted
 app               programs as sealed boxes: notes, the counter as the test, one that
                   breaks things on purpose
 desktop (Tuval)   one core, with browser, Electron and headless on subpaths of
                   @kampus/tuval, and a menu bar with Approve and Remove
 ```
 
+- **Tier 1 builds a slice of coordination's C2 to C5** (decided by the owner, 2026-11-06), as
+  [the five layers](./a-local-first-sync-engine.md)' header says: Tier 1 builds layers 1 to 3. A
+  skateboard must ride, not be a polished wheel: a program that crashes has to come back, or be
+  marked down and say why, or the first tier does not work. The slice is dead letters, one
+  crashed program restarted with a crash-loop brake and backoff, exit, info and monitors, a run
+  number per start, who is online, and a brain restart. Supervision trees, sibling strategies,
+  links, trap exit and leases stay in Tier 4, since Tier 1 has no process that starts another
+  and no claims. *Changed 2026-11-06: this note and the tiers gave Tier 1's coordination only the
+  mailbox, who belongs and grants, which clashed with the five layers' header.*
 - **A pass is not done until it runs everywhere it should.** "Everywhere" means a
   browser tab and an Electron window, on the laptop and on Cloudflare, one command
   apart ([local is the cloud](./local-is-the-cloud.md)).
@@ -34,8 +45,8 @@ desktop (Tuval)   one core, with browser, Electron and headless on subpaths of
   says so and says why ([the tiers](../plan/tiers.md)).
 - **A pass can land as several pull requests.** Each one is whole, and its demo
   works. More than 9,700 lines in one review is not a review, so Tier 1 is six
-  pieces, and since 2026-11-05 [29 smaller pull requests](../plan/tier-1.md#the-pull-requests-one-at-a-time)
-  inside them.
+  pieces, and since 2026-11-05 [smaller pull requests](../plan/tier-1.md#the-pull-requests-one-at-a-time)
+  inside them, 35 as of 2026-11-06.
 - **Debugging tools come in the first pass, not after.** A program that breaks
   things on purpose is part of the foundation, so failures are seen from day one.
   It runs on a throwaway ledger by default, never on real notes.

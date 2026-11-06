@@ -1089,7 +1089,7 @@ const fact = Schema.decodeUnknownOption(MemberFact)(fromLine(line));
 
 ## The public interface
 
-The tests compile against this block and nothing else of the new code. Plan-115's `Ledger`, `LedgerCalls`, `LedgerError`, `ProcessManager`, `CoordinationLayer` and `ProgramDown` carry over as written. These are the changes and additions.
+The tests compile against this block and nothing else of the new code. Plan-115's `Ledger`, `LedgerCalls`, `LedgerError`, `CoordinationLayer` and `ProgramDown` carry over as written. `ProcessManager` does not: it gains `exit`, `info`, `monitor`, `demonitor` and a run number per start in P33 (owner, 2026-11-06). These are the changes and additions.
 
 ```ts
 // next/packages/libfabrika/src/transport/wire.ts
@@ -1436,7 +1436,7 @@ import "./window/style.css";                 // only what the package lacks, cop
 | T20 drawing a note | D | new `programs/notes/{root.ts,drawn.tsx,highlight.ts,highlighter.ts}`, `programs/notes/{tile.ts,view.tsx}`, `window/style.css`, `window/page.ts`, `brain.ts` for the policy and `/highlight.js`, `build.ts`, `entry/electron-main.ts` for links, `next/programs/notes/package.json` |
 | T21 agents through MCP | D | new `mcp/{tools,serve,drive,client,index}.ts`, `next/apps/fabrika/mcp.ts`; `programs/notes/program.ts` inputs, `app/program.ts` `Input`, `transport/answer.ts`, `transport/waiting.ts`, `desktop/menu.ts`, `coordination/mailbox.ts` for `for`, `next/packages/libfabrika/package.json` |
 | T19 where notes live, and the demo | D | `entry/electron-main.ts`, `launchd.ts`, `desktop/menu.ts` for the status words, `alchemy.run.ts`, `README.md`, `docs/*.png`; the run in `field/` |
-| T22 backup and recovery | D2 | not designed yet, so its files are not named. It will touch `MemberFact`, `foldMembers` and p28 for `added`, the door, and the app's founding screen |
+| T22 backup and recovery | D2 | designed in the account recovery note ([PR 404](https://github.com/usirin/tea-fabrika/pull/404)), decided for the sheet 2026-11-06. Its fold and door parts move to P9 and P10 (`MemberFact`, `foldMembers`, p28, `added`); T22 keeps the sheet's screens, the words and the menu bar row |
 | T12 program | E | new package `next/programs/chaos`, `app/nemesis.ts`, the layout in `entry/views.ts` |
 | T13 live faults | E | `brain.ts`, `transport/gateway.ts`, `app/process.ts`, `data/project.ts`, `build.ts`, `dev.ts`, `alchemy.run.ts` |
 | T14 drill and run | E | `chaos-drill.ts` on `mcp/client.ts`, `README.md`, `docs/*.png`, `field/` |
@@ -1497,7 +1497,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - **p17's bar is measured new** (T6). The old table's start numbers came from raw Miniflare. Known so far: restart 292 to 539 ms, first answer 1.2 to 1.4 s (exp 171). Same rule: base and head in one sitting, the laptop blocks, CI only prints.
 - **p22** adds, from PR D: a program's own `refuse` leaves no line and answers with that program's `why`. `bad_msg` stays for a bad shape.
 - **p24** runs oxlint on `next/`, with an edge only on a line under an edge comment, `-- edge: <why>` (owner, 2026-11-05; it said: only in files the exam PR lists).
-- **p25** is `new`, no longer waits on the owner. From PR D, its "old letters the new code refuses count for nothing" holds only for the counter and chaos. A saved note always folds (p55).
+- **p25** is `new`, no longer waits on the owner. **Rewritten 2026-11-06 (owner):** when a program's step throws on a fresh letter: no answer and no line, and the letter is counted; on the third throw it moves to dead (p80). A wake that fails on a saved letter marks the process `down` and keeps every letter, never skipping it. A real refusal still gets `bad_msg`. From PR D, "old letters the new code refuses count for nothing" holds only for the counter and chaos; a saved note always folds (p55). *It said, from plan-115: on a wake, the wake fails rather than skipping the letter, which no note backed and which left a process down for good with no way to say why.*
 
 **p26, the signed hello (scenario of T4).** `new`, node. s4. `transport/hello.ts`, `answer.ts`.
 - A known key with a good signature goes online, `who` from the fold. A key that does not hash to the dialed name, a signature over another nonce, url or tab, and a reused nonce are each refused and change nothing. Unknown key: `not_granted`, and every method but `door.knock` gets `no_hello`. Nothing is written before online. `door.watch` and `door.deny` answer only an online client.
@@ -1511,6 +1511,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Over any list of facts: `founded` is first and never replaced. Its `window` is admitted with no grant. A revoked key stays out forever, whatever comes later. A `denied` changes who belongs in no way. Adding the same fact twice changes nothing.
 - A good thing happens: a grant by a person's key admits that key.
 - Why: rules checked on every hello. Plants: last fact wins for revoke; second `founded` accepted; `denied` blocks a later grant.
+- *Widened 2026-11-06 (owner: every device the person owns is a master):* any device's key may let in or remove any other device. A dropped key drops everything it let in, all the way down, folded from the ledger. `added` lets in what `Adds` says; a recovery key lets in one new device, once, and is then spent; making a new sheet spends the old one, so one sheet is live. An agent's key never approves or removes, and a browser tab's does not either (lean 70%, the brief's question 19). Plants: a dropped key whose grants stay; a spent sheet used twice; two live sheets; an agent's approve accepted.
 
 **p29, the first grant, real browser.** `new`, stage. s4, s3. e2e.
 - A fresh tab shows the waiting screen with its code and fingerprint. `node next/apps/fabrika/grant.ts client` with a throwaway key brings it online without a reload. A reload needs no new grant, and the fingerprint stays. Two tabs of one profile are both online, with one `by`. Those two tabs show one code. A grant from another key leaves it waiting. Revoke closes the socket and shows "This window was removed", and Ask again makes a new key and a new wait.
@@ -1686,6 +1687,41 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - The signer refuses, in words, and writes nothing, when: the cause was never told to this process; the cause is spent for this tag; the tag is person-only and the cause's input is not a person-only input sent by a person; the process has ended.
 - Why: the runner never sees a program's `update`, so pairing a Cmd with the Msg that made it gives the wrong signer once a write is queued. Plants: the runner pairs a Cmd with the last Msg (the note's `save_ok` case); a queued write that drops its cause; a cause borrowed from another process; a second `answered` from one press.
 
+**p70 to p78, hot reload (scenario of P15).** `new`, node against the program runner, fast-check with fixed seeds. s3, s7. `app/runner.ts`, `app/loader.ts`. *Added 2026-11-06, from [hot reload's nine laws](../direction/hot-reload.md#how-it-is-tested), written there first.*
+- p70: no acked fact is lost by a reload, and they read back in order.
+- p71: each Msg is stepped exactly once across a reload.
+- p72: a reload to the same hash changes nothing a reader can see.
+- p73: a fitting reload keeps the model equal; after it, the model equals a run of every Msg in order, each on the build its entry names (the law that catches experiment 183's lost counter).
+- p74: a refused reload leaves that process on its old hash, with one `code.refused`, and others of the program unaffected.
+- p75: code that failed to load never runs a step.
+- p76: every `build` on a record has an earlier `code.loaded` for that hash.
+- p77: only the saved program's processes swap.
+- p78: a pinned lane never changes build. It waits for lanes, which Tier 1 has none of; it is written now so the number holds.
+- Plants: a reload that drops the queued Msg; a migrate that skips S3's chain; `[Restart]` that keeps the old `init`.
+
+**p79, processes (scenario of P33).** `new`, node. s3, s7. `coordination/process-manager.ts`. *Added 2026-11-06 (owner: Tier 1 builds this slice of C4 and C5).*
+- `exit` writes `exited {why}`; `info` lists every live process with its run; each start after a crash writes `restarted {run, why, build}`, and the run number only grows.
+- A monitor gets one `DOWN {pid, run, why, to}` when its process ends, `noproc` at once if it was already gone, and none after `demonitor`, which also flushes a `DOWN` already in the inbox. A `DOWN` from an earlier run never lands in a later one.
+- The restart window counts a restart on its edge. A name is never freed. Only the parent sends an exit signal.
+- Who is online folds from each gateway's last ping and is never written.
+- C5's owed check: each of the above against OTP's own documentation, since experiment 99 came before experiment 107.
+- Plants: a `DOWN` with no `to`; a monitor on a gone process that waits forever; `demonitor` leaving a `DOWN` behind; a name reused; a stale `DOWN` delivered to a new run.
+
+**p80, a crash is not a refusal (scenario of P34; replaces p25's wake rule).** `new`, node and the stage. s3, s9. `app/runner.ts`. *Added 2026-11-06 (owner).*
+- A fresh letter whose step throws gets no line; it is counted per letter id in the process's own storage. On the third throw it moves to `<pid>/dead` with `dead {tries, limit, m, build}`, and its sender gets `{why: "dead"}`, so the outbox stops resending.
+- A process that crashes N times in T seconds goes `down`, with backoff, and a resend does not wake it. `[Restart]` exits it and starts it with the new `init`.
+- A wake that fails on a saved letter marks the process `down`, writes why, and keeps every letter. No saved letter is ever skipped or moved, so a saved note always folds (p55).
+- Plants: a fourth try; a poison letter that blocks the rest of the inbox; a saved letter moved to dead; a `down` process woken by a resend.
+
+**p81, the brain comes back (scenario of P12 and P19).** `new`, stage and real Electron. s3, s8. `dev.ts`, the launchd plist.
+- Under `dev.ts`: workerd killed with `kill -9` mid-burst comes back alone, with a start fact naming its build, and nothing acked is lost (with p13). A brain that dies in a loop stops at the brake, and says so. At the 500 MB mark it restarts.
+- Under launchd: the brain killed with `kill -9` comes back, and both windows come back to it. A clean Quit does not restart it.
+- Plants: a restart with no backoff; a restart after a clean exit; no start fact.
+
+**p82, version agreement (scenario of P10).** `new`, node. s5. `transport/hello.ts`, door.
+- The brain picks the highest version both sides list. No shared version is refused in words, and nothing is written. A field the brain does not know is ignored, never refused.
+- Plants: the lowest shared version picked; a mismatch let through; an unknown field refused.
+
 ## Criteria
 
 - **c1 to c6:** plan-115's, with oxlint in place of Biome, and c5's README also naming the stage.
@@ -1736,7 +1772,7 @@ An agent that is not the builder writes it. The owner reads it. It lands first, 
 3. Ports under the test writer step: `markdown.test.ts`, `highlight.test.ts`, what applies of `index.laws.test.ts`, and what applies of `agents.test.ts`. Each names its source path and commit, as the styling exception does. The laws that must survive: raw HTML never drawn, links only http or https, images as alt text, code as text children; no person-only tool, an agent never writes as the person, a stale base is refused.
 4. `next/apps/fabrika/src/exam/agent-may.test.ts`: the door's list for `as: "agent"`, method by method, read by the owner. Any new method defaults to refused.
 5. `next/apps/fabrika/src/exam/bytes.test.ts`: the brain's bytes hold no `@modelcontextprotocol`; the box's bundle of `@kampus/notes` holds no `micromark`, `mdast` or `@pierre`.
-6. Edges as comments (owner, 2026-11-05, [the brief's question 13](./tier-1.md#open-questions)). `fabrika/no-promises` also refuses `Effect.tryPromise`; `fabrika/no-effect-run-outside-edge` drops its 18-path list. A line passes either only under `// oxlint-disable-next-line <rule> -- edge: <why>`, and a disable of either without `edge:` fails. Planted lines for each. And the CI ask: a build commit that adds an edge comment asks the owner, one line each with its reason, `[ok] [no]`. The edges this list once named, `mcp/serve.ts`'s `Effect.runPromiseWith` and the SDK's async transport, and `import()` in `programs/notes/highlight.ts`, come as comments in P25 and P22, each asked. `no-promises`, `no-of` and `no-hand-tag` fire on the copies like any other file: a copy gets no line of its own. (`no-tea-react` was named here; it was dropped on 2026-11-02.) *It said: an edge is a file on the list, and the two files join it by their whole paths.*
+6. Edges as comments (owner, 2026-11-05, [the brief's question 13](./tier-1.md#open-questions)). *Moved 2026-11-06 to P35, an exam pull request of its own before any product code, since it changes the lint for every product file while this small exam's letters fixture must wait for the letter's final shape.* `fabrika/no-promises` also refuses `Effect.tryPromise`; `fabrika/no-effect-run-outside-edge` drops its 18-path list. A line passes either only under `// oxlint-disable-next-line <rule> -- edge: <why>`, and a disable of either without `edge:` fails. Planted lines for each. And the CI ask: a build commit that adds an edge comment asks the owner, one line each with its reason, `[ok] [no]`. The edges this list once named, `mcp/serve.ts`'s `Effect.runPromiseWith` and the SDK's async transport, and `import()` in `programs/notes/highlight.ts`, come as comments in P25 and P22, each asked. `no-promises`, `no-of` and `no-hand-tag` fire on the copies like any other file: a copy gets no line of its own. (`no-tea-react` was named here; it was dropped on 2026-11-02.) *It said: an edge is a file on the list, and the two files join it by their whole paths.*
 
 **Exam files for the builder.** On today's lane, a builder's diff here ends the lane `stuck` with `exam_touched`, and that is final. Nothing the build did is kept, and the owner hears why. Today's `RULES` list (`packages/pipeline/src/stages/exam/machine.ts`) does not yet name `next/**/*.test.ts`, `fixtures/next/**`, `next/apps/fabrika/src/exam/**`, `boundary-rules.json`, `vitest.config.ts` or `pnpm-workspace.yaml`. A small change to today's version (tracker ticket 122) adds them before PR A's lane starts, and until then those guards do not hold. The test writer only adds new `*.test.ts` files (`.fabrika/fabrika.toml`), so a test it needs elsewhere is new, not moved, and a fixture it cannot write comes from an exam PR. The files: `next/**/*.test.ts`, `fixtures/next/**`, `next/apps/fabrika/src/exam/**`, the oxlint and oxfmt config and plugin folder as PR 226 names them, `vitest.config.ts`, `.github/**`, `layer-rules.json`, `boundary-rules.json`, `pnpm-workspace.yaml`. A package's own `package.json` is the builder's, since its `exports` map says what is public, and p65 reads it. The test versions in `next/packages/tuval/src/headless/` are product code, not exam files; the tests read them only through the names in the interface block.
 
@@ -1764,7 +1800,7 @@ An agent that is not the builder writes it. The owner reads it. It lands first, 
 
 **Kept:** `Ledger.sql` and `.remote`, `LedgerError`, Mailbox, ProcessManager, `stepper`, `ProgramRunner`, `answerFrame`, one runtime per object, no failing Layers, no finalizers, laws p1 to p24, the exam's shape, the mutation seed.
 
-**Waits, with no fact lost, and with a tier now. Each tier here is a proposal, marked under Later tiers:** `keep` and Topic in Tier 2; invite and join in Tier 3 (GitHub as a keys source is dropped, owner, 2026-11-05: [a key per client](../direction/a-key-per-client-and-no-github-trust.md)); C2 to C5, leases, hands as a client and `kill_brain` as a button in Tier 4; limits in Tier 5; D4's poke, the note's T7 as a Sub, paging, and native `<dialog>` and `popover` against Zag in Tier 6; packs, `limits: {cpuMs}` and signing each letter in Tier 7.
+**Waits, with no fact lost, and with a tier now. Each tier here is a proposal, marked under Later tiers:** `keep` and Topic in Tier 2; invite and join in Tier 3 (GitHub as a keys source is dropped, owner, 2026-11-05: [a key per client](../direction/a-key-per-client-and-no-github-trust.md)); the rest of C2 to C5 (supervision trees, sibling strategies, links, trap exit), leases, hands as a client and `kill_brain` as a button in Tier 4, while Tier 1 builds C2 to C5's slice (owner, 2026-11-06); limits in Tier 5; D4's poke, the note's T7 as a Sub, paging, and native `<dialog>` and `popover` against Zag in Tier 6; packs, `limits: {cpuMs}` and signing each letter in Tier 7.
 
 **Waits, with a tier now, since they had none:** split, close and prefix keys in Tier 2; drag, zoom, workspaces and the palette in Tier 6. Today's version does all of these daily, so handover cannot finish without them.
 
@@ -1809,7 +1845,7 @@ No fact is lost by waiting on any of these. Each adds a kind of fact, and old sa
 **Tier 4, hands. Proposed: this splits the old Tier 4 in two, which makes seven tiers.**
 
 - The queue, claims and leases. `by` on each letter is kept now; nothing lost.
-- C2 to C5, as a proposal: work queues and running hands are the first to need them. `by` and `for` are kept now; nothing lost.
+- The rest of C2 to C5: supervision trees, sibling strategies, links and trap exit. Work queues and running hands are the first to need them. Tier 1 builds the slice a skateboard needs (owner, 2026-11-06). `by` and `for` are kept now; nothing lost.
 - Mac and VM hands, and hands as a client, as a proposal. `has` is in every hello from Tier 1; nothing lost.
 - A first tab that runs a job, and how a client says it takes jobs. `has` says what a host can do, so it can't also say that. Proposed, not decided, as `brain-hands-window-agent.md` says. Job code beside a window's key needs a sandbox first. Nothing lost.
 - `kill -9` from chaos through real hands, and `kill_brain` as a button, as a proposal: the button needs hands to do the kill, as biggest call 6 says. The facts have the same shape; nothing lost.
