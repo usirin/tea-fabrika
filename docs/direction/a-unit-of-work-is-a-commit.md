@@ -22,7 +22,7 @@ b72d9e4  signed by build  next/packages/libfabrika/src/data/log.ts, src/data/led
 // CI walks the pull request's commits and decides from each signature, never from the message.
 // `stepKeys` is the repo's allowed-signers file: one public key per step role.
 const check = (commit: Commit, stepKeys: StepKeys): Outcome => {
-	const step = stepKeys.verify(commit); // ssh-keygen -Y verify on the commit; the key names its step
+	const step = stepKeys.verify(commit); // ssh-keygen -Y verify on its note in refs/notes/fabrika
 	if (step === undefined) return {_tag: "stuck", why: "unsigned_commit", sha: commit.sha};
 	if (step === "build" && commit.files.some(isExam))
 		return {_tag: "stuck", why: "build_touched_exam", sha: commit.sha};
@@ -36,10 +36,18 @@ const check = (commit: Commit, stepKeys: StepKeys): Outcome => {
   agent that is not the builder, inside the same pull request.
 - **The test writer's commit comes first on the branch,** and it may touch exam paths: a boundary
   row, a ledger line, a catalog line a test needs, an exam test moved to a new bundler.
-- **Each step's agent signs its commits with its own key:** git's SSH signing
-  (`gpg.format=ssh`), the same SSHSIG shape the door checks. [A key per
+- **Each step's agent signs its commits with its own key,** the same SSHSIG shape the door checks
+  (`ssh-keygen -Y sign`, namespace `fabrika-step`). [A key per
   client](./a-key-per-client-and-no-github-trust.md) already gives every client a key; a step is
   one more.
+- **The signature goes in a git note, not in the commit.** *Changed 2026-11-06, the owner asking
+  for no "Unverified" on GitHub.* Each step adds a note on `refs/notes/fabrika` to its commit,
+  holding what it signs (its step, the commit, its tree, its parent), the key's fingerprint and the
+  signature. GitHub labels a commit signed with a key it does not know "Unverified"
+  (`unknown_key`), and a bot account cannot register a key; a commit with nothing in its signature
+  slot shows no badge. Tested that day with the bot: the commit showed no badge, a fresh clone with
+  no login fetched the note and the signature checked, and a note with one word changed failed.
+  gittuf, an OpenSSF project, keeps its signatures in the repo's own refs the same way.
 - **CI verifies each commit's signature and maps the key to its step.** A commit with no valid
   signature from a known step key is `stuck: unsigned_commit`. A `build` commit that touches an exam
   path is `stuck: build_touched_exam`.
@@ -90,7 +98,7 @@ and CI checks the chain of links from `main`'s tree to the squash commit's tree.
 - **No transparency-log server.** in-toto's links often go to a Sigstore Rekor server. Ours go to the
   ledger, which is already an append-only log with a referee, the way traces dropped Jaeger for the
   job record ([a job record holds its trace](./a-job-record-holds-its-trace.md)).
-- **Commit signatures stay too,** as how git carries each step's key while the branch is open. The
+- **The notes stay too,** as how git carries each step's proof while the branch is open. The
   chain is what survives the merge.
 
 **In Tier 1, until `next/`'s ledger exists, each link sits in the step's `field/` row.** Tracker
@@ -136,7 +144,7 @@ ledger entry will have, and nothing a later reader would need to trust us for:
 
 ## What it costs
 
-The check: a CI script that lists the pull request's commits, verifies each signature, reads the
+The check: a CI script that lists the pull request's commits, fetches `refs/notes/fabrika`, verifies each signature, reads the
 exam paths, and answers. A guess at 200 to 300 lines with its tests, planted commits and keys
 included, about 0.5 to 0.8 agent hours at 600 lines an hour. Three keys, made once.
 
@@ -148,9 +156,13 @@ How sure: 85%. The owner decided it. The doubts are in the next section.
   session runs as the same user, so a builder with a shell could read the test writer's key and sign
   as it. The signature proves which key, not which agent, until each step runs in its own box
   (Tier 5). The owner's read of every exam path is what holds the gap meanwhile.
-- **A rebase re-signs every commit with one key.** A branch rebased onto a newer main would come
-  out signed by whoever rebased. A lean, not tried: update a branch by merging main in, as a `lead`
+- **A rebase breaks every proof.** Tested 2026-11-06: a plain rebase drops the note; git's
+  `notes.rewriteRef` carries it over, but the signature still names the old commit, so the step
+  would have to sign again. A lean, not tried: update a branch by merging main in, as a `lead`
   commit, and never rebase a step's commits. P32's plan settles it.
+- **Branch rules do not cover notes.** The bot, or anyone who can push as it, can overwrite or delete
+  a note. It cannot forge one without a step key, and a missing proof is `stuck: unsigned_commit`,
+  so this fails safe.
 - **Whether a tree-to-tree link says enough.** It says what changed, not which tests ran. A link
   that also names the checks it ran is a later field, and adding it later loses those runs.
   *Squash merges were a doubt here; the owner kept them on 2026-11-05, with the links above.*
