@@ -201,6 +201,13 @@ export const laneTestsWork = Layer.effect(
 					.pipe(
 						Effect.catch((e) => failing("copy_failed", null, e.says ?? `no copy of ${commit}`)),
 					);
+				// The box starts its program in the copy, so a copy that is not a folder fails here, by name.
+				const kind = yield* fs.stat(folder).pipe(
+					Effect.map((info) => info.type),
+					Effect.catch((e) => failing("copy_failed", null, e.message, [folder])),
+				);
+				if (kind !== "Directory")
+					return yield* failing("copy_failed", null, "the copy is not a folder", [folder]);
 				const out = path.join(folder, ".lane-report.json");
 				yield* fs.remove(out, {force: true}).pipe(Effect.ignore);
 				const ran = yield* inBox(
