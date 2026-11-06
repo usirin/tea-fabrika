@@ -1148,6 +1148,23 @@ writer or mutation step. Each PR's own `spent` settles it.
 | 11 | about 32 | 1,950 to 2,600 | none | 3.25 to 4.3 | 4 | 1.2 to 1.6 | 2 |
 | **All** | **about 140** | **6,480 to 8,980** | ~~**29 to 41.5**~~, PRs 1 to 9 | **10.8 to 15** | 15.25 summed | **3.9 to 5.4** | 7.5 summed |
 
+## Also tried, not merged
+
+Today's version. Branch `keep/faster-lane-tests`, three commits from 2026-11-01, never opened
+as a pull request. It made a lane hear a person's answer as soon as it lands.
+
+- **What its tests showed.** `answerHeard` looks at the ticket, then sleeps 1 s before the
+  next look. Under a test clock, an answer that landed did not wake it at clock 0 (red on
+  main). The lane's GitHub checks wait got no `pollMs`, so a test lane waited 30 s between asks.
+- **What it changed.** `answerHeard` listens to the ticket's doorbell for the whole wait and
+  races the next ring against the 1 s look. The listener starts before the first look, so an
+  answer that lands between a look and the wait still rings. A bell that ends rings no more,
+  so the wait falls back to its 1 s look and does not spin. `LaneHome` got `pollMs`, which the
+  GitHub host passes on; the lane tests ran with `pollMs: 1`.
+- **Why it matters less than it looked.** The slow lane tests on PR 3 were a loop, not the 1 s
+  poll (field note `2026-11-02-01`). A faster wait is still a gain for a live lane and for test
+  time. How much time it saves was never measured.
+
 ## What this plan does not do
 
 - *Old plan, reversed by the owner 2026-11-02: the other rows of the table were to get one

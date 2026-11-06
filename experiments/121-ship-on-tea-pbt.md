@@ -634,3 +634,37 @@ return {go: landingOf(f)};
   wait's clock (the other half of 440).
 - **The 85% is a count of rules, made by hand.** Counted by lines, the law's
   own share is larger: its three rules across steps take many lines.
+
+## Also tried, not merged: where a guided answer gets chosen (2026-10-31)
+
+Today's version. Branch `keep/exp-guided-answers`, one commit, never opened as a pull request.
+It was written as experiment 174, a number that later went to
+[Effect on Cloudflare](./174-effect-on-cloudflare.md), so its write-up, script and results live
+only on that branch (`experiments/174-guided-answers.md`). It asked where the answer to a Cmd
+should be chosen in a guided list of Msgs, for
+[demlik#745](https://github.com/kamp-us/demlik/issues/745) and
+[demlik#749](https://github.com/kamp-us/demlik/issues/749). No model, $0. fast-check 4.10.2,
+effect 4.0.6, `@demlik/tea` 0.21.0.
+
+- **How.** 15 planted breaks, each with a proved shortest list: 7 on ship, 2 on this
+  experiment's "a ready pull request lands", 6 on a toy that keeps no Cmds. 10 seeds per case
+  and route, at most 5,000 runs to find each break.
+- **Fold time wins on length.** Blind picks read by the fold reached the true shortest on 121 of
+  124 shrunk lists, worst +2. A fast-check `chain` (draw time) reached it on 29 of 130, median
+  +53, since a chain cannot delete a step. Unguided lists, as here, looked short but 27 of them
+  answered a Cmd never sent.
+- **`fc.commands` fits but cannot cut its last command:** 9 of 125 at the shortest, nearly
+  always one too long.
+- **Effect's own generator did best:** fold on Effect, 131 of 133. So 120's weak shrinking came
+  from its fixed-length walks, not from Effect.
+- **What fold time costs.** On ship, 94% of drawn answers find nothing waiting, though lists
+  reach as deep. Narrow orders are found less often: 3 of 10 against 9 of 10.
+- **What has to change in #745.** A cell that looks at the state cannot shrink its value at fold
+  time (median id 26 letters against 3). So the cell becomes one per Cmd type, with `make`
+  getting the Cmd really sent. On ship no answer needed the state.
+- **#749.** Of tea's 280 pbt code lines, 117 could be shared, and 87 of the 163 twin lines are
+  runner wrapping. A bridge from Effect keeps list shrinking and loses value shrinking.
+- **Its leans, not decided:** #745 at fold time with a blind pick, 90% sure on length and 75%
+  overall. #749 an Effect flavor with no twin runners and no bridge, 70%.
+- **What it could not tell:** one real machine and one toy, breaks planted by the same agent,
+  tea's own runners not used, and only one version of each library.
