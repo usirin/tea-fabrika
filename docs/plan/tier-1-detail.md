@@ -1,6 +1,6 @@
 # Tier 1, the detail
 
-**Reference for [Tier 1's brief](./tier-1.md). Start there.** The brief says who it is for, what done looks like, what is out, what binds and what is open. This file holds the design, the laws and the reasons. Its PR letters and T numbers are a starting guess the planner may change. What it builds was approved on 2026-11-01. Nothing here is built.
+**Reference for [Tier 1's brief](./tier-1.md). Start there.** The brief says who it is for, what done looks like, what is out, what binds and what is open. This file holds the design, the laws and the reasons. Its PR letters and T numbers are a starting guess; since 2026-11-05 [the brief's split](./tier-1.md#the-pull-requests-one-at-a-time) cuts them into pull requests P1 to P36, built by hand. What it builds was approved on 2026-11-01. Only the exam is built: P1 and P2 landed on 2026-11-05, and [the brief](./tier-1.md#the-exam-on-main) says what they hold.
 
 Every claim here is about `next/` at PR 223's head (`7c1d073`), unless it says "today's version". A path with no `next/` in front starts inside its package: see [Packages](#packages). Where a section's sketch and [The public interface](#the-public-interface) differ, the interface holds, and tea code uses `@demlik/tea/effect`.
 
@@ -33,7 +33,7 @@ Three words to know. **Plan-115** is [ticket 115's plan](./ticket-115.md): laws 
 
 1. **A window's name is `<fingerprint>/<tab>`, and the key belongs to the browser profile.** Why: two tabs in one browser share one IndexedDB key. With one name per key, the second tab would close the first (gateway's code 4000). The code is per key too, so two tabs share one row. Cost: `tab` joins the signed hello. Sure: 85%.
 2. **A new window comes in from the menu bar, and the door reads one signature shape.** Settled by the owner. The person key writes SSHSIG, the same shape `ssh-keygen -Y sign` makes. Why: the door keeps one check, and anyone can re-check a grant with `ssh-keygen -Y verify` later. PR A keeps the terminal command `grant.ts` as the way in until PR B brings Approve. After B it stays only as a developer path. Cost: about 30 lines to write SSHSIG, and one more test vector. Sure: 85%.
-3. **One built file with programs and window scripts inside it, not env values.** Why: Cloudflare caps each env var at 5 KB ([limits](https://developers.cloudflare.com/workers/platform/limits/)), and the slice passes 664 KB of `WINDOW_JS`. It cannot deploy as is. Cost: esbuild text loader, about 40 lines. Sure: 90%.
+3. **One built file with programs and window scripts inside it, not env values.** Why: Cloudflare caps each env var at 5 KB ([limits](https://developers.cloudflare.com/workers/platform/limits/)), and the slice passes 664 KB of `WINDOW_JS`. It cannot deploy as is. Cost: carrying each built script as text in `build.ts`, about 40 lines. *Changed 2026-11-05:* this said esbuild's text loader; `next/` builds with Rolldown only (owner), and Rolldown's way to carry a script as text was not tried here (see [Packages](#packages)). Sure: 90% on the shape, less on the how until P16 tries it.
 4. **A program never gets a stub for its power.** Elm's answer: Cmds are data, the runtime does them. Why: `globalOutbound: null` and an empty env stay true for every program, so nothing new has to be checked in the box. Cost: `Program` gets a Cmd type, and `step` answers `{model, view, cmds, wake}`. Sure: 85%.
 5. **Fault replay can never fire a fault.** A fold ignores `cmds`; only a fresh letter fires them, and the letter is saved first. Why: otherwise every wake re-kills everything. Cost: two paths in the runner. Sure: 90%.
 6. **Laptop-only kills stay outside the program for now.** `kill -9` needs hands and C3's routing. The drill (`next/apps/fabrika/chaos-drill.ts`) does them and posts the result as a letter, so history stays in one stream. Why: no dead button in the window. Cost: one more script. Sure: 75%. The doubt is whether a button is wanted sooner. It waits with the items in [what can wait](#dropped-from-plan-115-and-what-can-wait), and nothing is lost: the facts have the same shape.
@@ -47,7 +47,7 @@ Three words to know. **Plan-115** is [ticket 115's plan](./ticket-115.md): laws 
 14. **The window parses Markdown; the sealed program never does.** Why: the fact keeps raw text, blocks are derived, a wake would otherwise parse every note, and a program's box stays small. Cost: each window parses for itself. Sure: 90%.
 15. **The bridge is a client with a key, not a local socket with a name.** Why: a handshake lets an agent just say who it is, and real notes live on Cloudflare, where a local socket cannot reach. Cost: one Approve per agent name, and a key file. Sure: 85%.
 16. **On notes, an agent's "own run" is its own client, not its own process.** Today's rule gives each agent its own run because a run in a tile writes as the person. In `next/`, `by` comes from the checked key, so that danger is gone, and a process of its own would hide the agent's doc from the list. Cost: this differs from today's `drive.ts`, and a later program with private state gets a real run of its own. Sure: 75%. The doubt is the first such program, in Tier 2.
-17. **Real packages now, not folders.** Settled by the owner. "Two people first" argues against publishing, not against package boundaries. Real boundaries prove the library is enough, because a missing tool shows up as an import that doesn't resolve. A program package is already the shape a pack has. Cost: a `package.json` and a `tsconfig.json` per package, and a few config lines. Sure: 85%. The doubt was code-graph's dead-export check and esbuild across packages; [Packages](#packages) says what each forces.
+17. **Real packages now, not folders.** Settled by the owner. "Two people first" argues against publishing, not against package boundaries. Real boundaries prove the library is enough, because a missing tool shows up as an import that doesn't resolve. A program package is already the shape a pack has. Cost: a `package.json` and a `tsconfig.json` per package, and a few config lines. Sure: 85%. The doubt was code-graph's dead-export check and the bundler across packages (esbuild then, Rolldown since 2026-11-05); [Packages](#packages) says what each forces.
 18. **`@kampus/libfabrika`'s top level holds only the app layer's names.** Lower layers are on subpaths that only named importers may use. Why: with one top level, an import name could not tell a program reaching `app` from one reaching `transport`, and the strict one-layer-down rule would have nothing to read. It also keeps a program's box small. Cost: three more lines in an `exports` map, and a law. Sure: 80%. The doubt is how many names the app layer ends up saying again.
 19. **Fabrika is the logic, and Tuval is the projection of it.** Settled by the owner. `@kampus/tuval` holds everything a client does. `next/apps/fabrika` is only wiring and the deploy stack. Tuval may import `@kampus/libfabrika`, and never the other way. Why: a client's logic then has one home, and the library can't come to lean on a screen. Cost: tuval holds Electron code, on a subpath, and its `electron` row needs two named exceptions. Sure: 85%. The doubt is what counts as "dialing": see [Packages](#packages).
 20. **Tier 1 has no desk process.** Settled by the owner: the desk is a program, and it arrives in Tier 2 with split and close. Tier 1 has one fixed layout at wiring, and each window keeps its own focus. Why: nothing in Tier 1 moves a tile, so a process would only hold one constant. Cost: PR 223 mirrors focus between two windows, and that goes away until Tier 2. Sure: 85%.
@@ -85,7 +85,7 @@ Three words to know. **Plan-115** is [ticket 115's plan](./ticket-115.md): laws 
 2  first time only: tab makes an Ed25519 key, not extractable, keeps it in IndexedDB.
 3  tab dials /client/<fingerprint>/<tab>.
 4  brain says  {method: "challenge", params: {nonce}}, the first frame.
-5  tab says    initialize {versions, has, ping, key, tab, platform, said, signed}.
+5  tab says    initialize {versions, has, ping, key, tab, platform, sentAt, signed}.
 6  brain checks: the signature is good for this nonce, this url, this tab; the key hashes to the
    name it dialed. The key is unknown, so:  err {why: "not_granted", fingerprint}.
    Nothing is written. Every method but door.knock gets no_hello.
@@ -172,7 +172,7 @@ const update = (m, msg) =>
 | The menu | `menuView`, drawn by `tuval/electron`, an array in headless | An array to read |
 | Checking the person | `PersonCheck`: the Mac version only in Tier 1, plus a test version | Answers given by the test |
 
-- **`PersonCheck` on a Mac:** Touch ID where `canPromptTouchID` is true, a plain click otherwise. No Swift helper. Sure: 85%. The doubt is Touch ID from a dev build signed by a self-made card. T8's spike settles it, and the plain click is the way out.
+- **`PersonCheck` on a Mac:** Touch ID where `canPromptTouchID` is true, a plain click otherwise. No Swift helper. Sure: 85%. The doubt is Touch ID from a dev build signed by a self-made card. T8's spike settles it, and the plain click is the way out. *P4, 2026-11-05 ([experiment 214](../../experiments/214-mac-app-four-unknowns.md)):* `canPromptTouchID()` is true on an unsigned build; `promptTouchID` itself needs a person and was not called.
 - **Its link.** Main dials the brain as one more client, `<window fingerprint>/menubar`, signing its hello with the window key. It reads rows with `door.watch`. Reading rows never touches the person key, so opening fabrika asks nothing.
 - **The law: kill the menu bar and the counter keeps working; only new approvals wait.** In one Electron app, killing the menu bar means killing the app. The brain is its own service, so tabs stay online. A new tab shows its code and waits. Reopen the app, and the row is there.
 
@@ -210,7 +210,7 @@ crash  nothing: launchd keeps the brain, and the next open finds it
 
 - The plist stays in the app's home, not in `LaunchAgents`, so nothing starts at login. It runs `next/apps/fabrika/dev.ts`, so one program is under test. `node next/apps/fabrika/dev.ts` stays for agents and tests, on a temp home and its own port.
 - It sits behind `BrainService`, with Layers `launchdBrain`, `childBrain` and a test one.
-- **Spike first, on an unsigned build (T8).** If it fails, `childBrain` carries this pass, and the owner is told.
+- **Spike first, on an unsigned build (T8).** If it fails, `childBrain` carries this pass, and the owner is told. *Done 2026-11-05, P4: launchd from an unsigned build starts the brain, keeps it through an app crash, and stops it, so `childBrain` is not needed. One catch: `bootout` returns before the job is gone, so Quit waits until `launchctl print` no longer finds the label.*
 - Stopping must take workerd with it, and that is part of the spike.
 - The app keeps its own home, apart from today's version, so both run side by side.
 
@@ -252,7 +252,7 @@ export const notes: Program<Model, Msg, View, never> = {
 
 // The note is on version 3. One real value, before and after:
 yield* Mailbox.send("notes:1", id, {type: "save", value: {note: "n-7f3a", base: 3, body: "# Ideas for Tier 2\n..."}}, who);
-// notes:1/inbox  {id, m: {type: "save", value: {base: 3, ...}}, by, for, said, at, rev, pos}     this becomes version 4
+// notes:1/inbox  {id, m: {type: "save", value: {base: 3, ...}}, by, for, sentAt, arrivedAt, cause, rev, pos}     this becomes version 4
 // An old window or an agent, still on version 3, saves too:
 // {why: "changed_elsewhere", now: 4}. No line is written. Its text stays with it, and nothing is overwritten.
 ```
@@ -426,7 +426,7 @@ Why: no module state, no function in a model, and the tile's laws run with no We
 
 - **Dependencies.** All are already pinned exactly in the catalog, so `next/programs/notes/package.json` adds only `catalog:` lines: `@pierre/highlights` 0.3.0 (a beta, held exact), `mdast-util-from-markdown` 2.1.0, `mdast-util-gfm` 3.1.0, `micromark-extension-gfm` 3.0.0, `@types/mdast` 4.0.4, and `@manti-ui/react` 0.13.0 for `Kbd`, with the patch today's app uses. No new entry, and the `^19.0.0` range in `programs/markdown/package.json` does not come along. If a later highlighter breaks, code is plain, and nothing else depends on it.
 - **The page's content security policy.** `next/`'s page has none today, and agent-written text is drawn in a real tab, so PR D adds one, as a header from the brain, the same on both stages: `default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`. `'wasm-unsafe-eval'` lets in WebAssembly and nothing else. So `style.css` is served as a file, not put inline in the page. A span's color still works, since React sets it as a property. Today's `apps/fabrika/src/files.ts` shows the same policy without `connect-src`. Sure: 85%. The doubt is `connect-src 'self'` and the socket on a phone's browser; T19 tries it.
-- **The page script's size.** The slice's script was 664 KB, and today about 400 KiB of `programs/markdown`'s script is the highlighter. A phone should not fetch that for a note with no code. Lean: the highlighter is its own script, `/highlight.js`, kept in the one built file and fetched when the first code block with a language asks. It needs no third export on the package: the app's `build.ts` splits on the `import()` inside `@kampus/notes/window`. Why: today's own note says text draws first and colors come after anyway. Cost: esbuild splitting, one route, and p33's law covers two scripts. Sure: 75%. T20 prints both sizes in the PR. No size blocks, since no bar is measured.
+- **The page script's size.** The slice's script was 664 KB, and today about 400 KiB of `programs/markdown`'s script is the highlighter. A phone should not fetch that for a note with no code. Lean: the highlighter is its own script, `/highlight.js`, kept in the one built file and fetched when the first code block with a language asks. It needs no third export on the package: the app's `build.ts` splits on the `import()` inside `@kampus/notes/window`. Why: today's own note says text draws first and colors come after anyway. Cost: Rolldown's split on a dynamic `import()` (this said esbuild's splitting until 2026-11-05; not tried with Rolldown here), carrying that chunk in the one built file, one route, and p33's law covers two scripts. Sure: 75%. T20 prints both sizes in the PR. No size blocks, since no bar is measured.
 - **The React rule.** `drawn.tsx` imports no tea React. Colors as data also remove its own `useSyncExternalStore`, so the one hook stays the one hook. React stays 19.3.1 from the catalog, and Strict Mode stays on, which `void loadColors()` in an effect would have run twice.
 - **`useState`, which A3 forbids.** Checked: `programs/markdown/src/window.tsx` has none. It uses `useMemo` for derived lines, and `useRef` and one `useEffect` to focus the page, which hold no state of ours. So the copy brings none in. Today's `frame.tsx`, `pop.tsx` and `desk.tsx` do use it, and they are not copied here.
 
@@ -511,7 +511,7 @@ const agentMay = ["initialize", "view.open", "window.msg:notes", "ledger.read", 
 | A real `as: "agent"` grant, once per name, on one program | The agent box, Tier 5 |
 | Tools made from a program's inputs | Spend, Tier 5, and leases, Tier 4 |
 | The bridge as a headless client | The `claude` and `codex` programs, and hands running agents, Tier 5 |
-| | Work queues and terminal tile, Tier 4; chat tile and asks list, Tier 5 |
+| | Work queues and terminal tile, Tier 4; chat tile and asks list, Tier 5 (the chat tile changes with [talk where you work](../direction/talk-where-you-work.md)'s thread tile once that note settles, noted 2026-11-05) |
 
 **A limit, in one plain sentence.** An agent reaches real notes before the box exists, which is the condition under which the plan said the box might move up. The door's rules keep it to notes, and whether that is enough is for the owner to weigh after real use.
 
@@ -691,7 +691,8 @@ import {defineProgram, type Input, type Letter, type Program, type Refusal, Saw}
 import {Cmd, defineMachine} from "@demlik/tea";
 
 // next/programs/notes/src/view.tsx and tile.ts: the window's side. The whole list.
-import {type Handle, send, useModel, type ViewProps} from "@kampus/tuval"; // ViewProps: data, press, and read for ledger.read
+import {type Handle, type ViewProps} from "@kampus/tuval"; // ViewProps: data, press, and read for ledger.read
+import {useRuntime} from "@demlik/tea/react"; // tea 0.23.0's hook; it was tuval's stand-in useModel and send
 ```
 
 `Letter` and `LedgerError` reach the top level because the app layer says them again, as [Strict layers](#strict-layers) already has it. T16 proves this list: if notes needs one more name, the name is added on purpose and the PR says so.
@@ -699,7 +700,8 @@ import {type Handle, send, useModel, type ViewProps} from "@kampus/tuval"; // Vi
 **No program has an `entry.ts`, so a package stays `.` and `./window`.** Today each program has nine lines that only say "this, as Worker Loader takes it". `build.ts` makes that line instead, and it is the one place that knows about Cloudflare:
 
 ```ts
-// next/apps/fabrika/build.ts, a sketch. esbuild's `stdin`. A program never imports `cloudflare:workers`.
+// next/apps/fabrika/build.ts, a sketch. The entry is made in code: esbuild's `stdin` once; on Rolldown, a
+// virtual module from a plugin's resolveId and load hooks, not tried here. A program never imports `cloudflare:workers`.
 const box = (pkg: string, name: string) => forWorkerd(`
 	import {entrypoint} from "@kampus/libfabrika/box";
 	import {${name}} from "${pkg}";
@@ -727,7 +729,7 @@ Each `tsconfig.json` extends `tsconfig.base.json` and is a few lines. `@kampus/l
 **The two doubts, and what each forces. I read both; neither was run, since this plan runs nothing.**
 
 - **code-graph's dead-export check forces no change of layout.** In 0.12.0's source, any file named in `exports` counts as public, and its exports are never dead. Today's `packages/fabrika` works the same way. So an unused public name goes unflagged, and "first customer" only catches a missing name, not a spare one. The way out: each PR prints `code-graph . --interface-width`, which lists exports with no outside user, and someone reads it. It blocks nothing, since no bar is measured. Sure: 80%.
-- **esbuild across packages forces two small things.** `exports` pointing at `.ts` already bundles by name in `experiments/173-worker-loader`. But esbuild keeps a module whose top level calls something, and `Schema.Struct(...)` counts. So each package sets `"sideEffects": false`, and `.` stays small, or a program's box drags in every layer. And `build.ts` takes the generated entry above. A change to used library code gives a program a new hash, the same as with folders. Sure: 80%.
+- **The bundler across packages forces two small things.** *Written for esbuild; since 2026-11-05 `next/` bundles with Rolldown only (owner). Rolldown shook Effect harder than esbuild in experiment 195, but neither point below was tried with it across packages.* `exports` pointing at `.ts` already bundles by name in `experiments/173-worker-loader`. But esbuild keeps a module whose top level calls something, and `Schema.Struct(...)` counts. So each package sets `"sideEffects": false`, and `.` stays small, or a program's box drags in every layer. And `build.ts` takes the generated entry above. A change to used library code gives a program a new hash, the same as with folders. Sure: 80%.
 - **T0 runs both first.** If either is off, stop and tell the owner.
 
 **What moves from PR 223's slice.** One commit of `git mv` plus import fixes, T0, before T1, so the rest of PR A reads as change and not as move.
@@ -842,30 +844,31 @@ windowApp.pipe(Effect.provide(layer), runMain);
 
 **The Elm answer.** Flags at start and ports: the machine knows `sign` and `send_text` as Cmds and socket and size as Subs. The Layers are the runtime that does them. No new tea abstraction, and tea stays small.
 
-**The window in React.** React 19.3.1, from a study with probes on Chromium 156. Strict Mode is on. One `useSyncExternalStore` hook reads the Effect engine, as a stand-in until tea's own hook takes the Effect engine ([demlik 852](https://github.com/kamp-us/demlik/issues/852)); then the file goes. *This once said "no tea `useMachine`: it dies under Strict Mode". tea 0.22.0 fixed that ([demlik PR 774](https://github.com/kamp-us/demlik/pull/774)). It also said `memo` per tile, which was dropped on 2026-11-02 for the React Compiler.*
+**The window in React.** React 19.3.1, from a study with probes on Chromium 156. Strict Mode is on. One `useSyncExternalStore` hook reads the Effect engine, as a stand-in until tea's own hook takes the Effect engine ([demlik 852](https://github.com/kamp-us/demlik/issues/852)); then the file goes. *This once said "no tea `useMachine`: it dies under Strict Mode". tea 0.22.0 fixed that ([demlik PR 774](https://github.com/kamp-us/demlik/pull/774)). It also said `memo` per tile, which was dropped on 2026-11-02 for the React Compiler.* *Changed 2026-11-03:* tea 0.23.0's `useRuntime` takes the Effect engine and a selector ([demlik PR 856](https://github.com/kamp-us/demlik/pull/856), [PR 859](https://github.com/kamp-us/demlik/pull/859)), so the stand-in file is never written. The sketch below uses it; the one it replaces was the stand-in `useModel = (h, pick) => useSyncExternalStore(h.subscribe, () => pick(h.getState()), () => pick(h.getState()))` with a `send` that forked `h.dispatch`.
 
 *The desk is way 3b, decided 2026-11-02 in [experiment 195](../../experiments/195-oxc-toolchain.md#decided): each tile, `App` and `Status` read their own part through the hook with a selector, a tile gets plain values, and there is no hand `memo`. How the Compiler rules hold it is decided 2026-11-03 in [React Compiler from day one](../direction/react-compiler.md), C6.*
 
 ```tsx
-// next/packages/tuval/src/window/use-model.ts, a sketch. All three arguments, or headless throws. Dispatch is a one-line edge.
-// The selector returns the same object while its part holds (experiment 195, way 3b).
-export const useModel = <A,>(h: Handle, pick: (m: Model) => A) =>
-	useSyncExternalStore(h.subscribe, () => pick(h.getState()), () => pick(h.getState()));
-export const send = (h: Handle, m: Msg) => Effect.runFork(h.dispatch(m).pipe(Effect.ignore));
-
-// No memo per tile: the Compiler memoizes. The tile reads its own view with useModel and a selector.
-<Tile key={t.id} id={t.id} shows={t.shows} folded={t.folded}>
-	{t.folded ? <Strip id={t.id} /> : null}
-	<Activity mode={t.folded ? "hidden" : "visible"}>   {/* mode comes from the model */}
-		<ProgramView shows={t.shows} />
-	</Activity>
-</Tile>
+// A sketch. The window is handed a run booted outside React. No memo per tile: the Compiler memoizes.
+// A tile gets plain values, reads its own view through tea's hook with a selector, and binds send to its id.
+const Tile = ({run, id, shows, folded}: {run: DeskRun; id: TileId; shows: Shows; folded: boolean}) => {
+	const [view, send] = useRuntime(run, (m) => m.views[id]); // redraws only when this tile's part changes
+	const toTile = (msg: TileMsg) => send({type: "tile", id, msg}); // Elm's Html.map
+	return (
+		<TileFrame id={id} shows={shows} folded={folded}>
+			{folded ? <Strip id={id} /> : null}
+			<Activity mode={folded ? "hidden" : "visible"}>   {/* mode comes from the model */}
+				<ProgramView shows={shows} view={view} send={toTile} />
+			</Activity>
+		</TileFrame>
+	);
+};
 ```
 
 - **`useEffectEvent`** for reads an effect must not depend on. It ends the `exhaustive-deps` fight.
 - **`<Activity>` for hidden tiles.** A hidden tile keeps its state. Focus is not restored by React, so a layout effect sets it from the model on reveal. A socket stays a tea Sub, outside React.
-- **The model keeps references for parts that did not change,** or a selector sees a change on every patch.
-- Why: the probe gave 1 tile render per patch against 16, and dispatch to DOM at p95 0.3 ms on a tiny model. It is the Elm answer. Cost: one small hook, and one selector per tile. Sure: 90% on the hook, 85% on `<Activity>`, whose memory with many hidden tiles is not measured.
+- **The model keeps references for parts that did not change,** or a selector sees a change on every patch. A selector picks a part and never builds one: a new object on every read makes React stop with "Maximum update depth exceeded" (experiment 213, S3).
+- Why: the probe gave 1 tile render per patch against 16, and dispatch to DOM at p95 0.3 ms on a tiny model. It is the Elm answer. Cost: one selector per tile; the hook is tea's. Sure: 90% on the hook, 85% on `<Activity>`, whose memory with many hidden tiles is not measured.
 - **Not decided:** native `<dialog>` and `popover` against Zag. Tier 1 needs neither, so it is left out and stays open for later.
 
 **New dependency:** `@effect/platform-browser` in the catalog. Not installed today; I read it by `npm pack`, outside the repo. Why: rely on Effect, not a handwritten socket. One gotcha from its source: every close fails the socket's reader with `SocketError`, so the Sub maps that to the `closed` Msg, which today's handwritten Stream does by hand.
@@ -878,10 +881,10 @@ export const send = (h: Handle, m: Msg) => Effect.runFork(h.dispatch(m).pipe(Eff
 - **The founding screen and the panel come from local files,** since the first runs before a brain exists and the second must never come from the brain's page. Each gets a small preload of its own.
 - **Security flags as in today's `apps/fabrika/src/main.ts`:** `sandbox: true, contextIsolation: true, nodeIntegration: false`; `titleBarStyle: "hiddenInset"`, traffic lights at `{x: 14, y: 11}`; new windows denied; navigating off the brain's origin blocked.
 - **A small preload after all.** I first leaned to none, but the key in the note's T3 forces one. `contextBridge` gives `publicKey()` and `signHello({nonce, tab})`. Main builds the bytes itself, so the page cannot get arbitrary text signed. It also gives `has`, the list main worked out at start. `ipcMain.handle` checks `senderFrame`'s origin.
-- **The keys.** Main makes two Ed25519 keys with Node's WebCrypto: the person key and the window key. Each private half is sealed by [`safeStorage`](https://www.electronjs.org/docs/latest/api/safe-storage)'s async API and kept in `userData`. The sync API is on its way out, "will be removed in Electron 46"; the catalog has 45.0.0. Async means one-line edges in the key files. The person key is read only when it signs. The window key is read on every open.
+- **The keys.** Main makes two Ed25519 keys with Node's WebCrypto: the person key and the window key. Each private half is sealed by [`safeStorage`](https://www.electronjs.org/docs/latest/api/safe-storage)'s async API and kept in `userData`. The sync API is on its way out, "will be removed in Electron 46"; the catalog has 45.2.1. Async means one-line edges in the key files. The person key is read only when it signs. The window key is read on every open.
 - **If the Keychain still asks when opening fabrika,** the plan does not stop. The window key moves to a browser-style WebCrypto key: not extractable, in IndexedDB, in a small hidden page from a local file. Main forwards sign calls to that page, so `window.fabrika` and the menu bar's link do not change. The person key stays sealed, since a prompt at Approve is fine. Why a hidden page: main has no IndexedDB, and the window may be closed. Cost: about 40 lines. Sure: 70%. Whether IndexedDB holds such a key in a local page is a guess, and T8's spike tries it.
 - **Platform defaults:** Mac close keeps it running, Cmd-Q quits and stops the brain, activate reopens.
-- **Tests:** Playwright's `_electron.launch`, as today's `apps/fabrika/e2e.ts` does, with a temp home and a test `PersonCheck`. A mock keychain flag may be needed. This is a guess. T8 settles it.
+- **Tests:** Playwright's `_electron.launch`, as today's `apps/fabrika/e2e.ts` does, with a temp home and a test `PersonCheck`. *Settled by P4, 2026-11-05:* Playwright's `--use-mock-keychain` does not reach `safeStorage`'s async API, and a seal under it makes a real item in the login Keychain, named after the app's `productName`. So a test seals through a stand-in service with a test Layer, as `PersonCheck` does, and the one law that must seal for real gives its app its own `productName` and deletes the item after. Lean, 75%, from [experiment 214](../../experiments/214-mac-app-four-unknowns.md); a CI Mac was not tried.
 
 ## Cloudflare
 
@@ -977,10 +980,10 @@ const rung = (sockets: ReadonlyArray<BrainSocket>, stream: string, rev: number) 
 - `as: "window" | "agent"` on each grant. Later rules need it, and an old grant could never tell.
 - `denied`, with what the person saw. A Deny is a person's act, so it costs nothing to keep.
 - `founded.keys` as a list, and `founded.window`.
-- `door/hellos`, one fact per online hello: key, tab, platform, versions, has, nonce, signature, `said`, `where`, brain code hash. Why: which window on which code at which moment exists only then. Cost: one append per connect. Refused hellos write nothing, so an unknown key cannot fill the log.
+- `door/hellos`, one fact per online hello: key, tab, platform, versions, has, nonce, signature, `sentAt`, `where`, brain code hash. Why: which window on which code at which moment exists only then. Cost: one append per connect. Refused hellos write nothing, so an unknown key cannot fill the log.
 - `started` gains the brain's build hash, and each letter's fold can name the program's hash. A chaos letter's `tick`, seed, target, asked and did.
-- `seen` on a letter, the last log rev the writer had read, filled by code, and `said`, both kept out of deciding code's types. The referee refuses a `seen` past its head. This was `saw`, the window's inbox position (the slice has it for counter); it became `seen` on the entry wrapper on 2026-11-01 ([saved state](../direction/saved-state.md)). A grant's `saw`, what a person looked at when they said yes, is a different fact and keeps its name.
-- **On each note's save:** `base`, since which version a writer worked on exists only then. `body` whole and raw, every time, since a version is never overwritten. `how`, since "kept from a stale screen" cannot be worked out later, and `from`, since nothing else ties a kept note to its source. The letter's `by`, `at`, `said` and `seen` come with it, using the plan's existing fields: who wrote it, the log's clock, their own clock, what they had seen. **New on every letter: `for`, the person the writer works for,** from the checked grant, so a fact names both the agent and its person with no fold. The agent's name is its grant's `saw.label`, recorded and shown to the person at Approve. `said` stays out of deciding code's types, and `refuse` sees only the Msg. Cost: one full body per save, about 500 small rows a day at most, a guess.
+- `seen` on a letter, the last log rev the writer had read, filled by code, and `sentAt`, both kept out of deciding code's types. The referee refuses a `seen` past its head. This was `saw`, the window's inbox position (the slice has it for counter); it became `seen` on the entry wrapper on 2026-11-01 ([saved state](../direction/saved-state.md)). A grant's `saw`, what a person looked at when they said yes, is a different fact and keeps its name.
+- **On each note's save:** `base`, since which version a writer worked on exists only then. `body` whole and raw, every time, since a version is never overwritten. `how`, since "kept from a stale screen" cannot be worked out later, and `from`, since nothing else ties a kept note to its source. The letter's `by`, `arrivedAt`, `sentAt`, `seen` and `cause` come with it, using the plan's existing fields: who wrote it, the log's clock, their own clock, what they had seen. **New on every letter: `for`, the person the writer works for,** from the checked grant, so a fact names both the agent and its person with no fold. The agent's name is its grant's `saw.label`, recorded and shown to the person at Approve. `sentAt` stays out of deciding code's types, and `refuse` sees only the Msg. Cost: one full body per save, about 500 small rows a day at most, a guess.
 - **On each `revoked`:** what the person saw and the check, inside the signed text, the same as a grant.
 
 **Can wait, since they rebuild from the log:** durations, recovery times, verdict tables, any view, a note's version number and name, the list's order, a diff between versions, a note's drawn blocks and code colors. `check` is itself a fold, so a better checker later re-judges old runs.
@@ -1075,7 +1078,7 @@ class KeyDown extends Schema.TaggedError<KeyDown>()("KeyDown", {why: Schema.Stri
 
 ```ts
 // next/packages/libfabrika/src/data/log.ts, a sketch. The log stores any fact and knows no cases, so `Line` holds `_tag` as an open string.
-export const toLine = (fact: {readonly _tag: string}, from: {readonly by: string; readonly said: string}): Line => {
+export const toLine = (fact: {readonly _tag: string}, from: {readonly by: string; readonly sentAt: string}): Line => {
 	const {_tag, ...body} = fact;
 	return {...from, _tag, body};
 };
@@ -1088,7 +1091,7 @@ const fact = Schema.decodeUnknownOption(MemberFact)(fromLine(line));
 
 ## The public interface
 
-The tests compile against this block and nothing else of the new code. Plan-115's `Ledger`, `LedgerCalls`, `LedgerError`, `ProcessManager`, `CoordinationLayer` and `ProgramDown` carry over as written. These are the changes and additions.
+The tests compile against this block and nothing else of the new code. Plan-115's `Ledger`, `LedgerCalls`, `LedgerError`, `CoordinationLayer` and `ProgramDown` carry over as written. `ProcessManager` does not: it gains `exit`, `info`, `monitor`, `demonitor` and a run number per start in P33 (owner, 2026-11-06). These are the changes and additions.
 
 ```ts
 // next/packages/libfabrika/src/transport/wire.ts
@@ -1099,8 +1102,9 @@ export const Hello = Schema.Struct({
 	key: Schema.String,   // Ed25519 public key, raw, base64url
 	tab: Schema.String,
 	platform: Schema.Literals(["browser", "electron", "headless"]),
-	said: Schema.String,  // the writer's own clock; recorded, never trusted
+	sentAt: Schema.String, // the writer's own clock; recorded, never trusted (was `said`, owner 2026-11-05)
 	signed: Schema.String,
+	// The OS is recorded here too (the brief's question 3, answered 2026-11-02). Its field is P10's to name.
 });
 /** One message read off the pipe. The frame on the wire stays JSON-RPC's. */
 export const Message = Schema.TaggedUnion({
@@ -1192,7 +1196,7 @@ export const Grant = Schema.Struct({
 	to: Schema.String,    // this ledger's name
 	as: Schema.Literals(["window", "agent"]),
 	saw: Saw,
-	said: Schema.String,
+	sentAt: Schema.String, // the signer's own clock, never trusted
 });
 export const grantText: (grant: typeof Grant.Type) => string;
 export const Founder = Schema.Struct({name: Schema.String, keys: Schema.Array(Schema.String), window: Schema.NullOr(Schema.String)});
@@ -1226,8 +1230,8 @@ export class ClientManager extends Context.Service<ClientManager, {
 
 // next/packages/libfabrika/src/coordination/mailbox.ts: as plan-115, and receive yields a Letter
 export type Letter = {
-	readonly id: string; readonly m: unknown; readonly by: string; readonly for: string; readonly said: string;
-	readonly rev: number; readonly pos: number;
+	readonly id: string; readonly m: unknown; readonly by: string; readonly for: string; readonly sentAt: string;
+	readonly cause: string | null; readonly rev: number; readonly pos: number;
 };
 
 // next/packages/libfabrika/src/app/program.ts
@@ -1285,7 +1289,7 @@ export const chaosFrom: (a: {readonly flag: string | null; readonly stage: "loca
 // next/programs/notes/src/program.ts. As in the Notes section.
 export const notes: Program<Model, Save, View, never>;
 export type NoteRow = {readonly note: string; readonly version: number; readonly name: string};
-export type Version = {readonly version: number; readonly body: string; readonly by: string; readonly at: string; readonly said: string};
+export type Version = {readonly version: number; readonly body: string; readonly by: string; readonly arrivedAt: string; readonly sentAt: string};
 /** Pure, for a window, from what `ledger.read` gave. The tile's history view. */
 export const history: (letters: ReadonlyArray<Letter>, note: string) => ReadonlyArray<Version>;
 
@@ -1388,15 +1392,25 @@ export const menuView: (m: MenuModel) => ReadonlyArray<MenuItem>;
 
 ## Styling
 
-**Named exception to "never copy across," styling only, by the owner.** From `apps/fabrika/src/window/window.css` at origin/main (`25d1317`, which includes PR 225 and [PR 308](https://github.com/usirin/tea-fabrika/pull/308)):
+**`next/`'s window imports `@kampus/fabrika-design`, and the copy is only what the package lacks** (owner, 2026-11-05: [one design package](../direction/fabrika-design-package.md) wins over the copy). The package holds the colors, the `:root` tokens and the Manti mapping, built in today's version by [P31](./tier-1.md#the-pull-requests-one-at-a-time) before P14. *This section was a named exception to "never copy across" that copied those too.*
+
+```ts
+// A sketch, next/packages/tuval. The names are the package note's guesses until P31 lands.
+import "@manti-ui/styles/index.css";
+import "@kampus/fabrika-design/tokens.css"; // our tokens, and Manti's --manti-* set from them
+import "./window/style.css";                 // only what the package lacks, copied under the exception
+```
+
+**What is still copied is a named exception to "never copy across," styling only, by the owner.** From `apps/fabrika/src/window/window.css` at origin/main (`25d1317`, which includes PR 225 and [PR 308](https://github.com/usirin/tea-fabrika/pull/308)):
 
 - **The tile and color rules came after this exception.** [Tile guidelines](../direction/tile-guidelines.md), [color principles](../direction/color-principles.md) and [pipe colors](../direction/pipe-colors.md) were decided for today's version the same day, and `next/` reads them as lessons. Today's app took the Radix fabrika theme, dark and light, in PR 308 (ticket 144), so this copy brings the Radix steps the rules name, and the owner called [the question](./tier-1.md#open-questions) moot on 2026-11-02.
-- **Copy:** the `:root` block, lines 12 to 133 (Radix 3.0.0 steps as `light-dark()` pairs: slate surfaces, lines and text, indigo for the turn, grass, amber and red for done, running and stuck; then type at 22/15/14/13/12/11 px, spacing and radius), without lines 115 to 127, the old names. Also the bottom line's rule, and the slot rule. *This once said lines 1 to 168, which was wrong, and then lines 7 to 137 at `ec7ef72`, graphite `--n-*` and accent `--a-*`, which PR 308 replaced.*
-- **Manti, as today's app.** `next/` uses Manti (the owner, 2026-11-02; [UI on Manti](../direction/ui-on-manti.md)). So the copy also takes `apps/fabrika/src/window/theme.css`, 139 lines that set Manti's tokens from our names, and the style build puts `@manti-ui/styles/index.css` before it, as today's `build.ts` does. `@manti-ui/react` and `@manti-ui/styles` are `catalog:` lines, already pinned at 0.13.0, and the root `patchedDependencies` already patch `@manti-ui/react` for the whole workspace.
+- **From the package, not copied:** the `:root` block, lines 12 to 133 at `25d1317` (Radix 3.0.0 steps as `light-dark()` pairs: slate surfaces, lines and text, indigo for the turn, grass, amber and red for done, running and stuck; then type at 22/15/14/13/12/11 px, spacing and radius). P31 reads each value again against [themes](../direction/themes.md) and [color principles](../direction/color-principles.md), and drops lines 115 to 127, the old names. Whether the type, spacing and radius tokens go in the package or stay in the copy is P31's plan to say; the package note names only the colors, the mapping and the text roles.
+- **Copy:** the bottom line's rule, and the slot rule. *This once said copy the `:root` block too, and before that lines 1 to 168, which was wrong, and then lines 7 to 137 at `ec7ef72`, graphite `--n-*` and accent `--a-*`, which PR 308 replaced.*
+- **Manti, as today's app.** `next/` uses Manti (the owner, 2026-11-02; [UI on Manti](../direction/ui-on-manti.md)). The Manti mapping, today's `apps/fabrika/src/window/theme.css`, 139 lines that set Manti's tokens from our names, comes from the package, not a copy, and the style build puts `@manti-ui/styles/index.css` before it, as today's `build.ts` does. `@manti-ui/react` and `@manti-ui/styles` are `catalog:` lines, already pinned at 0.13.0, and the root `patchedDependencies` already patch `@manti-ui/react` for the whole workspace.
 - **Fit, not copy: `.tile`, `.tile.focused` and `.titlebar`.** Today `.tile` is `position: relative; flex: 1`, and `.titlebar` is an absolute `<button>`. In `next/`, `Tile` draws with `position: absolute` and pixels from `fold`, and the title bar is a `<header>`. So their colors, borders and type carry over, their position and size are written fresh, and the PR names each edit.
 - **Keep the meaning rule:** accent is "your turn" only; red stuck or broken; amber running; green done.
 - **Keep the frame rules from `frame.tsx`:** bars monospace, plain words joined by ` · `, no item backgrounds, no line under the top bar or over the bottom line.
-- **Where:** `next/packages/tuval/src/window/style.css`, embedded by esbuild's text loader, replacing `STYLE` in `page.ts`. Only the tokens and rules in use are copied, about 300 lines of 3,935, plus 139 for `theme.css`, plus 215 for the `.markdown*` rules (lines 1428 to 1642 at `25d1317`) in PR D, with `.markdown-keys` and its `Kbd` keys, `e` in place of `q`, and with their 10 old-name lines rewritten to tokens that exist. The `compat` names are not copied. A comment gives the source path and commit.
+- **Where:** `next/packages/tuval/src/window/style.css`, embedded as text by the build, replacing `STYLE` in `page.ts`. *This said esbuild's text loader until 2026-11-05; on Rolldown it is not tried here.* Only the rules in use are copied, about 180 lines of 3,935 (the 300 this said, less about 120 lines of tokens the package now holds; a guess), plus 215 for the `.markdown*` rules (lines 1428 to 1642 at `25d1317`) in PR D, with `.markdown-keys` and its `Kbd` keys, `e` in place of `q`, and with their 10 old-name lines rewritten to tokens that exist. The `compat` names are not copied. A comment gives the source path and commit.
 - **Linear's question, per screen,** goes in each PR: the founding screen, the waiting screen ("how would Linear ask you to approve a device?"), the menu bar's panel, the counter tile, the chaos tile, and each notes screen, [answered as opinion in Notes](#notes). Screenshots: each key state in one tile, two side by side, two stacked, 2x2 and about 1024x700. The founding screen, waiting screen and panel come before any tile exists, so they are shot full, narrow and about 1024x700, and the PR says why.
 - **Other named exceptions:** the drawing and the MCP tools, each [marked the same way](#drawing-a-note).
 - **Notes' shots:** empty, reading a drawn doc with code and a table, editing, saving, no link, stale, too long, read failure and history, each in one tile, two side by side, two stacked, 2x2 and about 1024x700. The phone tab is in the demo, so each key state also gets one shot at phone width. The panel's let-in list and its Remove join PR B's panel shots, and an agent's row joins PR D's.
@@ -1405,12 +1419,12 @@ export const menuView: (m: MenuModel) => ReadonlyArray<MenuItem>;
 
 | Task | PR | Files |
 |---|---|---|
-| T0 the move | A | `git mv`s as [Packages](#packages) lists, six `package.json` and `tsconfig.json`, `index.ts` per public name set, `build.ts`'s generated entry; code-graph and esbuild tried on the new shape. Second commit: the desk leaves, `desktop/layout.ts`, `entry/views.ts`, `window/machine.ts`. The owner's rows stay in the exam PR |
+| T0 the move | A | `git mv`s as [Packages](#packages) lists, six `package.json` and `tsconfig.json`, `index.ts` per public name set, `build.ts`'s generated entry; code-graph and the bundler (Rolldown, since 2026-11-05) tried on the new shape. Second commit: the desk leaves, `desktop/layout.ts`, `entry/views.ts`, `window/machine.ts`. The owner's rows stay in the exam PR |
 | T1 the names | A | new `data/ledger.ts`, `app/runner.ts`, `app/nemesis.ts`, `transport/answer.ts`, `transport/hello.ts`, `transport/sshsig.ts`, `transport/waiting.ts`, `coordination/client-manager.ts`; added names in `coordination/*`, `app/program.ts`. Bodies are `Effect.die("not built: tN")` |
 | T2 data and coordination | A | `data/log.ts`, `data/ledger.ts`, `data/project.ts`, `coordination/*`; the smallest bridge in `app/process.ts`, gone in T3 |
 | T3 the process | A | `app/program.ts`, `app/runner.ts`, `app/entry.ts`, `app/process.ts`, `app/nemesis.ts`, `programs/counter/program.ts` for its ports |
 | T4 the door | A | `transport/*`, `brain.ts`, `window/machine.ts` |
-| T5 grant | A | `grant.ts`, `tuval/browser` only for its key, the waiting view in `window/main.tsx`, `window/use-model.ts` |
+| T5 grant | A | `grant.ts`, `tuval/browser` only for its key, the waiting view in `window/main.tsx` |
 | T6 the stage | A | new `alchemy.run.ts`, `dev.ts`, `build.ts`, delete `brain-host.ts`, change `e2e.ts`; `README.md`; style; `docs/*.png` |
 | T7 platforms | B | `desktop/services.ts`, `tuval/dom/*`, `tuval/browser/*`, `tuval/headless/*`, `entry/browser.tsx`, `entry/views.ts`, `window/main.tsx`. A catalog change comes from an exam PR, since `pnpm-workspace.yaml` is an exam file |
 | T8 the app, its keys and the brain | B | `entry/electron-main.ts`, `entry/electron.tsx`, `launchd.ts`, `tuval/electron/{preload,index,key,person-key,founding}.*`, signing setup in `README.md` |
@@ -1424,7 +1438,7 @@ export const menuView: (m: MenuModel) => ReadonlyArray<MenuItem>;
 | T20 drawing a note | D | new `programs/notes/{root.ts,drawn.tsx,highlight.ts,highlighter.ts}`, `programs/notes/{tile.ts,view.tsx}`, `window/style.css`, `window/page.ts`, `brain.ts` for the policy and `/highlight.js`, `build.ts`, `entry/electron-main.ts` for links, `next/programs/notes/package.json` |
 | T21 agents through MCP | D | new `mcp/{tools,serve,drive,client,index}.ts`, `next/apps/fabrika/mcp.ts`; `programs/notes/program.ts` inputs, `app/program.ts` `Input`, `transport/answer.ts`, `transport/waiting.ts`, `desktop/menu.ts`, `coordination/mailbox.ts` for `for`, `next/packages/libfabrika/package.json` |
 | T19 where notes live, and the demo | D | `entry/electron-main.ts`, `launchd.ts`, `desktop/menu.ts` for the status words, `alchemy.run.ts`, `README.md`, `docs/*.png`; the run in `field/` |
-| T22 backup and recovery | D2 | not designed yet, so its files are not named. It will touch `MemberFact`, `foldMembers` and p28 for `added`, the door, and the app's founding screen |
+| T22 backup and recovery | D2 | designed in the account recovery note ([PR 404](https://github.com/usirin/tea-fabrika/pull/404)), decided for the sheet 2026-11-06. Its fold and door parts move to P9 and P10 (`MemberFact`, `foldMembers`, p28, `added`); T22 keeps the sheet's screens, the words and the menu bar row |
 | T12 program | E | new package `next/programs/chaos`, `app/nemesis.ts`, the layout in `entry/views.ts` |
 | T13 live faults | E | `brain.ts`, `transport/gateway.ts`, `app/process.ts`, `data/project.ts`, `build.ts`, `dev.ts`, `alchemy.run.ts` |
 | T14 drill and run | E | `chaos-drill.ts` on `mcp/client.ts`, `README.md`, `docs/*.png`, `field/` |
@@ -1435,16 +1449,16 @@ Red to green, as plan-115: after the names of T1, T7, T15 and T16 everything com
 
 - **T0.** `ends`: local commit. Scenario p65. The test writer adds the slice's tests at their new paths, as new files, since nothing of `next/` is on main to move. Whatever route [takes PR 223 to the lane](./tier-1.md#still-open-how-next-reaches-the-lane), the desk and its mirrored-focus check do not come along. First step: `code-graph . --unreachable`, `--interface-width` and `build.ts` on the new shape. If either doubt in [Packages](#packages) is off, stop and tell the owner.
 - **T1.** `ends`: local commit. Scenario c1. Properties p1 to p5, p8, p9, p16.
-- **T2.** `ends`: local commit. Fixture: `Ledger.sql` on node:sqlite. Scenario p18. Other: p10 to p13, p19 to p21, p28. Criterion c2.
-- **T3.** `ends`: local commit. Fixture: `ProgramRunner` with real `counter`. Scenario p22. Other: p14, p25, p35. Criteria c2, c3.
-- **T4.** `ends`: local commit. Fixture: `answerFrame` with a fake `admit`. Scenario p26, p23. Other: p15, p42, p43. Criterion c2.
-- **T5.** `ends`: local commit. Fixture: `sshsig` vectors made by real `ssh-keygen`, saved in `fixtures/next/` by the first exam PR, so the owner reads them ([answered 2026-11-02](./tier-1.md#open-questions); the test writer only adds `*.test.ts`). Scenario p27. Other: p29 (needs T6 to run). Strict Mode goes on here, with the hook in `window/use-model.ts` and `Effect.runFork`, on the exam's edge list; probes showed it working on tea's Effect engine, sure 90%. Spike first: does a non-extractable Ed25519 `CryptoKey` survive reload in IndexedDB in Chromium, on 127.0.0.1? The browser note says not tried. If not, stop and tell the owner; no fallback is planned, because the fallback is a key the page can read.
-- **T6.** `ends`: PR A. Fixture: whole tree, two Chromium contexts, real `dev.ts`. Scenario p17 on the stage. Other: p24, p32, p29. Criteria c4, c5, c6, c7. **First step: measure 4 runs of the bar on the new stage, on the base,** so caps are set from numbers. `build.ts` moves from esbuild to Rolldown (lean 85%, [experiment 195](../../experiments/195-oxc-toolchain.md)), and runs the React Compiler on `.tsx` files only, through oxc's native port, `oxc-transform-react`, in a Rolldown plugin, with its purity check on. No Babel (owner, 2026-11-02). The build owns the check: one step compiles a file and returns its findings, and any finding fails the build, with no setting ([the note](../direction/react-compiler.md#how-the-build-runs-the-compiler), decided 2026-11-03). The PR body gives the window bundle's build time with and without it.
+- **T2.** `ends`: local commit. Fixture: `Ledger.sql` on node:sqlite. Scenario p18. Other: p10 to p13, p19 to p21, p28, p68. Criterion c2.
+- **T3.** `ends`: local commit. Fixture: `ProgramRunner` with real `counter`. Scenario p22. Other: p14, p25, p35, p69. Criteria c2, c3.
+- **T4.** `ends`: local commit. Fixture: `answerFrame` with a fake `admit`. Scenario p26, p23. Other: p15, p42, p43, p67. Criterion c2.
+- **T5.** `ends`: local commit. Fixture: `sshsig` vectors made by real `ssh-keygen`, saved in `fixtures/next/` by the first exam PR, so the owner reads them ([answered 2026-11-02](./tier-1.md#open-questions); the test writer only adds `*.test.ts`). Scenario p27. Other: p29 (needs T6 to run). Strict Mode goes on here, with tea 0.23.0's `useRuntime`, whose `send` runs the Effect inside tea, so no window file joins the exam's edge list; [experiment 213](../../experiments/213-tea-react-select.md) ran it on the Effect engine under Strict Mode and the Compiler, 400 of 400 trials, sure 90%. *Changed 2026-11-05: this once put a stand-in hook in `window/use-model.ts`, with `Effect.runFork` on the edge list.* Spike first: does a non-extractable Ed25519 `CryptoKey` survive reload in IndexedDB in Chromium, on 127.0.0.1? *Done 2026-11-05, P3: yes, over a reload and a browser restart, in Chromium 156 ([experiment 215](../../experiments/215-browser-key-survives-reload.md)). The key belongs to the exact origin, port included, so the person's brain listens on one fixed port.*
+- **T6.** `ends`: PR A. Fixture: whole tree, two Chromium contexts, real `dev.ts`. Scenario p17 on the stage. Other: p24, p32, p29. Criteria c4, c5, c6, c7. **First step: measure 4 runs of the bar on the new stage, on the base,** so caps are set from numbers. `build.ts` moves from esbuild to Rolldown ([experiment 195](../../experiments/195-oxc-toolchain.md); a lean at 85% until the owner made Rolldown `next/`'s one bundler on 2026-11-05, so the exam's `deps.test.ts` moves to Rolldown and `esbuild` leaves `next/apps/fabrika/package.json` in the test writer's commit of this task's pull request, P12, which the builder does not write), and runs the React Compiler on `.tsx` files only, through oxc's native port, `oxc-transform-react`, in a Rolldown plugin, with its purity check on. No Babel (owner, 2026-11-02). The build owns the check: one step compiles a file and returns its findings, and any finding fails the build, with no setting ([the note](../direction/react-compiler.md#how-the-build-runs-the-compiler), decided 2026-11-03). The PR body gives the window bundle's build time with and without it.
 
 ### PR B
 
 - **T7.** Scenario p30. Other: p50, p66's browser and headless half. Criterion c8. `window/main.tsx`: the Effect socket, tiles that read their own part with a selector and no `memo` (way 3b), `useEffectEvent` and `<Activity>`, on the hook T5 brought.
-- **T8.** Scenario p46. Other: p44, p31 up to the keys, p66's Electron half. Spikes first, all on a dev build: (1) launchd on an unsigned build: start, app crash, Quit. If it fails, `childBrain`, and tell the owner. (2) `safeStorage` under Playwright in a temp home. (3) The self-made card: the owner opens the built app twice. If the Keychain asks on open, the window key moves to WebCrypto in a hidden local page, and tell the owner. (4) Touch ID from that build. If it cannot prompt, the plain click, and tell the owner.
+- **T8.** Scenario p46. Other: p44, p31 up to the keys, p66's Electron half. Spikes first, all on a dev build: (1) launchd on an unsigned build: start, app crash, Quit. If it fails, `childBrain`, and tell the owner. (2) `safeStorage` under Playwright in a temp home. (3) The self-made card: the owner opens the built app twice. If the Keychain asks on open, the window key moves to WebCrypto in a hidden local page, and tell the owner. (4) Touch ID from that build. If it cannot prompt, the plain click, and tell the owner. *P4 ran (1), (2), (4) and a same-binary form of (3) on 2026-11-05, all yes ([experiment 214](../../experiments/214-mac-app-four-unknowns.md)); no way out is needed. The owner's two opens of the built app stay for this task, since a rebuilt or re-signed binary is new to the Keychain.*
 - **T15.** Scenario p45. Other: p49's pure half, p51's pure half, p66's grant half. A Tray and a panel, both drawn from `menuView`.
 - **T9.** Scenario p47, p31 whole. Other: p48, p49's live half, p51's live half. Criteria c5, c9, c13. `ends`: PR B. Screenshots from the real app. The owner's own finger is the last check, once, in the demo.
 
@@ -1466,7 +1480,7 @@ Before it, a small exam PR. See [The exam PR](#the-exam-pr-not-in-this-plan).
 
 ### PR D2
 
-- **T22.** s13. The backup sheet and recovery on a new Mac, plus the `added` fact on the `founded.keys` list. The owner moved these up from Tier 3. Not designed yet: [the brief](./tier-1.md#the-backup-needs-a-design-pass-first) says what the design pass answers. Its scenario, properties and laws are written and read by the owner before its test writer starts, in the same small way as the exam PR before PR D.
+- **T22.** s13. The backup sheet and recovery on a new Mac, plus the `added` fact on the `founded.keys` list. The owner moved these up from Tier 3. Designed in the account recovery note ([PR 404](https://github.com/usirin/tea-fabrika/pull/404)), decided 2026-11-06: its fold and door land in P9 and P10, the sheet in P28, email in P36. *It said: not designed yet.* Its scenario, properties and laws are written and read by the owner before its test writer starts, in the same small way as the exam PR before PR D.
 
 ### PR E
 
@@ -1484,8 +1498,8 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - **p10 to p15, p17** run on `stage`, not Miniflare. **p15** adds the checks of p26.
 - **p17's bar is measured new** (T6). The old table's start numbers came from raw Miniflare. Known so far: restart 292 to 539 ms, first answer 1.2 to 1.4 s (exp 171). Same rule: base and head in one sitting, the laptop blocks, CI only prints.
 - **p22** adds, from PR D: a program's own `refuse` leaves no line and answers with that program's `why`. `bad_msg` stays for a bad shape.
-- **p24** runs oxlint on `next/`, with an edge line only in files the exam PR lists.
-- **p25** is `new`, no longer waits on the owner. From PR D, its "old letters the new code refuses count for nothing" holds only for the counter and chaos. A saved note always folds (p55).
+- **p24** runs oxlint on `next/`, with an edge only on a line under an edge comment, `-- edge: <why>` (owner, 2026-11-05; it said: only in files the exam PR lists).
+- **p25** is `new`, no longer waits on the owner. **Rewritten 2026-11-06 (owner):** when a program's step throws on a fresh letter: no answer and no line, and the letter is counted; on the third throw it moves to dead (p80). A wake that fails on a saved letter marks the process `down` and keeps every letter, never skipping it. A real refusal still gets `bad_msg`. From PR D, "old letters the new code refuses count for nothing" holds only for the counter and chaos; a saved note always folds (p55). *It said, from plan-115: on a wake, the wake fails rather than skipping the letter, which no note backed and which left a process down for good with no way to say why.*
 
 **p26, the signed hello (scenario of T4).** `new`, node. s4. `transport/hello.ts`, `answer.ts`.
 - A known key with a good signature goes online, `who` from the fold. A key that does not hash to the dialed name, a signature over another nonce, url or tab, and a reused nonce are each refused and change nothing. Unknown key: `not_granted`, and every method but `door.knock` gets `no_hello`. Nothing is written before online. `door.watch` and `door.deny` answer only an online client.
@@ -1499,6 +1513,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Over any list of facts: `founded` is first and never replaced. Its `window` is admitted with no grant. A revoked key stays out forever, whatever comes later. A `denied` changes who belongs in no way. Adding the same fact twice changes nothing.
 - A good thing happens: a grant by a person's key admits that key.
 - Why: rules checked on every hello. Plants: last fact wins for revoke; second `founded` accepted; `denied` blocks a later grant.
+- *Widened 2026-11-06 (owner: every device the person owns is a master):* any device's key may let in or remove any other device. The person's own devices are equal roots: a device never hangs under another, so dropping one device never drops another. Only tabs and agents hang under the device that let them in, and drop with it, folded from the ledger. A sheet belongs to the person: removing a device leaves the live sheet alone. `added` lets in what `Adds` says; a recovery key lets in one new device, once, and is then spent; making a new sheet spends the old one, so one sheet is live. An agent's key never approves or removes, and a browser tab's does not either (lean 70%, the brief's question 19). Plants: a dropped device whose tabs stay; a dropped device that takes another device with it; a removed device that spends the sheet; a spent sheet used twice; two live sheets; an agent's approve accepted.
 
 **p29, the first grant, real browser.** `new`, stage. s4, s3. e2e.
 - A fresh tab shows the waiting screen with its code and fingerprint. `node next/apps/fabrika/grant.ts client` with a throwaway key brings it online without a reload. A reload needs no new grant, and the fingerprint stays. Two tabs of one profile are both online, with one `by`. Those two tabs show one code. A grant from another key leaves it waiting. Revoke closes the socket and shows "This window was removed", and Ask again makes a new key and a new wait.
@@ -1550,7 +1565,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Its chaos step waits for chaos to exist, so it runs at T14, not T11: a short run on the `drill` stage ends green, with the same `check`, and the stage is removed after it. By then `cloud` holds real notes, so chaos does not run there.
 
 **p42, the facts.** `new`, node. s2, s7.
-- A `granted` fact holds text and signature that re-verify alone, and its text holds `as` and all of `saw`, `check` and `has` included. A `denied` fact holds `saw`, and `by` from the checked key. A hello fact holds `platform`, `has`, code hash, `said`. `by` is never from params. A saved fact holds `_tag` and folds back through `MemberFact`; a line with a tag the fold does not know is skipped and kept.
+- A `granted` fact holds text and signature that re-verify alone, and its text holds `as` and all of `saw`, `check` and `has` included. A `denied` fact holds `saw`, and `by` from the checked key. A hello fact holds `platform`, `has`, code hash, `sentAt`. `by` is never from params. A saved fact holds `_tag` and folds back through `MemberFact`; a line with a tag the fold does not know is skipped and kept.
 - Plants: `by` from params; signature dropped; `saw` or its `has` left out of the signed text; a fact saved with `kind` in place of `_tag`.
 
 **p43, waiting (pbt).** `new`, node. s4. `transport/waiting.ts`.
@@ -1582,7 +1597,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Live: the click opens the tab, it comes online with no row to click, the address no longer shows the secret, and a request log holds no secret in any URL. The same link used again shows a code. The list of brain methods and bridge calls holds nothing that makes a link.
 - Plants: a pass used twice; no time limit; secret in the query string.
 
-**p50, the window in React.** `new`, real Chromium, stage. s3, s5. `window/use-model.ts`, `window/main.tsx`.
+**p50, the window in React.** `new`, real Chromium, stage. s3, s5. `window/main.tsx`.
 - Under Strict Mode: a patch to one of 16 tiles renders one tile. A folded tile keeps its state across a fold and unfold, sees no work while hidden, and is fresh when shown. Focus comes back from the model on reveal. The hook works with no DOM, by `renderToStaticMarkup`.
 - Plants: no `memo`; a tile that unmounts on fold; no third argument to the hook.
 
@@ -1592,7 +1607,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Why: a mix-up here removes the wrong window. Plants: remove without the check; `own` shown with Remove; a revoke signed by a window key accepted; the act not kept, so a remove signs a grant.
 
 **p52, a save is one fact (pbt, scenario of T17).** `new`, node, tea's pbt, real `ProgramRunner`. s9. `programs/notes/program.ts`, `app/runner.ts`.
-- Over any list of good saves: each is exactly one line in `notes:1/inbox`, with `base`, `body`, `how`, `from`, and `by`, `for`, `at`, `said` on the letter. No line is ever changed or removed. A note's version is one more than its `base`. `by` is the checked key, whatever the params say. `update` never sees `said`.
+- Over any list of good saves: each is exactly one line in `notes:1/inbox`, with `base`, `body`, `how`, `from`, and `by`, `for`, `arrivedAt`, `sentAt` on the letter. No line is ever changed or removed. A note's version is one more than its `base`. `by` is the checked key, whatever the params say. `update` never sees `sentAt`.
 - A good thing happens: a save on the current version always lands.
 - Why: this is what "never overwritten" means. Plants: a save that replaces a line; version counted across notes; `by` read from params.
 
@@ -1605,7 +1620,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Plants: `<` for `!==`; a refused save appended anyway; no permit; `now` read before the append.
 
 **p55, the list and history fold from facts alone (pbt).** `new`, node. s9, s2.
-- From the letters alone, with no other input: the list and each note's latest text come out the same, however many times it folds. `history` gives every version in order, with `by`, `at`, `said`. The fold never calls `refuse`. A saved letter from `fixtures/next/`, made by PR D's first code, folds forever, so a later change that breaks old letters fails here.
+- From the letters alone, with no other input: the list and each note's latest text come out the same, however many times it folds. `history` gives every version in order, with `by`, `arrivedAt`, `sentAt`. The fold never calls `refuse`. A saved letter from `fixtures/next/`, made by PR D's first code, folds forever, so a later change that breaks old letters fails here.
 - Plants: a fold that re-checks `base`; a list order from anything but the log; a letter skipped when its shape is unknown.
 
 **p56, a restart loses no saved text.** `new`, stage. s9, s3.
@@ -1659,10 +1674,60 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Nothing reads it yet: any list gets the same answers from the door, and a hello from an unknown key that claims `verify` still gets `not_granted`.
 - Why: old hellos can never get the list back, and with no reader, nothing else would notice a wrong one. Plants: a list written by hand in the hello, not read from `Host`; `has` dropped from the row; `verify` listed where it can't prompt; the door branching on `has`.
 
+**p67, the door stamps every input (scenario of P10).** `new`, node. s4, s7. `transport/answer.ts`, door. *Added 2026-11-05 (owner), from [inputs carry their sender](../direction/inputs-carry-their-sender.md).*
+- Every input past the door becomes one `Envelope` `{id, by, arrivedAt, input}`, made in memory there. `id` is an `InputId`, `in-<run>-<n>`: only the door makes one, the run part is fresh at each start of the door's object, and no id is made twice across any number of starts. `by` is the checked key's writer, whatever the params say. `arrivedAt` is the referee's clock.
+- A frame that names its own `id` or `by` is refused in words, and the refusal is recorded. Nothing it asked for happens.
+- Each envelope is logged in the brain's own log: who sent it and where it went. Never a raw key's text, and a `Redacted` value logs hidden.
+- Why: who sent each input exists only at the door, and the note decided to record it first. Plants: an `id` taken from the frame; `by` read from params; a client-sent `by` dropped silently instead of refused; a raw key in the log line; a run part reused after a restart.
+
+**p68, an entry keeps its cause (scenario of P6).** `new`, node. s7, s1. `data/log.ts`, `Ledger`. *Added 2026-11-05 (owner).*
+- Every entry has `cause`: a `CauseText` matching `/^in-[0-9a-f]{8}-[1-9][0-9]*$/`, or null for an `own` write. A text that does not match is refused and nothing is written. Read back, it is the same text, and no public function turns a `CauseText` into an `InputId`.
+- Why: an entry written without it never gets it back. Plants: `cause` dropped on append; a decode that brands the text as an `InputId`; a bad pattern accepted.
+
+**p69, every write is signed by its cause's sender (scenario of P11).** `new`, node, through the program test kit. s11, s2. `app/runner.ts`, the signer. *Added 2026-11-05 (owner); the walk is [open question 17](./tier-1.md#open-questions).*
+- For any list of inputs, each told by a person or by an agent for that person, interleaved, across queued writes: every write an input causes is signed as that input's sender. An `own` write is signed as the process owner.
+- The signer refuses, in words, and writes nothing, when: the cause was never told to this process; the cause is spent for this tag; the tag is person-only and the cause's input is not a person-only input sent by a person; the process has ended.
+- Why: the runner never sees a program's `update`, so pairing a Cmd with the Msg that made it gives the wrong signer once a write is queued. Plants: the runner pairs a Cmd with the last Msg (the note's `save_ok` case); a queued write that drops its cause; a cause borrowed from another process; a second `answered` from one press.
+
+**p70 to p78, hot reload (scenario of P15).** `new`, node against the program runner, fast-check with fixed seeds. s3, s7. `app/runner.ts`, `app/loader.ts`. *Added 2026-11-06, from [hot reload's nine laws](../direction/hot-reload.md#how-it-is-tested), written there first.*
+- p70: no acked fact is lost by a reload, and they read back in order.
+- p71: each Msg is stepped exactly once across a reload.
+- p72: a reload to the same hash changes nothing a reader can see.
+- p73: a fitting reload keeps the model equal; after it, the model equals a run of every Msg in order, each on the build its entry names (the law that catches experiment 183's lost counter).
+- p74: a refused reload leaves that process on its old hash, with one `code.refused`, and others of the program unaffected.
+- p75: code that failed to load never runs a step.
+- p76: every `build` on a record has an earlier `code.loaded` for that hash.
+- p77: only the saved program's processes swap.
+- p78: a pinned lane never changes build. It waits for lanes, which Tier 1 has none of; it is written now so the number holds.
+- Plants: a reload that drops the queued Msg; a migrate that skips S3's chain; `[Restart]` that keeps the old `init`.
+
+**p79, processes (scenario of P33).** `new`, node. s3, s7. `coordination/process-manager.ts`. *Added 2026-11-06 (owner: Tier 1 builds this slice of C4 and C5).*
+- `exit` writes `exited {why}`; `info` lists every live process with its run; each start after a crash writes `restarted {run, why, build}`, and the run number only grows.
+- A monitor gets one `DOWN {pid, run, why, to}` when its process ends, `noproc` at once if it was already gone, and none after `demonitor`, which also flushes a `DOWN` already in the inbox. A `DOWN` from an earlier run never lands in a later one.
+- The restart window counts a restart on its edge. A name is never freed. Only the parent sends an exit signal.
+- Who is online folds from each gateway's last ping and is never written.
+- C5's owed check: each of the above against OTP's own documentation, since experiment 99 came before experiment 107.
+- Plants: a `DOWN` with no `to`; a monitor on a gone process that waits forever; `demonitor` leaving a `DOWN` behind; a name reused; a stale `DOWN` delivered to a new run.
+
+**p80, a crash is not a refusal (scenario of P34; replaces p25's wake rule).** `new`, node and the stage. s3, s9. `app/runner.ts`. *Added 2026-11-06 (owner).*
+- A fresh letter whose step throws gets no line; it is counted per letter id in the process's own storage. On the third throw it moves to `<pid>/dead` with `dead {tries, limit, m, build}`, and its sender gets `{why: "dead"}`, so the outbox stops resending.
+- A process that crashes N times in T seconds goes `down`, with backoff, and a resend does not wake it. `[Restart]` exits it and starts it with the new `init`.
+- A wake that fails on a saved letter marks the process `down`, writes why, and keeps every letter. No saved letter is ever skipped or moved, so a saved note always folds (p55).
+- Plants: a fourth try; a poison letter that blocks the rest of the inbox; a saved letter moved to dead; a `down` process woken by a resend.
+
+**p81, the brain comes back (scenario of P12 and P19).** `new`, stage and real Electron. s3, s8. `dev.ts`, the launchd plist.
+- Under `dev.ts`: workerd killed with `kill -9` mid-burst comes back alone, with a start fact naming its build, and nothing acked is lost (with p13). A brain that dies in a loop stops at the brake, and says so. At the 500 MB mark it restarts.
+- Under launchd: the brain killed with `kill -9` comes back, and both windows come back to it. A clean Quit does not restart it.
+- Plants: a restart with no backoff; a restart after a clean exit; no start fact.
+
+**p82, version agreement (scenario of P10).** `new`, node. s5. `transport/hello.ts`, door.
+- The brain picks the highest version both sides list. No shared version is refused in words, and nothing is written. A field the brain does not know is ignored, never refused.
+- Plants: the lowest shared version picked; a mismatch let through; an unknown field refused.
+
 ## Criteria
 
 - **c1 to c6:** plan-115's, with oxlint in place of Biome, and c5's README also naming the stage.
-- **c7, T6, T20, T21.** Styling is what the styling section says: tokens match the named commit, meaning rule holds. From PR D the same read covers the other copies: each copied file has a comment naming its source path and commit, and nothing else was copied. Read: `style.css`, the copies, and shots. s5.
+- **c7, T6, T20, T21.** Styling is what the styling section says: the colors, tokens and Manti mapping come from `@kampus/fabrika-design`, the copied rules match the named commit, and the meaning rule holds. From PR D the same read covers the other copies: each copied file has a comment naming its source path and commit, and nothing else was copied. Read: `style.css`, the copies, and shots. s5.
 - **c8, T7.** Core has no platform name; `entry/browser.tsx` and `entry/electron.tsx` are three lines; `window/main.tsx` has no socket code of its own. Read: the diff. s5.
 - **c9, T9, T14, T19.** PR carries real shots in five layouts, says what looks broken, and answers Linear's question per screen. Read: the PR body. s5, s7.
 - **c10, T11.** A run log: plan read, yes given, deploy, p41's numbers, dollars. The repo holds no account name or key. Read: `field/`, a grep. s6.
@@ -1676,29 +1741,29 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 
 ## The mutation step
 
-- **New direction, not yet in a note on main:** mutation on a pull request must be very fast, and a long run does not block a pull request. It runs daily and files tickets. No number is set. What follows is the older shape. Today's lane still runs it, and what changes it is [an open question](./tier-1.md#open-questions).
+- **Decided 2026-11-01 in [fast and daily mutation](../direction/fast-and-daily-mutation.md):** the check on each pull request takes changed lines first, stops at 5 minutes, and only advises; a long run never blocks a pull request, and `next/`'s mutation queue comes in Tier 6. Tier 1's pull requests run that check ([Rules that bind](./tier-1.md#rules-that-bind)). What follows is the older shape: its tool, covers and skip list still hold, and its sample and its time do not. *This bullet said "new direction, not yet in a note on main", which was wrong from 2026-11-01.*
 - **Tool:** as plan-115. Stryker 10.1.1 through today's `MutationRunner`, from outside; `next/` imports none of it. Fixed sample per PR: seed 115, at most 150 (AGENTS.md's shared seed is 119120; either is fixed, so the choice is free). `nice -n 15`, `--maxWorkers=3`, concurrency 2. Typecheck on. Survivors go back to the test writer.
 - **Covers:** plan-115's list plus `transport/hello.ts`, `transport/sshsig.ts`, `transport/waiting.ts`, `coordination/client-manager.ts`, `desktop/menu.ts`, `programs/chaos/program.ts`, `app/nemesis.ts#check`, `app/nemesis.ts#chaosFrom`, `app/runner.ts`'s Cmd path, and for PR D `programs/notes/program.ts`, `programs/notes/tile.ts`, `programs/notes/root.ts`, `programs/notes/drawn.tsx`, `programs/notes/highlight.ts#colors`, `mcp/tools.ts`, `transport/answer.ts`'s `agentMay`, and `app/runner.ts`'s id, refuse and fold steps. Copied code gets no pass, since it runs here.
 - **Skip list by file, my decision:** plan-115's Q2 list, without `brain-host.ts`, plus `alchemy.run.ts`, `grant.ts`, `chaos-drill.ts`, `tuval/browser/*`, `tuval/electron/*`, `tuval/dom/*`, `launchd.ts`, `entry/*`, `programs/chaos/view.tsx`, `programs/notes/view.tsx`, `next/apps/fabrika/mcp.ts`, `mcp/serve.ts`, `mcp/drive.ts`, `mcp/client.ts`, and the live Nemesis in `brain.ts`. Why: none can be mutated in the test's process. p15, p17, p29, p31, p37, p39, p46, p47, p48, p51, p58, p59, p62 and p63 cover them. Cost: a wrong line in `brain.ts`'s door is only caught if a wire test sees it. That is why the logic lives in `answer.ts` and `client-manager.ts`. Sure: 80%.
-- **Cost, a guess:** 10 to 25 machine minutes per PR. That is not "very fast", so this shape does not meet the new direction.
+- **Cost, a guess:** 10 to 25 machine minutes per PR. That is not "very fast", so this shape does not meet the note; the note's 5-minute cap replaces it.
 
 ## The exam PR, not in this plan
 
 An agent that is not the builder writes it. The owner reads it. It lands first, on current main, and holds:
 
 1. An oxlint JS plugin rule, `no-promises`, blocking in `next/**` leaving out tests. It refuses `async`, `await`, `new Promise`, `Promise.<anything>(...)`, `.then(...)`, `Effect.promise(...)`, and `.catch(...)` unless the object is an imported Effect module. JS plugins are alpha and not type-aware, so that check goes by import name: report any miss.
-2. An oxlint rule, `no-effect-run-outside-edge`, with edges, written as full paths in the rule: `data/project.ts`, `data/ledger.ts`, `app/process.ts`, `transport/gateway.ts`, `transport/hello.ts`, `transport/sshsig.ts`, `brain.ts`, `build.ts`, `window/use-model.ts`, `tuval/browser/key.ts`, `tuval/electron/preload.ts`, `tuval/electron/panel-preload.ts`, `tuval/electron/key.ts`, `tuval/electron/person-key.ts`, `tuval/electron/person-check.ts`, `launchd.ts`, `entry/electron-main.ts`, `alchemy.run.ts`. `dev.ts`, `grant.ts` and `chaos-drill.ts` use `NodeRuntime.runMain` and should need none.
-3. *Dropped 2026-11-02:* an oxlint rule, `no-tea-react`, blocking tea's `useMachine` and `useRuntime` in `next/**`. Its reason, the Strict Mode bug, was fixed in tea 0.22.0 ([demlik PR 774](https://github.com/kamp-us/demlik/pull/774)), and `next/` moves to tea's hook once it takes the Effect engine ([demlik 852](https://github.com/kamp-us/demlik/issues/852)). `useRuntime`'s Promise dispatch is still caught by `no-promises`.
+2. An oxlint rule, `no-effect-run-outside-edge`, with edges, written as full paths in the rule: `data/project.ts`, `data/ledger.ts`, `app/process.ts`, `transport/gateway.ts`, `transport/hello.ts`, `transport/sshsig.ts`, `brain.ts`, `build.ts`, `tuval/browser/key.ts`, `tuval/electron/preload.ts`, `tuval/electron/panel-preload.ts`, `tuval/electron/key.ts`, `tuval/electron/person-key.ts`, `tuval/electron/person-check.ts`, `launchd.ts`, `entry/electron-main.ts`, `alchemy.run.ts`. `dev.ts`, `grant.ts` and `chaos-drill.ts` use `NodeRuntime.runMain` and should need none. *Changed 2026-11-05: `window/use-model.ts` left this list; tea's `send` runs the Effect, so the window has no edge.* *Built 2026-11-05 in P2, as whole paths, with `window/use-model.ts` still on it. The owner made this list the meaning of "edge" that day, and later that day replaced it with edge comments at the line, which P35 builds ([question 13](./tier-1.md#open-questions)).*
+3. *Dropped 2026-11-02:* an oxlint rule, `no-tea-react`, blocking tea's `useMachine` and `useRuntime` in `next/**`. Its reason, the Strict Mode bug, was fixed in tea 0.22.0 ([demlik PR 774](https://github.com/kamp-us/demlik/pull/774)), and `next/` moves to tea's hook once it takes the Effect engine ([demlik 852](https://github.com/kamp-us/demlik/issues/852)). `useRuntime`'s Promise dispatch is still caught by `no-promises`. *Changed 2026-11-03:* tea 0.23.0's `useRuntime` returns a `send` that returns nothing ([demlik PR 856](https://github.com/kamp-us/demlik/pull/856)), so `no-promises` has nothing of tea's hook left to catch.
 4. **An oxlint rule, `no-of`, blocking in `next/**`: no bare `of` and no `xOf` names.** It fires on a name this code declares: a variable, function, type, class, parameter or object key named `of`, or ending in `Of` after a lowercase letter or capital word (`colorsOf`, `IconOf`). It does not fire on a use, so `indexOf` and `for...of` pass. Why: it's a real rule that no check holds, and copies would bring about 55 such names. `next/` at `7c1d073` has none, so its false alarms should be about zero, and the fire count in the PR body measures that. Cost: about 30 lines. Sure: 90%.
 5. **An oxlint rule, `no-hand-tag`, blocking in `next/**` leaving out tests: no hand-written `_tag`.** It fires on any object key or type member named `_tag`, `Schema.Struct({_tag: ...})` included. It does not fire on a read, so `x._tag === "a"` and `const {_tag} = x` pass. One edge, by full path in the rule: `data/log.ts`, since the log stores any fact and knows no cases. Tests are left out because a test feeds raw frames. Why: the owner's pick asks for it, and a written rule alone holds nothing. `next/` at `7c1d073` holds no `_tag`, so the fire count there starts with nothing to misfire on. That is no measure of false alarms, and this plan claims no number. Cost: about 30 lines. Sure: 85%. The doubt is an edge beyond the log; a second one comes back to the owner.
 6. `next/apps/fabrika/src/exam/no-promises.test.ts`: planted lines, including `Effect.catch(...)`, which must not fire. `exam/no-of.test.ts`: planted `colorsOf`, `IconOf` and `{of: ...}`, which must fire, and `indexOf`, which must not. `exam/no-hand-tag.test.ts`: planted `{_tag: "x"}`, `type X = {readonly _tag: "x"}` and `Schema.Struct({_tag: Schema.Literal("x")})`, which must fire, and `Schema.TaggedUnion({x: {}})`, `Fault.cases.abort.make(...)`, `value._tag === "x"` and `{type: "plus"}`, which must not.
 7. `next/apps/fabrika/src/exam/laws-scan.test.ts`, as plan-115, scanning `next/`, since `next/src` goes away.
-8. `next/` layers in `layer-rules.json`, for `pnpm lint:layers`, and `exam/layers.test.ts` for skipped layers until demlik issue 763 lands. Both as in the section above. Package rows in `boundary-rules.json`, with new library types, since tuval imports the library and programs import both.
+8. `next/` layers in `layer-rules.json`, for `pnpm lint:layers`, and `exam/layers.test.ts` for skipped layers until demlik issue 763 lands. Both as in the section above. Package rows in `boundary-rules.json`, with new library types, since tuval imports the library and programs import both. *Changed 2026-11-05:* each package's row lands in the test writer's commit of its first pull request (P6, P11, P13, P14, P17), with the package's bare `package.json`, since code-graph 0.12.0 refuses a row for a folder that is not a package yet ([demlik 868](https://github.com/kamp-us/demlik/issues/868)).
 9. `exam/deps.test.ts`, with `exam/layers.test.ts`, for p65.
 10. `pnpm-workspace.yaml`'s three globs, `vitest.config.ts`'s new globs, and a `next` job in `.github/workflows/check.yaml`: `pnpm exec vitest run next/`, Chromium, and `node next/apps/fabrika/e2e.ts`, a thin runner over each landing's `e2e/*.test.ts`, which passes while there are none. The file is the exam's. This once named one `e2e.test.ts`, which no later landing could have grown. Electron and launchd run on the laptop first; CI gets Electron once xvfb and the keychain are tried, and the PR says so. A check too long to block a pull request moves to the daily run, under the new direction.
 11. PR body: each rule's fire count on PR 223's tree, read by hand. No check blocks until its false alarms are measured.
 12. `fixtures/next/`'s `sshsig` vectors, made once by real `ssh-keygen`, for p27. They are in the exam so the owner reads them, as answered on 2026-11-02.
-13. **React Compiler, decided 2026-11-03 in [its note](../direction/react-compiler.md), strict.** These block from the start, as React's own rules, by the owner's call; item 11's "no check blocks until its false alarms are measured" does not hold for them, though their fires are still counted. A false alarm is a bug to fix in the rule or the code, never a step down to advice. `react/refs`, `react/immutability` and `react/display-name` as errors in `next/**/*.tsx` leaving out tests, and an oxlint JS plugin rule, `one-store-hook`: `useSyncExternalStore` is imported only by `window/use-model.ts`, and a store hook whose value is dropped fires. `lint:compiler`, run by `pnpm lint`: the same compile step the build calls, oxc's native Compiler over `next/**/*.tsx` with `reportDiagnostics`, failing on any skipped function that `compiler-ledger.json` does not name with `"use no memo"`, on a directive with no row, on a stale row, and on any purity finding, with no setting to loosen it. An empty `compiler-ledger.json`; a row is the owner's call, in a change of its own, and the ledger only shrinks. `exam/compiler.test.ts` plants a skipped function, a named one, a directive with no row, a stale row, a clock read in render, a clock read in a handler a view passes down, and a dropped store value. `oxc-transform-react` and `oxc-parser` pinned exact in the catalog. Experiments 194 and 195 found 0 fires of the three React rules and 0 skips on PR 223's two `.tsx` files; oxlint's `react/purity` is left off after one false alarm there (`main.tsx:146`). Cost: about 230 lines: the check and its test as 195 sizes them, and the rule as 194 does. Sure: 75%.
+13. **React Compiler, decided 2026-11-03 in [its note](../direction/react-compiler.md), strict.** These block from the start, as React's own rules, by the owner's call; item 11's "no check blocks until its false alarms are measured" does not hold for them, though their fires are still counted. A false alarm is a bug to fix in the rule or the code, never a step down to advice. `react/refs`, `react/immutability` and `react/display-name` as errors in `next/**/*.tsx` leaving out tests, and an oxlint JS plugin rule, `one-store-hook`: `useSyncExternalStore` is imported nowhere in `next/**`, since tea's `useRuntime` is the one store hook, and a store hook whose value is dropped fires (*changed 2026-11-05*; it once named the stand-in's `window/use-model.ts`). `lint:compiler`, run by `pnpm lint`: the same compile step the build calls, oxc's native Compiler over `next/**/*.tsx` with `reportDiagnostics`, failing on any skipped function that `compiler-ledger.json` does not name with `"use no memo"`, on a directive with no row, on a stale row, and on any purity finding, with no setting to loosen it. An empty `compiler-ledger.json`; a row is the owner's call, in a change of its own, and the ledger only shrinks. `exam/compiler.test.ts` plants a skipped function, a named one, a directive with no row, a stale row, a clock read in render, a clock read in a handler a view passes down, and a dropped store value. `oxc-transform-react` and `oxc-parser` pinned exact in the catalog. Experiments 194 and 195 found 0 fires of the three React rules and 0 skips on PR 223's two `.tsx` files; oxlint's `react/purity` is left off after one false alarm there (`main.tsx:146`). *Built 2026-11-05 in P2 ([PR 401](https://github.com/usirin/tea-fabrika/pull/401)), with two changes by the owner: oxc-transform-react 0.157.0 no longer refuses a clock read in a handler a view passes down, so `react/purity` is on after all, for render, and a rule of ours, `no-clock-in-view`, refuses a clock or random read anywhere in a `next/**/*.tsx` file, handlers included. The Compiler tripwire for that case was dropped. P2 built `one-store-hook` with `window/use-model.ts` as the one file allowed, so its import half still waits on this change.* Cost: about 230 lines: the check and its test as 195 sizes them, and the rule as 194 does. Sure: 75%.
 
 **Where the exam lives: `next/apps/fabrika/src/exam/`,** since the app may see every package, so a bytes test can bundle by name. Why not a package of its own: one more `package.json` for no gain. Cost: the app's folder holds some files that are not the app. Sure: 80%. Saved letters and vectors stay in `fixtures/next/`, where toy data already lives.
 
@@ -1709,11 +1774,11 @@ An agent that is not the builder writes it. The owner reads it. It lands first, 
 3. Ports under the test writer step: `markdown.test.ts`, `highlight.test.ts`, what applies of `index.laws.test.ts`, and what applies of `agents.test.ts`. Each names its source path and commit, as the styling exception does. The laws that must survive: raw HTML never drawn, links only http or https, images as alt text, code as text children; no person-only tool, an agent never writes as the person, a stale base is refused.
 4. `next/apps/fabrika/src/exam/agent-may.test.ts`: the door's list for `as: "agent"`, method by method, read by the owner. Any new method defaults to refused.
 5. `next/apps/fabrika/src/exam/bytes.test.ts`: the brain's bytes hold no `@modelcontextprotocol`; the box's bundle of `@kampus/notes` holds no `micromark`, `mdast` or `@pierre`.
-6. New edge lines, by name: for `no-effect-run-outside-edge`, `mcp/serve.ts`'s `Effect.runPromiseWith`; for `no-promises`, the SDK's async transport in `mcp/serve.ts`, and `import()` in `programs/notes/highlight.ts`. `no-promises`, `no-of`, `no-tea-react` and `no-hand-tag` fire on the copies like any other file: a copy gets no line of its own.
+6. Edges as comments (owner, 2026-11-05, [the brief's question 13](./tier-1.md#open-questions)). *Moved 2026-11-06 to P35, an exam pull request of its own before any product code, since it changes the lint for every product file while this small exam's letters fixture must wait for the letter's final shape.* `fabrika/no-promises` also refuses `Effect.tryPromise`; `fabrika/no-effect-run-outside-edge` drops its 18-path list. A line passes either only under `// oxlint-disable-next-line <rule> -- edge: <why>`, and a disable of either without `edge:` fails. Planted lines for each. And the CI ask: a build commit that adds an edge comment asks the owner, one line each with its reason, `[ok] [no]`. The edges this list once named, `mcp/serve.ts`'s `Effect.runPromiseWith` and the SDK's async transport, and `import()` in `programs/notes/highlight.ts`, come as comments in P25 and P22, each asked. `no-promises`, `no-of` and `no-hand-tag` fire on the copies like any other file: a copy gets no line of its own. (`no-tea-react` was named here; it was dropped on 2026-11-02.) *It said: an edge is a file on the list, and the two files join it by their whole paths.*
 
 **Exam files for the builder.** On today's lane, a builder's diff here ends the lane `stuck` with `exam_touched`, and that is final. Nothing the build did is kept, and the owner hears why. Today's `RULES` list (`packages/pipeline/src/stages/exam/machine.ts`) does not yet name `next/**/*.test.ts`, `fixtures/next/**`, `next/apps/fabrika/src/exam/**`, `boundary-rules.json`, `vitest.config.ts` or `pnpm-workspace.yaml`. A small change to today's version (tracker ticket 122) adds them before PR A's lane starts, and until then those guards do not hold. The test writer only adds new `*.test.ts` files (`.fabrika/fabrika.toml`), so a test it needs elsewhere is new, not moved, and a fixture it cannot write comes from an exam PR. The files: `next/**/*.test.ts`, `fixtures/next/**`, `next/apps/fabrika/src/exam/**`, the oxlint and oxfmt config and plugin folder as PR 226 names them, `vitest.config.ts`, `.github/**`, `layer-rules.json`, `boundary-rules.json`, `pnpm-workspace.yaml`. A package's own `package.json` is the builder's, since its `exports` map says what is public, and p65 reads it. The test versions in `next/packages/tuval/src/headless/` are product code, not exam files; the tests read them only through the names in the interface block.
 
-**Order problems,** plan-115's stand: plan before exam, the exam sees nothing on main, PR 223 goes red when rebased on it, and that is intended. T0 turns p65 green. PR 223's `window/main.tsx` uses `useRuntime`, whose dispatch is a Promise, so `no-promises` is red until the hook lands. That is why the hook comes with T5, in PR A, which already changes that file. Later PRs extend the exam only through a small exam PR of their own. `tuval-*` rows are in the table and rules from the start, so B needs none for layers. It does need one for any new catalog entry. *This once said B needs none at all, which was wrong.*
+**Order problems,** plan-115's stand: plan before exam, the exam sees nothing on main, PR 223 goes red when rebased on it, and that is intended. T0 turns p65 green. PR 223's `window/main.tsx` uses `useRuntime`, whose dispatch is a Promise, so `no-promises` is red until the hook lands. That is why the hook comes with T5, in PR A, which already changes that file. *Changed 2026-11-05:* tea 0.23.0's `send` returns nothing, so the fix is that awaited dispatch becoming a plain `send`, still in T5. Later PRs extend the exam only through a small exam PR of their own. `tuval-*` rows are in the table and rules from the start, so B needs none for layers. It does need one for any new catalog entry. *This once said B needs none at all, which was wrong.*
 
 ## Dropped from plan-115, and what can wait
 
@@ -1737,7 +1802,7 @@ An agent that is not the builder writes it. The owner reads it. It lands first, 
 
 **Kept:** `Ledger.sql` and `.remote`, `LedgerError`, Mailbox, ProcessManager, `stepper`, `ProgramRunner`, `answerFrame`, one runtime per object, no failing Layers, no finalizers, laws p1 to p24, the exam's shape, the mutation seed.
 
-**Waits, with no fact lost, and with a tier now. Each tier here is a proposal, marked under Later tiers:** `keep` and Topic in Tier 2; GitHub as a keys source in Tier 3; C2 to C5, leases, hands as a client and `kill_brain` as a button in Tier 4; limits in Tier 5; D4's poke, the note's T7 as a Sub, paging, and native `<dialog>` and `popover` against Zag in Tier 6; packs, `limits: {cpuMs}` and signing each letter in Tier 7.
+**Waits, with no fact lost, and with a tier now. Each tier here is a proposal, marked under Later tiers:** `keep` and Topic in Tier 2; invite and join in Tier 3 (GitHub as a keys source is dropped, owner, 2026-11-05: [a key per client](../direction/a-key-per-client-and-no-github-trust.md)); the rest of C2 to C5 (supervision trees, sibling strategies, links, trap exit), leases, hands as a client and `kill_brain` as a button in Tier 4, while Tier 1 builds C2 to C5's slice (owner, 2026-11-06); limits in Tier 5; D4's poke, the note's T7 as a Sub, paging, and native `<dialog>` and `popover` against Zag in Tier 6; packs, `limits: {cpuMs}` and signing each letter in Tier 7.
 
 **Waits, with a tier now, since they had none:** split, close and prefix keys in Tier 2; drag, zoom, workspaces and the palette in Tier 6. Today's version does all of these daily, so handover cannot finish without them.
 
@@ -1761,6 +1826,7 @@ No fact is lost by waiting on any of these. Each adds a kind of fact, and old sa
 
 - Tracker as a picker. Its pick is a typed output (biggest call 9); nothing lost.
 - Ticket. It takes a ticket on a typed input (biggest call 9); nothing lost.
+- **Moving today's tracker tickets for `next/` work onto the new ledger is part of building the tracker,** with nothing lost: who filed, when, each comment, each link. Decided by the owner 2026-11-05, with Tier 1's question 12. What it needs: each moved fact keeps today's id, `by` and the referee's time (as `arrivedAt`). Today's facts have no writer's clock, so a moved fact has no `sentAt`, and the new ticket schema must let a moved fact say so rather than invent one. From the tickets filed now it needs only what the lead agent already does: `from` pointing at Tier 1's plan, and the pull request's link and merge written on the ticket, never only in a chat.
 - `fabsh`, the shell in `next/`. Today's version keeps `tsh`. It reads the ports programs declare; nothing lost.
 - A tile can start from a saved line. Records no fact from Tier 1's time; nothing lost.
 - Split, close and prefix keys, since `tracker | ticket` beside `fabsh` needs them. They arrive with the desk.
@@ -1776,12 +1842,12 @@ No fact is lost by waiting on any of these. Each adds a kind of fact, and old sa
 - Docked-Mac password helper. **`saw.check` is kept in Tier 1 for this;** old grants say how their person was checked.
 - GitHub Actions releases. Records no fact.
 - Who may start chaos. `by` comes from the checked key on every letter, kept now; nothing lost.
-- GitHub as a keys source, as a proposal: a collaborator's keys are the first ones not made on this Mac. `founded.keys` is a list; nothing lost.
+- A collaborator's keys, the first ones not made on this Mac, come in by invite and approval, the same flow as a new tab. `founded.keys` is a list; nothing lost. *Changed 2026-11-05 (owner): this said GitHub as a keys source. No key is ever let in because GitHub lists it ([a key per client](../direction/a-key-per-client-and-no-github-trust.md)).*
 
 **Tier 4, hands. Proposed: this splits the old Tier 4 in two, which makes seven tiers.**
 
 - The queue, claims and leases. `by` on each letter is kept now; nothing lost.
-- C2 to C5, as a proposal: work queues and running hands are the first to need them. `by` and `for` are kept now; nothing lost.
+- The rest of C2 to C5: supervision trees, sibling strategies, links and trap exit. Work queues and running hands are the first to need them. Tier 1 builds the slice a skateboard needs (owner, 2026-11-06). `by` and `for` are kept now; nothing lost.
 - Mac and VM hands, and hands as a client, as a proposal. `has` is in every hello from Tier 1; nothing lost.
 - A first tab that runs a job, and how a client says it takes jobs. `has` says what a host can do, so it can't also say that. Proposed, not decided, as `brain-hands-window-agent.md` says. Job code beside a window's key needs a sandbox first. Nothing lost.
 - `kill -9` from chaos through real hands, and `kill_brain` as a button, as a proposal: the button needs hands to do the kill, as biggest call 6 says. The facts have the same shape; nothing lost.
@@ -1791,7 +1857,7 @@ No fact is lost by waiting on any of these. Each adds a kind of fact, and old sa
 
 - Agent box. Records nothing from Tier 1's time; nothing lost. It stays here, though real notes make its trigger closer, as [Agents through MCP](#agents-through-mcp) says.
 - Agent grants in wider use. **The first real use moved up to Tier 1,** on notes only; `as` is why old grants say what they let in.
-- Spend, limits, the `claude` and `codex` programs, hands running agents, chat tile (not a copy of regular chat), asks list. All stay, and limits are a proposal; `by` and `for` on each letter are kept now, so nothing is lost.
+- Spend, limits, the `claude` and `codex` programs, hands running agents, chat tile (not a copy of regular chat; noted 2026-11-05: [talk where you work](../direction/talk-where-you-work.md) decided one thread tile that opens only from a spot, and this changes with it once that note settles), asks list. All stay, and limits are a proposal; `by` and `for` on each letter are kept now, so nothing is lost.
 - Repo programs, in `.fabrika/programs`, lean about 60%. Records no fact from Tier 1's time; nothing lost.
 
 **Tier 6, daily use.**
@@ -1850,15 +1916,15 @@ Plan-115's list stands, with these added:
 17. **Today's rule, tomorrow's reason.** "An agent gets its own run" came from a reason that does not hold in `next/`. Porting the rule would have hidden the agent's doc. Resolved: biggest call 16. Rethink-do-not-port covers it, and the plan names the difference.
 18. **A written rule with no home.** "No `xOf` names" lived only in private memory. No check held it, and no note or `AGENTS.md` said it, so a copy would have passed every step. Resolved: `no-of` in the exam PR, and a line in `AGENTS.md`. The steps have no moment that asks "where does this rule live?".
 19. **A plan can't assume what strict `node_modules` stops.** A root `package.json` that depends on a package makes it resolve from every folder below. So a law on `package.json` alone would have looked strong and stopped nothing. Resolved: p65 reads the imports too. Exam laws should plant the thing they claim to stop.
-20. **An exam needs a home before the code has one.** The exam PR writes to `next/apps/fabrika/src/exam/` before T0 makes that package. Resolved: it runs from the root's vitest, with the root's tools, until T0.
+20. **An exam needs a home before the code has one.** The exam PR writes to `next/apps/fabrika/src/exam/` before T0 makes that package. Resolved: it runs from the root's vitest, with the root's tools, until T0. *As built, 2026-11-05: P2 gave `next/apps/fabrika` a `package.json` holding only the exam's dependencies, and `boundary-rules.json` its `next-app` row.*
 
 ## What this plan cannot tell us
 
 - **Nothing was built or run for this plan,** except a scratch file that typechecks and runs the [Tags](#tags) schema sketches on effect 4.0.6. It rests on reading, plan-115's probes and past experiments. No fresh number.
 - **What `no-hand-tag` cannot see.** A new union hand-written under another key, such as `kind`, passes the rule. Review has to catch it. Whether the rule misfires on real code is not measured yet.
-- **Whether a non-extractable key in IndexedDB survives** on Chromium, Safari or Firefox over reload and restart. The browser note says not tried. T5 spikes Chromium only. Whether Safari treats 127.0.0.1 as secure is a guess.
-- **Whether `safeStorage` is smooth** under Playwright, and whether a dev Electron signed by a self-made card still prompts for the Keychain. Only a run shows it, and the window key has a way out.
-- **Whether launchd takes a brain from an unsigned build,** whether Touch ID prompts from it, and whether IndexedDB holds a key in a local page. T8's spikes tell, and each has a way out.
+- **Whether a non-extractable key in IndexedDB survives** on Chromium, Safari or Firefox over reload and restart. *Chromium 156 answered yes on 2026-11-05 (P3, [experiment 215](../../experiments/215-browser-key-survives-reload.md)), with the key tied to its exact origin and port.* Safari, Firefox and phones were not run. Whether Safari treats 127.0.0.1 as secure is a guess.
+- **Whether `safeStorage` is smooth** under Playwright, and whether a dev Electron signed by a self-made card still prompts for the Keychain. Only a run shows it, and the window key has a way out. *P4 ran it on 2026-11-05: smooth on one unsigned binary, with no Keychain prompt; Playwright's mock keychain does not reach the async API. A rebuilt or re-signed binary was not tried.*
+- **Whether launchd takes a brain from an unsigned build,** whether Touch ID prompts from it, and whether IndexedDB holds a key in a local page. T8's spikes tell, and each has a way out. *P4, 2026-11-05: launchd yes, `canPromptTouchID()` yes; `promptTouchID` and the hidden page were not tried, since neither was needed.*
 - **How the menu bar feels.** Nobody has built one here. No mockup and no run.
 - **Whether a wait parked as data works on Cloudflare,** across a gateway and the project. Experiment 174 saw it in one object, in Miniflare. T11's run shows it on the cloud.
 - **React's memory with many hidden tiles, and all of it on Safari.** The probes covered Chromium, part of Firefox, and toy trees.
@@ -1877,7 +1943,7 @@ Plan-115's list stands, with these added:
 - **Whether chaos finds real bugs.** A clean run means little until the plant in p39 shows it can catch one.
 - **A seed does not replay a run.** Only the fault list repeats.
 - **Whether oxlint's alpha plugins hold.** PR 226's first count is the evidence.
-- **Whether code-graph and esbuild behave across the new packages as their source reads.** Neither was run for this plan. T0 runs both first, and code-graph's handling of two-level workspace globs is the part least sure.
+- **Whether code-graph and the bundler behave across the new packages as their source reads.** Neither was run for this plan; the bundler is Rolldown since 2026-11-05. P6 runs code-graph first, P12 the build, and code-graph's handling of two-level workspace globs is the part least sure.
 - **Whether `.` of `@kampus/libfabrika` stays small,** or a program keeps needing lower names. Notes is one customer. Tier 2's programs tell.
 - **Whether a hello's `has` stays true.** A tab can lose the screen when it's hidden, and Touch ID goes on a docked Mac, while a hello is said once. Nothing reads it yet, so nothing breaks. Whoever reads it first settles this.
 - **The size.** 50% sure, as above.
@@ -1904,5 +1970,6 @@ The owner approved what Tier 1 builds on 2026-11-01. What is still open is in [t
 - **Q14, hosts:** a host is a place hands can run: a Mac, a VM or a browser profile. Hands and window are jobs, not places. In Tier 1, `Backend` becomes `Host`, the hello's `has` carries each Layer's list, `saw` records it, and the menu bar shows hosts. The hello's `backend` and `Host`'s field becoming `platform` is my call, 80%. Tiers can be restructured, and size never pushes work out of one.
 - **Q15, the tag key:** `_tag` for every union we define, never by hand. tea's Msgs and Cmds keep `type`, and third-party shapes keep theirs. A lint rule holds it. See [Tags](#tags).
 - **2026-11-02, the brief's questions 5 to 8:** the styling copy question is moot since PR 308; `next/` uses Manti; saved vectors and letters come in the exam PRs; configurable keys needs no owner call. Each is in [the brief](./tier-1.md#open-questions).
+- **2026-11-05, the brief's questions 9 to 13 and 18, and two clashes:** edges are opt-in comments at the line, not a path list; the first method is `initialize`, and `Hello` stays the schema's name; a key per client, the person key grants in SSHSIG's shape, and GitHub is never a way in ([the note](../direction/a-key-per-client-and-no-github-trust.md)); an entry's clocks are `arrivedAt` and `sentAt` in `next/`, which were `at` and `said`; `cause` on the entry in P6, with laws p67 to p69; a tracker ticket per pull request; P14 imports the design package, which P31 builds first; and a unit of work is a commit: each exam change is the test writer's commit, never the builder's, and CI walks the commits ([the note](../direction/a-unit-of-work-is-a-commit.md)).
 
 **Left open until Tier 6, as a proposal, no answer needed now:** native `<dialog>` and `popover` against Zag.

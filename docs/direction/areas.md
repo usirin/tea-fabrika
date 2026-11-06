@@ -57,7 +57,7 @@ p, Enter         area_picked {area: 1}; the row and the ticket drop the "?"
 - **Today's version (`programs/tracker`, `programs/ticket`, `packages/pipeline`, `apps/fabrika`):**
   built first, in four pull requests. See [the build](#the-build-in-todays-version).
 - **`next/`:** the same facts when its tracker is built, in a later tier. There every fact's case
-  key is `_tag`, the ticket's facts too, and each entry also keeps `said`, the writer's own clock.
+  key is `_tag`, the ticket's facts too, and each entry also keeps `sentAt`, the writer's own clock (`said` until 2026-11-05).
   Nothing about areas is in `next/` yet.
 
 ## The shape
@@ -100,7 +100,7 @@ const TicketArea = Schema.Union([
   may write its `guess`.
 - **`by` and `at`.** Each row keeps its writer (`by`, a person or an agent for a person) and the
   ledger's own time (`at`), as every ticket fact does today (`packages/pipeline/src/tickets/ticket.ts:481-489`).
-  Today's rows have no `said`; `next/`'s do.
+  Today's rows have no writer's clock; `next/`'s keep it as `sentAt`.
 - **A number, not a name.** A ticket holds the area's number, so a rename touches no ticket, and a
   merge moves every ticket at once, as Jira's delete "substitute[s]" another component [j2]. The
   name a ticket was guessed under stays in the log.

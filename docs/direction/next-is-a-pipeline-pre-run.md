@@ -33,7 +33,7 @@ ticket -> triage -> plan (the owner approves its Properties)
        -> build: cannot touch the tests
        -> mutation step: StrykerJS, a fixed sample of about 150
        -> one review of the whole diff, by another agent
-       -> push -> the owner's yes -> merge
+       -> push -> the lead agent's read, green CI, leak grep -> merge
 ```
 
 - **Each step has its own agent.** The one that writes the code writes no law, no
@@ -52,11 +52,17 @@ ticket -> triage -> plan (the owner approves its Properties)
 ## How a change lands
 
 - **A live run on a target repository:** only through the ship stage.
-- **A pull request that went by hand:** the owner's yes, with CI green for code. Then an agent runs
-  the merge, after a leak grep.
+- **A pull request that went by hand:** it follows [autonomy is measured trust](./autonomy-is-measured-trust.md):
+  a merge does not wait on the owner. One review by a separate agent says merge-ready, CI is green,
+  and the lead agent reads the diff and runs a leak grep, then merges and writes the `MergeRow`.
+  Still the owner's: an exam pull request, the read of any exam path a pull request touches
+  ([a unit of work is a commit](./a-unit-of-work-is-a-commit.md)), an edge comment a build adds,
+  and any new design call. *Changed 2026-11-05 (owner): this said every such pull request waited
+  on the owner's yes.*
 - **Rows that only record what happened (field logs, index rows):** they merge after the leak grep,
   with no yes.
-- **Direction notes and plans:** they still get the owner's yes.
+- **Direction notes and plans:** a note that records an owner's decision, or a plan that only builds
+  decided notes, merges as above. A new design call still gets the owner's yes.
 
 ## Changed
 

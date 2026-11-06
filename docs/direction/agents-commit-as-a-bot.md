@@ -3,15 +3,43 @@
 **Proposed 2026-11-05.** The owner decided the direction on 2026-11-05, marked decided below:
 
 - **Decided, agents commit and push as a bot.** An agent's commit is authored by a GitHub App's
-  bot identity (a name such as `fabrika[bot]`), never by the person's account. GitHub itself then
+  bot identity (`fabrikalfa[bot]`, named 2026-11-06), never by the person's account. GitHub itself then
   shows a person's work apart from an agent's.
 - **Decided, the person rides along.** The person the agent works for is named in a
   `Co-authored-by` trailer, so the commit still shows up as theirs too.
-- **Decided, one shared bot.** There is one fabrika bot for everyone, not one per person. Which
-  agent and whose it is ride in the commit, stamped by the host.
+- **Decided, one shared bot.** *Narrowed 2026-11-06, below: one bot for every project its owner
+  runs fabrika on, not one for everyone.* Which agent and whose it is ride in the commit, stamped by
+  the host.
 
-Not walked yet: how one shared app keeps one person's key from pushing to another's repos, where
-the app's key lives, and the branch rules a bot needs (all under Open, below).
+- **Decided 2026-11-06, a stand-in token in the box.** The app's key stays with the host (in
+  `next/`, the brain), outside every box. In the box, `git` and `gh` see a fake token; a proxy at
+  the box's network edge swaps it for a real 1-hour token limited to one repo and one branch.
+  Agents keep plain `git push` and `gh`, so people whose agent skills already use them move over
+  without change.
+- **Decided 2026-11-06, Verified on main only, for the first version.** What lands on main is
+  GitHub's squash commit, which GitHub signs. Commits on a pull request's branch carry no GitHub
+  badge. Replaying pushes through GitHub's API was turned down, since it rewrites the agent's
+  commits under new hashes; so was a machine user holding the keys, since every person would need
+  a second GitHub account ([experiment 212](../../experiments/212-fabrika-bot-commits.md),
+  calls 2 and 4).
+
+- **Decided 2026-11-06, the bot is `fabrikalfa`,** owned by the kamp-us organization and public.
+  It is one bot for every project its owner runs fabrika on, not one bot for everyone; this
+  replaces "one shared bot" above. A self-hoster makes their own app.
+- **Decided 2026-11-06, one key, in the brain.** The app's key sits in the brain, on Cloudflare in
+  its Secrets Store, shared by every worker in one account. A person invited to a project gets a
+  token through that project's brain, after it checks its member list. Nobody else holds a key.
+- **Decided 2026-11-06, pull requests as me or as the bot.** A setting per person. Commits are
+  always the bot's. "As me" opens the pull request with a sign-in token of the person's that the
+  app gets once through GitHub's own sign-in, kept in the brain like the app's key.
+- **Decided 2026-11-06, the repo's rules hold the bot to its own branches.** `main` only through a
+  pull request; outside `fabrikalfa/*` only people may push. Any owner of kamp-us can make a key, so
+  these rules are what limit a key.
+- **Step proofs go in git notes,** not in the commit's signature slot, so GitHub shows no
+  "Unverified" (the Tier 1 plan's P32). [Experiment 212](../../experiments/212-fabrika-bot-commits.md)
+  section 10 has what the first real app showed.
+
+Not walked yet: the branch rules on a repo other than this one (under Open, below).
 
 Built from [experiment 211](../../experiments/211-started-claude-sandbox.md), which asked what the
 claude `@claude` starts may do in the person's repo. It is not a measurement.
@@ -20,7 +48,7 @@ claude `@claude` starts may do in the person's repo. It is not a measurement.
 A sketch, both versions. What one agent commit carries. The host writes every line below the
 subject; the agent never names itself.
 
-author     fabrika[bot] <BOT_USER_ID+fabrika[bot]@users.noreply.github.com>
+author     fabrikalfa[bot] <353269643+fabrikalfa[bot]@users.noreply.github.com>
 subject    map: take a ticket from a pipe
 
 Co-authored-by: <the person> <their noreply address>
@@ -61,15 +89,16 @@ keys are a sketch until a plan checks them against git's trailer rules and the i
 
 ## Open
 
-1. **One shared app, each person's own reach.** Two people sharing a ledger each answer for their
-   own agents. One app can hold several private keys, but a key may be able to mint a token for
-   any install of the app. How each person's host stays inside their own repos is a study that
-   reads GitHub's App docs.
-2. **Where the app's private key lives.** The host holds it, outside any agent's sandbox, the way
-   it holds the person's login today.
+1. **The box's edge and a remote brain.** The stand-in token is swapped at the box's edge, which
+   asks the brain for a real token. How the edge reaches a brain on Cloudflare, and proves which
+   agent asks, is not designed.
+2. **Who writes the trailers.** With plain `git push`, the commit is made in the box, so
+   `Fabrika-Agent` and `Fabrika-Input` are no longer written by the host when it builds the
+   commit. How the host still stamps them, and checks them at the proxy, is open.
 3. **Branch rules.** A rule that blocks a bot's push or wants a review must let the bot through,
    and no agent approves (AGENTS.md).
-4. **Signing.** Whether the bot's commits show as verified on GitHub, and how.
+4. **Pull requests as the person.** Whether GitHub marks a pull request the app opens for a person
+   with the app's name is not checked.
 
 ## What would change it
 
@@ -78,5 +107,6 @@ new paid accounts, and nothing that needs a second server to start.
 
 ## What it cannot tell us
 
-Nothing here was run. Whether `Co-authored-by` with the bot as author shows the person on the
-commit the way the owner expects is a guess until one test commit shows it.
+The first pushes with the real app ran on 2026-11-06 ([experiment 212](../../experiments/212-fabrika-bot-commits.md)
+section 10). Whether `Co-authored-by` with the bot as author shows the person on the commit page
+the way the owner expects was not looked at on the page yet.

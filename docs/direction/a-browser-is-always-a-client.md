@@ -23,7 +23,7 @@ Electron). The brain checks the page's origin. The window row below and the
 //   VM hands       WebSocket to gateway:vm        an SSH key file        git, files, docker
 //   browser tab    WebSocket to gateway:<tab>     WebCrypto (Ed25519)    notify, clipboard
 //   window         Unix socket to its own hands   (its hands sign)       the same messages, a local shortcut
-{type: "hello", version: 1, key: "ed25519:...", signed: "...", has: ["notify"]}
+{method: "initialize", params: {versions: [1], key: "ed25519:...", signed: "...", has: ["notify"]}} // was `type: "hello"`; `initialize` decided 2026-11-05
 "ping" // a text message; the gateway answers "pong" without running its code
 ```
 
