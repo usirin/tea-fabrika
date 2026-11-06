@@ -399,7 +399,8 @@ Write-ups are read by busy people, some of them not native English speakers.
   often. No prompt on opening the app, nothing hourly. The protection goes in code, not in a
   chore.
 - **No new paid accounts** until fabrika is a product. Design for the free route and say
-  what it can't do.
+  what it can't do. Cloudflare is the exception: fabrika assumes its paid Workers plan, such as
+  its Secrets Store (owner, 2026-11-06).
 - **All in on Manti.** Never "Manti or native": a better way goes into Manti by pull
   request, tried first with a `pnpm patch` ([UI on Manti](./docs/direction/ui-on-manti.md)).
 - **Keep the platform's defaults.** On a Mac, closing a window keeps the app running and
