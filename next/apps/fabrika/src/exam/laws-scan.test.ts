@@ -35,7 +35,7 @@ const codeFiles = (dir: string): ReadonlyArray<string> =>
 			});
 
 /** The names a file imports from, read from lines that start with `import` and name a `from`. */
-const importsOf = (file: string): ReadonlyArray<string> =>
+const importsInFile = (file: string): ReadonlyArray<string> =>
 	[
 		...readFileSync(file, "utf8").matchAll(/^[ \t]*import\b[^;]*?\bfrom\s*["']([^"']+)["']/gm),
 	].flatMap((m) => (m[1] === undefined ? [] : [m[1]]));
@@ -56,7 +56,7 @@ const lawless = (next: string): ReadonlyArray<string> => {
 					basename(file).startsWith(`${stem}.`) &&
 					basename(file).endsWith(".laws.test.ts"),
 			);
-			return !laws.some((file) => importsOf(file).includes(PBT));
+			return !laws.some((file) => importsInFile(file).includes(PBT));
 		})
 		.map((file) => relative(next, file).split(sep).join("/"))
 		.sort();

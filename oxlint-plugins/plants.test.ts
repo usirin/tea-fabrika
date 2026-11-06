@@ -247,6 +247,13 @@ describe("each rule refuses what it is there to refuse", () => {
 			"no-redacted-value",
 			"no-project-settings",
 			"no-bare-disable",
+			// next/'s exam rules, planted at next/ paths in next/apps/fabrika/src/exam/.
+			"no-promises",
+			"no-effect-run-outside-edge",
+			"no-of",
+			"no-hand-tag",
+			"one-store-hook",
+			"no-clock-in-view",
 		];
 		const missing = Object.keys(plugin.rules).filter(
 			(rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),

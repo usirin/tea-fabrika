@@ -9,6 +9,7 @@
 # experiments/174-effect-on-cloudflare: one experiment's harness, so Effect's plumbing can be bundled into a Durable Object.
 # experiments/195-oxc-toolchain: one experiment's harness, so the React Compiler's Rust port, Rolldown and Vite stay out of the app.
 # oxlint-plugins: this repo's own lint rules, type-checked and tested like the rest.
+# next/apps: the new version's app (AGENTS.md, "Two versions, side by side"). So far its exam folder.
 packages:
   - apps/*
   - packages/*
@@ -56,6 +57,11 @@ catalog:
   oxfmt: 0.75.0
   oxlint: 1.90.0
   '@oxlint/plugins': 1.90.0
+  # The React Compiler without Babel, for next/'s compile step (next/apps/fabrika/src/exam/compiler.ts,
+  # docs/direction/react-compiler.md). oxc's Rust port and its parser, from oxlint's own repository.
+  # Held exact: 0.x and weekly, and the port is "experimental".
+  oxc-parser: 0.157.0
+  oxc-transform-react: 0.157.0
   # Held on the SDK's 2.x line: OpenTelemetry 3 needs api 1.10, and @effect/opentelemetry 4.1.1 asks for
   # resources below 3. On that line sdk-trace-base 2.12.0 asks for api below 1.10, so api stays 1.9.1.
   '@opentelemetry/api': 1.9.1
