@@ -59,6 +59,29 @@ more on 2026-11-05, each marked decided below:
   sandbox = "workspace-write"      # or "read-only", "danger-full-access"
   ```
 
+- **Decided 2026-11-05, talking at a spot is a mix: the box first, then one thread tile.** The
+  owner walked a private Design canvas that drew three ways (the box alone, a thread view alone,
+  and a mix) with a clickable try-it page, and picked the mix. The box at the spot holds the first
+  1 or 2 turns. After that the talk moves to one thread tile, reused for every spot
+  (`reuse: "program"`, [program guidelines](./program-guidelines.md)), opened by open or focus
+  beside. The tile always names its spot ("claude on plan · turn 4"); there is no way to open a
+  blank one. Esc and `C-b ;` go back to the spot. tsh stays the place for open-ended talk. So
+  every conversation is about something: tsh, or a spot.
+- **Decided 2026-11-05, never twice.** While the thread tile shows a thread, the spot shrinks to a
+  chip, "2 replies · in t3", and does not show the talk again.
+- **Decided 2026-11-05, what a spot is.** A spot is a program's `location`
+  ([program guidelines](./program-guidelines.md), G2) plus the version it came from (the lane, or
+  the plan version), and it may be a list of several rows. When the spot goes away, as on a rerun,
+  the thread says "old lane" and its way back opens that lane.
+- **Decided 2026-11-05, the thread tile also lists the threads on this ticket.**
+- **Decided 2026-11-05, `@` does not clash.** `packages/fabrika/src/shell/grammar.ts` reads no `@`.
+
+The canvas's lean for the mix was 70% sure. It is a drawing: nothing ran in the app.
+
+This walks back one thing, and only in how it reads: "no chat program" now means "no conversation
+without a spot or a tile". tsh is still the chat for open-ended talk, and the thread tile is not a
+chat program, since it cannot open without a spot. Nothing else above changes.
+
 Proposed: clicking a presence label as one way to talk at a spot, the syntax, the frame owning the
 box, the keys, and the accessibility wiring.
 
@@ -77,8 +100,8 @@ tsh$ git log --oneline -3                          you keep working; your prompt
 
 - **Today's version** (tsh in `packages/fabrika/src/shell/`, the frame in `apps/fabrika`): this
   note.
-- **`next/`:** the same rules in `fabsh` and Tuval's frame, read as a lesson. The spot needs a
-  design in `next/` first (below).
+- **`next/`:** the same rules in `fabsh` and Tuval's frame, read as a lesson. The spot's shape
+  (below) is written for both, on `next/`'s `location`.
 
 ## `@claude` in tsh
 
@@ -143,7 +166,8 @@ not only tsh.
 
 In any program, select a thing and press a key, or click a presence label. A small box opens
 anchored there. The spot rides with the message as context, so "why is this slow?" needs no
-copy-paste. The reply stays at the spot as a short thread, and is not copied into tsh.
+copy-paste. The reply stays at the spot for the first 1 or 2 turns, then the talk moves to the
+thread tile (below). It is never copied into tsh.
 
 ```text
 A sketch, today's version. trace in t2 beside tsh in t1; ticket #7's lane, the plan step.
@@ -168,13 +192,64 @@ the span shows "1 reply"                a polite status says "claude replied on 
   on a selection ([Docs](https://support.google.com/docs/answer/179738)).
 
 ```ts
-// A sketch, both versions. What a program tells the frame about its selection. Needs a design.
+// A sketch, both versions. What a program tells the frame about its selection (decided
+// 2026-11-05). `program` and `location` are G2's words; `Spot`, `Version` and `name` are made up.
+const Version = Schema.TaggedUnion({
+	lane: {lane: Schema.String}, // the lane run it came from; a rerun is a new lane
+	plan: {plan: Schema.Number}, // the plan version: 2
+});
 const Spot = Schema.Struct({
 	program: Schema.String, // "trace"
-	id: Schema.String, // the program's own id for the thing: "span:7f3a"
+	location: Schema.Unknown, // the program's own location.data decodes it, as an open does
+	version: Version,
 	name: Schema.String, // what a person and a screen reader hear: "plan · turn 4"
 });
+const Spots = Schema.NonEmptyArray(Spot); // several rows selected: one thread about all of them
+
+// One value, traced: the span in ticket #7's lane, plan step, turn 4.
+// {program: "trace", location: {span: "7f3a"}, version: {_tag: "lane", lane: "..."},
+//  name: "plan · turn 4"}
+// After a rerun the lane is gone: the thread says "old lane", and back opens that lane.
 ```
+
+## The thread tile, and replies
+
+Decided 2026-11-05, except replies, which are a lean.
+
+```text
+A sketch, today's version. The same span, turn 3: the talk outgrew the box.
+claude replies a second time            the box at the span holds 2 turns; the next send opens
+                                        the thread tile beside, by open or focus: "claude on plan · turn 4"
+the span                                shrinks to a chip "2 replies · in t3"; the talk is shown once
+Esc, or C-b ;                           back to the span, focus where it was
+another span, another talk              the same thread tile, now on that spot; one tile per workspace
+```
+
+```ts
+// A sketch, both versions. The thread tile in program guidelines' shape. `thread`,
+// `ThreadLocation` and its fields are made up.
+const ThreadLocation = Schema.Union([
+	Schema.Struct({spots: Spots}), // one thread, always on a spot
+	Schema.Struct({ticket: Schema.String}), // "threads on this ticket": the list, never a blank chat
+]);
+const thread = defineProgram({
+	name: "thread",
+	location: {data: ThreadLocation, select: (m) => m.location},
+	reuse: "program", // open or focus: every spot's talk lands in the same tile
+	// ...machine, msg, view as any program
+});
+```
+
+- **It always names its spot,** in its title and its accessible name. With no spot, there is
+  nothing to open: the palette has no "new thread" row.
+- **The same tile lists the threads on this ticket,** one row per spot, so a talk from another tile
+  is found again.
+- **When the spot goes,** the thread stays and says "old lane"; its way back opens that lane's
+  location, not today's.
+- **Replies (a lean, not decided, 70%).** A reply marks its spot "N replies", in words. A polite
+  status line says it once, without moving focus. The ticket's thread list shows it. A reply never
+  goes to the inbox, unless it ends in a real question; then that question becomes an ask
+  ([the ask desk](./ask-desk.md)).
 
 ## Why
 
@@ -212,36 +287,41 @@ Linear keeps the agent's reply on the issue; ours stays at the spot.
 ## Where this differs from settled notes
 
 - **[An agent is a program](./agents-are-programs.md)** (proposed) gives `claude` and `codex` a
-  chat window. This note says fabrika has no chat program. If the owner settles this note, that part
+  chat window. This note says fabrika has no chat program, read since 2026-11-05 as no
+  conversation without a spot or a tile. If the owner settles this note, that part
   of the older one goes; its "an agent is a program" part stays.
 - **The plan's Tier 5 line** (the closed [PR 192](https://github.com/usirin/tea-fabrika/pull/192)'s
   code "rethought when a chat window needs it") changes the same way.
 
 ## Open
 
-- **Does `@` clash with anything tsh reads today?** A read of `grammar.ts` on main found no `@`. A
-  `@` inside a flag's value, such as an email, is not checked.
-- **Detach a spot thread into a bigger view, and back.** Anchored Conversations could detach and
-  reattach; AnchoredAI advises a way between the two. No lean.
-- **What "a spot" is, as data.** Any program must name a thing on its screen, stably across
-  redraws. It needs a design before talking at a spot can work
-  ([the plan](../plan/README.md#where-we-are-now)).
-- **Whether people miss a reply left only at the spot,** especially from another tile.
+- **Is the box alone enough?** If most talks stay 1 to 3 turns, the thread tile is extra. A log of
+  real spot talks, turns per talk, settles it.
+- **The hearable name of a spot that is not text,** such as a span or a chart point. `name` above
+  is a placeholder.
+- **What the agent may see of the spot.** That is the box's call
+  ([programs run in a box](./programs-run-in-a-box.md)), not this note's.
+- **Replies:** the lean above (70%). Whether people miss a reply left at a spot in another tile
+  is not known.
+- **A `@` inside a flag's value,** such as an email, is not checked.
 
 ## What it costs
 
 A guess. `@` in tsh, about 200 lines with tests. The frame's box, the spot data and its keys, about
-500. The spot design first, about 1 agent hour of reading and drawing. Sure: 45%, since the spot
-is not designed.
+500. The thread tile, the chip and the ticket's thread list: about 450 more than the box alone,
+the canvas's own guess. Sure: 50%; the spot's shape is now set, but nothing is built.
 
 ## Made up here
 
-The `C-b @` key, `TextField` and its props, the `@` menu's row words, `Said` and its cases, `Spot`
-and its fields, the refusal's words, the span names past the lane's real steps, claude's words, the
+The `C-b @` key, `TextField` and its props, the `@` menu's row words, `Said` and its cases, `Spot`,
+`Spots`, `Version`, `name`, `thread`, `ThreadLocation`, the chip's and title's words, the refusal's
+words, the span names past the lane's real steps, claude's words, the
 ids, and the vitest path.
 
 ## What it cannot tell us
 
+- The mix was picked from a private Design canvas and its try-it page. That is a drawing: nothing
+  ran in the app, and no real spot talk was logged, so the 1-or-2-turn cut is a guess.
 - Nothing ran. Nobody has tested `@` addressing an agent inside a live shell, with both writers in
   one scrollback. No study either.
 - Talking at a spot in a non-text program (a span, a log row) is not studied. Text and images are.
