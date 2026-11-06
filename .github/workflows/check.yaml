@@ -153,3 +153,31 @@ jobs:
           else
             pnpm exec vitest run --shard "$SHARD"
           fi
+
+  # next/, the new version (docs/plan/tier-1.md). Every test under next/ runs on every pull request:
+  # the exam's tests read files and the later ones start a brain, so `--changed` in the test job,
+  # which follows imports, would not pick them up. Then the thin runner over next/apps/fabrika/e2e/,
+  # which passes while that folder is empty. Chromium is fetched only once an e2e file exists, by
+  # the app's own Playwright. Electron and launchd run on the laptop first; CI gets Electron once
+  # xvfb and the keychain are tried.
+  next:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26.13.0
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run next/
+      - name: chromium
+        if: hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''
+        run: pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
+      - run: node next/apps/fabrika/e2e.ts
