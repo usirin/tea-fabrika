@@ -1,11 +1,26 @@
 # The cloud is one more host
 
-**Proposed 2026-10-27 by the owner, for the next iteration.** Not built. The
-first shared ledger ships as it is today
-([the ledger goes to Cloudflare](./the-ledger-goes-to-cloudflare.md)); this
-note says what replaces its shape after that. The design draft below was
-added the same day. The owner walked it on 2026-10-30; the open questions
-now carry proposed answers (end of the note). Still proposed.
+**Part decided, part proposed. Not built.**
+
+- **Decided 2026-10-30:** [the brain and the hands](#decided-2026-10-30-the-brain-and-the-hands).
+  A program instance is a Durable Object, all machine work is a Cmd the hands do, the
+  names are brain and hands, and the brain is workerd everywhere. Single-purpose objects
+  plus one project object, decided the same day and changed 2026-10-31.
+- **Decided 2026-10-31:** [the app layer](#decided-2026-10-31-the-app-layer), A1 to A5,
+  layer 4 of the five layers. A4, packs, is decided only in part, as its section says.
+- **Still proposed:** the host draft of 2026-10-27, from
+  [the draft](#the-draft-one-host-built-for-the-strictest-place) to
+  [notes this draft disagrees with](#notes-this-draft-disagrees-with), the
+  [proposed answers](#proposed-answers-2026-10-30-walk) from the 2026-10-30 walk, and each
+  part a section marks proposed.
+
+*Written 2026-11-05: this header said "Still proposed" for the whole note, which was
+wrong for the parts above since 2026-10-30 and 2026-10-31.* The note began as the
+owner's proposal of 2026-10-27, for the next iteration: the first shared ledger ships
+as it is today ([the ledger goes to Cloudflare](./the-ledger-goes-to-cloudflare.md)),
+and this note says what replaces its shape after that. The design draft below was
+added the same day. The owner walked it on 2026-10-30, and the open questions carry
+proposed answers (end of the note).
 
 *Changed 2026-11-01: the sketches below say `_tag` where they said `kind`, as Tier 1's
 approval settled. Today's code keeps `kind`.*

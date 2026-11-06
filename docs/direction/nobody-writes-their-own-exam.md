@@ -1,6 +1,7 @@
 # Nobody writes their own exam
 
-Decided 2026-10-22. How it is enforced is **proposed**.
+Decided 2026-10-22. How it is enforced is **proposed**, except the CI half, which the owner replaced
+on 2026-11-05 with [a unit of work is a commit](./a-unit-of-work-is-a-commit.md).
 
 ```ts
 // A sketch. The build stage's Check move, after the agent's draft:
@@ -27,8 +28,11 @@ if (touched.length > 0)
   Proposed, in two places:
   1. **In the build stage.** A draft whose diff touches an exam file ends as
      `ask:owner:check_change`, never `done`.
-  2. **In CI.** A pull request that changes code and its exam together fails.
-     An exam change goes in a pull request of its own.
+  2. ~~**In CI.** A pull request that changes code and its exam together fails.
+     An exam change goes in a pull request of its own.~~ *Replaced 2026-11-05 (owner):* an exam
+     change is its own commit, by an agent that is not the builder, inside the same pull request.
+     Each step signs its commits with its own key; CI verifies the signatures, and a `build`
+     commit that touches an exam path is `stuck` ([a unit of work is a commit](./a-unit-of-work-is-a-commit.md)).
 - **One list says which paths are the exam**, kept in one file, so both places
   read the same list.
 - **How sure:** 90% on the rule. 75% on the two places. The doubt is the CI

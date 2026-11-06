@@ -159,7 +159,7 @@ A program in Tier 6, under "Pipeline stages, schedules" in [the tiers](../plan/t
 type Entry = {
 	gap: Gap["id"]; // the stable id below: a repeat is dropped, never queued twice
 	from: {_tag: "pr"; pr: number} | {_tag: "sweep"; day: string};
-	at: number; // the referee's clock: the queue's order
+	arrivedAt: number; // the referee's clock: the queue's order (`at` until 2026-11-05)
 };
 type Queue = {waiting: Entry[]; running: {batch: Entry[]; hands: string} | null};
 // One day, made-up numbers: a pull request left 40 lines; the sweep adds 3,000 mutants, 2,960 of them already known

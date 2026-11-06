@@ -207,7 +207,7 @@ decodes it. A mode in that model stays with its window, or goes to null with a l
 
 ## Protocol first
 
-Three facts, plus one field. Each entry also has the ledger's own `by`, `at` and `said`.
+Three facts, plus one field. Each entry also has the ledger's own `by`, `arrivedAt` and `sentAt` (`at` and `said` until 2026-11-05).
 
 ```ts
 // A sketch. Effect Schema writes `_tag`. Tag spelling follows the ledger's own rule.

@@ -43,7 +43,7 @@ client." When one kind is meant, name that kind.
 | host | a place hands can run | "the Mac is a host, and so is that Chrome profile" |
 | capabilities | what a host can do | "only the Mac has git" |
 
-A ledger entry's `said` is "the writer's own clock".
+A ledger entry's `sentAt` is "the writer's own clock", and its `arrivedAt` the referee's (renamed from `said` and `at` on 2026-11-05).
 
 ## Hands and window are jobs, not places
 
