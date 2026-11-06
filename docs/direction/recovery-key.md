@@ -141,10 +141,14 @@ What exists only at the moment it happens, and is lost forever if not written th
   writing it would let anyone grow the log. Sure: 80%.
 - **At email setup:** which address, and when it was checked (`verified`, in the
   [email section](#email-recovery-decided-two-unknowns-open)).
-- **A lean, not an owner call:** whether a "Check my sheet" is recorded (when, which label, which
-  answer, never the words). Experiment 216 leans yes: "when did they last know they had it" is
-  what a lockout story asks later. Where it would go, the ledger or the Mac's own log, is not
-  settled.
+- **Each "Check my sheet" (decided, owner 2026-11-06):** when, which device, and whether it
+  matched. Never the words. "When did they last know they had it" is what a lockout story asks
+  later (experiment 216). The device writes one `checked` fact when it is next online, signed with
+  its window key, so `by` is the device; `sentAt` is when the person checked, and is only shown.
+
+```ts
+{_tag: "checked", matched: true}   // by: the device's window key; sentAt: when; never the words
+```
 
 ```ts
 // A sketch. The new parts of next/packages/libfabrika/src/coordination/client-manager.ts.
@@ -387,8 +391,9 @@ signs one `added` with `saw.how: "device"`. How it looks is P21's and P28's to d
 ### 8. How `founded.keys` folds with `added`, and the grant tree
 
 **Decided, as a general rule: a dropped key drops everything it let in, all the way down.** That
-holds for a recovery and for Remove in the menu bar alike. The tree is folded from the ledger:
-each key hangs under the key that signed it in.
+holds for a recovery and for Remove in the menu bar alike. The tree is folded from the ledger.
+**Decided by the owner, 2026-11-06:** the person's own devices are equal roots, and the sheet
+belongs to the person. Only tabs and agents hang under the device that let them in.
 
 ```ts
 // A sketch of what foldMembers keeps, in ledger order (by rev).
@@ -402,23 +407,24 @@ type Members = {
 	}>;
 	readonly spent: ReadonlySet<string>;             // recovery keys that signed once
 };
-// founded                      -> each of keys as a "person" root; window under them
-// added (recovery)             -> the new key as "recovery", under its signer; each of drops not live
-// added (person), by a device  -> key as "person" under its signer, window under it; each of drops not live
-// added (person), by a sheet   -> key as a "person" root, window under it; signer spent; each of drops not live
-// granted                      -> the key, under the person key that signed it
+// founded             -> each of keys as a "person" root; window under them
+// added (recovery)    -> the new key as "recovery", a root of the person's own; each of drops not live
+// added (person)      -> key as a "person" root, window under it; each of drops not live
+//                        (by a sheet: signer spent; by a device: nothing more)
+// granted             -> the tab's or agent's key, under the person key that signed it
 // revoked                      -> the key not live
 // admitted(key)                -> the key and every key above it are live
 ```
 
-- **Roots are the keys nobody can take back from above:** `founded`'s keys, and a device a sheet
-  let in. So when the old Mac drops, the sheet it made is gone, but the new Mac that sheet let in
-  stays. A spent sheet is not dropped: it signs nothing more, and what it let in stays.
-- **A device let in by another device hangs under it.** So if the lost Mac had let in a second Mac,
-  that Mac drops too when the lost one is dropped. That follows the decided rule as written. The
-  recovery screen names each device it will drop before Touch ID, so it is never a surprise.
-- **A sheet hangs under the device that made it.** If that device is removed, its sheet stops too,
-  and the menu bar shows "No backup sheet. [Make one]" on the devices left.
+- **Every device of the person is a root,** however it came in: named at `founded`, let in by
+  another device, or let in by a sheet. A device never hangs under another device, so dropping
+  one never drops another. A device is dropped only by name, in `drops` or by Remove.
+- **Only tabs and agents hang under a device,** the one whose person key let them in, and they
+  drop with it. So the recovery screen lists what will drop with the old Mac: its own tabs and
+  agents, not the person's other devices.
+- **The sheet belongs to the person, not to a device.** Removing any device leaves the live sheet
+  alone. Only using it or making a new one kills it. A spent sheet signs nothing more, and the
+  device it let in stays.
 - **The rule is written for any depth,** so a phone as approver or an invite later needs no new
   rule.
 
@@ -427,6 +433,7 @@ The laws P28 adds to p28, all property-based, over any list of facts:
 - `founded` stays first and is never replaced, whatever `added` facts come after.
 - A dropped key stays out forever, as a revoked one does. A later `added` cannot bring it back.
 - A key is admitted only while every key above it is live. Removing one drops all below it.
+- Dropping a device never drops another device of the person, and never drops the live sheet.
 - A recovery key that signed once never signs again. A spent key's children stay admitted.
 - An `added`, a grant or a revoke signed by a window key or an agent's key changes nothing. A
   `granted` signed by a recovery key changes nothing.
@@ -556,7 +563,7 @@ Every live device, at once:  "A new device asked to get in by email. It gets in 
   wait and every live device stand between it and the ledger.
 
 ```ts
-// A sketch of the facts. Names are proposals ("Made up here").
+// The facts, decided by the owner 2026-11-06. Their fields are a sketch.
 // At setup: the person types their address, gets a code, types it back. A person key signs:
 {_tag: "verified", email: "<address>", signed: sshsig(personKey)}       // its arrivedAt is "when checked"
 // On a new device, after the code is right. The door writes it; nothing is let in yet:
@@ -571,9 +578,10 @@ Every live device, at once:  "A new device asked to get in by email. It gets in 
 - **Who signs the last `added`:** a key the brain holds for this one job, its public half on the
   ledger with the rank `email`. It signs only an `added` of a device, only after the wait, and
   never leaves the brain (experiment 217's lesson from Matrix, which handed its top key to every
-  device). So the door keeps its one signature check. A lean, 75%, for P28's plan to confirm.
+  device). So the door keeps its one signature check. Decided by the owner, 2026-11-06.
 - **The code:** good for 10 minutes and 5 tries, then a new one. Only its hash is kept, and never
-  in the ledger. Both numbers are guesses.
+  in the ledger. Decided by the owner, 2026-11-06.
+- **Cancel needs no finger,** as Deny needs none. Decided by the owner, 2026-11-06.
 - **Who it stops:** someone with the mailbox and no device waits 24 hours, and any of your devices
   cancels them. A thief who holds a stolen Mac with its password can cancel your email recovery;
   the sheet is instant and is the answer there.
@@ -627,8 +635,9 @@ builder and read by the owner, holds:
 - **The two unknowns,** in the first build, on a real account: one code through `send_email` to
   a real inbox, and one through Access with no domain. Each logged in `field/`.
 - **Plants:** spent rule skipped; a window key or an agent's key accepted as a signer; a recovery
-  key used twice; drops not applied; the tree not walked (a removed device's children stay); a
-  sheet-made device hung under the dropped Mac; a key that will not open sent to founding; words
+  key used twice; drops not applied; the tree not walked (a removed device's tabs stay); a
+  device dropped with another device; the sheet dropped with a removed device; a check not
+  recorded, or recorded with its words; a key that will not open sent to founding; words
   sent in the request; the label ignored; the old Mac not told; the email wait skipped; a cancel
   ignored.
 - **Only a person can pass:** a real print and a real recovery on a second home, with a real finger,
@@ -690,15 +699,16 @@ The sheet, all of it. The calls the owner made on it:
 13. Email recovery for the Cloudflare setup, sent free through Cloudflare (`send_email`, or
     Access's one-time PIN with no domain); a 6-digit code typed on the device that asked; every
     live device told at once; a 24-hour wait any live device can cancel. Which email and when it
-    was checked are recorded at setup.
+    was checked are recorded at setup. The code is good for 10 minutes and 5 tries; Cancel needs
+    no finger; the brain holds one key that signs only the final `added` after the wait; the facts
+    are `verified`, `requested` and `canceled`.
+14. The person's devices are equal roots in the grant tree; only tabs and agents hang under a
+    device. The sheet belongs to the person, and removing a device leaves it alone.
+15. Each "Check my sheet" is recorded: when, which device, matched or not. Never the words.
 
 Inside the decided part, still a lean:
 
 - **A browser tab cannot approve others.** 70% (call 7).
-- **Whether a "Check my sheet" is recorded,** and where. Experiment 216 leans yes. No call was
-  made on it.
-- **The brain's own email key signs the last `added`,** and the code's 10 minutes and 5 tries.
-  For P28's plan.
 
 Open, and the first build tries both:
 
@@ -717,7 +727,7 @@ Open, and the first build tries both:
   password Migration Assistant asks for keeps the login Keychain open was not researched.
 - **Where the owner's files sync,** which decides how real the PDF risk is.
 - **Whether the cascade's cost is small.** It is a handful of Approves with Tier 1's few clients.
-  With many tabs and agents, or a second Mac let in by the lost one, it could be a chore.
+  With many tabs and agents it could be a chore.
 - **Whether the new Mac's first `initialize` works before the menu bar is up.** The order of the
   screens is a guess until P19 exists.
 
@@ -725,10 +735,10 @@ Open, and the first build tries both:
 
 These are proposals, not settled words or numbers:
 
-- The field names `adds`, `drops`, `typed`, `kept`, `old`, `v`, `under`, the `how` words `device`
-  and `email`, the struct names `Add`, `Adds`, `AddSaw`, the `Rank` type, and the function `mayAdd`.
-- The email facts `verified`, `requested` and `canceled`, the rank `email`, and the brain's email key.
-- The code's 10 minutes and 5 tries.
+- The field names `adds`, `drops`, `typed`, `kept`, `old`, `v`, `under`, `matched`, the `how` words
+  `device` and `email`, the struct names `Add`, `Adds`, `AddSaw`, the `Rank` type, the rank word
+  `email`, the fact name `checked`, and the function `mayAdd`.
+- The fields inside `verified`, `requested` and `canceled` (the three names are decided).
 - The `why` words `used`, `replaced` and `not_allowed`.
 - The HKDF label and the choice of HKDF over BIP39's own seed.
 - The label's shape, `r1-7f3a`.
