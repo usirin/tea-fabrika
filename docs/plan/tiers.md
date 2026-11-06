@@ -3,11 +3,11 @@
 **Tier 1 approved 2026-11-01. Tiers 2 to 7 proposed. Order of work set 2026-11-01.** All
 the work on `next/` is one plan of seven tiers. Each tier is one pass across all five
 layers, and each ends with something a person can use. No layer gets finished alone. Only
-Tier 1 is committed. It has not started. *Changed 2026-11-05 by the owner:* `next/` no
+Tier 1 is committed. It started 2026-11-05 with its exam. *Changed 2026-11-05 by the owner:* `next/` no
 longer waits on today's pipeline, which is paused. Tier 1 is built now by the lead
 session's agents, by hand, with the pipeline's steps for each pull request, in
-[29 small pull requests](./tier-1.md#the-pull-requests-one-at-a-time)
-([where we are](./README.md#where-we-are-now)). *It said: today's pipeline finishes first
+[30 small pull requests](./tier-1.md#the-pull-requests-one-at-a-time)
+([where we are](./README.md#where-we-are-now)). P1 to P4, the exam and two spikes, are done. *It said: today's pipeline finishes first
 and builds ticket 117, then Tier 1's plan goes through the planner and the pipeline builds
 its tickets.* A tier is a project. The approval of 2026-11-01 covers what Tier 1 builds,
 not its breakdown.
@@ -34,7 +34,7 @@ will change. So is splitting the old Tier 4 into hands and agents, which makes s
 | **2. First programs** | Nothing new: letters and picks use the same connection, and this tier tests that | Tickets as facts; a program's own storage (`keep`) holds its filter | Typed pipes between programs; Topic, so a program can read outside its inbox | Tracker as a picker, ticket, `fabsh` | A tile starts `fabsh`, a line opens in place, a tile can start from a saved line; the desk arrives as a program, with split, close and prefix keys; the keybindings program; the `themes` program, and reading theme files |
 | **3. Two people** | Invite and join, typed codes on Cloudflare, GitHub as a keys source | `knocked`, `joined` (`added` and the backup moved up to Tier 1's PR D2, settled by the owner) | Two members, removing a member, each person's windows | The tracker shared, who filed what, who may start chaos; notes shared, with comments | Join screen, Windows list, password helper for a docked Mac, releases through GitHub Actions |
 | **4. Hands (proposed split)** | Hands as a client; how a client says it takes jobs | The queue, claims, leases | Mac and VM hands, work queues; mail delivery, leases, restarts and OTP calls (C2 to C5) | Secrets; `kill -9` from chaos through real hands, and `kill_brain` as a chaos button | Terminal tile; a first tab that runs a job |
-| **5. Agents (proposed split)** | Agent keys and grants in real use | Spend, limits | Hands run agents | `claude` and `codex` programs, repo programs (`.fabrika/programs`, lean about 60%) | Chat tile (not a copy of regular chat; several branches of a conversation at once stays possible), asks list; the agent box |
+| **5. Agents (proposed split)** | Agent keys and grants in real use | Spend, limits | Hands run agents | `claude` and `codex` programs, repo programs (`.fabrika/programs`, lean about 60%) | Chat tile (not a copy of regular chat; several branches of a conversation at once stays possible), asks list; the agent box. *Noted 2026-11-05:* [talk where you work](../direction/talk-where-you-work.md) decided talk at a spot moves to one thread tile that opens only from a spot, and says this line changes with it once the note settles |
 | **6. Daily use** | Reconnect and offline, tested hard; D4's poke, the sync-engine note's T7 as a Sub | Moving data, keeping history cheap, paging | Pipeline stages, schedules, and [the whole plan flow](#a-requirement-the-whole-plan-flow); the mutation queue, shaped like a merge queue: a pull request's leftover lines and a daily sweep in, survivors out as at most 3 tickets a day, Stryker on hands ([fast and daily mutation](../direction/fast-and-daily-mutation.md)) | Pipeline and tracker views take jobs over one at a time; notes gain tabs, search and delete | Drag, zoom, workspaces, command palette, speed budgets; formatted typing in place for notes; native dialog and popover against Zag |
 | **7. Others use it** | Phone as approver, QR, a real domain (a phone tab already works from Tier 1) | More than two people, roles, signing each letter | Other people's programs, kept apart, `limits: {cpuMs}` | How others write programs, packs; for notes: live co-editing, any CRDT, pages that run code in a box | Apple signing, auto-update, Windows and Linux |
 
