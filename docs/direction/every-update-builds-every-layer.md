@@ -46,7 +46,7 @@ desktop (Tuval)   one core, with browser, Electron and headless on subpaths of
 - **A pass can land as several pull requests.** Each one is whole, and its demo
   works. More than 9,700 lines in one review is not a review, so Tier 1 is six
   pieces, and since 2026-11-05 [smaller pull requests](../plan/tier-1.md#the-pull-requests-one-at-a-time)
-  inside them, 35 as of 2026-11-06.
+  inside them, 36 as of 2026-11-06.
 - **Debugging tools come in the first pass, not after.** A program that breaks
   things on purpose is part of the foundation, so failures are seen from day one.
   It runs on a throwaway ledger by default, never on real notes.
