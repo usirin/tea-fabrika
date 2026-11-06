@@ -65,7 +65,7 @@ const check = (commit: Commit, stepKeys: StepKeys): Outcome => {
 - **A key per step role that commits:** `tests`, `build`, and `lead` for the lead agent's own
   commits, such as a merge from main. Ed25519, made once.
 - **Where the private halves live:** in the lead session's home on the laptop, one file per role,
-  never in the repo. Each step's agent is started with its own role's key as git's signing key.
+  never in the repo. Each step's agent is started with its own role's key, the key it signs its notes with.
 - **How CI knows the public halves:** one file in the repo in git's allowed-signers format, the
   role as each key's name. It is an exam path, so a change to it asks the owner.
 - **Tier 1's P32 builds it,** with planted commits for each answer.

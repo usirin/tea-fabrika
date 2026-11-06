@@ -96,10 +96,10 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   part is small, never absent.
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
-  machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). tea 0.22.0 fixed
-  `useMachine` under Strict Mode, but it does not take the Effect engine yet
-  ([demlik 852](https://github.com/kamp-us/demlik/issues/852)). Until it does, one
-  `useSyncExternalStore` hook in one file stands in, and goes when tea's lands.
+  machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). From tea 0.23.0
+  that hook is `useRuntime`: it takes an Effect-engine run, hands back a `send` that
+  returns nothing, and reads one part through a selector, as in
+  `useRuntime(run, (m) => m.views[id])`. No stand-in hook.
 - **In `next/`, no bare `of` and no `xOf` names.** Today's `nameOf` and `outcomesOf`
   stay until that code goes.
 - **In today's version:** fixes that daily use or CI needs, the UX work the owner
@@ -403,7 +403,8 @@ Write-ups are read by busy people, some of them not native English speakers.
   often. No prompt on opening the app, nothing hourly. The protection goes in code, not in a
   chore.
 - **No new paid accounts** until fabrika is a product. Design for the free route and say
-  what it can't do.
+  what it can't do. Cloudflare is the exception: fabrika assumes its paid Workers plan, such as
+  its Secrets Store (owner, 2026-11-06).
 - **All in on Manti.** Never "Manti or native": a better way goes into Manti by pull
   request, tried first with a `pnpm patch` ([UI on Manti](./docs/direction/ui-on-manti.md)).
 - **Keep the platform's defaults.** On a Mac, closing a window keeps the app running and

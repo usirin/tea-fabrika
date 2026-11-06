@@ -25,7 +25,7 @@ from 2026-11-01: finish the pipeline, watch it build a real ticket, then switch 
    their asks, and nothing is lost by the wait.
 3. **Build `next/` now.** The owner approved what [Tier 1](./tier-1.md) builds on 2026-11-01.
    The lead session's agents build it by hand, in
-   [30 small pull requests](./tier-1.md#the-pull-requests-one-at-a-time), each with the steps
+   [36 small pull requests](./tier-1.md#the-pull-requests-one-at-a-time), each with the steps
    the pipeline enforces: a plan, tests written first and red, the build, the fast mutation
    check, one review by a separate agent, and the lead agent's read of the diff, green CI and a
    leak grep before merge. Each step that goes by hand is logged in `field/`.
@@ -120,7 +120,7 @@ raises a new design call goes to the owner.
 
 - Decides which version a job is in when the brief says, or the rule in [AGENTS.md](../../AGENTS.md#two-versions-side-by-side) answers it. If it still cannot tell, it asks.
 - Writes a note marked **proposed**, an experiment, or a field log.
-- Splits Tier 1 by hand, once, as a named exception: done 2026-11-05 as [29 pull requests](./tier-1.md#the-pull-requests-one-at-a-time), and grown to 35: P30 for tea's own hook, P31 for the design package and P32 for the commit check (2026-11-05), then P33 and P34 for coordination's slice, P35 for the edges exam and P36 for email recovery (2026-11-06). Each row also gets a ticket in today's tracker, filed by the lead agent when its plan starts, with `from` pointing at Tier 1's plan (owner, 2026-11-05, [question 12](./tier-1.md#open-questions)). No second project gets split by hand without the owner's yes. *It said: files Tier 1's ticket after ticket 117 lands, and each task of the planner's plan as a ticket.*
+- Splits Tier 1 by hand, once, as a named exception: done 2026-11-05 as [29 pull requests](./tier-1.md#the-pull-requests-one-at-a-time), and grown to 36: P30 for tea's own hook, P31 for the design package and P32 for the commit check (2026-11-05), then P33 and P34 for coordination's slice, P35 for the edges exam and P36 for email recovery (2026-11-06). Each row also gets a ticket in today's tracker, filed by the lead agent when its plan starts, with `from` pointing at Tier 1's plan (owner, 2026-11-05, [question 12](./tier-1.md#open-questions)). No second project gets split by hand without the owner's yes. *It said: files Tier 1's ticket after ticket 117 lands, and each task of the planner's plan as a ticket.*
 - Fixes a dead-code finding it checked by hand. If the finding is wrong, it stops and tells the owner.
 - Makes calls inside an approved plan, marked as its own call, with why, cost and how sure. The owner may overturn them.
 - Adds a lint exception on a line where the code is right and the rule does not fit, with the reason in plain words. It never switches a rule off to pass.
@@ -132,7 +132,7 @@ In a live run on a target repository, never, by anyone's agent: merge by hand, a
 - **A live run on a target repository:** inside the run, nothing but ship merges. Once a lane is finished and stuck, what is left is a by-hand change, under the next rule.
 - **A pull request that went by hand:** one review by a separate agent says merge-ready, CI is green for code, and the lead agent reads the diff and runs a leak grep. Then the lead agent merges and writes a MergeRow. A merge never waits on the owner ([autonomy is measured trust](../direction/autonomy-is-measured-trust.md), decided 2026-11-03). The owner still reads exam pull requests and says yes after `alchemy plan`. *It said: the owner's yes, with CI green for code.*
 - **Rows that only record what happened (field logs, index rows):** they merge after the leak grep, with no yes.
-- **Direction notes and plans:** they still get the owner's yes.
+- **Direction notes and plans:** a note that records an owner's decision, or a plan that only builds decided notes, merges as above. A new design call still gets the owner's yes ([the steps](../direction/next-is-a-pipeline-pre-run.md)). *It said: they still get the owner's yes.*
 - **A pull request that changes only Markdown or images:** no CI wait, since nothing in CI reads them. A broken relative link can slip through.
 - **To bring a branch up to date:** rebase and force-push with a lease, never a merge commit or `gh pr update-branch`. Linear history, and the diff's `git patch-id --stable` stays the same, so a review of that diff holds. Checks still rerun on the final commit.
 - **After every merge:** fast-forward the main checkout (`git pull --ff-only origin main`). Never reset or stash there; your own work stays in worktrees.
