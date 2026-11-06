@@ -115,44 +115,32 @@ export type KeptFailed<C extends Cmd, I> =
 	| CellErrors<C, I>;
 
 /**
- * Hands `tell` each error once. tea reports a reducer's throw twice, the same error: as "reduce",
- * then as "follow-up", which can land once the copy is closing. `done()` told the parent the first
- * time, and a parent that handles it goes on, so the repeat must not end the program run under it.
- */
-const onceEach = (tell: OnError): OnError => {
-	const told = new Set<unknown>();
-	return (error, where) => {
-		if (told.has(error)) return;
-		told.add(error);
-		tell(error, where);
-	};
-};
-
-/**
  * What a kept run does with what tea reports. A `RuntimeDiscardNotice` is a loss the host asked for:
- * nothing. Any other error, once: it `fail`s the run while the run is live, and is `broken` once
- * `closing`, when nobody is waiting on `done()`. See the note at the top of this file.
+ * nothing. Any other error: it `fail`s the run while the run is live, and is `broken` once
+ * `closing`, when nobody is waiting on `done()`. See the note at the top of this file. tea reports
+ * each failure once (tea 0.23.0, demlik PR 855), so nothing here drops a repeat.
  */
-export const failureReport = (
-	label: string,
-	{
-		closing,
-		fail,
-		broken,
-	}: {
-		readonly closing: () => boolean;
-		readonly fail: (ended: Error) => void;
-		readonly broken: (ended: Error) => void;
-	},
-): OnError =>
-	onceEach((error, {phase}) => {
+export const failureReport =
+	(
+		label: string,
+		{
+			closing,
+			fail,
+			broken,
+		}: {
+			readonly closing: () => boolean;
+			readonly fail: (ended: Error) => void;
+			readonly broken: (ended: Error) => void;
+		},
+	): OnError =>
+	(error, {phase}) => {
 		if (error instanceof RuntimeDiscardNotice) return;
 		const ended = new Error(`${label} failed (tea's "${phase}"): ${wordsOf(error)}`, {
 			cause: error,
 		});
 		if (closing()) broken(ended);
 		else fail(ended);
-	});
+	};
 
 /**
  * Run `machine`, kept under `id` in `handle`'s run through its `state`
