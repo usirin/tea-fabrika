@@ -27,6 +27,7 @@ export default defineConfig({
 			"wip/src/**/*.test.ts",
 			"legacy/src/**/*.test.ts",
 			"oxlint-plugins/*.test.ts",
+			"next/apps/*/src/**/*.test.ts",
 		],
 		// One time limit for every test, chosen from measured times, not vitest's 5 s default,
 		// which turned main red 6 times for slow tests and found no bug (experiment 125).

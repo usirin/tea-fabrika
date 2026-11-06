@@ -6,15 +6,20 @@ import {noBareTell} from "./no-bare-tell.ts";
 import {noContextTag} from "./no-context-tag.ts";
 import {noDataTaggederror} from "./no-data-taggederror.ts";
 import {noEffectPromise} from "./no-effect-promise.ts";
+import {noEffectRunOutsideEdge} from "./no-effect-run-outside-edge.ts";
 import {noExpectInIf} from "./no-expect-in-if.ts";
+import {noHandTag} from "./no-hand-tag.ts";
 import {noImplicitEffectConcurrency} from "./no-implicit-effect-concurrency.ts";
 import {noNumericDuration} from "./no-numeric-duration.ts";
+import {noOf} from "./no-of.ts";
 import {noProjectSettings} from "./no-project-settings.ts";
+import {noPromises} from "./no-promises.ts";
 import {noRawTryCatch} from "./no-raw-try-catch.ts";
 import {noRedactedValue} from "./no-redacted-value.ts";
 import {noSecretEnv} from "./no-secret-env.ts";
 import {noThrowInEffectGen} from "./no-throw-in-effect-gen.ts";
 import {noTypeAssertions} from "./no-type-assertions.ts";
+import {oneStoreHook} from "./one-store-hook.ts";
 import {useImportExtensions} from "./use-import-extensions.ts";
 
 const plugin: Plugin = {
@@ -25,15 +30,20 @@ const plugin: Plugin = {
 		"no-context-tag": noContextTag,
 		"no-data-taggederror": noDataTaggederror,
 		"no-effect-promise": noEffectPromise,
+		"no-effect-run-outside-edge": noEffectRunOutsideEdge,
 		"no-expect-in-if": noExpectInIf,
+		"no-hand-tag": noHandTag,
 		"no-implicit-effect-concurrency": noImplicitEffectConcurrency,
 		"no-numeric-duration": noNumericDuration,
+		"no-of": noOf,
 		"no-project-settings": noProjectSettings,
+		"no-promises": noPromises,
 		"no-raw-try-catch": noRawTryCatch,
 		"no-redacted-value": noRedactedValue,
 		"no-secret-env": noSecretEnv,
 		"no-throw-in-effect-gen": noThrowInEffectGen,
 		"no-type-assertions": noTypeAssertions,
+		"one-store-hook": oneStoreHook,
 		"use-import-extensions": useImportExtensions,
 	},
 };
