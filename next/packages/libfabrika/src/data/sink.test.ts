@@ -1,0 +1,583 @@
+// p96 and p97 (P37's plan writes them out; the lead commit adds them to docs/plan/tier-1-detail.md,
+// "Properties"), for `data/sink.ts` and `data/trace.ts`: a span that ends is never dropped, and its
+// tags hold names, ids and numbers only. From "design for bounded objects" and "monitoring is in
+// Tier 1" (owner, 2026-11-07). Written before the modules (Tier 1, P37, ticket 238).
+//
+// The shape these tests hold the modules to, from the plan's sketches:
+// - `SpanSink.layer(sql, {object})` gives Effect's `Tracer.Tracer` and `SpanSink` over the object's
+//   own SQLite, and needs nothing else. Building it touches nothing.
+// - A span that ends writes, before `end` returns, in one step: a `health` row (piece = the span's
+//   name) and an `unsent` row. Its chain is its own `fab.process` tag, else its nearest ancestor's,
+//   else `spans`.
+// - `SpanSink.flush` sends `unsent` to each chain's part (`parts`, 0 if none), follows `rolled`,
+//   deletes a row only after a good answer, and answers `{sent}`. The sink's own calls end no span.
+// - A write that throws `SQLITE_FULL` is held in memory and tried again at each later `end`; the
+//   next `flush` fails with `SinkError {why: "storage", held}` before it sends anything.
+// - A row keeps OTLP's span fields. Tags are strings (cut at 128, `<key>.length` beside), numbers
+//   and booleans; a `Redacted` is `"<redacted>"`; anything else is dropped and counted in
+//   `fab.sink.dropped`. A failed span's class is `error.type`; `Cause.pretty` goes only to content.
+// - Words: "run" is an agent run only. A program start is a process, and its tag is `fab.process`.
+import {createHash} from "node:crypto";
+import {mkdtempSync, readdirSync, readFileSync, rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {DatabaseSync} from "node:sqlite";
+import {afterAll, describe, expect, it} from "@effect/vitest";
+import {Effect, Exit, Layer, Option, Redacted, Stream} from "effect";
+import {TestClock} from "effect/testing";
+import * as fc from "fast-check";
+import {Archive, type BucketCalls} from "./archive.ts";
+import {RecordManager} from "./records.ts";
+import type {Sql} from "./referee.ts";
+import {SinkError, SpanSink} from "./sink.ts";
+import {nodeSql} from "./sqlite.ts";
+import type {Chain, SpanRow} from "./trace.ts";
+
+const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
+type ChainValue = typeof Chain.Type;
+type Row = typeof SpanRow.Type;
+
+const root = mkdtempSync(join(tmpdir(), "p37-sink-"));
+const opened: Array<DatabaseSync> = [];
+let homes = 0;
+afterAll(() => {
+	for (const db of opened.splice(0)) if (db.isOpen) db.close();
+	rmSync(root, {recursive: true, force: true});
+});
+
+/** A folder of its own: the object's file, and any part files, so a test can read every byte. */
+const home = () => {
+	const dir = mkdtempSync(join(root, `h${++homes}-`));
+	const open = (file: string): DatabaseSync => {
+		const db = new DatabaseSync(join(dir, file));
+		opened.push(db);
+		return db;
+	};
+	const db = open("object.db");
+	const parts = new Map<string, DatabaseSync>();
+	const sqls = new Map<string, Sql>();
+	const part = (name: string): Sql => {
+		const known = sqls.get(name);
+		if (known !== undefined) return known;
+		const made = open(`${name.replaceAll("/", "_")}.db`);
+		parts.set(name, made);
+		const sql = nodeSql(made);
+		sqls.set(name, sql);
+		return sql;
+	};
+	const bytes = (marker: string) =>
+		readdirSync(dir).filter((file) => readFileSync(join(dir, file)).includes(marker));
+	return {dir, db, sql: nodeSql(db), open, part, parts, bytes};
+};
+
+const OBJECT = "process_01JC9Q4W7Z3M8N5R2T6V0XKB4D";
+const P1 = OBJECT;
+const P2 = "process_01JC9Q4W7Z3M8N5R2T6V0XKB4E";
+const job = (process: string): ChainValue => ({_tag: "job", process});
+const spans: ChainValue = {_tag: "spans"};
+const BIG = 1024 * 1024 * 1024;
+
+const world = (
+	sql: Sql,
+	records: Layer.Layer<RecordManager> = RecordManager.memory(BIG),
+	archive: Layer.Layer<Archive> = Archive.memory,
+) => Layer.mergeAll(SpanSink.layer(sql, {object: OBJECT}), records, archive);
+
+const flush = SpanSink.use((sink) => sink.flush);
+const recorded = (chain: ChainValue) =>
+	RecordManager.use((records) => Stream.runCollect(records.read(chain)));
+const traced = <A, E, R>(
+	name: string,
+	attributes: Record<string, unknown>,
+	body: Effect.Effect<A, E, R>,
+) => body.pipe(Effect.withSpan(name, {attributes}));
+const step = (name: string, attributes: Record<string, unknown> = {}) =>
+	traced(name, attributes, Effect.void);
+
+const count = (db: DatabaseSync, table: string, where = "1"): number =>
+	Number(db.prepare(`SELECT count(*) AS n FROM ${table} WHERE ${where}`).get()?.["n"]);
+
+/** Each table and column in a database whose text holds `marker`, as `table.column`. */
+const places = (db: DatabaseSync, marker: string): Array<string> => {
+	const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all();
+	const found = new Set<string>();
+	for (const {name} of tables) {
+		for (const row of db.prepare(`SELECT * FROM "${String(name)}"`).all()) {
+			for (const [column, value] of Object.entries(row)) {
+				if (typeof value === "string" && value.includes(marker))
+					found.add(`${String(name)}.${column}`);
+			}
+		}
+	}
+	return [...found].sort();
+};
+
+const full = () =>
+	Object.assign(new Error("database or disk is full"), {
+		code: "ERR_SQLITE_ERROR",
+		errcode: 13,
+		errstr: "database or disk is full",
+	});
+const WRITE = /^\s*(INSERT|UPDATE|DELETE|REPLACE)/i;
+/** A Sql over a real one that throws SQLITE_FULL on its next `armed` writes, as a full disk would. */
+const filling = (inner: Sql) => {
+	let armed = 0;
+	let inside = false;
+	const sql: Sql = {
+		exec: (query, ...params) => {
+			if (!inside && armed > 0 && WRITE.test(query)) {
+				armed -= 1;
+				throw full();
+			}
+			return inner.exec(query, ...params);
+		},
+		transaction: (work) => {
+			if (armed > 0) {
+				armed -= 1;
+				throw full();
+			}
+			inside = true;
+			try {
+				return inner.transaction(work);
+			} finally {
+				inside = false;
+			}
+		},
+		size: () => inner.size(),
+	};
+	return {sql, arm: (times: number) => (armed = times)};
+};
+
+const hex = (body: Uint8Array) => createHash("sha256").update(body).digest("hex");
+/** R2 in memory, as its binding behaves: `put` fails when the body does not match its SHA-256. */
+const bucket = () => {
+	const files = new Map<string, Uint8Array>();
+	const calls: BucketCalls = {
+		put: (key, body, sha256) => {
+			if (hex(body) !== sha256) return Promise.reject(new Error("checksum mismatch"));
+			files.set(key, body.slice());
+			return Promise.resolve();
+		},
+		head: (key) => {
+			const body = files.get(key);
+			return Promise.resolve(body === undefined ? null : {sha256: hex(body)});
+		},
+	};
+	return {calls, files};
+};
+
+const ids = (rows: ReadonlyArray<Row>) => rows.map((r) => r.spanId);
+
+describe("p96, a span that ends is never dropped", () => {
+	it("its rows are in the object's own SQLite before end returns, and a later process's flush sends them", async () => {
+		const {db, open} = home();
+		// Effect.runSync: nothing may wait on a fiber or a timer for the rows to land.
+		const exit = Effect.runSyncExit(
+			traced("runner.step", {"fab.process": P1}, step("ledger.call")).pipe(
+				Effect.provide(SpanSink.layer(nodeSql(db), {object: OBJECT})),
+			),
+		);
+		expect(Exit.isSuccess(exit)).toBe(true);
+		db.close();
+		const again = open("object.db");
+		expect(count(again, "health", "piece IN ('runner.step', 'ledger.call')")).toBe(2);
+		expect(count(again, "unsent")).toBe(2);
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				expect(yield* flush).toEqual({sent: 2});
+				const rows = yield* recorded(job(P1));
+				expect(rows.map((r) => r.name).sort()).toEqual(["ledger.call", "runner.step"]);
+				expect(count(again, "unsent")).toBe(0);
+			}).pipe(Effect.provide(world(nodeSql(again)))),
+		);
+	});
+
+	it.effect(
+		"a span goes to its own process, else its nearest ancestor's, else to spans; each to one chain",
+		() => {
+			const {db, sql} = home();
+			return Effect.gen(function* () {
+				yield* traced(
+					"runner.step",
+					{"fab.process": P1},
+					traced("runner.cmd", {}, step("ledger.call")),
+				);
+				yield* traced("runner.step", {"fab.process": P2}, step("runner.cmd"));
+				yield* traced("door.envelope", {}, step("ledger.append"));
+				yield* traced(
+					"runner.step",
+					{"fab.process": P1},
+					traced("supervisor.restart", {"fab.process": P2}, step("leaf")),
+				);
+				expect(count(db, "unsent"), "every span gets an unsent row, none is health only").toBe(11);
+				expect(count(db, "health")).toBe(11);
+				expect(yield* flush).toEqual({sent: 11});
+				const one = yield* recorded(job(P1));
+				const two = yield* recorded(job(P2));
+				const outside = yield* recorded(spans);
+				expect(one.map((r) => r.name).sort()).toEqual([
+					"ledger.call",
+					"runner.cmd",
+					"runner.step",
+					"runner.step",
+				]);
+				expect(two.map((r) => r.name).sort()).toEqual([
+					"leaf",
+					"runner.cmd",
+					"runner.step",
+					"supervisor.restart",
+				]);
+				expect(outside.map((r) => r.name).sort()).toEqual(["door.envelope", "ledger.append"]);
+				const all = [...ids(one), ...ids(two), ...ids(outside)];
+				expect(new Set(all).size, "no span in two chains").toBe(11);
+				expect(count(db, "unsent")).toBe(0);
+			}).pipe(Effect.provide(world(sql)));
+		},
+	);
+
+	it.effect("a row keeps OTLP's span fields, its parent and its times", () => {
+		const {db, sql} = home();
+		const T = Date.UTC(2026, 10, 7, 21, 59, 59, 990);
+		const nanos = (ms: number) => String(BigInt(ms) * 1_000_000n);
+		return Effect.gen(function* () {
+			yield* TestClock.setTime(T);
+			yield* traced(
+				"runner.step",
+				{"fab.process": P1, "fab.letter.id": "m-17"},
+				TestClock.adjust(4).pipe(
+					Effect.andThen(traced("ledger.call", {"rpc.method": "append"}, TestClock.adjust(3))),
+				),
+			);
+			yield* flush;
+			const rows = yield* recorded(job(P1));
+			const parent = rows.find((r) => r.name === "runner.step");
+			const child = rows.find((r) => r.name === "ledger.call");
+			expect(parent).toEqual({
+				traceId: expect.any(String),
+				spanId: expect.any(String),
+				parentSpanId: null,
+				name: "runner.step",
+				kind: "internal",
+				startTimeUnixNano: nanos(T),
+				endTimeUnixNano: nanos(T + 7),
+				attributes: {"fab.process": P1, "fab.letter.id": "m-17"},
+				events: [],
+				ok: true,
+			});
+			expect(child).toMatchObject({
+				traceId: parent?.traceId,
+				parentSpanId: parent?.spanId,
+				startTimeUnixNano: nanos(T + 4),
+				endTimeUnixNano: nanos(T + 7),
+				attributes: {"rpc.method": "append"},
+				ok: true,
+			});
+			const health = db.prepare(`SELECT piece, ms, ok FROM health ORDER BY piece`).all();
+			expect(health.map((h) => [h["piece"], h["ms"], Boolean(h["ok"])])).toEqual([
+				["ledger.call", 3, true],
+				["runner.step", 7, true],
+			]);
+		}).pipe(Effect.provide(world(sql)));
+	});
+
+	it.effect(
+		"a RecordManager that fails leaves every unsent row; a lost answer's resend adds nothing",
+		() => {
+			const {db, sql} = home();
+			return Effect.gen(function* () {
+				for (let n = 0; n < 4; n++) yield* step("runner.step", {"fab.process": P1, "fab.n": n});
+				const real = yield* RecordManager;
+				const down = {
+					...real,
+					write: () => Effect.fail(new SinkError({why: "unreachable", held: 0})),
+				};
+				const failed = yield* Effect.flip(flush.pipe(Effect.provideService(RecordManager, down)));
+				expect(failed).toBeInstanceOf(SinkError);
+				expect(count(db, "unsent"), "unsent is deleted only after a good answer").toBe(4);
+				expect(yield* recorded(job(P1))).toEqual([]);
+
+				// The part takes the write, and the answer is lost on the way back.
+				let lose = 1;
+				const lossy = {
+					...real,
+					write: (...args: Parameters<typeof real.write>) =>
+						real
+							.write(...args)
+							.pipe(
+								Effect.flatMap((written) =>
+									lose-- > 0
+										? Effect.fail(new SinkError({why: "unreachable", held: 0}))
+										: Effect.succeed(written),
+								),
+							),
+				};
+				yield* Effect.exit(flush.pipe(Effect.provideService(RecordManager, lossy)));
+				expect(count(db, "unsent")).toBe(4);
+				expect(yield* flush).toEqual({sent: 4});
+				const rows = yield* recorded(job(P1));
+				expect(rows).toHaveLength(4);
+				expect(new Set(ids(rows)).size, "the resend wrote nothing twice").toBe(4);
+				expect(count(db, "unsent")).toBe(0);
+				expect(yield* flush).toEqual({sent: 0});
+			}).pipe(Effect.provide(world(sql)));
+		},
+	);
+
+	it.effect("flush follows a part's roll and the next batch starts at the new part", () => {
+		const {db, sql} = home();
+		return Effect.gen(function* () {
+			for (let batch = 0; batch < 3; batch++) {
+				for (let n = 0; n < 30; n++)
+					yield* step("runner.step", {"fab.process": P1, "fab.n": batch * 30 + n});
+				expect(yield* flush).toEqual({sent: 30});
+			}
+			const rows = yield* recorded(job(P1));
+			expect(rows.map((r) => r.attributes["fab.n"])).toEqual(Array.from({length: 90}, (_, n) => n));
+			const part = db.prepare(`SELECT max(part) AS part FROM parts`).get()?.["part"];
+			expect(Number(part), "90 spans under a 16 KB cap roll past part 0").toBeGreaterThan(0);
+		}).pipe(Effect.provide(world(sql, RecordManager.memory(16 * 1024))));
+	});
+
+	it.effect(
+		"a write that meets SQLITE_FULL once: the step's flush fails with storage, the span lands later",
+		() => {
+			const {db, sql: real} = home();
+			const {sql, arm} = filling(real);
+			return Effect.gen(function* () {
+				yield* step("runner.step", {"fab.process": P1, "fab.n": 0});
+				arm(1);
+				const exit = yield* Effect.exit(step("runner.step", {"fab.process": P1, "fab.n": 1}));
+				expect(Exit.isSuccess(exit), "end never fails the fiber").toBe(true);
+				const error = yield* Effect.flip(flush);
+				expect(error).toBeInstanceOf(SinkError);
+				expect(error.why).toBe("storage");
+				expect(error.held).toBe(1);
+				expect(yield* recorded(job(P1)), "flush fails before it sends anything").toEqual([]);
+				yield* step("runner.step", {"fab.process": P1, "fab.n": 2});
+				expect(count(db, "unsent"), "the held span landed at the next end").toBe(3);
+				expect(yield* flush).toEqual({sent: 3});
+				const rows = yield* recorded(job(P1));
+				expect(rows.map((r) => r.attributes["fab.n"]).sort()).toEqual([0, 1, 2]);
+			}).pipe(Effect.provide(world(sql)));
+		},
+	);
+
+	it.effect(
+		"a disk that stays full: every flush fails, held counts every span, none goes missing",
+		() => {
+			const {db, sql: real} = home();
+			const {sql, arm} = filling(real);
+			return Effect.gen(function* () {
+				yield* step("warm", {});
+				arm(Number.POSITIVE_INFINITY);
+				for (let n = 0; n < 5; n++) yield* step("runner.step", {"fab.n": n});
+				expect((yield* Effect.flip(flush)).held).toBe(5);
+				for (let n = 5; n < 8; n++) yield* step("runner.step", {"fab.n": n});
+				const error = yield* Effect.flip(flush);
+				expect(error.why).toBe("storage");
+				expect(error.held).toBe(8);
+				expect(count(db, "unsent")).toBe(1);
+				arm(0);
+				yield* step("runner.step", {"fab.n": 8});
+				expect(yield* flush).toEqual({sent: 10});
+				const rows = yield* recorded(spans);
+				expect(rows.map((r) => r.attributes["fab.n"] ?? "warm").sort()).toEqual(
+					[0, 1, 2, 3, 4, 5, 6, 7, 8, "warm"].sort(),
+				);
+			}).pipe(Effect.provide(world(sql)));
+		},
+	);
+
+	it.effect(
+		"a real full file (max_page_count): unsent plus held is every span, and all land once it has room",
+		() => {
+			const {db, sql} = home();
+			return Effect.gen(function* () {
+				yield* step("warm", {});
+				const pages = Number(db.prepare("PRAGMA page_count").get()?.["page_count"]);
+				db.exec(`PRAGMA max_page_count = ${pages}`);
+				const made = 120;
+				for (let n = 0; n < made; n++)
+					yield* step("runner.step", {"fab.n": n, "fab.pad": "p".repeat(100)});
+				const error = yield* Effect.flip(flush);
+				expect(error.why).toBe("storage");
+				expect(error.held).toBeGreaterThan(0);
+				expect(count(db, "unsent") + error.held).toBe(made + 1);
+				expect(yield* recorded(spans)).toEqual([]);
+				db.exec("PRAGMA max_page_count = 1073741823");
+				yield* step("runner.step", {"fab.n": made});
+				expect(yield* flush).toEqual({sent: made + 2});
+				const rows = yield* recorded(spans);
+				expect(new Set(ids(rows)).size).toBe(made + 2);
+			}).pipe(Effect.provide(world(sql)));
+		},
+	);
+
+	it.effect(
+		"building touches nothing: on a Sql that always throws it builds, and traced work still succeeds",
+		() => {
+			const throwing: Sql = {
+				exec: () => {
+					throw full();
+				},
+				transaction: () => {
+					throw full();
+				},
+				size: () => 0,
+			};
+			return Effect.gen(function* () {
+				expect(yield* traced("runner.step", {"fab.process": P1}, Effect.succeed(7))).toBe(7);
+				const error = yield* Effect.flip(flush);
+				expect(error.why).toBe("storage");
+				expect(error.held).toBe(1);
+			}).pipe(Effect.provide(world(throwing)));
+		},
+	);
+});
+
+const SECRET = "sk-p97-secret";
+const NOTE = "note-body-p97";
+const NOTE_TWO = "note-two-p97";
+class NoteError extends Error {
+	override readonly name = "NoteError";
+}
+
+describe("p97, tags hold names, ids and numbers; a message only in content", () => {
+	it.effect(
+		"no Redacted text anywhere, and a throw's message only in content, never in a tag, health or R2",
+		() => {
+			const h = home();
+			const r2 = bucket();
+			const day = Date.UTC(2026, 9, 23, 10);
+			return Effect.gen(function* () {
+				yield* TestClock.setTime(day);
+				const thrown = yield* Effect.exit(
+					traced(
+						"runner.step",
+						{"fab.process": P1, "fab.key": Redacted.make(SECRET)},
+						Effect.sync(() => {
+							// oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- the law is about a step that throws, as the plan's trace has it
+							throw new TypeError(`${NOTE} was not a function`);
+						}),
+					),
+				);
+				expect(Exit.isFailure(thrown)).toBe(true);
+				yield* Effect.exit(
+					traced(
+						"ledger.call",
+						{"fab.process": P1},
+						Effect.fail(new NoteError(`${NOTE_TWO} failed`)),
+					),
+				);
+
+				expect(places(h.db, NOTE), "before flush, only unsent's content holds the message").toEqual(
+					["unsent.content"],
+				);
+				expect(places(h.db, NOTE_TWO)).toEqual(["unsent.content"]);
+				const health = h.db.prepare(`SELECT piece, ok, error FROM health ORDER BY piece`).all();
+				expect(health.map((x) => [x["piece"], Boolean(x["ok"]), x["error"]])).toEqual([
+					["ledger.call", false, "NoteError"],
+					["runner.step", false, "TypeError"],
+				]);
+
+				yield* flush;
+				const rows = yield* recorded(job(P1));
+				const failed = rows.find((x) => x.name === "runner.step");
+				expect(failed?.ok).toBe(false);
+				expect(failed?.attributes["fab.key"]).toBe("<redacted>");
+				expect(failed?.attributes["error.type"]).toBe("TypeError");
+				expect(rows.find((x) => x.name === "ledger.call")?.attributes["error.type"]).toBe(
+					"NoteError",
+				);
+				for (const x of rows) {
+					for (const value of Object.values(x.attributes)) {
+						expect(String(value)).not.toContain(NOTE);
+						expect(String(value)).not.toContain(NOTE_TWO);
+					}
+				}
+				const content = yield* RecordManager.use((records) =>
+					records.content(job(P1), failed?.spanId ?? ""),
+				);
+				expect(
+					Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "",
+				).toContain(NOTE);
+
+				// Two weeks on, the day's raw rows go to R2: they hold the class, never the message.
+				yield* TestClock.setTime(day + 15 * 24 * 3_600_000);
+				yield* step("runner.step", {});
+				yield* flush;
+				expect(r2.files.size, "the day was archived").toBeGreaterThan(0);
+				for (const body of r2.files.values()) {
+					const text = new TextDecoder().decode(body);
+					expect(text).not.toContain(SECRET);
+					expect(text).not.toContain(NOTE);
+					expect(text).not.toContain(NOTE_TWO);
+				}
+
+				expect(places(h.db, NOTE), "the object keeps no message after flush").toEqual([]);
+				for (const [name, db] of h.parts) {
+					for (const place of [...places(db, NOTE), ...places(db, NOTE_TWO)]) {
+						expect(place.startsWith("content."), `${name}: ${place}`).toBe(true);
+					}
+				}
+				expect(h.bytes(SECRET), "no file holds the Redacted text, in any byte").toEqual([]);
+			}).pipe(
+				Effect.provide(world(h.sql, RecordManager.sql(h.part, BIG), Archive.bucket(r2.calls))),
+			);
+		},
+	);
+
+	it("every kept tag is a string of at most 128 characters, a number or a boolean; the rest is counted", async () => {
+		const key = fc.constantFrom(...Array.from({length: 8}, (_, n) => `fab.k${n}`));
+		const value = fc.oneof(
+			fc.string({maxLength: 400}),
+			fc.integer(),
+			fc.double({noNaN: true, noDefaultInfinity: true}).filter((x) => !Object.is(x, -0)),
+			fc.boolean(),
+			fc.string().map((text) => Redacted.make(`${SECRET}-${text}`)),
+			fc.object({maxDepth: 1}),
+			fc.array(fc.integer(), {maxLength: 3}),
+			fc.constant(null),
+			fc.bigInt(),
+		);
+		await fc.assert(
+			fc.asyncProperty(fc.dictionary(key, value, {maxKeys: 8}), (tags) => {
+				const {sql} = home();
+				return Effect.runPromise(
+					Effect.gen(function* () {
+						yield* step("runner.step", {"fab.process": P1, ...tags});
+						yield* flush;
+						const [row] = yield* recorded(job(P1));
+						const kept = row?.attributes ?? {};
+						let dropped = 0;
+						for (const [k, v] of Object.entries(tags)) {
+							if (typeof v === "string") {
+								if (v.length <= 128) expect(kept[k]).toBe(v);
+								else {
+									expect(v.startsWith(String(kept[k]))).toBe(true);
+									expect(String(kept[k]).length).toBeLessThanOrEqual(128);
+									expect(kept[`${k}.length`]).toBe(v.length);
+								}
+							} else if (typeof v === "number" || typeof v === "boolean") expect(kept[k]).toBe(v);
+							else if (Redacted.isRedacted(v)) expect(kept[k]).toBe("<redacted>");
+							else {
+								expect(k in kept, `${k} is dropped`).toBe(false);
+								dropped += 1;
+							}
+						}
+						expect(kept["fab.sink.dropped"] ?? 0).toBe(dropped);
+						for (const v of Object.values(kept)) {
+							expect(["string", "number", "boolean"]).toContain(typeof v);
+							if (typeof v === "string") {
+								expect(v.length).toBeLessThanOrEqual(128);
+								expect(v).not.toContain(SECRET);
+							}
+						}
+					}).pipe(Effect.provide(world(sql))),
+				);
+			}),
+			{seed: SEED, numRuns: 60},
+		);
+	});
+});
