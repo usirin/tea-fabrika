@@ -269,8 +269,31 @@ complete, by what the cursor expects
 
 ### S6: a turn is a foreground job, and Ctrl-C cancels the turn, not the agent
 
-**Decided 2026-11-07, by the owner.** The lean before it was 65%. **Ctrl-Z reopened 2026-11-07:**
-the rest of S6 stands; how Ctrl-Z stops a turn is open, and nothing builds it until it is settled.
+**Decided 2026-11-07, by the owner.** The lean before it was 65%. Ctrl-Z was reopened and settled
+the same day, after a walk with a worked example: it holds the turn at the agent's next ask.
+
+```text
+fabsh$ @scout why does post print #7 twice?
+scout: reading post.ts… (3s)
+^Z
+[1]+ held  @scout why does post print #7 twice?
+fabsh$ bg
+[1]+ @scout why does post print #7 twice? &
+fabsh$ git log -3
+[1]+ done  @scout  (fg 1 to read the answer)
+```
+
+- **Ctrl-Z holds.** The prompt comes back at once. The host stops answering the agent's
+  `session/request_permission` asks, the ones its rules would answer by themselves included, so
+  the agent waits at its next tool call that asks. It runs nothing and edits nothing; it may read a
+  little more first (below).
+- **`fg` answers the held ask** and the turn goes on in front of you. **`bg` answers it** and the
+  turn goes on behind you.
+- **A turn in the background prints one line when it ends,** before the next prompt, as bash does:
+  `done` or `failed`, and `fg 1` prints the reply. It never prints the reply over your work.
+- **An ask that needs a person holds a background turn** and says `[1]+ waiting: scout needs you`;
+  `fg` brings the `allow? [y/N]` up. This is POSIX's SIGTTIN: a background job that reads the
+  keyboard stops.
 
 - **Why it reopened.** ACP has no pause. A client may only cancel a turn with `session/cancel`
   ([prompt turn](https://agentclientprotocol.com/protocol/prompt-turn)), so "Ctrl-Z suspends the
@@ -281,16 +304,16 @@ the rest of S6 stands; how Ctrl-Z stops a turn is open, and nothing builds it un
   So holding that answer stops the agent at its next tool call that asks. Today's harness turns off
   the client's file and terminal methods (`packages/fabrika/src/agents/acp/client.ts:240-241`), and
   in `default` mode reads inside the working copy do not ask, so those pass a hold. A turn that
-  never asks never stops. Not yet checked in a live process: a hold of about 10 minutes would show
-  any hidden timer.
+  never asks never stops, and `held` says so if no ask comes. Not yet checked in a live process: a
+  hold of about 10 minutes would show any hidden timer, and the tryout's first pull request runs it.
 
 - **What.** `@scout ...` runs like any fabsh line: the prompt waits. A status line shows progress in
   place (tool calls, seconds), and the reply prints once whole, under the name, words faint. Ctrl-C
   tells the job `cancel` (ACP's `session/cancel`); scout stays summoned and idle. An ask from the
   agent takes the prompt as a person-only answer, `allow? [y/N]`, which the host records as the
   person's input; an agent never answers it (decided).
-- **Backgrounding a turn never parses the message.** Ctrl-Z suspends the waiting turn and `bg`
-  lets it finish in the background, as in POSIX job control. Or start the line with `bg`:
+- **Backgrounding a turn never parses the message.** Ctrl-Z holds the waiting turn and `bg`
+  lets it finish in the background, as in POSIX job control (how it holds is above). Or start the line with `bg`:
   `bg @scout why does post print #7 twice?`. `jobs` and `fg %n` work as for any job.
 - **Everything after `@name` goes to the agent exactly as typed,** `&`, `|` and `;` included. This
   keeps S2. A trailing `&` to background a turn is walked back on 2026-11-07: it would take a
