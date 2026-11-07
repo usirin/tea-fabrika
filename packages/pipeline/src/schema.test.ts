@@ -3,12 +3,12 @@ import {Cmd, run} from "@demlik/tea/effect";
 import {drive} from "@demlik/tea/testing/effect";
 import {createDraft, jsonSchema, reader} from "@kampus/fabrika-old/agents/claude";
 import {Context, Effect, Exit, Layer, Option, Schema, SchemaGetter} from "effect";
-import {describe, expect, it} from "vitest";
+import {describe, expect, expectTypeOf, it} from "vitest";
 import {z} from "zod";
 import {act, checkRun, createJudge, gather, intentOf} from "./primitives.ts";
 import {Jev} from "./services.ts";
 
-// Cmds from Effect schemas: tea's own `Cmd.define` from `@demlik/tea/effect`
+// Cmds from Effect schemas: tea's own `Cmd.make` from `@demlik/tea/effect`
 // and each move in its Effect form, beside the zod form the code not yet moved
 // still uses. One small machine carries all of them and is run on the Effect
 // engine.
@@ -23,8 +23,8 @@ const Ticket = Schema.Struct({
 type Ticket = typeof Ticket.Type;
 const Id = Schema.Struct({id: Schema.String});
 
-// tea's `Cmd.define`, and each move, handed Effect schemas.
-const readTicket = Cmd.define("ticket_read", {input: Id, ok: Ticket, err: ["unknown", "gone"]});
+// tea's `Cmd.make`, and each move, handed Effect schemas.
+const readTicket = Cmd.make("ticket_read", {input: Id, ok: Ticket, err: ["unknown", "gone"]});
 const sizeOf = gather("ticket_size", {
 	input: Id,
 	ok: Schema.Literals(["small", "medium", "large"]),
@@ -342,7 +342,7 @@ describe("a value the `ok` schema rejects is tea's `malformed_result`, as with z
 });
 
 describe("the types flow from the Effect schemas, with no cast and no wrapper at the call site", () => {
-	it("gives the same Cmd as the core `Cmd.define` over the hand-wrapped schemas", () => {
+	it("`Cmd.make` gives the same Cmd as the core `Cmd.define` over the hand-wrapped schemas", () => {
 		const byHand = CoreCmd.define("ticket_read", {
 			input: Schema.toStandardSchemaV1(Id),
 			ok: Schema.toStandardSchemaV1(Ticket),
@@ -418,6 +418,8 @@ describe("the types flow from the Effect schemas, with no cast and no wrapper at
 		gather("count", {input: Count, ok: Schema.Null, err: []});
 		// @ts-expect-error and for a brand, which only the type side carries
 		gather("count", {input: Id, ok: Schema.String.pipe(Schema.brand("TicketId")), err: []});
+		// @ts-expect-error `Cmd.make` itself refuses it, with no move in between
+		Cmd.make("count", {input: Id, ok: Count, err: []});
 
 		const counted = gather("count", {input: Id, ok: Schema.toType(Count), err: []});
 		expect(counted.schema.ok["~standard"].validate({n: 3})).toEqual({value: {n: 3}});
@@ -446,6 +448,25 @@ describe("the types flow from the Effect schemas, with no cast and no wrapper at
 		expect(write({id: "7", intent: "i"})).toEqual({type: "old", id: "7", intent: "i"});
 		// zod's own schema object goes through untouched.
 		expect(read.schema.ok).toBe(spec.ok);
+	});
+});
+
+describe("the Effect entry's `Cmd`", () => {
+	it("makes a Cmd with `make` and has no `define`; the core's other helpers come through as they are", () => {
+		// @ts-expect-error `Cmd.define` is the core's, for a Standard Schema; the Effect entry says `make`
+		const define: unknown = Cmd.define;
+
+		expect(define).toBeUndefined();
+		expect("define" in Cmd).toBe(false);
+		expectTypeOf<keyof typeof Cmd>().toEqualTypeOf<
+			"make" | "none" | "batch" | "when" | "whenDefined"
+		>();
+		expect([Cmd.none, Cmd.batch, Cmd.when, Cmd.whenDefined]).toEqual([
+			CoreCmd.none,
+			CoreCmd.batch,
+			CoreCmd.when,
+			CoreCmd.whenDefined,
+		]);
 	});
 });
 
