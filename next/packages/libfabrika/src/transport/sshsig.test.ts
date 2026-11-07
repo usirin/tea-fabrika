@@ -344,12 +344,143 @@ describe("KeyLine", () => {
 		);
 	}
 
+	it.effect("keeps a comment as given, runs of spaces and a tab inside it too", () =>
+		Effect.gen(function* () {
+			const line = lineFor(good.key, "my  laptop\tat home");
+			expect(yield* decodeLine(line)).toBe(line);
+			expect(yield* check(goodSig, [line])).toStrictEqual({signer: line});
+		}),
+	);
+
 	it("is the only line writeSshsig takes: a plain string does not typecheck", () => {
 		type Line = Parameters<typeof writeSshsig>[0]["line"];
 		// @ts-expect-error a plain string is not a KeyLine: decode it first, so a bad line never reaches the writer
 		const plain: Line = signer;
 		expect(plain).toBe(signer);
 	});
+});
+
+// The mutation step's gaps (P7). A field equal to the start of the one wanted is not that field:
+// the plan wants an `ssh-ed25519` key and signature and the namespace exactly, not a prefix of them.
+describe("p27, each field exactly, never a prefix of it", () => {
+	/** A good signature by `key` over `text` under SPACE, then some of its blob's fields swapped. */
+	const signedThenSwapped = (key: Key, swap: (raw: Uint8Array) => Partial<Blob>) =>
+		Effect.gen(function* () {
+			const raw = yield* signWith(key)(
+				toSign(SPACE, "sha512", yield* digest("SHA-512", utf8(text))),
+			);
+			return armor(
+				build({
+					magic: utf8("SSHSIG"),
+					version: 1,
+					key: keyBlob(key.publicKey),
+					space: utf8(SPACE),
+					reserved: new Uint8Array(),
+					hash: utf8("sha512"),
+					signature: join8(str("ssh-ed25519"), str(raw)),
+					...swap(raw),
+				}),
+			);
+		});
+	const prefixes = ["ssh-ed2551", ""];
+
+	it.effect("passes the same blob with nothing swapped, so each refusal below is the swap's", () =>
+		Effect.gen(function* () {
+			const key = yield* freshKey();
+			expect(yield* check(yield* signedThenSwapped(key, () => ({})), [key.line])).toStrictEqual({
+				signer: key.line,
+			});
+		}),
+	);
+
+	for (const type of prefixes) {
+		it.effect(`refuses a key typed "${type}", even with a line holding that blob named`, () =>
+			Effect.gen(function* () {
+				const key = yield* freshKey();
+				const typed = join8(str(type), str(key.publicKey));
+				const armored = yield* signedThenSwapped(key, () => ({key: typed}));
+				expect(yield* check(armored, [key.line, lineFor(typed)])).toStrictEqual(refused);
+			}),
+		);
+
+		it.effect(`refuses a signature typed "${type}"`, () =>
+			Effect.gen(function* () {
+				const key = yield* freshKey();
+				const armored = yield* signedThenSwapped(key, (raw) => ({
+					signature: join8(str(type), str(raw)),
+				}));
+				expect(yield* check(armored, [key.line])).toStrictEqual(refused);
+			}),
+		);
+
+		it.effect(`KeyLine refuses an ssh-ed25519 line whose blob is typed "${type}"`, () =>
+			Effect.gen(function* () {
+				const exit = yield* Effect.exit(decodeLine(lineFor(join8(str(type), str(goodKey)))));
+				expect(Exit.isFailure(exit)).toBe(true);
+			}),
+		);
+	}
+
+	for (const space of ["fabrika-clien", "fabrika", ""]) {
+		it.effect(`refuses a namespace field of "${space}", signed over the whole space`, () =>
+			Effect.gen(function* () {
+				const key = yield* freshKey();
+				const armored = yield* signedThenSwapped(key, () => ({space: utf8(space)}));
+				expect(yield* check(armored, [key.line])).toStrictEqual(refused);
+			}),
+		);
+	}
+});
+
+describe("p27, the armor's own words", () => {
+	const BEGIN = "-----BEGIN SSH SIGNATURE-----";
+	const END = "-----END SSH SIGNATURE-----";
+	// Each the same length as the line it stands in for, so only its words differ.
+	const cases: ReadonlyArray<readonly [string, string]> = [
+		[
+			"a bad BEGIN line and a good END line",
+			goodSig.replace(BEGIN, "-----BEGIN SSH SIGNATURX-----"),
+		],
+		["another kind's BEGIN line", goodSig.replace(BEGIN, "-----BEGIN PGP SIGNATURE-----")],
+		["a good BEGIN line and a bad END line", goodSig.replace(END, "-----END SSH SIGNATURX-----")],
+		["another kind's END line", goodSig.replace(END, "-----END PGP SIGNATURE-----")],
+		[
+			"both lines bad",
+			goodSig
+				.replace(BEGIN, "-----BEGIN SSH SIGNATURX-----")
+				.replace(END, "-----END SSH SIGNATURX-----"),
+		],
+	];
+	for (const [name, armored] of cases) {
+		it.effect(`refuses ${name}`, () =>
+			Effect.gen(function* () {
+				expect(armored).not.toBe(goodSig);
+				expect(armored.length).toBe(goodSig.length);
+				expect(yield* check(armored, [signer])).toStrictEqual(refused);
+			}),
+		);
+	}
+});
+
+// A key line is `<type> <base64> [comment]`, one space between its parts (the plan's grammar).
+// OpenSSH's own reader takes runs of spaces and tabs; this module does not.
+describe("a key line's parts and its type", () => {
+	const [type = "", key = ""] = signer.split(" ");
+	const bad: ReadonlyArray<readonly [string, string]> = [
+		["two spaces between type and key", `${type}  ${key}`],
+		["a tab between type and key", `${type}\t${key}`],
+		["an ECDSA type word over an Ed25519 blob", `ecdsa-sha2-nistp256 ${key}`],
+		["an RSA type word over an Ed25519 blob", `ssh-rsa ${key} signer@fabrika.test`],
+	];
+	for (const [name, line] of bad) {
+		it.effect(`KeyLine refuses ${name}, and it never matches as a signer`, () =>
+			Effect.gen(function* () {
+				const exit = yield* Effect.exit(decodeLine(line));
+				expect(Exit.isFailure(exit)).toBe(true);
+				expect(yield* check(goodSig, [line])).toStrictEqual(refused);
+			}),
+		);
+	}
 });
 
 // p44: one signature shape, against the real `ssh-keygen`.
