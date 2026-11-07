@@ -382,6 +382,27 @@ describe("what comes back is tea's own Machine", () => {
 		});
 	});
 
+	it("leaves the caller's spec as it was, and hands back a new object", () => {
+		const types = {ctx: undefined};
+		const spec = {
+			model: Model,
+			msg: Msg,
+			cmds: [readTicket],
+			types,
+			init: picker.init,
+			update: picker.update,
+		};
+		const before = {...spec};
+
+		const made = Machine.make(spec);
+
+		expect(spec).toStrictEqual(before);
+		expect(spec.model).toBe(Model);
+		expect(spec.msg).toBe(Msg);
+		expect(spec.types).toBe(types);
+		expect(made).not.toBe(spec);
+	});
+
 	it("is held and stepped by a parent, whose own schema holds the child's", () => {
 		const step = (s: Model, m: Every) => applyCell<Model, Every, ReadTicket>(picker, s, m);
 		const Side = <const T extends "left" | "right">(side: T) =>
