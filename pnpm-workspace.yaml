@@ -139,3 +139,8 @@ patchedDependencies:
   '@manti-ui/react@0.13.0': patches/@manti-ui__react@0.13.0.patch
   # Draw on change, and a hollow cursor when a tile is unfocused (experiment 142).
   ghostty-web@0.4.0: patches/ghostty-web@0.4.0.patch
+  # `Machine.make` and `Cmd.make` on `@demlik/tea/effect`: a machine named by two Effect schemas,
+  # and the Effect `Cmd.define` renamed `make` (https://github.com/kamp-us/demlik/issues/870 and
+  # https://github.com/kamp-us/demlik/issues/871), on the built files. Drop it at the release that
+  # ships them.
+  '@demlik/tea@0.23.0': patches/@demlik__tea@0.23.0.patch

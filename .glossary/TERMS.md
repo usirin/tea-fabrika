@@ -141,7 +141,7 @@ shell. Paths: `next/`'s app layer and `fabsh`.
 
 | Term | Definition | Not |
 |---|---|---|
-| Cmd | A request for an effect, with typed `input`, `ok` and `err`, defined through a pipeline primitive or tea's `Cmd.define`. Elm's Cmd. | |
+| Cmd | A request for an effect, with typed `input`, `ok` and `err`, defined through a pipeline primitive or tea's Effect `Cmd.make`. Elm's Cmd. | |
 | commands | A program's `commands` field: each a Msg with its keys, and each also a shell word and a palette row. [Modes](../docs/direction/modes.md), [keybindings are configurable](../docs/direction/keybindings-are-configurable.md) | |
 | envelope (runtime) | `Envelope<A> = {id, by, arrivedAt, input}` in `next/` (today's version says `at`): an input as the host's door stamped it. `id` is an `InputId` only the door makes, `in-<host run>-<n>`; `by` comes from the connection; `arrivedAt` is the referee's clock as it came. A client that sends its own id or sender is refused. Decided Nov 4, details proposed. [Inputs carry their sender](../docs/direction/inputs-carry-their-sender.md) | Not saved state's envelope, the fields around a ledger entry (Ledger): see the context map. Not a Msg: the program's handler gets the input, and only the id rides on as a cause. |
 | input | What a program is told while it runs, like stdin. Told at any time, never waiting, served in order. One input per command, apart from the one `query` (CQRS). [tea-program](../docs/direction/tea-program.md), [tracker views are programs](../docs/direction/tracker-views-are-programs.md) | |

@@ -84,14 +84,14 @@ export const greet = boxable(
 // ---------------------------------------------------------------- the Cmd wall
 
 /** Runs inside the box: counts the words of a text. */
-export const countWords = Cmd.define("count_words", {
+export const countWords = Cmd.make("count_words", {
 	input: Schema.Struct({text: Schema.String}),
 	ok: Schema.Int,
 	err: ["empty"],
 });
 
 /** Keyed: signs a text and its count with the host's key. It runs on the host. */
-export const stamp = Cmd.define("stamp", {
+export const stamp = Cmd.make("stamp", {
 	input: Schema.Struct({text: Schema.String, words: Schema.Int}),
 	ok: Schema.Struct({sig: Schema.String}),
 	err: ["refused"],

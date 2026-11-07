@@ -33,7 +33,7 @@ export const LaneState = Schema.Struct({
 export type LaneState = typeof LaneState.Type;
 const ZERO: LaneState = {k: 0, cursor: 0, answers: [], busy: false};
 
-export const step = Cmd.define("step", {
+export const step = Cmd.make("step", {
 	input: Schema.Struct({k: Schema.Int}),
 	ok: Schema.Struct({k: Schema.Int}),
 	err: ["unreachable"],

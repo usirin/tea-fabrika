@@ -365,22 +365,22 @@ export const forPage = (s: Desk): Desk => {
 	return drawn;
 };
 
-export const open = Cmd.define("open", {input: Opening, ok: Done, err: []});
-export const close = Cmd.define("close", {input: Tile, ok: Done, err: []});
-export const stop = Cmd.define("stop", {input: Tile, ok: Done, err: []});
-export const send = Cmd.define("send", {
+export const open = Cmd.make("open", {input: Opening, ok: Done, err: []});
+export const close = Cmd.make("close", {input: Tile, ok: Done, err: []});
+export const stop = Cmd.make("stop", {input: Tile, ok: Done, err: []});
+export const send = Cmd.make("send", {
 	input: Schema.Struct({tile: TileIdSchema, data: Schema.String}),
 	ok: Done,
 	err: [],
 });
-export const save = Cmd.define("save", {input: Schema.Struct({desk: Saved}), ok: Done, err: []});
-export const empty = Cmd.define("empty", {input: Schema.Struct({}), ok: Done, err: []});
+export const save = Cmd.make("save", {input: Schema.Struct({desk: Saved}), ok: Done, err: []});
+export const empty = Cmd.make("empty", {input: Schema.Struct({}), ok: Done, err: []});
 /** One process, a window of a line: by its id. */
 const Process = Schema.Struct({process: Schema.String});
-export const end = Cmd.define("end", {input: Process, ok: Done, err: []});
-export const kill = Cmd.define("kill", {input: Process, ok: Done, err: []});
+export const end = Cmd.make("end", {input: Process, ok: Done, err: []});
+export const kill = Cmd.make("kill", {input: Process, ok: Done, err: []});
 /** The frame shows something, on the page whose key asked: no tile and no layout changes. */
-export const show = Cmd.define("show", {
+export const show = Cmd.make("show", {
 	input: Schema.Struct({what: Schema.Literals(SHOWS)}),
 	ok: Done,
 	err: [],

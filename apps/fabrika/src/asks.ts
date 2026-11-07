@@ -140,7 +140,7 @@ export type AsksMsg =
 	| {readonly type: "seen"};
 
 /** Read the ledger's tickets after `after`: the facts found, and the last row's place. */
-export const load = Cmd.define("load", {
+export const load = Cmd.make("load", {
 	input: Schema.Struct({after: Schema.Int}),
 	ok: Schema.Struct({entries: Schema.Array(Entry), last: Schema.Int}),
 	err: ["unreachable"],

@@ -66,7 +66,7 @@ export type HoldMsg =
 const Done = Schema.Null;
 
 /** Send the key to the host, with its id. */
-export const press = Cmd.define("press", {
+export const press = Cmd.make("press", {
 	input: Schema.Struct({id: Schema.Int, key: Schema.String}),
 	ok: Done,
 	err: [],
@@ -76,7 +76,7 @@ export const press = Cmd.define("press", {
  * this instant, which the page lets go on as it is; `held: true` is one held back, which the
  * page presses again.
  */
-export const pass = Cmd.define("pass", {
+export const pass = Cmd.make("pass", {
 	input: Schema.Struct({key: Key, held: Schema.Boolean}),
 	ok: Done,
 	err: [],
