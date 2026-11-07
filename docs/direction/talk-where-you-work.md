@@ -29,6 +29,13 @@ more on 2026-11-05, each marked decided below:
   tsh> @sc<tab>  ->  @scout find where the lane retries
   ```
 
+- **Decided 2026-11-06, a summoned agent lives on the desk, not in a tile.** Closing the tile it was
+  summoned in changes nothing: any tsh, comment box or spot can still `@scout`. `dismiss scout` ends
+  it. An idle agent spends nothing, since it only spends when asked. The top bar counts the agents on
+  the desk ("3 agents"), and its list has a dismiss on each, so none is forgotten. If an idle agent
+  turns out to hold memory or a sandbox, the fallback is to save and stop it and wake it on the next
+  `@`, as Claude Code's `--resume` does.
+
 - **Decided 2026-11-05, the started claude works in the repo.** The agent `@claude` starts gets the
   person's repo folder and the fabrika connection, not today's scratch folder. It still has no
   `answer` tool ([experiment 211](../../experiments/211-started-claude-sandbox.md)).
