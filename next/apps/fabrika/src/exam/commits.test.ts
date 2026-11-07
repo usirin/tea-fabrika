@@ -439,12 +439,13 @@ const TREES = new Map([
 	[T("0"), A],
 	[T("f"), C],
 ]);
+const PLACED = {onMain: true, before: new Set([T("0")])};
 
 describe("chain (p86 and p89 after the merge)", () => {
 	const good = [logged(link(note("tests", A, B))), logged(link(note("build", B, C)))];
 
 	it("is done when the links run from the base's tree to the squash's tree", () => {
-		expect(chain(T("f"), good, TREES)).toEqual([DONE]);
+		expect(chain(T("f"), good, TREES, PLACED)).toEqual([DONE]);
 	});
 
 	it("is done through a lead merge in the middle", () => {
@@ -453,12 +454,12 @@ describe("chain (p86 and p89 after the merge)", () => {
 			logged(link(note("lead", B, D))),
 			logged(link(note("build", D, C))),
 		];
-		expect(chain(T("f"), rows, TREES)).toEqual([DONE]);
+		expect(chain(T("f"), rows, TREES, PLACED)).toEqual([DONE]);
 	});
 
 	it("reads only the squash's own links for the chain", () => {
 		const other = logged(link(note("tests", E, D, {ticket: "7"}), {squash: T("e")}));
-		expect(chain(T("f"), [other, ...good], TREES)).toEqual([DONE]);
+		expect(chain(T("f"), [other, ...good], TREES, PLACED)).toEqual([DONE]);
 	});
 
 	it.each([
@@ -480,24 +481,42 @@ describe("chain (p86 and p89 after the merge)", () => {
 			[good[0]!, logged(link(note("build", B, A))), logged(link(note("tests", A, B))), good[1]!],
 		],
 	])("is broken_chain with %s", (_, rows) => {
-		expect(chain(T("f"), rows, TREES)).toEqual([stuck("broken_chain", T("f"))]);
+		expect(chain(T("f"), rows, TREES, PLACED)).toEqual([stuck("broken_chain", T("f"))]);
 	});
 
 	it("is broken_chain when the base or the squash is not a known commit", () => {
-		expect(chain(T("f"), good, new Map([[T("0"), A]]))).toEqual([stuck("broken_chain", T("f"))]);
-		expect(chain(T("f"), good, new Map([[T("f"), C]]))).toEqual([stuck("broken_chain", T("f"))]);
+		expect(chain(T("f"), good, new Map([[T("0"), A]]), PLACED)).toEqual([
+			stuck("broken_chain", T("f")),
+		]);
+		expect(chain(T("f"), good, new Map([[T("f"), C]]), PLACED)).toEqual([
+			stuck("broken_chain", T("f")),
+		]);
+	});
+
+	it("is broken_chain when the squash is not on main", () => {
+		expect(chain(T("f"), good, TREES, {...PLACED, onMain: false})).toEqual([
+			stuck("broken_chain", T("f")),
+		]);
+	});
+
+	it("is broken_chain when a link's base is not on main before the squash", () => {
+		expect(chain(T("f"), good, TREES, {...PLACED, before: new Set()})).toEqual([
+			stuck("broken_chain", T("f")),
+		]);
+		const later = [good[0]!, logged(link(note("build", B, C), {base: T("9")}))];
+		expect(chain(T("f"), later, TREES, PLACED)).toEqual([stuck("broken_chain", T("f"))]);
 	});
 
 	it("is stale_link when another row holds a newer link of a step for the ticket", () => {
 		const newer = logged(link(note("tests", A, D, {version: 2}), {squash: T("e")}));
-		expect(chain(T("f"), [...good, newer], TREES)).toEqual([
+		expect(chain(T("f"), [...good, newer], TREES, PLACED)).toEqual([
 			stuck("stale_link", T("f"), {step: "tests"}),
 		]);
 	});
 
 	it("ignores a newer row that does not verify", () => {
 		const newer = logged(link(note("tests", A, D, {version: 2}), {squash: T("e")}), null);
-		expect(chain(T("f"), [...good, newer], TREES)).toEqual([DONE]);
+		expect(chain(T("f"), [...good, newer], TREES, PLACED)).toEqual([DONE]);
 	});
 
 	it("decodeLink takes a field/ link with every field the note's table lists", () => {
@@ -581,7 +600,13 @@ describe("the workflow file (hole 4)", () => {
 	});
 
 	it("runs the check on the event's shas, fetched by the program", () => {
-		expect(text).toContain('commits check --fetch --pr "$PR" --base "$BASE" --head "$HEAD"');
+		expect(text).toContain(
+			'commits check --fetch --pr "$PR" --base "$BASE" --head "$HEAD" --main "$MAIN"',
+		);
+		expect(text).toContain(
+			'commits chain --fetch --pr "$PR" --base "$BASE" --head "$HEAD" --main "$MAIN"',
+		);
+		expect(text.match(/MAIN: \$\{\{ github\.sha \}\}/g)).toHaveLength(2);
 		expect(text).not.toContain("--keys-from");
 	});
 });

@@ -96,7 +96,9 @@ tracker ticket, and writes it in the `MergeRow`.
 ## After the merge
 
 Copy each step's printed links into its `field/` row, with `pr`, `base`, `squash` and `keys` filled in,
-in a log pull request. The check walks them there, and blocks that pull request until they reach
+in a log pull request. `keys` and `base` must be commits on `main` before the squash, and the squash
+must be on `main`; a keys commit anywhere else counts for nothing, since anyone who can push can make
+one that holds their own key. The check walks them there, and blocks that pull request until they reach
 the squash commit's tree. On `main`, each push walks every squash since P32's, as advice.
 
 ## The pull request that added the check
