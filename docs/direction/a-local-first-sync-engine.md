@@ -171,9 +171,39 @@ them. The desktop has a note of its own. Config for every layer is one
   client. One shared project object holds the ledger, plus claims, inboxes and
   the process tree (80%).
 - **Two places for records.** The ledger keeps facts that someone decides
-  with, for good. Monitoring (OpenTelemetry, through tea's otel) keeps health
-  signals, such as lease renews, for about a week: on the Mac locally, in
-  Cloudflare's log storage there.
+  with, for good. Monitoring keeps how things ran. *Changed 2026-11-07 (owner):
+  it said monitoring, through tea's otel, keeps health signals for about a
+  week, on the Mac locally and in Cloudflare's log storage there.* Now:
+  - **A run's spans** go to its JobRecord, kept forever
+    ([a JobRecord holds its trace](./a-job-record-holds-its-trace.md)). They
+    come from Effect's own `Effect.withSpan`, since tea 0.23.0's otel traces
+    agent runs only.
+  - **Health has two levels.** Raw health rows (each ring, each renew) are kept
+    about 2 weeks. An hourly summary per piece (counts, errors, slowest times,
+    lag) is kept forever. Anything someone decides with stays a ledger fact
+    forever. Why: the trend is kept without the bulk, as record wide asks. The
+    industry keeps raw data short and rollups long: Graphite's retentions run
+    "from most-precise:least-history to least-precise:most-history"
+    ([carbon](https://graphite.readthedocs.io/en/latest/config-carbon.html)),
+    and Thanos keeps raw, 5-minute and 1-hour copies, each with its own
+    retention flag ([compactor](https://thanos.io/tip/components/compact.md/)).
+    The 2-week raw window is a guess the first real month settles (75%).
+  - **The same on both stages.** Our own records, read by our own programs
+    (`trace`, `ps`, later a dashboard program), on the laptop and on
+    Cloudflare alike. Alchemy's local stage has no trace viewer. Cloudflare's
+    own tracing is a second opinion, on the cloud only.
+  - **What each piece records.** Every piece records RED: rate, errors and
+    duration. Anything that delivers events also records consumer lag. For
+    the ledger's doorbell: rings sent, reads per ring, each reader's lag
+    behind the newest entry, and the time from a write to a reader seeing it.
+  - **Each object records its own size**, `ctx.storage.sql.databaseSize`, as
+    `{at, bytes}`, at most about once an hour and only when it is already
+    awake. Why: Cloudflare shows a namespace's total, never one object's, and
+    at 10 GB an object's writes fail with `SQLITE_FULL`
+    ([limits](https://developers.cloudflare.com/durable-objects/platform/limits/)).
+    The log stays in the one project object (below; experiment 145). Moving
+    old stretches of the log to R2, as Kafka's tiered storage (KIP-405) does,
+    is a later-tier proposal, not decided.
 - **Every question starts from local Miniflare** (workerd on the Mac), and
   Cloudflare is checked second. And every question asks of the data: what fact
   is lost for good if we do not record it now? A fact that exists only at write

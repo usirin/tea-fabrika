@@ -8,6 +8,8 @@
   plus one project object, decided the same day and changed 2026-10-31.
 - **Decided 2026-10-31:** [the app layer](#decided-2026-10-31-the-app-layer), A1 to A5,
   layer 4 of the five layers. A4, packs, is decided only in part, as its section says.
+- **Decided 2026-11-07:** one alarm per object, the first of
+  [notes this draft disagrees with](#notes-this-draft-disagrees-with).
 - **Still proposed:** the host draft of 2026-10-27, from
   [the draft](#the-draft-one-host-built-for-the-strictest-place) to
   [notes this draft disagrees with](#notes-this-draft-disagrees-with), the
@@ -249,13 +251,29 @@ watcher's GitHub read token. Step 4 is unmeasured.
 
 ## Notes this draft disagrees with
 
-Each is open until the owner's walk. None is changed yet.
+Each is open until the owner's walk. None is changed yet. *Changed 2026-11-07: the first,
+the alarm, is decided.*
 
 - [Scheduled jobs run on the host's alarms](./scheduled-jobs-on-the-host.md)
   and [tickets start in our tracker](./tickets-start-in-our-tracker.md) say
   each job has its own alarm because the ledger's is for leases. The ledger's
   alarm already serves two kinds of row, and [tea-host](./tea-host.md) sketches
   one alarm at the earliest timer. The draft: one alarm per host.
+  **Decided 2026-11-07 (owner): one alarm per object, set in one function, at
+  the earliest timer.** Every timer an object holds (a lease, a backoff's
+  `until`, a chaos `wake`, a job's next run) goes through that one function,
+  so no timer overwrites another. A program in its own object keeps its own
+  alarm, so the two notes' "its own alarm" still holds. It is tested by
+  killing the object mid-step, with workerd's `state.abort()`, then running
+  its alarm with `runDurableObjectAlarm`: the alarm is still set, at the
+  earliest timer.
+
+  ```ts
+  // A sketch. A pure function of the object's saved timers; the one place that sets the
+  // alarm sets it to this, or deletes it on null.
+  const nextAlarm = (timers: ReadonlyArray<number>): number | null =>
+  	timers.length === 0 ? null : Math.min(...timers);
+  ```
 - The same scheduled-jobs note says jobs that read code cannot run on
   Cloudflare. Experiment 148's box per job did.
 - [tea-host](./tea-host.md) parked the Cloudflare host on 2026-10-25, and

@@ -985,6 +985,30 @@ const rung = (sockets: ReadonlyArray<BrainSocket>, stream: string, rev: number) 
 - `seen` on a letter, the last log rev the writer had read, filled by code, and `sentAt`, both kept out of deciding code's types. The referee refuses a `seen` past its head. This was `saw`, the window's inbox position (the slice has it for counter); it became `seen` on the entry wrapper on 2026-11-01 ([saved state](../direction/saved-state.md)). A grant's `saw`, what a person looked at when they said yes, is a different fact and keeps its name.
 - **On each note's save:** `base`, since which version a writer worked on exists only then. `body` whole and raw, every time, since a version is never overwritten. `how`, since "kept from a stale screen" cannot be worked out later, and `from`, since nothing else ties a kept note to its source. The letter's `by`, `arrivedAt`, `sentAt`, `seen` and `cause` come with it, using the plan's existing fields: who wrote it, the log's clock, their own clock, what they had seen. **New on every letter: `for`, the person the writer works for,** from the checked grant, so a fact names both the agent and its person with no fold. The agent's name is its grant's `saw.label`, recorded and shown to the person at Approve. `sentAt` stays out of deciding code's types, and `refuse` sees only the Msg. Cost: one full body per save, about 500 small rows a day at most, a guess.
 - **On each `revoked`:** what the person saw and the check, inside the signed text, the same as a grant.
+- **Added 2026-11-07 (owner), three facts that were lost:** `dead` keeps each throw's error class (p80), `down` gains `until` (p80), and a failed Cmd always comes back as a letter with a `why` (p35). Each existed only at the moment it happened. The throw's message goes to the trace, never the ledger, since a message can quote a note and the trace's content can be deleted.
+- **Added 2026-11-07 (owner), the record of how it ran:** each process run's spans in its thin JobRecord, kept forever (P37); raw health rows about 2 weeks, and an hourly summary per piece kept forever; each object's own size, about once an hour while awake. Why: a slow step or a growing object is a trend, and a trend not kept cannot be rebuilt. [Monitoring is in Tier 1](./tier-1.md#monitoring-is-in-tier-1) has the rest.
+
+```ts
+// A sketch of the new shapes, in next/'s Schema. Key names are P33's, P34's and P37's plans' to settle.
+const Dead = Schema.TaggedStruct("dead", {
+	tries: Schema.Number, limit: Schema.Number, m: Schema.String, build: Schema.String,
+	errors: Schema.Array(Schema.String), // each throw's error class, one per try: ["TypeError", "TypeError", "RangeError"]
+});
+const Down = Schema.TaggedStruct("down", {
+	why: Schema.String, crashes: Schema.Number,
+	until: Schema.Number, // when it tries again, on the referee's clock
+});
+// One row per piece per hour, kept forever, in the object that wrote it. Not a ledger entry.
+const Summary = Schema.TaggedStruct("summary", {
+	piece: Schema.String,  // "runner.step", "door.envelope", "ledger.ring"
+	hour: Schema.Number,   // the hour's start
+	count: Schema.Number,  // rate
+	errors: Schema.Number, // errors
+	ms: Schema.Struct({p50: Schema.Number, p95: Schema.Number, max: Schema.Number}), // duration
+	lag: Schema.optional(Schema.Number), // a piece that delivers events: the furthest a reader fell behind the newest entry, in revs
+});
+const Size = Schema.TaggedStruct("size", {at: Schema.Number, bytes: Schema.Number}); // ctx.storage.sql.databaseSize
+```
 
 **Can wait, since they rebuild from the log:** durations, recovery times, verdict tables, any view, a note's version number and name, the list's order, a diff between versions, a note's drawn blocks and code colors. `check` is itself a fold, so a better checker later re-judges old runs.
 
@@ -1485,7 +1509,7 @@ Before it, a small exam PR. See [The exam PR](#the-exam-pr-not-in-this-plan).
 ### PR E
 
 - **T12.** Scenario p34. Other: p36, p90. Criterion c11.
-- **T13.** Scenario p35's live half, p37, p38, p60.
+- **T13.** Scenario p35's live half, p37, p38, p60, p91.
 - **T14.** Scenario p39, p41's chaos step. The owner reads `alchemy plan --stage drill` and says yes before the cloud run, and the stage is removed after it. The drill dials on PR D's `mcp/client.ts`, with its own key, and comes in by the same door. Criteria c9, c12. `ends`: PR E.
 
 ## Properties
@@ -1538,8 +1562,8 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Plants: no cap; `stop` ignored while a tick is open; a random number from outside the seed.
 
 **p35, Cmds in the runner.** `new`, node. s7, s1. `ProgramRunner`.
-- A fresh letter saves first, and only then fires. A fold from the log fires nothing, however many ticks it holds. A `tick:<at>` rung twice saves once and fires once. A `fire` from a program other than chaos is refused as `bad_cmd`. A process that dies after the save leaves asked with no did, and the next wake shows that and goes on. Results come back as letters.
-- Why: the worst bug here is a wake that re-fires. Plants: fire before save; replay fires; no table check.
+- A fresh letter saves first, and only then fires. A fold from the log fires nothing, however many ticks it holds. A `tick:<at>` rung twice saves once and fires once. A `fire` from a program other than chaos is refused as `bad_cmd`. A process that dies after the save leaves asked with no did, and the next wake shows that and goes on. Results come back as letters. **A failed Cmd always comes back as a letter with a `why`,** `bad_cmd` and a handler's error alike, so why it failed is a fact (owner, 2026-11-07).
+- Why: the worst bug here is a wake that re-fires. Plants: fire before save; replay fires; no table check; a failed Cmd that comes back as nothing, or with no `why`.
 
 **p36, the checker.** `new`, node, pbt. s7. `check`.
 - Over any letters: repeats by id count in `doubled`, missing `pos` in `gaps`, and a clean stream gives zeros.
@@ -1710,10 +1734,10 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Plants: a `DOWN` with no `to`; a monitor on a gone process that waits forever; `demonitor` leaving a `DOWN` behind; a name reused; a stale `DOWN` delivered to a new run.
 
 **p80, a crash is not a refusal (scenario of P34; replaces p25's wake rule).** `new`, node and the stage. s3, s9. `app/runner.ts`. *Added 2026-11-06 (owner).*
-- A fresh letter whose step throws gets no line; it is counted per letter id in the process's own storage. On the third throw it moves to `<pid>/dead` with `dead {tries, limit, m, build}`, and its sender gets `{why: "dead"}`, so the outbox stops resending.
-- A process that crashes N times in T seconds goes `down`, with backoff, and a resend does not wake it. `[Restart]` exits it and starts it with the new `init`.
+- A fresh letter whose step throws gets no line; it is counted per letter id in the process's own storage. On the third throw it moves to `<pid>/dead` with `dead {tries, limit, m, build, errors}`, and its sender gets `{why: "dead"}`, so the outbox stops resending. `errors` holds each throw's error class, one per try; the message goes only to the trace, where a person can delete it, since a message can quote a note (owner, 2026-11-07).
+- A process that crashes N times in T seconds goes `down {why, crashes, until}`, with backoff, and a resend does not wake it. `until` is when it tries again, on the referee's clock (owner, 2026-11-07). `[Restart]` exits it and starts it with the new `init`.
 - A wake that fails on a saved letter marks the process `down`, writes why, and keeps every letter. No saved letter is ever skipped or moved, so a saved note always folds (p55).
-- Plants: a fourth try; a poison letter that blocks the rest of the inbox; a saved letter moved to dead; a `down` process woken by a resend.
+- Plants: a fourth try; a poison letter that blocks the rest of the inbox; a saved letter moved to dead; a `down` process woken by a resend; a `dead` fact with fewer error classes than tries; a message in `errors`; a `down` with no `until`, or one it does not wake at.
 
 **p81, the brain comes back (scenario of P12 and P19).** `new`, stage and real Electron. s3, s8. `dev.ts`, the launchd plist.
 - Under `dev.ts`: workerd killed with `kill -9` mid-burst comes back alone, with a start fact naming its build, and nothing acked is lost (with p13). A brain that dies in a loop stops at the brake, and says so. At the 500 MB mark it restarts.
@@ -1740,6 +1764,11 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Checks: once a key's `revoked` fact lands, the brain refuses every write from that key, so nothing more from it reaches the ledger, even from a client still running old code.
 - The test: a seeded chaos run with a test client writing to the target. At a step the seed picks, the drill signs a `revoked` for that client's key with a key in `founded.keys`, as `grant.ts revoke` does. The client then plays old code: it ignores the 4003 close, keeps sending, and dials again with its old hello. Every later write is refused with its reason (`{why: "not_granted"}` at the hello, since `admitted` folds a revoked key out), and the ledger holds no letter `by` that key with an `arrivedAt` after the `revoked` fact's `arrivedAt`. The same seed gives the same step.
 - Why: a stop that relies on the client hearing a message fails on the client that matters most, the one that is stuck or old. Plants: the guard only at the hello, so an open socket keeps writing; the revoke read from a cached member list; a revoke that closes the socket and nothing more.
+
+**p91, nothing is lost (scenario of P27).** `new`, stage, on a throwaway ledger. s7, s3. `check`, the JobRecord, `spans.read`. *New 2026-11-07 (owner): "nothing is lost" is a Tier 1 goal, and chaos is one of the most important programs.*
+- Checks: for every fault a seeded run fires, the record answers four questions from the ledger and the JobRecord alone: what broke, when, why, and how it recovered. "What" is the fault's target and the process or client it hit. "When" is the `tick` and the `did`'s `arrivedAt`. "Why" is the `did`'s `ok` or `why`, the span's error class, and any `dead`, `down` or failed Cmd's `why`. "How it recovered" is the `restarted`, the `down`'s `until` and the wake after it, or a client's next `door/hellos`. A fault that leaves any of the four blank fails the run.
+- The test reads only what is kept: no stderr, no Workers Logs, no Cloudflare trace. The same seed gives the same faults, and the answers are compared per fault.
+- Why: a fault nobody can explain after the fact teaches nothing, and a missing fact cannot be added to entries already written. Plants: `dead` with no error classes; `down` with no `until`; a failed Cmd dropped with no letter; a run's spans written to the raw health rows, which are pruned; a fault whose `did` never lands.
 
 ## Criteria
 

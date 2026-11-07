@@ -6,6 +6,14 @@ program, not only the pipeline; the record is the storage programs already
 get; and a job is the host's, not tsh's. Jaeger goes away. Nothing extra runs:
 open fabrika and the traces are there.
 
+*Added 2026-11-07 (owner): Tier 1 builds a thin version in `next/`.* One
+record per process run, with its run number, holding that run's spans,
+kept forever. In Tier 1 no process starts another, so a job is one run. Its
+spans come from Effect's own `Effect.withSpan` in the runner, since tea
+0.23.0's otel traces agent runs only. The letters stay in the ledger forever,
+and any state rebuilds by replay. Later tiers add the rest of the record.
+[Tier 1's P37](../plan/tier-1.md#monitoring-is-in-tier-1) builds it.
+
 ```ts
 // A sketch. One Durable Object per host job, in the project's ledger Worker,
 // beside the project's object and each person's.
