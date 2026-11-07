@@ -530,6 +530,14 @@ tsh$
   points at the message's id, never a count.
 - **The picker's look and keys need a pressable test** (owner, 2026-11-07): the syntax is
   settled, the UX is not, and a prototype the owner presses settles it before fork's build.
+  **Pressed and approved 2026-11-07.** Tab after `at ` opens pick in the line's flow, just above
+  the prompt, and pushes the scrollback up rather than covering it, as fzf's `--height` does. Rows
+  are newest first: who said it, then the words on one line, cut to fit. Typed words filter; Up and
+  Down wrap; Enter writes the message's words, cut to about 40 characters, with a leading
+  `@name` dropped; Esc puts the line back as it was; a click picks. The input keeps focus, the box
+  is a listbox read through `aria-activedescendant`, and a polite live region says how many
+  messages match. The picked row is a full-row fill with stronger text. Still open: how tall the
+  box is in a short tile, and a real screen reader run.
 - **Built in its own pull request, after rooms are in daily use** (lead's lean, 75%). ACP's stable
   `session/new` takes no prior messages, and `session/fork` is still unstable and copies the whole
   session (schema `v1/schema.unstable.json`, read 2026-11-07); the Claude adapter can cut at a message
