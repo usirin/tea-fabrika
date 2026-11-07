@@ -7,7 +7,8 @@ runners are free in a public repository).
 ```text
                          check, wall    lane tests                       where they ran
 before (main, Nov 5-6)   27-33 min      1 file, 160 tests, 1,610 s        1 CPU of 1 machine, in order
-PR 412's run             5.4 min        18 files, 20 to 158 s each       6 machines, up to 4 files at once
+PR 412's first run       5.4 min        18 files, 20 to 158 s each       6 machines, up to 4 files at once
+PR 412, table refreshed  4.8 min        the same 18 files                 the same, 2.9 to 3.9 min a machine
 ```
 
 ## What was wrong
@@ -69,20 +70,22 @@ with another session loading the laptop.
 
 ## PR 412's run
 
-| machine | test step |
-|---|---|
-| 1 | 4.3 min (it also runs the bundles and standard tests) |
-| 2, 3, 5 | 3.0 min |
-| 4 | 3.3 min |
-| 6 | 3.9 min |
+| machine | test step, first run | test step, table refreshed |
+|---|---|---|
+| 1 (it also runs the bundles and standard tests) | 4.3 min | 3.7 min |
+| 2 | 3.0 min | 3.7 min |
+| 3 | 3.0 min | 3.9 min |
+| 4 | 3.3 min | 3.4 min |
+| 5 | 3.0 min | 2.9 min |
+| 6 | 3.9 min | 3.4 min |
 
-The whole check: 5.4 min, with every test (the change touches `.github` and `vitest.config.ts`, which
+The whole check: 5.4 min, then 4.8 min, both with every test (the change touches `.github` and `vitest.config.ts`, which
 rerun everything). On CI the lane files ran about 1.2 times their laptop time.
 
 The slowest file on CI was not a lane file: `packages/fabrika/src/host/door.laws.test.ts`, 170 s,
 which the first seconds table did not name, so it counted 1 s and stacked onto machine 1. The table
 now holds every file of 20 s or more from this run; over those files it gives each machine 413 to
-430 s.
+430 s. With it, machine 1 came down from 4.3 to 3.7 min and the slowest machine took 3.9 min.
 
 ## Wrong guesses, kept
 
@@ -94,7 +97,7 @@ now holds every file of 20 s or more from this run; over those files it gives ea
 
 ## What it cannot tell us
 
-- Whether the refreshed table brings machine 1 down to the others; the next run says.
+- Whether 4.8 min holds: two runs on one day is a small sample, and runners differ.
 - Setup is a floor of about 1 min a machine, and `apt-get update` once took 2.9 min on one.
 - The table goes stale as tests are added: a new slow file counts 1 s until it is measured again
   from the log. The cost is a slower machine, never a wrong result.
