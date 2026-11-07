@@ -1,7 +1,7 @@
 # Design for bounded objects
 
-**Decided 2026-11-07 (owner): the principle, and five calls from P37's questions and after. The four
-leans below are proposed.** `next/`.
+**Decided 2026-11-07 (owner): the principle, five calls from P37's questions and after, and the
+four leans below, after a walk of each part. The leans' confidence numbers stay as written.** `next/`.
 
 ```ts
 // A sketch of the whole idea. Every object that grows names its cap and what it does there.
@@ -54,7 +54,7 @@ at 10 GB; storage across many objects is unlimited. So:
 const record = env.SPANS.get(env.SPANS.idFromName(`spans/${part}`));
 ```
 
-## Proposed, with leans from experiment 225
+## Decided after the walk, with leans from experiment 225
 
 | Lean | What | Sure |
 |---|---|---|
@@ -101,15 +101,20 @@ const read = rev <= sealedTo ? sealedObjectFor(rev).read(stream, after) : head.r
   `(stream, id)`. Deleting a sealed stretch would break both.
 - A stretch is deleted from the head only after its sealed object has it, as KIP-405 and Kurrent
   delete only after the upload. Experiment 224 showed a `DELETE` frees room at once.
-- A sealed object, not an R2 file, first: the study sized it at 400 to 600 lines against 600 to
-  900, and it reads with the same SQL. R2 stays the next step if sealed objects grow many.
+- A sealed object, not an R2 file, because old stretches are still live data: any state rebuilds by
+  replaying the log from its start, so every rebuild reads them. A sealed object answers with the
+  same read code, order and rules as the head; an R2 file would be a second read path on every
+  replay. R2 is for what nobody replays: raw health rows, agent logs, big bodies. 75%. What would
+  change it: replays that start from a snapshot, which would make old stretches cold. *Corrected
+  2026-11-07 (owner): this bullet first chose by the study's line counts, which is no way to pick a
+  design; judged by what each way keeps true, the choice stayed and the reason changed.*
 
-### The clash for the owner to settle
+### The OpenTelemetry clash, settled by parts
 
 The OpenTelemetry SDK spec says a span processor should not block. The owner decided that a full
-disk fails the step. Both hold if rolling to a new part means the disk never fills: then the
-loud failure is the second net, for a bug, and never the daily path. If the owner wants the spec
-read strictly, a span write that fails would be counted and alarmed but would not fail the step.
+disk fails the step. Both hold because a record rolls to a new part before its disk fills: the
+loud failure is the second net, for a bug, and never the daily path (owner, 2026-11-07, after the
+walk).
 
 ## Why
 
