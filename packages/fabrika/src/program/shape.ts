@@ -137,7 +137,7 @@ export const jsonSchemaOf = (schema: Schema.Top): JsonSchema => {
 };
 
 // Asked as "not Effect", never as "has `~standard`": `Schema.toStandardSchemaV1`
-// (which tea's Effect `Cmd.define` calls) sets `~standard` on the Effect schema it is given.
+// (which tea's Effect `Cmd.make` calls) sets `~standard` on the Effect schema it is given.
 const isStandard = <T>(schema: ShapeSchema<T>): schema is StandardShape<T> =>
 	!Schema.isSchema(schema);
 
