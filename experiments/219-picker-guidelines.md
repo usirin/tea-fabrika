@@ -1,9 +1,12 @@
 # What is Cmd-K made of, if it is a picker and not a search box?
 
-Read 2026-11-06. **This is reading, not a measurement.** Nothing ran and nothing was built: the
-four designs at the end are named for a second pass that builds and shoots them. It feeds the
-proposed note [Pickers](../docs/direction/picker-guidelines.md) and a Design canvas, "Picker
-guidelines", which that second pass draws.
+Read 2026-11-06; built, shot and walked 2026-11-06 and 2026-11-07. **This is reading, not a
+measurement.** The first draft said nothing ran and nothing was built. Since then a second pass
+built the four designs at the end in today's app and shot 74 states, the owner's walk joined three
+of them into one `pick`, and a clickable prototype of it on the Design canvas, "Picker guidelines",
+was pressed and approved on 2026-11-07
+([what came back](#what-came-back-from-the-build-and-the-walk)). It feeds the note
+[Pickers](../docs/direction/picker-guidelines.md), decided 2026-11-07.
 
 **The answer.** Every picker read is built from the same five parts: a **source** that hands rows,
 a **ranker** that scores them against what was typed, **rows with an id**, **actions** on a row,
@@ -132,17 +135,21 @@ Today's version, read on main at `dd8b5be7`.
 | Tab | Kept in the box | `apps/fabrika/src/window/pop.tsx:564` |
 | Focus back | On close, focus goes back to where it was | `apps/fabrika/src/window/pop.tsx:127-142` |
 
-Checked against the note's seven principles:
+Checked against the note's ten principles, as decided (the first draft had seven; the walk added
+an exact id, `@` for people and agents, and fabsh as a source, and renumbered):
 
 | Principle | Today |
 |---|---|
 | Q1 five parts, a program writes sources | Breaks: one source, written into the frame |
-| Q2 one box, commands first, a few rows per group | Half: commands only, grouped |
-| Q3 narrow by a word and a space | Breaks: no scope |
-| Q4 the row under the cursor never moves | Half: rows never arrive late, but the index model would jump the day they do |
-| Q5 Enter, Cmd-Enter, Cmd-K for the rest; Esc pops one | Half: Enter and Esc only |
-| Q6 the agent is one more source, last and still | Breaks: no agent |
-| Q7 the accessibility floor | Half: the combobox and focus back follow; the count is hidden from screen readers |
+| Q2 one box, commands first, 5 per group | Half: commands only, grouped |
+| Q3 an exact id goes on top | Breaks: no ids |
+| Q4 a prefix narrows the box | Breaks: no scope |
+| Q5 people and agents: `@` and the Ask row | Breaks: no agent |
+| Q6 fabsh is a source | Breaks: no typed line |
+| Q7 the selected row never moves | Half: rows never arrive late, but the index model would jump the day they do |
+| Q8 Enter, Cmd-Enter, Cmd-K for the rest; Esc pops one | Half: Enter and Esc only |
+| Q9 pick is one program | Breaks: the palette is frame code |
+| Q10 the accessibility floor | Half: the combobox and focus back follow; the count is hidden from screen readers |
 
 ## What this tells us for fabrika
 
@@ -159,8 +166,8 @@ Checked against the note's seven principles:
 ## Four designs for the build pass
 
 Named here, built and shot by the second pass (step 5 of the guidelines skill). Each pipe line
-comes first. `index` and `pick` are made-up names for a sketch: `index` is the desk's one index (G7
-R5), `pick` the picker program.
+comes first. `index` and `pick` were made-up names for a sketch: `index` is the desk's one index (G7
+R5), `pick` the picker program. `pick` is now the program's name (the note's Q9).
 
 ```text
 A  one box, grouped         index | pick                     Linear's command menu: commands, then 5 per program, "All 37 tickets"
@@ -169,10 +176,43 @@ C  pick is a program        tracker --all | pick | ticket     fzf and Consult: t
 D  ask beside               index | pick --ask claude         Raycast Quick AI: rows on the left, the agent's answer streams on the right
 ```
 
+## What came back from the build and the walk
+
+Round 1 built A, B, C and D in today's app and shot 74 states. The owner's walk then joined three of
+them into one `pick`, and a prototype of it was pressed through all 34 presses on the canvas.
+
+| Design | Outcome | Why |
+|---|---|---|
+| A one box, grouped | Won, with D's Ask row and C's tile | One typed word finds commands, tickets and tiles together; "Tickets › test writer" read like Linear's prefix |
+| B a picker of pickers | Lost | "split" at the top gives "Nothing matches" while a command and two tickets have that word. Its Esc stack lives on in the note's Q8 |
+| C pick is a program | Lost as Cmd-K, kept as Q9 | As Cmd-K it had tickets only and no prefix. The same pick in a tile, the ticket beside it, is Q9. Its footer's "Leave ⌃B ←" was wrong; it is Esc now |
+| D ask beside | Its Ask row joined as Q5 | The answer streams under the Ask row, not on the right, so the rows above stay put |
+
+The walk also changed: Recent in the empty box, exact ids on top, the chip shows the program's
+name, people and agents behind `@`, fabsh as a source, and Cmd-K's actions in the same box.
+
+Guesses in this write-up that turned out wrong, left in on purpose:
+
+- **Wrong: D's answer on the right.** The four-designs block says the agent's answer "streams on the
+  right". The walk kept the answer under its Ask row, so the rows above stay put; the right-hand
+  pane lost.
+- **Changed: the agent is `claude`.** The first draft's Ask row asked claude. The walk made it your
+  default agent, and `@` names any summoned one.
+- **Wrong: one box versus a picker of pickers was open.** The draft said it needed a day of use.
+  B's shots settled it without one.
+
 ## What it cannot tell us
 
-- **Nobody used any of this.** It is reading. Whether 5 rows per group is right, and whether one
-  box beats a picker of pickers, needs the build pass's shots and a day of use.
+- **The joined pick is not built in the app.** Round 1's shots are of the four separate designs.
+  Agents, rooms, fabsh, actions, Recent and `/` have no app shot yet. Whether 5 rows per group is
+  right still needs a day of use.
+- **The prototype is simpler than the app.** Its tracker and ticket bodies are plain, its answers
+  are canned (no model is called), and Recent's rows, the trace rows' 0.7 s delay, the people under
+  `@` and the rooms are made up for it. Ticket titles, numbers and states are real.
+- **A limit of the canvas, not the design.** In Claude Design's Play mode, Esc leaves Play before
+  the prototype sees it.
+- **The prototype draws a dim behind the box.** The popovers note rules there is none (the owner,
+  2026-11-06); the canvas is off there.
 - **Thousands of rows.** No source here was measured. Linear caps at 500 [l1]; whether one desk
   index ranks 10,000 tickets inside 0.1 s [n2] needs a test with real numbers, as R5 already says.
 - **A real screen reader run.** VoiceOver and NVDA on the count, the groups and a streamed agent
@@ -182,7 +222,8 @@ D  ask beside               index | pick --ask claude         Raycast Quick AI: 
   operator search (403), Ableton's hot-swap text, VS Code's prefix list beyond `?`, WCAG 2.4.3. The
   Linear command menu's actions on a selected issue are from the program guidelines' sources, not
   this read.
-- **Spent:** $0. No model call beyond the reading agents.
+- **Spent:** $0 for the reading. No model call beyond the reading agents. The build pass and the
+  prototype ran in agent sessions whose cost was not counted here, a gap in this record.
 
 ## Links
 

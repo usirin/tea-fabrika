@@ -228,11 +228,13 @@ opens over the tiles, and the desktop layer. Layer 5, Tuval
 | layer | (decided Nov 3) One of six named levels the frame draws, low to high: desk, sheet, float, popover, palette, tooltip. Each has an owner and goes when it goes. NSWindow's level, by name. [Layers](../docs/direction/layers.md) | Not a z-index: no program picks a number. Not the five layers of the stack ([a local-first sync engine](../docs/direction/a-local-first-sync-engine.md)): write "a frame layer" where both could be meant. |
 | menu | A popover whose rows each do something: the inbox list, the jobs list. "Menu" when each row acts (decided Nov 3). [Popovers](../docs/direction/popovers.md) | Not "popup". |
 | menu bar extra | (decided Nov 3) The app's icon in macOS's menu bar, and its popover of rows (approve a tab, quit). Apple's word. [The desktop layer](../docs/direction/the-desktop-layer.md) | Not "menu bar": on macOS that is the system's bar. Not a panel. |
-| palette | Cmd-K: every command by name, grouped, with its shell word and keys. VS Code's Command Palette. [Popovers](../docs/direction/popovers.md) | Not the shortcuts list, which uses the same box. |
+| palette | Cmd-K: every command by name, grouped, with its shell word and keys. VS Code's Command Palette. [Popovers](../docs/direction/popovers.md). Since Nov 7 it is `pick` over the desk's one index in the palette layer: commands first, then things. [Pickers](../docs/direction/picker-guidelines.md) | Not the shortcuts list, which uses the same box. |
 | panel | (decided Nov 3) No part of the frame is a panel. Whether a side panel inside a view is a program waits on open call 8, "Is a side panel a program?", moved from [PR 332](https://github.com/usirin/tea-fabrika/pull/332) to [layers](../docs/direction/layers.md#8-is-a-side-panel-a-program). | Not the lines under a top bar item: a popover. Not `C-b ?`: the shortcuts list. Not the menu bar extra's rows: its popover. Not today's `Panel` (last section). |
 | peek | (decided Nov 3) Space on a row opens the tile beside, folded or not, on that row's thing, and leaves focus on the list; the peek follows the selection; Enter moves focus in. Linear's word. [Layers](../docs/direction/layers.md) (L6) | Not a float: it unfolds in place and covers nothing. Not a glance, which is a program's view in the top bar. |
+| pick | (decided Nov 7) The picker program: rows in, one row out, the type passed through. Cmd-K runs it over the desk's index in the palette layer; `/` on the tracker, or typing `pick`, runs it in a tile as `tracker \| pick \| ticket`. fzf's job. [Pickers](../docs/direction/picker-guidelines.md) (Q9) | Not a search box: search is one source of many. Not the palette, which is the layer it draws in from Cmd-K. |
 | popover | A raised box of rows in the views' font. Focus moves in; Escape closes it and puts focus back. Apple's and HTML's word. Popover for the box, menu when each row acts (decided Nov 3). The lines under a top bar item are a popover too. [Popovers](../docs/direction/popovers.md) | Not "popup", which stays only as ARIA's `aria-haspopup`. Not a panel. |
 | prefix | `C-b`, pressed before a tezgah key, as in tmux. Each window runs it itself. After it the status bar shows the prefix line. [The desktop layer](../docs/direction/the-desktop-layer.md) (W5) | |
+| prefix (picker) | (decided Nov 7) A program's short word, `t` for the tracker; typed with a space in `pick`, it narrows the box to that program's rows, shown as a chip with the program's name. `?` lists them; `@`, `>`, `?` and `#` need no space. Linear's and VS Code's word. [Pickers](../docs/direction/picker-guidelines.md) (Q4) | Not the tmux prefix `C-b` (the row above): an open clash, below. Not `find.word`, the proposed note's older word. |
 | presence label | (the word decided Nov 4, the design proposed) A small "✦ claude" name tag on the exact thing an agent's job is writing now, which fades after. Shown, never saved, never decided with: today it is desk state, and in `next/` it rides the ephemeral lane. [Shared tiles](../docs/direction/shared-tiles.md) | Not a flag, which is a command option such as `--all`. Not a cursor or an arrow pointer, dropped everywhere (decided Nov 5): agents send whole writes, so nothing moves. Not the avatar in the title bar, which says who is in the tile. |
 | question marker | (decided Nov 3) The mark on a tile that asks the close question. [Tile guidelines](../docs/direction/tile-guidelines.md) | Not "asking marker", the tile guidelines' older word. Not an ask. |
 | resize mode | (decided Nov 3, not built) i3's resize mode. A prefix key enters it; the status bar shows RESIZE and a screen reader hears "Resize mode on". `h j k l` move the focused tile's divider, which is a focused `role="separator"` while you move it. Esc or Enter leaves. | Not a drag, which needs no mode. The tile guidelines' "no focusable separators" becomes "focusable only in resize mode" in that note's own pull request. |
@@ -320,9 +322,14 @@ Each word that crosses a border, one line each:
 Only a word with two meanings, or one meaning with two words, inside one context, with what would
 settle it.
 
-None open. The four this file's walk found were settled on Nov 3, and each answer is in its row:
-the resume tag is `start`, a project ends and an area does not, the word is step and not stage,
-and primitive and not move.
+- **prefix, in the frame.** `C-b` is the prefix (the desktop layer, W5), and `pick`'s `t` is a
+  prefix too ([pickers](../docs/direction/picker-guidelines.md), Q4, decided Nov 7). Both are frame
+  words. tmux owns the first; Linear and VS Code use the second. Settled when the owner renames one
+  of them.
+
+The four this file's walk found were settled on Nov 3, and each answer is in its row: the resume tag
+is `start`, a project ends and an area does not, the word is step and not stage, and primitive and
+not move.
 
 ## Today's version says
 The translation list for today's version (`packages/`, `programs/`, `packs/`, `apps/`), and only
