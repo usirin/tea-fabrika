@@ -1,6 +1,6 @@
+import {fabrika, fabrikaLight, type Theme} from "@kampus/fabrika-design";
 import type {Shell} from "@kampus/fabrika-old";
 import {describe, expect, it} from "vitest";
-import {fabrika, fabrikaLight, type Theme} from "../themes.ts";
 import {table} from "./screen.ts";
 
 // The colors a table is printed in (tracker ticket 144). The line editor runs in the host, and its
