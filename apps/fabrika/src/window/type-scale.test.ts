@@ -1,5 +1,6 @@
 import {readFileSync} from "node:fs";
 import {join} from "node:path";
+import {fileURLToPath} from "node:url";
 import {describe, expect, it} from "vitest";
 
 // The type scale means what its names say: --fs-body is 13px, in every window and popover. It was
@@ -8,8 +9,16 @@ import {describe, expect, it} from "vitest";
 // computes each size as the browser does: a px size is itself, a rem size is that many roots.
 
 const CSS = readFileSync(join(import.meta.dirname, "window.css"), "utf8");
-/** fabrika's theme on Manti's tokens: Manti's parts draw their text from it. */
-const THEME = readFileSync(join(import.meta.dirname, "theme.css"), "utf8");
+/** The reset kept to Manti's parts, the app's own. */
+const RESET = readFileSync(join(import.meta.dirname, "manti-reset.css"), "utf8");
+/**
+ * The design package's tokens (P31): the scale, and Manti's tokens set from it, so Manti's parts
+ * draw their text from it. Found by its name, as the build finds it.
+ */
+const TOKENS = readFileSync(
+	fileURLToPath(import.meta.resolve("@kampus/fabrika-design/tokens.css")),
+	"utf8",
+);
 
 /** Each innermost rule of a stylesheet: its selector and its declarations, comments gone. */
 const rulesOf = (css: string) =>
@@ -55,19 +64,29 @@ const remsOf = (css: string) =>
 
 describe("the type scale", () => {
 	it("draws each size at the px its name says", () => {
-		expect(scaleOf(CSS)).toEqual({title: 22, head: 15, body: 13, prose: 14, small: 12, micro: 11});
+		expect(scaleOf(TOKENS)).toEqual({
+			title: 22,
+			head: 15,
+			body: 13,
+			prose: 14,
+			small: 12,
+			micro: 11,
+		});
 	});
 
 	it("names no rem, so the root's size moves nothing on its own", () => {
-		expect(remsOf(CSS)).toEqual([]);
-		expect(remsOf(THEME)).toEqual([]);
+		expect({tokens: remsOf(TOKENS), reset: remsOf(RESET), window: remsOf(CSS)}).toEqual({
+			tokens: [],
+			reset: [],
+			window: [],
+		});
 	});
 
 	// Manti's own text sizes are rem for a 16px root; on ours each would draw 12.5% small, as ours
-	// once did. The theme sets these six from our scale, so a Manti part draws our px; Manti's
+	// once did. The package sets these six from our scale, so a Manti part draws our px; Manti's
 	// 3xl to 5xl are multiples of its base, so they follow it.
 	it("sets each of Manti's text sizes from our scale", () => {
-		const root = rulesOf(THEME).find((r) => r.selector === ":root");
+		const root = rulesOf(TOKENS).find((r) => r.selector === ":root");
 		const sizes = Object.fromEntries(
 			[...(root?.says ?? [])].filter(([name]) => /^--manti-text-(xs|sm|base|lg|\d?xl)$/.test(name)),
 		);

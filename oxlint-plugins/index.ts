@@ -1,6 +1,7 @@
 // The repo's custom lint rules, one per file, loaded by `.oxlintrc.json`. README.md says where each
 // came from and what it was measured against.
 import type {Plugin} from "@oxlint/plugins";
+import {edgeComment} from "./edge-comment.ts";
 import {noBareDisable} from "./no-bare-disable.ts";
 import {noBareTell} from "./no-bare-tell.ts";
 import {noClockInView} from "./no-clock-in-view.ts";
@@ -26,6 +27,7 @@ import {useImportExtensions} from "./use-import-extensions.ts";
 const plugin: Plugin = {
 	meta: {name: "fabrika"},
 	rules: {
+		"edge-comment": edgeComment,
 		"no-bare-disable": noBareDisable,
 		"no-bare-tell": noBareTell,
 		"no-clock-in-view": noClockInView,

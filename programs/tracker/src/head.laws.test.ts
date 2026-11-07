@@ -1,4 +1,4 @@
-import {type Entry, type Fact, fold} from "@kampus/pipeline/tickets/ticket";
+import {type Entry, Fact, type FactOf, fold} from "@kampus/pipeline/tickets/ticket";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {type Head, HOUR, headOf, openAsksOf} from "./head.ts";
@@ -112,6 +112,38 @@ const since = (t: readonly Entry[]) =>
 const mergedSince = (t: readonly Entry[]) =>
 	since(t).some((e) => e.fact.type === "pr" && e.fact.state === "merged");
 const closedNow = (t: readonly Entry[]) => since(t).some((e) => e.fact.type === "closed");
+/**
+ * Every kind of fact a ticket's stream can hold, and whether it is work: a fact that moves the
+ * ticket on, so it wakes an idle one. The rest is advice, shown on the ticket and never read to
+ * decide (docs/direction/label-guidelines.md, L1): a Jev duplicate hint, a person's word on it, a
+ * person's rating of a review finding. A new kind must take a row here, or this does not compile.
+ */
+const WORK = {
+	filed: true,
+	commented: true,
+	closed: true,
+	reopened: true,
+	started: true,
+	session: true,
+	ended: true,
+	checked: true,
+	restarted: true,
+	planned: true,
+	pushed: true,
+	reviewed: true,
+	pr: true,
+	asked: true,
+	carried: true,
+	answered: true,
+	rated: false,
+	maybe_duplicate: false,
+	duplicate_rated: false,
+} as const satisfies Record<Fact["type"], boolean>;
+
+const isWork = (e: Entry) => WORK[e.fact.type];
+/** When the last work fact was written: the hour of "idle" runs from it, not from advice. */
+const lastWorkAt = (t: readonly Entry[]) => t.findLast(isWork)?.at ?? 0;
+
 const append = (t: readonly Entry[], by: Entry["by"], f: Fact): readonly Entry[] => [
 	...t,
 	{pos: (t.at(-1)?.pos ?? 0) + 1, ticket: 1, by, at: lastAt(t), fact: f},
@@ -223,7 +255,8 @@ describe("a ticket's top line", () => {
 				const early = headOf(t, nowOf(t, g));
 				const late = headOf(t, nowOf(t, g + more));
 				if (early._tag === late._tag) return same(late, early);
-				return early._tag === "next" && late._tag === "idle" && g + more > HOUR;
+				const quiet = nowOf(t, g + more) - lastWorkAt(t);
+				return early._tag === "next" && late._tag === "idle" && quiet > HOUR;
 			}),
 			OPTS,
 		));
@@ -231,10 +264,278 @@ describe("a ticket's top line", () => {
 	it("is idle only past the hour, and never while a run is going or an ask is open", () =>
 		fc.assert(
 			fc.property(timeline, gap, (t, g) => {
-				const head = headOf(t, nowOf(t, g));
+				const now = nowOf(t, g);
+				const head = headOf(t, now);
 				if (head._tag !== "idle") return true;
-				return g > HOUR && openAsksOf(t).length === 0;
+				return now - lastWorkAt(t) > HOUR && openAsksOf(t).length === 0;
 			}),
+			OPTS,
+		));
+});
+
+// ---------------------------------------------------------------- what wakes a ticket
+
+const hints = {kind: "agent", id: "duplicates", for: "owner"} as const;
+const watcher = {kind: "agent", id: "watcher", for: "owner"} as const;
+type Row = readonly [Entry["by"], Fact];
+
+const MINUTE = 60_000;
+/** When the fact under test is written: hours after what came before it, so that ticket is idle. */
+const AT = 5 * HOUR;
+const FILED: Row = [owner, {type: "filed", title: "Login fails", body: ""}];
+
+/** The ticket from `before`, a minute apart from 0, then `last` at {@link AT}, through the real fold. */
+const ticketOf = (before: readonly Row[], last?: Row): readonly Entry[] => {
+	const rows = last === undefined ? before : [...before, last];
+	const entries = rows.map(([by, fact], i): Entry => ({
+		pos: i + 1,
+		ticket: 3,
+		by,
+		at: last !== undefined && i === before.length ? AT : i * MINUTE,
+		fact,
+	}));
+	const {tickets, problems} = fold([], entries);
+	expect(problems).toEqual([]);
+	return tickets[0]?.timeline ?? [];
+};
+
+/** One fact of each kind, by the writer who writes it, after the facts it needs to fit. */
+const ONE_OF_EACH: {
+	readonly [K in Fact["type"]]: {
+		readonly before: readonly Row[];
+		readonly by: Entry["by"];
+		readonly fact: FactOf<K>;
+	};
+} = {
+	filed: {before: [], by: owner, fact: {type: "filed", title: "Login fails", body: ""}},
+	commented: {before: [FILED], by: owner, fact: {type: "commented", body: "Still broken."}},
+	closed: {before: [FILED], by: owner, fact: {type: "closed"}},
+	reopened: {before: [FILED, [owner, {type: "closed"}]], by: owner, fact: {type: "reopened"}},
+	started: {
+		before: [FILED],
+		by: build,
+		fact: {type: "started", run: "r-1", stage: "build", task: null, log: null},
+	},
+	session: {
+		before: [
+			FILED,
+			[build, {type: "started", run: "r-1", stage: "build", task: null, log: null}],
+			[
+				build,
+				{
+					type: "ended",
+					run: "r-1",
+					stage: "build",
+					outcome: {kind: "send", to: "review", why: "built"},
+					usd: 0.1,
+					input: 10,
+					output: 5,
+					turns: 3,
+				},
+			],
+		],
+		by: build,
+		fact: {type: "session", run: "r-1", id: "s-1"},
+	},
+	ended: {
+		before: [FILED, [build, {type: "started", run: "r-1", stage: "build", task: null, log: null}]],
+		by: build,
+		fact: {
+			type: "ended",
+			run: "r-1",
+			stage: "build",
+			outcome: {kind: "send", to: "review", why: "built"},
+			usd: 0.1,
+			input: 10,
+			output: 5,
+			turns: 3,
+		},
+	},
+	checked: {
+		before: [FILED],
+		by: build,
+		fact: {type: "checked", head: SHA, commands: [], result: "green", failed: []},
+	},
+	restarted: {
+		before: [FILED],
+		by: owner,
+		fact: {type: "restarted", from: "build", base: null, onto: SHA},
+	},
+	planned: {before: [FILED], by: build, fact: {type: "planned", version: 1, tasks: ["t-1"]}},
+	pushed: {
+		before: [FILED],
+		by: build,
+		fact: {type: "pushed", head: SHA, commits: [{sha: SHA, title: "Fix login"}]},
+	},
+	reviewed: {
+		before: [FILED],
+		by: build,
+		fact: {type: "reviewed", head: SHA, met: 2, of: 2, findings: []},
+	},
+	pr: {
+		before: [FILED],
+		by: watcher,
+		fact: {type: "pr", url: "https://github.com/o/r/pull/12", state: "open", head: SHA, checks: []},
+	},
+	asked: {
+		before: [FILED],
+		by: build,
+		fact: {type: "asked", ask: "a-1", what: "approve a-1", picks: [...PICKS]},
+	},
+	carried: {
+		before: [FILED],
+		by: build,
+		fact: {type: "carried", from: SHA, to: "d4e5f6a", why: "same_head"},
+	},
+	answered: {
+		before: [FILED, [build, {type: "asked", ask: "a-1", what: "approve a-1", picks: [...PICKS]}]],
+		by: owner,
+		fact: {type: "answered", ask: "a-1", pick: "approve", note: ""},
+	},
+	rated: {before: [FILED], by: owner, fact: {type: "rated", finding: "f-1", says: "noise"}},
+	maybe_duplicate: {
+		before: [FILED],
+		by: hints,
+		fact: {type: "maybe_duplicate", of: 4, yes: 0.83},
+	},
+	duplicate_rated: {
+		before: [FILED, [hints, {type: "maybe_duplicate", of: 4, yes: 0.83}]],
+		by: owner,
+		fact: {type: "duplicate_rated", of: 4, says: "dismiss"},
+	},
+};
+
+const KINDS = Object.keys(WORK) as readonly Fact["type"][];
+const WORK_KINDS = KINDS.filter((k) => WORK[k]);
+const ADVICE_KINDS = KINDS.filter((k) => !WORK[k]);
+
+/** A fact of advice, by the writer who writes it. A word on a hint never given is kept out by the fold. */
+const advice: fc.Arbitrary<Row> = fc.oneof(
+	fc
+		.constantFrom("fix" as const, "noise" as const)
+		.map((says): Row => [owner, {type: "rated", finding: "f-1", says}]),
+	fc
+		.tuple(fc.constantFrom(4, 5), fc.double({min: 0, max: 1, noNaN: true}))
+		.map(([of, yes]): Row => [hints, {type: "maybe_duplicate", of, yes}]),
+	fc
+		.tuple(fc.constantFrom(4, 5), fc.constantFrom("accept" as const, "dismiss" as const))
+		.map(([of, says]): Row => [owner, {type: "duplicate_rated", of, says}]),
+);
+
+/** `rows` after `t`, each `gap` after the one before, through the real fold. */
+const appendAll = (
+	t: readonly Entry[],
+	rows: readonly (readonly [Row, number])[],
+): readonly Entry[] => {
+	let at = lastAt(t);
+	const more = rows.map(([[by, f], g], i): Entry => {
+		at += g;
+		return {pos: (t.at(-1)?.pos ?? 0) + i + 1, ticket: 1, by, at, fact: f};
+	});
+	return fold([], [...t, ...more]).tickets[0]?.timeline ?? [];
+};
+
+/** A ticket's timeline with advice mixed in among the work, through the real fold. */
+const mixed: fc.Arbitrary<readonly Entry[]> = fc
+	.array(
+		fc.tuple(
+			fc.oneof({arbitrary: fc.tuple(writer, fact), weight: 3}, {arbitrary: advice, weight: 2}),
+			fc.nat({max: 3 * HOUR}),
+		),
+		{maxLength: 25},
+	)
+	.map((rows) => {
+		const filed: Entry = {
+			pos: 1,
+			ticket: 1,
+			by: owner,
+			at: 1_000,
+			fact: {type: "filed", title: "Login fails", body: ""},
+		};
+		return appendAll([filed], rows);
+	});
+
+describe("what wakes a ticket (label-guidelines.md, L1: nothing decides on advice)", () => {
+	it("has a row for every kind of fact a ticket's stream can hold, so a new kind must say if it is work", () => {
+		const kinds = Fact.members.map((m) => m.fields.type.literal);
+		expect([...KINDS].sort()).toEqual([...kinds].sort());
+		expect(Object.keys(ONE_OF_EACH).sort()).toEqual([...kinds].sort());
+	});
+
+	it.each(WORK_KINDS)(
+		"wakes an idle ticket on a %s fact, and the hour starts again from it",
+		(kind) => {
+			const {before, by, fact} = ONE_OF_EACH[kind];
+			const t = ticketOf(before, [by, fact]);
+			expect(headOf(t, AT + 30 * MINUTE)._tag).not.toBe("idle");
+			const later = headOf(t, AT + HOUR + 1);
+			if (later._tag === "idle") expect(later.since).toBe(AT);
+		},
+	);
+
+	it.each(ADVICE_KINDS)(
+		"leaves an idle ticket's line as it was on a %s fact, at any time after it",
+		(kind) => {
+			const {before, by, fact} = ONE_OF_EACH[kind];
+			const was = ticketOf(before);
+			const t = ticketOf(before, [by, fact]);
+			expect(t).toHaveLength(was.length + 1);
+			expect(headOf(was, AT + 30 * MINUTE)._tag).toBe("idle");
+			for (const now of [AT, AT + 30 * MINUTE, AT + HOUR + 1, AT + 3 * HOUR])
+				expect(headOf(t, now)).toEqual(headOf(was, now));
+		},
+	);
+
+	it("says the same line with every fact of advice taken out, at any time", () =>
+		fc.assert(
+			fc.property(mixed, gap, (t, g) => {
+				const now = nowOf(t, g);
+				return same(
+					headOf(t, now),
+					headOf(
+						t.filter((e) => isWork(e)),
+						now,
+					),
+				);
+			}),
+			OPTS,
+		));
+
+	it("keeps its line through any advice written after its last fact, at any time after", () =>
+		fc.assert(
+			fc.property(
+				timeline,
+				fc.array(fc.tuple(advice, gap), {minLength: 1, maxLength: 3}),
+				gap,
+				(t, rows, g) => {
+					const after = appendAll(t, rows);
+					const now = nowOf(after, g);
+					return same(headOf(after, now), headOf(t, now));
+				},
+			),
+			OPTS,
+		));
+
+	it("wakes an idle ticket with any work fact that fits, written within the hour", () =>
+		fc.assert(
+			fc.property(
+				timeline,
+				gap,
+				fc.tuple(writer, fact),
+				fc.nat({max: HOUR - 1}),
+				(t, g, [by, f], back) => {
+					const now = nowOf(t, g);
+					if (headOf(t, now)._tag !== "idle" || !WORK[f.type]) return true;
+					const at = Math.max(lastAt(t), now - back);
+					const pos = (t.at(-1)?.pos ?? 0) + 1;
+					const after = fold([], [...t, {pos, ticket: 1, by, at, fact: f}]).tickets[0]?.timeline;
+					if (after === undefined || after.length === t.length) return true;
+					const head = headOf(after, now);
+					if (head._tag === "idle") return false;
+					const later = headOf(after, at + HOUR + 1);
+					return later._tag !== "idle" || later.since === at;
+				},
+			),
 			OPTS,
 		));
 });

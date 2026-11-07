@@ -19,7 +19,8 @@ import {bundlesOf, common} from "./bundles.ts";
 //   dist/desk.js       the one page: the desk, ghostty-web with its WebAssembly, React and every
 //                      program view it knows, for Chromium
 //   dist/desk.html, dist/window.css   the page's stylesheet: Manti UI's, React Flow's base rules,
-//                      then fabrika's theme on Manti's tokens and the app's own rules
+//                      the design package's tokens (Manti's set from them), the reset kept to
+//                      Manti's parts, then the app's own rules
 //   dist/icon.png      the app's icon, for the Dock and for a window on Windows and Linux
 //
 // Every bundle gets the same build id, as the define `FABRIKA_BUILD` (src/build-id.ts): the first
@@ -43,6 +44,9 @@ const FLOW_CSS = "@xyflow/react/dist/base.css";
 
 /** Manti UI's stylesheet: its parts, in cascade layers, so the app's unlayered rules win. */
 const MANTI_CSS = "@manti-ui/styles/index.css";
+
+/** fabrika's tokens, with Manti's set from them: the design package's, read by its name. */
+const TOKENS_CSS = "@kampus/fabrika-design/tokens.css";
 
 const bundle = (options: BuildOptions) =>
 	Effect.tryPromise({
@@ -83,15 +87,20 @@ const program = Effect.gen(function* () {
 			fs.copy(at("../../programs/pipeline/briefs"), at("dist/briefs"), {overwrite: true}),
 			fs.copy(at("../../packages/pipeline/rubrics"), at("dist/rubrics"), {overwrite: true}),
 			// One stylesheet, as the page's policy serves only that: Manti's, layered, then React
-			// Flow's own rules for the map program's canvas, then fabrika's theme, which sets Manti's
-			// tokens from the app's values, and the app's rules, which restyle the rest.
+			// Flow's own rules for the map program's canvas, then the design package's tokens, which
+			// set Manti's from ours, the reset kept to Manti's parts, and the app's rules, which
+			// restyle the rest.
 			Effect.gen(function* () {
 				const read = (pkg: string) => fs.readFileString(fileURLToPath(import.meta.resolve(pkg)));
 				const manti = yield* read(MANTI_CSS);
 				const flow = yield* read(FLOW_CSS);
-				const theme = yield* fs.readFileString(at("src/window/theme.css"));
+				const tokens = yield* read(TOKENS_CSS);
+				const reset = yield* fs.readFileString(at("src/window/manti-reset.css"));
 				const own = yield* fs.readFileString(at("src/window/window.css"));
-				yield* fs.writeFileString(at("dist/window.css"), `${manti}\n${flow}\n${theme}\n${own}`);
+				yield* fs.writeFileString(
+					at("dist/window.css"),
+					`${manti}\n${flow}\n${tokens}\n${reset}\n${own}`,
+				);
 			}),
 		],
 		{concurrency: "unbounded", discard: true},

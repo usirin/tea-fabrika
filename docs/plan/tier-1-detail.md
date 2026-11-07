@@ -446,7 +446,7 @@ claude mcp add fabrika -- fabrika mcp --as claude
 
 ```ts
 // What the agent sees. One tool per input, from its schema. None is written by hand.
-//   runs            what runs, your own run, and tiles as a list you cannot drive
+//   ps              what runs, your own run, and tiles as a list you cannot drive
 //   notes_list      read-only
 //   notes_read      read-only
 //   notes_save      {value: {note, base, body}}
@@ -486,14 +486,14 @@ const agentMay = ["initialize", "view.open", "window.msg:notes", "ledger.read", 
 - **A retry is one row.** An MCP call has no id, so the bridge makes one from the key, note, base and body. Running the same call again repeats that id, which p53 keeps once.
 - **This tier still does not defend against a person's own agents,** as the menu bar's section says. These are the door's rules for an honest client, and each person answers for theirs.
 
-**An agent's "own run", in `next/`.** See biggest call 16. An agent never drives a tile, since a tile is a window onto a process and it has no window Msgs. `runs` only lists what is running. Tier 1 has no desk, so that means processes, and tiles join the list when the desk arrives in Tier 2.
+**An agent's "own run", in `next/`.** See biggest call 16. An agent never drives a tile, since a tile is a window onto a process and it has no window Msgs. `ps` only lists what is running, as `ps` does in a Unix shell and in today's tsh. Tier 1 has no desk, so that means processes, and tiles join the list when the desk arrives in Tier 2. One ticket's jobs are `timeline`'s, not `ps`'s. *Changed 2026-11-07 (owner): it said `runs`.*
 
 **What moves from today's version, from main at `2c29c13`.** The copies are marked as the styling exception is, read at c7.
 
 | From `packages/fabrika/src/mcp/` | Lines | What happens |
 |---|---|---|
 | `tools.ts` | 139 | Copied to `next/packages/libfabrika/src/mcp/tools.ts`, about 120 lines. It stays pure. Its three type imports fit `Program`. Renamed as it lands: `toolsOf` to `listTools`, `callOf` to `readCall`, `toolNameOf` to `toolName`, `toolNamesOf` to `toolNames`, `toolInputsOf` to `toolInputs`. Its `Call` moves from `kind` to `_tag`, through `Schema.TaggedUnion`. |
-| `drive.ts` | 142 | Its lessons stay: calls one at a time, tiles only as a list, `runs`' shape. Written fresh for `next/` at `mcp/drive.ts`, 70 to 100 lines. `AnyRun`, `memoryStorage` and `run.offer` cannot come. |
+| `drive.ts` | 142 | Its lessons stay: calls one at a time, tiles only as a list, the shape of its `runs` tool, which is `ps` here. Written fresh for `next/` at `mcp/drive.ts`, 70 to 100 lines. `AnyRun`, `memoryStorage` and `run.offer` cannot come. |
 | `serve.ts` | 145 | The use of `@modelcontextprotocol/server` stays. Written fresh at `mcp/serve.ts`, 60 to 90 lines, over stdio. No handshake. |
 | `handshake.ts`, the bridge's Unix socket, `host/mcp` in `apps/fabrika/src/host/socket.ts` | | **Not copied.** A handshake lets an agent just say its name, with only a file's mode behind it. And today's connected home has no agents' socket at all (`apps/fabrika/src/host/agents.ts`), while real notes live on Cloudflare. |
 | `apps/fabrika/src/host/agents.test.ts` | 340 | What applies, about 150 to 200 lines, ported by the test writer. The top bar's count does not apply. |
@@ -985,6 +985,30 @@ const rung = (sockets: ReadonlyArray<BrainSocket>, stream: string, rev: number) 
 - `seen` on a letter, the last log rev the writer had read, filled by code, and `sentAt`, both kept out of deciding code's types. The referee refuses a `seen` past its head. This was `saw`, the window's inbox position (the slice has it for counter); it became `seen` on the entry wrapper on 2026-11-01 ([saved state](../direction/saved-state.md)). A grant's `saw`, what a person looked at when they said yes, is a different fact and keeps its name.
 - **On each note's save:** `base`, since which version a writer worked on exists only then. `body` whole and raw, every time, since a version is never overwritten. `how`, since "kept from a stale screen" cannot be worked out later, and `from`, since nothing else ties a kept note to its source. The letter's `by`, `arrivedAt`, `sentAt`, `seen` and `cause` come with it, using the plan's existing fields: who wrote it, the log's clock, their own clock, what they had seen. **New on every letter: `for`, the person the writer works for,** from the checked grant, so a fact names both the agent and its person with no fold. The agent's name is its grant's `saw.label`, recorded and shown to the person at Approve. `sentAt` stays out of deciding code's types, and `refuse` sees only the Msg. Cost: one full body per save, about 500 small rows a day at most, a guess.
 - **On each `revoked`:** what the person saw and the check, inside the signed text, the same as a grant.
+- **Added 2026-11-07 (owner), three facts that were lost:** `dead` keeps each throw's error class (p80), `down` gains `until` (p80), and a failed Cmd always comes back as a letter with a `why` (p35). Each existed only at the moment it happened. The throw's message goes to the trace, never the ledger, since a message can quote a note and the trace's content can be deleted.
+- **Added 2026-11-07 (owner), the record of how it ran:** each process run's spans in its thin JobRecord, kept forever (P37); raw health rows about 2 weeks, and an hourly summary per piece kept forever; each object's own size, about once an hour while awake. Why: a slow step or a growing object is a trend, and a trend not kept cannot be rebuilt. [Monitoring is in Tier 1](./tier-1.md#monitoring-is-in-tier-1) has the rest.
+
+```ts
+// A sketch of the new shapes, in next/'s Schema. Key names are P33's, P34's and P37's plans' to settle.
+const Dead = Schema.TaggedStruct("dead", {
+	tries: Schema.Number, limit: Schema.Number, m: Schema.String, build: Schema.String,
+	errors: Schema.Array(Schema.String), // each throw's error class, one per try: ["TypeError", "TypeError", "RangeError"]
+});
+const Down = Schema.TaggedStruct("down", {
+	why: Schema.String, crashes: Schema.Number,
+	until: Schema.Number, // when it tries again, on the referee's clock
+});
+// One row per piece per hour, kept forever, in the object that wrote it. Not a ledger entry.
+const Summary = Schema.TaggedStruct("summary", {
+	piece: Schema.String,  // "runner.step", "door.envelope", "ledger.ring"
+	hour: Schema.Number,   // the hour's start
+	count: Schema.Number,  // rate
+	errors: Schema.Number, // errors
+	ms: Schema.Struct({p50: Schema.Number, p95: Schema.Number, max: Schema.Number}), // duration
+	lag: Schema.optional(Schema.Number), // a piece that delivers events: the furthest a reader fell behind the newest entry, in revs
+});
+const Size = Schema.TaggedStruct("size", {at: Schema.Number, bytes: Schema.Number}); // ctx.storage.sql.databaseSize
+```
 
 **Can wait, since they rebuild from the log:** durations, recovery times, verdict tables, any view, a note's version number and name, the list's order, a diff between versions, a note's drawn blocks and code colors. `check` is itself a fold, so a better checker later re-judges old runs.
 
@@ -1305,9 +1329,9 @@ export const colors: (highlights: Highlights, theme: Theme) => (code: string, la
 
 // next/packages/libfabrika/src/mcp/tools.ts, on `@kampus/libfabrika/mcp`. Copied, from today's mcp/tools.ts. Pure.
 export type Tool = {readonly name: string; readonly description: string; readonly inputSchema: object; readonly annotations?: {readonly readOnlyHint: true}};
-export const listTools: (programs: ReadonlyArray<AnyProgram>) => ReadonlyArray<Tool>; // `runs` first; no tool for personOnly
+export const listTools: (programs: ReadonlyArray<AnyProgram>) => ReadonlyArray<Tool>; // `ps` first; no tool for personOnly. Changed 2026-11-07 (owner): it said `runs`.
 export const Call = Schema.TaggedUnion({
-	runs: {},
+	ps: {},
 	input: {program: Schema.String, input: Schema.String, value: Schema.Unknown},
 	refused: {why: Schema.String},
 });
@@ -1406,7 +1430,7 @@ import "./window/style.css";                 // only what the package lacks, cop
 - **The tile and color rules came after this exception.** [Tile guidelines](../direction/tile-guidelines.md), [color principles](../direction/color-principles.md) and [pipe colors](../direction/pipe-colors.md) were decided for today's version the same day, and `next/` reads them as lessons. Today's app took the Radix fabrika theme, dark and light, in PR 308 (ticket 144), so this copy brings the Radix steps the rules name, and the owner called [the question](./tier-1.md#open-questions) moot on 2026-11-02.
 - **From the package, not copied:** the `:root` block, lines 12 to 133 at `25d1317` (Radix 3.0.0 steps as `light-dark()` pairs: slate surfaces, lines and text, indigo for the turn, grass, amber and red for done, running and stuck; then type at 22/15/14/13/12/11 px, spacing and radius). P31 reads each value again against [themes](../direction/themes.md) and [color principles](../direction/color-principles.md), and drops lines 115 to 127, the old names. Whether the type, spacing and radius tokens go in the package or stay in the copy is P31's plan to say; the package note names only the colors, the mapping and the text roles.
 - **Copy:** the bottom line's rule, and the slot rule. *This once said copy the `:root` block too, and before that lines 1 to 168, which was wrong, and then lines 7 to 137 at `ec7ef72`, graphite `--n-*` and accent `--a-*`, which PR 308 replaced.*
-- **Manti, as today's app.** `next/` uses Manti (the owner, 2026-11-02; [UI on Manti](../direction/ui-on-manti.md)). The Manti mapping, today's `apps/fabrika/src/window/theme.css`, 139 lines that set Manti's tokens from our names, comes from the package, not a copy, and the style build puts `@manti-ui/styles/index.css` before it, as today's `build.ts` does. `@manti-ui/react` and `@manti-ui/styles` are `catalog:` lines, already pinned at 0.13.0, and the root `patchedDependencies` already patch `@manti-ui/react` for the whole workspace.
+- **Manti, as today's app.** `next/` uses Manti (the owner, 2026-11-02; [UI on Manti](../direction/ui-on-manti.md)). The Manti mapping, in `@kampus/fabrika-design/tokens.css` since P31 (it was `apps/fabrika/src/window/theme.css`), which sets Manti's tokens from our names, comes from the package, not a copy, and the style build puts `@manti-ui/styles/index.css` before it, as today's `build.ts` does. `@manti-ui/react` and `@manti-ui/styles` are `catalog:` lines, already pinned at 0.13.0, and the root `patchedDependencies` already patch `@manti-ui/react` for the whole workspace.
 - **Fit, not copy: `.tile`, `.tile.focused` and `.titlebar`.** Today `.tile` is `position: relative; flex: 1`, and `.titlebar` is an absolute `<button>`. In `next/`, `Tile` draws with `position: absolute` and pixels from `fold`, and the title bar is a `<header>`. So their colors, borders and type carry over, their position and size are written fresh, and the PR names each edit.
 - **Keep the meaning rule:** accent is "your turn" only; red stuck or broken; amber running; green done.
 - **Keep the frame rules from `frame.tsx`:** bars monospace, plain words joined by ` · `, no item backgrounds, no line under the top bar or over the bottom line.
@@ -1484,8 +1508,8 @@ Before it, a small exam PR. See [The exam PR](#the-exam-pr-not-in-this-plan).
 
 ### PR E
 
-- **T12.** Scenario p34. Other: p36. Criterion c11.
-- **T13.** Scenario p35's live half, p37, p38, p60.
+- **T12.** Scenario p34. Other: p36, p90. Criterion c11.
+- **T13.** Scenario p35's live half, p37, p38, p60, p91.
 - **T14.** Scenario p39, p41's chaos step. The owner reads `alchemy plan --stage drill` and says yes before the cloud run, and the stage is removed after it. The drill dials on PR D's `mcp/client.ts`, with its own key, and comes in by the same door. Criteria c9, c12. `ends`: PR E.
 
 ## Properties
@@ -1538,8 +1562,8 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Plants: no cap; `stop` ignored while a tick is open; a random number from outside the seed.
 
 **p35, Cmds in the runner.** `new`, node. s7, s1. `ProgramRunner`.
-- A fresh letter saves first, and only then fires. A fold from the log fires nothing, however many ticks it holds. A `tick:<at>` rung twice saves once and fires once. A `fire` from a program other than chaos is refused as `bad_cmd`. A process that dies after the save leaves asked with no did, and the next wake shows that and goes on. Results come back as letters.
-- Why: the worst bug here is a wake that re-fires. Plants: fire before save; replay fires; no table check.
+- A fresh letter saves first, and only then fires. A fold from the log fires nothing, however many ticks it holds. A `tick:<at>` rung twice saves once and fires once. A `fire` from a program other than chaos is refused as `bad_cmd`. A process that dies after the save leaves asked with no did, and the next wake shows that and goes on. Results come back as letters. **A failed Cmd always comes back as a letter with a `why`,** `bad_cmd` and a handler's error alike, so why it failed is a fact (owner, 2026-11-07).
+- Why: the worst bug here is a wake that re-fires. Plants: fire before save; replay fires; no table check; a failed Cmd that comes back as nothing, or with no `why`.
 
 **p36, the checker.** `new`, node, pbt. s7. `check`.
 - Over any letters: repeats by id count in `doubled`, missing `pos` in `gaps`, and a clean stream gives zeros.
@@ -1654,8 +1678,8 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Why: a law, not a hope, for what the copies need and what agent text must not do. Plants, by hand: no `'wasm-unsafe-eval'`; policy on one stage only; the highlighter in the first script; a `var(--ink)` left in.
 
 **p63, an agent through MCP (scenario of T21).** `new`, node with the SDK's own client, and real `dev.ts`; ported where it applies from `agents.test.ts`. s11, s9. `mcp/tools.ts`, `mcp/serve.ts`, `mcp/drive.ts`, `mcp/client.ts`.
-- Tools are one per input, from its schema: `runs` first, `notes_list` and `notes_read` read-only, `notes_save` not. An input with `personOnly` has no tool, and a call to it is refused as an unknown tool. A value that does not fit is refused in words. No tool name holds grant, approve, remove, or chaos.
-- Before Approve, the list answers, and each call answers in words with the code. No letter is written. After one Approve, the same name needs none again, across restarts of the bridge. A second name gets its own row. A stale `base` is refused in the same words as a window's `why`, and writes nothing. The same call twice is one row. `runs` lists processes and drives none. `by` is the agent's key and `for` is the person, on every letter.
+- Tools are one per input, from its schema: `ps` first, `notes_list` and `notes_read` read-only, `notes_save` not. An input with `personOnly` has no tool, and a call to it is refused as an unknown tool. A value that does not fit is refused in words. No tool name holds grant, approve, remove, or chaos.
+- Before Approve, the list answers, and each call answers in words with the code. No letter is written. After one Approve, the same name needs none again, across restarts of the bridge. A second name gets its own row. A stale `base` is refused in the same words as a window's `why`, and writes nothing. The same call twice is one row. `ps` lists processes and drives none. *Changed 2026-11-07 (owner): it said `runs`.* `by` is the agent's key and `for` is the person, on every letter.
 - Plants: a tool for a `personOnly` input; `by` taken from `--as`; a name used without a grant; a retry with a new id.
 
 **p64, an agent stays an agent.** `new`, node. s11, s4. `transport/answer.ts`, door.
@@ -1710,10 +1734,10 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Plants: a `DOWN` with no `to`; a monitor on a gone process that waits forever; `demonitor` leaving a `DOWN` behind; a name reused; a stale `DOWN` delivered to a new run.
 
 **p80, a crash is not a refusal (scenario of P34; replaces p25's wake rule).** `new`, node and the stage. s3, s9. `app/runner.ts`. *Added 2026-11-06 (owner).*
-- A fresh letter whose step throws gets no line; it is counted per letter id in the process's own storage. On the third throw it moves to `<pid>/dead` with `dead {tries, limit, m, build}`, and its sender gets `{why: "dead"}`, so the outbox stops resending.
-- A process that crashes N times in T seconds goes `down`, with backoff, and a resend does not wake it. `[Restart]` exits it and starts it with the new `init`.
+- A fresh letter whose step throws gets no line; it is counted per letter id in the process's own storage. On the third throw it moves to `<pid>/dead` with `dead {tries, limit, m, build, errors}`, and its sender gets `{why: "dead"}`, so the outbox stops resending. `errors` holds each throw's error class, one per try; the message goes only to the trace, where a person can delete it, since a message can quote a note (owner, 2026-11-07).
+- A process that crashes N times in T seconds goes `down {why, crashes, until}`, with backoff, and a resend does not wake it. `until` is when it tries again, on the referee's clock (owner, 2026-11-07). `[Restart]` exits it and starts it with the new `init`.
 - A wake that fails on a saved letter marks the process `down`, writes why, and keeps every letter. No saved letter is ever skipped or moved, so a saved note always folds (p55).
-- Plants: a fourth try; a poison letter that blocks the rest of the inbox; a saved letter moved to dead; a `down` process woken by a resend.
+- Plants: a fourth try; a poison letter that blocks the rest of the inbox; a saved letter moved to dead; a `down` process woken by a resend; a `dead` fact with fewer error classes than tries; a message in `errors`; a `down` with no `until`, or one it does not wake at.
 
 **p81, the brain comes back (scenario of P12 and P19).** `new`, stage and real Electron. s3, s8. `dev.ts`, the launchd plist.
 - Under `dev.ts`: workerd killed with `kill -9` mid-burst comes back alone, with a start fact naming its build, and nothing acked is lost (with p13). A brain that dies in a loop stops at the brake, and says so. At the 500 MB mark it restarts.
@@ -1723,6 +1747,28 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 **p82, version agreement (scenario of P10).** `new`, node. s5. `transport/hello.ts`, door.
 - The brain picks the highest version both sides list. No shared version is refused in words, and nothing is written. A field the brain does not know is ignored, never refused.
 - Plants: the lowest shared version picked; a mismatch let through; an unknown field refused.
+
+**p83 to p87 and p89, the commit check (P32).** `new`, node. `src/exam/commits.ts`, `commits.test.ts`, `commits-git.test.ts`. *Added 2026-11-07, from P32's plan, approved that day: the owner settled the signed text (the link), merge-only and the newest-link rule; the lead agent approved the rest. It builds [a unit of work is a commit](../direction/a-unit-of-work-is-a-commit.md) and [experiment 221](../../experiments/221-signed-steps-and-rebases.md).* Every law reads `allowed_signers` and `exam-paths.json` from the base, never from the change under test, and judges a pull request only when its own change (`base...head`, three dots) names a path under `next/**` or on the base's exam list; any other answers `done`, "not in scope". The signed text is one function, `signedText`, the link in v2: `step`, `ticket`, `version`, `from` tree, `to` tree, no commit and no parents.
+- **p83, a commit counts only when its role's key signed a link that fits it.** Its note on `refs/notes/fabrika` decodes; the text rebuilt from the note verifies with `ssh-keygen -Y verify -n fabrika-step` under the principal `find-principals` names, which equals the note's `step`; `from` is the first parent's tree and `to` the commit's tree; its `ticket` is the pull request's. Else `stuck: unsigned_commit`. Author, message and trailers are never read. Plants: verify always true; keys read from the head; trees never compared; ticket not checked; namespace not passed; role taken from the note with no principal check.
+- **p84, a `build` commit changes no path on the base's exam list,** judged against its first parent with renames' both sides, merges included. Else `stuck: build_touched_exam` with the paths. Plants: only added paths; a rename's old path ignored; the list read from the head; merge commits skipped.
+- **p85, any exam path in the pull request's own change asks the owner:** `ask: owner: exam_read` with the paths, sorted, beside every `stuck`. A path with a control character counts as an exam path. Plants: a two-dot diff; the list from the head; the list's own rows removed.
+- **p86, the chain reaches the merged tree.** At pull request time the head contains the base, else `stuck: broken_chain`; the fix is a `lead` merge of `main`, never a rebase. After the merge, the `attested` links in `field/runs.jsonl` for one squash run from the tree of its `base` to its tree, each `from` the last `to`, no tree left twice, one ticket, each `sig` verified against `allowed_signers` at the link's `keys` commit. Plants: no up-to-date check; a gap passes; the head's tree in place of the squash's; keys from main's head.
+- **p87, the keys file says one thing:** `<role> namespaces="fabrika-step" ssh-ed25519 <key>` per line, roles `tests`, `build`, `lead`, each at least once, no key twice, no other option. Else, or with no file, the run fails and judges no commit. Plants: an ECDSA key; one key under two roles; a fourth role; a missing namespace.
+- **p89, only a step's newest signature for the ticket counts.** Over every verified note on `refs/notes/fabrika` for the ticket, each step's highest `version` must be a link the pull request uses, and its older links in the pull request come before it; a tie of two links at one `version` counts neither. Else every commit of that step is `stuck: stale_link`, or the head when the pull request has none. After the merge, the same over `field/runs.jsonl`. `sign` writes the step's highest verified `version` plus one. Plants: `version` ignored; the scan limited to the pull request's commits; an unverified note's `version` counted; a tie broken by picking one; the after-merge half reading only the squash's own rows.
+
+**p88, every machine passes the sync test (S2, P35).** `new`, node. `src/exam/laws-scan.test.ts`. *Added 2026-11-06: [saved state, S2](../direction/saved-state.md#s2-every-machine-passes-the-sync-test), decided 2026-11-01. p83 to p87 are P32's.*
+- Each machine's laws files call `syncTest(`, or one of them says `// sync test left out: <why>` with a reason. The scan reads text; the helper lands in libfabrika's test kit in P11, until tea ships one.
+- Plants: laws with no sync test and no reason; a reason left empty. The sync test in a second laws file passes.
+
+**p90, a revoke stops a client at the door (scenario of P17).** `new`, stage, on a throwaway ledger. s4, s7. door, `ClientManager`. *New 2026-11-07 (owner).*
+- Checks: once a key's `revoked` fact lands, the brain refuses every write from that key, so nothing more from it reaches the ledger, even from a client still running old code.
+- The test: a seeded chaos run with a test client writing to the target. At a step the seed picks, the drill signs a `revoked` for that client's key with a key in `founded.keys`, as `grant.ts revoke` does. The client then plays old code: it ignores the 4003 close, keeps sending, and dials again with its old hello. Every later write is refused with its reason (`{why: "not_granted"}` at the hello, since `admitted` folds a revoked key out), and the ledger holds no letter `by` that key with an `arrivedAt` after the `revoked` fact's `arrivedAt`. The same seed gives the same step.
+- Why: a stop that relies on the client hearing a message fails on the client that matters most, the one that is stuck or old. Plants: the guard only at the hello, so an open socket keeps writing; the revoke read from a cached member list; a revoke that closes the socket and nothing more.
+
+**p91, nothing is lost (scenario of P27).** `new`, stage, on a throwaway ledger. s7, s3. `check`, the JobRecord, `spans.read`. *New 2026-11-07 (owner): "nothing is lost" is a Tier 1 goal, and chaos is one of the most important programs.*
+- Checks: for every fault a seeded run fires, the record answers four questions from the ledger and the JobRecord alone: what broke, when, why, and how it recovered. "What" is the fault's target and the process or client it hit. "When" is the `tick` and the `did`'s `arrivedAt`. "Why" is the `did`'s `ok` or `why`, the span's error class, and any `dead`, `down` or failed Cmd's `why`. "How it recovered" is the `restarted`, the `down`'s `until` and the wake after it, or a client's next `door/hellos`. A fault that leaves any of the four blank fails the run.
+- The test reads only what is kept: no stderr, no Workers Logs, no Cloudflare trace. The same seed gives the same faults, and the answers are compared per fault.
+- Why: a fault nobody can explain after the fact teaches nothing, and a missing fact cannot be added to entries already written. Plants: `dead` with no error classes; `down` with no `until`; a failed Cmd dropped with no letter; a run's spans written to the raw health rows, which are pruned; a fault whose `did` never lands.
 
 ## Criteria
 
@@ -1830,7 +1876,7 @@ No fact is lost by waiting on any of these. Each adds a kind of fact, and old sa
 - `fabsh`, the shell in `next/`. Today's version keeps `tsh`. It reads the ports programs declare; nothing lost.
 - A tile can start from a saved line. Records no fact from Tier 1's time; nothing lost.
 - Split, close and prefix keys, since `tracker | ticket` beside `fabsh` needs them. They arrive with the desk.
-- The desk, `next/programs/desk`, built in as `fabrika/desk`. Layout and focus move into it, on the same Cmds as any program, with a grant for any start or monitor power it needs. Focus mirrors between windows again, and `runs` lists tiles. Tier 1 keeps no layout or focus as facts, and has none to lose.
+- The desk, `next/programs/desk`, built in as `fabrika/desk`. Layout and focus move into it, on the same Cmds as any program, with a grant for any start or monitor power it needs. Focus mirrors between windows again, and `ps` lists tiles. *Changed 2026-11-07 (owner): it said `runs`.* Tier 1 keeps no layout or focus as facts, and has none to lose.
 - `keep`, as a proposal: the tracker's filter is the first thing that needs it. Filters stay in the window's machine until then; nothing lost.
 - Topic, as a proposal: `tracker | ticket` is the first case that may need to read outside an inbox. A later Topic reads the same streams; nothing lost.
 
@@ -1971,5 +2017,6 @@ The owner approved what Tier 1 builds on 2026-11-01. What is still open is in [t
 - **Q15, the tag key:** `_tag` for every union we define, never by hand. tea's Msgs and Cmds keep `type`, and third-party shapes keep theirs. A lint rule holds it. See [Tags](#tags).
 - **2026-11-02, the brief's questions 5 to 8:** the styling copy question is moot since PR 308; `next/` uses Manti; saved vectors and letters come in the exam PRs; configurable keys needs no owner call. Each is in [the brief](./tier-1.md#open-questions).
 - **2026-11-05, the brief's questions 9 to 13 and 18, and two clashes:** edges are opt-in comments at the line, not a path list; the first method is `initialize`, and `Hello` stays the schema's name; a key per client, the person key grants in SSHSIG's shape, and GitHub is never a way in ([the note](../direction/a-key-per-client-and-no-github-trust.md)); an entry's clocks are `arrivedAt` and `sentAt` in `next/`, which were `at` and `said`; `cause` on the entry in P6, with laws p67 to p69; a tracker ticket per pull request; P14 imports the design package, which P31 builds first; and a unit of work is a commit: each exam change is the test writer's commit, never the builder's, and CI walks the commits ([the note](../direction/a-unit-of-work-is-a-commit.md)).
+- **2026-11-07, P32's signed text:** a step signs the link (step, ticket or lane, tree before, tree after), not the commit; a rebase is carried by replay, with old heads under kept refs; only a step's newest signature for this ticket counts; and Tier 1 catches up only by merging `main` in ([P32's row](./tier-1.md#the-pull-requests-one-at-a-time), [experiment 221](../../experiments/221-signed-steps-and-rebases.md)). *Changed 2026-11-07: P32's row said each step signs its commit.*
 
 **Left open until Tier 6, as a proposal, no answer needed now:** native `<dialog>` and `popover` against Zag.

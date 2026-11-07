@@ -67,9 +67,11 @@ weight and size, never from a gray between the two. A title is always step 12, s
 weaker than the text beside it on a row at rest, hovered or selected. A row set aside stays at the
 low step, since that is a state and not a rank, and its dashed ring carries it too (principle 3).
 
-**The bends.** Four, each with its reason, listed in `apps/fabrika/src/themes.ts`: the dark desk
-(`#0c0d0e`, darker than slate 1), white text on a step 9 fill (Radix's own rule for that step), the
-resting tile edge, and the light focus edge (slate a9 as a line, since a8 reads 1.90 on the desk).
+**The bends.** Five, each with its reason, listed in `packages/fabrika-design/src/themes.ts`: the
+dark desk (`#0c0d0e`, darker than slate 1), white text on a step 9 fill (Radix's own rule for that
+step), the resting tile edge, the light focus edge (slate a9 as a line, since a8 reads 1.90 on the
+desk), and the dark keyboard ring (slate a9 as a line too, since a8 reads 2.82 on a selected row;
+written down in P31).
 The one that needs a word here is the edge. Radix gives borders steps 6 to 8. Our resting tile edge
 is step 4, because a higher one was too loud on a desk full of tiles. It is 1.31:1 on the ground, so
 it cannot carry a needed fact. The title bar and the focus edge do that. A pipe's light focus edge
@@ -97,7 +99,8 @@ place it sits, hovered and selected rows included, not only on the page.
 ## What today's code still breaks
 
 - The grays and the state colors in `apps/fabrika/src/window/window.css` are Radix steps since
-  ticket 144, and the terminal and the window's frame read them from `apps/fabrika/src/themes.ts`.
+  ticket 144, now in the design package's `tokens.css` (P31), and the terminal and the window's frame
+  read them from its `themes.ts`.
   The hues are still hand-written oklch: the line tints, the type colors and the service colors.
 - Three of the six tints sit on amber, red and green, so they break principle 2.
 - Pipes have no second cue yet, so they break principle 3.

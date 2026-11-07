@@ -542,12 +542,54 @@ not exist yet. Doubt: whether `y` from a small popup is answered too fast on a p
 ticket 102 gives the popup a write, `y`, a note and a pick in the popup open the ticket and finish
 there (Q1, 75%); `Enter` on a popup row opens the asks tile, built as part of the ask desk (Q2, 85%).
 
+## Did this ask need you
+
+*Decided 2026-11-07 (owner).* Next to the answer, the person can tap one of two marks: this ask
+really needed me, or the agent could have worked it out. The mark is saved on `answered` as
+`needed`. It is optional, and an answer with no mark is fine.
+
+```ts
+// A sketch, next/. Effect Schema writes the _tag. One field is new on `answered`: `needed`.
+const Answered = Schema.TaggedStruct("answered", {
+	ask: Id,
+	answer: Answer,
+	saw: Schema.String, // the hash of what the desk drew, as one ask, one meter says
+	via: Via, // one ask, one meter's union: window or chat
+	took: Schema.optionalKey(Took), // required from a window, as A4 says
+	needed: Schema.optionalKey(Schema.Boolean), // true: only a person could answer; false: the agent could have
+});
+
+// One example: the person takes the rec, and says the agent could have worked it out.
+{_tag: "answered", ask: "a-approve-8", answer: {_tag: "rec"}, saw: "sha256:…",
+ via: {_tag: "window"}, took: {key: "y", rec: "shown", ms: 41_000, opened: [], said: 1793649030000},
+ needed: false}
+```
+
+- **What it means.** Two small buttons beside the answer. Neither is picked for you. No mark means
+  the person did not say; it never means yes or no.
+- **Why.** Later, asks get counted per step and per agent, to find the steps that ask too much. A
+  step that asks what it could have found gets the missing information in its brief, or a rule in
+  code ([A6](#a6-code-answers-what-code-can-a-stop-shows-as-a-stop)). Nothing reads the mark yet.
+  It goes in now because only the person knows it, only at the moment they answer, and an answer
+  written before the field exists can never get it (record wide).
+- **The count.** Per step: the step that wrote `asked`. Per agent: the `by` on that `asked` entry.
+  The share that needed a person is a fold, never stored. It is the second measure in
+  [autonomy is measured trust](./autonomy-is-measured-trust.md#m5-asks-that-did-not-need-a-person).
+- **Not A5's agreement.** A5 counts whether the person took the rec. `needed` says whether the
+  question should have reached a person at all. A yes to the rec with `needed: true` is common: the
+  rec was right, and it still needed a person's say.
+- **What holds it.** Only a person writes `answered`, so only a person writes the mark. A chat
+  answer may carry it too, when the person says so in chat.
+- **Doubt.** A person in a hurry may skip the mark most of the time, so the count is a sample. The
+  share of answers that carry a mark is itself a fold, and says how far to trust it.
+
 ## What the ledger records
 
 | Fact | Field | Lost forever if not recorded now |
 |---|---|---|
 | `asked` | `rec`, with `why`, `cost`, `sure` | What the step would have done, before it saw the answer. A rec written after cannot be trusted. |
 | `answered` | `answer` (`rec`, `against`, `chose`) and `took` (`key`, `rec`, `ms`, `opened`, `said`) | Which key, how long the ask was on screen, what was opened, whether the rec was in view. |
+| `answered` | `needed`, optional | Whether the person thought the ask needed them at all. |
 | `rule_made`, `rule_dropped` | `match`, `seen`, `from`, `why` | What the offer showed when the person said yes to it. |
 | `auto` | `ask`, `rule`, `pick` | That code, not a person, took the pick, and under which rule. |
 

@@ -9,11 +9,33 @@ more on 2026-11-05, each marked decided below:
 - **Decided, the word:** the name tag on what an agent is writing is a presence label
   ([shared tiles](./shared-tiles.md)).
 - **Decided 2026-11-05, `@claude` is a wrapper.** It is tsh's own `tell` to an agent the host
-  started, and with none running, the line that starts one. It is read off the line before tsh's
+  started, and with none running, the line that starts one (walked back 2026-11-06: `summon` starts it, below). It is read off the line before tsh's
   shell words, like Claude Code's `!`. The log keeps the line as typed, the job the name meant then,
   and that the cost line was shown
   ([experiment 210](../../experiments/210-at-claude-wrapper-or-primitive.md)). A Claude Code the
   person started themselves is out: reaching it would need a new push.
+- **Decided 2026-11-06, `summon` starts an agent, by name.** Starting an agent is its own line:
+  `summon <agent> [model] [effort] as <name>`, such as `summon claude haiku as scout` or
+  `summon codex gpt-6-astra xhigh as researcher`. It is a paid run, started on purpose. `@` talks only
+  to an agent summoned already, and tab completes only the names that exist now, so two of the same
+  agent can run side by side under two names. This walks back the line above where `@claude` with
+  none running starts one. Model and effort are set at the summon; a change later is the agent
+  program's own command, not the pipeline's. The log keeps each summon: who, the agent, model,
+  effort, name and both clocks.
+
+  ```text
+  tsh> summon claude haiku as scout
+    scout · claude haiku · ready
+  tsh> @sc<tab>  ->  @scout find where the lane retries
+  ```
+
+- **Decided 2026-11-06, a summoned agent lives on the desk, not in a tile.** Closing the tile it was
+  summoned in changes nothing: any tsh, comment box or spot can still `@scout`. `dismiss scout` ends
+  it. An idle agent spends nothing, since it only spends when asked. The top bar counts the agents on
+  the desk ("3 agents"), and its list has a dismiss on each, so none is forgotten. If an idle agent
+  turns out to hold memory or a sandbox, the fallback is to save and stop it and wake it on the next
+  `@`, as Claude Code's `--resume` does.
+
 - **Decided 2026-11-05, the started claude works in the repo.** The agent `@claude` starts gets the
   person's repo folder and the fabrika connection, not today's scratch folder. It still has no
   `answer` tool ([experiment 211](../../experiments/211-started-claude-sandbox.md)).
@@ -132,6 +154,38 @@ const Said = Schema.TaggedUnion({
 	only: {words: Schema.String}, // @ why ...  -> the one agent here, or refused
 });
 ```
+
+## In `next/`: `summon` is an alias with a session
+
+**Decided 2026-11-06.** In `next/` the shell is fabsh, and `claude` and `codex` are fabrika's own
+programs, not the vendors' command lines. `summon` defines an alias, the shell's oldest known way;
+each `@name` expands to one turn of that program on the alias's session. Nothing runs between turns,
+so an idle agent costs nothing, and a turn can still stop and ask the person, since our program owns
+the turn.
+
+```text
+fabsh> summon claude haiku as scout on cloud
+fabsh> @scout why is this slow?
+```
+
+- **Where each part lives.** The alias (name, agent, model, effort, permissions, session id, where it
+  runs) and the session's content are kept by the brain, so any client can `@scout`, a phone
+  included, while the Mac sleeps. The turn runs on hands. Using fabrika from a phone is one of the
+  owner's first needs, which is why the session is not kept on the Mac. The content stays deletable
+  ([an agent run keeps its content](./an-agent-run-keeps-its-content.md)).
+- **Two messages at once** queue in the run's one mailbox, as every program's do
+  ([tea program](./tea-program.md)). Nothing new for agents.
+- **Names belong to a person.** On a shared desk, another person's scout is theirs, shown with their
+  name.
+- **Permissions ride on the alias,** so every turn of scout runs with the rights it was summoned
+  with.
+- **The log keeps both lines:** the line as typed and what it expanded to, like `set -x`.
+- **Where it runs.** A turn needs files and agents, so a browser tab never takes it. Beyond that, the
+  person sets an ordered list of hands, such as their Mac, then their cloud host. The brain offers a
+  turn to the first; if it is not taken within a short wait (10 seconds, a guess to tune), the next
+  gets it. `on <hands>` on the summon pins one agent. Each turn records which hands ran it and why. The
+  known ways: GitHub Actions' `runs-on` labels, Buildkite's queues, and Kubernetes' required and
+  preferred node affinity.
 
 ## Every text box can summon
 

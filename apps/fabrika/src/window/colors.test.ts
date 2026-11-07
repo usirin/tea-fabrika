@@ -1,176 +1,66 @@
-import {readFileSync} from "node:fs";
+import {existsSync, readFileSync} from "node:fs";
 import {join} from "node:path";
+import {fileURLToPath} from "node:url";
+import {createElement} from "react";
+import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
+import {Palette} from "./pop.tsx";
 
-// Today's app takes the built-in `fabrika` and `fabrika-light` themes (docs/direction/themes.md,
-// decided 2026-11-01; tracker ticket 144): Radix 3.0.0, gray slate, accent indigo. Every value
-// below is a Radix step, read from experiments/177-themes/schemes/radix-colors-3.0.0.json, and
-// named beside it; the one that is not a step is the dark desk, the note's one bend.
+// Today's app's colors, read against the design package (docs/direction/fabrika-design-package.md,
+// decided 2026-11-02; P31). The package holds the built-in themes, the tokens and the Manti mapping,
+// and holds its own laws (packages/fabrika-design/src/themes.test.ts). These are the app's: its old
+// copies are gone, it reads the package by name, and its own rules (window.css, and the reset kept
+// to Manti's parts, manti-reset.css) still read on the package's tokens. Laws A1 to A3 of the P31
+// plan, and the palette's dim (the owner, 2026-11-06).
 //
-// The window's stylesheets are read, not drawn, as type-scale.test.ts reads them. A token's value
-// in a look is found as the browser finds it: follow var() to the token it names, and take
-// light-dark()'s first color in the light look and its second in the dark one. That is how
-// theme.css's own comment says light is set. Contrast is WCAG 2.2's ratio, computed from the
-// values, with an alpha color drawn over its background first, as rules.py does.
+// The stylesheets are read, not drawn, in the order the page loads them: the package's tokens.css,
+// then manti-reset.css, then window.css. A token's value in a look is found as the browser finds
+// it: follow var() to the token it names, and take light-dark()'s first color in the light look and
+// its second in the dark one. Contrast is WCAG 2.2's ratio, with an alpha color drawn over its
+// background first, rounded to 8 bits a channel, as rules.py does.
 
-const WINDOW = join(import.meta.dirname, "window");
-const CSS = readFileSync(join(WINDOW, "window.css"), "utf8");
-const THEME = readFileSync(join(WINDOW, "theme.css"), "utf8");
-const TERMINAL = readFileSync(join(WINDOW, "terminal.ts"), "utf8");
-const MAIN = readFileSync(join(import.meta.dirname, "main.ts"), "utf8");
+const SRC = join(import.meta.dirname, "..");
+/** The package's stylesheet, found by its name as the build finds it, never by a path. */
+const TOKENS = readFileSync(
+	fileURLToPath(import.meta.resolve("@kampus/fabrika-design/tokens.css")),
+	"utf8",
+);
+const RESET = readFileSync(join(import.meta.dirname, "manti-reset.css"), "utf8");
+const CSS = readFileSync(join(import.meta.dirname, "window.css"), "utf8");
+const TERMINAL = readFileSync(join(import.meta.dirname, "terminal.ts"), "utf8");
+const MAIN = readFileSync(join(SRC, "main.ts"), "utf8");
+const BUILD = readFileSync(join(SRC, "..", "build.ts"), "utf8");
 
 type Look = "dark" | "light";
 const LOOKS: readonly Look[] = ["dark", "light"];
 
-// ---- the note's values -------------------------------------------------------------------------
-
-/** The note's `[colors]` for `fabrika`, as written there. */
-const DARK = {
-	desk: "#0c0d0e", // not a step: nothing in slate is darker than 1
-	ground: "#111113", // slate 1
-	raised: "#18191b", // slate 2
-	hover: "#ddeaf814", // slate a3
-	edge: "#d3edf81d", // slate a4
-	focus: "#d9edff5d", // slate a8
-	text: "#edeef0", // slate 12
-	faint: "#f1f7feb5", // slate a11
-	turn: "#3e63dd", // indigo 9
-	"on-turn": "#ffffff", // Radix's rule for text on step 9
-	"turn-text": "#9eb1ff", // indigo 11
-	done: "#71d083", // grass 11
-	running: "#ffca16", // amber 11
-	stuck: "#ff9592", // red 11
-	closed: "#f1f7feb5", // slate a11: no hue, the word says closed
+/** The look's two text steps (color principles, decided 2026-11-02). */
+const SLATE: Record<Look, {high: string; low: readonly string[]}> = {
+	dark: {high: "#edeef0", low: ["#b0b4ba", "#f1f7feb5"]}, // slate 12; slate 11, slate a11
+	light: {high: "#1c2024", low: ["#60646c", "#0007149f"]}, // slate 12; slate 11, slate a11
 };
 
 /**
- * `fabrika-light`: the same pick, look light, with amber 12 for running and slate a9 for focus.
- * The owner approved three more on 2026-11-01 (the design review), so each state word reads 4.5:1
- * on a hovered and a selected row too: grass 12, red 12 and indigo a11.
+ * The names the app keeps for its own rules, beside the package's (flag 5): each is another name
+ * for a package token, so it follows that token's value.
  */
-const LIGHT = {
-	desk: "#f9f9fb", // slate 2
-	ground: "#fcfcfd", // slate 1
-	raised: "#fcfcfd", // slate 1
-	hover: "#0000330f", // slate a3
-	edge: "#00002d17", // slate a4
-	focus: "#00051d74", // slate a9: a8 reads 1.90
-	text: "#1c2024", // slate 12
-	faint: "#0007149f", // slate a11
-	turn: "#3e63dd", // indigo 9
-	"on-turn": "#ffffff",
-	"turn-text": "#002bb7c5", // indigo a11: indigo 11 reads 4.47 on a selected row
-	done: "#203c25", // grass 12: grass 11 reads 4.34 on a hovered row
-	running: "#4f3422", // amber 12: amber 11 reads 4.38
-	stuck: "#641723", // red 12: red 11 reads 4.46 on a hovered row
-	closed: "#0007149f", // slate a11
-};
-
-/** The note's `[terminal]`, both looks. The palette is in ANSI order, 0 to 15. */
-const TERMINALS = {
-	dark: {
-		foreground: "#edeef0", // slate 12
-		background: "#111113", // slate 1
-		cursor: "#edeef0", // slate 12
-		selection: "#d9edfe25", // slate a5
-		// slate 3; red, grass, amber, blue 9, purple 11, cyan 9; slate 12, slate 11; the six at 11; slate 12
-		palette: [
-			"#212225",
-			"#e5484d",
-			"#46a758",
-			"#ffc53d",
-			"#0090ff",
-			"#d19dff",
-			"#00a2c7",
-			"#edeef0",
-			"#b0b4ba",
-			"#ff9592",
-			"#71d083",
-			"#ffca16",
-			"#70b8ff",
-			"#d19dff",
-			"#4ccce6",
-			"#edeef0",
-		],
-	},
-	light: {
-		foreground: "#1c2024", // slate 12
-		background: "#fcfcfd", // slate 1
-		cursor: "#1c2024", // slate 12
-		selection: "#0009321f", // slate a5
-		// slate 12; red, grass 11, amber 12, blue, purple, cyan 11; slate 8, slate 11;
-		// red, grass 11, amber 12, blue 11, purple 9, cyan 11; slate 7
-		palette: [
-			"#1c2024",
-			"#ce2c31",
-			"#2a7e3b",
-			"#4f3422",
-			"#0d74ce",
-			"#8145b5",
-			"#107d98",
-			"#b9bbc6",
-			"#60646c",
-			"#ce2c31",
-			"#2a7e3b",
-			"#4f3422",
-			"#0d74ce",
-			"#8e4ec6",
-			"#107d98",
-			"#cdced6",
-		],
-	},
-} as const;
-
-/** Palette colors the built-ins mean as fills, not text: black in dark, the two whites in light. */
-const FILLS: Record<Look, ReadonlySet<number>> = {dark: new Set([0]), light: new Set([7, 15])};
-
-/**
- * Each token the window names, and its value in each look. A token the note names takes the
- * note's color; a raw step the note does not name takes the step Radix gives that job (ticket
- * 144's table). --text-secondary and --text-muted are the low step, decided by the owner on
- * 2026-11-02 (two text steps, color-principles.md). Tokens with no clear step yet (--person-bg,
- * --agent-bg, --ty-*, --svc-*) wait on the owner's pick, so they are not pinned here.
- */
-const TOKENS: Record<string, Record<Look, string>> = {
-	"--surface-sunken": {dark: DARK.desk, light: LIGHT.desk},
-	"--surface": {dark: DARK.ground, light: LIGHT.ground},
-	"--surface-raised": {dark: DARK.raised, light: LIGHT.raised},
-	"--surface-hover": {dark: DARK.hover, light: LIGHT.hover},
-	"--surface-selected": {dark: "#d9edfe25", light: "#0009321f"}, // slate a5: selected
-	"--border-faint": {dark: DARK.edge, light: LIGHT.edge},
-	"--border": {dark: "#d6ebfd30", light: "#00002f26"}, // slate a6: subtle border
-	"--border-strong": {dark: "#d9edff40", light: "#00062e32"}, // slate a7: UI border
-	"--wire": {dark: "#d9edff5d", light: "#00083046"}, // slate a8: strong border
-	"--tile-focus": {dark: DARK.focus, light: LIGHT.focus},
-	"--focus": {dark: "#dfebfd6d", light: "#00051d74"}, // slate a9: a8 is under 3:1 on the desk
-	"--text-primary": {dark: DARK.text, light: LIGHT.text},
-	"--text-faint": {dark: DARK.faint, light: LIGHT.faint},
-	"--text-secondary": {dark: DARK.faint, light: LIGHT.faint}, // the low step: two text steps
-	"--text-muted": {dark: DARK.faint, light: LIGHT.faint}, // the low step: two text steps
-	"--turn": {dark: DARK["turn-text"], light: LIGHT["turn-text"]},
-	"--turn-fill": {dark: DARK.turn, light: LIGHT.turn},
-	"--turn-fill-hover": {dark: "#5472e4", light: "#3358d4"}, // indigo 10: hovered solid
-	"--turn-fg": {dark: DARK["on-turn"], light: LIGHT["on-turn"]},
-	"--done": {dark: DARK.done, light: LIGHT.done},
-	"--running": {dark: DARK.running, light: LIGHT.running},
-	"--stuck": {dark: DARK.stuck, light: LIGHT.stuck},
-	"--closed": {dark: DARK.closed, light: LIGHT.closed},
-	// The names the counter's and tracker's windows use follow what they point at.
-	"--ground": {dark: DARK.ground, light: LIGHT.ground},
-	"--raised": {dark: DARK.raised, light: LIGHT.raised},
-	"--hover": {dark: DARK.hover, light: LIGHT.hover},
-	"--line": {dark: "#d6ebfd30", light: "#00002f26"},
-	"--pick": {dark: "#d9edfe25", light: "#0009321f"},
-	"--row-hi": {dark: DARK.hover, light: LIGHT.hover},
+const FAINT = {dark: "#f1f7feb5", light: "#0007149f"}; // slate a11
+const ALIASES: Record<string, Record<Look, string>> = {
+	"--text-secondary": FAINT,
+	"--text-muted": FAINT,
+	"--faint": FAINT,
+	"--ground": {dark: "#111113", light: "#fcfcfd"}, // slate 1
+	"--raised": {dark: "#18191b", light: "#fcfcfd"}, // slate 2; slate 1
+	"--pop-bg": {dark: "#18191b", light: "#fcfcfd"},
+	"--hover": {dark: "#ddeaf814", light: "#0000330f"}, // slate a3
+	"--row-hi": {dark: "#ddeaf814", light: "#0000330f"},
+	"--pick": {dark: "#d9edfe25", light: "#0009321f"}, // slate a5
 	"--row-on": {dark: "#d9edfe25", light: "#0009321f"},
-	"--pop-bg": {dark: DARK.raised, light: LIGHT.raised},
+	"--line": {dark: "#d6ebfd30", light: "#00002f26"}, // slate a6
 	"--pop-edge": {dark: "#d6ebfd30", light: "#00002f26"},
-	"--key": {dark: DARK.turn, light: LIGHT.turn},
-	"--open": {dark: DARK.done, light: LIGHT.done},
-	"--alert": {dark: DARK.stuck, light: LIGHT.stuck},
-	"--faint": {dark: DARK.faint, light: LIGHT.faint},
-	// Manti's selection was the raw --a-5; it takes slate a5, the terminal's selection.
-	"--manti-selection-bg": {dark: TERMINALS.dark.selection, light: TERMINALS.light.selection},
+	"--key": {dark: "#3e63dd", light: "#3e63dd"}, // indigo 9
+	"--open": {dark: "#71d083", light: "#203c25"}, // grass 11; grass 12
+	"--alert": {dark: "#ff9592", light: "#641723"}, // red 11; red 12
 };
 
 // ---- reading the stylesheets -------------------------------------------------------------------
@@ -198,12 +88,12 @@ const rulesOf = (css: string) =>
 		),
 	}));
 
-/** The page's :root, window.css then theme.css, as the page loads them. */
-const ROOT = new Map(
-	[...rulesOf(CSS), ...rulesOf(THEME)]
-		.filter((r) => r.selector === ":root")
-		.flatMap((r) => [...r.says]),
-);
+/** Every rule the page draws with, in the order it loads them. */
+const PAGE = [...rulesOf(TOKENS), ...rulesOf(RESET), ...rulesOf(CSS)];
+/** The page's :root: tokens.css, then window.css's, as the page loads them. */
+const ROOT = new Map(PAGE.filter((r) => r.selector === ":root").flatMap((r) => [...r.says]));
+/** The app's own rules. */
+const RULES = rulesOf(CSS);
 
 /** A value's parts split at its top-level commas: `light-dark(a, b)` gives a and b. */
 const argsOf = (inner: string) => {
@@ -350,9 +240,9 @@ const hexFrom = ([r, g, b]: Rgba) =>
 		)
 		.join("")}`;
 
-/** WCAG 2.2's contrast ratio of a color drawn on a background (which may itself be drawn over one). */
-const ratio = (fg: string, bg: string, under?: string) => {
-	const ground = under === undefined ? rgbaOf(bg) : over(bg, under);
+/** WCAG 2.2's contrast ratio of a color drawn on a solid background. */
+const ratio = (fg: string, bg: string) => {
+	const ground = rgbaOf(bg);
 	const ink = over(fg, hexFrom(ground));
 	const [hi, lo] = [luminance(ink), luminance(ground)].sort((x, y) => y - x);
 	return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
@@ -365,36 +255,117 @@ const under = (pairs: readonly (readonly [string, string, string, number])[]) =>
 		return r < bar ? [`${name} ${r.toFixed(2)} < ${bar}`] : [];
 	});
 
-// ---- the window's stylesheets ------------------------------------------------------------------
+/** Code with its comments gone: `/* *\/` blocks, and `//` to the line's end but not in a URL. */
+const codeOf = (code: string) =>
+	code.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
-describe("the window's colors are fabrika's, in both looks", () => {
-	it.each(LOOKS)("every named token takes its Radix value, %s", (look) => {
-		const got = Object.fromEntries(Object.keys(TOKENS).map((name) => [name, tokenIn(name, look)]));
-		const want = Object.fromEntries(Object.entries(TOKENS).map(([name, v]) => [name, v[look]]));
-		expect(got).toEqual(want);
+// ---- A1: no second copy ------------------------------------------------------------------------
+
+describe("A1: the app keeps no second copy of the design", () => {
+	it("has no themes.ts and no theme.css of its own", () => {
+		expect({
+			themes: existsSync(join(SRC, "themes.ts")),
+			theme: existsSync(join(import.meta.dirname, "theme.css")),
+		}).toEqual({themes: false, theme: false});
 	});
 
-	it("follows the system's look, so the light values can show", () => {
-		expect(ROOT.get("color-scheme")).toBe("light dark");
+	it("window.css's :root defines none of the names tokens.css defines", () => {
+		const ours = new Set(
+			rulesOf(TOKENS)
+				.filter((r) => r.selector === ":root")
+				.flatMap((r) => [...r.says.keys()]),
+		);
+		const again = rulesOf(CSS)
+			.filter((r) => r.selector === ":root")
+			.flatMap((r) => [...r.says.keys()])
+			.filter((name) => ours.has(name));
+		expect(again).toEqual([]);
+	});
+
+	it("manti-reset.css sets no token: it is the reset kept to Manti's parts, and only that", () => {
+		const tokens = rulesOf(RESET).flatMap((r) =>
+			[...r.says.keys()].filter((name) => name.startsWith("--")),
+		);
+		expect(tokens).toEqual([]);
+	});
+});
+
+// ---- A2: the app reads the package -------------------------------------------------------------
+
+/** A color written straight into code: `#` and 3, 4, 6 or 8 hex digits, comments gone. */
+const literalsIn = (ts: string) =>
+	[...codeOf(ts).matchAll(/["'`]#[0-9a-f]{3,8}["'`]/gi)].map(([m]) => m);
+
+describe("A2: the terminal, the window's frame and the build read the package", () => {
+	it("terminal.ts writes no color of its own and reads @kampus/fabrika-design", () => {
+		expect(literalsIn(TERMINAL)).toEqual([]);
+		expect(TERMINAL).toMatch(/from "@kampus\/fabrika-design"/);
+	});
+
+	it("main.ts writes no color of its own and reads @kampus/fabrika-design", () => {
+		expect(literalsIn(MAIN)).toEqual([]);
+		expect(MAIN).toMatch(/from "@kampus\/fabrika-design"/);
+	});
+
+	// main.ts is Electron's entry and starts the app when it loads, so no test imports it. This reads
+	// the desk window's maker instead: the frame follows the look only if it hands its window to
+	// followLook (the package's themes.frame.test.ts holds what followLook does).
+	it("main.ts hands the desk window to followLook, so its frame follows the look", () => {
+		const maker = /const deskWindow = [\s\S]*?\n};/.exec(codeOf(MAIN))?.[0] ?? "";
+		expect(maker).toMatch(/\bfollowLook\(\s*nativeTheme\s*,\s*window\s*\)/);
+	});
+
+	// The page's one stylesheet, dist/window.css, is written from a template of what build.ts read.
+	// Each part is followed to the file it names (through one const, as MANTI_CSS is), and the
+	// package's tokens come before the reset and the app's rules, so the app's rules win.
+	it("build.ts writes Manti's, React Flow's, the package's tokens, the reset, then window.css", () => {
+		const code = codeOf(BUILD);
+		const fileOf = (id: string) => {
+			const read = new RegExp(`const ${id}\\s*=\\s*yield\\*\\s*([^;]*);`).exec(code)?.[1] ?? "";
+			const named = /"([^"]+)"/.exec(read)?.[1];
+			if (named !== undefined) return named;
+			const constant = /\(([A-Z_]+)\)/.exec(read)?.[1] ?? "";
+			return (
+				new RegExp(`const ${constant}\\s*=\\s*"([^"]+)"`).exec(code)?.[1] ?? `(${id}: ${read})`
+			);
+		};
+		const template = /at\("dist\/window\.css"\),\s*`([^`]*)`/.exec(code)?.[1] ?? "";
+		expect([...template.matchAll(/\$\{(\w+)\}/g)].map(([, id = ""]) => fileOf(id))).toEqual([
+			"@manti-ui/styles/index.css",
+			"@xyflow/react/dist/base.css",
+			"@kampus/fabrika-design/tokens.css",
+			"src/window/manti-reset.css",
+			"src/window/window.css",
+		]);
+	});
+});
+
+// ---- A3: the app's rules still read ------------------------------------------------------------
+
+describe("A3: the app's colors are the package's, in both looks", () => {
+	it.each(LOOKS)("each name the app keeps follows the package token it names, %s", (look) => {
+		const got = Object.fromEntries(Object.keys(ALIASES).map((name) => [name, tokenIn(name, look)]));
+		const want = Object.fromEntries(Object.entries(ALIASES).map(([name, v]) => [name, v[look]]));
+		expect(got).toEqual(want);
 	});
 
 	it("keeps no hand-made ramp: no --n-* or --a-* step, defined or used", () => {
 		const ramps = (css: string) => [...uncommented(css).matchAll(/--[na]-\d+\b/g)].map(([m]) => m);
-		expect({window: ramps(CSS), theme: ramps(THEME)}).toEqual({window: [], theme: []});
+		expect({window: ramps(CSS), reset: ramps(RESET)}).toEqual({window: [], reset: []});
 	});
 
-	// A gray is an oklch() color with next to no chroma; today's ramp has 0.001 to 0.004, and
-	// --turn-fg 0. The hues left (--ty-*, --svc-*, --line-*) are 0.06 and up, and wait on the owner.
+	// A gray is an oklch() color with next to no chroma. The hues left (--ty-*, --svc-*) are 0.06
+	// and up, and wait on their own ticket.
 	it("keeps no oklch() gray", () => {
 		const grays = (css: string) =>
 			[...uncommented(css).matchAll(/oklch\(\s*[\d.]+%?\s+([\d.]+)\s+[\d.]+\s*\)/g)]
 				.filter(([, chroma]) => Number(chroma) < 0.02)
 				.map(([m]) => m);
-		expect({window: grays(CSS), theme: grays(THEME)}).toEqual({window: [], theme: []});
+		expect({window: grays(CSS), reset: grays(RESET)}).toEqual({window: [], reset: []});
 	});
 
 	it("draws the two dashed outlines (the map's not-built marks) in --wire", () => {
-		const map = rulesOf(CSS).filter((r) => r.selector.startsWith(".map-view"));
+		const map = RULES.filter((r) => r.selector.startsWith(".map-view"));
 		const dashed = map.flatMap((r) =>
 			[...r.says]
 				.filter(([name, value]) => name === "outline" && value.includes("dashed"))
@@ -407,41 +378,15 @@ describe("the window's colors are fabrika's, in both looks", () => {
 	});
 });
 
-// WCAG 2.2: 4.5:1 for text (1.4.3), 3:1 for a line or a part a person must see (1.4.11). Every
-// text token is held to 4.5:1, large or not. The backgrounds are the note's: text on the desk,
-// the ground and raised; the turn fill and the tile's focus line on the ground; on-turn on the
-// fill, and on the fill as it hovers. The keyboard ring sits anywhere, a hovered row included.
-describe("every text and line reads on what it sits on, in both looks", () => {
-	const TEXT = [
-		"--text-primary",
-		"--text-secondary",
-		"--text-muted",
-		"--text-faint",
-		"--turn",
-		"--done",
-		"--running",
-		"--stuck",
-		"--closed",
-	];
+// WCAG 2.2: 4.5:1 for text (1.4.3). The package holds its own tokens to it; these hold every token
+// the page sets as `color:` on the pages and rows it may sit on, and each rule's own text on the
+// background it sets.
+describe("A3: every text the app draws reads on what it sits on, in both looks", () => {
 	const PAGES = ["--surface-sunken", "--surface", "--surface-raised"];
 
-	it.each(LOOKS)(
-		"text and state words read 4.5:1 on the desk, the ground and raised, %s",
-		(look) => {
-			const pairs = TEXT.flatMap((fg) =>
-				PAGES.map((bg) => [`${fg} on ${bg}`, tokenIn(fg, look), tokenIn(bg, look), 4.5] as const),
-			);
-			expect(under(pairs)).toEqual([]);
-		},
-	);
-
-	// The note checks text on three backgrounds. The window draws more than that: rows hover and
-	// are selected, in a tile (the ground) and in what opens over the desk (raised). So every token a
-	// stylesheet sets as `color:` is held to 4.5:1 on each of those. --turn-fg sits only on the turn
-	// fill, so it has its own test below.
 	const USED_AS_TEXT = [
 		...new Set(
-			[...uncommented(CSS + THEME).matchAll(/(?<![\w-])color:\s*var\((--[\w-]+)\)/g)].map(
+			[...uncommented(TOKENS + RESET + CSS).matchAll(/(?<![\w-])color:\s*var\((--[\w-]+)\)/g)].map(
 				([, name = ""]) => name,
 			),
 		),
@@ -474,6 +419,16 @@ describe("every text and line reads on what it sits on, in both looks", () => {
 	});
 
 	it.each(LOOKS)(
+		"the names the app keeps for text read 4.5:1 on the desk, ground and raised, %s",
+		(look) => {
+			const pairs = ["--text-secondary", "--text-muted"].flatMap((fg) =>
+				PAGES.map((bg) => [`${fg} on ${bg}`, tokenIn(fg, look), tokenIn(bg, look), 4.5] as const),
+			);
+			expect(under(pairs)).toEqual([]);
+		},
+	);
+
+	it.each(LOOKS)(
 		"every token used as text reads 4.5:1 on the desk, ground and raised, %s",
 		(look) => {
 			const pairs = USED_AS_TEXT.flatMap((fg) =>
@@ -502,11 +457,10 @@ describe("every text and line reads on what it sits on, in both looks", () => {
 		},
 	);
 
-	// The checks above hold text to the pages and rows it may sit on. A rule that sets its own
-	// background, such as a button on the indigo fill, draws its text on that instead, so each rule
-	// that sets both a `color` and a one-color `background` is held to 4.5:1 on its own background.
-	// A background with alpha is drawn over the ground and over raised, the two pages a control sits on.
-	const PAINTS = [...rulesOf(CSS), ...rulesOf(THEME)].flatMap((r) => {
+	// A rule that sets its own background, such as a button on the indigo fill, draws its text on
+	// that instead, so each rule that sets both a `color` and a one-color `background` is held to
+	// 4.5:1 on its own background. A background with alpha is drawn over the ground and over raised.
+	const PAINTS = PAGE.flatMap((r) => {
 		const fg = r.says.get("color");
 		const bg = r.says.get("background-color") ?? r.says.get("background");
 		return fg === undefined || bg === undefined ? [] : [{selector: r.selector, fg, bg}];
@@ -525,9 +479,7 @@ describe("every text and line reads on what it sits on, in both looks", () => {
 		expect(valueIn("color-mix(in oklab, #000000, #ffffff 50%)", "dark")).toBe("#636363");
 	});
 
-	// A color this test cannot read would be skipped by the check below, so it fails here instead:
-	// each one gets a reader, or the rule changes to a color the test can read. A rule with no fill
-	// makes no pair, so its text (`inherit` included) is not read here.
+	// A color this test cannot read would be skipped by the check below, so it fails here instead.
 	it.each(LOOKS)("every rule's own text and background are colors this test reads, %s", (look) => {
 		const unread = PAINTS.flatMap(({selector, fg, bg}) => {
 			const ink = valueIn(fg, look);
@@ -558,69 +510,12 @@ describe("every text and line reads on what it sits on, in both looks", () => {
 		});
 		expect(under(pairs)).toEqual([]);
 	});
-
-	it("on-turn reads 4.5:1 on the turn fill, at rest in both looks and hovered in light", () => {
-		expect(
-			under([
-				...LOOKS.map(
-					(look) =>
-						[
-							`--turn-fg on --turn-fill, ${look}`,
-							tokenIn("--turn-fg", look),
-							tokenIn("--turn-fill", look),
-							4.5,
-						] as const,
-				),
-				[
-					"--turn-fg on --turn-fill-hover, light",
-					tokenIn("--turn-fg", "light"),
-					tokenIn("--turn-fill-hover", "light"),
-					4.5,
-				],
-			]),
-		).toEqual([]);
-	});
-
-	// Known exception, decided 2026-11-01: the hovered fill keeps Radix's indigo 10, and white on
-	// it reads 4.28 in dark, under 4.5:1 (tracker ticket 153). Any change to the pair shows here.
-	it("on-turn on the hovered turn fill, dark, is indigo 10 at exactly 4.28:1", () => {
-		const fill = tokenIn("--turn-fill-hover", "dark");
-		expect(fill).toBe("#5472e4");
-		expect(ratio(tokenIn("--turn-fg", "dark"), fill).toFixed(2)).toBe("4.28");
-	});
-
-	it.each(LOOKS)("the focus lines and the turn fill read 3:1, %s", (look) => {
-		const ground = tokenIn("--surface", look);
-		const ring = tokenIn("--focus", look);
-		const hovered = (page: string) =>
-			hexFrom(over(tokenIn("--surface-hover", look), tokenIn(page, look)));
-		expect(
-			under([
-				["--tile-focus on --surface", tokenIn("--tile-focus", look), ground, 3],
-				["--turn-fill on --surface", tokenIn("--turn-fill", look), ground, 3],
-				...PAGES.map((bg) => [`--focus on ${bg}`, ring, tokenIn(bg, look), 3] as const),
-				["--focus on a hovered row", ring, hovered("--surface"), 3],
-				["--focus on a hovered row on the desk", ring, hovered("--surface-sunken"), 3],
-				[
-					"--focus on a selected row",
-					ring,
-					hexFrom(over(tokenIn("--surface-selected", look), ground)),
-					3,
-				],
-			]),
-		).toEqual([]);
-	});
 });
 
 // The owner's ruling of 2026-11-02: text uses Radix's two text steps only. Step 12 is the main line
 // (titles, names), step 11 or a11 (where the look needs it to pass) is everything quieter. Rank
 // comes from weight and size, never a third gray, and a title is always step 12.
-describe("text takes Radix's two text steps, and a title is step 12, in both looks", () => {
-	const SLATE: Record<Look, {high: string; low: readonly string[]}> = {
-		dark: {high: "#edeef0", low: ["#b0b4ba", "#f1f7feb5"]}, // slate 12; slate 11, slate a11
-		light: {high: "#1c2024", low: ["#60646c", "#0007149f"]}, // slate 12; slate 11, slate a11
-	};
-
+describe("A3: text takes Radix's two text steps, and a title is step 12, in both looks", () => {
 	// The tokens with a hue: state words and the turn. Every other token set as `color:` is a gray.
 	const HUES = ["--turn", "--done", "--running", "--stuck", "--open", "--alert"];
 	const GRAYS = [
@@ -629,7 +524,7 @@ describe("text takes Radix's two text steps, and a title is step 12, in both loo
 			"--text-secondary",
 			"--text-muted",
 			"--text-faint",
-			...[...uncommented(CSS + THEME).matchAll(/(?<![\w-])color:\s*var\((--[\w-]+)\)/g)]
+			...[...uncommented(TOKENS + RESET + CSS).matchAll(/(?<![\w-])color:\s*var\((--[\w-]+)\)/g)]
 				.map(([, name = ""]) => name)
 				.filter((name) => name !== "--turn-fg" && !HUES.includes(name)),
 		]),
@@ -646,8 +541,6 @@ describe("text takes Radix's two text steps, and a title is step 12, in both loo
 			low: [...steps].filter((value) => value !== SLATE[look].high).sort(),
 		}).toEqual({offSteps: [], high: true, low: [expect.any(String)]});
 	});
-
-	const RULES = rulesOf(CSS);
 
 	/**
 	 * The color an element is drawn in: the first selector in its chain (its own rules, then each
@@ -695,8 +588,7 @@ describe("text takes Radix's two text steps, and a title is step 12, in both loo
 
 	// Color principles' step table: 11 is a name at rest, 12 a name when focused. A row set aside
 	// ("later") is a state, not a rank, so its title stays at the low step; its dashed ring is the
-	// second cue (pop.test.ts), so color is never alone. The tile's title bar, 11 unfocused and 12
-	// focused, is the same rule and is not a main line here; it has its own test below.
+	// second cue (pop.test.ts), so color is never alone.
 	it.each(LOOKS)("a set-aside row's title stays at the low step, %s", (look) => {
 		expect(SLATE[look].low).toContain(
 			colorOf(['.pop-row[data-icon="later"] .t', ".pop-row .t"], look),
@@ -717,8 +609,7 @@ describe("text takes Radix's two text steps, and a title is step 12, in both loo
 	);
 
 	// Radix's TextField draws typed text at step 12 and its placeholder at the low step, and its
-	// SegmentedControl draws the pressed segment at 12. A control's own text, typed or pressed, is
-	// what a person reads, so it is step 12, and typed text never looks like the placeholder.
+	// SegmentedControl draws the pressed segment at 12.
 	const CONTROLS: Record<string, readonly string[]> = {
 		"text typed in the tracker's find": [".tracker .tracker-find input", ".tracker-find"],
 		"text typed in the composer's line": [".tracker .tracker-composer input"],
@@ -755,8 +646,7 @@ describe("text takes Radix's two text steps, and a title is step 12, in both loo
 	});
 
 	// --ink was an old name that pointed at --text-secondary, so when that became the low step every
-	// rule through --ink went quiet with it, titles and typed text included. Each rule names the
-	// text token it means.
+	// rule through --ink went quiet with it. Each rule names the text token it means.
 	it("window.css names no --ink, so each rule names its own text token", () => {
 		const uses = [...uncommented(CSS).matchAll(/--ink(?![\w-])/g)].length;
 		expect({uses}).toEqual({uses: 0});
@@ -764,8 +654,7 @@ describe("text takes Radix's two text steps, and a title is step 12, in both loo
 
 	// Two text steps only: an opacity under 1 on a box of text draws a third gray. A part may still
 	// fade when it is out of reach (WCAG 1.4.3 does not hold an inactive part to contrast), when it
-	// holds no text, or in an animation. Each such rule is named here with its reason; any other
-	// opacity between 0 and 1 is a third gray.
+	// holds no text, or in an animation. Each such rule is named here with its reason.
 	const FADES: Record<string, string> = {
 		".tracker button:disabled": "a disabled button: an inactive part",
 		".desk.lost .workspace": "the link is down: the desk is out of reach till it is back",
@@ -775,12 +664,12 @@ describe("text takes Radix's two text steps, and a title is step 12, in both loo
 
 	it("no rule dims text with an opacity under 1, past the named fades", () => {
 		const keyframe = /^(from|to|[\d.]+%)$/;
-		const dims = rulesOf(CSS)
-			.filter((r) => !keyframe.test(r.selector) && !Object.hasOwn(FADES, r.selector))
-			.flatMap((r) => {
-				const value = Number(r.says.get("opacity"));
-				return value > 0 && value < 1 ? [`${r.selector} { opacity: ${String(value)} }`] : [];
-			});
+		const dims = RULES.filter(
+			(r) => !keyframe.test(r.selector) && !Object.hasOwn(FADES, r.selector),
+		).flatMap((r) => {
+			const value = Number(r.says.get("opacity"));
+			return value > 0 && value < 1 ? [`${r.selector} { opacity: ${String(value)} }`] : [];
+		});
 		expect(dims).toEqual([]);
 	});
 
@@ -837,11 +726,8 @@ describe("text takes Radix's two text steps, and a title is step 12, in both loo
 
 // Color principles rule 2: a color means one thing, and the accent says your turn. The accent is
 // the turn fill (indigo 9), its hover (indigo 10), and every token that is only another name for
-// one of them, such as --key. Each rule that draws with one is listed here with the turn it marks;
-// a focus ring, a hover, a pressed control or a plain primary button takes a gray instead.
-describe("the accent fill says your turn and nothing else", () => {
-	const RULES = [...rulesOf(CSS), ...rulesOf(THEME)];
-
+// one of them, such as --key. Each rule that draws with one is listed here with the turn it marks.
+describe("A3: the accent fill says your turn and nothing else", () => {
 	/** The turn fill, its hover, and every :root name that points at one of them, however far. */
 	const ACCENT = (() => {
 		const names = new Set(["--turn-fill", "--turn-fill-hover"]);
@@ -879,15 +765,11 @@ describe("the accent fill says your turn and nothing else", () => {
 		);
 	});
 
-	// Accent uses outside a turn that were there when this law came in (2026-11-02). Most follow
-	// Radix's defaults, and whether rule 2 rules them out is the owner's call. This list only
+	// Accent uses outside a turn that were there when this law came in (2026-11-02). This list only
 	// shrinks: a new accent use fails, and so does an entry whose rule is gone.
 	const PENDING = "owner call pending";
 	const KNOWN: Record<string, string> = {
-		// A hover border in the accent. The indigo 10 hover kept by tracker #153 is the turn
-		// button's own (.view .btn.turn:hover, a turn rule above), not this one.
 		"button:hover { border-color }": `hover border: ${PENDING}`,
-		// Radix draws focus in the accent (step 8); the desk's own --focus is slate a9.
 		"button:focus-visible { outline }": `Radix focus default, ${PENDING}`,
 		".tracker button:focus-visible { outline }": `Radix focus default, ${PENDING}`,
 		".tracker a:focus-visible { outline }": `Radix focus default, ${PENDING}`,
@@ -898,13 +780,12 @@ describe("the accent fill says your turn and nothing else", () => {
 		".tracker .tracker-composer textarea:focus { border-color }": `Radix focus default, ${PENDING}`,
 		".tracker .tracker-list button:focus-visible { box-shadow }": `Radix focus default, ${PENDING}`,
 		".tracker-list a.tracker-pull-request:focus-visible { box-shadow }": `Radix focus default, ${PENDING}`,
-		// File ticket, Comment and an ask's first answer share it; only the last is a turn.
 		".tracker button.tracker-primary { background }": `Radix solid primary, ${PENDING}`,
 		'.tracker .tracker-hint button[aria-pressed="true"] { border-color }': `pressed hint border, ${PENDING}`,
 	};
 
 	/** Each accent use outside the turn rules, as `selector { property }`. */
-	const OFF = RULES.filter((r) => r.selector !== ":root")
+	const OFF = PAGE.filter((r) => r.selector !== ":root")
 		.flatMap((r) =>
 			[...r.says]
 				.filter(([, value]) =>
@@ -929,84 +810,91 @@ describe("the accent fill says your turn and nothing else", () => {
 	});
 });
 
-// ---- one set of values for the window, the terminal and the window's frame ---------------------
+// ---- the palette has no dim (the owner, 2026-11-06) --------------------------------------------
 
-describe("the themes module holds the note's values", () => {
-	it("fabrika is the note's dark pick", async () => {
-		const {fabrika} = await import("./themes.ts");
-		expect({name: fabrika.name, look: fabrika.look}).toEqual({name: "fabrika", look: "dark"});
-		expect(fabrika.colors).toEqual(DARK);
-		expect(fabrika.terminal).toEqual(TERMINALS.dark);
-	});
+// The Cmd-K palette opens over the desk with no dim behind it, as Linear's and Discord's do
+// (measured from Linear's public video: its Cmd-K has no dim, its create-issue dialog dims to about
+// 26% black). The desk stays inert under the palette (layers L4): a press outside it lands on a
+// backdrop of the palette's own and closes it, never on a tile under it; the backdrop paints
+// nothing. A real dialog keeps a dim, the package's --scrim, a Radix black alpha step.
+describe("the palette opens with no dim behind it", () => {
+	const html = renderToStaticMarkup(
+		createElement(Palette, {
+			id: "pop-palette",
+			label: "Commands",
+			chip: "t2 · ticket",
+			query: "",
+			sections: [],
+			at: 0,
+			count: "0 commands",
+			onQuery: () => {},
+			onMove: () => {},
+			onRun: () => {},
+			onClose: () => {},
+		}),
+	);
+	/** What the palette draws before its dialog box: the classes of each element behind it. */
+	const behind = (() => {
+		const box = html.lastIndexOf("<", html.indexOf('role="dialog"'));
+		return [...html.slice(0, Math.max(box, 0)).matchAll(/<(\w+)([^>]*)>/g)].map(
+			([, , attrs = ""]) => ({
+				classes: (/class="([^"]*)"/.exec(attrs)?.[1] ?? "").split(/\s+/).filter((c) => c !== ""),
+				hidden: /aria-hidden="true"/.test(attrs),
+			}),
+		);
+	})();
+	/** The app's rules whose last compound selector names one of these classes. */
+	const rulesFor = (classes: readonly string[]) =>
+		RULES.filter((r) =>
+			r.selector.split(",").some((s) => {
+				const last =
+					s
+						.trim()
+						.split(/\s+|>|\+|~/)
+						.pop() ?? "";
+				return classes.some((c) => new RegExp(`\\.${c}(?![\\w-])`).test(last));
+			}),
+		);
 
-	it("fabrika-light is the same pick, look light", async () => {
-		const {fabrikaLight} = await import("./themes.ts");
-		expect({name: fabrikaLight.name, look: fabrikaLight.look}).toEqual({
-			name: "fabrika-light",
-			look: "light",
-		});
-		expect(fabrikaLight.colors).toEqual(LIGHT);
-		expect(fabrikaLight.terminal).toEqual(TERMINALS.light);
-	});
-
-	it("gives the terminal its colors by ghostty-web's names, palette in ANSI order", async () => {
-		const {fabrika, fabrikaLight, terminalTheme} = await import("./themes.ts");
-		const names = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"];
-		const named = (t: (typeof TERMINALS)[Look]) => ({
-			foreground: t.foreground,
-			background: t.background,
-			cursor: t.cursor,
-			...Object.fromEntries(names.map((n, i) => [n, t.palette[i]])),
-			...Object.fromEntries(
-				names.map((n, i) => [`bright${n[0]?.toUpperCase()}${n.slice(1)}`, t.palette[i + 8]]),
-			),
-		});
-		expect(terminalTheme(fabrika)).toMatchObject(named(TERMINALS.dark));
-		expect(terminalTheme(fabrikaLight)).toMatchObject(named(TERMINALS.light));
-	});
-
-	it.each(LOOKS)("the terminal reads: text 4.5:1, cursor 3:1, fills aside, %s", async (look) => {
-		const {fabrika, fabrikaLight} = await import("./themes.ts");
-		const t = (look === "dark" ? fabrika : fabrikaLight).terminal;
-		expect(
-			under([
-				["foreground", t.foreground, t.background, 4.5],
-				["cursor", t.cursor, t.background, 3],
-				...t.palette.flatMap((c, i) =>
-					FILLS[look].has(i) ? [] : [[`palette ${i}`, c, t.background, 4.5] as const],
+	// L4: today the backdrop is what keeps a press outside the palette off the desk.
+	it("keeps a backdrop behind the palette that covers the window, so a press never reaches a tile", () => {
+		const covers = behind.filter(
+			(el) =>
+				el.hidden &&
+				rulesFor(el.classes).some(
+					(r) =>
+						/^(absolute|fixed)$/.test(r.says.get("position") ?? "") && r.says.get("inset") === "0",
 				),
-			]),
-		).toEqual([]);
-	});
-});
-
-/** A color written straight into code: `#` and 3, 4, 6 or 8 hex digits, comments gone. */
-const literalsIn = (ts: string) =>
-	[
-		...ts
-			.replace(/\/\*[\s\S]*?\*\//g, "")
-			.replace(/\/\/.*$/gm, "")
-			.matchAll(/["'`]#[0-9a-f]{3,8}["'`]/gi),
-	].map(([m]) => m);
-
-describe("the terminal and the window's frame take their colors from the themes module", () => {
-	it("terminal.ts writes no color of its own and reads the themes module", () => {
-		expect(literalsIn(TERMINAL)).toEqual([]);
-		expect(TERMINAL).toMatch(/from "\.\.\/themes\.ts"/);
+		);
+		expect(covers.length).toBe(1);
 	});
 
-	it("main.ts writes no color of its own and reads the themes module", () => {
-		expect(literalsIn(MAIN)).toEqual([]);
-		expect(MAIN).toMatch(/from "\.\/themes\.ts"/);
+	it("paints nothing behind the palette: no background, shadow or blur", () => {
+		const paint = behind.flatMap((el) =>
+			rulesFor(el.classes).flatMap((r) =>
+				[...r.says]
+					.filter(
+						([name, value]) =>
+							((name === "background" || name === "background-color") &&
+								!["transparent", "none"].includes(value)) ||
+							name === "box-shadow" ||
+							name === "backdrop-filter",
+					)
+					.map(([name, value]) => `${r.selector} { ${name}: ${value} }`),
+			),
+		);
+		expect(paint).toEqual([]);
 	});
 
-	// main.ts is Electron's entry and starts the app when it loads, so no test imports it. This reads
-	// the desk window's maker instead: the frame follows the look only if it hands its window to
-	// followLook (themes.frame.test.ts holds what followLook does). A seam main.ts calls would let a
-	// test run it; until one exists, the call is pinned as written.
-	it("main.ts hands the desk window to followLook, so its frame follows the look", () => {
-		const code = MAIN.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-		const maker = /const deskWindow = [\s\S]*?\n};/.exec(code)?.[0] ?? "";
-		expect(maker).toMatch(/\bfollowLook\(\s*nativeTheme\s*,\s*window\s*\)/);
+	// The dim waits for a real dialog: a rule that paints it is named here with its dialog. None
+	// does today, since the palette was its only user.
+	const DIMS: Record<string, string> = {};
+
+	it("no rule in the app paints the scrim or Manti's overlay but a named dialog's", () => {
+		const dims = PAGE.filter((r) => r.selector !== ":root")
+			.filter((r) => [...r.says.values()].some((v) => /var\(--(scrim|manti-overlay)\)/.test(v)))
+			.map((r) => r.selector)
+			.filter((selector) => !Object.hasOwn(DIMS, selector));
+		expect(dims).toEqual([]);
 	});
 });

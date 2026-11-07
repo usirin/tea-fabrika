@@ -1,0 +1,52 @@
+/*
+ * Today's app's reset, kept to Manti's parts (docs/direction/ui-on-manti.md). The tokens, with
+ * Manti's set from them, are the design package's (@kampus/fabrika-design/tokens.css), loaded just
+ * before this file.
+ *
+ * Manti's reset and its body rule are for Manti's parts. The app's own parts were drawn on the
+ * browser's defaults, so outside a Manti part (an element with data-scope, and all inside it)
+ * each property the reset sets goes back to the browser's, as Manti's integration guide says:
+ * exclude Manti parts from the reset. Each rule is :where(), so any rule of the app's wins. A part
+ * that moves onto Manti leaves this list by itself; the list shrinks to nothing as the move ends.
+ */
+:where(:not([data-scope], [data-scope] *)),
+:where(:not([data-scope], [data-scope] *))::before,
+:where(:not([data-scope], [data-scope] *))::after {
+	box-sizing: revert;
+	margin: revert;
+}
+
+:where(img, picture, video, canvas, svg):where(:not([data-scope], [data-scope] *)) {
+	display: revert;
+	max-width: revert;
+}
+
+:where(button, input, textarea, select):where(:not([data-scope], [data-scope] *)) {
+	font: revert;
+	color: revert;
+}
+
+:where(button):where(:not([data-scope], [data-scope] *)) {
+	background: revert;
+	border: revert;
+}
+
+:where(h1, h2, h3, h4, h5, h6):where(:not([data-scope], [data-scope] *)) {
+	font-size: revert;
+	font-weight: revert;
+}
+
+:where(a):where(:not([data-scope], [data-scope] *)) {
+	color: revert;
+	text-decoration: revert;
+}
+
+:where(html) {
+	tab-size: revert;
+}
+
+/* The body takes the root's font and line height, as before, not Manti's base for it. */
+:where(body) {
+	font: inherit;
+	text-rendering: revert;
+}

@@ -34,6 +34,13 @@ Three kinds of part, each with its own job:
 
 ## Why
 
+- **Cost was there from the first day.** [Post 1](../../blog/01-v4.md) names three itches,
+  the mistakes, the cost and not seeing inside, and says the operator's 2,500 lines teach a model
+  to be a loop around a ledger the CLI already reads. On 2026-11-07 the owner named where the cost
+  came from: today's operator agents wake up to check state that code can check for free, and
+  most of those wakes had nothing to act on. Code holding the loop starts a model only when
+  there is writing to do. *Changed 2026-11-07: it said this was the first reason and that no
+  note had said so; post 1 had.*
 - A stage written as prose can only be carried out by an agent, even when
   every step in it is fixed. The shipper is the plain case: in two measured
   runs it made the same ten calls in the same order with nothing to decide,

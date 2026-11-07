@@ -1,6 +1,7 @@
 # One way to ask a person, and one meter for money
 
-Proposed 2026-10-30. Tracker tickets #90 (one way to ask a person) and #91 (one
+**Decided 2026-11-06** in the product walk, step 4: one shape for every ask, with the hash of what
+the person saw; silence is never a yes; one meter for money. Proposed 2026-10-30. Tracker tickets #90 (one way to ask a person) and #91 (one
 meter for money). Today fabrika has five places that ask a person and seven
 that count or cap money. None of them knows the others. This note proposes one
 ask, kept as facts on the ledger with one hash of what the person saw, and one
@@ -9,6 +10,10 @@ thing that can set a dollar limit.
 
 Keys renamed 2026-11-03 (short words keep one meaning): `via`'s `in` became `_tag`, and a spend's
 `of` became `total`.
+
+Grown 2026-11-07 by the owner: fabrika's agents run on flat subscriptions, and each agent run
+records how it was paid and how close its limit is. See
+[the meter on subscriptions](#the-meter-on-subscriptions).
 
 ```ts
 // The whole idea, as a sketch: the owner approves $0.40, and the run stops at $0.40.
@@ -97,7 +102,7 @@ ledger.charge(fence, "case-1", {usd: 0.07}) // what the case really cost; it rep
 
 | Who | How | What we take |
 |---|---|---|
-| [Anthropic](https://platform.claude.com/docs/en/api/rate-limits) | A spend limit per organization and per workspace; a request over it is refused. The [cost report](https://platform.claude.com/docs/en/manage-claude/usage-cost-api) comes in daily buckets. | Limits nest: a run sits under a project. The provider's report is a check on our count, not the count. |
+| [Anthropic](https://platform.claude.com/docs/en/api/rate-limits) | A spend limit per organization and per workspace; a request over it is refused. The [cost report](https://platform.claude.com/docs/en/manage-claude/usage-cost-api) comes in daily buckets. | Limits nest: a run sits under a project. The provider's report is a check on our count, not the count. *Changed 2026-11-07:* only for a run billed per token; an agent on a subscription has no such report ([the meter on subscriptions](#the-meter-on-subscriptions)). |
 | [OpenAI](https://developers.openai.com/api/docs/guides/spend-limits) | An alert only tells you. A hard limit refuses requests, but "enforcement is not instantaneous", so spend can pass it a little. | Say how far past a limit a run can go: at most one model request. |
 | [AWS Budgets](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-managing-costs.html) | Alerts on actual or forecast spend. Data updates up to three times a day, so you can pass a budget before you hear of it. [Budget actions](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-controls.html) run on their own or after an approval. | A meter that only reads the bill is too late. Count before and after each turn. |
 | [Google Cloud budgets](https://docs.cloud.google.com/billing/docs/how-to/notify) | A budget does not cap spend. To cap it, you wire its messages to code that turns billing off. | The cap and the count must be one thing, or the cap is a hope. |
@@ -327,6 +332,138 @@ const jev = liveJev(key, {calls: 2_000}, meter.of(self))   // the dollar cap is 
   `tokens` and a price table (Langfuse's "inferred"). The price table is the
   same one the estimate reads.
 
+## The meter on subscriptions
+
+*Decided 2026-11-07 (owner).* The study behind it is
+[experiment 223](../../experiments/223-reading-subscription-usage.md). The record's shape is for
+`next/`. Today's version gets the first three fields in `field/runs.jsonl`
+([field](../../field/README.md#a-run)), and its code records none of this yet.
+
+```ts
+// A sketch, next/. What one agent run records about how it was paid and how full its limit is.
+// Every key is optional: each source is experimental or undocumented, and a missing key is unknown.
+const Billing = Schema.TaggedUnion({
+	subscription: {product: Schema.optionalKey(Schema.String)}, // "max", "pro": the provider's own word
+	key: {},                                                     // billed per token
+});
+const Env = Schema.Struct({                                     // set or not, never the value
+	ANTHROPIC_API_KEY: Schema.optionalKey(Schema.Boolean),
+	ANTHROPIC_AUTH_TOKEN: Schema.optionalKey(Schema.Boolean),
+	OPENAI_API_KEY: Schema.optionalKey(Schema.Boolean),
+	CODEX_API_KEY: Schema.optionalKey(Schema.Boolean),
+});
+const Percent = Schema.Finite.check(Schema.isBetween({minimum: 0, maximum: 100}));
+const Quota = Schema.Struct({
+	id: Schema.optionalKey(Schema.String),     // "five_hour", "seven_day", "seven_day_opus"; Codex: "primary"
+	used: Schema.optionalKey(Percent),        // 0 to 100 on every provider
+	minutes: Schema.optionalKey(Schema.Int),  // how long the window is: 300, 10080
+	until: Schema.optionalKey(Schema.Finite), // when it resets, epoch ms, the provider's clock
+	state: Schema.optionalKey(Schema.String), // Claude's "allowed", "allowed_warning", "rejected"
+	turn: Schema.optionalKey(Schema.Int),     // the turn it came back with
+});
+
+// The run's `started` fact gains three keys, known before the first turn.
+billing: Schema.optionalKey(Billing),
+env: Schema.optionalKey(Env),
+raw: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)), // the CLI's own fields, as sent
+// Its `ended` fact gains one: the last reading of each quota the run saw.
+quotas: Schema.optionalKey(Schema.Array(Quota)),
+// Each turn's `chat` span gains tags, in OpenTelemetry's names where they exist.
+"tea.turn.cause", "tea.turn.why", "tea.turn.context",
+"gen_ai.usage.cache_read.input_tokens", "gen_ai.usage.cache_creation.input_tokens",
+// An ask's `answered` and `withdrawn` gain one key, filled by the referee, as it fills `arrivedAt`.
+waited: Schema.optionalKey(Schema.Finite), // ms from the ask's `arrivedAt` to this entry's
+```
+
+One run on a Max login, traced (the run id and the numbers are made up):
+
+```ts
+{_tag: "started", run: "r-build-12", billing: {_tag: "subscription", product: "max"},
+ env: {ANTHROPIC_API_KEY: false, ANTHROPIC_AUTH_TOKEN: false, OPENAI_API_KEY: false, CODEX_API_KEY: false},
+ raw: {apiKeySource: "none", apiProvider: "firstParty", subscriptionType: "max"}}
+{_tag: "ended", run: "r-build-12", usd: 1.84,   // list price, for comparison only
+ quotas: [{id: "five_hour", used: 24, minutes: 300, until: 1793412000000, state: "allowed", turn: 31},
+          {id: "seven_day", used: 50, minutes: 10080, until: 1793900000000, turn: 31}]}
+```
+
+### 1. The agents run on subscriptions
+
+- fabrika's agents run on flat subscriptions: Claude Max through Claude Code, and ChatGPT Pro
+  through Codex. They are not billed per token.
+- So the meter has no provider bill to check its dollars against, for those runs. The old gap,
+  "a weekly check against the Anthropic cost report", no longer applies to them (marked where it
+  stands, under [what it cannot tell us](#what-it-cannot-tell-us)).
+- Dollars at list price stay on every run, for comparison only, as `AGENTS.md` already says. For
+  an agent on a subscription, a `charge` counts list-price dollars: a measure of how much work ran,
+  not money paid. Jev is still billed per token, so its dollars are real money.
+- Not changed here, and still open: whether an agent run on a subscription still needs a person's
+  yes to a spend estimate before it starts. The rule above says it does; nobody has asked again.
+
+### 2. What every agent run records
+
+Every key is optional. The sources are experimental or undocumented
+([experiment 223](../../experiments/223-reading-subscription-usage.md)), so a key that did not come
+is unknown, never zero or false. The record never holds a key's value.
+
+| Key | Where it comes from |
+|---|---|
+| `billing` | Claude: `apiKeySource` on the first `system/init` message (`sdk.d.ts:132-135, 6241` in `@anthropic-ai/claude-agent-sdk` 0.3.316), or the SDK's `accountInfo()` with `subscriptionType` and `apiProvider` (`sdk.d.ts:23-32, 3218`). Codex: the auth mode, `chatgpt` with its `planType`, or `apiKey` (openai/codex `codex-rs/app-server-protocol/src/protocol/v2/account.rs:22-37`), cross-checked with the rate-limit snapshot's `plan_type` |
+| `env` | Whether each of `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `OPENAI_API_KEY` and `CODEX_API_KEY` was set in the run's environment, read by fabrika before it starts the CLI |
+| `quotas` | Claude: the last `rate_limit_event` (`sdk.d.ts:5918-5935`), whose `utilization` is 0 to 1, so it is multiplied by 100. Codex: the `token_count` event's `rate_limits` (`codex-rs/protocol/src/protocol.rs:2626-2684`), `used_percent` already 0 to 100 |
+| `tea.turn.cause`, `tea.turn.why` | Why the turn woke: the ledger's `cause`, the id of the input that started it, and that input's `_tag` |
+| `tea.turn.context` | The context size at that turn, in tokens. On Claude it is input plus both cache counts, as today's `packages/fabrika/src/agents/claude/adapter.ts:53` adds them |
+| cache reads and writes | Each turn's `cache_read_input_tokens` and `cache_creation_input_tokens`, under OpenTelemetry's `gen_ai.usage.*` names, as [a JobRecord holds its trace](./a-job-record-holds-its-trace.md) already tags a step's span |
+| `waited` | How long an ask waited on a person: from the `asked` entry's `arrivedAt` to the `answered` or `withdrawn` entry's, both the referee's clock |
+
+- **How `billing` is read.** A key source (`ANTHROPIC_API_KEY`, `apiKeyHelper`,
+  `/login managed key`) or Codex's `apiKey` is `key`. Claude's `none` with a `subscriptionType` and
+  `apiProvider: "firstParty"` is `subscription`, as is Codex's `chatgpt`. When the signals disagree,
+  `billing` is left out and `raw` and `env` keep what was seen. It is never a guess.
+- **Why `env` matters.** `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_API_KEY` both outrank `/login`, and in
+  `-p` mode "the key is always used when present", with no prompt
+  ([authentication](https://code.claude.com/docs/en/authentication#authentication-precedence)).
+  `CODEX_API_KEY` "takes precedence over any other auth method" where it is turned on, `codex exec`
+  included (`codex-rs/login/src/auth/manager.rs:1618-1625`). And Claude's `apiKeySource: "none"`
+  also covers a bearer token, so `env` is how a reader tells the two apart.
+- **One scale: 0 to 100.** Codex's `used_percent`, Claude's status line `used_percentage` and the
+  SDK's experimental `usage_…()` call all count 0 to 100 (`sdk.d.ts:3131-3150`;
+  [status line](https://code.claude.com/docs/en/statusline#rate-limit-usage)). Only Claude's
+  `rate_limit_event` sends 0 to 1, so its one reader converts, and `0.81` is kept as `81`.
+- **`raw` keeps the CLI's own words** (`apiKeySource`, `subscriptionType`, `plan_type` and the like)
+  as they came. Like GitHub's words behind `CodeHost`, they stay inside it and never become keys of
+  ours. A field renamed in the next release is still on record.
+- **Each ask records how long it waited on a person.** The two `arrivedAt` clocks are already on
+  every entry, so the wait could be worked out later. `waited` keeps it on the answer so a reader
+  needs no join, and a wait that ended in `withdrawn` counts too. The referee fills it, so a
+  person's session cannot type it.
+- **Names.** The providers call Max and Pro a plan. Here a plan is the plan step's answer
+  (Tracker), so the key is `product`, Stripe's word for what a subscription buys
+  ([products and prices](https://docs.stripe.com/products-prices/overview)). `quota` is Google
+  Cloud's word for a provider's usage limit
+  ([quotas](https://cloud.google.com/docs/quotas/overview)), kept apart from the meter's own `Limits`. `id`,
+  `minutes` and `until` read as they are: until is a time something ends, as on `asked`.
+
+### 3. A key in the environment never blocks a run
+
+- fabrika does not refuse or hold a run because `ANTHROPIC_API_KEY` or another key variable is
+  set. Which login to use is the person's call: a key is right for a shared service or a public
+  repository's own CI ([agents behind one service](./agents-behind-one-service.md#still-open)).
+- fabrika only records it, in `env` and `billing`. A run that moved to per-token billing by a
+  forgotten key shows up in the record and in the field log, not as a refusal.
+
+### 4. Later: hold new agents when a quota is nearly full
+
+- Not now. Later, the meter holds a new agent when a quota is close to full. No number is decided.
+- The data it would read is what point 2 records. One limit it has to live with: a new agent
+  starts blind, because each process learns the percent only from its own calls. Reading the
+  last `quotas` any run on that login wrote, or the SDK's experimental `usage_…()` call, are the
+  two ways in, and that is the later design's call.
+
+**How sure.** The four points are the owner's. On the reading of them (the `billing` rules, the 0
+to 100 scale, the names): about 85%. The doubt is how often `utilization` and Codex's
+`rate_limits` arrive on headless runs; a short logged run of each CLI would settle it, and every key
+is optional so a missing one costs nothing but the reading.
+
 ## Each old piece, and where it goes
 
 ### The ask
@@ -495,7 +632,12 @@ no person      -> no ask is written; the box's rules refuse the tool, reject_onc
   time; the price table only knows prices, not how long an agent works.
 - Whether the provider's own bill agrees with the meter. Nothing here compares
   them; a weekly check against the Anthropic cost report is the obvious next
-  step, and it is not designed.
+  step, and it is not designed. *Changed 2026-11-07 (owner):* the agents run on
+  flat subscriptions, so for them there is no per-token bill to check against.
+  Their list-price dollars are for comparison only, and the number to watch is
+  the percent of the limit used. The gap stays only for runs billed per token
+  (Jev, or an agent run on a key). See
+  [the meter on subscriptions](#the-meter-on-subscriptions).
 - Whether two asks of two people is enough when a change needs both to agree.
   No ticket has needed that yet.
 - How `withdrawn {why: "changed"}` should treat a yes on a plan that changed

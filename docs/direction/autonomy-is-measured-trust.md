@@ -67,6 +67,32 @@ const failRate = (merges: readonly MergeRow[], broke: readonly BrokeRow[]) => br
   check that blocks. After 30 merges we pick one from what we see. The doubt: 30 may be too few
   if breaks are rare. More merges would settle it.
 
+## M5: asks that did not need a person
+
+*Decided 2026-11-07 (owner).* A second measure beside change failure rate. Change failure rate
+says how often a merge nobody approved went wrong. This one says how often a step asked a person
+something it could have worked out itself. When a person answers an ask, they can mark it: it
+really needed me, or the agent could have worked it out. The mark is `needed` on the `answered`
+fact ([the ask desk](./ask-desk.md#did-this-ask-need-you)).
+
+```ts
+// A sketch. Derived, never stored. Per step, and the same fold per agent (the `asked` entry's `by`).
+type AskCount = {
+	readonly step: string; // the step that wrote `asked`
+	readonly needed: number; // answers marked needed: true
+	readonly avoidable: number; // answers marked needed: false
+	readonly unmarked: number; // answers with no mark
+};
+```
+
+- **What it is for.** A step with many avoidable asks asks too much. Its fix is the missing
+  information in its brief, or a rule in code, the same way a break hardens the step that missed
+  it.
+- **Optional, so a sample.** An answer without a mark is fine. `unmarked` stays in the count, so a
+  share is read against how many answers carried a mark.
+- Nothing reads it yet. It is recorded now because an answer written before the field exists can
+  never get it.
+
 ## What it means for the work
 
 - Every merge an agent makes without a person gets an M1 row, starting today.

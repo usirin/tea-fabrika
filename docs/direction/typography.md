@@ -84,7 +84,7 @@ export const DescriptionDetails = ({textStyle = "body", ...props}: DetailsProps)
 one text style traced: the rec's value
 DescriptionDetails    textStyle="heading", which spreads textStyles.heading, {size: "xl/semibold"}
 Manti's Text          <dd data-scope="text" data-size="xl" data-weight="semibold">
-theme.css             --manti-text-xl: var(--fs-head), which is 15px
+tokens.css            --manti-text-xl: var(--fs-head), which is 15px
 what a person sees    "Approve" at 15/600 in step 12, the loudest text in the card
 a screen reader       the h2 "Approve plan v1?" first, then the list: "Recommended, Approve"
 ```
@@ -99,7 +99,7 @@ a screen reader       the h2 "Approve plan v1?" first, then the list: "Recommend
 
 ## Why these numbers
 
-Manti's scale at base 13, as `theme.css` maps it, gives 12, 13, 15 and 22. Two makers that build
+Manti's scale at base 13, as the design package's `tokens.css` maps it, gives 12, 13, 15 and 22. Two makers that build
 dense desktop tools land on the same steps.
 
 | Text style | Ours | macOS text style [t2] | Linear's app CSS [t11] |
@@ -115,7 +115,7 @@ and `xs` (11) get no text style: 14 was prose, which moves to 13, and 11 is unde
 for a caption [t3].
 
 Every heading takes a text style. A Manti `Heading` with no size picks one from its level, and
-`<Heading level={1}>` draws at 4xl, 29.25px, because our `theme.css` does not map 3xl to 5xl
+`<Heading level={1}>` draws at 4xl, 29.25px, because our `tokens.css` does not map 3xl to 5xl
 [t21].
 
 ## The six principles
@@ -307,9 +307,9 @@ Offered, not filed. About 1 agent hour in all, after the design package move.
   `strong` in sans, and the cost and turns (`.act-r .code`, `window.css:2700`, such as "$0.11, 1
   turn") become `label`. About 10 lines. Decided.
 - **The ticket number and cost.** `#7` and the Cost row lose `mono`. A few lines.
-- **`themes.test.ts` reads the `textStyles` map.** Four of its checks read colors from `.tracker-title` and
+- **`colors.test.ts` (`apps/fabrika/src/window/`) reads the `textStyles` map.** Four of its checks read colors from `.tracker-title` and
   `.tk-title`, and fail once color comes from Manti's props. About 40 lines.
-- **`primary` text is our accent.** One line in `theme.css`; Manti's own `primary` is orange.
+- **`primary` text is our accent.** One line in the design package's `tokens.css`; Manti's own `primary` is orange.
 - **A lint on sizes in program CSS.** Advice first, its false alarms measured, then blocking.
 
 ## Manti ideas

@@ -6,21 +6,25 @@ description: Run this repo's guidelines study for one design area, from settled 
 # A guidelines study
 
 One design area becomes a few principles the owner can press, read and decide on, and then a
-build in the app. A study ends with one experiment, one note, one guidelines page, one Design
-canvas, one docs-only pull request, a walk that ends in a yes or a no, and, on a yes, a build plan
-the same day. The page is the front door: a pressable demo on top, the principles folded under
-it. The canvas sits behind it for every artboard side by side; it is a Design canvas in Claude
-Design with the design system installed
-([drawn on Claude Design](../../../docs/direction/design-on-claude-design.md)). A canvas alone was
-hard to use: nothing on it said what to look at or why (2026-11-03). And a decided note with no
-build step stayed a note: from 2026-11-01 to 2026-11-03, tile guidelines, keybindings, modes and
-typography were decided for today's app and none was built.
+build in the app. A study ends with one experiment, one note, one Design canvas titled "<Area>
+guidelines", one docs-only pull request, a walk that ends in a yes or a no, and, on a yes, a build
+plan the same day. The canvas is the study's front door, presented the way a designer presents
+work: slides that walk the story, and at the end a clickable prototype of the pick that answers
+every key and click the guidelines name. It is a Design canvas in Claude Design with the design
+system installed ([drawn on Claude Design](../../../docs/direction/design-on-claude-design.md)).
+
+Two earlier shapes failed. A canvas of artboards alone was hard to use: nothing on it said what to
+look at or why (2026-11-03). The plain page that replaced it lifted the real build's saved DOM, so
+any press nobody had captured said "not shot", and the owner turned that down on 2026-11-06: a
+press in a demo always does something. And a decided note with no build step stayed a note: from
+2026-11-01 to 2026-11-03, tile guidelines, keybindings, modes and typography were decided for
+today's app and none was built.
 
 The models are themes (PR 281), keybindings (PR 282), hot reload (PR 286) and modes (PR 287).
-Themes came first; the other three set the note's shape and the views under the page's mockup,
-and modes is the closest to it all: copy modes for those. Pipeline guidelines (PR 290) drifted on structure (no demo, no Try it), so it is not a model, but its views and palette are a second reference.
-The canvas copies the mockup rounds instead (the tile, the pipe marker finalists, the chat window,
-the outline round): there the mockup is the page, and the words sit beside it.
+Themes came first; the other three set the note's shape and the order of the principle slides,
+and modes is the closest to it all: copy modes for those. Pipeline guidelines (PR 290) drifted on structure (no demo, no Try it), so it is not a model.
+The prototype copies the mockup rounds instead (the tile, the pipe marker finalists, the chat
+window, the outline round): there the screen is the point, and the words sit beside it.
 
 Read `AGENTS.md` first. Its rules on names, writing, version and the public repo all apply.
 
@@ -110,16 +114,20 @@ pipe marker finalists did with four different designs, and only then refines one
   one tile filling the window, two side by side, two stacked, a 2x2 grid, and about 1024x700. Put
   each shot beside today's app and beside the closest Linear screen, from Linear's public docs or
   changelog.
-- Show the owner the designs on the canvas (step 9), each with its pipe line above it. **The owner
-  picks one.** Each design that lost gets one or two plain lines on why, tied to a principle or a shot.
+- Show the owner the designs on the canvas (step 9), one slide each with its pipe line on top and
+  its prototype beside it. **The owner picks one.** Each design that lost gets one or two plain
+  lines on why, tied to a principle or a shot.
 - Then refine the pick in rounds. For each shot, one line: would Linear's team ship this? What
   looks off: a box in a box, a gray that fights, a line nobody needs, loud text, a cramped
   layout? Fix it and reshoot. Two or three rounds is normal. Stop when you would ship it.
 - Keep every design and every round. For each, the shoot presses the real build through every
-  key and click the screen takes and saves each state it reaches: the DOM
-  (`document.documentElement.outerHTML`, scripts dropped, a canvas kept as its pixels), which
-  press led where, and the built `window.css`. Step 9 takes the canvas's words and keys, and a
-  plain page's demo, from these files.
+  key and click the principles name, and every other key and click the screen takes, and saves
+  each state it reaches: its shot, the words on screen (from the DOM), and which press led where.
+  These files are the prototype's reference, not its source: step 9 copies its words, keys and
+  first state table from them and matches its boxes and sizes to the shots.
+- **A press the shoot missed is shot now,** in the real build, never left out. A state the real
+  build cannot reach yet is built on the local branch first, then shot. Only a part Manti cannot
+  draw yet stays a named gap (step 9).
 - Their yes on the look comes before the write-up. On a no, go round again.
 - Each principle also gets a **kind**, so it is checked the right way: **law** (the test writer
   can check it), **lint** (`pnpm lint` can hold it) or **taste** (only a shot beside Linear checks
@@ -131,7 +139,9 @@ pipe marker finalists did with four different designs, and only then refines one
 
 - The title is the question. Line one: the date read, and **"This is reading, not a
   measurement."** unless something ran. It names the note and the Design canvas "<Area>
-  guidelines" by title. Never put a canvas or page link in the repo.
+  guidelines" by title. Never put the canvas's link in the repo.
+- When step 5 ran, say so: the branch, the app version, the designs and rounds shot, and how many
+  states each prototype has, with how many of them have a real shot.
 - **The answer** first: what the makers agree on, then how today's example follows and breaks it.
 - One small `text` block: how each tool does it, one line each.
 - `## What was read`, then one section per group of sources, at most one table each.
@@ -167,59 +177,59 @@ pipe marker finalists did with four different designs, and only then refines one
 - One row in `docs/direction/README.md`: what the note says, then its status, `proposed`.
 - One row in `experiments/README.md`: number, question, files, date, the answer, $.
 
-### 9. Build and publish the page and the canvas
+### 9. Build and publish the deck and the prototype
 
-**The page comes first.** A private artifact titled "<Area> guidelines". On top, one plain
-paragraph: what the page asks the owner, and how to use it. Then the pressable demo, lifted, not
-redrawn: each design and layout is its own small document in a frame, its CSS the built
-`window.css` copied unchanged, its markup step 5's saved DOM; a key or click moves to the saved
-state the real build reached, and a press with no saved state says "not shot". Switches for
-today, each design, each round and Linear, and the five layouts; two can sit side by side. Under
-the demo, folded: the principles with kinds and leans, why each losing design lost, what changed
-per round, what still looks off, the made-up list. Last, a link to the canvas as "every artboard
-side by side". The page keeps the pixel check below. Shots and demos are in dark mode first, as
-the owner runs it.
+**One Design canvas titled "<Area> guidelines",** with the design system installed: its
+`tokens.json` copied in and its record in the canvas's index, as the canvas type says. Follow the
+type's own instructions for every file. Later rounds revise the same canvas. It holds two things,
+in this order:
 
-The canvas is a mockup with the guidelines beside it, not a write-up with a demo in a corner.
-Pages built the other way came out as one design and a wall of text, and the redrawn demo drifted
-from the real screen (boxed buttons in a selected row, bigger type, a footer that wrapped).
+- **The deck.** Slides that walk the story the way a designer presents work: the question and the
+  scope, what is settled, how the makers do it, one slide per principle with its lean, one slide
+  per design with why it lost or won, the rounds of the pick, the proof, the smaller calls, what it
+  cannot tell us. Each slide is a 1280x720 artboard with one idea on it, and Play walks them in
+  order. The canvas opens on the first slide.
+- **The prototype, last.** The pick, built on the design system and driven by a small state
+  machine, so every key and click the guidelines name does something. Each other design gets one
+  too, at one tile at least, so its slide can be pressed.
 
-- Follow `references/page-structure.md`: the structure checklist, the canvas rules and, for a plain
-  page, the page rules and the highlight snippet. Every box on its list is checked before
-  publishing.
-- **A Design canvas titled "<Area> guidelines",** with the design system installed: its
-  `tokens.json` copied in and its record in the canvas's index, as the canvas type says. Follow the
-  type's own instructions for every file. Later rounds revise the same canvas.
+The Slides type is not used: its live embed takes no clicks and no keys, so it cannot hold a
+prototype. Shots and the prototype are in dark mode first, as the owner runs it.
+
+- Follow `references/deck-structure.md`: the slide list, the prototype rules, the press checklist
+  and the marks. Every box on it is checked before publishing.
+- **The prototype is a model, an update and a view** (Elm first). The model is the screen's state;
+  the update is a table of presses, one row per key or click in each state; the view is real
+  parts. A flow lives in one artboard, since each artboard keeps its own state.
 - **Real parts, not redrawn.** Mount Manti's parts and ours from the system's bundle
   (`window.Fabrika`) by name, never a look-alike. Layout is plain markup on the system's tokens.
-  Every word, name and key comes from the DOM step 5 saved, copied once: nobody retypes a word of
+  Every word, name and key is copied once from step 5's saved states: nobody retypes a word of
   the screen. A keys line comes from its program's `commands` table plus `refuse`, as the outline
   round's did. A part the bundle cannot draw yet, such as an edit inside a `TreeView` row, is a
-  named gap, never drawn as if it worked.
-- **Several designs, not one.** Today, each design from step 5 (at least 3, each with its why-not
-  line), the rounds of the pick, Proposed and Linear each get a row of artboards, one per state
-  and layout, so two sit side by side at the same layout. A round with no saved DOM shows its real
-  shot.
-- **Pressable where the canvas allows.** An artboard whose controls work is marked interactive: it
-  takes clicks, and keys on a focused element. A walk that needs keys from anywhere goes on a plain
-  page, since the canvas allows no page-wide key handler. That page keeps the old demo rules:
-  lifted from the built `window.css` and step 5's DOM, pressable, and "not shot" for a press with
-  no saved state ("The keyboard walk page" in the checklist).
-- **The blocking check is a person's look.** The canvas type tells an agent not to check its own
-  render. So each artboard sits beside its step 5 shot, uploaded as an image, and the owner looks
-  once per round. Any difference in words, boxes or sizes sends the round back: fix the artboard,
-  not the shot. Name the side-by-sides in the walk.
-- **A plain page keeps the pixel check.** Shoot each demo state a press can reach, at the size and
-  scale of its step 5 shot, and put the two side by side with a pixel diff. Any difference in
-  words, boxes or sizes blocks the publish: fix the lift, not the shot, and shoot again. Save the
-  side-by-sides in the scratch folder and name them in the walk. Shoot with scroll bars shown, as
-  Electron draws them. One drift is not a difference: when the check runs on a newer Chromium than
-  the app's Electron, a line can sit up to about 1px lower, so a long list creeps down a few
-  pixels. Same words, same boxes, same widths: say so in the walk and on the page.
-- **Publish one file at a time,** as the canvas type asks: the index with the first artboard, then
-  one artboard per call. List the round's artboards first, so none is sent twice. A plain page
-  publishes from files as a private artifact titled "<Area> guidelines: keys". Neither link goes in
-  any file in the repo.
+  named gap tag where it would be; the press still moves the state, and the gap tag says what the
+  build will draw there.
+- **Keys go to a focused window.** The canvas allows no page-wide key handler. So the prototype's
+  app window is one focusable element with its own key handler. It takes focus when Play opens it,
+  and a click on it gives the keys back. A ring shows while it has them, and a quiet line under it
+  says "Click the window to give it the keys" when it does not. A key the browser keeps for itself
+  (such as Cmd-W) cannot reach it: that key gets a row on the press checklist and a click on its
+  menu item stands in.
+- **Every press answers.** A line under the window logs each press: the key or click, and the
+  state it reached. A press the app ignores in that state says so in the log, with why, as the
+  app does. There is no "not shot": a press with no state is a bug to fix before publishing,
+  never a label.
+- **The press checklist.** One row per key or click a principle names: the press, the state it
+  starts from, the state it reaches, the principle and Try it line it serves, and whether that
+  state has a real shot. The agent ticks each row by reading the prototype's press table against
+  the principles' Try it lines and keys tables. It sits on a slide before the prototype.
+- **The blocking check is the owner's look,** once per round. The canvas type tells an agent not
+  to check its own render. So the proof slides put each prototype state beside its step 5 shot,
+  uploaded as an image, at the same size and scale. Any difference in words, boxes or sizes sends
+  the round back: fix the prototype, not the shot. A round is ready for that look only when every
+  row of the press checklist is ticked and every state has a real shot.
+- **Publish one file at a time,** as the canvas type asks: the index with the first slide, then one
+  artboard per call. List the round's artboards first, so none is sent twice. The link goes in no
+  file in the repo.
 
 ### 10. Open a docs-only pull request
 
@@ -228,16 +238,21 @@ from the real screen (boxed buttons in a selected row, bigger type, a footer tha
   keys, as `AGENTS.md`'s public repo rules say.
 - Title: `direction: <area>, proposed, with experiment NN`. The body, as PR 287: what is in it,
   the principles with their leans (or "No lean, the owner picks"), the shape, today's example, what was decided, what other open
-  pull requests would change to match, open calls, what it cannot tell us.
+  pull requests would change to match, open calls, what it cannot tell us. It names the canvas
+  "<Area> guidelines" by title, never by link.
 - Log the hand run in `field/` the same day. It lands by
   [the plan's rule](../../../docs/plan/README.md#how-a-change-lands), after the owner's yes.
 
 ### 11. Walk the owner through it
 
-- One step per message, titled `**Step N of M: <name>**`. Step one is the whole idea, then one
-  step per principle, then the smaller calls.
+- The walk follows the deck. One step per message, titled `**Step N of M: <name>**`, each naming
+  the slide it is about. Step one is the whole idea, then one step per principle, then the
+  designs, then the smaller calls.
 - 3 to 5 short bullets per step, each with its lean and how sure, or "No lean, the owner picks". Then one everyday comparison.
   End with "Say next." and wait.
+- A principle's step ends with its Try it line, so the owner can press it in the prototype.
+- The next to last step is the prototype: the owner presses it in Play, and any press that does
+  the wrong thing goes back to step 9 before the walk goes on.
 - The owner's answer on a lean changes the canvas first, then the note, then the pull request.
 - The last step asks one yes or no: merge it?
 - **Before the merge,** mark the note decided. Its status line becomes "**Decided DATE.** The

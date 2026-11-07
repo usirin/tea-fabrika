@@ -16,6 +16,7 @@
 		"lint:dead": "code-graph . --unreachable --ci",
 		"lint:compiler": "node next/apps/fabrika/src/exam/compiler.ts",
 		"promises": "node packages/promises/src/main.ts",
+		"commits": "node next/apps/fabrika/src/exam/commits.ts",
 		"format": "node oxlint-plugins/format.ts && node oxlint-plugins/lint.ts --fix && node oxlint-plugins/format.ts",
 		"demo": "node legacy/src/demo.ts",
 		"demo:claude": "AGENT=claude node legacy/src/demo.ts",

@@ -1,5 +1,5 @@
+import {fabrika, fabrikaLight, terminalTheme} from "@kampus/fabrika-design";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
-import {fabrika, fabrikaLight, terminalTheme} from "../themes.ts";
 
 // A terminal follows the system's look while it is open (tracker ticket 144). The window's
 // stylesheet follows it with light-dark(); a terminal draws on a canvas, so it must be told.

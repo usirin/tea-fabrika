@@ -1,12 +1,13 @@
 // The two built-in themes, `fabrika` and `fabrika-light` (docs/direction/themes.md): Radix 3.0.0,
 // gray slate, accent indigo. Every value is a Radix step, used for that step's job (color
-// principles, principle 5), but for four bends, each written down with its reason:
+// principles, principle 5), but for five bends, each written down with its reason:
 // - the dark desk, `#0c0d0e`, is no step: nothing in slate is darker than 1;
 // - on-turn is white, Radix's rule for text on step 9, not a step;
 // - edge is slate a4, a background step used as a line: a higher one was too loud on a full desk;
-// - focus in light is slate a9, a solid step used as a line: a8 reads 1.90 on the desk.
-// The terminal's black (dark) and two whites (light) are fills, not text. The window's stylesheet
-// writes the same values as tokens (window.css :root); the terminal and the window's frame read
+// - focus in light is slate a9, a solid step used as a line: a8 reads 1.90 on the desk;
+// - the keyboard ring in dark is slate a9 too (tokens.css --focus): a8 reads 2.82 on a selected row.
+// The terminal's black (dark) and two whites (light) are fills, not text. The package's stylesheet
+// writes the same values as tokens (tokens.css :root); the terminal and the window's frame read
 // them from here.
 //
 //   terminalTheme(fabrika).background   // "#111113", slate 1

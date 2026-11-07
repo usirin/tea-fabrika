@@ -249,19 +249,24 @@ const FORBIDDEN: ReadonlyArray<{readonly name: string; readonly test: (spec: str
 		{name: "@modelcontextprotocol/*", test: (spec) => spec.startsWith("@modelcontextprotocol/")},
 	];
 
-/** The detail's list: the top level of the library, of tuval and of notes, and every program's `/window`. */
+/** The detail's list, the top level of the library, of tuval and of notes, plus the library's
+ *  `/transport`, which a browser tab runs (Tier 1, P7). Every program's `/window` comes on top. */
+const BROWSER: Readonly<Record<string, ReadonlyArray<string>>> = {
+	"@kampus/libfabrika": [".", "./transport"],
+	"@kampus/tuval": ["."],
+	"@kampus/notes": ["."],
+};
 const browserEntries = (
 	packages: ReadonlyArray<Package>,
 ): ReadonlyArray<{readonly label: string; readonly file: string}> =>
 	packages.flatMap((pkg) => {
 		const name = pkg.manifest.name;
-		const keys = [
-			...(["@kampus/libfabrika", "@kampus/tuval", "@kampus/notes"].includes(name) ? ["."] : []),
-			...(pkg.group === "programs" ? ["./window"] : []),
-		];
+		const keys = [...(BROWSER[name] ?? []), ...(pkg.group === "programs" ? ["./window"] : [])];
 		return keys.flatMap((key) => {
 			const file = exportMap(pkg).get(key);
-			return file === undefined ? [] : [{label: key === "." ? name : `${name}/window`, file}];
+			return file === undefined
+				? []
+				: [{label: key === "." ? name : `${name}${key.slice(1)}`, file}];
 		});
 	});
 
@@ -416,10 +421,16 @@ describe("planted breaks", () => {
 
 	it("fires on a top level that reaches node, cloudflare, MCP or electron", async () => {
 		const bundles = plant({
-			"packages/libfabrika/package.json": manifest("@kampus/libfabrika"),
+			"packages/libfabrika/package.json": manifest("@kampus/libfabrika", {
+				exports: {".": "./src/index.ts", "./transport": "./src/transport/index.ts"},
+			}),
 			"packages/libfabrika/src/index.ts": lines(
 				'import {readFileSync} from "node:fs";',
 				"export const read = readFileSync;",
+			),
+			"packages/libfabrika/src/transport/index.ts": lines(
+				'import {createHash} from "node:crypto";',
+				"export const hash = createHash;",
 			),
 			"packages/tuval/package.json": manifest("@kampus/tuval"),
 			"packages/tuval/src/index.ts": lines("export const clean = 1;"),
@@ -443,6 +454,7 @@ describe("planted breaks", () => {
 		expect([...(await bundleFaults(bundles))].sort()).toEqual(
 			[
 				'@kampus/libfabrika reaches node:*: "node:fs" from packages/libfabrika/src/index.ts',
+				'@kampus/libfabrika/transport reaches node:*: "node:crypto" from packages/libfabrika/src/transport/index.ts',
 				'@kampus/notes reaches @modelcontextprotocol/*: "@modelcontextprotocol/server" from programs/notes/src/program.ts',
 				'@kampus/notes/window reaches cloudflare:*: "cloudflare:workers" from programs/notes/src/view.ts',
 				'@kampus/chaos/window reaches electron: "electron" from programs/chaos/src/index.ts',
