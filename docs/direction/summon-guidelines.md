@@ -1,7 +1,10 @@
 # Summon guidelines: naming agents in the shell, and the grammar for it
 
-**Proposed 2026-11-06.** Nothing new here is decided. It stands on these, decided before it and not
-asked again ([talk where you work](./talk-where-you-work.md)):
+**Proposed 2026-11-06.** The seven principles below are proposed. One section is decided: the owner
+settled threads, forks and who may talk to whose agent the same night, in
+[threads, forks and the verbs](#threads-forks-and-the-verbs), marked **Decided 2026-11-06**. The
+note stands on these, decided before it and not asked again
+([talk where you work](./talk-where-you-work.md)):
 
 - **Decided 2026-11-05:** `@` is read off the line before tsh's shell words, like Claude Code's `!`,
   and the log keeps the line as typed and what the name meant then.
@@ -13,7 +16,8 @@ asked again ([talk where you work](./talk-where-you-work.md)):
   top bar counts the agents and its list has a dismiss on each.
 - **Decided 2026-11-06, for `next/`:** `summon` is an alias with a session, `on <hands>` pins where
   it runs, the brain keeps alias and session, names belong to a person, permissions ride on the
-  alias, two messages queue in the run's one mailbox.
+  alias, two messages queue in the run's one mailbox. That note first said nothing runs between
+  turns; the owner corrected it the same night (below), and the note now says so.
 - **Decided 2026-11-05:** each harness's own permission words pass through, and the started agent
   works in the person's repo.
 - **Proposed:** [fabsh grows into a language](./fabsh-grows-into-a-language.md), and
@@ -64,20 +68,29 @@ everything; the rest are statements beside today's built-ins.
 
 ```text
 line       said | statements                        a line whose first non-space character is '@' is said
-said       '@' [name] prose                         prose: the rest of the line, as typed; no words, no #, no quotes
+said       '@' [address] prose                      prose: the rest of the line, as typed; no words, no #, no quotes
+address    name ['/' person] ['#' thread]           read with no spaces inside; the first space ends it
 statements statement (sep statement)*               as today
-statement  summon | dismiss | builtin word* ['&'] | pipeline ['&']
+statement  summon | dismiss | fork | builtin word* ['&'] | pipeline ['&']
 summon     'summon' agent [setting [setting]] 'as' name ['on' place]
-dismiss    'dismiss' name
+dismiss    'dismiss' name                           your own agents only
+fork       'fork' '@' address ['at' count] 'as' thread
 agent      word                                     checked: one of the harnesses (claude, codex)
 setting    word                                     checked: a model or an effort of that agent, below
 name       word                                     checked: the name rule (S3)
+person     word                                     checked: a member of this ledger
+thread     segment ('/' segment)*                   flat: '/' groups for the eye and for Tab, nothing more
+segment    word                                     checked: the name rule (S3)
+count      digit+                                   a message number in the thread; leave it out for the latest
 place      word                                     today: always refused (S5)
 ```
 
-- **`as`, `on` and `summon` are keywords only in their slot,** as POSIX keeps reserved words to
-  "certain positions" [p1]. `as` is a keyword only after `summon`'s settings, so `tell %1 as` is
-  untouched.
+- **`summon`, `dismiss` and `fork` are verbs; `as`, `on` and `at` are keywords only in their slot,**
+  as POSIX keeps reserved words to "certain positions" [p1]. `as` is a keyword only after
+  `summon`'s settings or `fork`'s address, and `at` only after `fork`'s address, so `tell %1 as` and
+  a prose line that says "at 5" are untouched.
+- **The address reads left to right as a sentence:** whose agent (`/<person>`), then which talk
+  (`#<thread>`). `@scout` alone is your own scout, on the tile's current thread (below).
 - **`said` is a lexer mode, not a word.** POSIX does the same for a here-document, whose body is
   read by other rules [p1]. It writes the decided "read before shell words" as a rule of the
   grammar, so the editor knows where prose starts.
@@ -92,8 +105,11 @@ span. Highlighting, completion and refusals all read this one list, as fish and 
 ```ts
 // A sketch, today's version. One span per token, from the parse, never from a regex over the line.
 type Role =
-	| "verb"        // summon, dismiss, a built-in, a program
-	| "keyword"     // as, on
+	| "verb"        // summon, dismiss, fork, a built-in, a program
+	| "keyword"     // as, on, at
+	| "person"      // the member after `/` in an address
+	| "thread"      // the thread after `#`, or the new one after fork's `as`
+	| "count"       // the message number after fork's `at`
 	| "agent"       // claude, codex
 	| "setting"     // haiku, high
 	| "name-new"    // the name after `as`
@@ -111,6 +127,9 @@ complete, by what the cursor expects
 "summon claude haiku as "    name-new   nothing: a new name is the person's; the hint says "a name"
 "@"                          name-ref   scout researcher                  this person's names, from the desk
 "dismiss sc"                 name-ref   scout
+"@scout#"                    thread     bug-17 bug-17/repro main          the threads of scout on this ledger
+"@scout/"                    person     the members whose scout exists    never a member without one
+"fork @scout#bug-17 at "     count      the hint says "a message number"; the thread view writes it
 ```
 
 - **`@` names reuse the picker's source.** The desk already keeps one index of rows
@@ -186,9 +205,11 @@ complete, by what the cursor expects
   in the update, not a check in the view.
 - **Doubt.** Dots in a name read badly at a sentence's end in a text box (`thanks @scout.`). 60% on
   keeping dots; dropping them changes the door's rule too.
-- **Two people.** Today's version has one person per app. In `next/`, names belong to a person, so
-  my `scout` and another person's never collide; theirs shows with their name, and `@`-ing it is
-  refused, since its permissions are theirs. Lean 70%.
+- **Two people. Decided 2026-11-06.** Today's version has one person per app. In `next/`, names
+  belong to a person, so my `scout` and another person's never collide. Theirs is
+  `@scout/<person>`: I may talk to it, never summon, dismiss or re-model it, and its turns are on
+  its owner's bill, where the owner sees them (rule T3 below). This replaces the earlier lean here,
+  which refused it.
 - **Today.** Half: the rule exists for writers; nothing names a summoned agent.
 
 ### S4: the shell owns the slots, the harness owns the words
@@ -277,6 +298,91 @@ complete, by what the cursor expects
 - **OTP.** `registered()` and `unregister/1`.
 - **Today.** Half: the count exists, for a different thing.
 
+## Threads, forks and the verbs
+
+**Decided 2026-11-06,** by the owner, the same night as the summon itself. These hold for both
+versions; what today's version can build of them is under T7.
+
+```text
+A sketch. One person, one tile, one agent, two threads.
+tsh$ summon claude haiku as scout
+  scout · claude haiku (claude-haiku-5-5) · high · on this Mac · ready
+tsh$ @scout why does post print #7 twice?            (your default thread, scout#<you>; the UI may show it as scout)
+tsh$ @scout#bug-17 here is the failing run           (a named thread: the tile switches to it)
+scout#bug-17 > @scout and the second run?            (plain @scout stays on bug-17, like a working directory)
+scout#bug-17 > fork @scout#bug-17 at 12 as bar        (a new thread #bar from message 12; the tile switches to it)
+  bar · forked from #bug-17 at 12
+scout#bar > @scout/<person>#review is this right?     (another member's scout: talk yes, on its owner's bill)
+```
+
+### T1: summon starts the agent, keeps it running, and puts it on the ledger
+
+- **What.** `summon` is more than an alias. It starts the agent, keeps it running between turns, and
+  writes it on the ledger, where every member can see it: who summoned it, which agent, model and
+  effort, since when. `dismiss` ends it, and that is on the ledger too.
+- **Corrects.** [Talk where you work](./talk-where-you-work.md) said, for `next/`, that nothing runs
+  between turns. That was wrong, and that note now says so.
+- **OTP.** `spawn` plus `register`: a running process with a name others can look up.
+
+### T2: every message goes to a named thread of an agent
+
+- **What.** A thread is one talk with one agent, with a name. Plain `@scout` goes to your default
+  thread, named after you: `scout#<person>`. The UI may hide your own name there, so you see
+  `scout`. `@scout#bug-17` names a thread anyone on the ledger can join, on purpose, by typing its
+  name.
+- **The address.** `@<agent>[/<person>][#<thread>]`. The `/` right after the agent says whose agent;
+  the `#` says which thread. `@scout #7 twice?`, with a space, is prose: the address ends at the
+  first space (S2).
+- **Clash with a word we have.** The glossary's `thread` (decided 2026-11-05) is the talk with an
+  agent about one spot, and "cannot open without a spot". A named thread typed in tsh has no spot.
+  The row needs the owner's word on whether a spot thread is one kind of this thread (see
+  [where this differs](#where-this-differs-from-settled-notes)).
+
+### T3: you may talk to another person's agent, never run it
+
+- **What.** `@scout/<person>` talks to another member's scout. You may never summon, dismiss or
+  re-model it. Its turn is on the agent owner's bill, and the owner sees it.
+- **Still open, lean yes, 70%.** Whether the agent's owner can read another person's thread with
+  their agent, read-only, with a notice both of them can see. The doubt: the thread may hold the
+  other person's private notes. What settles it: a week of two people sharing one ledger.
+
+### T4: the current thread sticks to the tile, like a working directory
+
+- **What.** `@scout#bug-17` once switches the tile to that thread. A later plain `@scout ...` keeps
+  going there, and the prompt shows `scout#bug-17 >`, as a shell's prompt shows its folder after
+  `cd`. Tab completes agent names, and after `#`, that agent's threads.
+- **Why per tile.** Two tiles of tsh are two shells, each with its own folder; each keeps its own
+  current thread the same way.
+- **Elm.** The current thread is the tile's model, `{agent, thread}`; a said line reads it in
+  `update`, never from a global.
+
+### T5: fork makes a new thread, with its origin as a fact, not in its name
+
+- **What.** `fork @scout#bug-17 as bar` makes a new thread `#bar` from the latest message and
+  switches the tile into it. `fork @scout#bug-17 at 12 as bar` forks from message 12. The thread
+  view's "fork from here" key writes that line at the prompt, so the key and the typed line are one
+  path.
+- **Names are flat.** The parent and the fork point are recorded facts, shown as "forked from
+  #bug-17 at 12", as git keeps a branch's origin in its history, not in its name. A `/` inside a
+  thread name (`bug-17/repro`) is grouping only, for the eye and for Tab; it says nothing about
+  where the thread came from.
+
+### T6: every act that changes something is a verb you can read and script
+
+- **What.** The family is `summon`, `dismiss`, `fork`. A button or key that changes something writes
+  one of these lines, so the log reads as a script and a script can do what a person did.
+- **Why.** The same rule as the "fork from here" key: one path, typed or pressed.
+
+### T7: what today's version can build
+
+- Today's version has one person per app and runs agents as `acp` jobs on this Mac. It can build
+  named threads, the sticky tile thread, Tab after `#`, and `fork` with `at` inside one person's
+  app. `/<person>` and the shared ledger need `next/`'s brain, so today the check refuses `/` in an
+  address in words, as it refuses `on` (S5).
+- Whether an `acp` session can fork at a given message is the harness's call. Claude Code resumes a
+  session by id [c1]; forking at message 12 may need a new session fed the first 12 messages.
+  Not read in code yet.
+
 ## The smaller calls
 
 ### 1. Summoning a name that already is exactly that
@@ -323,10 +429,31 @@ Each is a different answer to how a turn is typed and shown in today's tsh. The 
 
 ## What the ledger records
 
-Nothing in the project's ledger in today's version: a summon is a person's, kept in the host log
-and on the host's desk (the shape above). The fact lost forever if not written at the summon: the
-model a typed alias resolved to, since aliases move between CLI versions, and who summoned. Each
-turn already keeps the line as typed and what the name meant then (decided).
+A summon goes on the ledger, where every member sees it (T1, decided). In today's version there is
+one person per app, so the tryout keeps it in the host log and on the host's desk (the shape
+above); the ledger entries below are `next/`'s. The facts lost forever if not written when they
+happen: the model a typed alias resolved to, since aliases move between CLI versions; who
+summoned; who made or forked a thread, from which thread and at which message; and on whose bill
+a turn ran. Each turn already keeps the line as typed and what the name meant then (decided).
+
+```ts
+// A sketch, `next/`. Effect Schema writes `_tag`; `arrivedAt` is the referee's clock, `sentAt` the writer's.
+{_tag: "summoned",   by: "<person>", name: "scout", agent: "claude",
+ model: {typed: "haiku", resolved: "claude-haiku-5-5"}, effort: "high", arrivedAt, sentAt}
+{_tag: "threadMade", by: "<person>", agent: "scout", owner: "<person>", thread: "bug-17", arrivedAt, sentAt}
+{_tag: "forked",     by: "<person>", agent: "scout", owner: "<person>", thread: "bar",
+ from: {thread: "bug-17", at: 12}, arrivedAt, sentAt}
+{_tag: "said",       by: "<other person>", agent: "scout", owner: "<person>", thread: "review",
+ line: "@scout/<person>#review is this right?", bill: "<person>", arrivedAt, sentAt}
+{_tag: "dismissed",  by: "<person>", name: "scout", cut: null, arrivedAt, sentAt}
+```
+
+- **`owner` and `by` are two facts.** `by` is who wrote the entry; `owner` is whose agent it is.
+  For your own agent they match; for `@scout/<person>` they differ, and `bill` follows `owner`.
+- **A default thread is made by the first message,** with `thread` set to the caller's own id, so
+  `scout#<person>` needs no extra verb.
+- **`from.at` is a message number in the parent thread,** fixed at the fork, so a later message in
+  `#bug-17` never moves where `#bar` began.
 
 ## A tryout in today's version
 
@@ -350,6 +477,15 @@ Offered, not filed. A guess: about 650 lines with tests, 5 to 7 agent hours, 55%
   build's.
 - **The settled sketch** shows the prompt free while claude answers; S6 leans foreground. If the
   owner prefers the sketch, design C is it.
+- **Talk where you work, `next/` section,** said nothing runs between turns. The owner corrected it
+  (T1), and this pull request fixes that sentence there, saying the earlier line was wrong. A walk
+  back, by the owner.
+- **S3's two-people lean** refused talking to another person's agent. T3 allows it. A walk back,
+  by the owner.
+- **The glossary's `thread` row** says a thread cannot open without a spot. T2's named threads
+  have none. Not changed here: the owner says whether a spot thread is one kind of named thread.
+  The glossary also needs rows for `fork` (the verb) and the address, in the build's pull request
+  at the latest.
 
 ## What it costs
 
@@ -362,5 +498,8 @@ brain.
   and the reserved words are reasoned, not tried.
 - No screen reader ran: the status and reply regions are a plan.
 - Whether opening a session is free for every harness was read in code, not on a bill.
-- Two people's names are reasoned from the settled note.
+- Two people's names are reasoned from the settled note, and T3 is decided without a second person
+  having tried it.
+- Threads and forks (T1 to T7) are decisions, not findings: no maker was read for them, and
+  whether a harness can fork a session at a message is not checked.
 - Several makers' pages did not load or came through a summarizer (experiment 220 lists them).

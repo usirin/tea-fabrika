@@ -159,9 +159,14 @@ const Said = Schema.TaggedUnion({
 
 **Decided 2026-11-06.** In `next/` the shell is fabsh, and `claude` and `codex` are fabrika's own
 programs, not the vendors' command lines. `summon` defines an alias, the shell's oldest known way;
-each `@name` expands to one turn of that program on the alias's session. Nothing runs between turns,
-so an idle agent costs nothing, and a turn can still stop and ask the person, since our program owns
-the turn.
+each `@name` expands to one turn of that program on the alias's session. A turn can stop and ask the
+person, since our program owns the turn.
+
+**Corrected 2026-11-06, the same night.** This section first said "nothing runs between turns, so an
+idle agent costs nothing". That was wrong. `summon` is more than an alias: it starts the agent, keeps
+it running, and puts it on the ledger, where every member can see it. The alias is still how `@name`
+reads; the agent behind it is a running program. Threads, forks and the rest are in
+[summon guidelines](./summon-guidelines.md).
 
 ```text
 fabsh> summon claude haiku as scout on cloud

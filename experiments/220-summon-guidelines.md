@@ -173,7 +173,10 @@ Against the note's seven principles (S1 to S7):
   parser page and `aria-busy` were not read. Warp and both outside fields are secondary.
 - Whether opening an ACP session is free for every harness was read in code, not measured on a
   bill.
-- How two people share names is reasoned from the settled note, not tried.
+- How two people share names is reasoned from the settled note, not tried. Later the same night the
+  owner decided part of it (another person's agent is `@scout/<person>`, talk yes, summon or
+  dismiss no) and added named threads and forks; the note has them. No maker was read for threads
+  or forks: they are the owner's decisions, not this reading's findings.
 
 $0. No model call, no key.
 
