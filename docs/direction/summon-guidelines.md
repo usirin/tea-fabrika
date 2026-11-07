@@ -269,7 +269,20 @@ complete, by what the cursor expects
 
 ### S6: a turn is a foreground job, and Ctrl-C cancels the turn, not the agent
 
-**Decided 2026-11-07, by the owner.** The lean before it was 65%.
+**Decided 2026-11-07, by the owner.** The lean before it was 65%. **Ctrl-Z reopened 2026-11-07:**
+the rest of S6 stands; how Ctrl-Z stops a turn is open, and nothing builds it until it is settled.
+
+- **Why it reopened.** ACP has no pause. A client may only cancel a turn with `session/cancel`
+  ([prompt turn](https://agentclientprotocol.com/protocol/prompt-turn)), so "Ctrl-Z suspends the
+  waiting turn" cannot mean what it means in POSIX, where a stopped job does nothing until `fg`.
+  Giving the prompt back while the agent keeps editing files breaks that promise.
+- **What can stop it.** The agent waits on the client's answer to `session/request_permission`, and
+  the spec and the Claude adapter set no timer on it (adapter `src/acp-agent.ts`, read 2026-11-07).
+  So holding that answer stops the agent at its next tool call that asks. Today's harness turns off
+  the client's file and terminal methods (`packages/fabrika/src/agents/acp/client.ts:240-241`), and
+  in `default` mode reads inside the working copy do not ask, so those pass a hold. A turn that
+  never asks never stops. Not yet checked in a live process: a hold of about 10 minutes would show
+  any hidden timer.
 
 - **What.** `@scout ...` runs like any fabsh line: the prompt waits. A status line shows progress in
   place (tool calls, seconds), and the reply prints once whole, under the name, words faint. Ctrl-C
