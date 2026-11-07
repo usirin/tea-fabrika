@@ -78,20 +78,20 @@ statements statement (sep statement)*               as today
 statement  summon | dismiss | fork | builtin word* ['&'] | pipeline ['&']
 summon     'summon' agent [setting [setting]] 'as' name ['on' place]
 dismiss    'dismiss' name                           your own agents only
-fork       'fork' '@' address ['at' [match]] 'as' thread
+fork       'fork' '@' address 'as' thread ['at' match]
 agent      word                                     checked: one of the harnesses (claude, codex)
 setting    word                                     checked: a model or an effort of that agent, below
 name       word                                     checked: the name rule (S3)
 person     word                                     checked: a member of this ledger
 thread     segment ('/' segment)*                   flat: '/' groups for the eye and for Tab, nothing more
 segment    word                                     checked: the name rule (S3)
-match      quoted                                   the newest message holding these words; bare `at` opens the picker
+match      quoted                                   the newest message holding these words; Tab after `at ` picks one
 place      word                                     today: always refused (S5)
 ```
 
 - **Walked back 2026-11-06 (R1, R3):** the `address`, `person` and `thread` rules and `fork`'s
   `'@' address`. A said line is now `'@' name prose` (several names in a row are several mentions,
-  R4), a room is `'#' room` with flat names, and `fork '#' room ['at' [match]] 'as' room`. The rest of
+  R4), a room is `'#' room` with flat names, and `fork '#' room 'as' room ['at' match]`. The rest of
   this block stands.
 - **`summon`, `dismiss` and `fork` are verbs; `as`, `on` and `at` are keywords only in their slot,**
   as POSIX keeps reserved words to "certain positions" [p1]. `as` is a keyword only after
@@ -137,11 +137,11 @@ complete, by what the cursor expects
 "dismiss sc"                 name-ref   scout
 "@scout#"                    thread     bug-17 bug-17/repro main          the threads of scout on this ledger
 "@scout/"                    person     the members whose scout exists    never a member without one
-"fork #bug-17 at "           match      the picker opens on that room's messages; a key on a message writes it
+"fork #bug-17 as bar at "    match      the picker opens on that room's messages; a key on a message writes it
 ```
 
 - **Walked back (R1, R5):** the `"@scout#"` and `"@scout/"` rows. After `#` Tab completes rooms;
-  after `fork #bug-17 at ` it is the picker on that room's messages, never a number.
+  after `fork #bug-17 as bar at ` it is the picker on that room's messages, never a number.
 - **`@` names reuse the picker's source.** The desk already keeps one index of rows
   (G7 R5); summoned agents are one more source in it. tsh matches those rows by prefix, as
   readline does; a text box's `@` menu is the picker
@@ -368,7 +368,7 @@ tsh$ summon claude haiku as scout
 tsh$ @scout why does post print #7 twice?            (your default thread, scout#<you>; the UI may show it as scout)
 tsh$ @scout#bug-17 here is the failing run           (a named thread: the tile switches to it)
 scout#bug-17 > @scout and the second run?            (plain @scout stays on bug-17, like a working directory)
-scout#bug-17 > fork @scout#bug-17 at "footer" as bar  (a new thread #bar from the newest message with "footer")
+scout#bug-17 > fork @scout#bug-17 as bar at "footer"  (a new thread #bar from the newest message with "footer")
   bar · forked from #bug-17 at "the footer adds #7 again"
 scout#bar > @scout/<person>#review is this right?     (another member's scout: talk yes, on its owner's bill)
 ```
@@ -428,11 +428,11 @@ prompt stays `fabsh$`.
 
 ### T5: fork makes a new thread, with its origin as a fact, not in its name
 
-**Partly walked back (R3).** Fork stays, on rooms: `fork #bug-17 at "footer" as bar`. The forked thing is
+**Partly walked back (R3).** Fork stays, on rooms: `fork #bug-17 as bar at "footer"`. The forked thing is
 no longer an agent's thread. Flat names and the origin as a fact stand.
 
 - **What.** `fork @scout#bug-17 as bar` makes a new thread `#bar` from the latest message and
-  switches the tile into it. `fork @scout#bug-17 at "footer" as bar` forks from the
+  switches the tile into it. `fork @scout#bug-17 as bar at "footer"` forks from the
   newest message holding "footer" (message numbers walked back, R3). The thread
   view's "fork from here" key writes that line at the prompt, so the key and the typed line are one
   path.
@@ -473,7 +473,7 @@ tsh$ @scout why does post print #7 twice?                (your DM with scout: a 
 tsh$ join #bug-17                                        (the verb is a lean, below; you are a member, nothing moves)
 tsh$ #bug-17 @scout here is the failing run              (a mention: scout answers in #bug-17, for everyone)
 tsh$ #bug-17 @scout @researcher why did this stall?      (scout answers first, then researcher, who sees scout's reply)
-tsh$ fork #bug-17 at "footer" as bar                     (#bar, with its origin message as a fact)
+tsh$ fork #bug-17 as bar at "footer"                     (#bar, with its origin message as a fact)
   #bar · forked from #bug-17 at "the footer adds #7 again"
 tsh$
 ```
@@ -514,18 +514,22 @@ tsh$
 
 ### R3: fork stays, on rooms
 
-- **What.** `fork #bug-17 as bar` makes `#bar` from the latest message; `fork #bug-17 at as bar`
-  opens the picker on `#bug-17`'s messages, and `fork #bug-17 at "footer" as bar` takes the newest
-  message holding "footer". The parent and the message's id are a recorded fact, shown by the
+- **What.** `fork #bug-17 as bar` makes `#bar` from the latest message, and
+  `fork #bug-17 as bar at "footer"` takes the newest message holding "footer". The line reads as a
+  sentence, and `at` always takes words: a bare `at` would mean something only while a picker is
+  open, and a line in the history must read the same as one typed (owner, 2026-11-07). The parent and the message's id are a recorded fact, shown by the
   message's own words, never put in the name (T5's rule, kept).
 - **Decided 2026-11-07, by the owner: no message numbers.** Nobody working in tsh knows which
   message is number 12. Every tool read points at the message or searches its words: Slack, Discord
   and ChatGPT fork from the message itself, Claude Code's rewind is a list to pick from, git's `:/text`
   finds a commit by its words (secondary: read from memory, not checked against each page). So `at`
-  is optional; bare `at`, or Tab after it, opens the picker on the room's messages
+  is optional and comes last; Tab after `at ` opens the picker on the room's messages, newest first,
+  and the pick writes its words into the line, as fzf does over a zsh prompt
   ([picker guidelines](./picker-guidelines.md)); a quoted string jumps to the newest match, as a
   quoted string is short for pick there; a key on a message in the room writes the line. The data
   points at the message's id, never a count.
+- **The picker's look and keys need a pressable test** (owner, 2026-11-07): the syntax is
+  settled, the UX is not. A prototype is being made.
 - **Built in its own pull request, after rooms are in daily use** (lead's lean, 75%). ACP's stable
   `session/new` takes no prior messages, and `session/fork` is still unstable and copies the whole
   session (schema `v1/schema.unstable.json`, read 2026-11-07); the Claude adapter can cut at a message
