@@ -410,8 +410,12 @@ decision log's number).
 - tea's pieces ride inside it: `durableCommandCarrier` for owed Cmds,
   `idempotentEffect` keys so a Cmd runs once, and `stepHost`'s `callId` so a
   resent answer counts once.
-- The gap: tea's hands loop keeps its "already ran" list in memory only. Filed
-  as [kamp-us/demlik#762](https://github.com/kamp-us/demlik/issues/762).
+- ~~The gap: tea's hands loop keeps its "already ran" list in memory only. Filed
+  as [kamp-us/demlik#762](https://github.com/kamp-us/demlik/issues/762).~~
+  *Fixed in tea 0.22.0 (demlik PR 768, 2026-11-01):* `runStepLoop` takes an
+  optional `executed` store. Hands that pass one that outlives the process
+  send back the saved answer instead of running the step again. With no store
+  the list still lives in memory, so the hands must pass one. We pin 0.23.0.
 
 ### A2: limits are one primitive up the process tree
 
