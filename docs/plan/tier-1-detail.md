@@ -446,7 +446,7 @@ claude mcp add fabrika -- fabrika mcp --as claude
 
 ```ts
 // What the agent sees. One tool per input, from its schema. None is written by hand.
-//   runs            what runs, your own run, and tiles as a list you cannot drive
+//   ps              what runs, your own run, and tiles as a list you cannot drive
 //   notes_list      read-only
 //   notes_read      read-only
 //   notes_save      {value: {note, base, body}}
@@ -486,14 +486,14 @@ const agentMay = ["initialize", "view.open", "window.msg:notes", "ledger.read", 
 - **A retry is one row.** An MCP call has no id, so the bridge makes one from the key, note, base and body. Running the same call again repeats that id, which p53 keeps once.
 - **This tier still does not defend against a person's own agents,** as the menu bar's section says. These are the door's rules for an honest client, and each person answers for theirs.
 
-**An agent's "own run", in `next/`.** See biggest call 16. An agent never drives a tile, since a tile is a window onto a process and it has no window Msgs. `runs` only lists what is running. Tier 1 has no desk, so that means processes, and tiles join the list when the desk arrives in Tier 2.
+**An agent's "own run", in `next/`.** See biggest call 16. An agent never drives a tile, since a tile is a window onto a process and it has no window Msgs. `ps` only lists what is running, as `ps` does in a Unix shell and in today's tsh. Tier 1 has no desk, so that means processes, and tiles join the list when the desk arrives in Tier 2. One ticket's jobs are `timeline`'s, not `ps`'s. *Changed 2026-11-07 (owner): it said `runs`.*
 
 **What moves from today's version, from main at `2c29c13`.** The copies are marked as the styling exception is, read at c7.
 
 | From `packages/fabrika/src/mcp/` | Lines | What happens |
 |---|---|---|
 | `tools.ts` | 139 | Copied to `next/packages/libfabrika/src/mcp/tools.ts`, about 120 lines. It stays pure. Its three type imports fit `Program`. Renamed as it lands: `toolsOf` to `listTools`, `callOf` to `readCall`, `toolNameOf` to `toolName`, `toolNamesOf` to `toolNames`, `toolInputsOf` to `toolInputs`. Its `Call` moves from `kind` to `_tag`, through `Schema.TaggedUnion`. |
-| `drive.ts` | 142 | Its lessons stay: calls one at a time, tiles only as a list, `runs`' shape. Written fresh for `next/` at `mcp/drive.ts`, 70 to 100 lines. `AnyRun`, `memoryStorage` and `run.offer` cannot come. |
+| `drive.ts` | 142 | Its lessons stay: calls one at a time, tiles only as a list, the shape of its `runs` tool, which is `ps` here. Written fresh for `next/` at `mcp/drive.ts`, 70 to 100 lines. `AnyRun`, `memoryStorage` and `run.offer` cannot come. |
 | `serve.ts` | 145 | The use of `@modelcontextprotocol/server` stays. Written fresh at `mcp/serve.ts`, 60 to 90 lines, over stdio. No handshake. |
 | `handshake.ts`, the bridge's Unix socket, `host/mcp` in `apps/fabrika/src/host/socket.ts` | | **Not copied.** A handshake lets an agent just say its name, with only a file's mode behind it. And today's connected home has no agents' socket at all (`apps/fabrika/src/host/agents.ts`), while real notes live on Cloudflare. |
 | `apps/fabrika/src/host/agents.test.ts` | 340 | What applies, about 150 to 200 lines, ported by the test writer. The top bar's count does not apply. |
@@ -1305,9 +1305,9 @@ export const colors: (highlights: Highlights, theme: Theme) => (code: string, la
 
 // next/packages/libfabrika/src/mcp/tools.ts, on `@kampus/libfabrika/mcp`. Copied, from today's mcp/tools.ts. Pure.
 export type Tool = {readonly name: string; readonly description: string; readonly inputSchema: object; readonly annotations?: {readonly readOnlyHint: true}};
-export const listTools: (programs: ReadonlyArray<AnyProgram>) => ReadonlyArray<Tool>; // `runs` first; no tool for personOnly
+export const listTools: (programs: ReadonlyArray<AnyProgram>) => ReadonlyArray<Tool>; // `ps` first; no tool for personOnly. Changed 2026-11-07 (owner): it said `runs`.
 export const Call = Schema.TaggedUnion({
-	runs: {},
+	ps: {},
 	input: {program: Schema.String, input: Schema.String, value: Schema.Unknown},
 	refused: {why: Schema.String},
 });
@@ -1654,8 +1654,8 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Why: a law, not a hope, for what the copies need and what agent text must not do. Plants, by hand: no `'wasm-unsafe-eval'`; policy on one stage only; the highlighter in the first script; a `var(--ink)` left in.
 
 **p63, an agent through MCP (scenario of T21).** `new`, node with the SDK's own client, and real `dev.ts`; ported where it applies from `agents.test.ts`. s11, s9. `mcp/tools.ts`, `mcp/serve.ts`, `mcp/drive.ts`, `mcp/client.ts`.
-- Tools are one per input, from its schema: `runs` first, `notes_list` and `notes_read` read-only, `notes_save` not. An input with `personOnly` has no tool, and a call to it is refused as an unknown tool. A value that does not fit is refused in words. No tool name holds grant, approve, remove, or chaos.
-- Before Approve, the list answers, and each call answers in words with the code. No letter is written. After one Approve, the same name needs none again, across restarts of the bridge. A second name gets its own row. A stale `base` is refused in the same words as a window's `why`, and writes nothing. The same call twice is one row. `runs` lists processes and drives none. `by` is the agent's key and `for` is the person, on every letter.
+- Tools are one per input, from its schema: `ps` first, `notes_list` and `notes_read` read-only, `notes_save` not. An input with `personOnly` has no tool, and a call to it is refused as an unknown tool. A value that does not fit is refused in words. No tool name holds grant, approve, remove, or chaos.
+- Before Approve, the list answers, and each call answers in words with the code. No letter is written. After one Approve, the same name needs none again, across restarts of the bridge. A second name gets its own row. A stale `base` is refused in the same words as a window's `why`, and writes nothing. The same call twice is one row. `ps` lists processes and drives none. *Changed 2026-11-07 (owner): it said `runs`.* `by` is the agent's key and `for` is the person, on every letter.
 - Plants: a tool for a `personOnly` input; `by` taken from `--as`; a name used without a grant; a retry with a new id.
 
 **p64, an agent stays an agent.** `new`, node. s11, s4. `transport/answer.ts`, door.
@@ -1834,7 +1834,7 @@ No fact is lost by waiting on any of these. Each adds a kind of fact, and old sa
 - `fabsh`, the shell in `next/`. Today's version keeps `tsh`. It reads the ports programs declare; nothing lost.
 - A tile can start from a saved line. Records no fact from Tier 1's time; nothing lost.
 - Split, close and prefix keys, since `tracker | ticket` beside `fabsh` needs them. They arrive with the desk.
-- The desk, `next/programs/desk`, built in as `fabrika/desk`. Layout and focus move into it, on the same Cmds as any program, with a grant for any start or monitor power it needs. Focus mirrors between windows again, and `runs` lists tiles. Tier 1 keeps no layout or focus as facts, and has none to lose.
+- The desk, `next/programs/desk`, built in as `fabrika/desk`. Layout and focus move into it, on the same Cmds as any program, with a grant for any start or monitor power it needs. Focus mirrors between windows again, and `ps` lists tiles. *Changed 2026-11-07 (owner): it said `runs`.* Tier 1 keeps no layout or focus as facts, and has none to lose.
 - `keep`, as a proposal: the tracker's filter is the first thing that needs it. Filters stay in the window's machine until then; nothing lost.
 - Topic, as a proposal: `tracker | ticket` is the first case that may need to read outside an inbox. A later Topic reads the same streams; nothing lost.
 
