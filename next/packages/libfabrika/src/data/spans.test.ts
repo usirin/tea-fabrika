@@ -20,20 +20,24 @@ import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
 import {Duration, Effect, Exit, Layer, Stream, Tracer} from "effect";
 import {TestClock} from "effect/testing";
+import * as fc from "fast-check";
 import {Doorbell, Ledger, LedgerError, type LedgerCalls} from "./ledger.ts";
 import type {Line} from "./log.ts";
 import {Referee, type Sql} from "./referee.ts";
 import {nodeSql} from "./sqlite.ts";
 
+const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 // Every ledger is a fresh node:sqlite file in one temp folder, removed after.
 const folder = mkdtempSync(join(tmpdir(), "p6-spans-"));
 const opened: Array<DatabaseSync> = [];
 let files = 0;
-const fresh = (): Sql => {
+const freshDb = (): DatabaseSync => {
 	const db = new DatabaseSync(join(folder, `ledger-${++files}.db`));
 	opened.push(db);
-	return nodeSql(db);
+	return db;
 };
+const fresh = (): Sql => nodeSql(freshDb());
 afterAll(() => {
 	for (const db of opened.splice(0)) if (db.isOpen) db.close();
 	rmSync(folder, {recursive: true, force: true});
@@ -88,6 +92,28 @@ const ID = "messaging.message.id";
 const OP = "messaging.operation.type";
 const ERROR = "error.type";
 const tag = (name: string) => `fab.ledger.${name}`;
+
+/** The longest text a span tag may hold (p95). */
+const MOST = 128;
+/** Text a writer or caller hands in may be any length: short, or far past what a tag may hold. Its
+ *  letters cannot spell a SQL word or a marker, so the checks on tags below stay about length. */
+const letters = fc.constantFrom("a", "b", "7", ":", "-", "_", "é");
+const shortText = fc.string({unit: letters, minLength: 1, maxLength: MOST});
+const longText = fc.string({unit: letters, minLength: MOST + 1, maxLength: 4096});
+const anyText = fc.oneof({arbitrary: longText, weight: 3}, {arbitrary: shortText, weight: 1});
+/**
+ * A tag that took text from the caller: as it was when it fits, else cut to at most 128 characters
+ * with the full length kept beside it as a number, `<key>.length`.
+ */
+const heldShort = (span: Record<string, unknown>, key: string, full: string) => {
+	if (full.length <= MOST) {
+		expect(span[key], key).toBe(full);
+		return;
+	}
+	expect(typeof span[key], key).toBe("string");
+	expect(String(span[key]).length, key).toBeLessThanOrEqual(MOST);
+	expect(span[`${key}.length`], `${key}.length`).toBe(full.length);
+};
 
 describe("p95, every call is one span, names and numbers only", () => {
 	it.effect("each append, read, wait and ring ends one span of its name, with its tags", () => {
@@ -249,30 +275,140 @@ describe("p95, every call is one span, names and numbers only", () => {
 		}).pipe(Effect.provide(onSql(fresh())), Effect.withTracer(tracer));
 	});
 
-	it.effect("no tag holds the body, sentAt, SQL text, or a string over 128 characters", () => {
-		const {tracer, all, tags} = capture();
-		return Effect.gen(function* () {
-			const ledger = yield* Ledger;
-			yield* ledger.wait("a", 0);
-			yield* ledger.append("a", "w-1", line());
-			yield* ledger.append("a", "w-1", line());
-			yield* ledger.append("a", "w-1", line({body: {note: `${BODY}-2`}}));
-			yield* ledger.append("a", "w-2", line({seen: 9}));
-			yield* Stream.runCollect(ledger.read("a", 0));
-			yield* ledger.wait("a", 0);
-			expect(tags("ledger.ring")).toHaveLength(1);
-			const texts = all()
-				.filter((value) => typeof value === "string")
-				.map((value) => String(value));
-			expect(texts.length).toBeGreaterThan(0);
-			expect(texts.filter((text) => text.includes(BODY) || text.includes("sent-marker"))).toEqual(
-				[],
+	it("for any stream, id, _tag, by and reader, short or long, no tag holds the body, sentAt, SQL text, or a string over 128 characters (fast-check)", async () => {
+		const names = fc.record({
+			stream: anyText,
+			id: anyText,
+			kind: anyText,
+			by: anyText,
+			reader: anyText,
+		});
+		type Names = typeof names extends fc.Arbitrary<infer N> ? N : never;
+		const run = ({stream, id, kind, by, reader}: Names) => {
+			const {tracer, all, tags} = capture();
+			const named = (over: Partial<Line> = {}) => line({_tag: kind, by, ...over});
+			return Effect.runPromise(
+				Effect.gen(function* () {
+					const ledger = yield* Ledger;
+					yield* ledger.wait(stream, 0);
+					yield* ledger.append(stream, id, named());
+					yield* ledger.append(stream, id, named());
+					yield* ledger.append(stream, id, named({body: {note: `${BODY}-2`}}));
+					yield* ledger.append(stream, `${id}2`, named({seen: 9}));
+					yield* Stream.runCollect(ledger.read(stream, 0));
+					yield* ledger.wait(stream, 0);
+					expect(tags("ledger.ring")).toHaveLength(1);
+					const texts = all()
+						.filter((value) => typeof value === "string")
+						.map((value) => String(value));
+					expect(texts.length).toBeGreaterThan(0);
+					expect(
+						texts.filter((text) => text.includes(BODY) || text.includes("sent-marker")),
+					).toEqual([]);
+					expect(
+						texts.filter((text) => /\b(select|insert|update|delete|create)\b/i.test(text)),
+					).toEqual([]);
+					expect(texts.filter((text) => text.length > MOST).map((text) => text.length)).toEqual([]);
+				}).pipe(
+					Effect.provide(Ledger.sql(fresh(), {reader}).pipe(Layer.provide(quiet))),
+					Effect.withTracer(tracer),
+				),
 			);
-			expect(
-				texts.filter((text) => /\b(select|insert|update|delete|create)\b/i.test(text)),
-			).toEqual([]);
-			expect(texts.filter((text) => text.length > 128)).toEqual([]);
-		}).pipe(Effect.provide(onSql(fresh())), Effect.withTracer(tracer));
+		};
+		await fc.assert(fc.asyncProperty(names, run), {
+			seed: SEED,
+			numRuns: 30,
+			// The case this test held before it took generated names.
+			examples: [[{stream: "a", id: "w-1", kind: "saved", by: "SHA256:writer-a", reader: READER}]],
+		});
+	});
+
+	it.effect(
+		"a 1.9 MB id and a 200-character _tag are placed, and their tags hold at most 128 characters with the full length beside",
+		() => {
+			const {tracer, tags} = capture();
+			const id = "x".repeat(1_900_000);
+			const kind = "t".repeat(200);
+			return Effect.gen(function* () {
+				const ledger = yield* Ledger;
+				expect(yield* ledger.append("notes:1", id, line({_tag: kind}))).toEqual({
+					_tag: "placed",
+					rev: 1,
+					pos: 1,
+				});
+				const [span = {}] = tags("ledger.append");
+				heldShort(span, ID, id);
+				heldShort(span, tag("tag"), kind);
+				heldShort(span, STREAM, "notes:1");
+			}).pipe(Effect.provide(onSql(fresh())), Effect.withTracer(tracer));
+		},
+	);
+
+	it("for any long stream, id, _tag, by and reader, every span on both sides cuts its tags to 128 characters and keeps each full length as <key>.length (fast-check)", async () => {
+		const names = fc.record({
+			stream: anyText,
+			id: anyText,
+			kind: anyText,
+			by: anyText,
+			reader: anyText,
+		});
+		type Names = typeof names extends fc.Arbitrary<infer N> ? N : never;
+		const run = ({stream, id, kind, by, reader}: Names) => {
+			const {tracer, tags} = capture();
+			const one = (name: string) => {
+				const found = tags(name);
+				expect(found, name).toHaveLength(1);
+				return found[0] ?? {};
+			};
+			const referee = Effect.gen(function* () {
+				const ledger = yield* Ledger;
+				expect(yield* ledger.wait(stream, 0)).toEqual({_tag: "parked"});
+				expect(yield* ledger.append(stream, id, line({_tag: kind, by}))).toEqual({
+					_tag: "placed",
+					rev: 1,
+					pos: 1,
+				});
+				expect((yield* Stream.runCollect(ledger.read(stream, 0))).map((e) => e.id)).toEqual([id]);
+				const append = one("ledger.append");
+				heldShort(append, STREAM, stream);
+				heldShort(append, ID, id);
+				heldShort(append, tag("tag"), kind);
+				heldShort(append, tag("by"), by);
+				const wait = one("ledger.wait");
+				heldShort(wait, STREAM, stream);
+				heldShort(wait, tag("reader"), reader);
+				const ring = one("ledger.ring");
+				heldShort(ring, STREAM, stream);
+				heldShort(ring, tag("to"), reader);
+				const read = one("ledger.read");
+				heldShort(read, STREAM, stream);
+				heldShort(read, tag("reader"), reader);
+			}).pipe(
+				Effect.provide(Ledger.sql(fresh(), {reader}).pipe(Layer.provide(quiet))),
+				Effect.withTracer(tracer),
+			);
+			// The caller's side: `Ledger.remote`'s `ledger.call` span takes the stream and the reader too.
+			const {tracer: callTracer, tags: callTags} = capture();
+			const stub: LedgerCalls = {
+				append: () => Promise.resolve({_tag: "placed", rev: 1, pos: 1}),
+				read: () => Promise.resolve([]),
+				wait: () => Promise.resolve({_tag: "parked"}),
+			};
+			const remote = Effect.gen(function* () {
+				const ledger = yield* Ledger;
+				yield* ledger.append(stream, id, line({_tag: kind, by}));
+				yield* Stream.runCollect(ledger.read(stream, 0));
+				yield* ledger.wait(stream, 0);
+				const calls = callTags("ledger.call");
+				expect(calls).toHaveLength(3);
+				for (const call of calls) {
+					heldShort(call, STREAM, stream);
+					heldShort(call, tag("reader"), reader);
+				}
+			}).pipe(Effect.provide(Ledger.remote(stub, {reader})), Effect.withTracer(callTracer));
+			return Effect.runPromise(Effect.andThen(referee, remote));
+		};
+		await fc.assert(fc.asyncProperty(names, run), {seed: SEED, numRuns: 30});
 	});
 
 	it.effect(
@@ -363,6 +499,91 @@ describe("p95, every call is one span, names and numbers only", () => {
 			}).pipe(Effect.provide(onSql(odd)), Effect.withTracer(tracer));
 		},
 	);
+
+	it.effect(
+		"a full disk on node:sqlite keeps SQLite's own code, 13, in the span, not the code of a ROLLBACK SQLite already did",
+		() => {
+			const {tracer, tags, failed} = capture();
+			const db = freshDb();
+			return Effect.gen(function* () {
+				const ledger = yield* Ledger;
+				expect(yield* ledger.append("a", "w-1", line())).toEqual({_tag: "placed", rev: 1, pos: 1});
+				// No page past the ones there now: the next big row fails with SQLITE_FULL, and SQLite rolls
+				// the whole transaction back by itself, so a ROLLBACK after it finds none.
+				const {page_count: pages} = db.prepare("PRAGMA page_count").get() ?? {};
+				db.exec(`PRAGMA max_page_count = ${Number(pages)}`);
+				const error = yield* Effect.flip(
+					ledger.append("a", "w-2", line({body: {note: "y".repeat(100_000)}})),
+				);
+				expect(error).toBeInstanceOf(LedgerError);
+				expect(error.why).toBe("storage");
+				expect(failed("ledger.append")).toEqual([false, true]);
+				expect(tags("ledger.append")[1]?.[tag("code")]).toBe(13);
+				expect(tags("ledger.append")[1]).toEqual(
+					expect.objectContaining({[tag("why")]: "storage"}),
+				);
+				expect(error.message ?? "").not.toMatch(/no transaction is active/);
+				// With room again, the failed step left nothing behind and the next append is placed.
+				db.exec("PRAGMA max_page_count = 1073741823");
+				expect(yield* ledger.append("a", "w-3", line())).toEqual({_tag: "placed", rev: 2, pos: 2});
+			}).pipe(Effect.provide(onSql(nodeSql(db))), Effect.withTracer(tracer));
+		},
+	);
+
+	/** A doorbell whose ring to `dies` dies with a defect, as a thin class that throws would. */
+	class BellBroke extends Error {
+		override readonly name = "BellBroke";
+	}
+	const DIES = "gateway:dies";
+	const dying = (how: "inside" | "outside", rang: Array<string>) =>
+		Layer.succeed(Doorbell, {
+			ring: (to) => {
+				if (to !== DIES) {
+					return Effect.sync(() => {
+						rang.push(to);
+					});
+				}
+				// "inside": a sync throw inside the ring's Effect. "outside": a throw before any Effect.
+				if (how === "outside") throw new BellBroke("message-marker");
+				return Effect.sync(() => {
+					throw new BellBroke("message-marker");
+				});
+			},
+		});
+
+	for (const how of ["inside", "outside"] as const) {
+		it.effect(
+			`a ring that dies with a defect (a sync throw ${how} its Effect) leaves the append placed, its span failed with ok false, and the other ring rung`,
+			() => {
+				const {tracer, tags, ended, all} = capture();
+				const rang: Array<string> = [];
+				return Effect.gen(function* () {
+					const referee = yield* Referee;
+					expect(yield* referee.wait("a", 0, DIES)).toEqual({_tag: "parked"});
+					expect(yield* referee.wait("a", 0, READER)).toEqual({_tag: "parked"});
+					const exit = yield* Effect.exit(referee.append("a", "w-1", line()));
+					expect(exit).toEqual(Exit.succeed({_tag: "placed", rev: 1, pos: 1}));
+					expect(rang).toEqual([READER]);
+					const rings = ended("ledger.ring");
+					expect(rings).toHaveLength(2);
+					const died = rings.find((span) => span.attributes.get(tag("to")) === DIES);
+					const rung = rings.find((span) => span.attributes.get(tag("to")) === READER);
+					expect(died?.status._tag === "Ended" && Exit.isFailure(died.status.exit)).toBe(true);
+					expect(Object.fromEntries(died?.attributes ?? [])).toEqual(
+						expect.objectContaining({[tag("ok")]: false, [ERROR]: "BellBroke"}),
+					);
+					expect(rung?.attributes.get(tag("ok"))).toBe(true);
+					expect(tags("ledger.append")).toEqual([
+						expect.objectContaining({[tag("answer")]: "placed", [tag("rings")]: 2}),
+					]);
+					expect(all().filter((value) => String(value).includes("message-marker"))).toEqual([]);
+				}).pipe(
+					Effect.provide(Referee.layer(fresh()).pipe(Layer.provide(dying(how, rang)))),
+					Effect.withTracer(tracer),
+				);
+			},
+		);
+	}
 
 	it.effect(
 		"a ring whose delivery fails ends its span with ok false and the error's class; the append is placed",

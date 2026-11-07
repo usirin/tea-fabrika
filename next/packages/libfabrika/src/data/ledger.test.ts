@@ -605,6 +605,44 @@ describe("p20, failures are typed, and pass", () => {
 			}).pipe(Effect.provide(onSql(broken))),
 	);
 
+	it.effect(
+		"a stored row that does not decode gives bad_row, not storage, on a read and on its id's resend",
+		() => {
+			const db = openDb(freshPath());
+			// Rows the referee never wrote, planted past it straight in SQLite: one whose body is not
+			// JSON, one whose `_tag` is empty. Every other column holds what an entry may hold.
+			const plant = (rev: number, stream: string, id: string, kind: string, body: string) =>
+				db
+					.prepare(
+						`INSERT INTO entries (rev, stream, pos, id, "arrivedAt", "by", "for", "sentAt", seen,
+							cause, build, "_tag", body) VALUES (?, ?, 1, ?, 0, 'SHA256:writer-a', 'owner', 'x', 0,
+							NULL, 'b-7c1d073', ?, ?)`,
+					)
+					.run(rev, stream, id, kind, body);
+			return Effect.gen(function* () {
+				const ledger = yield* Ledger;
+				expect(yield* ledger.append("ok", "w-1", line())).toEqual(placed(1, 1));
+				plant(2, "a", "w-2", "saved", "{not json");
+				plant(3, "b", "w-3", "", JSON.stringify({note: "n-7f3a"}));
+				const errors = [
+					yield* Effect.flip(readAll("a")),
+					yield* Effect.flip(readAll("b")),
+					yield* Effect.flip(ledger.append("a", "w-2", line())),
+					yield* Effect.flip(ledger.append("b", "w-3", line())),
+				];
+				for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
+				expect(errors.map((error) => error.why)).toEqual([
+					"bad_row",
+					"bad_row",
+					"bad_row",
+					"bad_row",
+				]);
+				// The rows that do decode still read.
+				expect((yield* readAll("ok")).map((e) => e.id)).toEqual(["w-1"]);
+			}).pipe(Effect.provide(onSql(nodeSql(db))));
+		},
+	);
+
 	it("a wait leaves nothing running: Effect.runSync of a parking wait answers parked", () => {
 		const answer = Effect.runSync(
 			Ledger.use((ledger) => ledger.wait("a", 0)).pipe(Effect.provide(onSql(fresh()))),
