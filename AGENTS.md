@@ -211,7 +211,9 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   time, `by` is who wrote it, `_tag` is the case. An entry's two clocks have their own
   names in `next/` (owner, 2026-11-05): `arrivedAt` is the referee's, when the entry reached
   the ledger, and `sentAt` is the writer's own, when it wrote it (Kafka's LogAppendTime and
-  CreateTime). Today's code says `at` and `said`. A place, a path, a ref, a state, a reason or a total gets its own word
+  CreateTime). Today's code says `at` and `said`. In `next/`, a word means one thing. "Run"
+  means an agent run only; one start of a program is a process (a restart is a new process, as
+  in OTP). A place, a path, a ref, a state, a reason or a total gets its own word
   (`location`, `path`, `ref`, `state`, `why`, `total`). `rg` the word under
   `docs/direction/` and `next/` before you use it.
 

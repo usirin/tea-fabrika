@@ -174,7 +174,7 @@ them. The desktop has a note of its own. Config for every layer is one
   with, for good. Monitoring keeps how things ran. *Changed 2026-11-07 (owner):
   it said monitoring, through tea's otel, keeps health signals for about a
   week, on the Mac locally and in Cloudflare's log storage there.* Now:
-  - **A run's spans** go to its JobRecord, kept forever
+  - **A process's spans** go to its JobRecord, kept forever
     ([a JobRecord holds its trace](./a-job-record-holds-its-trace.md)). They
     come from Effect's own `Effect.withSpan`, since tea 0.23.0's otel traces
     agent runs only.
@@ -482,7 +482,7 @@ Carried into the rebuild: today's code differs from OTP in six places, and the
 new code fixes all six.
 
 - A watcher that dies drops its monitors. `DOWN` gets a `to` field, as `EXIT`
-  has, so a stale `DOWN` never lands in the restarted run.
+  has, so a stale `DOWN` never lands in the restarted process.
 - Linking to a process that is already gone writes an `EXIT` with
   `why: "noproc"`.
 - A parent's `EXIT` ends the supervisor with the parent's reason, not always

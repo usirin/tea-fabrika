@@ -337,7 +337,7 @@ commands                  the action bar's buttons with each key on them (P8), p
 mode(state)               the mode's word on the bottom line and the title, its status line, Esc out (modes)
 location                  open or focus, back inside the tile, C-b ; between tiles, a saved place
 its views                 the tile's frame, name, region, empty word and focus home (tile guidelines)
-its machine               a run id, a trace, saved state, hot reload, a job to attach to
+its machine               a process id, a trace, saved state, hot reload, a job to attach to
                           (agents are programs, saved state, hot reload)
 ```
 
