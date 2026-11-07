@@ -1,7 +1,7 @@
 # Tracker views are programs
 
 **Proposed 2026-10-28.** Not settled, except two parts marked decided: section 7, and one
-program per view (section 10, decided 2026-11-06). This note replaces two studies of 2026-10-27, both left open and not
+program per view (section 10, decided 2026-11-06), and the first three new facts (decided 2026-11-06, below). This note replaces two studies of 2026-10-27, both left open and not
 merged: [PR 135](https://github.com/usirin/tea-fabrika/pull/135) (Linear's
 model as facts) and [PR 153](https://github.com/usirin/tea-fabrika/pull/153)
 (every view a program). It starts from 153's text, folds in 135's, settles
@@ -48,6 +48,11 @@ The answer in eight lines:
 - **New facts, in order:** `linked` (a PR), `nested` (a parent), `moved` (an
   open state), then `assigned`, `related`, and later the fields only people
   read.
+- **Decided 2026-11-06: `linked`, `nested` and `moved`, as written here.** `nested` may come from
+  an agent, so a plan step can file its slices under the ticket. To keep those from crowding a
+  view, the list and the board each have a display option that hides sub-tickets, as Linear's
+  "Show sub-issues" does ([display options](https://linear.app/docs/display-options)). `moved`
+  still cannot spell done.
 - **Writes apart from reads, the CQRS way** (decided 2026-10-27): one input
   per command (`comment`, `close`, ...), each one fact, and one `query` with
   filters that writes none (changed 2026-10-28).
