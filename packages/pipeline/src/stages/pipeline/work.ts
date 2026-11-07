@@ -415,7 +415,7 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 		// `get-url` would apply `insteadOf` first, and name the folder a rewrite points at, not the repo.
 		// git exits 1 when the key is not there; any other failure is no checkout at all.
 		const START = "start the app from a checkout of the repository";
-		const origin = Effect.gen(function* () {
+		const readCheckoutOrigin = Effect.gen(function* () {
 			const ran = yield* gitIn(checkout, ["config", "--local", "--get", "remote.origin.url"]);
 			if (ran.code === 1) return yield* Effect.fail(failed(`${checkout} has no origin: ${START}`));
 			if (ran.code !== 0)
@@ -428,6 +428,14 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 				);
 			return read;
 		});
+		// Read once: one `LaneWork` serves one lane, and a checkout's origin does not change under it.
+		// Only a success is kept, so a read that failed is tried again on the next call.
+		let knownOrigin: Origin | null = null;
+		const origin = Effect.suspend(() =>
+			knownOrigin !== null
+				? Effect.succeed(knownOrigin)
+				: Effect.tap(readCheckoutOrigin, (read) => Effect.sync(() => (knownOrigin = read))),
+		);
 
 		const fetched = Effect.gen(function* () {
 			const {remote} = yield* origin;
@@ -442,8 +450,7 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 		const show = (commit: string, file: string) =>
 			textAt(inClone, commit, file).pipe(Effect.mapError((ran) => said(`read of ${file}`, ran)));
 
-		/** The repository's settings as commit `tip` has them. */
-		const settingsAt = (tip: string): Effect.Effect<Settings, Failed> =>
+		const readSettingsAt = (tip: string): Effect.Effect<Settings, Failed> =>
 			Effect.gen(function* () {
 				const refused = settingsRefusal(
 					yield* listedAt(inClone, tip, SETTINGS_PATHS).pipe(
@@ -459,6 +466,18 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 				return yield* readSettings(file).pipe(
 					Effect.provideService(FileSystem.FileSystem, fs),
 					Effect.mapError((e) => failed(e.why)),
+				);
+			});
+		// Read once a commit: a commit never changes. Only a success is kept, so a read that broke or a
+		// refusal is tried again on the next call.
+		const settingsRead = new Map<string, Settings>();
+		/** The repository's settings as commit `tip` has them. */
+		const settingsAt = (tip: string): Effect.Effect<Settings, Failed> =>
+			Effect.suspend(() => {
+				const known = settingsRead.get(tip);
+				if (known !== undefined) return Effect.succeed(known);
+				return Effect.tap(readSettingsAt(tip), (read) =>
+					Effect.sync(() => settingsRead.set(tip, read)),
 				);
 			});
 		const settings = Effect.flatMap(main, settingsAt);

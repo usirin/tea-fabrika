@@ -26,8 +26,8 @@ import {laneLayer, runLane} from "./layer.ts";
 // test writer's file failed the check, and the builder may not change an exam file: lint stayed red for
 // every round. Self-fix PR 1.
 //
-// One ticket through the whole lane, as ./program.test.ts runs it: the real machines over the fake
-// `codex`, real git on a bare remote, real vitest and Stryker. Main names its formatter only after round
+// One ticket through the whole lane, as the lane tests run it (./lane-harness.ts): the real
+// machines over the fake `codex`, real git on a bare remote, real vitest and Stryker. Main names its formatter only after round
 // 1's build, as ticket 117's restart would find it, so round 1's test is still as its writer wrote it.
 
 const MODULES = fileURLToPath(new URL("../../../node_modules", import.meta.url));

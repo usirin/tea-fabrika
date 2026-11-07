@@ -66,7 +66,7 @@ P1, PR 402, the frame
 
 P2, PR 401, the rules (blocking in next/**, tests left out unless it says)
   no-promises                  async, await, new Promise, Promise.x(), .then, Effect.promise, import(), a .catch not on Effect
-  no-effect-run-outside-edge   Effect's run functions only in the 18 edge files the rule names; P35 swaps the list for edge comments
+  no-effect-run-outside-edge   Effect's run functions; until P35, only in the 18 edge files the rule named
   no-of                        no bare `of` and no xOf name, tests included
   no-hand-tag                  no hand-written _tag; one exception, data/log.ts
   one-store-hook               useSyncExternalStore only in next/packages/tuval/src/window/use-model.ts; a dropped store value fires. PR 363 dropped that file; P30 drops it here
@@ -74,6 +74,14 @@ P2, PR 401, the rules (blocking in next/**, tests left out unless it says)
   no-clock-in-view             next/**/*.tsx: no Date.now(), new Date(), performance.now(), Math.random(), crypto.randomUUID(), handlers included
   pnpm lint:compiler           src/exam/compiler.ts, the compile step build.ts will call; compiler-ledger.json is empty
   catalog                      oxc-parser and oxc-transform-react 0.157.0
+
+P35, PR 435, edges as comments and the sync test
+  no-promises                  also Effect.tryPromise, typed calls, Schema's ...Promise calls, Stream's async iterable calls
+  no-effect-run-outside-edge   every next/ file; also runtimePromise and makeRuntimePromise; the 18-path list is gone
+  edge-comment                 a disable of either rule is `// oxlint-disable-next-line <rule> -- edge: <why>`, edge rules only
+  src/exam/edge-comment.test.ts  no .oxlintrc.json override turns an edge rule off for a next/ file that is not a test
+  src/exam/edges.ts            CI's `edges` step: each new edge comment, one line with its reason, [ok] [no]; never blocks
+  src/exam/laws-scan.test.ts   each machine's laws call syncTest( or say `// sync test left out: <why>` (S2, p88)
 ```
 
 - **PR 223's tree, read by hand in P2:** `no-promises` 225 fires on 195 lines, 63 of them on 57 lines of the slice's Promise plumbing and 162 in its Playwright script; `no-effect-run-outside-edge` 3, the `useRuntime` handle in `window/main.tsx`; `no-of` 1, `sizeOf`; `react/purity` 1 and `no-clock-in-view` 2, both in `window/main.tsx`; `lint:compiler` 0. No false alarm by each rule's own words.

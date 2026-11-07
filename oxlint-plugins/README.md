@@ -42,18 +42,21 @@ The other is `no-bare-tell.grit`. A `tell` or `offer` to a program's input is an
 
 ## The new version's exam rules
 
-Six rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests live with the rest of the exam, in `next/apps/fabrika/src/exam/`, and lint each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file.
+Seven rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13, and P35). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests live with the rest of the exam, in `next/apps/fabrika/src/exam/`, and lint each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file.
 
-| Rule | Refuses | Edges, whole paths in the rule | Tests |
+| Rule | Refuses | Edges | Tests |
 |---|---|---|---|
-| `no-promises` | `async`, `await`, `for await`, `new Promise`, `Promise.x(...)`, `.then`, `Effect.promise`, `import()`, and `.catch` on anything not imported from Effect | none yet | left out |
-| `no-effect-run-outside-edge` | any of Effect's twelve run functions, on `Effect` or a runtime; `NodeRuntime.runMain` passes | the plan's 18 | left out |
+| `no-promises` | `async`, `await`, `for await`, `new Promise`, `Promise.x(...)`, `.then`, `import()`, `.catch` on anything not imported from Effect, and Effect 4.1.1's calls that take or make a Promise: `Effect.promise`, `Effect.tryPromise`, Schema's four `...Promise` calls, Stream's `fromAsyncIterable` and `toAsyncIterable` and its two variants, typed calls included | a line under an edge comment | left out |
+| `no-effect-run-outside-edge` | any of Effect's twelve run functions, on `Effect` or a runtime, and `runtimePromise` and `makeRuntimePromise`; `NodeRuntime.runMain` passes | a line under an edge comment | left out |
+| `edge-comment` | an ignore comment naming either rule above that is not `// oxlint-disable-next-line <rule> -- edge: <why>`: another form, another rule named beside them, or no `edge: ` reason | none | on |
 | `no-of` | a declared name `of` or ending in `Of`; a use passes | none | on |
 | `no-hand-tag` | an object key, class field or type member named `_tag`; a read passes | the log, `next/packages/libfabrika/src/data/log.ts` | left out |
 | `one-store-hook` | `useSyncExternalStore` outside `next/packages/tuval/src/window/use-model.ts`; a store hook's value dropped | that file, for the first half | left out |
 | `no-clock-in-view` | `Date.now()`, `new Date()`, `Date()`, `performance.now()`, `Math.random()`, `crypto.randomUUID()` in a `.tsx` file, handlers included | none | left out |
 
 React's own `react/refs`, `react/immutability`, `react/display-name` and `react/purity` block in `next/**/*.tsx`, tests left out (`docs/direction/react-compiler.md`). `react/purity` refuses a clock or random read in render and lets a handler pass, as React means it; `no-clock-in-view` refuses the same reads anywhere in a `next/` `.tsx` file, handlers included, since the time comes through a Cmd (C1; owner, 2026-11-05). oxc-transform-react 0.157.0 stopped refusing a clock read in a handler a view passes down, which 0.156.0 did, so this rule holds that case now. `pnpm lint:compiler` runs the Compiler's compile step, `next/apps/fabrika/src/exam/compiler.ts`, over every `.tsx` file in `next/`, against `compiler-ledger.json`, which starts empty.
+
+**Edges are comments, not files** (owner, 2026-11-05; Tier 1, P35). The one line a platform demands, such as a Durable Object method that must answer a Promise, passes either rule only under `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, or the same for `fabrika/no-effect-run-outside-edge`, or one comment naming both. Until P35 the run rule held a list of 18 whole paths, which let a whole file wrap Promises; the list is gone. `edge-comment` keeps every such comment to one shape, reported at the top of the file as `no-bare-disable` is, so a comment cannot silence it. An edge comment over a line where nothing fires fails through `reportUnusedDisableDirectives`. CI's `edges` step (`next/apps/fabrika/src/exam/edges.ts`) lists each edge comment a pull request adds, with its reason, in the step summary and as a note on the diff, for the owner to read; it never blocks. Its industry match is clippy's `undocumented_unsafe_blocks`, with `edge:` for `SAFETY:`, and eslint-comments' `require-description` and `no-restricted-disable`.
 
 None of these rules sees types. A `.catch` is told apart by the name it is called on, `Effect.promise` and the run functions by their written names, so an Effect module under another name, or a Promise reached through a helper, passes. `no-hand-tag` misses `x._tag = "a"`, which the plan does not name. Report any miss.
 
