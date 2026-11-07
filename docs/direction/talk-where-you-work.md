@@ -155,6 +155,38 @@ const Said = Schema.TaggedUnion({
 });
 ```
 
+## In `next/`: `summon` is an alias with a session
+
+**Decided 2026-11-06.** In `next/` the shell is fabsh, and `claude` and `codex` are fabrika's own
+programs, not the vendors' command lines. `summon` defines an alias, the shell's oldest known way;
+each `@name` expands to one turn of that program on the alias's session. Nothing runs between turns,
+so an idle agent costs nothing, and a turn can still stop and ask the person, since our program owns
+the turn.
+
+```text
+fabsh> summon claude haiku as scout on cloud
+fabsh> @scout why is this slow?
+```
+
+- **Where each part lives.** The alias (name, agent, model, effort, permissions, session id, where it
+  runs) and the session's content are kept by the brain, so any client can `@scout`, a phone
+  included, while the Mac sleeps. The turn runs on hands. Using fabrika from a phone is one of the
+  owner's first needs, which is why the session is not kept on the Mac. The content stays deletable
+  ([an agent run keeps its content](./an-agent-run-keeps-its-content.md)).
+- **Two messages at once** queue in the run's one mailbox, as every program's do
+  ([tea program](./tea-program.md)). Nothing new for agents.
+- **Names belong to a person.** On a shared desk, another person's scout is theirs, shown with their
+  name.
+- **Permissions ride on the alias,** so every turn of scout runs with the rights it was summoned
+  with.
+- **The log keeps both lines:** the line as typed and what it expanded to, like `set -x`.
+- **Where it runs.** A turn needs files and agents, so a browser tab never takes it. Beyond that, the
+  person sets an ordered list of hands, such as their Mac, then their cloud host. The brain offers a
+  turn to the first; if it is not taken within a short wait (10 seconds, a guess to tune), the next
+  gets it. `on <hands>` on the summon pins one agent. Each turn records which hands ran it and why. The
+  known ways: GitHub Actions' `runs-on` labels, Buildkite's queues, and Kubernetes' required and
+  preferred node affinity.
+
 ## Every text box can summon
 
 Proposed 2026-11-05 (the owner leaned for it). Every text box is a place to call in your agents,
