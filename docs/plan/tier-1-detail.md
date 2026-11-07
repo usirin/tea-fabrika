@@ -1724,6 +1724,10 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - The brain picks the highest version both sides list. No shared version is refused in words, and nothing is written. A field the brain does not know is ignored, never refused.
 - Plants: the lowest shared version picked; a mismatch let through; an unknown field refused.
 
+**p88, every machine passes the sync test (S2, P35).** `new`, node. `src/exam/laws-scan.test.ts`. *Added 2026-11-06: [saved state, S2](../direction/saved-state.md#s2-every-machine-passes-the-sync-test), decided 2026-11-01. p83 to p87 are P32's.*
+- Each machine's laws files call `syncTest(`, or one of them says `// sync test left out: <why>` with a reason. The scan reads text; the helper lands in libfabrika's test kit in P11, until tea ships one.
+- Plants: laws with no sync test and no reason; a reason left empty. The sync test in a second laws file passes.
+
 ## Criteria
 
 - **c1 to c6:** plan-115's, with oxlint in place of Biome, and c5's README also naming the stage.
