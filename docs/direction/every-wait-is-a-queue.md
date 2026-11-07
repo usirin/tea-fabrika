@@ -27,7 +27,9 @@ Proposed 2026-10-18.
   in order, one at a time per worker, picked up again after a restart.
 - **Each queue is set by three things:** who reads it, how many at once, and in
   what order. Order is first in, first out; there is no priority
-  ([sort answers yes or no](./sort-answers-yes-or-no.md)).
+  ([sort answers yes or no](./sort-answers-yes-or-no.md)). One bend, decided 2026-11-06 in the
+  product walk: the inbox shows asks of one kind in a run, the oldest kind first, as the
+  [ask desk](./ask-desk.md)'s call 4 leans. Nothing jumps ahead because an agent calls it urgent.
 - **The owner's desk is one view:** every queue whose reader is a person
   ([packs are programs](./packs-are-programs.md)).
 
