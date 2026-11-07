@@ -46,7 +46,7 @@ Three words to know. **Plan-115** is [ticket 115's plan](./ticket-115.md): laws 
 13. **Chaos is not in the build on the real ledger.** Why: code not there cannot be reached, so no flag or slip can aim it at real notes. Cost: a second stage to deploy and remove for a cloud run. Sure: 85%.
 14. **The window parses Markdown; the sealed program never does.** Why: the fact keeps raw text, blocks are derived, a wake would otherwise parse every note, and a program's box stays small. Cost: each window parses for itself. Sure: 90%.
 15. **The bridge is a client with a key, not a local socket with a name.** Why: a handshake lets an agent just say who it is, and real notes live on Cloudflare, where a local socket cannot reach. Cost: one Approve per agent name, and a key file. Sure: 85%.
-16. **On notes, an agent's "own run" is its own client, not its own process.** Today's rule gives each agent its own run because a run in a tile writes as the person. In `next/`, `by` comes from the checked key, so that danger is gone, and a process of its own would hide the agent's doc from the list. Cost: this differs from today's `drive.ts`, and a later program with private state gets a real run of its own. Sure: 75%. The doubt is the first such program, in Tier 2.
+16. **On notes, an agent's "own run" is its own client, not its own process.** Today's rule gives each agent its own run because a run in a tile writes as the person. In `next/`, `by` comes from the checked key, so that danger is gone, and a process of its own would hide the agent's doc from the list. Cost: this differs from today's `drive.ts`, and a later program with private state gets a real process of its own. Sure: 75%. The doubt is the first such program, in Tier 2.
 17. **Real packages now, not folders.** Settled by the owner. "Two people first" argues against publishing, not against package boundaries. Real boundaries prove the library is enough, because a missing tool shows up as an import that doesn't resolve. A program package is already the shape a pack has. Cost: a `package.json` and a `tsconfig.json` per package, and a few config lines. Sure: 85%. The doubt was code-graph's dead-export check and the bundler across packages (esbuild then, Rolldown since 2026-11-05); [Packages](#packages) says what each forces.
 18. **`@kampus/libfabrika`'s top level holds only the app layer's names.** Lower layers are on subpaths that only named importers may use. Why: with one top level, an import name could not tell a program reaching `app` from one reaching `transport`, and the strict one-layer-down rule would have nothing to read. It also keeps a program's box small. Cost: three more lines in an `exports` map, and a law. Sure: 80%. The doubt is how many names the app layer ends up saying again.
 19. **Fabrika is the logic, and Tuval is the projection of it.** Settled by the owner. `@kampus/tuval` holds everything a client does. `next/apps/fabrika` is only wiring and the deploy stack. Tuval may import `@kampus/libfabrika`, and never the other way. Why: a client's logic then has one home, and the library can't come to lean on a screen. Cost: tuval holds Electron code, on a subpath, and its `electron` row needs two named exceptions. Sure: 85%. The doubt is what counts as "dialing": see [Packages](#packages).
@@ -446,7 +446,7 @@ claude mcp add fabrika -- fabrika mcp --as claude
 
 ```ts
 // What the agent sees. One tool per input, from its schema. None is written by hand.
-//   ps              what runs, your own run, and tiles as a list you cannot drive
+//   ps              the processes running now, and tiles as a list you cannot drive
 //   notes_list      read-only
 //   notes_read      read-only
 //   notes_save      {value: {note, base, body}}
@@ -987,7 +987,7 @@ const rung = (sockets: ReadonlyArray<BrainSocket>, stream: string, rev: number) 
 - **On each note's save:** `base`, since which version a writer worked on exists only then. `body` whole and raw, every time, since a version is never overwritten. `how`, since "kept from a stale screen" cannot be worked out later, and `from`, since nothing else ties a kept note to its source. The letter's `by`, `arrivedAt`, `sentAt`, `seen` and `cause` come with it, using the plan's existing fields: who wrote it, the log's clock, their own clock, what they had seen. **New on every letter: `for`, the person the writer works for,** from the checked grant, so a fact names both the agent and its person with no fold. The agent's name is its grant's `saw.label`, recorded and shown to the person at Approve. `sentAt` stays out of deciding code's types, and `refuse` sees only the Msg. Cost: one full body per save, about 500 small rows a day at most, a guess.
 - **On each `revoked`:** what the person saw and the check, inside the signed text, the same as a grant.
 - **Added 2026-11-07 (owner), three facts that were lost:** `dead` keeps each throw's error class (p80), `down` gains `until` (p80), and a failed Cmd always comes back as a letter with a `why` (p35). Each existed only at the moment it happened. The throw's message goes to the trace, never the ledger, since a message can quote a note and the trace's content can be deleted.
-- **Added 2026-11-07 (owner), the record of how it ran:** each process run's spans in its thin JobRecord, kept forever (P37); raw health rows about 2 weeks, and an hourly summary per piece kept forever; each object's own size, about once an hour while awake. Why: a slow step or a growing object is a trend, and a trend not kept cannot be rebuilt. [Monitoring is in Tier 1](./tier-1.md#monitoring-is-in-tier-1) has the rest.
+- **Added 2026-11-07 (owner), the record of how it ran:** each process's spans in its thin JobRecord, kept forever (P37); raw health rows about 2 weeks, and an hourly summary per piece kept forever; each object's own size, about once an hour while awake. Why: a slow step or a growing object is a trend, and a trend not kept cannot be rebuilt. [Monitoring is in Tier 1](./tier-1.md#monitoring-is-in-tier-1) has the rest.
 
 ```ts
 // A sketch of the new shapes, in next/'s Schema. Key names are P33's, P34's and P37's plans' to settle.
@@ -1116,7 +1116,7 @@ const fact = Schema.decodeUnknownOption(MemberFact)(fromLine(line));
 
 ## The public interface
 
-The tests compile against this block and nothing else of the new code. Plan-115's `CoordinationLayer` and `ProgramDown` carry over as written. `Ledger`, `LedgerCalls` and `LedgerError` do not: P6 built them anew, with `Doorbell`, `Appended` and `Waited` beside them ([the data layer, as built](#the-data-layer-as-p6-built-it), 2026-11-07). `ProcessManager` does not: it gains `exit`, `info`, `monitor`, `demonitor` and a run number per start in P33 (owner, 2026-11-06). These are the changes and additions.
+The tests compile against this block and nothing else of the new code. Plan-115's `CoordinationLayer` and `ProgramDown` carry over as written. `Ledger`, `LedgerCalls` and `LedgerError` do not: P6 built them anew, with `Doorbell`, `Appended` and `Waited` beside them ([the data layer, as built](#the-data-layer-as-p6-built-it), 2026-11-07). `ProcessManager` does not: it gains `exit`, `info`, `monitor`, `demonitor` and a new process id for each start in P33 (owner, 2026-11-06). These are the changes and additions.
 
 ```ts
 // next/packages/libfabrika/src/transport/wire.ts
@@ -1760,10 +1760,10 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Why: old hellos can never get the list back, and with no reader, nothing else would notice a wrong one. Plants: a list written by hand in the hello, not read from `Host`; `has` dropped from the row; `verify` listed where it can't prompt; the door branching on `has`.
 
 **p67, the door stamps every input (scenario of P10).** `new`, node. s4, s7. `transport/answer.ts`, door. *Added 2026-11-05 (owner), from [inputs carry their sender](../direction/inputs-carry-their-sender.md).*
-- Every input past the door becomes one `Envelope` `{id, by, arrivedAt, input}`, made in memory there. `id` is an `InputId`, `in-<run>-<n>`: only the door makes one, the run part is fresh at each start of the door's object, and no id is made twice across any number of starts. `by` is the checked key's writer, whatever the params say. `arrivedAt` is the referee's clock.
+- Every input past the door becomes one `Envelope` `{id, by, arrivedAt, input}`, made in memory there. `id` is an `InputId`, `in-<run>-<n>`: only the door makes one, the `<run>` part, which names the door's start ([question 20](./tier-1.md#open-questions)), is fresh at each start of the door's object, and no id is made twice across any number of starts. `by` is the checked key's writer, whatever the params say. `arrivedAt` is the referee's clock.
 - A frame that names its own `id` or `by` is refused in words, and the refusal is recorded. Nothing it asked for happens.
 - Each envelope is logged in the brain's own log: who sent it and where it went. Never a raw key's text, and a `Redacted` value logs hidden.
-- Why: who sent each input exists only at the door, and the note decided to record it first. Plants: an `id` taken from the frame; `by` read from params; a client-sent `by` dropped silently instead of refused; a raw key in the log line; a run part reused after a restart.
+- Why: who sent each input exists only at the door, and the note decided to record it first. Plants: an `id` taken from the frame; `by` read from params; a client-sent `by` dropped silently instead of refused; a raw key in the log line; a start part reused after a restart.
 
 **p68, an entry keeps its cause (scenario of P6).** `new`, node. s7, s1. `data/log.ts`, `Ledger`. *Added 2026-11-05 (owner).*
 - Every entry has `cause`: a `CauseText` matching `/^in-[0-9a-f]{8}-[1-9][0-9]*$/`, or null for an `own` write. A text that does not match is refused and nothing is written. Read back, it is the same text, and no public function turns a `CauseText` into an `InputId`.
@@ -1787,12 +1787,12 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Plants: a reload that drops the queued Msg; a migrate that skips S3's chain; `[Restart]` that keeps the old `init`.
 
 **p79, processes (scenario of P33).** `new`, node. s3, s7. `coordination/process-manager.ts`. *Added 2026-11-06 (owner: Tier 1 builds this slice of C4 and C5).*
-- `exit` writes `exited {why}`; `info` lists every live process with its run; each start after a crash writes `restarted {run, why, build}`, and the run number only grows.
-- A monitor gets one `DOWN {pid, run, why, to}` when its process ends, `noproc` at once if it was already gone, and none after `demonitor`, which also flushes a `DOWN` already in the inbox. A `DOWN` from an earlier run never lands in a later one.
+- `exit` writes `exited {why}`; `info` lists every live process with its id and name; each start is a new process with its own id, `process_<26 chars>`, and each start after a crash writes `restarted {process, after, name, why, build}`, where `after` is the id of the process it replaced. No process id is ever used twice, and `ps` counts restarts from `restarted` facts. *Proposed by the lead 2026-11-07, 75%: a start is a new process (OTP); the `run` field goes. Doubt: whether `after` is a link rather than a field; P33's plan settles it.*
+- A monitor gets one `DOWN {process, why, to}` when its process ends, `noproc` at once if it was already gone, and none after `demonitor`, which also flushes a `DOWN` already in the inbox. A `DOWN` from an earlier process never lands in a later one.
 - The restart window counts a restart on its edge. A name is never freed. Only the parent sends an exit signal.
 - Who is online folds from each gateway's last ping and is never written.
 - C5's owed check: each of the above against OTP's own documentation, since experiment 99 came before experiment 107.
-- Plants: a `DOWN` with no `to`; a monitor on a gone process that waits forever; `demonitor` leaving a `DOWN` behind; a name reused; a stale `DOWN` delivered to a new run.
+- Plants: a `DOWN` with no `to`; a monitor on a gone process that waits forever; `demonitor` leaving a `DOWN` behind; a name reused; a stale `DOWN` delivered to a new process.
 
 **p80, a crash is not a refusal (scenario of P34; replaces p25's wake rule).** `new`, node and the stage. s3, s9. `app/runner.ts`. *Added 2026-11-06 (owner).*
 - A fresh letter whose step throws gets no line; it is counted per letter id in the process's own storage. On the third throw it moves to `<pid>/dead` with `dead {tries, limit, m, build, errors}`, and its sender gets `{why: "dead"}`, so the outbox stops resending. `errors` holds each throw's error class, one per try; the message goes only to the trace, where a person can delete it, since a message can quote a note (owner, 2026-11-07).
@@ -1829,7 +1829,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 **p91, nothing is lost (scenario of P27).** `new`, stage, on a throwaway ledger. s7, s3. `check`, the JobRecord, `spans.read`. *New 2026-11-07 (owner): "nothing is lost" is a Tier 1 goal, and chaos is one of the most important programs.*
 - Checks: for every fault a seeded run fires, the record answers four questions from the ledger and the JobRecord alone: what broke, when, why, and how it recovered. "What" is the fault's target and the process or client it hit. "When" is the `tick` and the `did`'s `arrivedAt`. "Why" is the `did`'s `ok` or `why`, the span's error class, and any `dead`, `down` or failed Cmd's `why`. "How it recovered" is the `restarted`, the `down`'s `until` and the wake after it, or a client's next `door/hellos`. A fault that leaves any of the four blank fails the run.
 - The test reads only what is kept: no stderr, no Workers Logs, no Cloudflare trace. The same seed gives the same faults, and the answers are compared per fault.
-- Why: a fault nobody can explain after the fact teaches nothing, and a missing fact cannot be added to entries already written. Plants: `dead` with no error classes; `down` with no `until`; a failed Cmd dropped with no letter; a run's spans written to the raw health rows, which are pruned; a fault whose `did` never lands.
+- Why: a fault nobody can explain after the fact teaches nothing, and a missing fact cannot be added to entries already written. Plants: `dead` with no error classes; `down` with no `until`; a failed Cmd dropped with no letter; a process's spans written to the raw health rows, which are pruned; a fault whose `did` never lands.
 
 **p92 to p95 are P6's** (*new 2026-11-07, from P6's plan, approved by the lead agent*). Each is `new`, node, in `next/packages/libfabrika/src/data/`, beside p18 to p20 and p68.
 
