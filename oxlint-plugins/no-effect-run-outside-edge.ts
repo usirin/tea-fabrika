@@ -2,39 +2,22 @@
 // exam, item 2 (docs/plan/tier-1-detail.md, "The exam PR").
 //
 // It refuses a call to any of Effect's run functions, `Effect.runPromise(...)`, `runFork(...)` or
-// `this.runtime.runSync(...)` alike, in any file of `next/**` that is not on the list below. A
-// `ManagedRuntime` has the same method names, so the object it is called on does not matter.
-// `NodeRuntime.runMain` is not on the list of refused names: `dev.ts`, `grant.ts` and
-// `chaos-drill.ts` start with it and need no edge.
+// `this.runtime.runSync(...)` alike, in every file of `next/**`. A `ManagedRuntime` has the same
+// method names, so the object it is called on does not matter. `runtimePromise` and
+// `makeRuntimePromise` (on `FiberSet`, `FiberMap` and `FiberHandle`) count too: each makes a function
+// that runs an Effect into a Promise. `NodeRuntime.runMain` is not on the list of refused names:
+// `dev.ts`, `grant.ts` and `chaos-drill.ts` start with it and need no edge.
 //
-// The edges are whole paths from the top of the repo, written here, so a file cannot make itself one.
-// They are the plan's short paths, placed where the plan's "Packages" section puts them. A new edge
-// comes with a small exam PR. `.oxlintrc.json` leaves tests out, as the note does.
+// There is no list of edge files (owner, 2026-11-05; Tier 1, P35). The one line a platform demands
+// passes only under an edge comment where it stands, `// oxlint-disable-next-line
+// fabrika/no-effect-run-outside-edge -- edge: <why>`, which `edge-comment` holds to that shape and CI
+// asks the owner about. `.oxlintrc.json` leaves tests out, as the note does.
 import type {CreateRule} from "@oxlint/plugins";
-import {pathIn} from "./match.ts";
 
-const EDGES: ReadonlySet<string> = new Set([
-	"next/packages/libfabrika/src/data/project.ts",
-	"next/packages/libfabrika/src/data/ledger.ts",
-	"next/packages/libfabrika/src/app/process.ts",
-	"next/packages/libfabrika/src/transport/gateway.ts",
-	"next/packages/libfabrika/src/transport/hello.ts",
-	"next/packages/libfabrika/src/transport/sshsig.ts",
-	"next/apps/fabrika/src/brain.ts",
-	"next/apps/fabrika/build.ts",
-	"next/packages/tuval/src/window/use-model.ts",
-	"next/packages/tuval/src/browser/key.ts",
-	"next/packages/tuval/src/electron/preload.ts",
-	"next/packages/tuval/src/electron/panel-preload.ts",
-	"next/packages/tuval/src/electron/key.ts",
-	"next/packages/tuval/src/electron/person-key.ts",
-	"next/packages/tuval/src/electron/person-check.ts",
-	"next/apps/fabrika/src/launchd.ts",
-	"next/apps/fabrika/src/entry/electron-main.ts",
-	"next/apps/fabrika/alchemy.run.ts",
-]);
-
-/** Effect 4.1.1's run functions (`effect/Effect`), which a `ManagedRuntime` also has as methods. */
+/**
+ * Effect 4.1.1's run functions (`effect/Effect`), which a `ManagedRuntime` also has as methods, and
+ * the two that make a runner for a fiber set, map or handle.
+ */
 const RUNS = new Set([
 	"runCallback",
 	"runCallbackWith",
@@ -48,11 +31,12 @@ const RUNS = new Set([
 	"runSyncExit",
 	"runSyncExitWith",
 	"runSyncWith",
+	"runtimePromise",
+	"makeRuntimePromise",
 ]);
 
 export const noEffectRunOutsideEdge: CreateRule = {
 	create(context) {
-		if (EDGES.has(pathIn(context))) return {};
 		return {
 			CallExpression(node) {
 				const callee = node.callee;
@@ -67,7 +51,7 @@ export const noEffectRunOutsideEdge: CreateRule = {
 				if (name === null || !RUNS.has(name)) return;
 				context.report({
 					node,
-					message: `\`${name}\` runs an Effect, and only an edge file may (docs/direction/no-promises.md). Hand the Effect back to your caller; a new edge comes with a small exam PR.`,
+					message: `\`${name}\` runs an Effect (docs/direction/no-promises.md). Hand the Effect back to your caller. Where the platform demands it, mark that one line with \`// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: <why>\`, which the owner reads.`,
 				});
 			},
 		};
