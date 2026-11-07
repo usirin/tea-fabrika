@@ -9,6 +9,7 @@ runners are free in a public repository).
 before (main, Nov 5-6)   27-33 min      1 file, 160 tests, 1,610 s        1 CPU of 1 machine, in order
 PR 412's first run       5.4 min        18 files, 20 to 158 s each       6 machines, up to 4 files at once
 PR 412, table refreshed  4.8 min        the same 18 files                 the same, 2.9 to 3.9 min a machine
+main after the merge     5.0 min        the same 18 files                 the same
 ```
 
 ## What was wrong
@@ -86,6 +87,13 @@ The slowest file on CI was not a lane file: `packages/fabrika/src/host/door.laws
 which the first seconds table did not name, so it counted 1 s and stacked onto machine 1. The table
 now holds every file of 20 s or more from this run; over those files it gives each machine 413 to
 430 s. With it, machine 1 came down from 4.3 to 3.7 min and the slowest machine took 3.9 min.
+
+Two more runs of the pull request, after rebases onto main, took 4.5 and 4.3 min. Main's own first
+run after the merge took 5.0 min (run 42355711305, 2026-11-07). Its machine 5 was red on an older
+flake, `packages/fabrika/src/host/local.test.ts` (it failed on main on 2026-11-04 too, run
+41766963610), and green on a rerun of that machine. The next pull request keeps all an ended child
+wrote to stderr, where the first 500 characters had lost workerd's reason when Node's trace came
+first.
 
 ## Wrong guesses, kept
 
