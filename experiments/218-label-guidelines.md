@@ -7,6 +7,10 @@ feeds the note [label guidelines](../docs/direction/label-guidelines.md) and a D
 5's designs are listed at the end for the build agent. Dollars: $0 (no model ran; `gh` reads and
 web pages only).
 
+**Decided 2026-11-06.** The owner approved the note's six principles, its shape and its smaller
+calls with their leans, Area as the first label group among them. D1 and D4 below are built
+first; the note says why.
+
 **The answer.** The makers agree on one plain rule: **a label is a word people put on things so
 they can find them again; anything the system acts on, anything with a type, and anything that
 changes by itself is something else.** Kubernetes says it outright: labels "do not directly imply
@@ -267,6 +271,11 @@ guess into a pick.
 Shoot each at the five layouts with real ticket titles from today's tracker, and one row whose
 area is a guess. Linear's closest screen for D1 and D2 is its issue label menu and list
 multi-select.
+
+**Picked 2026-11-06:** D1 plus D4 first; D2 as the second slice, once guessing at filing exists,
+with Manti 0.13.0's `Checkbox` `indeterminate` prop for its half-checked "select all"; D3 is
+mostly the decided filter. D1's searchable menu is Manti 0.13.0's `Combobox` (it takes
+`multiple`) inside a `Popover`, so no Manti pull request is needed.
 
 ## Links
 

@@ -1,7 +1,8 @@
 # Label guidelines: when something is a label, and when it is its own field or fact
 
-**Proposed 2026-11-06.** Nothing here is decided yet. It builds on points the owner already
-decided, each named where it is used:
+**Decided 2026-11-06.** The owner approved the six principles, the shape and the smaller calls
+below with their leans, after a walk of each part. The leans' confidence numbers stay as written.
+It builds on points the owner decided earlier, each named where it is used:
 
 - **2026-10-21:** labels never gate a build; the approved plan is the only go
   ([sort answers yes or no](./sort-answers-yes-or-no.md)).
@@ -31,9 +32,9 @@ experiment's links.
 // tracker/ticket/193. An agent filed it, for a person.
 {_tag: "filed", title: "Test writer: a failed run on base loses its cause", body: "...",
  from: {_tag: "run", ticket: 117, run: "lane 7"}, guess: [4]}
-// labelsOf(193)  {area: {_tag: "guessed", label: 1, why: "filer"}, others: []}
+// TicketLabels.fromTimeline(193)  {area: {_tag: "guessed", label: 1, why: "filer"}, others: []}
 {_tag: "labeled", add: [1, 3], drop: []}                     // a person; the door refuses an agent
-// labelsOf(193)  {area: {_tag: "picked", label: 1}, others: [3]}
+// TicketLabels.fromTimeline(193)  {area: {_tag: "picked", label: 1}, others: [3]}
 {_tag: "labeled", add: [2], drop: []}                        // refused into problems: two in a pick-one group
 ```
 
@@ -106,7 +107,7 @@ Kind: **law** (the test writer can check it), **lint** (`pnpm lint` can hold it)
 
 ### L1: nothing decides on a label
 
-**Lean, 90%. Kind: law and lint.** Builds the decided "labels never gate a build".
+**Decided 2026-11-06** (lean was 90%). **Kind: law and lint.** Builds the decided "labels never gate a build".
 
 - **What it means.** No step, gate, lane, turn, notification or sort order branches on a label. A
   label is for people to find, filter and group work. If code needs to branch on a thing, the
@@ -128,7 +129,7 @@ Kind: **law** (the test writer can check it), **lint** (`pnpm lint` can hold it)
 
 ### L2: state that moves is a fold, never a label
 
-**Lean, 90%. Kind: law.** Builds the decided status and turn folds.
+**Decided 2026-11-06** (lean was 90%). **Kind: law.** Builds the decided status and turn folds.
 
 - **What it means.** If a value changes because work moved (status, done, whose turn, claimed,
   blocked, waiting on a person, a planning lock), it is folded from the facts that moved it. The
@@ -149,7 +150,7 @@ Kind: **law** (the test writer can check it), **lint** (`pnpm lint` can hold it)
 
 ### L3: a typed value is a field or a link
 
-**Lean, 85%. Kind: law.**
+**Decided 2026-11-06** (lean was 85%). **Kind: law.**
 
 - **What it means.** A person, a ticket, a pull request, a date, a number, or a level with an
   order is its own fact: `assigned`, `nested`, `related`, `linked`, `due`, `prioritized`. A label
@@ -164,13 +165,16 @@ Kind: **law** (the test writer can check it), **lint** (`pnpm lint` can hold it)
 - **Elm.** Each is its own case of the ticket's `Fact` union; the schema is the check.
 - **What holds it.** The schema: `prioritized {level}` takes one of four levels, so a fifth cannot
   be written.
-- **Doubt.** Priority as a field is in tracker views' sketch, not decided. If the owner wants
-  priority as a pick-one group, L3 says no because it is ordered and sorts. 85%.
+- **Which facts are decided.** Only `linked`, `nested`, `moved`, `assigned` and `delegated` are
+  decided facts. `related`, `due` and `prioritized` are examples here, decided when the tracker
+  slice that adds each one is planned.
+- **Doubt.** Priority as a field is the lean for that slice, not decided now. If the owner then
+  wants priority as a pick-one group, L3 says no because it is ordered and sorts. 85%.
 - **Today's example:** #7727's `p1` breaks it.
 
 ### L4: pick-one is a group, and the fold holds it
 
-**Lean, 80%. Kind: law, and taste for the menu.**
+**Decided 2026-11-06** (lean was 80%). **Kind: law, and taste for the menu.**
 
 - **What it means.** A group is made as `one` or `many`, and never changes. A ticket has at most
   one label per `one` group. The fold refuses a fact that would leave two, so no writer's care is
@@ -180,19 +184,22 @@ Kind: **law** (the test writer can check it), **lint** (`pnpm lint` can hold it)
   bag let two priorities sit on one issue ([#3771](https://github.com/kamp-us/phoenix/issues/3771)),
   and 35 issues had two homes ([#9075](https://github.com/kamp-us/phoenix/issues/9075)).
 - **Linear as the builder.** One label menu, groups as sections. Picking in a one-group replaces.
+  Pick-many is a toggle: a click adds, a second click removes. A D1 reshoot of the real app
+  confirmed both: a second pick replaced the area and left the pick-many labels alone.
 - **Elm.** The menu sends one Msg; the tracker writes one `labeled` with the replaced label in
   `drop`.
 - **Accessibility.** A one-group is a radio group, a many-group checkboxes, each with its name
   (WCAG 4.1.2, 1.3.1).
-- **What holds it.** A law over generated timelines: for every one-group, `labelsOf` gives at most
+- **What holds it.** A law over generated timelines: for every one-group, `TicketLabels.fromTimeline` gives at most
   one label.
-- **Doubt.** Is "replace on pick" right, or should the second be refused in the menu? Linear
-  replaces. 80%.
+- **Fixes for the build,** two look oddities the D1 reshoot found. The reopened menu highlights
+  the picked item, but the first ↓ jumps past it. After a swap the menu shifts left, because the
+  shorter chip moves the Labels button it is anchored to.
 - **Today's example:** today's areas follow it (one area per ticket); #7727 breaks it.
 
 ### L5: a label is a number with a name; people make it, agents guess
 
-**Lean, 80%. Kind: law for the door, taste for "few".** Extends decided A1 and A2 to every label.
+**Decided 2026-11-06** (lean was 80%). **Kind: law for the door, taste for "few".** Extends decided A1 and A2 to every label.
 
 - **What it means.** A ticket holds a label's number, so a rename touches no ticket and a merge
   moves every ticket at once. A person makes, renames, merges, archives and applies labels. An
@@ -207,7 +214,8 @@ Kind: **law** (the test writer can check it), **lint** (`pnpm lint` can hold it)
   printed the word, after one color meant two things [x3].
 - **Linear as the builder.** Labels made in settings or from the picker; triage suggests labels,
   a person accepts [l3]. Ours keeps make in the menu, as areas call 1 decided.
-- **Elm.** The labels stream is a subscription of the tracker; `labelsOf` is pure.
+- **Elm.** The labels stream is a subscription of the tracker; `TicketLabels.fromTimeline` is pure, as tracker views'
+  `Column.fromTimeline` is.
 - **Accessibility.** A label's color is never the only cue; its name is always shown (WCAG 1.4.1),
   and text on a colored fill meets 4.5:1 (WCAG 1.4.3).
 - **What holds it.** The door's person kinds gain the six label facts and `labeled`; a law that
@@ -216,7 +224,7 @@ Kind: **law** (the test writer can check it), **lint** (`pnpm lint` can hold it)
 
 ### L6: a label that grows behavior graduates to its own concept
 
-**Lean, 70%. Kind: taste for when, law for the carry-over.**
+**Decided 2026-11-06** (lean was 70%). **Kind: taste for when, law for the carry-over.**
 
 - **What it means.** The day a group needs an owner, a default assignee, a strategy, a date or a
   rule that acts, it stops being labels. It becomes its own facts, and its labels keep their
@@ -242,7 +250,7 @@ a  its own concept: area_made, area_picked, its own menu, filter and tsh inputs 
 b  the first label group: group_made {name: "Area", pick: "one", guess: true}; the tracker ships it
 ```
 
-**Lean b, 65%.** Labels are coming (`labeled` is in tracker views' sketch), and two systems would
+**Decided 2026-11-06: b, Area is the first label group** (lean was 65%). Labels are coming (`labeled` is in tracker views' sketch), and two systems would
 double make, rename, merge, pickers and filter doors for one act
 ([reuse before special rules](./reuse-before-special-rules.md)). Area's best parts (numbers,
 merge, the guess) are what phoenix's labels lacked, so every label gets them. Linear does it this
@@ -258,24 +266,44 @@ tracker --area pipeline          the short form, for the group the tracker ships
 tracker --label area=pipeline    the general form, any group; --label flaky for a groupless one
 ```
 
-Lean, 60%: keep both. Areas' A3 decided `--area` as one of three doors; it stays, as the Area
+**Decided 2026-11-06** (lean was 60%): keep both. Areas' A3 decided `--area` as one of three doors; it stays, as the Area
 group's name.
 
 ### 3. Does a kind group (bug, feature, chore) ship?
 
-Lean no, 60%. Sort's rule keeps kind labels out of the ledger for routing; a person may still make
+**Decided 2026-11-06: no** (lean was 60%). Sort's rule keeps kind labels out of the ledger for routing; a person may still make
 a "Kind" group for finding work (L1 keeps it from routing). Experiment 205 said the same. The
 tracker ships Area only.
 
 ### 4. Does a follow-up inherit labels?
 
-Lean: only guessable groups, and only as a guess (`why: "source"`), 70%. Other labels are the
+**Decided 2026-11-06** (lean was 70%): only guessable groups, and only as a guess
+(`why: "source"`). Other labels are the
 person's words about that ticket, not its source's.
 
 ### 5. Who sees a label
 
-Every label is the project's, for everyone on it. No per-person labels: a person's own marks are
+**Decided 2026-11-06.** Every label is the project's, for everyone on it. No per-person labels: a person's own marks are
 pins and saved views, which stay on their desk (areas call 4).
+
+## The design to build first
+
+**Decided 2026-11-06,** from experiment 218's step 5 designs.
+
+- **D1 and D4 are built first.** D1 is the label menu in the ticket: `l` opens it over the Labels
+  row, groups as sections, Area first. D4 is chips in the ticket tile plus a tsh line,
+  `label 193 area=pipeline +flaky -stale`, with Tab completing names. Both write the same
+  `labeled`.
+- **D2 is kept, as the second slice.** Bulk accept of guesses in the list waits until guessing at
+  filing exists, since before that there is nothing to accept. Its "select all" needs a
+  half-checked state when some rows are picked. Manti 0.13.0's `Checkbox` has an `indeterminate`
+  prop: when it is true the box draws a dash and its `checked` is set to `"indeterminate"`, over a
+  controlled `checked`. Manti's own data table already drives it with "some rows, not all". So no
+  Manti change is needed for D2.
+- **D3 is mostly the decided filter.** A labels tile that sets the tracker's filter adds little
+  over `--label` and `--area`; rename, merge and make stay in D1's menu.
+- **The menu is built from Manti, as it is.** The searchable menu is Manti 0.13.0's `Combobox`,
+  which takes `multiple`, inside a `Popover`. No Manti pull request is needed.
 
 ## What the ledger records
 
@@ -297,7 +325,7 @@ out unless the owner picks it.
 ## Where this differs from settled notes
 
 - **[Areas](./areas.md)**, its proposed "where this differs": "An area is not a label in a group."
-  This note leans the other way (call 1). A1 and A2, which are decided, hold either way.
+  This note decides the other way (call 1). A1 and A2, which are decided, hold either way.
 - **[Tracker views are programs](./tracker-views-are-programs.md)** sketches
   `labeled {add, drop}` with label strings. Here they are numbers, as areas taught.
 - **The glossary's `area` row** says "Not a label that gates a build". That holds: a label in the
@@ -315,16 +343,16 @@ on top of them.
 ## Made up here
 
 `tracker/labels`, `group_made`, `group_renamed`, `label_made`, `label_renamed`, `label_merged`,
-`label_archived`, `LabelNumber`, `GroupNumber`, `LabelName`, `Pick` and its cases, `labelsOf`, the
+`label_archived`, `LabelNumber`, `GroupNumber`, `LabelName`, `Pick` and its cases, `TicketLabels` and its `fromTimeline`, the
 `pick` and `guess` keys on a group, `--label`, labels 1 to 4 and every count in the trace.
 
 ## What it cannot tell us
 
 - Whether two people will ever make a group besides Area. If not, the general system is shape
-  ahead of need, and call 1's 65% is generous.
+  ahead of need, and call 1's lean of 65% was generous.
 - Whether an area will need an owner or a strategy; that is pipeline strategies' open call.
-- Whether "replace on pick" in a one-group surprises anyone. Only the build's shots and a week of
-  use tell.
+- Whether "replace on pick" in a one-group surprises anyone over time. The D1 reshoot showed it
+  works; only a week of use tells.
 - Phoenix's counts cover its 3,000 newest issues, not all, and did not count which stale labels
   something read.
 - No screen reader run: the label menu's radio and checkbox groups need VoiceOver.
