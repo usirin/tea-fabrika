@@ -2,7 +2,7 @@ import {layer as nodeServices} from "@effect/platform-node/NodeServices";
 import {Context, Effect, Layer, Option, Schema, Stream} from "effect";
 import type {Ledger} from "../../asks/ledger.ts";
 import {codeHostWritesOn} from "../../code-host-github-writes.ts";
-import {answerOf, codeHostOn} from "../../code-host-github.ts";
+import {answerOf, codeHostOn, type Polling} from "../../code-host-github.ts";
 import type {LocalCheck} from "../../code-host-local.ts";
 import {CodeHost, CodeHostWrites} from "../../services.ts";
 import {Tickets} from "../../tickets/tickets.ts";
@@ -114,10 +114,14 @@ const listArgs = (repo: string, branch: string) => [
 	"url,isCrossRepository",
 ];
 
-/** `CodeHost`, `CodeHostWrites` and `PullWire` on GitHub, through the person's own `gh`. */
+/**
+ * `CodeHost`, `CodeHostWrites` and `PullWire` on GitHub, through the person's own `gh`. `polling` is
+ * how its waits ask, 30 seconds apart when left out; a test asks faster.
+ */
 export const laneGitHubHost = (
 	repo: string,
 	checksOf: Effect.Effect<readonly LocalCheck[], Failed, LaneWork>,
+	polling: Polling = {},
 ): Layer.Layer<
 	CodeHost | CodeHostWrites | PullWire,
 	never,
@@ -131,7 +135,7 @@ export const laneGitHubHost = (
 			const tickets = yield* Tickets;
 			const bound = laneBound(work, tickets);
 			const local = yield* CodeHost;
-			const base = codeHostOn(gh, {own: [], reviewers: []});
+			const base = codeHostOn(gh, {...polling, own: [], reviewers: []});
 			const writes = codeHostWritesOn(gh);
 			// The file can change on main between two calls, so each call reads it.
 			const counted = work.settings.pipe(
