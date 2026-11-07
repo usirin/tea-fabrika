@@ -1484,7 +1484,7 @@ Before it, a small exam PR. See [The exam PR](#the-exam-pr-not-in-this-plan).
 
 ### PR E
 
-- **T12.** Scenario p34. Other: p36, p89. Criterion c11.
+- **T12.** Scenario p34. Other: p36, p90. Criterion c11.
 - **T13.** Scenario p35's live half, p37, p38, p60.
 - **T14.** Scenario p39, p41's chaos step. The owner reads `alchemy plan --stage drill` and says yes before the cloud run, and the stage is removed after it. The drill dials on PR D's `mcp/client.ts`, with its own key, and comes in by the same door. Criteria c9, c12. `ends`: PR E.
 
@@ -1728,7 +1728,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Each machine's laws files call `syncTest(`, or one of them says `// sync test left out: <why>` with a reason. The scan reads text; the helper lands in libfabrika's test kit in P11, until tea ships one.
 - Plants: laws with no sync test and no reason; a reason left empty. The sync test in a second laws file passes.
 
-**p89, a revoke stops a client at the door (scenario of P17).** `new`, stage, on a throwaway ledger. s4, s7. door, `ClientManager`. *New 2026-11-07 (owner).*
+**p90, a revoke stops a client at the door (scenario of P17).** `new`, stage, on a throwaway ledger. s4, s7. door, `ClientManager`. *New 2026-11-07 (owner).*
 - Checks: once a key's `revoked` fact lands, the brain refuses every write from that key, so nothing more from it reaches the ledger, even from a client still running old code.
 - The test: a seeded chaos run with a test client writing to the target. At a step the seed picks, the drill signs a `revoked` for that client's key with a key in `founded.keys`, as `grant.ts revoke` does. The client then plays old code: it ignores the 4003 close, keeps sending, and dials again with its old hello. Every later write is refused with its reason (`{why: "not_granted"}` at the hello, since `admitted` folds a revoked key out), and the ledger holds no letter `by` that key with an `arrivedAt` after the `revoked` fact's `arrivedAt`. The same seed gives the same step.
 - Why: a stop that relies on the client hearing a message fails on the client that matters most, the one that is stuck or old. Plants: the guard only at the hello, so an open socket keeps writing; the revoke read from a cached member list; a revoke that closes the socket and nothing more.
