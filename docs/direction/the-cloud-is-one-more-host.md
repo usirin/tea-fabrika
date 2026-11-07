@@ -579,8 +579,11 @@ type Blocked =
 ```
 
 - **Blocked list,** as above.
-- **One re-ask.** A form that fails its schema is asked for once more, in the
-  same session, with the exact error. The parse error is always saved.
+- ~~**One re-ask.** A form that fails its schema is asked for once more, in the
+  same session, with the exact error.~~ **Wrong, changed 2026-11-07 (owner):** a step's schema
+  check never adds a "fix your answer" turn. An answer that does not fit ends the step `stuck`,
+  and the stuck lane restarts from that step ([Tier 5's laws](../plan/tiers.md)). The parse error
+  is always saved.
 - **A looser pipe fit.** An output fits when it has every field the next
   input needs; extra fields are dropped. Branded types (`PrId`, `TicketId`)
   keep fields with the same name apart.
