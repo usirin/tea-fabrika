@@ -111,7 +111,7 @@ One exception: `tokens.css` sets `--manti-control-height-sm: 28px` as a raw valu
 ```
 
 ```ts
-// type-scale.test.ts, the new pin (abridged: the test reads the tokens out of theme.css's :root)
+// type-scale.test.ts, the new pin (abridged: the test reads the tokens out of tokens.css's :root)
 expect(mantiTextTokens).toEqual({
 	"--manti-text-xs": "var(--fs-micro)",
 	"--manti-text-sm": "var(--fs-small)",
@@ -126,7 +126,7 @@ expect(mantiTextTokens).toEqual({
 `box-sizing: border-box`, `margin: 0` and `canvas { max-width: 100% }` on every
 element. On our desk that squashed the terminals' canvas and moved tiles by a
 pixel or two. Manti's integration guide says to keep a reset off the other
-side's parts; theme.css does it the other way round. Outside an element with
+side's parts; `manti-reset.css` does it the other way round. Outside an element with
 `data-scope` (a Manti part), each property the reset sets goes back to the
 browser's own value, in `:where()` so any app rule still wins:
 
@@ -141,7 +141,7 @@ that has no Manti part draws pixel for pixel as on main.
 **Dark first.** The app is dark only today. Light would need, per color, a
 `light-dark(<light>, <dark>)` value with a light ramp for `--n-*` and `--a-*`,
 and `color-scheme: dark` dropped from `window.css`. Manti's own parts follow
-the tokens, so nothing in theme.css changes for light but the colors it points
+the tokens, so nothing in `tokens.css` changes for light but the colors it points
 at.
 
 ## 4. Every piece, mapped

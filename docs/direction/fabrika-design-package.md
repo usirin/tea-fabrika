@@ -10,7 +10,7 @@ holds the themes (`src/themes.ts`) and `src/tokens.css`, the tokens with Manti's
 // A sketch. The names and paths are guesses until the move's pull request.
 // @kampus/fabrika-design
 export { fabrika, fabrikaLight, terminalTheme, type Theme } from "./themes.ts"; // the colors
-export { roles, type Role } from "./roles.ts"; // the text roles, proposed
+export { textStyles, type TextStyle } from "./text-styles.ts"; // the text styles, not moved yet
 // @kampus/fabrika-design/tokens.css: our color tokens, and Manti's --manti-* tokens set from them
 
 // today's app, apps/fabrika
@@ -18,7 +18,7 @@ import { fabrika, terminalTheme } from "@kampus/fabrika-design";
 import "@kampus/fabrika-design/tokens.css";
 
 // next/, a window
-import { roles } from "@kampus/fabrika-design";
+import { textStyles } from "@kampus/fabrika-design";
 import "@kampus/fabrika-design/tokens.css";
 ```
 
@@ -31,13 +31,14 @@ The first slice:
   Manti mapping points at, so those tokens come along.
 - **The Manti mapping.** It was `apps/fabrika/src/window/theme.css`, and now is in `tokens.css`: Manti's `--manti-*` tokens,
   set from our own names ([UI on Manti](./ui-on-manti.md)).
-- **The text roles,** proposed, from the typography study. Six roles on Manti's `Text` and
-  `Heading`: `title`, `heading`, `strong`, `body`, `quiet`, `label`. They land when that study is
-  decided.
+- **The text styles,** from [typography](./typography.md). Six text styles on Manti's `Text` and
+  `Heading`: `title`, `heading`, `strong`, `body`, `quiet`, `label`, in `text-styles.ts`. *Changed
+  2026-11-07 (P31): they were "text roles", proposed; typography decided them as text styles on
+  2026-11-02. They land in their own row, not in P31.*
 
 Later:
 
-- **A lint that holds "every size comes from a role".** Its false alarms are measured before it
+- **A lint that holds "every size comes from a text style".** Its false alarms are measured before it
   blocks, as every blocking check is.
 - **A design-system page,** made from the package's data, never written by hand
   ([data first](./data-first-markdown-is-a-view.md)).
@@ -80,12 +81,13 @@ can grow the same way, one decided piece at a time. None of that is in the first
   together first, so publishing is later.
 - **When the move happens.** The move is its own pull request, through the pipeline's steps like
   every other ([the steps](./next-is-a-pipeline-pre-run.md)).
-- **How the text roles look in code.** That waits for the typography study.
+- ~~How the text roles look in code.~~ *Changed 2026-11-07 (P31): settled. [Typography](./typography.md)
+  shows them in code as `textStyles`, decided 2026-11-02.*
 
 ## What it costs
 
 About half an agent hour to move the two files and their tests, plus the tokens in `window.css` they
-point at. Then the text roles, once they are decided. The lint and the design-system page come after
+point at. Then the text styles, decided in typography. The lint and the design-system page come after
 and are sized then.
 
 How sure: 85% that one package is the right home. The doubt: `next/` has no window on main yet, so the
