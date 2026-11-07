@@ -17,7 +17,10 @@ import type {CreateRule} from "@oxlint/plugins";
 
 // No word boundary after the keyword: oxlint reads `oxlint-disablefoo` as naming a rule `foo`.
 const DISABLE = /^\s*(oxlint|eslint)-disable(?:-next-line|-line)?(.*)$/s;
-const NAMED_WITH_WHY = /^\s+[\w@./-]+(?:\s*,\s*[\w@./-]+)*\s+--\s+\S/s;
+// A rule name never holds `--`: oxlint ends the rule list at the first `--`, so `-- -- why` or
+// `--- -- why` names no rule, which means every rule.
+const NAME = String.raw`[\w@./]+(?:-[\w@./]+)*`;
+const NAMED_WITH_WHY = new RegExp(String.raw`^\s+${NAME}(?:\s*,\s*${NAME})*\s+--\s+\S`, "s");
 
 const START = {line: 1, column: 0};
 
