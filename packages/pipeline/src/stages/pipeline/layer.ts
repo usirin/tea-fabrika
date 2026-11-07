@@ -4,6 +4,7 @@ import {start} from "@kampus/fabrika-old";
 import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {type Cause, Effect, Fiber, Layer, Queue, Stream} from "effect";
 import {layerLanes} from "../../asks/claims.ts";
+import type {Polling} from "../../code-host-github.ts";
 import type {LocalCheck} from "../../code-host-local.ts";
 import {ticketsOnLedger, watcherOnLedger} from "../../tickets/tickets.ts";
 import {noFacts} from "../plan/services.ts";
@@ -37,21 +38,23 @@ const checksFromSettings = Effect.gen(function* () {
 }).pipe(Effect.mapError(() => ({_tag: "unknown" as const})));
 
 /**
- * The code host the checkout's origin names. A checkout with no origin gets the local one: it serves
- * nothing, since the lane's first read says what is missing and stops.
+ * The code host the checkout's origin names, its waits asking as `polling` says. A checkout with no
+ * origin gets the local one: it serves nothing, since the lane's first read says what is missing and
+ * stops.
  */
-const laneHost = Layer.unwrap(
-	Effect.gen(function* () {
-		const work = yield* LaneWork;
-		const origin = yield* work.origin.pipe(Effect.orElseSucceed(() => null));
-		return origin?.host === "github"
-			? laneGitHubHost(origin.repo, checksFromSettings)
-			: Layer.merge(laneLocalHost(checksFromSettings), localWire);
-	}),
-);
+const laneHost = (polling?: Polling) =>
+	Layer.unwrap(
+		Effect.gen(function* () {
+			const work = yield* LaneWork;
+			const origin = yield* work.origin.pipe(Effect.orElseSucceed(() => null));
+			return origin?.host === "github"
+				? laneGitHubHost(origin.repo, checksFromSettings, polling)
+				: Layer.merge(laneLocalHost(checksFromSettings), localWire);
+		}),
+	);
 
-/** All of it. Needs only the app's `Ledger`. */
-export const laneLayer = (home: LaneHome["Service"]) => {
+/** All of it. Needs only the app's `Ledger`. `polling`: how the GitHub host's waits ask, for a test. */
+export const laneLayer = (home: LaneHome["Service"], polling?: Polling) => {
 	const writer: Writer = {kind: "agent", id: "lane", for: home.person};
 	const first = Layer.mergeAll(
 		Layer.succeed(LaneHome, home),
@@ -83,7 +86,7 @@ export const laneLayer = (home: LaneHome["Service"]) => {
 		laneRecord,
 		laneWatch,
 	).pipe(
-		Layer.provideMerge(laneHost),
+		Layer.provideMerge(laneHost(polling)),
 		Layer.provideMerge(watcherOnLedger({kind: "agent", id: "watcher", for: home.person})),
 		Layer.provideMerge(third),
 		Layer.provideMerge(nodeServices),
