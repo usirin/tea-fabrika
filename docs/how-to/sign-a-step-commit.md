@@ -5,7 +5,7 @@ check. Tier 1's P32 built it, from [a unit of work is a commit](../direction/a-u
 The laws are p83 to p87 and p89 in [the detail](../plan/tier-1-detail.md#properties).
 
 ```sh
-pnpm commits sign --step build --ticket 229 --key ~/.config/fabrika/step-keys/build   # a step, after each commit
+pnpm commits sign --step build --ticket 229 --key ~/.fabrika/step-keys/build   # a step, after each commit
 pnpm commits push                                                                     # the lead, once the steps are done
 ```
 
@@ -16,13 +16,13 @@ signs with no person there. The comment is the role, so no machine name reaches 
 
 ```sh
 umask 077
-mkdir -p ~/.config/fabrika/step-keys
+mkdir -p ~/.fabrika/step-keys
 for role in tests build lead; do
-	ssh-keygen -q -t ed25519 -N "" -C "$role" -f ~/.config/fabrika/step-keys/"$role"
+	ssh-keygen -q -t ed25519 -N "" -C "$role" -f ~/.fabrika/step-keys/"$role"
 done
 for role in tests build lead; do
 	printf '%s namespaces="fabrika-step" %s\n' "$role" \
-		"$(cut -d' ' -f1,2 ~/.config/fabrika/step-keys/"$role".pub)"
+		"$(cut -d' ' -f1,2 ~/.fabrika/step-keys/"$role".pub)"
 done > allowed_signers
 ```
 
@@ -36,7 +36,7 @@ done > allowed_signers
 After each commit it makes, before anything is pushed:
 
 ```sh
-pnpm commits sign --step tests --ticket 229 --key ~/.config/fabrika/step-keys/tests
+pnpm commits sign --step tests --ticket 229 --key ~/.fabrika/step-keys/tests
 ```
 
 - It signs the link from the commit's first parent's tree to its tree, with the step, the ticket and
@@ -64,7 +64,7 @@ trees and reads `unsigned_commit`. The merge is the lead's commit, so the lead s
 
 ```sh
 git merge --no-edit origin/main
-pnpm commits sign --step lead --ticket 229 --key ~/.config/fabrika/step-keys/lead
+pnpm commits sign --step lead --ticket 229 --key ~/.fabrika/step-keys/lead
 ```
 
 ## What the check answers
