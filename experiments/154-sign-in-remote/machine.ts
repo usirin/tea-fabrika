@@ -31,35 +31,35 @@ const Pass = Schema.Struct({
 });
 
 /** Tell the person's app a sign-in is wanted. */
-export const want = Cmd.define("want", {
+export const want = Cmd.make("want", {
 	input: Schema.Struct({round: Schema.Int}),
 	ok: Schema.Null,
 	err: ["unreachable"],
 });
 
 /** Make the verifier, the state and the URL for the app's port, and send the URL out. */
-export const offer = Cmd.define("offer", {
+export const offer = Cmd.make("offer", {
 	input: Schema.Struct({port: Schema.Int, round: Schema.Int}),
 	ok: Schema.Struct({state: Schema.String, waitMs: Schema.Number}),
 	err: ["unreachable"],
 });
 
 /** Trade the code for the pass. `refused`: the server said invalid_grant (used, old, wrong verifier). */
-export const trade = Cmd.define("trade", {
+export const trade = Cmd.make("trade", {
 	input: Schema.Struct({code: Schema.String, client: Schema.NullOr(Schema.String)}),
 	ok: Pass,
 	err: ["refused", "no_scope", "unreachable", "closed"],
 });
 
 /** Trade the refresh token for a new pair. `no_renewal`: the pass came with no refresh token. */
-export const refresh = Cmd.define("refresh", {
+export const refresh = Cmd.make("refresh", {
 	input: Schema.Struct({turn: Schema.Int}),
 	ok: Pass,
 	err: ["refused", "no_scope", "unreachable", "closed", "no_renewal"],
 });
 
 /** Revoke, clear the vault, and tell the person. It always clears; `revoked` says if the server agreed. */
-export const forget = Cmd.define("forget", {
+export const forget = Cmd.make("forget", {
 	input: Schema.Struct({why: Schema.String}),
 	ok: Schema.Struct({revoked: Schema.Boolean}),
 	err: ["unreachable"],

@@ -4,8 +4,8 @@
 
 ```sh
 # Our work needs a change in a package we do not own. Do all three, the same day:
-pnpm patch @demlik/tea@0.22.0          # 1. make the change in the copy pnpm opens
-pnpm patch-commit <the folder it printed>   #    it lands in patches/ and package.json
+pnpm patch @demlik/tea@0.23.0          # 1. make the change in the copy pnpm opens
+pnpm patch-commit <the folder it printed>   #    it lands in patches/ and pnpm-workspace.yaml
 gh issue create -R kamp-us/demlik ...  # 2. file the same change upstream
 # 3. keep building on the patched package. Drop the patch in the pull request that takes the release.
 ```
