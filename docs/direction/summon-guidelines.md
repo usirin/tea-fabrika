@@ -4,7 +4,9 @@
 owner settled threads, forks and who may talk to whose agent the same night, in
 [threads, forks and the verbs](#threads-forks-and-the-verbs), and later that night made a talk a
 room with members, in [rooms, mentions and turns in order](#rooms-mentions-and-turns-in-order),
-which walks back parts of the first (each marked **Walked back** where it stands). The note stands
+which walks back parts of the first (each marked **Walked back** where it stands). On 2026-11-07
+the owner decided, for now, that joining a room never moves the tile ([R5](#r5-joining-a-room-never-moves-the-tile-a-line-to-a-room-starts-with-room)),
+which walks back the sticky room prompt of the night before. The note stands
 on these, decided before it and not asked again
 ([talk where you work](./talk-where-you-work.md)):
 
@@ -368,8 +370,10 @@ readable by everyone on the project.
 
 ### T4: the current thread sticks to the tile, like a working directory
 
-**Partly walked back (R5).** The tile still keeps its place like a working directory, but the place
-is a room: the prompt is `#bug-17 >`, not `scout#bug-17 >`, and the model is `{room}`.
+**Walked back (R5).** On 2026-11-06 it was walked back in part: the tile still kept its place like a
+working directory, but the place was a room, with the prompt `#bug-17 >`, not `scout#bug-17 >`, and
+the model `{room}`. On 2026-11-07 the rest went too: no room or thread sticks to a tile, and the
+prompt stays `fabsh$`.
 
 - **What.** `@scout#bug-17` once switches the tile to that thread. A later plain `@scout ...` keeps
   going there, and the prompt shows `scout#bug-17 >`, as a shell's prompt shows its folder after
@@ -418,15 +422,16 @@ and marked, so the old meaning stays readable. These hold for both versions; wha
 can build is under R7.
 
 ```text
-A sketch. One person, one tile, two agents, a DM and a room.
+A sketch. One person, one tile, two agents, a DM and a room. Updated 2026-11-07: the prompt stays
+tsh$, and every line to a room starts with #room (R5). The 2026-11-06 sketch had the prompt #bug-17 >.
 tsh$ summon claude haiku as scout
-tsh$ @scout why does post print #7 twice?        (your DM with scout: a room of two, you and scout)
-tsh$ join #bug-17                                (the verb is a lean, below; the tile is now in #bug-17)
-#bug-17 > @scout here is the failing run          (a mention: scout answers in #bug-17, for everyone)
-#bug-17 > @scout @researcher why did this stall?  (scout answers first, then researcher, who sees scout's reply)
-#bug-17 > fork #bug-17 at 12 as bar               (#bar, with "forked from #bug-17 at 12" as a fact)
+tsh$ @scout why does post print #7 twice?                (your DM with scout: a room of two, you and scout)
+tsh$ join #bug-17                                        (the verb is a lean, below; you are a member, nothing moves)
+tsh$ #bug-17 @scout here is the failing run              (a mention: scout answers in #bug-17, for everyone)
+tsh$ #bug-17 @scout @researcher why did this stall?      (scout answers first, then researcher, who sees scout's reply)
+tsh$ fork #bug-17 at 12 as bar                           (#bar, with "forked from #bug-17 at 12" as a fact)
   #bar · forked from #bug-17 at 12
-#bar >
+tsh$
 ```
 
 ### R1: a room is a place, with members; an agent is mentioned in it
@@ -446,9 +451,10 @@ tsh$ join #bug-17                                (the verb is a lean, below; the
 - **Open: two agents with one name in a room.** Names are unique per person (S3), so two members may
   each bring a scout into `#bug-17`. Lean, 60%: the mention is refused in words and names both
   owners, and the second one joins under another name. The doubt: renaming on join adds a step.
-- **Open, lean 70%: entering a room is `join #bug-17`.** IRC and Matrix call it join, and joining
-  changes who is a member, so it is a verb (T6). Typing in a room you already belong to only moves
-  the tile there.
+- **Open, lean 70%: becoming a member is `join #bug-17`.** IRC and Matrix call it join, and joining
+  changes who is a member, so it is a verb (T6). Since 2026-11-07 it only adds you to the room; it
+  never moves the tile (R5). The 2026-11-06 text here said that typing in a room you already belong
+  to only moves the tile there; that is walked back with R5's sticky prompt.
 
 ### R2: every room is readable by everyone on the project
 
@@ -484,7 +490,44 @@ tsh$ join #bug-17                                (the verb is a lean, below; the
   a person may want to skip only the slow one; a later key could do that.
 - **Bills.** Each turn is on its own agent owner's bill, as decided (T3).
 
-### R5: a room is a fabsh session its members share
+### R5: joining a room never moves the tile; a line to a room starts with `#room`
+
+**Decided 2026-11-07, for now,** by the owner. It walks back the R5 decided on 2026-11-06, which is
+kept below, marked.
+
+```text
+fabsh$ join #bug-17                          you joined #bug-17. The prompt stays fabsh$.
+fabsh$ #bug-17 is this #193 again?           → #bug-17 · message 16
+fabsh$ #bug-17 @scout why did this stall?    scout answers in #bug-17, in the foreground (S6)
+fabsh$ @scout and the second run?            your DM with scout
+fabsh$ agents                                a plain line is still a command
+fabsh$ leave #bug-17                         you left #bug-17; the bottom line drops it
+t1 fabsh · in #stall                         the bottom line: the rooms you are in
+```
+
+- **What.** `join #bug-17` only makes you a member. The prompt stays `fabsh$`, and a plain line is
+  still a command. To talk, a line always starts with `#room` or `@name`; Tab completes both, and
+  up-arrow brings the last line back, so the prefix is cheap to repeat. `#bug-17` alone shows the
+  room, read only, and tells nobody. The bottom line may list the rooms you are in; `join` adds one
+  and `leave` drops one.
+- **Why.** fabsh is a shell first. IRC and Slack go chat first, with `/` for a command, and that
+  makes a person join and leave just to switch between commands and talk.
+- **Elm.** A fabsh tile's model has no room. `update` reads the room from the line it is given,
+  never from the tile; who is a member lives on the room, and the bottom line is a view of it.
+- **The doubt.** Long chats may find the prefix tiring. What settles it: a week of real use. For a
+  long talk there is already a chat-first view: the room tile (`room #bug-17`), where a plain line is
+  a message.
+- **Settles.** The old R5's open question below takes branch (a), shell first, with `#room` as well
+  as `@name` starting a message. A message to a room's people with no agent in it starts with
+  `#bug-17`, which answers that branch's doubt.
+- **A bug it removes.** In the prototype, after `leave #bug-17` the prompt still read `#bug-17 >`
+  and the bottom line still read `t1 fabsh · #bug-17`. With no room on the tile the prompt cannot
+  go stale, and the bottom line lists rooms by membership, so `leave` drops it.
+
+### R5, as decided 2026-11-06: a room is a fabsh session its members share
+
+**Walked back 2026-11-07** by the R5 above. Kept as it was decided, so its meaning stays on the
+record.
 
 - **What.** Entering a room sticks to the tile, like a working directory: the prompt shows
   `#bug-17 >`. Lines typed there are commands or messages, and what they print lands in the room,
@@ -519,7 +562,8 @@ tsh$ join #bug-17                                (the verb is a lean, below; the
 ### R7: what today's version can build
 
 - Today's version has one person per app, so "readable by everyone" is true with no extra work. It
-  can build DMs, named rooms, mentions in order, the sticky prompt and `fork` with `at`. Rooms read
+  can build DMs, named rooms, mentions in order, the `#room` prefix with the bottom line's list of
+  rooms, and `fork` with `at`. Rooms read
   by other people, and agents of other people as members, need `next/`'s brain.
 - Whether an `acp` session can start from a room's first 12 messages is the same open question as
   in T7.
@@ -664,6 +708,8 @@ Offered, not filed. A guess: about 650 lines with tests, 5 to 7 agent hours, 55%
   request.
 - **T2 to T5,** decided earlier the same night, are walked back in part by R1 to R5, by the owner.
   Each place is marked.
+- **R5's sticky room prompt,** decided 2026-11-06, is walked back on 2026-11-07, for now, by the
+  owner: joining never moves the tile, and a line to a room starts with `#room`.
 
 ## What it costs
 
