@@ -1,6 +1,6 @@
 # Design for bounded objects
 
-**Decided 2026-11-07 (owner): the principle, and three calls from P37's questions. The four
+**Decided 2026-11-07 (owner): the principle, and five calls from P37's questions and after. The four
 leans below are proposed.** `next/`.
 
 ```ts
@@ -35,6 +35,18 @@ at 10 GB; storage across many objects is unlimited. So:
 - **Every span is recorded forever,** including spans from outside any process.
 - **Spans from outside a process leave the project object.** They go to record objects of their
   own, in parts, as a JobRecord does.
+- **Raw health rows are kept forever, the old ones archived to R2.** At the hourly roll-up, raw
+  rows older than about 2 weeks are written to one R2 file per object per day, and the local rows
+  are deleted only after the file's hash matches. Recent rows stay in the object for fast reads.
+  R2 stores data for $0.015 per GB-month against Durable Object storage's $0.20, with 10 GB-month
+  free, and no egress charge ([R2 pricing](https://developers.cloudflare.com/r2/pricing/),
+  [Durable Objects pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/),
+  read 2026-11-07). Miniflare emulates R2 on the laptop. Left for P37's plan: whether each object
+  writes its own archive or hands rows to one archive object.
+- **Where data lives:** archives in R2, everything live in Durable Objects, and anything global
+  across projects in Cloudflare D1, only once a real need appears. None is known today: a
+  person's devices and projects fit an object of their own. (Cloudflare D1 is not the five
+  layers note's decision label D1.)
 
 ```ts
 // A sketch: one span with no process behind it, such as a door call before any process starts.
@@ -137,9 +149,9 @@ read strictly, a span write that fails would be counted and alarmed but would no
 - **[A JobRecord holds its trace](./a-job-record-holds-its-trace.md)** has one object per job, and
   Tier 1 one per process. This adds parts: one process's record is many objects, chained by
   `rolled`.
-- **Raw health rows still go after about 2 weeks** ([monitoring](../plan/tier-1.md#monitoring-is-in-tier-1)).
-  That is a retention rule decided on its own, with the hourly summary written first, not a drop
-  to stay under a cap.
+- **Raw health rows are no longer deleted after about 2 weeks**
+  ([monitoring](../plan/tier-1.md#monitoring-is-in-tier-1) said so). From 2026-11-07 (owner) they
+  move to R2 instead; the hourly summary is still written first.
 - **P6's row cap** of 2,000,000 bytes (`referee.ts:28`, "flag 13") is stricter than Cloudflare's
   8 MB today. It is safe and does not change here.
 
