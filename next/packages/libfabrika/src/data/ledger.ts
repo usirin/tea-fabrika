@@ -3,7 +3,7 @@
 // it is the project's stub (`Ledger.remote`). Tier 1, P6 (laws p18 to p20, p94 and p95).
 import {Context, Effect, Layer, Option, Schema, Stream} from "effect";
 import {Appended, Entry, type Line, PAGE, type Rev, Waited} from "./log.ts";
-import {Referee, type Sql, STREAM, tag} from "./referee.ts";
+import {Referee, type Sql, STREAM, short, tag} from "./referee.ts";
 
 export class LedgerError extends Schema.TaggedError<LedgerError>()("LedgerError", {
 	/** `unreachable`: a call that never reached the referee. `bad_row`: an answer or a row that does
@@ -89,7 +89,10 @@ export class Ledger extends Context.Service<
 				),
 				Effect.tapError((error) => Effect.annotateCurrentSpan(tag("why"), error.why)),
 				Effect.withSpan("ledger.call", {
-					attributes: {"rpc.method": method, [STREAM]: stream, [tag("reader")]: who.reader},
+					attributes: {
+						"rpc.method": method,
+						...short({[STREAM]: stream, [tag("reader")]: who.reader}),
+					},
 				}),
 			);
 		const page = Schema.Array(Entry);

@@ -30,7 +30,9 @@ export const nodeSql = (db: DatabaseSync): Sql => {
 				db.exec("COMMIT");
 				return done;
 			} catch (error) {
-				db.exec("ROLLBACK");
+				// SQLite rolls some failures back by itself, SQLITE_FULL among them; then there is none to
+				// roll back, and a ROLLBACK would throw over the real error.
+				if (db.isTransaction) db.exec("ROLLBACK");
 				throw error;
 			}
 		},

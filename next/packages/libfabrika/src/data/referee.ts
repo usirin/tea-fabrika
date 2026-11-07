@@ -6,7 +6,7 @@
 // the write. A wait answers at once: `ready`, or a ring row that the next append past it takes out
 // in its own step and rings once. No fiber, timer or Deferred is left behind, so the object can
 // sleep under a parked wait. Every call ends one span with names, ids and numbers only.
-import {Context, Effect, Equal, Layer, Option, Result, Schema} from "effect";
+import {Cause, Context, Effect, Equal, Exit, Layer, Option, Result, Schema} from "effect";
 import {Doorbell, LedgerError} from "./ledger.ts";
 import {Appended, Entry, Line, PAGE, Rev, Row, Waited} from "./log.ts";
 
@@ -44,6 +44,29 @@ const ID = "messaging.message.id";
 const OPERATION = "messaging.operation.type";
 const ERROR = "error.type";
 export const tag = (name: string): string => `fab.ledger.${name}`;
+
+/** The most characters a span tag holds (p95). Caller text past it is cut, its length kept beside. */
+const MOST_CHARS = 128;
+
+/** The first `MOST_CHARS` characters, one fewer when the cut would split a surrogate pair. */
+const cut = (text: string): string => {
+	const last = text.charCodeAt(MOST_CHARS - 1);
+	return text.slice(0, last >= 0xd800 && last <= 0xdbff ? MOST_CHARS - 1 : MOST_CHARS);
+};
+
+/** Span tags from text a caller hands in (a stream, id, `_tag`, `by`, reader): each as it is when it
+ *  fits, else cut to 128 characters with its full length beside as `<key>.length`. */
+export const short = (texts: Readonly<Record<string, string>>): Record<string, string | number> =>
+	Object.fromEntries(
+		Object.entries(texts).flatMap(([key, text]) =>
+			text.length <= MOST_CHARS
+				? [[key, text]]
+				: [
+						[key, cut(text)],
+						[`${key}.length`, text.length],
+					],
+		),
+	);
 
 /** A waiter to ring, as the rings table holds it. */
 const Ring = Schema.Struct({to: Schema.String, after: Rev});
@@ -263,17 +286,26 @@ const make = (sql: Sql, doorbell: (typeof Doorbell)["Service"]): (typeof Referee
 		return Placing.cases.placed.make({rev, pos, rings});
 	};
 
-	/** Rings one waiter, at most once: a failed ring is gone all the same, kept only in its span. */
+	/** Rings one waiter, at most once: a failed ring is gone all the same, kept only in its span. A
+	 *  ring that fails or dies, even by throwing before it gives an Effect, never changes the append. */
 	const ring = (stream: string, rev: Rev, {to, after}: Ring) =>
-		doorbell.ring(to, stream, rev).pipe(
-			Effect.tap(() => Effect.annotateCurrentSpan(tag("ok"), true)),
-			Effect.tapError((error) =>
-				Effect.annotateCurrentSpan({[tag("ok")]: false, [ERROR]: errorClass(error)}),
+		Effect.suspend(() => doorbell.ring(to, stream, rev)).pipe(
+			Effect.onExit((exit) =>
+				Effect.annotateCurrentSpan(
+					Exit.match(exit, {
+						onSuccess: () => ({[tag("ok")]: true}),
+						onFailure: (cause) => ({[tag("ok")]: false, [ERROR]: errorClass(Cause.squash(cause))}),
+					}),
+				),
 			),
 			Effect.withSpan("ledger.ring", {
-				attributes: {[STREAM]: stream, [tag("to")]: to, [tag("after")]: after, [tag("rev")]: rev},
+				attributes: {
+					...short({[STREAM]: stream, [tag("to")]: to}),
+					[tag("after")]: after,
+					[tag("rev")]: rev,
+				},
 			}),
-			Effect.catch(() => Effect.void),
+			Effect.catchCause(() => Effect.void),
 		);
 
 	const refused = (why: Why) =>
@@ -287,7 +319,7 @@ const make = (sql: Sql, doorbell: (typeof Doorbell)["Service"]): (typeof Referee
 			const checked = check(stream, id, input);
 			if (Result.isFailure(checked)) return yield* refused(checked.failure);
 			const line = checked.success;
-			yield* Effect.annotateCurrentSpan({[tag("tag")]: line._tag, [tag("by")]: line.by});
+			yield* Effect.annotateCurrentSpan(short({[tag("tag")]: line._tag, [tag("by")]: line.by}));
 			const placing = yield* atomic((now) => place(stream, id, line, now));
 			return yield* Placing.match(placing, {
 				refused: ({why}) => refused(why),
@@ -318,7 +350,7 @@ const make = (sql: Sql, doorbell: (typeof Doorbell)["Service"]): (typeof Referee
 			});
 		}).pipe(
 			Effect.withSpan("ledger.append", {
-				attributes: {[STREAM]: stream, [ID]: id, [OPERATION]: "send"},
+				attributes: {...short({[STREAM]: stream, [ID]: id}), [OPERATION]: "send"},
 			}),
 		);
 
@@ -347,9 +379,8 @@ const make = (sql: Sql, doorbell: (typeof Doorbell)["Service"]): (typeof Referee
 			Effect.map(({entries}) => entries),
 			Effect.withSpan("ledger.read", {
 				attributes: {
-					[STREAM]: stream,
+					...short({[STREAM]: stream, [tag("reader")]: reader}),
 					[OPERATION]: "receive",
-					[tag("reader")]: reader,
 					[tag("after")]: after,
 				},
 			}),
@@ -377,7 +408,7 @@ const make = (sql: Sql, doorbell: (typeof Doorbell)["Service"]): (typeof Referee
 			),
 			Effect.map(({waited}) => waited),
 			Effect.withSpan("ledger.wait", {
-				attributes: {[STREAM]: stream, [tag("reader")]: reader, [tag("after")]: after},
+				attributes: {...short({[STREAM]: stream, [tag("reader")]: reader}), [tag("after")]: after},
 			}),
 		);
 
