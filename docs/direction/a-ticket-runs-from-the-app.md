@@ -4,6 +4,10 @@
 calls: push and merge are two steps, one review per plan, the cloud host in
 v1, stage agents on Codex, and every stage in a box. Nothing here is built.
 
+**One part decided 2026-11-06:** filing a ticket starts its lane, with no start button and no
+hand-off step. The owner's yes on the plan is the first stop, so a person comes back to work that is
+already triaged and planned, not to a pile of triaged tickets to pick from. The rest stays proposed.
+
 Keys renamed 2026-11-03 (short words keep one meaning): the lane's `at` became `state`, and its
 schema `At` became `State`.
 
