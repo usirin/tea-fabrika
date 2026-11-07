@@ -40,6 +40,15 @@ will change. So is splitting the old Tier 4 into hands and agents, which makes s
 
 *Added 2026-11-01: the keybindings program and the `themes` program joined Tier 2, decided by the owner; Tier 1 only reads their files. If Tier 2 grows too big, it splits, by the rule below.*
 
+### A requirement: the inbox on a phone, early
+
+Decided 2026-11-06 in the product walk (step 4): using fabrika from a phone is one of the owner's
+first needs, so "phone as approver" does not wait for Tier 7. A small slice moves earlier: a browser
+tab on the phone shows the inbox, answers asks and reaches a summoned agent (`@scout`), since the
+brain keeps the alias and session ([talk where you work](../direction/talk-where-you-work.md)). Which
+tier takes it is settled in the plan walk. It meets one open lean: a tab cannot approve (no, 70%),
+and answering an ask is an approval, so that lean is the first thing the slice must settle.
+
 ### A requirement: the whole plan flow
 
 Tier 6 in `next/`, since that is where its pipeline stages land. Decided 2026-11-01, 70%, since the order
