@@ -45,6 +45,9 @@ const pub = (who: string) =>
 		.split(" ")
 		.slice(0, 2)
 		.join(" ");
+/** A key's fingerprint, as `ssh-keygen -l` prints it and a note's `key` holds it. */
+const fingerprint = (who: string) =>
+	sh(KEYS, "ssh-keygen", ["-l", "-f", join(KEYS, `${who}.pub`)]).split(" ")[1]!;
 const keyLine = (role: string, who: string) => `${role} namespaces="fabrika-step" ${pub(who)}`;
 const GOOD_KEYS = `${[keyLine("tests", "tests"), keyLine("build", "build"), keyLine("lead", "lead")].join("\n")}\n`;
 
@@ -109,7 +112,7 @@ class Repo {
 		};
 		const args = ["-Y", "sign", "-n", opts.ns ?? "fabrika-step", "-f", join(KEYS, who)];
 		const sig = sh(this.dir, "ssh-keygen", args, signedText(link));
-		const note = {_tag: "attested", ...link, key: "SHA256:planted", sig};
+		const note = {_tag: "attested", ...link, key: fingerprint(who), sig};
 		this.setNote(sha, JSON.stringify(note));
 		return note;
 	}
@@ -301,6 +304,30 @@ describe("unsigned_commit (p83)", () => {
 		expect(r.check([], main).answers).toEqual([stuck("unsigned_commit", rebased)]);
 	});
 
+	it("a good signature whose note names another key's fingerprint", () => {
+		const r = new Repo();
+		const c = r.change("a.ts");
+		const note = r.sign("tests");
+		r.setNote(c, JSON.stringify({...note, key: fingerprint("stranger")}));
+		expect(r.check().answers).toEqual([stuck("unsigned_commit", c)]);
+	});
+
+	it("a key the event's base held and the checked-out main has dropped", () => {
+		const extra = `${GOOD_KEYS}${keyLine("build", "stranger")}\n`;
+		const r = new Repo(extra);
+		r.git("checkout", "-q", "main");
+		r.write("allowed_signers", GOOD_KEYS);
+		const main = r.commit("drop the stranger");
+		r.git("checkout", "-q", "pr");
+		r.git("merge", "-q", "--no-ff", "--no-edit", "main");
+		r.sign("lead");
+		const c = r.change("a.ts");
+		r.sign("stranger");
+		expect(r.check(["--main", main]).answers).toEqual([stuck("unsigned_commit", c)]);
+		// Read at the event's base, the stranger still counts, and main's own commit is in the range.
+		expect(r.check().answers).toEqual([stuck("unsigned_commit", main), ask("allowed_signers")]);
+	});
+
 	it("a good link for ticket 230 on a commit in ticket 229's pull request", () => {
 		const r = new Repo();
 		r.change("a.ts");
@@ -428,6 +455,18 @@ describe("broken_chain at pull request time (p86)", () => {
 		const main = r.commit("main moves");
 		expect(r.check([], main, head).answers).toEqual([stuck("broken_chain", head)]);
 	});
+
+	it("the branch contains the event's base but not the newer main CI checked out", () => {
+		const r = new Repo();
+		r.change("a.ts");
+		r.sign("tests");
+		const head = r.head();
+		r.git("checkout", "-q", "main");
+		r.write("docs/other.md", "o\n");
+		const main = r.commit("main moves after the event");
+		expect(r.check([], r.base, head).answers).toEqual([DONE]);
+		expect(r.check(["--main", main], r.base, head).answers).toEqual([stuck("broken_chain", head)]);
+	});
 });
 
 describe("the run fails (p87), judging no commit", () => {
@@ -515,13 +554,27 @@ describe("judged at the event's head (hole 3)", () => {
 		r.git("push", "-q", "origin", "pr");
 		const ci = join(TOP, `ci${count}`);
 		sh(TOP, "git", ["clone", "-q", "--branch", "main", origin, ci]);
-		const args = ["check", "--fetch", "--pr", "7", "--base", r.base, "--head", event];
+		const args = [
+			"check",
+			"--fetch",
+			"--pr",
+			"7",
+			"--base",
+			r.base,
+			"--head",
+			event,
+			"--main",
+			r.base,
+		];
 		const out = r.run(args, ENV, ci);
 		expect(out.answers).toEqual([DONE]);
 		expect(out.err).toContain("2 commits");
 		const bad = r.run(["check", "--fetch", "--pr", "7", "--base", r.base, "--head", "pr"], ENV, ci);
 		expect(bad.code).toBe(2);
 		expect(bad.answers).toEqual([]);
+		const noMain = r.run(args.slice(0, -2), ENV, ci);
+		expect(noMain.code).toBe(2);
+		expect(noMain.err).toContain("--main");
 	});
 });
 
@@ -662,9 +715,98 @@ describe("chain after the merge (p86 and p89)", () => {
 		]);
 		log(r, rows);
 		expect(r.run(["chain", "--squash", squash]).answers).toEqual([stuck("broken_chain", squash)]);
+		// A keys commit on a side branch, never on main: it holds the key, and still counts for nothing.
+		rows[1]!.attested[0] = {...rows[1]!.attested[0]!, keys: rotated};
+		log(r, rows);
+		expect(r.run(["chain", "--squash", squash]).answers).toEqual([stuck("broken_chain", squash)]);
+	});
+
+	it("done: a key main added before the squash counts, at a keys commit on main", () => {
+		const r = new Repo();
+		r.git("checkout", "-q", "main");
+		r.write("allowed_signers", `${GOOD_KEYS}${keyLine("build", "stranger")}\n`);
+		const rotated = r.commit("rotate");
+		r.git("checkout", "-q", "pr");
+		r.git("merge", "-q", "--no-ff", "--no-edit", "main");
+		const c1 = r.head();
+		const n1 = r.sign("lead");
+		const c2 = r.change("b.ts");
+		const n2 = r.sign("stranger");
+		const {squash, rows} = squashed(r, [
+			{note: n1, commit: c1},
+			{note: n2, commit: c2},
+		]);
 		rows[1]!.attested[0] = {...rows[1]!.attested[0]!, keys: rotated};
 		log(r, rows);
 		expect(r.run(["chain", "--squash", squash]).answers).toEqual([DONE]);
+	});
+
+	it("broken_chain: a log pull request that adds its own keys commit and points its rows at it", () => {
+		const r = new Repo();
+		const c1 = r.change("a.ts");
+		const n1 = r.sign("tests");
+		const c2 = r.change("b.ts");
+		const n2 = r.sign("stranger");
+		const {squash, rows} = squashed(r, [
+			{note: n1, commit: c1},
+			{note: n2, commit: c2},
+		]);
+		const main = r.head();
+		r.git("checkout", "-q", "-b", "log", main);
+		r.write("allowed_signers", `${GOOD_KEYS}${keyLine("build", "stranger")}\n`);
+		const forged = r.commit("my own keys");
+		rows[1]!.attested[0] = {...rows[1]!.attested[0]!, keys: forged};
+		log(r, rows);
+		const out = r.run(["chain", "--base", main, "--head", "HEAD"]);
+		expect(out.answers).toEqual([stuck("broken_chain", squash)]);
+		expect(out.code).toBe(1);
+	});
+
+	it("broken_chain: a log pull request naming a squash that is not on main", () => {
+		const r = new Repo();
+		const steps = twoSteps(r);
+		r.git("checkout", "-q", "-b", "elsewhere", r.base);
+		r.git("merge", "--squash", "-q", "pr");
+		const fake = r.commit("a squash off main");
+		const {rows} = squashed(r, steps);
+		const main = r.head();
+		r.git("checkout", "-q", "-b", "log", main);
+		const moved = rows.map((row) => ({
+			...row,
+			attested: row.attested.map((l) => ({...l, squash: fake})),
+		}));
+		log(r, moved);
+		expect(r.run(["chain", "--base", main, "--head", "HEAD"]).answers).toEqual([
+			stuck("broken_chain", fake),
+		]);
+	});
+
+	it("broken_chain: a link whose base has the base's tree but is not on main", () => {
+		const r = new Repo();
+		const steps = twoSteps(r);
+		const {squash, rows} = squashed(r, steps);
+		const twin = r
+			.git("commit-tree", "-p", r.base, "-m", "twin", r.head(`${r.base}^{tree}`))
+			.trim();
+		const moved = rows.map((row) => ({
+			...row,
+			attested: row.attested.map((l) => ({...l, base: twin})),
+		}));
+		log(r, moved);
+		expect(r.run(["chain", "--squash", squash]).answers).toEqual([stuck("broken_chain", squash)]);
+	});
+
+	it("broken_chain: a log row whose attested key is written with an escape is read all the same", () => {
+		const r = new Repo();
+		const steps = twoSteps(r);
+		const {squash, rows} = squashed(r, steps);
+		const main = r.head();
+		const line = JSON.stringify(rows[1]!).replaceAll('"attested"', '"\\u0061ttested"');
+		r.write("field/runs.jsonl", `${line}\n`);
+		r.commit("log");
+		const out = r.run(["chain", "--base", main, "--head", "HEAD"]);
+		expect(out.answers).toEqual([stuck("broken_chain", squash)]);
+		expect(out.code).toBe(1);
 	});
 
 	it("stale_link: field/ rows hold a tests link for the ticket newer than any the squash's chain uses", () => {

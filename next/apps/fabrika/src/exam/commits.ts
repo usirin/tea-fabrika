@@ -4,13 +4,14 @@
 // from the author, the message or a trailer. The laws are p83 to p87 and p89 in
 // docs/plan/tier-1-detail.md.
 //
-//   pnpm commits check --base <rev> --head <rev> [--keys-from head] [--fetch --pr <n>]
-//   pnpm commits chain (--squash <sha> | --base <rev> --head <rev> [--fetch] | --main)
+//   pnpm commits check --base <rev> --head <rev> [--main <sha>] [--keys-from head] [--fetch --pr <n>]
+//   pnpm commits chain (--squash <sha> | --base <rev> --head <rev> [--main <sha>] [--fetch] | --advise)
 //   pnpm commits sign --step <role> --ticket <n> --key <path>
 //   pnpm commits push
 //
-// `allowed_signers` and `exam-paths.json` are always read from the base, never from the change under
-// test. `--keys-from head` reads both from the head instead: only for the pull request that adds them,
+// `allowed_signers` and `exam-paths.json` are always read from main as CI checked it out (`--main`,
+// else the base), never from the change under test. After a merge, a logged link's keys commit counts
+// only when it was on main before its squash. `--keys-from head` reads both from the head instead: only for the pull request that adds them,
 // run once by hand, and never passed by the workflow. A pure core over plain data (`signedText`,
 // `check`, `chain`), and a thin edge that runs `git` and `ssh-keygen`, the reference verifier. It
 // imports no product code, so a builder cannot weaken it by changing one (p84). Exit 1 on any `stuck`,
@@ -252,14 +253,26 @@ export interface Logged {
 	readonly signer: Role | null;
 }
 
+/** What git says about one squash: whether it is on main, and which commits came before it there. */
+export interface Placed {
+	/** The squash is on the checked-out main. */
+	readonly onMain: boolean;
+	/** Commits on main before the squash (ancestors of its first parent), among the links' bases. */
+	readonly before: ReadonlySet<string>;
+}
+
 /**
  * p86 and p89 after the merge: the links logged for one squash run from its base's tree to its
- * tree. `trees` maps a commit to its tree, for the squash and the first link's base.
+ * tree. `trees` maps a commit to its tree, for the squash and the first link's base. The squash must
+ * be on main, and every link's base on main before it: a base off main could start the chain
+ * anywhere. A link's `base` is main when its step started, so after a `lead` merge of a moved main
+ * it is older than the squash's first parent, and an ancestor is what is asked, not that parent.
  */
 export const chain = (
 	squash: string,
 	rows: ReadonlyArray<Logged>,
 	trees: ReadonlyMap<string, string>,
+	placed: Placed,
 ): ReadonlyArray<Answer> => {
 	const mine = rows.filter((r) => r.link.squash === squash);
 	const links = mine.map((r) => r.link);
@@ -270,6 +283,8 @@ export const chain = (
 	const whole =
 		first !== undefined &&
 		last !== undefined &&
+		placed.onMain &&
+		links.every((l) => placed.before.has(l.base)) &&
 		mine.every((r) => r.signer === r.link.step) &&
 		tickets.size === 1 &&
 		froms.size === links.length &&
@@ -320,7 +335,10 @@ const words = (out: string) => out.split("\n").filter((p) => p !== "");
 const treeAt = (rev: string) => gitMaybe(["rev-parse", "--verify", "-q", `${rev}^{tree}`]);
 const fileAt = (rev: string, path: string) => gitMaybe(["show", `${rev}:${path}`]);
 
-/** Checks a link's text with ssh-keygen against one keys file: the role that signed it, or null. */
+/**
+ * Checks a link's text with ssh-keygen against one keys file: the role that signed it, or null. The
+ * note's `key` must be the fingerprint of the key that verified, so a row never names another key.
+ */
 const verifier = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
 	const dir = yield* fs.makeTempDirectoryScoped();
@@ -338,7 +356,8 @@ const verifier = Effect.gen(function* () {
 			if (found.code !== 0 || names.length !== 1 || who !== note.step) return null;
 			const args = ["-Y", "verify", "-f", allowed, "-I", who, "-n", NAMESPACE, "-s", sig];
 			const ok = yield* run("ssh-keygen", args, signedText(note));
-			return ok.code === 0 ? note.step : null;
+			const used = / key (SHA256:[A-Za-z0-9+/=]+)\s*$/.exec(ok.out)?.[1];
+			return ok.code === 0 && used === note.key ? note.step : null;
 		}).pipe(Effect.mapError(() => new Failed({what: "could not write a temp file"})));
 });
 
@@ -369,20 +388,27 @@ const need = (name: string) => {
 const resolve = (rev: string) =>
 	git(["rev-parse", "--verify", "-q", `${rev}^{commit}`]).pipe(Effect.map((s) => s.trim()));
 
-/** With `--fetch`, the workflow's values: the event's shas, checked, then fetched by sha, notes too. */
+/**
+ * The commits to judge. `--main` is the main CI checked out, the trusted one: the keys file, the exam
+ * list and the up-to-date check are read there, so a key main has dropped since the event's base stops
+ * counting. With no `--main`, the base stands in, as on a laptop. With `--fetch`, the workflow's values:
+ * `--main` is required, every sha is checked, and the event's shas are fetched by sha, notes too.
+ */
 const endpoints = Effect.gen(function* () {
 	const base = yield* need("--base");
 	const head = yield* need("--head");
+	const main = flag("--main");
 	if (process.argv.includes("--fetch")) {
 		const pr = flag("--pr");
-		if (!HEX.test(base) || !HEX.test(head) || (pr !== undefined && !/^[0-9]+$/.test(pr)))
-			return yield* new Failed({what: "--fetch takes 40-hex shas and a number"});
+		const shas = [base, head, main ?? ""];
+		if (!shas.every((sha) => HEX.test(sha)) || (pr !== undefined && !/^[0-9]+$/.test(pr)))
+			return yield* new Failed({what: "--fetch takes 40-hex shas, --main included, and a number"});
 		yield* git(["fetch", "--no-tags", "-q", "origin", base, head]);
 		const remote = yield* run("git", ["ls-remote", "--exit-code", "origin", "refs/notes/fabrika"]);
 		if (remote.code === 0)
 			yield* git(["fetch", "--no-tags", "-q", "origin", "+refs/notes/fabrika:refs/notes/fabrika"]);
 	}
-	return {base: yield* resolve(base), head: yield* resolve(head)};
+	return {head: yield* resolve(head), main: yield* resolve(main ?? base)};
 });
 
 /** Text inside a workflow command, escaped as GitHub's own toolkit does, so it cannot start another. */
@@ -444,13 +470,13 @@ const changedPaths = (from: string, sha: string) =>
 	);
 
 const checkMain = Effect.gen(function* () {
-	const {base, head} = yield* endpoints;
-	const trust = flag("--keys-from") === "head" ? head : base;
+	const {head, main} = yield* endpoints;
+	const trust = flag("--keys-from") === "head" ? head : main;
 	const exam = decodeExam((yield* fileAt(trust, "exam-paths.json")) ?? "");
 	if (Option.isNone(exam)) return yield* new Failed({what: "no readable exam-paths.json"});
 	const isExam = examMatcher(exam.value);
 	const changed = nul(
-		yield* git(["diff", "--name-only", "-z", "--no-renames", `${base}...${head}`]),
+		yield* git(["diff", "--name-only", "-z", "--no-renames", `${main}...${head}`]),
 	);
 	if (!inScope(changed, isExam)) {
 		yield* Console.log(JSON.stringify(done));
@@ -468,7 +494,7 @@ const checkMain = Effect.gen(function* () {
 	const byCommit = new Map(notes.map((n) => [n.commit, n.note]));
 	const commits: Commit[] = [];
 	for (const sha of words(
-		yield* git(["rev-list", "--topo-order", "--reverse", `${base}..${head}`]),
+		yield* git(["rev-list", "--topo-order", "--reverse", `${main}..${head}`]),
 	)) {
 		const parent = yield* gitMaybe(["rev-parse", "--verify", "-q", `${sha}^1`]);
 		const note = byCommit.get(sha);
@@ -490,26 +516,32 @@ const checkMain = Effect.gen(function* () {
 		const mine = commits.find((c) => c.sha === n.commit)?.signed;
 		all.push(mine ?? (yield* signedBy(n.note)));
 	}
-	const containsBase = (yield* run("git", ["merge-base", "--is-ancestor", base, head])).code === 0;
+	const containsBase = (yield* run("git", ["merge-base", "--is-ancestor", main, head])).code === 0;
 	const result = check({head, containsBase, changed, commits, notes: all}, isExam);
 	const extra = result.ticket === null ? "" : `, ticket ${result.ticket}`;
 	yield* Console.error(`commits: ${commits.length} commits${extra}`);
 	return yield* report("commits", result.answers, extra);
 });
 
-/** Every `attested` link in one revision's `field/runs.jsonl`, with the line each came from. */
+/**
+ * Every `attested` link in one revision's `field/runs.jsonl`, with the line each came from. Each line
+ * is parsed, never searched as text, so a key written with escapes cannot hide a row.
+ */
 const loggedAt = (rev: string) =>
 	Effect.gen(function* () {
 		const lines = ((yield* fileAt(rev, "field/runs.jsonl")) ?? "").split("\n");
 		const found: Array<{line: string; link: Link}> = [];
 		for (const [i, line] of lines.entries()) {
-			if (!line.includes('"attested"')) continue;
+			if (line.trim() === "") continue;
 			const row: unknown = yield* Effect.try({
 				try: () => JSON.parse(line),
 				catch: () => new Failed({what: `field/runs.jsonl line ${i + 1} is not JSON`}),
 			});
+			if (row === null || typeof row !== "object") continue;
 			const links = (row as {attested?: unknown}).attested;
-			if (!Array.isArray(links)) continue;
+			if (links === undefined) continue;
+			if (!Array.isArray(links))
+				return yield* new Failed({what: `field/runs.jsonl line ${i + 1}: attested is not a list`});
 			for (const raw of links) {
 				const link = decodeLink(raw);
 				if (Option.isNone(link))
@@ -522,9 +554,13 @@ const loggedAt = (rev: string) =>
 		return found;
 	});
 
+const ancestor = (older: string, newer: string) =>
+	run("git", ["merge-base", "--is-ancestor", older, newer]).pipe(Effect.map((r) => r.code === 0));
+
 const chainMain = Effect.gen(function* () {
-	const advice = process.argv.includes("--main");
+	const advice = process.argv.includes("--advise");
 	let rev = "HEAD";
+	let main = "HEAD";
 	let squashes: string[];
 	const one = flag("--squash");
 	if (one !== undefined) squashes = [yield* resolve(one)];
@@ -552,9 +588,11 @@ const chainMain = Effect.gen(function* () {
 			if (inScope(paths, isExam)) squashes.push(sha);
 		}
 	} else {
-		const {base, head} = yield* endpoints;
+		const ends = yield* endpoints;
+		const head = ends.head;
+		main = ends.main;
 		rev = head;
-		const before = new Set((yield* loggedAt(base)).map((l) => l.line));
+		const before = new Set((yield* loggedAt(main)).map((l) => l.line));
 		squashes = [
 			...new Set(
 				(yield* loggedAt(head)).filter((l) => !before.has(l.line)).map((l) => l.link.squash),
@@ -563,8 +601,12 @@ const chainMain = Effect.gen(function* () {
 	}
 	const verify = yield* verifier;
 	const rows: Logged[] = [];
+	// A row's keys commit counts only when it was on main before its squash. Anyone who can push can
+	// make a commit whose allowed_signers holds their own key, on a branch or in a log pull request.
 	for (const {link} of yield* loggedAt(rev)) {
-		const keys = yield* fileAt(link.keys, "allowed_signers");
+		const keys = (yield* ancestor(link.keys, `${link.squash}^1`))
+			? yield* fileAt(link.keys, "allowed_signers")
+			: null;
 		const signer = keys === null || keysProblem(keys) !== null ? null : yield* verify(keys, link);
 		rows.push({link, signer});
 	}
@@ -578,7 +620,12 @@ const chainMain = Effect.gen(function* () {
 			const tree = yield* treeAt(sha);
 			if (tree !== null) trees.set(sha, tree.trim());
 		}
-		answers.push(...chain(squash, rows, trees));
+		const before = new Set<string>();
+		for (const r of rows.filter((r) => r.link.squash === squash)) {
+			if (yield* ancestor(r.link.base, `${squash}^1`)) before.add(r.link.base);
+		}
+		const onMain = yield* ancestor(squash, main);
+		answers.push(...chain(squash, rows, trees, {onMain, before}));
 	}
 	if (squashes.length === 0) yield* Console.error("chain: no squash to walk");
 	const code = yield* report("chain", answers, "");
