@@ -86,6 +86,7 @@ const capture = () => {
 const STREAM = "messaging.destination.name";
 const ID = "messaging.message.id";
 const OP = "messaging.operation.type";
+const ERROR = "error.type";
 const tag = (name: string) => `fab.ledger.${name}`;
 
 describe("p95, every call is one span, names and numbers only", () => {
@@ -308,6 +309,62 @@ describe("p95, every call is one span, names and numbers only", () => {
 	);
 
 	it.effect(
+		"a storage failure tags each call's span with fab.ledger.why, fab.ledger.code and error.type",
+		() => {
+			const {tracer, tags} = capture();
+			const full = Object.assign(new Error("database or disk is full"), {
+				code: "ERR_SQLITE_ERROR",
+				errcode: 13,
+			});
+			const broken: Sql = {
+				exec: () => {
+					throw full;
+				},
+				transaction: () => {
+					throw full;
+				},
+				size: () => {
+					throw full;
+				},
+			};
+			const keys = {[tag("why")]: "storage", [tag("code")]: 13, [ERROR]: "Error"};
+			return Effect.gen(function* () {
+				const ledger = yield* Ledger;
+				yield* Effect.flip(ledger.append("a", "w-1", line()));
+				yield* Effect.flip(Stream.runCollect(ledger.read("a", 0)));
+				yield* Effect.flip(ledger.wait("a", 0));
+				expect(tags("ledger.append")).toEqual([expect.objectContaining(keys)]);
+				expect(tags("ledger.read")).toEqual([expect.objectContaining(keys)]);
+				expect(tags("ledger.wait")).toEqual([expect.objectContaining(keys)]);
+			}).pipe(Effect.provide(onSql(broken)), Effect.withTracer(tracer));
+		},
+	);
+
+	it.effect(
+		"a storage failure with no SQLite code tags its class as error.type and no fab.ledger.code",
+		() => {
+			const {tracer, tags} = capture();
+			const odd: Sql = {
+				exec: () => {
+					throw new TypeError("a blob column, which the ledger never writes");
+				},
+				transaction: (step) => step(),
+				size: () => 0,
+			};
+			return Effect.gen(function* () {
+				const ledger = yield* Ledger;
+				const error = yield* Effect.flip(ledger.append("a", "w-1", line()));
+				expect(error.why).toBe("storage");
+				const [span = {}] = tags("ledger.append");
+				expect(span).toEqual(
+					expect.objectContaining({[tag("why")]: "storage", [ERROR]: "TypeError"}),
+				);
+				expect(Object.keys(span)).not.toContain(tag("code"));
+			}).pipe(Effect.provide(onSql(odd)), Effect.withTracer(tracer));
+		},
+	);
+
+	it.effect(
 		"a ring whose delivery fails ends its span with ok false and the error's class; the append is placed",
 		() => {
 			const {tracer, tags} = capture();
@@ -321,6 +378,7 @@ describe("p95, every call is one span, names and numbers only", () => {
 					expect.objectContaining({[tag("to")]: READER, [tag("ok")]: false}),
 				);
 				expect(Object.values(rings[0] ?? {})).toContain("LedgerError");
+				expect(rings[0]).toEqual(expect.objectContaining({[ERROR]: "LedgerError"}));
 				expect(tags("ledger.append")[0]).toEqual(
 					expect.objectContaining({[tag("answer")]: "placed", [tag("rings")]: 1}),
 				);

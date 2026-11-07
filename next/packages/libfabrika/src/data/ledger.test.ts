@@ -14,7 +14,7 @@
 //   with the stream's newest rev, or `{_tag: "parked"}`.
 // - Failures are `LedgerError` with `why`: `unreachable` and `bad_row` from `Ledger.remote`,
 //   `storage` when the Sql throws. No Layer fails when it is built.
-import {mkdtempSync, rmSync} from "node:fs";
+import {mkdtempSync, rmSync, statSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
@@ -611,4 +611,29 @@ describe("p20, failures are typed, and pass", () => {
 		);
 		expect(answer).toEqual({_tag: "parked"});
 	});
+});
+
+// The plan's "what this piece records": P6 gives `Sql.size()` and its Node half, page_count times
+// page_size, for P37's hourly size row (how close the one object is to 10 GB; experiment 224).
+describe("Sql.size on node:sqlite, the object's bytes for P37's size row", () => {
+	it.effect(
+		"answers the file's bytes, positive once the ledger is used, and grows with writes",
+		() => {
+			const path = freshPath();
+			const sql = nodeSql(openDb(path));
+			return Effect.gen(function* () {
+				const ledger = yield* Ledger;
+				yield* ledger.append("a", "w-0", line());
+				const first = sql.size();
+				expect(first).toBeGreaterThan(0);
+				// With SQLite's default rollback journal, the file holds exactly page_count pages.
+				expect(first).toBe(statSync(path).size);
+				for (let n = 1; n <= 50; n++)
+					yield* ledger.append("a", `w-${n}`, line({body: {note: "x".repeat(4_000)}}));
+				const after = sql.size();
+				expect(after).toBeGreaterThan(first + 50 * 4_000);
+				expect(after).toBe(statSync(path).size);
+			}).pipe(Effect.provide(onSql(sql)));
+		},
+	);
 });

@@ -240,6 +240,40 @@ describe("p92, every entry has every field: at the referee", () => {
 			}).pipe(Effect.provide(onReferee(fresh()))),
 	);
 
+	it.effect(
+		"a row of exactly 2,000,000 UTF-8 bytes is placed, and one byte more is refused too_big",
+		() =>
+			Effect.gen(function* () {
+				// The row's bytes: its texts as UTF-8 (stream, id, by, for, sentAt, cause, build, _tag) and
+				// the body as JSON; numbers are not counted. handIn's ids, w-1 and w-2, are the same length.
+				const encoder = new TextEncoder();
+				const rowBytes = (line: Line): number =>
+					[
+						"notes:1",
+						"w-1",
+						line.by,
+						line.for,
+						line.sentAt,
+						line.cause ?? "",
+						line.build,
+						line._tag,
+						JSON.stringify(line.body),
+					].reduce((n, text) => n + encoder.encode(text).length, 0);
+				// A thousand two-byte letters, so a count of characters instead of bytes misses the limit.
+				const WIDE = "ü".repeat(1_000);
+				const sized = (total: number): Line => {
+					const rest = total - rowBytes({...full, body: {note: WIDE}});
+					return {...full, body: {note: WIDE + "x".repeat(rest)}};
+				};
+				const atLimit = sized(2_000_000);
+				const overLimit = sized(2_000_001);
+				expect([rowBytes(atLimit), rowBytes(overLimit)]).toEqual([2_000_000, 2_000_001]);
+				const {answers, entries} = yield* handIn([overLimit, atLimit]);
+				expect(answers).toEqual([refused("too_big"), {_tag: "placed", rev: 1, pos: 1}]);
+				expect(entries.map((entry) => entry.id)).toEqual(["w-2"]);
+			}).pipe(Effect.provide(onReferee(fresh()))),
+	);
+
 	it.effect("sentAt never decides: any text the writer sent is placed and read back as sent", () =>
 		Effect.gen(function* () {
 			const sent = ["", "yesterday, around nine", "2099-01-01T00:00:00Z", "1970-01-01T00:00:00Z"];
