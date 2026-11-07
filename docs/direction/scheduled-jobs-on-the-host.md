@@ -30,6 +30,14 @@ const tlaDrift = scheduled("tla_drift", {every: days(1)}, function* () {
     ([Cloudflare](https://developers.cloudflare.com/workers/configuration/cron-triggers/)).
   - Each job is its own program with its own alarm, since a Durable Object
     has one alarm and the ledger's is for leases.
+  - **Decided 2026-11-07 (owner): one alarm per object, set in one function,
+    at the earliest timer.** A job's object has one alarm, as this note says,
+    and every timer in one object (the ledger's leases among them) goes
+    through that one function, so no timer overwrites another. It is tested by
+    killing the object mid-step (workerd's `state.abort()`, then
+    `runDurableObjectAlarm`). This settles the disagreement in
+    [the cloud is one more host](./the-cloud-is-one-more-host.md#notes-this-draft-disagrees-with),
+    whose draft said one alarm per host.
 - **A job never changes code. It files a ticket,** written by an agent
   writer, so the timeline shows who filed it
   ([the ticket is the lane's one view](./the-ticket-is-the-lane-view.md)).
