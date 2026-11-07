@@ -529,7 +529,7 @@ tsh$
   quoted string is short for pick there; a key on a message in the room writes the line. The data
   points at the message's id, never a count.
 - **The picker's look and keys need a pressable test** (owner, 2026-11-07): the syntax is
-  settled, the UX is not. A prototype is being made.
+  settled, the UX is not, and a prototype the owner presses settles it before fork's build.
 - **Built in its own pull request, after rooms are in daily use** (lead's lean, 75%). ACP's stable
   `session/new` takes no prior messages, and `session/fork` is still unstable and copies the whole
   session (schema `v1/schema.unstable.json`, read 2026-11-07); the Claude adapter can cut at a message
