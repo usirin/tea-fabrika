@@ -99,14 +99,16 @@ jobs:
           path: ${{ runner.temp }}/e2e-shots
           if-no-files-found: ignore
 
-  # The tests, split by file over three machines (vitest's `--shard`): they were
-  # 5 min 40 s of a 7 min check on one.
+  # The tests, split by file over six machines (vitest's `--shard`, each machine
+  # given about the same seconds by vitest.shards.ts). The lane's tests are 18
+  # files of 19 to 124 s, 1,526 s in all (laptop, 2026-11-06): six machines take
+  # about 250 s of them each, where three took about 500.
   test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -143,7 +145,7 @@ jobs:
       - name: test
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
-          SHARD: ${{ matrix.shard }}/3
+          SHARD: ${{ matrix.shard }}/6
         run: |
           if [ -n "$BASE" ]; then
             pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests
