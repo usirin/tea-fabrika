@@ -99,11 +99,11 @@ export const Tried = Schema.Union([
 export type Tried = typeof Tried.Type;
 
 /** One try: reach the host on its socket, or start one and wait for it, then the handshake. */
-export const attach = Cmd.define("attach", {input: Schema.Struct({}), ok: Tried, err: []});
+export const attach = Cmd.make("attach", {input: Schema.Struct({}), ok: Tried, err: []});
 /** Stop the host by its pid and wait for it to exit, then one try, which starts this build's. */
-export const restart = Cmd.define("restart", {input: Schema.Struct({}), ok: Tried, err: []});
+export const restart = Cmd.make("restart", {input: Schema.Struct({}), ok: Tried, err: []});
 /** Pick the wait before try `attempt`: full jitter, between 0 and the policy's bound for it. */
-export const jitter = Cmd.define("jitter", {
+export const jitter = Cmd.make("jitter", {
 	input: Schema.Struct({attempt: Schema.Int}),
 	ok: Schema.Number.check(Schema.isBetween({minimum: 0, maximum: POLICY.capMs})),
 	err: [],

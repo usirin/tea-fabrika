@@ -8,8 +8,8 @@ import {Cmd} from "@demlik/tea/effect";
 import {Schema} from "effect";
 
 const Ask = Schema.Struct({turn: Schema.String, prompt: Schema.String});
-const runAgent = Cmd.define("agent_run", {input: Ask, ok: Draft, err: ["stuck", "over_budget"]});
-const askPerson = Cmd.define("person_ask", {input: Ask, ok: Answer, err: ["unknown"]});
+const runAgent = Cmd.make("agent_run", {input: Ask, ok: Draft, err: ["stuck", "over_budget"]});
+const askPerson = Cmd.make("person_ask", {input: Ask, ok: Answer, err: ["unknown"]});
 
 const Turn = Schema.TaggedUnion({
 	drafting: {turn: Schema.String},

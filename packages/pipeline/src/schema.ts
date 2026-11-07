@@ -4,15 +4,15 @@ import {Option, Schema, SchemaGetter} from "effect";
 import type {z} from "zod";
 
 // Schemas here are Effect Schema (docs/direction/data-first-markdown-is-a-view.md).
-// A Cmd from Effect schemas is tea's own `Cmd.define` from `@demlik/tea/effect`,
+// A Cmd from Effect schemas is tea's own `Cmd.make` from `@demlik/tea/effect`,
 // which wraps them for tea itself, so no caller writes `Schema.toStandardSchemaV1`.
 // The six moves (src/primitives.ts) call it.
 //
 // What stays here for Cmds is the one thing tea's does not do: a schema slot
 // that holds zod. Until the repo is off zod, a move takes a zod schema in any
-// slot, beside an Effect one, and tea's Effect `Cmd.define` takes Effect
+// slot, beside an Effect one, and tea's Effect `Cmd.make` takes Effect
 // schemas only. Each place that serves zod is marked "zod": removing zod is
-// deleting those, and then a move calls tea's `Cmd.define` and nothing else.
+// deleting those, and then a move calls tea's `Cmd.make` and nothing else.
 //
 // The other half that was here, how a Draft's answer is read (`reader`,
 // `jsonSchema`), is fabrika's since experiment 114, on
@@ -20,7 +20,7 @@ import type {z} from "zod";
 
 /**
  * A schema a Cmd may carry: an Effect schema whose two sides are the same
- * type, as tea's Effect `Cmd.define` takes it.
+ * type, as tea's Effect `Cmd.make` takes it.
  *
  * A Cmd holds its values, it does not read them from outside. tea types a
  * handler's answer by the type the schema hands on, and checks that answer as
@@ -41,7 +41,7 @@ export interface Spec<I, O, T extends readonly string[]> {
 	readonly err: T;
 }
 
-/** zod: no slot holds zod, so the spec goes to tea's Effect `Cmd.define` as it is. */
+/** zod: no slot holds zod, so the spec goes to tea's Effect `Cmd.make` as it is. */
 export const isEffectSpec = <I, O, T extends readonly string[]>(
 	spec: Spec<I, O, T>,
 ): spec is {readonly input: CheckingSchema<I>; readonly ok: CheckingSchema<O>; readonly err: T} =>
@@ -52,9 +52,9 @@ const standard = <T>(schema: Plain<T>) =>
 	Schema.isSchema(schema) ? Schema.toStandardSchemaV1(schema) : schema;
 
 /**
- * zod: a Cmd with a zod slot. tea's Effect `Cmd.define` refuses zod, so this
+ * zod: a Cmd with a zod slot. tea's Effect `Cmd.make` refuses zod, so this
  * wraps any Effect slot and hands the spec to the core `Cmd.define`. The Cmd
- * it gives back is the one tea's Effect `Cmd.define` gives for the same types.
+ * it gives back is the one tea's Effect `Cmd.make` gives for the same types.
  */
 export const zodCmd = <
 	const N extends string,

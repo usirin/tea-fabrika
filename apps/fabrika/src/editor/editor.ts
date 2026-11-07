@@ -119,19 +119,19 @@ export interface EditorCtx {
 export const KEPT = 1000;
 
 const Done = Schema.Null;
-export const write = Cmd.define("write", {
+export const write = Cmd.make("write", {
 	input: Schema.Struct({data: Schema.String}),
 	ok: Done,
 	err: [],
 });
-export const line = Cmd.define("line", {
+export const line = Cmd.make("line", {
 	input: Schema.Struct({text: Schema.String}),
 	ok: Done,
 	err: [],
 });
-export const interrupt = Cmd.define("interrupt", {input: Schema.Struct({}), ok: Done, err: []});
-export const close = Cmd.define("close", {input: Schema.Struct({}), ok: Done, err: []});
-export const keep = Cmd.define("keep", {
+export const interrupt = Cmd.make("interrupt", {input: Schema.Struct({}), ok: Done, err: []});
+export const close = Cmd.make("close", {input: Schema.Struct({}), ok: Done, err: []});
+export const keep = Cmd.make("keep", {
 	input: Schema.Struct({lines: Schema.Array(Schema.String)}),
 	ok: Done,
 	err: [],

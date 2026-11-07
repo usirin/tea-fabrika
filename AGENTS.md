@@ -181,9 +181,9 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   question). They are in `packages/pipeline/src/primitives.ts`; the combos
   built from them are in `packages/pipeline/src/combos.ts`.
 - **New schemas are Effect Schema.** Define a Cmd through one of the primitives, or
-  through tea's own `Cmd.define` from `@demlik/tea/effect`. Both take Effect
+  through tea's own `Cmd.make` from `@demlik/tea/effect`. Both take Effect
   schemas as they are, so nobody writes `Schema.toStandardSchemaV1`. zod stays
-  only in code not yet moved. A primitive takes either; tea's Effect `Cmd.define`
+  only in code not yet moved. A primitive takes either; tea's Effect `Cmd.make`
   takes Effect schemas only. See
   [`docs/direction/data-first-markdown-is-a-view.md`](./docs/direction/data-first-markdown-is-a-view.md).
 
@@ -196,7 +196,7 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   type Ticket = typeof Ticket.Type;
   const Id = Schema.Struct({ id: Schema.String });
   const readTicket = gather("ticket_read", { input: Id, ok: Ticket, err: ["unknown"] });
-  const closeTicket = Cmd.define("ticket_close", { input: Id, ok: Schema.Null, err: ["unknown"] });
+  const closeTicket = Cmd.make("ticket_close", { input: Id, ok: Schema.Null, err: ["unknown"] });
   ```
 - **Names.** Use the industry's word for a thing
   ([use the industry's names](./docs/direction/use-the-industrys-names.md)), checked on
