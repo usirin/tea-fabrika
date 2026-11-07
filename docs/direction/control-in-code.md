@@ -34,6 +34,10 @@ Three kinds of part, each with its own job:
 
 ## Why
 
+- **The first reason, recorded 2026-11-07 (owner):** today's operator agents cost money
+  by waking up to check state that code can check for free, and most of those wakes had
+  nothing to act on. Code holding the loop means a model is started only when there is writing
+  to do.
 - A stage written as prose can only be carried out by an agent, even when
   every step in it is fixed. The shipper is the plain case: in two measured
   runs it made the same ten calls in the same order with nothing to decide,
