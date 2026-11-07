@@ -49,13 +49,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # p83 to p87 and p89 on the event's own shas: a later push to the branch is never judged here.
+      # The keys, the exam list and the up-to-date check come from MAIN, the main checked out above,
+      # which can be newer than the event's base: a key main has dropped stops counting.
       - name: check
         if: github.event_name == 'pull_request_target'
         env:
           PR: ${{ github.event.pull_request.number }}
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
-        run: pnpm -s commits check --fetch --pr "$PR" --base "$BASE" --head "$HEAD"
+          MAIN: ${{ github.sha }}
+        run: pnpm -s commits check --fetch --pr "$PR" --base "$BASE" --head "$HEAD" --main "$MAIN"
 
       # p86 and p89 after the merge, blocking on a pull request that logs links in field/runs.jsonl.
       - name: chain
@@ -64,10 +67,11 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
-        run: pnpm -s commits chain --fetch --pr "$PR" --base "$BASE" --head "$HEAD"
+          MAIN: ${{ github.sha }}
+        run: pnpm -s commits chain --fetch --pr "$PR" --base "$BASE" --head "$HEAD" --main "$MAIN"
 
       # The same after each push to main, as advice: a squash's links often land later, in a log
       # pull request.
       - name: chain on main
         if: github.event_name == 'push'
-        run: pnpm -s commits chain --main
+        run: pnpm -s commits chain --advise
