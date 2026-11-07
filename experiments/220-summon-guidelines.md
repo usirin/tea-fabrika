@@ -175,8 +175,12 @@ Against the note's seven principles (S1 to S7):
   bill.
 - How two people share names is reasoned from the settled note, not tried. Later the same night the
   owner decided part of it (another person's agent is `@scout/<person>`, talk yes, summon or
-  dismiss no) and added named threads and forks; the note has them. No maker was read for threads
-  or forks: they are the owner's decisions, not this reading's findings.
+  dismiss no) and added named threads and forks. Later still, the owner walked the threads back: a
+  talk is a room with members, people and agents, and an agent is mentioned in it (`#bug-17`, then
+  `@scout`); a DM is a room of two; every room is readable by everyone on the project; several
+  mentions answer in order. The `@scout/<person>` address went with it; talk yes, run no stayed. The
+  note has all of it, with what was walked back marked. No maker was read for threads, rooms or
+  forks: they are the owner's decisions, not this reading's findings.
 
 $0. No model call, no key.
 

@@ -1,9 +1,11 @@
 # Summon guidelines: naming agents in the shell, and the grammar for it
 
-**Proposed 2026-11-06.** The seven principles below are proposed. One section is decided: the owner
-settled threads, forks and who may talk to whose agent the same night, in
-[threads, forks and the verbs](#threads-forks-and-the-verbs), marked **Decided 2026-11-06**. The
-note stands on these, decided before it and not asked again
+**Proposed 2026-11-06.** The seven principles below are proposed. Two sections are decided: the
+owner settled threads, forks and who may talk to whose agent the same night, in
+[threads, forks and the verbs](#threads-forks-and-the-verbs), and later that night made a talk a
+room with members, in [rooms, mentions and turns in order](#rooms-mentions-and-turns-in-order),
+which walks back parts of the first (each marked **Walked back** where it stands). The note stands
+on these, decided before it and not asked again
 ([talk where you work](./talk-where-you-work.md)):
 
 - **Decided 2026-11-05:** `@` is read off the line before tsh's shell words, like Claude Code's `!`,
@@ -85,11 +87,15 @@ count      digit+                                   a message number in the thre
 place      word                                     today: always refused (S5)
 ```
 
+- **Walked back 2026-11-06 (R1, R3):** the `address`, `person` and `thread` rules and `fork`'s
+  `'@' address`. A said line is now `'@' name prose` (several names in a row are several mentions,
+  R4), a room is `'#' room` with flat names, and `fork '#' room ['at' count] 'as' room`. The rest of
+  this block stands.
 - **`summon`, `dismiss` and `fork` are verbs; `as`, `on` and `at` are keywords only in their slot,**
   as POSIX keeps reserved words to "certain positions" [p1]. `as` is a keyword only after
   `summon`'s settings or `fork`'s address, and `at` only after `fork`'s address, so `tell %1 as` and
   a prose line that says "at 5" are untouched.
-- **The address reads left to right as a sentence:** whose agent (`/<person>`), then which talk
+- **The address reads left to right as a sentence** (walked back, R1): whose agent (`/<person>`), then which talk
   (`#<thread>`). `@scout` alone is your own scout, on the tile's current thread (below).
 - **`said` is a lexer mode, not a word.** POSIX does the same for a here-document, whose body is
   read by other rules [p1]. It writes the decided "read before shell words" as a rule of the
@@ -132,6 +138,8 @@ complete, by what the cursor expects
 "fork @scout#bug-17 at "     count      the hint says "a message number"; the thread view writes it
 ```
 
+- **Walked back (R1, R5):** the `"@scout#"` and `"@scout/"` rows. After `#` Tab completes rooms;
+  after `fork #bug-17 at ` it is a message number in that room.
 - **`@` names reuse the picker's source.** The desk already keeps one index of rows
   (G7 R5); summoned agents are one more source in it. tsh matches those rows by prefix, as
   readline does; a text box's `@` menu is the picker
@@ -303,6 +311,11 @@ complete, by what the cursor expects
 **Decided 2026-11-06,** by the owner, the same night as the summon itself. These hold for both
 versions; what today's version can build of them is under T7.
 
+**Walked back in part, later the same night:** a talk is now a room with members, not a thread of
+an agent ([rooms](#rooms-mentions-and-turns-in-order)). T1 and T6 stand. The addresses in T2, T3's
+`@scout/<person>`, T4's prompt and T5's `fork @scout#...` are walked back; each place says so, and
+the old text stays so its meaning is on the record. The sketch below is the walked-back one.
+
 ```text
 A sketch. One person, one tile, one agent, two threads.
 tsh$ summon claude haiku as scout
@@ -326,6 +339,9 @@ scout#bar > @scout/<person>#review is this right?     (another member's scout: t
 
 ### T2: every message goes to a named thread of an agent
 
+**Walked back (R1).** A talk is a room with members, and an agent is mentioned in it. Your default
+`scout#<person>` is now your DM with scout, and `@scout#bug-17` is `#bug-17` with `@scout` mentioned.
+
 - **What.** A thread is one talk with one agent, with a name. Plain `@scout` goes to your default
   thread, named after you: `scout#<person>`. The UI may hide your own name there, so you see
   `scout`. `@scout#bug-17` names a thread anyone on the ledger can join, on purpose, by typing its
@@ -340,6 +356,10 @@ scout#bar > @scout/<person>#review is this right?     (another member's scout: t
 
 ### T3: you may talk to another person's agent, never run it
 
+**Partly walked back (R1, R2).** The rule stands: talk yes, run no, on its owner's bill. The address
+`@scout/<person>` is walked back, and the open question below is settled by R2: every room is
+readable by everyone on the project.
+
 - **What.** `@scout/<person>` talks to another member's scout. You may never summon, dismiss or
   re-model it. Its turn is on the agent owner's bill, and the owner sees it.
 - **Still open, lean yes, 70%.** Whether the agent's owner can read another person's thread with
@@ -347,6 +367,9 @@ scout#bar > @scout/<person>#review is this right?     (another member's scout: t
   other person's private notes. What settles it: a week of two people sharing one ledger.
 
 ### T4: the current thread sticks to the tile, like a working directory
+
+**Partly walked back (R5).** The tile still keeps its place like a working directory, but the place
+is a room: the prompt is `#bug-17 >`, not `scout#bug-17 >`, and the model is `{room}`.
 
 - **What.** `@scout#bug-17` once switches the tile to that thread. A later plain `@scout ...` keeps
   going there, and the prompt shows `scout#bug-17 >`, as a shell's prompt shows its folder after
@@ -357,6 +380,9 @@ scout#bar > @scout/<person>#review is this right?     (another member's scout: t
   `update`, never from a global.
 
 ### T5: fork makes a new thread, with its origin as a fact, not in its name
+
+**Partly walked back (R3).** Fork stays, on rooms: `fork #bug-17 at 12 as bar`. The forked thing is
+no longer an agent's thread. Flat names and the origin as a fact stand.
 
 - **What.** `fork @scout#bug-17 as bar` makes a new thread `#bar` from the latest message and
   switches the tile into it. `fork @scout#bug-17 at 12 as bar` forks from message 12. The thread
@@ -369,7 +395,8 @@ scout#bar > @scout/<person>#review is this right?     (another member's scout: t
 
 ### T6: every act that changes something is a verb you can read and script
 
-- **What.** The family is `summon`, `dismiss`, `fork`. A button or key that changes something writes
+- **What.** The family is `summon`, `dismiss`, `fork`, and, as a lean, `join` (R5's sketch, IRC's
+  and Matrix's word). A button or key that changes something writes
   one of these lines, so the log reads as a script and a script can do what a person did.
 - **Why.** The same rule as the "fork from here" key: one path, typed or pressed.
 
@@ -382,6 +409,150 @@ scout#bar > @scout/<person>#review is this right?     (another member's scout: t
 - Whether an `acp` session can fork at a given message is the harness's call. Claude Code resumes a
   session by id [c1]; forking at message 12 may need a new session fed the first 12 messages.
   Not read in code yet.
+
+## Rooms, mentions and turns in order
+
+**Decided 2026-11-06,** by the owner, later the same night as the threads above. A talk is a room,
+not something an agent owns. This walks back parts of T2 to T5; each walked-back line is kept above
+and marked, so the old meaning stays readable. These hold for both versions; what today's version
+can build is under R7.
+
+```text
+A sketch. One person, one tile, two agents, a DM and a room.
+tsh$ summon claude haiku as scout
+tsh$ @scout why does post print #7 twice?        (your DM with scout: a room of two, you and scout)
+tsh$ join #bug-17                                (the verb is a lean, below; the tile is now in #bug-17)
+#bug-17 > @scout here is the failing run          (a mention: scout answers in #bug-17, for everyone)
+#bug-17 > @scout @researcher why did this stall?  (scout answers first, then researcher, who sees scout's reply)
+#bug-17 > fork #bug-17 at 12 as bar               (#bar, with "forked from #bug-17 at 12" as a fact)
+  #bar · forked from #bug-17 at 12
+#bar >
+```
+
+### R1: a room is a place, with members; an agent is mentioned in it
+
+- **What.** A room is one talk with a name, such as `#bug-17`. Its members are people and agents.
+  `#bug-17` names the room; `@scout` inside it is a mention, which asks scout for a turn there. The
+  room comes first and the agent is mentioned; no agent owns a room.
+- **Your DM.** Your default talk with an agent is a DM: a room with two members, you and that agent.
+  `@scout <text>` typed outside any room still talks to scout, in your DM with it.
+- **Walks back.** T2's address `@<agent>[/<person>][#<thread>]`, `@scout#bug-17` and the default
+  thread `scout#<person>`. A thread no longer belongs to an agent. The `@` line's own rule stays: the
+  name ends at the first space, and the rest is the agent's words, as typed (S2).
+- **The known shapes.** Slack and Discord have channels and DMs; a Slack DM is a conversation like a
+  channel, with two members. Matrix has only rooms: a DM is an ordinary room marked as direct in the
+  account's data (`m.direct`). Linear lets an issue mention several agents, each with its own agent
+  session there. All of them put the place first and mention who should answer.
+- **Open: two agents with one name in a room.** Names are unique per person (S3), so two members may
+  each bring a scout into `#bug-17`. Lean, 60%: the mention is refused in words and names both
+  owners, and the second one joins under another name. The doubt: renaming on join adds a step.
+- **Open, lean 70%: entering a room is `join #bug-17`.** IRC and Matrix call it join, and joining
+  changes who is a member, so it is a verb (T6). Typing in a room you already belong to only moves
+  the tile there.
+
+### R2: every room is readable by everyone on the project
+
+- **What.** No private rooms, no privacy toggle, no categories. Anyone on the project can read any
+  room, your DMs with your agents included. You type only in rooms you are a member of: your DMs,
+  and named rooms you join.
+- **Still as decided.** An agent's name belongs to a person (S3). Talking to another person's agent
+  bills its owner, and you never summon, dismiss or re-model it (T3). The content stays deletable
+  ([an agent run keeps its content](./an-agent-run-keeps-its-content.md)).
+- **Settles.** T3's open question (may an agent's owner read another person's talk with it): yes,
+  and so may everyone on the project. The doubt there, private notes in a talk, is answered by the
+  rule: nothing in a room is private.
+
+### R3: fork stays, on rooms
+
+- **What.** `fork #bug-17 as bar` makes `#bar` from the latest message; `fork #bug-17 at 12 as bar`
+  forks from message 12 of `#bug-17`. The parent and the message number are a recorded fact, shown
+  as "forked from #bug-17 at 12", never put in the name (T5's rule, kept).
+- **Walks back.** T5's `fork @scout#bug-17 ...`: the thing forked is a room, not an agent's thread.
+- **Open, lean 65%: the fork's members are the parent's,** so the agents who knew the talk can go on
+  in it. The doubt: a fork made to try a different agent would then have to drop one.
+
+### R4: several mentions on one line answer in order, like a pipe
+
+- **What.** `@scout @researcher why did this stall?` gives scout the turn first, then researcher.
+  Each agent sees the room as it stands when its turn starts, so researcher reads scout's reply.
+  They answer one after another, left to right, never at once.
+- **Why.** A shell pipe reads left to right and each stage gets what the one before it made. People
+  read a second answer that builds on the first more easily than two that cross.
+- **Differs from Linear,** where each mentioned agent gets its own session and they run side by side.
+- **Lean, 75%: Ctrl-C stops the whole line,** the turn running and the ones not started, as a shell
+  stops the whole foreground pipeline. Each agent that already answered stays a member. The doubt:
+  a person may want to skip only the slow one; a later key could do that.
+- **Bills.** Each turn is on its own agent owner's bill, as decided (T3).
+
+### R5: a room is a fabsh session its members share
+
+- **What.** Entering a room sticks to the tile, like a working directory: the prompt shows
+  `#bug-17 >`. Lines typed there are commands or messages, and what they print lands in the room,
+  where every member sees it. Another tile can be in another room, as two shells can be in two
+  folders.
+- **Walks back.** T4's prompt `scout#bug-17 >` and its tile model `{agent, thread}`. The tile's model
+  is now `{room}`; the stickiness is kept. Tab after `#` completes rooms, not one agent's threads.
+- **The known shapes.** tmux lets several clients attach to one session, and each sees the same
+  output; a Slack channel shows a bot's reply to everyone in it; a Matrix room is the same for
+  every member.
+- **Open, lean 55%: how a line in a room says "this is a message".** Three branches. (a) Shell
+  first: the line is read as fabsh reads it today, and a message is a line that starts with `@`.
+  (b) Chat first: a line is a message, and a command starts with `/`, as in IRC and Slack.
+  (c) Guess by the first word: a known command runs, anything else is a message. Lean (a): it keeps
+  the decided rule that `@` is read before shell words, and nothing is guessed. The doubt: a
+  message to the people in a room, with no agent in it, has no `@` to start with. What settles it:
+  the owner's pick, then a week of use.
+
+### R6: names, checked against the industry
+
+- **`room` is the word.** It is Matrix's word for exactly this: a named place with members, where a
+  DM is one kind. Slack's "thread" means a chain of replies under one message, so "thread" for this
+  would mean two things. Slack's and Discord's "channel" is close, but a person does not call a DM a
+  channel, and the glossary already uses "channel" loosely for a transport (its ephemeral lane row).
+  "Room" covers both the named place and the DM with one word. Lean, 80%.
+- **`DM`** is Slack's, Discord's and Matrix's word for a room with two members.
+- **`mention`** is the word Slack, Discord, Matrix and Linear all use for `@name` in a message.
+- **The glossary** gets rows for `room` and `DM`, and its `thread` row now says what it is not: a
+  room. Whether the spot talk of [talk where you work](./talk-where-you-work.md) becomes a room is
+  not decided here (see [where this differs](#where-this-differs-from-settled-notes)).
+
+### R7: what today's version can build
+
+- Today's version has one person per app, so "readable by everyone" is true with no extra work. It
+  can build DMs, named rooms, mentions in order, the sticky prompt and `fork` with `at`. Rooms read
+  by other people, and agents of other people as members, need `next/`'s brain.
+- Whether an `acp` session can start from a room's first 12 messages is the same open question as
+  in T7.
+
+### R8: what the ledger records for rooms (a lean)
+
+**Lean, 80%.** The facts below exist only when they happen. If they are not written now, they are
+gone, and no later field brings them back for the entries already written.
+
+```ts
+// A sketch, `next/`. Effect Schema writes `_tag`; `arrivedAt` is the referee's clock, `sentAt` the writer's.
+{_tag: "roomMade", by: "<person>", room: "bug-17", direct: false, arrivedAt, sentAt}
+{_tag: "joined",   by: "<person>", room: "bug-17", member: "scout", owner: "<person>", arrivedAt, sentAt}
+{_tag: "forked",   by: "<person>", room: "bar", from: {room: "bug-17", at: 12}, arrivedAt, sentAt}
+{_tag: "said",     by: "<person>", room: "bug-17", at: 14, line: "@scout @researcher why did this stall?",
+ mentions: [{name: "scout", owner: "<person>"}, {name: "researcher", owner: "<other person>"}],
+ arrivedAt, sentAt}
+{_tag: "replied",  by: "scout", room: "bug-17", at: 15, to: 14, saw: 14, bill: "<person>", arrivedAt, sentAt}
+{_tag: "replied",  by: "researcher", room: "bug-17", at: 16, to: 14, saw: 15, bill: "<other person>", arrivedAt, sentAt}
+```
+
+- **Who joined, and who added them.** Lost if not recorded: who could read and answer a message at
+  the time it was sent. Membership changes, and today's member list says nothing about last week's.
+- **Who mentioned whom, as resolved then.** `mentions` keeps what each name meant at send, as the
+  decided `@` log does, since a name can be dismissed and summoned again as another agent. Re-parsing
+  the line later gives today's meaning, not that day's.
+- **Mention order.** The array's order is the order of the turns. Lost if not recorded: why the
+  second agent said what it said, since it saw the first reply.
+- **What each turn saw.** `saw` is the last message in the room when the turn started. Lost if not
+  recorded: an agent's context, once more messages land in the room.
+- **Whose bill.** `bill` follows the agent's owner, not `by` of the mention (T3).
+- `direct: true` marks a DM, as Matrix's `m.direct` does; a DM is still a room, so it needs no
+  other entry.
 
 ## The smaller calls
 
@@ -429,7 +600,9 @@ Each is a different answer to how a turn is typed and shown in today's tsh. The 
 
 ## What the ledger records
 
-A summon goes on the ledger, where every member sees it (T1, decided). In today's version there is
+A summon goes on the ledger, where every member sees it (T1, decided). The `thread` and `owner`
+keys on a thread below are walked back with T2; rooms record what [R8](#r8-what-the-ledger-records-for-rooms-a-lean)
+gives. In today's version there is
 one person per app, so the tryout keeps it in the host log and on the host's desk (the shape
 above); the ledger entries below are `next/`'s. The facts lost forever if not written when they
 happen: the model a typed alias resolved to, since aliases move between CLI versions; who
@@ -482,10 +655,15 @@ Offered, not filed. A guess: about 650 lines with tests, 5 to 7 agent hours, 55%
   back, by the owner.
 - **S3's two-people lean** refused talking to another person's agent. T3 allows it. A walk back,
   by the owner.
-- **The glossary's `thread` row** says a thread cannot open without a spot. T2's named threads
-  have none. Not changed here: the owner says whether a spot thread is one kind of named thread.
-  The glossary also needs rows for `fork` (the verb) and the address, in the build's pull request
-  at the latest.
+- **The glossary's `thread` row** said a thread cannot open without a spot, and T2's named threads
+  had none. R1 settles the clash for tsh: a named talk is a room, and the glossary now has `room` and
+  `DM` rows and a `thread` row that says it is not a room. Still open: whether the spot talk of
+  [talk where you work](./talk-where-you-work.md) (the box, then the thread tile) becomes a room
+  with the spot recorded on it. Lean yes, 65%, since one word for one idea; the doubt is that a
+  spot talk has a home on the thing, which a room does not. A `fork` row waits for the build's pull
+  request.
+- **T2 to T5,** decided earlier the same night, are walked back in part by R1 to R5, by the owner.
+  Each place is marked.
 
 ## What it costs
 
@@ -498,6 +676,9 @@ brain.
   and the reserved words are reasoned, not tried.
 - No screen reader ran: the status and reply regions are a plan.
 - Whether opening a session is free for every harness was read in code, not on a bill.
+- The rooms section is the owner's decisions plus leans. The maker shapes it names (Slack, Discord,
+  Matrix's `m.direct`, tmux shared sessions, Linear's agent sessions) were not re-read for it. Nobody
+  has typed in a shared room, and the 55% lean on how a line says "message" is the weakest call.
 - Two people's names are reasoned from the settled note, and T3 is decided without a second person
   having tried it.
 - Threads and forks (T1 to T7) are decisions, not findings: no maker was read for them, and

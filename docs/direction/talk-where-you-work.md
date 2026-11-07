@@ -165,8 +165,9 @@ person, since our program owns the turn.
 **Corrected 2026-11-06, the same night.** This section first said "nothing runs between turns, so an
 idle agent costs nothing". That was wrong. `summon` is more than an alias: it starts the agent, keeps
 it running, and puts it on the ledger, where every member can see it. The alias is still how `@name`
-reads; the agent behind it is a running program. Threads, forks and the rest are in
-[summon guidelines](./summon-guidelines.md).
+reads; the agent behind it is a running program. Rooms, mentions, forks and the rest are in
+[summon guidelines](./summon-guidelines.md): a talk is a room with members (a DM is a room of two),
+decided later the same night.
 
 ```text
 fabsh> summon claude haiku as scout on cloud
