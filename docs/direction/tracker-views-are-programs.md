@@ -1,7 +1,7 @@
 # Tracker views are programs
 
 **Proposed 2026-10-28.** Not settled, except two parts marked decided: section 7, and one
-program per view (section 10, decided 2026-11-06), and the first three new facts (decided 2026-11-06, below). This note replaces two studies of 2026-10-27, both left open and not
+program per view (section 10, decided 2026-11-06), the first three new facts (decided 2026-11-06, below), and the whose-turn status line (section 5.1, decided 2026-11-06). This note replaces two studies of 2026-10-27, both left open and not
 merged: [PR 135](https://github.com/usirin/tea-fabrika/pull/135) (Linear's
 model as facts) and [PR 153](https://github.com/usirin/tea-fabrika/pull/153)
 (every view a program). It starts from 153's text, folds in 135's, settles
@@ -274,6 +274,10 @@ Agent                                                            <- 4. only whil
 ```
 
 ### 5.1 The status line: whose turn it is
+
+**Decided 2026-11-06.** It replaces today's seven-branch top line. Whose turn it is stays a fold of
+the facts, asks and answers included, never a field anyone writes
+([a ticket runs from the app](./a-ticket-runs-from-the-app.md)).
 
 The line answers one question: does this need me, and if not, who has it. It
 replaces `lineOf(headOf(...))` at the top of the page. The list and the board
