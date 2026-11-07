@@ -269,13 +269,19 @@ complete, by what the cursor expects
 
 ### S6: a turn is a foreground job, and Ctrl-C cancels the turn, not the agent
 
-**Lean, 65%.**
+**Decided 2026-11-07, by the owner.** The lean before it was 65%.
 
-- **What.** `@scout ...` runs like any tsh line: the prompt waits. A status line shows progress in
+- **What.** `@scout ...` runs like any fabsh line: the prompt waits. A status line shows progress in
   place (tool calls, seconds), and the reply prints once whole, under the name, words faint. Ctrl-C
   tells the job `cancel` (ACP's `session/cancel`); scout stays summoned and idle. An ask from the
   agent takes the prompt as a person-only answer, `allow? [y/N]`, which the host records as the
   person's input; an agent never answers it (decided).
+- **Backgrounding a turn never parses the message.** Ctrl-Z suspends the waiting turn and `bg`
+  lets it finish in the background, as in POSIX job control. Or start the line with `bg`:
+  `bg @scout why does post print #7 twice?`. `jobs` and `fg %n` work as for any job.
+- **Everything after `@name` goes to the agent exactly as typed,** `&`, `|` and `;` included. This
+  keeps S2. A trailing `&` to background a turn is walked back on 2026-11-07: it would take a
+  character from the message.
 - **Why.** The kitchen: say "heard" at once, then work [o2]; Slack: acknowledge within 3 seconds,
   then the work [s1]. Ctrl-C already means "stop the foreground" in tsh (`shell.ts:94-95`).
 - **Accessibility.** The status line is a status message: a `role=status` region outside the
@@ -289,7 +295,8 @@ complete, by what the cursor expects
   `acp`'s outputs (`said`, `result`, `ask`).
 - **OTP.** The turn is one message in the run's mailbox; a second `@scout` while one runs queues
   (decided for `next/`, kept here).
-- **Doubt.** People may want the prompt back at once (design C). A week of use settles it.
+- **Not taken.** Design C, a turn as a background job by default. `bg` and Ctrl-Z give the prompt
+  back when a person wants it.
 - **Today.** Half: Ctrl-C and `cancel` exist; the reply is not shown in tsh.
 
 ### S7: you can always see and end what you summoned
@@ -636,7 +643,7 @@ Each is a different answer to how a turn is typed and shown in today's tsh. The 
   `tell scout prompt "..."`, a built-in on the job.
 - **C, a turn is a background job.** `@scout why ...` prints `[3] scout` and gives the prompt back;
   the reply lands above the prompt when whole; `jobs` and `attach %3` bring it forward. Pipe line:
-  `@scout ... ` then `jobs`.
+  `@scout ... ` then `jobs`. Not taken: S6 was decided foreground on 2026-11-07.
 - **D, a quoted prompt on a typed pipe.** `ask scout "why does post print #7 twice?" | outline`:
   the prompt is a quoted value, so the reply is a typed output that pipes, Nushell-style [n1]. Pipe
   line: `ask scout prompt="..." | outline`. It gives up the prose mode for pipes, and quoting prose
@@ -692,8 +699,8 @@ Offered, not filed. A guess: about 650 lines with tests, 5 to 7 agent hours, 55%
 - **The glossary's `summon` row** (`.glossary/TERMS.md`) still says there is no `summon` word in
   tsh; the 2026-11-06 decision changed that. The row needs updating, in this pull request or the
   build's.
-- **The settled sketch** shows the prompt free while claude answers; S6 leans foreground. If the
-  owner prefers the sketch, design C is it.
+- **The settled sketch** shows the prompt free while claude answers. S6 is decided foreground
+  (2026-11-07), so that part of the sketch is walked back; `bg` gives the prompt back by choice.
 - **Talk where you work, `next/` section,** said nothing runs between turns. The owner corrected it
   (T1), and this pull request fixes that sentence there, saying the earlier line was wrong. A walk
   back, by the owner.
