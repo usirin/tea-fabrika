@@ -331,7 +331,7 @@ The seven open questions, each with its lean. Proposed, not decided.
   - **All machine work is a Cmd the hands do.** Files, git, Docker, agents,
     keys and the terminal live on a computer, so a program never touches one.
     It asks, and the hands answer with a Msg. Every step stays a message, so
-    every run can be watched and replayed.
+    every process can be watched and replayed.
   - **The names are brain and hands.** The brain runs programs and keeps their
     state; the hands act on a computer. "Runner" was dropped, since the hands
     do not run programs. Where this note says "host", read "brain".

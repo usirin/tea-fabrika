@@ -20,7 +20,7 @@ data              the ledger behind a service; each grant keeps what the person 
                   each note's saved versions, with a check against a stale save
 coordination      mailbox, who belongs, window and agent grants; a slice of C2 to C5:
                   dead letters, one crashed program restarted with a brake, exit,
-                  monitors, a run number per start, who is online, the brain restarted
+                  monitors, a new process id per start, who is online, the brain restarted
 app               programs as sealed boxes: notes, the counter as the test, one that
                   breaks things on purpose
 desktop (Tuval)   one core, with browser, Electron and headless on subpaths of
@@ -31,8 +31,8 @@ desktop (Tuval)   one core, with browser, Electron and headless on subpaths of
   [the five layers](./a-local-first-sync-engine.md)' header says: Tier 1 builds layers 1 to 3. A
   skateboard must ride, not be a polished wheel: a program that crashes has to come back, or be
   marked down and say why, or the first tier does not work. The slice is dead letters, one
-  crashed program restarted with a crash-loop brake and backoff, exit, info and monitors, a run
-  number per start, who is online, and a brain restart. Supervision trees, sibling strategies,
+  crashed program restarted with a crash-loop brake and backoff, exit, info and monitors, each
+  start a new process with its own id, who is online, and a brain restart. Supervision trees, sibling strategies,
   links, trap exit and leases stay in Tier 4, since Tier 1 has no process that starts another
   and no claims. *Changed 2026-11-06: this note and the tiers gave Tier 1's coordination only the
   mailbox, who belongs and grants, which clashed with the five layers' header.*
