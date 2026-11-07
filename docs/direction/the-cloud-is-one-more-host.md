@@ -8,6 +8,8 @@
   plus one project object, decided the same day and changed 2026-10-31.
 - **Decided 2026-10-31:** [the app layer](#decided-2026-10-31-the-app-layer), A1 to A5,
   layer 4 of the five layers. A4, packs, is decided only in part, as its section says.
+- **Decided 2026-11-07:** one alarm per object, the first of
+  [notes this draft disagrees with](#notes-this-draft-disagrees-with).
 - **Still proposed:** the host draft of 2026-10-27, from
   [the draft](#the-draft-one-host-built-for-the-strictest-place) to
   [notes this draft disagrees with](#notes-this-draft-disagrees-with), the
@@ -249,13 +251,29 @@ watcher's GitHub read token. Step 4 is unmeasured.
 
 ## Notes this draft disagrees with
 
-Each is open until the owner's walk. None is changed yet.
+Each is open until the owner's walk. None is changed yet. *Changed 2026-11-07: the first,
+the alarm, is decided.*
 
 - [Scheduled jobs run on the host's alarms](./scheduled-jobs-on-the-host.md)
   and [tickets start in our tracker](./tickets-start-in-our-tracker.md) say
   each job has its own alarm because the ledger's is for leases. The ledger's
   alarm already serves two kinds of row, and [tea-host](./tea-host.md) sketches
   one alarm at the earliest timer. The draft: one alarm per host.
+  **Decided 2026-11-07 (owner): one alarm per object, set in one function, at
+  the earliest timer.** Every timer an object holds (a lease, a backoff's
+  `until`, a chaos `wake`, a job's next run) goes through that one function,
+  so no timer overwrites another. A program in its own object keeps its own
+  alarm, so the two notes' "its own alarm" still holds. It is tested by
+  killing the object mid-step, with workerd's `state.abort()`, then running
+  its alarm with `runDurableObjectAlarm`: the alarm is still set, at the
+  earliest timer.
+
+  ```ts
+  // A sketch. A pure function of the object's saved timers; the one place that sets the
+  // alarm sets it to this, or deletes it on null.
+  const nextAlarm = (timers: ReadonlyArray<number>): number | null =>
+  	timers.length === 0 ? null : Math.min(...timers);
+  ```
 - The same scheduled-jobs note says jobs that read code cannot run on
   Cloudflare. Experiment 148's box per job did.
 - [tea-host](./tea-host.md) parked the Cloudflare host on 2026-10-25, and
@@ -313,7 +331,7 @@ The seven open questions, each with its lean. Proposed, not decided.
   - **All machine work is a Cmd the hands do.** Files, git, Docker, agents,
     keys and the terminal live on a computer, so a program never touches one.
     It asks, and the hands answer with a Msg. Every step stays a message, so
-    every run can be watched and replayed.
+    every process can be watched and replayed.
   - **The names are brain and hands.** The brain runs programs and keeps their
     state; the hands act on a computer. "Runner" was dropped, since the hands
     do not run programs. Where this note says "host", read "brain".
@@ -410,8 +428,12 @@ decision log's number).
 - tea's pieces ride inside it: `durableCommandCarrier` for owed Cmds,
   `idempotentEffect` keys so a Cmd runs once, and `stepHost`'s `callId` so a
   resent answer counts once.
-- The gap: tea's hands loop keeps its "already ran" list in memory only. Filed
-  as [kamp-us/demlik#762](https://github.com/kamp-us/demlik/issues/762).
+- ~~The gap: tea's hands loop keeps its "already ran" list in memory only. Filed
+  as [kamp-us/demlik#762](https://github.com/kamp-us/demlik/issues/762).~~
+  *Fixed in tea 0.22.0 (demlik PR 768, 2026-11-01):* `runStepLoop` takes an
+  optional `executed` store. Hands that pass one that outlives the process
+  send back the saved answer instead of running the step again. With no store
+  the list still lives in memory, so the hands must pass one. We pin 0.23.0.
 
 ### A2: limits are one primitive up the process tree
 
@@ -557,8 +579,11 @@ type Blocked =
 ```
 
 - **Blocked list,** as above.
-- **One re-ask.** A form that fails its schema is asked for once more, in the
-  same session, with the exact error. The parse error is always saved.
+- ~~**One re-ask.** A form that fails its schema is asked for once more, in the
+  same session, with the exact error.~~ **Wrong, changed 2026-11-07 (owner):** a step's schema
+  check never adds a "fix your answer" turn. An answer that does not fit ends the step `stuck`,
+  and the stuck lane restarts from that step ([Tier 5's laws](../plan/tiers.md)). The parse error
+  is always saved.
 - **A looser pipe fit.** An output fits when it has every field the next
   input needs; extra fields are dropped. Branded types (`PrId`, `TicketId`)
   keep fields with the same name apart.

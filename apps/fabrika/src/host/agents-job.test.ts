@@ -91,7 +91,10 @@ const said = (lines: readonly string[], message: string) =>
 const hostOn = (home: string, lines: string[]) =>
 	Effect.gen(function* () {
 		const paths = yield* pathsOf(home);
-		const host = yield* Scope.make();
+		// A child of the test's scope: the host stops before the test's temp home is removed. A
+		// scope of its own outlived the test, and a job still writing in `storage/jobs` made the
+		// home's removal fail with ENOTEMPTY.
+		const host = yield* Scope.fork(yield* Effect.scope);
 		const caught = Logger.make((o) => {
 			lines.push(Logger.formatSimple.log(o));
 		});

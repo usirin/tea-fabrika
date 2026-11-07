@@ -29,7 +29,7 @@ engineering    runtime and pipeline notes: outside the design language
   motion, content or focus foundation; no accessibility guide; three name sets for the same colors;
   one word, `turn`, meaning a fill in `themes.ts` and a text color in `window.css`; three focus
   looks; and our notes are decision records, not guideline pages.
-- **What we have and did not name:** contrast laws at test time (`themes.test.ts`, `pipes.test.ts`),
+- **What we have and did not name:** contrast laws at test time (the design package's `themes.test.ts`, the app's `colors.test.ts`, `pipes.test.ts`),
   a list of known accent uses that only shrinks, and jsx-a11y rules that block a click handler on a
   plain element.
 
@@ -115,7 +115,7 @@ const Level = Schema.TaggedUnion({
 | [Agent hours](./agent-hours.md) | engineering | keep | A tracker field. |
 
 **The level with almost nothing in it is tokens:** one note, themes. The real list lives only in
-`window.css` and `theme.css`.
+`window.css` and the design package's `tokens.css`.
 
 ## 3. A guideline page's shape
 
@@ -157,7 +157,7 @@ primitive    Radix 3.0.0 steps: slate.a4, indigo.9, grass.11            nobody's
 semantic     --surface-*, --text-*, --border-*, --focus, --turn-*,      every program
              --state-*, --space-*, --radius-*, --motion-*
 component    --tile-*, --pop-*                                          only the tile, only popovers
-manti        --manti-*, set from the semantic tier in theme.css         only Manti's parts
+manti        --manti-*, set from the semantic tier in tokens.css        only Manti's parts
 ```
 
 - **Two tiers, plus a component tier only where a part must theme its own parts.** The tile needs
@@ -194,7 +194,7 @@ export const tokens = {
   become `--radius-*`, Manti's words; `on` in a tile token becomes `focused`. The 12 aliases go, all
   in one commit: two people and one app need no deprecation step.
 - **How it is held:** we have no CSS linter ([oxlint and oxfmt](./oxlint-and-oxfmt.md)), so laws are
-  tests that read the stylesheets, as `type-scale.test.ts` and `themes.test.ts` do. New laws, each
+  tests that read the stylesheets, as `type-scale.test.ts` and `colors.test.ts` do. New laws, each
   with a list that only shrinks: no raw color outside the token file, no `color-mix()` on a token,
   no px `font-size` outside a text style, a reduced-motion twin for every animation.
 

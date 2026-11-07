@@ -1,0 +1,26 @@
+{
+	"name": "@kampus/libfabrika",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "The new fabrika's library. So far its transport's SSHSIG (Tier 1, P7) and its data layer, the ledger (P6).",
+	"sideEffects": false,
+	"exports": {
+		"./data": "./src/data/index.ts",
+		"./sqlite": "./src/data/sqlite.ts",
+		"./transport": "./src/transport/index.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"effect": "catalog:"
+	},
+	"devDependencies": {
+		"@effect/vitest": "catalog:",
+		"@types/node": "catalog:",
+		"fast-check": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

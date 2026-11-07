@@ -53,6 +53,9 @@ Decided 2026-10-18.
   Listen, Draft, Check and Judge the six moves; the code calls them primitives
   (`packages/pipeline/src/primitives.ts`). One idea, two words. "Move" is our
   own word. The sweep looks for the industry's word, then one is picked.
+- **Picked: the process list is `ps`** (owner, 2026-11-07). In `next/`, the agent
+  tool and list that shows the processes running now is `ps`, Unix's word and
+  today's tsh's. It said `runs`. One ticket's jobs stay `timeline`'s.
 
 ## Why
 

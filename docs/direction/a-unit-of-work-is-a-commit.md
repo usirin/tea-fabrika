@@ -42,8 +42,12 @@ const check = (commit: Commit, stepKeys: StepKeys): Outcome => {
   one more.
 - **The signature goes in a git note, not in the commit.** *Changed 2026-11-06, the owner asking
   for no "Unverified" on GitHub.* Each step adds a note on `refs/notes/fabrika` to its commit,
-  holding what it signs (its step, the commit, its tree, its parent), the key's fingerprint and the
-  signature. GitHub labels a commit signed with a key it does not know "Unverified"
+  holding what it signs, the link (its step, the ticket, a version, the tree before and the tree
+  after), the key's fingerprint and the signature. *Changed 2026-11-07 (owner, from [experiment
+  221](../../experiments/221-signed-steps-and-rebases.md)): a step signs the link, not the commit,
+  so a rebase can later carry it by replay, and only a step's newest signature for the ticket
+  counts. Tier 1 stays merge-only. It said: "holding what it signs (its step, the commit, its tree,
+  its parent)".* GitHub labels a commit signed with a key it does not know "Unverified"
   (`unknown_key`), and a bot account cannot register a key; a commit with nothing in its signature
   slot shows no badge. Tested that day with the bot: the commit showed no badge, a fresh clone with
   no login fetched the note and the signature checked, and a note with one word changed failed.
@@ -94,7 +98,10 @@ and CI checks the chain of links from `main`'s tree to the squash commit's tree.
   commit ids do not.
 - **When `main` moved.** The branch is brought up to date by merging `main` in, as a `lead` link from
   the old tree to the merged one. The squash's tree must equal the last link's `to`, so a pull
-  request merges only when it is up to date.
+  request merges only when it is up to date. *Changed 2026-11-07 (owner): in Tier 1 this is the only
+  way. A branch catches up by merging `main` in, with no rebases and no native stacks yet. The row
+  that first allows a rebase carries each link across it by replay, Gerrit's trivial-rebase check
+  ([experiment 221](../../experiments/221-signed-steps-and-rebases.md)).*
 - **No transparency-log server.** in-toto's links often go to a Sigstore Rekor server. Ours go to the
   ledger, which is already an append-only log with a referee, the way traces dropped Jaeger for the
   job record ([a job record holds its trace](./a-job-record-holds-its-trace.md)).
@@ -159,7 +166,10 @@ How sure: 85%. The owner decided it. The doubts are in the next section.
 - **A rebase breaks every proof.** Tested 2026-11-06: a plain rebase drops the note; git's
   `notes.rewriteRef` carries it over, but the signature still names the old commit, so the step
   would have to sign again. A lean, not tried: update a branch by merging main in, as a `lead`
-  commit, and never rebase a step's commits. P32's plan settles it.
+  commit, and never rebase a step's commits. P32's plan settles it. *Changed 2026-11-07 (owner,
+  from [experiment 221](../../experiments/221-signed-steps-and-rebases.md)): the note signs the link,
+  which names no commit, so a rebase can later carry it by replay. Tier 1 stays merge-only, and P32
+  reads a rebased commit as `unsigned_commit` until the replay check is built.*
 - **Branch rules do not cover notes.** The bot, or anyone who can push as it, can overwrite or delete
   a note. It cannot forge one without a step key, and a missing proof is `stuck: unsigned_commit`,
   so this fails safe.

@@ -1,9 +1,9 @@
+import {fabrika, fabrikaLight, terminalTheme} from "@kampus/fabrika-design";
 import {Effect} from "effect";
 import {FitAddon, Ghostty, Terminal} from "ghostty-web";
 import wasm from "ghostty-web/ghostty-vt.wasm";
 import type {TileId} from "../desk/layout/index.ts";
 import {readToTerminal} from "../messages.ts";
-import {fabrika, fabrikaLight, terminalTheme} from "../themes.ts";
 
 // A tile's terminal: a terminal, and nothing more. ghostty-web draws it: Ghostty's terminal,
 // built to WebAssembly, on a canvas. It sends the keys pressed and its size on its tile's port,

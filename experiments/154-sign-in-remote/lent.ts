@@ -17,21 +17,21 @@ import {Schema} from "effect";
 import type {InboxSub} from "./machine.ts";
 
 /** Ask the person's app for pass `turn`, sealed to this box's key. */
-export const ask = Cmd.define("ask", {
+export const ask = Cmd.make("ask", {
 	input: Schema.Struct({turn: Schema.Int}),
 	ok: Schema.Struct({waitMs: Schema.Number}),
 	err: ["unreachable"],
 });
 
 /** Open the sealed pass into the vault. The machine never sees it opened. */
-export const open = Cmd.define("open", {
+export const open = Cmd.make("open", {
 	input: Schema.Struct({turn: Schema.Int, sealed: Schema.String, expires_in: Schema.Number}),
 	ok: Schema.Struct({renewInMs: Schema.Number}),
 	err: ["unsealed", "closed"],
 });
 
 /** Clear the vault and tell the person. */
-export const drop = Cmd.define("drop", {
+export const drop = Cmd.make("drop", {
 	input: Schema.Struct({why: Schema.String}),
 	ok: Schema.Null,
 	err: ["unreachable"],

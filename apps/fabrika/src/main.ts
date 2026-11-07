@@ -3,6 +3,7 @@ import {backoffDelay, defaultRng} from "@demlik/tea/retry-backoff";
 import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
+import {followLook, frameColor} from "@kampus/fabrika-design";
 import {Cause, Effect, Exit, type FileSystem, Layer, Path, Scope, Stream} from "effect";
 import type {ChildProcessSpawner} from "effect/process";
 import {
@@ -31,7 +32,6 @@ import {type LinkNow, readAsks, readToApp, type ToPage} from "./messages.ts";
 import {Browser, NotOpened, openOutside} from "./outside.ts";
 import {noteOf, POLICY, reconnectMachine, type Tried} from "./reconnect.ts";
 import {startHost} from "./start-host.ts";
-import {followLook, frameColor} from "./themes.ts";
 import {Unattached, type Wire} from "./wire.ts";
 
 // The Electron edge: the main process. It runs nothing of fabrika's own: every tile's tsh, every

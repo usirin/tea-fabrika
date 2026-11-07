@@ -46,7 +46,7 @@ Three words to know. **Plan-115** is [ticket 115's plan](./ticket-115.md): laws 
 13. **Chaos is not in the build on the real ledger.** Why: code not there cannot be reached, so no flag or slip can aim it at real notes. Cost: a second stage to deploy and remove for a cloud run. Sure: 85%.
 14. **The window parses Markdown; the sealed program never does.** Why: the fact keeps raw text, blocks are derived, a wake would otherwise parse every note, and a program's box stays small. Cost: each window parses for itself. Sure: 90%.
 15. **The bridge is a client with a key, not a local socket with a name.** Why: a handshake lets an agent just say who it is, and real notes live on Cloudflare, where a local socket cannot reach. Cost: one Approve per agent name, and a key file. Sure: 85%.
-16. **On notes, an agent's "own run" is its own client, not its own process.** Today's rule gives each agent its own run because a run in a tile writes as the person. In `next/`, `by` comes from the checked key, so that danger is gone, and a process of its own would hide the agent's doc from the list. Cost: this differs from today's `drive.ts`, and a later program with private state gets a real run of its own. Sure: 75%. The doubt is the first such program, in Tier 2.
+16. **On notes, an agent's "own run" is its own client, not its own process.** Today's rule gives each agent its own run because a run in a tile writes as the person. In `next/`, `by` comes from the checked key, so that danger is gone, and a process of its own would hide the agent's doc from the list. Cost: this differs from today's `drive.ts`, and a later program with private state gets a real process of its own. Sure: 75%. The doubt is the first such program, in Tier 2.
 17. **Real packages now, not folders.** Settled by the owner. "Two people first" argues against publishing, not against package boundaries. Real boundaries prove the library is enough, because a missing tool shows up as an import that doesn't resolve. A program package is already the shape a pack has. Cost: a `package.json` and a `tsconfig.json` per package, and a few config lines. Sure: 85%. The doubt was code-graph's dead-export check and the bundler across packages (esbuild then, Rolldown since 2026-11-05); [Packages](#packages) says what each forces.
 18. **`@kampus/libfabrika`'s top level holds only the app layer's names.** Lower layers are on subpaths that only named importers may use. Why: with one top level, an import name could not tell a program reaching `app` from one reaching `transport`, and the strict one-layer-down rule would have nothing to read. It also keeps a program's box small. Cost: three more lines in an `exports` map, and a law. Sure: 80%. The doubt is how many names the app layer ends up saying again.
 19. **Fabrika is the logic, and Tuval is the projection of it.** Settled by the owner. `@kampus/tuval` holds everything a client does. `next/apps/fabrika` is only wiring and the deploy stack. Tuval may import `@kampus/libfabrika`, and never the other way. Why: a client's logic then has one home, and the library can't come to lean on a screen. Cost: tuval holds Electron code, on a subpath, and its `electron` row needs two named exceptions. Sure: 85%. The doubt is what counts as "dialing": see [Packages](#packages).
@@ -446,7 +446,7 @@ claude mcp add fabrika -- fabrika mcp --as claude
 
 ```ts
 // What the agent sees. One tool per input, from its schema. None is written by hand.
-//   runs            what runs, your own run, and tiles as a list you cannot drive
+//   ps              the processes running now, and tiles as a list you cannot drive
 //   notes_list      read-only
 //   notes_read      read-only
 //   notes_save      {value: {note, base, body}}
@@ -486,14 +486,14 @@ const agentMay = ["initialize", "view.open", "window.msg:notes", "ledger.read", 
 - **A retry is one row.** An MCP call has no id, so the bridge makes one from the key, note, base and body. Running the same call again repeats that id, which p53 keeps once.
 - **This tier still does not defend against a person's own agents,** as the menu bar's section says. These are the door's rules for an honest client, and each person answers for theirs.
 
-**An agent's "own run", in `next/`.** See biggest call 16. An agent never drives a tile, since a tile is a window onto a process and it has no window Msgs. `runs` only lists what is running. Tier 1 has no desk, so that means processes, and tiles join the list when the desk arrives in Tier 2.
+**An agent's "own run", in `next/`.** See biggest call 16. An agent never drives a tile, since a tile is a window onto a process and it has no window Msgs. `ps` only lists what is running, as `ps` does in a Unix shell and in today's tsh. Tier 1 has no desk, so that means processes, and tiles join the list when the desk arrives in Tier 2. One ticket's jobs are `timeline`'s, not `ps`'s. *Changed 2026-11-07 (owner): it said `runs`.*
 
 **What moves from today's version, from main at `2c29c13`.** The copies are marked as the styling exception is, read at c7.
 
 | From `packages/fabrika/src/mcp/` | Lines | What happens |
 |---|---|---|
 | `tools.ts` | 139 | Copied to `next/packages/libfabrika/src/mcp/tools.ts`, about 120 lines. It stays pure. Its three type imports fit `Program`. Renamed as it lands: `toolsOf` to `listTools`, `callOf` to `readCall`, `toolNameOf` to `toolName`, `toolNamesOf` to `toolNames`, `toolInputsOf` to `toolInputs`. Its `Call` moves from `kind` to `_tag`, through `Schema.TaggedUnion`. |
-| `drive.ts` | 142 | Its lessons stay: calls one at a time, tiles only as a list, `runs`' shape. Written fresh for `next/` at `mcp/drive.ts`, 70 to 100 lines. `AnyRun`, `memoryStorage` and `run.offer` cannot come. |
+| `drive.ts` | 142 | Its lessons stay: calls one at a time, tiles only as a list, the shape of its `runs` tool, which is `ps` here. Written fresh for `next/` at `mcp/drive.ts`, 70 to 100 lines. `AnyRun`, `memoryStorage` and `run.offer` cannot come. |
 | `serve.ts` | 145 | The use of `@modelcontextprotocol/server` stays. Written fresh at `mcp/serve.ts`, 60 to 90 lines, over stdio. No handshake. |
 | `handshake.ts`, the bridge's Unix socket, `host/mcp` in `apps/fabrika/src/host/socket.ts` | | **Not copied.** A handshake lets an agent just say its name, with only a file's mode behind it. And today's connected home has no agents' socket at all (`apps/fabrika/src/host/agents.ts`), while real notes live on Cloudflare. |
 | `apps/fabrika/src/host/agents.test.ts` | 340 | What applies, about 150 to 200 lines, ported by the test writer. The top bar's count does not apply. |
@@ -929,6 +929,7 @@ export const Attached = Schema.TaggedUnion({
 
 // data/project.ts: rings, in the object's own SQLite beside the log. Never a fact, never folded.
 //   ring {gateway, stream, after}   from ledger.wait; kept until `stream` passes `after`
+//                                   (P6 built it in data/referee.ts as {to, stream, after}: the data layer knows no gateway)
 //   ring {gateway, rows: true}      from door.watch; rung whenever the waiting rows or the let-in list change
 // append(stream) -> rev: read the rings on `stream` with after < rev, call rung(stream, rev) on each gateway, drop them.
 
@@ -985,6 +986,30 @@ const rung = (sockets: ReadonlyArray<BrainSocket>, stream: string, rev: number) 
 - `seen` on a letter, the last log rev the writer had read, filled by code, and `sentAt`, both kept out of deciding code's types. The referee refuses a `seen` past its head. This was `saw`, the window's inbox position (the slice has it for counter); it became `seen` on the entry wrapper on 2026-11-01 ([saved state](../direction/saved-state.md)). A grant's `saw`, what a person looked at when they said yes, is a different fact and keeps its name.
 - **On each note's save:** `base`, since which version a writer worked on exists only then. `body` whole and raw, every time, since a version is never overwritten. `how`, since "kept from a stale screen" cannot be worked out later, and `from`, since nothing else ties a kept note to its source. The letter's `by`, `arrivedAt`, `sentAt`, `seen` and `cause` come with it, using the plan's existing fields: who wrote it, the log's clock, their own clock, what they had seen. **New on every letter: `for`, the person the writer works for,** from the checked grant, so a fact names both the agent and its person with no fold. The agent's name is its grant's `saw.label`, recorded and shown to the person at Approve. `sentAt` stays out of deciding code's types, and `refuse` sees only the Msg. Cost: one full body per save, about 500 small rows a day at most, a guess.
 - **On each `revoked`:** what the person saw and the check, inside the signed text, the same as a grant.
+- **Added 2026-11-07 (owner), three facts that were lost:** `dead` keeps each throw's error class (p80), `down` gains `until` (p80), and a failed Cmd always comes back as a letter with a `why` (p35). Each existed only at the moment it happened. The throw's message goes to the trace, never the ledger, since a message can quote a note and the trace's content can be deleted.
+- **Added 2026-11-07 (owner), the record of how it ran:** each process's spans in its thin JobRecord, kept forever (P37); raw health rows about 2 weeks, and an hourly summary per piece kept forever; each object's own size, about once an hour while awake. Why: a slow step or a growing object is a trend, and a trend not kept cannot be rebuilt. [Monitoring is in Tier 1](./tier-1.md#monitoring-is-in-tier-1) has the rest.
+
+```ts
+// A sketch of the new shapes, in next/'s Schema. Key names are P33's, P34's and P37's plans' to settle.
+const Dead = Schema.TaggedStruct("dead", {
+	tries: Schema.Number, limit: Schema.Number, m: Schema.String, build: Schema.String,
+	errors: Schema.Array(Schema.String), // each throw's error class, one per try: ["TypeError", "TypeError", "RangeError"]
+});
+const Down = Schema.TaggedStruct("down", {
+	why: Schema.String, crashes: Schema.Number,
+	until: Schema.Number, // when it tries again, on the referee's clock
+});
+// One row per piece per hour, kept forever, in the object that wrote it. Not a ledger entry.
+const Summary = Schema.TaggedStruct("summary", {
+	piece: Schema.String,  // "runner.step", "door.envelope", "ledger.ring"
+	hour: Schema.Number,   // the hour's start
+	count: Schema.Number,  // rate
+	errors: Schema.Number, // errors
+	ms: Schema.Struct({p50: Schema.Number, p95: Schema.Number, max: Schema.Number}), // duration
+	lag: Schema.optional(Schema.Number), // a piece that delivers events: the furthest a reader fell behind the newest entry, in revs
+});
+const Size = Schema.TaggedStruct("size", {at: Schema.Number, bytes: Schema.Number}); // ctx.storage.sql.databaseSize
+```
 
 **Can wait, since they rebuild from the log:** durations, recovery times, verdict tables, any view, a note's version number and name, the list's order, a diff between versions, a note's drawn blocks and code colors. `check` is itself a fold, so a better checker later re-judges old runs.
 
@@ -1087,11 +1112,11 @@ export const fromLine = (line: Line): unknown => ({_tag: line._tag, ...(line.bod
 const fact = Schema.decodeUnknownOption(MemberFact)(fromLine(line));
 ```
 
-- **Not tags, for now.** Refusals stay plain data, `{why}`, beside an answer: `{rev} | {why}`, as plan-115 stands. `Input` stays a union on `writes`: it holds a schema and a function, so it is never data. `Split | Tile` arrives from PR 223 as a union by shape, and goes with the desk in Tier 2. Sure: 70%. The doubt is `{why}`: it reads like a tag, and the owner's pick does not name it. The owner's word settles it, and a change costs one schema per answer.
+- **Not tags, for now.** Refusals stay plain data, `{why}`, beside an answer: `{rev} | {why}`, as plan-115 stands. `Input` stays a union on `writes`: it holds a schema and a function, so it is never data. `Split | Tile` arrives from PR 223 as a union by shape, and goes with the desk in Tier 2. Sure: 70%. The doubt is `{why}`: it reads like a tag, and the owner's pick does not name it. The owner's word settles it, and a change costs one schema per answer. *Changed 2026-11-07 for the ledger's answers only (P6, approved by the lead agent): `append` answers `{_tag: "placed", rev, pos}` or `{_tag: "refused", why}`, and `wait` answers `ready` or `parked`, since AGENTS.md tags every union we define. Other refusals stay as they are.*
 
 ## The public interface
 
-The tests compile against this block and nothing else of the new code. Plan-115's `Ledger`, `LedgerCalls`, `LedgerError`, `CoordinationLayer` and `ProgramDown` carry over as written. `ProcessManager` does not: it gains `exit`, `info`, `monitor`, `demonitor` and a run number per start in P33 (owner, 2026-11-06). These are the changes and additions.
+The tests compile against this block and nothing else of the new code. Plan-115's `CoordinationLayer` and `ProgramDown` carry over as written. `Ledger`, `LedgerCalls` and `LedgerError` do not: P6 built them anew, with `Doorbell`, `Appended` and `Waited` beside them ([the data layer, as built](#the-data-layer-as-p6-built-it), 2026-11-07). `ProcessManager` does not: it gains `exit`, `info`, `monitor`, `demonitor` and a new process id for each start in P33 (owner, 2026-11-06). These are the changes and additions.
 
 ```ts
 // next/packages/libfabrika/src/transport/wire.ts
@@ -1305,9 +1330,9 @@ export const colors: (highlights: Highlights, theme: Theme) => (code: string, la
 
 // next/packages/libfabrika/src/mcp/tools.ts, on `@kampus/libfabrika/mcp`. Copied, from today's mcp/tools.ts. Pure.
 export type Tool = {readonly name: string; readonly description: string; readonly inputSchema: object; readonly annotations?: {readonly readOnlyHint: true}};
-export const listTools: (programs: ReadonlyArray<AnyProgram>) => ReadonlyArray<Tool>; // `runs` first; no tool for personOnly
+export const listTools: (programs: ReadonlyArray<AnyProgram>) => ReadonlyArray<Tool>; // `ps` first; no tool for personOnly. Changed 2026-11-07 (owner): it said `runs`.
 export const Call = Schema.TaggedUnion({
-	runs: {},
+	ps: {},
 	input: {program: Schema.String, input: Schema.String, value: Schema.Unknown},
 	refused: {why: Schema.String},
 });
@@ -1388,7 +1413,64 @@ export const menuView: (m: MenuModel) => ReadonlyArray<MenuItem>;
 
 **Changes to code plan-115 left alone:** `transport/wire.ts` takes the new `Hello`, `transport/link.ts` gains two states (`challenged`, `waiting_grant`), and `window/machine.ts` gains Cmds `sign` and `knock` and `Model.link.{fingerprint, code}`. So p5 and `link.test.ts` change with the exam. `programs/counter/program.ts` declares its ports, and in PR D its `refuse`. **The slice's tags move too:** `Message` in `transport/wire.ts` and `Link` in `transport/link.ts` go from `is` to `_tag`, with their readers in `transport/gateway.ts`, `window/machine.ts` and `window/main.tsx`. `Line` in `data/log.ts` and its SQL column go from `kind` to `_tag`, and `coordination/mailbox.ts` and `coordination/process-manager.ts` make their lines with `toLine`. So `log.test.ts`, `wire.test.ts`, `machine.test.ts` and the line read in `e2e.ts` change with the exam too. Everything else in plan-115's "no edits" list holds, except `window/page.ts`, which takes the new style.
 
-**Choices inside that block:** plan-115's stand. `append` answers `Rev`, numbers and checks share one sync block, one `ManagedRuntime` per object with no finalizers, no Layer fails at build, refusals are plain data. **Q1 and Q2 of plan-115 are now my decisions:** a failed `step` is not `bad_msg`, with no answer and no line, so the letter resends (p25). The skip list is below. **Q3:** speed caps block only on the laptop. Why each: as plan-115 argued. Sure: 85%, 80%, 80%.
+**Choices inside that block:** plan-115's stand. `append` answers `Rev`, numbers and checks share one sync block, one `ManagedRuntime` per object with no finalizers, no Layer fails at build, refusals are plain data. *Changed 2026-11-07 by P6, approved by the lead agent: `append` answers a tagged `placed {rev, pos}` or `refused {why}`, the ledger's answers only ([as built](#the-data-layer-as-p6-built-it)).* **Q1 and Q2 of plan-115 are now my decisions:** a failed `step` is not `bad_msg`, with no answer and no line, so the letter resends (p25). The skip list is below. **Q3:** speed caps block only on the laptop. Why each: as plan-115 argued. Sure: 85%, 80%, 80%.
+
+### The data layer, as P6 built it
+
+Built 2026-11-07, from [P6's row](./tier-1.md#the-pull-requests-one-at-a-time). The exported names, with their bodies left out; the code in `next/packages/libfabrika/src/data/` is the source.
+
+```ts
+// data/log.ts
+export const Rev: Schema.Int;                         // 0 means before the first entry
+export const CauseText: Schema.String;                // matches /^in-[0-9a-f]{8}-[1-9][0-9]*$/
+export type InputId = Brand.Branded<string, "InputId">; // a type only: P10's door makes one
+export const Line: Schema.Struct<{by, for, sentAt, seen, cause, build, _tag, body}>; // every key required
+export const Entry: Schema.Struct<{id, stream, pos, rev, arrivedAt, ...Line}>;     // arrivedAt: ms, the referee's
+export const Appended = Schema.TaggedUnion({
+	placed: {rev: Rev, pos: Rev},                       // a resend gets its first placing again
+	refused: {why: Schema.Literals(["bad_line", "bad_cause", "seen_ahead", "id_reused", "too_big"])},
+});
+export const Waited = Schema.TaggedUnion({ready: {rev: Rev}, parked: {}});
+
+// data/ledger.ts
+export class LedgerError extends Schema.TaggedError<LedgerError>()("LedgerError", {
+	why: Schema.Literals(["unreachable", "bad_row", "storage"]),
+	message: Schema.optional(Schema.String),            // in the span's failure, never in a tag
+}) {}
+export class Ledger extends Context.Service<Ledger, {
+	readonly append: (stream: string, id: string, line: Line) => Effect.Effect<Appended, LedgerError>;
+	readonly read: (stream: string, after: Rev) => Stream.Stream<Entry, LedgerError>;  // pages of 256
+	readonly wait: (stream: string, after: Rev) => Effect.Effect<Waited, LedgerError>; // never blocks
+}>()("@kampus/libfabrika/Ledger") {
+	static readonly sql: (sql: Sql, who: {readonly reader: string}) => Layer.Layer<Ledger, never, Doorbell>;
+	static readonly remote: (stub: LedgerCalls, who: {readonly reader: string}) => Layer.Layer<Ledger>;
+}
+export class Doorbell extends Context.Service<Doorbell, {
+	readonly ring: (to: string, stream: string, rev: Rev) => Effect.Effect<void, LedgerError>;
+}>()("@kampus/libfabrika/Doorbell") {}
+export type LedgerCalls = {                            // answers are decoded by the caller: a bad one is bad_row
+	append(stream: string, id: string, line: unknown): Promise<unknown>;
+	read(stream: string, after: number, reader: string): Promise<unknown>;
+	wait(stream: string, after: number, reader: string): Promise<unknown>;
+};
+
+// data/referee.ts: the referee's logic, plain code, the same on workerd and Node
+export interface Sql {
+	readonly exec: (query: string, ...params: ReadonlyArray<SqlValue>) => ReadonlyArray<Record<string, SqlValue>>;
+	readonly transaction: <A>(step: () => A) => A;      // workerd: ctx.storage.transactionSync
+	readonly size: () => number;                        // workerd: ctx.storage.sql.databaseSize
+}
+export class Referee extends Context.Service<Referee, {/* append, read (one page), wait, each with a reader */}>()(
+	"@kampus/libfabrika/Referee") {
+	static readonly layer: (sql: Sql) => Layer.Layer<Referee, never, Doorbell>;
+}
+
+// data/sqlite.ts, the ./sqlite subpath, Node only: node:sqlite as an Sql, for tests
+export const nodeSql: (db: DatabaseSync) => Sql;
+```
+
+- The thin `Project` object class, the real `Doorbell` (a call to the gateway) and workerd's `Sql` are P12's: each is a one-line handoff, tested only over the real wire.
+- The calls' spans (`ledger.append`, `ledger.read`, `ledger.wait`, `ledger.ring`, and `ledger.call` on a caller's side) are p95's. P37's sink keeps them.
 
 ## Styling
 
@@ -1406,7 +1488,7 @@ import "./window/style.css";                 // only what the package lacks, cop
 - **The tile and color rules came after this exception.** [Tile guidelines](../direction/tile-guidelines.md), [color principles](../direction/color-principles.md) and [pipe colors](../direction/pipe-colors.md) were decided for today's version the same day, and `next/` reads them as lessons. Today's app took the Radix fabrika theme, dark and light, in PR 308 (ticket 144), so this copy brings the Radix steps the rules name, and the owner called [the question](./tier-1.md#open-questions) moot on 2026-11-02.
 - **From the package, not copied:** the `:root` block, lines 12 to 133 at `25d1317` (Radix 3.0.0 steps as `light-dark()` pairs: slate surfaces, lines and text, indigo for the turn, grass, amber and red for done, running and stuck; then type at 22/15/14/13/12/11 px, spacing and radius). P31 reads each value again against [themes](../direction/themes.md) and [color principles](../direction/color-principles.md), and drops lines 115 to 127, the old names. Whether the type, spacing and radius tokens go in the package or stay in the copy is P31's plan to say; the package note names only the colors, the mapping and the text roles.
 - **Copy:** the bottom line's rule, and the slot rule. *This once said copy the `:root` block too, and before that lines 1 to 168, which was wrong, and then lines 7 to 137 at `ec7ef72`, graphite `--n-*` and accent `--a-*`, which PR 308 replaced.*
-- **Manti, as today's app.** `next/` uses Manti (the owner, 2026-11-02; [UI on Manti](../direction/ui-on-manti.md)). The Manti mapping, today's `apps/fabrika/src/window/theme.css`, 139 lines that set Manti's tokens from our names, comes from the package, not a copy, and the style build puts `@manti-ui/styles/index.css` before it, as today's `build.ts` does. `@manti-ui/react` and `@manti-ui/styles` are `catalog:` lines, already pinned at 0.13.0, and the root `patchedDependencies` already patch `@manti-ui/react` for the whole workspace.
+- **Manti, as today's app.** `next/` uses Manti (the owner, 2026-11-02; [UI on Manti](../direction/ui-on-manti.md)). The Manti mapping, in `@kampus/fabrika-design/tokens.css` since P31 (it was `apps/fabrika/src/window/theme.css`), which sets Manti's tokens from our names, comes from the package, not a copy, and the style build puts `@manti-ui/styles/index.css` before it, as today's `build.ts` does. `@manti-ui/react` and `@manti-ui/styles` are `catalog:` lines, already pinned at 0.13.0, and the root `patchedDependencies` already patch `@manti-ui/react` for the whole workspace.
 - **Fit, not copy: `.tile`, `.tile.focused` and `.titlebar`.** Today `.tile` is `position: relative; flex: 1`, and `.titlebar` is an absolute `<button>`. In `next/`, `Tile` draws with `position: absolute` and pixels from `fold`, and the title bar is a `<header>`. So their colors, borders and type carry over, their position and size are written fresh, and the PR names each edit.
 - **Keep the meaning rule:** accent is "your turn" only; red stuck or broken; amber running; green done.
 - **Keep the frame rules from `frame.tsx`:** bars monospace, plain words joined by ` · `, no item backgrounds, no line under the top bar or over the bottom line.
@@ -1449,7 +1531,7 @@ Red to green, as plan-115: after the names of T1, T7, T15 and T16 everything com
 
 - **T0.** `ends`: local commit. Scenario p65. The test writer adds the slice's tests at their new paths, as new files, since nothing of `next/` is on main to move. Whatever route [takes PR 223 to the lane](./tier-1.md#still-open-how-next-reaches-the-lane), the desk and its mirrored-focus check do not come along. First step: `code-graph . --unreachable`, `--interface-width` and `build.ts` on the new shape. If either doubt in [Packages](#packages) is off, stop and tell the owner.
 - **T1.** `ends`: local commit. Scenario c1. Properties p1 to p5, p8, p9, p16.
-- **T2.** `ends`: local commit. Fixture: `Ledger.sql` on node:sqlite. Scenario p18. Other: p10 to p13, p19 to p21, p28, p68. Criterion c2.
+- **T2.** `ends`: local commit. Fixture: `Ledger.sql` on node:sqlite. Scenario p18. Other: p10 to p13, p19 to p21, p28, p68, p92 to p95. Criterion c2.
 - **T3.** `ends`: local commit. Fixture: `ProgramRunner` with real `counter`. Scenario p22. Other: p14, p25, p35, p69. Criteria c2, c3.
 - **T4.** `ends`: local commit. Fixture: `answerFrame` with a fake `admit`. Scenario p26, p23. Other: p15, p42, p43, p67. Criterion c2.
 - **T5.** `ends`: local commit. Fixture: `sshsig` vectors made by real `ssh-keygen`, saved in `fixtures/next/` by the first exam PR, so the owner reads them ([answered 2026-11-02](./tier-1.md#open-questions); the test writer only adds `*.test.ts`). Scenario p27. Other: p29 (needs T6 to run). Strict Mode goes on here, with tea 0.23.0's `useRuntime`, whose `send` runs the Effect inside tea, so no window file joins the exam's edge list; [experiment 213](../../experiments/213-tea-react-select.md) ran it on the Effect engine under Strict Mode and the Compiler, 400 of 400 trials, sure 90%. *Changed 2026-11-05: this once put a stand-in hook in `window/use-model.ts`, with `Effect.runFork` on the edge list.* Spike first: does a non-extractable Ed25519 `CryptoKey` survive reload in IndexedDB in Chromium, on 127.0.0.1? *Done 2026-11-05, P3: yes, over a reload and a browser restart, in Chromium 156 ([experiment 215](../../experiments/215-browser-key-survives-reload.md)). The key belongs to the exact origin, port included, so the person's brain listens on one fixed port.*
@@ -1484,8 +1566,8 @@ Before it, a small exam PR. See [The exam PR](#the-exam-pr-not-in-this-plan).
 
 ### PR E
 
-- **T12.** Scenario p34. Other: p36. Criterion c11.
-- **T13.** Scenario p35's live half, p37, p38, p60.
+- **T12.** Scenario p34. Other: p36, p90. Criterion c11.
+- **T13.** Scenario p35's live half, p37, p38, p60, p91.
 - **T14.** Scenario p39, p41's chaos step. The owner reads `alchemy plan --stage drill` and says yes before the cloud run, and the stage is removed after it. The drill dials on PR D's `mcp/client.ts`, with its own key, and comes in by the same door. Criteria c9, c12. `ends`: PR E.
 
 ## Properties
@@ -1497,6 +1579,9 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - **p5** adds: `waiting_grant` is not stuck. A `client.granted` moves it. A timer does not leave it. Plant: `client.granted` ignored.
 - **p10 to p15, p17** run on `stage`, not Miniflare. **p15** adds the checks of p26.
 - **p17's bar is measured new** (T6). The old table's start numbers came from raw Miniflare. Known so far: restart 292 to 539 ms, first answer 1.2 to 1.4 s (exp 171). Same rule: base and head in one sitting, the laptop blocks, CI only prints.
+- **p18 and p20 are restated for a wait that answers at once** (P6, 2026-11-07, building the owner's call of 2026-11-02 that a wait is data). p18: a wait with news already there is `ready` with the stream's newest rev; a wait with none parks, and the first append to that stream past its `after` rings it once; an append to another stream, a resend or a refused line rings nothing. p20: a wait leaves nothing running, so `Effect.runSync` of a parking wait answers `parked`; and `LedgerError` gains `storage`, for a SQLite throw such as `SQLITE_FULL`. *p20 said: an interrupted wait ends and leaves no bell.*
+- **p10 and p18 refuse an id reused with another body** (owner, 2026-11-07). The same `(stream, id)` with another `by`, `for`, `cause`, `_tag` or `body` is `refused id_reused`, and nothing is written; `sentAt`, `seen` and `build` may differ on a resend. *They said: one line, the same answer, the first body kept, which dropped the second body with no trace.*
+- **p21 moves to P9** (P6's plan, 2026-11-07). It tests `Mailbox`, `ProcessManager` and `CoordinationLayer`, which P9 builds. p10 to p13 stay with the stage, in P12.
 - **p22** adds, from PR D: a program's own `refuse` leaves no line and answers with that program's `why`. `bad_msg` stays for a bad shape.
 - **p24** runs oxlint on `next/`, with an edge only on a line under an edge comment, `-- edge: <why>` (owner, 2026-11-05; it said: only in files the exam PR lists).
 - **p25** is `new`, no longer waits on the owner. **Rewritten 2026-11-06 (owner):** when a program's step throws on a fresh letter: no answer and no line, and the letter is counted; on the third throw it moves to dead (p80). A wake that fails on a saved letter marks the process `down` and keeps every letter, never skipping it. A real refusal still gets `bad_msg`. From PR D, "old letters the new code refuses count for nothing" holds only for the counter and chaos; a saved note always folds (p55). *It said, from plan-115: on a wake, the wake fails rather than skipping the letter, which no note backed and which left a process down for good with no way to say why.*
@@ -1538,8 +1623,8 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Plants: no cap; `stop` ignored while a tick is open; a random number from outside the seed.
 
 **p35, Cmds in the runner.** `new`, node. s7, s1. `ProgramRunner`.
-- A fresh letter saves first, and only then fires. A fold from the log fires nothing, however many ticks it holds. A `tick:<at>` rung twice saves once and fires once. A `fire` from a program other than chaos is refused as `bad_cmd`. A process that dies after the save leaves asked with no did, and the next wake shows that and goes on. Results come back as letters.
-- Why: the worst bug here is a wake that re-fires. Plants: fire before save; replay fires; no table check.
+- A fresh letter saves first, and only then fires. A fold from the log fires nothing, however many ticks it holds. A `tick:<at>` rung twice saves once and fires once. A `fire` from a program other than chaos is refused as `bad_cmd`. A process that dies after the save leaves asked with no did, and the next wake shows that and goes on. Results come back as letters. **A failed Cmd always comes back as a letter with a `why`,** `bad_cmd` and a handler's error alike, so why it failed is a fact (owner, 2026-11-07).
+- Why: the worst bug here is a wake that re-fires. Plants: fire before save; replay fires; no table check; a failed Cmd that comes back as nothing, or with no `why`.
 
 **p36, the checker.** `new`, node, pbt. s7. `check`.
 - Over any letters: repeats by id count in `doubled`, missing `pos` in `gaps`, and a clean stream gives zeros.
@@ -1654,8 +1739,8 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Why: a law, not a hope, for what the copies need and what agent text must not do. Plants, by hand: no `'wasm-unsafe-eval'`; policy on one stage only; the highlighter in the first script; a `var(--ink)` left in.
 
 **p63, an agent through MCP (scenario of T21).** `new`, node with the SDK's own client, and real `dev.ts`; ported where it applies from `agents.test.ts`. s11, s9. `mcp/tools.ts`, `mcp/serve.ts`, `mcp/drive.ts`, `mcp/client.ts`.
-- Tools are one per input, from its schema: `runs` first, `notes_list` and `notes_read` read-only, `notes_save` not. An input with `personOnly` has no tool, and a call to it is refused as an unknown tool. A value that does not fit is refused in words. No tool name holds grant, approve, remove, or chaos.
-- Before Approve, the list answers, and each call answers in words with the code. No letter is written. After one Approve, the same name needs none again, across restarts of the bridge. A second name gets its own row. A stale `base` is refused in the same words as a window's `why`, and writes nothing. The same call twice is one row. `runs` lists processes and drives none. `by` is the agent's key and `for` is the person, on every letter.
+- Tools are one per input, from its schema: `ps` first, `notes_list` and `notes_read` read-only, `notes_save` not. An input with `personOnly` has no tool, and a call to it is refused as an unknown tool. A value that does not fit is refused in words. No tool name holds grant, approve, remove, or chaos.
+- Before Approve, the list answers, and each call answers in words with the code. No letter is written. After one Approve, the same name needs none again, across restarts of the bridge. A second name gets its own row. A stale `base` is refused in the same words as a window's `why`, and writes nothing. The same call twice is one row. `ps` lists processes and drives none. *Changed 2026-11-07 (owner): it said `runs`.* `by` is the agent's key and `for` is the person, on every letter.
 - Plants: a tool for a `personOnly` input; `by` taken from `--as`; a name used without a grant; a retry with a new id.
 
 **p64, an agent stays an agent.** `new`, node. s11, s4. `transport/answer.ts`, door.
@@ -1675,10 +1760,10 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Why: old hellos can never get the list back, and with no reader, nothing else would notice a wrong one. Plants: a list written by hand in the hello, not read from `Host`; `has` dropped from the row; `verify` listed where it can't prompt; the door branching on `has`.
 
 **p67, the door stamps every input (scenario of P10).** `new`, node. s4, s7. `transport/answer.ts`, door. *Added 2026-11-05 (owner), from [inputs carry their sender](../direction/inputs-carry-their-sender.md).*
-- Every input past the door becomes one `Envelope` `{id, by, arrivedAt, input}`, made in memory there. `id` is an `InputId`, `in-<run>-<n>`: only the door makes one, the run part is fresh at each start of the door's object, and no id is made twice across any number of starts. `by` is the checked key's writer, whatever the params say. `arrivedAt` is the referee's clock.
+- Every input past the door becomes one `Envelope` `{id, by, arrivedAt, input}`, made in memory there. `id` is an `InputId`, `in-<run>-<n>`: only the door makes one, the `<run>` part, which names the door's start ([question 20](./tier-1.md#open-questions)), is fresh at each start of the door's object, and no id is made twice across any number of starts. `by` is the checked key's writer, whatever the params say. `arrivedAt` is the referee's clock.
 - A frame that names its own `id` or `by` is refused in words, and the refusal is recorded. Nothing it asked for happens.
 - Each envelope is logged in the brain's own log: who sent it and where it went. Never a raw key's text, and a `Redacted` value logs hidden.
-- Why: who sent each input exists only at the door, and the note decided to record it first. Plants: an `id` taken from the frame; `by` read from params; a client-sent `by` dropped silently instead of refused; a raw key in the log line; a run part reused after a restart.
+- Why: who sent each input exists only at the door, and the note decided to record it first. Plants: an `id` taken from the frame; `by` read from params; a client-sent `by` dropped silently instead of refused; a raw key in the log line; a start part reused after a restart.
 
 **p68, an entry keeps its cause (scenario of P6).** `new`, node. s7, s1. `data/log.ts`, `Ledger`. *Added 2026-11-05 (owner).*
 - Every entry has `cause`: a `CauseText` matching `/^in-[0-9a-f]{8}-[1-9][0-9]*$/`, or null for an `own` write. A text that does not match is refused and nothing is written. Read back, it is the same text, and no public function turns a `CauseText` into an `InputId`.
@@ -1702,18 +1787,18 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Plants: a reload that drops the queued Msg; a migrate that skips S3's chain; `[Restart]` that keeps the old `init`.
 
 **p79, processes (scenario of P33).** `new`, node. s3, s7. `coordination/process-manager.ts`. *Added 2026-11-06 (owner: Tier 1 builds this slice of C4 and C5).*
-- `exit` writes `exited {why}`; `info` lists every live process with its run; each start after a crash writes `restarted {run, why, build}`, and the run number only grows.
-- A monitor gets one `DOWN {pid, run, why, to}` when its process ends, `noproc` at once if it was already gone, and none after `demonitor`, which also flushes a `DOWN` already in the inbox. A `DOWN` from an earlier run never lands in a later one.
+- `exit` writes `exited {why}`; `info` lists every live process with its id and name; each start is a new process with its own id, `process_<26 chars>`, and each start after a crash writes `restarted {process, after, name, why, build}`, where `after` is the id of the process it replaced. No process id is ever used twice, and `ps` counts restarts from `restarted` facts. *Proposed by the lead 2026-11-07, 75%: a start is a new process (OTP); the `run` field goes. Doubt: whether `after` is a link rather than a field; P33's plan settles it.*
+- A monitor gets one `DOWN {process, why, to}` when its process ends, `noproc` at once if it was already gone, and none after `demonitor`, which also flushes a `DOWN` already in the inbox. A `DOWN` from an earlier process never lands in a later one.
 - The restart window counts a restart on its edge. A name is never freed. Only the parent sends an exit signal.
 - Who is online folds from each gateway's last ping and is never written.
 - C5's owed check: each of the above against OTP's own documentation, since experiment 99 came before experiment 107.
-- Plants: a `DOWN` with no `to`; a monitor on a gone process that waits forever; `demonitor` leaving a `DOWN` behind; a name reused; a stale `DOWN` delivered to a new run.
+- Plants: a `DOWN` with no `to`; a monitor on a gone process that waits forever; `demonitor` leaving a `DOWN` behind; a name reused; a stale `DOWN` delivered to a new process.
 
 **p80, a crash is not a refusal (scenario of P34; replaces p25's wake rule).** `new`, node and the stage. s3, s9. `app/runner.ts`. *Added 2026-11-06 (owner).*
-- A fresh letter whose step throws gets no line; it is counted per letter id in the process's own storage. On the third throw it moves to `<pid>/dead` with `dead {tries, limit, m, build}`, and its sender gets `{why: "dead"}`, so the outbox stops resending.
-- A process that crashes N times in T seconds goes `down`, with backoff, and a resend does not wake it. `[Restart]` exits it and starts it with the new `init`.
+- A fresh letter whose step throws gets no line; it is counted per letter id in the process's own storage. On the third throw it moves to `<pid>/dead` with `dead {tries, limit, m, build, errors}`, and its sender gets `{why: "dead"}`, so the outbox stops resending. `errors` holds each throw's error class, one per try; the message goes only to the trace, where a person can delete it, since a message can quote a note (owner, 2026-11-07).
+- A process that crashes N times in T seconds goes `down {why, crashes, until}`, with backoff, and a resend does not wake it. `until` is when it tries again, on the referee's clock (owner, 2026-11-07). `[Restart]` exits it and starts it with the new `init`.
 - A wake that fails on a saved letter marks the process `down`, writes why, and keeps every letter. No saved letter is ever skipped or moved, so a saved note always folds (p55).
-- Plants: a fourth try; a poison letter that blocks the rest of the inbox; a saved letter moved to dead; a `down` process woken by a resend.
+- Plants: a fourth try; a poison letter that blocks the rest of the inbox; a saved letter moved to dead; a `down` process woken by a resend; a `dead` fact with fewer error classes than tries; a message in `errors`; a `down` with no `until`, or one it does not wake at.
 
 **p81, the brain comes back (scenario of P12 and P19).** `new`, stage and real Electron. s3, s8. `dev.ts`, the launchd plist.
 - Under `dev.ts`: workerd killed with `kill -9` mid-burst comes back alone, with a start fact naming its build, and nothing acked is lost (with p13). A brain that dies in a loop stops at the brake, and says so. At the 500 MB mark it restarts.
@@ -1723,6 +1808,56 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 **p82, version agreement (scenario of P10).** `new`, node. s5. `transport/hello.ts`, door.
 - The brain picks the highest version both sides list. No shared version is refused in words, and nothing is written. A field the brain does not know is ignored, never refused.
 - Plants: the lowest shared version picked; a mismatch let through; an unknown field refused.
+
+**p83 to p87 and p89, the commit check (P32).** `new`, node. `src/exam/commits.ts`, `commits.test.ts`, `commits-git.test.ts`. *Added 2026-11-07, from P32's plan, approved that day: the owner settled the signed text (the link), merge-only and the newest-link rule; the lead agent approved the rest. It builds [a unit of work is a commit](../direction/a-unit-of-work-is-a-commit.md) and [experiment 221](../../experiments/221-signed-steps-and-rebases.md).* Every law reads `allowed_signers` and `exam-paths.json` from the base, never from the change under test, and judges a pull request only when its own change (`base...head`, three dots) names a path under `next/**` or on the base's exam list; any other answers `done`, "not in scope". The signed text is one function, `signedText`, the link in v2: `step`, `ticket`, `version`, `from` tree, `to` tree, no commit and no parents.
+- **p83, a commit counts only when its role's key signed a link that fits it.** Its note on `refs/notes/fabrika` decodes; the text rebuilt from the note verifies with `ssh-keygen -Y verify -n fabrika-step` under the principal `find-principals` names, which equals the note's `step`; `from` is the first parent's tree and `to` the commit's tree; its `ticket` is the pull request's. Else `stuck: unsigned_commit`. Author, message and trailers are never read. Plants: verify always true; keys read from the head; trees never compared; ticket not checked; namespace not passed; role taken from the note with no principal check.
+- **p84, a `build` commit changes no path on the base's exam list,** judged against its first parent with renames' both sides, merges included. Else `stuck: build_touched_exam` with the paths. Plants: only added paths; a rename's old path ignored; the list read from the head; merge commits skipped.
+- **p85, any exam path in the pull request's own change asks the owner:** `ask: owner: exam_read` with the paths, sorted, beside every `stuck`. A path with a control character counts as an exam path. Plants: a two-dot diff; the list from the head; the list's own rows removed.
+- **p86, the chain reaches the merged tree.** At pull request time the head contains the base, else `stuck: broken_chain`; the fix is a `lead` merge of `main`, never a rebase. After the merge, the `attested` links in `field/runs.jsonl` for one squash run from the tree of its `base` to its tree, each `from` the last `to`, no tree left twice, one ticket, each `sig` verified against `allowed_signers` at the link's `keys` commit. Plants: no up-to-date check; a gap passes; the head's tree in place of the squash's; keys from main's head.
+- **p87, the keys file says one thing:** `<role> namespaces="fabrika-step" ssh-ed25519 <key>` per line, roles `tests`, `build`, `lead`, each at least once, no key twice, no other option. Else, or with no file, the run fails and judges no commit. Plants: an ECDSA key; one key under two roles; a fourth role; a missing namespace.
+- **p89, only a step's newest signature for the ticket counts.** Over every verified note on `refs/notes/fabrika` for the ticket, each step's highest `version` must be a link the pull request uses, and its older links in the pull request come before it; a tie of two links at one `version` counts neither. Else every commit of that step is `stuck: stale_link`, or the head when the pull request has none. After the merge, the same over `field/runs.jsonl`. `sign` writes the step's highest verified `version` plus one. Plants: `version` ignored; the scan limited to the pull request's commits; an unverified note's `version` counted; a tie broken by picking one; the after-merge half reading only the squash's own rows.
+
+**p88, every machine passes the sync test (S2, P35).** `new`, node. `src/exam/laws-scan.test.ts`. *Added 2026-11-06: [saved state, S2](../direction/saved-state.md#s2-every-machine-passes-the-sync-test), decided 2026-11-01. p83 to p87 are P32's.*
+- Each machine's laws files call `syncTest(`, or one of them says `// sync test left out: <why>` with a reason. The scan reads text; the helper lands in libfabrika's test kit in P11, until tea ships one.
+- Plants: laws with no sync test and no reason; a reason left empty. The sync test in a second laws file passes.
+
+**p90, a revoke stops a client at the door (scenario of P17).** `new`, stage, on a throwaway ledger. s4, s7. door, `ClientManager`. *New 2026-11-07 (owner).*
+- Checks: once a key's `revoked` fact lands, the brain refuses every write from that key, so nothing more from it reaches the ledger, even from a client still running old code.
+- The test: a seeded chaos run with a test client writing to the target. At a step the seed picks, the drill signs a `revoked` for that client's key with a key in `founded.keys`, as `grant.ts revoke` does. The client then plays old code: it ignores the 4003 close, keeps sending, and dials again with its old hello. Every later write is refused with its reason (`{why: "not_granted"}` at the hello, since `admitted` folds a revoked key out), and the ledger holds no letter `by` that key with an `arrivedAt` after the `revoked` fact's `arrivedAt`. The same seed gives the same step.
+- Why: a stop that relies on the client hearing a message fails on the client that matters most, the one that is stuck or old. Plants: the guard only at the hello, so an open socket keeps writing; the revoke read from a cached member list; a revoke that closes the socket and nothing more.
+
+**p91, nothing is lost (scenario of P27).** `new`, stage, on a throwaway ledger. s7, s3. `check`, the JobRecord, `spans.read`. *New 2026-11-07 (owner): "nothing is lost" is a Tier 1 goal, and chaos is one of the most important programs.*
+- Checks: for every fault a seeded run fires, the record answers four questions from the ledger and the JobRecord alone: what broke, when, why, and how it recovered. "What" is the fault's target and the process or client it hit. "When" is the `tick` and the `did`'s `arrivedAt`. "Why" is the `did`'s `ok` or `why`, the span's error class, and any `dead`, `down` or failed Cmd's `why`. "How it recovered" is the `restarted`, the `down`'s `until` and the wake after it, or a client's next `door/hellos`. A fault that leaves any of the four blank fails the run.
+- The test reads only what is kept: no stderr, no Workers Logs, no Cloudflare trace. The same seed gives the same faults, and the answers are compared per fault.
+- Why: a fault nobody can explain after the fact teaches nothing, and a missing fact cannot be added to entries already written. Plants: `dead` with no error classes; `down` with no `until`; a failed Cmd dropped with no letter; a process's spans written to the raw health rows, which are pruned; a fault whose `did` never lands.
+
+**p92 to p95 are P6's** (*new 2026-11-07, from P6's plan, approved by the lead agent*). Each is `new`, node, in `next/packages/libfabrika/src/data/`, beside p18 to p20 and p68.
+
+**p92, every entry has every field (scenario of P6).** `new`, node. s7, s1. `data/log.ts`, `Referee.append`.
+- In the type: a `Line` with any one of `by`, `for`, `sentAt`, `seen`, `cause`, `build`, `_tag` or `body` left out does not compile (one `@ts-expect-error` each, so a key made optional fails the typecheck). `cause` is a required key whose value may be null.
+- At the referee, for lines that come in as JSON: a line missing any key, or with an empty `by`, `for` or `build`, is `refused bad_line`, and nothing is written. A line that names `arrivedAt`, `rev`, `pos` or any key `Line` does not have is `refused bad_line` too.
+- Every entry read back has all 13 fields, and `arrivedAt`, `rev` and `pos` are the referee's.
+- The referee's deciding step reads `seen` and the id, and its input type has no `sentAt`, so nothing can decide with the writer's clock (D3, S1).
+- Why: P6's row says each field comes "with a law that a writer cannot leave it out", and a fact not written now is never written. Plants: `for` made optional; `build` defaulted to `""`; an extra `arrivedAt` taken from the line; excess keys stripped and the line placed.
+
+**p93, `seen` is bounded by the head (scenario of P6).** `new`, node. s1. `Referee.append`. From [saved state, S1](../direction/saved-state.md#s1-every-entry-says-what-its-writer-had-seen).
+- `seen` past the log's head is `refused seen_ahead`, and nothing is written. `seen` equal to the head is placed.
+- For any interleaving of writers (fast-check, fixed seed 119120), every entry has `seen < rev`.
+- Plants: `seen` checked against the stream's head instead of the log's; `seen ≤ head + 1` let through; the check after the write.
+
+**p94, a parked wait is a row, rung once (scenario of P6).** `new`, node. s3, s1. `Referee.wait`, `Referee.append`, `Doorbell`. The data half of the owner's call of 2026-11-02, a wait is data ([Cloudflare](#cloudflare), "T2 the rings").
+- A parked wait writes one ring `{to, stream, after}`. A second wait by the same reader on the same stream keeps one ring, with the lower `after`.
+- The append that first passes a ring's `after` takes the ring out in its own step and rings it once, with its rev. The next append to that stream rings that reader nothing.
+- A ring whose delivery fails is gone all the same (at most once, D4's ephemeral rule). Its span says `ok: false` with the error's class, and the append still answers `placed`.
+- Rings survive a reopened file: park, close, open, append, and the ring rings.
+- Plants: a ring kept only in memory; a ring not dropped after it rang; a failed ring that fails the append; two rings for one reader and stream; a ring rung on a refused line.
+
+**p95, every call is one span, names and numbers only (scenario of P6).** `new`, node. s7. `Referee`, `Ledger`. From [monitoring is in Tier 1](./tier-1.md#monitoring-is-in-tier-1) (owner, 2026-11-07).
+- With a test `Tracer` that keeps ended spans: each `append`, `read` and `wait` ends exactly one span of its name, `ledger.append`, `ledger.read` or `ledger.wait`, and each ring one `ledger.ring`, with the tags P6's plan lists. `Ledger.remote` adds one `ledger.call` on the caller's side, failed with its `why` when the stub rejects.
+- Under `TestClock`: `lag` is the count of the stream's entries past `after`; `visible_ms` is the clock at the answer minus the oldest returned entry's `arrivedAt`.
+- No tag holds `body`, `sentAt`, a SQL string, or any string longer than 128 characters. A `storage` failure's span holds the SQLite error code as a tag, and its message only in the span's content.
+- A refused append and a resend each still end one `ledger.append` span, with `answer` (`placed`, `resent` or `refused`) and `why`.
+- Plants: `body` written into a tag; a refused append with no span; `lag` from the log's head instead of the stream's entries; `visible_ms` from `sentAt`; a failed ring with no span.
 
 ## Criteria
 
@@ -1830,7 +1965,7 @@ No fact is lost by waiting on any of these. Each adds a kind of fact, and old sa
 - `fabsh`, the shell in `next/`. Today's version keeps `tsh`. It reads the ports programs declare; nothing lost.
 - A tile can start from a saved line. Records no fact from Tier 1's time; nothing lost.
 - Split, close and prefix keys, since `tracker | ticket` beside `fabsh` needs them. They arrive with the desk.
-- The desk, `next/programs/desk`, built in as `fabrika/desk`. Layout and focus move into it, on the same Cmds as any program, with a grant for any start or monitor power it needs. Focus mirrors between windows again, and `runs` lists tiles. Tier 1 keeps no layout or focus as facts, and has none to lose.
+- The desk, `next/programs/desk`, built in as `fabrika/desk`. Layout and focus move into it, on the same Cmds as any program, with a grant for any start or monitor power it needs. Focus mirrors between windows again, and `ps` lists tiles. *Changed 2026-11-07 (owner): it said `runs`.* Tier 1 keeps no layout or focus as facts, and has none to lose.
 - `keep`, as a proposal: the tracker's filter is the first thing that needs it. Filters stay in the window's machine until then; nothing lost.
 - Topic, as a proposal: `tracker | ticket` is the first case that may need to read outside an inbox. A later Topic reads the same streams; nothing lost.
 
@@ -1971,5 +2106,6 @@ The owner approved what Tier 1 builds on 2026-11-01. What is still open is in [t
 - **Q15, the tag key:** `_tag` for every union we define, never by hand. tea's Msgs and Cmds keep `type`, and third-party shapes keep theirs. A lint rule holds it. See [Tags](#tags).
 - **2026-11-02, the brief's questions 5 to 8:** the styling copy question is moot since PR 308; `next/` uses Manti; saved vectors and letters come in the exam PRs; configurable keys needs no owner call. Each is in [the brief](./tier-1.md#open-questions).
 - **2026-11-05, the brief's questions 9 to 13 and 18, and two clashes:** edges are opt-in comments at the line, not a path list; the first method is `initialize`, and `Hello` stays the schema's name; a key per client, the person key grants in SSHSIG's shape, and GitHub is never a way in ([the note](../direction/a-key-per-client-and-no-github-trust.md)); an entry's clocks are `arrivedAt` and `sentAt` in `next/`, which were `at` and `said`; `cause` on the entry in P6, with laws p67 to p69; a tracker ticket per pull request; P14 imports the design package, which P31 builds first; and a unit of work is a commit: each exam change is the test writer's commit, never the builder's, and CI walks the commits ([the note](../direction/a-unit-of-work-is-a-commit.md)).
+- **2026-11-07, P32's signed text:** a step signs the link (step, ticket or lane, tree before, tree after), not the commit; a rebase is carried by replay, with old heads under kept refs; only a step's newest signature for this ticket counts; and Tier 1 catches up only by merging `main` in ([P32's row](./tier-1.md#the-pull-requests-one-at-a-time), [experiment 221](../../experiments/221-signed-steps-and-rebases.md)). *Changed 2026-11-07: P32's row said each step signs its commit.*
 
 **Left open until Tier 6, as a proposal, no answer needed now:** native `<dialog>` and `popover` against Zag.

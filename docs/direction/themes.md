@@ -64,13 +64,13 @@ theme = "nord-fabrika"   # a file in ~/.fabrika/themes/; leave the line out for 
   ([PR 291](https://github.com/usirin/tea-fabrika/pull/291)). This moves values only: theme files
   and the `themes` program stay in `next/`.
   - The window follows the system's look: each token is `light-dark(<fabrika-light>, <fabrika>)`
-    under `color-scheme: light dark`. `apps/fabrika/src/themes.ts` holds both themes for the
-    terminal and the window's frame.
+    under `color-scheme: light dark`. `packages/fabrika-design/src/themes.ts` (P31; it was
+    `apps/fabrika/src/themes.ts`) holds both themes for the terminal and the window's frame.
   - **Added 2026-11-01, approved by the owner from the design review:** a line or fill token is
     never a text color. Eight rules drew text in `--wire` (slate a8), `--border-strong` (slate a7)
     or `--key` (indigo 9), which read as low as 1.54 on a row. Those words now take `--text-faint` (slate a11)
     or `--turn` (accent 11, a11 in light). The tokens stay for the lines and fills they draw.
-    `apps/fabrika/src/themes.test.ts` holds every `color:` token to 4.5:1 on the desk, the ground,
+    `apps/fabrika/src/window/colors.test.ts` (it was `themes.test.ts`) holds every `color:` token to 4.5:1 on the desk, the ground,
     raised and hovered and selected rows, in both looks.
   - The one named exception: white on the hovered turn fill (indigo 10) in dark reads 4.28. The
     owner kept Radix's step; tracker ticket 153 tracks it.
@@ -84,7 +84,7 @@ theme = "nord-fabrika"   # a file in ~/.fabrika/themes/; leave the line out for 
       now draw in slate 12.
     - Kept low on purpose: a set-aside row's title. Set aside is a state, not a rank, and its
       dashed ring is the second cue.
-    - `apps/fabrika/src/themes.test.ts` holds it: every gray text token is slate 12 or the one low
+    - `apps/fabrika/src/window/colors.test.ts` holds it: every gray text token is slate 12 or the one low
       step, every listed main line is slate 12, and a row's title reads at least as strong as the
       text beside it, at rest, hovered and selected.
 
@@ -321,6 +321,10 @@ const Theme = Schema.Struct({
   since alpha sits on any ground. A Base16 file has red, yellow and green as states, and the study's
   own mapping made lines from them, which breaks "a color means one thing". Sure: 65%. Doubt: a pipe
   wash in Radix sky may look foreign on a warm theme. A look on real themes settles it.
+- **Seven tokens have no theme name.** `--surface-selected`, `--border`, `--border-strong`,
+  `--wire`, the keyboard ring `--focus`, `--turn-fill-hover` and `--scrim` are in the design
+  package's `tokens.css` but not among the fifteen colors above, so a brought theme could not set
+  them. Found in P31; Tier 2 meets it.
 - **Values are hex for now.** Whether a theme may hold Display P3 is still open on main
   ([pipe colors](./pipe-colors.md), [color principles](./color-principles.md)). Adding it later
   loses no data, since hex stays valid.

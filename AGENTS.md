@@ -136,6 +136,10 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   is experimental only because nobody had used it, so use it, and do not work around it.
   What these experiments decide wins over an older demlik issue or ruling. Real tea bugs
   stay their own tickets.
+- **Never wait on upstream.** When our work needs a change in a package we do not own (tea,
+  Manti, Effect, any other), patch it locally with `pnpm patch`, file the upstream issue the same
+  day, and keep building. The bump that takes the release deletes the patch
+  ([patch upstream locally](./docs/direction/patch-upstream-locally.md)).
 - **Read the installed version.** Agents know older libraries. Before you write or judge
   code against one, read the lockfile's version and that version's docs. A lint rule that
   fires a lot means ask why before you call it a false alarm.
@@ -177,9 +181,9 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   question). They are in `packages/pipeline/src/primitives.ts`; the combos
   built from them are in `packages/pipeline/src/combos.ts`.
 - **New schemas are Effect Schema.** Define a Cmd through one of the primitives, or
-  through tea's own `Cmd.define` from `@demlik/tea/effect`. Both take Effect
+  through tea's own `Cmd.make` from `@demlik/tea/effect`. Both take Effect
   schemas as they are, so nobody writes `Schema.toStandardSchemaV1`. zod stays
-  only in code not yet moved. A primitive takes either; tea's Effect `Cmd.define`
+  only in code not yet moved. A primitive takes either; tea's Effect `Cmd.make`
   takes Effect schemas only. See
   [`docs/direction/data-first-markdown-is-a-view.md`](./docs/direction/data-first-markdown-is-a-view.md).
 
@@ -192,7 +196,7 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   type Ticket = typeof Ticket.Type;
   const Id = Schema.Struct({ id: Schema.String });
   const readTicket = gather("ticket_read", { input: Id, ok: Ticket, err: ["unknown"] });
-  const closeTicket = Cmd.define("ticket_close", { input: Id, ok: Schema.Null, err: ["unknown"] });
+  const closeTicket = Cmd.make("ticket_close", { input: Id, ok: Schema.Null, err: ["unknown"] });
   ```
 - **Names.** Use the industry's word for a thing
   ([use the industry's names](./docs/direction/use-the-industrys-names.md)), checked on
@@ -207,7 +211,9 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   time, `by` is who wrote it, `_tag` is the case. An entry's two clocks have their own
   names in `next/` (owner, 2026-11-05): `arrivedAt` is the referee's, when the entry reached
   the ledger, and `sentAt` is the writer's own, when it wrote it (Kafka's LogAppendTime and
-  CreateTime). Today's code says `at` and `said`. A place, a path, a ref, a state, a reason or a total gets its own word
+  CreateTime). Today's code says `at` and `said`. In `next/`, a word means one thing. "Run"
+  means an agent run only; one start of a program is a process (a restart is a new process, as
+  in OTP). A place, a path, a ref, a state, a reason or a total gets its own word
   (`location`, `path`, `ref`, `state`, `why`, `total`). `rg` the word under
   `docs/direction/` and `next/` before you use it.
 

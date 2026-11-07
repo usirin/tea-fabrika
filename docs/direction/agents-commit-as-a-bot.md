@@ -35,6 +35,14 @@
 - **Decided 2026-11-06, the repo's rules hold the bot to its own branches.** `main` only through a
   pull request; outside `fabrikalfa/*` only people may push. Any owner of kamp-us can make a key, so
   these rules are what limit a key.
+- **Decided 2026-11-06, the bot may change CI files.** The app holds GitHub's `workflows`
+  permission, so an agent's pull request can change `.github/workflows/`. Which folders an agent
+  may edit is a setting in the repo's `.fabrika/fabrika.toml`, next to the network and hidden-file
+  lists ([talk where you work](./talk-where-you-work.md), [principle 5](./principles.md)), not a
+  wall in the app. A wall was weighed: a workflow runs with the repo's secrets, so an agent that
+  edits one could reach them. It was turned down, since nothing merges without passing review and
+  a wall would stop every ticket that touches CI. The app was first made without the permission;
+  it was added on 2026-11-07.
 - **Step proofs go in git notes,** not in the commit's signature slot, so GitHub shows no
   "Unverified" (the Tier 1 plan's P32). [Experiment 212](../../experiments/212-fabrika-bot-commits.md)
   section 10 has what the first real app showed.

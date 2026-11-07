@@ -99,14 +99,16 @@ jobs:
           path: ${{ runner.temp }}/e2e-shots
           if-no-files-found: ignore
 
-  # The tests, split by file over three machines (vitest's `--shard`): they were
-  # 5 min 40 s of a 7 min check on one.
+  # The tests, split by file over six machines (vitest's `--shard`, each machine
+  # given about the same seconds by vitest.shards.ts). The lane's tests were one
+  # file run in order, 27 min on one machine; as 18 files of 20 to 158 s they ran
+  # in 2.9 to 3.9 min a machine (pull request 412's run, experiment 222).
   test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -143,7 +145,7 @@ jobs:
       - name: test
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
-          SHARD: ${{ matrix.shard }}/3
+          SHARD: ${{ matrix.shard }}/6
         run: |
           if [ -n "$BASE" ]; then
             pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests
@@ -165,6 +167,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The edges step compares the pull request with its merge base, so the history must hold
+          # it. The whole repository is a few MB.
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v6
         with:
@@ -181,3 +187,11 @@ jobs:
         if: hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''
         run: pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
       - run: node next/apps/fabrika/e2e.ts
+      # Tier 1, P35: each edge comment this pull request adds, one line with its reason, for the owner
+      # (docs/direction/no-promises.md). In the step summary and as a note on that line of the diff.
+      # It never blocks on an edge: it exits 0, or 2 only when it could not read a file.
+      - name: edges
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: node next/apps/fabrika/src/exam/edges.ts --base "$BASE"

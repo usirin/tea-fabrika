@@ -302,8 +302,17 @@ pins and saved views, which stay on their desk (areas call 4).
   Manti change is needed for D2.
 - **D3 is mostly the decided filter.** A labels tile that sets the tracker's filter adds little
   over `--label` and `--area`; rename, merge and make stay in D1's menu.
-- **The menu is built from Manti, as it is.** The searchable menu is Manti 0.13.0's `Combobox`,
-  which takes `multiple`, inside a `Popover`. No Manti pull request is needed.
+- **The menu is built on Manti, with one Manti change.** The searchable menu is Manti's
+  `Combobox` (it takes `multiple`) inside a `Popover`. In Manti 0.13.0 a `ComboboxItem` is only
+  `{value, label: string, disabled?}`: no groups and no custom row content
+  ([UI on Manti](./ui-on-manti.md) already says Combobox and Listbox take string labels only).
+  The menu needs groups (Area first, as radio items) and a guess marker on a row. So we patch
+  Manti's `Combobox` with `pnpm patch` to take groups and custom row content, and send the same
+  change to Manti by pull request. The picker (`pick`, picker guidelines, pull request 419)
+  needs the same thing, so one Manti change serves both.
+- *Corrected 2026-11-06:* this note first said Manti 0.13.0's `Combobox` worked as it is and no
+  Manti pull request was needed. That was wrong: its items take a string label only, with no
+  groups. The `Checkbox` `indeterminate` point for D2 stands.
 
 ## What the ledger records
 
