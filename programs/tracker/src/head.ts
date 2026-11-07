@@ -1,5 +1,5 @@
 import {Writer} from "@kampus/fabrika-old";
-import {type Entry, factsOf, Id, Stage, Title} from "@kampus/pipeline/tickets/ticket";
+import {type Entry, type Fact, factsOf, Id, Stage, Title} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
 
 // A ticket's top line, folded from its facts (docs/direction/what-a-ticket-shows.md, section 1).
@@ -11,7 +11,7 @@ import {Schema} from "effect";
 //   asks      an ask is open                                       "waits on you: approve plan v2"
 //   running   a run started and has not ended                      "build running, task t-2"
 //   stuck     the last run answered stuck, and no ask came of it   "stuck: read failed"
-//   idle      the last fact is more than an hour old               "idle since 14:02"
+//   idle      the last work fact is more than an hour old          "idle since 14:02"
 //   next      otherwise, from the last run's send                  "next: review"
 //
 //   headOf(timeline, now)   // {_tag: "asks", asks: [{ask: "a-1", what: "approve plan v2", ...}]}
@@ -21,8 +21,36 @@ import {Schema} from "effect";
 // `ended` that says done is a row, never the ticket's state. "Idle" needs the clock, so `now`
 // comes in: the machine keeps it, fed each minute (./machine.ts).
 
-/** How long a ticket waits with no new fact before its line says nobody is driving it. */
+/** How long a ticket waits with no new work fact before its line says nobody is driving it. */
 export const HOUR = 60 * 60 * 1000;
+
+/**
+ * Which facts move work, so they wake an idle ticket and restart its hour. The rest is advice,
+ * shown on the ticket and never read to decide (docs/direction/label-guidelines.md, L1): a Jev
+ * duplicate hint, a person's word on it, a person's rating of a review finding. A comment is work.
+ * A new kind of fact must take a row here, or this does not compile.
+ */
+const MOVES = {
+	filed: true,
+	commented: true,
+	closed: true,
+	reopened: true,
+	started: true,
+	session: true,
+	ended: true,
+	checked: true,
+	restarted: true,
+	planned: true,
+	pushed: true,
+	reviewed: true,
+	pr: true,
+	asked: true,
+	carried: true,
+	answered: true,
+	rated: false,
+	maybe_duplicate: false,
+	duplicate_rated: false,
+} as const satisfies Record<Fact["type"], boolean>;
 
 /** An ask with no answer yet: what its box shows. */
 export const OpenAsk = Schema.Struct({
@@ -115,7 +143,7 @@ export const headOf = (timeline: readonly Entry[], now: number): Head => {
 	if (ended?.type === "ended" && ended.outcome.kind === "stuck" && !askedSince)
 		return {_tag: "stuck", stage: ended.stage, why: ended.outcome.why};
 
-	const last = timeline.at(-1)?.at ?? now;
+	const last = timeline.findLast((e) => MOVES[e.fact.type])?.at ?? now;
 	if (now - last > HOUR) return {_tag: "idle", since: last};
 
 	if (ended?.type !== "ended") return {_tag: "next", stage: "triage"};
