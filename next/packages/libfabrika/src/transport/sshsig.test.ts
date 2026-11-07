@@ -462,13 +462,26 @@ describe("p27, the armor's own words", () => {
 	}
 });
 
-// A key line is `<type> <base64> [comment]`, one space between its parts (the plan's grammar).
-// OpenSSH's own reader takes runs of spaces and tabs; this module does not.
+// A key line is `<type> <base64> [comment]`. Between its parts it takes a run of spaces or tabs,
+// as OpenSSH's own reader does (the lead's call on P7), and the key is the same one.
 describe("a key line's parts and its type", () => {
-	const [type = "", key = ""] = signer.split(" ");
+	const [type = "", key = "", comment = ""] = signer.split(" ");
+	const spaced: ReadonlyArray<readonly [string, string]> = [
+		["two spaces between type and key", `${type}  ${key} ${comment}`],
+		["a tab between type and key", `${type}\t${key} ${comment}`],
+		["a tab between key and comment", `${type} ${key}\t${comment}`],
+	];
+	for (const [name, line] of spaced) {
+		it.effect(`KeyLine takes ${name}, and it matches as the same key`, () =>
+			Effect.gen(function* () {
+				expect(yield* decodeLine(line)).toBe(line);
+				// good.sig was signed by signer.pub's key, so a match means the same key blob.
+				expect(yield* check(goodSig, [line])).toStrictEqual({signer: line});
+			}),
+		);
+	}
+
 	const bad: ReadonlyArray<readonly [string, string]> = [
-		["two spaces between type and key", `${type}  ${key}`],
-		["a tab between type and key", `${type}\t${key}`],
 		["an ECDSA type word over an Ed25519 blob", `ecdsa-sha2-nistp256 ${key}`],
 		["an RSA type word over an Ed25519 blob", `ssh-rsa ${key} signer@fabrika.test`],
 	];
