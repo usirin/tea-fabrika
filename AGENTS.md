@@ -136,6 +136,10 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   is experimental only because nobody had used it, so use it, and do not work around it.
   What these experiments decide wins over an older demlik issue or ruling. Real tea bugs
   stay their own tickets.
+- **Never wait on upstream.** When our work needs a change in a package we do not own (tea,
+  Manti, Effect, any other), patch it locally with `pnpm patch`, file the upstream issue the same
+  day, and keep building. The bump that takes the release deletes the patch
+  ([patch upstream locally](./docs/direction/patch-upstream-locally.md)).
 - **Read the installed version.** Agents know older libraries. Before you write or judge
   code against one, read the lockfile's version and that version's docs. A lint rule that
   fires a lot means ask why before you call it a false alarm.
