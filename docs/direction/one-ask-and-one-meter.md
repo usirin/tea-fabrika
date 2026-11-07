@@ -1,6 +1,7 @@
 # One way to ask a person, and one meter for money
 
-Proposed 2026-10-30. Tracker tickets #90 (one way to ask a person) and #91 (one
+**Decided 2026-11-06** in the product walk, step 4: one shape for every ask, with the hash of what
+the person saw; silence is never a yes; one meter for money. Proposed 2026-10-30. Tracker tickets #90 (one way to ask a person) and #91 (one
 meter for money). Today fabrika has five places that ask a person and seven
 that count or cap money. None of them knows the others. This note proposes one
 ask, kept as facts on the ledger with one hash of what the person saw, and one

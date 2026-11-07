@@ -184,6 +184,10 @@ const rowOf = (e: Entry): Row => {
   - the run ends: the live row goes, and the `ended` fact is its row.
   - the run dies with no end: after its process is gone, the row says
     **"build started 14:02, never ended"**. The top line says "stuck".
+- **Dollars on the live row (decided 2026-11-06).** The row adds the run's dollars so far at list
+  price: "review running 3m · 9 turns · $0.41 · open log". The ticket shows the total of its runs. A
+  price nobody knows reads "unknown", never "$0.00". Checking these numbers against the provider's
+  real bill is a separate call.
 - **Tool calls are never timeline rows.** They are kept, but in the agent's
   own log. "open log" opens it in a tile next to the ticket
   ([tiles, like tmux](./the-gui-is-electron-first.md)).
