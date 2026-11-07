@@ -360,7 +360,8 @@ the Mac and on Cloudflare: SQLite inside one object.
 interface Data {
 	append(stream: string, id: string, event: unknown): Effect.Effect<Rev>; // saved once, even if sent twice
 	read(stream: string, after: Rev): Stream.Stream<Entry>;
-	wait(stream: string, after: Rev): Effect.Effect<Rev>; // the doorbell
+	wait(stream: string, after: Rev): Effect.Effect<Waited>; // answers at once: ready, or parked until a ring
+	// Wrong, changed 2026-11-07: wait(stream: string, after: Rev): Effect.Effect<Rev>; // the doorbell
 }
 
 // D3: one entry, EventStoreDB's fields in our short words, plus the writer's own time.
@@ -377,6 +378,14 @@ interface Data {
 	body: {lease: "30s"},
 }
 ```
+
+*Changed 2026-11-07, from Tier 1's P6, building the owner's call of 2026-11-02 that a
+wait is data ([Tier 1's detail, Cloudflare](../plan/tier-1-detail.md#cloudflare)): a
+wait never blocks. It answers at once, `{_tag: "ready", rev}` with the stream's newest
+rev, or `{_tag: "parked"}`. A parked wait leaves a ring, a row in the project object's
+own SQLite, and the first append past its `after` rings the waiter once. It said `wait`
+returns a `Rev` when news comes, a call that waits, which was wrong: an object sleeps
+after about 10 s and drops what waits in memory.*
 
 - **D1, who decides a race (2026-10-19):** the project's Durable Object is
   the referee. It handles one call at a time, so a claim checks and writes in
@@ -396,8 +405,9 @@ interface Data {
   the client pulls with `ledger.read` after the last rev it has. A lost poke
   costs nothing: the next poke or the reconnect catch-up pulls the same
   entries. Every client hears every poke in its project; per-stream
-  subscriptions wait, since nothing is lost by adding them later. `wait` stays
-  for code that wants to block.
+  subscriptions wait, since nothing is lost by adding them later. ~~`wait` stays
+  for code that wants to block.~~ *Changed 2026-11-07: `wait` stays, and never
+  blocks (above).*
 - **D5, a local read copy:** later. Central first; the three calls leave
   room for a copy on each client, a browser too.
 - **D6, the services:** today's `Ledger` (about 25 methods, all three layers
