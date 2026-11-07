@@ -165,6 +165,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The edges step compares the pull request with its merge base, so the history must hold
+          # it. The whole repository is a few MB.
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v6
         with:
@@ -181,3 +185,11 @@ jobs:
         if: hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''
         run: pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
       - run: node next/apps/fabrika/e2e.ts
+      # Tier 1, P35: each edge comment this pull request adds, one line with its reason, for the owner
+      # (docs/direction/no-promises.md). In the step summary and as a note on that line of the diff.
+      # It never blocks on an edge: it exits 0, or 2 only when it could not read a file.
+      - name: edges
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: node next/apps/fabrika/src/exam/edges.ts --base "$BASE"
