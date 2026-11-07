@@ -250,6 +250,7 @@ describe("each rule refuses what it is there to refuse", () => {
 			// next/'s exam rules, planted at next/ paths in next/apps/fabrika/src/exam/.
 			"no-promises",
 			"no-effect-run-outside-edge",
+			"edge-comment",
 			"no-of",
 			"no-hand-tag",
 			"one-store-hook",
