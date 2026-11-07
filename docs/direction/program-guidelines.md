@@ -1,6 +1,6 @@
 # Programs: one job, a location, and the desk places the tile
 
-**Decided 2026-11-03.** G7's R5 was added and decided 2026-11-06. The owner approved G1 to G8 and calls 1 to 5 with their leans, after a walk
+**Decided 2026-11-03.** G7's R5 was added and decided 2026-11-06, and call 6 the same day. The owner approved G1 to G8 and calls 1 to 5 with their leans, after a walk
 of each part. Call 4 changed in its walk: both forms of `open` are the API, and the line form waits
 on a follow-up to experiment 204. The leans' confidence numbers stay as written.
 [Composing programs, C1 to C11](#composing-programs-c1-to-c11) was decided 2026-11-02. Calls 6 and 7 moved to experiment 206,
@@ -559,6 +559,11 @@ never                  only C-b ; goes back; Esc at the top does nothing
 ### 6. A glance view in the top bar
 
 **Moved to experiment 206, the customization study (2026-11-03). Not decided here.**
+
+**Decided 2026-11-06 (the product walk, step 4).** The top bar's glance is a slot a program fills.
+Any program may offer a glance view; the person picks which program fills the slot, and the default
+is `inbox`. Its quick look and its tile read one queue (G1: one model, every size draws it). How many
+slots, and where the person picks, stay with the customization study.
 
 **Lean "any program may have one; the person picks which show", 65%** (196's flag).
 
