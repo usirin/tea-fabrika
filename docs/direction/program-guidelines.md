@@ -1,6 +1,6 @@
 # Programs: one job, a location, and the desk places the tile
 
-**Decided 2026-11-03.** The owner approved G1 to G8 and calls 1 to 5 with their leans, after a walk
+**Decided 2026-11-03.** G7's R5 was added and decided 2026-11-06. The owner approved G1 to G8 and calls 1 to 5 with their leans, after a walk
 of each part. Call 4 changed in its walk: both forms of `open` are the API, and the line form waits
 on a follow-up to experiment 204. The leans' confidence numbers stay as written.
 [Composing programs, C1 to C11](#composing-programs-c1-to-c11) was decided 2026-11-02. Calls 6 and 7 moved to experiment 206,
@@ -346,6 +346,23 @@ its machine               a run id, a trace, saved state, hot reload, a job to a
   that keep state: list and detail, the row, the action bar, lean 75%. R4 what two programs both need
   moves below both: a view piece into the kit, and a fold into the domain package (C9, decided
   2026-11-02), lean 80% ([reuse before special rules](./reuse-before-special-rules.md)).
+- **R5, things to find (decided 2026-11-06).** A program hands the desk the rows it can be found by,
+  as a pure function of its model, the way `view` is one. The desk keeps one index, matches and ranks
+  once for every program, and keeps the last rows of a program that is not running. Picking a row is
+  `open program location` (G3). The other way, the desk asking each program on every key (VS Code's
+  workspace symbols), was weighed and lost: every program would match its own way, and the box waits
+  on the slowest. The known way is Apple's Spotlight, where apps hand their items to one index
+  ([Core Spotlight](https://developer.apple.com/documentation/corespotlight)).
+
+  ```ts
+  // a sketch
+  index: (model: Model) => ReadonlyArray<SearchableItem>
+  // SearchableItem (Core Spotlight's word): {location: "#193", title: "lane stalls at the test writer", hint: "running"}
+  ```
+
+  Still open: whether Cmd-K is one box for commands and things (Linear's command menu), lean 70%,
+  commands first; and how a program with thousands of rows does, which only a test with real numbers
+  settles.
 - **Why.** VS Code: "By default, commands show in the Command Palette", and a contributed key shows in
   the shortcuts list [x5]. Ableton's Key Map mode: "assignable elements of the interface become
   highlighted" [f1]. A cockpit's soft keys ring the page they act on [f4]. Elm: "Just write the helper
