@@ -4,6 +4,20 @@
 calls: push and merge are two steps, one review per plan, the cloud host in
 v1, stage agents on Codex, and every stage in a box. Nothing here is built.
 
+**Two parts decided 2026-11-06:**
+
+- **Filing a ticket starts its lane.** There is no start button. The owner's yes on the plan is the
+  first stop, so a person comes back to work that is already triaged and planned, not to a pile of
+  triaged tickets to pick from.
+- **A person is the assignee, and their agent is the delegate,** the way Linear does it
+  ([Linear](https://linear.app/developers/agent-interaction)). The person stays responsible and
+  pays for the agent. Filing a ticket delegates it to the assignee's agent, which is what starts the
+  lane. This brings back a `delegated` fact, which section 4 below had dropped. Whose turn it is
+  (the agent's, or the person's while an ask waits) is a fold of the asks and answers, never a field
+  someone writes, so an agent cannot forget to hand a ticket back.
+
+The rest stays proposed.
+
 Keys renamed 2026-11-03 (short words keep one meaning): the lane's `at` became `state`, and its
 schema `At` became `State`.
 
@@ -428,7 +442,8 @@ const lanes = starts.pipe(
   Triage's accept starts plan, and the owner's approval starts the test writer and
   build. A reopen starts a new lane, and the old PR stays in the timeline
   ([what a ticket shows](./what-a-ticket-shows.md), section 5).
-- **There is no start button and no `delegated` fact.** An earlier draft of
+- **There is no start button and no `delegated` fact** (the second half was walked back on
+  2026-11-06: see the top). An earlier draft of
   this note had both, and left triage out of v1 because "a person who presses
   start already said worth doing". That was wrong: triage is the front door,
   and it is the step that says whether a ticket is worth doing.
