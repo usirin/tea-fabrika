@@ -86,7 +86,7 @@ describe("Shards", () => {
 		expect(Shards.prototype.sort).toBe(BaseSequencer.prototype.sort);
 	});
 
-	it("over `--shard k/6`, keeps each lane file on one machine, the machines' lane seconds within one file", async () => {
+	it("over `--shard k/6`, keeps each lane file on one machine, and every machine's seconds within the heaviest file of every other's", async () => {
 		const lanes = readdirSync(join(ROOT, LANES))
 			.filter((name) => /^lane\..*\.test\.ts$/.test(name))
 			.map((name) => `${LANES}/${name}`);
@@ -98,16 +98,19 @@ describe("Shards", () => {
 				const specs = await vitest.globTestSpecifications();
 				const Sequencer = vitest.config.sequence.sequencer;
 				const mine = await new Sequencer(vitest).shard(specs);
-				kept.push(
-					mine.map((spec) => relative(ROOT, spec.moduleId)).filter((p) => lanes.includes(p)),
-				);
+				kept.push(mine.map((spec) => relative(ROOT, spec.moduleId)));
 			} finally {
 				await vitest.close();
 			}
 		}
-		expect(kept.flat().toSorted()).toEqual(lanes.toSorted());
+		expect(
+			kept
+				.flat()
+				.filter((p) => lanes.includes(p))
+				.toSorted(),
+		).toEqual(lanes.toSorted());
 		const seconds = kept.map((paths) => paths.reduce((sum, p) => sum + (measured[p] ?? 1), 0));
-		const heaviest = Math.max(...lanes.map((p) => measured[p] ?? 1));
+		const heaviest = Math.max(...Object.values(measured));
 		expect(Math.max(...seconds) - Math.min(...seconds)).toBeLessThanOrEqual(heaviest);
 	});
 });

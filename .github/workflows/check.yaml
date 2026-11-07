@@ -100,9 +100,9 @@ jobs:
           if-no-files-found: ignore
 
   # The tests, split by file over six machines (vitest's `--shard`, each machine
-  # given about the same seconds by vitest.shards.ts). The lane's tests are 18
-  # files of 19 to 124 s, 1,526 s in all (laptop, 2026-11-06): six machines take
-  # about 250 s of them each, where three took about 500.
+  # given about the same seconds by vitest.shards.ts). The lane's tests were one
+  # file run in order, 27 min on one machine; as 18 files of 20 to 158 s they ran
+  # in 2.9 to 3.9 min a machine (pull request 412's run, experiment 222).
   test:
     runs-on: ubuntu-latest
     strategy:
