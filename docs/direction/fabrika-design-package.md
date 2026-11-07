@@ -3,7 +3,8 @@
 **Decided 2026-11-02.** Both versions. fabrika's design lives in its own package,
 `@kampus/fabrika-design`. Today's app and `next/` both import it. It is modeled on `@kampus/design`
 in the public [kamp-us/phoenix](https://github.com/kamp-us/phoenix/tree/main/packages/design) repo.
-Nothing is moved yet.
+Moved in P31 ([PR 431](https://github.com/usirin/tea-fabrika/pull/431)): `packages/fabrika-design`
+holds the themes (`src/themes.ts`) and `src/tokens.css`, the tokens with Manti's set from them.
 
 ```ts
 // A sketch. The names and paths are guesses until the move's pull request.
@@ -25,10 +26,10 @@ import "@kampus/fabrika-design/tokens.css";
 
 The first slice:
 
-- **The colors.** Today they are in `apps/fabrika/src/themes.ts`, held by `themes.test.ts` and
-  `themes.frame.test.ts`. The window also writes them as tokens in `window.css`'s `:root`, which the
+- **The colors.** They were in `apps/fabrika/src/themes.ts`, held by `themes.test.ts` and
+  `themes.frame.test.ts`, and now are in the package's `src/themes.ts`, with those tests. The window also writes them as tokens in `window.css`'s `:root`, which the
   Manti mapping points at, so those tokens come along.
-- **The Manti mapping.** Today it is `apps/fabrika/src/window/theme.css`: Manti's `--manti-*` tokens,
+- **The Manti mapping.** It was `apps/fabrika/src/window/theme.css`, and now is in `tokens.css`: Manti's `--manti-*` tokens,
   set from our own names ([UI on Manti](./ui-on-manti.md)).
 - **The text roles,** proposed, from the typography study. Six roles on Manti's `Text` and
   `Heading`: `title`, `heading`, `strong`, `body`, `quiet`, `label`. They land when that study is
@@ -74,7 +75,7 @@ can grow the same way, one decided piece at a time. None of that is in the first
 
 ## What is open
 
-- **The folder.** A guess: `packages/fabrika-design`, beside the others.
+- **The folder.** `packages/fabrika-design`, beside the others (P31).
 - **Whether it is published.** phoenix publishes its package to npm. Ours aims at two people working
   together first, so publishing is later.
 - **When the move happens.** The move is its own pull request, through the pipeline's steps like

@@ -104,7 +104,7 @@ logged-in app was not measured.
 | Mono | `"Berkeley Mono", ui-monospace, …`, used only on `pre`, `code`, a git branch line and one chip | `--mono`, typed things only |
 | Menu box | `min-width: 220px`, radius 8px, padding 4px, 1px line, layered shadow | `--r-lg` (8px), `--s-1` (4px), `--border` |
 | Menu row | 32px tall, 13px, highlight inset with radius 6px | 32px one line, 44px two lines, `--r` (6px) |
-| Command menu | `max-width: 720px`, top 13vh, radius 12px, input 46px tall, group heading 30px, item 46px, page dimmed | 620px, `--r-xl` (12px), input 46px, heading 28px, item 34px, scrim |
+| Command menu | `max-width: 720px`, top 13vh, radius 12px, input 46px tall, group heading 30px, item 46px, page dimmed | 620px, `--r-xl` (12px), input 46px, heading 28px, item 34px, no dim (the owner, 2026-11-06, as Linear's Cmd-K and Discord's have none; the desk stays inert under a backdrop that paints nothing) |
 | Key hints | keycap 20px tall, 11px, weight 510, 1px border, radius 3px, same sans as the UI | 17px, `--fs-micro`, 500, `--border`, `--r-sm` |
 | Motion | menu in and out 100ms, scale 0.9 to 1 and fade; command menu 175ms, scale 0.96; row highlight on at once, off in 150ms | `--fast` (120ms), `--ease-out`, scale 0.96 |
 
@@ -205,7 +205,8 @@ Why, cost and confidence:
 
 ## 4. The tokens
 
-Built from the window tokens. The only new values are the shadow and the scrim.
+Built from the window tokens. The only new value is the shadow. The scrim moved to the design
+package (P31) and waits for a real dialog: the palette has no dim (the owner, 2026-11-06).
 
 ```css
 :root {
@@ -219,7 +220,6 @@ Built from the window tokens. The only new values are the shadow and the scrim.
 	--row-hi: var(--surface-hover); /* the active row */
 	--row-on: var(--surface-selected); /* the picked row in the palette */
 	--pop-in: var(--fast) var(--ease-out); /* 120ms */
-	--scrim: rgb(0 0 0 / 0.35); /* behind the palette only */
 }
 
 .pop {

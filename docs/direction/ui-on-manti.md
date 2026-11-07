@@ -17,7 +17,7 @@ The whole idea, in one block:
 /* apps/fabrika/dist/window.css, as build.ts writes it: */
 @import "@manti-ui/styles/index.css"; /* Manti's parts, in its own cascade layers  */
 /* React Flow's base rules                                                           */
-/* src/window/theme.css: Manti's tokens, set from our names (unlayered, so it wins)  */
+/* @kampus/fabrika-design/tokens.css: Manti's tokens, set from our names (unlayered) */
 :root {
 	--manti-font-sans: var(--font); /*  Inter, as the program windows               */
 	--manti-text-sm: var(--fs-small); /* our px scale, never Manti's rem scale      */
@@ -70,15 +70,17 @@ download time. Nobody has timed the start with and without it yet.
 
 ## 3. Our values, set on Manti's tokens
 
-`apps/fabrika/src/window/theme.css` sets Manti's tokens from the names in
-`window.css`'s `:root`. A value lives once, in `window.css`; the theme only
-points at it. So the type scale test still pins the px scale in one place, and
+The design package's `tokens.css` (`packages/fabrika-design`, P31; it was
+`apps/fabrika/src/window/theme.css`, pointing at `window.css`'s `:root`) sets Manti's
+tokens from our names in its own `:root`. A value lives once; the mapping only
+points at it. The reset kept to Manti's parts stays the app's, in
+`apps/fabrika/src/window/manti-reset.css`. So the type scale test still pins the px scale in one place, and
 now also pins that Manti's text sizes are those same names.
 
-One exception: `theme.css:66` sets `--manti-control-height-sm: 28px` as a raw value, not a name from `window.css`.
+One exception: `tokens.css` sets `--manti-control-height-sm: 28px` as a raw value, not one of our names.
 
 ```css
-/* theme.css, abridged */
+/* tokens.css, abridged */
 :root {
 	--manti-font-sans: var(--font);          /* Inter                 */
 	--manti-font-mono: var(--mono);          /* typed things only     */

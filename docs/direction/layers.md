@@ -106,7 +106,8 @@ sketch.
 - **Doubt.** Whether a sheet sits under or over a float. Lean under: the float is the person's pick.
   No float is built beside a sheet yet, so a shot would settle it.
 - **Cost.** About 40 lines and one lint (a guess).
-- **Today: half.** The order exists as three loose CSS numbers: `.scrim` 9, `.pop` 10, `.tip` 20
+- **Today: half.** The order exists as three loose CSS numbers: `.scrim` 9 (the palette's backdrop,
+  which paints nothing since 2026-11-06 and still takes a press outside), `.pop` 10, `.tip` 20
   (`window/window.css:1166`, `:840`, `:1297`).
 
 ### L2: every layer has an owner, and goes when its owner goes
