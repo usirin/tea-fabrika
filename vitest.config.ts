@@ -1,4 +1,5 @@
 import {configDefaults, defineConfig} from "vitest/config";
+import {Shards} from "./vitest.shards.ts";
 
 // One run over every package. `fixtures/` holds toy repos with their own
 // `node --test` files. They are the lane's subject, not this repo's tests.
@@ -27,6 +28,7 @@ export default defineConfig({
 			"wip/src/**/*.test.ts",
 			"legacy/src/**/*.test.ts",
 			"oxlint-plugins/*.test.ts",
+			"vitest.shards.test.ts",
 			// next/, the new version. Its end-to-end tests sit outside `src/`, in
 			// `next/apps/fabrika/e2e/`, and run through `node next/apps/fabrika/e2e.ts`.
 			"next/packages/*/src/**/*.test.{ts,tsx}",
@@ -45,5 +47,8 @@ export default defineConfig({
 		// set-up for its tests, so it gets their limit. Measured on 2026-10-24 with three whole
 		// suites side by side: no file's hooks took more than 1.5 s in all.
 		hookTimeout: 60_000,
+		// `--shard` gives each machine about the same seconds, from measured times, not the same count
+		// of files (vitest.shards.ts).
+		sequence: {sequencer: Shards},
 	},
 });

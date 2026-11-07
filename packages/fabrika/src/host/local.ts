@@ -211,7 +211,8 @@ export const startLocal = (o: LocalOptions) =>
 				// The child's end is an answer too, and at once: a child that has ended will never be
 				// ready. A port that is taken ends it within a second, as workerd cannot listen on it;
 				// waiting out the clock instead made that a 30 s hang (CI saw it twice). What it said is
-				// read to the end first, so the answer names why.
+				// read to the end first and kept whole, so the answer names why: Node and workerd both
+				// write to it, in either order, and a cut lost workerd's line when Node's came first.
 				yield* handle.exitCode.pipe(
 					Effect.flatMap((code) =>
 						Fiber.join(errRead).pipe(
@@ -219,7 +220,7 @@ export const startLocal = (o: LocalOptions) =>
 								Deferred.fail(
 									ready,
 									new LocalError({
-										message: `the ledger stopped before it was ready (exit ${code}): ${err.join("").slice(0, 500)}`,
+										message: `the ledger stopped before it was ready (exit ${code}): ${err.join("")}`,
 									}),
 								),
 							),

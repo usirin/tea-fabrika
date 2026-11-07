@@ -41,8 +41,10 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
 
 - Effect's overhead on each step. Ticket 115 measures it against a bar on click
   time, and we do not know the answer yet.
-- A rule the lint can only partly check: it names files, not lines. "One line" is
-  checked by a reader.
+- A rule the lint can only partly check: an edge comment covers one line, however
+  long, so "one line that holds no logic" is checked by a reader, the owner, who reads
+  each new edge. *Changed 2026-11-06 (Tier 1, P35): it said the rule names files, not
+  lines.*
 - `useMachine` and `useRuntime` in `@demlik/tea` expect Promise verbs, so the
   window may need its own small hook. *Updated 2026-11-01:* probes on tea's Effect
   engine showed one `useSyncExternalStore` hook working, 90% sure, and

@@ -313,12 +313,14 @@
 		},
 		{
 			// The new version's exam rules (Tier 1, P2). They block from the start, and their fires on PR
-			// 223's tree were read by hand (oxlint-plugins/README.md). Each edge is written whole inside
-			// its rule, so no line here can make a file one.
+			// 223's tree were read by hand (oxlint-plugins/README.md). An edge is one line under an edge
+			// comment, which `edge-comment` holds to its shape (P35). No override below turns the two
+			// edge rules off for a `next/` file that is not a test, and `edge-comment.test.ts` checks it.
 			"files": ["next/**"],
 			"rules": {
 				"fabrika/no-promises": "error",
 				"fabrika/no-effect-run-outside-edge": "error",
+				"fabrika/edge-comment": "error",
 				"fabrika/no-of": "error",
 				"fabrika/no-hand-tag": "error",
 				"fabrika/one-store-hook": "error"

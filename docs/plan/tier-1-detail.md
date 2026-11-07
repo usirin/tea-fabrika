@@ -1724,6 +1724,10 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - The brain picks the highest version both sides list. No shared version is refused in words, and nothing is written. A field the brain does not know is ignored, never refused.
 - Plants: the lowest shared version picked; a mismatch let through; an unknown field refused.
 
+**p88, every machine passes the sync test (S2, P35).** `new`, node. `src/exam/laws-scan.test.ts`. *Added 2026-11-06: [saved state, S2](../direction/saved-state.md#s2-every-machine-passes-the-sync-test), decided 2026-11-01. p83 to p87 are P32's.*
+- Each machine's laws files call `syncTest(`, or one of them says `// sync test left out: <why>` with a reason. The scan reads text; the helper lands in libfabrika's test kit in P11, until tea ships one.
+- Plants: laws with no sync test and no reason; a reason left empty. The sync test in a second laws file passes.
+
 ## Criteria
 
 - **c1 to c6:** plan-115's, with oxlint in place of Biome, and c5's README also naming the stage.
@@ -1971,5 +1975,6 @@ The owner approved what Tier 1 builds on 2026-11-01. What is still open is in [t
 - **Q15, the tag key:** `_tag` for every union we define, never by hand. tea's Msgs and Cmds keep `type`, and third-party shapes keep theirs. A lint rule holds it. See [Tags](#tags).
 - **2026-11-02, the brief's questions 5 to 8:** the styling copy question is moot since PR 308; `next/` uses Manti; saved vectors and letters come in the exam PRs; configurable keys needs no owner call. Each is in [the brief](./tier-1.md#open-questions).
 - **2026-11-05, the brief's questions 9 to 13 and 18, and two clashes:** edges are opt-in comments at the line, not a path list; the first method is `initialize`, and `Hello` stays the schema's name; a key per client, the person key grants in SSHSIG's shape, and GitHub is never a way in ([the note](../direction/a-key-per-client-and-no-github-trust.md)); an entry's clocks are `arrivedAt` and `sentAt` in `next/`, which were `at` and `said`; `cause` on the entry in P6, with laws p67 to p69; a tracker ticket per pull request; P14 imports the design package, which P31 builds first; and a unit of work is a commit: each exam change is the test writer's commit, never the builder's, and CI walks the commits ([the note](../direction/a-unit-of-work-is-a-commit.md)).
+- **2026-11-07, P32's signed text:** a step signs the link (step, ticket or lane, tree before, tree after), not the commit; a rebase is carried by replay, with old heads under kept refs; only a step's newest signature for this ticket counts; and Tier 1 catches up only by merging `main` in ([P32's row](./tier-1.md#the-pull-requests-one-at-a-time), [experiment 221](../../experiments/221-signed-steps-and-rebases.md)). *Changed 2026-11-07: P32's row said each step signs its commit.*
 
 **Left open until Tier 6, as a proposal, no answer needed now:** native `<dialog>` and `popover` against Zag.

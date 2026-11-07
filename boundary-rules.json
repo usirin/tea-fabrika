@@ -15,7 +15,8 @@
 		"packages/fabrika": "library",
 		"packages/fabrika-design": "design",
 		"packages/pipeline": "app",
-		"next/apps/fabrika": "next-app"
+		"next/apps/fabrika": "next-app",
+		"next/packages/libfabrika": "next-library"
 	},
 	"libraryRoots": ["next"],
 	"acrossDeployables": ["relative-import-crosses-workspace"]

@@ -17,7 +17,7 @@ import {Effect, Layer, type Result, Schema} from "effect";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 import {DEFAULT_SETTINGS, JSONC_MOVED, SETTINGS_MOVED} from "../../settings.ts";
 import {Title} from "../../tickets/ticket.ts";
-import {checkoutFor, LANE_REPO, makeLaneHome} from "./lane-fixture.ts";
+import {checkoutFor, LANE_REPO, makeLaneHome, shWord} from "./lane-fixture.ts";
 import {LaneHome, LaneWork, laneWork, readOrigin} from "./work.ts";
 
 // The lane learns its repository from its checkout's origin, and reads that repository's settings
@@ -300,6 +300,124 @@ describe("the settings a lane works by", () => {
 				}).pipe(provideLane(home), Effect.result),
 			);
 			expect(refusal(got)).toMatch(/\S/);
+		});
+	});
+
+	// One `LaneWork` serves one lane. Its checkout's origin does not change under it, and a commit's
+	// settings never change, so it asks git each once. `main` and `settings` still fetch every time, so
+	// each sees main move.
+	describe("how often a lane asks git", () => {
+		afterEach(() => {
+			vi.unstubAllEnvs();
+		});
+
+		/**
+		 * Every git call from here on, its words joined by spaces. `laneWork` builds its own process
+		 * spawner (`Layer.provide(nodeServices)`), so a test cannot wrap that service from outside. It
+		 * finds `git` on the PATH, so a `git` first on the PATH writes its words down and runs the real one.
+		 */
+		const countingGit = () => {
+			const bin = join(dir, "counting-bin");
+			const log = join(dir, "git-calls.log");
+			const real = execFileSync("sh", ["-c", "command -v git"], {encoding: "utf8"}).trim();
+			mkdirSync(bin);
+			writeFileSync(
+				join(bin, "git"),
+				`#!/bin/sh\nprintf '%s\\n' "$*" >> ${shWord(log)}\nexec ${shWord(real)} "$@"\n`,
+			);
+			chmodSync(join(bin, "git"), 0o755);
+			vi.stubEnv("PATH", `${bin}:${process.env.PATH ?? ""}`);
+			return () =>
+				existsSync(log)
+					? readFileSync(log, "utf8")
+							.split("\n")
+							.filter((call) => call !== "")
+					: [];
+		};
+		const originReads = (calls: readonly string[]) =>
+			calls.filter((call) => call.endsWith("config --local --get remote.origin.url"));
+		const fetches = (calls: readonly string[]) => calls.filter((call) => / fetch( |$)/.test(call));
+		/** The reads of the settings file at a commit: `ls-tree` of its paths and `cat-file` of its text. */
+		const settingsReads = (calls: readonly string[]) =>
+			calls.filter((call) => / (ls-tree|cat-file) /.test(call) && call.includes(".fabrika"));
+
+		/** `body` on one `LaneWork` for `home`, started from the fixture's seed. */
+		const onOneLane = <A>(
+			home: string,
+			body: (work: LaneWork["Service"]) => Effect.Effect<A, unknown>,
+		) =>
+			Effect.runPromise(
+				Effect.gen(function* () {
+					return yield* body(yield* LaneWork);
+				}).pipe(provideLane(home)),
+			);
+
+		/** Main moves on the remote: the triage agent's effort set to `low` on it, as a person's merge would. */
+		const lowerEffort = (home: string) => {
+			const seed = checkoutFor(home);
+			const file = join(seed, ".fabrika", "fabrika.toml");
+			writeFileSync(file, readFileSync(file, "utf8").replace('effort = "high"', 'effort = "low"'));
+			const git = (...args: readonly string[]) =>
+				execFileSync("git", args, {cwd: seed, env: {...process.env, ...IDENTITY}, stdio: "pipe"});
+			git("commit", "--quiet", "-am", "Lower the triage agent's effort");
+			git("push", "--quiet", "origin", "main");
+		};
+
+		it("reads the checkout's origin once, however many reads of main and the settings it makes", async () => {
+			const home = repository(() => {});
+			const calls = countingGit();
+			await onOneLane(home, (work) =>
+				Effect.gen(function* () {
+					yield* work.main;
+					yield* work.settings;
+					yield* work.main;
+					yield* work.settings;
+					yield* work.settings;
+					yield* work.main;
+				}),
+			);
+			expect(originReads(calls())).toHaveLength(1);
+		});
+
+		it("reads the settings at one main tip once, however often they are asked for", async () => {
+			const home = repository(() => {});
+			const calls = countingGit();
+			const [once, twice] = await onOneLane(home, (work) =>
+				Effect.gen(function* () {
+					yield* work.settings;
+					const once = settingsReads(calls()).length;
+					yield* work.settings;
+					return [once, settingsReads(calls()).length] as const;
+				}),
+			);
+			expect(once).toBeGreaterThan(0);
+			expect(twice).toBe(once);
+		});
+
+		// The GitHub host reads `[checks] github` on each call, as the file can change on main between
+		// two (./github.ts): no read of main between them is needed for the next to see it.
+		it("reads the new settings once main moved, with no read of main between", async () => {
+			const home = repository(() => {});
+			const [was, now] = await onOneLane(home, (work) =>
+				Effect.gen(function* () {
+					const was = yield* work.settings;
+					lowerEffort(home);
+					return [was, yield* work.settings] as const;
+				}),
+			);
+			expect(was).toMatchObject({agents: {triage: {effort: "high"}}});
+			expect(now).toMatchObject({agents: {triage: {effort: "low"}}});
+		});
+
+		it("fetches for the settings on a clone an earlier lane left, and reads the main that moved since", async () => {
+			const home = repository(() => {});
+			// An earlier lane's clone, left at the main it fetched. Main moves after it.
+			await onOneLane(home, (work) => work.settings);
+			lowerEffort(home);
+			const calls = countingGit();
+			const now = await onOneLane(home, (work) => work.settings);
+			expect(fetches(calls()).length).toBeGreaterThan(0);
+			expect(now).toMatchObject({agents: {triage: {effort: "low"}}});
 		});
 	});
 
