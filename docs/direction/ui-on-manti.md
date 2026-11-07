@@ -17,7 +17,7 @@ The whole idea, in one block:
 /* apps/fabrika/dist/window.css, as build.ts writes it: */
 @import "@manti-ui/styles/index.css"; /* Manti's parts, in its own cascade layers  */
 /* React Flow's base rules                                                           */
-/* src/window/theme.css: Manti's tokens, set from our names (unlayered, so it wins)  */
+/* @kampus/fabrika-design/tokens.css: Manti's tokens, set from our names (unlayered) */
 :root {
 	--manti-font-sans: var(--font); /*  Inter, as the program windows               */
 	--manti-text-sm: var(--fs-small); /* our px scale, never Manti's rem scale      */
@@ -70,15 +70,17 @@ download time. Nobody has timed the start with and without it yet.
 
 ## 3. Our values, set on Manti's tokens
 
-`apps/fabrika/src/window/theme.css` sets Manti's tokens from the names in
-`window.css`'s `:root`. A value lives once, in `window.css`; the theme only
-points at it. So the type scale test still pins the px scale in one place, and
+The design package's `tokens.css` (`packages/fabrika-design`, P31; it was
+`apps/fabrika/src/window/theme.css`, pointing at `window.css`'s `:root`) sets Manti's
+tokens from our names in its own `:root`. A value lives once; the mapping only
+points at it. The reset kept to Manti's parts stays the app's, in
+`apps/fabrika/src/window/manti-reset.css`. So the type scale test still pins the px scale in one place, and
 now also pins that Manti's text sizes are those same names.
 
-One exception: `theme.css:66` sets `--manti-control-height-sm: 28px` as a raw value, not a name from `window.css`.
+One exception: `tokens.css` sets `--manti-control-height-sm: 28px` as a raw value, not one of our names.
 
 ```css
-/* theme.css, abridged */
+/* tokens.css, abridged */
 :root {
 	--manti-font-sans: var(--font);          /* Inter                 */
 	--manti-font-mono: var(--mono);          /* typed things only     */
@@ -109,7 +111,7 @@ One exception: `theme.css:66` sets `--manti-control-height-sm: 28px` as a raw va
 ```
 
 ```ts
-// type-scale.test.ts, the new pin (abridged: the test reads the tokens out of theme.css's :root)
+// type-scale.test.ts, the new pin (abridged: the test reads the tokens out of tokens.css's :root)
 expect(mantiTextTokens).toEqual({
 	"--manti-text-xs": "var(--fs-micro)",
 	"--manti-text-sm": "var(--fs-small)",
@@ -124,7 +126,7 @@ expect(mantiTextTokens).toEqual({
 `box-sizing: border-box`, `margin: 0` and `canvas { max-width: 100% }` on every
 element. On our desk that squashed the terminals' canvas and moved tiles by a
 pixel or two. Manti's integration guide says to keep a reset off the other
-side's parts; theme.css does it the other way round. Outside an element with
+side's parts; `manti-reset.css` does it the other way round. Outside an element with
 `data-scope` (a Manti part), each property the reset sets goes back to the
 browser's own value, in `:where()` so any app rule still wins:
 
@@ -139,7 +141,7 @@ that has no Manti part draws pixel for pixel as on main.
 **Dark first.** The app is dark only today. Light would need, per color, a
 `light-dark(<light>, <dark>)` value with a light ramp for `--n-*` and `--a-*`,
 and `color-scheme: dark` dropped from `window.css`. Manti's own parts follow
-the tokens, so nothing in theme.css changes for light but the colors it points
+the tokens, so nothing in `tokens.css` changes for light but the colors it points
 at.
 
 ## 4. Every piece, mapped

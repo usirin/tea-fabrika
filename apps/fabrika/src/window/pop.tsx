@@ -43,7 +43,7 @@ import {
 // was. Escape is the page's (desk.tsx): it closes whatever is open. Only one is open at a time:
 // the frame holds one `over` (frame.ts).
 
-/** Keycaps, Manti's, in the UI's own font, with the Mac's glyphs: `⌃B` `A` (theme.css). */
+/** Keycaps, Manti's, in the UI's own font, with the Mac's glyphs: `⌃B` `A` (the design package's tokens.css). */
 export function Caps(props: {readonly caps: readonly Cap[]}): ReactNode {
 	return (
 		<span className="caps">

@@ -21,6 +21,7 @@
 		"@anthropic-ai/sandbox-runtime": "catalog:",
 		"@demlik/tea": "catalog:",
 		"@effect/platform-node": "catalog:",
+		"@kampus/fabrika-design": "workspace:*",
 		"@kampus/fabrika-old": "workspace:*",
 		"@kampus/pipeline": "workspace:*",
 		"@manti-ui/react": "catalog:",

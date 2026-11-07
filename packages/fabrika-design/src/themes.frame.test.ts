@@ -1,3 +1,4 @@
+import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {fabrika, fabrikaLight, followLook, frameColor} from "./themes.ts";
 
@@ -60,5 +61,34 @@ describe("the window's frame takes the desk's color in the system's look", () =>
 			painted: [],
 			listeners: 0,
 		});
+	});
+
+	// Law 15 of the P31 plan: for any start look, any run of look changes, and the window's close
+	// at any point in it, the frame is painted the desk of each look changed to before the close,
+	// nothing after, and no listener is left once it closed.
+	it("for any looks and any close, paints each change before the close and nothing after", () => {
+		fc.assert(
+			fc.property(
+				fc.boolean(),
+				fc.array(fc.boolean(), {maxLength: 20}),
+				fc.nat({max: 20}),
+				(start, changes, closeAt) => {
+					const look = fakeLook(start);
+					const window = fakeWindow();
+					followLook(look, window);
+					const cut = Math.min(closeAt, changes.length);
+					for (const dark of changes.slice(0, cut)) look.turn(dark);
+					window.close();
+					for (const dark of changes.slice(cut)) look.turn(dark);
+					expect({painted: window.painted, listeners: look.heard.size}).toEqual({
+						painted: changes
+							.slice(0, cut)
+							.map((dark) => (dark ? fabrika : fabrikaLight).colors.desk),
+						listeners: 0,
+					});
+				},
+			),
+			{seed: 119120, numRuns: 200},
+		);
 	});
 });

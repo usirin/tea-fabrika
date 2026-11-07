@@ -1,5 +1,6 @@
 import {readFileSync} from "node:fs";
 import {join} from "node:path";
+import {fileURLToPath} from "node:url";
 import {describe, expect, it} from "vitest";
 import {TINTS} from "./desk/layout/index.ts";
 import {PIPES} from "./pipes.ts";
@@ -10,13 +11,17 @@ import {PIPES} from "./pipes.ts";
 // is a Radix 3.0.0 alpha step, read from the scales the themes study saved
 // (experiments/177-themes/schemes/radix-colors-3.0.0.json), in both looks.
 //
-// The stylesheet is read, not drawn, as themes.test.ts reads it: a token is followed through var(),
+// The stylesheets are read, not drawn, as colors.test.ts reads them: a token is followed through var(),
 // light-dark() gives its first color in the light look and its second in the dark one, and a pipe's
 // rule (`[data-pipe="sky"]`) wins over :root. Contrast is WCAG 2.2's ratio, with an alpha color
 // drawn over what it sits on first, rounded to 8 bits a channel, as the page draws it.
 
 const CSS = readFileSync(join(import.meta.dirname, "window", "window.css"), "utf8");
-const THEME = readFileSync(join(import.meta.dirname, "window", "theme.css"), "utf8");
+/** The design package's tokens, found by its name as the build finds them (P31). */
+const TOKENS = readFileSync(
+	fileURLToPath(import.meta.resolve("@kampus/fabrika-design/tokens.css")),
+	"utf8",
+);
 const RADIX: unknown = JSON.parse(
 	readFileSync(
 		join(
@@ -125,9 +130,9 @@ const rulesOf = (css: string) =>
 
 const BASE = rulesOf(outsideMedia(uncommented(CSS)));
 
-/** The page's :root, window.css then theme.css, as the page loads them. */
+/** The page's :root, the package's tokens.css then window.css, as the page loads them. */
 const ROOT = new Map(
-	[...BASE, ...rulesOf(outsideMedia(uncommented(THEME)))]
+	[...rulesOf(outsideMedia(uncommented(TOKENS))), ...BASE]
 		.filter((r) => r.selectors.includes(":root"))
 		.flatMap((r) => [...r.says]),
 );
@@ -276,7 +281,7 @@ describe("a tile's colors are Radix steps, in both looks", () => {
 				washOn: alpha("slate", 3, look),
 				edge: alpha("slate", 4, look),
 				hover: alpha("slate", 7, look),
-				// The theme's focus: a8 in dark, a9 in light, where a8 reads 1.90 (themes.ts).
+				// The theme's focus: a8 in dark, a9 in light, where a8 reads 1.90 (@kampus/fabrika-design).
 				edgeOn: alpha("slate", look === "dark" ? 8 : 9, look),
 				text: alpha("slate", 11, look),
 				textOn: scaleOf("slate", "solid", look)[11],

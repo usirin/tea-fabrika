@@ -1,48 +1,17 @@
 /*
- * The app's tokens: the built-in themes' colors (docs/direction/themes.md; src/themes.ts holds the
- * same values for the terminal and the window's frame), its type scale and spacing. Radix 3.0.0,
- * gray slate, accent indigo: every color is a Radix step, used for that step's job (color
- * principles, principle 5). Text takes steps 11 and 12, lines 4 to 8, solid fills 9 and 10. Each
- * is light-dark(<fabrika-light>, <fabrika>), so the window follows the system's look.
+ * The app's own tokens. The colors, type scale, spacing and Manti's tokens are the design package's
+ * (@kampus/fabrika-design/tokens.css, docs/direction/fabrika-design-package.md), loaded before this
+ * file. What stays here is the app's: the names its rules were written with, each pointing at a
+ * package token, and the few values only its own views use.
  *
  * What each color means is held strictly: the accent means "your turn" and nothing else; red means
  * stuck or broken; amber running; green done. A line or a fill token is never a text color. The
  * four type colors live only on the program map's ports and wires, never on text.
  */
 :root {
-	color-scheme: light dark;
-
-	--surface-sunken: light-dark(
-		#f9f9fb,
-		#0c0d0e
-	); /* slate 2; dark: a bend, under slate 1 (themes.ts) */
-	--surface: light-dark(#fcfcfd, #111113); /* slate 1 */
-	--surface-raised: light-dark(#fcfcfd, #18191b); /* slate 1; slate 2 */
-	--surface-hover: light-dark(#0000330f, #ddeaf814); /* slate a3 */
-	--surface-selected: light-dark(#0009321f, #d9edfe25); /* slate a5 */
-	--border-faint: light-dark(#00002d17, #d3edf81d); /* slate a4: the resting edge, a bend */
-	--border: light-dark(#00002f26, #d6ebfd30); /* slate a6 */
-	--border-strong: light-dark(#00062e32, #d9edff40); /* slate a7 */
-	--wire: light-dark(#00083046, #d9edff5d); /* slate a8 */
-	/*
-	 * Text takes Radix's two text steps only (decided 2026-11-02): slate 12 for titles and main
-	 * lines, slate a11 for everything quieter. Rank comes from weight and size, not a third gray, so
-	 * secondary, muted and faint are one step under three names. Slate 11 is not used: in light it
-	 * reads 4.42 on a selected row.
-	 */
-	--text-faint: light-dark(#0007149f, #f1f7feb5); /* slate a11 */
+	/* Secondary, muted and faint are one step under three names; the package names it once. */
 	--text-muted: var(--text-faint);
 	--text-secondary: var(--text-faint);
-	--text-primary: light-dark(#1c2024, #edeef0); /* slate 12 */
-	--focus: light-dark(#00051d74, #dfebfd6d); /* slate a9: a8 is under 3:1 on the desk */
-	--tile-focus: light-dark(#00051d74, #d9edff5d); /* slate a9; slate a8 */
-	--turn: light-dark(#002bb7c5, #9eb1ff); /* indigo a11; indigo 11 */
-	--turn-fill: #3e63dd; /* indigo 9 */
-	--turn-fill-hover: light-dark(#3358d4, #5472e4); /* indigo 10 */
-	--turn-fg: #ffffff; /* Radix's rule for text on step 9 */
-	--done: light-dark(#203c25, #71d083); /* grass 12; grass 11 */
-	--running: light-dark(#4f3422, #ffca16); /* amber 12; amber 11 */
-	--stuck: light-dark(#641723, #ff9592); /* red 12; red 11 */
 	--person-bg: light-dark(#e0e1e6, #2e3135); /* slate 5 */
 	--agent-bg: light-dark(#f0f0f3, #212225); /* slate 3 */
 	--ty-fact: oklch(0.76 0.075 205);
@@ -60,62 +29,17 @@
 	--svc-3: oklch(0.72 0.075 340);
 	--svc-4: oklch(0.72 0.075 120);
 	--svc-5: oklch(0.72 0.075 60);
-	/*
-	 * A tile's own names (docs/direction/tile-guidelines.md, decided 2026-11-01). Each points at a
-	 * theme token, so a brought theme repaints a tile; a pipe's rule ([data-pipe], below) sets its
-	 * own washes and edges. The rest wash is slate a2, which no theme name holds yet, so it is
-	 * written out here.
-	 */
-	--tile-edge: var(--border-faint); /* slate a4, on every tile, plain or pipe */
-	--tile-edge-on: var(--tile-focus); /* focus: slate a8 dark, a9 light */
-	--tile-edge-hover: var(--border-strong); /* slate a7 */
-	--tile-edge-loud: var(--text-faint); /* slate a11: focus under more contrast only */
-	--tile-text: var(--text-faint); /* slate a11 */
-	--tile-text-on: var(--text-primary); /* slate 12 */
-	--tile-wash: light-dark(#00005506, #d8f4f609); /* slate a2 */
-	--tile-wash-on: var(--surface-hover); /* slate a3 */
 
-	--font: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
-	--mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-	/*
-	 * The type scale, in px: each size is the number its name says (Linear's body is 13px, macOS's
-	 * 13pt). Not rem: the root below is 14px, so a rem size drew 12.5% small (tracker ticket 108).
-	 * type-scale.test.ts pins these six and refuses a rem anywhere in this file.
-	 */
-	--fs-title: 22px;
-	--fs-head: 15px;
-	--fs-body: 13px;
-	--fs-prose: 14px;
-	--fs-small: 12px;
-	--fs-micro: 11px;
-	--s-1: 4px;
-	--s-2: 8px;
-	--s-3: 12px;
-	--s-4: 16px;
-	--s-5: 20px;
-	--s-6: 24px;
-	--s-8: 32px;
-	--s-10: 40px;
-	--r-sm: 4px;
-	--r: 6px;
-	--r-lg: 8px;
-	--r-xl: 12px;
-	--ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-	--fast: 120ms;
-
-	/* What opens over the desk (docs/direction/popovers.md): made of the tokens above. The only
-	   new values are the shadow and the scrim. */
+	/* What opens over the desk (docs/direction/popovers.md): made of the package's tokens. The only
+	   new value is the shadow. */
 	--pop-bg: var(--surface-raised);
 	--pop-edge: var(--border);
 	--pop-shadow:
 		0 0 0 1px rgb(0 0 0 / 0.25), 0 2px 6px rgb(0 0 0 / 0.3), 0 12px 32px rgb(0 0 0 / 0.45);
 	--pop-pad: var(--s-1);
-	--row-h: 32px;
-	--row-2h: 44px;
 	--row-hi: var(--surface-hover);
 	--row-on: var(--surface-selected);
 	--pop-in: var(--fast) var(--ease-out);
-	--scrim: rgb(0 0 0 / 0.35);
 
 	/* The names the counter's and the tracker's windows were written with, on the same palette. */
 	--ground: var(--surface);
@@ -127,11 +51,10 @@
 	--hover: var(--surface-hover);
 	--pick: var(--surface-selected);
 	--open: var(--done);
-	--closed: var(--text-faint); /* no hue: the word says closed */
 	--alert: var(--stuck);
 	--sans: var(--font);
-	/* Text that names no size of its own: the app-down page, "starting", an alert. The scale above
-	   does not read it. */
+	/* Text that names no size of its own: the app-down page, "starting", an alert. The scale does
+	   not read it. */
 	font-family: var(--mono);
 	font-size: 14px;
 	-webkit-font-smoothing: antialiased;
@@ -982,7 +905,7 @@ main.program > [role="alert"] {
 	}
 }
 
-/* Keycaps in a row: each one is Manti's Kbd, sized in theme.css. */
+/* Keycaps in a row: each one is Manti's Kbd, sized in the design package's tokens.css. */
 .caps {
 	display: inline-flex;
 	gap: 3px;
@@ -1264,13 +1187,15 @@ main.program > [role="alert"] {
 	outline-offset: 2px;
 }
 
-/* The palette: a modal dialog, over a dim page, in the window's middle. */
+/*
+ * The palette: a modal dialog in the window's middle, with no dim behind it (the owner,
+ * 2026-11-06, as Linear's and Discord's have none). Its backdrop paints nothing and stays, so a
+ * press outside the palette lands on it and closes it, never on a tile (layers L4).
+ */
 .scrim {
 	position: absolute;
 	z-index: 9;
 	inset: 0;
-	background: var(--scrim);
-	animation: pop-fade var(--pop-in) both;
 }
 
 .pop.palette {
