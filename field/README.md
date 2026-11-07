@@ -57,6 +57,35 @@ Two files, one record per line, so a script can read them:
 | `billing`, `product`, `env` | optional, on any agent run from 2026-11-07, and left out when not known; older rows are not changed. `billing` is how the run was paid: `subscription` or `key` (billed per token), read from Claude's `apiKeySource` on its first `system/init` message or the SDK's `accountInfo()`, or from Codex's auth mode (`chatgpt` or `apiKey`). `product` is the subscription's name as the provider gives it (`max`, `pro`), from Claude's `subscriptionType` or Codex's `planType`, cross-checked with its rate-limit snapshot's `plan_type`. `env` says whether each key variable was set, as `true` or `false` and never the value: `{"ANTHROPIC_API_KEY": false, "ANTHROPIC_AUTH_TOKEN": false, "OPENAI_API_KEY": false, "CODEX_API_KEY": false}`. A run with a key set still runs; this only records it ([the meter on subscriptions](../docs/direction/one-ask-and-one-meter.md#the-meter-on-subscriptions)). Later, not yet on these rows: the last percent of each limit used with its window and reset time, why each turn woke, the context size and cache reads and writes per turn, and how long each ask waited on a person |
 | `jev` | on a `machine` row only: the Jev calls it made |
 | `replay`, `name` | on a `reviewer` row only. `replay: true`: not today's fabrika. It is tea-fabrika's own review piece (`src/stages/review/`), run alone on a head today's reviewer had already reviewed. It only read and posted nothing. `name` is the outcome's name it printed. `model: null` on such a row: its gate stopped it before any agent started. `minutes` is the agent's own time, or the whole run where no agent ran. `tools` counts the one call that hands the answer back. Leave these rows out of any baseline of today's reviewer. On a `planner` row too: tea-fabrika's plan program (`wip/src/stages/plan/`), run read-only on a closed ticket at its PR's base commit (experiment 86). `tools` there is `null` and `minutes` sums its drafts. In experiment 136 it is the plan stage's planner options (`packages/pipeline/src/stages/plan/planner.ts`), asked only whether a closed ticket's first title and body join an open ticket (or, in part B, what its pull request should carry), with no plan written; `tools` counts its Read, Grep and Glob calls, `tokens` is its context at the last turn, and `name` is `null`. On a `triager` row too: tea-fabrika's sort (experiments 88 and 92; 92's `why` names which brief), one call with no tools on a closed ticket's first title and body. `name` is what it said (`plan`, `ruling`, `research`, `no` or `dup`); `tokens` and `billed` are that one call's. In experiments 133 and 133b it is today's sort brief and Check (`packages/pipeline/src/stages/sort/`), up to two calls, and `name` is the outcome's name, such as `send:plan:fold`. Leave these out of any baseline of today's triager |
+| `attested` | on a `next/` step's row from P32 on: the links the step signed, one per commit it made, in commit order. See [A step's links](#a-steps-links). Added 2026-11-07 |
+
+### A step's links
+
+In Tier 1, until `next/`'s ledger exists, a step's signed links live here
+([a unit of work is a commit](../docs/direction/a-unit-of-work-is-a-commit.md#squash-merges-stay-each-step-signs-a-link-from-tree-to-tree)).
+After a pull request merges, `pnpm commits chain` walks them from `main`'s tree to the squash
+commit's tree (laws p86 and p89 in [the detail](../docs/plan/tier-1-detail.md#properties)). A
+pull request that adds them is blocked until they walk. Each link is the JSON line `pnpm commits sign`
+printed, plus what only the person logging it knows:
+
+```ts
+{_tag: "attested", step: "build", ticket: "229", version: 1,          // what the key signed, with `from` and `to`
+ from: "9e02a1c…", to: "c7a8f55…",                                  // the trees before and after, full shas
+ key: "SHA256:Bx9…", sig: "-----BEGIN SSH SIGNATURE-----\n…",       // the key's fingerprint and the whole SSHSIG text
+ commit: "b72d9e4…",                                                 // the step's commit, as `sign` printed it
+ by: "agent:builder", arrivedAt: "2026-11-07T21:40:56-08:00",        // who signed, and when this row was written
+ cause: null,                                                        // the input that started the step; null in Tier 1
+ pr: "usirin/tea-fabrika#450",                                       // the pull request, written as `pr` above
+ base: "4b1d0e7…", squash: "e5f6a7b…",                               // main's commit at the start, and the squash commit
+ keys: "4b1d0e7…"}                                                   // the main commit whose allowed_signers checked it
+```
+
+- Every field is required, and every sha is the full 40 hex. A link that does not read fails the
+  check, so a typo is caught on the log's pull request, not later.
+- `ticket` and `version` are part of what was signed. Only a step's newest `version` for a ticket
+  counts: an older one the squash still uses, or a newer one it does not, is `stale_link`.
+- The squash is known only after the merge, so a step's links usually land in a log pull request
+  a little after it. On `main`, a squash with no links yet is only advised about.
 
 A `machine` run writes its own rows: `fieldRows` in `legacy/src/operator-host.ts`
 (the old first generation) turns a finished run into one `machine` row, one row per shell it ran, and one
