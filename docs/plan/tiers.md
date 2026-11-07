@@ -45,8 +45,7 @@ Decided by the owner, for when agents run as programs:
 - **A person's stop is final.** No restart, resume or resend brings that run back. Only a new start
   does. This is about the run. A lane a person stops is still a saved pause
   ([pipeline guidelines](../direction/pipeline-guidelines.md), clash 1): it goes on later with a new
-  run of the stopped step, never the stopped run. That reading is the lead agent's, for the owner to
-  confirm.
+  run of the stopped step, never the stopped run. The owner confirmed this reading the same day.
 - **A step's schema check never adds a "fix your answer" turn.** An answer that does not fit ends the
   step `stuck`, and the transcript stays the truth.
 - **When hands restart, they resume the maker's session,** as
