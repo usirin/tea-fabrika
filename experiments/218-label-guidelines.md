@@ -274,8 +274,14 @@ multi-select.
 
 **Picked 2026-11-06:** D1 plus D4 first; D2 as the second slice, once guessing at filing exists,
 with Manti 0.13.0's `Checkbox` `indeterminate` prop for its half-checked "select all"; D3 is
-mostly the decided filter. D1's searchable menu is Manti 0.13.0's `Combobox` (it takes
-`multiple`) inside a `Popover`, so no Manti pull request is needed.
+mostly the decided filter. D1's searchable menu is Manti's `Combobox` (it takes
+`multiple`) inside a `Popover`, patched with `pnpm patch` to take groups and custom row content
+and sent to Manti by pull request, since 0.13.0's items take a string label only. The picker
+needs the same change.
+
+*Corrected 2026-11-06:* this first said no Manti pull request was needed. That was wrong: Manti
+0.13.0's `ComboboxItem` is `{value, label: string, disabled?}`, with no groups and no custom row
+content.
 
 ## Links
 
