@@ -1,0 +1,6 @@
+tier = "component"
+owner = "tile"
+description = "the focused tile's title bar"
+
+[colors]
+extends = "surface-hover"

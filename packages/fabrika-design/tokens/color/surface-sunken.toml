@@ -1,0 +1,9 @@
+type = "background"
+tier = "global"
+owner = "design"
+description = "the desk, behind the tiles"
+theme = "desk"
+
+[colors]
+dark = { hex = "#0c0d0e", bend = "nothing in slate is darker than 1" }
+light = "slate.2"

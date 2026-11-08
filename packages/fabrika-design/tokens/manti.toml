@@ -1,0 +1,63 @@
+# Manti's tokens, each set from one of ours by its custom property's name, or to a plain value
+# with its reason (docs/direction/ui-on-manti.md). The build writes them into tokens.css's
+# manti region, in this order. A plain value is never a color: law 11 holds the list to shrink.
+
+# Manti's type, from our scale.
+"--manti-font-sans" = "--font"
+"--manti-font-mono" = "--mono"
+"--manti-text-xs" = "--fs-micro"
+"--manti-text-sm" = "--fs-small"
+"--manti-text-base" = "--fs-body"
+"--manti-text-lg" = "--fs-prose"
+"--manti-text-xl" = "--fs-head"
+"--manti-text-2xl" = "--fs-title"
+
+# Manti's surfaces, text and lines.
+"--manti-bg" = "--surface-sunken"
+"--manti-bg-subtle" = "--surface"
+"--manti-surface" = "--surface"
+"--manti-surface-raised" = "--surface-raised"
+"--manti-surface-sunken" = "--surface-sunken"
+"--manti-overlay" = "--scrim"
+"--manti-border" = "--border"
+"--manti-border-strong" = "--border-strong"
+"--manti-text" = "--text-primary"
+"--manti-text-muted" = "--text-faint"
+"--manti-text-subtle" = "--text-faint"
+"--manti-link" = "--text-primary"
+"--manti-fill-subtle" = "--surface-hover"
+"--manti-fill" = "--surface-hover"
+"--manti-fill-strong" = "--surface-selected"
+"--manti-focus-ring" = "--focus"
+"--manti-focus-ring-width" = { value = "2px", why = "the ring's width, as ours is (1.4.11)" }
+"--manti-focus-ring-offset" = { value = "2px", why = "the ring's gap, as ours is" }
+"--manti-selection-bg" = "--surface-selected"
+"--manti-selection-text" = "--text-primary"
+"--manti-accent-fill" = "--turn-fill"
+"--manti-text-on-accent" = "--turn-fg"
+"--manti-danger-text" = "--stuck"
+"--manti-danger-icon" = "--stuck"
+"--manti-danger-border" = "--stuck"
+"--manti-warning-text" = "--running"
+"--manti-panel-tint" = "--surface-raised"
+"--manti-panel-tint-strong" = "--surface-raised"
+"--manti-panel-tint-pressed" = "--surface-hover"
+"--manti-panel-border" = "--border"
+"--manti-panel-blur" = { value = "none", why = "popovers are opaque, no glass (popovers.md)" }
+
+# Manti's shape and room: px, never rem.
+"--manti-radius-xs" = "--r-sm"
+"--manti-radius-sm" = "--r"
+"--manti-radius-md" = "--r-lg"
+"--manti-radius-lg" = "--r-xl"
+"--manti-radius-xl" = "--r-xl"
+"--manti-radius-2xl" = "--r-xl"
+"--manti-space-1" = "--s-1"
+"--manti-control-height-sm" = { value = "28px", why = "ui-on-manti records it as the one raw value" }
+"--manti-control-height-md" = "--row-h"
+"--manti-control-height-lg" = "--row-2h"
+
+# Manti's motion: our one curve and our fast step.
+"--manti-duration-fast" = "--fast"
+"--manti-ease-smooth" = "--ease-out"
+"--manti-ease-soft" = "--ease-out"

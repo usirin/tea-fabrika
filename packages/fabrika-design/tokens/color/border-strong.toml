@@ -1,0 +1,10 @@
+type = "border"
+tier = "global"
+owner = "design"
+description = "the edge of an interactive part; its label and its focus ring say it is one"
+on = ["surface", "surface-raised"]
+carries = "nothing"
+
+[colors]
+dark = "slate.a7"
+light = "slate.a7"

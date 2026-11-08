@@ -40,6 +40,11 @@ import {afterAll, describe, expect, it} from "vitest";
 // `--root` names a folder laid out as this package is (tokens/, src/tokens.css,
 // src/theme-colors.ts, src/token-names.json), so a law can plant a bug in a copy. An error names
 // the file and the field; it is printed, on stdout or stderr.
+//
+// tokens/parts.toml names each owner: `[tile] stylesheets = [...]` for a part, `[design]
+// anywhere = true` for the package's own. tokens/manti.toml sets each --manti-* from one of our
+// custom properties by name, `"--manti-bg" = "--surface-sunken"`, or to a plain value with its
+// reason, `"--manti-panel-blur" = { value = "none", why = "..." }`. schema.ts says it in full.
 
 const PACKAGE = join(import.meta.dirname, "..", "..");
 const SCRIPT = join(import.meta.dirname, "tokens.ts");
@@ -173,6 +178,18 @@ describe("one TOML file per color token, flat in tokens/color/", () => {
 		const parts = parse(readFileSync(join(PACKAGE, "tokens", "parts.toml"), "utf8"));
 		expect(tableIn(parts, "tile")["stylesheets"]).toEqual(["apps/fabrika/src/window/window.css"]);
 	});
+
+	it("names the design's own tokens as readable anywhere", async () => {
+		const {parse} = await toml();
+		const parts = parse(readFileSync(join(PACKAGE, "tokens", "parts.toml"), "utf8"));
+		expect({
+			names: Object.keys(parts).sort(),
+			anywhere: tableIn(parts, "design")["anywhere"],
+		}).toEqual({
+			names: ["design", "tile"],
+			anywhere: true,
+		});
+	});
 });
 
 describe("each file says the owner's decided keys", () => {
@@ -207,13 +224,13 @@ describe("each file says the owner's decided keys", () => {
 		expect((await readToken(PACKAGE, token))["owner"]).toBe("tile");
 	});
 
-	it("gives the tile's owner to no other token", async () => {
+	it("gives every other token to the design", async () => {
 		const others = await Promise.all(
 			TOKENS.filter((t) => !t.startsWith("tile-")).map(
 				async (t) => [t, await readToken(PACKAGE, t)] as const,
 			),
 		);
-		expect(others.filter(([, t]) => t["owner"] === "tile").map(([name]) => name)).toEqual([]);
+		expect(others.filter(([, t]) => t["owner"] !== "design").map(([name]) => name)).toEqual([]);
 	});
 
 	// Q13, decided: a border no fact rides on says so, and focus holds its 3:1 floor.
@@ -376,6 +393,7 @@ describe("token-names.json lists what the stylelint rules read", () => {
 		});
 	});
 
+	// Only a part with stylesheets limits where its tokens appear; the design's are read anywhere.
 	it("gives the parts as parts.toml names them", () => {
 		expect(names()["parts"]).toEqual({tile: ["apps/fabrika/src/window/window.css"]});
 	});
@@ -478,6 +496,12 @@ const BAD: readonly (readonly [string, string, (t: Table) => void, RegExp])[] = 
 		/ticket/,
 	],
 	["the 4.28 pair with no exception", "turn-fg", without("except"), /floor/],
+	[
+		"a background that says it carries nothing",
+		"turn-fill",
+		with_("carries", "nothing"),
+		/carries/,
+	],
 ];
 
 // The build is run in write mode here, so a drift between the copy's generated files and its TOML
@@ -535,6 +559,58 @@ describe("a floor fails the build; an aim only prints", () => {
 });
 
 // In write mode too: a name written twice would also drift token-names.json, which is not the law.
+// No decided note gives a background a floor, so none is required (turn-fill keeps law 7's 3:1).
+describe("a background token needs no floor", () => {
+	it("passes with turn-fill's on and floor taken out", async () => {
+		const dir = copy();
+		await edit(dir, "turn-fill", without("on", "floor"));
+		expect(run("--root", dir).code).toBe(0);
+	});
+});
+
+describe("manti.toml sets Manti's tokens from ours", () => {
+	const plantManti = (line: string) => (dir: string) => {
+		const path = join(dir, "tokens", "manti.toml");
+		writeFileSync(path, `${line}\n${readFileSync(path, "utf8")}`);
+	};
+
+	it("fails on a token of ours written again in manti.toml, naming it", () => {
+		const dir = copy();
+		plantManti('"--surface" = "--surface-raised"')(dir);
+		const {code, said} = run("--root", dir);
+		expect({code, file: said.includes("manti.toml"), named: said.includes("--surface")}).toEqual({
+			code: 1,
+			file: true,
+			named: true,
+		});
+	});
+
+	it("fails on a --manti-* written again in another case", () => {
+		const dir = copy();
+		plantManti('"--manti-BG" = "--surface"')(dir);
+		const {code, said} = run("--root", dir);
+		expect({code, file: said.includes("manti.toml")}).toEqual({code: 1, file: true});
+	});
+
+	it("fails on a hex as a plain value", () => {
+		const dir = copy();
+		plantManti('"--manti-shadow" = { value = "#000000", why = "a shadow" }')(dir);
+		const {code, said} = run("--root", dir);
+		expect({
+			code,
+			file: said.includes("manti.toml"),
+			named: said.includes("--manti-shadow"),
+		}).toEqual({code: 1, file: true, named: true});
+	});
+
+	it("fails on a name that is none of ours", () => {
+		const dir = copy();
+		plantManti('"--manti-ring" = "--fokus"')(dir);
+		const {code, said} = run("--root", dir);
+		expect({code, named: said.includes("--fokus")}).toEqual({code: 1, named: true});
+	});
+});
+
 describe("a token name appears once, case folded", () => {
 	it("fails on a TOML token written again by hand in tokens.css", () => {
 		const dir = copy();
