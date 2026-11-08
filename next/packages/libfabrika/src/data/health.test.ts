@@ -48,7 +48,7 @@ afterAll(() => {
 	rmSync(folder, {recursive: true, force: true});
 });
 
-const OBJECT = "process_01JC9Q4W7Z3M8N5R2T6V0XKB4D";
+const OBJECT = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
 const H = 3_600_000;
 const DAY = 24 * H;
 const KEEP = 336 * H;

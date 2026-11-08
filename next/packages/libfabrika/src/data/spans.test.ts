@@ -60,7 +60,8 @@ const line = (over: Partial<Line> = {}): Line => ({
 	for: "owner",
 	sentAt: SENT,
 	seen: 0,
-	cause: null,
+	parent: null,
+	traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
 	build: "b-7c1d073",
 	_tag: "saved",
 	body: {note: BODY, base: 3},
@@ -207,14 +208,14 @@ describe("p95, every call is one span, names and numbers only", () => {
 				yield* ledger.append("a", "w-1", line({body: "another"}));
 				yield* ledger.append("a", "w-2", line({seen: 50}));
 				yield* referee.append("a", "w-3", {...line(), arrivedAt: 1});
-				yield* referee.append("a", "w-4", line({cause: "not an input id"}));
+				yield* referee.append("a", "w-4", line({parent: "not an input id"}));
 				expect(tags("ledger.append").map((t) => [t[ID], t[tag("answer")], t[tag("why")]])).toEqual([
 					["w-1", "placed", undefined],
 					["w-1", "resent", undefined],
 					["w-1", "refused", "id_reused"],
 					["w-2", "refused", "seen_ahead"],
 					["w-3", "refused", "bad_line"],
-					["w-4", "refused", "bad_cause"],
+					["w-4", "refused", "bad_parent"],
 				]);
 			}).pipe(
 				Effect.provide(

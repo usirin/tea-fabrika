@@ -25,7 +25,7 @@ import type {MemberFact} from "./members.ts";
 import {ProcessManager} from "./process-manager.ts";
 
 const READER = "gateway:t1";
-const CAUSE = "in-3f9a0c21-41";
+const PARENT = "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41";
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TO = "ledger:home";
 const SENT = "2026-11-07T21:10:01.204Z";
@@ -71,7 +71,8 @@ const from = (over: Partial<From> = {}): From => ({
 	for: P,
 	sentAt: SENT,
 	seen: 0,
-	cause: CAUSE,
+	parent: PARENT,
+	traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
 	build: "b-7c1d073",
 	...over,
 });
@@ -214,6 +215,9 @@ describe("p97, mailbox spans", () => {
 				expect(holds(placed, "notes:1") || holds(placed, "notes:1/inbox")).toBe(true);
 				expect(holds(placed, "letter_a")).toBe(true);
 				expect(tagged(placed, "answer")).toBe("placed");
+				expect(tagged(placed, "rev")).toBe(1);
+				expect(tagged(placed, "pos")).toBe(1);
+				expect(tags(placed)["messaging.operation.type"]).toBe("send");
 				expect(tagged(refused, "answer")).toBe("refused");
 				expect(tagged(refused, "why")).toBe("id_reused");
 				const appends = ended("ledger.append");
@@ -243,6 +247,7 @@ describe("p97, mailbox spans", () => {
 				expect(tagged(receive, "after")).toBe(0);
 				expect(tagged(receive, "letters")).toBe(2);
 				expect(tagged(receive, "skipped")).toBe(1);
+				expect(tags(receive)["messaging.operation.type"]).toBe("receive");
 				const reads = ended("ledger.read");
 				expect(reads.length).toBeGreaterThan(0);
 				expect(reads.every((read) => within(read, receive))).toBe(true);
@@ -261,12 +266,13 @@ describe("p97, process spans", () => {
 			yield* manager.start(
 				"notes:1",
 				{program: "notes", hash: "sha256-7c1d073e"},
-				from({cause: null}),
+				from({parent: null}),
 			);
 			const [first, second, ...more] = ended("process.start");
 			expect(more).toEqual([]);
 			if (first === undefined || second === undefined) return expect.unreachable();
 			expect(holds(first, "notes:1")).toBe(true);
+			expect(tagged(first, "pid")).toBe("notes:1");
 			expect(tagged(first, "program")).toBe("notes");
 			expect(tagged(first, "hash")).toBe("sha256-7c1d073e");
 			expect(tagged(first, "answer")).toBe("placed");
