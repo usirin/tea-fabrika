@@ -16,7 +16,7 @@
 //
 // `.oxlintrc.json` turns it on in `next/**` and leaves tests out: a test may plant a broken view.
 import type {CreateRule} from "@oxlint/plugins";
-import type {Node} from "./match.ts";
+import {pathIn, type Node} from "./match.ts";
 
 const STORE_HOOKS = new Set(["useModel", "useSyncExternalStore", "useRuntime", "useMachine"]);
 const ONLY =
@@ -38,8 +38,26 @@ const hookName = (node: Node): string | null => {
 
 export const oneStoreHook: CreateRule = {
 	create(context) {
+		// Supported: named import aliases, namespace/default imports, literal member access,
+		// const aliases and const destructuring. Dynamic property names and mutable aliases are
+		// outside this check. Import checks still refuse the external-store shim.
+		const names = new Map<string, string>();
+		const namespaces = new Map<string, string>();
+		const window = /next\/packages\/tuval\/src\/window\//.test(pathIn(context));
+		const member = (node: Node): string | null => {
+			if (node.type === "Identifier") return names.get(node.name) ?? node.name;
+			if (node.type !== "MemberExpression" || node.object.type !== "Identifier") return null;
+			if (!namespaces.has(node.object.name)) return null;
+			return !node.computed && node.property.type === "Identifier"
+				? node.property.name
+				: node.computed &&
+					  node.property.type === "Literal" &&
+					  typeof node.property.value === "string"
+					? node.property.value
+					: null;
+		};
 		const dropped = (node: Node, call: Node) => {
-			const name = hookName(call);
+			const name = call.type === "CallExpression" ? (member(call.callee) ?? hookName(call)) : null;
 			if (name === null || !STORE_HOOKS.has(name)) return;
 			context.report({
 				node,
@@ -47,8 +65,47 @@ export const oneStoreHook: CreateRule = {
 			});
 		};
 		return {
+			VariableDeclarator(node) {
+				if (
+					node.parent.type !== "VariableDeclaration" ||
+					node.parent.kind !== "const" ||
+					node.init === null
+				)
+					return;
+				if (node.id.type === "Identifier") {
+					const name =
+						node.init.type === "Identifier"
+							? (names.get(node.init.name) ?? null)
+							: member(node.init);
+					if (name !== null) names.set(node.id.name, name);
+				} else if (
+					node.id.type === "ObjectPattern" &&
+					node.init.type === "Identifier" &&
+					namespaces.has(node.init.name)
+				) {
+					for (const property of node.id.properties)
+						if (
+							property.type === "Property" &&
+							property.key.type === "Identifier" &&
+							property.value.type === "Identifier"
+						)
+							names.set(property.value.name, property.key.name);
+				}
+			},
 			ImportDeclaration(node) {
 				const from = node.source.value;
+				if (from === "react" || from === "@demlik/tea/react") {
+					for (const spec of node.specifiers) {
+						if (spec.type === "ImportSpecifier")
+							names.set(
+								spec.local.name,
+								spec.imported.type === "Identifier"
+									? spec.imported.name
+									: String(spec.imported.value),
+							);
+						else namespaces.set(spec.local.name, from);
+					}
+				}
 				if (from.startsWith("use-sync-external-store")) {
 					context.report({node, message: ONLY});
 					return;
@@ -67,6 +124,33 @@ export const oneStoreHook: CreateRule = {
 			MemberExpression(node) {
 				if (node.computed || node.property.type !== "Identifier") return;
 				if (node.property.name === "useSyncExternalStore") context.report({node, message: ONLY});
+			},
+			CallExpression(node) {
+				if (!window) return;
+				const name = member(node.callee);
+				const imported = node.callee.type !== "Identifier" || names.has(node.callee.name);
+				if (imported && (name === "memo" || name === "useMemo" || name === "useCallback"))
+					context.report({
+						node,
+						message:
+							"The React Compiler owns memoization in a window. Remove manual memoization (C6).",
+					});
+				if (name !== "useRuntime") return;
+				const selector = node.arguments[1];
+				if (selector === undefined || (selector.type === "Literal" && selector.value == null))
+					context.report({
+						node,
+						message: "A window useRuntime reader needs a selector as its second argument (p50).",
+					});
+				else if (
+					selector.type === "ArrowFunctionExpression" &&
+					(selector.body.type === "ObjectExpression" || selector.body.type === "ArrayExpression")
+				)
+					context.report({
+						node: selector,
+						message:
+							"Select an existing model part; constructing an object or array changes every read (p50).",
+					});
 			},
 			ExpressionStatement(node) {
 				const e = node.expression;

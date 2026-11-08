@@ -9,6 +9,9 @@
 		"typecheck": "tsc --noEmit -p ."
 	},
 	"dependencies": {
+		"@demlik/tea": "catalog:",
+		"@kampus/counter": "workspace:*",
+		"@kampus/tuval": "workspace:*",
 		"@kampus/libfabrika": "workspace:*",
 		"@effect/platform-node": "catalog:",
 		"effect": "catalog:",
@@ -19,6 +22,12 @@
 		"@effect/vitest": "catalog:",
 		"@types/node": "catalog:",
 		"esbuild": "catalog:",
+		"fast-check": "catalog:",
+		"playwright": "catalog:",
+		"react": "catalog:",
+		"react-dom": "catalog:",
+		"@types/react": "catalog:",
+		"@types/react-dom": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	}

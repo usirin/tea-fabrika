@@ -1,0 +1,32 @@
+{
+	"name": "@kampus/tuval",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": "./src/window/main.tsx",
+		"./browser": "./src/browser/index.ts",
+		"./headless": "./src/headless/index.ts",
+		"./dom": "./src/dom/index.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit --strict --skipLibCheck --module NodeNext --moduleResolution NodeNext --target ES2023 --allowImportingTsExtensions --jsx react-jsx src/window/main.test.tsx"
+	},
+	"dependencies": {
+		"@demlik/tea": "catalog:",
+		"@kampus/libfabrika": "workspace:*",
+		"effect": "catalog:",
+		"react": "catalog:",
+		"react-dom": "catalog:"
+	},
+	"devDependencies": {
+		"@kampus/counter": "workspace:*",
+		"@types/node": "catalog:",
+		"@types/react": "catalog:",
+		"@types/react-dom": "catalog:",
+		"fast-check": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

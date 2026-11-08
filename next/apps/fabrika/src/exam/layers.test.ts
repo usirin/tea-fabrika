@@ -178,20 +178,22 @@ const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
 	data: [],
 	coordination: ["data"],
 	app: ["coordination"],
+	client: ["transport", "data", "coordination"],
+	server: ["app", "coordination", "data", "transport", "client"],
 	mcp: ["app", "transport"], // the named exception: the bridge is a client, as a window is
 	desktop: [LIBRARY], // the app layer's names, nothing lower
 	window: ["desktop", LIBRARY, `${LIBRARY}/transport`], // a window is a client (the note's T3)
-	dom: ["desktop"],
-	browser: ["dom", "desktop", `${LIBRARY}/transport`], // its key signs transport's helloText
+	dom: ["desktop", LIBRARY, `${LIBRARY}/browser`],
+	browser: ["dom", "desktop", LIBRARY, `${LIBRARY}/browser`, `${LIBRARY}/transport`],
 	electron: ["dom", "desktop", `${LIBRARY}/transport`, `${LIBRARY}/coordination`], // the menu bar signs what the door takes
-	headless: ["desktop"],
+	headless: ["desktop", LIBRARY, `${LIBRARY}/headless`],
 	program: [LIBRARY], // `.`, what the box loads: no tuval and no React
 	"program-window": [LIBRARY, TUVAL], // `./window`: public names only
 };
 
 /** The folders under `src/` of the two library packages, each a part above. */
 const FOLDERS: Readonly<Record<string, ReadonlyArray<string>>> = {
-	[LIBRARY]: ["transport", "data", "coordination", "app", "mcp"],
+	[LIBRARY]: ["transport", "data", "coordination", "app", "mcp", "client", "server"],
 	[TUVAL]: ["desktop", "window", "dom", "browser", "electron", "headless"],
 };
 

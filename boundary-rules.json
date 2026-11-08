@@ -17,8 +17,14 @@
 		"packages/pipeline": "app",
 		"next/apps/fabrika": "next-app",
 		"next/packages/libfabrika": "next-library",
+		"next/packages/tuval": "next-tuval",
 		"next/programs/counter": "next-program"
 	},
 	"libraryRoots": ["next"],
+	"allowImportNames": {
+		"next/packages/tuval": {
+			"next/programs/counter": ["counterWindow"]
+		}
+	},
 	"acrossDeployables": ["relative-import-crosses-workspace"]
 }

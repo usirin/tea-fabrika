@@ -1,6 +1,14 @@
 {
 	"layers": [
 		{
+			"name": "next-tests",
+			"paths": [
+				"next/packages/libfabrika/src/coordination/client-signals.test.ts",
+				"next/packages/libfabrika/src/server/client-monitor.test.ts",
+				"next/packages/tuval/src/window/main.test.tsx"
+			]
+		},
+		{
 			"name": "next-apps",
 			"paths": ["next/apps"]
 		},
@@ -27,6 +35,25 @@
 		{
 			"name": "next-desktop",
 			"paths": ["next/packages/tuval/src/desktop"]
+		},
+		{
+			"name": "next-server",
+			"paths": ["next/packages/libfabrika/src/server"]
+		},
+		{
+			"name": "next-client-platforms",
+			"paths": [
+				"next/packages/libfabrika/src/client/browser.ts",
+				"next/packages/libfabrika/src/client/headless.ts",
+				"next/packages/libfabrika/src/client/dom.ts",
+				"next/packages/libfabrika/src/client/memory.ts",
+				"next/packages/libfabrika/src/browser.ts",
+				"next/packages/libfabrika/src/headless.ts"
+			]
+		},
+		{
+			"name": "next-client",
+			"paths": ["next/packages/libfabrika/src/client"]
 		},
 		{
 			"name": "next-mcp",

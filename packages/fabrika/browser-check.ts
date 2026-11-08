@@ -21,7 +21,7 @@
 //
 // Node at the edge: it is a build-time script, and esbuild's API is Node's.
 import {builtinModules} from "node:module";
-import {relative} from "node:path";
+import {relative, resolve} from "node:path";
 import {build, type Plugin} from "esbuild";
 
 const here = import.meta.dirname;
@@ -69,8 +69,20 @@ const watch: Plugin = {
 };
 
 const result = await build({
-	entryPoints: [entry],
+	entryPoints:
+		process.argv[2] === undefined
+			? [
+					entry,
+					resolve("next/packages/libfabrika/src/index.ts"),
+					resolve("next/packages/libfabrika/src/browser.ts"),
+					resolve("next/packages/libfabrika/src/headless.ts"),
+					resolve("next/packages/tuval/src/window/main.tsx"),
+					resolve("next/packages/tuval/src/browser/index.ts"),
+					resolve("next/packages/tuval/src/headless/index.ts"),
+				]
+			: [entry],
 	bundle: true,
+	outdir: "dist/browser-check",
 	platform: "browser",
 	format: "esm",
 	write: false,

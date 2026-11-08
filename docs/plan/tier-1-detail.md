@@ -2098,7 +2098,8 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 
 **p50, the window in React.** `new`, real Chromium, stage. s3, s5. `window/main.tsx`.
 - Under Strict Mode: a patch to one of 16 tiles renders one tile. A folded tile keeps its state across a fold and unfold, sees no work while hidden, and is fresh when shown. Focus comes back from the model on reveal. The hook works with no DOM, by `renderToStaticMarkup`.
-- Plants: no `memo`; a tile that unmounts on fold; no third argument to the hook.
+- Plants: whole-model subscription or a fresh selected value; a tile that unmounts on fold;
+  missing selector, which is the hook's second argument.
 
 **p51, Remove.** `new`. Pure half on node, pbt; live half on real Electron, real Chromium, stage, test `PersonCheck`. s10, s4. `desktop/menu.ts`, door.
 - Pure, over any Msgs: `sign_revoked` comes only after `checked` for that key and that act. `not_checked` makes no Cmd. `enter` makes no Cmd. A client with `own` has no Remove in `menuView`. What was shown at the click is what gets signed.

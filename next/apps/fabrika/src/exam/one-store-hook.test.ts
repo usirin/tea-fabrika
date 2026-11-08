@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname, join} from "node:path";
+import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {plant} from "./plant.ts";
 
@@ -111,6 +112,61 @@ const unary = [
 ].join("\n");
 
 describe("one-store-hook", () => {
+	it("P18 plants: aliases and namespaces require selectors and refuse manual memoization", () => {
+		fc.assert(
+			fc.property(
+				fc.constantFrom("useMemo", "useCallback", "memo"),
+				fc.constantFrom("named", "namespace", "destructure"),
+				(method, form) => {
+					const file = "next/packages/tuval/src/window/p18.tsx";
+					const imports =
+						form === "named"
+							? `import {${method} as optimize} from "react";`
+							: 'import * as React from "react";';
+					const alias = form === "destructure" ? `const {${method}: optimize} = React;` : "";
+					const call = form === "namespace" ? `React["${method}"]` : "optimize";
+					const source = `${imports}\n${alias}\nexport const Bad = ${call}(() => null);`;
+					expect(plant({[file]: source})(CODE, file)).toEqual([3]);
+				},
+			),
+			{seed: 119120, numRuns: 9},
+		);
+		fc.assert(
+			fc.property(fc.constantFrom("named", "namespace", "alias"), (form) => {
+				const file = "next/packages/tuval/src/window/p18.tsx";
+				const imports =
+					form === "namespace"
+						? 'import * as tea from "@demlik/tea/react";'
+						: 'import {useRuntime as read} from "@demlik/tea/react";';
+				const call = form === "namespace" ? "tea.useRuntime" : form === "alias" ? "select" : "read";
+				const prefix = `${imports}\n${form === "alias" ? "const select = read;" : ""}\ndeclare const run: unknown;`;
+				const bad = plant({[file]: `${prefix}\nexport const Bad = () => ${call}(run);`});
+				expect(bad(CODE, file)).toEqual([4]);
+				const good = plant({
+					[file]: `${prefix}\nexport const Good = () => ${call}(run, m => m.views.a);`,
+				});
+				expect(good(CODE, file)).toEqual([]);
+			}),
+			{seed: 119120, numRuns: 3},
+		);
+	});
+
+	it("P18 plants: fresh object and array selectors fail; existing model parts pass", () => {
+		fc.assert(
+			fc.property(fc.constantFrom("({value: m.views.a})", "[m.views.a]"), (value) => {
+				const file = "next/packages/tuval/src/window/select.tsx";
+				const source =
+					'import {useRuntime} from "@demlik/tea/react";\ndeclare const run: unknown;\n';
+				expect(
+					plant({[file]: `${source}export const Bad = () => useRuntime(run, m => ${value});`})(
+						CODE,
+						file,
+					),
+				).toEqual([3]);
+			}),
+			{seed: 119120, numRuns: 2},
+		);
+	});
 	const all = plant({
 		[HOOK]: forbidden,
 		[FIRES]: forbidden,

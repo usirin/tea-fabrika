@@ -254,8 +254,8 @@ const FORBIDDEN: ReadonlyArray<{readonly name: string; readonly test: (spec: str
  *  and which a tab holds a read copy of later (Tier 1, P6), and its `/coordination`, whose names
  *  the menu bar and the door share (Tier 1, P9). Every program's `/window` comes on top. */
 const BROWSER: Readonly<Record<string, ReadonlyArray<string>>> = {
-	"@kampus/libfabrika": [".", "./transport", "./data", "./coordination"],
-	"@kampus/tuval": ["."],
+	"@kampus/libfabrika": [".", "./transport", "./data", "./coordination", "./browser", "./headless"],
+	"@kampus/tuval": [".", "./browser", "./headless"],
 	"@kampus/notes": ["."],
 };
 const browserEntries = (
@@ -308,6 +308,18 @@ const bundleFaults = async (next: string): Promise<ReadonlyArray<string>> => {
 };
 
 describe("the real next/", () => {
+	it("P18 requires public browser and headless compositions, with no platform shims", async () => {
+		const packages = packagesIn(NEXT);
+		for (const name of ["@kampus/libfabrika", "@kampus/tuval"]) {
+			const pkg = packages.find((p) => p.manifest.name === name);
+			expect(pkg, name).toBeDefined();
+			for (const key of ["./browser", "./headless"]) {
+				const file = exportMap(pkg!).get(key);
+				expect(file, `${name}${key.slice(1)}`).toBeDefined();
+				expect(await reach(NEXT, `${name}${key.slice(1)}`, file!)).toEqual([]);
+			}
+		}
+	});
 	it("P11: libfabrika exports its required browser entry instead of silently skipping it", async () => {
 		const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
 		expect(library).toBeDefined();

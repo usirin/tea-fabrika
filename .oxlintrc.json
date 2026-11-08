@@ -5,7 +5,7 @@
 	"plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "jsx-a11y", "vitest"],
 	// Custom rules, copied from the pipeline this repo rebuilds, and this repo's own. See
 	// oxlint-plugins/README.md.
-	"jsPlugins": ["./oxlint-plugins/index.ts"],
+	"jsPlugins": ["./oxlint-plugins/index.ts", "./oxlint-plugins/wiring-only.ts"],
 	// Each rule is named here, so a new oxlint release adds none on its own.
 	"categories": { "correctness": "off" },
 	"options": { "reportUnusedDisableDirectives": "error" },
@@ -343,6 +343,7 @@
 			// edge rules off for a `next/` file that is not a test, and `edge-comment.test.ts` checks it.
 			"files": ["next/**"],
 			"rules": {
+				"p18/wiring-only": "error",
 				"fabrika/no-promises": "error",
 				"fabrika/no-effect-run-outside-edge": "error",
 				"fabrika/edge-comment": "error",
@@ -370,6 +371,7 @@
 			// `no-of` stays on, since a test names its helpers too.
 			"files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
 			"rules": {
+				"p18/wiring-only": "off",
 				"fabrika/no-promises": "off",
 				"fabrika/no-effect-run-outside-edge": "off",
 				"fabrika/no-hand-tag": "off",
