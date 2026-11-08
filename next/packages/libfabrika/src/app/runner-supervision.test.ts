@@ -1,5 +1,5 @@
 import {Outcome} from "@demlik/tea";
-// P34, next/. Real P11 runner, P33 manager and ledger; every wake reopens SQLite files.
+// P34, next/. Real P11 runner, P33 manager and ledger with SQLite-backed state.
 // Test wiring contract: layer(descriptor, {policy, recovery:{sql,name,capacity}}).
 // restart({id, build}) is the trusted H3 operation. These are implementation choices the plan
 // left unnamed, not a second runner. All stepping, counts and replacement are product code.
@@ -97,6 +97,8 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 		cmds: 0,
 		writes: [] as string[],
 		loseWriteReply: false,
+		flushOnce: false,
+		flushFailures: 0,
 		adds: 0,
 		crashAdd: 0,
 		cut: "",
@@ -303,7 +305,14 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 								alarms.push(at);
 							}),
 					}),
-					Layer.succeed(Recording, {flush: Effect.void}),
+					Layer.succeed(Recording, {
+						flush: Effect.suspend(() => {
+							if (!controls.flushOnce) return Effect.void;
+							controls.flushOnce = false;
+							controls.flushFailures++;
+							return Effect.fail(new LedgerError({why: "storage"}));
+						}),
+					}),
 					ProcessManager.layer(brain(), next.next),
 					Mailbox.layer,
 				).pipe(Layer.provideMerge(base())),
@@ -367,6 +376,98 @@ const recover = (w: ReturnType<typeof world>) =>
 	});
 
 describe("P34 runner supervision", () => {
+	for (const pending of ["fresh", "saved retry"] as const) {
+		for (const path of ["open", "msg", "due", "restart"] as const) {
+			it(`storage plant, drop jobs on flush failure: ${pending} write survives on the same runner through ${path}`, async () => {
+				await fc.assert(
+					fc.asyncProperty(fc.uuid(), fc.integer({min: 1000, max: 60_000}), (id, time) =>
+						Effect.runPromise(
+							Effect.gen(function* () {
+								const w = world(false, true);
+								const process = path === "restart" ? B : A;
+								const request = {id: `restart-${id}`, build: BUILD};
+								const input = w.input(id, {type: "save", token: id});
+								const checkpoint = ProcessStore.use((s) =>
+									s.select(process).pipe(Effect.flatMap((selected) => selected.load)),
+								);
+								yield* w.boot;
+								if (pending === "saved retry") {
+									// Leave a real dispatched write behind before constructing the tested runner.
+									yield* Effect.gen(function* () {
+										const r = yield* ProgramRunner;
+										if (path === "restart") yield* r.restart(request);
+										w.controls.loseWriteReply = true;
+										yield* failed(r.msg(input));
+									}).pipe(Effect.provide(w.layer()));
+								}
+								expect(w.controls.loseWriteReply).toBe(false);
+								expect(w.controls.writes).toHaveLength(pending === "saved retry" ? 1 : 0);
+								// One runner owns the failed flush and every later call. No storage reopen.
+								yield* Effect.gen(function* () {
+									const r = yield* ProgramRunner;
+									if (pending === "fresh" && path === "restart") yield* r.restart(request);
+									const wake = Effect.gen(function* () {
+										if (path === "open") yield* r.open(id);
+										else if (path === "msg") yield* r.msg(input);
+										// Repeat the completed request; replacing a process must not run its old Cmds.
+										else if (path === "restart") yield* r.restart(request);
+										else {
+											w.consumeAlarm();
+											yield* r.due(time);
+										}
+									});
+									const before = [...w.controls.writes];
+									w.controls.flushOnce = true;
+									yield* failed(pending === "fresh" ? r.msg(input) : wake);
+									expect(w.controls.flushFailures).toBe(1);
+									expect(w.controls.flushOnce).toBe(false);
+									expect(w.controls.writes, "the failed flush must dispatch nothing").toEqual(
+										before,
+									);
+									const saved = yield* checkpoint;
+									expect(saved?.cmds).toHaveLength(1);
+									const job = Schema.decodeUnknownSync(Schema.Struct({id: Schema.String}))(
+										saved!.cmds[0],
+									);
+									expect(saved?.cmds).toMatchObject([{id: job.id, state: "dispatched"}]);
+									expect((yield* inbox).filter((row) => row.id === `${job.id}/answer`)).toEqual([]);
+									expect(yield* read("facts")).toHaveLength(before.length);
+									const lifecycle = yield* lives;
+									yield* wake;
+									expect(
+										w.controls.writes,
+										"the next call must dispatch the pending write once",
+									).toEqual([...before, job.id]);
+									expect(
+										(yield* inbox).filter((row) => row.id === `${job.id}/answer`),
+									).toMatchObject([{body: {m: {type: "write_ok"}}}]);
+									expect(yield* checkpoint).toMatchObject({cmds: []});
+									yield* wake;
+									expect(w.controls.writes, "an answered write must not dispatch again").toEqual([
+										...before,
+										job.id,
+									]);
+									expect(yield* read("facts")).toMatchObject([{_tag: "saved", body: {token: id}}]);
+									expect(
+										(yield* inbox).filter((row) => row.id === `${job.id}/answer`),
+									).toHaveLength(1);
+									expect(yield* lives).toEqual(lifecycle);
+									expect(w.controls.flushFailures).toBe(1);
+								}).pipe(Effect.provide(w.layer()));
+							}).pipe(Effect.provide(TestClock.layer())),
+						),
+					),
+					{
+						seed: 119120,
+						numRuns: 12,
+						// Review 7: a failed pre-dispatch flush dropped fresh jobs and taken saved retries.
+						examples: [["00000000-0000-4000-8000-000000000271", 1000]],
+					},
+				);
+			});
+		}
+	}
+
 	for (const path of ["open", "msg", "due idle", "due early", "due ready", "restart"] as const) {
 		it(`p35 plant, skip takeRetry in ${path}: a same-process wake retries and answers a saved write`, async () => {
 			await fc.assert(
