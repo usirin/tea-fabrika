@@ -571,15 +571,15 @@ const world = async (
 			Layer.effect(
 				Recording,
 				Effect.gen(function* () {
-					const spanSink = yield* SpanSink;
+					const recording = yield* Recording;
 					return {
 						flush: Effect.gen(function* () {
 							if (fault.flush) return yield* new LedgerError({why: "storage"});
-							return yield* spanSink.flush;
+							return yield* recording.flush;
 						}),
 					};
 				}),
-			),
+			).pipe(Layer.provide(Recording.layer)),
 			Layer.effect(
 				CheckedWriter,
 				Effect.gen(function* () {
