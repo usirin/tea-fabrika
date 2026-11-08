@@ -9,6 +9,11 @@
 		".": "./src/index.ts",
 		"./coordination": "./src/coordination/index.ts",
 		"./data": "./src/data/index.ts",
+		"./desktop": "./src/desktop/index.ts",
+		"./electron": "./src/electron/index.ts",
+		"./electron/preload": "./src/electron/preload.ts",
+		"./node/desktop-store": "./src/node/desktop-store.ts",
+		"./node/launchd": "./src/node/launchd.ts",
 		"./sqlite": "./src/data/sqlite.ts",
 		"./testing": "./src/testing.ts",
 		"./transport": "./src/transport/index.ts"
@@ -21,8 +26,10 @@
 		"effect": "catalog:"
 	},
 	"devDependencies": {
+		"@effect/platform-node": "catalog:",
 		"@effect/vitest": "catalog:",
 		"@types/node": "catalog:",
+		"electron": "catalog:",
 		"fast-check": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"

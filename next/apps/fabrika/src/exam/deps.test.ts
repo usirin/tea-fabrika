@@ -252,9 +252,11 @@ const FORBIDDEN: ReadonlyArray<{readonly name: string; readonly test: (spec: str
 /** The detail's list, the top level of the library, of tuval and of notes, plus the library's
  *  `/transport`, which a browser tab runs (Tier 1, P7), its `/data`, which names no platform
  *  and which a tab holds a read copy of later (Tier 1, P6), and its `/coordination`, whose names
- *  the menu bar and the door share (Tier 1, P9). Every program's `/window` comes on top. */
+ *  the menu bar and the door share (Tier 1, P9), and its `/desktop`, the desktop's platform-free
+ *  rules, whose Node and Electron halves sit on their own subpaths (Tier 1, P19). Every program's
+ *  `/window` comes on top. */
 const BROWSER: Readonly<Record<string, ReadonlyArray<string>>> = {
-	"@kampus/libfabrika": [".", "./transport", "./data", "./coordination"],
+	"@kampus/libfabrika": [".", "./transport", "./data", "./coordination", "./desktop"],
 	"@kampus/tuval": ["."],
 	"@kampus/notes": ["."],
 };
@@ -314,6 +316,13 @@ describe("the real next/", () => {
 		const entry = exportMap(library!).get(".");
 		expect(entry, "P11 adds libfabrika's browser-safe app entry").toBeDefined();
 		expect(await reach(NEXT, "@kampus/libfabrika", entry!)).toEqual([]);
+	});
+	it("P19: libfabrika exports its platform-free desktop entry, and it bundles with no Node or Electron", async () => {
+		const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
+		const entry = exportMap(library!).get("./desktop");
+		expect(entry, "P19 adds @kampus/libfabrika/desktop").toBeDefined();
+		expect(existsSync(entry!), "P19 builds src/desktop/index.ts").toBe(true);
+		expect(await reach(NEXT, "@kampus/libfabrika/desktop", entry!)).toEqual([]);
 	});
 	it("has packages that are private at 0.0.0, with no side effects, a typecheck, and nothing of today's", () => {
 		expect(manifestFaults(NEXT)).toEqual([]);

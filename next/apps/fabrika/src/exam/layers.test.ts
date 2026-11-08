@@ -81,7 +81,9 @@ const codeFiles = (dir: string): ReadonlyArray<string> =>
 				return skip ? [] : codeFiles(path);
 			});
 
-const isTest = (file: string): boolean => /\.test\.tsx?$/.test(file);
+// A `.test-support.ts` file is a test's own helper (P19's stand-in seal and fixture), which no
+// product file imports, so it is held to the tests' rule, not its folder's.
+const isTest = (file: string): boolean => /\.test(?:-support)?\.tsx?$/.test(file);
 
 const IMPORTS = [
 	/^[ \t]*(?:import|export)\b[^;]*?\bfrom\s*["']([^"']+)["']/gm,
@@ -178,12 +180,24 @@ const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
 	data: [],
 	coordination: ["data"],
 	app: ["coordination"],
+	// P19: the desktop's platform-free rules, then their Node and Electron halves above them. Named
+	// `lib-*` so they never share a row with tuval's own desktop and electron parts.
+	"lib-desktop": ["app", "coordination", "data", "transport", "client"],
+	"lib-node": ["lib-desktop", "app", "coordination", "data", "transport", "client"],
+	"lib-electron": ["lib-desktop", "data", "transport", "client"],
 	mcp: ["app", "transport"], // the named exception: the bridge is a client, as a window is
 	desktop: [LIBRARY], // the app layer's names, nothing lower
 	window: ["desktop", LIBRARY, `${LIBRARY}/transport`], // a window is a client (the note's T3)
 	dom: ["desktop"],
 	browser: ["dom", "desktop", `${LIBRARY}/transport`], // its key signs transport's helloText
-	electron: ["dom", "desktop", `${LIBRARY}/transport`, `${LIBRARY}/coordination`], // the menu bar signs what the door takes
+	electron: [
+		"dom",
+		"desktop",
+		`${LIBRARY}/transport`,
+		`${LIBRARY}/coordination`, // the menu bar signs what the door takes
+		`${LIBRARY}/desktop`, // P19: the window bridge's ClientKey
+		`${LIBRARY}/browser`, // P19: the shared DOM screen
+	],
 	headless: ["desktop"],
 	program: [LIBRARY], // `.`, what the box loads: no tuval and no React
 	"program-window": [LIBRARY, TUVAL], // `./window`: public names only
@@ -191,7 +205,7 @@ const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
 
 /** The folders under `src/` of the two library packages, each a part above. */
 const FOLDERS: Readonly<Record<string, ReadonlyArray<string>>> = {
-	[LIBRARY]: ["transport", "data", "coordination", "app", "mcp"],
+	[LIBRARY]: ["transport", "data", "coordination", "app", "mcp", "desktop", "node", "electron"],
 	[TUVAL]: ["desktop", "window", "dom", "browser", "electron", "headless"],
 };
 
@@ -219,11 +233,19 @@ const folderAt = (pkg: Package, file: string): string | null => {
 	return inside.length === 1 ? null : (inside[0] ?? null);
 };
 
+/** The library's folders whose names tuval's parts also use, with the part each one is. */
+const LIBRARY_PARTS: Readonly<Record<string, string>> = {
+	desktop: "lib-desktop",
+	node: "lib-node",
+	electron: "lib-electron",
+};
+
 /** The part a file of `pkg` belongs to, or null when the table has no row for it. */
 const partAt = (pkg: Package, box: ReadonlySet<string>, file: string): string | null => {
 	if (pkg.group === "programs") return box.has(file) ? "program" : "program-window";
 	const folder = folderAt(pkg, file);
-	return folder !== null && FOLDERS[pkg.manifest.name]?.includes(folder) === true ? folder : null;
+	if (folder === null || FOLDERS[pkg.manifest.name]?.includes(folder) !== true) return null;
+	return pkg.manifest.name === LIBRARY ? (LIBRARY_PARTS[folder] ?? folder) : folder;
 };
 
 /** Every import in `next` that breaks the table, or that the library makes upward. */
@@ -305,6 +327,15 @@ describe("planted breaks", () => {
 			'import type {Wire} from "../transport/wire.ts";',
 		),
 		"packages/libfabrika/src/sync/merge.ts": lines("export const merge = 1;"),
+		"packages/libfabrika/src/desktop/keys.ts": lines(
+			'import {KeyLine} from "../transport/sshsig.ts";',
+			'import {electronSeal} from "../electron/seal.ts";',
+		),
+		"packages/libfabrika/src/node/launchd.ts": lines('import {Seal} from "../desktop/keys.ts";'),
+		"packages/libfabrika/src/electron/seal.ts": lines(
+			'import {Seal} from "../desktop/keys.ts";',
+			'import {launchControl} from "../node/launchd.ts";',
+		),
 		"packages/tuval/package.json": manifest(TUVAL),
 		"packages/tuval/src/index.ts": lines('export {fold} from "./desktop/fold.ts";'),
 		"packages/tuval/src/desktop/layout.ts": lines('import {run} from "@kampus/libfabrika";'),
@@ -356,6 +387,8 @@ describe("planted breaks", () => {
 				'packages/libfabrika/src/data/log.test.ts imports "@kampus/counter": the library imports nothing above it',
 				'packages/libfabrika/src/app/runner.ts imports "../data/log.ts": app may not import data',
 				'packages/libfabrika/src/sync/merge.ts: the folder "sync" has no row in the exam\'s table',
+				'packages/libfabrika/src/desktop/keys.ts imports "../electron/seal.ts": lib-desktop may not import lib-electron',
+				'packages/libfabrika/src/electron/seal.ts imports "../node/launchd.ts": lib-electron may not import lib-node',
 				'packages/tuval/src/desktop/fold.ts imports "@kampus/libfabrika/data": desktop may not import it',
 				'packages/tuval/src/headless/run.ts imports "../window/main.ts": headless may not import window',
 				'programs/notes/src/root.ts imports "@kampus/tuval": program may not import it',

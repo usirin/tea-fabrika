@@ -366,6 +366,14 @@
 			}
 		},
 		{
+			// An app entry only wires (Tier 1, P19): a rule there belongs in libfabrika, where a client
+			// built on it alone gets it (docs/direction/where-each-piece-lives.md).
+			"files": ["next/apps/fabrika/src/entry/**"],
+			"rules": {
+				"fabrika/wiring-only": "error"
+			}
+		},
+		{
 			// Tests are left out: they await vitest, feed raw frames and may plant a broken view.
 			// `no-of` stays on, since a test names its helpers too.
 			"files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
@@ -378,7 +386,8 @@
 				"react/immutability": "off",
 				"react/display-name": "off",
 				"react/purity": "off",
-				"fabrika/no-clock-in-view": "off"
+				"fabrika/no-clock-in-view": "off",
+				"fabrika/wiring-only": "off"
 			}
 		}
 	]

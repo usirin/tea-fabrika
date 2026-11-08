@@ -237,7 +237,9 @@ jobs:
       - name: chromium
         if: hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''
         run: pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
-      - run: node next/apps/fabrika/e2e.ts
+      # P19's Electron laws need a display on Linux; xvfb comes with Chromium's --with-deps above.
+      # Their launchd and real-Keychain laws are laptop-only and skip here.
+      - run: xvfb-run -a node next/apps/fabrika/e2e.ts
       # Tier 1, P35: each edge comment this pull request adds, one line with its reason, for the owner
       # (docs/direction/no-promises.md). In the step summary and as a note on that line of the diff.
       # It never blocks on an edge: it exits 0, or 2 only when it could not read a file.

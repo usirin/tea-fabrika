@@ -1,0 +1,9 @@
+{
+	"name": "fabrika-p19-fixture",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "The P19 Electron fixture's manifest template. The e2e support copies it beside the bundle and sets productName per run, so a real seal names its own Keychain item.",
+	"productName": "fabrika-p19-fixture",
+	"main": "p19-main.js"
+}

@@ -23,6 +23,7 @@ import {noThrowInEffectGen} from "./no-throw-in-effect-gen.ts";
 import {noTypeAssertions} from "./no-type-assertions.ts";
 import {oneStoreHook} from "./one-store-hook.ts";
 import {useImportExtensions} from "./use-import-extensions.ts";
+import {wiringOnly} from "./wiring-only.ts";
 
 const plugin: Plugin = {
 	meta: {name: "fabrika"},
@@ -49,6 +50,7 @@ const plugin: Plugin = {
 		"no-type-assertions": noTypeAssertions,
 		"one-store-hook": oneStoreHook,
 		"use-import-extensions": useImportExtensions,
+		"wiring-only": wiringOnly,
 	},
 };
 

@@ -5,6 +5,14 @@
 			"paths": ["next/apps"]
 		},
 		{
+			"name": "next-node",
+			"paths": ["next/packages/libfabrika/src/node"]
+		},
+		{
+			"name": "next-lib-electron",
+			"paths": ["next/packages/libfabrika/src/electron"]
+		},
+		{
 			"name": "next-programs",
 			"paths": ["next/programs"]
 		},
@@ -27,6 +35,10 @@
 		{
 			"name": "next-desktop",
 			"paths": ["next/packages/tuval/src/desktop"]
+		},
+		{
+			"name": "next-lib-desktop",
+			"paths": ["next/packages/libfabrika/src/desktop"]
 		},
 		{
 			"name": "next-mcp",
@@ -109,6 +121,12 @@
 		}
 	],
 	"allowed": [
+		{
+			"from": "next/packages/libfabrika/src/desktop/desktop.test-support.ts",
+			"to": "next/packages/libfabrika/src/electron/keys.test-support.ts",
+			"sites": 1,
+			"reason": "P19's tests: the desktop fixture uses the stand-in seal, which the plan places beside the Electron seal. Test-only; no product file imports either."
+		},
 		{
 			"from": "packages/pipeline/src/laws/agent.ts",
 			"to": "packages/pipeline/src/laws/explore.ts",
