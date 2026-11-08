@@ -21,7 +21,7 @@ import {type Name, openNames} from "./names.ts";
 // person, since names.ts keeps one list for the host and only records `by`.
 
 const WORDS = ["scout", "researcher", "a", "b-2"] as const;
-const PEOPLE = ["user:owner", "user:brother"] as const;
+const PEOPLE = ["user:owner", "user:teammate"] as const;
 
 /** The two Msgs of `names`, as `take` and `free` send them. */
 type NamesMsg =
@@ -181,7 +181,7 @@ describe("the laws of names, the kept summoned names", () => {
 		};
 		const steps = await play(memoryStorage(), [
 			{type: "taken", name: first},
-			{type: "taken", name: {...first, run: "acp:2", agent: "claude", by: "user:brother"}},
+			{type: "taken", name: {...first, run: "acp:2", agent: "claude", by: "user:teammate"}},
 		]);
 		expect(steps.map((s) => s.took)).toEqual([true, false]);
 		expect(steps.at(-1)?.names).toEqual([first]);
