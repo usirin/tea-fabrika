@@ -215,9 +215,13 @@ const passkey = Effect.fn("test.passkey")(function* () {
 
 // Loading inside the test hook lets each new law report the missing door on the pre-build base,
 // instead of losing every law to a collection error. This always imports the real module.
-let Door: typeof import("./door.ts").Door;
+let Door: typeof import("@kampus/libfabrika/door").Door;
+let IdGenerator: typeof import("@kampus/libfabrika/data").IdGenerator;
 beforeEach(async () => {
-	({Door} = await vi.importActual<typeof import("./door.ts")>("./door.ts"));
+	({Door} =
+		await vi.importActual<typeof import("@kampus/libfabrika/door")>("@kampus/libfabrika/door"));
+	({IdGenerator} =
+		await vi.importActual<typeof import("@kampus/libfabrika/data")>("@kampus/libfabrika/data"));
 });
 const top = mkdtempSync(join(tmpdir(), "p10-door-"));
 const opened: Array<DatabaseSync> = [];
@@ -347,11 +351,13 @@ const world = Effect.fnUntraced(function* (
 	const records = RecordManager.sql(part, options.recordCap ?? 64 * 1024);
 	const env = Layer.mergeAll(
 		clients,
+		LedgerTransaction.layer(sql).pipe(Layer.provide(quiet)),
 		C.Mailbox.layer.pipe(Layer.provide(clients)),
 		SpanSink.layer(sql, {object: START}),
 		records,
 		Archive.memory,
 		C.ProcessIdGenerator.layer,
+		IdGenerator.layer,
 	);
 	const layer = Door.layer(settings).pipe(Layer.provideMerge(env));
 	const reopen = (storage: ReturnType<typeof nodeSql>) => {
@@ -361,11 +367,13 @@ const world = Effect.fnUntraced(function* (
 			Layer.provideMerge(
 				Layer.mergeAll(
 					freshClients,
+					LedgerTransaction.layer(storage).pipe(Layer.provide(quiet)),
 					C.Mailbox.layer.pipe(Layer.provide(freshClients)),
 					SpanSink.layer(storage, {object: START}),
 					records,
 					Archive.memory,
 					C.ProcessIdGenerator.layer,
+					IdGenerator.layer,
 				),
 			),
 		);
@@ -1627,7 +1635,8 @@ describe("P10 inputs, retries and signer", () => {
 				expect((yield* d.route(client, "process.send", request("l1")))._tag).toBe("ok");
 				const e = w.deliveries[0]!.envelope;
 				expect(Object.keys(e).sort()).toEqual(["arrivedAt", "by", "id", "input"]);
-				expect(e.id).toMatch(/^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-1$/);
+				expect(e.id).toMatch(/^input_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
+				expect(Object.values((yield* stamped()).at(-1)!.body ?? {})).toContain(1);
 				expect(e.by).toEqual({_tag: "person", key: w.window.fingerprint, for: PERSON});
 				expect(e.arrivedAt).toBe(1_790_000_000_000);
 				expect(e.input).toEqual(comment());
@@ -1699,8 +1708,17 @@ describe("P10 inputs, retries and signer", () => {
 						const {client} = yield* online(d, w);
 						yield* d.route(client, "process.send", request(`letter-${i}`));
 						ids.push(w.deliveries.at(-1)!.envelope.id);
+						const recorded = Object.values((yield* stamped()).at(-1)!.body ?? {});
+						// P17a leaves the door's process and count as separate recorded fields.
+						// The plan leaves their key names to the builder.
+						expect(recorded).toContain(i === 0 ? START : OTHER_PROCESS);
+						expect(recorded).toContain(1);
 					}).pipe(w.provide);
-				expect(ids).toEqual([`in-${START}-1`, `in-${OTHER_PROCESS}-1`]);
+				expect(new Set(ids).size).toBe(2);
+				for (const id of ids) expect(id).toMatch(/^input_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
+				expect(
+					w.sql.exec("SELECT id FROM door_starts ORDER BY rowid").map((row) => row.id),
+				).toEqual([START, OTHER_PROCESS]);
 				expect(starts).toEqual([]);
 			}),
 	);
