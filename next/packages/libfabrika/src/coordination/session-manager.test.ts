@@ -12,14 +12,15 @@ import * as fc from "fast-check";
 import {type InputId} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
+import {processId} from "../id.test-support.ts";
 import * as C from "./index.ts";
 import {signalId} from "./process.ts";
 
-const OTHER_PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjt";
+const OTHER_PROCESS = Effect.runSync(processId);
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
-const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
+const PROCESS = Effect.runSync(processId);
 const SPAN = "00f067aa0ba902b7";
-const START = "process_01m6v5270hetdrt4r8h9vvjwjr";
+const START = Effect.runSync(processId);
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 const folder = mkdtempSync(join(tmpdir(), "p10-session-"));

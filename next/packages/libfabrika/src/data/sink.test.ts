@@ -26,6 +26,7 @@ import {afterAll, describe, expect, it} from "@effect/vitest";
 import {Cause, Effect, Exit, Layer, Option, Redacted, Stream, Tracer} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
+import {processId} from "../id.test-support.ts";
 import {Archive, type BucketCalls} from "./archive.ts";
 import {RecordManager} from "./records.ts";
 import type {Sql} from "./referee.ts";
@@ -71,9 +72,9 @@ const home = () => {
 	return {dir, db, sql: nodeSql(db), open, part, parts, bytes};
 };
 
-const OBJECT = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
+const OBJECT = Effect.runSync(processId);
 const P1 = OBJECT;
-const P2 = "process_01jc9q4w7z3m8n5r2t6v0xkb4e";
+const P2 = Effect.runSync(processId);
 const job = (process: string): ChainValue => ({_tag: "job", process});
 const spans: ChainValue = {_tag: "spans"};
 const BIG = 1024 * 1024 * 1024;
@@ -170,9 +171,10 @@ const bucket = () => {
 const ids = (rows: ReadonlyArray<Row>) => rows.map((r) => r.spanId);
 
 describe("T246, P37 decodes TypeID process ids", () => {
+	// Independently encoded and decoded UUIDv7 boundary fixtures, with RFC 9562's version/variant.
 	it.effect.each([
-		["starting with 0", `process_${"0".repeat(26)}`],
-		["starting with 7", `process_7${"z".repeat(25)}`],
+		["starting with 0", "process_0000000000e008000000000000"],
+		["starting with 7", "process_7zzzzzzzzzfzzvzzzzzzzzzzzz"],
 	] as const)("a valid process %s reaches its JobRecord", ([, process]) => {
 		const {db, sql} = home();
 		return Effect.gen(function* () {

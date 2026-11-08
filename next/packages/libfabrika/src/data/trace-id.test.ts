@@ -4,6 +4,7 @@ import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
 import {Cause, Effect, Exit, Layer, Stream, Tracer} from "effect";
 import {TestClock} from "effect/testing";
+import {processId} from "../id.test-support.ts";
 import {Archive} from "./archive.ts";
 import * as data from "./index.ts";
 import {Doorbell, Ledger, type LedgerCalls} from "./ledger.ts";
@@ -32,7 +33,7 @@ describe("T246, fromHere", () => {
 	// Plant: fromHere returns a fresh random traceId instead of the current span's.
 	it.effect.each([
 		["no parent", null],
-		["an input parent", "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41"],
+		["an input parent", `in-${Effect.runSync(processId)}-41`],
 	] as const)("an entry with parent %s joins the ledger.call span P37 records", ([, parent]) => {
 		const db = new DatabaseSync(":memory:");
 		opened.push(db);
