@@ -308,6 +308,12 @@ const bundleFaults = async (next: string): Promise<ReadonlyArray<string>> => {
 };
 
 describe("the real next/", () => {
+	it("P13: notes declares its required browser entry instead of silently skipping it", () => {
+		const notes = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/notes");
+		expect(notes).toBeDefined();
+		expect(exportMap(notes!).get(".")).toBeDefined();
+		expect(existsSync(exportMap(notes!).get(".")!)).toBe(true);
+	});
 	it("P11: libfabrika exports its required browser entry instead of silently skipping it", async () => {
 		const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
 		expect(library).toBeDefined();
