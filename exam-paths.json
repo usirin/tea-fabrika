@@ -21,6 +21,10 @@
 	{ "glob": ".oxfmtrc.json", "why": "the format settings" },
 	{ "glob": "oxlint-plugins/**", "why": "the custom lint rules and the lint runner" },
 	{ "glob": "vitest.config.ts", "why": "which tests run, and their time limit" },
+	{
+		"glob": ".agents/skills/*/scripts/*.test.ts",
+		"why": "the step scripts' laws and planted breaks"
+	},
 	{ "glob": "layer-rules.json", "why": "which way imports may point" },
 	{ "glob": "boundary-rules.json", "why": "which package may import which" },
 	{ "glob": "pnpm-workspace.yaml", "why": "the packages and the catalog's versions" },
