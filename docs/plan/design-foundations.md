@@ -562,6 +562,8 @@ What the owner sees: `pnpm lint` reads CSS, and six rules, each with its count.
 
 ## CODEOWNERS (call 9, decided yes for now)
 
+**Decided 2026-11-08 by the owner: CODEOWNERS stays advisory.** No `require_code_owner_review` on main while only the project's two people send commits, so the step below waits.
+
 New file `.github/CODEOWNERS`:
 
 ```text
