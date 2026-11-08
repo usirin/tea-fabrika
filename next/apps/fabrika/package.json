@@ -9,16 +9,19 @@
 		"typecheck": "tsc --noEmit -p ."
 	},
 	"dependencies": {
-		"@kampus/libfabrika": "workspace:*",
 		"@effect/platform-node": "catalog:",
+		"@kampus/libfabrika": "workspace:*",
 		"effect": "catalog:",
 		"oxc-parser": "catalog:",
 		"oxc-transform-react": "catalog:"
 	},
 	"devDependencies": {
+		"@demlik/tea": "catalog:",
 		"@effect/vitest": "catalog:",
 		"@types/node": "catalog:",
 		"esbuild": "catalog:",
+		"fast-check": "catalog:",
+		"rolldown": "1.2.13",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	}
