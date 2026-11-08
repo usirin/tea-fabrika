@@ -1,3 +1,4 @@
+import {deepEqual} from "@demlik/tea/persistence";
 import {
 	Job,
 	type JobTrace,
@@ -453,9 +454,6 @@ const stepWords = (answer: Replayed): {readonly n: number; readonly says: string
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-/** A value in one line, as JSON writes it. */
-const inLine = (value: unknown): string => JSON.stringify(value) ?? String(value);
-
 /** What tea's refusal names a state with no tag, as tally's `{total}` is: nothing a person reads. */
 const UNTAGGED = "(untagged state)";
 
@@ -466,7 +464,7 @@ const saysOf = (answer: Replayed | null): string => {
 		case "matches":
 			return `Replayed through current code: matches at every step, ${plural(answer.steps, "step")}.`;
 		case "parts":
-			return `Replayed through current code: parts at step ${answer.n} (${msgName(answer.msg)}), at ${answer.path}: ${inLine(answer.recorded)} in the recording, ${inLine(answer.replayed)} now.`;
+			return `Replayed through current code: parts at step ${answer.n} (${msgName(answer.msg)}), at ${answer.path}: the recording and today's code differ there.`;
 		case "refused":
 			return `Replayed through current code: no cell for step ${answer.n} (${msgName(answer.msg)})${answer.state === UNTAGGED ? "" : ` in ${answer.state}`}. Today's code takes ${answer.accepts.length === 0 ? "no Msg there" : answer.accepts.join(", ")}.`;
 		case "cannot":
@@ -543,10 +541,11 @@ const stepDetail = (
 	started: Start | null,
 	zero: number,
 ): Detail => {
-	// A life's start wins over the step before: a restart folds from where it booted.
+	// A life's start wins over the step before: a restart folds from where it booted. Two states
+	// compared as tea compares them, so keys in another order are the same state.
 	const from = started ?? before;
 	const restarted =
-		started !== null && before !== null && inLine(started.state) !== inLine(before.state)
+		started !== null && before !== null && !deepEqual(started.state, before.state)
 			? {left: before.state}
 			: null;
 	return {

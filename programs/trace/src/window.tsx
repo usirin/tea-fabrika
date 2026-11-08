@@ -1,6 +1,6 @@
 import type {WindowProps} from "@kampus/fabrika-old";
 import {Kbd} from "@manti-ui/react";
-import {Fragment, type KeyboardEvent, type ReactNode} from "react";
+import {Fragment, type KeyboardEvent, type ReactNode, useEffect, useRef} from "react";
 import type {trace} from "./index.ts";
 import {ticksOf} from "./ruler.ts";
 import type {
@@ -142,20 +142,29 @@ const tabStop = (chosen: string | null, drawn: readonly string[]): string | null
 	chosen !== null && drawn.includes(chosen) ? chosen : (drawn[0] ?? null);
 
 /**
- * Move focus to a row once it is drawn: the tile notes which row (on its own trace view, so two
- * tiles never mix), and the row takes focus when it draws and clears the note. The choose goes to
- * the machine and back before the row exists, so it can't be focused at the press.
+ * Focus follows the choice: when `chosen` changes, the row it names takes focus, whether it was
+ * drawn already or the choice revealed it, so a control that goes away when pressed (Open step)
+ * never drops focus to the page. An effect keyed on `chosen` alone, run once the row is drawn, so a
+ * later draw (a run closed and opened again) never pulls focus back, and the first draw takes none.
+ * Only while focus is in this tile or on the page: a choice never takes focus from another tile.
  */
-const focusOnDraw = (from: HTMLElement, row: string) => {
-	const view = from.closest<HTMLElement>(".trace-view");
-	if (view !== null) view.dataset.focusRow = row;
-};
-const focusIfAsked = (el: HTMLTableRowElement | null) => {
-	const view = el?.closest<HTMLElement>(".trace-view");
-	if (el === null || view === null || view === undefined) return;
-	if (view.dataset.focusRow !== el.dataset.row) return;
-	delete view.dataset.focusRow;
-	el.focus();
+const useFocusChosen = (chosen: string | null) => {
+	const tree = useRef<HTMLTableElement>(null);
+	const was = useRef(chosen);
+	useEffect(() => {
+		if (was.current === chosen) return;
+		was.current = chosen;
+		const table = tree.current;
+		if (chosen === null || table === null) return;
+		const at = document.activeElement;
+		const tile = table.closest(".trace-view");
+		if (at !== null && at !== document.body && tile?.contains(at) !== true) return;
+		const row = [...table.querySelectorAll<HTMLElement>("tr[data-row]")].find(
+			(r) => r.dataset.row === chosen,
+		);
+		row?.focus();
+	}, [chosen]);
+	return tree;
 };
 
 /**
@@ -346,8 +355,7 @@ function ReplayThrough({
 			</p>
 		);
 	const step = detail.replay?.step ?? null;
-	// The Open step button as drawn, so its press can note which row takes focus once it shows.
-	let opener: HTMLButtonElement | null = null;
+	const answer = detail.replay?.answer ?? null;
 	return (
 		<div className="wf-replay">
 			<button
@@ -357,20 +365,20 @@ function ReplayThrough({
 			>
 				Replay through current code
 			</button>
-			<p className="wf-replay-says" role="status">
-				{detail.replay?.says ?? ""}
-			</p>
+			<div className="wf-replay-says" role="status">
+				<p>{detail.replay?.says ?? ""}</p>
+				{answer?._tag === "parts" ? (
+					<div className="wf-states">
+						<Pre label="In the recording" value={answer.recorded} />
+						<Pre label="Today's code" value={answer.replayed} />
+					</div>
+				) : null}
+			</div>
 			{step === null ? null : (
 				<button
 					type="button"
 					className="btn sm"
-					ref={(el) => {
-						opener = el;
-					}}
-					onClick={() => {
-						if (opener !== null) focusOnDraw(opener, step.row);
-						send({type: "choose", value: {row: step.row}});
-					}}
+					onClick={() => send({type: "choose", value: {row: step.row}})}
 				>
 					Open step {step.n}
 				</button>
@@ -418,10 +426,10 @@ function Opened({detail, send}: {readonly detail: Detail; readonly send: Send}) 
 								<figcaption>State before</figcaption>
 								<pre>{json(detail.before.state)}</pre>
 								{detail.restarted === null ? null : (
-									<p className="faint">
-										Restarted from this state; the step before left{" "}
-										<code>{json(detail.restarted.left)}</code>.
-									</p>
+									<>
+										<p className="faint">Restarted from this state; the step before left:</p>
+										<pre>{json(detail.restarted.left)}</pre>
+									</>
 								)}
 							</figure>
 						) : (
@@ -722,6 +730,7 @@ export function TraceWindow({view, send}: WindowProps<typeof trace>) {
 
 function JobWindow({view, send}: {readonly view: Shown; readonly send: Send}) {
 	const chosen = view.chosen?.key ?? null;
+	const tree = useFocusChosen(chosen);
 	const toggle = (row: string) => send({type: "toggle", value: {row}});
 	const choose = (row: string | null) => send({type: "choose", value: {row}});
 	/** A click, or Enter or Space: a grouped row opens or closes, and shows its detail. */
@@ -774,8 +783,14 @@ function JobWindow({view, send}: {readonly view: Shown; readonly send: Send}) {
 	return (
 		<section className="view trace-view" aria-label={`trace of ${view.title}`}>
 			<Head view={view} drawn={true} />
-			{/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-to-interactive-role -- a tree grid is a table whose rows open and take the keys; the WAI-ARIA tree grid example is this same table with this role, and its cells become grid cells. */}
-			<table className="wf" role="treegrid" aria-label="spans and steps" aria-readonly="true">
+			<table
+				ref={tree}
+				className="wf"
+				// oxlint-disable-next-line jsx-a11y/no-noninteractive-element-to-interactive-role -- a tree grid is a table whose rows open and take the keys; the WAI-ARIA tree grid example is this same table with this role, and its cells become grid cells.
+				role="treegrid"
+				aria-label="spans and steps"
+				aria-readonly="true"
+			>
 				<colgroup>
 					<col className="wf-c-name" />
 					<col />
@@ -801,7 +816,6 @@ function JobWindow({view, send}: {readonly view: Shown; readonly send: Send}) {
 								aria-selected={row.key === chosen}
 								aria-label={`${KIND_WORD[row.kind]} ${row.name}${row.note === "" ? "" : `, ${row.note}`}${row.replay === null ? "" : `, replayed: ${row.replay}`}`}
 								tabIndex={row.key === focusable ? 0 : -1}
-								ref={focusIfAsked}
 								onClick={() => press(row)}
 								onKeyDown={(e) => onTreeKey(e, row, view.rows, toggle, () => press(row))}
 							>
