@@ -208,7 +208,9 @@ describe("ask desk P21: preparePending seals each parked old ask from what was k
 				expect(sealed?.shows.picks.map((p) => p.pick)).toEqual(["approve", "no"]);
 				const withdrawn = (yield* rows(5)).filter((r) => r.kind === "withdrawn");
 				expect(withdrawn).toHaveLength(1);
-				expect(withdrawn[0]?.writer).toContain("lane");
+				// Review 8: code seals it, in its own name for the person, never as the old ask's author.
+				expect(withdrawn[0]?.writer).toMatch(/^agent:\S+ for:owner$/);
+				expect(withdrawn[0]?.writer).not.toBe(LANE);
 			}),
 		);
 	});
