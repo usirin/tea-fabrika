@@ -174,7 +174,8 @@ replay: {row: RowKey, steps: Int, answer: Replayed | null} | null
     value of polite and an implicit aria-atomic value of true", so everything inside is read again
     on every change. The answer's region holds only its sentence. A parting answer's sentence names
     the path and both values when each fits on one line (the window's own `json` cutoff, 64
-    characters), as "at total: 3 in the recording, 6 now"; a longer one says "shown below". The
+    characters), with tea's path as given (it starts at `state` or `cmds`, which says which one
+    parted), as "at state.total: 3 in the recording, 6 now"; a longer one says "shown below". The
     two `Pre` blocks are drawn just after the region, never inside it.
   - *A test leaves nothing behind.* Every e2e stage that makes its own home removes it in its
     `finally`, after the host stops (AGENTS.md: "Leave nothing behind"), `tilesLook` included.
