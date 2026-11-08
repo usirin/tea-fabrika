@@ -25,7 +25,7 @@ export const Session = Schema.Struct({
 });
 export type Session = typeof Session.Type;
 export class SigningRefused extends Schema.TaggedError<SigningRefused>()("SigningRefused", {
-	why: Schema.Literals(["not_delivered", "spent", "person_only", "ended"]),
+	why: Schema.Literals(["not_delivered", "spent", "person_only", "ended", "signal"]),
 }) {}
 export class NotGranted extends Schema.TaggedError<NotGranted>()("NotGranted", {}) {}
 export class SignRequest extends Context.Service<SignRequest, {readonly id: string}>()(
@@ -124,6 +124,9 @@ export class SessionManager extends Context.Service<
 					kind: string,
 				) {
 					const request = yield* SignRequest;
+					// A signal id is the brain's alone: the signer refuses it before it reads or writes,
+					// so no receipt binds one and the delivery's one receipt stays free.
+					if (inSignalSpace(request.id)) return yield* new SigningRefused({why: "signal"});
 					const saved = yield* stored(() => {
 						ensure();
 						return load(parent);
@@ -137,9 +140,6 @@ export class SessionManager extends Context.Service<
 							if (current === null) return Result.fail(new SigningRefused({why: "not_delivered"}));
 							const session = SavedInput.sign(current, process, policy.fact(kind));
 							if (Result.isFailure(session)) return session;
-							// A signal id is the brain's alone: no receipt binds one, so the delivery's one
-							// receipt stays free and the door's append finds nothing to sign with.
-							if (inSignalSpace(request.id)) return session;
 							const [receipt] = sql.exec(
 								"SELECT * FROM door_receipts WHERE id=? OR (parent=? AND process=? AND kind=?)",
 								request.id,

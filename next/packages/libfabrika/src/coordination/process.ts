@@ -4,7 +4,11 @@ import {type Entry, valueFor} from "../data/log.ts";
 import {ProcessId} from "../data/trace.ts";
 import type {From} from "./mailbox.ts";
 
-const Text = Schema.NonEmptyString;
+/**
+ * Every text a client gives that lands in a brain line: at most 256 characters, counted as
+ * `string.length`, so no brain line can reach the ledger's per-line limit.
+ */
+const Text = Schema.NonEmptyString.check(Schema.isMaxLength(256));
 const PROCESSES = "processes";
 const CLIENTS = "client:";
 /** Names that lead streams this layer or the door already owns. */
@@ -13,11 +17,11 @@ const RESERVED = `(?!(?:${PROCESSES}|door)$)`;
  * A process name is a stream name: no `/`, so `<name>` and `<name>/inbox` never meet another's,
  * no `client:` lead, so it never meets a client's inbox, and never `processes` or `door`.
  */
-const ProcessName = Schema.String.check(
+const ProcessName = Text.check(
 	Schema.isPattern(new RegExp(`^${RESERVED}(?!${CLIENTS})[a-z0-9][a-z0-9._:-]*$`)),
 );
 /** A client id has no `:`, the mark of a process name such as `counter:1`. */
-const ClientId = Schema.String.check(
+const ClientId = Text.check(
 	Schema.isPattern(new RegExp(`^(?!${PROCESSES}$)[a-z0-9][a-z0-9._-]*$`)),
 );
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
@@ -74,7 +78,7 @@ export const Dead = Schema.TaggedStruct("dead", {
 	limit: Count,
 	m: Text,
 	build: Text,
-	errors: Schema.Array(Text),
+	errors: Schema.Array(Text).check(Schema.isMaxLength(32)),
 }).check(
 	Schema.makeFilter((value) => value.errors.length === value.tries || "one error class per try"),
 );
@@ -121,6 +125,7 @@ export class ProcessError extends Schema.TaggedError<ProcessError>()("ProcessErr
 		"ended",
 		"bad_ref",
 		"bad_name",
+		"bad_text",
 	]),
 }) {}
 
@@ -148,6 +153,7 @@ export type ProcessInfo = {
 const decodeFact = Schema.decodeUnknownSync(ProcessFact);
 const decodeDown = Schema.decodeUnknownOption(Down);
 const denied = (why: ProcessError["why"]) => Result.fail(new ProcessError({why}));
+const isText = Schema.is(Text);
 const canonical = (to: typeof Recipient.Type): typeof Recipient.Type =>
 	to._tag === "process"
 		? Recipient.cases.process.make({process: to.process})
@@ -278,6 +284,7 @@ export class ProcessTable {
 		from: From,
 	): Result.Result<Option.Option<StartAnswer>, ProcessError> {
 		if (!Schema.is(ProcessName)(request.name)) return denied("bad_name");
+		if (!Schema.is(Start)(request)) return denied("bad_text");
 		const saved = [...this.#lives.values()].find((life) => life.request.id === request.id);
 		if (saved !== undefined) {
 			if (
@@ -318,10 +325,18 @@ export class ProcessTable {
 			: denied("not_parent");
 	}
 	exit(process: string, why: string, owner: typeof Owner.Type): Result.Result<Life, ProcessError> {
+		if (!isText(why)) return denied("bad_text");
 		const parent = this.parent(process, owner);
 		if (Result.isFailure(parent)) return parent;
 		const state = parent.success.state;
 		return state._tag !== "live" && state.why !== why ? denied("ended") : parent;
+	}
+	/** The life a supervisor gives up on; refused while that process still lives. */
+	down(process: string, why: string, owner: typeof Owner.Type): Result.Result<Life, ProcessError> {
+		if (!isText(why)) return denied("bad_text");
+		const parent = this.parent(process, owner);
+		if (Result.isFailure(parent)) return parent;
+		return parent.success.state._tag === "live" ? denied("alive") : parent;
 	}
 	/** The round to write for a new or renewed watch; none when this watch is already live. */
 	monitor(
@@ -329,6 +344,7 @@ export class ProcessTable {
 		process: string,
 		to: typeof Recipient.Type,
 	): Result.Result<Option.Option<number>, ProcessError> {
+		if (!isText(ref)) return denied("bad_text");
 		if (to._tag === "client" && !Schema.is(ClientId)(to.client)) return denied("bad_name");
 		const watch = this.#watches.get(watchKey(to, ref));
 		if (watch !== undefined && watch.process !== process) return denied("bad_ref");

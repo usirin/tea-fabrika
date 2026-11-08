@@ -246,10 +246,8 @@ export class ProcessManager extends Context.Service<
 				) {
 					yield* Effect.annotateCurrentSpan({"fab.process": process});
 					yield* checked((table, turn) => {
-						const life = table.parent(process, caller.owner);
+						const life = table.down(process, policy.why, caller.owner);
 						if (Result.isFailure(life)) return Result.fail(life.failure);
-						if (life.success.state._tag === "live")
-							return Result.fail(new ProcessError({why: "alive"}));
 						turn.append(
 							ProcessTable.facts(life.success.name),
 							id("down", process, policy),
