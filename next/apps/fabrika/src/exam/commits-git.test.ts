@@ -850,10 +850,10 @@ describe("person commits between step links (p86b)", () => {
 			"main",
 		);
 		expect(verifyCommit(r, r.head())).toBe(0);
+		const stale = r.check([], main, behind);
 		r.change("b.ts");
 		r.sign("build");
 		const merged = r.check([], main);
-		const stale = r.check([], main, behind);
 		expect(merged.answers).toEqual([DONE]);
 		expect(merged.code).toBe(0);
 		expect(stale.answers).toEqual([stuck("broken_chain", behind)]);
