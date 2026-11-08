@@ -1986,6 +1986,7 @@ const lookFocus = async () => {
 		await app.close().catch(() => {});
 		const pid = await hostPid(own);
 		if (pid !== null) await stop(pid);
+		await removeHome(own);
 	}
 };
 
@@ -2772,7 +2773,7 @@ const keysLook = async () => {
 			await app.close().catch(() => {});
 			const pid = await hostPid(own);
 			if (pid !== null) await stop(pid);
-			await rm(own, {recursive: true, force: true});
+			await removeHome(own);
 		}
 	}
 };
@@ -2828,7 +2829,7 @@ const borderDrag = async () => {
 		await app.close().catch(() => {});
 		const pid = await hostPid(own);
 		if (pid !== null) await stop(pid);
-		await rm(own, {recursive: true, force: true});
+		await removeHome(own);
 	}
 };
 
@@ -3061,6 +3062,7 @@ const trackerFocus = async () => {
 		await app.close().catch(() => {});
 		const pid = await hostPid(own);
 		if (pid !== null) await stop(pid);
+		await removeHome(own);
 	}
 };
 
@@ -3151,6 +3153,7 @@ const focusShots = async () => {
 		await app.close().catch(() => {});
 		const pid = await hostPid(own);
 		if (pid !== null) await stop(pid);
+		await removeHome(own);
 	}
 };
 
@@ -3407,6 +3410,7 @@ const ariaStage = async (): Promise<0 | 2> => {
 		await app.close().catch(() => {});
 		const pid = await hostPid(own);
 		if (pid !== null) await stop(pid);
+		await removeHome(own);
 	}
 	console.log(
 		`aria: ${planned - pending.size}/${planned} planned, ${String(tally.same)} same, ` +
