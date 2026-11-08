@@ -16,7 +16,7 @@ import type {Open} from "../desk/desk.ts";
 import {tilesOf} from "../desk/desk.ts";
 import {defaults} from "../desk/keymap.ts";
 import {gridOf} from "../editor/grid.ts";
-import type {Down, Up} from "../link.ts";
+import {type Down, PROTOCOL, type Up} from "../link.ts";
 import {readToPage, type ToPage} from "../messages.ts";
 import {appWire, Unattached} from "../wire.ts";
 import {runHost} from "./run.ts";
@@ -326,7 +326,7 @@ describe("the host", () => {
 			}),
 		);
 		expect(seen.refused).toBeInstanceOf(Unattached);
-		expect(seen.refused.why).toEqual({kind: "version", theirs: 1, ours: 0});
+		expect(seen.refused.why).toEqual({kind: "version", theirs: PROTOCOL, ours: 0});
 		expect(seen.state).toBe("refused");
 		// Nothing past the hello: no desk, no port.
 		expect(seen.said).toEqual([]);
@@ -562,7 +562,7 @@ describe("attaching", () => {
 		expect(seen.refused instanceof Unattached ? seen.refused.why : null).toEqual({
 			kind: "version",
 			theirs: 0,
-			ours: 1,
+			ours: PROTOCOL,
 		});
 		expect(seen.after).toBe("live");
 		expect(seen.started).toBe(0);
@@ -736,6 +736,8 @@ describe("the host and the keys file", () => {
 		expect(seen.atStart).toEqual({
 			type: "keys",
 			...defaults,
+			version: expect.any(String),
+			changes: [],
 			file: {_tag: "refused", line: 1, why: "tezgah.zom is not a command"},
 		});
 		expect(seen.good).toMatchObject({prefix: "<c-a>", rows: defaults.rows, file: {_tag: "read"}});

@@ -855,6 +855,7 @@ describe("what is kept for the next start", () => {
 describe("the desk's words", () => {
 	it("runs each key's word, which tells the desk what that key does", async () => {
 		const said: Does[] = [];
+		const editors: string[] = [];
 		const words = [...BINDINGS.map((b) => wordOf(b.does)), "focus --to t3", "workspace --to 12"];
 		await go(
 			Effect.gen(function* () {
@@ -866,10 +867,18 @@ describe("the desk's words", () => {
 				});
 				for (const [i, word] of words.entries()) {
 					s.type(`${word}\r`);
+					if (word === "keys") {
+						const open = yield* s.opened();
+						editors.push(open.program);
+						yield* s.viewed(open.run, {open: true});
+						s.window(open.run).closed();
+						yield* s.closed(open.run);
+					}
 					yield* s.prompts(i + 2);
 				}
 			}).pipe(Effect.scoped),
 		);
+		expect(editors).toEqual(["keys"]);
 		// C-b J's word is tsh's own `jobs`, which prints the list in the tile and tells the desk nothing.
 		const toDesk = BINDINGS.filter((b) => wordOf(b.does) !== "jobs");
 		expect(toDesk).toHaveLength(BINDINGS.length - 1);
