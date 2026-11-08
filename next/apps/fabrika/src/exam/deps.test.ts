@@ -257,6 +257,7 @@ const BROWSER: Readonly<Record<string, ReadonlyArray<string>>> = {
 	"@kampus/libfabrika": [".", "./transport", "./data", "./coordination"],
 	"@kampus/tuval": ["."],
 	"@kampus/notes": ["."],
+	"@kampus/chaos": ["."],
 };
 const browserEntries = (
 	packages: ReadonlyArray<Package>,
@@ -308,6 +309,13 @@ const bundleFaults = async (next: string): Promise<ReadonlyArray<string>> => {
 };
 
 describe("the real next/", () => {
+	it("P17b: chaos has a required browser entry", async () => {
+		const chaos = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/chaos");
+		expect(chaos).toBeDefined();
+		const entry = exportMap(chaos!).get(".");
+		expect(entry, "P17b adds the actual chaos program").toBeDefined();
+		expect(await reach(NEXT, "@kampus/chaos", entry!)).toEqual([]);
+	});
 	it("P11: libfabrika exports its required browser entry instead of silently skipping it", async () => {
 		const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
 		expect(library).toBeDefined();
@@ -467,6 +475,7 @@ describe("planted breaks", () => {
 				'@kampus/notes reaches @modelcontextprotocol/*: "@modelcontextprotocol/server" from programs/notes/src/program.ts',
 				'@kampus/notes/window reaches cloudflare:*: "cloudflare:workers" from programs/notes/src/view.ts',
 				'@kampus/chaos/window reaches electron: "electron" from programs/chaos/src/index.ts',
+				'@kampus/chaos reaches electron: "electron" from programs/chaos/src/index.ts',
 			].sort(),
 		);
 	});
