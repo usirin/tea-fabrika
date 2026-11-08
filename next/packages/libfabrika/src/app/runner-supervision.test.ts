@@ -53,6 +53,7 @@ const Model = Schema.Struct({count: Schema.Int, replies: Schema.Int});
 type Model = typeof Model.Type;
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("add"), n: Schema.Int}),
+	Schema.Struct({type: Schema.Literal("save"), token: Schema.String}),
 	Schema.Struct({type: Schema.Literal("poison"), key: Schema.String}),
 	Schema.Struct({type: Schema.Literal("work")}),
 	Schema.Struct({type: Schema.Literal("refuse")}),
@@ -66,6 +67,12 @@ const Msg = Schema.Union([
 	}),
 ]);
 const work = Cmd.make("work", {input: Schema.Struct({}), ok: Schema.Null, err: ["failed"]});
+const write = Cmd.make("write", {
+	input: Schema.Struct({stream: Schema.String, write: Schema.Json}),
+	ok: Schema.Json,
+	err: ["failed"],
+});
+const Saved = Schema.TaggedStruct("saved", {token: Schema.String});
 type Wiring = {
 	policy: typeof policy;
 	recovery: {sql: Sql; name: string; capacity: number};
@@ -88,6 +95,8 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 		init: [] as Array<{build: string; loaded: unknown}>,
 		steps: [] as string[],
 		cmds: 0,
+		writes: [] as string[],
+		loseWriteReply: false,
 		adds: 0,
 		crashAdd: 0,
 		cut: "",
@@ -139,7 +148,7 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 		const machine = Machine.make({
 			model: Model,
 			msg: Msg,
-			cmds: [work],
+			cmds: [work, write],
 			init: (loaded) => {
 				controls.init.push({build: controls.build, loaded});
 				return [loaded ?? {count: 0, replies: 0}, []];
@@ -162,6 +171,10 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 					return [{...s, count: s.count + 1}, []];
 				},
 				work: (s) => [s, [work({})]],
+				save: (s, m) => [
+					s,
+					[write({stream: "facts", write: {_tag: "own", fact: Saved.make({token: m.token})}})],
+				],
 				refuse: (s) => [s, []],
 				timer: (s, m) => {
 					controls.timers.push(m.at);
@@ -173,6 +186,8 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 				},
 				work_ok: (s) => [{...s, replies: s.replies + 1}, []],
 				work_err: (s) => [{...s, replies: s.replies + 1}, []],
+				write_ok: (s) => [{...s, replies: s.replies + 1}, []],
+				write_err: (s) => [{...s, replies: s.replies + 1}, []],
 			},
 		});
 		return {
@@ -186,10 +201,11 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 				add: {_tag: "write", schema: Msg, description: "Add", personOnly},
 				poison: {_tag: "write", schema: Msg, description: "Poison", personOnly: false},
 				work: {_tag: "write", schema: Msg, description: "Work", personOnly: false},
+				save: {_tag: "write", schema: Msg, description: "Save", personOnly: false},
 				refuse: {_tag: "write", schema: Msg, description: "Refuse", personOnly: false},
 			},
 			outputs: {},
-			writes: {},
+			writes: {saved: {schema: Saved, personOnly: false}},
 			wake: (s: Model) => (s.replies === 0 ? controls.wakeAt : null),
 		};
 	};
@@ -232,6 +248,7 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 			CheckedWriter,
 			Effect.gen(function* () {
 				const mailbox = yield* Mailbox;
+				const ledger = yield* Ledger;
 				return {
 					append: (i: Incoming) =>
 						mailbox.send(
@@ -241,7 +258,21 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 							from({by: i.envelope.by.key, parent: i.envelope.id, sentAt: i.sentAt}),
 						),
 					commit: () => Effect.die("this program has no write Cmd"),
-					own: () => Effect.die("this program has no own Cmd"),
+					own: (id, stream, fact) =>
+						Effect.gen(function* () {
+							controls.writes.push(id);
+							const answer = yield* ledger.append(
+								stream,
+								id,
+								lineFor(from({by: person.key, parent: null}), fact),
+							);
+							// Commit the real fact, then lose only its reply.
+							if (controls.loseWriteReply) {
+								controls.loseWriteReply = false;
+								return yield* new LedgerError({why: "unreachable"});
+							}
+							return answer;
+						}),
 				};
 			}),
 		).pipe(Layer.provide(Mailbox.layer));
@@ -336,6 +367,88 @@ const recover = (w: ReturnType<typeof world>) =>
 	});
 
 describe("P34 runner supervision", () => {
+	for (const path of ["open", "msg", "due idle", "due early", "due ready", "restart"] as const) {
+		it(`p35 plant, skip takeRetry in ${path}: a same-process wake retries and answers a saved write`, async () => {
+			await fc.assert(
+				fc.asyncProperty(
+					fc.uuid(),
+					fc.integer({min: 1000, max: 60_000}),
+					fc.integer({min: 1, max: 1000}),
+					(id, time, delay) =>
+						Effect.runPromise(
+							Effect.gen(function* () {
+								const wakeAt =
+									path === "due ready" ? time : path === "due early" ? time + delay : null;
+								const w = world(false, true, wakeAt);
+								const process = path === "restart" ? B : A;
+								const request = {id: `restart-${id}`, build: BUILD};
+								const checkpoint = ProcessStore.use((s) =>
+									s.select(process).pipe(Effect.flatMap((selected) => selected.load)),
+								);
+								yield* w.boot;
+								yield* Effect.gen(function* () {
+									const r = yield* ProgramRunner;
+									// Repeat an already completed Restart to keep this process alive.
+									// A fresh Restart must not execute its predecessor's Cmds.
+									if (path === "restart") yield* r.restart(request);
+									w.controls.loseWriteReply = true;
+									yield* failed(r.msg(w.input(id, {type: "save", token: id})));
+									expect(w.controls.loseWriteReply).toBe(false);
+									expect(w.controls.writes).toHaveLength(1);
+									expect(yield* read("facts")).toMatchObject([{_tag: "saved", body: {token: id}}]);
+									expect(yield* inbox).toHaveLength(1);
+									expect(yield* checkpoint).toMatchObject({
+										cmds: [{id: w.controls.writes[0], state: "dispatched"}],
+									});
+								}).pipe(Effect.provide(w.layer()));
+								const [writeId] = w.controls.writes;
+								const before = yield* lives.pipe(Effect.provide(w.manager()));
+								w.reopen();
+								yield* Effect.gen(function* () {
+									const r = yield* ProgramRunner;
+									const wake = Effect.gen(function* () {
+										if (path === "open") yield* r.open(id);
+										else if (path === "msg")
+											yield* r.msg(w.input(`next-${id}`, {type: "add", n: delay}));
+										else if (path === "restart") yield* r.restart(request);
+										else {
+											w.consumeAlarm();
+											yield* r.due(time);
+										}
+									});
+									yield* wake;
+									expect(w.controls.writes, "the wake must retry the original write ID").toEqual([
+										writeId,
+										writeId,
+									]);
+									const answers = (yield* inbox).filter((row) => row.id === `${writeId}/answer`);
+									expect(answers).toMatchObject([{body: {m: {type: "write_ok"}}}]);
+									expect(yield* checkpoint).toMatchObject({cmds: []});
+									yield* wake;
+									expect(
+										w.controls.writes,
+										"a second wake must not retry an answered write",
+									).toEqual([writeId, writeId]);
+									expect(yield* read("facts")).toHaveLength(1);
+									expect(
+										(yield* inbox).filter((row) => row.id === `${writeId}/answer`),
+									).toHaveLength(1);
+									expect(yield* lives).toEqual(before);
+									expect(yield* ProcessManager.use((p) => p.isLive(process))).toBe(true);
+								}).pipe(Effect.provide(w.layer()));
+							}).pipe(Effect.provide(TestClock.layer())),
+						),
+				),
+				{
+					seed: 119120,
+					numRuns: 12,
+					// Review 6: an alarm-only wake lost main's saved-write retry.
+					examples: [["00000000-0000-4000-8000-000000000271", 1000, 7]],
+				},
+			);
+		});
+	}
+
 	// Cover every exit explicitly; generate the schedule and history inside each.
 	// The alarm is one slot. Firing it clears the slot before calling due.
 	for (const path of [
