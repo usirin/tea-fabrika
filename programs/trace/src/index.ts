@@ -265,6 +265,13 @@ export const trace = defineProgram({
 			const step = (msg: TraceMsg) => runtime.dispatch(msg).pipe(Effect.orDie);
 			const look = (id: string) => step({type: "look", id});
 			const show = (number: number) => step({type: "ticket", number});
+			// The programs this app has code for, told first: the window offers a replay only for a
+			// machine run of one of them. No `Replayer` given, none.
+			const replayer = yield* Effect.serviceOption(Replayer);
+			yield* step({
+				type: "code",
+				programs: Option.isSome(replayer) ? replayer.value.programs : [],
+			});
 			// The ticket flag, else the id flag's job, else its own line's: `null` when it runs in no
 			// job (a test).
 			if (flags.ticket !== undefined) yield* show(flags.ticket);

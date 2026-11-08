@@ -163,10 +163,16 @@ export const replayOf = (code: readonly Code[], {starts, steps}: Rows): Replayed
 	return Replayed.cases.matches.make({steps: ordered.length});
 };
 
-/** Replays one machine run through the code of the programs a host lists. */
+/**
+ * Replays one machine run through the code of the programs a host lists. `programs`: their names,
+ * in order, so a window offers a replay only for a machine run it has code for.
+ */
 export class Replayer extends Context.Service<
 	Replayer,
-	{readonly replay: (rows: Rows) => Effect.Effect<Replayed>}
+	{
+		readonly programs: readonly string[];
+		readonly replay: (rows: Rows) => Effect.Effect<Replayed>;
+	}
 >()("@kampus/fabrika-old/Replayer") {}
 
 /** The `Replayer` over `entries`: the programs a host lists, as a tile's tsh lists them. */
@@ -174,6 +180,9 @@ export const layerReplayer = (entries: readonly Entry[]) => {
 	const code = entries.map((e) => e.program);
 	return Layer.succeed(
 		Replayer,
-		Replayer.of({replay: (rows) => Effect.sync(() => replayOf(code, rows))}),
+		Replayer.of({
+			programs: code.map((p) => p.name),
+			replay: (rows) => Effect.sync(() => replayOf(code, rows)),
+		}),
 	);
 };

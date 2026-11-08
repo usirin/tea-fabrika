@@ -134,6 +134,31 @@ const KIND_WORD: Readonly<Record<Row["kind"], string>> = {
 };
 
 /**
+ * The one row of a tree that Tab lands on (WAI-ARIA's roving tabindex): the chosen row where it is
+ * drawn, else the first row, so a chosen row hidden under a closed one never leaves the tree with
+ * none. `null`: no row drawn.
+ */
+const tabStop = (chosen: string | null, drawn: readonly string[]): string | null =>
+	chosen !== null && drawn.includes(chosen) ? chosen : (drawn[0] ?? null);
+
+/**
+ * Move focus to a row once it is drawn: the tile notes which row (on its own trace view, so two
+ * tiles never mix), and the row takes focus when it draws and clears the note. The choose goes to
+ * the machine and back before the row exists, so it can't be focused at the press.
+ */
+const focusOnDraw = (from: HTMLElement, row: string) => {
+	const view = from.closest<HTMLElement>(".trace-view");
+	if (view !== null) view.dataset.focusRow = row;
+};
+const focusIfAsked = (el: HTMLTableRowElement | null) => {
+	const view = el?.closest<HTMLElement>(".trace-view");
+	if (el === null || view === null || view === undefined) return;
+	if (view.dataset.focusRow !== el.dataset.row) return;
+	delete view.dataset.focusRow;
+	el.focus();
+};
+
+/**
  * Each replay answer's mark beside its words on a row: one glyph per answer, so a glance tells
  * them apart, and never the only cue (WCAG 1.4.1). Hidden from a screen reader, since the words
  * say it. A replay that could not be made has words alone.
@@ -314,7 +339,15 @@ function ReplayThrough({
 }) {
 	if (detail.started === null)
 		return <p className="faint">Recorded before starts were kept, so it can't be replayed.</p>;
+	if (detail.program !== null && !detail.program.coded)
+		return (
+			<p className="faint">
+				This app has no code for {detail.program.name}, so it can't be replayed here.
+			</p>
+		);
 	const step = detail.replay?.step ?? null;
+	// The Open step button as drawn, so its press can note which row takes focus once it shows.
+	let opener: HTMLButtonElement | null = null;
 	return (
 		<div className="wf-replay">
 			<button
@@ -331,7 +364,13 @@ function ReplayThrough({
 				<button
 					type="button"
 					className="btn sm"
-					onClick={() => send({type: "choose", value: {row: step.row}})}
+					ref={(el) => {
+						opener = el;
+					}}
+					onClick={() => {
+						if (opener !== null) focusOnDraw(opener, step.row);
+						send({type: "choose", value: {row: step.row}});
+					}}
 				>
 					Open step {step.n}
 				</button>
@@ -375,7 +414,16 @@ function Opened({detail, send}: {readonly detail: Detail; readonly send: Send}) 
 					</section>
 					<div className="wf-states">
 						{detail.before.kind === "kept" ? (
-							<Pre label="State before" value={detail.before.state} />
+							<figure className="wf-json">
+								<figcaption>State before</figcaption>
+								<pre>{json(detail.before.state)}</pre>
+								{detail.restarted === null ? null : (
+									<p className="faint">
+										Restarted from this state; the step before left{" "}
+										<code>{json(detail.restarted.left)}</code>.
+									</p>
+								)}
+							</figure>
 						) : (
 							<figure className="wf-json">
 								<figcaption>State before</figcaption>
@@ -719,7 +767,10 @@ function JobWindow({view, send}: {readonly view: Shown; readonly send: Send}) {
 			</section>
 		);
 
-	const focusable = chosen ?? view.rows[0]?.key ?? null;
+	const focusable = tabStop(
+		chosen,
+		view.rows.map((r) => r.key),
+	);
 	return (
 		<section className="view trace-view" aria-label={`trace of ${view.title}`}>
 			<Head view={view} drawn={true} />
@@ -750,6 +801,7 @@ function JobWindow({view, send}: {readonly view: Shown; readonly send: Send}) {
 								aria-selected={row.key === chosen}
 								aria-label={`${KIND_WORD[row.kind]} ${row.name}${row.note === "" ? "" : `, ${row.note}`}${row.replay === null ? "" : `, replayed: ${row.replay}`}`}
 								tabIndex={row.key === focusable ? 0 : -1}
+								ref={focusIfAsked}
 								onClick={() => press(row)}
 								onKeyDown={(e) => onTreeKey(e, row, view.rows, toggle, () => press(row))}
 							>
@@ -1069,7 +1121,10 @@ function TicketWindow({view, send}: {readonly view: Shown; readonly send: Send})
 			if (chosen !== row.key) choose(row.key);
 		} else choose(chosen === row.key ? null : row.key);
 	};
-	const focusable = chosen ?? lines[0]?.tree.key ?? null;
+	const focusable = tabStop(
+		chosen,
+		lines.map((l) => l.tree.key),
+	);
 	const rowProps = (line: Line, label: string) => ({
 		"data-row": line.tree.key,
 		"aria-level": line.tree.depth + 1,

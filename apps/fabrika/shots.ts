@@ -67,6 +67,7 @@ const traceWith = (names: readonly string[]): Model => {
 		open: ["job", ...keys.slice(0, -1)],
 		chosen: keys.at(-1) ?? null,
 		replay: null,
+		code: [],
 	};
 };
 const traceView = (model: Model) => ({
@@ -89,12 +90,14 @@ const views = {
 		open: [`lane:${SEVEN_TRACE}`],
 		chosen: null,
 		replay: null,
+		code: [],
 	}),
 	4: traceView({
 		shows: {kind: "job", read: {at: "read", trace: TALLY_TRACE, now: null}},
 		open: ["job"],
 		chosen: null,
 		replay: null,
+		code: [],
 	}),
 	5: traceView(traceWith(["tally", "count total", "add 2"])),
 	6: {

@@ -142,7 +142,17 @@ the first step's state before is the machine's start, with nothing to show.
   the cue (WCAG 1.4.1).
 - **The detail opens the step it names:** after a replay that parts or is refused, an "Open step N"
   button chooses that step's row, which a small tile has scrolled out of view under the detail.
+  Choosing a row opens every row above it, so a closed machine run never hides it, and focus moves
+  to that row once it draws. The tree always has one row Tab lands on: the chosen one where it
+  shows, else the first.
 - **The detail shows where it started:** the first start the record kept, under "Started from".
+- **A restart is a new life:** the first step after it shows that life's start as its state before,
+  and its changes against it. When that start is not what the step before left, its detail says
+  "Restarted from this state; the step before left …".
+- **Only for code this app has:** `main` tells the machine, as it starts, the programs its
+  `Replayer` has code for (`code`, none when no `Replayer` is given). A machine run of any other
+  program says "This app has no code for <program>, so it can't be replayed here." in place of the
+  button, which could only answer no.
 - **A machine run with no start kept has no button.** Its detail says "Recorded before starts were
   kept, so it can't be replayed." A button that could only answer no would be a dead one.
 - The replay is kept while the record shown keeps that machine run's step count, and dropped by a

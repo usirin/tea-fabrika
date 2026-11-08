@@ -278,3 +278,13 @@ export const groupsOf = (root: Node): ReadonlySet<string> =>
 /** The row with `key`, wherever it is. */
 export const findOf = (root: Node, key: string): Node | undefined =>
 	nodesOf(root).find((n) => n.key === key);
+
+/** The keys of the rows above `key`, the root first. `undefined`: `root` holds no row `key`. */
+export const aboveOf = (root: Node, key: string): readonly string[] | undefined => {
+	if (root.key === key) return [];
+	for (const child of root.children) {
+		const above = aboveOf(child, key);
+		if (above !== undefined) return [root.key, ...above];
+	}
+	return undefined;
+};

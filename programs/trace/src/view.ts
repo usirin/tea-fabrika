@@ -166,6 +166,11 @@ export const Detail = Schema.Union([
 		 */
 		started: Schema.NullOr(Schema.Struct({state: Schema.Unknown})),
 		/**
+		 * The program that started it, as its first start names it, and whether this app has its
+		 * code, so it can be replayed here. `null`: no start kept, so no program named.
+		 */
+		program: Schema.NullOr(Schema.Struct({name: Schema.String, coded: Schema.Boolean})),
+		/**
 		 * Its replay through today's code, asked: the answer once it came, in words, and the step it
 		 * parts or is refused at, to open (`null` for any other answer). `null`: none asked.
 		 */
@@ -187,13 +192,19 @@ export const Detail = Schema.Union([
 		at: Schema.Number,
 		msg: Schema.Unknown,
 		/**
-		 * The state it folded from: the step before's, or for the first step the start the record
-		 * kept. `start`: a first step in a record kept before starts were, so no row keeps it.
+		 * The state it folded from: the step before's, or for the first step of a life (its machine
+		 * run's first, or the first after a restart) the start the record kept. `start`: a first step
+		 * in a record kept before starts were, so no row keeps it.
 		 */
 		before: Schema.Union([
 			Schema.Struct({kind: Schema.Literal("kept"), state: Schema.Unknown}),
 			Schema.Struct({kind: Schema.Literal("start")}),
 		]),
+		/**
+		 * The first step of a later life whose start is not what the step before it left (a crash
+		 * between a step's write and its save): what that step left. `null`: no such restart.
+		 */
+		restarted: Schema.NullOr(Schema.Struct({left: Schema.Unknown})),
 		after: Schema.Unknown,
 		changes: Schema.Array(Change),
 		cmds: Schema.Array(Schema.Unknown),
@@ -402,6 +413,12 @@ const startsIn = (trace: JobTrace, run: string, machine: string, id: string): re
 		.filter((s) => s.run === run && s.machine === machine && s.id === id)
 		.toSorted((a, b) => a.n - b.n);
 
+/** The start a machine run's life began at just before step `n`, when the record kept one. */
+const startBefore = (
+	trace: JobTrace,
+	{run, machine, id, n}: Pick<Step, "run" | "machine" | "id" | "n">,
+): Start | null => startsIn(trace, run, machine, id).findLast((s) => s.after === n - 1) ?? null;
+
 /** Where a machine run started, before its first step, when the record kept it. */
 const firstStart = (trace: JobTrace, run: string, machine: string, id: string): Start | null => {
 	const first = startsIn(trace, run, machine, id)[0];
@@ -526,7 +543,12 @@ const stepDetail = (
 	started: Start | null,
 	zero: number,
 ): Detail => {
-	const from = before ?? started;
+	// A life's start wins over the step before: a restart folds from where it booted.
+	const from = started ?? before;
+	const restarted =
+		started !== null && before !== null && inLine(started.state) !== inLine(before.state)
+			? {left: before.state}
+			: null;
 	return {
 		kind: "step",
 		key,
@@ -537,6 +559,7 @@ const stepDetail = (
 		at: step.at - zero,
 		msg: step.msg,
 		before: from === null ? {kind: "start"} : {kind: "kept", state: from.state},
+		restarted,
 		after: step.state,
 		changes: from === null ? [] : changesOf(from.state, step.state),
 		cmds: step.cmds,
@@ -571,6 +594,7 @@ const detailOf = (
 	trace: Extract<Read, {readonly at: "read"}>["trace"],
 	zero: number,
 	replay: Replay | null,
+	code: readonly string[],
 ): Detail => {
 	const record = trace.runs.find((r) => r.run === node.note || `run:${r.run}` === node.key);
 	const run =
@@ -592,6 +616,8 @@ const detailOf = (
 				steps: of.steps.length,
 				state: of.steps.at(-1)?.state ?? null,
 				started: started === null ? null : {state: started.state},
+				program:
+					started === null ? null : {name: started.program, coded: code.includes(started.program)},
 				replay:
 					replay?.row === node.key
 						? {
@@ -602,11 +628,8 @@ const detailOf = (
 						: null,
 			};
 		}
-		case "step": {
-			const {run, machine, id} = of.step;
-			const started = of.before === null ? firstStart(trace, run, machine, id) : null;
-			return stepDetail(node.key, of.step, of.before, started, zero);
-		}
+		case "step":
+			return stepDetail(node.key, of.step, of.before, startBefore(trace, of.step), zero);
 		case "group":
 			return {kind: "group", key: node.key, name: node.name, size: node.children.length, run, job};
 	}
@@ -985,7 +1008,7 @@ export const shownOf = (s: Model): Shown => {
 				steps: trace.steps.length,
 				empty: trace.runs.length + trace.spans.length + trace.steps.length === 0,
 				rows,
-				chosen: chosen === undefined ? null : detailOf(chosen, trace, zero, s.replay),
+				chosen: chosen === undefined ? null : detailOf(chosen, trace, zero, s.replay, s.code),
 				ticket: null,
 			};
 		}

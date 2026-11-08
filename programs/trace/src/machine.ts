@@ -4,7 +4,7 @@ import {JobTrace, Replayed, Start, Step as RecordStep, TraceId} from "@kampus/fa
 import {Entry, TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
 import {lanesOf, stopsOf} from "./ticket.ts";
-import {findOf, groupsOf, JOB, treeOf} from "./tree.ts";
+import {aboveOf, findOf, groupsOf, JOB, treeOf} from "./tree.ts";
 
 // The trace's machine: what the tile shows (one job's record, or one ticket's lanes), which of its
 // rows are open, and which one is chosen. Elm's debugger and Redux DevTools hold the same: the
@@ -25,7 +25,8 @@ import {findOf, groupsOf, JOB, treeOf} from "./tree.ts";
 //   toggle   open a row that groups others, or close it: a job, a run, a machine run, a round,
 //            an agent's turns. A row that groups nothing, or is not in the record, changes nothing
 //   choose   show one row's detail: a span's tags and events, or a step's Msg, the state before
-//            and after, and its Cmds. `null` closes the detail
+//            and after, and its Cmds. Every row above it opens, so the row chosen shows. `null`
+//            closes the detail
 //   tick     the time, while the record shown says its job has not ended: an earlier tick keeps
 //            the later time, as a clock can step back. Anything else lets it go
 //   replay   replay one machine run of the record shown through today's code
@@ -35,6 +36,8 @@ import {findOf, groupsOf, JOB, treeOf} from "./tree.ts";
 //   replay_ok  tea's answer to that Cmd: it lands only on the replay held for its row and step
 //            count. A look at another record clears the replay, and so does a newer read whose
 //            machine run has another step count now
+//   code     the programs this app has code for, told by `main` once when it starts: a machine
+//            run of another program can't be replayed here. Kept through every look
 //
 // The ticket view (ticket 141):
 //
@@ -146,6 +149,11 @@ export const Model = Schema.Struct({
 	chosen: Schema.NullOr(RowKey),
 	/** The replay asked last, of a machine run of the record shown. `null`: none. */
 	replay: Schema.NullOr(Replay),
+	/**
+	 * The programs this app has code for, as `main` is told by its `Replayer` when it starts: only
+	 * a machine run of one of them can be replayed here. Kept through every look and ticket.
+	 */
+	code: Schema.Array(Schema.String),
 });
 export type Model = typeof Model.Type;
 
@@ -182,6 +190,8 @@ export type TraceMsg =
 	| {readonly type: "step"; readonly by: -1 | 1}
 	/** Replay this machine run's row through today's code. */
 	| {readonly type: "replay"; readonly row: string}
+	/** The programs this app has code for, told by `main` when it starts. */
+	| {readonly type: "code"; readonly programs: readonly string[]}
 	/** tea's answer to the replay Cmd: `replay_ok` with the replay's answer, or `replay_err`. */
 	| Settled<typeof replayCmd>;
 
@@ -196,6 +206,7 @@ const start: Model = {
 	open: [],
 	chosen: null,
 	replay: null,
+	code: [],
 };
 
 /** The trace id the machine reads or shows. `null`: none told yet. */
@@ -319,6 +330,7 @@ const again = (s: Model, read: Read & {readonly at: "read"}, trace: Kept): Model
 		open: shown ? s.open.filter((k) => groups.has(k)) : firstOpen(trace),
 		chosen: s.chosen !== null && findOf(tree, s.chosen) !== undefined ? s.chosen : null,
 		replay: replayAfter(s.replay, trace),
+		code: s.code,
 	};
 };
 
@@ -386,6 +398,7 @@ export const trace = defineMachine({
 					open: [],
 					chosen: null,
 					replay: null,
+					code: s.code,
 				},
 				[],
 			];
@@ -412,6 +425,7 @@ export const trace = defineMachine({
 						open: firstOpen(m.trace),
 						chosen: null,
 						replay: null,
+						code: s.code,
 					},
 					[],
 				];
@@ -440,13 +454,19 @@ export const trace = defineMachine({
 			const open = s.open.includes(m.row) ? s.open.filter((k) => k !== m.row) : [...s.open, m.row];
 			return [{...s, open}, []];
 		},
+		// A row chosen shows: every row above it opens, so a closed machine run never hides the step
+		// "Open step N" chose, and the tree's focus has a row to land on.
 		choose: (s, m): Step => {
 			if (m.row === null) return [{...s, chosen: null}, []];
-			const holds =
-				s.shows.kind === "ticket"
-					? !m.row.startsWith("lane:") && ticketRowIn(s.shows, m.row, false)
-					: s.shows.read.at === "read" && findOf(treeOf(s.shows.read.trace), m.row) !== undefined;
-			return holds ? [{...s, chosen: m.row}, []] : [s, []];
+			if (s.shows.kind === "ticket")
+				return !m.row.startsWith("lane:") && ticketRowIn(s.shows, m.row, false)
+					? [{...s, chosen: m.row}, []]
+					: [s, []];
+			const above =
+				s.shows.read.at === "read" ? aboveOf(treeOf(s.shows.read.trace), m.row) : undefined;
+			if (above === undefined) return [s, []];
+			const open = [...s.open, ...above.filter((k) => !s.open.includes(k))];
+			return [{...s, open, chosen: m.row}, []];
 		},
 		// A tick that was on its way when the job's end was read, or a newer id, is let go. In the
 		// ticket view it lands on the view itself, while a lane is open and the playhead is live.
@@ -475,6 +495,7 @@ export const trace = defineMachine({
 							open: [],
 							chosen: null,
 							replay: null,
+							code: s.code,
 						},
 						[],
 					],
@@ -541,6 +562,8 @@ export const trace = defineMachine({
 			});
 			return [{...s, replay: {...held, answer}}, []];
 		},
+		// What `main` is told once: the last telling replaces the one before, and nothing else moves.
+		code: (s, m): Step => [{...s, code: m.programs}, []],
 	},
 	subs: [
 		{type: "follow", deps: followed} satisfies DepKeyedSub<Model, FollowSub>,
