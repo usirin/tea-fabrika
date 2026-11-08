@@ -32,6 +32,8 @@ export const Declaration = Schema.Struct({
 });
 export type Declaration = typeof Declaration.Type;
 
+export type ProgramSource = {readonly hash: string; readonly source: string};
+
 export type Execution = {
 	readonly init: (saved: unknown) => Effect.Effect<Step, ProgramDown>;
 	readonly step: (model: unknown, msg: unknown) => Effect.Effect<Step, ProgramDown>;
@@ -134,12 +136,12 @@ export const workerExecution = (rpc: ExecutionCalls): Execution => {
 		why: ProgramDown["why"],
 	) =>
 		// oxlint-disable-next-line fabrika/no-promises -- edge: adapt one Worker Loader RPC to Effect
-		Effect.tryPromise({try: send, catch: () => new ProgramDown({why})}).pipe(
+		Effect.tryPromise({try: send, catch: () => new ProgramDown({why, source: "rpc"})}).pipe(
 			Effect.flatMap((raw) => {
 				const decoded = Schema.decodeUnknownResult(schema)(raw);
 				return Result.isSuccess(decoded)
 					? Effect.succeed(decoded.success)
-					: Effect.fail(new ProgramDown({why}));
+					: Effect.fail(new ProgramDown({why, source: "decode"}));
 			}),
 		);
 	return {

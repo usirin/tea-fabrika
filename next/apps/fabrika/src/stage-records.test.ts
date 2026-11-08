@@ -1,6 +1,7 @@
-// P12, next/. localStage returns trusted object capabilities used by its lifecycle control path.
+// P12, next/. Outside only: real workerd, sockets and private local object capabilities.
 // No control method below is an unauthenticated HTTP route. All record calls hit real local objects.
 // The small record cap belongs to this fixture; the default remains P37's 1 GB.
+import {execFileSync} from "node:child_process";
 import {createHash, generateKeyPairSync, sign} from "node:crypto";
 import {mkdtempSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {createServer as httpServer} from "node:http";
@@ -13,6 +14,7 @@ import type {From} from "@kampus/libfabrika/coordination";
 import {Archive, RecordManager, SpanRow, SpanSink} from "@kampus/libfabrika/data";
 import {nodeSql} from "@kampus/libfabrika/sqlite";
 import {Effect, Layer, Schema, Stream} from "effect";
+import {rolldown} from "rolldown";
 import {describe, expect, it} from "vitest";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -84,6 +86,7 @@ const world = async (
 			from: From;
 		},
 	) => Promise<void>,
+	instrument = false,
 ) => {
 	process.env.DO_NOT_TRACK = "1";
 	const {localState} = await import("alchemy/State/LocalState");
@@ -91,6 +94,8 @@ const world = async (
 	const {localStage} = await import("./local-stage.ts");
 	const home = mkdtempSync(join(tmpdir(), "p12-o-")),
 		key = identity();
+	const previousHome = process.env.FABRIKA_HOME;
+	process.env.FABRIKA_HOME = home;
 	let hits = 0;
 	const outbound = httpServer((_request, reply) => {
 		hits++;
@@ -153,6 +158,7 @@ const world = async (
 				programs: {"writer-fixture": writer, "timer-fixture": timer, "sealed-fixture": sealed},
 			}),
 		);
+		if (instrument) await instrumentBrain(built.brain, home);
 		await Effect.runPromise(
 			Effect.gen(function* () {
 				const stage = yield* localStage(built, {
@@ -199,7 +205,128 @@ const world = async (
 		await new Promise<void>((done) => outbound.close(() => done()));
 		// localStage must close before removing its durable files.
 		rmSync(home, {recursive: true, force: true});
+		if (previousHome === undefined) delete process.env.FABRIKA_HOME;
+		else process.env.FABRIKA_HOME = previousHome;
 	}
+};
+
+// Test-only subclasses expose storage inspection and platform abort on the private control
+// socket. The production Gateway, runner, Project and transport behavior stays in the base.
+// No HTTP route or extra target is installed in a product build.
+const instrumentBrain = async (brain: string, home: string) => {
+	const entry = join(home, "exam-entry.mjs");
+	writeFileSync(
+		entry,
+		`
+import * as Brain from ${JSON.stringify(brain)};
+export default Brain.default;
+export const RecordPart = Brain.RecordPart;
+export class Gateway extends Brain.Gateway {
+  incarnation = crypto.randomUUID();
+  testState() { return {incarnation:this.incarnation, sockets:this.ctx.getWebSockets().map(ws=>({attachment:ws.deserializeAttachment(),tags:this.ctx.getTags(ws)}))}; }
+  testAbort() { this.ctx.abort("exam abort"); }
+}
+export class Process extends Brain.Process {
+  async testHold() { await this.ctx.storage.put("exam.hold",true); await this.ctx.storage.put("exam.entered",false); }
+  testEntered() { return this.ctx.storage.get("exam.entered"); }
+  testRelease() { return this.ctx.storage.put("exam.hold",false); }
+  async msg(input) { if (await this.ctx.storage.get("exam.hold")) {await this.ctx.storage.put("exam.entered",true); await new Promise(()=>{});} return super.msg(input); }
+}
+export class Project extends Brain.Project {
+  testGateway(name,method,args) { return this.env.GATEWAY.getByName(name)[method](...args); }
+}
+export class Control extends Brain.Control {
+  async fetch(request) {
+    if (request.headers.get("authorization") !== "Bearer "+this.ctx.props.token) return super.fetch(request);
+    const q = await request.clone().json();
+    if (!q.method.startsWith("test")) return super.fetch(request);
+    const stub = q.target === "project" ? this.env.PROJECT.getByName(q.project) : this.env.PROCESS.getByName(JSON.stringify([q.project,q.name]));
+    try {return Response.json({value: await stub[q.method](...q.args) ?? null});} catch {return Response.json({error:{why:"unreachable"}});}
+  }
+}`,
+	);
+	const bundle = await rolldown({
+		input: entry,
+		platform: "browser",
+		external: ["cloudflare:workers"],
+	});
+	try {
+		const out = await bundle.generate({format: "esm", codeSplitting: false});
+		writeFileSync(
+			brain,
+			out.output
+				.filter((item) => item.type === "chunk")
+				.map((item) => item.code)
+				.join("\n"),
+		);
+	} finally {
+		await bundle.close();
+	}
+};
+
+const pause = (ms = 20) => new Promise<void>((done) => setTimeout(done, ms));
+const wire = async (stage: any, key: ReturnType<typeof identity>, tab: string) => {
+	const name = `/client/${encodeURIComponent(key.fingerprint)}/${tab}`;
+	const socket = new WebSocket(stage.url.replace("http", "ws") + name);
+	const frames: any[] = [];
+	let closeCode: number | undefined,
+		serial = 0;
+	socket.addEventListener("message", (event) => {
+		if (event.data !== "pong") frames.push(JSON.parse(String(event.data)));
+	});
+	socket.addEventListener("close", (event) => {
+		closeCode = event.code;
+	});
+	socket.addEventListener("error", () => {
+		closeCode ??= 1006;
+	});
+	const next = async (match: (frame: any) => boolean) => {
+		for (;;) {
+			const index = frames.findIndex(match);
+			if (index >= 0) return frames.splice(index, 1)[0];
+			if (closeCode !== undefined) throw new Error(`closed ${closeCode}`);
+			await pause();
+		}
+	};
+	const call = async (method: string, params: unknown) => {
+		const id = ++serial;
+		socket.send(JSON.stringify({jsonrpc: "2.0", id, method, params}));
+		return next((frame) => frame.id === id);
+	};
+	const nonce = (await next((frame) => frame.method === "challenge")).params.nonce;
+	expect(
+		(
+			await call("initialize", {
+				versions: [1],
+				has: ["seal"],
+				ping: "30s",
+				key: key.raw,
+				tab,
+				nonce,
+				platform: "headless",
+				os: "linux",
+				sentAt: SENT,
+				signed: key.proof(`fabrika-hello\n${stage.url}\n${tab}\n${nonce}`),
+			})
+		).error,
+	).toBeUndefined();
+	return {name, call, socket, frames, closeCode: () => closeCode};
+};
+const workerdPid = () => {
+	const rows = execFileSync("ps", ["-axo", "pid=,ppid=,command="], {encoding: "utf8"})
+		.split("\n")
+		.flatMap((row) => {
+			const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(row);
+			return m ? [{pid: Number(m[1]), parent: Number(m[2]), command: m[3]!}] : [];
+		});
+	const descendants = new Set([process.pid]);
+	for (let n = 0; n < rows.length; n++)
+		for (const row of rows) if (descendants.has(row.parent)) descendants.add(row.pid);
+	const matches = rows.filter(
+		(row) => descendants.has(row.pid) && /\/workerd(?:\s|$)/.test(row.command),
+	);
+	expect(matches.length).toBeLessThanOrEqual(1);
+	return matches[0]?.pid ?? 0;
 };
 const admitted = async (stage: any, key: ReturnType<typeof identity>, project = "p12-records") => {
 	const p = stage.project(project);
@@ -234,6 +361,121 @@ const read = async (p: any, client: string, stream: string) => {
 };
 
 describe("P12 real object adapters", () => {
+	// Outside only. The saved attachment is read through the real object's private test method.
+	// Sleep uses real idle time and must prove a new object instance, not merely a delayed ring.
+	it("saved waits survive object sleep, object abort and workerd replacement", async () => {
+		await world(async (stage, key) => {
+			const p = stage.project("p12-records"),
+				{client} = await admitted(stage, key);
+			const pid = (await p.info()).find((row: any) => row.name === "counter:1").process;
+			let c = await wire(stage, key, "wait-recovery");
+			const gateway = (method: string, ...args: unknown[]) => p.testGateway(c.name, method, args);
+			let after = 0;
+			try {
+				for (const mode of ["sleep", "abort", "replacement"] as const) {
+					const waiting = c.call("ledger.wait", {stream: "counter:1/inbox", after}).then(
+						(answer) => ({answer}),
+						() => ({closed: true}),
+					);
+					let before = await gateway("testState");
+					while (!before.sockets.some((row: any) => row.attachment.waits?.length === 1)) {
+						await pause();
+						before = await gateway("testState");
+					}
+					if (mode === "sleep") {
+						// workerd's idle eviction is normally about ten seconds. This is an outside
+						// probe of that behavior: fail if the object did not actually sleep.
+						await pause(12_000);
+						const awake = await gateway("testState");
+						expect(awake.incarnation).not.toBe(before.incarnation);
+						expect(awake.sockets[0].attachment.waits).toEqual(before.sockets[0].attachment.waits);
+					} else {
+						if (mode === "abort") await gateway("testAbort").catch(() => undefined);
+						else {
+							const old = workerdPid();
+							expect(old).toBeGreaterThan(0);
+							process.kill(old, "SIGKILL");
+							let current = workerdPid();
+							while (current === 0 || current === old) {
+								await pause();
+								current = workerdPid();
+							}
+							expect(current).not.toBe(old);
+						}
+						// An object abort may close its socket. The client replays its same wait.
+						if (mode === "replacement" || c.closeCode() !== undefined) {
+							await waiting;
+							for (;;) {
+								try {
+									c = await wire(stage, key, "wait-recovery");
+									break;
+								} catch {
+									await pause();
+								}
+							}
+						}
+					}
+					const reply = await routed(p, client, "process.send", {
+						pid,
+						letter: `after-${mode}`,
+						m: {type: "inc"},
+						sentAt: SENT,
+						seen: 0,
+					});
+					expect(reply).toMatchObject({_tag: "ok", result: {_tag: "accepted"}});
+					after = reply.result.rev;
+					if (mode === "sleep")
+						expect(await waiting).toMatchObject({answer: {result: {rev: after}}});
+					else
+						expect(
+							await c.call("ledger.wait", {stream: "counter:1/inbox", after: after - 1}),
+						).toMatchObject({result: {rev: after}});
+					expect((await p.info()).find((row: any) => row.name === "counter:1").process).toBe(pid);
+				}
+			} finally {
+				c.socket.close();
+			}
+		}, true);
+	});
+	// Outside only. Hold an actual Process RPC before its inbox append, then kill that object.
+	it("an aborted busy call closes with 1012 and its stable letter can be retried once", async () => {
+		await world(async (stage, key) => {
+			const p = stage.project("p12-records"),
+				pid = (await p.info()).find((row: any) => row.name === "counter:1").process;
+			const process = stage.process(pid),
+				c = await wire(stage, key, "busy-recovery");
+			let retry: Awaited<ReturnType<typeof wire>> | undefined;
+			try {
+				await process.testHold();
+				const params = {pid, letter: "busy-once", m: {type: "inc"}, sentAt: SENT, seen: 0};
+				const pending = c.call("process.send", params).then(
+					(answer) => ({answer}),
+					() => ({closed: true}),
+				);
+				while (!(await process.testEntered())) await pause();
+				const before = await p.testGateway(c.name, "testState", []);
+				expect(before.sockets[0].attachment.busy).toBe(true);
+				await process.abort().catch(() => undefined);
+				await process.testRelease();
+				await p.testGateway(c.name, "testAbort", []).catch(() => undefined);
+				await p.testGateway(c.name, "testState", []);
+				while (c.closeCode() === undefined) await pause();
+				expect(c.closeCode()).toBe(1012);
+				await pending;
+				retry = await wire(stage, key, "busy-recovery");
+				const first = await retry.call("process.send", params);
+				expect(first).toMatchObject({result: {_tag: "accepted"}});
+				expect(await retry.call("process.send", params)).toMatchObject({result: first.result});
+				const opened = await retry.call("view.open", {pid});
+				expect(opened).toMatchObject({result: {view: {count: 1}}});
+				const inbox = await retry.call("ledger.read", {stream: "counter:1/inbox", after: 0});
+				expect(inbox.result.entries.filter((row: any) => row.id === params.letter)).toHaveLength(1);
+			} finally {
+				c.socket.close();
+				retry?.socket.close();
+			}
+		}, true);
+	});
 	it("p79 plant: an old close cannot remove the newer session; failed real probes give unknown", async () => {
 		await world(async (stage, key) => {
 			const p = stage.project("p12-records");
@@ -293,7 +535,7 @@ describe("P12 real object adapters", () => {
 	});
 	it("R2 archive plant: unlike checksum encodings or a lost acknowledgement must not lose the local copy", async () => {
 		await world(async (stage) => {
-			const {bucketCalls} = await import("./runtime.ts");
+			const {bucketCalls} = await import("@kampus/libfabrika/workers/runtime");
 			const calls = bucketCalls(stage.bucket);
 			const body = new TextEncoder().encode("local health archive");
 			const expected = createHash("sha256").update(body).digest("hex");

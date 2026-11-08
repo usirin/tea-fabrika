@@ -7,6 +7,7 @@ import {
 	readdirSync,
 	readFileSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import {syncBuiltinESMExports} from "node:module";
@@ -48,6 +49,60 @@ const plants = [
 ] as const;
 
 describe("P12 Rolldown build", () => {
+	it.each(plants)(
+		"every reachable TSX input passes the Compiler check: %s",
+		async (_name, source) => {
+			const {build} = await import("./build.ts");
+			const folder = home(),
+				file = join(folder, "hidden.tsx"),
+				program = join(folder, "program.ts"),
+				out = join(folder, "dist");
+			mkdirSync(join(folder, "node_modules"));
+			symlinkSync(
+				resolve(
+					import.meta.dirname,
+					"../../../../node_modules/.pnpm/react@19.3.1/node_modules/react",
+				),
+				join(folder, "node_modules/react"),
+			);
+			writeFileSync(file, clean);
+			writeFileSync(
+				program,
+				`import {Tip} from "./hidden.tsx"; import {counter} from ${JSON.stringify(resolve(import.meta.dirname, "../../../programs/counter/src/program.ts"))}; export const program = {...counter, fixture: Tip};`,
+			);
+			const options = {out, files: [], ledger: [], programs: {counter: program}};
+			await Effect.runPromise(build(options));
+			const before = snapshot(out);
+			writeFileSync(file, source);
+			const failed = await Effect.runPromise(Effect.exit(build(options)));
+			expect(Exit.isFailure(failed), "reachable input is checked even with files: []").toBe(true);
+			expect(snapshot(out)).toEqual(before);
+		},
+	);
+	it("Compiler ledger rows use the same repo-relative paths as discovered inputs", async () => {
+		const {build} = await import("./build.ts");
+		const folder = home(),
+			file = join(folder, "view.tsx"),
+			root = resolve(import.meta.dirname, "../../../..");
+		writeFileSync(file, 'export const Tip = () => {"use no memo"; return <b>approved</b>;}');
+		const path = relative(root, file);
+		const found = vi.spyOn(fs, "globSync").mockReturnValue([path]);
+		syncBuiltinESMExports();
+		try {
+			const result = await Effect.runPromise(
+				Effect.exit(
+					build({
+						out: join(folder, "dist"),
+						ledger: [{file: path, fn: "Tip", why: "fixture approval"}],
+					}),
+				),
+			);
+			expect(result).toMatchObject({_tag: "Success"});
+		} finally {
+			found.mockRestore();
+			syncBuiltinESMExports();
+		}
+	});
 	it("default discovery publishes a view and custom modules export program", async () => {
 		const {build} = await import("./build.ts");
 		const parent = home(),

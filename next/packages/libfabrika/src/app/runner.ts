@@ -300,6 +300,8 @@ export class ProgramRunner extends Context.Service<
 					options: {readonly mine?: string; readonly dirty?: boolean} = {},
 				) {
 					const letters = yield* Stream.runCollect(mailbox.read(process.name, state.after));
+					const saved = yield* store.load;
+					if (saved === null) yield* store.save(checkpoint(state, null));
 					if (letters.length === 0 && options.dirty !== true)
 						return {state, fresh: [] as ReadonlyArray<Dispatched>, mine: Option.none<History>()};
 					let model = state.model;
@@ -308,7 +310,6 @@ export class ProgramRunner extends Context.Service<
 					const fresh: Array<Dispatched> = [];
 					let cmds = state.cmds;
 					const placed: Array<Placed> = [];
-					const saved = yield* store.load;
 					const prepared = Schema.decodeUnknownOption(Turn)(saved?.turn);
 					let mine = Option.none<History>();
 					for (const letter of letters) {
@@ -385,7 +386,10 @@ export class ProgramRunner extends Context.Service<
 						Effect.flatMap((admitted) =>
 							admitted ? state.loaded.execution.step(model, m) : Effect.succeed(refused),
 						),
-						Effect.catch(() => Effect.succeed(refused)),
+						Effect.catchIf(
+							(error) => error.why === "step" && error.source === undefined,
+							() => Effect.succeed(refused),
+						),
 					);
 				});
 
@@ -420,18 +424,15 @@ export class ProgramRunner extends Context.Service<
 					}));
 
 				/** The span one Cmd runs in. */
-				const cmdSpan =
-					(job: Dispatched) =>
-					<A, E>(work: Effect.Effect<A, E>): Effect.Effect<A, E> =>
-						work.pipe(
-							Effect.withSpan("runner.cmd", {
-								attributes: {
-									[PROCESS]: process.id,
-									[tag("cmd")]: cmdType(job),
-									[tag("id")]: job.id,
-								},
-							}),
-						);
+				const cmdSpan = (job: Dispatched) =>
+					Effect.fn("runner.cmd")(function* <A, E>(work: Effect.Effect<A, E>) {
+						yield* Effect.annotateCurrentSpan({
+							[PROCESS]: process.id,
+							[tag("cmd")]: cmdType(job),
+							[tag("id")]: job.id,
+						});
+						return yield* work;
+					});
 
 				/** A checked write: the fact must be declared, not reserved, and match its schema. */
 				const write = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
@@ -452,20 +453,18 @@ export class ProgramRunner extends Context.Service<
 					)
 						return yield* err(job, "forbidden");
 					if (!(yield* state.loaded.execution.check(kind, fact))) return yield* err(job, "bad_cmd");
-					const commit = <E>(
+					const commit = Effect.fn("runner.write")(function* <E>(
 						appended: Effect.Effect<Appended, E>,
 						links: ReadonlyArray<Tracer.SpanLink>,
-					) =>
-						appended.pipe(
-							Effect.withSpan("runner.write", {
-								attributes: {
-									[PROCESS]: process.id,
-									[tag("write")]: job.id,
-									[tag("stream")]: stream,
-								},
-								links,
-							}),
-						);
+					) {
+						yield* Effect.annotateCurrentSpan({
+							[PROCESS]: process.id,
+							[tag("write")]: job.id,
+							[tag("stream")]: stream,
+						});
+						(yield* Effect.currentSpan.pipe(Effect.orDie)).addLinks(links);
+						return yield* appended;
+					});
 					const attempt: Effect.Effect<Appended, LedgerError | SigningRefused | NotGranted> =
 						Effect.gen(function* () {
 							if (asked._tag === "own") {
@@ -562,21 +561,31 @@ export class ProgramRunner extends Context.Service<
 					});
 
 				/** One public call: its span, its Cmds, then the flush, on success and failure. */
+				const tracedCall = (name: string) =>
+					Effect.fn(name)(function* <A>(
+						turn: Effect.Effect<
+							{readonly answer: A; readonly jobs: ReadonlyArray<Dispatched>},
+							RunnerFailure
+						>,
+					) {
+						yield* Effect.annotateCurrentSpan({[PROCESS]: process.id, [tag("name")]: process.name});
+						const {answer, jobs} = yield* turn;
+						yield* runAll(jobs);
+						return answer;
+					});
+				const calls = {
+					"runner.open": tracedCall("runner.open"),
+					"runner.step": tracedCall("runner.step"),
+					"runner.due": tracedCall("runner.due"),
+				};
 				const call = <A>(
-					name: string,
+					name: keyof typeof calls,
 					turn: Effect.Effect<
 						{readonly answer: A; readonly jobs: ReadonlyArray<Dispatched>},
 						RunnerFailure
 					>,
 				): Effect.Effect<A, RunnerFailure> =>
-					Effect.gen(function* () {
-						const {answer, jobs} = yield* turn;
-						yield* runAll(jobs);
-						return answer;
-					}).pipe(
-						Effect.withSpan(name, {
-							attributes: {[PROCESS]: process.id, [tag("name")]: process.name},
-						}),
+					calls[name](turn).pipe(
 						Effect.exit,
 						Effect.flatMap((exit) =>
 							recording.flush.pipe(

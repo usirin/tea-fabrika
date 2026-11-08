@@ -91,6 +91,7 @@ const Binding = Schema.Struct({
 	span: Link,
 	sentAt: Schema.String,
 	seen: Schema.optionalKey(Schema.Int),
+	body: Schema.optionalKey(Schema.String),
 	state: EnvelopeState,
 });
 type Binding = typeof Binding.Type;
@@ -197,6 +198,14 @@ type Options<A, RNext, RDeliver, RNotify> = {
 	readonly inputCap: number;
 	readonly spentCap: number;
 	readonly turn?: Semaphore.Semaphore;
+	readonly write?: <B, E, R>(work: Effect.Effect<B, E, R>) => Effect.Effect<B, E, R>;
+	readonly policy?: (process: string) => Effect.Effect<
+		{
+			readonly inputs: ReadonlyArray<string>;
+			readonly facts: ReadonlyArray<string>;
+		},
+		LedgerError
+	>;
 	readonly isLive?: (process: string) => Effect.Effect<boolean, LedgerError>;
 	readonly open?: (
 		process: string,
@@ -240,6 +249,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 	// Only calls currently checking a proof live here. No challenge is retained.
 	const checking = new Map<ConnectionId, Set<{current: boolean}>>();
 	const turn = options.turn ?? (yield* Semaphore.make(1));
+	const write = options.write ?? turn.withPermit;
 	const flush = sink.flush.pipe(
 		Effect.provideService(RecordManager, records),
 		Effect.provideService(Archive, archive),
@@ -281,6 +291,18 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			}),
 		),
 	);
+	const sessionsFor = Effect.fnUntraced(function* (process: string) {
+		if (options.policy === undefined) return sessions;
+		const policy = yield* options.policy(process);
+		return yield* SessionManager.pipe(
+			Effect.provide(
+				SessionManager.layer(sql, membership, {
+					input: (name) => policy.inputs.includes(name),
+					fact: (kind) => policy.facts.includes(kind),
+				}),
+			),
+		);
+	});
 	const prunePending = (at: number) => {
 		const expired = sql.exec(
 			"SELECT client FROM door_pending WHERE until<=? OR client IN (SELECT client FROM door_pending ORDER BY rowid DESC LIMIT -1 OFFSET ?)",
@@ -708,7 +730,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			});
 			return reply;
 		}).pipe(
-			turn.withPermits(1),
+			write,
 			Effect.withSpan("door.grant"),
 			Effect.flatMap((reply) =>
 				Effect.gen(function* () {
@@ -765,7 +787,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		}).pipe(Effect.withSpan("door.deny"));
 		return yield* clients
 			.write(MemberFact.cases.denied.make({id: random(), key, saw, by: from.by}), from)
-			.pipe(turn.withPermits(1));
+			.pipe(write);
 	});
 	const route = Effect.fnUntraced(function* (
 		client: ConnectionId,
@@ -807,6 +829,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		)
 			refusal ??= "bad_input";
 		const target = request !== null && Result.isSuccess(request) ? request.success.pid : "door";
+		const policy =
+			target !== "door" && options.policy !== undefined
+				? yield* options.policy(target)
+				: {inputs: options.inputs.personOnly, facts: options.facts.personOnly};
 		if (
 			request !== null &&
 			Result.isSuccess(request) &&
@@ -825,6 +851,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			if (!delivered) refusal ??= "bad_trace";
 		}
 		const digest = yield* hash(JSON.stringify(params));
+		const body = message === null ? undefined : yield* hash(JSON.stringify(message));
 		const process = yield* allocateStart();
 		const at = yield* clock;
 		const letter =
@@ -855,7 +882,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					by,
 					process: target,
 					name: typeof name === "string" ? name : method,
-					personOnly: typeof name === "string" && options.inputs.personOnly.includes(name),
+					personOnly: typeof name === "string" && policy.inputs.includes(name),
+					...(body === undefined ? {} : {body}),
 					digest,
 					arrivedAt: at,
 					span: {traceId: span.traceId, spanId: span.spanId},
@@ -939,6 +967,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					request !== null &&
 					Result.isSuccess(request)
 				) {
+					const sessions = yield* sessionsFor(target);
 					yield* sessions.record({...binding, traceId: binding.span.traceId});
 					yield* sessions.delivered(binding.id, target);
 					const delivered = Binding.make({
@@ -1044,6 +1073,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		readonly fact: unknown;
 	}) {
 		return yield* Effect.gen(function* () {
+			const sessions = yield* sessionsFor(a.process);
 			if (options.isLive !== undefined && !(yield* options.isLive(a.process)))
 				return yield* new SigningRefused({why: "not_delivered"});
 			const session = yield* sessions.receipt(a.id, a.parent, a.process, a.kind);
@@ -1087,7 +1117,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					decoded.success,
 				),
 			);
-		}).pipe(turn.withPermits(1));
+		}).pipe(write);
 	});
 	return {
 		target: Effect.fnUntraced(function* (name: string, code: string) {
@@ -1113,7 +1143,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		grant,
 		deny,
 		route,
-		signer: sessions.signer,
+		signer: (parent: string, process: string, kind: string) =>
+			sessionsFor(process).pipe(
+				Effect.flatMap((sessions) => sessions.signer(parent, process, kind)),
+			),
 		sign: Effect.fn("door.sign")(function* (
 			process: string,
 			id: string,
@@ -1122,11 +1155,35 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		) {
 			if (options.isLive !== undefined && !(yield* options.isLive(process)))
 				return yield* new SigningRefused({why: "not_delivered"});
-			return yield* sessions
+			return yield* (yield* sessionsFor(process))
 				.signer(parent, process, kind)
 				.pipe(Effect.provideService(SignRequest, {id}));
 		}),
 		retire: sessions.end,
+		checkDelivery: Effect.fn("door.checkDelivery")(function* (process: string, incoming: Incoming) {
+			const [row] = sql.exec(
+				"SELECT value FROM door_bindings WHERE id=? AND letter=?",
+				incoming.envelope.id,
+				`${process}/${incoming.id}`,
+			);
+			if (row === undefined) return yield* new SigningRefused({why: "not_delivered"});
+			const binding = decodeBinding(row.value);
+			const by = yield* membership(binding.client);
+			if (
+				binding.state._tag !== "delivered" ||
+				binding.process !== process ||
+				JSON.stringify(by) !== JSON.stringify(binding.by) ||
+				JSON.stringify(by) !== JSON.stringify(incoming.envelope.by) ||
+				binding.arrivedAt !== incoming.envelope.arrivedAt ||
+				binding.sentAt !== incoming.sentAt ||
+				(binding.seen ?? 0) !== incoming.seen ||
+				binding.span.traceId !== incoming.span.traceId ||
+				binding.span.spanId !== incoming.span.spanId ||
+				binding.body === undefined ||
+				binding.body !== (yield* hash(JSON.stringify(incoming.envelope.input)))
+			)
+				return yield* new SigningRefused({why: "not_delivered"});
+		}),
 		append,
 	};
 });

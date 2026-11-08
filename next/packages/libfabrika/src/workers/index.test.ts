@@ -1,6 +1,6 @@
 import {expect, it} from "@effect/vitest";
 import {Effect} from "effect";
-import {workerLoader} from "./workers.ts";
+import {workerLoader} from "./index.ts";
 
 const unexpected = () => {
 	throw new Error("unknown program reached Worker Loader");

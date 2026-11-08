@@ -153,10 +153,15 @@ const scan = (file: string, body: string): Array<Finding> => {
 		alchemy = new Set<string>(),
 		named = new Map<string, string>();
 	const remote = new Set<string>();
+	const helpers = new Set<string>();
 	const report = (node: Tree, why: string) =>
 		found.push({file, line: body.slice(0, node.start).split("\n").length, why});
 	for (const node of ast.body)
 		if (node.type === "ImportDeclaration") {
+			if (node.source.value.startsWith(".") && node.importKind !== "type")
+				for (const spec of node.specifiers)
+					if (spec.type !== "ImportSpecifier" || spec.importKind !== "type")
+						helpers.add(spec.local.name);
 			if (node.source.value.startsWith("@alchemy.run/cloudflare/"))
 				report(node, "unsupported-case: Cloudflare subpath import");
 			for (const s of node.specifiers) {
@@ -189,11 +194,12 @@ const scan = (file: string, body: string): Array<Finding> => {
 		if (callee && (remote.has(callee) || [...alchemy].some((a) => callee === `${a}.remote`)))
 			report(node, "remote override");
 		const first = callee?.split(".")[0];
+		if (first && helpers.has(first)) report(node, "unsupported-case: unfollowed stack helper");
 		const parts =
 			first && cloud.has(first)
 				? callee!.split(".").slice(1)
-				: named.has(callee ?? "")
-					? [named.get(callee!)!]
+				: first && named.has(first)
+					? [named.get(first)!, ...callee!.split(".").slice(1)]
 					: null;
 		if (!parts) {
 			// Computed Cloudflare calls and aliased constructors must be understood before blocking.
@@ -229,6 +235,27 @@ const scan = (file: string, body: string): Array<Finding> => {
 };
 
 describe("P12 local twin exam", () => {
+	it("every named Cloudflare namespace is checked alongside valid local resources", () => {
+		const stack = join(ROOT, "next/apps/fabrika/alchemy.run.ts");
+		for (const [imported, call] of [
+			["Zone", "Zone.Zone"],
+			["Zone as Z", "Z.Zone"],
+		]) {
+			const body = `${text(stack)}\nimport {${imported}} from "@alchemy.run/cloudflare";\n${call}("Remote", {name: "test.invalid"});`;
+			expect(scan(stack, body).map((finding) => finding.why)).toContain(
+				"no local provider: Cloudflare.Zone.Zone",
+			);
+		}
+	});
+	it("a called stack helper is inspected or reported as unsupported", () => {
+		const stack = join(ROOT, "next/apps/fabrika/alchemy.run.ts");
+		const body = `${text(stack)}\nimport {extraResources} from "./unfollowed-stack-helper.ts";\nextraResources();`;
+		// This unresolved helper may declare remote-only resources. Existing valid resources
+		// must not let it silently pass. Following it or refusing it are both honest answers.
+		expect(scan(stack, body).some((finding) => finding.why.startsWith("unsupported-case:"))).toBe(
+			true,
+		);
+	});
 	it("local twin plant: inspect every finding on the actual stack, with no second resource list", () => {
 		const stack = join(ROOT, "next/apps/fabrika/alchemy.run.ts");
 		expect(existsSync(stack), "P12 has no working stage on its base").toBe(true);

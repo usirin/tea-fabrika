@@ -1,16 +1,25 @@
-import {ProcessIdGenerator} from "@kampus/libfabrika/coordination";
-import {LedgerError, Waited} from "@kampus/libfabrika/data";
-import {Answer, Attached, Hello, Row} from "@kampus/libfabrika/transport";
-import {connection} from "@kampus/libfabrika/transport/gateway";
-import {workerSql} from "@kampus/libfabrika/workers";
 import {Context, Effect, Layer, ManagedRuntime, Result, Schema} from "effect";
-import type {ProjectBinding} from "./bindings.ts";
-import type {ConnectionId} from "./door.ts";
-import {complete, projectStub, recordingLayer, rpc, settings, type Env} from "./runtime.ts";
+import {ProcessIdGenerator} from "../coordination/process-id.ts";
+import {LedgerError, Waited} from "../data/index.ts";
+import {workerSql} from "../data/worker-sql.ts";
+import {connection} from "../transport/gateway.ts";
+import {Answer, Attached, Hello, Row} from "../transport/index.ts";
+import type {ConnectionId, ProjectBinding} from "./bindings.ts";
+import {
+	complete,
+	projectStub,
+	recordingLayer,
+	rpc,
+	type BrainOptions,
+	type Env,
+} from "./runtime.ts";
 
-const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: Env) {
-	const config = settings(env),
-		p = projectStub(env, config.name),
+const gatewayLogic = Effect.fnUntraced(function* (
+	ctx: DurableObjectState,
+	env: Env,
+	config: BrainOptions,
+) {
+	const p = projectStub(env, config.name),
 		ids = yield* ProcessIdGenerator;
 	const gateway = Schema.decodeUnknownSync(Schema.String)(ctx.id.name);
 	const recording = yield* Layer.build(
@@ -117,7 +126,52 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 		connections.set(ws, c);
 		return c;
 	};
-	for (const ws of ctx.getWebSockets()) yield* make(ws).wake();
+	const close = Effect.fn("gateway.close")(function* (ws: WebSocket) {
+		const state = attached(ws),
+			session = Schema.decodeUnknownSync(Schema.String)(ctx.getTags(ws)[0]);
+		yield* rpc(() => p.leave(state.client, session));
+		yield* rpc(() => p.disconnect(state.client as ConnectionId));
+		connections.delete(ws);
+	});
+	const ring = Effect.fn("gateway.ring")(function* (stream: string, rev: number) {
+		for (const ws of ctx.getWebSockets())
+			if (attached(ws)._tag === "online")
+				yield* (connections.get(ws) ?? make(ws)).ring(stream, rev);
+	});
+	const probe = Effect.fn("gateway.probe")(function* (session: string) {
+		for (const ws of ctx.getWebSockets(session))
+			if (attached(ws)._tag === "online")
+				return yield* (connections.get(ws) ?? make(ws)).probe(session);
+		return yield* new LedgerError({why: "unreachable"});
+	});
+	const notify = Effect.fn("gateway.notify")(function* (client: string, news: unknown) {
+		yield* Effect.try({
+			try: () => {
+				for (const ws of ctx.getWebSockets())
+					if (attached(ws).client === client) {
+						if (
+							typeof news === "object" &&
+							news !== null &&
+							"close" in news &&
+							typeof news.close === "number"
+						)
+							ws.close(news.close, "permission changed");
+						else
+							ws.send(
+								JSON.stringify({
+									jsonrpc: "2.0",
+									...(typeof news === "object" && news !== null ? news : {}),
+								}),
+							);
+					}
+			},
+			catch: () => new LedgerError({why: "unreachable"}),
+		});
+	});
+	for (const ws of ctx.getWebSockets()) {
+		const work = make(ws).wake();
+		yield* attached(ws)._tag === "online" ? recorded(work) : work;
+	}
 	return {
 		fetch: Effect.fnUntraced(function* (request: Request) {
 			const path = new URL(request.url).pathname.split("/");
@@ -145,51 +199,24 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 			const work = (connections.get(ws) ?? make(ws)).frame(text);
 			return attached(ws)._tag === "online" ? recorded(work) : work;
 		},
-		close: Effect.fnUntraced(function* (ws: WebSocket) {
-			const state = attached(ws),
-				session = Schema.decodeUnknownSync(Schema.String)(ctx.getTags(ws)[0]);
-			yield* rpc(() => p.leave(state.client, session));
-			yield* rpc(() => p.disconnect(state.client as ConnectionId));
-			connections.delete(ws);
-		}),
-		ring: Effect.fnUntraced(function* (stream: string, rev: number) {
-			for (const ws of ctx.getWebSockets())
-				yield* (connections.get(ws) ?? make(ws)).ring(stream, rev);
-		}),
-		probe: Effect.fnUntraced(function* (session: string) {
-			for (const ws of ctx.getWebSockets(session))
-				return yield* (connections.get(ws) ?? make(ws)).probe(session);
-			return yield* new LedgerError({why: "unreachable"});
-		}),
-		notify: (client: string, news: unknown) =>
-			Effect.sync(() => {
-				for (const ws of ctx.getWebSockets())
-					if (attached(ws).client === client) {
-						if (
-							typeof news === "object" &&
-							news !== null &&
-							"close" in news &&
-							typeof news.close === "number"
-						)
-							ws.close(news.close, "permission changed");
-						else
-							ws.send(
-								JSON.stringify({
-									jsonrpc: "2.0",
-									...(typeof news === "object" && news !== null ? news : {}),
-								}),
-							);
-					}
-			}),
+		close: (ws: WebSocket) => (attached(ws)._tag === "online" ? recorded(close(ws)) : close(ws)),
+		ring: (stream: string, rev: number) => recorded(ring(stream, rev)),
+		probe: (session: string) => recorded(probe(session)),
+		notify: (client: string, news: unknown) => {
+			const online = ctx
+				.getWebSockets()
+				.some((ws) => attached(ws).client === client && attached(ws)._tag === "online");
+			return online ? recorded(notify(client, news)) : notify(client, news);
+		},
 	};
 });
 export class GatewayService extends Context.Service<
 	GatewayService,
 	Effect.Success<ReturnType<typeof gatewayLogic>>
 >()("fabrika/Gateway") {}
-export const gatewayRuntime = (ctx: DurableObjectState, env: Env) =>
+export const gatewayRuntime = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>
 	ManagedRuntime.make(
-		Layer.effect(GatewayService, gatewayLogic(ctx, env)).pipe(
+		Layer.effect(GatewayService, gatewayLogic(ctx, env, config)).pipe(
 			Layer.provide(ProcessIdGenerator.layer),
 		),
 	);

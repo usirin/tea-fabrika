@@ -178,6 +178,8 @@ const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
 	data: [],
 	coordination: ["data"],
 	app: ["coordination"],
+	node: ["app", "coordination", "data"],
+	workers: ["app", "coordination", "data", "transport"],
 	mcp: ["app", "transport"], // the named exception: the bridge is a client, as a window is
 	desktop: [LIBRARY], // the app layer's names, nothing lower
 	window: ["desktop", LIBRARY, `${LIBRARY}/transport`], // a window is a client (the note's T3)
@@ -191,7 +193,7 @@ const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
 
 /** The folders under `src/` of the two library packages, each a part above. */
 const FOLDERS: Readonly<Record<string, ReadonlyArray<string>>> = {
-	[LIBRARY]: ["transport", "data", "coordination", "app", "mcp"],
+	[LIBRARY]: ["transport", "data", "coordination", "app", "mcp", "node", "workers"],
 	[TUVAL]: ["desktop", "window", "dom", "browser", "electron", "headless"],
 };
 

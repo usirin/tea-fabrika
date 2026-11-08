@@ -1,7 +1,14 @@
-import {workerLoader} from "@kampus/libfabrika/workers";
 import {Effect, Result, Schema} from "effect";
-import {bucketCalls, processStub, projectStub, recordStub, rpc, type Env} from "./runtime.ts";
-import {programs} from "./table.ts";
+import {workerLoader, type ProgramSource} from "./index.ts";
+import {
+	bucketCalls,
+	processStub,
+	projectStub,
+	recordStub,
+	recordCall,
+	rpc,
+	type Env,
+} from "./runtime.ts";
 
 const Request = Schema.Struct({
 	target: Schema.Literals(["project", "process", "record", "loader", "bucket"]),
@@ -32,8 +39,13 @@ const methods = {
 	process: new Set(["msg", "open", "due", "abort", "activity", "recover", "savedAlarm"]),
 	record: new Set(["write", "read", "content", "deleteContent"]),
 };
-const dispatch = Effect.fnUntraced(function* (env: Env, request: typeof Request.Type) {
+const dispatch = Effect.fnUntraced(function* (
+	env: Env,
+	programs: Readonly<Record<string, ProgramSource>>,
+	request: typeof Request.Type,
+) {
 	const {target, project, name, method, args} = request;
+	const call = target === "record" || target === "bucket" ? recordCall : rpc;
 	if (target === "loader") {
 		const loaded = yield* workerLoader(env.LOADER, programs).load(name, project);
 		if (method === "init") return yield* loaded.execution.init(args[0]);
@@ -43,14 +55,14 @@ const dispatch = Effect.fnUntraced(function* (env: Env, request: typeof Request.
 	if (target === "bucket") {
 		const calls = bucketCalls(env.HEALTH);
 		if (method === "put")
-			return yield* rpc(() =>
+			return yield* call(() =>
 				calls.put(
 					String(args[0]),
 					Uint8Array.from(Schema.decodeUnknownSync(Schema.Array(Schema.Number))(args[1])),
 					String(args[2]),
 				),
 			);
-		if (method === "head") return yield* rpc(() => calls.head(String(args[0])));
+		if (method === "head") return yield* call(() => calls.head(String(args[0])));
 		return yield* Effect.fail({why: "unknown_method"});
 	}
 	if (!methods[target].has(method)) return yield* Effect.fail({why: "unknown_method"});
@@ -70,14 +82,15 @@ const dispatch = Effect.fnUntraced(function* (env: Env, request: typeof Request.
 				: recordStub(env, project, name);
 	// Only the fixed internal method set above is callable. Public fetch never reaches this entrypoint.
 	// oxlint-disable-next-line fabrika/no-promises -- edge: dynamic platform RPC can return void or a Promise
-	const answer = rpc(() => Promise.resolve(Reflect.apply(Reflect.get(stub, method), stub, args)));
+	const answer = call(() => Promise.resolve(Reflect.apply(Reflect.get(stub, method), stub, args)));
 	return yield* target === "process" && method === "abort" ? answer.pipe(Effect.ignore) : answer;
 });
 
-export const control = Effect.fnUntraced(function* (
+export const control = Effect.fn("runtime.control")(function* (
 	request: globalThis.Request,
 	env: Env,
 	token: string,
+	programs: Readonly<Record<string, ProgramSource>>,
 ) {
 	if (typeof token !== "string" || request.headers.get("authorization") !== `Bearer ${token}`)
 		return new Response(null, {status: 403});
@@ -85,7 +98,7 @@ export const control = Effect.fnUntraced(function* (
 	const raw = yield* Effect.tryPromise({try: () => request.json(), catch: () => null});
 	const input = Schema.decodeUnknownResult(Request)(raw);
 	if (Result.isFailure(input)) return Response.json({error: {why: "bad_input"}}, {status: 400});
-	const answer = yield* Effect.result(dispatch(env, input.success));
+	const answer = yield* Effect.result(dispatch(env, programs, input.success));
 	return Result.isSuccess(answer)
 		? Response.json({value: answer.success ?? null})
 		: Response.json(

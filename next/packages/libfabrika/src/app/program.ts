@@ -122,6 +122,8 @@ export type Step = typeof Step.Type;
  *  state or a saved letter does not fold. Never a refusal: nothing was decided. */
 export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown", {
 	why: Schema.Literals(["load", "no_program", "step", "saved_state", "saved_letter"]),
+	/** An RPC or reply decode failure decided nothing about the input. It must be retried. */
+	source: Schema.optionalKey(Schema.Literals(["rpc", "decode"])),
 }) {}
 
 export type Stepper = {

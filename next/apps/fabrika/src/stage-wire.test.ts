@@ -1,13 +1,15 @@
-// P12, next/. Every wire law starts the real dev.ts, never a raw Miniflare substitute.
+// P12, next/. Outside only: every law needs workerd, sockets and a fresh FABRIKA_HOME.
+// Every wire law starts the real dev.ts, never a raw Miniflare substitute.
 // CLI fixture contract: --name, --person, --founder (public SSH line), --window (public raw key),
 // and the plan's --port. These are bootstrap settings, never a public signing capability.
 import {spawn, execFileSync, type ChildProcess} from "node:child_process";
 import {createHash, generateKeyPairSync, sign} from "node:crypto";
-import {mkdtempSync, readFileSync, rmSync} from "node:fs";
+import {mkdtempSync, readdirSync, readFileSync, rmSync} from "node:fs";
 import {request} from "node:http";
 import {createServer} from "node:net";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
+import {DatabaseSync} from "node:sqlite";
 import {Entry, PAGE} from "@kampus/libfabrika/data";
 import {Effect, Schema} from "effect";
 import {afterEach, describe, expect, it} from "vitest";
@@ -91,18 +93,18 @@ const sockets: Array<WebSocket> = [];
 afterEach(async () => {
 	for (const ws of sockets.splice(0)) ws.close();
 	for (const child of children.splice(0)) {
-		if (child.exitCode !== null) continue;
+		if (child.exitCode !== null || child.signalCode !== null) continue;
 		child.kill("SIGTERM");
 		await new Promise<void>((done) => child.once("exit", () => done()));
 	}
 	for (const h of homes.splice(0)) rmSync(h, {recursive: true, force: true});
 });
-const stage = async () => {
+const stage = async (saved?: {key: ReturnType<typeof identity>; home: string; port: number}) => {
 	readFileSync(join(APP, "dev.ts"), "utf8");
-	const key = identity();
-	const home = mkdtempSync(join(tmpdir(), "p12-w-"));
+	const key = saved?.key ?? identity();
+	const home = saved?.home ?? mkdtempSync(join(tmpdir(), "p12-w-"));
 	homes.push(home);
-	const port = await unusedPort();
+	const port = saved?.port ?? (await unusedPort());
 	const url = `http://127.0.0.1:${port}`;
 	const env: NodeJS.ProcessEnv = {...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1"};
 	delete env.TYPESAFE_API_KEY;
@@ -142,7 +144,32 @@ const stage = async () => {
 		}
 		await pause();
 	}
-	return {key, url, home, child, output: () => output};
+	return {key, url, home, child, port, output: () => output};
+};
+
+// Read only the named public metadata tables. Never inspect general storage or key rows.
+const savedRows = (home: string, table: "door_bindings" | "stage_clients") => {
+	const rows: Array<Record<string, unknown>> = [];
+	for (const entry of readdirSync(home, {recursive: true, withFileTypes: true})) {
+		if (!entry.isFile() || !/\.(sqlite|db)$/.test(entry.name)) continue;
+		const db = new DatabaseSync(join(entry.parentPath, entry.name), {readOnly: true});
+		try {
+			if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table))
+				continue;
+			rows.push(
+				...db
+					.prepare(
+						table === "door_bindings"
+							? "SELECT letter,value FROM door_bindings"
+							: "SELECT client,gateway FROM stage_clients",
+					)
+					.all(),
+			);
+		} finally {
+			db.close();
+		}
+	}
+	return rows;
 };
 
 type Frame = {
@@ -274,6 +301,20 @@ const view = async (c: Client, pid: string) => {
 };
 
 describe("P12 real dev.ts wire", () => {
+	it("a new dev command links its lifecycle fact to the previous runtime", async () => {
+		const first = await stage(),
+			c = await connected(first);
+		const starts = (await read(c, "door/brain")).filter((row) => row._tag === "started");
+		expect(starts).toHaveLength(1);
+		c.close();
+		first.child.kill("SIGTERM");
+		await new Promise<void>((done) => first.child.once("exit", () => done()));
+		const second = await stage(first),
+			reopened = await connected(second, "reopened");
+		const now = (await read(reopened, "door/brain")).filter((row) => row._tag === "started");
+		expect(now).toHaveLength(2);
+		expect(now[1]!.body).toMatchObject({after: (starts[0]!.body as {start: string}).start});
+	});
 	it("p10 plant: save twice or accept changed content; return the original placing", async () => {
 		const s = await stage(),
 			c = await connected(s),
@@ -340,7 +381,7 @@ describe("P12 real dev.ts wire", () => {
 		// Door input facts occupy the intervening global revisions.
 		expect(accepted.some((a, n) => n > 0 && a.rev > accepted[n - 1]!.rev + 1)).toBe(true);
 	});
-	it("p12/p94 plant: memory waits or wrong gateway reader lose a ring across workerd replacement", async () => {
+	it("a parked wire wait receives the next append and a ready wait answers now", async () => {
 		const s = await stage(),
 			c = await connected(s),
 			other = await connected(s, "tab-b"),
@@ -357,8 +398,6 @@ describe("P12 real dev.ts wire", () => {
 		expect(await c.call("ledger.wait", {stream: "counter:1/inbox", after: 0})).toMatchObject({
 			result: {rev: next.rev},
 		});
-		// Actual object sleep is a lead run: no local API can force cloud hibernation.
-		// The Gateway laws separately reconstruct from its serialized attachment.
 	});
 	it("p14 wire plant: drop placing or use global revisions as patch positions", async () => {
 		const s = await stage(),
@@ -385,7 +424,7 @@ describe("P12 real dev.ts wire", () => {
 		expect((await view(b, pid)).view.count).toBe(12);
 		expect(await read(a, "counter:1/inbox")).toHaveLength(12);
 	});
-	it("p15/p26 plant: skip Host/Origin or pre-hello guards, or trace strangers", async () => {
+	it("unauthenticated connections leave no input or span records", async () => {
 		const s = await stage(),
 			c = await connected(s);
 		expect(await statusWithHost(s.url, "wrong.test")).toBe(421);
@@ -396,14 +435,17 @@ describe("P12 real dev.ts wire", () => {
 			rows.filter((r) => r.by !== s.key.fingerprint);
 		const before = await read(c, "door/inputs");
 		const traces = await c.call("spans.read", {chain: {_tag: "spans"}, after: 0});
-		const stranger = new Client(s.url, identity(), "stranger");
+		const strangerKey = identity(),
+			unknownKey = identity(),
+			badKey = identity();
+		const stranger = new Client(s.url, strangerKey, "pre-hello");
 		await stranger.challenge();
 		expect(
 			(await stranger.call("ledger.read", {stream: "processes", after: 0})).error?.data?.why,
 		).toBe("no_hello");
-		const unknown = new Client(s.url, identity(), "unknown");
+		const unknown = new Client(s.url, unknownKey, "ungranted");
 		expect((await Effect.runPromise(unknown.hello())).error?.data?.why).toBe("not_granted");
-		const bad = new Client(s.url, identity(), "invalid-proof");
+		const bad = new Client(s.url, badKey, "invalid-proof");
 		const nonce = await bad.challenge();
 		expect(
 			(await Effect.runPromise(bad.hello(nonce, {signed: "not a proof"}))).error?.data?.why,
@@ -412,25 +454,57 @@ describe("P12 real dev.ts wire", () => {
 		expect(inputs.length).toBeGreaterThan(before.length);
 		expect(notC(inputs)).toEqual(notC(before));
 		const after = await c.call("spans.read", {chain: {_tag: "spans"}, after: 0});
-		// Authorized audit reads may record themselves; no span may be attributed to the stranger.
-		expect(
-			after.result.spans.filter((r: any) => JSON.stringify(r.attributes).includes("stranger")),
-		).toEqual([]);
+		const keys = [strangerKey, unknownKey, badKey];
+		const connections = savedRows(s.home, "stage_clients").filter((row) =>
+			keys.some((key) => String(row.gateway).includes(encodeURIComponent(key.fingerprint))),
+		);
+		expect(connections).toHaveLength(3);
+		const identities = [
+			...keys.flatMap((key) => [key.raw, key.fingerprint]),
+			...connections.map((row) => String(row.client)),
+		];
+		const attributed = (row: unknown) => identities.some((id) => JSON.stringify(row).includes(id));
+		expect(after.result.spans.filter(attributed)).toEqual([]);
+		// A planted unauthorized record with either identity must be found by this same predicate.
+		expect(attributed({attributes: {"fab.client": connections[0]!.client}})).toBe(true);
+		expect(attributed({attributes: {"fab.key": unknownKey.fingerprint}})).toBe(true);
 		expect(traces.error).toBeUndefined();
 		expect(await c.ping()).toBe("pong");
 	});
-	it("P11 handoff plant: omit sentAt, seen, parent or original trace on delivery and retry", async () => {
+	it("delivery and retry retain the original saved binding and nonzero seen revision", async () => {
 		const s = await stage(),
 			c = await connected(s),
 			pid = await counter(c);
-		const accepted = placing(await send(c, pid, "metadata"));
+		const seen = placing(await send(c, pid, "seed")).rev;
+		expect(seen).toBeGreaterThan(0);
+		const accepted = placing(await send(c, pid, "metadata", {type: "inc"}, seen));
+		const original = savedRows(s.home, "door_bindings").find(
+			(row) => row.letter === `${pid}/metadata`,
+		);
+		expect(original).toBeDefined();
+		const binding = JSON.parse(String(original!.value));
+		expect(binding).toMatchObject({
+			by: {key: s.key.fingerprint},
+			process: pid,
+			seen,
+			sentAt: SENT,
+			state: {_tag: "delivered"},
+		});
 		await send(c, pid, "later", {type: "dec"});
-		expect(placing(await send(c, pid, "metadata"))).toEqual(accepted);
+		expect(placing(await send(c, pid, "metadata", {type: "inc"}, seen))).toEqual(accepted);
+		expect(
+			savedRows(s.home, "door_bindings").find((row) => row.letter === `${pid}/metadata`),
+		).toEqual(original);
 		const rows = await read(c, "counter:1/inbox");
 		const row = rows.find((r) => r.id === "metadata")!;
-		expect(row).toMatchObject({sentAt: SENT, seen: 0, by: s.key.fingerprint});
+		expect(row).toMatchObject({
+			sentAt: SENT,
+			seen,
+			by: s.key.fingerprint,
+			parent: binding.id,
+			traceId: binding.span.traceId,
+		});
 		expect(row.traceId).toMatch(/^[0-9a-f]{32}$/);
-		expect(row.parent).toMatch(/^in-process_/);
 		const inputs = await read(c, "door/inputs");
 		expect(inputs.find((r) => r.id === row.parent)).toMatchObject({traceId: row.traceId});
 		const records = await c.call("spans.read", {chain: {_tag: "job", process: pid}, after: 0});
