@@ -110,8 +110,9 @@ export class SessionManager extends Context.Service<
 						"CREATE TABLE IF NOT EXISTS door_receipts (id TEXT PRIMARY KEY, parent TEXT NOT NULL, process TEXT NOT NULL, kind TEXT NOT NULL, session TEXT NOT NULL, UNIQUE(parent, process, kind))",
 					);
 				};
-				const stored = <A>(step: () => A) =>
-					Effect.try({try: step, catch: () => new LedgerError({why: "storage"})});
+				const stored = Effect.fnUntraced(function* <A>(step: () => A) {
+					return yield* Effect.try({try: step, catch: () => new LedgerError({why: "storage"})});
+				});
 				const ended = (process: string) =>
 					sql.exec("SELECT process FROM door_ended WHERE process=?", process).length > 0;
 				const load = (parent: string) => {

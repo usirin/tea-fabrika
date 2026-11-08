@@ -25,6 +25,9 @@ skill holds the rest.
      Effect's `Arbitrary`). A new law that is an example test with no generator is a defect. A
      pinned example is fine only inside a property's `examples`, naming the past bug it pins
      ([every law is a property](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property)).
+     A fixed test is fine only when its name starts with one of four labels and it is that kind:
+     `vector:`, `format:`, `pinned:` or `scenario:`. A hand-picked example checking a general rule,
+     labeled or not, is a defect.
    - Each law catches its plant. Plant a break yourself where a law looks weak, in your head or in a
      scratch copy, never in the branch.
    - No `build` commit touches a path in `exam-paths.json`. Check each commit's step note with

@@ -42,7 +42,7 @@ export const sameOrigin = (a: {
 
 const CheckedHello = Schema.TaggedUnion({
 	online: {who: Who, version: Schema.Int, ping: Schema.Number, hello: Hello},
-	refused: {why: Schema.String},
+	refused: {why: Schema.String, fingerprint: Schema.optionalKey(Schema.String)},
 });
 const no = (why: string) => CheckedHello.cases.refused.make({why});
 const pingMs = (text: string, min: number, max: number): number => {
@@ -98,7 +98,8 @@ export const checkHello = Effect.fn("transport.checkHello")(function* <E, R>(a: 
 	});
 	if ("why" in checked) return no("bad_signature");
 	const admitted = yield* a.admit(fingerprint);
-	if (admitted._tag === "refused") return no(admitted.why);
+	if (admitted._tag === "refused")
+		return CheckedHello.cases.refused.make({why: admitted.why, fingerprint});
 	if (!a.consume()) return no("bad_nonce");
 	return CheckedHello.cases.online.make({
 		who: admitted.who,

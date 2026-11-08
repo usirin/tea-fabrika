@@ -192,13 +192,15 @@ export class ClientManager extends Context.Service<
 					Effect.tapError((error) => Effect.annotateCurrentSpan(tag("why"), error.why)),
 				);
 
-				return {
-					members: load.pipe(
+				const members = Effect.fn("members.read")(function* () {
+					return yield* load.pipe(
 						Effect.tap((replayed) => Effect.annotateCurrentSpan(view(replayed))),
 						Effect.map(({folded}) => folded.members),
 						Effect.tapError((error) => Effect.annotateCurrentSpan(tag("why"), error.why)),
-						Effect.withSpan("members.read"),
-					),
+					);
+				});
+				return {
+					members: members(),
 					write,
 				};
 			}),
