@@ -1,7 +1,7 @@
 // P11 adds history without changing P9 Letter. One reader must keep entry timing and build.
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
-import {Effect, Layer, Stream} from "effect";
+import {Effect, Layer, Schema, Stream} from "effect";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {lineFor} from "../data/log.ts";
 import {nodeSql} from "../data/sqlite.ts";

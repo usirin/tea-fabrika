@@ -12,7 +12,19 @@ import {DatabaseSync} from "node:sqlite";
 import {Outcome} from "@demlik/tea";
 import {Cmd, Machine} from "@demlik/tea/effect";
 import {afterAll, describe, expect, it} from "@effect/vitest";
-import {Brand, Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, Stream} from "effect";
+import {
+	Brand,
+	Cause,
+	Deferred,
+	Effect,
+	Exit,
+	Fiber,
+	Layer,
+	Option,
+	Result,
+	Schema,
+	Stream,
+} from "effect";
 import * as fc from "fast-check";
 import {
 	type Envelope,
@@ -22,6 +34,7 @@ import {
 	Writer,
 } from "../coordination/index.ts";
 import {Mailbox, type From} from "../coordination/mailbox.ts";
+import {Activity, recoverActivity} from "../coordination/process.ts";
 import {Archive} from "../data/archive.ts";
 import {Doorbell, Ledger, LedgerError} from "../data/ledger.ts";
 import {type Entry, type InputId, lineFor} from "../data/log.ts";
@@ -267,6 +280,50 @@ const failure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 		}),
 	);
 
+// Experiment 231's storage edge, supplied as ProcessStore.layer(sql, {process, storage}).
+// put is buffered; only a completed sync survives an abort. No runner behavior lives here.
+type ActivityStorage = {
+	readonly get: (key: string) => Effect.Effect<unknown, LedgerError>;
+	readonly put: (key: string, value: unknown) => Effect.Effect<void, LedgerError>;
+	readonly sync: () => Effect.Effect<void, LedgerError>;
+};
+const activityStorage = () => {
+	let durable: unknown = Activity.cases.idle.make({process: PROCESS});
+	let pending = durable;
+	let aborted = false;
+	const calls: Array<unknown> = [];
+	const stored = <A>(f: () => A) =>
+		Effect.suspend(() =>
+			aborted ? Effect.fail(new LedgerError({why: "storage"})) : Effect.sync(f),
+		);
+	const storage: ActivityStorage = {
+		get: (key) => stored(() => (key === "activity" ? structuredClone(pending) : undefined)),
+		put: (key, value) =>
+			stored(() => {
+				expect(key).toBe("activity");
+				calls.push({put: structuredClone(value)});
+				pending = structuredClone(value);
+			}),
+		sync: () =>
+			stored(() => {
+				calls.push("sync");
+				durable = structuredClone(pending);
+			}),
+	};
+	return {
+		storage,
+		calls,
+		abort: () => {
+			aborted = true;
+			pending = structuredClone(durable);
+		},
+		wake: () => {
+			aborted = false;
+			return structuredClone(durable);
+		},
+	};
+};
+
 const world = async (
 	options: {
 		readonly name?: string;
@@ -274,6 +331,8 @@ const world = async (
 		readonly build?: string;
 		readonly unknownCmd?: boolean;
 		readonly owner?: Writer;
+		readonly storage?: ActivityStorage;
+		readonly onStep?: () => void;
 	} = {},
 ) => {
 	const {ProgramRunner} = await import("./runner.ts");
@@ -292,7 +351,18 @@ const world = async (
 		...normal,
 		machine: options.unknownCmd
 			? {...machine, update: {...machine.update, fire: (s: Model) => [s, [ghost({})]] as const}}
-			: machine,
+			: options.onStep === undefined
+				? machine
+				: {
+						...machine,
+						update: {
+							...machine.update,
+							add: (s: Model, m: {readonly type: "add"; readonly n: number}) => {
+								options.onStep?.();
+								return [{...s, count: s.count + m.n}, []] as const;
+							},
+						},
+					},
 	};
 	const published = new Map<string, Update[]>();
 	const alarms: Array<number | null> = [];
@@ -361,6 +431,7 @@ const world = async (
 	const monitors = () =>
 		Layer.mergeAll(SpanSink.layer(sink.sql, {object: process}), records, Archive.memory);
 	const base = () => Layer.mergeAll(data(), sessions(), monitors());
+	const storageOptions = {process, storage: options.storage};
 	const processStore = () =>
 		Layer.effect(
 			ProcessStore,
@@ -380,7 +451,7 @@ const world = async (
 						),
 				};
 			}),
-		).pipe(Layer.provide(ProcessStore.layer(store.sql, {process})));
+		).pipe(Layer.provide(ProcessStore.layer(store.sql, storageOptions)));
 	const input = (n: number, m: unknown, as: "person" | "agent" = "person"): Incoming => ({
 		id: `letter-${n}`,
 		envelope: {
@@ -588,6 +659,58 @@ const world = async (
 		},
 	};
 };
+
+describe("P11 activity durability, experiment 231", () => {
+	it("plant, skip sync: the runner puts stepping, completes sync, then starts the step", async () => {
+		const activity = activityStorage();
+		const w = await world({
+			storage: activity.storage,
+			onStep: () => activity.calls.push("step"),
+		});
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const r: Runner = yield* w.ProgramRunner;
+				expect(yield* r.msg(w.input(1, {type: "add", n: 1}))).toMatchObject({_tag: "accepted"});
+				const step = activity.calls.indexOf("step");
+				expect(step).toBeGreaterThanOrEqual(0);
+				expect(activity.calls.slice(0, step + 1).slice(-3)).toEqual([
+					{put: Activity.cases.stepping.make({process: PROCESS, letter: "letter-1", build: BUILD})},
+					"sync",
+					"step",
+				]);
+			}).pipe(Effect.provide(w.layer())),
+		);
+	});
+	it("plant, buffered marker: an abort at the start of the step wakes as interrupted, never idle", async () => {
+		const activity = activityStorage();
+		let starts = 0;
+		const w = await world({
+			storage: activity.storage,
+			onStep: () => {
+				starts++;
+				activity.abort();
+				throw new Error("object aborted at step entry");
+			},
+		});
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const r: Runner = yield* w.ProgramRunner;
+				expect(yield* failure(r.msg(w.input(1, {type: "add", n: 1})))).toMatchObject({
+					_tag: "ProgramDown",
+					why: "step",
+				});
+			}).pipe(Effect.provide(w.layer())),
+		);
+		expect(starts).toBe(1);
+		expect(Result.getOrThrow(recoverActivity(activity.wake()))).toEqual({
+			_tag: "interrupted",
+			process: PROCESS,
+			letter: "letter-1",
+			build: BUILD,
+			why: "interrupted",
+		});
+	});
+});
 
 describe("p14 turns and watcher revisions", () => {
 	it("plant, remove the permit: concurrent bursts accept every input once with consecutive positions", async () => {
