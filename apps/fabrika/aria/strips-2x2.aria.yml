@@ -1,33 +1,39 @@
 - banner:
   - navigation "workspaces":
     - button "1 tsh"
-    - button "2 tsh"
-    - 'button "3 #1"'
-    - 'button "4 #1"'
+    - 'button "2 #7"'
+    - button "3 tsh"
+    - 'button "4 #7"'
     - button "5 tsh"
+    - 'button "6 #7"'
+    - button "7 tsh"
   - navigation "the line": tsh
+  - button "1 asks you 1 not seen":
+    - text: 1 asks you
+    - img "1 not seen"
+  - text: ·
   - status "the link to the host":
     - button "host up"
-- button "open tsh, t9": tsh
-- region "tile t11":
-  - text: tsh t11
+- button "open tsh, t14": tsh
+- region "tile t16":
+  - text: tsh t16
   - textbox "Terminal input":
     - textbox "Terminal input"
-  - region "t11 screen": tsh$
+  - region "t16 screen": tsh$
 - separator
-- region "tile t10":
-  - text: tsh t10
+- region "tile t15":
+  - text: tsh t15
   - textbox "Terminal input":
     - textbox "Terminal input"
-  - region "t10 screen": tsh$
+  - region "t15 screen": tsh$
 - separator
-- region "tile t12":
-  - text: tsh t12
+- region "tile t17":
+  - text: tsh t17
   - textbox "Terminal input":
     - textbox "Terminal input"
-  - region "t12 screen": tsh$
+  - region "t17 screen": tsh$
 - contentinfo:
-  - text: t11 tsh
+  - text: t16 tsh
   - button "C-b i info"
   - text: ·
   - button "C-b ? keys"

@@ -1,31 +1,36 @@
 - banner:
   - navigation "workspaces":
     - button "1 tsh"
-    - button "2 tsh"
-    - 'button "3 #1"'
-    - button "4 tsh"
+    - 'button "2 #7"'
+    - button "3 tsh"
+    - 'button "4 #7"'
+    - button "5 tsh"
   - navigation "the line": tsh
+  - button "1 asks you 1 not seen":
+    - text: 1 asks you
+    - img "1 not seen"
+  - text: ·
   - status "the link to the host":
     - button "host up"
-- region "tile t6":
-  - text: tsh t6
+- region "tile t10":
+  - text: tsh t10
   - textbox "Terminal input":
     - textbox "Terminal input"
-  - region "t6 screen": tsh$
+  - region "t10 screen": tsh$
 - separator
-- region "tile t7":
-  - text: tsh t7
+- region "tile t11":
+  - text: tsh t11
   - textbox "Terminal input":
     - textbox "Terminal input"
-  - region "t7 screen": tsh$
+  - region "t11 screen": tsh$
 - contentinfo:
-  - text: t6 tsh
+  - text: t10 tsh
   - button "C-b i info"
   - text: ·
   - button "C-b ? keys"
 - status: Info mode off.
 - dialog "Commands":
-  - text: t6 · tsh
+  - text: t10 · tsh
   - combobox "Find commands" [expanded]
   - listbox "Commands":
     - group "Tile":
@@ -102,6 +107,10 @@
         - text: Workspace 4
         - code: workspace --to 4
         - text: ⌃B 4
+      - option "Workspace 5 workspace --to 5 ⌃B 5":
+        - text: Workspace 5
+        - code: workspace --to 5
+        - text: ⌃B 5
     - group "Window":
       - text: Window
       - option "Asks asks ⌃B A":

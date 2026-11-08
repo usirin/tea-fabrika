@@ -1,37 +1,44 @@
 - banner:
   - navigation "workspaces":
     - button "1 tsh"
-    - button "2 tsh"
-    - 'button "3 #1"'
-    - 'button "4 #1"'
-    - 'button "5 #1"'
-    - button "6 tsh"
+    - 'button "2 #7"'
+    - button "3 tsh"
+    - 'button "4 #7"'
+    - button "5 tsh"
+    - 'button "6 #7"'
+    - button "7 tsh"
+    - 'button "8 #7"'
+    - button "9 tsh"
   - navigation "the line": tsh
+  - button "1 asks you 1 not seen":
+    - text: 1 asks you
+    - img "1 not seen"
+  - text: ·
   - status "the link to the host":
     - button "host up"
-- region "tile t14":
-  - text: tsh t14
+- region "tile t22":
+  - text: tsh t22
   - textbox "Terminal input":
     - textbox "Terminal input"
-  - region "t14 screen": tsh$
+  - region "t22 screen": tsh$
 - separator
-- region "tile t16":
-  - text: tsh t16
+- region "tile t24":
+  - text: tsh t24
   - textbox "Terminal input":
     - textbox "Terminal input"
-  - region "t16 screen": tsh$
+  - region "t24 screen": tsh$
 - separator
-- region "tile t15":
-  - text: tsh t15
+- region "tile t23":
+  - text: tsh t23
   - textbox "Terminal input":
     - textbox "Terminal input"
-  - region "t15 screen": tsh$
+  - region "t23 screen": tsh$
 - separator
-- region "tile t17":
-  - text: tsh t17
+- region "tile t25":
+  - text: tsh t25
   - textbox "Terminal input":
     - textbox "Terminal input"
-  - region "t17 screen": tsh$
+  - region "t25 screen": tsh$
 - contentinfo:
   - text: INFO·point at anything esc leaves ·
   - button "C-b i info" [pressed]

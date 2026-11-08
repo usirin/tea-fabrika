@@ -3,6 +3,10 @@
     - button "1 tsh"
     - button "2 tsh"
   - navigation "the line": tsh
+  - button "1 asks you 1 not seen":
+    - text: 1 asks you
+    - img "1 not seen"
+  - text: ·
   - status "the link to the host":
     - button "host up"
 - region "tile t2":

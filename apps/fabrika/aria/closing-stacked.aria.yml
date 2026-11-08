@@ -1,87 +1,30 @@
 - banner:
   - navigation "workspaces":
     - button "1 tsh"
-    - button "2 tsh"
-    - 'button "3 #1"'
-    - 'button "4 #1"'
-  - navigation "the line":
-    - button "tracker"
-    - text: "|"
-    - button "ticket"
+    - 'button "2 #7"'
+    - button "3 tsh"
+    - 'button "4 #7"'
+    - button "5 tsh"
+  - navigation "the line": tsh
+  - button "1 asks you 1 not seen":
+    - text: 1 asks you
+    - img "1 not seen"
+  - text: ·
   - status "the link to the host":
     - button "host up"
-- region "tile t6, tracker, a window of the line typed in t6":
-  - text: tracker t6
+- region "tile t10":
+  - text: tsh t10
   - textbox "Terminal input":
     - textbox "Terminal input"
-  - region "t6 screen": tsh$ tracker | ticket ticket 1
-  - main "tracker view":
-    - region "tracker":
-      - button "← Tickets"
-      - text: Esc
-      - heading "The tree, read" [level=2]
-      - paragraph:
-        - img "open"
-        - text: "Open #1 next: triage"
-      - list "timeline":
-        - listitem:
-          - paragraph:
-            - text: owner filed it
-            - time: <time>
-      - form "comment":
-        - textbox "comment":
-          - /placeholder: Leave a comment
-        - text: Ctrl Enter comments
-        - button "Close ticket"
-        - button "Request changes" [disabled]
-        - button "Comment" [disabled]
+  - region "t10 screen": tsh$
 - separator
-- region "tile t8, ticket, a window of the line typed in t6":
-  - text: "ticket #1 t8"
-  - main "ticket view":
-    - text: "#1 filed by owner, <time>"
-    - heading "The tree, read" [level=1]
-    - region "Whose turn": "Next: triage Nothing waits on you."
-    - region "Properties":
-      - term: Status
-      - definition: "next: triage"
-      - term: Filed by
-      - definition: owner
-      - term: Step
-      - definition: none running
-      - term: Plan
-      - definition: none yet
-      - term: PR
-      - definition: none yet
-      - term: Checks
-      - definition: no PR yet
-      - term: Cost
-      - definition: $0.00
-      - term: Trace
-      - definition:
-        - code: trace --ticket 1
-    - paragraph: No description.
-    - region "Activity":
-      - heading "Activity" [level=2]
-      - text: 1 J K move ↵ open
-      - list:
-        - listitem:
-          - button "owner filed it <time>":
-            - text: owner filed it
-            - time: <time>
-      - text: Leave a comment
-      - textbox "Leave a comment"
-      - text: ⌘ ↵ to send
-      - button "Request changes" [disabled]
-      - button "Comment" [disabled]
-- separator
-- region "tile t7, closing":
-  - text: tsh closing t7
+- region "tile t11, closing":
+  - text: tsh closing t11
   - textbox "Terminal input":
     - textbox "Terminal input"
-  - region "t7 screen": tsh$ sleep --ms 600000 & [5] sleep:<id> tsh$
+  - region "t11 screen": tsh$ sleep --ms 600000 & [5] sleep:<id> tsh$
 - contentinfo:
-  - text: t7 tsh·
+  - text: t11 tsh·
   - button "%5 sleep --ms 600000 <time>"
   - button "C-b i info"
   - text: ·
