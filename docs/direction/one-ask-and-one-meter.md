@@ -1,5 +1,10 @@
 # One way to ask a person, and one meter for money
 
+**Decided, in pieces:**
+
+- One ask and one meter: decided 2026-11-06 in the product walk, below.
+- How each run is paid and counted: grown 2026-11-07, below.
+
 **Decided 2026-11-06** in the product walk, step 4: one shape for every ask, with the hash of what
 the person saw; silence is never a yes; one meter for money. Proposed 2026-10-30. Tracker tickets #90 (one way to ask a person) and #91 (one
 meter for money). Today fabrika has five places that ask a person and seven
