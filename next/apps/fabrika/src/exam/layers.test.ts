@@ -174,11 +174,13 @@ const TUVAL = "@kampus/tuval";
 
 /** What each part may import beyond itself: the detail's table, as it stands. */
 const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
-	transport: [],
-	data: [],
-	coordination: ["data"],
-	app: ["coordination"],
-	mcp: ["app", "transport"], // the named exception: the bridge is a client, as a window is
+	id: [],
+	"libfabrika-entry": ["id", "transport", "data", "coordination", "app", "mcp"],
+	transport: ["id"],
+	data: ["id"],
+	coordination: ["data", "id"],
+	app: ["coordination", "id"],
+	mcp: ["app", "transport", "id"], // the named exception: the bridge is a client, as a window is
 	desktop: [LIBRARY], // the app layer's names, nothing lower
 	window: ["desktop", LIBRARY, `${LIBRARY}/transport`], // a window is a client (the note's T3)
 	dom: ["desktop"],
@@ -222,6 +224,11 @@ const folderAt = (pkg: Package, file: string): string | null => {
 /** The part a file of `pkg` belongs to, or null when the table has no row for it. */
 const partAt = (pkg: Package, box: ReadonlySet<string>, file: string): string | null => {
 	if (pkg.group === "programs") return box.has(file) ? "program" : "program-window";
+	if (pkg.manifest.name === LIBRARY) {
+		if (file === join(pkg.dir, "src/id.ts")) return "id";
+		if (["index.ts", "testing.ts"].some((name) => file === join(pkg.dir, "src", name)))
+			return "libfabrika-entry";
+	}
 	const folder = folderAt(pkg, file);
 	return folder !== null && FOLDERS[pkg.manifest.name]?.includes(folder) === true ? folder : null;
 };

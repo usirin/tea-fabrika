@@ -1,83 +1,117 @@
-// P10/P33 shared generator contract. ProcessIdGenerator.layer owns monotonic state; next is an
-// Effect<ProcessId>. The schema stays in data/trace.ts. RFC 9562 §5.7, TypeID's base32 encoding.
-// Plants: UUIDv4 in a TypeID wrapper; random ids in one ms; wall-clock rollback; a constant id.
+// Next/, P10/P33 shared process generator contract, retained by T518 PR 1.
+// ProcessIdGenerator.layer owns one writer's state; next remains an Effect<ProcessId>.
 import {describe, expect, it, vi} from "@effect/vitest";
-import {Clock, Effect, Exit, Schema} from "effect";
+import {Cause, Clock, Effect, Exit, Schema} from "effect";
 import {TestClock} from "effect/testing";
 import {ProcessId} from "../data/trace.ts";
 import * as Coordination from "./index.ts";
 
+const maxClock = 2 ** 48 - 1;
+const Time = Schema.Int.check(Schema.isBetween({minimum: 0, maximum: maxClock - 10_000}));
+const Count = Schema.Int.check(Schema.isBetween({minimum: 2, maximum: 512}));
+const options = {arbitrary: {seed: 119120, runs: 40}};
 const decode = (id: string): Uint8Array => {
 	const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 	const value = [...id.slice(8)].reduce((n, c) => (n << 5n) | BigInt(alphabet.indexOf(c)), 0n);
 	return Uint8Array.from({length: 16}, (_, i) => Number((value >> BigInt((15 - i) * 8)) & 255n));
 };
+const timestamp = (id: string): number =>
+	[...decode(id).slice(0, 6)].reduce((n, b) => n * 256 + b, 0);
+
 describe("P10 shared process ids", () => {
-	it.effect("monotonic: exhausted random bits advance the clock before the next id", () =>
-		Effect.gen(function* () {
-			const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
-				if (array instanceof Uint8Array) array.fill(255);
-				return array;
-			});
-			try {
-				yield* TestClock.setTime(1_790_000_000_000);
+	it.effect.prop(
+		"monotonic: exhausted random bits advance the clock before the next id",
+		{at: Time},
+		({at}) =>
+			Effect.gen(function* () {
+				const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
+					if (array instanceof Uint8Array) array.fill(255);
+					return array;
+				});
+				try {
+					yield* TestClock.setTime(at);
+					const gen = yield* Coordination.ProcessIdGenerator;
+					const before = yield* gen.next;
+					const after = yield* gen.next;
+					expect(after > before).toBe(true);
+					expect(timestamp(before)).toBe(at);
+					expect(timestamp(after)).toBe(at + 1);
+				} finally {
+					random.mockRestore();
+				}
+			}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
+		options,
+	);
+	it.effect.prop(
+		"shape: a clock before the UUID epoch cannot produce a process id",
+		{distance: Count},
+		({distance}) =>
+			Effect.gen(function* () {
+				yield* TestClock.setTime(-distance);
 				const gen = yield* Coordination.ProcessIdGenerator;
+				const exit = yield* Effect.exit(gen.next);
+				expect(Exit.isFailure(exit)).toBe(true);
+				if (Exit.isFailure(exit)) {
+					expect(exit.cause.reasons.length).toBeGreaterThan(0);
+					for (const reason of exit.cause.reasons) {
+						expect(Cause.isDieReason(reason)).toBe(true);
+						if (Cause.isDieReason(reason)) expect(reason.defect).toBe("UUIDv7 clock exhausted");
+					}
+				}
+			}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
+		options,
+	);
+	it.effect.prop(
+		"shape: canonical TypeIDs contain UUIDv7 and the controlled clock",
+		{at: Time, count: Count},
+		({at, count}) =>
+			Effect.gen(function* () {
+				yield* TestClock.setTime(at);
+				const gen = yield* Coordination.ProcessIdGenerator;
+				const ids = yield* Effect.forEach(Array.from({length: count}), () => gen.next, {
+					concurrency: 1,
+				});
+				expect(timestamp(ids[0]!)).toBe(at);
+				for (const id of ids) {
+					expect(Schema.is(ProcessId)(id)).toBe(true);
+					expect(id).toMatch(/^process_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
+					const bytes = decode(id);
+					expect(bytes[6]! >>> 4).toBe(7);
+					expect(bytes[8]! >>> 6).toBe(2);
+					expect(timestamp(id)).toBeGreaterThanOrEqual(at);
+				}
+			}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
+		options,
+	);
+	it.effect.prop(
+		"monotonic: same-millisecond calls never repeat or sort backward",
+		{at: Time, count: Count},
+		({at, count}) =>
+			Effect.gen(function* () {
+				yield* TestClock.setTime(at);
+				const gen = yield* Coordination.ProcessIdGenerator;
+				const ids = yield* Effect.forEach(Array.from({length: count}), () => gen.next, {
+					concurrency: 1,
+				});
+				expect(new Set(ids).size).toBe(ids.length);
+				for (let i = 1; i < ids.length; i++) expect(ids[i]! > ids[i - 1]!).toBe(true);
+			}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
+		options,
+	);
+	it.effect.prop(
+		"monotonic: a clock rollback cannot reuse or lower an id",
+		{at: Time, distance: Count},
+		({at, distance}) =>
+			Effect.gen(function* () {
+				const gen = yield* Coordination.ProcessIdGenerator;
+				const now = at + distance;
+				yield* TestClock.setTime(now);
 				const before = yield* gen.next;
+				yield* TestClock.setTime(at);
+				expect(yield* Clock.currentTimeMillis).toBe(at);
 				const after = yield* gen.next;
 				expect(after > before).toBe(true);
-				expect([...decode(after).slice(0, 6)].reduce((n, b) => n * 256 + b, 0)).toBe(
-					1_790_000_000_001,
-				);
-			} finally {
-				random.mockRestore();
-			}
-		}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
-	);
-	it.effect("shape: a clock before the UUID epoch cannot produce a process id", () =>
-		Effect.gen(function* () {
-			yield* TestClock.setTime(-1);
-			const gen = yield* Coordination.ProcessIdGenerator;
-			expect(Exit.isFailure(yield* Effect.exit(gen.next))).toBe(true);
-		}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
-	);
-	it.effect("shape: a canonical TypeID containing UUIDv7, not a UUIDv4 plant", () =>
-		Effect.gen(function* () {
-			yield* TestClock.setTime(1_790_000_000_000);
-			const gen = yield* Coordination.ProcessIdGenerator;
-			const ids = yield* Effect.forEach(Array.from({length: 64}), () => gen.next, {concurrency: 1});
-			expect([...decode(ids[0]!).slice(0, 6)].reduce((n, b) => n * 256 + b, 0)).toBe(
-				1_790_000_000_000,
-			);
-			for (const id of ids) {
-				expect(Schema.is(ProcessId)(id)).toBe(true);
-				const bytes = decode(id);
-				expect(bytes[6]! >>> 4).toBe(7);
-				expect(bytes[8]! >>> 6).toBe(2);
-				const timestamp = [...bytes.slice(0, 6)].reduce((n, b) => n * 256 + b, 0);
-				expect(timestamp).toBeGreaterThanOrEqual(1_790_000_000_000);
-			}
-		}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
-	);
-	it.effect("monotonic: same-millisecond calls never repeat or sort backward", () =>
-		Effect.gen(function* () {
-			yield* TestClock.setTime(1_790_000_000_000);
-			const gen = yield* Coordination.ProcessIdGenerator;
-			const ids = yield* Effect.forEach(Array.from({length: 512}), () => gen.next, {
-				concurrency: 1,
-			});
-			expect(new Set(ids).size).toBe(ids.length);
-			for (let i = 1; i < ids.length; i++) expect(ids[i]! > ids[i - 1]!).toBe(true);
-		}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
-	);
-	it.effect("monotonic: a clock rollback cannot reuse or lower an id", () =>
-		Effect.gen(function* () {
-			const gen = yield* Coordination.ProcessIdGenerator;
-			yield* TestClock.setTime(1_790_000_000_000);
-			const before = yield* gen.next;
-			yield* TestClock.setTime(1_789_999_000_000);
-			expect(yield* Clock.currentTimeMillis).toBe(1_789_999_000_000);
-			const after = yield* gen.next;
-			expect(after > before).toBe(true);
-		}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
+			}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
+		options,
 	);
 });
