@@ -210,7 +210,10 @@ const states = async (app: ElectronApplication, page: Page, layout: string) => {
 	const panel = page.getByRole("dialog", {name: "The agents"});
 	await panel.waitFor();
 	await panel.getByRole("heading", {name: "1 agent summoned here", exact: true}).waitFor();
-	await panel.getByRole("heading", {name: "1 agent is attached", exact: true}).waitFor();
+	const attached = panel
+		.getByRole("heading", {name: "1 agent is attached", exact: true})
+		.locator("xpath=following-sibling::ul[1]");
+	await attached.waitFor();
 	check(
 		`${layout}: scout and its dismiss are visible`,
 		(await panel.getByText("scout", {exact: true}).isVisible()) &&
@@ -218,8 +221,8 @@ const states = async (app: ElectronApplication, page: Page, layout: string) => {
 	);
 	check(
 		`${layout}: the MCP agent is listed separately`,
-		(await panel.getByText("observer", {exact: true}).isVisible()) &&
-			(await panel.getByRole("button", {name: "Dismiss observer"}).count()) === 0,
+		(await attached.getByText("Observer", {exact: true}).isVisible()) &&
+			(await attached.getByRole("button", {name: /^Dismiss\b/}).count()) === 0,
 	);
 	await until(
 		"the top bar counts the summoned agent and the MCP agent",
