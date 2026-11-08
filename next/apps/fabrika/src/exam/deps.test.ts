@@ -308,6 +308,17 @@ const bundleFaults = async (next: string): Promise<ReadonlyArray<string>> => {
 };
 
 describe("the real next/", () => {
+	it("P20 requires the notes reader and window browser exports, including the unmerged P13 package", async () => {
+		const notes = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/notes");
+		expect(notes, "P13's test writer creates the notes manifest").toBeDefined();
+		if (notes === undefined) throw new Error("Missing upstream P13 notes package");
+		for (const key of [".", "./window"]) {
+			const file = exportMap(notes).get(key);
+			expect(file, `P20 requires notes export ${key}`).toBeDefined();
+			if (file === undefined) throw new Error(`Missing notes export ${key}`);
+			expect(await reach(NEXT, `@kampus/notes${key === "." ? "" : "/window"}`, file)).toEqual([]);
+		}
+	});
 	it("P11: libfabrika exports its required browser entry instead of silently skipping it", async () => {
 		const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
 		expect(library).toBeDefined();

@@ -1,7 +1,20 @@
 // T280, next/: authoring depends on libfabrika and tea alone. tsc checks the uncalled cases.
 import {Cmd, Machine} from "@demlik/tea/effect";
 import {expect, it} from "@effect/vitest";
-import {Input, Program, ProgramLoader, Write} from "@kampus/libfabrika";
+import {
+	Input,
+	Program,
+	ProgramLoader,
+	Write,
+	Id,
+	NoteEditor,
+	readHistory,
+	readKeys,
+	matchKey,
+	windowMachine,
+	type TileModel,
+	type TileMsg,
+} from "@kampus/libfabrika";
 import {Effect, Schema, type SchemaIssue} from "effect";
 import * as fc from "fast-check";
 import {expectTypeOf} from "vitest";
@@ -38,6 +51,96 @@ const fields = {
 	writes: {saved: {schema: Schema.TaggedStruct("saved", {count: Schema.Int}), personOnly: false}},
 	wake: () => null,
 };
+
+// T293 L01, L02, L29. These functions are never called. The compiler checks valid neighbors
+// beside each deliberate rejection. P14 supplies Id; P20 supplies the local-machine types.
+function notesClientTypes() {
+	const NoteId = Id.make("note"),
+		TileId = Id.make("tile"),
+		TabId = Id.make("tab");
+	const RequestId = Id.make("request"),
+		LetterId = Id.make("letter");
+	declareIds(NoteId.Type, TileId.Type, TabId.Type, RequestId.Type, LetterId.Type);
+	const localModel = Schema.Struct({body: Schema.String, editing: Schema.Boolean});
+	const localMsg = Schema.Union([
+		Schema.Struct({type: Schema.Literal("typed"), body: Schema.String}),
+		Schema.Struct({type: Schema.Literal("done")}),
+	]);
+	const tile = Machine.make({
+		model: localModel,
+		msg: localMsg,
+		cmds: [],
+		init: (loaded) => [loaded ?? {body: "", editing: false}, []],
+		update: {
+			typed: (s, m) => [{...s, body: m.body, editing: true}, []],
+			done: (s) => [{...s, editing: false}, []],
+		},
+	});
+	const mode = (s: typeof localModel.Type): "editing" | null => (s.editing ? "editing" : null);
+	const base = {...fields, view: (s: typeof Model.Type) => s};
+	const p = Program.make({
+		...base,
+		tile,
+		mode,
+		commands: {
+			typed: {send: {type: "typed", body: "hello"}, keys: [], mode: "editing"},
+			done: {send: {type: "done"}, keys: "escape", mode: "editing"},
+		},
+	});
+	expectTypeOf<TileModel<typeof p>>().toEqualTypeOf<typeof localModel.Type>();
+	expectTypeOf<TileMsg<typeof p>>().toEqualTypeOf<typeof localMsg.Type>();
+	// @ts-expect-error Local sends come from tile.msg, not the shared machine's add Msg.
+	Program.make({
+		...base,
+		tile,
+		mode,
+		commands: {done: {send: {type: "add", n: 1}, keys: "escape", mode: "editing"}},
+	});
+	// @ts-expect-error A command cannot add another mode to the mode function's return type.
+	Program.make({
+		...base,
+		tile,
+		mode,
+		commands: {done: {send: {type: "done"}, keys: "escape", mode: "unknown"}},
+	});
+	// @ts-expect-error A program without mode cannot declare a mode-only command.
+	Program.make({...base, commands: {reset: {send: {type: "reset"}, keys: "r", mode: "editing"}}});
+	// @ts-expect-error A program without tile uses the shared Msg and cannot send local Done.
+	Program.make({...base, commands: {done: {send: {type: "done"}, keys: "escape"}}});
+	Program.make({...base, commands: {reset: {send: {type: "reset"}, keys: "r"}}});
+	// @ts-expect-error A repeated schema cannot replace inference from the local machine.
+	Program.make({...base, tile, mode, msg: localMsg});
+	const editor = NoteEditor.make({
+		note: NoteId,
+		save: Schema.Struct({note: NoteId, base: Schema.Int, body: Schema.String}),
+		view: Schema.Struct({
+			notes: Schema.Array(Schema.Struct({note: NoteId, body: Schema.String, version: Schema.Int})),
+		}),
+	});
+	const decisions = {editor, readHistory, readKeys, matchKey, windowMachine};
+	expectTypeOf(decisions.editor.mode).toBeFunction();
+}
+function declareIds(
+	note: ReturnType<typeof Id.make<"note">>["Type"],
+	tile: ReturnType<typeof Id.make<"tile">>["Type"],
+	tab: ReturnType<typeof Id.make<"tab">>["Type"],
+	request: ReturnType<typeof Id.make<"request">>["Type"],
+	letter: ReturnType<typeof Id.make<"letter">>["Type"],
+) {
+	const takesNote = (_id: typeof note) => undefined;
+	takesNote(note);
+	// @ts-expect-error An outside string has not passed the note schema.
+	takesNote("note_unchecked");
+	// @ts-expect-error A tile is not a note.
+	takesNote(tile);
+	// @ts-expect-error A tab is not a note.
+	takesNote(tab);
+	// @ts-expect-error A request is not a note.
+	takesNote(request);
+	// @ts-expect-error A letter is not a note.
+	takesNote(letter);
+}
+void notesClientTypes;
 
 it("a from-scratch libfabrika program compiles and loads with a real Cmd and no app import", () => {
 	fc.assert(
