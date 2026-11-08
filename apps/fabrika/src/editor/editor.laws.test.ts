@@ -17,6 +17,7 @@ import fc from "fast-check";
 import {Ghostty, type GhosttyTerminal} from "ghostty-web";
 import {beforeAll, describe, expect, it, vi} from "vitest";
 import {
+	answer,
 	close,
 	type Editor,
 	type EditorCtx,
@@ -57,7 +58,9 @@ type Out =
 	| ReturnType<typeof line>
 	| ReturnType<typeof interrupt>
 	| ReturnType<typeof close>
-	| ReturnType<typeof keep>;
+	| ReturnType<typeof keep>
+	// The plan's PR 1: the person's y or n to what a job asks.
+	| ReturnType<typeof answer>;
 
 /** An editor to test: where it starts, one message, and the fit check it uses. */
 interface Variant {
@@ -431,9 +434,28 @@ const everything = (chars: readonly string[], resize: boolean) =>
 			jobs: arbRecordMsg("jobs", {jobs: fc.constant(Shell.EMPTY)}),
 			history: arbRecordMsg("history", {lines: fc.array(textOf(chars, 30), {maxLength: 3})}),
 			table: arbRecordMsg("table", {table: tableOf(chars)}),
+			// The plan's PR 1: the talk for Tab, a job's status row in place, and its asks.
+			talk: arbRecordMsg("talk", {talk: fc.constant(Shell.NO_TALK)}),
+			status: arbRecordMsg("status", {text: fc.option(textOf(chars, 40), {nil: null})}),
+			asked: arbRecordMsg("asked", {
+				n: fc.constant(1),
+				text: fc.option(textOf(chars, 20), {nil: null}),
+			}),
 		};
 		return arbMsg(table, {
-			weights: {keys: 20, size: 2, printed: 2, ready: 3, ended: 1, jobs: 1, history: 1, table: 1},
+			weights: {
+				keys: 20,
+				size: 2,
+				printed: 2,
+				ready: 3,
+				ended: 1,
+				jobs: 1,
+				history: 1,
+				table: 1,
+				talk: 1,
+				status: 1,
+				asked: 1,
+			},
 		});
 	});
 
@@ -832,7 +854,9 @@ type Cmd =
 	| ReturnType<typeof line>
 	| ReturnType<typeof interrupt>
 	| ReturnType<typeof close>
-	| ReturnType<typeof keep>;
+	| ReturnType<typeof keep>
+	// The plan's PR 1: the person's y or n to what a job asks.
+	| ReturnType<typeof answer>;
 type EditorStep = Step<Editor, Msg, Cmd>;
 
 const COLS = 80;
@@ -897,13 +921,20 @@ const job: Shell.Jobs = {
 /** A Cmd's failed answer. The editor's Cmds declare no errors, so a malformed answer is the one left. */
 const failed = <T extends string, C>(type: T, cmd: C) =>
 	fc.constant({type, cmd, error: {_tag: "malformed_result", issues: []} as const, at: 0});
-const [writing, lining, interrupting, closing, keeping] = [
+const [writing, lining, interrupting, closing, keeping, answering] = [
 	write({data: "x"}),
 	line({text: "ls"}),
 	interrupt({}),
 	close({}),
 	keep({lines: ["ls"]}),
+	answer({n: 1, allow: true}),
 ] as const;
+/** What Tab offers after `summon` and `@`, as the host says it (the plan's PR 1, Tab). */
+const TALK: Shell.Talk = {
+	agents: ["fake"],
+	offers: {fake: ["fake-small", "fake-large", "low", "high"]},
+	names: ["scout"],
+};
 
 /** One entry per Msg type, the Cmds' answers too: leaving one out does not compile. */
 const tableFor = (size: fc.Arbitrary<number>): MsgArbitraryTable<Msg> => ({
@@ -916,6 +947,15 @@ const tableFor = (size: fc.Arbitrary<number>): MsgArbitraryTable<Msg> => ({
 	// Lines another editor kept: cleaned and each once, as its `keep` sends them.
 	history: arbRecordMsg("history", {lines: fc.uniqueArray(fc.constantFrom(...HISTORY))}),
 	table: arbRecordMsg("table", {table: tableOf(["a", "b", "\x1b", "\n"])}),
+	// The plan's PR 1: the editor hears the talk for Tab, a job's status row and its asks.
+	talk: arbRecordMsg("talk", {talk: fc.constantFrom(Shell.NO_TALK, TALK)}),
+	status: arbRecordMsg("status", {
+		text: fc.constantFrom(null, "✦ scout  reading a.txt · 1 tool · 2s", ""),
+	}),
+	asked: arbRecordMsg("asked", {
+		n: fc.constant(1),
+		text: fc.constantFrom(null, "scout asks: Write written.txt"),
+	}),
 	write_ok: fc.constant(write.ok(writing, null, 0)),
 	write_err: failed(write.errType, writing),
 	line_ok: fc.constant(line.ok(lining, null, 0)),
@@ -926,6 +966,8 @@ const tableFor = (size: fc.Arbitrary<number>): MsgArbitraryTable<Msg> => ({
 	close_err: failed(close.errType, closing),
 	keep_ok: fc.constant(keep.ok(keeping, null, 0)),
 	keep_err: failed(keep.errType, keeping),
+	answer_ok: fc.constant(answer.ok(answering, null, 0)),
+	answer_err: failed(answer.errType, answering),
 });
 const WEIGHTS = {weights: {keys: 30, ready: 4, printed: 2, ended: 1}};
 const listsOf = (table: MsgArbitraryTable<Msg>) =>
@@ -1210,8 +1252,8 @@ describe("the line editor's laws", () => {
 		);
 		expect(caught).toEqual({
 			backspaceDrawsNothing: [screenShowsLine.name],
-			// With tables in the lists, the screen law no longer meets this plant in its 300 runs.
-			runsBlankLines: [oneLineAtATime.name, historyKept.name],
+			// With the plan's status, asked and talk in the lists, the screen law meets it again.
+			runsBlankLines: [screenShowsLine.name, oneLineAtATime.name, historyKept.name],
 			noTypeAhead: [screenShowsLine.name, keysWait.name, interruptReaches.name],
 			keepsCtrlC: [interruptReaches.name],
 			comesBack: [goneStaysGone.name],

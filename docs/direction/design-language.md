@@ -8,6 +8,10 @@ Both versions: the design package is the one thing today's app and `next/` share
 ([one design package](./fabrika-design-package.md)). The owner's calls are at the end, each yes or
 no.
 
+**Changed 2026-11-08:** design foundations PR 1 builds one slate a9 focus token in both looks
+for today's version. `--tile-edge-on` reads `--focus`; pipes keep their own focus steps.
+The examples below follow that choice.
+
 ```text
 principles     one page, a few lines; plus one line of rules at the top of every page
 foundations    the materials: color, type, motion, icons, layering, keys, words
@@ -54,8 +58,8 @@ const Level = Schema.TaggedUnion({
   ([color principles](./color-principles.md), 1).
 - **Foundations:** color, type, motion, icons, layering, words, and for us keys (the prefix, the
   notation, the keys a program cannot take). Example: [color principles](./color-principles.md).
-- **Tokens:** named values. Example: `--tile-edge-on`, the focused tile's edge: slate a8 in dark,
-  slate a9 in light, a pipe's own step inside `[data-pipe]` (`apps/fabrika/src/window/window.css`).
+- **Tokens:** named values. Example: `--tile-edge-on`, the focused tile's edge: `--focus`, slate a9
+  in both looks, a pipe's own step inside `[data-pipe]` (`apps/fabrika/src/window/window.css`).
 - **Components:** reusable parts with behavior, states and an API. [The frame](./the-frame.md) is
   this level's catalog: 50 parts, each with its word and its note. We don't split atoms, molecules
   and organisms ([atomic design](https://atomicdesign.bradfrost.com/)); the 50 parts are one list.
@@ -176,23 +180,26 @@ manti        --manti-*, set from the semantic tier in tokens.css        only Man
 - **A token means one thing; two tokens may share a primitive.** So `turn-fill` says your turn,
   and `focus-ring` is one slate token everywhere. A token used at 60% no longer has the contrast
   that was checked, so a modifier on a token is refused; ask for a token instead.
-- **One data file,** `tokens.ts` in the package, holds each token's step per look, the tokens it
-  sits on and the contrast it must reach there. It writes `tokens.css`, the Manti mapping and the
-  canvas's `tokens.json`. The W3C Design Tokens format is the known shape for the JSON
-  ([design tokens](https://www.designtokens.org/)).
+- **One data source,** TOML, not `tokens.ts` (call 5, decided 2026-11-07): one file per color token
+  in the package's `tokens/color/`, each with its step per look, the tokens it sits on and the
+  contrast it must reach there. The token build (`src/build/tokens.ts`) writes `tokens.css`, the
+  Manti mapping and the themes' colors, with room for the canvas's `tokens.json`. The W3C Design
+  Tokens format is the known shape for the JSON ([design tokens](https://www.designtokens.org/)).
+  The sketch below is the earlier `tokens.ts` shape, kept as it was proposed; the decided keys are
+  in `packages/fabrika-design/src/build/schema.ts`.
 
 ```ts
 // A sketch. packages/fabrika-design/src/tokens.ts. A primitive is a Radix step by name.
 export const tokens = {
 	"text-muted": {dark: "slate.a11", light: "slate.a11", on: ["surface-base", "fill-hover"], min: 4.5},
-	"focus-ring": {dark: "slate.a8", light: "slate.a9", on: ["surface-base", "surface-sunken"], min: 3},
+	"focus-ring": {dark: "slate.a9", light: "slate.a9", on: ["surface-base", "surface-sunken"], min: 3},
 	"surface-sunken": {dark: {hex: "#0c0d0e", bend: "nothing in slate is darker than 1"}, light: "slate.2"},
 } as const satisfies Record<string, Token>;
 // tokens.test.ts: every pair in `on` reaches `min` in both looks; a value that is no step needs `bend`.
 ```
 
 - **Names,** a lean of about 60% each: `--surface` becomes `--surface-base`; the three grays become
-  `--text-muted`; `--focus` and `--tile-focus` become `--focus-ring`; `--done`, `--running`,
+  `--text-muted`; `--focus` becomes `--focus-ring`; `--done`, `--running`,
   `--stuck` become `--state-*`; `--s-1` to `--s-10` become `--space-4` to `--space-40`; the `--r-*`
   become `--radius-*`, Manti's words; `on` in a tile token becomes `focused`. The 12 aliases go, all
   in one commit: two people and one app need no deprecation step.

@@ -78,7 +78,8 @@ export const checkHello = Effect.fn("transport.checkHello")(function* <E, R>(a: 
 		Result.isFailure(raw) ||
 		raw.success.length !== 32 ||
 		Base64Url.encode(raw.success) !== hello.key ||
-		hello.tab !== a.tab
+		hello.tab !== a.tab ||
+		hello.nonce !== a.nonce
 	)
 		return no("bad_signature");
 	const hash = yield* subtle(() => crypto.subtle.digest("SHA-256", new Uint8Array(raw.success)));

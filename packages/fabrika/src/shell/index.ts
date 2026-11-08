@@ -35,4 +35,6 @@ export {SMALL} from "./small.ts";
 // A table for a person, as tsh hands it out on `table`: laid out by a terminal at its own width,
 // then painted in its own colors (apps/fabrika's line editor does both).
 export {type Palette, paint, type Table, tableLines} from "./table.ts";
+// The host's summoned agents, as tsh asks for them: the manager is on `/agents/summon`.
+export {type AgentState, NO_TALK, type Summoned, SummonManager, type Talk} from "./summon.ts";
 export {type Short, Shorten} from "./title.ts";

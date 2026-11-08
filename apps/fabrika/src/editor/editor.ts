@@ -16,6 +16,7 @@ import {
 	redrawRow,
 	shown,
 	spot,
+	statusRow,
 	table,
 } from "./screen.ts";
 
@@ -34,6 +35,9 @@ import {
 //   search   Ctrl-R, bash's reverse-i-search, over the history (Shell.Search)
 //   busy     tsh runs a line. Keys wait, as a terminal's type-ahead does, and go to the next
 //            prompt; Ctrl-C goes to tsh at once and drops what waits, as a terminal's does.
+//            A job's status (`status`) is one row under what it printed, drawn again in place,
+//            cut to the width with …. When the job asks a yes or no (`asked`), the next key is
+//            the answer: y allows it, n or Enter refuses it.
 //   ended    tsh is gone; keys go nowhere
 //
 // What it asks for, each a Cmd (the host runs them, host.ts):
@@ -43,6 +47,7 @@ import {
 //   interrupt {}        Ctrl-C for tsh: it stops what runs in the foreground
 //   close {}            Ctrl-D on an empty line: tsh's input ends, and tsh with it
 //   keep {lines}        the history changed: keep it for the next start
+//   answer {n, allow}   the person's y or n to what job n asks
 //
 // A text from tsh (`printed`) goes above the prompt: the prompt is taken away, the text written,
 // and the prompt drawn again under it, as a shell does with a background job's output. A table
@@ -84,6 +89,12 @@ export interface Editor {
 	readonly resized: boolean;
 	/** tsh's job table, for `%1` on Tab. */
 	readonly jobs: Shell.Jobs;
+	/** The status row a job shows while tsh runs a line, drawn under its output. `null`: none. */
+	readonly status: string | null;
+	/** The job whose yes or no the next key answers. `null`: nothing asks. */
+	readonly asking: {readonly n: number} | null;
+	/** What Tab offers after `summon` and `@`, as the host last said it. */
+	readonly talk: Shell.Talk;
 	/**
 	 * The programs tsh knows, for Tab: handed in at the start, as Elm's flags are, and kept here
 	 * because an update sees only the model. Never kept on disk, so it may hold more than data.
@@ -106,6 +117,12 @@ export type EditorMsg =
 	| {readonly type: "ended"}
 	/** tsh's job table changed. */
 	| {readonly type: "jobs"; readonly jobs: Shell.Jobs}
+	/** The agents, their settings and the summoned names changed, for Tab. */
+	| {readonly type: "talk"; readonly talk: Shell.Talk}
+	/** A job's status row changed. `null`: it has none any more. */
+	| {readonly type: "status"; readonly text: string | null}
+	/** Job n asks a yes or no, printed already. `null` text: nothing asks any more. */
+	| {readonly type: "asked"; readonly n: number; readonly text: string | null}
 	/** An editor, this one or another tile's, kept its history: the lines every tile shares. */
 	| {readonly type: "history"; readonly lines: readonly string[]};
 
@@ -136,13 +153,19 @@ export const keep = Cmd.make("keep", {
 	ok: Done,
 	err: [],
 });
+export const answer = Cmd.make("answer", {
+	input: Schema.Struct({n: Schema.Int, allow: Schema.Boolean}),
+	ok: Done,
+	err: [],
+});
 
 type EditorCmd =
 	| ReturnType<typeof write>
 	| ReturnType<typeof line>
 	| ReturnType<typeof interrupt>
 	| ReturnType<typeof close>
-	| ReturnType<typeof keep>;
+	| ReturnType<typeof keep>
+	| ReturnType<typeof answer>;
 
 /** A step's output so far: bytes to write, and the other Cmds, in the order they were asked for. */
 type Part = string | Exclude<EditorCmd, ReturnType<typeof write>>;
@@ -170,6 +193,9 @@ export const fresh = (ctx: EditorCtx): Editor => ({
 	cols: 80,
 	resized: false,
 	jobs: Shell.EMPTY,
+	status: null,
+	asking: null,
+	talk: Shell.NO_TALK,
 	programs: ctx.programs,
 });
 
@@ -229,8 +255,40 @@ const say = (acc: Acc, ...parts: readonly Part[]): Acc => ({
  */
 const above = (s: Editor, text: string): Acc =>
 	shownLine(s) === null
-		? say(start(s), text)
+		? say(
+				start(s),
+				s.status === null ? text : `\r${CLEAR_BELOW}${text}${statusRow(s.status, s.cols)}`,
+			)
 		: say(start(s), backFrom(s) + CLEAR_BELOW + text + drawn(s));
+
+/** The status row: drawn again in place, or taken away. Only while no prompt is up. */
+const statusTo = (s: Editor, text: string | null): Acc => {
+	const next = {...s, status: text};
+	if (shownLine(s) !== null) return start({...s, status: null});
+	if (text === null) return say(start(next), s.status === null ? "" : `\r${CLEAR_BELOW}`);
+	return say(start(next), `\r${CLEAR_BELOW}${statusRow(text, s.cols)}`);
+};
+
+/** The status row taken away, before the prompt comes back under it. */
+const unStatus = (acc: Acc): Acc =>
+	acc.s.status === null ? acc : say({...acc, s: {...acc.s, status: null}}, `\r${CLEAR_BELOW}`);
+
+/** A key while a job asks: y allows, n or Enter refuses, Ctrl-C stops the job; any other rings. */
+const answering = (acc: Acc, n: number, raw: string): Acc => {
+	const key = keyOf(raw);
+	const command = key.kind === "command" ? key.command : null;
+	const yes = key.kind === "text" && (key.text === "y" || key.text === "Y");
+	const no =
+		(key.kind === "text" && (key.text === "n" || key.text === "N")) || command === "accept-line";
+	if (!yes && !no) return say(acc, BELL);
+	const s = {...acc.s, asking: null};
+	const said = `  ${yes ? "y: allowed once" : "n: refused"}${NEWLINE}`;
+	return say(
+		{...acc, s},
+		s.status === null ? said : `\r${CLEAR_BELOW}${said}${statusRow(s.status, s.cols)}`,
+		answer({n, allow: yes}),
+	);
+};
 
 /** The prompt line of `s`, if it is on one row of the screen, and stays there when drawn again. */
 const inRow = (s: Editor): {readonly text: string; readonly at: number} | null => {
@@ -431,7 +489,7 @@ const atPrompt = (acc: Acc, mode: Extract<Mode, {kind: "prompt"}>, raw: string):
 const completed = (acc: Acc, mode: Extract<Mode, {kind: "prompt"}>): Acc => {
 	const {s} = acc;
 	const {left, right} = mode.line;
-	const {candidates, word} = Shell.complete(left, s.programs, s.jobs);
+	const {candidates, word} = Shell.complete(left, s.programs, s.jobs, s.talk);
 	const stem = left.slice(0, left.length - word.length);
 	const put = (text: string) =>
 		redraw(acc, withMode(s, prompt({left: stem + text, right}, mode.recall)));
@@ -469,10 +527,12 @@ const step = (acc: Acc, raw: string): Acc => {
 		case "search":
 			return after(inSearch(acc, mode, raw));
 		case "busy":
+			if (acc.s.asking !== null && command !== "interrupt")
+				return answering(acc, acc.s.asking.n, raw);
 			if (command === "interrupt")
 				// A terminal's Ctrl-C drops what was typed ahead (POSIX: the input queue is flushed).
 				return say(
-					{...acc, s: withMode(acc.s, {kind: "busy", ahead: []})},
+					unStatus({...acc, s: {...withMode(acc.s, {kind: "busy", ahead: []}), asking: null}}),
 					`^C${NEWLINE}`,
 					interrupt({}),
 				);
@@ -508,7 +568,7 @@ const start = (s: Editor): Acc => ({s, parts: []});
 
 export const editor = defineMachine({
 	types: {model: {} as Editor, msg: {} as EditorMsg, ctx: {} as EditorCtx},
-	cmds: [write, line, interrupt, close, keep],
+	cmds: [write, line, interrupt, close, keep, answer],
 	init: (_loaded, ctx) => {
 		const s = fresh(ctx);
 		return [s, [write({data: drawn(s)})]];
@@ -524,12 +584,16 @@ export const editor = defineMachine({
 		ready: (s) => {
 			if (s.mode.kind !== "busy") return done(start(s));
 			// The prompt, then what was typed ahead, as if typed at it.
-			const up = withMode(s, prompt(EMPTY));
-			return done(keys(say(start(up), drawn(up)), s.mode.ahead));
+			const cleared = unStatus(start({...s, asking: null}));
+			const up = withMode(cleared.s, prompt(EMPTY));
+			return done(keys(say({...cleared, s: up}, drawn(up)), s.mode.ahead));
 		},
+		status: (s, m) => done(statusTo(s, m.text)),
+		asked: (s, m) => [{...s, asking: m.text === null ? null : {n: m.n}}, []],
 		ended: (s) =>
 			done(say(start(withMode(s, {kind: "ended"})), shownLine(s) === null ? "" : leave(s))),
 		jobs: (s, m) => [{...s, jobs: m.jobs}, []],
+		talk: (s, m) => [{...s, talk: m.talk}, []],
 		// Taken as it is: the lines came from an editor's `keep`, cleaned there already.
 		history: (s, m) => [{...s, history: m.lines.slice(-KEPT)}, []],
 		write_ok: noop,
@@ -542,5 +606,7 @@ export const editor = defineMachine({
 		close_err: noop,
 		keep_ok: noop,
 		keep_err: noop,
+		answer_ok: noop,
+		answer_err: noop,
 	},
 });

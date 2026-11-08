@@ -342,7 +342,11 @@ describe("what comes back is tea's own Machine", () => {
 		);
 	});
 
-	it("is stamped with its update form, out of sight, and keeps no schema and no `types`", () => {
+	// tea 0.24.0's own `Machine.make` hands its spec to `defineMachine`, which returns the object it
+	// was given, so `model`, `msg` and `types` stay on it as on any `defineMachine` machine. The
+	// patch this test was first written against stripped them; tea promises a plain Machine, not
+	// a set of keys.
+	it("is stamped with its update form, out of sight", () => {
 		const Door = Schema.Union([
 			Schema.Struct({type: Schema.Literal("shut")}),
 			Schema.Struct({type: Schema.Literal("ajar"), by: Schema.String}),
@@ -373,8 +377,8 @@ describe("what comes back is tea's own Machine", () => {
 			enumerable: false,
 		});
 		expect(formOf(door)).toBe("transitions");
-		expect(Object.keys(picker).toSorted()).toEqual(["cmds", "init", "update"]);
-		expect(Object.keys(door).toSorted()).toEqual(["cmds", "init", "update"]);
+		expect(Object.keys(picker)).not.toContain("__form");
+		expect(Object.keys(door)).not.toContain("__form");
 		expect(picker.cmds).toEqual([readTicket]);
 		expect(replay(door, {msgs: [{type: "push", by: "ann"}], ctx: undefined}).state).toEqual({
 			type: "ajar",

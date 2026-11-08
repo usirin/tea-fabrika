@@ -1,5 +1,6 @@
 import {
 	admitted,
+	brainOnly,
 	Change,
 	ClientManager,
 	enrollmentText,
@@ -37,6 +38,7 @@ import {
 	Hello,
 	KeyLine,
 	PasskeyLine,
+	passkeyRp,
 	Row,
 	verifySshsig,
 	Waiting,
@@ -55,7 +57,11 @@ import {
 	Tracer,
 } from "effect";
 import {Base64, Base64Url} from "effect/encoding";
+import {doorNonce} from "./door-nonce.ts";
 import {doorStore} from "./door-store.ts";
+
+const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
+export type ConnectionId = typeof ConnectionId.Type;
 
 const quiet = Tracer.make({span: (options) => new Tracer.NativeSpan(options)});
 const silent = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.withTracer(quiet));
@@ -97,7 +103,7 @@ const InputFact = Schema.TaggedUnion({
 		arrivedAt: Schema.Number,
 		traceId: Schema.String,
 		spanId: Schema.String,
-		input: Schema.optional(Schema.Json),
+		input: Schema.optionalKey(Schema.Json),
 	},
 	refused: {
 		method: Schema.String,
@@ -174,7 +180,7 @@ const methods: ReadonlySet<string> = new Set([
 	"door.deny",
 ]);
 
-type Options<A, R> = {
+type Options<A, RNext, RDeliver, RNotify> = {
 	readonly sql: Parameters<typeof doorStore>[0];
 	readonly founder: Parameters<typeof ClientManager.layer>[0];
 	readonly name: string;
@@ -186,13 +192,14 @@ type Options<A, R> = {
 	readonly waiting: {readonly most: number; readonly ttl: number};
 	readonly ping: {readonly min: number; readonly max: number};
 	readonly inputCap: number;
-	readonly nextProcess: () => Effect.Effect<string, never, R>;
+	readonly spentCap: number;
+	readonly nextProcess: () => Effect.Effect<string, never, RNext>;
 	readonly deliver: (
 		process: string,
 		envelope: Envelope<A>,
 		span: typeof Link.Type,
-	) => Effect.Effect<void, LedgerError | SinkError | SigningRefused | NotGranted, R>;
-	readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError, R>;
+	) => Effect.Effect<void, LedgerError | SinkError | SigningRefused | NotGranted, RDeliver>;
+	readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError, RNotify>;
 	readonly inputs: {
 		readonly schema: Schema.Codec<A, unknown>;
 		readonly personOnly: ReadonlyArray<string>;
@@ -202,8 +209,10 @@ type Options<A, R> = {
 	readonly facts: {readonly personOnly: ReadonlyArray<string>};
 };
 
-const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
-	const context = yield* Effect.context<R>();
+const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
+	options: Options<A, RNext, RDeliver, RNotify>,
+) {
+	const context = yield* Effect.context<RNext | RDeliver | RNotify>();
 	const ledger = yield* Ledger;
 	const clients = yield* ClientManager;
 	const sink = yield* SpanSink;
@@ -211,6 +220,9 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 	const archive = yield* Archive;
 	const store = doorStore(options.sql),
 		sql = options.sql;
+	const nonces = yield* silent(doorNonce(store, options.waiting.ttl, options.spentCap));
+	// Only calls currently checking a proof live here. No challenge is retained.
+	const checking = new Map<ConnectionId, Set<{current: boolean}>>();
 	const turn = yield* Semaphore.make(1);
 	const flush = sink.flush.pipe(
 		Effect.provideService(RecordManager, records),
@@ -253,9 +265,27 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 			}),
 		),
 	);
-	const attachment = (client: string) =>
-		store.atomic(() => store.get(`client/${client}`, Attached));
-	const online = Effect.fnUntraced(function* (client: string) {
+	const prunePending = (at: number) => {
+		const expired = sql.exec(
+			"SELECT client FROM door_pending WHERE until<=? OR client IN (SELECT client FROM door_pending ORDER BY rowid DESC LIMIT -1 OFFSET ?)",
+			at,
+			options.waiting.most,
+		);
+		for (const row of expired) {
+			const client = String(row.client);
+			sql.exec("DELETE FROM door_state WHERE name=?", `client/${client}`);
+			sql.exec("DELETE FROM door_state WHERE name=?", `key/${client}`);
+			sql.exec("DELETE FROM door_pending WHERE client=?", client);
+		}
+	};
+	const attachment = Effect.fnUntraced(function* (client: ConnectionId) {
+		const at = yield* clock;
+		return yield* store.atomic(() => {
+			prunePending(at);
+			return store.get(`client/${client}`, Attached);
+		});
+	});
+	const online = Effect.fnUntraced(function* (client: ConnectionId) {
 		const attached = yield* attachment(client);
 		if (attached?._tag !== "online") return yield* new NotGranted({});
 		const raw = yield* store.atomic(() => store.get(`key/${client}`, Schema.String));
@@ -263,45 +293,74 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 		const by = yield* membership(raw);
 		return {attached, raw, by};
 	});
-	const challenge = Effect.fnUntraced(function* (client: string) {
-		const nonce = random();
-		yield* store.atomic(() =>
-			store.set(`client/${client}`, Attached, Attached.cases.new.make({client, nonce})),
-		);
-		return nonce;
+	const connect = () => Effect.sync(() => ConnectionId.make(random()));
+	const challenge = Effect.fnUntraced(function* (client: ConnectionId) {
+		for (const attempt of checking.get(client) ?? []) attempt.current = false;
+		yield* store.atomic(() => {
+			// A reconnect retires this checked connection, never another client's proof.
+			sql.exec("DELETE FROM door_state WHERE name IN (?,?)", `client/${client}`, `key/${client}`);
+			sql.exec("DELETE FROM door_pending WHERE client=?", client);
+		});
+		return yield* silent(nonces.issue(client));
 	});
 	const initialize = Effect.fnUntraced(function* (
-		client: string,
+		client: ConnectionId,
 		input: unknown,
 		trusted: {readonly url: string; readonly tab: string; readonly name: string},
 	) {
-		const attached = yield* attachment(client);
-		if (attached === null || attached._tag === "online" || trusted.url !== options.url)
-			return no("bad_nonce");
+		if (trusted.url !== options.url) return no("bad_nonce");
 		const decoded = Schema.decodeUnknownResult(Hello)(input);
-		let verified = false;
+		if (Result.isFailure(decoded)) return no("bad_hello");
+		const hello = decoded.success;
+		return yield* Effect.acquireUseRelease(
+			Effect.sync(() => {
+				const attempt = {current: true};
+				const calls = checking.get(client) ?? new Set();
+				calls.add(attempt);
+				checking.set(client, calls);
+				return attempt;
+			}),
+			Effect.fnUntraced(function* (attempt: {current: boolean}) {
+				const until = yield* silent(nonces.check(client, hello.nonce));
+				return until === null
+					? no("bad_nonce")
+					: yield* initializeChecked(client, hello, trusted, until, attempt);
+			}),
+			(attempt) =>
+				Effect.sync(() => {
+					const calls = checking.get(client);
+					calls?.delete(attempt);
+					if (calls?.size === 0) checking.delete(client);
+				}),
+		);
+	});
+	const initializeChecked = Effect.fnUntraced(function* (
+		client: ConnectionId,
+		hello: typeof Hello.Type,
+		trusted: {readonly url: string; readonly tab: string; readonly name: string},
+		until: number,
+		attempt: {current: boolean},
+	) {
+		let claimed = false;
 		const result = yield* silent(
 			checkHello({
-				hello: input,
+				hello,
 				...trusted,
-				nonce: attached.nonce,
+				nonce: hello.nonce,
 				versions: options.versions,
 				ping: options.ping,
-				consume: () => {
-					const current = store.get(`client/${client}`, Attached);
-					if (current === null || current._tag === "online" || current.nonce !== attached.nonce)
-						return false;
-					store.set(
-						`client/${client}`,
-						Attached,
-						Attached.cases.new.make({client, nonce: random()}),
-					);
-					return true;
-				},
+				consume: () => attempt.current && claimed,
 				admit: Effect.fnUntraced(function* () {
-					verified = true;
-					if (Result.isFailure(decoded)) return Admission.cases.refused.make({why: "not_granted"});
-					const raw = decoded.success.key;
+					const at = yield* clock;
+					const spent = yield* store.atomic(() => {
+						const current = store.get(`client/${client}`, Attached);
+						if (!attempt.current || current?._tag === "online") return Result.succeed(false);
+						return nonces.spend(hello.nonce, until, at);
+					});
+					if (Result.isFailure(spent)) return yield* spent.failure;
+					claimed = spent.success;
+					if (!claimed) return Admission.cases.refused.make({why: "not_granted"});
+					const raw = hello.key;
 					const existing = yield* readMembers();
 					if (existing === null && raw !== options.founder.window)
 						return Admission.cases.refused.make({why: "not_granted"});
@@ -314,19 +373,30 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 			}),
 		);
 		if (result._tag === "refused") {
-			if (verified && result.why === "not_granted" && Result.isSuccess(decoded))
-				yield* store.atomic(() =>
+			if (result.why === "not_granted" && !claimed) return no("bad_nonce");
+			if (claimed && result.why === "not_granted") {
+				const at = yield* clock;
+				yield* store.atomic(() => {
+					const current = store.get(`client/${client}`, Attached);
+					if (!attempt.current || current?._tag === "online") return;
 					store.set(
 						`client/${client}`,
 						Attached,
 						Attached.cases.waiting.make({
 							client,
-							key: decoded.success.key,
-							hello: decoded.success,
-							nonce: attached.nonce,
+							key: hello.key,
+							hello,
+							nonce: hello.nonce,
 						}),
-					),
-				);
+					);
+					sql.exec(
+						"INSERT OR REPLACE INTO door_pending (client,until) VALUES (?,?)",
+						client,
+						at + options.waiting.ttl,
+					);
+					prunePending(at);
+				});
+			}
 			return result;
 		}
 		yield* Effect.gen(function* () {
@@ -339,8 +409,7 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 			});
 			const fact = HelloFact.make({
 				...result.hello,
-				key: result.who.key,
-				nonce: attached.nonce,
+				url: trusted.url,
 				version: result.version,
 				location: options.location,
 				build: options.build,
@@ -348,6 +417,7 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 			const placed = yield* ledger.append("door/hellos", `hello-${random()}`, lineFor(from, fact));
 			if (placed._tag === "refused") return yield* new LedgerError({why: "refused"});
 			yield* store.atomic(() => {
+				sql.exec("DELETE FROM door_pending WHERE client=?", client);
 				store.set(`key/${client}`, Schema.String, result.hello.key);
 				store.set(
 					`client/${client}`,
@@ -371,7 +441,7 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 		return Waiting.expire(state, at);
 	};
 	const knock = Effect.fnUntraced(function* (
-		client: string,
+		client: ConnectionId,
 		params: {readonly label: string; readonly pass?: string | null},
 	) {
 		const attached = yield* attachment(client);
@@ -396,7 +466,7 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 		});
 		return ok({rows: state.rows});
 	});
-	const watch = Effect.fnUntraced(function* (client: string) {
+	const watch = Effect.fnUntraced(function* (client: ConnectionId) {
 		const checked = yield* silent(Effect.result(online(client)));
 		if (Result.isFailure(checked))
 			return WatchReply.cases.refused.make({why: "not_granted", rows: []});
@@ -414,6 +484,17 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 			return live;
 		});
 		return WatchReply.cases.watching.make({rows: state.rows});
+	});
+	const disconnect = Effect.fnUntraced(function* (client: ConnectionId) {
+		for (const attempt of checking.get(client) ?? []) attempt.current = false;
+		const at = yield* clock;
+		yield* store.atomic(() => {
+			const attached = store.get(`client/${client}`, Attached);
+			if (attached?._tag === "waiting")
+				store.set("waiting", Waiting, Waiting.leave(waiting(at), {key: attached.key, client}));
+			sql.exec("DELETE FROM door_state WHERE name IN (?,?)", `client/${client}`, `key/${client}`);
+			sql.exec("DELETE FROM door_pending WHERE client=?", client);
+		});
 	});
 	const enrollment = Effect.fnUntraced(function* (binding: typeof Enrollment.Type) {
 		const nonce = random();
@@ -476,25 +557,16 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 		const signers = [...members.keys.keys()].filter(
 			(key) => Schema.is(KeyLine)(key) || Schema.is(PasskeyLine)(key),
 		);
-		const passkeys = (yield* silent(memberRows)).flatMap((entry) => {
-			const decoded = Schema.decodeUnknownResult(MemberFact)(valueFor(entry));
-			return Result.isSuccess(decoded) &&
-				decoded.success._tag === "added" &&
-				decoded.success.add.adds._tag === "person" &&
-				decoded.success.add.adds.passkey !== undefined
-				? [{key: decoded.success.add.adds.key, passkey: decoded.success.add.adds.passkey}]
-				: [];
-		});
 		let verified: typeof import("@kampus/libfabrika/transport").Checked.Type | null = null;
 		for (const signer of signers) {
-			const policy = passkeys.find((p) => p.key === signer)?.passkey;
+			const rp = passkeyRp(signer);
 			const checked = yield* silent(
 				verifySshsig({
 					text,
 					armored,
 					space: "fabrika-client",
 					signers: [signer],
-					...(policy === undefined ? {} : {policy: {rp: policy.rp, origins: options.origins}}),
+					...(Option.isNone(rp) ? {} : {policy: {rp: rp.value, origins: options.origins}}),
 				}),
 			);
 			if (checked._tag !== "refused") {
@@ -502,8 +574,7 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 				break;
 			}
 		}
-		if (verified === null || verified._tag === "refused")
-			return GrantReply.cases.refused.make({why: "bad_signature"});
+		if (verified === null) return GrantReply.cases.refused.make({why: "bad_signature"});
 		const checked = verified;
 		const signer = checked.signer;
 		const signerFingerprint = yield* silent(fingerprint(signer, true));
@@ -516,6 +587,8 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 		if (c._tag === "added" && c.add.adds._tag === "person") {
 			const added = c.add.adds;
 			if (!Schema.is(KeyLine)(added.key) && !Schema.is(PasskeyLine)(added.key))
+				return GrantReply.cases.refused.make({why: "bad_enrollment"});
+			if (added.passkey !== undefined && !Schema.is(PasskeyLine)(added.key))
 				return GrantReply.cases.refused.make({why: "bad_enrollment"});
 			if (Schema.is(PasskeyLine)(added.key)) {
 				const pass = added.passkey;
@@ -638,7 +711,7 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 						});
 						for (const row of pending)
 							for (const client of row.clients) {
-								const nonce = yield* challenge(client);
+								const nonce = yield* challenge(ConnectionId.make(client));
 								yield* notify(client, {method: "client.granted", params: {nonce}});
 							}
 						const connections = yield* store.atomic(() =>
@@ -658,7 +731,7 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 			),
 		);
 	});
-	const deny = Effect.fnUntraced(function* (client: string, input: unknown) {
+	const deny = Effect.fnUntraced(function* (client: ConnectionId, input: unknown) {
 		const checked = yield* silent(Effect.result(online(client)));
 		if (Result.isFailure(checked)) return GrantReply.cases.refused.make({why: "not_granted"});
 		if (checked.success.by._tag !== "person")
@@ -678,7 +751,11 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 			.write(MemberFact.cases.denied.make({id: random(), key, saw, by: from.by}), from)
 			.pipe(turn.withPermits(1));
 	});
-	const route = Effect.fnUntraced(function* (client: string, method: string, params: unknown) {
+	const route = Effect.fnUntraced(function* (
+		client: ConnectionId,
+		method: string,
+		params: unknown,
+	) {
 		const checked = yield* silent(Effect.result(online(client)));
 		if (Result.isFailure(checked)) return no("not_granted");
 		const {by, raw} = checked.success;
@@ -717,16 +794,14 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 			request.success.traceId !== undefined &&
 			by._tag === "agent"
 		) {
-			const delivered = yield* store.atomic(() =>
-				sql
-					.exec("SELECT value FROM door_bindings")
-					.map((r) => decodeBinding(r.value))
-					.some(
-						(b) =>
-							b.process === target &&
-							b.span.traceId === request.success.traceId &&
-							b.state._tag === "delivered",
-					),
+			const traceId = request.success.traceId;
+			const delivered = yield* store.atomic(
+				() =>
+					sql.exec(
+						"SELECT 1 FROM door_bindings WHERE json_extract(value, '$.process')=? AND json_extract(value, '$.span.traceId')=? AND json_extract(value, '$.state._tag')='delivered' LIMIT 1",
+						target,
+						traceId,
+					).length > 0,
 			);
 			if (!delivered) refusal ??= "bad_trace";
 		}
@@ -747,7 +822,10 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 					return Result.succeed(old.client === raw && old.digest === digest ? old : null);
 				}
 				if (
-					Number(sql.exec("SELECT count(*) n FROM door_bindings")[0]?.n ?? 0) >= options.inputCap ||
+					(letter !== null &&
+						Number(
+							sql.exec("SELECT count(*) n FROM door_bindings WHERE letter IS NOT NULL")[0]?.n ?? 0,
+						) >= options.inputCap) ||
 					!Number.isSafeInteger(count + 1)
 				)
 					return Result.fail(new LedgerError({why: "storage"}));
@@ -768,12 +846,13 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 							: new Date(at).toISOString(),
 					state: EnvelopeState.cases.allocated.make({}),
 				});
-				sql.exec(
-					"INSERT INTO door_bindings (id,letter,value) VALUES (?,?,?)",
-					binding.id,
-					letter,
-					encodeBinding(binding),
-				);
+				if (letter !== null)
+					sql.exec(
+						"INSERT INTO door_bindings (id,letter,value) VALUES (?,?,?)",
+						binding.id,
+						letter,
+						encodeBinding(binding),
+					);
 				return Result.succeed(binding);
 			});
 			if (Result.isFailure(allocation)) return yield* allocation.failure;
@@ -815,7 +894,7 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 				);
 				if (placed._tag === "refused") return yield* new LedgerError({why: "refused"});
 				const recorded = Binding.make({...binding, state: EnvelopeState.cases.recorded.make({})});
-				yield* store.atomic(() => saveBinding(recorded));
+				if (letter !== null) yield* store.atomic(() => saveBinding(recorded));
 				return recorded;
 			}
 			return binding;
@@ -918,7 +997,12 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 		return yield* Effect.gen(function* () {
 			const session = yield* sessions.receipt(a.id, a.parent, a.process, a.kind);
 			const fact = rawObject(a.fact);
-			if (fact === null || fact._tag !== a.kind || a.stream.startsWith("door/"))
+			if (
+				fact === null ||
+				fact._tag !== a.kind ||
+				a.stream.startsWith("door/") ||
+				brainOnly({stream: a.stream, id: a.id, tag: a.kind})
+			)
 				return yield* new SigningRefused({why: "not_delivered"});
 			const schema = Schema.StructWithRest(Schema.TaggedStruct(a.kind, {}), [
 				Schema.Record(Schema.String, Schema.Json),
@@ -955,10 +1039,12 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 		}).pipe(turn.withPermits(1));
 	});
 	return {
+		connect,
 		challenge,
 		initialize,
 		knock,
 		watch,
+		disconnect,
 		enrollment,
 		grant,
 		deny,
@@ -971,11 +1057,14 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 export class Door extends Context.Service<Door, Effect.Success<ReturnType<typeof make>>>()(
 	"@kampus/fabrika/Door",
 ) {
-	static readonly layer = <A, R>(options: Options<A, R>) => Layer.effect(Door, make(options));
+	static readonly layer = <A, RNext, RDeliver, RNotify>(
+		options: Options<A, RNext, RDeliver, RNotify>,
+	) => Layer.effect(Door, make(options));
 }
 
 const HelloFact = Schema.TaggedStruct("initialized", {
 	...Hello.fields,
+	url: Schema.String,
 	nonce: Schema.String,
 	version: Schema.Int,
 	location: Schema.String,

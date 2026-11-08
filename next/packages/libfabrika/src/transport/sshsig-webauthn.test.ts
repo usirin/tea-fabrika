@@ -194,6 +194,90 @@ const refused = {_tag: "refused", why: "bad_signature"};
 const blob = () => Buffer.from(realArmor.trim().split("\n").slice(1, -1).join(""), "base64");
 
 describe("P10 WebAuthn SSHSIG", () => {
+	it("p27: a passkey line requires an uncompressed P-256 point", () => {
+		const bytes = Buffer.from(line.split(" ")[1]!, "base64");
+		let at = 0;
+		for (let i = 0; i < 2; i++) at += 4 + bytes.readUInt32BE(at);
+		bytes[at + 4] = 3;
+		expect(Schema.is(T.PasskeyLine)(`${line.split(" ")[0]} ${bytes.toString("base64")}`)).toBe(
+			false,
+		);
+	});
+	it.effect("writer: malformed DER answers with a typed BadAssertion", () =>
+		Effect.gen(function* () {
+			expect(
+				yield* Effect.flip(
+					T.writeWebauthnSshsig({
+						text,
+						line: Schema.decodeUnknownSync(T.PasskeyLine)(line),
+						assertion: {
+							authenticatorData: new Uint8Array(Buffer.from(real.authenticatorData, "base64url")),
+							clientDataJSON: new Uint8Array(Buffer.from(real.clientDataJSON, "base64url")),
+							signature: new Uint8Array([0x30, 0]),
+						},
+					}),
+				),
+			).toMatchObject({_tag: "BadAssertion"});
+		}),
+	);
+	it.effect("p27: an ECDSA scalar with an unnecessary leading zero is refused", () =>
+		Effect.gen(function* () {
+			const source = blob();
+			let at = 10;
+			const take = () => {
+				const size = source.readUInt32BE(at);
+				at += 4;
+				const value = source.subarray(at, at + size);
+				at += size;
+				return value;
+			};
+			const key = take(),
+				space = take(),
+				reserved = take(),
+				hash = take(),
+				signature = take();
+			let sigAt = 0;
+			const sigField = () => {
+				const size = signature.readUInt32BE(sigAt);
+				sigAt += 4;
+				const value = signature.subarray(sigAt, sigAt + size);
+				sigAt += size;
+				return value;
+			};
+			const algorithm = sigField(),
+				pair = sigField(),
+				tail = signature.subarray(sigAt);
+			const rLength = pair.readUInt32BE(0),
+				r = pair.subarray(4, 4 + rLength);
+			const s = pair.subarray(8 + rLength);
+			// P-256 accepts both s and order-s. This captured s has a complement below 128.
+			const order = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
+			const low = Buffer.from(
+				(order - BigInt(`0x${s.toString("hex")}`)).toString(16).padStart(64, "0"),
+				"hex",
+			);
+			expect(low[0]).toBeLessThan(128);
+			const wrap = (value: Uint8Array) =>
+				armor(
+					Buffer.concat([
+						source.subarray(0, 10),
+						field(key),
+						field(space),
+						field(reserved),
+						field(hash),
+						field(
+							Buffer.concat([
+								field(algorithm),
+								field(Buffer.concat([field(r), field(value)])),
+								tail,
+							]),
+						),
+					]),
+				);
+			expect((yield* check(wrap(low)))._tag).toBe("passkey");
+			expect(yield* check(wrap(Buffer.concat([Buffer.from([0]), low])))).toEqual(refused);
+		}),
+	);
 	it.effect("p27: a raw WebAuthn object outside SSHSIG is refused", () =>
 		Effect.gen(function* () {
 			expect(yield* check(JSON.stringify(real))).toEqual(refused);

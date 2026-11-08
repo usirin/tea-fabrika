@@ -11,8 +11,24 @@ need nothing but a browser. So:
   Mac; the founding link stays a later option.
 - **Break 2 (row 8, a tab approving a device) is decided** as
   [Tier 1's question 19](../docs/plan/tier-1.md#open-questions).
-- **Everything else here is proposed:** rows 9 and 22 still break as written, and every fix below
-  is a lean, not a decision.
+- ~~**Everything else here is proposed:** rows 9 and 22 still break as written, and every fix below
+  is a lean, not a decision.~~ Wrong after 2026-11-08: see the next point.
+- **Every other row is settled, 2026-11-08.** The owner decided rows 13, 18, 19, 23 and 31, and the
+  owner's 11-07 product walk decided roles and invites (rows 2, 3 and 7). The lead agent checked
+  the rest against those calls. None is a new one: a no to any of them would contradict a decision
+  already made.
+
+| Row | Settled by |
+|---|---|
+| 9 | Question 19 (a passkey tab is an equal master) and one shape for every ask: the approve row is an ask, in the inbox of any client that holds a person key |
+| 22 | Already in [the tiers](../docs/plan/tiers.md): Tier 4's first hands are a Cloudflare container (owner, 2026-10-25) |
+| 16 | Tier 3 is browsers and phones only (owner, 2026-11-07): in `next/`, the hosted web client is a first-class client |
+| 17 | Question 19's follow-up (the sheet may let in a passkey tab): the flow says "device", and the sheet is offered on the web client's first screen |
+| 27 | Row 18's install with no hand steps: the install makes the group's GitHub App with GitHub's manifest flow. Not tried yet; a spike checks it before Tier 3 |
+| 11, 14 | Synced passkeys are accepted, and a wiped tab lets itself back in (owner, 2026-11-08) |
+| 6 | Roles, `{owner, admins[], members[]}` (owner, 2026-11-07) |
+| 25 | A box reaches only its allow list (owner, 2026-11-05), so no box has open internet |
+| 24 | Waits for Tier 5, with [agents commit as a bot](../docs/direction/agents-commit-as-a-bot.md) |
 
 ## The case
 

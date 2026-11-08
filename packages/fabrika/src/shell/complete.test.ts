@@ -9,6 +9,7 @@ import {complete} from "./complete.ts";
 import {parse} from "./grammar.ts";
 import {type ProgramList, programList} from "./programs.ts";
 import {SMALL} from "./small.ts";
+import {NO_TALK, type Talk} from "./summon.ts";
 
 // Tab completion on a name the program does not declare offers nothing. A
 // name every object has (`constructor`, `toString`, `__proto__`) is such a
@@ -125,3 +126,69 @@ function expectSameAsChecker(before: string, programs: ProgramList) {
 		expect(offered.includes(next), `${before} | ${next}`).toBe(wires);
 	}
 }
+
+// The summon tryout, PR 1 (ticket 237), today's version: Tab after `summon`, after a setting and
+// after `@` (the plan's PR 1 and its complete.ts row). What Tab offers comes from the host's
+// talk: the agents, each harness's last offered settings, and the summoned names.
+//
+//   @sc<Tab>                    @scout
+//   summon <Tab>                fake
+//   summon fake <Tab>           as and the settings the harness offered
+//   summon fake fake-large <Tab>   as and the settings not typed yet
+//   @scout a ; su<Tab>          nothing: the words after @name are the agent's, as typed
+describe("Tab completion for summon and @name (the summon tryout, PR 1)", () => {
+	const TALK: Talk = {
+		agents: ["fake"],
+		offers: {fake: ["fake-small", "fake-large", "low", "high"]},
+		names: ["scout", "researcher"],
+	};
+	const offered = (line: string) => complete(line, list, EMPTY, TALK);
+
+	it("after @ at the start of the line, offers the summoned names", () => {
+		expect(offered("@").candidates).toEqual(["@scout", "@researcher"]);
+		expect(offered("@sc")).toEqual({candidates: ["@scout"], word: "@sc"});
+		expect(offered("  @re").candidates).toEqual(["@researcher"]);
+		expect(offered("@nobody").candidates).toEqual([]);
+	});
+
+	it("offers no name when nobody is summoned", () => {
+		expect(complete("@", list, EMPTY, NO_TALK).candidates).toEqual([]);
+	});
+
+	it("completes dismiss's one name, then stops offering names", () => {
+		expect(offered("dismiss re")).toEqual({candidates: ["researcher"], word: "re"});
+		expect(offered("dismiss scout ").candidates).toEqual([]);
+	});
+
+	it("after summon, offers the agents", () => {
+		expect(offered("summon ").candidates).toEqual(["fake"]);
+		expect(offered("summon f").candidates).toEqual(["fake"]);
+	});
+
+	it("after the agent, offers as and the settings its harness offered", () => {
+		expect([...offered("summon fake ").candidates].sort()).toEqual(
+			["as", "fake-large", "fake-small", "high", "low"].sort(),
+		);
+		expect(offered("summon fake fake-l").candidates).toEqual(["fake-large"]);
+	});
+
+	it("after a setting, offers as and no setting typed already; after two, only as", () => {
+		const one = offered("summon fake fake-large ").candidates;
+		expect(one).toContain("as");
+		expect(one).not.toContain("fake-large");
+		expect(offered("summon fake fake-large high ").candidates).toEqual(["as"]);
+	});
+
+	it("after as, offers nothing: the name is the person's to choose", () => {
+		expect(offered("summon fake as ").candidates).toEqual([]);
+		expect(offered("summon fake high as s").candidates).toEqual([]);
+	});
+
+	// S2: no words, no operators in prose, so Tab there never offers a program or a built-in.
+	it.each(["@scout ", "@scout su", "@scout a | ", "@scout a ; su", "@scout a && ", "@scout $(se"])(
+		"inside what is said, offers nothing: %s",
+		(line) => {
+			expect(offered(line).candidates).toEqual([]);
+		},
+	);
+});

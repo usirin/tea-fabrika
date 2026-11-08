@@ -3,25 +3,24 @@
 //
 // Two halves:
 //
-// 1. `useSyncExternalStore` is reached only by the one hook's file,
-//    `next/packages/tuval/src/window/use-model.ts`, written whole here so no file can make itself the
-//    one. Anywhere else, importing it from `react` or from the `use-sync-external-store` shim, or
-//    reading it as `React.useSyncExternalStore`, fires.
-// 2. A store hook whose value is dropped fires, in every file: `useModel(store);`,
-//    `void useModel(store);`. The Compiler compiles such a component with no word, and keeps its
+// 1. `useSyncExternalStore` has no allowed file in `next/`. Importing it from `react` or from the
+//    `use-sync-external-store` shim, or reading it as `React.useSyncExternalStore`, fires. A view
+//    reads its model through `useRuntime` from `@demlik/tea/react`.
+// 2. A store hook whose value is dropped fires, in every checked file: `useRuntime(run);`,
+//    `void useRuntime(run);`. The Compiler compiles such a component with no word, and keeps its
 //    first output forever (experiments 176 and 194), so no other check sees it. The store hooks are
-//    our `useModel`, React's `useSyncExternalStore`, and tea's `useRuntime` and `useMachine`.
+//    legacy `useModel`, React's `useSyncExternalStore`, and tea's `useRuntime` and `useMachine`.
 //
-// It misses a module object read during render through a helper while the hook's value is used for
-// something else (the note's doubt). In `next/`, half 1 leaves no second store to read.
+// It follows written names and plain member access. It does not trace every alias, computed access,
+// re-export or helper.
 //
 // `.oxlintrc.json` turns it on in `next/**` and leaves tests out: a test may plant a broken view.
 import type {CreateRule} from "@oxlint/plugins";
-import {type Node, pathIn} from "./match.ts";
+import type {Node} from "./match.ts";
 
-const HOOK_FILE = "next/packages/tuval/src/window/use-model.ts";
 const STORE_HOOKS = new Set(["useModel", "useSyncExternalStore", "useRuntime", "useMachine"]);
-const ONLY = `\`useSyncExternalStore\` is the one store hook's alone (${HOOK_FILE}). Read the model through \`useModel\` (docs/direction/react-compiler.md, C4).`;
+const ONLY =
+	"`useSyncExternalStore` is not allowed in `next/`. Read the model through `useRuntime` from `@demlik/tea/react` (docs/direction/react-compiler.md, C4).";
 
 /** The hook a call names, plainly or as a member: `useModel(...)`, `React.useSyncExternalStore(...)`. */
 const hookName = (node: Node): string | null => {
@@ -39,7 +38,6 @@ const hookName = (node: Node): string | null => {
 
 export const oneStoreHook: CreateRule = {
 	create(context) {
-		const own = pathIn(context) === HOOK_FILE;
 		const dropped = (node: Node, call: Node) => {
 			const name = hookName(call);
 			if (name === null || !STORE_HOOKS.has(name)) return;
@@ -50,7 +48,6 @@ export const oneStoreHook: CreateRule = {
 		};
 		return {
 			ImportDeclaration(node) {
-				if (own) return;
 				const from = node.source.value;
 				if (from.startsWith("use-sync-external-store")) {
 					context.report({node, message: ONLY});
@@ -68,7 +65,7 @@ export const oneStoreHook: CreateRule = {
 				}
 			},
 			MemberExpression(node) {
-				if (own || node.computed || node.property.type !== "Identifier") return;
+				if (node.computed || node.property.type !== "Identifier") return;
 				if (node.property.name === "useSyncExternalStore") context.report({node, message: ONLY});
 			},
 			ExpressionStatement(node) {

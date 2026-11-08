@@ -1,6 +1,6 @@
 # Every wait is a queue
 
-Proposed 2026-10-18.
+Proposed 2026-10-18. Walked when Tier 6 starts (owner, 2026-11-08): pipeline queues and stage capacity.
 
 ## The idea
 

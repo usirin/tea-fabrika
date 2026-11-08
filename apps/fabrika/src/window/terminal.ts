@@ -65,6 +65,42 @@ export const loadGhostty = Effect.tryPromise({
 	catch: (cause) => new Error("the terminals could not start their screen", {cause}),
 });
 
+/** How often a job's status is said again, at most: the terminal draws it each second. */
+const STATUS_EVERY = 3000;
+/** The lines the replies' region keeps: a screen reader reads back what came lately. */
+const SAID_KEPT = 50;
+
+/**
+ * Say the newest value at most once every `ms`: the first at once, then the newest after a wait,
+ * as a throttle with a trailing call does. `null` (the job is over) is said at once.
+ */
+const sayingEvery = (ms: number, say: (now: string | null) => void) => {
+	let last = 0;
+	let waiting: ReturnType<typeof setTimeout> | null = null;
+	let newest: string | null = null;
+	const stop = () => {
+		if (waiting !== null) clearTimeout(waiting);
+		waiting = null;
+	};
+	const to = (now: string | null) => {
+		newest = now;
+		const since = Date.now() - last;
+		if (now === null || since >= ms) {
+			stop();
+			last = Date.now();
+			say(now);
+			return;
+		}
+		if (waiting !== null) return;
+		waiting = setTimeout(() => {
+			waiting = null;
+			last = Date.now();
+			say(newest);
+		}, ms - since);
+	};
+	return Object.assign(to, {stop});
+};
+
 /** A width or height the main process takes: between 2 and 1000 cells (messages.ts). */
 const cells = (n: number) => Math.min(1000, Math.max(2, Math.floor(n)));
 
@@ -89,7 +125,29 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 	const text = document.createElement("section");
 	text.className = "screen-text";
 	text.setAttribute("aria-label", `${tile} screen`);
-	element.append(screen, text);
+	// What a job says while it works, and the lines worth saying out loud, such as an agent's reply
+	// and what it asks: live regions, out of sight as the screen's text is (WCAG 4.1.3). Each has a
+	// class of its own, since `screen-text` names the screen alone, which a test reads as the tile's
+	// screen. The status is said at most once every few seconds, so a screen reader is not read a
+	// clock.
+	const status = document.createElement("div");
+	status.className = "job-status";
+	status.setAttribute("role", "status");
+	status.setAttribute("aria-label", `${tile} job status`);
+	const said = document.createElement("div");
+	said.className = "job-replies";
+	said.setAttribute("role", "log");
+	said.setAttribute("aria-label", `${tile} replies`);
+	element.append(screen, text, status, said);
+	const statusTo = sayingEvery(STATUS_EVERY, (now) => {
+		status.textContent = now ?? "";
+	});
+	const sayLine = (line: string) => {
+		const p = document.createElement("p");
+		p.textContent = line;
+		said.append(p);
+		while (said.childElementCount > SAID_KEPT) said.firstElementChild?.remove();
+	};
 
 	const make = () => {
 		const made = new Terminal({
@@ -193,14 +251,9 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 	 * terminal is made again in the new one and opened with what it showed (themes.md, live
 	 * switching). Keys go to it as they went to the old one.
 	 *
-	 * Focus stays where it was. ghostty-web 0.4's open() focuses the terminal, at once and again
-	 * after a zero timeout, and a look change remakes every tile's terminal, so the last one would
-	 * take focus from the tile or the input a person is in. A remake that had focus keeps it;
-	 * otherwise focus goes back where it was, at once and after open()'s own timeout, and where
-	 * nothing had focus, the remade terminal lets go of it, so keys typed next reach no tile
-	 * nobody picked (terminal.focus.test.ts). A pnpm patch
-	 * that stops open() focusing would be cleaner, but every first open then needs its own focus(),
-	 * and the tests model 0.4's open() as it is.
+	 * ghostty-web 0.4's open() calls focus(), which also queues a second focus. Suppress that
+	 * call for an unfocused tile so neither focus can steal a key between timer turns. Restore
+	 * the method even if opening fails: later clicks must still be able to focus the tile.
 	 */
 	const remake = () => {
 		const old = term;
@@ -209,7 +262,13 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 		({term, fit} = make());
 		old.dispose();
 		if (!opened) return;
-		open();
+		const focus = term.focus;
+		if (!focused) term.focus = () => {};
+		try {
+			open();
+		} finally {
+			term.focus = focus;
+		}
 		if (focused) {
 			term.focus();
 			return;
@@ -230,6 +289,7 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 				active.focus();
 		};
 		back();
+		// A focus queued before the remake can still be waiting from the old terminal.
 		setTimeout(back, 0);
 	};
 	const look = window.matchMedia(LIGHT);
@@ -244,15 +304,23 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 			// Heard only once it is open: the bytes that came before wait in the preload, in order.
 			window.fabrika.onMessage(port, (raw) => {
 				const read = readToTerminal(raw);
-				if (read.kind === "read") {
-					keep(read.msg.data);
-					term.write(read.msg.data, mirrorSoon);
-				} else console.warn(`fabrika: refused a message for ${tile}: ${read.why}`);
+				if (read.kind === "refused") {
+					console.warn(`fabrika: refused a message for ${tile}: ${read.why}`);
+					return;
+				}
+				const {msg} = read;
+				if (msg.type === "status") statusTo(msg.text);
+				else if (msg.type === "said") sayLine(msg.text);
+				else {
+					keep(msg.data);
+					term.write(msg.data, mirrorSoon);
+				}
 			});
 		},
 		focus: () => term.focus(),
 		dispose: () => {
 			look.removeEventListener("change", remake);
+			statusTo.stop();
 			window.fabrika.forget(port);
 			term.dispose();
 			element.remove();

@@ -1,10 +1,11 @@
 import {applyCell} from "@demlik/tea";
 import {Result} from "effect";
 import * as fc from "fast-check";
-import {describe, it} from "vitest";
+import {describe, expect, it} from "vitest";
+import {capOf} from "../window/pop.ts";
 import {type Desk, type DeskCmd, type DeskMsg, deskMachine, savedOf, takenNow} from "./desk.ts";
-import {commandOn, decodeKeys, defaults, Does, type Keys} from "./keymap.ts";
-import {keyOwner} from "./keys.ts";
+import {commandOn, decodeKeys, defaults, Does, type Keys, spell} from "./keymap.ts";
+import {keyOwner, matchPress} from "./keys.ts";
 
 // The keybindings file's laws (p12, p17, and the swap of p9), for any text and for any file
 // written from the file's own words. Today's version, ticket 174, PR 1. The examples are in
@@ -192,6 +193,141 @@ describe("the file's laws", () => {
 			fc.property(table, (keys) => keyOwner(cmdQ, true, keys) === "system"),
 			OPTS,
 		);
+	});
+});
+
+describe("today's PR 1 spelling and escape laws", () => {
+	it("K7: accepted spellings round-trip through matching, file spelling and displayed Shift", () => {
+		const examples = [
+			["f6", "F6", false, false, false],
+			["shift+f6", "F6", true, false, false],
+			["cmd+shift+w", "W", true, true, false],
+			["ctrl+shift+left", "ArrowLeft", true, false, true],
+			["N", "N", true, false, false],
+			["|", "|", true, false, false],
+			["İ", "İ", false, false, false],
+			["🦊", "🦊", false, false, false],
+		] as const;
+		fc.assert(
+			fc.property(fc.constantFrom(...examples), ([spelling, key, shift, meta, ctrl]) => {
+				const text = `tezgah.zoom = ${JSON.stringify(`<prefix>${spelling}`)}`;
+				const decoded = decodeKeys(text, false);
+				expect(Result.isSuccess(decoded), text).toBe(true);
+				if (Result.isFailure(decoded)) return;
+				const binding = decoded.success.rows.find((row) => row.does === "tezgah.zoom")?.keys[0];
+				expect(binding).toBeDefined();
+				if (binding === undefined) return;
+				const again = decodeKeys(
+					`tezgah.zoom = ${JSON.stringify(`<prefix>${spell(binding.key)}`)}`,
+					false,
+				);
+				expect(Result.isSuccess(again)).toBe(true);
+				if (Result.isSuccess(again)) expect(again.success.rows).toEqual(decoded.success.rows);
+				expect(
+					matchPress(
+						{key, code: "", shift, meta, ctrl, alt: false, composing: false, altGraph: false},
+						[binding],
+						false,
+					),
+				).toEqual(binding);
+				const cap = capOf(binding.key);
+				if (spelling.includes("shift")) expect(cap).toContain("⇧");
+				if (spelling === "|") expect(cap).toBe("|");
+				if (spelling === "İ" || spelling === "🦊") expect(cap).toBe(key);
+			}),
+			{seed: 119120, numRuns: 100},
+		);
+		const base = fc.constantFrom(
+			...["x", "w", "N", "|", "+", "İ", "ı", "Ж", "é", "🦊"].map((key) => ({word: key, key})),
+			...Array.from({length: 24}, (_, i) => ({word: `f${i + 1}`, key: `F${i + 1}`})),
+			{word: "left", key: "ArrowLeft"},
+			{word: "right", key: "ArrowRight"},
+			{word: "return", key: "Enter"},
+			{word: "esc", key: "Escape"},
+			{word: "space", key: " "},
+		);
+		fc.assert(
+			fc.property(
+				base,
+				fc.boolean(),
+				fc.boolean(),
+				fc.boolean(),
+				fc.boolean(),
+				(baseKey, ctrl, alt, meta, shift) => {
+					const spelling = [
+						...(ctrl ? ["control"] : []),
+						...(alt ? ["option"] : []),
+						...(shift ? ["shift"] : []),
+						...(meta ? ["command"] : []),
+						baseKey.word,
+					].join("+");
+					const decoded = decodeKeys(
+						`tezgah.zoom = ${JSON.stringify(`<prefix>${spelling}`)}`,
+						false,
+					);
+					if (Result.isFailure(decoded)) return;
+					const binding = decoded.success.rows.find((row) => row.does === "tezgah.zoom")?.keys[0];
+					expect(binding).toBeDefined();
+					if (binding === undefined) return;
+					const key =
+						shift && /^[a-z]$/.test(baseKey.key) ? baseKey.key.toUpperCase() : baseKey.key;
+					expect(
+						matchPress(
+							{key, code: "", ctrl, alt, meta, shift, composing: false, altGraph: false},
+							[binding],
+							false,
+						),
+					).toEqual(binding);
+					const roundtrip = decodeKeys(
+						`tezgah.zoom = ${JSON.stringify(`<prefix>${spell(binding.key)}`)}`,
+						false,
+					);
+					expect(Result.isSuccess(roundtrip)).toBe(true);
+					if (Result.isSuccess(roundtrip))
+						expect(roundtrip.success.rows).toEqual(decoded.success.rows);
+					expect(capOf(binding.key)).not.toContain("<");
+					if (shift && (/^(F\d+|Arrow|Enter|Escape)/.test(baseKey.key) || ctrl || alt || meta))
+						expect(capOf(binding.key)).toContain("⇧");
+				},
+			),
+			{seed: 119120, numRuns: 150},
+		);
+	});
+	it("K15: every accepted table keeps effective prefix navigation or a standalone focus command", () => {
+		const focusWords = defaults.rows
+			.filter((row) => row.does.startsWith('tezgah."focus --to '))
+			.map((row) => row.does);
+		const emptied = focusWords.map((does) => `${does} = []`);
+		const no = decodeKeys(emptied.join("\n"), true);
+		expect(Result.isFailure(no)).toBe(true);
+		if (Result.isFailure(no)) expect(no.failure.why).toMatch(/focus|way out|terminal/i);
+		fc.assert(
+			fc.property(fc.subarray(focusWords), (removed) => {
+				const read = decodeKeys(removed.map((does) => `${does} = []`).join("\n"), true);
+				if (Result.isFailure(read)) return;
+				const focus = read.success.rows.filter((row) => row.does.startsWith('tezgah."focus --to '));
+				expect(
+					focus.some((row) =>
+						row.keys.some(
+							(key) =>
+								key._tag === "after_prefix" ||
+								(key._tag === "alone" &&
+									!read.success.ignore.includes(key.key) &&
+									key.key !== read.success.prefix),
+						),
+					),
+				).toBe(true);
+			}),
+			{seed: 119120, numRuns: 100},
+		);
+		const saved = decodeKeys(
+			[
+				...emptied.filter((line) => !line.startsWith('tezgah."focus --to next"')),
+				'tezgah."focus --to next" = "f8"',
+			].join("\n"),
+			true,
+		);
+		expect(Result.isSuccess(saved)).toBe(true);
 	});
 });
 

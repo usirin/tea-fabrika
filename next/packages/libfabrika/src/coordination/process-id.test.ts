@@ -1,8 +1,8 @@
 // P10/P33 shared generator contract. ProcessIdGenerator.layer owns monotonic state; next is an
 // Effect<ProcessId>. The schema stays in data/trace.ts. RFC 9562 §5.7, TypeID's base32 encoding.
 // Plants: UUIDv4 in a TypeID wrapper; random ids in one ms; wall-clock rollback; a constant id.
-import {describe, expect, it} from "@effect/vitest";
-import {Clock, Effect, Schema} from "effect";
+import {describe, expect, it, vi} from "@effect/vitest";
+import {Clock, Effect, Exit, Schema} from "effect";
 import {TestClock} from "effect/testing";
 import {ProcessId} from "../data/trace.ts";
 import * as Coordination from "./index.ts";
@@ -13,6 +13,33 @@ const decode = (id: string): Uint8Array => {
 	return Uint8Array.from({length: 16}, (_, i) => Number((value >> BigInt((15 - i) * 8)) & 255n));
 };
 describe("P10 shared process ids", () => {
+	it.effect("monotonic: exhausted random bits advance the clock before the next id", () =>
+		Effect.gen(function* () {
+			const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
+				if (array instanceof Uint8Array) array.fill(255);
+				return array;
+			});
+			try {
+				yield* TestClock.setTime(1_790_000_000_000);
+				const gen = yield* Coordination.ProcessIdGenerator;
+				const before = yield* gen.next;
+				const after = yield* gen.next;
+				expect(after > before).toBe(true);
+				expect([...decode(after).slice(0, 6)].reduce((n, b) => n * 256 + b, 0)).toBe(
+					1_790_000_000_001,
+				);
+			} finally {
+				random.mockRestore();
+			}
+		}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
+	);
+	it.effect("shape: a clock before the UUID epoch cannot produce a process id", () =>
+		Effect.gen(function* () {
+			yield* TestClock.setTime(-1);
+			const gen = yield* Coordination.ProcessIdGenerator;
+			expect(Exit.isFailure(yield* Effect.exit(gen.next))).toBe(true);
+		}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
+	);
 	it.effect("shape: a canonical TypeID containing UUIDv7, not a UUIDv4 plant", () =>
 		Effect.gen(function* () {
 			yield* TestClock.setTime(1_790_000_000_000);

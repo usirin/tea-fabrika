@@ -1,6 +1,6 @@
 # The tiers: the whole plan for `next/`
 
-**Tier 1 approved 2026-11-01. Tiers 2 to 7 proposed. Order of work set 2026-11-01.** All
+**Tier 1 approved 2026-11-01. Tiers 2 to 7 proposed. Order of work set 2026-11-01.** Walked when Tier 2 starts (owner, 2026-11-08): the first proposed tier's plan. All
 the work on `next/` is one plan of seven tiers. Each tier is one pass across all five
 layers, and each ends with something a person can use. No layer gets finished alone. Only
 Tier 1 is committed. It started 2026-11-05 with its exam. *Changed 2026-11-05 by the owner:* `next/` no

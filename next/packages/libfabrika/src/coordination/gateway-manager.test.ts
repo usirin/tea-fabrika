@@ -210,6 +210,9 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
 						name,
 					).toHaveLength(1);
 				}
+				const join = spans.find((span) => span.name === "gateway.join")!;
+				expect(join.attributes.get("fab.gateway.client")).toBe("tab-a");
+				expect(join.attributes.get("fab.gateway.session")).toBe(A);
 			}).pipe(Effect.provide(world.layer()), Effect.withTracer(tracer));
 		},
 	);

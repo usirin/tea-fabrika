@@ -48,10 +48,10 @@ const DARK = {
 	raised: "#18191b", // slate 2
 	hover: "#ddeaf814", // slate a3
 	edge: "#d3edf81d", // slate a4
-	focus: "#d9edff5d", // slate a8
+	focus: "#dfebfd6d", // slate a9: a8 reads 2.82 on a selected row
 	text: "#edeef0", // slate 12
 	faint: "#f1f7feb5", // slate a11
-	turn: "#3e63dd", // indigo 9
+	"turn-fill": "#3e63dd", // indigo 9
 	"on-turn": "#ffffff", // Radix's rule for text on step 9
 	"turn-text": "#9eb1ff", // indigo 11
 	done: "#71d083", // grass 11
@@ -74,7 +74,7 @@ const LIGHT = {
 	focus: "#00051d74", // slate a9: a8 reads 1.90
 	text: "#1c2024", // slate 12
 	faint: "#0007149f", // slate a11
-	turn: "#3e63dd", // indigo 9
+	"turn-fill": "#3e63dd", // indigo 9
 	"on-turn": "#ffffff",
 	"turn-text": "#002bb7c5", // indigo a11: indigo 11 reads 4.47 on a selected row
 	done: "#203c25", // grass 12: grass 11 reads 4.34 on a hovered row
@@ -146,7 +146,6 @@ const SELECTED = {dark: "#d9edfe25", light: "#0009321f"}; // slate a5: selected
 const BORDER = {dark: "#d6ebfd30", light: "#00002f26"}; // slate a6: a part that is not interactive
 const BORDER_STRONG = {dark: "#d9edff40", light: "#00062e32"}; // slate a7: an interactive part
 const WIRE = {dark: "#d9edff5d", light: "#00083046"}; // slate a8: a strong line
-const RING = {dark: "#dfebfd6d", light: "#00051d74"}; // slate a9: the keyboard ring, a bend
 const TURN_HOVER = {dark: "#5472e4", light: "#3358d4"}; // indigo 10: the solid fill's hover
 const WASH = {dark: "#d8f4f609", light: "#00005506"}; // slate a2: a tile's title bar at rest
 
@@ -169,12 +168,11 @@ const TOKENS: Record<string, Record<Look, string>> = {
 	"--border": BORDER,
 	"--border-strong": BORDER_STRONG,
 	"--wire": WIRE,
-	"--tile-focus": both("focus"),
-	"--focus": RING,
+	"--focus": both("focus"),
 	"--text-primary": both("text"),
 	"--text-faint": both("faint"),
-	"--turn": both("turn-text"),
-	"--turn-fill": both("turn"),
+	"--turn-text": both("turn-text"),
+	"--turn-fill": both("turn-fill"),
 	"--turn-fill-hover": TURN_HOVER,
 	"--turn-fg": both("on-turn"),
 	"--done": both("done"),
@@ -206,10 +204,10 @@ const TOKENS: Record<string, Record<Look, string>> = {
 	"--manti-fill-subtle": both("hover"),
 	"--manti-fill": both("hover"),
 	"--manti-fill-strong": SELECTED,
-	"--manti-focus-ring": RING,
+	"--manti-focus-ring": both("focus"),
 	"--manti-selection-bg": {dark: TERMINALS.dark.selection, light: TERMINALS.light.selection},
 	"--manti-selection-text": both("text"),
-	"--manti-accent-fill": both("turn"),
+	"--manti-accent-fill": both("turn-fill"),
 	"--manti-text-on-accent": both("on-turn"),
 	"--manti-danger-text": both("stuck"),
 	"--manti-danger-icon": both("stuck"),
@@ -448,6 +446,19 @@ describe("law 2: each token in tokens.css is its value, in both looks", () => {
 		expect(colors.filter((name) => !held.has(name))).toEqual([]);
 	});
 
+	// Design language call 4 (decided 2026-11-07): focus is one gray token everywhere, so every ring
+	// and every focused edge draws one value. A second focus token with a value of its own (the old
+	// --tile-focus, slate a8 in dark) would be a second look for the same fact.
+	it("holds one focus value: every focus color token is --focus, or names it by var()", () => {
+		const focus = [...ROOT].filter(
+			([name]) => /focus/.test(name) && LOOKS.some((look) => HEX.test(tokenIn(name, look))),
+		);
+		expect({
+			defined: focus.map(([name]) => name).sort(),
+			own: focus.filter(([name, value]) => name !== "--focus" && value !== "var(--focus)"),
+		}).toEqual({defined: ["--focus", "--manti-focus-ring"], own: []});
+	});
+
 	// The owner, 2026-11-06: the Cmd-K palette has no dim, as Linear's and Discord's have none. The
 	// token stays for a real dialog, which keeps a dim, and Manti's overlay is set from it so none
 	// of Manti's own palette shows. Its step is the owner's pick by eye (principle 8): Radix Themes'
@@ -500,15 +511,22 @@ describe("law 4: every color is a Radix step, or a named bend (principle 5)", ()
 	});
 
 	// The bend list in themes.ts's header names each bend: the dark desk, white on the turn, the
-	// resting edge, and the keyboard ring, now in both looks (flag 3: dark's ring is slate a9 too).
-	it("themes.ts's header lists five bends, the dark keyboard ring among them", () => {
+	// resting edge, and focus. Focus is one token (design language call 4, 2026-11-07), slate a9 in
+	// both looks, so its two bends are one line that names both looks.
+	it("themes.ts's header lists four bends, focus at a9 in both looks among them", () => {
 		const header = /^(\/\/.*\n)+/.exec(THEMES_TS)?.[0] ?? "";
 		const bends = header.split("\n").filter((line) => line.startsWith("// - "));
 		expect({
-			five: /\bfive bends\b/i.test(header),
+			four: /\bfour bends\b/i.test(header),
 			bends: bends.length,
-			darkRing: bends.some((line) => /\bdark\b/i.test(line) && /\ba9\b/.test(line)),
-		}).toEqual({five: true, bends: 5, darkRing: true});
+			focus: bends.filter(
+				(line) =>
+					/\bfocus\b/i.test(line) &&
+					/\ba9\b/.test(line) &&
+					/\bdark\b/i.test(line) &&
+					/\blight\b/i.test(line),
+			).length,
+		}).toEqual({four: true, bends: 4, focus: 1});
 	});
 });
 
@@ -518,7 +536,7 @@ describe("law 5: text and state words read 4.5:1 where they sit (WCAG 1.4.3)", (
 	const TEXT = [
 		"--text-primary",
 		"--text-faint",
-		"--turn",
+		"--turn-text",
 		"--done",
 		"--running",
 		"--stuck",
@@ -571,12 +589,11 @@ describe("law 6: white reads on the turn fill", () => {
 });
 
 describe("law 7: the lines a person must see read 3:1 (WCAG 1.4.11)", () => {
-	it.each(LOOKS)("the tile's focus edge, the turn fill and the keyboard ring, %s", (look) => {
+	it.each(LOOKS)("the turn fill, and focus: every ring and the focused tile's edge, %s", (look) => {
 		const ground = tokenIn("--surface", look);
 		const ring = tokenIn("--focus", look);
 		expect(
 			under([
-				["--tile-focus on --surface", tokenIn("--tile-focus", look), ground, 3],
 				["--turn-fill on --surface", tokenIn("--turn-fill", look), ground, 3],
 				...["--surface-sunken", "--surface", "--surface-raised"].map(
 					(bg) => [`--focus on ${bg}`, ring, tokenIn(bg, look), 3] as const,
@@ -603,7 +620,7 @@ describe("law 7: the lines a person must see read 3:1 (WCAG 1.4.11)", () => {
 		).toEqual([]);
 	});
 
-	// The fifth bend's reason (flag 3): in dark the ring is slate a9, a solid step used as a line,
+	// The focus bend's reason (flag 3): in dark the ring is slate a9, a solid step used as a line,
 	// since slate a8, Radix's step for focus rings, reads under 3:1 on a selected row.
 	it("in dark, slate a8 as the ring would read 2.82 on a selected row, so the ring is a9", () => {
 		const darkA = stepsOf("slate", "darkA");
@@ -633,7 +650,6 @@ const LINES_AND_FILLS = [
 	"--border",
 	"--border-strong",
 	"--wire",
-	"--tile-focus",
 	"--focus",
 	"--turn-fill",
 	"--turn-fill-hover",
@@ -679,7 +695,12 @@ describe("law 9: a line or a fill is never text", () => {
 describe("law 10: the accent says your turn and nothing else", () => {
 	it.each(LOOKS)("the tokens that are an indigo step are the turn's four, %s", (look) => {
 		const indigo = [...ROOT.keys()].filter((name) => INDIGO.has(tokenIn(name, look))).sort();
-		expect(indigo).toEqual(["--manti-accent-fill", "--turn", "--turn-fill", "--turn-fill-hover"]);
+		expect(indigo).toEqual([
+			"--manti-accent-fill",
+			"--turn-fill",
+			"--turn-fill-hover",
+			"--turn-text",
+		]);
 	});
 });
 
@@ -776,11 +797,16 @@ describe("law 13: the top level imports nothing and runs anywhere", () => {
 		]);
 	});
 
-	it("index.ts names only themes.ts, and themes.ts imports nothing", () => {
-		expect({index: [...new Set(modulesIn(INDEX_TS))], themes: modulesIn(THEMES_TS)}).toEqual({
-			index: ["./themes.ts"],
-			themes: [],
-		});
+	// Design foundations PR 2: the fifteen colors come from the generated theme-colors.ts, which
+	// the token build writes from tokens/color/*.toml. It is read here, not at the top, so the laws
+	// above still run when it is missing.
+	it("index.ts names only themes.ts, themes.ts only theme-colors.ts, which imports nothing", () => {
+		const generated = readFileSync(join(import.meta.dirname, "theme-colors.ts"), "utf8");
+		expect({
+			index: [...new Set(modulesIn(INDEX_TS))],
+			themes: modulesIn(THEMES_TS),
+			generated: modulesIn(generated),
+		}).toEqual({index: ["./themes.ts"], themes: ["./theme-colors.ts"], generated: []});
 	});
 
 	// code-graph's impure globals: the process, a clock, randomness, timers, the network, files.
@@ -791,7 +817,10 @@ describe("law 13: the top level imports nothing and runs anywhere", () => {
 			codeOf(ts)
 				.replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
 				.match(impure) ?? [];
-		expect({index: words(INDEX_TS), themes: words(THEMES_TS)}).toEqual({index: [], themes: []});
+		const generated = readFileSync(join(import.meta.dirname, "theme-colors.ts"), "utf8");
+		expect({index: words(INDEX_TS), themes: words(THEMES_TS), generated: words(generated)}).toEqual(
+			{index: [], themes: [], generated: []},
+		);
 	});
 });
 

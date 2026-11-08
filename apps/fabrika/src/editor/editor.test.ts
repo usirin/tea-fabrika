@@ -47,6 +47,17 @@ const seen = (
 	);
 };
 
+it.each(["n", "N", "\r"])("refuses a permission ask with %j", (data) => {
+	const folded = replay(editor, {
+		ctx: {programs, history: []},
+		msgs: [keys("turn\r"), {type: "asked", n: 7, text: "Write written.txt"}, keys(data)],
+	});
+	expect(folded.cmds.filter((c) => c.type === "answer")).toEqual([
+		{type: "answer", n: 7, allow: false},
+	]);
+	expect(folded.state.asking).toBeNull();
+});
+
 describe("the prompt", () => {
 	it("starts with the prompt, the cursor after it", () => {
 		expect(seen([])).toEqual(["tsh$ |"]);

@@ -1,0 +1,9 @@
+type = "background"
+tier = "global"
+owner = "design"
+description = "what opens over the desk"
+theme = "raised"
+
+[colors]
+dark = "slate.2"
+light = "slate.1"

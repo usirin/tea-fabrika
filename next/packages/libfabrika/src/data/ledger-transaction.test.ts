@@ -1,7 +1,7 @@
 // P33, p79 atomic exit's storage contract. Each plant is named beside its law.
 import {DatabaseSync} from "node:sqlite";
 import {afterEach, describe, expect, it} from "@effect/vitest";
-import {Effect, Layer, Stream} from "effect";
+import {Effect, Layer, Stream, Tracer} from "effect";
 import {LedgerTransaction} from "./ledger-transaction.ts";
 import {Doorbell, Ledger, LedgerError} from "./ledger.ts";
 import type {Line} from "./log.ts";
@@ -51,6 +51,11 @@ const setup = (
 	return {db, sql, fault, layer};
 };
 
+/** A step that throws as the platform does: a string `code`, no SQLite `errcode`. */
+const diskFailure = (): never => {
+	throw Object.assign(new Error("disk"), {code: "EIO"});
+};
+
 describe("p79, LedgerTransaction", () => {
 	it.effect(
 		"plant, separate numbering: reads see earlier writes and share P6's rev and pos",
@@ -61,7 +66,7 @@ describe("p79, LedgerTransaction", () => {
 				const tx = yield* LedgerTransaction;
 				expect(yield* ledger.append("a", "one", line(1))).toEqual({_tag: "placed", rev: 1, pos: 1});
 				expect(
-					yield* tx.run((turn) => {
+					yield* tx.transact((turn) => {
 						const a = turn.append("a", "two", line(2));
 						const b = turn.append("b", "three", line(3));
 						return {a, b, read: [...turn.read("a", 1)].map((row) => row.id)};
@@ -87,7 +92,7 @@ describe("p79, LedgerTransaction", () => {
 				const before = store.fault.passed;
 				expect(
 					(yield* Effect.flip(
-						tx.run((turn) => {
+						tx.transact((turn) => {
 							turn.append("a", "two", line(2));
 							turn.append("b", "three", line(3));
 						}),
@@ -107,6 +112,26 @@ describe("p79, LedgerTransaction", () => {
 			}).pipe(Effect.provide(store.layer));
 		},
 	);
+	it.effect("plant, drop a string code: a platform error's code rides as a span tag", () => {
+		const store = setup();
+		const spans: Array<Tracer.NativeSpan> = [];
+		const tracer = Tracer.make({
+			span: (options) => {
+				const span = new Tracer.NativeSpan(options);
+				spans.push(span);
+				return span;
+			},
+		});
+		return Effect.gen(function* () {
+			const tx = yield* LedgerTransaction;
+			const error = yield* Effect.flip(tx.transact(diskFailure));
+			expect(error.why).toBe("storage");
+			const codes = spans.flatMap((span) =>
+				[...span.attributes].filter(([key]) => key.endsWith(".code")).map(([, value]) => value),
+			);
+			expect(codes).toEqual(["EIO"]);
+		}).pipe(Effect.provide(store.layer), Effect.withTracer(tracer));
+	});
 	for (const why of ["id_reused", "seen_ahead", "bad_trace"] as const) {
 		it.effect(`plant, keep the first append on ${why}: refusal aborts the entire turn`, () => {
 			const store = setup();
@@ -122,7 +147,7 @@ describe("p79, LedgerTransaction", () => {
 							: line(3);
 				expect(
 					(yield* Effect.flip(
-						tx.run((turn) => {
+						tx.transact((turn) => {
 							turn.append("b", "early", line(2));
 							turn.append("a", why === "id_reused" ? "one" : "late", refused);
 						}),
@@ -148,7 +173,10 @@ describe("p79, LedgerTransaction", () => {
 				yield* ledger.wait("a", 0);
 				yield* ledger.wait("b", 0);
 				const write = () =>
-					tx.run((turn) => [turn.append("a", "one", line(1)), turn.append("b", "two", line(2))]);
+					tx.transact((turn) => [
+						turn.append("a", "one", line(1)),
+						turn.append("b", "two", line(2)),
+					]);
 				const a = yield* write();
 				expect(yield* write()).toEqual(a);
 				expect(rings.sort()).toEqual(["a", "b"]);
@@ -173,14 +201,14 @@ describe("p79, LedgerTransaction", () => {
 			yield* ledger.wait("b", 0);
 			store.fault.after = 1;
 			yield* Effect.flip(
-				tx.run((turn) => {
+				tx.transact((turn) => {
 					turn.append("a", "one", line(1));
 					turn.append("b", "two", line(2));
 				}),
 			);
 			expect(observations).toEqual([]);
 			store.fault.after = null;
-			yield* tx.run((turn) => {
+			yield* tx.transact((turn) => {
 				turn.append("a", "one", line(1));
 				turn.append("b", "two", line(2));
 			});
@@ -203,7 +231,7 @@ describe("p79, LedgerTransaction", () => {
 				const ledger = yield* Ledger;
 				const tx = yield* LedgerTransaction;
 				yield* ledger.wait("a", 0);
-				const write = () => tx.run((turn) => turn.append("a", "one", line(1)));
+				const write = () => tx.transact((turn) => turn.append("a", "one", line(1)));
 				expect(yield* write()).toEqual({rev: 1, pos: 1});
 				expect(yield* write()).toEqual({rev: 1, pos: 1});
 				expect(rings).toBe(1);
@@ -215,10 +243,10 @@ describe("p79, LedgerTransaction", () => {
 		const store = setup();
 		return Effect.gen(function* () {
 			const tx = yield* LedgerTransaction;
-			yield* tx.run((turn) => {
+			yield* tx.transact((turn) => {
 				for (let n = 1; n <= 260; n++) turn.append("a", `m${n}`, line(n));
 			});
-			expect(yield* tx.run((turn) => [...turn.read("a", 0)].map((row) => row.rev))).toEqual(
+			expect(yield* tx.transact((turn) => [...turn.read("a", 0)].map((row) => row.rev))).toEqual(
 				Array.from({length: 260}, (_, i) => i + 1),
 			);
 		}).pipe(Effect.provide(store.layer));
@@ -227,9 +255,11 @@ describe("p79, LedgerTransaction", () => {
 		const store = setup();
 		return Effect.gen(function* () {
 			const tx = yield* LedgerTransaction;
-			yield* tx.run((turn) => turn.append("a", "one", line(1)));
+			yield* tx.transact((turn) => turn.append("a", "one", line(1)));
 			store.db.exec("UPDATE entries SET body='not JSON'");
-			expect((yield* Effect.flip(tx.run((turn) => [...turn.read("a", 0)]))).why).toBe("bad_row");
+			expect((yield* Effect.flip(tx.transact((turn) => [...turn.read("a", 0)]))).why).toBe(
+				"bad_row",
+			);
 		}).pipe(Effect.provide(store.layer));
 	});
 });

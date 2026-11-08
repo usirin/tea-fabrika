@@ -2,6 +2,7 @@
 import {describe, expect, it} from "@effect/vitest";
 import {Effect, Layer, Schema} from "effect";
 import {Doorbell, Ledger} from "../data/ledger.ts";
+import {lineFor} from "../data/log.ts";
 import {Mailbox} from "./mailbox.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {
@@ -11,6 +12,7 @@ import {
 	X,
 	again,
 	brain,
+	CLIENT,
 	first,
 	from,
 	ids,
@@ -20,7 +22,7 @@ import {
 	type Storage,
 	watcher,
 } from "./process.test-support.ts";
-import {Down, Recipient, Start} from "./process.ts";
+import {Down, Owner, Recipient, Start} from "./process.ts";
 
 const signals = (store: Storage) =>
 	store
@@ -116,7 +118,8 @@ describe("p79, addressed and independent monitors", () => {
 				yield* monitor(store, "watch:1");
 				const before = store.rows();
 				expect((yield* Effect.flip(monitor(store, "watch:1", W))).why).toBe("bad_ref");
-				expect((yield* Effect.flip(cancel(store, "watch:1", X))).why).toBe("bad_ref");
+				// Watches are keyed by (recipient, ref): X has no watch:1, so its cancel is a no-op.
+				yield* cancel(store, "watch:1", X);
 				expect(store.rows()).toEqual(before);
 				yield* exit(store);
 				expect(signals(store)[0]?.m.process).toBe(A);
@@ -313,13 +316,235 @@ describe("p79, cancellation, replay and stale delivery", () => {
 				yield* Mailbox.use((mailbox) =>
 					mailbox.send("watcher:1", "delayed-old", old.m, from()),
 				).pipe(Effect.provide(manager(store)));
+				// The delayed copy's id is not its signal id, so it is plain mail, never B's signal.
 				const later = yield* fresh(store, B);
-				expect(later).toHaveLength(1);
-				expect(later[0]!.id).not.toBe(old.id);
-				expect(Schema.decodeUnknownSync(Down)(later[0]!.m).to).toEqual(
+				const owed = later.filter((letter) => letter.id !== "delayed-old");
+				expect(owed).toHaveLength(1);
+				expect(owed[0]!.id).not.toBe(old.id);
+				expect(Schema.decodeUnknownSync(Down)(owed[0]!.m).to).toEqual(
 					Recipient.cases.process.make({process: B}),
 				);
 			});
 		},
 	);
+});
+
+// P33 review rules. A DOWN is a signal only under its own id, with a watch of that recipient,
+// ref and target, live or canceled. Anything else is plain mail. Watches key on (recipient, ref).
+const toW = Recipient.cases.process.make({process: W});
+const send = (store: Storage, id: string, m: unknown) =>
+	Mailbox.use((mailbox) => mailbox.send("watcher:1", id, m, from())).pipe(
+		Effect.provide(manager(store)),
+	);
+const demonitored = (store: Storage) =>
+	store
+		.rows()
+		.filter((row) => row._tag === "demonitored")
+		.map((row) => row.body as {readonly ref: string; readonly why?: unknown});
+
+describe("P33, a DOWN is a signal only under its signal id and a matching watch", () => {
+	it.effect("a DOWN-tagged letter under any other id is plain mail: cancel never drops it", () => {
+		const store = storage();
+		return Effect.gen(function* () {
+			yield* seed(store);
+			yield* monitor(store, "watch:1");
+			yield* cancel(store, "watch:1");
+			yield* send(
+				store,
+				"forged",
+				Down.make({ref: "watch:1", process: A, why: "crashed", to: toW}),
+			);
+			expect((yield* fresh(store)).map((letter) => letter.id)).toEqual(["forged"]);
+		});
+	});
+	it.effect(
+		"a DOWN under its signal id with no matching monitored watch is plain mail: cancel never drops it",
+		() => {
+			const store = storage();
+			return Effect.gen(function* () {
+				yield* seed(store);
+				yield* monitor(store, "watch:1");
+				yield* monitor(store, "real", X);
+				yield* cancel(store, "watch:1");
+				yield* exit(store, X);
+				const real = signals(store).map((row) => row.id);
+				expect(real).toHaveLength(1);
+				// watch:1 targets A, so a DOWN for B under a signal id matches no watch. Mail cannot
+				// take a signal id, so only another writer's raw row could, and it is plain mail.
+				const id = JSON.stringify(["DOWN", toW, "watch:1"]);
+				const m = Down.make({ref: "watch:1", process: B, why: "crashed", to: toW});
+				yield* Ledger.use((ledger) =>
+					ledger.append("watcher:1/inbox", id, lineFor(from({by: CLIENT}), {_tag: "send", m})),
+				).pipe(Effect.provide(manager(store)));
+				expect((yield* fresh(store)).map((letter) => letter.id)).toEqual([...real, id]);
+			});
+		},
+	);
+	it.effect(
+		"a malformed DOWN-tagged row never throws or wedges the inbox: later receives still work",
+		() => {
+			const store = storage();
+			return Effect.gen(function* () {
+				yield* seed(store);
+				yield* send(store, "bad", {_tag: "DOWN", ref: 5});
+				yield* send(store, "good", {hello: 1});
+				expect((yield* fresh(store)).map((letter) => letter.id)).toEqual(["bad", "good"]);
+				const last = (yield* fresh(store)).at(-1)!;
+				yield* send(store, "later", {hello: 2});
+				expect((yield* fresh(store, W, last.rev)).map((letter) => letter.id)).toEqual(["later"]);
+			});
+		},
+	);
+});
+
+describe("P33, watches are keyed by (recipient, ref)", () => {
+	it.effect("two recipients may both use ref watch:1, and each cancel is its own", () => {
+		const store = storage();
+		return Effect.gen(function* () {
+			yield* seed(store);
+			yield* monitor(store, "watch:1", A, W);
+			yield* monitor(store, "watch:1", A, X);
+			yield* cancel(store, "watch:1", X);
+			store.reopen();
+			yield* exit(store);
+			expect(
+				(yield* fresh(store)).map((letter) => Schema.decodeUnknownSync(Down)(letter.m)),
+			).toEqual([Down.make({ref: "watch:1", process: A, why: "crashed", to: toW})]);
+			expect(yield* fresh(store, X)).toEqual([]);
+		});
+	});
+	it.effect("a restarted watcher may reuse its own ref after its old watch ended", () => {
+		const store = storage();
+		return Effect.gen(function* () {
+			yield* seed(store);
+			yield* monitor(store, "watch:1");
+			yield* exit(store, W);
+			yield* ProcessManager.use((p) =>
+				p.start(
+					Start.cases.again.make({
+						id: "watcher:restart",
+						after: W,
+						why: "crashed",
+						name: "watcher:1",
+						code: {program: "watcher", hash: "build-a"},
+					}),
+					from(),
+				),
+			).pipe(Effect.provide(manager(store, brain(), ids(B).next)));
+			yield* monitor(store, "watch:1", A, B);
+			yield* exit(store);
+			expect(
+				(yield* fresh(store, B)).map((letter) => Schema.decodeUnknownSync(Down)(letter.m)),
+			).toEqual([
+				Down.make({
+					ref: "watch:1",
+					process: A,
+					why: "crashed",
+					to: Recipient.cases.process.make({process: B}),
+				}),
+			]);
+		});
+	});
+});
+
+describe("P33, monitor again after demonitor", () => {
+	it.effect(
+		"the re-monitor takes effect: the watch is live again and a later exit sends DOWN",
+		() => {
+			const store = storage();
+			return Effect.gen(function* () {
+				yield* seed(store);
+				yield* monitor(store, "watch:1");
+				yield* cancel(store, "watch:1");
+				yield* monitor(store, "watch:1");
+				store.reopen();
+				yield* exit(store);
+				expect(
+					(yield* fresh(store)).map((letter) => Schema.decodeUnknownSync(Down)(letter.m)),
+				).toEqual([Down.make({ref: "watch:1", process: A, why: "crashed", to: toW})]);
+			});
+		},
+	);
+});
+
+describe("P33, demonitored records why", () => {
+	it.effect("a demonitor writes why canceled; a watcher's exit writes why watcher_exited", () => {
+		const store = storage();
+		return Effect.gen(function* () {
+			yield* seed(store);
+			yield* monitor(store, "by-cancel", A, W);
+			yield* monitor(store, "by-exit", A, X);
+			yield* cancel(store, "by-cancel");
+			yield* exit(store, X);
+			expect(Object.fromEntries(demonitored(store).map((body) => [body.ref, body.why]))).toEqual({
+				"by-cancel": "canceled",
+				"by-exit": "watcher_exited",
+			});
+		});
+	});
+});
+
+describe("P33, a client's inbox is not a process's inbox", () => {
+	// A client and a process may share a name. Each DOWN lands in its own recipient's inbox only.
+	const notesClient = Recipient.cases.client.make({client: "notes", session: X});
+	const asClient = {owner: Owner.cases.brain.make({}), recipient: notesClient};
+	const twin = (store: Storage, name: string) =>
+		Effect.gen(function* () {
+			yield* seed(store);
+			const placed = yield* Effect.exit(
+				ProcessManager.use((p) =>
+					p.start(first(`start:${name}`, name, {program: "notes", hash: "build-a"}), from()),
+				).pipe(Effect.provide(manager(store, brain(), ids(B).next))),
+			);
+			if (placed._tag === "Failure") return false;
+			yield* ProcessManager.use((p) => p.monitor("watch:notes", A, from())).pipe(
+				Effect.provide(manager(store, watcher(B))),
+			);
+			yield* ProcessManager.use((p) => p.monitor("watch:notes", A, from())).pipe(
+				Effect.provide(manager(store, asClient)),
+			);
+			yield* exit(store);
+			return true;
+		});
+	it.effect("a client notes and a process notes each get their DOWN in their own inbox", () => {
+		const store = storage();
+		return Effect.gen(function* () {
+			expect(yield* twin(store, "notes")).toBe(true);
+			const downs = signals(store);
+			const forProcess = downs.filter((down) => down.m.to._tag === "process");
+			const forClient = downs.filter((down) => down.m.to._tag === "client");
+			expect(forProcess.map((down) => down.stream)).toEqual(["notes/inbox"]);
+			expect(forClient.map((down) => down.m.to)).toEqual([notesClient]);
+			expect(forClient.map((down) => down.stream)).toEqual(["client:notes/inbox"]);
+			const letters = yield* fresh(store, B);
+			expect(letters.map((letter) => letter.m)).toEqual([forProcess[0]!.m]);
+		});
+	});
+	it.effect("plain mail to process notes never reaches client notes's inbox", () => {
+		const store = storage();
+		return Effect.gen(function* () {
+			expect(yield* twin(store, "notes")).toBe(true);
+			yield* Mailbox.use((mail) => mail.send("notes", "letter:1", {hello: "notes"}, from())).pipe(
+				Effect.provide(manager(store)),
+			);
+			const rows = store.rows().filter((row) => row.id === "letter:1");
+			expect(rows.map((row) => row.stream)).toEqual(["notes/inbox"]);
+			const clientInbox = store.rows().filter((row) => row.stream === "client:notes/inbox");
+			expect(clientInbox.map((row) => row.id)).not.toContain("letter:1");
+			expect(clientInbox).toHaveLength(1);
+		});
+	});
+	it.effect("a process named client:notes never shares client notes's inbox", () => {
+		const store = storage();
+		return Effect.gen(function* () {
+			// Refusing the name or giving it another inbox both keep the two apart.
+			if (!(yield* twin(store, "client:notes"))) return;
+			const downs = signals(store);
+			const forProcess = downs.filter((down) => down.m.to._tag === "process");
+			const forClient = downs.filter((down) => down.m.to._tag === "client");
+			expect(forProcess).toHaveLength(1);
+			expect(forClient).toHaveLength(1);
+			expect(forClient[0]!.stream).not.toBe(forProcess[0]!.stream);
+		});
+	});
 });

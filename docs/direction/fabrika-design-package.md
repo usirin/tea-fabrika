@@ -31,6 +31,13 @@ The first slice:
   Manti mapping points at, so those tokens come along.
 - **The Manti mapping.** It was `apps/fabrika/src/window/theme.css`, and now is in `tokens.css`: Manti's `--manti-*` tokens,
   set from our own names ([UI on Manti](./ui-on-manti.md)).
+- *Changed 2026-11-07 (design language, call 5; built in design foundations PR 2, ticket 263):* the
+  colors and the Manti mapping are data now. Each color token is one TOML file in
+  `tokens/color/`, with its steps, what it sits on and the contrast it must reach there, and
+  `tokens/manti.toml` maps Manti's tokens. The token build (`src/build/tokens.ts`, `pnpm tokens`)
+  checks every floor and writes `tokens.css`'s two marked regions, `src/theme-colors.ts` (which
+  `themes.ts` reads) and `src/token-names.json`. `pnpm lint` fails when one has drifted. Only that
+  build imports `@radix-ui/colors` 3.0.0.
 - **The text styles,** from [typography](./typography.md). Six text styles on Manti's `Text` and
   `Heading`: `title`, `heading`, `strong`, `body`, `quiet`, `label`, in `text-styles.ts`. *Changed
   2026-11-07 (P31): they were "text roles", proposed; typography decided them as text styles on

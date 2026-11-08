@@ -1,6 +1,6 @@
 # The frame: every part of the window, named once
 
-**Decided 2026-11-03.** The words below were picked by the owner one by one and are in the
+**Decided 2026-11-03.** Today's version; walked if a tryout is picked (owner, 2026-11-08). The words below were picked by the owner one by one and are in the
 glossary, [`.glossary/TERMS.md`](../../.glossary/TERMS.md), under Frame. The parts listed under
 "Nobody decides these yet" stay **proposed**. Reading only: no code, no tests, nothing ran. This
 note names each part of fabrika's window in one place, so the owner and every agent use the same

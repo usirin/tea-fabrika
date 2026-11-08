@@ -1,6 +1,6 @@
 # An agent is a program: `claude` and `codex`, at parity
 
-Proposed 2026-10-29, reshaped 2026-10-30 after experiment 169 (tracker #87).
+Proposed 2026-10-29, reshaped 2026-10-30 after experiment 169 (tracker #87). Walked when Tier 5 starts (owner, 2026-11-08): claude and codex programs.
 Each agent maker gets a tea program of its own, `claude` and `codex`, each its
 own package in `programs/`, like `trace` and `tracker`. They are built
 together so neither one's shape leaks into the other. A person runs one by

@@ -221,6 +221,17 @@ const PLANTS: readonly Plant[] = [
 			["export declare const b: {c: 1};", false],
 		],
 	},
+	// Code never reaches a primitive (design language call 3's lint half): only the token build,
+	// under packages/fabrika-design/src/build/, imports Radix. The path case is below.
+	{
+		code: "eslint(no-restricted-imports)",
+		prelude: [],
+		lines: [
+			['import {slateDarkA} from "@radix-ui/colors";', true],
+			['import "@radix-ui/colors/slate-dark-alpha.css";', true],
+			['export {slate} from "effect";', false],
+		],
+	},
 ];
 
 describe("each rule refuses what it is there to refuse", () => {
@@ -457,6 +468,22 @@ describe("rules that apply by path", () => {
 		const {at, file} = plantIn(folder, EFFECTS);
 		made.push(at);
 		expect(fires(file, "react-hooks(exhaustive-deps)")).toEqual([3]);
+	});
+
+	const RADIX =
+		'import {slateDarkA} from "@radix-ui/colors";\nexport const a9 = slateDarkA.slateA9;\n';
+
+	it("the token build, under packages/fabrika-design/src/build/, may import Radix", () => {
+		mkdirSync(join(ROOT, "packages/fabrika-design/src/build"), {recursive: true});
+		const {at, file} = plantIn("packages/fabrika-design/src/build", RADIX);
+		made.push(at);
+		expect(fires(file, "eslint(no-restricted-imports)")).toEqual([]);
+	});
+
+	it("the rest of the design package may not, so the exception is the build's folder alone", () => {
+		const {at, file} = plantIn("packages/fabrika-design/src", RADIX);
+		made.push(at);
+		expect(fires(file, "eslint(no-restricted-imports)")).toEqual([1]);
 	});
 
 	it("a `use` in a .ts file under packages/ is left alone: it is Effect's, not a hook", () => {

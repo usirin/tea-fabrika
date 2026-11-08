@@ -1,7 +1,11 @@
 import {fabrika, fabrikaLight, type Theme} from "@kampus/fabrika-design";
 import type {Shell} from "@kampus/fabrika-old";
 import {describe, expect, it} from "vitest";
-import {table} from "./screen.ts";
+import {statusRow, table} from "./screen.ts";
+
+it("cuts a long status to one row and keeps the text before the ellipsis", () => {
+	expect(statusRow("reading a.txt and b.txt", 12)).toBe("\x1b[90mreading a.…\x1b[39m");
+});
 
 // The colors a table is printed in (tracker ticket 144). The line editor runs in the host, and its
 // bytes go to every terminal on the desk, while a look is each viewer's own. So a table names its

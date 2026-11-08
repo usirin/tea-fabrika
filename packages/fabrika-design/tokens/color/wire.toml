@@ -1,0 +1,10 @@
+type = "border"
+tier = "global"
+owner = "design"
+description = "a strong line; it reads 1.90 on the light ground, so no fact rides on it alone"
+on = ["surface", "surface-raised"]
+carries = "nothing"
+
+[colors]
+dark = "slate.a8"
+light = "slate.a8"

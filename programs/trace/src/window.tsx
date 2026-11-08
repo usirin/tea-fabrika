@@ -128,7 +128,7 @@ const KIND_WORD: Readonly<Record<Row["kind"], string>> = {
 	step: "step",
 };
 
-/** The ruler: ranked ticks, the finer ranks shown only where the ruler is wide (window.css). */
+/** The ruler: ranked ticks, rank 0 to 3, the finer ranks shown only where the ruler is wide (window.css). */
 function Ruler({length}: {readonly length: number}) {
 	return (
 		<div className="wf-track wf-ruler">

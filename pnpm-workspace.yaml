@@ -39,7 +39,7 @@ catalog:
   '@anthropic-ai/sandbox-runtime': 0.0.81
   '@demlik/code-graph': 0.12.0
   '@demlik/structure-sweep': 0.3.9
-  '@demlik/tea': 0.23.0
+  '@demlik/tea': 0.25.0
   '@effect/opentelemetry': 4.1.1
   '@effect/platform-node': 4.1.1
   '@effect/tsgo': 0.63.0
@@ -71,6 +71,9 @@ catalog:
   # The markdown window's code colors (programs/markdown): Pierre's highlighter, its lexers in one
   # WebAssembly module. Apache-2.0, its themes MIT or Apache-2.0. Held exact: a beta.
   '@pierre/highlights': 0.3.0
+  # Radix Colors, MIT: the steps the token build reads (packages/fabrika-design/src/build/tokens.ts).
+  # Only that build imports it (.oxlintrc.json). Held exact: a new version changes the steps.
+  '@radix-ui/colors': 3.0.0
   '@rslib/core': 1.0.5
   # The mutation step (packages/pipeline/src/stages/mutation), held exact: experiment 124 ran 10.1.1.
   '@stryker-mutator/core': 10.1.1
@@ -139,8 +142,6 @@ patchedDependencies:
   '@manti-ui/react@0.13.0': patches/@manti-ui__react@0.13.0.patch
   # Draw on change, and a hollow cursor when a tile is unfocused (experiment 142).
   ghostty-web@0.4.0: patches/ghostty-web@0.4.0.patch
-  # `Machine.make` and `Cmd.make` on `@demlik/tea/effect`: a machine named by two Effect schemas,
-  # and the Effect `Cmd.define` renamed `make` (https://github.com/kamp-us/demlik/issues/870 and
-  # https://github.com/kamp-us/demlik/issues/871), on the built files. Drop it at the release that
-  # ships them.
-  '@demlik/tea@0.23.0': patches/@demlik__tea@0.23.0.patch
+
+minimumReleaseAgeExclude:
+  - '@demlik/tea@0.24.0 || 0.25.0'

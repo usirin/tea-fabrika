@@ -1,3 +1,4 @@
+import {readFileSync} from "node:fs";
 import {Result} from "effect";
 import {describe, expect, it} from "vitest";
 import {commandOn, decodeKeys, defaults, Does, type Key, type Keys, spell} from "./keymap.ts";
@@ -343,12 +344,6 @@ describe("a file that is refused, with its line (p7)", () => {
 			"cmd+q is the system's, so the app never hears it",
 		],
 		[
-			"the palette after the prefix, since the palette is the window's",
-			'palette.open = "<prefix>p"',
-			1,
-			"palette.open is the window's, so it takes a key pressed alone, such as cmd+k, not <prefix>p",
-		],
-		[
 			"the prefix after itself",
 			'tezgah.zoom = "<prefix>ctrl+b"',
 			1,
@@ -399,6 +394,33 @@ describe("a file that is refused, with its line (p7)", () => {
 	it("says why a file is not TOML in the parser's words, not its first letter", () => {
 		const no = refused(file('prefix = "ctrl+a"', "tezgah.zoom = "));
 		expect(no.why).toMatch(/^not TOML: \S.{8,}$/);
+	});
+});
+
+describe("today's configurable keys PR 1", () => {
+	it("K5: Shift-F6 and Cmd-Shift-W decode independently of their unshifted keys", () => {
+		const keys = read('tezgah.zoom = ["f6", "shift+f6", "cmd+shift+w"]');
+		expect(rowOf(keys, "tezgah.zoom")?.keys).toEqual([
+			alone("<f6>"),
+			alone("<s-f6>"),
+			alone("<s-m-w>"),
+		]);
+		expect(spell("<s-f6>")).toBe("shift+f6");
+		expect(spell("<s-m-w>")).toBe("shift+cmd+w");
+	});
+	it("K9: a hand-file clash refuses the whole file and names both commands at the later assignment", () => {
+		const text = readFileSync(
+			new URL("../../../../fixtures/keybindings/clash.toml", import.meta.url),
+			"utf8",
+		);
+		const no = refused(text);
+		expect(no.line).toBe(7);
+		expect(no.why).toContain("tezgah.zoom");
+		expect(no.why).toContain('tezgah."split --to down"');
+		expect(no.why).toContain("<prefix>m");
+	});
+	it("K17: the palette accepts a prefix sequence", () => {
+		expect(commandOn(read('palette.open = "<prefix>p"'), after("p"))).toBe("palette.open");
 	});
 });
 

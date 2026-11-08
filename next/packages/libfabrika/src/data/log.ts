@@ -92,6 +92,8 @@ export const Appended = Schema.TaggedUnion({
 			"seen_ahead",
 			"id_reused",
 			"too_big",
+			// Not the ledger's own answer: a writer above it refused a write that is not its to make.
+			"forbidden",
 		]),
 	},
 });

@@ -20,8 +20,16 @@ const keyParts = (blob: Uint8Array) =>
 export const passkeyBlob = (line: string): Option.Option<Bytes> => {
 	const [kind, base64] = line.split(/\s+/);
 	if (kind !== KEY || base64 === undefined) return Option.none();
-	return Option.filter(Option.getSuccess(Base64.decode(base64)), (b) => Option.isSome(keyParts(b)));
+	return Option.getSuccess(Base64.decode(base64)).pipe(
+		Option.map((bytes) => new Uint8Array(bytes)),
+		Option.filter((bytes) => Option.isSome(keyParts(bytes))),
+	);
 };
+export const passkeyRp = (line: string): Option.Option<string> =>
+	passkeyBlob(line).pipe(
+		Option.flatMap(keyParts),
+		Option.flatMap(({rp}) => Option.liftThrowable(() => text(rp))()),
+	);
 export const PasskeyLine = Schema.String.check(
 	Schema.makeFilter((line: string) =>
 		Option.isSome(passkeyBlob(line)) ? undefined : "an OpenSSH P-256 passkey line",
