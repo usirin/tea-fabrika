@@ -18,7 +18,7 @@ import {
 } from "../coordination/index.ts";
 import {nodeExecution, type Execution, type Declaration} from "./execution.ts";
 import {type Patch} from "./patch.ts";
-import {ProgramDown, stepper} from "./program.ts";
+import {ProgramDown, stepper, type Stepper} from "./program.ts";
 
 /** A function type whose parameters are checked both ways, as a method's are. */
 type Code<A extends ReadonlyArray<unknown>, R> = {call(...args: A): R}["call"];
@@ -57,8 +57,9 @@ export type Incoming = typeof Incoming.Type;
 /** A Cmd handler: it does the outside work and answers with tea's Outcome. */
 export type Handler<R> = Code<[cmd: unknown], Effect.Effect<Outcome<unknown, unknown>, unknown, R>>;
 
-/** A loaded program: its stepper, and the handler for a Cmd it may run, if there is one. */
+/** An in-process program: its pure stepper, runner execution and allowed Cmd handlers. */
 export type Loaded = {
+	readonly stepper: Stepper;
 	readonly execution: Execution;
 	readonly declaration: Declaration;
 	readonly handler: (
@@ -90,6 +91,7 @@ export class ProgramLoader extends Context.Service<
 							Effect.mapError(() => new ProgramDown({why: "load"})),
 						);
 						return {
+							stepper: loaded,
 							execution: nodeExecution(programs[name], build),
 							declaration: {
 								name: loaded.program.name,

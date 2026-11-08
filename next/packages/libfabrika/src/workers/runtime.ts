@@ -12,14 +12,7 @@ import {
 } from "effect";
 import {Base64, Base64Url} from "effect/encoding";
 import type {BrainFact} from "../app/brain-fact.ts";
-import {
-	Alarm,
-	CheckedWriter,
-	ProgramLoader,
-	Recording,
-	WatcherManager,
-	type Incoming,
-} from "../app/entry.ts";
+import {Alarm, CheckedWriter, Recording, WatcherManager, type Incoming} from "../app/entry.ts";
 import type {Descriptor, Sent} from "../app/runner.ts";
 import {ProgramRunner} from "../app/runner.ts";
 import {
@@ -664,7 +657,6 @@ const processLogic = Effect.fnUntraced(function* (
 		yield* rpc(() => p.publish(client, update));
 	});
 	const dependencies = Layer.mergeAll(
-		Layer.succeed(ProgramLoader, {load: (name) => loader.load(name, pid)}),
 		Layer.succeed(CheckedWriter, {
 			sign: (id, parent, kind) =>
 				rpc<unknown>(() => p.sign(pid, id, parent, kind)).pipe(
@@ -706,10 +698,9 @@ const processLogic = Effect.fnUntraced(function* (
 		// Recording captures its sink's services itself (main's P11); the runner no longer provides them.
 		Layer.succeed(Recording, {flush: sink.flush.pipe(Effect.provideContext(services))}),
 	);
-	const runnerLayer = ProgramRunner.layer(saved).pipe(
-		Layer.provide(dependencies),
-		Layer.provide(Layer.succeedContext(services)),
-	);
+	const runnerLayer = ProgramRunner.withLoader(saved, {
+		load: (name) => loader.load(name, pid),
+	}).pipe(Layer.provide(dependencies), Layer.provide(Layer.succeedContext(services)));
 	const runner = yield* ProgramRunner.pipe(Effect.provide(runnerLayer));
 	yield* sink.flush.pipe(Effect.provideContext(services));
 	return {

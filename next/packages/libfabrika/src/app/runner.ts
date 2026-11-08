@@ -111,7 +111,7 @@ const tag = (word: string): string => `fab.runner.${word}`;
 
 /** What a process holds between turns. */
 type Live = {
-	readonly loaded: Loaded;
+	readonly loaded: Omit<Loaded, "stepper">;
 	readonly model: unknown;
 	readonly view: unknown;
 	readonly wake: number | null;
@@ -136,6 +136,7 @@ export class ProgramRunner extends Context.Service<
 		readonly due: (at: number) => Effect.Effect<void, RunnerFailure>;
 	}
 >()("@kampus/libfabrika/ProgramRunner") {
+	/** Load in process, keeping the pure stepper available to callers of ProgramLoader. */
 	static readonly layer = (
 		process: Descriptor,
 	): Layer.Layer<
@@ -143,10 +144,25 @@ export class ProgramRunner extends Context.Service<
 		never,
 		ProgramLoader | ProcessStore | Mailbox | CheckedWriter | WatcherManager | Alarm | Recording
 	> =>
+		Layer.unwrap(Effect.map(ProgramLoader, (loader) => ProgramRunner.withLoader(process, loader)));
+
+	/** Worker programs keep their pure stepper inside the box; the runner needs only execution. */
+	static readonly withLoader = (
+		process: Descriptor,
+		loader: {
+			readonly load: (
+				name: string,
+				build?: string,
+			) => Effect.Effect<Omit<Loaded, "stepper">, ProgramDown>;
+		},
+	): Layer.Layer<
+		ProgramRunner,
+		never,
+		ProcessStore | Mailbox | CheckedWriter | WatcherManager | Alarm | Recording
+	> =>
 		Layer.effect(
 			ProgramRunner,
 			Effect.gen(function* () {
-				const loader = yield* ProgramLoader;
 				const store = yield* ProcessStore;
 				const mailbox = yield* Mailbox;
 				const checked = yield* CheckedWriter;

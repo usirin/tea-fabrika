@@ -1,6 +1,6 @@
 import {type AnyCmdDef, type Tagged} from "@demlik/tea";
 import {Effect, Option, Result, Schema} from "effect";
-import {type Input, ProgramDown, stepper, Step} from "./program.ts";
+import {type Input, ProgramDown, stepper, Step, type Stepper} from "./program.ts";
 import {Saved} from "./state.ts";
 
 const Upgraded = Schema.Struct({saved: Saved, ran: Schema.Array(Schema.String)});
@@ -102,24 +102,28 @@ const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Sche
 };
 
 export const nodeExecution = (declared: unknown, build = "node"): Execution => {
-	const pure = stepper(declared);
+	const pure = Effect.fromResult(stepper(declared)).pipe(
+		Effect.mapError(() => new ProgramDown({why: "load"})),
+	);
+	const run = <A>(why: ProgramDown["why"], f: (pure: Stepper) => A) =>
+		pure.pipe(Effect.flatMap((loaded) => attempt(why, () => f(loaded))));
 	return {
-		init: Effect.fn("execution.init")((saved) => attempt("load", () => pure.init(saved))),
-		step: Effect.fn("execution.step")((model, msg) => attempt("step", () => pure.step(model, msg))),
+		init: Effect.fn("execution.init")((saved) => run("load", (pure) => pure.init(saved))),
+		step: Effect.fn("execution.step")((model, msg) => run("step", (pure) => pure.step(model, msg))),
 		fold: Effect.fn("execution.fold")((model, msg) =>
-			attempt("saved_letter", () => pure.fold(model, msg)),
+			run("saved_letter", (pure) => pure.fold(model, msg)),
 		),
 		upgrade: Effect.fn("execution.upgrade")((saved) =>
-			attempt("saved_state", () => Saved.upgrade(saved, pure.program.state, build)),
+			run("saved_state", (pure) => Saved.upgrade(saved, pure.program.state, build)),
 		),
 		reply: Effect.fn("execution.reply")((cmd, outcome) =>
-			attempt("step", () => reply(pure.program.machine.cmds ?? [], cmd, outcome)),
+			run("step", (pure) => reply(pure.program.machine.cmds ?? [], cmd, outcome)),
 		),
 		admit: Effect.fn("execution.admit")((m) =>
-			attempt("step", () => admits(pure.program.inputs, m)),
+			run("step", (pure) => admits(pure.program.inputs, m)),
 		),
 		check: Effect.fn("execution.check")((kind, fact) =>
-			attempt("step", () => {
+			run("step", (pure) => {
 				const policy = pure.program.writes[kind];
 				return (
 					policy !== undefined && Result.isSuccess(Schema.decodeUnknownResult(policy.schema)(fact))
