@@ -134,6 +134,7 @@ const world = () => {
 	const deliveries: Delivery[] = [];
 	const alarms: Array<number | null> = [];
 	let ids = 0;
+	let starts = 0;
 	let steps = 0;
 	const controls = {throws: true};
 	const Model = Schema.Struct({count: Schema.Int});
@@ -252,7 +253,7 @@ const world = () => {
 		ping: {min: 10000, max: 60000},
 		inputCap: 100,
 		spentCap: 100,
-		nextProcess: () => Effect.succeed(START),
+		nextProcess: () => Effect.sync(() => `process_${String(++starts).padStart(26, "0")}`),
 		notify: () => Effect.void,
 		inputs: {schema: Input, personOnly: [], raw: [], log: Schema.toCodecJson(Input)},
 		facts: {personOnly: []},
