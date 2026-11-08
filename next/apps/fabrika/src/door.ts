@@ -97,7 +97,7 @@ const InputFact = Schema.TaggedUnion({
 		arrivedAt: Schema.Number,
 		traceId: Schema.String,
 		spanId: Schema.String,
-		input: Schema.optional(Schema.Json),
+		input: Schema.optionalKey(Schema.Json),
 	},
 	refused: {
 		method: Schema.String,
