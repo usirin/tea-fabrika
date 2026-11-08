@@ -23,9 +23,9 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
   outside tests, except on a line marked as an edge: `// oxlint-disable-next-line
   fabrika/no-promises -- edge: <why>`. A build that adds one asks the owner, one line
   at a time. *Changed 2026-11-05 (owner): this said a named list of edge files.* Before
-  that change, it said: refuse Promises outside tests and a named list of edge files. They arrive in Tier 1's exam
-  pull request, along with planted lines that must fire. Until then, this note and
-  [AGENTS.md](../../AGENTS.md) are the only guard.
+  that change, it said: refuse Promises outside tests and a named list of edge files. *History: this said the rules would arrive in Tier 1's exam
+  pull request, with planted lines that must fire, and that until then this note and
+  [AGENTS.md](../../AGENTS.md) were the only guard. Tier 1's P2 and P35 built the rules.*
 
 ## Edges the owner has read
 
@@ -73,5 +73,6 @@ the edge list, which ticket 115 sets.*
 ## What it cannot tell us
 
 - Whether Effect's cost shows at the window. It has not been measured.
-- How the rule behaves on real code. Its first count of fires comes with the exam
-  pull request.
+- How the rule behaves on real code. *History: this said its first count of fires would
+  come with the exam pull request. P2 and P35 built the
+  rules.*

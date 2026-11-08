@@ -39,11 +39,11 @@ The test for any file in next/apps/fabrika:
     no   ->  it may stay in the app (wiring, the deploy stack, what starts things)
 ```
 
-- **A from-scratch client gets the same product.** The door, the ledger, the programs, the
-  rules for who may write: all in the library, so a second client cannot drift from fabrika.
+- **A from-scratch client gets the same product.** The door, the ledger, the program runtime,
+  the rules for who may write: all in the library, so a second client cannot drift from fabrika.
 - **The app holds only what is fabrika's own choice:** which Layers it hands in, its entries, its
   deploy stack. Tier 1's "if a file there holds a decision, it moves" is this same test.
-- **What it cannot tell us yet:** which of today's `next/apps/fabrika/src` files fail the test.
+- **What it cannot tell us yet:** which of the current `next/apps/fabrika/src` files fail the test.
   Main's door (`door.ts`, `door-nonce.ts`) is a likely one; a sweep names each file.
 
 ## What was decided

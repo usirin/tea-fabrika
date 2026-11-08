@@ -78,8 +78,7 @@ const r = Schema.decodeUnknownResult(Row)(raw); // Result<Row, SchemaError>
   when constructor input is trusted or when validation failure should abort with a thrown `Error`."
 - **`makeEffect` and `decodeEffect` (with `decodeUnknownEffect`) keep the failure in the error
   channel.** Effect's docs on `makeEffect`: "Use when construction must compose with other `Effect`
-  operations". `makeEffect` answers a bare `SchemaIssue.Issue`, so map it to a domain error at the
-  boundary.
+  operations". `makeEffect` answers a bare `SchemaIssue.Issue`.
 - **`decodeResult` (and `decodeUnknownResult`) only where plain code needs the details.** Effect
   4.1.1's Schema has no `makeResult`; `makeOption` gives none and drops the details.
 - **Untrusted input never takes the throwing one:** saved state, anything off the wire, anything
