@@ -56,6 +56,8 @@ catalog:
   # oxfmt is 0.x, and a new version can change what fires or how a file prints.
   oxfmt: 0.75.0
   oxlint: 1.90.0
+  stylelint: 18.0.0
+  postcss-value-parser: 4.2.0
   '@oxlint/plugins': 1.90.0
   # The React Compiler without Babel, for next/'s compile step (next/apps/fabrika/src/exam/compiler.ts,
   # docs/direction/react-compiler.md). oxc's Rust port and its parser, from oxlint's own repository.
