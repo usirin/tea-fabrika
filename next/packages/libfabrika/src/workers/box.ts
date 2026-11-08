@@ -1,7 +1,7 @@
 import {WorkerEntrypoint} from "cloudflare:workers";
 import {Effect} from "effect";
-import {Declaration, nodeExecution} from "./app/execution.ts";
-import {stepper} from "./app/program.ts";
+import {Declaration, nodeExecution} from "../app/execution.ts";
+import {stepper} from "../app/program.ts";
 
 export const programBox = (declared: unknown, build: string) => {
 	const pure = stepper(declared);

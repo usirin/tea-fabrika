@@ -53,7 +53,6 @@ import {
 	type Sql,
 } from "../data/index.ts";
 import {workerSql} from "../data/worker-sql.ts";
-import {workerLoader, type ProgramSource} from "../workers.ts";
 import type {
 	ConnectionId,
 	DoorCalls,
@@ -62,6 +61,7 @@ import type {
 	ProjectBinding,
 	RecordBinding,
 } from "./bindings.ts";
+import {workerLoader, type ProgramSource} from "./index.ts";
 const Fact = Schema.declare<Parameters<typeof lineFor>[1]>(
 	(value): value is Parameters<typeof lineFor>[1] =>
 		Schema.is(Schema.JsonObject)(value) && typeof value._tag === "string",

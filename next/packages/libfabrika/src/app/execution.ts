@@ -32,6 +32,8 @@ export const Declaration = Schema.Struct({
 });
 export type Declaration = typeof Declaration.Type;
 
+export type ProgramSource = {readonly hash: string; readonly source: string};
+
 export type Execution = {
 	readonly init: (saved: unknown) => Effect.Effect<Step, ProgramDown>;
 	readonly step: (model: unknown, msg: unknown) => Effect.Effect<Step, ProgramDown>;

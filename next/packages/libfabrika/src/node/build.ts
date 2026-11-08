@@ -2,7 +2,7 @@ import {createHash} from "node:crypto";
 import {join} from "node:path";
 import {Effect, Schema} from "effect";
 import {rolldown, type Plugin} from "rolldown";
-import type {ProgramSource} from "../workers.ts";
+import type {ProgramSource} from "../app/execution.ts";
 
 export class BuildError extends Schema.TaggedError<BuildError>()("BuildError", {
 	why: Schema.String,

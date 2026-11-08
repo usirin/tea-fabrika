@@ -1,9 +1,14 @@
 import {Effect, Option, Schema} from "effect";
-import {Declaration, workerExecution, type ExecutionCalls} from "./app/execution.ts";
-import {ProgramDown} from "./app/program.ts";
-export {workerSql} from "./data/worker-sql.ts";
+import {
+	Declaration,
+	workerExecution,
+	type ExecutionCalls,
+	type ProgramSource,
+} from "../app/execution.ts";
+import {ProgramDown} from "../app/program.ts";
+export type {ProgramSource} from "../app/execution.ts";
+export {workerSql} from "../data/worker-sql.ts";
 
-export type ProgramSource = {readonly hash: string; readonly source: string};
 type Calls = Rpc.WorkerEntrypointBranded &
 	Required<ExecutionCalls> & {
 		readonly describe: () => Promise<unknown>;

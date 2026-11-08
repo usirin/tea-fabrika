@@ -1,5 +1,5 @@
 import {Effect, Result, Schema} from "effect";
-import {workerLoader, type ProgramSource} from "../workers.ts";
+import {workerLoader, type ProgramSource} from "./index.ts";
 import {
 	bucketCalls,
 	processStub,
