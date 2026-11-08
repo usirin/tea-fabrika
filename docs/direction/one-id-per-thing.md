@@ -31,12 +31,20 @@ class Ticket extends Schema.Class<Ticket>("Ticket")({
   it (`#193` for a ticket, `build:7` for a step run) and parses it back.
 - **The desk, pickers and the shell never parse an `n`.** They carry the id and show the label the
   owning program gave them.
-- **Input ids: open, see [tier-1.md question 20](../plan/tier-1.md#open-questions).**
+- **An input id is a TypeID too:** `input_<UUIDv7 in 26 base32 chars>`, like every other thing.
+  Decided by the owner, 2026-11-08. The door's process and its count stay, as their own fields on
+  the entry, not packed into the id. This closes [tier-1.md question 20](../plan/tier-1.md#open-questions).
+  *It said: input ids are open. That was wrong: the 2026-11-07 ids sketch already gave every thing
+  this shape, and `in-<process>-<n>` was the only id left outside it.*
 
 ## Where main stands
 
 Main's `next/` does not follow this yet. It has no `Id` module, and `Entry`, `Letter` and member
 ids are loose strings. A build pull request will fix it.
+
+Main's door (P10, [PR 502](https://github.com/usirin/tea-fabrika/pull/502)) still makes
+`in-<process>-<n>`, and the entry's `parent` pattern matches that shape. A build pull request
+moves both to `input_<26 chars>`.
 
 ## What it changes
 
@@ -49,3 +57,4 @@ ids are loose strings. A build pull request will fix it.
 - How `Id.make` reads in a stack trace or a log line next to a 26-character suffix. No code
   exists yet.
 - Which things get an `n`. Tickets and step runs do; the rest is decided per program.
+- What the two door fields on the entry are named. The build pull request sets them.
