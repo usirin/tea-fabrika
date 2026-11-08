@@ -9,8 +9,6 @@
 	{ "glob": "next/**/*.test.ts", "why": "next/'s tests" },
 	{ "glob": "next/**/*.test.tsx", "why": "next/'s tests" },
 	{ "glob": "next/packages/libfabrika/src/compiler.ts", "why": "the shared Compiler check" },
-	{ "glob": "**/package.json", "why": "workspace dependencies and exports are part of the exam" },
-	{ "glob": "pnpm-lock.yaml", "why": "the exact dependencies the exam and builds run" },
 	{ "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
 	{ "glob": "next/apps/fabrika/e2e.ts", "why": "the end-to-end runner" },
 	{ "glob": "next/apps/fabrika/e2e/**", "why": "the end-to-end tests" },
