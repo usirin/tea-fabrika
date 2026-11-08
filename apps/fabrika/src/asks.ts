@@ -344,15 +344,24 @@ export const loadCell = (cmd: ReturnType<typeof load>) =>
 				const read = readRow(row);
 				if (read.kind === "entry") entries.push(read.entry);
 			}
-			for (const n of new Set(
-				entries
-					.filter((e) => e.fact.type === "asked" && !("format" in e.fact))
-					.map((e) => e.ticket),
-			))
-				yield* preparePending(n);
 			last = page.at(-1)?.pos ?? last;
-			if (page.length < PAGE) return {entries, last};
+			if (page.length < PAGE) break;
 		}
+		// Each ticket's parked old asks are sealed once per read, after the paging. A ticket whose old
+		// ask cannot be sealed keeps it parked and leaves every other ticket's asks to load; the sealed
+		// asks written here come back on the next read, which the poll starts.
+		for (const n of new Set(
+			entries.filter((e) => e.fact.type === "asked" && !("format" in e.fact)).map((e) => e.ticket),
+		))
+			yield* preparePending(n).pipe(
+				Effect.catch((e) =>
+					Effect.logWarning(
+						`ticket ${n}: an old ask was not sealed`,
+						"why" in e ? e.why : e.message,
+					),
+				),
+			);
+		return {entries, last};
 	}).pipe(
 		Effect.mapError((e) => ({_tag: "unreachable" as const, why: "why" in e ? e.why : e.message})),
 	);

@@ -10,7 +10,7 @@ import {
 import {readFacts} from "@kampus/pipeline/asks/ledger";
 import {foldLedger} from "@kampus/pipeline/asks/rules";
 import {AREAS, type AreaEntry, areasOf, readAreaRow} from "@kampus/pipeline/tickets/area";
-import {sealAsk} from "@kampus/pipeline/tickets/ask";
+import {questionLine, sealAsk} from "@kampus/pipeline/tickets/ask";
 import {askedFor, askedStep, LaneStep} from "@kampus/pipeline/tickets/steps";
 import {
 	type Entry,
@@ -59,6 +59,19 @@ const unreachable = (e: {readonly message: string}) => ({
 	_tag: "unreachable" as const,
 	why: e.message,
 });
+/**
+ * A write the ledger did not answer, in the words a person reads. The store's own text goes to the
+ * log only: it names a database, not what the person can do.
+ */
+const notSaved = (e: {readonly message: string}) =>
+	Effect.logWarning("the ledger did not take a write", e.message).pipe(
+		Effect.andThen(
+			Effect.fail({
+				_tag: "unreachable" as const,
+				why: "Could not reach the ledger. Nothing was saved. Try again.",
+			}),
+		),
+	);
 /** The ledger said no, and why in the words a person reads. */
 const refusal = (why: string) => ({_tag: "refused" as const, why});
 /** The ledger said no to a write on one stream, named for whoever reads the log. */
@@ -175,7 +188,7 @@ export const saveCell = (cmd: ReturnType<typeof save>) =>
 		return isAreaWrite(write) ? yield* saveArea(cmd.id, write) : yield* saveTicket(cmd, write);
 	}).pipe(
 		Effect.catchTags({
-			LedgerUnreachable: (e) => Effect.fail(unreachable(e)),
+			LedgerUnreachable: notSaved,
 			Denied: (e) => Effect.fail(refused(e.stream)),
 			Fenced: (e) => Effect.fail(refused(e.stream)),
 			UnknownName: (e) => Effect.fail(refused(e.stream)),
@@ -330,12 +343,17 @@ export const preparePending = (number: number) =>
 			const first = timeline[0]?.fact;
 			const title = first?.type === "filed" ? first.title : "State not recorded";
 			const body = first?.type === "filed" ? first.body : "";
+			// An old ask's question could run to 256 characters; the sealed ask shows one line and keeps
+			// the whole question beside it, as a lane's own ask does.
+			const what = questionLine(old.what);
+			const whole = what === old.what ? [] : [old.what];
+			const text = [...whole, ...factsOf(timeline, "commented").map((f) => f.body)].join("\n\n");
 			yield* prepareAsk(number, old.ask, {
 				for: kind ?? "unknown",
 				step: kind === null ? step : askedStep(kind, step),
 				repo: track?.plan.split("#")[0] ?? "unknown",
 				why: null,
-				what: old.what,
+				what,
 				picks: old.picks.map((pick) => ({
 					pick,
 					does:
@@ -349,13 +367,13 @@ export const preparePending = (number: number) =>
 				until: null,
 				evidence:
 					kind === "approve" && plan !== undefined
-						? {_tag: "plan", version: plan.version, plan: plan.data}
-						: {
-								_tag: "other",
-								text: factsOf(timeline, "commented")
-									.map((f) => f.body)
-									.join("\n\n"),
-							},
+						? {
+								_tag: "plan",
+								version: plan.version,
+								plan: plan.data,
+								...(whole.length === 0 ? {} : {text: whole[0]}),
+							}
+						: {_tag: "other", text},
 				...(old.trace === undefined ? {} : {trace: old.trace}),
 			});
 		}
@@ -398,7 +416,7 @@ export const saveHintsCell = (cmd: ReturnType<typeof saveHints>) =>
 		return {};
 	}).pipe(
 		Effect.catchTags({
-			LedgerUnreachable: (e) => Effect.fail(unreachable(e)),
+			LedgerUnreachable: notSaved,
 			Denied: (e) => Effect.fail(refused(e.stream)),
 			Fenced: (e) => Effect.fail(refused(e.stream)),
 			UnknownName: (e) => Effect.fail(refused(e.stream)),

@@ -211,8 +211,12 @@ const update = (model: Model, msg: Msg): Step => {
 			return [
 				{
 					...next,
-					evidence: !next.evidence,
-					took: {...next.took, opened: [...next.took.opened, msg.name]},
+					...(msg.name === "evidence" ? {evidence: !next.evidence} : {}),
+					// Only opening counts: closing the evidence again is not a look at it.
+					took:
+						msg.name === "evidence" && next.evidence === true
+							? next.took
+							: {...next.took, opened: [...next.took.opened, msg.name]},
 				},
 				[],
 			];
@@ -295,16 +299,28 @@ export type AskView = {
 	needed?: boolean;
 	failure: string | null;
 	busy: boolean;
+	/** The note editor's words, each naming the pick it sends; only while a note is open or saving. */
+	note?: {label: string; send: string};
 };
+/** The note editor's label and send button, naming the pick. Against a rec, the note is asked for. */
+const noteWords = (pick: string, against: boolean) => ({
+	label: against ? `Why ${pick}?` : `Note on ${pick} (optional)`,
+	send: `Send ${pick}`,
+});
 export const askView = (input: {
 	ticket: number;
 	ask: unknown;
 	editor: unknown;
+	draft?: unknown;
 	needed?: boolean;
 	failure: string | null;
 }): AskView => {
 	const ask = Schema.decodeUnknownSync(AskShown)(input.ask);
 	const editor = Schema.decodeUnknownSync(Editor)(input.editor);
+	const draft =
+		editor._tag === "saving" && input.draft !== undefined
+			? Schema.decodeUnknownSync(Editor)(input.draft)
+			: editor;
 	return {
 		key: `${input.ticket}/${ask.ask}`,
 		ticket: input.ticket,
@@ -314,6 +330,7 @@ export const askView = (input: {
 		busy: editor._tag === "saving",
 		failure: input.failure,
 		...(input.needed === undefined ? {} : {needed: input.needed}),
+		...(draft._tag === "note" ? {note: noteWords(draft.pick, ask.shows.rec._tag === "pick")} : {}),
 	};
 };
 export type AskActions = {
@@ -753,8 +770,7 @@ export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: A
 					))}
 				</div>
 			)}
-			{(view.editor._tag === "note" ||
-				(model.editor._tag === "saving" && model.draft?._tag === "note")) && (
+			{view.note !== undefined && (
 				<form
 					className="ask-note"
 					onSubmit={(e) => {
@@ -764,8 +780,7 @@ export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: A
 				>
 					<Textarea
 						ref={note}
-						label={rec._tag === "pick" ? "Why this answer?" : "Note (optional)"}
-						aria-label={rec._tag === "pick" ? "Note against the recommendation" : "Optional note"}
+						label={view.note.label}
 						aria-required={rec._tag === "pick"}
 						requiredIndicator={null}
 						maxLength={120}
@@ -790,7 +805,7 @@ export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: A
 						}}
 					/>
 					<Button type="submit" size="sm" variant="secondary" disabled={view.busy}>
-						Send answer
+						{view.note.send}
 					</Button>
 				</form>
 			)}

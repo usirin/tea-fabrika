@@ -27,6 +27,7 @@ import {
 	asksSections,
 	asksWord,
 	bottomLineShows,
+	asksHead,
 	type Command,
 	clockWord,
 	commandsOf,
@@ -494,8 +495,10 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 		<Panel id={POP.asks} label="Asks" onClose={close}>
 			<AskStatus>
 				<p className="pop-head">
-					{asks.asks.filter((a) => a.kind === "ask").length} asks ·{" "}
-					{asks.asks.filter((a) => a.kind === "stuck").length} stops
+					{asksHead(
+						asks.asks.filter((a) => a.kind === "ask").length,
+						asks.asks.filter((a) => a.kind === "stuck").length,
+					)}
 				</p>
 				{asks.reach === "failed" && <p role="alert">{asks.why ?? "The ledger is disconnected"}</p>}
 				{rows.length === 0 ? (

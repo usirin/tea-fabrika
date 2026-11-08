@@ -166,7 +166,12 @@ export const sealAsk = (input: unknown, policy?: {seed: number}) =>
 		if (sealed._tag === "pick" && !draft.picks.some((p) => p.pick === sealed.pick))
 			return yield* Effect.fail(new Error("The recommendation is not offered"));
 		const draw = blindDraw(draft.ask, policy?.seed);
-		const blind = {...draw, hidden: draft.rec._tag === "pick" && draw.hidden};
+		// An approve ask's rec comes only from the plan's leans and can only ever be approve: hiding it
+		// would hide nothing, so that kind is never drawn blind, and the sealed fact says it was not.
+		const blind = {
+			...draw,
+			hidden: draft.rec._tag === "pick" && draft.for !== "approve" && draw.hidden,
+		};
 		const shows = {
 			what: draft.what,
 			picks: draft.picks,

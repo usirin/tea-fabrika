@@ -278,6 +278,10 @@ export const lineIn = (ws: Workspace): readonly Segment[] => {
 export const asksWord = (n: number): string | null =>
 	n === 0 ? null : `${n} ask${n === 1 ? "s" : ""} you`;
 
+/** The asks list's head: `1 ask · 2 stops`, each count in the singular for one. */
+export const asksHead = (asks: number, stops: number): string =>
+	`${asks} ask${asks === 1 ? "" : "s"} · ${stops} stop${stops === 1 ? "" : "s"}`;
+
 /** A part of the frame that says how a part of the app is, and whether that part is broken. */
 export interface Said {
 	readonly word: string;
