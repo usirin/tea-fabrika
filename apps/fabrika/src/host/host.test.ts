@@ -196,6 +196,66 @@ describe("the host", () => {
 		expect(tileIds(seen.after)).toEqual(["t1"]);
 	});
 
+	it("takes a screen away from the pages shown it, while an app with no page looks on", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const {home, paths} = yield* freshHome;
+				const host = yield* hostOn(home);
+				// The app with no page attaches first, so the host meets it first when a screen goes.
+				const bare = yield* appOn(paths.sock);
+				yield* bare.wire.up;
+				const app = yield* appOn(paths.sock);
+				yield* app.wire.up;
+				app.send({type: "page"});
+				yield* until("t1's prompt", () => (app.rows("t1")[0] === "tsh$" ? true : undefined));
+				app.type("t1", "counter\r");
+				const port = yield* until("counter's port", () =>
+					app.got.find((m) => m.type === "port" && !m.port.startsWith("tile:")),
+				);
+				app.type("t1", "\x03");
+				const gone = yield* until("counter's port gone", () =>
+					app.got.find((m) => m.type === "gone"),
+				);
+				const after = yield* app.press("<c-b>");
+				yield* host.stop;
+				return {port, gone, after};
+			}),
+		);
+		expect(seen.gone).toEqual({
+			type: "gone",
+			port: seen.port.type === "port" ? seen.port.port : "",
+		});
+		expect(seen.after).toMatchObject({type: "answer", took: true});
+	});
+
+	it("closes every window when the last tile closes, and begins again on one fresh tile", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const {home, paths} = yield* freshHome;
+				const host = yield* hostOn(home);
+				const app = yield* appOn(paths.sock);
+				yield* app.wire.up;
+				app.send({type: "page"});
+				yield* until("t1's prompt", () => (app.rows("t1")[0] === "tsh$" ? true : undefined));
+				const first = app.desk();
+				yield* app.press("<c-b>");
+				yield* app.press("x");
+				yield* app.press("y");
+				const closed = yield* until("the window told to close", () =>
+					app.got.find((m) => m.type === "close"),
+				);
+				const fresh = yield* until("a fresh desk", () => {
+					const d = app.desk();
+					return d !== undefined && d !== first && tileIds(d).length === 1 ? d : undefined;
+				});
+				yield* host.stop;
+				return {closed, fresh};
+			}),
+		);
+		expect(seen.closed).toEqual({type: "close"});
+		expect(tileIds(seen.fresh)).toEqual(["t1"]);
+	});
+
 	it("shows two apps at once the same desk: Ctrl-B | from one splits it on both", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
@@ -217,8 +277,18 @@ describe("the host", () => {
 				// b was given a port for the new tile's terminal, and was sent no answer: the keys were a's.
 				const bPorts = b.got.flatMap((m) => (m.type === "port" ? [m.port] : []));
 				const bAnswers = b.page().filter((m) => m.type === "answer");
+				// A list a key shows opens on the page whose key asked for it, as tmux's list-keys does.
+				yield* a.press("<c-b>");
+				yield* a.press("a");
+				const shownOnA = yield* until("the asks list on a", () =>
+					a.page().find((m) => m.type === "show" && m.what === "asks"),
+				);
+				// The prefix armed after it reaches b behind anything said to b before it.
+				yield* a.press("<c-b>");
+				yield* until("the prefix on b", () => (b.desk()?.prefix.armed === true ? true : undefined));
+				const shownOnB = b.page().filter((m) => m.type === "show");
 				yield* host.stop;
-				return {prefix, split, onB, bPorts, bAnswers};
+				return {prefix, split, onB, bPorts, bAnswers, shownOnA, shownOnB};
 			}),
 		);
 		expect(seen.prefix).toEqual({type: "answer", id: 0, took: true});
@@ -227,6 +297,8 @@ describe("the host", () => {
 		expect(seen.onB.workspaces[0].focused).toBe("t2");
 		expect(seen.bPorts).toEqual(["tile:t1", "tile:t2"]);
 		expect(seen.bAnswers).toEqual([]);
+		expect(seen.shownOnA).toEqual({type: "show", what: "asks"});
+		expect(seen.shownOnB).toEqual([]);
 	});
 
 	it("answers a key the desk does not take with took: false, for the page to pass it on", async () => {
@@ -860,6 +932,19 @@ describe("the host and the keys file", () => {
 				yield* done(3);
 				app.type("t1", "ordinary typing");
 				yield* Effect.sleep("100 millis");
+				// A second workspace, then a click on it: the word names the workspace clicked.
+				app.send({type: "on", port: "desk", m: {type: "run", does: 'tezgah."workspace --to new"'}});
+				const second = yield* until("a second workspace, in front", () => {
+					const [, w2] = app.desk()?.workspaces ?? [];
+					return w2 !== undefined && app.desk()?.active === w2.id ? w2 : undefined;
+				});
+				app.send({type: "on", port: "desk", m: {type: "pick", workspace: second.id}});
+				yield* done(5);
+				// An ask picked in the asks list goes to its tile: its workspace comes forward.
+				app.send({type: "on", port: "desk", m: {type: "go", tile: "t1"}});
+				yield* until("t1's workspace forward", () =>
+					app.desk()?.active === desk.workspaces[0].id ? true : undefined,
+				);
 				yield* host.stop;
 				return lines
 					.map(fieldsOf)
@@ -871,6 +956,8 @@ describe("the host and the keys file", () => {
 			['tezgah."workspace --to 1"', {_tag: "click"}],
 			["palette.open", {_tag: "palette"}],
 			["tezgah.split", {_tag: "palette"}],
+			['tezgah."workspace --to new"', {_tag: "palette"}],
+			['tezgah."workspace --to 2"', {_tag: "click"}],
 		]);
 	});
 });
@@ -924,4 +1011,46 @@ it("K12: an editor save publishes one version to two windows and watcher echo ad
 			yield* host.stop;
 		}),
 	);
+});
+
+it("K20: an editor a page opens shows its view on its own run's port, and closing takes it away", async () => {
+	const seen = await goLogged((lines) =>
+		Effect.gen(function* () {
+			const {home, paths} = yield* freshHome;
+			const host = yield* hostOn(home);
+			const app = yield* appOn(paths.sock);
+			yield* app.wire.up;
+			app.send({type: "page"});
+			yield* until("a desk", app.desk);
+			app.send({type: "on", port: "desk", m: {type: "keys.open"}});
+			const opened = yield* until("the editor opened", () =>
+				app.page().find((m) => m.type === "keys.opened"),
+			);
+			const run = opened.type === "keys.opened" ? opened.run : "";
+			const view = yield* until("the editor's view", () =>
+				app.got.find((m) => m.type === "to" && m.port === `run:${run}`),
+			);
+			// An edit comes only by the checked inputs on the desk's port, never on the view's own.
+			app.send({type: "on", port: `run:${run}`, m: {type: "edit"}});
+			const refused = yield* until("the view's port refuses", () =>
+				lines.find((l) => l.includes(`refused a message on run:${run}`)),
+			);
+			app.send({type: "on", port: "desk", m: {type: "keys.close"}});
+			const closed = yield* until("the editor closed", () =>
+				app.page().find((m) => m.type === "keys.closed"),
+			);
+			const gone = app.got.find((m) => m.type === "gone" && m.port === `run:${run}`);
+			yield* host.stop;
+			return {run, view, refused, closed, gone};
+		}),
+	);
+	expect(seen.run).toMatch(/^keys:/);
+	expect(seen.view).toEqual({
+		type: "to",
+		port: `run:${seen.run}`,
+		m: {type: "view", program: "keys", data: {open: true}},
+	});
+	expect(seen.refused).toContain("Use the checked keys inputs on the desk port.");
+	expect(seen.closed).toEqual({type: "keys.closed", run: seen.run});
+	expect(seen.gone).toEqual({type: "gone", port: `run:${seen.run}`});
 });

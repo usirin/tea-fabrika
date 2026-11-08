@@ -7,6 +7,7 @@ import {join} from "node:path";
 import {promisify} from "node:util";
 import type {Shell} from "@kampus/fabrika-old";
 import {_electron, type ElectronApplication, type Locator, type Page} from "playwright";
+import {PROTOCOL} from "./src/link.ts";
 
 // The app, driven end to end through Playwright's Electron support: the whole flow in the one
 // tiled window, one screenshot per step. Not part of `pnpm test`: it opens a real window. The
@@ -85,6 +86,9 @@ import {_electron, type ElectronApplication, type Locator, type Page} from "play
 // Then the tiles' look, on a home of its own (`tilesLook`): one tile, a pipe side by side, a pipe
 // stacked, a 2x2 in each state, and a small window, each in `tiles/` as `<state>-<layout>-<look>`.
 // `pnpm --filter @kampus/fabrika-app-old e2e -- --tiles` runs that stage alone.
+//
+// Then a border dragged between two tiles, on a home of its own (`borderDrag`): the tiles resize
+// while the pointer moves, and keep the sizes once it is let go. `-- --drag` runs it alone.
 //
 // Last, as no person ever does (there is no stop command), the run stops the host it started by
 // its pid, and the fake one too, and checks with pgrep that nothing of either home is left.
@@ -1385,7 +1389,9 @@ const mismatch = async () => {
 			);
 			check(
 				"a host of another version: the app does not attach, and says both versions",
-				said.includes("version 0") && said.includes("speaks 1") && (await tiles(page)).length === 0,
+				said.includes("version 0") &&
+					said.includes(`speaks ${PROTOCOL}`) &&
+					(await tiles(page)).length === 0,
 				said,
 			);
 			await shot(page, "11-mismatch");
@@ -1424,7 +1430,8 @@ const askingHost = async (on: string) => {
 			held = lines.pop() ?? "";
 			for (const line of lines) {
 				const m = JSON.parse(line);
-				if (m.type === "hello") link.write('{"type":"hello","version":1}\n');
+				if (m.type === "hello")
+					link.write(`${JSON.stringify({type: "hello", version: PROTOCOL})}\n`);
 				else heard.push(m);
 			}
 		});
@@ -2100,8 +2107,9 @@ const keysLook = async () => {
 				});
 			}
 			await focusOn(page, "t1");
-			await app.evaluate(async () => {
-				const {EventEmitter} = await import("node:events");
+			await app.evaluate(() => {
+				// A dynamic import has no loader inside Playwright's evaluate: take the built-in as it is.
+				const {EventEmitter} = process.getBuiltinModule("node:events");
 				const emit = EventEmitter.prototype.emit;
 				const sends: unknown[] = [];
 				EventEmitter.prototype.emit = function (event: string | symbol, ...args: unknown[]) {
@@ -2241,16 +2249,19 @@ const keysLook = async () => {
 				(await app.evaluate(() => Reflect.get(globalThis, "keysTestBytes").length)) ===
 					beforeCandidate,
 			);
-			check(
+			// The file is written before the editor hears the applied table back: wait for that.
+			await until(
 				"K18: saved editor has the new binding",
-				/(?:C-b|⌃B).*M/i.test(await editor.innerText()),
+				() => editor.innerText(),
+				(text) => /(?:C-b|⌃B)\s*then\s*M/i.test(text) && !/Saving/i.test(text),
 			);
 			await snap("saved");
 			await close();
 			await page.keyboard.press("Control+b");
-			check(
+			await until(
 				"prefix hints follow the saved key",
-				/m.*zoom/i.test(await page.locator(".bottomline").innerText()),
+				() => page.locator(".bottomline").innerText(),
+				(text) => /m.*zoom/i.test(text),
 			);
 			await page.keyboard.press("q");
 			await open();
@@ -2259,10 +2270,12 @@ const keysLook = async () => {
 			await page.keyboard.press("Control+b");
 			await page.keyboard.press("x");
 			await editor.getByRole("button", {name: "Save", exact: true}).click();
-			check(
+			await until(
 				"K8: clash names loser and offers Undo",
-				/close/i.test(await editor.innerText()) &&
+				async () =>
+					/close/i.test(await editor.innerText()) &&
 					(await editor.getByRole("button", {name: "Undo", exact: true}).isVisible()),
+				(ok) => ok,
 			);
 			await snap("clash");
 			await editor.getByRole("button", {name: "Undo", exact: true}).click();
@@ -2281,7 +2294,8 @@ const keysLook = async () => {
 			await close();
 			await page.keyboard.press("Meta+k");
 			const palette = page.getByRole("dialog", {name: "Commands", exact: true});
-			await palette.getByRole("textbox").fill("zoom");
+			// The palette's text box is a combobox (window/pop.tsx), not a plain textbox.
+			await palette.getByRole("combobox").fill("zoom");
 			check(
 				"K17: unbinding keeps the palette command",
 				(await palette.getByRole("option", {name: /zoom/i}).count()) === 1,
@@ -2289,7 +2303,14 @@ const keysLook = async () => {
 			await page.keyboard.press("Escape");
 			await run(page, "t1", "zoom");
 			await prompted(page, "t1");
-			check("K17: tsh still executes unbound Zoom", (await stateIn(page, "t1")) === "zoomed");
+			// A lone tile does not zoom, as tmux's resize-pane -Z: only a layout of two or more says so.
+			await until(
+				"K17: tsh still executes unbound Zoom",
+				() => stateIn(page, "t1"),
+				(state) => state === (layout === "one" ? "" : "zoomed"),
+			);
+			// With two or more tiles, a zoom typed in t1 leaves focus on the page's body: put it back.
+			await tile(page, "t1").locator(".screen").focus();
 			await run(page, "t1", "zoom");
 			await prompted(page, "t1");
 
@@ -2354,7 +2375,7 @@ const keysLook = async () => {
 			await until(
 				"prefix palette binding applied",
 				() => editor.innerText(),
-				(text) => /(?:⌃A|C-a)[\s\S]*P/.test(text),
+				(text) => /(?:⌃A|C-a|ctrl\+a)\s*then\s*p/i.test(text),
 			);
 			await close();
 			await page.keyboard.press("Control+a");
@@ -2369,7 +2390,8 @@ const keysLook = async () => {
 			await editor.waitFor();
 			const first = await until(
 				"the keys job",
-				() => keptJobs(own),
+				// A slot read mid-write does not parse yet: read again.
+				() => keptJobs(own).catch((): readonly Shell.Job[] => []),
 				(jobs) => jobs.some((job) => job.text === "keys"),
 			);
 			const runId = first.find((job) => job.text === "keys")?.stages[0].run;
@@ -2378,20 +2400,24 @@ const keysLook = async () => {
 			await close();
 			await until(
 				"closed editor run ends",
-				() => keptJobs(own),
+				// A slot read mid-write does not parse yet: read again.
+				() => keptJobs(own).catch((): readonly Shell.Job[] => []),
 				(jobs) => jobs.every((job) => job.text !== "keys"),
 			);
-			check(
+			await until(
 				"K20: closing restores terminal focus",
-				await tile(page, "t1")
-					.locator(".screen")
-					.evaluate((el) => el.contains(document.activeElement)),
+				() =>
+					tile(page, "t1")
+						.locator(".screen")
+						.evaluate((el) => el.contains(document.activeElement)),
+				(inside) => inside,
 			);
 			await run(page, "t1", "keys");
 			await editor.waitFor();
 			const second = await until(
 				"new keys job",
-				() => keptJobs(own),
+				// A slot read mid-write does not parse yet: read again.
+				() => keptJobs(own).catch((): readonly Shell.Job[] => []),
 				(jobs) => jobs.some((job) => job.text === "keys"),
 			);
 			check(
@@ -2401,16 +2427,40 @@ const keysLook = async () => {
 			);
 			await close();
 			// K15 and K16: focus leaves a terminal using data-backed F6, and Ctrl-C still cancels its program.
+			// From inside the terminal, F6 moves to the next region: the bar, as a browser's F6 does.
+			await tile(page, "t1").locator(".screen").focus();
 			await page.keyboard.press("F6");
-			check(
-				"F6 provides a keyboard route out of the terminal",
-				!(await tile(page, "t1")
-					.locator(".screen")
-					.evaluate((el) => el.contains(document.activeElement))),
+			await until(
+				"F6 provides a keyboard route out of the terminal, to a bar",
+				() =>
+					page.evaluate(
+						() => document.activeElement?.closest(".bottomline, .topbar") instanceof HTMLElement,
+					),
+				(there) => there,
 			);
 			await page.keyboard.press("Shift+F6");
+			await until(
+				"Shift+F6 goes back into the terminal",
+				() =>
+					tile(page, "t1")
+						.locator(".screen")
+						.evaluate((el) => el.contains(document.activeElement)),
+				(inside) => inside,
+			);
+			// F6 leaves what is open over the desk too: the palette closes as focus moves on. The
+			// file now opens it on the prefix, then p.
+			await page.keyboard.press("Control+a");
+			await page.keyboard.press("p");
+			const commands = page.getByRole("dialog", {name: "Commands", exact: true});
+			await commands.waitFor();
+			await page.keyboard.press("F6");
+			await commands.waitFor({state: "hidden"});
+			check("F6 closes the palette as it moves focus", true);
 			await focusOn(page, "t1");
+			await tile(page, "t1").locator(".screen").focus();
 			await run(page, "t1", "counter");
+			// Ctrl-C before counter is up reaches only tsh's line: wait for counter first.
+			await countIn(page, "t1").waitFor();
 			await page.keyboard.press("Control+c");
 			await prompted(page, "t1");
 			await page.keyboard.type("recorder-is-closed");
@@ -2424,6 +2474,61 @@ const keysLook = async () => {
 			if (pid !== null) await stop(pid);
 			await rm(own, {recursive: true, force: true});
 		}
+	}
+};
+
+/**
+ * A border dragged between two tiles side by side, on a home of its own: the tiles take the new
+ * sizes while the pointer moves, as tmux's drag does, and the desk keeps them once it is let go.
+ */
+const borderDrag = async () => {
+	const own = await mkdtemp(join(tmpdir(), "fk-"));
+	const app = await launch(own);
+	try {
+		const page = await app.firstWindow();
+		await prompted(page, "t1");
+		await prefixed(page, "|");
+		await prompted(page, "t2");
+		const width = () =>
+			page.locator('[data-cell="t1"]').evaluate((el) => el.getBoundingClientRect().width);
+		const before = await width();
+		const box = await page.locator("hr.border").first().boundingBox();
+		if (box === null) throw new Error("no border between t1 and t2");
+		const y = box.y + box.height / 2;
+		await page.mouse.move(box.x + box.width / 2, y);
+		await page.mouse.down();
+		await page.mouse.move(box.x - 200, y, {steps: 5});
+		const during = await width();
+		check("a dragged border resizes t1 while it moves", during < before - 100, {before, during});
+		await page.mouse.up();
+		const kept = await until(
+			"the desk keeps the dragged sizes",
+			width,
+			(w) => Math.abs(w - during) < 20,
+		);
+		check("let go, the desk keeps the dragged sizes", Math.abs(kept - during) < 20, kept);
+
+		// Stacked: t1 split below, and the border between them dragged up, along the other axis.
+		await focusOn(page, "t1");
+		await prefixed(page, "-");
+		await prompted(page, "t3");
+		const height = () =>
+			page.locator('[data-cell="t1"]').evaluate((el) => el.getBoundingClientRect().height);
+		const tall = await height();
+		const across = await page.locator('hr.border[aria-orientation="horizontal"]').boundingBox();
+		if (across === null) throw new Error("no border between t1 and t3");
+		const x = across.x + across.width / 2;
+		await page.mouse.move(x, across.y + across.height / 2);
+		await page.mouse.down();
+		await page.mouse.move(x, across.y - 150, {steps: 5});
+		const short = await height();
+		check("a stacked border resizes t1's height while it moves", short < tall - 80, {tall, short});
+		await page.mouse.up();
+	} finally {
+		await app.close().catch(() => {});
+		const pid = await hostPid(own);
+		if (pid !== null) await stop(pid);
+		await rm(own, {recursive: true, force: true});
 	}
 };
 
@@ -2466,6 +2571,7 @@ const all = async () => {
 		await asksSwap();
 		await reconnect();
 		await tilesLook();
+		await borderDrag();
 		await keysLook();
 	} finally {
 		// No person stops the host: there is no command for it. The run stops its own, by its pid.
@@ -2476,6 +2582,7 @@ const all = async () => {
 
 // `-- --tiles` takes the tiles' pictures alone, with no other stage.
 if (process.argv.includes("--keys")) await keysLook();
+else if (process.argv.includes("--drag")) await borderDrag();
 else if (process.argv.includes("--tiles")) await tilesLook();
 else await all();
 const after = await pgrep(here);
