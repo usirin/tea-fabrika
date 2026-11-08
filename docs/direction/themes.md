@@ -593,21 +593,56 @@ The points this decision left open, each decided 2026-11-07 unless marked:
   - Sure: 75%. Doubt: the cost of one more contrast step per cell in ghostty-web's renderer, and
     upstream's answer. A patch measured with four full terminals, as the study's swap was, settles
     the first.
-- **The contrast math: WCAG 2.2 decides now. Leaned 2026-11-07, waiting on a measurement.** APCA
-  joins as a second floor (text Lc 60, non-text Lc 30) once a measurement of today's pairs lands;
-  that run is pending. The math stays behind one function, so the token build and the nudge
-  change together.
+- **The contrast math: two floors, both always. Decided 2026-11-07.** Text needs WCAG 4.5:1 (or
+  the person's raised `contrast`) and APCA Lc 60. Non-text needs WCAG 3:1 and APCA Lc 15. The one
+  contrast function computes both, so the token build and the nudge change together.
 
   ```ts
-  // A sketch: the one function both callers use. Today it is WCAG 2.2 only.
+  // A sketch: the one function both callers use.
   declare const passes: (fg: Hex, bg: Hex, floor: Floor) => boolean;
-  // Floor today: { wcag: 4.5 } for text, { wcag: 3 } for non-text
-  // after the measurement, if APCA joins: { wcag: 4.5, apca: 60 } and { wcag: 3, apca: 30 }
+  const text: Floor = { wcag: 4.5, apca: 60 }; // wcag rises with the person's `contrast`
+  const nonText: Floor = { wcag: 3, apca: 15 };
   ```
 
+  - The measurement (today's version, on main): 387 of today's color pairs, 365 text and 22
+    non-text, from `packages/fabrika-design/src/themes.test.ts` and
+    `apps/fabrika/src/window/colors.test.ts`, with apca-w3 0.1.9.
+  - 19 text pairs passed WCAG but failed APCA Lc 60, all in the dark look: status colors on
+    hovered or selected rows, one button label, and 4 terminal colors. No non-text pair failed
+    Lc 15.
+  - Why these levels: APCA's
+    [bronze simple mode](https://readtech.org/ARC/tests/bronze-simple-mode/) asks Lc 60 for
+    content text and Lc 75 for body text, and
+    [Why APCA](https://git.apcacontrast.com/documentation/WhyAPCA) gives Lc 15 for non-text that
+    must be seen. Radix
+    [promises](https://www.radix-ui.com/colors/docs/palette-composition/understanding-the-scale)
+    steps 11 and 12 reach Lc 60 and Lc 90 only on step 2 of the same scale, so a hovered or
+    selected row is outside that promise.
+  - **Wrong:** the earlier lean said non-text Lc 30. APCA's own non-text minimum is Lc 15.
   - **Changed 2026-11-07.** The old text said: "Which measure the one function uses, WCAG or
     APCA, is still open (Radix promises APCA). The nudge uses whatever the token build uses, so
     the choice is made once." The last part still holds.
+
+- **Radix is the primitive layer only. Decided 2026-11-07.** Primitives are Radix steps, solid
+  and alpha, so 24 per scale. A semantic token may name a scale and a floor instead of a fixed
+  step. The build picks the faintest step that passes both floors on every background in its `on`
+  list, per look.
+
+  ```toml
+  # tokens/color/text-stuck.toml (a sketch)
+  type = "text"
+  on = ["surface", "surface-hover", "surface-selected"]
+  floor = 4.5
+  [colors]
+  scale = "red"   # the build picks the step, per look
+  ```
+
+  - This walks back the [color principles](./color-principles.md)' rule that each Radix step
+    keeps its job (11 for quiet text, 12 for strong). Radix's roles become a starting point.
+  - If a token keeps landing on a step that is too bright, a finer step may be added to the
+    primitive layer, with its reason written beside it as a bend, and only then.
+  - Doubt: a status color may land on different steps in different places and look uneven. Shots
+    at the design PRs settle it.
 
 ### 5. Two names nobody has set yet (one decided 2026-11-07, one proposed)
 
