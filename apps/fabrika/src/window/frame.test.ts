@@ -182,6 +182,7 @@ describe("the frame's keys", () => {
 			"fold",
 			"zoom",
 			"close",
+			"last tile",
 			"focus left",
 			"focus down",
 			"focus up",
@@ -192,6 +193,12 @@ describe("the frame's keys", () => {
 			"previous workspace",
 			"next workspace",
 			"workspace 1",
+			"Next",
+			"Previous",
+			"Open all",
+			"Look",
+			"Reply",
+			"Later",
 			"asks",
 			"jobs",
 			"keys",
@@ -217,7 +224,7 @@ describe("the frame's keys", () => {
 
 describe("the frame's keys, from the keys file (ticket 174)", () => {
 	/**
-	 * Today's palette with no file, frozen before this change: each command's name, group, key
+	 * Today's palette with the inbox and focus history: each command's name, group, key
 	 * as the bottom line writes it, keycaps and tsh word, with nine workspaces (p1).
 	 */
 	const TODAY = [
@@ -228,6 +235,7 @@ describe("the frame's keys, from the keys file (ticket 174)", () => {
 		["fold", "tile", "C-b f", ["⌃B", "F"], "fold"],
 		["zoom", "tile", "C-b z", ["⌃B", "Z"], "zoom"],
 		["close", "tile", "C-b x", ["⌃B", "X"], "close-tile"],
+		["last tile", "focus", "C-b ;", ["⌃B", ";"], "focus --to last"],
 		["focus left", "focus", "C-b h", ["⌃B", "H"], "focus --to left"],
 		["focus down", "focus", "C-b j", ["⌃B", "J"], "focus --to down"],
 		["focus up", "focus", "C-b k", ["⌃B", "K"], "focus --to up"],
@@ -260,6 +268,12 @@ describe("the frame's keys, from the keys file (ticket 174)", () => {
 					`workspace --to ${i + 1}`,
 				] as const,
 		),
+		["Next", "window", "j", ["J"], "inbox next"],
+		["Previous", "window", "k", ["K"], "inbox previous"],
+		["Open all", "window", "O", ["⇧O"], "inbox open"],
+		["Look", "window", "Space", ["Space"], "inbox look"],
+		["Reply", "window", "r", ["R"], "inbox reply"],
+		["Later", "window", "h", ["H"], "inbox later"],
 		["asks", "window", "C-b a", ["⌃B", "A"], "asks"],
 		["jobs", "window", "C-b J", ["⌃B", "⇧J"], "jobs"],
 		["keys", "window", "C-b ?", ["⌃B", "?"], "keys"],

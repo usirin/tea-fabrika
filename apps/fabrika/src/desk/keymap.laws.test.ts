@@ -1,11 +1,12 @@
 import {applyCell} from "@demlik/tea";
+import {commandFor, commandKey} from "@kampus/fabrika-old";
 import {Result} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {capOf} from "../window/pop.ts";
 import {type Desk, type DeskCmd, type DeskMsg, deskMachine, savedOf, takenNow} from "./desk.ts";
-import {commandOn, decodeKeys, defaults, Does, type Keys, spell} from "./keymap.ts";
-import {keyOwner, matchPress} from "./keys.ts";
+import {commandOn, decodeKeys, defaults, Does, inboxCommands, type Keys, spell} from "./keymap.ts";
+import {keyName, keyOwner, matchPress} from "./keys.ts";
 
 // The keybindings file's laws (p12, p17, and the swap of p9), for any text and for any file
 // written from the file's own words. Today's version, ticket 174, PR 1. The examples are in
@@ -99,10 +100,16 @@ const BARE = new Set([
 	"<arrowdown>",
 ]);
 
-const placeOf = (keys: Keys) => {
+const SCOPES = ["global", "program.inbox", "program.ask"] as const;
+const scopeOf = (does: string) =>
+	does.startsWith("program.") ? does.split(".").slice(0, 2).join(".") : "global";
+
+const placeOf = (keys: Keys, scope: (typeof SCOPES)[number]) => {
 	const alone = new Map<string, string[]>();
 	const after = new Map<string, string[]>();
-	for (const row of keys.rows)
+	for (const row of [...keys.rows, ...(keys.programs ?? [])].filter(
+		(row) => scopeOf(row.does) === scope,
+	))
 		for (const key of row.keys) {
 			const place = key._tag === "alone" ? alone : after;
 			place.set(key.key, [...(place.get(key.key) ?? []), row.does]);
@@ -131,14 +138,16 @@ describe("the file's laws", () => {
 	it("keeps one key on one command in each place, and the prefix on none, in any file that reads", () => {
 		fc.assert(
 			fc.property(table, (keys) => {
-				const {alone, after} = placeOf(keys);
-				return (
-					// One command's list may name a key twice; two commands may never share one.
-					[...alone.values(), ...after.values()].every((on) => new Set(on).size === 1) &&
-					// Pressed alone it arms; after itself it is send-prefix: a row on it never runs.
-					!alone.has(keys.prefix) &&
-					!after.has(keys.prefix)
-				);
+				return SCOPES.every((scope) => {
+					const {alone, after} = placeOf(keys, scope);
+					return (
+						// One command's list may name a key twice; two commands may never share one.
+						[...alone.values(), ...after.values()].every((on) => new Set(on).size === 1) &&
+						// Pressed alone it arms; after itself it is send-prefix: a row on it never runs.
+						!alone.has(keys.prefix) &&
+						!after.has(keys.prefix)
+					);
+				});
 			}),
 			OPTS,
 		);
@@ -147,8 +156,9 @@ describe("the file's laws", () => {
 	it("puts no Cmd key after the prefix on a Mac, where the menu takes it first", () => {
 		fc.assert(
 			fc.property(macTable, (keys) => {
-				const {after} = placeOf(keys);
-				return [...after.keys()].every((key) => !/^<(?:[ca]-)*m-/.test(key));
+				return SCOPES.every((scope) =>
+					[...placeOf(keys, scope).after.keys()].every((key) => !/^<(?:[ca]-)*m-/.test(key)),
+				);
 			}),
 			OPTS,
 		);
@@ -157,8 +167,14 @@ describe("the file's laws", () => {
 	it("puts no bare named key alone or as the prefix, in any file that reads", () => {
 		fc.assert(
 			fc.property(table, (keys) => {
-				const {alone} = placeOf(keys);
-				return !BARE.has(keys.prefix) && [...alone.keys()].every((key) => !BARE.has(key));
+				const {alone} = placeOf(keys, "global");
+				return (
+					!BARE.has(keys.prefix) &&
+					[...alone.keys()].every((key) => !BARE.has(key)) &&
+					SCOPES.filter((scope) => scope !== "global").every(
+						(scope) => placeOf(keys, scope).after.size === 0,
+					)
+				);
 			}),
 			OPTS,
 		);
@@ -178,11 +194,33 @@ describe("the file's laws", () => {
 		);
 	});
 
-	it("looks a key up to the row that holds it", () => {
+	it("looks global keys up to their rows and never dispatches a program command globally", () => {
 		fc.assert(
-			fc.property(table, (keys) =>
-				keys.rows.every((row) => row.keys.every((key) => commandOn(keys, key) === row.does)),
-			),
+			fc.property(table, (keys) => {
+				const inbox = inboxCommands(keys);
+				for (const row of keys.rows) {
+					for (const key of row.keys) {
+						const command = commandOn(keys, key);
+						if (scopeOf(row.does) === "global") expect(command).toBe(row.does);
+						else expect(command?.startsWith("program.") ?? false).toBe(false);
+					}
+					if (!row.does.startsWith("program.inbox.")) continue;
+					const command = inbox.find((command) => `program.${command.id}` === row.does);
+					if (command === undefined) throw new Error(`Missing command ${row.does}`);
+					expect(command.keys).toHaveLength(row.keys.length);
+					for (const [index, binding] of command.keys.entries()) {
+						const press = commandKey(binding);
+						expect(
+							keyName({
+								...press,
+								key: press.shift && press.key.length === 1 ? press.key.toUpperCase() : press.key,
+							}),
+						).toBe(row.keys[index]?.key);
+						expect(commandFor(inbox, press, false)).toBe(command);
+						expect(commandFor(inbox, press, true)).toBeUndefined();
+					}
+				}
+			}),
 			OPTS,
 		);
 	});

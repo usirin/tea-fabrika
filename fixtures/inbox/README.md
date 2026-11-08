@@ -3,6 +3,9 @@
 Today's version, tracker ticket 268. These files contain tests and test setup only.
 No inbox, room store, command dispatcher, renderer, or settings implementation was added.
 
+The record below is from before the build. [The post-build check](post-build.md)
+records the exam repairs, passing checks, and remaining ask-desk and socket failures.
+
 ## What was run
 
 Run the new tests with one worker and `TYPESAFE_API_KEY` unset:

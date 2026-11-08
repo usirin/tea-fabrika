@@ -96,8 +96,51 @@ const [opening, closing, stopping, sending, saving, emptying, ending, killing, s
 	show({what: "asks"}),
 ] as const;
 
+const programOpen = {
+	type: "open_program",
+	program: "inbox",
+	location: {row: "m17"},
+	from: "t1",
+	via: {_tag: "click"},
+} as const satisfies Msg;
+const [withInbox, started] = applyCell<Desk, Msg, DeskCmd>(deskMachine, fresh(), programOpen);
+const starting = started.find((cmd) => cmd.type === "start_program");
+const locating = applyCell<Desk, Msg, DeskCmd>(deskMachine, withInbox, programOpen)[1].find(
+	(cmd) => cmd.type === "locate",
+);
+if (starting === undefined || locating === undefined)
+	throw new Error("Opening then reusing inbox must start the program and locate its row");
+
+const via = fc.constantFrom(
+	{_tag: "key", keys: "shift+o"} as const,
+	{_tag: "click"} as const,
+	{_tag: "palette"} as const,
+	{_tag: "word"} as const,
+);
+
 /** One entry per Msg type, the Cmds' answers too: leaving one out does not compile. */
 const table: MsgArbitraryTable<Msg> = {
+	open_program: fc.oneof(
+		arbRecordMsg("open_program", {
+			program: fc.constant("inbox" as const),
+			location: fc.option(fc.constantFrom("m17", "m18"), {nil: null}).map((row) => ({row})),
+			from: tile,
+			via,
+		}),
+		arbRecordMsg("open_program", {
+			program: fc.constant("tracker" as const),
+			location: fc.oneof(
+				fc.constant({row: null}),
+				fc.integer({min: 1, max: 999}).map((ticket) => ({ticket})),
+			),
+			from: tile,
+			via,
+		}),
+	),
+	start_program_ok: fc.constant({type: "start_program_ok", cmd: starting, value: null, at: 0}),
+	start_program_err: failed("start_program_err", starting),
+	locate_ok: fc.constant({type: "locate_ok", cmd: locating, value: null, at: 0}),
+	locate_err: failed("locate_err", locating),
 	key: arbRecordMsg("key", {key, at: fc.nat({max: 3000})}),
 	click: arbRecordMsg("click", {tile}),
 	resize: arbRecordMsg("resize", {
@@ -249,7 +292,7 @@ const tileIds = (s: Desk): ReadonlySet<string> =>
 	new Set(s.at === "over" ? [] : s.workspaces.flatMap((ws) => tilesOf(ws).map((t) => t.id)));
 const sameSet = (a: readonly string[], b: readonly string[]) =>
 	a.length === b.length && a.every((x) => b.includes(x));
-const tilesIn = (cmds: readonly DeskCmd[], type: "open" | "stop" | "close") =>
+const tilesIn = (cmds: readonly DeskCmd[], type: "open" | "stop" | "close" | "start_program") =>
 	cmds.flatMap((c) => (c.type === type ? [c.tile] : []));
 
 /**
@@ -333,7 +376,10 @@ const opensAndStops = everyStep(
 		);
 		const made = [...now].filter((t) => !before.has(t) && !windows.has(t));
 		const gone = [...before].filter((t) => !now.has(t));
-		return sameSet(tilesIn(cmds, "open"), made) && sameSet(tilesIn(cmds, "stop"), gone);
+		return (
+			sameSet([...tilesIn(cmds, "open"), ...tilesIn(cmds, "start_program")], made) &&
+			sameSet(tilesIn(cmds, "stop"), gone)
+		);
 	},
 );
 
@@ -660,8 +706,8 @@ describe("the desk's laws", () => {
 			deafToEnded: [endedGoes.name],
 			swallowsCtrlC: [ctrlCReaches.name],
 			splitKeepsFocus: [splitOpens.name],
-			// The focus-cycle rows change seed 1's lists; the restore law has its own plant.
-			foldsUnderFocus: [focusOpen.name],
+			// Opening programs adds a restore failure when focus is left on a folded tile.
+			foldsUnderFocus: [focusOpen.name, comesBack.name],
 			forgetsTheKept: [comesBack.name],
 		});
 		// Every law is caught by at least one plant.
