@@ -365,6 +365,99 @@ const recover = (w: ReturnType<typeof world>) =>
 	});
 
 describe("P34 door recovery", () => {
+	it("p69 plant, bind a first delivery to the addressed process: queued input reaches the live successor and signs there", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.uuid(), (letter) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const w = world();
+						const queued = request(false, letter);
+						yield* w.boot;
+						const old = yield* Effect.gen(function* () {
+							const client = yield* w.online();
+							const d = yield* Door;
+							expect(yield* Effect.exit(d.route(client, "process.send", request()))).toMatchObject({
+								_tag: "Failure",
+							});
+							return w.deliveries[0]!.parent;
+						}).pipe(Effect.provide(w.layer()));
+						w.reopen();
+						yield* recover(w);
+						w.controls.throws = false;
+						w.reopen();
+						yield* Effect.gen(function* () {
+							const client = yield* w.online();
+							const d = yield* Door;
+							expect(yield* C.ProcessManager.use((p) => p.resolve(P1))).toMatchObject({
+								name: NAME,
+								state: {_tag: "live", process: P2},
+							});
+							expect(
+								w.project.sql.exec(
+									"SELECT id FROM door_bindings WHERE letter=?",
+									`${P1}/${letter}`,
+								),
+							).toEqual([]);
+							expect(yield* d.route(client, "process.send", queued)).toMatchObject({
+								_tag: "ok",
+								result: {_tag: "accepted", pos: 1},
+							});
+							const view = yield* A.ProgramRunner.use((r) => r.open(client)).pipe(
+								Effect.provide(w.runner(P2)),
+							);
+							expect(view).toMatchObject({view: {count: 1}});
+							const delivery = w.deliveries.at(-1)!;
+							const oldWrite = yield* Effect.result(
+								d
+									.signer(old, P2, "saved")
+									.pipe(Effect.provideService(C.SignRequest, {id: `old-${letter}`})),
+							);
+							const freshWrite = yield* Effect.result(
+								d
+									.signer(delivery.parent, P2, "saved")
+									.pipe(Effect.provideService(C.SignRequest, {id: `fresh-${letter}`})),
+							);
+							expect({delivery, oldWrite, freshWrite}).toMatchObject({
+								delivery: {process: P2, letter},
+								oldWrite: {_tag: "Failure", failure: {why: "not_delivered"}},
+								freshWrite: {
+									_tag: "Success",
+									success: {parent: delivery.parent, by: {key: w.window.fingerprint}},
+								},
+							});
+							expect(
+								yield* d.append({
+									id: `fresh-${letter}`,
+									parent: delivery.parent,
+									process: P2,
+									kind: "saved",
+									stream: `${NAME}/events`,
+									fact: Schema.TaggedStruct("saved", {count: Schema.Int}).make({count: 1}),
+								}),
+							).toMatchObject({_tag: "placed"});
+							const ledger = yield* Ledger;
+							expect(yield* Stream.runCollect(ledger.read(`${NAME}/events`, 0))).toMatchObject([
+								{
+									id: `fresh-${letter}`,
+									parent: delivery.parent,
+									by: w.window.fingerprint,
+									_tag: "saved",
+									body: {count: 1},
+								},
+							]);
+						}).pipe(Effect.provide(w.layer()));
+					}).pipe(Effect.provide(TestClock.layer())),
+				),
+			),
+			{
+				seed: 119120,
+				numRuns: 12,
+				// T271 review 4: the client's queued letter first reaches the door after replacement.
+				examples: [["00000000-0000-4000-8000-000000000271"]],
+			},
+		);
+	});
+
 	it("p69 plant, trust delivered as final: resend after a lost retryable save gets a checked successor parent", async () => {
 		await fc.assert(
 			fc.asyncProperty(fc.uuid(), (letter) =>
