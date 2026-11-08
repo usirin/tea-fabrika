@@ -3,25 +3,21 @@ import {mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync} from 
 import {createRequire} from "node:module";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {_electron, type Page} from "playwright";
+import {Client} from "@modelcontextprotocol/client";
+import {StdioClientTransport} from "@modelcontextprotocol/client/stdio";
+import {_electron, type ElectronApplication, type Page} from "playwright";
 
 // An agent summoned and talked to, in the real built app, on a temp home and a temp git
 // repository, with the fake ACP agent: no model, no key, nothing real touched. Today's version.
-// Not part of `pnpm test`: it opens a window.
+// Separate from the default e2e run. The native window fits a 1440 by 674 CI screen;
+// the 1024 by 700 page uses DevTools emulation, as e2e.ts's infoModeSmall does.
 //
 //   pnpm --filter @kampus/fabrika-app-old e2e:summon
-//   SHOTS=<folder> ...e2e:summon     the screenshots there: docs/summon for the real ones
+//   SHOTS=docs/summon pnpm --filter @kampus/fabrika-app-old e2e:summon
 //
-// In each layout (one tile, two side by side, two stacked, a 2x2, and one tile at 1024 by 700):
-//
-//   summon fake as scout              ready, once, in the first layout; the name is the host's
-//   @scout slowly read a.txt b.txt    the status line in place while it works   <layout>-status
-//                                     then the reply, printed whole              <layout>-reply
-//   @scout write                      scout asks: ... allow? [y/N]               <layout>-ask
-//                                     y: allowed once, and the turn goes on
-//   @scout slowly read a.txt b.txt    then Ctrl-C: scout: turn cancelled         <layout>-ctrl-c
-//   Ctrl-B A                          the top bar's agents, scout under its own heading, with
-//                                     a Dismiss                                   <layout>-panel
+// PR 1's seven states in one, side, stacked, 2x2 and small: <state>-<layout>-dark.png,
+// plus summoned-<layout>-light.png. The fake harness supplies the model and effort lists,
+// including the refusal of ultra. An MCP client called observer attaches without running a model.
 
 const here = import.meta.dirname;
 const electronPath: string = createRequire(import.meta.url)("electron");
@@ -36,7 +32,8 @@ writeFileSync(join(repo, "b.txt"), "b\n");
 
 const env: Record<string, string> = {};
 for (const [name, value] of Object.entries(process.env))
-	if (value !== undefined && !/API_KEY$/.test(name)) env[name] = value;
+	if (value !== undefined && !/API_KEY$/.test(name) && name !== "FABRIKA_FOREGROUND")
+		env[name] = value;
 Object.assign(env, {FABRIKA_HOME: home, FABRIKA_REPO: repo});
 
 const check = (what: string, ok: boolean, seen?: unknown) => {
@@ -63,6 +60,9 @@ const screen = async (page: Page, id: string) => {
 	return (await text.count()) === 0 ? "" : ((await text.textContent({timeout: 2000})) ?? "");
 };
 const lastRow = (text: string) => text.split("\n").at(-1) ?? "";
+/** Terminal wraps can split a word or trim the space at the end of a row. */
+const contains = (text: string, words: string) =>
+	text.replaceAll(/\s/g, "").includes(words.replaceAll(/\s/g, ""));
 const tiles = (page: Page) =>
 	page.locator("[data-tile]").evaluateAll((all) => all.map((t) => t.getAttribute("data-tile")));
 const focused = async (page: Page) =>
@@ -81,8 +81,21 @@ const prefixed = async (page: Page, key: string) => {
 	await page.keyboard.press(key);
 };
 const shot = async (page: Page, name: string) => {
+	await page.mouse.move(1, 1);
+	await page.waitForTimeout(250);
 	await page.screenshot({path: join(shots, `${name}.png`)});
 	console.log(`shot ${name}`);
+};
+const lookIs = async (app: ElectronApplication, page: Page, look: "dark" | "light") => {
+	await app.evaluate(({nativeTheme}, to) => {
+		nativeTheme.themeSource = to;
+	}, look);
+	await page.emulateMedia({colorScheme: look});
+	await until(
+		`the ${look} look`,
+		() => page.evaluate(() => matchMedia("(prefers-color-scheme: light)").matches),
+		(light) => light === (look === "light"),
+	);
 };
 /** A new tile: focus moves to it, and its tsh is up. */
 const split = async (page: Page, key: "|" | "-") => {
@@ -116,21 +129,62 @@ const workspace = async (page: Page) => {
 	return id;
 };
 
-/** The five states, typed in the focused tile, each shot under `layout`. */
-const states = async (page: Page, layout: string) => {
+/** Each state checks PR 1's screenshot contract before saving its picture. */
+const states = async (app: ElectronApplication, page: Page, layout: string) => {
 	const id = await focused(page);
 	await prompted(page, id);
+	await run(page, id, "summon fake high as scout");
+	const summoned = () =>
+		shows(
+			page,
+			id,
+			"the resolved model, effort and place, then the prompt",
+			(t) =>
+				contains(t, "scout · fake fake-small · high · in this repo, on this Mac · ready") &&
+				lastRow(t) === "tsh$",
+		);
+	await summoned();
+	await shot(page, `summoned-${layout}-dark`);
+	await lookIs(app, page, "light");
+	await summoned();
+	await shot(page, `summoned-${layout}-light`);
+	await lookIs(app, page, "dark");
+
 	await run(page, id, "@scout slowly read a.txt b.txt");
-	await shows(page, id, "the status line", (t) => /✦ scout {2}.*·/.test(lastRow(t)));
-	await shot(page, `${layout}-status`);
-	await prompted(page, id);
-	const replied = await screen(page, id);
-	check(`${layout}: the reply, then the turn's line`, /scout · turn \d+ · /.test(replied), replied);
-	await shot(page, `${layout}-reply`);
+	await until(
+		"the bottom line's job number, line and seconds",
+		() => page.locator(".bottomline .job").textContent({timeout: 2000}),
+		(t) => t !== null && /%\d+\s+@scout slowly read a\.txt b\.txt\s+\d+s/.test(t),
+	);
+	const running = await shows(page, id, "one status row in place, holding the prompt", (t) =>
+		/^✦ scout {2}.+ · \d+s$/.test(lastRow(t)),
+	);
+	check(`${layout}: only the current status row`, running.match(/✦ scout {2}/g)?.length === 1);
+	check(
+		`${layout}: the bottom line's job is visible`,
+		await page.locator(".bottomline .job").isVisible(),
+	);
+	await shot(page, `turn-running-${layout}-dark`);
+	await shows(
+		page,
+		id,
+		"the whole reply under scout's name, then the prompt",
+		(t) =>
+			/✦ scout {2}a\.txt: a\n {9}b\.txt: b/.test(t) &&
+			/scout · turn \d+ · \d+s/.test(t) &&
+			lastRow(t) === "tsh$",
+	);
+	await shot(page, `turn-replied-${layout}-dark`);
 
 	await run(page, id, "@scout write");
-	await shows(page, id, "the ask", (t) => t.includes("allow? [y/N]"));
-	await shot(page, `${layout}-ask`);
+	await shows(page, id, "scout's permission question holding the prompt", (t) =>
+		/scout asks: Write written\.txt\s+allow\? \[y\/N\]/.test(t),
+	);
+	check(
+		`${layout}: the ask has not returned the prompt`,
+		lastRow(await screen(page, id)) !== "tsh$",
+	);
+	await shot(page, `turn-asking-${layout}-dark`);
 	await page.keyboard.press("y");
 	await shows(page, id, "allowed", (t) => t.includes("y: allowed once"));
 	await prompted(page, id);
@@ -140,75 +194,124 @@ const states = async (page: Page, layout: string) => {
 	await page.keyboard.press("Control+c");
 	await shows(page, id, "cancelled", (t) => t.includes("scout: turn cancelled"));
 	await prompted(page, id);
-	await shot(page, `${layout}-ctrl-c`);
+	await run(page, id, "agents");
+	await shows(
+		page,
+		id,
+		"the cancellation, scout still idle in agents, and the prompt back",
+		(t) =>
+			t.includes("scout: turn cancelled") &&
+			/\bscout\b[^\n]*\bidle\b/.test(t) &&
+			lastRow(t) === "tsh$",
+	);
+	await shot(page, `turn-cancelled-${layout}-dark`);
 
 	await prefixed(page, "A");
-	const panel = page.getByRole("button", {name: "Dismiss scout"});
-	await until(
-		"the agents' panel",
-		() => panel.count(),
-		(n) => n === 1,
+	const panel = page.getByRole("dialog", {name: "The agents"});
+	await panel.waitFor();
+	await panel.getByRole("heading", {name: "1 agent summoned here", exact: true}).waitFor();
+	await panel.getByRole("heading", {name: "1 agent is attached", exact: true}).waitFor();
+	check(
+		`${layout}: scout and its dismiss are visible`,
+		(await panel.getByText("scout", {exact: true}).isVisible()) &&
+			(await panel.getByRole("button", {name: "Dismiss scout"}).isVisible()),
 	);
-	await shot(page, `${layout}-panel`);
+	check(
+		`${layout}: the MCP agent is listed separately`,
+		(await panel.getByText("observer", {exact: true}).isVisible()) &&
+			(await panel.getByRole("button", {name: "Dismiss observer"}).count()) === 0,
+	);
+	await until(
+		"the top bar counts the summoned agent and the MCP agent",
+		() => page.locator(".topbar .right").textContent(),
+		(t) => t !== null && /\b2 agents\b/.test(t),
+	);
+	await shot(page, `agents-panel-${layout}-dark`);
 	await page.keyboard.press("Escape");
 	await until(
 		"the panel closed",
 		() => panel.count(),
 		(n) => n === 0,
 	);
+	await prompted(page, id);
+
+	await run(page, id, "summon fake ultra as x");
+	await shows(
+		page,
+		id,
+		"ultra refused with the offered models and efforts, then the prompt",
+		(t) =>
+			contains(
+				t,
+				"ultra is not a model or an effort fake offers. fake's models: fake-small, fake-large; efforts: low, medium, high",
+			) && lastRow(t) === "tsh$",
+	);
+	await shot(page, `refused-setting-${layout}-dark`);
+	await run(page, id, "dismiss scout");
+	await shows(
+		page,
+		id,
+		"scout dismissed",
+		(t) => t.includes("scout dismissed") && lastRow(t) === "tsh$",
+	);
 };
 
 const app = await _electron.launch({executablePath: electronPath, args: [here], env});
+const observer = new Client({name: "summon-shots", version: "0.0.0"});
 let failed = false;
 try {
 	const page = await app.firstWindow();
-	await prompted(page, "t1");
-
-	// ---- one tile: summon, then each state
-	await run(page, "t1", "summon fake as scout");
-	await shows(page, "t1", "ready", (t) => t.includes("scout · ") && t.includes("ready"));
-	await prompted(page, "t1");
-	await shot(page, "one-tile-summon");
-	await states(page, "one-tile");
-
-	// ---- a small window, 1024 by 700, through the DevTools protocol as e2e.ts does it
-	const cdp = await page.context().newCDPSession(page);
-	await cdp.send("Emulation.setDeviceMetricsOverride", {
-		width: 1024,
-		height: 700,
-		deviceScaleFactor: 0,
-		mobile: false,
+	const bounds = await app.evaluate(({BrowserWindow}) => {
+		const [window] = BrowserWindow.getAllWindows();
+		if (window === undefined) throw new Error("no app window");
+		window.setBounds({x: 0, y: 0, width: 1200, height: 640});
+		return window.getBounds();
 	});
-	await until(
-		"the window at 1024 by 700",
-		() => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
-		(size) => size === "1024x700",
+	check(
+		"the native window fits the CI screen",
+		bounds.width <= 1440 && bounds.height <= 674,
+		bounds,
 	);
-	await states(page, "small-window");
-	await cdp.send("Emulation.clearDeviceMetricsOverride");
-
-	// ---- two side by side, in a new workspace
-	await workspace(page);
-	await split(page, "|");
-	await states(page, "side-by-side");
-
-	// ---- two stacked
-	await workspace(page);
-	await split(page, "-");
-	await states(page, "stacked");
-
-	// ---- a 2x2: split right, then each column down
-	const first = await workspace(page);
-	await split(page, "|");
-	await split(page, "-");
-	await prefixed(page, "h");
-	await until(
-		`focus on ${first}`,
-		() => focused(page),
-		(f) => f === first,
+	await prompted(page, "t1");
+	await lookIs(app, page, "dark");
+	await observer.connect(
+		new StdioClientTransport({
+			command: process.execPath,
+			args: [join(here, "src", "cli.ts"), "mcp", "--as", "observer"],
+			env,
+			stderr: "inherit",
+		}),
 	);
-	await split(page, "-");
-	await states(page, "grid");
+
+	for (const layout of ["one", "side", "stacked", "2x2", "small"]) {
+		const first = layout === "one" ? "t1" : await workspace(page);
+		if (layout === "side" || layout === "2x2") await split(page, "|");
+		if (layout === "stacked" || layout === "2x2") await split(page, "-");
+		if (layout === "2x2") {
+			await prefixed(page, "h");
+			await until(
+				`focus on ${first}`,
+				() => focused(page),
+				(f) => f === first,
+			);
+			await split(page, "-");
+		}
+		if (layout === "small") {
+			const cdp = await page.context().newCDPSession(page);
+			await cdp.send("Emulation.setDeviceMetricsOverride", {
+				width: 1024,
+				height: 700,
+				deviceScaleFactor: 0,
+				mobile: false,
+			});
+			await until(
+				"the page at 1024 by 700",
+				() => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
+				(size) => size === "1024x700",
+			);
+		}
+		await states(app, page, layout);
+	}
 
 	const log = readFileSync(join(home, "host", "log"), "utf8");
 	for (const message of ["summoned", "turn_began", "turn_ended", "ask_answered"])
@@ -233,6 +336,7 @@ try {
 		})(),
 		10,
 	);
+	await observer.close().catch(() => {});
 	await app.close().catch(() => {});
 	// This run started that host, on its own temp home, and only this run stops it.
 	if (!Number.isNaN(pid))
