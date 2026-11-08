@@ -69,3 +69,51 @@ Their count on PR 223's tree at `7c1d073` (33 files), each fire read by hand, on
 - `no-clock-in-view`: 2, none false by its words: `window/main.tsx:146` (the same read) and `main.tsx:19`, a module-level `crypto.randomUUID()` naming the tab. That one is not in a view function, only in a view file; whether a read at a view file's top level should pass is a later call.
 - `no-hand-tag`, `one-store-hook`, `react/refs`, `react/immutability`, `react/display-name`: 0. The slice holds no `_tag` and no store hook, so for those two a zero measures nothing.
 - `lint:compiler`: 0 findings on the slice's two `.tsx` files.
+
+## Function tracing, T285 PR 1
+
+`effect-functions` applies to product code in `next/`. A named function returning
+an Effect with a whole-function `Effect.withSpan` chain uses named `Effect.fn`.
+The rule also sees returned recovery and flush chains, direct `Effect.withSpan`,
+curried wrappers, and aliased Effect imports. It leaves inner spans and
+`Stream.withSpan` alone. Stream spans measure consumption.
+
+Measured on HEAD `600c6449`, 2026-11-08, with
+`node oxlint-plugins/lint.ts next`. Each finding was read against
+[`the tracing decision`](../docs/direction/effect-fn-for-traced-functions.md).
+Paths below start at `next/packages/libfabrika/src/`.
+
+| Finding | Verdict |
+|---|---|
+| `data/ledger-store.ts:261`, `ring`, `ledger.ring` | Real. Keep recovery outside the failed span. |
+| `data/ledger-store.ts:312`, `append`, `ledger.append` | Real. Validation refusals must stay inside the span. |
+| `data/ledger-store.ts:340`, `read`, `ledger.read` | Real. One span per answered page. |
+| `data/ledger-store.ts:370`, `wait`, `ledger.wait` | Real. Keep ready and parked answers in the span. |
+| `app/runner.ts:436`, `cmdSpan`, `runner.cmd` | Real. Keep handler recovery outside the failed span. |
+| `app/runner.ts:470`, `commit`, `runner.write` | Real. Keep the signer's link and the same scope. |
+| `app/runner.ts:592`, `call`, public runner spans | Real. End the span before flushing. |
+| `data/ledger.ts:93`, `call`, `ledger.call` | Real. This protected file waits for the other driver's change. |
+| `data/sink.test.ts:94`, `traced`, arbitrary span input | False alarm in the first scan. This helper manufactures test input, rather than tracing a product operation. Tests are now outside this rule. |
+
+The first scan included tests: 9 findings, 8 real and 1 false alarm. The final
+config leaves tests out, as the other Effect exam rules do. A second scan of all
+`next/` has **8 findings, 8 real, 0 false alarms**. The rule is therefore an
+**error**, with those eight findings as PR 1's red on HEAD. It needs no advice
+exception in the lint runner. The existing advice rules still print separately.
+
+The planted exam is `next/apps/fabrika/src/exam/effect-functions.test.ts`.
+Nine rejected fixture sites are real violations. Seven allowed forms cover
+inner spans, consumed streams, named functions, untraced helpers, forwarding
+and one-use callbacks. Other fixtures check aliases, today's code and test span
+makers. A rule that rejects every `withSpan` fails these plants.
+
+This rule checks syntax, without types. It follows only the returned chain in an
+expression body or a block containing one return. It does not inspect Effect
+values such as `members` or `info`, infer indirect wrappers, or enforce every
+helper's use of `fnUntraced`. Behavior properties in
+`next/packages/libfabrika/src/app/effect-functions.test.ts` keep the names,
+attributes, parents, failed exits, signer links and flush order. The sample is
+one tree; zero false alarms here does not prove every future shape.
+
+`effectFnOpportunity` remains off. Its earlier 11 false alarms among 17 findings
+are not evidence for enabling it.
