@@ -19,8 +19,9 @@ import {
 	type Sql,
 } from "@kampus/libfabrika/data";
 import {nodeSql} from "@kampus/libfabrika/sqlite";
-import {Effect, Layer, Schema} from "effect";
+import {Effect, Layer, Schema, Stream} from "effect";
 import {TestClock} from "effect/testing";
+import * as fc from "fast-check";
 import {Door} from "./door.ts";
 
 const P1 = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
@@ -136,7 +137,7 @@ const world = () => {
 	let ids = 0;
 	let starts = 0;
 	let steps = 0;
-	const controls = {throws: true};
+	const controls = {throws: true, cutRetryable: false, retryableCuts: 0};
 	const Model = Schema.Struct({count: Schema.Int});
 	type Model = typeof Model.Type;
 	// Wire inputs use _tag, tea uses type. The program's Msg keeps tea's own tag.
@@ -242,8 +243,24 @@ const world = () => {
 			),
 		);
 	};
+	// Lose the retryable save after the real runner fails, keeping the prior delivered row.
+	const doorSql: Sql = {
+		...project.sql,
+		exec: (query, ...args) => {
+			if (
+				controls.cutRetryable &&
+				query.startsWith("UPDATE door_bindings") &&
+				args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"retryable"'))
+			) {
+				controls.cutRetryable = false;
+				controls.retryableCuts++;
+				throw new Error("lost retryable save");
+			}
+			return project.sql.exec(query, ...args);
+		},
+	};
 	const settings = (): DoorOptions => ({
-		sql: project.sql,
+		sql: doorSql,
 		founder,
 		name: "project-a",
 		url: URL,
@@ -348,6 +365,76 @@ const recover = (w: ReturnType<typeof world>) =>
 	});
 
 describe("P34 door recovery", () => {
+	it("p69 plant, trust delivered as final: resend after a lost retryable save gets a checked successor parent", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.uuid(), (letter) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const w = world();
+						yield* w.boot;
+						w.controls.cutRetryable = true;
+						const old = yield* Effect.gen(function* () {
+							const client = yield* w.online();
+							const d = yield* Door;
+							expect(
+								yield* Effect.exit(d.route(client, "process.send", request(true, letter))),
+							).toMatchObject({_tag: "Failure"});
+							expect(w.controls.retryableCuts).toBe(1);
+							const [binding] = w.project.sql.exec(
+								"SELECT json_extract(value, '$.state._tag') AS state FROM door_bindings WHERE letter=?",
+								`${P1}/${letter}`,
+							);
+							expect(binding?.state).toBe("delivered");
+							expect(yield* C.ProcessManager.use((p) => p.isLive(P1))).toBe(false);
+							expect(
+								yield* Ledger.use((l) => Stream.runCollect(l.read(`${NAME}/inbox`, 0))),
+							).toEqual([]);
+							return w.deliveries[0]!.parent;
+						}).pipe(Effect.provide(w.layer()));
+						w.reopen();
+						yield* recover(w);
+						w.controls.throws = false;
+						w.reopen();
+						yield* Effect.gen(function* () {
+							const client = yield* w.online();
+							const d = yield* Door;
+							expect(yield* C.ProcessManager.use((p) => p.isLive(P2))).toBe(true);
+							expect(yield* d.route(client, "process.send", request(true, letter))).toMatchObject({
+								_tag: "ok",
+								result: {_tag: "accepted"},
+							});
+							const delivery = w.deliveries.at(-1)!;
+							const oldWrite = yield* Effect.result(
+								d
+									.signer(old, P2, "saved")
+									.pipe(Effect.provideService(C.SignRequest, {id: `old-${letter}`})),
+							);
+							const freshWrite = yield* Effect.result(
+								d
+									.signer(delivery.parent, P2, "saved")
+									.pipe(Effect.provideService(C.SignRequest, {id: `fresh-${letter}`})),
+							);
+							expect({delivery, oldWrite, freshWrite}).toMatchObject({
+								delivery: {process: P2, letter, parent: expect.not.stringContaining(old)},
+								oldWrite: {_tag: "Failure", failure: {why: "not_delivered"}},
+								freshWrite: {
+									_tag: "Success",
+									success: {parent: delivery.parent, by: {key: w.window.fingerprint}},
+								},
+							});
+						}).pipe(Effect.provide(w.layer()));
+					}).pipe(Effect.provide(TestClock.layer())),
+				),
+			),
+			{
+				seed: 119120,
+				numRuns: 12,
+				// T271 re-review: the door crashes between delivered and retryable, before acceptance.
+				examples: [["00000000-0000-4000-8000-000000000271"]],
+			},
+		);
+	});
+
 	it.effect(
 		"p80 plant, void delivery hides placing: forward the real runner result and stable outbox ID",
 		() =>

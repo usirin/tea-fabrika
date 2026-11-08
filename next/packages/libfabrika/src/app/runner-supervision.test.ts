@@ -15,6 +15,7 @@ import {
 	B,
 	W,
 	X,
+	again,
 	brain,
 	data,
 	first,
@@ -26,7 +27,7 @@ import {
 } from "../coordination/process.test-support.ts";
 import {Activity, Down, Recipient} from "../coordination/process.ts";
 import {RecoveryStore} from "../coordination/recovery-store.ts";
-import {Ledger, type LedgerError} from "../data/ledger.ts";
+import {Ledger, LedgerError} from "../data/ledger.ts";
 import {lineFor} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
 import {
@@ -64,11 +65,15 @@ const Msg = Schema.Union([
 	}),
 ]);
 const work = Cmd.make("work", {input: Schema.Struct({}), ok: Schema.Null, err: ["failed"]});
-type Wiring = {policy: typeof policy; recovery: {sql: Sql; name: string; capacity: number}};
+type Wiring = {
+	policy: typeof policy;
+	recovery: {sql: Sql; name: string; capacity: number};
+	fault: (cut: string) => Effect.Effect<void, LedgerError>;
+};
 const runnerLayer: (p: Descriptor, wiring: Wiring) => ReturnType<typeof ProgramRunner.layer> =
 	ProgramRunner.layer;
 
-const world = (personOnly = false) => {
+const world = (personOnly = false, platformActivity = false) => {
 	const ledger = storage(),
 		state = storage(),
 		authority = storage();
@@ -84,8 +89,33 @@ const world = (personOnly = false) => {
 		cmds: 0,
 		adds: 0,
 		crashAdd: 0,
+		cut: "",
+		hits: [] as string[],
 		downs: [] as Array<typeof Down.Type>,
 	};
+	// The platform has one activity key per object, shared by every selected process.
+	// Back it with a SQLite file so reopening drops all runner memory but keeps the key.
+	if (platformActivity)
+		state.sql.exec("CREATE TABLE p34_activity (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+	const activityStorage = platformActivity
+		? {
+				put: (key: string, value: unknown) =>
+					Effect.sync(() => {
+						state.sql.exec(
+							"INSERT INTO p34_activity (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+							key,
+							JSON.stringify(value),
+						);
+					}),
+				get: (key: string) =>
+					Effect.sync(() => {
+						const [row] = state.sql.exec("SELECT value FROM p34_activity WHERE key=?", key);
+						return row === undefined ? undefined : JSON.parse(String(row.value));
+					}),
+				// SQLite has already committed each put when it returns.
+				sync: () => Effect.void,
+			}
+		: undefined;
 	const alarms: Array<number | null> = [];
 	const input = (id = "poison", m: unknown = {type: "poison", key: id}): Incoming => ({
 		id,
@@ -209,12 +239,22 @@ const world = (personOnly = false) => {
 		).pipe(Layer.provide(Mailbox.layer));
 		return runnerLayer(
 			{id: A, name: NAME, program: "counter", build: controls.build, owner: person},
-			{policy, recovery: {sql: state.sql, name: NAME, capacity: 1024 ** 3}},
+			{
+				policy,
+				recovery: {sql: state.sql, name: NAME, capacity: 1024 ** 3},
+				fault: (cut) =>
+					Effect.suspend(() => {
+						if (controls.cut !== cut) return Effect.void;
+						controls.cut = "";
+						controls.hits.push(cut);
+						return Effect.fail(new LedgerError({why: "unreachable"}));
+					}),
+			},
 		).pipe(
 			Layer.provideMerge(
 				Layer.mergeAll(
 					loader,
-					ProcessStore.layer(state.sql, {process: A}),
+					ProcessStore.layer(state.sql, {process: A, storage: activityStorage}),
 					checked,
 					Layer.succeed(WatcherManager, {publish: () => Effect.void}),
 					Layer.succeed(Alarm, {
@@ -283,6 +323,158 @@ const recover = (w: ReturnType<typeof world>) =>
 	});
 
 describe("P34 runner supervision", () => {
+	it("p80 H3 plant, restart clears turn: explicit Restart keeps unindexed person-only acceptance after a failed fold", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.uuid(), fc.integer({min: 1, max: 1000}), (id, n) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const w = world(true);
+						yield* w.boot;
+						w.controls.crashAdd = 2;
+						const letter = w.input(id, {type: "add", n});
+						const before = yield* Effect.gen(function* () {
+							yield* ProgramRunner.use((r) => failed(r.msg(letter)));
+							expect(w.controls.adds).toBe(2);
+							expect(yield* ProcessStore.use((s) => s.load)).toMatchObject({
+								turn: {_tag: "prepared", id},
+								saved: {model: {count: 0}},
+							});
+							expect(yield* ProcessStore.use((s) => s.placedByAny(id))).toBeNull();
+							expect((yield* lives).at(-1)).toMatchObject({
+								_tag: "down",
+								body: {process: A, why: "saved_letter"},
+							});
+							return yield* inbox;
+						}).pipe(Effect.provide(w.layer()));
+						w.reopen();
+						w.controls.build = "build-restart";
+						yield* Effect.gen(function* () {
+							const runner = yield* ProgramRunner;
+							yield* runner.restart({id: `restart-${id}`, build: w.controls.build});
+							expect(w.controls.init).toContainEqual({build: w.controls.build, loaded: null});
+							expect((yield* runner.open("restarted")).view).toMatchObject({count: n});
+							expect(yield* inbox).toEqual(before);
+							expect(yield* ProcessStore.use((s) => s.placedByAny(id))).toMatchObject({
+								id,
+								rev: before[0]!.rev,
+								pos: before[0]!.pos,
+							});
+							expect(yield* runner.msg(letter)).toMatchObject({_tag: "accepted"});
+							expect((yield* runner.open("resend")).view).toMatchObject({count: n});
+							expect(yield* dead).toEqual([]);
+						}).pipe(Effect.provide(w.layer()));
+					}).pipe(Effect.provide(TestClock.layer())),
+				),
+			),
+			{
+				seed: 119120,
+				numRuns: 12,
+				// T271 re-review: Restart loses the only acceptance marker for person-only mail.
+				examples: [["00000000-0000-4000-8000-000000000271", 7]],
+			},
+		);
+	});
+
+	it("wake probe plant, never clear marker on handoff: storage.get recovery survives a second wake with the same live successor", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.uuid(), (id) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const w = world(false, true);
+						yield* w.boot;
+						w.controls.cut = "after_observation";
+						yield* ProgramRunner.use((r) => failed(r.msg(w.input(id)))).pipe(
+							Effect.provide(w.layer()),
+						);
+						expect(w.controls.hits).toEqual(["after_observation"]);
+						w.reopen();
+						yield* Effect.gen(function* () {
+							expect(yield* ProcessStore.use((s) => s.readActivity)).toMatchObject({
+								_tag: "stepping",
+								process: A,
+								letter: id,
+							});
+							yield* ProgramRunner.use((r) => failed(r.open("recover")));
+						}).pipe(Effect.provide(w.layer()));
+						yield* recover(w);
+						const before = yield* Effect.gen(function* () {
+							expect(yield* ProcessManager.use((p) => p.isLive(B))).toBe(true);
+							return yield* lives;
+						}).pipe(Effect.provide(w.manager()));
+						w.reopen();
+						yield* Effect.gen(function* () {
+							const opened = yield* Effect.exit(ProgramRunner.use((r) => r.open("wake-again")));
+							const stillLive = yield* ProcessManager.use((p) => p.isLive(B));
+							const after = yield* lives;
+							expect({opened, stillLive, lives: after}).toMatchObject({
+								opened: {_tag: "Success", value: {view: {count: 0}}},
+								stillLive: true,
+								lives: before,
+							});
+						}).pipe(Effect.provide(w.layer()));
+					}).pipe(Effect.provide(TestClock.layer())),
+				),
+			),
+			{
+				seed: 119120,
+				numRuns: 12,
+				// T271 re-review: the object-wide stepping key outlives A's recovered failure.
+				examples: [["00000000-0000-4000-8000-000000000271"]],
+			},
+		);
+	});
+
+	it("H6 p80 plant, keep old build: adopting an external successor uses its build in records and later recovery", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.uuid(), fc.integer({min: 1, max: 1000}), (id, n) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const w = world();
+						yield* w.boot;
+						yield* ProgramRunner.use((r) => failed(r.msg(w.input()))).pipe(
+							Effect.provide(w.layer()),
+						);
+						const build = `build-${id}`;
+						yield* ProcessManager.use((p) =>
+							p.start(again(A, `external-${id}`, {program: "counter", hash: build}), from()),
+						).pipe(Effect.provide(w.manager()));
+						w.controls.build = build;
+						w.reopen();
+						const records = yield* Effect.gen(function* () {
+							const runner = yield* ProgramRunner;
+							expect(yield* runner.msg(w.input(id, {type: "add", n}))).toMatchObject({
+								_tag: "accepted",
+							});
+							const records = yield* read(B);
+							expect(records).toHaveLength(1);
+							yield* failed(runner.msg(w.input(`poison-${id}`)));
+							return records;
+						}).pipe(Effect.provide(w.layer()));
+						w.reopen();
+						yield* recover(w);
+						const status = yield* ProcessManager.use((p) => p.status(NAME)).pipe(
+							Effect.provide(w.manager()),
+						);
+						const saved = yield* RecoveryStore.use((s) => s.load).pipe(
+							Effect.provide(RecoveryStore.layer(w.state.sql, {name: NAME, capacity: 1024 ** 3})),
+						);
+						expect({records, saved, state: status.state}).toMatchObject({
+							records: [{build, body: {build, input: id}}],
+							saved: {build},
+							state: {_tag: "live", process: W, code: {hash: build}},
+						});
+					}).pipe(Effect.provide(TestClock.layer())),
+				),
+			),
+			{
+				seed: 119120,
+				numRuns: 12,
+				// T271 re-review: an external replacement selects a different build from A's.
+				examples: [["00000000-0000-4000-8000-000000000271", 7]],
+			},
+		);
+	});
+
 	it("p80 p55 plant, clear turn in handoff: person-only mail survives a successor's first failed fold", async () => {
 		await fc.assert(
 			fc.asyncProperty(fc.uuid(), fc.integer({min: 1, max: 1000}), (id, n) =>
