@@ -64,7 +64,8 @@ const line = (over: Partial<Line> = {}): Line => ({
 	for: "owner",
 	sentAt: "2026-11-07T21:10:01.204Z",
 	seen: 0,
-	cause: null,
+	parent: null,
+	traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
 	build: "b-7c1d073",
 	_tag: "saved",
 	body: {note: "n-7f3a", base: 3},
@@ -126,7 +127,7 @@ describe("p94, a parked wait is a row, rung once", () => {
 				yield* referee.append("a", "w-1", line({body: "another"})),
 				yield* referee.append("a", "w-2", line({seen: 9})),
 				yield* referee.append("a", "w-3", {...line(), rev: 2}),
-				yield* referee.append("a", "w-4", line({cause: "not an input id"})),
+				yield* referee.append("a", "w-4", line({parent: "not an input id"})),
 			];
 			expect(refusals.map((answer) => answer._tag)).toEqual([
 				"refused",

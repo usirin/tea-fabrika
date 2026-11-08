@@ -25,7 +25,7 @@ import type {MemberFact} from "./members.ts";
 import {ProcessManager} from "./process-manager.ts";
 
 const READER = "gateway:t1";
-const CAUSE = "in-3f9a0c21-41";
+const PARENT = "in-3f9a0c21-41";
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TO = "ledger:home";
 const SENT = "2026-11-07T21:10:01.204Z";
@@ -71,7 +71,8 @@ const from = (over: Partial<From> = {}): From => ({
 	for: P,
 	sentAt: SENT,
 	seen: 0,
-	cause: CAUSE,
+	parent: PARENT,
+	traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
 	build: "b-7c1d073",
 	...over,
 });
@@ -261,7 +262,7 @@ describe("p97, process spans", () => {
 			yield* manager.start(
 				"notes:1",
 				{program: "notes", hash: "sha256-7c1d073e"},
-				from({cause: null}),
+				from({parent: null}),
 			);
 			const [first, second, ...more] = ended("process.start");
 			expect(more).toEqual([]);

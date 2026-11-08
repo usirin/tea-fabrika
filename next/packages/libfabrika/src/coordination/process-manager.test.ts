@@ -8,7 +8,7 @@
 // - `ProcessManager.start(pid, {program, hash}, from)` appends one `{_tag: "started", body:
 //   {program, hash}}` line to the stream `<pid>`, under the id `hash`, with `from`'s fields, and
 //   answers P6's `Appended` as it is. The same build started again with the same `by`, `for` and
-//   `cause` gets the first placing back (P6's resend); started again by another input it is
+//   `parent` gets the first placing back (P6's resend); started again by another input it is
 //   `{_tag: "refused", why: "id_reused"}`. Either way there is one line per build.
 // - `CoordinationLayer: Layer<Mailbox | ProcessManager, never, Ledger>`. No Layer fails at build.
 import {mkdtempSync, rmSync} from "node:fs";
@@ -24,8 +24,7 @@ import {type From, Mailbox} from "./mailbox.ts";
 import {CoordinationLayer, ProcessManager} from "./process-manager.ts";
 
 const READER = "gateway:t1";
-// The one place an input id's text form lives here; P6's `CauseText` reads `in-<8 hex>-<n>` today.
-const CAUSE = "in-3f9a0c21-41";
+const PARENT = "in-3f9a0c21-41";
 const LATER = "in-3f9a0c21-42";
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-07T21:10:01.204Z";
@@ -54,7 +53,8 @@ const from = (over: Partial<From> = {}): From => ({
 	for: P,
 	sentAt: SENT,
 	seen: 0,
-	cause: CAUSE,
+	parent: PARENT,
+	traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
 	build: "b-7c1d073",
 	...over,
 });
@@ -81,7 +81,8 @@ describe("p21, a process's start", () => {
 					by: "SHA256:brain",
 					for: P,
 					sentAt: SENT,
-					cause: CAUSE,
+					parent: PARENT,
+					traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
 					build: "b-7c1d073",
 				});
 			}).pipe(Effect.provide(processes())),
@@ -91,11 +92,11 @@ describe("p21, a process's start", () => {
 		Effect.gen(function* () {
 			const first = yield* start("notes:1", NOTES);
 			expect(yield* start("notes:1", NOTES, {sentAt: "later"})).toEqual(first);
-			expect(yield* start("notes:1", NOTES, {cause: LATER})).toEqual({
+			expect(yield* start("notes:1", NOTES, {parent: LATER})).toEqual({
 				_tag: "refused",
 				why: "id_reused",
 			});
-			expect(yield* start("notes:1", NOTES, {cause: null})).toEqual({
+			expect(yield* start("notes:1", NOTES, {parent: null})).toEqual({
 				_tag: "refused",
 				why: "id_reused",
 			});

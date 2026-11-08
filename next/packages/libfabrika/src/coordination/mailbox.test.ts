@@ -5,10 +5,10 @@
 //
 // The shape these tests hold the module to, from the plan's "The shape" and flag 3:
 // - `Mailbox.send(to, id, m, from)` appends one line to the stream `<to>/inbox` under `id`, as
-//   `{_tag: "send", body: {m}}` with `from`'s `by`, `for`, `sentAt`, `seen`, `cause` and `build`,
+//   `{_tag: "send", body: {m}}` with `from`'s `by`, `for`, `sentAt`, `seen`, `parent`, `traceId` and `build`,
 //   and answers P6's `Appended` as it is, `pos` included. A resend gets the same placing.
 // - `Mailbox.receive(name, after)` is a Stream of `Letter`s from `<name>/inbox` past the log rev
-//   `after`, in rev order, each `{id, m, by, for, sentAt, cause, rev, pos}` from its entry. A line
+//   `after`, in rev order, each `{id, m, by, for, sentAt, parent, traceId, rev, pos}` from its entry. A line
 //   with any other `_tag` is skipped and stays in the log; a `send` whose body has no `m` fails the
 //   Stream with `LedgerError` `bad_row`.
 // - No Layer fails when it is built.
@@ -27,8 +27,9 @@ import {type From, type Letter, Mailbox} from "./mailbox.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const READER = "gateway:t1";
-// The one place an input id's text form lives here; P6's `CauseText` reads `in-<8 hex>-<n>` today.
-const CAUSE = "in-3f9a0c21-41";
+const PARENT = "in-3f9a0c21-41";
+const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+const OTHER_TRACE = "5bf92f3577b34da6a3ce929d0e0e4737";
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 // The writer's clock is a date text, never a number, so a Letter that took it as its rev shows.
 const SENT = "2026-11-07T21:10:01.204Z";
@@ -58,7 +59,8 @@ const from = (over: Partial<From> = {}): From => ({
 	for: P,
 	sentAt: SENT,
 	seen: 0,
-	cause: CAUSE,
+	parent: PARENT,
+	traceId: TRACE,
 	build: "b-7c1d073",
 	...over,
 });
@@ -76,7 +78,8 @@ const raw = (stream: string, id: string, over: Partial<Line>) =>
 			for: P,
 			sentAt: SENT,
 			seen: 0,
-			cause: null,
+			parent: null,
+			traceId: TRACE,
 			build: "b-7c1d073",
 			_tag: "send",
 			body: {m: null},
@@ -103,7 +106,8 @@ describe("p21, send", () => {
 				for: P,
 				sentAt: SENT,
 				seen: 0,
-				cause: CAUSE,
+				parent: PARENT,
+				traceId: TRACE,
 				build: "b-7c1d073",
 			});
 		}).pipe(Effect.provide(mail())),
@@ -154,9 +158,13 @@ describe("p21, send", () => {
 				_tag: "refused",
 				why: "seen_ahead",
 			});
-			expect(yield* send("notes:1", LETTER, 1, {cause: "not-a-cause"})).toEqual({
+			expect(yield* send("notes:1", LETTER, 1, {parent: "not-a-parent"})).toEqual({
 				_tag: "refused",
-				why: "bad_cause",
+				why: "bad_parent",
+			});
+			expect(yield* send("notes:1", LETTER, 1, {traceId: "0".repeat(32)})).toEqual({
+				_tag: "refused",
+				why: "bad_trace",
 			});
 			expect(yield* inbox("notes:1")).toEqual([]);
 		}).pipe(Effect.provide(mail())),
@@ -164,42 +172,43 @@ describe("p21, send", () => {
 });
 
 describe("p21, receive", () => {
-	it.effect(
-		"plant, for or cause dropped, or rev from sentAt: each Letter is its entry, field for field",
-		() =>
-			Effect.gen(function* () {
-				yield* send("notes:1", "letter_a", {type: "save", value: 1});
-				yield* raw("other", "x-1", {_tag: "saved"});
-				yield* send("notes:1", "letter_b", [1, "two", null], {
+	it.effect("plant, parent or traceId dropped: each Letter is its entry, field for field", () =>
+		Effect.gen(function* () {
+			yield* send("notes:1", "letter_a", {type: "save", value: 1});
+			yield* raw("other", "x-1", {_tag: "saved"});
+			yield* send("notes:1", "letter_b", [1, "two", null], {
+				by: "SHA256:g1",
+				for: P,
+				parent: null,
+				traceId: OTHER_TRACE,
+				sentAt: "1",
+			});
+			const letters: ReadonlyArray<Letter> = yield* receive("notes:1");
+			expect(letters).toEqual([
+				{
+					id: "letter_a",
+					m: {type: "save", value: 1},
+					by: "SHA256:t2",
+					for: P,
+					sentAt: SENT,
+					parent: PARENT,
+					traceId: TRACE,
+					rev: 1,
+					pos: 1,
+				},
+				{
+					id: "letter_b",
+					m: [1, "two", null],
 					by: "SHA256:g1",
 					for: P,
-					cause: null,
 					sentAt: "1",
-				});
-				const letters: ReadonlyArray<Letter> = yield* receive("notes:1");
-				expect(letters).toEqual([
-					{
-						id: "letter_a",
-						m: {type: "save", value: 1},
-						by: "SHA256:t2",
-						for: P,
-						sentAt: SENT,
-						cause: CAUSE,
-						rev: 1,
-						pos: 1,
-					},
-					{
-						id: "letter_b",
-						m: [1, "two", null],
-						by: "SHA256:g1",
-						for: P,
-						sentAt: "1",
-						cause: null,
-						rev: 3,
-						pos: 2,
-					},
-				]);
-			}).pipe(Effect.provide(mail())),
+					parent: null,
+					traceId: OTHER_TRACE,
+					rev: 3,
+					pos: 2,
+				},
+			]);
+		}).pipe(Effect.provide(mail())),
 	);
 
 	it.effect("gives only the letters past after, a log rev", () =>
