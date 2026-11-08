@@ -58,7 +58,10 @@ everything else    what we use today, and a map of which jobs exist
 
 Today's library is `@kampus/fabrika-old` and today's app is `@kampus/fabrika-app-old`. They are
 deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
-`@kampus/libfabrika` is the library.
+`@kampus/libfabrika` is the library. Anyone can take `@kampus/libfabrika` alone and build a
+client that works exactly like fabrika; fabrika is one libfabrika client. So for any file in
+`next/apps/fabrika`, ask: would a from-scratch client have to write it again? If yes, it belongs
+in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.md#why-libfabrika-exists-decided-2026-11-08)).
 
 - **A search finds both.** Check the path of every file you read before you
   trust it. A name that exists in both can mean different things: a `rev` or a
