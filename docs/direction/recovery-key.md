@@ -709,6 +709,16 @@ The sheet, all of it. The calls the owner made on it:
     device. The sheet belongs to the person, and removing a device leaves it alone.
 15. Each "Check my sheet" is recorded: when, which device, matched or not. Never the words.
 
+Decided by the owner, 2026-11-08, for a few friends on one Cloudflare account
+([experiment 229](../../experiments/229-browser-only-friends.md) rows 18 and 19):
+
+16. Recovery mail goes to any friend: Email Sending with the group's own domain, Access's
+    one-time PIN with only `workers.dev`. No check per friend. The install sets up the address,
+    the domain's DNS and the mail route through alchemy, with no steps by hand.
+17. An admin can re-invite a person who lost every device, as the same person, at once, with no
+    wait. An admin's invite is already trust, so recovery has no barrier
+    ([principles](./principles.md)). The ledger records who re-invited whom.
+
 Inside the decided part, still a lean:
 
 - **A browser tab cannot approve others.** 70% (call 7).
