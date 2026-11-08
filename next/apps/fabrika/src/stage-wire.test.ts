@@ -453,6 +453,46 @@ describe("P12 real dev.ts wire", () => {
 			expect(response.error?.data?.why).toBe("unknown_method");
 		}
 	});
+	it("dev.ts plant: hide the ready line, grant on any POST, or exit 0 when the stage child fails", async () => {
+		const s = await stage();
+		const ready = `${JSON.stringify({ready: s.url}).slice(0, -1)},"build":`;
+		for (let n = 0; !s.output().includes(ready); n++) {
+			expect(n, `no ready line on dev.ts stdout: ${s.output()}`).toBeLessThan(500);
+			await pause();
+		}
+		// Only POST /grant and GET /grant/client/KEY reach the grant routes; the rest get the page.
+		expect(await (await fetch(s.url)).text()).toBe("fabrika");
+		const posted = await fetch(`${s.url}/elsewhere`, {method: "POST", body: "{}"});
+		expect(await posted.text()).toBe("fabrika");
+		const home = mkdtempSync(join(tmpdir(), "p12-w-"));
+		homes.push(home);
+		const env: NodeJS.ProcessEnv = {...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1"};
+		delete env.TYPESAFE_API_KEY;
+		delete env.FABRIKA_FOREGROUND;
+		delete env.CLOUDFLARE_API_TOKEN;
+		const key = identity();
+		// Port 0 is outside the settings range, so the stage child fails before it builds.
+		const failed = spawn(
+			process.execPath,
+			[
+				join(APP, "dev.ts"),
+				"--port",
+				"0",
+				"--name",
+				"p12-wire",
+				"--person",
+				PERSON,
+				"--founder",
+				key.line,
+				"--window",
+				key.raw,
+			],
+			{cwd: APP, env, stdio: ["ignore", "ignore", "ignore"]},
+		);
+		children.push(failed);
+		const code = await new Promise<number | null>((done) => failed.once("exit", (c) => done(c)));
+		expect(code).not.toBe(0);
+	});
 	it("p13/p81 plant: acknowledge before append or restart twice; retry a killed mid-burst once", async () => {
 		const s = await stage(),
 			c = await connected(s),
