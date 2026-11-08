@@ -71,9 +71,36 @@ const shows = (page: Page, id: string, what: string, ok: (text: string) => boole
 	until(`${id}: ${what}`, () => screen(page, id), ok);
 const prompted = (page: Page, id: string) =>
 	shows(page, id, "the prompt", (t) => lastRow(t) === "tsh$");
+
+/** Type at the focused prompt, with at most three attempts and an exact echo check. */
+const typeLine = async (page: Page, id: string, line: string) => {
+	const expected = `tsh$ ${line}`;
+	const seen: string[] = [];
+	for (let attempt = 0; attempt < 3; attempt += 1) {
+		if (attempt > 0) {
+			await page.keyboard.press("Control+e");
+			await page.keyboard.press("Control+u");
+			await prompted(page, id);
+		}
+		await page.keyboard.type(line);
+		let row = lastRow(await screen(page, id));
+		for (let i = 0; i < 200 && row !== expected; i += 1) {
+			await page.waitForTimeout(50);
+			row = lastRow(await screen(page, id));
+		}
+		if (row === expected) return;
+		seen.push(row);
+		console.warn(
+			`${id}: typing attempt ${attempt + 1} for ${JSON.stringify(line)}; saw ${JSON.stringify(row)}`,
+		);
+	}
+	throw new Error(
+		`${id}: could not type ${JSON.stringify(line)} after 3 attempts; saw ${JSON.stringify(seen)}`,
+	);
+};
+
 const run = async (page: Page, id: string, line: string) => {
-	await page.keyboard.type(line);
-	await shows(page, id, `the line ${line}`, (t) => lastRow(t) === `tsh$ ${line}`);
+	await typeLine(page, id, line);
 	await page.keyboard.press("Enter");
 };
 const prefixed = async (page: Page, key: string) => {
