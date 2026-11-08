@@ -24,6 +24,14 @@ export type Letter = {
 	readonly pos: Rev;
 };
 
+/** A letter with what its entry also kept: the writer's build, the rev it had seen, and the
+ *  referee's clock. The runner reads these to catch a process up (P11); `Letter` stays as it is. */
+export type History = Letter & {
+	readonly build: string;
+	readonly seen: Rev;
+	readonly arrivedAt: number;
+};
+
 /** Span tag keys: OpenTelemetry's messaging names where they fit, `fab.<thing>.*` for the rest. */
 const STREAM = "messaging.destination.name";
 const ID = "messaging.message.id";
@@ -39,12 +47,12 @@ const decodeSent = Schema.decodeUnknownOption(Sent);
 
 const inbox = (name: string): string => `${name}/inbox`;
 
-/** A `send` entry as a Letter; any other case is none, and kept in the log (T4). */
-const letter = Effect.fnUntraced(function* (entry: Entry) {
-	if (entry._tag !== SEND) return Option.none<Letter>();
+/** A `send` entry as its History; any other case is none, and kept in the log (T4). */
+const history = Effect.fnUntraced(function* (entry: Entry) {
+	if (entry._tag !== SEND) return Option.none<History>();
 	const sent = decodeSent(entry.body);
 	if (Option.isNone(sent)) return yield* new LedgerError({why: "bad_row"});
-	return Option.some<Letter>({
+	return Option.some<History>({
 		id: entry.id,
 		m: sent.value.m,
 		by: entry.by,
@@ -54,8 +62,15 @@ const letter = Effect.fnUntraced(function* (entry: Entry) {
 		traceId: entry.traceId,
 		rev: entry.rev,
 		pos: entry.pos,
+		build: entry.build,
+		seen: entry.seen,
+		arrivedAt: entry.arrivedAt,
 	});
 });
+
+/** A History as the Letter P9 answers: the same entry, without what only the runner reads. */
+const letter = ({build: _build, seen: _seen, arrivedAt: _arrivedAt, ...plain}: History): Letter =>
+	plain;
 
 /** Tags an answer on the current span: placed or refused, and why. */
 export const answered = Effect.fnUntraced(function* (
@@ -91,6 +106,8 @@ export class Mailbox extends Context.Service<
 		) => Effect.Effect<Appended, LedgerError>;
 		/** The letters in `<name>/inbox` past the log rev `after`, oldest first. */
 		readonly receive: (name: string, after: Rev) => Stream.Stream<Letter, LedgerError>;
+		/** The same letters as `receive`, each with its entry's build, seen and arrival clock. */
+		readonly read: (name: string, after: Rev) => Stream.Stream<History, LedgerError>;
 	}
 >()("@kampus/libfabrika/Mailbox") {
 	/** Building it touches nothing: each call reaches the ledger on its own. */
@@ -98,6 +115,37 @@ export class Mailbox extends Context.Service<
 		Mailbox,
 		Effect.gen(function* () {
 			const ledger = yield* Ledger;
+			/** The one reader under both reads: each `send` entry past `after`, counted on its span. */
+			const reader = (name: string, after: Rev, span: string) =>
+				Stream.unwrap(
+					Effect.sync(() => {
+						const count = {letters: 0, skipped: 0};
+						return ledger.read(inbox(name), after).pipe(
+							Stream.mapEffect((entry) =>
+								Effect.map(history(entry), (found) => {
+									if (Option.isSome(found)) count.letters++;
+									else count.skipped++;
+									return Option.toArray(found);
+								}),
+							),
+							Stream.flattenIterable,
+							Stream.onExit(() =>
+								Effect.annotateCurrentSpan({
+									[tag("letters")]: count.letters,
+									[tag("skipped")]: count.skipped,
+								}),
+							),
+						);
+					}),
+				).pipe(
+					Stream.withSpan(span, {
+						attributes: {
+							...short({[STREAM]: inbox(name), [tag("name")]: name}),
+							[OPERATION]: "receive",
+							[tag("after")]: after,
+						},
+					}),
+				);
 			return {
 				send: Effect.fn("mailbox.send")(
 					function* (to: string, id: string, m: unknown, from: From) {
@@ -116,36 +164,8 @@ export class Mailbox extends Context.Service<
 					Effect.tap((answer) => answered(tag, answer)),
 					Effect.tapError(failed(tag)),
 				),
-				receive: (name, after) =>
-					Stream.unwrap(
-						Effect.sync(() => {
-							const count = {letters: 0, skipped: 0};
-							return ledger.read(inbox(name), after).pipe(
-								Stream.mapEffect((entry) =>
-									Effect.map(letter(entry), (found) => {
-										if (Option.isSome(found)) count.letters++;
-										else count.skipped++;
-										return Option.toArray(found);
-									}),
-								),
-								Stream.flattenIterable,
-								Stream.onExit(() =>
-									Effect.annotateCurrentSpan({
-										[tag("letters")]: count.letters,
-										[tag("skipped")]: count.skipped,
-									}),
-								),
-							);
-						}),
-					).pipe(
-						Stream.withSpan("mailbox.receive", {
-							attributes: {
-								...short({[STREAM]: inbox(name), [tag("name")]: name}),
-								[OPERATION]: "receive",
-								[tag("after")]: after,
-							},
-						}),
-					),
+				receive: (name, after) => reader(name, after, "mailbox.receive").pipe(Stream.map(letter)),
+				read: (name, after) => reader(name, after, "mailbox.read"),
 			};
 		}),
 	);
