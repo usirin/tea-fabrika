@@ -31,6 +31,11 @@ the rest.
    - A label needs a reason. The reviewer checks that each law's property or label is present and
      fits, under the [dated rule](../../../docs/direction/five-steps-for-every-check.md#four-reason-labels-2026-11-08).
    - A shape check (an import ban, a naming rule) is a lint rule, not a test.
+   - If secrets must stay out of records, URLs or spans, require `[secrets]` in the plan's Law
+     cell and a property over generated flows. Generate made-up words, keys and passes,
+     operation orders, refusals and failures. Inspect every named output, including encoded URL
+     forms. Plant a leak into each output and see the property fail. A scenario may supplement
+     the property, never replace it. Send a missing marker or flow law back to plan unsigned.
 3. **Do the exam work yourself.** Every exam path the plan gives `tests` is yours: lint rules,
    `exam-paths.json` rows, fixtures, an e2e runner. A builder is never handed one.
 4. **See each new law fail for the right reason:** the product does not do it yet. A typo, a

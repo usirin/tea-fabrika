@@ -20,6 +20,21 @@ A step's brief is short. It names the skill and the ticket's facts, and nothing 
 ```text
 Use the build skill for ticket 277, door fixes, next/. Plan at ../door-PLAN.md.
 Laws d1 to d3 are red. This round: make them green in door.ts, answer.ts and hello.ts.
+Every agent may file tracker tickets, even during read-only repo work. Filing claims no ticket
+and starts no build.
+```
+
+For a driver, add the parent and landing facts before it starts:
+
+```text
+Parent: ticket <id>, branch <branch>, signed build head <sha>, or none.
+Children: <ticket, branch and signed parent head for each child>, or none. Record before starting.
+Merge method: merge when this parent has a stacked child; squash otherwise.
+Start a child at its parent's signed build head. Keep the child's tests through catch-up.
+Land the child after the parent reaches main. Pass the recorded method to catchup.sh.
+Return plans unsigned, including reviews and revisions. Only the lead session approves them.
+Every agent may file tracker tickets, even during read-only repo work. Filing claims no ticket
+and starts no build.
 ```
 
 ## Who runs which step
@@ -54,7 +69,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `box.sh fetch <name> <branch>` | fetch the branch and step notes into the main checkout, nothing else |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push |
-| `catchup.sh <pr> <ticket>` | in its own checkout, merge `main` in as the bot, sign that merge `lead`, push, wait for every check on that head, squash-merge pinned to it |
+| `catchup.sh <pr> <ticket> [--merge-method squash\|merge]` | merge `main` in as the bot, sign `lead`, push, check that exact head and land pinned to it; squash by default |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
 
 `box.sh run` names the box's `.agents/` as its own writable root because Codex otherwise keeps
@@ -80,13 +95,20 @@ visible, and never weaken the rules to hide this message.
 
 1. **Plan.** Write a brief that names the ticket, its version, what to read and an older plan to copy
    the shape of. Run `runplan.sh` in the background. Save the answer as `BOXES/<name>-PLAN.md`.
-2. **Check the plan.** Run `sh .agents/skills/plan/scripts/plancheck.sh <plan>`. It lists every exam
+2. **Check the unsigned plan.** Run `sh .agents/skills/plan/scripts/plancheck.sh --draft <plan>`. It lists every exam
    path the plan names and exits 1 when a files table has no owner, gives an exam path to a step
    other than `tests`, or a law has no generator. Then the plan goes back. Check that each listed path is in the files table at all.
-3. **Approve.** A plan that only builds decided notes: write "Approved by the lead agent, builds
+3. **Approve in the lead session only.** Read the whole plan, its laws and generators or labels,
+   its decided notes and open questions. Plan writers and agents reviewing or revising a plan
+   return it unsigned, with line one blank. A driver sends it to the lead session for approval.
+   A plan that only builds decided notes: write "Approved by the lead agent, builds
    <note>" on its blank first line. A plan that raises a new design call goes to the owner as one
    yes or no. Answer, in the plan, any open question a decided note already answers.
-4. **Start a box** off `origin/main` on a `fabrikalfa/<name>` branch, with `box.sh new`.
+4. **Start a box** on a `fabrikalfa/<name>` branch, with `box.sh new`. Use `origin/main` for an
+   independent ticket. A stacked child starts at the parent's signed build head, before the
+   parent merges, as [Tier 1](../../../docs/plan/tier-1.md#the-pull-requests-one-at-a-time) allows.
+   Record the child, parent branch and signed head before starting it. Keep the child's tests
+   when merging parent work in. Never replace them with the parent's older tests.
 5. **Run the steps in order,** in the background: tests, build, mutation, review. Each runs in the
    box with `box.sh run`, except a step with Electron or socket work, which a Claude agent runs
    (above). No builder starts before tests that exist. Each brief names its skill.
@@ -102,10 +124,22 @@ visible, and never weaken the rules to hide this message.
    path touched stays `ask owner exam_read`; never write "owner read" unless the owner did, and give
    each such merge a field note. Then run `catchup.sh` in the background: it brings the PR up to
    date, signs only the new merge as `lead`, waits for every check on that exact head (e2e and
-   commits included) and squash-merges it pinned to that head. It never signs a step's commit: an
+   commits included) and lands it pinned to that head. Pass `--merge-method merge` for a parent
+   with a recorded stacked child, so the signed parent head stays in main's history. Otherwise
+   pass `--merge-method squash`, the default. A child lands only after its parent reaches main.
+   Catch-up merges main in and keeps the child's tests. It never signs a step's commit: an
    unsigned one goes back to its own step.
 10. **After the merge:** comment the pull request's URL on its ticket and close it, write the
     `MergeRow`, then `git pull --ff-only origin main` and `pnpm install` in the main checkout.
+
+## Same-day decisions
+
+The lead owns the count of decisions still missing from the repo. Its status gives that count
+and the docs PR carrying them. The owner does not keep the list.
+
+Start a docs agent the same day and land the day's decisions together in one docs PR, separate
+from slow builds. Update that PR as more decisions arrive. Keep the count current until all are
+in the repo. Code cannot count decisions nobody recorded.
 
 ## The leak grep
 

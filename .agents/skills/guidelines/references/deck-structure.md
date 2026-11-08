@@ -79,6 +79,27 @@ Follow the canvas type's own instructions for every file. These boxes are ours, 
   the prototype rows. A title note above each row names it.
 - [ ] Every slide is marked `"is_interactive": true`, since its Back and Next links work in Play.
 
+## The plain walk page
+
+This checklist applies to the owner's plain page and its single-file HTML copy. The canvas
+still follows its type's rule against an agent checking its own canvas render. Its blocking
+check remains the owner's look at the proof slides.
+
+- [ ] One selected design per screen. Today's version is on the left, the selected design on
+  the right, with a label on each. The page never packs three or four frames into one row.
+- [ ] The distinct designs from step 5 remain available. The walk switches designs between
+  screens or steps instead of squeezing them all into the same view.
+- [ ] Both screens use their real dimensions at 1:1 size. No zoom, scaling or smaller layout
+  makes them fit. The page scrolls when the pair needs more space.
+- [ ] Real parts, real words and states, and working keys and clicks match step 9's prototype
+  rules. A missed press is fixed before the page is sent.
+- [ ] Lead captured the plain page at 1440x900 and looked at the capture. Left and right order,
+  sizes, scrolling and the selected design are right. Clipping or crowding is fixed.
+- [ ] One HTML copy contains all styles, scripts, fonts, images and real parts inline. The
+  owner's side panel needs no other file or server.
+- [ ] Lead opened that copy and checked its keys, clicks and states before sending it. The
+  1440x900 look and the inline-copy check do not apply to the canvas.
+
 ## The slides
 
 Each slide is a 1280x720 artboard with one idea. A proof slide may be wider, as the two screens

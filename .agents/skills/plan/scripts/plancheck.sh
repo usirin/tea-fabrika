@@ -1,16 +1,20 @@
 #!/bin/sh
-# plancheck.sh <plan.md>: list every exam path the plan names, root-level files included, and check
+# plancheck.sh [--draft] <plan.md>: list every exam path the plan names and check
 # the plan's files tables. A files table is one whose first header starts with "file" or "path", or
 # that has an owner column ("owner", "step", "writer" or "writes it"). Exits 1 when a files table has no owner
 # column, a row has an empty owner, or an exam path in a row is owned by a step other than tests.
 # Version 2 checks the generator grammar on laws tables (a "plant" column). Legacy plans keep
 # their owner checks. Fixed inputs need one of the four labels in five-steps-for-every-check.md.
 # Paths are read as the repo reads them: `./package.json` is `package.json`.
+set -eu
+draft=0
+if [ "${1:-}" = --draft ]; then draft=1; shift; fi
+[ "$#" = 1 ] || { echo "usage: plancheck.sh [--draft] <plan.md>" >&2; exit 1; }
 here=$(cd "$(dirname "$0")" && pwd -P)
 plan=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
-cd "$here/../../../.." && python3 - "$plan" "$here/../../step-commit/scripts/exam.py" <<'PY'
+cd "$here/../../../.." && python3 - "$plan" "$here/../../step-commit/scripts/exam.py" "$draft" <<'PY'
 import json, re, subprocess, sys
-plan, exam = sys.argv[1], sys.argv[2]
+plan, exam, draft = sys.argv[1:]
 def norm(w):
     while w.startswith("./"): w = w[2:]
     return w
@@ -45,7 +49,8 @@ def owner_col(heads):
     if j is None: j = next((j for j, c in enumerate(heads) if c in ("step", "writer", "writes it")), None)
     return j
 lines, fence = [], None
-for line in open(plan).read().splitlines():
+raw = open(plan).read().splitlines()
+for line in raw:
     mark = re.match(r"^\s{0,3}(`{3,}|~{3,})(.*)$", line)
     if fence:
         if mark and mark[1][0] == fence[0] and len(mark[1]) >= len(fence) and not mark[2].strip(): fence = None
@@ -54,6 +59,12 @@ for line in open(plan).read().splitlines():
         fence = mark[1]; lines.append(""); continue
     lines.append(line)
 bad = []
+if draft == "1":
+    if not raw or raw[0].strip(): bad.append("draft: leave the first line blank for approval")
+    if len(raw) < 2 or raw[1] != "Plancheck-Version: 2":
+        bad.append("draft: put Plancheck-Version: 2 on line 2")
+    if any(line.lstrip().startswith("Approved by the lead agent,") for line in lines):
+        bad.append("draft: only the lead session may add an approval line")
 markers = [line.strip() for line in lines if re.match(r"^\s*Plancheck-Version\b", line)]
 versioned = markers == ["Plancheck-Version: 2"]
 if not markers: print("legacy plan: generator checks skipped")
@@ -65,18 +76,21 @@ if versioned:
         capture_output=True, text=True)
     if exported.returncode: sys.exit("cannot read installed fast-check exports: " + exported.stderr)
     fc = set(json.loads(exported.stdout))
-def generator(text):
+def generated(text):
     text = plain(text)
-    if text in ("lint", "type"): return True
     match = re.fullmatch(r"fc\.([A-Za-z_$][\w$]*)(?::\s*\S.*)?", text)
     if match: return match[1] in fc
     if re.fullmatch(r"@demlik/tea/pbt\.(arbMsg|arbRecordMsg|arbMsgSequence|arbGuidedSequence)(?::\s*\S.*)?", text): return True
     if re.fullmatch(r"Effect Arbitrary:\s*[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*", text): return True
+    return False
+def generator(text):
+    text = plain(text)
+    if text in ("lint", "type") or generated(text): return True
     match = re.fullmatch(r"(vector|format|pinned|scenario):\s*(.+)", text)
     return bool(match and any(c.isalnum() for c in match[2]))
 # Explicit qualified paths still get reported outside files tables. Bare root files do not.
 named = hits(p for p in re.findall(r"`([^`\s]+)`", "\n".join(lines)) if "/" in norm(p))
-col, files, gen, path = None, False, None, None
+col, files, gen, path, law = None, False, None, None, None
 for i, l in enumerate(lines):
     l = l.strip()
     if not l.startswith("|"): col = gen = None; continue
@@ -89,6 +103,7 @@ for i, l in enumerate(lines):
         if files and j is None: bad.append(f"line {i + 1}: a files table with no owner column")
         col = -1 if j is None else j
         gen = -1
+        law = next((k for k, c in enumerate(heads) if c.startswith(("law", "property"))), None)
         if versioned and any("plant" in c for c in heads):
             gen = next((k for k, c in enumerate(heads) if "generator" in c or c.startswith("input")), None)
             if gen is None:
@@ -99,6 +114,8 @@ for i, l in enumerate(lines):
         bad.append(f"line {i + 1}: table row has {len(row)} cells, expected {len(heads)}"); continue
     if gen >= 0 and not generator(row[gen]):
         bad.append(f"line {i + 1}: invalid generator: {row[gen]}")
+    if gen >= 0 and law is not None and "[secrets]" in row[law] and not generated(row[gen]):
+        bad.append(f"line {i + 1}: [secrets] requires generated inputs in the same row")
     found = hits(paths(row[path])) if files and path is not None else {}
     named.update(found)
     if not files or col < 0: continue
