@@ -27,7 +27,7 @@ import {type From, type Letter, Mailbox} from "./mailbox.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const READER = "gateway:t1";
-const PARENT = "in-3f9a0c21-41";
+const PARENT = "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const OTHER_TRACE = "5bf92f3577b34da6a3ce929d0e0e4737";
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
