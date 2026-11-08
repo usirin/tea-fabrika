@@ -84,6 +84,26 @@
 		// `x!` throws away the compiler's proof.
 		"typescript/no-non-null-assertion": "error",
 
+		// Code never reaches a primitive (design language, call 3): it reads a token. Only the token
+		// build imports Radix, so it is turned off for that folder alone below.
+		"eslint/no-restricted-imports": [
+			"error",
+			{
+				"paths": [
+					{
+						"name": "@radix-ui/colors",
+						"message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+					}
+				],
+				"patterns": [
+					{
+						"group": ["@radix-ui/colors/*"],
+						"message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+					}
+				]
+			}
+		],
+
 		"eslint/array-callback-return": ["error", { "checkForEach": true }],
 		"eslint/constructor-super": "error",
 		"eslint/default-case-last": "error",
@@ -263,6 +283,11 @@
 			// There is no JSX in a .ts file: its one `children` prop is what `createElement`'s types ask.
 			"files": ["**/*.tsx"],
 			"rules": { "react/no-children-prop": "error" }
+		},
+		{
+			// The token build reads Radix's steps and writes them out as tokens (design foundations, PR 2).
+			"files": ["packages/fabrika-design/src/build/**"],
+			"rules": { "eslint/no-restricted-imports": "off" }
 		},
 		{
 			// `ownRules` is the one place that says where a Claude run's settings come from.

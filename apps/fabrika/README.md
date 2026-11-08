@@ -101,13 +101,14 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/reconnect.ts` | When the app attaches again, a tea machine above the link: `reconnectMachine`, Model `Reconnect`, Msg `ReconnectMsg`, Cmds `ReconnectCmd`. A link that ends is tried again after a wait (AWS's full jitter, 0.5 s doubling to 30 s), the same way as at the start; five minutes on it stops and waits for Try again. A host of another version is never tried again; once the person confirms, it and a host of another build are stopped and this build's is started (`restart` in `attach.ts`). `noteOf` is what the window says meanwhile. |
 | `src/link.ts` | The link's two message types (`Up`, `Down`) and its handshake, a tea machine: `linkMachine`, Model `Link`, Msg `LinkMsg`, Cmds `LinkCmd`. |
 | `src/wire.ts` | One link on one socket for either side: NDJSON framing (Effect's `Ndjson`), the handshake stepped on every line, `Unattached` when it does not come up. |
-| `src/host/` | The host process. `main.ts` is the entry (`dist/host.mjs`). `run.ts` makes the folder, and under the start lock (`lock.ts`) cleans a stale socket, listens and writes the pid; then it opens the ledger, history and desk. `serve.ts` (no platform) runs the desk and the tiles, and serves every client. `socket.ts` reaches a socket: live, absent or stale. `settings.ts` is the one reader of the settings folder: it watches it and reads `keybindings.toml` again on each save. `agents.ts` serves each agent's MCP bridge on `host/mcp` (see [An agent drives a program](#an-agent-drives-a-program)). `jev.ts` turns on Jev, for the tracker's duplicate hint, only when the home holds `jev.key`; a test's home never does, so no test spends. |
+| `src/host/` | The host process. `main.ts` is the entry (`dist/host.mjs`). `run.ts` makes the folder, and under the start lock (`lock.ts`) cleans a stale socket, listens and writes the pid; then it opens the ledger, history and desk. `serve.ts` (no platform) runs the desk and the tiles, and serves every client. `socket.ts` reaches a socket: live, absent or stale. `settings.ts` is the one reader of the settings folder: it watches it and reads `keybindings.toml` again on each save. `keybindings.ts` is the `KeybindingManager`: it holds the applied table, saves the keys editor's edits one at a time, and records each change (see [Change keys in the app](#change-keys-in-the-app)). `agents.ts` serves each agent's MCP bridge on `host/mcp` (see [An agent drives a program](#an-agent-drives-a-program)). `jev.ts` turns on Jev, for the tracker's duplicate hint, only when the home holds `jev.key`; a test's home never does, so no test spends. |
 | `src/cli.ts` | The command line: `connect`, `invite`, `members`, `move`, `post`, and `mcp`, the bridge an MCP client starts. |
 | `src/preload.ts` | Gives the page `send`, `onMessage` and `forget`, by port name, and nothing else. |
 | `src/bridge.ts` | Those names, as the page sees them, the port names it takes, and the IPC channel. |
 | `src/tiles.ts` | One tsh per tile, each in its own scope. It tells the desk (`TileNews`) when a run covers a tile, when it is over, the tile's jobs, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. `end` and `kill` do the same for one process of a line, by its pid: a window of the line closed. |
 | `src/tsh.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. Each screen shows to every page that asks, starting with a terminal reset, so a page that still holds the screen draws it once. It tells its tile its jobs (`src/tile-jobs.ts`): each job of the host's table it started that still runs, with when it began by the host's clock, and the last to end, with how (`done`, `failed`, `stopped`, read off its runs' ends). The table keeps neither. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`, and the tracker's `PullRequests`, which the host makes on the pipeline's `CodeHost` and the person's own `gh` login (`src/host/main.ts`). |
 | `src/desk/` | The desk, a tea machine (`desk.ts`): `deskMachine`, Model `Desk`, Msg `DeskMsg`, Cmds `DeskCmd`; `DeskSchema` sends it to a page, and `takenNow` says which keys it takes now. `hold.ts` is the page's key holder: `holdMachine`, Model `Hold`, Msg `HoldMsg`, Cmds `HoldCmd`. `keys.ts` is the shipped table and who owns a press (`keyOwner`); `keymap.ts` reads the keys file and lays it over that table (see [Your keys](#your-keys-keybindingstoml)). `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". A container runs `horizontal` or `vertical`, and nested containers alternate; any tile can fold into a strip, and a container whose tiles are all folded counts as folded (`isFolded`) ([fold, not tabs](../../docs/direction/fold-not-tabs.md)). `layout/line.ts` opens a tsh line's windows in place (`openLine`), folds them past `MIN_WINDOW`, and drops them from a kept desk (`quiet`). |
+| `src/keys/` | The keys editor. `machine.ts` is the window's tea machine: search, selection, recording and the unsaved key (`editorMachine`). `program.ts` is the `keys` program, one run per open editor, which sends checked edits to the `KeybindingManager`, and the tsh `keys` word that waits on it. `window.tsx` draws it in the palette layer with Manti's parts. |
 | `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `cells.ts` lays text out in cells as ghostty-web does, from a table of its wasm's answers (`cells.table.ts`), `history.ts` keeps the history in a file, shared by every tile, `grid.ts` reads bytes back as rows for the tests. |
 | `src/messages.ts` | The seven message types as Effect Schemas, and their strict readers. |
 | `src/files.ts` | What the app's own scheme serves: one page, its script and one stylesheet, with a Content Security Policy. |
@@ -116,7 +117,7 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. Its one stylesheet, `window.css`, is Manti's, then React Flow's base rules, then `@kampus/fabrika-design/tokens.css`, then `src/window/manti-reset.css`, then `src/window/window.css`. |
 | `table.ts` | Writes `src/editor/cells.table.ts`: asks ghostty-web's wasm the width and grapheme class of every code point (`cells.probe.ts`). Run it with `pnpm table` after a new ghostty-web; `cells.test.ts` fails until then. |
 | `shots.ts` | The page alone in headless Chromium, with no Electron and no host: the built `dist/`, handed a desk and the tracker, ticket and map views of the stand-in ticket #7, the trace of that ticket's lanes, and the trace of `seq --to 3 | tally` (as it opens, and opened down to the step add 2), as the host would send them. Two of its desks come from the desk machine's own steps: `tracker | ticket | trace` opened beside the map, and in a spot too tight, its extra windows folded. Writes `docs/round-6/*.png`. No window, no network. Not in `pnpm test`. |
-| `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, the asks list and the palette (focus in, no key through to the tile under them, Escape and a click outside giving focus back, one open at a time), a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, a host of another version, one ask taking another's place with the asks list open, and the link dropping: the socket cut, the host killed, and no host until Try again. It stops its own hosts by their pids and checks with `pgrep`. Not in `pnpm test`. macOS only: CI runs it on a macOS runner (the check workflow's `e2e` job). It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. |
+| `e2e.ts` | Drives the built app through Playwright, one screenshot per step: split, focus, the asks list and the palette (focus in, no key through to the tile under them, Escape and a click outside giving focus back, one open at a time), a covered run, the close question, `&` and `attach`, a link in a ticket clicked, zoom, a closing tile, the stop question, Ctrl-B twice, shared history, the safety checks, the red button and the dock icon, then quit with the host and counter running on, open again on the same desk, a split through the host, the last tile closing the window, a host of another version, one ask taking another's place with the asks list open, and the link dropping: the socket cut, the host killed, and no host until Try again. It stops its own hosts by their pids and checks with `pgrep`. Not in `pnpm test`. macOS only: CI runs it on a macOS runner (the check workflow's `e2e` job). It swaps main's `shell.openExternal` for a list first, so it never opens a real browser. `node e2e.ts --keys` runs only the keys editor: search, record, save, clash and Undo, focus after each, a bad file and a failed save, with its shots in `docs/keybindings/` at five layouts in both looks. |
 
 ## Keys
 
@@ -135,7 +136,7 @@ Ctrl-B, then one key, as in tmux. Tuval had the same table.
 | `Ctrl-H`, `Ctrl-L` | the previous or next workspace; press again within 500 ms with no Ctrl-B |
 | `a` | open the asks list, or close it |
 | `J` | open the jobs list, or close it |
-| `?` | every key, with its name |
+| `?` | every key, with its name: search, change, add, unbind or reset one (see [Change keys in the app](#change-keys-in-the-app)) |
 | `i` | info mode: the bottom line explains whatever the pointer is over or keyboard focus is on, even with the bars hidden; again, or Escape, to stop |
 | `B` | hide both bars; again to show them |
 | `A`, `S`, `H` | open the agents', sync or host lines under the top bar; again to close them |
@@ -149,7 +150,7 @@ a tmux hand never opens one by mistake.
 Workspace, Window), its tsh word in mono on the line under the name, and its keys as Mac
 keycaps (`⌃B` `Z`) at the right. Type to narrow it, by name or by word, the matched letters
 bold; Enter runs one as its key would, and the bottom line then says `next time: C-b z`.
-`C-b ?` opens the same list as "Keyboard shortcuts".
+`C-b ?`, or `keys` in tsh, opens "Keyboard shortcuts": the same list, where each key can be changed.
 This is the app-level palette that tracker ticket 71 asked about. Today it lists the window's
 commands; programs' inputs join it later, from the same list that makes the agent tools.
 Ghostty's own palette opens with Cmd-Shift-P and takes user entries (`command-palette-entry`);
@@ -215,11 +216,44 @@ ignore                   = ["cmd+w"]                    # eaten: nothing hears i
     which is the program's in a tile;
   - the prefix on a command or on `ignore`, or `<prefix>` then the prefix, which sends the prefix on;
   - one key on two commands, or on `ignore` and a command;
-  - `palette.open` after the prefix, since the palette is the window's and opens from anywhere.
+  - a table that leaves a terminal no keyboard way out: the prefix's focus keys and `F6` all gone.
 - **The host reads the file and sends the keys on** (`host/settings.ts`, `desk/keymap.ts`); a
   page never reads a file. The host's log says `keys file=read`, `file=none` or
   `file=refused line=N`, and a `did` line for every command run, with `does` (its word) and `via`
   (the key, the palette, the tsh word or a click), so later we can see which keys people use.
+  Each change to the table is a `keybindings_changed` line: who and when by the host's clock,
+  the window and `said` for an editor save, `how` (`pressed` or `file`), the table before and
+  after, the keys that moved and the file's version. A hand save has no writer or clock of its
+  own, so those stay empty, and the file's modified time is kept beside them.
+- **F6 and Shift-F6 move focus** between the top bar, the focused tile and the bottom line, as
+  in a browser, so a terminal is never a trap. With the bars hidden, the desk itself takes the
+  turn, with a ring around it.
+
+### Change keys in the app
+
+`C-b ?` opens "Keyboard shortcuts" in the palette layer, with no new tile. tsh's `keys` opens
+it too, and waits until every window it opened in closes it.
+
+```text
+search "ctrl+b z"        Zoom   zoom   C-b then z   default
+select Zoom, Change      press Ctrl-B, then m: no time limit, nothing runs, no byte reaches tsh
+Save                     tezgah.zoom = ["<prefix>m"] in keybindings.toml; every window follows
+                         "tezgah.fold lost ctrl+b then m", and Undo
+```
+
+- **Search** matches a command's name, its file word, its tsh word and its keys. "Same key"
+  lists every command on one key.
+- **Change, Add, Unbind and Reset.** Unbind writes `[]`, so the command stays in the palette and
+  tsh. Reset removes your row, so the shipped default comes back. The prefix and `ignore` have
+  rows of their own. "Not ours" lists the keys the system keeps.
+- **Recording** takes the next key before any shortcut. Escape cancels, and "Record Escape"
+  records it. System keys and Ctrl-C keep their job. A screen reader hears each step from one
+  live region; focus stays in the editor, and goes back to Change once a save is done.
+- **A save changes only your rows.** The host reads the latest file, writes just the changed
+  rows (into the right table, keeping your comments), checks the whole file as a hand save is
+  checked, and renames it into place, through a symlink and with the file's own mode. A key it
+  takes from another command is named, with Undo, while the file is still the version it wrote.
+- **A file that does not read, or a save that fails,** keeps the last good keys and says why.
 
 ### Every key is a tsh word too
 

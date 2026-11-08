@@ -1,0 +1,8 @@
+type = "background"
+tier = "global"
+owner = "design"
+description = "the turn fill, hovered"
+
+[colors]
+dark = "indigo.10"
+light = "indigo.10"

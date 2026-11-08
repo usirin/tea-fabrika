@@ -1,0 +1,11 @@
+type = "background"
+tier = "global"
+owner = "design"
+description = "the turn's fill: your turn, and nothing else"
+theme = "turn-fill"
+on = ["surface"]
+floor = 3
+
+[colors]
+dark = "indigo.9"
+light = "indigo.9"

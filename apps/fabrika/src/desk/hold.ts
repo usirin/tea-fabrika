@@ -32,6 +32,8 @@ export const KeyPress = Schema.Struct({
 	alt: Schema.Boolean,
 	meta: Schema.Boolean,
 	shift: Schema.Boolean,
+	composing: Schema.optionalKey(Schema.Boolean),
+	altGraph: Schema.optionalKey(Schema.Boolean),
 });
 export type KeyPress = typeof KeyPress.Type;
 

@@ -27,6 +27,7 @@ import {
 	EXPLAIN_ON,
 	FRAME,
 	fileWord,
+	focusFollows,
 	type Frame,
 	type FrameMsg,
 	frameUpdate,
@@ -55,6 +56,7 @@ import {
 	workspaceName,
 } from "./frame.ts";
 import {BottomArea, BottomLine, type FrameProps, ModeStatus, Over} from "./frame.tsx";
+import {capOf} from "./pop.ts";
 
 // The frame's words, from a real desk folded by the real machine, and the keys file's real
 // table (desk/keymap.ts): the defaults, or a file's.
@@ -65,6 +67,21 @@ const fold = (msgs: readonly DeskMsg[]): Open => {
 	if (s.at !== "open") throw new Error("the desk is over");
 	return s;
 };
+
+it("K18: moved keys update palette search, prefix hints, keycaps and spoken words", () => {
+	const read = decodeKeys('prefix = "ctrl+a"\ntezgah.zoom = "<prefix>shift+f6"', true);
+	if (Result.isFailure(read)) throw new Error(read.failure.why);
+	const commands = commandsOf(read.success, 1);
+	const zoom = commands.find((command) => command.runs === "tezgah.zoom");
+	expect(zoom?.key).toMatch(/C-a.*(?:Shift|S-).*F6/i);
+	expect(zoom?.caps).toEqual(["⌃A", expect.stringMatching(/⇧f6/i)]);
+	expect(matching(commands, "shift+f6")).toContain(zoom);
+	expect(prefixLine(read.success)).toContainEqual(
+		expect.objectContaining({name: "zoom", key: expect.stringMatching(/(?:Shift|S-).*F6/i)}),
+	);
+	expect(capOf("<s-m-w>")).toBe("⇧⌘W");
+	expect(JSON.stringify(zoom)).not.toContain("C-b z");
+});
 /** The default prefix, as keyName spells it. */
 const PREFIX = "<c-b>";
 /** The keybindings file's table, one line per argument; a refusal fails the test. */
@@ -169,6 +186,8 @@ describe("the frame's keys", () => {
 			"focus down",
 			"focus up",
 			"focus right",
+			"focus next",
+			"focus previous",
 			"new",
 			"previous workspace",
 			"next workspace",
@@ -213,6 +232,20 @@ describe("the frame's keys, from the keys file (ticket 174)", () => {
 		["focus down", "focus", "C-b j", ["⌃B", "J"], "focus --to down"],
 		["focus up", "focus", "C-b k", ["⌃B", "K"], "focus --to up"],
 		["focus right", "focus", "C-b l", ["⌃B", "L"], "focus --to right"],
+		[
+			"focus next",
+			"focus",
+			expect.stringMatching(/f6/i),
+			[expect.stringMatching(/f6/i)],
+			"focus --to next",
+		],
+		[
+			"focus previous",
+			"focus",
+			expect.stringMatching(/(?:Shift|S-).*f6/i),
+			[expect.stringMatching(/⇧f6/i)],
+			"focus --to previous",
+		],
 		["new", "workspace", "C-b N", ["⌃B", "⇧N"], "workspace --to new"],
 		["previous workspace", "workspace", "C-b C-h", ["⌃B", "⌃H"], "workspace --to previous"],
 		["next workspace", "workspace", "C-b C-l", ["⌃B", "⌃L"], "workspace --to next"],
@@ -604,7 +637,10 @@ describe("the job item and the jobs list", () => {
 			...lined,
 			jobs: {
 				t1: {running: [job(1, "counter", 0)], ended: null},
-				t2: {running: [job(2, "tally", 0), job(5, "sleep --ms 9000", 0, true)], ended: ended()},
+				t2: {
+					running: [job(2, "tally", 0), job(5, "sleep --ms 9000", 60_000, true)],
+					ended: ended(),
+				},
 			},
 		};
 		const list = jobsList(desk, 120_000);
@@ -622,7 +658,7 @@ describe("the job item and the jobs list", () => {
 						icon: "running",
 						title: [typed("sleep --ms 9000")],
 						sub: [typed("%5"), plain(" · t2")],
-						side: "2m",
+						side: "1m",
 						second: null,
 					},
 					{
@@ -1061,6 +1097,18 @@ describe("info mode", () => {
 		expect(stepped).toEqual([{type: "info", focus: INFO.info}]);
 	});
 
+	it("K17: the keys button names its dialog and opens it on a click", () => {
+		const html = line(FRAME);
+		const button = /<button[^>]*data-item="keys"[^>]*>/.exec(html)?.[0];
+		expect(button).toContain('aria-haspopup="dialog"');
+		expect(button).toContain('aria-controls="pop-palette"');
+		const stepped: FrameMsg[] = [];
+		const key = itemsOf(FRAME, (m) => stepped.push(m))[1];
+		if (typeof key?.onClick !== "function") throw new Error("keys has no click handler");
+		key.onClick();
+		expect(stepped).toEqual([{type: "show", what: "keys"}]);
+	});
+
 	// M2: the mode is one value. Never on, on with what it explains, or off after it was on: an
 	// explanation with the mode off, or "left" while it is on, cannot be built.
 	it("keeps its state in one value, so the impossible mixes cannot be built", () => {
@@ -1155,6 +1203,10 @@ describe("info mode's words, from the keys file (p10)", () => {
 	/** The parts of the frame whose words name a key. */
 	const NAMING = ["workspace", "keys", "info", "titlebar"] as const;
 
+	it("K17: an unbound keys command points to its tsh word", () => {
+		expect(infoFor(table("keys.open = []")).keys).toContain("keys in tsh lists them all");
+	});
+
 	it("names your prefix, and never Ctrl-B, once the prefix is ctrl+a", () => {
 		const said = infoFor(table('prefix = "ctrl+a"'));
 		for (const part of NAMING) {
@@ -1184,4 +1236,21 @@ describe("info mode's words, from the keys file (p10)", () => {
 		for (const part of NAMING) expect(said[part], part).toContain(keyWord(PREFIX));
 		expect(Object.values(said).every((text) => text.length > 0)).toBe(true);
 	});
+});
+
+it("focus follows a zoom: zooming or unzooming the focused tile is a change that moves focus", () => {
+	const split = fold([{type: "typed", tile: "t1", does: {kind: "split", orientation: "vertical"}}]);
+	const zoomed = fold([
+		{type: "typed", tile: "t1", does: {kind: "split", orientation: "vertical"}},
+		{type: "typed", tile: "t2", does: {kind: "zoom"}},
+	]);
+	const back = fold([
+		{type: "typed", tile: "t1", does: {kind: "split", orientation: "vertical"}},
+		{type: "typed", tile: "t2", does: {kind: "zoom"}},
+		{type: "typed", tile: "t2", does: {kind: "zoom"}},
+	]);
+	expect(activeOf(zoomed).layout.zoomed).toBe("t2");
+	expect(focusFollows(zoomed)).not.toBe(focusFollows(split));
+	expect(focusFollows(back)).toBe(focusFollows(split));
+	expect(focusFollows(null)).toBe("");
 });

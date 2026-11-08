@@ -1,6 +1,17 @@
 import {applyCell} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
-import {type Entry, type JobsOnHost, Ledger, Shell, Traces, writerText} from "@kampus/fabrika-old";
+import {
+	type Entry,
+	type JobsOnHost,
+	Ledger,
+	memoryStorage,
+	type RunningOf,
+	Shell,
+	start,
+	tell,
+	Traces,
+	writerText,
+} from "@kampus/fabrika-old";
 import {SummonedNow} from "@kampus/fabrika-old/agents/summon";
 import {
 	type AgentOptions,
@@ -51,6 +62,7 @@ import {
 } from "../desk/keymap.ts";
 import type {SharedHistory} from "../editor/history.ts";
 import {jobLines} from "../job-lines.ts";
+import {keysProgram, type Snapshot} from "../keys/program.ts";
 import {type Down, PROTOCOL, type Up} from "../link.ts";
 import {
 	type AgentOn,
@@ -60,10 +72,11 @@ import {
 	type ToPage,
 } from "../messages.ts";
 import {startTiles} from "../tiles.ts";
-import {appPrograms, type Screen, tshList} from "../tsh.ts";
+import {appPrograms, type Screen, tshList, type WindowScreen} from "../tsh.ts";
 import {hostWire} from "../wire.ts";
 import type {AgentSessions} from "./agent-session.ts";
 import {serveAgents} from "./agents.ts";
+import {KeybindingManager} from "./keybindings.ts";
 import type {RestartNote} from "./restart.ts";
 import type {Setting} from "./settings.ts";
 
@@ -154,6 +167,8 @@ const ANSWER_FIRST = Duration.millis(250);
 
 /** One app attached. */
 interface Client {
+	readonly id: string;
+	editor: RunningOf<typeof keysProgram> | null;
 	send: (m: Down) => void;
 	/** Its link is up: it said hello with our version, so it is an app that will start a host again. */
 	up: () => boolean;
@@ -197,10 +212,10 @@ export const serve = (options: {
 	readonly desk: DeskHome;
 	readonly asks: AsksHome;
 	/**
-	 * The keys file's answers (host/settings.ts): one as the host starts, then one each save. The
+	 * The keys file (host/keybindings.ts): a snapshot as the host starts, then one each save. The
 	 * host serves no page before the first.
 	 */
-	readonly keys: Stream.Stream<Setting<Keys>>;
+	readonly keybindings: KeybindingManager;
 	/** The link's version this host speaks: `PROTOCOL`, but in a test of an old host. */
 	readonly ours?: number | undefined;
 	/**
@@ -277,7 +292,12 @@ export const serve = (options: {
 		});
 		/** The keys file's table: the last that read, or the defaults, with what came of the file now. */
 		let table: Keys = defaults;
-		const keysNow = (): ToPage => ({type: "keys", ...table});
+		let snapshot: Snapshot | null = null;
+		const keysNow = (): ToPage => ({
+			type: "keys",
+			...table,
+			...(snapshot === null ? {} : {version: snapshot.version, changes: snapshot.changes}),
+		});
 		/** A desk command ran: its word, and how it was reached. */
 		const did = (does: Command, via: Via) => {
 			Effect.runForkWith(services)(
@@ -461,8 +481,21 @@ export const serve = (options: {
 			screens.set(name, screen);
 			for (const client of clients) if (client.page) showTo(client, name, screen);
 		};
+		/**
+		 * Each tsh `keys` waiting on an editor, and the windows whose editor it waits on: those open
+		 * when it asked, and those that open after. It ends when the last of them closes, so one
+		 * window closing its editor leaves another window's request waiting.
+		 */
+		const keyRequests = new Map<
+			string,
+			{readonly screen: WindowScreen; readonly waiting: Set<Client>}
+		>();
+		const keyWatches = new Map<string, () => void>();
 		/** A screen goes: its tile closed, or its run ended. Every page shown it loses its port. */
 		const gone = (name: string) => {
+			keyRequests.delete(name);
+			keyWatches.get(name)?.();
+			keyWatches.delete(name);
 			screens.delete(name);
 			for (const client of clients) {
 				const shown = client.shown.get(name);
@@ -496,7 +529,21 @@ export const serve = (options: {
 					return null;
 				},
 				terminal: (tile, screen) => add(`tile:${tile}`, screen),
-				view: (run, screen) => add(`run:${run}`, screen),
+				view: (run, screen) => {
+					const name = `run:${run}`;
+					keyWatches.get(name)?.();
+					keyWatches.set(
+						name,
+						screen.show((view) => {
+							if (view.program === "keys" && !keyRequests.has(name))
+								keyRequests.set(name, {
+									screen,
+									waiting: new Set([...clients].filter((client) => client.editor !== null)),
+								});
+						}),
+					);
+					add(name, screen);
+				},
 				gone,
 				// The person's line is theirs: the log says one came, never what it said.
 				typed: (tile) => {
@@ -676,7 +723,13 @@ export const serve = (options: {
 			for (const client of clients) if (client.page) toPage(client, keysNow());
 			shout();
 		};
-		yield* options.keys.pipe(
+		const keyChanges = options.keybindings.changes.pipe(
+			Stream.map((next): Setting<Keys> => {
+				snapshot = next;
+				return next.keys.file._tag === "read" ? {_tag: "read", value: next.keys} : next.keys.file;
+			}),
+		);
+		yield* keyChanges.pipe(
 			Stream.runForEach((answer) =>
 				Effect.logInfo("keys").pipe(
 					Effect.annotateLogs(
@@ -698,6 +751,82 @@ export const serve = (options: {
 			Effect.forkScoped,
 		);
 		yield* Deferred.await(heardKeys);
+		const editorQueue = yield* Queue.unbounded<{
+			client: Client;
+			message: Extract<FromPage, {type: "keys.open" | "keys.close" | "keys.edit"}>;
+		}>();
+		const closeEditor = (client: Client) =>
+			Effect.sync(() => {
+				const running = client.editor;
+				if (running === null) return;
+				for (const request of keyRequests.values())
+					if (request.waiting.delete(client) && request.waiting.size === 0) request.screen.closed();
+				client.editor = null;
+				running.close("close");
+				running.close("edit");
+				gone(`run:${running.run.id}`);
+				toPage(client, {type: "keys.closed", run: running.run.id});
+			});
+		const openEditor = (client: Client) =>
+			Effect.gen(function* () {
+				if (client.editor !== null) return client.editor;
+				const manager = options.keybindings;
+				const running = yield* start(
+					keysProgram,
+					{window: client.id},
+					{
+						saved: (saved) => toPage(client, {type: "keys.saved", ...saved}),
+						failed: (failed) => toPage(client, {type: "keys.failed", ...failed}),
+					},
+					{id: `keys:${crypto.randomUUID().slice(0, 8)}`, storage: memoryStorage()},
+				).pipe(Effect.provideService(KeybindingManager, manager));
+				if (running.kind !== "running") {
+					toPage(client, {
+						type: "keys.failed",
+						request: "open",
+						why: "The keyboard editor could not start.",
+					});
+					return null;
+				}
+				client.editor = running;
+				for (const request of keyRequests.values()) request.waiting.add(client);
+				add(`run:${running.run.id}`, {
+					show: (page) => {
+						page({type: "view", program: "keys", data: {open: true}});
+						return () => {};
+					},
+					heard: () => ({kind: "refused", why: "Use the checked keys inputs on the desk port."}),
+				});
+				toPage(client, {type: "keys.opened", run: running.run.id});
+				return running;
+			});
+		yield* Queue.take(editorQueue).pipe(
+			Effect.flatMap(({client, message}) =>
+				Effect.gen(function* () {
+					if (message.type === "keys.close") return yield* closeEditor(client);
+					if (!client.page) return;
+					const running = yield* openEditor(client);
+					if (message.type === "keys.edit") {
+						if (running === null) {
+							toPage(client, {
+								type: "keys.failed",
+								request: message.request,
+								why: "Keyboard settings are unavailable.",
+							});
+							return;
+						}
+						yield* tell(running.run, "edit", {
+							request: message.request,
+							edit: message.edit,
+							said: message.said,
+						});
+					}
+				}),
+			),
+			Effect.catchCause((cause) => Effect.logError("Keyboard editor request failed", cause)),
+			Effect.forever,
+			Effect.forkScoped,
+		);
 		if (agents !== undefined)
 			yield* serveAgents({
 				server: agents.server,
@@ -729,6 +858,11 @@ export const serve = (options: {
 		/** What the page sent on the desk's port. */
 		const fromPage = (client: Client, m: FromPage) => {
 			switch (m.type) {
+				case "keys.open":
+				case "keys.close":
+				case "keys.edit":
+					Queue.offerUnsafe(editorQueue, {client, message: m});
+					return;
 				case "press": {
 					const at = clock.currentTimeMillisUnsafe();
 					lastKey = at;
@@ -770,7 +904,11 @@ export const serve = (options: {
 					return;
 				}
 				case "run":
-					if (m.does !== "palette.open") did(m.does, Via.palette());
+					did(m.does, m.via === undefined ? Via.palette() : Via.key(m.via));
+					if (m.does === "palette.open") {
+						toPage(client, {type: "show", what: "palette"});
+						return;
+					}
 					if (step({type: "run", does: m.does}, client)) shout();
 					return;
 				case "later":
@@ -812,6 +950,7 @@ export const serve = (options: {
 					for (const [name, screen] of screens) showTo(client, name, screen);
 					return;
 				case "away":
+					Queue.offerUnsafe(editorQueue, {client, message: {type: "keys.close"}});
 					hide(client);
 					client.page = false;
 					return;
@@ -834,12 +973,21 @@ export const serve = (options: {
 
 		const attach = (socket: Socket.Socket) =>
 			Effect.gen(function* () {
-				const client: Client = {send: () => {}, up: () => false, page: false, shown: new Map()};
+				const client: Client = {
+					id: crypto.randomUUID(),
+					editor: null,
+					send: () => {},
+					up: () => false,
+					page: false,
+					shown: new Map(),
+				};
 				const wire = yield* hostWire(socket, (m) => fromApp(client, m), ours, build);
 				client.send = wire.send;
 				client.up = () => wire.state().at === "up";
 				clients.add(client);
 				const why = yield* wire.ended;
+				client.page = false;
+				yield* closeEditor(client);
 				hide(client);
 				clients.delete(client);
 				yield* Effect.logDebug(`fabrika host: an app went: ${why}`);
