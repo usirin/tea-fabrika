@@ -703,3 +703,121 @@ describe("the generated files equal what the TOML gives", () => {
 		}).toEqual({handBefore: true, written: 0, kept: true, same: TOKENS_CSS()});
 	});
 });
+
+describe("the build's edges", () => {
+	it("draws white alpha, as black alpha, the same in both looks", async () => {
+		const dir = copy();
+		await edit(dir, "scrim", look("dark", "white.a8"));
+		const code = run("--root", dir).code;
+		const line = readFileSync(join(dir, "src", "tokens.css"), "utf8")
+			.split("\n")
+			.find((l) => l.startsWith("\t--scrim:"));
+		expect({code, line}).toEqual({
+			code: 0,
+			line: expect.stringMatching(
+				/^\t--scrim: light-dark\(#000000[0-9a-f]{2}, #ffffff[0-9a-f]{2}\);/,
+			),
+		});
+	});
+
+	it("writes an icon token under the owner's icons", async () => {
+		const dir = copy();
+		await edit(dir, "focus", with_("type", "icon"));
+		const code = run("--root", dir).code;
+		const css = readFileSync(join(dir, "src", "tokens.css"), "utf8");
+		expect({code, heading: css.includes("\t/* The design's icons. */\n\t--focus:")}).toEqual({
+			code: 0,
+			heading: true,
+		});
+	});
+
+	it("fails --check on a file in tokens/color that is not a .toml, naming it", () => {
+		const dir = copy();
+		writeFileSync(join(dir, "tokens", "color", "notes.txt"), 'type = "text"\n');
+		const {code, said} = check(dir);
+		expect({code, named: said.includes("notes.txt: name: a token file is <token>.toml")}).toEqual({
+			code: 1,
+			named: true,
+		});
+	});
+
+	it("stops clean on a parts.toml that does not decode, with no stack trace", () => {
+		const dir = copy();
+		writeFileSync(join(dir, "tokens", "parts.toml"), '[tile]\ndescription = ""\n');
+		const {code, said} = check(dir);
+		expect({code, file: said.includes("parts.toml"), trace: /\n\s+at |Error:/.test(said)}).toEqual({
+			code: 1,
+			file: true,
+			trace: false,
+		});
+	});
+
+	const cssOf = (dir: string) => join(dir, "src", "tokens.css");
+	const OPEN =
+		"/* @generated colors from tokens/color by pnpm tokens: edit the TOML, never this */";
+	const CLOSE = "/* @end generated colors */";
+
+	it("fails --check on a region whose closing comment comes before its opening one", () => {
+		const dir = copy();
+		const css = readFileSync(cssOf(dir), "utf8");
+		if (!css.includes(OPEN) || !css.includes(CLOSE)) throw new Error("no colors region");
+		writeFileSync(
+			cssOf(dir),
+			css.replace(OPEN, "@@open@@").replace(CLOSE, OPEN).replace("@@open@@", CLOSE),
+		);
+		const {code, said} = check(dir);
+		expect({code, said: said.includes("@generated colors: closes before it opens")}).toEqual({
+			code: 1,
+			said: true,
+		});
+	});
+
+	it("checks clean with the manti region written before the colors region", () => {
+		const dir = copy();
+		const css = readFileSync(cssOf(dir), "utf8");
+		const block = (name: string) => {
+			const from = css.indexOf(`/* @generated ${name}`);
+			const end = `/* @end generated ${name} */`;
+			const to = css.indexOf(end) + end.length;
+			if (from < 0 || to < end.length) throw new Error(`no ${name} region`);
+			return {from, to, text: css.slice(from, to)};
+		};
+		const [colors, manti] = [block("colors"), block("manti")];
+		const swapped =
+			css.slice(0, colors.from) +
+			manti.text +
+			css.slice(colors.to, manti.from) +
+			colors.text +
+			css.slice(manti.to);
+		writeFileSync(cssOf(dir), swapped);
+		expect(check(dir)).toEqual({code: 0, said: expect.any(String)});
+	});
+
+	it("names a value edited by hand with no space after its colon", () => {
+		const dir = copy();
+		const css = readFileSync(cssOf(dir), "utf8");
+		const edited = css.replace(/\t--focus: [^;]+;/, "\t--focus:#ffffff;");
+		if (edited === css) throw new Error("no --focus line to edit");
+		writeFileSync(cssOf(dir), edited);
+		const {code, said} = check(dir);
+		expect({code, named: said.includes("--focus is not what the TOML gives")}).toEqual({
+			code: 1,
+			named: true,
+		});
+	});
+
+	// Spacing alone is no changed value: the file differs, and no token is named as wrong.
+	it("calls a spacing-only edit a difference, not a changed value", () => {
+		const dir = copy();
+		const css = readFileSync(cssOf(dir), "utf8");
+		const edited = css.replace(/\t--focus: /, "\t--focus:");
+		if (edited === css) throw new Error("no --focus line to edit");
+		writeFileSync(cssOf(dir), edited);
+		const {code, said} = check(dir);
+		expect({
+			code,
+			differs: said.includes("tokens.css: differs from what the TOML gives"),
+			named: said.includes("--focus is not"),
+		}).toEqual({code: 1, differs: true, named: false});
+	});
+});

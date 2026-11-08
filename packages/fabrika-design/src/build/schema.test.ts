@@ -108,6 +108,53 @@ describe("a bad file is refused, naming its file and field", () => {
 			true,
 		);
 	});
+
+	it("decodes a file that is no table, or has no [colors], as bad, never a throw", () => {
+		const {colors: _, ...noColors} = textFaint();
+		expect({
+			array: decodeToken("x.toml", [])._tag,
+			string: decodeToken("x.toml", "text")._tag,
+			noColors: errorsOf("text-faint.toml", noColors),
+		}).toEqual({array: "bad", string: "bad", noColors: ["text-faint.toml: colors: Missing key"]});
+	});
+
+	it("names the file in an error that has no field", () => {
+		expect(errorsOf("x.toml", "text")).toEqual([expect.stringMatching(/^x\.toml: \S/)]);
+	});
+
+	it.each(["primitive", "global", "shared", "component"])("decodes the tier %s", (tier) => {
+		expect(decodeToken("text-faint.toml", {...textFaint(), tier})._tag).toBe("ok");
+	});
+
+	const withDark = (dark: unknown) => {
+		const t = textFaint();
+		const colors = t["colors"];
+		return errorsOf("text-faint.toml", {
+			...t,
+			colors: {...(typeof colors === "object" ? colors : {}), dark},
+		});
+	};
+
+	it("decodes a 6- or 8-digit hex, and refuses any other", () => {
+		expect({
+			six: withDark({hex: "#0c0d0e", bend: "b"}),
+			eight: withDark({hex: "#00000066", bend: "b"}),
+			seven: withDark({hex: "#0000006", bend: "b"}).some((e) => e.includes("colors.dark.hex:")),
+			lead: withDark({hex: "x#000000", bend: "b"}).some((e) => e.includes("colors.dark.hex:")),
+			upper: withDark({hex: "#0C0D0E", bend: "b"}).some((e) => e.includes("colors.dark.hex:")),
+		}).toEqual({six: [], eight: [], seven: true, lead: true, upper: true});
+	});
+
+	it.each(["Surface", "1surface", "surface/Surface", "surface-"])(
+		"refuses the backdrop %s",
+		(backdrop) => {
+			expect(
+				errorsOf("text-faint.toml", {...textFaint(), on: [backdrop]}).some((e) =>
+					e.startsWith("text-faint.toml: on.0:"),
+				),
+			).toBe(true);
+		},
+	);
 });
 
 describe("the checks across files", () => {
@@ -124,6 +171,87 @@ describe("the checks across files", () => {
 	};
 	const fields = (errors: readonly string[]) =>
 		errors.map((e) => e.split(": ").slice(0, 2).join(": "));
+
+	/** The checks across files with one token file changed, as `[field, message]` pairs. */
+	const changed = (name: string, change: (t: Record<string, unknown>) => void) => {
+		const s = sources();
+		const token = s.tokens.get(name);
+		if (token === undefined) throw new Error(`no ${name}`);
+		const t: Record<string, unknown> = {...token};
+		change(t);
+		const decoded = decodeToken(`${name}.toml`, t);
+		if (decoded._tag === "bad") throw new Error(decoded.errors.join("\n"));
+		s.tokens.set(name, decoded.value);
+		return checkAcross(s).map((e) => e.split(": ").slice(1));
+	};
+	const set =
+		(key: string, value: unknown) =>
+		(t: Record<string, unknown>): void => {
+			t[key] = value;
+		};
+	const drop =
+		(...keys: readonly string[]) =>
+		(t: Record<string, unknown>): void => {
+			for (const key of keys) delete t[key];
+		};
+
+	it("holds a text token to 4.5, so a WCAG 3 is not enough", () => {
+		expect(changed("text-faint", set("floor", 3))).toEqual([
+			["floor", "a text token needs 4.5 or more"],
+		]);
+	});
+
+	it("names each part of a backdrop that is no token", () => {
+		expect({
+			alone: changed("text-faint", set("on", ["no-such"])),
+			drawn: changed("text-faint", set("on", ["surface/no-such"])),
+		}).toEqual({
+			alone: [["on", 'no token "no-such" in "no-such"']],
+			drawn: [["on", 'no token "no-such" in "surface/no-such"']],
+		});
+	});
+
+	it("tells a text token with no on and no floor of both", () => {
+		expect(changed("text-faint", drop("on", "floor"))).toEqual([
+			["on", "a text token names what it sits on"],
+			["floor", "a text token needs 4.5 or more"],
+			["on", "a translucent value names its backdrop"],
+		]);
+	});
+
+	it("refuses a floor on a border that carries nothing", () => {
+		expect(changed("border-strong", set("floor", 3))).toEqual([
+			["floor", "a value that carries nothing has no floor"],
+		]);
+	});
+
+	it("tells a border with no carries, no on and no floor of both", () => {
+		expect(changed("border-strong", drop("carries", "on"))).toEqual([
+			["on", "a border names what it sits on, or carries nothing"],
+			["floor", "a border needs 3 or more, or carries nothing"],
+			["on", "a translucent value names its backdrop"],
+		]);
+	});
+
+	it("holds an icon as it holds a border", () => {
+		const icon = (t: Record<string, unknown>) => {
+			drop("carries", "on")(t);
+			t["type"] = "icon";
+		};
+		expect(changed("border-strong", icon)).toEqual([
+			["on", "an icon names what it sits on, or carries nothing"],
+			["floor", "an icon needs 3 or more, or carries nothing"],
+			["on", "a translucent value names its backdrop"],
+		]);
+	});
+
+	it("judges a floor on what the token sits on, so a floor needs an on", () => {
+		expect(changed("focus", drop("on"))).toEqual([
+			["on", "a border names what it sits on, or carries nothing"],
+			["on", "a translucent value names its backdrop"],
+			["on", "a floor or an aim is judged on what the token sits on"],
+		]);
+	});
 
 	it("holds a text token to its floor and its backdrops", () => {
 		expect(fields(without("text-faint", "floor"))).toEqual(["text-faint.toml: floor"]);

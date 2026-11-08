@@ -68,6 +68,17 @@ describe("the contrast checker's fixed points", () => {
 	});
 });
 
+describe("a color in any other form is refused", () => {
+	it.each([
+		["#abc", "#000000"],
+		["#ABCDEF", "#000000"],
+		["#ffffff", "#00000"],
+		["ffffff", "#000000"],
+	])("throws on %s over %s", (fg, bg) => {
+		expect(() => ratio(fg, bg)).toThrow(/not a #rrggbb or #rrggbbaa color/);
+	});
+});
+
 describe("the ratio's shape, for any colors", () => {
 	it("is the same both ways round for two solid colors", () => {
 		fc.assert(

@@ -217,11 +217,10 @@ export const checkAcross = ({tokens, manti, parts, hand}: Sources): readonly str
 			if (carries !== undefined) bad(name, "carries", "text always carries a fact");
 		}
 		if (type === "border" || type === "icon") {
+			const a = type === "icon" ? "an icon" : "a border";
 			if (carries === undefined) {
-				if (on === undefined)
-					bad(name, "on", `a ${type} names what it sits on, or carries nothing`);
-				if (floor === undefined)
-					bad(name, "floor", `a ${type} needs 3 or more, or carries nothing`);
+				if (on === undefined) bad(name, "on", `${a} names what it sits on, or carries nothing`);
+				if (floor === undefined) bad(name, "floor", `${a} needs 3 or more, or carries nothing`);
 			} else if (floor !== undefined) {
 				bad(name, "floor", "a value that carries nothing has no floor");
 			}
