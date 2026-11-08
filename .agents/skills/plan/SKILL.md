@@ -36,7 +36,7 @@ rows to read, and an older plan to copy the shape of. This skill holds the rest.
 - A table of properties a test checks, each with its plant (the break that must make it fail) and
   a `Generator` column: what its inputs are drawn from (fast-check, `@demlik/tea/pbt` or Effect's
   `Arbitrary`). Every law is a property over generated inputs
-  ([five steps for every check](../../../docs/direction/five-steps-for-every-check.md)); a
+  ([every law is a property](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property)); a
   hand-picked example is only a pinned case of a named past bug. Ask of each law: lint, type or
   test? A check on the shape of code is a lint rule, and its generator cell says `lint` (or `type`).
 - **The files table, with lines, and an owner step for every file:** `tests`, `build` or `lead`.

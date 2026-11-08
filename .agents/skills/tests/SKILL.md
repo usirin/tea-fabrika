@@ -18,7 +18,7 @@ the rest.
    rows it points to. Say which version you are in: `next/` or today's.
 2. **Write each law with its plant.** Every law is a property test on the real code, over generated
    inputs, not only the laws on a machine
-   ([five steps for every check](../../../docs/direction/five-steps-for-every-check.md),
+   ([every law is a property](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property),
    [property tests](../../../docs/direction/property-tests-not-our-own-search.md)):
    - On a machine: its real reducer from its real `init`, with `@demlik/tea/pbt`
      ([every machine has laws](../../../docs/direction/every-machine-has-laws.md)).

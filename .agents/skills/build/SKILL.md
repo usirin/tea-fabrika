@@ -29,8 +29,9 @@ the rest.
    - When the change touches a file in `forceRerunTriggers` (`vitest.config.ts`: vitest's own,
      such as `package.json` and the vitest config, plus the lockfile, `pnpm-workspace.yaml`, a
      `tsconfig`, the lint and format settings, `oxlint-plugins/`, `layer-rules.json`, `fixtures/`
-     and `.github/`), `--changed` selects the whole suite. Run it
-     still capped, once, at the end, and never while another agent's full run or typecheck runs.
+     and `.github/`), `--changed` selects the whole suite. Do not run it: never the full suite locally
+     (`AGENTS.md`, "Go easy on the machine"). Run the narrow laws, leave the rest to CI, and say so
+     in the report.
 6. **Commit and sign** with the step-commit skill:
    `sh .agents/skills/step-commit/scripts/stepcommit.sh build <ticket> "T<ticket> build: <subject>" <paths...>`
 7. **Report** in at most 6 lines: which laws went green, any still red and why, any file you needed

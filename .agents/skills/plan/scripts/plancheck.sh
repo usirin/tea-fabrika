@@ -5,7 +5,9 @@
 # column, a row has an empty owner, or an exam path in a row is owned by a step other than tests.
 # A laws table is one with a "plant" column. Each law is a property over generated inputs, so it
 # needs a "generator" or "input" column, filled on every row: what the generator draws, or "lint" or
-# "type" for a law that is a lint rule or a type (docs/direction/five-steps-for-every-check.md).
+# "type" for a law that is a lint rule or a type. A cell that starts with "example", "e.g.",
+# "none", "n/a" or "-" fails
+# (docs/direction/five-steps-for-every-check.md#every-law-is-a-property).
 # Paths are read as the repo reads them: `./package.json` is `package.json`.
 here=$(cd "$(dirname "$0")" && pwd -P)
 plan=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
@@ -47,7 +49,7 @@ for i, l in enumerate(lines):
         continue
     if set(l) <= set("|-: "): continue
     drawn = cells[gen].strip("*` ").lower() if 0 <= gen < len(cells) else ""
-    if gen >= 0 and drawn in ("", "-", "none", "n/a", "example", "examples"):
+    if gen >= 0 and (not drawn or re.match(r"(examples?|e\.g\.|none|n/a|-)($|[\s):,;.])", drawn)):
         bad.append(f"line {i + 1}: a law with no generator: say what its inputs are drawn from")
     if not files or col < 0: continue
     owner = cells[col].split()[0].strip("*`").lower() if col < len(cells) and cells[col].split() else ""

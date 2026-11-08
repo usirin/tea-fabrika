@@ -43,8 +43,9 @@ const DEFAULTS = {
   exam, test writer, build, review, mutation fixes) run on Codex; the lead stays on Claude
   opus. *Replaced the same day, below: "Claude subagents only read and audit" no longer holds.
   A Claude agent runs a step that needs Electron or a socket, and one Claude driver carries each
-  ticket.* *Changed the same day (owner): the standard tier, not the priority tier, since
-  priority burns the subscription's quota.* The call, with the brief on stdin:
+  ticket.* *Changed the same day (owner): this line first said "priority tier", and the call
+  below passed `-c service_tier=priority`. Runs now use the standard tier, since priority burns
+  the subscription's quota.* The call, with the brief on stdin:
 
   ```sh
   codex exec -m gpt-6.1-sol -c model_reasoning_effort=xhigh \

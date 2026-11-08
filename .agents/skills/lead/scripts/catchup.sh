@@ -19,7 +19,9 @@ W=$BOXES/catchup-$pr; LOCK=$BOXES/catchup.lock; LEAD=$lead_here
 AS='-c user.name=fabrikalfa[bot] -c user.email=353269643+fabrikalfa[bot]@users.noreply.github.com'
 mkdir -p "$BOXES"
 until mkdir "$LOCK" 2>/dev/null; do sleep 5; done
-trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT INT TERM
+# EXIT drops the lock; INT and TERM end the run (and so run EXIT), never carry on past a signal.
+trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
+trap 'exit 130' INT TERM
 head=$(gh pr view "$pr" -R "$GH_REPO" --json headRefName -q .headRefName)
 [ -d "$W" ] || git -C "$MAIN" worktree add -q --detach "$W" origin/main
 cd "$W"
@@ -29,7 +31,11 @@ git checkout -q --detach FETCH_HEAD
 [ -d node_modules ] || nice -n 15 pnpm install --silent >/dev/null 2>&1
 tip=$(git rev-parse HEAD)
 if ! git merge-base --is-ancestor origin/main HEAD; then
-	git $AS merge -q --no-edit origin/main -m "Merge main into $head" -m "Co-authored-by: $FABRIKA_COAUTHOR"
+	if ! git $AS merge -q --no-edit origin/main -m "Merge main into $head" -m "Co-authored-by: $FABRIKA_COAUTHOR"; then
+		git merge --abort 2>/dev/null || true
+		echo "pr $pr: merging main conflicts; aborted, nothing pushed" >&2
+		exit 1
+	fi
 	tip=$(git rev-parse HEAD)
 	nice -n 15 pnpm -s commits sign --step lead --ticket "$ticket" --key ~/.fabrika/step-keys/lead >/dev/null
 	case $head in
