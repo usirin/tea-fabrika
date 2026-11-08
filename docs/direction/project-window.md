@@ -32,7 +32,9 @@ In demlik's window, the person presses Cmd-O.
 
 ## Which version
 
-- **Today's version:** built with ticket 276's plan, amended for this look. The frame draws the
+- **Today's version:** built with ticket 276's plan, amended for this look. That plan was approved
+  by the lead agent and is not in the repo yet; "the plan" below means it, and its build pull
+  request brings its words in. The frame draws the
   welcome page, the button and the box; the app (`main.ts`) opens windows and the folder sheet.
 - **`next/`:** nothing yet. When `next/` gets windows, this is the lesson to rethink, not code to
   port: the place you are in is named top left and switches, and an empty window is one page.
@@ -76,9 +78,12 @@ In demlik's window, the person presses Cmd-O.
   Open Folder still opens that sheet directly.
 - Why: one key to learn for both jobs, and the box is the welcome page's list again, so the two
   places read the same.
-- The box is the palette layer's one desk-wide modal ([layers](./layers.md)), in the popover type
-  ([popovers](./popovers.md)): sans, 32px rows, Esc closes. It is an APG combobox with a listbox,
-  as [the picker note](./picker-guidelines.md) asks of a box.
+- The box is not a second modal. Lean, 80%: it is the palette, the one desk-wide modal
+  ([layers](./layers.md), L4), opened on a projects source with Open Folder… as a command row, as
+  the keys panel is the palette on another source ([popovers](./popovers.md)). So Cmd-K and Cmd-O
+  never stack: one replaces the other. Sans, 32px rows, Esc closes, an APG combobox with a listbox,
+  as [the picker note](./picker-guidelines.md) asks. If the build finds it must be a second modal,
+  that changes layers.md and goes to the owner.
 - Where it differs from the known way: VS Code and Zed open the sheet on Cmd-O, and VS Code keeps
   Open Recent on its own key (⌃R). The lead leaned that way at 65%; the owner picked the box.
 - Doubt: a new folder takes one more press (Cmd-O, then Open Folder…). A week of use settles it.
@@ -116,8 +121,8 @@ The 70% calls hang on how the page and the box feel side by side; the build's sh
 
 ## What the ledger records
 
-Nothing new beyond the plan's "Project opened or focused" record, whose `source` now names the
-press: `welcome`, `box`, `button`, `menu`, `sheet` or `dock`. Lost if not recorded now: which way
+Nothing new beyond the plan's "Project opened or focused" record. Lean, 85%, carried by the build
+plan: its `source` names the press, `welcome`, `box`, `button`, `menu`, `sheet` or `dock`. Lost if not recorded now: which way
 people reach a project, the fact that would tell whether P3's one key was right.
 
 ## Where this differs from settled notes
