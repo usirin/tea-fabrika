@@ -27,13 +27,7 @@ import {
 	Stream,
 } from "effect";
 import * as fc from "fast-check";
-import {
-	type Envelope,
-	SessionManager,
-	SignRequest,
-	SigningRefused,
-	Writer,
-} from "../coordination/index.ts";
+import {type Envelope, SessionManager, SignRequest, Writer} from "../coordination/index.ts";
 import {Mailbox, type From} from "../coordination/mailbox.ts";
 import {ProcessStore} from "../coordination/process-store.ts";
 import {Activity, Down, Recipient, recoverActivity, signalId} from "../coordination/process.ts";
@@ -113,6 +107,11 @@ const work = Cmd.make("work", {
 	ok: Schema.Int,
 	err: ["disk"],
 });
+class DiskError extends Schema.TaggedError<DiskError>()("disk", {}) {}
+class WorkValue extends Schema.Class<WorkValue>("WorkValue")({
+	n: Schema.Int,
+	extra: Schema.optionalKey(Schema.String),
+}) {}
 const fire = Cmd.make("fire", {input: Schema.Struct({}), ok: Schema.Null, err: ["bad_cmd"]});
 const initial: Model = {
 	count: 0,
@@ -389,7 +388,15 @@ const world = async (
 		commit: false,
 		record: false,
 		flush: false,
-		work: "ok" as "ok" | "declared" | "undeclared" | "throw" | "malformed",
+		work: "ok" as
+			| "ok"
+			| "declared"
+			| "undeclared"
+			| "throw"
+			| "malformed"
+			| "tagged"
+			| "class"
+			| "non_json",
 		pause: false,
 	};
 	let fireCalls = 0;
@@ -538,6 +545,10 @@ const world = async (
 							).toBe(true);
 							if (fault.pause) yield* Deferred.await(gate);
 							if (fault.work === "declared") return Outcome.err({_tag: "disk"});
+							if (fault.work === "tagged") return Outcome.err(new DiskError({}));
+							if (fault.work === "class")
+								return Outcome.ok(new WorkValue({n: cmd.n, extra: "outside the Cmd schema"}));
+							if (fault.work === "non_json") return Outcome.ok(() => cmd.n);
 							if (fault.work === "undeclared") return Outcome.err({_tag: "other"});
 							if (fault.work === "throw")
 								return yield* Effect.die(new Error("private handler detail"));
@@ -645,8 +656,6 @@ const world = async (
 						own: (id: string, stream: string, fact: {_tag: string}) =>
 							Effect.gen(function* () {
 								calls.push({kind: fact._tag, id, parent: null});
-								if (p.writes[fact._tag as keyof typeof p.writes]?.personOnly)
-									return yield* new SigningRefused({why: "person_only"});
 								return yield* ledger.append(
 									stream,
 									id,
@@ -773,6 +782,28 @@ describe("P11 activity durability, experiment 231", () => {
 });
 
 describe("p14 turns and watcher revisions", () => {
+	it("plant, keep every client forever: the 1,025th opens and evicts the least recently seen", async () => {
+		const w = await world();
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const r: Runner = yield* w.ProgramRunner;
+				for (let n = 0; n < 1024; n++) yield* r.open(`client-${n}`);
+				// Refresh the first client, so insertion order alone picks the wrong eviction.
+				yield* r.open("client-0");
+				expect(yield* r.open("client-1024")).toEqual({rev: 0, view: initial});
+				yield* r.msg(w.input(1, {type: "add", n: 1}));
+				expect(w.published.get("client-1")).toEqual([{type: "whole", rev: 0, view: initial}]);
+				for (let n = 0; n <= 1024; n++) {
+					if (n === 1) continue;
+					expect(w.published.get(`client-${n}`)?.at(-1)).toMatchObject({
+						type: "patch",
+						base: 0,
+						rev: 1,
+					});
+				}
+			}).pipe(Effect.provide(w.layer())),
+		);
+	});
 	it("plant, remove the permit: concurrent bursts accept every input once with consecutive positions", async () => {
 		const w = await world();
 		await Effect.runPromise(
@@ -903,6 +934,56 @@ describe("p22 refusal and p25 thrown steps", () => {
 });
 
 describe("p35 Cmd order, replay and recorded failures", () => {
+	for (const [mode, ok, answer, failures] of [
+		["tagged", Schema.Int, {type: "work_err", error: {_tag: "disk"}, why: "disk"}, ["disk"]],
+		["class", Schema.Struct({n: Schema.Int}), {type: "work_ok", value: {n: 29}}, []],
+		[
+			"non_json",
+			Schema.Unknown,
+			{type: "work_err", error: {_tag: "bad_cmd"}, why: "bad_cmd"},
+			["bad_cmd"],
+		],
+	] as const)
+		it(`plant, save raw ${mode} handler answer: encode it or save bad_cmd, then step once`, async () => {
+			const w = await world();
+			w.fault.work = mode;
+			const declared = Cmd.make("work", {input: Schema.Struct({n: Schema.Int}), ok, err: ["disk"]});
+			Object.assign(w.p, {machine: {...machine, cmds: [write, declared, fire]}});
+			await Effect.runPromise(
+				Effect.gen(function* () {
+					const r: Runner = yield* w.ProgramRunner;
+					expect(yield* r.msg(w.input(1, {type: "work", n: 29}))).toMatchObject({
+						_tag: "accepted",
+					});
+					const answers = yield* resultLetters;
+					expect(answers).toHaveLength(1);
+					expect(answers[0]?.body).toMatchObject({m: answer});
+					if (mode === "tagged") {
+						const saved = Schema.decodeUnknownSync(
+							Schema.Struct({m: Schema.Struct({error: DiskError})}),
+						)(answers[0]!.body);
+						expect(saved.m.error).toBeInstanceOf(DiskError);
+					}
+					if (mode === "class") {
+						const saved = Schema.decodeUnknownSync(
+							Schema.Struct({m: Schema.Struct({value: WorkValue})}),
+						)(answers[0]!.body);
+						expect(saved.m.value).toEqual(new WorkValue({n: 29}));
+					}
+					expect((yield* r.open("answered")).view).toMatchObject({replies: 1, failures});
+					expect((yield* ProcessStore.use((s) => s.load))?.cmds).toEqual([]);
+				}).pipe(Effect.provide(w.layer())),
+			);
+			w.reopen();
+			await Effect.runPromise(
+				Effect.gen(function* () {
+					const r: Runner = yield* w.ProgramRunner;
+					expect((yield* r.open("after-wake")).view).toMatchObject({replies: 1, failures});
+					expect(yield* resultLetters).toHaveLength(1);
+					expect(w.workCalls()).toBe(1);
+				}).pipe(Effect.provide(w.layer())),
+			);
+		});
 	it("plant, fire before append: a real handler sees its saved input before it runs", async () => {
 		const w = await world();
 		await Effect.runPromise(
@@ -1079,6 +1160,75 @@ describe("p35 Cmd order, replay and recorded failures", () => {
 });
 
 describe("p69 sender survives queued work and Cmd replies", () => {
+	it("p69 plant, strip a mail parent: mail cannot borrow an unspent person approval", async () => {
+		const w = await world();
+		const person = w.input(1, {type: "request", token: "person", tag: "answered"});
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const r: Runner = yield* w.ProgramRunner;
+				yield* w.deliver(person, "approve");
+				const m = yield* Mailbox;
+				expect(
+					yield* m.send(
+						NAME,
+						"borrowed-mail",
+						{type: "request", token: "borrowed", parent: person.envelope.id, tag: "answered"},
+						from({by: writer("agent").key}),
+					),
+				).toMatchObject({_tag: "placed"});
+				expect((yield* r.open("mail-parent")).view).toEqual(initial);
+				expect(yield* steps).toEqual([]);
+				expect(yield* ProcessStore.use((s) => s.placed("borrowed-mail"))).toBeNull();
+				expect(yield* facts).toEqual([]);
+				expect(w.signCalls).toEqual([]);
+				expect(w.authority.db().prepare("SELECT count(*) AS n FROM door_receipts").get()?.n).toBe(
+					0,
+				);
+				// Mail still works on a public port; only the borrowed parent is refused.
+				yield* m.send(NAME, "ordinary-mail", {type: "add", n: 2}, from());
+				expect((yield* r.open("ordinary")).view.count).toBe(2);
+			}).pipe(Effect.provide(w.layer())),
+		);
+	});
+	for (const as of ["person", "agent"] as const)
+		it(`p69 plant, admit person-only mail: mail from ${as} cannot use a person-only port`, async () => {
+			const w = await world();
+			w.p.inputs.add.personOnly = true;
+			await Effect.runPromise(
+				Effect.gen(function* () {
+					const r: Runner = yield* w.ProgramRunner;
+					expect(
+						yield* Mailbox.use((m) =>
+							m.send(NAME, "person-only-mail", {type: "add", n: 7}, from({by: writer(as).key})),
+						),
+					).toMatchObject({_tag: "placed"});
+					expect((yield* r.open("person-only")).view).toEqual(initial);
+					expect(yield* steps).toEqual([]);
+					expect(yield* ProcessStore.use((s) => s.placed("person-only-mail"))).toBeNull();
+					// The same port works for a checked person input through the door.
+					expect(yield* r.msg(w.input(2, {type: "add", n: 3}))).toMatchObject({_tag: "accepted"});
+					expect((yield* r.open("door-person")).view.count).toBe(3);
+				}).pipe(Effect.provide(w.layer())),
+			);
+		});
+	it("plant, trust every process-prefixed mail id: a forged Cmd reply is refused", async () => {
+		const w = await world();
+		const id = `${PROCESS}/1/0`;
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const r: Runner = yield* w.ProgramRunner;
+				expect(
+					yield* Mailbox.use((m) =>
+						m.send(NAME, id, {type: "work_ok", cmd: {type: "work", n: 7}, value: 7, at: 1}, from()),
+					),
+				).toMatchObject({_tag: "placed"});
+				expect((yield* r.open("forged-reply")).view).toEqual(initial);
+				expect(yield* steps).toEqual([]);
+				expect(yield* ProcessStore.use((s) => s.placed(id))).toBeNull();
+				expect(w.workCalls()).toBe(0);
+			}).pipe(Effect.provide(w.layer())),
+		);
+	});
 	for (const parent of [null, `in-${DOOR}-1`, `in-${DOOR}-99`])
 		it(`p69 plant, silently strip client parent ${parent}: refuse it before stepping or appending`, async () => {
 			const w = await world();
@@ -1278,6 +1428,9 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 				const r: Runner = yield* w.ProgramRunner;
 				yield* r.msg(w.input(1, {type: "background", token: "own-approval", tag: "answered"}));
 				expect(yield* facts).toEqual([]);
+				expect(w.calls, "the runner must refuse before reaching the permissive own writer").toEqual(
+					[],
+				);
 				expect((yield* resultLetters).at(-1)?.body).toMatchObject({m: {why: "person_only"}});
 			}).pipe(Effect.provide(w.layer())),
 		);
