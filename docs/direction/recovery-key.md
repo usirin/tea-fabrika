@@ -51,7 +51,8 @@ decided both ways are offered. The file name stays, so links hold.*
   and drops the keys the person picks. Then it is spent. Making a new sheet kills the old one.
 - **Every device the person owns is an equal person key,** as on Apple and Keybase. Any one may let
   in tabs, agents and other devices, and remove any of them. The sheet is the backstop. An agent is
-  never one, and a browser tab cannot approve others (lean, 70%).
+  never one, and a browser tab cannot approve others (lean, 70%). *Changed 2026-11-07 (owner): a
+  tab with a passkey made with user verification can approve, as an equal person key.*
 - **A Mac whose keys did not come across goes to the recovery screen,** never to a new founding.
 - **Recovery asks once: "Is your old Mac lost or stolen?"** The default is yes. Yes drops the old
   Mac and everything it let in, all the way down. The old Mac is told at once if online.
@@ -371,7 +372,9 @@ export const mayAdd = (members: Members, signer: string, add: Add):
 - **A browser tab joins and works, but cannot approve others.** A tab holds only a window key.
   Why: browser storage is weaker than a sealed key, and a phone's browser may clear it after 7 days
   without a visit. **Lean, 70%,** not yet settled. What would settle it: a phone as approver, which
-  the plan puts later.
+  the plan puts later. *Changed 2026-11-07 (owner): a tab can approve when the approval is signed by
+  a passkey (WebAuthn) made with user verification required; that tab is a person key. A tab with
+  only its window key still cannot ([Tier 1's question 19](../plan/tier-1.md#open-questions)).*
 - **A recovery key may** let in one new device and drop keys, once. It never grants a tab or an
   agent. The sheet's only job is to bring a device back.
 - **Anyone can re-check it later** with `ssh-keygen -Y verify`, since the signed text and the
