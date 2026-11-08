@@ -148,6 +148,14 @@ Machine.make({
 Input.make("comment", {fields: Comment.fields, description: "Comment", personOnly: false});
 // @ts-expect-error the same for an event
 Event.make(Commented, {stream: onTicket, personOnly: false});
+// Nor through a `boolean` held in a variable, where tsc checks no extra key: the plain case takes
+// no `personOnly` at all.
+const flag: boolean = Math.random() > 0.5;
+const loose = {fields: Comment.fields, description: "Comment", personOnly: flag};
+// @ts-expect-error a `boolean` is neither `true` nor left out
+Input.make("comment", loose);
+// @ts-expect-error the same for an event
+Event.make(Commented, {stream: onTicket, personOnly: flag});
 
 // Shape 3: tsc stops it where the plain input writes.
 const gated = Records.over({
@@ -235,9 +243,9 @@ const [stepped] = applyCell(threeTicket.machine, start, {
 export {stepped};
 
 // 9. A step that takes a write a plain event's write made, puts a person-only event into it, and
-// hands it to the person-only event's write Cmd. This compiles: a TypeScript brand is a type on
-// the object, and a spread keeps it. The brand stops a mistake, not a forger; the signer still
-// refuses the write when it runs (`person_only`).
+// hands it to the person-only event's write through tea's one-argument call. This compiles: a
+// TypeScript brand is a type on the object, and a spread keeps it. The brand stops a mistake, not
+// a forger. The Cmd is made as written, and the signer refuses it when it runs (`person_only`).
 const allowed = commented2.write(commentMsg, Commented.make({ticket: 1, body: "Skip part 2."}));
 answered2.write({stream: allowed.stream, write: {...allowed.write, fact: anAnswer}});
 

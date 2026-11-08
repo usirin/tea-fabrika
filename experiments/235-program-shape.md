@@ -168,13 +168,17 @@ answered.write(answerMsg, anAnswer); // compiles
   against the Msg types, its Cmd answers included.
 - **(iii) An event write not in `cmds` fails:** tea types a step's Cmds from the list, so an event
   write is checked like any other Cmd.
-- `personOnly: false` does not compile, on an input or an event.
+- `personOnly: false` does not compile, on an input or an event, and neither does a `boolean` held
+  in a variable: the plain case takes no `personOnly` key at all.
 - **Still compiles:** spreading a write that a plain event's write made, putting `answered` in it,
-  and handing it to `answered.write`'s one-argument Cmd form (part 9). A brand stops a mistake, not
-  a forger, and the signer refuses it at run time (`person_only`).
+  and handing it to `answered.write`'s one-argument call (part 9). tea reads a Cmd's types off
+  that call, so it stays; it runs as the plain Cmd, and a run of part 9 makes the Cmd as written.
+  A brand stops a mistake, not a forger, and the signer refuses it at run time (`person_only`).
+  Review 3 found that the first version of this call crashed instead; it now reaches the signer.
 
 The write's call takes `(msg, event)` and no stream, as the owner's sketch does. So an event says
-its stream once, `Event.make(Answered, {stream, ...})`. Each event's write Cmd is named by the
+its stream once, `Event.make(Answered, {stream, ...})`. That is one call beyond the owner's five,
+named in the decided note for the owner to confirm; the other way is a third argument. Each event's write Cmd is named by the
 event's `_tag`, so the stepper sees `{type: "answered", stream, write}`. The merged runner performs
 only `{type: "write"}`; the runner reading event writes off `cmds` is the build ticket. The script
 maps shape 2's event writes to `write` before it compares, and folds `commented_err` where the

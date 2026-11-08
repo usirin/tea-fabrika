@@ -67,8 +67,15 @@ Shape 2, values, with five changes (owner, 2026-11-08):
 5. **Two answers per event write** (`answered_ok`, `answered_err`; eight for the ticket program)
    are accepted for now as a tea problem. Nobody works around them.
 
-Where an event goes is said once, on the event (`stream`), so no step writes it. The owner's call
-form, `answered.write(msg, event)`, has two arguments; the stream on the event is what lets it.
+**One addition beyond the five, for the owner to confirm: `stream` on the event.** The owner's
+call form, `answered.write(msg, event)`, has two arguments, and a write needs a stream. So the
+probe has each event say where it goes, once (`stream: (e) => ...`), and no step writes it. The
+other way is a third argument, `answered.write(msg, stream, event)`, as the proposed shape had.
+The build ticket (302) builds the stream on the event unless the owner says otherwise.
+
+**tea's one-argument call.** tea reads a Cmd's types off a one-argument call (`CmdOf`, `Settled`),
+so an event's write also has one, and it runs as the plain Cmd. It takes only a sealed write,
+which only the two-argument call makes, so no step writes through it by mistake.
 
 ## The probe
 
@@ -82,8 +89,8 @@ three shapes the same after the change.
 | A typo in an update key, `coment` or `answerd_ok` | tsc: tea checks the keys against the Msgs |
 | An event write not listed in `cmds` | tsc: tea types a step's Cmds from the list |
 | A write Cmd called with a write of its own | tsc: it takes only a sealed write |
-| `personOnly: false` | tsc: only `true` is a way to write it |
-| A made write's spread, a person-only event put in | Compiles. The signer refuses it at run time (`person_only`) |
+| `personOnly: false`, or a `boolean` in a variable | tsc: only `true` is a way to write it |
+| A made write's spread, a person-only event put in, through the one-argument call | Compiles, and the Cmd is made. The signer refuses it at run time (`person_only`) |
 
 A TypeScript brand stops a mistake, not a forger. The signer stays the real check.
 
@@ -148,11 +155,11 @@ them today), and the Cmd list the runner reads at runtime. tea does not change.
   `Program` drops `makeEffect` by the one-way rule: a program is built once, at load, where the
   loader already runs as an Effect. Data keeps the pair.
 - The word fact, in [data first](./data-first-markdown-is-a-view.md) and the notes after it: the
-  same thing is now an event. The prose sweep is its own ticket.
+  same thing is now an event. The prose sweep is ticket 303.
 
 ## What it costs
 
-One pull request: the new `Program.make` and its values in libfabrika with type tests, the runner
+One pull request, ticket 302: the new `Program.make` and its values in libfabrika with type tests, the runner
 change, the counter moved. Sure about the rule and the pick: the owner set both. Sure the
 person-only check types cleanly: the probe compiles, about 90%; the doubt is how the brand reads in
 a tsc error to someone who did not write it.

@@ -50,14 +50,15 @@ export type Input<
 };
 
 // One maker, two cases, each written one way: `personOnly` appears only as `true`. Left out, any
-// client may send it. A person-only input's Msg is branded `FromPerson`.
+// client may send it; the plain case takes no `personOnly`, so a `boolean` in a variable fits
+// neither. A person-only input's Msg is branded `FromPerson`.
 function makeInput<const N extends string, const F extends Fields>(
 	name: N,
 	spec: {readonly fields: F; readonly description: string; readonly personOnly: true},
 ): Input<N, Schema.brand<MsgSchema<N, F>, "FromPerson">, true>;
 function makeInput<const N extends string, const F extends Fields>(
 	name: N,
-	spec: {readonly fields: F; readonly description: string},
+	spec: {readonly fields: F; readonly description: string; readonly personOnly?: never},
 ): Input<N, MsgSchema<N, F>, false>;
 function makeInput(
 	name: string,
@@ -86,8 +87,10 @@ const group = <const T extends readonly [Input, ...ReadonlyArray<Input>]>(inputs
 export const Input = {make: makeInput, group};
 
 type WriteErr = {readonly _tag: (typeof writeErrs)[number]};
+type Tag<S extends EventSchema> = S["Type"]["_tag"];
+
 type WriteIn = Schema.Struct<typeof writeFields>["Type"];
-type WriteDef<S extends EventSchema> = CmdDef<S["Type"]["_tag"], WriteIn, Schema.Json, WriteErr>;
+type WriteDef<S extends EventSchema> = CmdDef<Tag<S>, WriteIn, Schema.Json, WriteErr>;
 
 /** The Msg an event's write takes: any input's, or, for a person-only event, a person's alone. */
 type Cause<P extends boolean> = {readonly parent: string} & (P extends true ? FromPerson : unknown);
@@ -95,6 +98,12 @@ type Cause<P extends boolean> = {readonly parent: string} & (P extends true ? Fr
 /**
  * An event's write Cmd. To tea it is a Cmd like any other: listed in `cmds`, answered by
  * `<event>_ok` and `<event>_err`. A step calls it with the input's Msg and the event.
+ *
+ * tea reads a Cmd's types off a one-argument call (`CmdOf`, `Settled`), so that call is in the
+ * type too, and runs as the Cmd itself. It takes only a sealed write, which only a two-argument
+ * call makes, so a step cannot write through it by mistake. A step that spreads a sealed write
+ * and swaps its event still compiles: a brand stops a mistake, not a forger, and the signer
+ * refuses a person-only event the Msg's sender could not cause (`person_only`).
  */
 export type EventWrite<S extends EventSchema, P extends boolean> = WriteDef<S> &
 	((msg: Cause<P>, event: S["Type"]) => ReturnType<WriteDef<S>>);
@@ -109,25 +118,37 @@ export type Event<S extends EventSchema = EventSchema, P extends boolean = boole
 /** Each event, by its write Cmd, so Program.make reads the events off the machine's `cmds`. */
 const byWrite = new WeakMap<object, Event>();
 
-// One maker, two cases: `personOnly` appears only as `true`. `stream` says where the event goes,
-// once, so no step writes it.
+// One maker, two cases: `personOnly` appears only as `true`, and the plain case takes no
+// `personOnly` at all, so a `boolean` held in a variable does not fit either. `stream` says where
+// the event goes, once, so no step writes it.
 function makeEvent<S extends EventSchema>(
 	schema: S,
 	spec: {readonly stream: (event: S["Type"]) => string; readonly personOnly: true},
 ): Event<S, true>;
 function makeEvent<S extends EventSchema>(
 	schema: S,
-	spec: {readonly stream: (event: S["Type"]) => string},
+	spec: {readonly stream: (event: S["Type"]) => string; readonly personOnly?: never},
 ): Event<S, false>;
 function makeEvent<S extends EventSchema>(
 	schema: S,
 	spec: {readonly stream: (event: S["Type"]) => string; readonly personOnly?: true},
 ): Event<S> {
-	const tag: S["Type"]["_tag"] = schemaTag(schema);
+	const tag: Tag<S> = schemaTag(schema);
 	const def = Cmd.make(tag, {input: Schema.Struct(writeFields), ok: Schema.Json, err: writeErrs});
-	const call = (msg: {readonly parent: string}, event: S["Type"]) =>
-		def({stream: spec.stream(event), write: seal(msg, event)});
-	// The Cmd tea lists, called with a Msg and an event. Libfabrika makes it; no program does.
+	// The one-argument call is tea's (see `EventWrite`); a step makes the two-argument one.
+	function call(input: WriteIn): ReturnType<typeof def>;
+	function call(msg: {readonly parent: string}, event: S["Type"]): ReturnType<typeof def>;
+	function call(
+		first: WriteIn | {readonly parent: string},
+		event?: S["Type"],
+	): ReturnType<typeof def> {
+		if (event !== undefined && "parent" in first) {
+			return def({stream: spec.stream(event), write: seal(first, event)});
+		}
+		if ("write" in first) return def(first);
+		throw new Error("an event's write takes a Msg and the event");
+	}
+	// Libfabrika makes it; no program does.
 	const event: Event<S> = {
 		schema,
 		personOnly: spec.personOnly === true,
