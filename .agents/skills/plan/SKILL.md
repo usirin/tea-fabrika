@@ -43,6 +43,13 @@ rows to read, and an older plan to copy the shape of. This skill holds the rest.
   Every path that matches a glob in `exam-paths.json` belongs to `tests`. A builder is never handed
   one. If the build needs an exam file changed, that change goes in the tests commit.
 - Screenshots at five layouts when a window changes (`AGENTS.md`, "Shoot more than one layout").
+- **The rules every site keeps,** not only the site the plan names. When a window changes:
+  - where focus goes after a press that removes or reveals a control;
+  - how two states are compared (tea's `deepEqual`, never JSON text);
+  - what a live region holds (one short sentence, since `role="status"` is read whole);
+  - that each e2e stage removes its own home.
+
+  On PR 523 (field note 2026-11-08-29), three review rounds in a row found one of these missing.
 - Size in agent hours, with how sure.
 - What it records, and what fact is lost if it is not recorded now.
 - What it cannot tell us.
