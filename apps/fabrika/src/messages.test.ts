@@ -77,7 +77,7 @@ describe("the desk's port", () => {
 		const desk = fresh();
 		const sent = {type: "desk", desk, takes: takenNow(desk, 0)};
 		expect(readToPage(sent)).toEqual({kind: "read", msg: sent});
-		expect(sent.takes).toEqual({all: false, keys: ["<c-b>"]});
+		expect(sent.takes).toEqual({all: false, keys: ["<c-b>", "<f6>", "<s-f6>"]});
 		expect(readToPage({type: "desk", desk: {at: "over"}, takes: {all: false, keys: []}}).kind).toBe(
 			"read",
 		);

@@ -1261,8 +1261,10 @@ if (process.platform !== "darwin")
 	throw new Error("this run checks macOS's window rules: run it on a Mac");
 
 const launch = async (on: string) => {
-	const testEnv: NodeJS.ProcessEnv = {...process.env, FABRIKA_HOME: on};
-	delete testEnv.FABRIKA_FOREGROUND;
+	const testEnv: Record<string, string> = {};
+	for (const [name, value] of Object.entries(process.env))
+		if (value !== undefined && name !== "FABRIKA_FOREGROUND") testEnv[name] = value;
+	testEnv.FABRIKA_HOME = on;
 	const app = await _electron.launch({
 		executablePath: electronPath,
 		args: [here],
