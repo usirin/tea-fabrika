@@ -32,13 +32,37 @@ const fresh = [
 	},
 	{type: "nope", parent: `${PROCESS}-5`},
 ];
-// Saved letters: a Cmd's answers, folded as they were accepted.
-const saved = [
+// Saved letters: a Cmd's answers, folded as they were accepted. Shapes 1 and 3 send every write
+// through one `write` Cmd; shape 2 (decided) gives each event its own, so the same refusal comes
+// back as `commented_err`.
+const saved = (writeCmd: string) => [
 	{type: "ticket_read_ok", cmd: read, value: page, at: 1},
-	{type: "write_err", cmd: {type: "write"}, error: {_tag: "spent"}, at: 2},
+	{type: `${writeCmd}_err`, cmd: {type: writeCmd}, error: {_tag: "spent"}, at: 2},
 ];
 
-const run = (declared: unknown) => {
+/**
+ * Shape 2's event write as the runner takes it today: `{type: "write", stream, write}`. Its own
+ * Cmd name is the event's `_tag`; the runner reading event writes off `cmds` is the build ticket.
+ */
+const asWrite = (writes: ReadonlyArray<string>) => (step: unknown) => {
+	if (typeof step !== "object" || step === null || !("cmds" in step)) return step;
+	const cmds: unknown = step.cmds;
+	if (!Array.isArray(cmds)) return step;
+	return {
+		...step,
+		cmds: cmds.map((cmd: unknown) =>
+			typeof cmd === "object" &&
+			cmd !== null &&
+			"type" in cmd &&
+			typeof cmd.type === "string" &&
+			writes.includes(cmd.type)
+				? {...cmd, type: "write"}
+				: cmd,
+		),
+	};
+};
+
+const run = (declared: unknown, writeCmd = "write") => {
 	const loaded = stepper(declared);
 	if (Result.isFailure(loaded)) throw loaded.failure;
 	const s = loaded.success;
@@ -52,7 +76,7 @@ const run = (declared: unknown) => {
 		steps.push(step);
 		if (step._tag === "stepped") model = step.model;
 	}
-	for (const msg of saved) {
+	for (const msg of saved(writeCmd)) {
 		const step = s.fold(model, msg);
 		steps.push(step);
 		if (step._tag === "stepped") model = step.model;
@@ -62,10 +86,21 @@ const run = (declared: unknown) => {
 		Object.entries(p.inputs).map(([k, v]) => [k, v._tag === "write" ? v.personOnly : "read"]),
 	);
 	const writes = Object.fromEntries(Object.entries(p.writes).map(([k, v]) => [k, v.personOnly]));
-	return {steps, doors, writes, outputs: Object.keys(p.outputs), v: p.state.v};
+	const named = writeCmd === "write" ? [] : Object.keys(p.writes);
+	return {
+		steps: steps.map(asWrite(named)),
+		doors,
+		writes,
+		outputs: Object.keys(p.outputs),
+		v: p.state.v,
+	};
 };
 
-const shapes = {one: run(one), two: run(two.declared), three: run(three.declared)};
+const shapes = {
+	one: run(one),
+	two: run(two.declared, "commented"),
+	three: run(three.declared),
+};
 /** JSON with its keys sorted, so two shapes that build one object in another order still match. */
 const canon = (u: unknown): string =>
 	JSON.stringify(u, (_key, value: unknown) =>

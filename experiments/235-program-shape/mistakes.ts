@@ -6,10 +6,19 @@ import {Machine} from "@demlik/tea/effect";
 import {Schema} from "effect";
 import {Program as Today} from "../../next/packages/libfabrika/src/index.ts";
 import {ticketMachine as todayMachine} from "./shape-1-today.ts";
-import {Fact as Fact2, Input, Output} from "./shape-2-lib.ts";
+import {Event, Input, Output, Program as Program2} from "./shape-2-lib.ts";
 import {Fact as Fact3, Program as Records} from "./shape-3-lib.ts";
 import {ticket as threeTicket} from "./shape-3-records.ts";
-import {Answer, Answered, Comment, Model, TicketNumber, readTicket, start} from "./ticket-data.ts";
+import {
+	Answer,
+	Answered,
+	Comment,
+	Commented,
+	Model,
+	TicketNumber,
+	readTicket,
+	start,
+} from "./ticket-data.ts";
 
 const base = {
 	name: "ticket",
@@ -74,40 +83,72 @@ three.input({
 // 3. A plain input that writes a person-only fact, so an agent could cause it.
 // Shape 1: compiles. A write's fact is any JSON object. The signer refuses it when the Cmd runs
 // (`person_only`, session-manager.ts), after the step was accepted and saved.
-// Shape 2: tsc stops it twice, where the input is made and where it writes.
-const answered2 = Fact2.make(Answered, {who: "person"});
-// @ts-expect-error a plain input may not cause a person-only fact
-Input.make("comment", {fields: Comment.fields, description: "Comment", causes: [answered2]});
+// Shape 2 (decided): tsc stops it where the step writes. A person-only input's Msg is branded
+// `FromPerson`, and a person-only event's write takes only a Msg with that brand.
+const onTicket = (event: {readonly ticket: number}) => `ticket/${event.ticket}`;
+const answered2 = Event.make(Answered, {stream: onTicket, personOnly: true});
+const commented2 = Event.make(Commented, {stream: onTicket});
 const answer2 = Input.make("answer", {
 	fields: Answer.fields,
 	description: "Answer",
-	who: "person",
-	causes: [answered2],
+	personOnly: true,
 });
-const commented2 = Fact2.make(Schema.TaggedStruct("commented", Comment.fields));
-const comment2b = Input.make("comment", {
-	fields: Comment.fields,
-	description: "Comment",
-	causes: [commented2],
+const plain2 = Input.make("comment", {fields: Comment.fields, description: "Comment"});
+const answerMsg = Schema.decodeUnknownSync(answer2.schema)({
+	type: "answer",
+	parent: "in-1",
+	ticket: 1,
+	ask: "a",
+	pick: "yes",
+	note: "",
+	saw: {title: "", body: ""},
 });
-comment2b.write(
-	{type: "comment", parent: "in-1"},
-	"ticket/1",
-	// @ts-expect-error `comment` causes only `commented`
-	Answered.make({ticket: 1, ask: "a", pick: "yes", note: "", saw: {title: "", body: ""}}),
-);
-answer2.write(
-	{type: "answer", parent: "in-1"},
-	"ticket/1",
-	Answered.make({ticket: 1, ask: "a", pick: "yes", note: "", saw: {title: "", body: ""}}),
-);
-// Nor can a plain input's step borrow a person-only input's writer: it takes only its own Msg.
-answer2.write(
-	// @ts-expect-error a `comment` Msg cannot cause an `answer` write
-	{type: "comment", parent: "in-1"},
-	"ticket/1",
-	Answered.make({ticket: 1, ask: "a", pick: "yes", note: "", saw: {title: "", body: ""}}),
-);
+const commentMsg = Schema.decodeUnknownSync(plain2.schema)({
+	type: "comment",
+	parent: "in-1",
+	ticket: 1,
+	body: "Skip part 2.",
+});
+const anAnswer = Answered.make({
+	ticket: 1,
+	ask: "a",
+	pick: "yes",
+	note: "",
+	saw: {title: "", body: ""},
+});
+// (i) A plain input's Msg into a person-only event's write.
+// @ts-expect-error `comment` is no person-only input, so its Msg lacks `FromPerson`
+answered2.write(commentMsg, anAnswer);
+answered2.write(answerMsg, anAnswer);
+// A plain event takes any input's Msg, a person's too.
+commented2.write(commentMsg, Commented.make({ticket: 1, body: "Skip part 2."}));
+commented2.write(answerMsg, Commented.make({ticket: 1, body: "Skip part 2."}));
+// Nor a hand-made Msg: an object literal has no brand.
+// @ts-expect-error a hand-made Msg is no person's
+answered2.write({type: "answer", parent: "in-1"}, anAnswer);
+// The write checks the event too.
+// @ts-expect-error `answered`'s write takes an `answered` event
+answered2.write(answerMsg, Commented.make({ticket: 1, body: "Skip part 2."}));
+// Inside a machine: the `comment` cell writes `answered`.
+Machine.make({
+	model: Model,
+	msg: Input.group([plain2, answer2]),
+	cmds: [answered2.write],
+	init: (loaded) => [loaded ?? start, []],
+	update: {
+		// @ts-expect-error the `comment` cell's Msg is no person's
+		comment: (m, msg) => [m, [answered2.write(msg, anAnswer)]],
+		answer: (m, msg) => [m, [answered2.write(msg, anAnswer)]],
+		answered_ok: (m) => [m, []],
+		answered_err: (m) => [m, []],
+	},
+});
+// `personOnly` is written only as `true`. Left out, anyone may send it.
+// @ts-expect-error `personOnly: false` is not a way to write it
+Input.make("comment", {fields: Comment.fields, description: "Comment", personOnly: false});
+// @ts-expect-error the same for an event
+Event.make(Commented, {stream: onTicket, personOnly: false});
+
 // Shape 3: tsc stops it where the plain input writes.
 const gated = Records.over({
 	model: Model,
@@ -158,14 +199,26 @@ Today.make({...base, state: {v: 2, upgrades: []}, inputs: {}});
 // Shapes 2 and 3: there is no number to write; it is one more than the upgrades.
 
 // 5. An empty part written out. Shapes 2 and 3 take no `[]` where a list may be left out.
-// @ts-expect-error `causes` names at least one fact, or is left out
-Input.make("close", {fields: Comment.fields, description: "Close", causes: []});
+const small2 = Input.group([plain2]);
+Program2.make({
+	name: "ticket",
+	machine: Machine.make({
+		model: Model,
+		msg: small2,
+		cmds: [],
+		init: (loaded) => [loaded ?? start, []],
+		update: {comment: (m) => [m, []]},
+	}),
+	inputs: small2,
+	view: (m) => ({now: m.now}),
+	// @ts-expect-error `outputs` names at least one output, or is left out
+	outputs: [],
+});
 
-// 6. A step that skips its input's writer and calls the write Cmd itself. Both new shapes list the
-// runner's write Cmd, but the write it takes is branded and only an input's writer makes one, so
-// tsc stops it.
-// @ts-expect-error the write Cmd takes only what an input's writer makes
-Fact2.write({stream: "ticket/1", write: {_tag: "own", fact: {_tag: "answered"}}});
+// 6. A step that skips the writer and calls a write Cmd with a write of its own. A write Cmd takes
+// only a sealed write, and only libfabrika seals one, so tsc stops it.
+// @ts-expect-error an event's write takes only a sealed write
+answered2.write({stream: "ticket/1", write: {_tag: "own", fact: {_tag: "answered"}}});
 // @ts-expect-error the same in shape 3
 Fact3.write({stream: "ticket/1", write: {_tag: "own", fact: {_tag: "answered"}}});
 
@@ -181,18 +234,12 @@ const [stepped] = applyCell(threeTicket.machine, start, {
 });
 export {stepped};
 
-// 9. A step that takes a write its own writer made and puts a person-only fact into it. This
-// compiles: a TypeScript brand is a type on the object, and a spread keeps it. The brand stops a
-// mistake, not a forger; the signer still refuses the write when it runs (`person_only`).
-const allowed = comment2b.write({type: "comment", parent: "in-1"}, "ticket/1", {
-	_tag: "commented",
-	ticket: 1,
-	body: "Skip part 2.",
-});
-Fact2.write({
-	stream: allowed.stream,
-	write: {...allowed.write, fact: {_tag: "answered"}},
-});
+// 9. A step that takes a write a plain event's write made, puts a person-only event into it, and
+// hands it to the person-only event's write Cmd. This compiles: a TypeScript brand is a type on
+// the object, and a spread keeps it. The brand stops a mistake, not a forger; the signer still
+// refuses the write when it runs (`person_only`).
+const allowed = commented2.write(commentMsg, Commented.make({ticket: 1, body: "Skip part 2."}));
+answered2.write({stream: allowed.stream, write: {...allowed.write, fact: anAnswer}});
 
 // 10. An output whose selector sends what its schema does not say. `null` means nothing to send.
 Output.make("ticket", {
@@ -217,3 +264,32 @@ three.make({
 
 // 11. Shape 3: a program that takes no input leaves `inputs` out.
 three.make({name: "clock", init: () => ({model: start, cmds: []}), view: (m) => ({now: m.now})});
+
+// 12. (ii) A typo in an update key. tea checks the keys against the Msgs, its event answers too.
+Machine.make({
+	model: Model,
+	msg: Input.group([answer2]),
+	cmds: [answered2.write],
+	init: (loaded) => [loaded ?? start, []],
+	update: {
+		answer: (m, msg) => [m, [answered2.write(msg, anAnswer)]],
+		// @ts-expect-error `answerd_ok` is no Msg type
+		answerd_ok: (m) => [m, []],
+		answered_err: (m) => [m, []],
+	},
+});
+
+// 13. (iii) An event write the machine does not list in `cmds`. tea types a step's Cmds from the
+// list, so tsc stops it, as it does any Cmd not listed (2).
+Machine.make({
+	model: Model,
+	msg: Input.group([answer2]),
+	cmds: [commented2.write],
+	init: (loaded) => [loaded ?? start, []],
+	update: {
+		// @ts-expect-error `answered` is not in `cmds`
+		answer: (m, msg) => [m, [answered2.write(msg, anAnswer)]],
+		commented_ok: (m) => [m, []],
+		commented_err: (m) => [m, []],
+	},
+});

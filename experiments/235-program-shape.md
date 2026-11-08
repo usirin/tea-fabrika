@@ -7,6 +7,15 @@ per input, holding its whole story) reads best and gates person-only writes per 
 machine for you and gives a step a second return form. Lean: shape 2, about 65%. The doubt is
 shape 3's reading. That is the owner's call, on the files.
 
+**Picked (owner, 2026-11-08, after a walk of each part).** Shape 2, with five changes:
+`Fact` becomes `Event`; `personOnly: true` is the one way to say person-only, on an input and on
+an event; an input is plain data and names no events; each event brings its own write Cmd
+(`answered.write`), which the machine lists in `cmds` and calls in `update`, and from which
+`Program.make` reads the events; and the two answers per event write (eight cells for the ticket)
+are accepted for now as a tea problem. The probe below shows the changes type cleanly. The decided
+note is [a program's shape](../docs/direction/program-shape.md). The shape 2 files now hold the
+decided shape; the judgment table keeps shape 2 as it was proposed.
+
 This is reading, not a measurement. One script checks that all three shapes step the same, and one
 file checks which mistakes compile. `next/` only.
 
@@ -138,9 +147,42 @@ answers (`ticket_read_ok`, `write_err`). All 8 steps match as JSON across the th
 the ports (only `answer` is person-only), the fact policies (only `answered`), the outputs (`ticket`)
 and the version (1). `close 3` is refused `not_shown` in all three, and `nope` is `bad_msg`.
 
+## The probe (after the pick)
+
+The decided changes, written into `shape-2-lib.ts` and `shape-2-values.ts` and checked in
+`mistakes.ts` with `@ts-expect-error`:
+
+```ts
+const answered = Event.make(Answered, {stream: onTicket, personOnly: true});
+const answer = Input.make("answer", {fields, description, personOnly: true});
+// (i) a plain input's Msg into a person-only event's write
+answered.write(commentMsg, anAnswer); // tsc: no `FromPerson` brand
+answered.write(answerMsg, anAnswer); // compiles
+```
+
+- **(i) A plain input's Msg into `answered.write` fails tsc,** cleanly, with no cast. A person-only
+  input's Msg schema is branded with Effect's own `Schema.brand("FromPerson")`, so its Msg type
+  carries the brand into its update cell; a person-only event's write takes only a Msg with it. A
+  hand-made object, and the `comment` cell inside a real `Machine.make`, fail the same way.
+- **(ii) A typo in an update key fails,** `coment` and `answerd_ok` alike: tea checks the keys
+  against the Msg types, its Cmd answers included.
+- **(iii) An event write not in `cmds` fails:** tea types a step's Cmds from the list, so an event
+  write is checked like any other Cmd.
+- `personOnly: false` does not compile, on an input or an event.
+- **Still compiles:** spreading a write that a plain event's write made, putting `answered` in it,
+  and handing it to `answered.write`'s one-argument Cmd form (part 9). A brand stops a mistake, not
+  a forger, and the signer refuses it at run time (`person_only`).
+
+The write's call takes `(msg, event)` and no stream, as the owner's sketch does. So an event says
+its stream once, `Event.make(Answered, {stream, ...})`. Each event's write Cmd is named by the
+event's `_tag`, so the stepper sees `{type: "answered", stream, write}`. The merged runner performs
+only `{type: "write"}`; the runner reading event writes off `cmds` is the build ticket. The script
+maps shape 2's event writes to `write` before it compares, and folds `commented_err` where the
+others fold `write_err`. With that, all 8 steps, the ports and the event policies still match.
+
 ## The judgment
 
-Judged by properties, never by size. "Stops" means tsc stops it, from `mistakes.ts`.
+As proposed, before the pick. Judged by properties, never by size. "Stops" means tsc stops it, from `mistakes.ts`.
 
 | Property | Shape 1: today | Shape 2: values | Shape 3: records |
 |---|---|---|---|
@@ -197,6 +239,8 @@ tracker, with Subs and internal state) written both ways.
   marked where it stands: shape 3's built update table and init, its input brand, and the type of
   the machine it builds (one `oxlint-disable` with its reason). A parent stepping shape 3's machine
   with `applyCell` compiles (`mistakes.ts`, part 8), but no parent was written.
-- How a fact written `own`, caused by no input, is declared in shape 2. The ticket writes none; today
-  shape 2 finds facts only through the inputs that cause them.
+- How an event written `own`, caused by no input, is written in the decided shape. An event's write
+  takes an input's Msg; the ticket writes none `own`, so the probe did not need one.
+- How the `FromPerson` brand reads in a tsc error to someone who did not write the library. The
+  messages name `Cause<true>` and the missing brand; a type test in the build should show one.
 - Nothing ran on the runner or on workerd; only the stepper.

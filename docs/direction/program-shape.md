@@ -1,6 +1,8 @@
 # A program's shape: one thing means one thing, and one way to do each job
 
-**Proposed 2026-11-08.** `next/` only. From [experiment 235](../../experiments/235-program-shape.md).
+**Decided 2026-11-08** (owner, after a walk of each part). `next/` only. From
+[experiment 235](../../experiments/235-program-shape.md). It picks shape 2, values, with five
+changes, all probed in the experiment's code.
 
 **The rule (owner, 2026-11-08).** In a program's API, one word means one thing only, and there is
 only one way to do each job. A shape that offers two ways (a string or an object for an input,
@@ -11,21 +13,79 @@ reference or checked by tsc, never by two strings that happen to match. A part a
 use is left out, and a part that is written holds something.
 
 ```ts
-// Shape 2, values: an input is one value, made once, used by reference. A sketch from the experiment.
-const answered = Fact.make(Answered, {who: "person"});
-const answer = Input.make("answer", {
-	fields: Answer.fields,
-	description: "Answer an open ask on the ticket shown. A person only.",
-	who: "person",
-	causes: [answered],              // a plain input naming `answered` does not compile
+// A sketch of the ticket's person-only path; experiment 235 has it whole.
+const answered = Event.make(Answered, {
+	stream: (e) => `ticket/${e.ticket}`,
+	personOnly: true, // only `true`; left out, anyone
 });
-const inputs = Input.group([show, comment, answer, close, reopen]);   // the Msg IS the inputs
-export const ticketMachine = Machine.make({model: Model, msg: inputs, cmds: [readTicket, Fact.write], init, update});
-export const ticket = Program.make({name: "ticket", machine: ticketMachine, inputs, view, refuse, outputs: [shown]});
+const answer = Input.make("answer", {
+	fields: Answer.fields, // plain data: no events on an input
+	description: "Answer an open ask on the ticket shown.",
+	personOnly: true,
+});
+const inputs = Input.group([show, comment, answer, close, reopen]);
+
+export const ticketMachine = Machine.make({
+	model: Model,
+	msg: inputs, // the Msg IS the inputs
+	cmds: [readTicket, commented.write, answered.write],
+	init: (loaded) => [loaded ?? start, []],
+	update: {
+		// tsc lets only a person-only input's Msg in here
+		answer: (m, msg) => [m, [answered.write(msg, toAnswered(msg))]],
+		answered_ok: saved, // two answers per event write, from tea
+		answered_err: failed,
+		// ...
+	},
+});
+
+export const ticket = Program.make({
+	name: "ticket",
+	machine: ticketMachine,
+	inputs,
+	view,
+	refuse,
+	outputs: [shown], // the runner reads the events off `cmds`
+});
 ```
 
-**Which shape: no lean, the owner picks.** The experiment's lean is shape 2 at about 65%, under this
-repo's 80% bar, so the pick is the owner's, on the three files.
+## What was picked
+
+Shape 2, values, with five changes (owner, 2026-11-08):
+
+1. **`Fact` becomes `Event`.** The industry's word, as in event sourcing. The glossary row is
+   renamed in the same pull request; older notes still say fact.
+2. **`personOnly: true` says person-only,** on an input and on an event. Only `true` is allowed;
+   left out means anyone may send it or cause it. `who: "person"` goes.
+3. **An input is plain data:** its name, fields and words. It names no events it may cause.
+4. **Each event brings its own write Cmd** (`answered.write`). Libfabrika makes it; no program
+   writes a write Cmd by hand. The machine lists it in `cmds` and calls it in `update` with the
+   input's Msg and the event. A person-only input's Msg is branded `FromPerson` in its type
+   (Effect's `Schema.brand`), and a person-only event's write takes only a Msg with that brand, so
+   tsc lets only a person-only input's Msg into a person-only event's write. The program keeps no
+   events list: `Program.make` reads the events off the machine's `cmds`.
+5. **Two answers per event write** (`answered_ok`, `answered_err`; eight for the ticket program)
+   are accepted for now as a tea problem. Nobody works around them.
+
+Where an event goes is said once, on the event (`stream`), so no step writes it. The owner's call
+form, `answered.write(msg, event)`, has two arguments; the stream on the event is what lets it.
+
+## The probe
+
+Experiment 235's `mistakes.ts` proves each claim with `@ts-expect-error`, and its script steps all
+three shapes the same after the change.
+
+| Mistake | Stopped by |
+|---|---|
+| A plain input's Msg into `answered.write` | tsc: the Msg lacks `FromPerson` |
+| A hand-made Msg into `answered.write` | tsc: an object literal has no brand |
+| A typo in an update key, `coment` or `answerd_ok` | tsc: tea checks the keys against the Msgs |
+| An event write not listed in `cmds` | tsc: tea types a step's Cmds from the list |
+| A write Cmd called with a write of its own | tsc: it takes only a sealed write |
+| `personOnly: false` | tsc: only `true` is a way to write it |
+| A made write's spread, a person-only event put in | Compiles. The signer refuses it at run time (`person_only`) |
+
+A TypeScript brand stops a mistake, not a forger. The signer stays the real check.
 
 ## Why
 
@@ -37,92 +97,68 @@ output has no way to be sent. Experiment 235 wrote the real ticket program three
 named mistake on purpose: in today's shape, a plain input writing a person-only fact compiles and is
 refused only when the write runs, after the step was saved.
 
-## The two shapes on the table
+Shape 3, one record per input (Redux Toolkit's `createSlice`, XState's `setup`), reads better at a
+glance. It was not picked: a typo in an input's name compiles as a rename, and a step has two forms
+across the codebase, its `{model, cmds}` and tea's tuple.
 
-Both keep everything settled: the door's checks, `refuse` before update on fresh inputs only, writes
-caused by an input's `parent`, saved state with a version and named upgrades, a JSON view, `wake`,
-init's Cmds once per process start (decided, built in ticket 292; the merged stepper drops them
-today), and the Cmd list the runner reads at runtime. Neither needs tea to
-change. Both compile down to the declaration the merged `stepper` loads, and the experiment's script
-shows all three shapes step the same.
+The pick keeps everything settled: the door's checks, `refuse` before update on fresh inputs only,
+writes caused by an input's `parent`, saved state with a version and named upgrades, a JSON view,
+`wake`, init's Cmds once per process start (decided, built in ticket 292; the merged stepper drops
+them today), and the Cmd list the runner reads at runtime. tea does not change.
 
-```ts
-// Shape 3, records: each input holds its whole story; Program.make builds the tea machine.
-const {input, make} = Program.over({model: Model, facts: [Fact.make(Answered, {who: "person"}), ...], cmds: [readTicket]});
-export const ticket = make({
-	name: "ticket",
-	init: (saved) => ({model: saved ?? start, cmds: []}),
-	inputs: {
-		answer: input({
-			fields: Answer.fields,
-			description: "Answer an open ask on the ticket shown. A person only.",
-			who: "person",
-			refuse: notShown,
-			update: (m, msg, write) => ({model: {...m, saving: m.saving + 1}, cmds: [write(stream(msg.ticket), Answered.make({...}))]}),
-		}),
-	},
-	answers: {ticket_read: {ok, err}, write: {ok, err}},   // every Cmd's two answers, by its name
-	view: (m) => ({now: m.now, page: m.page, saving: m.saving, failed: m.failed}),
-	outputs: {ticket: {schema: TicketNumber, description: "...", select: (m) => m.now}},
-});
-export const ticketMachine = ticket.machine;   // still a tea machine a parent can step
-```
+## What it decides
 
-| | Shape 2: values | Shape 3: records |
-|---|---|---|
-| Known way | Elm ports, Effect `Rpc.make` | Redux Toolkit `createSlice`, XState `setup` |
-| Meets the rule | Yes; one value is handed to the machine and the program, checked to be the same | Inside a program; a step has two forms across the codebase, `{model, cmds}` here and tea's tuple elsewhere |
-| A typo in an input's name | Cannot happen; tea checks the update keys | Compiles, and renames the input |
-| A plain input writes a person-only fact | Does not compile (a mistake; a deliberate spread of a made write still compiles, and the signer refuses it) | Same |
-| Walks back | Required `outputs` and `writes`; outputs as events; read ports in `inputs`; `makeEffect` | All of shape 2's, and the machine as its own `Machine.make` value |
-
-## What it decides, once picked
-
-- **Inputs are values or records, never keys matched to Msg types.** The Msg is built from the
-  inputs, so a Msg no client can send cannot be written.
-- **`who: "person"` is the one way to say person-only,** on the input and on the fact, and tsc stops
-  a plain input from causing a person-only fact.
-- **The runner's `write` Cmd is declared once, in libfabrika.** No program names it again.
+- **Inputs are values, never keys matched to Msg types.** The Msg is built from the inputs, so a Msg
+  no client can send cannot be written.
+- **`personOnly: true` is the one way to say person-only,** on the input and on the event, and tsc
+  stops a plain input's step from writing a person-only event.
+- **Each event's write Cmd is made by libfabrika.** No program names a write Cmd, its input or the
+  runner's refusals.
+- **The events are the event writes in `cmds`.** No second list to keep in step.
 - **An output is a value picked from the model and sent when it changes** (C8, "a source sends after
-  each change"). tsc checks the value against the output's schema; `null` means nothing to send. It is never a Cmd, so "output" and "Cmd" keep one meaning each.
+  each change"). tsc checks the value against the output's schema; `null` means nothing to send. It
+  is never a Cmd, so "output" and "Cmd" keep one meaning each.
 - **"Input" means a write.** A read port gets its own word, picked with the first program that needs
   one.
-- **Every empty part is left out.** An optional list holds at least one item. Shape 2 alone needs
-  at least one input, since its Msg is built from them. The saved version is
-  one more than the number of upgrades, never written by hand.
+- **Every empty part is left out.** An optional list holds at least one item. A program needs at
+  least one input, since its Msg is built from them. The saved version is one more than the number
+  of upgrades, never written by hand.
 - **`refuse` is optional.** Left out, nothing is refused.
 - **`Program.make` only.** `makeEffect` goes; the loader's check is the Effect.
-- **A step does not call the write Cmd itself.** The write it takes is branded, and only an input's
-  writer makes one. A brand stops a mistake, not a forger: the signer stays the real check.
 
 ## Which version
 
-- **`next/`:** this note, once picked. `next/programs/counter` moves to the picked shape in the same
-  pull request, with its laws. The runner learns to send outputs.
+- **`next/`:** this note. Libfabrika gets the new `Program.make`, `Input`, `Event` and `Output`, and
+  each event's write Cmd. The runner learns to run an event's write Cmd as a write and to send
+  outputs. `next/programs/counter` moves to the new shape in the same pull request, with its laws.
 - **Today's version:** not changed.
 
 ## What it walks back, by name
 
 - [Tier 1's P11](../plan/tier-1-detail.md#programs-as-p11-built-it) and its plan's item 9: `inputs`,
-  `outputs` and `writes` required, `{}` for none. Now left out when empty.
+  `outputs` and `writes` required, `{}` for none. Now left out when empty, and `writes` is read off
+  `cmds`.
+- P11's one `write` Cmd that every program declares: now each event brings its own.
 - [tea-program](./tea-program.md) (today's version, proposed): "outputs are events". Now an output
-  is a selector of the model, sent on change.
+  is a selector of the model, sent on change, and "event" means a ledger entry.
 - P11's `Input` union of `read` and `write` ports: reads leave `inputs`.
 - [Elm first](./elm-first.md): "`Program` has a required `refuse`". Now it is left out when a program
   refuses nothing.
 - [Schema classes](./schema-classes-not-of-helpers.md) give data both `make` and `makeEffect`.
   `Program` drops `makeEffect` by the one-way rule: a program is built once, at load, where the
   loader already runs as an Effect. Data keeps the pair.
-- Shape 3 only: [Program.make](./program-make.md)'s "the machine is its own `Machine.make` value,
-  exported beside the program". The machine is still exported, but `Program.make` builds it.
+- The word fact, in [data first](./data-first-markdown-is-a-view.md) and the notes after it: the
+  same thing is now an event. The prose sweep is its own ticket.
 
 ## What it costs
 
-One pull request: the new `Program.make` in libfabrika with its type tests, the counter moved, the
-runner sending outputs. Sure about the rule: the owner set it. Sure about the pick: about 65% for
-shape 2. The doubt: shape 3 reads better at a glance, which is the owner's own complaint.
+One pull request: the new `Program.make` and its values in libfabrika with type tests, the runner
+change, the counter moved. Sure about the rule and the pick: the owner set both. Sure the
+person-only check types cleanly: the probe compiles, about 90%; the doubt is how the brand reads in
+a tsc error to someone who did not write it.
 
 ## What it cannot tell us
 
-How each shape feels to write over many programs; how a program with Subs, read ports or `wake`
-reads; whether every output can be a model selector. The experiment lists the rest.
+How the shape feels over many programs; how a program with Subs, read ports or `wake` reads;
+whether every output can be a model selector; whether eight answer cells for four events wear on a
+bigger program before tea fixes it. The experiment lists the rest.
