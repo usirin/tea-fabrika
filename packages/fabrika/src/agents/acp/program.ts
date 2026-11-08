@@ -492,6 +492,8 @@ const acpIn = (place: "scratch" | "repo") =>
 
 				const runTurn = (w: Waiting) =>
 					Effect.gen(function* () {
+						// A resumed prompt keeps its original number; it is never told a second time.
+						if (was.waiting.some((waiting) => waiting.n === w.n)) yield* send("told", {turn: w.n});
 						const start = yield* Clock.currentTimeMillis;
 						turn = {
 							events: acpEvents(`${id}#${w.n}`),

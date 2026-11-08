@@ -64,6 +64,7 @@ type Acp = RunningOf<typeof acpInRepo>;
 /** What the acp run of a name says, as it says it. */
 type Heard =
 	| {readonly _tag: "told"; readonly turn: number}
+	| {readonly _tag: "down"; readonly why: string}
 	| {readonly _tag: "said"; readonly text: string}
 	| {
 			readonly _tag: "result";
@@ -87,6 +88,8 @@ interface Live {
 	name: Name;
 	readonly scope: Scope.Closeable;
 	readonly heard: PubSub.PubSub<Heard>;
+	/** This start's latest turn, for a job attached after its agent reopened. */
+	readonly history: Heard[];
 	/** One turn at a time: a turn holds it from its prompt to its result. */
 	readonly permit: Semaphore.Semaphore;
 	/** Done once its session is open, with what it offers, or failed with why it would not open. */
@@ -235,6 +238,7 @@ export const summonManager = (options: {
 						name,
 						scope: own,
 						heard,
+						history: [],
 						permit: yield* Semaphore.make(1),
 						opened: yield* Deferred.make<Opened, SummonRefused>(),
 						ready: yield* Deferred.make<void, SummonRefused>(),
@@ -246,6 +250,7 @@ export const summonManager = (options: {
 					};
 					const hear = (h: Heard) => {
 						if (h._tag === "told") {
+							l.history.length = 0;
 							l.turn = h.turn;
 							setState(l, "turn");
 						} else if (h._tag === "ask") setState(l, h.answer === "waiting" ? "asking" : "turn");
@@ -254,6 +259,7 @@ export const summonManager = (options: {
 							l.cost = h.cost ?? l.cost;
 							setState(l, "idle");
 						}
+						l.history.push(h);
 						PubSub.publishUnsafe(heard, h);
 					};
 					const started = yield* start(
@@ -308,6 +314,7 @@ export const summonManager = (options: {
 								const down = Exit.fail(new SummonRefused({why: l.why}));
 								Deferred.doneUnsafe(l.opened, down);
 								Deferred.doneUnsafe(l.ready, down);
+								hear({_tag: "down", why: l.why});
 							}),
 						),
 						Effect.forkIn(own),
@@ -331,7 +338,7 @@ export const summonManager = (options: {
 					const ended = yield* PubSub.subscribe(l.heard);
 					yield* l.acp.run.tell("cancel", "now").pipe(Effect.ignore);
 					yield* Stream.fromSubscription(ended).pipe(
-						Stream.filter((h) => h._tag === "result"),
+						Stream.filter((h) => h._tag === "result" || h._tag === "down"),
 						Stream.take(1),
 						Stream.runDrain,
 						Effect.timeout(CANCELLING),
@@ -411,6 +418,7 @@ export const summonManager = (options: {
 						name,
 						scope: yield* Scope.fork(scope),
 						heard: yield* PubSub.unbounded<Heard>(),
+						history: [],
 						permit: yield* Semaphore.make(1),
 						opened: yield* Deferred.make<Opened, SummonRefused>(),
 						ready: yield* Deferred.make<void, SummonRefused>(),
@@ -510,8 +518,15 @@ export const summonManager = (options: {
 					}),
 
 				list: Effect.sync(() => [...live.values()].map(summonedOf)),
+				identify: (name, turn) =>
+					Effect.gen(function* () {
+						const l = live.get(name);
+						if (l === undefined || !l.history.some((h) => h._tag === "told" && h.turn === turn))
+							return yield* refuse(`${name}: turn ${turn} is no longer available`);
+						return {run: l.name.run};
+					}),
 
-				turn: (name, prompt, room) =>
+				turn: (name, prompt, room, resume) =>
 					Stream.unwrap(
 						Effect.gen(function* () {
 							const l = live.get(name);
@@ -523,39 +538,52 @@ export const summonManager = (options: {
 							const acp = l.acp;
 							if (acp === null || live.get(name) !== l)
 								return yield* refuse(`${name} was dismissed`);
+							if (l.state === "down") return yield* refuse(`${name} is down: ${l.why}`);
+							if (resume !== undefined && resume.run !== l.name.run)
+								return yield* refuse(
+									`${name} is a different agent now: this job belongs to ${resume.run}`,
+								);
 							const heard = yield* PubSub.subscribe(l.heard);
+							const past = resume === undefined ? [] : [...l.history];
 							const began = yield* Clock.currentTimeMillis;
-							const word = yield* acp.run
-								.tell("prompt", prompt)
-								.pipe(Effect.catchTag("MailboxFull", () => Effect.succeed("full")));
-							if (word !== "queued") return yield* refuse(`${name} took nothing: ${word}`);
-							yield* log("turn_told", {
-								name,
-								agent: l.name.agent,
-								run: l.name.run,
-								room: room ?? "",
-							});
-							let mine: number | null = null;
+							if (resume === undefined) {
+								const word = yield* acp.run
+									.tell("prompt", prompt)
+									.pipe(Effect.catchTag("MailboxFull", () => Effect.succeed("full")));
+								if (word !== "queued") return yield* refuse(`${name} took nothing: ${word}`);
+								yield* log("turn_told", {
+									name,
+									agent: l.name.agent,
+									run: l.name.run,
+									room: room ?? "",
+								});
+							}
+							let mine: number | null = resume?.turn ?? null;
 							let ended: Extract<Heard, {_tag: "result"}> | null = null;
 							const since = Effect.map(Clock.currentTimeMillis, (now) => now - began);
-							const news = Stream.fromSubscription(heard).pipe(
+							const news = Stream.concat(
+								Stream.fromIterable(past),
+								Stream.fromSubscription(heard).pipe(Stream.filter((h) => !past.includes(h))),
+							).pipe(
 								Stream.mapEffect((h) =>
-									Effect.map(since, (ms): readonly TurnNews[] => {
-										if (h._tag === "told") {
-											if (mine !== null) return [];
-											mine = h.turn;
-											return [{_tag: "told", turn: h.turn}];
-										}
-										if (mine === null) return [];
-										if (h._tag === "said") return [{_tag: "said", text: h.text}];
-										if (h._tag === "ask")
-											return h.answer === "waiting"
-												? [{_tag: "ask", ask: h.ask, title: h.title}]
-												: [];
-										if (h.turn !== mine) return [];
-										ended = h;
-										return [{_tag: "result", stop: h.stop, ms, cost: h.cost}];
-									}),
+									h._tag === "down"
+										? refuse(h.why)
+										: Effect.map(since, (ms): readonly TurnNews[] => {
+												if (h._tag === "told") {
+													if (mine !== null) return [];
+													mine = h.turn;
+													return [{_tag: "told", turn: h.turn}];
+												}
+												if (mine === null) return [];
+												if (h._tag === "said") return [{_tag: "said", text: h.text}];
+												if (h._tag === "ask")
+													return h.answer === "waiting"
+														? [{_tag: "ask", ask: h.ask, title: h.title}]
+														: [];
+												if (h.turn !== mine) return [];
+												ended = h;
+												return [{_tag: "result", stop: h.stop, ms, cost: h.cost}];
+											}),
 								),
 								Stream.flatMap((all) => Stream.fromIterable(all)),
 								Stream.takeUntil((n) => n._tag === "result"),
@@ -568,6 +596,7 @@ export const summonManager = (options: {
 												run: l.name.run,
 												turn: n.turn,
 												room: room ?? "",
+												at: began,
 											})
 										: n._tag === "result"
 											? log(
@@ -611,10 +640,16 @@ export const summonManager = (options: {
 						}),
 					),
 
-				cancel: (name) =>
+				cancel: (name, mine) =>
 					Effect.suspend(() => {
 						const l = live.get(name);
-						return l === undefined ? Effect.void : cancelTurn(l);
+						if (
+							l === undefined ||
+							(mine !== undefined &&
+								(l.turn !== mine.turn || (mine.run !== undefined && l.name.run !== mine.run)))
+						)
+							return Effect.void;
+						return cancelTurn(l);
 					}),
 
 				answer: (name, ask, allow, by) =>

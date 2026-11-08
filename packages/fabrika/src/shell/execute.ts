@@ -334,7 +334,12 @@ function printers(
 		`${job}${at.stages > 1 ? `${entry.program.name} ` : ""}${names.length > 1 ? `${output} ` : ""}`;
 	const tables: {readonly view: TableView<unknown>; rows: unknown[]}[] = [];
 	let showing = false;
-	let asking: string | null = null;
+	const asking: Asking[] = [];
+	const showAsk = () => {
+		const next = asking[0];
+		if (next !== undefined) shell.print("out", `${job}${next.text}  allow? [y/N]`, at.n);
+		shell.ask(at.n, next ?? null);
+	};
 	const listenerOf = (output: string): ((value: unknown) => void) => {
 		if (output === skip) return (value) => taken?.(value);
 		const person = outputs[output]?.person;
@@ -356,15 +361,14 @@ function printers(
 			return (value) => {
 				const question = person.ask(value);
 				if (question === null) {
-					if (asking === null) return;
-					asking = null;
-					shell.ask(at.n, null);
+					if (asking.length === 0) return;
+					asking.shift();
+					showAsk();
 					return;
 				}
-				if (asking === question.id) return;
-				asking = question.id;
-				shell.print("out", `${job}${question.text}  allow? [y/N]`, at.n);
-				shell.ask(at.n, {...question, run: at.run, input: person.answer});
+				if (asking.some((a) => a.id === question.id)) return;
+				asking.push({...question, run: at.run, input: person.answer});
+				if (asking.length === 1) showAsk();
 			};
 		const table = {view: person.table, rows: [] as unknown[]};
 		tables.push(table);
@@ -376,8 +380,8 @@ function printers(
 			// The run is over: what it showed in place goes, and nothing waits on an answer.
 			if (showing) shell.status(at.n, null);
 			showing = false;
-			if (asking !== null) shell.ask(at.n, null);
-			asking = null;
+			if (asking.length > 0) shell.ask(at.n, null);
+			asking.length = 0;
 			for (const table of tables) {
 				if (ok || table.rows.length > 0)
 					shell.printTable(tableOf(table.view, table.rows, {all: at.all, typed: at.typed}), at.n);
@@ -776,7 +780,10 @@ const runStages = (
 			return {status: statusOf(called.ended), values};
 		}
 		const jobScope = yield* Scope.fork(shell.scope);
-		const started = yield* startStages(shell, starting, !background).pipe(Scope.provide(jobScope));
+		const started = yield* startStages(shell, starting, !background).pipe(
+			Effect.annotateLogs({job: n}),
+			Scope.provide(jobScope),
+		);
 		if (!started.ok) {
 			shell.stops.delete(head.run);
 			yield* Effect.forEach(started.runs, (r) => r.stop, {concurrency: "unbounded"});
@@ -889,7 +896,10 @@ export const reattach = (shell: Shell, job: Job, background: boolean, typed: str
 			};
 		});
 		const jobScope = yield* Scope.fork(shell.scope);
-		const started = yield* startStages(shell, starting, !background).pipe(Scope.provide(jobScope));
+		const started = yield* startStages(shell, starting, !background).pipe(
+			Effect.annotateLogs({job: job.n}),
+			Scope.provide(jobScope),
+		);
 		if (!started.ok) {
 			shell.stops.delete(job.stages[0].run);
 			yield* Effect.forEach(started.runs, (r) => r.stop, {concurrency: "unbounded"});

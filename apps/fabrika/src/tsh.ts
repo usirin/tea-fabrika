@@ -751,7 +751,10 @@ export const startTsh = (options: {
 				// agent's tile it runs nothing, and the person is told so.
 				line: (c) =>
 					agent === null
-						? offer(started.run, "line", c.text).pipe(Effect.as(null))
+						? offer(started.run, "line", {
+								text: c.text,
+								said: clock.currentTimeMillisUnsafe(),
+							}).pipe(Effect.as(null))
 						: Effect.sync(() => {
 								toEditor({type: "printed", text: typedHere(agent)});
 								toEditor({type: "ready"});

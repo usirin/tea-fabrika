@@ -1,5 +1,6 @@
+import {defineMachine} from "@demlik/tea";
 import {Clock, Effect, Schema, Stream} from "effect";
-import {defineProgram, fork} from "../../program/program.ts";
+import {defineProgram, end, fork, kind} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import {SummonManager, type SummonRefused} from "../../shell/summon.ts";
 
@@ -18,6 +19,27 @@ import {SummonManager, type SummonRefused} from "../../shell/summon.ts";
 // It is a listed program, so `turn --to scout prompt="..."` is a line a script can type too.
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
+const Active = Schema.Struct({
+	name: Schema.String,
+	run: Schema.String,
+	turn: Count,
+	began: Schema.Finite,
+});
+const Turn = Schema.Struct({active: Schema.NullOr(Active)});
+type Turn = typeof Turn.Type;
+type TurnMsg =
+	| {readonly type: "told"; readonly active: typeof Active.Type}
+	| {readonly type: "ended"};
+const turnState = defineMachine({
+	types: {model: {} as Turn, msg: {} as TurnMsg, ctx: undefined},
+	cmds: [],
+	init: (loaded) => [loaded ?? {active: null}, []],
+	update: {
+		told: (_s, m) => [{active: m.active}, []],
+		ended: () => [{active: null}, []],
+	},
+});
 
 const Status = Schema.Struct({name: Schema.String, text: Schema.String});
 const Said = Schema.Struct({name: Schema.String, text: Schema.String});
@@ -59,7 +81,7 @@ export const turnProgram = defineProgram({
 		to: flag(Schema.String, "The summoned agent's name."),
 	},
 	inputs: {
-		prompt: input(Schema.String, "What to tell the agent, as typed: one turn."),
+		prompt: input(Schema.String, "What to tell the agent, as typed: one turn.", {personOnly: true}),
 		allow: input(
 			Schema.Struct({ask: Schema.String, allow: Schema.Boolean, by: Schema.String}),
 			"The person's answer to an ask the agent waits on: allow it once, or refuse it. A person only.",
@@ -89,25 +111,51 @@ export const turnProgram = defineProgram({
 			person: {line: resultLine, ends: true},
 		}),
 	},
-	main: ({flags, serve, send}) =>
+	machines: {
+		turn: kind({
+			machine: turnState,
+			state: Turn,
+			parent: "main",
+			options: () => ({ctx: undefined}),
+			drawing: () => ({name: "turn", steps: {}}),
+			status: (s) => (s.active === null ? "waiting" : `${s.active.name} · turn ${s.active.turn}`),
+		}),
+	},
+	main: ({flags, serve, send, machines}) =>
 		Effect.gen(function* () {
 			const manager = yield* SummonManager;
 			const name = flags.to;
+			const kept = yield* machines.turn.get("turn").start();
 			/** Each ask's title, for its answer's line. */
 			const titles = new Map<string, string>();
 
-			const one = (prompt: string): Effect.Effect<void, SummonRefused> =>
+			const one = (
+				prompt: string,
+				resume?: typeof Active.Type,
+			): Effect.Effect<void, SummonRefused> =>
 				Effect.gen(function* () {
-					const began = yield* Clock.currentTimeMillis;
-					let turn: number | null = null;
+					const began = resume?.began ?? (yield* Clock.currentTimeMillis);
+					let turn: number | null = resume?.turn ?? null;
+					let run = resume?.run;
 					let over = false;
 					const since = Effect.map(Clock.currentTimeMillis, (now) => Math.max(0, now - began));
-					yield* manager.turn(name, prompt, null).pipe(
+					yield* manager.turn(name, prompt, null, resume).pipe(
 						Stream.runForEach((news) => {
 							switch (news._tag) {
 								case "told":
 									turn = news.turn;
-									return send("told", {name, turn: news.turn});
+									return Effect.gen(function* () {
+										if (manager.identify !== undefined) {
+											run = (yield* manager.identify(name, news.turn)).run;
+											yield* kept
+												.dispatch({
+													type: "told",
+													active: {name, run, turn: news.turn, began},
+												})
+												.pipe(Effect.orDie);
+										}
+										yield* send("told", {name, turn: news.turn});
+									});
 								case "status":
 									return send("status", {name, text: news.text});
 								case "ask":
@@ -128,9 +176,9 @@ export const turnProgram = defineProgram({
 						}),
 						// Stopped (Ctrl-C, `stop %n`): the turn is cancelled, not the agent.
 						Effect.onInterrupt(() =>
-							over
+							over || turn === null
 								? Effect.void
-								: manager.cancel(name).pipe(
+								: manager.cancel(name, {turn, ...(run === undefined ? {} : {run})}).pipe(
 										Effect.andThen(since),
 										Effect.flatMap((ms) =>
 											send("result", {name, turn, stop: "cancelled", ms, cost: null}),
@@ -138,25 +186,27 @@ export const turnProgram = defineProgram({
 									),
 						),
 					);
+					yield* kept.dispatch({type: "ended"}).pipe(Effect.orDie);
 				});
 
-			yield* serve(
-				{
-					prompt: one,
-					allow: fork(({ask, allow, by}) =>
-						manager.answer(name, ask, allow, by).pipe(
-							Effect.andThen(
-								send("ask", {
-									name,
-									ask,
-									title: titles.get(ask) ?? "",
-									answer: allow ? "allowed" : "refused",
-								}),
-							),
+			const handlers = {
+				prompt: (prompt: string) => one(prompt).pipe(Effect.andThen(end)),
+				allow: fork(({ask, allow, by}: {ask: string; allow: boolean; by: string}) =>
+					manager.answer(name, ask, allow, by).pipe(
+						Effect.andThen(
+							send("ask", {
+								name,
+								ask,
+								title: titles.get(ask) ?? "",
+								answer: allow ? "allowed" : "refused",
+							}),
 						),
 					),
-				},
-				{until: ["prompt"]},
-			);
-		}),
+				),
+			};
+			const active = kept.getState().active;
+			yield* active === null
+				? serve(handlers, {until: ["prompt"]})
+				: Effect.raceFirst(one("", active), serve(handlers, {until: ["allow"]}));
+		}).pipe(Effect.scoped),
 });

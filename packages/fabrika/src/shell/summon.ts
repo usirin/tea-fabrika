@@ -88,14 +88,23 @@ export class SummonManager extends Context.Service<
 			by: string,
 		) => Effect.Effect<{readonly cut: number | null}, SummonRefused>;
 		readonly list: Effect.Effect<readonly Summoned[]>;
+		/** The kept ACP run behind a turn. Hosts without kept jobs may leave this out. */
+		readonly identify?: (
+			name: string,
+			turn: number,
+		) => Effect.Effect<{readonly run: string}, SummonRefused>;
 		/** One turn: tell the agent `prompt`, and send what comes back until its result. */
 		readonly turn: (
 			name: string,
 			prompt: string,
 			room: string | null,
+			resume?: {readonly run: string; readonly turn: number},
 		) => Stream.Stream<TurnNews, SummonRefused>;
 		/** Cancel the turn the agent runs now, by ACP's `session/cancel`. The agent stays. */
-		readonly cancel: (name: string) => Effect.Effect<void>;
+		readonly cancel: (
+			name: string,
+			mine?: {readonly turn: number; readonly run?: string},
+		) => Effect.Effect<void>;
 		/** Answer the ask `ask` of the agent: allow it once, or refuse it. `by`: who answered. */
 		readonly answer: (name: string, ask: string, allow: boolean, by: string) => Effect.Effect<void>;
 	}

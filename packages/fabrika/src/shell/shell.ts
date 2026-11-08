@@ -1,4 +1,15 @@
-import {type Cause, Deferred, Effect, Fiber, Option, PubSub, Queue, Schema, Stream} from "effect";
+import {
+	type Cause,
+	Clock,
+	Deferred,
+	Effect,
+	Fiber,
+	Option,
+	PubSub,
+	Queue,
+	Schema,
+	Stream,
+} from "effect";
 import {HostJobs, TABLE} from "../host/host-jobs.ts";
 import {earlierFor, Jobs, jobsMachine, tableLine} from "../host/jobs.ts";
 import type {AnyRunning} from "../program/listed.ts";
@@ -86,7 +97,7 @@ export const tsh = defineProgram({
 	},
 	inputs: {
 		line: input(
-			Schema.String,
+			Schema.Union([Schema.String, Schema.Struct({text: Schema.String, said: Schema.Finite})]),
 			"One line, typed or read from a script: statements parted by ; or &. Closing it is Ctrl-D: tsh ends.",
 		),
 		// A control input: lines waiting behind a slow one never hold it up, and a full mailbox never refuses it.
@@ -265,46 +276,52 @@ export const tsh = defineProgram({
 					if (word !== "queued") print("err", `tsh: %${n} did not take the answer: ${word}`, n);
 				});
 
-			const oneLine = (text: string): Effect.Effect<Said> =>
+			const oneLine = (
+				line: string | {readonly text: string; readonly said: number},
+			): Effect.Effect<Said> =>
 				Effect.gen(function* () {
-					const parsed = parse(text);
-					if (parsed.kind === "refused") {
-						for (const l of refusalLines(text, parsed)) print("err", l);
-						return {status: 2, exit: false};
-					}
-					let said: Said = {status: 0, exit: false};
-					for (const st of parsed.statements) {
-						// `a && b`: b only if a ended well; `a || b`: b only if it did not. The status stays a's.
-						if (st.after === "&&" && said.status !== 0) continue;
-						if (st.after === "||" && said.status === 0) continue;
-						if (st.kind === "builtin") said = yield* runBuiltin(shell, st, text);
-						else if (st.kind === "said") said = yield* runSaid(shell, st);
-						else {
-							const checked = check(st.pipeline, list, text);
-							if (checked.kind === "refused") {
-								for (const l of refusalLines(text, checked)) print("err", l);
-								said = {status: checked.status, exit: false};
-							} else if (checked.kind === "help") {
-								const page =
-									checked.parts === null
-										? helpOf(checked.entry, list)
-										: partsHelp(checked.entry, checked.parts);
-								for (const l of page) print("out", l);
-								said = {status: 0, exit: false};
-							} else {
-								const done = yield* runLine(
-									shell,
-									checked.line,
-									st.background
-										? {kind: "background", typed: text}
-										: {kind: "foreground", typed: text},
-								);
-								said = {status: done.status, exit: false};
-							}
+					const text = typeof line === "string" ? line : line.text;
+					const said = typeof line === "string" ? yield* Clock.currentTimeMillis : line.said;
+					return yield* Effect.gen(function* () {
+						const parsed = parse(text);
+						if (parsed.kind === "refused") {
+							for (const l of refusalLines(text, parsed)) print("err", l);
+							return {status: 2, exit: false};
 						}
-						if (said.exit) break;
-					}
-					return said;
+						let said: Said = {status: 0, exit: false};
+						for (const st of parsed.statements) {
+							// `a && b`: b only if a ended well; `a || b`: b only if it did not. The status stays a's.
+							if (st.after === "&&" && said.status !== 0) continue;
+							if (st.after === "||" && said.status === 0) continue;
+							if (st.kind === "builtin") said = yield* runBuiltin(shell, st, text);
+							else if (st.kind === "said") said = yield* runSaid(shell, st);
+							else {
+								const checked = check(st.pipeline, list, text);
+								if (checked.kind === "refused") {
+									for (const l of refusalLines(text, checked)) print("err", l);
+									said = {status: checked.status, exit: false};
+								} else if (checked.kind === "help") {
+									const page =
+										checked.parts === null
+											? helpOf(checked.entry, list)
+											: partsHelp(checked.entry, checked.parts);
+									for (const l of page) print("out", l);
+									said = {status: 0, exit: false};
+								} else {
+									const done = yield* runLine(
+										shell,
+										checked.line,
+										st.background
+											? {kind: "background", typed: text}
+											: {kind: "foreground", typed: text},
+									);
+									said = {status: done.status, exit: false};
+								}
+							}
+							if (said.exit) break;
+						}
+						return said;
+					}).pipe(Effect.annotateLogs({line: text, said}));
 				});
 
 			/**
