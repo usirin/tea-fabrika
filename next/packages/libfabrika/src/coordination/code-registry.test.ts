@@ -116,10 +116,10 @@ describe("P15a immutable code and trusted facts", () => {
 								: kind === "path"
 									? {...bundle, files: [{path: "../escape.js", source: "x"}]}
 									: kind === "worker"
-										? {...bundle, worker: raw}
+										? {...bundle, worker: {value: raw}}
 										: kind === "window"
 											? {...bundle, window: "a".repeat(63)}
-											: {...bundle, files: [{path: "worker.js", source: raw}]};
+											: {...bundle, files: [{path: "worker.js", source: {value: raw}}]};
 						const before = structuredClone(bad);
 						expect(
 							await failure(r.CodeRegistry.use((s) => s.put(bad)).pipe(Effect.provide(r.layer))),

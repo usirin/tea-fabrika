@@ -170,6 +170,7 @@ describe("P15a in-flight Cmds and Restart", () => {
 						}),
 					);
 					const answers = (await w.rows(`${w.name}/inbox`)).filter((r) => r.id.endsWith("/answer"));
+					expect(answers).toHaveLength(1);
 					for (const answer of answers) {
 						expect(answer.id.startsWith(`${w.process}/`)).toBe(true);
 						expect(answer.build).toBe(w.bundles[0]!.hash);

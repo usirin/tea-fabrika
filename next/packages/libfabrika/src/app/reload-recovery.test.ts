@@ -394,7 +394,16 @@ describe("P15a saved shapes and recovery", () => {
 							(r) => r._tag === "exited" && body(r).process === w.process,
 						),
 					).toBe(true);
-					expect(JSON.stringify(await w.checkpoint())).toContain(input.id);
+					// P34 may retain the pending input in its RecoveryStore, alongside the checkpoint.
+					const tables = w.processDisk.sql.exec(
+						"SELECT name FROM sqlite_master WHERE type='table'",
+					);
+					const pending = tables.flatMap((row) => {
+						const table = Schema.decodeUnknownSync(Schema.String)(row.name).replaceAll('"', '""');
+						return w.processDisk.sql.exec(`SELECT * FROM "${table}"`);
+					});
+					expect(JSON.stringify(pending)).toContain(input.id);
+					expect(JSON.stringify(pending)).toContain("crash");
 					await w.reopen();
 					await failure(w.use(w.runner().open("headless")));
 					expect((await w.checkpoint())?.saved).toEqual(committed);

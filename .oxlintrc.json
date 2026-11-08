@@ -282,6 +282,8 @@
 					"error",
 					{
 						"patterns": [
+							"@radix-ui/colors",
+							"@radix-ui/colors/*",
 							"node:*",
 							"@effect/platform-node",
 							"@effect/platform-node/*",
