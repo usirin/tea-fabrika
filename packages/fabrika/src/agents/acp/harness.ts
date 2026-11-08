@@ -218,6 +218,8 @@ const LOGINS = [...LOGIN_FILES, ".codex/auth.json", CODEX_HOMES];
 /** Closed whether it is there or not. `.codex` is not a login: its `packages` may be opened. */
 const ALWAYS_CLOSED = [...LOGINS, ".codex"];
 
+const HIDDEN_FILES = ["**/.env", "**/.env.*"];
+
 const plain = (path: string) => path.replace(/(?<=.)\/+$/, "");
 
 const lines = <Rule>(paths: readonly string[], rule: Rule): Record<string, Rule> =>
@@ -527,14 +529,13 @@ export const codexConfig = (
 			// `:workspace` makes the working folder writable whatever the folder's own line says
 			// (experiment 163, part 3), so a read turn starts from `:read-only`.
 			extends: access === "write" ? ":workspace" : ":read-only",
-			filesystem: homeFence(
-				home,
-				[...tools, ADAPTERS.replace(/\/$/, "")],
-				folder,
-				access,
-				disk,
-				logins,
-			),
+			filesystem: {
+				...homeFence(home, [...tools, ADAPTERS.replace(/\/$/, "")], folder, access, disk, logins),
+				...lines(
+					HIDDEN_FILES.map((path) => `/${path}`),
+					"deny" as const,
+				),
+			},
 		},
 	},
 	// Codex's own features that reach past the folder, on by default in a fresh home (listed at codex
@@ -755,23 +756,29 @@ export const withSystem = (
 };
 
 /** The Agent SDK options the Claude adapter is handed, the builder's own less what is a function. */
-export const claudeOptions = (folder: string, budget: number | null) => ({
-	settingSources: [],
-	strictMcpConfig: true,
-	mcpServers: {},
-	settings: {disableClaudeAiConnectors: true},
-	allowDangerouslySkipPermissions: false,
-	tools: [...TOOLS],
-	sandbox: {
-		enabled: true,
-		failIfUnavailable: true,
-		autoAllowBashIfSandboxed: true,
-		allowUnsandboxedCommands: false,
-		network: {allowedDomains: [], strictAllowlist: true},
-		filesystem: filesOf(folder),
-	},
-	...(budget === null ? {} : {maxBudgetUsd: budget}),
-});
+export const claudeOptions = (folder: string, budget: number | null) => {
+	const files = filesOf(folder);
+	return {
+		settingSources: [],
+		strictMcpConfig: true,
+		mcpServers: {},
+		settings: {
+			disableClaudeAiConnectors: true,
+			permissions: {deny: HIDDEN_FILES.map((path) => `Read(${path})`)},
+		},
+		allowDangerouslySkipPermissions: false,
+		tools: [...TOOLS],
+		sandbox: {
+			enabled: true,
+			failIfUnavailable: true,
+			autoAllowBashIfSandboxed: true,
+			allowUnsandboxedCommands: false,
+			network: {allowedDomains: [], strictAllowlist: true},
+			filesystem: {...files, denyRead: [...files.denyRead, ...HIDDEN_FILES]},
+		},
+		...(budget === null ? {} : {maxBudgetUsd: budget}),
+	};
+};
 
 /** Node, warnings about its own experimental parts off: they go to stderr, which nobody reads. */
 const node = (script: string): Pick<Spawnable, "command" | "args"> => ({
