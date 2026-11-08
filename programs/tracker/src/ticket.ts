@@ -13,6 +13,7 @@ import {
 	Asks,
 	Body,
 	type Fact,
+	type FactOf,
 	From,
 	Id,
 	Said,
@@ -102,9 +103,8 @@ const TicketWrite = Schema.Union([
 	Schema.Struct({kind: Schema.Literal("comment"), ...Comment.fields}),
 	Schema.Struct({kind: Schema.Literal("close"), ...OneTicket.fields}),
 	Schema.Struct({kind: Schema.Literal("reopen"), ...OneTicket.fields}),
-	...Answer.members.map((answer) =>
-		Schema.Struct({kind: Schema.Literal("answer"), ...answer.fields}),
-	),
+	Schema.Struct({kind: Schema.Literal("answer"), ...AskAnswer.fields}),
+	Schema.Struct({kind: Schema.Literal("answer"), ...LegacyAnswer.fields}),
 	Schema.Struct({kind: Schema.Literal("rate_duplicate"), ...RateDuplicate.fields}),
 ]);
 /** A write to one ticket's stream. */
@@ -161,8 +161,15 @@ export const areaFactOf = (
 	return why === null ? {fact} : {why};
 };
 
+/** An answer written before sealed asks: a pick, a note, and the text seen. */
+type LegacyAnswerWrite = Extract<TicketWrite, {kind: "answer"; pick: string}>;
+/** Its fact: the pick and note as they were, and the hash of the text seen. */
+type LegacyAnswered = Exclude<FactOf<"answered">, {format: 1}>;
+
 /** The fact a write puts on a ticket's stream. An answer's text goes in as its hash. */
-export const factOf = (write: TicketWrite): Effect.Effect<Fact> => {
+export function factOf(write: LegacyAnswerWrite): Effect.Effect<LegacyAnswered>;
+export function factOf(write: TicketWrite): Effect.Effect<Fact>;
+export function factOf(write: TicketWrite): Effect.Effect<Fact> {
 	switch (write.kind) {
 		case "file":
 			return Effect.succeed({
@@ -202,7 +209,7 @@ export const factOf = (write: TicketWrite): Effect.Effect<Fact> => {
 		case "rate_duplicate":
 			return Effect.succeed({type: "duplicate_rated", of: write.of, says: write.says});
 	}
-};
+}
 
 /** A ticket as the list shows it: no timeline, but how many comments and when it last moved. */
 export const Summary = Schema.Struct({

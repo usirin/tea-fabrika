@@ -58,7 +58,7 @@ const later = Cmd.make("later", {
 	err: [],
 });
 type Command = ReturnType<typeof save> | ReturnType<typeof answered> | ReturnType<typeof later>;
-type Step = readonly [Model, readonly Command[]];
+type Step = [Model, readonly Command[]];
 const reading = () => Editor.cases.reading.make({});
 const timed = (model: Model, now: number): Model & {clock: NonNullable<Model["clock"]>} => {
 	const clock = model.clock ?? {focused: false, active: true, visible: true, at: now};
@@ -99,6 +99,37 @@ const pick = (model: Model, chosen: string, key: string, now: number): Step => {
 	if (rec.pick === chosen) return write(model, Answer.cases.rec.make({}), key, now);
 	return [{...model, editor: Editor.cases.note.make({pick: chosen, text: ""}), failure: null}, []];
 };
+/** Why a save was refused, in words. */
+const whyOf = (error: unknown): string =>
+	typeof error === "object" && error !== null && "why" in error && typeof error.why === "string"
+		? error.why
+		: "The answer could not be saved";
+
+/** The save was refused: the draft and the ask stay, and the editor says why. */
+const failed = (model: Model, error: unknown): Step => [
+	{...model, editor: model.draft ?? reading(), failure: whyOf(error)},
+	[],
+];
+
+/** The save landed: the editor reads again, and says what was saved. */
+const saved = (model: Model): Step => {
+	const answer = model.editor._tag === "saving" ? model.editor.answer : null;
+	const chosen =
+		answer?._tag === "rec" && model.ask.shows.rec._tag === "pick"
+			? model.ask.shows.rec.pick
+			: answer !== null && "pick" in answer
+				? answer.pick
+				: "Answer";
+	return [
+		{
+			...model,
+			editor: reading(),
+			status: chosen === "approve" ? "Approved." : `${chosen} saved.`,
+		},
+		[answered({ticket: model.ticket})],
+	];
+};
+
 const update = (model: Model, msg: Msg): Step => {
 	switch (msg.type) {
 		case "do": {
@@ -179,50 +210,33 @@ const update = (model: Model, msg: Msg): Step => {
 						[],
 					];
 		}
+		case "save_ok":
+			return saved(model);
+		case "save_err":
+			return failed(model, msg.error);
 		case "escape":
 			return model.editor._tag === "note" || model.editor._tag === "picks"
 				? [{...model, editor: reading()}, []]
 				: [model, []];
-		case "save_err":
-			return [{...model, editor: model.draft ?? reading(), failure: msg.error.why}, []];
-		case "save_ok": {
-			const answer = model.editor._tag === "saving" ? model.editor.answer : null;
-			const chosen =
-				answer?._tag === "rec" && model.ask.shows.rec._tag === "pick"
-					? model.ask.shows.rec.pick
-					: answer !== null && "pick" in answer
-						? answer.pick
-						: "Answer";
-			return [
-				{
-					...model,
-					editor: reading(),
-					status: chosen === "approve" ? "Approved." : `${chosen} saved.`,
-				},
-				[answered({ticket: model.ticket})],
-			];
-		}
 	}
 };
 
-export const askMachine = defineMachine({
-	types: {
-		model: {} as Model,
-		msg: {} as Msg,
-		ctx: {} as {ticket: number; ask: unknown; now: number},
+type Ctx = {ticket: number; ask: unknown; now: number};
+const init = (_loaded: unknown, ctx: Ctx): Step => [
+	{
+		ticket: ctx.ticket,
+		ask: Schema.decodeUnknownSync(Asked)(ctx.ask),
+		editor: reading(),
+		took: {ms: 0, opened: []},
+		failure: null,
+		clock: {focused: false, visible: true, active: true, at: ctx.now},
 	},
+	[],
+];
+const machine = defineMachine({
+	types: {model: {} as Model, msg: {} as Msg, ctx: {} as Ctx},
 	cmds: [save, answered, later],
-	init: (_loaded, ctx): Step => [
-		{
-			ticket: ctx.ticket,
-			ask: Schema.decodeUnknownSync(Asked)(ctx.ask),
-			editor: reading(),
-			took: {ms: 0, opened: []},
-			failure: null,
-			clock: {focused: false, visible: true, active: true, at: ctx.now},
-		},
-		[],
-	],
+	init,
 	update: {
 		do: update,
 		pick: update,
@@ -236,12 +250,17 @@ export const askMachine = defineMachine({
 		show: update,
 		tick: update,
 		escape: update,
-		save_ok: update,
-		save_err: update,
+		save_ok: (s): Step => saved(s),
+		save_err: (s, m): Step => failed(s, m.error),
 		answered_ok: (s): Step => [s, []],
 		later_ok: (s): Step => [s, []],
+		// Neither cell can fail: these never come.
+		answered_err: (s): Step => [s, []],
+		later_err: (s): Step => [s, []],
 	},
 });
+/** The shared ask editor. Its `init` keeps its own type, so a caller reads the first model as it is. */
+export const askMachine = {...machine, init};
 
 export type AskView = {
 	key: string;
@@ -256,18 +275,19 @@ export type AskView = {
 export const askView = (input: {
 	ticket: number;
 	ask: unknown;
-	editor: Editor;
+	editor: unknown;
 	needed?: boolean;
 	failure: string | null;
 }): AskView => {
 	const ask = Schema.decodeUnknownSync(Asked)(input.ask);
+	const editor = Schema.decodeUnknownSync(Editor)(input.editor);
 	return {
 		key: `${input.ticket}/${ask.ask}`,
 		ticket: input.ticket,
 		shows: ask.shows,
 		saw: ask.saw,
-		editor: input.editor,
-		busy: input.editor._tag === "saving",
+		editor,
+		busy: editor._tag === "saving",
 		failure: input.failure,
 		...(input.needed === undefined ? {} : {needed: input.needed}),
 	};
