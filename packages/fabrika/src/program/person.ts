@@ -69,11 +69,11 @@ export interface TableView<T, H extends string = string> {
 
 /**
  * A yes or no a run waits on from the person at its terminal: what to ask, and the id the answer
- * names. `null`: the question is over (answered, or cancelled), and nothing waits.
+ * names. A `null` text clears this question by id after it is answered or cancelled.
  */
 export interface Question {
 	readonly id: string;
-	readonly text: string;
+	readonly text: string | null;
 }
 
 /**
@@ -93,7 +93,7 @@ export type Person<T, H extends string = string> =
 	  }
 	| {readonly table: TableView<T, H>}
 	| {readonly status: (value: T) => string}
-	| {readonly ask: (value: T) => Question | null; readonly answer: string}
+	| {readonly ask: (value: T) => Question; readonly answer: string}
 	| "none";
 
 /**

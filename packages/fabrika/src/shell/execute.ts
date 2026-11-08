@@ -360,10 +360,11 @@ function printers(
 		if ("ask" in person)
 			return (value) => {
 				const question = person.ask(value);
-				if (question === null) {
-					if (asking.length === 0) return;
-					asking.shift();
-					showAsk();
+				if (question.text === null) {
+					const index = asking.findIndex((a) => a.id === question.id);
+					if (index === -1) return;
+					asking.splice(index, 1);
+					if (index === 0) showAsk();
 					return;
 				}
 				if (asking.some((a) => a.id === question.id)) return;

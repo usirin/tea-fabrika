@@ -99,8 +99,10 @@ export const turnProgram = defineProgram({
 		}),
 		ask: output(Asked, "A permission the agent waits on, as it comes and as it is answered.", {
 			person: {
-				ask: (a) =>
-					a.answer === "waiting" ? {id: a.ask, text: `${a.name} asks: ${a.title}`} : null,
+				ask: (a) => ({
+					id: a.ask,
+					text: a.answer === "waiting" ? `${a.name} asks: ${a.title}` : null,
+				}),
 				answer: "allow",
 			},
 		}),
@@ -161,6 +163,13 @@ export const turnProgram = defineProgram({
 								case "ask":
 									titles.set(news.ask, news.title);
 									return send("ask", {name, ask: news.ask, title: news.title, answer: "waiting"});
+								case "answered":
+									return send("ask", {
+										name,
+										ask: news.ask,
+										title: titles.get(news.ask) ?? "",
+										answer: news.allow ? "allowed" : "refused",
+									});
 								case "said":
 									return send("said", {name, text: news.text});
 								case "result":
@@ -176,9 +185,12 @@ export const turnProgram = defineProgram({
 						}),
 						// Stopped (Ctrl-C, `stop %n`): the turn is cancelled, not the agent.
 						Effect.onInterrupt(() =>
-							over || turn === null
+							over
 								? Effect.void
-								: manager.cancel(name, {turn, ...(run === undefined ? {} : {run})}).pipe(
+								: (turn === null
+										? Effect.void
+										: manager.cancel(name, {turn, ...(run === undefined ? {} : {run})})
+									).pipe(
 										Effect.andThen(since),
 										Effect.flatMap((ms) =>
 											send("result", {name, turn, stop: "cancelled", ms, cost: null}),

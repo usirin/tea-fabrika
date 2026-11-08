@@ -329,12 +329,20 @@ export const summonManager = (options: {
 					changed();
 					yield* Scope.close(l.scope, Exit.void);
 					yield* PubSub.shutdown(l.heard);
+					yield* storage
+						.remove(l.name.run)
+						.pipe(Effect.mapError((e) => new SummonRefused({why: e.message})));
 				});
 
 			/** Ask a name's turn to end cancelled, and wait until it has. */
-			const cancelTurn = (l: Live) =>
+			const cancelTurn = (l: Live, accepted = false) =>
 				Effect.gen(function* () {
-					if (l.acp === null || (l.state !== "turn" && l.state !== "asking")) return;
+					if (
+						l.acp === null ||
+						l.state === "down" ||
+						(!accepted && l.state !== "turn" && l.state !== "asking")
+					)
+						return;
 					const ended = yield* PubSub.subscribe(l.heard);
 					yield* l.acp.run.tell("cancel", "now").pipe(Effect.ignore);
 					yield* Stream.fromSubscription(ended).pipe(
@@ -546,11 +554,18 @@ export const summonManager = (options: {
 							const heard = yield* PubSub.subscribe(l.heard);
 							const past = resume === undefined ? [] : [...l.history];
 							const began = yield* Clock.currentTimeMillis;
+							let mine: number | null = resume?.turn ?? null;
 							if (resume === undefined) {
-								const word = yield* acp.run
-									.tell("prompt", prompt)
-									.pipe(Effect.catchTag("MailboxFull", () => Effect.succeed("full")));
-								if (word !== "queued") return yield* refuse(`${name} took nothing: ${word}`);
+								yield* Effect.acquireRelease(
+									Effect.gen(function* () {
+										const word = yield* acp.run
+											.tell("prompt", prompt)
+											.pipe(Effect.catchTag("MailboxFull", () => Effect.succeed("full")));
+										if (word !== "queued") return yield* refuse(`${name} took nothing: ${word}`);
+									}),
+									// Until told, this stream owns the accepted prompt of this exact run.
+									() => (mine === null ? cancelTurn(l, true) : Effect.void),
+								);
 								yield* log("turn_told", {
 									name,
 									agent: l.name.agent,
@@ -558,7 +573,6 @@ export const summonManager = (options: {
 									room: room ?? "",
 								});
 							}
-							let mine: number | null = resume?.turn ?? null;
 							let ended: Extract<Heard, {_tag: "result"}> | null = null;
 							const since = Effect.map(Clock.currentTimeMillis, (now) => now - began);
 							const news = Stream.concat(
@@ -579,7 +593,7 @@ export const summonManager = (options: {
 												if (h._tag === "ask")
 													return h.answer === "waiting"
 														? [{_tag: "ask", ask: h.ask, title: h.title}]
-														: [];
+														: [{_tag: "answered", ask: h.ask, allow: h.answer === "allowed"}];
 												if (h.turn !== mine) return [];
 												ended = h;
 												return [{_tag: "result", stop: h.stop, ms, cost: h.cost}];

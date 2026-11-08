@@ -220,6 +220,8 @@ const ALWAYS_CLOSED = [...LOGINS, ".codex"];
 
 const HIDDEN_FILES = ["**/.env", "**/.env.*"];
 
+const PROTECTED_FILES = [".fabrika", ".envrc", ".husky", ".claude", ".github/workflows"];
+
 const plain = (path: string) => path.replace(/(?<=.)\/+$/, "");
 
 const lines = <Rule>(paths: readonly string[], rule: Rule): Record<string, Rule> =>
@@ -780,6 +782,30 @@ export const claudeOptions = (folder: string, budget: number | null) => {
 	};
 };
 
+/** A plain ACP session cannot plant commands in the person's repository for later execution. */
+const claudeRepoOptions = (folder: string, budget: number | null) => {
+	const base = claudeOptions(folder, budget);
+	return {
+		...base,
+		settings: {
+			...base.settings,
+			permissions: {
+				deny: [
+					...base.settings.permissions.deny,
+					...PROTECTED_FILES.flatMap((path) => [`Edit(${path})`, `Edit(${path}/**)`]),
+				],
+			},
+		},
+		sandbox: {
+			...base.sandbox,
+			filesystem: {
+				...base.sandbox.filesystem,
+				denyWrite: PROTECTED_FILES.map((path) => join(folder, path)),
+			},
+		},
+	};
+};
+
 /** Node, warnings about its own experimental parts off: they go to stderr, which nobody reads. */
 const node = (script: string): Pick<Spawnable, "command" | "args"> => ({
 	command: process.execPath,
@@ -812,7 +838,7 @@ export function harnessOf(
 				...node(CLAUDE),
 				env: fencedEnv(agentEnv(parent)),
 				script: CLAUDE,
-				meta: {claudeCode: {options: claudeOptions(folder, budget)}},
+				meta: {claudeCode: {options: claudeRepoOptions(folder, budget)}},
 			};
 		case "fake":
 			return {name: row, ...node(FAKE), env: runEnv(parent), script: FAKE, meta: undefined};

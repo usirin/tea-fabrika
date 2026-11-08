@@ -64,6 +64,7 @@ export type TurnNews =
 	| {readonly _tag: "told"; readonly turn: number}
 	| {readonly _tag: "status"; readonly text: string}
 	| {readonly _tag: "ask"; readonly ask: string; readonly title: string}
+	| {readonly _tag: "answered"; readonly ask: string; readonly allow: boolean}
 	| {readonly _tag: "said"; readonly text: string}
 	| {
 			readonly _tag: "result";
@@ -110,8 +111,9 @@ export class SummonManager extends Context.Service<
 	}
 >()("@kampus/fabrika-old/SummonManager") {}
 
-/** Why a tsh with no `SummonManager` refuses: it runs outside fabrika's app, with no agents. */
-const NOWHERE = "agents are summoned in fabrika's app: this tsh has no host that keeps them";
+/** How to supply the repository a missing `SummonManager` needs. */
+const NOWHERE =
+	"no repository is set for summoned agents: set FABRIKA_REPO to your git repo folder before starting fabrika, then restart its host";
 
 /** The manager of a tsh started with none: it lists nobody, and refuses the rest in words. */
 /**
