@@ -23,11 +23,12 @@ const uuid7 = (text: string) => {
 
 const make = <const P extends string>(prefix: P): IdSchema<P> => {
 	if (!validPrefix(prefix)) throw new IdError({why: "prefix"});
-	const schema = Schema.String.check(
-		Schema.makeFilter(
-			(text) => text.startsWith(`${prefix}_`) && uuid7(text.slice(prefix.length + 1)),
+	const schema = Schema.String.pipe(
+		Schema.refine(
+			(text): text is IdValue<P> =>
+				text.startsWith(`${prefix}_`) && uuid7(text.slice(prefix.length + 1)),
 		),
-	).pipe(Schema.brand(prefix));
+	);
 	prefixes.set(schema, prefix);
 	return schema;
 };

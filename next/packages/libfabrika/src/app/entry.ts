@@ -9,7 +9,6 @@ import {
 	type LedgerError,
 	type NotGranted,
 	InputId,
-	ParentText,
 	type RecordManager,
 	type Session,
 	type SigningRefused,
@@ -43,7 +42,7 @@ export type Update =
 export const Incoming = Schema.Struct({
 	id: Schema.NonEmptyString,
 	envelope: Schema.Struct({
-		id: Schema.Union([InputId, ParentText.pipe(Schema.brand("InputId"))]),
+		id: InputId,
 		by: Writer,
 		arrivedAt: Schema.Number,
 		input: Schema.Unknown,

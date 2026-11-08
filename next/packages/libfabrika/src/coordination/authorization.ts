@@ -19,22 +19,24 @@ export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(
 			short({"fab.authorization.id": write.id, "fab.authorization.stream": write.stream}),
 		);
 		const transaction = yield* LedgerTransaction;
-		const result = yield* transaction.transact((turn) => {
-			const facts: MemberFact[] = [];
-			for (const row of turn.read("door/members", 0)) {
-				if (!known.has(row._tag)) continue;
-				const fact = decodeFact(valueFor(row));
-				if (Result.isFailure(fact)) return Result.fail(new LedgerError({why: "bad_row"}));
-				facts.push(fact.success);
-			}
-			if ("why" in admitted(foldMembers(facts), key)) return Result.fail(new NotGranted({}));
-			return Result.succeed(
-				Appended.cases.placed.make(turn.append(write.stream, write.id, write.line)),
-			);
-		});
-		if (Result.isFailure(result)) return yield* result.failure;
+		const result = yield* transaction.transact(
+			(turn): Result.Result<Appended, LedgerError | NotGranted> => {
+				const facts: MemberFact[] = [];
+				for (const row of turn.read("door/members", 0)) {
+					if (!known.has(row._tag)) continue;
+					const fact = decodeFact(valueFor(row));
+					if (Result.isFailure(fact)) return Result.fail(new LedgerError({why: "bad_row"}));
+					facts.push(fact.success);
+				}
+				if ("why" in admitted(foldMembers(facts), key)) return Result.fail(new NotGranted({}));
+				return Result.succeed(
+					Appended.cases.placed.make(turn.append(write.stream, write.id, write.line)),
+				);
+			},
+		);
+		const appended = yield* Effect.fromResult(result);
 		yield* Effect.annotateCurrentSpan("fab.authorization.outcome", "placed");
-		return result.success;
+		return appended;
 	},
 	Effect.tapError((error) =>
 		Effect.annotateCurrentSpan(
