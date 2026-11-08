@@ -253,46 +253,49 @@ describe("person git signatures (p83b)", () => {
 		expect(after.code).toBe(0);
 	});
 
-	it("refuses a non-SSH signature even when git reports it valid", () => {
-		const r = new Repo(PERSON_KEYS);
-		const unsigned = r.change("a.ts");
-		const verifier = join(TOP, "pgp-verifier");
-		writeFileSync(
-			verifier,
-			[
-				"#!/bin/sh",
-				"cat >/dev/null",
-				"cat <<'STATUS'",
-				"[GNUPG:] NEWSIG",
-				"[GNUPG:] GOODSIG 1111111111111111 Fixture",
-				"[GNUPG:] VALIDSIG 1111111111111111111111111111111111111111 2026-11-08 1794168000 0 4 0 1 10 00 1111111111111111111111111111111111111111",
-				"[GNUPG:] TRUST_FULLY",
-				"STATUS",
-				"",
-			].join("\n"),
-			{mode: 0o700},
-		);
-		r.git("config", "gpg.program", verifier);
-		const raw = r
-			.git("cat-file", "commit", unsigned)
-			.replace(
-				"\n\n",
+	it.each(["xgpgsig", "gpgsig-sha256"])(
+		"refuses a non-SSH signature with an SSH %s header even when git reports it valid",
+		(header) => {
+			const r = new Repo(PERSON_KEYS);
+			const unsigned = r.change("a.ts");
+			const verifier = join(TOP, "pgp-verifier");
+			writeFileSync(
+				verifier,
 				[
-					"",
-					"xgpgsig -----BEGIN SSH SIGNATURE-----",
-					"gpgsig -----BEGIN PGP SIGNATURE-----",
-					" fixture",
-					" -----END PGP SIGNATURE-----",
-					"",
+					"#!/bin/sh",
+					"cat >/dev/null",
+					"cat <<'STATUS'",
+					"[GNUPG:] NEWSIG",
+					"[GNUPG:] GOODSIG 1111111111111111 Fixture",
+					"[GNUPG:] VALIDSIG 1111111111111111111111111111111111111111 2026-11-08 1794168000 0 4 0 1 10 00 1111111111111111111111111111111111111111",
+					"[GNUPG:] TRUST_FULLY",
+					"STATUS",
 					"",
 				].join("\n"),
+				{mode: 0o700},
 			);
-		const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
-		expect(verifyCommit(r, c)).toBe(0);
-		const out = r.check([], r.base, c);
-		expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
-		expect(out.code).toBe(1);
-	});
+			r.git("config", "gpg.program", verifier);
+			const raw = r
+				.git("cat-file", "commit", unsigned)
+				.replace(
+					"\n\n",
+					[
+						"",
+						`${header} -----BEGIN SSH SIGNATURE-----`,
+						"gpgsig -----BEGIN PGP SIGNATURE-----",
+						" fixture",
+						" -----END PGP SIGNATURE-----",
+						"",
+						"",
+					].join("\n"),
+				);
+			const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
+			expect(verifyCommit(r, c)).toBe(0);
+			const out = r.check([], r.base, c);
+			expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
+			expect(out.code).toBe(1);
+		},
+	);
 
 	it("reports why saving person signers failed", () => {
 		const r = new Repo(PERSON_KEYS);

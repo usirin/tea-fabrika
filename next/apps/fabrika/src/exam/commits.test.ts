@@ -476,6 +476,22 @@ describe("chain (p86 and p89 after the merge)", () => {
 		expect(chain(T("f"), rows, TREES, PLACED)).toEqual([DONE]);
 	});
 
+	const emptyPerson = {
+		link: {...link(note("tests", B, B)), step: "person" as const},
+		signer: "person" as const,
+	};
+	it.each([
+		["the same empty person link twice", [good[0]!, emptyPerson, emptyPerson, good[1]!], C],
+		[
+			"moves that return to a visited tree before an empty person link",
+			[good[0]!, good[1]!, logged(link(note("lead", C, B))), emptyPerson],
+			B,
+		],
+	])("is broken_chain with %s", (_, rows, tree) => {
+		const trees = new Map(TREES).set(T("f"), tree);
+		expect(chain(T("f"), rows, trees, PLACED)).toEqual([stuck("broken_chain", T("f"))]);
+	});
+
 	it("reads only the squash's own links for the chain", () => {
 		const other = logged(link(note("tests", E, D, {ticket: "7"}), {squash: T("e")}));
 		expect(chain(T("f"), [other, ...good], TREES, PLACED)).toEqual([DONE]);

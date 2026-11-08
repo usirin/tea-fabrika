@@ -293,9 +293,10 @@ export const chain = (
 	const links = mine.map((r) => r.link);
 	const tickets = new Set(links.map((l) => l.ticket));
 	const moves = links.filter((l) => l.from !== l.to);
-	const froms = new Set(moves.map((l) => l.from));
+	const empty = links.filter((l) => l.from === l.to);
 	const first = links[0];
 	const last = links.at(-1);
+	const visited = new Set([first?.from, ...moves.map((l) => l.to)]);
 	const whole =
 		first !== undefined &&
 		last !== undefined &&
@@ -303,7 +304,8 @@ export const chain = (
 		links.every((l) => placed.before.has(l.base)) &&
 		mine.every((r) => r.signer === r.link.step) &&
 		tickets.size === 1 &&
-		froms.size === moves.length &&
+		visited.size === moves.length + 1 &&
+		new Set(empty.map((l) => l.from)).size === empty.length &&
 		first.from === trees.get(first.base) &&
 		links.every((l, i) => i === 0 || l.from === links[i - 1]?.to) &&
 		last.to === trees.get(squash);
@@ -381,44 +383,49 @@ const verifier = Effect.gen(function* () {
 });
 
 /** p83b: git checks native SSH signatures using only the trusted file's person lines. */
-const personVerifier = (keys: string) =>
-	Effect.gen(function* () {
-		const people = words(keys).filter((line) => line.startsWith("person:"));
-		if (people.length === 0) return (_sha: string, _link?: PersonLink) => Effect.succeed(false);
-		const fs = yield* FileSystem.FileSystem;
-		const allowed = yield* fs.makeTempFileScoped();
-		yield* fs.writeFileString(allowed, `${people.join("\n")}\n`);
-		return (sha: string, link?: PersonLink) =>
-			Effect.gen(function* () {
-				// gpg.format chooses how to sign; verification detects the signature's own format.
-				const raw = yield* gitMaybe(["cat-file", "commit", sha]);
-				const header = (raw ?? "").split("\n\n", 1)[0] ?? "";
-				if (!/^gpgsig(?:-sha256)? -----BEGIN SSH SIGNATURE-----$/m.test(header)) return false;
-				if (link !== undefined) {
-					const signature = /^gpgsig(?:-sha256)? (.*(?:\n .*)*)/m.exec(header)?.[1] ?? "";
-					const tree = /^tree ([0-9a-f]+)$/m.exec(header)?.[1];
-					const parent = yield* treeAt(`${sha}^1`);
-					if (
-						link.sig !== `${signature.replaceAll("\n ", "\n")}\n` ||
-						link.to !== tree ||
-						link.from !== parent?.trim()
-					)
-						return false;
-				}
-				const result = yield* run("git", [
-					"-c",
-					"gpg.format=ssh",
-					"-c",
-					`gpg.ssh.allowedSignersFile=${allowed}`,
-					"-c",
-					"gpg.ssh.program=ssh-keygen",
-					"verify-commit",
-					sha,
-				]);
-				const used = / key (SHA256:[A-Za-z0-9+/=]+)\s*$/.exec(result.err)?.[1];
-				return result.code === 0 && (link === undefined || used === link.key);
-			});
-	}).pipe(Effect.mapError(() => new Failed({what: "could not write person signers"})));
+const personVerifier = Effect.gen(function* () {
+	const format = (yield* git(["rev-parse", "--show-object-format"])).trim();
+	const name = format === "sha256" ? "gpgsig-sha256" : "gpgsig";
+	const pattern = new RegExp(`^${name} (.*(?:\\n .*)*)`, "m");
+	return (keys: string) =>
+		Effect.gen(function* () {
+			const people = words(keys).filter((line) => line.startsWith("person:"));
+			if (people.length === 0) return (_sha: string, _link?: PersonLink) => Effect.succeed(false);
+			const fs = yield* FileSystem.FileSystem;
+			const allowed = yield* fs.makeTempFileScoped();
+			yield* fs.writeFileString(allowed, `${people.join("\n")}\n`);
+			return (sha: string, link?: PersonLink) =>
+				Effect.gen(function* () {
+					// gpg.format chooses how to sign; verification detects the signature's own format.
+					const raw = yield* gitMaybe(["cat-file", "commit", sha]);
+					const header = (raw ?? "").split("\n\n", 1)[0] ?? "";
+					const signature = pattern.exec(header)?.[1] ?? "";
+					if (signature.split("\n", 1)[0] !== "-----BEGIN SSH SIGNATURE-----") return false;
+					if (link !== undefined) {
+						const tree = /^tree ([0-9a-f]+)$/m.exec(header)?.[1];
+						const parent = yield* treeAt(`${sha}^1`);
+						if (
+							link.sig !== `${signature.replaceAll("\n ", "\n")}\n` ||
+							link.to !== tree ||
+							link.from !== parent?.trim()
+						)
+							return false;
+					}
+					const result = yield* run("git", [
+						"-c",
+						"gpg.format=ssh",
+						"-c",
+						`gpg.ssh.allowedSignersFile=${allowed}`,
+						"-c",
+						"gpg.ssh.program=ssh-keygen",
+						"verify-commit",
+						sha,
+					]);
+					const used = / key (SHA256:[A-Za-z0-9+/=]+)\s*$/.exec(result.err)?.[1];
+					return result.code === 0 && (link === undefined || used === link.key);
+				});
+		}).pipe(Effect.mapError(() => new Failed({what: "could not write person signers"})));
+});
 
 /** Every note on one notes ref, decoded; one that does not decode is left out. */
 const notesOn = (ref: string) =>
@@ -547,7 +554,8 @@ const checkMain = Effect.gen(function* () {
 	if (problem !== null || keys === null)
 		return yield* new Failed({what: `allowed_signers: ${problem}`});
 	const verify = yield* verifier;
-	const verifyPerson = yield* personVerifier(keys);
+	const people = yield* personVerifier;
+	const verifyPerson = yield* people(keys);
 	const signedBy = (note: Note) =>
 		verify(keys, note).pipe(Effect.map((signer): Signed => ({note, signer})));
 	const notes = yield* notesOn("fabrika");
@@ -662,6 +670,7 @@ const chainMain = Effect.gen(function* () {
 	}
 	const verify = yield* verifier;
 	const rows: Logged<ChainLink>[] = [];
+	const people = yield* personVerifier;
 	// A row's keys commit counts only when it was on main before its squash. Anyone who can push can
 	// make a commit whose allowed_signers holds their own key, on a branch or in a log pull request.
 	for (const {link} of yield* loggedAt(rev)) {
@@ -674,7 +683,7 @@ const chainMain = Effect.gen(function* () {
 				// A squash does not keep the original commit in main's history.
 				if ((yield* gitMaybe(["cat-file", "-e", `${link.commit}^{commit}`])) === null)
 					yield* run("git", ["fetch", "--no-tags", "-q", "origin", link.commit]);
-				const verifyPerson = yield* personVerifier(keys);
+				const verifyPerson = yield* people(keys);
 				signer = (yield* verifyPerson(link.commit, link)) ? "person" : null;
 			} else signer = yield* verify(keys, link);
 		}
