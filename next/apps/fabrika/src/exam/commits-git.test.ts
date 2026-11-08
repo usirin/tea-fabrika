@@ -1,7 +1,7 @@
 // The commit check's planted cases end to end (Tier 1, P32; laws p83 to p87 and p89). Each case is a
 // fresh temp repo: git with no global or system config, a `main` with one commit holding
-// `allowed_signers` and the real `exam-paths.json`, and a branch `pr` off it. Four throwaway Ed25519
-// keys (tests, build, lead, stranger) are made once by real `ssh-keygen` in the temp folder and go
+// `allowed_signers` and the real `exam-paths.json`, and a branch `pr` off it. Five throwaway Ed25519
+// keys (tests, build, lead, stranger, person) are made once by real `ssh-keygen` in the temp folder and go
 // with it; nothing here prints one. The program runs as CI runs it, `node commits.ts ...`.
 import {spawnSync} from "node:child_process";
 import {mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync} from "node:fs";
@@ -37,7 +37,7 @@ const sh = (cwd: string, cmd: string, args: string[], input?: string, env = ENV)
 const KEYS = join(TOP, "keys");
 mkdirSync(KEYS, {mode: 0o700});
 type Who = Role | "stranger";
-for (const who of ["tests", "build", "lead", "stranger"])
+for (const who of ["tests", "build", "lead", "stranger", "person"])
 	sh(KEYS, "ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", who, "-f", join(KEYS, who)]);
 sh(KEYS, "ssh-keygen", ["-q", "-t", "ecdsa", "-N", "", "-C", "ecdsa", "-f", join(KEYS, "ecdsa")]);
 const pub = (who: string) =>
@@ -49,7 +49,11 @@ const pub = (who: string) =>
 const fingerprint = (who: string) =>
 	sh(KEYS, "ssh-keygen", ["-l", "-f", join(KEYS, `${who}.pub`)]).split(" ")[1]!;
 const keyLine = (role: string, who: string) => `${role} namespaces="fabrika-step" ${pub(who)}`;
-const GOOD_KEYS = `${[keyLine("tests", "tests"), keyLine("build", "build"), keyLine("lead", "lead")].join("\n")}\n`;
+const stepKeys = (build = "build") =>
+	`${[keyLine("tests", "tests"), keyLine("build", build), keyLine("lead", "lead")].join("\n")}\n`;
+const GOOD_KEYS = stepKeys();
+const personLine = (id: string, who = "person") => `person:${id} namespaces="git" ${pub(who)}`;
+const PERSON_KEYS = `${GOOD_KEYS}${personLine("github:42")}\n`;
 
 let count = 0;
 
@@ -84,6 +88,23 @@ class Repo {
 	commit(message = "c") {
 		this.git("add", "-A");
 		this.git("commit", "-q", "--allow-empty", "-m", message);
+		return this.head();
+	}
+
+	gitSigned(who: Who | "person" = "person", message = "person") {
+		this.git("add", "-A");
+		this.git(
+			"-c",
+			"gpg.format=ssh",
+			"-c",
+			`user.signingkey=${join(KEYS, who)}`,
+			"commit",
+			"-q",
+			"--gpg-sign",
+			"--allow-empty",
+			"-m",
+			message,
+		);
 		return this.head();
 	}
 
@@ -143,6 +164,127 @@ class Repo {
 const DONE = {_tag: "done"};
 const stuck = (why: string, sha: string, more: object = {}) => ({_tag: "stuck", why, sha, ...more});
 const ask = (...paths: string[]) => ({_tag: "ask", who: "owner", for: "exam_read", paths});
+
+const verifyCommit = (r: Repo, sha: string, keys = PERSON_KEYS) => {
+	const allowed = join(TOP, "git-allowed-signers");
+	writeFileSync(allowed, keys);
+	return spawnSync("git", ["-c", `gpg.ssh.allowedSignersFile=${allowed}`, "verify-commit", sha], {
+		cwd: r.dir,
+		env: ENV,
+		encoding: "utf8",
+	}).status;
+};
+
+describe("person keys (p87b)", () => {
+	it("takes several distinct person ids in namespace git beside the three step roles", () => {
+		const r = new Repo(`${PERSON_KEYS}${personLine("github:43", "stranger")}\n`);
+		r.change("a.ts");
+		r.sign("tests");
+		const out = r.check();
+		expect(out.answers).toEqual([DONE]);
+		expect(out.code).toBe(0);
+	});
+
+	it.each([
+		["a step role twice", `${GOOD_KEYS}${keyLine("build", "stranger")}\n`],
+		["an id twice", `${PERSON_KEYS}${personLine("github:42", "stranger")}\n`],
+		["a person reusing a step key", `${GOOD_KEYS}${personLine("github:42", "tests")}\n`],
+		["two people reusing a key", `${PERSON_KEYS}${personLine("github:43")}\n`],
+		["an empty id", `${GOOD_KEYS}${personLine("")}\n`],
+		[
+			"a person in namespace fabrika-step",
+			`${GOOD_KEYS}${keyLine("person:github:42", "person")}\n`,
+		],
+	])("refuses %s before judging commits", (_, keys) => {
+		const r = new Repo(keys);
+		r.change("a.ts");
+		r.sign("tests");
+		const out = r.check();
+		expect(out.code).toBe(2);
+		expect(out.answers).toEqual([]);
+		expect(out.err).toContain("allowed_signers");
+	});
+});
+
+describe("person git signatures (p83b)", () => {
+	it("counts a person's git-signed commit with no step note", () => {
+		const r = new Repo(PERSON_KEYS);
+		r.write("next/packages/x/src/a.ts", "a\n");
+		const c = r.gitSigned();
+		expect(verifyCommit(r, c)).toBe(0);
+		expect(r.git("notes", "--ref=fabrika", "list")).toBe("");
+		const out = r.check();
+		expect(out.answers).toEqual([DONE]);
+		expect(out.code).toBe(0);
+	});
+
+	it("uses the base's person keys when the head removes that person", () => {
+		const r = new Repo(PERSON_KEYS);
+		r.write("allowed_signers", GOOD_KEYS);
+		r.gitSigned();
+		const out = r.check();
+		expect(out.answers).toEqual([ask("allowed_signers")]);
+		expect(out.code).toBe(0);
+	});
+
+	it("refuses a person's key added only at the head", () => {
+		const r = new Repo();
+		r.write("allowed_signers", PERSON_KEYS);
+		const c = r.gitSigned();
+		expect(verifyCommit(r, c)).toBe(0);
+		const out = r.check();
+		expect(out.answers).toEqual([stuck("unsigned_commit", c), ask("allowed_signers")]);
+		expect(out.code).toBe(1);
+	});
+
+	it.each([
+		["a key with no person line", "stranger"],
+		["a step key's git signature", "tests"],
+	] as const)("refuses %s", (_, who) => {
+		const r = new Repo(PERSON_KEYS);
+		r.write("next/packages/x/src/a.ts", "a\n");
+		const c = r.gitSigned(who);
+		const ownLine = `fixture namespaces="git" ${pub(who)}\n`;
+		expect(verifyCommit(r, c, ownLine)).toBe(0);
+		const out = r.check();
+		expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
+		expect(out.code).toBe(1);
+	});
+
+	it("refuses a bad git signature from a listed person", () => {
+		const r = new Repo(PERSON_KEYS);
+		r.write("next/packages/x/src/a.ts", "a\n");
+		const original = r.gitSigned();
+		expect(verifyCommit(r, original)).toBe(0);
+		const raw = `${r.git("cat-file", "commit", original)}changed after signing\n`;
+		const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
+		r.git("reset", "--hard", "-q", c);
+		expect(verifyCommit(r, c)).not.toBe(0);
+		const out = r.check();
+		expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
+		expect(out.code).toBe(1);
+	});
+
+	it("refuses an unsigned commit even when person keys are available", () => {
+		const r = new Repo(PERSON_KEYS);
+		const c = r.change("a.ts");
+		const out = r.check();
+		expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
+		expect(out.code).toBe(1);
+	});
+});
+
+describe("person exam changes (p84b)", () => {
+	it("asks the owner without build_touched_exam for a person's exam commit", () => {
+		const r = new Repo(PERSON_KEYS);
+		r.write("boundary-rules.json", "[1]\n");
+		r.write("next/packages/x/src/a.test.ts", "t\n");
+		r.gitSigned();
+		const out = r.check();
+		expect(out.answers).toEqual([ask("boundary-rules.json", "next/packages/x/src/a.test.ts")]);
+		expect(out.code).toBe(0);
+	});
+});
 
 /** Whether a note's signature verifies under the real keys, as tests, by ssh-keygen alone. */
 const verifies = (repo: Repo, note: {sig: string; step: Role}, text: string) => {
@@ -313,7 +455,7 @@ describe("unsigned_commit (p83)", () => {
 	});
 
 	it("a key the event's base held and the checked-out main has dropped", () => {
-		const extra = `${GOOD_KEYS}${keyLine("build", "stranger")}\n`;
+		const extra = stepKeys("stranger");
 		const r = new Repo(extra);
 		r.git("checkout", "-q", "main");
 		r.write("allowed_signers", GOOD_KEYS);
@@ -339,7 +481,7 @@ describe("unsigned_commit (p83)", () => {
 
 	it("a key added only in the pull request's own allowed_signers, signing a commit in it", () => {
 		const r = new Repo();
-		r.write("allowed_signers", `${GOOD_KEYS}${keyLine("build", "stranger")}\n`);
+		r.write("allowed_signers", stepKeys("stranger"));
 		r.commit();
 		r.sign("tests");
 		const c = r.change("a.ts");
@@ -476,7 +618,7 @@ describe("the run fails (p87), judging no commit", () => {
 			`${[keyLine("tests", "tests"), keyLine("build", "build"), keyLine("lead", "ecdsa")].join("\n")}\n`,
 		],
 		["a key under tests and build", `${GOOD_KEYS}${keyLine("build", "tests")}\n`],
-		["a fourth role", `${GOOD_KEYS}${keyLine("owner", "stranger")}\n`],
+		["an unknown principal", `${GOOD_KEYS}${keyLine("owner", "stranger")}\n`],
 		["a missing namespace", `${GOOD_KEYS}build ${pub("stranger")}\n`],
 		["no allowed_signers on the base", null],
 	])("%s", (_, keys) => {
@@ -648,6 +790,99 @@ const twoSteps = (r: Repo) => {
 	];
 };
 
+describe("person commits between step links (p86b)", () => {
+	it("connects tests, a person's file change, then build, before and after squash", () => {
+		const r = new Repo(PERSON_KEYS);
+		const tests = r.change("a.ts");
+		const first = r.sign("tests");
+		r.write("next/packages/x/src/person.ts", "person\n");
+		const person = r.gitSigned();
+		expect(verifyCommit(r, person)).toBe(0);
+		const raw = r.git("cat-file", "commit", person);
+		const signature = /^gpgsig (.*(?:\n .*)*)/m.exec(raw);
+		expect(signature).not.toBeNull();
+		const middle = {
+			_tag: "attested",
+			step: "person",
+			ticket: first.ticket,
+			version: 1,
+			from: r.head(`${person}^1^{tree}`),
+			to: r.head(`${person}^{tree}`),
+			key: fingerprint("person"),
+			sig: `${signature![1]!.replaceAll("\n ", "\n")}\n`,
+		};
+		const build = r.change("b.ts");
+		const last = r.sign("build");
+		expect(first.to).toBe(middle.from);
+		expect(middle.to).toBe(last.from);
+		expect(middle.from).not.toBe(middle.to);
+		const before = r.check();
+		const {squash, rows} = squashed(r, [
+			{note: first, commit: tests},
+			{note: middle, commit: person},
+			{note: last, commit: build},
+		]);
+		log(r, rows);
+		const after = r.run(["chain", "--squash", squash]);
+		expect(before.answers).toEqual([DONE]);
+		expect(before.code).toBe(0);
+		expect(after.answers, after.err).toEqual([DONE]);
+		expect(after.code).toBe(0);
+	});
+
+	it("refuses an unsigned commit between step links, before and after squash", () => {
+		const r = new Repo(PERSON_KEYS);
+		const tests = r.change("a.ts");
+		const first = r.sign("tests");
+		const gap = r.change("unsigned.ts");
+		const build = r.change("b.ts");
+		const last = r.sign("build");
+		expect(first.to).not.toBe(last.from);
+		const before = r.check();
+		expect(before.answers).toEqual([stuck("unsigned_commit", gap)]);
+		expect(before.code).toBe(1);
+		const {squash, rows} = squashed(r, [
+			{note: first, commit: tests},
+			{note: last, commit: build},
+		]);
+		log(r, rows);
+		const out = r.run(["chain", "--squash", squash]);
+		expect(out.answers).toEqual([stuck("broken_chain", squash)]);
+		expect(out.code).toBe(1);
+	});
+
+	it("counts a person's signed merge of main and still requires the base in the head", () => {
+		const r = new Repo(PERSON_KEYS);
+		r.change("a.ts");
+		r.sign("tests");
+		const behind = r.head();
+		r.git("checkout", "-q", "main");
+		r.write("docs/other.md", "main moved\n");
+		const main = r.commit("main moves");
+		r.git("checkout", "-q", "pr");
+		r.git(
+			"-c",
+			"gpg.format=ssh",
+			"-c",
+			`user.signingkey=${join(KEYS, "person")}`,
+			"merge",
+			"-q",
+			"--gpg-sign",
+			"--no-edit",
+			"main",
+		);
+		expect(verifyCommit(r, r.head())).toBe(0);
+		const stale = r.check([], main, behind);
+		r.change("b.ts");
+		r.sign("build");
+		const merged = r.check([], main);
+		expect(merged.answers).toEqual([DONE]);
+		expect(merged.code).toBe(0);
+		expect(stale.answers).toEqual([stuck("broken_chain", behind)]);
+		expect(stale.code).toBe(1);
+	});
+});
+
 describe("chain after the merge (p86 and p89)", () => {
 	it("done: a squash whose links run from its base's tree to its tree, one through a lead merge", () => {
 		const r = new Repo();
@@ -706,7 +941,7 @@ describe("chain after the merge (p86 and p89)", () => {
 		const c2 = r.change("b.ts");
 		const n2 = r.sign("stranger");
 		r.git("checkout", "-q", "-b", "rotate", r.base);
-		r.write("allowed_signers", `${GOOD_KEYS}${keyLine("build", "stranger")}\n`);
+		r.write("allowed_signers", stepKeys("stranger"));
 		const rotated = r.commit("rotate");
 		r.git("checkout", "-q", "pr");
 		const {squash, rows} = squashed(r, [
@@ -724,7 +959,7 @@ describe("chain after the merge (p86 and p89)", () => {
 	it("done: a key main added before the squash counts, at a keys commit on main", () => {
 		const r = new Repo();
 		r.git("checkout", "-q", "main");
-		r.write("allowed_signers", `${GOOD_KEYS}${keyLine("build", "stranger")}\n`);
+		r.write("allowed_signers", stepKeys("stranger"));
 		const rotated = r.commit("rotate");
 		r.git("checkout", "-q", "pr");
 		r.git("merge", "-q", "--no-ff", "--no-edit", "main");
@@ -753,7 +988,7 @@ describe("chain after the merge (p86 and p89)", () => {
 		]);
 		const main = r.head();
 		r.git("checkout", "-q", "-b", "log", main);
-		r.write("allowed_signers", `${GOOD_KEYS}${keyLine("build", "stranger")}\n`);
+		r.write("allowed_signers", stepKeys("stranger"));
 		const forged = r.commit("my own keys");
 		rows[1]!.attested[0] = {...rows[1]!.attested[0]!, keys: forged};
 		log(r, rows);
