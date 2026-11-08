@@ -7,6 +7,7 @@ import {Cmd, Machine} from "@demlik/tea/effect";
 import {describe, expect, it} from "@effect/vitest";
 import {type Context, Effect, Exit, type Layer as LayerType, Layer, Schema} from "effect";
 import {TestClock} from "effect/testing";
+import * as fc from "fast-check";
 import {Mailbox, ProcessStore, SessionManager, Writer} from "../coordination/index.ts";
 import {ProcessManager} from "../coordination/process-manager.ts";
 import {
@@ -21,8 +22,9 @@ import {
 	ids,
 	read,
 	storage,
+	watcher,
 } from "../coordination/process.test-support.ts";
-import {Activity} from "../coordination/process.ts";
+import {Activity, Down, Recipient} from "../coordination/process.ts";
 import {RecoveryStore} from "../coordination/recovery-store.ts";
 import {Ledger, type LedgerError} from "../data/ledger.ts";
 import {lineFor} from "../data/log.ts";
@@ -53,13 +55,20 @@ const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("poison"), key: Schema.String}),
 	Schema.Struct({type: Schema.Literal("work")}),
 	Schema.Struct({type: Schema.Literal("refuse")}),
+	Schema.Struct({
+		type: Schema.Literal("DOWN"),
+		ref: Schema.String,
+		process: Schema.String,
+		why: Schema.String,
+		to: Recipient,
+	}),
 ]);
 const work = Cmd.make("work", {input: Schema.Struct({}), ok: Schema.Null, err: ["failed"]});
 type Wiring = {policy: typeof policy; recovery: {sql: Sql; name: string; capacity: number}};
 const runnerLayer: (p: Descriptor, wiring: Wiring) => ReturnType<typeof ProgramRunner.layer> =
 	ProgramRunner.layer;
 
-const world = () => {
+const world = (personOnly = false) => {
 	const ledger = storage(),
 		state = storage(),
 		authority = storage();
@@ -73,6 +82,9 @@ const world = () => {
 		init: [] as Array<{build: string; loaded: unknown}>,
 		steps: [] as string[],
 		cmds: 0,
+		adds: 0,
+		crashAdd: 0,
+		downs: [] as Array<typeof Down.Type>,
 	};
 	const alarms: Array<number | null> = [];
 	const input = (id = "poison", m: unknown = {type: "poison", key: id}): Incoming => ({
@@ -100,6 +112,8 @@ const world = () => {
 			},
 			update: {
 				add: (s, m) => {
+					controls.adds++;
+					if (controls.adds === controls.crashAdd) throw new RangeError("private fold failure");
 					if (controls.savedThrows) throw new RangeError("private saved failure");
 					return [{...s, count: s.count + m.n}, []];
 				},
@@ -115,6 +129,10 @@ const world = () => {
 				},
 				work: (s) => [s, [work({})]],
 				refuse: (s) => [s, []],
+				DOWN: (s, m) => {
+					controls.downs.push(Down.make({ref: m.ref, process: m.process, why: m.why, to: m.to}));
+					return [{...s, replies: s.replies + 1}, []];
+				},
 				work_ok: (s) => [{...s, replies: s.replies + 1}, []],
 				work_err: (s) => [{...s, replies: s.replies + 1}, []],
 			},
@@ -127,7 +145,7 @@ const world = () => {
 			view: {data: Model, select: (s: Model) => s},
 			refuse: (_s: Model, m: typeof Msg.Type) => (m.type === "refuse" ? {why: "bad_msg"} : null),
 			inputs: {
-				add: {_tag: "write", schema: Msg, description: "Add", personOnly: false},
+				add: {_tag: "write", schema: Msg, description: "Add", personOnly},
 				poison: {_tag: "write", schema: Msg, description: "Poison", personOnly: false},
 				work: {_tag: "write", schema: Msg, description: "Work", personOnly: false},
 				refuse: {_tag: "write", schema: Msg, description: "Refuse", personOnly: false},
@@ -265,6 +283,124 @@ const recover = (w: ReturnType<typeof world>) =>
 	});
 
 describe("P34 runner supervision", () => {
+	it("p80 p55 plant, clear turn in handoff: person-only mail survives a successor's first failed fold", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.uuid(), fc.integer({min: 1, max: 1000}), (id, n) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const w = world(true);
+						yield* w.boot;
+						yield* ProgramRunner.use((r) => failed(r.msg(w.input()))).pipe(
+							Effect.provide(w.layer()),
+						);
+						yield* recover(w);
+						// B is A's successor. Preparation succeeds; B's first accepted fold throws.
+						w.controls.crashAdd = 2;
+						const letter = w.input(id, {type: "add", n});
+						const before = yield* Effect.gen(function* () {
+							const runner = yield* ProgramRunner;
+							yield* failed(runner.msg(letter));
+							expect(w.controls.adds).toBe(2);
+							expect((yield* lives).filter((row) => row._tag === "down")).toMatchObject([
+								{body: {process: A}},
+								{body: {process: B, why: "saved_letter"}},
+							]);
+							const store = yield* ProcessStore;
+							const successor = yield* store.select(B);
+							expect(yield* successor.load).toMatchObject({
+								turn: {_tag: "prepared", id},
+								saved: {model: {count: 0}},
+							});
+							expect(yield* store.placedByAny(id)).toBeNull();
+							const rows = yield* inbox;
+							expect(rows).toMatchObject([{id, body: {m: {type: "add", n}}}]);
+							return rows;
+						}).pipe(Effect.provide(w.layer()));
+						w.reopen();
+						yield* recover(w);
+						w.reopen();
+						yield* Effect.gen(function* () {
+							const runner = yield* ProgramRunner;
+							expect((yield* runner.open("recovered")).view).toMatchObject({count: n});
+							expect(w.controls.adds).toBe(3);
+							expect(yield* inbox).toEqual(before);
+							expect(yield* ProcessStore.use((s) => s.placedByAny(id))).toMatchObject({
+								id,
+								rev: before[0]!.rev,
+								pos: before[0]!.pos,
+							});
+							expect(yield* runner.msg(letter)).toMatchObject({_tag: "accepted"});
+							expect((yield* runner.open("resend")).view).toMatchObject({count: n});
+							expect(yield* dead).toEqual([]);
+						}).pipe(Effect.provide(w.layer()));
+					}).pipe(Effect.provide(TestClock.layer())),
+				),
+			),
+			{
+				seed: 119120,
+				numRuns: 12,
+				// T271 review: an appended person-only letter has a turn but no placing yet.
+				examples: [["00000000-0000-4000-8000-000000000271", 7]],
+			},
+		);
+	});
+
+	it("P34 p79 plant, skip untyped mail: the watcher program steps on real monitor DOWN signals", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.uniqueArray(fc.uuid(), {minLength: 1, maxLength: 3}),
+				fc.constantFrom("normal", "crashed", "shutdown"),
+				(refs, why) =>
+					Effect.runPromise(
+						Effect.gen(function* () {
+							const w = world();
+							yield* w.boot;
+							yield* ProcessManager.use((p) =>
+								p.start(first("child:start", "child:1"), from()),
+							).pipe(Effect.provide(w.manager()));
+							const watching = ProcessManager.layer({...brain(), ...watcher(A)}, ids().next).pipe(
+								Layer.provideMerge(w.base()),
+							);
+							for (const ref of refs)
+								yield* ProcessManager.use((p) => p.monitor(ref, B, from())).pipe(
+									Effect.provide(watching),
+								);
+							yield* ProcessManager.use((p) => p.exit(B, why, from())).pipe(
+								Effect.provide(w.manager()),
+							);
+							const expected = refs.map((ref) =>
+								Down.make({ref, process: B, why, to: Recipient.cases.process.make({process: A})}),
+							);
+							// Inspect the manager's actual untyped letters. The test does no translation.
+							const before = yield* inbox.pipe(Effect.provide(w.manager()));
+							expect(before.map((row) => row.body)).toEqual(
+								expected.map((m) => expect.objectContaining({m})),
+							);
+							w.reopen();
+							for (let wake = 0; wake < 2; wake++) {
+								yield* Effect.gen(function* () {
+									const runner = yield* ProgramRunner;
+									expect((yield* runner.open("watcher")).view).toMatchObject({
+										count: 0,
+										replies: refs.length,
+									});
+									expect(w.controls.downs).toEqual(expected);
+									expect(yield* inbox).toEqual(before);
+								}).pipe(Effect.provide(w.layer()));
+								w.reopen();
+							}
+						}),
+					),
+			),
+			{
+				seed: 119120,
+				numRuns: 12,
+				// T271 review: the manager writes _tag: DOWN, with no tea Msg type.
+				examples: [[["00000000-0000-4000-8000-000000000271"], "crashed"]],
+			},
+		);
+	});
+
 	it.effect(
 		"p80 bounded objects plant, keep every input in one row: a good step writes flat supervision bytes after 1 or 50 good letters without losing receipts",
 		() =>
