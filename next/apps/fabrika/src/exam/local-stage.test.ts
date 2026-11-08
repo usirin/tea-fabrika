@@ -3,7 +3,7 @@
 import {existsSync, readFileSync} from "node:fs";
 import {dirname, join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
-import {parseSync} from "oxc-parser";
+import {parseSync, type ModuleExportName} from "oxc-parser";
 import {describe, expect, it} from "vitest";
 
 type Tree = any;
@@ -38,6 +38,7 @@ const member = (node: Tree): string | null => {
 	}
 	return null;
 };
+const name = (node: ModuleExportName) => (node.type === "Identifier" ? node.name : node.value);
 // Follow the package's actual namespace and star exports, including aliases.
 const exported = (
 	file: string,
@@ -50,7 +51,7 @@ const exported = (
 	const ast = tree(file);
 	for (const node of ast.body) {
 		if (node.type === "ExportAllDeclaration") {
-			if (node.exported?.name === path[0]) {
+			if (node.exported && name(node.exported) === path[0]) {
 				const found = exported(source(file, node.source.value), path.slice(1), seen);
 				if (found) return found;
 			} else if (!node.exported) {
@@ -61,14 +62,15 @@ const exported = (
 		if (node.type !== "ExportNamedDeclaration") continue;
 		if (
 			path.length === 1 &&
-			node.declaration?.declarations?.some((d: Tree) => d.id?.name === path[0])
+			node.declaration?.type === "VariableDeclaration" &&
+			node.declaration.declarations.some((d) => d.id.type === "Identifier" && d.id.name === path[0])
 		)
 			return file;
 		for (const spec of node.specifiers ?? []) {
-			if (spec.exported.name !== path[0] || !node.source) continue;
+			if (name(spec.exported) !== path[0] || !node.source) continue;
 			const found = exported(
 				source(file, node.source.value),
-				[spec.local.name, ...path.slice(1)],
+				[name(spec.local), ...path.slice(1)],
 				seen,
 			);
 			if (found) return found;
@@ -82,7 +84,7 @@ const imports = (file: string) => {
 		if (n.type === "ImportDeclaration" && n.source.value.startsWith(".")) {
 			for (const s of n.specifiers)
 				if (s.type === "ImportSpecifier")
-					result.set(s.local.name, {file: source(file, n.source.value), name: s.imported.name});
+					result.set(s.local.name, {file: source(file, n.source.value), name: name(s.imported)});
 		}
 	return result;
 };
@@ -160,7 +162,7 @@ const scan = (file: string, body: string): Array<Finding> => {
 			for (const s of node.specifiers) {
 				if (node.source.value === "@alchemy.run/cloudflare") {
 					if (s.type === "ImportNamespaceSpecifier") cloud.add(s.local.name);
-					else if (s.type === "ImportSpecifier") named.set(s.local.name, s.imported.name);
+					else if (s.type === "ImportSpecifier") named.set(s.local.name, name(s.imported));
 				}
 				if (
 					node.source.value === "alchemy" &&
@@ -170,7 +172,7 @@ const scan = (file: string, body: string): Array<Finding> => {
 				if (
 					node.source.value === "alchemy" &&
 					s.type === "ImportSpecifier" &&
-					s.imported.name === "remote"
+					name(s.imported) === "remote"
 				)
 					remote.add(s.local.name);
 			}

@@ -87,7 +87,7 @@ describe("P12 Rolldown build", () => {
 		});
 		// The native Worker entry may import cloudflare:workers. Its execution is checked on workerd.
 		const file = join(home(), "program.mjs");
-		writeFileSync(file, built.programs.counter.source);
+		writeFileSync(file, built.programs.counter!.source);
 		const bundle = await rolldown({
 			input: file,
 			platform: "browser",

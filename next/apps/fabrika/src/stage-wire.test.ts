@@ -8,7 +8,7 @@ import {createServer} from "node:net";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
 import {Entry, PAGE} from "@kampus/libfabrika/data";
-import {Schema} from "effect";
+import {Effect, Schema} from "effect";
 import {afterEach, describe, expect, it} from "vitest";
 
 const APP = resolve(import.meta.dirname, "..");
@@ -92,7 +92,7 @@ const stage = async () => {
 	homes.push(home);
 	const port = await unusedPort();
 	const url = `http://127.0.0.1:${port}`;
-	const env = {...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1"};
+	const env: NodeJS.ProcessEnv = {...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1"};
 	delete env.TYPESAFE_API_KEY;
 	delete env.FABRIKA_FOREGROUND;
 	delete env.CLOUDFLARE_API_TOKEN;
@@ -171,21 +171,28 @@ class Client {
 		return (await this.next((f) => typeof f !== "string" && f.method === "challenge")).params
 			.nonce as string;
 	}
-	async hello(nonce = this.challenge(), overrides: object = {}) {
-		const n = await nonce;
-		return this.call("initialize", {
-			versions: [1],
-			has: ["seal"],
-			ping: "30s",
-			key: this.key.raw,
-			tab: this.tab,
-			nonce: n,
-			platform: "headless",
-			os: "linux",
-			sentAt: SENT,
-			signed: this.key.proof(`fabrika-hello\n${this.base}\n${this.tab}\n${n}`),
-			...overrides,
-		});
+	hello(nonce?: string, overrides: object = {}) {
+		const challenge =
+			nonce === undefined ? Effect.promise(() => this.challenge()) : Effect.succeed(nonce);
+		return challenge.pipe(
+			Effect.flatMap((n) =>
+				Effect.promise(() =>
+					this.call("initialize", {
+						versions: [1],
+						has: ["seal"],
+						ping: "30s",
+						key: this.key.raw,
+						tab: this.tab,
+						nonce: n,
+						platform: "headless",
+						os: "linux",
+						sentAt: SENT,
+						signed: this.key.proof(`fabrika-hello\n${this.base}\n${this.tab}\n${n}`),
+						...overrides,
+					}),
+				),
+			),
+		);
 	}
 	async call(method: string, params: unknown): Promise<Frame> {
 		const id = ++this.serial;
@@ -203,7 +210,7 @@ class Client {
 }
 const connected = async (s: Awaited<ReturnType<typeof stage>>, tab = "tab-a") => {
 	const client = new Client(s.url, s.key, tab);
-	const hello = await client.hello();
+	const hello = await Effect.runPromise(client.hello());
 	expect(hello.error).toBeUndefined();
 	return client;
 };
@@ -211,7 +218,7 @@ const read = async (
 	client: Client,
 	stream: string,
 	after = 0,
-): Promise<Array<typeof Entry.Type>> => {
+): Promise<ReadonlyArray<typeof Entry.Type>> => {
 	const response = await client.call("ledger.read", {stream, after});
 	expect(response.error).toBeUndefined();
 	return Schema.decodeUnknownSync(Schema.Array(Entry))(response.result.entries);
@@ -256,7 +263,7 @@ describe("P12 real dev.ts wire", () => {
 		expect((await view(c, pid)).view).toEqual({count: 1});
 		const otherKey = identity(),
 			other = new Client(s.url, otherKey, "other-key");
-		expect((await other.hello()).error?.data?.why).toBe("not_granted");
+		expect((await Effect.runPromise(other.hello())).error?.data?.why).toBe("not_granted");
 		await other.call("door.knock", {label: "Other client"});
 		const waiting = await other.next((f) => typeof f !== "string" && f.method === "door.waiting");
 		const {grantText} = await import("@kampus/libfabrika/coordination");
@@ -285,7 +292,7 @@ describe("P12 real dev.ts wire", () => {
 		const notification = await other.next(
 			(f) => typeof f !== "string" && f.method === "client.granted",
 		);
-		expect((await other.hello(notification.params.nonce)).error).toBeUndefined();
+		expect((await Effect.runPromise(other.hello(notification.params.nonce))).error).toBeUndefined();
 		const identityChanged = await send(other, pid, "once");
 		expect(identityChanged.error?.data?.why ?? identityChanged.result?.why).toBe("id_reused");
 		expect(await read(c, "counter:1/inbox")).toHaveLength(1);
@@ -364,12 +371,12 @@ describe("P12 real dev.ts wire", () => {
 			(await stranger.call("ledger.read", {stream: "processes", after: 0})).error?.data?.why,
 		).toBe("no_hello");
 		const unknown = new Client(s.url, identity(), "unknown");
-		expect((await unknown.hello()).error?.data?.why).toBe("not_granted");
+		expect((await Effect.runPromise(unknown.hello())).error?.data?.why).toBe("not_granted");
 		const bad = new Client(s.url, identity(), "invalid-proof");
 		const nonce = await bad.challenge();
-		expect((await bad.hello(nonce, {signed: "not a proof"})).error?.data?.why).toBe(
-			"bad_signature",
-		);
+		expect(
+			(await Effect.runPromise(bad.hello(nonce, {signed: "not a proof"}))).error?.data?.why,
+		).toBe("bad_signature");
 		expect(await read(c, "door/inputs")).toEqual(before);
 		const after = await c.call("spans.read", {chain: {_tag: "spans"}, after: 0});
 		// Authorized audit reads may record themselves; no span may be attributed to the stranger.

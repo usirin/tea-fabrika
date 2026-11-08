@@ -85,6 +85,8 @@ const world = async (
 		},
 	) => Promise<void>,
 ) => {
+	process.env.DO_NOT_TRACK = "1";
+	const {localState} = await import("alchemy/State/LocalState");
 	const {build} = await import("./build.ts");
 	const {localStage} = await import("./local-stage.ts");
 	const home = mkdtempSync(join(tmpdir(), "p12-o-")),
@@ -95,7 +97,10 @@ const world = async (
 		reply.end("reachable");
 	});
 	try {
-		await new Promise<void>((done) => outbound.listen(0, "127.0.0.1", done));
+		await new Promise<void>((done, fail) => {
+			outbound.once("error", fail);
+			outbound.listen(0, "127.0.0.1", done);
+		});
 		const destination = outbound.address();
 		if (destination === null || typeof destination === "string")
 			throw new Error("no probe address");
@@ -172,19 +177,23 @@ const world = async (
 					test(stage, key, {
 						hits: () => hits,
 						from,
-						start: (name, program) =>
-							stage.project("p12-records").start(
+						start: async (name, program) => {
+							const code = built.programs[program];
+							expect(code, `fixture program ${program} must be built`).toBeDefined();
+							const started = await Reflect.get(stage.project("p12-records"), "start")(
 								{
 									_tag: "first",
 									id: `start-${name}`,
 									name,
-									code: {program, hash: built.programs[program].hash},
+									code: {program, hash: code!.hash},
 								},
 								from,
-							),
+							);
+							return Schema.decodeUnknownSync(Schema.Struct({process: Schema.String}))(started);
+						},
 					}),
 				);
-			}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+			}).pipe(Effect.scoped, Effect.provide(localState()), Effect.provide(NodeServices.layer)),
 		);
 	} finally {
 		await new Promise<void>((done) => outbound.close(() => done()));

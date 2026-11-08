@@ -62,7 +62,7 @@ const launch = async () => {
 	const at = listener.address();
 	if (at === null || typeof at === "string") throw new Error("no TCP port");
 	await new Promise<void>((done) => listener.close(() => done()));
-	const env = {...process.env, FABRIKA_HOME: folder, DO_NOT_TRACK: "1"};
+	const env: NodeJS.ProcessEnv = {...process.env, FABRIKA_HOME: folder, DO_NOT_TRACK: "1"};
 	delete env.TYPESAFE_API_KEY;
 	delete env.FABRIKA_FOREGROUND;
 	delete env.CLOUDFLARE_API_TOKEN;
