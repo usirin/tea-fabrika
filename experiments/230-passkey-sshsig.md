@@ -179,6 +179,14 @@ that follow-up with the lead, outside P10's product changes. A direct decode of
 shared process-id helper's contract must also be supplied by the two row leads,
 as the plan requires. The lead has been asked for both prerequisites.
 
+Resolved in [PR 490](https://github.com/usirin/tea-fabrika/pull/490), now merged
+into this branch from main at `bde48daa`, merge commit `06d4fecb`. `ProcessId`
+lives in `data/trace.ts`, and `ParentText` accepts process-based input ids. The
+lead assigned P10 the UUIDv7 TypeID generator at
+`next/packages/libfabrika/src/coordination/process-id.ts`; P33 will reuse it.
+The generator's shape, monotonicity and fresh door-start laws are in the P10
+test change. The test writer did not add its implementation.
+
 ## Cost and limits
 
 No model or paid service was called by the script. Script cost was $0. The
