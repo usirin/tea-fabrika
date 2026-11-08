@@ -1,7 +1,8 @@
 import {Context, Effect, Layer} from "effect";
-import {type Doorbell, type LedgerError} from "./ledger.ts";
+import {ledgerStore} from "./ledger-store.ts";
+import {Doorbell, type LedgerError} from "./ledger.ts";
 import {type Entry, type Line, type Rev} from "./log.ts";
-import {Referee, type Sql} from "./referee.ts";
+import type {Sql} from "./referee.ts";
 
 /** Available only inside the synchronous callback. Refusal aborts the whole turn. */
 export interface LedgerTurn {
@@ -21,8 +22,7 @@ export class LedgerTransaction extends Context.Service<
 		Layer.effect(
 			LedgerTransaction,
 			Effect.gen(function* () {
-				const referee = yield* Referee;
-				return {run: referee.run};
+				return {run: ledgerStore(sql, yield* Doorbell).run};
 			}),
-		).pipe(Layer.provide(Referee.layer(sql)));
+		);
 }
