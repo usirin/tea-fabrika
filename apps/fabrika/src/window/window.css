@@ -1475,7 +1475,8 @@ main.program > [role="alert"] {
 	gap: 12px;
 }
 
-button {
+/* A plain button. A Manti button (`data-scope`) is Manti's to draw, here and in every rule below. */
+button:where(:not([data-scope])) {
 	font: inherit;
 	color: var(--text-secondary);
 	background: var(--line);
@@ -1489,7 +1490,12 @@ button:hover {
 	border-color: var(--key);
 }
 
-button:focus-visible {
+/* Manti draws its own hover: the plain one above stops at it. */
+button[data-scope]:hover {
+	border-color: revert-layer;
+}
+
+button:where(:not([data-scope])):focus-visible {
 	outline: 2px solid var(--focus);
 	outline-offset: 2px;
 }
@@ -1518,14 +1524,14 @@ button:focus-visible {
 	box-sizing: border-box;
 }
 
-.view button,
+.view button:where(:not([data-scope])),
 .view input,
 .view textarea {
 	font: inherit;
 	color: inherit;
 }
 
-.view button {
+.view button:where(:not([data-scope])) {
 	background: none;
 	border: 0;
 	border-radius: 0;
@@ -1534,11 +1540,11 @@ button:focus-visible {
 	text-align: start;
 }
 
-.view button:hover {
+.view button:where(:not([data-scope])):hover {
 	border-color: transparent;
 }
 
-.view button:disabled {
+.view button:where(:not([data-scope])):disabled {
 	cursor: default;
 }
 
@@ -1836,7 +1842,7 @@ button:focus-visible {
 }
 
 /* Buttons: quiet by default, one filled for the thing a form is for. */
-.tracker button {
+.tracker button:where(:not([data-scope])) {
 	font: inherit;
 	color: var(--soft);
 	background: transparent;
@@ -1846,12 +1852,12 @@ button:focus-visible {
 	cursor: default;
 }
 
-.tracker button:hover {
+.tracker button:where(:not([data-scope])):hover {
 	background: var(--hover);
 	border-color: var(--line);
 }
 
-.tracker button:focus-visible,
+.tracker button:where(:not([data-scope])):focus-visible,
 .tracker a:focus-visible,
 .tracker input:focus-visible,
 .tracker textarea:focus-visible {
@@ -1871,6 +1877,13 @@ button:focus-visible {
 	background: transparent;
 	color: var(--faint);
 	border-color: var(--line);
+}
+
+/* A disabled Manti button is Manti's to draw, as an enabled one is. */
+.tracker button[data-scope]:disabled {
+	opacity: revert-layer;
+	background: revert-layer;
+	border-color: revert-layer;
 }
 
 /* The bar: what the list shows, and the search. */
@@ -2763,6 +2776,25 @@ main.program:has(> .view) {
 	overflow-wrap: anywhere;
 }
 
+/* The turn card's icon, drawn bare: the card is the one box, so the icon gets none of its own. */
+.ticket-view .turn-icon {
+	flex: none;
+	display: inline-grid;
+	place-items: center;
+	inline-size: 24px;
+	block-size: 24px;
+	color: var(--text-muted);
+}
+
+.ticket-view .turn-icon.w-done {
+	color: var(--done);
+}
+
+.ticket-view .turn-icon svg {
+	inline-size: 14px;
+	block-size: 14px;
+}
+
 .ticket-view .turnc {
 	display: flex;
 	align-items: center;
@@ -2793,51 +2825,140 @@ main.program:has(> .view) {
 	font: var(--fs-body) / 1.5 var(--font);
 }
 
+/* Focused, the card keeps its own corners and a thin ring: `.view :focus-visible` draws a control's. */
+.ask-view:focus-visible {
+	border-radius: var(--r-lg);
+	outline-width: 1px;
+	outline-offset: 0;
+}
+
 .ask-view p {
 	margin: 0;
 	overflow-wrap: anywhere;
 }
+
+/* What it asks, the rec, the answers and a failed save: they stay in view while the evidence scrolls. */
+.ask-head {
+	position: sticky;
+	inset-block-start: 0;
+	z-index: 1;
+	display: grid;
+	gap: var(--s-2);
+	padding-block-end: var(--s-1);
+	background: var(--surface-card);
+}
 .ask-question {
 	font-weight: 600;
 }
-.ask-rec {
+.ask-rec,
+.ask-quiet {
 	color: var(--text-faint);
 }
 .ask-toolbar,
 .ask-marks {
 	display: flex;
 	flex-wrap: wrap;
+	align-items: center;
 	gap: var(--s-1);
-}
-.ask-toolbar {
-	position: sticky;
-	inset-block-start: 0;
-	background: var(--surface-card);
 }
 .ask-view button {
 	white-space: normal;
 }
+
+/* A pressed mark says so with a check beside its words, not only with its fill. */
+.ask-on {
+	inline-size: 10px;
+	block-size: 10px;
+	margin-inline-end: var(--s-1);
+}
+
+/* Every pick, one under another, each starting at the same edge: its number, then its words. */
 .ask-picks {
 	display: grid;
 	gap: var(--s-1);
 }
+.ask-picks [data-scope="button"] {
+	justify-content: flex-start;
+	inline-size: 100%;
+	text-align: start;
+}
 .ask-view form {
 	display: grid;
+	justify-items: start;
 	gap: var(--s-2);
 }
-.ask-view [role="status"]:empty {
-	display: none;
+.ask-view form > :first-child {
+	inline-size: 100%;
+}
+
+/* Manti's field draws the note's one box and its focus: the textarea inside draws neither. */
+.ask-view textarea:focus-visible {
+	outline: none;
+}
+
+/* What the ask stands on, as words: labels, short lists, the step's own words, then the diff. */
+.ask-evidence {
+	display: grid;
+	gap: var(--s-1);
+}
+.ask-evidence ul {
+	margin: 0;
+	padding-inline-start: var(--s-4);
+}
+.ask-evidence-label {
+	color: var(--text-faint);
+	font-size: var(--fs-small);
+	font-weight: 500;
+}
+.ask-said {
+	white-space: pre-wrap;
 }
 .ask-evidence pre {
+	margin: 0;
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	font: var(--fs-small) / 1.5 var(--mono);
 }
+
+/* The window's one status region: read out, not seen. */
+.ask-status {
+	position: absolute;
+	inline-size: 1px;
+	block-size: 1px;
+	margin: -1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* In the asks menu a row is a row: padded off the menu's edge, and its ask has no card of its own. */
 .asks-row {
-	padding-block: var(--s-1);
+	padding: var(--s-1) var(--s-2);
+	border-radius: var(--r-sm);
 }
 .asks-row[aria-selected="true"] {
 	background: var(--surface-hover);
+}
+.asks-row .ask-view,
+.asks-row .ask-head {
+	padding-inline: 0;
+	background: transparent;
+}
+.asks-row .ask-head {
+	position: static;
+}
+
+/* A row's question lines up with the words under it: a button by role, plain text by look. */
+.asks-row .asks-title {
+	padding-inline: 0;
+	justify-content: flex-start;
+	text-align: start;
+	font-weight: 500;
+}
+
+/* The menu's grid holds focus for its rows (aria-activedescendant): the active row shows where. */
+#pop-asks [role="grid"]:focus-visible {
+	outline: none;
 }
 
 .ticket-view .turnc .what {

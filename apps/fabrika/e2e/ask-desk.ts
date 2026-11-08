@@ -403,6 +403,10 @@ export const askDesk = async (tools: Tools) => {
 				await attempt("P10 the asks menu opens", async () => {
 					await tools.prefixed(page, "a");
 					await page.locator("#pop-asks").getByText(DRAFT.what, {exact: true}).first().waitFor();
+					// The menu fades in: the shot waits for it to finish, so it shows the menu as it stays.
+					await page
+						.locator("#pop-asks")
+						.evaluate((menu) => Promise.all(menu.getAnimations().map((a) => a.finished)));
 					await shot(page, "asks-menu", layout, look);
 					await page.keyboard.press("Escape");
 				});

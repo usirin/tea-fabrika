@@ -62,7 +62,12 @@ const Plan = Schema.StructWithRest(
 	[Schema.Record(Schema.String, Schema.Json)],
 );
 export const Evidence = Schema.TaggedUnion({
-	plan: {version: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)), plan: Plan},
+	plan: {
+		version: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+		plan: Plan,
+		/** The plan step's own words, as it wrote them while it ran. */
+		text: Schema.optionalKey(Schema.String),
+	},
 	change: {
 		head: Schema.String,
 		diff: Schema.String,
@@ -111,6 +116,18 @@ export const Asked = Schema.Struct({
 	blind: Schema.Struct({policy: Schema.Int, hidden: Schema.Boolean}),
 });
 export type Asked = typeof Asked.Type;
+/**
+ * What a window gets of a sealed ask: what it shows and the hash of that, never the sealed rec or
+ * the blind draw (review 7). A full `Asked` reads as one, and keeps only these.
+ */
+export const AskShown = Schema.Struct({ask: Id, shows: Shows, saw: Hash});
+export type AskShown = typeof AskShown.Type;
+/** A sealed ask as a window gets it. Pure. */
+export const askShownOf = (ask: AskShown): AskShown => ({
+	ask: ask.ask,
+	shows: ask.shows,
+	saw: ask.saw,
+});
 const Took = Schema.Struct({
 	key: Schema.NonEmptyString,
 	rec: Schema.Literals(["shown", "hidden", "none"]),

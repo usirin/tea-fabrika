@@ -1,7 +1,7 @@
 import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
 import {Ledger} from "@kampus/fabrika-old";
-import {Asked} from "@kampus/pipeline/tickets/ask";
+import {AskShown} from "@kampus/pipeline/tickets/ask";
 import {
 	Entry,
 	fold,
@@ -56,7 +56,7 @@ export const Ask = Schema.Struct({
 	/** What it asks, in its own words, or why the run is stuck. */
 	what: Schema.String,
 	kind: Schema.Literals(["ask", "stuck"]),
-	sealed: Schema.optionalKey(Asked),
+	sealed: Schema.optionalKey(AskShown),
 	for: Schema.optionalKey(Schema.String),
 	why: Schema.optionalKey(Schema.String),
 	resume: Schema.optionalKey(Schema.String),
@@ -263,7 +263,9 @@ export const waitingOf = (tickets: readonly Ticket[], now: number): readonly Wai
 					key: `${ticket.number}/${a.ask}`,
 					what: a.what,
 					kind: "ask",
-					...(a.sealed === undefined ? {} : {sealed: a.sealed, for: a.sealed.for}),
+					...(a.sealed === undefined
+						? {}
+						: {sealed: a.sealed, ...(a.for === undefined ? {} : {for: a.for})}),
 					at: a.at,
 				}));
 			if (head._tag !== "stuck") return [];

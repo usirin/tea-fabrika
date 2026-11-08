@@ -1,7 +1,7 @@
 import {runIn} from "@demlik/tea/effect";
 import {useMachine} from "@demlik/tea/react";
 import {Button, Dialog} from "@manti-ui/react";
-import {AskView} from "@tea-fabrika/tracker/ask-window";
+import {AskStatus, AskView} from "@tea-fabrika/tracker/ask-window";
 import {Layer, ManagedRuntime} from "effect";
 import {
 	type ReactNode,
@@ -492,96 +492,99 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 		);
 	return (
 		<Panel id={POP.asks} label="Asks" onClose={close}>
-			<p className="pop-head">
-				{asks.asks.filter((a) => a.kind === "ask").length} asks ·{" "}
-				{asks.asks.filter((a) => a.kind === "stuck").length} stops
-			</p>
-			{asks.reach === "failed" && <p role="alert">{asks.why ?? "The ledger is disconnected"}</p>}
-			{rows.length === 0 ? (
-				<p className="pop-empty">Nothing waits on you.</p>
-			) : (
-				<div
-					role="grid"
-					aria-label="Waiting asks"
-					tabIndex={0}
-					ref={grid}
-					aria-activedescendant={
-						active === undefined ? undefined : `ask-row-${rows.indexOf(active)}`
-					}
-					onKeyDown={(e) => {
-						if (
-							e.target instanceof HTMLTextAreaElement ||
-							e.target instanceof HTMLInputElement ||
-							(e.target !== e.currentTarget && (e.target as Element).closest(".ask-view"))
-						)
-							return;
-						const by =
-							e.key === "ArrowDown" || e.key === "j"
-								? 1
-								: e.key === "ArrowUp" || e.key === "k"
-									? -1
-									: 0;
-						if (by !== 0) {
-							e.preventDefault();
-							const at = active === undefined ? -1 : rows.indexOf(active);
-							const next = rows[(at + by + rows.length) % rows.length];
-							if (next !== undefined) select({type: "select", key: next.key});
+			<AskStatus>
+				<p className="pop-head">
+					{asks.asks.filter((a) => a.kind === "ask").length} asks ·{" "}
+					{asks.asks.filter((a) => a.kind === "stuck").length} stops
+				</p>
+				{asks.reach === "failed" && <p role="alert">{asks.why ?? "The ledger is disconnected"}</p>}
+				{rows.length === 0 ? (
+					<p className="pop-empty">Nothing waits on you.</p>
+				) : (
+					<div
+						role="grid"
+						aria-label="Waiting asks"
+						tabIndex={0}
+						ref={grid}
+						aria-activedescendant={
+							active === undefined ? undefined : `ask-row-${rows.indexOf(active)}`
 						}
-						if (e.key === "Enter" && active !== undefined) {
-							e.preventDefault();
-							open({id: active.key});
-						}
-						if (e.key === "h" && active !== undefined) {
-							e.preventDefault();
-							aside({id: active.key});
-						}
-					}}
-				>
-					{rows.map((row, i) => (
-						<div
-							role="row"
-							aria-selected={row.key === active?.key}
-							id={`ask-row-${i}`}
-							key={row.key}
-							className="asks-row"
-						>
-							<div role="gridcell">
-								{asks.later[0]?.key === row.key && <p>Later</p>}
-								<Button
-									variant="tertiary"
-									tabIndex={-1}
-									onClick={() => select({type: "select", key: row.key})}
-								>
-									<WordsOf words={labels.get(row.key)?.title ?? row.what} />
-								</Button>
-								<p>
-									<WordsOf words={labels.get(row.key)?.sub ?? ""} />
-								</p>
-								{row.key === active?.key && (
-									<>
-										{row.kind === "ask" && row.sealed !== undefined && (
-											<AskView key={row.key} ticket={row.ticket} ask={row.sealed} />
-										)}
-										{row.kind === "stuck" && (
-											<p>
-												{row.why ?? "State not recorded"} · resume at{" "}
-												{row.resume ?? "the saved step"}
-											</p>
-										)}
-										<Button variant="tertiary" onClick={() => open({id: row.key})}>
-											{row.kind === "stuck" ? "Open lane" : "Open ticket"}
-										</Button>
-										<Button variant="tertiary" onClick={() => aside({id: row.key})}>
-											{asks.later.some((a) => a.key === row.key) ? "Bring back" : "Later"}
-										</Button>
-									</>
-								)}
+						onKeyDown={(e) => {
+							if (
+								e.target instanceof HTMLTextAreaElement ||
+								e.target instanceof HTMLInputElement ||
+								(e.target !== e.currentTarget && (e.target as Element).closest(".ask-view"))
+							)
+								return;
+							const by =
+								e.key === "ArrowDown" || e.key === "j"
+									? 1
+									: e.key === "ArrowUp" || e.key === "k"
+										? -1
+										: 0;
+							if (by !== 0) {
+								e.preventDefault();
+								const at = active === undefined ? -1 : rows.indexOf(active);
+								const next = rows[(at + by + rows.length) % rows.length];
+								if (next !== undefined) select({type: "select", key: next.key});
+							}
+							if (e.key === "Enter" && active !== undefined) {
+								e.preventDefault();
+								open({id: active.key});
+							}
+							if (e.key === "h" && active !== undefined) {
+								e.preventDefault();
+								aside({id: active.key});
+							}
+						}}
+					>
+						{rows.map((row, i) => (
+							<div
+								role="row"
+								aria-selected={row.key === active?.key}
+								id={`ask-row-${i}`}
+								key={row.key}
+								className="asks-row"
+							>
+								<div role="gridcell">
+									{asks.later[0]?.key === row.key && <p>Later</p>}
+									<Button
+										className="asks-title"
+										variant="tertiary"
+										tabIndex={-1}
+										onClick={() => select({type: "select", key: row.key})}
+									>
+										<WordsOf words={labels.get(row.key)?.title ?? row.what} />
+									</Button>
+									<p>
+										<WordsOf words={labels.get(row.key)?.sub ?? ""} />
+									</p>
+									{row.key === active?.key && (
+										<>
+											{row.kind === "ask" && row.sealed !== undefined && (
+												<AskView key={row.key} ticket={row.ticket} ask={row.sealed} />
+											)}
+											{row.kind === "stuck" && (
+												<p>
+													{row.why ?? "State not recorded"} · resume at{" "}
+													{row.resume ?? "the saved step"}
+												</p>
+											)}
+											<Button variant="tertiary" onClick={() => open({id: row.key})}>
+												{row.kind === "stuck" ? "Open lane" : "Open ticket"}
+											</Button>
+											<Button variant="tertiary" onClick={() => aside({id: row.key})}>
+												{asks.later.some((a) => a.key === row.key) ? "Bring back" : "Later"}
+											</Button>
+										</>
+									)}
+								</div>
 							</div>
-						</div>
-					))}
-				</div>
-			)}
-			{rows.length > 0 && <Foot hints={ASKS_FOOT} />}
+						))}
+					</div>
+				)}
+				{rows.length > 0 && <Foot hints={ASKS_FOOT} />}
+			</AskStatus>
 		</Panel>
 	);
 }

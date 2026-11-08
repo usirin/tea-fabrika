@@ -2,15 +2,24 @@ import {defineMachine} from "@demlik/tea";
 import {Cmd, runIn} from "@demlik/tea/effect";
 import {useMachine} from "@demlik/tea/react";
 import {
-	Asked,
 	Answer,
+	AskShown,
+	askShownOf,
 	ASK_COMMANDS,
 	type AskCommand,
 	type Shows,
 } from "@kampus/pipeline/tickets/ask";
-import {Button, Collapsible, Kbd, Textarea} from "@manti-ui/react";
-import {Effect, Layer, ManagedRuntime, Schema} from "effect";
-import {createContext, useContext, useEffect, useRef, type KeyboardEvent} from "react";
+import {Alert, Button, Collapsible, Kbd, Textarea, Toggle} from "@manti-ui/react";
+import {Effect, Fiber, Layer, ManagedRuntime, Schema} from "effect";
+import {
+	createContext,
+	type KeyboardEvent,
+	type ReactNode,
+	useContext,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import {AskAnswer} from "./ticket.ts";
 
 const Editor = Schema.TaggedUnion({
@@ -22,7 +31,7 @@ const Editor = Schema.TaggedUnion({
 type Editor = typeof Editor.Type;
 type Model = {
 	ticket: number;
-	ask: Asked;
+	ask: AskShown;
 	editor: Editor;
 	needed?: boolean;
 	took: {ms: number; opened: readonly string[]};
@@ -48,7 +57,7 @@ type Msg =
 	| {type: "save_err"; error: {why: string}};
 const save = Cmd.make("save", {input: AskAnswer, ok: Schema.Unknown, err: ["refused"]});
 const answered = Cmd.make("answered", {
-	input: Schema.Struct({ticket: Schema.Int}),
+	input: Schema.Struct({ticket: Schema.Int, said: Schema.String}),
 	ok: Schema.Unknown,
 	err: [],
 });
@@ -58,6 +67,14 @@ const later = Cmd.make("later", {
 	err: [],
 });
 type Command = ReturnType<typeof save> | ReturnType<typeof answered> | ReturnType<typeof later>;
+/**
+ * The answer a save Cmd hands the window's `answer`: the Cmd's input, without the Cmd's `type`,
+ * which the host's strict reader refuses (shot S1). Pure.
+ */
+export const answerOfSave = (cmd: ReturnType<typeof save>): AskAnswer => {
+	const {type: _type, ...answer} = cmd;
+	return answer;
+};
 type Step = [Model, readonly Command[]];
 const reading = () => Editor.cases.reading.make({});
 const timed = (model: Model, now: number): Model & {clock: NonNullable<Model["clock"]>} => {
@@ -112,22 +129,23 @@ const failed = (model: Model, error: unknown): Step => [
 ];
 
 /** The save landed: the editor reads again, and says what was saved. */
-const saved = (model: Model): Step => {
-	const answer = model.editor._tag === "saving" ? model.editor.answer : null;
+/** What a saved answer says, in words: "Approved.", or the pick it saved. Pure. */
+const savedWords = (shows: Shows, answer: Answer | null): string => {
 	const chosen =
-		answer?._tag === "rec" && model.ask.shows.rec._tag === "pick"
-			? model.ask.shows.rec.pick
+		answer?._tag === "rec" && shows.rec._tag === "pick"
+			? shows.rec.pick
 			: answer !== null && "pick" in answer
 				? answer.pick
 				: "Answer";
-	return [
-		{
-			...model,
-			editor: reading(),
-			status: chosen === "approve" ? "Approved." : `${chosen} saved.`,
-		},
-		[answered({ticket: model.ticket})],
-	];
+	return chosen === "approve" ? "Approved." : `${chosen} saved.`;
+};
+
+const saved = (model: Model): Step => {
+	const status = savedWords(
+		model.ask.shows,
+		model.editor._tag === "saving" ? model.editor.answer : null,
+	);
+	return [{...model, editor: reading(), status}, [answered({ticket: model.ticket, said: status})]];
 };
 
 const update = (model: Model, msg: Msg): Step => {
@@ -194,7 +212,7 @@ const update = (model: Model, msg: Msg): Step => {
 			];
 		}
 		case "show": {
-			const ask = Schema.decodeUnknownSync(Asked)(msg.ask);
+			const ask = Schema.decodeUnknownSync(AskShown)(msg.ask);
 			const next = timed(model, msg.now);
 			return ask.ask === next.ask.ask
 				? [next, []]
@@ -225,7 +243,7 @@ type Ctx = {ticket: number; ask: unknown; now: number};
 const init = (_loaded: unknown, ctx: Ctx): Step => [
 	{
 		ticket: ctx.ticket,
-		ask: Schema.decodeUnknownSync(Asked)(ctx.ask),
+		ask: Schema.decodeUnknownSync(AskShown)(ctx.ask),
 		editor: reading(),
 		took: {ms: 0, opened: []},
 		failure: null,
@@ -279,7 +297,7 @@ export const askView = (input: {
 	needed?: boolean;
 	failure: string | null;
 }): AskView => {
-	const ask = Schema.decodeUnknownSync(Asked)(input.ask);
+	const ask = Schema.decodeUnknownSync(AskShown)(input.ask);
 	const editor = Schema.decodeUnknownSync(Editor)(input.editor);
 	return {
 		key: `${input.ticket}/${ask.ask}`,
@@ -330,28 +348,205 @@ const run = runIn(runtime);
 // Shared across mounts, so a held press cannot answer a newly mounted next ask.
 const held = new Set<string>();
 
-export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: Asked}) {
+/** Where an ask view says what it saved: the one status region its window holds (review 6). */
+const Says = createContext<((text: string) => void) | null>(null);
+
+/**
+ * The window's one polite status region, always drawn and visually hidden, outside any ask view,
+ * so what a save said is read out even when the next ask, or none, takes the view's place
+ * (WCAG 4.1.3).
+ */
+export function AskStatus({children}: {readonly children: ReactNode}) {
+	const [text, say] = useState("");
+	return (
+		<Says.Provider value={say}>
+			{children}
+			<p className="ask-status" role="status" aria-live="polite">
+				{text}
+			</p>
+		</Says.Provider>
+	);
+}
+
+/** Any JSON a plan or a check holds, as words: no braces, no quotes, no tags. Pure. */
+const wordsOf = (value: unknown): string => {
+	if (value === null || value === undefined) return "";
+	if (typeof value === "string") return value;
+	if (typeof value === "number" || typeof value === "boolean") return String(value);
+	if (Array.isArray(value))
+		return value
+			.map(wordsOf)
+			.filter((w) => w !== "")
+			.join("; ");
+	if (typeof value !== "object") return "";
+	const o = value as Record<string, unknown>;
+	if (typeof o.who === "string" && typeof o.want === "string")
+		return `${o.who} wants ${o.want}${typeof o.why === "string" ? `, to ${o.why}` : ""}`;
+	if (typeof o.name === "string") {
+		const state = o.state ?? o.conclusion ?? o.status;
+		return state === undefined ? o.name : `${o.name}: ${wordsOf(state)}`;
+	}
+	if (typeof o.title === "string")
+		return typeof o.met === "number" && typeof o.of === "number"
+			? `${o.title}, ${o.met} of ${o.of} met`
+			: o.title;
+	return Object.entries(o)
+		.filter(([key]) => key !== "_tag" && key !== "id")
+		.map(([key, v]) => [key, wordsOf(v)] as const)
+		.filter(([, words]) => words !== "")
+		.map(([key, words]) => `${key} ${words}`)
+		.join(", ");
+};
+
+/** A list of words, drawn only when it has any. */
+function Listed({label, items}: {readonly label: string; readonly items: readonly unknown[]}) {
+	const words = items.map(wordsOf).filter((w) => w !== "");
+	if (words.length === 0) return null;
+	return (
+		<>
+			<p className="ask-evidence-label">{label}</p>
+			<ul>
+				{words.map((w, i) => (
+					// one list of words, in order, never moved
+					<li key={i}>{w}</li>
+				))}
+			</ul>
+		</>
+	);
+}
+
+/** What the ask stands on, drawn as words, never as JSON (review 9). */
+function EvidenceText({shows}: {readonly shows: Shows}) {
+	const evidence = shows.evidence;
+	switch (evidence._tag) {
+		case "plan": {
+			const {plan} = evidence;
+			return (
+				<>
+					<p className="ask-evidence-label">Plan version {evidence.version}</p>
+					<p>{plan.summary}</p>
+					<Listed label="Stories" items={plan.stories} />
+					<Listed label="Tasks" items={plan.tasks} />
+					{plan.questions.length > 0 && (
+						<>
+							<p className="ask-evidence-label">Open questions</p>
+							<ul>
+								{plan.questions.map((q) => (
+									<li key={q.id}>
+										<p>{q.ask}</p>
+										<p className="ask-quiet">
+											Lean: {q.lean}. {q.why}
+											{q.cost === undefined ? "" : ` Cost: ${q.cost}`}
+											{q.sure === undefined ? "" : ` ${q.sure}% sure.`}
+										</p>
+									</li>
+								))}
+							</ul>
+						</>
+					)}
+					{evidence.text !== undefined && evidence.text !== "" && (
+						<p className="ask-said">{evidence.text}</p>
+					)}
+				</>
+			);
+		}
+		case "change":
+			return (
+				<>
+					<p className="ask-evidence-label">The change at {evidence.head.slice(0, 7)}</p>
+					{evidence.text !== undefined && evidence.text !== "" && (
+						<p className="ask-said">{evidence.text}</p>
+					)}
+					<Listed label="Checks" items={evidence.checks} />
+					{evidence.review !== null && (
+						<>
+							<p className="ask-evidence-label">Review</p>
+							<p>{wordsOf(evidence.review)}</p>
+						</>
+					)}
+					{evidence.rules.length > 0 && (
+						<>
+							<p className="ask-evidence-label">Rules</p>
+							<ul>
+								{evidence.rules.map((r) => (
+									<li key={r.path}>
+										<span className="mono">{r.path}</span>: {r.text}
+									</li>
+								))}
+							</ul>
+						</>
+					)}
+					<p className="ask-evidence-label">Diff</p>
+					<pre>{evidence.diff}</pre>
+				</>
+			);
+		case "other":
+			return <p className="ask-said">{evidence.text}</p>;
+	}
+}
+
+/** The mark that says a toggle is on, beside its words, so color is never the only cue. */
+const ON = (
+	<svg className="ask-on" viewBox="0 0 10 10" aria-hidden="true">
+		<path
+			d="M2.5 5.2 4.3 7 7.6 3.2"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		/>
+	</svg>
+);
+
+const MARKS = [
+	[true, "Needed me"],
+	[false, "Agent could work it out"],
+] as const;
+
+export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: AskShown}) {
 	const actions = useContext(AskActions);
+	const says = useContext(Says);
 	const root = useRef<HTMLElement>(null);
+	/** The program the view sits in, kept from its mount: an answered view draws nothing. */
+	const program = useRef<HTMLElement | null>(null);
 	const note = useRef<HTMLTextAreaElement>(null);
-	const ctx = useRef({ticket, ask, now: Date.now()}).current;
+	const ctx = useRef({ticket, ask: askShownOf(ask), now: Date.now()}).current;
 	const [model, send] = useMachine(askMachine, {
 		run,
 		ctx,
 		interpret: {
-			save: (cmd) =>
-				actions === null
-					? Effect.fail({_tag: "refused", why: "The host is disconnected"})
-					: actions.answer(cmd).pipe(Effect.mapError((e) => ({_tag: "refused", why: e.why}))),
-			answered: () =>
+			save: (cmd) => {
+				if (actions === null)
+					return Effect.fail({_tag: "refused", why: "The host is disconnected"});
+				const words = savedWords(shown.current, cmd.answer);
+				// The save and what it says outlive this view: a saved answer can take the ask, and
+				// the view with it, off the page before the host's reply comes back.
+				return Effect.gen(function* () {
+					const fiber = yield* actions.answer(answerOfSave(cmd)).pipe(
+						Effect.tap(() => Effect.sync(() => says?.(words))),
+						Effect.forkDetach,
+					);
+					return yield* Fiber.join(fiber);
+				}).pipe(Effect.mapError((e) => ({_tag: "refused", why: e.why})));
+			},
+			answered: (cmd) =>
 				Effect.sync(() => {
-					const target = root.current?.closest<HTMLElement>(".program") ?? root.current;
-					target?.focus();
+					says?.(cmd.said);
+					(program.current ?? root.current)?.focus();
 				}),
 			later: (cmd) => Effect.sync(() => actions?.later(cmd.key)),
 		},
 	});
 	const view = askView(model);
+	const shown = useRef(model.ask.shows);
+	shown.current = model.ask.shows;
+	// The next ask after an answer takes the focus its program holds, so its keys work at once.
+	useEffect(() => {
+		program.current = root.current?.closest<HTMLElement>(".program") ?? null;
+		const active = document.activeElement;
+		if (active === document.body || active === program.current) root.current?.focus();
+	}, []);
 	useEffect(() => {
 		const up = (e: globalThis.KeyboardEvent) => held.delete(e.key);
 		const active = () => {
@@ -425,12 +620,16 @@ export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: A
 			send({type: "open", name: "evidence", now: Date.now()});
 		}
 	};
+	// Answered: the view goes, so the next ask, or the turn card, takes its place at once.
+	if (model.status !== undefined) return null;
 	const rec = view.shows.rec;
+	const tools = (Object.keys(ASK_COMMANDS) as AskCommand["_tag"][]).filter(
+		(name) => rec._tag === "pick" || name === "picks" || name === "later",
+	);
 	return (
 		<section
 			ref={root}
 			className="ask-view"
-
 			aria-label={`ask: ${view.shows.what}`}
 			tabIndex={-1}
 			aria-busy={view.busy}
@@ -442,45 +641,61 @@ export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: A
 					send({type: "focus", value: false, now: Date.now()});
 			}}
 		>
-			<p className="ask-question">{view.shows.what}</p>
-			{rec._tag === "pick" ? (
-				<p className="ask-rec">
-					{rec.pick}: {rec.why}
-					<br />
-					{rec.cost} · {rec.sure === null ? "confidence unknown" : `${rec.sure}% confidence`}
-				</p>
-			) : (
-				<p className="ask-rec">
-					{rec._tag === "none" ? rec.why : "Pick first. The recommendation is hidden for this ask."}
-				</p>
-			)}
-			<div
-				role="toolbar"
-				aria-label="Answer"
-				tabIndex={0}
-				className="ask-toolbar"
-				onKeyDown={(e) => {
-					if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-					e.preventDefault();
-					e.stopPropagation();
-					const buttons = [
-						...e.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"),
-					];
-					const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
-					buttons[
-						(at + (e.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length
-					]?.focus();
-				}}
-			>
-				{(Object.keys(ASK_COMMANDS) as AskCommand["_tag"][])
-					.filter((name) => name !== "later" && (rec._tag === "pick" || name === "picks"))
-					.map((name) => {
+			<div className="ask-head">
+				<p className="ask-question">{view.shows.what}</p>
+				{rec._tag === "pick" ? (
+					<p className="ask-rec">
+						{rec.pick}: {rec.why}
+						<br />
+						{rec.cost} · {rec.sure === null ? "confidence unknown" : `${rec.sure}% confidence`}
+					</p>
+				) : (
+					<p className="ask-rec">
+						{rec._tag === "none"
+							? rec.why
+							: "Pick first. The recommendation is hidden for this ask."}
+					</p>
+				)}
+				{/* Focusable by code only (-1): Tab reaches its one roving button, never the toolbar itself. */}
+				<div
+					role="toolbar"
+					aria-label="Answer"
+					tabIndex={-1}
+					className="ask-toolbar"
+					onKeyDown={(e) => {
+						// One tab stop (APG toolbar): the arrows move it, and it stays where they left it.
+						const buttons = [...e.currentTarget.querySelectorAll<HTMLButtonElement>("button")];
+						const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
+						const last = buttons.length - 1;
+						const to =
+							e.key === "ArrowRight"
+								? at === last
+									? 0
+									: at + 1
+								: e.key === "ArrowLeft"
+									? at <= 0
+										? last
+										: at - 1
+									: e.key === "Home"
+										? 0
+										: e.key === "End"
+											? last
+											: null;
+						if (to === null) return;
+						e.preventDefault();
+						e.stopPropagation();
+						for (const [i, b] of buttons.entries()) b.tabIndex = i === to ? 0 : -1;
+						buttons[to]?.focus();
+					}}
+				>
+					{tools.map((name, i) => {
 						const keys = actions?.keys[name] ?? [ASK_COMMANDS[name].keys];
 						return (
 							<Button
 								key={name}
 								size="sm"
 								variant={name === "rec" ? "primary" : "tertiary"}
+								tabIndex={i === 0 ? 0 : -1}
 								disabled={view.busy}
 								aria-keyshortcuts={keys.length === 0 ? undefined : keys.join(" ")}
 								onClick={() => command(name)}
@@ -490,23 +705,31 @@ export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: A
 							</Button>
 						);
 					})}
-			</div>
-			<div className="ask-marks">
-				{[
-					[true, "Needed me"],
-					[false, "Agent could work it out"],
-				].map(([needed, label]) => (
-					<Button
-						key={String(needed)}
-						size="sm"
-						variant="tertiary"
-						aria-pressed={view.needed === needed}
-						disabled={view.busy}
-						onClick={() => send({type: "mark", needed: needed === true})}
-					>
-						{label}
-					</Button>
-				))}
+				</div>
+				<div className="ask-marks" role="group" aria-label="Did this need you?">
+					{MARKS.map(([needed, label]) => (
+						<Toggle
+							key={String(needed)}
+							variant="secondary"
+							pressed={view.needed === needed}
+							disabled={view.busy}
+							onPressedChange={() => send({type: "mark", needed})}
+						>
+							{(pressed: boolean) => (
+								<>
+									{pressed && ON}
+									{label}
+								</>
+							)}
+						</Toggle>
+					))}
+				</div>
+				{view.busy && <p className="ask-quiet">Saving answer…</p>}
+				{view.failure !== null && (
+					<Alert variant="danger" title="Not saved" icon={FAILED}>
+						{view.failure}
+					</Alert>
+				)}
 			</div>
 			{view.editor._tag === "picks" && (
 				<div className="ask-picks">
@@ -517,7 +740,9 @@ export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: A
 							onClick={() => send({type: "pick", pick: p.pick, now: Date.now()})}
 						>
 							<Kbd>{i + 1}</Kbd>
-							{p.pick}: {p.does}
+							<span>
+								{p.pick}: {p.does}
+							</span>
 						</Button>
 					))}
 				</div>
@@ -525,6 +750,7 @@ export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: A
 			{(view.editor._tag === "note" ||
 				(model.editor._tag === "saving" && model.draft?._tag === "note")) && (
 				<form
+					className="ask-note"
 					onSubmit={(e) => {
 						e.preventDefault();
 						send({type: "submit", key: "click", now: Date.now()});
@@ -534,9 +760,12 @@ export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: A
 						ref={note}
 						label="Why this answer?"
 						aria-label="Note against the recommendation"
-						required
+						aria-required="true"
+						requiredIndicator={null}
 						maxLength={120}
 						rows={2}
+						resize="none"
+						fullWidth
 						disabled={view.busy}
 						value={
 							model.editor._tag === "note"
@@ -559,22 +788,32 @@ export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: A
 					</Button>
 				</form>
 			)}
-			{view.busy && <p>Saving answer…</p>}
-			{view.failure !== null && <p role="alert">{view.failure}</p>}
 			<Collapsible
 				trigger="Evidence"
 				open={model.evidence ?? false}
 				onOpenChange={() => send({type: "open", name: "evidence", now: Date.now()})}
 			>
 				<div className="ask-evidence">
+					<p className="ask-evidence-label">The ticket</p>
 					<p>{view.shows.ticket.title}</p>
-					<p>{view.shows.ticket.body}</p>
-					<pre>{JSON.stringify(view.shows.evidence, null, 2)}</pre>
+					{view.shows.ticket.body !== "" && <p>{view.shows.ticket.body}</p>}
+					<EvidenceText shows={view.shows} />
 				</div>
 			</Collapsible>
-			<p role="status" aria-live="polite">
-				{model.status ?? ""}
-			</p>
 		</section>
 	);
 }
+
+/** The failed save's mark: a warning sign, so the words, not only their color, say it failed. */
+const FAILED = (
+	<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+		<path
+			d="M8 1.8 15 14H1Z M8 6v4 M8 11.8v.4"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		/>
+	</svg>
+);

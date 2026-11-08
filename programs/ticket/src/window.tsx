@@ -11,7 +11,7 @@ import {
 	type StepNow,
 	stepWords,
 } from "@tea-fabrika/tracker";
-import {AskView, AskActions, StopView} from "@tea-fabrika/tracker/ask-window";
+import {AskActions, AskStatus, AskView, StopView} from "@tea-fabrika/tracker/ask-window";
 import {whenOf} from "@tea-fabrika/tracker/window";
 import {type KeyboardEvent, type ReactNode, useState, useContext} from "react";
 import type {ticket} from "./index.ts";
@@ -140,7 +140,7 @@ function TurnCard(props: {
 		case "running":
 			return (
 				<section className="turnc" aria-label="Whose turn">
-					<span className="m a lg" aria-hidden="true">
+					<span className="turn-icon" aria-hidden="true">
 						{SPARK}
 					</span>
 					<div className="what">
@@ -151,7 +151,7 @@ function TurnCard(props: {
 							<span className="dot run live" />
 							<span className="w-run">running</span>
 							<span aria-hidden="true">·</span>
-							run {head.run}, since {whenOf(head.since, now)}
+							since {whenOf(head.since, now)}
 						</span>
 					</div>
 				</section>
@@ -174,13 +174,13 @@ function TurnCard(props: {
 		case "done":
 			return (
 				<section className="turnc" aria-label="Whose turn">
-					<span className="m s lg" aria-hidden="true">
+					<span className="turn-icon w-done" aria-hidden="true">
 						{CHECK}
 					</span>
 					<div className="what">
 						<span className="big">Done</span>
 						<span className="sub">
-							<span className="w-done">✓</span> {line.replace(/^done: /, "")}
+							{line.replace(/^done: /, "")}
 							<span aria-hidden="true">·</span>
 							{usd(page.usd)} in all
 						</span>
@@ -557,69 +557,71 @@ function OneTicket({view, send}: WindowProps<typeof ticket>) {
 	const paragraphs = paragraphsOf(page.body);
 	return (
 		<div className="view ticket-view">
-			<div className="tkv">
-				<div className="tk-main">
-					<div className="tk-col">
-						<div>
-							<div className="idl">
-								<span className="mono">#{number}</span>
-								{page.filed !== null && (
-									<span>
-										filed by {page.filed.by.id}, {whenOf(page.filed.at, now)}
-									</span>
-								)}
-								{opened.ticket.state === "closed" && <span className="tag">closed</span>}
+			<AskStatus>
+				<div className="tkv">
+					<div className="tk-main">
+						<div className="tk-col">
+							<div>
+								<div className="idl">
+									<span className="mono">#{number}</span>
+									{page.filed !== null && (
+										<span>
+											filed by {page.filed.by.id}, {whenOf(page.filed.at, now)}
+										</span>
+									)}
+									{opened.ticket.state === "closed" && <span className="tag">closed</span>}
+								</div>
+								<h1 className="tk-title">
+									<Ticks text={opened.ticket.title} />
+								</h1>
 							</div>
-							<h1 className="tk-title">
-								<Ticks text={opened.ticket.title} />
-							</h1>
-						</div>
-						{view.unreachable !== null && (
-							<p className="alert" role="alert">
-								The ledger did not answer: {view.unreachable}
-							</p>
-						)}
-						{view.failed !== null && (
-							<p className="alert" role="alert">
-								A write did not land: {view.failed.why}
-							</p>
-						)}
-						<TurnCard head={opened.head} page={page} now={now} send={send} />
-						<section className="props-inline" aria-label="Properties">
-							<Props page={page} number={number} now={now} />
-						</section>
-						<div className="desc">
-							{paragraphs.length === 0 ? (
-								<p className="empty">No description.</p>
-							) : (
-								paragraphs.map((p) => (
-									<p key={p.at}>
-										<Ticks text={p.text} />
-									</p>
-								))
+							{view.unreachable !== null && (
+								<p className="alert" role="alert">
+									The ledger did not answer: {view.unreachable}
+								</p>
 							)}
+							{view.failed !== null && (
+								<p className="alert" role="alert">
+									A write did not land: {view.failed.why}
+								</p>
+							)}
+							<TurnCard head={opened.head} page={page} now={now} send={send} />
+							<section className="props-inline" aria-label="Properties">
+								<Props page={page} number={number} now={now} />
+							</section>
+							<div className="desc">
+								{paragraphs.length === 0 ? (
+									<p className="empty">No description.</p>
+								) : (
+									paragraphs.map((p) => (
+										<p key={p.at}>
+											<Ticks text={p.text} />
+										</p>
+									))
+								)}
+							</div>
+							<section aria-label="Activity">
+								<Activity rows={opened.rows} timeline={opened.ticket.timeline} now={now} />
+								<Composer ticket={number} send={send} saving={view.saving.length} />
+							</section>
 						</div>
-						<section aria-label="Activity">
-							<Activity rows={opened.rows} timeline={opened.ticket.timeline} now={now} />
-							<Composer ticket={number} send={send} saving={view.saving.length} />
-						</section>
 					</div>
+					<aside className="tk-side" aria-label="Properties">
+						<div>
+							<h3>Properties</h3>
+							<Props page={page} number={number} now={now} />
+						</div>
+						<div className="made">
+							<h3>Made of</h3>
+							<span>
+								A lane and its steps, writing facts to one ledger stream. Type this in a tile to see
+								them:
+							</span>
+							<code className="cmd">map --ticket {number}</code>
+						</div>
+					</aside>
 				</div>
-				<aside className="tk-side" aria-label="Properties">
-					<div>
-						<h3>Properties</h3>
-						<Props page={page} number={number} now={now} />
-					</div>
-					<div className="made">
-						<h3>Made of</h3>
-						<span>
-							A lane and its steps, writing facts to one ledger stream. Type this in a tile to see
-							them:
-						</span>
-						<code className="cmd">map --ticket {number}</code>
-					</div>
-				</aside>
-			</div>
+			</AskStatus>
 		</div>
 	);
 }

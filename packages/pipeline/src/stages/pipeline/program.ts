@@ -133,6 +133,32 @@ import {LaneHome, LaneWork} from "./work.ts";
 
 const unknown = {_tag: "unknown" as const};
 
+type Leaned = {
+	readonly lean: string;
+	readonly why: string;
+	readonly cost?: string;
+	readonly sure?: number;
+};
+/**
+ * An approve ask's recommendation, only from the leans the plan recorded (review 1): every open
+ * question has a lean and a cost, and the least sure one gives the why and the cost. No question,
+ * or one without a lean or a cost: no recommendation. Pure.
+ */
+const recOfLeans = (questions: readonly Leaned[], picks: readonly string[]): Rec => {
+	if (questions.length === 0 || !picks.includes("approve"))
+		return Rec.cases.none.make({why: "The plan recorded no lean to recommend from"});
+	if (questions.some((q) => q.lean.trim() === "" || (q.cost ?? "").trim() === ""))
+		return Rec.cases.none.make({why: "The plan has an open question without a lean or a cost"});
+	const known = questions.every((q) => q.sure !== undefined);
+	const least = questions.reduce((a, q) => ((q.sure ?? 0) < (a.sure ?? 0) ? q : a));
+	return Rec.cases.pick.make({
+		pick: "approve",
+		why: questionLine(least.why.trim() === "" ? least.lean : least.why),
+		cost: questionLine(least.cost ?? ""),
+		sure: known ? Math.min(...questions.map((q) => q.sure ?? 0)) : null,
+	});
+};
+
 /** A failure, with the words a person can act on where it has them. */
 type Broke = {readonly _tag: string; readonly says?: string};
 
@@ -1696,6 +1722,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 					_tag: "plan",
 					version: cmd.carry?.version ?? 1,
 					plan: {...plan, questions: cmd.carry?.decided?.questions ?? []},
+					...(words === "" ? {} : {text: words}),
 				};
 			if (cmd.head !== undefined) {
 				const host = yield* CodeHost;
@@ -1713,41 +1740,21 @@ const laneInterpret = ({send, machines}: Stages) => ({
 					...(words === "" ? {} : {text: words}),
 				};
 			}
-			const questions = plan?.questions ?? [];
-			const sure =
-				questions.length > 0 && questions.every((q) => q.sure !== undefined)
-					? Math.min(...questions.map((q) => q.sure ?? 0))
-					: null;
-			const first = cmd.picks[0];
 			const rec =
-				previous !== undefined || first === undefined || kind === "spend"
-					? Rec.cases.none.make({
-							why:
-								previous === undefined
-									? "A priced recommendation is not available"
-									: "No recommendation was recorded",
-						})
-					: kind === "approve" && questions.some((q) => q.lean.trim() === "")
-						? Rec.cases.none.make({why: "The plan has an open question without a lean"})
-						: Rec.cases.pick.make({
-								pick: first,
-								why:
-									kind === "approve"
-										? "The plan covers the ticket"
-										: "The step recommends this answer",
-								cost:
-									kind === "approve"
-										? "Write and check the change"
-										: "Confidence and cost have not been measured",
-								sure: kind === "approve" ? sure : null,
-							});
+				previous !== undefined
+					? Rec.cases.none.make({why: "No recommendation was recorded"})
+					: kind === "spend"
+						? Rec.cases.none.make({why: "A priced recommendation is not available"})
+						: kind === "approve"
+							? recOfLeans(plan?.questions ?? [], cmd.picks)
+							: Rec.cases.none.make({why: "No lean was recorded for this question"});
 			const ask = previous === undefined ? cmd.ask : `${cmd.ask}/sealed`;
 			const sealed = yield* sealAsk({
 				ask,
 				for: kind,
 				step: cmd.step ?? "unknown",
 				repo,
-				why: null,
+				why: cmd.why ?? null,
 				what,
 				picks: cmd.picks.map((pick, i) => ({pick, does: cmd.does?.[i] ?? `Take ${pick}`})),
 				rec,
@@ -1757,13 +1764,15 @@ const laneInterpret = ({send, machines}: Stages) => ({
 				...(previous === undefined ? {} : {replaces: cmd.ask}),
 				...(trace === null ? {} : {trace}),
 			});
+			// The sealed ask first, then the old one withdrawn: a stop between the two leaves the
+			// replacement to answer, never a lane waiting on nothing (review 2).
+			yield* tickets.write(cmd.number, ask, sealed);
 			if (previous !== undefined)
 				yield* tickets.write(cmd.number, `withdraw/${cmd.ask}`, {
 					type: "withdrawn",
 					ask: cmd.ask,
 					why: "changed",
 				});
-			yield* tickets.write(cmd.number, ask, sealed);
 			yield* send("step", `asks: ${cmd.what} Answer it in: ticket --ticket ${cmd.number}`);
 			return null;
 		}).pipe(Effect.mapError(() => unknown)),

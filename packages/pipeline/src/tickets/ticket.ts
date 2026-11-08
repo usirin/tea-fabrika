@@ -609,6 +609,26 @@ export const factsOf = <T extends Fact["type"]>(
 ): readonly FactOf<T>[] =>
 	timeline.flatMap((e) => (e.fact.type === type ? [e.fact as FactOf<T>] : []));
 
+/**
+ * The asks no one may answer now: answered, withdrawn, or replaced by a sealed ask. A `changed`
+ * withdrawal closes its ask only once the replacement stands, so a crash between the two writes
+ * leaves the old ask waiting, never a ticket with nothing to answer. Pure.
+ */
+export const closedAsks = (timeline: readonly Entry[]): ReadonlySet<string> => {
+	const replaced = new Set(
+		factsOf(timeline, "asked").flatMap((a) =>
+			"format" in a && a.replaces !== undefined ? [a.replaces] : [],
+		),
+	);
+	return new Set([
+		...factsOf(timeline, "answered").map((a) => a.ask),
+		...factsOf(timeline, "withdrawn")
+			.filter((w) => w.why !== "changed" || replaced.has(w.ask))
+			.map((w) => w.ask),
+		...replaced,
+	]);
+};
+
 /** The current subject still matches the sealed display. Writer clocks never decide expiry. */
 export const answerRefused = (
 	timeline: readonly Entry[],

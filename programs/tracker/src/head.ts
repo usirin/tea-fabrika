@@ -1,6 +1,7 @@
 import {Writer} from "@kampus/fabrika-old";
-import {Asked} from "@kampus/pipeline/tickets/ask";
+import {AskShown, askShownOf} from "@kampus/pipeline/tickets/ask";
 import {
+	closedAsks,
 	type Entry,
 	type Fact,
 	factsOf,
@@ -69,7 +70,10 @@ export const OpenAsk = Schema.Struct({
 	ask: Id,
 	what: Title,
 	picks: Schema.NonEmptyArray(Title),
-	sealed: Schema.optionalKey(Asked),
+	/** A sealed ask as a window gets it, with no rec or blind draw. Left out: an ask from before sealing. */
+	sealed: Schema.optionalKey(AskShown),
+	/** What a sealed ask is for, as its fact says. */
+	for: Schema.optionalKey(Schema.String),
 	by: Writer,
 	/** For an agent's ask: the name its person goes by on this ledger (the entry's `whose`). */
 	whose: Schema.optional(Schema.String),
@@ -97,16 +101,15 @@ export type Head = typeof Head.Type;
 
 /** The asks with no answer, oldest first. A comment never answers one; only `answered` does. */
 export const openAsksOf = (timeline: readonly Entry[]): readonly OpenAsk[] => {
-	const answered = new Set(factsOf(timeline, "answered").map((a) => a.ask));
-	for (const withdrawn of factsOf(timeline, "withdrawn")) answered.add(withdrawn.ask);
+	const closed = closedAsks(timeline);
 	return timeline.flatMap((e) =>
-		e.fact.type === "asked" && !answered.has(e.fact.ask)
+		e.fact.type === "asked" && !closed.has(e.fact.ask)
 			? [
 					{
 						ask: e.fact.ask,
 						what: questionOf(e.fact),
 						picks: picksOf(e.fact) as readonly [string, ...string[]],
-						...("format" in e.fact ? {sealed: e.fact} : {}),
+						...("format" in e.fact ? {sealed: askShownOf(e.fact), for: e.fact.for} : {}),
 						by: e.by,
 						...(e.whose === undefined ? {} : {whose: e.whose}),
 						at: e.at,

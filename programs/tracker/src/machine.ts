@@ -610,7 +610,11 @@ const listOf = (s: Tracker): Shown["page"] => {
 
 /** One ticket as its page shows it, at `now`. `tickets`: every ticket read, for the hints' titles. */
 export const openedOf = (ticket: Ticket, now: number, tickets: readonly Ticket[]): Opened => ({
-	ticket,
+	// A window never gets a sealed ask's rec or blind draw (review 7): its asks carry what they show.
+	ticket: {
+		...ticket,
+		timeline: ticket.timeline.filter((e) => !(e.fact.type === "asked" && "format" in e.fact)),
+	},
 	head: headOf(ticket.timeline, now),
 	rows: rowsOf(ticket.timeline),
 	asks: openAsksOf(ticket.timeline),

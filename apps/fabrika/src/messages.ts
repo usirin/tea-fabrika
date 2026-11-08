@@ -1,5 +1,5 @@
 import {AskAnswer} from "@tea-fabrika/tracker";
-import {Cause, Effect, Exit, Schema} from "effect";
+import {Cause, Effect, Exit, Option, Schema} from "effect";
 import {AskKey, AsksNow} from "./asks.ts";
 import {DeskSchema, TileIdSchema} from "./desk/desk.ts";
 import {Does, KeyName, Keys} from "./desk/keymap.ts";
@@ -377,6 +377,10 @@ export const readToWindow = reader(ToWindow);
 export const readFromPage = reader(FromPage);
 /** What the page reads from the host, on the desk's port. */
 export const readToPage = reader(ToPage);
+const AnswerId = Schema.Struct({type: Schema.Literal("ask_answer"), id: Schema.String});
+/** The id of an answer the page sent, even one whose value does not read: its reply needs it. `null`: no answer. */
+export const answerIdOf = (raw: unknown): string | null =>
+	Option.getOrNull(Option.map(Schema.decodeUnknownOption(AnswerId)(raw), (m) => m.id));
 /** What main reads from the page, on the desk's port, before it passes the rest on to the host. */
 export const readToApp = reader(ToApp);
 /** What main reads of the host's messages on the desk's port: the asks, for the Dock badge. */

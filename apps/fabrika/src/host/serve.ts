@@ -66,6 +66,7 @@ import {keysProgram, type Snapshot} from "../keys/program.ts";
 import {type Down, PROTOCOL, type Up} from "../link.ts";
 import {
 	type AgentOn,
+	answerIdOf,
 	type FromPage,
 	type LedgerLink,
 	readFromPage,
@@ -881,6 +882,15 @@ export const serve = (options: {
 					return;
 				}
 				case "ask_answer":
+					// Only a page the person opened answers: a link that never opened one saw no ask.
+					if (!client.page) {
+						toPage(client, {
+							type: "ask_answered",
+							id: m.id,
+							why: "Open fabrika's window to answer",
+						});
+						return;
+					}
 					Effect.runForkWith(services)(
 						saveCell({type: "save", id: m.id, next: 1, write: {kind: "answer", ...m.value}}).pipe(
 							Effect.provideService(Ledger, ledger),
@@ -992,8 +1002,19 @@ export const serve = (options: {
 				case "on": {
 					if (m.port === "desk") {
 						const read = readFromPage(m.m);
-						if (read.kind === "read") fromPage(client, read.msg);
-						else warn(`refused a message from a page: ${read.why}`);
+						if (read.kind === "read") {
+							fromPage(client, read.msg);
+							return;
+						}
+						warn(`refused a message from a page: ${read.why}`);
+						// An answer the host cannot read still gets its reply, so the window never waits on it.
+						const id = answerIdOf(m.m);
+						if (id !== null)
+							toPage(client, {
+								type: "ask_answered",
+								id,
+								why: "The answer could not be read, so nothing was saved",
+							});
 						return;
 					}
 					const heard = screens.get(m.port)?.heard(m.m);

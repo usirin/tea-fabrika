@@ -12,7 +12,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import {AskView, StopView} from "./ask-window.tsx";
+import {AskStatus, AskView, StopView} from "./ask-window.tsx";
 import {lineOf, waits} from "./head.ts";
 import type {
 	Head,
@@ -111,36 +111,38 @@ export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
 	const {page} = view;
 	return (
 		<section className="tracker" aria-label="tracker">
-			<div className="tracker-column">
-				<Notices view={view} />
-				{!view.ready ? (
-					<p className="tracker-quiet">Reading the ledger…</p>
-				) : page.kind === "list" ? (
-					<ListPage
-						view={view}
-						page={page}
-						picked={picked}
-						pick={setPicked}
-						find={find}
-						setFind={(text) => {
-							setFind(text);
-							send({type: "query", value: {status: view.filter.show, find: text}});
-						}}
-						draft={{title, body, setTitle, setBody}}
-						act={send}
-					/>
-				) : (
-					<TicketPage
-						number={page.number}
-						opened={page.opened}
-						saving={view.saving}
-						draft={comments[page.number] ?? ""}
-						setDraft={(text) => setComments((all) => ({...all, [page.number]: text}))}
-						back={() => send({type: "query", value: {status: view.filter.show, find}})}
-						act={send}
-					/>
-				)}
-			</div>
+			<AskStatus>
+				<div className="tracker-column">
+					<Notices view={view} />
+					{!view.ready ? (
+						<p className="tracker-quiet">Reading the ledger…</p>
+					) : page.kind === "list" ? (
+						<ListPage
+							view={view}
+							page={page}
+							picked={picked}
+							pick={setPicked}
+							find={find}
+							setFind={(text) => {
+								setFind(text);
+								send({type: "query", value: {status: view.filter.show, find: text}});
+							}}
+							draft={{title, body, setTitle, setBody}}
+							act={send}
+						/>
+					) : (
+						<TicketPage
+							number={page.number}
+							opened={page.opened}
+							saving={view.saving}
+							draft={comments[page.number] ?? ""}
+							setDraft={(text) => setComments((all) => ({...all, [page.number]: text}))}
+							back={() => send({type: "query", value: {status: view.filter.show, find}})}
+							act={send}
+						/>
+					)}
+				</div>
+			</AskStatus>
 		</section>
 	);
 }

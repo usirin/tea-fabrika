@@ -15,10 +15,12 @@ import {askedFor, askedStep, LaneStep} from "@kampus/pipeline/tickets/steps";
 import {
 	type Entry,
 	answerRefused,
+	closedAsks,
 	factsOf,
 	fold,
 	mayWrite,
 	nameOf,
+	readAnswer,
 	readRow,
 	writtenDuring,
 } from "@kampus/pipeline/tickets/ticket";
@@ -199,8 +201,13 @@ const saveTicket = (cmd: ReturnType<typeof save>, write: TicketWrite) =>
 			for (let tries = 0; tries < TRIES; tries++) {
 				const rows = yield* ledger.readStream(inbox, 0, -1);
 				const timeline = timelineOf(ticket, rows);
-				const landed = timeline.find((e) => e.fact.type === "answered" && e.fact.ask === fact.ask);
-				if (landed !== undefined) return {ticket};
+				const landed = factsOf(timeline, "answered").find((a) => a.ask === fact.ask);
+				if (landed !== undefined) {
+					// The same pick again is one answer: a retry, or a second click. Another pick lost the race.
+					const won = readAnswer(timeline, landed)?.pick;
+					if (won === undefined || won === readAnswer(timeline, fact)?.pick) return {ticket};
+					return yield* Effect.fail(refusal(`Already answered: ${won}`));
+				}
 				const now = yield* Clock.currentTimeMillis;
 				const ask = factsOf(timeline, "asked").find((a) => a.ask === fact.ask);
 				const why =
@@ -240,11 +247,15 @@ const saveTicket = (cmd: ReturnType<typeof save>, write: TicketWrite) =>
 		return {ticket};
 	});
 
-/** Seal a parked old question once before any view is allowed to draw it. */
+/**
+ * Seal a parked old question once before any view is allowed to draw it. The sealed replacement is
+ * written first and the old ask withdrawn second, so a stop between the two leaves the replacement
+ * to answer; the next start writes the withdrawal. Code writes both, for the person (`sealerOf`).
+ */
 export const prepareAsk = (ticket: number, ask: string, draft: unknown) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
-		const writer = writerText(yield* Author);
+		const writer = writerText(sealerOf(yield* Author));
 		const inbox = streams(nameOf(ticket)).inbox;
 		for (let tries = 0; tries < TRIES; tries++) {
 			const rows = yield* ledger.readStream(inbox, 0, -1);
@@ -252,21 +263,29 @@ export const prepareAsk = (ticket: number, ask: string, draft: unknown) =>
 			const existing = factsOf(timeline, "asked").find(
 				(a) => "format" in a && (a.ask === ask || a.replaces === ask),
 			);
-			if (existing !== undefined && "format" in existing) return existing;
-			const old = factsOf(timeline, "asked").find((a) => a.ask === ask);
-			if (old === undefined || factsOf(timeline, "answered").some((a) => a.ask === ask))
-				return yield* Effect.fail(refusal("The pending question is missing"));
-			const sealed = yield* sealAsk({
-				...(draft as object),
-				ask: `${ask}/sealed`,
-				replaces: ask,
-				rec: {_tag: "none", why: "No recommendation was recorded"},
-			});
 			const withdrawn = factsOf(timeline, "withdrawn").some((w) => w.ask === ask);
-			const data = withdrawn ? sealed : {type: "withdrawn", ask, why: "changed"};
+			if (existing !== undefined && "format" in existing && (withdrawn || existing.ask === ask))
+				return existing;
+			const old = factsOf(timeline, "asked").find((a) => a.ask === ask);
+			if (
+				existing === undefined &&
+				(old === undefined || factsOf(timeline, "answered").some((a) => a.ask === ask))
+			)
+				return yield* Effect.fail(refusal("The pending question is missing"));
+			const sealed =
+				existing !== undefined && "format" in existing
+					? existing
+					: yield* sealAsk({
+							...(draft as object),
+							ask: `${ask}/sealed`,
+							replaces: ask,
+							rec: {_tag: "none", why: "No recommendation was recorded"},
+						});
+			const replaced = existing !== undefined;
+			const data = replaced ? {type: "withdrawn", ask, why: "changed"} : sealed;
 			const wrote = yield* ledger
 				.append(inbox, rows.at(-1)?.rev ?? 0, {
-					id: withdrawn ? sealed.ask : `withdraw/${ask}`,
+					id: replaced ? `withdraw/${ask}` : sealed.ask,
 					kind: data.type,
 					writer,
 					data,
@@ -285,11 +304,13 @@ export const preparePending = (number: number) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
 		const timeline = timelineOf(number, yield* ledger.readStream(streams(nameOf(number)).inbox));
-		const closed = new Set(
-			[...factsOf(timeline, "withdrawn"), ...factsOf(timeline, "answered")].map((f) => f.ask),
-		);
+		// Open, or replaced by a sealed ask but not yet withdrawn: a stop between the two writes.
+		const closed = closedAsks(timeline);
+		const answered = new Set(factsOf(timeline, "answered").map((a) => a.ask));
+		const withdrawn = new Set(factsOf(timeline, "withdrawn").map((w) => w.ask));
 		const pending = factsOf(timeline, "asked").filter(
-			(a) => !("format" in a) && !closed.has(a.ask),
+			(a) =>
+				!("format" in a) && !answered.has(a.ask) && (!closed.has(a.ask) || !withdrawn.has(a.ask)),
 		);
 		if (pending.length === 0) return;
 		const stored = foldLedger(yield* readFacts);
@@ -303,8 +324,6 @@ export const preparePending = (number: number) =>
 		const step = last !== undefined && Schema.is(LaneStep)(last) ? last : "plan";
 		for (const old of pending) {
 			if ("format" in old) continue;
-			const author = timeline.find((e) => e.fact.type === "asked" && e.fact.ask === old.ask)?.by;
-			if (author === undefined) continue;
 			const kind = askedFor(old.ask);
 			if (kind === "merge" || kind === "exam_merge" || (kind === "approve" && plan === undefined))
 				continue;
@@ -338,7 +357,7 @@ export const preparePending = (number: number) =>
 									.join("\n\n"),
 							},
 				...(old.trace === undefined ? {} : {trace: old.trace}),
-			}).pipe(Effect.provideService(Author, author));
+			});
 		}
 	});
 
@@ -348,11 +367,17 @@ export const preparePending = (number: number) =>
  * instead, so there it reads as the session's writer until a host's agents sign in as their
  * person.
  */
-export const hinterOf = (author: Writer): Writer =>
+export const hinterOf = (author: Writer): Writer => codeFor("duplicates", author);
+
+/** Who seals a parked old ask: code, as the agent `asks` working for whoever sits at the window. */
+const sealerOf = (author: Writer): Writer => codeFor("asks", author);
+
+/** Code named `id`, working for the person behind `author`. An agent for no one stays itself. */
+const codeFor = (id: string, author: Writer): Writer =>
 	author.kind === "user"
-		? {kind: "agent", id: "duplicates", for: author.id}
+		? {kind: "agent", id, for: author.id}
 		: "for" in author
-			? {kind: "agent", id: "duplicates", for: author.for}
+			? {kind: "agent", id, for: author.for}
 			: author;
 
 /** A ticket's duplicate hints, one fact each, under ids made from the ticket and the hint. */
