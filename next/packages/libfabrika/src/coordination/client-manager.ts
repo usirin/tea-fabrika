@@ -137,7 +137,7 @@ export class ClientManager extends Context.Service<
 					const placed = yield* ledger.append(MEMBERS, "founded", lineFor(from, founding));
 					if (placed._tag === "refused" && placed.why !== "id_reused")
 						return yield* new LedgerError({
-							why: "bad_row",
+							why: "refused",
 							message: `founded refused: ${placed.why}`,
 						});
 					return yield* read;
