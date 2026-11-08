@@ -254,7 +254,9 @@ type DeliveryCheck = Effect.Effect<
 	Ledger | RecordManager | Effect.Services<ReturnType<typeof writeId>>
 >;
 
-const world = Effect.fnUntraced(function* (options: {recordCap?: number; inputCap?: number} = {}) {
+const world = Effect.fnUntraced(function* (
+	options: {recordCap?: number; inputCap?: number; spentCap?: number} = {},
+) {
 	const dir = mkdtempSync(join(top, "w-"));
 	const db = open(join(dir, "project.db"));
 	const sql = nodeSql(db);
@@ -326,6 +328,7 @@ const world = Effect.fnUntraced(function* (options: {recordCap?: number; inputCa
 		waiting: {most: 3, ttl: 600_000},
 		ping: {min: 10_000, max: 60_000},
 		inputCap: options.inputCap ?? 1000,
+		spentCap: options.spentCap ?? 1000,
 		nextProcess: () => controls.next(),
 		deliver,
 		notify: (client: string, news: unknown) =>
@@ -390,6 +393,19 @@ const world = Effect.fnUntraced(function* (options: {recordCap?: number; inputCa
 	};
 });
 type World = Effect.Success<ReturnType<typeof world>>;
+
+// Compile-only law: a client cannot choose the connection whose state these calls change.
+const plainConnectionTypeLaw = (door: typeof Door.Service, wire: string) => {
+	// @ts-expect-error challenge requires a ConnectionId minted by the door or host
+	const challenge = door.challenge(wire);
+	// @ts-expect-error hello requires a ConnectionId minted by the door or host
+	const hello = door.initialize(wire, {}, {url: URL, tab: wire, name: wire});
+	// @ts-expect-error disconnect requires a ConnectionId minted by the door or host
+	const disconnect = door.disconnect(wire);
+	return [challenge, hello, disconnect];
+};
+void plainConnectionTypeLaw;
+
 const entries = (stream: string) =>
 	Ledger.use((l: typeof Ledger.Service) => Stream.runCollect(l.read(stream, 0)));
 const stamped = () => entries("door/inputs");
@@ -533,7 +549,7 @@ const enrolled = Effect.fnUntraced(function* (
 });
 
 describe("P10 review regressions", () => {
-	const pendingHello = Effect.fnUntraced(function* (
+	const signedHello = Effect.fnUntraced(function* (
 		d: typeof Door.Service,
 		k: World["window"],
 		client: string,
@@ -552,12 +568,81 @@ describe("P10 review regressions", () => {
 			signed: yield* k.sign(`fabrika-hello\n${URL}\n${client}\n${nonce}`),
 		};
 		const trusted = {url: URL, tab: client, name: k.fingerprint};
+		return {hello, trusted};
+	});
+	const pendingHello = Effect.fnUntraced(function* (
+		d: typeof Door.Service,
+		k: World["window"],
+		client: string,
+	) {
+		const {hello, trusted} = yield* signedHello(d, k, client);
 		expect(yield* d.initialize(client, hello, trusted)).toMatchObject({
 			_tag: "refused",
 			why: "not_granted",
 		});
 		return {hello, trusted};
 	});
+
+	it.effect(
+		"review 3.1: a full spent-receipt store writes nothing and keeps live nonces spent",
+		() =>
+			Effect.gen(function* () {
+				const w = yield* world({spentCap: 2});
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					const earlier = yield* online(d, w, "earlier");
+					yield* d.disconnect(earlier.client);
+					yield* pendingHello(d, w.otherWindow, "fill-cap");
+					const receipts = () => w.sql.exec("SELECT nonce,until FROM door_spent ORDER BY nonce");
+					const full = receipts();
+					expect(full).toHaveLength(w.settings.spentCap);
+					expect(full).toContainEqual(expect.objectContaining({nonce: earlier.nonce}));
+					const overflow = yield* signedHello(d, w.agent, "overflow");
+					const before = w.sql.exec("SELECT total_changes() total")[0]?.total;
+					const result = yield* Effect.result(
+						d.initialize("overflow", overflow.hello, overflow.trusted),
+					);
+					expect.soft(result).toMatchObject({
+						_tag: "Failure",
+						failure: {_tag: "LedgerError", why: "storage"},
+					});
+					expect.soft(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(before);
+					expect.soft(receipts()).toEqual(full);
+					yield* TestClock.adjust(w.settings.waiting.ttl - 1);
+					const beforeReplay = w.sql.exec("SELECT total_changes() total")[0]?.total;
+					expect(
+						yield* d.initialize(earlier.client, earlier.hello, {
+							url: URL,
+							tab: earlier.hello.tab,
+							name: w.window.fingerprint,
+						}),
+					).toMatchObject({_tag: "refused", why: "bad_nonce"});
+					expect(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(beforeReplay);
+				}).pipe(w.provide);
+			}),
+	);
+
+	it.effect("review 3.3: two connections receive different door-minted ids", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const door: typeof d & {
+					readonly connect?: () => Effect.Effect<Parameters<typeof d.challenge>[0]>;
+				} = d;
+				assert(door.connect, "Door.connect must mint a connection id without client input");
+				const first = yield* door.connect();
+				const second = yield* door.connect();
+				expect(first).toBeTypeOf("string");
+				expect(first.length).toBeGreaterThan(0);
+				expect(second).toBeTypeOf("string");
+				expect(second.length).toBeGreaterThan(0);
+				expect(second).not.toBe(first);
+				yield* d.challenge(first);
+				yield* d.challenge(second);
+			}).pipe(w.provide);
+		}),
+	);
 
 	it.effect(
 		"review 2.2: a live unknown hello stays spent after a direct key grant before expiry",
