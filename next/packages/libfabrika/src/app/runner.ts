@@ -42,6 +42,7 @@ import {
 	Start,
 	RuntimeRecord,
 	RunnerMail,
+	sha256,
 	SessionManager,
 	SigningRefused,
 	SignRequest,
@@ -50,7 +51,6 @@ import {
 	type Writer,
 } from "../coordination/index.ts";
 import {Failure, Policy, Recovery, type Supervision} from "../coordination/recovery.ts";
-import {sha256} from "../data/archive.ts";
 import {
 	Alarm,
 	CheckedWriter,
@@ -98,7 +98,7 @@ const Dispatched = Schema.Struct({
 	build: Schema.String,
 });
 type Dispatched = typeof Dispatched.Type;
-const decodeDispatched = Schema.decodeUnknownSync(Schema.Array(Dispatched));
+const decodeDispatched = Schema.decodeUnknownResult(Schema.Array(Dispatched));
 
 /** The turn a crash may cut: an input stepped and about to be appended. */
 const Turn = Schema.TaggedUnion({prepared: {id: Schema.NonEmptyString}});
@@ -679,7 +679,9 @@ export class ProgramRunner extends Context.Service<
 						};
 						return {live: fresh, dirty: false};
 					}
-					const cmds = yield* pure("saved_state", () => decodeDispatched(saved.cmds));
+					const decoded = decodeDispatched(saved.cmds);
+					if (Result.isFailure(decoded)) return yield* new ProgramDown({why: "saved_state"});
+					const cmds = decoded.success;
 					const {saved: next, ran} = yield* pure("saved_state", () =>
 						Saved.upgrade(saved.saved, program.state, process.build),
 					);
@@ -1352,7 +1354,13 @@ export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError"
 	why: Schema.Literals(["bad_input", "bad_client"]),
 }) {}
 
-type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError | ProcessError;
+type RunnerFailure =
+	| LedgerError
+	| ProgramDown
+	| RunnerError
+	| SinkError
+	| ProcessError
+	| NotGranted;
 
 const cmdType = (job: Dispatched): string =>
 	Option.match(decodeTyped(job.cmd), {onNone: () => "", onSome: (c) => c.type});
