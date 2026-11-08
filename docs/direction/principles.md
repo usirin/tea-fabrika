@@ -103,6 +103,11 @@ repos can choose differently, and we do not force our beliefs on them.
 - **Breaks it:** a guess hard-coded for everyone, a setting with no default or an unsafe one, or a
   flag nobody records the use of.
 
+## Decided rules
+
+- **fabrika is for building, not enterprise security** (owner, 2026-11-08). An admin's invite is
+  already trust, so recovery has no wait and no barrier.
+
 ## Other candidates
 
 The design-language draft offers five lines for the design system itself, in fabrika's words. They

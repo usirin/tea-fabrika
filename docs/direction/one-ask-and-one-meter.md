@@ -336,6 +336,9 @@ const jev = liveJev(key, {calls: 2_000}, meter.of(self))   // the dollar cap is 
   reports `null`, as Codex does, the charge is worked out from the turn's
   `tokens` and a price table (Langfuse's "inferred"). The price table is the
   same one the estimate reads.
+- **Every container job records its run seconds and who started it,** from the first job
+  (owner, 2026-11-08, [experiment 229](../../experiments/229-browser-only-friends.md) row 31).
+  It follows from "record wide, read later": who started a job is lost if it is not written then.
 
 ## The meter on subscriptions
 

@@ -37,6 +37,10 @@ const DEFAULTS = {
 - **The harness and model stay settings.** Each stage picks them in
   `fabrika.toml`, as [one fabrika.toml per repo](./one-fabrika-toml-per-repo.md)
   says. This note changes the defaults, not the shape.
+- **How a hand-run step runs on `next/`** (owner, 2026-11-08). Codex `gpt-6.1-sol`,
+  effort xhigh, priority tier, through `codex exec --json`. Codex's sandbox keeps
+  `.git` read-only, so the step leaves its changes in the working copy, and the lead
+  commits them as the bot and signs with that step's key.
 
 ## Why
 
