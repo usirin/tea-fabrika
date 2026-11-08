@@ -39,13 +39,14 @@ import {type Sql} from "../data/referee.ts";
 import {SpanSink} from "../data/sink.ts";
 import {nodeSql} from "../data/sqlite.ts";
 import {type SpanRow} from "../data/trace.ts";
+import {processId} from "../id.test-support.ts";
 import {type Update as WatcherUpdate} from "./entry.ts";
 import {Input, Program} from "./program.ts";
 
 const SEED = 119120;
-const PROCESS = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
-const REPLACEMENT = "process_01jc9q4w7z3m8n5r2t6v0xkb4e";
-const DOOR = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
+const PROCESS = Effect.runSync(processId);
+const REPLACEMENT = Effect.runSync(processId);
+const DOOR = Effect.runSync(processId);
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const OTHER_TRACE = "0bf92f3577b34da6a3ce929d0e0e4736";

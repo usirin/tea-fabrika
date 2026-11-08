@@ -29,6 +29,10 @@
 			"paths": ["next/packages/tuval/src/desktop"]
 		},
 		{
+			"name": "next-libfabrika-entry",
+			"paths": ["next/packages/libfabrika/src/index.ts", "next/packages/libfabrika/src/testing.ts"]
+		},
+		{
 			"name": "next-mcp",
 			"paths": ["next/packages/libfabrika/src/mcp"]
 		},
@@ -47,6 +51,10 @@
 		{
 			"name": "next-transport",
 			"paths": ["next/packages/libfabrika/src/transport"]
+		},
+		{
+			"name": "next-id",
+			"paths": ["next/packages/libfabrika/src/id.ts"]
 		},
 		{
 			"name": "apps",

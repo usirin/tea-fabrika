@@ -11,6 +11,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, beforeEach, describe, expect, it, vi} from "@effect/vitest";
+import {Id} from "@kampus/libfabrika";
 import * as C from "@kampus/libfabrika/coordination";
 import {
 	Archive,
@@ -42,9 +43,11 @@ const ADD_SAW = {
 	kept: null,
 	old: null,
 } as const;
-const OTHER_PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjt";
+const ids = Effect.runSync(Id.Generator.pipe(Effect.provide(Id.Generator.layer)));
+const processId = (): string => Effect.runSync(ids.next(Id.Process));
+const OTHER_PROCESS = processId();
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
-const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
+const PROCESS = processId();
 const SAW = {
 	code: "1234",
 	label: "Browser",
@@ -54,7 +57,7 @@ const SAW = {
 	has: ["verify", "seal"],
 } as const;
 const SENT = "2026-11-08T04:00:00.000Z";
-const START = "process_01m6v5270hetdrt4r8h9vvjwjr";
+const START = processId();
 const TOOK = {label: "Browser", where: "test", how: "panel", check: "touch"} as const;
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const SPACE = "fabrika-client";
@@ -2376,8 +2379,8 @@ describe("P33 signal ids belong to the brain", () => {
 	// A DOWN's entry id is ["DOWN", recipient, ref]. The door refuses any id in that space, so no
 	// receipt holder can hold a signal's id before the brain writes it.
 	const BRAIN = "SHA256:brain";
-	const WATCHER = "process_01m6v5270hetdrt4r8h9vvjwjv";
-	const TARGET = "process_01m6v5270hetdrt4r8h9vvjwjw";
+	const WATCHER = processId();
+	const TARGET = processId();
 	const brainFrom = {
 		by: BRAIN,
 		for: PERSON,

@@ -18,6 +18,7 @@ import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, expectTypeOf, it} from "@effect/vitest";
 import {Effect, Layer, Schema, Stream} from "effect";
 import * as fc from "fast-check";
+import {processId} from "../id.test-support.ts";
 import * as data from "./index.ts";
 import {Doorbell, Ledger} from "./ledger.ts";
 import type {Entry, InputId, Line} from "./log.ts";
@@ -29,7 +30,7 @@ const READER = "gateway:t1";
 
 // T246's approved addendum: a parent names the door's process, then its input counter.
 const PARENT = /^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-[1-9][0-9]*$/;
-const PROCESS = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
+const PROCESS = Effect.runSync(processId);
 const parents = (count: number): ReadonlyArray<string> =>
 	fc.sample(fc.stringMatching(PARENT), {seed: SEED, numRuns: count});
 const [goodParent = "", otherParent = ""] = parents(2);
@@ -318,8 +319,8 @@ describe("p68, an entry keeps its parent", () => {
 	});
 
 	it.effect.each([
-		["first character 0, counter 1", `in-process_${"0".repeat(26)}-1`],
-		["first character 7, counter 41", `in-process_7${"z".repeat(25)}-41`],
+		["first character 0, counter 1", "in-process_0000000000e008000000000000-1"],
+		["first character 7, counter 41", "in-process_7zzzzzzzzzfzzvzzzzzzzzzzzz-41"],
 	] as const)("p68b, a parent with %s is placed and kept as sent", ([, parent]) =>
 		Effect.gen(function* () {
 			const {answers, entries} = yield* handIn([{...json(), parent}]);
