@@ -155,10 +155,36 @@ const shows = (page: Page, id: string, what: string, ok: (text: string) => boole
 const prompted = (page: Page, id: string) =>
 	shows(page, id, "the prompt", (t) => lastRow(t) === "tsh$");
 
+/** Type at the focused prompt, with at most three attempts and an exact echo check. */
+const typeLine = async (page: Page, id: string, line: string) => {
+	const expected = `tsh$ ${line}`;
+	const seen: string[] = [];
+	for (let attempt = 0; attempt < 3; attempt += 1) {
+		if (attempt > 0) {
+			await page.keyboard.press("Control+e");
+			await page.keyboard.press("Control+u");
+			await prompted(page, id);
+		}
+		await page.keyboard.type(line);
+		let row = lastRow(await screen(page, id));
+		for (let i = 0; i < 200 && row !== expected; i += 1) {
+			await page.waitForTimeout(50);
+			row = lastRow(await screen(page, id));
+		}
+		if (row === expected) return;
+		seen.push(row);
+		console.warn(
+			`${id}: typing attempt ${attempt + 1} for ${JSON.stringify(line)}; saw ${JSON.stringify(row)}`,
+		);
+	}
+	throw new Error(
+		`${id}: could not type ${JSON.stringify(line)} after 3 attempts; saw ${JSON.stringify(seen)}`,
+	);
+};
+
 /** Type a line at the focused tile's prompt, wait to see it echoed, and press Enter. */
 const run = async (page: Page, id: string, line: string) => {
-	await page.keyboard.type(line);
-	await shows(page, id, `the line ${line}`, (t) => lastRow(t) === `tsh$ ${line}`);
+	await typeLine(page, id, line);
 	await page.keyboard.press("Enter");
 };
 
@@ -852,8 +878,7 @@ const systemKeys = async (app: ElectronApplication, page: Page) => {
 	await gone(page, "pop-asks");
 	await prompted(page, "t1");
 
-	await page.keyboard.type("ab");
-	await shows(page, "t1", "typing", (t) => lastRow(t) === "tsh$ ab");
+	await typeLine(page, "t1", "ab");
 	await page.keyboard.press("ArrowLeft");
 	await pressEnds(page, "Control+d", "taken");
 	await shows(page, "t1", "Ctrl-D deleting a character", (t) => lastRow(t) === "tsh$ a");
@@ -1067,9 +1092,10 @@ const flow = async (app: ElectronApplication) => {
 	);
 	const next = split[1] ?? "";
 	await prompted(page, next);
-	await page.keyboard.type("ab");
+	await typeLine(page, next, "ab");
 	await page.keyboard.press("Control+b");
 	await page.keyboard.press("Control+b");
+	// Keep the insertion raw so a retry cannot hide a cursor-routing bug.
 	await page.keyboard.type("X");
 	await shows(page, next, "aXb", (t) => lastRow(t) === "tsh$ aXb");
 	check("Ctrl-B twice sends one Ctrl-B on: the cursor went back one", true);
