@@ -14,7 +14,7 @@ A study of Rust CSS linters, Biome's among them, is running; if it finds one tha
 rules, that replaces stylelint. Not decided: which tests move, each an exam change for the owner.
 
 ```sh
-pnpm lint     # oxlint-plugins/lint.ts, format.ts --check, then the code-graph and browser checks
+pnpm lint     # oxlint-plugins/lint.ts, format.ts --check, the code-graph and browser checks, then stylelint.ts on tracked CSS
 pnpm format   # format.ts, lint.ts --fix, format.ts
 ```
 

@@ -254,7 +254,7 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
 
 ```sh
 pnpm typecheck
-pnpm lint       # oxlint and oxfmt: lint rules, format and imports, changing nothing
+pnpm lint       # oxlint, oxfmt and stylelint: lint rules, format, imports and CSS, changing nothing
 pnpm test
 ```
 
