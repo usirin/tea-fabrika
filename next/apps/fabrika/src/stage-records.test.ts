@@ -535,7 +535,7 @@ describe("P12 real object adapters", () => {
 	});
 	it("R2 archive plant: unlike checksum encodings or a lost acknowledgement must not lose the local copy", async () => {
 		await world(async (stage) => {
-			const {bucketCalls} = await import("./runtime.ts");
+			const {bucketCalls} = await import("@kampus/libfabrika/workers/runtime");
 			const calls = bucketCalls(stage.bucket);
 			const body = new TextEncoder().encode("local health archive");
 			const expected = createHash("sha256").update(body).digest("hex");

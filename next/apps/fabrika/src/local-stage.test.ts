@@ -1,13 +1,13 @@
-import {readdirSync, mkdtempSync, rmSync} from "node:fs";
+import {mkdtempSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {RuntimeLifecycle} from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import {NodeServices} from "@effect/platform-node";
 import {afterEach, expect, it} from "@effect/vitest";
+import type {BrainFact} from "@kampus/libfabrika/brain-fact";
 import {ProcessIdGenerator} from "@kampus/libfabrika/coordination";
 import {Context, Effect} from "effect";
 import {vi} from "vitest";
-import {brainOutbox, type BrainFact} from "./local-stage.ts";
 
 // P12, next/. Exercise startStage twice with one durable home. Only deployment and HTTP are fake.
 vi.mock("../alchemy.run.ts", () => ({
@@ -42,16 +42,6 @@ afterEach(() => {
 	vi.unstubAllEnvs();
 	for (const folder of homes.splice(0)) rmSync(folder, {recursive: true, force: true});
 });
-const fact = {
-	id: "brain-start-1",
-	_tag: "started",
-	start: "process_01jc9q4w7z3m8n5r2t6v0xkb4d",
-	after: null,
-	build: "build-a",
-	why: "open",
-	pid: 417,
-	at: 42,
-};
 
 it("a later dev command links its first start to the last runtime in that home", async () => {
 	const {startStage} = await import("./stage.ts");
@@ -87,29 +77,3 @@ it("a later dev command links its first start to the last runtime in that home",
 	expect(starts[1]).toMatchObject({after: starts[0]!.start, build: "build-b"});
 	expect(starts[1]!.start).not.toBe(starts[0]!.start);
 });
-
-it.effect("an outbox id accepts an exact retry once and rejects changed content", () =>
-	Effect.gen(function* () {
-		const folder = home();
-		const outbox = yield* brainOutbox(folder);
-		yield* outbox.add(fact);
-		yield* outbox.add(fact);
-		expect(yield* outbox.pending).toEqual([fact]);
-		expect(yield* Effect.flip(outbox.add({...fact, build: "build-b"}))).toMatchObject({
-			_tag: "BrainError",
-			why: "id_reused",
-		});
-		expect(yield* (yield* brainOutbox(folder)).pending).toEqual([fact]);
-	}),
-);
-
-it.effect("outbox writes release both the pending file and its directory handle", () =>
-	Effect.gen(function* () {
-		const outbox = yield* brainOutbox(home());
-		const before = readdirSync("/dev/fd").sort();
-		yield* outbox.add(fact);
-		expect(readdirSync("/dev/fd").sort()).toEqual(before);
-		yield* outbox.flush(() => Effect.void);
-		expect(readdirSync("/dev/fd").sort()).toEqual(before);
-	}),
-);

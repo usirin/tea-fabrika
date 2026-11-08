@@ -10,10 +10,11 @@ import {revokeText, SigningRefused, Start, type From} from "@kampus/libfabrika/c
 import type {SpanRow} from "@kampus/libfabrika/data";
 import {nodeSql} from "@kampus/libfabrika/sqlite";
 import {Attached} from "@kampus/libfabrika/transport";
+import {GatewayService, gatewayRuntime} from "@kampus/libfabrika/workers/gateway";
+import {ProjectService} from "@kampus/libfabrika/workers/runtime";
 import {Deferred, Effect, Exit, Option, Tracer} from "effect";
 import {afterEach, describe, expect, it, vi} from "vitest";
-import {GatewayService, gatewayRuntime} from "./gateway.ts";
-import {ProjectService, projectRuntime, type Env} from "./runtime.ts";
+import {projectRuntime, settings, type Env} from "./runtime.ts";
 
 const table = vi.hoisted(() => ({programs: {} as Record<string, {hash: string; source: string}>}));
 vi.mock("./table.ts", () => table);
@@ -425,7 +426,7 @@ describe("P12 Gateway recording", () => {
 			} as unknown as Env["PROJECT"];
 			// oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
 			const socket = ws as unknown as WebSocket;
-			const runtime = gatewayRuntime(ctx, {...w.env, PROJECT: project});
+			const runtime = gatewayRuntime(ctx, {...w.env, PROJECT: project}, settings(w.env));
 			try {
 				const gateway = await runtime.runPromise(GatewayService),
 					before = w.recorded.length;

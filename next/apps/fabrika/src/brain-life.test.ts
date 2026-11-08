@@ -175,76 +175,6 @@ describe("P12 local brain life", () => {
 		expect(descendants.filter(living)).toEqual([]);
 		await expect(fetch(s.url)).rejects.toThrow();
 	});
-	it.effect(
-		"p81 plant: sample workerd RSS, replace at 500000000, never measure the Node parent",
-		() =>
-			Effect.gen(function* () {
-				const {checkMemory} = yield* Effect.promise(() => import("./local-stage.ts"));
-				const sampled: Array<number> = [],
-					requests: Array<unknown> = [];
-				for (const bytes of [499_999_999, 500_000_000, 500_000_001]) {
-					yield* checkMemory({
-						pid: 417,
-						sample: (pid: number) =>
-							Effect.sync(() => {
-								sampled.push(pid);
-								return bytes;
-							}),
-						replace: (reason: unknown) =>
-							Effect.sync(() => {
-								requests.push(reason);
-							}),
-					});
-				}
-				expect(sampled).toEqual([417, 417, 417]);
-				expect(sampled).not.toContain(process.pid);
-				expect(requests).toEqual([
-					{why: "memory", pid: 417, bytes: 500_000_000},
-					{why: "memory", pid: 417, bytes: 500_000_001},
-				]);
-			}),
-	);
-	it.effect(
-		"p81/content plant: remove a pending fact before acknowledgement or leak error text",
-		() =>
-			Effect.gen(function* () {
-				const {brainOutbox} = yield* Effect.promise(() => import("./local-stage.ts"));
-				const folder = home();
-				let outbox = yield* brainOutbox(folder);
-				const fact = {
-					id: "brain-start-1",
-					_tag: "started",
-					start: "process_01jc9q4w7z3m8n5r2t6v0xkb4d",
-					after: null,
-					build: "build-a",
-					why: "open",
-					pid: 417,
-					at: 42,
-				};
-				yield* outbox.add(fact);
-				yield* Effect.exit(outbox.flush(() => Effect.fail(new Error("private control failure"))));
-				outbox = yield* brainOutbox(folder);
-				expect(yield* outbox.pending).toEqual([fact]);
-				const sent: Array<unknown> = [];
-				yield* outbox.flush((row: unknown) =>
-					Effect.sync(() => {
-						sent.push(row);
-					}),
-				);
-				expect(sent).toEqual([fact]);
-				expect(yield* outbox.pending).toEqual([]);
-				yield* outbox.add(fact);
-				yield* outbox.flush((row: unknown) =>
-					Effect.sync(() => {
-						sent.push(row);
-					}),
-				);
-				expect(sent).toEqual([fact, fact]); // Same stable id lets Project deduplicate a lost reply.
-				expect(readFileSync(join(folder, "brain.pending.jsonl"), "utf8")).not.toContain(
-					"private control failure",
-				);
-			}),
-	);
 	it("p81 plant: an outer retry loop defeats Alchemy's three-replacement brake", async () => {
 		const s = await launch();
 		let prior = 0;
@@ -266,7 +196,7 @@ describe("P12 local brain life", () => {
 		for (const [n, ms] of delays.entries()) expect(ms).toBeGreaterThanOrEqual(250 * 2 ** n);
 		await pause();
 		expect(tree(s.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command))).toEqual([]);
-		const {brainOutbox} = await import("./local-stage.ts");
+		const {brainOutbox} = await import("@kampus/libfabrika/node/local-stage");
 		const pending = await Effect.runPromise(
 			Effect.flatMap(brainOutbox(s.folder), (o: any) => o.pending),
 		);
