@@ -214,8 +214,12 @@ const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
 class Unread extends Schema.TaggedError<Unread>()("Unread", {path: Schema.String}) {}
 class Refused extends Schema.TaggedError<Refused>()("Refused", {findings: Schema.Number}) {}
 
-const read = (path: string) =>
-	Effect.try({try: () => readFileSync(join(ROOT, path), "utf8"), catch: () => new Unread({path})});
+const read = Effect.fnUntraced(function* (path: string) {
+	return yield* Effect.try({
+		try: () => readFileSync(join(ROOT, path), "utf8"),
+		catch: () => new Unread({path}),
+	});
+});
 
 /** `pnpm lint:compiler`: every `.tsx` file in `next/`, tests left out, against the ledger. */
 const lint = Effect.gen(function* () {

@@ -299,8 +299,9 @@ const make = (sql: Sql, who: {readonly object: string}) => {
 			}),
 	});
 
-	const attempt = <A>(step: () => A): Effect.Effect<A, SinkError> =>
-		Effect.try({try: () => atomic(step), catch: sinkError});
+	const attempt = Effect.fnUntraced(function* <A>(step: () => A) {
+		return yield* Effect.try({try: () => atomic(step), catch: sinkError});
+	});
 
 	/** Sends one chain's rows to its part, on through each `rolled`. Deletes only what landed. */
 	const send = Effect.fnUntraced(function* (
