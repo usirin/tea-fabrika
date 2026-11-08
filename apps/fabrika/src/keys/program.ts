@@ -1,8 +1,7 @@
 import {defineMachine} from "@demlik/tea";
 import {defineProgram, end, flag, input, kind, output} from "@kampus/fabrika-old";
-import {Effect, Schema} from "effect";
+import {Context, Effect, Schema, type Stream} from "effect";
 import {Does, Key, Keys} from "../desk/keymap.ts";
-import {KeybindingManager} from "../host/keybindings.ts";
 
 export const Edit = Schema.TaggedUnion({
 	prefix: {key: Schema.String},
@@ -31,6 +30,18 @@ export const Snapshot = Schema.Struct({
 	changes: Schema.Array(Change),
 });
 export type Snapshot = typeof Snapshot.Type;
+
+export interface KeybindingManager {
+	readonly current: Effect.Effect<Snapshot>;
+	readonly changes: Stream.Stream<Snapshot>;
+	readonly edit: (
+		edit: typeof Edit.Type,
+		from: {readonly how: "pressed"; readonly window: string; readonly said: number},
+	) => Effect.Effect<Snapshot, {readonly why: string}>;
+}
+export const KeybindingService = Context.Service<KeybindingManager, KeybindingManager>(
+	"@kampus/fabrika-app-old/KeybindingManager",
+);
 
 const Session = Schema.Struct({open: Schema.Boolean});
 const session = defineMachine({
@@ -76,7 +87,7 @@ export const keysProgram = defineProgram({
 	view: {machine: "session", data: Session, of: (s) => s},
 	main: ({serve, machines, flags, send}) =>
 		Effect.gen(function* () {
-			const manager = yield* KeybindingManager;
+			const manager = yield* KeybindingService;
 			yield* machines.session.get("session").start();
 			yield* serve({
 				close: () => end,
@@ -90,3 +101,21 @@ export const keysProgram = defineProgram({
 			});
 		}).pipe(Effect.scoped),
 });
+
+/** tsh waits on this request until the editor closes, without opening another tile. */
+export const keysRequest = (open: () => string | null) =>
+	defineProgram({
+		name: "keys",
+		description: "Searches and changes keyboard shortcuts.",
+		inputs: {close: input(Schema.Null, "Closes this editor.", {personOnly: true})},
+		outputs: {},
+		machines: keysProgram.machines,
+		view: {machine: "session", data: Session, of: (s: typeof Session.Type) => s},
+		main: ({serve, machines}) =>
+			Effect.gen(function* () {
+				yield* machines.session.get("session").start();
+				const why = open();
+				if (why !== null) return yield* Effect.fail({message: why});
+				yield* serve({close: () => end});
+			}).pipe(Effect.scoped),
+	});

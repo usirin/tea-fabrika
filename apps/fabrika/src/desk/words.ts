@@ -1,5 +1,6 @@
 import {defineProgram, type Entry, flag, listed} from "@kampus/fabrika-old";
 import {Context, Effect, Layer, Schema} from "effect";
+import {keysRequest} from "../keys/program.ts";
 import {TileIdSchema} from "./desk.ts";
 import {type Does, SHOWS, type Show, wordOf} from "./keys.ts";
 
@@ -122,7 +123,9 @@ const PLAIN = [
 	plain({kind: "fold"}, "Folds this tile into a strip. The last open tile does not fold."),
 	plain({kind: "zoom"}, "Zooms this tile, or undoes the zoom."),
 	plain({kind: "close"}, 'Asks "close t1? (y/n)" on the bottom line; y closes this tile.'),
-	...SHOWS.flatMap((what) => (what === "jobs" ? [] : [plain({kind: "show", what}, SHOWN[what])])),
+	...SHOWS.flatMap((what) =>
+		what === "jobs" || what === "keys" ? [] : [plain({kind: "show", what}, SHOWN[what])],
+	),
 ];
 
 /** The desk words for one tile's tsh: each tells `said` what it does, from that tile. */
@@ -132,6 +135,10 @@ export const deskWords = (said: (does: Does) => string | null): readonly Entry[]
 		listed(split, services),
 		listed(focus, services),
 		listed(workspace, services),
+		listed(
+			keysRequest(() => said({kind: "show", what: "keys"})),
+			Layer.empty,
+		),
 		...PLAIN.map((program) => listed(program, services)),
 	];
 };

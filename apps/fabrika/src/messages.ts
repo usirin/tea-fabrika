@@ -230,7 +230,10 @@ export const ToPage = Schema.Union([
 		),
 	}),
 	AsksMessage,
-	Schema.Struct({type: Schema.Literal("show"), what: Schema.Literals(SHOWS)}),
+	Schema.Struct({
+		type: Schema.Literal("show"),
+		what: Schema.Literals([...SHOWS, "focus-next", "focus-previous"]),
+	}),
 	Schema.Struct({
 		type: Schema.Literal("desk"),
 		desk: DeskSchema,
@@ -298,7 +301,11 @@ export const FromPage = Schema.Union([
 	Schema.Struct({type: Schema.Literal("area"), width: Pixels, height: Pixels}),
 	Schema.Struct({type: Schema.Literal("go"), tile: TileIdSchema}),
 	Schema.Struct({type: Schema.Literal("pick"), workspace: Schema.String}),
-	Schema.Struct({type: Schema.Literal("run"), does: Does}),
+	Schema.Struct({
+		type: Schema.Literal("run"),
+		does: Does,
+		via: Schema.optionalKey(Schema.Struct({keys: Schema.String})),
+	}),
 	Schema.Struct({type: Schema.Literal("later"), key: AskKey}),
 	Schema.Struct({type: Schema.Literal("back"), key: AskKey}),
 	Schema.Struct({type: Schema.Literal("seen")}),

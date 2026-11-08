@@ -1,6 +1,5 @@
 import {createHash} from "node:crypto";
 import {
-	Context,
 	Deferred,
 	Effect,
 	FileSystem,
@@ -16,12 +15,16 @@ import {
 	defaults,
 	File,
 	type Key,
-	type Keys,
 	patchKeys,
 	spell,
 	writtenKeys,
 } from "../desk/keymap.ts";
-import {Edit, type Snapshot} from "../keys/program.ts";
+import {
+	Edit,
+	type KeybindingManager as Manager,
+	KeybindingService as ManagerService,
+	type Snapshot,
+} from "../keys/program.ts";
 import {settingsFile} from "./settings.ts";
 
 export {Edit};
@@ -47,15 +50,9 @@ const version = (text: string | null) =>
 const spelling = (key: Key) => `${key._tag === "after_prefix" ? "<prefix>" : ""}${spell(key.key)}`;
 const same = (a: Key, b: Key) => a._tag === b._tag && a.key === b.key;
 
-export class KeybindingManager extends Context.Service<
-	KeybindingManager,
-	{
-		readonly current: Effect.Effect<Snapshot>;
-		readonly changes: Stream.Stream<Snapshot>;
-		readonly edit: (edit: typeof Edit.Type, from: Source) => Effect.Effect<Snapshot, Refused>;
-	}
->()("@kampus/fabrika-app-old/KeybindingManager") {
-	static make = (options: {readonly folder: string; readonly mac: boolean; readonly by: string}) =>
+export type KeybindingManager = Manager;
+export const KeybindingManager = Object.assign(ManagerService, {
+	make: (options: {readonly folder: string; readonly mac: boolean; readonly by: string}) =>
 		Effect.gen(function* () {
 			const fs = yield* FileSystem.FileSystem;
 			const path = yield* Path.Path;
@@ -94,7 +91,18 @@ export class KeybindingManager extends Context.Service<
 				Effect.gen(function* () {
 					const current = yield* SubscriptionRef.get(state);
 					const digest = version(text);
-					if (!initial && digest === current.version) return current;
+					if (!initial && digest === current.version) {
+						if (current.keys.file._tag !== "refused") return current;
+						const recovered = {
+							...current,
+							keys: {
+								...current.keys,
+								file: text === null ? File.cases.none.make({}) : File.cases.read.make({}),
+							},
+						};
+						yield* SubscriptionRef.set(state, recovered);
+						return recovered;
+					}
 					const decoded = text === null ? Result.succeed(defaults) : decodeKeys(text, options.mac);
 					if (Result.isFailure(decoded)) {
 						yield* refuse(decoded.failure.why, decoded.failure.line);
@@ -224,10 +232,10 @@ export class KeybindingManager extends Context.Service<
 						return applied;
 					}),
 				);
-			return KeybindingManager.of({
+			return ManagerService.of({
 				current: SubscriptionRef.get(state),
 				changes: SubscriptionRef.changes(state),
 				edit,
 			});
-		});
-}
+		}),
+});

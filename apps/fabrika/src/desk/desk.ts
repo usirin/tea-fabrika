@@ -381,7 +381,7 @@ export const end = Cmd.make("end", {input: Process, ok: Done, err: []});
 export const kill = Cmd.make("kill", {input: Process, ok: Done, err: []});
 /** The frame shows something, on the page whose key asked: no tile and no layout changes. */
 export const show = Cmd.make("show", {
-	input: Schema.Struct({what: Schema.Literals(SHOWS)}),
+	input: Schema.Struct({what: Schema.Literals([...SHOWS, "focus-next", "focus-previous"])}),
 	ok: Done,
 	err: [],
 });
@@ -599,10 +599,7 @@ const act = (s: Open, does: Does): Step => {
 			return [next, keep(next)];
 		}
 		case "cycle": {
-			const tiles = tilesOf(ws).filter((tile) => !tile.folded);
-			const at = tiles.findIndex((tile) => tile.id === ws.focused);
-			const to = tiles[(at + (does.to === "next" ? 1 : tiles.length - 1)) % tiles.length];
-			return to === undefined ? [s, []] : went(s, to.id);
+			return [s, [show({what: does.to === "next" ? "focus-next" : "focus-previous"})]];
 		}
 		case "go":
 			return went(s, does.tile);

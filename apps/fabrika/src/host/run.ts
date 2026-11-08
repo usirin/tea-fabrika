@@ -9,15 +9,14 @@ import {Author} from "@tea-fabrika/tracker";
 import {Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope, Stream} from "effect";
 import {SocketServer} from "effect/socket";
 import {BUILD} from "../build-id.ts";
-import {decodeKeys} from "../desk/keymap.ts";
 import {fileHistory, sharedHistory} from "../editor/history.ts";
 import {agentSessions} from "./agent-session.ts";
 import {connectionOf, hostLedger} from "./connection.ts";
+import {KeybindingManager} from "./keybindings.ts";
 import {holdLock} from "./lock.ts";
 import {logSteps, sampleLag} from "./log.ts";
 import {leaveNote, takeNote} from "./restart.ts";
 import {serve} from "./serve.ts";
-import {settingsFile} from "./settings.ts";
 import {pathsOf, reach} from "./socket.ts";
 
 // The host on a home: its socket, its files and its services, around the server (serve.ts).
@@ -168,9 +167,11 @@ export const runHost = (options: {
 		};
 		// The keys file, read now and again on each save, by the one reader of the settings folder.
 		const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
-		const keys = settingsFile(settings, "keybindings.toml", (text) => decodeKeys(text, mac)).pipe(
-			Stream.provideContext(platform),
-		);
+		const keybindings = yield* KeybindingManager.make({
+			folder: settings,
+			mac,
+			by: writerText(Context.get(ledger, Author)),
+		});
 		yield* Effect.logInfo(`fabrika host: listening, pid ${pid}`);
 		// Every start's line: its build, and after a restart who restarted the host before it, and why.
 		yield* Effect.logInfo("host_began").pipe(
@@ -196,7 +197,8 @@ export const runHost = (options: {
 		);
 		return yield* serve({
 			history,
-			keys,
+			keys: Stream.empty,
+			keybindings,
 			ours,
 			build: named,
 			agents: {server: agents},
