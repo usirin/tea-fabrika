@@ -5,7 +5,11 @@ import {createServer, type Socket} from "node:net";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {promisify} from "node:util";
-import type {Shell} from "@kampus/fabrika-old";
+import {Ledger, type Shell, streams, writerText} from "@kampus/fabrika-old";
+import {layerSqliteSync} from "@kampus/fabrika-old/sqlite";
+import {kindOf, nameOf} from "@kampus/pipeline/tickets/ticket";
+import {SEVEN, SEVEN_TITLE} from "@tea-fabrika/tracker/seven";
+import {Effect} from "effect";
 import {_electron, type ElectronApplication, type Locator, type Page} from "playwright";
 
 // The app, driven end to end through Playwright's Electron support: the whole flow in the one
@@ -89,6 +93,8 @@ import {_electron, type ElectronApplication, type Locator, type Page} from "play
 // The ARIA stage (`ariaStage`) is not in the whole run: `-- --aria` runs it alone, on a home of its
 // own. It reads the accessibility tree of each key state at the five layouts and compares it with
 // `aria/`, and it only advises: a diff is printed, never failed on.
+// `-- --focus` takes the design foundations' 60 images: six states, five layouts, both looks.
+// Run each build with its own SHOTS folder to keep the 120 before and after images apart.
 //
 // Last, as no person ever does (there is no stop command), the run stops the host it started by
 // its pid, and the fake one too, and checks with pgrep that nothing of either home is left.
@@ -2067,46 +2073,75 @@ const tilesLook = async () => {
 const LAYOUTS = ["one", "side", "stacked", "2x2", "small"] as const;
 type Layout = (typeof LAYOUTS)[number];
 
-/**
- * The five layouts, built once each, every one in a workspace of its own and on tsh tiles at their
- * prompts: one tile; two side by side; two stacked; a 2x2; and a 2x2 in a 1024 by 700 window,
- * through the DevTools window size as `infoModeSmall` sets it. Each layout is handed to `visit`
- * with its tiles in reading order, so the pictures and the ARIA tree look at one and the same grid.
- * The small window is last, since it stays small.
- */
+const addedTile = async (
+	page: Page,
+	before: readonly (string | null)[],
+	total = before.length + 1,
+) => {
+	const now = await until(
+		"a new tile",
+		() => tiles(page),
+		(t) => t.length === total && t.some((id) => !before.includes(id)),
+	);
+	const id = now.find((t) => t !== null && !before.includes(t));
+	if (id === undefined || id === null) throw new Error("no new tile");
+	return id;
+};
+
+const splitTile = async (page: Page, id: string, key: "|" | "-") => {
+	await focusOn(page, id);
+	const before = await tiles(page);
+	await prefixed(page, key);
+	const made = await addedTile(page, before);
+	await prompted(page, made);
+	return made;
+};
+
+/** Check both tile count and placement, including before a capture after a state changed. */
+const layoutIs = async (page: Page, layout: Layout, ids: readonly string[]) => {
+	await tilesAre(page, ids);
+	const columns = layout === "side" || layout === "2x2" || layout === "small" ? 2 : 1;
+	const rows = layout === "stacked" || layout === "2x2" || layout === "small" ? 2 : 1;
+	await until(
+		`${layout}: ${columns} columns, ${rows} rows, ${columns * rows} tiles`,
+		() =>
+			page.locator("[data-tile]").evaluateAll((all) =>
+				all.map((el) => {
+					const box = el.getBoundingClientRect();
+					return {x: box.x, y: box.y};
+				}),
+			),
+		(boxes) =>
+			boxes.length === columns * rows &&
+			new Set(boxes.map((b) => b.x)).size === columns &&
+			new Set(boxes.map((b) => b.y)).size === rows,
+	);
+};
+
+/** Start with one tile, or a pipe's two windows, and build the promised layout around them. */
+const arrange = async (page: Page, layout: Layout, first: string, second?: string) => {
+	let ids = [first];
+	if (layout !== "one") {
+		const b = second ?? (await splitTile(page, first, layout === "stacked" ? "-" : "|"));
+		if (second !== undefined && layout === "stacked") {
+			await focusOn(page, first);
+			await prefixed(page, " ");
+		}
+		ids =
+			layout === "2x2" || layout === "small"
+				? [first, await splitTile(page, first, "-"), b, await splitTile(page, b, "-")]
+				: [first, b];
+	}
+	await layoutIs(page, layout, ids);
+	await focusOn(page, first);
+	return ids;
+};
+
+/** Five fresh workspaces, shared by the screenshots and ARIA captures. Small comes last. */
 const grid = async (
 	page: Page,
 	visit: (layout: Layout, ids: readonly string[]) => Promise<void>,
 ) => {
-	/** The tile that came after `before`: the one id now drawn that was not. */
-	const added = async (before: readonly (string | null)[]) => {
-		const now = await until(
-			"a new tile",
-			() => tiles(page),
-			(t) => t.some((id) => !before.includes(id)),
-		);
-		const id = now.find((t) => !before.includes(t)) ?? "";
-		await prompted(page, id);
-		return id;
-	};
-	const workspace = async () => {
-		const before = await tiles(page);
-		await prefixed(page, "N");
-		return added([...before]);
-	};
-	const split = async (id: string, key: "|" | "-") => {
-		await focusOn(page, id);
-		const before = await tiles(page);
-		await prefixed(page, key);
-		return added(before);
-	};
-	const square = async () => {
-		const a = await workspace();
-		const b = await split(a, "|");
-		await split(a, "-");
-		await split(b, "-");
-		return tiles(page).then((t) => t.filter((id): id is string => id !== null));
-	};
 	for (const layout of LAYOUTS) {
 		if (layout === "small") {
 			const cdp = await page.context().newCDPSession(page);
@@ -2122,20 +2157,137 @@ const grid = async (
 				(size) => size === "1024x700",
 			);
 		}
-		const ids =
-			layout === "one"
-				? [await workspace()]
-				: layout === "side" || layout === "stacked"
-					? await workspace().then(async (a) => [a, await split(a, layout === "side" ? "|" : "-")])
-					: await square();
-		await focusOn(page, ids[0] ?? "");
-		await visit(layout, ids);
+		const before = await tiles(page);
+		await prefixed(page, "N");
+		const first = await addedTile(page, before, 1);
+		await prompted(page, first);
+		await visit(layout, await arrange(page, layout, first));
 	}
 };
 
 /** The key states the ARIA stage reads, in the order it puts each layout through them. */
-const STATES = ["plain", "close-asked", "info", "palette", "strips", "pipe", "closing"] as const;
+const STATES = [
+	"plain",
+	"asks-dot",
+	"close-asked",
+	"info",
+	"palette",
+	"strips",
+	"closing",
+	"pipe",
+] as const;
 type State = (typeof STATES)[number];
+
+/** The existing, made-up ticket #7 has a plan waiting on the person. No agent is started. */
+const seedAsks = (own: string) =>
+	Effect.runPromise(
+		Effect.gen(function* () {
+			const ledger = yield* Ledger;
+			for (const entry of SEVEN) {
+				const name = nameOf(entry.ticket);
+				const writer = writerText(entry.by);
+				yield* ledger.register(name, writer);
+				yield* ledger.send(streams(name).inbox, `focus-${entry.pos}`, {
+					kind: kindOf(entry.fact.type),
+					writer,
+					data: entry.fact,
+				});
+			}
+		}).pipe(Effect.provide(layerSqliteSync({path: join(own, "ledger.sqlite")}))),
+	);
+
+const FOCUS = {
+	"tile-focused": "apps/fabrika/docs/focus",
+	"tracker-ring-input": "programs/tracker/docs/focus",
+	"tracker-ring-row": "programs/tracker/docs/focus",
+	"tracker-ring-composer": "programs/tracker/docs/focus",
+	"asks-dot": "apps/fabrika/docs/focus",
+	"map-you": "programs/map/docs/focus",
+} as const;
+const LOOKS = ["dark", "light"] as const;
+
+/** All 60 planned images per build, under SHOTS with the plan's repo-relative folders. */
+const focusShots = async () => {
+	const own = await mkdtemp(join(tmpdir(), "fh-focus-"));
+	await seedAsks(own);
+	const pending = new Set(
+		Object.keys(FOCUS).flatMap((state) =>
+			LAYOUTS.flatMap((layout) => LOOKS.map((look) => `${state}-${layout}-${look}`)),
+		),
+	);
+	const planned = pending.size;
+	const app = await launch(own);
+	try {
+		const page = await app.firstWindow();
+		await prompted(page, "t1");
+		await app.evaluate(({BrowserWindow}) =>
+			BrowserWindow.getAllWindows()[0]?.setContentSize(1440, 900),
+		);
+		await until(
+			"the window at 1440 by 900",
+			() => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
+			(size) => size === "1440x900",
+		);
+		const ringOn = async (target: Locator) => {
+			await page.keyboard.press("Tab");
+			await target.focus();
+			await until(
+				"the keyboard focus ring",
+				() =>
+					target.evaluate((el) => el === document.activeElement && el.matches(":focus-visible")),
+				(on) => on,
+			);
+		};
+		await grid(page, async (layout, ids) => {
+			const first = ids[0] ?? "";
+			const both = async (state: keyof typeof FOCUS, prepare: () => Promise<unknown>) => {
+				const folder = join(shots, FOCUS[state]);
+				await mkdir(folder, {recursive: true});
+				for (const look of LOOKS) {
+					await lookIs(app, page, look);
+					await prepare();
+					await layoutIs(page, layout, ids);
+					await page.mouse.move(1, 1);
+					await page.waitForTimeout(250);
+					const name = `${state}-${layout}-${look}`;
+					const file = join(folder, `${name}.png`);
+					await page.screenshot({path: file});
+					check(`one planned image: ${name}`, pending.delete(name));
+					saved.push(file);
+				}
+				await lookIs(app, page, "dark");
+			};
+			await both("tile-focused", () => focusOn(page, first));
+			await both("asks-dot", () => page.locator(".udot").waitFor({state: "visible"}));
+			await run(page, first, "tracker");
+			const tracker = tile(page, first).getByLabel("tracker view");
+			await tracker.waitFor();
+			await both("tracker-ring-input", () => ringOn(tracker.getByLabel("search titles")));
+			await both("tracker-ring-row", () =>
+				ringOn(tracker.locator(".tracker-list button").filter({hasText: SEVEN_TITLE})),
+			);
+			await both("tracker-ring-composer", () => ringOn(tracker.getByLabel("new ticket title")));
+			await focusOn(page, first);
+			await page.keyboard.press("Control+c");
+			await prompted(page, first);
+			await until(
+				"tracker closed",
+				() => tracker.count(),
+				(n) => n === 0,
+			);
+			await run(page, first, "map --ticket 7");
+			await both("map-you", () =>
+				tile(page, first).locator(".mapbar .dot.you").waitFor({state: "visible"}),
+			);
+		});
+		check("every planned focus image was taken", pending.size === 0, [...pending]);
+		console.log(`focus: ${planned} planned images taken; ${planned * 2} across before and after`);
+	} finally {
+		await app.close().catch(() => {});
+		const pid = await hostPid(own);
+		if (pid !== null) await stop(pid);
+	}
+};
 
 /** Where the approved trees are kept: `<state>-<layout>.aria.yml`. */
 const ARIA = join(here, "aria");
@@ -2211,6 +2363,7 @@ const ariaStage = async (): Promise<0 | 2> => {
 	const own = await mkdtemp(join(tmpdir(), "fh-aria-"));
 	const out = join(shots, "aria-received");
 	await mkdir(out, {recursive: true});
+	await seedAsks(own);
 	const app = await launch(own);
 	const tally = {same: 0, diff: 0, fresh: 0, flake: 0, skipped: 0};
 	let reached: 0 | 2 = 0;
@@ -2229,16 +2382,15 @@ const ariaStage = async (): Promise<0 | 2> => {
 			() => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
 			(size) => size === "1440x900",
 		);
-		let filed = false;
-
 		const read = async () => {
 			await page.mouse.move(1, 1);
 			const pid = await hostPid(own);
 			const tree = await page.locator("body").ariaSnapshot();
 			return scrubbed(tree, own, pid === null ? [] : [pid]);
 		};
-		const cell = async (state: State, layout: Layout) => {
+		const cell = async (state: State, layout: Layout, ids: readonly string[]) => {
 			const name = `${state}-${layout}`;
+			if (state !== "strips") await layoutIs(page, layout, ids);
 			await page.waitForTimeout(250);
 			const first = await read();
 			await page.waitForTimeout(1100);
@@ -2270,12 +2422,16 @@ const ariaStage = async (): Promise<0 | 2> => {
 			const last = rest.at(-1) ?? first;
 			for (const state of STATES) {
 				try {
-					if (state === "plain") await cell(state, layout);
+					if (state === "plain") await cell(state, layout, ids);
+					if (state === "asks-dot") {
+						await page.locator(".udot").waitFor({state: "visible"});
+						await cell(state, layout, ids);
+					}
 					if (state === "close-asked") {
 						await focusOn(page, first);
 						await prefixed(page, "x");
 						await askedIs(page, `close ${first}? (y/n)`);
-						await cell(state, layout);
+						await cell(state, layout, ids);
 						await page.keyboard.press("n");
 						await noQuestion(page);
 					}
@@ -2287,7 +2443,7 @@ const ariaStage = async (): Promise<0 | 2> => {
 							() => infoItem(page).getAttribute("aria-pressed"),
 							(on) => on === "true",
 						);
-						await cell(state, layout);
+						await cell(state, layout, ids);
 						await page.keyboard.press("Escape");
 						await until(
 							"info mode off",
@@ -2299,7 +2455,7 @@ const ariaStage = async (): Promise<0 | 2> => {
 						await focusOn(page, first);
 						await page.keyboard.press("Meta+k");
 						await page.getByRole("dialog", {name: "Commands"}).waitFor();
-						await cell(state, layout);
+						await cell(state, layout, ids);
 						await page.keyboard.press("Escape");
 						await gone(page, "pop-palette");
 					}
@@ -2311,7 +2467,7 @@ const ariaStage = async (): Promise<0 | 2> => {
 						await focusOn(page, first);
 						await prefixed(page, "f");
 						await page.locator(`[data-strip="${first}"]`).waitFor();
-						await cell(state, layout);
+						await cell(state, layout, ids);
 						await page.locator(`[data-strip="${first}"]`).click();
 						await tilesAre(page, ids);
 					}
@@ -2320,25 +2476,31 @@ const ariaStage = async (): Promise<0 | 2> => {
 							skip(state, layout, "a pipe opens a tile per window, so it is never one tile");
 							continue;
 						}
+						// Closing was captured on the plain grid. Keep its first tile, then build a
+						// fresh pair for the pipe and split both columns for a 2x2.
+						for (const id of await tiles(page)) {
+							if (id === null || id === first) continue;
+							await focusOn(page, id);
+							await prefixed(page, "x");
+							await askedIs(page, `close ${id}? (y/n)`);
+							await page.keyboard.press("y");
+							await until(
+								`${id} closed`,
+								() => tile(page, id).count(),
+								(n) => n === 0,
+							);
+						}
+						await tilesAre(page, [first]);
 						await focusOn(page, first);
 						const before = await tiles(page);
 						await run(page, first, "tracker | ticket");
-						const after = await until(
-							"the pipe's second window",
-							() => tiles(page),
-							(t) => t.length === before.length + 1,
-						);
-						const ticket = after.find((t) => t !== null && !before.includes(t)) ?? "";
+						const ticket = await addedTile(page, before);
+						const pipeIds = await arrange(page, layout, first, ticket);
 						const tracker = tile(page, first).getByLabel("tracker view");
 						await tracker.waitFor();
-						if (!filed) {
-							await tracker.getByLabel("new ticket title").fill("The tree, read");
-							await tracker.getByRole("button", {name: "File ticket"}).click();
-							filed = true;
-						}
-						await tracker.getByRole("button", {name: /The tree, read/}).click();
-						await tile(page, ticket).getByText("The tree, read").first().waitFor();
-						await cell(state, layout);
+						await tracker.locator(".tracker-list button").filter({hasText: SEVEN_TITLE}).click();
+						await tile(page, ticket).getByText(SEVEN_TITLE).first().waitFor();
+						await cell(state, layout, pipeIds);
 					}
 					if (state === "closing") {
 						await focusOn(page, last);
@@ -2352,7 +2514,15 @@ const ariaStage = async (): Promise<0 | 2> => {
 							() => closingIn(page, last),
 							(n) => n === 1,
 						);
-						await cell(state, layout);
+						await cell(state, layout, ids);
+						await prefixed(page, "x");
+						await askedIs(page, `stop ${last} now? (y/n)`);
+						await page.keyboard.press("y");
+						await until(
+							`${last} stopped`,
+							() => tile(page, last).count(),
+							(n) => n === 0,
+						);
 					}
 				} catch (e) {
 					reached = 2;
@@ -2417,6 +2587,7 @@ const all = async () => {
 		await asksSwap();
 		await reconnect();
 		await tilesLook();
+		await focusShots();
 	} finally {
 		// No person stops the host: there is no command for it. The run stops its own, by its pid.
 		const pid = await hostPid(home);
@@ -2424,10 +2595,10 @@ const all = async () => {
 	}
 };
 
-// `-- --tiles` takes the tiles' pictures alone, with no other stage, and `-- --aria` the ARIA
-// trees alone: it answers 2 only when it cannot reach a state, never on a diff.
+// Each capture stage can also run alone. ARIA answers 2 only when it cannot reach a state.
 if (process.argv.includes("--tiles")) await tilesLook();
 else if (process.argv.includes("--aria")) process.exitCode = await ariaStage();
+else if (process.argv.includes("--focus")) await focusShots();
 else await all();
 const after = await pgrep(here);
 check(
