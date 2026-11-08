@@ -13,8 +13,10 @@ import {
 	Archive,
 	Doorbell,
 	Ledger,
+	LedgerError,
 	LedgerTransaction,
 	RecordManager,
+	SinkError,
 	SpanSink,
 	type Sql,
 } from "@kampus/libfabrika/data";
@@ -137,7 +139,15 @@ const world = () => {
 	let ids = 0;
 	let starts = 0;
 	let steps = 0;
-	const controls = {throws: true, cutRetryable: false, retryableCuts: 0};
+	const controls = {
+		throws: true,
+		cutRetryable: false,
+		retryableCuts: 0,
+		cutRecorded: false,
+		cutFlush: false,
+		cuts: 0,
+		failDelivery: false,
+	};
 	const Model = Schema.Struct({count: Schema.Int});
 	type Model = typeof Model.Type;
 	// Wire inputs use _tag, tea uses type. The program's Msg keeps tea's own tag.
@@ -202,7 +212,21 @@ const world = () => {
 			C.ClientManager.layer(founder).pipe(Layer.provide(data())),
 			records,
 			Archive.memory,
-			SpanSink.layer(project.sql, {object: START}),
+			Layer.effect(
+				SpanSink,
+				Effect.gen(function* () {
+					const real = yield* SpanSink;
+					return {
+						...real,
+						flush: Effect.suspend(() => {
+							if (!controls.cutFlush) return real.flush;
+							controls.cutFlush = false;
+							controls.cuts++;
+							return Effect.fail(new SinkError({why: "storage", held: 0}));
+						}),
+					};
+				}),
+			).pipe(Layer.provideMerge(SpanSink.layer(project.sql, {object: START}))),
 			manager(),
 		);
 	const runner = (pid: string) => {
@@ -248,6 +272,15 @@ const world = () => {
 		...project.sql,
 		exec: (query, ...args) => {
 			if (
+				controls.cutRecorded &&
+				query.startsWith("UPDATE door_bindings") &&
+				args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"recorded"'))
+			) {
+				controls.cutRecorded = false;
+				controls.cuts++;
+				throw new Error("lost recorded save");
+			}
+			if (
 				controls.cutRetryable &&
 				query.startsWith("UPDATE door_bindings") &&
 				args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"retryable"'))
@@ -283,6 +316,7 @@ const world = () => {
 			meta?: {id: string; sentAt: string; seen: number},
 		) => {
 			deliveries.push({process: pid, parent: envelope.id, letter: meta?.id});
+			if (controls.failDelivery) return Effect.fail(new LedgerError({why: "unreachable"}));
 			return A.ProgramRunner.use((r) =>
 				r.msg({
 					id: meta?.id ?? envelope.id,
@@ -365,6 +399,153 @@ const recover = (w: ReturnType<typeof world>) =>
 	});
 
 describe("P34 door recovery", () => {
+	// Enumerate the states, then generate IDs and resend counts within every case.
+	// A random choice of state could leave the same missing branch untested again.
+	for (const state of ["allocated", "recorded", "delivered", "retryable"] as const) {
+		for (const holds of [false, true]) {
+			it(`p69 plant, rebind only some states: ${state}, inbox ${holds ? "holds" : "lacks"} the letter`, async () => {
+				await fc.assert(
+					fc.asyncProperty(fc.uuid(), fc.integer({min: 2, max: 4}), (letter, resends) =>
+						Effect.runPromise(
+							Effect.gen(function* () {
+								const w = world();
+								const queued = request(false, letter);
+								const binding = () => {
+									const [row] = w.project.sql.exec(
+										"SELECT value FROM door_bindings WHERE letter=?",
+										`${P1}/${letter}`,
+									);
+									return Schema.decodeUnknownSync(
+										Schema.fromJsonString(
+											Schema.Struct({
+												id: Schema.String,
+												process: Schema.String,
+												state: Schema.Struct({_tag: Schema.String}),
+											}),
+										),
+									)(row?.value);
+								};
+								const inbox = Ledger.use((l) => Stream.runCollect(l.read(`${NAME}/inbox`, 0)));
+								yield* w.boot;
+								const old = yield* Effect.gen(function* () {
+									const client = yield* w.online();
+									// Fail the next boundary, leaving exactly this durable state.
+									w.controls.cutRecorded = state === "allocated";
+									// Review 5: the recorded row survives a failed trace flush.
+									w.controls.cutFlush = state === "recorded";
+									w.controls.cutRetryable = state === "delivered";
+									w.controls.failDelivery = true;
+									expect(
+										yield* Effect.exit(Door.use((d) => d.route(client, "process.send", queued))),
+									).toMatchObject({_tag: "Failure"});
+									expect(binding()).toMatchObject({process: P1, state: {_tag: state}});
+									expect(w.controls.cuts + w.controls.retryableCuts).toBe(
+										state === "retryable" ? 0 : 1,
+									);
+									expect(yield* inbox).toEqual([]);
+									return binding().id;
+								}).pipe(Effect.provide(w.layer()));
+								w.reopen();
+								w.controls.failDelivery = false;
+								// Acceptance can race the door's saved state. Use the real runner,
+								// keeping the unfinished door row, never fabricating a receipt.
+								if (holds)
+									yield* A.ProgramRunner.use((r) =>
+										r.msg({
+											id: letter,
+											envelope: {
+												id: Schema.decodeUnknownSync(
+													Schema.NonEmptyString.pipe(Schema.brand("InputId")),
+												)(old),
+												by: C.Writer.cases.person.make({key: w.window.fingerprint, for: PERSON}),
+												arrivedAt: 0,
+												input: {type: "press", poison: false},
+											},
+											sentAt: queued.sentAt,
+											seen: queued.seen,
+											span: {traceId: from().traceId, spanId: "00f067aa0ba902b7"},
+										}),
+									).pipe(Effect.provide(w.runner(P1)));
+								yield* A.ProgramRunner.use((r) =>
+									r.restart({id: `replace-${letter}`, build: "build-a"}),
+								).pipe(Effect.provide(w.runner(P1)));
+								w.reopen();
+								yield* Effect.gen(function* () {
+									const client = yield* w.online();
+									const d = yield* Door;
+									expect(yield* C.ProcessManager.use((p) => p.resolve(P1))).toMatchObject({
+										name: NAME,
+										state: {_tag: "live", process: P2},
+									});
+									yield* A.ProgramRunner.use((r) => r.open("successor")).pipe(
+										Effect.provide(w.runner(P2)),
+									);
+									const before = yield* inbox;
+									expect(before).toHaveLength(holds ? 1 : 0);
+									let steps = w.steps();
+									for (let n = 0; n < resends; n++) {
+										expect(yield* d.route(client, "process.send", queued)).toMatchObject({
+											_tag: "ok",
+											result: {_tag: "accepted", pos: 1},
+										});
+										if (!holds && n === 0) steps = w.steps();
+										expect(w.steps(), "resends must not apply an accepted letter again").toBe(
+											steps,
+										);
+									}
+									const rows = yield* inbox;
+									expect(rows).toMatchObject([{id: letter, pos: 1}]);
+									if (holds) {
+										expect(rows).toEqual(before);
+										expect(binding()).toMatchObject({id: old, process: P1});
+									} else {
+										const delivery = w.deliveries.at(-1)!;
+										const signed = yield* Effect.result(
+											d
+												.signer(delivery.parent, P2, "saved")
+												.pipe(Effect.provideService(C.SignRequest, {id: `write-${letter}`})),
+										);
+										expect({delivery, signed}).toMatchObject({
+											delivery: {process: P2, letter},
+											signed: {
+												_tag: "Success",
+												success: {parent: delivery.parent, by: {key: w.window.fingerprint}},
+											},
+										});
+										expect(delivery.parent).not.toBe(old);
+										expect(
+											yield* d.append({
+												id: `write-${letter}`,
+												parent: delivery.parent,
+												process: P2,
+												kind: "saved",
+												stream: `${NAME}/events`,
+												fact: Schema.TaggedStruct("saved", {count: Schema.Int}).make({count: 1}),
+											}),
+										).toMatchObject({_tag: "placed"});
+										expect(
+											yield* Ledger.use((l) => Stream.runCollect(l.read(`${NAME}/events`, 0))),
+										).toMatchObject([
+											{id: `write-${letter}`, parent: delivery.parent, by: w.window.fingerprint},
+										]);
+									}
+									expect(
+										yield* Effect.result(
+											d
+												.signer(old, P2, "saved")
+												.pipe(Effect.provideService(C.SignRequest, {id: `old-${letter}`})),
+										),
+									).toMatchObject({_tag: "Failure", failure: {why: "not_delivered"}});
+								}).pipe(Effect.provide(w.layer()));
+							}).pipe(Effect.provide(TestClock.layer())),
+						),
+					),
+					{seed: 119120, numRuns: 12},
+				);
+			});
+		}
+	}
+
 	it("p69 plant, bind a first delivery to the addressed process: queued input reaches the live successor and signs there", async () => {
 		await fc.assert(
 			fc.asyncProperty(fc.uuid(), (letter) =>

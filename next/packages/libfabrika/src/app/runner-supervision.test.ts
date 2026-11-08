@@ -91,6 +91,7 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 		adds: 0,
 		crashAdd: 0,
 		cut: "",
+		wakeAt,
 		hits: [] as string[],
 		downs: [] as Array<typeof Down.Type>,
 		timers: [] as number[],
@@ -119,6 +120,7 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 			}
 		: undefined;
 	const alarms: Array<number | null> = [];
+	let alarm: number | null = null;
 	const input = (id = "poison", m: unknown = {type: "poison", key: id}): Incoming => ({
 		id,
 		envelope: {
@@ -188,7 +190,7 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 			},
 			outputs: {},
 			writes: {},
-			wake: (s: Model) => (s.replies === 0 ? wakeAt : null),
+			wake: (s: Model) => (s.replies === 0 ? controls.wakeAt : null),
 		};
 	};
 	const base = () =>
@@ -266,6 +268,7 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 					Layer.succeed(Alarm, {
 						set: (at) =>
 							Effect.sync(() => {
+								alarm = at;
 								alarms.push(at);
 							}),
 					}),
@@ -282,6 +285,10 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 		authority,
 		controls,
 		alarms,
+		alarm: () => alarm,
+		consumeAlarm: () => {
+			alarm = null;
+		},
 		input,
 		base,
 		manager,
@@ -329,6 +336,147 @@ const recover = (w: ReturnType<typeof world>) =>
 	});
 
 describe("P34 runner supervision", () => {
+	// Cover every exit explicitly; generate the schedule and history inside each.
+	// The alarm is one slot. Firing it clears the slot before calling due.
+	for (const path of [
+		"after_observation",
+		"after_exit",
+		"after_down",
+		"after_start",
+		"after_checkpoint",
+		"due",
+		"Restart live",
+		"Restart down",
+		"external adoption",
+		"wake",
+	] as const) {
+		for (const history of [false, true]) {
+			it(`p80 plant, rearm only some paths: ${path}, ${history ? "saved" : "empty"} inbox`, async () => {
+				await fc.assert(
+					fc.asyncProperty(
+						fc.uuid(),
+						fc.integer({min: 1001, max: 60_000}),
+						fc.integer({min: 1, max: 1000}),
+						(id, time, n) =>
+							Effect.runPromise(
+								Effect.gen(function* () {
+									const restarting = path === "Restart live" || path === "Restart down";
+									// A selected Restart build gets a timer even if the old build had none.
+									const w = world(false, false, restarting ? null : time);
+									yield* w.boot;
+									if (history)
+										yield* ProgramRunner.use((r) => r.msg(w.input(id, {type: "add", n}))).pipe(
+											Effect.provide(w.layer()),
+										);
+									const before = yield* inbox.pipe(Effect.provide(w.manager()));
+									// A platform alarm has fired before due enters the runner.
+									const fire = (r: Context.Service.Shape<typeof ProgramRunner>, at: number) => {
+										w.consumeAlarm();
+										return r.due(at);
+									};
+									if (path === "wake") {
+										w.reopen();
+										yield* ProgramRunner.use((r) => r.open("wake")).pipe(Effect.provide(w.layer()));
+									} else if (path === "Restart live") {
+										w.controls.build = `build-${id}`;
+										w.controls.wakeAt = time;
+										yield* ProgramRunner.use((r) =>
+											r.restart({id: `restart-${id}`, build: w.controls.build}),
+										).pipe(Effect.provide(w.layer()));
+									} else {
+										const earlyCut = ["after_observation", "after_exit", "after_down"].includes(
+											path,
+										);
+										if (earlyCut) w.controls.cut = path;
+										yield* ProgramRunner.use((r) => failed(r.msg(w.input(`crash-${id}`)))).pipe(
+											Effect.provide(w.layer()),
+										);
+										w.reopen();
+										if (earlyCut)
+											yield* ProgramRunner.use((r) => failed(r.open("resume-down"))).pipe(
+												Effect.provide(w.layer()),
+											);
+										expect(w.alarm(), "only recovery is eligible while down").toBe(100);
+										if (earlyCut) expect(w.controls.hits).toEqual([path]);
+										if (path === "Restart down") {
+											w.controls.build = `build-${id}`;
+											w.controls.wakeAt = time;
+											yield* ProgramRunner.use((r) =>
+												r.restart({id: `restart-${id}`, build: w.controls.build}),
+											).pipe(Effect.provide(w.layer()));
+										} else if (path === "external adoption") {
+											yield* ProcessManager.use((p) =>
+												p.start(again(A, `external-${id}`), from()),
+											).pipe(Effect.provide(w.manager()));
+											w.reopen();
+											yield* ProgramRunner.use((r) => r.open("adopt")).pipe(
+												Effect.provide(w.layer()),
+											);
+										} else {
+											yield* TestClock.setTime(100);
+											const lateCut = path === "after_start" || path === "after_checkpoint";
+											if (lateCut) w.controls.cut = path;
+											yield* ProgramRunner.use((r) =>
+												lateCut ? failed(fire(r, 100)) : fire(r, 100),
+											).pipe(Effect.provide(w.layer()));
+											if (lateCut) {
+												expect(w.controls.hits).toEqual([path]);
+												w.reopen();
+												yield* ProgramRunner.use((r) => r.open("resume-live")).pipe(
+													Effect.provide(w.layer()),
+												);
+											}
+										}
+									}
+									const armed = w.alarm();
+									const recovery = yield* RecoveryStore.use((s) => s.load).pipe(
+										Effect.provide(
+											RecoveryStore.layer(w.state.sql, {name: NAME, capacity: 1024 ** 3}),
+										),
+									);
+									// The program is live, so no recovery deadline remains. Earlier down
+									// exits above checked the other side of the same earliest-deadline law.
+									expect(recovery?.recovery._tag ?? "live").toBe("live");
+									expect(
+										yield* ProcessManager.use((p) => p.isLive(path === "wake" ? A : B)).pipe(
+											Effect.provide(w.manager()),
+										),
+									).toBe(true);
+									expect(yield* inbox.pipe(Effect.provide(w.manager()))).toEqual(before);
+									expect(w.controls.timers).toEqual([]);
+									yield* Effect.gen(function* () {
+										const r = yield* ProgramRunner;
+										yield* TestClock.setTime(time);
+										yield* fire(r, time);
+										yield* fire(r, time);
+										expect({
+											armed,
+											timers: w.controls.timers,
+											view: (yield* r.open("timer")).view,
+										}).toEqual({
+											armed: time,
+											timers: [time],
+											view: {count: history ? n : 0, replies: 1},
+										});
+										expect(w.alarm()).toBeNull();
+										const rows = yield* inbox;
+										expect(rows).toHaveLength(before.length + 1);
+										expect(rows.at(-1)?.id).toBe(`${path === "wake" ? A : B}/due/${time}`);
+									}).pipe(Effect.provide(w.layer()));
+								}).pipe(Effect.provide(TestClock.layer())),
+							),
+					),
+					{
+						seed: 119120,
+						numRuns: 12,
+						// Review 5: Restart with no old timer and no accepted inbox letter.
+						examples: [["00000000-0000-4000-8000-000000000271", 1000, 7]],
+					},
+				);
+			});
+		}
+	}
+
 	it("p80 p55 plant, adopt without handoff: external successor folds unindexed person-only mail once across reopen", async () => {
 		await fc.assert(
 			fc.asyncProperty(fc.uuid(), fc.integer({min: 1, max: 1000}), (id, n) =>
