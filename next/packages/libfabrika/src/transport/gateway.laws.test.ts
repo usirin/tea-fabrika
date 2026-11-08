@@ -70,6 +70,55 @@ describe("P12 Gateway attachment laws", () => {
 			const f = yield* setup(() => Effect.succeed({_tag: "parked"} as const));
 			expect(yield* f.c.probe("session-1")).toBe(42);
 			expect(yield* f.c.probe("old-session")).toBeNull();
+			f.save(Attached.cases.new.make({client: "gateway/session-1", nonce: "fresh"}));
+			expect(yield* f.c.probe("session-1")).toBeNull();
+		}),
+	);
+	it.effect("a ready wait reply cannot answer a new wait that reused its request id", () =>
+		Effect.gen(function* () {
+			const entered = yield* Deferred.make<void>();
+			const reply = yield* Deferred.make<{readonly _tag: "ready"; readonly rev: number}>();
+			const f = yield* setup((stream) =>
+				stream === "old"
+					? Effect.gen(function* () {
+							yield* Deferred.succeed(entered, undefined);
+							return yield* Deferred.await(reply);
+						})
+					: Effect.succeed({_tag: "parked"} as const),
+			);
+			const first = yield* Effect.forkChild(f.c.frame(request("reused", "old")));
+			yield* Deferred.await(entered);
+			yield* f.c.ring("old", 1);
+			yield* f.c.frame(request("reused", "new"));
+			yield* Deferred.succeed(reply, {_tag: "ready", rev: 1});
+			yield* Fiber.join(first);
+			expect(f.frames).toEqual([{jsonrpc: "2.0", id: "reused", result: {rev: 1}}]);
+			expect(f.saved()).toMatchObject({waits: [{id: "reused", stream: "new", after: 0}]});
+			yield* f.c.ring("new", 2);
+			expect(f.frames).toEqual([
+				{jsonrpc: "2.0", id: "reused", result: {rev: 1}},
+				{jsonrpc: "2.0", id: "reused", result: {rev: 2}},
+			]);
+		}),
+	);
+	it.effect("a ready wait reply is discarded after the connection loses its hello", () =>
+		Effect.gen(function* () {
+			const entered = yield* Deferred.make<void>();
+			const reply = yield* Deferred.make<{readonly _tag: "ready"; readonly rev: number}>();
+			const f = yield* setup(() =>
+				Effect.gen(function* () {
+					yield* Deferred.succeed(entered, undefined);
+					return yield* Deferred.await(reply);
+				}),
+			);
+			const pending = yield* Effect.forkChild(f.c.frame(request(1)));
+			yield* Deferred.await(entered);
+			const fresh = Attached.cases.new.make({client: "gateway/session-1", nonce: "fresh"});
+			f.save(fresh);
+			yield* Deferred.succeed(reply, {_tag: "ready", rev: 1});
+			yield* Fiber.join(pending);
+			expect(f.saved()).toEqual(fresh);
+			expect(f.frames).toEqual([]);
 		}),
 	);
 	it.effect(
@@ -153,6 +202,7 @@ describe("P12 Gateway attachment laws", () => {
 				expect(f.frames.some((frame) => JSON.stringify(frame).includes("too_many_waits"))).toBe(
 					true,
 				);
+				if (ids.length === 65) expect(f.frames).toHaveLength(1);
 				const a = f.saved();
 				expect(a._tag === "online" && a.waits.length <= 64).toBe(true);
 			}
