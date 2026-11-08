@@ -96,6 +96,8 @@ import {_electron, type ElectronApplication, type Locator, type Page} from "play
 // `-- --focus` takes the design foundations' 60 images: six states, five layouts, both looks.
 // Run each build with its own SHOTS folder to keep the 120 before and after images apart.
 // `-- --tracker-focus` checks T245's input outlines and whole row rings from computed styles.
+// The default run also checks T259: changing the look while typing into the right tile leaves
+// the left prompt empty. Its window is 1200 by 600, within the CI screen's 1440 by 674.
 //
 // Last, as no person ever does (there is no stop command), the run stops the host it started by
 // its pid, and the fake one too, and checks with pgrep that nothing of either home is left.
@@ -1902,6 +1904,59 @@ const focusOn = async (page: Page, id: string) => {
 	await focusIs(page, id);
 };
 
+/** L3, today's version: real keys overlap a look change, with no timer drain or typing retry. */
+const lookFocus = async () => {
+	const own = await mkdtemp(join(tmpdir(), "fabrika-look-"));
+	const app = await launch(own);
+	try {
+		await app.evaluate(({BrowserWindow}) =>
+			BrowserWindow.getAllWindows()[0]?.setBounds({x: 0, y: 0, width: 1200, height: 600}),
+		);
+		const page = await app.firstWindow();
+		await prompted(page, "t1");
+		await lookIs(app, page, "dark");
+		await prefixed(page, "|");
+		await tilesAre(page, ["t1", "t2"]);
+		await prompted(page, "t2");
+		await focusOn(page, "t2");
+		const burst = "focusstaysright".repeat(4);
+		for (const look of ["light", "dark"] as const) {
+			await prompted(page, "t1");
+			await prompted(page, "t2");
+			await app.evaluate(({nativeTheme}, to) => {
+				nativeTheme.themeSource = to;
+			}, look);
+			// lookIs waits for the bug to pass. Start real key events alongside the media change
+			// instead; the short burst spans its focus timers and is never retried.
+			await Promise.all([
+				page.emulateMedia({colorScheme: look}),
+				page.keyboard.type(burst, {delay: 1}),
+			]);
+			const rows = await until(
+				`L3: the burst echoed after switching to ${look}`,
+				async () => ({
+					left: lastRow(await screen(page, "t1")),
+					right: lastRow(await screen(page, "t2")),
+				}),
+				(seen) => seen.left !== "tsh$" || seen.right === `tsh$ ${burst}`,
+			);
+			check(`L3: the left prompt stays empty in ${look}`, rows.left === "tsh$", rows);
+			check(
+				`L3: the right prompt receives the whole burst in ${look}`,
+				rows.right === `tsh$ ${burst}`,
+				rows,
+			);
+			check("L3: the desk still picks the right tile", (await focused(page)) === "t2");
+			await page.keyboard.press("Control+u");
+			await prompted(page, "t2");
+		}
+	} finally {
+		await app.close().catch(() => {});
+		const pid = await hostPid(own);
+		if (pid !== null) await stop(pid);
+	}
+};
+
 /**
  * The stage's one ticket, picked in a tracker: the pick goes down the pipe, and the tracker shows
  * the ticket, not the repository's pull requests, which change from run to run.
@@ -2725,6 +2780,7 @@ const all = async () => {
 		await mismatch();
 		await asksSwap();
 		await reconnect();
+		await lookFocus();
 		await tilesLook();
 		await trackerFocus();
 		// The 60 focus images need a 1440 by 900 window, taller than a CI runner's screen, so they

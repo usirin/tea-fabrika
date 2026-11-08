@@ -1,63 +1,76 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 
-// When nothing had focus before a look change, a remade terminal does not keep the focus
-// ghostty-web 0.4's open() gives it (at once, and again after a zero timeout): keys typed next
-// must not land in a tile nobody picked (tracker ticket 144). ghostty-web is faked as 0.4.0
-// behaves; terminal.test.ts holds the other focus cases.
+// Today's version: look changes keep keys in the chosen tile, including between ghostty-web
+// 0.4.0's focus timer and the app's restore timer (tracker tickets 144 and 259).
 
-/** The page: its body, and which element has focus. */
-const body = {name: "body"};
-const page: {createElement: () => object; activeElement: unknown; body: object} = {
-	createElement: () => element(),
-	activeElement: body,
-	body,
+class Element extends EventTarget {
+	className = "";
+	textContent = "";
+	parentElement: Element | null = null;
+	readonly children: Element[] = [];
+	setAttribute() {}
+	append(...kids: Element[]) {
+		for (const kid of kids) {
+			kid.parentElement = this;
+			this.children.push(kid);
+		}
+	}
+	contains(at: unknown): boolean {
+		return at === this || this.children.some((kid) => kid.contains(at));
+	}
+	remove() {
+		this.parentElement = null;
+	}
+	focus() {
+		page.activeElement = this;
+	}
+	blur() {
+		if (page.activeElement === this) page.activeElement = body;
+	}
+}
+
+const element = () => new Element();
+const body = element();
+const page = {createElement: element, activeElement: body as Element | null, body};
+// One callback per turn: advancing all zero-delay timers together hides the stolen focus.
+const timers: (() => void)[] = [];
+const tick = () => timers.shift()?.();
+const settle = () => {
+	while (timers.length > 0) tick();
 };
-
-const element = (): Record<string, unknown> => {
-	const el: Record<string, unknown> = {
-		className: "",
-		textContent: "",
-		parentElement: null,
-		setAttribute: () => {},
-		append: (...kids: Record<string, unknown>[]) => {
-			for (const kid of kids) kid["parentElement"] = el;
-		},
-		remove: () => {},
-		focus: () => {
-			page.activeElement = el;
-		},
-		blur: () => {
-			if (page.activeElement === el) page.activeElement = body;
-		},
-	};
-	return el;
-};
-
-const timers: ReturnType<typeof setTimeout>[] = [];
 
 class FakeTerminal {
-	element: {focus: () => void} | undefined;
+	element: Element | undefined;
 	opened = false;
 	cols = 80;
 	rows = 24;
 	readonly buffer = {active: {length: 0, cursorY: 0, getLine: () => undefined}};
+	private data: (data: string) => void = () => {};
+	private key = (event: Event) => {
+		if ("key" in event && typeof event.key === "string") this.data(event.key);
+	};
 	loadAddon() {}
 	/** As 0.4.0's open(): it ends by focusing itself, now and after a zero timeout. */
-	open(parent: {focus: () => void}) {
+	open(parent: Element) {
 		this.opened = true;
 		this.element = parent;
+		parent.addEventListener("keydown", this.key);
 		this.focus();
 	}
 	focus() {
-		const at = this.element;
-		if (at === undefined) return;
-		at.focus();
-		timers.push(setTimeout(() => at.focus(), 0));
+		if (!this.opened || this.element === undefined) return;
+		this.element.focus();
+		setTimeout(() => this.element?.focus(), 0);
 	}
-	onData() {}
+	onData(fn: (data: string) => void) {
+		this.data = fn;
+	}
 	onResize() {}
 	write() {}
-	dispose() {}
+	dispose() {
+		this.element?.removeEventListener("keydown", this.key);
+		this.element = undefined;
+	}
 }
 
 class FakeFit {
@@ -68,12 +81,21 @@ class FakeFit {
 vi.mock("ghostty-web", () => ({Terminal: FakeTerminal, FitAddon: FakeFit, Ghostty: class {}}));
 vi.mock("ghostty-web/ghostty-vt.wasm", () => ({default: new Uint8Array()}));
 
-let change: (() => void) | undefined;
+const changes = new Set<() => void>();
+const sent: {port: string; msg: unknown}[] = [];
 let light = false;
+
+const switchLook = () => {
+	light = !light;
+	for (const change of changes) change();
+};
 
 beforeEach(() => {
 	page.activeElement = body;
 	light = false;
+	changes.clear();
+	sent.length = 0;
+	vi.stubGlobal("setTimeout", (fn: () => void) => timers.push(fn));
 	vi.stubGlobal("document", page);
 	vi.stubGlobal("requestAnimationFrame", (fn: () => void) => fn());
 	vi.stubGlobal("window", {
@@ -82,21 +104,24 @@ beforeEach(() => {
 				return light;
 			},
 			addEventListener: (_: string, fn: () => void) => {
-				change = fn;
+				changes.add(fn);
 			},
-			removeEventListener: () => {},
+			removeEventListener: (_: string, fn: () => void) => {
+				changes.delete(fn);
+			},
 		}),
-		fabrika: {send: () => {}, forget: () => {}, onMessage: () => {}},
+		fabrika: {
+			send: (port: string, msg: unknown) => sent.push({port, msg}),
+			forget: () => {},
+			onMessage: () => {},
+		},
 	});
 });
 
 afterEach(() => {
-	for (const timer of timers) clearTimeout(timer);
 	timers.length = 0;
 	vi.unstubAllGlobals();
 });
-
-const settled = () => new Promise((done) => setTimeout(done, 0));
 
 describe("a look change with nothing focused", () => {
 	// A page says nothing has focus with its body, or with null where it has no body to give.
@@ -107,9 +132,66 @@ describe("a look change with nothing focused", () => {
 		const {terminalFor} = await import("./terminal.ts");
 		terminalFor({} as never, "t1" as never).attach(element() as never);
 		page.activeElement = nothing;
-		light = true;
-		change?.();
-		await settled();
+		switchLook();
+		settle();
 		expect(page.activeElement).toBe(body);
+	});
+});
+
+const twoTiles = async () => {
+	const {terminalFor} = await import("./terminal.ts");
+	const left = element();
+	const right = element();
+	terminalFor({} as never, "t1" as never).attach(left as never);
+	const chosen = terminalFor({} as never, "t2" as never);
+	chosen.attach(right as never);
+	settle();
+	chosen.focus();
+	settle();
+	expect(right.contains(page.activeElement)).toBe(true);
+	sent.length = 0;
+	return {left, right};
+};
+
+describe("a look change with the right tile focused", () => {
+	it("L1: a key between any two timers reaches only the chosen tile", async () => {
+		await twoTiles();
+		const delivered = () => sent.filter(({msg}) => (msg as {type: string}).type === "keys");
+		const type = () => {
+			const event = Object.assign(new Event("keydown"), {key: "x"});
+			page.activeElement?.dispatchEvent(event);
+		};
+		type();
+		expect(delivered()).toEqual([{port: "tile:t2", msg: {type: "keys", data: "x"}}]);
+		sent.length = 0;
+		switchLook();
+		let turns = 0;
+		do {
+			if (timers.length > 0) {
+				tick();
+				turns += 1;
+			}
+			type();
+			expect
+				.soft(delivered(), `keys after timer ${turns}`)
+				.toEqual([{port: "tile:t2", msg: {type: "keys", data: "x"}}]);
+			sent.length = 0;
+		} while (timers.length > 0);
+	});
+
+	it("L2: no timer turn leaves activeElement inside the unfocused tile", async () => {
+		const {left, right} = await twoTiles();
+		switchLook();
+		let turns = 0;
+		const staysRight = () => {
+			expect.soft(left.contains(page.activeElement), `left after timer ${turns}`).toBe(false);
+			expect.soft(right.contains(page.activeElement), `right after timer ${turns}`).toBe(true);
+		};
+		staysRight();
+		while (timers.length > 0) {
+			tick();
+			turns += 1;
+			staysRight();
+		}
 	});
 });
