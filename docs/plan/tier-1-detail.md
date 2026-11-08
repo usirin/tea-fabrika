@@ -2046,7 +2046,7 @@ No fact is lost by waiting on any of these. Each adds a kind of fact, and old sa
 - `keep`, as a proposal: the tracker's filter is the first thing that needs it. Filters stay in the window's machine until then; nothing lost.
 - Topic, as a proposal: `tracker | ticket` is the first case that may need to read outside an inbox. A later Topic reads the same streams; nothing lost.
 
-**Tier 3, two people.**
+**Tier 3, a few people** (it said two people until 2026-11-07, owner; [the tiers](./tiers.md#tier-3-is-a-few-people-owner-2026-11-07)).
 
 - Typed codes on Cloudflare. `saw.how` gains a word; nothing lost.
 - Invites and join. New facts on a `founded.keys` list; nothing lost.
