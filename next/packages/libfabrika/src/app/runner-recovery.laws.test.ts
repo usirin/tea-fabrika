@@ -40,7 +40,7 @@ describe("P12 saved mail recovery", () => {
 				const db = new DatabaseSync(":memory:");
 				try {
 					const sql = nodeSql(db),
-						pure = stepper(program);
+						pure = yield* Effect.fromResult(stepper(program));
 					let down = false;
 					const execution = workerExecution({
 						init: async (saved) => pure.init(saved),
@@ -70,6 +70,7 @@ describe("P12 saved mail recovery", () => {
 						Layer.succeed(ProgramLoader, {
 							load: () =>
 								Effect.succeed({
+									stepper: pure,
 									execution,
 									declaration: {
 										name: "counter",

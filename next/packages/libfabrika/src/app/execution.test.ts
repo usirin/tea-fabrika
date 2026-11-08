@@ -56,7 +56,7 @@ describe("P12 Effect execution adapter", () => {
 			const {nodeExecution, workerExecution} = yield* Effect.promise(
 				() => import("./execution.ts"),
 			);
-			const pure = stepper(declared);
+			const pure = yield* Effect.fromResult(stepper(declared));
 			const node: Execution = nodeExecution(declared);
 			// Independent pure implementation stays in P11. RPC introduces a genuine async boundary.
 			const remote: Execution = workerExecution({
