@@ -1,14 +1,18 @@
 /*
  * fabrika's tokens (docs/direction/fabrika-design-package.md): the built-in themes' colors
- * (docs/direction/themes.md; themes.ts holds the same values for the terminal and the window's
- * frame), the type scale, spacing, shape and motion, then Manti's --manti-* tokens set from them
- * (docs/direction/ui-on-manti.md), so a Manti part looks like the rest of a window and nothing of
- * Manti's own palette shows.
+ * (docs/direction/themes.md), the type scale, spacing, shape and motion, then Manti's --manti-*
+ * tokens set from them (docs/direction/ui-on-manti.md), so a Manti part looks like the rest of a
+ * window and nothing of Manti's own palette shows.
+ *
+ * The colors and Manti's tokens are generated: each color is one file in tokens/color, what it is
+ * for, what it sits on and the contrast it must reach, and Manti's are tokens/manti.toml. The token
+ * build (src/build/tokens.ts, run as pnpm tokens) writes them into the two marked regions below,
+ * and themes.ts reads the same values from theme-colors.ts. pnpm lint fails when a region differs
+ * from what the TOML gives. The rest of this file is written by hand.
  *
  * Radix 3.0.0, gray slate, accent indigo: every color is a Radix step, used for that step's job
- * (color principles, principle 5), or one of the bends themes.ts lists. Text takes steps 11 and 12,
- * lines 4 to 8, solid fills 9 and 10. Each is light-dark(<fabrika-light>, <fabrika>), so a window
- * follows the system's look.
+ * (color principles, principle 5), or a bend its file names with its reason. Each is
+ * light-dark(<fabrika-light>, <fabrika>), so a window follows the system's look.
  *
  * What each color means is held strictly: the accent means "your turn" and nothing else; red means
  * stuck or broken; amber running; green done. A line or a fill token is never a text color.
@@ -19,63 +23,48 @@
 :root {
 	color-scheme: light dark;
 
-	/* Surfaces. */
-	--surface-sunken: light-dark(#f9f9fb, #0c0d0e); /* slate 2; dark: a bend, under slate 1 */
+	/* @generated colors from tokens/color by pnpm tokens: edit the TOML, never this */
+	/* The design's backgrounds. */
+	--scrim: light-dark(#00000066, #00000099); /* light black a6; dark black a8 */
 	--surface: light-dark(#fcfcfd, #111113); /* slate 1 */
-	--surface-raised: light-dark(#fcfcfd, #18191b); /* slate 1; slate 2 */
 	--surface-hover: light-dark(#0000330f, #ddeaf814); /* slate a3 */
+	--surface-raised: light-dark(#fcfcfd, #18191b); /* light slate 1; dark slate 2 */
 	--surface-selected: light-dark(#0009321f, #d9edfe25); /* slate a5 */
-
-	/* Lines. */
-	--border-faint: light-dark(#00002d17, #d3edf81d); /* slate a4: the resting edge, a bend */
-	--border: light-dark(#00002f26, #d6ebfd30); /* slate a6: a part that is not interactive */
-	--border-strong: light-dark(#00062e32, #d9edff40); /* slate a7: an interactive part */
-	--wire: light-dark(#00083046, #d9edff5d); /* slate a8: a strong line */
-	/*
-	 * The one focus token: every ring and the focused tile's edge. Slate a9 in both looks, a bend:
-	 * a8 reads 1.90 on the desk in light and 2.82 on a selected row in dark.
-	 */
-	--focus: light-dark(#00051d74, #dfebfd6d);
-
-	/*
-	 * Text takes Radix's two text steps only (decided 2026-11-02): slate 12 for titles and main
-	 * lines, slate a11 for everything quieter. Rank comes from weight and size, not a third gray.
-	 */
-	--text-primary: light-dark(#1c2024, #edeef0); /* slate 12 */
-	--text-faint: light-dark(#0007149f, #f1f7feb5); /* slate a11 */
-
-	/* The accent, your turn. */
-	--turn-text: light-dark(#002bb7c5, #9eb1ff); /* indigo a11; indigo 11: the turn's text only */
+	--surface-sunken: light-dark(#f9f9fb, #0c0d0e); /* light slate 2; dark a bend */
 	--turn-fill: #3e63dd; /* indigo 9 */
 	--turn-fill-hover: light-dark(#3358d4, #5472e4); /* indigo 10 */
-	--turn-fg: #ffffff; /* Radix's rule for text on step 9, a bend */
 
-	/* The state words. */
-	--done: light-dark(#203c25, #71d083); /* grass 12; grass 11 */
-	--running: light-dark(#4f3422, #ffca16); /* amber 12; amber 11 */
-	--stuck: light-dark(#641723, #ff9592); /* red 12; red 11 */
-	--closed: var(--text-faint); /* no hue: the word says closed */
+	/* The design's borders. */
+	--border: light-dark(#00002f26, #d6ebfd30); /* slate a6 */
+	--border-faint: light-dark(#00002d17, #d3edf81d); /* slate a4, a bend */
+	--border-strong: light-dark(#00062e32, #d9edff40); /* slate a7 */
+	--focus: light-dark(#00051d74, #dfebfd6d); /* slate a9, a bend */
+	--wire: light-dark(#00083046, #d9edff5d); /* slate a8 */
 
-	/*
-	 * The dim behind a dialog: a Radix black alpha step, Radix Themes' overlay (blackA6 light,
-	 * blackA8 dark) until the owner picks a step by eye. The Cmd-K palette has none (the owner,
-	 * 2026-11-06), so nothing draws it today.
-	 */
-	--scrim: light-dark(#00000066, #00000099);
+	/* The design's text. */
+	--done: light-dark(#203c25, #71d083); /* light grass 12; dark grass 11 */
+	--running: light-dark(#4f3422, #ffca16); /* light amber 12; dark amber 11 */
+	--stuck: light-dark(#641723, #ff9592); /* light red 12; dark red 11 */
+	--text-faint: light-dark(#0007149f, #f1f7feb5); /* slate a11 */
+	--text-primary: light-dark(#1c2024, #edeef0); /* slate 12 */
+	--turn-fg: #ffffff; /* a bend */
+	--turn-text: light-dark(#002bb7c5, #9eb1ff); /* light indigo a11; dark indigo 11 */
 
-	/*
-	 * A tile's own names (docs/direction/tile-guidelines.md, decided 2026-11-01). Each points at a
-	 * token above, so a brought theme repaints a tile. The rest wash is slate a2, which no theme
-	 * name holds yet, so it is written out here.
-	 */
-	--tile-edge: var(--border-faint); /* slate a4, on every tile, plain or pipe */
-	--tile-edge-on: var(--focus); /* focus: slate a9 in both looks */
-	--tile-edge-hover: var(--border-strong); /* slate a7 */
-	--tile-edge-loud: var(--text-faint); /* slate a11: focus under more contrast only */
-	--tile-text: var(--text-faint); /* slate a11 */
-	--tile-text-on: var(--text-primary); /* slate 12 */
+	/* The design's names for other tokens. */
+	--closed: var(--text-faint);
+
+	/* The tile's backgrounds. */
 	--tile-wash: light-dark(#00005506, #d8f4f609); /* slate a2 */
-	--tile-wash-on: var(--surface-hover); /* slate a3 */
+
+	/* The tile's names for other tokens. */
+	--tile-edge: var(--border-faint);
+	--tile-edge-hover: var(--border-strong);
+	--tile-edge-loud: var(--text-faint);
+	--tile-edge-on: var(--focus);
+	--tile-text: var(--text-faint);
+	--tile-text-on: var(--text-primary);
+	--tile-wash-on: var(--surface-hover);
+	/* @end generated colors */
 
 	/*
 	 * Type: Inter for the UI, mono only for typed things. The scale is px: each size is the number
@@ -109,7 +98,7 @@
 	--ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 	--fast: 120ms;
 
-	/* Manti's type, from our scale. */
+	/* @generated manti from tokens/manti.toml by pnpm tokens: edit the TOML, never this */
 	--manti-font-sans: var(--font);
 	--manti-font-mono: var(--mono);
 	--manti-text-xs: var(--fs-micro);
@@ -118,8 +107,6 @@
 	--manti-text-lg: var(--fs-prose);
 	--manti-text-xl: var(--fs-head);
 	--manti-text-2xl: var(--fs-title);
-
-	/* Manti's surfaces, text and lines. */
 	--manti-bg: var(--surface-sunken);
 	--manti-bg-subtle: var(--surface);
 	--manti-surface: var(--surface);
@@ -131,33 +118,26 @@
 	--manti-text: var(--text-primary);
 	--manti-text-muted: var(--text-faint);
 	--manti-text-subtle: var(--text-faint);
-	/* The accent says your turn and nothing else, so a link is text; one drawn needs an underline. */
 	--manti-link: var(--text-primary);
 	--manti-fill-subtle: var(--surface-hover);
 	--manti-fill: var(--surface-hover);
 	--manti-fill-strong: var(--surface-selected);
 	--manti-focus-ring: var(--focus);
-	--manti-focus-ring-width: 2px;
-	--manti-focus-ring-offset: 2px;
+	--manti-focus-ring-width: 2px; /* the ring's width, as ours is (1.4.11) */
+	--manti-focus-ring-offset: 2px; /* the ring's gap, as ours is */
 	--manti-selection-bg: var(--surface-selected);
 	--manti-selection-text: var(--text-primary);
-
-	/* What each color means is ours: the accent is "your turn" and nothing else. */
 	--manti-accent-fill: var(--turn-fill);
 	--manti-text-on-accent: var(--turn-fg);
 	--manti-danger-text: var(--stuck);
 	--manti-danger-icon: var(--stuck);
 	--manti-danger-border: var(--stuck);
 	--manti-warning-text: var(--running);
-
-	/* Popovers: opaque, with no glass (popovers.md). */
 	--manti-panel-tint: var(--surface-raised);
 	--manti-panel-tint-strong: var(--surface-raised);
 	--manti-panel-tint-pressed: var(--surface-hover);
 	--manti-panel-border: var(--border);
-	--manti-panel-blur: none;
-
-	/* Manti's shape and room: px, never rem. */
+	--manti-panel-blur: none; /* popovers are opaque, no glass (popovers.md) */
 	--manti-radius-xs: var(--r-sm);
 	--manti-radius-sm: var(--r);
 	--manti-radius-md: var(--r-lg);
@@ -165,14 +145,13 @@
 	--manti-radius-xl: var(--r-xl);
 	--manti-radius-2xl: var(--r-xl);
 	--manti-space-1: var(--s-1);
-	--manti-control-height-sm: 28px;
+	--manti-control-height-sm: 28px; /* ui-on-manti records it as the one raw value */
 	--manti-control-height-md: var(--row-h);
 	--manti-control-height-lg: var(--row-2h);
-
-	/* Manti's motion: our one curve and our fast step. */
 	--manti-duration-fast: var(--fast);
 	--manti-ease-smooth: var(--ease-out);
 	--manti-ease-soft: var(--ease-out);
+	/* @end generated manti */
 }
 
 /* A keycap: our size and border, in the UI's own sans, as Linear's are (popovers.md). */
