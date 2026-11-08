@@ -1,5 +1,17 @@
-import {Duration, Effect, Fiber, Logger, type Scope, Stream} from "effect";
+import {
+	Cause,
+	Deferred,
+	Duration,
+	Effect,
+	Exit,
+	Fiber,
+	Logger,
+	Option,
+	type Scope,
+	Stream,
+} from "effect";
 import {beforeEach, describe, expect, it, vi} from "vitest";
+import type {Ended} from "../../program/program.ts";
 import {memoryStorage} from "../../program/storage.ts";
 import {SummonManager, type TurnNews} from "../../shell/summon.ts";
 import {EMPTY, type Transcript} from "../acp/transcript.ts";
@@ -17,6 +29,7 @@ type Agent = {
 	turn: number;
 	snapshot: Transcript | null;
 	cancelled: number;
+	end: Deferred.Deferred<Ended<unknown>>;
 };
 const rig = vi.hoisted(() => ({agents: [] as Agent[]}));
 
@@ -25,7 +38,14 @@ vi.mock("../../program/program.ts", async (original) => ({
 	...(await original<typeof import("../../program/program.ts")>()),
 	start: (_: unknown, flags: Record<string, unknown>, outputs: Outputs) =>
 		Effect.sync(() => {
-			const agent: Agent = {flags, outputs, turn: 0, snapshot: EMPTY, cancelled: 0};
+			const agent: Agent = {
+				flags,
+				outputs,
+				turn: 0,
+				snapshot: EMPTY,
+				cancelled: 0,
+				end: Deferred.makeUnsafe<Ended<unknown>>(),
+			};
 			rig.agents.push(agent);
 			let model = "fake-small";
 			let effort: string | null = null;
@@ -34,7 +54,7 @@ vi.mock("../../program/program.ts", async (original) => ({
 			return {
 				kind: "running",
 				run: {
-					ended: Effect.never,
+					ended: Deferred.await(agent.end),
 					machines: {transcript: {state: () => agent.snapshot}},
 					listen: (_name: string, heard: typeof settings) => {
 						settings = heard;
@@ -108,6 +128,38 @@ beforeEach(() => {
 });
 
 describe("the manager reads ACP's state", () => {
+	// Plan: a down agent reports why; the foreground turn ends and gives the prompt back.
+	it("T237-5: a harness exit fails its active turn stream instead of waiting forever", async () => {
+		const seen = await hosted(
+			Effect.gen(function* () {
+				const manager = yield* SummonManager;
+				yield* summon();
+				const t = yield* turning;
+				Deferred.doneUnsafe(
+					current().end,
+					Exit.succeed({
+						kind: "failed",
+						cause: Cause.fail(new Error("fake harness exited")),
+						unread: {},
+					}),
+				);
+				const down = yield* SummonedNow;
+				yield* down.changes.pipe(
+					Stream.filter((agents) => agents.some((a) => a.state === "down")),
+					Stream.take(1),
+					Stream.runDrain,
+				);
+				const ended = yield* Fiber.await(t.fiber).pipe(Effect.timeoutOption("250 millis"));
+				return {list: yield* manager.list, ended};
+			}),
+		);
+		expect(seen.list.map((a) => [a.name, a.state])).toEqual([["scout", "down"]]);
+		expect(Option.isSome(seen.ended), "the harness is down, but its turn still waits").toBe(true);
+		const ended = Option.getOrThrow(seen.ended);
+		expect(Exit.isFailure(ended)).toBe(true);
+		expect(Exit.isFailure(ended) ? Cause.pretty(ended.cause) : "").toContain("fake harness exited");
+	});
+
 	it("refuses an invalid second setting with the offered efforts", async () => {
 		const refused = await hosted(Effect.result(summon("fake", ["fake-large", "ultra"])));
 		expect(refused._tag).toBe("Failure");

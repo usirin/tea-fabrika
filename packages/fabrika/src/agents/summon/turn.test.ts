@@ -131,7 +131,7 @@ const tshOn = (d: Double, by: string = PERSON) =>
 		const ready = ear<Ready>();
 		const tables = ear<unknown>();
 		const status = ear<unknown>();
-		const asked = ear<unknown>();
+		const asked = ear<{n: number; text: string | null}>();
 		const services = Layer.succeed(SummonManager, d.service);
 		const list = programList([...SMALL, listed(turnProgram, services)]);
 		const started = yield* start(
@@ -147,7 +147,7 @@ const tshOn = (d: Double, by: string = PERSON) =>
 			{id: "tsh:summon", storage},
 		).pipe(
 			Effect.provideService(HostJobs, {...jobs, owner: "t1", by}),
-			Effect.provideService(Programs, list),
+			Effect.provideService(Programs, by === AGENT ? forAgent(list) : list),
 			Effect.provideService(SummonManager, d.service),
 		);
 		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
@@ -356,6 +356,53 @@ describe("S-2: a said line is one job in the foreground", () => {
 });
 
 describe("S-5, tsh's side: Ctrl-C cancels the turn, not the agent", () => {
+	// Plan: Ctrl-C stops this job's turn; `told` identifies which turn it owns.
+	it("T237-3: stopping a job before its turn begins leaves another job's active turn alone", async () => {
+		const d = double();
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const told = ear<unknown>();
+				const result = ear<{stop: string}>();
+				const first = yield* start(
+					turnProgram,
+					{to: "scout"},
+					{
+						told: told.hear,
+						result: result.hear,
+					},
+					{id: "turn:t1", storage: memoryStorage()},
+				);
+				const queued = yield* start(
+					turnProgram,
+					{to: "scout"},
+					{},
+					{
+						id: "turn:t2",
+						storage: memoryStorage(),
+					},
+				);
+				if (first.kind !== "running" || queued.kind !== "running")
+					return yield* Effect.die("turn did not start");
+				yield* tell(first.run, "prompt", "first tile's turn");
+				first.close("prompt");
+				yield* until("the first turn", () => d.calls.turns.length === 1);
+				Queue.offerUnsafe(d.calls.turns[0]!.news, {_tag: "told", turn: 1});
+				yield* told.upTo(1);
+				yield* tell(queued.run, "prompt", "second tile's turn");
+				queued.close("prompt");
+				yield* until("the second job waiting for told", () => d.calls.turns.length === 2);
+				// Only the first job has received a turn number. The second is still queued.
+				yield* queued.stop;
+				const cancels = [...d.calls.cancels];
+				Queue.offerUnsafe(d.calls.turns[0]!.news, RESULT);
+				yield* first.run.ended;
+				return {cancels, result: result.values};
+			}).pipe(Effect.provideService(SummonManager, d.service), Effect.scoped),
+		);
+		expect(seen.cancels).toEqual([]);
+		expect(seen.result).toMatchObject([{stop: "end_turn"}]);
+	});
+
 	it("stops the turn job with 130, cancels scout's turn, dismisses nothing, and the next @scout runs", async () => {
 		const d = double(["scout"]);
 		const seen = await Effect.runPromise(
@@ -421,6 +468,47 @@ describe("S-7, tsh's side: the reply prints once, whole, under the name", () => 
 });
 
 describe("the ask: allow? [y/N] holds the prompt", () => {
+	// Plan: "each edit asks" and the ask row in "One press traced". Two asks must both be answerable.
+	it("T237-6: answering one of two asks leaves the other answerable", async () => {
+		const d = double();
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const t = yield* tshOn(d);
+				const n = yield* t.type("@scout edit two files");
+				yield* until("the turn", () => d.calls.turns.length === 1);
+				const turn = d.calls.turns[0]!;
+				Queue.offerUnsafe(turn.news, {_tag: "told", turn: 1});
+				Queue.offerUnsafe(turn.news, {_tag: "ask", ask: "edit-a", title: "Write a.txt"});
+				yield* t.asked.upTo(1);
+				Queue.offerUnsafe(turn.news, {_tag: "ask", ask: "edit-b", title: "Write b.txt"});
+				// A following status proves the second ask was consumed, even if the UI queues it.
+				Queue.offerUnsafe(turn.news, {_tag: "status", text: "waiting on two edits"});
+				yield* until("both asks consumed", () => t.status.values.length > 0);
+				const first = t.asked.values.at(-1)?.text?.includes("a.txt") ? "edit-a" : "edit-b";
+				const other = first === "edit-a" ? "edit-b" : "edit-a";
+				const title = other === "edit-a" ? "Write a.txt" : "Write b.txt";
+				const job = t.table.getState().jobs[0]!;
+				const before = t.asked.values.length;
+				yield* tell(t.run, "answer", {n: job.n, allow: true});
+				yield* until("the answer shown", () => t.asked.values.length > before);
+				yield* until(
+					"the other ask shown",
+					() => t.asked.values.at(-1)?.text?.includes(title) === true,
+				).pipe(Effect.timeoutOption("250 millis"));
+				expect(t.asked.values.at(-1)?.text ?? "").toContain(title);
+				expect(t.ready.values).toEqual([]);
+				yield* tell(t.run, "answer", {n: job.n, allow: false});
+				yield* until("both answers", () => d.calls.answers.length === 2);
+				expect(d.calls.answers).toEqual([
+					{name: "scout", ask: first, allow: true, by: PERSON},
+					{name: "scout", ask: other, allow: false, by: PERSON},
+				]);
+				Queue.offerUnsafe(turn.news, RESULT);
+				expect(yield* t.done(n)).toBe(0);
+			}).pipe(Effect.scoped),
+		);
+	});
+
 	it("keeps the ask's title when the person's answer clears it", async () => {
 		const d = double();
 		const asks = await Effect.runPromise(
@@ -482,6 +570,20 @@ describe("the ask: allow? [y/N] holds the prompt", () => {
 });
 
 describe("S-8: only a person summons, dismisses or talks", () => {
+	// The plan's person-only rule applies to the listed `turn` spelling too.
+	it("T237-2: an agent cannot start paid work by spelling turn directly", async () => {
+		const d = double();
+		d.state.auto = true;
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				return yield* (yield* tshOn(d, AGENT)).line('turn --to scout prompt="do paid work"');
+			}).pipe(Effect.scoped),
+		);
+		expect(d.calls.turns).toEqual([]);
+		expect(seen.status).not.toBe(0);
+		expect(seen.err.join("\n")).not.toBe("");
+	});
+
 	it("from an agent's tsh, summon, dismiss and @ are refused, and the manager is asked nothing", async () => {
 		const d = double(["scout"]);
 		const seen = await Effect.runPromise(
@@ -514,7 +616,6 @@ describe("S-8: only a person summons, dismisses or talks", () => {
 		const theirs = forAgent(programList([entry])).get("turn");
 		expect(theirs).toBeDefined();
 		expect(Object.keys(theirs?.program.inputs ?? {})).not.toContain("allow");
-		expect(Object.keys(theirs?.program.inputs ?? {})).toContain("prompt");
 	});
 });
 
