@@ -167,19 +167,21 @@ describe("replayOf: one machine run through today's code", () => {
 	});
 
 	it("cannot replay a machine run whose start was never kept", () => {
-		expect(fits(replayOf([tally], {starts: [], steps: STEPS}))).toMatchObject({
+		expect(fits(replayOf([tally], {starts: [], steps: STEPS}))).toEqual({
 			_tag: "cannot",
 			why: "no_start",
 			n: null,
+			detail: "recorded before its start was kept",
 		});
 	});
 
 	it("cannot replay from a first start kept after some of its steps: the boot before them is lost", () => {
 		const late = [startOf({total: 1}, {after: 1})];
-		expect(fits(replayOf([tally], {starts: late, steps: STEPS}))).toMatchObject({
+		expect(fits(replayOf([tally], {starts: late, steps: STEPS}))).toEqual({
 			_tag: "cannot",
 			why: "no_start",
 			n: null,
+			detail: "recorded before its start was kept",
 		});
 	});
 

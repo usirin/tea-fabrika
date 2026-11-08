@@ -187,8 +187,22 @@ interface Found {
 	readonly text: string;
 }
 
-/** Every element `root` draws, each component called, with its text and whether a row holds it. */
+/**
+ * Every element `root` draws, each component called, with its text and whether a row holds it.
+ * The walk runs inside a server render, so a component that uses a hook (an effect that moves
+ * focus) is called where React lets it be; the server runs no effect, so what is drawn is the same.
+ */
 const drawnFrom = (root: ReactNode): readonly Found[] => {
+	let found: readonly Found[] = [];
+	const Walk = () => {
+		found = walkOf(root);
+		return null;
+	};
+	renderToStaticMarkup(createElement(Walk));
+	return found;
+};
+
+const walkOf = (root: ReactNode): readonly Found[] => {
 	const out: Found[] = [];
 	const call = (n: ReactNode): ReactNode =>
 		isValidElement<Record<string, unknown>>(n) && typeof n.type === "function"
@@ -419,9 +433,18 @@ const restartedAt = (state: unknown): JobTrace => ({
 	],
 });
 
+/** tally's record with step 2 leaving `left`, then count total restarted after it at `state`. */
+const restartedWith = (left: unknown, state: unknown): JobTrace => {
+	const record = restartedAt(state);
+	return {...record, steps: record.steps.map((s) => (s.n === 2 ? {...s, state: left} : s))};
+};
+
 const RESTARTED_WORDS = "Restarted from this state; the step before left";
 /** `text` with no white space, so a JSON value reads the same however it is laid out. */
 const tight = (text: string) => text.replaceAll(/\s/g, "");
+/** The text of every block of code drawn outside the rows (`pre`), with no white space. */
+const blocksOf = (all: readonly Found[]) =>
+	all.filter((e) => !e.inRow && e.type === "pre").map((e) => tight(e.text));
 
 describe("the first step of a later life", () => {
 	it("shows that life's start as its state before, and its changes against it", () => {
@@ -435,11 +458,32 @@ describe("the first step of a later life", () => {
 
 	it("says it restarted from a state the step before did not leave, and what that step left", () => {
 		const {all} = windowOf(opened(restartedAt({total: 10}), [{type: "choose", row: ADD_3}]));
-		const said = all.filter((e) => !e.inRow && e.text.includes(RESTARTED_WORDS));
-		expect(said).not.toEqual([]);
-		expect(said.some((e) => tight(e.text).includes(tight(`${RESTARTED_WORDS} {"total":3}`)))).toBe(
-			true,
+		expect(all.filter((e) => !e.inRow && e.text.includes(RESTARTED_WORDS))).not.toEqual([]);
+		expect(blocksOf(all)).toContain('{"total":3}');
+	});
+
+	// tea owns equality (the plan's "Two rules, after the second review"): a state is compared with
+	// tea's `deepEqual`, never as JSON text, and a state inside a sentence is drawn as a block.
+	it("says nothing more when the start is the state the step before left, its keys in another order", () => {
+		// The step's state came from a patch, its new key last; the start from the schema, in its order.
+		const record = restartedWith({total: 3, seen: 2}, {seen: 2, total: 3});
+		const s = opened(record, [{type: "choose", row: ADD_3}]);
+		const chosen = shownOf(s).chosen;
+		expect(chosen?.kind === "step" && [chosen.before, chosen.restarted]).toEqual([
+			{kind: "kept", state: {seen: 2, total: 3}},
+			null,
+		]);
+		expect(windowOf(s).all.filter((e) => e.text.includes("Restarted from"))).toEqual([]);
+	});
+
+	it("draws what the step before left as a block, never inline, however big", () => {
+		const left = {total: 3, seen: Array.from({length: 40}, (_, i) => i), note: "x".repeat(120)};
+		const {all} = windowOf(
+			opened(restartedWith(left, {total: 10}), [{type: "choose", row: ADD_3}]),
 		);
+		expect(all.filter((e) => !e.inRow && e.text.includes(RESTARTED_WORDS))).not.toEqual([]);
+		expect(blocksOf(all)).toContain(tight(JSON.stringify(left)));
+		expect(all.filter((e) => e.type === "code" && e.text.includes('"total"'))).toEqual([]);
 	});
 
 	it("says nothing more when it restarted from the very state the step before left", () => {

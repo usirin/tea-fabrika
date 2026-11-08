@@ -953,4 +953,41 @@ describe("on a storage that keeps steps, every boot of a kept machine run is kep
 		);
 		expect(endOf(called).kind).toBe("ended");
 	});
+
+	// A start must name its program, or no replay can find its code: a storage that keeps starts,
+	// given no program name, ends the run before it boots rather than writing starts nobody can use.
+	it("ends the run, by name, when its storage keeps starts and it is given no program to name in them", async () => {
+		const {written, log} = noting();
+		const machine = defineMachine({
+			types: {
+				model: {} as {readonly total: number},
+				msg: {} as {readonly type: "add"; readonly n: number},
+				ctx: undefined,
+			},
+			cmds: [],
+			init: (loaded) => [loaded ?? {total: 0}, []],
+			update: {add: (s, m) => [{total: s.total + m.n}, []]},
+		});
+		const ended = await Effect.runPromise(
+			Effect.gen(function* () {
+				const handle = yield* memoryStorage(log).open("ticker:r7", {});
+				return yield* runKept(
+					handle,
+					"ticker",
+					machine,
+					TextTotal,
+					"t",
+					{ctx: undefined},
+					() => null,
+					() => Effect.void,
+					() => ({name: "ticker", steps: {}}),
+					() => {},
+				);
+			}).pipe(Effect.scoped, Effect.exit),
+		);
+		expect(Exit.isFailure(ended) ? Cause.pretty(ended.cause) : "booted").toContain(
+			"ticker run t keeps its starts, and was given no program to name in them",
+		);
+		expect(written).toEqual([]);
+	});
 });

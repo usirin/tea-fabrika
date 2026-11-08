@@ -1,9 +1,11 @@
 import {execFile, spawn} from "node:child_process";
-import {mkdir, mkdtemp, readFile, rename, rm, stat, writeFile} from "node:fs/promises";
+import {randomBytes} from "node:crypto";
+import {mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile} from "node:fs/promises";
 import {createRequire} from "node:module";
 import {createServer, type Socket} from "node:net";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
+import {DatabaseSync} from "node:sqlite";
 import {promisify} from "node:util";
 import type {Shell} from "@kampus/fabrika-old";
 import {_electron, type ElectronApplication, type Locator, type Page} from "playwright";
@@ -81,6 +83,10 @@ import {_electron, type ElectronApplication, type Locator, type Page} from "play
 //   13 stopped       main's clock moved five minutes on: it stops, and the top bar offers try
 //                    again, which takes no focus. The folder back, a click on it starts a host,
 //                    and the desk is back
+//
+// Then the trace tile's focus, on a home of its own (`traceFocus`): a replay pressed keeps focus in
+// its tile, Open step puts focus on the step's row whether its machine run was open or closed, and
+// closing and opening the machine run again leaves focus where it is. `-- --trace` runs it alone.
 //
 // Then the tiles' look, on a home of its own (`tilesLook`): one tile, a pipe side by side, a pipe
 // stacked, a 2x2 in each state, and a small window, each in `tiles/` as `<state>-<layout>-<look>`.
@@ -2059,6 +2065,133 @@ const tilesLook = async () => {
 	}
 };
 
+/**
+ * Focus follows the choice in the trace tile (docs/plan/replay-through-current-code.md, "Two rules,
+ * after the second review"), on a home of its own: a control that goes away when pressed never
+ * drops focus to the page, and a press's note asking for focus never outlives the press. Read from
+ * `document.activeElement`, as a keyboard user lives it. `seq --to 3 | tally | trace`, then a copy
+ * of its record with step 2's Msg changed, so a replay through today's code parts there.
+ *
+ *   replay pressed      Replay through current code, answered: focus is still in the tile
+ *   open, run open      Open step 2 with the step's row drawn already: focus on that row
+ *   closed, reopened    the machine run closed by ← and opened by →: focus stays on its row
+ *   open, run closed    Open step 2 with the machine run closed: the row shows, and takes focus
+ */
+const traceFocus = async () => {
+	const own = await mkdtemp(join(tmpdir(), "fabrika-trace-"));
+	const app = await launch(own);
+	try {
+		const page = await app.firstWindow();
+		await prompted(page, "t1");
+		await run(page, "t1", "seq --to 3 | tally | trace");
+		const rowIn = (id: string, name: string) =>
+			tile(page, id).locator(`tr.wf-row[aria-label^="${name}"]`).first();
+		await until(
+			"the job's trace",
+			() => rowIn("t1", "run tally").count(),
+			(n) => n > 0,
+		);
+		await rowIn("t1", "run tally").click();
+		await until(
+			"count total's three steps, kept",
+			() => rowIn("t1", "machine run count total, 3 steps").count(),
+			(n) => n > 0,
+		);
+		// The record, copied to a trace of its own with step 2's Msg changed: what today's code folds
+		// from it parts at step 2. A copy, so the host's own record is never written under it.
+		const records = join(own, "records");
+		const [file] = (await readdir(records)).filter((f) => f.endsWith(".sqlite"));
+		if (file === undefined) throw new Error(`no record in ${records}`);
+		const copy = randomBytes(16).toString("hex");
+		const from = new DatabaseSync(join(records, file), {readOnly: true});
+		from.exec(`VACUUM INTO '${join(records, `${copy}.sqlite`)}'`);
+		from.close();
+		const into = new DatabaseSync(join(records, `${copy}.sqlite`));
+		into.exec(`UPDATE steps SET msg = '{"type":"add","n":5}' WHERE n = 2`);
+		into.close();
+
+		await prefixed(page, "N");
+		await tilesAre(page, ["t2"]);
+		await prompted(page, "t2");
+		await run(page, "t2", `trace --id ${copy}`);
+		const row = (name: string) => rowIn("t2", name);
+		await until(
+			"the copy's trace",
+			() => row("run tally").count(),
+			(n) => n > 0,
+		);
+		await row("run tally").click();
+		await row("machine run count total").click();
+		await row("step add 5").waitFor();
+		/** What has focus: a row by its name, a button by its words, or `body` for the page. */
+		const active = () =>
+			page.evaluate(() => {
+				const el = document.activeElement;
+				if (el === null || el === document.body) return "body";
+				const tile = el.closest("[data-tile]")?.getAttribute("data-tile") ?? "no tile";
+				return `${tile}: ${el.getAttribute("aria-label") ?? el.textContent ?? el.tagName}`;
+			});
+		/** Wait for focus on the row named `name`, and say so. */
+		const focusOnRow = async (what: string, name: string) => {
+			await until(what, active, (on) => on.startsWith(`t2: ${name}`));
+			check(what, true);
+		};
+		const button = (name: string) => tile(page, "t2").getByRole("button", {name});
+
+		await button("Replay through current code").click();
+		await until(
+			"the replay's answer",
+			() => tile(page, "t2").locator(".wf-replay-says").first().textContent(),
+			(says) => (says ?? "").includes("parts at step 2"),
+		);
+		await page.waitForTimeout(300);
+		const replayed = await active();
+		check(
+			"the replay pressed and answered: focus is still in its tile, never on the page",
+			replayed.startsWith("t2: "),
+			replayed,
+		);
+
+		await button("Open step 2").click();
+		await focusOnRow("Open step 2 with its row drawn already: focus on step 2's row", "step add 5");
+
+		const machine = row("machine run count total");
+		await machine.focus();
+		await page.keyboard.press("ArrowLeft");
+		await until(
+			"count total closed",
+			() => machine.getAttribute("aria-expanded"),
+			(open) => open === "false",
+		);
+		await page.keyboard.press("ArrowRight");
+		await row("step add 5").waitFor();
+		await page.waitForTimeout(300);
+		const reopened = await active();
+		check(
+			"count total closed and opened again: focus stays on its row, the press's note gone",
+			reopened.startsWith("t2: machine run count total"),
+			reopened,
+		);
+
+		// Closed and chosen by a press on its row, its detail offers step 2 again.
+		await machine.click();
+		await until(
+			"count total closed, and chosen",
+			() => machine.getAttribute("aria-expanded"),
+			(open) => open === "false",
+		);
+		await button("Open step 2").click();
+		await focusOnRow(
+			"Open step 2 under a closed machine run: the row shows, with focus",
+			"step add 5",
+		);
+	} finally {
+		await app.close().catch(() => {});
+		const pid = await hostPid(own);
+		if (pid !== null) await stop(pid);
+	}
+};
+
 const all = async () => {
 	const first = await launch(home);
 	let left = "";
@@ -2098,6 +2231,7 @@ const all = async () => {
 		await asksSwap();
 		await reconnect();
 		await tilesLook();
+		await traceFocus();
 	} finally {
 		// No person stops the host: there is no command for it. The run stops its own, by its pid.
 		const pid = await hostPid(home);
@@ -2105,8 +2239,10 @@ const all = async () => {
 	}
 };
 
-// `-- --tiles` takes the tiles' pictures alone, with no other stage.
+// `-- --tiles` takes the tiles' pictures alone, with no other stage; `-- --trace` checks the trace
+// tile's focus alone.
 if (process.argv.includes("--tiles")) await tilesLook();
+else if (process.argv.includes("--trace")) await traceFocus();
 else await all();
 const after = await pgrep(here);
 check(

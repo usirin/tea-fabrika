@@ -347,7 +347,12 @@ const codeIn = (replayer?: Layer.Layer<Replayer>) => {
 describe("the trace program's replay", () => {
 	it("answers cannot, no_code, when no Replayer is given", async () => {
 		const replay = await replayedIn([TALLY_STARTED]);
-		expect(replay?.answer).toMatchObject({_tag: "cannot", why: "no_code", n: null});
+		expect(replay?.answer).toEqual({
+			_tag: "cannot",
+			why: "no_code",
+			n: null,
+			detail: "no programs' code is given here to replay through",
+		});
 	});
 
 	it("replays count total through the small programs' code when their Replayer is given: it matches at every step", async () => {
