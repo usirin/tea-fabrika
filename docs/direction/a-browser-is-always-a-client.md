@@ -1,6 +1,6 @@
 # Protocols first, and a browser is always a client
 
-**Decided 2026-10-30,** during the walk of the transport layer. Every protocol
+**Decided 2026-10-30,** during the walk of the transport layer. Walked when Tier 1 starts (owner, 2026-11-08): the browser client's protocol checks in CI. Every protocol
 fabrika speaks is written so that a browser tab could speak it too, even when
 nobody builds the browser side yet. The protocol comes first; each
 implementation (the Mac's hands, the VM's hands, a browser tab, a test) is one

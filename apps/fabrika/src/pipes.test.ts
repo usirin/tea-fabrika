@@ -281,8 +281,9 @@ describe("a tile's colors are Radix steps, in both looks", () => {
 				washOn: alpha("slate", 3, look),
 				edge: alpha("slate", 4, look),
 				hover: alpha("slate", 7, look),
-				// The theme's focus: a8 in dark, a9 in light, where a8 reads 1.90 (@kampus/fabrika-design).
-				edgeOn: alpha("slate", look === "dark" ? 8 : 9, look),
+				// The one focus token, slate a9 in both looks (design language call 4, 2026-11-07): a8
+				// reads 1.90 on the desk in light and 2.82 on a selected row in dark.
+				edgeOn: alpha("slate", 9, look),
 				text: alpha("slate", 11, look),
 				textOn: scaleOf("slate", "solid", look)[11],
 			});
@@ -361,14 +362,12 @@ describe("a title bar's text reads 4.5:1 on its wash", () => {
 
 /**
  * WCAG 2.2 1.4.11: a needed state reads 3:1. The focus edge does, on the ground. Where it crosses
- * the focused title (20px), two dark values are under it, named in the note: slate 2.99 and violet
- * 2.92. They pass along the rest of the tile; a look at the built app settles them. A third fails,
- * and so does either of the two sinking lower.
+ * the focused title (20px), one dark value is under it, named in the note: violet 2.92. It passes
+ * along the rest of the tile; a look at the built app settles it. Slate was the second at 2.99
+ * until its edge moved to a9 (design language call 4, 2026-11-07), which lifts it over 3:1. A new
+ * one fails, and so does violet sinking lower.
  */
-const NAMED_UNDER: ReadonlyMap<string, number> = new Map([
-	["dark slate", 2.99],
-	["dark violet", 2.92],
-]);
+const NAMED_UNDER: ReadonlyMap<string, number> = new Map([["dark violet", 2.92]]);
 
 describe("a focus edge reads 3:1", () => {
 	it.each(LOOKS)("on the tile's ground, in every color, %s", (look) => {
@@ -405,7 +404,7 @@ describe("a tile's tokens point at the theme", () => {
 			"--tile-wash-on": ROOT.get("--tile-wash-on"),
 		}).toEqual({
 			"--tile-edge": "var(--border-faint)",
-			"--tile-edge-on": "var(--tile-focus)",
+			"--tile-edge-on": "var(--focus)",
 			"--tile-edge-hover": "var(--border-strong)",
 			"--tile-text": "var(--text-faint)",
 			"--tile-text-on": "var(--text-primary)",
@@ -413,7 +412,6 @@ describe("a tile's tokens point at the theme", () => {
 		});
 		const raw = [...ROOT]
 			.filter(([name]) => name.startsWith("--tile-") && name !== "--tile-wash")
-			.filter(([name]) => name !== "--tile-focus")
 			.filter(([, value]) => !/^var\(--[\w-]+\)$/.test(value));
 		expect(raw).toEqual([]);
 	});

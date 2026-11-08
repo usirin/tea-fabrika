@@ -16,6 +16,31 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Which kind of pull request this is. One that changes only Markdown or field/ rows skips the
+  # test shards, next and e2e: nothing they run reads those files (a search of every test file on
+  # 2026-11-08 found them named in comments only). check still runs (lint holds the Markdown's
+  # format, typecheck holds docs/tutorials), and so does commits. The list names what may skip,
+  # so a path nobody thought of runs every test. A push to main runs everything. None of the three
+  # is a required check, so a skipped one blocks nothing.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          code=true
+          if [ -n "$BASE" ] && ! git diff --name-only "$BASE...$HEAD" | grep -v -E '\.md$|^field/' | grep -q .; then
+            code=false
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   check:
     runs-on: ubuntu-latest
     steps:
@@ -64,8 +89,11 @@ jobs:
   # No secret and no key: the API keys are never set here. The one download beyond what the other
   # jobs fetch is Electron's own binary, from its GitHub release, kept in the cache after once.
   e2e:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: macos-latest
-    timeout-minutes: 15
+    # 15 for the run, and room for the ARIA stage's own app and its about 35 cells.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
 
@@ -91,6 +119,10 @@ jobs:
         env:
           SHOTS: ${{ runner.temp }}/e2e-shots
         run: pnpm --filter @kampus/fabrika-app-old e2e
+      # The trace ruler's labels at widths from 60 to 1600px (apps/fabrika/ruler-e2e.ts): the built
+      # renderer in headless Chromium, as shots.ts draws it. The build above made dist/.
+      - name: ruler labels
+        run: pnpm --filter @kampus/fabrika-app-old exec playwright install chromium && pnpm --filter @kampus/fabrika-app-old exec node ruler-e2e.ts
       # What the window showed at each step, to see a red run without running it again.
       - if: failure()
         uses: actions/upload-artifact@v7
@@ -98,12 +130,29 @@ jobs:
           name: e2e-shots
           path: ${{ runner.temp }}/e2e-shots
           if-no-files-found: ignore
+      # The ARIA trees (design language call 8, decided 2026-11-07): each key state at the five
+      # layouts, compared with apps/fabrika/aria/. It advises and never blocks: a diff is printed and
+      # the step passes, so `continue-on-error` only covers a state it cannot reach (exit 2). It
+      # blocks once its false alarms are counted (0 noise in 300 clean checks, 0 flakes).
+      - name: aria
+        continue-on-error: true
+        env:
+          SHOTS: ${{ runner.temp }}/e2e-shots
+        run: pnpm --filter @kampus/fabrika-app-old e2e -- --aria
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: aria-received
+          path: ${{ runner.temp }}/e2e-shots/aria-received
+          if-no-files-found: ignore
 
   # The tests, split by file over six machines (vitest's `--shard`, each machine
   # given about the same seconds by vitest.shards.ts). The lane's tests were one
   # file run in order, 27 min on one machine; as 18 files of 20 to 158 s they ran
   # in 2.9 to 3.9 min a machine (pull request 412's run, experiment 222).
   test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -163,6 +212,8 @@ jobs:
   # the app's own Playwright. Electron and launchd run on the laptop first; CI gets Electron once
   # xvfb and the keychain are tried.
   next:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
