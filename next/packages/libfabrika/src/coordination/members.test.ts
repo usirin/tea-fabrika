@@ -20,8 +20,9 @@
 //   else is `{why: "not_granted"}`.
 // Signatures are not checked here, so `signed` values are opaque text with the signer named.
 import {describe, expect, it} from "@effect/vitest";
+import {Result} from "effect";
 import * as fc from "fast-check";
-import {admitted, foldMembers, type MemberFact, type Members} from "./members.ts";
+import {admitted, allows, EMPTY, foldMembers, type MemberFact, type Members} from "./members.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const RUNS = 300;
@@ -744,5 +745,37 @@ describe("p28, what changes nothing", () => {
 			}),
 			{seed: SEED, numRuns: 100},
 		);
+	});
+});
+
+// Gaps the mutation step found on the build (ticket 236): laws the tests above held loose.
+describe("p28, the rule's answer for a key that is out", () => {
+	it("a revoked key granted again is refused as revoked, and stays out", () => {
+		const facts = [founded(["pA", "pB"], "wA"), granted("pA", "t1"), revoked("pB", "t1")];
+		const folded = facts.reduce((at, fact) => Result.getOrElse(allows(at, fact), () => at), EMPTY);
+		const again = allows(folded, granted("pA", "t1"));
+		expect(Result.isFailure(again) && again.failure).toBe("revoked");
+		expect(isIn(foldMembers([...facts, granted("pA", "t1")]), "t1")).toBe(false);
+	});
+
+	it("a live key granted again as what it is changes nothing and is not refused", () => {
+		const facts = [founded(["pA", "pB"], "wA"), granted("pA", "t1")];
+		const folded = facts.reduce((at, fact) => Result.getOrElse(allows(at, fact), () => at), EMPTY);
+		const again = allows(folded, granted("pB", "t1"));
+		expect(Result.isSuccess(again)).toBe(true);
+		if (Result.isSuccess(again)) expect(view(again.success.members)).toEqual(view(folded.members));
+	});
+});
+
+describe("p28, a device never drops itself", () => {
+	it("a device that names its own key in drops stays live, and its window stays in", () => {
+		const m = foldMembers([
+			founded(["pA"], "wA"),
+			addedDevice("pA", "pB", "wB", {drops: ["pA", "wA"]}),
+		]);
+		expect(livePersons(m)).toEqual(["pA", "pB"]);
+		expect(isIn(m, "wB")).toBe(true);
+		// The signer's own key is skipped; the rest of drops still stops.
+		expect(isIn(m, "wA")).toBe(false);
 	});
 });

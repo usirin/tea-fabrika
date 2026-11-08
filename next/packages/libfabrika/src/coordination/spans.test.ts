@@ -16,7 +16,7 @@ import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
 import {Effect, Layer, Option, Stream, Tracer} from "effect";
-import {Doorbell, Ledger, type LedgerError} from "../data/ledger.ts";
+import {Doorbell, Ledger, LedgerError} from "../data/ledger.ts";
 import type {Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
 import {ClientManager} from "./client-manager.ts";
@@ -384,5 +384,94 @@ describe("p97, names and numbers only", () => {
 				expect(ended(name).length, name).toBe(1);
 			clean(spans);
 		}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+	});
+});
+
+// Gaps the mutation step found on the build (ticket 236): tag names and numbers held loose above.
+describe("p97, the tags hold the right names and numbers", () => {
+	it.effect("members.read counts only live keys as live, and members.write names its key", () => {
+		const {tracer, ended} = capture();
+		return Effect.gen(function* () {
+			const clients = yield* ClientManager;
+			yield* write(granted("pA", "t1"));
+			yield* write(revoked("pA", "t1"));
+			const [grant] = ended("members.write");
+			if (grant === undefined) return expect.unreachable();
+			expect(tagged(grant, "key")).toBe("t1");
+			expect(tagged(grant, "signer")).toBe("pA");
+			yield* clients.members;
+			const read = ended("members.read").at(-1);
+			if (read === undefined) return expect.unreachable();
+			// pA, wA and t1 are known; t1 is revoked, so two are live.
+			expect(tagged(read, "keys")).toBe(3);
+			expect(tagged(read, "live")).toBe(2);
+		}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+	});
+
+	it.effect("an ignored write's span holds the rev it was placed at", () => {
+		const {tracer, ended} = capture();
+		const sql = fresh();
+		const sheet = addedSheet("pA", "r1");
+		const macC = addedDevice("r1", "pC", "wC", ["pA"]);
+		const macX = addedDevice("r1", "pX", "wX");
+		const target = macC._tag === "added" ? macC.add.id : "";
+		let before: Effect.Effect<void, LedgerError> | null = write(macX).pipe(
+			Effect.asVoid,
+			Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
+		);
+		// Mac X's whole write runs just before Mac C's append, as in the race above.
+		const racing = Layer.effect(
+			Ledger,
+			Effect.map(Ledger, (real) => ({
+				read: real.read,
+				wait: real.wait,
+				append: (stream: string, id: string, line: Parameters<typeof real.append>[2]) =>
+					Effect.suspend(() => {
+						const first = id === target ? before : null;
+						if (first === null) return real.append(stream, id, line);
+						before = null;
+						return Effect.andThen(first, real.append(stream, id, line));
+					}),
+			})),
+		).pipe(Layer.provide(onSql(sql)));
+		return Effect.gen(function* () {
+			yield* write(sheet);
+			expect(yield* write(macC)).toEqual({_tag: "ignored", rev: 4, why: "used"});
+			const ignored = ended("members.write").find((span) => tagged(span, "answer") === "ignored");
+			if (ignored === undefined) return expect.unreachable();
+			expect(tagged(ignored, "rev")).toBe(4);
+			expect(tagged(ignored, "why")).toBe("used");
+		}).pipe(
+			Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(racing))),
+			Effect.withTracer(tracer),
+		);
+	});
+
+	it.effect("mailbox.send keeps the letter's id under OpenTelemetry's message id key", () => {
+		const {tracer, ended} = capture();
+		return Effect.gen(function* () {
+			const mailbox = yield* Mailbox;
+			yield* mailbox.send("notes:1", "letter_a", {value: M_MARK}, from());
+			const [send] = ended("mailbox.send");
+			if (send === undefined) return expect.unreachable();
+			expect(tags(send)["messaging.message.id"]).toBe("letter_a");
+		}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+	});
+
+	it.effect("a send the ledger fails ends its span with the ledger's why", () => {
+		const {tracer, ended} = capture();
+		const broken = Layer.succeed(Ledger, {
+			append: () => Effect.fail(new LedgerError({why: "storage"})),
+			read: () => Stream.fail(new LedgerError({why: "storage"})),
+			wait: () => Effect.fail(new LedgerError({why: "storage"})),
+		});
+		return Effect.gen(function* () {
+			const mailbox = yield* Mailbox;
+			const failed = yield* Effect.flip(mailbox.send("notes:1", "letter_a", {}, from()));
+			expect(failed.why).toBe("storage");
+			const [send] = ended("mailbox.send");
+			if (send === undefined) return expect.unreachable();
+			expect(tagged(send, "why")).toBe("storage");
+		}).pipe(Effect.provide(Mailbox.layer.pipe(Layer.provide(broken))), Effect.withTracer(tracer));
 	});
 });

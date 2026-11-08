@@ -557,3 +557,42 @@ describe("p96, write tells the truth over any history", () => {
 		expect(refused).toBeGreaterThan(60);
 	});
 });
+
+// Gaps the mutation step found on the build (ticket 236): answers the tests above held loose.
+describe("p96, a write tells the truth about a key that is out", () => {
+	it.effect("a revoked tab granted again is refused revoked, and nothing is written", () =>
+		Effect.gen(function* () {
+			yield* write(addedDevice("pA", "pB", "wB"));
+			yield* write(granted("pA", "t1"));
+			expect((yield* write(revoked("pB", "t1")))._tag).toBe("applied");
+			const before = (yield* entries).length;
+			expect(yield* write(granted("pA", "t1"))).toEqual({_tag: "refused", why: "revoked"});
+			expect((yield* entries).length).toBe(before);
+		}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+	);
+
+	it.effect("revoking a key already revoked is refused revoked, and nothing is written", () =>
+		Effect.gen(function* () {
+			yield* write(addedDevice("pA", "pB", "wB"));
+			yield* write(granted("pA", "t1"));
+			expect((yield* write(revoked("pA", "t1")))._tag).toBe("applied");
+			const before = (yield* entries).length;
+			expect(yield* write(revoked("pB", "t1"))).toEqual({_tag: "refused", why: "revoked"});
+			expect((yield* entries).length).toBe(before);
+		}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+	);
+
+	it.effect("a sheet revoked before a new one is made answers revoked, never replaced", () =>
+		Effect.gen(function* () {
+			yield* write(addedSheet("pA", "r1"));
+			expect((yield* write(revoked("pA", "r1")))._tag).toBe("applied");
+			expect((yield* write(addedSheet("pA", "r2")))._tag).toBe("applied");
+			expect(yield* write(addedDevice("r1", "pY", "wY", {old: "lost"}))).toEqual({
+				_tag: "refused",
+				why: "revoked",
+			});
+			// The new sheet still works: the one it ended was the live one, and there was none.
+			expect((yield* write(addedDevice("r2", "pY", "wY", {old: "lost"})))._tag).toBe("applied");
+		}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+	);
+});
