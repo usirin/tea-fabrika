@@ -1,0 +1,91 @@
+// P11 adds history without changing P9 Letter. One reader must keep entry timing and build.
+import {DatabaseSync} from "node:sqlite";
+import {afterAll, describe, expect, it} from "@effect/vitest";
+import {Effect, Layer, Schema, Stream} from "effect";
+import {Doorbell, Ledger} from "../data/ledger.ts";
+import {lineFor} from "../data/log.ts";
+import {nodeSql} from "../data/sqlite.ts";
+import {Mailbox, type From} from "./mailbox.ts";
+
+const opened: DatabaseSync[] = [];
+afterAll(() => {
+	for (const db of opened) db.close();
+});
+const from: From = {
+	by: "SHA256:sender",
+	for: "person",
+	sentAt: "2026-11-08T01:00:00Z",
+	seen: 0,
+	parent: "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-1",
+	traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+	build: "build-original",
+};
+const world = () => {
+	const db = new DatabaseSync(":memory:");
+	opened.push(db);
+	return Mailbox.layer.pipe(
+		Layer.provideMerge(
+			Ledger.sql(nodeSql(db), {reader: "p11-history"}).pipe(
+				Layer.provide(Layer.succeed(Doorbell, {ring: () => Effect.void})),
+			),
+		),
+	);
+};
+
+describe("P11 richer mailbox history", () => {
+	it.effect("plant, project away build or clocks: rich history preserves the original entry", () =>
+		Effect.gen(function* () {
+			const mailbox = yield* Mailbox;
+			const ledger = yield* Ledger;
+			yield* mailbox.send("counter:1", "a", {type: "add", n: 1}, from);
+			yield* ledger.append("elsewhere", "noise", lineFor(from, {_tag: "noise"}));
+			yield* mailbox.send(
+				"counter:1",
+				"b",
+				{type: "add", n: 2},
+				{...from, seen: 2, build: "build-later"},
+			);
+			const entries = yield* Stream.runCollect(ledger.read("counter:1/inbox", 0));
+			const rich = yield* Stream.runCollect(mailbox.read("counter:1", 0));
+			const plain = yield* Stream.runCollect(mailbox.receive("counter:1", 0));
+			expect(rich).toEqual(
+				entries.map((row) => ({
+					id: row.id,
+					m: Schema.decodeUnknownSync(Schema.Struct({m: Schema.Json}))(row.body).m,
+					by: row.by,
+					for: row.for,
+					sentAt: row.sentAt,
+					parent: row.parent,
+					traceId: row.traceId,
+					rev: row.rev,
+					pos: row.pos,
+					build: row.build,
+					seen: row.seen,
+					arrivedAt: row.arrivedAt,
+				})),
+			);
+			expect(
+				rich.map(({build: _build, seen: _seen, arrivedAt: _arrivedAt, ...letter}) => letter),
+			).toEqual(plain);
+			expect(rich.map((row) => row.pos)).toEqual([1, 2]);
+			expect(rich.map((row) => row.rev)).toEqual([1, 3]);
+			expect(yield* Stream.runCollect(mailbox.read("counter:1", 1))).toEqual(rich.slice(1));
+		}).pipe(Effect.provide(world())),
+	);
+	it.effect("plant, replace first delivery metadata: resend keeps its first build and clocks", () =>
+		Effect.gen(function* () {
+			const mailbox = yield* Mailbox;
+			const first = yield* mailbox.send("counter:1", "a", {type: "add", n: 1}, from);
+			const before = yield* Stream.runCollect(mailbox.read("counter:1", 0));
+			expect(
+				yield* mailbox.send(
+					"counter:1",
+					"a",
+					{type: "add", n: 1},
+					{...from, build: "retry-build", seen: 1, sentAt: "later"},
+				),
+			).toEqual(first);
+			expect(yield* Stream.runCollect(mailbox.read("counter:1", 0))).toEqual(before);
+		}).pipe(Effect.provide(world())),
+	);
+});

@@ -66,7 +66,12 @@ export const brainOnly = (write: {
 	write.stream === PROCESSES ||
 	write.stream.startsWith(`${PROCESSES}/`) ||
 	Object.hasOwn(ProcessFact.cases, write.tag) ||
-	inSignalSpace(write.id);
+	inSignalSpace(write.id) ||
+	inRunnerSpace(write.id);
+
+/** Answer and alarm letters belong to the brain. Cmd write ids remain available to the signer. */
+export const inRunnerSpace = (id: string): boolean =>
+	/^process_[^/]+\/(?:due\/|[0-9]+\/[0-9]+\/answer(?:$|\/))/.test(id);
 export const Down = Schema.TaggedStruct("DOWN", {
 	ref: Text,
 	process: ProcessId,
@@ -87,12 +92,13 @@ export const Activity = Schema.TaggedUnion({
 	stepping: {process: ProcessId, letter: Text, build: Text},
 });
 const Recovered = Schema.TaggedUnion({
-	idle: Activity.cases.idle.fields,
+	idle: {process: Schema.optionalKey(ProcessId)},
 	interrupted: {process: ProcessId, letter: Text, build: Text, why: Schema.Literal("interrupted")},
 });
 export const recoverActivity = (
 	raw: unknown,
 ): Result.Result<typeof Recovered.Type, LedgerError> => {
+	if (raw === undefined) return Result.succeed(Recovered.cases.idle.make({}));
 	const saved = Schema.decodeUnknownResult(Activity)(raw);
 	if (Result.isFailure(saved)) return Result.fail(new LedgerError({why: "bad_row"}));
 	const value = saved.success;

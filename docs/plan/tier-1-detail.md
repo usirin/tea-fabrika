@@ -270,10 +270,12 @@ yield* Mailbox.send("notes:1", id, {type: "save", value: {note: "n-7f3a", base: 
 ```text
 1  the id is already in the log?   answer as the first time. Never look at `base`.
 2  refuse(model, m) says no?       answer its {why, ...}. No line, no view change.
-3  append, then update.            one more version.
+3  step, then append.              one more version. The step is ready first; it shows, and its Cmds run, only once the append lands.
 
 on a wake: letters from the log go through update only. refuse never runs on what was already saved.
 ```
+
+- **Step 3 steps before it appends** (P11's plan, 2026-11-08, [as built](#programs-as-p11-built-it)). A fresh step that throws then leaves no letter, so no poison letter reaches the log (p25). *It said: append, then update.*
 
 - **Step 1 comes first, or a lost answer turns into a false alarm.** The save landed, the answer was lost, and the window resends. By then its `base` is old, so a check of `base` alone would say "changed elsewhere" about its own text. p53 holds this.
 - **One at a time** is plan-115's permit (p22). It is also what makes two saves on one `base` end with one winner.
@@ -639,7 +641,7 @@ next/apps/fabrika          @kampus/fabrika: only wiring and the deploy stack: en
 **Fabrika is the logic, and Tuval is the projection of it.** Settled by the owner (biggest call 19).
 
 - **`@kampus/tuval` holds everything a client does:** dialing, the waiting screen, drawing tiles, folding to size, the prefix keys when they come, the menu view, the `PersonKey` and `PersonCheck` services, and the `dom`, `browser`, `electron` and `headless` parts on subpaths. So the tray, the panel, the keys, Touch ID and the founding screen live in `tuval/electron/`.
-- **`next/apps/fabrika` holds what starts things:** `entry/*`, `brain.ts`, `table.ts`, `launchd.ts` (the start), `build.ts`, `dev.ts`, `grant.ts`, `chaos-drill.ts`, `mcp.ts`, `alchemy.run.ts`, and the end-to-end test. It picks Layers and hands them in. If a file there holds a decision, it moves.
+- **`next/apps/fabrika` holds what starts things:** `entry/*`, `brain.ts`, `table.ts`, `launchd.ts` (the start), `build.ts`, `dev.ts`, `grant.ts`, `chaos-drill.ts`, `mcp.ts`, `alchemy.run.ts`, and the end-to-end test. It picks Layers and hands them in. If a file there holds a decision, it moves. *The test, decided by the owner 2026-11-08 ([why libfabrika exists](../direction/where-each-piece-lives.md#why-libfabrika-exists-decided-2026-11-08)): would a from-scratch client, built on `@kampus/libfabrika` alone, have to write the file again? If yes, it belongs in libfabrika.*
 - **Tuval may import `@kampus/libfabrika`, and never the other way.** The layer rules and p65 hold it. The law "kill the app and the counter keeps working in other windows" stays, as p48.
 - **Where "dialing" stops.** `transport/link.ts`, the wire's own state machine, stays in the library, since the MCP bridge is a client and dials too, and it can't import tuval. Tuval's window opens the socket, runs that machine and shows the waiting screen. So does `mcp/client.ts`, with no screen. Sure: 75%. The doubt is whether the owner meant the link too; if so, the bridge needs its own, or a lower package.
 
@@ -687,8 +689,9 @@ Nothing is lost. A focus move was never kept for its own sake, and PR 223's `des
 
 ```ts
 // next/programs/notes/src/program.ts: the box's side. The whole list.
-import {defineProgram, type Input, type Letter, type Program, type Refusal, Saw} from "@kampus/libfabrika";
-import {Cmd, defineMachine} from "@demlik/tea";
+// (updated 2026-11-08 to Program.make: it imported defineProgram and defineMachine)
+import {Program, type Input, type Letter, type Refusal, Saw} from "@kampus/libfabrika";
+import {Cmd, Machine} from "@demlik/tea/effect"; // export const machine = Machine.make(...), then Program.make({name, machine, ...})
 
 // next/programs/notes/src/view.tsx and tile.ts: the window's side. The whole list.
 import {type Handle, type ViewProps} from "@kampus/tuval"; // ViewProps: data, press, and read for ledger.read
@@ -1625,12 +1628,189 @@ export class GatewayManager extends Context.Service<GatewayManager, {
 
 **Where it hands off.**
 
-- **P11:** writes the `Activity` marker around each step and calls `storage.sync()` right after `stepping`. [Experiment 231](../../experiments/231-process-wakes.md) found that a constructor runs on every wake, idle ones too, so it can never mean a crash, and that the marker was lost twice when the object aborted right after the put; `sync()` kept it. P11 also reads fresh mail through `ProcessManager.receive` and puts the real process ID on runner spans.
+- **P11:** writes the `Activity` marker around each step and calls `storage.sync()` right after `stepping`. [Experiment 231](../../experiments/231-process-wakes.md) found that a constructor runs on every wake, idle ones too, so it can never mean a crash, and that the marker was lost twice when the object aborted right after the put; `sync()` kept it. P11 also reads fresh mail through `ProcessManager.receive` and puts the real process ID on runner spans. *As P11 built it: it reads its inbox through its own `Mailbox.read`, not `ProcessManager.receive`, and no wake reads the marker yet ([as built](#programs-as-p11-built-it)).*
 - **P34:** supplies the restart policy, calls `down` and `canRestart`, writes `dead`, and starts the successor with `Start.cases.again`. Retry counts must survive the new process ID.
 - **P10 and P12:** the signer checks `isLive` in the same project turn as a new append, and P12 wires connections to `GatewayManager` and the platform probe.
 - **P18** binds a window's monitor to its exact client session. **P21** reads `online(key)`. **P25** reads `info` for `ps`. **P27** checks recovery from these facts and P37's records.
 
 **What it cannot tell us.** The cost of folding process history and probing gateways on workerd (P12 measures it). Whether local wakes match every cloud shutdown (P24 checks real hibernation; experiment 231 ran on Miniflare only). Whether P11's step path writes and clears the marker at the right point. Whether P34's brake and backoff recover correctly. How a `DOWN`'s reason reads in P18's real window. Whether 256 characters is the right cap: it keeps every brain line under the ledger's limit, but no real text has been measured against it.
+
+### Programs, as P11 built it
+
+Built 2026-11-08, from [P11's row](./tier-1.md#the-pull-requests-one-at-a-time), tracker ticket 255, its pull request to come. It builds detail T3, p14, p22, p25's half, p35 and p69, and saved state's S2 and S3. The code is in `next/packages/libfabrika/src/app/` (`program.ts`, `state.ts`, `entry.ts`, `runner.ts`, `patch.ts`), `coordination/process-store.ts`, `src/testing.ts` and `next/programs/counter/`. These are the exported names, bodies left out; the code is the source. About 5,380 lines in 34 files, 3,640 of them tests.
+
+```ts
+// The whole idea, as built. Values are test values.
+const runner = yield* ProgramRunner;                 // ProgramRunner.layer(process), one per process
+yield* runner.open("client-1");                      // the whole view once, then one patch per installed step
+const sent = yield* runner.msg(delivery);            // P10's delivery, decoded as Incoming, never a public request
+// sent: {_tag: "accepted", rev: 12, pos: 3}, or {_tag: "refused", why: "bad_msg"}, or the program's own refusal
+yield* runner.due(Date.parse("2026-11-08T10:05:00Z")); // the object's alarm fired: a timer letter, if the program asked
+```
+
+**The program.** A program is a pure tea machine and the declarations the runner checks it by. A program is made with a typed `Program.make({name, machine, ...})`, its machine a `Machine.make` value of its own, so TypeScript infers the model, msg and view and nothing is written twice ([Program.make](../direction/program-make.md), decided 2026-11-07). `Program` below is the Schema behind it: the check when a program is loaded, where a missing part fails as `ProgramDown load`. Main's P11 shipped a plain object checked by this Schema, with no `Program.make`; the Program.make pull request fixes that, before P14. *(updated 2026-11-08 to Program.make; it said `Program` is a schema, so a declaration is decoded when it is loaded.)*
+
+```ts
+// app/program.ts
+export const Program = Schema.Struct({
+	name: Schema.NonEmptyString,
+	machine: /* a tea machine: update table, cmds, init */,
+	state: State,                                    // {v, schema, upgrades: [{name, from, run}]}
+	msg: Schemas,                                    // the only schema a fresh Msg is decoded by
+	view: Schema.Struct({data: Schemas, select: /* (model) => view */}),
+	refuse: /* (model, msg) => Refusal | null */,
+	inputs: Schema.Record(Schema.String, Input),     // the ports a client may use
+	outputs: Schema.Record(Schema.String, Schemas),
+	writes: Schema.Record(Schema.String, FactPolicy), // required, `{}` for none
+	wake: /* (model) => number | null */,
+});
+export const Input = Schema.TaggedUnion({
+	write: {schema, description, personOnly: Schema.Boolean},
+	read: {schema, description, answer: /* (view, input) => answer */},
+});
+export const FactPolicy = Schema.Struct({schema: Schemas, personOnly: Schema.Boolean});
+export const Refusal = Schema.Struct({why: Schema.String, now: Schema.optionalKey(Schema.Number), most: Schema.optionalKey(Schema.Number)});
+export const Write = Schema.TaggedUnion({caused: {parent: ParentText, fact: Fact}, own: {fact: Fact}});
+export const Step = Schema.TaggedUnion({
+	stepped: {model: Schema.Json, view: Schema.Json, cmds: Schema.Array(Schema.Json), wake: Schema.NullOr(Schema.Number)},
+	refused: Refusal.fields,
+});
+export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown", {
+	why: Schema.Literals(["load", "no_program", "step", "saved_state", "saved_letter"]),
+}) {}
+
+export type Stepper = {
+	readonly program: Program;
+	readonly init: (saved: unknown) => Step;              // boots from a saved model, or from null
+	readonly step: (model: unknown, msg: unknown) => Step; // a fresh input: decoded, maybe refused, stepped
+	readonly fold: (model: unknown, msg: unknown) => Step; // a saved input: applied as accepted, never refused
+};
+export const stepper: (declared: unknown) => Stepper;   // runs no Cmd, ever
+
+// app/state.ts: saved state, S3
+export class Saved extends Schema.Opaque<Saved>()(Schema.Struct({v, build, model: Schema.Json, after: Rev})) {
+	static upgrade(raw: unknown, state: State, build: string): {saved: Saved; ran: ReadonlyArray<string>};
+	// one named upgrade per number, on a copy; a gap, a repeated `from`, a future v, a throw or a bad model is ProgramDown saved_state
+}
+```
+
+**What the runner is given.** Every outside piece is a service, so P12 wires the real ones and Node tests wire the same shapes.
+
+```ts
+// app/entry.ts
+export const Incoming = Schema.Struct({
+	id: Schema.NonEmptyString,                          // P10's stable letter id
+	envelope: Schema.Struct({id: InputId, by: Writer, arrivedAt: Schema.Number, input: Schema.Unknown}),
+	sentAt: Schema.String,
+	seen: Schema.Int,
+	span: Schema.Struct({traceId: Schema.String, spanId: Schema.String}),
+});
+export type Update =
+	| {type: "whole"; rev: number; view: View}
+	| {type: "patch"; base: number; rev: number; patch: ReadonlyArray<Patch>}; // rev is an inbox pos
+export class ProgramLoader /* load: (name) => Effect<Loaded, ProgramDown> */ {
+	static layer(programs, handlers): Layer<ProgramLoader>;  // a handler per Cmd type; `fire` runs only for `chaos`
+}
+export class CheckedWriter /* P10's checked edges */ {
+	append: (input: Incoming) => Effect<Appended, LedgerError>;
+	commit: (id, session: Session, stream, fact) => Effect<Appended, LedgerError | SigningRefused | NotGranted>;
+	own: (id, stream, fact) => Effect<Appended, LedgerError | SigningRefused>;
+}
+export class WatcherManager /* publish: (client, update: Update) => Effect<void> */ {}
+export class Alarm /* set: (at: number | null) => Effect<void> */ {}
+export class Recording /* flush */ { static layer: Layer<Recording, never, SpanSink | RecordManager | Archive> }
+
+// app/runner.ts
+export type Descriptor = {id: string; name: string; program: string; build: string; owner: Writer};
+export const Sent = Schema.TaggedUnion({accepted: {rev, pos}, refused: Refusal.fields});
+export class ProgramRunner extends Context.Service<ProgramRunner, {
+	readonly open: (client: string) => Effect.Effect<Opened, RunnerFailure>;  // Opened = {rev, view}
+	readonly msg: (input: unknown) => Effect.Effect<Sent, RunnerFailure>;
+	readonly due: (at: number) => Effect.Effect<void, RunnerFailure>;
+}>()("@kampus/libfabrika/ProgramRunner") {
+	static layer: (process: Descriptor) => Layer<ProgramRunner, never,
+		ProgramLoader | ProcessStore | Mailbox | CheckedWriter | WatcherManager | Alarm | Recording>; // SessionManager optional
+}
+export class RunnerError /* why: "bad_input" | "bad_client" */ {}
+type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError;
+
+// coordination/process-store.ts: the process object's own storage
+export const Checkpoint = Schema.Struct({saved: {v, build, model, after}, turn: Schema.NullOr(Schema.Json), cmds: Schema.Array(Schema.Json)});
+export const RuntimeRecord = Schema.TaggedUnion({
+	stepped: {input, pos, build},                       // on the process's own stream, id `step:<letter>`
+	"state.upgraded": {program, from, to, ran, build},
+});
+export class ProcessStore /* activity, load, save(checkpoint, placed), placed(id), record(id, fact, from) */ {
+	static layer(sql, {process, storage?: {put, sync}}): Layer<ProcessStore, never, Ledger>;
+}
+
+// coordination/mailbox.ts: P9's `receive` is unchanged; `read` adds what the runner needs
+export type History = Letter & {build: string; seen: Rev; arrivedAt: number};
+// Mailbox.read: (name, after) => Stream<History, LedgerError>
+
+// src/testing.ts, `@kampus/libfabrika/testing`
+export const syncTest: (machine, ctx, {msgs, encode, decode, equals, seed}) => void; // S2, every cut
+export const senderTest: ({inputs, expected, writes, owner, seed}) => void;          // p69, expected table from inputs
+```
+
+**One input, traced.** The program `review` and its `approved` fact are made up; the steps are the code's, in order.
+
+```ts
+yield* runner.msg({
+	id: "letter-1",
+	envelope: {id: "in-process_01j…-1", by: {_tag: "person", key: "k1", for: "p1"}, arrivedAt: 1000, input: {type: "approve"}},
+	sentAt: "2026-11-08T10:00:00.000Z", seen: 11, span: {traceId: "t1", spanId: "s1"},
+});
+// under the permit:
+//  1 load or catch up the process (see the wake, below)
+//  2 a brain-only id, or an input that sends its own `parent`?   refused bad_msg
+//  3 store.placed("letter-1")?                                   accepted with its first placing, nothing run
+//  4 port `approve` is a write port; personOnly needs by._tag "person"; else refused bad_msg
+//  5 m = {type: "approve", parent: "in-process_01j…-1"}          the parent is the door's envelope id
+//  6 marker stepping, put then sync; stepper.step(model, m); marker idle
+//    a refusal answers its fields; a throw or bad returned data is ProgramDown step, and nothing is saved
+//  7 save the checkpoint with turn {_tag: "prepared", id: "letter-1"}
+//  8 checked.append(input) → {_tag: "placed", rev: 12, pos: 3}  (refused: clear the turn, answer its why)
+//  9 catch up: letter-1 folds, `stepped {input: "letter-1", pos: 3, build}` is recorded,
+//    the checkpoint and the letter's placing are saved in one transaction, watchers get a patch, the alarm is set
+// 10 its Cmd is saved dispatched: {id: "process_01j…/3/0", cmd: {type: "write", stream: "review:1",
+//    write: {_tag: "caused", parent: "in-process_01j…-1", fact: {_tag: "approved"}}}, parent, traceId, build}
+// after the permit, the Cmd runs:
+// 11 `approved` is declared in `writes`, is no process, member or runtime fact, and decodes by its schema
+// 12 sessions.signer(parent, process, "approved") under SignRequest {id: "process_01j…/3/0"},
+//    then checked.commit(...), its span linked to the signer's
+// 13 the answer is saved as letter "process_01j…/3/0/answer": {type: "write_ok", cmd, value: placed, at}
+//    (refused: {type: "write_err", why: "spent", …}), and folds under the permit; the Cmd leaves `dispatched`
+// 14 spans flush; msg answers {_tag: "accepted", rev: 12, pos: 3}
+```
+
+The prepared step in 6 is a check: what is installed is the fold of the landed letter in 9, so a fresh input steps twice. A failed append leaves the old model, view and Cmds.
+
+**How a wake works.** A runner loads on its first call, and catches up at the start of every turn after.
+
+- **Load.** The loader gives the stepper. A missing checkpoint boots with `init(null)`. A saved one decodes its dispatched Cmds, climbs through `Saved.upgrade`, boots with `init(model)`, and records `state.upgraded {program, from, to, ran, build}` when it climbed. Dispatched writes are kept to retry in the next turn, under the same id; a handler Cmd is never fired again, so one with no answer stays visible as dispatched.
+- **Catch up.** It reads `Mailbox.read(name, after)`. A letter counts as accepted when it is the runner's own (an answer or a timer), this call's letter, the saved prepared turn's id, or a placing the store kept. An accepted letter folds with its parent stamped back on; a fold that fails is `ProgramDown saved_letter`, and every letter stays. Any other letter is mail: it takes the fresh checks (a write port that is not person-only, no `parent`, its schema) and a refusal or a throw just skips it. Each folded letter records `stepped`; its Cmds are saved as dispatched, but only this call's letter's Cmds run now.
+- **`stepping`.** The runner writes `Activity stepping {process, letter, build}` before every fresh step and every fold of an accepted letter, and `idle` after, success or failure. Mail checked in a catch up gets no marker. On workerd's storage it calls `put`, then `storage.sync()`, then steps, since [experiment 231](../../experiments/231-process-wakes.md) found `await put()` returns before the marker is on disk. On Node, the SQL commit is the flush. If writing `idle` fails after a failed step, the step's failure is the one kept.
+- **Reading the marker.** `recoverActivity` reads it: a marker never written is `idle`; `idle` is `idle`; `stepping` is `interrupted {process, letter, build, why: "interrupted"}`; anything else is `LedgerError bad_row`. The law: an abort right after the step starts wakes as `interrupted`, never `idle`. The runner does not call it yet.
+
+**Review rulings, as built.**
+
+- **The brain-only id space.** `process_<id>/due/<at>` and `process_<id>/<pos>/<index>/answer` are the runner's alone: `brainOnly` covers them, `Mailbox.send` refuses them as `forbidden` unless the call carries the internal `RunnerMail` for that process and name, and the signer refuses them as `signal`. A Cmd's own write id, `process_<id>/<pos>/<index>`, stays free for the signer.
+- **A fresh input goes through `program.msg` only.** A fresh `timer` or a Cmd's `_ok` or `_err` is `bad_msg`; only a saved letter may settle a Cmd, and then its value is checked by the Cmd's `ok` schema.
+- **The door stamps the parent.** An input that already carries `parent` is `bad_msg`. The runner puts the envelope's id in as `parent`, so the program sees the door's stamp and nothing a client wrote.
+- **An answer is encoded through the Cmd's schema.** A handler's `Ok` value is encoded by the Cmd's `ok` schema to JSON; a declared error is saved as its `_tag`; anything else, an unknown Cmd, or a Cmd without a handler is `bad_cmd`. A handler that fails answers `handler_failed`, with the message only in deletable span content. An interrupted handler stays dispatched.
+- **Clients are evicted oldest first.** A client id is 1 to 256 characters, else `RunnerError bad_client`. At most 1,024 watchers are kept; opening again refreshes a client, and the 1,025th evicts the one opened longest ago.
+- **A refused commit keeps its why.** A `SigningRefused` keeps its own `why` (`not_delivered`, `spent`, `person_only`, `ended`, `signal`), `NotGranted` answers `not_granted`, and a refused append keeps the ledger's why, each in the saved `write_err`. A storage failure is no answer, so the Cmd stays dispatched. An `own` write of a person-only fact is `person_only`. A write to a brain-only stream, the door, or another process's inbox is `forbidden`.
+- Spans: `runner.open`, `runner.step`, `runner.due`, `runner.cmd`, `runner.write`, `loader.load`, `process.activity`, `process.record` and `mailbox.read`, each runner span with `fab.process`. `Recording.flush` runs after every call, on success and failure.
+
+**What is left for P34 and later.**
+
+- **P34:** reads the marker on a wake, counts throws, writes `dead`, and marks a process `down`. It also routes `DOWN` to a program: today a `DOWN` has `_tag` and no `type`, so it is mail that never reaches the program.
+- **Cmds from mail run late.** A Cmd made by folding mail or a prepared letter is saved, but a write runs only at the next load, and a handler Cmd stays dispatched for good; a peer's mail cannot start work live. Say so in the pull request, and file it for P34 if it is not meant.
+- **A prepared turn can outlive a failed append.** If the append fails on storage, the turn stays saved, and a later letter with that id would fold as accepted. It needs a storage failure and an id clash. A follow-up ticket.
+- **P12** wires the real loader, the workerd `put` and `sync` edge, `CheckedWriter`, `SessionManager` (a caused write without one ends the call as a defect), watchers, the alarm and P37's sink. **P14** decodes each program's view in its client. **P15** swaps code. **P17 and P27** bring the chaos program and its `fire`.
+
+**What it cannot tell us.** Nothing ran on workerd, so the cost of a turn, of stepping twice, and of `sync()` is not measured (P12). Experiment 231 ran on Miniflare only. The sender test proves the table its caller gives it, not what a program's author meant. Saving a Cmd before it runs does not make an outside effect happen once: a crash can leave a Cmd with no answer, and the runner does not guess.
 
 ### The span sink, as P37 built it
 
@@ -1994,6 +2174,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Why: old hellos can never get the list back, and with no reader, nothing else would notice a wrong one. Plants: a list written by hand in the hello, not read from `Host`; `has` dropped from the row; `verify` listed where it can't prompt; the door branching on `has`.
 
 **p67, the door stamps every input (scenario of P10).** `new`, node. s4, s7. `transport/answer.ts`, door. *Added 2026-11-05 (owner), from [inputs carry their sender](../direction/inputs-carry-their-sender.md).*
+- *Changed 2026-11-08 (owner, [question 20](./tier-1.md#open-questions)): `id` is a TypeID, `input_<26 chars>`, and the door's process and count are their own fields on the entry. Below is the law as first written; a build pull request moves p67 and p68 to the new shape.*
 - Every input past the door becomes one `Envelope` `{id, by, arrivedAt, input}`, made in memory there. `id` is an `InputId`, `in-<run>-<n>`: only the door makes one, the `<run>` part, which names the door's start ([question 20](./tier-1.md#open-questions)), is fresh at each start of the door's object, and no id is made twice across any number of starts. `by` is the checked key's writer, whatever the params say. `arrivedAt` is the referee's clock.
 - A frame that names its own `id` or `by` is refused in words, and the refusal is recorded. Nothing it asked for happens.
 - Each envelope is logged in the brain's own log: who sent it and where it went. Never a raw key's text, and a `Redacted` value logs hidden.
@@ -2049,7 +2230,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - **p84, a `build` commit changes no path on the base's exam list,** judged against its first parent with renames' both sides, merges included. Else `stuck: build_touched_exam` with the paths. Plants: only added paths; a rename's old path ignored; the list read from the head; merge commits skipped.
 - **p85, any exam path in the pull request's own change asks the owner:** `ask: owner: exam_read` with the paths, sorted, beside every `stuck`. A path with a control character counts as an exam path. Plants: a two-dot diff; the list from the head; the list's own rows removed.
 - **p86, the chain reaches the merged tree.** At pull request time the head contains the base, else `stuck: broken_chain`; the fix is a `lead` merge of `main`, never a rebase. After the merge, the `attested` links in `field/runs.jsonl` for one squash run from the tree of its `base` to its tree, each `from` the last `to`, no tree left twice, one ticket, each `sig` verified against `allowed_signers` at the link's `keys` commit. Plants: no up-to-date check; a gap passes; the head's tree in place of the squash's; keys from main's head.
-- **p87, the keys file says one thing:** `<role> namespaces="fabrika-step" ssh-ed25519 <key>` per line, roles `tests`, `build`, `lead`, each at least once, no key twice, no other option. Else, or with no file, the run fails and judges no commit. Plants: an ECDSA key; one key under two roles; a fourth role; a missing namespace.
+- **p87, the keys file says one thing:** `<role> namespaces="fabrika-step" ssh-ed25519 <key>` per line, roles `tests`, `build`, `lead`, each at least once, no key twice, no other option. Else, or with no file, the run fails and judges no commit. Plants: an ECDSA key; one key under two roles; a fourth role; a missing namespace. *Changed 2026-11-08 (owner): a `person:<id>` line with `namespaces="git"` is allowed too, for a person's own SSH-signed commits, so the "fourth role" plant goes ([a unit of work is a commit](../direction/a-unit-of-work-is-a-commit.md)); ticket 251 builds it.*
 - **p89, only a step's newest signature for the ticket counts.** Over every verified note on `refs/notes/fabrika` for the ticket, each step's highest `version` must be a link the pull request uses, and its older links in the pull request come before it; a tie of two links at one `version` counts neither. Else every commit of that step is `stuck: stale_link`, or the head when the pull request has none. After the merge, the same over `field/runs.jsonl`. `sign` writes the step's highest verified `version` plus one. Plants: `version` ignored; the scan limited to the pull request's commits; an unverified note's `version` counted; a tie broken by picking one; the after-merge half reading only the squash's own rows.
 
 **p88, every machine passes the sync test (S2, P35).** `new`, node. `src/exam/laws-scan.test.ts`. *Added 2026-11-06: [saved state, S2](../direction/saved-state.md#s2-every-machine-passes-the-sync-test), decided 2026-11-01. p83 to p87 are P32's.*

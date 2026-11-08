@@ -219,6 +219,8 @@ describe("p97, mailbox spans", () => {
 				expect(sends.length).toBe(2);
 				const [placed, refused] = sends;
 				if (placed === undefined || refused === undefined) return expect.unreachable();
+				expect(tagged(placed, "to")).toBe("notes:1");
+				expect(tagged(refused, "to")).toBe("notes:1");
 				expect(holds(placed, "notes:1") || holds(placed, "notes:1/inbox")).toBe(true);
 				expect(holds(placed, "letter_a")).toBe(true);
 				expect(tagged(placed, "answer")).toBe("placed");

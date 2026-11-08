@@ -97,6 +97,9 @@ with real shots and the owner's yes.
 The Linear row in step 4 is words. This step checks the look with eyes. It starts wide, as the
 pipe marker finalists did with four different designs, and only then refines one.
 
+This step also runs on its own for a screen already being built in today's app, before its pull
+request opens, even when no study is running (owner, 2026-11-08).
+
 - Build **3 or 4 distinct designs** for real in today's app, on a local branch, with the real
   tokens (`apps/fabrika/src/themes.ts`) and the real chassis around them. Each is a different
   answer to the same job, such as a list, a card, a panel or inline, not a small change to one
