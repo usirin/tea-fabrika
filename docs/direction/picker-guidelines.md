@@ -25,18 +25,20 @@ presses. Neither is a measurement.
 
 ```ts
 // A sketch, next/, Tier 2. The tracker hands the desk a pure function, a prefix and its commands.
-const tracker = defineProgram({
+// (updated 2026-11-08 to Program.make, and to one id per thing: the row's id was `#${t.number}`)
+const tracker = Program.make({
 	name: "tracker",
 	prefix: "t", // Q4: `t ` narrows the box to this program's rows
 	index: (m) =>
 		m.tickets.map((t) => ({
-			id: `#${t.number}`, // Q3: typed exactly, this row goes on top
-			location: {ticket: t.number},
+			id: t.id, // the ticket's one id; data points at it (one id per thing)
+			label: `#${t.n}`, // Q3: typed exactly, this row goes on top; only the tracker prints n
+			location: {ticket: t.id},
 			title: t.title,
 			hint: t.state,
 			open: t.state !== "done", // Q2: open work ranks first
 		})),
-	// machine, msg, view, commands, location: as program guidelines
+	// machine (its own Machine.make value), view, commands, location: as program guidelines
 });
 
 // pick's model: one program, in the palette layer or in a tile (Q9). The selection is an id (Q7).
