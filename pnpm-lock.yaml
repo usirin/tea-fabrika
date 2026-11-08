@@ -347,7 +347,7 @@ overrides:
 
 patchedDependencies:
   '@manti-ui/react@0.13.0': 520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef
-  '@manti-ui/styles@0.13.0': 2c3f0695e81699c228c9bfa56cdc1cc9a066d179127b15b7806dbb743025e72d
+  '@manti-ui/styles@0.13.0': 9dfe28661a29def50863a456ede72cf497903a2f4c7ea2eae80df62b543b3b3b
   alchemy@2.0.0-beta.84: 8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a
   ghostty-web@0.4.0: 28f943f1f6dce932fac5730afcbd278dfbbe017f43b896765d7146580f6dfb54
 
@@ -496,10 +496,10 @@ importers:
         version: link:../../packages/pipeline
       '@manti-ui/react':
         specifier: 'catalog:'
-        version: 0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0(patch_hash=2c3f0695e81699c228c9bfa56cdc1cc9a066d179127b15b7806dbb743025e72d))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0(patch_hash=9dfe28661a29def50863a456ede72cf497903a2f4c7ea2eae80df62b543b3b3b))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@manti-ui/styles':
         specifier: 'catalog:'
-        version: 0.13.0(patch_hash=2c3f0695e81699c228c9bfa56cdc1cc9a066d179127b15b7806dbb743025e72d)
+        version: 0.13.0(patch_hash=9dfe28661a29def50863a456ede72cf497903a2f4c7ea2eae80df62b543b3b3b)
       '@modelcontextprotocol/server':
         specifier: 'catalog:'
         version: 2.4.0
@@ -1388,7 +1388,7 @@ importers:
         version: link:../../packages/fabrika
       '@manti-ui/react':
         specifier: 'catalog:'
-        version: 0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0(patch_hash=2c3f0695e81699c228c9bfa56cdc1cc9a066d179127b15b7806dbb743025e72d))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0(patch_hash=9dfe28661a29def50863a456ede72cf497903a2f4c7ea2eae80df62b543b3b3b))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@pierre/highlights':
         specifier: 'catalog:'
         version: 0.3.0
@@ -1480,7 +1480,7 @@ importers:
         version: link:../../packages/pipeline
       '@manti-ui/react':
         specifier: 'catalog:'
-        version: 0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0(patch_hash=2c3f0695e81699c228c9bfa56cdc1cc9a066d179127b15b7806dbb743025e72d))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0(patch_hash=9dfe28661a29def50863a456ede72cf497903a2f4c7ea2eae80df62b543b3b3b))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@tea-fabrika/tracker':
         specifier: workspace:*
         version: link:../tracker
@@ -1523,7 +1523,7 @@ importers:
         version: link:../../packages/pipeline
       '@manti-ui/react':
         specifier: 'catalog:'
-        version: 0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0(patch_hash=2c3f0695e81699c228c9bfa56cdc1cc9a066d179127b15b7806dbb743025e72d))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0(patch_hash=9dfe28661a29def50863a456ede72cf497903a2f4c7ea2eae80df62b543b3b3b))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@tea-fabrika/tracker':
         specifier: workspace:*
         version: link:../tracker
@@ -1569,7 +1569,7 @@ importers:
         version: link:../../packages/pipeline
       '@manti-ui/react':
         specifier: 'catalog:'
-        version: 0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0(patch_hash=2c3f0695e81699c228c9bfa56cdc1cc9a066d179127b15b7806dbb743025e72d))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0(patch_hash=9dfe28661a29def50863a456ede72cf497903a2f4c7ea2eae80df62b543b3b3b))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       effect:
         specifier: 'catalog:'
         version: 4.1.1
@@ -7441,10 +7441,10 @@ snapshots:
     transitivePeerDependencies:
       - '@internationalized/date'
 
-  '@manti-ui/react@0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0(patch_hash=2c3f0695e81699c228c9bfa56cdc1cc9a066d179127b15b7806dbb743025e72d))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+  '@manti-ui/react@0.13.0(patch_hash=520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef)(@internationalized/date@3.12.4)(@manti-ui/styles@0.13.0(patch_hash=9dfe28661a29def50863a456ede72cf497903a2f4c7ea2eae80df62b543b3b3b))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
       '@manti-ui/folds': 0.13.0(@internationalized/date@3.12.4)
-      '@manti-ui/styles': 0.13.0(patch_hash=2c3f0695e81699c228c9bfa56cdc1cc9a066d179127b15b7806dbb743025e72d)
+      '@manti-ui/styles': 0.13.0(patch_hash=9dfe28661a29def50863a456ede72cf497903a2f4c7ea2eae80df62b543b3b3b)
       '@manti-ui/tokens': 0.13.0
       '@tanstack/react-table': 8.21.3(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@zag-js/react': 1.47.0(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -7453,7 +7453,7 @@ snapshots:
     transitivePeerDependencies:
       - '@internationalized/date'
 
-  '@manti-ui/styles@0.13.0(patch_hash=2c3f0695e81699c228c9bfa56cdc1cc9a066d179127b15b7806dbb743025e72d)':
+  '@manti-ui/styles@0.13.0(patch_hash=9dfe28661a29def50863a456ede72cf497903a2f4c7ea2eae80df62b543b3b3b)':
     dependencies:
       '@manti-ui/tokens': 0.13.0
 
