@@ -27,6 +27,20 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
   pull request, along with planted lines that must fire. Until then, this note and
   [AGENTS.md](../../AGENTS.md) are the only guard.
 
+## Edges the owner has read
+
+Each new edge comment is read by the owner, one line at a time. The ones read so far:
+
+| Where | The edge | Read |
+|---|---|---|
+| `next/apps/fabrika/src/door.ts` | two WebCrypto hashes (`crypto.subtle.digest`) | 2026-11-08, P10 ([PR 502](https://github.com/usirin/tea-fabrika/pull/502)) |
+| `next/apps/fabrika/src/door-nonce.ts` | WebCrypto `importKey`, `sign` and `verify` | 2026-11-08, P10 ([PR 502](https://github.com/usirin/tea-fabrika/pull/502)) |
+
+Decided by the owner, 2026-11-08: these five are approved as edges, each one `Effect.tryPromise`
+with a typed error. A crypto failure gets its own `why`, `crypto`, not `storage`. Why, as this note reads
+it: a hash that fails is not a storage fault, and the `why` is what a reader of the log acts on. Today four of them say
+`storage` and one says `not_granted`; a build pull request moves them to `crypto`.
+
 ## Why
 
 - **Everything after a base copies its style.** The first slice in `next/`
