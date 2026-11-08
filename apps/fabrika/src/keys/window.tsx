@@ -69,9 +69,7 @@ export const announcement = (keys: Keys, recording: Editor["recording"]): string
 			: "Press a key. Escape cancels."
 		: recording._tag === "candidate"
 			? `New key: ${recording.keys.map((key) => spoken(keys, key)).join(", ")}. Save or record again.`
-			: recording._tag === "saving"
-				? "Saving..."
-				: "";
+			: "";
 
 const ON_A_MAC = /Mac/.test(globalThis.navigator?.userAgent ?? "");
 
@@ -279,7 +277,7 @@ export function KeysWindow({
 												size="sm"
 												onClick={() => send({type: "query", query: spelling(key)})}
 											>
-												Same key: {spelling(key)}
+												Same key: {spoken(keys, key)}
 											</Button>
 										))}
 								</div>
@@ -313,7 +311,6 @@ export function KeysWindow({
 									</div>
 								</div>
 							)}
-							{busy && <p aria-hidden="true">{said}</p>}
 							{row?.keys.length === 0 && (
 								<p>No key. This command is still available in the command palette and tsh.</p>
 							)}
@@ -322,18 +319,20 @@ export function KeysWindow({
 				</div>
 			</div>
 			<div ref={result} tabIndex={-1} className="keys-result" role="status">
-				{/* A failed save's words, in the alert above, replace the last result here. */}
-				{editor.save !== "failed" && latest !== undefined && (
+				{/* While a save runs, the line says so and nothing older: focus rests here then. A failed
+				    save's words, in the alert above, replace the last result. */}
+				{busy && <p>Saving...</p>}
+				{!busy && editor.save !== "failed" && latest !== undefined && (
 					<>
 						<p>{latest.how === "file" ? "File change applied." : "Keys saved."}</p>
 						{latest.displaced.map((lost) => (
 							<p key={`${lost.does}:${spelling(lost.key)}`}>
-								{lost.does} lost {spoken(keys, lost.key)}.
+								{bindingFor(lost.does)?.name ?? lost.does} lost {spoken(keys, lost.key)}.
 							</p>
 						))}
 					</>
 				)}
-				{editor.undo !== null && (
+				{!busy && editor.undo !== null && (
 					<Button size="sm" disabled={busy || choosing} onClick={() => send({type: "undo"})}>
 						Undo
 					</Button>

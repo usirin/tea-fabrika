@@ -58,8 +58,9 @@ const same = (a: Key, b: Key) => a._tag === b._tag && a.key === b.key;
  */
 const CHANGES_SENT = 20;
 
-const failed = (what: "read" | "write", error: PlatformError.PlatformError) =>
-	new Refused({why: `${what} of keybindings.toml failed: ${saidOf(error)}`});
+/** Only a save reads and writes here: either failing is a failed save. */
+const failed = (error: PlatformError.PlatformError) =>
+	new Refused({why: `save of keybindings.toml failed: ${saidOf(error)}`});
 
 export type KeybindingManager = Manager;
 export const KeybindingManager = Object.assign(ManagerService, {
@@ -80,9 +81,7 @@ export const KeybindingManager = Object.assign(ManagerService, {
 			const ready = yield* Deferred.make<void>();
 			const read = Effect.suspend(() => fs.readFileString(file)).pipe(
 				Effect.catch((error) =>
-					error.reason._tag === "NotFound"
-						? Effect.succeed(null)
-						: Effect.fail(failed("read", error)),
+					error.reason._tag === "NotFound" ? Effect.succeed(null) : Effect.fail(failed(error)),
 				),
 			);
 			const modified = fs.stat(file).pipe(
@@ -241,12 +240,14 @@ export const KeybindingManager = Object.assign(ManagerService, {
 							path.dirname(real),
 							`.keybindings-${crypto.randomUUID()}.tmp`,
 						);
-						yield* fs.writeFileString(temporary, saved, {mode}).pipe(
-							Effect.andThen(fs.chmod(temporary, mode)),
-							Effect.andThen(fs.rename(temporary, real)),
-							Effect.ensuring(fs.remove(temporary).pipe(Effect.ignore)),
-							Effect.mapError((error) => failed("write", error)),
-						);
+						yield* fs
+							.writeFileString(temporary, saved, {mode})
+							.pipe(
+								Effect.andThen(fs.chmod(temporary, mode)),
+								Effect.andThen(fs.rename(temporary, real)),
+								Effect.ensuring(fs.remove(temporary).pipe(Effect.ignore)),
+								Effect.mapError(failed),
+							);
 						const applied = yield* observe(saved, from, displaced);
 						undo = request._tag === "undo" ? null : {version: applied.version, rows: restore};
 						return applied;
