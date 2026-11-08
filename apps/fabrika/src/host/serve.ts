@@ -692,7 +692,9 @@ export const serve = (options: {
 				: options.keybindings.changes.pipe(
 						Stream.map((next): Setting<Keys> => {
 							snapshot = next;
-							return {_tag: "read", value: next.keys};
+							return next.keys.file._tag === "read"
+								? {_tag: "read", value: next.keys}
+								: next.keys.file;
 						}),
 					);
 		yield* keyChanges.pipe(
@@ -744,7 +746,7 @@ export const serve = (options: {
 						saved: (saved) => toPage(client, {type: "keys.saved", ...saved}),
 						failed: (failed) => toPage(client, {type: "keys.failed", ...failed}),
 					},
-					{id: `keys:${crypto.randomUUID()}`, storage: memoryStorage()},
+					{id: `keys:${crypto.randomUUID().slice(0, 8)}`, storage: memoryStorage()},
 				).pipe(Effect.provideService(KeybindingManager, manager));
 				if (running.kind !== "running") {
 					toPage(client, {
