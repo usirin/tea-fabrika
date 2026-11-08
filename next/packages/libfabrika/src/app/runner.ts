@@ -196,6 +196,7 @@ export class ProgramRunner extends Context.Service<
 				const sessions = yield* Effect.serviceOption(SessionManager);
 				const permit = yield* Semaphore.make(1);
 				let live: Live | null = null;
+				let alarmAt: number | null | undefined;
 				/** Writes left dispatched by an earlier process life: retried once loaded. */
 				let retry: ReadonlyArray<Dispatched> = [];
 				const clients = new Set<string>();
@@ -234,6 +235,19 @@ export class ProgramRunner extends Context.Service<
 				);
 				const moved = (s: Supervision, msg: SupervisorMsg): Supervision =>
 					applyCell(supervisor, s, msg)[0];
+				/** One object alarm: program work is eligible only while live. */
+				const setAlarm = Effect.fnUntraced(function* (retryAt?: number) {
+					const running = supervision === null || supervision.recovery._tag === "live";
+					const until =
+						retryAt ?? (supervision?.recovery._tag === "down" ? supervision.recovery.until : null);
+					// Loading supplies the live program's wake; do not clear it before then.
+					if (running && live === null && until === null) return;
+					const wake = running ? (live?.wake ?? null) : null;
+					const next = wake === null ? until : until === null ? wake : Math.min(wake, until);
+					if (alarmAt === next) return;
+					yield* alarm.set(next);
+					alarmAt = next;
+				});
 				const adopt = Effect.fnUntraced(function* (id: string, build: string) {
 					if (process.id === id && process.build === build) return;
 					store = yield* rootStore.select(id);
@@ -325,7 +339,6 @@ export class ProgramRunner extends Context.Service<
 								if (s.recovery._tag !== "down") return yield* new LedgerError({why: "bad_row"});
 								yield* p.down(action.process, s.recovery, meta);
 								yield* fault("after_down");
-								yield* alarm.set(s.recovery.until);
 								yield* saveRecovery({...s, pending: null});
 								break;
 							}
@@ -405,10 +418,11 @@ export class ProgramRunner extends Context.Service<
 							Effect.gen(function* () {
 								if (supervision?.pending === null || supervision === null) return;
 								const at = yield* Clock.currentTimeMillis;
-								yield* alarm.set(at + supervision.policy.backoff.minMs);
+								yield* setAlarm(at + supervision.policy.backoff.minMs);
 							}),
 						),
 					);
+					yield* setAlarm();
 				});
 				const observed = Effect.fnUntraced(function* (
 					failure: Failure,
@@ -572,11 +586,11 @@ export class ProgramRunner extends Context.Service<
 						}
 					}
 					const latest = yield* currentRecovery;
-					if (latest.recovery._tag === "down") yield* alarm.set(latest.recovery.until);
-					else if (latest.recovery._tag === "live") {
+					if (latest.recovery._tag === "live") {
 						const healthy = moved(latest, {type: "healthy", at: status.at});
 						if (healthy !== latest) yield* saveRecovery(healthy);
 					}
+					yield* setAlarm();
 				});
 
 				/** A pure call: a ProgramDown it throws stays itself; any other throw is `why`. */
@@ -741,7 +755,7 @@ export class ProgramRunner extends Context.Service<
 								patch,
 							});
 					}
-					yield* alarm.set(after.wake);
+					yield* setAlarm();
 				});
 
 				/**
@@ -865,10 +879,14 @@ export class ProgramRunner extends Context.Service<
 					yield* ensure();
 					if (supervision !== null && supervision.recovery._tag !== "live")
 						return yield* new ProgramDown({why: "saved_letter"});
-					if (live !== null) return (yield* catchUp(live)).state;
-					const {live: loaded, dirty} = yield* load();
-					const {state} = yield* catchUp(loaded, {dirty});
+					let state: Live;
+					if (live !== null) state = (yield* catchUp(live)).state;
+					else {
+						const {live: loaded, dirty} = yield* load();
+						state = (yield* catchUp(loaded, {dirty})).state;
+					}
 					live = state;
+					yield* setAlarm();
 					return state;
 				});
 
@@ -1175,12 +1193,14 @@ export class ProgramRunner extends Context.Service<
 							"runner.due",
 							permit.withPermit(
 								Effect.gen(function* () {
+									// The platform consumes the alarm before this call.
+									alarmAt = undefined;
 									yield* ensure(time);
 									if (supervision !== null && supervision.recovery._tag !== "live")
 										return {answer: undefined, jobs: []};
 									const state = yield* ready();
 									if (state.wake === null || state.wake > time) {
-										yield* alarm.set(state.wake);
+										yield* setAlarm();
 										return {answer: undefined, jobs: []};
 									}
 									const id = `${process.id}/due/${time}`;
@@ -1213,6 +1233,7 @@ export class ProgramRunner extends Context.Service<
 									if (prior !== undefined) {
 										if (prior.build !== request.build)
 											return yield* new RunnerError({why: "bad_input"});
+										if (s.recovery._tag === "live") yield* ready();
 										return {answer: undefined, jobs: []};
 									}
 									const p = yield* coordinator;

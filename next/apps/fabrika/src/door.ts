@@ -851,7 +851,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					const old = decodeBinding(prior.value);
 					if (old.client !== raw || old.digest !== digest) return Result.succeed(null);
 					if (
-						(old.state._tag !== "retryable" && old.state._tag !== "delivered") ||
+						old.state._tag === "settled" ||
 						accepted ||
 						destination?.state._tag !== "live" ||
 						destination.state.process === old.process
