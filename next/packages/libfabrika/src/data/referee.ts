@@ -7,6 +7,7 @@
 // in its own step and rings once. No fiber, timer or Deferred is left behind, so the object can
 // sleep under a parked wait. Every call ends one span with names, ids and numbers only.
 import {Cause, Context, Effect, Equal, Exit, Layer, Option, Result, Schema} from "effect";
+import type {LedgerTurn} from "./ledger-transaction.ts";
 import {Doorbell, LedgerError} from "./ledger.ts";
 import {Appended, Entry, Line, PAGE, ParentText, Rev, Row, Waited} from "./log.ts";
 import {errorClass, short} from "./trace.ts";
@@ -156,6 +157,7 @@ const errorCode = (error: unknown): Option.Option<string | number> => {
 export class Referee extends Context.Service<
 	Referee,
 	{
+		readonly run: <A>(step: (turn: LedgerTurn) => A) => Effect.Effect<A, LedgerError>;
 		readonly append: (
 			stream: string,
 			id: string,
@@ -208,6 +210,7 @@ const make = (sql: Sql, doorbell: (typeof Doorbell)["Service"]): (typeof Referee
 			}),
 		).pipe(
 			Effect.catch(({error}) => {
+				if (error instanceof LedgerError) return Effect.fail(error);
 				const why = Schema.isSchemaError(error) ? "bad_row" : "storage";
 				const failure = new LedgerError({
 					why,
@@ -410,5 +413,42 @@ const make = (sql: Sql, doorbell: (typeof Doorbell)["Service"]): (typeof Referee
 			}),
 		);
 
-	return {append, read, wait};
+	const run = Effect.fn("ledger.transaction")(function* <A>(step: (turn: LedgerTurn) => A) {
+		const committed = yield* atomic((now) => {
+			const rings: Array<{stream: string; rev: Rev; waiter: Ring}> = [];
+			let open = true;
+			const ensureOpen = () => {
+				if (!open) throw new LedgerError({why: "storage", message: "ledger turn has ended"});
+			};
+			const turn: LedgerTurn = {
+				read: (stream, after) => {
+					ensureOpen();
+					return sql
+						.exec(`SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev`, stream, after)
+						.map((row) => decodeRow(row));
+				},
+				append: (stream, id, input) => {
+					ensureOpen();
+					const checked = check(stream, id, input);
+					if (Result.isFailure(checked)) throw new LedgerError({why: "refused"});
+					const placing = place(stream, id, checked.success, now);
+					if (placing._tag === "refused") throw new LedgerError({why: "refused"});
+					if (placing._tag === "placed")
+						for (const waiter of placing.rings) rings.push({stream, rev: placing.rev, waiter});
+					return {rev: placing.rev, pos: placing.pos};
+				},
+			};
+			try {
+				return {value: step(turn), rings};
+			} finally {
+				open = false;
+			}
+		});
+		yield* Effect.forEach(committed.rings, ({stream, rev, waiter}) => ring(stream, rev, waiter), {
+			discard: true,
+		});
+		return committed.value;
+	});
+
+	return {append, read, wait, run};
 };
