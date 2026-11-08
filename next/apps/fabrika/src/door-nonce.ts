@@ -7,6 +7,7 @@ import type {doorStore} from "./door-store.ts";
 export const doorNonce = Effect.fn("door.nonce")(function* (
 	store: ReturnType<typeof doorStore>,
 	ttl: number,
+	cap: number,
 ) {
 	const secret = yield* store.atomic(() => {
 		const saved = store.get("challengeKey", Schema.String);
@@ -76,10 +77,15 @@ export const doorNonce = Effect.fn("door.nonce")(function* (
 			until <= at ||
 			store.sql.exec("SELECT nonce FROM door_spent WHERE nonce=?", nonce).length > 0
 		)
-			return false;
+			return Result.succeed(false);
+		if (
+			Number(store.sql.exec("SELECT count(*) n FROM door_spent WHERE until>?", at)[0]?.n ?? 0) >=
+			cap
+		)
+			return Result.fail(new LedgerError({why: "storage"}));
 		store.sql.exec("DELETE FROM door_spent WHERE until<=?", at);
 		store.sql.exec("INSERT INTO door_spent (nonce,until) VALUES (?,?)", nonce, until);
-		return true;
+		return Result.succeed(true);
 	};
 	return {issue, check, spend};
 });

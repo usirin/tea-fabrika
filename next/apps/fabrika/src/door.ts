@@ -59,6 +59,9 @@ import {Base64, Base64Url} from "effect/encoding";
 import {doorNonce} from "./door-nonce.ts";
 import {doorStore} from "./door-store.ts";
 
+const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
+export type ConnectionId = typeof ConnectionId.Type;
+
 const quiet = Tracer.make({span: (options) => new Tracer.NativeSpan(options)});
 const silent = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.withTracer(quiet));
 const json = Schema.decodeUnknownResult(Schema.Json);
@@ -188,6 +191,7 @@ type Options<A, RNext, RDeliver, RNotify> = {
 	readonly waiting: {readonly most: number; readonly ttl: number};
 	readonly ping: {readonly min: number; readonly max: number};
 	readonly inputCap: number;
+	readonly spentCap: number;
 	readonly nextProcess: () => Effect.Effect<string, never, RNext>;
 	readonly deliver: (
 		process: string,
@@ -215,9 +219,9 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 	const archive = yield* Archive;
 	const store = doorStore(options.sql),
 		sql = options.sql;
-	const nonces = yield* silent(doorNonce(store, options.waiting.ttl));
+	const nonces = yield* silent(doorNonce(store, options.waiting.ttl, options.spentCap));
 	// Only calls currently checking a proof live here. No challenge is retained.
-	const checking = new Map<string, Set<{current: boolean}>>();
+	const checking = new Map<ConnectionId, Set<{current: boolean}>>();
 	const turn = yield* Semaphore.make(1);
 	const flush = sink.flush.pipe(
 		Effect.provideService(RecordManager, records),
@@ -273,14 +277,14 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			sql.exec("DELETE FROM door_pending WHERE client=?", client);
 		}
 	};
-	const attachment = Effect.fnUntraced(function* (client: string) {
+	const attachment = Effect.fnUntraced(function* (client: ConnectionId) {
 		const at = yield* clock;
 		return yield* store.atomic(() => {
 			prunePending(at);
 			return store.get(`client/${client}`, Attached);
 		});
 	});
-	const online = Effect.fnUntraced(function* (client: string) {
+	const online = Effect.fnUntraced(function* (client: ConnectionId) {
 		const attached = yield* attachment(client);
 		if (attached?._tag !== "online") return yield* new NotGranted({});
 		const raw = yield* store.atomic(() => store.get(`key/${client}`, Schema.String));
@@ -288,7 +292,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		const by = yield* membership(raw);
 		return {attached, raw, by};
 	});
-	const challenge = Effect.fnUntraced(function* (client: string) {
+	const connect = () => Effect.sync(() => ConnectionId.make(random()));
+	const challenge = Effect.fnUntraced(function* (client: ConnectionId) {
 		for (const attempt of checking.get(client) ?? []) attempt.current = false;
 		yield* store.atomic(() => {
 			// A reconnect retires this checked connection, never another client's proof.
@@ -298,7 +303,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		return yield* silent(nonces.issue(client));
 	});
 	const initialize = Effect.fnUntraced(function* (
-		client: string,
+		client: ConnectionId,
 		input: unknown,
 		trusted: {readonly url: string; readonly tab: string; readonly name: string},
 	) {
@@ -329,7 +334,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		);
 	});
 	const initializeChecked = Effect.fnUntraced(function* (
-		client: string,
+		client: ConnectionId,
 		hello: typeof Hello.Type,
 		trusted: {readonly url: string; readonly tab: string; readonly name: string},
 		until: number,
@@ -346,11 +351,13 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				consume: () => attempt.current && claimed,
 				admit: Effect.fnUntraced(function* () {
 					const at = yield* clock;
-					claimed = yield* store.atomic(() => {
+					const spent = yield* store.atomic(() => {
 						const current = store.get(`client/${client}`, Attached);
-						if (!attempt.current || current?._tag === "online") return false;
+						if (!attempt.current || current?._tag === "online") return Result.succeed(false);
 						return nonces.spend(hello.nonce, until, at);
 					});
+					if (Result.isFailure(spent)) return yield* spent.failure;
+					claimed = spent.success;
 					if (!claimed) return Admission.cases.refused.make({why: "not_granted"});
 					const raw = hello.key;
 					const existing = yield* readMembers();
@@ -433,7 +440,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		return Waiting.expire(state, at);
 	};
 	const knock = Effect.fnUntraced(function* (
-		client: string,
+		client: ConnectionId,
 		params: {readonly label: string; readonly pass?: string | null},
 	) {
 		const attached = yield* attachment(client);
@@ -458,7 +465,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		});
 		return ok({rows: state.rows});
 	});
-	const watch = Effect.fnUntraced(function* (client: string) {
+	const watch = Effect.fnUntraced(function* (client: ConnectionId) {
 		const checked = yield* silent(Effect.result(online(client)));
 		if (Result.isFailure(checked))
 			return WatchReply.cases.refused.make({why: "not_granted", rows: []});
@@ -477,7 +484,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		});
 		return WatchReply.cases.watching.make({rows: state.rows});
 	});
-	const disconnect = Effect.fnUntraced(function* (client: string) {
+	const disconnect = Effect.fnUntraced(function* (client: ConnectionId) {
 		for (const attempt of checking.get(client) ?? []) attempt.current = false;
 		const at = yield* clock;
 		yield* store.atomic(() => {
@@ -703,7 +710,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 						});
 						for (const row of pending)
 							for (const client of row.clients) {
-								const nonce = yield* challenge(client);
+								const nonce = yield* challenge(ConnectionId.make(client));
 								yield* notify(client, {method: "client.granted", params: {nonce}});
 							}
 						const connections = yield* store.atomic(() =>
@@ -723,7 +730,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			),
 		);
 	});
-	const deny = Effect.fnUntraced(function* (client: string, input: unknown) {
+	const deny = Effect.fnUntraced(function* (client: ConnectionId, input: unknown) {
 		const checked = yield* silent(Effect.result(online(client)));
 		if (Result.isFailure(checked)) return GrantReply.cases.refused.make({why: "not_granted"});
 		if (checked.success.by._tag !== "person")
@@ -743,7 +750,11 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			.write(MemberFact.cases.denied.make({id: random(), key, saw, by: from.by}), from)
 			.pipe(turn.withPermits(1));
 	});
-	const route = Effect.fnUntraced(function* (client: string, method: string, params: unknown) {
+	const route = Effect.fnUntraced(function* (
+		client: ConnectionId,
+		method: string,
+		params: unknown,
+	) {
 		const checked = yield* silent(Effect.result(online(client)));
 		if (Result.isFailure(checked)) return no("not_granted");
 		const {by, raw} = checked.success;
@@ -1022,6 +1033,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		}).pipe(turn.withPermits(1));
 	});
 	return {
+		connect,
 		challenge,
 		initialize,
 		knock,
