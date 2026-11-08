@@ -801,3 +801,58 @@ describe("p99, late rows of an archived day leave as a further part", () => {
 		},
 	);
 });
+
+describe("p99, a big day archives", () => {
+	it.effect(
+		"a day with 200,000 health rows leaves as one file, and its rows are deleted",
+		() => {
+			const {db, sql} = fresh();
+			const r2 = bucket();
+			const BIG = 200_000;
+			return Effect.gen(function* () {
+				yield* oldDay;
+				// Seeded in one statement, inside hour 10 of the day, which `oldDay` already summarized.
+				db.exec(
+					`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < ${BIG - 1})
+					INSERT INTO health (piece, at, ms, ok, error, lag, "spanId")
+					SELECT 'bulk.row', ${D + 10 * H} + (i % ${H}), 1, 1, NULL, NULL, NULL FROM n`,
+				);
+				expect(count(db, "health", inDay(D))).toBe(BIG + 8);
+				yield* flush;
+				expect(archiveRows(db), "the big day's try writes a good row").toEqual([ARCHIVED_OK]);
+				expect(db.prepare(`SELECT rows FROM archived`).all()).toEqual([{rows: BIG + 8}]);
+				expect(r2.lines(fileKey("2026-10-23"))).toHaveLength(BIG + 8);
+				expect(count(db, "health", inDay(D)), "the big day's rows are deleted").toBe(0);
+			}).pipe(Effect.provide(world(sql, Archive.bucket(r2.calls))));
+		},
+		60_000,
+	);
+});
+
+describe("p99, archiving checks the count before it deletes", () => {
+	it.effect(
+		"a row of the day deleted between the read and the delete: the archive deletes nothing",
+		() => {
+			const {db, sql} = fresh();
+			const r2 = bucket();
+			return Effect.gen(function* () {
+				yield* oldDay;
+				const real = yield* Archive;
+				// Something else takes one of the read rows while the put is on the wire.
+				const racing = {
+					put: (key: string, body: Uint8Array) =>
+						Effect.sync(() =>
+							db.exec(
+								`DELETE FROM health WHERE rowid = (SELECT min(rowid) FROM health WHERE ${inDay(D)})`,
+							),
+						).pipe(Effect.andThen(real.put(key, body))),
+				};
+				expect(count(db, "health", inDay(D))).toBe(8);
+				yield* flush.pipe(Effect.provideService(Archive, racing));
+				expect(count(db, "archived"), "no archived row when the count changed").toBe(0);
+				expect(count(db, "health", inDay(D)), "the other seven rows stay").toBe(7);
+				expect(archiveRows(db)).toEqual([{piece: ARCHIVE, ok: 0, error: "mismatch"}]);
+			}).pipe(Effect.provide(world(sql, Archive.bucket(r2.calls))));
+		},
+	);
+});
