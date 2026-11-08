@@ -1,9 +1,9 @@
 # What may a person change about where programs show, and what may a program claim for itself?
 
-Read 2026-11-07. **This is reading, not a measurement.** Steps 1 to 4 of the
-[guidelines skill](../.claude/skills/guidelines/SKILL.md) only. No app was built and no shot was
-taken: the one Electron slot was held by other work. Step 5 (designs and shots) comes next, and
-this write-up lists the shots it should take. No note and no Design canvas exist yet; they will
+Read 2026-11-07; designs built and shot 2026-11-08. **This is reading, not a measurement.**
+Steps 1 to 4 of the [guidelines skill](../.claude/skills/guidelines/SKILL.md) on 2026-11-07, step
+5 (four designs in today's app, shot at eight layouts) on 2026-11-08, when the owner picked D1 with
+D3. No note and no Design canvas exist yet; they will
 be the note "Customization" and the canvas "Customization guidelines". It takes the calls parked
 here by [program guidelines](../docs/direction/program-guidelines.md) (calls 6 and 7),
 [the ask desk](../docs/direction/ask-desk.md) (the inbox tile), [layers](../docs/direction/layers.md)
@@ -331,6 +331,63 @@ light. Each beside today's app and the closest Linear image.
 | Where a program opens | `trace` beside; `trace` with a float rule; the reset row | side by side, 2x2, 1024x700, smallest tile |
 | 7, the look | A, B and C from the same list, focus on the list | all eight; B and C must show what they cover in the 2x2 |
 
+## Step 5: four designs, and the pick
+
+Built 2026-11-08 in today's app, on a local lab branch that is never merged. Each design ran in the
+real renderer behind `?design=d1..d4`, with the design package's tokens and the real chassis, and
+was shot with headless Chromium on the built renderer, as `apps/fabrika/shots.ts` does (no
+Electron, no host). 21 states at the eight layouts above, dark at every layout and light at one
+tile and the 2x2: 210 shots. The shots and the lab stay on that branch, not in the repo.
+
+```text
+design   pipe line            what makes it different
+today    none                 the frame's own asks menu; asks only
+D1       inbox (top bar)      the inbox's glance: a popover, two groups, reply in the row, Open all with its key
+D2       inbox | ticket       the slot is a count; the inbox tile has two tabs; the ticket opens beside it
+D3       inbox                one list, two groups; Space unfolds the look under the row; a place rule may float it
+D4       inbox                the same list; Space floats the look over the next rows, as Linear's peek
+```
+
+| Design | States shot | Leans it follows or breaks |
+|---|---|---|
+| D1, the glance | closed, popover, reply in the popover, the slot set to tracker, the palette row, empty | Follows call 6 (one slot, the person picks it), groups, "Open all" as a command |
+| D2, tabs beside | Your turn tab, Messages tab, reply, empty, `trace` floated by a rule | Breaks the groups lean (tabs). Follows "a program never says where" |
+| D3, unfold | groups, the look unfolded, the look floated by a place rule, reply, a long list | Follows groups, layers L6 and call 7 B |
+| D4, float | groups, the look floated, reply | Walks back layers L6 and call 3, both decided; Linear's answer as it ships |
+
+**The pick (owner, 2026-11-08): D1 with D3.** The inbox program has two views: its glance in the
+top bar's one slot (D1) and its tile (D3). One list in two groups, Your turn on top, then
+Messages. Space unfolds a look in place under the row; a person's place rule may make it float,
+which settles call 7 as **B**. "Open all" is the inbox's own command with its key.
+
+- **D2 lost** on the groups lean: two tabs hide one group behind a press, and Linear's own
+  Priority split keeps asks on top in one list.
+- **D4 lost** on layers L6 and call 3: its float covered the rows under the selected one at every
+  layout, and in the 2x2 it covered most of the tile.
+- **The second group is Messages,** not Lines: what an agent or a person sends you (owner,
+  2026-11-08, [PR 496](https://github.com/usirin/tea-fabrika/pull/496)).
+
+What changed in two rounds:
+
+- D3 and D4 dropped the "Inbox" heading inside the tile; the tile's title bar already says it.
+- D4's float sat over its own row; it moved under the row.
+- D1's popover ran off the window at 320 px (WCAG 1.4.10). It is now never wider than the window
+  less 16 px.
+- In a tile under 420 px the footer wrapped to three lines. It now keeps Move and Open, and the
+  rest stay in the palette.
+
+Still off, for the build plan:
+
+- D1's slot words ("2 your turn · 2 messages") are cut at 320 px. A shorter word at that width,
+  or the count alone, is the build's call.
+- Today's trace program draws "5 min" over "10 min" in a narrow tile. Not this study's; filed as
+  its own ticket.
+
+Made up in the lab: the stuck run on #12 and its title, both agent messages (builder on #7, scout
+on #9), the long list's tickets 20 to 33, the reply text, and the palette rows' words. Ticket #7,
+its ask and its trace are the stand-in's (`@tea-fabrika/tracker/seven`). In the lab, Approve,
+No, Send and Later draw their keys but write nothing, since there is no host.
+
 ## What this tells us for fabrika
 
 - One shape covers four of the five calls: a program offers, the person places, the frame draws.
@@ -343,7 +400,8 @@ light. Each beside today's app and the closest Linear image.
 
 ## What it cannot tell us
 
-- Nothing was built or shot. Every lean is a reading, and the look is untested.
+- The shots ran headless on the built renderer, not in Electron, and no screen reader ran. The
+  look is checked by eye beside today's app; nothing was measured.
 - Linear's sidebar settings were not found; its docs page 404s. The claim that Linear lets no app
   add chrome rests on the developer docs not naming a place, which is absence, not a statement.
 - Apple's HIG page did not render, so macOS is read from its support guide only.
