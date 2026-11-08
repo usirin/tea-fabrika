@@ -3,7 +3,8 @@
 **Decided 2026-11-01 by the owner**, after [experiment 177](../../experiments/177-themes.md). Each
 person picks the colors they see. The default way in is a Radix pick. A theme file people already
 use (Base16, Base24, Ghostty) is the other way in, and it keeps its own colors, even though they are
-not Radix steps. `next/` builds this. Nothing is built yet.
+not Radix steps. `next/` builds this. Nothing is built yet. **Point 4, a theme that fails
+contrast, decided 2026-11-07 by the owner:** the app nudges it at load, or shows it as written.
 
 ```toml
 # ~/.fabrika/fabrika.toml, the person's own settings
@@ -44,14 +45,17 @@ theme = "nord-fabrika"   # a file in ~/.fabrika/themes/; leave the line out for 
   color so it reads, Nord is saved as `~/.fabrika/themes/nord-fabrika.toml` and shown as
   `nord-fabrika` in the picker, never under `nord`. A theme that needs no repair keeps its name. So
   repair happens once, at import, and lands in a real file a person can open. Its `[repaired]` table
-  says what came in and what changed. This is the Linux distro habit for a patched package: Debian
+  says what came in and what changed. *Changed 2026-11-07: repair now also runs at every load, as
+  the nudge, and never writes a file ([point 4](#4-a-theme-that-fails-contrast-decided-2026-11-07));
+  import still writes this repaired file, decided 2026-11-07: a person can open it and read what
+  changed.* This is the Linux distro habit for a patched package: Debian
   adds `+deb13u1` to a stable update
   ([Developer's Reference 5.5.1](https://www.debian.org/doc/manuals/developers-reference/pkgs.en.html)),
   and Ubuntu adds `ubuntu1` the first time it changes a Debian package
   ([version string format](https://ubuntu.com/project/docs/how-ubuntu-is-made/concepts/version-strings/)),
   so nobody takes their version for the upstream one.
 - **The terminal's per-cell check never renames anything.** It happens as the terminal draws and
-  never changes a file ([below](#4-a-brought-theme-that-fails-contrast-proposed)).
+  never changes a file ([below](#4-a-theme-that-fails-contrast-decided-2026-11-07)).
 - **Where it lands in the plan.** Tier 1 reads its config files and keeps today's styling as its
   named exception. Reading theme files and the `themes` program are both in Tier 2, beside the other
   first programs. The approved Tier 1 does not grow.
@@ -95,12 +99,14 @@ Themes and keys follow one rule: **user config, with the defaults as the first r
 `~/.fabrika/`, and each setting has one home there.
 
 - The built-in themes are `fabrika`, the dark default, and `fabrika-light`. They ship as files in
-  the same TOML shape, and they are the first rows of the list the picker shows.
+  the same TOML shape, and they are the first rows of the list the picker shows. *Changed
+  2026-11-07 ([design language](./design-language.md), call 5): the built-in theme files are
+  generated from the token files, not written by hand.*
 - A person's own files come after. A guess, to match keys: a file with a built-in's name wins over
   the built-in, as a later row does.
 - One difference from keys: a theme is a full set, so a file is not merged with the default. On the
   lean below, a file with a color missing does not load
-  ([what the app does](#4-a-brought-theme-that-fails-contrast-proposed)).
+  ([what the app does](#4-a-theme-that-fails-contrast-decided-2026-11-07)).
 
 ## The answer each way in gives
 
@@ -132,10 +138,10 @@ ground = "#111113"    # gray 1
 raised = "#18191b"    # gray 2
 hover = "#ddeaf814"   # gray a3
 edge = "#d3edf81d"    # gray a4, the bend color principles already records
-focus = "#d9edff5d"   # gray a8
+focus = "#dfebfd6d"   # gray a9; changed 2026-11-07, was a8 #d9edff5d
 text = "#edeef0"      # gray 12
 faint = "#f1f7feb5"   # gray a11
-turn = "#3e63dd"      # accent 9: your turn
+turn = "#3e63dd"      # accent 9: your turn; the token is turn-fill, see below
 on-turn = "#ffffff"   # Radix's own rule for text on step 9
 turn-text = "#9eb1ff" # accent 11
 done = "#71d083"      # step 11
@@ -154,7 +160,7 @@ palette = [ ... ]     # 16 Radix steps: gray 3 (black, a fill); the six at 9, 9,
 
 ```text
 text 15.15   faint 8.71   turn-text 8.53   done 9.26   running 11.49   stuck 8.35   closed 8.71
-focus 3.01   turn 3.62   on-turn 5.21   edge 1.31 (carries no fact, see below)
+focus 3.01 (a8; a9 not yet run)   turn 3.62   on-turn 5.21   edge 1.31 (carries no fact, see below)
 terminal: every color but black (0, a fill) 4.82 or more on the background
 moved by repair: 0
 ```
@@ -163,7 +169,7 @@ moved by repair: 0
 the dark one:
 
 - `running` is amber 12, since amber 11 reads 4.38, and `focus` is slate a9, since a8 reads 1.90.
-  Repair would move both there.
+  Repair would move both there. *Changed 2026-11-07: focus is slate a9 in both looks now (call 4).*
 - **Changed 2026-11-01, approved by the owner from the design review of ticket 144:** `done` is
   grass 12 (`#203c25`), `stuck` red 12 (`#641723`) and `turn-text` indigo a11 (`#002bb7c5`). This
   note had them at step 11. Step 11 passes on the desk, the ground and raised, but the window also
@@ -256,7 +262,8 @@ base00 the ground, base05 the text, base08 red, base0A yellow, base0B green, bas
 
 ## Proposed
 
-Each point is a lean from experiment 177, for the owner to settle.
+Each point is a lean from experiment 177, for the owner to settle. Point 4 was settled on
+2026-11-07, and its heading says so.
 
 ### 1. The data shape (proposed)
 
@@ -321,10 +328,19 @@ const Theme = Schema.Struct({
   since alpha sits on any ground. A Base16 file has red, yellow and green as states, and the study's
   own mapping made lines from them, which breaks "a color means one thing". Sure: 65%. Doubt: a pipe
   wash in Radix sky may look foreign on a warm theme. A look on real themes settles it.
+- **Changed 2026-11-07 ([design language](./design-language.md), calls 3 to 6):**
+  - **A theme sets only global tokens; part tokens follow them.** A tile or popover token is never
+    in a theme file. It points at a global token, so it changes when the theme does.
+  - **`turn` becomes `turn-fill`, and focus is one slate a9 token everywhere** (call 4). `turn`
+    meant the fill here and the text in `window.css`; now each token means one thing.
+  - **The `[colors]` keys take the global token names in call 6's rename pull request.** Until then
+    this note keeps today's names (`turn`, `faint`, `edge` and the rest), so the sketches above
+    still say `turn`.
 - **Seven tokens have no theme name.** `--surface-selected`, `--border`, `--border-strong`,
   `--wire`, the keyboard ring `--focus`, `--turn-fill-hover` and `--scrim` are in the design
   package's `tokens.css` but not among the fifteen colors above, so a brought theme could not set
-  them. Found in P31; Tier 2 meets it.
+  them. Found in P31; Tier 2 meets it. *Changed 2026-11-07: a part token among them follows a
+  global one and needs no theme name; which are global is settled in call 6's rename.*
 - **Values are hex for now.** Whether a theme may hold Display P3 is still open on main
   ([pipe colors](./pipe-colors.md), [color principles](./color-principles.md)). Adding it later
   loses no data, since hex stays valid.
@@ -373,39 +389,131 @@ A program never sees a theme file and never sets a theme. It gets, in this order
 
 Sure: 75%. Doubt: no third-party program exists yet, so this is reasoning from today's code.
 
-### 4. A brought theme that fails contrast (proposed)
+### 4. A theme that fails contrast (decided 2026-11-07)
 
-A brought theme must never make the app unreadable. The `themes` program repairs it at import, into
-`<name>-fabrika`, and does not refuse it.
+**Decided 2026-11-07 by the owner.** A theme must never make the app unreadable, and a person can
+still see their theme exactly as written. One setting picks which:
 
-What is checked, at import and again on every load:
+```toml
+# ~/.fabrika/fabrika.toml
+[theme]
+fix = "nudge"   # the default
+# fix = "off"   show the theme exactly as written, with a warning line
+```
 
-| Names | Against | Bar |
+```ts
+// A sketch, in packages/fabrika-design: the one checker. The token build calls it on the
+// built-in themes, and the app calls it when it loads a person's theme.
+const Fix = Schema.Literals(["nudge", "off"]);
+
+class Moved extends Schema.TaggedClass<Moved>()("moved", {
+	token: TokenName, // a text, icon or border token, never a background
+	on: TokenName, // the background of the pair that failed
+	was: Hex,
+	now: Hex, // same hue and chroma in OKLCH, the smallest lightness move that reaches the floor
+	from: Schema.Number, // the ratio before, on final values
+	to: Schema.Number,
+}) {}
+class Builtin extends Schema.TaggedClass<Builtin>()("builtin", {
+	token: TokenName,
+	now: Hex, // fabrika's own value for the look: `fabrika` for dark, `fabrika-light` for light
+	why: Schema.Literal("past_cap"),
+}) {}
+const Change = Schema.Union([Moved, Builtin]);
+
+// pairs and floors come from the token files, the same ones the build reads
+declare const check: (theme: Theme, pairs: Pairs, version: RepairVersion) => ReadonlyArray<typeof Change.Type>;
+```
+
+```text
+theme "dusk": 2 colors moved, 1 uses fabrika's
+  text-faint on surface   2.9 -> 4.5
+```
+
+**`nudge`** runs when the app loads a person's theme:
+
+- **One checker.** It uses the same contrast function, and the same pairs and floors from the token
+  files, that the build uses for the built-in themes. One function, called in both places.
+- **It moves text, icon and border colors only, never a background,** since one background sits
+  under many pairs.
+- **It moves lightness only, in OKLCH.** It keeps hue and chroma, so the color still reads as the
+  person's pick, and takes the smallest move that reaches the floor.
+- **It is capped.** Past the cap, that one token uses fabrika's own built-in value for the theme's
+  look (`fabrika` for dark, `fabrika-light` for light), and says so. The cap's size is set from
+  fixture themes, not guessed. It is an open number until then.
+- **It checks final values.** A translucent token is composited onto its backdrop first.
+- **It shows what moved,** once at load, and through a check command, as in the sketch above.
+- **It never rewrites the person's file.** The repaired values are derived each time the theme
+  loads.
+
+**`off`** shows the theme as written, and still prints the same warning lines.
+
+Also decided:
+
+- **An agent that writes a theme runs the check, and fixes its own file before the file lands.**
+  The nudge is the safety net for files nobody checked.
+- **A few real Base16 and Ghostty themes are kept as test fixtures,** each asserting how much it
+  moves, so a change to the checker cannot quietly move everyone's colors. Experiment 177's kept
+  schemes (`experiments/177-themes/schemes/`) are the candidates.
+- **The repair math is versioned.** A new version is a change the fixtures show.
+- **When the OS high-contrast mode (forced colors) is on, the person's theme is dropped.** The
+  system's colors win.
+- **A color picked in the app's color picker goes through the same check.**
+- **Import still writes its own copy.** Importing Nord writes `nord-fabrika.toml` with the fixes
+  and a `[repaired]` table in it, so a person can open the file and read what changed. The nudge
+  is for a file the person wrote; it finds nothing to move in an imported copy.
+- **What stays from the proposal:** backgrounds never move (desk, ground, raised, hover, and the
+  terminal's background). `edge` is not checked and never moves: it carries no needed fact, at
+  1.31:1 in `fabrika` by design, the bend [color principles](./color-principles.md) records.
+  `focus` is checked like text, to 3:1, since it is the one line a person must see. A file that
+  does not decode (a value that is not a color, a missing name, broken TOML) is not applied: the
+  app keeps `fabrika` and says why.
+- **Changed 2026-11-07:** a file in `themes/` that fails at load is no longer refused. The proposal
+  kept `fabrika` and offered to import it as `<name>-fabrika`; now the nudge repairs it at load, or
+  `off` shows it as written. That answers the proposal's doubt that a person tuning their own file
+  may want it shown anyway.
+
+The pairs and floors checked today, before they move into the token files (this note's names; the
+token files use the global token names after call 6's rename):
+
+| Names | Against | Floor |
 |---|---|---|
 | `text`, `faint`, `turn-text`, `done`, `running`, `stuck`, `closed` | the worst of desk, ground and raised | 4.5:1, [WCAG 1.4.3](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html) |
 | `on-turn` | `turn` | 4.5:1 |
 | `focus`, `turn` | the ground (focus is drawn inside the tile) | 3:1, [1.4.11](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html) |
-| terminal text, per cell, when drawn | that cell's own background | 4.5:1 |
 | the terminal cursor | the terminal's background | 3:1 |
 
-What repair does:
+What the study's files would need, from `experiments/177-themes/rules.py`. These counts come from
+the proposal's older repair, which moved away from the background without a smallest-move rule or
+a cap, so the fixtures re-measure them under the nudge:
 
-- **Backgrounds never move:** desk, ground, raised, hover, and the terminal's background.
-- **`edge` is not checked and never moves.** It carries no needed fact. It is 1.31:1 in `fabrika`
-  by design, the bend [color principles](./color-principles.md) records, and the title bar and the
-  focus edge carry the tile instead. Moving it would break that look on every theme.
-- **`focus` moves like text, to 3:1.** It is the one line a person must see.
+| Theme | App colors moved | Terminal colors under 4.5 on the background |
+|---|---|---|
+| `fabrika`, `fabrika-light` | 0 | 1 and 2, the fills |
+| Nord (Base16) | 3 | 6 |
+| Solarized Light (Base16) | 7 | 14 |
+| Catppuccin Mocha (Base24) | 1 | 2 |
+| Dracula (Ghostty) | 1 | 2 |
+| Catppuccin Latte (Ghostty) | 6, and the cursor | 14 |
+| Unreadable on purpose | 9, and the cursor | 16 |
+
+When a person meets it:
+
+- **At load, when the nudge moved anything,** or when `off` shows a theme that fails: the lines
+  above, once.
+- **Any time,** through the check command.
+- **In the `themes` program, before they pick or import:** what the nudge would move.
+- **At load, when a file does not decode:** `theme nord: ground is not a color; using fabrika`.
+- There is no prompt on opening the app.
+
+Not settled by this decision, still proposed:
+
 - **A Radix pick steps up its own scale,** one step at a time, solid or alpha: 11 to 12, a8 to a9,
-  9 to 10 or 11. `on-turn` takes white or slate 1, whichever reads. Run over all 300 picks (6 grays,
-  25 accents, dark and light), this always ended on a Radix step, with no value off the scale. 275
-  of the 300 needed a move: every light pick moves `running` (amber 11 to 12) and `focus` (a8 to
-  a9). So the built-ins are written with those steps already, and repair moves nothing in them.
-  - A guess: a pick has no upstream file anyone could mistake it for, so it is written with its
-    steps already chosen and keeps its name. If the owner wants `-fabrika` there too, it costs
-    nothing.
-- **A shared file moves lightness only,** along each color's own hue, away from the background
-  first, as iTerm2's minimum contrast moves text and never the background. Black or white text
-  reaches 4.5:1 on any ground, so it always ends readable.
+  9 to 10 or 11, so a pick stays on Radix steps and the nudge finds nothing to move. Run over all
+  300 picks (6 grays, 25 accents, dark and light), this always ended on a Radix step. 275 of the
+  300 needed a move: every light pick moves `running` (amber 11 to 12) and `focus` (a8 to a9). So
+  the built-ins are written with those steps already. A guess: a pick has no upstream file anyone
+  could mistake it for, so it keeps its name.
 - **The terminal's palette is never changed. Its text is kept readable per cell, when it is drawn.**
   Each cell's text moves, lightness only, against that cell's own background, and the background
   never moves. So ANSI black stays black where a program paints a bar with it, and only black text
@@ -424,54 +532,16 @@ What repair does:
   - The check, run over every pair a program can draw (the default text and the 16, on the default
     background and the 16, 273 pairs): in the study's unreadable test (every color near one gray),
     16 of 16 colors read under 3:1 and all 273 pairs under 4.5:1. Per cell, all 273 reach 4.5.
-  - The cursor stays a theme check, at 3:1 on the terminal's background, and moves like `focus`.
-    Ghostty leaves the cursor glyph out of minimum contrast too. In the unreadable test it goes from
-    1.07 to 3.05.
+  - The cursor stays a theme check, at 3:1 on the terminal's background. Ghostty leaves the cursor
+    glyph out of minimum contrast too. In the unreadable test it goes from 1.07 to 3.05.
   - ghostty-web 0.4 has no minimum contrast. We try it first as a `pnpm patch` to ghostty-web and
     offer it upstream. Until one lands, the terminal draws the file's colors as they are, and the
     `themes` program counts the colors under 4.5 before a person picks.
   - Sure: 75%. Doubt: the cost of one more contrast step per cell in ghostty-web's renderer, and
     upstream's answer. A patch measured with four full terminals, as the study's swap was, settles
     the first.
-- **The file brought in is never changed.** Repair writes a new file, `<name>-fabrika.toml`, with
-  `[repaired]` saying what changed. Import keeps only the original's hash, as above.
-- **A file in `themes/` that fails at load is not applied.** That is a file written or edited by
-  hand, since import never writes one that fails. The app keeps `fabrika` and says once:
-  `theme mine: stuck under 4.5:1; using fabrika`. The `themes` program offers to import it as
-  `mine-fabrika`. Sure: 70%. Doubt: a person tuning their own file may want it shown anyway, as they
-  edit it.
-- **A file that does not decode is not applied.** A value that is not a color, a missing name or
-  broken TOML: the app keeps `fabrika` and says why.
-
-What the study's files need, from the same script. No palette is changed in any of them.
-
-| Theme | App colors moved | Terminal colors under 4.5 on the background, lifted per cell |
-|---|---|---|
-| `fabrika`, `fabrika-light` | 0 | 1 and 2, the fills |
-| Nord (Base16) | 3 | 6 |
-| Solarized Light (Base16) | 7 | 14 |
-| Catppuccin Mocha (Base24) | 1 | 2 |
-| Dracula (Ghostty) | 1 | 2 |
-| Catppuccin Latte (Ghostty) | 6, and the cursor | 14 |
-| Unreadable on purpose | 9, and the cursor | 16 |
-
-When a person meets it:
-
-- **In the `themes` program, before they import.** The preview lists what repair will change, for
-  example `stuck #bf616a -> #eb8991`, the name it will be saved under, and how many terminal colors
-  are lifted per cell.
-- **At import, when repair changed anything.** The bottom line says so once, in one line:
-  `Imported Nord as nord-fabrika: 3 colors changed to stay readable`. The file's `[repaired]` lists
-  them.
-- **At load, when a file is refused.** The bottom line says once: `theme nord: ground is not a
-  color; using fabrika`. The `themes` program shows the same reason.
-- There is no prompt on opening the app.
-
-Sure: 75%, and 75% on the terminal (its doubt is above). Doubts: which measure gates, WCAG or APCA,
-is open (Radix promises APCA). Repair changes colors the person chose: Solarized Light and Latte lift
-most of their terminal text when drawn, so a "keep my colors" switch may be wanted. A `-fabrika`
-file is a copy: when the scheme's author ships a new version, it must be imported again. A real person using a
-brought theme for a week settles both.
+- **Which measure the one function uses, WCAG or APCA,** is still open (Radix promises APCA). The
+  nudge uses whatever the token build uses, so the choice is made once.
 
 ### 5. Two names nobody has set yet (proposed)
 
@@ -526,13 +596,15 @@ up.
   - A doubt: cyan sits 4 degrees from sky and mint 4 from teal, iris 10 from violet, and indigo, the
     default, 21 from violet. A pipe's letter tells them apart (principle 3), but on a desk the
     accent may look like a pipe. A look on a real desk settles it.
-- **Principle 1, accessible.** Kept by repair, above.
+- **Principle 1, accessible.** Kept by the nudge, above, unless the person sets `fix = "off"`.
 
 ## What this cannot tell us
 
 - Whether anyone beyond the owner wants a brought theme. No user has picked one.
 - How a brought theme looks with Radix pipe washes on it. Nobody has looked.
-- Whether repair feels like the app overruling the person. Nobody has used it for long.
+- Whether the nudge feels like the app overruling the person. Nobody has used it for long, and
+  `off` is the way out.
+- How big the nudge's cap is. It is set from the fixture themes, and none is kept yet.
 - The live-switching and Nord-at-2.83 numbers are from today's version, on one Mac, in experiment 177.
   The contrast numbers come from `experiments/177-themes/rules.py` on the study's files, not from a
   screen: alpha colors were composited by hand, and nothing was drawn. Per-cell contrast was
