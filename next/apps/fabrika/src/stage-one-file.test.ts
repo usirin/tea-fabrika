@@ -1,359 +1,88 @@
-// P16, next/. These checks consume the lead's real-stage observations. P12's stage and driver
-// are absent on this base; inventing their RPC or provider API here would test a stand-in.
-// P16_STAGE_PROOF names the saved JSON from that run, P16_BRAIN its copied brain.mjs. Neither
-// path is recorded. The digest binds every observation to the exact completed file.
-//
-// The lead must collect declarations from the REAL Alchemy test provider, loader calls from the
-// REAL box, HTTP bytes from the copied-file stage, and inbox/view results from P12's driver.
-// Plants below exercise the same rejecting checks. They are not claims that workerd ran here.
+// P16, next/. P12's actual workerLoader, stack and localStage contracts, not saved proof JSON.
+// The input-ID migration is missing on the base. Never manufacture an old stamped ID here.
 import assert from "node:assert/strict";
-import {createHash} from "node:crypto";
-import {existsSync, readFileSync} from "node:fs";
-import {basename, resolve} from "node:path";
-import {Schema} from "effect";
-import {describe, expect, it} from "vitest";
+import {createHash, generateKeyPairSync, sign} from "node:crypto";
+import {
+	cpSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
+import {createServer as httpServer} from "node:http";
+import {createServer} from "node:net";
+import {join, resolve} from "node:path";
+import {NodeServices} from "@effect/platform-node";
+import {workerLoader} from "@kampus/libfabrika/workers";
+import {Effect, Layer, Schema} from "effect";
+import * as fc from "fast-check";
+import {parseSync} from "oxc-parser";
+import {afterEach, describe, expect, it, vi} from "vitest";
 
-const sha = (bytes: string | Uint8Array) => createHash("sha256").update(bytes).digest("hex");
-const Hash = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
-const Blob = Schema.Struct({hash: Hash, base64: Schema.String});
-const Program = Schema.Struct({name: Schema.String, hash: Hash, source: Schema.String});
-const Asset = Schema.Struct({
-	route: Schema.String,
-	type: Schema.String,
-	hash: Hash,
-	body: Schema.String,
-});
-const Setting = Schema.Struct({name: Schema.String, value: Schema.Json});
-const Binding = Schema.Struct({name: Schema.String, type: Schema.String});
-const Declaration = Schema.Struct({
-	stage: Schema.Literals(["local", "cloud"]),
-	chaos: Schema.Boolean,
-	main: Schema.String,
-	bundle: Schema.Boolean,
-	file: Blob,
-	settings: Schema.Array(Setting),
-	bindings: Schema.Array(Binding),
-});
-const Loader = Schema.Struct({
-	key: Schema.String,
-	process: Schema.String,
-	program: Schema.String,
-	hash: Hash,
-	mainModule: Schema.String,
-	modules: Schema.Record(Schema.String, Schema.String),
-	env: Schema.Record(Schema.String, Schema.Json),
-	// optional only so the omitted-outbound plant reaches the assertion, not a decoder error.
-	globalOutbound: Schema.optionalKey(Schema.Json),
-});
-const Http = Schema.Struct({
-	route: Schema.String,
-	status: Schema.Int,
-	type: Schema.String,
-	body: Schema.String,
-});
-const Place = Schema.Struct({rev: Schema.Int, pos: Schema.Int});
-const Counter = Schema.Struct({
-	letter: Schema.String,
-	first: Place,
-	resent: Place,
-	acknowledgedBeforeStop: Schema.Array(Schema.String),
-	inbox: Schema.Array(Schema.Struct({id: Schema.String, pos: Schema.Int})),
-	view: Schema.Struct({count: Schema.Int}),
-	watcher: Schema.Struct({count: Schema.Int}),
-	stoppedBeforeReply: Schema.Boolean,
-	restartedOnSameUrl: Schema.Boolean,
-});
-const Proof = Schema.Struct({
-	brain: Blob,
-	declarations: Schema.Array(Declaration),
-	programs: Schema.Array(Program),
-	assets: Schema.Array(Asset),
-	loaders: Schema.Array(Loader),
-	http: Schema.Array(Http),
-	copiedFiles: Schema.Array(Schema.String),
-	unknownProgram: Schema.Struct({
-		_tag: Schema.Literal("ProgramDown"),
-		why: Schema.Literal("no_program"),
-	}),
-	isolation: Schema.Struct({
-		parentBinding: Schema.String,
-		bindingValue: Schema.String,
-		programKeys: Schema.Array(Schema.String),
-		outbound: Schema.Literals(["denied", "allowed"]),
-		controlOutbound: Schema.Literal("allowed"),
-		probeHits: Schema.Int,
-	}),
-	counter: Counter,
-	wake: Schema.Struct({before: Schema.String, after: Schema.String}),
-});
-type Proof = typeof Proof.Type;
-
-const readProof = () => {
-	assert(
-		existsSync(resolve(import.meta.dirname, "local-stage.ts")),
-		"P12 not built: next/apps/fabrika/src/local-stage.ts",
-	);
-	const path = process.env.P16_STAGE_PROOF;
-	const brain = process.env.P16_BRAIN;
-	assert(
-		path && brain,
-		"P16 real run unfinished: lead must set P16_STAGE_PROOF and P16_BRAIN after running P12's actual stage driver",
-	);
-	const proof = Schema.decodeUnknownSync(Schema.fromJsonString(Proof))(readFileSync(path, "utf8"));
-	assert.equal(
-		proof.brain.hash,
-		sha(readFileSync(brain)),
-		"proof is for different final brain bytes",
-	);
-	assert.equal(proof.brain.hash, sha(Buffer.from(proof.brain.base64, "base64")));
-	return proof;
+const APP = resolve(import.meta.dirname, "..");
+const homes: string[] = [];
+const runs = {seed: 119120, numRuns: 3};
+const hash = (s: string) => createHash("sha256").update(s).digest("hex");
+const home = () => {
+	const h = mkdtempSync("/tmp/fh.");
+	homes.push(h);
+	vi.stubEnv("FABRIKA_HOME", h);
+	vi.stubEnv("TYPESAFE_API_KEY", undefined);
+	vi.stubEnv("DO_NOT_TRACK", "1");
+	return h;
 };
-
-const environment = (proof: Proof) => {
-	assert.equal(proof.declarations.length, 2);
-	const code = [
-		...proof.programs.map((row) => row.source),
-		...proof.assets.map((row) => row.body),
-	].filter(Boolean);
-	for (const declaration of proof.declarations) {
-		for (const setting of declaration.settings) {
-			assert(
-				Buffer.byteLength(
-					typeof setting.value === "string" ? setting.value : JSON.stringify(setting.value),
-					"utf8",
-				) <
-					5 * 1024,
-				"setting exceeds 5 KB of encoded bytes",
-			);
-			assert(!/WINDOW_JS|PROGRAM_SOURCE/i.test(setting.name), "source returned to environment");
-			const includesCode = (value: unknown): boolean =>
-				typeof value === "string"
-					? code.some((source) => value.includes(source))
-					: value !== null && typeof value === "object" && Object.values(value).some(includesCode);
-			assert(!includesCode(setting.value), "compiled code in setting");
+// Change the disposable completed file, then exercise that file on the real stage below.
+// Parsing finds P12's loader policy, so the plant cannot silently miss a formatting change.
+const plantPolicy = (source: string, mode: "binding" | "outbound", name: string, value: string) => {
+	const ranges: Array<{start: number; end: number}> = [];
+	const visit = (node: any): void => {
+		if (node === null || typeof node !== "object") return;
+		if (node.type === "ObjectExpression") {
+			const prop = (key: string) =>
+				node.properties.find((p: any) => p.key?.name === key || p.key?.value === key);
+			if (
+				prop("mainModule")?.value?.value === "program.js" &&
+				prop("env") &&
+				prop("globalOutbound")
+			) {
+				const target = mode === "binding" ? prop("env").value : prop("globalOutbound");
+				ranges.push({start: target.start, end: target.end});
+			}
 		}
-		for (const binding of declaration.bindings) {
-			assert(
-				!/WINDOW_JS|PROGRAM_SOURCE/i.test(binding.name),
-				"source masquerading as resource binding",
-			);
-			assert(binding.type.length > 0, "provider did not identify resource binding");
-		}
-	}
-};
-
-const stages = (proof: Proof) => {
-	assert.deepEqual(proof.declarations.map((row) => row.stage).sort(), ["cloud", "local"]);
-	assert.equal(new Set(proof.declarations.map((row) => row.chaos)).size, 1);
-	for (const declaration of proof.declarations) {
-		assert.equal(declaration.bundle, false, "stack bundles the completed file again");
-		assert.equal(
-			basename(declaration.main),
-			"brain.mjs",
-			"stack selects source instead of the completed file",
-		);
-		assert.equal(sha(Buffer.from(declaration.file.base64, "base64")), declaration.file.hash);
-		assert.equal(declaration.file.hash, proof.brain.hash, "local/cloud clean builds differ");
-	}
-};
-
-const assets = (proof: Proof) => {
-	assert.deepEqual(
-		proof.copiedFiles,
-		["brain.mjs"],
-		"complete-output run retained source or sibling files",
-	);
-	assert(
-		proof.assets.filter((row) => row.type === "text/javascript; charset=utf-8").length >= 2,
-		"secondary chunk absent",
-	);
-	assert(
-		proof.assets.some((row) => row.type === "text/css; charset=utf-8"),
-		"CSS absent",
-	);
+		for (const child of Object.values(node)) visit(child);
+	};
+	visit(parseSync("brain.mjs", source).program);
+	assert.equal(ranges.length, 1, "plant must reach exactly one real loader policy");
+	const at = ranges[0]!;
+	const changed =
+		source.slice(0, at.start) +
+		(mode === "binding" ? JSON.stringify({[name]: value}) : "") +
+		source.slice(at.end);
 	assert.equal(
-		new Set(proof.assets.map((row) => row.route)).size,
-		proof.assets.length,
-		"duplicate asset route",
+		parseSync("brain.mjs", changed).errors.length,
+		0,
+		"plant must leave executable JavaScript",
 	);
-	for (const asset of proof.assets) {
-		assert.equal(sha(asset.body), asset.hash);
-		const response = proof.http.find((row) => row.route === asset.route);
-		assert(response, "embedded route was not fetched from the copied-file stage");
-		assert.equal(response.status, 200);
-		assert.equal(response.type, asset.type);
-		assert.equal(response.body, asset.body, "served bytes changed");
-	}
-	assert.equal(
-		proof.http.find((row) => row.route === "/p16-missing.js")?.status,
-		404,
-		"missing script got HTML fallback",
-	);
+	return changed;
 };
-
-const loader = (proof: Proof) => {
-	assert(proof.programs.length >= 2, "table must exercise two distinguishable programs");
-	assert.equal(
-		new Set(proof.programs.map((row) => row.name)).size,
-		proof.programs.length,
-		"duplicate program name",
-	);
-	assert.equal(
-		new Set(proof.programs.map((row) => row.hash)).size,
-		proof.programs.length,
-		"fixture programs must have distinguishable code",
-	);
-	for (const program of proof.programs) {
-		assert.equal(sha(program.source), program.hash, "program hash paired with another source");
-		const calls = proof.loaders.filter((row) => row.program === program.name);
-		assert(calls.length > 0, "table entry fell back to host execution");
-		for (const call of calls) {
-			assert.equal(call.hash, program.hash);
-			assert.equal(call.key, `${program.hash}:${call.process}`);
-			assert.equal(call.mainModule, "program.mjs");
-			assert.deepEqual(call.modules, {"program.mjs": program.source});
-			assert.deepEqual(call.env, {}, "program received a binding");
-			assert.equal(call.globalOutbound, null, "program inherited outbound access");
-		}
-	}
-	assert(proof.isolation.parentBinding.length > 0 && proof.isolation.bindingValue.length > 0);
-	assert.deepEqual(proof.isolation.programKeys, [], "program read parent bindings");
-	assert.equal(proof.isolation.controlOutbound, "allowed");
-	assert.equal(proof.isolation.outbound, "denied", "program fetched externally");
-	assert.equal(proof.isolation.probeHits, 0);
-	assert.equal(proof.wake.after, proof.wake.before, "storage wake changed the process ID");
-	assert(
-		proof.loaders.some((row) => row.process === proof.wake.before),
-		"wake did not exercise the loader",
-	);
-};
-
-const recovery = (proof: Proof) => {
-	const run = proof.counter;
-	assert(run.stoppedBeforeReply && run.restartedOnSameUrl, "recovery scenario was not reached");
-	assert.deepEqual(run.resent, run.first, "resend lost its first placing");
-	assert.equal(
-		run.inbox.filter((row) => row.id === run.letter).length,
-		1,
-		"resend duplicated or lost the input",
-	);
-	assert.equal(run.inbox.find((row) => row.id === run.letter)?.pos, run.first.pos);
-	for (const id of run.acknowledgedBeforeStop)
-		assert.equal(
-			run.inbox.filter((row) => row.id === id).length,
-			1,
-			"acknowledgement preceded durable append",
-		);
-	assert.equal(run.view.count, 1);
-	assert.equal(run.watcher.count, 1);
-};
-
-describe("P16 real-stage obligations, lead run required", () => {
-	it("p33 environment: encoded sizes and code-free settings, including multibyte and WINDOW_JS plants", () => {
-		const proof = readProof();
-		environment(proof);
-		const declaration = proof.declarations[0]!;
-		for (const setting of [
-			{name: "WINDOW_JS", value: proof.assets[0]!.body},
-			{name: "multibyte", value: "雪".repeat(2000)},
-		]) {
-			const planted = {
-				...proof,
-				declarations: [
-					{...declaration, settings: [...declaration.settings, setting]},
-					proof.declarations[1]!,
-				],
-			};
-			expect(() => environment(planted)).toThrow();
-		}
-	});
-	it("p33 same file: actual local/cloud declarations, source/time/URL/rebundle plants", () => {
-		const proof = readProof();
-		stages(proof);
-		for (const change of [
-			{main: "src/brain.ts"},
-			{bundle: true},
-			{
-				file: {
-					hash: sha("stage URL or build time"),
-					base64: Buffer.from("stage URL or build time").toString("base64"),
-				},
-			},
-		]) {
-			expect(() =>
-				stages({
-					...proof,
-					declarations: [{...proof.declarations[0]!, ...change}, proof.declarations[1]!],
-				}),
-			).toThrow();
-		}
-	});
-	it("p33 complete output and assets: copied file serves every chunk and CSS; missing script is 404", () => {
-		const proof = readProof();
-		assets(proof);
-		for (const planted of [
-			{...proof, copiedFiles: ["brain.mjs", "window.js"]},
-			{...proof, assets: proof.assets.filter((row) => !row.type.startsWith("text/css"))},
-			{
-				...proof,
-				assets: proof.assets.filter(
-					(row) => row.type.startsWith("text/css") || row.route === "/window.js",
-				),
-			},
-			{
-				...proof,
-				http: proof.http.map((row) =>
-					row.route === "/p16-missing.js"
-						? {...row, status: 200, body: "<html>fallback</html>"}
-						: row,
-				),
-			},
-			{...proof, http: proof.http.slice(1)},
-		])
-			expect(() => assets(planted)).toThrow();
-	});
-	it("p33 isolation and table: actual loader config, binding/outbound/host-fallback/swapped-hash plants", () => {
-		const proof = readProof();
-		loader(proof);
-		const call = proof.loaders[0]!;
-		const {globalOutbound: _outbound, ...omitted} = call;
-		for (const first of [{...call, env: {P16_BINDING: "planted"}}, omitted])
-			expect(() => loader({...proof, loaders: [first, ...proof.loaders.slice(1)]})).toThrow();
-		expect(() => loader({...proof, loaders: []})).toThrow("host execution");
-		expect(() =>
-			loader({
-				...proof,
-				programs: [
-					{...proof.programs[0]!, source: proof.programs[1]!.source},
-					...proof.programs.slice(1),
-				],
-			}),
-		).toThrow("hash paired");
-		expect(() =>
-			loader({...proof, isolation: {...proof.isolation, outbound: "allowed", probeHits: 1}}),
-		).toThrow("fetched externally");
-	});
-	it("T10 behavior: lost reply and restart return the first placing and one input to both clients", () => {
-		const proof = readProof();
-		recovery(proof);
-		for (const counter of [
-			{...proof.counter, resent: {...proof.counter.first, pos: proof.counter.first.pos + 1}},
-			{...proof.counter, inbox: []},
-			{
-				...proof.counter,
-				inbox: [
-					...proof.counter.inbox,
-					{id: proof.counter.letter, pos: proof.counter.first.pos + 1},
-				],
-			},
-		])
-			expect(() => recovery({...proof, counter})).toThrow();
-	});
+afterEach(() => {
+	vi.doUnmock("alchemy");
+	vi.doUnmock("@alchemy.run/cloudflare");
+	vi.resetModules();
+	vi.unstubAllEnvs();
+	for (const h of homes.splice(0)) rmSync(h, {recursive: true, force: true});
 });
-
-// This is the lead's measurement, not a benchmark performed by the tests step. P12 supplies
-// the actual caps. CI checks behavior and prints timings; only the laptop run compares caps.
-const Readings = Schema.Struct({
+const field = (value: string | Buffer) => {
+	const b = Buffer.from(value),
+		n = Buffer.alloc(4);
+	n.writeUInt32BE(b.length);
+	return Buffer.concat([n, b]);
+};
+// P12's driver field names. Its current driver supplies no lostLinkMs and publishes no caps.
+// Those are missing measurements, never a license to reuse PR 223's caps or invent new ones.
+const Metrics = Schema.Struct({
 	acceptedSend: Schema.Number,
 	publication: Schema.Number,
 	restart: Schema.Number,
@@ -363,98 +92,599 @@ const Readings = Schema.Struct({
 	startup: Schema.Number,
 });
 const Sample = Schema.Struct({
-	ok: Schema.Boolean,
-	brain: Hash,
 	session: Schema.String,
 	settings: Schema.String,
-	load: Schema.String,
 	chaos: Schema.Boolean,
-	readings: Readings,
+	brain: Schema.String,
+	load: Schema.String,
+	missing: Schema.Record(Schema.String, Schema.String),
+	error: Schema.optionalKey(Schema.String),
+	startMs: Schema.Number,
+	sendMs: Schema.Array(Schema.Number),
+	publishMs: Schema.Array(Schema.Number),
+	replaceMs: Schema.Number,
+	reconnectMs: Schema.Number,
+	lostLinkMs: Schema.Number,
+	workerdRssMb: Schema.Number,
 });
 const Bar = Schema.Struct({
 	driver: Schema.String,
 	capsFrom: Schema.String,
-	caps: Readings,
+	caps: Metrics,
 	base: Schema.Array(Sample),
 	head: Schema.Array(Sample),
-	sizes: Schema.Struct({brain: Schema.Int, programs: Schema.Int, window: Schema.Int}),
+	sizes: Schema.Struct({brain: Schema.Number, programs: Schema.Number, window: Schema.Number}),
 });
 type Bar = typeof Bar.Type;
-const metrics = [
-	"acceptedSend",
-	"publication",
-	"restart",
-	"reconnect",
-	"lostLink",
-	"rss",
-	"startup",
-] as const;
-const median = (values: readonly number[]) =>
-	[...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]!;
-const localBar = (bar: Bar, brain: string, enforce: boolean) => {
-	assert.equal(bar.base.length, 4, "four individual base runs required");
-	assert.equal(bar.head.length, 5, "five individual head runs required");
-	assert(
-		bar.driver.length > 0 && bar.capsFrom.length > 0,
-		"P12 driver and recorded cap source required",
-	);
-	const reference = bar.base[0]!;
+const median = (values: readonly number[]) => {
+	assert(values.length > 0, "reading missing");
+	const sorted = [...values].sort((a, b) => a - b);
+	return sorted[Math.floor(sorted.length / 2)]!;
+};
+const readings = (s: typeof Sample.Type) => ({
+	acceptedSend: median(s.sendMs.slice(1)),
+	publication: median(s.publishMs),
+	restart: s.replaceMs,
+	reconnect: s.reconnectMs,
+	lostLink: s.lostLinkMs,
+	rss: s.workerdRssMb,
+	startup: s.startMs,
+});
+const localBar = (bar: Bar, digest: string, enforce: boolean) => {
+	assert.equal(bar.driver, "experiments/233-local-stage-speed-bar.ts");
+	assert(bar.capsFrom.length > 0, "measured cap source missing");
+	assert.equal(bar.base.length, 4);
+	assert.equal(bar.head.length, 5);
 	for (const sample of [...bar.base, ...bar.head]) {
-		assert(sample.ok, "a failed run blocks the bar");
-		for (const key of ["session", "settings", "load", "chaos"] as const)
-			assert.equal(sample[key], reference[key], "base/head settings or sitting differ");
-		for (const value of Object.values(sample.readings))
-			assert(Number.isFinite(value) && value >= 0, "missing or invalid reading");
+		assert.equal(sample.error, undefined, "failed run");
+		assert.deepEqual(sample.missing, {}, "missing reading");
+		for (const key of ["session", "settings", "chaos"] as const)
+			assert.equal(sample[key], bar.base[0]![key], "different sitting or settings");
+		assert(sample.load.length > 0, "load missing");
+		for (const value of Object.values(readings(sample)))
+			assert(Number.isFinite(value) && value >= 0, "invalid reading");
 	}
-	for (const sample of bar.head)
-		assert.equal(sample.brain, brain, "measurement is for different final bytes");
-	for (const size of Object.values(bar.sizes))
-		assert(size > 0, "brain/program/window sizes required separately");
-	for (const metric of metrics) {
-		assert(
-			Number.isFinite(bar.caps[metric]) && bar.caps[metric] > 0,
-			"cap must come from P12's measured bar",
-		);
+	for (const sample of bar.head) assert.equal(sample.brain, digest, "wrong built bytes");
+	for (const size of Object.values(bar.sizes)) assert(size > 0, "separate byte sizes missing");
+	for (const key of Object.keys(bar.caps) as Array<keyof typeof bar.caps>) {
+		assert(Number.isFinite(bar.caps[key]) && bar.caps[key] > 0, "recorded cap missing");
 		if (enforce)
 			assert(
-				median(bar.head.map((row) => row.readings[metric])) <= bar.caps[metric],
-				`local bar regressed: ${metric}`,
+				median(bar.head.map((s) => readings(s)[key])) <= bar.caps[key],
+				`local bar regressed: ${key}`,
 			);
 	}
 };
+const identity = () => {
+	const pair = generateKeyPairSync("ed25519"),
+		raw = pair.publicKey.export({format: "jwk"}).x!;
+	const blob = Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]);
+	return {
+		raw,
+		line: `ssh-ed25519 ${blob.toString("base64")}`,
+		fingerprint: `SHA256:${createHash("sha256").update(Buffer.from(raw, "base64url")).digest("base64").replace(/=+$/, "")}`,
+		proof: (text: string) => {
+			const payload = Buffer.concat([
+				Buffer.from("SSHSIG"),
+				field("fabrika-client"),
+				field(""),
+				field("sha512"),
+				field(createHash("sha512").update(text).digest()),
+			]);
+			const version = Buffer.alloc(4);
+			version.writeUInt32BE(1);
+			return `-----BEGIN SSH SIGNATURE-----\n${Buffer.concat([
+				Buffer.from("SSHSIG"),
+				version,
+				field(blob),
+				field("fabrika-client"),
+				field(""),
+				field("sha512"),
+				field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
+			])
+				.toString("base64")
+				.match(/.{1,70}/g)!
+				.join("\n")}\n-----END SSH SIGNATURE-----\n`;
+		},
+	};
+};
 
-describe("P16 T10 laptop bar, measured by the lead", () => {
-	it("keeps all four base and five head readings, and rejects failure, wrong bytes, or a controlled delay over P12's cap", () => {
-		const proof = readProof();
+describe("P16 stack and sealed loader", () => {
+	it("p33 environment and declarations: actual stack selects completed bytes, no rebundle, byte-limited code-free env", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.integer({min: 1600, max: 1800}),
+				fc.boolean(),
+				async (length, multibyte) => {
+					const calls: Array<{main: string; bundle: boolean; env: Record<string, unknown>}> = [];
+					vi.doMock("@alchemy.run/cloudflare", () => ({
+						providers: () => Layer.empty,
+						R2: {Bucket: () => Effect.succeed({type: "r2"})},
+						DurableObject: (name: string) => ({type: "object", name}),
+						WorkerLoader: () => ({type: "loader"}),
+						Workers: {
+							Worker: (_name: string, props: (typeof calls)[number]) => {
+								calls.push(props);
+								return Effect.succeed({url: "http://test.invalid"});
+							},
+						},
+					}));
+					vi.doMock("alchemy", () => ({
+						localState: () => Layer.empty,
+						Stack: (_name: string, _options: unknown, body: Effect.Effect<unknown>) => body,
+					}));
+					vi.resetModules();
+					const {stack} = await import("../alchemy.run.ts"),
+						h = home();
+					const built = {
+						brain: join(h, "brain.mjs"),
+						build: hash("brain"),
+						programs: {counter: {hash: hash("program-marker"), source: "program-marker"}},
+					};
+					for (const name of ["local", "cloud"]) {
+						const settings = {
+							name,
+							port: 18787,
+							person: "person-test",
+							founder: (multibyte ? "雪" : "a").repeat(length),
+							window: null,
+							build: built.build,
+						};
+						const result = await Effect.runPromise(Effect.result(stack(built, settings)));
+						const expectedBytes = Buffer.byteLength(JSON.stringify(settings));
+						if (expectedBytes >= 5 * 1024) {
+							expect(result._tag, "oversized serialized setting must be refused").toBe("Failure");
+							continue;
+						}
+						expect(result._tag).toBe("Success");
+					}
+					for (const call of calls) {
+						expect(call.main).toBe(built.brain);
+						expect(call.bundle).toBe(false);
+						for (const [name, value] of Object.entries(call.env)) {
+							expect(name).not.toMatch(/WINDOW_JS|PROGRAM_SOURCE/);
+							expect(JSON.stringify(value)).not.toContain("program-marker");
+							if (typeof value === "string")
+								expect(Buffer.byteLength(value)).toBeLessThan(5 * 1024);
+							else expect(value).toHaveProperty("type");
+						}
+					}
+					vi.doUnmock("alchemy");
+					vi.doUnmock("@alchemy.run/cloudflare");
+					vi.resetModules();
+				},
+			),
+			{...runs, numRuns: 6},
+		);
+	});
+	it("p33 loader: actual config uses recorded bytes/hash and exact process, empty env, null outbound; unknown is typed no_program", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.string({minLength: 1, maxLength: 50}),
+				fc.uuid(),
+				fc.string({minLength: 1, maxLength: 20}),
+				async (source, process, missing) => {
+					const calls: Array<{key: string; config: unknown}> = [];
+					const get = (key: string, callback: () => unknown) => {
+						calls.push({key, config: callback()});
+						return {
+							getEntrypoint: () => ({
+								describe: async () => ({name: "counter", v: 1, writes: {}, inputs: {}, cmds: []}),
+							}),
+						};
+					};
+					// WorkerLoader is a platform capability. The stand-in only records calls to the real adapter.
+					const loader = workerLoader(
+						{
+							get,
+							load: () => {
+								throw Error("unused load");
+							},
+						} as WorkerLoader,
+						{counter: {hash: hash(source), source}},
+					);
+					const loaded = await Effect.runPromise(loader.load("counter", process));
+					expect(loaded.hash).toBe(hash(source));
+					expect(calls).toEqual([
+						{
+							key: `${hash(source)}/${process}`,
+							config: {
+								compatibilityDate: "2026-10-12",
+								mainModule: "program.js",
+								modules: {"program.js": source},
+								env: {},
+								globalOutbound: null,
+							},
+						},
+					]);
+					const refused = await Effect.runPromise(
+						Effect.result(loader.load(`missing-${missing}`, process)),
+					);
+					expect(refused).toMatchObject({
+						_tag: "Failure",
+						failure: {_tag: "ProgramDown", why: "no_program"},
+					});
+					expect(calls).toHaveLength(1);
+					const config = calls[0]!.config;
+					const sealed = (value: unknown) => assert.deepEqual(value, config);
+					for (const plant of [
+						{...Object(config), env: {PLANTED: source}},
+						{...Object(config), globalOutbound: undefined},
+						{...Object(config), modules: {"program.js": "host fallback"}},
+					])
+						expect(() => sealed(plant)).toThrow();
+				},
+			),
+			{...runs, numRuns: 12},
+		);
+	});
+});
+
+// P12's driver protocol, exercised on copied output. No private key is read from disk.
+class Client {
+	readonly frames: any[] = [];
+	readonly ws: WebSocket;
+	serial = 0;
+	constructor(
+		readonly url: string,
+		readonly key: ReturnType<typeof identity>,
+		readonly tab: string,
+	) {
+		this.ws = new WebSocket(
+			`${url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+		);
+		this.ws.addEventListener("error", () => this.frames.push({closed: true}));
+		this.ws.addEventListener("close", () => this.frames.push({closed: true}));
+		this.ws.addEventListener("message", ({data}) => this.frames.push(JSON.parse(String(data))));
+	}
+	async next(match: (x: any) => boolean): Promise<any> {
+		for (;;) {
+			const at = this.frames.findIndex(match);
+			if (at >= 0) return this.frames.splice(at, 1)[0];
+			if (this.frames.some((x) => x.closed)) throw Error("wire closed");
+			await new Promise((done) => setTimeout(done, 10));
+		}
+	}
+	async call(method: string, params: unknown) {
+		const id = ++this.serial;
+		this.ws.send(JSON.stringify({jsonrpc: "2.0", id, method, params}));
+		return this.next((x) => x.id === id);
+	}
+	async hello() {
+		const {
+			params: {nonce},
+		} = await this.next((x) => x.method === "challenge");
+		return this.call("initialize", {
+			versions: [1],
+			has: ["seal"],
+			ping: "30s",
+			key: this.key.raw,
+			tab: this.tab,
+			nonce,
+			platform: "headless",
+			os: "linux",
+			sentAt: "2026-11-08T04:00:00.000Z",
+			signed: this.key.proof(`fabrika-hello\n${this.url}\n${this.tab}\n${nonce}`),
+		});
+	}
+}
+
+describe("P16 copied-file real stage, serial", () => {
+	it("isolation plants reach the actual compiled loader policy before a real-stage run", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.integer({min: 1, max: 9999}), async (n) => {
+				const h = home(),
+					{build} = await import("./build.ts");
+				const built = await Effect.runPromise(build({out: join(h, "dist"), files: [], ledger: []}));
+				const source = readFileSync(built.brain, "utf8");
+				for (const mode of ["binding", "outbound"] as const)
+					expect(plantPolicy(source, mode, `P16_${n}`, String(n))).not.toBe(source);
+			}),
+			{...runs, numRuns: 2},
+		);
+	});
+	it("p33 real isolation: a selected program sees no planted binding and cannot reach a controlled HTTP target", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.integer({min: 1, max: 9999}), async (n) => {
+				const h = home(),
+					key = identity();
+				let hits = 0;
+				const probe = httpServer((_request, response) => {
+					hits++;
+					response.end("reachable");
+				});
+				try {
+					const port = await new Promise<number>((done, fail) => {
+						probe.once("error", fail);
+						probe.listen(0, "127.0.0.1", () => {
+							const at = probe.address();
+							assert(at && typeof at !== "string");
+							done(at.port);
+						});
+					});
+					const target = `http://127.0.0.1:${port}/probe-${n}`;
+					expect((await fetch(target)).ok).toBe(true);
+					hits = 0;
+					const listener = createServer();
+					const brainPort = await new Promise<number>((done, fail) => {
+						listener.once("error", fail);
+						listener.listen(0, "127.0.0.1", () => {
+							const at = listener.address();
+							assert(at && typeof at !== "string");
+							listener.close(() => done(at.port));
+						});
+					});
+					symlinkSync(join(APP, "node_modules"), join(h, "node_modules"));
+					const file = join(h, "sealed.ts");
+					writeFileSync(
+						file,
+						`import {env} from 'cloudflare:workers'; import {Machine} from '@demlik/tea/effect'; import {Schema} from 'effect'; let outbound='denied'; try {await fetch(${JSON.stringify(target)});outbound='allowed'} catch {} const Model=Schema.Struct({keys:Schema.Array(Schema.String),outbound:Schema.String}); const Msg=Schema.Struct({type:Schema.Literal('read')}); const machine=Machine.make({model:Model,msg:Msg,init:()=>[{keys:Object.keys(env),outbound},[]],update:{read:s=>[s,[]]}}); export const program={name:'sealed',machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};`,
+					);
+					const {build} = await import("./build.ts"),
+						{localStage} = await import("./local-stage.ts"),
+						{localState} = await import("alchemy/State/LocalState");
+					const built = await Effect.runPromise(
+						build({
+							out: join(h, "dist"),
+							files: [],
+							ledger: [],
+							programs: Object.fromEntries(
+								Array.from({length: (n % 3) + 1}, (_, i) => [`sealed-${i}`, file]),
+							),
+						}),
+					);
+					const alone = join(h, "alone");
+					mkdirSync(alone);
+					cpSync(built.brain, join(alone, "brain.mjs"));
+					const bytes = readFileSync(join(alone, "brain.mjs"), "utf8");
+					rmSync(join(h, "dist"), {recursive: true});
+					rmSync(file);
+					for (const mode of ["sealed", "binding", "outbound"] as const) {
+						writeFileSync(
+							join(alone, "brain.mjs"),
+							mode === "sealed" ? bytes : plantPolicy(bytes, mode, `P16_${n}`, String(n)),
+						);
+						hits = 0;
+						await Effect.runPromise(
+							Effect.scoped(
+								Effect.gen(function* () {
+									const stage = yield* localStage(
+										{...built, brain: join(alone, "brain.mjs")},
+										{
+											home: h,
+											name: "p16-isolation",
+											person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+											founder: key.line,
+											window: key.raw,
+											port: brainPort,
+										},
+									);
+									yield* Effect.tryPromise({
+										try: async () => {
+											expect(Object.keys(built.programs).length).toBeGreaterThan(0);
+											for (const name of Object.keys(built.programs)) {
+												const program = await stage.loader.load(name, `probe-${n}-${mode}-${name}`);
+												const value = await Reflect.get(program, "init")(null);
+												if (name === "counter") {
+													expect(value.model).toEqual({count: 0});
+													continue;
+												}
+												const closed = (model: unknown) =>
+													assert.deepEqual(model, {keys: [], outbound: "denied"});
+												if (mode === "sealed") {
+													closed(value.model);
+													expect(hits).toBe(0);
+												} else {
+													expect(() => closed(value.model)).toThrow();
+													expect(value.model).toEqual(
+														mode === "binding"
+															? {keys: [`P16_${n}`], outbound: "denied"}
+															: {keys: [], outbound: "allowed"},
+													);
+												}
+											}
+										},
+										catch: (e) => e,
+									});
+								}),
+							).pipe(Effect.provide(localState()), Effect.provide(NodeServices.layer)),
+						);
+					}
+				} finally {
+					if (probe.listening) await new Promise<void>((done) => probe.close(() => done()));
+				}
+			}),
+			{...runs, numRuns: 2},
+		);
+	});
+	it("p33 complete output and T10 recovery: copied file loads programs; resend after restart retains placing, stamped ID, inbox and both views", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.array(fc.constantFrom("inc", "dec", "reset"), {minLength: 1, maxLength: 4}),
+				async (messages) => {
+					const h = home(),
+						key = identity();
+					const {build} = await import("./build.ts"),
+						{localStage} = await import("./local-stage.ts");
+					const built = await Effect.runPromise(
+						build({out: join(h, "dist"), files: [], ledger: []}),
+					);
+					const alone = join(h, "alone");
+					mkdirSync(alone);
+					cpSync(built.brain, join(alone, "brain.mjs"));
+					rmSync(join(h, "dist"), {recursive: true});
+					const listener = createServer();
+					const port = await new Promise<number>((done, fail) => {
+						listener.once("error", fail);
+						listener.listen(0, "127.0.0.1", () => {
+							const at = listener.address();
+							assert(at && typeof at !== "string");
+							listener.close(() => done(at.port));
+						});
+					});
+					const options = {
+						home: h,
+						name: "p16-stage",
+						person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+						founder: key.line,
+						window: key.raw,
+						port,
+					};
+					const copied = {...built, brain: join(alone, "brain.mjs")};
+					let pid = "",
+						first: unknown,
+						stamped = "",
+						total = 0;
+					const stage = async (again: boolean) =>
+						Effect.runPromise(
+							Effect.scoped(
+								Effect.gen(function* () {
+									const runtime = yield* localStage(copied, options);
+									yield* Effect.tryPromise({
+										try: async () => {
+											const a = new Client(runtime.url, key, "a"),
+												b = new Client(runtime.url, key, "b");
+											try {
+												expect((await a.hello()).error).toBeUndefined();
+												expect((await b.hello()).error).toBeUndefined();
+												const rows = (
+													await a.call("ledger.read", {stream: "processes/counter:1", after: 0})
+												).result.entries;
+												const current = rows.findLast((r: any) => r._tag === "started").body
+													.process;
+												if (again) expect(current).toBe(pid);
+												else pid = current;
+												await b.call("view.open", {pid});
+												for (const [n, type] of messages.entries()) {
+													const answer = await a.call("process.send", {
+														pid,
+														letter: `p16-${n}`,
+														m: {type},
+														sentAt: "2026-11-08T04:00:00.000Z",
+														seen: 0,
+													});
+													expect(answer.result).toMatchObject({_tag: "accepted"});
+													if (n === 0) {
+														if (again) expect(answer.result).toEqual(first);
+														else first = answer.result;
+													}
+													if (!again)
+														total = type === "reset" ? 0 : total + (type === "inc" ? 1 : -1);
+												}
+												const inbox = (
+													await a.call("ledger.read", {stream: "counter:1/inbox", after: 0})
+												).result.entries;
+												const acknowledged = inbox.filter((r: any) =>
+													String(r.id).startsWith("p16-"),
+												);
+												expect(acknowledged).toHaveLength(messages.length);
+												expect(new Set(acknowledged.map((r: any) => r.id)).size).toBe(
+													messages.length,
+												);
+												const input = inbox[0].parent;
+												expect(input).toMatch(/^input_[0-9a-hjkmnp-tv-z]{26}$/);
+												if (again) expect(input).toBe(stamped);
+												else stamped = input;
+												if (again) {
+													const retried = await a.call("process.send", {
+														pid,
+														letter: "unanswered",
+														m: {type: "inc"},
+														sentAt: "2026-11-08T04:00:00.000Z",
+														seen: 0,
+													});
+													expect(retried.result).toMatchObject({_tag: "accepted"});
+													const after = (
+														await a.call("ledger.read", {stream: "counter:1/inbox", after: 0})
+													).result.entries;
+													expect(after.filter((r: any) => r.id === "unanswered")).toHaveLength(1);
+													for (const c of [a, b])
+														expect((await c.call("view.open", {pid})).result.view).toEqual({
+															count: total + 1,
+														});
+												} else {
+													for (const c of [a, b])
+														expect((await c.call("view.open", {pid})).result.view).toEqual({
+															count: total,
+														});
+													a.ws.send(
+														JSON.stringify({
+															jsonrpc: "2.0",
+															id: 999999,
+															method: "process.send",
+															params: {
+																pid,
+																letter: "unanswered",
+																m: {type: "inc"},
+																sentAt: "2026-11-08T04:00:00.000Z",
+																seen: 0,
+															},
+														}),
+													);
+													a.ws.close();
+												}
+												// Every embedded route must answer from this one file. P14 is absent on this base.
+												const missing = await fetch(`${runtime.url}/p16-missing.js`);
+												expect(missing.status).toBe(404);
+											} finally {
+												a.ws.close();
+												b.ws.close();
+											}
+										},
+										catch: (error) => error,
+									});
+								}),
+							).pipe(
+								Effect.provide((await import("alchemy/State/LocalState")).localState()),
+								Effect.provide(NodeServices.layer),
+							),
+						);
+					await stage(false);
+					await stage(true);
+				},
+			),
+			{...runs, numRuns: 2},
+		);
+	});
+	it("T10 timing scenario: keeps P12's four base and five head readings; unavailable readings remain unfinished", () => {
 		const path = process.env.P16_LOCAL_BAR;
-		assert(path, "T10 unfinished: lead must save P12 driver readings and set P16_LOCAL_BAR");
+		assert(
+			path,
+			"T10 unfinished: rerun experiments/233-local-stage-speed-bar.ts, four base and five head, same sitting/settings/chaos; lost-link reading is missing on P12",
+		);
 		const bar = Schema.decodeUnknownSync(Schema.fromJsonString(Bar))(readFileSync(path, "utf8"));
-		localBar(bar, proof.brain.hash, !process.env.CI);
+		const brain = process.env.P16_BRAIN;
+		assert(brain, "final brain path missing");
+		const digest = createHash("sha256").update(readFileSync(brain)).digest("hex");
+		localBar(bar, digest, !process.env.CI);
 		console.log(
 			JSON.stringify({
 				law: "T10",
-				base: bar.base.map((row) => row.readings),
-				head: bar.head.map((row) => row.readings),
+				base: bar.base.map(readings),
+				head: bar.head.map(readings),
 				sizes: bar.sizes,
 			}),
 		);
-		const delayed = {
-			...bar,
-			head: bar.head.map((row) => ({
-				...row,
-				readings: {...row.readings, acceptedSend: bar.caps.acceptedSend + 1},
-			})),
-		};
-		expect(() => localBar(delayed, proof.brain.hash, true)).toThrow("acceptedSend");
 		expect(() =>
 			localBar(
-				{...bar, head: [{...bar.head[0]!, ok: false}, ...bar.head.slice(1)]},
-				proof.brain.hash,
+				{
+					...bar,
+					head: bar.head.map((s) => ({
+						...s,
+						sendMs: s.sendMs.map(() => bar.caps.acceptedSend + 1),
+					})),
+				},
+				digest,
+				true,
+			),
+		).toThrow("acceptedSend");
+		expect(() =>
+			localBar(
+				{...bar, head: bar.head.map((s) => ({...s, error: "planted failure"}))},
+				digest,
 				false,
 			),
 		).toThrow("failed run");
-		expect(() => localBar(bar, sha("different final file"), false)).toThrow(
-			"different final bytes",
-		);
+		expect(() => localBar(bar, "wrong digest", false)).toThrow("wrong built bytes");
 	});
 });

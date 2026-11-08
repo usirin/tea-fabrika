@@ -22,6 +22,7 @@ import {noSecretEnv} from "./no-secret-env.ts";
 import {noThrowInEffectGen} from "./no-throw-in-effect-gen.ts";
 import {noTypeAssertions} from "./no-type-assertions.ts";
 import {oneStoreHook} from "./one-store-hook.ts";
+import {programPackageLayout} from "./program-package-layout.ts";
 import {useImportExtensions} from "./use-import-extensions.ts";
 
 const plugin: Plugin = {
@@ -48,6 +49,7 @@ const plugin: Plugin = {
 		"no-throw-in-effect-gen": noThrowInEffectGen,
 		"no-type-assertions": noTypeAssertions,
 		"one-store-hook": oneStoreHook,
+		"program-package-layout": programPackageLayout,
 		"use-import-extensions": useImportExtensions,
 	},
 };

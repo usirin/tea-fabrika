@@ -29,6 +29,8 @@
 		"fabrika/no-numeric-duration": "error",
 		"fabrika/no-throw-in-effect-gen": "error",
 		"fabrika/no-type-assertions": "error",
+		// P16: the package keeps its pure entry; a real window is always './window'.
+		"fabrika/program-package-layout": "error",
 
 		// Where a Claude run's settings come from is said by `ownRules` alone, so its file is left
 		// out below (experiment 155). So are tests: they write the options' shape to check it, and

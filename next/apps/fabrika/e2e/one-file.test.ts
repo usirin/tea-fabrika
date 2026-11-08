@@ -1,6 +1,4 @@
-// P16, next/. A disposable package supplies executable window fixtures while P14 is absent.
-// Uses only P12's planned build({chaos}) and localStage(built, settings) boundaries. The lead
-// must reconcile their final exports once P12 lands, then run through the existing e2e runner.
+// P16, next/. P14 is absent. Executable browser fixtures prove packaging, not its future UI.
 import assert from "node:assert/strict";
 import {createHash, generateKeyPairSync} from "node:crypto";
 import {
@@ -8,190 +6,187 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
-	readFileSync,
-	readdirSync,
 	rmSync,
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
-import {createRequire} from "node:module";
-import {dirname, join, resolve} from "node:path";
+import {createServer} from "node:net";
+import {join, resolve} from "node:path";
 import {pathToFileURL} from "node:url";
 import {NodeServices} from "@effect/platform-node";
-import {Effect, Exit, Scope} from "effect";
-import {afterEach, describe, expect, it, vi} from "vitest";
+import {Effect, Scope, Exit} from "effect";
+import * as fc from "fast-check";
+import {chromium} from "playwright";
+import {describe, expect, it} from "vitest";
+import type {Built} from "../src/build.ts";
 
-const APP = resolve(import.meta.dirname, "..");
-const ROOT = resolve(APP, "../../..");
-const homes: string[] = [];
-type Built = {readonly brain: string};
+const APP = resolve(import.meta.dirname, ".."),
+	ROOT = resolve(APP, "../../..");
+type Asset = {readonly type: string; readonly body: string; readonly hash: string};
 type Build = {
-	readonly build: (options: {readonly chaos: boolean}) => Effect.Effect<Built, unknown>;
+	readonly build: (options: {
+		readonly root: string;
+		readonly entry: string;
+		readonly out: string;
+		readonly programs: readonly {
+			readonly name: string;
+			readonly package: string;
+			readonly export: string;
+		}[];
+		readonly chaos: boolean;
+		readonly files: readonly string[];
+		readonly ledger: readonly unknown[];
+	}) => Effect.Effect<Built & {readonly assets: Readonly<Record<string, Asset>>}, unknown>;
 };
-type Settings = {
-	readonly name: string;
-	readonly person: string;
-	readonly founder: string;
-	readonly port: number;
-	readonly build: string;
-};
-type Stage = {
-	readonly localStage: (
-		built: Built,
-		settings: Settings,
-	) => Effect.Effect<{readonly url: string}, unknown, Scope.Scope>;
-};
-
-const field = (value: string | Uint8Array) => {
-	const bytes = Buffer.from(value);
-	const n = Buffer.alloc(4);
-	n.writeUInt32BE(bytes.length);
-	return Buffer.concat([n, bytes]);
-};
-const founder = () => {
-	const {publicKey} = generateKeyPairSync("ed25519");
-	const key = publicKey.export({format: "jwk"}).x;
-	assert(key);
-	return `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(key, "base64url"))]).toString("base64")}`;
+const field = (v: string | Buffer) => {
+	const b = Buffer.from(v),
+		n = Buffer.alloc(4);
+	n.writeUInt32BE(b.length);
+	return Buffer.concat([n, b]);
 };
 
-const fixture = () => {
-	assert(existsSync(join(APP, "src/build.ts")), "P12 not built: next/apps/fabrika/src/build.ts");
-	assert(
-		existsSync(join(APP, "src/local-stage.ts")),
-		"P12 not built: next/apps/fabrika/src/local-stage.ts",
-	);
-	const home = mkdtempSync("/tmp/fh.");
-	homes.push(home);
-	const app = join(home, "next/apps/fabrika");
-	cpSync(APP, app, {
-		recursive: true,
-		filter: (path) => !["node_modules", "dist", ".alchemy"].includes(path.split("/").at(-1) ?? ""),
-	});
-	for (const name of [
-		"package.json",
-		"compiler-ledger.json",
-		"pnpm-workspace.yaml",
-		"pnpm-lock.yaml",
-	])
-		cpSync(join(ROOT, name), join(home, name));
-	symlinkSync(join(ROOT, "node_modules"), join(home, "node_modules"), "dir");
-	mkdirSync(join(app, "node_modules"), {recursive: true});
-	for (const name of readdirSync(join(APP, "node_modules")))
-		symlinkSync(join(APP, "node_modules", name), join(app, "node_modules", name), "dir");
-	const pkg = join(app, "node_modules/@p16/browser");
-	mkdirSync(pkg, {recursive: true});
-	writeFileSync(
-		join(pkg, "package.json"),
-		JSON.stringify({
-			name: "@p16/browser",
-			type: "module",
-			exports: {".": "./program.ts", "./window": "./window.tsx"},
-		}),
-	);
-	writeFileSync(join(pkg, "program.ts"), 'export {counter} from "@kampus/counter";');
-	writeFileSync(
-		join(pkg, "window.tsx"),
-		[
-			'import "./window.css";',
-			'globalThis.p16Ready = import("./secondary.ts").then(({text}) => {',
-			' const out = document.createElement("output"); out.id = "p16"; out.textContent = text;',
-			" document.body.append(out); return text;",
-			"});",
-		].join("\n"),
-	);
-	writeFileSync(join(pkg, "secondary.ts"), 'export const text = "secondary 雪 </script> \\\\";');
-	writeFileSync(join(pkg, "window.css"), "#p16 { color: rgb(12, 34, 56); }");
-	writeFileSync(
-		join(app, "src/table.ts"),
-		'export const programs = [{name: "counter", package: "@p16/browser", export: "counter"}];',
-	);
-	vi.stubEnv("FABRIKA_HOME", home);
-	vi.stubEnv("TYPESAFE_API_KEY", undefined);
-	return {home, app, pkg};
-};
-
-afterEach(() => {
-	vi.unstubAllEnvs();
-	vi.resetModules();
-	for (const home of homes.splice(0)) rmSync(home, {recursive: true, force: true});
-});
-
-describe("P16 browser, actual copied-file local stage", () => {
-	it("assets: browser executes the entry and secondary import with embedded CSS; blocked-chunk plant fails", async () => {
-		const {home, app, pkg} = fixture();
-		const api = await vi.importActual<Build>(pathToFileURL(join(app, "src/build.ts")).href);
-		const built = await Effect.runPromise(
-			api.build({chaos: false}).pipe(Effect.provide(NodeServices.layer)),
+describe("P16 real browser from a copied one-file build", () => {
+	it("assets: generated secondary imports execute and CSS loads; blocking the secondary route kills the same check", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc
+					.array(fc.constantFrom("雪", "🫖", "</script>", "\\", "'", '"', "\r\n"), {
+						minLength: 1,
+						maxLength: 6,
+					})
+					.map((v) => v.join("")),
+				async (text) => {
+					const home = mkdtempSync("/tmp/fh."),
+						oldHome = process.env.FABRIKA_HOME;
+					process.env.FABRIKA_HOME = home;
+					delete process.env.TYPESAFE_API_KEY;
+					const scope = Effect.runSync(Scope.make());
+					let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+					try {
+						// Try the real browser even when P16's library build has not been written yet.
+						browser = await chromium.launch({headless: true});
+						mkdirSync(join(home, "node_modules/@p16/browser"), {recursive: true});
+						for (const name of ["@kampus", "@demlik", "effect"])
+							symlinkSync(join(APP, "node_modules", name), join(home, "node_modules", name));
+						writeFileSync(join(home, "package.json"), '{"type":"module"}');
+						const pkg = join(home, "node_modules/@p16/browser");
+						writeFileSync(
+							join(pkg, "package.json"),
+							JSON.stringify({
+								type: "module",
+								exports: {".": "./program.ts", "./window": "./window.tsx"},
+							}),
+						);
+						writeFileSync(
+							join(pkg, "program.ts"),
+							'export {counter as program} from "@kampus/counter";',
+						);
+						writeFileSync(
+							join(pkg, "window.tsx"),
+							'import "./window.css"; globalThis.__p16Ready = import("./secondary.ts").then(({text})=>{const out=document.createElement("output");out.id="p16";out.textContent=text;document.body.append(out);return text;});',
+						);
+						writeFileSync(join(pkg, "secondary.ts"), `export const text=${JSON.stringify(text)};`);
+						writeFileSync(join(pkg, "window.css"), "#p16 {color: rgb(12, 34, 56);}");
+						cpSync(join(APP, "src"), join(home, "src"), {
+							recursive: true,
+							filter: (p) => !p.endsWith(".test.ts"),
+						});
+						const file = join(ROOT, "next/packages/libfabrika/src/build.ts");
+						assert(existsSync(file), "P16 not built: reusable library build absent");
+						const api = (await import(pathToFileURL(file).href)) as Build;
+						const built = await Effect.runPromise(
+							api
+								.build({
+									root: home,
+									entry: join(home, "src/brain.ts"),
+									out: join(home, "dist"),
+									programs: [{name: "counter", package: "@p16/browser", export: "program"}],
+									chaos: false,
+									files: [],
+									ledger: [],
+								})
+								.pipe(Effect.provide(NodeServices.layer)),
+						);
+						const alone = join(home, "alone");
+						mkdirSync(alone);
+						cpSync(built.brain, join(alone, "brain.mjs"));
+						rmSync(join(home, "dist"), {recursive: true});
+						rmSync(pkg, {recursive: true});
+						const listener = createServer();
+						const port = await new Promise<number>((done, fail) => {
+							listener.once("error", fail);
+							listener.listen(0, "127.0.0.1", () => {
+								const at = listener.address();
+								assert(at && typeof at !== "string");
+								listener.close(() => done(at.port));
+							});
+						});
+						const raw = generateKeyPairSync("ed25519").publicKey.export({format: "jwk"}).x!;
+						const {localStage} = await import("../src/local-stage.ts");
+						const {localState} = await import("alchemy/State/LocalState");
+						const stage = await Effect.runPromise(
+							localStage(
+								{...built, brain: join(alone, "brain.mjs")},
+								{
+									home,
+									name: "p16-browser",
+									person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+									founder: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]).toString("base64")}`,
+									window: null,
+									port,
+								},
+							).pipe(
+								Effect.provideService(Scope.Scope, scope),
+								Effect.provide(localState()),
+								Effect.provide(NodeServices.layer),
+							),
+						);
+						const entry = Object.entries(built.assets).find(
+							([, a]) => a.type.startsWith("text/javascript") && a.body.includes("__p16Ready"),
+						);
+						assert(entry, "entry script missing");
+						const scripts = Object.entries(built.assets).filter(([, a]) =>
+							a.type.startsWith("text/javascript"),
+						);
+						expect(scripts.length).toBeGreaterThan(1);
+						const page = await browser.newPage();
+						await page.goto(stage.url);
+						for (const [route, asset] of Object.entries(built.assets)) {
+							const response = await page.request.get(stage.url + route);
+							expect(response.status()).toBe(200);
+							expect(response.headers()["content-type"]).toBe(asset.type);
+							expect(await response.text()).toBe(asset.body);
+							expect(createHash("sha256").update(asset.body).digest("hex")).toBe(asset.hash);
+							if (asset.type.startsWith("text/css"))
+								await page.addStyleTag({url: stage.url + route});
+						}
+						await page.addScriptTag({url: stage.url + entry[0], type: "module"});
+						await page.waitForSelector("#p16");
+						expect(await page.locator("#p16").textContent()).toBe(text);
+						expect(await page.locator("#p16").evaluate((e) => getComputedStyle(e).color)).toBe(
+							"rgb(12, 34, 56)",
+						);
+						expect((await page.request.get(`${stage.url}/missing.js`)).status()).toBe(404);
+						const planted = await browser.newPage();
+						await planted.route("**/*.js", (route) =>
+							new URL(route.request().url()).pathname === entry[0]
+								? route.continue()
+								: route.abort(),
+						);
+						await planted.goto(stage.url);
+						await planted.addScriptTag({url: stage.url + entry[0], type: "module"});
+						await expect(planted.evaluate("globalThis.__p16Ready")).rejects.toThrow();
+						expect(await planted.locator("#p16").count()).toBe(0);
+					} finally {
+						await browser?.close();
+						await Effect.runPromise(Scope.close(scope, Exit.void));
+						rmSync(home, {recursive: true, force: true});
+						if (oldHome === undefined) delete process.env.FABRIKA_HOME;
+						else process.env.FABRIKA_HOME = oldHome;
+					}
+				},
+			),
+			{seed: 119120, numRuns: 2},
 		);
-		const alone = join(home, "alone");
-		mkdirSync(alone);
-		cpSync(resolve(app, built.brain), join(alone, "brain.mjs"));
-		rmSync(pkg, {recursive: true});
-		const originalOutput = dirname(resolve(app, built.brain));
-		assert.notEqual(originalOutput, app, "output must be apart from the stage driver");
-		rmSync(originalOutput, {recursive: true, force: true});
-		const scope = Effect.runSync(Scope.make());
-		const stage = await vi.importActual<Stage>(pathToFileURL(join(app, "src/local-stage.ts")).href);
-		try {
-			const {url} = await Effect.runPromise(
-				stage
-					.localStage(
-						{...built, brain: join(alone, "brain.mjs")},
-						{
-							name: "p16-browser",
-							person: "p16-test",
-							founder: founder(),
-							port: 19816,
-							build: createHash("sha256")
-								.update(readFileSync(join(alone, "brain.mjs")))
-								.digest("hex"),
-						},
-					)
-					.pipe(Effect.provideService(Scope.Scope, scope), Effect.provide(NodeServices.layer)),
-			);
-			// Playwright is already pinned by the app that installed it. This loads that external
-			// dependency, never today's app code, and needs no new manifest or lockfile change.
-			const {chromium} = createRequire(join(ROOT, "apps/fabrika/package.json"))("playwright");
-			const browser = await chromium.launch({headless: true});
-			try {
-				const page = await browser.newPage();
-				await page.goto(`${url}/window.js`);
-				await page.setContent('<script type="module" src="/window.js"></script>');
-				await page.addStyleTag({url: `${url}/window.css`});
-				await page.waitForSelector("#p16");
-				expect(await page.locator("#p16").textContent()).toBe("secondary 雪 </script> \\");
-				expect(
-					await page
-						.locator("#p16")
-						.evaluate((element: Element) => getComputedStyle(element).color),
-				).toBe("rgb(12, 34, 56)");
-				const missing = await page.request.get(`${url}/p16-missing.js`);
-				expect(missing.status()).toBe(404);
-				await page.close();
-				// A new context avoids a cached module hiding the planted missing secondary chunk.
-				const planted = await browser.newPage();
-				await planted.route(
-					"**/*.js",
-					(route: {
-						request: () => {url: () => string};
-						continue: () => Promise<void>;
-						abort: () => Promise<void>;
-					}) =>
-						new URL(route.request().url()).pathname === "/window.js"
-							? route.continue()
-							: route.abort(),
-				);
-				await planted.goto(`${url}/window.js`);
-				await planted.setContent('<script type="module" src="/window.js"></script>');
-				await planted.addScriptTag({url: `${url}/window.js`, type: "module"});
-				await expect(planted.evaluate("globalThis.p16Ready")).rejects.toThrow();
-				await planted.close();
-			} finally {
-				await browser.close();
-			}
-		} finally {
-			await Effect.runPromise(Scope.close(scope, Exit.void));
-		}
 	});
 });
