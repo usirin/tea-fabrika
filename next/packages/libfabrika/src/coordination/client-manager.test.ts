@@ -7,7 +7,8 @@
 // - `ClientManager.layer(founder & {person})` over a `Ledger`. Building it writes nothing. The first
 //   call on an empty `door/members` writes `founded` under the fixed id `founded`, once, by the
 //   key and build the layer was handed. A ledger refusal of it, except `id_reused`, is a
-//   `LedgerError`, never an empty member list.
+//   `LedgerError` with its own `why: "refused"` (not `bad_row`, which means a row that does not
+//   decode), never an empty member list.
 // - `members` folds `door/members` with `foldMembers`.
 // - `write(fact, from)` folds, refuses what the fold's rule refuses (`{_tag: "refused", why}`,
 //   nothing written), else appends under the fact's own id with `seen` the folded head, folds on to
@@ -336,8 +337,10 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
 				const layer = ClientManager.layer(FOUNDER).pipe(Layer.provide(refusing(sql, why)));
 				const failed = yield* Effect.flip(members.pipe(Effect.provide(layer)));
 				expect(failed, why).toBeInstanceOf(LedgerError);
+				expect(failed.why, why).toBe("refused");
 				const got = yield* Effect.flip(write(granted("pA", "t1")).pipe(Effect.provide(layer)));
 				expect(got, why).toBeInstanceOf(LedgerError);
+				expect(got.why, why).toBe("refused");
 				expect((yield* entries.pipe(Effect.provide(onSql(sql)))).length, why).toBe(0);
 			}
 		}),
