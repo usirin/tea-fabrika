@@ -2,9 +2,39 @@
 import {Deferred, Effect, Fiber, Schema} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {body, checks, failure, request, variant, world} from "./reload.test-support.ts";
+import {body, checks, failure, request, typeId, variant, world} from "./reload.test-support.ts";
 
 describe("P15a in-flight Cmds and Restart", () => {
+	it("the P34 wrapper forwards the stable request and selected code unchanged", async () => {
+		// P34's answer-only stand-in checks the handoff. The real successor/init law is below.
+		await fc.assert(
+			fc.asyncProperty(variant, fc.integer({min: 1, max: 4}), async (spec, repeats) => {
+				const answer = {process: typeId("process", 77)};
+				const w = await world(
+					[
+						{...spec, crash: false},
+						{...spec, factor: spec.factor + 1, crash: false},
+					],
+					{restart: answer},
+				);
+				try {
+					await w.install(0);
+					await w.install(1);
+					await w.run(w.runner().open("headless"));
+					const req = {id: (await request(w.bundles[1]!, 500)).id, build: w.bundles[1]!.hash};
+					for (let i = 0; i < repeats; i++) {
+						expect(await w.run(w.runner().restart(req))).toEqual(answer);
+						await w.reopen();
+					}
+					expect(w.p34!.requests.length).toBeGreaterThan(0);
+					for (const forwarded of w.p34!.requests) expect(forwarded).toEqual(req);
+				} finally {
+					await w.close();
+				}
+			}),
+			checks,
+		);
+	});
 	it("H5/p71/p76: dispatched Cmd keeps its originating handler, reply schema, target and build", async () => {
 		// Plant: use the new handler/schema, resend the Cmd, or retarget the answer to a successor.
 		await fc.assert(

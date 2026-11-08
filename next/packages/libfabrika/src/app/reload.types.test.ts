@@ -44,9 +44,26 @@ it("p78/types: policy, hashes and IDs retain separate brands and typed Effect fa
 		_entry: typeof EntryId.Type,
 	) => {};
 	const entry = Schema.decodeUnknownSync(EntryId)("entry_01j0000000e0080000000000001");
+	const letter = Schema.decodeUnknownSync(LetterId)(typeId("letter", 1));
+	const tile = Schema.decodeUnknownSync(TileId)(typeId("tile", 1));
+	const tab = Schema.decodeUnknownSync(TabId)(typeId("tab", 1));
+	const observation = Schema.decodeUnknownSync(ObservationId)(typeId("observation", 1));
+	brands(hash, req, letter, tile, tab, observation, entry);
 	const compileOnly = (registry: typeof CodeRegistry.Service, state: State, bundle: CodeBundle) => {
-		// @ts-expect-error every identity has a distinct purpose
-		brands(req, entry, req, req, req, req, hash);
+		// @ts-expect-error request IDs cannot select code
+		brands(req, req, letter, tile, tab, observation, entry);
+		// @ts-expect-error entry IDs cannot correlate requests
+		brands(hash, entry, letter, tile, tab, observation, entry);
+		// @ts-expect-error request IDs cannot identify letters
+		brands(hash, req, req, tile, tab, observation, entry);
+		// @ts-expect-error tab IDs cannot identify tiles
+		brands(hash, req, letter, tab, tab, observation, entry);
+		// @ts-expect-error tile IDs cannot identify tabs
+		brands(hash, req, letter, tile, tile, observation, entry);
+		// @ts-expect-error letter IDs cannot identify observations
+		brands(hash, req, letter, tile, tab, letter, entry);
+		// @ts-expect-error request IDs cannot identify ledger entries
+		brands(hash, req, letter, tile, tab, observation, req);
 		expectTypeOf(registry.put(bundle)).toEqualTypeOf<
 			Effect.Effect<CodeBundle, CodeError | LedgerError>
 		>();

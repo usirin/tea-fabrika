@@ -3,6 +3,9 @@ import {mkdtempSync, rmSync} from "node:fs";
 import {Effect, Layer, Schema, Stream} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
+import {LedgerTransaction} from "../data/ledger-transaction.ts";
+import {Doorbell, Ledger} from "../data/ledger.ts";
+import {brainOnly} from "./process.ts";
 import {
 	checks,
 	code,
@@ -12,10 +15,7 @@ import {
 	release,
 	request,
 	typeId,
-} from "../app/reload.test-support.ts";
-import {LedgerTransaction} from "../data/ledger-transaction.ts";
-import {Doorbell, Ledger} from "../data/ledger.ts";
-import {brainOnly} from "./process.ts";
+} from "./reload.test-support.ts";
 
 const registry = async () => {
 	const {CodeRegistry} = await import("./code-registry.ts");
@@ -93,6 +93,22 @@ describe("P15a immutable code and trusted facts", () => {
 					expect(
 						await r.run((s) => s.put({...bundle, files: [...bundle.files].reverse()})),
 					).toEqual(bundle);
+					const newer = await release("counter", `${text}-changed`);
+					await r.run((s) => s.put(newer));
+					r.reopen();
+					expect(await r.run((s) => s.get(bundle.hash))).toEqual(bundle);
+					expect(await r.run((s) => s.get(newer.hash))).toEqual(newer);
+					const {CodeHash} = await code();
+					const unused = ["a", "b", "c"]
+						.map((s) => s.repeat(64))
+						.find((hash) => hash !== bundle.hash && hash !== newer.hash)!;
+					expect(
+						await failure(
+							r.CodeRegistry.use((s) => s.get(Schema.decodeUnknownSync(CodeHash)(unused))).pipe(
+								Effect.provide(r.layer),
+							),
+						),
+					).toMatchObject({_tag: "CodeError", why: "unknown_hash"});
 				} finally {
 					r.close();
 				}

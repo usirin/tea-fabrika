@@ -2,6 +2,7 @@
 import {Deferred, Effect, Fiber, Schema} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
+import {ProgramDown, Step} from "./program.ts";
 import {
 	body,
 	checks,
@@ -15,6 +16,7 @@ import {
 	variant,
 	world,
 } from "./reload.test-support.ts";
+import {Saved} from "./state.ts";
 
 const runSequence = async (draw: Draw<typeof operations>, factors: readonly number[]) => {
 	const w = await world(
@@ -85,6 +87,47 @@ const runSequence = async (draw: Draw<typeof operations>, factors: readonly numb
 };
 
 describe("P15a committed program reload", () => {
+	it("P12 inspection refuses a candidate without running its init, update or Cmds", async () => {
+		// Plant: use init as an inspection call, or install a candidate after failed inspection.
+		await fc.assert(
+			fc.asyncProperty(fc.integer({min: -10, max: 10}), async (count) => {
+				const executions = new Map<
+					number,
+					Parameters<typeof import("./reload.test-support.ts").executionFixture>[0]
+				>();
+				const w = await world(
+					[1, 2].map((factor) => ({factor, start: count, v: 1, crash: false, program: "counter"})),
+					{executions},
+				);
+				try {
+					const model = {count, replies: []};
+					executions.set(1, {
+						init: Step.cases.stepped.make({model, view: model, cmds: [], wake: null}),
+						steps: [],
+						upgrade: {
+							saved: Saved.make({v: 1, build: w.bundles[1]!.hash, model, after: 0}),
+							ran: [],
+						},
+						inspect: new ProgramDown({why: "saved_state"}),
+					});
+					await w.install(0);
+					const req = await w.install(1);
+					await w.run(w.runner().open("headless"));
+					const before = await w.checkpoint();
+					expect(await w.run(w.runner().reload(req))).toMatchObject({_tag: "refused"});
+					expect(await w.checkpoint()).toEqual(before);
+					const calls = w.fixtures.get(1)!.calls.map((c) => c.method);
+					expect(calls).toContain("inspect");
+					expect(
+						calls.filter((method) => ["init", "step", "fold", "reply"].includes(method)),
+					).toEqual([]);
+				} finally {
+					await w.close();
+				}
+			}),
+			checks,
+		);
+	});
 	it("p70: acknowledged facts survive every reload/reopen in order", async () => {
 		// Plant: acknowledge before save, or overwrite the latest accepted checkpoint at reload.
 		await fc.assert(
@@ -330,6 +373,12 @@ describe("P15a committed program reload", () => {
 			fc.asyncProperty(fc.stringMatching(/^[0-9a-f]{64}$/), variant, async (raw, spec) => {
 				const hash = Schema.decodeUnknownSync(CodeHash)(raw);
 				const policy = ReloadPolicy.cases.pinned.make({hash});
+				expect(await Effect.runPromise(Schema.decodeUnknownEffect(ReloadPolicy)(policy))).toEqual(
+					policy,
+				);
+				await failure(
+					Schema.decodeUnknownEffect(ReloadPolicy)({_tag: "pinned", hash: raw.slice(1)}),
+				);
 				const w = await world(
 					[
 						{...spec, crash: false},

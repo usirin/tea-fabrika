@@ -106,12 +106,12 @@ describe("P15a facts and ended spans", () => {
 							path: "next/programs/counter/src/machine.ts",
 							line,
 						});
-						expect(JSON.stringify(facts)).not.toContain(diagnostic);
+						expect(JSON.stringify(facts)).not.toContain("PRIVATE_SOURCE_");
 						const rows = await records(w);
 						expect(rows.length).toBeGreaterThan(0);
 						for (const span of rows) {
-							expect(JSON.stringify(span.attributes)).not.toContain(diagnostic);
-							expect(JSON.stringify(span.events)).not.toContain(diagnostic);
+							expect(JSON.stringify(span.attributes)).not.toContain("PRIVATE_SOURCE_");
+							expect(JSON.stringify(span.events)).not.toContain("PRIVATE_SOURCE_");
 						}
 						const contents = await w.run(
 							RecordManager.use((r) =>
