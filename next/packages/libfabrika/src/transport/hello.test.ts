@@ -2,7 +2,7 @@
 // It answers online {who,version,ping} or refused {why}; capability claims grant no rank.
 // Plants: accept the first version; omit one signed binding; consume before checking; admit verify.
 import {createHash} from "node:crypto";
-import {describe, expect, it, vi} from "@effect/vitest";
+import {assert, describe, expect, it, vi} from "@effect/vitest";
 import {Effect} from "effect";
 import * as fc from "fast-check";
 import * as Transport from "./index.ts";
@@ -84,7 +84,11 @@ const setup = Effect.fnUntraced(function* () {
 		sentAt: SENT,
 		signed,
 	};
-	const who = {key: k.fingerprint, person: PERSON, as: "window"};
+	const who = {
+		key: k.fingerprint,
+		person: PERSON,
+		as: "window",
+	} satisfies typeof Transport.Who.Type;
 	let used = false;
 	const consume = vi.fn(() => {
 		if (used) return false;
@@ -197,6 +201,7 @@ describe("P10 hello", () => {
 			});
 			const result = yield* checked;
 			expect(result).toMatchObject({_tag: "online", who: x.who, version: 2, ping: 10_000});
+			assert(result._tag === "online");
 			expect(result.hello).toMatchObject({os: "ios", has: ["verify", "seal"]});
 		}),
 	);

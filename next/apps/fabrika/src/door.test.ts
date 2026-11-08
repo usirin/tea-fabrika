@@ -1932,6 +1932,9 @@ describe("P10 span reader and recording", () => {
 						Schema.is(Schema.toType(Input.cases.secret))(w.deliveries.at(-1)!.envelope.input),
 					).toBe(true);
 					yield* TestClock.adjust("16 days");
+					// P37 rolls up the old hour when a later span ends, before archiving it.
+					const later = yield* d.route("w1", "ledger.read", {stream: "x", after: 0});
+					expect(later._tag).toBe("ok");
 					yield* SpanSink.use((s: typeof SpanSink.Service) => s.flush);
 					const inputRows = yield* stamped(),
 						spans = yield* RecordManager.use((r: typeof RecordManager.Service) =>

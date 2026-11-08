@@ -1,5 +1,8 @@
 # P10 test-writer record
 
+The [check on the built product](./build-check.md) records the later test
+corrections, 121 passing cases and the remaining workspace type errors.
+
 The follow-up [type audit](./type-audit.md) lists the test-only fixes and every
 remaining build diagnostic, with a single-thread check config. That follow-up
 reran the door file once and refreshed its 66 case locations below.
