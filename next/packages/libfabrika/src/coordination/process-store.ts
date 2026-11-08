@@ -6,6 +6,7 @@ import {Ledger, LedgerError} from "../data/ledger.ts";
 import {lineFor, Rev} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
 import {type From} from "./mailbox.ts";
+import {Activity} from "./process.ts";
 
 /** What a process saves: its model as the runner keeps it, the turn it was in, and its Cmds. The
  *  runner gives `turn` and `cmds` their shapes; the store keeps them as JSON. */
@@ -42,7 +43,9 @@ export type RuntimeRecord = typeof RuntimeRecord.Type;
 const TABLES = [
 	"CREATE TABLE IF NOT EXISTS process_state (process TEXT PRIMARY KEY, checkpoint TEXT NOT NULL)",
 	"CREATE TABLE IF NOT EXISTS process_letters (process TEXT NOT NULL, id TEXT NOT NULL, rev INTEGER NOT NULL, pos INTEGER NOT NULL, PRIMARY KEY (process, id))",
+	"CREATE TABLE IF NOT EXISTS process_activity (process TEXT PRIMARY KEY, activity TEXT NOT NULL)",
 ];
+const encodeActivity = Schema.encodeSync(Schema.fromJsonString(Activity));
 const encodeCheckpoint = Schema.encodeUnknownSync(Schema.fromJsonString(Checkpoint));
 const decodeCheckpoint = Schema.decodeUnknownSync(Schema.fromJsonString(Checkpoint));
 const decodePlaced = Schema.decodeUnknownSync(Placed);
@@ -52,6 +55,8 @@ const encodeRecord = Schema.encodeSync(RuntimeRecord);
 export class ProcessStore extends Context.Service<
 	ProcessStore,
 	{
+		/** Makes the activity marker durable before the runner starts or finishes a step. */
+		readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError>;
 		/** The saved checkpoint, or null before the first save. */
 		readonly load: Effect.Effect<Checkpoint | null, LedgerError>;
 		/** Replaces the checkpoint and adds `placed` to the letter index, in one transaction. */
@@ -71,7 +76,16 @@ export class ProcessStore extends Context.Service<
 >()("@kampus/libfabrika/ProcessStore") {
 	static readonly layer = (
 		sql: Sql,
-		who: {readonly process: string},
+		who: {
+			readonly process: string;
+			/** The object's storage calls, wrapped in Effect by its platform edge. Node uses SQL. */
+			readonly storage?:
+				| {
+						readonly put: (key: string, value: unknown) => Effect.Effect<void, LedgerError>;
+						readonly sync: () => Effect.Effect<void, LedgerError>;
+				  }
+				| undefined;
+		},
 	): Layer.Layer<ProcessStore, never, Ledger> =>
 		Layer.effect(
 			ProcessStore,
@@ -92,6 +106,21 @@ export class ProcessStore extends Context.Service<
 							}),
 					});
 				return {
+					activity: Effect.fn("process.activity")(function* (value: typeof Activity.Type) {
+						if (who.storage !== undefined) {
+							yield* who.storage.put("activity", value);
+							yield* who.storage.sync();
+						} else {
+							// Node's synchronous SQLite commit needs no separate flush.
+							yield* stored(() => {
+								sql.exec(
+									"INSERT INTO process_activity (process, activity) VALUES (?, ?) ON CONFLICT (process) DO UPDATE SET activity = excluded.activity",
+									who.process,
+									encodeActivity(value),
+								);
+							});
+						}
+					}),
 					load: stored(() => {
 						const [row] = sql.exec(
 							"SELECT checkpoint FROM process_state WHERE process=?",

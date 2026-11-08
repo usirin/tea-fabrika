@@ -87,12 +87,13 @@ export const Activity = Schema.TaggedUnion({
 	stepping: {process: ProcessId, letter: Text, build: Text},
 });
 const Recovered = Schema.TaggedUnion({
-	idle: Activity.cases.idle.fields,
+	idle: {process: Schema.optionalKey(ProcessId)},
 	interrupted: {process: ProcessId, letter: Text, build: Text, why: Schema.Literal("interrupted")},
 });
 export const recoverActivity = (
 	raw: unknown,
 ): Result.Result<typeof Recovered.Type, LedgerError> => {
+	if (raw === undefined) return Result.succeed(Recovered.cases.idle.make({}));
 	const saved = Schema.decodeUnknownResult(Activity)(raw);
 	if (Result.isFailure(saved)) return Result.fail(new LedgerError({why: "bad_row"}));
 	const value = saved.success;

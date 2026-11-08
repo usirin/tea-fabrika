@@ -19,6 +19,7 @@ import {
 	Tracer,
 } from "effect";
 import {
+	Activity,
 	type Appended,
 	type Archive,
 	type From,
@@ -190,6 +191,27 @@ export class ProgramRunner extends Context.Service<
 						catch: (error) => (error instanceof ProgramDown ? error : new ProgramDown({why})),
 					});
 
+				const step = Effect.fnUntraced(function* (
+					why: ProgramDown["why"],
+					letter: string,
+					f: () => Step,
+				) {
+					yield* store.activity(
+						Activity.cases.stepping.make({process: process.id, letter, build: process.build}),
+					);
+					return yield* pure(why, f).pipe(
+						Effect.onExit((exit) =>
+							store
+								.activity(Activity.cases.idle.make({process: process.id}))
+								.pipe(
+									Effect.catch((error) =>
+										exit._tag === "Failure" ? Effect.void : Effect.fail(error),
+									),
+								),
+						),
+					);
+				});
+
 				const stepped = (
 					step: Step,
 					why: ProgramDown["why"],
@@ -302,8 +324,10 @@ export class ProgramRunner extends Context.Service<
 					const placed: Array<Placed> = [];
 					let mine = Option.none<History>();
 					for (const letter of letters) {
-						const step = yield* stepped(
-							yield* pure("saved_letter", () => state.loaded.stepper.fold(model, letter.m)),
+						const folded = yield* stepped(
+							yield* step("saved_letter", letter.id, () =>
+								state.loaded.stepper.fold(model, letter.m),
+							),
 							"saved_letter",
 						);
 						yield* store.record(
@@ -315,13 +339,13 @@ export class ProgramRunner extends Context.Service<
 							}),
 							yield* from(letter.parent, letter.traceId),
 						);
-						model = step.model;
-						view = step.view;
-						wake = step.wake;
+						model = folded.model;
+						view = folded.view;
+						wake = folded.wake;
 						placed.push({id: letter.id, rev: letter.rev, pos: letter.pos});
 						if (letter.id === options.mine) {
 							mine = Option.some(letter);
-							for (const [index, cmd] of step.cmds.entries())
+							for (const [index, cmd] of folded.cmds.entries())
 								fresh.push({
 									id: `${process.id}/${letter.pos}/${index}`,
 									cmd,
@@ -622,11 +646,11 @@ export class ProgramRunner extends Context.Service<
 						const prior = yield* store.placed(input.id);
 						if (prior !== null)
 							return {answer: Sent.cases.accepted.make({rev: prior.rev, pos: prior.pos}), jobs: []};
-						const step = yield* pure("step", () =>
+						const prepared = yield* step("step", input.id, () =>
 							state.loaded.stepper.step(state.model, input.envelope.input),
 						);
-						if (step._tag === "refused") {
-							const {_tag: _case, ...why} = step;
+						if (prepared._tag === "refused") {
+							const {_tag: _case, ...why} = prepared;
 							return {answer: Sent.cases.refused.make(why), jobs: []};
 						}
 						yield* store.save(checkpoint(state, Turn.cases.prepared.make({id: input.id})));
