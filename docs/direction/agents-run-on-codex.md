@@ -37,10 +37,25 @@ const DEFAULTS = {
 - **The harness and model stay settings.** Each stage picks them in
   `fabrika.toml`, as [one fabrika.toml per repo](./one-fabrika-toml-per-repo.md)
   says. This note changes the defaults, not the shape.
-- **How a hand-run step runs on `next/`** (owner, 2026-11-08). Codex `gpt-6.1-sol`,
-  effort xhigh, priority tier, through `codex exec --json`. Codex's sandbox keeps
-  `.git` read-only, so the step leaves its changes in the working copy, and the lead
-  commits them as the bot and signs with that step's key.
+- **How a hand-run step runs** (owner, 2026-11-08). Codex `gpt-6.1-sol`, effort xhigh,
+  priority tier, beside Claude subagents, under the same caps as any code agent
+  ([go easy on the machine](../../AGENTS.md#go-easy-on-the-machine)). Step agents (plan,
+  exam, test writer, build, review, mutation fixes) run on Codex; the lead stays on Claude
+  opus, and Claude subagents only read and audit. The call, with the brief on stdin:
+
+  ```sh
+  codex exec -m gpt-6.1-sol -c model_reasoning_effort=xhigh -c service_tier=priority \
+    -s workspace-write -C <dir> --json -o <last.md> -
+  # -p is a profile in codex, not a prompt
+  ```
+
+- **How a Codex step commits** (owner, 2026-11-08, from P10 on). Codex's `workspace-write`
+  sandbox keeps `.git` read-only, even with `--add-dir`. So each step gets its own clone whose
+  git data sits outside any folder named `.git`, and the step commits and signs there itself.
+  The lead only fetches from a step's clone and never runs git inside one. The lead pushes as
+  the bot, with a 1-hour token that may push only to `fabrikalfa/*`
+  ([agents commit as a bot](./agents-commit-as-a-bot.md)). *Until 2026-11-08 the step left its
+  changes in the working copy and the lead committed them as the bot.*
 
 ## Why
 

@@ -689,8 +689,9 @@ Nothing is lost. A focus move was never kept for its own sake, and PR 223's `des
 
 ```ts
 // next/programs/notes/src/program.ts: the box's side. The whole list.
-import {defineProgram, type Input, type Letter, type Program, type Refusal, Saw} from "@kampus/libfabrika";
-import {Cmd, defineMachine} from "@demlik/tea";
+// (updated 2026-11-08 to Program.make: it imported defineProgram and defineMachine)
+import {Program, type Input, type Letter, type Refusal, Saw} from "@kampus/libfabrika";
+import {Cmd, Machine} from "@demlik/tea/effect"; // export const machine = Machine.make(...), then Program.make({name, machine, ...})
 
 // next/programs/notes/src/view.tsx and tile.ts: the window's side. The whole list.
 import {type Handle, type ViewProps} from "@kampus/tuval"; // ViewProps: data, press, and read for ledger.read
@@ -1647,7 +1648,7 @@ const sent = yield* runner.msg(delivery);            // P10's delivery, decoded 
 yield* runner.due(Date.parse("2026-11-08T10:05:00Z")); // the object's alarm fired: a timer letter, if the program asked
 ```
 
-**The program.** A program is a pure tea machine and the declarations the runner checks it by. `Program` is a schema, so a declaration is decoded when it is loaded, and a missing part fails as `ProgramDown load`.
+**The program.** A program is a pure tea machine and the declarations the runner checks it by. A program is made with a typed `Program.make({name, machine, ...})`, its machine a `Machine.make` value of its own, so TypeScript infers the model, msg and view and nothing is written twice ([Program.make](../direction/program-make.md), decided 2026-11-07). `Program` below is the Schema behind it: the check when a program is loaded, where a missing part fails as `ProgramDown load`. Main's P11 shipped a plain object checked by this Schema, with no `Program.make`; the Program.make pull request fixes that, before P14. *(updated 2026-11-08 to Program.make; it said `Program` is a schema, so a declaration is decoded when it is loaded.)*
 
 ```ts
 // app/program.ts
@@ -2228,7 +2229,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - **p84, a `build` commit changes no path on the base's exam list,** judged against its first parent with renames' both sides, merges included. Else `stuck: build_touched_exam` with the paths. Plants: only added paths; a rename's old path ignored; the list read from the head; merge commits skipped.
 - **p85, any exam path in the pull request's own change asks the owner:** `ask: owner: exam_read` with the paths, sorted, beside every `stuck`. A path with a control character counts as an exam path. Plants: a two-dot diff; the list from the head; the list's own rows removed.
 - **p86, the chain reaches the merged tree.** At pull request time the head contains the base, else `stuck: broken_chain`; the fix is a `lead` merge of `main`, never a rebase. After the merge, the `attested` links in `field/runs.jsonl` for one squash run from the tree of its `base` to its tree, each `from` the last `to`, no tree left twice, one ticket, each `sig` verified against `allowed_signers` at the link's `keys` commit. Plants: no up-to-date check; a gap passes; the head's tree in place of the squash's; keys from main's head.
-- **p87, the keys file says one thing:** `<role> namespaces="fabrika-step" ssh-ed25519 <key>` per line, roles `tests`, `build`, `lead`, each at least once, no key twice, no other option. Else, or with no file, the run fails and judges no commit. Plants: an ECDSA key; one key under two roles; a fourth role; a missing namespace.
+- **p87, the keys file says one thing:** `<role> namespaces="fabrika-step" ssh-ed25519 <key>` per line, roles `tests`, `build`, `lead`, each at least once, no key twice, no other option. Else, or with no file, the run fails and judges no commit. Plants: an ECDSA key; one key under two roles; a fourth role; a missing namespace. *Changed 2026-11-08 (owner): a `person:<id>` line with `namespaces="git"` is allowed too, for a person's own SSH-signed commits, so the "fourth role" plant goes ([a unit of work is a commit](../direction/a-unit-of-work-is-a-commit.md)); ticket 251 builds it.*
 - **p89, only a step's newest signature for the ticket counts.** Over every verified note on `refs/notes/fabrika` for the ticket, each step's highest `version` must be a link the pull request uses, and its older links in the pull request come before it; a tie of two links at one `version` counts neither. Else every commit of that step is `stuck: stale_link`, or the head when the pull request has none. After the merge, the same over `field/runs.jsonl`. `sign` writes the step's highest verified `version` plus one. Plants: `version` ignored; the scan limited to the pull request's commits; an unverified note's `version` counted; a tie broken by picking one; the after-merge half reading only the squash's own rows.
 
 **p88, every machine passes the sync test (S2, P35).** `new`, node. `src/exam/laws-scan.test.ts`. *Added 2026-11-06: [saved state, S2](../direction/saved-state.md#s2-every-machine-passes-the-sync-test), decided 2026-11-01. p83 to p87 are P32's.*

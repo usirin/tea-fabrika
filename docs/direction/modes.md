@@ -22,9 +22,10 @@ guidelines", with a mode you can enter and leave. Neither is a measurement. It b
 type Desk = {focus: TileId; info: {_tag: "off"} | {_tag: "on"; explained: string | null}};
 type DeskMsg = {type: "info"; active?: boolean} | {type: "split"}; // and the rest
 
-const desk = defineProgram({
+// (updated 2026-11-08 to Program.make: the machine is its own Machine.make value; msg is inferred)
+const desk = Program.make({
 	name: "desk",
-	// machine, msg, view, refuse: as today
+	// machine, view, refuse: as today
 	mode: (d: Desk) => (d.info._tag === "on" ? "info" : null), // read from state, never a flag
 	commands: {
 		info: {send: {type: "info"}, keys: "<prefix>i", global: true}, // toggles; works in any mode

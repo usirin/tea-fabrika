@@ -326,11 +326,12 @@ const ThreadLocation = Schema.Union([
 	Schema.Struct({spots: Spots}), // one thread, always on a spot
 	Schema.Struct({ticket: Schema.String}), // "threads on this ticket": the list, never a blank chat
 ]);
-const thread = defineProgram({
+// (updated 2026-11-08 to Program.make; in today's version it is defineProgram)
+const thread = Program.make({
 	name: "thread",
 	location: {data: ThreadLocation, select: (m) => m.location},
 	reuse: "program", // open or focus: every spot's talk lands in the same tile
-	// ...machine, msg, view as any program
+	// ...machine (its own Machine.make value), view as any program
 });
 ```
 

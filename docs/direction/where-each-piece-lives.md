@@ -21,8 +21,8 @@ everything a client does. fabrika is the logic, and Tuval is what is drawn from 
 `@kampus/libfabrika`, never the other way. Each program is a package under `next/programs/`.*
 
 ```ts
-// After the rename, a sketch.
-import {defineProgram, serve} from "@kampus/libfabrika"; // the library: program, host, shell, ledger, agents
+// After the rename, a sketch. (updated 2026-11-08 to Program.make: it imported defineProgram)
+import {Program, serve} from "@kampus/libfabrika"; // the library: program, host, shell, ledger, agents
 // @kampus/fabrika                                       // the app: a local web page that runs programs
 ```
 
