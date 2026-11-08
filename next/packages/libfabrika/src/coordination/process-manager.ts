@@ -3,9 +3,9 @@
 // info, monitor, demonitor and the run number.
 import {Context, Effect, Layer, Schema} from "effect";
 import {Ledger, type LedgerError} from "../data/ledger.ts";
-import type {Appended} from "../data/log.ts";
+import {type Appended, lineFor} from "../data/log.ts";
 import {short} from "../data/referee.ts";
-import {answered, failed, type From, lineFor, Mailbox} from "./mailbox.ts";
+import {answered, failed, type From, Mailbox} from "./mailbox.ts";
 
 const tag = (word: string): string => `fab.process.${word}`;
 

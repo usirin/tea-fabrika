@@ -1,9 +1,9 @@
 // The mailbox: a letter goes into a name's inbox once per id, and comes back out as a `Letter`, in
 // order. Delivery is at least once, made safe by the id (C2, D4): a resend is one line. Tier 1, P9
 // (law p21, p97). An inbox is the stream `<name>/inbox` on P6's ledger.
-import {Context, Effect, Layer, Option, Schema, Stream, Struct} from "effect";
+import {Context, Effect, Layer, Option, Schema, Stream} from "effect";
 import {Ledger, LedgerError} from "../data/ledger.ts";
-import {Appended, type Entry, type Line, type Rev} from "../data/log.ts";
+import {Appended, type Entry, type Line, lineFor, type Rev} from "../data/log.ts";
 import {short} from "../data/referee.ts";
 
 /** What a writer says about itself, shared by every write in this layer: P6's `Line` without its
@@ -34,16 +34,6 @@ const Sent = Schema.Struct({m: Schema.Json});
 const Send = Schema.TaggedStruct(SEND, Sent.fields);
 const decodeJson = Schema.decodeUnknownOption(Schema.Json);
 const decodeSent = Schema.decodeUnknownOption(Sent);
-
-/** A value a schema made, as a line: its case as the line's case, the rest as its body. */
-export const lineFor = <A extends Pick<Line, "_tag"> & Schema.JsonObject>(
-	from: From,
-	value: A,
-) => ({
-	...from,
-	...Struct.pick(value, ["_tag"]),
-	body: Struct.omit(value, ["_tag"]),
-});
 
 const inbox = (name: string): string => `${name}/inbox`;
 
@@ -123,20 +113,20 @@ export class Mailbox extends Context.Service<
 				receive: (name, after) =>
 					Stream.unwrap(
 						Effect.sync(() => {
-							const seen = {letters: 0, skipped: 0};
+							const count = {letters: 0, skipped: 0};
 							return ledger.read(inbox(name), after).pipe(
 								Stream.mapEffect((entry) =>
 									Effect.map(letter(entry), (found) => {
-										if (Option.isSome(found)) seen.letters++;
-										else seen.skipped++;
+										if (Option.isSome(found)) count.letters++;
+										else count.skipped++;
 										return Option.toArray(found);
 									}),
 								),
 								Stream.flattenIterable,
 								Stream.onExit(() =>
 									Effect.annotateCurrentSpan({
-										[tag("letters")]: seen.letters,
-										[tag("skipped")]: seen.skipped,
+										[tag("letters")]: count.letters,
+										[tag("skipped")]: count.skipped,
 									}),
 								),
 							);

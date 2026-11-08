@@ -6,11 +6,11 @@
 // id and folds on to the new rev. The second fold is the honest answer to a race: two Macs typing
 // one stolen sheet at once both pass the first check, the log puts one first, and the other hears
 // `ignored used`, never "you are in".
-import {Context, DateTime, Effect, Layer, Result, Schema, Stream, Struct} from "effect";
+import {Context, DateTime, Effect, Layer, Result, Schema, Stream} from "effect";
 import {Ledger, LedgerError} from "../data/ledger.ts";
-import {Appended, type Entry, Rev} from "../data/log.ts";
+import {Appended, type Entry, lineFor, Rev, valueFor} from "../data/log.ts";
 import {short} from "../data/referee.ts";
-import {type From, lineFor} from "./mailbox.ts";
+import type {From} from "./mailbox.ts";
 import {
 	allows,
 	EMPTY,
@@ -45,12 +45,6 @@ export const Written = Schema.TaggedUnion({
 });
 export type Written = typeof Written.Type;
 
-/**
- * The build that writes `founded`, the one line this piece writes on its own. A stand-in until the
- * wiring hands each piece its build hash.
- */
-const BUILD = "@kampus/libfabrika";
-
 const tag = (word: string): string => `fab.members.${word}`;
 
 const known: ReadonlySet<string> = new Set(Object.keys(MemberFact.cases));
@@ -70,7 +64,7 @@ type Replayed = {
 
 const row = (entry: Entry): Effect.Effect<Row, LedgerError> => {
 	if (!known.has(entry._tag)) return Effect.succeed({entry, fact: null});
-	const fact = decodeFact(Object.assign({}, entry.body, Struct.pick(entry, ["_tag"])));
+	const fact = decodeFact(valueFor(entry));
 	return Result.isSuccess(fact)
 		? Effect.succeed({entry, fact: fact.success})
 		: Effect.fail(new LedgerError({why: "bad_row"}));
@@ -105,7 +99,14 @@ export class ClientManager extends Context.Service<
 	/** Building it writes nothing. The first call on an empty `door/members` writes `founded` under
 	 *  the fixed id `founded`, inside that call's error channel, so the referee keeps it once (p20). */
 	static readonly layer = (
-		founder: Founder & {readonly person: string},
+		founder: Founder & {
+			/** The person the founder works for: `founded`'s `for`, and its fact's id. */
+			readonly person: string;
+			/** The founder's checked key, which signs `founded`: `by`, never the person. */
+			readonly by: string;
+			/** The build of the code that writes `founded` (H6). */
+			readonly build: string;
+		},
 	): Layer.Layer<ClientManager, never, Ledger> =>
 		Layer.effect(
 			ClientManager,
@@ -128,9 +129,17 @@ export class ClientManager extends Context.Service<
 					const first = yield* read;
 					if (first.rows.length > 0) return first;
 					const sentAt = DateTime.formatIso(yield* DateTime.now);
-					const from = {by: founder.person, for: founder.person, sentAt, seen: 0, cause: null};
-					// Two first calls at once write the same line under one id: the referee keeps one.
-					yield* ledger.append(MEMBERS, "founded", lineFor({...from, build: BUILD}, founding));
+					const {by, person, build} = founder;
+					const from = {by, for: person, sentAt, seen: 0, cause: null, build};
+					// Two first calls at once write the same line under one id: the referee keeps one,
+					// and the other hears `id_reused` and reads what the first wrote. Any other refusal
+					// fails: a stream with no `founded` would start with no members.
+					const placed = yield* ledger.append(MEMBERS, "founded", lineFor(from, founding));
+					if (placed._tag === "refused" && placed.why !== "id_reused")
+						return yield* new LedgerError({
+							why: "bad_row",
+							message: `founded refused: ${placed.why}`,
+						});
 					return yield* read;
 				});
 
