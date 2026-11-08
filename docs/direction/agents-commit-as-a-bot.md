@@ -99,7 +99,13 @@ keys are a sketch until a plan checks them against git's trailer rules and the i
 
 1. **The box's edge and a remote brain.** The stand-in token is swapped at the box's edge, which
    asks the brain for a real token. How the edge reaches a brain on Cloudflare, and proves which
-   agent asks, is not designed.
+   agent asks, is not designed. Two runs show the swap itself works on a Cloudflare Container:
+   in [experiment 148](../../experiments/148-remote-programs.md) the box's outbound handler
+   (`interceptOutboundHttp`) sent each model call to a relay that added the starter's key on the
+   way out, and in [experiment 157](../../experiments/157-login-stays-home.md)'s round 1 the same
+   kind of handler (`interceptOutboundHttps`) added the person's Claude token on the way out, with
+   0 copies in 18 boxes. 157's ruled round 2 put the Claude token in the box instead, so this is
+   evidence for the swap, not a decided shape.
 2. **Who writes the trailers.** With plain `git push`, the commit is made in the box, so
    `Fabrika-Agent` and `Fabrika-Input` are no longer written by the host when it builds the
    commit. How the host still stamps them, and checks them at the proxy, is open.
