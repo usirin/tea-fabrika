@@ -111,23 +111,55 @@ const setup = Effect.fnUntraced(function* () {
 	return {hello, trusted, who, consume, admit};
 });
 describe("P10 hello", () => {
-	it.effect("d2: unknown key refusal includes the fingerprint checked from the signed hello", () =>
-		Effect.gen(function* () {
-			const x = yield* setup();
-			// Plant: return not_granted without identifying the caller's checked key.
-			const result = yield* Transport.checkHello({
-				...x.trusted,
-				hello: x.hello,
-				admit: () => Effect.succeed(Transport.Admission.cases.refused.make({why: "not_granted"})),
-			});
-			expect(result).toEqual({
-				_tag: "refused",
-				why: "not_granted",
-				fingerprint: x.who.key,
-			});
-			expect(x.consume).not.toHaveBeenCalled();
-		}),
-	);
+	// d2: for any signed hello (a fresh key, any url, tab and nonce) that admission refuses
+	// (not_granted, its one refusal), the refusal carries that caller's own checked fingerprint and spends no nonce.
+	// Plant: return the refusal without the fingerprint.
+	it("d2: any refused signed hello names its own checked fingerprint", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.webUrl(), fc.string(), fc.string(), (url, tab, nonce) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const k = yield* key();
+						const hello = {
+							versions: [1, 2],
+							has: [],
+							ping: "30s",
+							key: k.raw,
+							tab,
+							nonce,
+							platform: "browser",
+							os: "ios",
+							sentAt: SENT,
+							signed: yield* k.sign(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
+						};
+						const consume = vi.fn(() => true);
+						const admit = vi.fn((_key: string) =>
+							Effect.succeed(Transport.Admission.cases.refused.make({why: "not_granted"})),
+						);
+						const result = yield* Transport.checkHello({
+							hello,
+							url,
+							tab,
+							nonce,
+							name: k.fingerprint,
+							versions: [2, 1],
+							ping: {min: 10_000, max: 60_000},
+							consume,
+							admit,
+						});
+						expect(admit.mock.calls).toEqual([[k.fingerprint]]);
+						expect(result).toEqual({
+							_tag: "refused",
+							why: "not_granted",
+							fingerprint: k.fingerprint,
+						});
+						expect(consume).not.toHaveBeenCalled();
+					}),
+				),
+			),
+			{seed: 119120, endOnFailure: true, numRuns: 40},
+		);
+	});
 	for (const binding of ["tab", "nonce"] as const)
 		it.effect(
 			`p26: an unsigned ${binding} claim cannot differ from the ${binding} bound by the proof`,

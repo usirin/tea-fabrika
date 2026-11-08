@@ -4,6 +4,7 @@
 import {readFileSync} from "node:fs";
 import {join} from "node:path";
 import {Option} from "effect";
+import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {
 	type Answer,
@@ -22,6 +23,7 @@ import {
 	type Note,
 	plain,
 	type PullRequest,
+	ROLES,
 	type Role,
 	type Signed,
 	signedText,
@@ -438,22 +440,58 @@ const TREES = new Map([
 ]);
 const PLACED = {onMain: true, before: new Set([T("0")])};
 
+// d4 (Q15): a logged link names its parent and traceId, and the old `cause` is gone. Over any
+// link a step or a person could log. Plants: drop onExcessProperty, so cause rides along; make
+// parent or traceId optional; read cause as the old name for parent.
 describe("d4: logged links use parent and traceId (Q15)", () => {
-	it.each([null, "in-process-test-1"])("keeps parent %s and the request's traceId", (parent) => {
-		const value = link(note("tests", A, B), {parent});
-		expect(decodeLink(value)).toEqual(Option.some(value));
+	const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+	const runs = {seed: SEED, endOnFailure: true, numRuns: 200};
+	const sha = fc.stringMatching(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
+	const anyLink = fc.record({
+		_tag: fc.constant("attested" as const),
+		step: fc.constantFrom(...ROLES, "person" as const),
+		ticket: fc.stringMatching(/^[0-9]+$/),
+		version: fc.integer({min: 1}),
+		from: sha,
+		to: sha,
+		key: fc.string(),
+		sig: fc.string(),
+		by: fc.string(),
+		arrivedAt: fc.string(),
+		parent: fc.option(fc.string(), {nil: null}),
+		traceId: fc.string(),
+		commit: sha,
+		pr: fc.string(),
+		base: sha,
+		squash: sha,
+		keys: sha,
 	});
-	it("refuses the old cause field even alongside parent and traceId", () => {
-		const value = link(note("tests", A, B));
-		// Plant: accept cause as an extra field, or as the old name for parent.
-		expect(Option.isNone(decodeLink({...value, cause: null}))).toBe(true);
-		const {parent: _, ...old} = value;
-		expect(Option.isNone(decodeLink({...old, cause: null}))).toBe(true);
+	it("a link with parent and traceId decodes to itself", () => {
+		fc.assert(
+			fc.property(anyLink, (value) => {
+				expect(decodeLink(value)).toEqual(Option.some(value));
+			}),
+			runs,
+		);
 	});
-	it.each(["parent", "traceId"] as const)("requires %s", (field) => {
-		const value: Record<string, unknown> = {...link(note("tests", A, B))};
-		delete value[field];
-		expect(Option.isNone(decodeLink(value))).toBe(true);
+	it("a link carrying cause is refused, with or without parent", () => {
+		fc.assert(
+			fc.property(anyLink, fc.anything(), fc.boolean(), (value, cause, keepParent) => {
+				const {parent: _, ...old} = value;
+				expect(decodeLink({...(keepParent ? value : old), cause})).toEqual(Option.none());
+			}),
+			runs,
+		);
+	});
+	it("a link missing parent or traceId is refused", () => {
+		fc.assert(
+			fc.property(anyLink, fc.constantFrom("parent", "traceId"), (value, field) => {
+				const missing: Record<string, unknown> = {...value};
+				delete missing[field];
+				expect(decodeLink(missing)).toEqual(Option.none());
+			}),
+			runs,
+		);
 	});
 });
 
