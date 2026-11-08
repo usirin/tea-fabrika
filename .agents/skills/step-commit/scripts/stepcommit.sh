@@ -10,6 +10,11 @@ case $step in tests|build|lead) ;; *) echo "stepcommit: unknown step $step" >&2;
 [ $# -gt 0 ] || { echo "stepcommit: name the paths to stage" >&2; exit 2; }
 here=$(dirname "$0")
 coauthor=${FABRIKA_COAUTHOR:-"$(git config --global user.name) <$(git config --global user.email)>"}
+# Refuse a tree with anything staged already: it could be another step's work, and it would ride in.
+if ! git diff --cached --quiet; then
+	echo "stepcommit: the index already holds staged changes; commit only your own paths" >&2
+	git diff --cached --name-only >&2; exit 4
+fi
 git add -- "$@"
 if [ "$step" = build ]; then
 	staged=$(git diff --cached --name-only)

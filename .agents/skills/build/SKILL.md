@@ -22,7 +22,8 @@ the rest.
 4. **If a test or an exam path must change, stop.** Name the file, the line and why, and answer
    `send` to tests. The step-commit script refuses a build commit that holds an exam path anyway.
 5. **Run** the narrow laws, then `pnpm exec vitest run --changed origin/main` once (only tests that
-   reach a changed file; CI runs the full suite), then one typecheck at the end.
+   reach a changed file; a pull request's CI runs the same, the full suite runs on main after the
+   merge, and `next/`'s own job runs all its tests), then one typecheck at the end.
 6. **Commit and sign** with the step-commit skill:
    `sh .agents/skills/step-commit/scripts/stepcommit.sh build <ticket> "T<ticket> build: <subject>" <paths...>`
 7. **Report** in at most 6 lines: which laws went green, any still red and why, any file you needed

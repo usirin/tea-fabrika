@@ -13,9 +13,10 @@ sh .agents/skills/step-commit/scripts/stepcommit.sh <step> <ticket> "T<ticket> <
 sh .agents/skills/step-commit/scripts/stepcommit.sh build 277 "T277 build: one refusal per request" next/apps/fabrika/src/door.ts
 ```
 
-Why one command: on 2026-11-08 about 21 of 126 step reports were signing problems, and every one
-came from driving the commit and the signature as two steps
-([code commits and signs each step](../../../docs/direction/code-commits-and-signs-each-step.md),
+Why one command: on 2026-11-08 about 21 of 126 step reports were signing problems. Three causes sat
+under them: the plan did not say who owns each file, signing was a second command, and history
+rewrites broke signed links. This script covers the last two, and refuses a build's exam path for
+the first ([code commits and signs each step](../../../docs/direction/code-commits-and-signs-each-step.md),
 field note 2026-11-08-20).
 
 ## The rules
@@ -23,6 +24,8 @@ field note 2026-11-08-20).
 - **`<step>` is `tests`, `build`, `mutation` or `lead`.** `mutation` signs as `tests` for now, a
   stopgap until it has a role of its own (field note 2026-11-08-19).
 - **Name every path.** Never `git add -A` or `.`. Another step's edits may sit in the same tree.
+- **Start with nothing staged.** If the index already holds changes, the script refuses (exit 4)
+  before it stages anything, and lists them. Do not unstage another step's work: tell the lead.
 - **A build that names an exam path is refused** (exit 3) and nothing is committed. The paths are in
   `exam-paths.json`. Do not work around it: answer `send` to tests with the paths.
 - **One commit per call.** Several commits mean several calls, in order.

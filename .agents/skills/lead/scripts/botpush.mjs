@@ -1,4 +1,5 @@
-// Push a worktree's branch (and step notes) as fabrikalfa[bot].
+// Push a worktree's branch and step notes as fabrikalfa[bot], in one atomic push. It merges the
+// remote's notes in first, and fails when the worktree has no step notes.
 // The app key is read from the keychain into memory only; the token is never printed or written.
 // usage: node botpush.mjs <worktree> <branch> [src=HEAD]   (branch "-" pushes only the step notes)
 // FABRIKA_APP_ID names the GitHub App; GH_REPO (owner/name) defaults to the worktree's origin.
@@ -16,6 +17,13 @@ const REPO =
 		.trim()
 		.replace(/^(https:\/\/github\.com\/|git@github\.com:)/, "")
 		.replace(/\.git$/, "");
+
+// The step notes must exist: a branch pushed without them fails the commits check.
+try {
+	execFileSync("git", ["-C", dir, "rev-parse", "--verify", "-q", "refs/notes/fabrika"]);
+} catch {
+	throw new Error("botpush: no refs/notes/fabrika here; sign the commits before pushing");
+}
 
 const b64 = (s) => Buffer.from(s).toString("base64url");
 const raw = execFileSync("security", [
@@ -68,14 +76,27 @@ const git = (...a) =>
 		stdio: ["ignore", "pipe", "pipe"],
 	}).toString();
 const url = `https://github.com/${REPO}.git`;
-// Notes first in the list: one push updates both, so CI, started by the branch, finds the signatures.
-const refs = branch === "-" ? [] : [`${src}:refs/heads/${branch}`];
+// One atomic push: the notes and the branch land together or not at all, so CI finds the signatures.
+const refs = ["refs/notes/fabrika:refs/notes/fabrika"];
+if (branch !== "-") refs.push(`${src}:refs/heads/${branch}`);
 try {
-	git("rev-parse", "--verify", "refs/notes/fabrika");
-	refs.push("refs/notes/fabrika:refs/notes/fabrika");
-} catch {}
-try {
-	git("push", url, ...refs);
+	// Take the remote's notes first and merge them in, as the signer's own push does, so the push is
+	// a fast-forward. A conflict (two notes on one commit) stops here, before anything is pushed.
+	if (git("ls-remote", url, "refs/notes/fabrika").trim()) {
+		git("fetch", "--no-tags", "-q", url, "+refs/notes/fabrika:refs/notes/fabrika-origin");
+		git(
+			"-c",
+			"user.name=fabrikalfa[bot]",
+			"-c",
+			"user.email=353269643+fabrikalfa[bot]@users.noreply.github.com",
+			"notes",
+			"--ref=fabrika",
+			"merge",
+			"-q",
+			"refs/notes/fabrika-origin",
+		);
+	}
+	git("push", "--atomic", url, ...refs);
 	console.log(
 		`pushed ${branch} as fabrikalfa[bot]; installation ${inst.id}; token expires ${tok.expires_at}`,
 	);
@@ -84,7 +105,7 @@ try {
 		`push refused: ${String(e.stderr ?? e.message)
 			.replaceAll(tok.token, "***")
 			.split("\n")
-			.filter((l) => /GH0|refused|rejected|error/i.test(l))
+			.filter((l) => /GH0|refused|rejected|error|conflict/i.test(l))
 			.join(" | ")}`,
 	);
 	process.exitCode = 1;
