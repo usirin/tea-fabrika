@@ -62,13 +62,12 @@ type Replayed = {
 	readonly head: Rev;
 };
 
-const row = (entry: Entry): Effect.Effect<Row, LedgerError> => {
-	if (!known.has(entry._tag)) return Effect.succeed({entry, fact: null});
+const row = Effect.fnUntraced(function* (entry: Entry) {
+	if (!known.has(entry._tag)) return {entry, fact: null} satisfies Row;
 	const fact = decodeFact(valueFor(entry));
-	return Result.isSuccess(fact)
-		? Effect.succeed({entry, fact: fact.success})
-		: Effect.fail(new LedgerError({why: "bad_row"}));
-};
+	if (Result.isFailure(fact)) return yield* new LedgerError({why: "bad_row"});
+	return {entry, fact: fact.success} satisfies Row;
+});
 
 const replay = (rows: ReadonlyArray<Row>): Replayed => {
 	const skipped = new Map<Rev, Why>();
@@ -143,21 +142,28 @@ export class ClientManager extends Context.Service<
 					return yield* read;
 				});
 
-				const answer = (written: Written) =>
-					Effect.as(
-						Effect.annotateCurrentSpan({
-							[tag("answer")]: written._tag,
-							...Written.match(written, {
-								applied: ({rev}) => ({[tag("rev")]: rev}),
-								ignored: ({rev, why}) => ({[tag("rev")]: rev, [tag("why")]: why}),
-								refused: ({why}) => ({[tag("why")]: why}),
-							}),
+				const answer = Effect.fnUntraced(function* (written: Written) {
+					yield* Effect.annotateCurrentSpan({
+						[tag("answer")]: written._tag,
+						...Written.match(written, {
+							applied: ({rev}) => ({[tag("rev")]: rev}),
+							ignored: ({rev, why}) => ({[tag("rev")]: rev, [tag("why")]: why}),
+							refused: ({why}) => ({[tag("why")]: why}),
 						}),
-						written,
-					);
+					});
+					return written;
+				});
 
-				const write = (fact: MemberFact, from: From) =>
-					Effect.gen(function* () {
+				const write = Effect.fn("members.write")(
+					function* (fact: MemberFact, from: From) {
+						yield* Effect.annotateCurrentSpan(
+							short({
+								[tag("tag")]: fact._tag,
+								[tag("id")]: factId(fact),
+								...nonNull(tag("signer"), signedBy(fact)),
+								...nonNull(tag("key"), subject(fact)),
+							}),
+						);
 						const before = yield* load;
 						const id = factId(fact);
 						// A fact already in the log goes to the referee as it is: a resend gets its first
@@ -180,17 +186,9 @@ export class ClientManager extends Context.Service<
 								? Written.cases.applied.make({rev: placed.rev})
 								: Written.cases.ignored.make({rev: placed.rev, why}),
 						);
-					}).pipe(
-						Effect.tapError((error) => Effect.annotateCurrentSpan(tag("why"), error.why)),
-						Effect.withSpan("members.write", {
-							attributes: short({
-								[tag("tag")]: fact._tag,
-								[tag("id")]: factId(fact),
-								...nonNull(tag("signer"), signedBy(fact)),
-								...nonNull(tag("key"), subject(fact)),
-							}),
-						}),
-					);
+					},
+					Effect.tapError((error) => Effect.annotateCurrentSpan(tag("why"), error.why)),
+				);
 
 				return {
 					members: load.pipe(

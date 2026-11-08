@@ -38,29 +38,28 @@ const decodeSent = Schema.decodeUnknownOption(Sent);
 const inbox = (name: string): string => `${name}/inbox`;
 
 /** A `send` entry as a Letter; any other case is none, and kept in the log (T4). */
-const letter = (entry: Entry): Effect.Effect<Option.Option<Letter>, LedgerError> => {
-	if (entry._tag !== SEND) return Effect.succeed(Option.none());
-	return Option.match(decodeSent(entry.body), {
-		onNone: () => Effect.fail(new LedgerError({why: "bad_row"})),
-		onSome: ({m}) =>
-			Effect.succeed(
-				Option.some({
-					id: entry.id,
-					m,
-					by: entry.by,
-					for: entry.for,
-					sentAt: entry.sentAt,
-					cause: entry.cause,
-					rev: entry.rev,
-					pos: entry.pos,
-				}),
-			),
+const letter = Effect.fnUntraced(function* (entry: Entry) {
+	if (entry._tag !== SEND) return Option.none<Letter>();
+	const sent = decodeSent(entry.body);
+	if (Option.isNone(sent)) return yield* new LedgerError({why: "bad_row"});
+	return Option.some<Letter>({
+		id: entry.id,
+		m: sent.value.m,
+		by: entry.by,
+		for: entry.for,
+		sentAt: entry.sentAt,
+		cause: entry.cause,
+		rev: entry.rev,
+		pos: entry.pos,
 	});
-};
+});
 
 /** Tags an answer on the current span: placed or refused, and why. */
-export const answered = (word: (name: string) => string, answer: Appended) =>
-	Effect.annotateCurrentSpan(
+export const answered = Effect.fnUntraced(function* (
+	word: (name: string) => string,
+	answer: Appended,
+) {
+	yield* Effect.annotateCurrentSpan(
 		Appended.match(answer, {
 			placed: ({rev, pos}) => ({
 				[word("answer")]: "placed",
@@ -70,10 +69,13 @@ export const answered = (word: (name: string) => string, answer: Appended) =>
 			refused: ({why}) => ({[word("answer")]: "refused", [word("why")]: why}),
 		}),
 	);
+});
 
 /** Tags a failure's why on the current span. */
-export const failed = (word: (name: string) => string) => (error: LedgerError) =>
-	Effect.annotateCurrentSpan(word("why"), error.why);
+export const failed = (word: (name: string) => string) =>
+	Effect.fnUntraced(function* (error: LedgerError) {
+		yield* Effect.annotateCurrentSpan(word("why"), error.why);
+	});
 
 export class Mailbox extends Context.Service<
 	Mailbox,
@@ -94,22 +96,20 @@ export class Mailbox extends Context.Service<
 		Effect.gen(function* () {
 			const ledger = yield* Ledger;
 			return {
-				send: (to, id, m, from) =>
-					Option.match(decodeJson(m), {
+				send: Effect.fn("mailbox.send")(
+					function* (to: string, id: string, m: unknown, from: From) {
+						yield* Effect.annotateCurrentSpan({
+							...short({[STREAM]: inbox(to), [ID]: id, [tag("to")]: to}),
+							[OPERATION]: "send",
+						});
+						const json = decodeJson(m);
 						// The ledger's own answer for a body that is not JSON, without the trip.
-						onNone: (): Effect.Effect<Appended, LedgerError> =>
-							Effect.succeed(Appended.cases.refused.make({why: "bad_line"})),
-						onSome: (json) => ledger.append(inbox(to), id, lineFor(from, Send.make({m: json}))),
-					}).pipe(
-						Effect.tap((answer) => answered(tag, answer)),
-						Effect.tapError(failed(tag)),
-						Effect.withSpan("mailbox.send", {
-							attributes: {
-								...short({[STREAM]: inbox(to), [ID]: id, [tag("to")]: to}),
-								[OPERATION]: "send",
-							},
-						}),
-					),
+						if (Option.isNone(json)) return Appended.cases.refused.make({why: "bad_line"});
+						return yield* ledger.append(inbox(to), id, lineFor(from, Send.make({m: json.value})));
+					},
+					Effect.tap((answer) => answered(tag, answer)),
+					Effect.tapError(failed(tag)),
+				),
 				receive: (name, after) =>
 					Stream.unwrap(
 						Effect.sync(() => {

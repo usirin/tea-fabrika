@@ -30,18 +30,21 @@ export class ProcessManager extends Context.Service<
 		Effect.gen(function* () {
 			const ledger = yield* Ledger;
 			return {
-				start: (pid, {program, hash}, from) =>
-					ledger.append(pid, hash, lineFor(from, Started.make({program, hash}))).pipe(
-						Effect.tap((answer) => answered(tag, answer)),
-						Effect.tapError(failed(tag)),
-						Effect.withSpan("process.start", {
-							attributes: short({
-								[tag("pid")]: pid,
-								[tag("program")]: program,
-								[tag("hash")]: hash,
-							}),
-						}),
-					),
+				start: Effect.fn("process.start")(
+					function* (
+						pid: string,
+						code: {readonly program: string; readonly hash: string},
+						from: From,
+					) {
+						const {program, hash} = code;
+						yield* Effect.annotateCurrentSpan(
+							short({[tag("pid")]: pid, [tag("program")]: program, [tag("hash")]: hash}),
+						);
+						return yield* ledger.append(pid, hash, lineFor(from, Started.make({program, hash})));
+					},
+					Effect.tap((answer) => answered(tag, answer)),
+					Effect.tapError(failed(tag)),
+				),
 			};
 		}),
 	);
