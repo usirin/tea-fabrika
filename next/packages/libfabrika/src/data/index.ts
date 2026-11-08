@@ -9,10 +9,13 @@ export {
 	fromHere,
 	type InputId,
 	Line,
+	lineFor,
+	PAGE,
 	ParentText,
 	Rev,
 	TraceId,
 	Waited,
+	valueFor,
 } from "./log.ts";
 export {type RecordCalls, RecordManager, Written} from "./records.ts";
 export {Referee, type Sql, type SqlValue} from "./referee.ts";
@@ -28,4 +31,5 @@ export {
 	SpanRow,
 	Summary,
 	Tag,
+	short,
 } from "./trace.ts";

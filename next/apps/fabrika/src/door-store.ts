@@ -1,0 +1,36 @@
+import {LedgerError, type Sql} from "@kampus/libfabrika/data";
+import {Effect, Schema} from "effect";
+
+// Only checked connection state and input metadata belong here. Input bodies stay out.
+export const doorStore = (sql: Sql) => {
+	const ensure = () => {
+		sql.exec("CREATE TABLE IF NOT EXISTS door_state (name TEXT PRIMARY KEY, value TEXT NOT NULL)");
+		sql.exec("CREATE TABLE IF NOT EXISTS door_starts (id TEXT PRIMARY KEY)");
+		sql.exec(
+			"CREATE TABLE IF NOT EXISTS door_bindings (id TEXT PRIMARY KEY, letter TEXT UNIQUE, value TEXT NOT NULL)",
+		);
+	};
+	const atomic = <A>(step: () => A) =>
+		Effect.try({
+			try: () =>
+				sql.transaction(() => {
+					ensure();
+					return step();
+				}),
+			catch: () => new LedgerError({why: "storage"}),
+		});
+	const get = <A>(name: string, schema: Schema.Codec<A>) => {
+		const [row] = sql.exec("SELECT value FROM door_state WHERE name=?", name);
+		return row === undefined
+			? null
+			: Schema.decodeUnknownSync(Schema.fromJsonString(schema))(row.value);
+	};
+	const set = <A>(name: string, schema: Schema.Codec<A>, value: A) => {
+		sql.exec(
+			"INSERT INTO door_state (name,value) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
+			name,
+			Schema.encodeSync(Schema.fromJsonString(schema))(value),
+		);
+	};
+	return {atomic, get, set, sql};
+};

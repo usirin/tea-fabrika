@@ -83,6 +83,12 @@ export class SessionManager extends Context.Service<
 			process: string,
 			kind: string,
 		) => Effect.Effect<Session, SigningRefused | NotGranted | LedgerError, SignRequest>;
+		readonly receipt: (
+			id: string,
+			parent: string,
+			process: string,
+			kind: string,
+		) => Effect.Effect<Session, SigningRefused | NotGranted | LedgerError>;
 	}
 >()("@kampus/libfabrika/SessionManager") {
 	static readonly layer = <R>(
@@ -165,6 +171,29 @@ export class SessionManager extends Context.Service<
 				});
 				return {
 					signer,
+					receipt: Effect.fn("session.receipt")(function* (
+						id: string,
+						parent: string,
+						process: string,
+						kind: string,
+					) {
+						const exists = yield* stored(() => {
+							ensure();
+							return (
+								sql.exec(
+									"SELECT id FROM door_receipts WHERE id=? AND parent=? AND process=? AND kind=?",
+									id,
+									parent,
+									process,
+									kind,
+								).length > 0
+							);
+						});
+						if (!exists) return yield* new SigningRefused({why: "not_delivered"});
+						return yield* signer(parent, process, kind).pipe(
+							Effect.provideService(SignRequest, {id}),
+						);
+					}),
 					record: Effect.fn("session.record")(function* (input: InputRecord) {
 						const result = yield* stored(() =>
 							sql.transaction(() => {
