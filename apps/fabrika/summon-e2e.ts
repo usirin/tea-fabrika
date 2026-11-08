@@ -56,7 +56,7 @@ const until = async <T>(what: string, look: () => Promise<T>, ok: (seen: T) => b
 
 const tile = (page: Page, id: string) => page.locator(`[data-tile="${id}"]`);
 const screen = async (page: Page, id: string) => {
-	const text = tile(page, id).locator(".screen-text").first();
+	const text = tile(page, id).locator(".screen-text");
 	return (await text.count()) === 0 ? "" : ((await text.textContent({timeout: 2000})) ?? "");
 };
 const lastRow = (text: string) => text.split("\n").at(-1) ?? "";

@@ -126,14 +126,16 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 	text.className = "screen-text";
 	text.setAttribute("aria-label", `${tile} screen`);
 	// What a job says while it works, and the lines worth saying out loud, such as an agent's reply
-	// and what it asks: live regions, out of sight as the screen's text is (WCAG 4.1.3). The status
-	// is said at most once every few seconds, so a screen reader is not read a clock.
+	// and what it asks: live regions, out of sight as the screen's text is (WCAG 4.1.3). Each has a
+	// class of its own, since `screen-text` names the screen alone, which a test reads as the tile's
+	// screen. The status is said at most once every few seconds, so a screen reader is not read a
+	// clock.
 	const status = document.createElement("div");
-	status.className = "screen-text";
+	status.className = "job-status";
 	status.setAttribute("role", "status");
 	status.setAttribute("aria-label", `${tile} job status`);
 	const said = document.createElement("div");
-	said.className = "screen-text";
+	said.className = "job-replies";
 	said.setAttribute("role", "log");
 	said.setAttribute("aria-label", `${tile} replies`);
 	element.append(screen, text, status, said);
