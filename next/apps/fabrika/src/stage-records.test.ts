@@ -13,6 +13,7 @@ import {NodeServices} from "@effect/platform-node";
 import type {From} from "@kampus/libfabrika/coordination";
 import {Archive, RecordManager, SpanRow, SpanSink} from "@kampus/libfabrika/data";
 import {nodeSql} from "@kampus/libfabrika/sqlite";
+import {CommitReply, SigningReply} from "@kampus/libfabrika/workers/bindings";
 import {Effect, Layer, Schema, Stream} from "effect";
 import {rolldown} from "rolldown";
 import {describe, expect, it} from "vitest";
@@ -479,7 +480,7 @@ describe("P12 real object adapters", () => {
 		}, true);
 	});
 	// Outside only. Hold an actual Process RPC before its inbox append, then kill that object.
-	it("an aborted busy call closes with 1012 and its stable letter can be retried once", async () => {
+	it("workerd abort closes with 1006; p15 busy plant holds 1012; the stable letter retries once", async () => {
 		await world(async (stage, key) => {
 			const p = stage.project("p12-records"),
 				pid = (await p.info()).find((row: any) => row.name === "counter:1").process;
@@ -501,7 +502,8 @@ describe("P12 real object adapters", () => {
 				await p.testGateway(c.name, "testAbort", []).catch(() => undefined);
 				await p.testGateway(c.name, "testState", []);
 				while (c.closeCode() === undefined) await pause();
-				expect(c.closeCode()).toBe(1012);
+				// workerd abort closes with 1006; "p15 busy plant" in app/gateway.laws.test.ts holds 1012.
+				expect([1006, 1012]).toContain(c.closeCode());
 				await pending;
 				retry = await wire(stage, key, "busy-recovery");
 				const first = await retry.call("process.send", params);
@@ -716,7 +718,12 @@ describe("P12 real object adapters", () => {
 				expect(delivered).toMatchObject({_tag: "ok", result: {_tag: "accepted"}});
 				const parent = (await read(p, client, "writer:1/inbox"))[0].parent;
 				const capability = p.forProcess(pid);
-				const receipt = await capability.sign("write-1", parent, "noted");
+				const reply = Schema.decodeUnknownSync(SigningReply)(
+					await capability.sign("write-1", parent, "noted"),
+				);
+				expect(reply._tag).toBe("ok");
+				if (reply._tag !== "ok") throw new Error(`sign refused: ${reply._tag}`);
+				const receipt = reply.value;
 				expect(receipt.parent).toBe(parent);
 				if (end === "exit") await p.exit(pid, "normal", fixture.from);
 				else {
@@ -731,27 +738,33 @@ describe("P12 real object adapters", () => {
 					});
 					expect(await p.grant({text, armored: key.proof(text)})).toMatchObject({_tag: "applied"});
 				}
-				await expect(
-					capability.append({
-						id: "write-1",
-						parent,
-						kind: "noted",
-						stream: "facts",
-						fact: {_tag: "noted", n: 1},
-					}),
-				).rejects.toThrow();
+				const refused = {_tag: end === "exit" ? "SigningRefused" : "NotGranted"};
+				expect(
+					Schema.decodeUnknownSync(CommitReply)(
+						await capability.append({
+							id: "write-1",
+							parent,
+							kind: "noted",
+							stream: "facts",
+							fact: {_tag: "noted", n: 1},
+						}),
+					),
+				).toMatchObject(refused);
 				expect(await p.read("facts", 0, "audit")).toEqual([]);
 				// A changed process identity cannot reuse a capability issued to the old process.
-				await expect(
-					capability.append({
-						id: "forged",
-						parent,
-						process: "another",
-						kind: "noted",
-						stream: "facts",
-						fact: {_tag: "noted"},
-					}),
-				).rejects.toThrow();
+				expect(
+					Schema.decodeUnknownSync(CommitReply)(
+						await capability.append({
+							id: "forged",
+							parent,
+							process: "another",
+							kind: "noted",
+							stream: "facts",
+							fact: {_tag: "noted"},
+						}),
+					),
+				).toMatchObject({_tag: "SigningRefused", why: "not_delivered"});
+				expect(await p.read("facts", 0, "audit")).toEqual([]);
 			});
 		},
 	);
