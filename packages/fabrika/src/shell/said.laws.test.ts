@@ -11,8 +11,8 @@ import {BUILTINS, parse, type Statement} from "./grammar.ts";
 //   // one statement: {kind: "said", room: null, mentions: [scout at [1,6)],
 //   //                 prose: {text: "why does post print #7 twice?", at: [7,38)}, background: false}
 //
-// Laws S-1 and S-2 of the plan, as the grammar holds them. turn.laws.test.ts holds S-1 again,
-// through tsh, on the value the `turn` program is told.
+// Laws S-1 and S-2 of the plan, as the grammar holds them. turn.prose.laws.test.ts holds S-1
+// again, through tsh, on the value the `turn` program is told.
 
 /** Seed 119120: the shared one (AGENTS.md). */
 const OPTS = {numRuns: 300, seed: 119120};
