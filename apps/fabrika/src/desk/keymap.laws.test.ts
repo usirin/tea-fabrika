@@ -2,8 +2,8 @@ import {applyCell} from "@demlik/tea";
 import {Result} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
+import {keyPress, loadKeyRouter, type KeyRouter} from "../../../../fixtures/keybindings/router.ts";
 import {capOf} from "../window/pop.ts";
-import {type Desk, type DeskCmd, type DeskMsg, deskMachine, savedOf, takenNow} from "./desk.ts";
 import {commandOn, decodeKeys, defaults, Does, type Keys, spell} from "./keymap.ts";
 import {keyOwner, matchPress} from "./keys.ts";
 
@@ -13,7 +13,7 @@ import {keyOwner, matchPress} from "./keys.ts";
 //
 //   any text at all            rows, or a refusal with a line in the text; never a throw
 //   any file that reads        one key does one thing in each place; the prefix is never a row's
-//   any table, any desk        the swap disarms the prefix, asks for nothing, keeps what is kept
+//   any table, any window      the swap disarms its prefix and asks for no work
 
 const OPTS = {seed: 119120, numRuns: 300};
 
@@ -331,66 +331,67 @@ describe("today's PR 1 spelling and escape laws", () => {
 	});
 });
 
-/** Keys pressed into a fresh desk, a moment apart: it ends anywhere, armed or asking or not. */
+/** Keys pressed into a fresh window, including armed prefixes and pending layout commands. */
 const pressed = fc.array(
 	fc.constantFrom("<c-b>", "<c-b>", "|", "-", "z", "x", "y", "n", "N", "f", "h", "<c-h>"),
 	{maxLength: 30},
 );
 
-const deskAfter = (keys: readonly string[]): Desk => {
-	let s: Desk = deskMachine.init(null, undefined)[0];
+const windowAfter = (machine: KeyRouter, keys: readonly string[]) => {
+	let s = machine.init(null, {
+		keys: defaults,
+		window: "w1",
+		target: {program: "tsh", tile: "t1"},
+		mac: true,
+	})[0];
 	for (const [at, key] of keys.entries())
-		s = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, s, {type: "key", key, at})[0];
+		s = applyCell(machine, s, {type: "press", press: keyPress(key), at})[0];
 	return s;
 };
 
-describe("the desk's laws for a swapped table (p9)", () => {
-	it("disarms the prefix, asks for nothing and keeps what is kept, on any desk, for any table", () => {
+describe("the window's laws for a swapped table (p9)", () => {
+	it("disarms its prefix and asks for no work, after any keys, for any table", async () => {
+		const machine = await loadKeyRouter();
 		fc.assert(
 			fc.property(pressed, table, (keys, swapped) => {
-				const s = deskAfter(keys);
-				if (s.at !== "open") return true;
-				const [next, cmds] = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, s, {
+				const s = windowAfter(machine, keys);
+				const [next, cmds] = applyCell(machine, s, {
 					type: "keys",
 					keys: swapped,
 				});
-				return (
-					next.at === "open" &&
-					!next.prefix.armed &&
-					cmds.length === 0 &&
-					JSON.stringify(savedOf(next)) === JSON.stringify(savedOf(s))
-				);
+				return !next.prefix.armed && cmds.length === 0;
 			}),
 			OPTS,
 		);
 	});
 
-	it("takes the new prefix, and every tezgah key pressed alone, once swapped in", () => {
+	it("uses the new prefix and every global key pressed alone, including the palette", async () => {
+		const machine = await loadKeyRouter();
 		fc.assert(
-			fc.property(pressed, table, (keys, swapped) => {
-				const s = deskAfter(keys);
-				if (s.at !== "open") return true;
-				const [next] = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, s, {
-					type: "keys",
-					keys: swapped,
+			fc.property(table, (swapped) => {
+				const before = windowAfter(machine, ["<c-b>"]);
+				const [state] = applyCell(machine, before, {type: "keys", keys: swapped});
+				const [armed, cmds] = applyCell(machine, state, {
+					type: "press",
+					press: keyPress(swapped.prefix),
+					at: 100,
 				});
-				if (next.at !== "open" || next.ask !== null) return true;
-				const takes = takenNow(next, 0);
-				const alone = swapped.rows.flatMap((r) =>
-					r.does.startsWith("tezgah.")
-						? r.keys.flatMap((k) => (k._tag === "alone" ? [k.key] : []))
-						: [],
-				);
-				const page = swapped.rows.flatMap((r) =>
-					r.does === "palette.open"
-						? r.keys.flatMap((k) => (k._tag === "alone" ? [k.key] : []))
-						: [],
-				);
-				return (
-					takes.keys.includes(swapped.prefix) &&
-					alone.every((k) => takes.keys.includes(k)) &&
-					page.every((k) => !takes.keys.includes(k))
-				);
+				expect(armed.prefix.armed).toBe(true);
+				expect(cmds).toEqual([]);
+				for (const row of swapped.rows) {
+					if (row.scope !== "global" || row.target.mode !== null) continue;
+					for (const key of row.keys) {
+						if (key._tag !== "alone") continue;
+						const [, out] = applyCell(machine, state, {
+							type: "press",
+							press: keyPress(key.key),
+							at: 101,
+						});
+						expect(out).toContainEqual(
+							expect.objectContaining({type: "run", target: {...row.target, tile: "t1"}}),
+						);
+					}
+				}
 			}),
 			OPTS,
 		);

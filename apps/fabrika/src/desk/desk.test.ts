@@ -1,11 +1,11 @@
 import {applyCell} from "@demlik/tea";
 import {Result} from "effect";
 import {describe, expect, it} from "vitest";
+import {windowKeys} from "../../../../fixtures/keybindings/router.ts";
 import {PIPES} from "../pipes.ts";
 import type {TileJobs} from "../tile-jobs.ts";
 import {
 	activeOf,
-	claims,
 	type Desk,
 	type DeskCmd,
 	type DeskMsg,
@@ -15,10 +15,9 @@ import {
 	refusedOf,
 	restore,
 	savedOf,
-	takenNow,
 	tilesOf,
 } from "./desk.ts";
-import {decodeKeys, type Keys} from "./keymap.ts";
+import {decodeKeys, defaults, type Does, type Keys} from "./keymap.ts";
 import {keyName} from "./keys.ts";
 import {findTile} from "./layout/index.ts";
 
@@ -37,17 +36,20 @@ const running = (count: number): TileJobs => ({
 	ended: null,
 });
 
-describe("today's keys PR 1 command paths", () => {
-	it("K17: a prefix opens the palette, and an unbound command still runs by name", () => {
+describe("today's completed command paths", () => {
+	it("K17: a window opens the palette, and an unbound command still runs by name", async () => {
 		const read = decodeKeys('palette.open = "<prefix>p"\ntezgah.zoom = []', true);
 		if (Result.isFailure(read)) throw new Error(read.failure.why);
-		const configured = fold([{type: "keys", keys: read.success}]).s;
-		const openedPalette = fold(prefixed("p"), configured);
-		expect(openedPalette.cmds).toContainEqual(
-			expect.objectContaining({type: "show", what: "palette"}),
+		const router = await windowKeys(read.success);
+		expect(router.prefixed("p")).toContainEqual(
+			expect.objectContaining({
+				type: "run",
+				target: expect.objectContaining({program: "palette", word: "open"}),
+			}),
 		);
-		const two = fold(prefixed("|"), configured).s;
-		expect(activeOf(opened(fold(prefixed("z"), two).s)).layout.zoomed).toBeNull();
+		const unbound = await windowKeys(read.success);
+		expect(unbound.prefixed("z").some((c) => c.type === "run")).toBe(false);
+		const two = fold(command("tezgah.split")).s;
 		const named = fold([{type: "run", does: "tezgah.zoom"}], two);
 		expect(activeOf(opened(named.s)).layout.zoomed).toBe("t2");
 	});
@@ -70,11 +72,8 @@ const opened = (s: Desk): Open => {
 	return s;
 };
 
-/** Ctrl-B, then `key`, a moment apart. */
-const prefixed = (key: string, at = 0): readonly DeskMsg[] => [
-	{type: "key", key: "<c-b>", at},
-	{type: "key", key, at: at + 1},
-];
+/** The window already resolved the key. The desk receives a finished command. */
+const command = (does: Does): readonly DeskMsg[] => [{type: "run", does}];
 
 const ids = (s: Desk) => tilesOf(activeOf(opened(s))).map((t) => t.id);
 const focus = (s: Desk) => activeOf(opened(s)).focused;
@@ -86,8 +85,8 @@ describe("the desk", () => {
 		expect(booted.map((c) => c.type)).toEqual(["open", "save"]);
 	});
 
-	it("splits side by side with | and top to bottom with -, the new tile focused and opened", () => {
-		const {s, cmds} = fold([...prefixed("|"), ...prefixed("-", 10)]);
+	it("splits side by side and top to bottom, the new tile focused and opened", () => {
+		const {s, cmds} = fold([...command("tezgah.split"), ...command('tezgah."split --to down"')]);
 		const root = activeOf(opened(s)).layout.root;
 		expect(root.orientation).toBe("horizontal");
 		expect(ids(s)).toEqual(["t1", "t2", "t3"]);
@@ -99,63 +98,95 @@ describe("the desk", () => {
 	});
 
 	it("moves focus by direction, as tmux does, and stays at an edge", () => {
-		const split = fold([...prefixed("|"), ...prefixed("-", 10)]).s;
-		expect(focus(fold(prefixed("h", 20), split).s)).toBe("t1");
-		expect(focus(fold(prefixed("k", 20), split).s)).toBe("t2");
-		expect(focus(fold(prefixed("<arrowup>", 20), split).s)).toBe("t2");
-		expect(focus(fold(prefixed("l", 20), split).s)).toBe("t3");
+		const split = fold([...command("tezgah.split"), ...command('tezgah."split --to down"')]).s;
+		expect(focus(fold(command('tezgah."focus --to left"'), split).s)).toBe("t1");
+		expect(focus(fold(command('tezgah."focus --to up"'), split).s)).toBe("t2");
+		expect(focus(fold(command('tezgah."focus --to right"'), split).s)).toBe("t3");
 	});
 
-	it("lets every key go to the tile while the prefix is not armed, and swallows an unbound one after it", () => {
-		expect(claims(start, "|", 0)).toBe(false);
-		expect(claims(start, "<c-b>", 0)).toBe(true);
-		const armed = fold([{type: "key", key: "<c-b>", at: 0}]).s;
-		expect(claims(armed, "q", 1)).toBe(true);
-		const after = fold([{type: "key", key: "q", at: 1}], armed);
-		expect(after.cmds).toEqual([]);
-		expect(opened(after.s).prefix).toEqual({armed: false});
+	it("the window passes ordinary typing and swallows an unbound key after its prefix", async () => {
+		const router = await windowKeys(defaults);
+		expect(router.key("|")).toContainEqual(expect.objectContaining({type: "pass"}));
+		expect(router.key("<c-b>")).toEqual([]);
+		expect(router.state().prefix.armed).toBe(true);
+		expect(router.key("q", 1)).toEqual([]);
+		expect(router.state().prefix.armed).toBe(false);
 	});
 
-	it("sends one Ctrl-B on for Ctrl-B twice, as tmux's send-prefix", () => {
-		const {cmds} = fold(prefixed("<c-b>"));
-		expect(cmds).toEqual([{type: "send", tile: "t1", data: "\x02"}]);
+	it("the window sends one Ctrl-B on for Ctrl-B twice, as tmux's send-prefix", async () => {
+		const router = await windowKeys(defaults);
+		expect(router.prefixed("<c-b>")).toEqual([
+			expect.objectContaining({
+				type: "pass",
+				target: expect.objectContaining({tile: "t1"}),
+				press: expect.objectContaining({key: "b", ctrl: true}),
+			}),
+		]);
 	});
 
 	it("zooms the focused tile and back, and a split or a focus move undoes the zoom", () => {
-		const two = fold(prefixed("|")).s;
-		const zoomed = fold(prefixed("z", 10), two).s;
+		const two = fold(command("tezgah.split")).s;
+		const zoomed = fold(command("tezgah.zoom"), two).s;
 		expect(activeOf(opened(zoomed)).layout.zoomed).toBe("t2");
-		expect(activeOf(opened(fold(prefixed("z", 20), zoomed).s)).layout.zoomed).toBeNull();
-		expect(activeOf(opened(fold(prefixed("h", 20), zoomed).s)).layout.zoomed).toBeNull();
+		expect(activeOf(opened(fold(command("tezgah.zoom"), zoomed).s)).layout.zoomed).toBeNull();
+		expect(
+			activeOf(opened(fold(command('tezgah."focus --to left"'), zoomed).s)).layout.zoomed,
+		).toBeNull();
 	});
 
-	it("asks before closing a tile with nothing running, and y closes it at once", () => {
-		const two = fold(prefixed("|")).s;
-		const asked = fold(prefixed("x", 10), two);
+	it("asks before closing a tile with nothing running, and Confirm closes it at once", () => {
+		const two = fold(command("tezgah.split")).s;
+		const asked = fold(command("tezgah.close"), two);
 		expect(opened(asked.s).ask).toBe("t2");
 		expect(questionOf(opened(asked.s), "t2")).toBe("close t2? (y/n)");
 		expect(asked.cmds).toEqual([]);
-		const {s, cmds} = fold([{type: "key", key: "y", at: 20}], asked.s);
+		const {s, cmds} = fold(command("tezgah.confirm"), asked.s);
 		expect(ids(s)).toEqual(["t1"]);
 		expect(focus(s)).toBe("t1");
 		expect(cmds).toContainEqual({type: "stop", tile: "t2"});
 		expect(cmds.some((c) => c.type === "close")).toBe(false);
 	});
 
-	it("takes only y for yes: any other key says no and keeps the tile", () => {
-		const asked = fold([...prefixed("|"), ...prefixed("x", 10)]).s;
-		for (const key of ["n", "Y", "a", "<c-b>", "<c-c>", "x", "<enter>"]) {
-			expect(claims(asked, key, 20)).toBe(true);
-			const no = fold([{type: "key", key, at: 20}], asked);
-			expect(ids(no.s)).toEqual(["t1", "t2"]);
-			expect(opened(no.s).ask).toBeNull();
-			expect(no.cmds).toEqual([]);
+	it("the window turns y into Confirm, and other ordinary keys into Cancel", async () => {
+		for (const key of ["n", "Y", "a", "x", "<enter>"]) {
+			const router = await windowKeys(defaults);
+			router.send({type: "question", tile: "t2"});
+			expect(router.key(key)).toEqual([
+				expect.objectContaining({
+					type: "run",
+					target: expect.objectContaining({program: "tezgah", word: "cancel", tile: "t2"}),
+				}),
+			]);
 		}
+		const router = await windowKeys(defaults);
+		router.send({type: "question", tile: "t2"});
+		expect(router.key("y")).toEqual([
+			expect.objectContaining({
+				type: "run",
+				target: expect.objectContaining({word: "confirm", tile: "t2"}),
+			}),
+		]);
+		const asked = fold([...command("tezgah.split"), ...command("tezgah.close")]).s;
+		const no = fold(command("tezgah.cancel"), asked);
+		expect(ids(no.s)).toEqual(["t1", "t2"]);
+		expect(opened(no.s).ask).toBeNull();
+		expect(no.cmds).toEqual([]);
+	});
+	it("Ctrl-C keeps the tile's priority while a close question is open", async () => {
+		const router = await windowKeys(defaults);
+		router.send({type: "question", tile: "t1"});
+		expect(router.key("<c-c>")).toEqual([
+			expect.objectContaining({
+				type: "pass",
+				target: expect.objectContaining({tile: "t1"}),
+				press: expect.objectContaining({key: "c", ctrl: true}),
+			}),
+		]);
 	});
 
 	it("gives a busy tile's programs the end of their inputs on y, and takes it away when its tsh ended", () => {
-		const busy = fold([...prefixed("|"), {type: "jobs", tile: "t2", jobs: running(1)}]).s;
-		const yes = fold([...prefixed("x", 10), {type: "key", key: "y", at: 20}], busy);
+		const busy = fold([...command("tezgah.split"), {type: "jobs", tile: "t2", jobs: running(1)}]).s;
+		const yes = fold([...command("tezgah.close"), ...command("tezgah.confirm")], busy);
 		expect(ids(yes.s)).toEqual(["t1", "t2"]);
 		expect(opened(yes.s).closing).toEqual(["t2"]);
 		expect(yes.cmds).toEqual([{type: "close", tile: "t2"}]);
@@ -174,31 +205,31 @@ describe("the desk", () => {
 
 	it("asks a closing tile to stop now, and y stops it", () => {
 		const covered = fold([
-			...prefixed("|"),
+			...command("tezgah.split"),
 			{type: "covered", tile: "t2", runs: [counter]},
-			...prefixed("x", 10),
-			{type: "key", key: "y", at: 20},
+			...command("tezgah.close"),
+			...command("tezgah.confirm"),
 		]).s;
 		expect(opened(covered).closing).toEqual(["t2"]);
-		const asked = fold(prefixed("x", 30), covered).s;
+		const asked = fold(command("tezgah.close"), covered).s;
 		expect(opened(asked).ask).toBe("t2");
 		expect(questionOf(opened(asked), "t2")).toBe("stop t2 now? (y/n)");
-		const no = fold([{type: "key", key: "n", at: 40}], asked).s;
+		const no = fold(command("tezgah.cancel"), asked).s;
 		expect(ids(no)).toEqual(["t1", "t2"]);
 		expect(opened(no).closing).toEqual(["t2"]);
-		const yes = fold([{type: "key", key: "y", at: 40}], asked);
+		const yes = fold(command("tezgah.confirm"), asked);
 		expect(ids(yes.s)).toEqual(["t1"]);
 		expect(yes.cmds).toContainEqual({type: "stop", tile: "t2"});
 	});
 
 	it("hears a tile was closing before the page loaded: its question is stop", () => {
-		const two = fold([...prefixed("|"), {type: "closing", tile: "t2"}]).s;
+		const two = fold([...command("tezgah.split"), {type: "closing", tile: "t2"}]).s;
 		expect(opened(two).closing).toEqual(["t2"]);
 		expect(questionOf(opened(two), "t2")).toBe("stop t2 now? (y/n)");
 	});
 
 	it("empties when the last tile closes: the window closes, as with Terminal's last tab", () => {
-		const {s, cmds} = fold([...prefixed("x"), {type: "key", key: "y", at: 10}]);
+		const {s, cmds} = fold([...command("tezgah.close"), ...command("tezgah.confirm")]);
 		expect(s).toEqual({at: "over"});
 		expect(cmds).toEqual([{type: "stop", tile: "t1"}, {type: "empty"}]);
 	});
@@ -209,49 +240,48 @@ describe("the desk", () => {
 			kind: "tsh",
 			run: counter,
 		});
-		expect(claims(covered, "<c-c>", 0)).toBe(true);
-		expect(fold([{type: "key", key: "<c-c>", at: 0}], covered).cmds).toEqual([
+		expect(fold(command("tezgah.interrupt"), covered).cmds).toEqual([
 			{type: "send", tile: "t1", data: "\x03"},
 		]);
 		const back = fold([{type: "over", run: counter.id}], covered).s;
 		expect(findTile(activeOf(opened(back)).layout, "t1")?.shows).toEqual({kind: "tsh", run: null});
-		expect(claims(back, "<c-c>", 0)).toBe(false);
+		expect(fold(command("tezgah.interrupt"), back).cmds).toEqual([]);
 	});
 
-	it("makes workspaces with N, and walks them with Ctrl-H and Ctrl-L, repeating within 500 ms", () => {
-		const three = fold([...prefixed("N"), ...prefixed("N", 10)]).s;
+	it("makes workspaces and walks them by finished commands", () => {
+		const three = fold([
+			...command('tezgah."workspace --to new"'),
+			...command('tezgah."workspace --to new"'),
+		]).s;
 		expect(opened(three).workspaces.map((w) => w.id)).toEqual(["w1", "w2", "w3"]);
 		expect(opened(three).active).toBe("w3");
 		const walked = fold(
 			[
-				{type: "key", key: "<c-b>", at: 100},
-				{type: "key", key: "<c-h>", at: 101},
-				{type: "key", key: "<c-h>", at: 300},
+				...command('tezgah."workspace --to previous"'),
+				...command('tezgah."workspace --to previous"'),
 			],
 			three,
 		).s;
 		expect(opened(walked).active).toBe("w1");
-		// After the window, the key is the tile's again, and the prefix is not armed.
-		expect(claims(walked, "<c-h>", 900)).toBe(false);
-		expect(opened(fold(prefixed("<c-l>", 1000), walked).s).active).toBe("w2");
+		expect(opened(fold(command('tezgah."workspace --to next"'), walked).s).active).toBe("w2");
 	});
 
 	it("closes a workspace with its last tile, and moves to the one next to it", () => {
-		const two = fold(prefixed("N")).s;
-		const {s} = fold([...prefixed("x", 10), {type: "key", key: "y", at: 20}], two);
+		const two = fold(command('tezgah."workspace --to new"')).s;
+		const {s} = fold([...command("tezgah.close"), ...command("tezgah.confirm")], two);
 		expect(opened(s).workspaces.map((w) => w.id)).toEqual(["w1"]);
 		expect(opened(s).active).toBe("w1");
 	});
 
 	it("resizes a container from a dragged border", () => {
-		const two = fold(prefixed("|")).s;
+		const two = fold(command("tezgah.split")).s;
 		const root = activeOf(opened(two)).layout.root;
 		const {s} = fold([{type: "resize", container: root.id, sizes: {t1: 70, t2: 30}}], two);
 		expect(activeOf(opened(s)).layout.root.sizes).toEqual({t1: 70, t2: 30});
 	});
 
 	it("closes a tile whose tsh ended", () => {
-		const two = fold(prefixed("|")).s;
+		const two = fold(command("tezgah.split")).s;
 		const {s, cmds} = fold([{type: "ended", tile: "t2"}], two);
 		expect(ids(s)).toEqual(["t1"]);
 		expect(cmds).toContainEqual({type: "stop", tile: "t2"});
@@ -259,10 +289,13 @@ describe("the desk", () => {
 });
 
 describe("the desk, moved by the window's frame", () => {
-	it("picks a workspace by its place with Ctrl-B 1 to 9, or by a click on its name", () => {
-		const three = fold([...prefixed("N"), ...prefixed("N", 10)]).s;
-		expect(opened(fold(prefixed("1", 20), three).s).active).toBe("w1");
-		expect(opened(fold(prefixed("9", 20), three).s).active).toBe("w3");
+	it("picks a workspace by its place, or by a click on its name", () => {
+		const three = fold([
+			...command('tezgah."workspace --to new"'),
+			...command('tezgah."workspace --to new"'),
+		]).s;
+		expect(opened(fold(command('tezgah."workspace --to 1"'), three).s).active).toBe("w1");
+		expect(opened(fold(command('tezgah."workspace --to 9"'), three).s).active).toBe("w3");
 		const {s, cmds} = fold([{type: "pick", workspace: "w2"}], three);
 		expect(opened(s).active).toBe("w2");
 		expect(cmds.map((c) => c.type)).toEqual(["save"]);
@@ -270,7 +303,11 @@ describe("the desk, moved by the window's frame", () => {
 	});
 
 	it("goes to a tile in another workspace, as an ask picked in the list does, and unzooms another", () => {
-		const zoomed = fold([...prefixed("|"), ...prefixed("z", 10), ...prefixed("N", 20)]).s;
+		const zoomed = fold([
+			...command("tezgah.split"),
+			...command("tezgah.zoom"),
+			...command('tezgah."workspace --to new"'),
+		]).s;
 		expect(opened(zoomed).active).not.toBe("w1");
 		const {s} = fold([{type: "go", tile: "t1"}], zoomed);
 		expect(opened(s).active).toBe("w1");
@@ -279,11 +316,10 @@ describe("the desk, moved by the window's frame", () => {
 		expect(fold([{type: "go", tile: "t9"}], zoomed).s).toBe(zoomed);
 	});
 
-	it("runs a command from the palette by its word, as Ctrl-B and its key would", () => {
-		const viaPalette = fold([{type: "run", does: "tezgah.split"}]);
-		const viaKeys = fold(prefixed("|"));
-		expect(viaPalette.s).toEqual(viaKeys.s);
-		expect(viaPalette.cmds).toEqual(viaKeys.cmds);
+	it("runs completed commands by name, while opening the palette stays in the window", () => {
+		const split = fold(command("tezgah.split"));
+		expect(ids(split.s)).toEqual(["t1", "t2"]);
+		expect(split.cmds).toContainEqual({type: "open", tile: "t2"});
 		expect(fold([{type: "run", does: "keys.open"}]).cmds).toEqual([{type: "show", what: "keys"}]);
 		// The palette is the page's own: the desk has nothing to run for it.
 		const palette = fold([{type: "run", does: "palette.open"}]);
@@ -292,16 +328,16 @@ describe("the desk, moved by the window's frame", () => {
 	});
 
 	it("asks the frame to show the asks, the keys, the info mode and an item's lines, and changes nothing else", () => {
-		for (const [key, what] of [
-			["a", "asks"],
-			["?", "keys"],
-			["i", "info"],
-			["B", "bars"],
-			["A", "agents"],
-			["S", "sync"],
-			["H", "host"],
+		for (const [does, what] of [
+			["tezgah.asks", "asks"],
+			["keys.open", "keys"],
+			["tezgah.info", "info"],
+			["tezgah.bars", "bars"],
+			["tezgah.agents", "agents"],
+			["tezgah.sync", "sync"],
+			["tezgah.host", "host"],
 		] as const) {
-			const {s, cmds} = fold(prefixed(key));
+			const {s, cmds} = fold(command(does));
 			expect(cmds).toEqual([{type: "show", what}]);
 			expect(savedOf(opened(s))).toEqual(savedOf(opened(start)));
 		}
@@ -309,16 +345,16 @@ describe("the desk, moved by the window's frame", () => {
 });
 
 describe("the desk, moved by a word typed in tsh", () => {
-	it("does what the key does, from the tile it was typed in", () => {
+	it("does what the completed command does, from the tile it was typed in", () => {
 		const viaWord = fold([{type: "typed", tile: "t1", does: {kind: "zoom"}}]);
-		const viaKeys = fold(prefixed("z"));
-		expect(viaWord.s).toEqual(viaKeys.s);
-		expect(viaWord.cmds).toEqual(viaKeys.cmds);
+		const named = fold(command("tezgah.zoom"));
+		expect(viaWord.s).toEqual(named.s);
+		expect(viaWord.cmds).toEqual(named.cmds);
 	});
 
 	it("brings the tile's workspace forward and focuses it first, with one save of both", () => {
 		// t1 in w1, t2 in w2, which is in front.
-		const two = fold(prefixed("N")).s;
+		const two = fold(command('tezgah."workspace --to new"')).s;
 		const {s, cmds} = fold(
 			[{type: "typed", tile: "t1", does: {kind: "split", orientation: "vertical"}}],
 			two,
@@ -329,12 +365,11 @@ describe("the desk, moved by a word typed in tsh", () => {
 		expect(cmds.map((c) => c.type)).toEqual(["open", "save"]);
 	});
 
-	it("puts an armed prefix down, and moves to a tile by name with focus --to", () => {
-		const armed = fold([...prefixed("|"), {type: "key", key: "<c-b>", at: 20}]).s;
-		const {s} = fold([{type: "typed", tile: "t2", does: {kind: "go", tile: "t1"}}], armed);
+	it("moves to a tile by name with focus --to, and zooms from the originating tile", () => {
+		const two = fold(command("tezgah.split")).s;
+		const {s} = fold([{type: "typed", tile: "t2", does: {kind: "go", tile: "t1"}}], two);
 		expect(focus(s)).toBe("t1");
-		const zoomed = fold([{type: "typed", tile: "t2", does: {kind: "zoom"}}], armed).s;
-		expect(opened(zoomed).prefix.armed).toBe(false);
+		const zoomed = fold([{type: "typed", tile: "t2", does: {kind: "zoom"}}], two).s;
 		expect(activeOf(opened(zoomed)).layout.zoomed).toBe("t2");
 	});
 
@@ -345,7 +380,7 @@ describe("the desk, moved by a word typed in tsh", () => {
 	});
 
 	it("says why a word does nothing: a tile gone, a tile or a workspace not there", () => {
-		const two = opened(fold(prefixed("N")).s);
+		const two = opened(fold(command('tezgah."workspace --to new"')).s);
 		expect(refusedOf(two, "t1", {kind: "zoom"})).toBeNull();
 		expect(refusedOf(two, "t9", {kind: "zoom"})).toBe("t9 is gone");
 		expect(refusedOf(two, "t1", {kind: "go", tile: "t7"})).toBe("no tile t7");
@@ -365,19 +400,19 @@ describe("folds", () => {
 			.filter((t) => t.folded)
 			.map((t) => t.id);
 	/** t1, t2 and t3 side by side, focus on t3. */
-	const row = fold([...prefixed("|"), ...prefixed("|", 10)]).s;
+	const row = fold([...command("tezgah.split"), ...command("tezgah.split")]).s;
 	/** t1 beside a column of t2 over t3, the column c3, focus on t3. */
-	const column = fold([...prefixed("|"), ...prefixed("-", 10)]).s;
+	const column = fold([...command("tezgah.split"), ...command('tezgah."split --to down"')]).s;
 
-	it("turns the focused tile's container with Space, horizontal to vertical and back, and saves each", () => {
-		const turned = fold(prefixed(" ", 20), row);
+	it("turns the focused tile's container, horizontal to vertical and back, and saves each", () => {
+		const turned = fold(command("tezgah.turn"), row);
 		expect(layout(turned.s).root.orientation).toBe("vertical");
 		expect(turned.cmds.at(-1)?.type).toBe("save");
-		expect(layout(fold(prefixed(" ", 30), turned.s).s).root.orientation).toBe("horizontal");
+		expect(layout(fold(command("tezgah.turn"), turned.s).s).root.orientation).toBe("horizontal");
 	});
 
-	it("folds the focused tile with Ctrl-B f, keeps its share, moves focus to an open tile, and saves", () => {
-		const {s, cmds} = fold(prefixed("f", 20), row);
+	it("folds the focused tile, keeps its share, moves focus to an open tile, and saves", () => {
+		const {s, cmds} = fold(command("tezgah.fold"), row);
 		expect(folded(s)).toEqual(["t3"]);
 		expect(focus(s)).toBe("t2");
 		expect(layout(s).root.sizes).toEqual(layout(row).root.sizes);
@@ -414,22 +449,22 @@ describe("folds", () => {
 			],
 			row,
 		).s;
-		const again = fold(prefixed("f", 20), one);
+		const again = fold(command("tezgah.fold"), one);
 		expect(folded(again.s)).toEqual(["t1", "t2"]);
 		expect(again.cmds).toEqual([]);
 		expect(fold([{type: "fold", tile: "t3"}], one).cmds).toEqual([]);
 	});
 
 	it("opens a folded tile when focus moves onto it, or its strip is clicked", () => {
-		const shut = fold(prefixed("f", 20), row).s;
-		const moved = fold(prefixed("l", 30), shut).s;
+		const shut = fold(command("tezgah.fold"), row).s;
+		const moved = fold(command('tezgah."focus --to right"'), shut).s;
 		expect([focus(moved), folded(moved)]).toEqual(["t3", []]);
 		const clicked = fold([{type: "unfold", node: "t3"}], shut).s;
 		expect([focus(clicked), folded(clicked)]).toEqual(["t3", []]);
 	});
 
 	it("folds a whole column when its tiles fold, and its strip opens them all", () => {
-		const shut = fold([...prefixed("f", 20), ...prefixed("f", 30)], column).s;
+		const shut = fold([...command("tezgah.fold"), ...command("tezgah.fold")], column).s;
 		expect(folded(shut)).toEqual(["t2", "t3"]);
 		expect(focus(shut)).toBe("t1");
 		const {s, cmds} = fold([{type: "unfold", node: "c3"}], shut);
@@ -439,13 +474,13 @@ describe("folds", () => {
 	});
 
 	it("folds a zoomed tile out of its zoom", () => {
-		const zoomed = fold(prefixed("z", 20), row).s;
-		const {s} = fold(prefixed("f", 30), zoomed);
+		const zoomed = fold(command("tezgah.zoom"), row).s;
+		const {s} = fold(command("tezgah.fold"), zoomed);
 		expect([layout(s).zoomed, folded(s), focus(s)]).toEqual([null, ["t3"], "t2"]);
 	});
 
 	it("comes back from a kept desk with its folds, and the focused tile open", () => {
-		const shut = fold(prefixed("f", 20), row).s;
+		const shut = fold(command("tezgah.fold"), row).s;
 		const kept = savedOf(opened(shut));
 		expect(savedOf(restore(JSON.parse(JSON.stringify(kept))) ?? opened(row))).toEqual(kept);
 		const onFolded = {...kept, workspaces: kept.workspaces.map((ws) => ({...ws, focused: "t3"}))};
@@ -462,7 +497,7 @@ describe("a kept desk", () => {
 		const tracker = {id: "tracker:1", program: "tracker"};
 		const ticket = {id: "ticket:1", program: "ticket"};
 		const piped = fold([
-			...prefixed("|"),
+			...command("tezgah.split"),
 			{type: "covered", tile: "t2", runs: [tracker, ticket]},
 		]).s;
 		const before = JSON.parse(JSON.stringify(savedOf(opened(piped))), (key, value: unknown) =>
@@ -478,7 +513,11 @@ describe("a kept desk", () => {
 	});
 
 	it("comes back as it was, and opens each tile's tsh", () => {
-		const kept = fold([...prefixed("|"), ...prefixed("-", 10), ...prefixed("N", 20)]).s;
+		const kept = fold([
+			...command("tezgah.split"),
+			...command('tezgah."split --to down"'),
+			...command('tezgah."workspace --to new"'),
+		]).s;
 		const back = restore(JSON.parse(JSON.stringify(savedOf(opened(kept)))));
 		expect(back).not.toBeNull();
 		expect(back === null ? null : savedOf(back)).toEqual(savedOf(opened(kept)));
@@ -488,7 +527,7 @@ describe("a kept desk", () => {
 
 	it("drops what ran: a covered tile shows tsh, and nothing is closing", () => {
 		const ran = fold([
-			...prefixed("|"),
+			...command("tezgah.split"),
 			{type: "covered", tile: "t1", runs: [counter]},
 			{type: "closing", tile: "t2"},
 		]).s;
@@ -504,7 +543,7 @@ describe("a kept desk", () => {
 	it("refuses one that does not read or breaks a law", () => {
 		expect(restore(null)).toBeNull();
 		expect(restore({workspaces: [], active: "w1", next: 2})).toBeNull();
-		const kept = savedOf(opened(fold(prefixed("|")).s));
+		const kept = savedOf(opened(fold(command("tezgah.split")).s));
 		const named = {
 			...kept,
 			workspaces: kept.workspaces.map((ws) => ({
@@ -545,7 +584,8 @@ describe("a line with several windows", () => {
 	};
 	const tile = (s: Desk, id: string) => findTile(layout(s), id);
 	/** t1 and t2 side by side, focus on t2, in a workspace this wide. */
-	const beside = (width: number) => fold([{type: "area", width, height: 860}, ...prefixed("|")]).s;
+	const beside = (width: number) =>
+		fold([{type: "area", width, height: 860}, ...command("tezgah.split")]).s;
 	/** The line open in t2, t3 and t4, with focus on t3, the ticket's window. */
 	const onTicket = () =>
 		fold(
@@ -601,7 +641,7 @@ describe("a line with several windows", () => {
 		const s = fold(
 			[
 				{type: "area", width: 1440, height: 860},
-				...prefixed("-"),
+				...command('tezgah."split --to down"'),
 				{type: "covered", tile: "t2", runs: line},
 			],
 			start,
@@ -630,7 +670,7 @@ describe("a line with several windows", () => {
 			],
 			beside(1440),
 		).s;
-		expect(fold([{type: "key", key: "<c-c>", at: 0}], s).cmds).toEqual([
+		expect(fold(command("tezgah.interrupt"), s).cmds).toEqual([
 			{type: "send", tile: "t2", data: "\x03"},
 		]);
 	});
@@ -655,7 +695,7 @@ describe("a line with several windows", () => {
 	});
 
 	it("closes a window on y as kill-pane: its one process gets its inputs' end, and the window goes when it ends", () => {
-		const s = fold([...prefixed("x", 10), {type: "key", key: "y", at: 20}], onTicket());
+		const s = fold([...command("tezgah.close"), ...command("tezgah.confirm")], onTicket());
 		// Only the ticket's process is ended; the tile it was typed in, and its tsh, are not touched.
 		expect(s.cmds).toEqual([{type: "end", process: ticket.id}]);
 		expect(opened(s.s).closing).toEqual(["t3"]);
@@ -668,8 +708,8 @@ describe("a line with several windows", () => {
 	});
 
 	it("kills a closing window's process on y to stop now, and the window goes at once", () => {
-		const closing = fold([...prefixed("x", 10), {type: "key", key: "y", at: 20}], onTicket()).s;
-		const s = fold([...prefixed("x", 30), {type: "key", key: "y", at: 40}], closing);
+		const closing = fold([...command("tezgah.close"), ...command("tezgah.confirm")], onTicket()).s;
+		const s = fold([...command("tezgah.close"), ...command("tezgah.confirm")], closing);
 		expect(ids(s.s)).toEqual(["t1", "t2", "t4"]);
 		expect(opened(s.s).closing).toEqual([]);
 		expect(s.cmds).toEqual([
@@ -687,7 +727,7 @@ describe("a line with several windows", () => {
 			],
 			beside(1440),
 		).s;
-		const s = fold([...prefixed("x", 10), {type: "key", key: "y", at: 20}], typed);
+		const s = fold([...command("tezgah.close"), ...command("tezgah.confirm")], typed);
 		expect(s.cmds).toEqual([{type: "close", tile: "t2"}]);
 		expect(opened(s.s).closing).toEqual(["t2"]);
 	});
@@ -711,7 +751,7 @@ describe("a line with several windows", () => {
 	// pipe-colors.md: colors are counted per workspace, sky first. A pipe in another workspace takes
 	// none of this one's colors or letters.
 	it("gives pipes in one workspace sky, pink, teal, violet, lime, plum in order, and each workspace its own count", () => {
-		const splits = Array.from({length: 5}, (_, i) => prefixed("|", 10 * i)).flat();
+		const splits = Array.from({length: 5}, () => command("tezgah.split")).flat();
 		const six = fold(splits).s;
 		expect(ids(six)).toEqual(["t1", "t2", "t3", "t4", "t5", "t6"]);
 		const pipes = fold(
@@ -754,7 +794,7 @@ describe("a line with several windows", () => {
 			],
 			six,
 		).s;
-		const other = fold(prefixed("N", 100), onePipe).s;
+		const other = fold(command('tezgah."workspace --to new"'), onePipe).s;
 		const here = focus(other);
 		const there = fold(
 			[
@@ -791,198 +831,180 @@ const table = (text: string): Keys => {
 	if (Result.isFailure(answer)) throw new Error(`refused: ${answer.failure.why}`);
 	return answer.success;
 };
-/** The host swaps the desk's table: the file was saved. */
-const swap = (text: string): DeskMsg => ({type: "keys", keys: table(text)});
-
-/**
- * Today's table, frozen from desk/keys.ts `BINDINGS` before this change: each key after the
- * prefix, what it does, and whether it repeats.
- */
+// Shipped keys, frozen before PR 2. Expected command names do not come from the catalog.
 const TODAY = [
-	["|", {kind: "split", orientation: "horizontal"}, false],
-	["-", {kind: "split", orientation: "vertical"}, false],
-	["h", {kind: "focus", to: "left"}, false],
-	["j", {kind: "focus", to: "down"}, false],
-	["k", {kind: "focus", to: "up"}, false],
-	["l", {kind: "focus", to: "right"}, false],
-	["<arrowleft>", {kind: "focus", to: "left"}, false],
-	["<arrowdown>", {kind: "focus", to: "down"}, false],
-	["<arrowup>", {kind: "focus", to: "up"}, false],
-	["<arrowright>", {kind: "focus", to: "right"}, false],
-	[" ", {kind: "turn"}, false],
-	["f", {kind: "fold"}, false],
-	["z", {kind: "zoom"}, false],
-	["x", {kind: "close"}, false],
-	["N", {kind: "new"}, false],
-	["<c-h>", {kind: "step", to: "previous"}, true],
-	["<c-l>", {kind: "step", to: "next"}, true],
-	...Array.from({length: 9}, (_, i) => [String(i + 1), {kind: "pick", at: i + 1}, false] as const),
-	["a", {kind: "show", what: "asks"}, false],
-	["J", {kind: "show", what: "jobs"}, false],
-	["?", {kind: "show", what: "keys"}, false],
-	["i", {kind: "show", what: "info"}, false],
-	["B", {kind: "show", what: "bars"}, false],
-	["A", {kind: "show", what: "agents"}, false],
-	["S", {kind: "show", what: "sync"}, false],
-	["H", {kind: "show", what: "host"}, false],
+	["|", "tezgah", "split", false],
+	["-", "tezgah", "split --to down", false],
+	["h", "tezgah", "focus --to left", false],
+	["j", "tezgah", "focus --to down", false],
+	["k", "tezgah", "focus --to up", false],
+	["l", "tezgah", "focus --to right", false],
+	["<arrowleft>", "tezgah", "focus --to left", false],
+	["<arrowdown>", "tezgah", "focus --to down", false],
+	["<arrowup>", "tezgah", "focus --to up", false],
+	["<arrowright>", "tezgah", "focus --to right", false],
+	[" ", "tezgah", "turn", false],
+	["f", "tezgah", "fold", false],
+	["z", "tezgah", "zoom", false],
+	["x", "tezgah", "close", false],
+	["N", "tezgah", "workspace --to new", false],
+	["<c-h>", "tezgah", "workspace --to previous", true],
+	["<c-l>", "tezgah", "workspace --to next", true],
+	...Array.from(
+		{length: 9},
+		(_, i) => [String(i + 1), "tezgah", `workspace --to ${i + 1}`, false] as const,
+	),
+	["a", "tezgah", "asks", false],
+	["J", "tezgah", "jobs", false],
+	["?", "keys", "open", false],
+	["i", "tezgah", "info", false],
+	["B", "tezgah", "bars", false],
+	["A", "tezgah", "agents", false],
+	["S", "tezgah", "sync", false],
+	["H", "tezgah", "host", false],
 ] as const;
-
-/** Three tiles in w1 and two in w2, w1 in front: every key has something to move. */
-const busy = fold([
-	...prefixed("|"),
-	...prefixed("-", 10),
-	...prefixed("N", 20),
-	...prefixed("|", 30),
-	...prefixed("1", 40),
-]).s;
-
-/** A desk without its prefix, to compare two ways to one command. */
-const unprefixed = (s: Desk) => (s.at === "open" ? {...s, prefix: null} : s);
 
 /** A key's name in a test's title: the space is Space. */
 const titled = (key: string) => (key === " " ? "Space" : key);
 
-describe("the desk, on the keys file", () => {
-	it.each(TODAY.map(([key, does, repeats]) => [titled(key), key, does, repeats] as const))(
-		"does with no file what C-b %s does today (p1)",
-		(_, key, does, repeats) => {
-			for (const from of [busy, fold([swap("")], busy).s]) {
-				const viaKey = fold(prefixed(key, 100), from);
-				const viaWord = fold([{type: "typed", tile: focus(from), does}], from);
-				expect(unprefixed(viaKey.s)).toEqual(unprefixed(viaWord.s));
-				expect(viaKey.cmds).toEqual(viaWord.cmds);
-				expect(opened(viaKey.s).prefix).toEqual(
-					repeats ? {armed: true, until: 101 + 500} : {armed: false},
-				);
+describe("the window router, on the keys file", () => {
+	it.each(
+		TODAY.map(
+			([key, program, word, repeats]) => [titled(key), key, program, word, repeats] as const,
+		),
+	)(
+		"keeps C-b %s's shipped command with no file or an empty file (p1)",
+		async (_, key, program, word, repeats) => {
+			for (const keys of [defaults, table("")]) {
+				const router = await windowKeys(keys);
+				expect(router.prefixed(key, 100)).toEqual([
+					expect.objectContaining({type: "run", target: {program, word, mode: null, tile: "t1"}}),
+				]);
+				expect(router.state().prefix).toEqual(repeats ? {armed: true, until: 601} : {armed: false});
 			}
 		},
 	);
 
-	it("arms on your prefix, and Ctrl-B goes to the tile (p2)", () => {
-		const s = fold([swap('prefix = "ctrl+a"')]).s;
-		expect(takenNow(s, 0).keys).toContain("<c-a>");
-		expect(takenNow(s, 0).keys).not.toContain("<c-b>");
-		expect(claims(s, "<c-b>", 0)).toBe(false);
-		expect(claims(s, "<c-a>", 0)).toBe(true);
-		const split = fold(
-			[
-				{type: "key", key: "<c-a>", at: 0},
-				{type: "key", key: "|", at: 1},
-			],
-			s,
-		);
-		expect(ids(split.s)).toEqual(["t1", "t2"]);
-		// tmux's send-prefix sends the prefix itself on: Ctrl-A is byte 1.
-		const twice = fold(
-			[
-				{type: "key", key: "<c-a>", at: 0},
-				{type: "key", key: "<c-a>", at: 1},
-			],
-			s,
-		);
-		expect(twice.cmds).toEqual([{type: "send", tile: "t1", data: "\x01"}]);
+	it("arms on your prefix, passes Ctrl-B, and sends your prefix once when doubled (p2)", async () => {
+		const router = await windowKeys(table('prefix = "ctrl+a"'));
+		expect(router.key("<c-b>")).toEqual([
+			expect.objectContaining({
+				type: "pass",
+				press: expect.objectContaining({key: "b", ctrl: true}),
+			}),
+		]);
+		expect(router.key("<c-a>")).toEqual([]);
+		expect(router.state().prefix.armed).toBe(true);
+		expect(router.key("<c-a>", 1)).toEqual([
+			expect.objectContaining({
+				type: "pass",
+				target: expect.objectContaining({tile: "t1"}),
+				press: expect.objectContaining({key: "a", ctrl: true}),
+			}),
+		]);
+		expect(router.state().prefix.armed).toBe(false);
 	});
 
-	it.each(TODAY.map(([key]) => [titled(key), key] as const))(
+	it.each(TODAY.map(([key, program, word]) => [titled(key), key, program, word] as const))(
 		"moves C-b %s to C-a with the prefix (p2)",
-		(_, key) => {
-			const moved = fold([swap('prefix = "ctrl+a"')], busy).s;
-			const viaA = fold(
-				[
-					{type: "key", key: "<c-a>", at: 100},
-					{type: "key", key, at: 101},
-				],
-				moved,
-			);
-			const viaB = fold(prefixed(key, 100), busy);
-			expect({...opened(viaA.s), keys: null}).toEqual({...opened(viaB.s), keys: null});
-			expect(viaA.cmds).toEqual(viaB.cmds);
+		async (_, key, program, word) => {
+			const router = await windowKeys(table('prefix = "ctrl+a"'));
+			expect(router.prefixed(key, 100, "<c-a>")).toEqual([
+				expect.objectContaining({type: "run", target: {program, word, mode: null, tile: "t1"}}),
+			]);
 		},
 	);
 
-	it("runs a command on your key, and its old key after the prefix does nothing (p3)", () => {
-		const s = fold([swap('tezgah.zoom = "<prefix>m"')], busy).s;
-		const zoomed = fold(prefixed("m", 100), s).s;
-		expect(activeOf(opened(zoomed)).layout.zoomed).toBe(focus(s));
-		// z is bound to nothing now: swallowed after the prefix, as tmux does.
-		const armed = fold([{type: "key", key: "<c-b>", at: 100}], s).s;
-		expect(claims(armed, "z", 101)).toBe(true);
-		const z = fold([{type: "key", key: "z", at: 101}], armed);
-		expect(z.cmds).toEqual([]);
-		expect(z.s).toEqual(s);
+	it("runs a command on your key, and swallows its old key after the prefix (p3)", async () => {
+		const keys = table('tezgah.zoom = "<prefix>m"');
+		const moved = await windowKeys(keys);
+		expect(moved.prefixed("m")).toEqual([
+			expect.objectContaining({type: "run", target: expect.objectContaining({word: "zoom"})}),
+		]);
+		const old = await windowKeys(keys);
+		expect(old.prefixed("z")).toEqual([]);
+		expect(old.state().prefix.armed).toBe(false);
 	});
 
-	it("runs your command on a default's key, and the default no longer does (p3)", () => {
-		const s = fold([swap('tezgah.zoom = "<prefix>x"')], busy).s;
-		const {s: after} = fold(prefixed("x", 100), s);
-		expect(activeOf(opened(after)).layout.zoomed).toBe(focus(s));
-		expect(opened(after).ask).toBeNull();
+	it("runs your command on a default's key, and the default no longer does (p3)", async () => {
+		const router = await windowKeys(table('tezgah.zoom = "<prefix>x"'));
+		expect(router.prefixed("x")).toEqual([
+			expect.objectContaining({type: "run", target: expect.objectContaining({word: "zoom"})}),
+		]);
 	});
 
-	it("runs an unbound command from the palette and from its tsh word, and from no key (p4)", () => {
-		const s = fold([swap("tezgah.zoom = []")], busy).s;
-		expect(fold(prefixed("z", 100), s).s).toEqual(s);
-		const viaPalette = fold([{type: "run", does: "tezgah.zoom"}], s).s;
-		expect(activeOf(opened(viaPalette)).layout.zoomed).toBe(focus(s));
-		const viaWord = fold([{type: "typed", tile: focus(s), does: {kind: "zoom"}}], s).s;
-		expect(activeOf(opened(viaWord)).layout.zoomed).toBe(focus(s));
+	it("runs an unbound command from the palette and tsh, and from no key (p4)", async () => {
+		const router = await windowKeys(table("tezgah.zoom = []"));
+		expect(router.prefixed("z")).toEqual([]);
+		const two = fold(command("tezgah.split")).s;
+		expect(activeOf(opened(fold(command("tezgah.zoom"), two).s)).layout.zoomed).toBe("t2");
+		expect(
+			activeOf(opened(fold([{type: "typed", tile: "t2", does: {kind: "zoom"}}], two).s)).layout
+				.zoomed,
+		).toBe("t2");
 	});
 
-	it("takes a tezgah key pressed alone, and leaves the palette's key to the page (p5, p6)", () => {
-		const s = fold([swap(['tezgah.split = "cmd+d"', 'palette.open = "cmd+p"'].join("\n"))]).s;
-		expect(takenNow(s, 0).keys).toContain("<m-d>");
-		expect(takenNow(s, 0).keys).not.toContain("<m-p>");
-		expect(claims(s, "<m-p>", 0)).toBe(false);
-		const split = fold([{type: "key", key: "<m-d>", at: 0}], s);
-		expect(ids(split.s)).toEqual(["t1", "t2"]);
-		expect(opened(split.s).prefix).toEqual({armed: false});
-		// Split's old key went with the move.
-		expect(ids(fold(prefixed("|", 10), s).s)).toEqual(["t1"]);
+	it("resolves tezgah and palette keys pressed alone in the window (p5, p6)", async () => {
+		const keys = table('tezgah.split = "cmd+d"\npalette.open = "cmd+p"');
+		for (const [key, program, word] of [
+			["<m-d>", "tezgah", "split"],
+			["<m-p>", "palette", "open"],
+		]) {
+			const router = await windowKeys(keys);
+			expect(router.key(key!)).toEqual([
+				expect.objectContaining({type: "run", target: expect.objectContaining({program, word})}),
+			]);
+			expect(router.state().prefix.armed).toBe(false);
+		}
+		const old = await windowKeys(keys);
+		expect(old.prefixed("|")).toEqual([]);
 	});
 
-	it("swaps the table at the next key: an armed prefix is disarmed, nothing is asked for or kept (p9)", () => {
-		const armed = fold([{type: "key", key: "<c-b>", at: 0}], busy).s;
-		const swapped = fold([swap('prefix = "ctrl+a"')], armed);
-		expect(opened(swapped.s).prefix).toEqual({armed: false});
-		expect(swapped.cmds).toEqual([]);
-		expect(savedOf(opened(swapped.s))).toEqual(savedOf(opened(armed)));
-		// The next key uses the new table: | is the tile's, C-a | splits.
-		expect(claims(swapped.s, "|", 1)).toBe(false);
-		const split = fold(
-			[
-				{type: "key", key: "<c-a>", at: 2},
-				{type: "key", key: "|", at: 3},
-			],
-			swapped.s,
-		).s;
-		expect(ids(split)).toHaveLength(ids(busy).length + 1);
-		// In the repeat window too.
-		const repeating = fold(prefixed("<c-l>", 10), busy).s;
-		expect(opened(repeating).prefix.armed).toBe(true);
-		expect(opened(fold([swap("")], repeating).s).prefix).toEqual({armed: false});
+	it("swaps the window table without work and disarms ordinary and repeating prefixes (p9)", async () => {
+		for (const repeat of [false, true]) {
+			const router = await windowKeys(defaults);
+			if (repeat) {
+				const [cmd] = router.prefixed("<c-l>", 10);
+				expect(cmd?.id).toBeTypeOf("string");
+				router.send({type: "applied", id: cmd!.id!, target: {program: "tsh", tile: "t1"}});
+			} else router.key("<c-b>");
+			expect(router.state().prefix.armed).toBe(true);
+			expect(router.send({type: "keys", keys: table('prefix = "ctrl+a"')})).toEqual([]);
+			expect(router.state().prefix.armed).toBe(false);
+			expect(router.key("|")).toContainEqual(expect.objectContaining({type: "pass"}));
+			expect(router.prefixed("|", 20, "<c-a>")).toContainEqual(
+				expect.objectContaining({type: "run", target: expect.objectContaining({word: "split"})}),
+			);
+		}
+	});
+
+	it("repeats workspace movement for 500 ms, then passes the key to the tile", async () => {
+		const router = await windowKeys(defaults);
+		const [first] = router.prefixed("<c-h>", 100);
+		expect(first?.target?.word).toBe("workspace --to previous");
+		expect(first?.id).toBeTypeOf("string");
+		router.send({type: "applied", id: first!.id!, target: {program: "tsh", tile: "t1"}});
+		const [again] = router.key("<c-h>", 300);
+		expect(again?.target?.word).toBe("workspace --to previous");
+		expect(again?.id).toBeTypeOf("string");
+		router.send({type: "applied", id: again!.id!, target: {program: "tsh", tile: "t1"}});
+		expect(router.key("<c-h>", 900)).toEqual([expect.objectContaining({type: "pass"})]);
+		expect(router.state().prefix.armed).toBe(false);
 	});
 
 	it.each([
 		["Alt-A", "alt+a", "<a-a>"],
 		["F12", "f12", "<f12>"],
-	])("takes a %s prefix pressed twice, and sends no byte, since it has none", (_, spelled, key) => {
-		const s = fold([swap(`prefix = "${spelled}"`)]).s;
-		const twice = fold(
-			[
-				{type: "key", key, at: 0},
-				{type: "key", key, at: 1},
-			],
-			s,
-		);
-		expect(twice.cmds).toEqual([]);
-		expect(opened(twice.s).prefix).toEqual({armed: false});
+	])("takes a %s prefix twice, and sends no byte, since it has none", async (_, spelled, key) => {
+		const router = await windowKeys(table(`prefix = "${spelled}"`));
+		expect(router.prefixed(key, 0, key)).toEqual([]);
+		expect(router.state().prefix.armed).toBe(false);
 	});
 
-	it("sends no prefix byte to a tile a program covers, when the prefix is pressed twice", () => {
-		const covered = fold([{type: "covered", tile: "t1", runs: [counter]}]).s;
-		const twice = fold(prefixed("<c-b>"), covered);
-		expect(twice.cmds).toEqual([]);
-		expect(opened(twice.s).prefix).toEqual({armed: false});
+	it("sends no prefix byte to a tile a program covers, when the prefix is pressed twice", async () => {
+		const router = await windowKeys(defaults, {program: "counter", tile: "t1"});
+		expect(router.prefixed("<c-b>")).toEqual([]);
+		expect(router.state().prefix.armed).toBe(false);
 	});
 });
 

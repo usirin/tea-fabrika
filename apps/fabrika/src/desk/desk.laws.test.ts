@@ -12,6 +12,7 @@ import type {MsgOf} from "@kampus/fabrika-old";
 import {Schema} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
+import {keyPress, loadKeyRouter, type KeyRouter} from "../../../../fixtures/keybindings/router.ts";
 import {
 	activeOf,
 	close,
@@ -34,18 +35,16 @@ import {
 	send,
 	show,
 	stop,
-	takenNow,
 	tilesOf,
 	whereIs,
 } from "./desk.ts";
-import {defaults, Does} from "./keymap.ts";
-import {BINDINGS} from "./keys.ts";
+import {defaults} from "./keymap.ts";
 import {checkTree, findTile, quiet, tiles, unfold} from "./layout/index.ts";
 
-// The desk's laws, on tea's pbt: after every step of any list of Msgs, from the real init. Keys,
+// Today's desk laws, on tea's pbt: after every step of a list of finished Msgs. Commands,
 // clicks and drags come in any order, and so does what the tiles say (a run covers a tile, a run
 // ends, a tile's jobs, a tile's tsh ended), for tiles that exist and tiles that do not. The
-// "something good" laws press keys from wherever a list left the desk.
+// "something good" laws send commands from wherever a list left the desk.
 
 type Machine = typeof deskMachine;
 type Msg = MsgOf<Machine>;
@@ -66,16 +65,28 @@ const line = fc
 		if (first === undefined) throw new Error("a line has a run");
 		return [first, ...rest] as const;
 	});
-/** Half the keys are the prefix, so most lists split, zoom, close and walk a good deal. */
-const after = ["|", "-", "h", "j", "k", "l", "<arrowup>", "z", "x", "N", "<c-h>", "<c-l>"];
-/**
- * The turn and fold keys come less often, so they do not crowd out the questions and the closes;
- * x and y come a little more, so a question is asked and answered yes in most runs.
- */
-const key = fc.oneof(
-	{arbitrary: fc.constant("<c-b>"), weight: 4},
-	{arbitrary: fc.constantFrom(...after, "y", "n", "<c-c>", "a"), weight: 3},
-	{arbitrary: fc.constantFrom(" ", "f", "x", "y"), weight: 1},
+// More Close and Confirm commands keep closing paths common. Turn and Fold stay rarer.
+const command = fc.oneof(
+	{arbitrary: fc.constantFrom("tezgah.close", "tezgah.confirm"), weight: 4},
+	{
+		arbitrary: fc.constantFrom(
+			"tezgah.split",
+			'tezgah."split --to down"',
+			'tezgah."focus --to left"',
+			'tezgah."focus --to down"',
+			'tezgah."focus --to up"',
+			'tezgah."focus --to right"',
+			"tezgah.zoom",
+			'tezgah."workspace --to new"',
+			'tezgah."workspace --to previous"',
+			'tezgah."workspace --to next"',
+			"tezgah.cancel",
+			"tezgah.interrupt",
+			"tezgah.asks",
+		),
+		weight: 3,
+	},
+	{arbitrary: fc.constantFrom("tezgah.turn", "tezgah.fold"), weight: 1},
 );
 /** A strip's node: a tile, or a container, that exists or not. */
 const node = fc.constantFrom("t1", "t2", "t3", "t4", "c1", "c2", "c3", "c4", "c5");
@@ -98,7 +109,6 @@ const [opening, closing, stopping, sending, saving, emptying, ending, killing, s
 
 /** One entry per Msg type, the Cmds' answers too: leaving one out does not compile. */
 const table: MsgArbitraryTable<Msg> = {
-	key: arbRecordMsg("key", {key, at: fc.nat({max: 3000})}),
 	click: arbRecordMsg("click", {tile}),
 	resize: arbRecordMsg("resize", {
 		container: fc.constantFrom("c1", "c2", "c3", "c4"),
@@ -127,20 +137,36 @@ const table: MsgArbitraryTable<Msg> = {
 	closing: arbRecordMsg("closing", {tile}),
 	ended: arbRecordMsg("ended", {tile}),
 	go: arbRecordMsg("go", {tile}),
-	// A tsh word, typed in a tile that is there or not: any key's command, or a move to a tile.
+	// A tsh word, typed in a tile that is there or not.
 	typed: arbRecordMsg("typed", {
 		tile,
 		does: fc.oneof(
-			fc.constantFrom(...BINDINGS.map((b) => b.does)),
+			fc.constantFrom(
+				{kind: "split", orientation: "horizontal"} as const,
+				{kind: "split", orientation: "vertical"} as const,
+				{kind: "zoom"} as const,
+				{kind: "close"} as const,
+				{kind: "new"} as const,
+				{kind: "fold"} as const,
+				{kind: "turn"} as const,
+				{kind: "focus", to: "left"} as const,
+				{kind: "focus", to: "right"} as const,
+				{kind: "focus", to: "up"} as const,
+				{kind: "focus", to: "down"} as const,
+				{kind: "cycle", to: "next"} as const,
+				{kind: "cycle", to: "previous"} as const,
+				{kind: "step", to: "next"} as const,
+				{kind: "step", to: "previous"} as const,
+			),
+			fc.integer({min: 1, max: 9}).map((at) => ({kind: "pick", at}) as const),
+			fc
+				.constantFrom("asks", "jobs", "keys", "info", "bars", "agents", "sync", "host")
+				.map((what) => ({kind: "show", what}) as const),
 			tile.map((to) => ({kind: "go", tile: to}) as const),
 		),
 	}),
 	pick: arbRecordMsg("pick", {workspace: fc.constantFrom("w1", "w2", "w3", "w9")}),
-	// The palette runs a command by its word, any the code lists, bound to a key or not.
-	run: arbRecordMsg("run", {does: fc.constantFrom(...Does.literals)}),
-	// The keys file saved: the defaults again, so the lists still press C-b. Other tables are
-	// keymap.laws.test.ts's.
-	keys: arbRecordMsg("keys", {keys: fc.constant(defaults)}),
+	run: arbRecordMsg("run", {does: command}),
 	// The host asks for an agent's tile, as its `line` tool's first call does (tracker 185b, PR 3).
 	launch: arbRecordMsg("launch", {agent: fc.constantFrom("claude", "lead")}),
 	show_ok: fc.constant(show.ok(showing, null, 0)),
@@ -163,20 +189,18 @@ const table: MsgArbitraryTable<Msg> = {
 	kill_err: failed(kill.errType, killing),
 };
 /**
- * Lists of Msgs, mostly keys. Not tea's `arbMsgSequence`: at fast-check's default size its lists
+ * Lists of Msgs, mostly commands. Not tea's `arbMsgSequence`: at fast-check's default size its lists
  * come out about ten long (demlik#744), too short to make a few workspaces and close them again.
  */
 const random = fc.array(
-	// `launch` weighs nothing here, so these lists stay the lists seed 1 made before it: the
-	// planted mistakes below are caught as they were. The agents' lists (`agentLists`) have it.
 	arbMsg(table, {
-		weights: {key: 24, click: 2, covered: 3, over: 2, jobs: 2, closing: 1, area: 1, launch: 0},
+		weights: {run: 24, click: 2, covered: 3, over: 2, jobs: 2, closing: 1, area: 1, launch: 0},
 	}),
 	{maxLength: 60, size: "max"},
 );
 /**
  * A line of three typed in t1, its window t2 focused and asked to close, then answered y once or
- * twice. Random keys seldom get that far, and a window's close is a rule of its own.
+ * twice. A window's close is a rule of its own.
  */
 const asked: readonly Msg[] = [
 	{
@@ -189,10 +213,9 @@ const asked: readonly Msg[] = [
 		],
 	},
 	{type: "click", tile: "t2"},
-	{type: "key", key: "<c-b>", at: 0},
-	{type: "key", key: "x", at: 0},
+	{type: "run", does: "tezgah.close"},
 ];
-const yes: Msg = {type: "key", key: "y", at: 0};
+const yes: Msg = {type: "run", does: "tezgah.confirm"};
 const windowFirst = fc.constantFrom<readonly Msg[]>(
 	[],
 	[],
@@ -208,7 +231,7 @@ const lists = fc
  */
 const agentLists = fc.array(
 	arbMsg(table, {
-		weights: {key: 24, click: 2, covered: 3, over: 2, jobs: 2, closing: 1, area: 1, launch: 3},
+		weights: {run: 24, click: 2, covered: 3, over: 2, jobs: 2, closing: 1, area: 1, launch: 3},
 	}),
 	{maxLength: 60, size: "max"},
 );
@@ -266,17 +289,11 @@ const kept = (s: Open): Saved => ({
 	}),
 });
 
-/** Press keys a moment apart, long after any list's keys: the repeat window is over by then. */
-const LATE = 1_000_000;
-const press = (machine: Machine, from: Desk, keys: readonly string[]) => {
+const runCommands = (machine: Machine, from: Desk, commands: readonly Msg[]) => {
 	let s = from;
 	const cmds: DeskCmd[] = [];
-	for (const [at, key] of keys.entries()) {
-		const [next, out] = applyCell<Desk, Msg, DeskCmd>(machine, s, {
-			type: "key",
-			key,
-			at: LATE + at,
-		});
+	for (const msg of commands) {
+		const [next, out] = applyCell<Desk, Msg, DeskCmd>(machine, s, msg);
 		s = next;
 		cmds.push(...out);
 	}
@@ -369,15 +386,6 @@ const savesChanges = everyStep(
 	},
 );
 
-const takesWhatItSays = everyStep(
-	"a key changes the desk or asks for work only when the desk said it takes that key",
-	({prev, msg, next, cmds}) => {
-		if (msg.type !== "key" || (same(prev, next) && cmds.length === 0)) return true;
-		const takes = takenNow(prev, msg.at);
-		return takes.all || takes.keys.includes(msg.key);
-	},
-);
-
 const overStays = everyStep(
 	"once the desk is over, it stays over and asks for nothing",
 	({prev, next, cmds}) => prev.at !== "over" || (next.at === "over" && cmds.length === 0),
@@ -392,9 +400,14 @@ const emptiesAtTheEnd = everyStep(
 // ---------------------------------------------------------------- something good
 
 const yesCloses = everyStep(
-	"y to a tile's question closes it: an idle or closing tile goes, stopped; a busy one starts closing; a line's window ends its one process, then kills it",
+	"Confirm closes the asked tile: an idle or closing tile goes, stopped; a busy one starts closing; a line's window ends its one process, then kills it",
 	({prev, msg, next, cmds}) => {
-		if (prev.at !== "open" || prev.ask === null || msg.type !== "key" || msg.key !== "y")
+		if (
+			prev.at !== "open" ||
+			prev.ask === null ||
+			msg.type !== "run" ||
+			msg.does !== "tezgah.confirm"
+		)
 			return true;
 		const asked = prev.ask;
 		const gone = !tileIds(next).has(asked) && tilesIn(cmds, "stop").includes(asked);
@@ -420,22 +433,25 @@ const endedGoes = everyStep(
 );
 
 const ctrlCReaches = everyStep(
-	"Ctrl-C over a program in the focused tile goes at once to the tsh it runs in: the tile's, or the one its line was typed in",
+	"Interrupt over a program reaches its tsh: the tile's, or the one its line was typed in",
 	({prev, msg, cmds}) => {
-		if (prev.at !== "open" || prev.ask !== null || prev.prefix.armed) return true;
+		if (prev.at !== "open") return true;
 		const focused = focusedOf(prev);
-		if (msg.type !== "key" || msg.key !== "<c-c>" || focused?.shows.run == null) return true;
+		if (msg.type !== "run" || msg.does !== "tezgah.interrupt" || focused?.shows.run == null)
+			return true;
 		const to = focused.shows.kind === "window" ? focused.shows.line.from : focused.id;
 		return same(cmds, [send({tile: to, data: "\x03"})]);
 	},
 );
 
 const splitOpens = atTheEnd(
-	"wherever it is, Ctrl-B then | makes a new tile beside the focused one, focuses it, and opens its tsh",
+	"wherever it is, Split makes a new tile beside the focused one, focuses it, and opens its tsh",
 	(machine, last) => {
 		if (last.at === "over") return true;
-		// `n` first: it answers a question no, ends a waiting prefix, and is nothing to the desk else.
-		const {s, cmds} = press(machine, last, ["n", "<c-b>", "|"]);
+		const {s, cmds} = runCommands(machine, last, [
+			{type: "run", does: "tezgah.cancel"},
+			{type: "run", does: "tezgah.split"},
+		]);
 		if (s.at === "over") return false;
 		const made = activeOf(s).focused;
 		return !tileIds(last).has(made) && same(tilesIn(cmds, "open"), [made]);
@@ -462,7 +478,6 @@ const LAWS = [
 	closesOnce,
 	freshIds,
 	savesChanges,
-	takesWhatItSays,
 	overStays,
 	emptiesAtTheEnd,
 	yesCloses,
@@ -519,8 +534,8 @@ const PLANTS = {
 	}),
 	/** A new tile is made and its tsh never opened. */
 	forgetsToOpen: plant({
-		key: (s, m) => {
-			const [next, cmds] = real.key(s, m);
+		run: (s, m) => {
+			const [next, cmds] = real.run(s, m);
 			return [next, cmds.filter((c) => c.type !== "open")];
 		},
 	}),
@@ -535,8 +550,8 @@ const PLANTS = {
 	}),
 	/** A split does not move the next number on. */
 	mintsTwice: plant({
-		key: (s, m) => {
-			const [next, cmds] = real.key(s, m);
+		run: (s, m) => {
+			const [next, cmds] = real.run(s, m);
 			return s.at === "open" && next.at === "open" ? [{...next, next: s.next}, cmds] : [next, cmds];
 		},
 	}),
@@ -547,16 +562,9 @@ const PLANTS = {
 			return [next, cmds.filter((c) => c.type !== "save")];
 		},
 	}),
-	/** `a` arms the prefix, though the desk never said it takes `a`. */
-	grabsA: plant({
-		key: (s, m) =>
-			s.at === "open" && m.key === "a" && !s.prefix.armed && s.ask === null
-				? [{...s, prefix: {armed: true, until: null}}, []]
-				: real.key(s, m),
-	}),
-	/** Over, a key starts a fresh desk. */
+	/** Over, a command starts a fresh desk. */
 	wakesUp: plant({
-		key: (s, m) => (s.at === "over" ? [fresh(), [open({tile: "t1"})]] : real.key(s, m)),
+		run: (s, m) => (s.at === "over" ? [fresh(), [open({tile: "t1"})]] : real.run(s, m)),
 	}),
 	/** The last tile goes and the window is not told to close. */
 	closesSilently: plant({
@@ -565,16 +573,18 @@ const PLANTS = {
 			return [next, cmds.filter((c) => c.type !== "empty")];
 		},
 	}),
-	/** y is taken for no. */
+	/** Confirm is taken for Cancel. */
 	yesIsNo: plant({
-		key: (s, m) =>
-			s.at === "open" && s.ask !== null && m.key === "y" ? [{...s, ask: null}, []] : real.key(s, m),
+		run: (s, m) =>
+			s.at === "open" && s.ask !== null && m.does === "tezgah.confirm"
+				? [{...s, ask: null}, []]
+				: real.run(s, m),
 	}),
 	/** y to one window of a line closes the whole line: the tile it was typed in too. */
 	closesTheLine: plant({
-		key: (s, m) => {
-			const [next, cmds] = real.key(s, m);
-			if (s.at !== "open" || s.ask === null || m.key !== "y") return [next, cmds];
+		run: (s, m) => {
+			const [next, cmds] = real.run(s, m);
+			if (s.at !== "open" || s.ask === null || m.does !== "tezgah.confirm") return [next, cmds];
 			const shows = findTile(activeOf(s).layout, s.ask)?.shows;
 			if (shows?.kind !== "window") return [next, cmds];
 			return [next, [...cmds, close({tile: shows.line.from})]];
@@ -582,17 +592,19 @@ const PLANTS = {
 	}),
 	/** A tile whose tsh ended stays. */
 	deafToEnded: plant({ended: (s) => [s, []]}),
-	/** Ctrl-C over a program is swallowed. */
+	/** Interrupt over a program is swallowed. */
 	swallowsCtrlC: plant({
-		key: (s, m) => {
-			const [next, cmds] = real.key(s, m);
-			return m.key === "<c-c>" ? [next, cmds.filter((c) => c.type !== "send")] : [next, cmds];
+		run: (s, m) => {
+			const [next, cmds] = real.run(s, m);
+			return m.does === "tezgah.interrupt"
+				? [next, cmds.filter((c) => c.type !== "send")]
+				: [next, cmds];
 		},
 	}),
 	/** A split makes the new tile and leaves focus where it was. */
 	splitKeepsFocus: plant({
-		key: (s, m) => {
-			const [next, cmds] = real.key(s, m);
+		run: (s, m) => {
+			const [next, cmds] = real.run(s, m);
 			if (s.at !== "open" || next.at !== "open" || !cmds.some((c) => c.type === "open"))
 				return [next, cmds];
 			if (findTile(activeOf(next).layout, activeOf(s).focused) === null) return [next, cmds];
@@ -602,9 +614,9 @@ const PLANTS = {
 	}),
 	/** `f` folds the focused tile and leaves focus on its strip. */
 	foldsUnderFocus: plant({
-		key: (s, m) => {
-			const [next, cmds] = real.key(s, m);
-			if (s.at !== "open" || next.at !== "open" || m.key !== "f") return [next, cmds];
+		run: (s, m) => {
+			const [next, cmds] = real.run(s, m);
+			if (s.at !== "open" || next.at !== "open" || m.does !== "tezgah.fold") return [next, cmds];
 			const [was, now] = [activeOf(s), activeOf(next)];
 			if (was.id !== now.id || was.focused === now.focused) return [next, cmds];
 			const back = focusOn(next, was.focused);
@@ -621,51 +633,78 @@ describe("the desk's laws", () => {
 	});
 
 	it("each law is seen to fail on a planted mistake", () => {
+		expect(broken(deskMachine)).toEqual([]);
 		const caught = Object.fromEntries(
 			Object.entries(PLANTS).map(([name, machine]) => [name, broken(machine)]),
 		);
-		expect(caught).toEqual({
-			// Focus left on a gone tile breaks the layout, and so the saves, the split and the restore.
-			// A tile that is gone is open nowhere, either.
-			focusOnTheGone: [
-				whole.name,
-				focusOpen.name,
-				savesChanges.name,
-				splitOpens.name,
-				comesBack.name,
-			],
-			countsTheGone: [booksTidy.name],
-			forgetsToOpen: [opensAndStops.name, splitOpens.name],
-			closesTwice: [closesOnce.name],
-			// An id given twice makes a split that does not split, and a kept desk that does not read.
-			// The ended-tile law caught it too, by chance, until the keys Msgs (run, keys) changed which
-			// lists seed 1 makes; deafToEnded catches that law on any list.
-			mintsTwice: [
-				whole.name,
-				opensAndStops.name,
-				freshIds.name,
-				savesChanges.name,
-				splitOpens.name,
-				comesBack.name,
-			],
-			quietResize: [savesChanges.name],
-			grabsA: [takesWhatItSays.name],
-			wakesUp: [takesWhatItSays.name, overStays.name],
-			closesSilently: [emptiesAtTheEnd.name],
-			// The saves law caught it too, by chance, until the frame's Msgs (go, pick, run) changed which
-			// lists seed 1 makes; the law about y catches it on any list.
-			yesIsNo: [yesCloses.name],
-			// The tile the line was typed in is asked to close with no question of its own.
-			closesTheLine: [closesOnce.name, yesCloses.name],
-			deafToEnded: [endedGoes.name],
-			swallowsCtrlC: [ctrlCReaches.name],
-			splitKeepsFocus: [splitOpens.name],
-			// The focus-cycle rows change seed 1's lists; the restore law has its own plant.
-			foldsUnderFocus: [focusOpen.name],
-			forgetsTheKept: [comesBack.name],
-		});
+		const required = {
+			focusOnTheGone: whole,
+			countsTheGone: booksTidy,
+			forgetsToOpen: opensAndStops,
+			closesTwice: closesOnce,
+			mintsTwice: freshIds,
+			quietResize: savesChanges,
+			wakesUp: overStays,
+			closesSilently: emptiesAtTheEnd,
+			yesIsNo: yesCloses,
+			closesTheLine: yesCloses,
+			deafToEnded: endedGoes,
+			swallowsCtrlC: ctrlCReaches,
+			splitKeepsFocus: splitOpens,
+			foldsUnderFocus: focusOpen,
+			forgetsTheKept: comesBack,
+		};
+		// A new generator may catch extra faults. Each plant must still break its own law.
+		for (const [name, law] of Object.entries(required)) expect(caught[name]).toContain(law.name);
 		// Every law is caught by at least one plant.
 		expect(LAWS.filter((law) => !Object.values(caught).flat().includes(law.name))).toEqual([]);
+	});
+});
+
+// `takesWhatItSays` moves to the window with the key decision. There is no host `takes` reply.
+const takesWhatItSays = (machine: KeyRouter) =>
+	fc.assert(
+		fc.property(fc.constantFrom("a", "g", "q", "7"), (key) => {
+			const [state] = machine.init(null, {
+				keys: defaults,
+				window: "w1",
+				target: {program: "tsh", tile: "t1"},
+				mac: true,
+			});
+			const press = keyPress(key);
+			const [next, cmds] = applyCell(machine, state, {type: "press", press, at: 0});
+			expect(next.prefix).toEqual(state.prefix);
+			expect(cmds).toEqual([
+				expect.objectContaining({
+					type: "pass",
+					press,
+					target: expect.objectContaining({tile: "t1"}),
+				}),
+			]);
+		}),
+		OPTS,
+	);
+
+describe("the window owns the old key-claim law", () => {
+	it("passes unbound typing without arming a prefix or running a command", async () => {
+		takesWhatItSays(await loadKeyRouter());
+	});
+	it("catches the planted mistake that grabs a plain a", async () => {
+		const machine = await loadKeyRouter();
+		takesWhatItSays(machine);
+		const grabsA: KeyRouter = {
+			...machine,
+			update: {
+				...machine.update,
+				press: (s, m) => {
+					const [next, cmds] = machine.update.press(s, m);
+					return m.press.key === "a"
+						? [{...next, prefix: {armed: true, until: null}}, cmds]
+						: [next, cmds];
+				},
+			},
+		};
+		expect(() => takesWhatItSays(grabsA)).toThrow();
 	});
 });
 
@@ -821,7 +860,6 @@ const KEPT_ON_AGENTS = [
 	closesOnce,
 	freshIds,
 	savesChanges,
-	takesWhatItSays,
 	overStays,
 	emptiesAtTheEnd,
 	yesCloses,

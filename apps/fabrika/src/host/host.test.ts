@@ -67,6 +67,7 @@ const live = (sock: string) =>
 const hostOn = (home: string, ours?: number, build?: string | null) =>
 	Effect.gen(function* () {
 		const scope = yield* Scope.make();
+		yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
 		// Its own scope, inside its fiber: stopping interrupts the server before its socket closes,
 		// as SIGTERM does in host/main.ts, so no app attached holds the close.
 		// The pid is this test's own, so `stopHost` on this home refuses it (host/stop.ts): a host
@@ -81,8 +82,9 @@ const hostOn = (home: string, ours?: number, build?: string | null) =>
 const appOn = (sock: string, ours?: number) =>
 	Effect.gen(function* () {
 		const scope = yield* Scope.make();
+		yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
 		const got: Down[] = [];
-		const socket = yield* NodeSocket.makeNet({path: sock});
+		const socket = yield* NodeSocket.makeNet({path: sock}).pipe(Scope.provide(scope));
 		const wire = yield* appWire(socket, (m) => got.push(m), ours).pipe(Scope.provide(scope));
 		/** What the page was sent on the desk's port, read. */
 		const page = (): ToPage[] =>
@@ -109,20 +111,31 @@ const appOn = (sock: string, ours?: number) =>
 				1000,
 			).rows;
 		let id = 0;
-		/** Press a key the desk takes, and wait for the host's answer. */
-		const press = (key: string) =>
+		/** Send a finished command and wait for its resulting desk and target. */
+		const run = (
+			word: string,
+			via: {_tag: "palette"} | {_tag: "key"; keys: string} = {_tag: "palette"},
+			program = "tezgah",
+		) =>
 			Effect.gen(function* () {
-				const n = id;
+				const request = `command-${id}`;
 				id += 1;
-				send({type: "on", port: "desk", m: {type: "press", id: n, key}});
-				return yield* until(`the answer to ${key}`, () =>
-					page().find((m) => m.type === "answer" && m.id === n),
+				const current = desk();
+				const tile = current?.workspaces.find((ws) => ws.id === current.active)?.focused;
+				if (tile === undefined) return yield* Effect.die("a command needs its target tile");
+				send({
+					type: "on",
+					port: "desk",
+					m: {type: "run", id: request, target: {program, word, mode: null, tile}, via},
+				});
+				return yield* until(`completed ${program}.${word}`, () =>
+					page().find((m) => m.type === "applied" && m.id === request),
 				);
 			});
 		const send = (m: Up) => wire.send(m);
 		const type = (tile: string, data: string) =>
 			send({type: "on", port: `tile:${tile}`, m: {type: "keys", data}});
-		return {wire, got, page, desk, rows, press, send, type, leave: Scope.close(scope, Exit.void)};
+		return {wire, got, page, desk, rows, run, send, type, leave: Scope.close(scope, Exit.void)};
 	});
 
 const tileIds = (desk: Open | undefined) =>
@@ -190,6 +203,7 @@ describe("today's completed program commands, T174 PR 2", () => {
 				const {home, paths} = yield* freshHome;
 				const logs: {message: string; fields: Readonly<Record<string, unknown>>}[] = [];
 				const scope = yield* Scope.make();
+				yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
 				yield* runHost({home, pid: process.pid}).pipe(
 					Effect.scoped,
 					Effect.provide(
@@ -334,7 +348,7 @@ describe("the host", () => {
 				const gone = yield* until("counter's port gone", () =>
 					app.got.find((m) => m.type === "gone"),
 				);
-				const after = yield* app.press("<c-b>");
+				const after = yield* app.run("split");
 				yield* host.stop;
 				return {port, gone, after};
 			}),
@@ -343,7 +357,7 @@ describe("the host", () => {
 			type: "gone",
 			port: seen.port.type === "port" ? seen.port.port : "",
 		});
-		expect(seen.after).toMatchObject({type: "answer", took: true});
+		expect(seen.after).toMatchObject({type: "applied", target: {tile: "t2"}});
 	});
 
 	it("closes every window when the last tile closes, and begins again on one fresh tile", async () => {
@@ -356,9 +370,8 @@ describe("the host", () => {
 				app.send({type: "page"});
 				yield* until("t1's prompt", () => (app.rows("t1")[0] === "tsh$" ? true : undefined));
 				const first = app.desk();
-				yield* app.press("<c-b>");
-				yield* app.press("x");
-				yield* app.press("y");
+				yield* app.run("close");
+				yield* app.run("confirm");
 				const closed = yield* until("the window told to close", () =>
 					app.got.find((m) => m.type === "close"),
 				);
@@ -374,7 +387,7 @@ describe("the host", () => {
 		expect(tileIds(seen.fresh)).toEqual(["t1"]);
 	});
 
-	it("shows two apps at once the same desk: Ctrl-B | from one splits it on both", async () => {
+	it("shows two apps the same desk, but replies and window actions stay with their sender", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
 				const {home, paths} = yield* freshHome;
@@ -387,56 +400,35 @@ describe("the host", () => {
 				b.send({type: "page"});
 				yield* until("a's desk", a.desk);
 				yield* until("b's desk", b.desk);
-				const prefix = yield* a.press("<c-b>");
-				const split = yield* a.press("|");
+				const split = yield* a.run("split", {_tag: "key", keys: "ctrl+b |"});
 				const onB = yield* until("the split on b", () =>
 					tileIds(b.desk()).length === 2 ? b.desk() : undefined,
 				);
-				// b was given a port for the new tile's terminal, and was sent no answer: the keys were a's.
+				// b gets the new tile's terminal, but no completion for a's command.
 				const bPorts = b.got.flatMap((m) => (m.type === "port" ? [m.port] : []));
-				const bAnswers = b.page().filter((m) => m.type === "answer");
-				// A list a key shows opens on the page whose key asked for it, as tmux's list-keys does.
-				yield* a.press("<c-b>");
-				yield* a.press("a");
+				const bApplied = b.page().filter((m) => m.type === "applied");
+				yield* a.run("asks", {_tag: "key", keys: "ctrl+b a"});
 				const shownOnA = yield* until("the asks list on a", () =>
 					a.page().find((m) => m.type === "show" && m.what === "asks"),
 				);
-				// The prefix armed after it reaches b behind anything said to b before it.
-				yield* a.press("<c-b>");
-				yield* until("the prefix on b", () => (b.desk()?.prefix.armed === true ? true : undefined));
 				const shownOnB = b.page().filter((m) => m.type === "show");
 				yield* host.stop;
-				return {prefix, split, onB, bPorts, bAnswers, shownOnA, shownOnB};
+				return {split, onB, bPorts, bApplied, shownOnA, shownOnB};
 			}),
 		);
-		expect(seen.prefix).toEqual({type: "answer", id: 0, took: true});
-		expect(seen.split).toEqual({type: "answer", id: 1, took: true});
+		expect(seen.split).toMatchObject({type: "applied", id: "command-0", target: {tile: "t2"}});
 		expect(tileIds(seen.onB)).toEqual(["t1", "t2"]);
 		expect(seen.onB.workspaces[0].focused).toBe("t2");
 		expect(seen.bPorts).toEqual(["tile:t1", "tile:t2"]);
-		expect(seen.bAnswers).toEqual([]);
+		expect(seen.bApplied).toEqual([]);
+		expect(seen.onB).not.toHaveProperty("prefix");
 		expect(seen.shownOnA).toEqual({type: "show", what: "asks"});
 		expect(seen.shownOnB).toEqual([]);
 	});
 
-	it("answers a key the desk does not take with took: false, for the page to pass it on", async () => {
-		const seen = await go(
-			Effect.gen(function* () {
-				const {home, paths} = yield* freshHome;
-				const host = yield* hostOn(home);
-				const app = yield* appOn(paths.sock);
-				yield* app.wire.up;
-				app.send({type: "page"});
-				yield* until("the desk", app.desk);
-				const answer = yield* app.press("q");
-				yield* host.stop;
-				return answer;
-			}),
-		);
-		expect(seen).toEqual({type: "answer", id: 0, took: false});
-	});
+	// Retired by PR 2: per-key took:false replies. The window's pass law owns native typing.
 
-	it("sends one Ctrl-B on to tsh on Ctrl-B Ctrl-B, as tmux's send-prefix", async () => {
+	it("tsh receives the one Ctrl-B the window passes for a doubled prefix", async () => {
 		const row = await go(
 			Effect.gen(function* () {
 				const {home, paths} = yield* freshHome;
@@ -447,8 +439,7 @@ describe("the host", () => {
 				yield* until("t1's prompt", () => (app.rows("t1")[0] === "tsh$" ? true : undefined));
 				app.type("t1", "ab");
 				yield* until("ab", () => (app.rows("t1")[0] === "tsh$ ab" ? true : undefined));
-				yield* app.press("<c-b>");
-				yield* app.press("<c-b>");
+				app.type("t1", "\x02");
 				// The line editor's Ctrl-B moves back one: X goes in before b.
 				app.type("t1", "X");
 				const got = yield* until("aXb", () =>
@@ -654,6 +645,7 @@ describe("the asks' later and seen", () => {
 				yield* fs.writeFileString(join(home, "asks.json"), text);
 				const logs: string[] = [];
 				const scope = yield* Scope.make();
+				yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
 				yield* runHost({home, pid: process.pid}).pipe(
 					Effect.scoped,
 					Effect.provide(Logger.layer([Logger.make((l) => logs.push(String(l.message)))])),
@@ -861,10 +853,9 @@ const saveKeys = (home: string, ...lines: readonly string[]) =>
 type App = Effect.Success<ReturnType<typeof appOn>>;
 const keysSent = (app: App) => app.page().flatMap((m) => (m.type === "keys" ? [m] : []));
 const lastKeys = (app: App) => keysSent(app).at(-1);
-const lastTakes = (app: App) => app.page().findLast((m) => m.type === "desk");
 
 describe("the host and the keys file", () => {
-	it("reads the keys file in its own home, and the desk arms on its prefix (p2, p11)", async () => {
+	it("publishes its home's keys file to the window and accepts completed commands (p2, p11)", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
 				const {home, paths} = yield* freshHome;
@@ -875,24 +866,19 @@ describe("the host and the keys file", () => {
 				app.send({type: "page"});
 				yield* until("the desk", app.desk);
 				const keys = lastKeys(app);
-				const takes = lastTakes(app);
-				const b = yield* app.press("<c-b>");
-				const a = yield* app.press("<c-a>");
-				const split = yield* app.press("|");
+				const desk = app.desk();
+				const split = yield* app.run("split", {_tag: "key", keys: "ctrl+a |"});
 				const two = yield* until("the split", () =>
 					tileIds(app.desk()).length === 2 ? true : undefined,
 				);
 				yield* host.stop;
-				return {keys, takes, b, a, split, two};
+				return {keys, desk, split, two};
 			}),
 		);
 		expect(seen.keys).toMatchObject({type: "keys", prefix: "<c-a>", file: {_tag: "read"}});
-		expect(seen.takes).toMatchObject({
-			takes: {all: false, keys: expect.arrayContaining(["<c-a>"])},
-		});
-		expect(seen.b).toMatchObject({took: false});
-		expect(seen.a).toMatchObject({took: true});
-		expect(seen.split).toMatchObject({took: true});
+		expect(seen.desk).not.toHaveProperty("prefix");
+		expect(seen.split).toMatchObject({type: "applied", target: {tile: "t2"}});
+		expect(seen.two).toBe(true);
 	});
 
 	it("starts on the defaults with a bad file, and keeps the last good table after a bad save (p8)", async () => {
@@ -914,14 +900,12 @@ describe("the host and the keys file", () => {
 				const bad = yield* until("the refusal", () =>
 					lastKeys(app)?.file._tag === "refused" ? lastKeys(app) : undefined,
 				);
-				// The desk kept the good table: C-a still arms, C-b is the tile's.
-				const a = yield* app.press("<c-a>");
 				const files = lines
 					.map(fieldsOf)
 					.filter((f) => f.message === "keys")
 					.map((f) => f.file);
 				yield* host.stop;
-				return {atStart, good, bad, a, files};
+				return {atStart, good, bad, files};
 			}),
 		);
 		expect(seen.atStart).toEqual({
@@ -937,12 +921,12 @@ describe("the host and the keys file", () => {
 			rows: defaults.rows,
 			file: {_tag: "refused", line: 2, why: "tezgah.zom is not a command"},
 		});
-		expect(seen.a).toMatchObject({took: true});
+		expect(seen.bad?.version).toBe(seen.good?.version);
 		// Each read is logged: what the file came to.
 		expect(seen.files).toEqual(["refused", "read", "refused"]);
 	});
 
-	it("swaps the table on both pages on a save, and disarms a prefix armed on one (p9)", async () => {
+	it("publishes one saved table to both pages without sharing prefix state (p9)", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
 				const {home, paths} = yield* freshHome;
@@ -955,7 +939,8 @@ describe("the host and the keys file", () => {
 				b.send({type: "page"});
 				yield* until("a's desk", a.desk);
 				yield* until("b's desk", b.desk);
-				const armed = yield* a.press("<c-b>");
+				const beforeA = a.desk();
+				const beforeB = b.desk();
 				yield* saveKeys(home, 'prefix = "ctrl+a"');
 				const onA = yield* until("a's new table", () =>
 					lastKeys(a)?.prefix === "<c-a>" ? lastKeys(a) : undefined,
@@ -963,28 +948,20 @@ describe("the host and the keys file", () => {
 				const onB = yield* until("b's new table", () =>
 					lastKeys(b)?.prefix === "<c-a>" ? lastKeys(b) : undefined,
 				);
-				const disarmed = yield* until("the prefix disarmed", () =>
-					a.desk()?.prefix.armed === false ? lastTakes(a) : undefined,
-				);
-				// The next key uses the new table.
-				const bar = yield* a.press("|");
-				const prefix = yield* a.press("<c-a>");
-				const split = yield* a.press("|");
+				expect(a.desk()).toEqual(beforeA);
+				expect(b.desk()).toEqual(beforeB);
+				const split = yield* a.run("split", {_tag: "key", keys: "ctrl+a |"});
 				const two = yield* until("the split on b", () =>
 					tileIds(b.desk()).length === 2 ? tileIds(b.desk()) : undefined,
 				);
 				yield* host.stop;
-				return {armed, onA, onB, disarmed, bar, prefix, split, two};
+				return {onA, onB, split, two, deskA: a.desk(), deskB: b.desk()};
 			}),
 		);
-		expect(seen.armed).toMatchObject({took: true});
 		expect(seen.onA).toEqual(seen.onB);
-		expect(seen.disarmed).toMatchObject({
-			takes: {all: false, keys: expect.arrayContaining(["<c-a>"])},
-		});
-		expect(seen.bar).toMatchObject({took: false});
-		expect(seen.prefix).toMatchObject({took: true});
-		expect(seen.split).toMatchObject({took: true});
+		expect(seen.deskA).not.toHaveProperty("prefix");
+		expect(seen.deskB).not.toHaveProperty("prefix");
+		expect(seen.split).toMatchObject({type: "applied", target: {tile: "t2"}});
 		expect(seen.two).toEqual(["t1", "t2"]);
 	});
 
@@ -1003,11 +980,10 @@ describe("the host and the keys file", () => {
 						lines.filter((l) => fieldsOf(l).message === "did").length >= n ? true : undefined,
 					);
 				// The palette, by the command's word.
-				app.send({type: "on", port: "desk", m: {type: "run", does: "tezgah.split"}});
+				yield* app.run("split");
 				yield* done(1);
 				// A key: C-b, then z.
-				yield* app.press("<c-b>");
-				yield* app.press("z");
+				yield* app.run("zoom", {_tag: "key", keys: "ctrl+b z"});
 				yield* done(2);
 				// A tsh word, typed in t1's tsh.
 				app.type("t1", "zoom\r");
@@ -1046,13 +1022,13 @@ describe("the host and the keys file", () => {
 				// A click on the first workspace in the top bar.
 				app.send({type: "on", port: "desk", m: {type: "pick", workspace: desk.workspaces[0].id}});
 				yield* done(1);
-				app.send({type: "on", port: "desk", m: {type: "run", does: "palette.open"}});
-				app.send({type: "on", port: "desk", m: {type: "run", does: "tezgah.split"}});
+				yield* app.run("open", {_tag: "palette"}, "palette");
+				yield* app.run("split");
 				yield* done(3);
 				app.type("t1", "ordinary typing");
 				yield* Effect.sleep("100 millis");
 				// A second workspace, then a click on it: the word names the workspace clicked.
-				app.send({type: "on", port: "desk", m: {type: "run", does: 'tezgah."workspace --to new"'}});
+				yield* app.run("workspace --to new");
 				const second = yield* until("a second workspace, in front", () => {
 					const [, w2] = app.desk()?.workspaces ?? [];
 					return w2 !== undefined && app.desk()?.active === w2.id ? w2 : undefined;
@@ -1094,31 +1070,44 @@ it("K12: an editor save publishes one version to two windows and watcher echo ad
 			b.send({type: "page"});
 			yield* until("a desk", a.desk);
 			yield* until("b desk", b.desk);
-			yield* a.press("<c-b>");
 			a.send({
 				type: "on",
 				port: "desk",
 				m: {
 					type: "keys.edit",
 					request: "edit-1",
-					edit: {_tag: "bind", does: "tezgah.zoom", keys: ["<prefix>m"]},
+					edit: {
+						_tag: "bind",
+						target: {program: "tezgah", word: "zoom", mode: null},
+						keys: ["<prefix>m"],
+					},
 					said: 100,
 				},
 			});
 			const onA = yield* until("editor save on a", () =>
-				lastKeys(a)?.rows.find((row) => row.does === "tezgah.zoom")?.keys[0]?.key === "m"
+				lastKeys(a)?.rows.find(
+					(row) =>
+						row.target.program === "tezgah" &&
+						row.target.word === "zoom" &&
+						row.target.mode === null,
+				)?.keys[0]?.key === "m"
 					? lastKeys(a)
 					: undefined,
 			);
 			const onB = yield* until("editor save on b", () =>
-				lastKeys(b)?.rows.find((row) => row.does === "tezgah.zoom")?.keys[0]?.key === "m"
+				lastKeys(b)?.rows.find(
+					(row) =>
+						row.target.program === "tezgah" &&
+						row.target.word === "zoom" &&
+						row.target.mode === null,
+				)?.keys[0]?.key === "m"
 					? lastKeys(b)
 					: undefined,
 			);
 			expect(onA).toEqual(onB);
 			expect(onA).toHaveProperty("version", expect.any(String));
 			expect(onA).toHaveProperty("changes", [expect.objectContaining({how: "pressed"})]);
-			expect(a.desk()?.prefix.armed).toBe(false);
+			expect(a.desk()).not.toHaveProperty("prefix");
 			const countA = keysSent(a).length;
 			const countB = keysSent(b).length;
 			yield* Effect.sleep("200 millis");
