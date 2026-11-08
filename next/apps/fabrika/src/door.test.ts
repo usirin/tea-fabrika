@@ -29,6 +29,9 @@ import {nodeSql} from "@kampus/libfabrika/sqlite";
 import {checkSshsig, Hello} from "@kampus/libfabrika/transport";
 import {Deferred, Effect, Fiber, Layer, Logger, Option, Schema, Stream} from "effect";
 import {TestClock} from "effect/testing";
+import * as fc from "fast-check";
+const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+const runs = (numRuns: number) => ({seed: SEED, endOnFailure: true, numRuns});
 const SpanPage = Schema.Struct({spans: Schema.Array(SpanRow), next: Schema.Int});
 const ADD_SAW = {
 	how: "device",
@@ -585,6 +588,295 @@ describe("P10 review regressions", () => {
 		});
 		return {client, hello, trusted};
 	});
+	it.effect("P12: view.open rejects a bad pid before invoking the program", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			const opened: Array<unknown> = [];
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const {client} = yield* online(d, w);
+				expect(yield* d.route(client, "view.open", {pid: "invalid"})).toEqual({
+					_tag: "refused",
+					why: "bad_input",
+				});
+				expect(opened).toEqual([]);
+				expect(yield* d.route(client, "view.open", {pid: PROCESS})).toEqual({
+					_tag: "ok",
+					result: {count: 7},
+				});
+				expect(opened).toEqual([{pid: PROCESS, client}]);
+			}).pipe(
+				Effect.provide(
+					Door.layer({
+						...w.settings,
+						open: (pid, client) =>
+							Effect.sync(() => {
+								opened.push({pid, client});
+								return {count: 7};
+							}),
+					}).pipe(Layer.provideMerge(w.env)),
+				),
+			);
+		}),
+	);
+	it.live("P12: a grant target needs both the waiting key and its code", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const {client} = yield* pendingHello(d, w.otherWindow, "target");
+				const knocked = yield* d.knock(client, {label: "Pending"});
+				assert(knocked._tag === "ok");
+				const {rows} = Schema.decodeUnknownSync(
+					Schema.Struct({rows: Schema.Array(Schema.Struct({code: Schema.String}))}),
+				)(knocked.result);
+				const code = rows[0]!.code;
+				expect(yield* d.target(w.otherWindow.fingerprint, code)).toEqual({
+					key: w.otherWindow.raw,
+					for: PERSON,
+					to: "project-a",
+					code,
+					label: "Pending",
+				});
+				expect(yield* d.target(w.window.fingerprint, code)).toBeNull();
+				expect(yield* d.target(w.otherWindow.fingerprint, `${code}x`)).toBeNull();
+			}).pipe(w.provide);
+		}),
+	);
+
+	// d1: for any waiting clients and any knock order, with repeat knocks and a second tab of the
+	// same key, each knock answers exactly its own row's code and until, read back from the
+	// owner's watch at that moment. Four keys and up to eight tabs against a cap of three, so
+	// rows fall out and the oldest pending connections are pruned: a pruned one is refused
+	// not_waiting, never handed a row. Plants: return all rows; return the first row; give a
+	// second tab of a key its own row.
+	it("d1: any knock order answers each knock with only its own row's code and until", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.array(
+					fc.record({
+						who: fc.nat(3),
+						tab: fc.nat(1),
+						pass: fc.oneof(fc.constant(undefined), fc.constant(null), fc.string()),
+					}),
+					{minLength: 1, maxLength: 8},
+				),
+				(knocks) =>
+					Effect.runPromise(
+						Effect.gen(function* () {
+							const w = yield* world();
+							yield* Effect.gen(function* () {
+								const d = yield* Door;
+								const owner = yield* online(d, w);
+								const keys = [w.otherWindow, w.agent, w.otherRoot, w.sheet] as const;
+								const clients = new Map<string, Effect.Success<ReturnType<typeof d.connect>>>();
+								for (const {who, tab, pass} of knocks) {
+									const k = keys[who]!;
+									const name = `${who}-${tab}`;
+									const client =
+										clients.get(name) ?? (yield* pendingHello(d, k, `tab-${name}`)).client;
+									clients.set(name, client);
+									// The door keeps the newest `most` pending connections.
+									const kept = [...clients.keys()].slice(-w.settings.waiting.most);
+									const label = `browser ${who}`;
+									const reply = yield* d.knock(
+										client,
+										pass === undefined ? {label} : {label, pass},
+									);
+									if (!kept.includes(name)) {
+										expect(reply).toEqual({_tag: "refused", why: "not_waiting"});
+										continue;
+									}
+									const rows = (yield* d.watch(owner.client)).rows;
+									// One row per key: a second tab of a key joins that key's row, never a new one.
+									expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length);
+									const row = rows.find((r) => r.key === k.raw);
+									assert(row);
+									expect(reply).toEqual({_tag: "ok", result: {code: row.code, until: row.until}});
+								}
+							}).pipe(w.provide);
+						}),
+					),
+			),
+			runs(25),
+		);
+	});
+
+	// d2: for any unknown key and any tab, the checked hello's not_granted refusal carries that
+	// caller's own fingerprint. Plant: refuse without the fingerprint.
+	it("d2: any unknown key is refused with its own fingerprint", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.string(), (tab) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const w = yield* world();
+						const stranger = yield* key();
+						yield* Effect.gen(function* () {
+							const d = yield* Door;
+							const {client, hello, trusted} = yield* signedHello(d, stranger, tab);
+							expect(yield* d.initialize(client, hello, trusted)).toEqual({
+								_tag: "refused",
+								why: "not_granted",
+								fingerprint: stranger.fingerprint,
+							});
+						}).pipe(w.provide);
+					}),
+				),
+			),
+			runs(25),
+		);
+	});
+
+	// d3: for every Uint32 n that getRandomValues gives, the waiting code is six digits, n's last
+	// six, with leading zeros kept: String(n % 1_000_000).padStart(6, "0"). Plants: keep four
+	// digits (the code on main before PR 516); drop the zero padding; keep seven digits. The
+	// property covers leading zeros by itself, so no small value is pinned.
+	it("d3: any random Uint32 gives a six-digit waiting code with its leading zeros", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.integer({min: 0, max: 0xffffffff}), (random) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const w = yield* world();
+						yield* Effect.gen(function* () {
+							const d = yield* Door;
+							const owner = yield* online(d, w);
+							const pending = yield* pendingHello(d, w.otherWindow, "code");
+							const original = crypto.getRandomValues.bind(crypto);
+							const rng = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
+								if (array instanceof Uint32Array && array.length === 1) {
+									array[0] = random;
+									return array;
+								}
+								return original(array);
+							});
+							const reply = yield* d
+								.knock(pending.client, {label: "Code browser"})
+								.pipe(Effect.ensuring(Effect.sync(() => rng.mockRestore())));
+							const code = String(random % 1_000_000).padStart(6, "0");
+							expect(code).toMatch(/^[0-9]{6}$/);
+							expect((yield* d.watch(owner.client)).rows.map((r) => r.code)).toEqual([code]);
+							expect(reply).toMatchObject({_tag: "ok", result: {code}});
+						}).pipe(w.provide);
+					}),
+				),
+			),
+			// pinned: 4294967295, the largest Uint32, must give 967295. In PR 516's round 1 mutation
+			// step, a .slice(-7) planted by hand survived, because no case had more than six digits.
+			{...runs(30), examples: [[4294967295]]},
+		);
+	});
+
+	// crypto: for each of the five WebCrypto edges and any failure (a rejection or a throw, of any
+	// value), the call fails with LedgerError why "crypto", never "storage", and delivers
+	// nothing. Plant: map a WebCrypto failure to storage (or NotGranted) at any edge.
+	type Armed = <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
+	// The spied WebCrypto call fails once, by a throw or a rejection, with the generated value.
+	type Spy = {
+		mockImplementationOnce: (fn: () => never) => unknown;
+		mockRejectedValueOnce: (value: unknown) => unknown;
+		mockRestore: () => void;
+	};
+	const failOnce = (spy: Spy, thrown: unknown, sync: boolean) =>
+		sync
+			? spy.mockImplementationOnce(() => {
+					throw thrown;
+				})
+			: spy.mockRejectedValueOnce(thrown);
+	type Edge = {
+		readonly name: string;
+		readonly spy: () => Spy;
+		readonly fail: (w: World, armed: Armed) => Effect.Effect<unknown, unknown>;
+	};
+	const edges: ReadonlyArray<Edge> = [
+		{
+			name: "importKey",
+			spy: () => vi.spyOn(crypto.subtle, "importKey"),
+			fail: (w: World, armed: Armed) => armed(Door.pipe(w.provide)),
+		},
+		{
+			name: "nonce sign",
+			spy: () => vi.spyOn(crypto.subtle, "sign"),
+			fail: (w: World, armed: Armed) =>
+				Effect.gen(function* () {
+					const d = yield* Door;
+					const client = yield* d.connect();
+					return yield* armed(d.challenge(client));
+				}).pipe(w.provide),
+		},
+		{
+			name: "nonce verify",
+			spy: () => vi.spyOn(crypto.subtle, "verify"),
+			fail: (w: World, armed: Armed) =>
+				Effect.gen(function* () {
+					const d = yield* Door;
+					const {client, hello, trusted} = yield* signedHello(d, w.window, "crypto-failed");
+					return yield* armed(d.initialize(client, hello, trusted));
+				}).pipe(w.provide),
+		},
+		{
+			name: "fingerprint digest",
+			spy: () => vi.spyOn(crypto.subtle, "digest"),
+			fail: (w: World, armed: Armed) =>
+				Effect.gen(function* () {
+					const d = yield* Door;
+					const {client} = yield* online(d, w);
+					yield* d.route(client, "process.send", request("before-crypto-failed"));
+					const parent = w.deliveries[0]!.envelope.id;
+					return yield* armed(writeId("crypto-failed", d.signer(parent, PROCESS, "saved")));
+				}).pipe(w.provide),
+		},
+		{
+			// The first digest is the caller's fingerprint, which runs as it is; the second hashes
+			// the input.
+			name: "input hash digest",
+			spy: () => {
+				const digest = crypto.subtle.digest.bind(crypto.subtle);
+				return vi.spyOn(crypto.subtle, "digest").mockImplementationOnce(digest);
+			},
+			fail: (w: World, armed: Armed) =>
+				Effect.gen(function* () {
+					const d = yield* Door;
+					const {client} = yield* online(d, w);
+					return yield* armed(d.route(client, "process.send", request("digest-failed")));
+				}).pipe(w.provide),
+		},
+	];
+	for (const edge of edges)
+		it(`a WebCrypto ${edge.name} failure, of any value, is refused with crypto and delivers nothing`, async () => {
+			await fc.assert(
+				fc.asyncProperty(
+					fc.oneof(
+						fc.anything(),
+						fc.string().map((message) => new Error(message)),
+						fc.constantFrom(undefined, null, "crypto unavailable"),
+					),
+					fc.boolean(),
+					(thrown, sync) =>
+						Effect.runPromise(
+							Effect.gen(function* () {
+								const w = yield* world();
+								// Armed only around the call under test, so setup's own WebCrypto runs as it is.
+								let before = -1;
+								let restore = () => {};
+								const armed: Armed = (effect) =>
+									Effect.sync(() => {
+										before = w.deliveries.length;
+										const spy = edge.spy();
+										restore = () => spy.mockRestore();
+										failOnce(spy, thrown, sync);
+									}).pipe(Effect.andThen(effect));
+								const failure = yield* Effect.flip(edge.fail(w, armed)).pipe(
+									Effect.ensuring(Effect.sync(() => restore())),
+								);
+								expect(failure).toBeInstanceOf(LedgerError);
+								expect(failure).toMatchObject({_tag: "LedgerError", why: "crypto"});
+								expect(w.deliveries).toHaveLength(before);
+							}),
+						),
+				),
+				runs(15),
+			);
+		});
 
 	it.effect(
 		"review 3.1: a full spent-receipt store writes nothing and keeps live nonces spent",
@@ -1715,8 +2007,8 @@ describe("P10 inputs, retries and signer", () => {
 					yield* d.route(client, "process.send", request("first"));
 					const parent = w.deliveries[0]!.envelope.id;
 					expect(
-						(yield* Effect.flip(d.route(client, "process.send", request("second"))))._tag,
-					).toBe("LedgerError");
+						yield* Effect.flip(d.route(client, "process.send", request("second"))),
+					).toMatchObject({_tag: "LedgerError"});
 					expect(w.deliveries).toHaveLength(1);
 					expect((yield* writeId("saved-a", d.signer(parent, PROCESS, "saved"))).parent).toBe(
 						parent,
@@ -2407,8 +2699,8 @@ describe("P10 span reader and recording", () => {
 					const {client} = yield* online(d, w);
 					block = true;
 					expect(
-						(yield* Effect.flip(d.route(client, "process.send", request("flush-failure"))))._tag,
-					).toBe("SinkError");
+						yield* Effect.flip(d.route(client, "process.send", request("flush-failure"))),
+					).toMatchObject({_tag: "SinkError"});
 					expect(w.deliveries).toEqual([]);
 					block = false;
 					yield* d.route(client, "process.send", request("flush-failure"));
@@ -2485,9 +2777,8 @@ describe("P10 span reader and recording", () => {
 				const d = yield* Door;
 				const {client} = yield* online(d, w);
 				expect(
-					(yield* Effect.flip(d.route(client, "spans.read", {chain: {_tag: "spans"}, after: 0})))
-						._tag,
-				).toBe("SinkError");
+					yield* Effect.flip(d.route(client, "spans.read", {chain: {_tag: "spans"}, after: 0})),
+				).toMatchObject({_tag: "SinkError"});
 			}).pipe(
 				Effect.provide(Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, broken)))),
 			);
@@ -2618,8 +2909,8 @@ describe("P10 span reader and recording", () => {
 				const {client} = yield* online(d, w);
 				block = true;
 				expect(
-					(yield* Effect.flip(d.route(client, "process.send", request("unrecorded"))))._tag,
-				).toBe("LedgerError");
+					yield* Effect.flip(d.route(client, "process.send", request("unrecorded"))),
+				).toMatchObject({_tag: "LedgerError"});
 				expect(w.deliveries).toEqual([]);
 			}).pipe(
 				Effect.provide(Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, ledger)))),
@@ -3253,28 +3544,6 @@ describe("P10 refusal records and checked writes", () => {
 				expect(
 					yield* Effect.flip(d.grant({text, armored: yield* w.root.sign(text)})),
 				).toMatchObject({_tag: "LedgerError", why: "bad_row"});
-			}).pipe(w.provide);
-		}),
-	);
-	it.effect("p67: a failed input digest reports storage and never delivers", () =>
-		Effect.gen(function* () {
-			const w = yield* world();
-			yield* Effect.gen(function* () {
-				const d = yield* Door;
-				const {client} = yield* online(d, w);
-				const digest = crypto.subtle.digest.bind(crypto.subtle);
-				const spy = vi
-					.spyOn(crypto.subtle, "digest")
-					.mockImplementationOnce(digest)
-					.mockRejectedValueOnce(new Error("crypto unavailable"));
-				try {
-					expect(
-						yield* Effect.flip(d.route(client, "process.send", request("digest-failed"))),
-					).toMatchObject({_tag: "LedgerError", why: "storage"});
-					expect(w.deliveries).toEqual([]);
-				} finally {
-					spy.mockRestore();
-				}
 			}).pipe(w.provide);
 		}),
 	);

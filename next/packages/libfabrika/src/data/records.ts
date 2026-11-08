@@ -304,6 +304,24 @@ const sqlStore = (sql: Sql): Store => {
 	};
 };
 
+export const recordPart = (sql: Sql, chain: Chain, at: number, cap: number) => {
+	const calls = local(part(sqlStore(sql), chain, at, cap));
+	return {
+		write: Effect.fnUntraced(function* (rows: ReadonlyArray<Sent>) {
+			return yield* calls.write(rows);
+		}),
+		read: Effect.fnUntraced(function* (after: number) {
+			return yield* calls.page(after);
+		}),
+		content: Effect.fnUntraced(function* (id: string) {
+			return yield* calls.lookup(id);
+		}),
+		deleteContent: Effect.fnUntraced(function* (id: string, by: Deletion) {
+			return yield* calls.erase(id, by);
+		}),
+	};
+};
+
 const encoder = new TextEncoder();
 
 /** A part in memory, for tests. Its size is the bytes of its rows as JSON. */

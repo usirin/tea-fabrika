@@ -46,6 +46,24 @@ Every formal check in this repo follows five steps.
    fingerprint. CI goes red when covered code changes and nobody checks again.
    This matters most for a check that runs on a copy of the code.
 
+## Every law is a property
+
+Decided 2026-11-08 by the owner, after PR 516's laws were all example tests.
+
+- **Every law is a property test over generated inputs, on the real code,** not only a machine's
+  laws. A machine uses `@demlik/tea/pbt`; anything else uses fast-check or Effect's `Arbitrary`.
+- **A hand-picked example stays only as a pinned case of a named past bug,** in fast-check's
+  `examples`, with the bug named beside it.
+- **A check on the shape of code is a lint rule or a type,** not a test.
+
+```ts
+// A sketch: one law, with one pinned case of a named past bug.
+fc.assert(
+	fc.property(fc.array(fc.integer()), (xs) => isSorted(sortIds(xs))),
+	{examples: [[[2, 1, 2]]]}, // the duplicate-id bug, pinned
+);
+```
+
 ## Why
 
 - **Experiment 115:** a check on a hand-written copy of the lane found the

@@ -44,7 +44,8 @@ export const Link = Schema.TaggedStruct("attested", {
 	...Note.fields,
 	by: Schema.String,
 	arrivedAt: Schema.String,
-	cause: Schema.NullOr(Schema.String),
+	parent: Schema.NullOr(Schema.String),
+	traceId: Schema.String,
 	commit: Sha,
 	pr: Schema.String,
 	base: Sha,
@@ -52,6 +53,14 @@ export const Link = Schema.TaggedStruct("attested", {
 	keys: Sha,
 });
 export type Link = typeof Link.Type;
+
+const PersonLink = Schema.TaggedStruct("attested", {
+	...Link.fields,
+	step: Schema.Literal("person"),
+});
+type PersonLink = typeof PersonLink.Type;
+const ChainLink = Schema.Union([Link, PersonLink]);
+type ChainLink = typeof ChainLink.Type;
 
 export const Why = Schema.Literals([
 	"unsigned_commit",
@@ -100,14 +109,14 @@ export const signedText = (link: {
 	].join("\n");
 
 export const decodeNote = Schema.decodeUnknownOption(Schema.fromJsonString(Note));
-export const decodeLink = Schema.decodeUnknownOption(Link);
+export const decodeLink = Schema.decodeUnknownOption(ChainLink, {onExcessProperty: "error"});
 
 const KEY_LINE =
-	/^(\S+) namespaces="fabrika-step" ssh-ed25519 (AAAAC3NzaC1lZDI1NTE5AAAAI[A-Za-z0-9+/]{43})$/;
+	/^(\S+) namespaces="(fabrika-step|git)" ssh-ed25519 (AAAAC3NzaC1lZDI1NTE5AAAAI[A-Za-z0-9+/]{43})$/;
 
 /**
- * p87: why the keys file is refused, or null when it says one thing. One role per key, the three
- * roles each at least once, Ed25519 in namespace `fabrika-step`, no other option. No file is refused.
+ * p87 and p87b: each step exactly once in `fabrika-step`, and distinct `person:<id>` principals in
+ * `git`. Ed25519 only, no key twice and no other option. No file is refused.
  */
 export const keysProblem = (text: string | null): string | null => {
 	if (text === null) return "no allowed_signers on the base";
@@ -116,9 +125,13 @@ export const keysProblem = (text: string | null): string | null => {
 	for (const line of text.replace(/\n$/, "").split("\n")) {
 		const m = KEY_LINE.exec(line);
 		if (m === null) return `refused line ${JSON.stringify(line)}`;
-		const [, role = "", key = ""] = m;
-		if (!(ROLES as ReadonlyArray<string>).includes(role))
-			return `unknown role ${JSON.stringify(role)}`;
+		const [, role = "", namespace = "", key = ""] = m;
+		const step = (ROLES as ReadonlyArray<string>).includes(role);
+		const person = role.startsWith("person:") && role.length > "person:".length;
+		if (!step && !person) return `unknown role ${JSON.stringify(role)}`;
+		if (namespace !== (step ? NAMESPACE : "git"))
+			return `wrong namespace for ${JSON.stringify(role)}`;
+		if (roles.has(role)) return `principal named twice: ${JSON.stringify(role)}`;
 		if (keys.has(key)) return `a key named twice, the second under ${role}`;
 		keys.add(key);
 		roles.add(role);
@@ -176,6 +189,8 @@ export interface Commit {
 	/** Changed against its first parent: added, changed and deleted, and both sides of a rename. */
 	readonly paths: ReadonlyArray<string>;
 	readonly signed: Signed | null;
+	/** Present only when git verified an SSH commit signature against the base's person keys. */
+	readonly person?: true | undefined;
 }
 
 export interface PullRequest {
@@ -232,9 +247,10 @@ export const check = (pr: PullRequest, isExam: (path: string) => boolean) => {
 	for (const c of pr.commits) {
 		const step = role(c);
 		const touched = step === "build" ? c.paths.filter(isExam).sort() : [];
-		if (step === null) answers.push(stuck("unsigned_commit", c.sha));
+		if (step === null && !(c.signed === null && c.person === true))
+			answers.push(stuck("unsigned_commit", c.sha));
 		else if (touched.length > 0) answers.push(stuck("build_touched_exam", c.sha, {paths: touched}));
-		else if (stale.has(step)) answers.push(stuck("stale_link", c.sha, {step}));
+		else if (step !== null && stale.has(step)) answers.push(stuck("stale_link", c.sha, {step}));
 	}
 	for (const step of stale) {
 		if (!pr.commits.some((c) => role(c) === step))
@@ -247,10 +263,10 @@ export const check = (pr: PullRequest, isExam: (path: string) => boolean) => {
 	return {ticket, answers: answers.length === 0 ? [done] : answers};
 };
 
-/** A link from `field/runs.jsonl`, and the role whose key, at the link's `keys` commit, verified it. */
-export interface Logged {
-	readonly link: Link;
-	readonly signer: Role | null;
+/** A logged link, and its signer verified against the keys at its `keys` commit. */
+export interface Logged<L extends ChainLink = Link> {
+	readonly link: L;
+	readonly signer: L["step"] | null;
 }
 
 /** What git says about one squash: whether it is on main, and which commits came before it there. */
@@ -270,7 +286,7 @@ export interface Placed {
  */
 export const chain = (
 	squash: string,
-	rows: ReadonlyArray<Logged>,
+	rows: ReadonlyArray<Logged<ChainLink>>,
 	trees: ReadonlyMap<string, string>,
 	placed: Placed,
 ): ReadonlyArray<Answer> => {
@@ -292,8 +308,11 @@ export const chain = (
 		links.every((l, i) => i === 0 || l.from === links[i - 1]?.to) &&
 		last.to === trees.get(squash);
 	if (!whole || first === undefined) return [stuck("broken_chain", squash)];
-	const all = rows.map((r) => ({note: r.link, signer: r.signer}));
-	const stale = staleSteps(first.ticket, all, links);
+	const all = rows.flatMap(({link, signer}): Signed[] =>
+		link.step === "person" || signer === "person" ? [] : [{note: link, signer}],
+	);
+	const steps = links.filter((l): l is Link => l.step !== "person");
+	const stale = staleSteps(first.ticket, all, steps);
 	return stale.size === 0 ? [done] : [...stale].map((step) => stuck("stale_link", squash, {step}));
 };
 
@@ -360,6 +379,46 @@ const verifier = Effect.gen(function* () {
 			return ok.code === 0 && used === note.key ? note.step : null;
 		}).pipe(Effect.mapError(() => new Failed({what: "could not write a temp file"})));
 });
+
+/** p83b: git checks native SSH signatures using only the trusted file's person lines. */
+const personVerifier = (keys: string) =>
+	Effect.gen(function* () {
+		const people = words(keys).filter((line) => line.startsWith("person:"));
+		if (people.length === 0) return (_sha: string, _link?: PersonLink) => Effect.succeed(false);
+		const fs = yield* FileSystem.FileSystem;
+		const allowed = yield* fs.makeTempFileScoped();
+		yield* fs.writeFileString(allowed, `${people.join("\n")}\n`);
+		return (sha: string, link?: PersonLink) =>
+			Effect.gen(function* () {
+				// gpg.format chooses how to sign; verification detects the signature's own format.
+				const raw = yield* gitMaybe(["cat-file", "commit", sha]);
+				const header = (raw ?? "").split("\n\n", 1)[0] ?? "";
+				if (!/^gpgsig -----BEGIN SSH SIGNATURE-----$/m.test(header)) return false;
+				if (link !== undefined) {
+					const signature = /^gpgsig (.*(?:\n .*)*)/m.exec(header)?.[1] ?? "";
+					const tree = /^tree ([0-9a-f]+)$/m.exec(header)?.[1];
+					const parent = yield* treeAt(`${sha}^1`);
+					if (
+						link.sig !== `${signature.replaceAll("\n ", "\n")}\n` ||
+						link.to !== tree ||
+						link.from !== parent?.trim()
+					)
+						return false;
+				}
+				const result = yield* run("git", [
+					"-c",
+					"gpg.format=ssh",
+					"-c",
+					`gpg.ssh.allowedSignersFile=${allowed}`,
+					"-c",
+					"gpg.ssh.program=ssh-keygen",
+					"verify-commit",
+					sha,
+				]);
+				const used = / key (SHA256:[A-Za-z0-9+/=]+)\s*$/.exec(result.err)?.[1];
+				return result.code === 0 && (link === undefined || used === link.key);
+			});
+	}).pipe(Effect.mapError(() => new Failed({what: "could not write person signers"})));
 
 /** Every note on one notes ref, decoded; one that does not decode is left out. */
 const notesOn = (ref: string) =>
@@ -488,6 +547,7 @@ const checkMain = Effect.gen(function* () {
 	if (problem !== null || keys === null)
 		return yield* new Failed({what: `allowed_signers: ${problem}`});
 	const verify = yield* verifier;
+	const verifyPerson = yield* personVerifier(keys);
 	const signedBy = (note: Note) =>
 		verify(keys, note).pipe(Effect.map((signer): Signed => ({note, signer})));
 	const notes = yield* notesOn("fabrika");
@@ -504,6 +564,7 @@ const checkMain = Effect.gen(function* () {
 			parentTree: parent === null ? null : ((yield* treeAt(parent.trim()))?.trim() ?? null),
 			paths: parent === null ? [] : yield* changedPaths(parent.trim(), sha),
 			signed: note === undefined ? null : yield* signedBy(note),
+			person: note === undefined && (yield* verifyPerson(sha)) ? true : undefined,
 		});
 	}
 	// p89 reads every note on the ref, but only one naming a ticket of this pull request can matter.
@@ -530,7 +591,7 @@ const checkMain = Effect.gen(function* () {
 const loggedAt = (rev: string) =>
 	Effect.gen(function* () {
 		const lines = ((yield* fileAt(rev, "field/runs.jsonl")) ?? "").split("\n");
-		const found: Array<{line: string; link: Link}> = [];
+		const found: Array<{line: string; link: ChainLink}> = [];
 		for (const [i, line] of lines.entries()) {
 			if (line.trim() === "") continue;
 			const row: unknown = yield* Effect.try({
@@ -600,14 +661,23 @@ const chainMain = Effect.gen(function* () {
 		];
 	}
 	const verify = yield* verifier;
-	const rows: Logged[] = [];
+	const rows: Logged<ChainLink>[] = [];
 	// A row's keys commit counts only when it was on main before its squash. Anyone who can push can
 	// make a commit whose allowed_signers holds their own key, on a branch or in a log pull request.
 	for (const {link} of yield* loggedAt(rev)) {
 		const keys = (yield* ancestor(link.keys, `${link.squash}^1`))
 			? yield* fileAt(link.keys, "allowed_signers")
 			: null;
-		const signer = keys === null || keysProblem(keys) !== null ? null : yield* verify(keys, link);
+		let signer: Logged<ChainLink>["signer"] = null;
+		if (keys !== null && keysProblem(keys) === null) {
+			if (link.step === "person") {
+				// A squash does not keep the original commit in main's history.
+				if ((yield* gitMaybe(["cat-file", "-e", `${link.commit}^{commit}`])) === null)
+					yield* run("git", ["fetch", "--no-tags", "-q", "origin", link.commit]);
+				const verifyPerson = yield* personVerifier(keys);
+				signer = (yield* verifyPerson(link.commit, link)) ? "person" : null;
+			} else signer = yield* verify(keys, link);
+		}
 		rows.push({link, signer});
 	}
 	const answers: Answer[] = [];

@@ -27,3 +27,10 @@ export {
 } from "./app/program.ts";
 export {type Descriptor, type Opened, ProgramRunner, RunnerError, Sent} from "./app/runner.ts";
 export {Saved} from "./app/state.ts";
+export {
+	Declaration,
+	type Execution,
+	type ExecutionCalls,
+	nodeExecution,
+	workerExecution,
+} from "./app/execution.ts";

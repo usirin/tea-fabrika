@@ -58,7 +58,10 @@ everything else    what we use today, and a map of which jobs exist
 
 Today's library is `@kampus/fabrika-old` and today's app is `@kampus/fabrika-app-old`. They are
 deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
-`@kampus/libfabrika` is the library.
+`@kampus/libfabrika` is the library. Anyone can take `@kampus/libfabrika` alone and build a
+client that works exactly like fabrika; fabrika is one libfabrika client. So for any file in
+`next/apps/fabrika`, ask: would a from-scratch client have to write it again? If yes, it belongs
+in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.md#why-libfabrika-exists-decided-2026-11-08)).
 
 - **A search finds both.** Check the path of every file you read before you
   trust it. A name that exists in both can mean different things: a `rev` or a
@@ -260,7 +263,7 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
 
 ```sh
 pnpm typecheck
-pnpm lint       # oxlint and oxfmt: lint rules, format and imports, changing nothing
+pnpm lint       # oxlint, oxfmt and stylelint: lint rules, format, imports and CSS, changing nothing
 pnpm test
 ```
 
@@ -318,7 +321,11 @@ These run on a laptop a person is using. A prompt can't see the load, so every a
 brief carries these caps. Each one came from a laptop that became unusable.
 
 - Tests: `nice -n 15 pnpm exec vitest run --maxWorkers=3`, a narrow path while you
-  work, the full suite once at the end. With two or more code agents running:
+  work, then `--changed origin/main` once at the end: only the tests that reach a changed file.
+  Never the full suite locally (owner, 2026-11-08). On a pull request, CI runs only the tests that
+  reach a changed file; the full suite runs after the merge, on main. `next/` has its own CI job that
+  runs all of its tests on every pull request. A run that
+  needs what CI lacks (Electron shots, a stage with workerd) still runs here. With two or more code agents running:
   `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at the very end. `tsgo` takes
   about 8 cores, so small jobs add up.
 - "Under load" means at most 8 code agents, one `pnpm typecheck` at a time across all of
@@ -456,6 +463,11 @@ Write-ups are read by busy people, some of them not native English speakers.
     pipes between programs. Their taste and quality bar, on our primitive. Never
     copy a Linear screen. Ask which program owns the job, what composes beside
     what, and what becomes a piece every program gets for free.
+- **Pick the look before the PR.** A screen being built in today's app runs the look step
+  ([step 5 of the guidelines skill](./.claude/skills/guidelines/SKILL.md#5-build-3-or-4-designs-and-look-at-them-next-to-linear))
+  before its pull request opens: 3 or 4 real designs, shots at the five layouts beside Linear,
+  and the owner picks one (owner, 2026-11-08). That covers all work in flight: the ask desk,
+  the inbox, the project window and typography. The keys editor already does it.
 - **Show it running.** A PR that adds or changes a program's window carries
   screenshots from the real built app, saved in that program's `docs/` folder
   and shown in the PR body. Take them the way `apps/fabrika/e2e.ts` drives the
