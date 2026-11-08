@@ -1840,7 +1840,6 @@ button:focus-visible {
 	background: transparent;
 	color: var(--text-primary);
 	font: inherit;
-	outline: none;
 }
 
 .tracker-find input::-webkit-search-cancel-button {
@@ -1942,7 +1941,6 @@ button:focus-visible {
 	border: 1px solid var(--line);
 	border-radius: 8px;
 	padding: 7px 10px;
-	outline: none;
 }
 
 .tracker .tracker-composer input {
@@ -1957,7 +1955,6 @@ button:focus-visible {
 .tracker .tracker-composer input:focus,
 .tracker .tracker-composer textarea:focus {
 	border-color: var(--focus);
-	outline: none;
 }
 
 .tracker input::placeholder,
@@ -2023,8 +2020,15 @@ button:focus-visible {
 
 .tracker .tracker-list button:focus-visible,
 .tracker-list a.tracker-pull-request:focus-visible {
-	outline: none;
-	box-shadow: inset 2px 0 0 var(--focus);
+	outline: 2px solid var(--focus);
+	outline-offset: -2px;
+}
+
+@media (forced-colors: active) {
+	.tracker .tracker-list button:focus-visible,
+	.tracker-list a.tracker-pull-request:focus-visible {
+		outline-color: Highlight;
+	}
 }
 
 .tracker-number {

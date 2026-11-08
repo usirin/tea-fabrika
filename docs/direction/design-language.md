@@ -196,7 +196,7 @@ export const tokens = {
 ```
 
 - **Names,** a lean of about 60% each: `--surface` becomes `--surface-base`; the three grays become
-  `--text-muted`; `--focus` and `--tile-focus` become `--focus-ring`; `--done`, `--running`,
+  `--text-muted`; `--focus` becomes `--focus-ring`; `--done`, `--running`,
   `--stuck` become `--state-*`; `--s-1` to `--s-10` become `--space-4` to `--space-40`; the `--r-*`
   become `--radius-*`, Manti's words; `on` in a tile token becomes `focused`. The 12 aliases go, all
   in one commit: two people and one app need no deprecation step.
