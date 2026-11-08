@@ -132,6 +132,9 @@ overrides:
   '@effect/platform-node-shared': 4.1.1
 
 patchedDependencies:
+  # P12 observes workerd PIDs, exits, replacement delays and recovery stopping.
+  # Keep Alchemy's existing restart policy. Drop this when Alchemy exposes the hooks.
+  '@alchemy.run/cloudflare-runtime@2.0.0-beta.84': patches/@alchemy.run__cloudflare-runtime@2.0.0-beta.84.patch
   # effect 4.1 deleted effect/Crypto, which alchemy 2.0.0-beta.84 imports, so its Cloudflare
   # package cannot load. The patch is the fix alchemy already merged
   # (https://github.com/alchemy-run/alchemy/pull/2754), on the built files. Drop it at the next beta.
