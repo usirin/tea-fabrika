@@ -168,6 +168,16 @@ replay: {row: RowKey, steps: Int, answer: Replayed | null} | null
     ... reuse it rather than adding a third deep-compare"). fabrika never compares states as JSON
     text, where key order differs between a patched state and a schema-encoded one. A state shown
     inside a sentence is drawn as a block (`Pre`), never inline.
+- **Two more, after the third review (added 2026-11-08, the lead agent).** Again rules this plan
+  never stated:
+  - *A live region says one short sentence.* WAI-ARIA 1.2's `status` has "an implicit aria-live
+    value of polite and an implicit aria-atomic value of true", so everything inside is read again
+    on every change. The answer's region holds only its sentence. A parting answer's sentence names
+    the path and both values when each fits on one line (the window's own `json` cutoff, 64
+    characters), as "at total: 3 in the recording, 6 now"; a longer one says "shown below". The
+    two `Pre` blocks are drawn just after the region, never inside it.
+  - *A test leaves nothing behind.* Every e2e stage that makes its own home removes it in its
+    `finally`, after the host stops (AGENTS.md: "Leave nothing behind"), `tilesLook` included.
 - **A machine run with no start kept shows no button.** Its detail says "Recorded before starts
   were kept, so it can't be replayed." A button that can only answer no is a dead button
   (AGENTS.md, "No rough first versions": "all it shows works, with no stub, dead button"), and
