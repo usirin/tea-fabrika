@@ -133,6 +133,8 @@ const WORK = {
 	reviewed: true,
 	pr: true,
 	asked: true,
+	withdrawn: true,
+	stopped: true,
 	carried: true,
 	answered: true,
 	rated: false,
@@ -382,6 +384,16 @@ const ONE_OF_EACH: {
 		by: build,
 		fact: {type: "asked", ask: "a-1", what: "approve a-1", picks: [...PICKS]},
 	},
+	withdrawn: {
+		before: [FILED, [build, {type: "asked", ask: "a-1", what: "approve a-1", picks: [...PICKS]}]],
+		by: build,
+		fact: {type: "withdrawn", ask: "a-1", why: "changed"},
+	},
+	stopped: {
+		before: [FILED],
+		by: build,
+		fact: {type: "stopped", why: "read_failed", resume: "build"},
+	},
 	carried: {
 		before: [FILED],
 		by: build,
@@ -457,7 +469,7 @@ const mixed: fc.Arbitrary<readonly Entry[]> = fc
 
 describe("what wakes a ticket (label-guidelines.md, L1: nothing decides on advice)", () => {
 	it("has a row for every kind of fact a ticket's stream can hold, so a new kind must say if it is work", () => {
-		const kinds = Fact.members.map((m) => m.fields.type.literal);
+		const kinds = new Set(Fact.members.map((m) => m.fields.type.literal));
 		expect([...KINDS].sort()).toEqual([...kinds].sort());
 		expect(Object.keys(ONE_OF_EACH).sort()).toEqual([...kinds].sort());
 	});

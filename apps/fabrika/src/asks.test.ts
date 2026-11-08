@@ -79,7 +79,7 @@ const facts = entriesOf(
 );
 
 describe("the asks", () => {
-	it("counts each open ask and each stuck run, oldest first, and nothing answered or closed", () => {
+	it("counts each open ask and each stuck run by oldest kind, then oldest ask, and nothing answered or closed", () => {
 		const now = asksNow(loaded(facts));
 		expect(now.asks.map((a) => [a.key, a.ticket, a.kind, a.what])).toEqual([
 			["7/a-1", 7, "ask", "approve plan"],
@@ -115,8 +115,8 @@ describe("the asks", () => {
 		const now = asksNow(read);
 		expect(now.asks.map((a) => [a.key, a.seen])).toEqual([
 			["7/a-1", true],
-			["8/stuck/r-1", true],
 			["11/a-2", false],
+			["8/stuck/r-1", true],
 		]);
 	});
 
