@@ -481,3 +481,116 @@ describe("the host log records who answered and what a turn cost", () => {
 		TIME,
 	);
 });
+
+describe("T237-4, the manager's side: a kept job finds its turn again", () => {
+	it(
+		"identify names the run behind a told turn, and refuses a turn or a name it never told",
+		async () => {
+			const folder = repo();
+			const seen = await hosted(
+				memoryStorage(),
+				folder,
+				Effect.gen(function* () {
+					const manager = yield* SummonManager;
+					yield* summon("scout");
+					yield* turned("scout", "read a.txt");
+					const identify = manager.identify!;
+					return {
+						one: yield* identify("scout", 1),
+						two: whyOf(yield* Effect.flip(identify("scout", 2))),
+						ghost: whyOf(yield* Effect.flip(identify("ghost", 1))),
+					};
+				}),
+			);
+			expect(seen.one).toEqual({run: expect.stringMatching(/\S/)});
+			expect(seen.two).toContain("scout: turn 2 is no longer available");
+			expect(seen.ghost).toContain("ghost: turn 1 is no longer available");
+		},
+		TIME,
+	);
+
+	it(
+		"a resumed turn that already ended plays its kept news, and tells the agent nothing again",
+		async () => {
+			const folder = repo();
+			const seen = await hosted(
+				memoryStorage(),
+				folder,
+				Effect.gen(function* () {
+					const manager = yield* SummonManager;
+					yield* summon("scout");
+					const first = yield* turned("scout", "read a.txt");
+					const {run} = yield* manager.identify!("scout", 1);
+					const again = yield* manager
+						.turn("scout", "", null, {run, turn: 1})
+						.pipe(Stream.runCollect, Effect.timeout(Duration.seconds(10)));
+					const other = whyOf(
+						yield* Effect.flip(
+							manager.turn("scout", "", null, {run: "another-run", turn: 1}).pipe(Stream.runDrain),
+						),
+					);
+					// Long enough for the fake to note a prompt, had one been told.
+					yield* Effect.sleep(Duration.seconds(1));
+					return {first: [...first], again: [...again], other};
+				}),
+			);
+			const said = seen.first.find((n) => n._tag === "said");
+			expect(said).toBeDefined();
+			expect(seen.again.filter((n) => n._tag !== "status")).toEqual([
+				said,
+				expect.objectContaining({_tag: "result", stop: "end_turn"}),
+			]);
+			expect(seen.other).toContain("scout is a different agent now");
+			expect(prompts(folder)).toHaveLength(1);
+		},
+		TIME,
+	);
+
+	it(
+		"cancel leaves a turn alone unless it names that turn, and of that run when it names one",
+		async () => {
+			const folder = repo();
+			const seen = await hosted(
+				memoryStorage(),
+				folder,
+				Effect.gen(function* () {
+					const manager = yield* SummonManager;
+					yield* summon("scout");
+					const first = yield* turning("scout", "slowly read a.txt and b.txt");
+					yield* until("told", () => first.got.some((n) => n._tag === "told"));
+					yield* manager.cancel("scout", {turn: 2});
+					yield* manager.cancel("scout", {turn: 1, run: "another-run"});
+					yield* manager.cancel("ghost", {turn: 1});
+					const still = (yield* manager.list).map((s) => s.state);
+					yield* manager.cancel("scout", {turn: 1});
+					yield* Fiber.join(first.fiber).pipe(Effect.timeout(Duration.seconds(10)));
+					return {still, got: first.got};
+				}),
+			);
+			expect(seen.still).toEqual(["turn"]);
+			expect(seen.got.at(-1)).toMatchObject({_tag: "result", stop: "cancelled"});
+		},
+		TIME,
+	);
+});
+
+describe("the host log names who a turn was told to", () => {
+	it(
+		"turn_told records the name, the agent, its run and an empty room for a turn from no room",
+		async () => {
+			const folder = repo();
+			const {value: run, lines} = await logged(
+				folder,
+				Effect.gen(function* () {
+					yield* summon("scout");
+					yield* turned("scout", "Read a.txt");
+					return (yield* (yield* SummonManager).identify!("scout", 1)).run;
+				}),
+			);
+			const told = linesOf(lines, "turn_told");
+			expect(told).toHaveLength(1);
+			expect(told[0]).toMatchObject({name: "scout", agent: "fake", run, room: ""});
+		},
+		TIME,
+	);
+});

@@ -52,15 +52,18 @@ const RESULT: TurnNews = {_tag: "result", stop: "end_turn", ms: 5, cost: null};
 
 /**
  * A `SummonManager` in memory. `auto`: each turn says `told`, a reply and `result` at once.
- * Otherwise the test pushes each turn's news on its queue.
+ * Otherwise the test pushes each turn's news on its queue. `run`: the kept run `identify` names
+ * behind any told turn; left out, the double has no `identify`, as a host without kept jobs.
  */
-const double = (names: readonly string[] = ["scout"]) => {
+const double = (names: readonly string[] = ["scout"], run?: string) => {
 	const agents = new Map(names.map((n) => [n, summonedAs(n, PERSON)]));
 	const calls = {
 		summons: [] as unknown[],
 		dismisses: [] as string[],
 		turns: [] as Asked[],
 		cancels: [] as string[],
+		/** The turn each cancel said it owns, in the order of `cancels`. */
+		mines: [] as unknown[],
 		answers: [] as unknown[],
 	};
 	const state = {auto: false};
@@ -93,9 +96,11 @@ const double = (names: readonly string[] = ["scout"]) => {
 					return Stream.fromQueue(news).pipe(Stream.takeUntil((n) => n._tag === "result"));
 				}),
 			),
-		cancel: (name) =>
+		...(run === undefined ? {} : {identify: () => Effect.succeed({run})}),
+		cancel: (name, mine) =>
 			Effect.sync(() => {
 				calls.cancels.push(name);
+				calls.mines.push(mine);
 				for (const t of calls.turns)
 					if (t.name === name)
 						Queue.offerUnsafe(t.news, {_tag: "result", stop: "cancelled", ms: 1, cost: null});
@@ -696,5 +701,119 @@ describe("ask_answered records who answered", () => {
 		);
 		expect(seen.answers).toEqual([{name: "scout", ask: "t1.w", allow: true, by: PERSON}]);
 		expect(seen.errors).toEqual([]);
+	});
+});
+
+describe("T237-4, the turn's side: a told turn is kept with its run", () => {
+	// Plan: "Who holds what" and the turn program's kept {name, run, turn}.
+	/** One turn job on the double, told turn 3; `then` runs while that turn is open. */
+	const told3 = <A>(
+		d: Double,
+		then: (run: {stop: Effect.Effect<void>; result: Effect.Effect<unknown>}) => Effect.Effect<A>,
+	) =>
+		Effect.gen(function* () {
+			const told = ear<unknown>();
+			const result = ear<unknown>();
+			const started = yield* start(
+				turnProgram,
+				{to: "scout"},
+				{told: told.hear, result: result.hear},
+				{id: "turn:kept", storage: memoryStorage()},
+			);
+			if (started.kind !== "running") return yield* Effect.die("turn did not start");
+			const kept = () => started.run.machines.turn.state();
+			yield* tell(started.run, "prompt", "slowly read a.txt");
+			yield* until("the turn", () => d.calls.turns.length === 1);
+			const before = kept();
+			Queue.offerUnsafe(d.calls.turns[0]!.news, {_tag: "told", turn: 3});
+			yield* told.upTo(1);
+			const during = kept();
+			const got = yield* then({
+				stop: started.stop,
+				result: started.run.ended.pipe(Effect.andThen(result.upTo(1))),
+			});
+			return {before, during, got, after: kept()};
+		}).pipe(Effect.provideService(SummonManager, d.service), Effect.scoped);
+
+	it("keeps {name, run, turn} once told, and nothing once the turn's result is in", async () => {
+		const d = double(["scout"], "run-7");
+		const seen = await Effect.runPromise(
+			told3(d, (run) =>
+				Effect.gen(function* () {
+					Queue.offerUnsafe(d.calls.turns[0]!.news, RESULT);
+					yield* run.result;
+				}),
+			),
+		);
+		expect(seen.before).toEqual({active: null});
+		expect(seen.during).toEqual({
+			active: {name: "scout", run: "run-7", turn: 3, began: expect.any(Number)},
+		});
+		expect(seen.after).toEqual({active: null});
+	});
+
+	it("a stop cancels the turn it was told, of the run identify named", async () => {
+		const d = double(["scout"], "run-7");
+		await Effect.runPromise(told3(d, (run) => run.stop));
+		expect(d.calls.mines).toEqual([{turn: 3, run: "run-7"}]);
+	});
+
+	it("says its status line as waiting, or the name and turn it runs", () => {
+		const status = turnProgram.machines.turn.status;
+		expect(status({active: null})).toBe("waiting");
+		expect(status({active: {name: "scout", run: "run-7", turn: 3, began: 0}})).toBe(
+			"scout · turn 3",
+		);
+	});
+});
+
+describe("the ask's prompt line clears when nothing waits", () => {
+	/** A tsh turn told 1, with `asks` sent in order, each shown or held behind the first. */
+	const asking = (d: Double, asks: readonly {ask: string; title: string}[]) =>
+		Effect.gen(function* () {
+			const t = yield* tshOn(d);
+			const n = yield* t.type("@scout edit it");
+			yield* until("the turn", () => d.calls.turns.length === 1);
+			const turn = d.calls.turns[0]!;
+			Queue.offerUnsafe(turn.news, {_tag: "told", turn: 1});
+			for (const a of asks) Queue.offerUnsafe(turn.news, {_tag: "ask", ...a});
+			Queue.offerUnsafe(turn.news, {_tag: "status", text: "waiting on an edit"});
+			yield* until("the asks consumed", () => t.status.values.length > 0);
+			return {t, n, turn};
+		});
+	const cleared = (t: {asked: {values: readonly {text: string | null}[]}}) =>
+		until("the ask cleared", () => t.asked.values.at(-1)?.text === null);
+
+	it("an ask sent twice is shown once: its one answer clears it", async () => {
+		const d = double();
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const edit = {ask: "edit-a", title: "Write a.txt"};
+				const {t, n, turn} = yield* asking(d, [edit, edit]);
+				expect(t.asked.values.filter((a) => a.text !== null)).toHaveLength(1);
+				const job = t.table.getState().jobs[0]!;
+				yield* tell(t.run, "answer", {n: job.n, allow: true});
+				yield* until("the answer", () => d.calls.answers.length === 1);
+				yield* cleared(t);
+				Queue.offerUnsafe(turn.news, RESULT);
+				expect(yield* t.done(n)).toBe(0);
+			}).pipe(Effect.scoped),
+		);
+		expect(d.calls.answers).toEqual([{name: "scout", ask: "edit-a", allow: true, by: PERSON}]);
+	});
+
+	it("a turn that ends with its ask unanswered clears the ask", async () => {
+		const d = double();
+		const last = await Effect.runPromise(
+			Effect.gen(function* () {
+				const {t, n, turn} = yield* asking(d, [{ask: "edit-a", title: "Write a.txt"}]);
+				expect(t.asked.values.at(-1)?.text ?? "").toContain("Write a.txt");
+				Queue.offerUnsafe(turn.news, RESULT);
+				expect(yield* t.done(n)).toBe(0);
+				yield* cleared(t);
+				return t.asked.values.at(-1);
+			}).pipe(Effect.scoped),
+		);
+		expect(last?.text).toBeNull();
 	});
 });

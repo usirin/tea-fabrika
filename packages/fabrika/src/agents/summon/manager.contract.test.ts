@@ -11,13 +11,14 @@ import {
 	Stream,
 } from "effect";
 import {beforeEach, describe, expect, it, vi} from "vitest";
-import type {Ended} from "../../program/program.ts";
+import {type Ended, MailboxFull} from "../../program/program.ts";
 import {memoryStorage} from "../../program/storage.ts";
 import {SummonManager, type TurnNews} from "../../shell/summon.ts";
 import {EMPTY, type Transcript} from "../acp/transcript.ts";
 import {SummonedNow, summonManager} from "./manager.ts";
 
 type Outputs = {
+	said: (text: string) => void;
 	opened: (o: {models: string[]; efforts: string[]; model: string}) => void;
 	told: (t: {turn: number}) => void;
 	result: (r: {turn: number; stop: string; cost: null; input: null; output: null}) => void;
@@ -29,6 +30,12 @@ type Agent = {
 	turn: number;
 	snapshot: Transcript | null;
 	cancelled: number;
+	/** A cancel the agent never answers with a result, as a harness on its way down. */
+	hush: boolean;
+	/** A prompt fails as a full mailbox would. */
+	full: boolean;
+	/** A prompt is queued, but its told waits for the test. */
+	hold: boolean;
 	end: Deferred.Deferred<Ended<unknown>>;
 };
 const rig = vi.hoisted(() => ({agents: [] as Agent[]}));
@@ -44,6 +51,9 @@ vi.mock("../../program/program.ts", async (original) => ({
 				turn: 0,
 				snapshot: EMPTY,
 				cancelled: 0,
+				hush: false,
+				full: false,
+				hold: false,
 				end: Deferred.makeUnsafe<Ended<unknown>>(),
 			};
 			rig.agents.push(agent);
@@ -63,25 +73,31 @@ vi.mock("../../program/program.ts", async (original) => ({
 						};
 					},
 					tell: (name: string, value: string) =>
-						Effect.sync(() => {
-							if (name === "model" || name === "effort") {
-								if (name === "model") model = value;
-								else effort = value;
-								settings?.({model, effort});
-							}
-							if (name === "prompt") outputs.told({turn: ++agent.turn});
-							if (name === "cancel") {
-								agent.cancelled += 1;
-								outputs.result({
-									turn: agent.turn,
-									stop: "cancelled",
-									cost: null,
-									input: null,
-									output: null,
-								});
-							}
-							return "queued";
-						}),
+						name === "prompt" && agent.full
+							? Effect.fail(new MailboxFull({input: name, capacity: 1}))
+							: Effect.sync(() => {
+									if (name === "model" || name === "effort") {
+										if (name === "model") model = value;
+										else effort = value;
+										settings?.({model, effort});
+									}
+									if (name === "prompt") {
+										agent.turn += 1;
+										if (!agent.hold) outputs.told({turn: agent.turn});
+									}
+									if (name === "cancel") {
+										agent.cancelled += 1;
+										if (!agent.hush)
+											outputs.result({
+												turn: agent.turn,
+												stop: "cancelled",
+												cost: null,
+												input: null,
+												output: null,
+											});
+									}
+									return "queued";
+								}),
 				},
 			};
 		}),
@@ -158,6 +174,71 @@ describe("the manager reads ACP's state", () => {
 		const ended = Option.getOrThrow(seen.ended);
 		expect(Exit.isFailure(ended)).toBe(true);
 		expect(Exit.isFailure(ended) ? Cause.pretty(ended.cause) : "").toContain("fake harness exited");
+	});
+
+	it("T237-5: a cancel waiting on its turn's end stops waiting when the harness goes down", async () => {
+		const seen = await hosted(
+			Effect.gen(function* () {
+				const manager = yield* SummonManager;
+				yield* summon();
+				yield* turning;
+				current().hush = true;
+				const cancelling = yield* manager.cancel("scout").pipe(Effect.forkChild);
+				while (current().cancelled === 0) yield* Effect.sleep(Duration.millis(5));
+				Deferred.doneUnsafe(
+					current().end,
+					Exit.succeed({
+						kind: "failed",
+						cause: Cause.fail(new Error("fake harness exited")),
+						unread: {},
+					}),
+				);
+				// Well under the 10 seconds a cancel waits for a result that never comes.
+				const cancelled = yield* Fiber.await(cancelling).pipe(Effect.timeoutOption("2 seconds"));
+				const next = yield* manager.turn("scout", "again", null).pipe(Stream.runDrain, Effect.flip);
+				return {cancelled, next};
+			}),
+		);
+		expect(Option.isSome(seen.cancelled), "the cancel still waits on a harness that is gone").toBe(
+			true,
+		);
+		expect(seen.next.why).toContain("scout is down: ");
+	});
+
+	it("a prompt the agent's mailbox has no room for is refused as taking nothing", async () => {
+		const seen = await hosted(
+			Effect.gen(function* () {
+				const manager = yield* SummonManager;
+				yield* summon();
+				current().full = true;
+				return yield* manager.turn("scout", "hello", null).pipe(Stream.runDrain, Effect.flip);
+			}),
+		);
+		expect(seen.why).toBe("scout took nothing: full");
+	});
+
+	it("news the agent says before this turn is told is not this turn's", async () => {
+		const seen = await hosted(
+			Effect.gen(function* () {
+				const manager = yield* SummonManager;
+				yield* summon();
+				current().hold = true;
+				const news: TurnNews[] = [];
+				const fiber = yield* manager.turn("scout", "hello", null).pipe(
+					Stream.runForEach((n) => Effect.sync(() => news.push(n))),
+					Effect.forkChild,
+				);
+				while (current().turn === 0) yield* Effect.sleep(Duration.millis(5));
+				current().outputs.said("the last turn's tail");
+				current().outputs.told({turn: current().turn});
+				current().outputs.said("this turn's reply");
+				finish();
+				yield* Fiber.join(fiber);
+				return news.filter((n) => n._tag !== "status");
+			}),
+		);
+		expect(seen.map((n) => n._tag)).toEqual(["told", "said", "result"]);
+		expect(seen[1]).toEqual({_tag: "said", text: "this turn's reply"});
 	});
 
 	it("refuses an invalid second setting with the offered efforts", async () => {
