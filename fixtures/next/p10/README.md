@@ -1,5 +1,8 @@
 # P10 test-writer record
 
+The [final test-type check](./final-test-types.md) records the correction of
+the last 91 test diagnostics after product typing finished.
+
 The [check on the built product](./build-check.md) records the later test
 corrections, 121 passing cases and the remaining workspace type errors.
 

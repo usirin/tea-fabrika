@@ -3,6 +3,7 @@
 // Its options inject only production dependencies: typed program declarations, delivery,
 // notifications, settings and the shared ProcessIdGenerator.next. No workerd class or runner.
 // Each test names the plant it guards. The builder implements door.ts and does not edit this file.
+import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {mkdtempSync, readdirSync, readFileSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
@@ -24,6 +25,7 @@ import {
 import {nodeSql} from "@kampus/libfabrika/sqlite";
 import {Effect, Layer, Logger, Option, Schema, Stream} from "effect";
 import {TestClock} from "effect/testing";
+const SpanPage = Schema.Struct({spans: Schema.Array(SpanRow), next: Schema.Int});
 const ADD_SAW = {
 	how: "device",
 	check: "touch",
@@ -402,8 +404,8 @@ const request = (letter: string, m: unknown = comment()) => ({
 const online = Effect.fnUntraced(function* (
 	d: typeof Door.Service,
 	w: World,
-	client = "w1",
-	k = w.window,
+	client: string = "w1",
+	k: World["window"] = w.window,
 ) {
 	const nonce = yield* d.challenge(client);
 	const tab = `tab-${client}`;
@@ -426,7 +428,7 @@ const online = Effect.fnUntraced(function* (
 const grantWindow = Effect.fnUntraced(function* (
 	d: typeof Door.Service,
 	w: World,
-	client = "w2",
+	client: string = "w2",
 	as: "window" | "agent" = "window",
 ) {
 	const k = as === "window" ? w.otherWindow : w.agent;
@@ -449,8 +451,8 @@ const writeId = (id: string, effect: ReturnType<typeof Door.Service.signer>) =>
 const device = Effect.fnUntraced(function* (
 	d: typeof Door.Service,
 	w: World,
-	k = w.otherRoot,
-	window = w.otherWindow,
+	k: World["otherRoot"] = w.otherRoot,
+	window: World["otherWindow"] = w.otherWindow,
 ) {
 	const text = C.addText({
 		id: `device-${k.raw}`,
@@ -478,8 +480,8 @@ const sheet = Effect.fnUntraced(function* (d: typeof Door.Service, w: World) {
 const enrolled = Effect.fnUntraced(function* (
 	d: typeof Door.Service,
 	w: World,
-	id = "passkey-device",
-	signer = w.root,
+	id: string = "passkey-device",
+	signer: World["root"] = w.root,
 ) {
 	const sk = yield* passkey(),
 		freshWindow = yield* key();
@@ -506,7 +508,7 @@ const enrolled = Effect.fnUntraced(function* (
 		drops: [],
 		saw: {...ADD_SAW, how: signer === w.sheet ? "recovery" : "device"},
 		sentAt: SENT,
-	};
+	} satisfies typeof C.Add.Type;
 	const text = C.addText(add),
 		armored = yield* signer.sign(text);
 	return {sk, freshWindow, binding, nonce, add, text, armored, proof};
@@ -721,7 +723,7 @@ describe("P10 door admission and waiting", () => {
 					as: "window",
 					saw: {...SAW, code: "not-the-shown-code"},
 					sentAt: SENT,
-				};
+				} satisfies typeof C.Grant.Type;
 				const text = C.grantText(grant);
 				expect((yield* d.grant({text, armored: yield* w.root.sign(text)}))._tag).toBe("applied");
 				expect((yield* d.watch("w1")).rows).toEqual([]);
@@ -844,7 +846,7 @@ describe("P10 signed membership changes", () => {
 					as: "agent",
 					saw: SAW,
 					sentAt: SENT,
-				};
+				} satisfies typeof C.Grant.Type;
 				const text = C.grantText(grant),
 					armored = yield* w.root.sign(text),
 					first = yield* d.grant({text, armored});
@@ -968,7 +970,7 @@ describe("P10 signed membership changes", () => {
 						as: "window",
 						saw: SAW,
 						sentAt: SENT,
-					};
+					} satisfies typeof C.Grant.Type;
 					const text = C.grantText(grant),
 						before = yield* entries("door/members");
 					expect(
@@ -999,7 +1001,7 @@ describe("P10 signed membership changes", () => {
 						as: "window",
 						saw: SAW,
 						sentAt: SENT,
-					};
+					} satisfies typeof C.Grant.Type;
 					const text = `${JSON.stringify({_tag: "granted", grant: value, future: {kept: true}}, null, 2)}\n`;
 					const armored = yield* w.root.sign(text);
 					const first = yield* d.grant({text, armored});
@@ -1446,7 +1448,7 @@ describe("P10 passkey roots and recovery", () => {
 					const second = yield* enrolled(d, w, "recovered-b", w.sheet);
 					expect((yield* d.grant({text: first.text, armored: first.armored}))._tag).toBe("applied");
 					const result = yield* d.grant({text: second.text, armored: second.armored});
-					expect(result._tag).not.toBe("applied");
+					assert(result._tag !== "applied");
 					expect(result.why).toBe("used");
 					expect(yield* d.grant({text: first.text, armored: first.armored})).toMatchObject({
 						_tag: "applied",
@@ -1618,8 +1620,9 @@ describe("P10 span reader and recording", () => {
 				}));
 				yield* r.write(chain, 0, rows);
 				const answer = yield* d.route("w1", "spans.read", {chain, after: 0});
-				expect(answer._tag).toBe("ok");
-				expect(answer.result.spans).toHaveLength(256);
+				assert(answer._tag === "ok");
+				const page = yield* Schema.decodeUnknownEffect(SpanPage)(answer.result);
+				expect(page.spans).toHaveLength(256);
 				expect(poisoned).toBe(0);
 			}).pipe(
 				Effect.provide(
@@ -1694,20 +1697,21 @@ describe("P10 span reader and recording", () => {
 					const baseline = yield* Stream.runCollect(records.read(chain));
 					expect(w.partCount()).toBeGreaterThan(1);
 					const first = yield* d.route("w1", "spans.read", {chain, after: 0});
-					expect(first._tag).toBe("ok");
-					expect(first.result.spans).toHaveLength(256);
-					expect(first.result.next).toBe(256);
-					expect(first.result.spans.map((s: typeof SpanRow.Type) => s.spanId)).toEqual(
+					assert(first._tag === "ok");
+					const firstPage = yield* Schema.decodeUnknownEffect(SpanPage)(first.result);
+					expect(firstPage.spans).toHaveLength(256);
+					expect(firstPage.next).toBe(256);
+					expect(firstPage.spans.map((s) => s.spanId)).toEqual(
 						baseline.slice(0, 256).map((s) => s.spanId),
 					);
 					const second = yield* d.route("w1", "spans.read", {chain, after: 256});
-					expect(
-						second.result.spans
-							.slice(0, baseline.length - 256)
-							.map((s: typeof SpanRow.Type) => s.spanId),
-					).toEqual(baseline.slice(256).map((s) => s.spanId));
-					expect(second.result.spans.length).toBeLessThanOrEqual(256);
-					expect(second.result.next).toBe(256 + second.result.spans.length);
+					assert(second._tag === "ok");
+					const secondPage = yield* Schema.decodeUnknownEffect(SpanPage)(second.result);
+					expect(secondPage.spans.slice(0, baseline.length - 256).map((s) => s.spanId)).toEqual(
+						baseline.slice(256).map((s) => s.spanId),
+					);
+					expect(secondPage.spans.length).toBeLessThanOrEqual(256);
+					expect(secondPage.next).toBe(256 + secondPage.spans.length);
 				}).pipe(w.provide);
 			}),
 	);
