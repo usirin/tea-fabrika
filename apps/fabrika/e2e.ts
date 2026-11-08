@@ -1851,6 +1851,14 @@ const lookIs = async (app: ElectronApplication, page: Page, look: "dark" | "ligh
 		() => page.evaluate(() => matchMedia("(prefers-color-scheme: light)").matches),
 		(light) => light === (look === "light"),
 	);
+	// Media change handlers remake terminals and restore focus on a timer (terminal.ts). Let
+	// that frame and its timers finish before a capture moves focus to a different control.
+	await page.evaluate(
+		() =>
+			new Promise<void>((done) => {
+				requestAnimationFrame(() => setTimeout(done, 0));
+			}),
+	);
 };
 /** The tile a title bar's slot, name and state belong to, as the page draws them. */
 const titleOf = (page: Page, id: string) =>
@@ -2229,13 +2237,20 @@ const focusShots = async () => {
 			(size) => size === "1440x900",
 		);
 		const ringOn = async (target: Locator) => {
-			await page.keyboard.press("Tab");
-			await target.focus();
+			// A key on the target establishes keyboard focus without Tab moving to another control.
+			await target.press("ArrowRight");
 			await until(
 				"the keyboard focus ring",
 				() =>
-					target.evaluate((el) => el === document.activeElement && el.matches(":focus-visible")),
-				(on) => on,
+					target.evaluate((el) => ({
+						pageFocused: document.hasFocus(),
+						focused: el === document.activeElement,
+						visible: el.matches(":focus-visible"),
+						active:
+							document.activeElement?.getAttribute("aria-label") ?? document.activeElement?.tagName,
+						activeTile: document.activeElement?.closest("[data-tile]")?.getAttribute("data-tile"),
+					})),
+				(on) => on.pageFocused && on.focused && on.visible,
 			);
 		};
 		await grid(page, async (layout, ids) => {
