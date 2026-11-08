@@ -6,6 +6,7 @@ import {afterAll, describe, expect, it} from "@effect/vitest";
 import {Effect, Layer, Schema, Stream} from "effect";
 import * as fc from "fast-check";
 import {Mailbox, type Letter} from "../coordination/mailbox.ts";
+import {type ProcessFact} from "../coordination/process.ts";
 import {Archive} from "../data/archive.ts";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {PAGE} from "../data/log.ts";
@@ -17,6 +18,7 @@ import {Chain} from "../data/trace.ts";
 const LIBRARY = "@kampus/libfabrika";
 const SEED = 119120;
 const LAW = {seed: SEED, numRuns: 100};
+type RecoveryTarget = Pick<typeof ProcessFact.cases.restarted.Type, "name" | "process">;
 const load = (): Promise<typeof import("@kampus/libfabrika")> => import(LIBRARY);
 const root = mkdtempSync("/tmp/fh.XXXX-");
 const opened: DatabaseSync[] = [];
@@ -200,13 +202,14 @@ describe("P17b nemesis laws", () => {
 		);
 	});
 
-	it("plant, did.ok or unrelated replacement: recovery requires an exact predecessor after the fault", async () => {
+	it("plant, ignore name or unrelated replacement: recovery matches the target name and predecessor after the fault", async () => {
 		const A = await load();
 		const chain = fc.record({
 			length: fc.integer({min: 2, max: 10}),
 			at: fc.integer({min: 0, max: 100_000}),
 			gap: fc.integer({min: 0, max: 20}),
 			name: fc.integer({min: 1, max: 20}).map((n) => `target:${n}`),
+			otherName: fc.integer({min: 1, max: 20}).map((n) => `other:${n}`),
 		});
 		fc.assert(
 			fc.property(chain, fc.nat(), fc.boolean(), (draw, cut, reverse) => {
@@ -223,12 +226,17 @@ describe("P17b nemesis laws", () => {
 				);
 				const hit = cut % rows.length;
 				const askedAt = rows[hit]!.arrivedAt;
-				const process = rows[hit]!.after;
+				const target: RecoveryTarget = {name: draw.name, process: rows[hit]!.after};
 				const unrelated = Schema.decodeUnknownSync(A.RestartRow)({
 					...rows[0],
 					after: id("process", 500),
-					name: "unrelated",
+					name: target.name,
 					arrivedAt: askedAt,
+				});
+				const wrongName = Schema.decodeUnknownSync(A.RestartRow)({
+					...rows[hit],
+					name: draw.otherName,
+					rev: 202,
 				});
 				const before = Schema.decodeUnknownSync(A.RestartRow)({
 					...rows[hit],
@@ -241,10 +249,14 @@ describe("P17b nemesis laws", () => {
 					rev: 200,
 				});
 				const tied = Schema.decodeUnknownSync(A.RestartRow)({...rows[hit], rev: 201});
-				const all = [...rows, later, tied, unrelated, before];
-				expect(A.recoveredAt(process, askedAt, reverse ? all.reverse() : all)).toBe(askedAt);
-				expect(A.recoveredAt(process, askedAt, [unrelated, before])).toBeNull();
-				expect(A.recoveredAt(process, askedAt, [])).toBeNull();
+				const all = [...rows, later, tied, unrelated, before, wrongName];
+				expect(A.recoveredAt(target, askedAt, reverse ? all.reverse() : all)).toBe(askedAt);
+				expect(A.recoveredAt(target, askedAt, [wrongName])).toBeNull();
+				expect(A.recoveredAt(target, askedAt, [unrelated, before, wrongName])).toBeNull();
+				expect(
+					A.recoveredAt(target, askedAt, reverse ? [later, wrongName] : [wrongName, later]),
+				).toBe(later.arrivedAt);
+				expect(A.recoveredAt(target, askedAt, [])).toBeNull();
 			}),
 			LAW,
 		);
