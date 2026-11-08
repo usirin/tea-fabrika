@@ -78,28 +78,37 @@ The rule also sees returned recovery and flush chains, direct `Effect.withSpan`,
 curried wrappers, and aliased Effect imports. It leaves inner spans and
 `Stream.withSpan` alone. Stream spans measure consumption.
 
-Measured on HEAD `600c6449`, 2026-11-08, with
+Round 1 measured base `600c6449`, 2026-11-08, with
 `node oxlint-plugins/lint.ts next`. Each finding was read against
 [`the tracing decision`](../docs/direction/effect-fn-for-traced-functions.md).
 Paths below start at `next/packages/libfabrika/src/`.
 
 | Finding | Verdict |
 |---|---|
-| `data/ledger-store.ts:261`, `ring`, `ledger.ring` | Real. Keep recovery outside the failed span. |
-| `data/ledger-store.ts:312`, `append`, `ledger.append` | Real. Validation refusals must stay inside the span. |
-| `data/ledger-store.ts:340`, `read`, `ledger.read` | Real. One span per answered page. |
-| `data/ledger-store.ts:370`, `wait`, `ledger.wait` | Real. Keep ready and parked answers in the span. |
-| `app/runner.ts:436`, `cmdSpan`, `runner.cmd` | Real. Keep handler recovery outside the failed span. |
-| `app/runner.ts:470`, `commit`, `runner.write` | Real. Keep the signer's link and the same scope. |
-| `app/runner.ts:592`, `call`, public runner spans | Real. End the span before flushing. |
-| `data/ledger.ts:93`, `call`, `ledger.call` | Real. This protected file waits for the other driver's change. |
+| `data/ledger-store.ts:261`, `ring`, `ledger.ring` | Real. Fixed in round 1. Recovery stays outside the failed span. |
+| `data/ledger-store.ts:312`, `append`, `ledger.append` | Real. Fixed in round 1. Validation refusals stay inside the span. |
+| `data/ledger-store.ts:340`, `read`, `ledger.read` | Real. Fixed in round 1. One span per answered page. |
+| `data/ledger-store.ts:370`, `wait`, `ledger.wait` | Real. Fixed in round 1. Ready and parked answers stay inside the span. |
+| `app/runner.ts:436`, `cmdSpan`, `runner.cmd` | Real. Fixed in round 1. Handler recovery stays outside the failed span. |
+| `app/runner.ts:470`, `commit`, `runner.write` | Real. Fixed in round 1. The signer's link and scope stay the same. |
+| `app/runner.ts:592`, `call`, public runner spans | Real. Fixed in round 1. The span ends before flushing. |
+| `data/ledger.ts:94`, `call`, `ledger.call` | Real. Still open in round 2. Use named `Effect.fn` and set argument attributes inside it. Forwarding methods need no second span. |
 | `data/sink.test.ts:94`, `traced`, arbitrary span input | False alarm in the first scan. This helper manufactures test input, rather than tracing a product operation. Tests are now outside this rule. |
 
 The first scan included tests: 9 findings, 8 real and 1 false alarm. The final
 config leaves tests out, as the other Effect exam rules do. A second scan of all
-`next/` has **8 findings, 8 real, 0 false alarms**. The rule is therefore an
-**error**, with those eight findings as PR 1's red on HEAD. It needs no advice
-exception in the lint runner. The existing advice rules still print separately.
+`next/` had **8 findings, 8 real, 0 false alarms**.
+
+Round 2 scanned all of `next/` again on base `c20a363c`, 2026-11-08, with the
+same command after the door fixes landed. It has **1 finding, 1 real, 0 false
+alarms**, at `next/packages/libfabrika/src/data/ledger.ts:94:5`. The five partial
+door spans are accepted. Their scope stays covered by generated keep-laws in
+`next/apps/fabrika/src/door-spans.test.ts`. Remote forwarding, argument tags,
+pages and failed exits are covered by generated keep-laws in
+`next/packages/libfabrika/src/data/ledger-call-spans.test.ts`.
+The rule stays an **error**. The remaining finding is PR 1's red. It needs no
+advice exception in the lint runner. The seven advice diagnostics in this scan
+are from the existing advice rules.
 
 The planted exam is `next/apps/fabrika/src/exam/effect-functions.test.ts`.
 Nine rejected fixture sites are real violations. Seven allowed forms cover
