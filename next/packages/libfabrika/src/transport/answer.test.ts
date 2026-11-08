@@ -21,6 +21,24 @@ const online = () =>
 		watching: false,
 		busy: false,
 	});
+const waiting = () =>
+	T.Attached.cases.waiting.make({
+		client: "c1",
+		key: "k",
+		nonce: "n",
+		hello: {
+			versions: [1],
+			has: [],
+			ping: "30s",
+			key: "k",
+			tab: "t",
+			nonce: "n",
+			platform: "headless",
+			os: "linux",
+			sentAt: "",
+			signed: "",
+		},
+	});
 const admit = () => Effect.die("online routing must not repeat hello admission");
 const frame = (over: Record<string, unknown> = {}) =>
 	JSON.stringify({
@@ -95,28 +113,12 @@ describe("P10 JSON-RPC", () => {
 			() =>
 				Effect.gen(function* () {
 					const attached =
-						state === "new"
-							? T.Attached.cases.new.make({client: "c1", nonce: "n"})
-							: T.Attached.cases.waiting.make({
-									client: "c1",
-									key: "k",
-									nonce: "n",
-									hello: {
-										versions: [1],
-										has: [],
-										ping: "30s",
-										key: "k",
-										tab: "t",
-										nonce: "n",
-										platform: "headless",
-										os: "linux",
-										sentAt: "",
-										signed: "",
-									},
-								});
+						state === "new" ? T.Attached.cases.new.make({client: "c1", nonce: "n"}) : waiting();
 					const route = vi.fn(() => Effect.die("unauthenticated route"));
 					// Plant: silently drop a request before the connection is online.
-					for (const method of ["ledger.read", "process.send", "unknown.method"])
+					const methods = ["ledger.read", "process.send", "unknown.method"];
+					if (state === "new") methods.push("door.knock");
+					for (const method of methods)
 						for (const id of ["r1", 0]) {
 							const result = yield* T.answerFrame(frame({id, method}), attached, admit, route);
 							expect(result.send).not.toBeNull();
@@ -129,6 +131,32 @@ describe("P10 JSON-RPC", () => {
 						}
 					expect(route).not.toHaveBeenCalled();
 				}),
+		);
+	for (const id of ["r1", 0])
+		it.effect(`d2: waiting door.knock reaches its handler and gets one matching reply ${id}`, () =>
+			Effect.gen(function* () {
+				const attached = waiting();
+				const params = {label: "Browser"};
+				const knock = vi.fn((_method: string, _params: unknown) =>
+					Effect.succeed(T.Answer.cases.ok.make({result: {code: "482109", until: 600_000}})),
+				);
+				// Plant: answer no_hello to door.knock from a waiting client.
+				const result = yield* T.answerFrame(
+					frame({id, method: "door.knock", params}),
+					attached,
+					admit,
+					knock,
+				);
+				expect(result.send).not.toBeNull();
+				expect(JSON.parse(result.send!)).toEqual({
+					jsonrpc: "2.0",
+					id,
+					result: {code: "482109", until: 600_000},
+				});
+				expect(knock).toHaveBeenCalledOnce();
+				expect(knock.mock.calls[0]?.slice(0, 2)).toEqual(["door.knock", params]);
+				expect(result.attached).toEqual(attached);
+			}),
 		);
 	for (const id of ["r1", 0])
 		it.effect(`p23: parked wait retains reply id ${id} and cursor, with no unresolved work`, () =>
