@@ -16,12 +16,14 @@ import {type Tick, ticksOf} from "./ruler.ts";
 
 const OPTS = {numRuns: 500, seed: 141};
 const MIN = 60_000;
+const DAY = 24 * 60 * MIN;
 
-/** An axis: a few ms to a day. One lane runs under an hour on the tickets so far. */
+/** An axis: a few ms to a month, including lanes left waiting for days. */
 const lengths = fc.oneof(
 	fc.integer({min: 1, max: 10_000}),
 	fc.integer({min: 10_000, max: 3 * 3_600_000}),
-	fc.integer({min: 3 * 3_600_000, max: 24 * 3_600_000}),
+	fc.integer({min: 3 * 3_600_000, max: DAY}),
+	fc.integer({min: DAY + 1, max: 30 * DAY}),
 );
 
 /** The times of the ticks of rank `rank` or coarser. */
@@ -42,6 +44,7 @@ describe("the ruler's ticks (L7, L8)", () => {
 				const ticks = ticksOf(length);
 				expect(ticks[0]).toEqual({t: 0, rank: 0});
 				for (const tick of ticks) {
+					expect(Number.isInteger(tick.t)).toBe(true);
 					expect(tick.t).toBeGreaterThanOrEqual(0);
 					expect(tick.t).toBeLessThanOrEqual(length);
 					expect([0, 1, 2, 3]).toContain(tick.rank);
@@ -54,16 +57,32 @@ describe("the ruler's ticks (L7, L8)", () => {
 		);
 	});
 
-	it("L7, P1: at most 2 ticks of rank 0, 4 of rank 1 or coarser, 8 of rank 2 or coarser, 16 in all", () => {
+	it("L7, P1: a positive whole-ms axis has two rank 0 ticks; at most 4 of rank 1, 8 of rank 2, 16 in all", () => {
 		fc.assert(
 			fc.property(lengths, (length) => {
 				const ticks = ticksOf(length);
-				expect(upTo(ticks, 0).length).toBeGreaterThanOrEqual(1);
-				expect(upTo(ticks, 0).length).toBeLessThanOrEqual(2);
+				expect(upTo(ticks, 0)).toHaveLength(2);
 				expect(upTo(ticks, 1).length).toBeLessThanOrEqual(4);
 				expect(upTo(ticks, 2).length).toBeLessThanOrEqual(8);
 				expect(upTo(ticks, 3).length).toBeLessThanOrEqual(16);
 			}),
+			OPTS,
+		);
+	});
+
+	it("L7: a zero, negative, or NaN length keeps only 0 at rank 0", () => {
+		fc.assert(
+			fc.property(
+				fc.oneof(
+					fc.integer({min: -30 * DAY, max: 0}),
+					fc.constant(0),
+					fc.constant(Number.NaN),
+					fc.constant(Number.NEGATIVE_INFINITY),
+				),
+				(length) => {
+					expect(ticksOf(length)).toEqual([{t: 0, rank: 0}]);
+				},
+			),
 			OPTS,
 		);
 	});
