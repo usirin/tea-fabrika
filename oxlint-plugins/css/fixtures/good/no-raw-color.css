@@ -5,3 +5,6 @@
 .allowed { color: transparent; border-color: currentColor; background: inherit; outline-color: initial; fill: unset; stroke: revert; caret-color: revert-layer; }
 @media (forced-colors: active) { .forced { color: CanvasText; outline-color: Highlight; } }
 @media (prefers-reduced-motion: no-preference) { .name { animation-name: red; } }
+.names { font-family: red; grid-area: blue; container-name: green; }
+.decoration { text-decoration: underline var(--focus); column-rule: 1px solid currentColor; scrollbar-color: var(--focus) transparent; text-emphasis: filled circle var(--focus); }
+.filter { filter: drop-shadow(0 0 2px var(--focus)); mask-image: linear-gradient(var(--focus), transparent); }

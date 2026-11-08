@@ -25,11 +25,15 @@ const WINDOW = "apps/fabrika/src/window/window.css";
 const TOKENS = "packages/fabrika-design/src/tokens.css";
 const RULES = [
 	{law: 21, name: "token-exists", lines: [1, 2, 3, 4]},
-	{law: 22, name: "no-raw-color", lines: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]},
+	{
+		law: 22,
+		name: "no-raw-color",
+		lines: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],
+	},
 	{law: 23, name: "no-primitive-var", lines: [1, 2, 3]},
 	{law: 24, name: "part-token-owner", lines: [1, 2]},
 	{law: 25, name: "motion-under-guard", lines: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]},
-	{law: 26, name: "font-size-from-scale", lines: [1, 2, 3, 4]},
+	{law: 26, name: "font-size-from-scale", lines: [1, 2, 3, 4, 5, 6, 7]},
 ] as const;
 const temps: string[] = [];
 afterAll(() => {

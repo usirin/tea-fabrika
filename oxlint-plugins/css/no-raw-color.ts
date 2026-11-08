@@ -40,7 +40,10 @@ const pipeTokens = new Set([
 	"--tile-edge-loud",
 ]);
 const colorProperty =
-	/^(?:color|background(?:-.+)?|border(?:-.+)?|outline(?:-.+)?|(?:box|text)-shadow|fill|stroke(?:-.+)?|(?:accent|caret|column-rule|flood|lighting|stop|text-decoration|text-emphasis)-color)$/i;
+	/^(?:color|.+-color|background(?:-.+)?|border(?:-.+)?|outline(?:-.+)?|(?:box|text)-shadow|fill|stroke(?:-.+)?|column-rule|text-(?:decoration|emphasis|stroke))$/i;
+
+const colorFunction =
+	/^(?:(?:repeating-)?(?:linear|radial|conic)-gradient|drop-shadow|image|cross-fade|light-dark)$/i;
 
 export default plugin("no-raw-color", (root, fire) => {
 	root.walkDecls((decl) => {
@@ -52,23 +55,29 @@ export default plugin("no-raw-color", (root, fire) => {
 			/^\[data-pipe=(?:"[^"]+"|'[^']+')\]$/.test(decl.parent.selector)
 		)
 			return;
-		const named = decl.prop.startsWith("--") || colorProperty.test(decl.prop);
+		const named =
+			decl.prop.startsWith("--") ||
+			colorProperty.test(decl.prop.replace(/^-(?:webkit|moz|ms|o)-/i, ""));
 		const forced = media(decl, "forced-colors", "active");
 		let raw = false;
-		valueParser(decl.value).walk((node) => {
-			if (node.type === "function") {
-				if (node.value.toLowerCase() === "url") return false;
-				// light-dark selects values; its token-only form is fine.
-				if (functions.test(node.value) && node.value.toLowerCase() !== "light-dark") raw = true;
-			}
-			if (node.type !== "word") return;
-			const word = node.value.toLowerCase();
-			if (
-				/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/.test(word) ||
-				(named && (colors.has(word) || (system.has(word) && !forced)))
-			)
-				raw = true;
-		});
+		const check = (nodes: valueParser.Node[], names: boolean) =>
+			valueParser.walk(nodes, (node) => {
+				if (node.type === "function") {
+					if (node.value.toLowerCase() === "url") return false;
+					// light-dark selects values; its token-only form is fine.
+					if (functions.test(node.value) && node.value.toLowerCase() !== "light-dark") raw = true;
+					check(node.nodes, names || colorFunction.test(node.value));
+					return false;
+				}
+				if (node.type !== "word") return;
+				const word = node.value.toLowerCase();
+				if (
+					/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/.test(word) ||
+					(names && (colors.has(word) || (system.has(word) && !forced)))
+				)
+					raw = true;
+			});
+		check(valueParser(decl.value).nodes, named);
 		if (raw) fire(decl, "Read a design token instead of a raw color");
 	});
 });
