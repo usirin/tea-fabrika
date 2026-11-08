@@ -139,9 +139,33 @@ describe("the ruler's coarsest rank (P1, P3)", () => {
 			OPTS,
 		);
 	});
+
+	it("P3 (amended): rank 0's second tick is the largest rank 1 tick at or past half the axis; 0 alone only when rank 1 has no tick past 0", () => {
+		fc.assert(
+			fc.property(lengths, (length) => {
+				const ticks = ticksOf(length);
+				const zero = upTo(ticks, 0);
+				const pastZero = upTo(ticks, 1).filter((t) => t > 0);
+				if (pastZero.length === 0) {
+					expect(zero).toEqual([0]);
+					return;
+				}
+				const halfOn = pastZero.filter((t) => t >= length / 2);
+				expect(halfOn.length).toBeGreaterThan(0);
+				expect(zero).toEqual([0, Math.max(...halfOn)]);
+			}),
+			OPTS,
+		);
+	});
 });
 
 describe("the ruler's ticks, by example", () => {
+	it("29 min: 0 and 20 min at rank 0, never 0 alone (the amendment's case)", () => {
+		const ticks = ticksOf(29 * MIN);
+		expect(upTo(ticks, 1)).toEqual([0, 10 * MIN, 20 * MIN]);
+		expect(upTo(ticks, 0)).toEqual([0, 20 * MIN]);
+	});
+
 	it("13 min 1 s: 0 and 10 min at rank 0 (the plan's own example)", () => {
 		const ticks = ticksOf(781_000);
 		expect(upTo(ticks, 0)).toEqual([0, 10 * MIN]);

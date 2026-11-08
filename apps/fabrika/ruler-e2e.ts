@@ -38,8 +38,17 @@ const SEC = 1_000;
 const MIN = 60 * SEC;
 const HOUR = 60 * MIN;
 
-/** The plan's lane lengths: 30 s, 13 min 1 s, 47 min 14 s, 2 h 10 min. */
-const LENGTHS = [30 * SEC, 13 * MIN + SEC, 47 * MIN + 14 * SEC, 2 * HOUR + 10 * MIN] as const;
+/**
+ * The plan's lane lengths: 30 s, 13 min 1 s, 29 min, 47 min 14 s, 2 h 10 min. 29 min is the
+ * amendment's: before it, rank 0 there was "0" alone, and under 120px no label showed.
+ */
+const LENGTHS = [
+	30 * SEC,
+	13 * MIN + SEC,
+	29 * MIN,
+	47 * MIN + 14 * SEC,
+	2 * HOUR + 10 * MIN,
+] as const;
 const WIDTHS = Array.from({length: (1600 - 60) / 20 + 1}, (_, k) => 60 + k * 20);
 /** The least room between two labels shown side by side, in px. */
 const ROOM = 4;
