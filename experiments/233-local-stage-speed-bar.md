@@ -1,4 +1,4 @@
-# 232. The local stage's first speed bar
+# 233. The local stage's first speed bar
 
 This is P12, ticket 270, in `next/`. Nine runs of the real stage on one laptop, in one sitting:
 four initial runs, then five head runs, all on branch head `c2a38125`. Medians, initial then head:
@@ -39,7 +39,7 @@ await connect(url, key, "again");                          // reconnectMs
 
 ## How it was run
 
-- `experiments/232-local-stage-speed-bar.ts` is the driver. It starts the real
+- `experiments/233-local-stage-speed-bar.ts` is the driver. It starts the real
   `next/apps/fabrika/dev.ts` with its own `FABRIKA_HOME` from `mktemp -d /tmp/fh.XXXX`. The key is
   unset. Every child runs under `nice -n 15`. Only one stage runs at a time. Before each run, the
   driver waits while 6 or more vitest workers run, and it records `uptime`.
@@ -61,12 +61,12 @@ await connect(url, key, "again");                          // reconnectMs
   minute of wall time.
 
 ```sh
-env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/232-local-stage-speed-bar.ts stage initial 4
-env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/232-local-stage-speed-bar.ts stage head 5
-env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/232-local-stage-speed-bar.ts compiler 5
+env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/233-local-stage-speed-bar.ts stage initial 4
+env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/233-local-stage-speed-bar.ts stage head 5
+env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/233-local-stage-speed-bar.ts compiler 5
 ```
 
-Every individual reading is in `results/232-local-stage-speed-bar.json`, including every health
+Every individual reading is in `results/233-local-stage-speed-bar.json`, including every health
 row of every run.
 
 ## The readings

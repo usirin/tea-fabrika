@@ -86,10 +86,9 @@ export class ProgramLoader extends Context.Service<
 				return {
 					load: Effect.fn("loader.load")(function* (name: string, build = "node") {
 						if (!Object.hasOwn(programs, name)) return yield* new ProgramDown({why: "no_program"});
-						const loaded = yield* Effect.try({
-							try: () => stepper(programs[name]),
-							catch: () => new ProgramDown({why: "load"}),
-						});
+						const loaded = yield* Effect.fromResult(stepper(programs[name])).pipe(
+							Effect.mapError(() => new ProgramDown({why: "load"})),
+						);
 						return {
 							execution: nodeExecution(programs[name], build),
 							declaration: {

@@ -8,11 +8,13 @@ import {afterAll, describe, expect, it} from "@effect/vitest";
 import {Mailbox, Writer} from "@kampus/libfabrika/coordination";
 import {Doorbell, Ledger} from "@kampus/libfabrika/data";
 import {nodeSql} from "@kampus/libfabrika/sqlite";
-import {Effect, Layer, Schema, Stream} from "effect";
+import {Effect, Layer, Result, Schema, Stream} from "effect";
+import * as fc from "fast-check";
 
 const PROCESS = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
 const NAME = "counter:1";
 const LIBRARY = "@kampus/libfabrika"; // Missing P11 exports must not prevent collecting the laws.
+const SEED = 119120;
 const folder = mkdtempSync(join(tmpdir(), "p11-counter-"));
 const opened: DatabaseSync[] = [];
 afterAll(() => {
@@ -52,6 +54,63 @@ const reconstruct = (before: unknown, change: Update): unknown => {
 };
 
 describe("p22 real counter in the runner", () => {
+	it("loads a constructed counter and returns typed load failures for broken modules", async () => {
+		const {counter} = await import("./program.ts");
+		const {ProgramDown, ProgramLoader}: typeof import("@kampus/libfabrika") = await import(LIBRARY);
+		const malformed = fc.option(
+			fc.oneof(
+				fc
+					.constantFrom(
+						"name",
+						"machine",
+						"state",
+						"msg",
+						"view",
+						"refuse",
+						"inputs",
+						"outputs",
+						"writes",
+						"wake",
+					)
+					.map((field) => {
+						const raw: Record<string, unknown> = {...counter};
+						delete raw[field];
+						return raw;
+					}),
+				fc.jsonValue().map((bad) => ({...counter, msg: bad})),
+				fc
+					.tuple(fc.constantFrom("refuse", "wake"), fc.jsonValue())
+					.map(([field, bad]) => ({...counter, [field]: bad})),
+			),
+			{nil: null},
+		);
+		await fc.assert(
+			fc.asyncProperty(
+				fc.record({
+					name: fc.string().map((s) => `broken-${s}`),
+					count: fc.integer(),
+					broken: malformed,
+				}),
+				async ({name, count, broken}) => {
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const loader = yield* ProgramLoader;
+							const healthy = yield* loader.load("counter");
+							expect(healthy.stepper.program.machine).toBe(counter.machine);
+							expect(healthy.stepper.init({count})).toMatchObject({_tag: "stepped", view: {count}});
+							const result = yield* Effect.result(loader.load(name));
+							expect(Result.isFailure(result)).toBe(true);
+							if (Result.isFailure(result)) {
+								expect(Schema.is(ProgramDown)(result.failure)).toBe(true);
+								expect(result.failure.why).toBe("load");
+							}
+						}).pipe(Effect.provide(ProgramLoader.layer({counter, [name]: broken}, {}))),
+					);
+				},
+			),
+			{seed: SEED, numRuns: 100},
+		);
+	});
 	it("plant, skip first letter or patch the wrong base: wake and every watcher reproduce the counter", async () => {
 		const {counter} = await import("./program.ts");
 		const A: typeof import("@kampus/libfabrika") = await import(LIBRARY);

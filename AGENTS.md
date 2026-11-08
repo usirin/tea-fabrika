@@ -58,7 +58,10 @@ everything else    what we use today, and a map of which jobs exist
 
 Today's library is `@kampus/fabrika-old` and today's app is `@kampus/fabrika-app-old`. They are
 deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
-`@kampus/libfabrika` is the library.
+`@kampus/libfabrika` is the library. Anyone can take `@kampus/libfabrika` alone and build a
+client that works exactly like fabrika; fabrika is one libfabrika client. So for any file in
+`next/apps/fabrika`, ask: would a from-scratch client have to write it again? If yes, it belongs
+in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.md#why-libfabrika-exists-decided-2026-11-08)).
 
 - **A search finds both.** Check the path of every file you read before you
   trust it. A name that exists in both can mean different things: a `rev` or a
@@ -89,7 +92,10 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). A plan that only builds a
   decided note is approved by the agent leading the session, which writes "Approved by the lead
   agent, builds <note>" in it; a plan that raises a new design call goes to the owner (owner,
-  2026-11-03). No merged pull request
+  2026-11-03). A scheduled walk or approval that a decided note already answers is decided in
+  the plan, and the lead approves it in one line; a question to the owner must be one they could
+  answer no to without contradicting a decision (owner, 2026-11-08). In `next/`'s planner step
+  this becomes code: a check on the plan's open questions. No merged pull request
   has been built this way yet ([where we are](./docs/plan/README.md#where-we-are-now)).
   A step is a program, and a prompt you would have typed is its first source: a rule in
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each
@@ -147,6 +153,9 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
 - **Read the installed version.** Agents know older libraries. Before you write or judge
   code against one, read the lockfile's version and that version's docs. A lint rule that
   fires a lot means ask why before you call it a false alarm.
+- **Judge a design by its properties, never its size.** Never pick between designs by how many
+  lines or agent hours each takes. Judge by what is lost, what holds, how it reads and how it fails
+  (owner, 2026-11-07, field note 2026-11-07-13). Size a design once it is picked.
 - **Solve a problem we have.** A big vision gets saved as a note and tied back to a real
   problem. An experiment picks the tech. Aim at two people working together first:
   packages for others and publishing are recorded as later.
@@ -254,7 +263,7 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
 
 ```sh
 pnpm typecheck
-pnpm lint       # oxlint and oxfmt: lint rules, format and imports, changing nothing
+pnpm lint       # oxlint, oxfmt and stylelint: lint rules, format, imports and CSS, changing nothing
 pnpm test
 ```
 
@@ -289,6 +298,11 @@ the rules of the pipeline this repo rebuilds, with its custom rules in
 to pass. A `// oxlint-disable-next-line <rule> -- <why>` is for a line where the
 code is right and the rule does not fit, and its reason says why in plain words.
 
+A check on the shape of code, such as an import ban or "no program reaches a step", is a lint
+rule, never a test: oxlint's own rule where one exists (`no-restricted-imports`), else ours in
+`oxlint-plugins/` (owner, 2026-11-07). A plan asks "lint, type or test?" of every law. One sweep
+found 7 of 27 shape tests could move (field note 2026-11-07-16).
+
 A real Jev call needs `TYPESAFE_API_KEY` in the environment. Run everything
 else with it unset, so no test can spend money by accident. Before any paid
 run, estimate the cost, try a handful of cases, look at the answers, then
@@ -307,7 +321,11 @@ These run on a laptop a person is using. A prompt can't see the load, so every a
 brief carries these caps. Each one came from a laptop that became unusable.
 
 - Tests: `nice -n 15 pnpm exec vitest run --maxWorkers=3`, a narrow path while you
-  work, the full suite once at the end. With two or more code agents running:
+  work, then `--changed origin/main` once at the end: only the tests that reach a changed file.
+  Never the full suite locally (owner, 2026-11-08). On a pull request, CI runs only the tests that
+  reach a changed file; the full suite runs after the merge, on main. `next/` has its own CI job that
+  runs all of its tests on every pull request. A run that
+  needs what CI lacks (Electron shots, a stage with workerd) still runs here. With two or more code agents running:
   `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at the very end. `tsgo` takes
   about 8 cores, so small jobs add up.
 - "Under load" means at most 8 code agents, one `pnpm typecheck` at a time across all of
@@ -445,6 +463,11 @@ Write-ups are read by busy people, some of them not native English speakers.
     pipes between programs. Their taste and quality bar, on our primitive. Never
     copy a Linear screen. Ask which program owns the job, what composes beside
     what, and what becomes a piece every program gets for free.
+- **Pick the look before the PR.** A screen being built in today's app runs the look step
+  ([step 5 of the guidelines skill](./.claude/skills/guidelines/SKILL.md#5-build-3-or-4-designs-and-look-at-them-next-to-linear))
+  before its pull request opens: 3 or 4 real designs, shots at the five layouts beside Linear,
+  and the owner picks one (owner, 2026-11-08). That covers all work in flight: the ask desk,
+  the inbox, the project window and typography. The keys editor already does it.
 - **Show it running.** A PR that adds or changes a program's window carries
   screenshots from the real built app, saved in that program's `docs/` folder
   and shown in the PR body. Take them the way `apps/fabrika/e2e.ts` drives the

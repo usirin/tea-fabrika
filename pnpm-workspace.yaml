@@ -56,6 +56,8 @@ catalog:
   # oxfmt is 0.x, and a new version can change what fires or how a file prints.
   oxfmt: 0.75.0
   oxlint: 1.90.0
+  stylelint: 18.0.0
+  postcss-value-parser: 4.2.0
   '@oxlint/plugins': 1.90.0
   # The React Compiler without Babel, for next/'s compile step (next/apps/fabrika/src/exam/compiler.ts,
   # docs/direction/react-compiler.md). oxc's Rust port and its parser, from oxlint's own repository.
@@ -135,6 +137,8 @@ patchedDependencies:
   # P12 observes workerd PIDs, exits, replacement delays and recovery stopping.
   # Keep Alchemy's existing restart policy. Drop this when Alchemy exposes the hooks.
   '@alchemy.run/cloudflare-runtime@2.0.0-beta.84': patches/@alchemy.run__cloudflare-runtime@2.0.0-beta.84.patch
+  # demlik#897: expose the machine's existing schemas; drop at the release that has it.
+  '@demlik/tea@0.25.0': patches/@demlik__tea@0.25.0.patch
   # effect 4.1 deleted effect/Crypto, which alchemy 2.0.0-beta.84 imports, so its Cloudflare
   # package cannot load. The patch is the fix alchemy already merged
   # (https://github.com/alchemy-run/alchemy/pull/2754), on the built files. Drop it at the next beta.

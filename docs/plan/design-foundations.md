@@ -562,6 +562,8 @@ What the owner sees: `pnpm lint` reads CSS, and six rules, each with its count.
 
 ## CODEOWNERS (call 9, decided yes for now)
 
+**Decided 2026-11-08 by the owner: CODEOWNERS stays advisory.** No `require_code_owner_review` on main while only the project's two people send commits, so the step below waits.
+
 New file `.github/CODEOWNERS`:
 
 ```text
@@ -576,6 +578,10 @@ New file `.github/CODEOWNERS`:
 /apps/fabrika/src/window/colors.test.ts               @<owner>
 /apps/fabrika/src/pipes.test.ts                       @<owner>
 ```
+
+**Decided by the owner, 2026-11-08: CODEOWNERS stays advisory.** The step below is not taken for
+now: `require_code_owner_review` stays off on `main`. Only two people send commits here, and the
+owner accepts no one else's. Revisit when a third person can push.
 
 **A step that needs the owner's yes, never done silently.**
 

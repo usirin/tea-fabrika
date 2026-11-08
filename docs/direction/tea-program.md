@@ -79,6 +79,11 @@ const called = yield* call(seq, { to: 3 }, { told: {}, stopOn: ctrlC });
 // { kind: "called", ended, heard: [{ name: "n", value: 1 }, ...] } | { kind: "bad_shape", name, why }
 ```
 
+*(updated 2026-11-08 to Program.make.)* This sketch and `defineProgram` below are today's
+version. In `next/`, a program is one typed `Program.make({name, machine, ...})`, its machine a
+`Machine.make` value of its own, and there is no `defineX` ([Program.make](./program-make.md),
+decided 2026-11-07).
+
 **The rule: outputs are events.** Heard once, by whoever listens at that
 moment, and kept nowhere. Anything a viewer who comes late needs lives in a
 machine's state, which the handle serves as `run.machines.<name>.state()` and
