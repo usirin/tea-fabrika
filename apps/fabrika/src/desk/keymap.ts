@@ -324,16 +324,25 @@ const pathWord = (path: readonly string[]): string => path.map(partWord).join(".
 
 interface Assignment {
 	readonly word: string;
+	readonly path: readonly string[];
 	readonly start: number;
 	readonly end: number;
 	readonly value: number;
 	readonly until: number;
 }
 
+/** A table's section: its path, and where a new row under it goes. Root is the empty path. */
+interface Section {
+	readonly path: readonly string[];
+	after: number;
+}
+
 /** Source positions, read with TOML's strings, comments and nested values intact. */
-const assignments = (text: string): {rows: Assignment[]; header: number} => {
+const assignments = (text: string): {rows: Assignment[]; sections: Section[]} => {
 	const rows: Assignment[] = [];
 	let table: readonly string[] = [];
+	const sections: Section[] = [{path: [], after: 0}];
+	let section = sections[0] as Section;
 	let header = text.length;
 	let at = 0;
 	while (at < text.length) {
@@ -348,6 +357,7 @@ const assignments = (text: string): {rows: Assignment[]; header: number} => {
 		if (line.startsWith("[")) {
 			header = Math.min(header, start);
 			const read = readToml(line);
+			let named = false;
 			if (Result.isSuccess(read)) {
 				let nested = read.success;
 				const parts: string[] = [];
@@ -358,7 +368,11 @@ const assignments = (text: string): {rows: Assignment[]; header: number} => {
 					nested = nested[part];
 				}
 				table = parts;
+				named = parts.length > 0 && !line.startsWith("[[");
 			}
+			// An array of tables or an unread header takes no new rows.
+			section = {path: named ? table : [], after: end};
+			if (named) sections.push(section);
 			at = end;
 			continue;
 		}
@@ -430,38 +444,99 @@ const assignments = (text: string): {rows: Assignment[]; header: number} => {
 		while (until > value && /\s/.test(text[until - 1] ?? "")) until -= 1;
 		const last = text.indexOf("\n", cursor);
 		at = last < 0 ? text.length : last + 1;
-		rows.push({word: pathWord([...table, ...path]), start, end: at, value, until});
+		rows.push({
+			word: pathWord([...table, ...path]),
+			path: [...table, ...path],
+			start,
+			end: at,
+			value,
+			until,
+		});
+		section.after = at;
 	}
-	return {rows, header};
+	(sections[0] as Section).after = header;
+	return {rows, sections};
 };
 
-/** Change only the requested assignments. New rows precede table headers. */
-export const patchKeys = (
-	text: string,
-	values: ReadonlyMap<string, string | readonly string[] | null>,
-): string => {
+const startsWith = (path: readonly string[], head: readonly string[]): boolean =>
+	head.length < path.length && head.every((part, i) => path[i] === part);
+
+/** A dotted word's parts: `tezgah."split --to down"` is `tezgah` then `split --to down`. */
+const wordPath = (word: string): readonly string[] => {
+	const read = readToml(`${word} = 0`);
+	return Result.isSuccess(read) ? (leaves(read.success)[0]?.path ?? [word]) : [word];
+};
+
+type Assigned = string | readonly string[];
+
+/** A TOML value as one line: strings and lists as JSON spells them, tables inline. */
+const inline = (value: unknown): string =>
+	isTable(value)
+		? `{ ${Object.entries(value)
+				.map(([part, one]) => `${partWord(part)} = ${inline(one)}`)
+				.join(", ")} }`
+		: JSON.stringify(value);
+
+/** The table with `path` set to `value`, or without it when `value` is null. */
+const setIn = (
+	table: Readonly<Record<string, unknown>>,
+	path: readonly string[],
+	value: Assigned | null,
+): Readonly<Record<string, unknown>> => {
+	const [part, ...rest] = path;
+	if (part === undefined) return table;
+	const {[part]: here, ...others} = table;
+	if (rest.length === 0) return value === null ? others : {...table, [part]: value};
+	return {...table, [part]: setIn(isTable(here) ? here : {}, rest, value)};
+};
+
+/**
+ * Change only the requested assignments. A new row goes into the deepest table header that holds
+ * it, as a short key, or into an inline table that holds it; otherwise it goes above the first
+ * header, where a dotted key cannot clash with one.
+ */
+export const patchKeys = (text: string, values: ReadonlyMap<string, Assigned | null>): string => {
 	const source = assignments(text);
 	const patches: {start: number; end: number; text: string}[] = [];
-	let added = "";
+	const added = new Map<number, string>();
+	const inlines = new Map<Assignment, Readonly<Record<string, unknown>>>();
 	for (const [word, value] of values) {
-		const row = source.rows.find((row) => row.word === word);
-		if (row === undefined) {
-			if (value !== null) added += `${word} = ${JSON.stringify(value)}\n`;
-		} else if (value === null) {
-			// Leave a trailing hand-written comment in place when removing its assignment.
-			const tail = text.slice(row.until, row.end);
-			patches.push({
-				start: row.start,
-				end: row.end,
-				text: tail.trimStart().startsWith("#") ? tail.trimStart() : "",
-			});
-		} else patches.push({start: row.value, end: row.until, text: JSON.stringify(value)});
+		const path = wordPath(word);
+		const row = source.rows.find((row) => row.word === pathWord(path));
+		const holder = source.rows.find(
+			(row) => startsWith(path, row.path) && text.slice(row.value, row.value + 1) === "{",
+		);
+		if (row !== undefined) {
+			if (value === null) {
+				// Leave a trailing hand-written comment in place when removing its assignment.
+				const tail = text.slice(row.until, row.end);
+				patches.push({
+					start: row.start,
+					end: row.end,
+					text: tail.trimStart().startsWith("#") ? tail.trimStart() : "",
+				});
+			} else patches.push({start: row.value, end: row.until, text: JSON.stringify(value)});
+		} else if (holder !== undefined) {
+			const read = readToml(`x = ${text.slice(holder.value, holder.until)}`);
+			const before =
+				inlines.get(holder) ??
+				(Result.isSuccess(read) && isTable(read.success.x) ? read.success.x : {});
+			inlines.set(holder, setIn(before, path.slice(holder.path.length), value));
+		} else if (value !== null) {
+			const section = source.sections
+				.filter((one) => one.path.length === 0 || startsWith(path, one.path))
+				.reduce((deepest, one) => (one.path.length > deepest.path.length ? one : deepest));
+			const line = `${pathWord(path.slice(section.path.length))} = ${JSON.stringify(value)}\n`;
+			added.set(section.after, (added.get(section.after) ?? "") + line);
+		}
 	}
-	if (added !== "")
+	for (const [holder, table] of inlines)
+		patches.push({start: holder.value, end: holder.until, text: inline(table)});
+	for (const [at, rows] of added)
 		patches.push({
-			start: source.header,
-			end: source.header,
-			text: `${source.header > 0 && text[source.header - 1] !== "\n" ? "\n" : ""}${added}`,
+			start: at,
+			end: at,
+			text: `${at > 0 && text[at - 1] !== "\n" ? "\n" : ""}${rows}`,
 		});
 	let saved = text;
 	for (const patch of patches.sort((a, b) => b.start - a.start))

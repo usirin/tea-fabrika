@@ -50,6 +50,13 @@ const version = (text: string | null) =>
 const spelling = (key: Key) => `${key._tag === "after_prefix" ? "<prefix>" : ""}${spell(key.key)}`;
 const same = (a: Key, b: Key) => a._tag === b._tag && a.key === b.key;
 
+/**
+ * How many changes each snapshot carries to the pages. The window shows the newest and names keys
+ * that moved; Undo is held here, apart from this list. Every change is still logged in full as
+ * `keybindings_changed`, so the cap only bounds what each page is sent, not what is recorded.
+ */
+const CHANGES_SENT = 20;
+
 export type KeybindingManager = Manager;
 export const KeybindingManager = Object.assign(ManagerService, {
 	make: (options: {readonly folder: string; readonly mac: boolean; readonly by: string}) =>
@@ -125,7 +132,7 @@ export const KeybindingManager = Object.assign(ManagerService, {
 					const snapshot: Snapshot = {
 						version: digest,
 						keys,
-						changes: initial ? [] : [...current.changes, record],
+						changes: initial ? [] : [...current.changes, record].slice(-CHANGES_SENT),
 					};
 					if (!initial)
 						yield* Effect.logInfo("keybindings_changed").pipe(
@@ -219,9 +226,20 @@ export const KeybindingManager = Object.assign(ManagerService, {
 						const restore = new Map<string, Value>(
 							[...changes.keys()].map((word) => [word, values.get(word) ?? null]),
 						);
-						const temporary = path.join(options.folder, `.keybindings-${crypto.randomUUID()}.tmp`);
-						yield* fs.writeFileString(temporary, saved, {mode: 0o600}).pipe(
-							Effect.andThen(fs.rename(temporary, file)),
+						// Write beside the real file, so a symlinked keybindings.toml stays a link and the
+						// rename stays on one disk, and keep the mode it already has.
+						const real = yield* fs.realPath(file).pipe(Effect.orElseSucceed(() => file));
+						const mode = yield* fs.stat(real).pipe(
+							Effect.map((stat) => stat.mode & 0o7777),
+							Effect.orElseSucceed(() => 0o600),
+						);
+						const temporary = path.join(
+							path.dirname(real),
+							`.keybindings-${crypto.randomUUID()}.tmp`,
+						);
+						yield* fs.writeFileString(temporary, saved, {mode}).pipe(
+							Effect.andThen(fs.chmod(temporary, mode)),
+							Effect.andThen(fs.rename(temporary, real)),
 							Effect.ensuring(fs.remove(temporary).pipe(Effect.ignore)),
 							Effect.mapError(
 								(error) => new Refused({why: `write or rename failed: ${error.message}`}),

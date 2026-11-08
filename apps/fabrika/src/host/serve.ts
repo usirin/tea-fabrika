@@ -211,11 +211,10 @@ export const serve = (options: {
 	readonly desk: DeskHome;
 	readonly asks: AsksHome;
 	/**
-	 * The keys file's answers (host/settings.ts): one as the host starts, then one each save. The
+	 * The keys file (host/keybindings.ts): a snapshot as the host starts, then one each save. The
 	 * host serves no page before the first.
 	 */
-	readonly keys: Stream.Stream<Setting<Keys>>;
-	readonly keybindings?: KeybindingManager;
+	readonly keybindings: KeybindingManager;
 	/** The link's version this host speaks: `PROTOCOL`, but in a test of an old host. */
 	readonly ours?: number | undefined;
 	/**
@@ -456,7 +455,15 @@ export const serve = (options: {
 			screens.set(name, screen);
 			for (const client of clients) if (client.page) showTo(client, name, screen);
 		};
-		const keyRequests = new Map<string, WindowScreen>();
+		/**
+		 * Each tsh `keys` waiting on an editor, and the windows whose editor it waits on: those open
+		 * when it asked, and those that open after. It ends when the last of them closes, so one
+		 * window closing its editor leaves another window's request waiting.
+		 */
+		const keyRequests = new Map<
+			string,
+			{readonly screen: WindowScreen; readonly waiting: Set<Client>}
+		>();
 		const keyWatches = new Map<string, () => void>();
 		/** A screen goes: its tile closed, or its run ended. Every page shown it loses its port. */
 		const gone = (name: string) => {
@@ -502,7 +509,11 @@ export const serve = (options: {
 					keyWatches.set(
 						name,
 						screen.show((view) => {
-							if (view.program === "keys") keyRequests.set(name, screen);
+							if (view.program === "keys" && !keyRequests.has(name))
+								keyRequests.set(name, {
+									screen,
+									waiting: new Set([...clients].filter((client) => client.editor !== null)),
+								});
 						}),
 					);
 					add(name, screen);
@@ -686,17 +697,12 @@ export const serve = (options: {
 			for (const client of clients) if (client.page) toPage(client, keysNow());
 			shout();
 		};
-		const keyChanges =
-			options.keybindings === undefined
-				? options.keys
-				: options.keybindings.changes.pipe(
-						Stream.map((next): Setting<Keys> => {
-							snapshot = next;
-							return next.keys.file._tag === "read"
-								? {_tag: "read", value: next.keys}
-								: next.keys.file;
-						}),
-					);
+		const keyChanges = options.keybindings.changes.pipe(
+			Stream.map((next): Setting<Keys> => {
+				snapshot = next;
+				return next.keys.file._tag === "read" ? {_tag: "read", value: next.keys} : next.keys.file;
+			}),
+		);
 		yield* keyChanges.pipe(
 			Stream.runForEach((answer) =>
 				Effect.logInfo("keys").pipe(
@@ -727,7 +733,8 @@ export const serve = (options: {
 			Effect.sync(() => {
 				const running = client.editor;
 				if (running === null) return;
-				for (const request of keyRequests.values()) request.closed();
+				for (const request of keyRequests.values())
+					if (request.waiting.delete(client) && request.waiting.size === 0) request.screen.closed();
 				client.editor = null;
 				running.close("close");
 				running.close("edit");
@@ -738,7 +745,6 @@ export const serve = (options: {
 			Effect.gen(function* () {
 				if (client.editor !== null) return client.editor;
 				const manager = options.keybindings;
-				if (manager === undefined) return null;
 				const running = yield* start(
 					keysProgram,
 					{window: client.id},
@@ -757,6 +763,7 @@ export const serve = (options: {
 					return null;
 				}
 				client.editor = running;
+				for (const request of keyRequests.values()) request.waiting.add(client);
 				add(`run:${running.run.id}`, {
 					show: (page) => {
 						page({type: "view", program: "keys", data: {open: true}});

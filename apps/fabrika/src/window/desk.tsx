@@ -50,6 +50,7 @@ import {
 } from "../messages.ts";
 import {
 	EXPLAIN_ON,
+	focusFollows,
 	FRAME,
 	type Frame,
 	type FrameMsg,
@@ -879,7 +880,7 @@ function App(): ReactNode {
 	const ws = open === null ? null : activeOf(open);
 	const focused = open === null ? null : focusedOf(open);
 	const over = store.frame.over.kind;
-	const shown = focused === null ? "" : `${ws?.id}/${focused.id}/${runOf(focused)?.id ?? "tsh"}`;
+	const shown = focusFollows(open);
 	// Focus follows the desk: to the focused tile's terminal, or to the view that covers it. Only
 	// when that changes, so a view's own input keeps focus while its view is drawn again. A layout
 	// effect, so focus has moved before a key held for the host's answer is pressed again. The
@@ -926,6 +927,8 @@ function App(): ReactNode {
 		<div
 			className={`desk${view.kind === "over" && view.dim ? " lost" : ""}${MAC ? " mac" : ""}${bare ? " bare" : ""}`}
 			tabIndex={-1}
+			role="group"
+			aria-label="the desk"
 		>
 			{bare || view.kind === "instead" ? <Band /> : <TopBar {...props} />}
 			{view.kind === "instead" ? (

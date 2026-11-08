@@ -6,7 +6,7 @@ import {recordTracing} from "@kampus/fabrika-old/otel";
 import {sqliteRecords} from "@kampus/fabrika-old/records";
 import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {Author} from "@tea-fabrika/tracker";
-import {Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope, Stream} from "effect";
+import {Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope} from "effect";
 import {SocketServer} from "effect/socket";
 import {BUILD} from "../build-id.ts";
 import {fileHistory, sharedHistory} from "../editor/history.ts";
@@ -197,7 +197,6 @@ export const runHost = (options: {
 		);
 		return yield* serve({
 			history,
-			keys: Stream.empty,
 			keybindings,
 			ours,
 			build: named,

@@ -99,6 +99,12 @@ body,
 	box-sizing: border-box;
 }
 
+/* With the bars hidden, F6 lands on the desk itself: show where focus went (WCAG 2.4.7). */
+.desk:focus-visible {
+	outline: 2px solid var(--tile-edge-on);
+	outline-offset: -2px;
+}
+
 .workspace {
 	flex: 1;
 	display: flex;
@@ -1383,6 +1389,23 @@ main.program > [role="alert"] {
 
 .keys-editor p {
 	margin-block: var(--s-2);
+}
+
+/* The one live region: always there, so each new line is heard. The same words show beside the
+   controls they explain. */
+.keys-live {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* Focus rests here while a save runs, so it shows where it is. */
+.keys-result:focus-visible {
+	outline: 2px solid var(--tile-edge-on);
+	outline-offset: 2px;
 }
 
 .keys-system ul {

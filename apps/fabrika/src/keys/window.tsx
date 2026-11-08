@@ -1,5 +1,5 @@
 import {Button, Input, Kbd, Listbox, ScrollArea} from "@manti-ui/react";
-import {type ReactNode, useLayoutEffect, useRef} from "react";
+import {type ReactNode, useId, useLayoutEffect, useRef} from "react";
 import {bindingFor, defaults, type Key, type Keys, spell} from "../desk/keymap.ts";
 import {THE_MACS, wordOf} from "../desk/keys.ts";
 import {capOf} from "../window/pop.ts";
@@ -43,6 +43,38 @@ const shortcut = (key: Key) => {
 	].join("+");
 };
 
+type Stage = Editor["recording"]["_tag"];
+
+/**
+ * Where focus goes when recording moves on, so it never falls to the page when the focused button
+ * goes away (WCAG 2.4.3): into the box to record, to the result line while saving, and back to
+ * Change once the editor is idle again. Nothing moves while the stage stays, or on first draw.
+ */
+export const focusAfter = (before: Stage | null, now: Stage): "box" | "result" | "change" | null =>
+	before === null || before === now
+		? null
+		: now === "waiting"
+			? "box"
+			: now === "saving"
+				? "result"
+				: now === "idle"
+					? "change"
+					: null;
+
+/** What the one live region says now: it stays mounted, so a screen reader hears each change. */
+export const announcement = (keys: Keys, recording: Editor["recording"]): string =>
+	recording._tag === "waiting"
+		? recording.prefix
+			? `${spell(keys.prefix)} recorded. Press the next key. No time limit.`
+			: "Press a key. Escape cancels."
+		: recording._tag === "candidate"
+			? `New key: ${recording.keys.map((key) => spoken(keys, key)).join(", ")}. Save or record again.`
+			: recording._tag === "saving"
+				? "Saving..."
+				: "";
+
+const ON_A_MAC = /Mac/.test(globalThis.navigator?.userAgent ?? "");
+
 function Keycaps({keys, on}: {readonly keys: Keys; readonly on: readonly Key[]}): ReactNode {
 	return on.length === 0 ? (
 		<span>unbound</span>
@@ -67,20 +99,32 @@ export function KeysWindow({
 	send,
 	changes = [],
 	close,
+	mac = ON_A_MAC,
 }: {
 	readonly keys: Keys;
 	readonly editor: Editor;
 	readonly send: (msg: EditorMsg) => void;
 	readonly changes?: Snapshot["changes"];
 	readonly close?: () => void;
+	readonly mac?: boolean;
 }): ReactNode {
 	const selected = editor.selected;
 	const row = keys.rows.find((r) => r.does === selected);
 	const recording = editor.recording;
 	const box = useRef<HTMLElement>(null);
+	const change = useRef<HTMLButtonElement>(null);
+	const result = useRef<HTMLDivElement>(null);
+	const stage = useRef<Stage | null>(null);
+	const instructions = useId();
 	useLayoutEffect(() => {
-		if (recording._tag === "waiting") box.current?.focus();
+		const to = focusAfter(stage.current, recording._tag);
+		stage.current = recording._tag;
+		if (to === "box") box.current?.focus();
+		if (to === "result") result.current?.focus();
+		// With no command selected there is no Change button; the result line holds focus.
+		if (to === "change") (change.current ?? result.current)?.focus();
 	}, [recording._tag]);
+	const said = announcement(keys, recording);
 	const busy = recording._tag === "saving";
 	const choosing = recording._tag === "waiting" || recording._tag === "candidate";
 	const on =
@@ -139,8 +183,12 @@ export function KeysWindow({
 			tabIndex={-1}
 			className="keys-editor"
 			aria-label="Keyboard shortcuts"
+			aria-describedby={recording._tag === "waiting" ? instructions : undefined}
 			data-over=""
 		>
+			<p id={instructions} className="keys-live" role="status">
+				{said}
+			</p>
 			<Input
 				label="Search commands or keys"
 				placeholder="Search commands, tsh words or keys"
@@ -208,7 +256,7 @@ export function KeysWindow({
 							</div>
 							{recording._tag === "idle" && (
 								<div className="keys-actions">
-									<Button size="sm" onClick={() => send({type: "change"})}>
+									<Button ref={change} size="sm" onClick={() => send({type: "change"})}>
 										Change
 									</Button>
 									{selected !== "prefix" && (
@@ -237,12 +285,8 @@ export function KeysWindow({
 								</div>
 							)}
 							{recording._tag === "waiting" && (
-								<div role="status">
-									<p>
-										{recording.prefix
-											? `${spell(keys.prefix)} recorded. Press the next key. No time limit.`
-											: "Press a key. Escape cancels."}
-									</p>
+								<div>
+									<p aria-hidden="true">{said}</p>
 									<p>
 										Tab reaches Cancel to stop recording. System keys and Ctrl-C keep their usual
 										job.
@@ -254,7 +298,7 @@ export function KeysWindow({
 								</div>
 							)}
 							{recording._tag === "candidate" && (
-								<div role="status">
+								<div>
 									<p>New key</p>
 									<Keycaps keys={keys} on={recording.keys} />
 									{conflicts.map((r) => (
@@ -269,7 +313,7 @@ export function KeysWindow({
 									</div>
 								</div>
 							)}
-							{busy && <p role="status">Saving...</p>}
+							{busy && <p aria-hidden="true">{said}</p>}
 							{row?.keys.length === 0 && (
 								<p>No key. This command is still available in the command palette and tsh.</p>
 							)}
@@ -277,7 +321,7 @@ export function KeysWindow({
 					)}
 				</div>
 			</div>
-			<div className="keys-result" role="status">
+			<div ref={result} tabIndex={-1} className="keys-result" role="status">
 				{latest !== undefined && (
 					<>
 						<p>{latest.how === "file" ? "File change applied." : "Keys saved."}</p>
@@ -296,14 +340,23 @@ export function KeysWindow({
 			</div>
 			<details className="keys-system">
 				<summary>Not ours</summary>
-				<p>macOS owns these keys. Recording, the prefix and ignore cannot take them.</p>
-				<ul>
-					{[...THE_MACS].map((key) => (
-						<li key={key}>
-							<Kbd>{capOf(key)}</Kbd> {systemReason[key] ?? "System shortcut"}
-						</li>
-					))}
-				</ul>
+				{mac ? (
+					<>
+						<p>macOS owns these keys. Recording, the prefix and ignore cannot take them.</p>
+						<ul>
+							{[...THE_MACS].map((key) => (
+								<li key={key}>
+									<Kbd>{capOf(key)}</Kbd> {systemReason[key] ?? "System shortcut"}
+								</li>
+							))}
+						</ul>
+					</>
+				) : (
+					<p>
+						Your system keeps its own shortcuts, such as switching windows, and the app never hears
+						them, so recording cannot take them.
+					</p>
+				)}
 				<p>Ctrl-C stays with the tile program.</p>
 			</details>
 			{close !== undefined && (

@@ -181,19 +181,21 @@ const update = (s: Editor, m: EditorMsg): Step => {
 					? Edit.cases.reset.make({does: s.selected})
 					: Edit.cases.bind.make({does: s.selected, keys: []}),
 			);
-		case "keys":
+		case "keys": {
+			const moved = s.undo !== null && m.version !== undefined && m.version !== s.undo;
+			// While our own save runs, its broadcast can land before its answer: that new version is
+			// ours, so the old Undo just goes quietly and `saved` offers the new one.
+			const ours = s.recording._tag === "saving";
 			return [
 				{
 					...s,
 					keys: m.keys,
-					undo: m.version === undefined || s.undo === m.version ? s.undo : null,
-					error:
-						s.undo !== null && m.version !== undefined && m.version !== s.undo
-							? "The file changed. Undo is no longer available."
-							: s.error,
+					undo: moved ? null : s.undo,
+					error: moved && !ours ? "The file changed. Undo is no longer available." : s.error,
 				},
 				[],
 			];
+		}
 		case "saved":
 			return s.recording._tag !== "saving" || s.recording.request !== m.request
 				? [s, []]
