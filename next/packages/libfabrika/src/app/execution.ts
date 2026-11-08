@@ -156,17 +156,20 @@ export const workerExecution = (rpc: ExecutionCalls): Execution => {
 		reply: Effect.fn("execution.reply")((cmd, outcome) =>
 			ask(Schema.Json, () => rpc.reply(cmd, outcome), "step"),
 		),
+		// On a Workers RPC stub, `method.call(rpc, ...)` is a remote call to a method named "call"
+		// that sends the stub itself as an argument, and a Worker Loader stub cannot be sent.
+		// Reflect.apply keeps `this` without reading a property off the stub.
 		check: Effect.fn("execution.check")((kind, fact) => {
 			const check = rpc.check;
 			return check === undefined
 				? Effect.fail(new ProgramDown({why: "load"}))
-				: ask(Schema.Boolean, () => check.call(rpc, kind, fact), "step");
+				: ask(Schema.Boolean, () => Reflect.apply(check, rpc, [kind, fact]), "step");
 		}),
 		admit: Effect.fn("execution.admit")((m) => {
 			const admit = rpc.admit;
 			return admit === undefined
 				? Effect.fail(new ProgramDown({why: "load"}))
-				: ask(Schema.Boolean, () => admit.call(rpc, m), "step");
+				: ask(Schema.Boolean, () => Reflect.apply(admit, rpc, [m]), "step");
 		}),
 	};
 };

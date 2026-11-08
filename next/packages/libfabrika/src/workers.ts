@@ -18,8 +18,9 @@ export const workerLoader = (
 		if (code === undefined) return yield* new ProgramDown({why: "no_program"});
 		const worker = loader.get(`${code.hash}/${process}`, () => ({
 			compatibilityDate: "2026-10-12",
-			mainModule: "program.mjs",
-			modules: {"program.mjs": code.source},
+			// Worker Loader reads an ES module only from a ".js" name; ".mjs" fails to load.
+			mainModule: "program.js",
+			modules: {"program.js": code.source},
 			env: {},
 			globalOutbound: null,
 		}));

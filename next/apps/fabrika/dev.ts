@@ -10,16 +10,25 @@ import {localStage} from "./src/local-stage.ts";
 import {Settings} from "./src/settings.ts";
 
 class StageError extends Schema.TaggedError<StageError>()("StageError", {why: Schema.String}) {}
-const options = parseArgs({
-	options: {
-		child: {type: "boolean"},
-		port: {type: "string"},
-		name: {type: "string"},
-		person: {type: "string"},
-		founder: {type: "string"},
-		window: {type: "string"},
-	},
-}).values;
+const flags = {
+	child: {type: "boolean"},
+	port: {type: "string"},
+	name: {type: "string"},
+	person: {type: "string"},
+	founder: {type: "string"},
+	window: {type: "string"},
+} as const;
+// A base64url key can start with "-", which parseArgs refuses as a separate value. Each string
+// flag takes the next word as its value, written as `--flag=value`.
+const words: Array<string> = [];
+for (let n = 2; n < process.argv.length; n++) {
+	const word = process.argv[n] ?? "",
+		value = process.argv[n + 1];
+	const flag = /^--(port|name|person|founder|window)$/.test(word) && value !== undefined;
+	words.push(flag ? `${word}=${value}` : word);
+	if (flag) n++;
+}
+const options = parseArgs({args: words, options: flags}).values;
 const home = process.env.FABRIKA_HOME ?? join(homedir(), ".fabrika");
 process.env.DO_NOT_TRACK = "1";
 const child = Effect.scoped(

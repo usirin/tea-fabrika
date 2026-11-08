@@ -38,7 +38,18 @@ import {
 	type Sql,
 } from "@kampus/libfabrika/data";
 import {workerLoader, workerSql} from "@kampus/libfabrika/workers";
-import {Context, Effect, Exit, Layer, ManagedRuntime, Result, Schema, Semaphore} from "effect";
+import {
+	Context,
+	Effect,
+	Exit,
+	Layer,
+	ManagedRuntime,
+	Option,
+	Result,
+	Schema,
+	Semaphore,
+	Tracer,
+} from "effect";
 import {Base64, Base64Url} from "effect/encoding";
 import type {GatewayBinding, ProcessBinding, ProjectBinding, RecordBinding} from "./bindings.ts";
 import {Door, type ConnectionId} from "./door.ts";
@@ -73,24 +84,36 @@ export const rpc = Effect.fnUntraced(function* <A>(send: () => Promise<A>) {
 	return yield* Effect.tryPromise({try: send, catch: () => new LedgerError({why: "unreachable"})});
 });
 
+const hex = (bytes: ArrayBuffer) =>
+	Array.from(new Uint8Array(bytes), (n) => n.toString(16).padStart(2, "0")).join("");
+// R2 refuses a body whose SHA-256 differs from the one sent. The local bucket does not check,
+// so the adapter checks first and both places fail the same way.
+const checkedPut = Effect.fnUntraced(function* (
+	bucket: R2Bucket,
+	key: string,
+	body: Uint8Array,
+	sha256: string,
+) {
+	const copy = new Uint8Array(body);
+	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
+	const digest = yield* Effect.tryPromise({
+		try: () => crypto.subtle.digest("SHA-256", copy),
+		catch: () => new LedgerError({why: "bad_row"}),
+	});
+	if (hex(digest) !== sha256.toLowerCase()) return yield* new LedgerError({why: "bad_row"});
+	yield* rpc(() => bucket.put(key, copy, {sha256}));
+});
+
 export const bucketCalls = (bucket: R2Bucket): BucketCalls => ({
 	put: (key, body, sha256) =>
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: P37's R2 interface returns a Promise
-		Effect.runPromise(
-			rpc(() => bucket.put(key, new Uint8Array(body), {sha256})).pipe(Effect.asVoid),
-		),
+		Effect.runPromise(checkedPut(bucket, key, body, sha256)),
 	head: (key) =>
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: P37's R2 interface returns a Promise
 		Effect.runPromise(
 			rpc(() => bucket.head(key)).pipe(
 				Effect.map((row) =>
-					row?.checksums.sha256 === undefined
-						? null
-						: {
-								sha256: Array.from(new Uint8Array(row.checksums.sha256), (n) =>
-									n.toString(16).padStart(2, "0"),
-								).join(""),
-							},
+					row?.checksums.sha256 === undefined ? null : {sha256: hex(row.checksums.sha256)},
 				),
 			),
 		),
@@ -407,6 +430,10 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
 		),
 	);
 
+// The trace a delivered letter carries from the door, as P11's Incoming names it.
+const Delivered = Schema.Struct({
+	span: Schema.Struct({traceId: Schema.String, spanId: Schema.String}),
+});
 const processLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: Env) {
 	const [project, pid] = Schema.decodeUnknownSync(Schema.Tuple([Schema.String, Schema.String]))(
 		JSON.parse(Schema.decodeUnknownSync(Schema.String)(ctx.id.name)),
@@ -446,10 +473,15 @@ const processLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 				rpc(() => p.publish(client, update)).pipe(Effect.catch(() => Effect.void)),
 		}),
 		Layer.succeed(Alarm, {
+			// The program's wake is saved as it set it; the platform alarm moves a past time to now.
 			set: (at) =>
 				(at === null
-					? rpc(() => ctx.storage.deleteAlarm())
-					: rpc(() => ctx.storage.setAlarm(at))
+					? rpc(() => ctx.storage.delete("wake")).pipe(
+							Effect.andThen(rpc(() => ctx.storage.deleteAlarm())),
+						)
+					: rpc(() => ctx.storage.put("wake", at)).pipe(
+							Effect.andThen(rpc(() => ctx.storage.setAlarm(at))),
+						)
 				).pipe(Effect.orDie),
 		}),
 		// Recording captures its sink's services itself (main's P11); the runner no longer provides them.
@@ -462,10 +494,16 @@ const processLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 	const runner = yield* ProgramRunner.pipe(Effect.provide(runnerLayer));
 	yield* sink.flush.pipe(Effect.provideContext(services));
 	return {
-		msg: (input: unknown) =>
-			runner
+		msg: (input: unknown) => {
+			const work = runner
 				.msg(input)
-				.pipe(Effect.annotateSpans({"fab.process": pid}), Effect.provideContext(services)),
+				.pipe(Effect.annotateSpans({"fab.process": pid}), Effect.provideContext(services));
+			// The door's input span is in another object, so its trace crosses the call as data.
+			const sent = Schema.decodeUnknownOption(Delivered)(input);
+			return Option.isSome(sent)
+				? work.pipe(Effect.withParentSpan(Tracer.externalSpan(sent.value.span)))
+				: work;
+		},
 		open: (client: string) =>
 			runner
 				.open(client)
@@ -474,6 +512,17 @@ const processLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 			runner
 				.due(at)
 				.pipe(Effect.annotateSpans({"fab.process": pid}), Effect.provideContext(services)),
+		// A platform alarm delivers the saved due time, so a repeated alarm is the same letter.
+		alarm: () =>
+			rpc(() => ctx.storage.get<number>("wake")).pipe(
+				Effect.flatMap((at) =>
+					at === undefined
+						? Effect.void
+						: runner
+								.due(at)
+								.pipe(Effect.annotateSpans({"fab.process": pid}), Effect.provideContext(services)),
+				),
+			),
 		activity: store.activity,
 		recover: () =>
 			rpc(() => ctx.storage.get("activity")).pipe(

@@ -44,65 +44,75 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 					rev: Schema.decodeUnknownSync(Schema.Struct({rev: Schema.Int}))(answer.result).rev,
 				});
 			}),
-			call: Effect.fnUntraced(function* (method, params) {
-				const client = attached(ws).client as ConnectionId;
-				if (method === "initialize") {
-					const hello = Schema.decodeUnknownResult(Hello)(params);
-					const result = yield* rpc<Awaited<ReturnType<ProjectBinding["initialize"]>>>(() =>
-						p.initialize(client, params, {url: `http://127.0.0.1:${config.port}`, tab, name: key}),
-					);
-					if (result._tag === "refused") {
-						if (Result.isSuccess(hello))
-							ws.serializeAttachment(
-								Attached.cases.waiting.make({
-									client,
-									key: hello.success.key,
-									hello: hello.success,
-									nonce: hello.success.nonce,
-								}),
-							);
+			call: Effect.fnUntraced(
+				function* (method, params) {
+					const client = attached(ws).client as ConnectionId;
+					if (method === "initialize") {
+						const hello = Schema.decodeUnknownResult(Hello)(params);
+						const result = yield* rpc<Awaited<ReturnType<ProjectBinding["initialize"]>>>(() =>
+							p.initialize(client, params, {
+								url: `http://127.0.0.1:${config.port}`,
+								tab,
+								name: key,
+							}),
+						);
+						if (result._tag === "refused") {
+							if (Result.isSuccess(hello))
+								ws.serializeAttachment(
+									Attached.cases.waiting.make({
+										client,
+										key: hello.success.key,
+										hello: hello.success,
+										nonce: hello.success.nonce,
+									}),
+								);
+							return result;
+						}
+						ws.serializeAttachment(
+							Attached.cases.online.make({
+								client,
+								who: result.who,
+								version: result.version,
+								waits: [],
+								watching: false,
+								busy: false,
+							}),
+						);
+						yield* rpc(() =>
+							p.join({client, key: result.who.key, gateway, session, at: Date.now()}),
+						);
+						return Answer.cases.ok.make({
+							result: {who: result.who, version: result.version, ping: result.ping},
+						});
+					}
+					if (method === "door.knock") {
+						const result = yield* rpc<typeof Answer.Type>(() =>
+							p.knock(
+								client,
+								Schema.decodeUnknownSync(Schema.Struct({label: Schema.String}))(params),
+							),
+						);
+						if (result._tag === "ok") {
+							const rows = Schema.decodeUnknownSync(Schema.Struct({rows: Schema.Array(Row)}))(
+								result.result,
+							).rows;
+							for (const row of rows)
+								if (row.clients.includes(client))
+									for (const waiting of row.clients)
+										yield* rpc(() =>
+											p.publish(waiting, {
+												method: "door.waiting",
+												params: {code: row.code, until: row.until},
+											}),
+										);
+						}
 						return result;
 					}
-					ws.serializeAttachment(
-						Attached.cases.online.make({
-							client,
-							who: result.who,
-							version: result.version,
-							waits: [],
-							watching: false,
-							busy: false,
-						}),
-					);
-					yield* rpc(() => p.join({client, key: result.who.key, gateway, session, at: Date.now()}));
-					return Answer.cases.ok.make({
-						result: {who: result.who, version: result.version, ping: result.ping},
-					});
-				}
-				if (method === "door.knock") {
-					const result = yield* rpc<typeof Answer.Type>(() =>
-						p.knock(
-							client,
-							Schema.decodeUnknownSync(Schema.Struct({label: Schema.String}))(params),
-						),
-					);
-					if (result._tag === "ok") {
-						const rows = Schema.decodeUnknownSync(Schema.Struct({rows: Schema.Array(Row)}))(
-							result.result,
-						).rows;
-						for (const row of rows)
-							if (row.clients.includes(client))
-								for (const waiting of row.clients)
-									yield* rpc(() =>
-										p.publish(waiting, {
-											method: "door.waiting",
-											params: {code: row.code, until: row.until},
-										}),
-									);
-					}
-					return result;
-				}
-				return yield* rpc<typeof Answer.Type>(() => p.route(client, method, params));
-			}),
+					return yield* rpc<typeof Answer.Type>(() => p.route(client, method, params));
+				},
+				// A failed object call still answers its request, so a client never waits forever.
+				Effect.catch(() => Effect.succeed(Answer.cases.refused.make({why: "unreachable"}))),
+			),
 		});
 		connections.set(ws, c);
 		return c;

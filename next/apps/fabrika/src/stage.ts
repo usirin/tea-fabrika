@@ -10,7 +10,7 @@ import {ArtifactStore, createArtifactStore} from "alchemy/Artifacts";
 import {deploy} from "alchemy/Deploy";
 import * as Interaction from "alchemy/Interaction";
 import {localState} from "alchemy/State/LocalState";
-import {Context, Effect, Layer, Queue, Schema} from "effect";
+import {Context, Deferred, Effect, Layer, Queue, Schema} from "effect";
 import {stack} from "../alchemy.run.ts";
 import {brainLife} from "./brain-life.ts";
 import type {Built} from "./build.ts";
@@ -54,7 +54,10 @@ export const startStage = Effect.fn("brain.start")(function* (
 		scope = yield* Effect.scope,
 		ids = yield* ProcessIdGenerator;
 	const outbox = yield* brainOutbox(options.home),
-		events = yield* Queue.unbounded<RuntimeEvent>();
+		events = yield* Queue.unbounded<RuntimeEvent>(),
+		// Alchemy's local Worker provider forks the workerd start, so deploy returns before workerd
+		// listens. The control socket's first start opens this latch.
+		listening = yield* Deferred.make<void>();
 	const token = randomBytes(32).toString("base64url");
 	let port = 0,
 		pid = 0,
@@ -124,7 +127,7 @@ export const startStage = Effect.fn("brain.start")(function* (
 			start: (ports) =>
 				Effect.sync(() => {
 					port = Schema.decodeUnknownSync(Schema.Int)(ports["fabrika-control"]);
-				}),
+				}).pipe(Effect.andThen(Deferred.succeed(listening, undefined))),
 		}),
 	);
 	yield* Effect.addFinalizer(() =>
@@ -210,6 +213,12 @@ export const startStage = Effect.fn("brain.start")(function* (
 	yield* deploy({stack: stack(built, config, local), stage: "local", dev: true, scope}).pipe(
 		Effect.provide(localState()),
 		Effect.provide(engine),
+	);
+	yield* Deferred.await(listening).pipe(
+		Effect.timeoutOrElse({
+			duration: "30 seconds",
+			orElse: () => Effect.fail(new ControlError({why: "start_timeout"})),
+		}),
 	);
 	yield* call("project", config.name, "", "info", []);
 	yield* flush;

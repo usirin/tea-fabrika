@@ -776,8 +776,9 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		const checked = yield* silent(Effect.result(online(client)));
 		if (Result.isFailure(checked)) return no("not_granted");
 		const {by, raw} = checked.success;
-		let refusal: string | null = reserved(params) ? "reserved" : null;
-		if (!methods.has(method)) refusal ??= "unknown_method";
+		// An unknown method is named first: no field it carries makes it callable.
+		let refusal: string | null = methods.has(method) ? null : "unknown_method";
+		if (reserved(params)) refusal ??= "reserved";
 		if ((method === "ledger.read" || method === "ledger.wait") && !Schema.is(Read)(params))
 			refusal ??= "bad_input";
 		if (method === "spans.read" && !Schema.is(SpanRead)(params)) refusal ??= "bad_input";

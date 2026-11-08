@@ -144,7 +144,7 @@ export class Process extends DurableObject<Env> {
 	}
 	alarm() {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the platform alarm enters the runner
-		return this.runtime.runPromise(ProcessService.use((p) => p.due(Date.now())));
+		return this.runtime.runPromise(ProcessService.use((p) => p.alarm()));
 	}
 	activity(value: typeof Activity.Type) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
@@ -155,7 +155,7 @@ export class Process extends DurableObject<Env> {
 		return this.runtime.runPromise(ProcessService.use((p) => p.recover()));
 	}
 	savedAlarm() {
-		return this.ctx.storage.getAlarm();
+		return this.ctx.storage.get<number>("wake");
 	}
 	abort() {
 		this.ctx.abort("storage wake");
