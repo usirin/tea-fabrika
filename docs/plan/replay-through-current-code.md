@@ -149,6 +149,14 @@ replay: {row: RowKey, steps: Int, answer: Replayed | null} | null
 - The answer shows in the detail as text in a `role="status"` region, so it is read out when it
   comes. The parting step's row says "parts from the recording", the refused one "no cell in
   today's code". Color is never the only cue (WCAG 1.4.1).
+- **Review round (added 2026-11-08, the lead agent).** "Open step N" reveals the step: choosing a
+  row opens every row above it, and focus moves to it, so a closed machine run never hides the
+  chosen step. The first step of a later life shows that life's start as its "before", and when
+  that start is not what the step before it left, its detail says so: "Restarted from this state;
+  the step before left …". And the button shows only for a program the `Replayer` has code for;
+  any other says "This app has no code for <program>, so it can't be replayed here." The lane's
+  stages run in the host's process, so their kept machines can reach a record, and a button that
+  could only answer "no code" would be the dead button the next line forbids.
 - **A machine run with no start kept shows no button.** Its detail says "Recorded before starts
   were kept, so it can't be replayed." A button that can only answer no is a dead button
   (AGENTS.md, "No rough first versions": "all it shows works, with no stub, dead button"), and
@@ -163,7 +171,9 @@ replay: {row: RowKey, steps: Int, answer: Replayed | null} | null
 **How Linear would build it, on our pieces.** The action lives where the object is open: the
 detail panel's header, with a keyboard shortcut, and the answer comes back as one line in place,
 never a modal. A list row gets an icon and a word, never a second action. We match that. Where we
-differ: Linear has no replay; the step list and before/after layout come from Elm's debugger and
+differ: no shortcut of its own. The tile's keys are the tree's (arrows, Enter), so Enter on the
+machine run opens its detail and Tab reaches the button: two keys, and no new binding to collide
+with the app's key map. Linear has no replay; the step list and before/after layout come from Elm's debugger and
 Redux DevTools, as the tile already does.
 
 **Shots**, from the built app, as `apps/fabrika/e2e.ts` drives it: matches, parts, refused and
