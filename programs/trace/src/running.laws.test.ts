@@ -1,3 +1,4 @@
+import type {Machine as TeaMachine} from "@demlik/tea";
 import {
 	arbMsg,
 	arbRecordMsg,
@@ -34,7 +35,10 @@ import {type Shown, shownOf} from "./view.ts";
 
 type Machine = typeof trace;
 type Msg = MsgOf<Machine>;
-type TraceStep = Step<Model, Msg, never>;
+/** The Cmds the machine can start: its one, `replay`. */
+type CmdsOf<X> =
+	X extends TeaMachine<infer _S, infer _M, infer C, infer _U, infer _Ctx> ? C : never;
+type TraceStep = Step<Model, Msg, CmdsOf<Machine>>;
 /** The job view's Msgs: these laws are today's, on the job view alone (ticket 141, M5). */
 type JobMsg = Extract<Msg, {readonly type: "look" | "got" | "lost" | "toggle" | "choose" | "tick"}>;
 

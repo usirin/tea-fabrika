@@ -115,7 +115,7 @@ describe("the trace program", () => {
 		expect(seen.ended).toBe("ended");
 	});
 
-	it("shows the first step's state before as the machine's start, which no row keeps", async () => {
+	it("shows the first step's state before as the machine's start in a record written before starts were kept", async () => {
 		const add1 = keyOf(TALLY_TRACE, "add 1");
 		const chosen = await Effect.runPromise(
 			Effect.gen(function* () {

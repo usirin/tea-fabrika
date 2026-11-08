@@ -1,9 +1,9 @@
 import {defineMachine} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
-import {Effect, Schema} from "effect";
+import {Effect, Layer, Schema} from "effect";
 import {describe, expect, it} from "vitest";
+import {listed} from "../program/listed.ts";
 import {defineProgram, kind} from "../program/program.ts";
-import {SMALL, tally} from "../shell/small.ts";
 import {layerReplayer, Replayed, Replayer, replayOf} from "./replay.ts";
 import type {Start, Step} from "./traces.ts";
 
@@ -48,11 +48,47 @@ const stepOf = (n: number, add: number, total: unknown, cmds: readonly unknown[]
 	by: BY,
 });
 
+/** A running total's state, kept as its schema encodes it: whole numbers, as tally's. */
+const Total = Schema.Struct({total: Schema.Int});
+
+/**
+ * tally's shape, written here: the shell's own tally sits in a layer the host may not import
+ * (layer-rules.json). The proof on the real tally is in ../shell/trace/replay.test.ts.
+ */
+const count = defineMachine({
+	types: {
+		model: {} as {readonly total: number},
+		msg: {} as {readonly type: "add"; readonly n: number},
+		ctx: undefined,
+	},
+	cmds: [],
+	init: (loaded) => [loaded ?? {total: 0}, []],
+	update: {add: (s, m) => [{total: s.total + m.n}, []]},
+});
+
+const tally = defineProgram({
+	name: "tally",
+	description: "Keeps a running total of the numbers it is told.",
+	inputs: {},
+	outputs: {},
+	machines: {
+		count: kind({
+			machine: count,
+			state: Total,
+			parent: "main",
+			options: () => ({ctx: undefined}),
+			drawing: () => ({name: "count", steps: {}}),
+			status: (s) => `total ${s.total}`,
+		}),
+	},
+	main: () => Effect.void,
+});
+
 /** `seq --to 3 | tally`, as its record keeps count total. */
 const STARTS = [startOf({total: 0})];
 const STEPS = [stepOf(1, 1, 1), stepOf(2, 2, 3), stepOf(3, 3, 6)];
 
-const count = tally.machines.count;
+const counted = tally.machines.count;
 
 type Add = (
 	s: {readonly total: number},
@@ -61,14 +97,14 @@ type Add = (
 
 /** Today's code with tally's count changed: its `add` cell is `add`, or gone with `null`. */
 const tallyWith = (add: Add | null) => {
-	const {add: _, ...rest} = count.machine.update;
+	const {add: _, ...rest} = counted.machine.update;
 	return [
 		{
 			name: "tally",
 			machines: {
 				count: {
-					...count,
-					machine: {...count.machine, update: add === null ? rest : {...rest, add}},
+					...counted,
+					machine: {...counted.machine, update: add === null ? rest : {...rest, add}},
 				},
 			},
 		},
@@ -249,7 +285,6 @@ describe("replayOf: one machine run through today's code", () => {
 // options, the only place a Cmd handler can come from, throw if anything asks for them.
 
 const note = Cmd.make("note", {input: Schema.Struct({k: Schema.Int}), ok: Schema.Null, err: []});
-const Total = Schema.Struct({total: Schema.Int});
 
 /** A total that notes each add, with `k` the add's number plus `shift`. */
 const notingOf = (shift: number) =>
@@ -326,7 +361,7 @@ describe("Replayer: replays over the programs a host lists", () => {
 		const answer = await Effect.runPromise(
 			Effect.gen(function* () {
 				return yield* (yield* Replayer).replay({starts: STARTS, steps: STEPS});
-			}).pipe(Effect.provide(layerReplayer(SMALL))),
+			}).pipe(Effect.provide(layerReplayer([listed(tally, Layer.empty)]))),
 		);
 		expect(answer).toEqual({_tag: "matches", steps: 3});
 	});

@@ -1,3 +1,4 @@
+import type {Machine as TeaMachine} from "@demlik/tea";
 import {
 	arbMsg,
 	arbRecordMsg,
@@ -28,7 +29,10 @@ import {NUMBER, SOME_STORIES} from "./timelines.ts";
 
 type Machine = typeof trace;
 type Msg = MsgOf<Machine>;
-type TraceStep = Step<Model, Msg, never>;
+/** The Cmds the machine can start: its one, `replay`. */
+type CmdsOf<X> =
+	X extends TeaMachine<infer _S, infer _M, infer C, infer _U, infer _Ctx> ? C : never;
+type TraceStep = Step<Model, Msg, CmdsOf<Machine>>;
 type Got = Extract<Msg, {readonly type: "got"}>;
 
 const OTHER_NUMBER = NUMBER + 1;
@@ -72,8 +76,14 @@ const rows = fc.constantFrom(
 	"span:ffffffffffffffff",
 );
 
-/** One entry per Msg type: leaving one out does not compile. */
-const table: MsgArbitraryTable<Msg> = {
+/**
+ * The Msgs these laws draw: every one but the replay's, which asks of a job view's machine run and
+ * has its own laws (./machine.laws.test.ts).
+ */
+type Drawn = Exclude<Msg, {readonly type: "replay" | "replay_ok" | "replay_err"}>;
+
+/** One entry per Msg type drawn: leaving one out does not compile. */
+const table: MsgArbitraryTable<Drawn> = {
 	look: arbRecordMsg("look", {id: ids}),
 	got: ids.map((id): Got => ({type: "got", trace: record(id)})),
 	lost: arbRecordMsg("lost", {id: ids, why: fc.constant("gone")}),
