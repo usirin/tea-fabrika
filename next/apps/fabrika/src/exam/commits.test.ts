@@ -115,6 +115,7 @@ describe("decodeNote", () => {
 const KEY = (c: string) => `AAAAC3NzaC1lZDI1NTE5AAAAI${c.repeat(43)}`;
 const line = (role: string, key: string) => `${role} namespaces="fabrika-step" ssh-ed25519 ${key}`;
 const GOOD = [line("tests", KEY("A")), line("build", KEY("B")), line("lead", KEY("C"))];
+const PERSON = `person:fixture namespaces="git" ssh-ed25519 ${KEY("D")}`;
 
 describe("keysProblem (p87)", () => {
 	it("passes the three roles, one key each, with or without a last newline", () => {
@@ -157,8 +158,13 @@ describe("keysProblem (p87)", () => {
 		["a blank line inside", [GOOD[0], "", GOOD[1], GOOD[2]].join("\n")],
 		["a key cut short", [GOOD[0], GOOD[1], line("lead", KEY("C").slice(0, 60))].join("\n")],
 		["the placeholder", "PLACEHOLDER, not a key."],
+		["a lookalike person prefix", [...GOOD, PERSON.replace("person:", "personish:")].join("\n")],
+		["text before a principal", [...GOOD, `ignored ${PERSON}`].join("\n")],
+		["text after a key", [...GOOD, `${PERSON} ignored`].join("\n")],
+		["a person key one character short", [...GOOD, PERSON.slice(0, -1)].join("\n")],
+		["a person key one character long", [...GOOD, `${PERSON}D`].join("\n")],
 	])("refuses %s, naming why", (_, text) => {
-		expect(keysProblem(text)).toEqual(expect.any(String));
+		expect(keysProblem(text)).toEqual(expect.stringMatching(/\S/));
 	});
 
 	it("names the line it refused", () => {

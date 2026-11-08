@@ -62,11 +62,11 @@ class Repo {
 	readonly dir: string;
 	readonly base: string;
 
-	constructor(keys: string | null = GOOD_KEYS, at?: string) {
+	constructor(keys: string | null = GOOD_KEYS, at?: string, format: "sha1" | "sha256" = "sha1") {
 		count += 1;
 		this.dir = at ?? join(TOP, `r${count}`);
 		mkdirSync(this.dir);
-		this.git("init", "-q", "-b", "main");
+		this.git("init", "-q", "-b", "main", `--object-format=${format}`);
 		if (keys !== null) this.write("allowed_signers", keys);
 		this.write("exam-paths.json", EXAM_LIST);
 		this.write("README.md", "x\n");
@@ -175,6 +175,21 @@ const verifyCommit = (r: Repo, sha: string, keys = PERSON_KEYS) => {
 	}).status;
 };
 
+const personLink = (r: Repo, sha: string, who = "person") => {
+	const signature = /^gpgsig(?:-sha256)? (.*(?:\n .*)*)/m.exec(r.git("cat-file", "commit", sha));
+	expect(signature).not.toBeNull();
+	return {
+		_tag: "attested",
+		step: "person",
+		ticket: "229",
+		version: 1,
+		from: r.head(`${sha}^1^{tree}`),
+		to: r.head(`${sha}^{tree}`),
+		key: fingerprint(who),
+		sig: `${signature![1]!.replaceAll("\n ", "\n")}\n`,
+	};
+};
+
 describe("person keys (p87b)", () => {
 	it("takes several distinct person ids in namespace git beside the three step roles", () => {
 		const r = new Repo(`${PERSON_KEYS}${personLine("github:43", "stranger")}\n`);
@@ -202,20 +217,111 @@ describe("person keys (p87b)", () => {
 		const out = r.check();
 		expect(out.code).toBe(2);
 		expect(out.answers).toEqual([]);
-		expect(out.err).toContain("allowed_signers");
+		expect(out.err).toMatch(/allowed_signers: \S/);
 	});
 });
 
 describe("person git signatures (p83b)", () => {
-	it("counts a person's git-signed commit with no step note", () => {
-		const r = new Repo(PERSON_KEYS);
+	it.each([
+		["one person", PERSON_KEYS, "person"],
+		[
+			"the second of several people",
+			`${PERSON_KEYS}${personLine("github:43", "stranger")}\n`,
+			"stranger",
+		],
+	] as const)("counts %s with a git signature and no step note", (_, keys, who) => {
+		const r = new Repo(keys);
 		r.write("next/packages/x/src/a.ts", "a\n");
-		const c = r.gitSigned();
-		expect(verifyCommit(r, c)).toBe(0);
+		const c = r.gitSigned(who);
+		expect(verifyCommit(r, c, keys)).toBe(0);
 		expect(r.git("notes", "--ref=fabrika", "list")).toBe("");
 		const out = r.check();
 		expect(out.answers).toEqual([DONE]);
 		expect(out.code).toBe(0);
+	});
+
+	// DEFECT T251: person verification rejects Git's gpgsig-sha256 header before and after squash.
+	it.fails("counts an SSH person commit before and after squash in a SHA-256 repo", () => {
+		const r = new Repo(PERSON_KEYS, undefined, "sha256");
+		r.write("next/packages/x/src/a.ts", "a\n");
+		const c = r.gitSigned();
+		expect(verifyCommit(r, c)).toBe(0);
+		const before = r.check();
+		const {squash, rows} = squashed(r, [{note: personLink(r, c), commit: c}]);
+		log(r, rows);
+		const after = r.run(["chain", "--squash", squash]);
+		expect({before: before.answers, after: after.answers}).toEqual({before: [DONE], after: [DONE]});
+		expect(before.code).toBe(0);
+		expect(after.code).toBe(0);
+	});
+
+	it("refuses a non-SSH signature even when git reports it valid", () => {
+		const r = new Repo(PERSON_KEYS);
+		const unsigned = r.change("a.ts");
+		const verifier = join(TOP, "pgp-verifier");
+		writeFileSync(
+			verifier,
+			[
+				"#!/bin/sh",
+				"cat >/dev/null",
+				"cat <<'STATUS'",
+				"[GNUPG:] NEWSIG",
+				"[GNUPG:] GOODSIG 1111111111111111 Fixture",
+				"[GNUPG:] VALIDSIG 1111111111111111111111111111111111111111 2026-11-08 1794168000 0 4 0 1 10 00 1111111111111111111111111111111111111111",
+				"[GNUPG:] TRUST_FULLY",
+				"STATUS",
+				"",
+			].join("\n"),
+			{mode: 0o700},
+		);
+		r.git("config", "gpg.program", verifier);
+		const raw = r
+			.git("cat-file", "commit", unsigned)
+			.replace(
+				"\n\n",
+				[
+					"",
+					"xgpgsig -----BEGIN SSH SIGNATURE-----",
+					"gpgsig -----BEGIN PGP SIGNATURE-----",
+					" fixture",
+					" -----END PGP SIGNATURE-----",
+					"",
+					"",
+				].join("\n"),
+			);
+		const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
+		expect(verifyCommit(r, c)).toBe(0);
+		const out = r.check([], r.base, c);
+		expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
+		expect(out.code).toBe(1);
+	});
+
+	it("reports why saving person signers failed", () => {
+		const r = new Repo(PERSON_KEYS);
+		r.write("next/packages/x/src/a.ts", "a\n");
+		r.gitSigned();
+		const preload = join(TOP, "no-person-writes.mjs");
+		writeFileSync(
+			preload,
+			`
+import fs from "node:fs";
+import {syncBuiltinESMExports} from "node:module";
+const write = fs.writeFile;
+fs.writeFile = (path, data, options, done) => {
+  if (Buffer.from(data).toString("utf8").includes("person:"))
+    return done(Object.assign(new Error("fixture disk full"), {code: "ENOSPC"}));
+  return write(path, data, options, done);
+};
+syncBuiltinESMExports();
+`,
+		);
+		const out = r.run(["check", "--base", r.base, "--head", "HEAD"], {
+			...ENV,
+			NODE_OPTIONS: `${ENV.NODE_OPTIONS ?? ""} --import=${preload}`.trim(),
+		});
+		expect(out.code).toBe(2);
+		expect(out.answers).toEqual([]);
+		expect(out.err).toMatch(/commits: the run failed: \S/);
 	});
 
 	it("uses the base's person keys when the head removes that person", () => {
@@ -246,6 +352,32 @@ describe("person git signatures (p83b)", () => {
 		const c = r.gitSigned(who);
 		const ownLine = `fixture namespaces="git" ${pub(who)}\n`;
 		expect(verifyCommit(r, c, ownLine)).toBe(0);
+		const out = r.check();
+		expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
+		expect(out.code).toBe(1);
+	});
+
+	it("refuses a registered person's key on a step note", () => {
+		const r = new Repo(PERSON_KEYS);
+		const c = r.change("a.ts");
+		const note = r.sign("tests");
+		const sig = sh(
+			r.dir,
+			"ssh-keygen",
+			["-Y", "sign", "-n", "fabrika-step", "-f", join(KEYS, "person")],
+			signedText(note),
+		);
+		const allowed = join(TOP, "person-step-signers");
+		const signature = join(TOP, "person-step-signature");
+		writeFileSync(allowed, `fixture namespaces="fabrika-step" ${pub("person")}\n`);
+		writeFileSync(signature, sig);
+		const verified = spawnSync(
+			"ssh-keygen",
+			["-Y", "verify", "-f", allowed, "-I", "fixture", "-n", "fabrika-step", "-s", signature],
+			{cwd: r.dir, env: ENV, input: signedText(note)},
+		);
+		expect(verified.status).toBe(0);
+		r.setNote(c, JSON.stringify({...note, key: fingerprint("person"), sig}));
 		const out = r.check();
 		expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
 		expect(out.code).toBe(1);
@@ -791,6 +923,128 @@ const twoSteps = (r: Repo) => {
 };
 
 describe("person commits between step links (p86b)", () => {
+	it.each([
+		"the wrong key",
+		"another signature",
+		"another to tree",
+		"another from tree",
+		"an unsigned commit",
+		"a step key",
+	] as const)("refuses a person link with %s", (plant) => {
+		const r = new Repo(PERSON_KEYS);
+		r.write("next/packages/x/src/a.ts", "a\n");
+		const person = r.gitSigned();
+		expect(verifyCommit(r, person)).toBe(0);
+		const middle = personLink(r, person);
+		expect(middle.from).not.toBe(middle.to);
+		const signedCommit = (parent: string, tree: string, who: "person" | "tests" = "person") =>
+			r
+				.git(
+					"-c",
+					"gpg.format=ssh",
+					"-c",
+					`user.signingkey=${join(KEYS, who)}`,
+					"commit-tree",
+					"-S",
+					"-p",
+					parent,
+					"-m",
+					"planted signed commit",
+					tree,
+				)
+				.trim();
+		const {squash, rows} = squashed(r, [{note: middle, commit: person}]);
+		const row = rows[0]!.attested[0]!;
+		switch (plant) {
+			case "the wrong key":
+				row.key = fingerprint("tests");
+				break;
+			case "another signature":
+				row.sig = personLink(r, signedCommit(r.base, middle.from)).sig;
+				break;
+			case "another to tree":
+			case "another from tree": {
+				const other =
+					plant === "another to tree"
+						? signedCommit(r.base, middle.from)
+						: signedCommit(person, middle.to);
+				expect(verifyCommit(r, other)).toBe(0);
+				row.commit = other;
+				row.sig = personLink(r, other).sig;
+				break;
+			}
+			case "an unsigned commit":
+				row.commit = r.git("commit-tree", "-p", r.base, "-m", "unsigned", middle.to).trim();
+				break;
+			case "a step key": {
+				const other = signedCommit(r.base, middle.to, "tests");
+				expect(verifyCommit(r, other, `fixture namespaces="git" ${pub("tests")}\n`)).toBe(0);
+				row.commit = other;
+				row.key = fingerprint("tests");
+				row.sig = personLink(r, other, "tests").sig;
+				break;
+			}
+		}
+		log(r, rows);
+		const out = r.run(["chain", "--squash", squash]);
+		expect(out.answers).toEqual([stuck("broken_chain", squash)]);
+		expect(out.code).toBe(1);
+	});
+
+	it("refuses a signature copied from another commit header", () => {
+		const r = new Repo(PERSON_KEYS);
+		r.write("next/packages/x/src/a.ts", "a\n");
+		const person = r.gitSigned();
+		const payload = r
+			.git("cat-file", "commit", person)
+			.replace(/^gpgsig .*(?:\n .*)*\n/m, "")
+			.replace("\n\n", "\nxgpgsig forged\n\n");
+		const sig = sh(
+			r.dir,
+			"ssh-keygen",
+			["-Y", "sign", "-n", "git", "-f", join(KEYS, "person")],
+			payload,
+		);
+		const raw = payload.replace("\n\n", `\ngpgsig ${sig.trimEnd().replaceAll("\n", "\n ")}\n\n`);
+		const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
+		expect(verifyCommit(r, c)).toBe(0);
+		const {squash, rows} = squashed(r, [{note: {...personLink(r, c), sig: "forged\n"}, commit: c}]);
+		log(r, rows);
+		const out = r.run(["chain", "--squash", squash]);
+		expect(out.answers).toEqual([stuck("broken_chain", squash)]);
+		expect(out.code).toBe(1);
+	});
+
+	it("refuses a person link whose keys file is incomplete", () => {
+		const keys = `${keyLine("tests", "tests")}\n${personLine("github:42")}\n`;
+		const r = new Repo(keys);
+		r.write("next/packages/x/src/a.ts", "a\n");
+		const person = r.gitSigned();
+		expect(verifyCommit(r, person, keys)).toBe(0);
+		const {squash, rows} = squashed(r, [{note: personLink(r, person), commit: person}]);
+		log(r, rows);
+		const out = r.run(["chain", "--squash", squash]);
+		expect(out.answers).toEqual([stuck("broken_chain", squash)]);
+		expect(out.code).toBe(1);
+	});
+
+	it("fetches a missing signed person commit before checking its logged link", () => {
+		const r = new Repo(PERSON_KEYS);
+		r.write("next/packages/x/src/a.ts", "a\n");
+		const person = r.gitSigned();
+		const {squash, rows} = squashed(r, [{note: personLink(r, person), commit: person}]);
+		log(r, rows);
+		const ci = join(TOP, `person-ci${count}`);
+		sh(TOP, "git", ["clone", "-q", "--no-local", "--single-branch", "--branch", "main", r.dir, ci]);
+		const missing = spawnSync("git", ["cat-file", "-e", `${person}^{commit}`], {cwd: ci, env: ENV});
+		expect(missing.error).toBeUndefined();
+		expect(missing.status).not.toBe(0);
+		const out = r.run(["chain", "--squash", squash], ENV, ci);
+		expect(out.answers, out.err).toEqual([DONE]);
+		expect(out.code).toBe(0);
+		expect(sh(ci, "git", ["cat-file", "-e", `${person}^{commit}`])).toBe("");
+	});
+
 	it("connects tests, a person's file change, then build, before and after squash", () => {
 		const r = new Repo(PERSON_KEYS);
 		const tests = r.change("a.ts");
@@ -798,19 +1052,7 @@ describe("person commits between step links (p86b)", () => {
 		r.write("next/packages/x/src/person.ts", "person\n");
 		const person = r.gitSigned();
 		expect(verifyCommit(r, person)).toBe(0);
-		const raw = r.git("cat-file", "commit", person);
-		const signature = /^gpgsig (.*(?:\n .*)*)/m.exec(raw);
-		expect(signature).not.toBeNull();
-		const middle = {
-			_tag: "attested",
-			step: "person",
-			ticket: first.ticket,
-			version: 1,
-			from: r.head(`${person}^1^{tree}`),
-			to: r.head(`${person}^{tree}`),
-			key: fingerprint("person"),
-			sig: `${signature![1]!.replaceAll("\n ", "\n")}\n`,
-		};
+		const middle = personLink(r, person);
 		const build = r.change("b.ts");
 		const last = r.sign("build");
 		expect(first.to).toBe(middle.from);
