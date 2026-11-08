@@ -1,5 +1,5 @@
-import {workerLoader} from "@kampus/libfabrika/workers";
 import {Effect, Result, Schema} from "effect";
+import {workerLoader, type ProgramSource} from "../workers.ts";
 import {
 	bucketCalls,
 	processStub,
@@ -9,7 +9,6 @@ import {
 	rpc,
 	type Env,
 } from "./runtime.ts";
-import {programs} from "./table.ts";
 
 const Request = Schema.Struct({
 	target: Schema.Literals(["project", "process", "record", "loader", "bucket"]),
@@ -40,7 +39,11 @@ const methods = {
 	process: new Set(["msg", "open", "due", "abort", "activity", "recover", "savedAlarm"]),
 	record: new Set(["write", "read", "content", "deleteContent"]),
 };
-const dispatch = Effect.fnUntraced(function* (env: Env, request: typeof Request.Type) {
+const dispatch = Effect.fnUntraced(function* (
+	env: Env,
+	programs: Readonly<Record<string, ProgramSource>>,
+	request: typeof Request.Type,
+) {
 	const {target, project, name, method, args} = request;
 	const call = target === "record" || target === "bucket" ? recordCall : rpc;
 	if (target === "loader") {
@@ -87,6 +90,7 @@ export const control = Effect.fn("runtime.control")(function* (
 	request: globalThis.Request,
 	env: Env,
 	token: string,
+	programs: Readonly<Record<string, ProgramSource>>,
 ) {
 	if (typeof token !== "string" || request.headers.get("authorization") !== `Bearer ${token}`)
 		return new Response(null, {status: 403});
@@ -94,7 +98,7 @@ export const control = Effect.fn("runtime.control")(function* (
 	const raw = yield* Effect.tryPromise({try: () => request.json(), catch: () => null});
 	const input = Schema.decodeUnknownResult(Request)(raw);
 	if (Result.isFailure(input)) return Response.json({error: {why: "bad_input"}}, {status: 400});
-	const answer = yield* Effect.result(dispatch(env, input.success));
+	const answer = yield* Effect.result(dispatch(env, programs, input.success));
 	return Result.isSuccess(answer)
 		? Response.json({value: answer.success ?? null})
 		: Response.json(

@@ -1,9 +1,9 @@
 import {mkdirSync} from "node:fs";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
-import {Archive, RecordManager, SpanSink} from "@kampus/libfabrika/data";
-import {nodeSql} from "@kampus/libfabrika/sqlite";
 import {Effect, Layer, Schema} from "effect";
+import {Archive, RecordManager, SpanSink} from "../data/index.ts";
+import {nodeSql} from "../data/sqlite.ts";
 
 // This is P37's durable span queue, never a second ledger. Delivery makes no spans.
 export const stageRecording = Effect.fn(function* <E>(

@@ -1,4 +1,3 @@
-import {createHash} from "node:crypto";
 import {
 	existsSync,
 	globSync,
@@ -10,8 +9,9 @@ import {
 	writeFileSync,
 } from "node:fs";
 import {dirname, join, relative, resolve} from "node:path";
+import {BuildError, bundle, bundlePrograms, hash} from "@kampus/libfabrika/node/build";
 import {Effect, Schema} from "effect";
-import {rolldown, type Plugin} from "rolldown";
+import type {Plugin} from "rolldown";
 import {check, compile, Row} from "./exam/compiler.ts";
 
 const APP = resolve(import.meta.dirname, "..");
@@ -27,30 +27,6 @@ type Options = {
 	readonly ledger?: ReadonlyArray<Row>;
 	readonly programs?: Readonly<Record<string, string>>;
 };
-class BuildError extends Schema.TaggedError<BuildError>()("BuildError", {
-	why: Schema.String,
-	message: Schema.optionalKey(Schema.String),
-}) {}
-const hash = (text: string) => createHash("sha256").update(text).digest("hex");
-const bundle = Effect.fnUntraced(function* (input: string, plugins: Array<Plugin>) {
-	// oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown's build API returns a Promise
-	const built = yield* Effect.tryPromise({
-		try: () => rolldown({input, plugins, platform: "browser", external: ["cloudflare:workers"]}),
-		catch: (error) => new BuildError({why: "bundle", message: String(error)}),
-	});
-	return yield* Effect.acquireUseRelease(
-		Effect.succeed(built),
-		(b) =>
-			// oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown generates through a Promise
-			Effect.tryPromise({
-				try: () => b.generate({format: "esm", codeSplitting: false}),
-				catch: (error) => new BuildError({why: "generate", message: String(error)}),
-			}),
-		// oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown closes through a Promise
-		(b) => Effect.promise(() => b.close()),
-	);
-});
-
 export const build = Effect.fn("build.build")(function* (options: Options) {
 	const files = yield* Effect.try({
 		try: () =>
@@ -81,27 +57,19 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 			return {code: out.code};
 		},
 	};
-	const programs: Record<string, {hash: string; source: string}> = {};
-	for (const [name, path] of Object.entries({counter: "@kampus/counter", ...options.programs})) {
-		const entry = `import {programBox} from "@kampus/libfabrika/box"; import {${name === "counter" && path === "@kampus/counter" ? "counter" : "program"} as program} from ${JSON.stringify(path)}; export default programBox(program, ${JSON.stringify(name)});`;
-		const output = yield* bundle("fabrika:program", [
-			compiler,
-			{
-				name: "fabrika-program",
-				resolveId(id) {
-					if (id === "fabrika:program") return join(APP, "program.generated.ts");
+	const programs = yield* bundlePrograms({
+		root: APP,
+		plugins: [compiler],
+		programs: Object.fromEntries(
+			Object.entries({counter: "@kampus/counter", ...options.programs}).map(([name, path]) => [
+				name,
+				{
+					module: path,
+					name: name === "counter" && path === "@kampus/counter" ? "counter" : "program",
 				},
-				load(id) {
-					if (id === join(APP, "program.generated.ts")) return entry;
-				},
-			},
-		]);
-		const source = output.output
-			.filter((o) => o.type === "chunk")
-			.map((o) => o.code)
-			.join("\n");
-		programs[name] = {hash: hash(source), source};
-	}
+			]),
+		),
+	});
 	const output = yield* bundle(join(APP, "src/brain.ts"), [
 		compiler,
 		{

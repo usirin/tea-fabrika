@@ -1,21 +1,80 @@
-import type {Descriptor, Incoming, ProgramRunner} from "@kampus/libfabrika";
+import {type Brand, type Effect, Schema} from "effect";
+import type {BrainFact} from "../app/brain-fact.ts";
+import type {Incoming} from "../app/entry.ts";
+import type {Descriptor, ProgramRunner} from "../app/runner.ts";
 import type {
 	Activity,
 	From,
 	GatewayManager,
 	ProcessManager,
 	Start,
-} from "@kampus/libfabrika/coordination";
-import type {Appended, LedgerCalls, RecordCalls} from "@kampus/libfabrika/data";
-import type {Effect} from "effect";
-import type {Door} from "./door.ts";
-import type {BrainFact} from "./local-stage.ts";
+	Session,
+} from "../coordination/index.ts";
+import type {Appended, LedgerCalls, RecordCalls} from "../data/index.ts";
+import type {Answer, checkHello} from "../transport/index.ts";
+
+export type ConnectionId = string & Brand.Brand<"ConnectionId">;
+const GrantReply = Schema.TaggedUnion({
+	applied: {rev: Schema.Number},
+	ignored: {rev: Schema.Number, why: Schema.String},
+	refused: {why: Schema.String},
+});
+export interface DoorCalls {
+	readonly connect: () => Effect.Effect<ConnectionId>;
+	readonly challenge: (client: ConnectionId) => Effect.Effect<string, unknown>;
+	readonly initialize: (
+		client: ConnectionId,
+		input: unknown,
+		trusted: {readonly url: string; readonly tab: string; readonly name: string},
+	) => Effect.Effect<Effect.Success<ReturnType<typeof checkHello>>, unknown>;
+	readonly target: (
+		name: string,
+		code: string,
+	) => Effect.Effect<
+		{
+			key: string;
+			for: string;
+			to: string;
+			code: string;
+			label: string;
+		} | null,
+		unknown
+	>;
+	readonly route: (
+		client: ConnectionId,
+		method: string,
+		params: unknown,
+		reader?: string,
+	) => Effect.Effect<typeof Answer.Type, unknown>;
+	readonly knock: (
+		client: ConnectionId,
+		input: {readonly label: string; readonly pass?: string | null},
+	) => Effect.Effect<typeof Answer.Type, unknown>;
+	readonly grant: (input: unknown) => Effect.Effect<typeof GrantReply.Type, unknown>;
+	readonly disconnect: (client: ConnectionId) => Effect.Effect<void, unknown>;
+	readonly sign: (
+		process: string,
+		id: string,
+		parent: string,
+		kind: string,
+	) => Effect.Effect<Session, unknown>;
+	readonly append: (input: {
+		readonly process: string;
+		readonly id: string;
+		readonly parent: string;
+		readonly kind: string;
+		readonly stream: string;
+		readonly fact: unknown;
+	}) => Effect.Effect<Appended, unknown>;
+	readonly retire: (process: string) => Effect.Effect<void, unknown>;
+	readonly checkDelivery: (process: string, incoming: Incoming) => Effect.Effect<void, unknown>;
+}
 
 type RemoteCall<F> = F extends (...args: infer A) => infer B
 	? (...args: A) => Promise<Effect.Success<B>>
 	: never;
 type Remote<S> = {[K in keyof S]: RemoteCall<S[K]>};
-type DoorService = (typeof Door)["Service"];
+type DoorService = DoorCalls;
 type Processes = (typeof ProcessManager)["Service"];
 type Gateways = (typeof GatewayManager)["Service"];
 type Runner = (typeof ProgramRunner)["Service"];

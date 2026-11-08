@@ -1,25 +1,29 @@
 import type {Descriptor, Incoming} from "@kampus/libfabrika";
 import type {Activity, From, Start} from "@kampus/libfabrika/coordination";
 import type {Chain} from "@kampus/libfabrika/data";
-import {DurableObject, WorkerEntrypoint} from "cloudflare:workers";
-import {Effect} from "effect";
-import {control} from "./control.ts";
-import type {ConnectionId} from "./door.ts";
-import {gatewayRuntime, GatewayService} from "./gateway.ts";
-import {recordContent, recordDelete, recordRead, recordWrite} from "./record.ts";
+import {control} from "@kampus/libfabrika/workers/control";
+import {gatewayRuntime, GatewayService} from "@kampus/libfabrika/workers/gateway";
+import {
+	recordContent,
+	recordDelete,
+	recordRead,
+	recordWrite,
+} from "@kampus/libfabrika/workers/record";
 import {
 	processRuntime,
 	ProcessService,
-	projectRuntime,
 	ProjectService,
-	settings,
 	projectStub,
 	rpc,
 	configureProcess,
 	savedAlarm,
 	processDescriptor,
-	type Env,
-} from "./runtime.ts";
+} from "@kampus/libfabrika/workers/runtime";
+import {DurableObject, WorkerEntrypoint} from "cloudflare:workers";
+import {Effect} from "effect";
+import type {ConnectionId} from "./door.ts";
+import {projectRuntime, settings, type Env} from "./runtime.ts";
+import {programs} from "./table.ts";
 
 export class Project extends DurableObject<Env> {
 	readonly runtime = projectRuntime(this.ctx, this.env);
@@ -135,7 +139,7 @@ export class Project extends DurableObject<Env> {
 type ContextProject = (typeof ProjectService)["Service"];
 
 export class Process extends DurableObject<Env> {
-	readonly runtime = processRuntime(this.ctx, this.env);
+	readonly runtime = processRuntime(this.ctx, this.env, programs);
 	configure(descriptor: Descriptor) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object configuration returns a Promise
 		return Effect.runPromise(configureProcess(this.ctx, descriptor));
@@ -178,7 +182,7 @@ export class Process extends DurableObject<Env> {
 }
 
 export class Gateway extends DurableObject<Env> {
-	readonly runtime = gatewayRuntime(this.ctx, this.env);
+	readonly runtime = gatewayRuntime(this.ctx, this.env, settings(this.env));
 	fetch(request: Request) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Worker fetch returns a Promise
 		return this.runtime.runPromise(GatewayService.use((g) => g.fetch(request)));
@@ -213,26 +217,34 @@ type Rows = Parameters<typeof recordWrite>[4];
 export class RecordPart extends DurableObject<Env> {
 	write(chain: Chain, at: number, rows: Rows) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-		return Effect.runPromise(recordWrite(this.ctx, this.env, chain, at, rows));
+		return Effect.runPromise(
+			recordWrite(this.ctx, settings(this.env).limits?.recordBytes, chain, at, rows),
+		);
 	}
 	read(chain: Chain, at: number, after: number) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-		return Effect.runPromise(recordRead(this.ctx, this.env, chain, at, after));
+		return Effect.runPromise(
+			recordRead(this.ctx, settings(this.env).limits?.recordBytes, chain, at, after),
+		);
 	}
 	content(chain: Chain, at: number, id: string) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-		return Effect.runPromise(recordContent(this.ctx, this.env, chain, at, id));
+		return Effect.runPromise(
+			recordContent(this.ctx, settings(this.env).limits?.recordBytes, chain, at, id),
+		);
 	}
 	deleteContent(chain: Chain, at: number, id: string, by: Parameters<typeof recordDelete>[5]) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-		return Effect.runPromise(recordDelete(this.ctx, this.env, chain, at, id, by));
+		return Effect.runPromise(
+			recordDelete(this.ctx, settings(this.env).limits?.recordBytes, chain, at, id, by),
+		);
 	}
 }
 
 export class Control extends WorkerEntrypoint<Env, {token: string}> {
 	fetch(request: Request) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the private local control socket enters Effect
-		return Effect.runPromise(control(request, this.env, this.ctx.props.token));
+		return Effect.runPromise(control(request, this.env, this.ctx.props.token, programs));
 	}
 }
 

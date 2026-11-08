@@ -1,16 +1,25 @@
-import {ProcessIdGenerator} from "@kampus/libfabrika/coordination";
-import {LedgerError, Waited} from "@kampus/libfabrika/data";
-import {Answer, Attached, Hello, Row} from "@kampus/libfabrika/transport";
-import {connection} from "@kampus/libfabrika/transport/gateway";
-import {workerSql} from "@kampus/libfabrika/workers";
 import {Context, Effect, Layer, ManagedRuntime, Result, Schema} from "effect";
-import type {ProjectBinding} from "./bindings.ts";
-import type {ConnectionId} from "./door.ts";
-import {complete, projectStub, recordingLayer, rpc, settings, type Env} from "./runtime.ts";
+import {ProcessIdGenerator} from "../coordination/process-id.ts";
+import {LedgerError, Waited} from "../data/index.ts";
+import {workerSql} from "../data/worker-sql.ts";
+import {connection} from "../transport/gateway.ts";
+import {Answer, Attached, Hello, Row} from "../transport/index.ts";
+import type {ConnectionId, ProjectBinding} from "./bindings.ts";
+import {
+	complete,
+	projectStub,
+	recordingLayer,
+	rpc,
+	type BrainOptions,
+	type Env,
+} from "./runtime.ts";
 
-const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: Env) {
-	const config = settings(env),
-		p = projectStub(env, config.name),
+const gatewayLogic = Effect.fnUntraced(function* (
+	ctx: DurableObjectState,
+	env: Env,
+	config: BrainOptions,
+) {
+	const p = projectStub(env, config.name),
 		ids = yield* ProcessIdGenerator;
 	const gateway = Schema.decodeUnknownSync(Schema.String)(ctx.id.name);
 	const recording = yield* Layer.build(
@@ -205,9 +214,9 @@ export class GatewayService extends Context.Service<
 	GatewayService,
 	Effect.Success<ReturnType<typeof gatewayLogic>>
 >()("fabrika/Gateway") {}
-export const gatewayRuntime = (ctx: DurableObjectState, env: Env) =>
+export const gatewayRuntime = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>
 	ManagedRuntime.make(
-		Layer.effect(GatewayService, gatewayLogic(ctx, env)).pipe(
+		Layer.effect(GatewayService, gatewayLogic(ctx, env, config)).pipe(
 			Layer.provide(ProcessIdGenerator.layer),
 		),
 	);
