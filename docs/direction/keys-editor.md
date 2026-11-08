@@ -125,8 +125,10 @@ binding wins, said in words, with Undo). Kind: law.
   list says "Saved to keybindings.toml · Split lost ⌃B |" with Undo, and one live region says it
   in words. The keycaps are one named image, so a screen reader hears "ctrl+b then |", not the
   glyphs.
-- **Why.** JetBrains warns on a clash [k3]; macOS does not [k4]. WCAG 4.1.3 for the status
-  message; ARIA 1.2 drops `aria-label` on a plain span, so the caps need `role="img"`.
+- **Why.** JetBrains warns on a clash as you press it [k3]. macOS only marks a clash with a
+  warning icon in the list, and the new shortcut does not work [k9]; neither says what the new key
+  took. WCAG 4.1.3 for the status message; ARIA 1.2 drops `aria-label` on a plain span, so the
+  caps need `role="img"`.
 - **Today.** Passes: "close lost ctrl+b then x." and Undo.
 
 ### E5: one model, every size
@@ -168,7 +170,13 @@ binding wins, said in words, with Undo). Kind: law.
 
 ### E7: quiet, inside the tile's own edge
 
-**Lean, 85%.** Kind: law (the edge), lint (fonts and colors), taste (the rest).
+**Decided in part, the rest a lean, 85%.** Kind: law (the edge), lint (fonts and colors), taste
+(the rest). The fonts, the grays and the colors are already decided: sans for names and mono only
+for typed words ([typography](./typography.md) T6, decided 2026-11-02), two grays
+([typography](./typography.md) T3), the accent says your turn and nothing else
+([color principles](./color-principles.md) 2, decided 2026-11-01), and one slate focus token (the
+same note, changed 2026-11-08). This note adds no font or color rule. The lean is the edge law and
+"no second line".
 
 - **What it means.** The program paints no background over the tile's edge, so the focus edge
   lights all the way round. No second line under a line: the search is a field with a rule under
@@ -179,6 +187,10 @@ binding wins, said in words, with Undo). Kind: law.
 - **What holds it.** The edge law, measured in pixels in the real app: on the left, right and
   bottom of a tile, the edge pixel differs from the pixel 3px inside it by at least 6 on some
   channel. Every tile design passed it; the box over the tiles failed it.
+- **The doubt.** The 3px and the 6 come from the shots of this study only, at dark and one scale.
+  A light theme, a high-contrast theme or a 1x screen may need other numbers. Running the check on
+  every tile program in both looks, at 1x and 2x, settles it: it must pass on main's own tiles and
+  fail on the box over the tiles.
 - **Today.** Breaks: mono names, Manti's orange row and focus ring, a full-width Close
   (`keys/window.tsx:363`).
 
@@ -188,8 +200,8 @@ binding wins, said in words, with Undo). Kind: law.
 hidden. The other way, tmux's `C-b ?`, takes over the pane until `q`.
 
 ```text
-a  split beside the focused tile; C-b x closes it         (lean)
-b  in place of the focused tile, Esc gives it back        (tmux)
+a  split beside the focused tile; C-b x asks y or n, y closes it   (lean)
+b  in place of the focused tile, Esc gives it back                (tmux)
 ```
 
 **2. Where the picks live.** Lean, 60%: a `[drawing]` table in `keybindings.toml`, since a

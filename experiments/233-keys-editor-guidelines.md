@@ -34,11 +34,11 @@ how each tool read does a keys editor, one line each
 VS Code     one list, with and without keys; a box that listens; Show Same Keybindings; a modal over the editor
 Zed         the same list; Enter or a double-click edits; writes the keymap.json a person edits by hand
 JetBrains   right-click, Add Keyboard Shortcut, press it; warns on a clash; Reset Shortcuts
-macOS       a sidebar of groups; double-click the shortcut, press the new one; no clash warning
+macOS       a sidebar of groups; double-click the shortcut, press the new one; a warning icon on a clash, no words
 Ableton     Key Map mode marks every part that takes a key; click one, press a key
 Linear      a side panel of every shortcut, search on top, groups, keycaps on the right; read only
 Raycast     records a physical key or a character; built-ins use the character
-Premiere    a drawn keyboard with each key's command (secondary: the page refused the fetch)
+Premiere    a drawn keyboard with each key's command (a guess: Adobe's page refused the fetch)
 ```
 
 ## What was read
@@ -51,6 +51,7 @@ Premiere    a drawn keyboard with each key's command (secondary: the page refuse
 | [k2] | Zed, Key bindings | Every action with its bindings; edit by "double-clicking the action row or pressing enter"; changes are "reflected on the keymap.json file". |
 | [k3] | JetBrains, Keymap | Right-click, "Add Keyboard Shortcut", "press the necessary key combination"; warns on a conflict; Enter and Escape need a button of their own; "Reset Shortcuts". |
 | [k4] | Apple, Keyboard Shortcuts settings | A sidebar of groups; "Double-click the current key combination, then press the new key combination"; "Restore Defaults". |
+| [k9] | Apple, Change a conflicting keyboard shortcut | "A warning icon is shown next to conflicting keyboard shortcuts." |
 | [k5] | Ableton Live manual, Key Map Mode | Parts that take a key "become highlighted in red"; click, then press a key; a Mapping Browser lists them. |
 | [k6] | WCAG 2.1.4 Character Key Shortcuts | A single-character shortcut can be turned off, remapped, or works only while its part has focus. |
 | [k7] | Linear changelog, 2021-03-25 | The keyboard shortcuts help: a side panel, search on top, groups, the name on the left in sans, keycaps on the right. Read only. |
@@ -79,10 +80,11 @@ right for matching, wrong for drawing.
 
 - **Ableton Live (music):** mark every part that takes a key, then one click and one press. It
   carries over as "record in place". Its red-only mark does not: color is never the only cue.
-- **Premiere Pro and DaVinci Resolve (video):** a drawn keyboard with each key's command. It shows
+- **Premiere Pro and DaVinci Resolve (video), a guess, not read:** Adobe's page refused the
+  fetch and Blackmagic's keyboard page shows no key map, so this is from memory. A drawn keyboard with each key's command. It shows
   free keys at a glance. It carries over poorly to a prefix key: everything sits under `C-b`, so the
   drawing is the board after the prefix, not the board itself.
-- **A cockpit checklist:** one item per line, read top to bottom, the state in words. It is the list.
+- **A cockpit checklist, a guess with no source:** one item per line, read top to bottom, the state in words. It is the list.
 
 ## Today's editor
 
@@ -167,6 +169,7 @@ Dollars: $0. No model ran. The probe and the designs stay on the local branch, n
 - [k2] https://zed.dev/docs/key-bindings
 - [k3] https://www.jetbrains.com/help/idea/configuring-keyboard-and-mouse-shortcuts.html
 - [k4] https://support.apple.com/guide/mac-help/keyboard-shortcuts-mchlp2262/mac
+- [k9] https://support.apple.com/en-gb/guide/mac-help/mchlp2864/mac
 - [k5] https://www.ableton.com/en/manual/midi-and-key-remote-control/
 - [k6] https://www.w3.org/WAI/WCAG21/Understanding/character-key-shortcuts.html
 - [k7] https://linear.app/changelog/2021-03-25-keyboard-shortcuts-help

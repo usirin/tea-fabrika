@@ -38,7 +38,7 @@ Enter        editor.recording {_tag: "waiting", prefix: false}; the row listens
 C-b |        editor.recording {_tag: "candidate", keys: [⌃B |]}; row: Takes it from Split · Save · Cancel
 Enter        edit sent to the host; saved {version}; row: Zoom Changed ⌃B |
              under the list: Saved to keybindings.toml · Split lost ⌃B |  Undo
-C-b x        t2 closes, its run ends, focus goes back to t1
+C-b x        asks y or n, as every tile does; y: t2 closes, its process ends, focus goes back to t1
 ```
 
 ## Properties the tests check

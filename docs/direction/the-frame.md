@@ -273,7 +273,7 @@ the owner's desk              every-wait-is-a-queue.md, and the owner-desk pack
 
 ```text
 Panel in pop.tsx:619          the item lines: a non-modal dialog
-"keys panel"                  C-b ?, which is the palette
+"keys panel"                  C-b ?, the palette today; a tile from the keys editor build (E1)
 the menu bar's panel          next/, Tier 1's detail: "the panel's status line"
 properties panel, agent panel inside the ticket's view (tracker views)
 ```
