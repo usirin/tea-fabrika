@@ -29,7 +29,14 @@ const CAUSE = "in-3f9a0c21-41";
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TO = "ledger:home";
 const SENT = "2026-11-07T21:10:01.204Z";
-const FOUNDER = {name: "home", keys: ["pA"], window: "wA", person: P} as const;
+const FOUNDER = {
+	name: "home",
+	keys: ["pA"],
+	window: "wA",
+	person: P,
+	by: "SHA256:founder-mac",
+	build: "b-5e9c2a0",
+} as const;
 const MOST = 128; // the longest text a span tag may hold (P37's law, as P6's p95)
 
 // Markers no tag may hold: the letter's m, every saw text, and the signature's two texts.
@@ -405,6 +412,18 @@ describe("p97, the tags hold the right names and numbers", () => {
 			// pA, wA and t1 are known; t1 is revoked, so two are live.
 			expect(tagged(read, "keys")).toBe(3);
 			expect(tagged(read, "live")).toBe(2);
+		}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+	});
+
+	it.effect("a members call on a founded ledger appends nothing: no ledger.append span", () => {
+		const {tracer, ended} = capture();
+		return Effect.gen(function* () {
+			const clients = yield* ClientManager;
+			yield* clients.members;
+			expect(ended("ledger.append").length).toBe(1); // the founding
+			yield* clients.members;
+			yield* clients.members;
+			expect(ended("ledger.append").length).toBe(1);
 		}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
 	});
 

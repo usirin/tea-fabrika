@@ -5,7 +5,9 @@
 //
 // The shape these tests hold the module to, from the plan's "The shape" and flag 6:
 // - `ClientManager.layer(founder & {person})` over a `Ledger`. Building it writes nothing. The first
-//   call on an empty `door/members` writes `founded` under the fixed id `founded`, once.
+//   call on an empty `door/members` writes `founded` under the fixed id `founded`, once, by the
+//   key and build the layer was handed. A ledger refusal of it, except `id_reused`, is a
+//   `LedgerError`, never an empty member list.
 // - `members` folds `door/members` with `foldMembers`.
 // - `write(fact, from)` folds, refuses what the fold's rule refuses (`{_tag: "refused", why}`,
 //   nothing written), else appends under the fact's own id with `seen` the folded head, folds on to
@@ -38,7 +40,18 @@ const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const NAME = "home";
 const TO = "ledger:home";
 const SENT = "2026-11-07T21:10:01.204Z";
-const FOUNDER = {name: NAME, keys: ["pA"], window: "wA", person: P} as const;
+// The founder's Mac signs `founded`: `by` is its checked key, never the person, and `build` is the
+// hash of the code that wrote the line, both handed in by the wiring (log.ts, `Line`).
+const FOUNDER_BY = "SHA256:founder-mac";
+const FOUNDER_BUILD = "b-5e9c2a0";
+const FOUNDER = {
+	name: NAME,
+	keys: ["pA"],
+	window: "wA",
+	person: P,
+	by: FOUNDER_BY,
+	build: FOUNDER_BUILD,
+} as const;
 const FOUNDED: MemberFact = {_tag: "founded", id: P, name: NAME, keys: ["pA"], window: "wA"};
 
 // Every ledger is a fresh node:sqlite file in one temp folder, removed after.
@@ -265,6 +278,85 @@ describe("p96, founded is written once, by the first call", () => {
 			expect(written.filter((e) => e._tag === "founded").map((e) => e.id)).toEqual(["founded"]);
 		}),
 	);
+});
+
+describe("p96, founded carries true facts and is never refused quietly", () => {
+	it.effect("the founded line carries the writer's key and build the layer was handed", () =>
+		Effect.gen(function* () {
+			yield* members;
+			const [founding, ...more] = yield* entries;
+			expect(more).toEqual([]);
+			expect(founding).toMatchObject({
+				id: "founded",
+				_tag: "founded",
+				by: FOUNDER_BY,
+				build: FOUNDER_BUILD,
+				for: P,
+				seen: 0,
+				cause: null,
+			});
+		}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+	);
+
+	it("the layer's type requires the writer's key and build", () => {
+		const base = {name: NAME, keys: ["pA"], window: "wA", person: P};
+		const noBy = {...base, build: FOUNDER_BUILD};
+		const noBuild = {...base, by: FOUNDER_BY};
+		// @ts-expect-error `by` is required: the founding line is signed by a checked key
+		const one = ClientManager.layer(noBy);
+		// @ts-expect-error `build` is required: the founding line names the code that wrote it
+		const two = ClientManager.layer(noBuild);
+		// @ts-expect-error neither can be left out
+		const three = ClientManager.layer(base);
+		expect([one, two, three].every(Layer.isLayer)).toBe(true);
+	});
+
+	/** A Ledger whose append of `founded` is refused with `why`, after `before` runs. */
+	const refusing = (
+		sql: Sql,
+		why: "bad_line" | "bad_cause" | "seen_ahead" | "id_reused" | "too_big",
+		before: Effect.Effect<void, LedgerError> = Effect.void,
+	) =>
+		Layer.effect(
+			Ledger,
+			Effect.map(Ledger, (real) => ({
+				read: real.read,
+				wait: real.wait,
+				append: (stream: string, id: string, line: Parameters<typeof real.append>[2]) =>
+					id === "founded"
+						? Effect.as(before, {_tag: "refused" as const, why})
+						: real.append(stream, id, line),
+			})),
+		).pipe(Layer.provide(onSql(sql)));
+
+	it.effect("a founding the ledger refuses fails loud, and never starts with no members", () =>
+		Effect.gen(function* () {
+			for (const why of ["bad_line", "bad_cause", "seen_ahead", "too_big"] as const) {
+				const sql = fresh();
+				const layer = ClientManager.layer(FOUNDER).pipe(Layer.provide(refusing(sql, why)));
+				const failed = yield* Effect.flip(members.pipe(Effect.provide(layer)));
+				expect(failed, why).toBeInstanceOf(LedgerError);
+				const got = yield* Effect.flip(write(granted("pA", "t1")).pipe(Effect.provide(layer)));
+				expect(got, why).toBeInstanceOf(LedgerError);
+				expect((yield* entries.pipe(Effect.provide(onSql(sql)))).length, why).toBe(0);
+			}
+		}),
+	);
+
+	it.effect("a founding refused id_reused, a second load that lost the race, goes on", () => {
+		const sql = fresh();
+		// Another load's whole first call lands first, so this one's append hears id_reused.
+		const other = members.pipe(
+			Effect.asVoid,
+			Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
+		);
+		const raced = refusing(sql, "id_reused", other);
+		return Effect.gen(function* () {
+			expect(view(yield* members)).toEqual(view(foldMembers([FOUNDED])));
+			expect(yield* write(granted("pA", "t1"))).toEqual({_tag: "applied", rev: 2});
+			expect((yield* entries).map((e) => e.id)[0]).toBe("founded");
+		}).pipe(Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provideMerge(raced))));
+	});
 });
 
 describe("p96, the traced history from the plan", () => {
