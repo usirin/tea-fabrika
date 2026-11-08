@@ -1093,16 +1093,25 @@ export class ProgramRunner extends Context.Service<
 						discard: true,
 					});
 
-				/** One public call: its span, its Cmds, then the flush, on success and failure. */
+				/** Every public call recovers and takes saved writes under the permit, then runs Cmds. */
 				const call = <A>(
 					name: string,
 					turn: Effect.Effect<
 						{readonly answer: A; readonly jobs: ReadonlyArray<Dispatched>},
 						RunnerFailure
 					>,
+					time?: number,
 				): Effect.Effect<A, RunnerFailure> =>
 					Effect.gen(function* () {
-						const {answer, jobs} = yield* turn;
+						const {answer, jobs} = yield* permit.withPermit(
+							Effect.gen(function* () {
+								// The platform consumes the alarm before due enters this wrapper.
+								if (time !== undefined) alarmAt = undefined;
+								yield* ensure(time);
+								const {answer, jobs} = yield* turn;
+								return {answer, jobs: [...takeRetry(), ...jobs]};
+							}),
+						);
 						yield* recording.flush;
 						yield* runAll(jobs);
 						return answer;
@@ -1119,45 +1128,27 @@ export class ProgramRunner extends Context.Service<
 						),
 					);
 
-				const turn = <A>(
-					body: (
-						state: Live,
-					) => Effect.Effect<
-						{readonly answer: A; readonly jobs: ReadonlyArray<Dispatched>},
-						RunnerFailure
-					>,
-				) =>
-					permit.withPermit(
-						Effect.gen(function* () {
-							const state = yield* ready();
-							const retried = takeRetry();
-							const {answer, jobs} = yield* body(state);
-							return {answer, jobs: [...retried, ...jobs]};
-						}),
-					);
-
 				return {
 					open: (client: string) =>
 						call(
 							"runner.open",
-							turn((state) =>
-								Effect.gen(function* () {
-									if (client.length === 0 || client.length > 256)
-										return yield* new RunnerError({why: "bad_client"});
-									clients.delete(client);
-									if (clients.size >= 1024) {
-										const oldest = clients.values().next();
-										if (!oldest.done) clients.delete(oldest.value);
-									}
-									clients.add(client);
-									yield* watchers.publish(client, {
-										type: "whole",
-										rev: state.pos,
-										view: state.view,
-									});
-									return {answer: {rev: state.pos, view: state.view}, jobs: []};
-								}),
-							),
+							Effect.gen(function* () {
+								const state = yield* ready();
+								if (client.length === 0 || client.length > 256)
+									return yield* new RunnerError({why: "bad_client"});
+								clients.delete(client);
+								if (clients.size >= 1024) {
+									const oldest = clients.values().next();
+									if (!oldest.done) clients.delete(oldest.value);
+								}
+								clients.add(client);
+								yield* watchers.publish(client, {
+									type: "whole",
+									rev: state.pos,
+									view: state.view,
+								});
+								return {answer: {rev: state.pos, view: state.view}, jobs: []};
+							}),
 						),
 					msg: (raw: unknown) =>
 						call(
@@ -1167,112 +1158,97 @@ export class ProgramRunner extends Context.Service<
 									Effect.mapError(() => new RunnerError({why: "bad_input"})),
 								);
 								yield* Effect.annotateCurrentSpan(tag("letter"), input.id);
-								return yield* permit.withPermit(
-									Effect.gen(function* () {
-										yield* ensure();
-										const receipt = supervision?.receipts.find((r) => r.letter === input.id);
-										if (receipt !== undefined) {
-											const digest =
-												receipt.digest ??
-												(yield* inputDigest(Schema.decodeUnknownSync(Incoming)(receipt.input)));
-											if ((yield* inputDigest(input)) !== digest)
-												return {answer: Sent.cases.refused.make({why: "id_reused"}), jobs: []};
-											if (receipt.result !== null)
-												return {answer: Sent.cases.refused.make({why: "dead"}), jobs: []};
-										}
-										const state = yield* ready();
-										const retried = takeRetry();
-										const {answer, jobs} = yield* accept(state, input);
-										return {answer, jobs: [...retried, ...jobs]};
-									}),
-								);
+								const receipt = supervision?.receipts.find((r) => r.letter === input.id);
+								if (receipt !== undefined) {
+									const digest =
+										receipt.digest ??
+										(yield* inputDigest(Schema.decodeUnknownSync(Incoming)(receipt.input)));
+									if ((yield* inputDigest(input)) !== digest)
+										return {answer: Sent.cases.refused.make({why: "id_reused"}), jobs: []};
+									if (receipt.result !== null)
+										return {answer: Sent.cases.refused.make({why: "dead"}), jobs: []};
+								}
+								return yield* accept(yield* ready(), input);
 							}),
 						),
 					due: (time: number) =>
 						call(
 							"runner.due",
-							permit.withPermit(
-								Effect.gen(function* () {
-									// The platform consumes the alarm before this call.
-									alarmAt = undefined;
-									yield* ensure(time);
-									if (supervision !== null && supervision.recovery._tag !== "live")
-										return {answer: undefined, jobs: []};
-									const state = yield* ready();
-									if (state.wake === null || state.wake > time) {
-										yield* setAlarm();
-										return {answer: undefined, jobs: []};
-									}
-									const id = `${process.id}/due/${time}`;
-									const sent = yield* mailbox
-										.send(
-											process.name,
-											id,
-											{type: "timer", at: time},
-											yield* from(null, yield* traceId),
-										)
-										.pipe(
-											Effect.provideService(RunnerMail, {process: process.id, name: process.name}),
-										);
-									if (sent._tag === "refused")
-										return yield* new LedgerError({why: "refused", message: sent.why});
-									const {fresh} = yield* catchUp(state, {mine: id});
-									return {answer: undefined, jobs: fresh};
-								}),
-							),
+							Effect.gen(function* () {
+								if (supervision !== null && supervision.recovery._tag !== "live")
+									return {answer: undefined, jobs: []};
+								const state = yield* ready();
+								if (state.wake === null || state.wake > time) {
+									yield* setAlarm();
+									return {answer: undefined, jobs: []};
+								}
+								const id = `${process.id}/due/${time}`;
+								const sent = yield* mailbox
+									.send(
+										process.name,
+										id,
+										{type: "timer", at: time},
+										yield* from(null, yield* traceId),
+									)
+									.pipe(
+										Effect.provideService(RunnerMail, {process: process.id, name: process.name}),
+									);
+								if (sent._tag === "refused")
+									return yield* new LedgerError({why: "refused", message: sent.why});
+								const {fresh} = yield* catchUp(state, {mine: id});
+								return {answer: undefined, jobs: fresh};
+							}),
+							time,
 						),
 					restart: (request: {readonly id: string; readonly build: string}) =>
 						call(
 							"runner.restart.request",
-							permit.withPermit(
-								Effect.gen(function* () {
-									if (recovery === null) return yield* new LedgerError({why: "unreachable"});
-									yield* ensure();
-									const s = yield* currentRecovery;
-									const prior = s.requests?.find((r) => r.id === request.id);
-									if (prior !== undefined) {
-										if (prior.build !== request.build)
-											return yield* new RunnerError({why: "bad_input"});
-										if (s.recovery._tag === "live") yield* ready();
-										return {answer: undefined, jobs: []};
-									}
-									const p = yield* coordinator;
-									const status = yield* p.status(process.name);
-									const after = status.state.process;
-									const start = Start.cases.again.make({
-										id: request.id,
-										name: s.name,
-										after,
-										why: "restart",
-										code: {program: process.program, hash: request.build},
-									});
-									const meta = yield* from(null, yield* traceId);
-									if (status.state._tag === "live") {
-										const failure = Failure.cases.interrupted.make({
-											process: after,
-											letter: request.id,
-											build: process.build,
-											seq: s.seq + 1,
-										});
-										yield* saveRecovery({
-											...s,
-											restart: request,
-											recovery: Recovery.cases.ending.make({process: after, failure}),
-											pending: {type: "exit", process: after, from: meta},
-										});
-									} else
-										yield* saveRecovery({
-											...s,
-											build: request.build,
-											restart: request,
-											recovery: Recovery.cases.starting.make({after, request: start}),
-											pending: {type: "start", process: after, from: meta},
-										});
-									yield* continueRecovery();
-									yield* ready();
+							Effect.gen(function* () {
+								if (recovery === null) return yield* new LedgerError({why: "unreachable"});
+								const s = yield* currentRecovery;
+								const prior = s.requests?.find((r) => r.id === request.id);
+								if (prior !== undefined) {
+									if (prior.build !== request.build)
+										return yield* new RunnerError({why: "bad_input"});
+									if (s.recovery._tag === "live") yield* ready();
 									return {answer: undefined, jobs: []};
-								}),
-							),
+								}
+								const p = yield* coordinator;
+								const status = yield* p.status(process.name);
+								const after = status.state.process;
+								const start = Start.cases.again.make({
+									id: request.id,
+									name: s.name,
+									after,
+									why: "restart",
+									code: {program: process.program, hash: request.build},
+								});
+								const meta = yield* from(null, yield* traceId);
+								if (status.state._tag === "live") {
+									const failure = Failure.cases.interrupted.make({
+										process: after,
+										letter: request.id,
+										build: process.build,
+										seq: s.seq + 1,
+									});
+									yield* saveRecovery({
+										...s,
+										restart: request,
+										recovery: Recovery.cases.ending.make({process: after, failure}),
+										pending: {type: "exit", process: after, from: meta},
+									});
+								} else
+									yield* saveRecovery({
+										...s,
+										build: request.build,
+										restart: request,
+										recovery: Recovery.cases.starting.make({after, request: start}),
+										pending: {type: "start", process: after, from: meta},
+									});
+								yield* continueRecovery();
+								yield* ready();
+								return {answer: undefined, jobs: []};
+							}),
 						),
 				};
 
