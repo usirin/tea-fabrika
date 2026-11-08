@@ -7,6 +7,7 @@ import {spawnSync} from "node:child_process";
 import {mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname, join} from "node:path";
+import * as fc from "fast-check";
 import {afterAll, describe, expect, it} from "vitest";
 import {type Role, signedText} from "./commits.ts";
 
@@ -761,7 +762,8 @@ const squashed = (r: Repo, notes: Array<{note: object; commit: string}>, moveMai
 					...note,
 					by: "agent:planted",
 					arrivedAt: "2026-11-07T10:00:00-08:00",
-					cause: null,
+					parent: null,
+					traceId: `trace-step-${i}`,
 					commit,
 					pr: "usirin/tea-fabrika#1",
 					base: r.base,
@@ -884,6 +886,44 @@ describe("person commits between step links (p86b)", () => {
 });
 
 describe("chain after the merge (p86 and p89)", () => {
+	// d4: in a real repo, whichever logged link carries cause (with or without parent), or lacks
+	// parent or traceId, chain stops on that row's line and answers nothing. The same log without
+	// the change answers done. One repo for every run, and few runs, since each spawns git and
+	// node; commits.test.ts's d4 laws cover the link's input space at 200 runs. Plants: drop
+	// onExcessProperty; make parent or traceId optional; read cause as the old name for parent.
+	it("d4: any logged link with cause, or without parent or traceId, stops the chain on its line", () => {
+		const r = new Repo();
+		const {squash, rows} = squashed(r, twoSteps(r));
+		log(r, rows);
+		expect(r.run(["chain", "--squash", squash])).toMatchObject({code: 0, answers: [DONE]});
+		// A cause of null or a string is what an old link held, so it comes up often.
+		const cause = fc.oneof(fc.constant(null), fc.string(), fc.jsonValue());
+		const change = fc.oneof(
+			cause.map((cause) => ({_tag: "cause" as const, cause, keepParent: true})),
+			cause.map((cause) => ({_tag: "cause" as const, cause, keepParent: false})),
+			fc.constantFrom(
+				{_tag: "drop" as const, field: "parent"},
+				{_tag: "drop" as const, field: "traceId"},
+			),
+		);
+		fc.assert(
+			fc.property(fc.nat(rows.length - 1), change, (at, how) => {
+				const bad = structuredClone(rows);
+				const link: Record<string, unknown> = bad[at]!.attested[0]!;
+				if (how._tag === "cause") {
+					if (!how.keepParent) delete link.parent;
+					link.cause = how.cause;
+				} else delete link[how.field];
+				log(r, bad);
+				const out = r.run(["chain", "--squash", squash]);
+				expect(out.code).toBe(2);
+				expect(out.answers).toEqual([]);
+				expect(out.err).toContain(`field/runs.jsonl line ${at + 1}: a link that does not read`);
+			}),
+			{seed: 119120, endOnFailure: true, numRuns: 8},
+		);
+	});
+
 	it("done: a squash whose links run from its base's tree to its tree, one through a lead merge", () => {
 		const r = new Repo();
 		const c1 = r.change("a.ts");
