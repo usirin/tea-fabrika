@@ -24,7 +24,9 @@ import {pathsOf} from "./socket.ts";
 // FABRIKA_HOME is always given: the host never guesses a home, so a host started by a test can
 // never be the owner's, and the owner's never a test's. With none, it does not start.
 // FABRIKA_SETTINGS names the folder that holds keybindings.toml: `~/.fabrika` for the owner's
-// start, as the app passes it (start-host.ts). With none, the home holds it.
+// start, as the app passes it (start-host.ts). With none, the home holds it. FABRIKA_REPO names
+// the person's git repository, where the agents they summon work (tsh's `summon`); with none, the
+// host keeps no summoned agents, and `summon` says so.
 //
 // It stops on SIGTERM or SIGINT (`NodeRuntime.runMain`): the scope closes, every tile's tsh stops
 // with it, the jobs stay in the host's table for `attach` at the next start, and the socket and
@@ -66,11 +68,14 @@ const main = Effect.gen(function* () {
 	const toFile = yield* Logger.toFile(Logger.formatSimple, paths.log, {flag: "a"});
 	// The keys file's folder, as the app said; `mod` in it is Cmd on a Mac (host/settings.ts).
 	const settings = process.env.FABRIKA_SETTINGS;
+	// The person's git repository, where the agents they summon work.
+	const repo = process.env.FABRIKA_REPO;
 	return yield* runHost({
 		home,
 		pid: process.pid,
 		settings: settings === undefined || settings === "" ? undefined : settings,
 		mac: process.platform === "darwin",
+		repo: repo === undefined || repo === "" ? undefined : repo,
 	}).pipe(
 		// Jev, for the tracker's duplicate hint, only when the home holds a key (jev.ts).
 		Effect.provide(Layer.merge(Logger.layer([toFile]), hostJev(home))),

@@ -1,0 +1,20 @@
+type = "text"
+tier = "global"
+owner = "design"
+description = "the state word running; light takes amber 12, since amber 11 reads 4.38"
+theme = "running"
+on = [
+	"surface-sunken",
+	"surface",
+	"surface-raised",
+	"surface-card",
+	"surface-hover/surface",
+	"surface-hover/surface-raised",
+	"surface-selected/surface",
+	"surface-selected/surface-raised",
+]
+floor = 4.5
+
+[colors]
+dark = "amber.11"
+light = "amber.12"

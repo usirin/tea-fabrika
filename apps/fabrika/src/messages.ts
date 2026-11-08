@@ -4,6 +4,7 @@ import {AskKey, AsksNow} from "./asks.ts";
 import {DeskSchema, TileIdSchema} from "./desk/desk.ts";
 import {Does, KeyName, Keys} from "./desk/keymap.ts";
 import {SHOWS} from "./desk/keys.ts";
+import {Change, Edit} from "./keys/program.ts";
 
 // What the app's one window and the host say to each other. The window draws the desk
 // (desk/desk.ts, run in the host), a terminal per tile, and a view per run of a program with one;
@@ -38,7 +39,15 @@ import {SHOWS} from "./desk/keys.ts";
 /** A terminal's width or height, in cells. */
 const Cells = Schema.Int.check(Schema.isBetween({minimum: 2, maximum: 1000}));
 
-export const ToTerminal = Schema.Struct({type: Schema.Literal("write"), data: Schema.String});
+/**
+ * What a tile's terminal is told: bytes to draw, and, for a screen reader, which the canvas is
+ * blank to, a job's status (`null`: none any more) and a line to say, such as an agent's reply.
+ */
+export const ToTerminal = Schema.Union([
+	Schema.Struct({type: Schema.Literal("write"), data: Schema.String}),
+	Schema.Struct({type: Schema.Literal("status"), text: Schema.NullOr(Schema.String)}),
+	Schema.Struct({type: Schema.Literal("said"), text: Schema.String}),
+]);
 export type ToTerminal = typeof ToTerminal.Type;
 
 export const FromTerminal = Schema.Union([
@@ -134,6 +143,20 @@ export const AgentOn = Schema.Struct({
 export type AgentOn = typeof AgentOn.Type;
 
 /**
+ * An agent the person summoned on this host (tsh's `summon`): its name, what it runs on, what it
+ * does now, and since when. Ours to dismiss, unlike one attached over the agents' socket.
+ */
+export const SummonedOn = Schema.Struct({
+	name: Schema.String,
+	agent: Schema.String,
+	model: Schema.NullOr(Schema.String),
+	effort: Schema.NullOr(Schema.String),
+	state: Schema.Literals(["opening", "idle", "turn", "asking", "down"]),
+	since: Millis,
+});
+export type SummonedOn = typeof SummonedOn.Type;
+
+/**
  * Which ledger the home's host reads and writes (host/connection.ts): the home's own file, or a
  * ledger server, by its address and the login the host signs in as.
  */
@@ -157,6 +180,7 @@ const Restarted = Schema.Struct({
  * The host, as it says of itself (host/serve.ts): its process, when it started, its build, its
  * ledger, the agents attached now, and who restarted the host before it. `agents` is `null` on a
  * host with no agents' socket: a test's, or one built before every home had one (host/agents.ts).
+ * `summoned` is the agents the person summoned here (tsh's `summon`), apart from those attached.
  * `restarted` is `null` on a host that started fresh, or after a crash. A host of an older build
  * sends none, and the app still attaches to it, so a `HostNow` without it reads.
  */
@@ -168,6 +192,8 @@ export const HostNow = Schema.Struct({
 	ledger: LedgerLink,
 	agents: Schema.NullOr(Schema.Array(AgentOn)),
 	restarted: Schema.optionalKey(Schema.NullOr(Restarted)),
+	/** The agents summoned here, oldest first. A host from before summon sends none. */
+	summoned: Schema.optionalKey(Schema.Array(SummonedOn)),
 });
 export type HostNow = typeof HostNow.Type;
 
@@ -209,7 +235,20 @@ export const ToPage = Schema.Union([
 		id: Schema.String,
 		why: Schema.NullOr(Schema.String),
 	}),
-	Schema.Struct({type: Schema.Literal("keys"), ...Keys.fields}),
+	Schema.Struct({
+		type: Schema.Literal("keys"),
+		...Keys.fields,
+		version: Schema.optionalKey(Schema.String),
+		changes: Schema.optionalKey(Schema.Array(Change)),
+	}),
+	Schema.Struct({
+		type: Schema.Literal("keys.saved"),
+		request: Schema.String,
+		version: Schema.String,
+	}),
+	Schema.Struct({type: Schema.Literal("keys.failed"), request: Schema.String, why: Schema.String}),
+	Schema.Struct({type: Schema.Literal("keys.opened"), run: Schema.String}),
+	Schema.Struct({type: Schema.Literal("keys.closed"), run: Schema.String}),
 	Schema.Struct({type: Schema.Literal("host"), now: HostNow}),
 	Schema.Struct({
 		type: Schema.Literal("programs"),
@@ -222,7 +261,10 @@ export const ToPage = Schema.Union([
 		),
 	}),
 	AsksMessage,
-	Schema.Struct({type: Schema.Literal("show"), what: Schema.Literals(SHOWS)}),
+	Schema.Struct({
+		type: Schema.Literal("show"),
+		what: Schema.Literals([...SHOWS, "focus-next", "focus-previous"]),
+	}),
 	Schema.Struct({
 		type: Schema.Literal("desk"),
 		desk: DeskSchema,
@@ -272,6 +314,14 @@ export type ToApp = typeof ToApp.Type;
 export const FromPage = Schema.Union([
 	Schema.Struct({type: Schema.Literal("open_lane"), from: TileIdSchema, ticket: Schema.Int}),
 	Schema.Struct({type: Schema.Literal("ask_answer"), id: Schema.String, value: AskAnswer}),
+	Schema.Struct({
+		type: Schema.Literal("keys.edit"),
+		request: Schema.String,
+		edit: Edit,
+		said: Schema.Number,
+	}),
+	Schema.Struct({type: Schema.Literal("keys.open")}),
+	Schema.Struct({type: Schema.Literal("keys.close")}),
 	Schema.Struct({type: Schema.Literal("press"), id: PressId, key: KeyName}),
 	Schema.Struct({type: Schema.Literal("click"), tile: TileIdSchema}),
 	Schema.Struct({
@@ -284,10 +334,15 @@ export const FromPage = Schema.Union([
 	Schema.Struct({type: Schema.Literal("area"), width: Pixels, height: Pixels}),
 	Schema.Struct({type: Schema.Literal("go"), tile: TileIdSchema}),
 	Schema.Struct({type: Schema.Literal("pick"), workspace: Schema.String}),
-	Schema.Struct({type: Schema.Literal("run"), does: Does}),
+	Schema.Struct({
+		type: Schema.Literal("run"),
+		does: Does,
+		via: Schema.optionalKey(Schema.Struct({keys: Schema.String})),
+	}),
 	Schema.Struct({type: Schema.Literal("later"), key: AskKey}),
 	Schema.Struct({type: Schema.Literal("back"), key: AskKey}),
 	Schema.Struct({type: Schema.Literal("seen")}),
+	Schema.Struct({type: Schema.Literal("dismiss"), name: Schema.String}),
 ]);
 export type FromPage = typeof FromPage.Type;
 

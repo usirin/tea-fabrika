@@ -1,0 +1,18 @@
+{
+	"extends": "../../../next/apps/fabrika/tsconfig.json",
+	"files": ["../../../next/apps/fabrika/src/door.test.ts"],
+	"include": [],
+	"compilerOptions": {
+		"typeRoots": ["../../../next/apps/fabrika/node_modules/@types"],
+		"paths": {
+			"@effect/vitest": [
+				"../../../next/packages/libfabrika/node_modules/@effect/vitest/dist/index.d.ts"
+			],
+			"@kampus/libfabrika/data": ["../../../next/packages/libfabrika/src/data/index.ts"],
+			"@kampus/libfabrika/coordination": [
+				"../../../next/packages/libfabrika/src/coordination/index.ts"
+			],
+			"@kampus/libfabrika/sqlite": ["../../../next/packages/libfabrika/src/data/sqlite.ts"]
+		}
+	}
+}

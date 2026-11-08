@@ -1,23 +1,23 @@
 import {monitorEventLoopDelay} from "node:perf_hooks";
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
 import {keepJobs, layerRecordTraces, openJobs, stepsInto, writerText} from "@kampus/fabrika-old";
+import {summonManager} from "@kampus/fabrika-old/agents/summon";
 import {RestartRefused} from "@kampus/fabrika-old/mcp";
 import {recordTracing} from "@kampus/fabrika-old/otel";
 import {sqliteRecords} from "@kampus/fabrika-old/records";
 import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {Author} from "@tea-fabrika/tracker";
-import {Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope, Stream} from "effect";
+import {Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope} from "effect";
 import {SocketServer} from "effect/socket";
 import {BUILD} from "../build-id.ts";
-import {decodeKeys} from "../desk/keymap.ts";
 import {fileHistory, sharedHistory} from "../editor/history.ts";
 import {agentSessions} from "./agent-session.ts";
 import {connectionOf, hostLedger} from "./connection.ts";
+import {KeybindingManager} from "./keybindings.ts";
 import {holdLock} from "./lock.ts";
 import {logSteps, sampleLag} from "./log.ts";
 import {leaveNote, takeNote} from "./restart.ts";
 import {serve} from "./serve.ts";
-import {settingsFile} from "./settings.ts";
 import {pathsOf, reach} from "./socket.ts";
 
 // The host on a home: its socket, its files and its services, around the server (serve.ts).
@@ -87,9 +87,14 @@ export const runHost = (options: {
 	readonly settings?: string | undefined;
 	/** The host runs on a Mac: `mod` in the keys file is Cmd there, and Ctrl elsewhere. */
 	readonly mac?: boolean | undefined;
+	/**
+	 * The person's git repository, where the agents they summon work (`FABRIKA_REPO`). Not said:
+	 * the host keeps no summoned agents, and tsh's `summon` says how to give it one.
+	 */
+	readonly repo?: string | undefined;
 }) =>
 	Effect.gen(function* () {
-		const {home, pid, ours, build, settings = home, mac = false} = options;
+		const {home, pid, ours, build, settings = home, mac = false, repo} = options;
 		/** The build this host names: `BUILD`, but in a test of an older host. */
 		const named = build === undefined ? BUILD : build;
 		const fs = yield* FileSystem.FileSystem;
@@ -158,6 +163,13 @@ export const runHost = (options: {
 		const before = yield* takeNote(paths);
 		// One job table for the host process, for every tile's tsh, open until the host stops. After
 		// a restart, each tile's tsh names who restarted it beside its jobs from an earlier tsh.
+		// The agents the person summons, in their repository, kept in the home for the next start.
+		const summons =
+			repo === undefined
+				? Context.empty()
+				: yield* Layer.build(
+						summonManager({storage: fileStorage(at("storage", "summon")), folder: repo}),
+					);
 		const jobs = {
 			...keepJobs(
 				yield* openJobs(fileStorage(at("storage", "jobs"), stepsInto(records))),
@@ -168,9 +180,11 @@ export const runHost = (options: {
 		};
 		// The keys file, read now and again on each save, by the one reader of the settings folder.
 		const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
-		const keys = settingsFile(settings, "keybindings.toml", (text) => decodeKeys(text, mac)).pipe(
-			Stream.provideContext(platform),
-		);
+		const keybindings = yield* KeybindingManager.make({
+			folder: settings,
+			mac,
+			by: writerText(Context.get(ledger, Author)),
+		});
 		yield* Effect.logInfo(`fabrika host: listening, pid ${pid}`);
 		// Every start's line: its build, and after a restart who restarted the host before it, and why.
 		yield* Effect.logInfo("host_began").pipe(
@@ -196,7 +210,7 @@ export const runHost = (options: {
 		);
 		return yield* serve({
 			history,
-			keys,
+			keybindings,
 			ours,
 			build: named,
 			agents: {server: agents},
@@ -251,6 +265,7 @@ export const runHost = (options: {
 		}).pipe(
 			Effect.provideService(SocketServer.SocketServer, server),
 			Effect.provideContext(ledger),
+			Effect.provideContext(summons),
 			// Each lane step's begin and end in the log, read off the spans the records keep.
 			Effect.provide(logSteps),
 			Effect.provide(Layer.merge(layerRecordTraces(records), recordTracing(records))),

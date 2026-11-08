@@ -1,0 +1,7 @@
+tier = "global"
+owner = "design"
+description = "no hue: the word says closed"
+theme = "closed"
+
+[colors]
+extends = "text-faint"

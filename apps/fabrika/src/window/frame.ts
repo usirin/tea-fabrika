@@ -110,9 +110,9 @@ export const keyWord = (key: string): string => {
 	const arrow = arrows[key];
 	if (arrow !== undefined) return arrow;
 	if (key === " ") return "Space";
-	const mod = /^<([cam])-(.+)>$/.exec(key);
+	const mod = /^<((?:[casm]-)*)(.+)>$/.exec(key);
 	if (mod === null) return key;
-	return `${mod[1]?.toUpperCase()}-${mod[2]}`;
+	return `${(mod[1] ?? "").toUpperCase()}${mod[2]}`;
 };
 
 /** A binding's whole key, as pressed: the prefix, then its own key. */
@@ -209,7 +209,11 @@ export const fileWord = (file: File): string | null =>
 export const matching = (commands: readonly Command[], query: string): readonly Command[] => {
 	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
 	return commands.filter((c) => {
-		const text = `${c.name} ${c.tsh}`.toLowerCase();
+		const spelling = c.key.replace(
+			/([CASM])-/g,
+			(_, mod: string) => ({C: "ctrl+", A: "alt+", S: "shift+", M: "cmd+"})[mod] ?? "",
+		);
+		const text = `${c.name} ${c.tsh} ${c.key} ${c.runs} ${spelling}`.toLowerCase();
 		return words.every((w) => text.includes(w));
 	});
 };
@@ -281,13 +285,13 @@ export interface Said {
 }
 
 /**
- * The agents' item: how many agents are attached to the host's agents' socket now, or `null`
- * when none is. Those are the agents at work on this desk: each drives the app's programs as tools
- * (host/agents.ts). No agent attached is not news, on a host where one could attach or on one
+ * The agents' item: how many agents are at work on this desk now, or `null` when none is: those
+ * the person summoned here (tsh's `summon`), and those attached to the host's agents' socket, each
+ * driving the app's programs as tools (host/agents.ts). No agent attached is not news, on a host where one could attach or on one
  * with no agents' socket (an older host's); C-b A still opens lines that say which.
  */
 export const agentsWord = (host: HostNow): string | null => {
-	const n = host.agents?.length ?? 0;
+	const n = (host.agents?.length ?? 0) + (host.summoned?.length ?? 0);
 	return n === 0 ? null : `${n} agent${n === 1 ? "" : "s"}`;
 };
 
@@ -897,6 +901,8 @@ const shown = (f: Frame, what: Exclude<Show, "info">): Frame => {
 			return toggle(f, {kind: "jobs"});
 		case "keys":
 			return {...f, over: {kind: "palette", title: "keys", query: "", at: 0}};
+		case "palette":
+			return {...f, over: {kind: "palette", title: "commands", query: "", at: 0}};
 		case "bars":
 			return {...f, bare: !f.bare, over: {kind: "none"}};
 	}
@@ -950,4 +956,20 @@ export const frameUpdate = (f: Frame, m: FrameMsg): Frame => {
 		case "escape":
 			return escaped(f, m.desk);
 	}
+};
+
+/**
+ * What keyboard focus follows on the desk: the workspace, its focused tile, what that tile shows
+ * and the zoom. When it changes, focus moves to the tile. A zoom moves the tile's terminal into
+ * another box, so it counts too, or focus would fall to the page.
+ *
+ *   focusFollows(open)    "ws1/t2/tsh/"     zoomed: "ws1/t2/tsh/t2"
+ */
+export const focusFollows = (open: Open | null): string => {
+	if (open === null) return "";
+	const ws = activeOf(open);
+	const tile = focusedOf(open);
+	return tile === null
+		? ""
+		: `${ws.id}/${tile.id}/${tile.shows.run?.id ?? "tsh"}/${ws.layout.zoomed ?? ""}`;
 };

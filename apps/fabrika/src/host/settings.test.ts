@@ -80,6 +80,38 @@ describe("the settings folder", () => {
 });
 
 describe("a settings file", () => {
+	it("K11: permission failure is reported as refused, never as a missing file", async () => {
+		const got = await go(
+			Effect.gen(function* () {
+				const {fs, dir} = yield* folder;
+				const broken = FileSystem.FileSystem.of({
+					...fs,
+					readFileString: () =>
+						Effect.fail(
+							PlatformError.systemError({
+								_tag: "PermissionDenied",
+								module: "FileSystem",
+								method: "readFileString",
+								description: "test denies the read",
+								pathOrDescriptor: join(dir, "keybindings.toml"),
+							}),
+						),
+				});
+				return yield* settingsFile(dir, "keybindings.toml", decode).pipe(
+					Stream.take(1),
+					Stream.runCollect,
+					Effect.provideService(FileSystem.FileSystem, broken),
+				);
+			}),
+		);
+		expect(got).toEqual([
+			expect.objectContaining({
+				_tag: "refused",
+				// No path from this machine. The screen already names the file and line before it.
+				why: "it could not be read: permission denied",
+			}),
+		]);
+	});
 	it("answers none when there is no file, and when there is no folder", async () => {
 		const seen = await go(
 			Effect.gen(function* () {

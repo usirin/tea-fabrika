@@ -1,7 +1,7 @@
 import {ASK_COMMANDS, type AskCommand} from "@kampus/pipeline/tickets/ask";
 import {Result, Schema} from "effect";
 import {parse, TomlError} from "smol-toml";
-import {type Does as Action, BINDINGS, type Binding, THE_MACS, wordOf} from "./keys.ts";
+import {type Does as Action, BINDINGS, type Binding, keyName, THE_MACS, wordOf} from "./keys.ts";
 
 // The keys file: ~/.fabrika/keybindings.toml, read and laid over the defaults that ship with the
 // app (docs/direction/keybindings-are-configurable.md, decided; ticket 174, PR 1). The file holds
@@ -54,6 +54,8 @@ export const Does = Schema.Literals([
 	'tezgah."focus --to down"',
 	'tezgah."focus --to up"',
 	'tezgah."focus --to right"',
+	'tezgah."focus --to next"',
+	'tezgah."focus --to previous"',
 	"tezgah.turn",
 	"tezgah.fold",
 	"tezgah.zoom",
@@ -152,7 +154,9 @@ export const defaults: Keys = {
 			keys:
 				does === "palette.open"
 					? [alone(PALETTE_KEY)]
-					: BINDINGS.filter((b) => b.command === does).map((b) => after(b.key)),
+					: BINDINGS.filter((b) => b.command === does).map((b) =>
+							b.does.kind === "cycle" ? alone(b.key) : after(b.key),
+						),
 			source: "default",
 		}),
 	),
@@ -235,21 +239,12 @@ const readPress = (spelled: string, mac: boolean): Result.Result<Pressed, string
 	const char = base === "space" ? " " : [...base].length === 1 ? base : null;
 	const named = char === null ? NAMED[base.toLowerCase()] : undefined;
 	if (char === null && named === undefined) return Result.fail(`${base} is not a key`);
-	if (shift) {
-		// Shift is told apart only by the character it types, as `keyName` reads a press.
-		if (mods.size > 0 || char === null || !/^[a-z]$/i.test(char))
-			return Result.fail(
-				`${spelled}: Shift is told apart only by the character it types, so write that character, such as N or |`,
-			);
-		return Result.succeed({name: char.toUpperCase(), printable: true});
-	}
-	if (mods.size === 0)
-		return Result.succeed(
-			char === null ? {name: `<${named}>`, printable: false} : {name: char, printable: true},
-		);
-	const letters = ["c", "a", "m"].filter((m) => mods.has(m)).map((m) => `${m}-`);
-	const bare = char === null ? named : char.toLowerCase();
-	return Result.succeed({name: `<${letters.join("")}${bare}>`, printable: false});
+	const key =
+		shift && char !== null && /^[a-z]$/.test(char) ? char.toUpperCase() : (char ?? named ?? "");
+	const name = keyName({key, ctrl: mods.has("c"), alt: mods.has("a"), meta: mods.has("m"), shift});
+	return name === null
+		? Result.fail(`${spelled} is not a key`)
+		: Result.succeed({name, printable: char !== null && mods.size === 0});
 };
 
 /**
@@ -344,6 +339,242 @@ const leaves = (table: Readonly<Record<string, unknown>>, above: readonly string
 };
 
 const pathWord = (path: readonly string[]): string => path.map(partWord).join(".");
+
+interface Assignment {
+	readonly word: string;
+	readonly path: readonly string[];
+	readonly start: number;
+	readonly end: number;
+	readonly value: number;
+	readonly until: number;
+}
+
+/** A table's section: its path, and where a new row under it goes. Root is the empty path. */
+interface Section {
+	readonly path: readonly string[];
+	after: number;
+}
+
+/** Source positions, read with TOML's strings, comments and nested values intact. */
+const assignments = (text: string): {rows: Assignment[]; sections: Section[]} => {
+	const rows: Assignment[] = [];
+	let table: readonly string[] = [];
+	const sections: Section[] = [{path: [], after: 0}];
+	let section = sections[0] as Section;
+	let header = text.length;
+	let at = 0;
+	while (at < text.length) {
+		const start = at;
+		const newline = text.indexOf("\n", at);
+		const end = newline < 0 ? text.length : newline + 1;
+		const line = text.slice(start, end).trim();
+		if (line === "" || line.startsWith("#")) {
+			at = end;
+			continue;
+		}
+		if (line.startsWith("[")) {
+			header = Math.min(header, start);
+			const read = readToml(line);
+			let named = false;
+			if (Result.isSuccess(read)) {
+				let nested = read.success;
+				const parts: string[] = [];
+				while (Object.keys(nested).length === 1) {
+					const part = Object.keys(nested)[0];
+					if (part === undefined || !isTable(nested[part])) break;
+					parts.push(part);
+					nested = nested[part];
+				}
+				table = parts;
+				named = parts.length > 0 && !line.startsWith("[[");
+			}
+			// An array of tables or an unread header takes no new rows.
+			section = {path: named ? table : [], after: end};
+			if (named) sections.push(section);
+			at = end;
+			continue;
+		}
+		let quote = "";
+		let equal = start;
+		for (; equal < end; equal += 1) {
+			const c = text[equal];
+			if (quote === '"' && c === "\\") {
+				equal += 1;
+				continue;
+			}
+			if (quote !== "") {
+				if (c === quote) quote = "";
+				continue;
+			}
+			if (c === '"' || c === "'") {
+				quote = c;
+				continue;
+			}
+			if (c === "=") break;
+		}
+		if (equal === end) {
+			at = end;
+			continue;
+		}
+		const key = readToml(`${text.slice(start, equal)} = 0`);
+		if (Result.isFailure(key)) {
+			at = end;
+			continue;
+		}
+		const path = leaves(key.success)[0]?.path ?? [];
+		let value = equal + 1;
+		while (text[value] === " " || text[value] === "\t") value += 1;
+		let cursor = value;
+		let depth = 0;
+		quote = "";
+		let triple = false;
+		for (; cursor < text.length; cursor += 1) {
+			const c = text[cursor] ?? "";
+			if (quote !== "") {
+				if (quote === '"' && c === "\\") {
+					cursor += 1;
+					continue;
+				}
+				if (triple ? text.slice(cursor, cursor + 3) === quote.repeat(3) : c === quote) {
+					if (triple) cursor += 2;
+					quote = "";
+					triple = false;
+				}
+				continue;
+			}
+			if (c === '"' || c === "'") {
+				quote = c;
+				triple = text.slice(cursor, cursor + 3) === c.repeat(3);
+				if (triple) cursor += 2;
+				continue;
+			}
+			if (c === "#") {
+				if (depth === 0) break;
+				const next = text.indexOf("\n", cursor);
+				cursor = next < 0 ? text.length : next;
+				continue;
+			}
+			if (c === "[" || c === "{") depth += 1;
+			if (c === "]" || c === "}") depth -= 1;
+			if ((c === "\n" || c === "\r") && depth === 0) break;
+		}
+		let until = cursor;
+		while (until > value && /\s/.test(text[until - 1] ?? "")) until -= 1;
+		const last = text.indexOf("\n", cursor);
+		at = last < 0 ? text.length : last + 1;
+		rows.push({
+			word: pathWord([...table, ...path]),
+			path: [...table, ...path],
+			start,
+			end: at,
+			value,
+			until,
+		});
+		section.after = at;
+	}
+	(sections[0] as Section).after = header;
+	return {rows, sections};
+};
+
+const startsWith = (path: readonly string[], head: readonly string[]): boolean =>
+	head.length < path.length && head.every((part, i) => path[i] === part);
+
+/** A dotted word's parts: `tezgah."split --to down"` is `tezgah` then `split --to down`. */
+const wordPath = (word: string): readonly string[] => {
+	const read = readToml(`${word} = 0`);
+	return Result.isSuccess(read) ? (leaves(read.success)[0]?.path ?? [word]) : [word];
+};
+
+type Assigned = string | readonly string[];
+
+/** A TOML value as one line: strings and lists as JSON spells them, tables inline. */
+const inline = (value: unknown): string =>
+	isTable(value)
+		? `{ ${Object.entries(value)
+				.map(([part, one]) => `${partWord(part)} = ${inline(one)}`)
+				.join(", ")} }`
+		: JSON.stringify(value);
+
+/** The table with `path` set to `value`, or without it when `value` is null. */
+const setIn = (
+	table: Readonly<Record<string, unknown>>,
+	path: readonly string[],
+	value: Assigned | null,
+): Readonly<Record<string, unknown>> => {
+	const [part, ...rest] = path;
+	if (part === undefined) return table;
+	const {[part]: here, ...others} = table;
+	if (rest.length === 0) return value === null ? others : {...table, [part]: value};
+	return {...table, [part]: setIn(isTable(here) ? here : {}, rest, value)};
+};
+
+/**
+ * Change only the requested assignments. A new row goes into the deepest table header that holds
+ * it, as a short key, or into an inline table that holds it; otherwise it goes above the first
+ * header, where a dotted key cannot clash with one.
+ */
+export const patchKeys = (text: string, values: ReadonlyMap<string, Assigned | null>): string => {
+	const source = assignments(text);
+	const patches: {start: number; end: number; text: string}[] = [];
+	const added = new Map<number, string>();
+	const inlines = new Map<Assignment, Readonly<Record<string, unknown>>>();
+	for (const [word, value] of values) {
+		const path = wordPath(word);
+		const row = source.rows.find((row) => row.word === pathWord(path));
+		const holder = source.rows.find(
+			(row) => startsWith(path, row.path) && text.slice(row.value, row.value + 1) === "{",
+		);
+		if (row !== undefined) {
+			if (value === null) {
+				// Leave a trailing hand-written comment in place when removing its assignment.
+				const tail = text.slice(row.until, row.end);
+				patches.push({
+					start: row.start,
+					end: row.end,
+					text: tail.trimStart().startsWith("#") ? tail.trimStart() : "",
+				});
+			} else patches.push({start: row.value, end: row.until, text: JSON.stringify(value)});
+		} else if (holder !== undefined) {
+			const read = readToml(`x = ${text.slice(holder.value, holder.until)}`);
+			const before =
+				inlines.get(holder) ??
+				(Result.isSuccess(read) && isTable(read.success.x) ? read.success.x : {});
+			inlines.set(holder, setIn(before, path.slice(holder.path.length), value));
+		} else if (value !== null) {
+			const section = source.sections
+				.filter((one) => one.path.length === 0 || startsWith(path, one.path))
+				.reduce((deepest, one) => (one.path.length > deepest.path.length ? one : deepest));
+			const line = `${pathWord(path.slice(section.path.length))} = ${JSON.stringify(value)}\n`;
+			added.set(section.after, (added.get(section.after) ?? "") + line);
+		}
+	}
+	for (const [holder, table] of inlines)
+		patches.push({start: holder.value, end: holder.until, text: inline(table)});
+	for (const [at, rows] of added)
+		patches.push({
+			start: at,
+			end: at,
+			text: `${at > 0 && text[at - 1] !== "\n" ? "\n" : ""}${rows}`,
+		});
+	let saved = text;
+	for (const patch of patches.sort((a, b) => b.start - a.start))
+		saved = saved.slice(0, patch.start) + patch.text + saved.slice(patch.end);
+	return saved;
+};
+
+export const writtenKeys = (text: string): ReadonlyMap<string, string | readonly string[]> => {
+	const read = readToml(text);
+	return new Map(
+		Result.isFailure(read)
+			? []
+			: leaves(read.success).flatMap(({path, value}) =>
+					typeof value === "string" ||
+					(Array.isArray(value) && value.every((one) => typeof one === "string"))
+						? [[pathWord(path), value] as const]
+						: [],
+				),
+	);
+};
 
 /** The text read as TOML, or the line it breaks on. */
 const readToml = (text: string): Result.Result<Readonly<Record<string, unknown>>, Refused> => {
@@ -478,10 +709,6 @@ const readWritten = (
 		for (const one of spelled.success) {
 			const read = readKey(one, mac, word.startsWith("program."));
 			if (Result.isFailure(read)) return no(read.failure);
-			if (word === "palette.open" && read.success._tag === "after_prefix")
-				return no(
-					`palette.open is the window's, so it takes a key pressed alone, such as cmd+k, not ${one}`,
-				);
 			if (Schema.is(ProgramDoes)(word) && read.success._tag === "after_prefix")
 				return no(`${word} takes a key pressed alone inside the focused ask, not ${one}`);
 			keys.push({key: read.success, spelled: one});
@@ -566,6 +793,8 @@ export const decodeKeys = (text: string, mac: boolean): Result.Result<Keys, Refu
 			? {...row, keys: row.keys.filter((k) => !lost(k))}
 			: Row.make({does: row.does, keys: yours.keys.map((k) => k.key), source: "yours"});
 	});
+	if (!rows.some((row) => row.does.startsWith('tezgah."focus --to ') && row.keys.length > 0))
+		return Result.fail({line: 1, why: "Keep a focus key so a terminal has a keyboard way out"});
 	const programs = (defaults.programs ?? []).map((row) => {
 		const yours = set.rows.find((r) => r.does === row.does);
 		const takenHere = set.rows
@@ -615,7 +844,7 @@ export const programCommandOn = (
 
 // ---------------------------------------------------------------- a key, as the file spells it
 
-const WORDS: Readonly<Record<string, string>> = {c: "ctrl", a: "alt", m: "cmd"};
+const WORDS: Readonly<Record<string, string>> = {c: "ctrl", a: "alt", s: "shift", m: "cmd"};
 const SPOKEN: Readonly<Record<string, string>> = Object.fromEntries(
 	Object.entries(NAMED).map(([word, name]) => [name, word]),
 );
@@ -626,7 +855,7 @@ const SPOKEN: Readonly<Record<string, string>> = Object.fromEntries(
  */
 export const spell = (name: string): string => {
 	if (name === " ") return "space";
-	const wrapped = /^<((?:[cam]-)*)(.+)>$/.exec(name);
+	const wrapped = /^<((?:[casm]-)*)(.+)>$/.exec(name);
 	if (wrapped === null) return name;
 	const [, mods = "", base = ""] = wrapped;
 	const words = mods

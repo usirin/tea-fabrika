@@ -24,8 +24,15 @@ import {
 	type Workspace,
 } from "../desk/desk.ts";
 import {type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key} from "../desk/hold.ts";
-import {commandOn, programCommandOn, defaults, Key as KeyCase, type Keys} from "../desk/keymap.ts";
-import {keyName, keyOwner} from "../desk/keys.ts";
+import {
+	commandOn,
+	programCommandOn,
+	defaults,
+	Key as KeyCase,
+	type Keys,
+	spell,
+} from "../desk/keymap.ts";
+import {keyName, keyOwner, matchPress, THE_MACS} from "../desk/keys.ts";
 import {
 	type ContainerNode,
 	findTile,
@@ -37,6 +44,8 @@ import {
 	type TileId,
 	type TileNode,
 } from "../desk/layout/index.ts";
+import {type Editor, type EditorCmd, type EditorMsg, editorMachine} from "../keys/machine.ts";
+import type {Snapshot} from "../keys/program.ts";
 import {
 	type Attached,
 	type FromPage,
@@ -49,6 +58,7 @@ import {
 } from "../messages.ts";
 import {
 	EXPLAIN_ON,
+	focusFollows,
 	FRAME,
 	type Frame,
 	type FrameMsg,
@@ -115,6 +125,9 @@ const store: {
 	attachedOnce: boolean;
 	/** The keys file's table, as the host sent it last (desk/keymap.ts); the defaults until then. */
 	keys: Keys;
+	keysEditor: Editor | null;
+	keySession: string;
+	keyChanges: Snapshot["changes"];
 	/** What each program takes and sends. */
 	shapes: Shapes;
 	/** What waits on the person, as the host counts it; `null` until it says. */
@@ -132,6 +145,9 @@ const store: {
 	desk: null,
 	attachedOnce: false,
 	keys: defaults,
+	keysEditor: null,
+	keySession: "",
+	keyChanges: [],
 	shapes: new Map(),
 	asks: null,
 	host: null,
@@ -204,6 +220,23 @@ const askActions: AskActions = {
 		};
 	},
 	blocked: () => store.desk?.at === "open" && store.desk.prefix.armed,
+};
+const editKeys = (message: EditorMsg) => {
+	if (store.keysEditor === null) return;
+	const [next, cmds] = applyCell<Editor, EditorMsg, EditorCmd>(
+		editorMachine,
+		store.keysEditor,
+		message,
+	);
+	store.keysEditor = next;
+	for (const command of cmds)
+		toHost({
+			type: "keys.edit",
+			edit: command.edit,
+			request: `${store.keySession}:${command.request}`,
+			said: Date.now(),
+		});
+	changed();
 };
 /** What the page tells the app itself: on the desk's port, read by main and not passed on. */
 const toApp = (m: ToApp) => window.fabrika.send("desk", m);
@@ -288,7 +321,9 @@ const editable = (el: Element | null): el is HTMLElement =>
 
 /** With something over the desk, keep focus in it: answers whether focus was already there. */
 const focusOver = (target: EventTarget | null): "in" | "moved in" => {
-	const box = document.querySelector<HTMLElement>("[data-over]");
+	const box = document.querySelector<HTMLElement>(
+		".keys-dialog[role='dialog'], .keys-dialog [role='dialog'], [data-over]",
+	);
 	if (box === null || (target instanceof Element && box.contains(target))) return "in";
 	(box.querySelector<HTMLElement>("input") ?? box).focus();
 	return "moved in";
@@ -338,6 +373,8 @@ const pressAgain = (key: Key) => {
 				altKey: p.alt,
 				metaKey: p.meta,
 				shiftKey: p.shift,
+				isComposing: p.composing ?? false,
+				modifierAltGraph: p.altGraph ?? false,
 				bubbles: true,
 				cancelable: true,
 			}),
@@ -369,6 +406,17 @@ let noteTimer: ReturnType<typeof setTimeout> | undefined;
 const frameStep = (m: FrameMsg): boolean => {
 	const next = frameUpdate(store.frame, m);
 	if (next === store.frame) return false;
+	const wasKeys = store.frame.over.kind === "palette" && store.frame.over.title === "keys";
+	const isKeys = next.over.kind === "palette" && next.over.title === "keys";
+	if (wasKeys && !isKeys) {
+		toHost({type: "keys.close"});
+		store.keysEditor = null;
+	}
+	if (!wasKeys && isKeys) {
+		store.keySession = crypto.randomUUID();
+		store.keysEditor = editorMachine.init(store.keys, undefined)[0];
+		toHost({type: "keys.open"});
+	}
 	if (next.note !== null && next.note !== store.frame.note) {
 		clearTimeout(noteTimer);
 		noteTimer = setTimeout(() => frameStep({type: "unnote"}), NOTE_MS);
@@ -376,6 +424,31 @@ const frameStep = (m: FrameMsg): boolean => {
 	store.frame = next;
 	changed();
 	return true;
+};
+
+const cycleFocus = (to: "next" | "previous") => {
+	const open = store.desk?.at === "open" ? store.desk : null;
+	const tile = open === null ? null : focusedOf(open);
+	const screen =
+		tile === null
+			? null
+			: document.querySelector<HTMLElement>(
+					`[data-tile="${tile.id}"] .screen, [data-view="${tile.id}"]`,
+				);
+	const regions = [
+		document.querySelector<HTMLElement>(".topbar button"),
+		screen,
+		document.querySelector<HTMLElement>(".bottomline button"),
+	].filter((el): el is HTMLElement => el !== null && el.getClientRects().length > 0);
+	if (regions.length < 2)
+		regions.unshift(document.querySelector<HTMLElement>(".desk") ?? document.body);
+	const at = regions.findIndex((el) =>
+		el.matches(".desk") ? el === document.activeElement : el.contains(document.activeElement),
+	);
+	const target = regions[(at + (to === "next" ? 1 : regions.length - 1)) % regions.length];
+	if (target === screen && tile !== null && tile.shows.run === null)
+		terminals.get(tile.id)?.focus();
+	else target?.focus();
 };
 
 /** What info mode says of a part of the page: the words of the nearest `data-info`, or `null`. */
@@ -439,7 +512,31 @@ const heard = (raw: unknown) => {
 				ignore: m.ignore,
 				file: m.file,
 			};
+			store.keyChanges = m.changes ?? [];
+			editKeys({
+				type: "keys",
+				keys: store.keys,
+				...(m.version === undefined ? {} : {version: m.version}),
+			});
 			return changed();
+		case "keys.saved":
+			if (!m.request.startsWith(`${store.keySession}:`)) return;
+			return editKeys({
+				type: "saved",
+				request: m.request.slice(store.keySession.length + 1),
+				version: m.version,
+			});
+		case "keys.failed":
+			if (m.request !== "open" && !m.request.startsWith(`${store.keySession}:`)) return;
+			return editKeys({
+				type: "failed",
+				request: m.request === "open" ? "open" : m.request.slice(store.keySession.length + 1),
+				why: m.why,
+			});
+		case "keys.opened":
+			return;
+		case "keys.closed":
+			return;
 		case "programs":
 			store.shapes = new Map(m.programs.map((p) => [p.name, {takes: p.takes, sends: p.sends}]));
 			return changed();
@@ -450,6 +547,8 @@ const heard = (raw: unknown) => {
 			store.host = m.now;
 			return changed();
 		case "show":
+			if (m.what === "focus-next" || m.what === "focus-previous")
+				return cycleFocus(m.what === "focus-next" ? "next" : "previous");
 			return m.what === "info"
 				? frameStep({type: "info", focus: focusWords()})
 				: frameStep({type: "show", what: m.what});
@@ -467,7 +566,10 @@ const heard = (raw: unknown) => {
 		case "link":
 			store.link = m.now;
 			// Off a host, a key held for its answer gets none: the hold lets them go.
-			if (!attached(m.now)) holdStep({type: "down"});
+			if (!attached(m.now)) {
+				holdStep({type: "down"});
+				if (store.keysEditor !== null) frameStep({type: "close"});
+			}
 			// On one, it may be a host that never heard the workspace's size.
 			else tellArea(true);
 			return changed();
@@ -510,20 +612,85 @@ const swallow = (e: KeyboardEvent) => {
  */
 const onKey = (e: KeyboardEvent) => {
 	if (replaying) return;
-	const pressed = {key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey};
-	const owner = keyOwner(pressed, MAC, store.keys);
+	const pressed = {
+		key: e.key,
+		code: e.code,
+		ctrl: e.ctrlKey,
+		alt: e.altKey,
+		meta: e.metaKey,
+		shift: e.shiftKey,
+		composing: e.isComposing,
+		altGraph: e.getModifierState("AltGraph"),
+	};
+	const rawName = keyName(pressed);
+	if (MAC && rawName !== null && THE_MACS.has(rawName)) {
+		e.stopPropagation();
+		return;
+	}
+	const recording = store.keysEditor?.recording;
+	if (recording !== undefined && recording._tag !== "idle" && rawName === "<c-c>") {
+		swallow(e);
+		const tile = store.desk?.at === "open" ? focusedOf(store.desk) : null;
+		if (tile !== null) window.fabrika.send(`tile:${tile.id}`, {type: "keys", data: "\u0003"});
+		return;
+	}
+	if (recording?._tag === "waiting") {
+		if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey) return;
+		if (
+			(e.key === "Enter" || e.key === " ") &&
+			e.target instanceof Element &&
+			e.target.closest("button") !== null
+		)
+			return;
+		swallow(e);
+		return editKeys({type: "press", press: pressed});
+	}
+	if (recording?._tag === "candidate" || recording?._tag === "saving") {
+		if (e.key === "Escape") {
+			swallow(e);
+			if (recording._tag === "candidate") editKeys({type: "cancel"});
+			return;
+		}
+		// Keep candidates away from app shortcuts while the native controls still receive their keys.
+		if (pressed.meta || pressed.ctrl || pressed.alt) {
+			if (keyOwner(pressed, MAC, store.keys) === "system") return;
+			return swallow(e);
+		}
+		return;
+	}
+	const afterPrefix = midKey().armed
+		? matchPress(
+				pressed,
+				store.keys.rows.flatMap((row) => row.keys.filter((key) => key._tag === "after_prefix")),
+				MAC,
+			)
+		: null;
+	const owner = afterPrefix === null ? keyOwner(pressed, MAC, store.keys) : "app";
 	if (owner === "nobody") return swallow(e);
 	if (owner === "system") {
 		if (e.target instanceof Element && e.target.closest(".term") !== null) e.stopPropagation();
 		if (store.frame.over.kind !== "none") focusOver(e.target);
 		return;
 	}
-	const name = keyName(pressed);
+	const applicable = [
+		KeyCase.cases.alone.make({key: store.keys.prefix}),
+		...store.keys.rows.flatMap((row) =>
+			row.keys.filter((key) => key._tag === (midKey().armed ? "after_prefix" : "alone")),
+		),
+	];
+	const name = matchPress(pressed, applicable, MAC)?.key ?? rawName;
 	const alone =
 		name === null ? undefined : commandOn(store.keys, KeyCase.cases.alone.make({key: name}));
 	if (alone === "palette.open") {
 		swallow(e);
-		return frameStep({type: "palette"});
+		toHost({type: "run", does: "palette.open", via: {keys: spell(name ?? "")}});
+		return;
+	}
+	if (alone === 'tezgah."focus --to next"' || alone === 'tezgah."focus --to previous"') {
+		swallow(e);
+		if (store.frame.over.kind !== "none") frameStep({type: "close"});
+		toHost({type: "run", does: alone, via: {keys: spell(name ?? "")}});
+		return;
 	}
 	const innerAsk =
 		e.target instanceof Element
@@ -535,14 +702,7 @@ const onKey = (e: KeyboardEvent) => {
 	const forOver = keyForOver(name, e.target);
 	if (forOver === "in") return;
 	if (forOver === "moved in") return swallow(e);
-	const press = {
-		key: e.key,
-		code: e.code,
-		ctrl: e.ctrlKey,
-		alt: e.altKey,
-		meta: e.metaKey,
-		shift: e.shiftKey,
-	};
+	const press = pressed;
 	if (name === store.keys.prefix) noteKeyedFrom(e.target);
 	if (holdStep({type: "key", key: {name, press}})) return;
 	swallow(e);
@@ -572,7 +732,7 @@ function View({tile, run}: {readonly tile: TileId; readonly run: string}): React
 			data-view={tile}
 			tabIndex={-1}
 		>
-			{view === undefined ? (
+			{view?.program === "keys" ? null : view === undefined ? (
 				<p className="starting">starting</p>
 			) : known === undefined ? (
 				<p role="alert">no view for {view.program} in this app</p>
@@ -788,7 +948,7 @@ function App(): ReactNode {
 	const ws = open === null ? null : activeOf(open);
 	const focused = open === null ? null : focusedOf(open);
 	const over = store.frame.over.kind;
-	const shown = focused === null ? "" : `${ws?.id}/${focused.id}/${runOf(focused)?.id ?? "tsh"}`;
+	const shown = focusFollows(open);
 	// Focus follows the desk: to the focused tile's terminal, or to the view that covers it. Only
 	// when that changes, so a view's own input keeps focus while its view is drawn again. A layout
 	// effect, so focus has moved before a key held for the host's answer is pressed again. The
@@ -818,6 +978,9 @@ function App(): ReactNode {
 		link: store.link,
 		attachedOnce: store.attachedOnce,
 		keys: store.keys,
+		keysEditor: store.keysEditor,
+		keyChanges: store.keyChanges,
+		editKeys,
 		shapes: store.shapes,
 		tickets: ticketsShown(store.views),
 		armed: open?.prefix.armed ?? false,
@@ -831,6 +994,9 @@ function App(): ReactNode {
 	return (
 		<div
 			className={`desk${view.kind === "over" && view.dim ? " lost" : ""}${MAC ? " mac" : ""}${bare ? " bare" : ""}`}
+			tabIndex={-1}
+			role="group"
+			aria-label="the desk"
 		>
 			{bare || view.kind === "instead" ? <Band /> : <TopBar {...props} />}
 			{view.kind === "instead" ? (

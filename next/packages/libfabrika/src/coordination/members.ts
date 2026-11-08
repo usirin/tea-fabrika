@@ -44,6 +44,15 @@ export const Signed = Schema.Struct({
 	text: Schema.String,
 	armored: Schema.String,
 	signer: Schema.String,
+	passkey: Schema.optionalKey(
+		Schema.Struct({
+			origin: Schema.String,
+			rp: Schema.String,
+			be: Schema.Boolean,
+			bs: Schema.Boolean,
+			counter: Schema.Int,
+		}),
+	),
 });
 
 /** A removal, the grant's twin: its own id, and the ledger it was meant for (flag 5). */
@@ -72,7 +81,21 @@ export const AddSaw = Schema.Struct({
 
 /** What joins: a new device (its person key and window key) or a new sheet. */
 export const Adds = Schema.TaggedUnion({
-	person: {key: Schema.String, window: Schema.String},
+	person: {
+		key: Schema.String,
+		window: Schema.String,
+		passkey: Schema.optionalKey(
+			Schema.Struct({
+				credential: Schema.String,
+				rp: Schema.String,
+				origin: Schema.String,
+				be: Schema.Boolean,
+				bs: Schema.Boolean,
+				nonce: Schema.String,
+				proof: Schema.String,
+			}),
+		),
+	},
 	recovery: {key: Schema.String, v: Schema.Literal(1)},
 });
 

@@ -37,6 +37,22 @@ const running = (count: number): TileJobs => ({
 	ended: null,
 });
 
+describe("today's keys PR 1 command paths", () => {
+	it("K17: a prefix opens the palette, and an unbound command still runs by name", () => {
+		const read = decodeKeys('palette.open = "<prefix>p"\ntezgah.zoom = []', true);
+		if (Result.isFailure(read)) throw new Error(read.failure.why);
+		const configured = fold([{type: "keys", keys: read.success}]).s;
+		const openedPalette = fold(prefixed("p"), configured);
+		expect(openedPalette.cmds).toContainEqual(
+			expect.objectContaining({type: "show", what: "palette"}),
+		);
+		const two = fold(prefixed("|"), configured).s;
+		expect(activeOf(opened(fold(prefixed("z"), two).s)).layout.zoomed).toBeNull();
+		const named = fold([{type: "run", does: "tezgah.zoom"}], two);
+		expect(activeOf(opened(named.s)).layout.zoomed).toBe("t2");
+	});
+});
+
 /** Fold msgs through the desk from `from`, keeping every Cmd asked for. */
 const fold = (msgs: readonly DeskMsg[], from: Desk = start) => {
 	let s = from;

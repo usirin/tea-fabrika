@@ -1,6 +1,6 @@
 import {runIn} from "@demlik/tea/effect";
 import {useMachine} from "@demlik/tea/react";
-import {Button} from "@manti-ui/react";
+import {Button, Dialog} from "@manti-ui/react";
 import {AskView} from "@tea-fabrika/tracker/ask-window";
 import {Layer, ManagedRuntime} from "effect";
 import {
@@ -17,7 +17,10 @@ import type {AsksNow} from "../asks.ts";
 import {activeOf, focusedOf, type Open} from "../desk/desk.ts";
 import type {Keys} from "../desk/keymap.ts";
 import {type Group, wordOf} from "../desk/keys.ts";
-import type {FromPage, HostNow, LinkNow, ToApp} from "../messages.ts";
+import type {Editor, EditorMsg} from "../keys/machine.ts";
+import type {Snapshot} from "../keys/program.ts";
+import {KeysWindow} from "../keys/window.tsx";
+import type {FromPage, HostNow, LinkNow, SummonedOn, ToApp} from "../messages.ts";
 import {
 	agentsWord,
 	asksMenuMachine,
@@ -55,7 +58,7 @@ import {
 	workspaceName,
 } from "./frame.ts";
 import {type Cap, type Hint, type Row, sentence, type Words} from "./pop.ts";
-import {type Empty, IconOf, Lines, Menu, Palette, Panel, useTip, WordsOf} from "./pop.tsx";
+import {type Empty, Foot, IconOf, Lines, Menu, Palette, Panel, useTip, WordsOf} from "./pop.tsx";
 
 // The window's frame, drawn: the top bar, the bottom line, and what opens over the desk (the
 // asks list, the jobs list, the palette, an item's few lines). Its words are frame.ts's; this file only lays
@@ -84,6 +87,9 @@ export interface FrameProps {
 	readonly attachedOnce: boolean;
 	/** The keys file's table, as the host sent it (desk/keymap.ts): the defaults until it says. */
 	readonly keys: Keys;
+	readonly keysEditor?: Editor | null;
+	readonly editKeys?: (msg: EditorMsg) => void;
+	readonly keyChanges?: Snapshot["changes"];
 	readonly shapes: Shapes;
 	readonly tickets: TicketsShown;
 	readonly armed: boolean;
@@ -428,6 +434,14 @@ export function Band(): ReactNode {
 	return <div className="band" data-info={INFO.drag} />;
 }
 
+/** The asks list's footer: the keys no row shows. */
+const ASKS_FOOT: readonly Hint[] = [
+	{caps: ["↑", "↓"], name: "Move"},
+	{caps: ["↵"], name: "Open"},
+	{caps: ["H"], name: "Later"},
+	{caps: ["Esc"], name: "Close"},
+];
+
 /** The asks menu's selection runs on the Effect engine, with nothing to provide. */
 const menuRun = runIn(ManagedRuntime.make(Layer.empty));
 
@@ -567,6 +581,7 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 					))}
 				</div>
 			)}
+			{rows.length > 0 && <Foot hints={ASKS_FOOT} />}
 		</Panel>
 	);
 }
@@ -665,7 +680,7 @@ function ItemLines(props: FrameProps & {readonly what: Part}): ReactNode {
 				</>
 			);
 		return props.what === "agents" ? (
-			<AgentsLines host={host} now={now} />
+			<AgentsLines host={host} now={now} toHost={props.toHost} />
 		) : (
 			<SyncLines host={host} asks={props.asks} />
 		);
@@ -687,8 +702,90 @@ const ATTACH: Words = [
 	},
 ];
 
+/** What a summoned agent does now, in a word or two. */
+const STATE_WORD: Readonly<Record<SummonedOn["state"], string>> = {
+	opening: "opening",
+	idle: "idle",
+	turn: "working",
+	asking: "asking you",
+	down: "down",
+};
+
+/**
+ * The agents the person summoned here, a row each: its name, what it runs on and does now, and a
+ * Dismiss, as `dismiss <name>` is in a tile. Nothing when none is summoned.
+ */
+function SummonedLines(props: {
+	readonly summoned: readonly SummonedOn[];
+	readonly now: number;
+	readonly toHost: (m: FromPage) => void;
+}): ReactNode {
+	const {summoned} = props;
+	if (summoned.length === 0) return null;
+	return (
+		<>
+			<h2 className="pop-title">
+				{`${summoned.length} agent${summoned.length === 1 ? "" : "s"} summoned here`}
+			</h2>
+			<ul className="pop-lines">
+				{summoned.map((a) => (
+					<li key={a.name} className="pop-row two">
+						<span className="lead">
+							<IconOf icon={a.state === "down" ? "stuck" : "running"} />
+						</span>
+						<span className="text">
+							<span className="t">{a.name}</span>
+							<span className="s">
+								{[a.agent, a.model, a.effort].filter((w) => w !== null).join(" · ")} ·{" "}
+								{STATE_WORD[a.state]} · since {clockWord(a.since, props.now)}
+							</span>
+						</span>
+						<button
+							type="button"
+							className="pop-button"
+							aria-label={`Dismiss ${a.name}`}
+							onClick={() => props.toHost({type: "dismiss", name: a.name})}
+						>
+							Dismiss
+						</button>
+					</li>
+				))}
+			</ul>
+			<p className="pop-text">
+				<WordsOf words={SUMMON} />
+			</p>
+		</>
+	);
+}
+
+/** How an agent is summoned, said under the summoned ones, its command typed. */
+const SUMMON: Words = [
+	{text: "Summon one in a tile with ", typed: false},
+	{text: "summon claude as scout", typed: true},
+	{text: ", then talk with ", typed: false},
+	{text: "@scout", typed: true},
+	{text: ".", typed: false},
+];
+
+/**
+ * The agents on this desk: the ones the person summoned, ours to dismiss, then each attached to
+ * the host's agents' socket, under its own heading: its name, and since when.
+ */
+function AgentsLines(props: {
+	readonly host: HostNow;
+	readonly now: number;
+	readonly toHost: (m: FromPage) => void;
+}): ReactNode {
+	return (
+		<>
+			<SummonedLines summoned={props.host.summoned ?? []} now={props.now} toHost={props.toHost} />
+			<AttachedLines host={props.host} now={props.now} />
+		</>
+	);
+}
+
 /** Each agent attached to the host now, a row each: its name, and since when. */
-function AgentsLines(props: {readonly host: HostNow; readonly now: number}): ReactNode {
+function AttachedLines(props: {readonly host: HostNow; readonly now: number}): ReactNode {
 	const {agents} = props.host;
 	if (agents === null)
 		return (
@@ -1098,6 +1195,30 @@ function CommandPalette(props: FrameProps): ReactNode {
 	const close = useCallback(() => step({type: "close"}), [step]);
 	if (frame.over.kind !== "palette") return null;
 	const {title, query, at} = frame.over;
+	if (title === "keys" && props.keysEditor != null && props.editKeys !== undefined)
+		return (
+			<Dialog
+				id={POP.palette}
+				className="keys-dialog"
+				title="Keyboard shortcuts"
+				open
+				size="lg"
+				closeOnEscape={false}
+				showCloseButton={false}
+				closeOnInteractOutside={props.keysEditor.recording._tag !== "saving"}
+				onOpenChange={(open) => {
+					if (!open && props.keysEditor?.recording._tag !== "saving") close();
+				}}
+			>
+				<KeysWindow
+					keys={props.keys}
+					editor={props.keysEditor}
+					send={props.editKeys}
+					changes={props.keyChanges ?? []}
+					close={close}
+				/>
+			</Dialog>
+		);
 	const keys = title === "keys";
 	const shown = matching(commandsOf(props.keys, desk?.workspaces.length ?? 0), query);
 	const run = (i: number) => {

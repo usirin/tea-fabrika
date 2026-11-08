@@ -1,0 +1,21 @@
+type = "border"
+tier = "global"
+owner = "design"
+description = "the one focus token: every keyboard ring and the focused tile's edge"
+theme = "focus"
+on = [
+	"surface-sunken",
+	"surface",
+	"surface-raised",
+	"surface-card",
+	"surface-hover/surface-sunken",
+	"surface-hover/surface",
+	"surface-hover/surface-raised",
+	"surface-selected/surface",
+	"surface-selected/surface-raised",
+]
+floor = 3
+
+[colors]
+dark = { step = "slate.a9", bend = "a solid step used as a line: a8 reads 2.82 on a selected row" }
+light = { step = "slate.a9", bend = "a solid step used as a line: a8 reads 1.90 on the desk" }

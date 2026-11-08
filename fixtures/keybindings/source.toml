@@ -1,0 +1,12 @@
+# A hand-written file. These comments and untouched rows must survive a save.
+prefix = "ctrl+a" # keep this note
+ignore = ["cmd+w"]
+
+tezgah.zoom = [
+  "<prefix>m", # first choice
+  "<prefix>enter",
+] # zoom note
+tezgah."split --to down" = '<prefix>_' # quoted dotted word
+
+[palette] # keep this header
+open = "cmd+p" # keep this row

@@ -1,0 +1,20 @@
+type = "text"
+tier = "global"
+owner = "design"
+description = "titles and main lines"
+theme = "text"
+on = [
+	"surface-sunken",
+	"surface",
+	"surface-raised",
+	"surface-card",
+	"surface-hover/surface",
+	"surface-hover/surface-raised",
+	"surface-selected/surface",
+	"surface-selected/surface-raised",
+]
+floor = 4.5
+
+[colors]
+dark = "slate.12"
+light = "slate.12"
