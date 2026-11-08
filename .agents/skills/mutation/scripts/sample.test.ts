@@ -24,22 +24,25 @@ type Report = {
 };
 const options = {seed: 520, numRuns: 100};
 const position = (a: Position, b: Position) => a.line - b.line || a.column - b.column;
-// This is Stryker's documented file:startLine[:startColumn]-endLine[:endColumn] grammar.
-const enclosed = (range: string, candidate: Candidate) => {
-	const match = /^(.*):(\d+)(?::(\d+))?-(\d+)(?::(\d+))?$/.exec(range);
+// Stryker 10.1.1's fs/project-reader.js keeps columns zero-based and subtracts one from lines.
+// These candidates keep CLI lines one-based. Missing columns default to 0 and MAX_SAFE_INTEGER.
+const parseRange = (range: string) => {
+	const match = /^(.*?):(\d+)(?::(\d+))?-(\d+)(?::(\d+))?$/.exec(range);
 	expect(match, `invalid Stryker range: ${range}`).not.toBeNull();
 	if (!match) throw new Error("invalid range");
 	const [, file, startLine, startColumn, endLine, endColumn] = match;
+	return {
+		file,
+		start: {line: Number(startLine), column: Number(startColumn ?? 0)},
+		end: {line: Number(endLine), column: Number(endColumn ?? Number.MAX_SAFE_INTEGER)},
+	};
+};
+const enclosed = (range: string, candidate: Candidate) => {
+	const {file, start, end} = parseRange(range);
 	return (
 		file === candidate.fileName &&
-		position(candidate.location.start, {
-			line: Number(startLine),
-			column: Number(startColumn ?? 0),
-		}) >= 0 &&
-		position(candidate.location.end, {
-			line: Number(endLine),
-			column: Number(endColumn ?? Number.MAX_SAFE_INTEGER),
-		}) <= 0
+		position(candidate.location.start, start) >= 0 &&
+		position(candidate.location.end, end) <= 0
 	);
 };
 const isChanged = (candidate: Candidate, changed: Changed[]) =>
@@ -94,6 +97,45 @@ const pool = fc.array(
 );
 
 describe("mutation sampling, today's tooling", () => {
+	// Plant: make the file match greedy, so it swallows the start line when a column follows.
+	it("range helper parses generated ranges with and without zero-based columns", () => {
+		fc.assert(
+			fc.property(
+				fc.record({
+					file: fc
+						.tuple(
+							fc.constantFrom("src/", "C:/src/", "src/with:colon/"),
+							fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/),
+						)
+						.map(([dir, name]) => `${dir}${name}.ts`),
+					startLine: fc.integer({min: 1, max: 50}),
+					lineSpan: fc.nat({max: 10}),
+					startColumn: fc.nat({max: 80}),
+					columnSpan: fc.nat({max: 80}),
+				}),
+				({file, startLine, lineSpan, startColumn, columnSpan}) => {
+					const endLine = startLine + lineSpan;
+					const endColumn = startColumn + columnSpan;
+					for (const from of [startColumn, undefined]) {
+						for (const to of [endColumn, undefined]) {
+							const range = `${file}:${startLine}${from === undefined ? "" : `:${from}`}-${endLine}${to === undefined ? "" : `:${to}`}`;
+							expect(parseRange(range)).toEqual({
+								file,
+								start: {line: startLine, column: from ?? 0},
+								end: {line: endLine, column: to ?? Number.MAX_SAFE_INTEGER},
+							});
+						}
+					}
+				},
+			),
+			{
+				...options,
+				// pinned: ticket 520 round 3 parsed src/a.ts:1:0-1:1 as file src/a.ts:1.
+				examples: [[{file: "src/a.ts", startLine: 1, lineSpan: 0, startColumn: 0, columnSpan: 1}]],
+			},
+		);
+	});
+
 	// Plants: ignore the seed, include unchanged lines, or allow more than the cap.
 	it("sampling is repeatable, changed-only and bounded", () => {
 		fc.assert(
