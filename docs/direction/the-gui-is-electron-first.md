@@ -623,6 +623,10 @@ a cloud host  the app -> that host's one door, signed in with the person's SSH k
 a browser     later: only for a device with no fabrika on it, such as a phone or a tablet.
 ```
 
+*In `next/`, a browser tab is an equal client, not a later one: every window dials the brain, and
+the backends differ only in screen things ([the desktop layer](./the-desktop-layer.md), W1). This
+block is today's version.*
+
 - **Why.** A tab needs a port on 127.0.0.1. In experiment 150, with no
   guards, a page served by any other local server typed into tsh, with
   Chromium's Local Network Access checks on. Three guards held: `Origin`, a
