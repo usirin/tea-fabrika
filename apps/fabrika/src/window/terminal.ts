@@ -193,14 +193,9 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 	 * terminal is made again in the new one and opened with what it showed (themes.md, live
 	 * switching). Keys go to it as they went to the old one.
 	 *
-	 * Focus stays where it was. ghostty-web 0.4's open() focuses the terminal, at once and again
-	 * after a zero timeout, and a look change remakes every tile's terminal, so the last one would
-	 * take focus from the tile or the input a person is in. A remake that had focus keeps it;
-	 * otherwise focus goes back where it was, at once and after open()'s own timeout, and where
-	 * nothing had focus, the remade terminal lets go of it, so keys typed next reach no tile
-	 * nobody picked (terminal.focus.test.ts). A pnpm patch
-	 * that stops open() focusing would be cleaner, but every first open then needs its own focus(),
-	 * and the tests model 0.4's open() as it is.
+	 * ghostty-web 0.4's open() calls focus(), which also queues a second focus. Suppress that
+	 * call for an unfocused tile so neither focus can steal a key between timer turns. Restore
+	 * the method even if opening fails: later clicks must still be able to focus the tile.
 	 */
 	const remake = () => {
 		const old = term;
@@ -209,7 +204,13 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 		({term, fit} = make());
 		old.dispose();
 		if (!opened) return;
-		open();
+		const focus = term.focus;
+		if (!focused) term.focus = () => {};
+		try {
+			open();
+		} finally {
+			term.focus = focus;
+		}
 		if (focused) {
 			term.focus();
 			return;
@@ -218,6 +219,7 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 		const nowhere = active === null || active === document.body;
 		const back = () => {
 			if (nowhere) {
+				if (document.activeElement === null) document.body?.focus?.();
 				const held = document.activeElement;
 				for (const at of [remade.textarea, remade.element])
 					if (at !== undefined && at === held) at.blur();
@@ -230,6 +232,7 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 				active.focus();
 		};
 		back();
+		// A focus queued before the remake can still be waiting from the old terminal.
 		setTimeout(back, 0);
 	};
 	const look = window.matchMedia(LIGHT);
