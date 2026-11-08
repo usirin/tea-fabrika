@@ -1,6 +1,8 @@
 // The log's shapes: what a writer hands in, what the referee keeps, and what it answers. Tier 1,
 // P6 (laws p68 and p92). The one file `no-hand-tag` lets write `_tag`: the log stores any fact and
 // knows no cases, so a line's `_tag` is an open string, the case as the writer's own schema wrote it.
+// `lineFor` and `valueFor` turn a schema's value into a line and an entry back, so no other file
+// writes the key.
 import {type Brand, Schema} from "effect";
 
 /** A place in the log or in a stream. Both count from 1; 0 means before the first. */
@@ -35,6 +37,16 @@ export const Line = Schema.Struct({
 	body: Schema.Json,
 });
 export type Line = typeof Line.Type;
+
+/** A value a schema made, as a line: its case as the line's case, the rest as its body. */
+export const lineFor = <A extends {readonly _tag: string} & Schema.JsonObject>(
+	from: Omit<Line, "_tag" | "body">,
+	{_tag, ...body}: A,
+) => ({...from, _tag, body});
+
+/** The reverse of `lineFor`: an entry as the value its schema made, for that schema to decode. */
+export const valueFor = (entry: Entry): unknown =>
+	Object.assign({}, entry.body, {_tag: entry._tag});
 
 /** One entry: the line, plus what only the referee knows. */
 export const Entry = Schema.Struct({

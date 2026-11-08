@@ -3,9 +3,10 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "The new fabrika's library. So far its transport's SSHSIG (Tier 1, P7) and its data layer, the ledger (P6).",
+	"description": "The new fabrika's library. So far its transport's SSHSIG (Tier 1, P7), its data layer, the ledger (P6), and its coordination: the mailbox, starts and who belongs (P9).",
 	"sideEffects": false,
 	"exports": {
+		"./coordination": "./src/coordination/index.ts",
 		"./data": "./src/data/index.ts",
 		"./sqlite": "./src/data/sqlite.ts",
 		"./transport": "./src/transport/index.ts"

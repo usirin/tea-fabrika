@@ -1116,7 +1116,7 @@ const fact = Schema.decodeUnknownOption(MemberFact)(fromLine(line));
 
 ## The public interface
 
-The tests compile against this block and nothing else of the new code. Plan-115's `CoordinationLayer` and `ProgramDown` carry over as written. `Ledger`, `LedgerCalls` and `LedgerError` do not: P6 built them anew, with `Doorbell`, `Appended` and `Waited` beside them ([the data layer, as built](#the-data-layer-as-p6-built-it), 2026-11-07). `ProcessManager` does not: it gains `exit`, `info`, `monitor`, `demonitor` and a new process id for each start in P33 (owner, 2026-11-06). These are the changes and additions.
+The tests compile against this block and nothing else of the new code. Plan-115's `CoordinationLayer` and `ProgramDown` carry over as written. `Ledger`, `LedgerCalls` and `LedgerError` do not: P6 built them anew, with `Doorbell`, `Appended` and `Waited` beside them ([the data layer, as built](#the-data-layer-as-p6-built-it), 2026-11-07). `ProcessManager` does not: it gains `exit`, `info`, `monitor`, `demonitor` and a new process id for each start in P33 (owner, 2026-11-06). The coordination half of the block below, `client-manager.ts` and `mailbox.ts`, is as planned: P9 built it anew, with `From`, `Revoke`, `Written` and `Members` beside it ([coordination, as built](#coordination-as-p9-built-it), 2026-11-07). These are the changes and additions.
 
 ```ts
 // next/packages/libfabrika/src/transport/wire.ts
@@ -1426,6 +1426,9 @@ export const CauseText: Schema.String;                // matches /^in-[0-9a-f]{8
 export type InputId = Brand.Branded<string, "InputId">; // a type only: P10's door makes one
 export const Line: Schema.Struct<{by, for, sentAt, seen, cause, build, _tag, body}>; // every key required
 export const Entry: Schema.Struct<{id, stream, pos, rev, arrivedAt, ...Line}>;     // arrivedAt: ms, the referee's
+// P9: a schema's value as a line, and an entry back, so no other file writes `_tag` by hand
+export const lineFor: <A extends {readonly _tag: string} & Schema.JsonObject>(from: Omit<Line, "_tag" | "body">, value: A) => Line;
+export const valueFor: (entry: Entry) => unknown;
 export const Appended = Schema.TaggedUnion({
 	placed: {rev: Rev, pos: Rev},                       // a resend gets its first placing again
 	refused: {why: Schema.Literals(["bad_line", "bad_cause", "seen_ahead", "id_reused", "too_big"])},
@@ -1434,7 +1437,7 @@ export const Waited = Schema.TaggedUnion({ready: {rev: Rev}, parked: {}});
 
 // data/ledger.ts
 export class LedgerError extends Schema.TaggedError<LedgerError>()("LedgerError", {
-	why: Schema.Literals(["unreachable", "bad_row", "storage"]),
+	why: Schema.Literals(["unreachable", "bad_row", "storage", "refused"]), // refused: P9, a line the caller needed written
 	message: Schema.optional(Schema.String),            // in the span's failure, never in a tag
 }) {}
 export class Ledger extends Context.Service<Ledger, {
@@ -1471,6 +1474,64 @@ export const nodeSql: (db: DatabaseSync) => Sql;
 
 - The thin `Project` object class, the real `Doorbell` (a call to the gateway) and workerd's `Sql` are P12's: each is a one-line handoff, tested only over the real wire.
 - The calls' spans (`ledger.append`, `ledger.read`, `ledger.wait`, `ledger.ring`, and `ledger.call` on a caller's side) are p95's. P37's sink keeps them.
+
+### Coordination, as P9 built it
+
+Built 2026-11-07, from [P9's row](./tier-1.md#the-pull-requests-one-at-a-time). The exported names of `./coordination`, bodies left out; the code in `next/packages/libfabrika/src/coordination/` is the source. `Saw`, `Grant`, `Took`, `Signed` and `Founder` are the block above, as written; `Add`, `Adds` and `AddSaw` are the [recovery note's](../direction/recovery-key.md).
+
+```ts
+// mailbox.ts
+export type From = Omit<Line, "_tag" | "body">;       // by, for, sentAt, seen, cause, build: one for every write here
+export type Letter = {id, m, by, for, sentAt, cause, rev, pos};  // as the block above
+export class Mailbox extends Context.Service<Mailbox, {
+	readonly send: (to: string, id: string, m: unknown, from: From) => Effect.Effect<Appended, LedgerError>; // one `send {m}` on `<to>/inbox`
+	readonly receive: (name: string, after: Rev) => Stream.Stream<Letter, LedgerError>; // another `_tag` is skipped and kept
+}>()("@kampus/libfabrika/Mailbox") { static readonly layer: Layer.Layer<Mailbox, never, Ledger> }
+
+// process-manager.ts: P33 adds exit, info, monitor and demonitor
+export class ProcessManager extends Context.Service<ProcessManager, {
+	readonly start: (pid: string, code: {readonly program: string; readonly hash: string}, from: From) =>
+		Effect.Effect<Appended, LedgerError>;            // one `started {program, hash}` on `<pid>`, entry id = the hash
+}>()("@kampus/libfabrika/ProcessManager") { static readonly layer: Layer.Layer<ProcessManager, never, Ledger> }
+export const CoordinationLayer: Layer.Layer<Mailbox | ProcessManager, never, Ledger>;
+
+// members.ts, pure. The door verifies; this never does.
+export const Revoke = Schema.Struct({id, key, for, to, saw: Took, sentAt});  // the grant's twin: an id, and the ledger it is for
+export const MemberFact = Schema.TaggedUnion({
+	founded: {id, name, keys, window},                  // id is the person, `person_<26>`
+	granted: {grant: Grant, signed: Signed},
+	denied: {id, key, saw: Saw, by},
+	revoked: {revoke: Revoke, signed: Signed},
+	added: {add: Add, signed: Signed},
+});
+export type Members = {
+	readonly person: string; readonly name: string;     // from founded, never changed
+	readonly keys: ReadonlyMap<string, {readonly rank: "person" | "window" | "agent" | "recovery"; readonly live: boolean; readonly under: string | null}>;
+	readonly spent: ReadonlySet<string>;                // recovery keys that signed once
+};
+export const Why = Schema.Literals(["not_member", "not_allowed", "used", "replaced", "revoked"]);
+export const foldMembers: (facts: ReadonlyArray<MemberFact>) => Members;
+export const admitted: (members: Members, key: string) => {key, person, as: "window" | "agent"} | {why: "not_granted"};
+
+// client-manager.ts: reads and writes `door/members`
+export const Written = Schema.TaggedUnion({
+	applied: {rev: Rev},                                // in the log, and the fold takes it
+	ignored: {rev: Rev, why: Why},                      // in the log, but an earlier fact won the race
+	refused: {why: Schema.Union([Why, /* Appended's refused whys */])}, // nothing written
+});
+export class ClientManager extends Context.Service<ClientManager, {
+	readonly members: Effect.Effect<Members, LedgerError>;
+	readonly write: (fact: MemberFact, from: From) => Effect.Effect<Written, LedgerError>;
+}>()("@kampus/libfabrika/ClientManager") {
+	static readonly layer: (founder: Founder & {readonly person: string; readonly by: string; readonly build: string}) =>
+		Layer.Layer<ClientManager, never, Ledger>;     // by: the founder's checked key; build: the code's hash (H6)
+}
+// index.ts also passes on Appended, Rev and LedgerError, so `app/` never imports `data/`.
+```
+
+- One rule, `allows`, decides; `foldMembers` skips what it refuses, and `write` answers with it. `write` refuses before it appends, then folds again to the new rev, so the Mac that lost a sheet race hears `ignored used`.
+- `founded` is written by the first call on an empty `door/members`, under the fixed id `founded`, with the Layer's `by`, `person` and `build`; a refusal other than `id_reused` fails the call with `LedgerError refused`.
+- No `to` is checked here: P10's door checks it before `write`. Traced calls use `Effect.fn` ([Effect.fn for traced functions](../direction/effect-fn-for-traced-functions.md), owner, 2026-11-07). Spans: `mailbox.send`, `mailbox.receive`, `process.start`, `members.read`, `members.write`, with OpenTelemetry's `messaging.*` keys where they fit and `fab.<piece>.*` for the rest (p97).
 
 ## Styling
 
@@ -1582,6 +1643,8 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - **p18 and p20 are restated for a wait that answers at once** (P6, 2026-11-07, building the owner's call of 2026-11-02 that a wait is data). p18: a wait with news already there is `ready` with the stream's newest rev; a wait with none parks, and the first append to that stream past its `after` rings it once; an append to another stream, a resend or a refused line rings nothing. p20: a wait leaves nothing running, so `Effect.runSync` of a parking wait answers `parked`; and `LedgerError` gains `storage`, for a SQLite throw such as `SQLITE_FULL`. *p20 said: an interrupted wait ends and leaves no bell.*
 - **p10 and p18 refuse an id reused with another body** (owner, 2026-11-07). The same `(stream, id)` with another `by`, `for`, `cause`, `_tag` or `body` is `refused id_reused`, and nothing is written; `sentAt`, `seen` and `build` may differ on a resend. *They said: one line, the same answer, the first body kept, which dropped the second body with no trace.*
 - **p21 moves to P9** (P6's plan, 2026-11-07). It tests `Mailbox`, `ProcessManager` and `CoordinationLayer`, which P9 builds. p10 to p13 stay with the stage, in P12.
+- **p21 is restated for P6's `append`** (P9, 2026-11-07). `send` writes one `{_tag: "send", body: {m}}` on `<to>/inbox` and answers P6's `Appended` as it is, `pos` included, so plan-115's extra read is gone; a resend gets its first placing. `receive` gives `Letter`s past `after` in rev order, every field from the entry, past one page; another `_tag` is skipped and stays in the log; a `send` with no `m` fails the Stream with `bad_row`. `start` writes one `started {program, hash}` per build under the hash; the same build again is its first placing, or `id_reused` from another input, and writes nothing. No Layer fails at build. Plants: a placing from the wrong line; a new id on each start; `for` or `cause` dropped from a Letter; an unknown tag that ends the Stream.
+- **p28 is widened** (owner, 2026-11-06, built by P9): equal device roots, the grant tree, one live sheet, the limits. Its full list is in [P9's row](./tier-1.md#the-pull-requests-one-at-a-time) and P9's tests, fast-check, seed 119120. Added plants: a dropped device whose tabs stay; a dropped device that takes another with it; a spent sheet used twice; two live sheets; an agent's approve accepted; a revoked key let back in by a new grant.
 - **p22** adds, from PR D: a program's own `refuse` leaves no line and answers with that program's `why`. `bad_msg` stays for a bad shape.
 - **p24** runs oxlint on `next/`, with an edge only on a line under an edge comment, `-- edge: <why>` (owner, 2026-11-05; it said: only in files the exam PR lists).
 - **p25** is `new`, no longer waits on the owner. **Rewritten 2026-11-06 (owner):** when a program's step throws on a fresh letter: no answer and no line, and the letter is counted; on the third throw it moves to dead (p80). A wake that fails on a saved letter marks the process `down` and keeps every letter, never skipping it. A real refusal still gets `bad_msg`. From PR D, "old letters the new code refuses count for nothing" holds only for the counter and chaos; a saved note always folds (p55). *It said, from plan-115: on a wake, the wake fails rather than skipping the letter, which no note backed and which left a process down for good with no way to say why.*
@@ -1858,6 +1921,19 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - No tag holds `body`, `sentAt`, a SQL string, or any string longer than 128 characters. A `storage` failure's span holds the SQLite error code as a tag, and its message only in the span's content.
 - A refused append and a resend each still end one `ledger.append` span, with `answer` (`placed`, `resent` or `refused`) and `why`.
 - Plants: `body` written into a tag; a refused append with no span; `lag` from the log's head instead of the stream's entries; `visible_ms` from `sentAt`; a failed ring with no span.
+
+**p96 and p97 are P9's** (*new 2026-11-07, from P9's plan, approved by the lead agent*). Each is `new`, node, in `next/packages/libfabrika/src/coordination/`, beside p21 and p28.
+
+**p96, `write` tells the truth (scenario of P9).** `new`, node. s4. `ClientManager.write`, `allows`.
+- For any history: `refused` exactly when `allows` refuses, and nothing is written; `applied` exactly when the fold, run to the new rev, takes the fact; else `ignored` with the fold's why. A resend gets its first answer.
+- Two writes of one sheet at once, as fibers: one `applied`, the other `ignored used` or `refused used`, never two `applied`.
+- On an empty stream the first call writes `founded` once, with the Layer's `by` and `build`, and two first calls at once still leave one. A founding the ledger refuses for any other reason fails with `LedgerError refused`, so no ledger starts with no members.
+- Plants: `write` that skips the second fold; `founded` written at Layer build; the check after the append only; a revoked key granted or revoked again answered `applied`.
+
+**p97, every coordination call is one span, names and numbers only (scenario of P9).** `new`, node. s7. `Mailbox`, `ProcessManager`, `ClientManager`. From [monitoring is in Tier 1](./tier-1.md#monitoring-is-in-tier-1) (owner, 2026-11-07).
+- With P6's test `Tracer`: each `send`, `receive`, `start`, `members` and `write` ends exactly one span of its name, with P6's spans inside it, and the tags P9's plan lists. A refused write still ends one span with `answer` and `why`.
+- No tag holds `m`, `saw`, a signature, or a string over 128 characters. A `members` call on a founded ledger ends no `ledger.append` span.
+- Plants: `m` in a tag; a refused write with no span; `ignored` reported as `applied`; the live count taken over every key.
 
 ## Criteria
 
