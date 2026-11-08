@@ -146,6 +146,65 @@ beforeEach(() => {
 });
 
 describe("the manager reads ACP's state", () => {
+	it("cancel leaves an idle session alone", async () => {
+		const seen = await hosted(
+			Effect.gen(function* () {
+				yield* summon();
+				const manager = yield* SummonManager;
+				yield* manager.cancel("scout");
+				return {cancelled: current().cancelled, states: (yield* manager.list).map((a) => a.state)};
+			}),
+		);
+		expect(seen).toEqual({cancelled: 0, states: ["idle"]});
+	});
+
+	it("an accepted prompt whose harness exits before told sends no cancel to that dead harness", async () => {
+		const seen = await hosted(
+			Effect.gen(function* () {
+				yield* summon();
+				current().hold = true;
+				const manager = yield* SummonManager;
+				const fiber = yield* manager
+					.turn("scout", "hello", null)
+					.pipe(Stream.runDrain, Effect.forkChild);
+				while (current().turn === 0) yield* Effect.sleep("5 millis");
+				Deferred.doneUnsafe(
+					current().end,
+					Exit.succeed({
+						kind: "failed",
+						cause: Cause.fail(new Error("fake harness exited before told")),
+						unread: {},
+					}),
+				);
+				const ended = yield* Fiber.await(fiber).pipe(Effect.timeout("2 seconds"));
+				return {ended, cancelled: current().cancelled};
+			}),
+		);
+		expect(Exit.isFailure(seen.ended)).toBe(true);
+		expect(seen.cancelled).toBe(0);
+	});
+
+	it.each(["allowed", "refused"] as const)(
+		"forwards an ACP ask answered %s by its id",
+		async (answer) => {
+			const news = await hosted(
+				Effect.gen(function* () {
+					yield* summon();
+					const t = yield* turning;
+					current().outputs.ask({ask: "edit-a", title: "Write a.txt", answer: "waiting"});
+					current().outputs.ask({ask: "edit-a", title: "Write a.txt", answer});
+					finish();
+					yield* Fiber.join(t.fiber);
+					return t.news.filter((n) => n._tag === "ask" || n._tag === "answered");
+				}),
+			);
+			expect(news).toEqual([
+				{_tag: "ask", ask: "edit-a", title: "Write a.txt"},
+				{_tag: "answered", ask: "edit-a", allow: answer === "allowed"},
+			]);
+		},
+	);
+
 	// Review 2, finding 6, today's version. The ACP mailbox took a prompt, but its told
 	// acknowledgement has not arrived. Ctrl-C must still send session/cancel to that run.
 	it("T237-R2-6: Ctrl-C after prompt acceptance and before told cancels the unseen ACP turn", async () => {

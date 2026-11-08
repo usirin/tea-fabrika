@@ -6,13 +6,13 @@ import {listed} from "../../program/listed.ts";
 import {defineProgram, fork, start, tell} from "../../program/program.ts";
 import {memoryStorage} from "../../program/storage.ts";
 import {Programs, programList} from "../../shell/programs.ts";
-import {type Ready, tsh} from "../../shell/shell.ts";
+import {type Printed, type Ready, tsh} from "../../shell/shell.ts";
 import {turnProgram} from "./turn.ts";
 
 // T237 review 2, finding 5. Today's version. A is shown; B waits behind it; the agent
 // withdraws B. Use the real turn's output declaration and its non-waiting form to clear B.
 // A must still be the question the person answers. No private queue is read by this law.
-it("T237-R2-5: cancelling queued ask B keeps ask A shown and routes y to A", async () => {
+it("T237-R2-5: withdrawing queued B twice keeps one prompt for A and routes y to A", async () => {
 	const answers: string[] = [];
 	const story = defineProgram({
 		name: "ask-story",
@@ -24,6 +24,7 @@ it("T237-R2-5: cancelling queued ask B keeps ask A shown and routes y to A", asy
 				yield* send("ask", {name: "scout", ask: "edit-a", title: "Write a.txt", answer: "waiting"});
 				yield* send("ask", {name: "scout", ask: "edit-b", title: "Write b.txt", answer: "waiting"});
 				// The turn's current protocol spells a withdrawn question as a non-waiting refusal.
+				yield* send("ask", {name: "scout", ask: "edit-b", title: "Write b.txt", answer: "refused"});
 				yield* send("ask", {name: "scout", ask: "edit-b", title: "Write b.txt", answer: "refused"});
 				yield* send("status", {name: "scout", text: "B was withdrawn"});
 				yield* serve({
@@ -47,12 +48,13 @@ it("T237-R2-5: cancelling queued ask B keeps ask A shown and routes y to A", asy
 			const storage = memoryStorage();
 			const jobs = yield* openJobs(storage);
 			const asked = ear<{n: number; text: string | null}>();
+			const printed = ear<Printed>();
 			const status = ear<unknown>();
 			const ready = ear<Ready>();
 			const started = yield* start(
 				tsh,
 				{show: "short"},
-				{asked: asked.hear, status: status.hear, ready: ready.hear},
+				{asked: asked.hear, printed: printed.hear, status: status.hear, ready: ready.hear},
 				{id: "tsh:cancel-queued-ask", storage},
 			).pipe(
 				Effect.provideService(HostJobs, {...jobs, owner: "t1", by: "user:owner"}),
@@ -64,6 +66,7 @@ it("T237-R2-5: cancelling queued ask B keeps ask A shown and routes y to A", asy
 			expect(ready.values).toEqual([]);
 			expect.soft(asked.values.at(-1)?.text).toContain("Write a.txt");
 			expect.soft(asked.values.some((a) => a.text?.includes("Write b.txt"))).toBe(false);
+			expect(printed.values.filter((p) => p.text.includes("allow? [y/N]"))).toHaveLength(1);
 			const n = asked.values[0]!.n;
 			yield* tell(started.run, "answer", {n, allow: true});
 			yield* status.upTo(2);

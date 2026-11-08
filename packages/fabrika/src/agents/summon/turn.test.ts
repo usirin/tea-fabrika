@@ -514,38 +514,59 @@ describe("the ask: allow? [y/N] holds the prompt", () => {
 		);
 	});
 
-	it("keeps the ask's title when the person's answer clears it", async () => {
-		const d = double();
-		const asks = await Effect.runPromise(
-			Effect.gen(function* () {
-				const seen = ear<unknown>();
-				const started = yield* start(
-					turnProgram,
-					{to: "scout"},
-					{ask: seen.hear},
-					{
-						id: "turn:answer-title",
-						storage: memoryStorage(),
-					},
-				).pipe(Effect.provideService(SummonManager, d.service));
-				if (started.kind !== "running") return yield* Effect.die("turn did not start");
-				yield* tell(started.run, "prompt", "write it");
-				yield* until("the turn", () => d.calls.turns.length === 1);
-				const turn = d.calls.turns[0];
-				if (turn === undefined) return yield* Effect.die("no turn");
-				Queue.offerUnsafe(turn.news, {_tag: "ask", ask: "edit-1", title: "Write written.txt"});
-				yield* seen.upTo(1);
-				yield* tell(started.run, "allow", {ask: "edit-1", allow: false, by: PERSON});
-				yield* seen.upTo(2);
-				Queue.offerUnsafe(turn.news, RESULT);
-				return seen.values;
-			}).pipe(Effect.scoped),
-		);
-		expect(asks).toEqual([
-			{name: "scout", ask: "edit-1", title: "Write written.txt", answer: "waiting"},
-			{name: "scout", ask: "edit-1", title: "Write written.txt", answer: "refused"},
-		]);
-	});
+	it.each([
+		{by: "person", allow: false, asked: true},
+		{by: "agent", allow: true, asked: true},
+		{by: "agent", allow: false, asked: true},
+		{by: "agent", allow: false, asked: false},
+	])(
+		"keeps the ask id and title when $by answers allow=$allow after asked=$asked",
+		async ({by, allow, asked}) => {
+			const d = double();
+			const asks = await Effect.runPromise(
+				Effect.gen(function* () {
+					const seen = ear<unknown>();
+					const started = yield* start(
+						turnProgram,
+						{to: "scout"},
+						{ask: seen.hear},
+						{
+							id: "turn:answer-title",
+							storage: memoryStorage(),
+						},
+					).pipe(Effect.provideService(SummonManager, d.service));
+					if (started.kind !== "running") return yield* Effect.die("turn did not start");
+					yield* tell(started.run, "prompt", "write it");
+					yield* until("the turn", () => d.calls.turns.length === 1);
+					const turn = d.calls.turns[0];
+					if (turn === undefined) return yield* Effect.die("no turn");
+					Queue.offerUnsafe(turn.news, {_tag: "told", turn: 1});
+					if (asked) {
+						Queue.offerUnsafe(turn.news, {_tag: "ask", ask: "edit-1", title: "Write written.txt"});
+						yield* seen.upTo(1);
+					}
+					if (by === "person")
+						yield* tell(started.run, "allow", {ask: "edit-1", allow, by: PERSON});
+					else Queue.offerUnsafe(turn.news, {_tag: "answered", ask: "edit-1", allow});
+					yield* seen.upTo(asked ? 2 : 1);
+					Queue.offerUnsafe(turn.news, RESULT);
+					yield* started.run.ended;
+					return seen.values;
+				}).pipe(Effect.scoped),
+			);
+			expect(asks).toEqual([
+				...(asked
+					? [{name: "scout", ask: "edit-1", title: "Write written.txt", answer: "waiting"}]
+					: []),
+				{
+					name: "scout",
+					ask: "edit-1",
+					title: asked ? "Write written.txt" : "",
+					answer: allow ? "allowed" : "refused",
+				},
+			]);
+		},
+	);
 
 	it("shows the agent's ask with its name and title, and the turn ends once it is over", async () => {
 		const d = double(["scout"]);

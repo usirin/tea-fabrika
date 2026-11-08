@@ -16,21 +16,29 @@ afterEach(() => {
 
 // T237 review 2, finding 3. Today's app opened from the Dock has no shell's FABRIKA_REPO.
 // The folder chosen by the app must reach the actual child process, even with that variable absent.
-it("T237-R2-3: a Dock start gives the host the selected repo without a parent FABRIKA_REPO", async () => {
-	vi.stubEnv("FABRIKA_REPO", undefined);
+it.each([
+	{source: "selected", selected: true},
+	{source: "inherited", selected: false},
+])("T237-R2-3: the host gets the $source repo", async ({selected}) => {
 	const root = realpathSync(mkdtempSync(join(tmpdir(), "summon-start-")));
 	made.push(root);
 	const repo = join(root, "selected-repo");
 	mkdirSync(repo);
 	execFileSync("git", ["init", "-q"], {cwd: repo});
+	vi.stubEnv("FABRIKA_REPO", selected ? undefined : repo);
 	const entry = join(root, "host.mjs");
 	writeFileSync(entry, "process.stderr.write(JSON.stringify({repo: process.env.FABRIKA_REPO}));\n");
 	const seen = await Effect.runPromise(
 		Effect.gen(function* () {
 			const home = join(root, "home");
 			const paths = yield* pathsOf(home);
-			const selected = {binary: process.execPath, entry, home, paths, repo};
-			const exited = yield* startHost(selected);
+			const exited = yield* startHost({
+				binary: process.execPath,
+				entry,
+				home,
+				paths,
+				...(selected ? {repo} : {}),
+			});
 			return {code: yield* exited, paths};
 		}).pipe(Effect.provide(NodePath.layer)),
 	);
