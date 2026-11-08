@@ -93,6 +93,8 @@ const row = (spanId: string, fill = 0): Row => ({
 		...(fill > 0 ? {"fab.fill": "f".repeat(fill)} : {}),
 	},
 	events: [],
+	links: [],
+	resource: {attributes: {"fab.object": PROCESS}},
 	ok: true,
 });
 const id = (n: number) => `s${String(n).padStart(15, "0")}`;
