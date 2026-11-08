@@ -27,6 +27,7 @@ import {
 	ClientManager,
 	GatewayManager,
 	Mailbox,
+	NotGranted,
 	ProcessIdGenerator,
 	ProcessManager,
 	ProcessStore,
@@ -36,6 +37,8 @@ import {
 	Writer,
 	type From,
 	Start,
+	SigningRefused,
+	type Session,
 } from "../coordination/index.ts";
 import type {Appended} from "../data/index.ts";
 import {
@@ -53,19 +56,28 @@ import {
 	type Sql,
 } from "../data/index.ts";
 import {workerSql} from "../data/worker-sql.ts";
-import type {
-	ConnectionId,
-	DoorCalls,
-	GatewayBinding,
-	ProcessBinding,
-	ProjectBinding,
-	RecordBinding,
+import {
+	CommitReply,
+	SigningReply,
+	type ConnectionId,
+	type DoorCalls,
+	type GatewayBinding,
+	type ProcessBinding,
+	type ProjectBinding,
+	type RecordBinding,
 } from "./bindings.ts";
 import {workerLoader, type ProgramSource} from "./index.ts";
 const Fact = Schema.declare<Parameters<typeof lineFor>[1]>(
 	(value): value is Parameters<typeof lineFor>[1] =>
 		Schema.is(Schema.JsonObject)(value) && typeof value._tag === "string",
 );
+const SavedDescriptor = Schema.Struct({
+	id: Schema.String,
+	name: Schema.String,
+	program: Schema.String,
+	build: Schema.String,
+	owner: Writer,
+});
 
 export interface Env {
 	readonly PROJECT: DurableObjectNamespace<ProjectBinding>;
@@ -128,6 +140,44 @@ export const recordCall = Effect.fn(function* <A>(send: () => Promise<A>) {
 });
 export const rpc = Effect.fn("runtime.rpc")(function* <A>(send: () => Promise<A>) {
 	return yield* recordCall(send);
+});
+
+// Only checked refusals become RPC data. Storage and transport failures still fail the call.
+const checkedReply = Effect.fnUntraced(function* <A, B>(
+	work: Effect.Effect<A, unknown>,
+	ok: (value: A) => B,
+) {
+	return yield* work.pipe(
+		Effect.map(ok),
+		Effect.catchIf(
+			(error): error is SigningRefused => error instanceof SigningRefused,
+			(error) => Effect.succeed(SigningReply.cases.SigningRefused.make({why: error.why})),
+		),
+		Effect.catchIf(
+			(error): error is NotGranted => error instanceof NotGranted,
+			() => Effect.succeed(SigningReply.cases.NotGranted.make({})),
+		),
+	);
+});
+export const signingReply = Effect.fn("project.signingReply")(function* (
+	work: Effect.Effect<Session, unknown>,
+) {
+	return yield* checkedReply(work, (value) => SigningReply.cases.ok.make({value}));
+});
+export const commitReply = Effect.fn("project.commitReply")(function* (
+	work: Effect.Effect<Appended, unknown>,
+) {
+	return yield* checkedReply(work, (value) => CommitReply.cases.ok.make({value}));
+});
+const checkedValue = Effect.fnUntraced(function* <A>(
+	reply:
+		| (Omit<typeof SigningReply.cases.ok.Type, "value"> & {readonly value: A})
+		| typeof SigningReply.cases.SigningRefused.Type
+		| typeof SigningReply.cases.NotGranted.Type,
+) {
+	if (reply._tag === "SigningRefused") return yield* new SigningRefused({why: reply.why});
+	if (reply._tag === "NotGranted") return yield* new NotGranted({});
+	return reply.value;
 });
 
 export const configureProcess = Effect.fn("process.configure")(function* (
@@ -282,8 +332,22 @@ const projectLogic = Effect.fnUntraced(function* (
 	const loader = workerLoader(env.LOADER, programs);
 	const loaded = yield* loader.load(bootstrap.program, `project:${name}`);
 	sql.exec(
-		"CREATE TABLE IF NOT EXISTS stage_descriptors (process TEXT PRIMARY KEY, value TEXT NOT NULL)",
+		"CREATE TABLE IF NOT EXISTS stage_descriptors (process TEXT PRIMARY KEY, value TEXT NOT NULL, pending INTEGER NOT NULL DEFAULT 0)",
 	);
+	if (!sql.exec("PRAGMA table_info(stage_descriptors)").some((column) => column.name === "pending"))
+		sql.exec("ALTER TABLE stage_descriptors ADD COLUMN pending INTEGER NOT NULL DEFAULT 0");
+	const configure = Effect.fnUntraced(function* (pid: string) {
+		const [saved] = sql.exec(
+			"SELECT value FROM stage_descriptors WHERE process=? AND pending=1",
+			pid,
+		);
+		if (saved === undefined) return;
+		const descriptor = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(
+			saved.value,
+		).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
+		yield* rpc(() => processStub(env, name, pid).configure(descriptor));
+		sql.exec("UPDATE stage_descriptors SET pending=0 WHERE process=?", pid);
+	});
 	const policies = new Map<string, {inputs: Array<string>; facts: Array<string>}>();
 	const remember = (pid: string, declaration: typeof loaded.declaration) =>
 		policies.set(pid, {
@@ -303,11 +367,12 @@ const projectLogic = Effect.fnUntraced(function* (
 		) {
 			const descriptor = yield* rpc(() => processStub(env, name, process.process).descriptor());
 			sql.exec(
-				"INSERT INTO stage_descriptors VALUES (?,?)",
+				"INSERT INTO stage_descriptors (process,value) VALUES (?,?)",
 				process.process,
 				JSON.stringify(descriptor),
 			);
 		}
+		yield* configure(process.process);
 	}
 	const policy = Effect.fnUntraced(function* (pid: string) {
 		const process = (yield* processes.info).find((row) => row.process === pid);
@@ -378,7 +443,7 @@ const projectLogic = Effect.fnUntraced(function* (
 		if (!Object.hasOwn(programs, request.code.program))
 			return yield* new LedgerError({why: "refused"});
 		const program = yield* loader.load(request.code.program, `project:${name}/${request.name}`);
-		const {result, descriptor} = yield* write(
+		const result = yield* write(
 			Effect.gen(function* () {
 				const result = yield* processes.start(request, origin);
 				remember(result.process, program.declaration);
@@ -390,14 +455,14 @@ const projectLogic = Effect.fnUntraced(function* (
 					owner: Writer.cases.person.make({key: founder.by, for: config.person}),
 				};
 				sql.exec(
-					"INSERT OR IGNORE INTO stage_descriptors VALUES (?,?)",
+					"INSERT OR IGNORE INTO stage_descriptors (process,value,pending) VALUES (?,?,1)",
 					result.process,
 					JSON.stringify(descriptor),
 				);
-				return {result, descriptor};
+				return result;
 			}),
 		);
-		yield* rpc(() => processStub(env, name, result.process).configure(descriptor));
+		yield* configure(result.process);
 		return result;
 	});
 	const registered = (yield* processes.info).find((row) => row.name === bootstrap.name);
@@ -601,11 +666,20 @@ const processLogic = Effect.fnUntraced(function* (
 	const dependencies = Layer.mergeAll(
 		Layer.succeed(ProgramLoader, {load: (name) => loader.load(name, pid)}),
 		Layer.succeed(CheckedWriter, {
-			sign: (id, parent, kind) => rpc(() => p.sign(pid, id, parent, kind)),
+			sign: (id, parent, kind) =>
+				rpc<unknown>(() => p.sign(pid, id, parent, kind)).pipe(
+					Effect.flatMap(Schema.decodeUnknownEffect(SigningReply)),
+					Effect.mapError(() => new LedgerError({why: "unreachable"})),
+					Effect.flatMap(checkedValue),
+				),
 			append: (input) => rpc<Appended>(() => p.inbox(pid, input)),
 			commit: (id, session, stream, fact) =>
-				rpc<Appended>(() =>
+				rpc<unknown>(() =>
 					p.commit(pid, {id, parent: session.parent, kind: fact._tag, stream, fact}),
+				).pipe(
+					Effect.flatMap(Schema.decodeUnknownEffect(CommitReply)),
+					Effect.mapError(() => new LedgerError({why: "unreachable"})),
+					Effect.flatMap(checkedValue),
 				),
 			own: Effect.fn("process.own")(function* (id: string, stream: string, fact: unknown) {
 				const span = yield* Effect.currentSpan.pipe(Effect.orDie);

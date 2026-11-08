@@ -9,7 +9,7 @@ export class BuildError extends Schema.TaggedError<BuildError>()("BuildError", {
 	message: Schema.optionalKey(Schema.String),
 }) {}
 export const hash = (text: string) => createHash("sha256").update(text).digest("hex");
-export const bundle = Effect.fnUntraced(function* (input: string, plugins: Array<Plugin>) {
+export const bundle = Effect.fn("build.bundle")(function* (input: string, plugins: Array<Plugin>) {
 	// oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown's build API returns a Promise
 	const built = yield* Effect.tryPromise({
 		try: () => rolldown({input, plugins, platform: "browser", external: ["cloudflare:workers"]}),

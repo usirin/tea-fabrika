@@ -10,7 +10,7 @@ import {stack} from "../alchemy.run.ts";
 import type {Built} from "./build.ts";
 import {Settings} from "./settings.ts";
 
-export const startStage = Effect.fnUntraced(function* (
+export const startStage = Effect.fn("stage.startStage")(function* (
 	built: Built,
 	options: Omit<Settings, "build"> & {readonly home: string},
 ) {

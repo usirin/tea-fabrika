@@ -2,15 +2,9 @@ import {type Brand, type Effect, Schema} from "effect";
 import type {BrainFact} from "../app/brain-fact.ts";
 import type {Incoming} from "../app/entry.ts";
 import type {Descriptor, ProgramRunner} from "../app/runner.ts";
-import type {
-	Activity,
-	From,
-	GatewayManager,
-	ProcessManager,
-	Start,
-	Session,
-} from "../coordination/index.ts";
-import type {Appended, LedgerCalls, RecordCalls} from "../data/index.ts";
+import type {Activity, From, GatewayManager, ProcessManager, Start} from "../coordination/index.ts";
+import {Session, SigningRefused} from "../coordination/index.ts";
+import {Appended, type LedgerCalls, type RecordCalls} from "../data/index.ts";
 import type {Answer, checkHello} from "../transport/index.ts";
 
 export type ConnectionId = string & Brand.Brand<"ConnectionId">;
@@ -19,6 +13,12 @@ const GrantReply = Schema.TaggedUnion({
 	ignored: {rev: Schema.Number, why: Schema.String},
 	refused: {why: Schema.String},
 });
+const refusals = {
+	SigningRefused: {why: SigningRefused.fields.why},
+	NotGranted: {},
+};
+export const SigningReply = Schema.TaggedUnion({ok: {value: Session}, ...refusals});
+export const CommitReply = Schema.TaggedUnion({ok: {value: Appended}, ...refusals});
 export interface DoorCalls {
 	readonly connect: () => Effect.Effect<ConnectionId>;
 	readonly challenge: (client: ConnectionId) => Effect.Effect<string, unknown>;
@@ -84,7 +84,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
 	Remote<
 		Pick<
 			DoorService,
-			"target" | "challenge" | "initialize" | "route" | "knock" | "grant" | "disconnect" | "sign"
+			"target" | "challenge" | "initialize" | "route" | "knock" | "grant" | "disconnect"
 		>
 	> & {
 		clientConnect: RemoteCall<DoorService["connect"]>;
@@ -95,11 +95,19 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
 		info: RemoteCall<() => Processes["info"]>;
 		start: RemoteCall<(request: Start, from: From) => ReturnType<Processes["start"]>>;
 		exit: RemoteCall<Processes["exit"]>;
+		sign: RemoteCall<
+			(
+				process: string,
+				id: string,
+				parent: string,
+				kind: string,
+			) => Effect.Effect<typeof SigningReply.Type>
+		>;
 		commit: RemoteCall<
 			(
 				pid: string,
 				input: Omit<Parameters<DoorService["append"]>[0], "process">,
-			) => ReturnType<DoorService["append"]>
+			) => Effect.Effect<typeof CommitReply.Type>
 		>;
 		inbox: RemoteCall<(pid: string, input: Incoming) => Effect.Effect<Appended>>;
 		own: RemoteCall<
