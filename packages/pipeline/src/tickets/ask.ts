@@ -21,7 +21,7 @@ export type Rec = typeof Rec.Type;
 export const Answer = Schema.TaggedUnion({
 	rec: {},
 	against: {pick: Line, note: Line},
-	chose: {pick: Line},
+	chose: {pick: Line, note: Schema.optionalKey(Line)},
 });
 export type Answer = typeof Answer.Type;
 export const AskCommand = Schema.TaggedUnion({rec: {}, not: {}, picks: {}, later: {}});
@@ -208,7 +208,8 @@ export const answerOf = (raw: unknown, input: unknown): {pick: string; note: str
 	const rec = asked.shows.rec;
 	if (answer._tag === "rec") return rec._tag === "pick" ? {pick: rec.pick, note: ""} : null;
 	if (!asked.shows.picks.some((p) => p.pick === answer.pick)) return null;
-	if (answer._tag === "chose") return rec._tag !== "pick" ? {pick: answer.pick, note: ""} : null;
+	if (answer._tag === "chose")
+		return rec._tag !== "pick" ? {pick: answer.pick, note: answer.note ?? ""} : null;
 	return rec._tag === "pick" && rec.pick !== answer.pick
 		? {pick: answer.pick, note: answer.note}
 		: null;

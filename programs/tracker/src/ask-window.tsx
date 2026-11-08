@@ -112,8 +112,8 @@ const pick = (model: Model, chosen: string, key: string, now: number): Step => {
 	if (model.editor._tag === "saving" || !model.ask.shows.picks.some((p) => p.pick === chosen))
 		return [model, []];
 	const rec = model.ask.shows.rec;
-	if (rec._tag !== "pick") return write(model, Answer.cases.chose.make({pick: chosen}), key, now);
-	if (rec.pick === chosen) return write(model, Answer.cases.rec.make({}), key, now);
+	if (rec._tag === "pick" && rec.pick === chosen)
+		return write(model, Answer.cases.rec.make({}), key, now);
 	return [{...model, editor: Editor.cases.note.make({pick: chosen, text: ""}), failure: null}, []];
 };
 /** Why a save was refused, in words. */
@@ -182,6 +182,12 @@ const update = (model: Model, msg: Msg): Step => {
 		case "submit": {
 			if (model.editor._tag !== "note") return [model, []];
 			const value = {pick: model.editor.pick, note: model.editor.text.trim()};
+			if (model.ask.shows.rec._tag !== "pick") {
+				const choice = {pick: value.pick, ...(value.note === "" ? {} : {note: value.note})};
+				return Schema.is(Answer.cases.chose)({_tag: "chose", ...choice})
+					? write(model, Answer.cases.chose.make(choice), msg.key, msg.now)
+					: [model, []];
+			}
 			return Schema.is(Answer.cases.against)({_tag: "against", ...value})
 				? write(model, Answer.cases.against.make(value), msg.key, msg.now)
 				: [model, []];
@@ -758,9 +764,9 @@ export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: A
 				>
 					<Textarea
 						ref={note}
-						label="Why this answer?"
-						aria-label="Note against the recommendation"
-						aria-required="true"
+						label={rec._tag === "pick" ? "Why this answer?" : "Note (optional)"}
+						aria-label={rec._tag === "pick" ? "Note against the recommendation" : "Optional note"}
+						aria-required={rec._tag === "pick"}
 						requiredIndicator={null}
 						maxLength={120}
 						rows={2}
