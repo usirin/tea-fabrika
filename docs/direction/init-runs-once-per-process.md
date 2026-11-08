@@ -72,7 +72,9 @@ restart process_B   init -> 1 Cmd   dispatched process_B/init/0, runs
   ([gen_server](https://www.erlang.org/doc/apps/stdlib/gen_server.html),
   [supervisor](https://www.erlang.org/doc/apps/stdlib/supervisor.html)).
 - We follow both. The one extra step is ours: the dispatched entry is saved before the Cmd runs,
-  because our process sleeps and wakes, and an Erlang process does not.
+  because our process can be evicted from memory and must rebuild its state from the ledger when it
+  wakes. An Erlang process that hibernates keeps its state, so it never has to ask what it already
+  ran.
 
 ## What the ledger records
 
@@ -104,8 +106,9 @@ Sure: about 90%. Elm and OTP agree, and the runner already saves a step's Cmds t
 
 ## What it cannot tell us
 
-- Whether an init Cmd should finish before the first input is stepped. Elm and OTP do not wait; this
-  note does not either, and a real program may show it should.
+- Whether an init Cmd should finish before the first input is stepped. Elm does not wait. OTP does:
+  `init/1` returns before the process takes a message, and `handle_continue/2` runs before any
+  message too. This note does not wait, and a real program may show it should.
 - Saving the entry first does not make an outside effect happen once. A crash between the run and
   its answer leaves the Cmd dispatched, and the runner does not guess.
 - How the id reads (`init` as its middle part) until the plan writes it.
