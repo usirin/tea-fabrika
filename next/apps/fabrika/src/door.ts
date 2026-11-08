@@ -189,7 +189,7 @@ type Options<A, RNext, RDeliver, RNotify> = {
 	readonly versions: ReadonlyArray<number>;
 	readonly location: string;
 	readonly build: string;
-	readonly waiting: {readonly most: number; readonly ttl: number};
+	readonly waiting: Pick<Waiting, "most" | "ttl">;
 	readonly ping: {readonly min: number; readonly max: number};
 	readonly inputCap: number;
 	readonly spentCap: number;
@@ -212,6 +212,7 @@ type Options<A, RNext, RDeliver, RNotify> = {
 const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 	options: Options<A, RNext, RDeliver, RNotify>,
 ) {
+	const initialWaiting = Waiting.make({rows: [], ...options.waiting});
 	const context = yield* Effect.context<RNext | RDeliver | RNotify>();
 	const ledger = yield* Ledger;
 	const clients = yield* ClientManager;
@@ -437,7 +438,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		return result;
 	});
 	const waiting = (at: number) => {
-		const state = store.get("waiting", Waiting) ?? Waiting.make({rows: [], ...options.waiting});
+		const state = store.get("waiting", Waiting) ?? initialWaiting;
 		return Waiting.expire(state, at);
 	};
 	const knock = Effect.fnUntraced(function* (
@@ -456,15 +457,19 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				has: attached.hello.has,
 				as: "window",
 				code: String(crypto.getRandomValues(new Uint32Array(1))[0] ?? 0)
-					.slice(-4)
-					.padStart(4, "0"),
+					.slice(-6)
+					.padStart(6, "0"),
 				pass: params.pass ?? null,
 				at,
 			});
 			store.set("waiting", Waiting, next);
 			return next;
 		});
-		return ok({rows: state.rows});
+		// The positive cap keeps the row this knock just wrote.
+		const row = Option.getOrThrow(
+			Option.fromUndefinedOr(state.rows.find((r) => r.key === attached.key)),
+		);
+		return ok({code: row.code, until: row.until});
 	});
 	const watch = Effect.fnUntraced(function* (client: ConnectionId) {
 		const checked = yield* silent(Effect.result(online(client)));
@@ -1077,7 +1082,7 @@ const fingerprint = Effect.fnUntraced(function* (value: string, line: boolean) {
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
 	const digest = yield* Effect.tryPromise({
 		try: () => crypto.subtle.digest("SHA-256", new Uint8Array(bytes.success)),
-		catch: () => new NotGranted({}),
+		catch: () => new LedgerError({why: "crypto"}),
 	});
 	return `SHA256:${Base64.encode(new Uint8Array(digest)).replace(/=+$/, "")}`;
 });
@@ -1085,7 +1090,7 @@ const hash = Effect.fnUntraced(function* (text: string) {
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
 	const digest = yield* Effect.tryPromise({
 		try: () => crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)),
-		catch: () => new LedgerError({why: "storage"}),
+		catch: () => new LedgerError({why: "crypto"}),
 	});
 	return Base64Url.encode(new Uint8Array(digest));
 });
