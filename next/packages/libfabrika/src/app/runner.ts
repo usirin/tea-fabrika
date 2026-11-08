@@ -306,16 +306,16 @@ export class ProgramRunner extends Context.Service<
 				 */
 				const catchUp = Effect.fnUntraced(function* (
 					state: Live,
-					options: {readonly mine?: string; readonly done?: string; readonly dirty?: boolean} = {},
+					options: {readonly mine?: string; readonly dirty?: boolean} = {},
 				) {
 					const letters = yield* Stream.runCollect(mailbox.read(process.name, state.after));
-					if (letters.length === 0 && options.done === undefined && options.dirty !== true)
+					if (letters.length === 0 && options.dirty !== true)
 						return {state, fresh: [] as ReadonlyArray<Dispatched>, mine: Option.none<History>()};
 					let model = state.model;
 					let view = state.view;
 					let wake = state.wake;
 					const fresh: Array<Dispatched> = [];
-					let cmds = state.cmds.filter((cmd) => cmd.id !== options.done);
+					let cmds = state.cmds;
 					const placed: Array<Placed> = [];
 					const saved = yield* store.load;
 					const prepared = Schema.decodeUnknownOption(Turn)(saved?.turn);
@@ -524,10 +524,10 @@ export class ProgramRunner extends Context.Service<
 						return yield* err(job, "handler_failed");
 					}
 					const outcome: Outcome<unknown, unknown> = exit.value;
-					if (outcome._tag === "Ok")
-						return yield* isAccepted(def.schema.ok, outcome.value)
-							? ok(job, outcome.value)
-							: err(job, "bad_cmd");
+					if (outcome._tag === "Ok") {
+						const encoded = encodeAnswer(def.schema.ok, outcome.value);
+						return yield* Option.isSome(encoded) ? ok(job, encoded.value) : err(job, "bad_cmd");
+					}
 					const declared = def.errTags.find(
 						(t) =>
 							typeof outcome.error === "object" &&
@@ -535,9 +535,11 @@ export class ProgramRunner extends Context.Service<
 							"_tag" in outcome.error &&
 							outcome.error._tag === t,
 					);
-					return yield* declared === undefined
-						? err(job, "bad_cmd")
-						: err(job, declared, outcome.error);
+					if (declared === undefined) return yield* err(job, "bad_cmd");
+					const encoded = encodeAnswer(Schema.TaggedStruct(declared, {}), outcome.error);
+					return yield* Option.isSome(encoded)
+						? err(job, declared, encoded.value)
+						: err(job, "bad_cmd");
 				});
 
 				/** Runs one saved Cmd, saves its answer as a letter, and folds it. Answers the Cmds that
@@ -562,7 +564,7 @@ export class ProgramRunner extends Context.Service<
 									);
 								if (sent._tag === "refused")
 									return yield* new LedgerError({why: "refused", message: sent.why});
-								return (yield* catchUp(current, {mine: answer, done: job.id})).fresh;
+								return (yield* catchUp(current, {mine: answer})).fresh;
 							}),
 						);
 					});
@@ -624,8 +626,11 @@ export class ProgramRunner extends Context.Service<
 								Effect.gen(function* () {
 									if (client.length === 0 || client.length > 256)
 										return yield* new RunnerError({why: "bad_client"});
-									if (!clients.has(client) && clients.size >= 1024)
-										return yield* new RunnerError({why: "clients_full"});
+									clients.delete(client);
+									if (clients.size >= 1024) {
+										const oldest = clients.values().next();
+										if (!oldest.done) clients.delete(oldest.value);
+									}
 									clients.add(client);
 									yield* watchers.publish(client, {
 										type: "whole",
@@ -727,7 +732,7 @@ export class ProgramRunner extends Context.Service<
 
 /** A delivery that does not have P10's shape. */
 export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError", {
-	why: Schema.Literals(["bad_input", "bad_client", "clients_full"]),
+	why: Schema.Literals(["bad_input", "bad_client"]),
 }) {}
 
 type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError;
@@ -749,12 +754,12 @@ const inputPort = (state: Live, m: unknown) =>
 
 const isFact = (u: Readonly<Record<string, Schema.Json>>): u is Fact => typeof u._tag === "string";
 
-const isAccepted = (
-	schema: {readonly "~standard": {readonly validate: (value: unknown) => unknown}},
-	value: unknown,
-): boolean => {
-	const answer = schema["~standard"].validate(value);
-	return (
-		typeof answer === "object" && answer !== null && "value" in answer && !("issues" in answer)
-	);
+const isCodec = (schema: unknown): schema is Schema.Codec<unknown, unknown> =>
+	Schema.isSchema(schema);
+
+const encodeAnswer = (schema: unknown, value: unknown): Option.Option<Schema.Json> => {
+	if (!isCodec(schema)) return Option.none();
+	return Option.liftThrowable(() =>
+		Schema.decodeUnknownSync(Schema.Json)(Schema.encodeUnknownSync(schema)(value)),
+	)();
 };
