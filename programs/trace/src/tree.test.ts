@@ -31,6 +31,7 @@ const empty: JobTrace = {
 	runs: [],
 	spans: [],
 	steps: [],
+	starts: [],
 	opened: [],
 };
 

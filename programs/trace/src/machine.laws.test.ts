@@ -1,4 +1,4 @@
-import {applyCell} from "@demlik/tea";
+import {applyCell, type Machine as TeaMachine} from "@demlik/tea";
 import {
 	arbMsg,
 	arbRecordMsg,
@@ -8,7 +8,8 @@ import {
 	type Step,
 	stubCtxThrowingProxy,
 } from "@demlik/tea/pbt";
-import type {MsgOf} from "@kampus/fabrika-old";
+import {deepEqual} from "@demlik/tea/persistence";
+import type {JobTrace, MsgOf} from "@kampus/fabrika-old";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {
@@ -21,7 +22,7 @@ import {
 	ticking,
 	trace,
 } from "./machine.ts";
-import {TALLY_ID, TALLY_TRACE} from "./tally.ts";
+import {TALLY_ID, TALLY_STARTED, TALLY_TRACE} from "./tally.ts";
 import {findOf, groupsOf, JOB, nodesOf, treeOf} from "./tree.ts";
 
 // The trace machine's laws, on tea's pbt: after every step of any list of Msgs, from the real
@@ -30,7 +31,11 @@ import {findOf, groupsOf, JOB, nodesOf, treeOf} from "./tree.ts";
 
 type Machine = typeof trace;
 type Msg = MsgOf<Machine>;
-type TraceStep = Step<Model, Msg, never>;
+/** The Cmds a machine can start: the trace machine's one, `replay`. */
+type CmdsOf<X> =
+	X extends TeaMachine<infer _S, infer _M, infer C, infer _U, infer _Ctx> ? C : never;
+type Cmds = CmdsOf<Machine>;
+type TraceStep = Step<Model, Msg, Cmds>;
 /** The job view's Msgs: these laws are today's, on the job view alone (ticket 141, M5). */
 type JobMsg = Extract<Msg, {readonly type: "look" | "got" | "lost" | "toggle" | "choose" | "tick"}>;
 
@@ -47,10 +52,13 @@ const flat = (s: Model): Flat => {
 	if (s.shows.kind !== "job") throw new Error("a ticket view, from the job view's Msgs alone");
 	return {read: s.shows.read, open: s.open, chosen: s.chosen};
 };
+// No replay: these laws draw none of the replay's Msgs, so none is ever held (the replay's laws are
+// at the end of this file).
 const unflat = (f: Flat): Model => ({
 	shows: {kind: "job", read: f.read},
 	open: f.open,
 	chosen: f.chosen,
+	replay: null,
 });
 /** One step, as the laws read it. `same`: the step gave back the very state it was given. */
 interface FlatStep {
@@ -275,11 +283,11 @@ const real = trace.update;
 type Cell<T extends JobMsg["type"]> = (
 	s: Flat,
 	m: Extract<JobMsg, {readonly type: T}>,
-) => readonly [Flat, readonly never[]];
+) => readonly [Flat, readonly Cmds[]];
 /** A flat cell as the machine's own: the very state back when the cell gave its own back. */
 const lift =
 	<T extends JobMsg["type"]>(cell: Cell<T>) =>
-	(s: Model, m: Extract<JobMsg, {readonly type: T}>): readonly [Model, readonly never[]] => {
+	(s: Model, m: Extract<JobMsg, {readonly type: T}>): readonly [Model, readonly Cmds[]] => {
 		const f = flat(s);
 		const [n, cmds] = cell(f, m);
 		return [n === f ? s : unflat(n), cmds];
@@ -460,5 +468,258 @@ describe("the trace machine's laws", () => {
 		expect(broken(PLANTS.secondFollow)).toContain(followsWhatItHolds.name);
 		expect(broken(PLANTS.secondClock)).toContain(ticksWhileItRuns.name);
 		expect(broken(PLANTS.strangeSub)).toContain(followsWhatItHolds.name);
+	});
+});
+
+// The replay's laws (docs/plan/replay-through-current-code.md, section 3). Today's version. On the
+// whole Model, from the real init, with the replay's Msgs drawn among the job view's: a replay
+// asked of any row, rows a record holds and rows it does not, and tea's answer to a replay Cmd for
+// any row and any step count, so an answer can come for a replay no longer held. The records read
+// keep tally's start, and some hold a second machine run of count, so the Cmd's rows are one
+// machine run's, not the record's.
+
+/** The Msgs these laws draw: the job view's that move what shows, and the replay's two. */
+type ReplayMsg = Extract<
+	Msg,
+	{readonly type: "look" | "got" | "toggle" | "choose" | "replay" | "replay_ok"}
+>;
+type ReplayStep = TraceStep;
+
+const FIRST_STEP = TALLY_STARTED.steps[0] as JobTrace["steps"][number];
+const FIRST_START = TALLY_STARTED.starts[0] as JobTrace["starts"][number];
+/** tally's record with a second machine run of count, `count other`, beside count total. */
+const TWO_RUNS: JobTrace = {
+	...TALLY_STARTED,
+	steps: [...TALLY_STARTED.steps, {...FIRST_STEP, id: "other", at: FIRST_STEP.at + 1}],
+	starts: [...TALLY_STARTED.starts, {...FIRST_START, id: "other"}],
+};
+/** The whole record, two machine runs, count total after one step, after none, and no start kept. */
+const replayRecords = [
+	TALLY_STARTED,
+	TWO_RUNS,
+	{...TALLY_STARTED, steps: TALLY_STARTED.steps.slice(0, 1)},
+	{...TALLY_STARTED, steps: []},
+	TALLY_TRACE,
+];
+/** Every row of those records, a row none holds, and none. */
+const replayRow = fc.constantFrom(
+	...new Set(replayRecords.flatMap((r) => nodesOf(treeOf(r)).map((n) => n.key))),
+	"span:ffffffffffffffff",
+	"",
+);
+const ANSWERS = [
+	{_tag: "matches", steps: 3},
+	{_tag: "parts", n: 2, msg: {type: "add", n: 2}, path: "state.total", recorded: 3, replayed: 4},
+	{_tag: "refused", n: 1, msg: {type: "add", n: 1}, state: "(untagged state)", accepts: []},
+	{_tag: "cannot", why: "no_start", n: null, detail: "recorded before its start was kept"},
+] as const;
+
+/** tea's answer to a replay Cmd: `cmd` the Cmd it answers, `value` the replay's answer. */
+type ReplayOk = Extract<ReplayMsg, {readonly type: "replay_ok"}>;
+
+/** tea's answer to a replay Cmd: for a row, with a machine run's rows as the Cmd carried them. */
+const replayOk = fc
+	.tuple(replayRow, fc.constantFrom(0, 1, 3, 4), fc.constantFrom(...ANSWERS))
+	.map(([row, steps, value]): ReplayOk => ({
+		type: "replay_ok",
+		cmd: {
+			type: "replay",
+			row,
+			starts: TALLY_STARTED.starts,
+			steps: Array.from({length: steps}, () => FIRST_STEP),
+		} as ReplayOk["cmd"],
+		value: value as ReplayOk["value"],
+		at: 0,
+	}));
+
+const replayTable: MsgArbitraryTable<ReplayMsg> = {
+	look: arbRecordMsg("look", {id}),
+	got: fc
+		.tuple(id, fc.constantFrom(...replayRecords))
+		.map(([i, r]) => ({type: "got" as const, trace: {...r, trace: i}})),
+	toggle: arbRecordMsg("toggle", {row: replayRow}),
+	choose: arbRecordMsg("choose", {row: fc.option(replayRow, {nil: null})}),
+	replay: arbRecordMsg("replay", {row: replayRow}),
+	replay_ok: replayOk,
+};
+const replayLists = fc.array(arbMsg(replayTable), {maxLength: 30, size: "max"});
+
+/** The record a job view shows, read. `null`: none read, or a ticket view. */
+const shownRecord = (s: Model): JobTrace | null =>
+	s.shows.kind === "job" && s.shows.read.at === "read" ? s.shows.read.trace : null;
+
+/** A machine run's row in a record, with its starts and steps. `null`: the row is no machine run there. */
+const machineRun = (record: JobTrace | null, row: string) => {
+	if (record === null) return null;
+	const node = findOf(treeOf(record), row);
+	if (node?.of.kind !== "machine") return null;
+	const {run, machine, id: copy} = node.of;
+	const mine = (r: {readonly run: string; readonly machine: string; readonly id: string}) =>
+		r.run === run && r.machine === machine && r.id === copy;
+	return {starts: record.starts.filter(mine), steps: record.steps.filter(mine)};
+};
+
+const replayEvery = (
+	name: string,
+	law: (step: ReplayStep & {readonly same: boolean}) => boolean,
+): Law => ({
+	name,
+	check: (machine) =>
+		propertyInvariant(
+			machine,
+			ctx,
+			replayLists,
+			(step) => law({...step, same: step.next === step.prev}),
+			OPTS,
+		),
+});
+
+const heldIsAMachineRun = replayEvery(
+	"a replay held names a machine run of the record shown, with that run's step count now",
+	({next}) => {
+		if (next.replay === null) return true;
+		const run = machineRun(shownRecord(next), next.replay.row);
+		return run !== null && run.steps.length === next.replay.steps;
+	},
+);
+
+const asksOnlyToReplay = replayEvery(
+	"only a replay of a machine run asks by Cmd: one replay Cmd with that run's rows, held with no answer",
+	({prev, msg, next, cmds}) => {
+		const run = msg.type === "replay" ? machineRun(shownRecord(prev), msg.row) : null;
+		if (msg.type !== "replay" || run === null) return cmds.length === 0;
+		return (
+			deepEqual(cmds, [{type: "replay", row: msg.row, ...run}]) &&
+			deepEqual(next.replay, {row: msg.row, steps: run.steps.length, answer: null})
+		);
+	},
+);
+
+const noMachineIsNothing = replayEvery(
+	"a replay of a row that is no machine run of the record shown changes nothing",
+	({prev, msg, same}) =>
+		msg.type !== "replay" || machineRun(shownRecord(prev), msg.row) !== null || same,
+);
+
+const answerLandsOnItsReplay = replayEvery(
+	"an answer lands only on the replay that asked it, for that row and step count, and changes nothing else",
+	({prev, msg, next, same}) => {
+		if (msg.type !== "replay_ok") return true;
+		const {cmd, value} = msg;
+		const held = prev.replay;
+		if (held === null || held.row !== cmd.row || held.steps !== cmd.steps.length) return same;
+		return (
+			next.shows === prev.shows &&
+			next.open === prev.open &&
+			next.chosen === prev.chosen &&
+			deepEqual(next.replay, {...held, answer: value})
+		);
+	},
+);
+
+const lookClears = replayEvery(
+	"a look that changes what shows clears the replay",
+	({msg, next, same}) => msg.type !== "look" || same || next.replay === null,
+);
+
+const gotKeepsWhileSame = replayEvery(
+	"a newer read of the record shown keeps the replay while its machine run's step count is the same",
+	({prev, msg, next}) => {
+		if (msg.type !== "got" || prev.replay === null) return true;
+		const shown = shownRecord(prev);
+		if (shown === null || shown.trace !== msg.trace.trace) return true;
+		const run = machineRun(msg.trace, prev.replay.row);
+		if (run === null || run.steps.length !== prev.replay.steps) return true;
+		return deepEqual(next.replay, prev.replay);
+	},
+);
+
+const REPLAY_LAWS = [
+	heldIsAMachineRun,
+	asksOnlyToReplay,
+	noMachineIsNothing,
+	answerLandsOnItsReplay,
+	lookClears,
+	gotKeepsWhileSame,
+];
+
+const replayBroken = (machine: Machine): readonly string[] =>
+	REPLAY_LAWS.filter((law) => {
+		try {
+			law.check(machine);
+			return false;
+		} catch {
+			return true;
+		}
+	}).map((law) => law.name);
+
+// Planted mistakes: the real machine with one replay cell, or a cell that clears the replay,
+// changed. `real` is the real machine's cells, as the plants above read them.
+const replant = (changed: Partial<Machine["update"]>): Machine => ({
+	...trace,
+	update: {...real, ...changed},
+});
+
+const REPLAY_PLANTS = {
+	/** A replay of any row is held, a step or one the record does not hold. */
+	replaysAnyRow: replant({
+		replay: (s, m) => {
+			const [next, cmds] = real.replay(s, m);
+			return next === s ? [{...s, replay: {row: m.row, steps: 0, answer: null}}, []] : [next, cmds];
+		},
+	}),
+	/** A replay is held, and never asked for. */
+	asksNothing: replant({replay: (s, m) => [real.replay(s, m)[0], []]}),
+	/** The Cmd carries every row of the record, not the machine run's. */
+	sendsTheWholeRecord: replant({
+		replay: (s, m) => {
+			const [next, cmds] = real.replay(s, m);
+			const record = shownRecord(s);
+			return record === null
+				? [next, cmds]
+				: [next, cmds.map((c) => ({...c, starts: record.starts, steps: record.steps}))];
+		},
+	}),
+	/** Any answer lands on the replay held, whatever row or step count it was for. */
+	takesAnyAnswer: replant({
+		replay_ok: (s, m) =>
+			s.replay === null ? [s, []] : [{...s, replay: {...s.replay, answer: m.value}}, []],
+	}),
+	/** A newer read never clears the replay, though its machine run moved on. */
+	keepsOnEveryRead: replant({
+		got: (s, m) => {
+			const [next, cmds] = real.got(s, m);
+			return next === s ? [next, cmds] : [{...next, replay: s.replay}, cmds];
+		},
+	}),
+	/** A newer read always clears the replay. */
+	clearsOnEveryRead: replant({
+		got: (s, m) => {
+			const [next, cmds] = real.got(s, m);
+			return next === s ? [next, cmds] : [{...next, replay: null}, cmds];
+		},
+	}),
+	/** A look at another record keeps the replay of the one before. */
+	lookKeeps: replant({
+		look: (s, m) => {
+			const [next, cmds] = real.look(s, m);
+			return next === s ? [next, cmds] : [{...next, replay: s.replay}, cmds];
+		},
+	}),
+};
+
+describe("the trace machine's replay laws", () => {
+	it.each(REPLAY_LAWS.map((law) => [law.name, law] as const))("%s", (_, law) => {
+		law.check(trace);
+	});
+
+	it("each replay law is seen to fail on a planted mistake", () => {
+		expect(replayBroken(REPLAY_PLANTS.replaysAnyRow)).toContain(noMachineIsNothing.name);
+		expect(replayBroken(REPLAY_PLANTS.asksNothing)).toEqual([asksOnlyToReplay.name]);
+		expect(replayBroken(REPLAY_PLANTS.sendsTheWholeRecord)).toEqual([asksOnlyToReplay.name]);
+		expect(replayBroken(REPLAY_PLANTS.takesAnyAnswer)).toEqual([answerLandsOnItsReplay.name]);
+		expect(replayBroken(REPLAY_PLANTS.keepsOnEveryRead)).toEqual([heldIsAMachineRun.name]);
+		expect(replayBroken(REPLAY_PLANTS.clearsOnEveryRead)).toEqual([gotKeepsWhileSame.name]);
+		expect(replayBroken(REPLAY_PLANTS.lookKeeps)).toContain(lookClears.name);
 	});
 });

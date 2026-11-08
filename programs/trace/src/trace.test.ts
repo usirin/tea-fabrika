@@ -1,9 +1,12 @@
 import {
 	type JobTrace,
+	layerReplayer,
 	memoryStorage,
 	offer,
 	type PayloadOf,
+	type Replayer,
 	readInput,
+	Shell,
 	start,
 	Traces,
 	type Word,
@@ -13,7 +16,7 @@ import {TestClock} from "effect/testing";
 import {describe, expect, it} from "vitest";
 import {SETTLE, trace} from "./index.ts";
 import {memoryTraces} from "./memory.ts";
-import {TALLY_ID, TALLY_TRACE} from "./tally.ts";
+import {TALLY_ID, TALLY_STARTED, TALLY_TRACE} from "./tally.ts";
 import {nodesOf, treeOf} from "./tree.ts";
 import {type Shown, shownOf} from "./view.ts";
 
@@ -265,6 +268,7 @@ describe("the trace program", () => {
 			shows: {kind: "job", read: {at: "read", trace: TALLY_TRACE, now: null}},
 			open: ["job"],
 			chosen: tally,
+			replay: null,
 		}).chosen;
 		expect(chosen?.kind).toBe("span");
 		if (chosen?.kind !== "span") return;
@@ -293,5 +297,50 @@ describe("the trace program", () => {
 		expect(readInput(trace, {type: "id", value: "not-a-trace"}).kind).toBe("refused");
 		expect(readInput(trace, {type: "any", value: {total: 6}}).kind).toBe("read");
 		expect(readInput(trace, {type: "any", value: null}).kind).toBe("read");
+	});
+});
+
+// Replay through current code (docs/plan/replay-through-current-code.md, section 3). Today's
+// version. The window asks to replay a machine run on `replay`; the program's Cmd asks the
+// `Replayer` service, and with none given (a test, the shots) it answers `cannot no_code`, as a
+// ticket with no ledger is answered.
+
+/** The machine run's detail once its replay is answered. */
+const replayedIn = (traces: readonly JobTrace[], replayer?: Layer.Layer<Replayer>) => {
+	const count = keyOf(TALLY_STARTED, "count total");
+	const asked = Effect.gen(function* () {
+		const {say, until} = yield* session(traces, TALLY_ID);
+		yield* until((s) => s.read === "read");
+		yield* say("choose", {row: count});
+		yield* say("replay", {row: count});
+		const shown = yield* until(
+			(s) =>
+				s.chosen?.kind === "machine" && s.chosen.replay !== null && s.chosen.replay.answer !== null,
+		);
+		return shown.chosen?.kind === "machine" ? shown.chosen.replay : null;
+	}).pipe(Effect.scoped);
+	return Effect.runPromise(replayer === undefined ? asked : asked.pipe(Effect.provide(replayer)));
+};
+
+describe("the trace program's replay", () => {
+	it("answers cannot, no_code, when no Replayer is given", async () => {
+		const replay = await replayedIn([TALLY_STARTED]);
+		expect(replay?.answer).toMatchObject({_tag: "cannot", why: "no_code", n: null});
+	});
+
+	it("replays count total through the small programs' code when their Replayer is given: it matches at every step", async () => {
+		const replay = await replayedIn([TALLY_STARTED], layerReplayer(Shell.SMALL));
+		expect(replay?.answer).toEqual({_tag: "matches", steps: 3});
+	});
+
+	it("answers cannot, no_start, for a record kept before starts were", async () => {
+		const replay = await replayedIn([TALLY_TRACE], layerReplayer(Shell.SMALL));
+		expect(replay?.answer).toMatchObject({_tag: "cannot", why: "no_start", n: null});
+	});
+
+	it("reads a replay its window sends, and refuses a row it does not know the shape of", () => {
+		expect(readInput(trace, {type: "replay", value: {row: "job"}}).kind).toBe("read");
+		expect(readInput(trace, {type: "replay", value: {row: 7}}).kind).toBe("refused");
+		expect(readInput(trace, {type: "replay", value: null}).kind).toBe("refused");
 	});
 });

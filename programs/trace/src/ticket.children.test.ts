@@ -81,7 +81,7 @@ const longStep = (n: number): {readonly record: JobTrace; readonly under: readon
 	});
 	const under = spans.filter((_, j) => built[j]?.under).toSorted((a, b) => a.start - b.start);
 	return {
-		record: {trace: "d4".repeat(16), job: null, runs: [], spans, steps: [], opened: []},
+		record: {trace: "d4".repeat(16), job: null, runs: [], spans, steps: [], starts: [], opened: []},
 		under,
 	};
 };
@@ -135,6 +135,7 @@ describe("a record whose parents loop (childrenOf)", () => {
 			runs: [],
 			spans: [a, b],
 			steps: [],
+			starts: [],
 			opened: [],
 		};
 		expect(childrenOf(record, RUN, 0, 1).map((s) => s.span)).toEqual([b.span, a.span]);

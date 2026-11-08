@@ -124,6 +124,30 @@ export const TALLY_TRACE: JobTrace = {
 		cmds: [],
 		by,
 	})),
+	// Written before starts were kept: no row says where count total started.
+	starts: [],
 	// No span kept open for a child run to nest under: neither run starts another.
 	opened: [],
+};
+
+/**
+ * The same record as a host writes it once every start of a kept machine run is kept
+ * (docs/plan/replay-through-current-code.md, step 1): count total booted once, at 0, before its
+ * first step. What a replay through today's code folds from.
+ */
+export const TALLY_STARTED: JobTrace = {
+	...TALLY_TRACE,
+	starts: [
+		{
+			run: TALLY_RUN,
+			program: "tally",
+			machine: "count",
+			id: "total",
+			n: 1,
+			after: 0,
+			at: at(1.5),
+			state: {total: 0},
+			by,
+		},
+	],
 };

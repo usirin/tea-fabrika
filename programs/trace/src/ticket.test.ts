@@ -154,6 +154,7 @@ describe("a step's spans (childrenOf)", () => {
 		runs: [],
 		spans,
 		steps: [],
+		starts: [],
 		opened: [],
 	});
 

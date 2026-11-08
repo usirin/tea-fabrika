@@ -88,7 +88,7 @@ const forest: fc.Arbitrary<JobTrace> = fc
 			events: [],
 			by: "agent:lane",
 		}));
-		return {trace: "d4".repeat(16), job: null, runs: [], spans, steps: [], opened: []};
+		return {trace: "d4".repeat(16), job: null, runs: [], spans, steps: [], starts: [], opened: []};
 	});
 
 const query = fc.record({

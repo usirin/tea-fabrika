@@ -67,6 +67,7 @@ const LANE_2_RECORD: JobTrace = {
 		span(FETCH, STEP, "GET", P + 201_000, P + 202_000, GET),
 	],
 	steps: [],
+	starts: [],
 	opened: [],
 };
 

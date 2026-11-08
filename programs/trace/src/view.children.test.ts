@@ -100,7 +100,7 @@ const countingRecord = (): {readonly record: JobTrace; readonly reads: {n: numbe
 		},
 	});
 	return {
-		record: {trace: LANE_A, job: null, runs: [], spans: counted, steps: [], opened: []},
+		record: {trace: LANE_A, job: null, runs: [], spans: counted, steps: [], starts: [], opened: []},
 		reads,
 	};
 };
@@ -186,6 +186,7 @@ const recordWith = (others: readonly Span[]): JobTrace => ({
 		...others,
 	],
 	steps: [],
+	starts: [],
 	opened: [],
 });
 

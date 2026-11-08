@@ -20,6 +20,7 @@ const just: JobTrace = {
 	runs: [],
 	spans: [],
 	steps: [],
+	starts: [],
 	opened: [],
 };
 const stepping: JobTrace = {

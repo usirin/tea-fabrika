@@ -61,6 +61,7 @@ const record = (id: string): JobTrace => ({
 	runs: [],
 	spans: [],
 	steps: [],
+	starts: [],
 	opened: [],
 });
 const times = [...new Set(TIMELINES.flatMap((tl) => tl.map((e) => e.at)))];

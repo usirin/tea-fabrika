@@ -1,12 +1,12 @@
 import {Cmd, type DepKeyedSub, defineMachine, RuntimeDiscardedError, type Sub} from "@demlik/tea";
-import {run} from "@demlik/tea/effect";
+import {Cmd as EffectCmd, run} from "@demlik/tea/effect";
 import {describe, expect, it} from "@effect/vitest";
 import {Cause, Deferred, Effect, Exit, Schema, Stream} from "effect";
 import {KeyValueStore} from "effect/persistence";
 import {failureReport, runKept} from "./kept.ts";
 import {mortalDisk} from "./mortal.ts";
 import {AlreadyStarted, call, defineProgram, kind} from "./program.ts";
-import {type Handle, memoryStorage, StateRefused, type Storage} from "./storage.ts";
+import {type Handle, memoryStorage, StateRefused, type StepLog, type Storage} from "./storage.ts";
 
 // A ref's `start` (./refs.ts, ./kept.ts) against the restart race of
 // experiment 69, on a toy with the build machine's shape: a Listen that
@@ -743,3 +743,214 @@ const stall = (w: World, sub: WorkSub, working?: Deferred.Deferred<void>): Strea
 			Effect.andThen(Effect.never),
 		),
 	);
+
+// Every boot of a kept machine run is kept, on a storage that keeps steps
+// (docs/plan/replay-through-current-code.md, step 1): one start, with the
+// program's name, the machine, the id, and the state it booted from as its
+// schema encodes it, written in the same ordered queue as the steps, so it
+// lands before every step of that boot. A restart is a second start. And a
+// step's Cmds are the ones its transition started, as tea's `observe` hands
+// them (tea 0.26.0): `update` is called once per Msg, never folded again.
+
+/** What a storage that keeps steps wrote, in the order it wrote it. */
+type Written =
+	| {
+			readonly row: "start";
+			readonly run: string;
+			readonly machine: string;
+			readonly id: string;
+			readonly program: string;
+			readonly state: unknown;
+			readonly at: number;
+	  }
+	| {
+			readonly row: "step";
+			readonly run: string;
+			readonly machine: string;
+			readonly id: string;
+			readonly msg: unknown;
+			readonly state: unknown;
+			readonly cmds: readonly unknown[];
+	  };
+
+/** A step log that notes every start and step a storage hands it, in order. */
+const noting = () => {
+	const written: Written[] = [];
+	const log: StepLog = {
+		start: (run, machine, id, start) =>
+			Effect.sync(() => {
+				written.push({
+					row: "start",
+					run,
+					machine,
+					id,
+					program: start.program,
+					state: start.state,
+					at: start.at,
+				});
+			}),
+		step: (run, machine, id, step) =>
+			Effect.sync(() => {
+				written.push({
+					row: "step",
+					run,
+					machine,
+					id,
+					msg: step.msg,
+					state: step.state,
+					cmds: step.cmds,
+				});
+			}),
+	};
+	return {written, log};
+};
+
+const note = EffectCmd.make("note", {
+	input: Schema.Struct({k: Schema.Int}),
+	ok: Schema.Null,
+	err: [],
+});
+
+/** A total kept as text: its kept state is not its live one, so what is written shows which. */
+const TextTotal = Schema.Struct({total: Schema.FiniteFromString});
+
+/**
+ * A running total whose every `add` starts one `note` Cmd, numbered by how many times `update`
+ * has been called: a second fold of the same Msg would number it again, and call it twice.
+ */
+const ticker = () => {
+	let calls = 0;
+	const machine = defineMachine({
+		types: {
+			model: {} as {readonly total: number},
+			msg: {} as {readonly type: "add"; readonly n: number},
+			ctx: undefined,
+		},
+		cmds: [note],
+		init: (loaded) => [loaded ?? {total: 0}, []],
+		update: {
+			add: (s, m) => {
+				calls += 1;
+				return [{total: s.total + m.n}, [note({k: calls})]];
+			},
+			note_ok: (s) => [s, []],
+			note_err: (s) => [s, []],
+		},
+	});
+	const program = defineProgram({
+		name: "ticker",
+		description: "Adds 1, then 2, to a kept total, noting each add.",
+		inputs: {},
+		outputs: {},
+		machines: {
+			ticker: kind({
+				machine,
+				state: TextTotal,
+				parent: "main",
+				options: () => ({ctx: undefined, interpret: {note: () => Effect.succeed(null)}}),
+				drawing: () => ({name: "ticker", steps: {note: "note"}}),
+				status: (s) => `total ${s.total}`,
+			}),
+		},
+		main: ({machines}) =>
+			Effect.gen(function* () {
+				const runtime = yield* machines.ticker.get("t").start();
+				yield* runtime.dispatch({type: "add", n: 1}).pipe(Effect.orDie);
+				yield* runtime.dispatch({type: "add", n: 2}).pipe(Effect.orDie);
+			}).pipe(Effect.scoped),
+	});
+	return {program, calls: () => calls};
+};
+
+/** The rows written, each as a short line: a start's state, a step's Msg type. */
+const lines = (written: readonly Written[]) =>
+	written.map((w) =>
+		w.row === "start" ? ["start", w.state] : ["step", (w.msg as {type: string}).type],
+	);
+
+describe("on a storage that keeps steps, every boot of a kept machine run is kept as a start", () => {
+	it("writes one start, naming the program, the machine and the id, before any step of that boot", async () => {
+		const {written, log} = noting();
+		const t = ticker();
+		const called = await Effect.runPromise(
+			call(t.program, {}, {keeping: {id: "ticker:r1", storage: memoryStorage(log)}}),
+		);
+		expect(endOf(called).kind).toBe("ended");
+		expect(written[0]).toMatchObject({
+			row: "start",
+			run: "ticker:r1",
+			program: "ticker",
+			machine: "ticker",
+			id: "t",
+		});
+		expect(typeof (written[0] as {at?: unknown}).at).toBe("number");
+		expect(written.filter((w) => w.row === "start")).toHaveLength(1);
+		expect(lines(written)).toEqual([
+			["start", {total: "0"}],
+			["step", "add"],
+			["step", "note_ok"],
+			["step", "add"],
+			["step", "note_ok"],
+		]);
+	});
+
+	it("writes the state as the kind's schema encodes it, for the start and the steps alike", async () => {
+		const {written, log} = noting();
+		await Effect.runPromise(
+			call(ticker().program, {}, {keeping: {id: "ticker:r2", storage: memoryStorage(log)}}),
+		);
+		expect(written.map((w) => w.state)).toEqual([
+			{total: "0"},
+			{total: "1"},
+			{total: "1"},
+			{total: "3"},
+			{total: "3"},
+		]);
+	});
+
+	it("writes a second start on a restart, from the state the first life kept, before that life's steps", async () => {
+		const {written, log} = noting();
+		const storage = memoryStorage(log);
+		await Effect.runPromise(call(ticker().program, {}, {keeping: {id: "ticker:r3", storage}}));
+		await Effect.runPromise(call(ticker().program, {}, {keeping: {id: "ticker:r3", storage}}));
+		expect(lines(written)).toEqual([
+			["start", {total: "0"}],
+			["step", "add"],
+			["step", "note_ok"],
+			["step", "add"],
+			["step", "note_ok"],
+			["start", {total: "3"}],
+			["step", "add"],
+			["step", "note_ok"],
+			["step", "add"],
+			["step", "note_ok"],
+		]);
+	});
+
+	it("keeps each step's Cmds as the ones its transition started: update is called once per Msg", async () => {
+		const {written, log} = noting();
+		const t = ticker();
+		await Effect.runPromise(
+			call(t.program, {}, {keeping: {id: "ticker:r4", storage: memoryStorage(log)}}),
+		);
+		const steps = written.filter((w) => w.row === "step");
+		expect(steps.map((s) => s.cmds)).toEqual([
+			[{type: "note", k: 1}],
+			[],
+			[{type: "note", k: 2}],
+			[],
+		]);
+		expect(t.calls()).toBe(2);
+	});
+
+	it("writes nothing on a storage that keeps no steps: its handle has no step and no start", async () => {
+		const storage = memoryStorage();
+		const handle = await Effect.runPromise(storage.open("ticker:r5", {}));
+		expect(handle.step).toBeUndefined();
+		expect(handle.start).toBeUndefined();
+		const called = await Effect.runPromise(
+			call(ticker().program, {}, {keeping: {id: "ticker:r6", storage}}),
+		);
+		expect(endOf(called).kind).toBe("ended");
+	});
+});

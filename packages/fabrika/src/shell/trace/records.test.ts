@@ -90,6 +90,12 @@ describe("a host's records", () => {
 			["count", 2],
 			["count", 3],
 		]);
+		// Where count total started, kept before its first step: tally's own name, its state at 0
+		// as `Total` encodes it, and no step yet when it came (docs/plan/replay-through-current-code.md).
+		expect(
+			record.starts.map((s) => [s.program, s.machine, s.id, s.n, s.after, s.state, s.by]),
+		).toEqual([["tally", "count", "total", 1, 0, {total: 0}, "user:owner"]]);
+		expect(record.starts.map((s) => s.run)).toEqual([record.steps[0]?.run]);
 		// One file: the job's. tsh's own run and the host's table began no job.
 		expect(readdirSync(at).filter((f) => f.endsWith(".sqlite"))).toEqual([
 			`${record.trace}.sqlite`,
@@ -111,7 +117,15 @@ describe("a host's records", () => {
 				return yield* readOn(records, trace);
 			}).pipe(Effect.scoped, Effect.provide(node)),
 		);
-		expect(read).toEqual({trace, job: null, runs: [], spans: [], steps: [], opened: []});
+		expect(read).toEqual({
+			trace,
+			job: null,
+			runs: [],
+			spans: [],
+			steps: [],
+			starts: [],
+			opened: [],
+		});
 		expect(readdirSync(at)).toEqual([]);
 	});
 

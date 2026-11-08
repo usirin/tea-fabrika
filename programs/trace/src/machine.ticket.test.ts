@@ -29,6 +29,7 @@ const record = (id: string): JobTrace => ({
 	runs: [],
 	spans: [],
 	steps: [],
+	starts: [],
 	opened: [],
 });
 
