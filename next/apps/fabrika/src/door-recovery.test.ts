@@ -161,7 +161,9 @@ const world = () => {
 		msg: TeaMsg,
 		view: {data: Model, select: (s: Model) => s},
 		refuse: () => null,
-		inputs: {},
+		inputs: {
+			press: {_tag: "write", schema: TeaMsg, description: "Press", personOnly: false},
+		},
 		outputs: {},
 		writes: {},
 		wake: () => null,

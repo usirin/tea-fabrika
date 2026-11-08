@@ -23,6 +23,7 @@ import {
 	storage,
 } from "../coordination/process.test-support.ts";
 import {Activity} from "../coordination/process.ts";
+import {RecoveryStore} from "../coordination/recovery-store.ts";
 import {Ledger, type LedgerError} from "../data/ledger.ts";
 import {lineFor} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
@@ -264,6 +265,128 @@ const recover = (w: ReturnType<typeof world>) =>
 	});
 
 describe("P34 runner supervision", () => {
+	it.effect(
+		"p80 bounded objects plant, keep every input in one row: a good step writes flat supervision bytes after 1 or 50 good letters without losing receipts",
+		() =>
+			Effect.gen(function* () {
+				const w = world();
+				yield* w.boot;
+				// Identify P11's tables before supervision creates any. Audit all other tables,
+				// whether recovery uses one JSON row or separate rows for letters and observations.
+				yield* ProcessStore.use((s) => s.load).pipe(Effect.provide(w.layer()));
+				const tables = () =>
+					w.state.sql.exec(
+						"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+					);
+				const processTables = new Set(tables().map((row) => String(row.name)));
+				const poison = w.input();
+				yield* ProgramRunner.use((r) => failed(r.msg(poison))).pipe(Effect.provide(w.layer()));
+				w.reopen();
+				yield* recover(w);
+				const goodId = (n: number) => `good-${String(n).padStart(3, "0")}`;
+				const good = (n: number) =>
+					ProgramRunner.use((r) => r.msg(w.input(goodId(n), {type: "add", n: 1}))).pipe(
+						Effect.tap((answer) =>
+							Effect.sync(() => expect(answer).toMatchObject({_tag: "accepted", pos: n})),
+						),
+						Effect.provide(w.layer()),
+					);
+				yield* good(1);
+				const recoveryTables = tables().filter((row) => !processTables.has(String(row.name)));
+				expect(recoveryTables.length, "audit must cover real supervision storage").toBeGreaterThan(
+					0,
+				);
+				const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
+				w.state.sql.exec("CREATE TEMP TABLE p34_supervision_writes (bytes INTEGER NOT NULL)");
+				for (const [index, {name}] of recoveryTables.entries()) {
+					const table = quote(String(name));
+					const columns = w.state.sql.exec(`PRAGMA table_info(${table})`);
+					for (const event of ["INSERT", "UPDATE", "DELETE"]) {
+						const record = event === "DELETE" ? "OLD" : "NEW";
+						const bytes = columns
+							.map(({name}) => `coalesce(length(CAST(${record}.${quote(String(name))} AS BLOB)),0)`)
+							.join(" + ");
+						w.state.sql.exec(
+							`CREATE TEMP TRIGGER ${quote(`p34_write_${index}_${event}`)} AFTER ${event} ON ${table}
+							BEGIN INSERT INTO p34_supervision_writes (bytes) VALUES (${bytes}); END`,
+						);
+					}
+				}
+				const measure = (n: number) =>
+					Effect.gen(function* () {
+						w.state.sql.exec("DELETE FROM p34_supervision_writes");
+						yield* good(n);
+						const [row] = w.state.sql.exec(
+							"SELECT coalesce(sum(bytes),0) AS bytes FROM p34_supervision_writes",
+						);
+						return Number(row?.bytes);
+					});
+				// Sum full row images written by SQL, not the difference in database size.
+				// A growing JSON row adds a constant size but rewrites all the older inputs.
+				const afterOne = yield* measure(2);
+				for (let n = 3; n <= 50; n++) yield* good(n);
+				const afterFifty = yield* measure(51);
+
+				const recovery = () => RecoveryStore.layer(w.state.sql, {name: NAME, capacity: 1024 ** 3});
+				w.reopen();
+				yield* Effect.gen(function* () {
+					const r = yield* ProgramRunner;
+					expect(yield* r.msg(w.input(goodId(1), {type: "add", n: 2}))).toMatchObject({
+						_tag: "refused",
+						why: "id_reused",
+					});
+					expect(yield* r.msg(w.input(goodId(1), {type: "add", n: 1}))).toMatchObject({
+						_tag: "accepted",
+						pos: 1,
+					});
+				}).pipe(Effect.provide(w.layer()));
+				expect(
+					yield* RecoveryStore.use((s) => s.receipt(poison.id)).pipe(Effect.provide(recovery())),
+				).toMatchObject({tries: 1, errors: ["TypeError"], result: null});
+				yield* ProgramRunner.use((r) => failed(r.msg(poison))).pipe(Effect.provide(w.layer()));
+				w.reopen();
+				expect(
+					yield* RecoveryStore.use((s) => s.receipt(poison.id)).pipe(Effect.provide(recovery())),
+				).toMatchObject({tries: 2, errors: ["TypeError", "RangeError"], result: null});
+				yield* recover(w);
+				expect(
+					yield* ProgramRunner.use((r) => r.msg(poison)).pipe(Effect.provide(w.layer())),
+				).toMatchObject({_tag: "refused", why: "dead"});
+				w.reopen();
+				expect(
+					yield* RecoveryStore.use((s) => s.input(poison.id)).pipe(Effect.provide(recovery())),
+				).toEqual(poison);
+				expect(
+					yield* RecoveryStore.use((s) => s.receipt(poison.id)).pipe(Effect.provide(recovery())),
+				).toMatchObject({
+					tries: 3,
+					errors: ["TypeError", "RangeError", "TypeError"],
+					result: {_tag: "refused", why: "dead"},
+				});
+				yield* Effect.gen(function* () {
+					const r = yield* ProgramRunner;
+					expect(yield* r.msg(poison)).toMatchObject({_tag: "refused", why: "dead"});
+					expect(
+						yield* r.msg({
+							...poison,
+							envelope: {...poison.envelope, input: {type: "poison", key: "changed"}},
+						}),
+					).toMatchObject({_tag: "refused", why: "id_reused"});
+					expect(w.controls.steps).toEqual(["poison", "poison", "poison"]);
+					expect((yield* inbox).map((row) => row.id)).toEqual(
+						Array.from({length: 51}, (_, n) => goodId(n + 1)),
+					);
+					expect((yield* dead).map((row) => row.body)).toMatchObject([{m: poison.id, tries: 3}]);
+				}).pipe(Effect.provide(w.layer()));
+				// Fixed-width IDs and identical good bodies. Allow 256 bytes for decimal
+				// metadata gaining digits across all writes; never an allowance per old letter.
+				expect(
+					Math.abs(afterFifty - afterOne),
+					`supervision bytes per good step: after 1=${afterOne}, after 50=${afterFifty}`,
+				).toBeLessThanOrEqual(256);
+			}),
+	);
+
 	it.effect(
 		"P33 authority plant, trust forged dead row: foreign ledger data cannot manufacture a terminal answer",
 		() =>
