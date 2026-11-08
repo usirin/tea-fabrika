@@ -1,8 +1,8 @@
 # Design language: the levels, the page shape, and where each note sits
 
 **Proposed 2026-11-04; most calls decided 2026-11-07.** A draft read on main at `ffa7056f`. The
-owner walked it on 2026-11-07 and decided calls 1, 2, 4, 5, 6, 7 and 8, below, with the changes
-written beside each; call 3 waits on the tier names, and call 9 is still to walk. Each decided call
+owner walked it on 2026-11-07 and decided calls 1, 2 and 4 to 9, below, with the changes written
+beside each; call 3 waits on the tier names. Each decided call
 starts on today's app at once (AGENTS.md).
 Both versions: the design package is the one thing today's app and `next/` share
 ([one design package](./fabrika-design-package.md)). The owner's calls are at the end, each yes or
@@ -279,8 +279,8 @@ At 600 lines an agent hour ([agent hours](./agent-hours.md)):
 7. A principles page? **Decided yes, 2026-11-07:** [principles](./principles.md) is its first draft.
 8. An ARIA snapshot per story and per layout, advising first? **Decided yes, 2026-11-07,** on
    today's app first.
-9. A `CODEOWNERS` line for the token files? Lean yes, 60%. Doubt: it slows token changes. Not yet
-   walked.
+9. A `CODEOWNERS` line for the token files? **Decided yes, 2026-11-07, for now:** the owner reviews
+   every change to the token files and their laws while the system settles, and may relax it after.
 
 ## What it cannot tell us
 
