@@ -527,11 +527,11 @@ The owner answers these. **As of 2026-11-05, nothing here stops the first wave.*
 
     ```text
     entry_a1  by person:p1     "@claude run the tests"   parent: null             traceId: t1 (new)
-    entry_b2  by agent:claude  turn started              parent: in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41   traceId: t1
-    entry_c4  by agent:claude  line "pnpm test"          parent: in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-42   traceId: t1
+    entry_b2  by agent:claude  turn started              parent: input_01jc9q4w7z3m8n5r2t6v0xkb4d   traceId: t1
+    entry_c4  by agent:claude  line "pnpm test"          parent: input_01jc9q4w8a5n2p7r3s6t0xkb4e   traceId: t1
     ```
 
-    The door stamps the person's ask as `in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41` and the agent's next input as `in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-42`. The agent's line has `parent: in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-42`, so it is signed as the agent, and `traceId: t1` ties it back to the person's ask. *It was, below:*
+    The door stamps the person's ask as `input_01jc9q4w7z3m8n5r2t6v0xkb4d` and the agent's next input as `input_01jc9q4w8a5n2p7r3s6t0xkb4e`. The agent's line has `parent: input_01jc9q4w8a5n2p7r3s6t0xkb4e`, so it is signed as the agent, and `traceId: t1` ties it back to the person's ask. *Ids changed 2026-11-08 ([question 20](#open-questions)): an input id is a TypeID, `input_<26 chars>`. This example said `in-process_<26 chars>-<n>`, the shape main's door still makes until a build pull request moves it.* *It was, below:*
     *Added 2026-11-05, from [the inputs note](../direction/inputs-carry-their-sender.md#open-an-agents-stated-reason). Needed before any agent's line carries a person's message as its reason; no Tier 1 row does, so it blocks nothing here.* A line claude runs because the person asked cannot be signed by its cause's sender and also carry the person's message as its cause. **Lean, the note's (70%):** two links, as event stores keep two ids. `cause` is the direct one and signs, so claude's line is claude's; the person's message rides as its stated reason (`asked` in the note's sketch), checked only for delivery, shown, and never deciding. The owner's call is the key's name and whether a reason is worth keeping at all.
 16. **The signing service.** **Decided (owner, 2026-11-07): `SessionManager`, owned by the door.** The door stamped every input, so it is the one authority over "who sent input X", the way one gen_server owns a table in OTP. A process asks it over one RPC. The four refusals stay as the inputs note writes them, with `cause` now named `parent`. The doubt: one extra round trip per write. A cache in the process could cut it, but would go stale.
 

@@ -37,9 +37,11 @@ Each new edge comment is read by the owner, one line at a time. The ones read so
 | `next/apps/fabrika/src/door-nonce.ts` | WebCrypto `importKey`, `sign` and `verify` | 2026-11-08, P10 ([PR 502](https://github.com/usirin/tea-fabrika/pull/502)) |
 
 Decided by the owner, 2026-11-08: these five are approved as edges, each one `Effect.tryPromise`
-with a typed error. A crypto failure gets its own `why`, `crypto`, not `storage`. Why, as this note reads
-it: a hash that fails is not a storage fault, and the `why` is what a reader of the log acts on. Today four of them say
-`storage` and one says `not_granted`; a build pull request moves them to `crypto`.
+with a typed error. A crypto failure gets its own `why`, `crypto`, not `storage`.
+
+Why, as this note reads it: a hash that fails is not a storage fault. The `why` is what a reader
+of the log acts on. Today four of the five say `storage` and one says `not_granted`. A build pull
+request moves them to `crypto`.
 
 ## Why
 
