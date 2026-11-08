@@ -69,6 +69,11 @@ The email's number is the bot user's id, not the app's id, and a commit made fro
 carries one `Fabrika-Input` line for each
 ([experiment 212](../../experiments/212-fabrika-bot-commits.md)).
 
+**On Tier 1 pull requests** (owner, 2026-11-07, in use from 2026-11-08). From T246 and P10 on,
+step commits are authored by `fabrikalfa[bot]`, with the person as `Co-authored-by`. The lead
+pushes them to `fabrikalfa/<name>` with a token that lasts one hour. The pull request opens as the
+person.
+
 ## Why
 
 - **Nobody names themselves.** Today an agent commits as the person, and the only sign it was an
