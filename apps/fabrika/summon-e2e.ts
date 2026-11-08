@@ -67,6 +67,16 @@ const tiles = (page: Page) =>
 	page.locator("[data-tile]").evaluateAll((all) => all.map((t) => t.getAttribute("data-tile")));
 const focused = async (page: Page) =>
 	(await page.locator('[data-tile][aria-current="true"]').getAttribute("data-tile")) ?? "";
+/** aria-current names the selected tile; keys go to document.activeElement. */
+const focusIs = (page: Page, id: string) =>
+	until(
+		`keyboard focus on ${id}`,
+		() =>
+			page.evaluate(
+				() => document.activeElement?.closest("[data-tile]")?.getAttribute("data-tile") ?? null,
+			),
+		(f) => f === id,
+	);
 const shows = (page: Page, id: string, what: string, ok: (text: string) => boolean) =>
 	until(`${id}: ${what}`, () => screen(page, id), ok);
 const prompted = (page: Page, id: string) =>
@@ -77,6 +87,7 @@ const typeLine = async (page: Page, id: string, line: string) => {
 	const expected = `tsh$ ${line}`;
 	const seen: string[] = [];
 	for (let attempt = 0; attempt < 3; attempt += 1) {
+		await focusIs(page, id);
 		if (attempt > 0) {
 			await page.keyboard.press("Control+e");
 			await page.keyboard.press("Control+u");
@@ -101,15 +112,24 @@ const typeLine = async (page: Page, id: string, line: string) => {
 
 const run = async (page: Page, id: string, line: string) => {
 	await typeLine(page, id, line);
+	await focusIs(page, id);
 	await page.keyboard.press("Enter");
 };
 const prefixed = async (page: Page, key: string) => {
 	await page.keyboard.press("Control+b");
 	await page.keyboard.press(key);
 };
-const shot = async (page: Page, name: string) => {
+const otherPromptsEmpty = async (page: Page, id: string, state: string) => {
+	for (const other of await tiles(page)) {
+		if (other === null || other === id) continue;
+		const row = lastRow(await screen(page, other));
+		check(`${state}: ${other}'s prompt is empty`, row === "tsh$", row);
+	}
+};
+const shot = async (page: Page, id: string, name: string) => {
 	await page.mouse.move(1, 1);
 	await page.waitForTimeout(250);
+	await otherPromptsEmpty(page, id, name);
 	await page.screenshot({path: join(shots, `${name}.png`)});
 	console.log(`shot ${name}`);
 };
@@ -140,6 +160,7 @@ const split = async (page: Page, key: "|" | "-") => {
 		(f) => f === id,
 	);
 	await prompted(page, id);
+	await focusIs(page, id);
 	return id;
 };
 
@@ -153,6 +174,7 @@ const workspace = async (page: Page) => {
 		(f) => f !== "" && !before.includes(f),
 	);
 	await prompted(page, id);
+	await focusIs(page, id);
 	return id;
 };
 
@@ -171,10 +193,10 @@ const states = async (app: ElectronApplication, page: Page, layout: string) => {
 				lastRow(t) === "tsh$",
 		);
 	await summoned();
-	await shot(page, `summoned-${layout}-dark`);
+	await shot(page, id, `summoned-${layout}-dark`);
 	await lookIs(app, page, "light");
 	await summoned();
-	await shot(page, `summoned-${layout}-light`);
+	await shot(page, id, `summoned-${layout}-light`);
 	await lookIs(app, page, "dark");
 
 	await run(page, id, "@scout slowly read a.txt b.txt");
@@ -191,7 +213,7 @@ const states = async (app: ElectronApplication, page: Page, layout: string) => {
 		`${layout}: the bottom line's job is visible`,
 		await page.locator(".bottomline .job").isVisible(),
 	);
-	await shot(page, `turn-running-${layout}-dark`);
+	await shot(page, id, `turn-running-${layout}-dark`);
 	await shows(
 		page,
 		id,
@@ -201,7 +223,7 @@ const states = async (app: ElectronApplication, page: Page, layout: string) => {
 			/scout · turn \d+ · \d+s/.test(t) &&
 			lastRow(t) === "tsh$",
 	);
-	await shot(page, `turn-replied-${layout}-dark`);
+	await shot(page, id, `turn-replied-${layout}-dark`);
 
 	await run(page, id, "@scout write");
 	await shows(page, id, "scout's permission question holding the prompt", (t) =>
@@ -211,13 +233,15 @@ const states = async (app: ElectronApplication, page: Page, layout: string) => {
 		`${layout}: the ask has not returned the prompt`,
 		lastRow(await screen(page, id)) !== "tsh$",
 	);
-	await shot(page, `turn-asking-${layout}-dark`);
+	await shot(page, id, `turn-asking-${layout}-dark`);
+	await focusIs(page, id);
 	await page.keyboard.press("y");
 	await shows(page, id, "allowed", (t) => t.includes("y: allowed once"));
 	await prompted(page, id);
 
 	await run(page, id, "@scout slowly read a.txt b.txt");
 	await shows(page, id, "the status line", (t) => /✦ scout {2}/.test(lastRow(t)));
+	await focusIs(page, id);
 	await page.keyboard.press("Control+c");
 	await shows(page, id, "cancelled", (t) => t.includes("scout: turn cancelled"));
 	await prompted(page, id);
@@ -231,7 +255,7 @@ const states = async (app: ElectronApplication, page: Page, layout: string) => {
 			/\bscout\b[^\n]*\bidle\b/.test(t) &&
 			lastRow(t) === "tsh$",
 	);
-	await shot(page, `turn-cancelled-${layout}-dark`);
+	await shot(page, id, `turn-cancelled-${layout}-dark`);
 
 	await prefixed(page, "A");
 	const panel = page.getByRole("dialog", {name: "The agents"});
@@ -256,7 +280,7 @@ const states = async (app: ElectronApplication, page: Page, layout: string) => {
 		() => page.locator(".topbar .right").textContent(),
 		(t) => t !== null && /\b2 agents\b/.test(t),
 	);
-	await shot(page, `agents-panel-${layout}-dark`);
+	await shot(page, id, `agents-panel-${layout}-dark`);
 	await page.keyboard.press("Escape");
 	await until(
 		"the panel closed",
@@ -276,7 +300,7 @@ const states = async (app: ElectronApplication, page: Page, layout: string) => {
 				"ultra is not a model or an effort fake offers. fake's models: fake-small, fake-large; efforts: low, medium, high",
 			) && lastRow(t) === "tsh$",
 	);
-	await shot(page, `refused-setting-${layout}-dark`);
+	await shot(page, id, `refused-setting-${layout}-dark`);
 	await run(page, id, "dismiss scout");
 	await shows(
 		page,
@@ -324,6 +348,7 @@ try {
 				() => focused(page),
 				(f) => f === first,
 			);
+			await focusIs(page, first);
 			await split(page, "-");
 		}
 		if (layout === "small") {
