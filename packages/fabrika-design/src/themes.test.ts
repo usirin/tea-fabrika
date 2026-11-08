@@ -11,6 +11,8 @@ import {describe, expect, it} from "vitest";
 // bends color principles records are named where they stand. Laws 1 to 14 and 16 of the P31 plan;
 // law 15 is in themes.frame.test.ts. The laws about the app's own rules stay in the app
 // (apps/fabrika/src/window/colors.test.ts): a package does not read its app.
+// Ask desk's decided look (docs/direction/ask-desk.md:203,212) adds a slate 3 card in both looks.
+// Color principles' step 3 is a component background; the card joins the contrast checks below.
 //
 // tokens.css is read, not drawn. A token's value in a look is found as the browser finds it:
 // follow var() to the token it names, and take light-dark()'s first color in the light look and
@@ -46,6 +48,7 @@ const DARK = {
 	desk: "#0c0d0e", // not a step: nothing in slate is darker than 1
 	ground: "#111113", // slate 1
 	raised: "#18191b", // slate 2
+	card: "#212225", // slate 3
 	hover: "#ddeaf814", // slate a3
 	edge: "#d3edf81d", // slate a4
 	focus: "#d9edff5d", // slate a8
@@ -69,6 +72,7 @@ const LIGHT = {
 	desk: "#f9f9fb", // slate 2
 	ground: "#fcfcfd", // slate 1
 	raised: "#fcfcfd", // slate 1
+	card: "#f0f0f3", // slate 3
 	hover: "#0000330f", // slate a3
 	edge: "#00002d17", // slate a4
 	focus: "#00051d74", // slate a9: a8 reads 1.90
@@ -163,6 +167,7 @@ const TOKENS: Record<string, Record<Look, string>> = {
 	"--surface-sunken": both("desk"),
 	"--surface": both("ground"),
 	"--surface-raised": both("raised"),
+	"--surface-card": both("card"),
 	"--surface-hover": both("hover"),
 	"--surface-selected": SELECTED,
 	"--border-faint": both("edge"),
@@ -398,9 +403,9 @@ const under = (pairs: readonly (readonly [string, string, string, number])[]) =>
 const rowOver = (row: string, page: string, look: Look) =>
 	hexFrom(over(tokenIn(row, look), tokenIn(page, look)));
 
-/** The three pages, and a hovered and a selected row over the ground and over raised. */
+/** Pages and cards, and a hovered and a selected row over the ground and over raised. */
 const backgroundsIn = (look: Look): readonly (readonly [string, string])[] => [
-	...["--surface-sunken", "--surface", "--surface-raised"].map(
+	...["--surface-sunken", "--surface", "--surface-raised", "--surface-card"].map(
 		(page) => [page, tokenIn(page, look)] as const,
 	),
 	...["--surface-hover", "--surface-selected"].flatMap((row) =>
@@ -526,7 +531,7 @@ describe("law 5: text and state words read 4.5:1 where they sit (WCAG 1.4.3)", (
 	];
 
 	it.each(LOOKS)(
-		"on the desk, the ground, raised, and hovered and selected rows over the ground and raised, %s",
+		"on the desk, the ground, raised, cards, and hovered and selected rows over the ground and raised, %s",
 		(look) => {
 			const pairs = TEXT.flatMap((fg) =>
 				backgroundsIn(look).map(
@@ -578,7 +583,7 @@ describe("law 7: the lines a person must see read 3:1 (WCAG 1.4.11)", () => {
 			under([
 				["--tile-focus on --surface", tokenIn("--tile-focus", look), ground, 3],
 				["--turn-fill on --surface", tokenIn("--turn-fill", look), ground, 3],
-				...["--surface-sunken", "--surface", "--surface-raised"].map(
+				...["--surface-sunken", "--surface", "--surface-raised", "--surface-card"].map(
 					(bg) => [`--focus on ${bg}`, ring, tokenIn(bg, look), 3] as const,
 				),
 				...["--surface-sunken", "--surface", "--surface-raised"].map(
