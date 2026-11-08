@@ -1,5 +1,11 @@
 # Nobody writes their own exam
 
+**Decided, in pieces:**
+
+- The rule: decided 2026-10-22, below.
+- The CI half: replaced 2026-11-05 by [a unit of work is a commit](./a-unit-of-work-is-a-commit.md).
+- How code holds it: in the approved [Tier 1 plan](../plan/tier-1.md), where P1 and P2 built the exam and P32 builds the check that a `build` commit touching an exam path is `stuck`.
+
 Decided 2026-10-22. How it is enforced is **proposed**, except the CI half, which the owner replaced
 on 2026-11-05 with [a unit of work is a commit](./a-unit-of-work-is-a-commit.md).
 

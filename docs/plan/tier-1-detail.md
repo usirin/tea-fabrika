@@ -252,7 +252,7 @@ export const notes: Program<Model, Msg, View, never> = {
 
 // The note is on version 3. One real value, before and after:
 yield* Mailbox.send("notes:1", id, {type: "save", value: {note: "n-7f3a", base: 3, body: "# Ideas for Tier 2\n..."}}, who);
-// notes:1/inbox  {id, m: {type: "save", value: {base: 3, ...}}, by, for, sentAt, arrivedAt, cause, rev, pos}     this becomes version 4
+// notes:1/inbox  {id, m: {type: "save", value: {base: 3, ...}}, by, for, sentAt, arrivedAt, parent, traceId, rev, pos}     this becomes version 4
 // An old window or an agent, still on version 3, saves too:
 // {why: "changed_elsewhere", now: 4}. No line is written. Its text stays with it, and nothing is overwritten.
 ```
@@ -984,7 +984,7 @@ const rung = (sockets: ReadonlyArray<BrainSocket>, stream: string, rev: number) 
 - `door/hellos`, one fact per online hello: key, tab, platform, versions, has, nonce, signature, `sentAt`, `where`, brain code hash. Why: which window on which code at which moment exists only then. Cost: one append per connect. Refused hellos write nothing, so an unknown key cannot fill the log.
 - `started` gains the brain's build hash, and each letter's fold can name the program's hash. A chaos letter's `tick`, seed, target, asked and did.
 - `seen` on a letter, the last log rev the writer had read, filled by code, and `sentAt`, both kept out of deciding code's types. The referee refuses a `seen` past its head. This was `saw`, the window's inbox position (the slice has it for counter); it became `seen` on the entry wrapper on 2026-11-01 ([saved state](../direction/saved-state.md)). A grant's `saw`, what a person looked at when they said yes, is a different fact and keeps its name.
-- **On each note's save:** `base`, since which version a writer worked on exists only then. `body` whole and raw, every time, since a version is never overwritten. `how`, since "kept from a stale screen" cannot be worked out later, and `from`, since nothing else ties a kept note to its source. The letter's `by`, `arrivedAt`, `sentAt`, `seen` and `cause` come with it, using the plan's existing fields: who wrote it, the log's clock, their own clock, what they had seen. **New on every letter: `for`, the person the writer works for,** from the checked grant, so a fact names both the agent and its person with no fold. The agent's name is its grant's `saw.label`, recorded and shown to the person at Approve. `sentAt` stays out of deciding code's types, and `refuse` sees only the Msg. Cost: one full body per save, about 500 small rows a day at most, a guess.
+- **On each note's save:** `base`, since which version a writer worked on exists only then. `body` whole and raw, every time, since a version is never overwritten. `how`, since "kept from a stale screen" cannot be worked out later, and `from`, since nothing else ties a kept note to its source. The letter's `by`, `arrivedAt`, `sentAt`, `seen`, `parent` and `traceId` come with it, using the plan's existing fields: who wrote it, the log's clock, their own clock, what they had seen. **New on every letter: `for`, the person the writer works for,** from the checked grant, so a fact names both the agent and its person with no fold. The agent's name is its grant's `saw.label`, recorded and shown to the person at Approve. `sentAt` stays out of deciding code's types, and `refuse` sees only the Msg. Cost: one full body per save, about 500 small rows a day at most, a guess.
 - **On each `revoked`:** what the person saw and the check, inside the signed text, the same as a grant.
 - **Added 2026-11-07 (owner), three facts that were lost:** `dead` keeps each throw's error class (p80), `down` gains `until` (p80), and a failed Cmd always comes back as a letter with a `why` (p35). Each existed only at the moment it happened. The throw's message goes to the trace, never the ledger, since a message can quote a note and the trace's content can be deleted.
 - **Added 2026-11-07 (owner), the record of how it ran:** each process's spans in its thin JobRecord, kept forever (P37); a raw health row per ended span, local about 2 weeks and then in R2, forever, and an hourly summary per piece kept forever; each object's own size, about once an hour while awake. Why: a slow step or a growing object is a trend, and a trend not kept cannot be rebuilt. [Monitoring is in Tier 1](./tier-1.md#monitoring-is-in-tier-1) has the rest.
@@ -1259,7 +1259,7 @@ export class ClientManager extends Context.Service<ClientManager, {
 // next/packages/libfabrika/src/coordination/mailbox.ts: as plan-115, and receive yields a Letter
 export type Letter = {
 	readonly id: string; readonly m: unknown; readonly by: string; readonly for: string; readonly sentAt: string;
-	readonly cause: string | null; readonly rev: number; readonly pos: number;
+	readonly parent: string | null; readonly traceId: string; readonly rev: number; readonly pos: number;
 };
 
 // next/packages/libfabrika/src/app/program.ts
@@ -1427,14 +1427,14 @@ Built 2026-11-07, from [P6's row](./tier-1.md#the-pull-requests-one-at-a-time). 
 export const Rev: Schema.Int;                         // 0 means before the first entry
 export const CauseText: Schema.String;                // matches /^in-[0-9a-f]{8}-[1-9][0-9]*$/
 export type InputId = Brand.Branded<string, "InputId">; // a type only: P10's door makes one
-export const Line: Schema.Struct<{by, for, sentAt, seen, cause, build, _tag, body}>; // every key required
+export const Line: Schema.Struct<{by, for, sentAt, seen, parent, traceId, build, _tag, body}>; // every key required
 export const Entry: Schema.Struct<{id, stream, pos, rev, arrivedAt, ...Line}>;     // arrivedAt: ms, the referee's
 // P9: a schema's value as a line, and an entry back, so no other file writes `_tag` by hand
 export const lineFor: <A extends {readonly _tag: string} & Schema.JsonObject>(from: Omit<Line, "_tag" | "body">, value: A) => Line;
 export const valueFor: (entry: Entry) => unknown;
 export const Appended = Schema.TaggedUnion({
 	placed: {rev: Rev, pos: Rev},                       // a resend gets its first placing again
-	refused: {why: Schema.Literals(["bad_line", "bad_cause", "seen_ahead", "id_reused", "too_big"])},
+	refused: {why: Schema.Literals(["bad_line", "bad_parent", "seen_ahead", "id_reused", "too_big"])},
 });
 export const Waited = Schema.TaggedUnion({ready: {rev: Rev}, parked: {}});
 
@@ -1484,8 +1484,8 @@ Built 2026-11-07, from [P9's row](./tier-1.md#the-pull-requests-one-at-a-time). 
 
 ```ts
 // mailbox.ts
-export type From = Omit<Line, "_tag" | "body">;       // by, for, sentAt, seen, cause, build: one for every write here
-export type Letter = {id, m, by, for, sentAt, cause, rev, pos};  // as the block above
+export type From = Omit<Line, "_tag" | "body">;       // by, for, sentAt, seen, parent, traceId, build: one for every write here
+export type Letter = {id, m, by, for, sentAt, parent, traceId, rev, pos};  // as the block above
 export class Mailbox extends Context.Service<Mailbox, {
 	readonly send: (to: string, id: string, m: unknown, from: From) => Effect.Effect<Appended, LedgerError>; // one `send {m}` on `<to>/inbox`
 	readonly receive: (name: string, after: Rev) => Stream.Stream<Letter, LedgerError>; // another `_tag` is skipped and kept
@@ -1715,9 +1715,9 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - **p10 to p15, p17** run on `stage`, not Miniflare. **p15** adds the checks of p26.
 - **p17's bar is measured new** (T6). The old table's start numbers came from raw Miniflare. Known so far: restart 292 to 539 ms, first answer 1.2 to 1.4 s (exp 171). Same rule: base and head in one sitting, the laptop blocks, CI only prints.
 - **p18 and p20 are restated for a wait that answers at once** (P6, 2026-11-07, building the owner's call of 2026-11-02 that a wait is data). p18: a wait with news already there is `ready` with the stream's newest rev; a wait with none parks, and the first append to that stream past its `after` rings it once; an append to another stream, a resend or a refused line rings nothing. p20: a wait leaves nothing running, so `Effect.runSync` of a parking wait answers `parked`; and `LedgerError` gains `storage`, for a SQLite throw such as `SQLITE_FULL`. *p20 said: an interrupted wait ends and leaves no bell.*
-- **p10 and p18 refuse an id reused with another body** (owner, 2026-11-07). The same `(stream, id)` with another `by`, `for`, `cause`, `_tag` or `body` is `refused id_reused`, and nothing is written; `sentAt`, `seen` and `build` may differ on a resend. *They said: one line, the same answer, the first body kept, which dropped the second body with no trace.*
+- **p10 and p18 refuse an id reused with another body** (owner, 2026-11-07). The same `(stream, id)` with another `by`, `for`, `parent`, `traceId`, `_tag` or `body` is `refused id_reused`, and nothing is written; `sentAt`, `seen` and `build` may differ on a resend. *They said: one line, the same answer, the first body kept, which dropped the second body with no trace.*
 - **p21 moves to P9** (P6's plan, 2026-11-07). It tests `Mailbox`, `ProcessManager` and `CoordinationLayer`, which P9 builds. p10 to p13 stay with the stage, in P12.
-- **p21 is restated for P6's `append`** (P9, 2026-11-07). `send` writes one `{_tag: "send", body: {m}}` on `<to>/inbox` and answers P6's `Appended` as it is, `pos` included, so plan-115's extra read is gone; a resend gets its first placing. `receive` gives `Letter`s past `after` in rev order, every field from the entry, past one page; another `_tag` is skipped and stays in the log; a `send` with no `m` fails the Stream with `bad_row`. `start` writes one `started {program, hash}` per build under the hash; the same build again is its first placing, or `id_reused` from another input, and writes nothing. No Layer fails at build. Plants: a placing from the wrong line; a new id on each start; `for` or `cause` dropped from a Letter; an unknown tag that ends the Stream.
+- **p21 is restated for P6's `append`** (P9, 2026-11-07). `send` writes one `{_tag: "send", body: {m}}` on `<to>/inbox` and answers P6's `Appended` as it is, `pos` included, so plan-115's extra read is gone; a resend gets its first placing. `receive` gives `Letter`s past `after` in rev order, every field from the entry, past one page; another `_tag` is skipped and stays in the log; a `send` with no `m` fails the Stream with `bad_row`. `start` writes one `started {program, hash}` per build under the hash; the same build again is its first placing, or `id_reused` from another input, and writes nothing. No Layer fails at build. Plants: a placing from the wrong line; a new id on each start; `for`, `parent` or `traceId` dropped from a Letter; an unknown tag that ends the Stream.
 - **p28 is widened** (owner, 2026-11-06, built by P9): equal device roots, the grant tree, one live sheet, the limits. Its full list is in [P9's row](./tier-1.md#the-pull-requests-one-at-a-time) and P9's tests, fast-check, seed 119120. Added plants: a dropped device whose tabs stay; a dropped device that takes another with it; a spent sheet used twice; two live sheets; an agent's approve accepted; a revoked key let back in by a new grant.
 - **p22** adds, from PR D: a program's own `refuse` leaves no line and answers with that program's `why`. `bad_msg` stays for a bad shape.
 - **p24** runs oxlint on `next/`, with an edge only on a line under an edge comment, `-- edge: <why>` (owner, 2026-11-05; it said: only in files the exam PR lists).
@@ -1902,9 +1902,10 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Each envelope is logged in the brain's own log: who sent it and where it went. Never a raw key's text, and a `Redacted` value logs hidden.
 - Why: who sent each input exists only at the door, and the note decided to record it first. Plants: an `id` taken from the frame; `by` read from params; a client-sent `by` dropped silently instead of refused; a raw key in the log line; a start part reused after a restart.
 
-**p68, an entry keeps its cause (scenario of P6).** `new`, node. s7, s1. `data/log.ts`, `Ledger`. *Added 2026-11-05 (owner).*
-- Every entry has `cause`: a `CauseText` matching `/^in-[0-9a-f]{8}-[1-9][0-9]*$/`, or null for an `own` write. A text that does not match is refused and nothing is written. Read back, it is the same text, and no public function turns a `CauseText` into an `InputId`.
-- Why: an entry written without it never gets it back. Plants: `cause` dropped on append; a decode that brands the text as an `InputId`; a bad pattern accepted.
+**p68, an entry keeps its parent (scenario of P6).** `new`, node. s7, s1. `data/log.ts`, `Ledger`. *Added 2026-11-05 (owner).*
+- *Renamed 2026-11-07 (owner): `cause` is now `parent`, and `traceId` joins it ([question 15](./tier-1.md#open-questions)). The code rename is its own ticket.*
+- Every entry has `parent`: a `CauseText` matching `/^in-[0-9a-f]{8}-[1-9][0-9]*$/`, or null for an `own` write. A text that does not match is refused and nothing is written. Read back, it is the same text, and no public function turns a `CauseText` into an `InputId`.
+- Why: an entry written without it never gets it back. Plants: `parent` or `traceId` dropped on append; a decode that brands the text as an `InputId`; a bad pattern accepted.
 
 **p69, every write is signed by its cause's sender (scenario of P11).** `new`, node, through the program test kit. s11, s2. `app/runner.ts`, the signer. *Added 2026-11-05 (owner); the walk is [open question 17](./tier-1.md#open-questions).*
 - For any list of inputs, each told by a person or by an agent for that person, interleaved, across queued writes: every write an input causes is signed as that input's sender. An `own` write is signed as the process owner.
@@ -1971,7 +1972,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 **p92 to p95 are P6's** (*new 2026-11-07, from P6's plan, approved by the lead agent*). Each is `new`, node, in `next/packages/libfabrika/src/data/`, beside p18 to p20 and p68.
 
 **p92, every entry has every field (scenario of P6).** `new`, node. s7, s1. `data/log.ts`, `Referee.append`.
-- In the type: a `Line` with any one of `by`, `for`, `sentAt`, `seen`, `cause`, `build`, `_tag` or `body` left out does not compile (one `@ts-expect-error` each, so a key made optional fails the typecheck). `cause` is a required key whose value may be null.
+- In the type: a `Line` with any one of `by`, `for`, `sentAt`, `seen`, `parent`, `traceId`, `build`, `_tag` or `body` left out does not compile (one `@ts-expect-error` each, so a key made optional fails the typecheck). `parent` is a required key whose value may be null.
 - At the referee, for lines that come in as JSON: a line missing any key, or with an empty `by`, `for` or `build`, is `refused bad_line`, and nothing is written. A line that names `arrivedAt`, `rev`, `pos` or any key `Line` does not have is `refused bad_line` too.
 - Every entry read back has all 13 fields, and `arrivedAt`, `rev` and `pos` are the referee's.
 - The referee's deciding step reads `seen` and the id, and its input type has no `sentAt`, so nothing can decide with the writer's clock (D3, S1).

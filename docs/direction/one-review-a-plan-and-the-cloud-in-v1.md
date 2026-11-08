@@ -1,5 +1,7 @@
 # One review a plan, and the cloud host in v1
 
+**Superseded 2026-11-01 by [the tiers](../plan/tiers.md).** The plan is now the tiers on [the five layers](./a-local-first-sync-engine.md), and the cloud host in v1 was parked in [tea-host](./tea-host.md).
+
 **Proposed 2026-10-27.** Three changes to the v1 plan
 ([a ticket runs from the app](./a-ticket-runs-from-the-app.md), PR 131). Each
 task gets quick checks only, and the plan gets one review at the end. No

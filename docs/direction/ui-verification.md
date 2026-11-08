@@ -1,6 +1,8 @@
 # UI verification
 
-**Proposed 2026-11-02.** Nothing here is decided yet. It stands on points the owner already
+**Decided 2026-11-07.** The owner approved the seven principles, as leaned, after a walk of each,
+with the changes to U3 and U4 below. The leans' confidence numbers stay as written. Proposed
+2026-11-02. It stands on points the owner already
 decided, named where they come up: nobody writes their own exam (2026-10-22), a check blocks only
 at about 0% false alarms (AGENTS.md, Google CACM 2018), an unrated finding counts as noise once its
 change ships (2026-10-24), every pull request shows screenshots at five layouts (AGENTS.md), color
@@ -89,7 +91,7 @@ pipeline guidelines' "a skipped check never looks clean". Nothing compiled.
 
 ### U1: check the data first, the pixels last
 
-**Lean, 85%.** Seven layers, cheapest and surest first, as experiment 191 lays them out. A bug is
+**Lean, 85%. Decided 2026-11-07.** Seven layers, cheapest and surest first, as experiment 191 lays them out. A bug is
 pinned at the lowest layer that can say it in code.
 
 ```text
@@ -134,7 +136,7 @@ layer         reads                         catches tonight's            cost
 
 ### U2: block only what is measured near 0%; the rest advises
 
-**Lean, 80%. The bar itself is decided:** about 0% false alarms to block, up to 10% to advise
+**Lean, 80%. Decided 2026-11-07. The bar itself is decided:** about 0% false alarms to block, up to 10% to advise
 (AGENTS.md, Google CACM 2018).
 
 ```text
@@ -170,9 +172,10 @@ layer        today's state                 blocks when
 - **Today.** Half. e2e blocks in CI, and its checks are deterministic. Shots advise a person. No
   check has a counted false alarm rate, since no rating is recorded.
 
-### U3: five layouts, both looks, every time
+### U3: eight layouts and the content states, both looks, every time
 
-**Lean, 85%. The five layouts are decided** (AGENTS.md, "Shoot more than one layout").
+**Lean, 85%. Decided 2026-11-07,** grown from AGENTS.md's five layouts ("Shoot more than one
+layout") to eight, plus content states.
 
 ```text
 size            one tile   side by side   stacked   2x2
@@ -181,6 +184,17 @@ small 1024x700     shot       shot           shot      shot
 x dark and light, for every seeded state a change touches
 ```
 
+- **The eight layouts.** The five from AGENTS.md: one tile, side by side, stacked, a 2x2 grid,
+  and a small app window of about 1024x700. Then three more:
+  - 200% text zoom on the 2x2 grid (WCAG 1.4.4 Resize Text).
+  - The smallest tile the desk allows.
+  - Reflow: one tile at 400% zoom in a 1280-wide window, which equals 320 CSS px, with no
+    sideways scrolling (WCAG 1.4.10 Reflow,
+    [Understanding 1.4.10](https://www.w3.org/WAI/WCAG22/Understanding/reflow.html)). A terminal
+    tile is the exception: 1.4.10 exempts content that needs two dimensions to be used.
+- **Content states are not layouts.** Each window's test lists its empty state, a very long name
+  and a long list, and they run in the 2x2 grid.
+- **Both looks** still apply to every layout and every content state.
 - **What it means.** Layers 3 to 5 and the person's shots run on one fixed grid: the four tile
   layouts at the default window, and the same four at the small window (the smaller call C3). Both
   looks, now that ticket 144 brings a light one. A seeded state names what is open, never the size.
@@ -208,7 +222,7 @@ x dark and light, for every seeded state a change touches
 
 ### U4: a check presses what a person presses
 
-**Lean, 80%.**
+**Lean, 80%. Decided 2026-11-07.**
 
 ```ts
 // No: the test moves focus where the keyboard never could.
@@ -230,6 +244,13 @@ expect(await focusedIs(page, "keys"), "the hint says 'tab to it'").toBe(true);
   by writing the model.
 - **WCAG.** 2.1.1 Keyboard: "operable through a keyboard interface" [m19]; 2.4.7 Focus Visible
   [m20]; 2.4.3 Focus Order.
+- **A component layer under it.** Component tests use Testing Library
+  (`@testing-library/react` 16.3.3 with `@testing-library/user-event` 14.6.8), queried by role and
+  name, in jsdom, run by `pnpm test`. A control with no accessible name fails the test. Layout,
+  focus rings and the real accessibility tree stay with Playwright on Electron. Why jsdom, not a
+  browser: our Playwright runs start Electron, one at a time on the laptop, while jsdom runs in
+  milliseconds. The doubt: jsdom computes roles with a library, not a browser, and Playwright's
+  ARIA snapshots catch where the two differ.
 - **Holds it.** A lint rule on e2e and shot files that refuses `.focus(`, `.dispatchEvent(` and a
   page-changing `evaluate` (smaller call C5). A layer 3 law: a Tab walk at each layout reaches every
   part the window says can be reached.
@@ -244,7 +265,7 @@ expect(await focusedIs(page, "keys"), "the hint says 'tab to it'").toBe(true);
 ### U5: approved images and snapshots are the exam
 
 **The rule is decided 2026-10-22** ([nobody writes their own exam](./nobody-writes-their-own-exam.md)).
-**How it holds for UI files: lean, 85%.**
+**How it holds for UI files: lean, 85%. Decided 2026-11-07.**
 
 ```text
 file                       who writes it                   who changes it
@@ -282,7 +303,7 @@ a suppression (fingerprint)  nobody but the owner               the owner
 
 ### U6: a model judge answers one narrow row, is measured first, and advises
 
-**Lean, 70%.**
+**Lean, 70%. Decided 2026-11-07.**
 
 ```ts
 // A sketch. The Judge move: one shot, one row, a typed answer.
@@ -315,7 +336,7 @@ const rows = ["the focused tile says so without color", "no must-read word is cu
 
 ### U7: a person looks at what no law explains, and at the critical tasks
 
-**Lean, 75%. "Numbers check, eyes pick" is decided** (color principles 8).
+**Lean, 75%. Decided 2026-11-07. "Numbers check, eyes pick" is decided** (color principles 8).
 
 - **What it means.** The owner's look is aimed: the shots no layer explained, each with the layer
   that flagged it; every new screen; and a short list of critical tasks, where a slip does harm:
