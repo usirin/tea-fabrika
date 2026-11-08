@@ -9,6 +9,7 @@
 import {Cause, Context, Effect, Equal, Exit, Layer, Option, Result, Schema} from "effect";
 import {Doorbell, LedgerError} from "./ledger.ts";
 import {Appended, Entry, Line, PAGE, Rev, Row, Waited} from "./log.ts";
+import {errorClass, short} from "./trace.ts";
 
 export type SqlValue = string | number | null;
 
@@ -44,29 +45,6 @@ const ID = "messaging.message.id";
 const OPERATION = "messaging.operation.type";
 const ERROR = "error.type";
 export const tag = (name: string): string => `fab.ledger.${name}`;
-
-/** The most characters a span tag holds (p95). Caller text past it is cut, its length kept beside. */
-const MOST_CHARS = 128;
-
-/** The first `MOST_CHARS` characters, one fewer when the cut would split a surrogate pair. */
-const cut = (text: string): string => {
-	const last = text.charCodeAt(MOST_CHARS - 1);
-	return text.slice(0, last >= 0xd800 && last <= 0xdbff ? MOST_CHARS - 1 : MOST_CHARS);
-};
-
-/** Span tags from text a caller hands in (a stream, id, `_tag`, `by`, reader): each as it is when it
- *  fits, else cut to 128 characters with its full length beside as `<key>.length`. */
-export const short = (texts: Readonly<Record<string, string>>): Record<string, string | number> =>
-	Object.fromEntries(
-		Object.entries(texts).flatMap(([key, text]) =>
-			text.length <= MOST_CHARS
-				? [[key, text]]
-				: [
-						[key, cut(text)],
-						[`${key}.length`, text.length],
-					],
-		),
-	);
 
 /** A waiter to ring, as the rings table holds it. */
 const Ring = Schema.Struct({to: Schema.String, after: Rev});
@@ -146,8 +124,6 @@ const decide = (line: Decides, first: Option.Option<Entry>, head: Rev): Option.O
 
 /** What an atomic step threw: a SQL error, or a row that did not decode. Typed at once below. */
 class Threw extends Schema.TaggedError<Threw>()("Threw", {error: Schema.Unknown}) {}
-
-const errorClass = (error: unknown): string => (error instanceof Error ? error.name : typeof error);
 
 /** SQLite's own error code, as node:sqlite gives it (`errcode`), or the platform's `code`. */
 const errorCode = (error: unknown): Option.Option<string | number> => {

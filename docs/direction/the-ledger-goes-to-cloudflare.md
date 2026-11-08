@@ -1216,8 +1216,9 @@ apart, or whether GitHub's keys list answers a Worker reliably.
 
 None of these is in the first version.
 
-- Roles: who may invite, who may remove, read-only members. In the first
-  version the creator invites and removes, and everyone else is equal.
+- Roles: in `next/`, decided by the owner on 2026-11-07: one owner, admins and members, recorded
+  from day one with who invited whom ([Tier 3's roles](../plan/tiers.md#tier-3s-roles-owner-2026-11-07)).
+  Finer roles, such as read-only members, wait for Tier 7, if they come at all.
 - More than one repository on a ledger.
 - One Durable Object per lane (section 9), and lane tokens at the door.
 - Each fact signed by its writer's key, the sync note's signed lines. The SSH

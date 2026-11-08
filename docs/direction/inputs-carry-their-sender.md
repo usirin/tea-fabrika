@@ -3,6 +3,12 @@
 **Proposed 2026-11-04.** The owner set the direction on 2026-11-04, and each decided point is
 marked decided below:
 
+- **Renamed 2026-11-07 (owner):** the write's `cause` is now `parent`, and a `traceId` joins it.
+  "Every write carries its cause" keeps its meaning: `parent` is the direct link, and it signs.
+  `traceId` is the whole request, shown and checked for delivery only, never deciding. These are
+  OpenTelemetry's names, which Effect's Tracer uses; in Effect, `cause` already means a failure.
+  This settles the open point on an agent's stated reason below. The sketches keep the old word.
+
 - **Decided, the direction:** inputs carry their sender, and the host ties each write to the input
   that caused it. This is design D of the shared tile study. The cause rides in the data, not in
   the call stack.
@@ -18,8 +24,13 @@ marked decided below:
 - **Decided, record first:** who sent each input is recorded now, in the host log, before any write
   uses it.
 
-Not walked yet: the signing service, the test-kit law, and the open point on an agent's stated
-reason (below). Tier 1 lists all three as its open questions 15 to 17.
+Not walked yet: the test-kit law, Tier 1's open question 17. The open point on an agent's stated
+reason (below) was decided 2026-11-07 as question 15.
+
+- **Decided 2026-11-07 (owner), the signing service:** `SessionManager`, owned by the door, with
+  `signer(parent, process, kind)` and the four refusals below. The door stamped every input, so it
+  is the one authority on who sent it, as one gen_server owns a table in OTP. A process asks over
+  one RPC. The doubt: one extra round trip per write; a cache would go stale.
 
 Built from [experiment 209](../../experiments/209-talking-to-agents-in-place.md) and the shared
 tile study behind it, and the Design canvas "Shared tile guidelines". Neither is a measurement.
@@ -158,7 +169,10 @@ nothing errors.
   data, never guessed.
 - **What it does not make expensive:** an honest program pays one field per Msg it queues.
 
-## Open: an agent's stated reason
+## Decided: an agent's stated reason
+
+**Decided 2026-11-07 (owner):** two links, named `parent` and `traceId`, as the lean below had it.
+The stated reason is the `traceId`, the request the person's message started.
 
 The walk's notes say claude's lines, run because the person asked `@claude ...`, carry the
 person's message as their cause. The signing rule says a write is signed by its cause's sender. Both
