@@ -268,7 +268,8 @@ describe("ask desk review 7: a window never receives the sealed rec", () => {
 	it("an opened ticket holds each ask's shows and saw, and no rec or blind draw outside shows", async () => {
 		await run(
 			Effect.gen(function* () {
-				const hidden = yield* seal(DRAFT, policyFor(DRAFT.ask, true, blindDraw));
+				// A step's ask: an approve ask is never drawn blind (review 2, medium 2).
+				const hidden = yield* seal({...DRAFT, for: "step"}, policyFor(DRAFT.ask, true, blindDraw));
 				expect(hidden.shows.rec).toEqual({_tag: "hidden"});
 				yield* ticket(117, {type: "planned", version: 2, tasks: []}, hidden);
 				const [opened] = fold([], yield* entries(117)).tickets;

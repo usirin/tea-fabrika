@@ -36,7 +36,11 @@ type Msg =
 type Cmd = {type: string; [key: string]: unknown};
 const start = async (hidden = false, rec: unknown = DRAFT.rec): Promise<Model> => {
 	const ask = await Effect.runPromise(
-		sealAsk({...DRAFT, rec}, policyFor(DRAFT.ask, hidden, blindDraw)),
+		// Review 2, medium 2: an approve ask is never drawn blind, so a blind ask here is a step's.
+		sealAsk(
+			{...DRAFT, rec, ...(hidden ? {for: "step"} : {})},
+			policyFor(DRAFT.ask, hidden, blindDraw),
+		),
 	);
 	const [model]: [Model, readonly Cmd[]] = askMachine.init(null, {
 		ticket: 117,
@@ -211,4 +215,38 @@ it("hands the later inbox the shared view identity and display data", async () =
 	const view = draw(await start());
 	expect(view).toMatchObject({key: `117/${DRAFT.ask}`, ticket: 117});
 	expect(view.shows).toMatchObject({what: DRAFT.what, picks: DRAFT.picks});
+});
+
+describe("ask desk review 2, medium 3: the note editor names the pick it sends", () => {
+	it("against the rec, the label and the send button say the pick", async () => {
+		const against = step(await start(), {type: "do", value: {_tag: "not"}})[0];
+		expect(against.editor).toMatchObject({_tag: "note", pick: "no"});
+		expect(askView(against)).toMatchObject({
+			note: {label: expect.stringMatching(/\bno\b/), send: expect.stringMatching(/\bno\b/)},
+		});
+	});
+	it("with no rec, the label and the send button say the pick chosen", async () => {
+		const chose = go(
+			await start(false, NONE),
+			{type: "do", value: {_tag: "picks"}},
+			{type: "pick", pick: "approve"},
+		);
+		expect(askView(chose)).toMatchObject({
+			note: {
+				label: expect.stringMatching(/\bapprove\b/),
+				send: expect.stringMatching(/\bapprove\b/),
+			},
+		});
+	});
+});
+
+describe("ask desk review 2, low 2: only opening the evidence counts as opened", () => {
+	it("opening then closing the evidence records it once", async () => {
+		const model = go(
+			await start(),
+			{type: "open", name: "evidence", now: NOW},
+			{type: "open", name: "evidence", now: NOW + 100},
+		);
+		expect(model.took.opened).toEqual(["evidence"]);
+	});
 });

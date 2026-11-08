@@ -43,7 +43,9 @@ describe("ask desk review 7: the page never receives the sealed rec", () => {
 	it.each([true, false])(
 		"the asks sent to every page hold shows and saw only (hidden=%s)",
 		async (hidden) => {
-			const ask = await Effect.runPromise(seal(DRAFT, policyFor(DRAFT.ask, hidden, blindDraw)));
+			// A blind ask is a step's: an approve ask is never drawn blind (review 2, medium 2).
+			const draft = hidden ? {...DRAFT, for: "step"} : DRAFT;
+			const ask = await Effect.runPromise(seal(draft, policyFor(DRAFT.ask, hidden, blindDraw)));
 			const sent = Schema.encodeSync(AsksNow)(asksNow(initial([entry(1, FILED), entry(2, ask)])));
 			expect(sent.asks).toHaveLength(1);
 			const keys = pathsIn(sent);

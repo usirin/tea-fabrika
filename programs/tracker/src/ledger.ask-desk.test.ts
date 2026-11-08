@@ -1,11 +1,11 @@
-import {Ledger, Stale, streams} from "@kampus/fabrika-old";
+import {Ledger, LedgerUnreachable, Stale, streams} from "@kampus/fabrika-old";
 import {memoryService} from "@kampus/fabrika-old/memory";
 import {demoFacts} from "@kampus/pipeline/asks/demo";
 import {sendFact} from "@kampus/pipeline/asks/ledger";
 import {readFacts} from "@kampus/pipeline/asks/ledger";
 import {foldLedger} from "@kampus/pipeline/asks/rules";
 import {planOf, ticketId} from "@kampus/pipeline/ids";
-import {Asked, blindDraw, sealAsk} from "@kampus/pipeline/tickets/ask";
+import {Asked, blindDraw, questionLine, sealAsk} from "@kampus/pipeline/tickets/ask";
 import {nameOf} from "@kampus/pipeline/tickets/ticket";
 import {Effect, Schema} from "effect";
 import {describe, expect, it} from "vitest";
@@ -296,4 +296,83 @@ describe("ask desk P21: preparePending seals each parked old ask from what was k
 			}),
 		);
 	});
+});
+
+describe("ask desk review 2, high 2: a save the store could not take says so in plain words", () => {
+	it("an unreachable ledger is said as nothing saved, never as the store's own text", async () => {
+		await run(
+			Effect.gen(function* () {
+				const ask = yield* sealAsk(DRAFT, policyFor(DRAFT.ask, false, blindDraw));
+				yield* ticket(117, {type: "planned", version: 2, tasks: []}, ask);
+				const ledger = yield* Ledger;
+				const locked: typeof ledger = {
+					...ledger,
+					append: () =>
+						Effect.fail(new LedgerUnreachable({method: "append", message: "database is locked"})),
+					send: () =>
+						Effect.fail(new LedgerUnreachable({method: "send", message: "database is locked"})),
+				};
+				const write = Schema.decodeUnknownSync(Write)({
+					kind: "answer",
+					ticket: 117,
+					ask: ask.ask,
+					answer: {_tag: "rec"},
+					saw: ask.saw,
+					via: {_tag: "window", took: TOOK},
+				});
+				const error = yield* saveCell(save({id: "click", next: 118, write})).pipe(
+					Effect.provideService(Ledger, locked),
+					Effect.flip,
+				);
+				expect(error.why).not.toContain("database is locked");
+				expect(error.why).toMatch(/ledger/i);
+				expect(error.why).toContain("Nothing was saved");
+				expect(error.why).toContain("Try again");
+			}),
+		);
+	});
+});
+
+/** A question past an ask's 120 characters, within an old ask's 256, as a lane's old asks wrote them. */
+const LONG = `The build used all 3 rounds and the checks are still red. The last review said: ${"the parser drops a trailing comma in nested lists, ".repeat(2)}Run again?`;
+
+describe("ask desk review 2, high 1: an old ask's long question is sealed as one line", () => {
+	it.each([
+		["rounds_spent", "a-rounds_spent-4"],
+		["exam_conflict", "a-exam_conflict-4"],
+		["step", "a-step-4"],
+	])(
+		"seals a %s ask whose question runs past one line, keeping all of it beside",
+		async (kind, id) => {
+			await run(
+				Effect.gen(function* () {
+					yield* ticket(
+						5,
+						{type: "commented", body: "First note."},
+						{type: "started", run: "r-build-1", stage: "build", task: null, log: null},
+						{
+							type: "ended",
+							run: "r-build-1",
+							stage: "build",
+							outcome: {kind: "done", part: false},
+							usd: 0,
+							input: 0,
+							output: 0,
+							turns: 1,
+						},
+						{type: "asked", ask: id, what: LONG, picks: ["again", "no"]},
+					);
+					yield* preparePending(5);
+					const [sealed, ...more] = sealedOf(yield* asked(5));
+					expect(more).toEqual([]);
+					expect(sealed).toMatchObject({replaces: id, for: kind});
+					expect(sealed?.shows.what).toBe(questionLine(LONG));
+					const evidence = sealed?.shows.evidence;
+					expect(evidence?._tag).toBe("other");
+					expect(evidence?._tag === "other" ? evidence.text : "").toContain(LONG);
+					expect(evidence?._tag === "other" ? evidence.text : "").toContain("First note.");
+				}),
+			);
+		},
+	);
 });

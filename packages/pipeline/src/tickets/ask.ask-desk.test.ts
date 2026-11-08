@@ -112,7 +112,10 @@ describe("ask desk P7: what an answer means", () => {
 	});
 	it.each([false, true])("resolves a chose note with hidden=%s", async (hidden) => {
 		const ask = await Effect.runPromise(
-			seal({...DRAFT, rec: hidden ? REC : NONE}, policyFor(DRAFT.ask, hidden, draw)),
+			seal(
+				hidden ? {...DRAFT, for: "step", rec: REC} : {...DRAFT, rec: NONE},
+				policyFor(DRAFT.ask, hidden, draw),
+			),
 		);
 		expect(resolve(ask, {_tag: "chose", pick: "no", note: "Keep the empty input test."})).toEqual({
 			pick: "no",
@@ -131,7 +134,10 @@ describe("ask desk P7: what an answer means", () => {
 
 describe("ask desk P8/P9: blind asks", () => {
 	it("never hands a hidden rec to the display and keeps a blind answer chose after reveal", async () => {
-		const ask = await Effect.runPromise(seal(DRAFT, policyFor(DRAFT.ask, true, draw)));
+		// A step's ask: an approve ask is never drawn blind (review 2, medium 2, below).
+		const ask = await Effect.runPromise(
+			seal({...DRAFT, for: "step"}, policyFor(DRAFT.ask, true, draw)),
+		);
 		expect(ask.rec).toEqual(REC);
 		expect(ask.shows.rec).toEqual({_tag: "hidden"});
 		expect(JSON.stringify(ask.shows)).not.toContain(REC.why);
@@ -166,6 +172,33 @@ describe("ask desk P8/P9: blind asks", () => {
 		);
 		expect(restarted).toEqual(first);
 		expect(first.blind).toEqual(draw(DRAFT.ask, 119120, 1));
+	});
+});
+
+describe("ask desk review 2, medium 2: a rec that can only be one pick is never blind", () => {
+	// The lane's approve rec comes only from the plan's leans, and it can only ever be approve
+	// (recOfLeans): hiding it would hide nothing. The lead's decision: such a kind is never drawn
+	// blind, and the sealed fact says it was not.
+	it("an approve ask whose draw would hide its rec shows the rec, and records blind as not hidden", async () => {
+		const ask = await Effect.runPromise(seal(DRAFT, policyFor(DRAFT.ask, true, draw)));
+		expect(ask.for).toBe("approve");
+		expect(ask.blind.hidden).toBe(false);
+		expect(ask.shows.rec).toEqual(REC);
+		expect(resolve(ask, {_tag: "rec"})).toEqual({pick: "approve", note: ""});
+	});
+	it("an approve ask is not blind for any seed", async () => {
+		for (let seed = 119120; seed < 119140; seed++) {
+			const ask = await Effect.runPromise(seal(DRAFT, {seed}));
+			expect(ask.blind.hidden).toBe(false);
+			expect(ask.shows.rec).toEqual(REC);
+		}
+	});
+	it("another kind with the same draw stays blind", async () => {
+		const ask = await Effect.runPromise(
+			seal({...DRAFT, for: "step"}, policyFor(DRAFT.ask, true, draw)),
+		);
+		expect(ask.blind.hidden).toBe(true);
+		expect(ask.shows.rec).toEqual({_tag: "hidden"});
 	});
 });
 

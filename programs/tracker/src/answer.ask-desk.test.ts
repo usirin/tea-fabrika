@@ -88,7 +88,11 @@ describe.each([false, true])("ask desk P7/P22: chose notes in the ledger, SQLite
 			async (note) => {
 				await run(
 					Effect.gen(function* () {
-						const ask = yield* seed({...DRAFT, rec: hidden ? DRAFT.rec : NONE}, hidden);
+						// A blind ask is a step's: an approve ask is never drawn blind (review 2, medium 2).
+						const ask = yield* seed(
+							hidden ? {...DRAFT, for: "step", rec: DRAFT.rec} : {...DRAFT, rec: NONE},
+							hidden,
+						);
 						const chose = {_tag: "chose", pick: "no", ...(note === undefined ? {} : {note})};
 						yield* answer(ask, "person", {
 							answer: chose,

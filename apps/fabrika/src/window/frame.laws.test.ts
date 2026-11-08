@@ -213,6 +213,41 @@ describe("today's frame display laws", () => {
 		expect(jobs).toMatch(/Esc<\/kbd>[\s\S]*?Close/);
 	});
 
+	it("the asks menu counts one ask and one stop in the singular (ask desk review 2, low 5)", () => {
+		const html = show({
+			frame: {...FRAME, over: {kind: "asks"}},
+			asks: {
+				...asks,
+				asks: [
+					{
+						key: "7/a-1",
+						ticket: 7,
+						title: "Keys",
+						what: "approve plan",
+						kind: "ask",
+						at: 0,
+						seen: false,
+					},
+					{
+						key: "8/stuck/r-3",
+						ticket: 8,
+						title: "Login",
+						what: "read_failed",
+						kind: "stuck",
+						at: 0,
+						seen: false,
+					},
+				],
+			},
+		});
+		const head = html
+			.replace(/<!-- -->/g, "")
+			.replace(/<[^>]+>/g, " ")
+			.replace(/\s+/g, " ");
+		expect(head).toContain("1 ask · 1 stop");
+		expect(head).not.toMatch(/\b1 (asks|stops)\b/);
+	});
+
 	it("the sync explanation keeps the failure reason and an older host names its build", () => {
 		expect(
 			show({

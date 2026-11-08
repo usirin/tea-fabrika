@@ -33,11 +33,13 @@ type AskStep = Step<Model, Msg, {readonly type: string; readonly [key: string]: 
 
 const THIRD = {pick: "stop", does: "Stop the lane here"};
 let ASKS: readonly AskShown[] = [];
+// A blind ask is a step's: an approve ask is never drawn blind (review 2, medium 2).
 const seal = (rec: unknown, picks: typeof PICKS, ask: string, hidden: boolean) =>
 	Effect.runPromise(
-		sealAsk({...DRAFT, ask, rec, picks}, policyFor(ask, hidden, blindDraw)).pipe(
-			Effect.map(askShownOf),
-		),
+		sealAsk(
+			{...DRAFT, ask, rec, picks, ...(hidden ? {for: "step"} : {})},
+			policyFor(ask, hidden, blindDraw),
+		).pipe(Effect.map(askShownOf)),
 	);
 beforeAll(async () => {
 	ASKS = [
