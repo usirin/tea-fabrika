@@ -28,7 +28,7 @@ type Update =
 			patch: ReadonlyArray<{op: string; path: string; value?: unknown}>;
 	  };
 type Runner = {
-	readonly open: (client: string) => Effect.Effect<{rev: number; view: {count: number}}, unknown>;
+	readonly open: (client: string) => Effect.Effect<{rev: number; view: unknown}, unknown>;
 	readonly msg: (input: unknown) => Effect.Effect<{_tag: string; why?: string}, unknown>;
 };
 const reconstruct = (before: unknown, change: Update): unknown => {
