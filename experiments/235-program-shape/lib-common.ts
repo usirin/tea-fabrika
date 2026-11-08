@@ -35,18 +35,20 @@ function makeFact<S extends FactSchema>(schema: S, spec?: {readonly who: "person
 }
 
 /**
- * Where a write goes. Branded, so only `caused` below makes one: a step that calls the write Cmd
- * itself, skipping its input's writer and its person-only gate, does not compile. The brand is a
- * type only; the saved Cmd holds a plain string.
+ * A write as the write Cmd takes it: branded, so only `caused` below makes one. A step that calls
+ * the write Cmd itself, or puts another fact into a write it was handed, skipping its input's
+ * writer and its person-only gate, does not compile. The brand is a type only; the saved Cmd holds
+ * plain JSON. In libfabrika `caused` would stay inside the package; here the two shape libraries
+ * import it, and neither passes it on.
  */
-const Stream = Schema.String.pipe(Schema.brand("WriteStream"));
+const Sealed = Write.pipe(Schema.brand("CausedWrite"));
 
 /**
  * The one Cmd the runner itself performs: a checked write. Declared once, here, so no program
  * writes its name, its input or the runner's refusals again. Programs list it in `cmds`.
  */
 const write = Cmd.make("write", {
-	input: Schema.Struct({stream: Schema.toType(Stream), write: Write}),
+	input: Schema.Struct({stream: Schema.String, write: Schema.toType(Sealed)}),
 	ok: Schema.Json,
 	err: ["not_delivered", "spent", "person_only", "ended", "not_granted", "bad_cmd", "forbidden"],
 });
@@ -62,7 +64,7 @@ export const caused = (
 	stream: string,
 	fact: typeof Write.cases.caused.fields.fact.Type & {readonly _tag: string},
 ): WriteCmd =>
-	write({stream: Stream.make(stream), write: Write.cases.caused.make({parent: msg.parent, fact})});
+	write({stream, write: Sealed.make(Write.cases.caused.make({parent: msg.parent, fact}))});
 
 /** One step of a saved model's shape. Its number is its place in the list: no `from` to get wrong. */
 export type Upgrade = {readonly name: string; readonly run: (raw: unknown) => unknown};
@@ -70,12 +72,15 @@ export type Upgrade = {readonly name: string; readonly run: (raw: unknown) => un
 /** Saved state with at least one upgrade. Left out, the shape is version 1 and has none. */
 export type State = {readonly upgrades: readonly [Upgrade, ...ReadonlyArray<Upgrade>]};
 
-/** An output: a value picked from the model, sent each time it changes, as a source does (C8). */
+/**
+ * An output: a value picked from the model, sent each time it changes, as a source does (C8).
+ * `null` means nothing to send now; any other value must be what `schema` says.
+ */
 export type Output<S, A = unknown> = {
 	readonly name: string;
 	readonly schema: Schema.Codec<A, unknown>;
 	readonly description: string;
-	readonly select: (model: S) => A;
+	readonly select: (model: S) => A | null;
 };
 
 /** One input as the door checks it. Read inputs stay out: they get their own word when a program needs one. */

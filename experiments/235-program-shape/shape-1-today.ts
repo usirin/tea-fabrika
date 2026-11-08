@@ -118,8 +118,8 @@ export const ticket = Program.make({
 		close: "Close the ticket shown.",
 		reopen: "Reopen the ticket shown.",
 	},
-	// Declared, and nothing sends it: the merged runner has no way to send an output. A send would
-	// need a Cmd named after the output, matched by name, with a handler nobody has written.
+	// Declared, and nothing sends it: the merged runner has no way to send an output yet, and no
+	// decided note says how one will be sent.
 	outputs: {ticket: TicketNumber},
 	// LINK: each key must equal its fact's `_tag` (the types check that much). Nothing here says
 	// which input may cause which fact: `personOnly` on `answer` and on `answered` are two flags,

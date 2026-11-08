@@ -143,17 +143,23 @@ const over = <
 	}
 
 	const make = <
-		const I extends Readonly<Record<string, Spec<S, C>>>,
 		V extends Schema.Json,
-		const O extends Readonly<Record<string, Omit<Output<S>, "name">>>,
+		const I extends Readonly<Record<string, Spec<S, C>>> = never,
+		const O extends Readonly<Record<string, Omit<Output<S>, "name">>> = never,
 	>(
 		spec: {
 			readonly name: string;
 			readonly init: (saved: S | null) => Next<S, C>;
-			readonly inputs: I;
+			/** Its inputs, by name. Left out, it takes none. */
+			readonly inputs?: I;
 			readonly view: (model: S) => V;
 			/** Its outputs, by name. Left out, it has none; `{}` does not compile. */
-			readonly outputs?: O & (keyof O extends never ? never : unknown);
+			readonly outputs?: O &
+				(keyof O extends never ? never : unknown) & {
+					readonly [K in keyof O]: O[K] extends {readonly schema: Schema.Codec<infer A, unknown>}
+						? {readonly select: (model: S) => A | null}
+						: never;
+				};
 			/** When the runner should wake it, and the step it takes then. Left out, it never wakes. */
 			readonly wake?: {
 				readonly at: (model: S) => number | null;
@@ -177,16 +183,17 @@ const over = <
 		V,
 		D[number] | ([F] extends [never] ? never : WriteDef)
 	> => {
-		const names = Object.keys(spec.inputs);
+		const inputs: Readonly<Record<string, Spec<S, C>>> = spec.inputs ?? {};
+		const names = Object.keys(inputs);
 		const structs = names.map((name) =>
-			Schema.Struct({type: Schema.Literal(name), parent, ...spec.inputs[name]?.fields}),
+			Schema.Struct({type: Schema.Literal(name), parent, ...inputs[name]?.fields}),
 		);
 		const timer = Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number});
 		const msg = Schema.Union(spec.wake === undefined ? structs : [...structs, timer]);
 		const tuple = (next: Next<S, C>) => [next.model, next.cmds] as const;
 		const cells: Record<string, (model: S, m: Raw) => readonly [S, ReadonlyArray<C>]> = {};
 		for (const name of names) {
-			const one = spec.inputs[name];
+			const one = inputs[name];
 			if (one === undefined) continue;
 			cells[name] = (model, m) =>
 				tuple(one.update(model, m, (stream, fact) => caused(m, stream, fact)));
@@ -213,15 +220,15 @@ const over = <
 			update: cells as never,
 		}) as unknown as Built<S, InputMsg<I>, C, D[number] | ([F] extends [never] ? never : WriteDef)>;
 		const doors: ReadonlyArray<Door> = names.flatMap((name, i) => {
-			const one = spec.inputs[name];
+			const one = inputs[name];
 			const schema = structs[i];
 			return one === undefined || schema === undefined
 				? []
 				: [{name, schema, description: one.description, personOnly: one.personOnly}];
 		});
 		const refuse = (model: S, m: Raw & {readonly type: string}): Refusal | null => {
-			const one: Spec<S, C> | undefined = Object.hasOwn(spec.inputs, m.type)
-				? spec.inputs[m.type]
+			const one: Spec<S, C> | undefined = Object.hasOwn(inputs, m.type)
+				? inputs[m.type]
 				: undefined;
 			return one === undefined ? null : one.refuse(model, m);
 		};

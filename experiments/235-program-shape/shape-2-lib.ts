@@ -121,7 +121,8 @@ export const Output = {
 		spec: {
 			readonly schema: Schema.Codec<A, unknown>;
 			readonly description: string;
-			readonly select: (model: S) => A;
+			/** What it sends now, as `schema` says, or `null` for nothing. */
+			readonly select: (model: S) => NoInfer<A> | null;
 		},
 	): Output<S, A> => ({name, ...spec}),
 };

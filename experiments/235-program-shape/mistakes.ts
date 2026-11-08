@@ -6,10 +6,10 @@ import {Machine} from "@demlik/tea/effect";
 import {Schema} from "effect";
 import {Program as Today} from "../../next/packages/libfabrika/src/index.ts";
 import {ticketMachine as todayMachine} from "./shape-1-today.ts";
-import {Fact as Fact2, Input} from "./shape-2-lib.ts";
+import {Fact as Fact2, Input, Output} from "./shape-2-lib.ts";
 import {Fact as Fact3, Program as Records} from "./shape-3-lib.ts";
 import {ticket as threeTicket} from "./shape-3-records.ts";
-import {Answer, Answered, Comment, Model, readTicket, start} from "./ticket-data.ts";
+import {Answer, Answered, Comment, Model, TicketNumber, readTicket, start} from "./ticket-data.ts";
 
 const base = {
 	name: "ticket",
@@ -162,8 +162,8 @@ Today.make({...base, state: {v: 2, upgrades: []}, inputs: {}});
 Input.make("close", {fields: Comment.fields, description: "Close", causes: []});
 
 // 6. A step that skips its input's writer and calls the write Cmd itself. Both new shapes list the
-// runner's write Cmd, but its `stream` is branded and only an input's writer makes one, so tsc
-// stops it.
+// runner's write Cmd, but the write it takes is branded and only an input's writer makes one, so
+// tsc stops it.
 // @ts-expect-error the write Cmd takes only what an input's writer makes
 Fact2.write({stream: "ticket/1", write: {_tag: "own", fact: {_tag: "answered"}}});
 // @ts-expect-error the same in shape 3
@@ -180,3 +180,40 @@ const [stepped] = applyCell(threeTicket.machine, start, {
 	parent: "in-process_0123456789abcdefghjkmnpqrs-1",
 });
 export {stepped};
+
+// 9. A step that takes a write its own writer made and puts a person-only fact into it. This
+// compiles: a TypeScript brand is a type on the object, and a spread keeps it. The brand stops a
+// mistake, not a forger; the signer still refuses the write when it runs (`person_only`).
+const allowed = comment2b.write({type: "comment", parent: "in-1"}, "ticket/1", {
+	_tag: "commented",
+	ticket: 1,
+	body: "Skip part 2.",
+});
+Fact2.write({
+	stream: allowed.stream,
+	write: {...allowed.write, fact: {_tag: "answered"}},
+});
+
+// 10. An output whose selector sends what its schema does not say. `null` means nothing to send.
+Output.make("ticket", {
+	schema: TicketNumber,
+	description: "The ticket it shows.",
+	// @ts-expect-error a string is no ticket number
+	select: (m: Model) => String(m.now),
+});
+three.make({
+	name: "ticket",
+	init: () => ({model: start, cmds: []}),
+	view: (m) => ({now: m.now}),
+	outputs: {
+		ticket: {
+			schema: TicketNumber,
+			description: "The ticket it shows.",
+			// @ts-expect-error a string is no ticket number
+			select: (m) => String(m.now),
+		},
+	},
+});
+
+// 11. Shape 3: a program that takes no input leaves `inputs` out.
+three.make({name: "clock", init: () => ({model: start, cmds: []}), view: (m) => ({now: m.now})});

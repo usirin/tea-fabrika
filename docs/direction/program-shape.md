@@ -73,7 +73,7 @@ export const ticketMachine = ticket.machine;   // still a tea machine a parent c
 | Known way | Elm ports, Effect `Rpc.make` | Redux Toolkit `createSlice`, XState `setup` |
 | Meets the rule | Yes; one value is handed to the machine and the program, checked to be the same | Inside a program; a step has two forms across the codebase, `{model, cmds}` here and tea's tuple elsewhere |
 | A typo in an input's name | Cannot happen; tea checks the update keys | Compiles, and renames the input |
-| A plain input writes a person-only fact | Does not compile | Does not compile |
+| A plain input writes a person-only fact | Does not compile (a mistake; a deliberate spread of a made write still compiles, and the signer refuses it) | Same |
 | Walks back | Required `outputs` and `writes`; outputs as events; read ports in `inputs`; `makeEffect` | All of shape 2's, and the machine as its own `Machine.make` value |
 
 ## What it decides, once picked
@@ -84,14 +84,16 @@ export const ticketMachine = ticket.machine;   // still a tea machine a parent c
   a plain input from causing a person-only fact.
 - **The runner's `write` Cmd is declared once, in libfabrika.** No program names it again.
 - **An output is a value picked from the model and sent when it changes** (C8, "a source sends after
-  each change"). It is never a Cmd, so "output" and "Cmd" keep one meaning each.
+  each change"). tsc checks the value against the output's schema; `null` means nothing to send. It is never a Cmd, so "output" and "Cmd" keep one meaning each.
 - **"Input" means a write.** A read port gets its own word, picked with the first program that needs
   one.
-- **Every empty part is left out.** An optional list holds at least one item. The saved version is
+- **Every empty part is left out.** An optional list holds at least one item. Shape 2 alone needs
+  at least one input, since its Msg is built from them. The saved version is
   one more than the number of upgrades, never written by hand.
 - **`refuse` is optional.** Left out, nothing is refused.
 - **`Program.make` only.** `makeEffect` goes; the loader's check is the Effect.
-- **A step cannot call the write Cmd itself.** Its `stream` is branded, and only an input's writer makes one.
+- **A step does not call the write Cmd itself.** The write it takes is branded, and only an input's
+  writer makes one. A brand stops a mistake, not a forger: the signer stays the real check.
 
 ## Which version
 
