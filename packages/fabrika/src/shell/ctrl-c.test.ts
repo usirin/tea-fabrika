@@ -93,6 +93,8 @@ describe("Ctrl-C reaches a foreground job however many lines wait behind it", ()
 					signal: {length: 0, waiting: 0},
 					stop: {length: 0, waiting: 0},
 					background: {length: 0, waiting: 0},
+					// The plan's S-8: tsh gains an `answer` input, person-only.
+					answer: {length: 0, waiting: 0},
 				},
 			},
 			signal: "queued",
@@ -111,6 +113,8 @@ describe("Ctrl-C reaches a foreground job however many lines wait behind it", ()
 					signal: {length: 0, waiting: 0},
 					stop: {length: 0, waiting: 0},
 					background: {length: 0, waiting: 0},
+					// The plan's S-8: tsh gains an `answer` input, person-only.
+					answer: {length: 0, waiting: 0},
 				},
 			},
 			signal: "queued",

@@ -1,0 +1,10 @@
+type = "background"
+tier = "global"
+owner = "design"
+description = "a hovered row"
+theme = "hover"
+on = ["surface", "surface-raised"]
+
+[colors]
+dark = "slate.a3"
+light = "slate.a3"

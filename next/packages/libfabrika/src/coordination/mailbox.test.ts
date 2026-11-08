@@ -88,6 +88,16 @@ const raw = (stream: string, id: string, over: Partial<Line>) =>
 	);
 
 describe("p21, send", () => {
+	it.effect("non-JSON mail is refused as bad_line and writes no entry", () =>
+		Effect.gen(function* () {
+			for (const m of [undefined, () => null, 1n, {value: undefined}])
+				expect(yield* send("notes:1", LETTER, m)).toEqual({
+					_tag: "refused",
+					why: "bad_line",
+				});
+			expect(yield* inbox("notes:1")).toEqual([]);
+		}).pipe(Effect.provide(mail())),
+	);
 	it.effect("writes one send line in the name's inbox, with every field the writer gave", () =>
 		Effect.gen(function* () {
 			const m = {type: "save", value: {text: "hello", n: 3}};

@@ -1,6 +1,6 @@
 # One fabrika.toml per repo
 
-Decided 2026-10-05. Packs added 2026-10-18. The full story is
+Decided 2026-10-05. Packs added 2026-10-18. Walked when Tier 5 starts (owner, 2026-11-08): repo programs and their settings. The full story is
 [blog post 10](../../blog/10-knobs-in-a-file.md); the first code is
 `legacy/src/settings.ts`.
 

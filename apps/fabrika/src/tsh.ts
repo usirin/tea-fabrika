@@ -19,6 +19,7 @@ import {
 	viewOf,
 	writerText,
 } from "@kampus/fabrika-old";
+import {SummonedNow, turnProgram} from "@kampus/fabrika-old/agents/summon";
 import {LineAnswer, LineAsk, LineRefused} from "@kampus/fabrika-old/mcp";
 import {experimentsOnLedger} from "@kampus/pipeline/experiments/experiments";
 import {ticketsOnLedger} from "@kampus/pipeline/tickets/tickets";
@@ -33,7 +34,18 @@ import {laneRunner} from "@tea-fabrika/pipeline/node";
 import {ticket} from "@tea-fabrika/ticket";
 import {trace} from "@tea-fabrika/trace";
 import {Author, PullRequests, RepoTree, type RepoTreeShape, tracker} from "@tea-fabrika/tracker";
-import {Clock, Deferred, Effect, Exit, Layer, Queue, Schema, Semaphore, Stream} from "effect";
+import {
+	Clock,
+	Deferred,
+	Effect,
+	Exit,
+	Layer,
+	Option,
+	Queue,
+	Schema,
+	Semaphore,
+	Stream,
+} from "effect";
 import type {TileId} from "./desk/layout/index.ts";
 import {type EditorMsg, editor} from "./editor/editor.ts";
 import type {SharedHistory} from "./editor/history.ts";
@@ -250,7 +262,8 @@ export const RESET = "\x1bc";
  * lane's record through `traces` (`tracker | trace`). The three that read experiments (the list, one experiment, two runs
  * compared), on the same ledger, read-only, and `markdown`, which draws what it is told
  * (experiment 170). `pipeline`, which runs one ticket's lane for `author`, on the host's home
- * (experiment 175).
+ * (experiment 175). `turn`, one turn of an agent the person summoned, when the host keeps
+ * summoned agents (`summons`): a said line (`@scout ...`) runs as it.
  *
  * `trace` replays a machine run through today's code by a `Replayer` over the same programs a
  * tile's tsh lists (`tshList`), so nothing is wired per program
@@ -264,6 +277,7 @@ export const appPrograms = (
 	pullRequests: PullRequests["Service"],
 	traces: Traces["Service"],
 	repoTree?: RepoTreeShape,
+	summons?: Shell.SummonManager["Service"],
 ): readonly Entry[] => {
 	const tickets = Layer.mergeAll(
 		Layer.succeed(Ledger, ledger),
@@ -285,6 +299,9 @@ export const appPrograms = (
 		listed(experiment, read),
 		listed(compare, read),
 		listed(markdown, Layer.empty),
+		...(summons === undefined
+			? []
+			: [listed(turnProgram, Layer.succeed(Shell.SummonManager, summons))]),
 	];
 	const traced = listed(
 		trace,
@@ -404,6 +421,8 @@ export const startTsh = (options: {
 		const pullRequests = yield* PullRequests;
 		const repoTree = yield* RepoTree;
 		const traces = yield* Traces;
+		/** The host's summoned agents, when it keeps any: tsh's `summon` and `@name` speak to them. */
+		const summons = Option.getOrUndefined(yield* Effect.serviceOption(Shell.SummonManager));
 		/** Its scope is closing: the tile closes or the host stops, and every run stops with it. */
 		let closing = false;
 		/** The host's job table now, read off tsh as a run is seen. Set once tsh started; no run starts before. */
@@ -472,6 +491,10 @@ export const startTsh = (options: {
 		const write = (data: string) => {
 			screen = kept(screen + data);
 			for (const page of pages) page({type: "write", data});
+		};
+		/** Told to every page now, for its screen reader, and not kept: a page loaded later missed it. */
+		const toPages = (m: ToTerminal) => {
+			for (const page of pages) page(m);
 		};
 
 		/** A run of a program with a view: its tile is told, its view is shown each change, and it goes at the end. */
@@ -551,7 +574,7 @@ export const startTsh = (options: {
 				yield* opened(running);
 			});
 
-		const apps = tshList(appPrograms(ledger, author, pullRequests, traces, repoTree));
+		const apps = tshList(appPrograms(ledger, author, pullRequests, traces, repoTree, summons));
 		// An agent's tsh lists no desk word, and only the inputs an agent may tell.
 		const watched = Shell.programList(
 			(agent === null ? [...apps, ...words] : apps).map((entry) =>
@@ -650,9 +673,23 @@ export const startTsh = (options: {
 				backgrounded: (r) => {
 					if (asked?.via === "background") said(asked, r.status);
 				},
+				// A job's line in place, and its yes or no: the editor draws the one and takes the other.
+				status: ({text}) => {
+					toEditor({type: "status", text});
+					toPages({type: "status", text});
+				},
+				asked: ({n, text}) => {
+					toEditor({type: "asked", n, text});
+					if (text !== null) toPages({type: "said", text: `${text}  allow? y or n`});
+				},
+				announced: ({text}) => toPages({type: "said", text}),
 			},
 			{id: TSH, storage: memoryStorage()},
-		).pipe(Effect.provideService(Shell.Programs, programs), Effect.provideService(HostJobs, jobs));
+		).pipe(
+			Effect.provideService(Shell.Programs, programs),
+			Effect.provideService(HostJobs, jobs),
+			summons === undefined ? (e) => e : Effect.provideService(Shell.SummonManager, summons),
+		);
 		// tsh's flags are this file's own: a refusal here is a mistake in it, not something to show.
 		if (started.kind !== "running")
 			return yield* Effect.die(`tsh refused its flags: ${started.why}`);
@@ -685,6 +722,13 @@ export const startTsh = (options: {
 			Effect.andThen(Deferred.succeed(over, undefined)),
 			Effect.forkScoped,
 		);
+		// What Tab offers after `summon` and `@`: the host's agents, as they change.
+		const talk = yield* Effect.serviceOption(SummonedNow);
+		if (Option.isSome(talk))
+			yield* talk.value.talk.pipe(
+				Stream.runForEach((now) => Effect.sync(() => toEditor({type: "talk", talk: now}))),
+				Effect.forkScoped,
+			);
 		yield* started.run.machines.jobs.changes.pipe(
 			Stream.runForEach((now) =>
 				Effect.sync(() => {
@@ -718,7 +762,10 @@ export const startTsh = (options: {
 				// agent's tile it runs nothing, and the person is told so.
 				line: (c) =>
 					agent === null
-						? offer(started.run, "line", c.text).pipe(Effect.as(null))
+						? offer(started.run, "line", {
+								text: c.text,
+								said: clock.currentTimeMillisUnsafe(),
+							}).pipe(Effect.as(null))
 						: Effect.sync(() => {
 								toEditor({type: "printed", text: typedHere(agent)});
 								toEditor({type: "ready"});
@@ -733,6 +780,12 @@ export const startTsh = (options: {
 						Effect.as(null),
 					),
 				close: () => Effect.sync(() => started.close("line")).pipe(Effect.as(null)),
+				// A person's y or n: a control input, so it reaches tsh while the job holds the prompt.
+				answer: (c) =>
+					tell(started.run, "answer", {n: c.n, allow: c.allow}).pipe(
+						Effect.catchTag("MailboxFull", () => Effect.void),
+						Effect.as(null),
+					),
 				// The person's history is theirs: nothing typed in an agent's tile goes in it.
 				keep: (c) =>
 					agent === null ? history.save(c.lines).pipe(Effect.as(null)) : Effect.succeed(null),

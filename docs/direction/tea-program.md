@@ -1,6 +1,6 @@
 # tea-program: programs between tea and a host
 
-**Proposed** 2026-10-15, changed 2026-10-16, 2026-10-17 (five times), 2026-10-19 and 2026-10-30. Not settled.
+**Proposed** 2026-10-15, changed 2026-10-16, 2026-10-17 (five times), 2026-10-19 and 2026-10-30. Not settled. Today's version; walked if a tryout is picked (owner, 2026-11-08).
 
 ```ts
 // tea: the kernel. A machine is a data structure: a state and the rules that move it.
@@ -78,6 +78,11 @@ handle.store("ship", intent);                 // a tea Store; each save is atomi
 const called = yield* call(seq, { to: 3 }, { told: {}, stopOn: ctrlC });
 // { kind: "called", ended, heard: [{ name: "n", value: 1 }, ...] } | { kind: "bad_shape", name, why }
 ```
+
+*(updated 2026-11-08 to Program.make.)* This sketch and `defineProgram` below are today's
+version. In `next/`, a program is one typed `Program.make({name, machine, ...})`, its machine a
+`Machine.make` value of its own, and there is no `defineX` ([Program.make](./program-make.md),
+decided 2026-11-07).
 
 **The rule: outputs are events.** Heard once, by whoever listens at that
 moment, and kept nowhere. Anything a viewer who comes late needs lives in a

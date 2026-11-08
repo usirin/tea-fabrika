@@ -10,6 +10,7 @@ import {
 	linkMsgOf,
 	readDown,
 	readUp,
+	PROTOCOL,
 } from "./link.ts";
 
 // The link's handshake, folded by hand for each side, and the lines each side reads.
@@ -30,6 +31,24 @@ const APP: LinkCtx = {side: "app", ours: 1};
 const HOST: LinkCtx = {side: "host", ours: 1};
 
 describe("the link", () => {
+	it("K21: today's new protocol refuses the old version in both directions before delivery", () => {
+		expect(PROTOCOL).toBeGreaterThan(1);
+		for (const side of ["app", "host"] as const) {
+			const {s, steps} = fold({side, ours: PROTOCOL}, [
+				{type: "hello", version: 1},
+				{type: "line", m: {type: "keys.edit", edit: {_tag: "reset", does: "tezgah.zoom"}}},
+			]);
+			expect(s.at).toBe("refused");
+			expect(steps.flat().some((cmd) => cmd.type === "deliver")).toBe(false);
+			expect(steps[1]).toContainEqual({type: "refuse", theirs: 1, ours: PROTOCOL});
+			const old = fold({side, ours: 1}, [
+				{type: "hello", version: PROTOCOL},
+				{type: "line", m: {type: "page"}},
+			]);
+			expect(old.s.at).toBe("refused");
+			expect(old.steps.flat().some((cmd) => cmd.type === "deliver")).toBe(false);
+		}
+	});
 	it("is up on the app's side when the host says hello with the same version", () => {
 		const {s, steps} = fold(APP, [
 			{type: "hello", version: 1},

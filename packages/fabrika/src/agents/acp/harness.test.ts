@@ -18,9 +18,10 @@ import {Effect} from "effect";
 import {ear} from "../../program/ear.ts";
 import {start} from "../../program/program.ts";
 import {memoryStorage} from "../../program/storage.ts";
-import {gitOf, LOGIN_FILES, temps} from "../claude/sandbox.ts";
+import {filesOf, gitOf, LOGIN_FILES, TOOLS, temps} from "../claude/sandbox.ts";
 import {codexEnvOf, flagsOf} from "../codex/adapter.ts";
 import {
+	claudeOptions,
 	codexConfig,
 	codexHome,
 	codexHomeOf,
@@ -1944,4 +1945,38 @@ describe("acp --agent codex", () => {
 			}
 		}).pipe(Effect.scoped, Effect.provide(nodeServices)),
 	);
+});
+
+describe("the Claude row's options", () => {
+	// What the Agent SDK is handed for a summoned Claude: no settings files, no connector, the
+	// builder's tools, the OS sandbox with no way out and no network, and env files hidden.
+	it("loads no settings, keeps permissions asked, sandboxes every command and names no budget", () => {
+		const folder = realpathSync(mkdtempSync(join(tmpdir(), "claude-row-")));
+		const files = filesOf(folder);
+		expect(claudeOptions(folder, null)).toEqual({
+			settingSources: [],
+			strictMcpConfig: true,
+			mcpServers: {},
+			settings: {
+				disableClaudeAiConnectors: true,
+				permissions: {deny: ["Read(**/.env)", "Read(**/.env.*)"]},
+			},
+			allowDangerouslySkipPermissions: false,
+			tools: [...TOOLS],
+			sandbox: {
+				enabled: true,
+				failIfUnavailable: true,
+				autoAllowBashIfSandboxed: true,
+				allowUnsandboxedCommands: false,
+				network: {allowedDomains: [], strictAllowlist: true},
+				filesystem: {...files, denyRead: [...files.denyRead, "**/.env", "**/.env.*"]},
+			},
+		});
+		rmSync(folder, {recursive: true, force: true});
+	});
+
+	it("names the budget when there is one", () => {
+		expect(claudeOptions("/repo", 2.5)).toMatchObject({maxBudgetUsd: 2.5});
+		expect(claudeOptions("/repo", null)).not.toHaveProperty("maxBudgetUsd");
+	});
 });

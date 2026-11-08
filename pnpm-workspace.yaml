@@ -56,6 +56,8 @@ catalog:
   # oxfmt is 0.x, and a new version can change what fires or how a file prints.
   oxfmt: 0.75.0
   oxlint: 1.90.0
+  stylelint: 18.0.0
+  postcss-value-parser: 4.2.0
   '@oxlint/plugins': 1.90.0
   # The React Compiler without Babel, for next/'s compile step (next/apps/fabrika/src/exam/compiler.ts,
   # docs/direction/react-compiler.md). oxc's Rust port and its parser, from oxlint's own repository.
@@ -71,6 +73,9 @@ catalog:
   # The markdown window's code colors (programs/markdown): Pierre's highlighter, its lexers in one
   # WebAssembly module. Apache-2.0, its themes MIT or Apache-2.0. Held exact: a beta.
   '@pierre/highlights': 0.3.0
+  # Radix Colors, MIT: the steps the token build reads (packages/fabrika-design/src/build/tokens.ts).
+  # Only that build imports it (.oxlintrc.json). Held exact: a new version changes the steps.
+  '@radix-ui/colors': 3.0.0
   '@rslib/core': 1.0.5
   # The mutation step (packages/pipeline/src/stages/mutation), held exact: experiment 124 ran 10.1.1.
   '@stryker-mutator/core': 10.1.1
@@ -139,6 +144,9 @@ patchedDependencies:
   '@manti-ui/react@0.13.0': patches/@manti-ui__react@0.13.0.patch
   # Draw on change, and a hollow cursor when a tile is unfocused (experiment 142).
   ghostty-web@0.4.0: patches/ghostty-web@0.4.0.patch
+  # demlik#897: expose the machine's existing schemas; drop at the release that has it (closed
+  # upstream after 0.26.0 shipped, so 0.26.0 still needs it).
+  '@demlik/tea@0.26.0': patches/@demlik__tea@0.26.0.patch
 
 minimumReleaseAgeExclude:
   - '@demlik/tea@0.24.0 || 0.25.0 || 0.26.0'

@@ -1,6 +1,6 @@
 # Agents commit as a bot, with the person as co-author
 
-**Proposed 2026-11-05.** The owner decided the direction on 2026-11-05, marked decided below:
+**Proposed 2026-11-05.** Walked when Tier 5 starts (owner, 2026-11-08): agent commits, token swaps and trailers. The owner decided the direction on 2026-11-05, marked decided below:
 
 - **Decided, agents commit and push as a bot.** An agent's commit is authored by a GitHub App's
   bot identity (`fabrikalfa[bot]`, named 2026-11-06), never by the person's account. GitHub itself then
@@ -73,6 +73,11 @@ carries one `Fabrika-Input` line for each
 step commits are authored by `fabrikalfa[bot]`, with the person as `Co-authored-by`. The lead
 pushes them to `fabrikalfa/<name>` with a token that lasts one hour. The pull request opens as the
 person.
+
+Decided by the owner, 2026-11-08: this covers every commit an agent makes in this repo, the lead
+agent's own included, not only step commits. Each is authored by `fabrikalfa[bot]` with the owner
+as `Co-authored-by`, on a `fabrikalfa/<name>` branch pushed with a 1-hour token. Pull requests
+still open as the owner. A repo where the app is not installed is not covered.
 
 ## Why
 

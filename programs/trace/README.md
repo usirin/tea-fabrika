@@ -256,7 +256,7 @@ job   seq --to 3 | tally        the tsh line's span
 | | `src/machine.ts` | `trace`, the machine, `followed` and `ticking`, the deps of its Subs, and `replayCmd`. Pure. |
 | | `src/tree.ts` | `treeOf`, `nodesOf`, `groupsOf`, `findOf`: a job's record as rows. Pure. |
 | | `src/ticket.ts` | The ticket view's fold. `lanesOf`: the lanes from the facts up to a time. `stopsOf`: the times the stepper stops at. `childrenOf`: the spans under one step, from its lane's record, indexed once per record in a memo keyed on its spans, outside the Model. `summaryOf`: what a lane's line and the ticket's line say. Pure. |
-| | `src/ruler.ts` | `ticksOf`: the ruler's ticks, ranked, for both views. Rank 1 is at most 4 ticks, rank 2 at most 8, rank 3 at most 16. The CSS shows rank 2 from a 480px ruler and rank 3 from 960px, so each label has 60px. Pure. |
+| | `src/ruler.ts` | `ticksOf`: the ruler's ticks, ranked, for both views. Rank 0 is 0 and rank 1's last tick, past half the axis; rank 1 is at most 4 ticks, rank 2 at most 8, rank 3 at most 16. The CSS shows rank 0 always, rank 1 from a 240px ruler, rank 2 from 480px and rank 3 from 960px, so each label has 60px; under 120px only rank 0's second label shows. Pure. |
 | | `src/view.ts` | `shownOf`: the rows open, placed in time, and the chosen row's detail, for either view. `changesOf`: a JSON Patch of two states. Pure. |
 | | `src/t117.ts` | A made-up ticket in ticket 117's shape, for the ticket view's tests: three lanes, a restart, three waits. Ids, times and tokens are made up. |
 | | `src/timelines.ts` | Generators of made-up ticket timelines for the ticket view's laws, each with what is true of it written down as it is made. |

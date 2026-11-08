@@ -3,16 +3,20 @@
 // subpath, `./sqlite`, so this one names no platform.
 export {Archive, type BucketCalls} from "./archive.ts";
 export {Doorbell, Ledger, type LedgerCalls, LedgerError} from "./ledger.ts";
+export {LedgerTransaction, type LedgerTurn} from "./ledger-transaction.ts";
 export {
 	Appended,
 	Entry,
 	fromHere,
 	type InputId,
 	Line,
+	lineFor,
+	PAGE,
 	ParentText,
 	Rev,
 	TraceId,
 	Waited,
+	valueFor,
 } from "./log.ts";
 export {type RecordCalls, RecordManager, Written} from "./records.ts";
 export {Referee, type Sql, type SqlValue} from "./referee.ts";
@@ -28,4 +32,5 @@ export {
 	SpanRow,
 	Summary,
 	Tag,
+	short,
 } from "./trace.ts";

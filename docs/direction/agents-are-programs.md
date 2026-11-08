@@ -1,6 +1,6 @@
 # An agent is a program: `claude` and `codex`, at parity
 
-Proposed 2026-10-29, reshaped 2026-10-30 after experiment 169 (tracker #87).
+Proposed 2026-10-29, reshaped 2026-10-30 after experiment 169 (tracker #87). Walked when Tier 5 starts (owner, 2026-11-08): claude and codex programs.
 Each agent maker gets a tea program of its own, `claude` and `codex`, each its
 own package in `programs/`, like `trace` and `tracker`. They are built
 together so neither one's shape leaks into the other. A person runs one by
@@ -33,6 +33,11 @@ const sorted = decoder(SortReply);                       // @kampus/pipeline/dec
 self.startChild("claude", {schema: sorted.schema, folder});
 // ended.answer goes through sorted.decode: a misfit is `sort_failed`, and the stage ends stuck.
 ```
+
+*(updated 2026-11-08 to Program.make.)* The block above is today's code. In `next/`, an agent program is
+`Program.make({name, machine, ...})`, its machine a `Machine.make` value of its own, with no `main`
+and no `machines` table ([Program.make](./program-make.md)).
+
 
 ## Why
 

@@ -1,6 +1,6 @@
 # Tracker views are programs
 
-**Proposed 2026-10-28.** Not settled, except two parts marked decided: section 7, and one
+**Proposed 2026-10-28.** Walked when Tier 2 starts (owner, 2026-11-08): tracker views and ticket facts. Not settled, except two parts marked decided: section 7, and one
 program per view (section 10, decided 2026-11-06), the first three new facts (decided 2026-11-06, below), and the whose-turn status line (section 5.1, decided 2026-11-06). This note replaces two studies of 2026-10-27, both left open and not
 merged: [PR 135](https://github.com/usirin/tea-fabrika/pull/135) (Linear's
 model as facts) and [PR 153](https://github.com/usirin/tea-fabrika/pull/153)

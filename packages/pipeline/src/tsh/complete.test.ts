@@ -35,7 +35,24 @@ describe("Tab completion", () => {
 		["sh", ["ship"]],
 		[
 			"",
-			[...list.keys(), "jobs", "ps", "tell", "close", "stop", "attach", "programs", "help", "exit"],
+			[
+				...list.keys(),
+				"jobs",
+				"ps",
+				"tell",
+				"close",
+				"stop",
+				"attach",
+				"programs",
+				"help",
+				"exit",
+				// The summon plan's grammar: `summon <agent> [setting] as <name>` is a tsh built-in.
+				"summon",
+				// The summon plan's grammar: `dismiss <name>` frees the name and stops its agent.
+				"dismiss",
+				// The summon plan's grammar: `agents` lists the summoned names, as `registered()` does.
+				"agents",
+			],
 		],
 		["seq --t", ["--to"]],
 		["ship --mode ", ["read", "write"]],

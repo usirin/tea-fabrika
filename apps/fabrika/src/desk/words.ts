@@ -1,5 +1,6 @@
 import {defineProgram, type Entry, flag, listed} from "@kampus/fabrika-old";
 import {Context, Effect, Layer, Schema} from "effect";
+import {keysRequest} from "../keys/program.ts";
 import {TileIdSchema} from "./desk.ts";
 import {type Does, SHOWS, type Show, wordOf} from "./keys.ts";
 
@@ -14,7 +15,7 @@ import {type Does, SHOWS, type Show, wordOf} from "./keys.ts";
 //   tsh$ focus --to t3              as a click on t3 in the top bar's line
 //   tsh$ workspace --to 2           as C-b 2; --to next, previous or new as C-b C-l, C-b C-h, C-b N
 //   tsh$ close-tile                 as C-b x: asks "close t1? (y/n)" on the bottom line
-//   tsh$ agents                     as C-b A: the agents' lines open under the top bar
+//   tsh$ sync                       as C-b S: the sync lines open under the top bar
 //   tsh$ focus --to t9              tsh: focus failed: no tile t9
 //
 // They are the person's: a tile's tsh lists them, and the agents' socket does not (host/agents.ts),
@@ -43,6 +44,7 @@ const plain = (does: Does, description: string) =>
 	defineProgram({name: wordOf(does), description, inputs: {}, outputs: {}, main: () => tell(does)});
 
 const Way = Schema.Literals(["left", "down", "up", "right"]);
+const Cycle = Schema.Literals(["next", "previous"]);
 
 const split = defineProgram({
 	name: "split",
@@ -60,12 +62,21 @@ const focus = defineProgram({
 	name: "focus",
 	description: "Moves focus from this tile to the next one that way, or to a tile by its name.",
 	flags: {
-		to: flag(Schema.Union([Way, TileIdSchema]), "A way, left, down, up or right, or a tile: t3."),
+		to: flag(
+			Schema.Union([Way, Cycle, TileIdSchema]),
+			"A direction, next, previous, or a tile: t3.",
+		),
 	},
 	inputs: {},
 	outputs: {},
 	main: ({flags}) =>
-		tell(Schema.is(Way)(flags.to) ? {kind: "focus", to: flags.to} : {kind: "go", tile: flags.to}),
+		tell(
+			Schema.is(Way)(flags.to)
+				? {kind: "focus", to: flags.to}
+				: Schema.is(Cycle)(flags.to)
+					? {kind: "cycle", to: flags.to}
+					: {kind: "go", tile: flags.to},
+		),
 });
 
 /** A workspace's place in the top bar, from 1: past 9 too, where the number keys stop. */
@@ -88,18 +99,22 @@ const workspace = defineProgram({
 		),
 });
 
+/** The parts of the frame whose word is tsh's own, which prints the same list in the tile. */
+type TshOwn = "jobs" | "agents";
+
 /**
- * What each word that opens a part of the frame says it does. Not `jobs`: that word is tsh's own,
- * and prints the same list in the tile, so C-b J's word is it and no second `jobs` is listed.
+ * What each word that opens a part of the frame says it does. Not `jobs` or `agents`: those words
+ * are tsh's own, and print the same list in the tile, so C-b J's and C-b A's words are them and no
+ * second one is listed.
  */
-const SHOWN: Readonly<Record<Exclude<Show, "jobs">, string>> = {
+const SHOWN: Readonly<Record<Exclude<Show, TshOwn>, string>> = {
 	asks: "Opens the asks list, or closes it.",
 	keys: "Lists every command, with its key and its tsh word.",
 	info: "Turns info mode on or off: the bottom line explains what the pointer is over or what has focus.",
 	bars: "Hides both bars, or shows them again.",
-	agents: "Opens the agents' lines under the top bar: each agent attached to this host.",
 	sync: "Opens the sync lines under the top bar: which ledger this home reads, and how.",
 	host: "Opens the host's lines under the top bar: its process, its build and how long it has run.",
+	palette: "Finds a command by name and runs it.",
 };
 
 /** The words with no flags, as tsh lists them after split, focus and workspace. */
@@ -111,7 +126,11 @@ const PLAIN = [
 	plain({kind: "fold"}, "Folds this tile into a strip. The last open tile does not fold."),
 	plain({kind: "zoom"}, "Zooms this tile, or undoes the zoom."),
 	plain({kind: "close"}, 'Asks "close t1? (y/n)" on the bottom line; y closes this tile.'),
-	...SHOWS.flatMap((what) => (what === "jobs" ? [] : [plain({kind: "show", what}, SHOWN[what])])),
+	...SHOWS.flatMap((what) =>
+		what === "jobs" || what === "agents" || what === "keys"
+			? []
+			: [plain({kind: "show", what}, SHOWN[what])],
+	),
 ];
 
 /** The desk words for one tile's tsh: each tells `said` what it does, from that tile. */
@@ -121,6 +140,10 @@ export const deskWords = (said: (does: Does) => string | null): readonly Entry[]
 		listed(split, services),
 		listed(focus, services),
 		listed(workspace, services),
+		listed(
+			keysRequest(() => said({kind: "show", what: "keys"})),
+			Layer.empty,
+		),
 		...PLAIN.map((program) => listed(program, services)),
 	];
 };

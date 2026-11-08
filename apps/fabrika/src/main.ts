@@ -391,6 +391,7 @@ const main = Effect.gen(function* () {
 			home,
 			paths,
 			settings: settingsFolder(launch, app.getPath("home")),
+			repo: process.env.FABRIKA_REPO,
 		});
 	});
 	/**

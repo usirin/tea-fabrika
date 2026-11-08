@@ -1,6 +1,6 @@
 # The tracker is like Linear
 
-**Decided 2026-10-27 by the owner.** The tracker is the most important place
+**Decided 2026-10-27 by the owner.** Walked when Tier 2 starts (owner, 2026-11-08): the first tracker and ticket programs. The tracker is the most important place
 where people and agents work together, so it is built like Linear: a full issue
 tracker, not the smallest form that runs one lane. The pipeline, milestones and
 later packs are all built on it.

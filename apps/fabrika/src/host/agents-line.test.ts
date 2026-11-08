@@ -425,12 +425,20 @@ describe("the line tool", {timeout: 30_000}, () => {
 				const after = yield* until("claude's tile in the top bar", () =>
 					host.now()?.agents?.find((a) => a.name === "claude" && a.tile === "t2"),
 				);
-				return {before: before.agents, after};
+				// A desk change that leaves the agents' tiles as they were says nothing new of the host.
+				const said = host.page().filter((m) => m.type === "host").length;
+				host.click("t2");
+				yield* until("t2 focused", () =>
+					host.desk()?.workspaces[0]?.focused === "t2" ? true : undefined,
+				);
+				const saidAfter = host.page().filter((m) => m.type === "host").length;
+				return {before: before.agents, after, said, saidAfter};
 			}),
 		);
 		// made up: AgentOn's `tile`, `null` until the agent's first line opens one.
 		expect(seen.before).toEqual([expect.objectContaining({name: "claude", tile: null})]);
 		expect(seen.after).toMatchObject({name: "claude", tile: "t2"});
+		expect(seen.saidAfter).toBe(seen.said);
 	});
 
 	it("opens a fresh tile at the next line once the agent's tile has gone (d12)", async () => {

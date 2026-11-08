@@ -1,6 +1,6 @@
 # Talk where you work: `@claude` in tsh, and talking at a spot
 
-**Proposed 2026-11-04, parts decided through 2026-11-07.** Leaned in the walk on 2026-11-04, where
+**Proposed 2026-11-04, parts decided through 2026-11-07.** Walked when Tier 5 starts (owner, 2026-11-08): talking to agents at a spot. Leaned in the walk on 2026-11-04, where
 the owner set three points, and more on 2026-11-05 to 2026-11-07, each marked decided below:
 
 - **Decided, no chat program.** tsh is the chat. You summon different agents and talk to them in
@@ -326,11 +326,12 @@ const ThreadLocation = Schema.Union([
 	Schema.Struct({spots: Spots}), // one thread, always on a spot
 	Schema.Struct({ticket: Schema.String}), // "threads on this ticket": the list, never a blank chat
 ]);
-const thread = defineProgram({
+// (updated 2026-11-08 to Program.make; in today's version it is defineProgram)
+const thread = Program.make({
 	name: "thread",
 	location: {data: ThreadLocation, select: (m) => m.location},
 	reuse: "program", // open or focus: every spot's talk lands in the same tile
-	// ...machine, msg, view as any program
+	// ...machine (its own Machine.make value), view as any program
 });
 ```
 
