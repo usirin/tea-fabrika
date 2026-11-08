@@ -2,7 +2,7 @@
 // A program gets no sender, key, ledger or service. `stepper` steps it by hand, as Elm's runtime
 // would, and never runs a Cmd: the runner does that, after the input is saved.
 import {applyCell, msgKeysOf, type AnyCmdDef} from "@demlik/tea";
-import {Option, Result, Schema} from "effect";
+import {Effect, Option, Result, Schema} from "effect";
 import {ParentText} from "../coordination/index.ts";
 
 /** A function type whose parameters TypeScript checks both ways, as it does a method's: a program
@@ -58,7 +58,7 @@ export type State = typeof State.Type;
 
 /** A port a client may use. A write port takes an input; a read port answers from the view. The
  *  two are exclusive: a read port carries no `personOnly`, and a write port no answer. */
-export const Input = Schema.TaggedUnion({
+const InputSchema = Schema.TaggedUnion({
 	write: {
 		schema: Schemas,
 		description: Schema.String,
@@ -72,14 +72,57 @@ export const Input = Schema.TaggedUnion({
 		personOnly: Schema.optionalKey(Schema.Never),
 	},
 });
-export type Input = typeof Input.Type;
+export type Input = typeof InputSchema.Type;
+
+type ReadPort<Q extends Declared, A> = Omit<
+	typeof InputSchema.cases.read.Type,
+	"schema" | "answer"
+> & {
+	readonly schema: Q;
+	readonly description: string;
+	readonly answer: A;
+};
+
+const readInput = InputSchema.cases.read.make;
+const writeInput = InputSchema.cases.write.make;
+const readPort = <
+	Q extends Declared,
+	A extends (view: never, input: NoInfer<Q["Type"]>) => unknown,
+>(
+	spec: Omit<ReadPort<Q, A>, "_tag">,
+): ReadPort<Q, A> => ({...readInput(spec), schema: spec.schema, answer: spec.answer});
+const writePort = <Q extends Declared>(
+	spec: Omit<typeof InputSchema.cases.write.Type, "_tag" | "schema"> & {readonly schema: Q},
+) => ({...writeInput(spec), schema: spec.schema});
+
+type InputConstructors = Omit<typeof InputSchema, "cases"> & {
+	readonly cases: {
+		readonly read: Omit<typeof InputSchema.cases.read, "make"> & {readonly make: typeof readPort};
+		readonly write: Omit<typeof InputSchema.cases.write, "make"> & {
+			readonly make: typeof writePort;
+		};
+	};
+};
+
+const readCase = Schema.make<InputConstructors["cases"]["read"]>(InputSchema.cases.read.ast, {
+	fields: InputSchema.cases.read.fields,
+});
+const writeCase = Schema.make<InputConstructors["cases"]["write"]>(InputSchema.cases.write.ast, {
+	fields: InputSchema.cases.write.fields,
+});
+Object.defineProperty(readCase, "make", {value: readPort});
+Object.defineProperty(writeCase, "make", {value: writePort});
+export const Input = Schema.make<InputConstructors>(InputSchema.ast, {
+	...InputSchema,
+	cases: {read: readCase, write: writeCase},
+});
 
 /** A fact a program may write: its schema, and whether only a person's input may cause it. This is
  *  the trusted policy the door checks. Elm outputs never authorize a ledger write. */
 export const FactPolicy = Schema.Struct({schema: Schemas, personOnly: Schema.Boolean});
 export type FactPolicy = typeof FactPolicy.Type;
 
-export const Program = Schema.Struct({
+const Declaration = Schema.Struct({
 	name: Schema.NonEmptyString,
 	machine: Schema.declare(isSteps, {expected: "a tea machine"}),
 	state: State,
@@ -94,7 +137,193 @@ export const Program = Schema.Struct({
 	writes: Schema.Record(Schema.String, FactPolicy),
 	wake: code<Code<[model: unknown], unknown>>("a wake time"),
 });
-export type Program = typeof Program.Type;
+
+type Typed = {readonly type: string};
+type ProgramMachine = Steps & {
+	readonly model: Schema.Schema<unknown>;
+	readonly msg: Schema.Schema<Typed>;
+};
+type Description =
+	| string
+	| {
+			readonly description: string;
+			readonly personOnly: true;
+			readonly schema?: never;
+			readonly answer?: never;
+	  };
+type Port<M extends Typed, K, P> = P extends Pick<typeof InputSchema.cases.read.Type, "_tag"> & {
+	readonly schema: infer Q extends Declared;
+}
+	? P extends ReadPort<Q, (view: never, input: Q["Type"]) => unknown>
+		? P
+		: never
+	: K extends M["type"]
+		? Description
+		: never;
+type Ports<M extends Typed, I> = {
+	readonly [K in keyof I]: Port<M, K, I[K]>;
+};
+type ReadView<P> = P extends Pick<typeof InputSchema.cases.read.Type, "_tag"> & {
+	readonly answer: (view: infer V, ...args: never[]) => unknown;
+}
+	? (view: V) => void
+	: never;
+// Check the selector's result after inferring ports. Checking read answers against V first
+// makes a nested Input constructor fix V to Json before the selector can infer it.
+type ViewFor<I> = {
+	readonly [K in keyof I]: ReadView<I[K]>;
+}[keyof I] extends (view: infer V) => void
+	? V
+	: unknown;
+type Policies<W> = {
+	readonly [K in keyof W]: {
+		readonly schema: Schema.Codec<
+			Schema.TaggedStruct<K & string, Record<never, never>>["Type"],
+			unknown
+		>;
+		readonly personOnly: boolean;
+	};
+};
+type Spec<T extends ProgramMachine, V extends Schema.Json, I, O, W> = {
+	readonly name: string;
+	readonly machine: T;
+	readonly state: Omit<State, "schema"> & {readonly schema?: never};
+	readonly msg?: never;
+	readonly view: (model: NoInfer<T["model"]["Type"]>) => V & NoInfer<ViewFor<I>>;
+	readonly refuse: (
+		model: NoInfer<T["model"]["Type"]>,
+		msg: NoInfer<T["msg"]["Type"]>,
+	) => Refusal | null;
+	readonly inputs: I & Ports<NoInfer<T["msg"]["Type"]>, I>;
+	readonly outputs: O;
+	readonly writes: W & Policies<W>;
+	readonly wake: (model: NoInfer<T["model"]["Type"]>) => number | null;
+};
+type FilledPort<T extends ProgramMachine, P> =
+	P extends Pick<typeof InputSchema.cases.read.Type, "_tag">
+		? P
+		: Omit<typeof InputSchema.cases.write.Type, "schema"> & {readonly schema: T["msg"] & Declared};
+type FilledPorts<T extends ProgramMachine, I> = {
+	readonly [K in keyof I]: FilledPort<T, I[K]>;
+};
+
+/** Concrete types stay with authored programs. The loader uses the checked, erased declaration. */
+export type Program<
+	T extends ProgramMachine = ProgramMachine,
+	V extends Schema.Json = Schema.Json,
+	I = Record<string, Input>,
+	O = Record<string, Declared>,
+	W = Record<string, FactPolicy>,
+> = {
+	readonly name: string;
+	readonly machine: T;
+	readonly state: Omit<State, "schema"> & {readonly schema: T["model"] & Declared};
+	readonly msg: T["msg"] & Declared;
+	readonly view: {
+		readonly data: typeof Schema.Json;
+		readonly select: (model: T["model"]["Type"]) => V;
+	};
+	readonly refuse: (model: T["model"]["Type"], msg: T["msg"]["Type"]) => Refusal | null;
+	readonly inputs: FilledPorts<T, I>;
+	readonly outputs: O;
+	readonly writes: W;
+	readonly wake: (model: T["model"]["Type"]) => number | null;
+};
+
+export class ProgramInvalid extends Schema.TaggedError<ProgramInvalid>()("ProgramInvalid", {
+	cause: Schema.declare((u): u is Schema.SchemaError => Schema.isSchemaError(u)),
+}) {}
+
+const Authoring = Schema.Struct({
+	name: Declaration.fields.name,
+	machine: Schema.declare(
+		(u): u is ProgramMachine & {readonly model: Declared; readonly msg: Declared} =>
+			isSteps(u) && "model" in u && isDeclared(u.model) && "msg" in u && isDeclared(u.msg),
+		{expected: "a tea machine with model and Msg schemas"},
+	),
+	state: Schema.Struct({v: State.fields.v, upgrades: State.fields.upgrades}),
+	view: code<Code<[model: unknown], unknown>>("a view selector"),
+	inputs: Schema.Record(
+		Schema.String,
+		Schema.Union([
+			Schema.String,
+			Schema.Struct({description: Schema.String, personOnly: Schema.Literal(true)}),
+			InputSchema.cases.read,
+		]),
+	),
+	refuse: Declaration.fields.refuse,
+	outputs: Declaration.fields.outputs,
+	writes: Declaration.fields.writes,
+	wake: Declaration.fields.wake,
+});
+const decodeDeclaration = Schema.decodeUnknownResult(Declaration);
+const decodeAuthoring = Schema.decodeUnknownResult(Authoring);
+const invalid = (cause: Schema.SchemaError) => new ProgramInvalid({cause});
+const checkDeclaration = (raw: unknown) => Result.mapError(decodeDeclaration(raw), invalid);
+const construct = (raw: unknown) =>
+	Result.flatMap(decodeAuthoring(raw), (spec) =>
+		decodeDeclaration({
+			...spec,
+			state: {...spec.state, schema: spec.machine.model},
+			msg: spec.machine.msg,
+			view: {data: Schema.Json, select: spec.view},
+			inputs: Object.fromEntries(
+				Object.entries(spec.inputs).map(([key, port]) => [
+					key,
+					typeof port !== "string" && "_tag" in port
+						? port
+						: Input.cases.write.make({
+								schema: spec.machine.msg,
+								description: typeof port === "string" ? port : port.description,
+								personOnly: typeof port !== "string",
+							}),
+				]),
+			),
+		}),
+	).pipe(Result.mapError(invalid));
+
+// Schema checks callable fields; the spec's types check the signatures without calling them.
+const typedProgram = <T extends ProgramMachine, V extends Schema.Json, I, O, W>(
+	spec: Spec<T, V, I, O, W>,
+) =>
+	Schema.declare(
+		(u): u is Program<T, V, I, O, W> =>
+			Result.isSuccess(checkDeclaration(u)) &&
+			typeof u === "object" &&
+			u !== null &&
+			"machine" in u &&
+			u.machine === spec.machine,
+		{expected: "the checked program"},
+	);
+
+const make = <
+	T extends ProgramMachine,
+	V extends Schema.Json,
+	const I extends Readonly<Record<string, unknown>>,
+	O extends Readonly<Record<string, Declared>>,
+	W extends Readonly<Record<string, FactPolicy>>,
+>(
+	spec: Spec<T, V, I, O, W>,
+): Program<T, V, I, O, W> => {
+	const checked = construct(spec);
+	if (Result.isFailure(checked)) throw checked.failure;
+	return Schema.decodeUnknownSync(typedProgram(spec))(checked.success);
+};
+const makeEffect = Effect.fn("program.make")(function* <
+	T extends ProgramMachine,
+	V extends Schema.Json,
+	const I extends Readonly<Record<string, unknown>>,
+	O extends Readonly<Record<string, Declared>>,
+	W extends Readonly<Record<string, FactPolicy>>,
+>(spec: Spec<T, V, I, O, W>): Effect.fn.Return<Program<T, V, I, O, W>, ProgramInvalid> {
+	const checked = construct(spec);
+	if (Result.isFailure(checked)) return yield* checked.failure;
+	return yield* Schema.decodeUnknownEffect(typedProgram(spec))(checked.success).pipe(
+		Effect.mapError(invalid),
+	);
+});
+
+export const Program = {schema: Declaration, make, makeEffect};
 
 /** A JSON object: a fact as it travels inside a write. Its declared schema gives its `_tag`. */
 const Fact = Schema.Record(Schema.String, Schema.Json);
@@ -125,7 +354,7 @@ export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown"
 }) {}
 
 export type Stepper = {
-	readonly program: Program;
+	readonly program: typeof Declaration.Type;
 	/** Boots from a saved model, or from nothing. */
 	readonly init: (saved: unknown) => Step;
 	/** A fresh input: checked, maybe refused, then stepped. */
@@ -134,10 +363,8 @@ export type Stepper = {
 	readonly fold: (model: unknown, msg: unknown) => Step;
 };
 
-const decodeProgram = Schema.decodeUnknownResult(Program);
 const decodeRefusal = Schema.decodeUnknownResult(Schema.NullOr(Refusal));
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
-type Typed = {readonly type: string};
 const isTyped = (u: unknown): u is Typed =>
 	typeof u === "object" && u !== null && "type" in u && typeof u.type === "string";
 const decodeTyped = (u: unknown): Option.Option<Typed> =>
@@ -190,7 +417,7 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
 };
 
 export const stepper = (declared: unknown): Stepper => {
-	const loaded = decodeProgram(declared);
+	const loaded = checkDeclaration(declared);
 	if (Result.isFailure(loaded)) throw new ProgramDown({why: "load"});
 	const program = loaded.success;
 	const machine = program.machine;
