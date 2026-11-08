@@ -1,6 +1,6 @@
 import {Writer} from "@kampus/fabrika-old";
 import {endedAs} from "@kampus/pipeline/stages/status";
-import type {Check, Entry, Fact} from "@kampus/pipeline/tickets/ticket";
+import {type Check, type Entry, type Fact, readAnswer, questionOf, picksOf} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
 import {prRefOf, words} from "./head.ts";
 
@@ -122,11 +122,16 @@ const saidOf = (fact: Fact, timeline: readonly Entry[]): Said => {
 		case "pr":
 			return said(`PR ${prRefOf(fact.url)} ${fact.state}`, checksLine(fact.checks));
 		case "asked":
-			return said(`asks you: ${fact.what}`, fact.picks.join(" / "));
+			return said(`asks you: ${questionOf(fact)}`, picksOf(fact).join(" / "));
+		case "withdrawn":
+			return said(`withdrew ask ${fact.ask}`, fact.why);
+		case "stopped":
+			return said(`stopped: ${words(fact.why)}`, `resume at ${fact.resume}`);
 		case "answered": {
 			const asked = timeline.find((e) => e.fact.type === "asked" && e.fact.ask === fact.ask);
-			const what = asked?.fact.type === "asked" ? asked.fact.what : fact.ask;
-			return said(`answered "${what}": ${fact.pick}`, "", fact.note === "" ? null : fact.note);
+			const what = asked?.fact.type === "asked" ? questionOf(asked.fact) : fact.ask;
+			const answer = readAnswer(timeline, fact);
+			return said(`answered "${what}": ${answer?.pick ?? "unknown"}`, "", answer?.note || null);
 		}
 		case "rated":
 			return said(`rated finding ${fact.finding}: ${words(fact.says)}`);

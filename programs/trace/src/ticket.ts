@@ -1,6 +1,6 @@
 import type {JobTrace, Span} from "@kampus/fabrika-old";
 import {listUsdOf} from "@kampus/pipeline/stages/price";
-import type {Entry, FactOf} from "@kampus/pipeline/tickets/ticket";
+import {type Entry, type FactOf, readAnswer, questionOf} from "@kampus/pipeline/tickets/ticket";
 
 // One ticket's lanes, folded from its facts: the fold the view and the laws share (ticket 141).
 // Today's version. Pure.
@@ -113,8 +113,13 @@ export const lanesOf = (timeline: readonly Entry[], now: number, upTo: number): 
 	for (const e of seen) {
 		if (e.fact.type === "ended" && !ends.has(e.fact.run))
 			ends.set(e.fact.run, {at: e.at, fact: e.fact});
-		if (e.fact.type === "answered" && !answers.has(e.fact.ask))
-			answers.set(e.fact.ask, {at: e.at, pick: e.fact.pick, by: e.by.id});
+		if (e.fact.type === "answered" && !answers.has(e.fact.ask)) {
+			const answer = readAnswer(timeline, e.fact);
+			if (answer !== null) {
+				answers.set(e.fact.ask, {at: e.at, pick: answer.pick, by: e.by.id});
+				answers.set(answer.ask, {at: e.at, pick: answer.pick, by: e.by.id});
+			}
+		}
 	}
 
 	const lanes: Building[] = [];
@@ -154,7 +159,7 @@ export const lanesOf = (timeline: readonly Entry[], now: number, upTo: number): 
 				return {
 					kind: "wait",
 					ask: row.asked.ask,
-					what: row.asked.what,
+					what: questionOf(row.asked),
 					from: row.at,
 					to: answer?.at ?? (over ? row.at : clock),
 					pick: answer?.pick ?? null,

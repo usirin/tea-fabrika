@@ -1,5 +1,6 @@
 import {Writer} from "@kampus/fabrika-old";
-import {type Entry, type Fact, factsOf, Id, Stage, Title} from "@kampus/pipeline/tickets/ticket";
+import {type Entry, type Fact, factsOf, Id, Stage, Title, questionOf, picksOf} from "@kampus/pipeline/tickets/ticket";
+import {Asked} from "@kampus/pipeline/tickets/ask";
 import {Schema} from "effect";
 
 // A ticket's top line, folded from its facts (docs/direction/what-a-ticket-shows.md, section 1).
@@ -45,6 +46,8 @@ const MOVES = {
 	reviewed: true,
 	pr: true,
 	asked: true,
+	withdrawn: true,
+	stopped: true,
 	carried: true,
 	answered: true,
 	rated: false,
@@ -57,6 +60,7 @@ export const OpenAsk = Schema.Struct({
 	ask: Id,
 	what: Title,
 	picks: Schema.NonEmptyArray(Title),
+	sealed: Schema.optionalKey(Asked),
 	by: Writer,
 	/** For an agent's ask: the name its person goes by on this ledger (the entry's `whose`). */
 	whose: Schema.optional(Schema.String),
@@ -85,13 +89,15 @@ export type Head = typeof Head.Type;
 /** The asks with no answer, oldest first. A comment never answers one; only `answered` does. */
 export const openAsksOf = (timeline: readonly Entry[]): readonly OpenAsk[] => {
 	const answered = new Set(factsOf(timeline, "answered").map((a) => a.ask));
+	for (const withdrawn of factsOf(timeline, "withdrawn")) answered.add(withdrawn.ask);
 	return timeline.flatMap((e) =>
 		e.fact.type === "asked" && !answered.has(e.fact.ask)
 			? [
 					{
 						ask: e.fact.ask,
-						what: e.fact.what,
-						picks: e.fact.picks,
+						what: questionOf(e.fact),
+						picks: picksOf(e.fact) as readonly [string, ...string[]],
+						...("format" in e.fact ? {sealed: e.fact} : {}),
 						by: e.by,
 						...(e.whose === undefined ? {} : {whose: e.whose}),
 						at: e.at,
@@ -134,6 +140,10 @@ export const headOf = (timeline: readonly Entry[], now: number): Head => {
 	if (first !== undefined) return {_tag: "asks", asks: [first, ...more]};
 
 	const run = openRuns(timeline).at(-1);
+	const stop = timeline.findLast((e) => e.fact.type === "stopped");
+	const restart = timeline.findLast((e) => e.fact.type === "restarted" || e.fact.type === "started");
+	if (stop?.fact.type === "stopped" && stop.pos > (restart?.pos ?? 0))
+		return {_tag: "stuck", stage: stop.fact.resume, why: stop.fact.why};
 	if (run !== undefined)
 		return {_tag: "running", run: run.run, stage: run.stage, task: run.task, since: run.at};
 

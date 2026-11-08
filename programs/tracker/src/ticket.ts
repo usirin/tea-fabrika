@@ -1,4 +1,5 @@
 import {hashOf, Text} from "@kampus/pipeline/tickets/approval";
+import {Answer as Choice, Answered} from "@kampus/pipeline/tickets/ask";
 import {
 	AreaName,
 	AreaNumber,
@@ -58,13 +59,18 @@ export type OneTicket = typeof OneTicket.Type;
  * A click on an ask's box: one of its picks, the note typed beside it, and the ticket's title and
  * body as the person saw them, so the answer names the text it covers. Becomes one `answered`.
  */
-export const Answer = Schema.Struct({
+const LegacyAnswer = Schema.Struct({
 	ticket: TicketNumber,
 	ask: Id,
 	pick: Title,
 	note: Body,
 	saw: Text,
 });
+const CurrentAnswer = Schema.Struct({
+	ticket: TicketNumber, ask: Id, answer: Choice, saw: Answered.fields.saw,
+	via: Answered.fields.via, needed: Answered.fields.needed,
+});
+export const Answer = Schema.Union([CurrentAnswer, LegacyAnswer]);
 export type Answer = typeof Answer.Type;
 
 /** Accept or dismiss on a duplicate hint: is `ticket` the same as `of`? Advice: nothing closes. */
@@ -91,7 +97,7 @@ const TicketWrite = Schema.Union([
 	Schema.Struct({kind: Schema.Literal("comment"), ...Comment.fields}),
 	Schema.Struct({kind: Schema.Literal("close"), ...OneTicket.fields}),
 	Schema.Struct({kind: Schema.Literal("reopen"), ...OneTicket.fields}),
-	Schema.Struct({kind: Schema.Literal("answer"), ...Answer.fields}),
+	...Answer.members.map((answer) => Schema.Struct({kind: Schema.Literal("answer"), ...answer.fields})),
 	Schema.Struct({kind: Schema.Literal("rate_duplicate"), ...RateDuplicate.fields}),
 ]);
 /** A write to one ticket's stream. */
@@ -169,6 +175,10 @@ export const factOf = (write: TicketWrite): Effect.Effect<Fact> => {
 		case "reopen":
 			return Effect.succeed({type: "reopened"});
 		case "answer":
+			if ("answer" in write) return Effect.succeed({
+				type: "answered", format: 1, ask: write.ask, answer: write.answer, saw: write.saw,
+				via: write.via, ...(write.needed === undefined ? {} : {needed: write.needed}),
+			});
 			return Effect.map(hashOf(write.saw), (text) => ({
 				type: "answered" as const,
 				ask: write.ask,
