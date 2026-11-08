@@ -1,4 +1,5 @@
-// p26/p82. checkHello takes trusted upgrade values, an atomic nonce consumer and admission.
+// p26/p82. Hello echoes the issued nonce, bound by the existing signature with the URL and tab.
+// checkHello takes trusted upgrade values, an atomic nonce consumer and admission.
 // It answers online {who,version,ping} or refused {why}; capability claims grant no rank.
 // Plants: accept the first version; omit one signed binding; consume before checking; admit verify.
 import {createHash} from "node:crypto";
@@ -79,6 +80,7 @@ const setup = Effect.fnUntraced(function* () {
 		ping: "30s",
 		key: k.raw,
 		tab,
+		nonce,
 		platform: "browser",
 		os: "ios",
 		sentAt: SENT,
@@ -109,16 +111,22 @@ const setup = Effect.fnUntraced(function* () {
 	return {hello, trusted, who, consume, admit};
 });
 describe("P10 hello", () => {
-	it.effect("p26: an unsigned tab claim cannot differ from the tab bound by the proof", () =>
-		Effect.gen(function* () {
-			const x = yield* setup();
-			expect(
-				yield* Transport.checkHello({hello: {...x.hello, tab: "another-tab"}, ...x.trusted}),
-			).toMatchObject({_tag: "refused", why: "bad_signature"});
-			expect(x.admit).not.toHaveBeenCalled();
-			expect(x.consume).not.toHaveBeenCalled();
-		}),
-	);
+	for (const binding of ["tab", "nonce"] as const)
+		it.effect(
+			`p26: an unsigned ${binding} claim cannot differ from the ${binding} bound by the proof`,
+			() =>
+				Effect.gen(function* () {
+					const x = yield* setup();
+					expect(
+						yield* Transport.checkHello({
+							hello: {...x.hello, [binding]: `another-${binding}`},
+							...x.trusted,
+						}),
+					).toMatchObject({_tag: "refused", why: "bad_signature"});
+					expect(x.admit).not.toHaveBeenCalled();
+					expect(x.consume).not.toHaveBeenCalled();
+				}),
+		);
 	it.effect("p82: a client with an unknown OS can still initialize", () =>
 		Effect.gen(function* () {
 			const x = yield* setup();
@@ -132,7 +140,13 @@ describe("P10 hello", () => {
 			const x = yield* setup();
 			const checked = Transport.checkHello({hello: x.hello, ...x.trusted});
 			const result = yield* checked;
-			expect(result).toMatchObject({_tag: "online", who: x.who, version: 2, ping: 30_000});
+			expect(result).toMatchObject({
+				_tag: "online",
+				who: x.who,
+				version: 2,
+				ping: 30_000,
+				hello: {nonce},
+			});
 			expect(x.admit).toHaveBeenCalledOnce();
 			expect(x.consume).toHaveBeenCalledOnce();
 		}),

@@ -3,6 +3,7 @@
 // Its options inject only production dependencies: typed program declarations, delivery,
 // notifications, settings and the shared ProcessIdGenerator.next. No workerd class or runner.
 // Each test names the plant it guards. The builder implements door.ts and does not edit this file.
+// Every hello echoes the issued nonce. Its existing signature binds that nonce, the URL and tab.
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {mkdtempSync, readdirSync, readFileSync, rmSync} from "node:fs";
@@ -418,6 +419,7 @@ const online = Effect.fnUntraced(function* (
 		ping: "30s",
 		key: k.raw,
 		tab,
+		nonce,
 		platform: "browser",
 		os: "ios",
 		sentAt: SENT,
@@ -543,6 +545,7 @@ describe("P10 review regressions", () => {
 			ping: "30s",
 			key: k.raw,
 			tab: client,
+			nonce,
 			platform: "browser",
 			os: "ios",
 			sentAt: SENT,
@@ -620,7 +623,7 @@ describe("P10 review regressions", () => {
 					const before = w.sql.exec("SELECT total_changes() total")[0]?.total;
 					for (let i = 0; i <= w.settings.waiting.most; i++) {
 						const client = `stranger-${i}`;
-						yield* d.challenge(client);
+						const nonce = yield* d.challenge(client);
 						if (attack === "bad signature")
 							expect(
 								yield* d.initialize(
@@ -631,6 +634,7 @@ describe("P10 review regressions", () => {
 										ping: "30s",
 										key: w.otherWindow.raw,
 										tab: client,
+										nonce,
 										platform: "browser",
 										os: "ios",
 										sentAt: SENT,
@@ -640,6 +644,54 @@ describe("P10 review regressions", () => {
 								),
 							).toMatchObject({_tag: "refused", why: "bad_signature"});
 					}
+					expect(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(before);
+				}).pipe(w.provide);
+			}),
+		);
+
+	for (const source of ["forged", "another door key"] as const)
+		it.effect(`p26: a nonce from ${source} is refused before any write`, () =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				const other = yield* world();
+				const client = "unissued",
+					tab = client;
+				const foreign = yield* Door.use((d) => d.challenge(client)).pipe(other.provide);
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					yield* online(d, w);
+					const issued = yield* d.challenge(client);
+					const nonce =
+						source === "forged" ? `${issued[0] === "a" ? "b" : "a"}${issued.slice(1)}` : foreign;
+					expect(nonce).not.toBe(issued);
+					const signed = yield* w.window.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`);
+					expect(
+						yield* checkSshsig({
+							text: `fabrika-hello\n${URL}\n${tab}\n${nonce}`,
+							armored: signed,
+							space: SPACE,
+							signers: [w.window.line],
+						}),
+					).toEqual({signer: w.window.line});
+					const before = w.sql.exec("SELECT total_changes() total")[0]?.total;
+					expect(
+						yield* d.initialize(
+							client,
+							{
+								versions: [1, 2],
+								has: [],
+								ping: "30s",
+								key: w.window.raw,
+								tab,
+								nonce,
+								platform: "browser",
+								os: "ios",
+								sentAt: SENT,
+								signed,
+							},
+							{url: URL, tab, name: w.window.fingerprint},
+						),
+					).toMatchObject({_tag: "refused", why: "bad_nonce"});
 					expect(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(before);
 				}).pipe(w.provide);
 			}),
@@ -831,6 +883,7 @@ describe("P10 door admission and waiting", () => {
 								ping: "30s",
 								key: k.raw,
 								tab,
+								nonce,
 								platform: "browser",
 								os: "ios",
 								sentAt: SENT,
@@ -903,6 +956,7 @@ describe("P10 door admission and waiting", () => {
 						ping: "30s",
 						key: k.raw,
 						tab: "tab",
+						nonce,
 						platform: "browser",
 						os: "ios",
 						sentAt: SENT,
@@ -959,6 +1013,7 @@ describe("P10 door admission and waiting", () => {
 								ping: "30s",
 								key: pending.raw,
 								tab,
+								nonce,
 								platform: "browser",
 								os: "ios",
 								sentAt: SENT,
@@ -997,6 +1052,7 @@ describe("P10 door admission and waiting", () => {
 					ping: "30s",
 					key: w.otherWindow.raw,
 					tab: "tab",
+					nonce,
 					platform: "browser",
 					os: "ios",
 					sentAt: SENT,
@@ -1012,7 +1068,7 @@ describe("P10 door admission and waiting", () => {
 					signed2 = yield* w.otherWindow.sign(`fabrika-hello\n${URL}\ntab2\n${nonce2}`);
 				yield* d.initialize(
 					"pending2",
-					{...hello, tab: "tab2", signed: signed2},
+					{...hello, tab: "tab2", nonce: nonce2, signed: signed2},
 					{url: URL, tab: "tab2", name: w.otherWindow.fingerprint},
 				);
 				yield* d.knock("pending2", {label: "Pending"});
@@ -2392,6 +2448,7 @@ describe("P10 refusal records and checked writes", () => {
 								ping: "30s",
 								key: k.raw,
 								tab: "replaced",
+								nonce,
 								platform: "browser",
 								os: "ios",
 								sentAt: SENT,
@@ -2447,6 +2504,7 @@ describe("P10 refusal records and checked writes", () => {
 								ping: "30s",
 								key: k.raw,
 								tab: "verifying",
+								nonce,
 								platform: "browser",
 								os: "ios",
 								sentAt: SENT,
@@ -2775,6 +2833,7 @@ describe("P10 refusal records and checked writes", () => {
 						ping: "30s",
 						key: w.window.raw,
 						tab: "race",
+						nonce,
 						platform: "browser",
 						os: "ios",
 						sentAt: SENT,
