@@ -1,5 +1,7 @@
 # tea-host: OTP for tea programs
 
+**Superseded 2026-10-31 by [brain, hands, window, agent](./brain-hands-window-agent.md), for `next/`.** Its cloud parts are in [the cloud is one more host](./the-cloud-is-one-more-host.md). What it says about today's version stays decided.
+
 Decided 2026-10-19. A first `packages/tea-host` exists since experiment 98
 (2026-10-20): the ledger, `serve`, `call`, `whereis`. Experiment 99 added
 monitors, links and a `one_for_one` supervisor, with dead letters for a

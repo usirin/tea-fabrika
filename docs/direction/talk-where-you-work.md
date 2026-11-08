@@ -1,7 +1,7 @@
 # Talk where you work: `@claude` in tsh, and talking at a spot
 
-**Proposed 2026-11-04.** Leaned in the walk on 2026-11-04, where the owner set three points, and
-more on 2026-11-05, each marked decided below:
+**Proposed 2026-11-04, parts decided through 2026-11-07.** Leaned in the walk on 2026-11-04, where
+the owner set three points, and more on 2026-11-05 to 2026-11-07, each marked decided below:
 
 - **Decided, no chat program.** tsh is the chat. You summon different agents and talk to them in
   tsh, so they learn to compose with your programs. It also makes the first day easy.
@@ -97,6 +97,16 @@ more on 2026-11-05, each marked decided below:
   the thread says "old lane" and its way back opens that lane.
 - **Decided 2026-11-05, the thread tile also lists the threads on this ticket.**
 - **Decided 2026-11-05, `@` does not clash.** `packages/fabrika/src/shell/grammar.ts` reads no `@`.
+- **Decided 2026-11-07, `@` works in every text box, the command palette included.** There is no
+  separate "Summon claude here" palette row ([below](#every-text-box-can-summon)).
+- **Decided 2026-11-07, the `@` line.** It runs in the background, as if it ended in `&`, and
+  `fg %scout` waits on it. The first `@name` answers; every later `@name` is a target that agent
+  may use. Every `@name` is a mailbox address: an agent, a connector or a person
+  ([below](#every-name-is-a-mailbox-address), and in full in
+  [summon guidelines](./summon-guidelines.md#the--line-decided-2026-11-07)).
+- **Decided 2026-11-07, a line from an agent nobody summoned is an inbox row.** It lands in the
+  person's `inbox` program, the person replies inline on that row, and no tile opens on its own
+  ([shared tiles](./shared-tiles.md#the-smaller-calls)).
 
 The canvas's lean for the mix was 70% sure. It is a drawing: nothing ran in the app.
 
@@ -195,8 +205,10 @@ fabsh> @scout why is this slow?
 
 ## Every text box can summon
 
-Proposed 2026-11-05 (the owner leaned for it). Every text box is a place to call in your agents,
-not only tsh.
+**Decided 2026-11-07:** `@` works in every text box, the command palette included, and there is
+no separate "Summon claude here" palette row. It was proposed 2026-11-05, when the owner leaned for
+it. Every text box is a place to call in your agents, not only tsh. The rows below are still
+proposed.
 
 - **The `@` menu lists agents already on your desk first,** then a "summon <name> here" row for one
   that is not.
@@ -221,6 +233,28 @@ not only tsh.
 //   ✦ claude                 on your desk
 //   ✦ summon codex here      starts a run
 ```
+
+## Every `@name` is a mailbox address
+
+**Decided 2026-11-07.** The grammar expands `@x words` to `tell x <input> "words"`, and `tell`
+delivers to x's mailbox. An agent, a connector and a person all work the same way, and their names
+share one list. The full rules are in
+[summon guidelines](./summon-guidelines.md#the--line-decided-2026-11-07).
+
+```text
+A sketch, both versions. Three kinds of name, one way to reach them.
+@scout why is this slow?      ->  tell scout <input> "why is this slow?"      an agent
+@linear what is open?         ->  tell linear <input> "what is open?"         a connector (summon linear from linear)
+@ana the plan is ready        ->  tell ana <input> "the plan is ready"        ana's inbox program
+```
+
+- **A person's inbox is a program registered under their name,** so `@ana hi` reaches ana's inbox
+  program, and her windows show it.
+- **The sender never knows where the process runs,** one Mac, another, a browser tab or the brain:
+  Erlang's location transparency ([distributed Erlang](https://www.erlang.org/doc/system/distributed.html)).
+- **Today's version:** `tell` goes to a job on this Mac, into that run's mailbox, and a person's
+  inbox is this app's `inbox` program. **`next/`:** `tell` sends through P9's `Mailbox` into the
+  `<name>/inbox` stream, and the brain keeps the names.
 
 ## Talking at a spot
 
@@ -350,6 +384,9 @@ Linear keeps the agent's reply on the issue; ours stays at the spot.
   chat window. This note says fabrika has no chat program, read since 2026-11-05 as no
   conversation without a spot or a tile. If the owner settles this note, that part
   of the older one goes; its "an agent is a program" part stays.
+- **The `@` menu's "summon <name> here" row** (proposed 2026-11-05, below the decided `@` in every
+  box) clashes with the decision of 2026-11-06 that `@` talks only to an agent summoned already.
+  Not settled here.
 - **The plan's Tier 5 line** (the closed [PR 192](https://github.com/usirin/tea-fabrika/pull/192)'s
   code "rethought when a chat window needs it") changes the same way.
 
