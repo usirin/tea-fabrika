@@ -273,3 +273,58 @@ describe("the job view's replay, as the window draws it", () => {
 		expect(rowText(matches.all, COUNT)).toContain("matches at every step");
 	});
 });
+
+// Two fixes from the shots. In a small tile the parting step's row is scrolled out of view under
+// the machine run's detail, and its words are cut, so the detail itself offers to open that step.
+// And the detail shows where the machine run started: the first start the record kept.
+
+/** The buttons the window draws outside every row whose text starts with `words`. */
+const buttonsOf = (all: readonly Found[], words: string) =>
+	all.filter((e) => e.type === "button" && !e.inRow && e.text.trim().startsWith(words));
+
+/** What a press of the one button starting with `words` sends. */
+const pressOf = (s: Model, words: string): readonly unknown[] => {
+	const {all, sent} = windowOf(s);
+	const [button, ...more] = buttonsOf(all, words);
+	if (button === undefined || more.length > 0) throw new Error(`not one "${words}" button`);
+	const press = button.props.onClick;
+	if (typeof press !== "function") throw new Error(`the "${words}" button takes no click`);
+	press();
+	return sent;
+};
+
+/** The parts of the detail, outside every row, whose text begins with the label "started from". */
+const startedFrom = (all: readonly Found[]) =>
+	all.filter((e) => !e.inRow && e.text.trim().toLowerCase().startsWith("started from"));
+
+describe("the machine run's detail, after a replay", () => {
+	it("offers to open the step where a replay parts, and opening it chooses that step's row", () => {
+		expect(buttonsOf(windowOf(replayed(opened(), PARTS)).all, "Open step 2")).toHaveLength(1);
+		expect(pressOf(replayed(opened(), PARTS), "Open step 2")).toEqual([
+			{type: "choose", value: {row: ADD_2}},
+		]);
+	});
+
+	it("offers to open the step where a replay is refused, and opening it chooses that step's row", () => {
+		expect(pressOf(replayed(opened(), REFUSED), "Open step 1")).toEqual([
+			{type: "choose", value: {row: ADD_1}},
+		]);
+	});
+
+	it("offers to open no step when a replay matches or cannot be done, or before it is answered", () => {
+		for (const s of [replayed(opened(), MATCHES), replayed(opened(), NO_CODE), replayed(opened())])
+			expect(buttonsOf(windowOf(s).all, "Open step")).toEqual([]);
+	});
+});
+
+describe("the machine run's detail, where it started", () => {
+	it("shows the first start the record kept, under the label started from", () => {
+		const found = startedFrom(windowOf(opened()).all);
+		expect(found).not.toEqual([]);
+		expect(found.some((e) => e.text.replaceAll(/\s/g, "").includes('{"total":0}'))).toBe(true);
+	});
+
+	it("shows no started from for a machine run whose start was never kept", () => {
+		expect(startedFrom(windowOf(opened(TALLY_TRACE)).all)).toEqual([]);
+	});
+});
