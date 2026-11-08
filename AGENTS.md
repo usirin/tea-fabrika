@@ -58,7 +58,10 @@ everything else    what we use today, and a map of which jobs exist
 
 Today's library is `@kampus/fabrika-old` and today's app is `@kampus/fabrika-app-old`. They are
 deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
-`@kampus/libfabrika` is the library.
+`@kampus/libfabrika` is the library. Anyone can take `@kampus/libfabrika` alone and build a
+client that works exactly like fabrika; fabrika is one libfabrika client. So for any file in
+`next/apps/fabrika`, ask: would a from-scratch client have to write it again? If yes, it belongs
+in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.md#why-libfabrika-exists-decided-2026-11-08)).
 
 - **A search finds both.** Check the path of every file you read before you
   trust it. A name that exists in both can mean different things: a `rev` or a
@@ -460,6 +463,11 @@ Write-ups are read by busy people, some of them not native English speakers.
     pipes between programs. Their taste and quality bar, on our primitive. Never
     copy a Linear screen. Ask which program owns the job, what composes beside
     what, and what becomes a piece every program gets for free.
+- **Pick the look before the PR.** A screen being built in today's app runs the look step
+  ([step 5 of the guidelines skill](./.claude/skills/guidelines/SKILL.md#5-build-3-or-4-designs-and-look-at-them-next-to-linear))
+  before its pull request opens: 3 or 4 real designs, shots at the five layouts beside Linear,
+  and the owner picks one (owner, 2026-11-08). That covers all work in flight: the ask desk,
+  the inbox, the project window and typography. The keys editor already does it.
 - **Show it running.** A PR that adds or changes a program's window carries
   screenshots from the real built app, saved in that program's `docs/` folder
   and shown in the PR body. Take them the way `apps/fabrika/e2e.ts` drives the
