@@ -11,6 +11,7 @@ import {
 } from "@kampus/fabrika-old";
 import type {Entry} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
+import {oneLine} from "./json.ts";
 import {isRunning, type Model, type Read, type Replay} from "./machine.ts";
 import {childrenOf, type Lane, type LaneRow, lanesOf, stopsOf, summaryOf} from "./ticket.ts";
 import {findOf, type Kind, msgName, type Node, nodesOf, treeOf} from "./tree.ts";
@@ -457,6 +458,18 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 /** What tea's refusal names a state with no tag, as tally's `{total}` is: nothing a person reads. */
 const UNTAGGED = "(untagged state)";
 
+/**
+ * The two values a replay parts on, said in its sentence when each fits on one line; a longer one
+ * is drawn below the sentence, never read out with it.
+ */
+const partsWords = (recorded: unknown, replayed: unknown): string => {
+	const was = oneLine(recorded);
+	const now = oneLine(replayed);
+	return was === null || now === null
+		? "the recording and today's code differ, shown below"
+		: `${was} in the recording, ${now} now`;
+};
+
 /** A replay's answer, said whole: what the detail's status region reads out. `null`: on its way. */
 const saysOf = (answer: Replayed | null): string => {
 	if (answer === null) return "Replaying through current code…";
@@ -464,7 +477,7 @@ const saysOf = (answer: Replayed | null): string => {
 		case "matches":
 			return `Replayed through current code: matches at every step, ${plural(answer.steps, "step")}.`;
 		case "parts":
-			return `Replayed through current code: parts at step ${answer.n} (${msgName(answer.msg)}), at ${answer.path}: the recording and today's code differ there.`;
+			return `Replayed through current code: parts at step ${answer.n} (${msgName(answer.msg)}), at ${answer.path}: ${partsWords(answer.recorded, answer.replayed)}.`;
 		case "refused":
 			return `Replayed through current code: no cell for step ${answer.n} (${msgName(answer.msg)})${answer.state === UNTAGGED ? "" : ` in ${answer.state}`}. Today's code takes ${answer.accepts.length === 0 ? "no Msg there" : answer.accepts.join(", ")}.`;
 		case "cannot":

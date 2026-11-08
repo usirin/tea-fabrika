@@ -2,6 +2,7 @@ import type {WindowProps} from "@kampus/fabrika-old";
 import {Kbd} from "@manti-ui/react";
 import {Fragment, type KeyboardEvent, type ReactNode, useEffect, useRef} from "react";
 import type {trace} from "./index.ts";
+import {json} from "./json.ts";
 import {ticksOf} from "./ruler.ts";
 import type {
 	Change,
@@ -108,12 +109,6 @@ const dollars = (usd: number): string => {
 	if (usd === 0) return "no charge";
 	if (usd < 0.005) return "under $0.01";
 	return `$${usd.toFixed(2)}`;
-};
-
-/** A value as JSON: on one line when short, else indented. */
-const json = (value: unknown): string => {
-	const one = JSON.stringify(value) ?? "undefined";
-	return one.length <= 64 ? one : (JSON.stringify(value, null, 2) ?? one);
 };
 
 /** A place on an axis, as a share of its length, kept on the axis. */
@@ -365,15 +360,16 @@ function ReplayThrough({
 			>
 				Replay through current code
 			</button>
-			<div className="wf-replay-says" role="status">
-				<p>{detail.replay?.says ?? ""}</p>
-				{answer?._tag === "parts" ? (
-					<div className="wf-states">
-						<Pre label="In the recording" value={answer.recorded} />
-						<Pre label="Today's code" value={answer.replayed} />
-					</div>
-				) : null}
-			</div>
+			{/* A status region is read whole on every change, so it holds the one sentence alone. */}
+			<p className="wf-replay-says" role="status">
+				{detail.replay?.says ?? ""}
+			</p>
+			{answer?._tag === "parts" ? (
+				<div className="wf-states wf-replay-values">
+					<Pre label="In the recording" value={answer.recorded} />
+					<Pre label="Today's code" value={answer.replayed} />
+				</div>
+			) : null}
 			{step === null ? null : (
 				<button
 					type="button"
