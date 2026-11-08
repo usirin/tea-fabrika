@@ -221,7 +221,7 @@ export class ProcessTable {
 				return denied("id_reused");
 			const parent = this.parent(saved.state.process, caller.owner);
 			return Result.isFailure(parent)
-				? parent
+				? Result.fail(parent.failure)
 				: Result.succeed(Option.some({process: saved.state.process, rev: saved.rev}));
 		}
 		const name = this.#names.get(request.name);

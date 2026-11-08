@@ -85,7 +85,7 @@ export class ProcessManager extends Context.Service<
 								const process = yield* nextId;
 								return yield* checked((table, turn) => {
 									const current = table.start(request, caller, from);
-									if (Result.isFailure(current)) return current;
+									if (Result.isFailure(current)) return Result.fail(current.failure);
 									if (Option.isSome(current.success)) return Result.succeed(current.success.value);
 									if (table.collision(process))
 										return Result.fail(new ProcessError({why: "id_collision"}));
@@ -147,7 +147,7 @@ export class ProcessManager extends Context.Service<
 					yield* Effect.annotateCurrentSpan({"fab.process": process});
 					yield* checked((table, turn) => {
 						const life = table.exit(process, why, caller.owner);
-						if (Result.isFailure(life)) return life;
+						if (Result.isFailure(life)) return Result.fail(life.failure);
 						if (life.success.state._tag !== "live") return Result.succeed(undefined);
 						turn.append(
 							life.success.name,
@@ -176,7 +176,7 @@ export class ProcessManager extends Context.Service<
 					});
 					yield* checked((table, turn) => {
 						const watch = table.monitor(ref, process, caller.recipient);
-						if (Result.isFailure(watch)) return watch;
+						if (Result.isFailure(watch)) return Result.fail(watch.failure);
 						if (Option.isSome(watch.success)) return Result.succeed(undefined);
 						turn.append(
 							ProcessTable.stream,
@@ -192,7 +192,7 @@ export class ProcessManager extends Context.Service<
 					yield* Effect.annotateCurrentSpan(short({[tag("ref")]: ref}));
 					yield* checked((table, turn) => {
 						const watch = table.demonitor(ref, caller.recipient);
-						if (Result.isFailure(watch)) return watch;
+						if (Result.isFailure(watch)) return Result.fail(watch.failure);
 						if (Option.isSome(watch.success) && !watch.success.value.canceled)
 							turn.append(
 								ProcessTable.stream,
@@ -210,7 +210,7 @@ export class ProcessManager extends Context.Service<
 					yield* Effect.annotateCurrentSpan({"fab.process": process});
 					yield* checked((table, turn) => {
 						const life = table.parent(process, caller.owner);
-						if (Result.isFailure(life)) return life;
+						if (Result.isFailure(life)) return Result.fail(life.failure);
 						if (life.success.state._tag === "live")
 							return Result.fail(new ProcessError({why: "alive"}));
 						turn.append(
