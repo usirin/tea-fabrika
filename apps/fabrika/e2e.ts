@@ -1279,6 +1279,19 @@ const launch = async (on: string) => {
 	return app;
 };
 
+/**
+ * Remove a home a stage made, once its host has stopped: a run leaves nothing behind (AGENTS.md),
+ * and a home holds the stage's records and its desk.
+ */
+const removeHome = async (on: string) => {
+	await rm(on, {recursive: true, force: true});
+	const left = await stat(on).then(
+		() => true,
+		() => false,
+	);
+	check(`the home ${on} removed, its host stopped first`, !left);
+};
+
 /** Is there a process with this pid? Signal 0 asks, and sends nothing. */
 const alive = (pid: number) => {
 	try {
@@ -1400,6 +1413,7 @@ const mismatch = async () => {
 		);
 	} finally {
 		if (old.pid !== undefined) await stop(old.pid);
+		await removeHome(other);
 	}
 	check(
 		"the old host stopped by its pid: pgrep finds nothing on its home",
@@ -1488,6 +1502,7 @@ const asksSwap = async () => {
 	} finally {
 		await app.close().catch(() => {});
 		await host.stop();
+		await removeHome(other);
 	}
 };
 
@@ -1830,6 +1845,7 @@ const reconnect = async () => {
 	} finally {
 		await app.close().catch(() => {});
 		for (const pid of started) if (alive(pid) && (await ours(pid))) await stop(pid);
+		await removeHome(own);
 	}
 };
 
@@ -2062,6 +2078,7 @@ const tilesLook = async () => {
 		await app.close().catch(() => {});
 		const pid = await hostPid(own);
 		if (pid !== null) await stop(pid);
+		await removeHome(own);
 	}
 };
 
@@ -2189,6 +2206,7 @@ const traceFocus = async () => {
 		await app.close().catch(() => {});
 		const pid = await hostPid(own);
 		if (pid !== null) await stop(pid);
+		await removeHome(own);
 	}
 };
 
@@ -2255,4 +2273,5 @@ const sock = await stat(join(home, "host", "sock")).then(
 	() => false,
 );
 check("the host took its socket away as it stopped", !sock);
+await removeHome(home);
 console.log(`screenshots:\n${saved.map((s) => `  ${s}`).join("\n")}`);

@@ -641,3 +641,65 @@ describe("a machine run's starts, beside other machine runs' starts", () => {
 		]);
 	});
 });
+
+// A live region says one short sentence (the plan's "Two more, after the third review"): a
+// `status` region is read whole on every change (WAI-ARIA 1.2: aria-live polite, aria-atomic
+// true), so it holds the answer's sentence alone, and the values it parts on are drawn after it.
+
+/** Where a replay parts with values that fit on one line: tally's total, 3 recorded, 6 now. */
+const SHORT = {...PARTS, path: "state.total", recorded: 3, replayed: 6} as const;
+/** Where a replay parts on the whole state, each side over 64 characters as JSON. */
+const LONG = {
+	...PARTS,
+	path: "state",
+	recorded: {total: 3, note: "x".repeat(80)},
+	replayed: {total: 6, note: "y".repeat(80)},
+} as const;
+
+/** The answer's status region the window draws, and everything drawn inside it. */
+const statusOf = (all: readonly Found[]) => {
+	const [region, ...more] = all.filter((e) => !e.inRow && e.props.role === "status");
+	if (region === undefined || more.length > 0) throw new Error("not one status region");
+	return {region, inside: drawnFrom(region.props.children as ReactNode)};
+};
+
+describe("the replay's answer, as one short sentence in its status region", () => {
+	it("names the path and both values where each fits on one line", () => {
+		expect(saysFor(SHORT)).toContain("at total: 3 in the recording, 6 now");
+	});
+
+	it("says the values are shown below where one is over 64 characters, and does not read them out", () => {
+		const says = saysFor(LONG) ?? "";
+		expect(says).toContain("shown below");
+		expect(says).not.toContain("xxxx");
+		expect(says).not.toContain("yyyy");
+	});
+
+	it("holds only its sentence: no block of code inside the region", () => {
+		for (const answer of [SHORT, LONG, MATCHES, REFUSED, NO_CODE]) {
+			const s = replayed(coded(), answer);
+			const chosen = shownOf(s).chosen;
+			const says = chosen?.kind === "machine" ? chosen.replay?.says : undefined;
+			const {region, inside} = statusOf(windowOf(s).all);
+			expect(inside.filter((e) => e.type === "pre" || e.type === "figure")).toEqual([]);
+			expect(region.text.trim()).toBe(says);
+		}
+	});
+
+	it("draws the two values right after the region, outside it", () => {
+		const {all} = windowOf(replayed(coded(), LONG));
+		const {region, inside} = statusOf(all);
+		expect(inside.filter((e) => e.type === "pre")).toEqual([]);
+		const at = all.indexOf(region);
+		const blocks = all.filter((e) => !e.inRow && e.type === "pre").map((e) => all.indexOf(e));
+		const recorded = blocks.find((i) => tight(all[i]?.text ?? "").includes("x".repeat(80)));
+		const now = blocks.find((i) => tight(all[i]?.text ?? "").includes("y".repeat(80)));
+		expect(recorded).toBeGreaterThan(at);
+		expect(now).toBeGreaterThan(recorded ?? Infinity);
+		// Right after: nothing but the two blocks' own frames lies between the region and them.
+		const between = all
+			.slice(at + 1, now)
+			.filter((e) => e.type === "button" || e.props.role === "status");
+		expect(between).toEqual([]);
+	});
+});
