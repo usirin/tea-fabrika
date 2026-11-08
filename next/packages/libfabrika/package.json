@@ -3,18 +3,21 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "The new fabrika's library. So far its transport's SSHSIG (Tier 1, P7), its data layer, the ledger (P6), and its coordination: the mailbox, starts and who belongs (P9).",
+	"description": "The new fabrika's library: its transport's SSHSIG (Tier 1, P7), its data layer, the ledger (P6), its coordination: the mailbox, starts and who belongs (P9), and its app layer: programs and the runner (P11).",
 	"sideEffects": false,
 	"exports": {
+		".": "./src/index.ts",
 		"./coordination": "./src/coordination/index.ts",
 		"./data": "./src/data/index.ts",
 		"./sqlite": "./src/data/sqlite.ts",
+		"./testing": "./src/testing.ts",
 		"./transport": "./src/transport/index.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit -p ."
 	},
 	"dependencies": {
+		"@demlik/tea": "catalog:",
 		"effect": "catalog:"
 	},
 	"devDependencies": {

@@ -36,6 +36,14 @@ describe("p79, inclusive restart window", () => {
 });
 
 describe("p79, saved activity is not a crash detector", () => {
+	it("P11 plant, decode an absent marker: a marker never written wakes as idle", () => {
+		expect(
+			Result.match(recoverActivity(undefined), {
+				onFailure: (error) => error.why,
+				onSuccess: (value) => value._tag,
+			}),
+		).toBe("idle");
+	});
 	it("plant, new ID on constructor entry: an idle marker restores the same process", () => {
 		const saved = Activity.cases.idle.make({process: A});
 		expect(Result.getOrThrow(recoverActivity(JSON.parse(JSON.stringify(saved))))).toEqual(saved);
@@ -51,7 +59,6 @@ describe("p79, saved activity is not a crash detector", () => {
 		});
 	});
 	for (const saved of [
-		undefined,
 		null,
 		{},
 		{_tag: "idle", process: "counter:1"},

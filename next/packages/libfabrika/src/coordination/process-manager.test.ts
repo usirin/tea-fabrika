@@ -51,6 +51,9 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
 			expect((yield* Effect.flip(processes.start(first(), from({parent: null})))).why).toBe(
 				"id_reused",
 			);
+			expect((yield* Effect.flip(processes.start(first(), from({for: "other-person"})))).why).toBe(
+				"id_reused",
+			);
 			expect((yield* facts("counter:1")).filter((row) => row._tag === "started")).toHaveLength(1);
 			expect(generated.calls()).toBe(1);
 		}).pipe(Effect.provide(manager(store, brain(), generated.next)));

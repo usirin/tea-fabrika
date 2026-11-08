@@ -63,6 +63,19 @@ const fresh = (store: Storage, process = W, after = 0) =>
 	receive(process, after).pipe(Effect.provide(manager(store, watcher(process))));
 
 describe("p79, addressed and independent monitors", () => {
+	for (const ended of [false, true])
+		it.effect(`an ${ended ? "ended" : "absent"} watcher cannot create a monitor`, () => {
+			const store = storage();
+			return Effect.gen(function* () {
+				if (ended) {
+					yield* seed(store);
+					yield* exit(store, W);
+				}
+				const before = store.rows();
+				expect((yield* Effect.flip(monitor(store, "late-watch"))).why).toBe("ended");
+				expect(store.rows()).toEqual(before);
+			});
+		});
 	it.effect(
 		"plant, omit to or collapse monitors: each reference gets one stable addressed DOWN",
 		() => {
@@ -371,7 +384,7 @@ describe("P33, a DOWN is a signal only under its signal id and a matching watch"
 				expect(real).toHaveLength(1);
 				// watch:1 targets A, so a DOWN for B under a signal id matches no watch. Mail cannot
 				// take a signal id, so only another writer's raw row could, and it is plain mail.
-				const id = JSON.stringify(["DOWN", toW, "watch:1"]);
+				const id = JSON.stringify(["DOWN", toW, "watch:1", 1]);
 				const m = Down.make({ref: "watch:1", process: B, why: "crashed", to: toW});
 				yield* Ledger.use((ledger) =>
 					ledger.append("watcher:1/inbox", id, lineFor(from({by: CLIENT}), {_tag: "send", m})),
