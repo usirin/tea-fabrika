@@ -65,7 +65,8 @@ jobs:
   # jobs fetch is Electron's own binary, from its GitHub release, kept in the cache after once.
   e2e:
     runs-on: macos-latest
-    timeout-minutes: 15
+    # 15 for the run, and room for the ARIA stage's own app and its about 35 cells.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
 
@@ -97,6 +98,21 @@ jobs:
         with:
           name: e2e-shots
           path: ${{ runner.temp }}/e2e-shots
+          if-no-files-found: ignore
+      # The ARIA trees (design language call 8, decided 2026-11-07): each key state at the five
+      # layouts, compared with apps/fabrika/aria/. It advises and never blocks: a diff is printed and
+      # the step passes, so `continue-on-error` only covers a state it cannot reach (exit 2). It
+      # blocks once its false alarms are counted (0 noise in 300 clean checks, 0 flakes).
+      - name: aria
+        continue-on-error: true
+        env:
+          SHOTS: ${{ runner.temp }}/e2e-shots
+        run: pnpm --filter @kampus/fabrika-app-old e2e -- --aria
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: aria-received
+          path: ${{ runner.temp }}/e2e-shots/aria-received
           if-no-files-found: ignore
 
   # The tests, split by file over six machines (vitest's `--shard`, each machine

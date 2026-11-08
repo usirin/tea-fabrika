@@ -1,0 +1,35 @@
+- banner:
+  - navigation "workspaces":
+    - button "1 tsh"
+    - button "2 tsh"
+    - 'button "3 #1"'
+    - 'button "4 #1"'
+    - 'button "5 #1"'
+    - button "6 tsh"
+  - navigation "the line": tsh
+  - status "the link to the host":
+    - button "host up"
+- button "open tsh, t14": tsh
+- region "tile t16":
+  - text: tsh t16
+  - textbox "Terminal input":
+    - textbox "Terminal input"
+  - region "t16 screen": tsh$
+- separator
+- region "tile t15":
+  - text: tsh t15
+  - textbox "Terminal input":
+    - textbox "Terminal input"
+  - region "t15 screen": tsh$
+- separator
+- region "tile t17":
+  - text: tsh t17
+  - textbox "Terminal input":
+    - textbox "Terminal input"
+  - region "t17 screen": tsh$
+- contentinfo:
+  - text: t16 tsh
+  - button "C-b i info"
+  - text: ·
+  - button "C-b ? keys"
+- status: Info mode off.

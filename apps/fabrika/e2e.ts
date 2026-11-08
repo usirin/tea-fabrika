@@ -86,6 +86,10 @@ import {_electron, type ElectronApplication, type Locator, type Page} from "play
 // stacked, a 2x2 in each state, and a small window, each in `tiles/` as `<state>-<layout>-<look>`.
 // `pnpm --filter @kampus/fabrika-app-old e2e -- --tiles` runs that stage alone.
 //
+// The ARIA stage (`ariaStage`) is not in the whole run: `-- --aria` runs it alone, on a home of its
+// own. It reads the accessibility tree of each key state at the five layouts and compares it with
+// `aria/`, and it only advises: a diff is printed, never failed on.
+//
 // Last, as no person ever does (there is no stop command), the run stops the host it started by
 // its pid, and the fake one too, and checks with pgrep that nothing of either home is left.
 //
@@ -2059,6 +2063,321 @@ const tilesLook = async () => {
 	}
 };
 
+/** The five layouts every look is checked at (AGENTS.md, "Shoot more than one layout"). */
+const LAYOUTS = ["one", "side", "stacked", "2x2", "small"] as const;
+type Layout = (typeof LAYOUTS)[number];
+
+/**
+ * The five layouts, built once each, every one in a workspace of its own and on tsh tiles at their
+ * prompts: one tile; two side by side; two stacked; a 2x2; and a 2x2 in a 1024 by 700 window,
+ * through the DevTools window size as `infoModeSmall` sets it. Each layout is handed to `visit`
+ * with its tiles in reading order, so the pictures and the ARIA tree look at one and the same grid.
+ * The small window is last, since it stays small.
+ */
+const grid = async (
+	page: Page,
+	visit: (layout: Layout, ids: readonly string[]) => Promise<void>,
+) => {
+	/** The tile that came after `before`: the one id now drawn that was not. */
+	const added = async (before: readonly (string | null)[]) => {
+		const now = await until(
+			"a new tile",
+			() => tiles(page),
+			(t) => t.some((id) => !before.includes(id)),
+		);
+		const id = now.find((t) => !before.includes(t)) ?? "";
+		await prompted(page, id);
+		return id;
+	};
+	const workspace = async () => {
+		const before = await tiles(page);
+		await prefixed(page, "N");
+		return added([...before]);
+	};
+	const split = async (id: string, key: "|" | "-") => {
+		await focusOn(page, id);
+		const before = await tiles(page);
+		await prefixed(page, key);
+		return added(before);
+	};
+	const square = async () => {
+		const a = await workspace();
+		const b = await split(a, "|");
+		await split(a, "-");
+		await split(b, "-");
+		return tiles(page).then((t) => t.filter((id): id is string => id !== null));
+	};
+	for (const layout of LAYOUTS) {
+		if (layout === "small") {
+			const cdp = await page.context().newCDPSession(page);
+			await cdp.send("Emulation.setDeviceMetricsOverride", {
+				width: 1024,
+				height: 700,
+				deviceScaleFactor: 0,
+				mobile: false,
+			});
+			await until(
+				"the window at 1024 by 700",
+				() => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
+				(size) => size === "1024x700",
+			);
+		}
+		const ids =
+			layout === "one"
+				? [await workspace()]
+				: layout === "side" || layout === "stacked"
+					? await workspace().then(async (a) => [a, await split(a, layout === "side" ? "|" : "-")])
+					: await square();
+		await focusOn(page, ids[0] ?? "");
+		await visit(layout, ids);
+	}
+};
+
+/** The key states the ARIA stage reads, in the order it puts each layout through them. */
+const STATES = ["plain", "close-asked", "info", "palette", "strips", "pipe", "closing"] as const;
+type State = (typeof STATES)[number];
+
+/** Where the approved trees are kept: `<state>-<layout>.aria.yml`. */
+const ARIA = join(here, "aria");
+
+/**
+ * A tree as text with what changes from run to run taken out: the stage's home is `<home>`, a pid
+ * is `<pid>`, a clock time or a job's age (`3s`, `1m`) is `<time>`, and a job's run id
+ * (`sleep:8c6246d7`) is `sleep:<id>`. Anything else that moves is a real change, or noise
+ * the ratings will find.
+ */
+const scrubbed = (tree: string, own: string, pids: readonly number[]) => {
+	let out = tree.replaceAll(own, "<home>").replaceAll(join("/private", own), "<home>");
+	for (const pid of pids) out = out.replace(new RegExp(`\\b${String(pid)}\\b`, "g"), "<pid>");
+	return out
+		.replace(/\bpid( ?)\d+\b/gi, "pid$1<pid>")
+		.replace(/\b\d{1,2}:\d{2}(:\d{2})?(\s?[AP]M)?\b/g, "<time>")
+		.replace(/\b\d+(ms|s|m|h|d)\b/g, "<time>")
+		.replace(/\b([a-z]+):[0-9a-f]{8}\b/g, "$1:<id>");
+};
+
+/** A line diff of two trees, as `-` and `+` lines with a little context: the longest common run. */
+const linesDiff = (was: string, now: string) => {
+	const a = was.split("\n");
+	const b = now.split("\n");
+	const lcs = a.map(() => b.map(() => 0));
+	for (let i = a.length - 1; i >= 0; i -= 1)
+		for (let j = b.length - 1; j >= 0; j -= 1) {
+			const row = lcs[i] ?? [];
+			row[j] =
+				a[i] === b[j]
+					? (lcs[i + 1]?.[j + 1] ?? 0) + 1
+					: Math.max(lcs[i + 1]?.[j] ?? 0, row[j + 1] ?? 0);
+		}
+	const out: string[] = [];
+	let i = 0;
+	let j = 0;
+	while (i < a.length || j < b.length) {
+		if (i < a.length && j < b.length && a[i] === b[j]) {
+			out.push(`  ${a[i] ?? ""}`);
+			i += 1;
+			j += 1;
+		} else if (
+			j < b.length &&
+			(i >= a.length || (lcs[i]?.[j + 1] ?? 0) >= (lcs[i + 1]?.[j] ?? 0))
+		) {
+			out.push(`+ ${b[j] ?? ""}`);
+			j += 1;
+		} else {
+			out.push(`- ${a[i] ?? ""}`);
+			i += 1;
+		}
+	}
+	// Context: three lines either side of a change, as a unified diff keeps.
+	const near = new Set<number>();
+	out.forEach((line, n) => {
+		if (!line.startsWith("  ")) for (let k = n - 3; k <= n + 3; k += 1) near.add(k);
+	});
+	return out.filter((_, n) => near.has(n)).join("\n");
+};
+
+/**
+ * The ARIA stage (design language call 8, decided 2026-11-07: advising first), on a home of its
+ * own: each key state at each of the five layouts, in the dark look only, since the tree is the
+ * same in both. Each cell is read twice, a second apart; two reads that differ are a flake. Each
+ * is compared as text with `aria/<state>-<layout>.aria.yml`, a diff printed per cell and a total,
+ * and the trees it read are written to `aria-received/` under the screenshots' folder. A state
+ * with no meaning in a layout prints `skipped: <why>`. It never fails on a diff: it answers 0,
+ * and 2 only when it cannot reach a state. Blocking waits on its false alarms being counted.
+ *
+ *   pnpm --filter @kampus/fabrika-app-old e2e -- --aria    only this
+ */
+const ariaStage = async (): Promise<0 | 2> => {
+	const own = await mkdtemp(join(tmpdir(), "fh-aria-"));
+	const out = join(shots, "aria-received");
+	await mkdir(out, {recursive: true});
+	const app = await launch(own);
+	const tally = {same: 0, diff: 0, fresh: 0, flake: 0, skipped: 0};
+	let reached: 0 | 2 = 0;
+	try {
+		const page = await app.firstWindow();
+		await prompted(page, "t1");
+		await lookIs(app, page, "dark");
+		// The window opens at the size it last had, which a person's own use sets: a wider or narrower
+		// window lays a view out another way (the ticket's properties beside or under it), so the
+		// stage sets its own.
+		await app.evaluate(({BrowserWindow}) =>
+			BrowserWindow.getAllWindows()[0]?.setContentSize(1440, 900),
+		);
+		await until(
+			"the window at 1440 by 900",
+			() => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
+			(size) => size === "1440x900",
+		);
+		let filed = false;
+
+		const read = async () => {
+			await page.mouse.move(1, 1);
+			const pid = await hostPid(own);
+			const tree = await page.locator("body").ariaSnapshot();
+			return scrubbed(tree, own, pid === null ? [] : [pid]);
+		};
+		const cell = async (state: State, layout: Layout) => {
+			const name = `${state}-${layout}`;
+			await page.waitForTimeout(250);
+			const first = await read();
+			await page.waitForTimeout(1100);
+			const second = await read();
+			if (first !== second) {
+				tally.flake += 1;
+				console.log(`flake  ${name}: two reads differ\n${linesDiff(first, second)}`);
+			}
+			await writeFile(join(out, `${name}.aria.yml`), `${second}\n`);
+			const approved = await readFile(join(ARIA, `${name}.aria.yml`), "utf8").catch(() => null);
+			if (approved === null) {
+				tally.fresh += 1;
+				console.log(`new    ${name}: no approved tree yet`);
+			} else if (approved === `${second}\n`) {
+				tally.same += 1;
+				console.log(`same   ${name}`);
+			} else {
+				tally.diff += 1;
+				console.log(`diff   ${name}\n${linesDiff(approved.replace(/\n$/, ""), second)}`);
+			}
+		};
+		const skip = (state: State, layout: Layout, why: string) => {
+			tally.skipped += 1;
+			console.log(`skipped: ${why} (${state}-${layout})`);
+		};
+
+		await grid(page, async (layout, ids) => {
+			const [first = "", ...rest] = ids;
+			const last = rest.at(-1) ?? first;
+			for (const state of STATES) {
+				try {
+					if (state === "plain") await cell(state, layout);
+					if (state === "close-asked") {
+						await focusOn(page, first);
+						await prefixed(page, "x");
+						await askedIs(page, `close ${first}? (y/n)`);
+						await cell(state, layout);
+						await page.keyboard.press("n");
+						await noQuestion(page);
+					}
+					if (state === "info") {
+						await focusOn(page, first);
+						await prefixed(page, "i");
+						await until(
+							"info mode on",
+							() => infoItem(page).getAttribute("aria-pressed"),
+							(on) => on === "true",
+						);
+						await cell(state, layout);
+						await page.keyboard.press("Escape");
+						await until(
+							"info mode off",
+							() => infoItem(page).getAttribute("aria-pressed"),
+							(on) => on === "false",
+						);
+					}
+					if (state === "palette") {
+						await focusOn(page, first);
+						await page.keyboard.press("Meta+k");
+						await page.getByRole("dialog", {name: "Commands"}).waitFor();
+						await cell(state, layout);
+						await page.keyboard.press("Escape");
+						await gone(page, "pop-palette");
+					}
+					if (state === "strips") {
+						if (rest.length === 0) {
+							skip(state, layout, "a strip lies beside another tile, and this is one tile");
+							continue;
+						}
+						await focusOn(page, first);
+						await prefixed(page, "f");
+						await page.locator(`[data-strip="${first}"]`).waitFor();
+						await cell(state, layout);
+						await page.locator(`[data-strip="${first}"]`).click();
+						await tilesAre(page, ids);
+					}
+					if (state === "pipe") {
+						if (rest.length === 0) {
+							skip(state, layout, "a pipe opens a tile per window, so it is never one tile");
+							continue;
+						}
+						await focusOn(page, first);
+						const before = await tiles(page);
+						await run(page, first, "tracker | ticket");
+						const after = await until(
+							"the pipe's second window",
+							() => tiles(page),
+							(t) => t.length === before.length + 1,
+						);
+						const ticket = after.find((t) => t !== null && !before.includes(t)) ?? "";
+						const tracker = tile(page, first).getByLabel("tracker view");
+						await tracker.waitFor();
+						if (!filed) {
+							await tracker.getByLabel("new ticket title").fill("The tree, read");
+							await tracker.getByRole("button", {name: "File ticket"}).click();
+							filed = true;
+						}
+						await tracker.getByRole("button", {name: /The tree, read/}).click();
+						await tile(page, ticket).getByText("The tree, read").first().waitFor();
+						await cell(state, layout);
+					}
+					if (state === "closing") {
+						await focusOn(page, last);
+						await run(page, last, "sleep --ms 600000 &");
+						await prompted(page, last);
+						await prefixed(page, "x");
+						await askedIs(page, `close ${last}? (y/n)`);
+						await page.keyboard.press("y");
+						await until(
+							`${last} closing`,
+							() => closingIn(page, last),
+							(n) => n === 1,
+						);
+						await cell(state, layout);
+					}
+				} catch (e) {
+					reached = 2;
+					console.log(
+						`cannot reach ${state}-${layout}: ${e instanceof Error ? e.message : String(e)}`,
+					);
+					throw e;
+				}
+			}
+		});
+	} catch (e) {
+		reached = 2;
+		console.log(`the ARIA stage stopped: ${e instanceof Error ? e.message : String(e)}`);
+	} finally {
+		await app.close().catch(() => {});
+		const pid = await hostPid(own);
+		if (pid !== null) await stop(pid);
+	}
+	console.log(
+		`aria: ${String(tally.same)} same, ${String(tally.diff)} differ, ${String(tally.fresh)} new, ` +
+			`${String(tally.flake)} flaky, ${String(tally.skipped)} skipped; trees in ${out}`,
+	);
+	return reached;
+};
+
 const all = async () => {
 	const first = await launch(home);
 	let left = "";
@@ -2105,8 +2424,10 @@ const all = async () => {
 	}
 };
 
-// `-- --tiles` takes the tiles' pictures alone, with no other stage.
+// `-- --tiles` takes the tiles' pictures alone, with no other stage, and `-- --aria` the ARIA
+// trees alone: it answers 2 only when it cannot reach a state, never on a diff.
 if (process.argv.includes("--tiles")) await tilesLook();
+else if (process.argv.includes("--aria")) process.exitCode = await ariaStage();
 else await all();
 const after = await pgrep(here);
 check(

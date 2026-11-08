@@ -1,0 +1,20 @@
+- banner:
+  - navigation "workspaces":
+    - button "1 tsh"
+    - button "2 tsh"
+    - button "3 tsh"
+  - navigation "the line": tsh
+  - status "the link to the host":
+    - button "host up"
+- button "open tsh, t3": tsh
+- region "tile t4":
+  - text: tsh t4
+  - textbox "Terminal input":
+    - textbox "Terminal input"
+  - region "t4 screen": tsh$
+- contentinfo:
+  - text: t4 tsh
+  - button "C-b i info"
+  - text: ·
+  - button "C-b ? keys"
+- status: Info mode off.

@@ -1,0 +1,23 @@
+- banner:
+  - navigation "workspaces":
+    - button "1 tsh"
+    - button "2 tsh"
+    - button "3 tsh"
+  - navigation "the line": tsh
+  - status "the link to the host":
+    - button "host up"
+- region "tile t3":
+  - text: tsh close t3? (y/n) t3
+  - textbox "Terminal input":
+    - textbox "Terminal input"
+  - region "t3 screen": tsh$
+- separator
+- region "tile t4":
+  - text: tsh t4
+  - textbox "Terminal input":
+    - textbox "Terminal input"
+  - region "t4 screen": tsh$
+- contentinfo:
+  - alertdialog "close t3? (y/n)"
+  - text: y closes · n keeps it
+- status: Info mode off.

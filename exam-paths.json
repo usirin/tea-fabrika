@@ -25,5 +25,9 @@
 	{ "glob": "unreachable-ledger.json", "why": "the owner's ledger of dead exports" },
 	{ "glob": "package.json", "why": "the root scripts: lint, test, typecheck and this check" },
 	{ "glob": "tsconfig.base.json", "why": "the type checker's strictness" },
-	{ "glob": "patches/**", "why": "the Effect checks patched into tsgo" }
+	{ "glob": "patches/**", "why": "the Effect checks patched into tsgo" },
+	{ "glob": "packages/fabrika-design/src/**/*.test.ts", "why": "the design package's laws" },
+	{ "glob": "apps/fabrika/src/window/colors.test.ts", "why": "the app's color laws" },
+	{ "glob": "apps/fabrika/src/pipes.test.ts", "why": "the pipe color laws" },
+	{ "glob": "apps/fabrika/aria/**", "why": "the approved ARIA snapshots" }
 ]

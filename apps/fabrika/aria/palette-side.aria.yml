@@ -1,0 +1,133 @@
+- banner:
+  - navigation "workspaces":
+    - button "1 tsh"
+    - button "2 tsh"
+    - button "3 tsh"
+  - navigation "the line": tsh
+  - status "the link to the host":
+    - button "host up"
+- region "tile t3":
+  - text: tsh t3
+  - textbox "Terminal input":
+    - textbox "Terminal input"
+  - region "t3 screen": tsh$
+- separator
+- region "tile t4":
+  - text: tsh t4
+  - textbox "Terminal input":
+    - textbox "Terminal input"
+  - region "t4 screen": tsh$
+- contentinfo:
+  - text: t3 tsh
+  - button "C-b i info"
+  - text: ·
+  - button "C-b ? keys"
+- status: Info mode off.
+- dialog "Commands":
+  - text: t3 · tsh
+  - combobox "Find commands" [expanded]
+  - listbox "Commands":
+    - group "Tile":
+      - text: Tile
+      - option "Split split ⌃B |" [selected]:
+        - text: Split
+        - code: split
+        - text: ⌃B |
+      - option "Split down split --to down ⌃B -":
+        - text: Split down
+        - code: split --to down
+        - text: ⌃B -
+      - option "Turn turn ⌃B Space":
+        - text: Turn
+        - code: turn
+        - text: ⌃B Space
+      - option "Fold fold ⌃B F":
+        - text: Fold
+        - code: fold
+        - text: ⌃B F
+      - option "Zoom zoom ⌃B Z":
+        - text: Zoom
+        - code: zoom
+        - text: ⌃B Z
+      - option "Close close-tile ⌃B X":
+        - text: Close
+        - code: close-tile
+        - text: ⌃B X
+    - group "Focus":
+      - text: Focus
+      - option "Focus left focus --to left ⌃B H":
+        - text: Focus left
+        - code: focus --to left
+        - text: ⌃B H
+      - option "Focus down focus --to down ⌃B J":
+        - text: Focus down
+        - code: focus --to down
+        - text: ⌃B J
+      - option "Focus up focus --to up ⌃B K":
+        - text: Focus up
+        - code: focus --to up
+        - text: ⌃B K
+      - option "Focus right focus --to right ⌃B L":
+        - text: Focus right
+        - code: focus --to right
+        - text: ⌃B L
+    - group "Workspace":
+      - text: Workspace
+      - option "New workspace --to new ⌃B ⇧N":
+        - text: New
+        - code: workspace --to new
+        - text: ⌃B ⇧N
+      - option "Previous workspace workspace --to previous ⌃B ⌃H":
+        - text: Previous workspace
+        - code: workspace --to previous
+        - text: ⌃B ⌃H
+      - option "Next workspace workspace --to next ⌃B ⌃L":
+        - text: Next workspace
+        - code: workspace --to next
+        - text: ⌃B ⌃L
+      - option "Workspace 1 workspace --to 1 ⌃B 1":
+        - text: Workspace 1
+        - code: workspace --to 1
+        - text: ⌃B 1
+      - option "Workspace 2 workspace --to 2 ⌃B 2":
+        - text: Workspace 2
+        - code: workspace --to 2
+        - text: ⌃B 2
+      - option "Workspace 3 workspace --to 3 ⌃B 3":
+        - text: Workspace 3
+        - code: workspace --to 3
+        - text: ⌃B 3
+    - group "Window":
+      - text: Window
+      - option "Asks asks ⌃B A":
+        - text: Asks
+        - code: asks
+        - text: ⌃B A
+      - option "Jobs jobs ⌃B ⇧J":
+        - text: Jobs
+        - code: jobs
+        - text: ⌃B ⇧J
+      - option "Keys keys ⌃B ?":
+        - text: Keys
+        - code: keys
+        - text: ⌃B ?
+      - option "Info info ⌃B I":
+        - text: Info
+        - code: info
+        - text: ⌃B I
+      - option "Bars bars ⌃B ⇧B":
+        - text: Bars
+        - code: bars
+        - text: ⌃B ⇧B
+      - option "Agents agents ⌃B ⇧A":
+        - text: Agents
+        - code: agents
+        - text: ⌃B ⇧A
+      - option "Sync sync ⌃B ⇧S":
+        - text: Sync
+        - code: sync
+        - text: ⌃B ⇧S
+      - option "Host host ⌃B ⇧H":
+        - text: Host
+        - code: host
+        - text: ⌃B ⇧H
