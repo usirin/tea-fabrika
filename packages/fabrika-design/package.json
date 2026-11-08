@@ -13,8 +13,11 @@
 		"typecheck": "tsc --noEmit -p ."
 	},
 	"devDependencies": {
+		"@radix-ui/colors": "catalog:",
 		"@types/node": "catalog:",
+		"effect": "catalog:",
 		"fast-check": "catalog:",
+		"smol-toml": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	}

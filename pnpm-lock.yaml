@@ -227,6 +227,9 @@ catalogs:
     '@pierre/highlights':
       specifier: 0.3.0
       version: 0.3.0
+    '@radix-ui/colors':
+      specifier: 3.0.0
+      version: 3.0.0
     '@rslib/core':
       specifier: 1.0.5
       version: 1.0.5
@@ -971,12 +974,21 @@ importers:
 
   packages/fabrika-design:
     devDependencies:
+      '@radix-ui/colors':
+        specifier: 'catalog:'
+        version: 3.0.0
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
+      effect:
+        specifier: 'catalog:'
+        version: 4.1.1
       fast-check:
         specifier: 'catalog:'
         version: 4.10.2
+      smol-toml:
+        specifier: 'catalog:'
+        version: 1.9.1
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -3930,6 +3942,9 @@ packages:
         optional: true
       yauzl:
         optional: true
+
+  '@radix-ui/colors@3.0.0':
+    resolution: {integrity: sha512-FUOsGBkHrYJwCSEtWRCIfQbZG7q1e6DgxCIOe1SUQzDe/7rXXeA47s8yCn6fuTNQAj1Zq4oTFi9Yjp3wzElcxg==}
 
   '@redis/bloom@6.3.0':
     resolution: {integrity: sha512-NQ5poYpZr0jv6zazN1cy6JY5kIipKFZ3R9GTL4kOUTX3a9YAfY29U8bsE4lWhVQEM+G4V0BXVC57mubIdDijeA==}
@@ -7971,6 +7986,8 @@ snapshots:
       yargs: 18.2.0
     optionalDependencies:
       yauzl: 3.4.0
+
+  '@radix-ui/colors@3.0.0': {}
 
   '@redis/bloom@6.3.0(@redis/client@6.3.0(@opentelemetry/api@1.9.1))':
     dependencies:
