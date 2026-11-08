@@ -25,6 +25,11 @@ export const passkeyBlob = (line: string): Option.Option<Bytes> => {
 		Option.filter((bytes) => Option.isSome(keyParts(bytes))),
 	);
 };
+export const passkeyRp = (line: string): Option.Option<string> =>
+	passkeyBlob(line).pipe(
+		Option.flatMap(keyParts),
+		Option.flatMap(({rp}) => Option.liftThrowable(() => text(rp))()),
+	);
 export const PasskeyLine = Schema.String.check(
 	Schema.makeFilter((line: string) =>
 		Option.isSome(passkeyBlob(line)) ? undefined : "an OpenSSH P-256 passkey line",

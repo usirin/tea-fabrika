@@ -7,7 +7,13 @@ export const doorStore = (sql: Sql) => {
 		sql.exec("CREATE TABLE IF NOT EXISTS door_state (name TEXT PRIMARY KEY, value TEXT NOT NULL)");
 		sql.exec("CREATE TABLE IF NOT EXISTS door_starts (id TEXT PRIMARY KEY)");
 		sql.exec(
+			"CREATE TABLE IF NOT EXISTS door_pending (client TEXT PRIMARY KEY, until REAL NOT NULL)",
+		);
+		sql.exec(
 			"CREATE TABLE IF NOT EXISTS door_bindings (id TEXT PRIMARY KEY, letter TEXT UNIQUE, value TEXT NOT NULL)",
+		);
+		sql.exec(
+			"CREATE INDEX IF NOT EXISTS door_delivered_trace ON door_bindings (json_extract(value, '$.process'), json_extract(value, '$.span.traceId')) WHERE json_extract(value, '$.state._tag')='delivered'",
 		);
 	};
 	const atomic = <A>(step: () => A) =>
