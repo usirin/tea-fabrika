@@ -3,7 +3,7 @@
 **Decided 2026-11-03 by the owner,** from [experiment 205](../../experiments/205-organizing-work.md):
 a ticket records where it came from, at filing, and tickets stay without a type label. The
 shape of `from` below is **proposed**: the plan for its ticket settles it. Today's version
-first; `next/`'s tracker carries the same key when it is built.
+first; `next/`'s tracker carries the same key when it is built. Walked when Tier 2 starts (owner, 2026-11-08): filing tickets with their source kept.
 
 ```ts
 // A sketch, not built. A filing says where it came from. Effect Schema writes `_tag`.

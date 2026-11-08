@@ -1,6 +1,6 @@
 # Windows in `next/`
 
-**Proposed 2026-11-01. Nothing here was run on Windows.** This is about `next/`. The
+**Proposed 2026-11-01. Nothing here was run on Windows.** Walked when Tier 4 starts (owner, 2026-11-08): Windows hands and stopping their brain. This is about `next/`. The
 [Windows trial](https://github.com/usirin/tea-fabrika/issues/256) ran today's version
 only. The claims about `next/` come from reading the first slice and from a simulation on
 a Mac.

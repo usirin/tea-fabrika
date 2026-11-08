@@ -1,6 +1,6 @@
 # Pipeline strategies: what a lane does when a gate is not perfect
 
-**Proposed 2026-11-05.** The owner's idea, named on 2026-11-05: a strategy is the lane's answer to
+**Proposed 2026-11-05.** Walked when Tier 6 starts (owner, 2026-11-08): pipeline stages and their gate strategies. The owner's idea, named on 2026-11-05: a strategy is the lane's answer to
 "this gate isn't perfect, now what?" The owner drew the line between fixing forward and stopping
 (proposed, below). Nothing else here is settled. Both versions: the pipeline's words are the same in
 each.

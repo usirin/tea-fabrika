@@ -1,6 +1,6 @@
 # The host keeps terminals and jobs; a tile attaches to one
 
-Decided 2026-10-28 by the owner. The WezTerm model: the host keeps every
+Decided 2026-10-28 by the owner. Today's version; walked if a tryout is picked (owner, 2026-11-08). The WezTerm model: the host keeps every
 terminal and every job, each with its own id, and a tile only shows one. Any
 tile, in any window, can attach to a terminal or a job that is already running.
 The layout is the app's, the way i3 arranges windows it does not own.

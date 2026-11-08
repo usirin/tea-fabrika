@@ -1,6 +1,6 @@
 # Errors are diagnostics, drawn the way rustc draws them
 
-Proposed 2026-10-29.
+Proposed 2026-10-29. Walked when Tier 2 starts (owner, 2026-11-08): fabsh's typed-pipe and command errors.
 
 Keys renamed 2026-11-03 (short words keep one meaning): a label's `at` became `span`, rustc's
 word for a label's place (LSP says `range`).
