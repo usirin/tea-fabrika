@@ -2727,7 +2727,8 @@ const all = async () => {
 		await reconnect();
 		await tilesLook();
 		await trackerFocus();
-		await focusShots();
+		// The 60 focus images need a 1440 by 900 window, taller than a CI runner's screen, so they
+		// run only with --focus, the way the ARIA trees run only with --aria.
 	} finally {
 		// No person stops the host: there is no command for it. The run stops its own, by its pid.
 		const pid = await hostPid(home);
