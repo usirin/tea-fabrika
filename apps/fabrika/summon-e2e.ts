@@ -144,6 +144,13 @@ const lookIs = async (app: ElectronApplication, page: Page, look: "dark" | "ligh
 		(light) => light === (look === "light"),
 	);
 };
+/** T259: let rebuilt terminals' focus timers finish before checking focus and typing. */
+const settleTerminals = (page: Page) =>
+	page.evaluate(async () => {
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+	});
 /** A new tile: focus moves to it, and its tsh is up. */
 const split = async (page: Page, key: "|" | "-") => {
 	const before = await tiles(page);
@@ -195,9 +202,11 @@ const states = async (app: ElectronApplication, page: Page, layout: string) => {
 	await summoned();
 	await shot(page, id, `summoned-${layout}-dark`);
 	await lookIs(app, page, "light");
+	await settleTerminals(page);
 	await summoned();
 	await shot(page, id, `summoned-${layout}-light`);
 	await lookIs(app, page, "dark");
+	await settleTerminals(page);
 
 	await run(page, id, "@scout slowly read a.txt b.txt");
 	await until(
@@ -227,7 +236,7 @@ const states = async (app: ElectronApplication, page: Page, layout: string) => {
 
 	await run(page, id, "@scout write");
 	await shows(page, id, "scout's permission question holding the prompt", (t) =>
-		/scout asks: Write written\.txt\s+allow\? \[y\/N\]/.test(t),
+		contains(t, "scout asks: Write written.txt allow? [y/N]"),
 	);
 	check(
 		`${layout}: the ask has not returned the prompt`,
@@ -328,6 +337,7 @@ try {
 	);
 	await prompted(page, "t1");
 	await lookIs(app, page, "dark");
+	await settleTerminals(page);
 	await observer.connect(
 		new StdioClientTransport({
 			command: process.execPath,
