@@ -17,7 +17,8 @@ export type Letter = {
 	readonly by: string;
 	readonly for: string;
 	readonly sentAt: string;
-	readonly cause: string | null;
+	readonly parent: string | null;
+	readonly traceId: string;
 	readonly rev: Rev;
 	readonly pos: Rev;
 };
@@ -48,7 +49,8 @@ const letter = Effect.fnUntraced(function* (entry: Entry) {
 		by: entry.by,
 		for: entry.for,
 		sentAt: entry.sentAt,
-		cause: entry.cause,
+		parent: entry.parent,
+		traceId: entry.traceId,
 		rev: entry.rev,
 		pos: entry.pos,
 	});
