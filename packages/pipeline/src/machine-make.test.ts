@@ -64,7 +64,12 @@ const ticket: Ticket = {id: "T-1", title: "Fix login"};
 describe("the types come from the two schemas, with no annotation", () => {
 	it("is the very Machine `defineMachine` gives for the same model and Msgs, and not `any`", () => {
 		expectTypeOf(picker).not.toBeAny();
-		expectTypeOf(picker).toEqualTypeOf<typeof twin>();
+		expectTypeOf(picker).toEqualTypeOf<
+			typeof twin & {
+				readonly model: Schema.Schema<Model>;
+				readonly msg: Schema.Schema<Msg>;
+			}
+		>();
 		expectTypeOf(replay(picker, {msgs: [], ctx: undefined}).state).toEqualTypeOf<Model>();
 		expectTypeOf(replay(picker, {msgs: [], ctx: undefined}).cmds).toEqualTypeOf<ReadTicket[]>();
 		expect(typeof picker.init).toBe("function");
