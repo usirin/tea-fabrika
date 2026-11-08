@@ -1,4 +1,5 @@
 import {spawnSync} from "node:child_process";
+import {randomBytes} from "node:crypto";
 import {mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {isAbsolute, join, matchesGlob, relative, resolve} from "node:path";
@@ -13,7 +14,10 @@ import {harnessOf} from "./harness.ts";
 // https://code.claude.com/docs/en/permissions#read-and-edit
 
 const made: string[] = [];
-const SECRET = "T237_ENV_SECRET";
+// Each hidden file holds its own random bytes, so a leak of one cannot hide behind another file's
+// text. Names may show (talk-where-you-work.md: hidden means unreadable by any tool); bytes never.
+const SECRET = "T237-hidden-bytes-";
+const secretOf = (path: string) => `${SECRET}${randomBytes(12).toString("hex")}:${path}\n`;
 const TEXT = "ordinary text\n";
 afterEach(() => {
 	for (const folder of made.splice(0)) rmSync(folder, {recursive: true, force: true});
@@ -28,7 +32,8 @@ const fixture = () => {
 	mkdirSync(join(folder, "src", "deep"), {recursive: true});
 	const hidden = [".env", ".env.local", "src/.env", "src/deep/.env.production"];
 	const ordinary = ["README.md", "src/env.ts", ".environment", ".envrc", "src/deep/note.txt"];
-	for (const path of hidden) writeFileSync(join(folder, path), `${SECRET}\n`);
+	const secrets = hidden.map(secretOf);
+	for (const [i, path] of hidden.entries()) writeFileSync(join(folder, path), secrets[i]!);
 	for (const path of ordinary) writeFileSync(join(folder, path), TEXT);
 	symlinkSync(join(folder, ".env"), join(folder, "alias.txt"));
 	symlinkSync(join(folder, "src"), join(folder, "linked"));
@@ -36,6 +41,7 @@ const fixture = () => {
 	return {
 		folder,
 		home,
+		secrets,
 		hidden: [
 			...hidden,
 			"alias.txt",
@@ -144,7 +150,10 @@ const seatbelt = spawnSync(
 const nested = seatbelt.stderr?.includes("sandbox_apply: Operation not permitted") ?? false;
 const noSeatbelt = process.platform !== "darwin" || seatbelt.error !== undefined || nested;
 const word = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
-const hiddenNames = /(?:^|[\s/])(?:\.env(?:\.[^\s/:]*)?|alias\.txt)(?=[:\s/]|$)/;
+const leaked = (f: ReturnType<typeof fixture>, out: string) => [
+	...f.secrets.filter((secret) => out.includes(secret.trim())),
+	...(out.includes(SECRET) ? [SECRET] : []),
+];
 
 describe.skipIf(noSeatbelt)("T237-1: real reads, listings and searches", () => {
 	for (const agent of ["claude", "codex"] as const) {
@@ -208,35 +217,44 @@ describe.skipIf(noSeatbelt)("T237-1: real reads, listings and searches", () => {
 			for (const path of f.hidden) {
 				const got = run(f, `/bin/cat ${word(path)}`);
 				expect(got.status, path).not.toBe(0);
-				expect(got.stdout, path).not.toContain(SECRET);
+				expect(leaked(f, got.stdout + got.stderr), path).toEqual([]);
 			}
 		});
 
-		it(`${agent}: directory listings omit env files and their file alias`, () => {
+		// A listing may show env names: macOS's sandbox cannot drop one name from a folder. So the
+		// law opens every listed entry, and none of them may give back an env file's bytes.
+		it(`${agent}: listings keep ordinary files, and no listed entry gives env bytes`, () => {
 			const f = fixture();
 			ready(f);
-			const got = run(f, "/bin/ls -a . src src/deep linked linked/deep src/..");
-			expect(got.stdout).toContain("README.md");
-			expect(got.stdout).toContain("note.txt");
-			expect(got.stdout + got.stderr).not.toMatch(hiddenNames);
+			const got = run(
+				f,
+				'for d in . src src/deep linked linked/deep src/..; do /bin/ls -a "$d"; ' +
+					'for n in $(/bin/ls -a "$d"); do [ -f "$d/$n" ] && /bin/cat "$d/$n"; done; done; true',
+			);
+			for (const name of ["README.md", "env.ts", ".environment", ".envrc", "note.txt"])
+				expect(got.stdout, name).toContain(name);
+			expect(got.stdout).toContain(TEXT);
+			expect(leaked(f, got.stdout + got.stderr)).toEqual([]);
 		});
 
-		it(`${agent}: find cannot discover env files, even following symlinks`, () => {
+		it(`${agent}: find, even following symlinks, finds ordinary files and opens no env file`, () => {
 			const f = fixture();
 			ready(f);
-			const got = run(f, "/usr/bin/find -L . -type f -print");
-			expect(got.stdout).toContain("./README.md");
-			expect(got.stdout).toContain("./src/deep/note.txt");
-			expect(got.stdout + got.stderr).not.toMatch(hiddenNames);
+			const got = run(f, "/usr/bin/find -L . -type f -print -exec /bin/cat {} ';'");
+			for (const path of ["./README.md", "./src/env.ts", "./.envrc", "./src/deep/note.txt"])
+				expect(got.stdout, path).toContain(path);
+			expect(got.stdout).toContain("./linked/deep/note.txt");
+			expect(got.stdout).toContain(TEXT);
+			expect(leaked(f, got.stdout + got.stderr)).toEqual([]);
 		});
 
 		it(`${agent}: recursive content search returns ordinary matches and no env bytes`, () => {
 			const f = fixture();
 			ready(f);
-			const got = run(f, "/usr/bin/grep -R -n -E 'T237_ENV_SECRET|ordinary text' .");
+			const got = run(f, "/usr/bin/grep -R -n -E 'hidden-[b]ytes|ordinary text' .");
 			expect(got.stdout).toContain("./README.md:1:ordinary text");
-			expect(got.stdout).not.toContain(SECRET);
-			expect(got.stdout + got.stderr).not.toMatch(hiddenNames);
+			expect(got.stdout).toContain("./src/deep/note.txt:1:ordinary text");
+			expect(leaked(f, got.stdout + got.stderr)).toEqual([]);
 		});
 	}
 });
