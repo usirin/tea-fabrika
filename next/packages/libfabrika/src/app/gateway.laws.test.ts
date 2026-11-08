@@ -6,7 +6,7 @@ import {Deferred, Effect, Fiber, Layer} from "effect";
 import * as fc from "fast-check";
 import {Doorbell, Ledger, LedgerError, Referee, lineFor} from "../data/index.ts";
 import {nodeSql} from "../data/sqlite.ts";
-import {Answer, Attached} from "./wire.ts";
+import {Answer, Attached} from "../transport/wire.ts";
 
 const SEED = 119120;
 type Connection = {
@@ -36,7 +36,7 @@ const setup = Effect.fnUntraced(function* (
 	>,
 	call = () => Effect.succeed(Answer.cases.ok.make({result: null})),
 ) {
-	const {connection} = yield* Effect.promise(() => import("./gateway.ts"));
+	const {connection} = yield* Effect.promise(() => import("../transport/gateway.ts"));
 	let saved: typeof Attached.Type = online();
 	const frames: Array<Record<string, unknown>> = [];
 	const closes: Array<number> = [];

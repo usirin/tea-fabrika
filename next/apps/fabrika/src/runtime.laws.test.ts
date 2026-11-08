@@ -6,7 +6,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import type {Descriptor, Incoming, Sent} from "@kampus/libfabrika";
-import {revokeText, Start, type From} from "@kampus/libfabrika/coordination";
+import {revokeText, SigningRefused, Start, type From} from "@kampus/libfabrika/coordination";
 import type {SpanRow} from "@kampus/libfabrika/data";
 import {nodeSql} from "@kampus/libfabrika/sqlite";
 import {Attached} from "@kampus/libfabrika/transport";
@@ -258,7 +258,9 @@ describe("P12 Project authority", () => {
 		const parent = w.received[0]!.envelope.id;
 		const result = await w.run(Effect.exit(w.p.sign(pid, "write-1", parent, "answered")));
 		expect(result).toMatchObject({_tag: "Failure"});
-		if (Exit.isFailure(result)) expect(String(result.cause)).toContain("person_only");
+		const failure = Option.getOrThrow(Exit.findErrorOption(result));
+		expect(failure).toBeInstanceOf(SigningRefused);
+		expect(failure).toMatchObject({why: "person_only"});
 	});
 	it("a program's declared person-only input authorizes its person-only fact", async () => {
 		const w = await world(),
