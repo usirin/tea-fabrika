@@ -142,6 +142,7 @@ patchedDependencies:
   '@manti-ui/react@0.13.0': patches/@manti-ui__react@0.13.0.patch
   # Draw on change, and a hollow cursor when a tile is unfocused (experiment 142).
   ghostty-web@0.4.0: patches/ghostty-web@0.4.0.patch
+  '@manti-ui/styles@0.13.0': patches/@manti-ui__styles@0.13.0.patch
 
 minimumReleaseAgeExclude:
   - '@demlik/tea@0.24.0 || 0.25.0'
