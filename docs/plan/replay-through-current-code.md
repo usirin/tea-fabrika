@@ -22,7 +22,7 @@ replayed {row, answer: {_tag: "cannot", why: "no_start", n: null}}   // recorded
 Elm's debugger imports a history and folds its Msgs through `update` again from the history's
 own initial model, keeping only the model and dropping the Cmds:
 
-- Ref: elm-lang/virtual-dom 2.0.4, `src/VirtualDom/Debug.elm:244-251` — "initialUserModel =
+- Ref: elm-lang/virtual-dom 2.0.4, `src/VirtualDom/Debug.elm:244-251`: "initialUserModel =
   History.initialModel model.history" and "pureUserUpdate msg userModel = Tuple.first
   (userUpdate msg userModel)".
 
