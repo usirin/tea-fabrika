@@ -330,8 +330,7 @@ describe("P12 real dev.ts wire", () => {
 		const otherKey = identity(),
 			other = new Client(s.url, otherKey, "other-key");
 		expect((await Effect.runPromise(other.hello())).error?.data?.why).toBe("not_granted");
-		await other.call("door.knock", {label: "Other client"});
-		const waiting = await other.next((f) => typeof f !== "string" && f.method === "door.waiting");
+		const knocked = await other.call("door.knock", {label: "Other client"});
 		const {grantText} = await import("@kampus/libfabrika/coordination");
 		const text = grantText({
 			id: "grant-other",
@@ -340,7 +339,7 @@ describe("P12 real dev.ts wire", () => {
 			to: "p12-wire",
 			as: "window",
 			saw: {
-				code: waiting.params.code,
+				code: knocked.result.code,
 				label: "Other client",
 				where: "local",
 				how: "command",

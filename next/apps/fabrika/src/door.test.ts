@@ -627,10 +627,9 @@ describe("P10 review regressions", () => {
 				const {client} = yield* pendingHello(d, w.otherWindow, "target");
 				const knocked = yield* d.knock(client, {label: "Pending"});
 				assert(knocked._tag === "ok");
-				const {rows} = Schema.decodeUnknownSync(
-					Schema.Struct({rows: Schema.Array(Schema.Struct({code: Schema.String}))}),
-				)(knocked.result);
-				const code = rows[0]!.code;
+				const {code} = Schema.decodeUnknownSync(Schema.Struct({code: Schema.String}))(
+					knocked.result,
+				);
 				expect(yield* d.target(w.otherWindow.fingerprint, code)).toEqual({
 					key: w.otherWindow.raw,
 					for: PERSON,
