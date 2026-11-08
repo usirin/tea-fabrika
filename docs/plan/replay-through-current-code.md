@@ -157,6 +157,17 @@ replay: {row: RowKey, steps: Int, answer: Replayed | null} | null
   any other says "This app has no code for <program>, so it can't be replayed here." The lane's
   stages run in the host's process, so their kept machines can reach a record, and a button that
   could only answer "no code" would be the dead button the next line forbids.
+- **Two rules, after the second review (added 2026-11-08, the lead agent).** Both findings of that
+  review came from rules this plan never stated, so they are stated here, for every site:
+  - *Focus follows the choice.* A control that unmounts when pressed (Open step, Replay) never
+    drops focus to the page: focus moves to the row `chosen` names, in an effect keyed on `chosen`,
+    whether that row was already drawn or is revealed by the press, and a note asking for focus
+    never outlives the press. Tests read `document.activeElement`, never `tabIndex` alone.
+  - *tea owns equality.* Every comparison of two states uses tea's `deepEqual`
+    (`@demlik/tea/persistence`: "the comparator the record/replay lane owns, exposed so consumers
+    ... reuse it rather than adding a third deep-compare"). fabrika never compares states as JSON
+    text, where key order differs between a patched state and a schema-encoded one. A state shown
+    inside a sentence is drawn as a block (`Pre`), never inline.
 - **A machine run with no start kept shows no button.** Its detail says "Recorded before starts
   were kept, so it can't be replayed." A button that can only answer no is a dead button
   (AGENTS.md, "No rough first versions": "all it shows works, with no stub, dead button"), and
