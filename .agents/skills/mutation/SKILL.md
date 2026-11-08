@@ -33,6 +33,9 @@ rest.
 
 ## Go easy on the machine
 
+- Any run that starts the app, the brain or the stage sets its own temp `FABRIKA_HOME` first
+  (`mktemp -d /tmp/fh.XXXX`, short, since a socket path has a 103-byte limit). Never the real
+  `~/.fabrika`: a P12 hand run once wrote its stage files there.
 - Under `nice -n 15` outside a Codex box. In a box, `nice` and `pgrep` are blocked: skip them.
 - One worker. The fixed sample, never the whole set.
 

@@ -64,3 +64,10 @@ Plain short sentences, American English, no em dashes.
 
 `scripts/plancheck.sh <plan.md>` lists every exam path a saved plan names. The lead runs it before
 approving.
+
+## Where code goes in `next/`
+
+Anyone must be able to take `@kampus/libfabrika` alone and build a client that works exactly like
+fabrika; fabrika is one such client (owner, 2026-11-08). So for every file the plan puts in
+`next/apps/fabrika`, ask: would a from-scratch client have to write this again? If yes, it goes in
+libfabrika, and the app only picks Layers and hands them in.
