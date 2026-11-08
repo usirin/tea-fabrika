@@ -95,6 +95,7 @@ import {_electron, type ElectronApplication, type Locator, type Page} from "play
 // `aria/`, and it only advises: a diff is printed, never failed on.
 // `-- --focus` takes the design foundations' 60 images: six states, five layouts, both looks.
 // Run each build with its own SHOTS folder to keep the 120 before and after images apart.
+// `-- --tracker-focus` checks T245's input outlines and whole row rings from computed styles.
 //
 // Last, as no person ever does (there is no stop command), the run stops the host it started by
 // its pid, and the fake one too, and checks with pgrep that nothing of either home is left.
@@ -2240,6 +2241,101 @@ const FOCUS = {
 } as const;
 const LOOKS = ["dark", "light"] as const;
 
+/** T245 A and B, today's tracker: actual keyboard focus, with the built app's CSS cascade. */
+const trackerFocus = async () => {
+	const own = await mkdtemp(join(tmpdir(), "fh-ring-"));
+	await seedAsks(own);
+	const app = await launch(own);
+	try {
+		const page = await app.firstWindow();
+		await prompted(page, "t1");
+		await run(page, "t1", "tracker");
+		const tracker = tile(page, "t1").getByLabel("tracker view");
+		await tracker.waitFor();
+		await tracker.getByLabel("new ticket title").fill("Focus check");
+		const failures: string[] = [];
+		const record = (law: string, ok: boolean, seen: unknown) => {
+			if (ok) check(law, true);
+			else failures.push(`${law}: ${JSON.stringify(seen)}`);
+		};
+		const ring = async (target: Locator) => {
+			await target.press("ArrowRight");
+			await until(
+				"keyboard focus on the tracker control",
+				() =>
+					target.evaluate(
+						(el) =>
+							document.hasFocus() && el === document.activeElement && el.matches(":focus-visible"),
+					),
+				(on) => on,
+			);
+			return target.evaluate((el) => {
+				const forced = matchMedia("(forced-colors: active)").matches;
+				const probe = document.createElement("span");
+				probe.style.position = "fixed";
+				probe.style.visibility = "hidden";
+				probe.style.outline = `2px solid ${forced ? "Highlight" : "var(--focus)"}`;
+				el.parentElement?.append(probe);
+				const expected = getComputedStyle(probe).outlineColor;
+				probe.remove();
+				const style = getComputedStyle(el);
+				const outline =
+					style.outlineStyle === "solid" &&
+					style.outlineWidth === "2px" &&
+					style.outlineColor === expected;
+				const shadow = style.boxShadow.split(/,(?![^()]*\))/).some((layer) => {
+					const lengths = layer.match(/-?\d+(?:\.\d+)?px/g)?.map(Number.parseFloat);
+					return (
+						lengths?.length === 4 &&
+						lengths[0] === 0 &&
+						lengths[1] === 0 &&
+						lengths[2] === 0 &&
+						lengths[3] === 2 &&
+						layer.includes(expected)
+					);
+				});
+				return {
+					forced,
+					outline,
+					shadow,
+					expected,
+					width: style.outlineWidth,
+					style: style.outlineStyle,
+					color: style.outlineColor,
+					boxShadow: style.boxShadow,
+				};
+			});
+		};
+		for (const look of LOOKS) {
+			await lookIs(app, page, look);
+			await page.emulateMedia({forcedColors: "none"});
+			for (const name of ["search titles", "new ticket title", "new ticket body"]) {
+				const seen = await ring(tracker.getByLabel(name));
+				record(`T245 A: ${name}, ${look}, draws a 2px --focus outline`, seen.outline, seen);
+			}
+			const row = tracker.locator(".tracker-list button").filter({hasText: SEVEN_TITLE});
+			const normal = await ring(row);
+			record(
+				`T245 B: the row, ${look}, draws a full --focus ring`,
+				normal.outline || normal.shadow,
+				normal,
+			);
+			await page.emulateMedia({forcedColors: "active"});
+			const forced = await ring(row);
+			record(
+				`T245 B: the row, ${look}, keeps a full ring in forced colors`,
+				forced.forced && forced.outline,
+				forced,
+			);
+		}
+		check("T245 tracker focus laws", failures.length === 0, failures);
+	} finally {
+		await app.close().catch(() => {});
+		const pid = await hostPid(own);
+		if (pid !== null) await stop(pid);
+	}
+};
+
 /** All 60 planned images per build, under SHOTS with the plan's repo-relative folders. */
 const focusShots = async () => {
 	const own = await mkdtemp(join(tmpdir(), "fh-focus-"));
@@ -2628,6 +2724,7 @@ const all = async () => {
 		await asksSwap();
 		await reconnect();
 		await tilesLook();
+		await trackerFocus();
 		await focusShots();
 	} finally {
 		// No person stops the host: there is no command for it. The run stops its own, by its pid.
@@ -2640,6 +2737,7 @@ const all = async () => {
 if (process.argv.includes("--tiles")) await tilesLook();
 else if (process.argv.includes("--aria")) process.exitCode = await ariaStage();
 else if (process.argv.includes("--focus")) await focusShots();
+else if (process.argv.includes("--tracker-focus")) await trackerFocus();
 else await all();
 const after = await pgrep(here);
 check(

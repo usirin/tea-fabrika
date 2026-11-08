@@ -886,6 +886,31 @@ describe("every focus indicator draws in the one focus token", () => {
 				.map(({selector, name, value}) => `${selector} { ${name}: ${value} }`),
 		).toEqual([]);
 	});
+
+	// T245 B: build.ts copies these declarations unchanged. This checks the replacement's
+	// geometry only; e2e.ts's trackerFocus checks what wins the cascade and forced colors.
+	it("a tracker row's replacement focus shadow spans all four sides at 2px", () => {
+		const off = focusRules(splitMedia(app, FORCED).outside).filter((rule) => {
+			if (!rule.selector.includes(".tracker-list") || !rule.says.has("box-shadow")) return false;
+			if (/^(none|0)$/.test(rule.says.get("box-shadow") ?? "")) return false;
+			const shadows = argsOf(rule.says.get("box-shadow") ?? "");
+			return !shadows.some((shadow) => {
+				const lengths = shadow
+					.replace(/var\([^)]*\)/g, "")
+					.match(/-?\d+(?:\.\d+)?(?:px)?\b/g)
+					?.map(Number.parseFloat);
+				return (
+					lengths?.length === 4 &&
+					lengths[0] === 0 &&
+					lengths[1] === 0 &&
+					lengths[2] === 0 &&
+					lengths[3] === 2 &&
+					shadow.includes("var(--focus)")
+				);
+			});
+		});
+		expect(off.map((rule) => rule.selector)).toEqual([]);
+	});
 });
 
 // `turn` split in two (call 4): --turn-fill is the fill, --turn-text the turn's text. A token
