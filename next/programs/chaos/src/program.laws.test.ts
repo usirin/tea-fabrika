@@ -88,7 +88,11 @@ describe("P17b schedule and machine laws", () => {
 				expect(A.planFaults(input)).toEqual(first);
 				if (Result.isFailure(first)) return;
 				expect(first.success).toHaveLength(value.most);
-				for (const row of first.success) expect(Schema.is(A.Fault)(row.fault)).toBe(true);
+				for (const [n, row] of first.success.entries()) {
+					expect(Schema.is(A.Fault)(row.fault)).toBe(true);
+					expect(row.at).toBeGreaterThanOrEqual(times.from);
+					if (n > 0) expect(row.at - first.success[n - 1]!.at).toBeGreaterThanOrEqual(value.gap);
+				}
 				const msgs = sequence(A, A.chaosMachine, raw, times);
 				propertyTrace(
 					A.chaosMachine,
@@ -147,7 +151,8 @@ describe("P17b schedule and machine laws", () => {
 				).toMatchObject({_tag: "Failure", failure: {why: field === "most" ? "limit" : field}});
 				const input = {
 					...Schema.decodeUnknownSync(A.Start)(raw),
-					from: Number.MAX_SAFE_INTEGER - raw.gap + 1,
+					most: Math.max(2, raw.most),
+					from: Number.MAX_SAFE_INTEGER,
 				};
 				expect(A.planFaults(input)).toMatchObject({_tag: "Failure", failure: {why: "overflow"}});
 			}),
@@ -199,12 +204,13 @@ describe("P17b schedule and machine laws", () => {
 					return "the experiment must reach, and never exceed, its cap";
 				for (let i = 0; i < fires.length; i++) {
 					const hit = fires[i]!;
-					if (hit.msg.type !== "timer") return "only a saved timer can fire";
+					const timer = hit.msg;
+					if (timer.type !== "timer") return "only a saved timer can fire";
 					const asked = records(A.Asked, hit.next);
-					if (!asked.some((a) => a.tick === hit.msg.id && a.n === i + 1))
+					if (!asked.some((a) => a.tick === timer.id && a.n === i + 1))
 						return "Asked must precede fire";
 					const previous = fires[i - 1]?.msg;
-					if (previous?.type === "timer" && hit.msg.at - previous.at < begin.value.gap)
+					if (previous?.type === "timer" && timer.at - previous.at < begin.value.gap)
 						return "late callbacks burst";
 					if (hit.cmds.filter((c) => c.type === "fire").length !== 1)
 						return "one timer consumed several faults";
