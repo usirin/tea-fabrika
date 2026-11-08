@@ -1,0 +1,10 @@
+# The Cmd-K palette has no scrim (owner, 2026-11-06), so nothing draws this token today.
+type = "background"
+tier = "global"
+owner = "design"
+description = "the dim behind a dialog: Radix Themes' overlay, until the owner picks a step by eye"
+on = ["surface-sunken", "surface"]
+
+[colors]
+dark = "black.a8"
+light = "black.a6"

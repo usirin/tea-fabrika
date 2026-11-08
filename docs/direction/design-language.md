@@ -180,10 +180,13 @@ manti        --manti-*, set from the semantic tier in tokens.css        only Man
 - **A token means one thing; two tokens may share a primitive.** So `turn-fill` says your turn,
   and `focus-ring` is one slate token everywhere. A token used at 60% no longer has the contrast
   that was checked, so a modifier on a token is refused; ask for a token instead.
-- **One data file,** `tokens.ts` in the package, holds each token's step per look, the tokens it
-  sits on and the contrast it must reach there. It writes `tokens.css`, the Manti mapping and the
-  canvas's `tokens.json`. The W3C Design Tokens format is the known shape for the JSON
-  ([design tokens](https://www.designtokens.org/)).
+- **One data source,** TOML, not `tokens.ts` (call 5, decided 2026-11-07): one file per color token
+  in the package's `tokens/color/`, each with its step per look, the tokens it sits on and the
+  contrast it must reach there. The token build (`src/build/tokens.ts`) writes `tokens.css`, the
+  Manti mapping and the themes' colors, with room for the canvas's `tokens.json`. The W3C Design
+  Tokens format is the known shape for the JSON ([design tokens](https://www.designtokens.org/)).
+  The sketch below is the earlier `tokens.ts` shape, kept as it was proposed; the decided keys are
+  in `packages/fabrika-design/src/build/schema.ts`.
 
 ```ts
 // A sketch. packages/fabrika-design/src/tokens.ts. A primitive is a Radix step by name.

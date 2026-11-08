@@ -797,11 +797,16 @@ describe("law 13: the top level imports nothing and runs anywhere", () => {
 		]);
 	});
 
-	it("index.ts names only themes.ts, and themes.ts imports nothing", () => {
-		expect({index: [...new Set(modulesIn(INDEX_TS))], themes: modulesIn(THEMES_TS)}).toEqual({
-			index: ["./themes.ts"],
-			themes: [],
-		});
+	// Design foundations PR 2: the fifteen colors come from the generated theme-colors.ts, which
+	// the token build writes from tokens/color/*.toml. It is read here, not at the top, so the laws
+	// above still run when it is missing.
+	it("index.ts names only themes.ts, themes.ts only theme-colors.ts, which imports nothing", () => {
+		const generated = readFileSync(join(import.meta.dirname, "theme-colors.ts"), "utf8");
+		expect({
+			index: [...new Set(modulesIn(INDEX_TS))],
+			themes: modulesIn(THEMES_TS),
+			generated: modulesIn(generated),
+		}).toEqual({index: ["./themes.ts"], themes: ["./theme-colors.ts"], generated: []});
 	});
 
 	// code-graph's impure globals: the process, a clock, randomness, timers, the network, files.
@@ -812,7 +817,10 @@ describe("law 13: the top level imports nothing and runs anywhere", () => {
 			codeOf(ts)
 				.replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
 				.match(impure) ?? [];
-		expect({index: words(INDEX_TS), themes: words(THEMES_TS)}).toEqual({index: [], themes: []});
+		const generated = readFileSync(join(import.meta.dirname, "theme-colors.ts"), "utf8");
+		expect({index: words(INDEX_TS), themes: words(THEMES_TS), generated: words(generated)}).toEqual(
+			{index: [], themes: [], generated: []},
+		);
 	});
 });
 

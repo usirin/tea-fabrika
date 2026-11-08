@@ -1,0 +1,10 @@
+# The token files and their laws: the owner reads every change (design language, call 9,
+# decided 2026-11-07, for now; the owner may relax it).
+/packages/fabrika-design/tokens/                      @usirin
+/packages/fabrika-design/src/build/schema.ts          @usirin
+/packages/fabrika-design/src/build/contrast.ts        @usirin
+/packages/fabrika-design/src/build/tokens.test.ts     @usirin
+/packages/fabrika-design/src/build/contrast.test.ts   @usirin
+/packages/fabrika-design/src/themes.test.ts           @usirin
+/apps/fabrika/src/window/colors.test.ts               @usirin
+/apps/fabrika/src/pipes.test.ts                       @usirin

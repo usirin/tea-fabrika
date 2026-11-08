@@ -1,0 +1,6 @@
+tier = "component"
+owner = "tile"
+description = "a hovered tile's edge"
+
+[colors]
+extends = "border-strong"

@@ -1,0 +1,15 @@
+type = "border"
+tier = "global"
+owner = "design"
+description = "the resting edge: a background step used as a line, a bend; the part's own text and fill say what it is"
+theme = "edge"
+on = [
+	"surface-sunken",
+	"surface",
+	"surface-raised",
+]
+carries = "nothing"
+
+[colors]
+dark = { step = "slate.a4", bend = "a background step used as a line: a higher one was too loud on a full desk" }
+light = { step = "slate.a4", bend = "a background step used as a line: a higher one was too loud on a full desk" }

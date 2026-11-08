@@ -1,0 +1,10 @@
+# Each owner a token file may name, and where its tokens may appear (design foundations, PR 2).
+# The stylelint rule part-token-owner reads this, through src/token-names.json.
+
+[design]
+description = "the package's own tokens: any stylesheet may read them"
+anywhere = true
+
+[tile]
+description = "a tile's own names (docs/direction/tile-guidelines.md): only the tile's rules read them"
+stylesheets = ["apps/fabrika/src/window/window.css"]
