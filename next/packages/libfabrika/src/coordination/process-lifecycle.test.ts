@@ -12,13 +12,14 @@ import {
 	W,
 	X,
 	again,
+	BRAIN,
 	brain,
 	CODE,
+	facts,
 	first,
 	from,
 	ids,
 	manager,
-	read,
 	storage,
 	type Storage,
 	watcher,
@@ -123,7 +124,7 @@ describe("p79, predecessors and live info", () => {
 			);
 			expect(error.why).toBe("name_taken");
 			expect(store.rows()).toEqual(before);
-			expect((yield* read("counter:1")).filter((row) => row._tag === "restarted")).toEqual([]);
+			expect((yield* facts("counter:1")).filter((row) => row._tag === "restarted")).toEqual([]);
 		}).pipe(Effect.provide(manager(store)));
 	});
 	it.effect(
@@ -148,7 +149,7 @@ describe("p79, predecessors and live info", () => {
 				expect((yield* Effect.flip(processes.start(again(A, "restart:stale"), from()))).why).toBe(
 					"stale",
 				);
-				expect((yield* read("counter:1")).filter((row) => row._tag === "restarted")).toHaveLength(
+				expect((yield* facts("counter:1")).filter((row) => row._tag === "restarted")).toHaveLength(
 					1,
 				);
 			}).pipe(Effect.provide(manager(store)));
@@ -178,13 +179,27 @@ describe("p79, predecessors and live info", () => {
 					yield* processes.exit(B, "crashed", from());
 					const x = yield* processes.start(again(B), from());
 					expect(x.process).toBe(X);
-					const facts = (yield* read("counter:1")).filter((row) => row._tag === "restarted");
-					expect(facts.map((row) => row.body)).toEqual([
-						{process: B, after: A, name: "counter:1", why: "crashed", build: "build-b"},
-						{process: X, after: B, name: "counter:1", why: "crashed", build: "build-a"},
+					const restarts = (yield* facts("counter:1")).filter((row) => row._tag === "restarted");
+					expect(restarts.map((row) => row.body)).toEqual([
+						{
+							process: B,
+							after: A,
+							name: "counter:1",
+							why: "crashed",
+							build: "build-b",
+							asked: BRAIN,
+						},
+						{
+							process: X,
+							after: B,
+							name: "counter:1",
+							why: "crashed",
+							build: "build-a",
+							asked: BRAIN,
+						},
 					]);
 					expect(
-						facts.every((row) => row.parent === from().parent && row.build === "writer-build"),
+						restarts.every((row) => row.parent === from().parent && row.build === "writer-build"),
 					).toBe(true);
 				}).pipe(Effect.provide(manager(store, brain(), ids(A, W, B, X).next)));
 				store.reopen();
@@ -222,8 +237,10 @@ describe("p79, predecessors and live info", () => {
 				yield* processes.exit(A, "shutdown:requested", from());
 				yield* processes.exit(A, "shutdown:requested", from());
 				yield* Effect.exit(processes.exit(A, "crashed", from()));
-				const exits = (yield* read("counter:1")).filter((row) => row._tag === "exited");
-				expect(exits.map((row) => row.body)).toEqual([{process: A, why: "shutdown:requested"}]);
+				const exits = (yield* facts("counter:1")).filter((row) => row._tag === "exited");
+				expect(exits.map((row) => row.body)).toEqual([
+					{process: A, why: "shutdown:requested", asked: BRAIN},
+				]);
 				expect(yield* processes.info).toEqual([]);
 			}).pipe(Effect.provide(manager(store)));
 		},

@@ -12,11 +12,11 @@ import {
 	brain,
 	CODE,
 	data,
+	facts,
 	first,
 	from,
 	ids,
 	manager,
-	read,
 	storage,
 } from "./process.test-support.ts";
 
@@ -29,16 +29,16 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
 			const b = yield* processes.start(first("start:counter:2", "counter:2"), from());
 			expect(a.process).toBe(A);
 			expect(b.process).toBe(B);
-			const started = (yield* read("counter:1")).filter((row) => row._tag === "started");
+			const started = (yield* facts("counter:1")).filter((row) => row._tag === "started");
 			expect(started).toHaveLength(1);
 			expect(started[0]).toMatchObject({
 				_tag: "started",
-				stream: "counter:1",
+				stream: "processes/counter:1",
 				body: {process: A, name: "counter:1", ...CODE},
 				...from(),
 			});
 			expect(started[0]?.rev).toBe(a.rev);
-			expect((yield* read("counter:2")).filter((row) => row._tag === "started")).toHaveLength(1);
+			expect((yield* facts("counter:2")).filter((row) => row._tag === "started")).toHaveLength(1);
 		}).pipe(Effect.provide(manager(store)));
 	});
 	it.effect("plant, allocate on retry: a lost answer gets the first process and placing", () => {
@@ -51,7 +51,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
 			expect((yield* Effect.flip(processes.start(first(), from({parent: null})))).why).toBe(
 				"id_reused",
 			);
-			expect((yield* read("counter:1")).filter((row) => row._tag === "started")).toHaveLength(1);
+			expect((yield* facts("counter:1")).filter((row) => row._tag === "started")).toHaveLength(1);
 			expect(generated.calls()).toBe(1);
 		}).pipe(Effect.provide(manager(store, brain(), generated.next)));
 	});

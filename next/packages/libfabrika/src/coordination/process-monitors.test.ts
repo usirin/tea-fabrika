@@ -2,6 +2,7 @@
 import {describe, expect, it} from "@effect/vitest";
 import {Effect, Layer, Schema} from "effect";
 import {Doorbell, Ledger} from "../data/ledger.ts";
+import {lineFor} from "../data/log.ts";
 import {Mailbox} from "./mailbox.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {
@@ -11,6 +12,7 @@ import {
 	X,
 	again,
 	brain,
+	CLIENT,
 	first,
 	from,
 	ids,
@@ -365,13 +367,16 @@ describe("P33, a DOWN is a signal only under its signal id and a matching watch"
 				yield* monitor(store, "real", X);
 				yield* cancel(store, "watch:1");
 				yield* exit(store, X);
-				// The manager's signal id for (to, ref), checked against a real signal.
-				const signalId = (ref: string) => JSON.stringify(["DOWN", toW, ref]);
-				expect(signals(store).map((row) => row.id)).toEqual([signalId("real")]);
-				// watch:1 targets A, so a DOWN for B under watch:1's signal id matches no watch.
-				const id = signalId("watch:1");
-				yield* send(store, id, Down.make({ref: "watch:1", process: B, why: "crashed", to: toW}));
-				expect((yield* fresh(store)).map((letter) => letter.id)).toEqual([signalId("real"), id]);
+				const real = signals(store).map((row) => row.id);
+				expect(real).toHaveLength(1);
+				// watch:1 targets A, so a DOWN for B under a signal id matches no watch. Mail cannot
+				// take a signal id, so only another writer's raw row could, and it is plain mail.
+				const id = JSON.stringify(["DOWN", toW, "watch:1"]);
+				const m = Down.make({ref: "watch:1", process: B, why: "crashed", to: toW});
+				yield* Ledger.use((ledger) =>
+					ledger.append("watcher:1/inbox", id, lineFor(from({by: CLIENT}), {_tag: "send", m})),
+				).pipe(Effect.provide(manager(store)));
+				expect((yield* fresh(store)).map((letter) => letter.id)).toEqual([...real, id]);
 			});
 		},
 	);

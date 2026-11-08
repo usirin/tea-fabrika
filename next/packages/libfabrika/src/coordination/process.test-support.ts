@@ -22,7 +22,9 @@ export const W = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
 export const X = "process_01jc9q4w7z3m8n5r2t6v0xkb4g";
 export const CODE = {program: "counter", hash: "build-a"};
 /** The brain's own writer key: the `by` on every process fact, and the only one the fold trusts. */
-const BRAIN = "SHA256:brain";
+export const BRAIN = "SHA256:brain";
+/** A client's own key: what it asks with, never a fact the fold trusts. */
+export const CLIENT = "SHA256:window-a";
 export const from = (over: Partial<From> = {}): From => ({
 	by: BRAIN,
 	for: "person_01m6v5270hf3c8x2q7w9z4k5mn",
@@ -133,5 +135,7 @@ export const manager = (
 	);
 export const read = (stream: string) =>
 	Ledger.use((ledger) => Stream.runCollect(ledger.read(stream, 0)));
+/** A registered name's lifecycle facts, on the stream only the brain may write. */
+export const facts = (name: string) => read(`processes/${name}`);
 export const receive = (process: string, after = 0) =>
 	ProcessManager.use((processes) => Stream.runCollect(processes.receive(process, after)));

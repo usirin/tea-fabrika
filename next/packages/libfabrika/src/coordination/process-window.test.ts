@@ -5,7 +5,7 @@ import {describe, expect, it} from "@effect/vitest";
 import {Effect, Result, Schema} from "effect";
 import * as fc from "fast-check";
 import {ProcessManager} from "./process-manager.ts";
-import {A, first, from, manager, storage} from "./process.test-support.ts";
+import {A, BRAIN, first, from, manager, storage} from "./process.test-support.ts";
 import {Activity, canRestart, Dead, ProcessFact, recoverActivity, State} from "./process.ts";
 
 describe("p79, inclusive restart window", () => {
@@ -99,7 +99,7 @@ describe("p80, supplied policy facts", () => {
 						.rows()
 						.filter((row) => row._tag === "down")
 						.map((row) => row.body),
-				).toEqual([{process: A, why: "owner-policy", crashes: 17, until: 123_456}]);
+				).toEqual([{process: A, why: "owner-policy", crashes: 17, until: 123_456, asked: BRAIN}]);
 				expect(store.rows().filter((row) => row._tag === "restarted")).toEqual([]);
 			}).pipe(Effect.provide(manager(store)));
 		},

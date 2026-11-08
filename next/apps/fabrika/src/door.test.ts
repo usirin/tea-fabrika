@@ -2125,6 +2125,10 @@ describe("P33 the door never writes process lifecycle facts", () => {
 	it.effect("the door refuses any append to the processes stream", () =>
 		refusedAppend("saved", "processes"),
 	);
+	for (const stream of ["processes/counter:1", "processes/counter:1/inbox", "processes/a/b"])
+		it.effect(`the door refuses any append under processes/, here ${stream}`, () =>
+			refusedAppend("saved", stream),
+		);
 	for (const kind of Object.keys(C.ProcessFact.cases))
 		it.effect(`the door refuses a fact tagged ${kind} on any stream, from any receipt holder`, () =>
 			refusedAppend(kind, "tickets"),
@@ -2264,6 +2268,53 @@ describe("P33 signal ids belong to the brain", () => {
 				expect(letters.map((letter) => letter.m)).toEqual([
 					{_tag: "DOWN", ref: "watch:1", process: TARGET, why: "crashed", to: toWatcher},
 				]);
+			}).pipe(w.provide);
+		}),
+	);
+	it.effect("a door send with no m, a wrong m or junk never wedges a process inbox", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* C.ProcessManager.use((p) =>
+					p.start(
+						C.Start.cases.first.make({
+							id: "start:watcher",
+							name: "watcher:1",
+							code: {program: "watcher", hash: "build-a"},
+						}),
+						brainFrom,
+					),
+				).pipe(Effect.provide(processes(w, asBrain, brainSeat)));
+				const {client} = yield* online(d, w);
+				const sends = [
+					{_tag: "send"},
+					{_tag: "send", m: {_tag: "DOWN", ref: 5}},
+					{_tag: "send", junk: [1, {m: 2}]},
+					{_tag: "send", m: "hello"},
+				];
+				for (const [n, fact] of sends.entries()) {
+					// Each receipt signs its own writes, so each append rides a fresh input.
+					yield* d.route(client, "process.send", request(`press-${n}`));
+					const parent = w.deliveries.at(-1)!.envelope.id;
+					const id = `junk-${n}`;
+					yield* writeId(id, d.signer(parent, PROCESS, "send"));
+					const placing = yield* d.append({
+						id,
+						parent,
+						process: PROCESS,
+						kind: "send",
+						stream: "watcher:1/inbox",
+						fact,
+					});
+					expect(placing._tag).toBe("placed");
+				}
+				// Pinned: a send with no m is skipped; any m is plain mail.
+				const watcher = processes(w, C.Owner.cases.process.make({process: TARGET}), brainSeat);
+				const letters = yield* C.ProcessManager.use((p) =>
+					Stream.runCollect(p.receive(TARGET, 0)),
+				).pipe(Effect.provide(watcher));
+				expect(letters.map((letter) => letter.m)).toEqual([{_tag: "DOWN", ref: 5}, "hello"]);
 			}).pipe(w.provide);
 		}),
 	);
