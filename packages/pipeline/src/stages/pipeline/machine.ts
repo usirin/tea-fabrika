@@ -273,6 +273,9 @@ const StepIn = Schema.Struct({
 });
 const AskIn = Schema.Struct({
 	number: Schema.Finite,
+	for: Schema.optionalKey(Schema.String),
+	step: Schema.optionalKey(LaneStep),
+	carry: Schema.optionalKey(Carry),
 	ask: Schema.String,
 	what: Schema.String,
 	picks: Schema.Array(Schema.String),
@@ -286,7 +289,7 @@ const AskIn = Schema.Struct({
 	head: Schema.optionalKey(Schema.String),
 });
 /** How the lane ended, for what it takes with it. Left out: a lane saved before this key still reads. */
-const ReleaseIn = Schema.Struct({...LaneIn.fields, outcome: Schema.optionalKey(LaneOutcome)});
+const ReleaseIn = Schema.Struct({...LaneIn.fields, outcome: Schema.optionalKey(LaneOutcome), resume: Schema.optionalKey(LaneStep)});
 
 /** Who filed it, as the lane reads it. */
 export const Filed = Schema.Struct({
@@ -1045,6 +1048,9 @@ const headAsked = (kind: AskFor, carry: Carry): {readonly head?: string} => {
 const asking = (s: Held, question: Question): Step_ => {
 	const cmd = askPerson({
 		number: s.number,
+		for: question.for === "step" ? question.call?.about ?? "unknown" : question.for,
+		step: question.step,
+		carry: s.carry,
 		ask: question.ask,
 		what: question.what,
 		picks: question.picks,
@@ -1179,6 +1185,7 @@ const releasing = (s: Held, close: End | Stop): Step_ => {
 		number: s.number,
 		lane: s.lane,
 		outcome: close.outcome,
+		...("at" in close ? {resume: close.at.step} : {}),
 		intent: intentOf("lane", s.number, "release"),
 	});
 	return [{...heldOf(s), ...close, phase: "releasing", asked: cmd}, [cmd]];

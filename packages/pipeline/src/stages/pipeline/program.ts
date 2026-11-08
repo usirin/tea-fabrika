@@ -15,6 +15,8 @@ import {bookTarget} from "../../code-host-local.ts";
 import {mustFail, mustPass} from "../../controls.ts";
 import {planOf, readTicketId, type TicketId, ticketOf} from "../../ids.ts";
 import type {AgentStep} from "../../settings.ts";
+import {CodeHost} from "../../services.ts";
+import {sealAsk, type Evidence, Rec} from "../../tickets/ask.ts";
 import {hashOf, sha256, textOf} from "../../tickets/approval.ts";
 import {
 	type Checked,
@@ -1618,6 +1620,10 @@ const laneInterpret = ({send, machines}: Stages) => ({
 
 	lane_release: (cmd: ReturnType<typeof releaseLane>) =>
 		Effect.gen(function* () {
+			if (cmd.outcome?.kind === "stuck" && cmd.resume !== undefined)
+				yield* (yield* Tickets).write(cmd.number, `${cmd.intent}/stopped`, {
+					type: "stopped", why: cmd.outcome.why, resume: cmd.resume,
+				});
 			// First: it never fails, and a kill before the release comes back here to finish both.
 			yield* leaveBehind(cmd.number, cmd.outcome);
 			const {repo} = yield* (yield* LaneWork).origin;
@@ -1628,6 +1634,10 @@ const laneInterpret = ({send, machines}: Stages) => ({
 	lane_ask: (cmd: ReturnType<typeof askPerson>) =>
 		Effect.gen(function* () {
 			const tickets = yield* Tickets;
+			const ticket = yield* tickets.read(cmd.number);
+			const previous = factsOf(ticket.timeline, "asked").find((a) =>
+				a.ask === cmd.ask || "format" in a && a.replaces === cmd.ask);
+			if (previous !== undefined && "format" in previous) return null;
 			const spent =
 				cmd.spent === true
 					? [
@@ -1657,14 +1667,40 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			// The lane that asks, by the trace id its `started` facts carry, so a view of a ticket with
 			// several lanes puts the ask in the right one.
 			const trace = yield* jobTraceId;
-			yield* tickets.write(cmd.number, cmd.ask, {
-				type: "asked",
-				ask: cmd.ask,
-				what: cmd.what,
-				...(cmd.head === undefined ? {} : {head: cmd.head}),
-				picks: cmd.picks as never,
-				...(trace === null ? {} : {trace}),
-			});
+			const work = yield* LaneWork;
+			const {repo} = yield* work.origin;
+			const kind = cmd.for ?? "unknown";
+			const plan = cmd.carry?.plan;
+			let evidence: typeof Evidence.Type = {_tag: "other", text: [...(cmd.also ?? []), ...spent].join("\n")};
+			if (kind === "approve" && plan !== null && plan !== undefined)
+				evidence = {_tag: "plan", version: cmd.carry?.version ?? 1, plan};
+			if (cmd.head !== undefined) {
+				const host = yield* CodeHost;
+				const id = yield* need(readTicketId(`${repo}#${cmd.number}`), "No ticket id");
+				const target = kind === "exam_merge" ? `${planOf(id)}/exam` : bookTarget(planOf(id));
+				const change = yield* host.change(target, cmd.head);
+				if (change.diff === null) return yield* Effect.fail(unknown);
+				evidence = {_tag: "change", head: change.head, diff: change.diff,
+					checks: change.checks.required, review: factsOf(ticket.timeline, "reviewed").at(-1) ?? null,
+					rules: change.rules.map((r) => ({path: r.file, text: r.text}))};
+			}
+			const questions = plan?.questions ?? [];
+			const sure = questions.length > 0 && questions.every((q) => q.sure !== undefined)
+				? Math.min(...questions.map((q) => q.sure ?? 0)) : null;
+			const first = cmd.picks[0];
+			const rec = previous !== undefined || first === undefined || kind === "spend"
+				? Rec.cases.none.make({why: previous === undefined ? "A priced recommendation is not available" : "No recommendation was recorded"})
+				: kind === "approve" && questions.some((q) => q.lean.trim() === "")
+					? Rec.cases.none.make({why: "The plan has an open question without a lean"})
+					: Rec.cases.pick.make({pick: first, why: kind === "approve" ? "The plan covers the ticket" : "The step recommends this answer",
+						cost: kind === "approve" ? "Write and check the change" : "Confidence and cost have not been measured", sure: kind === "approve" ? sure : null});
+			const ask = previous === undefined ? cmd.ask : `${cmd.ask}/sealed`;
+			const sealed = yield* sealAsk({ask, for: kind, step: cmd.step ?? "unknown", repo, why: null,
+				what: cmd.what, picks: cmd.picks.map((pick, i) => ({pick, does: cmd.does?.[i] ?? `Take ${pick}`})),
+				rec, ticket: textOf(ticket), evidence, until: null,
+				...(previous === undefined ? {} : {replaces: cmd.ask}), ...(trace === null ? {} : {trace})});
+			if (previous !== undefined) yield* tickets.write(cmd.number, `withdraw/${cmd.ask}`, {type: "withdrawn", ask: cmd.ask, why: "changed"});
+			yield* tickets.write(cmd.number, ask, sealed);
 			yield* send("step", `asks: ${cmd.what} Answer it in: ticket --ticket ${cmd.number}`);
 			return null;
 		}).pipe(Effect.mapError(() => unknown)),
