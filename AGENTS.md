@@ -459,6 +459,11 @@ Write-ups are read by busy people, some of them not native English speakers.
     pipes between programs. Their taste and quality bar, on our primitive. Never
     copy a Linear screen. Ask which program owns the job, what composes beside
     what, and what becomes a piece every program gets for free.
+- **Pick the look before the PR.** A screen being built in today's app runs the look step
+  ([step 5 of the guidelines skill](./.claude/skills/guidelines/SKILL.md#5-build-3-or-4-designs-and-look-at-them-next-to-linear))
+  before its pull request opens: 3 or 4 real designs, shots at the five layouts beside Linear,
+  and the owner picks one (owner, 2026-11-08). That covers all work in flight: the ask desk,
+  the inbox, the project window and typography. The keys editor already does it.
 - **Show it running.** A PR that adds or changes a program's window carries
   screenshots from the real built app, saved in that program's `docs/` folder
   and shown in the PR body. Take them the way `apps/fabrika/e2e.ts` drives the
