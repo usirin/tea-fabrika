@@ -24,9 +24,10 @@ const checkTypes = (raw: string) => {
 		takeProcess(ProcessId.make(raw));
 		// @ts-expect-error An unchecked string has no process brand.
 		takeProcess(raw);
-		expectTypeOf<typeof TraceProcessId.Type>().toEqualTypeOf<typeof ProcessId.Type>();
+		// A6 keeps the existing process API unbranded until PR 2.
+		expectTypeOf<typeof TraceProcessId.Type>().toEqualTypeOf<string>();
 		expectTypeOf<Context.Service.Shape<typeof ProcessIdGenerator>["next"]>().toEqualTypeOf<
-			Effect.Effect<typeof ProcessId.Type>
+			Effect.Effect<typeof TraceProcessId.Type>
 		>();
 	};
 	const checkGenerator = Effect.gen(function* () {

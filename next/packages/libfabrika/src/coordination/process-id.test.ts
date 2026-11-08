@@ -4,6 +4,7 @@ import {describe, expect, it, vi} from "@effect/vitest";
 import {Cause, Clock, Effect, Exit, Schema} from "effect";
 import {TestClock} from "effect/testing";
 import {ProcessId} from "../data/trace.ts";
+import * as Id from "../id.ts";
 import * as Coordination from "./index.ts";
 
 const maxClock = 2 ** 48 - 1;
@@ -62,10 +63,11 @@ describe("P10 shared process ids", () => {
 		options,
 	);
 	it.effect.prop(
-		"shape: canonical TypeIDs contain UUIDv7 and the controlled clock",
+		"shape: both process schemas decode UUIDv7 ids with the controlled clock",
 		{at: Time, count: Count},
 		({at, count}) =>
 			Effect.gen(function* () {
+				const Specific = Id.make("process");
 				yield* TestClock.setTime(at);
 				const gen = yield* Coordination.ProcessIdGenerator;
 				const ids = yield* Effect.forEach(Array.from({length: count}), () => gen.next, {
@@ -74,6 +76,8 @@ describe("P10 shared process ids", () => {
 				expect(timestamp(ids[0]!)).toBe(at);
 				for (const id of ids) {
 					expect(Schema.is(ProcessId)(id)).toBe(true);
+					expect(Schema.decodeUnknownSync(ProcessId)(id)).toBe(id);
+					expect(Schema.decodeUnknownSync(Specific)(id)).toBe(id);
 					expect(id).toMatch(/^process_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
 					const bytes = decode(id);
 					expect(bytes[6]! >>> 4).toBe(7);
