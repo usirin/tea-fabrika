@@ -1491,7 +1491,7 @@ export class Mailbox extends Context.Service<Mailbox, {
 	readonly receive: (name: string, after: Rev) => Stream.Stream<Letter, LedgerError>; // another `_tag` is skipped and kept
 }>()("@kampus/libfabrika/Mailbox") { static readonly layer: Layer.Layer<Mailbox, never, Ledger> }
 
-// process-manager.ts: P33 adds exit, info, monitor and demonitor
+// process-manager.ts: replaced by P33 (2026-11-08); see Processes, as P33 built it, below
 export class ProcessManager extends Context.Service<ProcessManager, {
 	readonly start: (pid: string, code: {readonly program: string; readonly hash: string}, from: From) =>
 		Effect.Effect<Appended, LedgerError>;            // one `started {program, hash}` on `<pid>`, entry id = the hash
@@ -1535,6 +1535,102 @@ export class ClientManager extends Context.Service<ClientManager, {
 - One rule, `allows`, decides; `foldMembers` skips what it refuses, and `write` answers with it. `write` refuses before it appends, then folds again to the new rev, so the Mac that lost a sheet race hears `ignored used`.
 - `founded` is written by the first call on an empty `door/members`, under the fixed id `founded`, with the Layer's `by`, `person` and `build`; a refusal other than `id_reused` fails the call with `LedgerError refused`.
 - No `to` is checked here: P10's door checks it before `write`. Traced calls use `Effect.fn` ([Effect.fn for traced functions](../direction/effect-fn-for-traced-functions.md), owner, 2026-11-07). Spans: `mailbox.send`, `mailbox.receive`, `process.start`, `members.read`, `members.write`, with OpenTelemetry's `messaging.*` keys where they fit and `fab.<piece>.*` for the rest (p97).
+
+### Processes, as P33 built it
+
+Built 2026-11-08, from [P33's row](./tier-1.md#the-pull-requests-one-at-a-time), tracker ticket 252, on its way to main. It replaces P9's `ProcessManager` above. The exported names, bodies left out; the code in `next/packages/libfabrika/src/coordination/` and `data/ledger-transaction.ts` is the source.
+
+```ts
+// The whole idea, as built. Values are test values.
+const first = yield* processes.start(Start.cases.first.make({id: "start:counter:1", name: "counter:1", code}), from);
+yield* processes.monitor("watch:1", first.process, from);   // the recipient comes from the wiring, never from params
+yield* processes.exit(first.process, "crashed", from);      // one transaction: exited, one DOWN per watch, the exit's own watches end
+const second = yield* processes.start(
+	Start.cases.again.make({id: `restart:${first.process}`, name: "counter:1", code, after: first.process, why: "crashed"}),
+	from,
+);                                                          // a new process ID; restarted {process, after, name, why, build}
+```
+
+```ts
+// data/ledger-transaction.ts: several appends in one SQLite transaction, shared with Referee
+export interface LedgerTurn {
+	readonly read: (stream: string, after: Rev) => Iterable<Entry>;
+	readonly append: (stream: string, id: string, line: Line) => {readonly rev: Rev; readonly pos: Rev};
+}
+export class LedgerTransaction extends Context.Service<LedgerTransaction, {
+	readonly transact: <A>(step: (turn: LedgerTurn) => A) => Effect.Effect<A, LedgerError>; // a refusal aborts the whole turn
+}>()("@kampus/libfabrika/LedgerTransaction") { static readonly layer: (sql: Sql) => Layer.Layer<LedgerTransaction, never, Doorbell> }
+
+// process.ts: shapes and pure rules
+const Text = Schema.NonEmptyString.check(Schema.isMaxLength(256)); // every client text in a brain line
+export const Owner = Schema.TaggedUnion({brain: {}, process: {process: ProcessId}});
+export const Recipient = Schema.TaggedUnion({process: {process: ProcessId}, client: {client: Text, session: ProcessId}});
+export const Start = Schema.TaggedUnion({
+	first: {id, name, code: {program, hash}},
+	again: {id, name, code, after: ProcessId, why},
+});
+export const State = Schema.TaggedUnion({live: {process, code}, ended: {process, code, why}, down: {process, code, why, crashes, until}});
+export const ProcessFact = Schema.TaggedUnion({
+	registered: {name, program, owner: Owner},          // on `processes`, once per name, never freed
+	started: {process, name, program, hash},             // the rest on `processes/<name>`
+	exited: {process, why},
+	restarted: {process, after, name, why, build},
+	down: {process, why, crashes, until},
+	monitored: {ref, process, to: Recipient},            // on `processes`
+	demonitored: {ref, to: Recipient, why: "canceled" | "watcher_exited"},
+});
+export const Down = Schema.TaggedStruct("DOWN", {ref, process, why, to: Recipient});
+export const Dead = Schema.TaggedStruct("dead", {tries, limit, m, build, errors}); // errors: one class per try, at most 32
+export const Activity = Schema.TaggedUnion({idle: {process}, stepping: {process, letter, build}}); // P11 writes it
+export const recoverActivity: (raw: unknown) => Result<{_tag: "idle", process} | {_tag: "interrupted", process, letter, build, why: "interrupted"}, LedgerError>; // bad_row on a broken marker
+export const canRestart: (times: ReadonlyArray<number>, now: number, period: number, intensity: number) => boolean; // at >= now - period
+export const brainOnly: (write: {stream: string; id: string; tag: string}) => boolean; // the one writer rule
+export const inSignalSpace: (id: string) => boolean;  // a JSON array led by "DOWN"
+export class ProcessError extends Schema.TaggedError<ProcessError>()("ProcessError", {
+	why: Schema.Literals(["not_parent", "name_taken", "alive", "stale", "id_reused", "id_collision", "ended", "bad_ref", "bad_name", "bad_text"]),
+}) {}
+
+// process-manager.ts
+export class ProcessManager extends Context.Service<ProcessManager, {
+	readonly start: (request: Start, from: From) => Effect.Effect<{process: string; rev: number}, ProcessError | LedgerError>;
+	readonly exit: (process: string, why: string, from: From) => Effect.Effect<void, ProcessError | LedgerError>;
+	readonly info: Effect.Effect<ReadonlyArray<{process, name, program, build, restarts}>, LedgerError>; // live ones; restarts folds from restarted
+	readonly isLive: (process: string) => Effect.Effect<boolean, LedgerError>;                          // P10's signer asks this
+	readonly monitor: (ref: string, process: string, from: From) => Effect.Effect<void, ProcessError | LedgerError>;
+	readonly demonitor: (ref: string, from: From) => Effect.Effect<void, ProcessError | LedgerError>;
+	readonly receive: (process: string, after: Rev) => Stream.Stream<Letter, ProcessError | LedgerError>; // fresh delivery
+	readonly down: (process: string, policy: {why: string; crashes: number; until: number}, from: From) => Effect.Effect<void, ProcessError | LedgerError>;
+}>()("@kampus/libfabrika/ProcessManager") {
+	static readonly layer: (wiring: {owner: Owner; recipient: Recipient; by: string}, nextId: Effect.Effect<string>) =>
+		Layer.Layer<ProcessManager, never, LedgerTransaction>; // wiring is trusted, never decoded from params; nextId is P10's generator
+}
+export const CoordinationLayer: (wiring, nextId) => Layer.Layer<Mailbox | ProcessManager, never, Ledger | LedgerTransaction>;
+
+// gateway-manager.ts: who is online, in mutable rows outside the ledger
+export class GatewayManager extends Context.Service<GatewayManager, {
+	readonly join: (connection: {key, client, gateway, session, at}) => Effect.Effect<void, LedgerError>;
+	readonly leave: (client: string, session: string) => Effect.Effect<void, LedgerError>; // removes only its own session
+	readonly online: (key: string) => Effect.Effect<ReadonlyArray<{key, client, gateway, session, at, state: "online" | "away" | "unknown"}>, LedgerError>;
+}>()("@kampus/libfabrika/GatewayManager") { static readonly layer: (sql: Sql, adapter: {probe, admitted}) => Layer.Layer<GatewayManager> }
+```
+
+- **One writer rule.** Only the brain's `ProcessManager` writes `processes`, any stream under `processes/`, any `ProcessFact` case, or any id in the signal id space. `brainOnly` says so, and three doors use it: the door refuses such an append, `Mailbox.send` answers `refused forbidden`, and the session signer answers `SigningRefused signal` for a signal id before it reads or writes, so the parent stays free for a real write.
+- **The brain signs its own facts.** Every line `ProcessManager` writes has the brain's key as `by`, and keeps the caller's key in the body as `asked`. The fold counts a fact only when `by` is the brain, and never reads `asked`.
+- **A `DOWN` is a signal only under its signal id,** `["DOWN", to, ref, round]`, written by the brain, with a watch of that recipient, ref and target. `round` counts that watch's `monitored` facts, so a watch renewed after a cancel gets a fresh id, and an earlier round's signal is dropped. Anything else shaped like a `DOWN` is plain mail.
+- **Inboxes.** A process's `DOWN` lands in its name's inbox, a client's in `client:<id>/inbox`. A name never starts with `client:`, has no `/`, and is never `processes` or `door`.
+- **`receive` never fails on what another writer put in the inbox.** A `send` with no `m` is skipped, and any other `m` is mail. It fails only with `ended` for a process that is not live, or with the ledger's own error.
+- **Text caps.** Every client text that lands in a brain line is at most 256 characters, so no brain line can reach the ledger's line limit. An over-cap start, exit, monitor or down is `bad_text` and writes nothing. `Dead.errors` holds at most 32 entries.
+- **Who is online** is computed on each ask from each gateway's last ping: online under 75 s, away after, `unknown` when the probe fails. No online fact is written.
+- Spans: `process.start`, `process.exit`, `process.monitor`, `process.demonitor`, `process.down`, `process.receive`, `process.info`, `process.isLive`, `gateway.join`, `gateway.leave`, `gateway.online`, `gateway.probe`. Each `process.*` span carries `fab.process`, the real process ID, refusals included (p97).
+
+**Where it hands off.**
+
+- **P11:** writes the `Activity` marker around each step and calls `storage.sync()` right after `stepping`. [Experiment 231](../../experiments/231-process-wakes.md) found that a constructor runs on every wake, idle ones too, so it can never mean a crash, and that the marker was lost twice when the object aborted right after the put; `sync()` kept it. P11 also reads fresh mail through `ProcessManager.receive` and puts the real process ID on runner spans.
+- **P34:** supplies the restart policy, calls `down` and `canRestart`, writes `dead`, and starts the successor with `Start.cases.again`. Retry counts must survive the new process ID.
+- **P10 and P12:** the signer checks `isLive` in the same project turn as a new append, and P12 wires connections to `GatewayManager` and the platform probe.
+- **P18** binds a window's monitor to its exact client session. **P21** reads `online(key)`. **P25** reads `info` for `ps`. **P27** checks recovery from these facts and P37's records.
+
+**What it cannot tell us.** The cost of folding process history and probing gateways on workerd (P12 measures it). Whether local wakes match every cloud shutdown (P24 checks real hibernation; experiment 231 ran on Miniflare only). Whether P11's step path writes and clears the marker at the right point. Whether P34's brake and backoff recover correctly. How a `DOWN`'s reason reads in P18's real window. Whether 256 characters is the right cap: it keeps every brain line under the ledger's limit, but no real text has been measured against it.
 
 ### The span sink, as P37 built it
 
@@ -1718,6 +1814,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - **p10 and p18 refuse an id reused with another body** (owner, 2026-11-07). The same `(stream, id)` with another `by`, `for`, `parent`, `traceId`, `_tag` or `body` is `refused id_reused`, and nothing is written; `sentAt`, `seen` and `build` may differ on a resend. *They said: one line, the same answer, the first body kept, which dropped the second body with no trace.*
 - **p21 moves to P9** (P6's plan, 2026-11-07). It tests `Mailbox`, `ProcessManager` and `CoordinationLayer`, which P9 builds. p10 to p13 stay with the stage, in P12.
 - **p21 is restated for P6's `append`** (P9, 2026-11-07). `send` writes one `{_tag: "send", body: {m}}` on `<to>/inbox` and answers P6's `Appended` as it is, `pos` included, so plan-115's extra read is gone; a resend gets its first placing. `receive` gives `Letter`s past `after` in rev order, every field from the entry, past one page; another `_tag` is skipped and stays in the log; a `send` with no `m` fails the Stream with `bad_row`. `start` writes one `started {program, hash}` per build under the hash; the same build again is its first placing, or `id_reused` from another input, and writes nothing. No Layer fails at build. Plants: a placing from the wrong line; a new id on each start; `for`, `parent` or `traceId` dropped from a Letter; an unknown tag that ends the Stream.
+- **p21's start rule is replaced** (P33, 2026-11-08, by an exam amendment in its test writer's commit). Each start is a new process with a new ID, and a retry of the same start request gets its first answer; P9's one `started {program, hash}` per build hash is gone, so starting the same build twice is two processes. `Mailbox.send` also answers `refused forbidden` for an inbox or id only the brain writes. The rest of p21 stands. *It said: one `started` per build under the hash; the same build again is its first placing.*
 - **p28 is widened** (owner, 2026-11-06, built by P9): equal device roots, the grant tree, one live sheet, the limits. Its full list is in [P9's row](./tier-1.md#the-pull-requests-one-at-a-time) and P9's tests, fast-check, seed 119120. Added plants: a dropped device whose tabs stay; a dropped device that takes another with it; a spent sheet used twice; two live sheets; an agent's approve accepted; a revoked key let back in by a new grant.
 - **p22** adds, from PR D: a program's own `refuse` leaves no line and answers with that program's `why`. `bad_msg` stays for a bad shape.
 - **p24** runs oxlint on `next/`, with an edge only on a line under an edge comment, `-- edge: <why>` (owner, 2026-11-05; it said: only in files the exam PR lists).
@@ -1925,7 +2022,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Plants: a reload that drops the queued Msg; a migrate that skips S3's chain; `[Restart]` that keeps the old `init`.
 
 **p79, processes (scenario of P33).** `new`, node. s3, s7. `coordination/process-manager.ts`. *Added 2026-11-06 (owner: Tier 1 builds this slice of C4 and C5).*
-- `exit` writes `exited {why}`; `info` lists every live process with its id and name; each start is a new process with its own id, `process_<26 chars>`, and each start after a crash writes `restarted {process, after, name, why, build}`, where `after` is the id of the process it replaced. No process id is ever used twice, and `ps` counts restarts from `restarted` facts. *Proposed by the lead 2026-11-07, 75%: a start is a new process (OTP); the `run` field goes. Doubt: whether `after` is a link rather than a field; P33's plan settles it.*
+- `exit` writes `exited {why}`; `info` lists every live process with its id and name; each start is a new process with its own id, `process_<26 chars>`, and each start after a crash writes `restarted {process, after, name, why, build}`, where `after` is the id of the process it replaced. No process id is ever used twice, and `ps` counts restarts from `restarted` facts. *Proposed by the lead 2026-11-07, 75%: a start is a new process (OTP); the `run` field goes. Doubt: whether `after` is a link rather than a field; P33's plan settles it.* *Built 2026-11-08 by P33: `after` is a field, since `parent` already names the input that caused the write ([as built](#processes-as-p33-built-it)).*
 - A monitor gets one `DOWN {process, why, to}` when its process ends, `noproc` at once if it was already gone, and none after `demonitor`, which also flushes a `DOWN` already in the inbox. A `DOWN` from an earlier process never lands in a later one.
 - The restart window counts a restart on its edge. A name is never freed. Only the parent sends an exit signal.
 - Who is online folds from each gateway's last ping and is never written.
