@@ -142,8 +142,11 @@ the same way. Or a later `@effect/tsgo` whose rule covers these cases, counted a
   to the tracer. Nobody has measured how much on our code. `fnUntraced` on helpers and loops
   keeps the count down.
 - **A stack frame per call** for `Effect.fn`, which is what makes a failure point at a function.
-- **No check yet.** Until a rule fires, a reader keeps it, as with
-  [no Promises](./no-promises.md) before its lint rule.
+- **A rule of our own since ticket 285.** `fabrika/effect-functions` in `oxlint-plugins/` blocks a
+  named function in `next/` whose whole body is wrapped in `Effect.withSpan`. On all of `next/` it
+  found 9: 8 real, 1 false alarm in a test helper, so tests were left out, and then 0 false alarms
+  (`oxlint-plugins/README.md`). It reads syntax only: it does not check that a helper uses
+  `fnUntraced`, so a reader still keeps that part.
 
 **How sure: 90%** on the rule; it is Effect's own documented way, and the spans `next/` already
 writes fit it. **50%** on the `ledger.call` lean, which the owner has not looked at.

@@ -153,8 +153,8 @@ export const ledgerStore = (
 		Option.fromUndefinedOr(sql.exec(query, ...params)[0]);
 
 	/** Runs `work` as one atomic step, reading the referee's clock inside it. A throw is typed. */
-	const atomic = <A>(work: (now: () => number) => A): Effect.Effect<A, LedgerError> =>
-		Effect.clockWith((clock) =>
+	const atomic = Effect.fnUntraced(function* <A>(work: (now: () => number) => A) {
+		return yield* Effect.clockWith((clock) =>
 			Effect.try({
 				try: () => {
 					if (!ready) {
@@ -186,6 +186,7 @@ export const ledgerStore = (
 				}).pipe(Effect.andThen(Effect.fail(failure)));
 			}),
 		);
+	});
 
 	const behind = (stream: string, after: Rev) =>
 		decodeLag(
@@ -248,8 +249,13 @@ export const ledgerStore = (
 
 	/** Rings one waiter, at most once: a failed ring is gone all the same, kept only in its span. A
 	 *  ring that fails or dies, even by throwing before it gives an Effect, never changes the append. */
-	const ring = (stream: string, rev: Rev, {to, after}: Ring) =>
-		Effect.suspend(() => doorbell.ring(to, stream, rev)).pipe(
+	const ring = Effect.fn("ledger.ring")(function* (stream: string, rev: Rev, {to, after}: Ring) {
+		yield* Effect.annotateCurrentSpan({
+			...short({[STREAM]: stream, [tag("to")]: to}),
+			[tag("after")]: after,
+			[tag("rev")]: rev,
+		});
+		return yield* Effect.suspend(() => doorbell.ring(to, stream, rev)).pipe(
 			Effect.onExit((exit) =>
 				Effect.annotateCurrentSpan(
 					Exit.match(exit, {
@@ -258,64 +264,66 @@ export const ledgerStore = (
 					}),
 				),
 			),
-			Effect.withSpan("ledger.ring", {
-				attributes: {
-					...short({[STREAM]: stream, [tag("to")]: to}),
-					[tag("after")]: after,
-					[tag("rev")]: rev,
-				},
-			}),
-			Effect.catchCause(() => Effect.void),
 		);
+	});
 
-	const refused = (why: Why) =>
-		Effect.as(
+	const refused = Effect.fnUntraced(function* (why: Why) {
+		return yield* Effect.as(
 			Effect.annotateCurrentSpan({[tag("answer")]: "refused", [tag("why")]: why}),
 			Appended.cases.refused.make({why}),
 		);
+	});
 
-	const append = (stream: string, id: string, input: unknown) =>
-		Effect.gen(function* () {
-			const checked = check(stream, id, input);
-			if (Result.isFailure(checked)) return yield* refused(checked.failure);
-			const line = checked.success;
-			yield* Effect.annotateCurrentSpan(short({[tag("tag")]: line._tag, [tag("by")]: line.by}));
-			const placing = yield* atomic((now) => place(stream, id, line, now));
-			return yield* Placing.match(placing, {
-				refused: ({why}) => refused(why),
-				resent: ({rev, pos}) =>
-					Effect.as(
-						Effect.annotateCurrentSpan({
-							[tag("answer")]: "resent",
-							[tag("rev")]: rev,
-							[tag("pos")]: pos,
-						}),
-						Appended.cases.placed.make({rev, pos}),
-					),
-				placed: ({rev, pos, rings}) =>
-					Effect.forEach(rings, (waiter) => ring(stream, rev, waiter), {
+	const append = Effect.fn("ledger.append")(function* (stream: string, id: string, input: unknown) {
+		yield* Effect.annotateCurrentSpan({
+			...short({[STREAM]: stream, [ID]: id}),
+			[OPERATION]: "send",
+		});
+		const checked = check(stream, id, input);
+		if (Result.isFailure(checked)) return yield* refused(checked.failure);
+		const line = checked.success;
+		yield* Effect.annotateCurrentSpan(short({[tag("tag")]: line._tag, [tag("by")]: line.by}));
+		const placing = yield* atomic((now) => place(stream, id, line, now));
+		return yield* Placing.match(placing, {
+			refused: ({why}) => refused(why),
+			resent: ({rev, pos}) =>
+				Effect.as(
+					Effect.annotateCurrentSpan({
+						[tag("answer")]: "resent",
+						[tag("rev")]: rev,
+						[tag("pos")]: pos,
+					}),
+					Appended.cases.placed.make({rev, pos}),
+				),
+			placed: ({rev, pos, rings}) =>
+				Effect.forEach(
+					rings,
+					(waiter) => ring(stream, rev, waiter).pipe(Effect.catchCause(() => Effect.void)),
+					{
 						concurrency: "unbounded",
 						discard: true,
-					}).pipe(
-						Effect.andThen(
-							Effect.annotateCurrentSpan({
-								[tag("answer")]: "placed",
-								[tag("rev")]: rev,
-								[tag("pos")]: pos,
-								[tag("rings")]: rings.length,
-							}),
-						),
-						Effect.as(Appended.cases.placed.make({rev, pos})),
+					},
+				).pipe(
+					Effect.andThen(
+						Effect.annotateCurrentSpan({
+							[tag("answer")]: "placed",
+							[tag("rev")]: rev,
+							[tag("pos")]: pos,
+							[tag("rings")]: rings.length,
+						}),
 					),
-			});
-		}).pipe(
-			Effect.withSpan("ledger.append", {
-				attributes: {...short({[STREAM]: stream, [ID]: id}), [OPERATION]: "send"},
-			}),
-		);
+					Effect.as(Appended.cases.placed.make({rev, pos})),
+				),
+		});
+	});
 
-	const read = (stream: string, after: Rev, reader: string) =>
-		atomic((now) => {
+	const read = Effect.fn("ledger.read")(function* (stream: string, after: Rev, reader: string) {
+		yield* Effect.annotateCurrentSpan({
+			...short({[STREAM]: stream, [tag("reader")]: reader}),
+			[OPERATION]: "receive",
+			[tag("after")]: after,
+		});
+		return yield* atomic((now) => {
 			const {head, lag} = behind(stream, after);
 			const entries = sql
 				.exec(
@@ -337,17 +345,15 @@ export const ledgerStore = (
 				}),
 			),
 			Effect.map(({entries}) => entries),
-			Effect.withSpan("ledger.read", {
-				attributes: {
-					...short({[STREAM]: stream, [tag("reader")]: reader}),
-					[OPERATION]: "receive",
-					[tag("after")]: after,
-				},
-			}),
 		);
+	});
 
-	const wait = (stream: string, after: Rev, reader: string) =>
-		atomic(() => {
+	const wait = Effect.fn("ledger.wait")(function* (stream: string, after: Rev, reader: string) {
+		yield* Effect.annotateCurrentSpan({
+			...short({[STREAM]: stream, [tag("reader")]: reader}),
+			[tag("after")]: after,
+		});
+		return yield* atomic(() => {
 			const {head, lag} = behind(stream, after);
 			if (head > after) return {head, lag, waited: Waited.cases.ready.make({rev: head})};
 			sql.exec(
@@ -367,10 +373,8 @@ export const ledgerStore = (
 				}),
 			),
 			Effect.map(({waited}) => waited),
-			Effect.withSpan("ledger.wait", {
-				attributes: {...short({[STREAM]: stream, [tag("reader")]: reader}), [tag("after")]: after},
-			}),
 		);
+	});
 
 	const inTurn = <A>(step: (turn: LedgerTurn) => A, now: () => number) => {
 		const rings: Array<{stream: string; rev: Rev; waiter: Ring}> = [];
@@ -404,10 +408,15 @@ export const ledgerStore = (
 	};
 	const transact = Effect.fn("ledger.transaction")(function* <A>(step: (turn: LedgerTurn) => A) {
 		const committed = yield* atomic((now) => inTurn(step, now));
-		yield* Effect.forEach(committed.rings, ({stream, rev, waiter}) => ring(stream, rev, waiter), {
-			discard: true,
-			concurrency: 1,
-		});
+		yield* Effect.forEach(
+			committed.rings,
+			({stream, rev, waiter}) =>
+				ring(stream, rev, waiter).pipe(Effect.catchCause(() => Effect.void)),
+			{
+				discard: true,
+				concurrency: 1,
+			},
+		);
 		return committed.value;
 	});
 
