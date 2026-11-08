@@ -10,6 +10,7 @@ export type KeyModel = {readonly prefix: {readonly armed: boolean; readonly unti
 export type KeyMsg =
 	| {readonly type: "press"; readonly press: Press; readonly at: number}
 	| {readonly type: "keys"; readonly keys: Keys}
+	| {readonly type: "mode"; readonly program: string; readonly mode: string | null}
 	| {readonly type: "question"; readonly tile: string | null}
 	| {readonly type: "applied"; readonly id: string; readonly target: Place};
 export type KeyCommand = {

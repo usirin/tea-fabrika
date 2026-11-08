@@ -4,6 +4,7 @@ import {Shown as TraceShown, shownOf as traceShownOf} from "@tea-fabrika/trace";
 import {TALLY_AT, TALLY_TRACE} from "@tea-fabrika/trace/tally";
 import {Schema} from "effect";
 import {chromium} from "playwright";
+import {fresh} from "./src/desk/desk.ts";
 import {createContainer, createTile} from "./src/desk/layout/node.ts";
 import {readToPage, readToWindow} from "./src/messages.ts";
 
@@ -77,17 +78,16 @@ const desk = (() => {
 	const msg = {
 		type: "desk",
 		desk: {
+			...fresh(),
 			at: "open",
 			workspaces: [{id: "1", layout: {root, zoomed: null}, focused: "t1"}],
 			active: "1",
-			prefix: {armed: false},
 			ask: null,
 			jobs: {},
 			closing: [],
 			next: 2,
 			area: null,
 		},
-		takes: {all: false, keys: ["<c-b>"]},
 	};
 	const read = readToPage(msg);
 	if (read.kind === "refused") throw new Error(`the desk does not read: ${read.why}`);

@@ -2,13 +2,14 @@ import {applyCell} from "@demlik/tea";
 import {Result} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
+import {packs} from "../../../../fixtures/keybindings/programs.ts";
 import {keyPress, loadKeyRouter, type KeyRouter} from "../../../../fixtures/keybindings/router.ts";
 import {capOf} from "../window/pop.ts";
-import {commandOn, decodeKeys, defaults, Does, type Keys, spell} from "./keymap.ts";
+import {decodeKeys, defaults, fileWord, type Row, spell} from "./keymap.ts";
 import {keyOwner, matchPress} from "./keys.ts";
 
 // The keybindings file's laws (p12, p17, and the swap of p9), for any text and for any file
-// written from the file's own words. Today's version, ticket 174, PR 1. The examples are in
+// written from the file's own words. Today's version, ticket 174, PR 2. The examples are in
 // keymap.test.ts. Seed 119120, the shared one.
 //
 //   any text at all            rows, or a refusal with a line in the text; never a throw
@@ -20,7 +21,16 @@ const OPTS = {seed: 119120, numRuns: 300};
 const lineCount = (text: string) => text.split("\n").length;
 
 /** Some words the file knows, and two it does not. */
-const word = fc.constantFrom(...Does.literals, "tezgah.zom", "desk.split");
+const declared = packs.flatMap(({program}) =>
+	Object.entries(program.commands ?? {}).flatMap(([word, command]) =>
+		(Array.isArray(command.mode) ? command.mode : [command.mode ?? null]).map((mode) =>
+			mode === null ? `${program.name}.${word}` : `mode.${program.name}.${mode}.keys.${word}`,
+		),
+	),
+);
+const targets = [...defaults.rows.map((row) => fileWord(row.target)), ...declared];
+const word = fc.constantFrom(...targets, "tezgah.zom", "desk.split");
+const read = (text: string, mac: boolean) => decodeKeys(text, mac, {programs: packs});
 /** Keys as the file writes them: good ones, and a few the load refuses. */
 const spelled = fc.constantFrom(
 	"<prefix>z",
@@ -77,17 +87,17 @@ const mac = fc.boolean();
 /** The tables that read, from `keysFile`. */
 const table = fc
 	.tuple(keysFile, mac)
-	.map(([text, onMac]) => decodeKeys(text, onMac))
+	.map(([text, onMac]) => read(text, onMac))
 	.filter(Result.isSuccess)
 	.map((answer) => answer.success);
 
 /** The tables that read on a Mac, from `keysFile`. */
 const macTable = keysFile
-	.map((text) => decodeKeys(text, true))
+	.map((text) => read(text, true))
 	.filter(Result.isSuccess)
 	.map((answer) => answer.success);
 
-/** The named keys that type or move in tsh, with no modifier: never pressed alone, never the prefix. */
+/** Bare navigation stays in focused or mode tables, never the global base table or prefix. */
 const BARE = new Set([
 	"<enter>",
 	"<escape>",
@@ -99,13 +109,15 @@ const BARE = new Set([
 	"<arrowdown>",
 ]);
 
-const placeOf = (keys: Keys) => {
+const scopeOf = (row: Row) =>
+	JSON.stringify([row.scope, row.scope === "global" ? null : row.target.program, row.target.mode]);
+const placeOf = (rows: readonly Row[]) => {
 	const alone = new Map<string, string[]>();
 	const after = new Map<string, string[]>();
-	for (const row of keys.rows)
+	for (const row of rows)
 		for (const key of row.keys) {
 			const place = key._tag === "alone" ? alone : after;
-			place.set(key.key, [...(place.get(key.key) ?? []), row.does]);
+			place.set(key.key, [...(place.get(key.key) ?? []), fileWord(row.target)]);
 		}
 	return {alone, after};
 };
@@ -119,8 +131,8 @@ describe("the file's laws", () => {
 		);
 		fc.assert(
 			fc.property(text, mac, (t, onMac) => {
-				const answer = decodeKeys(t, onMac);
-				if (Result.isSuccess(answer)) return answer.success.rows.length === defaults.rows.length;
+				const answer = read(t, onMac);
+				if (Result.isSuccess(answer)) return answer.success.rows.length === targets.length;
 				const {line: at, why} = answer.failure;
 				return Number.isInteger(at) && at >= 1 && at <= lineCount(t) && why.length > 0;
 			}),
@@ -128,17 +140,20 @@ describe("the file's laws", () => {
 		);
 	});
 
-	it("keeps one key on one command in each place, and the prefix on none, in any file that reads", () => {
+	it("keeps one key on one target per scope and mode, and the prefix on none", () => {
 		fc.assert(
 			fc.property(table, (keys) => {
-				const {alone, after} = placeOf(keys);
-				return (
-					// One command's list may name a key twice; two commands may never share one.
-					[...alone.values(), ...after.values()].every((on) => new Set(on).size === 1) &&
-					// Pressed alone it arms; after itself it is send-prefix: a row on it never runs.
-					!alone.has(keys.prefix) &&
-					!after.has(keys.prefix)
-				);
+				return [...new Set(keys.rows.map(scopeOf))].every((scope) => {
+					const rows = keys.rows.filter((row) => scopeOf(row) === scope);
+					const {alone, after} = placeOf(rows);
+					return (
+						// One command's list may name a key twice; two commands may never share one.
+						[...alone.values(), ...after.values()].every((on) => new Set(on).size === 1) &&
+						// Pressed alone it arms; after itself it is send-prefix: a row on it never runs.
+						!alone.has(keys.prefix) &&
+						!after.has(keys.prefix)
+					);
+				});
 			}),
 			OPTS,
 		);
@@ -147,42 +162,72 @@ describe("the file's laws", () => {
 	it("puts no Cmd key after the prefix on a Mac, where the menu takes it first", () => {
 		fc.assert(
 			fc.property(macTable, (keys) => {
-				const {after} = placeOf(keys);
+				const {after} = placeOf(keys.rows);
 				return [...after.keys()].every((key) => !/^<(?:[ca]-)*m-/.test(key));
 			}),
 			OPTS,
 		);
 	});
 
-	it("puts no bare named key alone or as the prefix, in any file that reads", () => {
+	it("puts no bare named key in the global base table or as the prefix", () => {
 		fc.assert(
 			fc.property(table, (keys) => {
-				const {alone} = placeOf(keys);
+				const {alone} = placeOf(
+					keys.rows.filter((row) => row.scope === "global" && row.target.mode === null),
+				);
 				return !BARE.has(keys.prefix) && [...alone.keys()].every((key) => !BARE.has(key));
 			}),
 			OPTS,
 		);
 	});
 
-	it("keeps one row for every command the code lists, bound or not", () => {
+	it("keeps one row for every declared target, including unbound commands and each mode", () => {
 		fc.assert(
 			fc.property(table, (keys) => {
-				const does = keys.rows.map((r) => r.does);
+				const words = keys.rows.map((row) => fileWord(row.target));
 				return (
-					new Set(does).size === does.length &&
-					does.length === Does.literals.length &&
-					does.every((d) => (Does.literals as readonly string[]).includes(d))
+					new Set(words).size === words.length &&
+					words.length === targets.length &&
+					words.every((word) => targets.includes(word))
 				);
 			}),
 			OPTS,
 		);
 	});
 
-	it("looks a key up to the row that holds it", () => {
+	it("routes a key to its row in that program's scope and mode", async () => {
+		const machine = await loadKeyRouter();
 		fc.assert(
-			fc.property(table, (keys) =>
-				keys.rows.every((row) => row.keys.every((key) => commandOn(keys, key) === row.does)),
-			),
+			fc.property(table, (keys) => {
+				for (const row of keys.rows)
+					for (const key of row.keys) {
+						let state = machine.init(null, {
+							keys,
+							window: "w1",
+							target: {program: row.target.program, tile: "t1"},
+							mac: false,
+						})[0];
+						state = applyCell(machine, state, {
+							type: "mode",
+							program: row.target.program,
+							mode: row.target.mode,
+						})[0];
+						if (key._tag === "after_prefix")
+							state = applyCell(machine, state, {
+								type: "press",
+								press: keyPress(keys.prefix),
+								at: 0,
+							})[0];
+						const [, commands] = applyCell(machine, state, {
+							type: "press",
+							press: keyPress(key.key),
+							at: 1,
+						});
+						expect(commands).toContainEqual(
+							expect.objectContaining({type: "run", target: {...row.target, tile: "t1"}}),
+						);
+					}
+			}),
 			OPTS,
 		);
 	});
@@ -337,12 +382,12 @@ const pressed = fc.array(
 	{maxLength: 30},
 );
 
-const windowAfter = (machine: KeyRouter, keys: readonly string[]) => {
+const windowAfter = (machine: KeyRouter, keys: readonly string[], program = "tsh") => {
 	let s = machine.init(null, {
 		keys: defaults,
 		window: "w1",
-		target: {program: "tsh", tile: "t1"},
-		mac: true,
+		target: {program, tile: "t1"},
+		mac: false,
 	})[0];
 	for (const [at, key] of keys.entries())
 		s = applyCell(machine, s, {type: "press", press: keyPress(key), at})[0];
@@ -365,11 +410,11 @@ describe("the window's laws for a swapped table (p9)", () => {
 		);
 	});
 
-	it("uses the new prefix and every global key pressed alone, including the palette", async () => {
+	it("uses the new prefix and global base keys without a focused command taking priority", async () => {
 		const machine = await loadKeyRouter();
 		fc.assert(
 			fc.property(table, (swapped) => {
-				const before = windowAfter(machine, ["<c-b>"]);
+				const before = windowAfter(machine, ["<c-b>"], "tezgah");
 				const [state] = applyCell(machine, before, {type: "keys", keys: swapped});
 				const [armed, cmds] = applyCell(machine, state, {
 					type: "press",

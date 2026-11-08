@@ -3,7 +3,7 @@ import {Result} from "effect";
 import {createElement, isValidElement, type ReactNode} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
-import {decodeKeys, defaults, type Keys} from "../desk/keymap.ts";
+import {decodeKeys, defaults, type Keys, type Target} from "../desk/keymap.ts";
 import {type Editor, type EditorCmd, type EditorMsg, editorMachine} from "./machine.ts";
 import {announcement, focusAfter, KeysWindow} from "./window.tsx";
 
@@ -14,8 +14,12 @@ const table = (text: string): Keys => {
 	if (Result.isFailure(read)) throw new Error(read.failure.why);
 	return read.success;
 };
-const selected = (keys: Keys, does: Editor["selected"]) =>
-	step(editorMachine.init(keys, undefined)[0], {type: "select", does});
+const zoom: Target = {program: "tezgah", word: "zoom", mode: null};
+const selected = (keys: Keys, target: Target | "prefix" | "ignore") =>
+	step(
+		editorMachine.init(keys, undefined)[0],
+		typeof target === "string" ? {type: "select", does: target} : {type: "select", target},
+	);
 const draw = (editor: Editor) =>
 	renderToStaticMarkup(createElement(KeysWindow, {keys: editor.keys, editor, send: () => {}}));
 
@@ -29,7 +33,7 @@ describe("today's keyboard shortcuts view", () => {
 		let model = editorMachine.init(read.success, undefined)[0];
 		model = applyCell<Editor, EditorMsg, EditorCmd>(editorMachine, model, {
 			type: "select",
-			does: "tezgah.zoom",
+			target: zoom,
 		})[0];
 		const html = renderToStaticMarkup(
 			createElement(KeysWindow, {keys: read.success, editor: model, send: () => {}}),
@@ -44,13 +48,13 @@ describe("today's keyboard shortcuts view", () => {
 		expect(html).toContain("Not ours");
 		expect(html).toMatch(/system|macOS/i);
 		for (const action of ["Change", "Add", "Unbind", "Reset"]) expect(html).toContain(action);
-		expect(html).not.toMatch(/mapping mode/i);
+		expect(html).toContain("Map controls");
 		expect(html).toContain("<h3>zoom</h3>");
 		expect(html).toContain("tsh: <code>zoom</code>");
 		expect(html).not.toContain('role="alert"');
 		expect(html).not.toContain("No commands found.");
 		expect(
-			draw(step(selected(read.success, "tezgah.zoom"), {type: "query", query: "no such command"})),
+			draw(step(selected(read.success, zoom), {type: "query", query: "no such command"})),
 		).toContain("No commands found.");
 	});
 
@@ -70,8 +74,8 @@ describe("today's keyboard shortcuts view", () => {
 
 	it("K8: moved keys name their new owner; a recording lists only actual conflicts", () => {
 		const moved = table('tezgah.fold = "<prefix>z"');
-		expect(draw(selected(moved, "tezgah.zoom"))).toContain("ctrl+b then z moved to tezgah.fold");
-		let editor = step(selected(defaults, "tezgah.zoom"), {type: "change"});
+		expect(draw(selected(moved, zoom))).toContain("ctrl+b then z moved to tezgah.fold");
+		let editor = step(selected(defaults, zoom), {type: "change"});
 		for (const [key, ctrl] of [
 			["b", true],
 			["f", false],
@@ -128,7 +132,7 @@ describe("today's keyboard shortcuts view", () => {
 	it("one live region stays mounted and only its words change as recording moves on", () => {
 		const region = (html: string) =>
 			/<p id="([^"]+)" class="keys-live" role="status">([^<]*)<\/p>/.exec(html);
-		const idle = selected(defaults, "tezgah.zoom");
+		const idle = selected(defaults, zoom);
 		expect(region(draw(idle))?.[2]).toBe("");
 		const waiting = step(idle, {type: "change"});
 		const html = draw(waiting);
@@ -152,7 +156,7 @@ describe("today's keyboard shortcuts view", () => {
 	});
 
 	it("names macOS's own keys only on a Mac", () => {
-		const editor = selected(defaults, "tezgah.zoom");
+		const editor = selected(defaults, zoom);
 		const on = (mac: boolean) =>
 			renderToStaticMarkup(
 				createElement(KeysWindow, {keys: defaults, editor, send: () => {}, mac}),
@@ -180,7 +184,7 @@ describe("today's keyboard shortcuts view", () => {
 		];
 		const [saving, cmds] = applyCell<Editor, EditorMsg, EditorCmd>(
 			editorMachine,
-			selected(defaults, "tezgah.zoom"),
+			selected(defaults, zoom),
 			{type: "unbind"},
 		);
 		const request = cmds[0]?.request ?? "";
@@ -210,12 +214,16 @@ describe("today's keyboard shortcuts view", () => {
 				before: defaults,
 				after: defaults,
 				displaced: [
-					{does: "tezgah.close" as const, key: {_tag: "after_prefix" as const, key: "x"}},
+					{
+						does: "tezgah.close",
+						target: {program: "tezgah", word: "close", mode: null},
+						key: {_tag: "after_prefix" as const, key: "x"},
+					},
 				],
 				version: "v1",
 			},
 		];
-		const idle = {...selected(defaults, "tezgah.zoom"), undo: "v1"};
+		const idle = {...selected(defaults, zoom), undo: "v1"};
 		const result = (editor: Editor) =>
 			/<div tabindex="-1" class="keys-result" role="status">([\s\S]*?)<\/div>/.exec(
 				renderToStaticMarkup(
@@ -235,7 +243,7 @@ describe("today's keyboard shortcuts view", () => {
 	});
 
 	it("Same key names the key as it is spoken, not as the file spells it", () => {
-		const html = draw(selected(defaults, "tezgah.zoom"));
+		const html = draw(selected(defaults, zoom));
 		const said = [...html.matchAll(/Same key: (?:<!-- -->)?([^<]*)/g)].map((m) => m[1]);
 		expect(said).toEqual(["ctrl+b then z"]);
 	});

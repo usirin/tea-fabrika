@@ -12,7 +12,7 @@ import {
 	deskMachine,
 	type Open,
 } from "../desk/desk.ts";
-import {decodeKeys, defaults, Does, type Keys} from "../desk/keymap.ts";
+import {decodeKeys, defaults, type Keys} from "../desk/keymap.ts";
 import type {HostNow} from "../messages.ts";
 import type {JobEnded} from "../tile-jobs.ts";
 import {
@@ -67,11 +67,16 @@ const fold = (msgs: readonly DeskMsg[]): Open => {
 	if (s.at !== "open") throw new Error("the desk is over");
 	return s;
 };
+const commandsFor = (keys: Keys, workspaces: number) =>
+	commandsOf(keys, workspaces, {
+		target: {program: "tezgah", tile: "t1"},
+		modes: {},
+	});
 
 it("K18: moved keys update palette search, prefix hints, keycaps and spoken words", () => {
 	const read = decodeKeys('prefix = "ctrl+a"\ntezgah.zoom = "<prefix>shift+f6"', true);
 	if (Result.isFailure(read)) throw new Error(read.failure.why);
-	const commands = commandsOf(read.success, 1);
+	const commands = commandsFor(read.success, 1);
 	const zoom = commands.find((command) => command.runs === "tezgah.zoom");
 	expect(zoom?.key).toMatch(/C-a.*(?:Shift|S-).*F6/i);
 	expect(zoom?.caps).toEqual(["⌃A", expect.stringMatching(/⇧f6/i)]);
@@ -138,7 +143,7 @@ describe("the frame's keys", () => {
 	});
 
 	it("lists every command once, by the desk's own table, and only the workspaces there are", () => {
-		const commands = commandsOf(defaults, 2);
+		const commands = commandsFor(defaults, 2);
 		const names = commands.map((c) => c.name);
 		expect(new Set(names).size).toBe(names.length);
 		expect(names).toContain("zoom");
@@ -147,6 +152,7 @@ describe("the frame's keys", () => {
 		expect(commands.find((c) => c.name === "focus left")?.key).toBe("C-b h");
 		// The palette runs a command by its word, not by its key (ticket 174).
 		expect(commands.find((c) => c.name === "zoom")).toEqual({
+			target: {program: "tezgah", word: "zoom", mode: null},
 			name: "zoom",
 			group: "tile",
 			key: "C-b z",
@@ -162,7 +168,7 @@ describe("the frame's keys", () => {
 			caps: ["⌃B", "⇧A"],
 			tsh: "agents",
 		});
-		const words: readonly string[] = Does.literals;
+		const words = defaults.rows.map((row) => row.does);
 		expect(commands.every((c) => words.includes(c.runs))).toBe(true);
 		expect(matching(commands, "zo").map((c) => c.name)).toEqual(["zoom"]);
 		expect(matching(commands, "workspace 2").map((c) => c.name)).toEqual(["workspace 2"]);
@@ -174,7 +180,7 @@ describe("the frame's keys", () => {
 	});
 
 	it("groups the commands as the palette shows them: tile, focus, workspace, then the window's own", () => {
-		const commands = commandsOf(defaults, 1);
+		const commands = commandsFor(defaults, 1);
 		expect(commands.map((c) => c.name)).toEqual([
 			"split",
 			"split down",
@@ -270,8 +276,8 @@ describe("the frame's keys, from the keys file (ticket 174)", () => {
 		["host", "window", "C-b H", ["⌃B", "⇧H"], "host"],
 	];
 	const shown = (keys: Keys, workspaces = 9) =>
-		commandsOf(keys, workspaces).map((c) => [c.name, c.group, c.key, c.caps, c.tsh]);
-	const zoomOf = (keys: Keys) => commandsOf(keys, 1).find((c) => c.name === "zoom");
+		commandsFor(keys, workspaces).map((c) => [c.name, c.group, c.key, c.caps, c.tsh]);
+	const zoomOf = (keys: Keys) => commandsFor(keys, 1).find((c) => c.name === "zoom");
 
 	it("lists with no file the palette it lists today (p1)", () => {
 		expect(shown(defaults)).toEqual(TODAY);
@@ -281,7 +287,7 @@ describe("the frame's keys, from the keys file (ticket 174)", () => {
 	it("writes your prefix in every key and keycap of the palette (p2, p10)", () => {
 		const keys = table('prefix = "ctrl+a"');
 		expect(zoomOf(keys)).toMatchObject({key: "C-a z", caps: ["⌃A", "Z"]});
-		expect(commandsOf(keys, 1).every((c) => !c.key.includes("C-b"))).toBe(true);
+		expect(commandsFor(keys, 1).every((c) => !c.key.includes("C-b"))).toBe(true);
 	});
 
 	it("shows a moved command on its new key, in the palette and after the prefix (p10)", () => {
@@ -310,14 +316,14 @@ describe("the frame's keys, from the keys file (ticket 174)", () => {
 			tsh: "zoom",
 			runs: "tezgah.zoom",
 		});
-		expect(matching(commandsOf(keys, 1), "zoom").map((c) => c.name)).toEqual(["zoom"]);
+		expect(matching(commandsFor(keys, 1), "zoom").map((c) => c.name)).toEqual(["zoom"]);
 		// The bottom line after the prefix shows only keys there are.
 		expect(prefixLine(keys).map((k) => k.name)).not.toContain("zoom");
 	});
 
 	it("shows a command pressed alone with its own keycap, and no prefix (p5)", () => {
 		const keys = table('tezgah.split = "cmd+d"');
-		const split = commandsOf(keys, 1).find((c) => c.name === "split");
+		const split = commandsFor(keys, 1).find((c) => c.name === "split");
 		expect(split?.caps).toEqual(["⌘D"]);
 		expect(split?.runs).toBe("tezgah.split");
 		expect(prefixLine(keys).map((k) => k.name)).not.toContain("split");
@@ -456,10 +462,7 @@ describe("the bottom line and the asks list", () => {
 	});
 
 	it("asks your own close at the bottom, as tmux does", () => {
-		const asking = fold([
-			{type: "key", key: "<c-b>", at: 0},
-			{type: "key", key: "x", at: 1},
-		]);
+		const asking = fold([{type: "run", does: "tezgah.close"}]);
 		expect(questionWord(asking)).toBe("close t1? (y/n)");
 		expect(questionWord(fold([]))).toBeNull();
 	});
@@ -735,7 +738,7 @@ describe("the job item and the jobs list", () => {
 		const open = frameUpdate(FRAME, {type: "show", what: "jobs"});
 		expect(open.over).toEqual({kind: "jobs"});
 		expect(frameUpdate(open, {type: "show", what: "jobs"}).over).toEqual({kind: "none"});
-		expect(commandsOf(defaults, 1).find((c) => c.name === "jobs")?.key).toBe("C-b J");
+		expect(commandsFor(defaults, 1).find((c) => c.name === "jobs")?.key).toBe("C-b J");
 	});
 });
 
@@ -1158,11 +1161,8 @@ describe("info mode", () => {
 		expect(EXPLAIN_ON).toEqual(["pointerover", "focusin"]);
 	});
 
-	/** A desk asking its own question: Ctrl-B x on t1. */
-	const asking = fold([
-		{type: "key", key: "<c-b>", at: 0},
-		{type: "key", key: "x", at: 1},
-	]);
+	/** A desk asking its own question after the window completes Close on t1. */
+	const asking = fold([{type: "run", does: "tezgah.close"}]);
 	/**
 	 * The desk's bottom area as drawn: whether its bottom line shows, and what its one status region
 	 * says. The region is checked to be there, and outside the bottom line, in every case.

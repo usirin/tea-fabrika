@@ -6,9 +6,10 @@ import {type Editor, type EditorCmd, type EditorMsg, editorMachine, matching} fr
 
 // Today's version. The new editor's public machine is the builder's contract.
 const start = () => editorMachine.init(defaults, undefined)[0];
+const zoom = {program: "tezgah", word: "zoom", mode: null};
 const step = (model: Editor, msg: EditorMsg) =>
 	applyCell<Editor, EditorMsg, EditorCmd>(editorMachine, model, msg);
-const select = () => step(start(), {type: "select", does: "tezgah.zoom"})[0];
+const select = () => step(start(), {type: "select", target: zoom})[0];
 const press = (key: string, mods = {}) => ({
 	key,
 	code: "",
@@ -49,14 +50,14 @@ describe("today's keys editor", () => {
 			const [saving, cmds] = step(model, {type: "save"});
 			expect(saving.recording._tag).toBe("saving");
 			expect(cmds).toContainEqual(
-				expect.objectContaining({type: "edit", edit: {_tag: "bind", does: "tezgah.zoom", keys}}),
+				expect.objectContaining({type: "edit", edit: {_tag: "bind", target: zoom, keys}}),
 			);
 		}
 		expect(step(select(), {type: "unbind"})[1]).toContainEqual(
-			expect.objectContaining({type: "edit", edit: {_tag: "bind", does: "tezgah.zoom", keys: []}}),
+			expect.objectContaining({type: "edit", edit: {_tag: "bind", target: zoom, keys: []}}),
 		);
 		expect(step(select(), {type: "reset"})[1]).toContainEqual(
-			expect.objectContaining({type: "edit", edit: {_tag: "reset", does: "tezgah.zoom"}}),
+			expect.objectContaining({type: "edit", edit: {_tag: "reset", target: zoom}}),
 		);
 	});
 

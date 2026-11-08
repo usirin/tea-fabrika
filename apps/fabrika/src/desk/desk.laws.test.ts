@@ -23,7 +23,6 @@ import {
 	empty,
 	end,
 	focusedOf,
-	forPage,
 	fresh,
 	kill,
 	type Open,
@@ -988,7 +987,7 @@ describe("an agent's tile on the desk (tracker 185b, PR 3)", () => {
 	it("sends the page the desk's agents, so the window names each agent's tile", () => {
 		const [first] = deskMachine.init(null, undefined);
 		const [s] = launched(deskMachine, first, "claude");
-		const read = Schema.decodeUnknownSync(DeskSchema)(JSON.parse(JSON.stringify(forPage(s))));
+		const read = Schema.decodeUnknownSync(DeskSchema)(JSON.parse(JSON.stringify(s)));
 		expect(read.at === "open" ? read.agents : null).toEqual({claude: "t2"});
 	});
 });

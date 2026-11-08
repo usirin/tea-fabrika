@@ -14,15 +14,22 @@ import {
 } from "effect";
 import {parse} from "smol-toml";
 import {describe, expect, it} from "vitest";
-import {decodeKeys, defaults, type Does, type Keys} from "../desk/keymap.ts";
+import {decodeKeys, defaults, type Keys} from "../desk/keymap.ts";
 import {Edit, KeybindingManager, type Snapshot} from "./keybindings.ts";
 
 const platform = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer);
 const go = <A, E>(test: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path | Scope.Scope>) =>
 	Effect.runPromise(test.pipe(Effect.scoped, Effect.provide(platform)));
 const FROM = {how: "pressed" as const, window: "window-1", said: 100};
-const bind = (does: Does, keys: readonly string[]) => Edit.cases.bind.make({does, keys});
-const row = (keys: Keys, does: string) => keys.rows.find((r) => r.does === does);
+const target = (does: string) => {
+	const found = defaults.rows.find((row) => row.does === does && row.target.mode === null);
+	if (found === undefined) throw new Error(`No base command ${does}`);
+	return found.target;
+};
+const bind = (does: string, keys: readonly string[]) =>
+	Edit.cases.bind.make({target: target(does), keys});
+const row = (keys: Keys, does: string) =>
+	keys.rows.find((r) => r.does === does && r.target.mode === null);
 const pause = Effect.sleep("150 millis");
 const until = (what: string, check: () => boolean) =>
 	Effect.gen(function* () {
@@ -89,7 +96,7 @@ describe("today's KeybindingManager", () => {
 				const unbound = yield* h.edit(bind("tezgah.zoom", []));
 				expect(row(unbound.keys, "tezgah.zoom")).toMatchObject({keys: [], source: "yours"});
 				expect(parse(yield* h.fs.readFileString(h.file))).toMatchObject({tezgah: {zoom: []}});
-				const reset = yield* h.edit(Edit.cases.reset.make({does: "tezgah.zoom"}));
+				const reset = yield* h.edit(Edit.cases.reset.make({target: target("tezgah.zoom")}));
 				expect(row(reset.keys, "tezgah.zoom")).toEqual(row(defaults, "tezgah.zoom"));
 				expect(parse(yield* h.fs.readFileString(h.file))).not.toHaveProperty("tezgah.zoom");
 			}),
@@ -353,7 +360,7 @@ describe("today's KeybindingManager", () => {
 				yield* inline.edit(bind("tezgah.zoom", ["<prefix>u"]));
 				const written = yield* inline.fs.readFileString(inline.file);
 				expect(written).toBe('tezgah = { zoom = ["<prefix>u"], close = ["<prefix>c"] }\n');
-				const reset = yield* inline.edit(Edit.cases.reset.make({does: "tezgah.zoom"}));
+				const reset = yield* inline.edit(Edit.cases.reset.make({target: target("tezgah.zoom")}));
 				expect(row(reset.keys, "tezgah.zoom")).toEqual(row(defaults, "tezgah.zoom"));
 				expect(parse(yield* inline.fs.readFileString(inline.file))).toEqual({
 					tezgah: {close: ["<prefix>c"]},

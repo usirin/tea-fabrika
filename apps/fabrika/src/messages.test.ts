@@ -147,8 +147,15 @@ describe("the desk's port", () => {
 			file: {_tag: "refused", line: 2, why: "tezgah.zom is not a command"},
 		};
 		expect(readToPage(refused)).toEqual({kind: "read", msg: refused});
-		// A row names a command the code lists, never a free string.
-		const typo = {...sent, rows: [{does: "tezgah.zom", keys: [], source: "yours"}]};
+		// Keep every required field so an unknown target is the only reason to refuse.
+		const typo = {
+			...sent,
+			rows: sent.rows.map((row) =>
+				row.does === "tezgah.zoom"
+					? {...row, does: "tezgah.zom", target: {...row.target, word: "zom"}}
+					: row,
+			),
+		};
 		expect(readToPage(typo).kind).toBe("refused");
 		// The old table, one row per key, is not read.
 		expect(

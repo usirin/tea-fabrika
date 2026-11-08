@@ -32,7 +32,10 @@ describe("today's recording laws", () => {
 					fc.integer({min: 1, max: 2_000_000_000}),
 					(noise, delay) => {
 						let model = editorMachine.init(defaults, undefined)[0];
-						model = step(model, {type: "select", does: "tezgah.zoom"})[0];
+						model = step(model, {
+							type: "select",
+							target: {program: "tezgah", word: "zoom", mode: null},
+						})[0];
 						model = step(model, {type: "change"})[0];
 						const [armed, cmds] = step(model, {type: "press", press: event("b", {ctrl: true})});
 						expect(cmds).toEqual([]);
@@ -86,7 +89,9 @@ const msg: fc.Arbitrary<EditorMsg> = fc.oneof(
 		{type: "reset"},
 		{type: "escape-key"},
 		{type: "undo"},
-		{type: "select", does: "tezgah.zoom"},
+		{type: "select", target: {program: "tezgah", word: "zoom", mode: null}},
+		{type: "select", target: {program: "tezgah", word: "exit", mode: "info"}},
+		{type: "mapping"},
 		{type: "select", does: "prefix"},
 		{type: "select", does: null},
 		{type: "query", query: "zoom"},

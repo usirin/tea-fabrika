@@ -14,7 +14,7 @@ import {One, oneOf, tracker} from "@tea-fabrika/tracker";
 import {SEVEN, SEVEN_NOW, SEVEN_TRACE, trackerAtSeven} from "@tea-fabrika/tracker/seven";
 import {Schema} from "effect";
 import {chromium} from "playwright";
-import {type Desk, type DeskCmd, type DeskMsg, deskMachine} from "./src/desk/desk.ts";
+import {type Desk, type DeskCmd, type DeskMsg, deskMachine, fresh} from "./src/desk/desk.ts";
 import {type ContainerNode, createContainer, createTile} from "./src/desk/layout/node.ts";
 import {readToPage, readToWindow} from "./src/messages.ts";
 
@@ -141,17 +141,16 @@ const deskWith = (root: ContainerNode, focused: string) => {
 	const msg = {
 		type: "desk",
 		desk: {
+			...fresh(),
 			at: "open",
 			workspaces: [{id: "1", layout: {root, zoomed: null}, focused}],
 			active: "1",
-			prefix: {armed: false},
 			ask: null,
 			jobs: {},
 			closing: [],
 			next: 6,
 			area: null,
 		},
-		takes: {all: false, keys: ["<c-b>"]},
 	};
 	const read = readToPage(msg);
 	if (read.kind === "refused") throw new Error(`the desk does not read: ${read.why}`);
@@ -176,16 +175,13 @@ const deskAfter = (msgs: readonly DeskMsg[]) => {
 		(s, m) => applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, s, m)[0],
 		first,
 	);
-	const msg = {type: "desk", desk, takes: {all: false, keys: ["<c-b>"]}};
+	const msg = {type: "desk", desk};
 	const read = readToPage(JSON.parse(JSON.stringify(msg)));
 	if (read.kind === "refused") throw new Error(`the desk does not read: ${read.why}`);
 	return msg;
 };
 
-const split: readonly DeskMsg[] = [
-	{type: "key", key: "<c-b>", at: 0},
-	{type: "key", key: "|", at: 1},
-];
+const split: readonly DeskMsg[] = [{type: "run", does: "tezgah.split"}];
 
 const shots = [
 	{
@@ -217,8 +213,7 @@ const shots = [
 		desk: deskAfter([
 			AREA,
 			...split,
-			{type: "key", key: "<c-b>", at: 10},
-			{type: "key", key: "|", at: 11},
+			{type: "run", does: "tezgah.split"},
 			{type: "covered", tile: "t1", runs: [{id: "2", program: "map"}]},
 			{type: "covered", tile: "t3", runs: LINE},
 		]),

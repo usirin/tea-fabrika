@@ -36,7 +36,14 @@ describe("the link", () => {
 		for (const side of ["app", "host"] as const) {
 			const {s, steps} = fold({side, ours: PROTOCOL}, [
 				{type: "hello", version: 1},
-				{type: "line", m: {type: "keys.edit", edit: {_tag: "reset", does: "tezgah.zoom"}}},
+				{
+					type: "line",
+					m: {
+						type: "keys.edit",
+						request: "reset-1",
+						edit: {_tag: "reset", target: {program: "tezgah", word: "zoom", mode: null}},
+					},
+				},
 			]);
 			expect(s.at).toBe("refused");
 			expect(steps.flat().some((cmd) => cmd.type === "deliver")).toBe(false);

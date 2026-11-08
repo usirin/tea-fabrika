@@ -16,6 +16,8 @@
 		"why": "today's app tests, including configurable keys"
 	},
 	{ "glob": "apps/fabrika/e2e.ts", "why": "today's app end-to-end runner and screenshot checks" },
+	{ "glob": "apps/fabrika/shots.ts", "why": "today's app screenshot scenarios and desk fixtures" },
+	{ "glob": "apps/fabrika/ruler-e2e.ts", "why": "today's trace ruler end-to-end runner" },
 	{ "glob": "fixtures/keybindings/**", "why": "hand-written keybinding files used by the exam" },
 	{
 		"glob": "packages/fabrika/src/program/**/*.test.ts",

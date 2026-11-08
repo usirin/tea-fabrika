@@ -1,11 +1,12 @@
 import {readFileSync} from "node:fs";
 import {Result} from "effect";
 import {describe, expect, it} from "vitest";
-import {commandOn, decodeKeys, defaults, Does, type Key, type Keys, spell} from "./keymap.ts";
+import {packs} from "../../../../fixtures/keybindings/programs.ts";
+import {commandOn, decodeKeys, defaults, fileWord, type Key, type Keys, spell} from "./keymap.ts";
 
 // The keybindings file, read: ~/.fabrika/keybindings.toml, laid over the defaults that ship with
 // the app (docs/direction/keybindings-are-configurable.md, K5, K6, K9). Today's version, ticket
-// 174, PR 1. The laws over any text are in keymap.laws.test.ts.
+// 174, PR 2. The laws over any text are in keymap.laws.test.ts.
 //
 //   decodeKeys('prefix = "ctrl+a"', true)              the defaults, with the prefix <c-a>
 //   decodeKeys('tezgah.zoom = "<prefix>m"', true)      zoom on m after the prefix, and no longer on z
@@ -31,7 +32,8 @@ const refused = (text: string, mac = true) => {
 
 const after = (key: string): Key => ({_tag: "after_prefix", key});
 const alone = (key: string): Key => ({_tag: "alone", key});
-const rowOf = (keys: Keys, does: string) => keys.rows.find((r) => r.does === does);
+const rowOf = (keys: Keys, does: string, mode: string | null = null) =>
+	keys.rows.find((r) => r.does === does && r.target.mode === mode);
 
 /**
  * Today's table, frozen from desk/keys.ts `BINDINGS` before this change: each key after the
@@ -96,11 +98,22 @@ describe("the defaults, with no file (p1)", () => {
 		expect(commandOn(defaults, after("?"))).toBe("keys.open");
 	});
 
-	it("hold one row per command, every command the code lists, each from the defaults", () => {
-		const does = defaults.rows.map((r) => r.does);
-		expect(new Set(does).size).toBe(does.length);
-		expect([...does].sort()).toEqual([...Does.literals].sort());
-		expect(defaults.rows.every((r) => r.source === "default")).toBe(true);
+	it("holds one row per declared target, including unbound commands and each mode", () => {
+		const answer = decodeKeys("", true, {programs: packs});
+		if (Result.isFailure(answer)) throw new Error(answer.failure.why);
+		const words = answer.success.rows.map((row) => fileWord(row.target));
+		const declared = packs.flatMap(({program}) =>
+			Object.entries(program.commands ?? {}).flatMap(([word, command]) =>
+				(Array.isArray(command.mode) ? command.mode : [command.mode ?? null]).map((mode) =>
+					mode === null ? `${program.name}.${word}` : `mode.${program.name}.${mode}.keys.${word}`,
+				),
+			),
+		);
+		expect(new Set(words).size).toBe(words.length);
+		expect(words.toSorted()).toEqual(
+			[...defaults.rows.map((row) => fileWord(row.target)), ...declared].sort(),
+		);
+		expect(answer.success.rows.every((row) => row.source === "default")).toBe(true);
 	});
 
 	it("read the same from an empty file, and from one with only comments", () => {
@@ -190,6 +203,10 @@ describe("your rows, laid over the defaults (p3, p4)", () => {
 		expect(commandOn(keys, after("z"))).toBeUndefined();
 		expect(rowOf(keys, "tezgah.zoom")).toEqual({
 			does: "tezgah.zoom",
+			target: {program: "tezgah", word: "zoom", mode: null},
+			scope: "global",
+			origin: "app",
+			disabled: null,
 			keys: [after("m")],
 			source: "yours",
 		});
@@ -211,7 +228,15 @@ describe("your rows, laid over the defaults (p3, p4)", () => {
 
 	it("keeps an unbound command as a row with no keys, so the palette still lists it", () => {
 		const keys = read("tezgah.zoom = []");
-		expect(rowOf(keys, "tezgah.zoom")).toEqual({does: "tezgah.zoom", keys: [], source: "yours"});
+		expect(rowOf(keys, "tezgah.zoom")).toEqual({
+			does: "tezgah.zoom",
+			target: {program: "tezgah", word: "zoom", mode: null},
+			scope: "global",
+			origin: "app",
+			disabled: null,
+			keys: [],
+			source: "yours",
+		});
 		expect(commandOn(keys, after("z"))).toBeUndefined();
 		expect(keys.rows).toHaveLength(defaults.rows.length);
 	});
@@ -219,7 +244,13 @@ describe("your rows, laid over the defaults (p3, p4)", () => {
 	it("moves every <prefix> row with the prefix, since a row holds only the key after it", () => {
 		const keys = read('prefix = "ctrl+a"');
 		expect(keys.prefix).toBe("<c-a>");
-		expect(keys.rows).toEqual(defaults.rows);
+		expect(keys.rows).toEqual(
+			defaults.rows.map((row) => ({
+				...row,
+				keys: row.keys.filter((key) => key.key !== "<c-a>"),
+			})),
+		);
+		expect(rowOf(keys, "tsh.beginning-of-line")?.keys).toEqual([alone("<home>")]);
 	});
 
 	it("binds a desk command alone, with no prefix", () => {

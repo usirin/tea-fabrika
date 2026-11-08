@@ -3,6 +3,7 @@ import {listed, Shell} from "@kampus/fabrika-old";
 import {counter} from "@tea-fabrika/counter";
 import {Layer} from "effect";
 import {describe, expect, it} from "vitest";
+import {defaults} from "../desk/keymap.ts";
 import {type Editor, type EditorMsg, editor} from "./editor.ts";
 import {gridOf} from "./grid.ts";
 import {back, draw, PROMPT, spot} from "./screen.ts";
@@ -67,10 +68,16 @@ describe("the prompt", () => {
 		expect(seen([keys("seq --to 3")])).toEqual(["tsh$ seq --to 3|"]);
 	});
 
-	it("moves the cursor: Ctrl-A, Ctrl-E, Ctrl-B, Ctrl-F and the arrows, as readline's emacs keys", () => {
+	it("moves the cursor with the applied Readline keys and a finished backward-char command", () => {
 		expect(seen([keys("seq 3\x01")])).toEqual(["tsh$ |seq 3"]);
 		expect(seen([keys("seq 3\x01\x05")])).toEqual(["tsh$ seq 3|"]);
-		expect(seen([keys("seq 3\x02\x02")])).toEqual(["tsh$ seq| 3"]);
+		expect(
+			seen([
+				keys("seq 3"),
+				{type: "command", command: "backward-char"},
+				{type: "command", command: "backward-char"},
+			]),
+		).toEqual(["tsh$ seq| 3"]);
 		expect(seen([keys("seq 3\x1b[D\x1b[D\x1b[C")])).toEqual(["tsh$ seq |3"]);
 		expect(seen([keys("seq 3\x1b[H\x06")])).toEqual(["tsh$ s|eq 3"]);
 	});
@@ -94,7 +101,7 @@ describe("the prompt", () => {
 		// Two Ctrl-W in a row: Ctrl-Y puts both words back.
 		expect(seen([keys("say hi there\x17\x17\x19")])).toEqual(["tsh$ say hi there|"]);
 		// A key between them: only the last kill.
-		expect(seen([keys("say hi there\x17\x02\x17\x05\x19")])).toEqual(["tsh$ say  hi|"]);
+		expect(seen([keys("say hi there\x17\x1b[D\x17\x05\x19")])).toEqual(["tsh$ say  hi|"]);
 	});
 
 	it("deletes: Backspace before the cursor, Delete and Ctrl-D under it", () => {
@@ -210,7 +217,7 @@ describe("Ctrl-C and Ctrl-D at the prompt", () => {
 
 describe("text from tsh while the prompt is up", () => {
 	it("goes above the prompt, and the line and cursor stay as they were", () => {
-		expect(seen([keys("say hi\x02"), {type: "printed", text: "counter 1"}])).toEqual([
+		expect(seen([keys("say hi\x1b[D"), {type: "printed", text: "counter 1"}])).toEqual([
 			"counter 1",
 			"tsh$ say h|i",
 		]);
@@ -309,8 +316,15 @@ describe("Ctrl-R, bash's reverse-i-search", () => {
 		expect(seen([keys("dou\x12say\x03")], {history})).toEqual(["tsh$ dou|"]);
 	});
 
-	it("takes the line found to edit on another key, and that key goes on", () => {
-		expect(seen([keys("\x12count\x01")], {history})).toEqual(["tsh$ |counter"]);
+	it("keeps the search-to-edit action as a declared command for search mode", () => {
+		expect(defaults.rows).toContainEqual(
+			expect.objectContaining({
+				target: {program: "tsh", word: "beginning-of-line", mode: "search"},
+			}),
+		);
+		expect(
+			seen([keys("\x12count"), {type: "command", command: "beginning-of-line"}], {history}),
+		).toEqual(["tsh$ |counter"]);
 	});
 });
 
@@ -455,11 +469,11 @@ describe("a redraw of a line that fits its row", () => {
 	it("leaves the screen the old full redraw left, for hand-picked edits", () => {
 		const cases: readonly {msgs: readonly EditorMsg[]; history?: readonly string[]}[] = [
 			// A letter, a Backspace and a Delete with the cursor in the middle of the line.
-			{msgs: [keys("seq --to 3\x02\x02"), keys("x")]},
-			{msgs: [keys("seq --to 3\x02\x02"), keys("\x7f")]},
+			{msgs: [keys("seq --to 3\x1b[D\x1b[D"), keys("x")]},
+			{msgs: [keys("seq --to 3\x1b[D\x1b[D"), keys("\x7f")]},
 			{msgs: [keys("seq --to 3\x01"), keys("\x1b[3~")]},
 			// Ctrl-U and Ctrl-W, at the end and in the middle; Ctrl-U down to the prompt alone.
-			{msgs: [keys("seq --to 3\x02\x02"), keys("\x15")]},
+			{msgs: [keys("seq --to 3\x1b[D\x1b[D"), keys("\x15")]},
 			{msgs: [keys("seq --to 3"), keys("\x15")]},
 			{msgs: [keys("seq --to 3"), keys("\x17")]},
 			{msgs: [keys("say hi there\x1bb"), keys("\x17")]},

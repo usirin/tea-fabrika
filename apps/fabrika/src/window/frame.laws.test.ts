@@ -4,7 +4,7 @@ import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it, vi} from "vitest";
 import type {AsksNow} from "../asks.ts";
 import {type Desk, type DeskCmd, type DeskMsg, deskMachine, type Open} from "../desk/desk.ts";
-import {defaults} from "../desk/keymap.ts";
+import {defaults, type Target} from "../desk/keymap.ts";
 import {FRAME, type FrameMsg, frameUpdate} from "./frame.ts";
 import {type FrameProps, Over, TopBar} from "./frame.tsx";
 import type {PaletteProps} from "./pop.tsx";
@@ -37,6 +37,7 @@ const props = (over: Partial<FrameProps> = {}): FrameProps => ({
 	link: {kind: "up"},
 	attachedOnce: true,
 	keys: defaults,
+	keyContext: {target: {program: "tsh", tile: "t1"}, modes: {}},
 	shapes: new Map(),
 	tickets: new Map(),
 	armed: false,
@@ -150,17 +151,17 @@ describe("today's frame display laws", () => {
 
 	it("K17: the palette opens before a desk arrives and running a command gives its key hint", () => {
 		const stepped: FrameMsg[] = [];
-		const sent: FrameProps["toHost"] extends (msg: infer M) => void ? M[] : never = [];
+		const sent: Target[] = [];
 		const frame = frameUpdate(FRAME, {type: "palette"});
 		expect(show({frame, desk: null})).toContain('<span class="chip">Keyboard shortcuts</span>');
-		show({frame, step: (msg) => stepped.push(msg), toHost: (msg) => sent.push(msg)});
+		show({frame, step: (msg) => stepped.push(msg), runCommand: (target) => sent.push(target)});
 		const drawn = palette.props;
 		if (drawn === null) throw new Error("palette did not render");
 		const options = drawn.sections.flatMap((section) => section.options);
 		const zoom = options.findIndex((option) => option.name === "zoom");
 		expect(zoom).toBeGreaterThanOrEqual(0);
 		drawn.onRun(zoom);
-		expect(sent).toEqual([{type: "run", does: "tezgah.zoom"}]);
+		expect(sent).toEqual([{program: "tezgah", word: "zoom", mode: null}]);
 		expect(stepped).toEqual([{type: "ran", key: "C-b z"}]);
 	});
 });

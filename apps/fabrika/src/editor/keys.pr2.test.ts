@@ -1,37 +1,18 @@
 import {replay} from "@demlik/tea";
 import {Shell} from "@kampus/fabrika-old";
+import {Result} from "effect";
 import {describe, expect, it} from "vitest";
-import {defaults} from "../desk/keymap.ts";
+import {decodeKeys} from "../desk/keymap.ts";
 import {editor} from "./editor.ts";
 import {keyOf} from "./keys.ts";
 
 const keys = (data: string) => ({type: "keys" as const, data});
-// The applied rows are supplied by the real keymap in the app. Here only the affected
-// command's rows are added, so a fixed BOUND lookup cannot accidentally satisfy the test.
-const applied = {
-	...defaults,
-	rows: [
-		...defaults.rows,
-		{
-			does: "tsh.beginning-of-line",
-			target: {program: "tsh", word: "beginning-of-line", mode: null},
-			keys: [{_tag: "alone", key: "<c-x>"}],
-			source: "yours",
-		},
-		{
-			does: "tsh.reverse-search-history",
-			target: {program: "tsh", word: "reverse-search-history", mode: null},
-			keys: [{_tag: "alone", key: "<c-r>"}],
-			source: "default",
-		},
-		{
-			does: "tsh.exit",
-			target: {program: "tsh", word: "exit", mode: "search"},
-			keys: [{_tag: "alone", key: "<c-x>"}],
-			source: "yours",
-		},
-	],
-};
+const read = decodeKeys(
+	'tsh."beginning-of-line" = "ctrl+x"\n[mode.tsh.search.keys]\nexit = "ctrl+x"',
+	false,
+);
+if (Result.isFailure(read)) throw new Error(read.failure.why);
+const applied = read.success;
 const programs = Shell.programList(Shell.SMALL);
 
 describe("today's tsh effective bindings", () => {

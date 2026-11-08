@@ -16,6 +16,7 @@ import {Layer} from "effect";
 import fc from "fast-check";
 import {Ghostty, type GhosttyTerminal} from "ghostty-web";
 import {beforeAll, describe, expect, it, vi} from "vitest";
+import {defaults} from "../desk/keymap.ts";
 import {
 	answer,
 	close,
@@ -417,6 +418,18 @@ const editsAndResizes = (chars: readonly string[]) =>
 const everything = (chars: readonly string[], resize: boolean) =>
 	caseOf(chars, (cols) => {
 		const table: MsgArbitraryTable<EditorMsg> = {
+			bindings: arbRecordMsg("bindings", {keys: fc.constant(defaults)}),
+			command: arbRecordMsg("command", {
+				command: fc.constantFrom(
+					"beginning-of-line",
+					"end-of-line",
+					"backward-char",
+					"forward-char",
+					"backward-delete-char",
+					"accept-line",
+					"reverse-search-history",
+				),
+			}),
 			keys: keysMsg(
 				fc.oneof(
 					{arbitrary: editKey(chars), weight: 8},
@@ -938,6 +951,18 @@ const TALK: Shell.Talk = {
 
 /** One entry per Msg type, the Cmds' answers too: leaving one out does not compile. */
 const tableFor = (size: fc.Arbitrary<number>): MsgArbitraryTable<Msg> => ({
+	bindings: arbRecordMsg("bindings", {keys: fc.constant(defaults)}),
+	command: arbRecordMsg("command", {
+		command: fc.constantFrom(
+			"beginning-of-line",
+			"end-of-line",
+			"backward-char",
+			"forward-char",
+			"backward-delete-char",
+			"accept-line",
+			"reverse-search-history",
+		),
+	}),
 	keys: arbRecordMsg("keys", {data}),
 	size: arbRecordMsg("size", {cols: size}),
 	printed: arbRecordMsg("printed", {text: fc.constantFrom("done", "a\nb", "\x1b[2Jboom", "")}),
