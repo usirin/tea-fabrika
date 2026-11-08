@@ -22,9 +22,7 @@ describe("P11 real counter laws", () => {
 		expect(counter.msg).toBe(counterMachine.msg);
 		expect(counter.view.data).toBe(Schema.Json);
 		expectTypeOf(counter.view.select({count: 1}).count).toEqualTypeOf<number>();
-	});
-	it("counter ports allow agents and give each action a readable description", async () => {
-		const {counter} = await import("./program.ts");
+		expect(counter.wake({count: 1})).toBeNull();
 		for (const type of ["inc", "dec", "reset"] as const) {
 			const port = counter.inputs[type];
 			expect(port.personOnly).toBe(false);

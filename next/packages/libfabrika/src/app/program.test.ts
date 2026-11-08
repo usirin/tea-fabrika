@@ -97,9 +97,12 @@ describe("Program.make authoring laws, next/", () => {
 		});
 		expect(p.machine).toBe(untouched);
 		expect(calls).toEqual([]);
+		expect(p.inputs.read._tag).toBe("read");
+		expect(p.inputs.read.schema).toBe(Schema.Null);
 	});
 	for (const [label, broken] of [
 		["empty name", {name: ""}],
+		["missing machine", {machine: null}],
 		["invalid version", {state: {v: 0, upgrades: []}}],
 		["non-function view", {view: 3}],
 		["non-function refusal", {refuse: 3}],
