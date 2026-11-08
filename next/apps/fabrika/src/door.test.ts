@@ -1887,7 +1887,7 @@ describe("P10 span reader and recording", () => {
 				const archive = Layer.effect(
 					Archive,
 					Archive.pipe(
-						Effect.map((real) => ({
+						Effect.map((real: typeof Archive.Service) => ({
 							put: (name: string, body: Uint8Array) => {
 								archives.push(body.slice());
 								return real.put(name, body);
@@ -1926,9 +1926,9 @@ describe("P10 span reader and recording", () => {
 						Schema.is(Schema.toType(Input.cases.secret))(w.deliveries.at(-1)!.envelope.input),
 					).toBe(true);
 					yield* TestClock.adjust("16 days");
-					yield* SpanSink.use((s) => s.flush);
+					yield* SpanSink.use((s: typeof SpanSink.Service) => s.flush);
 					const inputRows = yield* stamped(),
-						spans = yield* RecordManager.use((r) =>
+						spans = yield* RecordManager.use((r: typeof RecordManager.Service) =>
 							Stream.runCollect(r.read(Chain.cases.spans.make({}))),
 						);
 					const visible = JSON.stringify({
