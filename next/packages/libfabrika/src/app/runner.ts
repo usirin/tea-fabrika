@@ -1112,7 +1112,15 @@ export class ProgramRunner extends Context.Service<
 								return {answer, jobs: [...takeRetry(), ...jobs]};
 							}),
 						);
-						yield* recording.flush;
+						yield* recording.flush.pipe(
+							Effect.onError(() =>
+								permit.withPermit(
+									Effect.sync(() => {
+										retry = [...jobs, ...retry];
+									}),
+								),
+							),
+						);
 						yield* runAll(jobs);
 						return answer;
 					}).pipe(
