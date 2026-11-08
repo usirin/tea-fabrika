@@ -24,8 +24,10 @@ import {findOf, type Kind, msgName, type Node, nodesOf, treeOf} from "./tree.ts"
 //   // {kind: "step", msg: {type: "add", n: 2}, before: {kind: "kept", state: {total: 1}},
 //   //  after: {total: 3}, changes: [{op: "replace", path: "/total", before: 1, after: 3}], cmds: []}
 //   shownOf(model)             // after choose "count total", replay it, and its answer parts at 2:
-//   // chosen {kind: "machine", replayable: true, replay: {answer: {_tag: "parts", n: 2, ...}, says: "..."}}
-//   // rows: "count total" {replay: "parts at step 2"}, "add 2" {replay: "parts from the recording"}
+//   // chosen {kind: "machine", started: {state: {total: 0}},
+//   //         replay: {answer: {_tag: "parts", n: 2, ...}, says: "...", step: {n: 2, row: "<add 2's key>"}}}
+//   // rows: "count total" {replay: "parts at step 2", answer: "parts"},
+//   //       "add 2" {replay: "parts from the recording", answer: "parts"}
 //
 // Times are milliseconds from the job's start, so the window places bars with no clock of its own.
 //
@@ -64,6 +66,8 @@ export const Row = Schema.Struct({
 	 * on the step that parts or is refused ("parts from the recording"). `null`: nothing to say.
 	 */
 	replay: Schema.NullOr(Schema.String),
+	/** Which answer those words are, so the window marks it: `null` when the row says none. */
+	answer: Schema.NullOr(Schema.Literals(["matches", "parts", "refused", "cannot"])),
 });
 export type Row = typeof Row.Type;
 
@@ -156,10 +160,22 @@ export const Detail = Schema.Union([
 		steps: Schema.Int,
 		/** Its state after its newest step. */
 		state: Schema.Unknown,
-		/** The record kept where it started, before its first step: it can be replayed. */
-		replayable: Schema.Boolean,
-		/** Its replay through today's code, asked: the answer once it came, and in words. `null`: none asked. */
-		replay: Schema.NullOr(Schema.Struct({answer: Schema.NullOr(Replayed), says: Schema.String})),
+		/**
+		 * Where it started, before its first step, when the record kept it: the first start's state.
+		 * Only then can it be replayed. `null`: recorded before starts were kept.
+		 */
+		started: Schema.NullOr(Schema.Struct({state: Schema.Unknown})),
+		/**
+		 * Its replay through today's code, asked: the answer once it came, in words, and the step it
+		 * parts or is refused at, to open (`null` for any other answer). `null`: none asked.
+		 */
+		replay: Schema.NullOr(
+			Schema.Struct({
+				answer: Schema.NullOr(Replayed),
+				says: Schema.String,
+				step: Schema.NullOr(Schema.Struct({n: Schema.Int, row: Schema.String})),
+			}),
+		),
 	}),
 	Schema.Struct({
 		kind: Schema.Literal("step"),
@@ -441,16 +457,31 @@ const saysOf = (answer: Replayed | null): string => {
 	}
 };
 
+/** The step of a machine run's node that an answer parts or is refused at, with its row's key. */
+const stepAt = (
+	machine: Node | undefined,
+	answer: Replayed | null,
+): {readonly n: number; readonly row: string; readonly says: string} | null => {
+	const at = answer === null ? null : stepWords(answer);
+	if (at === null) return null;
+	const step = machine?.children.find((c) => c.of.kind === "step" && c.of.step.n === at.n);
+	return step === undefined ? null : {n: at.n, row: step.key, says: at.says};
+};
+
+/** What a row says of a replay: its words, and which answer they are. */
+interface Words {
+	readonly says: string;
+	readonly answer: Replayed["_tag"];
+}
+
 /** Each row's replay words, by key: the machine run's row, and the step its answer names. */
-const replayWords = (root: Node, replay: Replay | null): ReadonlyMap<string, string> => {
-	const words = new Map<string, string>();
+const replayWords = (root: Node, replay: Replay | null): ReadonlyMap<string, Words> => {
+	const words = new Map<string, Words>();
 	if (replay === null || replay.answer === null) return words;
-	words.set(replay.row, machineWords(replay.answer));
-	const at = stepWords(replay.answer);
-	const step = findOf(root, replay.row)?.children.find(
-		(c) => c.of.kind === "step" && c.of.step.n === at?.n,
-	);
-	if (at !== null && step !== undefined) words.set(step.key, at.says);
+	const answer = replay.answer._tag;
+	words.set(replay.row, {says: machineWords(replay.answer), answer});
+	const step = stepAt(findOf(root, replay.row), replay.answer);
+	if (step !== null) words.set(step.row, {says: step.says, answer});
 	return words;
 };
 
@@ -458,7 +489,7 @@ const flatten = (
 	root: Node,
 	open: ReadonlySet<string>,
 	zero: number,
-	words: ReadonlyMap<string, string>,
+	words: ReadonlyMap<string, Words>,
 ): Row[] => {
 	const out: Row[] = [];
 	const walk = (n: Node, depth: number) => {
@@ -478,7 +509,8 @@ const flatten = (
 			open: isOpen,
 			size: n.children.length,
 			dots: n.events.map((e) => ({name: e.name, at: e.at - zero})),
-			replay: words.get(n.key) ?? null,
+			replay: words.get(n.key)?.says ?? null,
+			answer: words.get(n.key)?.answer ?? null,
 		});
 		if (isOpen) for (const c of n.children) walk(c, depth + 1);
 	};
@@ -548,7 +580,9 @@ const detailOf = (
 	switch (of.kind) {
 		case "span":
 			return spanDetail(node.key, of.span, run, job, zero);
-		case "machine":
+		case "machine": {
+			const started = firstStart(trace, of.run, of.machine, of.id);
+			const step = replay?.row === node.key ? stepAt(node, replay.answer) : null;
 			return {
 				kind: "machine",
 				key: node.key,
@@ -557,10 +591,17 @@ const detailOf = (
 				id: of.id,
 				steps: of.steps.length,
 				state: of.steps.at(-1)?.state ?? null,
-				replayable: firstStart(trace, of.run, of.machine, of.id) !== null,
+				started: started === null ? null : {state: started.state},
 				replay:
-					replay?.row === node.key ? {answer: replay.answer, says: saysOf(replay.answer)} : null,
+					replay?.row === node.key
+						? {
+								answer: replay.answer,
+								says: saysOf(replay.answer),
+								step: step === null ? null : {n: step.n, row: step.row},
+							}
+						: null,
 			};
+		}
 		case "step": {
 			const {run, machine, id} = of.step;
 			const started = of.before === null ? firstStart(trace, run, machine, id) : null;

@@ -135,9 +135,14 @@ the first step's state before is the machine's start, with nothing to show.
 - **The answer is read out:** the detail's `role="status"` region says it in full ("Replayed
   through current code: parts at step 2 (add 2), at state.total: 3 in the recording, 4 now."). It
   is in the detail before the button is pressed, so its first answer is announced.
-- **The rows say it in words, with an icon:** the machine run's row "matches at every step", "parts
-  at step 2" or "no cell for step 1", and the step it names "parts from the recording" or "no cell
-  in today's code". Color is never the cue (WCAG 1.4.1).
+- **The rows say it in words, each answer with its own mark:** the machine run's row "✓ matches at
+  every step", "✕ parts at step 2" or "⊘ no cell for step 1", and the step it names "parts from the
+  recording" or "no cell in today's code", with the same mark. A replay that could not be made has
+  words alone. The mark is hidden from a screen reader, since the words say it, and color is never
+  the cue (WCAG 1.4.1).
+- **The detail opens the step it names:** after a replay that parts or is refused, an "Open step N"
+  button chooses that step's row, which a small tile has scrolled out of view under the detail.
+- **The detail shows where it started:** the first start the record kept, under "Started from".
 - **A machine run with no start kept has no button.** Its detail says "Recorded before starts were
   kept, so it can't be replayed." A button that could only answer no would be a dead one.
 - The replay is kept while the record shown keeps that machine run's step count, and dropped by a

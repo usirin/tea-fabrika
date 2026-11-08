@@ -133,6 +133,18 @@ const KIND_WORD: Readonly<Record<Row["kind"], string>> = {
 	step: "step",
 };
 
+/**
+ * Each replay answer's mark beside its words on a row: one glyph per answer, so a glance tells
+ * them apart, and never the only cue (WCAG 1.4.1). Hidden from a screen reader, since the words
+ * say it. A replay that could not be made has words alone.
+ */
+const MARK = {
+	matches: "✓",
+	parts: "✕",
+	refused: "⊘",
+	cannot: null,
+} satisfies Record<NonNullable<Row["answer"]>, string | null>;
+
 /** The ruler: ranked ticks, the finer ranks shown only where the ruler is wide (window.css). */
 function Ruler({length}: {readonly length: number}) {
 	return (
@@ -300,8 +312,9 @@ function ReplayThrough({
 	readonly detail: Extract<Detail, {kind: "machine"}>;
 	readonly send: Send;
 }) {
-	if (!detail.replayable)
+	if (detail.started === null)
 		return <p className="faint">Recorded before starts were kept, so it can't be replayed.</p>;
+	const step = detail.replay?.step ?? null;
 	return (
 		<div className="wf-replay">
 			<button
@@ -314,6 +327,15 @@ function ReplayThrough({
 			<p className="wf-replay-says" role="status">
 				{detail.replay?.says ?? ""}
 			</p>
+			{step === null ? null : (
+				<button
+					type="button"
+					className="btn sm"
+					onClick={() => send({type: "choose", value: {row: step.row}})}
+				>
+					Open step {step.n}
+				</button>
+			)}
 		</div>
 	);
 }
@@ -424,6 +446,9 @@ function Opened({detail, send}: {readonly detail: Detail; readonly send: Send}) 
 						<span className="mono faint">{detail.run}</span>
 					</p>
 					<ReplayThrough detail={detail} send={send} />
+					{detail.started === null ? null : (
+						<Pre label="Started from" value={detail.started.state} />
+					)}
 					<Pre label="State after its newest step" value={detail.state} />
 				</section>
 			);
@@ -747,7 +772,9 @@ function JobWindow({view, send}: {readonly view: Shown; readonly send: Send}) {
 										{row.note === "" ? null : <span className="faint wf-note">{row.note}</span>}
 										{row.replay === null ? null : (
 											<span className="wf-replayed">
-												<span aria-hidden="true">↻ </span>
+												{row.answer === null || MARK[row.answer] === null ? null : (
+													<span aria-hidden="true">{MARK[row.answer]} </span>
+												)}
 												{row.replay}
 											</span>
 										)}
