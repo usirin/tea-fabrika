@@ -1,14 +1,14 @@
 # Passkey SSHSIG: capture outside the sandbox
 
-`next/`, Tier 1 P10, ticket 248. Started on 2026-11-07. The browser capture now
-waits for the lead to run it outside Codex's sandbox. Neither WebCrypto nor
-`ssh-keygen -Y verify` has checked an assertion yet. The challenge writer is ready
-and prints 106 bytes as hex.
+`next/`, Tier 1 P10, ticket 248. Started on 2026-11-07. **The real Chromium
+assertion passes both WebCrypto and OpenSSH.** All 29 positive, changed-byte
+and policy-control cases matched their expected answers. The passkey SSHSIG
+path works for this captured browser and virtual authenticator.
 
 ```ts
 // The split. Only the browser capture runs outside the sandbox.
 // 230-passkey-sshsig.ts -> signed-data hex -> 230-capture.ts -> public assertion JSON
-// The two independent checkers will read that JSON after the capture returns.
+// 230-check.ts reads that JSON and checks the packed SSHSIG with both verifiers.
 ```
 
 ## What broke first
@@ -68,9 +68,11 @@ output, 106 bytes:
 
 An independent Python encoding using `struct.pack` and `hashlib.sha512` produced
 the same bytes. Both new TypeScript scripts passed Node's syntax check. The
-browser capture and the SSHSIG packing mode have not run yet.
+lead ran the capture outside the sandbox. Its UP, UV, BE and BS checks passed,
+as did its zero-counter check. The packing mode and both verifiers then ran
+inside the sandbox.
 
-The lead runs this exact command from the repo root, outside the sandbox:
+The lead ran this exact command from the repo root, outside the sandbox:
 
 ```sh
 env -u TYPESAFE_API_KEY nice -n 19 node experiments/230-capture.ts "$(node experiments/230-passkey-sshsig.ts)"
@@ -83,8 +85,8 @@ with internal transport and user verification enabled. It requests and checks
 user verification for its one assertion. It requests backup eligibility and
 backup state, and sets the credential's counter to zero through CDP. The script
 requires UP, UV, BE and BS in the returned flags and a zero returned counter.
-These are capture settings, not observed assertion results yet. If that check
-fails, the public bytes are still saved for inspection.
+The captured assertion has flags `0x1d`, UP, UV, BE and BS, and counter zero. If
+that check fails in a future capture, the public bytes are still saved for inspection.
 
 The output is `experiments/results/230-assertion.json`. The script refuses to
 overwrite an existing capture. Every saved byte string is base64url, including
@@ -98,27 +100,84 @@ from CDP, printed or saved. The temporary browser closes in `finally`.
 The writer's `--pack` mode reads that file and builds SSHSIG armor. It uses the
 SK public-key type with the RP application, converts DER integers to SSH
 mpints, and packs the original client data, flags, counter, origin and
-extensions in OpenSSH's WebAuthn signature. Packing is not a verification
-result. WebCrypto and OpenSSH checks remain the next work after the lead's
-capture. No P10 product tests may start before they pass.
+extensions in OpenSSH's WebAuthn signature. The independent checker reads that
+armor back, reconstructs the authenticator bytes and compares them with the
+original capture. It converts the two SSH integers to WebCrypto's 64-byte
+P1363 signature, then verifies P-256 over the original client-data hash.
+
+## The two checkers and the changed bytes
+
+Run from the repo root, inside the sandbox:
+
+```sh
+env -u TYPESAFE_API_KEY nice -n 19 node experiments/230-check.ts
+```
+
+This completed with exit 0. The real fixture passed WebCrypto and OpenSSH.
+[The public assertion](./results/230-assertion.json) keeps the exact browser
+bytes. [The results](./results/230-checks.json) keep its SHA-256, every tested
+SSHSIG, the public signer line, both answers and the independent CLI output.
+The script makes no browser or network call. It deletes its temporary CLI
+files after the checks.
+
+The independent command, with paths supplied by the script's temporary folder:
+
+```sh
+ssh-keygen -Y verify -n fabrika-client -I spike -f allowed_signers -s assertion.sig < message
+```
+
+`message` is the exact fixed text above. `allowed_signers` contains the principal
+`spike`, the SK public-key type and the base64 public-key blob, with no extra
+options. Local OpenSSH_9.4p1, LibreSSL 3.3.6 accepted it with exit 0. No newer
+OpenSSH, verification option or execution outside the sandbox was needed.
+
+| Case group | Observed result |
+|---|---|
+| Real assertion, BE and BS set, counter zero | WebCrypto signature and policy pass; OpenSSH passes. |
+| Changed expected text or namespace | Binding check and OpenSSH refuse. The unchanged assertion's raw P-256 signature remains valid. |
+| Wrong configured RP or origin | Our policy refuses. OpenSSH still accepts the original signed bytes, since the application's settings are not its input. |
+| Changed challenge, type, client origin, crossOrigin, UV, UP, BE, BS, reserved flag, counter, RP application or signature | Our policy refuses; raw WebCrypto verification and OpenSSH also fail. |
+| Changed unsigned wrapper origin | Our policy and OpenSSH refuse its mismatch with the signed client data; the raw P-256 signature remains valid. |
+| Client data reformatted, inconsistent extension flag or bytes, truncated or trailing blob | Both checks refuse. Reformatting the JSON breaks the signature even when its decoded fields match. |
+| Synthetic, correctly signed BE/BS combinations 00, 10 and 11, all counter zero | Our policy, WebCrypto and OpenSSH pass all three. |
+| Synthetic, correctly signed BS without BE or UP without UV | Our policy refuses each for its own reason; raw WebCrypto and OpenSSH pass. |
+
+The five synthetic controls use a separate throwaway P-256 key made in memory.
+They are not claimed as browser assertions. No private bytes leave memory or
+enter the saved results. They isolate policy from signature failure: invalid
+backup state and missing UV are refused even with a valid signature. The real
+browser fixture remains the independent positive case.
+
+OpenSSH proves the byte format, not the application's entire policy. In this
+run it accepted the synthetic missing-UV and invalid-backup signatures. The
+product checker must enforce those rules itself. No protocol change is needed.
 
 ## The answer so far
 
 | Check | Observed answer |
 |---|---|
-| Real browser assertion using CDP WebAuthn | Initial sandbox launch failed. The lead's startup check passed outside it; assertion capture pending. |
-| WebCrypto policy and signature verification | Not run. No assertion bytes exist. |
-| Independent `ssh-keygen -Y verify -n fabrika-client` | Not run. No SSHSIG exists. Local `ssh -V` reports OpenSSH_9.4p1, LibreSSL 3.3.6; support was not tested. |
-| Changed text, namespace, RP id, origin, challenge, UV, flags, signature | Not run. |
-| Backup flags and zero counter | Not run. |
+| Real browser assertion using CDP WebAuthn | Captured outside the sandbox in Chromium 156.0.8078.4; public bytes saved. |
+| WebCrypto policy and signature verification | Pass on the real fixture. |
+| Independent `ssh-keygen -Y verify -n fabrika-client` | Pass inside the sandbox on OpenSSH_9.4p1; no extra option. |
+| Changed text, namespace, RP id, origin, challenge, UV, flags, signature | Expected refusals, with binding failures distinguished from raw signature failures. |
+| Backup flags and zero counter | Real BE/BS 11 and zero pass. Synthetic 00 and 10 pass; invalid 01 is refused by our policy with a valid signature. |
 
-There is no public assertion fixture yet. No P10 product tests or product code
-were written. The lead's browser capture is the next required input.
+The spike's byte gate is passed. No P10 product code was written.
 
 The intended byte format remains [OpenSSH's SSHSIG format](https://raw.githubusercontent.com/openssh/openssh-portable/master/PROTOCOL.sshsig)
 and [its WebAuthn SK signature format](https://raw.githubusercontent.com/openssh/openssh-portable/master/PROTOCOL.u2f).
-The challenge writer follows the SSHSIG format. Its completed signature has
-not been checked yet. No change to either format is proposed.
+Both checkers accepted the completed signature in these formats. No change to
+either format is proposed.
+
+## A prerequisite found before the laws
+
+Ticket 246 renamed the field to `parent` and added `traceId`, but its
+`ParentText` schema still accepts only the old eight-hex input ids. The approved
+P10 plan explicitly requires process-based ids before the P10 tests and leaves
+that follow-up with the lead, outside P10's product changes. A direct decode of
+`in-process_01m6v5270hetdrt4r8h9vvjwjr-1` returned failure on this base. The
+shared process-id helper's contract must also be supplied by the two row leads,
+as the plan requires. The lead has been asked for both prerequisites.
 
 ## Cost and limits
 
@@ -128,8 +187,8 @@ No real account, hardware authenticator, external server or persistent profile
 was used by the startup runs. The capture uses a fresh temporary browser and a
 virtual authenticator too.
 
-This run cannot tell us whether a real assertion passes either checker. It
-cannot tell us whether the local OpenSSH needs an option or a newer supporting
-version. It also cannot tell us whether any P10 law holds. It preserves only a
-browser startup failure identified as the sandbox restriction. Assertion
-compatibility remains an open measurement.
+This proves one Chromium version and a virtual authenticator. It does not prove
+Safari, Firefox, a physical security key or a synced passkey provider. It tests
+extension consistency, not every possible valid CBOR extension. It does not
+measure workerd, phone approval UX or every P10 law. Ordinary CI will use the
+recorded public fixture; it will not need a browser gesture or a private key.
