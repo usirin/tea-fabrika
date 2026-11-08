@@ -164,6 +164,16 @@ const bySummary = (x: Placed, y: Placed) =>
 
 const PIECES = ["runner.step", "ledger.call", "door.envelope"] as const;
 
+/** The piece of the health row each archive try writes, good or failed. */
+const ARCHIVE = "sink.archive";
+const ARCHIVED_OK = {piece: ARCHIVE, ok: 1, error: null};
+/** The `sink.archive` health rows, oldest first. */
+const archiveRows = (db: DatabaseSync) =>
+	db
+		.prepare(`SELECT piece, ok, error FROM health WHERE piece = '${ARCHIVE}' ORDER BY rowid`)
+		.all()
+		.map((row) => ({...row}));
+
 describe("p99, health in two levels", () => {
 	it("each summary's count, errors, p50, p95, max and lag match the raw rows", async () => {
 		const one = fc.record({
@@ -365,7 +375,8 @@ describe("p99, no raw row is ever lost", () => {
 					{day: "2026-10-23", key, sha256: hex(r2.stored.get(key) ?? new Uint8Array()), rows: 8},
 				]);
 				expect(count(db, "health", inDay(D))).toBe(0);
-				expect(count(db, "health"), "the younger days stay local").toBe(2);
+				expect(count(db, "health", `piece != '${ARCHIVE}'`), "the younger days stay local").toBe(2);
+				expect(archiveRows(db), "a good archive writes its own row").toEqual([ARCHIVED_OK]);
 				expect(count(db, "summary")).toBeGreaterThanOrEqual(summariesBefore);
 				expect(count(db, "summary", `hour IN (${D + 10 * H}, ${D + 23 * H})`)).toBe(2);
 				expect(count(db, "sizes")).toBeGreaterThanOrEqual(sizesBefore);
@@ -456,8 +467,16 @@ describe("p99, no raw row is ever lost", () => {
 						const written: Array<Raw> = [];
 						let kept = {summary: 0, sizes: 0, archived: 0};
 						const check = (now: number) => {
-							const local = db.prepare(`SELECT piece, at, ms, ok FROM health`).all().map(raw);
-							const archived = [...r2.stored.keys()].flatMap((k) => r2.lines(k).map(raw));
+							// The sink's own `sink.archive` rows are health too, but no span wrote them.
+							const spanRows = (r: Raw) => r.piece !== ARCHIVE;
+							const local = db
+								.prepare(`SELECT piece, at, ms, ok FROM health`)
+								.all()
+								.map(raw)
+								.filter(spanRows);
+							const archived = [...r2.stored.keys()]
+								.flatMap((k) => r2.lines(k).map(raw))
+								.filter(spanRows);
 							expect([...local, ...archived].map(key).sort(), "none missing, none twice").toEqual(
 								written.map(key).sort(),
 							);
@@ -508,7 +527,7 @@ describe("p99, no raw row is ever lost", () => {
 						yield* end("closing", last, 1, true);
 						yield* flush;
 						check(t);
-						const local = db.prepare(`SELECT at FROM health`).all();
+						const local = db.prepare(`SELECT at FROM health WHERE piece != '${ARCHIVE}'`).all();
 						expect(local.every((row) => utcDay(Number(row["at"])) === utcDay(last))).toBe(true);
 					}).pipe(
 						Effect.provide(world(sql, Archive.bucket(r2.calls))),
@@ -520,13 +539,6 @@ describe("p99, no raw row is ever lost", () => {
 		);
 	});
 });
-
-/** The `sink.archive` health rows: what each failed archive left behind. */
-const archiveRows = (db: DatabaseSync) =>
-	db
-		.prepare(`SELECT piece, ok, error FROM health WHERE piece = 'sink.archive' ORDER BY rowid`)
-		.all()
-		.map((row) => ({...row}));
 
 describe("p99, an archive that fails is never silent", () => {
 	it.effect(
@@ -541,7 +553,12 @@ describe("p99, an archive that fails is never silent", () => {
 				put: () => Promise.reject(new Error("R2 down")),
 				head: () => Promise.reject(new Error("R2 down")),
 			};
-			const failed = (error: string) => ({piece: "sink.archive", ok: 0, error});
+			// R2's `head` finds no file: nothing proves the copy is there, so it counts as a mismatch.
+			const blind: BucketCalls = {
+				put: () => Promise.resolve(),
+				head: () => Promise.resolve(null),
+			};
+			const failed = (error: string) => ({piece: ARCHIVE, ok: 0, error});
 			return Effect.gen(function* () {
 				yield* oldDay;
 				const tries = [
@@ -549,8 +566,9 @@ describe("p99, an archive that fails is never silent", () => {
 					[Archive.bucket(down), "unreachable"],
 					[Layer.succeed(Archive, wrong), "mismatch"],
 					[Archive.bucket(liar.calls), "mismatch"],
+					[Archive.bucket(blind), "mismatch"],
 				] as const;
-				const seen: Array<ReturnType<typeof failed>> = [];
+				const seen: Array<Record<string, unknown>> = [];
 				for (const [archive, error] of tries) {
 					const exit = yield* Effect.exit(flush.pipe(Effect.provide(archive)));
 					expect(exit._tag, "a day that cannot leave never fails the step").toBe("Success");
@@ -563,20 +581,17 @@ describe("p99, an archive that fails is never silent", () => {
 				expect(count(db, "archived")).toBe(1);
 				expect(count(db, "health", inDay(D))).toBe(0);
 				expect(r2.lines(fileKey("2026-10-23"))).toHaveLength(8);
-				expect(
-					archiveRows(db).filter((row) => row["ok"] === 0),
-					"a good flush adds no failure row",
-				).toHaveLength(4);
+				expect(archiveRows(db), "the good archive writes its own row").toEqual([
+					...seen,
+					ARCHIVED_OK,
+				]);
 				const joins = db
-					.prepare(`SELECT "spanId" FROM health WHERE piece = 'sink.archive'`)
+					.prepare(`SELECT "spanId" FROM health WHERE piece = '${ARCHIVE}'`)
 					.all()
 					.map((row) => row["spanId"]);
-				expect(joins, "a flush is no span, so its row joins none").toEqual([
-					null,
-					null,
-					null,
-					null,
-				]);
+				expect(joins, "a flush outside any span joins none").toEqual(
+					seen.map(() => null).concat(null),
+				);
 			}).pipe(Effect.provide(world(sql, Archive.bucket(r2.calls))));
 		},
 	);
@@ -672,6 +687,117 @@ describe("p99, the hour's size row is never skipped", () => {
 					"the hour's first span writes its size row, though summaries ran first",
 				).toBe(1);
 			}).pipe(Effect.provide(world(sql)));
+		},
+	);
+});
+
+describe("p99, a sink.archive row's time, duration and span", () => {
+	it.effect(
+		"at is the clock when the put finished, ms how long it took, spanId the span flush ran in",
+		() => {
+			const {db, sql} = fresh();
+			return Effect.gen(function* () {
+				yield* oldDay;
+				const real = yield* Archive;
+				const slow = (ms: number, fail: boolean) => ({
+					put: (key: string, body: Uint8Array) =>
+						TestClock.adjust(ms).pipe(
+							Effect.andThen(
+								fail
+									? Effect.fail(new SinkError({why: "unreachable", held: 0}))
+									: real.put(key, body),
+							),
+						),
+				});
+				const now = () =>
+					Effect.clockWith((clock) => Effect.succeed(clock.currentTimeMillisUnsafe()));
+				const rows = () =>
+					db
+						.prepare(
+							`SELECT ok, error, at, ms, "spanId" FROM health WHERE piece = '${ARCHIVE}' ORDER BY rowid`,
+						)
+						.all()
+						.map((row) => ({...row}));
+
+				// A failed put that takes 40 ms, in a flush outside any span.
+				const first = yield* now();
+				yield* flush.pipe(Effect.provideService(Archive, slow(40, true)));
+				expect(rows()).toEqual([
+					{ok: 0, error: "unreachable", at: first + 40, ms: 40, spanId: null},
+				]);
+
+				// A good put that takes 250 ms, in a flush the runner's step span wraps.
+				const second = yield* now();
+				const step = yield* Effect.gen(function* () {
+					const current = yield* Effect.currentSpan;
+					yield* flush.pipe(Effect.provideService(Archive, slow(250, false)));
+					return current.spanId;
+				}).pipe(Effect.withSpan("runner.step"));
+				expect(rows()[1]).toEqual({ok: 1, error: null, at: second + 250, ms: 250, spanId: step});
+				expect(count(db, "health", inDay(D))).toBe(0);
+			}).pipe(Effect.provide(world(sql)));
+		},
+	);
+});
+
+describe("p99, late rows of an archived day leave as a further part", () => {
+	it.effect(
+		"a row that lands after its day was archived goes in part 2, with its own key, hash and archived row",
+		() => {
+			const {db, sql} = fresh();
+			const r2 = bucket();
+			const late = D + 10 * H + 30 * 60_000;
+			return Effect.gen(function* () {
+				yield* oldDay;
+				const real = yield* Archive;
+				const slow = {
+					put: (key: string, body: Uint8Array) =>
+						Effect.gen(function* () {
+							const now = yield* Effect.clockWith((clock) =>
+								Effect.succeed(clock.currentTimeMillisUnsafe()),
+							);
+							yield* TestClock.setTime(late);
+							yield* Effect.void.pipe(Effect.withSpan("late.write"));
+							yield* TestClock.setTime(now);
+							return yield* real.put(key, body);
+						}),
+				};
+				yield* flush.pipe(Effect.provideService(Archive, slow));
+				expect(count(db, "health", inDay(D)), "the late row waits for the next flush").toBe(1);
+				yield* flush;
+				const first = fileKey("2026-10-23");
+				const second = `health/${OBJECT}/2026-10-23.2.jsonl`;
+				expect([...r2.stored.keys()].sort()).toEqual([first, second].sort());
+				expect(r2.lines(first)).toHaveLength(8);
+				expect(r2.lines(second).map((line) => [line["piece"], line["at"]])).toEqual([
+					["late.write", late],
+				]);
+				const archived = db
+					.prepare(`SELECT day, key, sha256, rows FROM archived ORDER BY key`)
+					.all();
+				expect(archived.map((row) => ({...row}))).toEqual(
+					[
+						{
+							day: "2026-10-23",
+							key: first,
+							sha256: hex(r2.stored.get(first) ?? new Uint8Array()),
+							rows: 8,
+						},
+						{
+							day: "2026-10-23",
+							key: second,
+							sha256: hex(r2.stored.get(second) ?? new Uint8Array()),
+							rows: 1,
+						},
+					].sort((x, y) => x.key.localeCompare(y.key)),
+				);
+				expect(count(db, "health", inDay(D)), "nothing of the day stays local").toBe(0);
+				yield* flush;
+				expect(
+					r2.puts.filter((k) => k === second),
+					"part 2 is put once",
+				).toHaveLength(1);
+			}).pipe(Effect.provide(world(sql, Archive.bucket(r2.calls))));
 		},
 	);
 });
