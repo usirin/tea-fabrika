@@ -260,9 +260,45 @@
 	},
 	"overrides": [
 		{
+			// P15a: these app entries only register and call libfabrika operations.
+			"files": [
+				"next/apps/fabrika/dev.ts",
+				"next/apps/fabrika/build.ts",
+				"next/apps/fabrika/src/build.ts",
+				"next/apps/fabrika/src/runtime.ts",
+				"next/apps/fabrika/src/brain.ts",
+				"next/apps/fabrika/src/table.ts"
+			],
+			"rules": { "fabrika/wiring-only": "error" }
+		},
+		{
+			// Browser code cannot reach Node-only build, watch or storage implementations.
+			"files": [
+				"next/packages/libfabrika/src/browser/**",
+				"next/packages/libfabrika/src/client/**"
+			],
+			"rules": {
+				"eslint/no-restricted-imports": [
+					"error",
+					{
+						"patterns": [
+							"node:*",
+							"@effect/platform-node",
+							"@effect/platform-node/*",
+							"../local/*",
+							"../build/*",
+							"../workers/*",
+							"@kampus/libfabrika/local",
+							"@kampus/libfabrika/build"
+						]
+					}
+				]
+			}
+		},
+		{
 			// Test files only: an `expect` that sits only inside an `if` may never run.
 			// `!` is allowed here: a test that hits a missing value fails on its own.
-			"files": ["**/*.test.ts"],
+			"files": ["**/*.test.ts", "**/*.test-support.ts"],
 			"rules": {
 				"fabrika/no-expect-in-if": "error",
 				"typescript/no-non-null-assertion": "off",
@@ -368,7 +404,7 @@
 		{
 			// Tests are left out: they await vitest, feed raw frames and may plant a broken view.
 			// `no-of` stays on, since a test names its helpers too.
-			"files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
+			"files": ["next/**/*.test.ts", "next/**/*.test.tsx", "next/**/*.test-support.ts"],
 			"rules": {
 				"fabrika/no-promises": "off",
 				"fabrika/no-effect-run-outside-edge": "off",

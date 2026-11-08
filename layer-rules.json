@@ -32,6 +32,11 @@
 			"name": "next-mcp",
 			"paths": ["next/packages/libfabrika/src/mcp"]
 		},
+		{ "name": "next-local", "paths": ["next/packages/libfabrika/src/local"] },
+		{ "name": "next-build", "paths": ["next/packages/libfabrika/src/build"] },
+		{ "name": "next-server", "paths": ["next/packages/libfabrika/src/server"] },
+		{ "name": "next-browser", "paths": ["next/packages/libfabrika/src/browser"] },
+		{ "name": "next-client", "paths": ["next/packages/libfabrika/src/client"] },
 		{
 			"name": "next-app",
 			"paths": ["next/packages/libfabrika/src/app"]
