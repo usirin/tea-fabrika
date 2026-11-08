@@ -4,7 +4,7 @@
 import {Context, Effect, Layer, Schema} from "effect";
 import {Ledger, type LedgerError} from "../data/ledger.ts";
 import {type Appended, lineFor} from "../data/log.ts";
-import {short} from "../data/referee.ts";
+import {short} from "../data/trace.ts";
 import {answered, failed, type From, Mailbox} from "./mailbox.ts";
 
 const tag = (word: string): string => `fab.process.${word}`;

@@ -9,7 +9,7 @@
 import {Context, DateTime, Effect, Layer, Result, Schema, Stream} from "effect";
 import {Ledger, LedgerError} from "../data/ledger.ts";
 import {Appended, type Entry, lineFor, Rev, valueFor} from "../data/log.ts";
-import {short} from "../data/referee.ts";
+import {short} from "../data/trace.ts";
 import type {From} from "./mailbox.ts";
 import {
 	allows,

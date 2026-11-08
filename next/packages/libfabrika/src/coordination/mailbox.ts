@@ -4,7 +4,7 @@
 import {Context, Effect, Layer, Option, Schema, Stream} from "effect";
 import {Ledger, LedgerError} from "../data/ledger.ts";
 import {Appended, type Entry, type Line, lineFor, type Rev} from "../data/log.ts";
-import {short} from "../data/referee.ts";
+import {short} from "../data/trace.ts";
 
 /** What a writer says about itself, shared by every write in this layer: P6's `Line` without its
  *  case and body, so a writer can leave none out (p92). */
