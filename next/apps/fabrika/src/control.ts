@@ -1,0 +1,104 @@
+import {workerLoader} from "@kampus/libfabrika/workers";
+import {Effect, Result, Schema} from "effect";
+import {bucketCalls, processStub, projectStub, recordStub, rpc, type Env} from "./runtime.ts";
+import {programs} from "./table.ts";
+
+const Request = Schema.Struct({
+	target: Schema.Literals(["project", "process", "record", "loader", "bucket"]),
+	project: Schema.String,
+	name: Schema.String,
+	method: Schema.String,
+	args: Schema.Array(Schema.Unknown),
+});
+const methods = {
+	project: new Set([
+		"clientConnect",
+		"challenge",
+		"initialize",
+		"route",
+		"grant",
+		"read",
+		"wait",
+		"start",
+		"exit",
+		"info",
+		"sign",
+		"commit",
+		"join",
+		"leave",
+		"online",
+		"brain",
+	]),
+	process: new Set(["msg", "open", "due", "abort", "activity", "recover", "savedAlarm"]),
+	record: new Set(["write", "read", "content", "deleteContent"]),
+};
+const dispatch = Effect.fnUntraced(function* (env: Env, request: typeof Request.Type) {
+	const {target, project, name, method, args} = request;
+	if (target === "loader") {
+		const loaded = yield* workerLoader(env.LOADER, programs).load(name, project);
+		if (method === "init") return yield* loaded.execution.init(args[0]);
+		if (method === "step") return yield* loaded.execution.step(args[0], args[1]);
+		return yield* Effect.fail({why: "unknown_method"});
+	}
+	if (target === "bucket") {
+		const calls = bucketCalls(env.HEALTH);
+		if (method === "put")
+			return yield* rpc(() =>
+				calls.put(
+					String(args[0]),
+					Uint8Array.from(Schema.decodeUnknownSync(Schema.Array(Schema.Number))(args[1])),
+					String(args[2]),
+				),
+			);
+		if (method === "head") return yield* rpc(() => calls.head(String(args[0])));
+		return yield* Effect.fail({why: "unknown_method"});
+	}
+	if (!methods[target].has(method)) return yield* Effect.fail({why: "unknown_method"});
+	if (
+		target === "project" &&
+		method === "commit" &&
+		typeof args[1] === "object" &&
+		args[1] !== null &&
+		"process" in args[1]
+	)
+		return yield* Effect.fail({why: "reserved"});
+	const stub =
+		target === "project"
+			? projectStub(env, project)
+			: target === "process"
+				? processStub(env, project, name)
+				: recordStub(env, project, name);
+	// Only the fixed internal method set above is callable. Public fetch never reaches this entrypoint.
+	// oxlint-disable-next-line fabrika/no-promises -- edge: dynamic platform RPC can return void or a Promise
+	const answer = rpc(() => Promise.resolve(Reflect.apply(Reflect.get(stub, method), stub, args)));
+	return yield* target === "process" && method === "abort" ? answer.pipe(Effect.ignore) : answer;
+});
+
+export const control = Effect.fnUntraced(function* (
+	request: globalThis.Request,
+	env: Env,
+	token: string,
+) {
+	if (typeof token !== "string" || request.headers.get("authorization") !== `Bearer ${token}`)
+		return new Response(null, {status: 403});
+	// oxlint-disable-next-line fabrika/no-promises -- edge: a Request body returns a Promise
+	const raw = yield* Effect.tryPromise({try: () => request.json(), catch: () => null});
+	const input = Schema.decodeUnknownResult(Request)(raw);
+	if (Result.isFailure(input)) return Response.json({error: {why: "bad_input"}}, {status: 400});
+	const answer = yield* Effect.result(dispatch(env, input.success));
+	return Result.isSuccess(answer)
+		? Response.json({value: answer.success ?? null})
+		: Response.json(
+				{
+					error: {
+						why:
+							typeof answer.failure === "object" &&
+							answer.failure !== null &&
+							"why" in answer.failure
+								? answer.failure.why
+								: "unreachable",
+					},
+				},
+				{status: 500},
+			);
+});

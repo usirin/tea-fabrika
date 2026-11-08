@@ -1,0 +1,307 @@
+import {execFile} from "node:child_process";
+import {randomBytes} from "node:crypto";
+import {join} from "node:path";
+import * as Plugin from "@alchemy.run/cloudflare-runtime/core/Plugin";
+import {RuntimeLifecycle, type RuntimeEvent} from "@alchemy.run/cloudflare-runtime/core/Runtime";
+import {applyCell} from "@demlik/tea";
+import {ProcessIdGenerator} from "@kampus/libfabrika/coordination";
+import {AlchemyContext} from "alchemy/AlchemyContext";
+import {ArtifactStore, createArtifactStore} from "alchemy/Artifacts";
+import {deploy} from "alchemy/Deploy";
+import * as Interaction from "alchemy/Interaction";
+import {localState} from "alchemy/State/LocalState";
+import {Context, Effect, Layer, Queue, Schema} from "effect";
+import {stack} from "../alchemy.run.ts";
+import {brainLife} from "./brain-life.ts";
+import type {Built} from "./build.ts";
+import {BrainFact, brainOutbox, checkMemory} from "./local-stage.ts";
+import {Settings} from "./settings.ts";
+
+class ControlPlugin extends Plugin.Service<ControlPlugin>()(
+	"cloudflare-runtime/plugin/FabrikaControl",
+) {}
+class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
+	why: Schema.String,
+}) {}
+type Target = "project" | "process" | "record" | "loader" | "bucket";
+const Response = Schema.Struct({
+	value: Schema.optionalKey(Schema.Unknown),
+	error: Schema.optionalKey(Schema.Struct({why: Schema.String})),
+});
+const sample = (pid: number) =>
+	Effect.callback<number, ControlError>((resume) => {
+		const child = execFile(
+			"ps",
+			["-o", "rss=", "-p", String(pid)],
+			{encoding: "utf8"},
+			(error, text) =>
+				resume(
+					error
+						? Effect.fail(new ControlError({why: "sample"}))
+						: Effect.succeed(Number(text.trim()) * 1024),
+				),
+		);
+		return Effect.sync(() => {
+			child.kill();
+		});
+	});
+
+export const startStage = Effect.fn("brain.start")(function* (
+	built: Built,
+	options: Omit<Settings, "build"> & {readonly home: string},
+) {
+	const config = Settings.make({...options, build: built.build}),
+		scope = yield* Effect.scope,
+		ids = yield* ProcessIdGenerator;
+	const outbox = yield* brainOutbox(options.home),
+		events = yield* Queue.unbounded<RuntimeEvent>();
+	const token = randomBytes(32).toString("base64url");
+	let port = 0,
+		pid = 0,
+		previous: string | null = null,
+		start = "",
+		stopping = false;
+	let reason: "open" | "crash" | "memory" | "core" = "open",
+		bytes: number | undefined;
+	let state = brainLife.init(null, {})[0];
+	const transition = (
+		msg:
+			| Parameters<typeof brainLife.update.started>[1]
+			| {type: "waiting"; after: string; until: number; why: string}
+			| {type: "braked"; after: string; why: string}
+			| {type: "stop"}
+			| {type: "stopped"},
+	) => {
+		state = applyCell(brainLife, state, msg)[0];
+	};
+	const call = Effect.fnUntraced(function* (
+		target: Target,
+		project: string,
+		name: string,
+		method: string,
+		args: ReadonlyArray<unknown>,
+	) {
+		if (port === 0) return yield* new ControlError({why: "offline"});
+		// oxlint-disable-next-line fabrika/no-promises -- edge: the private runtime socket is an HTTP transport for object calls
+		const response = yield* Effect.tryPromise({
+			try: () =>
+				fetch(`http://127.0.0.1:${port}`, {
+					method: "POST",
+					headers: {authorization: `Bearer ${token}`, "content-type": "application/json"},
+					body: JSON.stringify({target, project, name, method, args}),
+				}),
+			catch: () => new ControlError({why: "unreachable"}),
+		});
+		// oxlint-disable-next-line fabrika/no-promises -- edge: the binding transport response returns a Promise
+		const raw = yield* Effect.tryPromise({
+			try: () => response.json(),
+			catch: () => new ControlError({why: "bad_row"}),
+		});
+		const answer = yield* Schema.decodeUnknownEffect(Response)(raw).pipe(
+			Effect.mapError(() => new ControlError({why: "bad_row"})),
+		);
+		if (answer.error !== undefined) return yield* new ControlError(answer.error);
+		return answer.value;
+	});
+	const flush = outbox.flush((fact) => call("project", config.name, "", "brain", [fact]));
+	const local = Context.empty().pipe(
+		Context.add(RuntimeLifecycle, (event) => {
+			Queue.offerUnsafe(events, event);
+		}),
+		Context.add(ControlPlugin, {
+			sockets: [
+				{
+					name: "fabrika-control",
+					address: "127.0.0.1:0",
+					http: {},
+					service: {
+						name: "user-worker",
+						entrypoint: "Control",
+						props: {json: JSON.stringify({token})},
+					},
+				},
+			],
+			start: (ports) =>
+				Effect.sync(() => {
+					port = Schema.decodeUnknownSync(Schema.Int)(ports["fabrika-control"]);
+				}),
+		}),
+	);
+	yield* Effect.addFinalizer(() =>
+		Effect.gen(function* () {
+			stopping = true;
+			transition({type: "stop"});
+			if (start !== "") {
+				yield* outbox.add(
+					BrainFact.cases.stopped.make({
+						id: `${start}/stopped`,
+						start,
+						at: Date.now(),
+						why: "stop",
+					}),
+				);
+				yield* flush.pipe(Effect.ignore);
+			}
+			transition({type: "stopped"});
+		}).pipe(Effect.orDie),
+	);
+	const recordEvents = Effect.forever(
+		Effect.gen(function* () {
+			const event = yield* Queue.take(events);
+			if (stopping) return;
+			if (event.type === "start") {
+				previous = start || null;
+				start = yield* ids.next;
+				pid = event.pid;
+				const fact = BrainFact.cases.started.make({
+					id: `${start}/started`,
+					start,
+					after: previous,
+					build: built.build,
+					why: reason,
+					pid,
+					at: Date.now(),
+					...(bytes === undefined ? {} : {bytes}),
+				});
+				transition({type: "started", ...fact});
+				yield* outbox.add(fact);
+				reason = "crash";
+				bytes = undefined;
+			} else if (event.type === "restart") {
+				transition({type: "waiting", after: start, until: Date.now() + event.delay, why: reason});
+				yield* outbox.add(
+					BrainFact.cases.exited.make({
+						id: `${start}/exited`,
+						start,
+						at: Date.now(),
+						why: reason,
+						exitCode: event.exit.exitCode,
+						signal: event.exit.signal === null ? null : String(event.exit.signal),
+						backoff: event.delay,
+						...(bytes === undefined ? {} : {bytes}),
+					}),
+				);
+			} else if (event.type === "stop") {
+				transition({type: "braked", after: start, why: event.why});
+				yield* outbox.add(
+					BrainFact.cases.braked.make({
+						id: `${start}/braked`,
+						start,
+						at: Date.now(),
+						why: event.why,
+						exitCode: event.exit.exitCode,
+						signal: event.exit.signal === null ? null : String(event.exit.signal),
+					}),
+				);
+				pid = 0;
+			}
+		}),
+	);
+	yield* Effect.forkScoped(recordEvents);
+	const engine = Layer.mergeAll(
+		Layer.succeed(AlchemyContext, {
+			dotAlchemy: join(options.home, ".alchemy"),
+			dev: true,
+			adopt: false,
+		}),
+		Layer.succeed(ArtifactStore, createArtifactStore()),
+		Interaction.layerNonInteractive(),
+	);
+	yield* deploy({stack: stack(built, config, local), stage: "local", dev: true, scope}).pipe(
+		Effect.provide(localState()),
+		Effect.provide(engine),
+	);
+	yield* call("project", config.name, "", "info", []);
+	yield* flush;
+	yield* Effect.forkScoped(
+		Effect.forever(
+			Effect.gen(function* () {
+				yield* Effect.sleep("1 second");
+				if (stopping || pid === 0) return;
+				yield* checkMemory({
+					pid,
+					sample,
+					replace: (value) =>
+						Effect.sync(() => {
+							reason = "memory";
+							bytes = value.bytes;
+							process.kill(value.pid, "SIGTERM");
+						}),
+				}).pipe(Effect.ignore);
+				yield* flush.pipe(Effect.ignore);
+			}),
+		),
+	);
+	const proxy = (target: Target, project: string, name = "") =>
+		new Proxy(
+			{},
+			{
+				get: (_value, method) => {
+					if (method === "then") return undefined;
+					return (...args: ReadonlyArray<unknown>) =>
+						// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local binding proxy matches Durable Object's Promise API
+						Effect.runPromise(call(target, project, name, String(method), args));
+				},
+			},
+		);
+	return {
+		url: `http://127.0.0.1:${config.port}`,
+		project: (project: string) => {
+			const p = proxy("project", project);
+			return new Proxy(p, {
+				get: (value, method) =>
+					method === "connect"
+						? Reflect.get(p, "clientConnect")
+						: method === "gateways"
+							? {
+									join: Reflect.get(p, "join"),
+									leave: Reflect.get(p, "leave"),
+									online: Reflect.get(p, "online"),
+								}
+							: method === "forProcess"
+								? (pid: string) => ({
+										sign: (id: string, parent: string, kind: string) =>
+											Reflect.get(p, "sign")(pid, id, parent, kind),
+										append: (input: unknown) => Reflect.get(p, "commit")(pid, input),
+									})
+								: Reflect.get(value, method),
+			});
+		},
+		process: (pid: string) =>
+			new Proxy(proxy("process", config.name, pid), {
+				get: (value, method) => Reflect.get(value, method === "alarm" ? "savedAlarm" : method),
+			}),
+		record: (project: string, name: string) => proxy("record", project, name),
+		loader: {
+			load: (name: string, pid: string) =>
+				// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Worker Loader proxy matches the platform's Promise API
+				Effect.runPromise(
+					call("loader", pid, name, "init", [null]).pipe(Effect.as(proxy("loader", pid, name))),
+				),
+		},
+		bucket: {
+			put: (key: string, body: Uint8Array, options: {sha256: string}) =>
+				// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local R2 proxy matches the platform's Promise API
+				Effect.runPromise(call("bucket", config.name, "", "put", [key, [...body], options.sha256])),
+			head: (key: string) =>
+				// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local R2 proxy matches the platform's Promise API
+				Effect.runPromise(
+					call("bucket", config.name, "", "head", [key]).pipe(
+						Effect.map((raw) =>
+							raw === null
+								? null
+								: {
+										checksums: {
+											sha256: Uint8Array.from(
+												(String((raw as {sha256: string}).sha256).match(/../g) ?? []).map((byte) =>
+													Number.parseInt(byte, 16),
+												),
+											).buffer,
+										},
+									},
+						),
+					),
+				),
+		},
+	};
+});
