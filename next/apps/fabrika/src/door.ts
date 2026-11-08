@@ -1073,9 +1073,9 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		readonly fact: unknown;
 	}) {
 		return yield* Effect.gen(function* () {
-			const sessions = yield* sessionsFor(a.process);
 			if (options.isLive !== undefined && !(yield* options.isLive(a.process)))
 				return yield* new SigningRefused({why: "not_delivered"});
+			const sessions = yield* sessionsFor(a.process);
 			const session = yield* sessions.receipt(a.id, a.parent, a.process, a.kind);
 			const fact = rawObject(a.fact);
 			if (
