@@ -1,0 +1,1121 @@
+{
+	"base": "06d4fecb",
+	"total": 159,
+	"failed": 157,
+	"passed": 2,
+	"cases": [
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 516,
+			"name": "P10 door admission and waiting p43: capped oldest-first waiting rows persist and unauthenticated knocks add no audit rows",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 563,
+			"name": "P10 door admission and waiting p26/p42/p66: verified initialize records complete hello once, never rank from has",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 599,
+			"name": "P10 door admission and waiting p26: unknown on an empty project cannot found or grow the sink",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 599,
+			"name": "P10 door admission and waiting p26: bad signature on an empty project cannot found or grow the sink",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 599,
+			"name": "P10 door admission and waiting p26: no version on an empty project cannot found or grow the sink",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 599,
+			"name": "P10 door admission and waiting p26: wrong name on an empty project cannot found or grow the sink",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 636,
+			"name": "P10 door admission and waiting p43: waiting tabs, cap, expiry and watcher registration survive reopening SQLite",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 683,
+			"name": "P10 door admission and waiting p43: grant accepts any comparison code, clears all tabs, fresh nonce required",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 754,
+			"name": "P10 signed membership changes p42 recovery: the real P9 second fold's ignored result is not turned into applied",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 832,
+			"name": "P10 signed membership changes p42: a removed signer can resend its exact old fact, but cannot change it",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 870,
+			"name": "P10 signed membership changes p43/p66: agent watch/deny refuse; window deny records its real writer and saw",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 892,
+			"name": "P10 signed membership changes p27: granted wrong-to never calls ClientManager.write or founds",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 892,
+			"name": "P10 signed membership changes p27: revoked wrong-to never calls ClientManager.write or founds",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 892,
+			"name": "P10 signed membership changes p27: added wrong-to never calls ClientManager.write or founds",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 956,
+			"name": "P10 signed membership changes question 19: window cannot promote itself from platform or capabilities",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 956,
+			"name": "P10 signed membership changes question 19: agent cannot promote itself from platform or capabilities",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 956,
+			"name": "P10 signed membership changes question 19: otherRoot cannot promote itself from platform or capabilities",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 986,
+			"name": "P10 signed membership changes p42: original additive signed text re-verifies; exact resend reuses first placing",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1021,
+			"name": "P10 signed membership changes p27: a text mismatch writes no membership fact",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1021,
+			"name": "P10 signed membership changes p27: a namespace mismatch writes no membership fact",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1021,
+			"name": "P10 signed membership changes p27: a person mismatch writes no membership fact",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1048,
+			"name": "P10 inputs, retries and signer p67: authenticated reads, parked waits and refusals each keep an input record",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1070,
+			"name": "P10 inputs, retries and signer question 16: caller personOnly claims cannot turn a person's comment into approval",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1090,
+			"name": "P10 inputs, retries and signer p67 record retry: a lost input-log append answer keeps the first id, trace and placing",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1134,
+			"name": "P10 inputs, retries and signer trace reason: an agent cannot claim a request never delivered to its process",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1151,
+			"name": "P10 inputs, retries and signer p67: a stamped input has exactly four fields, checked writer and referee time",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1170,
+			"name": "P10 inputs, retries and signer p67 spoof: outer id is refused before decoding, with the real sender recorded",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1170,
+			"name": "P10 inputs, retries and signer p67 spoof: wrapper id is refused before decoding, with the real sender recorded",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1170,
+			"name": "P10 inputs, retries and signer p67 spoof: outer by is refused before decoding, with the real sender recorded",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1170,
+			"name": "P10 inputs, retries and signer p67 spoof: wrapper by is refused before decoding, with the real sender recorded",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1170,
+			"name": "P10 inputs, retries and signer p67 spoof: outer for is refused before decoding, with the real sender recorded",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1170,
+			"name": "P10 inputs, retries and signer p67 spoof: wrapper for is refused before decoding, with the real sender recorded",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1170,
+			"name": "P10 inputs, retries and signer p67 spoof: outer arrivedAt is refused before decoding, with the real sender recorded",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1170,
+			"name": "P10 inputs, retries and signer p67 spoof: wrapper arrivedAt is refused before decoding, with the real sender recorded",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1190,
+			"name": "P10 inputs, retries and signer p67: logical retries retain parent/trace and have one real mailbox placing",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1214,
+			"name": "P10 inputs, retries and signer p67: a new door start retries an injected id collision and never reuses an input id",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1233,
+			"name": "P10 inputs, retries and signer p67: the authority storage cap fails before acknowledgment or delivery, without eviction",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1253,
+			"name": "P10 inputs, retries and signer question 16: authority is saved before delivery, and a failed delivery retries the same parent",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1289,
+			"name": "P10 inputs, retries and signer explicit method table: public signer cannot bypass authority",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1289,
+			"name": "P10 inputs, retries and signer explicit method table: public session.signer cannot bypass authority",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1289,
+			"name": "P10 inputs, retries and signer explicit method table: public ledger.append cannot bypass authority",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1289,
+			"name": "P10 inputs, retries and signer explicit method table: public process.exit cannot bypass authority",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1289,
+			"name": "P10 inputs, retries and signer explicit method table: public door.founded cannot bypass authority",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1310,
+			"name": "P10 passkey roots and recovery question 19: an enrolled passkey root approves, removes and recovers a cleared window",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1372,
+			"name": "P10 passkey roots and recovery question 19 enrollment: changing key cannot reuse a proof",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1372,
+			"name": "P10 passkey roots and recovery question 19 enrollment: changing window cannot reuse a proof",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1372,
+			"name": "P10 passkey roots and recovery question 19 enrollment: changing for cannot reuse a proof",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1372,
+			"name": "P10 passkey roots and recovery question 19 enrollment: changing to cannot reuse a proof",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1372,
+			"name": "P10 passkey roots and recovery question 19 enrollment: changing id cannot reuse a proof",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1372,
+			"name": "P10 passkey roots and recovery question 19 enrollment: changing nonce cannot reuse a proof",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1405,
+			"name": "P10 passkey roots and recovery question 19: missing or inconsistent proof cannot create an SK person root",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1405,
+			"name": "P10 passkey roots and recovery question 19: missing or inconsistent verification cannot create an SK person root",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1405,
+			"name": "P10 passkey roots and recovery question 19: missing or inconsistent backup metadata cannot create an SK person root",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1436,
+			"name": "P10 passkey roots and recovery question 19 recovery: a sheet adds one passkey device; a spent sheet's exact resend is idempotent",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1460,
+			"name": "P10 revocation and append revocation: a device removal kills descendants despite lost close messages; other roots and sheet live",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1501,
+			"name": "P10 revocation and append append race: revocation after signer answers prevents a new write",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1536,
+			"name": "P10 revocation and append receipt binding: append cannot change its write id, process, kind or parent",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1573,
+			"name": "P10 span reader and recording P37 reader: first page stops pulling before a failure after row 256",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1631,
+			"name": "P10 span reader and recording recording failure: a failed pre-route sink flush prevents delivery and acknowledgment",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1664,
+			"name": "P10 span reader and recording P37 reader: a bounded page crosses rolled parts and outside-process spans in order",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1714,
+			"name": "P10 span reader and recording P37 reader: failure remains an Effect failure, never a domain err",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1738,
+			"name": "P10 span reader and recording P37 content deletion: only a person can erase, checked fingerprint retained, span stays",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1799,
+			"name": "P10 span reader and recording record first: input log and ended input span are flushed before delivery; route has a real link",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1842,
+			"name": "P10 span reader and recording recording failure: failed input append or sink flush prevents delivery",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1871,
+			"name": "P10 span reader and recording route failure: final flush includes the ended failed route span",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"line": 1886,
+			"name": "P10 span reader and recording no content leak: raw keys, terminal bytes, signature, forged sender and nested Redacted stay out of input telemetry",
+			"status": "failed",
+			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/passkey.test.ts",
+			"line": 15,
+			"name": "P10 passkey records question 19: Signed keeps checked backup state and zero counter beside the original bytes",
+			"status": "failed",
+			"why": "AssertionError: expected { text: 'original\\n', …(2) } to deeply equal { text: 'original\\n', …(3) }"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/passkey.test.ts",
+			"line": 21,
+			"name": "P10 passkey records question 19: an added person keeps credential, RP, origin and enrollment proof",
+			"status": "failed",
+			"why": "AssertionError: expected { _tag: 'person', key: 'sk-key', …(1) } to deeply equal { _tag: 'person', key: 'sk-key', …(2) }"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/passkey.test.ts",
+			"line": 40,
+			"name": "P10 passkey records P7 compatibility: plain Ed25519 signed facts need no invented passkey fields",
+			"status": "passed",
+			"why": "passed"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/process-id.test.ts",
+			"line": 16,
+			"name": "P10 shared process ids shape: a canonical TypeID containing UUIDv7, not a UUIDv4 plant",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'layer')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/process-id.test.ts",
+			"line": 34,
+			"name": "P10 shared process ids monotonic: same-millisecond calls never repeat or sort backward",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'layer')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/process-id.test.ts",
+			"line": 45,
+			"name": "P10 shared process ids monotonic: a clock rollback cannot reuse or lower an id",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'layer')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/session-manager.test.ts",
+			"line": 115,
+			"name": "P10 saved signing authority question 16: interleaved writers keep the direct parent's identity and span",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'layer')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/session-manager.test.ts",
+			"line": 139,
+			"name": "P10 saved signing authority question 16: not_delivered is distinct and changes no saved rows",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'layer')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/session-manager.test.ts",
+			"line": 139,
+			"name": "P10 saved signing authority question 16: spent is distinct and changes no saved rows",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'layer')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/session-manager.test.ts",
+			"line": 139,
+			"name": "P10 saved signing authority question 16: person_only is distinct and changes no saved rows",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'layer')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/session-manager.test.ts",
+			"line": 139,
+			"name": "P10 saved signing authority question 16: ended is distinct and changes no saved rows",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'layer')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/session-manager.test.ts",
+			"line": 155,
+			"name": "P10 saved signing authority question 16: a parent delivered to one process is refused to another",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'layer')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/session-manager.test.ts",
+			"line": 168,
+			"name": "P10 saved signing authority question 16: an agent on a person-only input still cannot approve",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'layer')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/session-manager.test.ts",
+			"line": 179,
+			"name": "P10 saved signing authority question 16: different allowed kinds can spend the same parent independently",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'layer')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/session-manager.test.ts",
+			"line": 191,
+			"name": "P10 saved signing authority retry/wake: a lost answer returns the identical receipt after reopening SQLite",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'layer')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/session-manager.test.ts",
+			"line": 208,
+			"name": "P10 saved signing authority atomic receipt: a storage failure rolls back both spend and receipt",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'layer')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/session-manager.test.ts",
+			"line": 224,
+			"name": "P10 saved signing authority exit/wake: an ended process cannot revive through layer rebuild or an old receipt",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'layer')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/session-manager.test.ts",
+			"line": 243,
+			"name": "P10 saved signing authority revocation: even the same write id must recheck live membership",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'layer')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/session-manager.test.ts",
+			"line": 257,
+			"name": "P10 saved signing authority traceId cannot choose a writer or authorize a missing parent",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'layer')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/text.test.ts",
+			"line": 47,
+			"name": "P10 signed text grantText: tag, target, every saw field and one newline are signed",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_1__.grantText is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/text.test.ts",
+			"line": 52,
+			"name": "P10 signed text revokeText: removal has its own tag and complete saw",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_1__.revokeText is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/text.test.ts",
+			"line": 57,
+			"name": "P10 signed text addText: the new root, window and complete recovery observation are signed",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_1__.addText is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/coordination/text.test.ts",
+			"line": 62,
+			"name": "P10 signed text enrollmentText: proof binds both keys, person, ledger, add id and nonce",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_1__.enrollmentText is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/answer.test.ts",
+			"line": 29,
+			"name": "P10 JSON-RPC p23: numeric reply id zero is preserved, not mistaken for a notification",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'cases')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/answer.test.ts",
+			"line": 38,
+			"name": "P10 JSON-RPC p23: ok has one matching reply",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'cases')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/answer.test.ts",
+			"line": 38,
+			"name": "P10 JSON-RPC p23: refused has one matching reply",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'cases')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/answer.test.ts",
+			"line": 57,
+			"name": "P10 JSON-RPC p23: failure sends nothing and permits a real retry",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'cases')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/answer.test.ts",
+			"line": 57,
+			"name": "P10 JSON-RPC p23: defect sends nothing and permits a real retry",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'cases')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/answer.test.ts",
+			"line": 80,
+			"name": "P10 JSON-RPC p23: no reply for junk, response or notification {",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'cases')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/answer.test.ts",
+			"line": 80,
+			"name": "P10 JSON-RPC p23: no reply for junk, response or notification null",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'cases')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/answer.test.ts",
+			"line": 80,
+			"name": "P10 JSON-RPC p23: no reply for junk, response or notification []",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'cases')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/answer.test.ts",
+			"line": 80,
+			"name": "P10 JSON-RPC p23: no reply for junk, response or notification {\"jsonrpc\":\"2.0\",\"id\":\"r1\",\"result\":7}",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'cases')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/answer.test.ts",
+			"line": 80,
+			"name": "P10 JSON-RPC p23: no reply for junk, response or notification {\"jsonrpc\":\"2.0\",\"method\":\"news\",\"params\":{}}",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'cases')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/answer.test.ts",
+			"line": 87,
+			"name": "P10 JSON-RPC p23: new never reaches an application route",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'cases')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/answer.test.ts",
+			"line": 87,
+			"name": "P10 JSON-RPC p23: waiting never reaches an application route",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'cases')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/answer.test.ts",
+			"line": 114,
+			"name": "P10 JSON-RPC p23: parked wait retains reply id r1 and cursor, with no unresolved work",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'cases')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/answer.test.ts",
+			"line": 114,
+			"name": "P10 JSON-RPC p23: parked wait retains reply id 0 and cursor, with no unresolved work",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'cases')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/answer.test.ts",
+			"line": 124,
+			"name": "P10 JSON-RPC p82: additive request fields leave the reply id and checked writer alone",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'cases')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 108,
+			"name": "P10 hello p26: a checked window goes online with the fold's identity and chosen version",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.checkHello is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 118,
+			"name": "P10 hello p82: agreement is the maximum intersection, independent of order and duplicates",
+			"status": "failed",
+			"why": "Error: Property failed after 1 tests"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 134,
+			"name": "P10 hello p26: changed trusted nonce refuses before admission",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.checkHello is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 134,
+			"name": "P10 hello p26: changed trusted url refuses before admission",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.checkHello is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 134,
+			"name": "P10 hello p26: changed trusted tab refuses before admission",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.checkHello is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 134,
+			"name": "P10 hello p26: changed trusted name refuses before admission",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.checkHello is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 148,
+			"name": "P10 hello p26: a consumed nonce cannot initialize again",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.checkHello is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 158,
+			"name": "P10 hello p26/p82: signature refusal has no nonce write or successful admission",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.checkHello is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 158,
+			"name": "P10 hello p26/p82: key refusal has no nonce write or successful admission",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.checkHello is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 158,
+			"name": "P10 hello p26/p82: version refusal has no nonce write or successful admission",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.checkHello is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 158,
+			"name": "P10 hello p26/p82: unknown refusal has no nonce write or successful admission",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.checkHello is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 191,
+			"name": "P10 hello p82/p66: additive hello fields are ignored, has/os preserved, ping clamped",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.checkHello is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 212,
+			"name": "P10 hello p26 origin: https://fabrika.test / 127.0.0.1:8123",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.sameOrigin is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 212,
+			"name": "P10 hello p26 origin: null / 127.0.0.1:8123",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.sameOrigin is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 212,
+			"name": "P10 hello p26 origin: null / 127.0.0.1:8123",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.sameOrigin is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 212,
+			"name": "P10 hello p26 origin: https://fabrika.test.evil.test / 127.0.0.1:8123",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.sameOrigin is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 212,
+			"name": "P10 hello p26 origin: https://fabrika.test@evil.test / 127.0.0.1:8123",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.sameOrigin is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 212,
+			"name": "P10 hello p26 origin: not a URL / 127.0.0.1:8123",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.sameOrigin is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/hello.test.ts",
+			"line": 212,
+			"name": "P10 hello p26 origin: https://fabrika.test / evil.test:8123",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_4__.sameOrigin is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 197,
+			"name": "P10 WebAuthn SSHSIG p27: a raw WebAuthn object outside SSHSIG is refused",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 202,
+			"name": "P10 WebAuthn SSHSIG p27: the independent ordinary ECDSA vector stays refused by the shared verifier",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 214,
+			"name": "P10 WebAuthn SSHSIG p27: the exact real assertion passes, with signed backup flags and counter zero",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 227,
+			"name": "P10 WebAuthn SSHSIG writer: wraps the real DER assertion byte for byte, without re-signing",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'ast')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 244,
+			"name": "P10 WebAuthn SSHSIG independent control: OpenSSH verifies the same recorded assertion",
+			"status": "passed",
+			"why": "passed"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 283,
+			"name": "P10 WebAuthn SSHSIG p27 policy: refuses UP without UV even with a valid P-256 signature",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 283,
+			"name": "P10 WebAuthn SSHSIG p27 policy: refuses UV without UP even with a valid P-256 signature",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 283,
+			"name": "P10 WebAuthn SSHSIG p27 policy: refuses BS without BE even with a valid P-256 signature",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 283,
+			"name": "P10 WebAuthn SSHSIG p27 policy: refuses ED without extensions even with a valid P-256 signature",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 283,
+			"name": "P10 WebAuthn SSHSIG p27 policy: refuses extensions without ED even with a valid P-256 signature",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 283,
+			"name": "P10 WebAuthn SSHSIG p27 policy: refuses attested data on an assertion even with a valid P-256 signature",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 283,
+			"name": "P10 WebAuthn SSHSIG p27 policy: refuses foreign origin even with a valid P-256 signature",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 283,
+			"name": "P10 WebAuthn SSHSIG p27 policy: refuses wrong type even with a valid P-256 signature",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 283,
+			"name": "P10 WebAuthn SSHSIG p27 policy: refuses cross origin even with a valid P-256 signature",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 283,
+			"name": "P10 WebAuthn SSHSIG p27 policy: refuses wrong challenge even with a valid P-256 signature",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 291,
+			"name": "P10 WebAuthn SSHSIG question 19: signed backup flags 5 and zero counter pass",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 291,
+			"name": "P10 WebAuthn SSHSIG question 19: signed backup flags 13 and zero counter pass",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 291,
+			"name": "P10 WebAuthn SSHSIG question 19: signed backup flags 29 and zero counter pass",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 308,
+			"name": "P10 WebAuthn SSHSIG p27 binding: changing expected text refuses the real assertion",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 308,
+			"name": "P10 WebAuthn SSHSIG p27 binding: changing expected RP refuses the real assertion",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 308,
+			"name": "P10 WebAuthn SSHSIG p27 binding: changing expected origin allowlist refuses the real assertion",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 313,
+			"name": "P10 WebAuthn SSHSIG p27: a different admitted signer cannot borrow the embedded key",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 319,
+			"name": "P10 WebAuthn SSHSIG p27: a valid signature in another namespace is refused",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 335,
+			"name": "P10 WebAuthn SSHSIG p27 bytes: refuses version",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 335,
+			"name": "P10 WebAuthn SSHSIG p27 bytes: refuses key length",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 335,
+			"name": "P10 WebAuthn SSHSIG p27 bytes: refuses hash",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 335,
+			"name": "P10 WebAuthn SSHSIG p27 bytes: refuses signature algorithm",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 335,
+			"name": "P10 WebAuthn SSHSIG p27 bytes: refuses signature byte",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 335,
+			"name": "P10 WebAuthn SSHSIG p27 bytes: refuses truncated",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 335,
+			"name": "P10 WebAuthn SSHSIG p27 bytes: refuses trailing",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 367,
+			"name": "P10 WebAuthn SSHSIG P7: the compatibility checker keeps SK out and returns an Ed25519 signer as supplied",
+			"status": "failed",
+			"why": "TypeError: __vite_ssr_import_7__.verifySshsig is not a function"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts",
+			"line": 384,
+			"name": "P10 WebAuthn SSHSIG P7: ordinary ECDSA is not a passkey line",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'ast')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/waiting.test.ts",
+			"line": 28,
+			"name": "P10 waiting rows p43: one checked key, two tabs, one stable code until expiry",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'make')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/waiting.test.ts",
+			"line": 46,
+			"name": "P10 waiting rows p43: expiry boundary and access pruning do not renew an old code",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'make')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/waiting.test.ts",
+			"line": 53,
+			"name": "P10 waiting rows p43: the cap evicts the oldest key, never another tab's newer code",
+			"status": "failed",
+			"why": "TypeError: Cannot read properties of undefined (reading 'make')"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/waiting.test.ts",
+			"line": 60,
+			"name": "P10 waiting rows p43: arbitrary duplicate knocks have exactly the distinct live tab count",
+			"status": "failed",
+			"why": "Error: Property failed after 1 tests"
+		}
+	]
+}
