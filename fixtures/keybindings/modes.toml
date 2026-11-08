@@ -1,0 +1,14 @@
+# Keep these comments and all unrelated bytes.
+tezgah.info = '<prefix>i' # entry stays flat
+alpha.next = [
+  'j', # same character as beta, in a different scope
+]
+beta.next = 'j'
+
+[mode.alpha.select.keys] # selection keys
+exit = ["escape", "ctrl+g"] # keep this explanation
+accept = "enter"
+
+[mode.alpha.search.keys]
+exit = "escape"
+find = "n"

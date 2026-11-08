@@ -17,6 +17,12 @@
 	},
 	{ "glob": "apps/fabrika/e2e.ts", "why": "today's app end-to-end runner and screenshot checks" },
 	{ "glob": "fixtures/keybindings/**", "why": "hand-written keybinding files used by the exam" },
+	{
+		"glob": "packages/fabrika/src/program/**/*.test.ts",
+		"why": "today's program declarations and agent restrictions, Keys PR 2"
+	},
+	{ "glob": "programs/*/src/**/*.test.ts", "why": "today's program and window behavior tests" },
+	{ "glob": "programs/*/src/**/*.test.tsx", "why": "today's rendered program behavior tests" },
 	{ "glob": ".oxlintrc.json", "why": "the lint rules" },
 	{ "glob": ".oxfmtrc.json", "why": "the format settings" },
 	{ "glob": "oxlint-plugins/**", "why": "the custom lint rules and the lint runner" },

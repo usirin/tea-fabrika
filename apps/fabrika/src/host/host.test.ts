@@ -128,6 +128,124 @@ const appOn = (sock: string, ours?: number) =>
 const tileIds = (desk: Open | undefined) =>
 	desk === undefined ? [] : desk.workspaces.flatMap((ws) => tilesOf(ws).map((t) => t.id));
 
+describe("today's completed program commands, T174 PR 2", () => {
+	it("P14: neither attached window receives shared prefix or mode state", async () => {
+		await go(
+			Effect.gen(function* () {
+				const {home, paths} = yield* freshHome;
+				const host = yield* hostOn(home);
+				const a = yield* appOn(paths.sock);
+				const b = yield* appOn(paths.sock);
+				yield* a.wire.up;
+				yield* b.wire.up;
+				a.send({type: "page"});
+				b.send({type: "page"});
+				const first = yield* until("first desk", a.desk);
+				const second = yield* until("second desk", b.desk);
+				for (const desk of [first, second]) {
+					expect(desk).not.toHaveProperty("prefix");
+					expect(desk).not.toHaveProperty("info");
+					expect(desk).not.toHaveProperty("mapping");
+				}
+				yield* host.stop;
+			}),
+		);
+	});
+	it("P16: Split acknowledges its resulting desk before typing reaches the new tile", async () => {
+		await go(
+			Effect.gen(function* () {
+				const {home, paths} = yield* freshHome;
+				const host = yield* hostOn(home);
+				const app = yield* appOn(paths.sock);
+				yield* app.wire.up;
+				app.send({type: "page"});
+				yield* until("desk", app.desk);
+				app.send({
+					type: "on",
+					port: "desk",
+					m: {
+						type: "run",
+						id: "split-1",
+						target: {program: "tezgah", word: "split", mode: null, tile: "t1"},
+						via: {_tag: "key", keys: "ctrl+b |"},
+					},
+				});
+				const applied = yield* until("completed split with its new target", () =>
+					app.page().find((m) => m.type === "applied" && m.id === "split-1"),
+				);
+				expect(applied).toMatchObject({target: {tile: "t2"}});
+				expect(tileIds(app.desk())).toEqual(["t1", "t2"]);
+				app.type("t2", "echo correct");
+				yield* until("typing in t2", () =>
+					app.rows("t2").at(-1) === "tsh$ echo correct" ? true : undefined,
+				);
+				expect(app.rows("t1").at(-1)).toBe("tsh$");
+				yield* host.stop;
+			}),
+		);
+	});
+	it("P29: named commands retain target and via, while ordinary typing writes no command record", async () => {
+		await go(
+			Effect.gen(function* () {
+				const {home, paths} = yield* freshHome;
+				const logs: {message: string; fields: Readonly<Record<string, unknown>>}[] = [];
+				const scope = yield* Scope.make();
+				yield* runHost({home, pid: process.pid}).pipe(
+					Effect.scoped,
+					Effect.provide(
+						Logger.layer([
+							Logger.make((l) =>
+								logs.push({
+									message: String(l.message),
+									fields: Logger.formatStructured.log(l).annotations,
+								}),
+							),
+						]),
+					),
+					Effect.forkIn(scope),
+				);
+				yield* live(paths.sock);
+				const app = yield* appOn(paths.sock);
+				yield* app.wire.up;
+				app.send({type: "page"});
+				yield* until("desk", app.desk);
+				app.type("t1", "ordinary draft");
+				yield* until("typed draft", () =>
+					app.rows("t1").at(-1) === "tsh$ ordinary draft" ? true : undefined,
+				);
+				expect(logs.filter((l) => l.message === "did")).toEqual([]);
+				app.send({
+					type: "on",
+					port: "desk",
+					m: {
+						type: "run",
+						id: "zoom-1",
+						target: {program: "tezgah", word: "zoom", mode: null, tile: "t1"},
+						via: {_tag: "palette"},
+					},
+				});
+				const did = yield* until("named command record", () =>
+					logs.find((l) => l.message === "did"),
+				);
+				const fields = did.fields;
+				expect(fields).toMatchObject({
+					program: "tezgah",
+					mode: null,
+					tile: "t1",
+					window: expect.any(String),
+					at: expect.any(Number),
+					catalog: expect.anything(),
+				});
+				expect(fields.via).toEqual(expect.stringMatching(/palette/));
+				expect(JSON.stringify(fields)).not.toContain("ordinary draft");
+				expect(logs.filter((l) => l.message === "did")).toHaveLength(1);
+				yield* app.leave;
+				yield* Scope.close(scope, Exit.void);
+			}),
+		);
+	});
+});
+
 describe("the host", () => {
 	it("makes its folder 0700 and its socket 0600 in the home, and writes its pid", async () => {
 		const seen = await go(

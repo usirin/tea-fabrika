@@ -1305,7 +1305,8 @@ if (process.platform !== "darwin")
 const launch = async (on: string) => {
 	const testEnv: Record<string, string> = {};
 	for (const [name, value] of Object.entries(process.env))
-		if (value !== undefined && name !== "FABRIKA_FOREGROUND") testEnv[name] = value;
+		if (value !== undefined && name !== "FABRIKA_FOREGROUND" && name !== "TYPESAFE_API_KEY")
+			testEnv[name] = value;
 	testEnv.FABRIKA_HOME = on;
 	const app = await _electron.launch({
 		executablePath: electronPath,
@@ -3073,6 +3074,271 @@ const linesDiff = (was: string, now: string) => {
  *
  *   pnpm --filter @kampus/fabrika-app-old e2e -- --aria    only this
  */
+// T174 PR 2. All navigation in the mapping check uses actual Tab/Enter presses.
+const programKeysLook = async () => {
+	for (const layout of ["one", "side", "stacked", "2x2", "small"] as const) {
+		const own = await mkdtemp(join(tmpdir(), "fk2-"));
+		await seedAsks(own);
+		const file = join(own, "keybindings.toml");
+		await writeFile(
+			file,
+			'markdown.quit = "<prefix>q"\ntsh.beginning-of-line = "ctrl+x"\n[mode.tsh.search.keys]\nexit = ["escape", "ctrl+g"]\n',
+		);
+		const app = await launch(own);
+		try {
+			const page = await app.firstWindow();
+			await prompted(page, "t1");
+			// No wait for a desk update between Split and typing.
+			await prefixed(page, "|");
+			await page.keyboard.type("after split");
+			await shows(
+				page,
+				"t2",
+				"P16: rapid typing reaches the new tile",
+				(t) => lastRow(t) === "tsh$ after split",
+			);
+			check("P16: the old tile stays empty", lastRow(await screen(page, "t1")) === "tsh$");
+			await page.keyboard.press("Control+c");
+			await prefixed(page, "x");
+			await page.keyboard.press("y");
+			await focusOn(page, "t1");
+			if (layout === "side" || layout === "2x2") {
+				await prefixed(page, "|");
+				await prompted(page, "t3");
+			}
+			if (layout === "stacked") {
+				await prefixed(page, "-");
+				await prompted(page, "t3");
+			}
+			if (layout === "2x2") {
+				await prefixed(page, "-");
+				await prompted(page, "t4");
+				await focusOn(page, "t1");
+				await prefixed(page, "-");
+				await prompted(page, "t5");
+			}
+			if (layout === "small") {
+				const cdp = await page.context().newCDPSession(page);
+				await cdp.send("Emulation.setDeviceMetricsOverride", {
+					width: 1024,
+					height: 700,
+					deviceScaleFactor: 0,
+					mobile: false,
+				});
+			}
+			await focusOn(page, "t1");
+			const snap = async (state: string, program = "app") => {
+				const folder = join(shots, "keys2", program);
+				await mkdir(folder, {recursive: true});
+				for (const look of ["dark", "light"] as const) {
+					await lookIs(app, page, look);
+					const clipped = await page
+						.locator('[role="dialog"], [data-tile] > section, .markdown')
+						.evaluateAll((els) =>
+							els
+								.filter((el) => el.scrollWidth > el.clientWidth)
+								.map((el) => el.getAttribute("aria-label")),
+						);
+					check(
+						`${state} in ${layout}/${look} has no horizontal clipping`,
+						clipped.length === 0,
+						clipped,
+					);
+					const path = join(folder, `${state}-${layout}-${look}.png`);
+					await page.screenshot({path});
+					saved.push(path);
+				}
+			};
+			const editor = page.getByRole("dialog", {name: "Keyboard shortcuts"});
+			const openKeys = async () => {
+				await prefixed(page, "?");
+				await editor.waitFor();
+			};
+			const closeKeys = async () => {
+				await editor.getByRole("button", {name: /close keyboard shortcuts/i}).click();
+				await editor.waitFor({state: "hidden"});
+			};
+			const tabTo = async (control: Locator) => {
+				for (let i = 0; i < 150; i += 1) {
+					if (await control.evaluate((el) => el === document.activeElement).catch(() => false))
+						return;
+					await page.keyboard.press("Tab");
+				}
+				throw new Error("P25: Tab never reached the real control");
+			};
+			const markdownText = Array.from({length: 100}, (_, n) => `Line ${n + 1}.`).join("\\n\\n");
+			await run(page, "t1", `markdown --text "# Keys\\n\\n${markdownText}"`);
+			const article = tile(page, "t1").getByRole("article", {name: "markdown"});
+			await article.waitFor();
+			await page.keyboard.press("q");
+			check("P3: Markdown's old q handler is gone", await article.isVisible());
+			const scrollBefore = await article.evaluate((el) => el.scrollTop);
+			await page.keyboard.press("j");
+			await until(
+				"P3: Markdown's declared local command scrolls its own page",
+				() => article.evaluate((el) => el.scrollTop),
+				(top) => top > scrollBefore,
+			);
+			await snap("normal", "markdown");
+			await openKeys();
+			await editor.getByRole("textbox", {name: /search/i}).fill("markdown.quit");
+			check(
+				"P22: the editor shows the moved quit key",
+				/ctrl\+b.*q|⌃B.*Q|C-b.*q/is.test(await editor.innerText()),
+			);
+			await snap("changed-binding", "markdown");
+			await closeKeys();
+			await prefixed(page, "q");
+			await prompted(page, "t1");
+			await page.keyboard.type("hello");
+			await page.keyboard.press("Control+a");
+			await page.keyboard.type("X");
+			await shows(
+				page,
+				"t1",
+				"P18: old Ctrl-A no longer moves the prompt cursor",
+				(t) => lastRow(t) === "tsh$ helloX",
+			);
+			await page.keyboard.press("Control+x");
+			await page.keyboard.type("Y");
+			await shows(
+				page,
+				"t1",
+				"P18: the rebound prompt key works",
+				(t) => lastRow(t) === "tsh$ YhelloX",
+			);
+			await page.keyboard.press("Control+c");
+			await run(page, "t1", "echo history");
+			await prompted(page, "t1");
+			await page.keyboard.press("Control+r");
+			await snap("mode-active", "tsh");
+			await page.keyboard.press("Control+g");
+			await prompted(page, "t1");
+			await run(page, "t1", "counter");
+			const count = tile(page, "t1").getByRole("status", {name: "count"});
+			await tile(page, "t1").getByRole("button", {name: "+1", exact: true}).waitFor();
+			await snap("normal", "counter");
+			await openKeys();
+			check(
+				"P22: unbound program actions appear beside app commands",
+				/counter.plus|counter.*plus/is.test(await editor.innerText()),
+			);
+			await snap("program-keys");
+			await editor.getByRole("textbox", {name: /search/i}).fill("info");
+			await snap("mode-keys");
+			await editor.getByRole("textbox", {name: /search/i}).fill("");
+			await closeKeys();
+			await openKeys();
+			await tabTo(editor.getByRole("button", {name: "Map controls", exact: true}));
+			await page.keyboard.press("Enter");
+			await until(
+				"P24: mapping has a word and exit",
+				() => page.locator("body").innerText(),
+				(text) => /MAP KEYS/.test(text) && /esc|exit|leave/i.test(text),
+			);
+			await snap("mapping");
+			const plus = tile(page, "t1")
+				.getByRole("button", {name: /\+1|plus/i})
+				.first();
+			check(
+				"P24: the unbound real control carries text",
+				/Unbound.*plus|plus.*Unbound/is.test(await plus.innerText()) ||
+					/Unbound.*plus|plus.*Unbound/is.test((await plus.getAttribute("aria-label")) ?? ""),
+			);
+			await tabTo(plus);
+			await page.keyboard.press("Enter");
+			check("P24: selection executes no Plus", (await count.innerText()) === "0");
+			await until(
+				"P25: selection reaches the recorder",
+				() => editor.innerText(),
+				(text) => /counter.*plus|plus.*counter/is.test(text),
+			);
+			await snap("mapping-recording");
+			await page.keyboard.press("F8");
+			await tabTo(editor.getByRole("button", {name: "Save", exact: true}));
+			await page.keyboard.press("Enter");
+			await until(
+				"P25: keyboard Save wrote the logical command",
+				() => readFile(file, "utf8"),
+				(text) => /counter.plus.*f8/is.test(text),
+			);
+			check("P24: saving a mapping executes no Plus", (await count.innerText()) === "0");
+			await snap("mapping-saved");
+			await snap("mapping", "counter");
+			await page.keyboard.press("Escape");
+			await until(
+				"P25: keyboard exits mapping",
+				() => page.locator("body").innerText(),
+				(text) => !/MAP KEYS/.test(text),
+			);
+			await page.keyboard.press("F8");
+			await until(
+				"P22: the saved key runs the same Plus as the button",
+				() => count.innerText(),
+				(text) => text === "1",
+			);
+			await page.keyboard.press("Control+c");
+			await prompted(page, "t1");
+			await run(page, "t1", "tracker");
+			const tracker = tile(page, "t1").getByRole("region", {name: "tracker"});
+			const title = tile(page, "t1").getByRole("textbox", {name: "new ticket title"});
+			await title.waitFor();
+			await title.click();
+			await page.keyboard.type("jk c");
+			check(
+				"P19: tracker shortcuts do not steal composer text",
+				(await title.inputValue()) === "jk c",
+			);
+			await snap("normal", "tracker");
+			await openKeys();
+			await editor.getByRole("textbox", {name: /search/i}).fill("tracker");
+			await snap("changed-binding", "tracker");
+			await closeKeys();
+			await page.keyboard.press("Control+c");
+			await prompted(page, "t1");
+			await run(page, "t1", "ticket --ticket 7");
+			const comment = tile(page, "t1").getByRole("textbox", {name: "Leave a comment"});
+			await comment.fill("mapping must not post this draft");
+			await snap("normal", "ticket");
+			await openKeys();
+			await editor.getByRole("button", {name: "Map controls", exact: true}).click();
+			await tile(page, "t1")
+				.getByRole("button", {name: /^Comment/})
+				.click();
+			check(
+				"P24: selecting Comment keeps the draft",
+				(await comment.inputValue()) === "mapping must not post this draft",
+			);
+			check(
+				"P24: selecting Comment posts no activity",
+				(await tile(page, "t1")
+					.getByText("mapping must not post this draft", {exact: true})
+					.count()) === 0,
+			);
+			await snap("mapping", "ticket");
+			await editor.getByRole("button", {name: "Cancel", exact: true}).click();
+			await page.keyboard.press("Escape");
+			await page.keyboard.press("Control+c");
+			await prompted(page, "t1");
+			await run(page, "t1", "trace --ticket 7");
+			await tile(page, "t1").getByRole("treegrid").waitFor();
+			await snap("normal", "trace");
+			await openKeys();
+			await editor.getByRole("textbox", {name: /search/i}).fill("trace");
+			await snap("changed-binding", "trace");
+			await closeKeys();
+			check(
+				"P19: the tracker region is gone after its program ended",
+				!(await tracker.isVisible()),
+			);
+		} finally {
+			await app.close().catch(() => {});
+			const pid = await hostPid(own);
+			if (pid !== null) await stop(pid);
+		}
+	}
+};
+
 const ariaStage = async (): Promise<0 | 2> => {
 	const own = await mkdtemp(join(tmpdir(), "fh-aria-"));
 	const out = join(shots, "aria-received");
@@ -3306,6 +3572,7 @@ const all = async () => {
 		await tilesLook();
 		await borderDrag();
 		await keysLook();
+		await programKeysLook();
 		await trackerFocus();
 		// The 60 focus images need a 1440 by 900 window, taller than a CI runner's screen, so they
 		// run only with --focus, the way the ARIA trees run only with --aria.
@@ -3317,7 +3584,8 @@ const all = async () => {
 };
 
 // Each capture stage can also run alone. ARIA answers 2 only when it cannot reach a state.
-if (process.argv.includes("--keys")) await keysLook();
+if (process.argv.includes("--keys2")) await programKeysLook();
+else if (process.argv.includes("--keys")) await keysLook();
 else if (process.argv.includes("--drag")) await borderDrag();
 else if (process.argv.includes("--tiles")) await tilesLook();
 else if (process.argv.includes("--aria")) process.exitCode = await ariaStage();

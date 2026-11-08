@@ -1,7 +1,9 @@
+import {applyCell} from "@demlik/tea";
 import {Result} from "effect";
 import {describe, expect, it} from "vitest";
-import {fresh, takenNow} from "./desk/desk.ts";
+import {fresh} from "./desk/desk.ts";
 import {decodeKeys, defaults} from "./desk/keymap.ts";
+import {linkMachine, PROTOCOL, readUp} from "./link.ts";
 import {
 	readFromPage,
 	readFromTerminal,
@@ -11,6 +13,39 @@ import {
 	readToTerminal,
 	readToWindow,
 } from "./messages.ts";
+
+it("P30: completed commands replace raw key traffic and refuse a PR 1 peer", () => {
+	const command = {
+		type: "run",
+		id: "command-1",
+		target: {program: "tezgah", word: "split", mode: null, tile: "t1"},
+		via: {_tag: "key", keys: "ctrl+b |"},
+	};
+	expect(readFromPage(command)).toEqual({kind: "read", msg: command});
+	for (const raw of [
+		{type: "press", id: 0, key: "<c-b>"},
+		{type: "answer", id: 0, took: true},
+	]) {
+		expect(readFromPage(raw).kind).toBe("refused");
+		expect(readToPage(raw).kind).toBe("refused");
+	}
+	for (const target of [
+		null,
+		{...command.target, tile: "../t1"},
+		{...command.target, word: "typo"},
+	])
+		expect(readFromPage({...command, target}).kind).toBe("refused");
+	expect(PROTOCOL).toBeGreaterThan(2);
+	for (const side of ["app", "host"] as const) {
+		const initial = linkMachine.init(null, {side, ours: PROTOCOL})[0];
+		const [refused, cmds] = applyCell(linkMachine, initial, {type: "hello", version: 2});
+		expect(refused.at).toBe("refused");
+		expect(cmds).toContainEqual({type: "refuse", theirs: 2, ours: PROTOCOL});
+		const [, delivery] = applyCell(linkMachine, refused, {type: "line", m: command});
+		expect(delivery.some((c) => c.type === "deliver")).toBe(false);
+	}
+	expect(readUp({type: "on", port: "desk", m: command}).kind).toBe("read");
+});
 
 // The envelope of each message type, read strictly. What is inside a window's `msg` is read by
 // its run's program, in tsh.test.ts.
@@ -59,36 +94,35 @@ describe("the desk's port", () => {
 		const edit = {
 			type: "keys.edit",
 			request: "edit-1",
-			edit: {_tag: "bind", does: "tezgah.zoom", keys: ["<prefix>m"]},
+			edit: {
+				_tag: "bind",
+				target: {program: "tezgah", word: "zoom", mode: null},
+				keys: ["<prefix>m"],
+			},
 			said: 100,
 		};
 		expect(readFromPage(edit)).toEqual({kind: "read", msg: edit});
 		for (const bad of [
 			{...edit, by: "owner"},
 			{...edit, at: 1},
-			{...edit, edit: {_tag: "reset", does: "tezgah.zom"}},
+			{...edit, edit: {_tag: "reset", target: {program: "tezgah", word: "zom", mode: null}}},
 			{...edit, said: "yesterday"},
 			{...edit, edit: {_tag: "undo"}},
 		])
 			expect(readFromPage(bad).kind).toBe("refused");
 		expect(readToPage({type: "keys", ...defaults, version: "v1", changes: []}).kind).toBe("read");
 	});
-	it("sends the page the whole desk, with the keys the desk takes now", () => {
+	it("sends the page the whole desk without raw-key routing state", () => {
 		const desk = fresh();
-		const sent = {type: "desk", desk, takes: takenNow(desk, 0)};
+		const sent = {type: "desk", desk};
 		expect(readToPage(sent)).toEqual({kind: "read", msg: sent});
-		expect(sent.takes).toEqual({all: false, keys: ["<c-b>", "<f6>", "<s-f6>"]});
-		expect(readToPage({type: "desk", desk: {at: "over"}, takes: {all: false, keys: []}}).kind).toBe(
-			"read",
-		);
+		expect(readToPage({type: "desk", desk: {at: "over"}}).kind).toBe("read");
 		// A desk that breaks its own shape is not drawn.
 		const broken = {...desk, workspaces: []};
-		expect(readToPage({type: "desk", desk: broken, takes: sent.takes}).kind).toBe("refused");
-		expect(readToPage({type: "answer", id: 3, took: true}).kind).toBe("read");
+		expect(readToPage({type: "desk", desk: broken}).kind).toBe("refused");
 	});
 
-	it("takes keys, clicks, a border let go and folds from the page, and nothing that opens or stops a tile", () => {
-		expect(readFromPage({type: "press", id: 0, key: "<c-b>"}).kind).toBe("read");
+	it("takes clicks, a border let go and folds from the page, and nothing that opens or stops a tile", () => {
 		expect(readFromPage({type: "press", id: 0, key: "<c-b>", at: 12}).kind).toBe("refused");
 		expect(readFromPage({type: "click", tile: "t2"}).kind).toBe("read");
 		expect(readFromPage({type: "click", tile: "../t2"}).kind).toBe("refused");
@@ -124,7 +158,14 @@ describe("the desk's port", () => {
 				table: [{key: "|", repeats: false, name: "split", tsh: "split"}],
 			}).kind,
 		).toBe("refused");
-		expect(readFromPage({type: "run", does: "tezgah.zoom"}).kind).toBe("read");
+		expect(
+			readFromPage({
+				type: "run",
+				id: "zoom-1",
+				target: {program: "tezgah", word: "zoom", mode: null, tile: "t1"},
+				via: {_tag: "palette"},
+			}).kind,
+		).toBe("read");
 		expect(readFromPage({type: "run", does: "tezgah.zom"}).kind).toBe("refused");
 		expect(readFromPage({type: "run", key: "z"}).kind).toBe("refused");
 	});
