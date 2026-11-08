@@ -1328,6 +1328,78 @@ main.program > [role="alert"] {
 	padding: 0 16px;
 }
 
+[data-scope="dialog"][data-part="backdrop"]:has(+ [data-part="positioner"] .keys-dialog) {
+	background: none;
+	backdrop-filter: none;
+}
+
+.keys-dialog {
+	width: min(900px, calc(100vw - 32px));
+	max-height: calc(100vh - 32px);
+	overflow: auto;
+	background: var(--surface-raised);
+	color: var(--text-primary);
+}
+
+.keys-editor {
+	display: grid;
+	gap: var(--s-3);
+	min-width: 0;
+}
+
+.keys-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+	gap: var(--s-3);
+}
+
+.keys-list {
+	max-height: min(45vh, 420px);
+}
+
+.keys-list [data-part="item"] {
+	height: auto;
+	min-height: var(--row-2h);
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
+.keys-detail {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.keys-actions,
+.keys-combination {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--s-2);
+}
+
+.keys-actions,
+.keys-combination + .keys-combination {
+	margin-top: var(--s-2);
+}
+
+.keys-editor p {
+	margin-block: var(--s-2);
+}
+
+.keys-system ul {
+	display: grid;
+	gap: var(--s-2);
+}
+
+@media (max-width: 640px) {
+	.keys-layout {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.keys-list {
+		max-height: 25vh;
+	}
+}
+
 /* A tooltip: a name and its keys, after a short wait. Never under the pointer's way. */
 .tip {
 	position: fixed;

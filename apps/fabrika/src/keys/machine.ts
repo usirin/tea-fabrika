@@ -11,7 +11,7 @@ const Recording = Schema.TaggedUnion({
 	idle: {},
 	waiting: {target: Target, prefix: Schema.Boolean, add: Schema.Boolean},
 	candidate: {target: Target, keys: Schema.Array(Key), add: Schema.Boolean},
-	saving: {request: Schema.String},
+	saving: {request: Schema.String, undo: Schema.Boolean},
 });
 
 export interface Editor {
@@ -64,7 +64,12 @@ const target = (selected: Editor["selected"]): Target | null =>
 const saving = (s: Editor, request: typeof Edit.Type): Step => {
 	const id = `keys-${s.next}`;
 	return [
-		{...s, next: s.next + 1, error: null, recording: Recording.cases.saving.make({request: id})},
+		{
+			...s,
+			next: s.next + 1,
+			error: null,
+			recording: Recording.cases.saving.make({request: id, undo: request._tag === "undo"}),
+		},
 		[edit({request: id, edit: request})],
 	];
 };
@@ -192,8 +197,9 @@ const update = (s: Editor, m: EditorMsg): Step => {
 		case "saved":
 			return s.recording._tag !== "saving" || s.recording.request !== m.request
 				? [s, []]
-				: [{...s, recording: idle(), undo: m.version, error: null}, []];
+				: [{...s, recording: idle(), undo: s.recording.undo ? null : m.version, error: null}, []];
 		case "failed":
+			if (m.request === "open") return [{...s, error: m.why}, []];
 			return s.recording._tag !== "saving" || s.recording.request !== m.request
 				? [s, []]
 				: [{...s, recording: idle(), error: `Save failed: ${m.why}`}, []];

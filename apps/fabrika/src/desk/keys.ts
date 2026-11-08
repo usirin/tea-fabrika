@@ -265,7 +265,11 @@ export const matchPress = (press: Press, keys: readonly Key[], mac: boolean): Ke
 		const folded = keys.find((key) => key.key === typed);
 		if (folded !== undefined) return folded;
 	}
-	if ((press.ctrl || press.meta) && !press.altGraph && !/^[\x00-\x7f]+$/.test(press.key)) {
+	if (
+		(press.ctrl || press.meta) &&
+		!press.altGraph &&
+		[...press.key].some((char) => (char.codePointAt(0) ?? 0) > 127)
+	) {
 		const latin = /^Key([A-Z])$/.exec(press.code ?? "")?.[1];
 		if (latin !== undefined) {
 			const position = keyName({...press, key: latin.toLowerCase()});

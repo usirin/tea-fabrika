@@ -9,6 +9,13 @@ import type {Snapshot} from "./program.ts";
 const spelling = (key: Key) => `${key._tag === "after_prefix" ? "<prefix>" : ""}${spell(key.key)}`;
 const spoken = (keys: Keys, key: Key) =>
 	`${key._tag === "after_prefix" ? `${spell(keys.prefix)} then ` : ""}${spell(key.key)}`;
+const systemReason: Readonly<Record<string, string>> = {
+	"<m-q>": "Quit the app",
+	"<m-h>": "Hide the app",
+	"<m-tab>": "Switch apps",
+	"<m- >": "Open Spotlight",
+	"<a-m-escape>": "Force quit an app",
+};
 const shortcut = (key: Key) => {
 	if (key._tag === "after_prefix") return null;
 	const parts = spell(key.key).split("+");
@@ -59,11 +66,13 @@ export function KeysWindow({
 	editor,
 	send,
 	changes = [],
+	close,
 }: {
 	readonly keys: Keys;
 	readonly editor: Editor;
 	readonly send: (msg: EditorMsg) => void;
 	readonly changes?: Snapshot["changes"];
+	readonly close?: () => void;
 }): ReactNode {
 	const selected = editor.selected;
 	const row = keys.rows.find((r) => r.does === selected);
@@ -93,6 +102,25 @@ export function KeysWindow({
 			: "yours");
 	const binding = row === undefined ? undefined : bindingFor(row.does);
 	const latest = changes.at(-1);
+	const moved = (does: string) => {
+		const before = defaults.rows.find((r) => r.does === does)?.keys ?? [];
+		const lost = [
+			...before,
+			...changes.flatMap((change) =>
+				change.displaced.filter((entry) => entry.does === does).map((entry) => entry.key),
+			),
+		];
+		return [
+			...new Set(
+				lost.flatMap((key) => {
+					const winner = keys.rows.find(
+						(r) => r.does !== does && r.keys.some((k) => spelling(k) === spelling(key)),
+					);
+					return winner === undefined ? [] : [`${spoken(keys, key)} moved to ${winner.does}`];
+				}),
+			),
+		].join(". ");
+	};
 	const candidate = recording._tag === "candidate" ? recording.keys : [];
 	const conflicts = keys.rows.filter(
 		(r) =>
@@ -114,7 +142,7 @@ export function KeysWindow({
 			data-over=""
 		>
 			<Input
-				label="Find a command or key"
+				label="Search commands or keys"
 				placeholder="Search commands, tsh words or keys"
 				value={editor.query}
 				disabled={busy || choosing}
@@ -145,14 +173,15 @@ export function KeysWindow({
 								})),
 							...shown.map((r) => {
 								const b = bindingFor(r.does);
+								const why = moved(r.does);
 								return {
 									value: r.does,
-									label: `${b?.name ?? "palette"} · ${r.does} · ${b === undefined ? "palette" : wordOf(b.does)} · ${r.keys.map((key) => spoken(keys, key)).join(", ") || "unbound"} · ${r.source}`,
+									label: `${b?.name ?? "palette"} · ${r.does} · ${b === undefined ? "palette" : wordOf(b.does)} · ${r.keys.map((key) => spoken(keys, key)).join(", ") || "unbound"} · ${r.source}${why === "" ? "" : ` · ${why}`}`,
 								};
 							}),
 						]}
 					/>
-					{shown.length === 0 && <p role="status">No commands match.</p>}
+					{shown.length === 0 && <p role="status">No commands found.</p>}
 				</ScrollArea>
 				<div className="keys-detail">
 					{selected === null ? (
@@ -214,9 +243,12 @@ export function KeysWindow({
 											? `${spell(keys.prefix)} recorded. Press the next key. No time limit.`
 											: "Press a key. Escape cancels."}
 									</p>
-									<p>Tab reaches Stop recording. System keys and Ctrl-C keep their usual job.</p>
+									<p>
+										Tab reaches Cancel to stop recording. System keys and Ctrl-C keep their usual
+										job.
+									</p>
 									<div className="keys-actions">
-										<Button onClick={() => send({type: "cancel"})}>Stop recording</Button>
+										<Button onClick={() => send({type: "cancel"})}>Cancel</Button>
 										<Button onClick={() => send({type: "escape-key"})}>Record Escape</Button>
 									</div>
 								</div>
@@ -230,7 +262,9 @@ export function KeysWindow({
 									))}
 									<div className="keys-actions">
 										<Button onClick={() => send({type: "save"})}>Save</Button>
-										<Button onClick={() => send({type: "change"})}>Record again</Button>
+										<Button onClick={() => send({type: recording.add ? "add" : "change"})}>
+											Record again
+										</Button>
 										<Button onClick={() => send({type: "cancel"})}>Cancel</Button>
 									</div>
 								</div>
@@ -266,12 +300,17 @@ export function KeysWindow({
 				<ul>
 					{[...THE_MACS].map((key) => (
 						<li key={key}>
-							<Kbd>{capOf(key)}</Kbd> system shortcut
+							<Kbd>{capOf(key)}</Kbd> {systemReason[key] ?? "System shortcut"}
 						</li>
 					))}
 				</ul>
 				<p>Ctrl-C stays with the tile program.</p>
 			</details>
+			{close !== undefined && (
+				<Button aria-label="Close keyboard shortcuts" disabled={busy} onClick={close}>
+					Close
+				</Button>
+			)}
 		</section>
 	);
 }
