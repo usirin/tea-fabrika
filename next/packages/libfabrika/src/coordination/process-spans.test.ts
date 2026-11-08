@@ -78,7 +78,7 @@ describe("p97, process calls", () => {
 		const trace = capture();
 		return Effect.gen(function* () {
 			const processes = yield* ProcessManager;
-			yield* processes.start(first(), from());
+			const placed = yield* processes.start(first(), from());
 			yield* processes.start(
 				first("watcher:start", "watcher:1", {program: "watcher", hash: "build-a"}),
 				from(),
@@ -108,6 +108,9 @@ describe("p97, process calls", () => {
 			const refusal = trace.ended("process.start")[2]!;
 			expect([...refusal.attributes].find(([key]) => key.endsWith(".why"))?.[1]).toBe("id_reused");
 			expect(trace.ended("process.start")[0]!.attributes.get("fab.process")).toBe(A);
+			expect(
+				[...trace.ended("process.start")[0]!.attributes].find(([key]) => key.endsWith(".rev"))?.[1],
+			).toBe(placed.rev);
 			expect(trace.ended("process.exit")[0]!.attributes.get("fab.process")).toBe(A);
 		}).pipe(
 			Effect.provide(manager(store, brain(), ids(A, W).next)),

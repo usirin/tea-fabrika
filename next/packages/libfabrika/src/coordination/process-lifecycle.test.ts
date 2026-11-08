@@ -108,6 +108,21 @@ describe("p79, predecessors and live info", () => {
 			expect(store.rows()).toEqual(before);
 		}).pipe(Effect.provide(manager(store)));
 	});
+	it.effect("plant, restart under another program: the name stays its program's", () => {
+		const store = storage();
+		return Effect.gen(function* () {
+			const processes = yield* ProcessManager;
+			yield* processes.start(first(), from());
+			yield* processes.exit(A, "crashed", from());
+			const before = store.rows();
+			const error = yield* Effect.flip(
+				processes.start(again(A, "restart:other", {program: "other", hash: "build-a"}), from()),
+			);
+			expect(error.why).toBe("name_taken");
+			expect(store.rows()).toEqual(before);
+			expect((yield* read("counter:1")).filter((row) => row._tag === "restarted")).toEqual([]);
+		}).pipe(Effect.provide(manager(store)));
+	});
 	it.effect(
 		"plant, two successors: concurrent attempts accept only one and reject a stale predecessor",
 		() => {
@@ -230,6 +245,7 @@ describe("p79, names, parents and replay", () => {
 						Effect.provide(manager(store)),
 					),
 				);
+				expect(error._tag).toBe("ProcessError");
 				expect(error.why).toBe("name_taken");
 			}
 			expect(store.rows()).toEqual(before);
