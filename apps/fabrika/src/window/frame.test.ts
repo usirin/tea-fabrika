@@ -27,6 +27,7 @@ import {
 	EXPLAIN_ON,
 	FRAME,
 	fileWord,
+	focusFollows,
 	type Frame,
 	type FrameMsg,
 	frameUpdate,
@@ -1209,4 +1210,21 @@ describe("info mode's words, from the keys file (p10)", () => {
 		for (const part of NAMING) expect(said[part], part).toContain(keyWord(PREFIX));
 		expect(Object.values(said).every((text) => text.length > 0)).toBe(true);
 	});
+});
+
+it("focus follows a zoom: zooming or unzooming the focused tile is a change that moves focus", () => {
+	const split = fold([{type: "typed", tile: "t1", does: {kind: "split", orientation: "vertical"}}]);
+	const zoomed = fold([
+		{type: "typed", tile: "t1", does: {kind: "split", orientation: "vertical"}},
+		{type: "typed", tile: "t2", does: {kind: "zoom"}},
+	]);
+	const back = fold([
+		{type: "typed", tile: "t1", does: {kind: "split", orientation: "vertical"}},
+		{type: "typed", tile: "t2", does: {kind: "zoom"}},
+		{type: "typed", tile: "t2", does: {kind: "zoom"}},
+	]);
+	expect(activeOf(zoomed).layout.zoomed).toBe("t2");
+	expect(focusFollows(zoomed)).not.toBe(focusFollows(split));
+	expect(focusFollows(back)).toBe(focusFollows(split));
+	expect(focusFollows(null)).toBe("");
 });

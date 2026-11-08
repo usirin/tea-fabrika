@@ -122,4 +122,18 @@ describe("today's keys editor", () => {
 		expect(unopened.error).toBe("editor refused");
 		expect(opening).toEqual([]);
 	});
+	it("K14: a second save's broadcast landing before its answer never says Undo is gone", () => {
+		const read = decodeKeys('tezgah.zoom = "<prefix>u"', true);
+		if (Result.isFailure(read)) throw new Error(read.failure.why);
+		const saved = {...select(), undo: "first"};
+		const [saving, cmds] = step(saved, {type: "unbind"});
+		const request = cmds[0]?.request;
+		if (request === undefined) throw new Error("no save request");
+		const [heard] = step(saving, {type: "keys", keys: read.success, version: "second"});
+		expect(heard.error).toBeNull();
+		expect(heard.undo).toBeNull();
+		const [answered] = step(heard, {type: "saved", request, version: "second"});
+		expect(answered.undo).toBe("second");
+		expect(answered.error).toBeNull();
+	});
 });

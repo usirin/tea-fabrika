@@ -1054,3 +1054,37 @@ it("K20: an editor a page opens shows its view on its own run's port, and closin
 	expect(seen.closed).toEqual({type: "keys.closed", run: seen.run});
 	expect(seen.gone).toEqual({type: "gone", port: `run:${seen.run}`});
 });
+
+it("K20: one window closing its editor leaves tsh's keys waiting on another window's editor", async () => {
+	const seen = await go(
+		Effect.gen(function* () {
+			const {home, paths} = yield* freshHome;
+			const host = yield* hostOn(home);
+			const a = yield* appOn(paths.sock);
+			const b = yield* appOn(paths.sock);
+			yield* a.wire.up;
+			yield* b.wire.up;
+			a.send({type: "page"});
+			b.send({type: "page"});
+			yield* until("t1's prompt", () => (a.rows("t1")[0] === "tsh$" ? true : undefined));
+			const prompts = () => a.rows("t1").filter((row) => row.trim() === "tsh$").length;
+			a.type("t1", "keys\r");
+			for (const app of [a, b]) {
+				yield* until("the editor asked for", () =>
+					app.page().find((m) => m.type === "show" && m.what === "keys"),
+				);
+				app.send({type: "on", port: "desk", m: {type: "keys.open"}});
+				yield* until("the editor opened", () => app.page().find((m) => m.type === "keys.opened"));
+			}
+			a.send({type: "on", port: "desk", m: {type: "keys.close"}});
+			yield* until("a's editor closed", () => a.page().find((m) => m.type === "keys.closed"));
+			yield* Effect.sleep("300 millis");
+			const waiting = prompts();
+			b.send({type: "on", port: "desk", m: {type: "keys.close"}});
+			yield* until("tsh's prompt back", () => (prompts() > waiting ? true : undefined));
+			yield* host.stop;
+			return {waiting};
+		}),
+	);
+	expect(seen.waiting).toBe(0);
+});

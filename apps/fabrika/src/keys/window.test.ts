@@ -5,7 +5,7 @@ import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
 import {decodeKeys, defaults, type Keys} from "../desk/keymap.ts";
 import {type Editor, type EditorCmd, type EditorMsg, editorMachine} from "./machine.ts";
-import {KeysWindow} from "./window.tsx";
+import {announcement, focusAfter, KeysWindow} from "./window.tsx";
 
 const step = (model: Editor, msg: EditorMsg) =>
 	applyCell<Editor, EditorMsg, EditorCmd>(editorMachine, model, msg)[0];
@@ -113,5 +113,54 @@ describe("today's keyboard shortcuts view", () => {
 		if (typeof change !== "function") throw new Error("search has no change handler");
 		change({currentTarget: {value: "fold"}});
 		expect(sent).toEqual([{type: "query", query: "fold"}]);
+	});
+	it("focus never falls to the page as recording moves on: box, result line, then Change", () => {
+		expect(focusAfter(null, "idle")).toBeNull();
+		expect(focusAfter("idle", "waiting")).toBe("box");
+		expect(focusAfter("waiting", "candidate")).toBeNull();
+		expect(focusAfter("candidate", "saving")).toBe("result");
+		// Save answered, Cancel pressed, or Undo done: the editor is idle and Change takes focus.
+		for (const from of ["saving", "waiting", "candidate"] as const)
+			expect(focusAfter(from, "idle")).toBe("change");
+		expect(focusAfter("idle", "idle")).toBeNull();
+	});
+
+	it("one live region stays mounted and only its words change as recording moves on", () => {
+		const region = (html: string) =>
+			/<p id="([^"]+)" class="keys-live" role="status">([^<]*)<\/p>/.exec(html);
+		const idle = selected(defaults, "tezgah.zoom");
+		expect(region(draw(idle))?.[2]).toBe("");
+		const waiting = step(idle, {type: "change"});
+		const html = draw(waiting);
+		const live = region(html);
+		expect(live?.[2]).toBe("Press a key. Escape cancels.");
+		expect(html).toContain(`aria-describedby="${live?.[1]}"`);
+		expect(html.match(/role="status"/g)).toHaveLength(2);
+		const armed = step(waiting, {
+			type: "press",
+			press: {key: "b", ctrl: true, alt: false, meta: false},
+		});
+		expect(announcement(defaults, armed.recording)).toBe(
+			"ctrl+b recorded. Press the next key. No time limit.",
+		);
+		const candidate = step(armed, {
+			type: "press",
+			press: {key: "m", ctrl: false, alt: false, meta: false},
+		});
+		expect(region(draw(candidate))?.[2]).toBe("New key: ctrl+b then m. Save or record again.");
+		expect(draw(candidate)).not.toContain("aria-describedby");
+	});
+
+	it("names macOS's own keys only on a Mac", () => {
+		const editor = selected(defaults, "tezgah.zoom");
+		const on = (mac: boolean) =>
+			renderToStaticMarkup(
+				createElement(KeysWindow, {keys: defaults, editor, send: () => {}, mac}),
+			);
+		expect(on(true)).toContain("macOS owns these keys");
+		expect(on(true)).toContain("Quit the app");
+		expect(on(false)).not.toContain("macOS");
+		expect(on(false)).not.toContain("Quit the app");
+		expect(on(false)).toContain("Your system keeps its own shortcuts");
 	});
 });

@@ -2176,6 +2176,17 @@ const keysLook = async () => {
 				await prefixed(page, "?");
 				await editor.waitFor();
 			};
+			// WCAG 2.4.3: the button pressed goes away, and focus goes to Change, never the page.
+			const onChange = (what: string) =>
+				until(
+					what,
+					() =>
+						editor
+							.getByRole("button", {name: "Change", exact: true})
+							.evaluate((el) => el === document.activeElement)
+							.catch(() => false),
+					(focused) => focused,
+				);
 			await open();
 			check(
 				"keys opens in the palette layer with no new tile",
@@ -2185,6 +2196,11 @@ const keysLook = async () => {
 				"list shows unbound commands and source",
 				(await editor.innerText()).match(/fold.*(?:unbound|no key)/is) !== null &&
 					(await editor.innerText()).includes("default"),
+			);
+			check(
+				"F6's fallback target, the desk, has a name",
+				// The dialog hides the desk from the tree while it is open, so read the desk's own attributes.
+				(await page.locator('.desk[role="group"][aria-label="the desk"]').count()) === 1,
 			);
 			check(
 				"actions are outside listbox options",
@@ -2214,6 +2230,7 @@ const keysLook = async () => {
 				(await app.evaluate(() => Reflect.get(globalThis, "keysTestBytes").length)) === bytesBefore,
 			);
 			await editor.getByRole("button", {name: "Cancel", exact: true}).click();
+			await onChange("after Cancel focus is on Change");
 			await editor.getByRole("button", {name: "Change", exact: true}).click();
 			await page.keyboard.press("Control+b");
 			check(
@@ -2255,6 +2272,7 @@ const keysLook = async () => {
 				() => editor.innerText(),
 				(text) => /(?:C-b|⌃B)\s*then\s*M/i.test(text) && !/Saving/i.test(text),
 			);
+			await onChange("after Save focus is on Change");
 			await snap("saved");
 			await close();
 			await page.keyboard.press("Control+b");
@@ -2284,6 +2302,7 @@ const keysLook = async () => {
 				() => readFile(file, "utf8"),
 				(text) => text.includes("<prefix>m") && !text.includes("<prefix>x"),
 			);
+			await onChange("after Undo focus is on Change");
 			await editor.getByRole("button", {name: "Unbind", exact: true}).click();
 			await until(
 				"Zoom unbound",
@@ -2309,8 +2328,14 @@ const keysLook = async () => {
 				() => stateIn(page, "t1"),
 				(state) => state === (layout === "one" ? "" : "zoomed"),
 			);
-			// With two or more tiles, a zoom typed in t1 leaves focus on the page's body: put it back.
-			await tile(page, "t1").locator(".screen").focus();
+			await until(
+				"focus follows the zoom into t1's terminal",
+				() =>
+					tile(page, "t1")
+						.locator(".screen")
+						.evaluate((el) => el.contains(document.activeElement)),
+				(inside) => inside,
+			);
 			await run(page, "t1", "zoom");
 			await prompted(page, "t1");
 
@@ -2426,6 +2451,14 @@ const keysLook = async () => {
 					(await editor.getByRole("button", {name: "Cancel", exact: true}).count()) === 0,
 			);
 			await close();
+			// The keys run's end moves focus back to the tile it covered: wait for it, so it cannot
+			// pull focus back from where F6 put it.
+			await until(
+				"the reopened keys run ends",
+				() => keptJobs(own).catch((): readonly Shell.Job[] => []),
+				(jobs) => jobs.every((job) => job.text !== "keys"),
+			);
+			await prompted(page, "t1");
 			// K15 and K16: focus leaves a terminal using data-backed F6, and Ctrl-C still cancels its program.
 			// From inside the terminal, F6 moves to the next region: the bar, as a browser's F6 does.
 			await tile(page, "t1").locator(".screen").focus();

@@ -1,4 +1,4 @@
-import {readFileSync} from "node:fs";
+import {lstatSync, readFileSync} from "node:fs";
 import {join} from "node:path";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
@@ -331,6 +331,69 @@ describe("today's KeybindingManager", () => {
 					modified: expect.any(Number),
 				});
 				expect(file?.at).toBeGreaterThanOrEqual(past.changes.at(-1)?.at ?? 0);
+			}),
+		);
+	});
+	it("K10: a new row goes into its own table, as a [tezgah] header or an inline table holds it", async () => {
+		await go(
+			Effect.gen(function* () {
+				const header = yield* opened(
+					'# mine\n[tezgah]\nzoom = "<prefix>m" # keep\n\n[palette]\nopen = "cmd+p"\n',
+				);
+				yield* header.edit(bind("tezgah.close", ["<prefix>c"]));
+				yield* header.edit(bind('tezgah."split --to down"', ["<prefix>v"]));
+				const tabled = yield* header.fs.readFileString(header.file);
+				expect(tabled).toBe(
+					'# mine\n[tezgah]\nzoom = "<prefix>m" # keep\nclose = ["<prefix>c"]\n"split --to down" = ["<prefix>v"]\n\n[palette]\nopen = "cmd+p"\n',
+				);
+				expect(Result.isSuccess(decodeKeys(tabled, true))).toBe(true);
+
+				const inline = yield* opened('tezgah = { zoom = "<prefix>m" }\n');
+				yield* inline.edit(bind("tezgah.close", ["<prefix>c"]));
+				yield* inline.edit(bind("tezgah.zoom", ["<prefix>u"]));
+				const written = yield* inline.fs.readFileString(inline.file);
+				expect(written).toBe('tezgah = { zoom = ["<prefix>u"], close = ["<prefix>c"] }\n');
+				const reset = yield* inline.edit(Edit.cases.reset.make({does: "tezgah.zoom"}));
+				expect(row(reset.keys, "tezgah.zoom")).toEqual(row(defaults, "tezgah.zoom"));
+				expect(parse(yield* inline.fs.readFileString(inline.file))).toEqual({
+					tezgah: {close: ["<prefix>c"]},
+				});
+			}),
+		);
+	});
+
+	it("a save writes through a symlinked keybindings.toml and keeps the file's mode", async () => {
+		await go(
+			Effect.gen(function* () {
+				const fs = yield* FileSystem.FileSystem;
+				const dir = yield* fs.makeTempDirectoryScoped({prefix: "kb-"});
+				yield* fs.makeDirectory(join(dir, "dotfiles"));
+				const real = join(dir, "dotfiles", "keys.toml");
+				yield* fs.writeFileString(real, "# linked\n");
+				yield* fs.chmod(real, 0o640);
+				const link = join(dir, "keybindings.toml");
+				yield* fs.symlink(real, link);
+				const manager = yield* KeybindingManager.make({folder: dir, mac: true, by: "owner"});
+				yield* manager.edit(bind("tezgah.zoom", ["<prefix>m"]), FROM);
+				expect(lstatSync(link).isSymbolicLink()).toBe(true);
+				expect(yield* fs.readFileString(real)).toBe('# linked\ntezgah.zoom = ["<prefix>m"]\n');
+				expect((yield* fs.stat(real)).mode & 0o777).toBe(0o640);
+				expect(yield* fs.readDirectory(join(dir, "dotfiles"))).toEqual(["keys.toml"]);
+			}),
+		);
+	});
+
+	it("each snapshot carries only the newest changes, and Undo still works past the cap", async () => {
+		await go(
+			Effect.gen(function* () {
+				const h = yield* opened();
+				let last: Snapshot | null = null;
+				for (let i = 0; i < 25; i += 1)
+					last = yield* h.edit(bind("tezgah.zoom", [i % 2 === 0 ? "<prefix>m" : "<prefix>u"]));
+				expect(last?.changes).toHaveLength(20);
+				expect(last?.changes.at(-1)?.version).toBe(last?.version);
+				const undone = yield* h.edit(Edit.cases.undo.make({version: last?.version ?? ""}));
+				expect(row(undone.keys, "tezgah.zoom")?.keys[0]?.key).toBe("u");
 			}),
 		);
 	});
