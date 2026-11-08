@@ -22,6 +22,17 @@ Use the build skill for ticket 277, door fixes, next/. Plan at ../door-PLAN.md.
 Laws d1 to d3 are red. This round: make them green in door.ts, answer.ts and hello.ts.
 ```
 
+## Who runs which step
+
+- **Codex in a box runs every step:** plan, tests, build, mutation and review. That is the decided
+  runner for steps, and each step is its own agent.
+- **A Claude agent only drives:** it starts boxes, fetches, hands work along, and does what a Codex
+  sandbox cannot (start Electron, bind a socket, list processes): e2e runs and screenshots.
+- A driver never writes the step's code or tests itself (owner, 2026-11-08: a session that gave step
+  work to Claude agents ran few Codex agents and fell behind).
+- Plan every row as soon as its tier opens, and start each test writer when its plan is approved.
+  Tests do not wait for the code under them; only builds wait in line ("act like a factory").
+
 ## Scripts
 
 All read `scripts/env.sh`, which finds the main checkout from the repo and keeps the boxes beside
