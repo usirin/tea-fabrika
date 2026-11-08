@@ -7,12 +7,14 @@ import type {From} from "./mailbox.ts";
 const Text = Schema.NonEmptyString;
 const PROCESSES = "processes";
 const CLIENTS = "client:";
+/** Names that lead streams this layer or the door already owns. */
+const RESERVED = `(?!(?:${PROCESSES}|door)$)`;
 /**
  * A process name is a stream name: no `/`, so `<name>` and `<name>/inbox` never meet another's,
- * and no `client:` lead, so it never meets a client's inbox.
+ * no `client:` lead, so it never meets a client's inbox, and never `processes` or `door`.
  */
 const ProcessName = Schema.String.check(
-	Schema.isPattern(new RegExp(`^(?!${PROCESSES}$)(?!${CLIENTS})[a-z0-9][a-z0-9._:-]*$`)),
+	Schema.isPattern(new RegExp(`^${RESERVED}(?!${CLIENTS})[a-z0-9][a-z0-9._:-]*$`)),
 );
 /** A client id has no `:`, the mark of a process name such as `counter:1`. */
 const ClientId = Schema.String.check(
@@ -45,9 +47,22 @@ export const ProcessFact = Schema.TaggedUnion({
 	monitored: {ref: Text, process: ProcessId, to: Recipient},
 	demonitored: {ref: Text, to: Recipient, why: Schema.Literals(["canceled", "watcher_exited"])},
 });
-/** Only the brain's ProcessManager writes the `processes` stream and every ProcessFact case. */
-export const brainOnly = (stream: string, tag: string): boolean =>
-	stream === PROCESSES || Object.hasOwn(ProcessFact.cases, tag);
+/** Where a registered name's own lifecycle facts live: `processes/<name>`. */
+const factStream = (name: string): string => `${PROCESSES}/${name}`;
+/**
+ * The one rule for who may write what: only the brain's ProcessManager writes `processes` or any
+ * stream under `processes/`, any ProcessFact case, or any id in the signal id space. The door and
+ * the mailbox refuse every such write.
+ */
+export const brainOnly = (write: {
+	readonly stream: string;
+	readonly id: string;
+	readonly tag: string;
+}): boolean =>
+	write.stream === PROCESSES ||
+	write.stream.startsWith(`${PROCESSES}/`) ||
+	Object.hasOwn(ProcessFact.cases, write.tag) ||
+	inSignalSpace(write.id);
 export const Down = Schema.TaggedStruct("DOWN", {
 	ref: Text,
 	process: ProcessId,
@@ -141,9 +156,9 @@ const watchKey = (to: typeof Recipient.Type, ref: string): string =>
 	JSON.stringify([canonical(to), ref]);
 /** A client's own inbox, `client:<id>/inbox`, where its DOWNs land; never a process's inbox. */
 export const clientInbox = (client: string): string => `${CLIENTS}${client}/inbox`;
-/** The one id a DOWN for (recipient, ref) is written under. */
-export const signalId = (to: typeof Recipient.Type, ref: string): string =>
-	JSON.stringify(["DOWN", canonical(to), ref]);
+/** The one id a DOWN for (recipient, ref) in that watch's `round` is written under. */
+export const signalId = (to: typeof Recipient.Type, ref: string, round: number): string =>
+	JSON.stringify(["DOWN", canonical(to), ref, round]);
 const SIGNAL_LEAD = JSON.stringify(["DOWN"]).slice(0, -1);
 const decodeIdParts = Schema.decodeUnknownOption(
 	Schema.fromJsonString(Schema.Array(Schema.Unknown)),
@@ -158,6 +173,7 @@ export const inSignalSpace = (id: string): boolean =>
  */
 export class ProcessTable {
 	static readonly stream = PROCESSES;
+	static readonly facts = factStream;
 	readonly #by: string;
 	readonly #names = new Map<string, Reservation>();
 	readonly #lives = new Map<string, Life>();
@@ -249,7 +265,9 @@ export class ProcessTable {
 			.filter((entry) => entry._tag === "registered" && entry.by === by)
 			.map((entry) => Schema.decodeUnknownSync(ProcessFact.cases.registered)(valueFor(entry)).name);
 		return new ProcessTable(
-			[...control, ...names.flatMap((name) => [...read(name, 0)])].sort((a, b) => a.rev - b.rev),
+			[...control, ...names.flatMap((name) => [...read(factStream(name), 0)])].sort(
+				(a, b) => a.rev - b.rev,
+			),
 			by,
 		);
 	}
@@ -346,14 +364,15 @@ export class ProcessTable {
 		if (Option.isNone(down)) return "mail";
 		const {to, ref} = down.value;
 		const watch = this.#watches.get(watchKey(to, ref));
-		if (
-			entry.by !== this.#by ||
-			entry.id !== signalId(to, ref) ||
-			watch === undefined ||
-			watch.process !== down.value.process
-		)
+		if (entry.by !== this.#by || watch === undefined || watch.process !== down.value.process)
 			return "mail";
-		return to._tag === "process" && to.process === process && !watch.canceled ? "signal" : "drop";
+		const round = Array.from({length: watch.round}, (_, n) => n + 1).find(
+			(n) => entry.id === signalId(to, ref, n),
+		);
+		if (round === undefined) return "mail";
+		// An earlier round's signal belongs to a watch already canceled.
+		const current = round === watch.round && !watch.canceled;
+		return current && to._tag === "process" && to.process === process ? "signal" : "drop";
 	}
 	get info(): ReadonlyArray<ProcessInfo> {
 		return [...this.#lives.values()]

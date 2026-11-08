@@ -54,9 +54,10 @@ export class ProcessManager extends Context.Service<
 			Effect.gen(function* () {
 				const tx = yield* LedgerTransaction;
 				const fold = (turn: LedgerTurn) => ProcessTable.read(turn.read, caller.by);
-				// The brain writes every process fact; `from` keeps the call's person, parent and trace.
+				// The brain writes every line here; `from` keeps the call's person, parent and trace, and
+				// `asked` keeps the caller's own key. The fold trusts `by` alone and never reads `asked`.
 				const line = (from: From, fact: Parameters<typeof lineFor>[1]) =>
-					lineFor({...from, by: caller.by}, fact);
+					lineFor({...from, by: caller.by}, {...fact, asked: from.by});
 				const checked = Effect.fnUntraced(function* <A>(
 					step: (table: ProcessTable, turn: LedgerTurn) => Result.Result<A, ProcessError>,
 				) {
@@ -65,19 +66,24 @@ export class ProcessManager extends Context.Service<
 				const signal = (
 					table: ProcessTable,
 					turn: LedgerTurn,
-					ref: string,
+					watch: {readonly ref: string; readonly round: number},
 					process: string,
 					why: string,
 					to: (typeof Down.Type)["to"],
 					from: From,
 				) => {
+					const {ref, round} = watch;
 					const inbox =
 						to._tag === "client"
 							? clientInbox(to.client)
 							: `${Option.getOrThrow(table.life(to.process)).name}/inbox`;
-					const letter = signalId(to, ref);
-					// A renewed watch on a dead target may find its first signal already written.
-					if ([...turn.read(inbox, 0)].some((entry) => entry.id === letter)) return;
+					const letter = signalId(to, ref, round);
+					// A retried call may find this signal already written. Only the brain's own row counts;
+					// another writer's row at this id makes the append refuse, and the whole turn with it.
+					if (
+						[...turn.read(inbox, 0)].some((entry) => entry.id === letter && entry.by === caller.by)
+					)
+						return;
 					turn.append(
 						inbox,
 						letter,
@@ -117,7 +123,7 @@ export class ProcessManager extends Context.Service<
 											),
 										);
 									const placed = turn.append(
-										request.name,
+										ProcessTable.facts(request.name),
 										request.id,
 										line(
 											from,
@@ -130,7 +136,7 @@ export class ProcessManager extends Context.Service<
 									);
 									if (request._tag === "again")
 										turn.append(
-											request.name,
+											ProcessTable.facts(request.name),
 											id("restarted", process),
 											line(
 												from,
@@ -164,12 +170,12 @@ export class ProcessManager extends Context.Service<
 						if (Result.isFailure(life)) return Result.fail(life.failure);
 						if (life.success.state._tag !== "live") return Result.succeed(undefined);
 						turn.append(
-							life.success.name,
+							ProcessTable.facts(life.success.name),
 							id("exited", process),
 							line(from, ProcessFact.cases.exited.make({process, why})),
 						);
 						for (const watch of table.inbound(process))
-							signal(table, turn, watch.ref, process, why, watch.to, from);
+							signal(table, turn, watch, process, why, watch.to, from);
 						for (const watch of table.outbound(process))
 							turn.append(
 								ProcessTable.stream,
@@ -205,7 +211,15 @@ export class ProcessManager extends Context.Service<
 							line(from, ProcessFact.cases.monitored.make({ref, process, to: caller.recipient})),
 						);
 						if (!table.isLive(process))
-							signal(table, turn, ref, process, "noproc", caller.recipient, from);
+							signal(
+								table,
+								turn,
+								{ref, round: round.success.value},
+								process,
+								"noproc",
+								caller.recipient,
+								from,
+							);
 						return Result.succeed(undefined);
 					});
 				}, Effect.tapError(failed));
@@ -237,7 +251,7 @@ export class ProcessManager extends Context.Service<
 						if (life.success.state._tag === "live")
 							return Result.fail(new ProcessError({why: "alive"}));
 						turn.append(
-							life.success.name,
+							ProcessTable.facts(life.success.name),
 							id("down", process, policy),
 							line(from, ProcessFact.cases.down.make({process, ...policy})),
 						);
