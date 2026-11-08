@@ -143,6 +143,7 @@ const fresh = (trace: JobTrace): Model => ({
 	open: [],
 	chosen: null,
 	replay: null,
+	code: [],
 });
 
 interface Law {

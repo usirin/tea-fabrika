@@ -374,4 +374,18 @@ describe("Replayer: replays over the programs a host lists", () => {
 		);
 		expect(answer).toMatchObject({_tag: "cannot", why: "no_code"});
 	});
+
+	// A window offers a replay only for a program the app has code for (review round, section 3).
+	it("names the programs it has code for: its entries', in order, and none for none", async () => {
+		const named = (entries: Parameters<typeof layerReplayer>[0]) =>
+			Effect.runPromise(
+				Effect.gen(function* () {
+					return (yield* Replayer).programs;
+				}).pipe(Effect.provide(layerReplayer(entries))),
+			);
+		expect(await named([listed(tally, Layer.empty)])).toEqual(["tally"]);
+		const noted = listed(notedOf(0, {n: 0}), Layer.empty);
+		expect(await named([noted, listed(tally, Layer.empty)])).toEqual(["noted", "tally"]);
+		expect(await named([])).toEqual([]);
+	});
 });

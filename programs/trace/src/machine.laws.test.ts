@@ -23,7 +23,7 @@ import {
 	trace,
 } from "./machine.ts";
 import {TALLY_ID, TALLY_STARTED, TALLY_TRACE} from "./tally.ts";
-import {findOf, groupsOf, JOB, nodesOf, treeOf} from "./tree.ts";
+import {findOf, groupsOf, JOB, type Node, nodesOf, treeOf} from "./tree.ts";
 
 // The trace machine's laws, on tea's pbt: after every step of any list of Msgs, from the real
 // init. The record's reads are drawn too, so one can come for a trace that is not followed, come
@@ -52,13 +52,14 @@ const flat = (s: Model): Flat => {
 	if (s.shows.kind !== "job") throw new Error("a ticket view, from the job view's Msgs alone");
 	return {read: s.shows.read, open: s.open, chosen: s.chosen};
 };
-// No replay: these laws draw none of the replay's Msgs, so none is ever held (the replay's laws are
-// at the end of this file).
+// No replay and no code: these laws draw none of the replay's Msgs, so none is ever held (the
+// replay's laws are at the end of this file), and no `code`, so it holds the init's none.
 const unflat = (f: Flat): Model => ({
 	shows: {kind: "job", read: f.read},
 	open: f.open,
 	chosen: f.chosen,
 	replay: null,
+	code: [],
 });
 /** One step, as the laws read it. `same`: the step gave back the very state it was given. */
 interface FlatStep {
@@ -162,6 +163,26 @@ const chosenIsARow = every(
 		(next.read.at === "read" && findOf(treeOf(next.read.trace), next.chosen) !== undefined),
 );
 
+/** The keys of the rows above `key` in `root`, the root first. `undefined`: `root` holds no `key`. */
+const aboveOf = (root: Node, key: string): readonly string[] | undefined => {
+	if (root.key === key) return [];
+	for (const child of root.children) {
+		const above = aboveOf(child, key);
+		if (above !== undefined) return [root.key, ...above];
+	}
+	return undefined;
+};
+
+// "Open step N" sends a choose of a step row, and a closed machine run must not hide it: the row
+// chosen shows, so its detail draws and the tree grid's focus has a row to land on (review round,
+// docs/plan/replay-through-current-code.md, section 3).
+const chosenShows = every("a row chosen shows: every row above it is open", ({msg, next}) => {
+	if (msg.type !== "choose" || msg.row === null || next.chosen !== msg.row) return true;
+	if (next.read.at !== "read") return false;
+	const above = aboveOf(treeOf(next.read.trace), msg.row);
+	return above !== undefined && above.every((k) => next.open.includes(k));
+});
+
 const followsWhatItHolds = every(
 	"it asks for nothing by Cmd, and follows the id it holds while it reads or shows it, and nothing else",
 	({next, cmds}, machine) => {
@@ -257,6 +278,7 @@ const twiceIsNothing: Law = {
 const LAWS = [
 	openAreGroups,
 	chosenIsARow,
+	chosenShows,
 	followsWhatItHolds,
 	ticksWhileItRuns,
 	holdsTimeWhileItRuns,
@@ -324,6 +346,13 @@ const PLANTS = {
 	opensAnything: plant({toggle: (s, m) => [{...s, open: [...s.open, m.row]}, []]}),
 	/** A choose takes any row. */
 	choosesAnything: plant({choose: (s, m) => [{...s, chosen: m.row}, []]}),
+	/** A choose takes a row of the record and opens nothing, so a row under a closed one hides. */
+	choosesHidden: plant({
+		choose: (s, m) =>
+			m.row === null || (s.read.at === "read" && findOf(treeOf(s.read.trace), m.row) !== undefined)
+				? [{...s, chosen: m.row}, []]
+				: [s, []],
+	}),
 	/** Every look starts over, on the record held too. */
 	readsEveryLook: plant({
 		look: (_, m) => [{read: {at: "reading", id: m.id}, open: [], chosen: null}, []],
@@ -447,7 +476,8 @@ describe("the trace machine's laws", () => {
 
 	it("each law is seen to fail on a planted mistake", () => {
 		expect(broken(PLANTS.opensAnything)).toContain(openAreGroups.name);
-		expect(broken(PLANTS.choosesAnything)).toEqual([chosenIsARow.name]);
+		expect(broken(PLANTS.choosesAnything)).toEqual([chosenIsARow.name, chosenShows.name]);
+		expect(broken(PLANTS.choosesHidden)).toEqual([chosenShows.name]);
 		expect(broken(PLANTS.readsEveryLook)).toEqual([lookAgainIsNothing.name]);
 		expect(broken(PLANTS.firstLookWins)).toEqual([newestWins.name]);
 		expect(broken(PLANTS.takesLateAnswers)).toEqual([newestWins.name]);

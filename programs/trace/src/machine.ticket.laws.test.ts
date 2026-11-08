@@ -78,9 +78,9 @@ const rows = fc.constantFrom(
 
 /**
  * The Msgs these laws draw: every one but the replay's, which asks of a job view's machine run and
- * has its own laws (./machine.laws.test.ts).
+ * has its own laws (./machine.laws.test.ts), and `code`, told once by `main` when it starts.
  */
-type Drawn = Exclude<Msg, {readonly type: "replay" | "replay_ok" | "replay_err"}>;
+type Drawn = Exclude<Msg, {readonly type: "replay" | "replay_ok" | "replay_err" | "code"}>;
 
 /** One entry per Msg type drawn: leaving one out does not compile. */
 const table: MsgArbitraryTable<Drawn> = {

@@ -33,9 +33,20 @@ const ADD_1 = keyOf(TALLY_STARTED, "add 1");
 const ADD_2 = keyOf(TALLY_STARTED, "add 2");
 const ADD_3 = keyOf(TALLY_STARTED, "add 3");
 
-/** tally's record read, count total open and chosen, then these Msgs. */
-const opened = (record: JobTrace = TALLY_STARTED, more: readonly TraceMsg[] = []): Model =>
+/**
+ * What `main` tells the trace when it starts, from its `Replayer`: the programs this app has code
+ * for. Here tally's, so a machine run of tally can be replayed.
+ */
+const CODE: TraceMsg = {type: "code", programs: ["tally"]};
+
+/** tally's record read, count total open and chosen, then these Msgs. `first`: told before it. */
+const opened = (
+	record: JobTrace = TALLY_STARTED,
+	more: readonly TraceMsg[] = [],
+	first: readonly TraceMsg[] = [],
+): Model =>
 	foldEvents(trace, ctx, null, [
+		...first,
 		{type: "look", id: TALLY_ID},
 		{type: "got", trace: record},
 		{type: "toggle", row: TALLY},
@@ -43,6 +54,10 @@ const opened = (record: JobTrace = TALLY_STARTED, more: readonly TraceMsg[] = []
 		{type: "choose", row: COUNT},
 		...more,
 	]).finalState;
+
+/** `opened`, told first that this app has code for tally. */
+const coded = (record: JobTrace = TALLY_STARTED, more: readonly TraceMsg[] = []): Model =>
+	opened(record, more, [CODE]);
 
 /** tea's answer to a replay Cmd: the Cmd it answers, and the replay's answer. */
 type ReplayOk = Extract<TraceMsg, {readonly type: "replay_ok"}>;
@@ -216,14 +231,14 @@ const NO_START_WORDS = "Recorded before starts were kept, so it can't be replaye
 
 describe("the job view's replay, as the window draws it", () => {
 	it("offers the replay as a button in the machine run's detail, never inside its row", () => {
-		const {all} = windowOf(opened());
+		const {all} = windowOf(coded());
 		const buttons = all.filter((e) => e.type === "button" && e.text.includes(REPLAY));
 		expect(buttons).toHaveLength(1);
 		expect(buttons[0]?.inRow).toBe(false);
 	});
 
 	it("sends replay with the machine run's row when its button is pressed", () => {
-		const {all, sent} = windowOf(opened());
+		const {all, sent} = windowOf(coded());
 		const button = all.find((e) => e.type === "button" && e.text.includes(REPLAY));
 		const press = button?.props.onClick;
 		if (typeof press !== "function") throw new Error("the replay button takes no click");
@@ -238,24 +253,24 @@ describe("the job view's replay, as the window draws it", () => {
 	});
 
 	it("says nothing of starts for a machine run whose start was kept", () => {
-		const {all} = windowOf(opened());
+		const {all} = windowOf(coded());
 		expect(all.filter((e) => e.text.includes(NO_START_WORDS))).toEqual([]);
 	});
 
 	it("offers no replay in a step's detail", () => {
-		const {all} = windowOf(opened(TALLY_STARTED, [{type: "choose", row: ADD_1}]));
+		const {all} = windowOf(coded(TALLY_STARTED, [{type: "choose", row: ADD_1}]));
 		expect(all.filter((e) => e.type === "button" && e.text.includes(REPLAY))).toEqual([]);
 	});
 
 	it("shows the answer as text in a status region of the detail, so it is read out when it comes", () => {
-		const {all, markup} = windowOf(replayed(opened(), MATCHES));
+		const {all, markup} = windowOf(replayed(coded(), MATCHES));
 		const status = all.filter((e) => e.props.role === "status" && !e.inRow);
 		expect(status.map((e) => e.text).join(" ")).toContain("matches at every step");
 		expect(markup).toContain('role="status"');
 	});
 
 	it("keeps its status region in the detail while the replay is on its way", () => {
-		const {all} = windowOf(replayed(opened()));
+		const {all} = windowOf(replayed(coded()));
 		expect(all.filter((e) => e.props.role === "status" && !e.inRow)).not.toEqual([]);
 	});
 
@@ -299,20 +314,20 @@ const startedFrom = (all: readonly Found[]) =>
 
 describe("the machine run's detail, after a replay", () => {
 	it("offers to open the step where a replay parts, and opening it chooses that step's row", () => {
-		expect(buttonsOf(windowOf(replayed(opened(), PARTS)).all, "Open step 2")).toHaveLength(1);
-		expect(pressOf(replayed(opened(), PARTS), "Open step 2")).toEqual([
+		expect(buttonsOf(windowOf(replayed(coded(), PARTS)).all, "Open step 2")).toHaveLength(1);
+		expect(pressOf(replayed(coded(), PARTS), "Open step 2")).toEqual([
 			{type: "choose", value: {row: ADD_2}},
 		]);
 	});
 
 	it("offers to open the step where a replay is refused, and opening it chooses that step's row", () => {
-		expect(pressOf(replayed(opened(), REFUSED), "Open step 1")).toEqual([
+		expect(pressOf(replayed(coded(), REFUSED), "Open step 1")).toEqual([
 			{type: "choose", value: {row: ADD_1}},
 		]);
 	});
 
 	it("offers to open no step when a replay matches or cannot be done, or before it is answered", () => {
-		for (const s of [replayed(opened(), MATCHES), replayed(opened(), NO_CODE), replayed(opened())])
+		for (const s of [replayed(coded(), MATCHES), replayed(coded(), NO_CODE), replayed(coded())])
 			expect(buttonsOf(windowOf(s).all, "Open step")).toEqual([]);
 	});
 });
@@ -326,5 +341,155 @@ describe("the machine run's detail, where it started", () => {
 
 	it("shows no started from for a machine run whose start was never kept", () => {
 		expect(startedFrom(windowOf(opened(TALLY_TRACE)).all)).toEqual([]);
+	});
+});
+
+// The review round (docs/plan/replay-through-current-code.md, section 3, added 2026-11-08).
+
+/** `s` with `msg` stepped by the real cell. */
+const stepped = (s: Model, msg: TraceMsg): Model =>
+	applyCell<Model, TraceMsg, never>(trace, s, msg)[0];
+
+/** The tree grid's rows the window draws whose `tabIndex` is 0: where Tab lands in the tree. */
+const focusableOf = (all: readonly Found[]): readonly unknown[] =>
+	all
+		.filter((e) => e.type === "tr" && typeof e.props["data-row"] === "string")
+		.filter((e) => e.props.tabIndex === 0)
+		.map((e) => e.props["data-row"]);
+
+/** The step's detail the window draws, by its label. */
+const stepDetailOf = (all: readonly Found[], label: string) =>
+	all.filter((e) => e.type === "section" && e.props["aria-label"] === label);
+
+describe("opening the step a replay names, under a closed machine run", () => {
+	// The review's repro: count total chosen, then closed, replayed, and its parting step opened.
+	const closed = (): Model => replayed(coded(TALLY_STARTED, [{type: "toggle", row: COUNT}]), PARTS);
+
+	it("shows the step chosen: its row is drawn, and so is its detail", () => {
+		const s = stepped(closed(), {type: "choose", row: ADD_2});
+		const view = shownOf(s);
+		expect(view.rows.map((r) => r.key)).toContain(ADD_2);
+		expect(view.chosen).toMatchObject({kind: "step", n: 2});
+		expect(stepDetailOf(windowOf(s).all, "step 2 of count total")).toHaveLength(1);
+	});
+
+	it("puts the tree's focus on that step's row once Open step 2 is pressed", () => {
+		const [sent] = pressOf(closed(), "Open step 2");
+		expect(sent).toEqual({type: "choose", value: {row: ADD_2}});
+		const s = stepped(closed(), {type: "choose", row: ADD_2});
+		expect(focusableOf(windowOf(s).all)).toEqual([ADD_2]);
+	});
+
+	it("always has exactly one row of the tree that Tab lands on, the chosen one where it shows", () => {
+		const states: readonly (readonly [string, Model])[] = [
+			[
+				"read, nothing chosen",
+				foldEvents(trace, ctx, null, [
+					{type: "look", id: TALLY_ID},
+					{type: "got", trace: TALLY_STARTED},
+				]).finalState,
+			],
+			["count total chosen", coded()],
+			["count total chosen, then closed", coded(TALLY_STARTED, [{type: "toggle", row: COUNT}])],
+			[
+				"count total chosen, then tally closed above it",
+				coded(TALLY_STARTED, [{type: "toggle", row: TALLY}]),
+			],
+			["step 2 opened from a closed machine run", stepped(closed(), {type: "choose", row: ADD_2})],
+			["nothing chosen again", coded(TALLY_STARTED, [{type: "choose", row: null}])],
+		];
+		for (const [name, s] of states)
+			expect([name, focusableOf(windowOf(s).all).length]).toEqual([name, 1]);
+		expect(focusableOf(windowOf(coded()).all)).toEqual([COUNT]);
+	});
+});
+
+// A restart is a new life, replayed from its own start: the first step after it folded from that
+// start, not from the step before it.
+
+const [FIRST_START] = TALLY_STARTED.starts;
+if (FIRST_START === undefined) throw new Error("TALLY_STARTED keeps no start");
+
+/** tally's record with count total restarted after step 2, at `state`. */
+const restartedAt = (state: unknown): JobTrace => ({
+	...TALLY_STARTED,
+	starts: [
+		...TALLY_STARTED.starts,
+		{...FIRST_START, n: 2, after: 2, at: FIRST_START.at + 5, state},
+	],
+});
+
+const RESTARTED_WORDS = "Restarted from this state; the step before left";
+/** `text` with no white space, so a JSON value reads the same however it is laid out. */
+const tight = (text: string) => text.replaceAll(/\s/g, "");
+
+describe("the first step of a later life", () => {
+	it("shows that life's start as its state before, and its changes against it", () => {
+		const chosen = shownOf(opened(restartedAt({total: 10}), [{type: "choose", row: ADD_3}])).chosen;
+		expect(chosen?.kind === "step" && [chosen.before, chosen.after, chosen.changes]).toEqual([
+			{kind: "kept", state: {total: 10}},
+			{total: 6},
+			[{op: "replace", path: "/total", before: 10, after: 6}],
+		]);
+	});
+
+	it("says it restarted from a state the step before did not leave, and what that step left", () => {
+		const {all} = windowOf(opened(restartedAt({total: 10}), [{type: "choose", row: ADD_3}]));
+		const said = all.filter((e) => !e.inRow && e.text.includes(RESTARTED_WORDS));
+		expect(said).not.toEqual([]);
+		expect(said.some((e) => tight(e.text).includes(tight(`${RESTARTED_WORDS} {"total":3}`)))).toBe(
+			true,
+		);
+	});
+
+	it("says nothing more when it restarted from the very state the step before left", () => {
+		const s = opened(restartedAt({total: 3}), [{type: "choose", row: ADD_3}]);
+		const chosen = shownOf(s).chosen;
+		expect(chosen?.kind === "step" && chosen.before).toEqual({kind: "kept", state: {total: 3}});
+		expect(windowOf(s).all.filter((e) => e.text.includes("Restarted from"))).toEqual([]);
+	});
+
+	it("says nothing of a restart on a step that is not the first of a later life", () => {
+		for (const row of [ADD_1, ADD_2]) {
+			const s = opened(restartedAt({total: 10}), [{type: "choose", row}]);
+			expect(windowOf(s).all.filter((e) => e.text.includes("Restarted from"))).toEqual([]);
+		}
+	});
+});
+
+// The button shows only for a program this app has code for: the lane's stages run in the host's
+// process, so a machine run of a program it cannot replay is no rare case, and a button that could
+// only answer "no code" is a dead one.
+
+/** What a machine run of `program` says in place of the button, when this app has no code for it. */
+const noCodeWords = (program: string) =>
+	`This app has no code for ${program}, so it can't be replayed here.`;
+
+describe("the replay, only for a program this app has code for", () => {
+	it("offers no replay before it is told of any code, and says why in the detail", () => {
+		const {all} = windowOf(opened());
+		expect(buttonsOf(all, REPLAY)).toEqual([]);
+		expect(all.filter((e) => !e.inRow && e.text.trim() === noCodeWords("tally"))).not.toEqual([]);
+	});
+
+	it("offers no replay when the code it was told of is other programs'", () => {
+		const {all} = windowOf(opened(TALLY_STARTED, [], [{type: "code", programs: ["seq"]}]));
+		expect(buttonsOf(all, REPLAY)).toEqual([]);
+		expect(all.filter((e) => !e.inRow && e.text.trim() === noCodeWords("tally"))).not.toEqual([]);
+	});
+
+	it("offers the replay once told this app has code for tally, and says nothing of no code", () => {
+		const {all} = windowOf(coded());
+		expect(buttonsOf(all, REPLAY)).toHaveLength(1);
+		expect(all.filter((e) => e.text.includes("has no code for"))).toEqual([]);
+	});
+
+	it("still says a machine run with no start kept can't be replayed, whatever code it was told of", () => {
+		for (const s of [opened(TALLY_TRACE), coded(TALLY_TRACE)]) {
+			const {all} = windowOf(s);
+			expect(buttonsOf(all, REPLAY)).toEqual([]);
+			expect(all.filter((e) => !e.inRow && e.text.includes(NO_START_WORDS))).not.toEqual([]);
+			expect(all.filter((e) => e.text.includes("has no code for"))).toEqual([]);
+		}
 	});
 });

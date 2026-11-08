@@ -186,3 +186,32 @@ describe("the trace machine's replay", () => {
 		expect(ticket.replay).toBeNull();
 	});
 });
+
+// The programs this app has code for, told once by `main` from its `Replayer` (review round, section
+// 3): the window offers a replay only for a machine run of one of them.
+describe("the code the trace is told of", () => {
+	it("holds none until it is told, so no machine run can be replayed", () => {
+		expect(foldEvents(trace, ctx, null, []).finalState.code).toEqual([]);
+	});
+
+	it("holds the programs it is told of, the last telling replacing the one before, and nothing else moves", () => {
+		const s = foldEvents(trace, ctx, null, [
+			{type: "look", id: TALLY_ID},
+			{type: "got", trace: TALLY_STARTED},
+		]).finalState;
+		const [told, cmds] = applyCell<Model, TraceMsg, never>(trace, s, {
+			type: "code",
+			programs: ["seq", "tally"],
+		});
+		expect(cmds).toEqual([]);
+		expect(told).toEqual({...s, code: ["seq", "tally"]});
+		const [again] = applyCell<Model, TraceMsg, never>(trace, told, {type: "code", programs: []});
+		expect(again.code).toEqual([]);
+	});
+
+	it("keeps what it was told through a look at another record", () => {
+		const s = foldEvents(trace, ctx, null, [{type: "code", programs: ["tally"]}]).finalState;
+		const [looked] = applyCell<Model, TraceMsg, never>(trace, s, {type: "look", id: OTHER_ID});
+		expect(looked.code).toEqual(["tally"]);
+	});
+});

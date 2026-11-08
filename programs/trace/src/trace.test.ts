@@ -98,7 +98,8 @@ describe("the trace program", () => {
 			[3, "step", "add 2"],
 			[3, "step", "add 3"],
 		]);
-		expect(seen.opened.chosen).toEqual({
+		// Matched, not equaled: a step's detail may say more, such as where a later life restarted.
+		expect(seen.opened.chosen).toMatchObject({
 			kind: "step",
 			key: add2,
 			run: "tally-5d02c7a1",
@@ -269,6 +270,7 @@ describe("the trace program", () => {
 			open: ["job"],
 			chosen: tally,
 			replay: null,
+			code: [],
 		}).chosen;
 		expect(chosen?.kind).toBe("span");
 		if (chosen?.kind !== "span") return;
@@ -322,6 +324,26 @@ const replayedIn = (traces: readonly JobTrace[], replayer?: Layer.Layer<Replayer
 	return Effect.runPromise(replayer === undefined ? asked : asked.pipe(Effect.provide(replayer)));
 };
 
+/**
+ * The programs the trace holds that it has code for, once its record is read: `main` tells it
+ * from its `Replayer` when it starts. With a Replayer given, it waits for them to come.
+ */
+const codeIn = (replayer?: Layer.Layer<Replayer>) => {
+	const told = Effect.gen(function* () {
+		const {run, until} = yield* session([TALLY_STARTED], TALLY_ID);
+		yield* until((s) => s.read === "read");
+		const held = yield* run.machines.trace.changes.pipe(
+			Stream.filter((s) => s !== null),
+			Stream.filter((s) => replayer === undefined || (Array.isArray(s.code) && s.code.length > 0)),
+			Stream.runHead,
+			Effect.map(Option.getOrThrow),
+			Effect.timeout(Duration.seconds(2)),
+		);
+		return held.code;
+	}).pipe(Effect.scoped);
+	return Effect.runPromise(replayer === undefined ? told : told.pipe(Effect.provide(replayer)));
+};
+
 describe("the trace program's replay", () => {
 	it("answers cannot, no_code, when no Replayer is given", async () => {
 		const replay = await replayedIn([TALLY_STARTED]);
@@ -331,6 +353,16 @@ describe("the trace program's replay", () => {
 	it("replays count total through the small programs' code when their Replayer is given: it matches at every step", async () => {
 		const replay = await replayedIn([TALLY_STARTED], layerReplayer(Shell.SMALL));
 		expect(replay?.answer).toEqual({_tag: "matches", steps: 3});
+	});
+
+	it("learns no code when it starts with no Replayer given, so its window offers no replay", async () => {
+		expect(await codeIn()).toEqual([]);
+	});
+
+	it("learns, when it starts, the programs its Replayer has code for", async () => {
+		expect(await codeIn(layerReplayer(Shell.SMALL))).toEqual(
+			Shell.SMALL.map((e) => e.program.name),
+		);
 	});
 
 	it("reads a replay its window sends, and refuses a row it does not know the shape of", () => {
