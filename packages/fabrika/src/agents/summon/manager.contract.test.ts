@@ -11,11 +11,13 @@ import {
 	Stream,
 } from "effect";
 import {beforeEach, describe, expect, it, vi} from "vitest";
+import {ear} from "../../program/ear.ts";
 import {type Ended, MailboxFull} from "../../program/program.ts";
 import {memoryStorage} from "../../program/storage.ts";
 import {SummonManager, type TurnNews} from "../../shell/summon.ts";
 import {EMPTY, type Transcript} from "../acp/transcript.ts";
 import {SummonedNow, summonManager} from "./manager.ts";
+import {turnProgram} from "./turn.ts";
 
 type Outputs = {
 	said: (text: string) => void;
@@ -144,6 +146,39 @@ beforeEach(() => {
 });
 
 describe("the manager reads ACP's state", () => {
+	// Review 2, finding 6, today's version. The ACP mailbox took a prompt, but its told
+	// acknowledgement has not arrived. Ctrl-C must still send session/cancel to that run.
+	it("T237-R2-6: Ctrl-C after prompt acceptance and before told cancels the unseen ACP turn", async () => {
+		const program = await vi.importActual<typeof import("../../program/program.ts")>(
+			"../../program/program.ts",
+		);
+		const seen = await hosted(
+			Effect.gen(function* () {
+				yield* summon();
+				current().hold = true;
+				const told = ear<unknown>();
+				const result = ear<unknown>();
+				const job = yield* program.start(
+					turnProgram,
+					{to: "scout"},
+					{told: told.hear, result: result.hear},
+					{id: "turn:accepted-before-told", storage: memoryStorage()},
+				);
+				if (job.kind !== "running") return yield* Effect.die("turn did not start");
+				yield* program.tell(job.run, "prompt", "slowly read the repo");
+				yield* Effect.gen(function* () {
+					while (current().turn === 0) yield* Effect.sleep("5 millis");
+				}).pipe(Effect.timeout("2 seconds"));
+				expect(current().turn).toBe(1);
+				expect(told.values).toEqual([]);
+				yield* job.stop;
+				return {cancelled: current().cancelled, result: result.values};
+			}),
+		);
+		expect.soft(seen.cancelled, "ACP accepted the prompt but received no cancellation").toBe(1);
+		expect(seen.result).toContainEqual(expect.objectContaining({name: "scout", stop: "cancelled"}));
+	});
+
 	// Plan: a down agent reports why; the foreground turn ends and gives the prompt back.
 	it("T237-5: a harness exit fails its active turn stream instead of waiting forever", async () => {
 		const seen = await hosted(
