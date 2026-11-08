@@ -6,7 +6,6 @@ import {Effect} from "effect";
 import {TestClock} from "effect/testing";
 import {Ledger} from "../data/ledger.ts";
 import {lineFor} from "../data/log.ts";
-import {type From} from "./mailbox.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {
 	A,
@@ -26,22 +25,7 @@ import {
 	storage,
 	watcher,
 } from "./process.test-support.ts";
-import {brainOnly, canRestart, Dead, type State} from "./process.ts";
-
-type Failure = {readonly why: string};
-type RecoveryManager = (typeof ProcessManager)["Service"] & {
-	readonly status: (
-		name: string,
-	) => Effect.Effect<
-		{name: string; state: typeof State.Type; at: number; restarts: ReadonlyArray<number>},
-		Failure
-	>;
-	readonly dead: (
-		process: string,
-		dead: typeof Dead.Type,
-		from: From,
-	) => Effect.Effect<unknown, Failure>;
-};
+import {brainOnly, canRestart, Dead} from "./process.ts";
 const dead = Dead.make({
 	tries: 3,
 	limit: 3,
@@ -88,7 +72,7 @@ describe("P34 coordination recovery", () => {
 				).pipe(Effect.provide(manager(disk)));
 				yield* TestClock.setTime(6100);
 				yield* Effect.gen(function* () {
-					const p = (yield* ProcessManager) as RecoveryManager;
+					const p = yield* ProcessManager;
 					expect(p.status, "P34 parent-checked status read is missing").toBeTypeOf("function");
 					const status = yield* p.status("counter:1");
 					expect(status).toMatchObject({
@@ -112,7 +96,7 @@ describe("P34 coordination recovery", () => {
 			Effect.gen(function* () {
 				const disk = storage();
 				yield* Effect.gen(function* () {
-					const p = (yield* ProcessManager) as RecoveryManager;
+					const p = yield* ProcessManager;
 					yield* p.start(first(), from());
 					yield* p.exit(A, "saved_letter", from());
 					yield* p.down(A, {why: "saved_letter", crashes: 2, until: 5001}, from());
@@ -125,7 +109,7 @@ describe("P34 coordination recovery", () => {
 				}).pipe(Effect.provide(manager(disk)));
 				disk.reopen();
 				yield* Effect.gen(function* () {
-					const p = (yield* ProcessManager) as RecoveryManager;
+					const p = yield* ProcessManager;
 					expect(yield* Effect.flip(p.status("counter:1"))).toMatchObject({why: "not_parent"});
 				}).pipe(Effect.provide(manager(disk, watcher(X))));
 			}),
@@ -145,14 +129,14 @@ describe("P34 coordination recovery", () => {
 			Effect.gen(function* () {
 				const disk = storage();
 				yield* Effect.gen(function* () {
-					const p = (yield* ProcessManager) as RecoveryManager;
+					const p = yield* ProcessManager;
 					yield* p.start(first(), from());
 					expect(p.dead, "P34 fixed dead write is missing").toBeTypeOf("function");
 					yield* p.dead(A, dead, from({by: CLIENT}));
 				}).pipe(Effect.provide(manager(disk)));
 				disk.reopen();
 				yield* Effect.gen(function* () {
-					const p = (yield* ProcessManager) as RecoveryManager;
+					const p = yield* ProcessManager;
 					yield* p.dead(A, dead, from({by: CLIENT}));
 					expect(yield* read(`${A}/dead`)).toMatchObject([
 						{
@@ -163,7 +147,7 @@ describe("P34 coordination recovery", () => {
 					]);
 				}).pipe(Effect.provide(manager(disk)));
 				yield* Effect.gen(function* () {
-					const p = (yield* ProcessManager) as RecoveryManager;
+					const p = yield* ProcessManager;
 					expect(yield* Effect.flip(p.dead(A, dead, from()))).toMatchObject({why: "not_parent"});
 				}).pipe(Effect.provide(manager(disk, watcher(X))));
 			}),

@@ -1,6 +1,5 @@
 // P34, next/. The real door delivers to the real P11 runner and P33 manager on SQLite files.
 // P34 extends delivery's callback with {id,sentAt,seen}; its result is the runner's Sent.
-// The existing void callback is cast only at this assembly edge so laws collect on P11's base.
 import {createHash, generateKeyPairSync, sign} from "node:crypto";
 import {mkdtempSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
@@ -108,6 +107,7 @@ const from = () => ({
 	build: "build-a",
 });
 const Input = Schema.TaggedUnion({press: {poison: Schema.Boolean}});
+type DoorOptions = Parameters<typeof Door.layer<typeof Input.Type, never, never, never>>[0];
 type Delivery = {process: string; parent: string; letter: string | undefined};
 const policy = {
 	maxDeliveries: 3,
@@ -240,7 +240,7 @@ const world = () => {
 			),
 		);
 	};
-	const settings = () => ({
+	const settings = (): DoorOptions => ({
 		sql: project.sql,
 		founder,
 		name: "project-a",
@@ -275,8 +275,7 @@ const world = () => {
 			).pipe(Effect.provide(runner(pid)));
 		},
 	});
-	const layer = () =>
-		Door.layer(settings() as Parameters<typeof Door.layer>[0]).pipe(Layer.provideMerge(env()));
+	const layer = () => Door.layer(settings()).pipe(Layer.provideMerge(env()));
 	const online = Effect.fnUntraced(function* (who = window) {
 		const d = yield* Door;
 		const client = yield* d.connect();

@@ -75,7 +75,6 @@ type Wiring = {
 };
 const runnerLayer: (p: Descriptor, options: Wiring) => ReturnType<typeof ProgramRunner.layer> =
 	ProgramRunner.layer;
-type Restart = {restart: (request: {id: string; build: string}) => Effect.Effect<unknown, unknown>};
 
 const world = Effect.fnUntraced(function* () {
 	const ledger = storage(),
@@ -275,9 +274,10 @@ const world = Effect.fnUntraced(function* () {
 });
 const lives = read(`processes/${NAME}`);
 const inbox = read(`${NAME}/inbox`);
-const restart = (runner: (typeof ProgramRunner)["Service"], id: string, build: string) =>
+const exitBody = Schema.decodeUnknownSync(Schema.Struct({process: Schema.String}));
+const restartBody = Schema.decodeUnknownSync(Schema.Struct({after: Schema.String}));
+const restart = (r: (typeof ProgramRunner)["Service"], id: string, build: string) =>
 	Effect.gen(function* () {
-		const r = runner as (typeof ProgramRunner)["Service"] & Restart;
 		expect(r.restart, "P34 trusted Restart operation is missing").toBeTypeOf("function");
 		return yield* r.restart({id, build});
 	});
@@ -338,11 +338,9 @@ describe("P34 interrupted recovery", () => {
 					}
 					const rows = yield* lives;
 					const exits = rows.filter((row) => row._tag === "exited");
-					expect(new Set(exits.map((row) => (row.body as {process: string}).process)).size).toBe(
-						exits.length,
-					);
+					expect(new Set(exits.map((row) => exitBody(row.body).process)).size).toBe(exits.length);
 					const restarts = rows.filter((row) => row._tag === "restarted");
-					expect(new Set(restarts.map((row) => (row.body as {after: string}).after)).size).toBe(
+					expect(new Set(restarts.map((row) => restartBody(row.body).after)).size).toBe(
 						restarts.length,
 					);
 					if (cut === "after_start") expect(restarts).toHaveLength(1);
@@ -423,9 +421,8 @@ describe("P34 interrupted recovery", () => {
 					const r = yield* ProgramRunner;
 					const pending = yield* r.msg(w.input("wait", {type: "wait"})).pipe(Effect.forkChild);
 					yield* Deferred.await(w.entered);
-					const restart = r as (typeof ProgramRunner)["Service"] & Restart;
-					expect(restart.restart, "P34 replacement operation is missing").toBeTypeOf("function");
-					yield* restart.restart({id: "replace-wait", build: "build-b"});
+					expect(r.restart, "P34 replacement operation is missing").toBeTypeOf("function");
+					yield* r.restart({id: "replace-wait", build: "build-b"});
 					yield* Deferred.succeed(w.gate, undefined);
 					yield* Fiber.join(pending);
 					expect((yield* r.open("new")).view).toMatchObject({replies: 0});

@@ -54,9 +54,6 @@ const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("refuse")}),
 ]);
 const work = Cmd.make("work", {input: Schema.Struct({}), ok: Schema.Null, err: ["failed"]});
-type Runner = (typeof ProgramRunner)["Service"] & {
-	readonly restart: (request: {id: string; build: string}) => Effect.Effect<unknown, unknown>;
-};
 type Wiring = {policy: typeof policy; recovery: {sql: Sql; name: string; capacity: number}};
 const runnerLayer: (p: Descriptor, wiring: Wiring) => ReturnType<typeof ProgramRunner.layer> =
 	ProgramRunner.layer;
@@ -500,7 +497,9 @@ describe("P34 runner supervision", () => {
 					expect(w.controls.loads).toBe(loads);
 					expect(w.controls.steps).toEqual([]);
 					expect(yield* lives).toEqual(rows);
-					expect(w.alarms.at(-1)).toBe((down!.body as {until: number}).until);
+					expect(w.alarms.at(-1)).toBe(
+						Schema.decodeUnknownSync(Schema.Struct({until: Schema.Int}))(down!.body).until,
+					);
 				}).pipe(Effect.provide(w.layer()));
 			}),
 	);
@@ -572,7 +571,7 @@ describe("P34 runner supervision", () => {
 				w.controls.build = "build-b";
 				w.reopen();
 				yield* Effect.gen(function* () {
-					const r = (yield* ProgramRunner) as Runner;
+					const r = yield* ProgramRunner;
 					expect(r.restart, "P34 trusted Restart operation is missing").toBeTypeOf("function");
 					yield* r.restart({id: "restart-explicit", build: "build-b"});
 					expect(w.controls.init).toContainEqual({build: "build-b", loaded: null});

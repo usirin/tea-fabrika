@@ -8,6 +8,7 @@ import {describe, expect, it} from "@effect/vitest";
 import {Schema} from "effect";
 import * as fc from "fast-check";
 import {A, B} from "../coordination/process.test-support.ts";
+import {Supervision} from "../coordination/recovery.ts";
 import {syncTest} from "../testing.ts";
 
 const SEED = 119120;
@@ -159,7 +160,10 @@ describe("P34 policy and saved supervision laws", () => {
 			msgs,
 			seed: SEED,
 			encode: (model) => model,
-			decode: (raw) => raw as Model,
+			decode: (raw) => {
+				if (!Schema.is(Supervision)(raw)) throw new Error("invalid saved supervision");
+				return raw;
+			},
 			equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
 		});
 		let [model] = s.supervisor.init(null, ctx);
