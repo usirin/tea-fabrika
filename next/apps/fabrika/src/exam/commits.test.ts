@@ -123,6 +123,23 @@ describe("keysProblem (p87)", () => {
 		expect(keysProblem(`${GOOD.join("\n")}\n`)).toBeNull();
 	});
 
+	it("passes a second key for one role, as when a key is rotated", () => {
+		expect(keysProblem([...GOOD, line("build", KEY("D"))].join("\n"))).toBeNull();
+	});
+
+	it("passes a literal person id with letters, digits, dots, underscores, colons and hyphens", () => {
+		expect(keysProblem([...GOOD, PERSON.replace("fixture", "Az09._:-")].join("\n"))).toBeNull();
+	});
+
+	it.each(["alice,*", "a*", "a?", "!x"])("refuses the person principal pattern %s", (id) => {
+		const keys = [
+			...GOOD,
+			PERSON.replace("fixture", "alice"),
+			`person:${id} namespaces="git" ssh-ed25519 ${KEY("E")}`,
+		];
+		expect(keysProblem(keys.join("\n"))).toEqual(expect.stringMatching(/\S/));
+	});
+
 	it.each([
 		["no file", null],
 		[

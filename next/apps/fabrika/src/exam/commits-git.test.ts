@@ -201,7 +201,6 @@ describe("person keys (p87b)", () => {
 	});
 
 	it.each([
-		["a step role twice", `${GOOD_KEYS}${keyLine("build", "stranger")}\n`],
 		["an id twice", `${PERSON_KEYS}${personLine("github:42", "stranger")}\n`],
 		["a person reusing a step key", `${GOOD_KEYS}${personLine("github:42", "tests")}\n`],
 		["two people reusing a key", `${PERSON_KEYS}${personLine("github:43")}\n`],
@@ -240,8 +239,7 @@ describe("person git signatures (p83b)", () => {
 		expect(out.code).toBe(0);
 	});
 
-	// DEFECT T251: person verification rejects Git's gpgsig-sha256 header before and after squash.
-	it.fails("counts an SSH person commit before and after squash in a SHA-256 repo", () => {
+	it("counts an SSH person commit before and after squash in a SHA-256 repo", () => {
 		const r = new Repo(PERSON_KEYS, undefined, "sha256");
 		r.write("next/packages/x/src/a.ts", "a\n");
 		const c = r.gitSigned();
@@ -1045,32 +1043,35 @@ describe("person commits between step links (p86b)", () => {
 		expect(sh(ci, "git", ["cat-file", "-e", `${person}^{commit}`])).toBe("");
 	});
 
-	it("connects tests, a person's file change, then build, before and after squash", () => {
-		const r = new Repo(PERSON_KEYS);
-		const tests = r.change("a.ts");
-		const first = r.sign("tests");
-		r.write("next/packages/x/src/person.ts", "person\n");
-		const person = r.gitSigned();
-		expect(verifyCommit(r, person)).toBe(0);
-		const middle = personLink(r, person);
-		const build = r.change("b.ts");
-		const last = r.sign("build");
-		expect(first.to).toBe(middle.from);
-		expect(middle.to).toBe(last.from);
-		expect(middle.from).not.toBe(middle.to);
-		const before = r.check();
-		const {squash, rows} = squashed(r, [
-			{note: first, commit: tests},
-			{note: middle, commit: person},
-			{note: last, commit: build},
-		]);
-		log(r, rows);
-		const after = r.run(["chain", "--squash", squash]);
-		expect(before.answers).toEqual([DONE]);
-		expect(before.code).toBe(0);
-		expect(after.answers, after.err).toEqual([DONE]);
-		expect(after.code).toBe(0);
-	});
+	it.each(["file change", "empty commit"] as const)(
+		"connects tests, a person's %s, then build, before and after squash",
+		(change) => {
+			const r = new Repo(PERSON_KEYS);
+			const tests = r.change("a.ts");
+			const first = r.sign("tests");
+			if (change === "file change") r.write("next/packages/x/src/person.ts", "person\n");
+			const person = r.gitSigned();
+			expect(verifyCommit(r, person)).toBe(0);
+			const middle = personLink(r, person);
+			const build = r.change("b.ts");
+			const last = r.sign("build");
+			expect(first.to).toBe(middle.from);
+			expect(middle.to).toBe(last.from);
+			expect(middle.from === middle.to).toBe(change === "empty commit");
+			const before = r.check();
+			const {squash, rows} = squashed(r, [
+				{note: first, commit: tests},
+				{note: middle, commit: person},
+				{note: last, commit: build},
+			]);
+			log(r, rows);
+			const after = r.run(["chain", "--squash", squash]);
+			expect(before.answers).toEqual([DONE]);
+			expect(before.code).toBe(0);
+			expect(after.answers, after.err).toEqual([DONE]);
+			expect(after.code).toBe(0);
+		},
+	);
 
 	it("refuses an unsigned commit between step links, before and after squash", () => {
 		const r = new Repo(PERSON_KEYS);

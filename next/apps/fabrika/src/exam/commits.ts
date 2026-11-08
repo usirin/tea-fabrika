@@ -114,8 +114,8 @@ const KEY_LINE =
 	/^(\S+) namespaces="(fabrika-step|git)" ssh-ed25519 (AAAAC3NzaC1lZDI1NTE5AAAAI[A-Za-z0-9+/]{43})$/;
 
 /**
- * p87 and p87b: each step exactly once in `fabrika-step`, and distinct `person:<id>` principals in
- * `git`. Ed25519 only, no key twice and no other option. No file is refused.
+ * p87 and p87b: each step at least once in `fabrika-step`, and distinct literal `person:<id>`
+ * principals in `git`. Ed25519 only, no key twice and no other option. No file is refused.
  */
 export const keysProblem = (text: string | null): string | null => {
 	if (text === null) return "no allowed_signers on the base";
@@ -126,11 +126,11 @@ export const keysProblem = (text: string | null): string | null => {
 		if (m === null) return `refused line ${JSON.stringify(line)}`;
 		const [, role = "", namespace = "", key = ""] = m;
 		const step = (ROLES as ReadonlyArray<string>).includes(role);
-		const person = role.startsWith("person:") && role.length > "person:".length;
+		const person = /^person:[A-Za-z0-9._:-]+$/.test(role);
 		if (!step && !person) return `unknown role ${JSON.stringify(role)}`;
 		if (namespace !== (step ? NAMESPACE : "git"))
 			return `wrong namespace for ${JSON.stringify(role)}`;
-		if (roles.has(role)) return `principal named twice: ${JSON.stringify(role)}`;
+		if (person && roles.has(role)) return `principal named twice: ${JSON.stringify(role)}`;
 		if (keys.has(key)) return `a key named twice, the second under ${role}`;
 		keys.add(key);
 		roles.add(role);
@@ -292,7 +292,8 @@ export const chain = (
 	const mine = rows.filter((r) => r.link.squash === squash);
 	const links = mine.map((r) => r.link);
 	const tickets = new Set(links.map((l) => l.ticket));
-	const froms = new Set(links.map((l) => l.from));
+	const moves = links.filter((l) => l.from !== l.to);
+	const froms = new Set(moves.map((l) => l.from));
 	const first = links[0];
 	const last = links.at(-1);
 	const whole =
@@ -302,7 +303,7 @@ export const chain = (
 		links.every((l) => placed.before.has(l.base)) &&
 		mine.every((r) => r.signer === r.link.step) &&
 		tickets.size === 1 &&
-		froms.size === links.length &&
+		froms.size === moves.length &&
 		first.from === trees.get(first.base) &&
 		links.every((l, i) => i === 0 || l.from === links[i - 1]?.to) &&
 		last.to === trees.get(squash);
@@ -392,9 +393,9 @@ const personVerifier = (keys: string) =>
 				// gpg.format chooses how to sign; verification detects the signature's own format.
 				const raw = yield* gitMaybe(["cat-file", "commit", sha]);
 				const header = (raw ?? "").split("\n\n", 1)[0] ?? "";
-				if (!/^gpgsig -----BEGIN SSH SIGNATURE-----$/m.test(header)) return false;
+				if (!/^gpgsig(?:-sha256)? -----BEGIN SSH SIGNATURE-----$/m.test(header)) return false;
 				if (link !== undefined) {
-					const signature = /^gpgsig (.*(?:\n .*)*)/m.exec(header)?.[1] ?? "";
+					const signature = /^gpgsig(?:-sha256)? (.*(?:\n .*)*)/m.exec(header)?.[1] ?? "";
 					const tree = /^tree ([0-9a-f]+)$/m.exec(header)?.[1];
 					const parent = yield* treeAt(`${sha}^1`);
 					if (
