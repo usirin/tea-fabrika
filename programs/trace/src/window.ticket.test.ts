@@ -2,6 +2,7 @@ import {foldEvents, stubCtxThrowingProxy} from "@demlik/tea/pbt";
 import {createElement} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
+import {windowProps} from "../../../fixtures/keybindings/trace-window.ts";
 import {type Model, type TraceMsg, trace} from "./machine.ts";
 import {astra, LANE_1, LANE_2, T117, T117_MADE_UP} from "./t117.ts";
 import {stopsOf} from "./ticket.ts";
@@ -21,9 +22,7 @@ const ctx = stubCtxThrowingProxy<undefined>();
 
 /** The window's text for a state: its markup with the tags taken out. */
 const textOf = (s: Model): {readonly markup: string; readonly text: string} => {
-	const markup = renderToStaticMarkup(
-		createElement(TraceWindow, {view: shownOf(s), send: () => {}}),
-	);
+	const markup = renderToStaticMarkup(createElement(TraceWindow, windowProps(shownOf(s))));
 	return {markup, text: markup.replaceAll(/<[^>]*>/g, " ").replaceAll(/\s+/g, " ")};
 };
 

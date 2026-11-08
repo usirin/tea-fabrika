@@ -4,6 +4,7 @@ import {LANE} from "@kampus/pipeline/stages/traced";
 import {createElement, isValidElement, type ReactNode} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
+import {windowProps} from "../../../fixtures/keybindings/trace-window.ts";
 import {type Model, type TraceMsg, trace} from "./machine.ts";
 import {LANE_1, LANE_2, LANE_3, T117} from "./t117.ts";
 import {type Shown, shownOf} from "./view.ts";
@@ -129,7 +130,7 @@ describe("a step's spans in the ticket view", () => {
 
 	it("names a calls row by how many calls it folds", () => {
 		const markup = renderToStaticMarkup(
-			createElement(TraceWindow, {view: shownOf(shown(OPENED)), send: () => {}}),
+			createElement(TraceWindow, windowProps(shownOf(shown(OPENED)))),
 		);
 		expect(markup).toContain("<span>3 calls</span>");
 		expect(markup).toContain("<span>1 call</span>");
@@ -174,7 +175,7 @@ const rowsDrawn = (view: Shown, send: (msg: unknown) => void): readonly DrawnRow
 		walk(props.children as ReactNode);
 	};
 	// TraceWindow hands the ticket view to its own component, which keeps no state: call it.
-	const outer = TraceWindow({view, send});
+	const outer = TraceWindow(windowProps(view, send));
 	if (isValidElement<Record<string, unknown>>(outer) && typeof outer.type === "function")
 		walk((outer.type as (p: unknown) => ReactNode)(outer.props));
 	return out;

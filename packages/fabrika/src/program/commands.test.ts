@@ -54,6 +54,7 @@ describe("today's typed command declarations", () => {
 			expect(() =>
 				defineProgram({
 					...definition,
+					// @ts-expect-error An unrelated message is invalid but must also be refused at runtime.
 					commands: {wrong: {send: {type: "unrelated", value: 1}, keys: "j"}},
 				}),
 			).toThrow(/command|unrelated|message|input/i);
@@ -63,6 +64,7 @@ describe("today's typed command declarations", () => {
 		expect(() =>
 			defineProgram({
 				...base,
+				// @ts-expect-error A command cannot name a mode when the program declares none.
 				commands: {copy: {send: {type: "act", value: "copy"}, keys: "c", mode: "copy"}},
 			}),
 		).toThrow(/mode.*copy|copy.*mode/i);

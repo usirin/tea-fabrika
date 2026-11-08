@@ -4,6 +4,7 @@ import type {Entry, Fact, FactOf} from "@kampus/pipeline/tickets/ticket";
 import {createElement} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
+import {windowProps} from "../../../fixtures/keybindings/trace-window.ts";
 import {type Model, type TraceMsg, trace} from "./machine.ts";
 import {LANE_2, MIN, SEC, T0, T117} from "./t117.ts";
 import {stopsOf} from "./ticket.ts";
@@ -89,9 +90,7 @@ const shown = (timeline: readonly Entry[], more: readonly TraceMsg[] = []): Mode
 
 /** The window's markup for a state, and its text with the tags taken out. */
 const drawn = (s: Model): {readonly markup: string; readonly text: string} => {
-	const markup = renderToStaticMarkup(
-		createElement(TraceWindow, {view: shownOf(s), send: () => {}}),
-	);
+	const markup = renderToStaticMarkup(createElement(TraceWindow, windowProps(shownOf(s))));
 	return {markup, text: markup.replaceAll(/<[^>]*>/g, " ").replaceAll(/\s+/g, " ")};
 };
 
