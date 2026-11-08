@@ -9,9 +9,9 @@ import {
 } from "@kampus/fabrika-old";
 import {readFacts} from "@kampus/pipeline/asks/ledger";
 import {foldLedger} from "@kampus/pipeline/asks/rules";
-import {askedFor, askedStep, LaneStep} from "@kampus/pipeline/stages/pipeline/routes";
 import {AREAS, type AreaEntry, areasOf, readAreaRow} from "@kampus/pipeline/tickets/area";
 import {sealAsk} from "@kampus/pipeline/tickets/ask";
+import {askedFor, askedStep, LaneStep} from "@kampus/pipeline/tickets/steps";
 import {
 	type Entry,
 	answerRefused,
