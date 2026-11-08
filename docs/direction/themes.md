@@ -47,7 +47,8 @@ theme = "nord-fabrika"   # a file in ~/.fabrika/themes/; leave the line out for 
   repair happens once, at import, and lands in a real file a person can open. Its `[repaired]` table
   says what came in and what changed. *Changed 2026-11-07: repair now also runs at every load, as
   the nudge, and never writes a file ([point 4](#4-a-theme-that-fails-contrast-decided-2026-11-07));
-  whether import still writes this repaired file is left open there.* This is the Linux distro habit for a patched package: Debian
+  import still writes this repaired file, decided 2026-11-07: a person can open it and read what
+  changed.* This is the Linux distro habit for a patched package: Debian
   adds `+deb13u1` to a stable update
   ([Developer's Reference 5.5.1](https://www.debian.org/doc/manuals/developers-reference/pkgs.en.html)),
   and Ubuntu adds `ubuntu1` the first time it changes a Debian package
@@ -458,6 +459,9 @@ Also decided:
 - **When the OS high-contrast mode (forced colors) is on, the person's theme is dropped.** The
   system's colors win.
 - **A color picked in the app's color picker goes through the same check.**
+- **Import still writes its own copy.** Importing Nord writes `nord-fabrika.toml` with the fixes
+  and a `[repaired]` table in it, so a person can open the file and read what changed. The nudge
+  is for a file the person wrote; it finds nothing to move in an imported copy.
 - **What stays from the proposal:** backgrounds never move (desk, ground, raised, hover, and the
   terminal's background). `edge` is not checked and never moves: it carries no needed fact, at
   1.31:1 in `fabrika` by design, the bend [color principles](./color-principles.md) records.
@@ -504,9 +508,6 @@ When a person meets it:
 
 Not settled by this decision, still proposed:
 
-- **Whether import still writes `<name>-fabrika`.** The decided rename above has import repair into
-  a new file with a `[repaired]` table. With the nudge deriving repairs at load, import could write
-  the mapped colors as they are and keep the original name. The owner settles it.
 - **A Radix pick steps up its own scale,** one step at a time, solid or alpha: 11 to 12, a8 to a9,
   9 to 10 or 11, so a pick stays on Radix steps and the nudge finds nothing to move. Run over all
   300 picks (6 grays, 25 accents, dark and light), this always ended on a Radix step. 275 of the
