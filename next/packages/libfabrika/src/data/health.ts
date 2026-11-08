@@ -1,14 +1,15 @@
 // Health in two levels, over an object's own SQLite: a raw row per ended span, and an hourly summary
 // per piece, both kept forever. Raw rows stay local about two weeks, then leave for R2, one file per
-// object per UTC day, deleted here only after the stored file's hash matches. Tier 1, P37 (law p99).
+// object per UTC day, deleted here only after the stored file's hash matches. A row of the day that
+// lands after its file leaves later, as the day's part 2, 3 and on. Tier 1, P37 (law p99).
 //
 // Every step here is plain code over the synchronous `Sql`; the sink runs the row, the rollup and
-// the size inside a span's `end`, and the archive inside `flush`. No alarm, no timer.
-import {Effect, Option, Schema} from "effect";
+// the size inside a span's `end`, and the archive inside `flush`. No alarm, no timer. Each archive
+// try writes its own health row, `sink.archive`, good or failed, so a day that cannot leave is seen.
+import {Clock, Effect, Option, Result, Schema} from "effect";
 import {Archive, sha256} from "./archive.ts";
 import type {Sql} from "./referee.ts";
-import type {SinkError} from "./trace.ts";
-import {type Health, Summary, sinkError} from "./trace.ts";
+import {type Health, type SinkError, Summary, sinkError} from "./trace.ts";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -20,7 +21,7 @@ export const hourStart = (at: number): number => Math.floor(at / HOUR) * HOUR;
 export const HEALTH_TABLES = [
 	`CREATE TABLE IF NOT EXISTS health (
 		piece TEXT NOT NULL, at INTEGER NOT NULL, ms REAL NOT NULL, ok INTEGER NOT NULL, error TEXT,
-		lag REAL)`,
+		lag REAL, "spanId" TEXT)`,
 	`CREATE INDEX IF NOT EXISTS health_by_at ON health (at)`,
 	`CREATE TABLE IF NOT EXISTS summarized (hour INTEGER PRIMARY KEY)`,
 	`CREATE TABLE IF NOT EXISTS summary (
@@ -28,7 +29,8 @@ export const HEALTH_TABLES = [
 		p50 REAL NOT NULL, p95 REAL NOT NULL, max REAL NOT NULL, lag REAL, PRIMARY KEY (piece, hour))`,
 	`CREATE TABLE IF NOT EXISTS sizes (at INTEGER PRIMARY KEY, bytes INTEGER NOT NULL)`,
 	`CREATE TABLE IF NOT EXISTS archived (
-		day TEXT PRIMARY KEY, key TEXT NOT NULL, sha256 TEXT NOT NULL, rows INTEGER NOT NULL)`,
+		day TEXT NOT NULL, part INTEGER NOT NULL, key TEXT NOT NULL, sha256 TEXT NOT NULL,
+		rows INTEGER NOT NULL, PRIMARY KEY (day, part))`,
 ];
 
 const HealthColumns = Schema.Struct({
@@ -38,11 +40,13 @@ const HealthColumns = Schema.Struct({
 	ok: Schema.Literals([0, 1]),
 	error: Schema.NullOr(Schema.String),
 	lag: Schema.NullOr(Schema.Number),
+	spanId: Schema.NullOr(Schema.String),
 });
 const decodeHealth = Schema.decodeUnknownSync(HealthColumns);
 const decodeHour = Schema.decodeUnknownSync(Schema.Struct({hour: Schema.Int}));
 const decodeDay = Schema.decodeUnknownSync(Schema.Struct({day: Schema.Int}));
 const decodeCount = Schema.decodeUnknownSync(Schema.Struct({n: Schema.Int}));
+const decodeSeq = Schema.decodeUnknownSync(Schema.Struct({seq: Schema.Int}));
 const decodeSummary = Schema.decodeUnknownSync(
 	Schema.Struct({
 		piece: Schema.String,
@@ -58,20 +62,23 @@ const decodeSummary = Schema.decodeUnknownSync(
 
 /** Reads `health` rows back as `Health`. */
 const healthRows = (sql: Sql, query: string, ...params: ReadonlyArray<number>): Array<Health> =>
-	sql.exec(query, ...params).map((row) => {
-		const {ok, ...rest} = decodeHealth(row);
-		return {...rest, ok: ok === 1};
-	});
+	sql.exec(query, ...params).map((row) => toHealth(row));
 
-export const writeHealth = (sql: Sql, {piece, at, ms, ok, error, lag}: Health): void =>
+const toHealth = (row: unknown): Health => {
+	const {ok, ...rest} = decodeHealth(row);
+	return {...rest, ok: ok === 1};
+};
+
+export const writeHealth = (sql: Sql, {piece, at, ms, ok, error, lag, spanId}: Health): void =>
 	void sql.exec(
-		`INSERT INTO health (piece, at, ms, ok, error, lag) VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO health (piece, at, ms, ok, error, lag, "spanId") VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		piece,
 		at,
 		ms,
 		ok ? 1 : 0,
 		error,
 		lag,
+		spanId,
 	);
 
 /** Nearest rank: the smallest value with at least `percent` of the sorted values at or below it. */
@@ -153,8 +160,30 @@ export const readSummaries = (sql: Sql, from: number, to: number): Array<Summary
 
 const encoder = new TextEncoder();
 
-/** A day ready to leave: old enough, every hour with rows summarized, and not archived yet. */
-const due = (sql: Sql, object: string, now: number) => {
+/** The piece of the health row each archive try writes. */
+const ARCHIVE = "sink.archive";
+
+/** Why an archive try failed: the store never answered, or nothing proves the copy holds the rows. */
+type Failed = "unreachable" | "mismatch";
+
+/** One file to put: a day's rows not yet in a file, read up to rowid `last`. */
+type Part = {
+	readonly start: number;
+	readonly day: string;
+	readonly part: number;
+	readonly key: string;
+	readonly body: Uint8Array;
+	readonly rows: number;
+	readonly last: number;
+};
+
+/** Part 1 is the day's own file; a later part says its number. */
+const partKey = (object: string, day: string, part: number): string =>
+	`health/${object}/${day}${part === 1 ? "" : `.${part}`}.jsonl`;
+
+/** Each day ready to leave, as its next part: old enough, every hour with rows summarized, and with
+ *  rows still local. */
+const due = (sql: Sql, object: string, now: number): Array<Part> => {
 	const cutoff = Math.floor((now - KEEP) / DAY) * DAY;
 	return sql
 		.exec(
@@ -170,61 +199,103 @@ const due = (sql: Sql, object: string, now: number) => {
 				start,
 				start + DAY,
 			);
-			const unsummarized = open === undefined ? 0 : decodeCount(open).n;
-			const archived = sql.exec(`SELECT 1 FROM archived WHERE day = ?`, day).length > 0;
-			if (unsummarized > 0 || archived) return [];
-			const rows = healthRows(
-				sql,
-				`SELECT * FROM health WHERE at >= ? AND at < ? ORDER BY at, rowid`,
+			if (open !== undefined && decodeCount(open).n > 0) return [];
+			const read = sql.exec(
+				`SELECT rowid AS seq, * FROM health WHERE at >= ? AND at < ? ORDER BY at, rowid`,
 				start,
 				start + DAY,
 			);
+			const last = Math.max(...read.map((row) => decodeSeq(row).seq));
+			const [had] = sql.exec(`SELECT coalesce(max(part), 0) AS n FROM archived WHERE day = ?`, day);
+			const part = (had === undefined ? 0 : decodeCount(had).n) + 1;
 			const body = encoder.encode(
-				`${rows
-					.map(({piece, at, ms, ok, error, lag}) => JSON.stringify({piece, at, ms, ok, error, lag}))
+				`${read
+					.map(toHealth)
+					.map(({piece, at, ms, ok, error, lag, spanId}) =>
+						JSON.stringify({piece, at, ms, ok, error, lag, spanId}),
+					)
 					.join("\n")}\n`,
 			);
-			return [{start, day, key: `health/${object}/${day}.jsonl`, body, rows: rows.length}];
+			return [{start, day, part, key: partKey(object, day, part), body, rows: read.length, last}];
 		});
 };
 
-/** Archives each due day: one file through `Archive.put`; on a matching hash, `archived` and the
- *  day's local rows deleted in one step. A failed put or a mismatch deletes nothing and is tried
- *  again at the next flush, so a day here never fails the step: nothing is lost. */
-export const archiveDays = (
+/** Whether the day still holds exactly the rows read for `part`: none of them gone since. */
+const unchanged = (sql: Sql, {start, rows, last}: Part): boolean => {
+	const [now] = sql.exec(
+		`SELECT count(*) AS n FROM health WHERE at >= ? AND at < ? AND rowid <= ?`,
+		start,
+		start + DAY,
+		last,
+	);
+	return now !== undefined && decodeCount(now).n === rows;
+};
+
+/** One try at one part: the put, then, in one step, its `sink.archive` row and, on a matching hash,
+ *  its `archived` row and the deletion of only the rows it read. */
+const archivePart = Effect.fnUntraced(function* (
 	sql: Sql,
-	object: string,
-	now: number,
-): Effect.Effect<void, never, Archive> =>
-	Effect.gen(function* () {
+	archive: (typeof Archive)["Service"],
+	part: Part,
+) {
+	const hash = yield* sha256(part.body);
+	const began = yield* Clock.currentTimeMillis;
+	const stored = yield* Effect.result(archive.put(part.key, part.body));
+	const ended = yield* Clock.currentTimeMillis;
+	const span = yield* Effect.option(Effect.currentSpan);
+	const failed: Failed | null = Result.match(stored, {
+		onFailure: (error) => (error.why === "unreachable" ? "unreachable" : "mismatch"),
+		onSuccess: ({sha256: held}) => (held === hash ? null : "mismatch"),
+	});
+	yield* Effect.try({
+		try: () =>
+			sql.transaction(() => {
+				const error: Failed | null = failed ?? (unchanged(sql, part) ? null : "mismatch");
+				if (error === null) {
+					sql.exec(
+						`INSERT INTO archived (day, part, key, sha256, rows) VALUES (?, ?, ?, ?, ?)`,
+						part.day,
+						part.part,
+						part.key,
+						hash,
+						part.rows,
+					);
+					sql.exec(
+						`DELETE FROM health WHERE at >= ? AND at < ? AND rowid <= ?`,
+						part.start,
+						part.start + DAY,
+						part.last,
+					);
+				}
+				writeHealth(sql, {
+					piece: ARCHIVE,
+					at: ended,
+					ms: ended - began,
+					ok: error === null,
+					error,
+					lag: null,
+					spanId: Option.getOrNull(Option.map(span, ({spanId}) => spanId)),
+				});
+			}),
+		catch: sinkError,
+	});
+});
+
+/** Archives each due day's next part. A failed put or a mismatch deletes nothing, writes its
+ *  `sink.archive` row and is tried again at the next flush, so a day here never fails the step:
+ *  nothing is lost. An unnamed `Effect.fn`: the sink's own work ends no span. */
+export const archiveDays = Effect.fn(
+	function* (sql: Sql, object: string, now: number) {
 		const archive = yield* Archive;
-		const days = yield* Effect.try({
+		const parts = yield* Effect.try({
 			try: () => sql.transaction(() => due(sql, object, now)),
 			catch: sinkError,
 		});
 		yield* Effect.forEach(
-			days,
-			({start, day, key, body, rows}) =>
-				Effect.gen(function* () {
-					const hash = yield* sha256(body);
-					const stored = yield* archive.put(key, body);
-					if (stored.sha256 !== hash) return Option.none();
-					yield* Effect.try({
-						try: () =>
-							sql.transaction(() => {
-								sql.exec(
-									`INSERT INTO archived (day, key, sha256, rows) VALUES (?, ?, ?, ?)`,
-									day,
-									key,
-									hash,
-									rows,
-								);
-								sql.exec(`DELETE FROM health WHERE at >= ? AND at < ?`, start, start + DAY);
-							}),
-						catch: sinkError,
-					});
-					return Option.some(day);
-				}).pipe(Effect.catch((_: SinkError) => Effect.succeedNone)),
+			parts,
+			(part) => archivePart(sql, archive, part).pipe(Effect.catch((_: SinkError) => Effect.void)),
 			{concurrency: 1, discard: true},
 		);
-	}).pipe(Effect.catch((_: SinkError) => Effect.void));
+	},
+	Effect.catch((_: SinkError) => Effect.void),
+);

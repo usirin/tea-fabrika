@@ -181,7 +181,8 @@ const PART_TABLES = [
 	`CREATE TABLE IF NOT EXISTS spans (
 		"spanId" TEXT PRIMARY KEY, "traceId" TEXT NOT NULL, "parentSpanId" TEXT, name TEXT NOT NULL,
 		kind TEXT NOT NULL, "startTimeUnixNano" TEXT NOT NULL, "endTimeUnixNano" TEXT NOT NULL,
-		attributes TEXT NOT NULL, events TEXT NOT NULL, ok INTEGER NOT NULL)`,
+		attributes TEXT NOT NULL, events TEXT NOT NULL, links TEXT NOT NULL, resource TEXT NOT NULL,
+		ok INTEGER NOT NULL)`,
 	`CREATE TABLE IF NOT EXISTS content (
 		"spanId" TEXT PRIMARY KEY, state TEXT NOT NULL, message TEXT, "by" TEXT, at INTEGER, why TEXT)`,
 	`CREATE TABLE IF NOT EXISTS rolled (
@@ -193,6 +194,8 @@ const SpanColumns = Schema.Struct({
 	...SpanRow.fields,
 	attributes: Schema.fromJsonString(SpanRow.fields.attributes),
 	events: Schema.fromJsonString(SpanRow.fields.events),
+	links: Schema.fromJsonString(SpanRow.fields.links),
+	resource: Schema.fromJsonString(SpanRow.fields.resource),
 	ok: Schema.Literals([0, 1]),
 });
 const decodeSpan = Schema.decodeUnknownSync(SpanColumns);
@@ -245,7 +248,8 @@ const sqlStore = (sql: Sql): Store => {
 			for (const {span, content} of rows) {
 				sql.exec(
 					`INSERT INTO spans ("spanId", "traceId", "parentSpanId", name, kind, "startTimeUnixNano",
-						"endTimeUnixNano", attributes, events, ok) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+						"endTimeUnixNano", attributes, events, links, resource, ok)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					span.spanId,
 					span.traceId,
 					span.parentSpanId,
@@ -255,6 +259,8 @@ const sqlStore = (sql: Sql): Store => {
 					span.endTimeUnixNano,
 					JSON.stringify(span.attributes),
 					JSON.stringify(span.events),
+					JSON.stringify(span.links),
+					JSON.stringify(span.resource),
 					span.ok ? 1 : 0,
 				);
 				if (content !== null)

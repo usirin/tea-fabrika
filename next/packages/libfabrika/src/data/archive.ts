@@ -16,16 +16,15 @@ export interface BucketCalls {
 const hex = (bytes: Uint8Array): string =>
 	Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 
-/** The body's SHA-256, as lowercase hex. */
-export const sha256 = (body: Uint8Array): Effect.Effect<string, SinkError> =>
-	Effect.map(
-		// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto answers only with a Promise
-		Effect.tryPromise({
-			try: () => crypto.subtle.digest("SHA-256", new Uint8Array(body)),
-			catch: () => new SinkError({why: "storage", held: 0}),
-		}),
-		(digest) => hex(new Uint8Array(digest)),
-	);
+/** The body's SHA-256, as lowercase hex. An unnamed `Effect.fn`: the sink's own work ends no span. */
+export const sha256 = Effect.fn(function* (body: Uint8Array) {
+	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto answers only with a Promise
+	const digest = yield* Effect.tryPromise({
+		try: () => crypto.subtle.digest("SHA-256", new Uint8Array(body)),
+		catch: () => new SinkError({why: "storage", held: 0}),
+	});
+	return hex(new Uint8Array(digest));
+});
 
 const Head = Schema.NullOr(Schema.Struct({sha256: Schema.String}));
 const decodeHead = Schema.decodeUnknownEffect(Head);
@@ -33,42 +32,42 @@ const decodeHead = Schema.decodeUnknownEffect(Head);
 export class Archive extends Context.Service<
 	Archive,
 	{
-		/** Stores `body` at `key` and answers the SHA-256 the store says it holds. */
-		readonly put: (key: string, body: Uint8Array) => Effect.Effect<{sha256: string}, SinkError>;
+		/** Stores `body` at `key` and answers the SHA-256 the store says it holds: null when it finds
+		 *  no file there, which proves no copy. */
+		readonly put: (
+			key: string,
+			body: Uint8Array,
+		) => Effect.Effect<{readonly sha256: string | null}, SinkError>;
 	}
 >()("@kampus/libfabrika/Archive") {
 	/** In memory, for tests: it holds what it was given, so its hash always matches. */
 	static readonly memory: Layer.Layer<Archive> = Layer.sync(Archive)(() => {
 		const files = new Map<string, Uint8Array>();
 		return {
-			put: (key, body) =>
-				Effect.map(sha256(body), (hash) => {
-					files.set(key, body.slice());
-					return {sha256: hash};
-				}),
+			put: Effect.fnUntraced(function* (key: string, body: Uint8Array) {
+				const hash = yield* sha256(body);
+				files.set(key, body.slice());
+				return {sha256: hash};
+			}),
 		};
 	});
 
 	/** An R2 bucket: `put` with the body's hash, then `head`. A call that rejects is `unreachable`,
-	 *  a `head` that finds nothing or does not decode is `bad_row`. */
+	 *  a `head` that does not decode is `bad_row`, and one that finds nothing answers null. */
 	static readonly bucket = (calls: BucketCalls): Layer.Layer<Archive> => {
 		const call = <A>(send: () => Promise<A>): Effect.Effect<A, SinkError> =>
 			// oxlint-disable-next-line fabrika/no-promises -- edge: an R2 binding answers with a Promise
 			Effect.tryPromise({try: send, catch: () => new SinkError({why: "unreachable", held: 0})});
 		return Layer.succeed(Archive, {
-			put: (key, body) =>
-				Effect.gen(function* () {
-					const hash = yield* sha256(body);
-					yield* call(() => calls.put(key, body, hash));
-					const stored = yield* call(() => calls.head(key)).pipe(
-						Effect.flatMap((raw) => decodeHead(raw)),
-						Effect.mapError((error) =>
-							error instanceof SinkError ? error : new SinkError({why: "bad_row", held: 0}),
-						),
-					);
-					if (stored === null) return yield* Effect.fail(new SinkError({why: "bad_row", held: 0}));
-					return {sha256: stored.sha256};
-				}),
+			put: Effect.fnUntraced(function* (key: string, body: Uint8Array) {
+				const hash = yield* sha256(body);
+				yield* call(() => calls.put(key, body, hash));
+				const raw = yield* call(() => calls.head(key));
+				const stored = yield* decodeHead(raw).pipe(
+					Effect.mapError(() => new SinkError({why: "bad_row", held: 0})),
+				);
+				return {sha256: stored === null ? null : stored.sha256};
+			}),
 		});
 	};
 }

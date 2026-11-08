@@ -30,6 +30,15 @@ export const Tag = Schema.Union([Schema.String, Schema.Number, Schema.Boolean]);
 export type Tag = typeof Tag.Type;
 const Tags = Schema.Record(Schema.String, Tag);
 
+/** The tag that names the object that ended a span. It is the row's resource, never a span tag. */
+export const OBJECT = "fab.object";
+
+/** A link to another span, in OTLP's shape. Its tags are kept as a span's are. */
+const Link = Schema.Struct({traceId: Schema.String, spanId: Schema.String, attributes: Tags});
+
+/** OTLP's resource: what produced the span. Here, the object that ended it. */
+const Resource = Schema.Struct({attributes: Schema.Struct({[OBJECT]: Schema.String})});
+
 export const SpanRow = Schema.Struct({
 	traceId: Schema.String,
 	spanId: Schema.String,
@@ -43,6 +52,8 @@ export const SpanRow = Schema.Struct({
 	events: Schema.Array(
 		Schema.Struct({name: Schema.String, timeUnixNano: Schema.String, attributes: Tags}),
 	),
+	links: Schema.Array(Link),
+	resource: Resource,
 	/** The exit. A failure's class is `attributes["error.type"]`; its message is content. */
 	ok: Schema.Boolean,
 });
@@ -73,6 +84,8 @@ export const Health = Schema.Struct({
 	/** The error's class, never its message. */
 	error: Schema.NullOr(Schema.String),
 	lag: Schema.NullOr(Schema.Number),
+	/** The span this row measured, so it joins its span row. Null when no span was current. */
+	spanId: Schema.NullOr(Schema.String),
 });
 export type Health = typeof Health.Type;
 
@@ -90,9 +103,11 @@ export type Summary = typeof Summary.Type;
 /** The object's own size, at most once an hour while it is awake, forever. */
 export const Size = Schema.TaggedStruct("size", {at: Schema.Int, bytes: Schema.Int});
 
-/** Where one day of raw health rows went, and the hash it was checked by, forever. */
+/** Where one part of a day of raw health rows went, and the hash it was checked by, forever. Part 1
+ *  is the day's file; rows that land after it leave as part 2, 3 and on. */
 export const Archived = Schema.TaggedStruct("archived", {
 	day: Schema.String,
+	part: Schema.Int,
 	key: Schema.String,
 	sha256: Schema.String,
 	rows: Schema.Int,

@@ -8,6 +8,7 @@
 // `storage`: let it crash. The sink's own calls end no span.
 import {
 	Cause,
+	Clock,
 	Context,
 	Effect,
 	Exit,
@@ -35,6 +36,7 @@ import {
 	chainName,
 	errorClass,
 	type Health,
+	OBJECT,
 	PROCESS,
 	SinkError,
 	SpanRow,
@@ -114,20 +116,26 @@ const cutContent = (text: string): string =>
 		? text
 		: `${text.slice(0, MOST_CONTENT)}\n[cut: ${text.length} characters]`;
 
-/** Turns an ended span into its rows. Pure: no write, no clock but the span's own times. */
+/** Turns an ended span into its rows. Pure: no write, no clock but the span's own times. `object`
+ *  is the one that ended it, the row's resource. */
 const ended = (
-	span: Tracer.Span,
+	span: Tracer.NativeSpan,
 	endTime: bigint,
 	exit: Exit.Exit<unknown, unknown>,
-	events: ReadonlyArray<readonly [string, bigint, Record<string, unknown>]>,
+	object: string,
 ): Ended => {
 	const own = keep(span.attributes);
-	const kept = events.map(([name, time, attributes]) => ({
+	const kept = span.events.map(([name, time, attributes]) => ({
 		name,
 		time,
 		...keep(Object.entries(attributes)),
 	}));
-	const dropped = own.dropped + kept.reduce((n, event) => n + event.dropped, 0);
+	const links = span.links.map(({span: linked, attributes}) => ({
+		traceId: linked.traceId,
+		spanId: linked.spanId,
+		...keep(Object.entries(attributes)),
+	}));
+	const dropped = [...kept, ...links].reduce((n, one) => n + one.dropped, own.dropped);
 	const failure = Exit.isFailure(exit) ? Option.some(exit.cause) : Option.none();
 	const error = Option.map(failure, (cause) => {
 		const named = own.tags[ERROR];
@@ -156,6 +164,8 @@ const ended = (
 			timeUnixNano: String(time),
 			attributes,
 		})),
+		links: links.map(({traceId, spanId, tags: attributes}) => ({traceId, spanId, attributes})),
+		resource: {attributes: {[OBJECT]: object}},
 		ok: Exit.isSuccess(exit),
 	});
 	return {
@@ -166,6 +176,7 @@ const ended = (
 			ok: row.ok,
 			error: Option.getOrNull(error),
 			lag: largestLag(tags),
+			spanId: row.spanId,
 		},
 		chain: Option.match(findProcess(span), {
 			onNone: () => Chain.cases.spans.make({}),
@@ -226,7 +237,7 @@ const make = (sql: Sql, who: {readonly object: string}) => {
 	/** Spans whose write met a full disk, oldest first, tried again at each later `end`. */
 	let held: ReadonlyArray<Ended> = [];
 	/** Whether a write failed since the last flush. */
-	let met = false;
+	let failed = false;
 	/** The newest hour this process has rolled up and sized. Memory only: a wake checks once more. */
 	let checked = Number.NEGATIVE_INFINITY;
 
@@ -271,7 +282,7 @@ const make = (sql: Sql, who: {readonly object: string}) => {
 		});
 		if (Result.isFailure(done)) {
 			held = batch;
-			met = true;
+			failed = true;
 		} else {
 			held = [];
 			if (sized && hour > checked) checked = hour;
@@ -282,7 +293,7 @@ const make = (sql: Sql, who: {readonly object: string}) => {
 	const tracer = Tracer.make({
 		span: (options) =>
 			new SinkSpan(options, (span, endTime, exit) => {
-				commit([ended(span, endTime, exit, span.events)], Number(endTime / 1_000_000n), true);
+				commit([ended(span, endTime, exit, who.object)], Number(endTime / 1_000_000n), true);
 			}),
 	});
 
@@ -290,50 +301,49 @@ const make = (sql: Sql, who: {readonly object: string}) => {
 		Effect.try({try: () => atomic(step), catch: sinkError});
 
 	/** Sends one chain's rows to its part, on through each `rolled`. Deletes only what landed. */
-	const send = (
+	const send = Effect.fnUntraced(function* (
 		records: (typeof RecordManager)["Service"],
 		chain: Chain,
 		rows: ReadonlyArray<{readonly span: SpanRow; readonly content: string | null}>,
-	): Effect.Effect<number, SinkError> =>
-		Effect.gen(function* () {
-			const name = chainName(chain);
-			let at = yield* attempt(() =>
-				Option.match(
-					Option.fromUndefinedOr(sql.exec(`SELECT part FROM parts WHERE chain = ?`, name)[0]),
-					{
-						onNone: () => 0,
-						onSome: (row) => decodePart(row).part,
-					},
-				),
-			);
-			let left = rows;
-			let sent = 0;
-			while (left.length > 0) {
-				const answer = yield* records.write(chain, at, left);
-				const landed = answer._tag === "written" ? left.map((row) => row.span.spanId) : answer.had;
-				const next = at + 1;
-				yield* attempt(() => {
-					for (const spanId of landed) sql.exec(`DELETE FROM unsent WHERE "spanId" = ?`, spanId);
-					if (answer._tag === "rolled")
-						sql.exec(
-							`INSERT INTO parts (chain, part) VALUES (?, ?)
+	) {
+		const name = chainName(chain);
+		let at = yield* attempt(() =>
+			Option.match(
+				Option.fromUndefinedOr(sql.exec(`SELECT part FROM parts WHERE chain = ?`, name)[0]),
+				{
+					onNone: () => 0,
+					onSome: (row) => decodePart(row).part,
+				},
+			),
+		);
+		let left = rows;
+		let sent = 0;
+		while (left.length > 0) {
+			const answer = yield* records.write(chain, at, left);
+			const landed = answer._tag === "written" ? left.map((row) => row.span.spanId) : answer.had;
+			const next = at + 1;
+			yield* attempt(() => {
+				for (const spanId of landed) sql.exec(`DELETE FROM unsent WHERE "spanId" = ?`, spanId);
+				if (answer._tag === "rolled")
+					sql.exec(
+						`INSERT INTO parts (chain, part) VALUES (?, ?)
 							ON CONFLICT (chain) DO UPDATE SET part = excluded.part`,
-							name,
-							next,
-						);
-				});
-				sent += landed.length;
-				if (answer._tag === "written") return sent;
-				const had = new Set(answer.had);
-				left = left.filter((row) => !had.has(row.span.spanId));
-				at = next;
-			}
-			return sent;
-		});
+						name,
+						next,
+					);
+			});
+			sent += landed.length;
+			if (answer._tag === "written") return sent;
+			const had = new Set(answer.had);
+			left = left.filter((row) => !had.has(row.span.spanId));
+			at = next;
+		}
+		return sent;
+	});
 
 	const flush = Effect.gen(function* () {
-		if (met || held.length > 0) {
-			met = false;
+		if (failed || held.length > 0) {
+			failed = false;
 			return yield* Effect.fail(new SinkError({why: "storage", held: held.length}));
 		}
 		const records = yield* RecordManager;
@@ -355,19 +365,16 @@ const make = (sql: Sql, who: {readonly object: string}) => {
 			for (let from = 0; from < rows.length; from += BATCH)
 				sent += yield* send(records, chain, rows.slice(from, from + BATCH));
 		}
-		const now = yield* Effect.clockWith((clock) => Effect.succeed(clock.currentTimeMillisUnsafe()));
-		yield* archiveDays(sql, who.object, now);
+		yield* archiveDays(sql, who.object, yield* Clock.currentTimeMillis);
 		return {sent};
 	});
 
-	const summaries = (from: number, to: number) =>
-		Effect.clockWith((clock) => {
-			const now = clock.currentTimeMillisUnsafe();
-			const done = commit([], now, false);
-			return Result.isFailure(done)
-				? Effect.fail(new SinkError({why: "storage", held: held.length}))
-				: attempt(() => readSummaries(sql, from, to));
-		});
+	const summaries = Effect.fnUntraced(function* (from: number, to: number) {
+		const done = commit([], yield* Clock.currentTimeMillis, false);
+		if (Result.isFailure(done))
+			return yield* Effect.fail(new SinkError({why: "storage", held: held.length}));
+		return yield* attempt(() => readSummaries(sql, from, to));
+	});
 
 	return {tracer, sink: {flush, summaries}};
 };
