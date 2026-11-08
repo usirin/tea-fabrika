@@ -82,6 +82,10 @@ Principle 5 holds for each use, not only for each value. A token made from a bor
 or a solid fill (9, 10) is never a `color:`. Text takes 11 or 12, and it must read 4.5:1 on every
 place it sits, hovered and selected rows included, not only on the page.
 
+- **Changed 2026-11-07.** A text token no longer has to take 11 or 12: it may name a scale and a
+  floor, and the build picks the step
+  ([themes, point 4](./themes.md#4-a-theme-that-fails-contrast-decided-2026-11-07)).
+
 ```css
 /* Before: the wire line's step used as words, 1.87 to 3.02 */
 .topbar .num { color: var(--wire); }       /* slate a8 */
