@@ -31,6 +31,27 @@ done > allowed_signers
 - Nothing ever prints a private key, and no agent reads one into its output. A step agent's brief
   names one path: its own role's key.
 
+## Your own commits
+
+For `next/`, add your Ed25519 public signing key to `allowed_signers` in a separate pull request
+the owner approves. Use `person:<id>` as its principal and `namespaces="git"`. A GitHub signing key
+can help find the public key; the checked-in line is what the check trusts. Each id and key must
+appear only once, and a person cannot reuse a step key.
+
+Then turn on [Git's SSH commit signing](https://git-scm.com/docs/git-config#Documentation/git-config.txt-usersigningKey)
+once, using your own signing key's public path:
+
+```sh
+git config --global gpg.format ssh
+git config --global user.signingkey ~/.ssh/id_ed25519.pub
+git config --global commit.gpgsign true
+```
+
+Your commits need no step note. The check verifies their Git signature against the base's person
+keys. Exam changes still ask the owner to read them. A signed merge of `main` counts too.
+Step links around a person's commit must still connect after squash; a person adds no tree link.
+Squash drops the person's signature, so this verification runs on the pull request's commits.
+
 ## A step signs
 
 After each commit it makes, before anything is pushed:
@@ -71,9 +92,9 @@ pnpm commits sign --step lead --ticket 229 --key ~/.fabrika/step-keys/lead
 
 | Answer | What to do |
 |---|---|
-| `done` | nothing: every commit is signed by its role, and no exam path changed |
+| `done` | nothing: every commit has a valid step note or person signature, and no exam path changed |
 | `ask exam_read` | send the owner one line with the paths; merge after the yes, and note it in the `MergeRow` |
-| `stuck unsigned_commit` | the commit has no note that fits it: sign it with its own step's key |
+| `stuck unsigned_commit` | sign the commit with your listed person key, or add a fitting note with its step's key |
 | `stuck build_touched_exam` | a builder changed the exam: the change goes back to the test writer |
 | `stuck stale_link` | a step's newest link is not the last of its links on the branch: use it, or sign again |
 | `stuck broken_chain` | the branch is behind `main`: merge `main` in, as above |
