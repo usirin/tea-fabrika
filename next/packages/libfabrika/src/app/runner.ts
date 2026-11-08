@@ -359,8 +359,25 @@ export class ProgramRunner extends Context.Service<
 								if (action.after === undefined) return yield* new LedgerError({why: "bad_row"});
 								const previous = yield* rootStore.select(action.after);
 								const next = yield* rootStore.select(action.process);
-								if (s.restart === undefined && (yield* next.load) === null) {
-									const checkpoint = yield* previous.load;
+								const checkpoint = yield* previous.load;
+								if (s.restart !== undefined && checkpoint !== null) {
+									// Keep the accepted turn in the index without carrying its rejected model.
+									const prepared = Schema.decodeUnknownOption(Turn)(checkpoint.turn);
+									if (
+										Option.isSome(prepared) &&
+										(yield* previous.placedByAny(prepared.value.id)) === null
+									) {
+										const accepted = yield* Stream.runHead(
+											mailbox
+												.read(s.name, checkpoint.saved.after)
+												.pipe(Stream.filter((letter) => letter.id === prepared.value.id)),
+										);
+										if (Option.isSome(accepted)) {
+											const {id, rev, pos} = accepted.value;
+											yield* previous.save(checkpoint, [{id, rev, pos}]);
+										}
+									}
+								} else if ((yield* next.load) === null) {
 									// The turn is the acceptance marker until its letter is indexed.
 									if (checkpoint !== null) yield* next.save({...checkpoint, cmds: []});
 								}
@@ -486,6 +503,7 @@ export class ProgramRunner extends Context.Service<
 					) {
 						yield* saveRecovery({
 							...moved(s, {type: "started", process: status.state.process, at: status.at}),
+							build: status.state.code.hash,
 							restarts: status.restarts,
 						});
 					}
@@ -495,11 +513,11 @@ export class ProgramRunner extends Context.Service<
 						yield* adopt(resumed.recovery.process, resumed.build);
 					if (!woke) {
 						const marker = yield* store.readActivity;
+						const attempt = resumed.attempt?.process === process.id ? resumed.attempt : null;
 						if (
 							resumed.recovery._tag === "live" &&
-							(marker?._tag === "stepping" || resumed.attempt !== null)
+							((marker?._tag === "stepping" && marker.process === process.id) || attempt !== null)
 						) {
-							const attempt = resumed.attempt;
 							const seq = attempt?.seq ?? resumed.seq + 1;
 							yield* observed(
 								Failure.cases.interrupted.make({
