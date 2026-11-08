@@ -3,7 +3,7 @@
 // Fabrika deliberately requires UUIDv7 on decode too; the spec permits other versions on decode.
 import {describe, expect, it, vi} from "@effect/vitest";
 import {Id} from "@kampus/libfabrika";
-import {Cause, Clock, Effect, Exit, Schema, SchemaIssue} from "effect";
+import {Cause, Clock, Effect, Exit, Schema, SchemaIssue, Tracer} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
 import {ProcessId} from "./data/trace.ts";
@@ -48,6 +48,8 @@ const badPrefixShapes = fc
 		word.toUpperCase(),
 		long,
 		`${word}${bad}${word}`,
+		// T518-PREFIX-EXCEPTION: mutation 13 admitted this invalid prefix; UUIDs stay generated.
+		"Stryker was here!",
 	]);
 const clock = fc.oneof(fc.constant(0), fc.constant(maxClock), fc.integer({min: 0, max: maxClock}));
 const uuid = fc.tuple(clock, fc.uint8Array({minLength: 10, maxLength: 10})).map(([at, random]) => {
@@ -126,6 +128,64 @@ const Time = Schema.Int.check(Schema.isBetween({minimum: 0, maximum: maxClock}))
 const Count = Schema.Int.check(Schema.isBetween({minimum: 2, maximum: 128}));
 
 describe("T518 Id format", () => {
+	it("built-in schemas and the type list keep every declared prefix", () => {
+		const builtins = [
+			["ledger", Id.Ledger],
+			["person", Id.Person],
+			["process", Id.Process],
+			["connection", Id.Connection],
+			["tab", Id.Tab],
+			["mailbox", Id.Mailbox],
+			["input", Id.Input],
+			["letter", Id.Letter],
+			["cmd", Id.Cmd],
+			["monitor", Id.Monitor],
+			["entry", Id.Entry],
+			["grant", Id.Grant],
+			["revoke", Id.Revoke],
+			["add", Id.Add],
+			["deny", Id.Deny],
+		] as const;
+		fc.assert(
+			fc.property(uuid, prefix, (bytes, type) => {
+				for (const [name, Specific] of builtins) {
+					expect(Schema.is(Id.Type)(name)).toBe(true);
+					expect(Specific.prefix).toBe(name);
+					const raw = wire(name, bytes);
+					expect(Schema.decodeUnknownSync(Specific)(raw)).toBe(raw);
+					expect(Schema.is(Specific)(wire("", bytes))).toBe(false);
+				}
+				expect(Schema.is(Id.Type)(type)).toBe(builtins.some(([name]) => name === type));
+			}),
+			options,
+		);
+	});
+	it("makeEffect records a named, completed span for valid and invalid generated prefixes", () => {
+		fc.assert(
+			fc.property(prefix, badPrefixShapes, (type, bad) => {
+				for (const name of [type, ...bad]) {
+					const spans: Array<Tracer.NativeSpan> = [];
+					const tracer = Tracer.make({
+						span(options) {
+							const span = new Tracer.NativeSpan(options);
+							spans.push(span);
+							return span;
+						},
+					});
+					const exit = Effect.runSync(
+						Effect.exit(Id.makeEffect(name)).pipe(Effect.withTracer(tracer)),
+					);
+					expect(Exit.isSuccess(exit)).toBe(validPrefix(name));
+					const made = spans.filter((span) => span.name === "id.makeEffect");
+					expect(made).toHaveLength(1);
+					const status = made[0]!.status;
+					expect(status._tag).toBe("Ended");
+					if (status._tag === "Ended") expect(Exit.isSuccess(status.exit)).toBe(validPrefix(name));
+				}
+			}),
+			options,
+		);
+	});
 	it("decodes independent UUIDv7 encodings for every valid prefix shape", () => {
 		fc.assert(
 			fc.property(uuid, prefixShapes, prefix, (bytes, shapes, type) => {
@@ -359,6 +419,39 @@ describe("T518 Id format", () => {
 });
 
 describe("T518 Id order and generation", () => {
+	it.effect.prop(
+		"an empty-prefix schema generates bare UUIDv7 suffixes on generated clocks and bursts",
+		{at: Time, count: Count},
+		({at, count}) =>
+			Effect.gen(function* () {
+				const Specific = Id.make("");
+				const generator = yield* Id.Generator;
+				const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
+					if (array instanceof Uint8Array) array.fill(0);
+					return array;
+				});
+				try {
+					yield* TestClock.setTime(at);
+					const ids = yield* Effect.forEach(
+						Array.from({length: count}),
+						() => generator.next(Specific),
+						{
+							concurrency: 1,
+						},
+					);
+					increasing(ids);
+					for (const id of ids) {
+						expect(accepts(id, "")).toBe(true);
+						expect(id).not.toContain("_");
+						expect(Schema.decodeUnknownSync(Specific)(id)).toBe(id);
+						expect(timestamp(id)).toBe(at);
+					}
+				} finally {
+					random.mockRestore();
+				}
+			}).pipe(Effect.provide(Id.Generator.layer)),
+		effectOptions,
+	);
 	it("Order compares suffix first, then the whole prefix on ties", () => {
 		fc.assert(
 			fc.property(
