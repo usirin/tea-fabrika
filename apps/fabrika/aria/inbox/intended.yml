@@ -1,0 +1,24 @@
+# Intended structure for today's inbox, not a recording from Electron.
+# Dynamic row text is the native message / sealed ask / saved stop seeded by e2e/inbox.ts.
+- region "inbox glance":
+  - toolbar:
+    - button "Open all"
+  - grid "inbox":
+    - rowgroup "Your turn":
+      - row:
+        - gridcell
+    - rowgroup "Messages":
+      - row [selected]:
+        - gridcell:
+          - textbox "Reply"
+          - button "Send"
+          - button "Cancel"
+- region "inbox":
+  - grid "inbox":
+    - rowgroup "Your turn":
+      - row:
+        - gridcell
+    - rowgroup "Messages":
+      - row [selected]:
+        - gridcell
+        - region "look"

@@ -36,6 +36,7 @@
 		"@tea-fabrika/counter": "workspace:*",
 		"@tea-fabrika/experiment": "workspace:*",
 		"@tea-fabrika/experiments": "workspace:*",
+		"@tea-fabrika/inbox": "workspace:*",
 		"@tea-fabrika/map": "workspace:*",
 		"@tea-fabrika/markdown": "workspace:*",
 		"@tea-fabrika/pipeline": "workspace:*",

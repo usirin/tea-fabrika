@@ -1,0 +1,22 @@
+[
+	{"law":"I1","plant":"Give each view its own selection","owner":"programs/inbox/src/inbox.laws.test.ts","proof":"Executable projection plant in I1"},
+	{"law":"I2","plant":"Filter Messages to agents","owner":"programs/inbox/src/inbox.laws.test.ts","proof":"Executable reducer plant in I2"},
+	{"law":"I3","plant":"Require a positive ticket number","owner":"programs/inbox/src/inbox.test.ts","proof":"Unticketed read and reply; native dm_send in e2e"},
+	{"law":"I4","plant":"Send an open request on receipt","owner":"apps/fabrika/src/host/serve.inbox.test.ts","proof":"Compare desk, ports and show messages before/after receipt; e2e compares DOM focus"},
+	{"law":"I5","plant":"Run list shortcuts before checking the focused field","owner":"programs/inbox/src/window.test.tsx","proof":"Scoped command dispatch plus real typing in --inbox"},
+	{"law":"I6","plant":"Let the frame close the popover first","owner":"programs/inbox/src/inbox.test.ts","proof":"Draft survives close/reopen; real capture handler order in --inbox"},
+	{"law":"I7","plant":"Read the current selection at Send","owner":"programs/inbox/src/inbox.test.ts","proof":"Executable reply-target plant in I7"},
+	{"law":"I8","plant":"Generate a fresh ID on every retry","owner":"programs/inbox/src/inbox.test.ts","proof":"Executable retry-id plant; real RoomManager reopen and duplicate writes"},
+	{"law":"I9","plant":"Accept payload by, or expose the answer input to agents","owner":"apps/fabrika/src/host/serve.inbox.test.ts","proof":"CLI/MCP caller, legitimate write before forged write, no answer tool"},
+	{"law":"I10","plant":"Read all room messages before filtering","owner":"apps/fabrika/src/host/serve.inbox.test.ts","proof":"Two actual MCP callers, private marker absent from all returned bytes","limit":"A correct internal filter can preserve the stated property; this plant is underspecified"},
+	{"law":"I11","plant":"Start the inbox with empty saved state","owner":"programs/inbox/src/inbox.test.ts","proof":"Executable empty-init plant, service file reopen, real host reconnect"},
+	{"law":"I12","plant":"Start before checking the existing tile","owner":"apps/fabrika/src/desk/desk.inbox.test.ts","proof":"Repeated requests before acknowledgement, one reservation and one start per workspace"},
+	{"law":"I13","plant":"Focus the still-folded tile","owner":"apps/fabrika/src/desk/desk.inbox.test.ts","proof":"Folded inbox with another tile zoomed, selected location in emitted command"},
+	{"law":"I14","plant":"Replace the origin's program","owner":"apps/fabrika/src/desk/desk.inbox.test.ts","proof":"Counter survives, wide shares are halves, narrow inbox stays open"},
+	{"law":"I15","plant":"Render an overlay or move focus into it","owner":"apps/fabrika/e2e/inbox.ts","proof":"Real row/look/following-row geometry and active element, Space and Escape"},
+	{"law":"I16","plant":"Build ask buttons for every Your turn row","owner":"programs/inbox/src/window.test.tsx","proof":"Both renderers receive only a stop, no answer controls; real app repeats it"},
+	{"law":"I17","plant":"Keep a separate Open all handler or hard-coded hint","owner":"packages/fabrika/src/shell/commands.test.ts","proof":"Registry, checked tsh words, remapped dispatch, SSR toolbar, real pointer and key"},
+	{"law":"I18","plant":"Save inbox over the chosen value","owner":"apps/fabrika/src/host/settings.inbox.test.ts","proof":"Saved tracker survives stop/restart and write failure; theme and other setting kept"},
+	{"law":"I19","plant":"Stop the inbox with its tile","owner":"apps/fabrika/src/host/serve.inbox.test.ts","proof":"Native receipt after leave; desk history test, real C-b ;"},
+	{"law":"I20","plant":"Retain the lab's listbox roles and nested field","owner":"programs/inbox/src/window.test.tsx","proof":"Rendered grid roles and same-row fields, real keys/clicks and intended ARIA contract"}
+]

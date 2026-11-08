@@ -1,0 +1,8 @@
+{
+	"OWNER": {"kind": "user", "id": "owner"},
+	"PERSON": {"kind": "user", "id": "peer"},
+	"AGENT": {"kind": "agent", "id": "scout", "for": "owner"},
+	"OTHER": {"kind": "agent", "id": "other", "for": "owner"},
+	"NOW": 1794153600000,
+	"DELIVERY": {"id": "r18", "to": {"kind": "agent", "id": "scout", "for": "owner"}, "thread": "dm/owner/scout", "text": "Please fix it.", "replyTo": "m17", "ticket": null, "said": 1794153600002}
+}

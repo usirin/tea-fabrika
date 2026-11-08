@@ -11,6 +11,36 @@
 	{ "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
 	{ "glob": "**/*.ask-desk.test.ts", "why": "today's ask-desk PR 1 laws" },
 	{ "glob": "fixtures/ask-desk/**", "why": "ask-desk saved cases, vectors and mutation plants" },
+	{ "glob": "programs/inbox/**/*.test.{ts,tsx}", "why": "today's inbox PR 1 laws" },
+	{ "glob": "programs/inbox/package.json", "why": "the inbox's package and checked entry points" },
+	{
+		"glob": "programs/inbox/tsconfig.json",
+		"why": "the inbox typecheck, including its React views"
+	},
+	{ "glob": "fixtures/inbox/**", "why": "inbox actors, contracts, plants and shot checks" },
+	{ "glob": "**/*.inbox.test.ts", "why": "inbox delivery, opening, settings and wire laws" },
+	{
+		"glob": "packages/fabrika/src/program/commands.test.ts",
+		"why": "checked program command declarations"
+	},
+	{
+		"glob": "packages/fabrika/src/shell/commands.test.ts",
+		"why": "tsh uses the same command declaration"
+	},
+	{
+		"glob": "packages/fabrika-design/src/**/*.test.tsx",
+		"why": "rendered design component contracts"
+	},
+	{
+		"glob": "packages/fabrika-design/package.json",
+		"why": "the shared toolbar's exports and React dependencies"
+	},
+	{
+		"glob": "packages/fabrika-design/tsconfig.json",
+		"why": "typecheck covers shared React components"
+	},
+	{ "glob": "apps/fabrika/package.json", "why": "the app's inbox dependency and test runners" },
+	{ "glob": "pnpm-lock.yaml", "why": "the exact dependencies used by the exam" },
 	{ "glob": "apps/fabrika/e2e.ts", "why": "today's real-app checks and their routing" },
 	{ "glob": "apps/fabrika/e2e/**", "why": "today's real-app checks and captures" },
 	{ "glob": "programs/tracker/package.json", "why": "the shared ask-view subpath" },

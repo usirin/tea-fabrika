@@ -12,6 +12,7 @@ import {SEVEN, SEVEN_TITLE} from "@tea-fabrika/tracker/seven";
 import {Effect} from "effect";
 import {_electron, type ElectronApplication, type Locator, type Page} from "playwright";
 import {askDesk} from "./e2e/ask-desk.ts";
+import {inboxStage} from "./e2e/inbox.ts";
 import {PROTOCOL} from "./src/link.ts";
 
 // The app, driven end to end through Playwright's Electron support: the whole flow in the one
@@ -3320,6 +3321,7 @@ const all = async () => {
 			stop,
 			shots,
 		});
+		await inboxStage({launch, prompted, run, prefixed, focusOn, lookIs, hostPid, stop, shots});
 		// The 60 focus images need a 1440 by 900 window, taller than a CI runner's screen, so they
 		// run only with --focus, the way the ARIA trees run only with --aria.
 	} finally {
@@ -3330,7 +3332,12 @@ const all = async () => {
 };
 
 // Each capture stage can also run alone. ARIA answers 2 only when it cannot reach a state.
-if (process.argv.includes("--ask-desk"))
+if (process.argv.includes("--inbox") || process.argv.includes("--inbox-shots"))
+	await inboxStage(
+		{launch, prompted, run, prefixed, focusOn, lookIs, hostPid, stop, shots},
+		process.argv.includes("--inbox-shots"),
+	);
+else if (process.argv.includes("--ask-desk"))
 	await askDesk({launch, prompted, run, prefixed, focusOn, tilesAre, lookIs, hostPid, stop, shots});
 else if (process.argv.includes("--keys")) await keysLook();
 else if (process.argv.includes("--drag")) await borderDrag();
