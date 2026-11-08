@@ -1,6 +1,6 @@
 // The span sink: every object installs one Tracer, and a span that ends is in the object's own SQLite
 // before `end` returns. `flush` ships it to its record later, when the runner says. Tier 1, P37
-// (laws p96, p97 and p99).
+// (laws p98, p99 and p101).
 //
 // The queue is a table, `unsent`, not memory: an object sleeps and loses memory, and a timer fiber
 // is what "a wait is data" forbids. Nothing is dropped. A write that cannot land (`SQLITE_FULL`) is

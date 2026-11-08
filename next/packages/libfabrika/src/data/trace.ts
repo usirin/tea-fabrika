@@ -1,5 +1,5 @@
 // The span sink's rows: what a span keeps, where its record lives, and the two levels of health.
-// Plain shapes and pure helpers, the same on workerd and on Node. Tier 1, P37 (laws p96 to p100).
+// Plain shapes and pure helpers, the same on workerd and on Node. Tier 1, P37 (laws p98 to p102).
 //
 // A row keeps OTLP's span field names, so a later export to any OTLP backend is a map, not a
 // rewrite. A tag holds a name, an id, a number or a boolean; a failed span's message is never a
@@ -129,7 +129,7 @@ export const sinkError = (error: unknown): SinkError =>
 export const errorClass = (error: unknown): string =>
 	error instanceof Error ? error.name : typeof error;
 
-/** The most characters a span tag holds (p95, p97). Text past it is cut, its length kept beside. */
+/** The most characters a span tag holds (p95, p99). Text past it is cut, its length kept beside. */
 const MOST_CHARS = 128;
 
 /** The first `MOST_CHARS` characters, one fewer when the cut would split a surrogate pair. */

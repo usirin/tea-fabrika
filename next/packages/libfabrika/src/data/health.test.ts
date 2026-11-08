@@ -1,4 +1,4 @@
-// p99 (P37's plan writes it out; the lead commit adds it to docs/plan/tier-1-detail.md,
+// p101 (P37's plan writes it out; the lead commit adds it to docs/plan/tier-1-detail.md,
 // "Properties"), for `data/health.ts` and `data/archive.ts`: health in two levels, and no raw row is
 // ever lost. From "design for bounded objects" and "monitoring is in Tier 1" (owner, 2026-11-07),
 // and the owner's archive answer (each object writes its own R2 files). Written before the modules
@@ -109,7 +109,7 @@ const span = (
 		yield* TestClock.setTime(at);
 		yield* Effect.exit(
 			TestClock.adjust(ms).pipe(
-				Effect.andThen(ok ? Effect.void : Effect.fail(new Error("p99"))),
+				Effect.andThen(ok ? Effect.void : Effect.fail(new Error("p101"))),
 				Effect.withSpan(piece, {attributes}),
 			),
 		);
@@ -174,7 +174,7 @@ const archiveRows = (db: DatabaseSync) =>
 		.all()
 		.map((row) => ({...row}));
 
-describe("p99, health in two levels", () => {
+describe("p101, health in two levels", () => {
 	it("each summary's count, errors, p50, p95, max and lag match the raw rows", async () => {
 		const one = fc.record({
 			piece: fc.constantFrom(...PIECES),
@@ -301,7 +301,7 @@ describe("p99, health in two levels", () => {
 	});
 });
 
-describe("p99, a size row per hour across processes", () => {
+describe("p101, a size row per hour across processes", () => {
 	it.effect(
 		"a new process in the same hour writes no second size row; the next hour gets its own",
 		() => {
@@ -332,7 +332,7 @@ const oldDay = Effect.gen(function* () {
 	yield* span("runner.step", D + DAY + KEEP + H, 1);
 });
 
-describe("p99, no raw row is ever lost", () => {
+describe("p101, no raw row is ever lost", () => {
 	it.effect(
 		"a day past 336 hours goes to R2 as one JSON-lines file, and its rows leave only after the hash matches",
 		() => {
@@ -540,7 +540,7 @@ describe("p99, no raw row is ever lost", () => {
 	});
 });
 
-describe("p99, an archive that fails is never silent", () => {
+describe("p101, an archive that fails is never silent", () => {
 	it.effect(
 		"a failed put or a hash mismatch keeps the rows and writes a sink.archive health row; the next good flush archives them",
 		() => {
@@ -597,7 +597,7 @@ describe("p99, an archive that fails is never silent", () => {
 	);
 });
 
-describe("p99, a health row joins its span", () => {
+describe("p101, a health row joins its span", () => {
 	it.effect("each raw health row carries the spanId of the span it measured", () => {
 		const {db, sql} = fresh();
 		return Effect.gen(function* () {
@@ -625,7 +625,7 @@ describe("p99, a health row joins its span", () => {
 	});
 });
 
-describe("p99, archiving deletes only what it archived", () => {
+describe("p101, archiving deletes only what it archived", () => {
 	it.effect(
 		"a row of the day written while its file is being put stays until it is in a file",
 		() => {
@@ -669,7 +669,7 @@ describe("p99, archiving deletes only what it archived", () => {
 	);
 });
 
-describe("p99, the hour's size row is never skipped", () => {
+describe("p101, the hour's size row is never skipped", () => {
 	it.effect(
 		"summaries before the hour's first span: that span still writes the hour's size row",
 		() => {
@@ -691,7 +691,7 @@ describe("p99, the hour's size row is never skipped", () => {
 	);
 });
 
-describe("p99, a sink.archive row's time, duration and span", () => {
+describe("p101, a sink.archive row's time, duration and span", () => {
 	it.effect(
 		"at is the clock when the put finished, ms how long it took, spanId the span flush ran in",
 		() => {
@@ -740,7 +740,7 @@ describe("p99, a sink.archive row's time, duration and span", () => {
 	);
 });
 
-describe("p99, late rows of an archived day leave as a further part", () => {
+describe("p101, late rows of an archived day leave as a further part", () => {
 	it.effect(
 		"a row that lands after its day was archived goes in part 2, with its own key, hash and archived row",
 		() => {
@@ -802,7 +802,7 @@ describe("p99, late rows of an archived day leave as a further part", () => {
 	);
 });
 
-describe("p99, a big day archives", () => {
+describe("p101, a big day archives", () => {
 	it.effect(
 		"a day with 200,000 health rows leaves as one file, and its rows are deleted",
 		() => {
@@ -829,7 +829,7 @@ describe("p99, a big day archives", () => {
 	);
 });
 
-describe("p99, archiving checks the count before it deletes", () => {
+describe("p101, archiving checks the count before it deletes", () => {
 	it.effect(
 		"a row of the day deleted between the read and the delete: the archive deletes nothing",
 		() => {

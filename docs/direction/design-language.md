@@ -2,7 +2,7 @@
 
 **Proposed 2026-11-04; most calls decided 2026-11-07.** A draft read on main at `ffa7056f`. The
 owner walked it on 2026-11-07 and decided calls 1, 2 and 4 to 9, below, with the changes written
-beside each; call 3 waits on the tier names. Each decided call
+beside each; call 3 decided the same day, with the tier words and naming grammar. Each decided call
 starts on today's app at once (AGENTS.md).
 Both versions: the design package is the one thing today's app and `next/` share
 ([one design package](./fabrika-design-package.md)). The owner's calls are at the end, each yes or
@@ -261,10 +261,18 @@ At 600 lines an agent hour ([agent hours](./agent-hours.md)):
 2. Split each design note into a decision note and a guideline page made from doc tags?
    **Decided yes, 2026-11-07.** The page is read in Claude Design's fabrika design system, and a
    sync writes it from the package, never by hand (owner, the same day).
-3. Two token tiers, plus a component tier for the tile and popovers only? **Open.** The shape
-   stands; the tiers' names, and whether a shared tier for parts with states is needed now, wait on
-   a reference the owner asked for. Code never reaches a primitive: the rule is lint
-   (`no-restricted-imports`, one exception for the token build), not a test (owner, 2026-11-07).
+3. Two token tiers, plus a component tier for the tile and popovers only? **Decided 2026-11-07,
+   changed** (owner): four tier words, **primitive** (a Radix step, which no program reads),
+   **global** (a meaning every program reads), **shared** (a state set two or more parts repeat,
+   added only when they do) and **component** (a part's own tokens). Global names are
+   `category-subcategory-item` (`background-surface-high`, `text-muted`); a part's are
+   `part-piece-variant-category-state-interaction` (`tile-titlebar-background-selected-hover`).
+   Fixed slot words: `background` (with `base` and `surface` under it), `text`, `icon`, `border`;
+   `subtle`, `muted`, `strong`; `hover`, `active`, `focus`; ladders `low`/`lower`/`lowest` and
+   `high`/`higher`/`highest`. Each token's data names its `owner`; the lint rule reads that field,
+   never the name's prefix. The keys inside a token file are still open. The renames land in call 6's
+   one pull request. Code never reaches a primitive: the rule is lint (`no-restricted-imports`, one
+   exception for the token build), not a test (owner, 2026-11-07).
 4. Restate "accent only for your turn" as "a token means one thing", with focus one slate token?
    **Decided yes, 2026-11-07.** `turn` splits into `turn-fill` and `turn-text`; focus is one gray
    token everywhere. A colored primary button stays a separate pick.

@@ -1,6 +1,6 @@
 // A record part's logic: the one code `job/<process>/<part>` and `spans/<part>` both run. Each part
 // is its own object with its own SQLite; a part that reaches its cap writes `rolled` and takes no new
-// span, and the next part does. Tier 1, P37 (laws p98 and p100).
+// span, and the next part does. Tier 1, P37 (laws p100 and p102).
 //
 // A write, in one step: (1) drop the rows whose span id this part holds; (2) when none are left,
 // answer `written`; (3) when the part has rolled, or its size is at or past the cap, write `rolled`

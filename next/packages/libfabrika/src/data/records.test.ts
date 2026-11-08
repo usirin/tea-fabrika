@@ -1,4 +1,4 @@
-// p98 and p100 (P37's plan writes them out; the lead commit adds them to docs/plan/tier-1-detail.md,
+// p100 and p102 (P37's plan writes them out; the lead commit adds them to docs/plan/tier-1-detail.md,
 // "Properties"), for `data/records.ts`: a record part's logic, the one code `job/<process>/<part>`
 // and `spans/<part>` both run. From "design for bounded objects" (owner, 2026-11-07) and "an agent
 // run keeps its content". Written before the module (Tier 1, P37, ticket 238).
@@ -147,7 +147,7 @@ const backends: ReadonlyArray<Backend> = [
 ];
 
 describe.each(backends)(
-	"p100, a record rolls and never fills, on RecordManager.$name",
+	"p102, a record rolls and never fills, on RecordManager.$name",
 	(backend) => {
 		it.effect(
 			"rows past the cap go to the next part; read walks every part, each span once, in write order",
@@ -290,7 +290,7 @@ describe.each(backends)(
 	},
 );
 
-describe("p100, the cap is checked before the write (RecordManager.sql)", () => {
+describe("p102, the cap is checked before the write (RecordManager.sql)", () => {
 	it.effect("a part already at its cap writes rolled and none of the batch", () => {
 		const parts = home();
 		return Effect.gen(function* () {
@@ -332,10 +332,10 @@ describe("p100, the cap is checked before the write (RecordManager.sql)", () => 
 });
 
 const T = Date.UTC(2026, 10, 7, 22, 0, 0, 20);
-const MESSAGE = "TypeError: note-body-p98 was not a function\n    at step (counter.ts:12:3)";
+const MESSAGE = "TypeError: note-body-p100 was not a function\n    at step (counter.ts:12:3)";
 
 describe.each(backends)(
-	"p98, content is the one deletable part, on RecordManager.$name",
+	"p100, content is the one deletable part, on RecordManager.$name",
 	(backend) => {
 		it.effect(
 			"deleteContent keeps who, when and why; the span row stays as it was; a second delete changes nothing",
@@ -378,7 +378,7 @@ describe.each(backends)(
 					if (parts !== undefined) {
 						expect(parts.rows(part(0), "spans")).toEqual(rawBefore);
 						const content = JSON.stringify(parts.rows(part(0), "content"));
-						expect(content).not.toContain("note-body-p98");
+						expect(content).not.toContain("note-body-p100");
 						expect(content).toContain("owner");
 					}
 				}).pipe(Effect.provide(layer));

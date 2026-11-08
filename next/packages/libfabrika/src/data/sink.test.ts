@@ -1,4 +1,4 @@
-// p96 and p97 (P37's plan writes them out; the lead commit adds them to docs/plan/tier-1-detail.md,
+// p98 and p99 (P37's plan writes them out; the lead commit adds them to docs/plan/tier-1-detail.md,
 // "Properties"), for `data/sink.ts` and `data/trace.ts`: a span that ends is never dropped, and its
 // tags hold names, ids and numbers only. From "design for bounded objects" and "monitoring is in
 // Tier 1" (owner, 2026-11-07). Written before the modules (Tier 1, P37, ticket 238).
@@ -169,7 +169,7 @@ const bucket = () => {
 
 const ids = (rows: ReadonlyArray<Row>) => rows.map((r) => r.spanId);
 
-describe("p96, a span that ends is never dropped", () => {
+describe("p98, a span that ends is never dropped", () => {
 	it("its rows are in the object's own SQLite before end returns, and a later process's flush sends them", async () => {
 		const {db, open} = home();
 		// Effect.runSync: nothing may wait on a fiber or a timer for the rows to land.
@@ -287,7 +287,7 @@ describe("p96, a span that ends is never dropped", () => {
 		"every row names the object that ended it, as OTLP's resource, inside a process and outside one",
 		() => {
 			// Two objects end spans. The spans outside a process share one chain, `spans`, so the row
-			// is the only place that says which object ended each one (review must-fix, p96).
+			// is the only place that says which object ended each one (review must-fix, p98).
 			const one = home();
 			const two = home();
 			const ends = (sql: Sql, object: string, process: string) =>
@@ -347,7 +347,7 @@ describe("p96, a span that ends is never dropped", () => {
 								attributes: {
 									"fab.link": "follows-from",
 									"fab.n": 2,
-									"fab.key": Redacted.make("sk-p96-link"),
+									"fab.key": Redacted.make("sk-p98-link"),
 								},
 							},
 							{span: second, attributes: {}},
@@ -364,7 +364,7 @@ describe("p96, a span that ends is never dropped", () => {
 					},
 					{traceId: "5bf92f3577b34da6a3ce929d0e0e4737", spanId: "10f067aa0ba902b8", attributes: {}},
 				]);
-				expect(bytes("sk-p96-link"), "a link's secret is never written").toEqual([]);
+				expect(bytes("sk-p98-link"), "a link's secret is never written").toEqual([]);
 			}).pipe(Effect.provide(world(sql)));
 		},
 	);
@@ -582,15 +582,15 @@ describe("p96, a span that ends is never dropped", () => {
 	);
 });
 
-const SECRET = "sk-p97-secret";
-const NOTE = "note-body-p97";
-const NOTE_TWO = "note-two-p97";
+const SECRET = "sk-p99-secret";
+const NOTE = "note-body-p99";
+const NOTE_TWO = "note-two-p99";
 const a = (n: number) => "a".repeat(n);
 class NoteError extends Error {
 	override readonly name = "NoteError";
 }
 
-describe("p97, tags hold names, ids and numbers; a message only in content", () => {
+describe("p99, tags hold names, ids and numbers; a message only in content", () => {
 	it.effect(
 		"no Redacted text anywhere, and a throw's message only in content, never in a tag, health or R2",
 		() => {
