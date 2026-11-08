@@ -105,6 +105,10 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
 - **In today's version:** fixes that daily use or CI needs, the UX work the owner
   picks, and ideas the owner wants to try out there first. What a tryout teaches
   goes into `next/` as a lesson, rethought and not copied. Nothing else is added.
+- **A product foundation decided in a walk starts on today's app at once,** no exception (owner,
+  2026-11-07): tokens, focus, lint rules for the design, accessibility checks. Its build plan is
+  written the same day and comes to the owner as one yes, so the decision is pressed in the real
+  app while `next/` is built.
 - **When `next/` takes a job over,** the pull request that switches to it deletes
   the old part. Its tests or laws are ported first.
 - `next/` is the lab until a person opens it for real work, so it may be rough. "No

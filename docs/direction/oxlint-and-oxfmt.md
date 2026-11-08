@@ -3,6 +3,16 @@
 Decided 2026-10-31 by the owner. This covers the whole repo: today's version, and `next/` when it
 lands.
 
+**Changed 2026-11-07 by the owner: CSS gets stylelint, for now.** "Nothing else" holds for code;
+stylelint lints CSS only, to win back the largest loss named below. A sweep of the tests found
+about 50 checks in 7 files that read stylesheets for their shape (no raw color, no modifier on a
+token, px sizes only from the type scale); those can move into stylelint rules, while contrast
+math stays a test, since it needs real values. stylelint is the field's CSS linter (about 14
+million npm downloads a week, read 2026-11-07); the Vite, Vitest and Rolldown repos lint no CSS,
+and oxc formats CSS but has no CSS linter (oxc issue 26324, a request with no maintainer reply).
+A study of Rust CSS linters, Biome's among them, is running; if it finds one that holds custom
+rules, that replaces stylelint. Not decided: which tests move, each an exam change for the owner.
+
 ```sh
 pnpm lint     # oxlint-plugins/lint.ts, format.ts --check, then the code-graph and browser checks
 pnpm format   # format.ts, lint.ts --fix, format.ts
