@@ -1,3 +1,4 @@
+import {Machine} from "@demlik/tea/effect";
 // P15a, next/. tsc owns negative cases; Vitest requires actual exports through deferred imports.
 import type {Layer} from "effect";
 import {Effect, Schema} from "effect";
@@ -5,9 +6,10 @@ import * as fc from "fast-check";
 import {expect, expectTypeOf, it} from "vitest";
 import type {CodeError, CodeHash, CodeBundle} from "../data/code.ts";
 import type {LedgerError} from "../data/ledger.ts";
+import {ProgramLoader} from "./entry.ts";
 import type {ProgramDown, State} from "./program.ts";
-import {Step} from "./program.ts";
-import {checks, executionFixture, restartFixture, typeId} from "./reload.test-support.ts";
+import {Step, Program} from "./program.ts";
+import {checks, executionFixture, failure, restartFixture, typeId} from "./reload.test-support.ts";
 import type {Saved as SavedValue} from "./state.ts";
 
 it("p78/types: policy, hashes and IDs retain separate brands and typed Effect failures", async () => {
@@ -52,10 +54,10 @@ it("p78/types: policy, hashes and IDs retain separate brands and typed Effect fa
 			Effect.Effect<{readonly saved: SavedValue; readonly ran: ReadonlyArray<string>}, ProgramDown>
 		>();
 		// @ts-expect-error get needs a hash, never an entry ID
-		registry.get(entry);
+		const wrongHash = registry.get(entry);
 		// @ts-expect-error outside data does not return synchronously
 		const synchronous: CodeBundle = registry.put(bundle);
-		return synchronous;
+		return {synchronous, wrongHash};
 	};
 	expect(typeof compileOnly).toBe("function");
 	expectTypeOf<Layer.Error<ReturnType<typeof CodeRegistry.layer>>>().toEqualTypeOf<never>();
@@ -86,6 +88,41 @@ it("test-owned P12/P34 stand-ins only return answers and collect calls", async (
 			expect(fixture.calls.map((c) => c.method)).toEqual(["init", "step"]);
 			const restart = restartFixture({process: typeId("process", 1)});
 			expect(restart.requests).toEqual([]);
+		}),
+		checks,
+	);
+});
+
+it("outside module declarations fail through ProgramDown; a real Program.make control loads", async () => {
+	await fc.assert(
+		fc.asyncProperty(fc.jsonValue(), fc.integer({min: -10, max: 10}), async (raw, initial) => {
+			const machine = Machine.make({
+				model: Schema.Int,
+				msg: Schema.Struct({type: Schema.Literal("inc")}),
+				cmds: [],
+				init: (loaded) => [loaded ?? initial, []],
+				update: {inc: (m) => [m + 1, []]},
+			});
+			const program = Program.make({
+				name: "counter",
+				machine,
+				state: {v: 1, upgrades: []},
+				view: (m) => m,
+				refuse: () => null,
+				inputs: {inc: "Add"},
+				outputs: {},
+				writes: {},
+				wake: () => null,
+			});
+			const load = (declaration: unknown) =>
+				ProgramLoader.use((l) => l.load("counter")).pipe(
+					Effect.provide(ProgramLoader.layer({counter: declaration}, {})),
+				);
+			expect(await failure(load({...program, machine: raw}))).toMatchObject({
+				_tag: "ProgramDown",
+				why: "load",
+			});
+			expect(await Effect.runPromise(load(program))).toHaveProperty("handler");
 		}),
 		checks,
 	);

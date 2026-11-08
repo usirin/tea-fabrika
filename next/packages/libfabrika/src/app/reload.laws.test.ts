@@ -11,6 +11,7 @@ import {
 	Model,
 	operations,
 	request,
+	typeId,
 	variant,
 	world,
 } from "./reload.test-support.ts";
@@ -190,13 +191,16 @@ describe("P15a committed program reload", () => {
 					program: "counter",
 				}));
 				const bad = await world([{...specs[0]!, v: future}, specs[1]!]);
-				const good = await world(specs);
+				const good = await world(specs, {
+					process: typeId("process", 3),
+					name: "counter:2",
+					shared: bad,
+				});
 				try {
-					for (const w of [bad, good]) {
-						await w.install(0);
-						await w.install(1);
-						await w.run(w.runner().open("headless"));
-					}
+					await bad.install(0);
+					await good.install(0, 100);
+					await bad.install(1);
+					for (const w of [bad, good]) await w.run(w.runner().open("headless"));
 					const saved = (await bad.checkpoint())!;
 					const req = await request(bad.bundles[1]!, 15);
 					for (let i = 0; i < 3; i++)
@@ -213,8 +217,8 @@ describe("P15a committed program reload", () => {
 					await good.run(good.runner().msg(good.input(1, {type: "add", n: 1})));
 					expect((await good.checkpoint())?.saved.model).toEqual({count: 6, replies: []});
 				} finally {
-					await bad.close();
 					await good.close();
+					await bad.close();
 				}
 			}),
 			checks,
@@ -280,7 +284,10 @@ describe("P15a committed program reload", () => {
 							),
 						).toBe(true);
 					}
-					for (const fact of facts) expect(fact.build).toBe("brain-build");
+					for (const fact of facts) {
+						expect(fact.by).toBe("SHA256:brain");
+						expect(fact.build).toBe(facts[0]!.build);
+					}
 					expect(steps.slice(0, historical.length)).toEqual(historical);
 				} finally {
 					await w.close();

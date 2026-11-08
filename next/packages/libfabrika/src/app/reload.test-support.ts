@@ -23,7 +23,9 @@ import {
 } from "effect";
 import * as fc from "fast-check";
 import {Mailbox, type From} from "../coordination/mailbox.ts";
+import {ProcessManager} from "../coordination/process-manager.ts";
 import {ProcessStore} from "../coordination/process-store.ts";
+import {Owner, Recipient, Start} from "../coordination/process.ts";
 import {Writer} from "../coordination/session-manager.ts";
 import {Archive} from "../data/archive.ts";
 import type {CodeBundle} from "../data/code.ts";
@@ -234,16 +236,29 @@ export const disk = (folder: string, name: string) => {
 	const path = join(folder, `${name}.db`);
 	let db = new DatabaseSync(path);
 	let inner = nodeSql(db);
-	const fault = {query: (_q: string) => false, once: false};
+	const fault = {
+		query: (_q: string) => false,
+		once: false,
+		afterTransaction: false,
+		rows: (_query: string, rows: ReturnType<Sql["exec"]>) => rows,
+	};
 	const sql: Sql = {
 		exec: (query, ...values) => {
 			if (fault.once && fault.query(query)) {
 				fault.once = false;
 				throw new Error("SQLITE_FULL");
 			}
-			return inner.exec(query, ...values);
+			return fault.rows(query, inner.exec(query, ...values));
 		},
-		transaction: (f) => inner.transaction(f),
+		transaction: (f) =>
+			inner.transaction(() => {
+				const value = f();
+				if (fault.afterTransaction) {
+					fault.afterTransaction = false;
+					throw new Error("SQLITE_FULL");
+				}
+				return value;
+			}),
 		size: () => inner.size(),
 	};
 	return {
@@ -273,19 +288,27 @@ export const body = (entry: Entry) =>
 /** Creates no reload policy. Every turn, journal, fact and placement is the real library's. */
 export const world = async (
 	specs: ReadonlyArray<Variant>,
-	options: {readonly process?: string; readonly policy?: unknown} = {},
+	options: {
+		readonly process?: string;
+		readonly name?: string;
+		readonly policy?: unknown;
+		readonly shared?: {
+			readonly ledgerDisk: ReturnType<typeof disk>;
+			readonly codeDisk: ReturnType<typeof disk>;
+		};
+	} = {},
 ) => {
 	const {CodeRegistry} = await import("../coordination/code-registry.ts");
 	const {CodeLoader, CodeInstaller} = await import("./loader.ts");
 	const {ProgramRunner} = await import("./runner.ts");
 	const folder = mkdtempSync("/tmp/p15.");
 	const processDisk = disk(folder, "process");
-	const ledgerDisk = disk(folder, "ledger");
-	const codeDisk = disk(folder, "code");
+	const ledgerDisk = options.shared?.ledgerDisk ?? disk(folder, "ledger");
+	const codeDisk = options.shared?.codeDisk ?? disk(folder, "code");
 	const sinkDisk = disk(folder, "sink");
 	const recordDisk = disk(folder, "record");
 	const process = options.process ?? PROCESS;
-	const name = `${specs[0]!.program}:1`;
+	const name = options.name ?? `${specs[0]!.program}:1`;
 	const bundles = await Promise.all(
 		specs.map((s, i) => release(s.program, JSON.stringify({...s, i}))),
 	);
@@ -299,6 +322,15 @@ export const world = async (
 	const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
 	const ledger = Ledger.sql(ledgerDisk.sql, {reader: "p15-tests"}).pipe(Layer.provide(quiet));
 	const transaction = LedgerTransaction.layer(ledgerDisk.sql).pipe(Layer.provide(quiet));
+	let allocated = 0;
+	const manager = ProcessManager.layer(
+		{
+			by: from.by,
+			owner: Owner.cases.brain.make({}),
+			recipient: Recipient.cases.process.make({process}),
+		},
+		Effect.sync(() => (allocated++ === 0 ? process : typeId("process", allocated + 1000))),
+	).pipe(Layer.provide(transaction));
 	const registry = Layer.effect(
 		CodeRegistry,
 		Effect.gen(function* () {
@@ -340,14 +372,20 @@ export const world = async (
 		1024 * 1024 * 1024,
 	);
 	const openedDisks = () => [
-		...new Set([processDisk, ledgerDisk, codeDisk, sinkDisk, recordDisk, ...recordDisks.values()]),
+		...new Set([
+			processDisk,
+			...(options.shared === undefined ? [ledgerDisk, codeDisk] : []),
+			sinkDisk,
+			recordDisk,
+			...recordDisks.values(),
+		]),
 	];
 	const monitors = Layer.mergeAll(
 		SpanSink.layer(sinkDisk.sql, {object: process}),
 		records,
 		Archive.memory,
 	);
-	const base = Layer.mergeAll(ledger, registry, monitors);
+	const base = Layer.mergeAll(ledger, registry, monitors, manager);
 	const declarations = specs.map(makeProgram);
 	const loaded = declarations.map((p) => Result.getOrThrow(stepper(p)));
 	const nodeCode = (i: number): LoadedCode => {
@@ -543,6 +581,18 @@ export const world = async (
 		for (const d of openedDisks()) d.close();
 		rmSync(folder, {recursive: true, force: true});
 	};
+	await run(
+		ProcessManager.use((p) =>
+			p.start(
+				Start.cases.first.make({
+					id: `boot:${process}`,
+					name,
+					code: {program: specs[0]!.program, hash: bundles[0]!.hash},
+				}),
+				from,
+			),
+		),
+	);
 	return {
 		bundles,
 		specs,
