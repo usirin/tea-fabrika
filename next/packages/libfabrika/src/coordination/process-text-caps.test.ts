@@ -21,7 +21,7 @@ import {
 	watcher,
 	X,
 } from "./process.test-support.ts";
-import {Down, Owner, ProcessFact, Recipient, Start} from "./process.ts";
+import {Dead, Down, Owner, ProcessFact, Recipient, Start} from "./process.ts";
 
 const CAP = 256;
 const at = (length: number, unit = "a") => unit.repeat(length);
@@ -145,6 +145,30 @@ describe("P33 rule 1, the text caps live in the schema", () => {
 			expect(Schema.is(schema)(value(at(CAP)))).toBe(true);
 			expect(Schema.is(schema)(value(over))).toBe(false);
 		});
+	// A dead letter keeps one error class per try, so its list is capped too: 32 entries at most.
+	const dead = (errors: ReadonlyArray<string>) => ({
+		_tag: "dead",
+		tries: errors.length,
+		limit: errors.length,
+		m: "letter-17",
+		build: "build-a",
+		errors,
+	});
+	const classes = (count: number) => Array.from({length: count}, () => "TypeError");
+	it("a dead letter's errors: 32 entries decode, 33 do not", () => {
+		expect(Schema.is(Dead)(dead(classes(32)))).toBe(true);
+		expect(Schema.is(Dead)(dead(classes(33)))).toBe(false);
+	});
+	it(`a dead letter's errors: each entry is capped at ${CAP} characters`, () => {
+		expect(Schema.is(Dead)(dead([...classes(31), at(CAP)]))).toBe(true);
+		expect(Schema.is(Dead)(dead([...classes(31), over]))).toBe(false);
+	});
+	it(`a dead letter's m and build: ${CAP} characters decode, ${CAP + 1} do not`, () => {
+		for (const key of ["m", "build"]) {
+			expect(Schema.is(Dead)({...dead(classes(1)), [key]: at(CAP)})).toBe(true);
+			expect(Schema.is(Dead)({...dead(classes(1)), [key]: over})).toBe(false);
+		}
+	});
 });
 
 describe("P33 rule 1, an over-cap text is refused as a typed error and writes nothing", () => {
