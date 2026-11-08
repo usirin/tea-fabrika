@@ -170,13 +170,63 @@ describe("replayOf: one machine run through today's code", () => {
 		expect(fits(answer)).toMatchObject({_tag: "cannot", why: "state_refused", n: 2});
 	});
 
-	it("cannot replay across a restart that booted from a state the step before it did not leave", () => {
-		const starts = [startOf({total: 0}), startOf({total: 99}, {n: 2, after: 2, at: 50})];
-		expect(fits(replayOf([tally], {starts, steps: STEPS}))).toMatchObject({
-			_tag: "cannot",
-			why: "restarted",
-			n: 2,
+	// A restart is a new life (the plan, changed 2026-11-08): each life is replayed from its own
+	// start. Here start 2 booted from 10, which step 2 never left: a crash between a step's write and
+	// its save, never a verdict on the code.
+	const crashed = {
+		starts: [startOf({total: 0}), startOf({total: 10}, {n: 2, after: 2, at: 50})],
+		steps: [stepOf(1, 1, 1), stepOf(2, 2, 3), stepOf(3, 3, 13)],
+	};
+
+	it("replays each life from its own start: a restart from a state the step before it did not leave still matches", () => {
+		expect(fits(replayOf([tally], crashed))).toEqual({_tag: "matches", steps: 3});
+	});
+
+	it("parts in a later life at the record's own step number, folded from that life's start", () => {
+		const offAtThree = tallyWith((s, m) => [{total: s.total + (m.n === 3 ? 4 : m.n)}, []]);
+		expect(fits(replayOf(offAtThree, crashed))).toEqual({
+			_tag: "parts",
+			n: 3,
+			msg: {type: "add", n: 3},
+			path: "state.total",
+			recorded: 13,
+			replayed: 14,
 		});
+	});
+
+	it("answers for the first life that parts, though a later one parts too", () => {
+		const plusOne = tallyWith((s, m) => [{total: s.total + m.n + 1}, []]);
+		expect(fits(replayOf(plusOne, crashed))).toMatchObject({_tag: "parts", n: 1});
+	});
+
+	it("is refused in a later life at the record's own step number", () => {
+		// Life 2's Msg is one today's code has no cell for: a Msg renamed since it was recorded.
+		const renamed = {
+			starts: crashed.starts,
+			steps: [...crashed.steps.slice(0, 2), {...stepOf(3, 3, 13), msg: {type: "sub", n: 3}}],
+		};
+		expect(fits(replayOf([tally], renamed))).toEqual({
+			_tag: "refused",
+			n: 3,
+			msg: {type: "sub", n: 3},
+			state: "(untagged state)",
+			accepts: ["add"],
+		});
+	});
+
+	it("cannot replay from a later start its state schema refuses: step 0", () => {
+		const starts = [startOf({total: 0}), startOf({total: "ten"}, {n: 2, after: 2, at: 50})];
+		expect(fits(replayOf([tally], {starts, steps: crashed.steps}))).toMatchObject({
+			_tag: "cannot",
+			why: "state_refused",
+			n: 0,
+		});
+	});
+
+	it("has no answer that blames a restart", () => {
+		expect(Schema.is(Replayed)({_tag: "cannot", why: "restarted", n: 2, detail: "a restart"})).toBe(
+			false,
+		);
 	});
 
 	it("replays across a restart that booted from the state its step before it left", () => {

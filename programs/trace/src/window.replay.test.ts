@@ -76,11 +76,11 @@ const REFUSED = {
 	state: "(untagged state)",
 	accepts: [],
 } as const;
-const NO_START = {
+const NO_CODE = {
 	_tag: "cannot",
-	why: "no_start",
+	why: "no_code",
 	n: null,
-	detail: "recorded before its start was kept",
+	detail: "today's code lists no program tally",
 } as const;
 
 /** Each row's replay words, by key, for the rows that say any. */
@@ -152,9 +152,9 @@ describe("the job view's replay, as shown", () => {
 	});
 
 	it("says why a replay cannot be done, in the detail", () => {
-		const view = shownOf(replayed(opened(), NO_START));
+		const view = shownOf(replayed(opened(), NO_CODE));
 		expect(view.chosen?.kind === "machine" && view.chosen.replay?.says).toContain(
-			"recorded before its start was kept",
+			"today's code lists no program tally",
 		);
 		expect(Object.keys(wordsOf(view))).not.toContain(ADD_1);
 		expect(Object.keys(wordsOf(view))).not.toContain(ADD_3);
@@ -211,6 +211,8 @@ const windowOf = (s: Model) => {
 };
 
 const REPLAY = "Replay through current code";
+/** What a machine run with no start kept says in its detail, in place of the button. */
+const NO_START_WORDS = "Recorded before starts were kept, so it can't be replayed.";
 
 describe("the job view's replay, as the window draws it", () => {
 	it("offers the replay as a button in the machine run's detail, never inside its row", () => {
@@ -227,6 +229,17 @@ describe("the job view's replay, as the window draws it", () => {
 		if (typeof press !== "function") throw new Error("the replay button takes no click");
 		press();
 		expect(sent).toEqual([{type: "replay", value: {row: COUNT}}]);
+	});
+
+	it("offers no replay for a machine run whose start was never kept, and says why in the detail", () => {
+		const {all} = windowOf(opened(TALLY_TRACE));
+		expect(all.filter((e) => e.type === "button" && e.text.includes(REPLAY))).toEqual([]);
+		expect(all.filter((e) => !e.inRow && e.text.includes(NO_START_WORDS))).not.toEqual([]);
+	});
+
+	it("says nothing of starts for a machine run whose start was kept", () => {
+		const {all} = windowOf(opened());
+		expect(all.filter((e) => e.text.includes(NO_START_WORDS))).toEqual([]);
 	});
 
 	it("offers no replay in a step's detail", () => {

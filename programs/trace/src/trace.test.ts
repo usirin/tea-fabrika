@@ -333,11 +333,6 @@ describe("the trace program's replay", () => {
 		expect(replay?.answer).toEqual({_tag: "matches", steps: 3});
 	});
 
-	it("answers cannot, no_start, for a record kept before starts were", async () => {
-		const replay = await replayedIn([TALLY_TRACE], layerReplayer(Shell.SMALL));
-		expect(replay?.answer).toMatchObject({_tag: "cannot", why: "no_start", n: null});
-	});
-
 	it("reads a replay its window sends, and refuses a row it does not know the shape of", () => {
 		expect(readInput(trace, {type: "replay", value: {row: "job"}}).kind).toBe("read");
 		expect(readInput(trace, {type: "replay", value: {row: 7}}).kind).toBe("refused");
