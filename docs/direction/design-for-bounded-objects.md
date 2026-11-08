@@ -41,8 +41,12 @@ at 10 GB; storage across many objects is unlimited. So:
   R2 stores data for $0.015 per GB-month against Durable Object storage's $0.20, with 10 GB-month
   free, and no egress charge ([R2 pricing](https://developers.cloudflare.com/r2/pricing/),
   [Durable Objects pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/),
-  read 2026-11-07). Miniflare emulates R2 on the laptop. Left for P37's plan: whether each object
-  writes its own archive or hands rows to one archive object.
+  read 2026-11-07). Miniflare emulates R2 on the laptop.
+- **Each object uploads its own archive files** (decided by the owner, 2026-11-07). It checks the
+  file's hash before it deletes its local rows. There is no shared archive object. *It said: left
+  for P37's plan, whether each object writes its own archive or hands rows to one archive object.*
+- **One R2 bucket per kind of data,** such as health and blobs. A lean, under 80% sure, for the owner to
+  confirm. The doubt: whether one bucket with a prefix per kind is simpler to grant and to clean up.
 - **Where data lives:** archives in R2, everything live in Durable Objects, and anything global
   across projects in Cloudflare D1, only once a real need appears. None is known today: a
   person's devices and projects fit an object of their own. (Cloudflare D1 is not the five
