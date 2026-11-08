@@ -118,6 +118,10 @@ jobs:
         env:
           SHOTS: ${{ runner.temp }}/e2e-shots
         run: pnpm --filter @kampus/fabrika-app-old e2e
+      # The trace ruler's labels at widths from 60 to 1600px (apps/fabrika/ruler-e2e.ts): the built
+      # renderer in headless Chromium, as shots.ts draws it. The build above made dist/.
+      - name: ruler labels
+        run: pnpm --filter @kampus/fabrika-app-old exec playwright install chromium && pnpm --filter @kampus/fabrika-app-old exec node ruler-e2e.ts
       # What the window showed at each step, to see a red run without running it again.
       - if: failure()
         uses: actions/upload-artifact@v7
