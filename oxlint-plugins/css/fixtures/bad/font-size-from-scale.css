@@ -1,0 +1,4 @@
+.size { font-size: 12px; }
+.shorthand { font: 600 10px / 1 var(--font); }
+.calc { font-size: calc(12px + 1px); }
+.font-calc { font: 600 calc(12px + 1px) / 1 var(--font); }

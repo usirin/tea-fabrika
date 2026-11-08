@@ -1,0 +1,7 @@
+#fab { color: var(--text-primary); }
+.url { background: url("icon.svg#fff"); }
+/* color: #fff; color: red; */
+.content { content: "#1 red rgb(1 2 3)"; }
+.allowed { color: transparent; border-color: currentColor; background: inherit; outline-color: initial; fill: unset; stroke: revert; caret-color: revert-layer; }
+@media (forced-colors: active) { .forced { color: CanvasText; outline-color: Highlight; } }
+@media (prefers-reduced-motion: no-preference) { .name { animation-name: red; } }

@@ -1,0 +1,6 @@
+.scale { font-size: var(--fs-body); }
+.manti { font-size: var(--manti-text-sm); }
+.inherit { font-size: inherit; font: inherit; }
+.keywords { font-size: medium; }
+.font { font: 600 var(--fs-small) / 12px var(--font); }
+.text { content: "font-size: 12px"; padding: 12px; }
