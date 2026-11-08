@@ -1,6 +1,6 @@
 # Protocols first, and a browser is always a client
 
-**Decided 2026-10-30,** during the walk of the transport layer. Walked when Tier 1 starts (owner, 2026-11-08): the browser client's protocol checks in CI. Every protocol
+**Decided 2026-10-30,** during the walk of the transport layer. Walked when Tier 1 starts (owner, 2026-11-08): the browser client's protocol checks in CI. *Walked 2026-11-08: nothing new to decide; the proposed check is built in Tier 1's P18.* Every protocol
 fabrika speaks is written so that a browser tab could speak it too, even when
 nobody builds the browser side yet. The protocol comes first; each
 implementation (the Mac's hands, the VM's hands, a browser tab, a test) is one
@@ -96,7 +96,7 @@ A written rule does not stop a change that breaks it. Two checks do:
   `@kampus/fabrika-old`'s top level for a browser and fails on a Node import. The
   protocol's schemas and the client's state machine live on that top level; a Node or
   Unix-socket transport goes on a subpath.
-- **Proposed: a browser client in CI.** The CI job starts its own Miniflare and
+- **A browser client in CI (Tier 1, P18; was proposed).** The CI job starts its own Miniflare and
   a headless browser (Playwright) on the CI machine itself; the browser
   connects, signs a hello, pings, sends one message and reads the answer.
   Both stop when the job ends. Nothing connects to anyone's computer. Every transport (WebSocket from Node, the Unix socket, memory) runs

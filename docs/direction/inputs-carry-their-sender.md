@@ -1,6 +1,6 @@
 # Inputs carry their sender, and every write carries its cause
 
-**Proposed 2026-11-04.** Walked when Tier 1 starts (owner, 2026-11-08): P11's test-kit law in question 17. The owner set the direction on 2026-11-04, and each decided point is
+**Proposed 2026-11-04.** Walked when Tier 1 starts (owner, 2026-11-08): P11's test-kit law in question 17, approved by the owner 2026-11-08. The owner set the direction on 2026-11-04, and each decided point is
 marked decided below:
 
 - **Renamed 2026-11-07 (owner):** the write's `cause` is now `parent`, and a `traceId` joins it.
