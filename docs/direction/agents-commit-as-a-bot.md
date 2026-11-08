@@ -74,6 +74,11 @@ step commits are authored by `fabrikalfa[bot]`, with the person as `Co-authored-
 pushes them to `fabrikalfa/<name>` with a token that lasts one hour. The pull request opens as the
 person.
 
+Decided by the owner, 2026-11-08: this covers every commit an agent makes in this repo, the lead
+agent's own included, not only step commits. Each is authored by `fabrikalfa[bot]` with the owner
+as `Co-authored-by`, on a `fabrikalfa/<name>` branch pushed with a 1-hour token. Pull requests
+still open as the owner. A repo where the app is not installed is not covered.
+
 ## Why
 
 - **Nobody names themselves.** Today an agent commits as the person, and the only sign it was an

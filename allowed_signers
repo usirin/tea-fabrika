@@ -1,3 +1,5 @@
 tests namespaces="fabrika-step" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIODby9vP60wFRZ2agaeCTOXbOy9xBVI3HZRtN8rKIuWI
 build namespaces="fabrika-step" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIChUxYX0OwyhME23g8p0hWEetfA9NSTYW+g9CU5gJsfU
 lead namespaces="fabrika-step" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7Pw+x0Rp2KsBfbfplpp6EwgVEtM11WUIboqJAOGsBu
+person:github:1783869 namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICPHs8blqZm9XxoyOTKN4swXg+uyQuWqcYwz10dGS0/N
+person:github:8138047 namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHL4wfEP52AxIe5QAT2gnpHc16it29EpneHPYvLVs/0p

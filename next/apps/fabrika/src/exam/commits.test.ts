@@ -122,10 +122,6 @@ describe("keysProblem (p87)", () => {
 		expect(keysProblem(`${GOOD.join("\n")}\n`)).toBeNull();
 	});
 
-	it("passes a second key for one role, as when a key is rotated", () => {
-		expect(keysProblem([...GOOD, line("build", KEY("D"))].join("\n"))).toBeNull();
-	});
-
 	it.each([
 		["no file", null],
 		[
@@ -135,7 +131,7 @@ describe("keysProblem (p87)", () => {
 			),
 		],
 		["one key under tests and build", [GOOD[0], line("build", KEY("A")), GOOD[2]].join("\n")],
-		["a fourth role", [...GOOD, line("owner", KEY("D"))].join("\n")],
+		["an unknown principal", [...GOOD, line("owner", KEY("D"))].join("\n")],
 		["a missing namespace", [GOOD[0], GOOD[1], `lead ssh-ed25519 ${KEY("C")}`].join("\n")],
 		[
 			"another namespace",

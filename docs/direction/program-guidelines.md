@@ -39,9 +39,10 @@ about what runs in a tile, how one program reaches another tile, and how the per
 ```ts
 // A sketch, next/. The asks program in the new shape. Two fields are new: `location` and `reuse`.
 // The rest is Tier 1's Program, plus `commands` from modes and `glance` (call 6, moved to experiment 206).
-const asks = defineProgram({
+// (updated 2026-11-08 to Program.make: the machine is its own `export const machine = Machine.make(...)`)
+const asks = Program.make({
 	name: "asks",
-	machine, msg, view, refuse, inputs, outputs,     // Tier 1; outputs: {ticket}, for `| ticket`
+	machine, view, refuse, inputs, outputs,          // Tier 1; outputs: {ticket}, for `| ticket`; msg is inferred from machine
 	location: {data: AsksLocation, select: (m) => ({ask: m.selected})}, // where it is now
 	reuse: "program",                                 // open or focus: one asks tile per workspace
 	glance: {data: Glance, select: (m) => ({count: m.queue.length, ask: m.selected})}, // the popup

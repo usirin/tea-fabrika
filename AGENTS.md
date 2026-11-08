@@ -89,7 +89,10 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). A plan that only builds a
   decided note is approved by the agent leading the session, which writes "Approved by the lead
   agent, builds <note>" in it; a plan that raises a new design call goes to the owner (owner,
-  2026-11-03). No merged pull request
+  2026-11-03). A scheduled walk or approval that a decided note already answers is decided in
+  the plan, and the lead approves it in one line; a question to the owner must be one they could
+  answer no to without contradicting a decision (owner, 2026-11-08). In `next/`'s planner step
+  this becomes code: a check on the plan's open questions. No merged pull request
   has been built this way yet ([where we are](./docs/plan/README.md#where-we-are-now)).
   A step is a program, and a prompt you would have typed is its first source: a rule in
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each
@@ -147,6 +150,9 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
 - **Read the installed version.** Agents know older libraries. Before you write or judge
   code against one, read the lockfile's version and that version's docs. A lint rule that
   fires a lot means ask why before you call it a false alarm.
+- **Judge a design by its properties, never its size.** Never pick between designs by how many
+  lines or agent hours each takes. Judge by what is lost, what holds, how it reads and how it fails
+  (owner, 2026-11-07, field note 2026-11-07-13). Size a design once it is picked.
 - **Solve a problem we have.** A big vision gets saved as a note and tied back to a real
   problem. An experiment picks the tech. Aim at two people working together first:
   packages for others and publishing are recorded as later.
@@ -288,6 +294,11 @@ the rules of the pipeline this repo rebuilds, with its custom rules in
 [oxlint and oxfmt](./docs/direction/oxlint-and-oxfmt.md). Never switch a rule off
 to pass. A `// oxlint-disable-next-line <rule> -- <why>` is for a line where the
 code is right and the rule does not fit, and its reason says why in plain words.
+
+A check on the shape of code, such as an import ban or "no program reaches a step", is a lint
+rule, never a test: oxlint's own rule where one exists (`no-restricted-imports`), else ours in
+`oxlint-plugins/` (owner, 2026-11-07). A plan asks "lint, type or test?" of every law. One sweep
+found 7 of 27 shape tests could move (field note 2026-11-07-16).
 
 A real Jev call needs `TYPESAFE_API_KEY` in the environment. Run everything
 else with it unset, so no test can spend money by accident. Before any paid

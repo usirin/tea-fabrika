@@ -61,7 +61,9 @@ states, the messages it takes, and one small pure step per message. The shape
 can be drawn and edited. The body of each step is code and stays code.
 
 ```ts
-const ship = defineMachine({
+// (updated 2026-11-08 to Program.make: it said defineMachine.) The machine is its own value,
+// and Program.make({name: "ship", machine: ship, ...}) wraps it.
+export const ship = Machine.make({
   types: { model: {} as Ship, msg: {} as ShipMsg },
   init: ...,
   update: {

@@ -577,6 +577,10 @@ New file `.github/CODEOWNERS`:
 /apps/fabrika/src/pipes.test.ts                       @<owner>
 ```
 
+**Decided by the owner, 2026-11-08: CODEOWNERS stays advisory.** The step below is not taken for
+now: `require_code_owner_review` stays off on `main`. Only two people send commits here, and the
+owner accepts no one else's. Revisit when a third person can push.
+
 **A step that needs the owner's yes, never done silently.**
 
 - In the ruleset "main only through a pull request", set `require_code_owner_review` to `true`. It is `false` today, with `required_approving_review_count` at 0.
