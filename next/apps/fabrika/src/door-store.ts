@@ -9,6 +9,8 @@ export const doorStore = (sql: Sql) => {
 		sql.exec(
 			"CREATE TABLE IF NOT EXISTS door_pending (client TEXT PRIMARY KEY, until REAL NOT NULL)",
 		);
+		sql.exec("CREATE TABLE IF NOT EXISTS door_spent (nonce TEXT PRIMARY KEY, until REAL NOT NULL)");
+		sql.exec("CREATE INDEX IF NOT EXISTS door_spent_until ON door_spent (until)");
 		sql.exec(
 			"CREATE TABLE IF NOT EXISTS door_bindings (id TEXT PRIMARY KEY, letter TEXT UNIQUE, value TEXT NOT NULL)",
 		);

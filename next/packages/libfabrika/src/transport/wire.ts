@@ -6,6 +6,7 @@ export const Hello = Schema.Struct({
 	ping: Schema.String,
 	key: Schema.String,
 	tab: Schema.String,
+	nonce: Schema.String,
 	platform: Schema.Literals(["browser", "electron", "headless"]),
 	os: Schema.Literals(["macos", "windows", "linux", "android", "ios", "unknown"]),
 	sentAt: Schema.String,
