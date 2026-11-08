@@ -64,6 +64,41 @@ fc.assert(
 );
 ```
 
+## Four reason labels, 2026-11-08
+
+Amendment for both versions and today's step skills. This replaces the earlier blanket rule
+against fixed examples. Every law uses generated inputs unless it has one of these reason labels:
+
+- `vector:` names fixed inputs from a specification.
+- `format:` names the exact bytes of a fixed format.
+- `pinned:` names a past bug's exact input, beside the property covering it.
+- `scenario:` names one scripted outside run. Its internal logic still gets properties.
+
+```ts
+// A sketch: the bug's fixed input stays beside the generated cases.
+fc.assert(
+	fc.property(fc.array(fc.integer()), (xs) => isSorted(sortIds(xs))),
+	{examples: [[[2, 1, 2]]]}, // pinned: the duplicate-id bug
+);
+// vector: inputs and answers from the named specification's test table.
+// format: exact bytes of the named version's wire message.
+// scenario: Stryker tests changed sample.ts with seed 119120 and its adjacent laws.
+```
+
+[Claessen and Hughes's QuickCheck](https://www.cs.tufts.edu/~nr/cs257/archive/john-hughes/quick.pdf)
+checks general rules with generated inputs.
+[Hypothesis's `@example`](https://hypothesis.readthedocs.io/en/latest/tutorial/replaying-failures.html#using-example-to-run-a-specific-input)
+keeps explicit inputs alongside generated cases. Our four labels name why a fixed case exists;
+they do not claim that one example checks a general rule.
+
+The plan names the generator or a label with a reason for each law. The test writer keeps that
+reason beside the check. The reviewer checks that a property or permitted label is present and
+fits. Review does not reopen each test's merits. Shape checks remain lint rules or types.
+
+Cost: a label can be misused. The checker validates its syntax; review checks its reason against
+the specification, bytes, past bug or outside run. Confidence: 90%. This amendment cannot show
+that a particular set of generated inputs will find every bug.
+
 ## Why
 
 - **Experiment 115:** a check on a hand-written copy of the lane found the

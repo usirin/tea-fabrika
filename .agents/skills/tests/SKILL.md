@@ -16,15 +16,20 @@ the rest.
 
 1. **Read** `AGENTS.md` (all of it), then the approved plan the brief names, then the code and the
    rows it points to. Say which version you are in: `next/` or today's.
-2. **Write each law with its plant.** Every law is a property test on the real code, over generated
-   inputs, not only the laws on a machine
+2. **Write each law with its plant.** Every law uses generated inputs on the real code unless it
+   has one of the four reason labels, not only laws on a machine
    ([every law is a property](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property),
    [property tests](../../../docs/direction/property-tests-not-our-own-search.md)):
    - On a machine: its real reducer from its real `init`, with `@demlik/tea/pbt`
      ([every machine has laws](../../../docs/direction/every-machine-has-laws.md)).
    - On anything else: `fast-check` (`fc.assert(fc.property(...))`), or Effect's `Arbitrary`.
-   - A hand-picked example stays only as a pinned case of a named past bug, in fast-check's
-     `examples`, with the bug named beside it. A law that is only examples is not done.
+   - `vector:` names fixed inputs from a specification.
+   - `format:` names the exact bytes of a fixed format.
+   - `pinned:` names a past bug's exact input, beside the property covering it. Keep that input in
+     fast-check's `examples`, with the bug named beside it.
+   - `scenario:` names one scripted outside run. Its internal logic still gets properties.
+   - A label needs a reason. The reviewer checks that each law's property or label is present and
+     fits, under the [dated rule](../../../docs/direction/five-steps-for-every-check.md#four-reason-labels-2026-11-08).
    - A shape check (an import ban, a naming rule) is a lint rule, not a test.
 3. **Do the exam work yourself.** Every exam path the plan gives `tests` is yours: lint rules,
    `exam-paths.json` rows, fixtures, an e2e runner. A builder is never handed one.

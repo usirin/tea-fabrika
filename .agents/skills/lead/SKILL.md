@@ -57,6 +57,25 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `catchup.sh <pr> <ticket>` | in its own checkout, merge `main` in as the bot, sign that merge `lead`, push, wait for every check on that head, squash-merge pinned to it |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
 
+`box.sh run` names the box's `.agents/` as its own writable root because Codex otherwise keeps
+that folder read-only inside the writable checkout.
+
+Catch-up retries read-only `gh` failures three times, waiting 1 and 2 seconds. A successful red or
+untrusted answer stops immediately. Logs are captured before parsing, so a failed read cannot
+look green. Pushes and merges are never retried by that helper.
+
+## Pushes and protected refs
+
+Keep the bot's explicit atomic push of notes plus branch. On a person's branch, notes-only as the
+bot and branch-only as the person are two intended writes. A refusal stops the step.
+
+`Cannot update this protected ref.` alone does not prove a push failed. Read the command's exit
+status and the rule suite's overall result and named ref. In
+[rule suite 4984058968](https://api.github.com/repos/usirin/tea-fabrika/rulesets/rule-suites/4984058968),
+the update check named a person's branch, and the overall result was `bypass`: that push
+succeeded through the owner's bypass. It did not show a refused notes ref. Keep real push failures
+visible, and never weaken the rules to hide this message.
+
 ## Steps
 
 1. **Plan.** Write a brief that names the ticket, its version, what to read and an older plan to copy

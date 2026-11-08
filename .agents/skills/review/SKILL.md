@@ -21,10 +21,13 @@ skill holds the rest.
    - It does what the plan and the notes' decided parts say, and nothing they leave undecided.
    - "No rough first versions": no stub, dead button or "(not yet)".
    - Names follow `AGENTS.md` for its version (`_tag`, no `xOf`, "run" means an agent run in `next/`).
-   - Every new law is a property test over generated inputs (fast-check, `@demlik/tea/pbt` or
-     Effect's `Arbitrary`). A new law that is an example test with no generator is a defect. A
-     pinned example is fine only inside a property's `examples`, naming the past bug it pins
-     ([every law is a property](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property)).
+   - Every law uses generated inputs unless it has one of the four reason labels. Check that a
+     property or permitted label is present and fits: `vector:` names fixed inputs from a
+     specification; `format:` names the exact bytes of a fixed format; `pinned:` names a past
+     bug's exact input, beside the property covering it; `scenario:` names one scripted outside
+     run. Its internal logic still gets properties. Check the reason against the named source,
+     bytes, bug or run. Missing or mismatched labels are defects. Do not reopen each test's merits
+     ([the dated rule](../../../docs/direction/five-steps-for-every-check.md#four-reason-labels-2026-11-08)).
    - Each law catches its plant. Plant a break yourself where a law looks weak, in your head or in a
      scratch copy, never in the branch.
    - No `build` commit touches a path in `exam-paths.json`. Check each commit's step note with
