@@ -1,0 +1,5 @@
+.typo { color: var(--txet-faint); }
+.fallback { color: var(--missing, var(--text-primary)); }
+.inner { color: var(--text-primary, var(--missing-fallback)); }
+.sibling { color: var(--local); }
+.defines { --local: var(--focus); }
