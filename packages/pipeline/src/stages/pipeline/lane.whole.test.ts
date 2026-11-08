@@ -1,6 +1,6 @@
 import {ATTR} from "@kampus/fabrika-old";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
-import {type FactOf} from "../../tickets/ticket.ts";
+import {type FactOf, readAnswer} from "../../tickets/ticket.ts";
 import {nameOf as outcomeName} from "../outcome.ts";
 import {LANE} from "../traced.ts";
 import {
@@ -74,9 +74,15 @@ describe("a lane, whole", () => {
 	});
 
 	it("ties each ask to its lane's trace, and tags each step's span and each wait's span by name, never with a note (ticket 141, P1 to P3)", async () => {
-		const NOTE = "Looks right to me, go on";
-		const ran = await lane({picks: YES, notes: {approve: NOTE}, traced: true});
-		expect(ran.stages, ran.lines.join("\n")).toEqual(WHOLE);
+		const NOTE = "Please revise the plan before building";
+		const ran = await lane({
+			picks: YES,
+			queues: {approve: ["no", "no", "approve"]},
+			notes: {approve: NOTE},
+			again: [{}, {}],
+			traced: true,
+		});
+		expect(ran.stages, ran.lines.join("\n")).toEqual(["triage", "plan", "plan", ...WHOLE.slice(1)]);
 
 		// P1: every ask carries the trace id its lane's `started` facts carry, the one before it.
 		let lastTrace: string | undefined;
@@ -137,6 +143,11 @@ describe("a lane, whole", () => {
 			e.fact.type === "answered" ? [{fact: e.fact, by: e.by.id}] : [],
 		);
 		expect(answers.length).toBeGreaterThan(0);
+		expect(
+			answers.some(
+				({fact}) => "format" in fact && fact.answer._tag === "against" && fact.answer.note === NOTE,
+			),
+		).toBe(true);
 		for (const {fact, by} of answers) {
 			const heard = waitSpans.filter(
 				(s) => s.attributes[LANE.ask] === fact.ask && s.attributes[LANE.pick] !== undefined,
@@ -145,7 +156,7 @@ describe("a lane, whole", () => {
 			const what = kindOfAsk(fact.ask);
 			expect(what, fact.ask).not.toBeNull();
 			expect(heard[0]?.attributes["tea.ask.for"], fact.ask).toBe(what);
-			expect(heard[0]?.attributes[LANE.pick]).toBe(fact.pick);
+			expect(heard[0]?.attributes[LANE.pick]).toBe(readAnswer(ran.entries, fact)?.pick);
 			expect(heard[0]?.attributes[LANE.by]).toBe(by);
 		}
 		// The note is a value a person typed: no wait span, or event on one, holds it.
@@ -192,7 +203,7 @@ describe("a lane, whole", () => {
 			(f) => f.type === "asked" && String(f.ask).startsWith("a-exam_touched-"),
 		);
 		expect(asked).toHaveLength(1);
-		expect(asked[0]?.picks).toEqual(PICKS.exam_touched);
+		expect(asked[0]).toMatchObject({shows: {picks: PICKS.exam_touched.map((pick) => ({pick}))}});
 		expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
 		const said = ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body));
 		expect(said.some((body) => body.includes("src/lower.test.ts"))).toBe(true);
@@ -259,7 +270,7 @@ describe("a lane, whole", () => {
 		const asked = ran.facts.filter((f) => f.type === "asked");
 		const spent = asked.filter((f) => String(f.ask).includes("rounds_spent"));
 		expect(spent).toHaveLength(1);
-		expect(spent[0]?.picks).toEqual(["again", "stop"]);
+		expect(spent[0]).toMatchObject({shows: {picks: [{pick: "again"}, {pick: "stop"}]}});
 		const cost = /\$\d|price unknown/;
 		expect(comments.some((c) => c.includes(NAME) && cost.test(c))).toBe(true);
 		expect(ran.lines.at(-1)).toContain("ended: stuck:rounds_spent");

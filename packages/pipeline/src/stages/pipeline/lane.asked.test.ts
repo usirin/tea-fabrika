@@ -145,7 +145,9 @@ describe("a lane, on what the real agents answered", () => {
 		expect(body).toMatch(/no test/i);
 		expect(body).toContain(REAL_P1.when);
 		expect(body).not.toContain(REAL_P2.when);
-		const answered = ran.facts.findIndex((f) => f.type === "answered" && f.pick === "go_on");
+		const answer = answeredWith(ran, "go_on")[0];
+		expect(answer).toBeDefined();
+		const answered = ran.facts.indexOf(answer!);
 		const later = ran.facts
 			.slice(answered)
 			.filter((f) => f.type === "commented")
@@ -298,14 +300,22 @@ describe("a lane, on what the real agents answered", () => {
 			});
 
 			// P20
-			it("the words a person wrote beside their yes reach those steps too", async () => {
-				const NOTE = "Yes, but ß gives ss. The rest as you lean.";
+			it("the note against a recommendation reaches the steps after the revised plan", async () => {
+				const NOTE = "Fold ß to ss. Keep the rest of the plan.";
 				const ran = await lane({
 					within: 50,
 					picks: YES,
+					// The first recommendation is hidden. The next refusal can carry a note.
+					queues: {approve: ["no", "no", "approve"]},
 					notes: {approve: NOTE},
+					again: [{}, {}],
 					fake: {answers: THE_LEAN},
 				});
+				expect(answeredWith(ran, "no")).toContainEqual(
+					expect.objectContaining({
+						answer: {_tag: "against", pick: "no", note: NOTE},
+					}),
+				);
 				const untold = ["tests", "build", "mutants", "review"].filter(
 					(step) => !(runsOf(ran, step)[0]?.prompt ?? "").includes(NOTE),
 				);

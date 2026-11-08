@@ -21,6 +21,7 @@ import {
 	WRITES_REDONE,
 	REDO,
 	SEE,
+	answeredWith,
 } from "./lane-harness.ts";
 
 // A test writer's restart and redo when a stopped lane is typed again, and a writer whose run on the
@@ -344,10 +345,7 @@ describe("a stopped lane, typed again", () => {
 				.slice(asked)
 				.find((f) => f.type === "ended" && f.stage === "test_writer");
 			expect(redo?.outcome, said).toEqual({kind: "ask", who: "owner", for: "cannot_test"});
-			expect(
-				ran.facts.filter((f) => f.type === "answered" && f.pick === "go_on"),
-				said,
-			).toHaveLength(1);
+			expect(answeredWith(ran, "go_on"), said).toHaveLength(1);
 			const {head, touched} = Schema.decodeUnknownSync(
 				Schema.Struct({head: Schema.String, touched: Schema.Array(Schema.String)}),
 			)(redo?.carry);

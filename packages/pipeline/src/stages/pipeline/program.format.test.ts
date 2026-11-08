@@ -15,10 +15,10 @@ import {Ledger, streams} from "@kampus/fabrika-old";
 import {Duration, Effect, Fiber, Layer} from "effect";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 import {memoryLedger} from "../../asks/ledger.ts";
-import {hashOf, textOf} from "../../tickets/approval.ts";
-import {factsOf, nameOf} from "../../tickets/ticket.ts";
+import {factsOf, nameOf, picksOf} from "../../tickets/ticket.ts";
 import {Tickets, ticketsOnLedger} from "../../tickets/tickets.ts";
 import {fakeEnv, makeLaneHome} from "./lane-fixture.ts";
+import {answerAsk} from "./lane-harness.ts";
 import {laneLayer, runLane} from "./layer.ts";
 
 // Today's version. Before a build round, an exam file that fails the repository's format check gets a
@@ -138,7 +138,6 @@ const file = Effect.gen(function* () {
 /** Answers every ask as a person, with `picks[kind]` or its first pick, until the fiber is stopped. */
 const answering = (picks: Readonly<Record<string, string>>) =>
 	Effect.gen(function* () {
-		const ledger = yield* Ledger;
 		const done = new Set<string>();
 		for (;;) {
 			const ticket = yield* read;
@@ -146,17 +145,11 @@ const answering = (picks: Readonly<Record<string, string>>) =>
 				const fact = entry.fact;
 				if (fact.type !== "asked" || done.has(fact.ask)) continue;
 				done.add(fact.ask);
-				yield* ledger.send(streams(nameOf(NUMBER)).inbox, `answer-${fact.ask}`, {
-					kind: "answered",
-					writer: OWNER,
-					data: {
-						type: "answered",
-						ask: fact.ask,
-						pick: picks[fact.ask.split("-")[1] ?? ""] ?? fact.picks[0],
-						note: "",
-						text: yield* hashOf(textOf(ticket)),
-					},
-				});
+				if (!("format" in fact))
+					return yield* Effect.die(new Error(`The test's person needs a sealed ask: ${fact.ask}`));
+				const pick = picks[fact.ask.split("-")[1] ?? ""] ?? picksOf(fact)[0];
+				if (pick === undefined) return yield* Effect.die(new Error("The ask has no pick"));
+				yield* answerAsk(NUMBER, fact, pick);
 			}
 			yield* Effect.sleep("50 millis");
 		}

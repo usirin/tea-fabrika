@@ -64,7 +64,7 @@ describe("the exam's pull request", () => {
 		expect(reviewed, said).toBeGreaterThan(-1);
 		expect(asked).toBeGreaterThan(reviewed);
 		expect(ran.facts[reviewed]).toMatchObject({met: 1, of: 1});
-		expect(String(ran.facts[asked]?.what)).toContain(
+		expect(String((ran.facts[asked]?.shows as {what: string} | undefined)?.what)).toContain(
 			"The review met 1 of 1, and the checks passed at",
 		);
 		// The review read the criterion code made from the plan's list, never one an agent wrote.

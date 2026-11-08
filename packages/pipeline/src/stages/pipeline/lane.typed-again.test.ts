@@ -184,9 +184,9 @@ describe("a stopped lane, typed again", () => {
 		// Asked once, with the file, and the picks its definition gives.
 		const asked = askedFor(ran, "exam_conflict");
 		expect(asked, said).toHaveLength(1);
-		expect(asked[0]?.picks).toEqual(PICKS.exam_conflict);
+		expect(asked[0]).toMatchObject({shows: {picks: PICKS.exam_conflict.map((pick) => ({pick}))}});
 		const told = [
-			String(asked[0]?.what),
+			String((asked[0]?.shows as {what: string} | undefined)?.what),
 			...ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body)),
 		];
 		expect(told.filter((text) => text.includes("src/lower.test.ts"))).not.toEqual([]);
@@ -246,10 +246,11 @@ describe("a stopped lane, typed again", () => {
 		const ran = await lane({
 			within: 50,
 			picks: YES,
-			queues: {approve: ["no", "approve"]},
+			// A blind refusal has no note; the next, shown recommendation permits one.
+			queues: {approve: ["no", "no", "approve"]},
 			notes: {approve: NOTE},
 			fold: true,
-			again: [{}],
+			again: [{}, {}],
 		});
 		const said = ran.lines.join("\n");
 		expect(ran.lines, said).not.toContain(TIMED_OUT);
@@ -258,8 +259,8 @@ describe("a stopped lane, typed again", () => {
 		const runs = codexRuns(ran.dir);
 		expect(runs.filter((r) => r.step === "triage")).toHaveLength(1);
 		const plans = runs.filter((r) => r.step === "plan");
-		expect(plans).toHaveLength(2);
-		expect(plans[1]?.prompt).toContain(NOTE);
+		expect(plans).toHaveLength(3);
+		expect(plans[2]?.prompt).toContain(NOTE);
 		expect(ran.lines.at(-1)).toContain("ended: done");
 	});
 

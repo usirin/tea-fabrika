@@ -28,6 +28,7 @@ import {
 	RUN_3,
 	bye,
 	FOLDS,
+	answersOf,
 } from "./lane-harness.ts";
 
 // What a person decided at the plan: `again` and its rounds, and a finding a person lets through. The
@@ -148,9 +149,9 @@ describe("a lane, on what the real agents answered", () => {
 					(f) => f.type === "asked" && String(f.ask).startsWith("a-step"),
 				);
 				expect(new Set(asked.map((f) => f.ask)).size).toBe(2);
-				const heard = ran.facts
-					.filter((f) => f.type === "answered" && String(f.ask).startsWith("a-step"))
-					.map((f) => [f.ask, f.pick]);
+				const heard = answersOf(ran)
+					.filter(({fact}) => fact.ask.startsWith("a-step"))
+					.map(({fact, answer}) => [fact.ask, answer?.pick]);
 				expect(heard).toEqual([
 					[asked[0]?.ask, "go_on"],
 					[asked[1]?.ask, "stop"],
