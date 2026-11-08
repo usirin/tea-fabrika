@@ -1,0 +1,92 @@
+// P15a, next/. tsc owns negative cases; Vitest requires actual exports through deferred imports.
+import type {Layer} from "effect";
+import {Effect, Schema} from "effect";
+import * as fc from "fast-check";
+import {expect, expectTypeOf, it} from "vitest";
+import type {CodeError, CodeHash, CodeBundle} from "../data/code.ts";
+import type {LedgerError} from "../data/ledger.ts";
+import type {ProgramDown, State} from "./program.ts";
+import {Step} from "./program.ts";
+import {checks, executionFixture, restartFixture, typeId} from "./reload.test-support.ts";
+import type {Saved as SavedValue} from "./state.ts";
+
+it("p78/types: policy, hashes and IDs retain separate brands and typed Effect failures", async () => {
+	const {ReloadPolicy} = await import("./reload.ts");
+	const {CodeHash, EntryId} = await import("../data/code.ts");
+	const {RequestId, LetterId, TileId, TabId, ObservationId} = await import("../data/id.ts");
+	const {CodeRegistry} = await import("../coordination/code-registry.ts");
+	const {Saved} = await import("./state.ts");
+	const hash = Schema.decodeUnknownSync(CodeHash)("a".repeat(64));
+	const req = Schema.decodeUnknownSync(RequestId)("request_01j0000000e0080000000000001");
+	const policy = ReloadPolicy.cases.pinned.make({hash});
+	expect(policy.hash).toBe(hash);
+	expectTypeOf(policy.hash).toEqualTypeOf<CodeHash>();
+	const invalid = () => {
+		// @ts-expect-error a code pin must carry a decoded hash
+		ReloadPolicy.cases.pinned.make({hash: "arbitrary text"});
+		// @ts-expect-error RequestId cannot name executable bytes
+		ReloadPolicy.cases.pinned.make({hash: req});
+		// @ts-expect-error a pin cannot omit its hash
+		ReloadPolicy.cases.pinned.make({});
+		// @ts-expect-error follow cannot smuggle in a pinned hash
+		ReloadPolicy.cases.follow.make({hash});
+	};
+	expect(typeof invalid).toBe("function");
+	const brands = (
+		_hash: CodeHash,
+		_request: typeof RequestId.Type,
+		_letter: typeof LetterId.Type,
+		_tile: typeof TileId.Type,
+		_tab: typeof TabId.Type,
+		_observation: typeof ObservationId.Type,
+		_entry: typeof EntryId.Type,
+	) => {};
+	const entry = Schema.decodeUnknownSync(EntryId)("entry_01j0000000e0080000000000001");
+	const compileOnly = (registry: typeof CodeRegistry.Service, state: State, bundle: CodeBundle) => {
+		// @ts-expect-error every identity has a distinct purpose
+		brands(req, entry, req, req, req, req, hash);
+		expectTypeOf(registry.put(bundle)).toEqualTypeOf<
+			Effect.Effect<CodeBundle, CodeError | LedgerError>
+		>();
+		expectTypeOf(Saved.upgradeEffect({}, state, hash)).toEqualTypeOf<
+			Effect.Effect<{readonly saved: SavedValue; readonly ran: ReadonlyArray<string>}, ProgramDown>
+		>();
+		// @ts-expect-error get needs a hash, never an entry ID
+		registry.get(entry);
+		// @ts-expect-error outside data does not return synchronously
+		const synchronous: CodeBundle = registry.put(bundle);
+		return synchronous;
+	};
+	expect(typeof compileOnly).toBe("function");
+	expectTypeOf<Layer.Error<ReturnType<typeof CodeRegistry.layer>>>().toEqualTypeOf<never>();
+});
+
+it("upstream P14 IDs: shared identity decoders exist independently of P15", async () => {
+	const upstream = await import("../data/id.ts");
+	expect(typeof upstream.Id.make).toBe("function");
+	expect(typeof upstream.IdGenerator).toBe("function");
+});
+
+it("test-owned P12/P34 stand-ins only return answers and collect calls", async () => {
+	await fc.assert(
+		fc.asyncProperty(fc.integer(), async (count) => {
+			const step = Step.cases.stepped.make({model: {count}, view: {count}, wake: null, cmds: []});
+			const {Saved} = await import("./state.ts");
+			const saved = Saved.make({v: 1, build: "fixture", model: {count}, after: 0});
+			const fixture = executionFixture({
+				init: step,
+				steps: [step],
+				upgrade: {saved, ran: []},
+				inspect: {model: {count}, view: {count}, wake: null},
+			});
+			expect(await Effect.runPromise(fixture.execution.init(null))).toEqual(step);
+			expect(await Effect.runPromise(fixture.execution.step({count}, {type: "add", n: 1}))).toEqual(
+				step,
+			);
+			expect(fixture.calls.map((c) => c.method)).toEqual(["init", "step"]);
+			const restart = restartFixture({process: typeId("process", 1)});
+			expect(restart.requests).toEqual([]);
+		}),
+		checks,
+	);
+});
