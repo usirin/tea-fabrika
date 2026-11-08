@@ -397,4 +397,19 @@ describe("today's KeybindingManager", () => {
 			}),
 		);
 	});
+	it("K11: a failed save names keybindings.toml, never the machine's path to it", async () => {
+		await go(
+			Effect.gen(function* () {
+				const h = yield* opened('prefix = "ctrl+a"\n');
+				yield* h.fs.remove(h.file);
+				yield* h.fs.makeDirectory(h.file);
+				const result = yield* h.edit(bind("tezgah.zoom", ["<prefix>m"])).pipe(Effect.result);
+				expect(Result.isFailure(result)).toBe(true);
+				const why = Result.isFailure(result) ? String(result.failure) : "";
+				expect(why).toContain("keybindings.toml failed:");
+				expect(why).not.toContain(h.dir);
+				expect(why).not.toMatch(/\/(?:var|tmp|Users|home)\//);
+			}),
+		);
+	});
 });

@@ -163,4 +163,39 @@ describe("today's keyboard shortcuts view", () => {
 		expect(on(false)).not.toContain("Quit the app");
 		expect(on(false)).toContain("Your system keeps its own shortcuts");
 	});
+	it("a failed save replaces the last result: no 'Keys saved.' beside 'Save failed'", () => {
+		const changes = [
+			{
+				by: "owner",
+				at: 1,
+				said: 1,
+				window: "w",
+				how: "pressed" as const,
+				modified: null,
+				before: defaults,
+				after: defaults,
+				displaced: [],
+				version: "v1",
+			},
+		];
+		const [saving, cmds] = applyCell<Editor, EditorMsg, EditorCmd>(
+			editorMachine,
+			selected(defaults, "tezgah.zoom"),
+			{type: "unbind"},
+		);
+		const request = cmds[0]?.request ?? "";
+		const view = (editor: Editor) =>
+			renderToStaticMarkup(
+				createElement(KeysWindow, {keys: defaults, editor, send: () => {}, changes}),
+			);
+		const failed = step(saving, {type: "failed", request, why: "write of keybindings.toml failed"});
+		expect(view(failed)).toContain("Save failed");
+		expect(view(failed)).not.toContain("Keys saved.");
+		const [again, next] = applyCell<Editor, EditorMsg, EditorCmd>(editorMachine, failed, {
+			type: "unbind",
+		});
+		const saved = step(again, {type: "saved", request: next[0]?.request ?? "", version: "v2"});
+		expect(view(saved)).toContain("Keys saved.");
+		expect(view(saved)).not.toContain("Save failed");
+	});
 });

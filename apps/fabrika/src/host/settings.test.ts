@@ -93,6 +93,7 @@ describe("a settings file", () => {
 								module: "FileSystem",
 								method: "readFileString",
 								description: "test denies the read",
+								pathOrDescriptor: join(dir, "keybindings.toml"),
 							}),
 						),
 				});
@@ -106,7 +107,8 @@ describe("a settings file", () => {
 		expect(got).toEqual([
 			expect.objectContaining({
 				_tag: "refused",
-				why: expect.stringMatching(/read|permission|denied/i),
+				// No path from this machine. The screen already names the file and line before it.
+				why: "it could not be read: permission denied",
 			}),
 		]);
 	});

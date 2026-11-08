@@ -2379,17 +2379,34 @@ const keysLook = async () => {
 			await until(
 				"save error",
 				() => editor.innerText(),
-				(text) => /could not|cannot|failed/i.test(text),
+				// The watcher may say the file cannot be read first: wait for the save's own answer.
+				(text) => /Save failed/.test(text),
 			);
 			check(
 				"K11: failed save shows no success",
-				!/saved successfully/i.test(await editor.innerText()),
+				!/saved successfully|Keys saved\./i.test(await editor.innerText()),
+			);
+			check(
+				"a failed save shows no path from this machine",
+				!(await editor.innerText()).includes(own),
 			);
 			await snap("save-error");
 			await rm(file, {recursive: true});
 			await rename(join(own, "keys-backup.toml"), file);
 			await search.fill("");
-			check("reserved keys have plain reasons", /system|macOS/i.test(await editor.innerText()));
+			// Open "Not ours", so the shot shows the system's keys and their reasons.
+			await editor.locator("details.keys-system > summary").click();
+			check(
+				"Not ours lists the system's keys",
+				await editor
+					.locator("details.keys-system")
+					.evaluate((el) => (el as HTMLDetailsElement).open),
+			);
+			// Read once "Not ours" is open: a closed details element hides its text.
+			check(
+				"reserved keys have plain reasons",
+				/macOS owns|Quit the app/.test(await editor.innerText()),
+			);
 			await snap("not-ours");
 			await close();
 			await writeFile(file, `${good}\npalette.open = "<prefix>p"\n`);
