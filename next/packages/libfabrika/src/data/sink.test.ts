@@ -210,9 +210,9 @@ describe("p96, a span that ends is never dropped", () => {
 					{"fab.process": P1},
 					traced("supervisor.restart", {"fab.process": P2}, step("leaf")),
 				);
-				expect(count(db, "unsent"), "every span gets an unsent row, none is health only").toBe(11);
-				expect(count(db, "health")).toBe(11);
-				expect(yield* flush).toEqual({sent: 11});
+				expect(count(db, "unsent"), "every span gets an unsent row, none is health only").toBe(10);
+				expect(count(db, "health")).toBe(10);
+				expect(yield* flush).toEqual({sent: 10});
 				const one = yield* recorded(job(P1));
 				const two = yield* recorded(job(P2));
 				const outside = yield* recorded(spans);
@@ -230,7 +230,7 @@ describe("p96, a span that ends is never dropped", () => {
 				]);
 				expect(outside.map((r) => r.name).sort()).toEqual(["door.envelope", "ledger.append"]);
 				const all = [...ids(one), ...ids(two), ...ids(outside)];
-				expect(new Set(all).size, "no span in two chains").toBe(11);
+				expect(new Set(all).size, "no span in two chains").toBe(10);
 				expect(count(db, "unsent")).toBe(0);
 			}).pipe(Effect.provide(world(sql)));
 		},
