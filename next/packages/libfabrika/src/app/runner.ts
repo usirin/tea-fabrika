@@ -48,6 +48,7 @@ import {
 	type Writer,
 } from "../coordination/index.ts";
 import {Failure, Policy, Recovery, type Supervision} from "../coordination/recovery.ts";
+import {sha256} from "../data/archive.ts";
 import {
 	Alarm,
 	CheckedWriter,
@@ -114,6 +115,13 @@ const decodeWriteCmd = Schema.decodeUnknownResult(WriteCmd);
 const decodeIncoming = Schema.decodeUnknownEffect(Incoming);
 const Typed = Schema.Struct({type: Schema.String});
 const decodeTyped = Schema.decodeUnknownOption(Typed);
+const inputDigest = Effect.fnUntraced(function* (input: Incoming) {
+	return yield* sha256(
+		new TextEncoder().encode(
+			JSON.stringify([input.envelope.by, input.envelope.input, input.sentAt, input.seen]),
+		),
+	);
+});
 
 const PROCESS = "fab.process";
 const tag = (word: string): string => `fab.runner.${word}`;
@@ -1103,10 +1111,10 @@ export class ProgramRunner extends Context.Service<
 										yield* ensure();
 										const receipt = supervision?.receipts.find((r) => r.letter === input.id);
 										if (receipt !== undefined) {
-											const original = Schema.decodeUnknownSync(Incoming)(receipt.input);
-											const identity = (i: Incoming) =>
-												JSON.stringify([i.envelope.by, i.envelope.input, i.sentAt, i.seen]);
-											if (identity(input) !== identity(original))
+											const digest =
+												receipt.digest ??
+												(yield* inputDigest(Schema.decodeUnknownSync(Incoming)(receipt.input)));
+											if ((yield* inputDigest(input)) !== digest)
 												return {answer: Sent.cases.refused.make({why: "id_reused"}), jobs: []};
 											if (receipt.result !== null)
 												return {answer: Sent.cases.refused.make({why: "dead"}), jobs: []};
@@ -1216,16 +1224,9 @@ export class ProgramRunner extends Context.Service<
 							hasParent(input.envelope.input)
 						)
 							return {answer: Sent.cases.refused.make({why: "bad_msg"}), jobs: []};
-						const prior = yield* store.placed(input.id);
+						const prior = (yield* store.placed(input.id)) ?? (yield* store.placedByAny(input.id));
 						if (prior !== null)
 							return {answer: Sent.cases.accepted.make({rev: prior.rev, pos: prior.pos}), jobs: []};
-						const history = yield* Stream.runCollect(mailbox.read(process.name, 0));
-						const existing = history.find((letter) => letter.id === input.id);
-						if (existing !== undefined)
-							return {
-								answer: Sent.cases.accepted.make({rev: existing.rev, pos: existing.pos}),
-								jobs: [],
-							};
 						const port = inputPort(state, input.envelope.input);
 						if (
 							port === undefined ||
@@ -1244,6 +1245,7 @@ export class ProgramRunner extends Context.Service<
 									{
 										letter: input.id,
 										input: Schema.decodeUnknownSync(Schema.Json)(input),
+										digest: yield* inputDigest(input),
 										errors: [],
 										tries: 0,
 										result: null,
@@ -1275,6 +1277,19 @@ export class ProgramRunner extends Context.Service<
 						if (appended._tag === "refused") {
 							yield* store.save(checkpoint(state, null));
 							return {answer: Sent.cases.refused.make({why: appended.why}), jobs: []};
+						}
+						// The inbox now holds the accepted input. Failed deliveries keep their original body.
+						if (supervision !== null) {
+							const receipt = supervision.receipts.find((r) => r.letter === input.id);
+							if (receipt !== undefined && receipt.tries === 0) {
+								const digest = receipt.digest ?? (yield* inputDigest(input));
+								yield* saveRecovery({
+									...supervision,
+									receipts: supervision.receipts.map((r) =>
+										r.letter === input.id ? {...r, input: null, digest} : r,
+									),
+								});
+							}
 						}
 						const {fresh} = yield* catchUp(state, {mine: input.id, dirty: true});
 						return {

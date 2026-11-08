@@ -44,6 +44,7 @@ export type RuntimeRecord = typeof RuntimeRecord.Type;
 const TABLES = [
 	"CREATE TABLE IF NOT EXISTS process_state (process TEXT PRIMARY KEY, checkpoint TEXT NOT NULL)",
 	"CREATE TABLE IF NOT EXISTS process_letters (process TEXT NOT NULL, id TEXT NOT NULL, rev INTEGER NOT NULL, pos INTEGER NOT NULL, PRIMARY KEY (process, id))",
+	"CREATE INDEX IF NOT EXISTS process_letters_id ON process_letters (id, rev)",
 	"CREATE TABLE IF NOT EXISTS process_activity (process TEXT PRIMARY KEY, activity TEXT NOT NULL)",
 ];
 const encodeActivity = Schema.encodeSync(Schema.fromJsonString(Activity));

@@ -65,14 +65,21 @@ const Observation = Schema.Struct({
 	error: Schema.optionalKey(Text),
 	at: Millis,
 });
-const Receipt = Schema.Struct({
+export const Receipt = Schema.Struct({
 	letter: Text,
 	input: Schema.Json,
+	digest: Schema.optionalKey(Text),
 	errors: Schema.Array(Text),
 	tries: Millis,
 	result: Schema.NullOr(Schema.TaggedStruct("refused", {why: Schema.Literal("dead")})),
 	process: ProcessId,
-});
+}).check(
+	Schema.makeFilter((r) =>
+		r.input !== null || (r.digest !== undefined && r.tries === 0 && r.result === null)
+			? true
+			: "a failed delivery keeps its input; an accepted delivery keeps its digest",
+	),
+);
 
 export const Supervision = Schema.Struct({
 	v: Schema.Literal(1),
