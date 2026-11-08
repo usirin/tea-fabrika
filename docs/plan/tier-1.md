@@ -412,7 +412,7 @@ Most of the order above is a choice. **These parts are not, and each says why:**
 ```ts
 // A sketch, next/. P10 stamps, P6 keeps, P11 signs.
 interface Envelope<A> {          // P10: made in memory at the door, never decoded, so no schema
-	readonly id: InputId;        // "in-3f9a0c21-41": the door's start, then a count
+	readonly id: InputId;        // "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41": the door's start, then a count
 	readonly by: Writer;         // from the checked key, never from params
 	readonly arrivedAt: number;  // the referee's clock as it came
 	readonly input: A;
@@ -517,7 +517,7 @@ The owner answers these. **As of 2026-11-05, nothing here stops the first wave.*
 13. **Does the exam hold a Promise to the edge list?** **Decided (owner, 2026-11-05): edges are opt-in comments at the line, not a path list.** `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, or the same for `fabrika/no-effect-run-outside-edge`. `Effect.tryPromise` and `Effect.promise` fire everywhere unless that comment is there, which closes the loophole. The 18-path list goes. A build commit that adds such a comment does not block: the pull request asks the owner, one line each with its reason, `[ok] [no]`; the owner chose the ask over a list a reviewer judges, to start with. P35 builds it. *The lean was to hold `Effect.tryPromise` to the 18-path list, 70%; this walks back the list itself.* The doubt that stays: a Promise reached with no Promise syntax still passes; only types would see it.
 14. **Does a clock read at a view file's top level fail?** **Decided (owner, 2026-11-07): yes, strictly.** A view file reads no clock at all, per [Elm first](../direction/elm-first.md). The tab's name comes from the key's edge (`tuval/browser/key.ts`) or through a Cmd.
     *Added 2026-11-05. Needed before P14, the first `.tsx` file.* P2's `no-clock-in-view` fires on any read in a `next/**/*.tsx` file, so on PR 223's tree it fired on `main.tsx:19`, a module-level `crypto.randomUUID()` naming the tab, which is in a view file but in no view. P2's body left it as a later call. **Lean, the lead session's:** keep it failing, so a view file reads no clock at all, and the tab's name comes from where the key is kept (`tuval/browser/key.ts`, an edge) or through a Cmd. Cost: none now; a stray read moves to another file. No number was given.
-15. **An agent's stated reason: a second link beside `cause`?** **Decided (owner, 2026-11-07): yes, and `cause` becomes `parent`.** The entry keeps two links, in OpenTelemetry's names, which Effect's Tracer uses (`traceId`, `spanId`, `parent`). `parent` is the entry that directly made this one, and it signs. `traceId` is the whole request, the same id P37's spans carry. `traceId` is shown and checked for delivery only, and it never decides. Why the rename: in an Effect codebase `cause` already means a failure (`Cause<E>`, and every `TaggedError`'s `cause` field), so it broke one word, one meaning. Erlang's `seq_trace` carries the same pair: a label for the chain, and the previous serial for the direct cause. Effect's own `EventJournal.Entry` (effect 4.1.1) stores neither and leaves it to tracing. The code rename in P6's and P9's files is its own ticket, through the steps.
+15. **An agent's stated reason: a second link beside `cause`?** **Decided (owner, 2026-11-07): yes, and `cause` becomes `parent`.** The entry keeps two links, in OpenTelemetry's names, which Effect's Tracer uses (`traceId`, `spanId`, `parent`). `parent` is the input that directly made this write, and it signs. `traceId` is the whole request, the same id P37's spans carry. `traceId` is shown and checked for delivery only, and it never decides. Why the rename: in an Effect codebase `cause` already means a failure (`Cause<E>`, and every `TaggedError`'s `cause` field), so it broke one word, one meaning. Erlang's `seq_trace` carries the same pair: a label for the chain, and the previous serial for the direct cause. Effect's own `EventJournal.Entry` (effect 4.1.1) stores neither and leaves it to tracing. The code rename in P6's and P9's files is its own ticket, through the steps.
 
     ```ts
     // Before, P6 as built:  {by, for, sentAt, seen, cause, build, _tag, body}
@@ -525,12 +525,12 @@ The owner answers these. **As of 2026-11-05, nothing here stops the first wave.*
     ```
 
     ```text
-    entry_a1  by person:ana    "@claude run the tests"   parent: null  traceId: t1 (new)
-    entry_b2  by agent:claude  turn started              parent: a1    traceId: t1
-    entry_c4  by agent:claude  line "pnpm test"          parent: b2    traceId: t1
+    entry_a1  by person:p1     "@claude run the tests"   parent: null             traceId: t1 (new)
+    entry_b2  by agent:claude  turn started              parent: in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41   traceId: t1
+    entry_c4  by agent:claude  line "pnpm test"          parent: in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-42   traceId: t1
     ```
 
-    claude's line has `parent: b2`, so it is signed as claude, and `traceId: t1` ties it back to the person's ask. *It was, below:*
+    The door stamps the person's ask as `in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41` and the agent's next input as `in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-42`. The agent's line has `parent: in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-42`, so it is signed as the agent, and `traceId: t1` ties it back to the person's ask. *It was, below:*
     *Added 2026-11-05, from [the inputs note](../direction/inputs-carry-their-sender.md#open-an-agents-stated-reason). Needed before any agent's line carries a person's message as its reason; no Tier 1 row does, so it blocks nothing here.* A line claude runs because the person asked cannot be signed by its cause's sender and also carry the person's message as its cause. **Lean, the note's (70%):** two links, as event stores keep two ids. `cause` is the direct one and signs, so claude's line is claude's; the person's message rides as its stated reason (`asked` in the note's sketch), checked only for delivery, shown, and never deciding. The owner's call is the key's name and whether a reason is worth keeping at all.
 16. **The signing service.** **Decided (owner, 2026-11-07): `SessionManager`, owned by the door.** The door stamped every input, so it is the one authority over "who sent input X", the way one gen_server owns a table in OTP. A process asks it over one RPC. The four refusals stay as the inputs note writes them, with `cause` now named `parent`. The doubt: one extra round trip per write. A cache in the process could cut it, but would go stale.
 

@@ -6,8 +6,10 @@
 // tag, only its record part's `content`, the one part a person may delete.
 import {Schema} from "effect";
 
-/** A process's id, P33's (proposed `process_<26 chars>`). A restart is a new process. */
-export const ProcessId = Schema.NonEmptyString;
+/** A process's id: `process_` and a TypeID suffix. A restart is a new process (P33). */
+export const ProcessId = Schema.String.check(
+	Schema.isPattern(/^process_[0-7][0-9a-hjkmnp-tv-z]{25}$/),
+);
 
 /** Where a span's record lives: its process's JobRecord, or `spans` for every span outside one. */
 export const Chain = Schema.TaggedUnion({

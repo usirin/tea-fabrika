@@ -6,9 +6,9 @@
 // The shape these tests hold the modules to:
 // - `append(stream, id, line)` answers `{_tag: "placed", rev, pos}` or `{_tag: "refused", why}`.
 //   `rev` is the place in the whole log, `pos` the place in the stream, both from 1. The same id on
-//   the same stream with the same `by`, `for`, `cause`, `_tag` and `body` gets its first placing
+//   the same stream with the same `by`, `for`, `parent`, `_tag` and `body` gets its first placing
 //   again and writes nothing; with any of those different it is `id_reused` (owner, 2026-11-07).
-//   `sentAt`, `seen` and `build` may differ on a resend. `seen` past the log's head is `seen_ahead`.
+//   `sentAt`, `seen`, `traceId` and `build` may differ on a resend. `seen` past the log's head is `seen_ahead`.
 // - `read(stream, after)` is a Stream of the stream's entries past `after`, oldest first, fetched
 //   in pages of 256 only when it runs. `wait(stream, after)` answers at once: `{_tag: "ready", rev}`
 //   with the stream's newest rev, or `{_tag: "parked"}`.
@@ -29,7 +29,9 @@ import {nodeSql} from "./sqlite.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const READER = "gateway:t1";
-const CAUSE = "in-3f9a0c21-41"; // an input id's text form, as log.test.ts's CAUSE takes it
+const PARENT = "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41";
+const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+const OTHER_TRACE = "5bf92f3577b34da6a3ce929d0e0e4737";
 
 // Every ledger is a fresh node:sqlite file in one temp folder, removed after.
 const folder = mkdtempSync(join(tmpdir(), "p6-ledger-"));
@@ -67,7 +69,8 @@ const line = (over: Partial<Line> = {}): Line => ({
 	for: "owner",
 	sentAt: "2026-11-07T21:10:01.204Z",
 	seen: 0,
-	cause: null,
+	parent: null,
+	traceId: TRACE,
 	build: "b-7c1d073",
 	_tag: "saved",
 	body: {note: "n-7f3a", base: 3},
@@ -125,18 +128,6 @@ const throwingOnce = (sql: Sql) => {
 		},
 	};
 };
-const broken: Sql = {
-	exec: () => {
-		throw sqliteFull();
-	},
-	transaction: () => {
-		throw sqliteFull();
-	},
-	size: () => {
-		throw sqliteFull();
-	},
-};
-
 /** A tracer that keeps every span it makes, so a test can count the ones that ended. */
 const capture = () => {
 	const spans: Array<Tracer.NativeSpan> = [];
@@ -178,10 +169,30 @@ describe("p18, the ledger suite on Ledger.sql", () => {
 			}).pipe(Effect.provide(onSql(fresh()))),
 	);
 
+	// Plant: same() compares traceId, so a retry in another trace is refused.
+	it.effect(
+		"traceId never decides: a resend gets its first placing and keeps the first trace",
+		() =>
+			Effect.gen(function* () {
+				const ledger = yield* Ledger;
+				expect(yield* ledger.append("notes:1", "w-1", line())).toEqual(placed(1, 1));
+				expect(yield* ledger.append("notes:1", "w-2", line())).toEqual(placed(2, 2));
+				expect(yield* ledger.append("notes:1", "w-1", line({traceId: OTHER_TRACE}))).toEqual(
+					placed(1, 1),
+				);
+				const entries = yield* readAll("notes:1");
+				expect(entries.map((entry) => [entry.id, entry.rev, entry.pos, entry.traceId])).toEqual([
+					["w-1", 1, 1, TRACE],
+					["w-2", 2, 2, TRACE],
+				]);
+				expect(yield* ledger.append("notes:1", "w-3", line())).toEqual(placed(3, 3));
+			}).pipe(Effect.provide(onSql(fresh()))),
+	);
+
 	const changes: ReadonlyArray<readonly [string, Partial<Line>]> = [
 		["by", {by: "SHA256:writer-b"}],
 		["for", {for: "someone-else"}],
-		["cause", {cause: CAUSE}],
+		["parent", {parent: PARENT}],
 		["_tag", {_tag: "deleted"}],
 		["body", {body: {note: "n-7f3a", base: 4}}],
 	];
@@ -590,9 +601,15 @@ describe("p20, failures are typed, and pass", () => {
 		await runtime.dispose();
 	});
 
-	it.effect(
-		"no Layer fails at build: a Sql that throws on every use still builds, and each call answers storage",
-		() =>
+	it.effect.each([
+		["an Error", sqliteFull()],
+		["text", "disk full"],
+		["a number", 13],
+		["null", null],
+		["undefined", undefined],
+	] as const)(
+		"no Layer fails at build: a Sql throwing %s still builds, and each call answers storage",
+		([, thrown]) =>
 			Effect.gen(function* () {
 				const ledger = yield* Ledger;
 				const errors = [
@@ -602,7 +619,17 @@ describe("p20, failures are typed, and pass", () => {
 				];
 				for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
 				expect(errors.map((error) => error.why)).toEqual(["storage", "storage", "storage"]);
-			}).pipe(Effect.provide(onSql(broken))),
+			}).pipe(
+				Effect.provide(
+					onSql({
+						exec: () => {
+							throw thrown;
+						},
+						transaction: (step) => step(),
+						size: () => 0,
+					}),
+				),
+			),
 	);
 
 	it.effect(
@@ -615,10 +642,10 @@ describe("p20, failures are typed, and pass", () => {
 				db
 					.prepare(
 						`INSERT INTO entries (rev, stream, pos, id, "arrivedAt", "by", "for", "sentAt", seen,
-							cause, build, "_tag", body) VALUES (?, ?, 1, ?, 0, 'SHA256:writer-a', 'owner', 'x', 0,
-							NULL, 'b-7c1d073', ?, ?)`,
+							parent, "traceId", build, "_tag", body) VALUES (?, ?, 1, ?, 0, 'SHA256:writer-a', 'owner', 'x', 0,
+							NULL, ?, 'b-7c1d073', ?, ?)`,
 					)
-					.run(rev, stream, id, kind, body);
+					.run(rev, stream, id, TRACE, kind, body);
 			return Effect.gen(function* () {
 				const ledger = yield* Ledger;
 				expect(yield* ledger.append("ok", "w-1", line())).toEqual(placed(1, 1));
