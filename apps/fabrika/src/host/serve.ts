@@ -10,7 +10,7 @@ import {
 	StopAnswer,
 	StopRefused,
 } from "@kampus/fabrika-old/mcp";
-import {Author, PullRequests, RepoTree} from "@tea-fabrika/tracker";
+import {Author, PullRequests, RepoTree, saveCell} from "@tea-fabrika/tracker";
 import {Data, Deferred, Duration, Effect, Queue, Ref, Stream} from "effect";
 import {type Socket, SocketServer} from "effect/socket";
 import {
@@ -242,6 +242,7 @@ export const serve = (options: {
 		const server = yield* SocketServer.SocketServer;
 		const scope = yield* Effect.scope;
 		const services = yield* Effect.context<never>();
+		const author = yield* Author;
 		const clock = yield* Effect.clockWith(Effect.succeed);
 		const since = clock.currentTimeMillisUnsafe();
 		const warn = (what: string) => {
@@ -703,6 +704,41 @@ export const serve = (options: {
 		/** What the page sent on the desk's port. */
 		const fromPage = (client: Client, m: FromPage) => {
 			switch (m.type) {
+				case "open_lane": {
+					if (desk.at !== "open") return;
+					const source = desk.workspaces.flatMap(tilesOf).find((t) => t.id === m.from);
+					if (source === undefined) return;
+					const root = source.shows.kind === "tsh" ? source.id : source.shows.line.from;
+					Effect.runForkWith(services)(
+						tiles.lane(root, m.ticket).pipe(
+							Effect.match({
+								onSuccess: (run) => {
+									if (desk.at !== "open") return;
+									const tile = desk.workspaces
+										.flatMap(tilesOf)
+										.find((t) => t.shows.run?.id === run);
+									if (tile !== undefined) step({type: "go", tile: tile.id});
+									shout();
+								},
+								onFailure: (error) => warn(error.why),
+							}),
+						),
+					);
+					return;
+				}
+				case "ask_answer":
+					Effect.runForkWith(services)(
+						saveCell({type: "save", id: m.id, next: 1, write: {kind: "answer", ...m.value}}).pipe(
+							Effect.provideService(Ledger, ledger),
+							Effect.provideService(Author, author),
+							Effect.match({
+								onSuccess: () => toPage(client, {type: "ask_answered", id: m.id, why: null}),
+								onFailure: (error) =>
+									toPage(client, {type: "ask_answered", id: m.id, why: error.why}),
+							}),
+						),
+					);
+					return;
 				case "press": {
 					const at = clock.currentTimeMillisUnsafe();
 					lastKey = at;

@@ -2,6 +2,7 @@ import type {WindowProps, Writer} from "@kampus/fabrika-old";
 import {nameOf} from "@kampus/pipeline/stages/outcome";
 import type {Entry} from "@kampus/pipeline/tickets/ticket";
 import {Kbd} from "@manti-ui/react";
+import {Button} from "@manti-ui/react";
 import {
 	type Head,
 	lineOf,
@@ -10,8 +11,9 @@ import {
 	type StepNow,
 	stepWords,
 } from "@tea-fabrika/tracker";
+import {AskView, AskActions, StopView} from "@tea-fabrika/tracker/ask-window";
 import {whenOf} from "@tea-fabrika/tracker/window";
-import {type KeyboardEvent, type ReactNode, useState} from "react";
+import {type KeyboardEvent, type ReactNode, useState, useContext} from "react";
 import type {ticket} from "./index.ts";
 import {type Page, runTicketOf} from "./view.ts";
 
@@ -108,91 +110,17 @@ const usd = (n: number) => `$${n.toFixed(2)}`;
 /** A pick as a button says it: the first letter up. */
 const said = (pick: string) => pick.slice(0, 1).toUpperCase() + pick.slice(1);
 
-/** The main button's words: the ask itself when it starts with its pick, "Approve plan v1". */
-const primaryWords = (ask: OpenAsk, pick: string) =>
-	ask.what.startsWith(`${pick} `) ? said(ask.what) : said(pick);
-
 function AskCard(props: {
 	readonly ask: OpenAsk;
 	readonly page: Page;
 	readonly now: number;
 	readonly send: Send;
 }) {
-	const {ask, page, now, send} = props;
-	const [first, ...rest] = ask.picks;
-	const [other, setOther] = useState<string | null>(null);
-	const [note, setNote] = useState("");
-	const saw = {title: page.opened.ticket.title, body: page.body};
-	const ticket = page.opened.ticket.number;
-	const answer = (pick: string, text: string) =>
-		send({type: "answer", value: {ticket, ask: ask.ask, pick, note: text, saw}});
-	return (
-		<section className="turnc you" aria-label="Whose turn">
-			<span className="m p you lg" aria-hidden="true">
-				Y
-			</span>
-			<div className="what">
-				<span className="big">
-					<span className="w-you">Your turn</span> · {ask.what}
-				</span>
-				<span className="sub">
-					<Mark by={ask.by} />
-					<Who by={ask.by} /> asked at {whenOf(ask.at, now)}
-					{page.plan !== null && (
-						<>
-							<span aria-hidden="true">·</span>
-							{page.plan.tasks.length} task{page.plan.tasks.length === 1 ? "" : "s"}
-						</>
-					)}
-				</span>
-			</div>
-			<div className="acts">
-				{rest.map((pick) => (
-					<button
-						key={pick}
-						type="button"
-						className="btn quiet"
-						aria-expanded={other === pick}
-						onClick={() => setOther(other === pick ? null : pick)}
-					>
-						{said(pick)}
-					</button>
-				))}
-				<button type="button" className="btn turn" onClick={() => answer(first, "")}>
-					{primaryWords(ask, first)}
-				</button>
-			</div>
-			{other !== null && (
-				<div className="noform">
-					<label className="sr" htmlFor="ticket-note">
-						Why {other}
-					</label>
-					<textarea
-						id="ticket-note"
-						rows={2}
-						placeholder={`Why ${other}? The note goes with your answer.`}
-						value={note}
-						onChange={(e) => setNote(e.target.value)}
-					/>
-					<div className="row2">
-						<button type="button" className="btn quiet sm" onClick={() => setOther(null)}>
-							Cancel
-						</button>
-						<button
-							type="button"
-							className="btn sm"
-							onClick={() => {
-								answer(other, note.trim());
-								setOther(null);
-								setNote("");
-							}}
-						>
-							Send {other}
-						</button>
-					</div>
-				</div>
-			)}
-		</section>
+	const {ask, page} = props;
+	return ask.sealed === undefined ? (
+		<StopView ticket={page.opened.ticket.number} why="State not recorded" />
+	) : (
+		<AskView key={ask.ask} ticket={page.opened.ticket.number} ask={ask.sealed} />
 	);
 }
 
@@ -204,6 +132,7 @@ function TurnCard(props: {
 	readonly send: Send;
 }) {
 	const {head, page, now, send} = props;
+	const actions = useContext(AskActions);
 	const line = lineOf(head, (at) => whenOf(at, now));
 	switch (head._tag) {
 		case "asks":
@@ -237,6 +166,9 @@ function TurnCard(props: {
 						</span>
 						<span className="sub">{line}. Nothing runs until someone looks.</span>
 					</div>
+					<Button variant="tertiary" onClick={() => actions?.openLane(page.opened.ticket.number)}>
+						Open lane
+					</Button>
 				</section>
 			);
 		case "done":

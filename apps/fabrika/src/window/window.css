@@ -2667,20 +2667,82 @@ main.program:has(> .view) {
 	flex-wrap: wrap;
 	padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4);
 	border-radius: var(--r-lg);
-	background: var(--surface-raised);
-	box-shadow: inset 0 0 0 1px var(--border-faint);
+	background: var(--surface-card);
 }
 
 .ticket-view .turnc.you {
-	box-shadow:
-		inset 0 0 0 1px var(--border-faint),
-		inset 2px 0 0 var(--turn-fill);
+	box-shadow: none;
 }
 
 .ticket-view .turnc.stuck {
-	box-shadow:
-		inset 0 0 0 1px var(--border-faint),
-		inset 2px 0 0 var(--stuck);
+	box-shadow: none;
+}
+
+.ask-view {
+	display: grid;
+	gap: var(--s-2);
+	min-inline-size: 0;
+	padding: var(--s-3);
+	border: 0;
+	border-radius: var(--r-lg);
+	background: var(--surface-card);
+	color: var(--text-primary);
+	font: var(--fs-body) / 1.5 var(--font);
+}
+
+.ask-view p {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+.ask-question {
+	font-weight: 600;
+}
+.ask-rec {
+	color: var(--text-faint);
+}
+.ask-toolbar,
+.ask-marks {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--s-1);
+}
+.ask-toolbar {
+	position: sticky;
+	inset-block-start: 0;
+	background: var(--surface-card);
+}
+.ask-view button {
+	white-space: normal;
+}
+.ask-picks {
+	display: grid;
+	gap: var(--s-1);
+}
+.ask-view form {
+	display: grid;
+	gap: var(--s-2);
+}
+.ask-view [role="status"]:empty {
+	display: none;
+}
+.ask-evidence {
+	max-block-size: 32vh;
+	overflow: auto;
+}
+.ask-evidence pre {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	font: var(--fs-small) / 1.5 var(--mono);
+}
+.asks-grid {
+	max-block-size: 70vh;
+	overflow: auto;
+}
+.asks-row {
+	padding-block: var(--s-1);
+}
+.asks-row[aria-selected="true"] {
+	background: var(--surface-hover);
 }
 
 .ticket-view .turnc .what {
@@ -2904,7 +2966,6 @@ main.program:has(> .view) {
 
 /* The properties, as Linear keeps them: a quiet column beside the work. */
 .ticket-view .tk-side {
-	border-inline-start: 1px solid var(--border-faint);
 	padding: var(--s-5) var(--s-4) var(--s-8);
 	display: grid;
 	gap: var(--s-5);
@@ -3025,7 +3086,6 @@ main.program:has(> .view) {
 		gap: var(--s-1);
 		padding: var(--s-3) var(--s-3) var(--s-2);
 		border-radius: var(--r-lg);
-		box-shadow: inset 0 0 0 1px var(--border-faint);
 	}
 
 	.ticket-view .props-inline .props {

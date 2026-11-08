@@ -1,5 +1,4 @@
 import {hashOf, Text} from "@kampus/pipeline/tickets/approval";
-import {Answer as Choice, Answered} from "@kampus/pipeline/tickets/ask";
 import {
 	AreaName,
 	AreaNumber,
@@ -9,6 +8,7 @@ import {
 	nextArea,
 	Suggested,
 } from "@kampus/pipeline/tickets/area";
+import {Answer as Choice, Answered} from "@kampus/pipeline/tickets/ask";
 import {
 	Asks,
 	Body,
@@ -66,11 +66,16 @@ const LegacyAnswer = Schema.Struct({
 	note: Body,
 	saw: Text,
 });
-const CurrentAnswer = Schema.Struct({
-	ticket: TicketNumber, ask: Id, answer: Choice, saw: Answered.fields.saw,
-	via: Answered.fields.via, needed: Answered.fields.needed,
+export const AskAnswer = Schema.Struct({
+	ticket: TicketNumber,
+	ask: Id,
+	answer: Choice,
+	saw: Answered.fields.saw,
+	via: Answered.fields.via,
+	needed: Answered.fields.needed,
 });
-export const Answer = Schema.Union([CurrentAnswer, LegacyAnswer]);
+export type AskAnswer = typeof AskAnswer.Type;
+export const Answer = Schema.Union([AskAnswer, LegacyAnswer]);
 export type Answer = typeof Answer.Type;
 
 /** Accept or dismiss on a duplicate hint: is `ticket` the same as `of`? Advice: nothing closes. */
@@ -97,7 +102,9 @@ const TicketWrite = Schema.Union([
 	Schema.Struct({kind: Schema.Literal("comment"), ...Comment.fields}),
 	Schema.Struct({kind: Schema.Literal("close"), ...OneTicket.fields}),
 	Schema.Struct({kind: Schema.Literal("reopen"), ...OneTicket.fields}),
-	...Answer.members.map((answer) => Schema.Struct({kind: Schema.Literal("answer"), ...answer.fields})),
+	...Answer.members.map((answer) =>
+		Schema.Struct({kind: Schema.Literal("answer"), ...answer.fields}),
+	),
 	Schema.Struct({kind: Schema.Literal("rate_duplicate"), ...RateDuplicate.fields}),
 ]);
 /** A write to one ticket's stream. */
@@ -175,10 +182,16 @@ export const factOf = (write: TicketWrite): Effect.Effect<Fact> => {
 		case "reopen":
 			return Effect.succeed({type: "reopened"});
 		case "answer":
-			if ("answer" in write) return Effect.succeed({
-				type: "answered", format: 1, ask: write.ask, answer: write.answer, saw: write.saw,
-				via: write.via, ...(write.needed === undefined ? {} : {needed: write.needed}),
-			});
+			if ("answer" in write)
+				return Effect.succeed({
+					type: "answered",
+					format: 1,
+					ask: write.ask,
+					answer: write.answer,
+					saw: write.saw,
+					via: write.via,
+					...(write.needed === undefined ? {} : {needed: write.needed}),
+				});
 			return Effect.map(hashOf(write.saw), (text) => ({
 				type: "answered" as const,
 				ask: write.ask,

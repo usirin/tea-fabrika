@@ -1,3 +1,4 @@
+import {AskAnswer} from "@tea-fabrika/tracker";
 import {Cause, Effect, Exit, Schema} from "effect";
 import {AskKey, AsksNow} from "./asks.ts";
 import {DeskSchema, TileIdSchema} from "./desk/desk.ts";
@@ -203,6 +204,11 @@ export type HostNow = typeof HostNow.Type;
  *    ledger: {kind: "own"}, agents: [{name: "claude", since: 1793400060000}]}}
  */
 export const ToPage = Schema.Union([
+	Schema.Struct({
+		type: Schema.Literal("ask_answered"),
+		id: Schema.String,
+		why: Schema.NullOr(Schema.String),
+	}),
 	Schema.Struct({type: Schema.Literal("keys"), ...Keys.fields}),
 	Schema.Struct({type: Schema.Literal("host"), now: HostNow}),
 	Schema.Struct({
@@ -264,6 +270,8 @@ export type ToApp = typeof ToApp.Type;
  *   {type: "seen"}                    the asks list was opened: no ask is new any more
  */
 export const FromPage = Schema.Union([
+	Schema.Struct({type: Schema.Literal("open_lane"), from: TileIdSchema, ticket: Schema.Int}),
+	Schema.Struct({type: Schema.Literal("ask_answer"), id: Schema.String, value: AskAnswer}),
 	Schema.Struct({type: Schema.Literal("press"), id: PressId, key: KeyName}),
 	Schema.Struct({type: Schema.Literal("click"), tile: TileIdSchema}),
 	Schema.Struct({

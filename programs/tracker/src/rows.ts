@@ -1,6 +1,13 @@
 import {Writer} from "@kampus/fabrika-old";
 import {endedAs} from "@kampus/pipeline/stages/status";
-import {type Check, type Entry, type Fact, readAnswer, questionOf, picksOf} from "@kampus/pipeline/tickets/ticket";
+import {
+	type Check,
+	type Entry,
+	type Fact,
+	readAnswer,
+	questionOf,
+	picksOf,
+} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
 import {prRefOf, words} from "./head.ts";
 

@@ -137,9 +137,16 @@ export const laneBuildHost = Layer.effect(
 					const track = plan === null ? undefined : state.plans.get(plan);
 					const tip = yield* work.main;
 					const blob = (text: string | null) => (text === null ? null : {text});
-					const approvals = yield* Effect.forEach(t.timeline, (e) =>
-						e.by.kind === "user" && e.fact.type === "answered" && readAnswer(t.timeline, e.fact)?.pick === "approve"
-							? covers(e.fact, t) : Effect.succeed(false));
+					const approvals = yield* Effect.forEach(
+						t.timeline,
+						(e) =>
+							e.by.kind === "user" &&
+							e.fact.type === "answered" &&
+							readAnswer(t.timeline, e.fact)?.pick === "approve"
+								? covers(e.fact, t)
+								: Effect.succeed(false),
+						{concurrency: 1},
+					);
 					const approved = approvals.some(Boolean);
 					return {
 						url,

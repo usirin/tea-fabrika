@@ -1,6 +1,15 @@
 import {Writer} from "@kampus/fabrika-old";
-import {type Entry, type Fact, factsOf, Id, Stage, Title, questionOf, picksOf} from "@kampus/pipeline/tickets/ticket";
 import {Asked} from "@kampus/pipeline/tickets/ask";
+import {
+	type Entry,
+	type Fact,
+	factsOf,
+	Id,
+	Stage,
+	Title,
+	questionOf,
+	picksOf,
+} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
 
 // A ticket's top line, folded from its facts (docs/direction/what-a-ticket-shows.md, section 1).
@@ -141,7 +150,9 @@ export const headOf = (timeline: readonly Entry[], now: number): Head => {
 
 	const run = openRuns(timeline).at(-1);
 	const stop = timeline.findLast((e) => e.fact.type === "stopped");
-	const restart = timeline.findLast((e) => e.fact.type === "restarted" || e.fact.type === "started");
+	const restart = timeline.findLast(
+		(e) => e.fact.type === "restarted" || e.fact.type === "started",
+	);
 	if (stop?.fact.type === "stopped" && stop.pos > (restart?.pos ?? 0))
 		return {_tag: "stuck", stage: stop.fact.resume, why: stop.fact.why};
 	if (run !== undefined)

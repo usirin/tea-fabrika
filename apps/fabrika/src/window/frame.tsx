@@ -1,3 +1,6 @@
+import {useMachine} from "@demlik/tea/react";
+import {Button} from "@manti-ui/react";
+import {AskView} from "@tea-fabrika/tracker/ask-window";
 import {
 	type ReactNode,
 	type RefObject,
@@ -15,6 +18,7 @@ import {type Group, wordOf} from "../desk/keys.ts";
 import type {FromPage, HostNow, LinkNow, ToApp} from "../messages.ts";
 import {
 	agentsWord,
+	asksMenuMachine,
 	asksSections,
 	asksWord,
 	bottomLineShows,
@@ -422,21 +426,21 @@ export function Band(): ReactNode {
 	return <div className="band" data-info={INFO.drag} />;
 }
 
-/** The asks list's footer: the keys no row shows. */
-const ASKS_FOOT: readonly Hint[] = [
-	{caps: ["↑", "↓"], name: "Move"},
-	{caps: ["↵"], name: "Open"},
-	{caps: ["H"], name: "Later"},
-	{caps: ["Esc"], name: "Close"},
-];
-
-/**
- * The asks list, a menu: one row per ask, the ones set aside under `Later`. Enter opens the
- * ticket: its tile, else the tracker turned to it (frame.ts, `opensOf`). H sets an ask aside, or
- * brings it back. You answer in the ticket's own tile, never here.
- */
+/** Today's menu keeps its opening and Later behavior, with the shared answer controls. */
 function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 	const {asks, desk, step, toHost, toRun, tickets} = props;
+	const [menu, select] = useMachine(asksMenuMachine, {});
+	const grid = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		grid.current?.focus();
+	}, []);
+	const rows = [...asks.asks, ...asks.later];
+	const labels = new Map(
+		asksSections(asks, desk, tickets, Date.now())
+			.flatMap((s) => s.rows)
+			.map((r) => [r.id, r]),
+	);
+	const active = rows.find((a) => a.key === menu.selected) ?? rows[0];
 	// Opened, every ask in it is seen: the dot in the top bar goes. By the asks' keys, not their
 	// count: one ask leaving as another arrives keeps the count, and the new one is seen too.
 	const shown = asks.asks.map((a) => a.key).join("\n");
@@ -445,7 +449,7 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 		sayAsksSeen();
 	}, [shown]);
 	const close = useCallback(() => step({type: "close"}), [step]);
-	const open = (row: Row) => {
+	const open = (row: {id: string}) => {
 		const ask = [...asks.asks, ...asks.later].find((a) => a.key === row.id);
 		if (ask === undefined) return;
 		const to = opensOf(desk, ask.ticket, tickets);
@@ -461,25 +465,103 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 				return step({type: "say", note: nowhereNote(ask.ticket)});
 		}
 	};
-	const aside = (row: Row) =>
+	const aside = (row: {id: string}) =>
 		toHost(
 			asks.later.some((a) => a.key === row.id)
 				? {type: "back", key: row.id}
 				: {type: "later", key: row.id},
 		);
 	return (
-		<Menu
-			id={POP.asks}
-			label="Asks"
-			from="top"
-			count={asks.asks.length}
-			sections={asksSections(asks, desk, tickets, Date.now())}
-			foot={ASKS_FOOT}
-			empty={{title: "Nothing waits on you", sub: "A new ask shows here and in the top bar."}}
-			onAct={open}
-			onSecond={aside}
-			onClose={close}
-		/>
+		<Panel id={POP.asks} label="Asks" onClose={close}>
+			<p className="pop-head">
+				{asks.asks.filter((a) => a.kind === "ask").length} asks ·{" "}
+				{asks.asks.filter((a) => a.kind === "stuck").length} stops
+			</p>
+			{asks.reach === "failed" && <p role="alert">{asks.why ?? "The ledger is disconnected"}</p>}
+			{rows.length === 0 ? (
+				<p className="pop-empty">Nothing waits on you.</p>
+			) : (
+				<div
+					role="grid"
+					aria-label="Waiting asks"
+					tabIndex={0}
+					ref={grid}
+					className="asks-grid"
+					aria-activedescendant={
+						active === undefined ? undefined : `ask-row-${rows.indexOf(active)}`
+					}
+					onKeyDown={(e) => {
+						if (
+							e.target instanceof HTMLTextAreaElement ||
+							e.target instanceof HTMLInputElement ||
+							(e.target !== e.currentTarget && (e.target as Element).closest(".ask-view"))
+						)
+							return;
+						const by =
+							e.key === "ArrowDown" || e.key === "j"
+								? 1
+								: e.key === "ArrowUp" || e.key === "k"
+									? -1
+									: 0;
+						if (by !== 0) {
+							e.preventDefault();
+							const at = active === undefined ? -1 : rows.indexOf(active);
+							const next = rows[(at + by + rows.length) % rows.length];
+							if (next !== undefined) select({type: "select", key: next.key});
+						}
+						if (e.key === "Enter" && active !== undefined) {
+							e.preventDefault();
+							open({id: active.key});
+						}
+						if (e.key === "h" && active !== undefined) {
+							e.preventDefault();
+							aside({id: active.key});
+						}
+					}}
+				>
+					{rows.map((row, i) => (
+						<div
+							role="row"
+							aria-selected={row.key === active?.key}
+							id={`ask-row-${i}`}
+							key={row.key}
+							className="asks-row"
+						>
+							<div role="gridcell">
+								{asks.later[0]?.key === row.key && <p>Later</p>}
+								<Button
+									variant="tertiary"
+									tabIndex={-1}
+									onClick={() => select({type: "select", key: row.key})}
+								>
+									{labels.get(row.key)?.title ?? row.what}
+								</Button>
+								<p>{labels.get(row.key)?.sub}</p>
+								{row.key === active?.key && (
+									<>
+										{row.kind === "ask" && row.sealed !== undefined && (
+											<AskView key={row.key} ticket={row.ticket} ask={row.sealed} />
+										)}
+										{row.kind === "stuck" && (
+											<p>
+												{row.why ?? "State not recorded"} · resume at{" "}
+												{row.resume ?? "the saved step"}
+											</p>
+										)}
+										<Button variant="tertiary" onClick={() => open({id: row.key})}>
+											{row.kind === "stuck" ? "Open lane" : "Open ticket"}
+										</Button>
+										<Button variant="tertiary" onClick={() => aside({id: row.key})}>
+											{asks.later.some((a) => a.key === row.key) ? "Bring back" : "Later"}
+										</Button>
+									</>
+								)}
+							</div>
+						</div>
+					))}
+				</div>
+			)}
+		</Panel>
 	);
 }
 

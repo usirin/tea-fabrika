@@ -1,7 +1,14 @@
+import {defineMachine} from "@demlik/tea";
 import {writerOf} from "@kampus/fabrika-old";
 import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {whenOf} from "@tea-fabrika/tracker/window";
 import {Option, Schema} from "effect";
+
+export const asksMenuMachine = defineMachine({
+	types: {model: {} as {selected: string | null}, msg: {} as {type: "select"; key: string}},
+	init: () => [{selected: null}, []],
+	update: {select: (s, m) => [{...s, selected: m.key}, []]},
+});
 import type {Ask, AsksNow} from "../asks.ts";
 import {activeOf, focusedOf, type Open, questionOf, tilesOf, type Workspace} from "../desk/desk.ts";
 import {bindingFor, defaults, type Does, type File, type Key, type Keys} from "../desk/keymap.ts";

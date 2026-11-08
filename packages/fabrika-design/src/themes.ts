@@ -23,6 +23,7 @@ interface Colors {
 	readonly ground: Hex;
 	/** What opens over the desk. */
 	readonly raised: Hex;
+	readonly card: Hex;
 	readonly hover: Hex;
 	/** A tile's edge at rest: carries no fact, the bend color principles records. */
 	readonly edge: Hex;
@@ -89,6 +90,7 @@ export const fabrika: Theme = {
 		desk: "#0c0d0e", // not a step: nothing in slate is darker than 1
 		ground: "#111113", // slate 1
 		raised: "#18191b", // slate 2
+		card: "#212225", // slate 3
 		hover: "#ddeaf814", // slate a3
 		edge: "#d3edf81d", // slate a4
 		focus: "#d9edff5d", // slate a8
@@ -142,6 +144,7 @@ export const fabrikaLight: Theme = {
 		desk: "#f9f9fb", // slate 2
 		ground: "#fcfcfd", // slate 1
 		raised: "#fcfcfd", // slate 1
+		card: "#f0f0f3", // slate 3
 		hover: "#0000330f", // slate a3
 		edge: "#00002d17", // slate a4
 		focus: "#00051d74", // slate a9: a8 reads 1.90

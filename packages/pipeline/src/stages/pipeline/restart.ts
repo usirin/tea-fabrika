@@ -222,7 +222,7 @@ export const fold = (seen: Seen): Folded => {
 				break;
 			}
 			case "asked": {
-				const kind = askedFor("format" in fact ? fact.replaces ?? fact.ask : fact.ask);
+				const kind = askedFor("format" in fact ? (fact.replaces ?? fact.ask) : fact.ask);
 				if (kind === null) break;
 				kinds.set(fact.ask, kind);
 				const step = askedStep(kind, last);
@@ -243,7 +243,9 @@ export const fold = (seen: Seen): Folded => {
 				carry = answer.pick === "go_on" ? letThrough(noted) : noted;
 				if (kind === "approve" && answer.pick === "approve") {
 					approved = true;
-					const asked = seen.timeline.find((e) => e.fact.type === "asked" && e.fact.ask === fact.ask)?.fact;
+					const asked = seen.timeline.find(
+						(e) => e.fact.type === "asked" && e.fact.ask === fact.ask,
+					)?.fact;
 					if (asked?.type === "asked" && "format" in asked && asked.shows.evidence._tag === "plan")
 						carry = {...carry, decided: {questions: asked.shows.evidence.plan.questions, said: []}};
 				}

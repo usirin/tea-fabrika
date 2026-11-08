@@ -1,4 +1,5 @@
 import {applyCell} from "@demlik/tea";
+import {AskActions} from "@tea-fabrika/tracker/ask-window";
 import {absurd, Effect} from "effect";
 import type {Ghostty} from "ghostty-web";
 import {
@@ -23,7 +24,7 @@ import {
 	type Workspace,
 } from "../desk/desk.ts";
 import {type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key} from "../desk/hold.ts";
-import {commandOn, defaults, Key as KeyCase, type Keys} from "../desk/keymap.ts";
+import {commandOn, programCommandOn, defaults, Key as KeyCase, type Keys} from "../desk/keymap.ts";
 import {keyName, keyOwner} from "../desk/keys.ts";
 import {
 	type ContainerNode,
@@ -159,6 +160,51 @@ const followed = new Set<string>();
 let ghostty: Ghostty | null = null;
 
 const toHost = (m: FromPage) => window.fabrika.send("desk", m);
+const answering = new Map<string, (why: string | null) => void>();
+const askActions: AskActions = {
+	command: (press, typing) => {
+		const key = keyName(press);
+		if (key === null) return undefined;
+		const command = programCommandOn(store.keys, "ask", key, {
+			focused: true,
+			typing,
+			prefix: store.desk?.at === "open" && store.desk.prefix.armed,
+			platform: false,
+		});
+		return command === undefined ? undefined : {key, value: command.value};
+	},
+	openLane: (ticket) => {
+		const from = document.activeElement?.closest<HTMLElement>("[data-tile]")?.dataset.tile;
+		if (from !== undefined) toHost({type: "open_lane", from, ticket});
+	},
+	answer: (value) =>
+		Effect.callback<unknown, {why: string}>((resume) => {
+			const id = crypto.randomUUID();
+			answering.set(id, (why) =>
+				resume(why === null ? Effect.succeed({ticket: value.ticket}) : Effect.fail({why})),
+			);
+			toHost({type: "ask_answer", id, value});
+			return Effect.sync(() => {
+				answering.delete(id);
+			});
+		}).pipe(
+			Effect.timeoutOrElse({
+				duration: "15 seconds",
+				orElse: () => Effect.fail({why: "The host did not answer. Try again."}),
+			}),
+		),
+	later: (key) => toHost({type: "later", key}),
+	get keys() {
+		const programs = store.keys.programs ?? defaults.programs ?? [];
+		return {
+			rec: programs.find((r) => r.does === "program.ask.rec")?.keys.map((k) => k.key) ?? [],
+			not: programs.find((r) => r.does === "program.ask.not")?.keys.map((k) => k.key) ?? [],
+			picks: programs.find((r) => r.does === "program.ask.picks")?.keys.map((k) => k.key) ?? [],
+			later: programs.find((r) => r.does === "program.ask.later")?.keys.map((k) => k.key) ?? [],
+		};
+	},
+	blocked: () => store.desk?.at === "open" && store.desk.prefix.armed,
+};
 /** What the page tells the app itself: on the desk's port, read by main and not passed on. */
 const toApp = (m: ToApp) => window.fabrika.send("desk", m);
 /** One of a run's own inputs, on its port, as its window sends them (View, below). */
@@ -381,8 +427,18 @@ const heard = (raw: unknown) => {
 	if (read.kind === "refused") return console.warn(`fabrika: refused a message: ${read.why}`);
 	const m = read.msg;
 	switch (m.type) {
+		case "ask_answered":
+			answering.get(m.id)?.(m.why);
+			answering.delete(m.id);
+			return;
 		case "keys":
-			store.keys = {prefix: m.prefix, rows: m.rows, ignore: m.ignore, file: m.file};
+			store.keys = {
+				prefix: m.prefix,
+				rows: m.rows,
+				programs: m.programs ?? defaults.programs ?? [],
+				ignore: m.ignore,
+				file: m.file,
+			};
 			return changed();
 		case "programs":
 			store.shapes = new Map(m.programs.map((p) => [p.name, {takes: p.takes, sends: p.sends}]));
@@ -469,6 +525,11 @@ const onKey = (e: KeyboardEvent) => {
 		swallow(e);
 		return frameStep({type: "palette"});
 	}
+	const innerAsk =
+		e.target instanceof Element
+			? e.target.closest("[data-ask-editor=note], [data-ask-editor=picks]")
+			: null;
+	if (e.key === "Escape" && innerAsk !== null && !midKey().armed) return;
 	if (e.key === "Escape" && frameStep({type: "escape", desk: midKey()})) return swallow(e);
 	if (name === null) return;
 	const forOver = keyForOver(name, e.target);
@@ -814,7 +875,12 @@ const boot = Effect.gen(function* () {
 	for (const on of EXPLAIN_ON) window.addEventListener(on, explainAt);
 	window.fabrika.onMessage("desk", heard);
 	const root = document.getElementById("root");
-	if (root !== null) createRoot(root).render(<App />);
+	if (root !== null)
+		createRoot(root).render(
+			<AskActions.Provider value={askActions}>
+				<App />
+			</AskActions.Provider>,
+		);
 });
 
 Effect.runFork(

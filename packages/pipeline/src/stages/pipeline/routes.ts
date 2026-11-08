@@ -63,6 +63,20 @@ export const AskFor = Schema.Literals([
 ]);
 export type AskFor = typeof AskFor.Type;
 
+/** The kind of question a lane's ask id names. */
+export const askedFor = (ask: string): AskFor | null => {
+	const kind = /^a-([a-z_]+)-\d+$/.exec(ask)?.[1];
+	return Schema.is(AskFor)(kind) ? kind : null;
+};
+
+/** Where a spent round's `again` goes: the writer first after a review. */
+const againTo = (step: LaneStep): LaneStep =>
+	step.startsWith("exam") ? "exam" : step === "review" ? "test_writer" : "build";
+
+/** The step a question resumes after the named step ended. */
+export const askedStep = (kind: AskFor, step: LaneStep): LaneStep =>
+	kind === "rounds_spent" ? againTo(step) : kind === "exam_conflict" ? "test_writer" : step;
+
 /**
  * What a step sent back is handed, besides its plan: the reason it runs again. `names`: the failing
  * tests. `findings`: a review's. `comment`: one left on the pull request. `files`: the ones that

@@ -1,6 +1,7 @@
 import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
 import {Ledger} from "@kampus/fabrika-old";
+import {Asked} from "@kampus/pipeline/tickets/ask";
 import {
 	Entry,
 	fold,
@@ -10,7 +11,7 @@ import {
 	TicketNumber,
 	Title,
 } from "@kampus/pipeline/tickets/ticket";
-import {headOf, words} from "@tea-fabrika/tracker";
+import {headOf, words, preparePending} from "@tea-fabrika/tracker";
 import {Cause, Clock, Duration, Effect, Exit, Schema, Stream} from "effect";
 
 // The asks: every ask on the ledger that waits on the person, folded in the host, once, for
@@ -55,6 +56,10 @@ export const Ask = Schema.Struct({
 	/** What it asks, in its own words, or why the run is stuck. */
 	what: Schema.String,
 	kind: Schema.Literals(["ask", "stuck"]),
+	sealed: Schema.optionalKey(Asked),
+	for: Schema.optionalKey(Schema.String),
+	why: Schema.optionalKey(Schema.String),
+	resume: Schema.optionalKey(Schema.String),
 	/** When it was asked, or the run ended stuck. */
 	at: Schema.Finite,
 	/** The person has opened the list since it came. */
@@ -258,6 +263,7 @@ export const waitingOf = (tickets: readonly Ticket[], now: number): readonly Wai
 					key: `${ticket.number}/${a.ask}`,
 					what: a.what,
 					kind: "ask",
+					...(a.sealed === undefined ? {} : {sealed: a.sealed, for: a.sealed.for}),
 					at: a.at,
 				}));
 			if (head._tag !== "stuck") return [];
@@ -269,6 +275,8 @@ export const waitingOf = (tickets: readonly Ticket[], now: number): readonly Wai
 					key: `${ticket.number}/stuck/${run}`,
 					what: words(head.why),
 					kind: "stuck",
+					why: head.why,
+					resume: head.stage,
 					at: ended?.at ?? now,
 				},
 			];
@@ -277,7 +285,12 @@ export const waitingOf = (tickets: readonly Ticket[], now: number): readonly Wai
 
 /** The frame's view of the asks: one value, for the top bar, the badge and the list alike. */
 export const asksNow = (s: Asks): AsksNow => {
-	const all = waitingOf(s.tickets, s.now).map((a) => ({...a, seen: s.seen.includes(a.key)}));
+	const groups = new Map<string, Waiting[]>();
+	for (const row of waitingOf(s.tickets, s.now)) {
+		const kind = row.for ?? row.kind;
+		groups.set(kind, [...(groups.get(kind) ?? []), row]);
+	}
+	const all = [...groups.values()].flat().map((a) => ({...a, seen: s.seen.includes(a.key)}));
 	return {
 		asks: all.filter((a) => !s.later.includes(a.key)),
 		later: all.filter((a) => s.later.includes(a.key)),
@@ -329,6 +342,12 @@ export const loadCell = (cmd: ReturnType<typeof load>) =>
 				const read = readRow(row);
 				if (read.kind === "entry") entries.push(read.entry);
 			}
+			for (const n of new Set(
+				entries
+					.filter((e) => e.fact.type === "asked" && !("format" in e.fact))
+					.map((e) => e.ticket),
+			))
+				yield* preparePending(n);
 			last = page.at(-1)?.pos ?? last;
 			if (page.length < PAGE) return {entries, last};
 		}

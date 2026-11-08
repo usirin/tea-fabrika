@@ -7,6 +7,9 @@ import {
 	type Writer,
 	writerText,
 } from "@kampus/fabrika-old";
+import {readFacts} from "@kampus/pipeline/asks/ledger";
+import {foldLedger} from "@kampus/pipeline/asks/rules";
+import {askedFor, askedStep, LaneStep} from "@kampus/pipeline/stages/pipeline/routes";
 import {AREAS, type AreaEntry, areasOf, readAreaRow} from "@kampus/pipeline/tickets/area";
 import {sealAsk} from "@kampus/pipeline/tickets/ask";
 import {
@@ -19,6 +22,7 @@ import {
 	readRow,
 	writtenDuring,
 } from "@kampus/pipeline/tickets/ticket";
+import {Schema} from "effect";
 import {Clock, Context, Duration, Effect, Stream} from "effect";
 import type {ClockSub, load, PollSub, save, saveHints} from "./machine.ts";
 import {type AreaWrite, areaFactOf, factOf, isAreaWrite, type TicketWrite} from "./ticket.ts";
@@ -199,14 +203,30 @@ const saveTicket = (cmd: ReturnType<typeof save>, write: TicketWrite) =>
 				if (landed !== undefined) return {ticket};
 				const now = yield* Clock.currentTimeMillis;
 				const ask = factsOf(timeline, "asked").find((a) => a.ask === fact.ask);
-				const why = "format" in fact ? answerRefused(timeline, fact, now) :
-					ask === undefined ? "The ask is missing" : "format" in ask ? "The ask needs an exact display answer" :
-					factsOf(timeline, "withdrawn").some((w) => w.ask === ask.ask) ? "The ask was withdrawn" :
-					!ask.picks.includes(fact.pick) ? "The answer is not offered" : null;
+				const why =
+					"format" in fact
+						? answerRefused(timeline, fact, now)
+						: ask === undefined
+							? "The ask is missing"
+							: "format" in ask
+								? "The ask needs an exact display answer"
+								: factsOf(timeline, "withdrawn").some((w) => w.ask === ask.ask)
+									? "The ask was withdrawn"
+									: !ask.picks.includes(fact.pick)
+										? "The answer is not offered"
+										: null;
 				if (why !== null) return yield* Effect.fail({_tag: "refused" as const, why});
-				const wrote = yield* ledger.append(inbox, rows.at(-1)?.rev ?? 0, {
-					id: `answer/${fact.ask}`, kind: "answered", writer, data: fact,
-				}).pipe(Effect.as(true), Effect.catchTag("Stale", () => Effect.succeed(false)));
+				const wrote = yield* ledger
+					.append(inbox, rows.at(-1)?.rev ?? 0, {
+						id: `answer/${fact.ask}`,
+						kind: "answered",
+						writer,
+						data: fact,
+					})
+					.pipe(
+						Effect.as(true),
+						Effect.catchTag("Stale", () => Effect.succeed(false)),
+					);
 				if (wrote) return {ticket};
 			}
 			return yield* Effect.fail(refused("The question kept changing. Try again."));
@@ -221,29 +241,106 @@ const saveTicket = (cmd: ReturnType<typeof save>, write: TicketWrite) =>
 	});
 
 /** Seal a parked old question once before any view is allowed to draw it. */
-export const prepareAsk = (ticket: number, ask: string, draft: unknown) => Effect.gen(function* () {
-	const ledger = yield* Ledger;
-	const writer = writerText(yield* Author);
-	const inbox = streams(nameOf(ticket)).inbox;
-	for (let tries = 0; tries < TRIES; tries++) {
-		const rows = yield* ledger.readStream(inbox, 0, -1);
-		const timeline = timelineOf(ticket, rows);
-		const existing = factsOf(timeline, "asked").find((a) => "format" in a && (a.ask === ask || a.replaces === ask));
-		if (existing !== undefined && "format" in existing) return existing;
-		const old = factsOf(timeline, "asked").find((a) => a.ask === ask);
-		if (old === undefined || factsOf(timeline, "answered").some((a) => a.ask === ask))
-			return yield* Effect.fail(refused("The pending question is missing"));
-		const sealed = yield* sealAsk({...draft as object, ask: `${ask}/sealed`, replaces: ask,
-			rec: {_tag: "none", why: "No recommendation was recorded"}});
-		const withdrawn = factsOf(timeline, "withdrawn").some((w) => w.ask === ask);
-		const data = withdrawn ? sealed : {type: "withdrawn", ask, why: "changed"};
-		const wrote = yield* ledger.append(inbox, rows.at(-1)?.rev ?? 0, {
-			id: withdrawn ? sealed.ask : `withdraw/${ask}`, kind: data.type, writer, data,
-		}).pipe(Effect.as(true), Effect.catchTag("Stale", () => Effect.succeed(false)));
-		if (!wrote) continue;
-	}
-	return yield* Effect.fail(refused("The pending question kept changing"));
-});
+export const prepareAsk = (ticket: number, ask: string, draft: unknown) =>
+	Effect.gen(function* () {
+		const ledger = yield* Ledger;
+		const writer = writerText(yield* Author);
+		const inbox = streams(nameOf(ticket)).inbox;
+		for (let tries = 0; tries < TRIES; tries++) {
+			const rows = yield* ledger.readStream(inbox, 0, -1);
+			const timeline = timelineOf(ticket, rows);
+			const existing = factsOf(timeline, "asked").find(
+				(a) => "format" in a && (a.ask === ask || a.replaces === ask),
+			);
+			if (existing !== undefined && "format" in existing) return existing;
+			const old = factsOf(timeline, "asked").find((a) => a.ask === ask);
+			if (old === undefined || factsOf(timeline, "answered").some((a) => a.ask === ask))
+				return yield* Effect.fail(refused("The pending question is missing"));
+			const sealed = yield* sealAsk({
+				...(draft as object),
+				ask: `${ask}/sealed`,
+				replaces: ask,
+				rec: {_tag: "none", why: "No recommendation was recorded"},
+			});
+			const withdrawn = factsOf(timeline, "withdrawn").some((w) => w.ask === ask);
+			const data = withdrawn ? sealed : {type: "withdrawn", ask, why: "changed"};
+			const wrote = yield* ledger
+				.append(inbox, rows.at(-1)?.rev ?? 0, {
+					id: withdrawn ? sealed.ask : `withdraw/${ask}`,
+					kind: data.type,
+					writer,
+					data,
+				})
+				.pipe(
+					Effect.as(true),
+					Effect.catchTag("Stale", () => Effect.succeed(false)),
+				);
+			if (!wrote) continue;
+		}
+		return yield* Effect.fail(refused("The pending question kept changing"));
+	});
+
+/** Recover only evidence the ledger actually kept. Unknown old change approvals stay unreadable. */
+export const preparePending = (number: number) =>
+	Effect.gen(function* () {
+		const ledger = yield* Ledger;
+		const timeline = timelineOf(number, yield* ledger.readStream(streams(nameOf(number)).inbox));
+		const closed = new Set(
+			[...factsOf(timeline, "withdrawn"), ...factsOf(timeline, "answered")].map((f) => f.ask),
+		);
+		const pending = factsOf(timeline, "asked").filter(
+			(a) => !("format" in a) && !closed.has(a.ask),
+		);
+		if (pending.length === 0) return;
+		const stored = foldLedger(yield* readFacts);
+		const tracks = [...stored.plans.values()].filter((p) =>
+			p.tickets.some((t) => t.endsWith(`#${number}`)),
+		);
+		const track = tracks.length === 1 ? tracks[0] : undefined;
+		const version = factsOf(timeline, "planned").at(-1)?.version;
+		const plan = track?.versions.findLast((p) => p.version === version);
+		const last = factsOf(timeline, "ended").at(-1)?.stage;
+		const step = last !== undefined && Schema.is(LaneStep)(last) ? last : "plan";
+		for (const old of pending) {
+			if ("format" in old) continue;
+			const author = timeline.find((e) => e.fact.type === "asked" && e.fact.ask === old.ask)?.by;
+			if (author === undefined) continue;
+			const kind = askedFor(old.ask);
+			if (kind === "merge" || kind === "exam_merge" || (kind === "approve" && plan === undefined))
+				continue;
+			const first = timeline[0]?.fact;
+			const title = first?.type === "filed" ? first.title : "State not recorded";
+			const body = first?.type === "filed" ? first.body : "";
+			yield* prepareAsk(number, old.ask, {
+				for: kind ?? "unknown",
+				step: kind === null ? step : askedStep(kind, step),
+				repo: track?.plan.split("#")[0] ?? "unknown",
+				why: null,
+				what: old.what,
+				picks: old.picks.map((pick) => ({
+					pick,
+					does:
+						pick === "approve"
+							? "Approve this plan and continue to the exam"
+							: pick === "no"
+								? "Keep the lane parked for a new plan"
+								: `Resume the saved lane with ${pick}`,
+				})),
+				ticket: {title, body},
+				until: null,
+				evidence:
+					kind === "approve" && plan !== undefined
+						? {_tag: "plan", version: plan.version, plan: plan.data}
+						: {
+								_tag: "other",
+								text: factsOf(timeline, "commented")
+									.map((f) => f.body)
+									.join("\n\n"),
+							},
+				...(old.trace === undefined ? {} : {trace: old.trace}),
+			}).pipe(Effect.provideService(Author, author));
+		}
+	});
 
 /**
  * Who writes a duplicate hint: code, as the agent `duplicates` working for whoever sits at the

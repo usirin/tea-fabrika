@@ -64,7 +64,13 @@ const approvalOf = (timeline: readonly Entry[]): StepNow => {
 		(e) => e.fact.type === "answered" && e.fact.ask === last.ask,
 	)?.fact;
 	return answer?.type === "answered"
-		? {step: "approval", state: "done", runs: asks.length, usd: 0, last: `answered: ${readAnswer(timeline, answer)?.pick ?? "unknown"}`}
+		? {
+				step: "approval",
+				state: "done",
+				runs: asks.length,
+				usd: 0,
+				last: `answered: ${readAnswer(timeline, answer)?.pick ?? "unknown"}`,
+			}
 		: {step: "approval", state: "you", runs: asks.length, usd: 0, last: questionOf(last)};
 };
 

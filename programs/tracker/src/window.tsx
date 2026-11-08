@@ -1,5 +1,4 @@
 import type {WindowProps} from "@kampus/fabrika-old";
-import {type Text, textOf} from "@kampus/pipeline/tickets/approval";
 import {type Suggested, suggestedName} from "@kampus/pipeline/tickets/area";
 import {Kbd} from "@manti-ui/react";
 import {
@@ -13,6 +12,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import {AskView, StopView} from "./ask-window.tsx";
 import {lineOf, waits} from "./head.ts";
 import type {
 	Head,
@@ -65,7 +65,7 @@ const said = (w: Write): string => {
 		case "reopen":
 			return `reopen #${w.ticket}`;
 		case "answer":
-			return `answer "${w.pick}" on #${w.ticket}`;
+			return `answer on #${w.ticket}`;
 		case "rate_duplicate":
 			return `${w.says} the hint #${w.of} on #${w.ticket}`;
 		case "make_area":
@@ -842,17 +842,7 @@ function TicketPage(props: {
 						))}
 					</ol>
 					{opened.asks.map((ask) => (
-						<AskBox
-							key={ask.ask}
-							number={number}
-							ask={ask}
-							saw={textOf(ticket)}
-							saving={saving.some(
-								(w) => w.kind === "answer" && w.ticket === number && w.ask === ask.ask,
-							)}
-							act={act}
-							onKey={onPageKey}
-						/>
+						<AskBox key={ask.ask} number={number} ask={ask} />
 					))}
 					<form className="tracker-composer tracker-reply" onSubmit={comment} aria-label="comment">
 						<textarea
@@ -952,57 +942,12 @@ const TimelineRow = ({
 	</li>
 );
 
-/**
- * An open ask's box: what it asks, a note, and one button per pick. A click sends `answer`, which
- * writes `answered`; a comment never does. `saw`: the ticket's text on the page, which the answer
- * covers. While the answer is saving, the buttons wait.
- */
-function AskBox(props: {
-	readonly number: number;
-	readonly ask: OpenAsk;
-	readonly saw: Text;
-	readonly saving: boolean;
-	readonly act: Send;
-	readonly onKey: (e: KeyboardEvent) => void;
-}) {
-	const {number, ask, saw, saving, act, onKey} = props;
-	const [note, setNote] = useState("");
-	return (
-		<section className="tracker-ask" aria-label={`ask: ${ask.what}`}>
-			<p className="tracker-meta">
-				<Who of={ask} /> asks you{" "}
-				<time className="tracker-quiet">{whenOf(ask.at, Date.now())}</time>
-			</p>
-			<p className="tracker-ask-what">{ask.what}</p>
-			<textarea
-				aria-label="note with the answer"
-				placeholder="A note with your answer, if it needs one"
-				rows={2}
-				value={note}
-				onChange={(e) => setNote(e.target.value)}
-				onKeyDown={onKey}
-			/>
-			<div className="tracker-row">
-				{ask.picks.map((pick, i) => (
-					<button
-						key={pick}
-						type="button"
-						className={i === 0 ? "tracker-primary" : undefined}
-						disabled={saving}
-						onKeyDown={onKey}
-						onClick={() =>
-							act({
-								type: "answer",
-								value: {ticket: number, ask: ask.ask, pick, note: note.trimEnd(), saw},
-							})
-						}
-					>
-						{pick}
-					</button>
-				))}
-				{saving ? <small>saving…</small> : null}
-			</div>
-		</section>
+function AskBox(props: {readonly number: number; readonly ask: OpenAsk}) {
+	const {number, ask} = props;
+	return ask.sealed === undefined ? (
+		<StopView ticket={number} why="State not recorded" />
+	) : (
+		<AskView ticket={number} ask={ask.sealed} />
 	);
 }
 

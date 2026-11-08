@@ -610,7 +610,11 @@ export const factsOf = <T extends Fact["type"]>(
 	timeline.flatMap((e) => (e.fact.type === type ? [e.fact as FactOf<T>] : []));
 
 /** The current subject still matches the sealed display. Writer clocks never decide expiry. */
-export const answerRefused = (timeline: readonly Entry[], fact: Answered, at: number): string | null => {
+export const answerRefused = (
+	timeline: readonly Entry[],
+	fact: Answered,
+	at: number,
+): string | null => {
 	const ask = factsOf(timeline, "asked").find((a) => a.ask === fact.ask);
 	if (ask === undefined || !("format" in ask)) return "The sealed ask is missing";
 	if (factsOf(timeline, "withdrawn").some((w) => w.ask === ask.ask)) return "The ask was withdrawn";
@@ -618,7 +622,8 @@ export const answerRefused = (timeline: readonly Entry[], fact: Answered, at: nu
 	if (fact.saw !== ask.saw) return "The displayed question changed";
 	if (answerOf(ask, fact.answer) === null) return "The answer is not offered by this ask";
 	const evidence = ask.shows.evidence;
-	if (evidence._tag === "plan" && factsOf(timeline, "planned").at(-1)?.version !== evidence.version)
+	const planned = factsOf(timeline, "planned").at(-1);
+	if (evidence._tag === "plan" && planned !== undefined && planned.version !== evidence.version)
 		return "The plan changed";
 	if (evidence._tag === "change") {
 		const current = timeline.findLast((e) => e.fact.type === "pushed" || e.fact.type === "pr");
@@ -629,19 +634,28 @@ export const answerRefused = (timeline: readonly Entry[], fact: Answered, at: nu
 };
 
 /** One answer reader for current and historical facts, including replacement waits. */
-export const readAnswer = (timeline: readonly Entry[], fact: FactOf<"answered">) => {
-	if (!("format" in fact)) return {ask: fact.ask, pick: fact.pick, note: fact.note, head: fact.head};
-	const ask = factsOf(timeline, "asked").find((a) => a.ask === fact.ask);
-	if (ask === undefined || !("format" in ask)) return null;
+export const readAnswer = (
+	timeline: readonly {readonly fact: Fact}[],
+	fact: FactOf<"answered">,
+) => {
+	if (!("format" in fact))
+		return {ask: fact.ask, pick: fact.pick, note: fact.note, head: fact.head};
+	const ask = timeline.find((e) => e.fact.type === "asked" && e.fact.ask === fact.ask)?.fact;
+	if (ask?.type !== "asked" || !("format" in ask)) return null;
 	const answer = answerOf(ask, fact.answer);
-	return answer === null ? null : {
-		...answer, ask: ask.replaces ?? ask.ask,
-		head: ask.shows.evidence._tag === "change" ? ask.shows.evidence.head : undefined,
-	};
+	return answer === null
+		? null
+		: {
+				...answer,
+				ask: ask.replaces ?? ask.ask,
+				head: ask.shows.evidence._tag === "change" ? ask.shows.evidence.head : undefined,
+			};
 };
 
-export const questionOf = (ask: FactOf<"asked">): string => "format" in ask ? ask.shows.what : ask.what;
-export const picksOf = (ask: FactOf<"asked">): readonly string[] => "format" in ask ? ask.shows.picks.map((p) => p.pick) : ask.picks;
+export const questionOf = (ask: FactOf<"asked">): string =>
+	"format" in ask ? ask.shows.what : ask.what;
+export const picksOf = (ask: FactOf<"asked">): readonly string[] =>
+	"format" in ask ? ask.shows.picks.map((p) => p.pick) : ask.picks;
 
 /**
  * The run live on a timeline: its last `started`, while no `ended` names that run. `null`: none

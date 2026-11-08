@@ -13,9 +13,17 @@ import {Carried, Given} from "./carry.ts";
 import {openWords, ruleChangeLines, throughWords} from "./found.ts";
 import {EndOutcome, isEnd, LaneOutcome, StopOutcome} from "./outcome.ts";
 import type {Folded} from "./restart.ts";
-import {AskFor, LaneStep, ROUTES, type Move as Route, STEPS} from "./routes.ts";
+import {
+	AskFor,
+	askedFor,
+	askedStep,
+	LaneStep,
+	ROUTES,
+	type Move as Route,
+	STEPS,
+} from "./routes.ts";
 
-export {AskFor, LaneStep, STEPS};
+export {AskFor, askedFor, askedStep, LaneStep, STEPS};
 
 // The lane: one tracker ticket through every step, in order. Plain tea. Each step is a machine of
 // its own, and the lane starts each as one Act and reads its outcome, as `operate` does; it never
@@ -89,14 +97,6 @@ const stopsAt = (step: LaneStep, end: LaneOutcome): Resume =>
  * back for. Past it, only a person's `again`. 3 is a guess (docs/direction/jidoka-and-andon.md#bounds).
  */
 export const MAX_ROUNDS = 3;
-
-const isAskFor = Schema.is(AskFor);
-
-/** The kind of question a lane's ask id names: `a-approve-3` is `approve`. `null`: not a lane's. Pure. */
-export const askedFor = (ask: string): AskFor | null => {
-	const kind = /^a-([a-z_]+)-\d+$/.exec(ask)?.[1];
-	return kind !== undefined && isAskFor(kind) ? kind : null;
-};
 
 /** The picks that give the builder one more round past the bound: a person's call, each counted once. */
 const GRANTS: Readonly<Partial<Record<AskFor, readonly string[]>>> = {
@@ -289,7 +289,11 @@ const AskIn = Schema.Struct({
 	head: Schema.optionalKey(Schema.String),
 });
 /** How the lane ended, for what it takes with it. Left out: a lane saved before this key still reads. */
-const ReleaseIn = Schema.Struct({...LaneIn.fields, outcome: Schema.optionalKey(LaneOutcome), resume: Schema.optionalKey(LaneStep)});
+const ReleaseIn = Schema.Struct({
+	...LaneIn.fields,
+	outcome: Schema.optionalKey(LaneOutcome),
+	resume: Schema.optionalKey(LaneStep),
+});
 
 /** Who filed it, as the lane reads it. */
 export const Filed = Schema.Struct({
@@ -794,17 +798,6 @@ const pausedBy = (question: Question): StopOutcome =>
 const pausedAt = (question: Question, pick: string): Resume =>
 	goesOnFrom(resumeOf(question, pick), pausedBy(question));
 
-/** Where a spent round's `again` goes: the writer first after a review, as a review's send-back does. */
-const againTo = (step: LaneStep): LaneStep =>
-	EXAM_STEPS.has(step) ? "exam" : step === "review" ? "test_writer" : "build";
-
-/**
- * The step a question of `kind` comes back to, asked after `step` ended. The rounds' question comes
- * back to where its `again` goes; main's change to the test writer's files, to the test writer. Pure.
- */
-export const askedStep = (kind: AskFor, step: LaneStep): LaneStep =>
-	kind === "rounds_spent" ? againTo(step) : kind === "exam_conflict" ? "test_writer" : step;
-
 /**
  * Where a lane goes on after `step` ended with `outcome` in `round`, with `trail` behind it, had it
  * stopped right there. Pure.
@@ -1048,7 +1041,7 @@ const headAsked = (kind: AskFor, carry: Carry): {readonly head?: string} => {
 const asking = (s: Held, question: Question): Step_ => {
 	const cmd = askPerson({
 		number: s.number,
-		for: question.for === "step" ? question.call?.about ?? "unknown" : question.for,
+		for: question.for === "step" ? (question.call?.about ?? "unknown") : question.for,
 		step: question.step,
 		carry: s.carry,
 		ask: question.ask,

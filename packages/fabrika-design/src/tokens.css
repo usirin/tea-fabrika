@@ -23,6 +23,7 @@
 	--surface-sunken: light-dark(#f9f9fb, #0c0d0e); /* slate 2; dark: a bend, under slate 1 */
 	--surface: light-dark(#fcfcfd, #111113); /* slate 1 */
 	--surface-raised: light-dark(#fcfcfd, #18191b); /* slate 1; slate 2 */
+	--surface-card: light-dark(#f0f0f3, #212225); /* slate 3 */
 	--surface-hover: light-dark(#0000330f, #ddeaf814); /* slate a3 */
 	--surface-selected: light-dark(#0009321f, #d9edfe25); /* slate a5 */
 
