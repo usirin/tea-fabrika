@@ -66,7 +66,9 @@ export const openNames = (storage: Storage) =>
 			take: (name: Name) =>
 				runtime.dispatch({type: "taken", name}).pipe(
 					Effect.orDie,
-					Effect.map(() => runtime.getState().names.some((n) => n.run === name.run)),
+					Effect.map(() =>
+						runtime.getState().names.some((n) => n.name === name.name && n.run === name.run),
+					),
 				),
 			free: (name: string) => runtime.dispatch({type: "freed", name}).pipe(Effect.orDie),
 		};
