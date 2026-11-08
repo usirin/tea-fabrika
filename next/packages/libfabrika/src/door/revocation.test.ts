@@ -419,7 +419,8 @@ describe("P17a, revoke stops writes at the final door", () => {
 							const entered = yield* Deferred.make<void>(),
 								release = yield* Deferred.make<void>();
 							const digest = crypto.subtle.digest.bind(crypto.subtle),
-								marker = `p17-queued-${text}`;
+								marker = `p17-queued-${text}`,
+								encodedMarker = JSON.stringify(marker);
 							let paused = false;
 							const spy = vi
 								.spyOn(crypto.subtle, "digest")
@@ -427,7 +428,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 									const bytes = ArrayBuffer.isView(data)
 										? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
 										: new Uint8Array(data);
-									if (!paused && new TextDecoder().decode(bytes).includes(marker)) {
+									if (!paused && new TextDecoder().decode(bytes).includes(encodedMarker)) {
 										paused = true;
 										return Effect.runPromise(
 											Deferred.succeed(entered, undefined).pipe(
@@ -466,7 +467,11 @@ describe("P17a, revoke stops writes at the final door", () => {
 					);
 				},
 			),
-			checks,
+			{
+				...checks,
+				// P17a regression: JSON-escaped text used to miss the pause after receipt checking.
+				examples: [["notes", true, false, '"\n\\']],
+			},
 		);
 	});
 	it("old-key challenges cannot reconnect or regrant it; a separate admitted client keeps writing", async () => {

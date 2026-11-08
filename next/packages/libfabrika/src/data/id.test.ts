@@ -4,7 +4,7 @@ import {beforeEach, describe, expect, expectTypeOf, it, vi} from "@effect/vitest
 import {Effect, Result, Schema} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
-import {ProcessIdGenerator} from "../coordination/process-id.ts";
+import {ProcessId} from "./trace.ts";
 
 let ids: typeof import("./id.ts");
 beforeEach(async () => {
@@ -201,15 +201,12 @@ describe("P17a, one valid typed identity", () => {
 									made.push(input.slice(6));
 								}
 								expect(made).toEqual([...new Set(made)].sort());
-								const process = yield* ProcessIdGenerator.use((g) => g.next);
+								const process = yield* gen.next(ids.Id.make("process"));
+								expect(Schema.is(ProcessId)(process)).toBe(true);
 								expect(process).toMatch(/^process_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
 								expect(unpack(process)[6]! >>> 4).toBe(7);
 								expect(unpack(process)[8]! >>> 6).toBe(2);
-							}).pipe(
-								Effect.provide(ProcessIdGenerator.layer),
-								Effect.provide(ids.IdGenerator.layer),
-								Effect.provide(TestClock.layer()),
-							),
+							}).pipe(Effect.provide(ids.IdGenerator.layer), Effect.provide(TestClock.layer())),
 						);
 					} finally {
 						entropy.mockRestore();
