@@ -105,6 +105,7 @@ describe("P10 JSON-RPC", () => {
 									ping: "30s",
 									key: "k",
 									tab: "t",
+									nonce: "n",
 									platform: "headless",
 									os: "linux",
 									sentAt: "",
