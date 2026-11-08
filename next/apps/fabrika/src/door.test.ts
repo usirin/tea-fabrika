@@ -2181,7 +2181,10 @@ describe("P33 signal ids belong to the brain", () => {
 					yield* d.route(client, "process.send", request("press"));
 					const parent = w.deliveries.at(-1)!.envelope.id;
 					const fact = {_tag: "send", m: {_tag: "DOWN", ref: "watch:1", why: "normal"}};
-					yield* writeId(id, d.signer(parent, PROCESS, "send"));
+					// The signer refuses a signal id outright, and the append refuses it if reached.
+					expect(yield* Effect.flip(writeId(id, d.signer(parent, PROCESS, "send")))).toMatchObject({
+						_tag: "SigningRefused",
+					});
 					expect(
 						yield* Effect.flip(
 							d.append({id, parent, process: PROCESS, kind: "send", stream: "notes", fact}),
@@ -2235,7 +2238,9 @@ describe("P33 signal ids belong to the brain", () => {
 				yield* d.route(client, "process.send", request("press"));
 				const parent = w.deliveries.at(-1)!.envelope.id;
 				const taken = JSON.stringify(["DOWN", toWatcher, "watch:1"]);
-				yield* writeId(taken, d.signer(parent, PROCESS, "send"));
+				expect(yield* Effect.flip(writeId(taken, d.signer(parent, PROCESS, "send")))).toMatchObject(
+					{_tag: "SigningRefused"},
+				);
 				const forged = {
 					_tag: "send",
 					m: {_tag: "DOWN", ref: "watch:1", process: TARGET, why: "normal", to: toWatcher},

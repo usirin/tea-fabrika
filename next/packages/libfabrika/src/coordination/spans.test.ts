@@ -397,13 +397,15 @@ describe("p97, names and numbers only", () => {
 	it.effect("a name, an id and a key far over 128 characters are cut in every tag", () => {
 		const {tracer, spans, ended} = capture();
 		const long = (letter: string) => letter.repeat(300);
+		// Process texts stay under their 256-character cap and still pass the 128 tag cut.
+		const capped = (letter: string) => letter.repeat(200);
 		return Effect.gen(function* () {
 			const mailbox = yield* Mailbox;
 			const manager = yield* ProcessManager;
 			yield* mailbox.send(long("n"), long("i"), {value: M_MARK}, from({by: long("b")}));
 			yield* Stream.runCollect(mailbox.receive(long("n"), 0));
 			yield* manager.start(
-				firstStart("start:long", long("p"), {program: long("g"), hash: long("h")}),
+				firstStart("start:long", capped("p"), {program: capped("g"), hash: capped("h")}),
 				from({seen: 1}),
 			);
 			yield* write(granted(long("k"), "t1"));
