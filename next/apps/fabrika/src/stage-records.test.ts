@@ -234,6 +234,7 @@ export class Process extends Brain.Process {
 }
 export class Project extends Brain.Project {
   testGateway(name,method,args) { return this.env.GATEWAY.getByName(name)[method](...args); }
+  testWaits(reader,stream) { return Array.from(this.ctx.storage.sql.exec('SELECT "to",stream,after FROM rings WHERE "to"=? AND stream=?',reader,stream)); }
 }
 export class Control extends Brain.Control {
   async fetch(request) {
@@ -373,16 +374,26 @@ describe("P12 real object adapters", () => {
 			let after = 0;
 			try {
 				for (const mode of ["sleep", "abort", "replacement"] as const) {
-					const waiting = c.call("ledger.wait", {stream: "counter:1/inbox", after}).then(
-						(answer) => ({answer}),
-						() => ({closed: true}),
-					);
+					let settled = false;
+					const wait = () =>
+						c.call("ledger.wait", {stream: "counter:1/inbox", after}).then(
+							(answer) => {
+								settled = true;
+								return {answer};
+							},
+							() => {
+								settled = true;
+								return {closed: true};
+							},
+						);
+					let waiting = wait();
 					let before = await gateway("testState");
 					while (!before.sockets.some((row: any) => row.attachment.waits?.length === 1)) {
 						await pause();
 						before = await gateway("testState");
 					}
 					if (mode === "sleep") {
+						// The original pending reply remains the one checked after wake.
 						// workerd's idle eviction is normally about ten seconds. This is an outside
 						// probe of that behavior: fail if the object did not actually sleep.
 						await pause(12_000);
@@ -402,9 +413,23 @@ describe("P12 real object adapters", () => {
 							}
 							expect(current).not.toBe(old);
 						}
-						// An object abort may close its socket. The client replays its same wait.
-						if (mode === "replacement" || c.closeCode() !== undefined) {
-							await waiting;
+						let awake;
+						for (;;) {
+							try {
+								awake = await gateway("testState");
+								break;
+							} catch {
+								await pause();
+							}
+						}
+						expect(awake.incarnation).not.toBe(before.incarnation);
+						// If its socket closes, replay the pending wait before anything can ring it.
+						if (
+							mode === "replacement" ||
+							c.closeCode() !== undefined ||
+							awake.sockets.length === 0
+						) {
+							expect(await waiting).toEqual({closed: true});
 							for (;;) {
 								try {
 									c = await wire(stage, key, "wait-recovery");
@@ -413,8 +438,27 @@ describe("P12 real object adapters", () => {
 									await pause();
 								}
 							}
+							settled = false;
+							waiting = wait();
+							let saved = await gateway("testState");
+							while (!saved.sockets.some((row: any) => row.attachment.waits?.length === 1)) {
+								await pause();
+								saved = await gateway("testState");
+							}
+							before = saved;
 						}
 					}
+					// Inspect saved data only. Calling wait here would conceal a lost registration.
+					const pending = before.sockets[0].attachment.waits[0];
+					expect(pending).toMatchObject({stream: "counter:1/inbox", after});
+					expect((await gateway("testState")).sockets[0].attachment.waits).toEqual([pending]);
+					let rings = await p.testWaits(c.name, "counter:1/inbox");
+					while (rings.length === 0) {
+						await pause();
+						rings = await p.testWaits(c.name, "counter:1/inbox");
+					}
+					expect(rings).toEqual([{to: c.name, stream: "counter:1/inbox", after}]);
+					expect(settled, `${mode} wait must still be parked before append`).toBe(false);
 					const reply = await routed(p, client, "process.send", {
 						pid,
 						letter: `after-${mode}`,
@@ -424,12 +468,9 @@ describe("P12 real object adapters", () => {
 					});
 					expect(reply).toMatchObject({_tag: "ok", result: {_tag: "accepted"}});
 					after = reply.result.rev;
-					if (mode === "sleep")
-						expect(await waiting).toMatchObject({answer: {result: {rev: after}}});
-					else
-						expect(
-							await c.call("ledger.wait", {stream: "counter:1/inbox", after: after - 1}),
-						).toMatchObject({result: {rev: after}});
+					expect(await waiting).toMatchObject({answer: {id: pending.id, result: {rev: after}}});
+					expect((await gateway("testState")).sockets[0].attachment.waits).toEqual([]);
+					expect(await p.testWaits(c.name, "counter:1/inbox")).toEqual([]);
 					expect((await p.info()).find((row: any) => row.name === "counter:1").process).toBe(pid);
 				}
 			} finally {
@@ -715,22 +756,19 @@ describe("P12 real object adapters", () => {
 		},
 	);
 	it("p79/alarm handoff plant: storage wake keeps pid; durable due delivery has one letter and one Cmd", async () => {
-		await world(async (stage, _key, fixture) => {
-			const p = stage.project("p12-records");
+		await world(async (stage, key, fixture) => {
+			const {p, client} = await admitted(stage, key);
 			const start = await fixture.start("timer:1", "timer-fixture");
 			const process = stage.process(start.process);
-			await process.msg({
-				id: "schedule",
-				envelope: {
-					id: `in-${start.process}-1`,
-					by: {_tag: "person", key: "SHA256:fixture", for: PERSON},
-					arrivedAt: 1,
-					input: {type: "schedule", at: 42},
-				},
-				sentAt: SENT,
-				seen: 0,
-				span: {traceId: TRACE, spanId: "00f067aa0ba902b7"},
-			});
+			expect(
+				await routed(p, client, "process.send", {
+					pid: start.process,
+					letter: "schedule",
+					m: {type: "schedule", at: 42},
+					sentAt: SENT,
+					seen: 0,
+				}),
+			).toMatchObject({_tag: "ok", result: {_tag: "accepted"}});
 			await process.abort();
 			expect((await p.info()).find((i: any) => i.name === "timer:1").process).toBe(start.process);
 			await process.due(42);

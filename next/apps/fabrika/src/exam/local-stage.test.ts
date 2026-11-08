@@ -38,6 +38,10 @@ const member = (node: Tree): string | null => {
 	}
 	return null;
 };
+const root = (node: Tree): string | null => {
+	if (node?.type === "Identifier") return node.name;
+	return node?.type === "MemberExpression" ? root(node.object) : null;
+};
 const name = (node: ModuleExportName) => (node.type === "Identifier" ? node.name : node.value);
 // Follow the package's actual namespace and star exports, including aliases.
 const exported = (
@@ -154,6 +158,10 @@ const scan = (file: string, body: string): Array<Finding> => {
 		named = new Map<string, string>();
 	const remote = new Set<string>();
 	const helpers = new Set<string>();
+	const cloudImport = (node: Tree) => {
+		const first = root(node);
+		return first !== null && (cloud.has(first) || named.has(first));
+	};
 	const report = (node: Tree, why: string) =>
 		found.push({file, line: body.slice(0, node.start).split("\n").length, why});
 	for (const node of ast.body)
@@ -186,7 +194,7 @@ const scan = (file: string, body: string): Array<Finding> => {
 	nodes(ast, (node) => {
 		if (node.type === "VariableDeclarator") {
 			const alias = member(node.init);
-			if (alias && (cloud.has(alias.split(".")[0]!) || named.has(alias) || remote.has(alias)))
+			if (cloudImport(node.init) || (alias && remote.has(alias)))
 				report(node, "unsupported-case: aliased resource or remote function");
 		}
 		if (node.type !== "CallExpression") return;
@@ -203,11 +211,7 @@ const scan = (file: string, body: string): Array<Finding> => {
 					: null;
 		if (!parts) {
 			// Computed Cloudflare calls and aliased constructors must be understood before blocking.
-			if (
-				node.callee?.type === "MemberExpression" &&
-				cloud.has(member(node.callee.object)?.split(".")[0] ?? "") &&
-				node.callee.computed
-			)
+			if (node.callee?.type === "MemberExpression" && cloudImport(node.callee))
 				report(node, "unsupported-case: computed resource");
 			return;
 		}
@@ -235,6 +239,16 @@ const scan = (file: string, body: string): Array<Finding> => {
 };
 
 describe("P12 local twin exam", () => {
+	it.each([
+		['Zone["Zone"]("Remote", {name: "test.invalid"});', "computed resource"],
+		['const Z = Zone.Zone; Z("Remote", {name: "test.invalid"});', "aliased resource"],
+	])("named import plant beside the valid stack: %s", (call, why) => {
+		const stack = join(ROOT, "next/apps/fabrika/alchemy.run.ts");
+		const body = `${text(stack)}\nimport {Zone} from "@alchemy.run/cloudflare";\n${call}`;
+		expect(scan(stack, body).map((finding) => finding.why)).toContainEqual(
+			expect.stringContaining(`unsupported-case: ${why}`),
+		);
+	});
 	it("every named Cloudflare namespace is checked alongside valid local resources", () => {
 		const stack = join(ROOT, "next/apps/fabrika/alchemy.run.ts");
 		for (const [imported, call] of [

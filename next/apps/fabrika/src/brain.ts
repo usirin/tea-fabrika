@@ -18,6 +18,8 @@ import {
 	configureProcess,
 	savedAlarm,
 	processDescriptor,
+	signingReply,
+	commitReply,
 } from "@kampus/libfabrika/workers/runtime";
 import {DurableObject, WorkerEntrypoint} from "cloudflare:workers";
 import {Effect} from "effect";
@@ -107,11 +109,13 @@ export class Project extends DurableObject<Env> {
 	}
 	sign(pid: string, id: string, parent: string, kind: string) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-		return this.runtime.runPromise(ProjectService.use((p) => p.sign(pid, id, parent, kind)));
+		return this.runtime.runPromise(
+			ProjectService.use((p) => signingReply(p.sign(pid, id, parent, kind))),
+		);
 	}
 	commit(pid: string, input: Parameters<ContextProject["commit"]>[1]) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-		return this.runtime.runPromise(ProjectService.use((p) => p.commit(pid, input)));
+		return this.runtime.runPromise(ProjectService.use((p) => commitReply(p.commit(pid, input))));
 	}
 	own(
 		pid: string,
