@@ -918,6 +918,96 @@ const runnerWorld = (
 };
 
 describe("T285, runner tracing keep-laws", () => {
+	it("generated reply conflicts keep the refusal reason and the pending Cmd", async () => {
+		await fc.assert(
+			fc.asyncProperty(context, attributes, async (ctx, a) => {
+				const w = runnerWorld({name: "refused-reply", build: a.build, key: a.by}, ctx);
+				try {
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const ledger = yield* Ledger;
+							const runner = yield* ProgramRunner;
+							const store = yield* ProcessStore;
+							// This unrelated first row reserves the answer id for the next input at position 2.
+							const id = `${PROCESS}/2/0/answer`;
+							expect(
+								yield* ledger.append("refused-reply/inbox", id, line(a, ctx.traceId)),
+							).toMatchObject({_tag: "placed", pos: 1});
+							const error = yield* Effect.flip(
+								runner.msg(w.input(1, {type: "work", value: a.value})),
+							);
+							expect(error).toMatchObject({
+								_tag: "LedgerError",
+								why: "refused",
+								message: "id_reused",
+							});
+							expect((yield* store.load)?.cmds).toHaveLength(1);
+							const entries = yield* Stream.runCollect(ledger.read("refused-reply/inbox", 0));
+							expect(entries.filter((entry) => entry.id === id)).toHaveLength(1);
+							expect(entries.find((entry) => entry.id === id)?.body).toEqual({value: a.value});
+						}).pipe(Effect.withParentSpan(Tracer.externalSpan(ctx)), Effect.provide(w.layer)),
+					);
+				} finally {
+					w.close();
+				}
+			}),
+			CHECK,
+		);
+	});
+
+	it("generated successful Cmds save typed answers and update the model once", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				context,
+				fc.array(
+					fc.record({
+						value: fc.integer(),
+						at: fc.integer({min: 0, max: 2_000_000_000_000}),
+					}),
+					{minLength: 1, maxLength: 12},
+				),
+				async (ctx, calls) => {
+					const w = runnerWorld({name: "reply-test", build: "test", key: "test"}, ctx);
+					let now = 0;
+					try {
+						await Effect.runPromise(
+							Effect.gen(function* () {
+								const runner = yield* ProgramRunner;
+								const ledger = yield* Ledger;
+								for (const [index, call] of calls.entries()) {
+									now = call.at;
+									yield* runner.msg(w.input(index + 1, {type: "work", value: call.value}));
+									const entries = yield* Stream.runCollect(ledger.read("reply-test/inbox", 0));
+									const answers = entries.filter((entry) => entry.id.endsWith("/answer"));
+									expect(answers).toHaveLength(index + 1);
+									expect(answers.at(-1)?.body).toEqual({
+										m: {
+											type: "work_ok",
+											cmd: {type: "work", value: call.value},
+											value: 1,
+											at: call.at,
+										},
+									});
+									expect((yield* runner.open("inspect")).view).toEqual({replies: index + 1});
+								}
+							}).pipe(
+								Effect.withParentSpan(Tracer.externalSpan(ctx)),
+								Effect.provide(w.layer),
+								Effect.provideService(
+									Clock.Clock,
+									clock(() => now),
+								),
+							),
+						);
+					} finally {
+						w.close();
+					}
+				},
+			),
+			CHECK,
+		);
+	});
+
 	it("generated operations keep names, attributes, parents, signer links and refusal spans", async () => {
 		const action = fc.record({
 			op: fc.constantFrom(
