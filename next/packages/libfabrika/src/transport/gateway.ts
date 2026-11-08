@@ -44,7 +44,7 @@ export const connection = <E>(options: Options<E>) => {
 			),
 		);
 	};
-	const remove = (wait: typeof Wait.Type, rev: number) => {
+	const remove = (wait: typeof Wait.Type, answer: typeof Answer.Type) => {
 		const now = options.read();
 		if (
 			now._tag !== "online" ||
@@ -52,8 +52,24 @@ export const connection = <E>(options: Options<E>) => {
 		)
 			return;
 		options.save({...now, waits: now.waits.filter((w) => w.id !== wait.id)});
-		respond(wait.id, Answer.cases.ok.make({result: {rev}}));
+		respond(wait.id, answer);
 	};
+	const register = Effect.fnUntraced(function* (wait: typeof Wait.Type) {
+		const answer = yield* Effect.result(options.wait(wait.stream, wait.after, options.reader));
+		if (Result.isFailure(answer)) {
+			const error = answer.failure;
+			const why =
+				typeof error === "object" &&
+				error !== null &&
+				"why" in error &&
+				typeof error.why === "string"
+					? error.why
+					: "unreachable";
+			remove(wait, Answer.cases.refused.make({why}));
+		} else if (answer.success._tag === "ready")
+			remove(wait, Answer.cases.ok.make({result: {rev: answer.success.rev}}));
+		return Result.isSuccess(answer) && answer.success._tag === "parked";
+	});
 	const parked = Effect.fnUntraced(function* (id: string | number, params: unknown) {
 		const now = options.read();
 		if (now._tag !== "online") return respond(id, Answer.cases.refused.make({why: "no_hello"}));
@@ -69,8 +85,7 @@ export const connection = <E>(options: Options<E>) => {
 		)
 			return respond(id, Answer.cases.refused.make({why: "too_many_waits"}));
 		options.save(next);
-		const answer = yield* options.wait(wait.stream, wait.after, options.reader);
-		if (answer._tag === "ready") remove(wait, answer.rev);
+		yield* register(wait);
 	});
 	const ordinary = Effect.fnUntraced(function* (request: typeof Request.Type) {
 		const now = options.read();
@@ -92,14 +107,24 @@ export const connection = <E>(options: Options<E>) => {
 			if (request.method === "ledger.wait") return yield* parked(request.id, request.params);
 			yield* ordinary(request).pipe(turn.withPermit);
 		}),
-		ring: Effect.fn("gateway.ring")((stream: string, rev: number) =>
-			Effect.sync(() => {
-				const now = options.read();
-				if (now._tag === "online")
-					for (const wait of now.waits)
-						if (wait.stream === stream && rev > wait.after) remove(wait, rev);
-			}),
-		),
+		ring: Effect.fn("gateway.ring")(function* (stream: string, rev: number) {
+			const now = options.read();
+			if (now._tag === "online")
+				for (const wait of now.waits)
+					if (wait.stream === stream && rev > wait.after)
+						remove(wait, Answer.cases.ok.make({result: {rev}}));
+			while (true) {
+				const latest = options.read();
+				if (latest._tag !== "online") return;
+				const next = latest.waits
+					.filter((wait) => wait.stream === stream)
+					.reduce<typeof Wait.Type | undefined>(
+						(first, wait) => (first === undefined || wait.after < first.after ? wait : first),
+						undefined,
+					);
+				if (next === undefined || (yield* register(next))) return;
+			}
+		}),
 		wake: Effect.fn("gateway.wake")(() =>
 			Effect.sync(() => {
 				const now = options.read();

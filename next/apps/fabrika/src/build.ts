@@ -9,7 +9,7 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs";
-import {dirname, join, resolve} from "node:path";
+import {dirname, join, relative, resolve} from "node:path";
 import {Effect, Schema} from "effect";
 import {rolldown, type Plugin} from "rolldown";
 import {check, compile, Row} from "./exam/compiler.ts";
@@ -60,7 +60,10 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 					globSync("next/**/*.tsx", {cwd: ROOT})
 						.filter((p) => !p.includes("node_modules") && !p.includes(".test."))
 						.map((p) => join(ROOT, p))
-				).map((file) => [file, readFileSync(file, "utf8")]),
+				).map((file) => [
+					relative(ROOT, resolve(ROOT, file)),
+					readFileSync(resolve(ROOT, file), "utf8"),
+				]),
 			),
 		catch: () => new BuildError({why: "read"}),
 	});
@@ -69,11 +72,11 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 		Schema.decodeUnknownSync(Schema.Array(Row))(
 			JSON.parse(readFileSync(join(ROOT, "compiler-ledger.json"), "utf8")),
 		);
-	if (check(files, ledger).length) return yield* new BuildError({why: "compiler"});
 	const compiler: Plugin = {
 		name: "fabrika-compiler",
 		transform(code, id) {
 			if (!id.endsWith(".tsx")) return;
+			files.set(relative(ROOT, id), code);
 			const out = compile(id, code);
 			return {code: out.code};
 		},
@@ -116,6 +119,8 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 		.map((o) => o.code)
 		.join("\n");
 	const build = hash(brain);
+	// Include modules discovered by Rolldown, then check the whole ledger for stale rows.
+	if (check(files, ledger).length) return yield* new BuildError({why: "compiler"});
 	yield* Effect.try({
 		try: () => {
 			mkdirSync(dirname(options.out), {recursive: true});

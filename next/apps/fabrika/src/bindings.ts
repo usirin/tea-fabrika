@@ -44,7 +44,13 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
 		>;
 		inbox: RemoteCall<(pid: string, input: Incoming) => Effect.Effect<Appended>>;
 		own: RemoteCall<
-			(pid: string, id: string, stream: string, fact: unknown) => Effect.Effect<Appended>
+			(
+				pid: string,
+				id: string,
+				stream: string,
+				fact: unknown,
+				trace?: {traceId: string; spanId: string},
+			) => Effect.Effect<Appended>
 		>;
 		publish: RemoteCall<(client: string, update: unknown) => Effect.Effect<void>>;
 		brain: RemoteCall<(fact: typeof BrainFact.Type) => Effect.Effect<Appended>>;
@@ -52,6 +58,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
 export type ProcessBinding = Rpc.DurableObjectBranded &
 	Remote<Pick<Runner, "msg" | "open" | "due">> & {
 		configure: RemoteCall<(descriptor: Descriptor) => Effect.Effect<void>>;
+		descriptor: RemoteCall<() => Effect.Effect<Descriptor>>;
 		activity: RemoteCall<(value: typeof Activity.Type) => Effect.Effect<void>>;
 		recover: RemoteCall<() => Effect.Effect<unknown>>;
 		savedAlarm: RemoteCall<() => Effect.Effect<number | null>>;

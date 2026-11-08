@@ -55,6 +55,7 @@ export const checkMemory = Effect.fn("brain.checkMemory")(function* <E, R>(optio
 
 export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
 	const file = join(home, "brain.pending.jsonl");
+	const lastFile = join(home, "brain.last.json");
 	const turn = yield* Semaphore.make(1);
 	const read = Effect.try({
 		try: () => {
@@ -91,7 +92,45 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
 			},
 			catch: () => new BrainError({why: "storage"}),
 		});
+	const last = Effect.fnUntraced(function* () {
+		const pending = (yield* read).filter((fact) => fact._tag === "started").at(-1);
+		if (pending !== undefined) return pending.start;
+		return yield* Effect.try({
+			try: () =>
+				existsSync(lastFile)
+					? Schema.decodeUnknownSync(Schema.fromJsonString(Schema.NonEmptyString))(
+							readFileSync(lastFile, "utf8"),
+						)
+					: null,
+			catch: () => new BrainError({why: "bad_row"}),
+		});
+	});
+	const saveLast = Effect.fnUntraced(function* () {
+		const start = yield* last();
+		if (start === null) return;
+		yield* Effect.try({
+			try: () => {
+				const pending = `${lastFile}.tmp`;
+				const fd = openSync(pending, "w", 0o600);
+				try {
+					writeFileSync(fd, JSON.stringify(start));
+					fsyncSync(fd);
+				} finally {
+					closeSync(fd);
+				}
+				renameSync(pending, lastFile);
+				const dir = openSync(home, "r");
+				try {
+					fsyncSync(dir);
+				} finally {
+					closeSync(dir);
+				}
+			},
+			catch: () => new BrainError({why: "storage"}),
+		});
+	});
 	return {
+		last: last().pipe(turn.withPermit),
 		pending: read.pipe(turn.withPermit),
 		add: Effect.fn("brain.pending")(function* (raw: unknown) {
 			yield* Effect.gen(function* () {
@@ -106,6 +145,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
 					return;
 				}
 				yield* write([...rows, fact]);
+				if (fact._tag === "started") yield* saveLast();
 			}).pipe(turn.withPermit);
 		}),
 		flush: Effect.fn("brain.flush")(function* <E, R>(
@@ -113,6 +153,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
 		) {
 			yield* Effect.gen(function* () {
 				const rows = [...(yield* read)];
+				yield* saveLast();
 				for (const row of [...rows]) {
 					yield* send(row);
 					rows.shift();

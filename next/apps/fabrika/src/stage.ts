@@ -5,17 +5,19 @@ import * as Plugin from "@alchemy.run/cloudflare-runtime/core/Plugin";
 import {RuntimeLifecycle, type RuntimeEvent} from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import {applyCell} from "@demlik/tea";
 import {ProcessIdGenerator} from "@kampus/libfabrika/coordination";
+import {SpanSink} from "@kampus/libfabrika/data";
 import {AlchemyContext} from "alchemy/AlchemyContext";
 import {ArtifactStore, createArtifactStore} from "alchemy/Artifacts";
 import {deploy} from "alchemy/Deploy";
 import * as Interaction from "alchemy/Interaction";
 import {localState} from "alchemy/State/LocalState";
-import {Context, Deferred, Effect, Layer, Queue, Schema} from "effect";
+import {Context, Deferred, Effect, Exit, Layer, Queue, Schema, Scope} from "effect";
 import {stack} from "../alchemy.run.ts";
 import {brainLife} from "./brain-life.ts";
 import type {Built} from "./build.ts";
 import {BrainFact, brainOutbox, checkMemory} from "./local-stage.ts";
 import {Settings} from "./settings.ts";
+import {stageRecording} from "./stage-recording.ts";
 
 class ControlPlugin extends Plugin.Service<ControlPlugin>()(
 	"cloudflare-runtime/plugin/FabrikaControl",
@@ -45,8 +47,19 @@ const sample = (pid: number) =>
 			child.kill();
 		});
 	});
+const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) {
+	const raw = yield* work;
+	if (raw === null) return null;
+	const {sha256} = yield* Schema.decodeUnknownEffect(Schema.Struct({sha256: Schema.String}))(raw);
+	return {
+		checksums: {
+			sha256: Uint8Array.from((sha256.match(/../g) ?? []).map((byte) => Number.parseInt(byte, 16)))
+				.buffer,
+		},
+	};
+});
 
-export const startStage = Effect.fn("brain.start")(function* (
+export const startStage = Effect.fn("brain.stage")(function* (
 	built: Built,
 	options: Omit<Settings, "build"> & {readonly home: string},
 ) {
@@ -54,6 +67,7 @@ export const startStage = Effect.fn("brain.start")(function* (
 		scope = yield* Effect.scope,
 		ids = yield* ProcessIdGenerator;
 	const outbox = yield* brainOutbox(options.home),
+		runtimeScope = yield* Scope.make(),
 		events = yield* Queue.unbounded<RuntimeEvent>(),
 		// Alchemy's local Worker provider forks the workerd start, so deploy returns before workerd
 		// listens. The control socket's first start opens this latch.
@@ -61,9 +75,10 @@ export const startStage = Effect.fn("brain.start")(function* (
 	const token = randomBytes(32).toString("base64url");
 	let port = 0,
 		pid = 0,
-		previous: string | null = null,
+		previous = yield* outbox.last,
 		start = "",
 		stopping = false;
+	let replacement: Deferred.Deferred<void, ControlError> | null = null;
 	let reason: "open" | "crash" | "memory" | "core" = "open",
 		bytes: number | undefined;
 	let state = brainLife.init(null, {})[0];
@@ -107,6 +122,28 @@ export const startStage = Effect.fn("brain.start")(function* (
 		return answer.value;
 	});
 	const flush = outbox.flush((fact) => call("project", config.name, "", "brain", [fact]));
+	const recording = yield* stageRecording(
+		options.home,
+		`brain:${config.name}`,
+		(target, name, method, args) => call(target, config.name, name, method, args),
+	);
+	const sink = Context.get(recording, SpanSink);
+	const flushRecords = sink.flush.pipe(Effect.provideContext(recording));
+	const recorded = <A, E, R>(work: Effect.Effect<A, E, R>) =>
+		work.pipe(
+			Effect.exit,
+			Effect.flatMap((exit) =>
+				flushRecords.pipe(
+					// The durable queue retries a down receiver. A full local disk still fails loudly.
+					Effect.catchIf(
+						(error) => error.why !== "storage",
+						() => Effect.void,
+					),
+					Effect.flatMap(() => exit),
+				),
+			),
+			Effect.provideContext(recording),
+		);
 	const local = Context.empty().pipe(
 		Context.add(RuntimeLifecycle, (event) => {
 			Queue.offerUnsafe(events, event);
@@ -127,33 +164,53 @@ export const startStage = Effect.fn("brain.start")(function* (
 			start: (ports) =>
 				Effect.sync(() => {
 					port = Schema.decodeUnknownSync(Schema.Int)(ports["fabrika-control"]);
-				}).pipe(Effect.andThen(Deferred.succeed(listening, undefined))),
+				}).pipe(
+					Effect.andThen(
+						Effect.gen(function* () {
+							yield* Deferred.succeed(listening, undefined);
+							if (replacement !== null) {
+								yield* Deferred.succeed(replacement, undefined);
+								replacement = null;
+							}
+						}),
+					),
+				),
 		}),
 	);
-	yield* Effect.addFinalizer(() =>
-		Effect.gen(function* () {
-			stopping = true;
-			transition({type: "stop"});
-			if (start !== "") {
-				yield* outbox.add(
-					BrainFact.cases.stopped.make({
-						id: `${start}/stopped`,
-						start,
-						at: Date.now(),
-						why: "stop",
-					}),
-				);
-				yield* flush.pipe(Effect.ignore);
-			}
-			transition({type: "stopped"});
-		}).pipe(Effect.orDie),
-	);
+	const stopRuntime = Effect.fn("brain.stop")(function* () {
+		stopping = true;
+		transition({type: "stop"});
+		yield* Scope.close(runtimeScope, Exit.void);
+		if (start !== "") {
+			yield* outbox.add(
+				BrainFact.cases.stopped.make({
+					id: `${start}/stopped`,
+					start,
+					at: Date.now(),
+					why: "stop",
+				}),
+			);
+			yield* flush.pipe(Effect.ignore);
+		}
+		transition({type: "stopped"});
+	});
+	yield* Effect.addFinalizer(() => recorded(stopRuntime()).pipe(Effect.orDie));
+	const restartRuntime = Effect.fn("brain.restart")(function* (
+		ready: Deferred.Deferred<void, ControlError>,
+	) {
+		yield* Deferred.await(ready);
+	});
 	const recordEvents = Effect.forever(
 		Effect.gen(function* () {
 			const event = yield* Queue.take(events);
 			if (stopping) return;
+			if (event.type === "exit") {
+				const ready = yield* Deferred.make<void, ControlError>();
+				replacement = ready;
+				yield* Effect.forkIn(recorded(restartRuntime(ready)).pipe(Effect.ignore), scope);
+			}
 			if (event.type === "start") {
-				previous = start || null;
+				previous = start || previous;
 				start = yield* ids.next;
 				pid = event.pid;
 				const fact = BrainFact.cases.started.make({
@@ -185,6 +242,10 @@ export const startStage = Effect.fn("brain.start")(function* (
 					}),
 				);
 			} else if (event.type === "stop") {
+				if (replacement !== null) {
+					yield* Deferred.fail(replacement, new ControlError({why: event.why}));
+					replacement = null;
+				}
 				transition({type: "braked", after: start, why: event.why});
 				yield* outbox.add(
 					BrainFact.cases.braked.make({
@@ -210,18 +271,23 @@ export const startStage = Effect.fn("brain.start")(function* (
 		Layer.succeed(ArtifactStore, createArtifactStore()),
 		Interaction.layerNonInteractive(),
 	);
-	yield* deploy({stack: stack(built, config, local), stage: "local", dev: true, scope}).pipe(
-		Effect.provide(localState()),
-		Effect.provide(engine),
-	);
-	yield* Deferred.await(listening).pipe(
-		Effect.timeoutOrElse({
-			duration: "30 seconds",
-			orElse: () => Effect.fail(new ControlError({why: "start_timeout"})),
-		}),
-	);
-	yield* call("project", config.name, "", "info", []);
-	yield* flush;
+	const startRuntime = Effect.fn("brain.start")(function* () {
+		yield* deploy({
+			stack: stack(built, config, local),
+			stage: "local",
+			dev: true,
+			scope: runtimeScope,
+		}).pipe(Effect.provide(localState()), Effect.provide(engine));
+		yield* Deferred.await(listening).pipe(
+			Effect.timeoutOrElse({
+				duration: "30 seconds",
+				orElse: () => Effect.fail(new ControlError({why: "start_timeout"})),
+			}),
+		);
+		yield* call("project", config.name, "", "info", []);
+		yield* flush;
+	});
+	yield* recorded(startRuntime());
 	yield* Effect.forkScoped(
 		Effect.forever(
 			Effect.gen(function* () {
@@ -238,6 +304,13 @@ export const startStage = Effect.fn("brain.start")(function* (
 						}),
 				}).pipe(Effect.ignore);
 				yield* flush.pipe(Effect.ignore);
+				yield* flushRecords.pipe(
+					Effect.catchIf(
+						(error) => error.why !== "storage",
+						() => Effect.void,
+					),
+					Effect.orDie,
+				);
 			}),
 		),
 	);
@@ -294,23 +367,7 @@ export const startStage = Effect.fn("brain.start")(function* (
 				Effect.runPromise(call("bucket", config.name, "", "put", [key, [...body], options.sha256])),
 			head: (key: string) =>
 				// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local R2 proxy matches the platform's Promise API
-				Effect.runPromise(
-					call("bucket", config.name, "", "head", [key]).pipe(
-						Effect.map((raw) =>
-							raw === null
-								? null
-								: {
-										checksums: {
-											sha256: Uint8Array.from(
-												(String((raw as {sha256: string}).sha256).match(/../g) ?? []).map((byte) =>
-													Number.parseInt(byte, 16),
-												),
-											).buffer,
-										},
-									},
-						),
-					),
-				),
+				Effect.runPromise(bucketChecksum(call("bucket", config.name, "", "head", [key]))),
 		},
 	};
 });

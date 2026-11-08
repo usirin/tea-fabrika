@@ -1,4 +1,4 @@
-import type {Sent} from "@kampus/libfabrika";
+import type {Descriptor, Sent} from "@kampus/libfabrika";
 import {
 	Alarm,
 	CheckedWriter,
@@ -31,6 +31,7 @@ import {
 	LedgerError,
 	LedgerTransaction,
 	lineFor,
+	fromHere,
 	RecordManager,
 	Referee,
 	SpanSink,
@@ -79,9 +80,29 @@ export const recordStub = (env: Env, project: string, name: string) =>
 	env.RECORD.getByName(JSON.stringify([project, name]));
 
 // Only binding calls are Promises. All decisions stay inside Effects.
-export const rpc = Effect.fnUntraced(function* <A>(send: () => Promise<A>) {
+export const recordCall = Effect.fn(function* <A>(send: () => Promise<A>) {
 	// oxlint-disable-next-line fabrika/no-promises -- edge: one Durable Object call enters Effect
 	return yield* Effect.tryPromise({try: send, catch: () => new LedgerError({why: "unreachable"})});
+});
+export const rpc = Effect.fn("runtime.rpc")(function* <A>(send: () => Promise<A>) {
+	return yield* recordCall(send);
+});
+
+export const configureProcess = Effect.fn("process.configure")(function* (
+	ctx: DurableObjectState,
+	descriptor: Descriptor,
+) {
+	yield* rpc(() => ctx.storage.put("descriptor", descriptor));
+});
+export const savedAlarm = Effect.fn("process.savedAlarm")(function* (ctx: DurableObjectState) {
+	return yield* rpc(() => ctx.storage.get<number>("wake"));
+});
+export const processDescriptor = Effect.fn("process.descriptor")(function* (
+	ctx: DurableObjectState,
+) {
+	const descriptor = yield* rpc(() => ctx.storage.get<Descriptor>("descriptor"));
+	if (descriptor === undefined) return yield* new LedgerError({why: "bad_row"});
+	return descriptor;
 });
 
 const hex = (bytes: ArrayBuffer) =>
@@ -101,7 +122,11 @@ const checkedPut = Effect.fnUntraced(function* (
 		catch: () => new LedgerError({why: "bad_row"}),
 	});
 	if (hex(digest) !== sha256.toLowerCase()) return yield* new LedgerError({why: "bad_row"});
-	yield* rpc(() => bucket.put(key, copy, {sha256}));
+	yield* recordCall(() => bucket.put(key, copy, {sha256}));
+});
+const bucketHead = Effect.fn(function* (bucket: R2Bucket, key: string) {
+	const row = yield* recordCall(() => bucket.head(key));
+	return row?.checksums.sha256 === undefined ? null : {sha256: hex(row.checksums.sha256)};
 });
 
 export const bucketCalls = (bucket: R2Bucket): BucketCalls => ({
@@ -110,13 +135,7 @@ export const bucketCalls = (bucket: R2Bucket): BucketCalls => ({
 		Effect.runPromise(checkedPut(bucket, key, body, sha256)),
 	head: (key) =>
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: P37's R2 interface returns a Promise
-		Effect.runPromise(
-			rpc(() => bucket.head(key)).pipe(
-				Effect.map((row) =>
-					row?.checksums.sha256 === undefined ? null : {sha256: hex(row.checksums.sha256)},
-				),
-			),
-		),
+		Effect.runPromise(bucketHead(bucket, key)),
 });
 const recordLayer = (env: Env, project: string) =>
 	RecordManager.remote((name) => recordStub(env, project, name));
@@ -153,6 +172,23 @@ const projectLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 		name = ctx.id.name ?? config.name,
 		sql = workerSql(ctx.storage);
 	const turn = yield* Semaphore.make(1);
+	const notifications = Context.Reference<Array<Effect.Effect<void, LedgerError>> | null>(
+		"fabrika/WriteNotifications",
+		{defaultValue: () => null},
+	);
+	const write = Effect.fnUntraced(function* <A, E, R>(work: Effect.Effect<A, E, R>) {
+		const pending: Array<Effect.Effect<void, LedgerError>> = [];
+		return yield* work.pipe(
+			Effect.provideService(notifications, pending),
+			turn.withPermit,
+			Effect.onExit(() =>
+				Effect.forEach(pending, (send) => send.pipe(Effect.ignoreCause), {
+					discard: true,
+					concurrency: 1,
+				}),
+			),
+		);
+	});
 	const by = `brain:${name}`;
 	const ids = yield* ProcessIdGenerator;
 	const founder = {
@@ -163,8 +199,17 @@ const projectLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 		by: yield* fingerprint(config.founder),
 		build: config.build,
 	};
+	const ring = Effect.fn("project.ring")(function* (to: string, stream: string, rev: number) {
+		yield* rpc(() => env.GATEWAY.getByName(to).ring(stream, rev));
+	});
 	const bell = Layer.succeed(Doorbell, {
-		ring: (to, stream, rev) => rpc(() => env.GATEWAY.getByName(to).ring(stream, rev)),
+		ring: Effect.fnUntraced(function* (to, stream, rev) {
+			const send = ring(to, stream, rev);
+			const pending = yield* notifications;
+			if (pending === null) return yield* send;
+			const context = yield* Effect.context<never>();
+			pending.push(send.pipe(Effect.provideContext(context)));
+		}),
 	});
 	const ledgerLayer = Layer.mergeAll(
 		Ledger.sql(sql, {reader: `project:${name}`}),
@@ -190,11 +235,41 @@ const projectLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 		processes = Context.get(services, ProcessManager);
 	const loader = workerLoader(env.LOADER, programs);
 	const loaded = yield* loader.load("counter", `project:${name}`);
-	const inputPolicy = new Set(
-		Object.entries(loaded.declaration.inputs)
-			.filter(([, p]) => p.personOnly)
-			.map(([name]) => name),
+	sql.exec(
+		"CREATE TABLE IF NOT EXISTS stage_descriptors (process TEXT PRIMARY KEY, value TEXT NOT NULL)",
 	);
+	const policies = new Map<string, {inputs: Array<string>; facts: Array<string>}>();
+	const remember = (pid: string, declaration: typeof loaded.declaration) =>
+		policies.set(pid, {
+			inputs: Object.entries(declaration.inputs)
+				.filter(([, p]) => p.personOnly)
+				.map(([name]) => name),
+			facts: Object.entries(declaration.writes)
+				.filter(([, p]) => p.personOnly)
+				.map(([name]) => name),
+		});
+	for (const process of yield* processes.info) {
+		const program = yield* loader.load(process.program, process.process);
+		remember(process.process, program.declaration);
+		if (
+			sql.exec("SELECT process FROM stage_descriptors WHERE process=?", process.process).length ===
+			0
+		) {
+			const descriptor = yield* rpc(() => processStub(env, name, process.process).descriptor());
+			sql.exec(
+				"INSERT INTO stage_descriptors VALUES (?,?)",
+				process.process,
+				JSON.stringify(descriptor),
+			);
+		}
+	}
+	const policy = Effect.fnUntraced(function* (pid: string) {
+		const process = (yield* processes.info).find((row) => row.process === pid);
+		if (process === undefined) return yield* new LedgerError({why: "refused"});
+		const policy = policies.get(pid);
+		if (policy === undefined) return yield* new LedgerError({why: "bad_row"});
+		return policy;
+	});
 	const notify = Effect.fnUntraced(function* (client: string, news: unknown) {
 		const [row] = sql.exec("SELECT gateway FROM stage_clients WHERE client=?", client);
 		if (row !== undefined)
@@ -219,6 +294,8 @@ const projectLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 				inputCap: 1_000_000,
 				spentCap: 100_000,
 				turn,
+				write,
+				policy,
 				isLive: processes.isLive,
 				nextProcess: () => ids.next,
 				notify,
@@ -233,16 +310,14 @@ const projectLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 					schema: Schema.Json,
 					log: Schema.Json,
 					raw: [],
-					personOnly: [...inputPolicy],
+					personOnly: [],
 					name: (m) =>
 						typeof m === "object" && m !== null && "type" in m && typeof m.type === "string"
 							? m.type
 							: undefined,
 				},
 				facts: {
-					personOnly: Object.entries(loaded.declaration.writes)
-						.filter(([, p]) => p.personOnly)
-						.map(([name]) => name),
+					personOnly: [],
 				},
 			}),
 		),
@@ -283,27 +358,77 @@ const projectLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 	const start = Effect.fnUntraced(function* (request: Start, origin: From) {
 		if (!Object.hasOwn(programs, request.code.program))
 			return yield* new LedgerError({why: "refused"});
-		const result = yield* processes.start(request, origin).pipe(turn.withPermit);
-		const descriptor = {
-			id: result.process,
-			name: request.name,
-			program: request.code.program,
-			build: request.code.hash,
-			owner: Writer.cases.person.make({key: founder.by, for: config.person}),
-		};
+		const program = yield* loader.load(request.code.program, `project:${name}/${request.name}`);
+		const {result, descriptor} = yield* write(
+			Effect.gen(function* () {
+				const result = yield* processes.start(request, origin);
+				remember(result.process, program.declaration);
+				const descriptor = {
+					id: result.process,
+					name: request.name,
+					program: request.code.program,
+					build: request.code.hash,
+					owner: Writer.cases.person.make({key: founder.by, for: config.person}),
+				};
+				sql.exec(
+					"INSERT OR IGNORE INTO stage_descriptors VALUES (?,?)",
+					result.process,
+					JSON.stringify(descriptor),
+				);
+				return {result, descriptor};
+			}),
+		);
 		yield* rpc(() => processStub(env, name, result.process).configure(descriptor));
 		return result;
 	});
-	const boot = yield* start(
-		Start.cases.first.make({
-			id: "counter:1",
-			name: "counter:1",
-			code: {program: "counter", hash: loaded.hash},
-		}),
-		from(),
+	const registered = (yield* processes.info).find((row) => row.name === "counter:1");
+	const [original] = sql.exec(
+		"SELECT body,rev FROM entries WHERE stream=? AND id=?",
+		"processes/counter:1",
+		"counter:1",
 	);
+	const boot =
+		registered !== undefined
+			? {process: registered.process, rev: Number(original?.rev)}
+			: original !== undefined
+				? {process: String(JSON.parse(String(original.body)).process), rev: Number(original.rev)}
+				: yield* start(
+						Start.cases.first.make({
+							id: "counter:1",
+							name: "counter:1",
+							code: {program: "counter", hash: loaded.hash},
+						}),
+						from(),
+					);
 	const wrapped = <A, E>(effect: Effect.Effect<A, E>) =>
 		complete(effect).pipe(Effect.provideContext(services));
+	const own = Effect.fn("project.own")(function* (
+		pid: string,
+		id: string,
+		stream: string,
+		fact: unknown,
+	) {
+		if (!(yield* processes.isLive(pid))) return yield* new LedgerError({why: "refused"});
+		if (stream.startsWith("door/") || stream.startsWith("processes"))
+			return yield* new LedgerError({why: "refused"});
+		const body = Schema.decodeUnknownSync(Fact)(fact);
+		const [saved] = sql.exec("SELECT value FROM stage_descriptors WHERE process=?", pid);
+		if (saved === undefined) return yield* new LedgerError({why: "bad_row"});
+		const descriptor = Schema.decodeUnknownSync(
+			Schema.fromJsonString(Schema.Struct({owner: Writer, build: Schema.String})),
+		)(saved.value);
+		const origin = yield* fromHere({
+			by: descriptor.owner.key,
+			for: descriptor.owner.for,
+			seen: 0,
+			parent: null,
+			build: descriptor.build,
+		});
+		return yield* ledger.append(stream, id, lineFor(origin, body));
+	});
+	const brain = Effect.fn("project.brain")(function* (fact: typeof BrainFact.Type) {
+		return yield* ledger.append("door/brain", fact.id, lineFor(from(), fact));
+	});
 	yield* flushed.pipe(Effect.provideContext(services));
 	return {
 		target: door.target,
@@ -356,7 +481,7 @@ const projectLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 				Effect.gen(function* () {
 					yield* processes.exit(pid, why, origin);
 					yield* door.retire(pid);
-				}).pipe(turn.withPermit),
+				}).pipe(write),
 			),
 		read: referee.read,
 		wait: referee.wait,
@@ -369,6 +494,7 @@ const projectLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 			wrapped(
 				Effect.gen(function* () {
 					if (!(yield* processes.isLive(pid))) return yield* new LedgerError({why: "refused"});
+					yield* door.checkDelivery(pid, input);
 					const row = (yield* processes.info).find((r) => r.process === pid);
 					if (row === undefined) return yield* new LedgerError({why: "refused"});
 					return yield* ledger.append(
@@ -389,32 +515,23 @@ const projectLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 							}),
 						),
 					);
-				}).pipe(turn.withPermit),
+				}).pipe(write),
 			),
-		own: (pid: string, id: string, stream: string, fact: unknown) =>
-			wrapped(
-				Effect.gen(function* () {
-					if (!(yield* processes.isLive(pid))) return yield* new LedgerError({why: "refused"});
-					if (stream.startsWith("door/") || stream.startsWith("processes"))
-						return yield* new LedgerError({why: "refused"});
-					const body = Schema.decodeUnknownSync(Fact)(fact);
-					return yield* ledger.append(stream, id, lineFor(from(), body));
-				}).pipe(turn.withPermit),
-			),
-		brain: (fact: typeof BrainFact.Type) =>
-			wrapped(
-				ledger
-					.append("door/brain", fact.id, lineFor(from(), fact))
-					.pipe(
-						Effect.withSpan(
-							fact._tag === "started"
-								? fact.after === null
-									? "brain.start"
-									: "brain.restart"
-								: "brain.stop",
-						),
-					),
-			),
+		own: (
+			pid: string,
+			id: string,
+			stream: string,
+			fact: unknown,
+			trace?: {traceId: string; spanId: string},
+		) => {
+			const work = own(pid, id, stream, fact);
+			return wrapped(
+				write(
+					trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace))),
+				),
+			);
+		},
+		brain: (fact: typeof BrainFact.Type) => wrapped(brain(fact)),
 		boot,
 	};
 });
@@ -457,6 +574,9 @@ const processLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 		ctx.storage.get<import("@kampus/libfabrika").Descriptor>("descriptor"),
 	);
 	if (saved === undefined) return yield* new LedgerError({why: "bad_row"});
+	const publish = Effect.fn("process.publish")(function* (client: string, update: unknown) {
+		yield* rpc(() => p.publish(client, update));
+	});
 	const dependencies = Layer.mergeAll(
 		Layer.succeed(ProgramLoader, {load: (name) => loader.load(name, pid)}),
 		Layer.succeed(CheckedWriter, {
@@ -466,11 +586,15 @@ const processLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 				rpc<Appended>(() =>
 					p.commit(pid, {id, parent: session.parent, kind: fact._tag, stream, fact}),
 				),
-			own: (id, stream, fact) => rpc<Appended>(() => p.own(pid, id, stream, fact)),
+			own: Effect.fn("process.own")(function* (id: string, stream: string, fact: unknown) {
+				const span = yield* Effect.currentSpan.pipe(Effect.orDie);
+				return yield* rpc<Appended>(() =>
+					p.own(pid, id, stream, fact, {traceId: span.traceId, spanId: span.spanId}),
+				);
+			}),
 		}),
 		Layer.succeed(WatcherManager, {
-			publish: (client, update) =>
-				rpc(() => p.publish(client, update)).pipe(Effect.catch(() => Effect.void)),
+			publish: (client, update) => publish(client, update).pipe(Effect.ignore),
 		}),
 		Layer.succeed(Alarm, {
 			// The program's wake is saved as it set it; the platform alarm moves a past time to now.

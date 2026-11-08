@@ -15,6 +15,9 @@ import {
 	settings,
 	projectStub,
 	rpc,
+	configureProcess,
+	savedAlarm,
+	processDescriptor,
 	type Env,
 } from "./runtime.ts";
 
@@ -106,9 +109,15 @@ export class Project extends DurableObject<Env> {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
 		return this.runtime.runPromise(ProjectService.use((p) => p.commit(pid, input)));
 	}
-	own(pid: string, id: string, stream: string, fact: unknown) {
+	own(
+		pid: string,
+		id: string,
+		stream: string,
+		fact: unknown,
+		trace?: {traceId: string; spanId: string},
+	) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-		return this.runtime.runPromise(ProjectService.use((p) => p.own(pid, id, stream, fact)));
+		return this.runtime.runPromise(ProjectService.use((p) => p.own(pid, id, stream, fact, trace)));
 	}
 	inbox(pid: string, input: Incoming) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
@@ -128,7 +137,12 @@ type ContextProject = (typeof ProjectService)["Service"];
 export class Process extends DurableObject<Env> {
 	readonly runtime = processRuntime(this.ctx, this.env);
 	configure(descriptor: Descriptor) {
-		return this.ctx.storage.put("descriptor", descriptor);
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object configuration returns a Promise
+		return Effect.runPromise(configureProcess(this.ctx, descriptor));
+	}
+	descriptor() {
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object descriptor lookup returns a Promise
+		return Effect.runPromise(processDescriptor(this.ctx));
 	}
 	msg(input: unknown) {
 		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
@@ -155,7 +169,8 @@ export class Process extends DurableObject<Env> {
 		return this.runtime.runPromise(ProcessService.use((p) => p.recover()));
 	}
 	savedAlarm() {
-		return this.ctx.storage.get<number>("wake");
+		// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object alarm inspection returns a Promise
+		return Effect.runPromise(savedAlarm(this.ctx));
 	}
 	abort() {
 		this.ctx.abort("storage wake");
