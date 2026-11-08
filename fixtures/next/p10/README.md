@@ -1,5 +1,9 @@
 # P10 test-writer record
 
+The follow-up [type audit](./type-audit.md) lists the test-only fixes and every
+remaining build diagnostic, with a single-thread check config. That follow-up
+reran the door file once and refreshed its 66 case locations below.
+
 `next/`, tracker ticket 248. The approved P10 plan, plus the lead's process-id
 contract, on merge `06d4fecb` of main `bde48daa`. Main's prerequisite landed in
 [PR 490](https://github.com/usirin/tea-fabrika/pull/490).
@@ -51,28 +55,28 @@ record expands every parameterized case with its own observed failure.
 | p26, hello proof and nonce | [hello.test.ts:108](../../../next/packages/libfabrika/src/transport/hello.test.ts#L108) | checkHello is not a function; each changed binding and refusal case ran red. | Skip nonce, URL, tab or name; admit an unknown key; consume before the checks. |
 | p26, origin and Host | [hello.test.ts:212](../../../next/packages/libfabrika/src/transport/hello.test.ts#L212) | sameOrigin is not a function. | Substring-match the origin or trust a forwarded Host. |
 | p82, version and additive fields | [hello.test.ts:118](../../../next/packages/libfabrika/src/transport/hello.test.ts#L118) | selectVersion is absent; fast-check shrank to empty lists, seed 119120. | Pick the first/lowest shared version; reject additive fields. |
-| p42/p66, claimed hello metadata | [door.test.ts:557](../../../next/apps/fabrika/src/door.test.ts#L557) | door.ts is absent, before this integration body's assertions. | Drop os/has/build/location or derive writer rank from a claim. |
+| p42/p66, claimed hello metadata | [door.test.ts:563](../../../next/apps/fabrika/src/door.test.ts#L563) | door.ts is absent, before this integration body's assertions. | Drop os/has/build/location or derive writer rank from a claim. |
 | p43, waiting state | [waiting.test.ts:28](../../../next/packages/libfabrika/src/transport/waiting.test.ts#L28) | Waiting.make is absent. SQLite cap/reopen cases also fail on absent door.ts. | Count duplicate tabs; code per tab; skip expiry/cap; keep rows only in memory. |
-| p43, code and grant notification | [door.test.ts:677](../../../next/apps/fabrika/src/door.test.ts#L677) | door.ts is absent. | Authorize by comparison code; clear only one tab; accept the old nonce after approval. |
-| p27, grant/revoke/add target | [door.test.ts:886](../../../next/apps/fabrika/src/door.test.ts#L886) | All three wrong-to cases fail on absent door.ts. | Skip to on one case or call ClientManager.write before checking it. |
+| p43, code and grant notification | [door.test.ts:683](../../../next/apps/fabrika/src/door.test.ts#L683) | door.ts is absent. | Authorize by comparison code; clear only one tab; accept the old nonce after approval. |
+| p27, grant/revoke/add target | [door.test.ts:892](../../../next/apps/fabrika/src/door.test.ts#L892) | All three wrong-to cases fail on absent door.ts. | Skip to on one case or call ClientManager.write before checking it. |
 | p27, WebAuthn writer and checker | [sshsig-webauthn.test.ts:214](../../../next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts#L214) | verifySshsig, writeWebauthnSshsig and PasskeyLine are absent. The independent OpenSSH control passes. | Treat DER as fixed-width; hash only the text; allow bare ECDSA, raw WebAuthn or a type prefix. |
-| question 19, person roots and enrollment | [door.test.ts:1304](../../../next/apps/fabrika/src/door.test.ts#L1304) | door.ts is absent; all six changed enrollment bindings have named red cases. | Let a window/agent self-promote; accept an SK root without UV or a bound proof. |
+| question 19, person roots and enrollment | [door.test.ts:1310](../../../next/apps/fabrika/src/door.test.ts#L1310) | door.ts is absent; all six changed enrollment bindings have named red cases. | Let a window/agent self-promote; accept an SK root without UV or a bound proof. |
 | question 19, durable backup metadata | [passkey.test.ts:15](../../../next/packages/libfabrika/src/coordination/passkey.test.ts#L15) | Actual assertion failure: Signed decoding drops passkey. Adds decoding drops enrollment. | Trust caller flags; discard verified flags/proof; reject BE or zero counters. |
-| question 19, recovery and cleared storage | [door.test.ts:1430](../../../next/apps/fabrika/src/door.test.ts#L1430) | door.ts is absent. | Use a sheet twice; report an ignored recovery as applied; block a passkey from admitting a fresh window. |
+| question 19, recovery and cleared storage | [door.test.ts:1436](../../../next/apps/fabrika/src/door.test.ts#L1436) | door.ts is absent. | Use a sheet twice; report an ignored recovery as applied; block a passkey from admitting a fresh window. |
 | p42, original signed text and retries | [text.test.ts:47](../../../next/packages/libfabrika/src/coordination/text.test.ts#L47) | Text writers are absent. The original-text, removed-signer resend and real P9 race cases fail on absent door.ts. | Reserialize before checking; drop saw/has; mint a new parent on resend; turn ignored into applied. |
-| p67, stamped envelope | [door.test.ts:1145](../../../next/apps/fabrika/src/door.test.ts#L1145) | door.ts is absent. | Trust sentAt or a supplied id/by; omit an envelope on a read, wait or refusal. |
-| p67, spoofing | [door.test.ts:1164](../../../next/apps/fabrika/src/door.test.ts#L1164) | All eight reserved-field cases fail on absent door.ts. | Strip sender claims silently; reject ordinary RPC/letter/nested domain ids; route forged input. |
-| p67, durable input retry | [door.test.ts:1084](../../../next/apps/fabrika/src/door.test.ts#L1084) | door.ts is absent. | Allocate another id/trace after a lost append answer; dedupe only by letter. |
+| p67, stamped envelope | [door.test.ts:1151](../../../next/apps/fabrika/src/door.test.ts#L1151) | door.ts is absent. | Trust sentAt or a supplied id/by; omit an envelope on a read, wait or refusal. |
+| p67, spoofing | [door.test.ts:1170](../../../next/apps/fabrika/src/door.test.ts#L1170) | All eight reserved-field cases fail on absent door.ts. | Strip sender claims silently; reject ordinary RPC/letter/nested domain ids; route forged input. |
+| p67, durable input retry | [door.test.ts:1090](../../../next/apps/fabrika/src/door.test.ts#L1090) | door.ts is absent. | Allocate another id/trace after a lost append answer; dedupe only by letter. |
 | question 16, four signer refusals | [session-manager.test.ts:139](../../../next/packages/libfabrika/src/coordination/session-manager.test.ts#L139) | SessionManager.layer is absent; all four named refusal cases ran red. | Fallback to owner; borrow another process's parent; let an agent or a person comment approve. |
 | signer retry, wake and atomic receipt | [session-manager.test.ts:191](../../../next/packages/libfabrika/src/coordination/session-manager.test.ts#L191) | SessionManager.layer is absent. | Spend in a Map; split receipt from spend; revive an ended process; reuse a revoked receipt. |
-| P37, bounded reader and content deletion | [door.test.ts:1567](../../../next/apps/fabrika/src/door.test.ts#L1567) | door.ts is absent. | Read only part zero; collect the whole chain; let an agent delete; use the claimed deleter. |
-| door input log, span order and links | [door.test.ts:1793](../../../next/apps/fabrika/src/door.test.ts#L1793) | door.ts is absent. | Deliver before recording/flushing; flush before route span end; select writer by traceId. |
-| no content leak | [door.test.ts:1880](../../../next/apps/fabrika/src/door.test.ts#L1880) | door.ts is absent. | Log the raw frame, encode a secret in clear, retain raw input bodies or put content in tags. |
-| revocation and append race | [door.test.ts:1495](../../../next/apps/fabrika/src/door.test.ts#L1495) | door.ts is absent. | Cache admission forever; treat a signer answer as permanent append permission. |
+| P37, bounded reader and content deletion | [door.test.ts:1573](../../../next/apps/fabrika/src/door.test.ts#L1573) | door.ts is absent. | Read only part zero; collect the whole chain; let an agent delete; use the claimed deleter. |
+| door input log, span order and links | [door.test.ts:1799](../../../next/apps/fabrika/src/door.test.ts#L1799) | door.ts is absent. | Deliver before recording/flushing; flush before route span end; select writer by traceId. |
+| no content leak | [door.test.ts:1886](../../../next/apps/fabrika/src/door.test.ts#L1886) | door.ts is absent. | Log the raw frame, encode a secret in clear, retain raw input bodies or put content in tags. |
+| revocation and append race | [door.test.ts:1501](../../../next/apps/fabrika/src/door.test.ts#L1501) | door.ts is absent. | Cache admission forever; treat a signer answer as permanent append permission. |
 | shared UUIDv7 TypeID shape | [process-id.test.ts:16](../../../next/packages/libfabrika/src/coordination/process-id.test.ts#L16) | ProcessIdGenerator.layer is absent. | Use UUIDv4, the wrong prefix, encoding, version, variant or timestamp. |
 | monotonic within one process | [process-id.test.ts:34](../../../next/packages/libfabrika/src/coordination/process-id.test.ts#L34) | ProcessIdGenerator.layer is absent. | Generate unordered random ids in one millisecond or return a constant. |
 | monotonic across clock rollback | [process-id.test.ts:45](../../../next/packages/libfabrika/src/coordination/process-id.test.ts#L45) | ProcessIdGenerator.layer is absent. | Let a backward clock lower or reuse an id. |
-| fresh door start and id collision | [door.test.ts:1208](../../../next/apps/fabrika/src/door.test.ts#L1208) | door.ts is absent. | Reuse the door's start id; ignore the saved allocated-start collision. |
+| fresh door start and id collision | [door.test.ts:1214](../../../next/apps/fabrika/src/door.test.ts#L1214) | door.ts is absent. | Reuse the door's start id; ignore the saved allocated-start collision. |
 
 The real P9 ignored-recovery case interleaves another real ClientManager write
 at the ledger boundary, so the losing write's second fold produces `ignored`.

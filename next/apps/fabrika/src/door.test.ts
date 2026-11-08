@@ -231,7 +231,7 @@ const Input = Schema.TaggedUnion({
 	keys: {bytes: Schema.String},
 	secret: {
 		value: Schema.Struct({
-			secret: Schema.RedactedFromValue(Schema.String, {disallowJsonEncode: true}),
+			secret: Schema.RedactedFromValue(Schema.String, {disallowEncode: true}),
 		}),
 	},
 });
@@ -243,6 +243,11 @@ type Envelope = {
 	input: unknown;
 };
 type Delivery = {process: string; envelope: Envelope; trace: {traceId: string; spanId: string}};
+type DeliveryCheck = Effect.Effect<
+	void,
+	LedgerError | SinkError | Effect.Error<ReturnType<typeof writeId>>,
+	Ledger | RecordManager | Effect.Services<ReturnType<typeof writeId>>
+>;
 
 const world = Effect.fnUntraced(function* (options: {recordCap?: number; inputCap?: number} = {}) {
 	const dir = mkdtempSync(join(top, "w-"));
@@ -274,7 +279,7 @@ const world = Effect.fnUntraced(function* (options: {recordCap?: number; inputCa
 	const deliveries: Array<Delivery> = [],
 		notices: Array<{client: string; news: unknown}> = [];
 	const controls = {
-		deliver: (_: Delivery): Effect.Effect<void, LedgerError> => Effect.void,
+		deliver: (_: Delivery): DeliveryCheck => Effect.void,
 		notify: (_client: string, _news: unknown): Effect.Effect<void, LedgerError> => Effect.void,
 		next: () => C.ProcessIdGenerator.use((g) => g.next),
 	};
@@ -379,8 +384,9 @@ const world = Effect.fnUntraced(function* (options: {recordCap?: number; inputCa
 		bytes: () => readdirSync(dir).map((file) => readFileSync(join(dir, file))),
 	};
 });
-type World = Effect.Effect.Success<ReturnType<typeof world>>;
-const entries = (stream: string) => Ledger.use((l) => Stream.runCollect(l.read(stream, 0)));
+type World = Effect.Success<ReturnType<typeof world>>;
+const entries = (stream: string) =>
+	Ledger.use((l: typeof Ledger.Service) => Stream.runCollect(l.read(stream, 0)));
 const stamped = () => entries("door/inputs");
 const rawRows = (db: DatabaseSync, stream: string) =>
 	db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='entries'").get()
@@ -760,7 +766,7 @@ describe("P10 signed membership changes", () => {
 					drops: [],
 					saw: {...ADD_SAW, how: "recovery"},
 					sentAt: SENT,
-				};
+				} satisfies typeof C.Add.Type;
 				const text = C.addText(winner),
 					armored = yield* w.sheet.sign(text);
 				const fact = C.MemberFact.cases.added.make({
@@ -772,7 +778,7 @@ describe("P10 signed membership changes", () => {
 				const racedLedger = Layer.effect(
 					Ledger,
 					Ledger.pipe(
-						Effect.map((real) => ({
+						Effect.map((real: typeof Ledger.Service) => ({
 							...real,
 							append: (...args: Parameters<typeof real.append>) =>
 								Effect.gen(function* () {
@@ -890,7 +896,7 @@ describe("P10 signed membership changes", () => {
 				const clients = Layer.effect(
 					C.ClientManager,
 					C.ClientManager.pipe(
-						Effect.map((real) => ({
+						Effect.map((real: typeof C.ClientManager.Service) => ({
 							...real,
 							write: (...args: Parameters<typeof real.write>) => {
 								called();
@@ -1090,7 +1096,7 @@ describe("P10 inputs, retries and signer", () => {
 				const ledger = Layer.effect(
 					Ledger,
 					Ledger.pipe(
-						Effect.map((real) => ({
+						Effect.map((real: typeof Ledger.Service) => ({
 							...real,
 							append: (...args: Parameters<typeof real.append>) =>
 								real.append(...args).pipe(
@@ -1571,7 +1577,7 @@ describe("P10 span reader and recording", () => {
 			const records = Layer.effect(
 				RecordManager,
 				RecordManager.pipe(
-					Effect.map((real) => ({
+					Effect.map((real: typeof RecordManager.Service) => ({
 						...real,
 						read: (chain: typeof Chain.Type) =>
 							real.read(chain).pipe(
@@ -1631,7 +1637,7 @@ describe("P10 span reader and recording", () => {
 				const sink = Layer.effect(
 					SpanSink,
 					SpanSink.pipe(
-						Effect.map((real) => ({
+						Effect.map((real: typeof SpanSink.Service) => ({
 							...real,
 							flush: Effect.suspend(() =>
 								block ? Effect.fail(new SinkError({why: "storage", held: 1})) : real.flush,
@@ -1711,7 +1717,7 @@ describe("P10 span reader and recording", () => {
 			const broken = Layer.effect(
 				RecordManager,
 				RecordManager.pipe(
-					Effect.map((r) => ({
+					Effect.map((r: typeof RecordManager.Service) => ({
 						...r,
 						read: () => Stream.fail(new SinkError({why: "unreachable", held: 0})),
 					})),
@@ -1802,7 +1808,7 @@ describe("P10 span reader and recording", () => {
 						Effect.gen(function* () {
 							const rows = yield* stamped();
 							expect(rows.some((r) => r.id === envelope.id)).toBe(true);
-							const spans = yield* RecordManager.use((r) =>
+							const spans = yield* RecordManager.use((r: typeof RecordManager.Service) =>
 								Stream.runCollect(r.read(Chain.cases.spans.make({}))),
 							);
 							expect(
@@ -1819,7 +1825,7 @@ describe("P10 span reader and recording", () => {
 					const received = rows.find((r) => r.id === w.deliveries[0]!.envelope.id)!;
 					expect(received.parent).toBeNull();
 					expect(received.by).toBe(w.window.fingerprint);
-					const spans = yield* RecordManager.use((r) =>
+					const spans = yield* RecordManager.use((r: typeof RecordManager.Service) =>
 						Stream.runCollect(r.read(Chain.cases.spans.make({}))),
 					);
 					const route = spans.find((s) => s.name === "door.route");
@@ -1840,7 +1846,7 @@ describe("P10 span reader and recording", () => {
 			const ledger = Layer.effect(
 				Ledger,
 				Ledger.pipe(
-					Effect.map((real) => ({
+					Effect.map((real: typeof Ledger.Service) => ({
 						...real,
 						append: (...args: Parameters<typeof real.append>) =>
 							block && args[0] === "door/inputs"
@@ -1870,7 +1876,7 @@ describe("P10 span reader and recording", () => {
 				yield* online(d, w);
 				w.controls.deliver = () => Effect.fail(new LedgerError({why: "unreachable"}));
 				yield* Effect.flip(d.route("w1", "process.send", request("failed-route")));
-				const spans = yield* RecordManager.use((r) =>
+				const spans = yield* RecordManager.use((r: typeof RecordManager.Service) =>
 					Stream.runCollect(r.read(Chain.cases.spans.make({}))),
 				);
 				expect(spans.some((s) => s.name === "door.route" && !s.ok)).toBe(true);

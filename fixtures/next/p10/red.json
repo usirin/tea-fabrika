@@ -6,462 +6,462 @@
 	"cases": [
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 510,
+			"line": 516,
 			"name": "P10 door admission and waiting p43: capped oldest-first waiting rows persist and unauthenticated knocks add no audit rows",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 557,
+			"line": 563,
 			"name": "P10 door admission and waiting p26/p42/p66: verified initialize records complete hello once, never rank from has",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 593,
+			"line": 599,
 			"name": "P10 door admission and waiting p26: unknown on an empty project cannot found or grow the sink",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 593,
+			"line": 599,
 			"name": "P10 door admission and waiting p26: bad signature on an empty project cannot found or grow the sink",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 593,
+			"line": 599,
 			"name": "P10 door admission and waiting p26: no version on an empty project cannot found or grow the sink",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 593,
+			"line": 599,
 			"name": "P10 door admission and waiting p26: wrong name on an empty project cannot found or grow the sink",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 630,
+			"line": 636,
 			"name": "P10 door admission and waiting p43: waiting tabs, cap, expiry and watcher registration survive reopening SQLite",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 677,
+			"line": 683,
 			"name": "P10 door admission and waiting p43: grant accepts any comparison code, clears all tabs, fresh nonce required",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 748,
+			"line": 754,
 			"name": "P10 signed membership changes p42 recovery: the real P9 second fold's ignored result is not turned into applied",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 826,
+			"line": 832,
 			"name": "P10 signed membership changes p42: a removed signer can resend its exact old fact, but cannot change it",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 864,
+			"line": 870,
 			"name": "P10 signed membership changes p43/p66: agent watch/deny refuse; window deny records its real writer and saw",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 886,
+			"line": 892,
 			"name": "P10 signed membership changes p27: granted wrong-to never calls ClientManager.write or founds",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 886,
+			"line": 892,
 			"name": "P10 signed membership changes p27: revoked wrong-to never calls ClientManager.write or founds",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 886,
+			"line": 892,
 			"name": "P10 signed membership changes p27: added wrong-to never calls ClientManager.write or founds",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 950,
+			"line": 956,
 			"name": "P10 signed membership changes question 19: window cannot promote itself from platform or capabilities",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 950,
+			"line": 956,
 			"name": "P10 signed membership changes question 19: agent cannot promote itself from platform or capabilities",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 950,
+			"line": 956,
 			"name": "P10 signed membership changes question 19: otherRoot cannot promote itself from platform or capabilities",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 980,
+			"line": 986,
 			"name": "P10 signed membership changes p42: original additive signed text re-verifies; exact resend reuses first placing",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1015,
+			"line": 1021,
 			"name": "P10 signed membership changes p27: a text mismatch writes no membership fact",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1015,
+			"line": 1021,
 			"name": "P10 signed membership changes p27: a namespace mismatch writes no membership fact",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1015,
+			"line": 1021,
 			"name": "P10 signed membership changes p27: a person mismatch writes no membership fact",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1042,
+			"line": 1048,
 			"name": "P10 inputs, retries and signer p67: authenticated reads, parked waits and refusals each keep an input record",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1064,
+			"line": 1070,
 			"name": "P10 inputs, retries and signer question 16: caller personOnly claims cannot turn a person's comment into approval",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1084,
+			"line": 1090,
 			"name": "P10 inputs, retries and signer p67 record retry: a lost input-log append answer keeps the first id, trace and placing",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1128,
+			"line": 1134,
 			"name": "P10 inputs, retries and signer trace reason: an agent cannot claim a request never delivered to its process",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1145,
+			"line": 1151,
 			"name": "P10 inputs, retries and signer p67: a stamped input has exactly four fields, checked writer and referee time",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1164,
+			"line": 1170,
 			"name": "P10 inputs, retries and signer p67 spoof: outer id is refused before decoding, with the real sender recorded",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1164,
+			"line": 1170,
 			"name": "P10 inputs, retries and signer p67 spoof: wrapper id is refused before decoding, with the real sender recorded",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1164,
+			"line": 1170,
 			"name": "P10 inputs, retries and signer p67 spoof: outer by is refused before decoding, with the real sender recorded",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1164,
+			"line": 1170,
 			"name": "P10 inputs, retries and signer p67 spoof: wrapper by is refused before decoding, with the real sender recorded",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1164,
+			"line": 1170,
 			"name": "P10 inputs, retries and signer p67 spoof: outer for is refused before decoding, with the real sender recorded",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1164,
+			"line": 1170,
 			"name": "P10 inputs, retries and signer p67 spoof: wrapper for is refused before decoding, with the real sender recorded",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1164,
+			"line": 1170,
 			"name": "P10 inputs, retries and signer p67 spoof: outer arrivedAt is refused before decoding, with the real sender recorded",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1164,
+			"line": 1170,
 			"name": "P10 inputs, retries and signer p67 spoof: wrapper arrivedAt is refused before decoding, with the real sender recorded",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1184,
+			"line": 1190,
 			"name": "P10 inputs, retries and signer p67: logical retries retain parent/trace and have one real mailbox placing",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1208,
+			"line": 1214,
 			"name": "P10 inputs, retries and signer p67: a new door start retries an injected id collision and never reuses an input id",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1227,
+			"line": 1233,
 			"name": "P10 inputs, retries and signer p67: the authority storage cap fails before acknowledgment or delivery, without eviction",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1247,
+			"line": 1253,
 			"name": "P10 inputs, retries and signer question 16: authority is saved before delivery, and a failed delivery retries the same parent",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1283,
+			"line": 1289,
 			"name": "P10 inputs, retries and signer explicit method table: public signer cannot bypass authority",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1283,
+			"line": 1289,
 			"name": "P10 inputs, retries and signer explicit method table: public session.signer cannot bypass authority",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1283,
+			"line": 1289,
 			"name": "P10 inputs, retries and signer explicit method table: public ledger.append cannot bypass authority",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1283,
+			"line": 1289,
 			"name": "P10 inputs, retries and signer explicit method table: public process.exit cannot bypass authority",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1283,
+			"line": 1289,
 			"name": "P10 inputs, retries and signer explicit method table: public door.founded cannot bypass authority",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1304,
+			"line": 1310,
 			"name": "P10 passkey roots and recovery question 19: an enrolled passkey root approves, removes and recovers a cleared window",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1366,
+			"line": 1372,
 			"name": "P10 passkey roots and recovery question 19 enrollment: changing key cannot reuse a proof",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1366,
+			"line": 1372,
 			"name": "P10 passkey roots and recovery question 19 enrollment: changing window cannot reuse a proof",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1366,
+			"line": 1372,
 			"name": "P10 passkey roots and recovery question 19 enrollment: changing for cannot reuse a proof",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1366,
+			"line": 1372,
 			"name": "P10 passkey roots and recovery question 19 enrollment: changing to cannot reuse a proof",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1366,
+			"line": 1372,
 			"name": "P10 passkey roots and recovery question 19 enrollment: changing id cannot reuse a proof",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1366,
+			"line": 1372,
 			"name": "P10 passkey roots and recovery question 19 enrollment: changing nonce cannot reuse a proof",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1399,
+			"line": 1405,
 			"name": "P10 passkey roots and recovery question 19: missing or inconsistent proof cannot create an SK person root",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1399,
+			"line": 1405,
 			"name": "P10 passkey roots and recovery question 19: missing or inconsistent verification cannot create an SK person root",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1399,
+			"line": 1405,
 			"name": "P10 passkey roots and recovery question 19: missing or inconsistent backup metadata cannot create an SK person root",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1430,
+			"line": 1436,
 			"name": "P10 passkey roots and recovery question 19 recovery: a sheet adds one passkey device; a spent sheet's exact resend is idempotent",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1454,
+			"line": 1460,
 			"name": "P10 revocation and append revocation: a device removal kills descendants despite lost close messages; other roots and sheet live",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1495,
+			"line": 1501,
 			"name": "P10 revocation and append append race: revocation after signer answers prevents a new write",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1530,
+			"line": 1536,
 			"name": "P10 revocation and append receipt binding: append cannot change its write id, process, kind or parent",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1567,
+			"line": 1573,
 			"name": "P10 span reader and recording P37 reader: first page stops pulling before a failure after row 256",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1625,
+			"line": 1631,
 			"name": "P10 span reader and recording recording failure: a failed pre-route sink flush prevents delivery and acknowledgment",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1658,
+			"line": 1664,
 			"name": "P10 span reader and recording P37 reader: a bounded page crosses rolled parts and outside-process spans in order",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1708,
+			"line": 1714,
 			"name": "P10 span reader and recording P37 reader: failure remains an Effect failure, never a domain err",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1732,
+			"line": 1738,
 			"name": "P10 span reader and recording P37 content deletion: only a person can erase, checked fingerprint retained, span stays",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1793,
+			"line": 1799,
 			"name": "P10 span reader and recording record first: input log and ended input span are flushed before delivery; route has a real link",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1836,
+			"line": 1842,
 			"name": "P10 span reader and recording recording failure: failed input append or sink flush prevents delivery",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1865,
+			"line": 1871,
 			"name": "P10 span reader and recording route failure: final flush includes the ended failed route span",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
 		},
 		{
 			"file": "next/apps/fabrika/src/door.test.ts",
-			"line": 1880,
+			"line": 1886,
 			"name": "P10 span reader and recording no content leak: raw keys, terminal bytes, signature, forged sender and nested Redacted stay out of input telemetry",
 			"status": "failed",
 			"why": "Error: Cannot find module './door.ts' imported from next/apps/fabrika/src/door.test.ts"
