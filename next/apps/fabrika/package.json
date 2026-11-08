@@ -11,6 +11,7 @@
 	"dependencies": {
 		"@effect/platform-node": "catalog:",
 		"@kampus/libfabrika": "workspace:*",
+		"@kampus/notes": "workspace:*",
 		"effect": "catalog:",
 		"oxc-parser": "catalog:",
 		"oxc-transform-react": "catalog:"

@@ -1,231 +1,251 @@
-// P13, next/. Expected history comes from independently authored ledger entries, never notes.save.
+// P13, next/. Saved bytes come from P8. Generated expectations never call notes.save.
 import {readFileSync} from "node:fs";
 import {describe, expect, it} from "@effect/vitest";
-import {stepper} from "@kampus/libfabrika";
+import {Id, stepper} from "@kampus/libfabrika";
 import {Entry} from "@kampus/libfabrika/data";
-import {Effect, Result, Schema} from "effect";
+import {Result, Schema} from "effect";
 import * as fc from "fast-check";
 
-const SEED = 119120;
-const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
-const fields = (n: number) => ({
-	id: `input_0000000000e00800000000000${n}`,
-	stream: "notes:1/inbox",
-	rev: n * 2,
-	pos: n,
-	by: n % 2 ? "SHA256:person" : "SHA256:agent",
-	for: `person-${n % 2}`,
-	arrivedAt: 1000 + n,
-	sentAt: `writer-clock-${10 - n}`,
-	seen: n - 1,
-	parent: null,
-	traceId: TRACE,
-	build: `build-${n}`,
+const options = {seed: 119120, numRuns: 30};
+const InputId = Id.make("input");
+const inputIds = fc.uuid({version: 7}).map((uuid) => {
+	let value = BigInt(`0x${uuid.replaceAll("-", "")}`),
+		suffix = "";
+	for (let n = 0; n < 26; n++) {
+		suffix = "0123456789abcdefghjkmnpqrstvwxyz"[Number(value & 31n)] + suffix;
+		value >>= 5n;
+	}
+	return InputId.make(`input_${suffix}`);
 });
-const entry = (n: number, note: string, base: number, body: string) => ({
-	...fields(n),
-	_tag: "send",
-	body: {
-		m: {
-			type: "save",
-			value: {
-				note,
-				base,
-				body,
-				...(n % 2 ? {how: "kept", from: {note: "source", version: 3}} : {}),
+const samples = fc.array(
+	fc.record({
+		id: inputIds,
+		note: fc.constantFrom("a", "b", "c"),
+		body: fc.string({maxLength: 100}),
+		sentAt: fc.string(),
+		arrivedAt: fc.integer(),
+		agent: fc.boolean(),
+		kept: fc.boolean(),
+	}),
+	{minLength: 2, maxLength: 20},
+);
+type Sample = {
+	id: typeof InputId.Type;
+	note: string;
+	body: string;
+	sentAt: string;
+	arrivedAt: number;
+	agent: boolean;
+	kept: boolean;
+};
+const rows = (values: ReadonlyArray<Sample>) => {
+	const versions = new Map<string, number>();
+	return values.map((v, index) => {
+		const base = versions.get(v.note) ?? 0;
+		versions.set(v.note, base + 1);
+		return {
+			id: v.id,
+			stream: "notes:1/inbox",
+			rev: index * 3 + 1,
+			pos: index + 1,
+			by: v.agent ? "SHA256:agent" : "SHA256:person",
+			for: "person",
+			sentAt: v.sentAt,
+			arrivedAt: v.arrivedAt,
+			seen: index,
+			parent: null,
+			traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+			build: `build-${index}`,
+			_tag: "send",
+			body: {
+				m: {
+					type: "save",
+					value: {
+						note: v.note,
+						base,
+						body: v.body,
+						...(v.kept ? {how: "kept", from: {note: "origin", version: 2}} : {}),
+					},
+				},
 			},
-		},
-	},
-});
-const entries = [
-	entry(1, "a", 0, "# First\n  \r\n🙂"),
-	entry(2, "b", 0, "שלום\n"),
-	entry(3, "a", 1, ""),
-];
-// The plan permits Result or Effect failures. Both must decode untrusted saved data without throws.
-type Checked = Effect.Effect<unknown, unknown> | Result.Result<unknown, unknown>;
-const result = async (answer: Checked): Promise<unknown> => {
-	if (Effect.isEffect(answer)) return Effect.runPromise(answer);
-	expect(Result.isResult(answer), "history returns a checked Result or Effect").toBe(true);
-	if (!Result.isResult(answer)) throw new Error("unchecked history answer");
-	expect(Result.isSuccess(answer)).toBe(true);
-	return Result.isSuccess(answer) ? answer.success : undefined;
+		};
+	});
 };
-const failed = async (answer: Checked) => {
-	if (Effect.isEffect(answer)) return Effect.runPromise(Effect.flip(answer));
-	expect(Result.isResult(answer)).toBe(true);
-	if (!Result.isResult(answer)) throw new Error("unchecked history failure");
-	expect(Result.isFailure(answer)).toBe(true);
-	return Result.isFailure(answer) ? answer.failure : undefined;
+const success = <A, E>(result: Result.Result<A, E>): A => {
+	expect(Result.isResult(result)).toBe(true);
+	if (Result.isFailure(result)) throw result.failure;
+	return result.success;
 };
+type Version = Omit<typeof Entry.Type, "body"> & {
+	note: string;
+	version: number;
+	body: string;
+	how?: string;
+	from?: {note: string; version: number};
+};
+const checkedHistory = (result: Result.Result<ReadonlyArray<Version>, Schema.SchemaError>) =>
+	success(result);
 
 describe("p55 checked notes history", () => {
-	it("plant: retain only the latest version, sort by sender clock, or drop ledger metadata", async () => {
+	it("plant: latest-only history, sender-clock sorting, lost metadata/page or trimmed body", async () => {
 		const {history} = await import("./history.ts");
-		for (let again = 0; again < 3; again++) {
-			const versions = await result(history(entries, "a"));
-			expect(versions).toMatchObject([
-				{
-					...fields(1),
-					note: "a",
-					version: 1,
-					body: "# First\n  \r\n🙂",
-					how: "kept",
-					from: {note: "source", version: 3},
-				},
-				{
-					...fields(3),
-					note: "a",
-					version: 2,
-					body: "",
-					how: "kept",
-					from: {note: "source", version: 3},
-				},
-			]);
-		}
-		expect(await result(history(entries, "b"))).toMatchObject([
-			{
-				note: "b",
-				version: 1,
-				body: "שלום\n",
-				by: "SHA256:agent",
-				sentAt: "writer-clock-8",
-				arrivedAt: 1002,
-			},
-		]);
-		expect(await result(history(entries, "absent"))).toEqual([]);
-	});
-	it("plant: lose versions at a page boundary, trim bodies, or use a global version", async () => {
-		const {history} = await import("./history.ts");
-		await fc.assert(
-			fc.asyncProperty(
-				fc.array(fc.string({maxLength: 80}), {minLength: 2, maxLength: 40}),
-				async (bodies) => {
-					const rows = bodies.map((body, n) => ({
-						...entry(1, "a", n, body),
-						...fields(n + 1),
-						id: `input_0000000000e0080000000${String(n + 1).padStart(5, "0")}`,
-					}));
-					const expected = bodies.map((body, n) => ({
-						version: n + 1,
-						body,
-						by: fields(n + 1).by,
-						sentAt: fields(n + 1).sentAt,
-						arrivedAt: fields(n + 1).arrivedAt,
-					}));
-					// Callers supply one page at a time; base + 1 remains correct without earlier pages.
-					for (let cut = 1; cut < rows.length; cut++) {
-						const first = await result(history(rows.slice(0, cut), "a"));
-						const rest = await result(history(rows.slice(cut), "a"));
-						expect([...(first as unknown[]), ...(rest as unknown[])]).toMatchObject(expected);
+		fc.assert(
+			fc.property(samples, (values) => {
+				const entries = rows(values);
+				for (const note of ["a", "b", "c", "absent"]) {
+					const expected = entries
+						.filter((e) => e.body.m.value.note === note)
+						.map(({body, _tag: _, ...fields}) => {
+							const {base, ...save} = body.m.value;
+							return {...fields, _tag: "send", ...save, version: base + 1};
+						});
+					for (let cut = 0; cut <= entries.length; cut++) {
+						const left = checkedHistory(history(entries.slice(0, cut), note));
+						const right = checkedHistory(history(entries.slice(cut), note));
+						expect([...left, ...right]).toEqual(expected);
 					}
-				},
-			),
-			{seed: SEED, numRuns: 25},
+					expect(checkedHistory(history(entries, note))).toEqual(expected);
+				}
+			}),
+			options,
 		);
 	});
-	it("plant: silently skip malformed saved saves or throw while decoding them", async () => {
+	it("plant: throw from saved decoding, skip malformed Msgs or corrupt projected versions", async () => {
 		const {history} = await import("./history.ts");
 		const {notes} = await import("./program.ts");
-		for (const value of [
-			{note: "a", base: "0", body: "text"},
-			{note: "a", base: 0},
-			{note: "a", base: -1, body: "text"},
-		]) {
-			const broken = {...entry(2, "a", 1, ""), body: {m: {type: "save", value}}};
-			let answer: Checked = Result.fail("history did not answer");
-			expect(() => {
-				answer = history([entries[0], broken, entries[2]], "a");
-			}).not.toThrow();
-			expect(await failed(answer)).toBeDefined();
-			expect(() => stepper(notes).fold({notes: []}, broken.body.m)).toThrowError(
-				expect.objectContaining({_tag: "ProgramDown", why: "saved_letter"}),
-			);
-		}
+		fc.assert(
+			fc.property(
+				samples,
+				fc.constantFrom("missing_body", "bad_base", "empty_note", "bad_from"),
+				(values, fault) => {
+					const entries = rows(values);
+					const value: Record<string, unknown> = {...entries[0]!.body.m.value};
+					if (fault === "missing_body") delete value.body;
+					if (fault === "bad_base") value.base = -1;
+					if (fault === "empty_note") value.note = "";
+					if (fault === "bad_from") value.from = {note: "origin", version: 0};
+					const msg = {type: "save", value};
+					const broken = {...entries[0], body: {m: msg}};
+					let answer: Result.Result<unknown, unknown> | undefined;
+					expect(() => {
+						answer = history([broken, ...entries.slice(1)], "a");
+					}).not.toThrow();
+					expect(answer).toBeDefined();
+					if (answer === undefined || Result.isSuccess(answer))
+						throw new Error("saved corruption was not a typed failure");
+					expect(answer.failure).toMatchObject({_tag: "SchemaError"});
+					const p = success(stepper(notes));
+					expect(() => p.fold({notes: []}, msg)).toThrowError(
+						expect.objectContaining({_tag: "ProgramDown", why: "saved_letter"}),
+					);
+				},
+			),
+			options,
+		);
 	});
-	it("plant: reject additive fields or accept malformed saved metadata", async () => {
+	it("plant: reject additive fields or accept broken saved entry metadata", async () => {
 		const {history} = await import("./history.ts");
-		const additive = {
-			...entries[0],
-			later: "extra",
-			body: {m: {type: "save", value: {note: "a", base: 0, body: "text", later: 42}}},
-		};
-		expect(await result(history([additive], "a"))).toMatchObject([
-			{note: "a", version: 1, body: "text"},
-		]);
-		for (const change of [
-			{id: "not-a-TypeID"},
-			{by: null},
-			{sentAt: 12},
-			{arrivedAt: "today"},
-			{traceId: "bad"},
-			{seen: -1},
-		]) {
-			let answer: Checked = Result.fail("history did not answer");
-			expect(() => {
-				answer = history([{...entries[0], ...change}], "a");
-			}).not.toThrow();
-			expect(await failed(answer)).toBeDefined();
-		}
+		fc.assert(
+			fc.property(
+				samples,
+				fc.constantFrom("id", "by", "sentAt", "arrivedAt", "traceId", "seen"),
+				(values, field) => {
+					const first = rows(values)[0]!;
+					const additive = {
+						...first,
+						later: {number: 42},
+						body: {m: {...first.body.m, value: {...first.body.m.value, later: true}}},
+					};
+					expect(success(history([additive], first.body.m.value.note))).toHaveLength(1);
+					const wrong: Record<string, unknown> = {
+						id: "not-a-TypeID",
+						by: null,
+						sentAt: 12,
+						arrivedAt: "today",
+						traceId: "bad",
+						seen: -1,
+					};
+					let answer: Result.Result<unknown, unknown> | undefined;
+					expect(() => {
+						answer = history([{...first, [field]: wrong[field]}], first.body.m.value.note);
+					}).not.toThrow();
+					if (answer === undefined || Result.isSuccess(answer))
+						throw new Error("bad metadata was not a typed failure");
+					expect(answer.failure).toMatchObject({_tag: "SchemaError"});
+				},
+			),
+			options,
+		);
 	});
-	it("P8 p55 replay plant: recheck today's limit against yesterday's saved notes fixture", async () => {
-		// P8 owns this file. Its absence is an unmet prerequisite, never permission to regenerate it.
+	it("Notes saved body plant: reject oversized accepted-history bodies or reapply a fresh limit", async () => {
+		const {history} = await import("./history.ts");
+		fc.assert(
+			fc.property(samples, fc.integer({min: 1, max: 80}), (values, extra) => {
+				const entries = rows(
+					values.slice(0, 2).map((v) => ({...v, note: "a", body: "🙂".repeat(256 * 1024 + extra)})),
+				);
+				const versions = checkedHistory(history(entries, "a"));
+				expect(versions.map((v) => v.body)).toEqual(entries.map((e) => e.body.m.value.body));
+			}),
+			{...options, numRuns: 5},
+		);
+	});
+	it("format: P8 saved notes fold under a stricter policy; plant: rename a stored field or recheck MOST", async () => {
+		// Never regenerate or rewrite this fixture. Its original IDs are compatibility evidence.
 		const text = readFileSync(
 			new URL("../../../../fixtures/next/notes-letters.jsonl", import.meta.url),
 			"utf8",
 		);
-		const rows = text
+		const entries = text
 			.trim()
 			.split("\n")
-			.map((line) => Schema.decodeUnknownSync(Entry)(JSON.parse(line)));
-		expect(rows.length).toBeGreaterThan(1);
+			.map((line) => success(Schema.decodeUnknownResult(Schema.fromJsonString(Entry))(line)));
+		expect(entries).toHaveLength(8);
 		const {notes} = await import("./program.ts");
 		const {history} = await import("./history.ts");
-		let called = 0;
-		const p = stepper({
-			...notes,
-			refuse: () => {
-				called++;
-				return {why: "too_long", most: 0};
-			},
-		});
-		const saved = Schema.Struct({
+		let refused = 0;
+		const p = success(
+			stepper({
+				...notes,
+				refuse: () => {
+					refused++;
+					return {why: "too_long", most: 0};
+				},
+			}),
+		);
+		const Saved = Schema.Struct({
 			m: Schema.Struct({
 				type: Schema.Literal("save"),
 				value: Schema.Struct({note: Schema.String, base: Schema.Int, body: Schema.String}),
 			}),
 		});
-		const oracle = new Map<string, {note: string; version: number; body: string}>();
-		let order: string[] = [];
-		for (const e of rows) {
-			const s = Schema.decodeUnknownSync(saved)(e.body).m.value;
-			oracle.set(s.note, {note: s.note, version: s.base + 1, body: s.body});
-			order = [s.note, ...order.filter((id) => id !== s.note)];
-		}
+		const saves = entries.map((e) => success(Schema.decodeUnknownResult(Saved)(e.body)).m);
+		const oracle = saves.reduce(
+			(state, {value}) => ({
+				notes: [
+					{note: value.note, version: value.base + 1, body: value.body},
+					...state.notes.filter((n) => n.note !== value.note),
+				],
+			}),
+			{notes: []} as {notes: Array<{note: string; version: number; body: string}>},
+		);
 		for (let again = 0; again < 3; again++) {
 			let model: unknown = {notes: []};
-			for (const e of rows) {
-				const one = p.fold(model, Schema.decodeUnknownSync(saved)(e.body).m);
-				expect(one._tag).toBe("stepped");
-				if (one._tag === "stepped") model = one.model;
+			for (const msg of saves) {
+				const folded = p.fold(model, msg);
+				if (folded._tag !== "stepped") throw new Error("saved fixture refused");
+				model = folded.model;
 			}
-			expect(model).toEqual({notes: order.map((id) => oracle.get(id))});
+			expect(model).toEqual(oracle);
 		}
-		expect(called).toBe(0);
-		for (const note of order) {
-			const expected = rows.filter(
-				(e) => Schema.decodeUnknownSync(saved)(e.body).m.value.note === note,
+		expect(refused).toBe(0);
+		for (const {note} of oracle.notes)
+			expect(
+				checkedHistory(history(entries, note)).map((v) => ({body: v.body, version: v.version})),
+			).toEqual(
+				saves
+					.filter((m) => m.value.note === note)
+					.map(({value}) => ({body: value.body, version: value.base + 1})),
 			);
-			const versions = (await result(history(rows, note))) as Array<{
-				body: string;
-				version: number;
-			}>;
-			expect(versions.map((v) => ({body: v.body, version: v.version}))).toEqual(
-				expected.map((e) => {
-					const s = Schema.decodeUnknownSync(saved)(e.body).m.value;
-					return {body: s.body, version: s.base + 1};
-				}),
-			);
-		}
 	});
 });

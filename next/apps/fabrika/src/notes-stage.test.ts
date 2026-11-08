@@ -1,16 +1,31 @@
 // P13, next/. Real dev.ts and JSON-RPC. The driver retains pending text; it proves no screen.
 import {spawn, execFileSync, type ChildProcess} from "node:child_process";
 import {createHash, generateKeyPairSync, sign} from "node:crypto";
-import {mkdtempSync, readFileSync, rmSync} from "node:fs";
+import {mkdtempSync, readFileSync, rmSync, readdirSync, statSync} from "node:fs";
 import {createServer} from "node:net";
 import {join, resolve} from "node:path";
+import {DatabaseSync} from "node:sqlite";
+import {Id} from "@kampus/libfabrika";
 import {Entry, PAGE} from "@kampus/libfabrika/data";
 import {Schema} from "effect";
+import * as fc from "fast-check";
 import {afterEach, describe, expect, it} from "vitest";
 
 const APP = resolve(import.meta.dirname, "..");
 const SENT = "2026-11-08T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+const options = {seed: 119120, numRuns: 3, endOnFailure: true};
+const InputId = Id.make("input");
+const inputIds = fc.uuid({version: 7}).map((uuid) => {
+	let bits = BigInt(`0x${uuid.replaceAll("-", "")}`),
+		text = "";
+	for (let n = 0; n < 26; n++) {
+		text = "0123456789abcdefghjkmnpqrstvwxyz"[Number(bits & 31n)] + text;
+		bits >>= 5n;
+	}
+	return InputId.make(`input_${text}`);
+});
+const letters = fc.sample(inputIds, {seed: options.seed, numRuns: 80});
 const homes: string[] = [],
 	children: ChildProcess[] = [],
 	sockets: WebSocket[] = [];
@@ -99,12 +114,12 @@ const port = async () => {
 	if (address === null || typeof address === "string") throw new Error("No TCP port");
 	return address.port;
 };
-const stage = async () => {
+const stage = async (saved?: {home: string; key: ReturnType<typeof identity>}) => {
 	// Fail on the absent P12 entry before allocating a socket or starting any child.
 	readFileSync(join(APP, "dev.ts"), "utf8");
-	const key = identity(),
-		home = mkdtempSync("/tmp/fh.");
-	homes.push(home);
+	const key = saved?.key ?? identity(),
+		home = saved?.home ?? mkdtempSync("/tmp/fh.");
+	if (saved === undefined) homes.push(home);
 	const number = await port();
 	const url = `http://127.0.0.1:${number}`;
 	const env: NodeJS.ProcessEnv = {...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1"};
@@ -119,7 +134,7 @@ const stage = async () => {
 			"--name",
 			"p13-notes",
 			"--person",
-			"person_01m6v5270hf3c8x2q7w9z4k5mn",
+			"person_0000000000e008000000000001",
 			"--founder",
 			key.line,
 			"--window",
@@ -220,15 +235,15 @@ const read = async (c: Client, stream: string) => {
 		after = page.at(-1)!.rev;
 	}
 };
-const processId = async (c: Client) => {
-	const rows = await read(c, "processes/notes:1");
+const processId = async (c: Client, name = "notes:1") => {
+	const rows = await read(c, `processes/${name}`);
 	const started = rows.findLast((e) => e._tag === "started");
 	const body = Schema.decodeUnknownSync(
-		Schema.Struct({name: Schema.Literal("notes:1"), process: Schema.String}),
+		Schema.Struct({name: Schema.String, process: Schema.String}),
 	)(started?.body);
 	return body.process;
 };
-const send = (c: Client, pid: string, letter: string, value: object) =>
+const send = (c: Client, pid: string, letter: typeof InputId.Type, value: object) =>
 	c.call("process.send", {
 		pid,
 		letter,
@@ -264,113 +279,259 @@ const workerd = (parent: number, excluding = 0) =>
 	}, "replacement workerd PID");
 const values = ["\n# Title\r\ntrailing  \n", "🙂👩🏽‍💻\nשלום\nمرحبا", "", "same", "same"];
 
+// Test-only wake hooks. Run with the wrapper stopped, so SQLite and workerd never write together.
+// No new route or production cache is introduced. T17's driver can use these same observations.
+const storage = (home: string) => {
+	const files: string[] = [];
+	const walk = (dir: string) => {
+		for (const child of readdirSync(dir, {withFileTypes: true})) {
+			const path = join(dir, child.name);
+			if (child.isDirectory()) walk(path);
+			else if (child.isFile() && /\.(sqlite|sqlite3|db)$/.test(child.name)) files.push(path);
+		}
+	};
+	walk(home);
+	return files;
+};
+const checkpoint = (home: string, pid: string, remove: boolean) => {
+	let bytes = 0,
+		found = 0;
+	const files = storage(home);
+	for (const file of files) {
+		const db = new DatabaseSync(file);
+		try {
+			if (
+				db
+					.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='process_state'")
+					.get() === undefined
+			)
+				continue;
+			const row = db.prepare("SELECT checkpoint FROM process_state WHERE process=?").get(pid);
+			if (row === undefined) continue;
+			found++;
+			bytes += Buffer.byteLength(String(row.checkpoint));
+			if (remove) db.prepare("DELETE FROM process_state WHERE process=?").run(pid);
+		} finally {
+			db.close();
+		}
+	}
+	expect(found, "the derived notes checkpoint must exist before a full-fold measurement").toBe(1);
+	return {
+		checkpointBytes: bytes,
+		objectBytes: files.reduce((n, file) => n + statSync(file).size, 0),
+	};
+};
+const stop = async (s: Awaited<ReturnType<typeof stage>>) => {
+	const ended = new Promise<void>((done) => s.child.once("exit", () => done()));
+	s.child.kill("SIGTERM");
+	await ended;
+	if (s.child.pid !== undefined) {
+		try {
+			process.kill(-s.child.pid, "SIGKILL");
+		} catch (error) {
+			if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) throw error;
+		}
+	}
+};
+
 describe("P13 real stage", () => {
 	it("p56 text/restart plant: memory-only saves, normalized text, changed retry id or lost pending text", async () => {
-		const s = await stage(),
-			c = await connect(s),
-			pid = await processId(c);
-		const first = accepted(
-			await send(c, pid, "input_0000000000e008000000000001", {note: "a", base: 0, body: values[0]}),
-		);
-		for (let n = 1; n < values.length; n++)
-			accepted(
-				await send(c, pid, `input_0000000000e00800000000000${n + 1}`, {
-					note: "a",
-					base: n,
-					body: values[n],
-				}),
-			);
-		const before = await read(c, "notes:1/inbox");
-		expect(before).toHaveLength(values.length);
-		const old = await workerd(s.child.pid!);
-		process.kill(old, "SIGKILL");
-		// The pending save stays in this driver while no server can receive it.
-		const pending = {
-			letter: "input_0000000000e008000000000006",
-			value: {note: "a", base: values.length, body: "pending  \r\n🙂"},
-		};
-		await workerd(s.child.pid!, old);
-		const after = await connect(s, "notes-after"),
-			samePid = await processId(after);
-		expect(samePid).toBe(pid);
-		expect(await read(after, "notes:1/inbox")).toEqual(before);
-		expect(
-			accepted(
-				await send(after, samePid, "input_0000000000e008000000000001", {
-					note: "a",
-					base: 0,
-					body: values[0],
-				}),
+		await fc.assert(
+			fc.asyncProperty(
+				fc.array(fc.string({maxLength: 40}), {minLength: 1, maxLength: 3}),
+				fc.nat({max: 20}),
+				async (extra, cut) => {
+					const bodies = [...values, ...extra];
+					const count = 1 + (cut % bodies.length);
+					const s = await stage(),
+						c = await connect(s),
+						pid = await processId(c);
+					const first = accepted(
+						await send(c, pid, letters[0]!, {note: "a", base: 0, body: bodies[0]}),
+					);
+					for (let n = 1; n < count; n++)
+						accepted(
+							await send(c, pid, letters[n]!, {
+								note: "a",
+								base: n,
+								body: bodies[n],
+							}),
+						);
+					const before = await read(c, "notes:1/inbox");
+					expect(before).toHaveLength(count);
+					const old = await workerd(s.child.pid!);
+					process.kill(old, "SIGKILL");
+					// The pending save stays in this driver while no server can receive it.
+					const pending = {
+						letter: letters[count]!,
+						value: {
+							note: "a",
+							base: count,
+							body: bodies[count] ?? `pending  \r\n🙂${extra.join("")}`,
+						},
+					};
+					await workerd(s.child.pid!, old);
+					const after = await connect(s, "notes-after"),
+						samePid = await processId(after);
+					expect(samePid).toBe(pid);
+					expect(await read(after, "notes:1/inbox")).toEqual(before);
+					expect(
+						accepted(
+							await send(after, samePid, letters[0]!, {
+								note: "a",
+								base: 0,
+								body: bodies[0],
+							}),
+						),
+					).toEqual(first);
+					const placing = accepted(await send(after, samePid, pending.letter, pending.value));
+					expect(accepted(await send(after, samePid, pending.letter, pending.value))).toEqual(
+						placing,
+					);
+					for (let n = count + 1; n < bodies.length; n++)
+						accepted(
+							await send(after, samePid, letters[n]!, {note: "a", base: n, body: bodies[n]}),
+						);
+					const rows = await read(after, "notes:1/inbox");
+					const Body = Schema.Struct({
+						m: Schema.Struct({
+							type: Schema.Literal("save"),
+							value: Schema.Struct({base: Schema.Int, body: Schema.String}),
+						}),
+					});
+					expect(rows.map((e) => Schema.decodeUnknownSync(Body)(e.body).m.value)).toEqual(
+						(count < bodies.length ? bodies : [...bodies, pending.value.body]).map(
+							(body, base) => ({body, base}),
+						),
+					);
+					const opened = await after.call("view.open", {pid});
+					expect(opened.error).toBeUndefined();
+					expect(opened.result.view).toEqual({
+						notes: [
+							{
+								note: "a",
+								version: Math.max(bodies.length, count + 1),
+								body: count < bodies.length ? bodies.at(-1) : pending.value.body,
+							},
+						],
+					});
+					await stop(s);
+					// A checkpoint wake and a full fold are separate paths. Remove no accepted letters.
+					const kept = checkpoint(s.home, pid, false);
+					expect(kept.checkpointBytes).toBeGreaterThan(0);
+					const loaded = await stage(s),
+						loadedClient = await connect(loaded, "checkpoint-wake");
+					expect(await read(loadedClient, "notes:1/inbox")).toEqual(rows);
+					expect((await loadedClient.call("view.open", {pid})).result.view).toEqual(
+						opened.result.view,
+					);
+					await stop(loaded);
+					checkpoint(s.home, pid, true);
+					const folded = await stage(s),
+						foldedClient = await connect(folded, "full-fold");
+					expect(await read(foldedClient, "notes:1/inbox")).toEqual(rows);
+					expect((await foldedClient.call("view.open", {pid})).result.view).toEqual(
+						opened.result.view,
+					);
+					await stop(folded);
+				},
 			),
-		).toEqual(first);
-		const placing = accepted(await send(after, samePid, pending.letter, pending.value));
-		expect(accepted(await send(after, samePid, pending.letter, pending.value))).toEqual(placing);
-		const rows = await read(after, "notes:1/inbox");
-		const Body = Schema.Struct({
-			m: Schema.Struct({
-				type: Schema.Literal("save"),
-				value: Schema.Struct({base: Schema.Int, body: Schema.String}),
-			}),
-		});
-		expect(rows.map((e) => Schema.decodeUnknownSync(Body)(e.body).m.value)).toEqual(
-			[...values, pending.value.body].map((body, base) => ({body, base})),
+			options,
 		);
-		const opened = await after.call("view.open", {pid});
-		expect(opened.error).toBeUndefined();
-		expect(opened.result.view).toEqual({
-			notes: [{note: "a", version: 6, body: pending.value.body}],
-		});
 	});
 	it("p53 identity plant: let changed text or another admitted caller borrow a terminal reply", async () => {
-		const s = await stage(),
-			c = await connect(s),
-			pid = await processId(c);
-		const id = "input_0000000000e008000000000001";
-		const original = {note: "a", base: 1, body: "refused-draft-marker"};
-		const refusal = await send(c, pid, id, original);
-		expect(refusal.result).toEqual({_tag: "refused", why: "changed_elsewhere", now: 0});
-		const changed = await send(c, pid, id, {...original, body: "changed"});
-		expect(changed.error?.data?.why ?? changed.result?.why).toBe("id_reused");
-		// A second tab is an admitted caller too; its binding must remain distinct.
-		const other = await connect(s, "notes-other");
-		const borrowed = await send(other, pid, id, original);
-		expect(borrowed.error?.data?.why ?? borrowed.result?.why).toBe("id_reused");
-		expect(await read(c, "notes:1/inbox")).toHaveLength(0);
+		await fc.assert(
+			fc.asyncProperty(
+				fc.string({maxLength: 60}),
+				fc.integer({min: 1, max: 8}),
+				async (text, base) => {
+					const s = await stage(),
+						c = await connect(s),
+						pid = await processId(c);
+					const id = letters[0]!;
+					const original = {note: "a", base, body: `refused-draft-marker-${text}`};
+					const refusal = await send(c, pid, id, original);
+					expect(refusal.result).toEqual({_tag: "refused", why: "changed_elsewhere", now: 0});
+					const changed = await send(c, pid, id, {...original, body: "changed"});
+					expect(changed.error?.data?.why ?? changed.result?.why).toBe("id_reused");
+					// A second tab is an admitted caller too; its binding must remain distinct.
+					const other = await connect(s, "notes-other");
+					const borrowed = await send(other, pid, id, original);
+					expect(borrowed.error?.data?.why ?? borrowed.result?.why).toBe("id_reused");
+					const counter = await processId(c, "counter:1");
+					const retargeted = await send(c, counter, id, original);
+					expect(retargeted.error?.data?.why ?? retargeted.result?.why).toBe("id_reused");
+					expect(await read(c, "notes:1/inbox")).toHaveLength(0);
+					await stop(s);
+				},
+			),
+			options,
+		);
 	});
 	it("p54/recording plant: lose now/most on the wire or record refused bodies at the door", async () => {
-		const s = await stage(),
-			c = await connect(s),
-			pid = await processId(c);
-		const marker = "refused-body-must-not-be-recorded";
-		const stale = await send(c, pid, "input_0000000000e008000000000001", {
-			note: "a",
-			base: 2,
-			body: marker,
-			how: "kept",
-			from: {note: "b", version: 1},
-		});
-		expect(stale.error).toBeUndefined();
-		expect(stale.result).toEqual({_tag: "refused", why: "changed_elsewhere", now: 0});
-		const large = await send(c, pid, "input_0000000000e008000000000002", {
-			note: "a",
-			base: 0,
-			body: marker + "x".repeat(256 * 1024),
-		});
-		expect(large.error).toBeUndefined();
-		expect(large.result).toEqual({_tag: "refused", why: "too_long", most: 256 * 1024});
-		const records = await read(c, "door/inputs");
-		expect(records.length).toBeGreaterThan(0);
-		expect(JSON.stringify(records)).not.toContain(marker);
-		const Meta = Schema.Struct({
-			input: Schema.Struct({
-				type: Schema.Literal("save"),
-				note: Schema.Literal("a"),
-				base: Schema.Literal(2),
-				how: Schema.Literal("kept"),
-				from: Schema.Struct({note: Schema.Literal("b"), version: Schema.Literal(1)}),
-			}),
-		});
-		expect(records.some((e) => Schema.is(Meta)(e.body))).toBe(true);
-		expect(await read(c, "notes:1/inbox")).toHaveLength(0);
+		await fc.assert(
+			fc.asyncProperty(
+				fc.string({maxLength: 50}),
+				fc.integer({min: 1, max: 12}),
+				async (suffix, base) => {
+					const s = await stage(),
+						c = await connect(s),
+						pid = await processId(c);
+					const marker = `refused-body-must-not-be-recorded-${suffix}`;
+					const stale = await send(c, pid, letters[0]!, {
+						note: "a",
+						base,
+						body: marker,
+						how: "kept",
+						from: {note: "b", version: 1},
+					});
+					expect(stale.error).toBeUndefined();
+					expect(stale.result).toEqual({_tag: "refused", why: "changed_elsewhere", now: 0});
+					const large = await send(c, pid, letters[1]!, {
+						note: "a",
+						base: 0,
+						body: marker + "x".repeat(256 * 1024),
+					});
+					expect(large.error).toBeUndefined();
+					expect(large.result).toEqual({_tag: "refused", why: "too_long", most: 256 * 1024});
+					const records = await read(c, "door/inputs");
+					expect(records.length).toBeGreaterThan(0);
+					expect(JSON.stringify(records)).not.toContain(marker);
+					const Meta = Schema.Struct({
+						input: Schema.Struct({
+							type: Schema.Literal("save"),
+							note: Schema.Literal("a"),
+							base: Schema.Literal(base),
+							how: Schema.Literal("kept"),
+							from: Schema.Struct({note: Schema.Literal("b"), version: Schema.Literal(1)}),
+						}),
+					});
+					expect(records.some((e) => Schema.is(Meta)(e.body))).toBe(true);
+					expect(await read(c, "notes:1/inbox")).toHaveLength(0);
+					const savedBody = `accepted-body-must-not-be-recorded-${suffix}`;
+					accepted(
+						await send(c, pid, letters[2]!, {note: "a", base: 0, body: savedBody, how: "done"}),
+					);
+					const logs = await read(c, "door/inputs");
+					expect(JSON.stringify(logs)).not.toContain(savedBody);
+					expect(
+						logs.some((row) =>
+							Schema.is(
+								Schema.Struct({
+									input: Schema.Struct({
+										type: Schema.Literal("save"),
+										note: Schema.Literal("a"),
+										base: Schema.Literal(0),
+										how: Schema.Literal("done"),
+									}),
+								}),
+							)(row.body),
+						),
+					).toBe(true);
+					await stop(s);
+				},
+			),
+			options,
+		);
 	});
 });

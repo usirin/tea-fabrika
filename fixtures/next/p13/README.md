@@ -1,58 +1,111 @@
-# P13 test record
+# P13 tests, revised plan
 
-This is the test writer's record for `next/` notes, tracker ticket 281. It covers no code from today's version. Seeded cases use 119120 and one vitest worker.
+Ticket 281, Tier 1 P13, `next/` only. This is a new tests step above the older tests commit.
+It follows the plan approved again on 2026-11-08. Generated cases use seed 119120.
+No product file, saved P8 fixture byte or lockfile was changed.
 
-## Laws
+## Laws and their plants
 
-| Law | Test and plant |
+The names below link to each law's first line. Every behavior check uses generated inputs.
+P8's fixed saved format is the labeled exception. The plant named in each test is the break that
+the law must catch. Missing product code prevents measuring those mutations yet; this record
+does not claim that a mutation of absent code was killed.
+
+| Law | File:line and plant |
 |---|---|
-| p52, progress | [program.laws.test.ts:45](../../../next/programs/notes/src/program.laws.test.ts#L45), independent per-note versions, exact bodies, empty text and empty Cmds. Plants: ignore a save, refuse every save, count versions across notes. |
-| p52, stored input and sender | [runner.laws.test.ts:191](../../../next/programs/notes/src/runner.laws.test.ts#L191) and [sender:242](../../../next/programs/notes/src/runner.laws.test.ts#L242), actual SQLite inbox entries, all metadata, unchanged earlier entries, person and agent writers. Plants: replace a row, drop optional fields, trust supplied writer fields, give update a writer clock. |
-| p53, accepted | [runner.laws.test.ts:289](../../../next/programs/notes/src/runner.laws.test.ts#L289), original placing after later saves and reopened files; different ids with identical text. Plants: check base first, deduplicate by body. |
-| p53, refused | [runner-replies.test.ts:153](../../../next/packages/libfabrika/src/app/runner-replies.test.ts#L153), future base remains refused after advancing, reopening and replacing the process. Plants: recheck the base, keep a reply in memory or under its old process id. |
-| p53, reply storage | [process-replies.test.ts:78](../../../next/packages/libfabrika/src/coordination/process-replies.test.ts#L78), insert-only replies, name and letter isolation, reopen, failed writes and retained older replies. Plants: overwrite a reply, key only by letter, evict on failure. |
-| p53, identity and answer order | [notes-stage.test.ts:324](../../../next/apps/fabrika/src/notes-stage.test.ts#L324) rejects changed text and another admitted client. [runner-replies.test.ts:182](../../../next/packages/libfabrika/src/app/runner-replies.test.ts#L182) requires storage failure instead of a terminal answer. Plants: match only the letter id, answer before saving. |
-| p54, stale and race | [runner.laws.test.ts:314](../../../next/programs/notes/src/runner.laws.test.ts#L314) and [race:352](../../../next/programs/notes/src/runner.laws.test.ts#L352), true `now`, unchanged inbox/model/watchers, one winner on one base, independent notes. Plants: `<`, append anyway, stale `now`, remove permit, project-wide version. |
-| p54, size | [program.laws.test.ts:120](../../../next/programs/notes/src/program.laws.test.ts#L120) checks exact UTF-8 bytes, equality and size-before-base. [runner.laws.test.ts:381](../../../next/programs/notes/src/runner.laws.test.ts#L381) checks the complete escaped row plus metadata. Plants: string length, reject equality, ignore escaping. |
-| p55, history | [history.test.ts:63](../../../next/programs/notes/src/history.test.ts#L63), every version, all metadata, both clocks, caller pages and additive fields. Plants: latest-only history, sender-time order, trimming, lost page. |
-| p55, replay | [program.laws.test.ts:137](../../../next/programs/notes/src/program.laws.test.ts#L137) checks repeated folds under a stricter refusal. [history.test.ts:171](../../../next/programs/notes/src/history.test.ts#L171) reads P8's permanent fixture, and [malformed saves:127](../../../next/programs/notes/src/history.test.ts#L127) requires checked failures. Plants: call refuse, silently skip a save, throw on untrusted data. |
-| p55, checkpoint | [runner.laws.test.ts:414](../../../next/programs/notes/src/runner.laws.test.ts#L414) and [saved failure:456](../../../next/programs/notes/src/runner.laws.test.ts#L456), reopen with checkpoint, remove only checkpoint, rebuild twice, retain all letters on saved failure. Plants: checkpoint as sole copy, omit a note, reset after a broken save. |
-| S2, p88 | [program.laws.test.ts:167](../../../next/programs/notes/src/program.laws.test.ts#L167), real `syncTest` at every JSON cut, duplicate-id rejection and saved text above today's refusal limit. Plants: lose id, body or version during encoding. |
-| p56, text and stage | [notes-stage.test.ts:268](../../../next/apps/fabrika/src/notes-stage.test.ts#L268), real `dev.ts`, kill workerd, reconnect, exact history and retained pending letter. Plants: memory-only text, newline normalization, new retry id. This proves no screen. |
-| recording | [notes-spans.test.ts:125](../../../next/apps/fabrika/src/notes-spans.test.ts#L125) and [replay:171](../../../next/apps/fabrika/src/notes-spans.test.ts#L171), actual P37 sink and records, ended/flushed outcomes, checkpoint versus full replay, no body in span tags, health or replies. [notes-stage.test.ts:340](../../../next/apps/fabrika/src/notes-stage.test.ts#L340) checks body-free door input metadata and wire refusal fields. Plants: log Msg, omit refusal tags, flush early. |
-| p24, p32, p65 | Existing browser, package and layer checks. [deps.test.ts:311](../../../next/apps/fabrika/src/exam/deps.test.ts#L311) now also requires the notes entry to exist. No new source-shape test or exception. |
-| read and list | [program.laws.test.ts:205](../../../next/programs/notes/src/program.laws.test.ts#L205), present/missing notes, independent versions, stable order, derived names and no mutation or write from reads. |
+| p52 | [runner.laws.test.ts:194](../../../next/programs/notes/src/runner.laws.test.ts#L194): replace a row, drop optional save/writer fields, share versions across notes, refuse valid saves. |
+| p52 progress | [program.laws.test.ts:52](../../../next/programs/notes/src/program.laws.test.ts#L52): ignore/refuse a current-base save or emit a Cmd. Every generated sequence includes empty text. |
+| p52 sender | [runner.laws.test.ts:245](../../../next/programs/notes/src/runner.laws.test.ts#L245): trust forged writer fields or pass clocks into the pure update. |
+| p53 accepted | [runner.laws.test.ts:304](../../../next/programs/notes/src/runner.laws.test.ts#L304): check base before ID, deduplicate by body, lose placing on reopen. |
+| p53 refused | [runner-replies.test.ts:178](../../../next/packages/libfabrika/src/app/runner-replies.test.ts#L178): recheck a future base after it becomes current, lose a reply on reopen/replacement. |
+| p53 identity | [notes-stage.test.ts:442](../../../next/apps/fabrika/src/notes-stage.test.ts#L442): borrow a reply after changing caller, target or payload. [runner-replies.test.ts:216](../../../next/packages/libfabrika/src/app/runner-replies.test.ts#L216): answer before reply storage succeeds. |
+| p53 durable storage | [process-replies.test.ts:116](../../../next/packages/libfabrika/src/coordination/process-replies.test.ts#L116): overwrite, store only in memory, key only by letter or old process. [Failure:153](../../../next/packages/libfabrika/src/coordination/process-replies.test.ts#L153): acknowledge a failed write or lose an older reply. |
+| p53 reply decoding | [process-replies.test.ts:186](../../../next/packages/libfabrika/src/coordination/process-replies.test.ts#L186): throw, ignore or erase corrupt stored JSON/Reply fields. [runner-replies.test.ts:251](../../../next/packages/libfabrika/src/app/runner-replies.test.ts#L251): accept malformed Sent or its wrong terminal case. |
+| p54 | [program.laws.test.ts:68](../../../next/programs/notes/src/program.laws.test.ts#L68), [malformed:85](../../../next/programs/notes/src/program.laws.test.ts#L85), [runner:341](../../../next/programs/notes/src/runner.laws.test.ts#L341): use `<`, give stale `now`, admit malformed bases, append/publish a refused save. |
+| p54 race | [runner.laws.test.ts:379](../../../next/programs/notes/src/runner.laws.test.ts#L379): remove the permit or use a project-wide note version. |
+| p54 size | [program.laws.test.ts:102](../../../next/programs/notes/src/program.laws.test.ts#L102): count JS characters, reject MOST equality, check base first. [runner:429](../../../next/programs/notes/src/runner.laws.test.ts#L429): ignore complete encoded-row bytes. |
+| p55 | [history.test.ts:90](../../../next/programs/notes/src/history.test.ts#L90): retain only latest versions, sort by sender clock, trim bodies, lose metadata or a page. |
+| p55 replay | [program.laws.test.ts:133](../../../next/programs/notes/src/program.laws.test.ts#L133): call today's refusal during replay. [history:113](../../../next/programs/notes/src/history.test.ts#L113), [metadata:146](../../../next/programs/notes/src/history.test.ts#L146), [runner:537](../../../next/programs/notes/src/runner.laws.test.ts#L537): throw, skip malformed saved data, erase letters or reset state. |
+| p55 saved format | [history.test.ts:193](../../../next/programs/notes/src/history.test.ts#L193): rename saved fields or apply a stricter current limit to P8's unchanged eight-row fixture. |
+| p55 checkpoint | [runner.laws.test.ts:489](../../../next/programs/notes/src/runner.laws.test.ts#L489): keep only a checkpoint or omit a note in the full fold at generated cuts. |
+| Notes duplicate IDs | [program.laws.test.ts:162](../../../next/programs/notes/src/program.laws.test.ts#L162): drop uniqueness checking on otherwise valid generated notes. |
+| Notes saved body | [program.laws.test.ts:185](../../../next/programs/notes/src/program.laws.test.ts#L185), [history:180](../../../next/programs/notes/src/history.test.ts#L180): put today's limit in saved Notes, Save, Msg or history decoding. |
+| S2, p88 | [program.laws.test.ts:213](../../../next/programs/notes/src/program.laws.test.ts#L213): drop ID, body or version at a JSON save/load cut. Uses real `syncTest`. |
+| read | [program.laws.test.ts:257](../../../next/programs/notes/src/program.laws.test.ts#L257): return another note/version, mutate on read. Uses tea's pbt from real init. |
+| list | [program.laws.test.ts:257](../../../next/programs/notes/src/program.laws.test.ts#L257): duplicate rows, reorder on read or trim saved text while deriving a name. |
+| p56 stage and text | [notes-stage.test.ts:338](../../../next/apps/fabrika/src/notes-stage.test.ts#L338): keep saves only in memory, normalize text, change a retry ID or lose a retained pending send. Generated restart cuts, real wire, workerd replacement, checkpoint wake and full fold. |
+| audit encoding | [program.laws.test.ts:232](../../../next/programs/notes/src/program.laws.test.ts#L232): retain a body, drop save metadata or throw on malformed outside input. The pure `audit` contract returns Result. |
+| stored audit and delivery | [notes-stage.test.ts:471](../../../next/apps/fabrika/src/notes-stage.test.ts#L471): lose `now`/`most` over delivery or keep accepted/refused bodies in actual door input records. |
+| recording | [notes-spans.test.ts:159](../../../next/apps/fabrika/src/notes-spans.test.ts#L159), [replay:227](../../../next/apps/fabrika/src/notes-spans.test.ts#L227), [failure:267](../../../next/apps/fabrika/src/notes-spans.test.ts#L267): omit outcomes, flush early, leak bodies in actual spans/health/replies, mislabel a checkpoint as a fold or acknowledge recording failure. |
+| p24, p32, p65 | Existing browser/layer/package checks plus the enabled notes import restriction. [Import plant:57](../../../oxlint-plugins/required-browser-entry.test.ts#L57): Node, coordination, today's code and Markdown. |
+| required browser entry | [required-browser-entry.test.ts:37](../../../oxlint-plugins/required-browser-entry.test.ts#L37), [valid cases:48](../../../oxlint-plugins/required-browser-entry.test.ts#L48): remove export, use only a window export, remove target, name a directory or escape the package. |
 
-## Expected red results
+## Runs and limits
 
-Final narrow run: 41 checks collected, 33 failed for the expected reasons below and 8 existing package/exam checks passed. Every law ran; no suite failed to collect.
+Final narrow run: **48 checks collected, 12 passed, 36 failed**. No suite failed to collect.
+All tests named above ran, including their named plant cases. No full suite ran.
+Every command kept `TYPESAFE_API_KEY` unset and used one vitest worker.
 
-The base has no notes `program.ts`, `history.ts` or public entry. Those laws collect and fail on their planned missing modules. The notes package manifest and boundary row are in this test commit; its `tsconfig.json` is still the builder's file.
+The 36 reds are expected missing work: 23 notes program/history/audit laws, six reply laws,
+three P37 notes-recording laws, three real-stage laws and the existing notes browser bundle.
+The real-stage laws stop at missing P12 `dev.ts`, before opening a listener or child.
+There is no green claim about workerd, sockets, process inspection or wake measurements here.
+On this sandbox, socket allocation and `ps` may also be blocked once P12 exists.
 
-The reply-store methods are absent. Its three laws fail on that absence. The existing runner demonstrates both intended p53 failures: a previously refused future base becomes accepted, and a failed reply write still returns a terminal refusal. Those are missing P13 behavior, not test errors.
+The lint plants passed: six broken entries detected, four valid entries accepted, and all four
+forbidden imports detected. False alarms were zero in those valid cases. The actual tree's one
+new-rule finding is correct: notes declares an entry whose builder-owned file does not exist.
 
-P8's `fixtures/next/notes-letters.jsonl` is absent. Its compatibility test fails opening that exact documented path. This is an unmet plan prerequisite. No replacement fixture was made.
+`pnpm format` applied formatting. Its lint-fix phase then stopped on that missing entry.
+The one `pnpm lint` run stopped on the same single expected finding, with no test-side diagnostic.
+Later lint steps did not run after that failure. No rule or ledger was weakened.
 
-P12's `next/apps/fabrika/dev.ts` is absent. Every real-wire law fails there before it allocates a listener or starts a child. The tests use P12's planned CLI and wire methods, also checked against its test writer's contracts. No raw Miniflare substitute is used.
+The requested `pnpm typecheck` hit pnpm's unsafe task-state symlink before compiling. After fixing
+the ignored local dependency setup, its recursive compiler phase ran serially and stopped at
+missing reply methods. A narrow continuation included the new tests, including notes before its
+builder-owned tsconfig exists. It found one test-side error, an unavailable fast-check type alias;
+that is now an explicit input type. Other reported errors name missing program/history/audit
+modules or missing `reply`/`rememberReply`. There was no second workspace typecheck.
 
-Own test errors found during authoring were fixed: one missing brace, Effect 4's typed `tap` callback, a pbt generic inference, and history helper context types. A focused compiler check then reported only absent notes modules and reply methods. This does not typecheck code that has not been built.
+An existing dependency-reader false alarm from merged P8 was fixed in `deps.test.ts`: the regex
+read quoted bundle-plant code as an actual import of `${pkg}`. The installed Oxc parser now reads
+imports, and a generated plant checks quoted versus executable import text. All nine other
+dependency checks pass. The remaining browser red is the missing notes entry.
 
-Formatting passed. The requested `pnpm lint` call found one empty type literal in a test. That was fixed. The complete linter then had zero blocking findings, and every remaining lint part passed separately: exact versions, layers, boundaries, browser bundle, unreachable exports, Compiler, token checks and format checks. No lint rule or ledger was weakened.
+## Plan conflicts the lead must resolve
 
-The root type check stopped on the planned missing reply methods. A focused compiler check covered all new test files, including notes before its builder-owned typecheck config exists. Its remaining errors were only missing `program.ts`, `history.ts`, `reply` and `rememberReply`. The stage checks were rerun after tightening child-group and temporary-home cleanup; all three still failed only on missing P12 `dev.ts`.
+The shared Id change here provides `Id.make("input")`. It has **not** changed `ParentText` or
+`Incoming.envelope.id`; both still require the old input-parent format. The revised tests use
+UUIDv7 input IDs for both delivery IDs, as the approved plan says. Current runner laws therefore
+also stop at `RunnerError bad_input` until that prerequisite's schema migration is supplied.
+An earlier targeted run using the old parent format reached the intended missing behavior:
+a terminal future-base refusal turned into acceptance after the note advanced.
 
-## Proof still due from the lead
+P8's saved fixture has `p8-01` through `p8-08` IDs and old input parents. P8's own fixture law pins
+those exact bytes. The new plan's projected Version requires an input TypeID while also requiring
+this unchanged fixture to remain readable. Those requirements conflict without an explicit
+compatibility decision. The fixture was read, never rewritten or regenerated.
 
-Run the real stage laws after combining P12 and P13. They must show a real workerd PID dies, its replacement listens at the same address and home, every saved body's bytes survive, and a retained stable letter lands once. Changed text and another admitted client must fail the original binding. Domain refusals must preserve `now` and `most` over the wire, and door input records must retain save metadata without draft text.
+## What the lead's real-stage run still owes
 
-T17's builder-owned measurement driver must save 1,000 and 10,000 accepted 5 KB bodies on that real local stage. Use reproducible note ids and bodies. Record actual body and encoded row bytes, individual samples, versions, build hashes and stage settings. Keep checkpoint wakes, full folds with only the checkpoint removed, and restart/reconnect after killing workerd as separate samples. Record inbox count, checkpoint bytes, object bytes, workerd RSS, replay duration and sink flush duration. The experiment and `field/` records must say whether each sample actually folded history. There is no performance threshold in these tests.
+The stage test starts only P12's real `dev.ts`, with its own short temporary `FABRIKA_HOME`.
+It must show a real workerd PID dies, its replacement reconnects on the same wrapper/address/home,
+every prior inbox entry and historical body remains byte for byte, a lost accepted answer keeps
+its original placing, and a driver-retained pending letter lands once. It must reject changed
+caller, target and payload bindings. This proves no screen behavior.
 
-Every stage child gets a short fresh temporary `FABRIKA_HOME`; paid model calls remain disabled. P20 still owes visible draft behavior, and P26 still owes real Cloudflare cold-start and hibernation measurements.
+The test-only [storage hooks](../../../next/apps/fabrika/src/notes-stage.test.ts#L284) and
+[checkpoint hook](../../../next/apps/fabrika/src/notes-stage.test.ts#L296) operate only after stopping
+the wrapper. They find the notes checkpoint by process ID, measure it and the SQLite files, and
+optionally delete only its derived checkpoint. Restart uses the same home. The inbox must remain
+unchanged and the view must match both with a checkpoint and after a full fold.
 
-## Integration details
+T17 still needs the builder's real-stage driver at **1,000 and 10,000 accepted saves of 5 KB**.
+Record actual encoded bytes, individual samples, package versions, build hashes and stage settings.
+Keep checkpoint load, full fold after checkpoint removal, and workerd restart/reconnect separate.
+Record inbox count, checkpoint/object bytes, workerd RSS, replay count/cursor/duration and sink
+flush duration. State whether each path really folded history. Save results in an experiment and
+`field/`. No guessed performance threshold or extra notes cache belongs in this row.
 
-P6's current complete-row limit is 2,000,000 bytes. A 256 KiB body of NUL characters encodes below that limit, so the over-budget test includes additional escaped note metadata. Calling that body alone oversized would be a test mistake.
-
-Stable test letters use UUIDv7 TypeIDs. The current P11 stamped input parent still uses its installed `in-process_...` decoder. The history schema must reuse libfabrika's final ledger and id schemas when the lead combines the input-id change; the tests do not redefine production schemas.
-
-The stage timing and measurement results remain unknown. These red tests prove what is missing on the base; they do not prove the later implementation or the real local stage works.
+These red laws cannot prove an implementation that does not exist yet, actual wake costs, visible
+draft recovery, Cloudflare cold starts or future compatibility decisions.

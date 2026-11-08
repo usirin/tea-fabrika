@@ -5,17 +5,43 @@ import {DatabaseSync} from "node:sqlite";
 import {Machine} from "@demlik/tea/effect";
 import {afterAll, describe, expect, it} from "@effect/vitest";
 import {Effect, Layer, Schema, Stream} from "effect";
+import * as fc from "fast-check";
 import {Mailbox} from "../coordination/mailbox.ts";
 import {ProcessStore} from "../coordination/process-store.ts";
 import {Writer} from "../coordination/session-manager.ts";
 import {Doorbell, Ledger, LedgerError} from "../data/ledger.ts";
 import {nodeSql} from "../data/sqlite.ts";
-import {Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManager} from "./entry.ts";
+import * as Id from "../id.ts";
+import type {Incoming} from "./entry.ts";
+import {Alarm, CheckedWriter, ProgramLoader, Recording, WatcherManager} from "./entry.ts";
 import {Input} from "./program.ts";
 import {ProgramRunner} from "./runner.ts";
 
-const PROCESS = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
-const NEXT = "process_01jc9q4w7z3m8n5r2t6v0xkb4e";
+const PROCESS = Id.make("process").make("process_0000000000e008000000000001");
+const NEXT = Id.make("process").make("process_0000000000e008000000000002");
+const options = {seed: 119120, numRuns: 12};
+const InputId = Id.make("input");
+const inputIds = fc.uuid({version: 7}).map((uuid) => {
+	let bits = BigInt(`0x${uuid.replaceAll("-", "")}`),
+		text = "";
+	for (let n = 0; n < 26; n++) {
+		text = "0123456789abcdefghjkmnpqrstvwxyz"[Number(bits & 31n)] + text;
+		bits >>= 5n;
+	}
+	return InputId.make(`input_${text}`);
+});
+const letters = fc.sample(inputIds, {seed: options.seed, numRuns: 80});
+type Reply = {
+	name: string;
+	id: typeof InputId.Type;
+	by: Writer;
+	parent: typeof InputId.Type;
+	answer: Schema.Json;
+};
+type Replies = {
+	reply: (name: string, id: string) => Effect.Effect<Reply | null, LedgerError>;
+	rememberReply: (reply: Reply) => Effect.Effect<void, LedgerError>;
+};
 const folder = mkdtempSync("/tmp/fh.");
 const databases: DatabaseSync[] = [];
 afterAll(() => {
@@ -61,19 +87,18 @@ const world = () => {
 			Layer.provide(Layer.succeed(Doorbell, {ring: () => Effect.void})),
 		);
 	const by = Writer.cases.agent.make({key: "SHA256:agent", for: "person"});
-	const incoming = (n: number, base: number) =>
-		Schema.decodeUnknownSync(Incoming)({
-			id: `input_0000000000e00800000000000${n}`,
-			envelope: {
-				id: `in-${PROCESS}-${n}`,
-				by,
-				arrivedAt: n,
-				input: {type: "save", value: {base, body: "private-draft-marker"}},
-			},
-			sentAt: "writer-clock",
-			seen: 0,
-			span: {traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7"},
-		});
+	const incoming = (n: number, base: number, body = "private-draft-marker") => ({
+		id: letters[n - 1]!,
+		envelope: {
+			id: letters[n + 39]!,
+			by,
+			arrivedAt: n,
+			input: {type: "save", value: {base, body}},
+		},
+		sentAt: "writer-clock",
+		seen: 0,
+		span: {traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7"},
+	});
 	const layer = (process = PROCESS) => {
 		const store = Layer.effect(
 			ProcessStore,
@@ -81,7 +106,7 @@ const world = () => {
 				const actual = yield* ProcessStore;
 				return {
 					...actual,
-					rememberReply: (value: unknown) =>
+					rememberReply: (value: Reply) =>
 						Effect.suspend(() => {
 							replies.push(value);
 							if (fault.reply) return Effect.fail(new LedgerError({why: "storage"}));
@@ -151,57 +176,124 @@ const inbox = Ledger.use((l) => Stream.runCollect(l.read("reply:1/inbox", 0)));
 
 describe("p53 refused replies in the runner", () => {
 	it("plant: recheck a future base after it becomes current; refuse before and after reopen/replacement", async () => {
-		const w = world(),
-			future = w.incoming(2, 2);
-		const first = {_tag: "refused", why: "changed_elsewhere", now: 1};
-		await Effect.runPromise(
-			Effect.gen(function* () {
-				const r = yield* ProgramRunner;
-				expect((yield* r.msg(w.incoming(1, 0)))._tag).toBe("accepted");
-				expect(yield* r.msg(future)).toEqual(first);
-				expect((yield* r.msg(w.incoming(3, 1)))._tag).toBe("accepted");
-				expect(yield* r.msg(future)).toEqual(first);
-				expect(yield* inbox).toHaveLength(2);
-			}).pipe(Effect.provide(w.layer())),
+		await fc.assert(
+			fc.asyncProperty(
+				fc.integer({min: 1, max: 12}),
+				fc.string({maxLength: 80}),
+				async (target, body) => {
+					const w = world(),
+						future = w.incoming(1, target, body);
+					const first = {_tag: "refused", why: "changed_elsewhere", now: 0};
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const r = yield* ProgramRunner;
+							expect(yield* r.msg(future)).toEqual(first);
+							for (let n = 0; n < target; n++)
+								expect((yield* r.msg(w.incoming(n + 2, n, body)))._tag).toBe("accepted");
+							expect(yield* r.msg(future)).toEqual(first);
+							expect(yield* inbox).toHaveLength(target);
+						}).pipe(Effect.provide(w.layer())),
+					);
+					w.reopen();
+					for (const process of [PROCESS, NEXT]) {
+						await Effect.runPromise(
+							Effect.gen(function* () {
+								const r = yield* ProgramRunner;
+								yield* r.open("watcher");
+								const count = w.publications.length;
+								expect(yield* r.msg(future)).toEqual(first);
+								expect(w.publications).toHaveLength(count);
+								expect((yield* r.open("inspect")).view).toEqual({version: target});
+								expect(yield* inbox).toHaveLength(target);
+							}).pipe(Effect.provide(w.layer(process))),
+						);
+					}
+				},
+			),
+			options,
 		);
-		w.reopen();
-		for (const process of [PROCESS, NEXT]) {
-			await Effect.runPromise(
-				Effect.gen(function* () {
-					const r = yield* ProgramRunner;
-					yield* r.open("watcher");
-					const count = w.publications.length;
-					expect(yield* r.msg(future)).toEqual(first);
-					expect(w.publications).toHaveLength(count);
-					expect((yield* r.open("inspect")).view).toEqual({version: 2});
-					expect(yield* inbox).toHaveLength(2);
-				}).pipe(Effect.provide(w.layer(process))),
-			);
-		}
 	});
 	it("plant: answer a refusal before durable reply storage succeeds", async () => {
-		const w = world();
-		await Effect.runPromise(
-			Effect.gen(function* () {
-				const r = yield* ProgramRunner;
-				yield* r.open("watcher");
-				const count = w.publications.length;
-				w.fault.reply = true;
-				expect(yield* Effect.flip(r.msg(w.incoming(1, 1)))).toMatchObject({
-					_tag: "LedgerError",
-					why: "storage",
-				});
-				expect(w.replies).toHaveLength(1);
-				expect(JSON.stringify(w.replies)).not.toContain("private-draft-marker");
-				expect(yield* inbox).toHaveLength(0);
-				expect(w.publications).toHaveLength(count);
-				w.fault.reply = false;
-				expect(yield* r.msg(w.incoming(1, 1))).toEqual({
-					_tag: "refused",
-					why: "changed_elsewhere",
-					now: 0,
-				});
-			}).pipe(Effect.provide(w.layer())),
+		await fc.assert(
+			fc.asyncProperty(
+				fc.integer({min: 1, max: 12}),
+				fc.string({maxLength: 80}),
+				async (base, suffix) => {
+					const w = world();
+					const body = `private-draft-marker-${suffix}`;
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const r = yield* ProgramRunner;
+							yield* r.open("watcher");
+							const count = w.publications.length;
+							w.fault.reply = true;
+							expect(yield* Effect.flip(r.msg(w.incoming(1, base, body)))).toMatchObject({
+								_tag: "LedgerError",
+								why: "storage",
+							});
+							expect(w.replies).toHaveLength(1);
+							expect(JSON.stringify(w.replies)).not.toContain("private-draft-marker");
+							expect(yield* inbox).toHaveLength(0);
+							expect(w.publications).toHaveLength(count);
+							w.fault.reply = false;
+							expect(yield* r.msg(w.incoming(1, base, body))).toEqual({
+								_tag: "refused",
+								why: "changed_elsewhere",
+								now: 0,
+							});
+						}).pipe(Effect.provide(w.layer())),
+					);
+				},
+			),
+			options,
+		);
+	});
+	it("Sent decoding plant: throw, ignore corruption, accept a wrong terminal case or erase its row", async () => {
+		const invalid = fc.oneof(
+			fc.string(),
+			fc.constant(null),
+			fc.constantFrom(
+				{_tag: "accepted", rev: 1, pos: 1},
+				{_tag: "refused", why: 42},
+				{_tag: "refused", why: "too_long", most: "huge"},
+				{_tag: "refused", why: "changed_elsewhere", now: "later"},
+				{_tag: "unknown"},
+				{},
+			),
+		);
+		await fc.assert(
+			fc.asyncProperty(invalid, async (answer) => {
+				const w = world(),
+					incoming = w.incoming(1, 1);
+				// Coordination accepts JSON. Only the app knows that a terminal reply must be refused.
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const store: Replies = yield* ProcessStore;
+						yield* store.rememberReply({
+							name: "reply:1",
+							id: incoming.id,
+							by: incoming.envelope.by,
+							parent: incoming.envelope.id,
+							answer,
+						});
+					}).pipe(Effect.provide(w.layer())),
+				);
+				w.reopen();
+				for (const process of [PROCESS, NEXT])
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const r = yield* ProgramRunner;
+							const store: Replies = yield* ProcessStore;
+							const before = yield* store.reply("reply:1", incoming.id);
+							const error = yield* Effect.flip(r.msg(incoming));
+							expect(error).toMatchObject({_tag: "LedgerError", why: "bad_row"});
+							expect(JSON.stringify(error)).not.toContain("private-draft-marker");
+							expect(yield* store.reply("reply:1", incoming.id)).toEqual(before);
+							expect(yield* inbox).toHaveLength(0);
+						}).pipe(Effect.provide(w.layer(process))),
+					);
+			}),
+			options,
 		);
 	});
 });

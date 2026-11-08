@@ -18,15 +18,16 @@ import {tmpdir} from "node:os";
 import {dirname, join, relative, resolve, sep} from "node:path";
 import {Schema} from "effect";
 import {build, type Plugin} from "esbuild";
+import * as fc from "fast-check";
+import {parseSync, Visitor} from "oxc-parser";
 import {afterAll, describe, expect, it} from "vitest";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
 
 // The reader. Each exam file stands alone and carries its own copy, since a shared helper file
-// would export names only tests call, which `pnpm lint:dead` refuses. An import is found by reading
-// text: a line that starts with `import` or `export` and names a `from`, a line that is only
-// `import` and a quoted name, or a dynamic import call with a quoted name. Planted code is written
-// as one-line strings, so no line of an exam file starts with a planted `import`.
+// would export names only tests call, which `pnpm lint:dead` refuses. Oxc reads real imports.
+// P8's bundle plants contain import text inside strings; a regex mistook
+// those strings for real dependencies. The installed Oxc parser keeps that distinction.
 
 const GROUPS = ["packages", "programs", "apps"] as const; // pnpm-workspace.yaml's next/ globs
 
@@ -79,17 +80,30 @@ const codeFiles = (dir: string): ReadonlyArray<string> =>
 				return skip ? [] : codeFiles(path);
 			});
 
-const IMPORTS = [
-	/^[ \t]*(?:import|export)\b[^;]*?\bfrom\s*["']([^"']+)["']/gm,
-	/^[ \t]*import\s*["']([^"']+)["']/gm,
-	/\bimport\(\s*["']([^"']+)["']\s*\)/g,
-];
-const importsIn = (text: string): ReadonlyArray<string> =>
-	IMPORTS.flatMap((pattern) =>
-		[...text.matchAll(pattern)].flatMap((m) => (m[1] === undefined ? [] : [m[1]])),
-	);
+const importsIn = (text: string, file = "exam.ts"): ReadonlyArray<string> => {
+	const parsed = parseSync(file, text);
+	if (parsed.errors.length > 0)
+		throw new Error(`Cannot scan imports in ${file}: ${parsed.errors[0]?.message}`);
+	const imports: string[] = [];
+	new Visitor({
+		ImportDeclaration(node) {
+			imports.push(node.source.value);
+		},
+		ExportAllDeclaration(node) {
+			imports.push(node.source.value);
+		},
+		ExportNamedDeclaration(node) {
+			if (node.source !== null) imports.push(node.source.value);
+		},
+		ImportExpression(node) {
+			if (node.source.type === "Literal" && typeof node.source.value === "string")
+				imports.push(node.source.value);
+		},
+	}).visit(parsed.program);
+	return imports;
+};
 const importsInFile = (file: string): ReadonlyArray<string> =>
-	importsIn(readFileSync(file, "utf8"));
+	importsIn(readFileSync(file, "utf8"), file);
 const isRelative = (spec: string): boolean => spec.startsWith(".");
 
 /** `@kampus/libfabrika/transport` is `{name: "@kampus/libfabrika", subpath: "./transport"}`. */
@@ -308,11 +322,15 @@ const bundleFaults = async (next: string): Promise<ReadonlyArray<string>> => {
 };
 
 describe("the real next/", () => {
-	it("P13: notes declares its required browser entry instead of silently skipping it", () => {
-		const notes = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/notes");
-		expect(notes).toBeDefined();
-		expect(exportMap(notes!).get(".")).toBeDefined();
-		expect(existsSync(exportMap(notes!).get(".")!)).toBe(true);
+	it("P8 import-text plant: scan real imports, never quoted bundle-plant source", () => {
+		fc.assert(
+			fc.property(fc.string({minLength: 1, maxLength: 30}), (pkg) => {
+				const statement = `import(${JSON.stringify(pkg)})`;
+				expect(importsIn(`const plant = ${JSON.stringify(statement)};`)).toEqual([]);
+				expect(importsIn(statement)).toEqual([pkg]);
+			}),
+			{seed: 119120, numRuns: 40},
+		);
 	});
 	it("P11: libfabrika exports its required browser entry instead of silently skipping it", async () => {
 		const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
@@ -348,7 +366,9 @@ describe("reading imports", () => {
 			'} from "@kampus/libfabrika";',
 			dynamic,
 			'// import {x} from "not-this";',
+			"/**",
 			' * import {y} from "nor-this";',
+			" */",
 		);
 		expect([...importsIn(text)].sort()).toEqual(
 			[

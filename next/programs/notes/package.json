@@ -3,6 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
+	"description": "The next notes program: exact saved text, per-note versions and checked history.",
 	"sideEffects": false,
 	"exports": {
 		".": "./src/index.ts"

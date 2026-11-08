@@ -69,3 +69,18 @@ Their count on PR 223's tree at `7c1d073` (33 files), each fire read by hand, on
 - `no-clock-in-view`: 2, none false by its words: `window/main.tsx:146` (the same read) and `main.tsx:19`, a module-level `crypto.randomUUID()` naming the tab. That one is not in a view function, only in a view file; whether a read at a view file's top level should pass is a later call.
 - `no-hand-tag`, `one-store-hook`, `react/refs`, `react/immutability`, `react/display-name`: 0. The slice holds no `_tag` and no store hook, so for those two a zero measures nothing.
 - `lint:compiler`: 0 findings on the slice's two `.tsx` files.
+
+## Required notes browser entry, P13, next/
+
+`fabrika/required-browser-entry` checks notes' manifest and its top-level target when lint reads
+`oxlint-plugins/index.ts`. This file is always in `pnpm lint`; checking only notes files would miss
+a deleted entry. P12's browser bundler still checks the actual imports. The notes-only
+`eslint/no-restricted-imports` override keeps platform, coordination, old-code and Markdown imports
+out of its pure entry files. Tests may use platform adapters.
+
+The rule's plants remove the export, name only a window, name a missing file or directory, remove
+the target, and escape the package. Four valid string/conditional entries check false alarms.
+The import plant covers Node, coordination, old code and Markdown. Run results and the real-tree
+finding are recorded in `fixtures/next/p13/README.md`. On 2026-11-08 all six bad entries fired, all
+four valid entries passed, and the actual tree's one missing-entry finding was correct. No false
+alarm was found in those cases. This rule adds no guessed numeric threshold.

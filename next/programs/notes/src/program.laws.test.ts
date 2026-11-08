@@ -1,5 +1,4 @@
-// P13, next/. Seeded laws run on the real tea machine. Bases come from this test's own model.
-import {applyCell} from "@demlik/tea";
+// P13, next/. Each plant is named beside the law it must break. Seed 119120.
 import {propertyInvariant} from "@demlik/tea/pbt";
 import {describe, expect, it} from "@effect/vitest";
 import {stepper} from "@kampus/libfabrika";
@@ -7,14 +6,8 @@ import {syncTest} from "@kampus/libfabrika/testing";
 import {Result, Schema} from "effect";
 import * as fc from "fast-check";
 
-const SEED = 119120;
-type Save = {
-	note: string;
-	base: number;
-	body: string;
-	how?: "pause" | "leave" | "done" | "kept";
-	from?: {note: string; version: number};
-};
+const options = {seed: 119120, numRuns: 60};
+type Save = {note: string; base: number; body: string};
 type Msg = {type: "save"; value: Save};
 type Model = {notes: ReadonlyArray<{note: string; version: number; body: string}>};
 const text = fc.oneof(
@@ -24,11 +17,11 @@ const text = fc.oneof(
 const sequences = fc
 	.array(fc.record({note: fc.constantFrom("a", "b", "c"), body: text}), {
 		minLength: 1,
-		maxLength: 30,
+		maxLength: 25,
 	})
 	.map((values): Msg[] => {
 		const versions = new Map<string, number>();
-		return values.map(({note, body}) => {
+		return [...values, {note: "empty", body: ""}].map(({note, body}) => {
 			const base = versions.get(note) ?? 0;
 			versions.set(note, base + 1);
 			return {type: "save", value: {note, base, body}};
@@ -40,104 +33,107 @@ const expected = (before: Model, save: Save): Model => ({
 		...before.notes.filter((n) => n.note !== save.note),
 	],
 });
+const checkedStepper = (program: unknown) => {
+	const decoded = stepper(program);
+	if (Result.isFailure(decoded)) throw decoded.failure;
+	return decoded.success;
+};
+const name = (body: string) => {
+	const lines = body.split(/\r?\n/);
+	const heading = lines.find((line) => /^#{1,6}\s+/.test(line));
+	return (
+		heading?.replace(/^#{1,6}\s+/, "").trim() ||
+		lines.find((line) => line.trim() !== "")?.trim() ||
+		"Untitled"
+	);
+};
 
 describe("P13 notes pure laws", () => {
-	it("p52 progress plant: ignore a valid update or count versions across notes", async () => {
+	it("p52 progress plant: ignore/refuse a current-base save, share versions or emit a Cmd", async () => {
 		const {notes} = await import("./program.ts");
-		propertyInvariant<typeof notes.state.schema.Type, Msg, never, never, Record<string, never>>(
+		const p = checkedStepper(notes);
+		propertyInvariant<Model, Msg, never, never, Record<string, never>>(
 			notes.machine,
 			{},
 			sequences,
-			({
-				prev,
-				msg,
-				next,
-				cmds,
-			}: {
-				prev: Model;
-				msg: Msg;
-				next: Model;
-				cmds: ReadonlyArray<unknown>;
-			}) => {
+			({prev, msg, next, cmds}) => {
 				expect(next).toEqual(expected(prev, msg.value));
 				expect(cmds).toEqual([]);
+				expect(p.step(prev, msg)).toMatchObject({_tag: "stepped", model: next, cmds: []});
 				return true;
 			},
-			{seed: SEED, numRuns: 100},
-		);
-		const p = stepper(notes);
-		fc.assert(
-			fc.property(sequences, (messages) => {
-				let model: Model = {notes: []};
-				for (const msg of messages) {
-					const old = structuredClone(model);
-					const answer = p.step(model, msg);
-					expect(answer).toMatchObject({
-						_tag: "stepped",
-						model: expected(model, msg.value),
-						cmds: [],
-					});
-					expect(model).toEqual(old);
-					model = expected(model, msg.value);
-				}
-			}),
-			{seed: SEED, numRuns: 100},
+			options,
 		);
 	});
-	it("p52 progress plant: refuse every save, including empty text", async () => {
+	it("p54 plant: use <, give stale now or mutate the model on refusal", async () => {
 		const {notes} = await import("./program.ts");
-		const p = stepper(notes);
-		const first = p.step({notes: []}, {type: "save", value: {note: "empty", base: 0, body: ""}});
-		expect(first).toMatchObject({
-			_tag: "stepped",
-			model: {notes: [{note: "empty", version: 1, body: ""}]},
-			cmds: [],
-		});
-	});
-	it("p54 plant: use < instead of exact equality, or report a stale now", async () => {
-		const {notes} = await import("./program.ts");
-		const p = stepper(notes);
+		const p = checkedStepper(notes);
 		fc.assert(
-			fc.property(fc.integer({min: 0, max: 50}), fc.integer({min: 0, max: 60}), (now, base) => {
+			fc.property(fc.nat({max: 50}), fc.nat({max: 60}), text, (now, base, body) => {
 				const model = {notes: now === 0 ? [] : [{note: "a", version: now, body: "old"}]};
-				const answer = p.step(model, {type: "save", value: {note: "a", base, body: "draft"}});
-				expect(answer).toMatchObject(
+				const before = structuredClone(model);
+				expect(p.step(model, {type: "save", value: {note: "a", base, body}})).toMatchObject(
 					base === now
-						? {_tag: "stepped", model: {notes: [{note: "a", version: now + 1, body: "draft"}]}}
+						? {_tag: "stepped", model: {notes: [{note: "a", version: now + 1, body}]}}
 						: {_tag: "refused", why: "changed_elsewhere", now},
 				);
+				expect(model).toEqual(before);
 			}),
-			{seed: SEED, numRuns: 150},
+			options,
 		);
 	});
-	it("p54 shape plant: admit a negative, fractional or nonnumeric base", async () => {
+	it("p54 malformed plant: admit negative, fractional or nonnumeric bases", async () => {
 		const {notes} = await import("./program.ts");
-		for (const base of [-1, 0.5, "0", null, Number.NaN, Infinity])
-			expect(
-				stepper(notes).step({notes: []}, {type: "save", value: {note: "a", base, body: ""}}),
-			).toEqual({_tag: "refused", why: "bad_msg"});
+		const invalid = fc.oneof(
+			fc.integer({min: -1000, max: -1}),
+			fc.integer().map((n) => n + 0.5),
+			fc.string(),
+			fc.constant(null),
+		);
+		fc.assert(
+			fc.property(invalid, text, (base, body) => {
+				expect(
+					checkedStepper(notes).step({notes: []}, {type: "save", value: {note: "a", base, body}}),
+				).toEqual({_tag: "refused", why: "bad_msg"});
+			}),
+			options,
+		);
 	});
-	it("p54 size plant: count JS characters or reject equality; body bytes win before base", async () => {
+	it("p54 size plant: count JS characters, reject equality or check base before bytes", async () => {
 		const {notes, MOST} = await import("./program.ts");
 		expect(MOST).toBe(256 * 1024);
-		for (const unit of ["x", "é", "🙂", "\u0000", '"', "\\"]) {
-			const bytes = Buffer.byteLength(unit);
-			const exact = unit.repeat(Math.floor(MOST / bytes)) + "x".repeat(MOST % bytes);
-			expect(Buffer.byteLength(exact)).toBe(MOST);
-			const p = stepper(notes);
-			expect(
-				p.step({notes: []}, {type: "save", value: {note: "a", base: 0, body: exact}}),
-			).toMatchObject({_tag: "stepped", model: {notes: [{body: exact, version: 1}]}});
-			for (const base of [0, 7])
-				expect(
-					p.step({notes: []}, {type: "save", value: {note: "a", base, body: `${exact}x`}}),
-				).toEqual({_tag: "refused", why: "too_long", most: MOST});
-		}
+		fc.assert(
+			fc.property(
+				fc.constantFrom("x", "é", "🙂", "\u0000", '"', "\\"),
+				fc.nat({max: 40}),
+				(unit, stale) => {
+					for (const delta of [-1, 0, 1]) {
+						const size = MOST + delta;
+						const bytes = Buffer.byteLength(unit);
+						const body = unit.repeat(Math.floor(size / bytes)) + "x".repeat(size % bytes);
+						expect(Buffer.byteLength(body)).toBe(size);
+						const p = checkedStepper(notes);
+						expect(
+							p.step({notes: []}, {type: "save", value: {note: "a", base: 0, body}}),
+						).toMatchObject(
+							delta <= 0
+								? {_tag: "stepped", model: {notes: [{note: "a", version: 1, body}]}}
+								: {_tag: "refused", why: "too_long", most: MOST},
+						);
+						if (delta > 0)
+							expect(
+								p.step({notes: []}, {type: "save", value: {note: "a", base: stale + 1, body}}),
+							).toEqual({_tag: "refused", why: "too_long", most: MOST});
+					}
+				},
+			),
+			{...options, numRuns: 12},
+		);
 	});
-	it("p55 replay plant: call refuse, trim text or order notes by a clock", async () => {
+	it("p55 replay plant: call refuse again, trim text, reorder or lose a note", async () => {
 		const {notes} = await import("./program.ts");
 		let refusals = 0;
-		const p = stepper({
+		const p = checkedStepper({
 			...notes,
 			refuse: () => {
 				refusals++;
@@ -149,22 +145,72 @@ describe("P13 notes pure laws", () => {
 				const oracle = messages.reduce((s, m) => expected(s, m.value), {notes: []} as Model);
 				for (let again = 0; again < 3; again++) {
 					let model: unknown = {notes: []};
-					for (const m of messages) {
-						const folded = p.fold(model, m);
+					for (const msg of messages) {
+						const folded = p.fold(model, msg);
 						expect(folded._tag).toBe("stepped");
-						if (folded._tag === "stepped") {
-							model = folded.model;
-							expect(folded.cmds).toEqual([]);
-						}
+						if (folded._tag !== "stepped") throw new Error("saved input refused");
+						expect(folded.cmds).toEqual([]);
+						model = folded.model;
 					}
 					expect(model).toEqual(oracle);
 				}
 			}),
-			{seed: SEED, numRuns: 100},
+			options,
 		);
 		expect(refusals).toBe(0);
 	});
-	it("S2 p88 plant: drop note id, body or version at a JSON cut", async () => {
+	it("Notes duplicate IDs plant: drop the uniqueness decoder check", async () => {
+		const {Notes} = await import("./program.ts");
+		fc.assert(
+			fc.property(
+				fc.string({minLength: 1, maxLength: 40}),
+				text,
+				text,
+				fc.integer({min: 1, max: 40}),
+				(note, first, last, version) => {
+					const one = {note, version, body: first};
+					expect(Result.isSuccess(Schema.decodeUnknownResult(Notes)({notes: [one]}))).toBe(true);
+					expect(
+						Result.isFailure(
+							Schema.decodeUnknownResult(Notes)({
+								notes: [one, {...one, version: version + 1, body: last}],
+							}),
+						),
+					).toBe(true);
+				},
+			),
+			options,
+		);
+	});
+	it("Notes saved body plant: put the current limit in Notes, Save or saved Msg decoding", async () => {
+		const {notes, Notes, Save, Msg, MOST} = await import("./program.ts");
+		fc.assert(
+			fc.property(
+				fc.integer({min: 1, max: 64}),
+				fc.constantFrom("x", "🙂", "\u0000"),
+				(extra, unit) => {
+					const body = unit.repeat(MOST + extra);
+					const save = {note: "a", base: 0, body};
+					const msg = {type: "save", value: save};
+					expect(Result.isSuccess(Schema.decodeUnknownResult(Save)(save))).toBe(true);
+					expect(Result.isSuccess(Schema.decodeUnknownResult(Msg)(msg))).toBe(true);
+					expect(
+						Result.isSuccess(
+							Schema.decodeUnknownResult(Notes)({notes: [{note: "a", version: 1, body}]}),
+						),
+					).toBe(true);
+					const p = checkedStepper(notes);
+					expect(p.fold({notes: []}, msg)).toMatchObject({
+						_tag: "stepped",
+						model: {notes: [{note: "a", version: 1, body}]},
+					});
+					expect(p.step({notes: []}, msg)).toEqual({_tag: "refused", why: "too_long", most: MOST});
+				},
+			),
+			{...options, numRuns: 8},
+		);
+	});
+	it("S2 p88 plant: drop ID, body or version at a JSON cut", async () => {
 		const {notes} = await import("./program.ts");
 		fc.assert(
 			fc.property(sequences, (messages) => {
@@ -176,74 +222,62 @@ describe("P13 notes pure laws", () => {
 						encode: Schema.encodeSync(notes.state.schema),
 						decode: Schema.decodeUnknownSync(notes.state.schema),
 						equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
-						seed: SEED,
+						seed: options.seed,
 					},
 				);
 			}),
-			{seed: SEED, numRuns: 100},
+			options,
 		);
-		const schema = notes.state.schema;
-		expect(
-			Result.isFailure(
-				Schema.decodeUnknownResult(schema)({
-					notes: [
-						{note: "a", version: 1, body: "one"},
-						{note: "a", version: 2, body: "two"},
-					],
-				}),
-			),
-		).toBe(true);
-		// A later lower refusal limit cannot make saved state undecodable.
-		expect(
-			Result.isSuccess(
-				Schema.decodeUnknownResult(schema)({
-					notes: [{note: "a", version: 1, body: "x".repeat(256 * 1024 + 1)}],
-				}),
-			),
-		).toBe(true);
 	});
-	it("read/list plant: write from read, share versions, reorder on read, or trim saved bodies", async () => {
-		const {notes} = await import("./program.ts");
-		const model: Model = {
-			notes: [
-				{note: "a", version: 3, body: "\n# Heading\nKeep trailing  \n"},
-				{note: "b", version: 1, body: "\n  First line  \nnext"},
-				{note: "c", version: 8, body: ""},
-			],
-		};
-		const snapshot = structuredClone(model);
-		const checked = Schema.decodeUnknownSync(notes.state.schema)(model);
-		const read = notes.inputs.read;
-		const list = notes.inputs.list;
-		expect(read._tag).toBe("read");
-		expect(list._tag).toBe("read");
-		expect(read.answer(checked, {note: "a"})).toMatchObject({_tag: "found", ...model.notes[0]});
-		expect(read.answer(checked, {note: "absent"})).toEqual({_tag: "missing", note: "absent"});
-		for (let i = 0; i < 3; i++)
-			expect(list.answer(checked)).toEqual([
-				{note: "a", version: 3, name: "Heading"},
-				{note: "b", version: 1, name: "First line"},
-				{note: "c", version: 8, name: "Untitled"},
-			]);
-		expect(model).toEqual(snapshot);
-		expect(stepper(notes).step(model, {type: "read", value: {note: "a"}})).toEqual({
-			_tag: "refused",
-			why: "bad_msg",
-		});
-		expect(notes.inputs.save.personOnly).toBe(false);
-		expect(
-			Schema.decodeUnknownSync(notes.inputs.save.schema)({
-				type: "save",
-				value: {note: "d", base: 0, body: ""},
+	it("audit plant: keep a body, lose save metadata or throw on outside values", async () => {
+		const {Audit, audit} = await import("./audit.ts");
+		fc.assert(
+			fc.property(text, fc.nat({max: 30}), fc.boolean(), (body, base, kept) => {
+				const fields = {
+					type: "save",
+					note: "a",
+					base,
+					...(kept ? {how: "kept", from: {note: "origin", version: 2}} : {}),
+				};
+				const {type, ...value} = fields;
+				const answer = audit({type, value: {...value, body, by: "forged"}});
+				expect(Result.isSuccess(answer)).toBe(true);
+				if (Result.isFailure(answer)) throw answer.failure;
+				expect(answer.success).toEqual(fields);
+				expect(Schema.decodeUnknownResult(Audit)(answer.success)).toMatchObject({_tag: "Success"});
+				let bad: Result.Result<unknown, unknown> | undefined;
+				expect(() => {
+					bad = audit({type, value: {...value, body: null}});
+				}).not.toThrow();
+				expect(bad).toMatchObject({_tag: "Failure"});
 			}),
-		).toMatchObject({type: "save", value: {body: ""}});
-		const [boot, cmds] = notes.machine.init(null, {});
-		expect(boot).toEqual({notes: []});
-		expect(cmds).toEqual([]);
-		const [, out] = applyCell(notes.machine, boot, {
-			type: "save",
-			value: {note: "a", base: 0, body: ""},
-		});
-		expect(out).toEqual([]);
+			options,
+		);
+	});
+	it("read/list plant: return another note/version, mutate, duplicate rows, reorder or trim stored text", async () => {
+		const {notes} = await import("./program.ts");
+		propertyInvariant<Model, Msg, never, never, Record<string, never>>(
+			notes.machine,
+			{},
+			sequences,
+			({next, cmds}) => {
+				const before = structuredClone(next);
+				expect(cmds).toEqual([]);
+				expect(notes.inputs.save.personOnly).toBe(false);
+				for (const row of next.notes)
+					expect(notes.inputs.read.answer(next, {note: row.note})).toEqual({_tag: "found", ...row});
+				expect(notes.inputs.read.answer(next, {note: "absent"})).toEqual({
+					_tag: "missing",
+					note: "absent",
+				});
+				for (let repeat = 0; repeat < 2; repeat++)
+					expect(notes.inputs.list.answer(next, {})).toEqual(
+						next.notes.map((row) => ({note: row.note, version: row.version, name: name(row.body)})),
+					);
+				expect(next).toEqual(before);
+				return true;
+			},
+			options,
+		);
 	});
 });

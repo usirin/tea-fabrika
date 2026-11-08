@@ -6,6 +6,7 @@ import {afterAll, describe, expect, it} from "@effect/vitest";
 import {
 	Alarm,
 	CheckedWriter,
+	Id,
 	ProgramLoader,
 	ProgramRunner,
 	Recording,
@@ -20,7 +21,7 @@ import {Effect, Layer, Schema, Stream} from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120;
-const PROCESS = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
+const PROCESS = Id.make("process").make("process_0000000000e008000000000001");
 const NAME = "notes:1";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const folder = mkdtempSync("/tmp/fh.");
@@ -59,21 +60,23 @@ const View = Schema.Struct({
 type Model = typeof View.Type;
 const who = (as: "person" | "agent" = "person") =>
 	Writer.cases[as].make({key: `SHA256:${as}`, for: `person-${as}`});
-// UUIDv7 wrapped as a TypeID. Stable letter ids are independent of P10's stamped input parent.
-const letter = (n: number) => {
-	let value = (1794099600000n << 80n) | (7n << 76n) | (2n << 62n) | BigInt(n);
+const InputId = Id.make("input");
+const inputIds = fc.uuid({version: 7}).map((uuid) => {
+	let value = BigInt(`0x${uuid.replaceAll("-", "")}`);
 	const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 	let suffix = "";
 	for (let k = 0; k < 26; k++) {
 		suffix = alphabet[Number(value & 31n)] + suffix;
 		value >>= 5n;
 	}
-	return `input_${suffix}`;
-};
+	return InputId.make(`input_${suffix}`);
+});
+const letters = fc.sample(inputIds, {seed: SEED, numRuns: 80});
+const letter = (n: number) => letters[n - 1]!;
 const input = (n: number, save: Save, as: "person" | "agent" = "person") => ({
 	id: letter(n),
 	envelope: {
-		id: `in-${PROCESS}-${n}`,
+		id: letter(n + 40),
 		by: who(as),
 		arrivedAt: 1794099600000 + n,
 		input: {type: "save", value: save},
@@ -241,74 +244,98 @@ describe("P13 real notes runner", () => {
 	});
 	it("p52 sender plant: use supplied writer or expose sentAt to the pure update", async () => {
 		const {notes} = await import("./program.ts");
-		const calls: unknown[] = [];
-		const normal = notes.machine.update.save;
-		const program = {
-			...notes,
-			machine: {
-				...notes.machine,
-				update: {
-					...notes.machine.update,
-					save: (model: typeof notes.state.schema.Type, m: typeof notes.msg.Type) => {
-						calls.push(structuredClone(m));
-						return normal(model, m);
-					},
+		await fc.assert(
+			fc.asyncProperty(
+				fc.string({maxLength: 60}),
+				fc.string(),
+				fc.integer(),
+				async (body, clock, referee) => {
+					const calls: unknown[] = [];
+					const normal = notes.machine.update.save;
+					const program = {
+						...notes,
+						machine: {
+							...notes.machine,
+							update: {
+								...notes.machine.update,
+								save: (model: typeof notes.state.schema.Type, m: typeof notes.msg.Type) => {
+									calls.push(structuredClone(m));
+									return normal(model, m);
+								},
+							},
+						},
+					};
+					const w = world(program);
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const r = yield* ProgramRunner;
+							for (const [index, as] of (["person", "agent"] as const).entries()) {
+								const i = input(index + 1, {note: as, base: 0, body}, as);
+								i.sentAt = clock;
+								i.envelope.arrivedAt = referee;
+								i.envelope.input.value = Object.assign(i.envelope.input.value, {
+									by: "SHA256:forged",
+									for: "forged",
+									sentAt: "forged-clock",
+								});
+								expect((yield* r.msg(i))._tag).toBe("accepted");
+							}
+							const rows = yield* readInbox;
+							expect(rows.map((e) => [e.by, e.for])).toEqual([
+								["SHA256:person", "person-person"],
+								["SHA256:agent", "person-agent"],
+							]);
+							expect(calls.length).toBeGreaterThan(0);
+							for (const call of calls) {
+								expect(call).not.toHaveProperty("sentAt");
+								expect(call).not.toHaveProperty("arrivedAt");
+								expect(call).not.toHaveProperty("by");
+								expect(call).not.toHaveProperty("value.sentAt");
+								expect(call).not.toHaveProperty("value.by");
+								expect(call).not.toHaveProperty("value.for");
+							}
+						}).pipe(Effect.provide(w.layer())),
+					);
 				},
-			},
-		};
-		const w = world(program);
-		await Effect.runPromise(
-			Effect.gen(function* () {
-				const r = yield* ProgramRunner;
-				for (const [index, as] of (["person", "agent"] as const).entries()) {
-					const i = input(index + 1, {note: as, base: 0, body: "text"}, as);
-					i.envelope.input.value = Object.assign(i.envelope.input.value, {
-						by: "SHA256:forged",
-						for: "forged",
-						sentAt: "forged-clock",
-					});
-					expect((yield* r.msg(i))._tag).toBe("accepted");
-				}
-				const rows = yield* readInbox;
-				expect(rows.map((e) => [e.by, e.for])).toEqual([
-					["SHA256:person", "person-person"],
-					["SHA256:agent", "person-agent"],
-				]);
-				expect(calls.length).toBeGreaterThan(0);
-				for (const call of calls) {
-					expect(call).not.toHaveProperty("sentAt");
-					expect(call).not.toHaveProperty("arrivedAt");
-					expect(call).not.toHaveProperty("by");
-					expect(call).not.toHaveProperty("value.sentAt");
-					expect(call).not.toHaveProperty("value.by");
-					expect(call).not.toHaveProperty("value.for");
-				}
-			}).pipe(Effect.provide(w.layer())),
+			),
+			{seed: SEED, numRuns: 12},
 		);
 	});
 	it("p53 accepted plant: check base before id, deduplicate by body, or lose placing on reopen", async () => {
 		const {notes} = await import("./program.ts");
-		const w = world(notes),
-			first = input(1, {note: "a", base: 0, body: "same"});
-		let placing: unknown;
-		await Effect.runPromise(
-			Effect.gen(function* () {
-				const r = yield* ProgramRunner;
-				placing = yield* r.msg(first); // The driver deliberately discards this answer.
-				expect(placing).toMatchObject({_tag: "accepted"});
-				expect((yield* r.msg(input(2, {note: "a", base: 1, body: "same"})))._tag).toBe("accepted");
-				expect(yield* r.msg(first)).toEqual(placing);
-				expect(yield* readInbox).toHaveLength(2);
-			}).pipe(Effect.provide(w.layer())),
-		);
-		w.reopen();
-		await Effect.runPromise(
-			Effect.gen(function* () {
-				const r = yield* ProgramRunner;
-				expect(yield* r.msg(first)).toEqual(placing);
-				expect(yield* view(r)).toEqual({notes: [{note: "a", version: 2, body: "same"}]});
-				expect(yield* readInbox).toHaveLength(2);
-			}).pipe(Effect.provide(w.layer())),
+		await fc.assert(
+			fc.asyncProperty(
+				fc.string({maxLength: 80}),
+				fc.integer({min: 2, max: 12}),
+				async (body, count) => {
+					const w = world(notes),
+						first = input(1, {note: "a", base: 0, body});
+					let placing: unknown;
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const r = yield* ProgramRunner;
+							placing = yield* r.msg(first); // The driver deliberately discards this answer.
+							expect(placing).toMatchObject({_tag: "accepted"});
+							for (let n = 1; n < count; n++)
+								expect((yield* r.msg(input(n + 1, {note: "a", base: n, body})))._tag).toBe(
+									"accepted",
+								);
+							expect(yield* r.msg(first)).toEqual(placing);
+							expect(yield* readInbox).toHaveLength(count);
+						}).pipe(Effect.provide(w.layer())),
+					);
+					w.reopen();
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const r = yield* ProgramRunner;
+							expect(yield* r.msg(first)).toEqual(placing);
+							expect(yield* view(r)).toEqual({notes: [{note: "a", version: count, body}]});
+							expect(yield* readInbox).toHaveLength(count);
+						}).pipe(Effect.provide(w.layer())),
+					);
+				},
+			),
+			{seed: SEED, numRuns: 12},
 		);
 	});
 	it("p54 plant: append refused saves, patch a watcher, or use the wrong now", async () => {
@@ -351,145 +378,208 @@ describe("P13 real notes runner", () => {
 	});
 	it("p54 race plant: remove the permit or use a project-wide note version", async () => {
 		const {notes} = await import("./program.ts");
-		const w = world(notes);
-		await Effect.runPromise(
-			Effect.gen(function* () {
-				const r = yield* ProgramRunner;
-				const race = yield* Effect.all(
-					[
-						r.msg(input(1, {note: "a", base: 0, body: "one"})),
-						r.msg(input(2, {note: "a", base: 0, body: "two"})),
-					],
-					{concurrency: 2},
-				);
-				expect(race.filter((a) => a._tag === "accepted")).toHaveLength(1);
-				expect(race.filter((a) => a._tag === "refused")).toEqual([
-					{_tag: "refused", why: "changed_elsewhere", now: 1},
-				]);
-				const separate = yield* Effect.all(
-					[
-						r.msg(input(3, {note: "b", base: 0, body: "b"})),
-						r.msg(input(4, {note: "c", base: 0, body: "c"})),
-					],
-					{concurrency: 2},
-				);
-				expect(separate.every((a) => a._tag === "accepted")).toBe(true);
-				expect(yield* readInbox).toHaveLength(3);
-			}).pipe(Effect.provide(w.layer())),
+		await fc.assert(
+			fc.asyncProperty(
+				fc.string({maxLength: 50}),
+				fc.string({maxLength: 50}),
+				fc.boolean(),
+				async (one, two, reverse) => {
+					const w = world(notes);
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const r = yield* ProgramRunner;
+							const race = yield* Effect.all(
+								[
+									r.msg(input(reverse ? 2 : 1, {note: "a", base: 0, body: reverse ? two : one})),
+									r.msg(input(reverse ? 1 : 2, {note: "a", base: 0, body: reverse ? one : two})),
+								],
+								{concurrency: 2},
+							);
+							expect(race.filter((a) => a._tag === "accepted")).toHaveLength(1);
+							expect(race.filter((a) => a._tag === "refused")).toEqual([
+								{_tag: "refused", why: "changed_elsewhere", now: 1},
+							]);
+							const separate = yield* Effect.all(
+								[
+									r.msg(input(3, {note: "b", base: 0, body: "b"})),
+									r.msg(input(4, {note: "c", base: 0, body: "c"})),
+								],
+								{concurrency: 2},
+							);
+							expect(separate.every((a) => a._tag === "accepted")).toBe(true);
+							expect(yield* readInbox).toHaveLength(3);
+							const latest = yield* view(r);
+							expect(new Map(latest.notes.map((n) => [n.note, n.version]))).toEqual(
+								new Map([
+									["a", 1],
+									["b", 1],
+									["c", 1],
+								]),
+							);
+							expect(latest.notes.find((n) => n.note === "a")?.body).toBe(
+								saved((yield* readInbox)[0]!).body,
+							);
+						}).pipe(Effect.provide(w.layer())),
+					);
+				},
+			),
+			{seed: SEED, numRuns: 12},
 		);
 	});
 	it("p54 size plant: ignore encoded JSON overhead; reject with no partial save or patch", async () => {
 		const {notes, MOST} = await import("./program.ts");
-		const w = world(notes);
-		await Effect.runPromise(
-			Effect.gen(function* () {
-				const r = yield* ProgramRunner;
-				yield* r.open("watcher");
-				expect.hasAssertions();
-				for (const [index, body] of [
-					"x".repeat(MOST),
-					"\u0000".repeat(MOST),
-					"\u0000".repeat(MOST),
-					"x".repeat(MOST + 1),
-				].entries()) {
-					const before = yield* readInbox,
-						patches = w.published.length;
-					// P6 caps a complete row at 2,000,000 bytes. Escaping alone fits; metadata can tip it over.
-					const note = index === 2 ? "\u0000".repeat(100_000) : `size-${index}`;
-					const answer = yield* r.msg(input(index + 1, {note, base: 0, body}));
-					if (index < 2) expect(answer._tag).toBe("accepted");
-					else {
-						expect(answer).toMatchObject({
-							_tag: "refused",
-							why: index === 2 ? "too_big" : "too_long",
-						});
-						if (index === 3) expect(answer).toHaveProperty("most", MOST);
-						expect(yield* readInbox).toEqual(before);
-						expect(w.published).toHaveLength(patches);
-					}
-				}
-			}).pipe(Effect.provide(w.layer())),
+		await fc.assert(
+			fc.asyncProperty(
+				fc.integer({min: 80_000, max: 100_000}),
+				fc.constantFrom("\u0000", "\u0001"),
+				async (extra, escape) => {
+					const w = world(notes);
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const r = yield* ProgramRunner;
+							yield* r.open("watcher");
+							expect.hasAssertions();
+							for (const [index, body] of [
+								"x".repeat(MOST),
+								escape.repeat(MOST),
+								escape.repeat(MOST),
+								"x".repeat(MOST + 1),
+							].entries()) {
+								const before = yield* readInbox,
+									model = yield* view(r),
+									patches = w.published.length;
+								// P6 caps a complete row at 2,000,000 bytes. Escaping alone fits; metadata can tip it over.
+								const note = index === 2 ? escape.repeat(extra) : `size-${index}`;
+								const save = {note, base: 0, body};
+								const incoming = input(index + 1, save);
+								// P6 counts every text column plus the encoded body, not JSON field names or numeric columns.
+								const encodedBytes = [
+									`${NAME}/inbox`,
+									incoming.id,
+									incoming.envelope.by.key,
+									incoming.envelope.by.for,
+									incoming.sentAt,
+									incoming.envelope.id,
+									TRACE,
+									"p13-build",
+									"send",
+									JSON.stringify({m: incoming.envelope.input}),
+								].reduce((n, field) => n + Buffer.byteLength(field), 0);
+								expect(encodedBytes > 2_000_000).toBe(index === 2);
+								const answer = yield* r.msg(incoming);
+								if (index < 2) expect(answer._tag).toBe("accepted");
+								else {
+									expect(answer).toMatchObject({
+										_tag: "refused",
+										why: index === 2 ? "too_big" : "too_long",
+									});
+									if (index === 3) expect(answer).toHaveProperty("most", MOST);
+									expect(yield* readInbox).toEqual(before);
+									expect(w.published).toHaveLength(patches);
+									expect(yield* view(r)).toEqual(model);
+								}
+							}
+						}).pipe(Effect.provide(w.layer())),
+					);
+				},
+			),
+			{seed: SEED, numRuns: 5},
 		);
 	});
 	it("p55 checkpoint plant: keep only the checkpoint or omit notes during a full rebuild", async () => {
 		const {notes} = await import("./program.ts");
-		const messages: Save[] = [
-			{note: "a", base: 0, body: "# One\n  "},
-			{note: "b", base: 0, body: "🙂\r\nשלום"},
-			{note: "a", base: 1, body: ""},
-		];
-		const expected = messages.reduce(oracle, {notes: []} as Model),
-			w = world(notes);
-		let letters: ReadonlyArray<Entry> = [];
-		await Effect.runPromise(
-			Effect.gen(function* () {
-				const r = yield* ProgramRunner;
-				for (const [index, s] of messages.entries())
-					expect((yield* r.msg(input(index + 1, s)))._tag).toBe("accepted");
-				expect(yield* view(r)).toEqual(expected);
-				letters = yield* readInbox;
-			}).pipe(Effect.provide(w.layer())),
+		await fc.assert(
+			fc.asyncProperty(cases, fc.nat({max: 40}), async (values, selected) => {
+				const versions = new Map<string, number>();
+				const messages: Save[] = values.slice(0, selected % (values.length + 1)).map((v) => {
+					const base = versions.get(v.note) ?? 0;
+					versions.set(v.note, base + 1);
+					return {note: v.note, base, body: v.body};
+				});
+				const expected = messages.reduce(oracle, {notes: []} as Model),
+					w = world(notes);
+				let letters: ReadonlyArray<Entry> = [];
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const r = yield* ProgramRunner;
+						for (const [index, s] of messages.entries())
+							expect((yield* r.msg(input(index + 1, s)))._tag).toBe("accepted");
+						expect(yield* view(r)).toEqual(expected);
+						letters = yield* readInbox;
+					}).pipe(Effect.provide(w.layer())),
+				);
+				w.reopen();
+				await Effect.runPromise(
+					ProgramRunner.use((r) =>
+						view(r).pipe(
+							Effect.tap((v) =>
+								Effect.sync(() => {
+									expect(v).toEqual(expected);
+								}),
+							),
+						),
+					).pipe(Effect.provide(w.layer())),
+				);
+				for (let again = 0; again < 2; again++) {
+					w.rebuild();
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const r = yield* ProgramRunner;
+							expect(yield* view(r)).toEqual(expected);
+							expect(yield* readInbox).toEqual(letters);
+						}).pipe(Effect.provide(w.layer())),
+					);
+				}
+			}),
+			{seed: SEED, numRuns: 12},
 		);
-		w.reopen();
-		await Effect.runPromise(
-			ProgramRunner.use((r) =>
-				view(r).pipe(
-					Effect.tap((v) =>
-						Effect.sync(() => {
-							expect(v).toEqual(expected);
-						}),
-					),
-				),
-			).pipe(Effect.provide(w.layer())),
-		);
-		for (let again = 0; again < 2; again++) {
-			w.rebuild();
-			await Effect.runPromise(
-				Effect.gen(function* () {
-					const r = yield* ProgramRunner;
-					expect(yield* view(r)).toEqual(expected);
-					expect(yield* readInbox).toEqual(letters);
-				}).pipe(Effect.provide(w.layer())),
-			);
-		}
 	});
 	it("p55 saved failure plant: skip a broken save, reset notes, or delete accepted letters", async () => {
 		const {notes} = await import("./program.ts");
-		const w = world(notes);
-		let letters: ReadonlyArray<Entry> = [];
-		await Effect.runPromise(
-			Effect.gen(function* () {
-				const r = yield* ProgramRunner;
-				expect((yield* r.msg(input(1, {note: "a", base: 0, body: "kept"})))._tag).toBe("accepted");
-				const mailbox = yield* Mailbox;
-				const placed = yield* mailbox.send(
-					NAME,
-					letter(2),
-					{type: "save", value: {note: "a", base: 1, body: null}},
-					{
-						by: "SHA256:person",
-						for: "person-person",
-						sentAt: "old-writer-clock",
-						seen: 0,
-						parent: null,
-						traceId: TRACE,
-						build: "old-build",
-					},
-				);
-				expect(placed._tag).toBe("placed");
-				letters = yield* readInbox;
-			}).pipe(Effect.provide(w.layer())),
-		);
-		w.rebuild();
-		await Effect.runPromise(
-			Effect.gen(function* () {
-				const r = yield* ProgramRunner;
-				expect(yield* Effect.flip(r.open("wake"))).toMatchObject({
-					_tag: "ProgramDown",
-					why: "saved_letter",
-				});
-				expect(yield* readInbox).toEqual(letters);
-			}).pipe(Effect.provide(w.layer())),
+		await fc.assert(
+			fc.asyncProperty(
+				fc.string({maxLength: 80}),
+				fc.constantFrom(null, 42, false),
+				async (body, invalid) => {
+					const w = world(notes);
+					let letters: ReadonlyArray<Entry> = [];
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const r = yield* ProgramRunner;
+							expect((yield* r.msg(input(1, {note: "a", base: 0, body})))._tag).toBe("accepted");
+							const mailbox = yield* Mailbox;
+							const placed = yield* mailbox.send(
+								NAME,
+								letter(2),
+								{type: "save", value: {note: "a", base: 1, body: invalid}},
+								{
+									by: "SHA256:person",
+									for: "person-person",
+									sentAt: "old-writer-clock",
+									seen: 0,
+									parent: null,
+									traceId: TRACE,
+									build: "old-build",
+								},
+							);
+							expect(placed._tag).toBe("placed");
+							letters = yield* readInbox;
+						}).pipe(Effect.provide(w.layer())),
+					);
+					w.rebuild();
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const r = yield* ProgramRunner;
+							expect(yield* Effect.flip(r.open("wake"))).toMatchObject({
+								_tag: "ProgramDown",
+								why: "saved_letter",
+							});
+							expect(yield* readInbox).toEqual(letters);
+						}).pipe(Effect.provide(w.layer())),
+					);
+				},
+			),
+			{seed: SEED, numRuns: 8},
 		);
 	});
 });

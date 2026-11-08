@@ -29,6 +29,7 @@
 		"fabrika/no-numeric-duration": "error",
 		"fabrika/no-throw-in-effect-gen": "error",
 		"fabrika/no-type-assertions": "error",
+		"fabrika/required-browser-entry": "error",
 
 		// Where a Claude run's settings come from is said by `ownRules` alone, so its file is left
 		// out below (experiment 155). So are tests: they write the options' shape to check it, and
@@ -259,6 +260,34 @@
 		"typescript/no-unsafe-function-type": "error"
 	},
 	"overrides": [
+		{
+			"files": ["**/next/programs/notes/src/{index,program,history,audit}.ts"],
+			"rules": {
+				"eslint/no-restricted-imports": [
+					"error",
+					{
+						"patterns": [
+							{
+								"group": [
+									"node:*",
+									"cloudflare:*",
+									"electron",
+									"react",
+									"react/*",
+									"@kampus/libfabrika/*",
+									"@kampus/*-old",
+									"@kampus/*-old/*",
+									"micromark*",
+									"mdast*",
+									"@pierre/*"
+								],
+								"message": "The pure notes entry uses tea, Effect and libfabrika's browser-safe top level."
+							}
+						]
+					}
+				]
+			}
+		},
 		{
 			// Test files only: an `expect` that sits only inside an `if` may never run.
 			// `!` is allowed here: a test that hits a missing value fails on its own.

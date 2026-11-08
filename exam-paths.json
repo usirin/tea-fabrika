@@ -9,8 +9,8 @@
 	{ "glob": "next/**/*.test.ts", "why": "next/'s tests" },
 	{ "glob": "next/**/*.test.tsx", "why": "next/'s tests" },
 	{
-		"glob": "next/programs/notes/package.json",
-		"why": "P13's tests own the notes package entry and dependencies throughout its build"
+		"glob": "next/**/package.json",
+		"why": "tests own manifests, exports and dependencies throughout the build"
 	},
 	{ "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
 	{ "glob": "next/apps/fabrika/e2e.ts", "why": "the end-to-end runner" },
