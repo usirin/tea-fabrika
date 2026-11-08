@@ -14,11 +14,12 @@ import {Effect, Schema} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, expectTypeOf, it} from "vitest";
 
-// `Machine.make` and `Cmd.make` from `@demlik/tea/effect`, the local patch of tea 0.23.0 that
-// demlik issues 870 and 871 ask for upstream. A machine names its model and its Msgs as Effect
-// schemas, and every cell is typed from them with no annotation. What comes back is tea's own
-// Machine, so `replay`, the laws, a parent and the Effect engine take it as they take one from
-// `defineMachine`. These tests stay after the bump to the release and prove it does the same.
+// `Machine.make` and `Cmd.make` from `@demlik/tea/effect`, shipped in tea 0.24.0 (demlik issues
+// 870 and 871). A machine names its model and its Msgs as Effect schemas, and every cell is typed
+// from them with no annotation. What comes back is tea's own Machine, so `replay`, the laws, a
+// parent and the Effect engine take it as they take one from `defineMachine`. These tests were
+// written against the local patch of 0.23.0 and stayed through the bump. One changed: the release
+// keeps the schemas on the machine it returns, where the patch dropped them.
 
 const Ticket = Schema.Struct({id: Schema.String, title: Schema.String});
 type Ticket = typeof Ticket.Type;
@@ -342,7 +343,7 @@ describe("what comes back is tea's own Machine", () => {
 		);
 	});
 
-	it("is stamped with its update form, out of sight, and keeps no schema and no `types`", () => {
+	it("is stamped with its update form, out of sight, and keeps its schemas as tea 0.24.0 does", () => {
 		const Door = Schema.Union([
 			Schema.Struct({type: Schema.Literal("shut")}),
 			Schema.Struct({type: Schema.Literal("ajar"), by: Schema.String}),
@@ -373,8 +374,11 @@ describe("what comes back is tea's own Machine", () => {
 			enumerable: false,
 		});
 		expect(formOf(door)).toBe("transitions");
-		expect(Object.keys(picker).toSorted()).toEqual(["cmds", "init", "update"]);
-		expect(Object.keys(door).toSorted()).toEqual(["cmds", "init", "update"]);
+		// tea 0.24.0 hands the spec on to `defineMachine` whole, so `model`, `msg` and a `types` slot
+		// stay on the machine. The 0.23.0 patch dropped them; nothing here reads them.
+		const keys = ["cmds", "init", "model", "msg", "types", "update"];
+		expect(Object.keys(picker).toSorted()).toEqual(keys);
+		expect(Object.keys(door).toSorted()).toEqual(keys);
 		expect(picker.cmds).toEqual([readTicket]);
 		expect(replay(door, {msgs: [{type: "push", by: "ann"}], ctx: undefined}).state).toEqual({
 			type: "ajar",

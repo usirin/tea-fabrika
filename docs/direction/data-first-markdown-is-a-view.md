@@ -124,7 +124,7 @@ ruled on that issue to be `Cmd.define` in tea's Effect entry, not `defineCmd`.*
 `zodCmd`, which wraps the Effect slot and calls the core `Cmd.define`. It is
 marked "zod" and goes when zod does.
 
-*2026-11-07: renamed `Cmd.make` (local patch, demlik 871).*
+*2026-11-07: renamed `Cmd.make` (demlik 871, a local patch first, in tea 0.24.0 since the same day).*
 
 ### Where the move stands
 
