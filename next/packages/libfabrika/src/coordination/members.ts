@@ -44,7 +44,7 @@ export const Signed = Schema.Struct({
 	text: Schema.String,
 	armored: Schema.String,
 	signer: Schema.String,
-	passkey: Schema.optional(
+	passkey: Schema.optionalKey(
 		Schema.Struct({
 			origin: Schema.String,
 			rp: Schema.String,
@@ -84,7 +84,7 @@ export const Adds = Schema.TaggedUnion({
 	person: {
 		key: Schema.String,
 		window: Schema.String,
-		passkey: Schema.optional(
+		passkey: Schema.optionalKey(
 			Schema.Struct({
 				credential: Schema.String,
 				rp: Schema.String,

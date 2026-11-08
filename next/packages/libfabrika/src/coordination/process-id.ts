@@ -32,7 +32,7 @@ export class ProcessIdGenerator extends Context.Service<
 			let at = -1,
 				random = 0n;
 			return {
-				next: Effect.fn("process.next")(function* () {
+				next: Effect.gen(function* () {
 					const now = yield* Effect.clockWith((clock) => clock.currentTimeMillis);
 					if (now > at) {
 						at = now;
@@ -44,7 +44,7 @@ export class ProcessIdGenerator extends Context.Service<
 					if (!Number.isSafeInteger(at) || at < 0 || at >= 2 ** 48)
 						return yield* Effect.die("UUIDv7 clock exhausted");
 					return encode(at, random);
-				})(),
+				}).pipe(Effect.withSpan("process.next")),
 			};
 		}),
 	);
