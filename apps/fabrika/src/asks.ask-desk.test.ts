@@ -104,7 +104,10 @@ describe("ask desk P20: a saved stop is not a question", () => {
 // whose old ask cannot be sealed leaves every other ticket's asks to load.
 const LANE = "agent:lane for:owner";
 const inboxOf = (n: number) => streams(nameOf(n)).inbox;
-const put = (n: number, facts: readonly {readonly type: string}[]) =>
+const put = (
+	n: number,
+	facts: readonly {readonly type: string; readonly [key: string]: unknown}[],
+) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
 		yield* ledger.register(nameOf(n), "user:owner");

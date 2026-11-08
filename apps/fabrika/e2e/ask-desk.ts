@@ -104,7 +104,9 @@ const seedAsk = (
 				writer: "agent:lane for:owner",
 				data: {type: "planned", version: 2, tasks: []},
 			});
-			const ask = yield* seal({...DRAFT, ask: id, rec}, policyFor(id, hidden, blindDraw));
+			// A blind ask is a step's: an approve ask is never drawn blind (review 2, medium 2).
+			const draft = {...DRAFT, ask: id, rec, ...(hidden ? {for: "step"} : {})};
+			const ask = yield* seal(draft, policyFor(id, hidden, blindDraw));
 			yield* ledger.send(inbox, id, {kind: "asked", writer: "agent:lane for:owner", data: ask});
 			return ask;
 		}),
