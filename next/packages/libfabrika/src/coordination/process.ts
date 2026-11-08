@@ -5,6 +5,15 @@ import {ProcessId} from "../data/trace.ts";
 import type {From} from "./mailbox.ts";
 
 const Text = Schema.NonEmptyString;
+const PROCESSES = "processes";
+/** A process name is a stream name: no `/`, so `<name>` and `<name>/inbox` never meet another's. */
+const ProcessName = Schema.String.check(
+	Schema.isPattern(new RegExp(`^(?!${PROCESSES}$)[a-z0-9][a-z0-9._:-]*$`)),
+);
+/** A client id has no `:`, the mark of a process name such as `counter:1`. */
+const ClientId = Schema.String.check(
+	Schema.isPattern(new RegExp(`^(?!${PROCESSES}$)[a-z0-9][a-z0-9._-]*$`)),
+);
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 const Code = Schema.Struct({program: Text, hash: Text});
 export const Owner = Schema.TaggedUnion({brain: {}, process: {process: ProcessId}});
@@ -30,8 +39,11 @@ export const ProcessFact = Schema.TaggedUnion({
 	restarted: {process: ProcessId, after: ProcessId, name: Text, why: Text, build: Text},
 	down: {process: ProcessId, why: Text, crashes: Count, until: Schema.Int},
 	monitored: {ref: Text, process: ProcessId, to: Recipient},
-	demonitored: {ref: Text, to: Recipient},
+	demonitored: {ref: Text, to: Recipient, why: Schema.Literals(["canceled", "watcher_exited"])},
 });
+/** Only the brain's ProcessManager writes the `processes` stream and every ProcessFact case. */
+export const brainOnly = (stream: string, tag: string): boolean =>
+	stream === PROCESSES || Object.hasOwn(ProcessFact.cases, tag);
 export const Down = Schema.TaggedStruct("DOWN", {
 	ref: Text,
 	process: ProcessId,
@@ -89,6 +101,7 @@ export class ProcessError extends Schema.TaggedError<ProcessError>()("ProcessErr
 		"id_collision",
 		"ended",
 		"bad_ref",
+		"bad_name",
 	]),
 }) {}
 
@@ -100,7 +113,11 @@ type Life = {
 	readonly from: From;
 	readonly rev: number;
 };
-type Watch = typeof ProcessFact.cases.monitored.Type & {readonly canceled: boolean};
+/** `round` counts this (recipient, ref)'s monitored facts, so a monitor after a cancel is new. */
+type Watch = typeof ProcessFact.cases.monitored.Type & {
+	readonly canceled: boolean;
+	readonly round: number;
+};
 export type StartAnswer = {readonly process: string; readonly rev: number};
 export type ProcessInfo = {
 	readonly process: string;
@@ -110,20 +127,35 @@ export type ProcessInfo = {
 	readonly restarts: number;
 };
 const decodeFact = Schema.decodeUnknownSync(ProcessFact);
+const decodeDown = Schema.decodeUnknownOption(Down);
 const denied = (why: ProcessError["why"]) => Result.fail(new ProcessError({why}));
+const canonical = (to: typeof Recipient.Type): typeof Recipient.Type =>
+	to._tag === "process"
+		? Recipient.cases.process.make({process: to.process})
+		: Recipient.cases.client.make({client: to.client, session: to.session});
+const watchKey = (to: typeof Recipient.Type, ref: string): string =>
+	JSON.stringify([canonical(to), ref]);
+/** The one id a DOWN for (recipient, ref) is written under. */
+export const signalId = (to: typeof Recipient.Type, ref: string): string =>
+	JSON.stringify(["DOWN", canonical(to), ref]);
 
-/** A disposable fold of the ledger. No process authority survives outside its facts. */
+/**
+ * A disposable fold of the ledger. No process authority survives outside its facts, and a fact
+ * counts only when `by` is the brain's own writer.
+ */
 export class ProcessTable {
-	static readonly stream = "processes";
+	static readonly stream = PROCESSES;
+	readonly #by: string;
 	readonly #names = new Map<string, Reservation>();
 	readonly #lives = new Map<string, Life>();
 	readonly #watches = new Map<string, Watch>();
 	readonly #current = new Map<string, string>();
 	readonly #restarts = new Map<string, number>();
 
-	constructor(entries: Iterable<Entry>) {
+	constructor(entries: Iterable<Entry>, by: string) {
+		this.#by = by;
 		for (const entry of entries) {
-			if (!Object.hasOwn(ProcessFact.cases, entry._tag)) continue;
+			if (!Object.hasOwn(ProcessFact.cases, entry._tag) || entry.by !== by) continue;
 			const fact = decodeFact(valueFor(entry));
 			switch (fact._tag) {
 				case "registered":
@@ -176,13 +208,16 @@ export class ProcessTable {
 					});
 					break;
 				}
-				case "monitored":
-					this.#watches.set(fact.ref, {...fact, canceled: false});
+				case "monitored": {
+					const key = watchKey(fact.to, fact.ref);
+					const round = (this.#watches.get(key)?.round ?? 0) + 1;
+					this.#watches.set(key, {...fact, canceled: false, round});
 					break;
+				}
 				case "demonitored": {
-					const watch = this.#watches.get(fact.ref);
-					if (watch !== undefined && Equal.equals(watch.to, fact.to))
-						this.#watches.set(fact.ref, {...watch, canceled: true});
+					const key = watchKey(fact.to, fact.ref);
+					const watch = this.#watches.get(key);
+					if (watch !== undefined) this.#watches.set(key, {...watch, canceled: true});
 					break;
 				}
 			}
@@ -195,13 +230,14 @@ export class ProcessTable {
 		return life;
 	}
 
-	static read(read: (stream: string, after: number) => Iterable<Entry>): ProcessTable {
+	static read(read: (stream: string, after: number) => Iterable<Entry>, by: string): ProcessTable {
 		const control = [...read(ProcessTable.stream, 0)];
 		const names = control
-			.filter((entry) => entry._tag === "registered")
+			.filter((entry) => entry._tag === "registered" && entry.by === by)
 			.map((entry) => Schema.decodeUnknownSync(ProcessFact.cases.registered)(valueFor(entry)).name);
 		return new ProcessTable(
 			[...control, ...names.flatMap((name) => [...read(name, 0)])].sort((a, b) => a.rev - b.rev),
+			by,
 		);
 	}
 
@@ -210,11 +246,11 @@ export class ProcessTable {
 		caller: Caller,
 		from: From,
 	): Result.Result<Option.Option<StartAnswer>, ProcessError> {
+		if (!Schema.is(ProcessName)(request.name)) return denied("bad_name");
 		const saved = [...this.#lives.values()].find((life) => life.request.id === request.id);
 		if (saved !== undefined) {
 			if (
 				!Equal.equals(saved.request, request) ||
-				saved.from.by !== from.by ||
 				saved.from.for !== from.for ||
 				saved.from.parent !== from.parent
 			)
@@ -256,26 +292,25 @@ export class ProcessTable {
 		const state = parent.success.state;
 		return state._tag !== "live" && state.why !== why ? denied("ended") : parent;
 	}
+	/** The round to write for a new or renewed watch; none when this watch is already live. */
 	monitor(
 		ref: string,
 		process: string,
 		to: typeof Recipient.Type,
-	): Result.Result<Option.Option<Watch>, ProcessError> {
-		const watch = this.#watches.get(ref);
-		if (watch !== undefined && (watch.process !== process || !Equal.equals(watch.to, to)))
-			return denied("bad_ref");
-		if (watch === undefined && to._tag === "process" && !this.isLive(to.process))
-			return denied("ended");
-		return Result.succeed(Option.fromUndefinedOr(watch));
+	): Result.Result<Option.Option<number>, ProcessError> {
+		if (to._tag === "client" && !Schema.is(ClientId)(to.client)) return denied("bad_name");
+		const watch = this.#watches.get(watchKey(to, ref));
+		if (watch !== undefined && watch.process !== process) return denied("bad_ref");
+		if (watch !== undefined && !watch.canceled) return Result.succeed(Option.none());
+		if (to._tag === "process" && !this.isLive(to.process)) return denied("ended");
+		return Result.succeed(Option.some((watch?.round ?? 0) + 1));
 	}
-	demonitor(
-		ref: string,
-		to: typeof Recipient.Type,
-	): Result.Result<Option.Option<Watch>, ProcessError> {
-		const watch = this.#watches.get(ref);
-		return watch !== undefined && !Equal.equals(watch.to, to)
-			? denied("bad_ref")
-			: Result.succeed(Option.fromUndefinedOr(watch));
+	/** The caller's own live watch under `ref`, if any. Another recipient's ref is never touched. */
+	demonitor(ref: string, to: typeof Recipient.Type): Option.Option<Watch> {
+		return Option.filter(
+			Option.fromUndefinedOr(this.#watches.get(watchKey(to, ref))),
+			(watch) => !watch.canceled,
+		);
 	}
 	inbound(process: string): ReadonlyArray<Watch> {
 		return [...this.#watches.values()].filter(
@@ -287,12 +322,25 @@ export class ProcessTable {
 			(watch) => !watch.canceled && watch.to._tag === "process" && watch.to.process === process,
 		);
 	}
-	deliver(signal: typeof Down.Type, process: string): boolean {
-		return (
-			signal.to._tag === "process" &&
-			signal.to.process === process &&
-			this.#watches.get(signal.ref)?.canceled !== true
-		);
+	/**
+	 * How fresh delivery treats one letter. A DOWN is a signal only under its signal id, from the
+	 * brain, with a watch of that recipient, ref and target, live or canceled. A signal reaches only
+	 * its own recipient, and only while its watch is live. Anything else is plain mail.
+	 */
+	deliver(entry: Entry, m: unknown, process: string): "mail" | "signal" | "drop" {
+		if (typeof m !== "object" || m === null || !("_tag" in m) || m._tag !== "DOWN") return "mail";
+		const down = decodeDown(m);
+		if (Option.isNone(down)) return "mail";
+		const {to, ref} = down.value;
+		const watch = this.#watches.get(watchKey(to, ref));
+		if (
+			entry.by !== this.#by ||
+			entry.id !== signalId(to, ref) ||
+			watch === undefined ||
+			watch.process !== down.value.process
+		)
+			return "mail";
+		return to._tag === "process" && to.process === process && !watch.canceled ? "signal" : "drop";
 	}
 	get info(): ReadonlyArray<ProcessInfo> {
 		return [...this.#lives.values()]

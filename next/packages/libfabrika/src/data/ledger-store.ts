@@ -146,7 +146,7 @@ export const ledgerStore = (
 	sql: Sql,
 	doorbell: (typeof Doorbell)["Service"],
 ): (typeof Referee)["Service"] & {
-	readonly run: <A>(step: (turn: LedgerTurn) => A) => Effect.Effect<A, LedgerError>;
+	readonly transact: <A>(step: (turn: LedgerTurn) => A) => Effect.Effect<A, LedgerError>;
 } => {
 	let ready = false;
 	const one = (query: string, ...params: ReadonlyArray<SqlValue>): Option.Option<unknown> =>
@@ -372,7 +372,7 @@ export const ledgerStore = (
 			}),
 		);
 
-	const transact = <A>(step: (turn: LedgerTurn) => A, now: () => number) => {
+	const inTurn = <A>(step: (turn: LedgerTurn) => A, now: () => number) => {
 		const rings: Array<{stream: string; rev: Rev; waiter: Ring}> = [];
 		let open = true;
 		const ensureOpen = () => {
@@ -402,8 +402,8 @@ export const ledgerStore = (
 			open = false;
 		}
 	};
-	const run = Effect.fn("ledger.transaction")(function* <A>(step: (turn: LedgerTurn) => A) {
-		const committed = yield* atomic((now) => transact(step, now));
+	const transact = Effect.fn("ledger.transaction")(function* <A>(step: (turn: LedgerTurn) => A) {
+		const committed = yield* atomic((now) => inTurn(step, now));
 		yield* Effect.forEach(committed.rings, ({stream, rev, waiter}) => ring(stream, rev, waiter), {
 			discard: true,
 			concurrency: 1,
@@ -411,5 +411,5 @@ export const ledgerStore = (
 		return committed.value;
 	});
 
-	return {append, read, wait, run};
+	return {append, read, wait, transact};
 };

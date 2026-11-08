@@ -1,5 +1,6 @@
 // P33 uses layer(caller, nextId). Caller is trusted wiring, never From.
-// The plan leaves Caller's fields unnamed; tests use {owner, recipient}.
+// The plan leaves Caller's fields unnamed; tests use {owner, recipient}, plus `by`, the brain's
+// own writer key, which `manager()` adds to every caller.
 import {mkdtempSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -20,8 +21,10 @@ export const B = "process_01jc9q4w7z3m8n5r2t6v0xkb4e";
 export const W = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
 export const X = "process_01jc9q4w7z3m8n5r2t6v0xkb4g";
 export const CODE = {program: "counter", hash: "build-a"};
+/** The brain's own writer key: the `by` on every process fact, and the only one the fold trusts. */
+const BRAIN = "SHA256:brain";
 export const from = (over: Partial<From> = {}): From => ({
-	by: "SHA256:brain",
+	by: BRAIN,
 	for: "person_01m6v5270hf3c8x2q7w9z4k5mn",
 	sentAt: "2026-11-07T21:10:01.204Z",
 	seen: 0,
@@ -31,9 +34,10 @@ export const from = (over: Partial<From> = {}): From => ({
 	...over,
 });
 type Caller = {readonly owner: typeof Owner.Type; readonly recipient: typeof Recipient.Type};
-export const brain = (): Caller => ({
+export const brain = (): Caller & {readonly by: string} => ({
 	owner: Owner.cases.brain.make({}),
 	recipient: Recipient.cases.client.make({client: "window-a", session: X}),
+	by: BRAIN,
 });
 export const watcher = (process: string): Caller => ({
 	owner: Owner.cases.process.make({process}),
@@ -120,11 +124,11 @@ export const ids = (...values: ReadonlyArray<string>) => {
 };
 export const manager = (
 	store: Storage,
-	caller = brain(),
+	caller: Caller = brain(),
 	next = ids(A, B, W, X).next,
 	bell = quiet,
 ) =>
-	ProcessManager.layer(caller, next).pipe(
+	ProcessManager.layer({...caller, by: BRAIN}, next).pipe(
 		Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data(store.sql, bell)))),
 	);
 export const read = (stream: string) =>

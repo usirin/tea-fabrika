@@ -16,13 +16,13 @@ export interface LedgerTurn {
 
 export class LedgerTransaction extends Context.Service<
 	LedgerTransaction,
-	{readonly run: <A>(step: (turn: LedgerTurn) => A) => Effect.Effect<A, LedgerError>}
+	{readonly transact: <A>(step: (turn: LedgerTurn) => A) => Effect.Effect<A, LedgerError>}
 >()("@kampus/libfabrika/LedgerTransaction") {
 	static readonly layer = (sql: Sql): Layer.Layer<LedgerTransaction, never, Doorbell> =>
 		Layer.effect(
 			LedgerTransaction,
 			Effect.gen(function* () {
-				return {run: ledgerStore(sql, yield* Doorbell).run};
+				return {transact: ledgerStore(sql, yield* Doorbell).transact};
 			}),
 		);
 }

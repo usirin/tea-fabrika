@@ -22,6 +22,7 @@ export {CoordinationLayer, ProcessManager} from "./process-manager.ts";
 export {ProcessIdGenerator} from "./process-id.ts";
 export {
 	Activity,
+	brainOnly,
 	canRestart,
 	Dead,
 	Down,

@@ -1,5 +1,6 @@
 import {
 	admitted,
+	brainOnly,
 	Change,
 	ClientManager,
 	enrollmentText,
@@ -996,7 +997,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		return yield* Effect.gen(function* () {
 			const session = yield* sessions.receipt(a.id, a.parent, a.process, a.kind);
 			const fact = rawObject(a.fact);
-			if (fact === null || fact._tag !== a.kind || a.stream.startsWith("door/"))
+			if (
+				fact === null ||
+				fact._tag !== a.kind ||
+				a.stream.startsWith("door/") ||
+				brainOnly(a.stream, a.kind)
+			)
 				return yield* new SigningRefused({why: "not_delivered"});
 			const schema = Schema.StructWithRest(Schema.TaggedStruct(a.kind, {}), [
 				Schema.Record(Schema.String, Schema.Json),
