@@ -17,5 +17,5 @@ i,c,o=u["input_tokens"],u["cached_input_tokens"],u["output_tokens"]
 # gpt-6.1-sol's standard list price (experiments/lib/list-price.ts). Another model gets no dollars here.
 sol=x.model=="gpt-6.1-sol"
 usd=round((i-c)*2e-6+c*0.1e-6+o*10e-6,4) if sol else None
-if sol: why+=" Dollars are gpt-6.1-sol's standard list price (experiments/lib/list-price.ts); the priority tier bills more."
+if sol: why+=" Dollars are gpt-6.1-sol's standard list price (experiments/lib/list-price.ts); runs use the standard tier."
 print(json.dumps({"date":b.strftime("%Y-%m-%d"),"run":x.run,"ticket":x.ticket,"pr":None,"started":b.isoformat(timespec="seconds"),"ended":e.isoformat(timespec="seconds"),"parent":x.parent,"active":None,"role":"hand","model":x.model,"effort":x.effort,"outcome":x.outcome,"why":why,"tokens":None,"tools":None,"minutes":round((e-b).total_seconds()/60,1),"note":None,"costUsd":None,"listUsd":usd,"billed":i+o,"inputTokens":i,"cachedTokens":c,"outputTokens":o},ensure_ascii=False))

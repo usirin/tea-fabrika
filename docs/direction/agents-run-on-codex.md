@@ -38,15 +38,16 @@ const DEFAULTS = {
   `fabrika.toml`, as [one fabrika.toml per repo](./one-fabrika-toml-per-repo.md)
   says. This note changes the defaults, not the shape.
 - **How a hand-run step runs** (owner, 2026-11-08). Codex `gpt-6.1-sol`, effort xhigh,
-  priority tier, beside Claude subagents, under the same caps as any code agent
+  standard tier, beside Claude subagents, under the same caps as any code agent
   ([go easy on the machine](../../AGENTS.md#go-easy-on-the-machine)). Step agents (plan,
   exam, test writer, build, review, mutation fixes) run on Codex; the lead stays on Claude
   opus. *Replaced the same day, below: "Claude subagents only read and audit" no longer holds.
   A Claude agent runs a step that needs Electron or a socket, and one Claude driver carries each
-  ticket.* The call, with the brief on stdin:
+  ticket.* *Changed the same day (owner): the standard tier, not the priority tier, since
+  priority burns the subscription's quota.* The call, with the brief on stdin:
 
   ```sh
-  codex exec -m gpt-6.1-sol -c model_reasoning_effort=xhigh -c service_tier=priority \
+  codex exec -m gpt-6.1-sol -c model_reasoning_effort=xhigh \
     -s workspace-write -C <dir> --json -o <last.md> -
   # -p is a profile in codex, not a prompt
   ```

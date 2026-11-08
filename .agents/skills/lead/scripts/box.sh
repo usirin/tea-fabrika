@@ -2,7 +2,7 @@
 # box.sh: a Codex agent's own copy of tea-fabrika, whose git data is outside any folder named .git,
 # so Codex's sandbox lets it commit. The lead never runs git inside a box; it only fetches from it.
 #   box.sh new   <name> <base-ref> <branch>   make the box, install, print its paths
-#   box.sh run   <name> <prompt-file> <out>   run codex in it (CODEX_MODEL, CODEX_EFFORT, priority), writable: box + its git data
+#   box.sh run   <name> <prompt-file> <out>   run codex in it (CODEX_MODEL, CODEX_EFFORT, standard tier), writable: box + its git data
 #   box.sh fetch <name> <branch>              pull the box's branch and step notes into the main checkout
 # Paths come from env.sh beside this script.
 set -eu
@@ -25,7 +25,7 @@ new)
 run)
 	prompt=$3; out=$4
 	cd "$work"
-	exec nice -n 15 codex exec --ignore-user-config -m "$CODEX_MODEL" -c model_reasoning_effort="$CODEX_EFFORT" -c service_tier=priority \
+	exec nice -n 15 codex exec --ignore-user-config -m "$CODEX_MODEL" -c model_reasoning_effort="$CODEX_EFFORT" \
 		-s workspace-write -c "sandbox_workspace_write.writable_roots=[\"$work\",\"$gitdata\"]" \
 		-C "$work" --json -o "$out" - < "$prompt"
 	;;
