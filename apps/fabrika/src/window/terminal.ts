@@ -219,7 +219,6 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 		const nowhere = active === null || active === document.body;
 		const back = () => {
 			if (nowhere) {
-				if (document.activeElement === null) document.body?.focus?.();
 				const held = document.activeElement;
 				for (const at of [remade.textarea, remade.element])
 					if (at !== undefined && at === held) at.blur();
