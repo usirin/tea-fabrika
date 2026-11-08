@@ -37,7 +37,15 @@ import {SHOWS} from "./desk/keys.ts";
 /** A terminal's width or height, in cells. */
 const Cells = Schema.Int.check(Schema.isBetween({minimum: 2, maximum: 1000}));
 
-export const ToTerminal = Schema.Struct({type: Schema.Literal("write"), data: Schema.String});
+/**
+ * What a tile's terminal is told: bytes to draw, and, for a screen reader, which the canvas is
+ * blank to, a job's status (`null`: none any more) and a line to say, such as an agent's reply.
+ */
+export const ToTerminal = Schema.Union([
+	Schema.Struct({type: Schema.Literal("write"), data: Schema.String}),
+	Schema.Struct({type: Schema.Literal("status"), text: Schema.NullOr(Schema.String)}),
+	Schema.Struct({type: Schema.Literal("said"), text: Schema.String}),
+]);
 export type ToTerminal = typeof ToTerminal.Type;
 
 export const FromTerminal = Schema.Union([
@@ -133,6 +141,20 @@ export const AgentOn = Schema.Struct({
 export type AgentOn = typeof AgentOn.Type;
 
 /**
+ * An agent the person summoned on this host (tsh's `summon`): its name, what it runs on, what it
+ * does now, and since when. Ours to dismiss, unlike one attached over the agents' socket.
+ */
+export const SummonedOn = Schema.Struct({
+	name: Schema.String,
+	agent: Schema.String,
+	model: Schema.NullOr(Schema.String),
+	effort: Schema.NullOr(Schema.String),
+	state: Schema.Literals(["opening", "idle", "turn", "asking", "down"]),
+	since: Millis,
+});
+export type SummonedOn = typeof SummonedOn.Type;
+
+/**
  * Which ledger the home's host reads and writes (host/connection.ts): the home's own file, or a
  * ledger server, by its address and the login the host signs in as.
  */
@@ -156,6 +178,7 @@ const Restarted = Schema.Struct({
  * The host, as it says of itself (host/serve.ts): its process, when it started, its build, its
  * ledger, the agents attached now, and who restarted the host before it. `agents` is `null` on a
  * host with no agents' socket: a test's, or one built before every home had one (host/agents.ts).
+ * `summoned` is the agents the person summoned here (tsh's `summon`), apart from those attached.
  * `restarted` is `null` on a host that started fresh, or after a crash. A host of an older build
  * sends none, and the app still attaches to it, so a `HostNow` without it reads.
  */
@@ -167,6 +190,8 @@ export const HostNow = Schema.Struct({
 	ledger: LedgerLink,
 	agents: Schema.NullOr(Schema.Array(AgentOn)),
 	restarted: Schema.optionalKey(Schema.NullOr(Restarted)),
+	/** The agents summoned here, oldest first. A host from before summon sends none. */
+	summoned: Schema.optionalKey(Schema.Array(SummonedOn)),
 });
 export type HostNow = typeof HostNow.Type;
 
@@ -280,6 +305,7 @@ export const FromPage = Schema.Union([
 	Schema.Struct({type: Schema.Literal("later"), key: AskKey}),
 	Schema.Struct({type: Schema.Literal("back"), key: AskKey}),
 	Schema.Struct({type: Schema.Literal("seen")}),
+	Schema.Struct({type: Schema.Literal("dismiss"), name: Schema.String}),
 ]);
 export type FromPage = typeof FromPage.Type;
 

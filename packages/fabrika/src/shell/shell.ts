@@ -1,4 +1,4 @@
-import {type Cause, Deferred, Effect, Fiber, PubSub, Queue, Schema, Stream} from "effect";
+import {type Cause, Deferred, Effect, Fiber, Option, PubSub, Queue, Schema, Stream} from "effect";
 import {HostJobs, TABLE} from "../host/host-jobs.ts";
 import {earlierFor, Jobs, jobsMachine, tableLine} from "../host/jobs.ts";
 import type {AnyRunning} from "../program/listed.ts";
@@ -6,10 +6,12 @@ import {defineProgram, end, fork, kind} from "../program/program.ts";
 import {flag, input, output} from "../program/shape.ts";
 import {runBuiltin, type Said} from "./builtins.ts";
 import {check} from "./check.ts";
-import {type JobStop, runLine, type Shell, stopJob, type Watcher} from "./execute.ts";
-import {parse, type Refused} from "./grammar.ts";
+import {type Asking, type JobStop, runLine, type Shell, stopJob, type Watcher} from "./execute.ts";
+import {parse, refusalLines} from "./grammar.ts";
 import {helpOf, partsHelp} from "./help.ts";
 import {Programs} from "./programs.ts";
+import {runSaid} from "./said.ts";
+import {noSummons, SummonManager} from "./summon.ts";
 import {Table} from "./table.ts";
 
 // tsh: a shell that is itself a tea program. Lines in, lines out, and a view
@@ -26,6 +28,8 @@ import {Table} from "./table.ts";
 //   yield* tell(started.run, "signal", "interrupt");           // Ctrl-C: stops the foreground job, if any
 //   yield* tell(started.run, "stop", 1);                       // the host's word: stop %1, as `stop %1` does
 //   yield* tell(started.run, "background", "tally &");         // beside a foreground line: printed [2] tally:…; backgrounded {status: 0}
+//   yield* tell(started.run, "line", "@scout why?");           // a turn of scout, as job %3: status {n: 3, text: "✦ scout  ..."}, printed "✦ scout  It ..."
+//   yield* tell(started.run, "answer", {n: 3, allow: true});   // a person's y to what %3 asks (asked {n: 3, text: "scout asks: ..."})
 //   started.close("line");                              // Ctrl-D: tsh ends; its jobs stay in the table, detached
 //
 // It has no terminal in it. A launcher (./main.ts) connects it to one with
@@ -34,7 +38,8 @@ import {Table} from "./table.ts";
 // It asks for two services: `Programs`, the list it starts programs from by
 // name, and `HostJobs`, its host's jobs (../host/host-jobs.ts): the table every
 // line becomes a job in, and the storage the jobs' runs keep what must outlive
-// them in. The job table is the host's, not tsh's: tsh shows it and sends it
+// them in. A third, `SummonManager` (./summon.ts), is the host's summoned agents, when it has
+// any: with none given, `summon` and `@name` are refused in words. The job table is the host's, not tsh's: tsh shows it and sends it
 // Msgs, as a shell shows the kernel's process groups.
 //
 // Each tsh is a fresh run, under a fresh id. Storage keeps a closed input
@@ -62,17 +67,12 @@ export const TABLE_REFUSED =
 /** What tsh says, in the order it says it: a line, a table, or that a line is done. */
 type Spoken =
 	| {readonly kind: "printed"; readonly printed: Printed}
-	| {readonly kind: "table"; readonly table: Table; readonly n: number}
+	| {readonly kind: "table"; readonly table: Table; readonly n: number | undefined}
+	| {readonly kind: "status"; readonly n: number; readonly text: string | null}
+	| {readonly kind: "asked"; readonly n: number; readonly text: string | null}
+	| {readonly kind: "announced"; readonly n: number; readonly text: string}
 	| {readonly kind: "ready"; readonly ready: Ready}
 	| {readonly kind: "backgrounded"; readonly ready: Ready};
-
-/** A refusal as a shell shows it: why, the guess, and a caret under where. */
-export function refusalLines(line: string, refused: Refused): readonly string[] {
-	const guess = refused.didYouMean === undefined ? "" : `. Did you mean ${refused.didYouMean}?`;
-	const head = `tsh: ${refused.why}${guess}`;
-	if (line.includes("\n") || line.length > 160) return [head];
-	return [head, `  ${line}`, `  ${" ".repeat(refused.at)}^`];
-}
 
 export const tsh = defineProgram({
 	name: "tsh",
@@ -103,6 +103,12 @@ export const tsh = defineProgram({
 			"Stop job n, as `stop %n` does: told by the host for whoever asked. A job not in the table changes nothing.",
 			{control: true},
 		),
+		// A control input: the answer comes while the job that asks holds the prompt.
+		answer: input(
+			Schema.Struct({n: Schema.Int, allow: Schema.Boolean}),
+			"A person's y or n to what job n asks (asked): allow it once, or refuse it. A person only.",
+			{control: true, personOnly: true},
+		),
 		// A control input: a line that runs beside the one in the foreground, as a person's second
 		// line would if a shell took one while a job held the prompt. So only jobs: every statement
 		// a program's line ending with &, and nothing that waits, writes the table or ends tsh.
@@ -125,6 +131,18 @@ export const tsh = defineProgram({
 		ready: output(
 			Ready,
 			"Once a line is done: the prompt comes back. status: how its last statement ended, as an exit status (0 ended, 1 failed, 130 stopped, 2 refused, 127 no such program).",
+		),
+		status: output(
+			Schema.Struct({n: Schema.Int, text: Schema.NullOr(Schema.String)}),
+			"Job n's line shown in place while it works, as a progress line, never printed. text null: none any more.",
+		),
+		asked: output(
+			Schema.Struct({n: Schema.Int, text: Schema.NullOr(Schema.String)}),
+			"Job n waits on a person's y or n: what it asks, printed with allow? [y/N] too. text null: nothing waits any more.",
+		),
+		announced: output(
+			Schema.Struct({n: Schema.Int, text: Schema.String}),
+			"A line job n printed that a screen reader is told too, as an agent's reply: printed already, said again here.",
 		),
 		backgrounded: output(
 			Ready,
@@ -169,10 +187,16 @@ export const tsh = defineProgram({
 					s.kind === "printed"
 						? send("printed", s.printed)
 						: s.kind === "table"
-							? send("table", {table: s.table, n: s.n})
-							: s.kind === "ready"
-								? send("ready", s.ready)
-								: send("backgrounded", s.ready),
+							? send("table", s.n === undefined ? {table: s.table} : {table: s.table, n: s.n})
+							: s.kind === "status"
+								? send("status", {n: s.n, text: s.text})
+								: s.kind === "asked"
+									? send("asked", {n: s.n, text: s.text})
+									: s.kind === "announced"
+										? send("announced", {n: s.n, text: s.text})
+										: s.kind === "ready"
+											? send("ready", s.ready)
+											: send("backgrounded", s.ready),
 				),
 				Effect.forkScoped,
 			);
@@ -182,11 +206,14 @@ export const tsh = defineProgram({
 					printed: n === undefined ? {to, text} : {to, text, n},
 				});
 			};
-			const printTable = (table: Table, n: number) => {
+			const printTable = (table: Table, n?: number) => {
 				Queue.offerUnsafe(spoken, {kind: "table", table, n});
 			};
 
 			const signals = yield* PubSub.unbounded<"interrupt">();
+			const summons = Option.getOrElse(yield* Effect.serviceOption(SummonManager), () => noSummons);
+			/** What each job waits on a person's answer to, by its number. */
+			const asking = new Map<number, Asking>();
 
 			const shell: Shell = {
 				list,
@@ -202,7 +229,32 @@ export const tsh = defineProgram({
 				stops: new Map<string, JobStop>(),
 				watched: new Map<string, Watcher>(),
 				scope,
+				summons,
+				status: (n, text) => {
+					Queue.offerUnsafe(spoken, {kind: "status", n, text});
+				},
+				ask: (n, a) => {
+					if (a === null) asking.delete(n);
+					else asking.set(n, a);
+					Queue.offerUnsafe(spoken, {kind: "asked", n, text: a?.text ?? null});
+				},
+				announce: (n, text) => {
+					Queue.offerUnsafe(spoken, {kind: "announced", n, text});
+				},
 			};
+
+			/** A person's y or n to what job n asks: told to the input its run named for it. */
+			const answerTold = ({n, allow}: {readonly n: number; readonly allow: boolean}) =>
+				Effect.gen(function* () {
+					const a = asking.get(n);
+					const running = a === undefined ? undefined : shell.live.get(a.run);
+					if (a === undefined || running === undefined) return;
+					asking.delete(n);
+					const word = yield* running.run
+						.tell(a.input, {ask: a.id, allow})
+						.pipe(Effect.catchTag("MailboxFull", () => Effect.succeed("full")));
+					if (word !== "queued") print("err", `tsh: %${n} did not take the answer: ${word}`, n);
+				});
 
 			const oneLine = (text: string): Effect.Effect<Said> =>
 				Effect.gen(function* () {
@@ -217,6 +269,7 @@ export const tsh = defineProgram({
 						if (st.after === "&&" && said.status !== 0) continue;
 						if (st.after === "||" && said.status === 0) continue;
 						if (st.kind === "builtin") said = yield* runBuiltin(shell, st, text);
+						else if (st.kind === "said") said = yield* runSaid(shell, st);
 						else {
 							const checked = check(st.pipeline, list, text);
 							if (checked.kind === "refused") {
@@ -281,6 +334,7 @@ export const tsh = defineProgram({
 							}),
 						),
 					signal: fork((s) => PubSub.publish(signals, s)),
+					answer: fork(answerTold),
 					stop: fork(stopTold),
 					background: fork((text) =>
 						besideLine(text).pipe(

@@ -6,11 +6,13 @@ import {writerOf} from "../host/writer.ts";
 import type {AnyRunning, Entry} from "../program/listed.ts";
 import type {TableView} from "../program/person.ts";
 import {type Ended, type Listeners, type Unread, viewOf} from "../program/program.ts";
+import type {Input} from "../program/shape.ts";
 import {StateRefused, type Storage} from "../program/storage.ts";
 import {ATTR, SERVICE_NAME, traceOf} from "../program/trace.ts";
 import type {Line, Source, Stage} from "./check.ts";
 import {type ProgramList, statusOf, statusOfJob} from "./programs.ts";
 import {type Show, shown} from "./short.ts";
+import type {SummonManager} from "./summon.ts";
 import {type Table, tableOf} from "./table.ts";
 import {attachTitleOf, Shorten, titleOf} from "./title.ts";
 
@@ -43,8 +45,8 @@ export interface Shell {
 	readonly by: string | null;
 	/** A line to show; `n`: the job it was printed for, so a host keeps a job's lines (Printed's `n`). */
 	readonly print: (to: "out" | "err", text: string, n?: number) => void;
-	/** A table for a person, on out: its terminal lays it out (./table.ts). `n`: the job that printed it. */
-	readonly printTable: (table: Table, n: number) => void;
+	/** A table for a person, on out: its terminal lays it out (./table.ts). `n`: the job that printed it; none for tsh's own. */
+	readonly printTable: (table: Table, n?: number) => void;
 	/** How a value a program sends is printed: short for a person, or its JSON whole. */
 	readonly show: Show;
 	/** Ctrl-C, as it comes. Heard by the foreground wait only. */
@@ -61,6 +63,25 @@ export interface Shell {
 	readonly watched: Map<string, Watcher>;
 	/** tsh's own scope: a job's scope is made under it, so every job stops when tsh does. */
 	readonly scope: Scope.Scope;
+	/** The agents summoned on this host: what `summon`, `dismiss`, `agents` and `@name` speak to. */
+	readonly summons: SummonManager["Service"];
+	/** Job n's line shown in place (an output's `status` form); `null`: none any more. */
+	readonly status: (n: number, text: string | null) => void;
+	/**
+	 * Job n waits on a yes or no (an output's `ask` form): what it asks, and the run and input the
+	 * answer goes to. `null`: nothing waits any more.
+	 */
+	readonly ask: (n: number, asking: Asking | null) => void;
+	/** Job n printed a line a screen reader is told too (a `line` form with `announce`). */
+	readonly announce: (n: number, text: string) => void;
+}
+
+/** A yes or no a job waits on: its question, and where the person's answer is told. */
+export interface Asking {
+	readonly id: string;
+	readonly text: string;
+	readonly run: string;
+	readonly input: string;
 }
 
 /** Every end of a job's runs, once the job table has heard each. */
@@ -273,9 +294,10 @@ interface Printers {
 	readonly flush: (ok: boolean) => void;
 }
 
-/** Where a stage prints: its job, and the command as typed, for a table's hint. */
+/** Where a stage prints: its job, its run, and the command as typed, for a table's hint. */
 interface PrintAt {
 	readonly n: number;
+	readonly run: string;
 	readonly background: boolean;
 	readonly stages: number;
 	/** `--all`: a table shows every row. */
@@ -290,6 +312,8 @@ interface PrintAt {
  *   no person form    tsh's short form, after the output's name when the program has several
  *   a line            the program's own line, and nothing before it but a background job's [n]
  *   a table           its rows held, and printed as one table when the run ends
+ *   a status          shown in place on tsh's `status`, never printed, and gone when the run ends
+ *   an ask            printed with `allow? [y/N]`, and said on tsh's `asked` until it is over
  *   "none"            nothing: it is for a pipe or a window
  *
  * A line or a table is the program's answer in a person's form: when a pipe or a `$( )` takes
@@ -309,13 +333,39 @@ function printers(
 	const prefix = (output: string) =>
 		`${job}${at.stages > 1 ? `${entry.program.name} ` : ""}${names.length > 1 ? `${output} ` : ""}`;
 	const tables: {readonly view: TableView<unknown>; rows: unknown[]}[] = [];
+	let showing = false;
+	let asking: string | null = null;
 	const listenerOf = (output: string): ((value: unknown) => void) => {
 		if (output === skip) return (value) => taken?.(value);
 		const person = outputs[output]?.person;
 		if (shell.show === "json" || person === undefined)
 			return (value) => shell.print("out", `${prefix(output)}${shown(value, shell.show)}`, at.n);
 		if (person === "none" || skip !== null) return () => {};
-		if ("line" in person) return (value) => shell.print("out", `${job}${person.line(value)}`, at.n);
+		if ("line" in person)
+			return (value) => {
+				const text = person.line(value);
+				shell.print("out", `${job}${text}`, at.n);
+				if (person.announce === true) shell.announce(at.n, text);
+			};
+		if ("status" in person)
+			return (value) => {
+				showing = true;
+				shell.status(at.n, person.status(value));
+			};
+		if ("ask" in person)
+			return (value) => {
+				const question = person.ask(value);
+				if (question === null) {
+					if (asking === null) return;
+					asking = null;
+					shell.ask(at.n, null);
+					return;
+				}
+				if (asking === question.id) return;
+				asking = question.id;
+				shell.print("out", `${job}${question.text}  allow? [y/N]`, at.n);
+				shell.ask(at.n, {...question, run: at.run, input: person.answer});
+			};
 		const table = {view: person.table, rows: [] as unknown[]};
 		tables.push(table);
 		return (value) => table.rows.push(value);
@@ -323,6 +373,11 @@ function printers(
 	return {
 		listeners: Object.fromEntries(names.map((output) => [output, listenerOf(output)])),
 		flush: (ok) => {
+			// The run is over: what it showed in place goes, and nothing waits on an answer.
+			if (showing) shell.status(at.n, null);
+			showing = false;
+			if (asking !== null) shell.ask(at.n, null);
+			asking = null;
 			for (const table of tables) {
 				if (ok || table.rows.length > 0)
 					shell.printTable(tableOf(table.view, table.rows, {all: at.all, typed: at.typed}), at.n);
@@ -354,7 +409,8 @@ const flushAll = (stages: readonly Starting[], ends: readonly Ended<unknown>[]) 
  * Start the stages of a job, the last first, so each pipe has its downstream
  * running before its upstream starts. `close`: close every input no pipe
  * feeds once its values are told, like a foreground command's stdin at its
- * end, but not those of a program with a window, which its window tells.
+ * end, but not those of a program with a window, which its window tells, nor
+ * an input only a person tells, which the person answers while the job runs.
  * Answers the handles in stage order, or why one did not start.
  */
 const startStages = (shell: Shell, stages: readonly Starting[], close: boolean) =>
@@ -401,8 +457,8 @@ const startStages = (shell: Shell, stages: readonly Starting[], close: boolean) 
 						};
 				}
 			if (close && viewOf(entry.program) === undefined)
-				for (const name of Object.keys(entry.program.inputs))
-					if (name !== stage.fed) started.close(name);
+				for (const [name, declared] of Object.entries<Input<unknown>>(entry.program.inputs))
+					if (name !== stage.fed && !declared.personOnly) started.close(name);
 		}
 		return {ok: true as const, runs};
 	});
@@ -597,6 +653,10 @@ export const lineSpan = (first: string, typed: string) => ({
 	attributes: {[ATTR.run]: first, [ATTR.line]: typed, [SERVICE_NAME]: "tsh"},
 });
 
+/** A program with an input only a person tells: they answer it while it runs. */
+const answered = (entry: Entry): boolean =>
+	Object.values<Input<unknown>>(entry.program.inputs).some((declared) => declared.personOnly);
+
 const runStages = (
 	shell: Shell,
 	line: Line,
@@ -623,13 +683,15 @@ const runStages = (
 		const [head, ...tail] = records;
 		if (head === undefined) return {status: 0, values: []};
 		const background = mode.kind === "background";
-		// `call` closes every input at once: not for a program whose window tells them.
+		// `call` closes every input at once: not for a program whose window tells them, nor one a
+		// person answers while it runs.
 		const [alone, ...others] = line.stages;
 		const calling =
 			!background &&
 			alone !== undefined &&
 			others.length === 0 &&
-			viewOf(alone.entry.program) === undefined;
+			viewOf(alone.entry.program) === undefined &&
+			!answered(alone.entry);
 		// Its stop, kept before its job is in the table (`Shell.stops`).
 		const stop = yield* keepStop(shell, head.run);
 		yield* note(shell, {
@@ -648,7 +710,14 @@ const runStages = (
 			const printing = printers(
 				shell,
 				stage.entry,
-				{n, background, stages: line.stages.length, all: stage.all, typed: stage.text},
+				{
+					n,
+					run: records[i]?.run ?? head.run,
+					background,
+					stages: line.stages.length,
+					all: stage.all,
+					typed: stage.text,
+				},
 				i === last ? capture : (stage.wire?.output ?? null),
 				i === last ? (value) => values.push(value) : null,
 			);
@@ -787,7 +856,14 @@ export const reattach = (shell: Shell, job: Job, background: boolean, typed: str
 			const printing = printers(
 				shell,
 				entry,
-				{n: job.n, background, stages: job.stages.length, all: false, typed: record.program},
+				{
+					n: job.n,
+					run: record.run,
+					background,
+					stages: job.stages.length,
+					all: false,
+					typed: record.program,
+				},
 				record.wire?.output ?? null,
 				null,
 			);

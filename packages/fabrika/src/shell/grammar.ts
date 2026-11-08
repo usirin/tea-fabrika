@@ -7,7 +7,10 @@ import {type At, type Token, words} from "./words.ts";
 // the program list in hand. Here a line is only cut into statements, pipes
 // and the parts of each command.
 //
-//   line       statement ((';' | '&' | '&&' | '||') statement)*
+//   line       said | statement ((';' | '&' | '&&' | '||') statement)*
+//   said       mention prose        first non-space character '@': the whole line, never shell words
+//   mention    '@' [name] ' '       a bare '@': the one agent summoned
+//   prose      the rest of the line, as typed: no words, no #, no quotes, no operators
 //              (&& and || chain on the status, as in a POSIX shell; a job cannot be part of a chain)
 //   statement  builtin word* ['&']  |  pipeline ['&']
 //   pipeline   command ('|' command)*
@@ -20,6 +23,7 @@ import {type At, type Token, words} from "./words.ts";
 //   review-scripted --rubrics r ... pr=$(…) | ship --mode read   a pipe: an output of the left into an input of the right
 //   ship --mode read &                                       a job: the prompt comes back
 //   tell %1 pr https://github.com/o/r/pull/2                 a built-in: plain words only
+//   @scout why does post print #7 twice? a | b &             said: scout is told the rest, as typed
 //   ship --mode --help                                        ship's help: every other word is left unread
 //
 // `>output` names the output a pipe or a `$(…)` takes, and `<input` the input
@@ -86,6 +90,9 @@ export const BUILTINS = [
 	"programs",
 	"help",
 	"exit",
+	"summon",
+	"dismiss",
+	"agents",
 ] as const;
 export type Builtin = (typeof BUILTINS)[number];
 const isBuiltin = (name: string): name is Builtin => (BUILTINS as readonly string[]).includes(name);
@@ -111,7 +118,52 @@ type Bare =
 			readonly background: boolean;
 			readonly text: string;
 			readonly at: At;
-	  };
+	  }
+	| SaidStatement;
+
+/**
+ * A said line: the words after `@name` are the agent's, as typed, so `#`, quotes, `|`, `&` and
+ * `;` are text in them (docs/direction/summon-guidelines.md, S2). It is the whole line, one
+ * statement, and one job in the foreground: a trailing `&` is the agent's too.
+ *
+ *   @scout why does post print #7 twice?   mentions [scout at [1,6)], prose at [7,38)
+ */
+export interface SaidStatement {
+	readonly kind: "said";
+	/** The room it is said in. `null`: your own talk with the one agent named. */
+	readonly room: Named | null;
+	/** The agents named, in order. A bare `@` is the name `""`: the one agent summoned. */
+	readonly mentions: readonly Named[];
+	/** The rest of the line after the mention and its one space, exactly: `line.slice(at.start)`. */
+	readonly prose: {readonly text: string; readonly at: At};
+	readonly background: boolean;
+	/** The line as typed. */
+	readonly text: string;
+}
+
+/** A said line, read before any shell word, or `null`: the line is not one. */
+function saidLine(line: string): SaidStatement | Refused | null {
+	const lead = line.length - line.trimStart().length;
+	if (line.charAt(lead) !== "@") return null;
+	let end = lead + 1;
+	while (end < line.length && !/\s/.test(line.charAt(end))) end += 1;
+	const name = line.slice(lead + 1, end);
+	if (name.includes("@"))
+		return refused(lead, `@${name} is one agent's name: put a space after it, then what to say`);
+	// One space between the mention and what is said; the rest is the agent's, spaces and all.
+	const from = /[ \t]/.test(line.charAt(end)) ? end + 1 : end;
+	const text = line.slice(from);
+	if (/^@/.test(text))
+		return refused(from, "a line talks to one agent: say it to each on a line of its own");
+	return {
+		kind: "said",
+		room: null,
+		mentions: [{name, at: {start: lead + 1, end}}],
+		prose: {text, at: {start: from, end: line.length}},
+		background: false,
+		text: line,
+	};
+}
 
 /** Why a line was not taken: where, what was wrong, and the closest known name when there is one. */
 export interface Refused {
@@ -122,6 +174,14 @@ export interface Refused {
 }
 
 export type Parsed = {readonly kind: "parsed"; readonly statements: readonly Statement[]} | Refused;
+
+/** A refusal as a shell shows it: why, the guess, and a caret under where. */
+export function refusalLines(line: string, refused: Refused): readonly string[] {
+	const guess = refused.didYouMean === undefined ? "" : `. Did you mean ${refused.didYouMean}?`;
+	const head = `tsh: ${refused.why}${guess}`;
+	if (line.includes("\n") || line.length > 160) return [head];
+	return [head, `  ${line}`, `  ${" ".repeat(refused.at)}^`];
+}
 
 const refused = (at: number, why: string, guess?: string): Refused => ({
 	kind: "refused",
@@ -140,6 +200,9 @@ class Stop {
 
 /** Read one line. A line with nothing but spaces, comments and `;` is no statements. */
 export function parse(line: string): Parsed {
+	const said = saidLine(line);
+	if (said !== null)
+		return said.kind === "refused" ? said : {kind: "parsed", statements: [{...said, after: null}]};
 	const {tokens, open} = words(line);
 	if (open) return refused(line.length, "a quote is not closed");
 	let i = 0;

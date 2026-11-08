@@ -5,6 +5,7 @@ import {hasTable, own, wire} from "./check.ts";
 import {choices} from "./decode.ts";
 import {ALL_WORD, BUILTINS, HELP_WORDS, parse} from "./grammar.ts";
 import type {ProgramList} from "./programs.ts";
+import {NO_TALK, type Talk} from "./summon.ts";
 import {type Token, words} from "./words.ts";
 
 // Tab completion, from the line as typed so far and nothing else: the program
@@ -20,6 +21,9 @@ import {type Token, words} from "./words.ts";
 //   complete("seq --to 3 | ", …)            double tally         after a pipe: programs seq can feed
 //   complete("tell ", …)                    %1 tally:3f2a…       the jobs in the table
 //   complete("tell %1 ", …)                 add                  the inputs of the job's program
+//   complete("summon ", …)                  claude codex         the agents a person can summon
+//   complete("summon claude ", …)           as fake-small …      `as`, and the settings it offered
+//   complete("@sc", …)                      @scout               the names summoned now
 //
 // The answer is what readline wants: the candidates, and the part of the line
 // they replace.
@@ -39,7 +43,12 @@ const matching = (typed: string, all: Iterable<string>): readonly string[] => [
 ];
 
 /** Complete the line, as typed up to the cursor. */
-export function complete(line: string, list: ProgramList, jobs: Jobs): Completed {
+export function complete(
+	line: string,
+	list: ProgramList,
+	jobs: Jobs,
+	talk: Talk = NO_TALK,
+): Completed {
 	const {tokens, open, trailing} = words(line);
 	// Inside an open quote the word's text is not what is on the line: no guess beats a wrong one.
 	if (open) return none("");
@@ -58,6 +67,15 @@ export function complete(line: string, list: ProgramList, jobs: Jobs): Completed
 	const args = before.slice(cut + 1).flatMap((t) => (t.kind === "word" ? [t.text] : []));
 	const [head, ...rest] = args;
 
+	// A said line's name: `@` starts one only as the line's first word.
+	if (head === undefined && cut === -1 && typed.startsWith("@"))
+		return {
+			candidates: matching(
+				typed,
+				talk.names.map((n) => `@${n}`),
+			),
+			word: raw,
+		};
 	if (head === undefined) {
 		// The program's own name. After `|` or `$(` a built-in cannot stand,
 		// and after `|` only a program the stage before can feed.
@@ -70,6 +88,9 @@ export function complete(line: string, list: ProgramList, jobs: Jobs): Completed
 		return {candidates: matching(typed, [...programs, ...(inPipe ? [] : BUILTINS)]), word: raw};
 	}
 
+	if (head === "summon") return summonWord(rest, typed, talk);
+	if (head === "dismiss")
+		return rest.length === 0 ? {candidates: matching(typed, talk.names), word: raw} : none(raw);
 	if ((BUILTINS as readonly string[]).includes(head))
 		return builtinWord(head, rest, typed, list, jobs);
 
@@ -178,6 +199,27 @@ const canWire = ({entry, out}: Feeds, b: Entry): boolean =>
 	[null, ...Object.keys(b.program.inputs)].some(
 		(into) => wire(entry, out, b, into).kind === "wired",
 	);
+
+/**
+ * `summon`'s words: an agent first, then up to two of the settings its harness offered, and `as`
+ * before the name. Nothing after `as`: the name is the person's to choose.
+ *
+ *   summon                         claude codex
+ *   summon claude                  as fake-small fake-large low medium high
+ *   summon claude fake-large       as low medium high
+ *   summon claude as               (nothing)
+ */
+function summonWord(rest: readonly string[], typed: string, talk: Talk): Completed {
+	const [agent, ...more] = rest;
+	if (agent === undefined) return {candidates: matching(typed, talk.agents), word: typed};
+	const at = more.indexOf("as");
+	if (at !== -1) return none(typed);
+	const offered = (talk.offers[agent] ?? []).filter((w) => !more.includes(w));
+	return {
+		candidates: matching(typed, more.length >= 2 ? ["as"] : ["as", ...offered]),
+		word: typed,
+	};
+}
 
 /** A built-in's words: a job first, then (for tell and close) one of its program's inputs, then (for tell) values. */
 function builtinWord(

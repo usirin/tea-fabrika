@@ -1,5 +1,5 @@
 import {createHash} from "node:crypto";
-import {readdirSync, realpathSync} from "node:fs";
+import {existsSync, readdirSync, realpathSync} from "node:fs";
 import {userInfo} from "node:os";
 import {basename, dirname, isAbsolute, join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -118,7 +118,24 @@ export type Row = "claude" | "fake" | {readonly name: "codex"; readonly access: 
 /** The row's name. */
 export const rowName = (row: Row): AgentName => (typeof row === "string" ? row : row.name);
 
-const at = (path: string) => fileURLToPath(new URL(path, import.meta.url));
+/**
+ * This folder in the checkout. Beside this file when it runs from source; from the app's bundle
+ * (apps/fabrika/dist), which holds this code but not the fake agent or the adapters, it is found
+ * from the checkout's root, the folder above with `pnpm-workspace.yaml`.
+ */
+const HERE = (() => {
+	const here = fileURLToPath(new URL(".", import.meta.url));
+	if (existsSync(join(here, "fake-agent.ts"))) return here;
+	for (let up = here; dirname(up) !== up; up = dirname(up))
+		if (existsSync(join(up, "pnpm-workspace.yaml")))
+			return join(up, "packages", "fabrika", "src", "agents", "acp");
+	return here;
+})();
+
+const at = (path: string) => {
+	const whole = join(HERE, path);
+	return path.endsWith("/") && !whole.endsWith("/") ? `${whole}/` : whole;
+};
 
 /** Where the pinned adapters are installed: `pnpm --dir adapters install --ignore-workspace --frozen-lockfile`. */
 export const ADAPTERS = at("../../../../../adapters/node_modules/");

@@ -8,7 +8,7 @@ import {defineProgram, kind} from "../../program/program.ts";
 import {flag, input, output} from "../../program/shape.ts";
 import {runTraced} from "../../program/trace.ts";
 import {agentTrace} from "../trace/agent.ts";
-import {connect, type Heard, type Opened, type PendingAsk} from "./client.ts";
+import {connect, type Heard, type Opened, type PendingAsk, valuesOf} from "./client.ts";
 import {AGENTS, CODEX_MODES, harnessOf, type Row} from "./harness.ts";
 import {Session, session, type Waiting} from "./session.ts";
 import {type AcpEvents, acpEvents} from "./spans.ts";
@@ -35,6 +35,13 @@ import {
 //   tell %1 prompt "and b.txt?"
 //   tell %1 allow ask-1        an ask it showed, allowed once; `refuse ask-1` refuses it
 //   tell %1 cancel now         the running turn, cancelled
+//   tell %1 model fake-large   a setting changed after the session opened, by the harness's own value
+//
+// `acpInRepo` is the same program in a person's git repository, as a summoned
+// agent works (../summon/manager.ts): the harness's fence and sandbox stay as
+// they are, with the repository as the folder, so writes outside it stay
+// closed. It is not on tsh's list: only the host's summon starts it, with
+// `--permissions ask`, so each edit asks the person first.
 //
 // Swapping the harness is `--agent` and nothing else (./harness.ts).
 //
@@ -66,6 +73,15 @@ const OpenedOut = Schema.Struct({
 	earlier: Count,
 	/** Prompts told at an earlier start and not answered: sent again now. */
 	resent: Count,
+	/** The models the harness offers, by its own values: what `model` takes. */
+	models: Schema.Array(Schema.String),
+	/** The efforts it offers: what `effort` takes. Empty when it has none. */
+	efforts: Schema.Array(Schema.String),
+});
+
+const SettingsOut = Schema.Struct({
+	model: Schema.NullOr(Schema.String),
+	effort: Schema.NullOr(Schema.String),
 });
 
 const Result = Schema.Struct({
@@ -99,18 +115,26 @@ const refused = (message: string) => Effect.fail<AcpRefused>({_tag: "acp_refused
 /** What the pump reads: the harness's own sends, and a mark to wait until all before it is folded. */
 type Item = Heard | {readonly kind: "sync"; readonly done: Deferred.Deferred<void>};
 
-/** The scratch folder, by its real path: absolute, there, and in no git repository. */
-const scratchFolder = (given: string) =>
+/**
+ * The folder, by its real path: absolute and there. `scratch`: in no git repository. `repo`: a git
+ * repository's top folder, the one that holds `.git`.
+ */
+const folderOf = (given: string, kind: "scratch" | "repo") =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		if (!path.isAbsolute(given)) return yield* refused(`--folder must be an absolute path`);
 		const real = yield* fs.realPath(given).pipe(Effect.orElseSucceed(() => null));
 		if (real === null) return yield* refused(`--folder ${given} is not there`);
+		const gitIn = (at: string) =>
+			fs.exists(path.join(at, ".git")).pipe(Effect.orElseSucceed(() => false));
+		if (kind === "repo")
+			return (yield* gitIn(real))
+				? real
+				: yield* refused(`--folder ${given} is not a git repository's top folder`);
 		let at = real;
 		for (;;) {
-			const git = yield* fs.exists(path.join(at, ".git")).pipe(Effect.orElseSucceed(() => false));
-			if (git) return yield* refused(`--folder ${given} is inside a git repository`);
+			if (yield* gitIn(at)) return yield* refused(`--folder ${given} is inside a git repository`);
 			const up = path.dirname(at);
 			if (up === at) return real;
 			at = up;
@@ -146,329 +170,376 @@ const shown = (pending: PendingAsk, answer: Answer | "waiting") => {
 	return {ask: id, ...ask, answer};
 };
 
-export const acpProgram = defineProgram({
-	name: "acp",
-	description:
-		"An ACP client: starts one agent harness over the Agent Client Protocol, opens one session in a scratch folder, and runs each prompt it is told as a turn. Started again under the same run, it opens the same session and sends the prompt a kill cut off.",
-	flags: {
-		agent: flag(
-			Schema.Literals(AGENTS),
-			"The harness: claude, codex, or fake (scripted, no model).",
-		),
-		folder: flag(
-			Schema.String,
-			"The scratch folder the harness works in: an absolute path, in no git repository.",
-		),
-		model: flag(Schema.UndefinedOr(Schema.String), "The model, by the harness's own value."),
-		effort: flag(
-			Schema.UndefinedOr(Schema.String),
-			"How hard it thinks, by the harness's own value. Not every model has one.",
-		),
-		mode: flag(
-			Schema.UndefinedOr(Schema.String),
-			"The harness's permission mode. Left out: the harness's default. Codex has none: read-only or workspace-write, which also says whether its folder may change.",
-		),
-		permissions: flag(
-			Schema.UndefinedOr(Schema.Literals(["refuse", "ask"])),
-			"refuse (the default): every permission ask is refused at once. ask: each waits for allow or refuse.",
-		),
-		reopen: flag(
-			Schema.UndefinedOr(Schema.Literals(["load", "resume"])),
-			"How a session is opened again after a restart: load (the default; the harness replays it) or resume (it does not).",
-		),
-		budget: flag(
-			Schema.UndefinedOr(Schema.Finite.check(Schema.isGreaterThan(0))),
-			"The dollars one session may cost, where the harness can stop at a cap (claude).",
-		),
-	},
-	inputs: {
-		prompt: input(Schema.String, "A prompt: one turn, after the turns before it."),
-		allow: input(Schema.String, "The id of an ask waiting: allow it, once."),
-		refuse: input(Schema.String, "The id of an ask waiting: refuse it."),
-		cancel: input(Schema.String, "Anything: cancel the turn running now."),
-	},
-	outputs: {
-		opened: output(
-			OpenedOut,
-			"Once per start: the session, how it was opened, and how long that took.",
-		),
-		said: output(Schema.String, "What the agent said in a turn, once the turn ended."),
-		result: output(Result, "Each turn's end: why it stopped, its tokens, its tool calls."),
-		ask: output(AskOut, "A permission ask, as it comes and as it is answered."),
-	},
-	machines: {
-		// Kept until the run is forgotten. No `recovered`: main reads what is waiting at every start
-		// and sends it again itself, once the session is open.
-		session: kind({
-			machine: session,
-			state: Session,
-			parent: "main",
-			options: () => ({ctx: undefined}),
-			drawing: ({kept}) => ({
-				name: "acp session",
-				steps: {},
-				tags: (s) => ({"acp.turns": s.turns, "acp.waiting": s.waiting.length}),
-				attributes: {"acp.agent": kept?.agent ?? "none yet"},
+/** The acp program, in a scratch folder or in a person's repository. */
+const acpIn = (place: "scratch" | "repo") =>
+	defineProgram({
+		name: "acp",
+		description: `An ACP client: starts one agent harness over the Agent Client Protocol, opens one session in ${place === "scratch" ? "a scratch folder" : "a git repository"}, and runs each prompt it is told as a turn. Started again under the same run, it opens the same session and sends the prompt a kill cut off.`,
+		flags: {
+			agent: flag(
+				Schema.Literals(AGENTS),
+				"The harness: claude, codex, or fake (scripted, no model).",
+			),
+			folder: flag(
+				Schema.String,
+				place === "scratch"
+					? "The scratch folder the harness works in: an absolute path, in no git repository."
+					: "The repository the harness works in: an absolute path, a git repository's top folder.",
+			),
+			model: flag(Schema.UndefinedOr(Schema.String), "The model, by the harness's own value."),
+			effort: flag(
+				Schema.UndefinedOr(Schema.String),
+				"How hard it thinks, by the harness's own value. Not every model has one.",
+			),
+			mode: flag(
+				Schema.UndefinedOr(Schema.String),
+				"The harness's permission mode. Left out: the harness's default. Codex has none: read-only or workspace-write, which also says whether its folder may change.",
+			),
+			permissions: flag(
+				Schema.UndefinedOr(Schema.Literals(["refuse", "ask"])),
+				"refuse (the default): every permission ask is refused at once. ask: each waits for allow or refuse.",
+			),
+			reopen: flag(
+				Schema.UndefinedOr(Schema.Literals(["load", "resume"])),
+				"How a session is opened again after a restart: load (the default; the harness replays it) or resume (it does not).",
+			),
+			budget: flag(
+				Schema.UndefinedOr(Schema.Finite.check(Schema.isGreaterThan(0))),
+				"The dollars one session may cost, where the harness can stop at a cap (claude).",
+			),
+		},
+		inputs: {
+			prompt: input(Schema.String, "A prompt: one turn, after the turns before it."),
+			allow: input(Schema.String, "The id of an ask waiting: allow it, once."),
+			refuse: input(Schema.String, "The id of an ask waiting: refuse it."),
+			cancel: input(Schema.String, "Anything: cancel the turn running now."),
+			model: input(Schema.String, "Set the model now, by one of opened's models."),
+			effort: input(Schema.String, "Set the effort now, by one of opened's efforts."),
+		},
+		outputs: {
+			opened: output(
+				OpenedOut,
+				"Once per start: the session, how it was opened, and how long that took.",
+			),
+			told: output(
+				Schema.Struct({turn: Count}),
+				"Each prompt told, as it joins the turns: the number of its turn, which its result says too.",
+			),
+			settings: output(SettingsOut, "The model and effort, once model or effort set one."),
+			said: output(Schema.String, "What the agent said in a turn, once the turn ended."),
+			result: output(Result, "Each turn's end: why it stopped, its tokens, its tool calls."),
+			ask: output(AskOut, "A permission ask, as it comes and as it is answered."),
+		},
+		machines: {
+			// Kept until the run is forgotten. No `recovered`: main reads what is waiting at every start
+			// and sends it again itself, once the session is open.
+			session: kind({
+				machine: session,
+				state: Session,
+				parent: "main",
+				options: () => ({ctx: undefined}),
+				drawing: ({kept}) => ({
+					name: "acp session",
+					steps: {},
+					tags: (s) => ({"acp.turns": s.turns, "acp.waiting": s.waiting.length}),
+					attributes: {"acp.agent": kept?.agent ?? "none yet"},
+				}),
+				status: (s) =>
+					`${s.agent ?? "no session yet"} · ${s.turns} turns · ${s.waiting.length} waiting`,
 			}),
-			status: (s) =>
-				`${s.agent ?? "no session yet"} · ${s.turns} turns · ${s.waiting.length} waiting`,
-		}),
-		// Not kept: folded again from the harness at every start, and only shown.
-		transcript: kind({
-			machine: transcript,
-			state: Transcript,
-			parent: "main",
-			options: () => ({ctx: undefined}),
-			drawing: () => ({name: "acp transcript", steps: {}, tags: countsOf}),
-			status: statusLine,
-		}),
-	},
-	main: ({flags, serve, send, watch, machines}) =>
-		Effect.gen(function* () {
-			const fs = yield* FileSystem.FileSystem;
-			const folder = yield* scratchFolder(flags.folder);
-			// Codex's mode is its folder's access, so it must be named: a mode codex may not run in, or
-			// none, is refused first, whether or not the adapter is installed.
-			const row: Row | null =
-				flags.agent !== "codex"
-					? flags.agent
-					: flags.mode === "read-only"
-						? {name: "codex", access: "read"}
-						: flags.mode === "workspace-write"
-							? {name: "codex", access: "write"}
-							: null;
-			if (row === null)
-				return yield* refused(
-					`codex runs only in ${CODEX_MODES.join(" or ")}, not ${flags.mode ?? "a mode left out"}`,
-				);
-			const harness = harnessOf(row, folder, flags.budget ?? null);
-			if (!(yield* fs.exists(harness.script).pipe(Effect.orElseSucceed(() => false))))
-				return yield* refused(
-					`${flags.agent} is not installed: pnpm --dir adapters install --ignore-workspace --frozen-lockfile`,
-				);
-			if (harness.prepare !== undefined) yield* harness.prepare.pipe(Effect.catch(refused));
-
-			// One session per run, started with no Msg: a new one begins empty, a kept one as it was left.
-			const kept = yield* machines.session.get("session").start();
-			const was = kept.getState();
-			if (was.agent !== null && was.agent !== flags.agent)
-				return yield* refused(
-					`this run's session is on ${was.agent}: it cannot move to ${flags.agent}`,
-				);
-
-			const booting = yield* runTraced(
-				"transcript",
-				transcript,
-				{ctx: undefined},
-				{name: "acp transcript", steps: {}, tags: countsOf, attributes: {"acp.agent": flags.agent}},
-			);
-			const view = yield* booting.ready;
-			yield* watch("transcript", "transcript", view);
-			const fold = <M extends Parameters<typeof view.dispatch>[0]>(msg: M) =>
-				view.dispatch(msg).pipe(Effect.orDie);
-
-			// ---------------------------------------------------------------- what the harness sends
-			const items = yield* Queue.unbounded<Item>();
-			const c = yield* connect(harness, folder, (heard) => {
-				Queue.offerUnsafe(items, heard);
-			});
-			/** Wait until everything the harness sent before now is folded. */
-			const sync = Effect.gen(function* () {
-				const done = yield* Deferred.make<void>();
-				yield* Queue.offer(items, {kind: "sync", done});
-				yield* Deferred.await(done);
-			});
-
-			let turn: {readonly events: AcpEvents; readonly spans: AgentSpans<null> | null} | null = null;
-			const draw = (events: readonly AgentEvent<null>[]) => {
-				for (const event of events) turn?.spans?.onEvent(event);
-			};
-			let loading = false;
-			let replayed = 0;
-			const pending = new Map<string, PendingAsk>();
-
-			const answer = (ask: PendingAsk, allow: boolean) =>
-				Effect.gen(function* () {
-					pending.delete(ask.id);
-					const option =
-						ask.request.options.find((o) => allow && o.kind === "allow_once") ??
-						ask.request.options.find((o) => o.kind === "reject_once");
-					const given: Answer =
-						option === undefined
-							? "cancelled"
-							: option.kind === "allow_once"
-								? "allowed"
-								: "refused";
-					ask.answer(
-						option === undefined
-							? {outcome: {outcome: "cancelled"}}
-							: {outcome: {outcome: "selected", optionId: option.optionId}},
+			// Not kept: folded again from the harness at every start, and only shown.
+			transcript: kind({
+				machine: transcript,
+				state: Transcript,
+				parent: "main",
+				options: () => ({ctx: undefined}),
+				drawing: () => ({name: "acp transcript", steps: {}, tags: countsOf}),
+				status: statusLine,
+			}),
+		},
+		main: ({flags, serve, send, watch, machines}) =>
+			Effect.gen(function* () {
+				const fs = yield* FileSystem.FileSystem;
+				const folder = yield* folderOf(flags.folder, place);
+				// Codex's mode is its folder's access, so it must be named: a mode codex may not run in, or
+				// none, is refused first, whether or not the adapter is installed.
+				const row: Row | null =
+					flags.agent !== "codex"
+						? flags.agent
+						: flags.mode === "read-only"
+							? {name: "codex", access: "read"}
+							: flags.mode === "workspace-write"
+								? {name: "codex", access: "write"}
+								: null;
+				if (row === null)
+					return yield* refused(
+						`codex runs only in ${CODEX_MODES.join(" or ")}, not ${flags.mode ?? "a mode left out"}`,
 					);
-					yield* fold({type: "answered", ask: ask.id, answer: given});
-					yield* send("ask", shown(ask, given));
+				const harness = harnessOf(row, folder, flags.budget ?? null);
+				if (!(yield* fs.exists(harness.script).pipe(Effect.orElseSucceed(() => false))))
+					return yield* refused(
+						`${flags.agent} is not installed: pnpm --dir adapters install --ignore-workspace --frozen-lockfile`,
+					);
+				if (harness.prepare !== undefined) yield* harness.prepare.pipe(Effect.catch(refused));
+
+				// One session per run, started with no Msg: a new one begins empty, a kept one as it was left.
+				const kept = yield* machines.session.get("session").start();
+				const was = kept.getState();
+				if (was.agent !== null && was.agent !== flags.agent)
+					return yield* refused(
+						`this run's session is on ${was.agent}: it cannot move to ${flags.agent}`,
+					);
+
+				const booting = yield* runTraced(
+					"transcript",
+					transcript,
+					{ctx: undefined},
+					{
+						name: "acp transcript",
+						steps: {},
+						tags: countsOf,
+						attributes: {"acp.agent": flags.agent},
+					},
+				);
+				const view = yield* booting.ready;
+				yield* watch("transcript", "transcript", view);
+				const fold = <M extends Parameters<typeof view.dispatch>[0]>(msg: M) =>
+					view.dispatch(msg).pipe(Effect.orDie);
+
+				// ---------------------------------------------------------------- what the harness sends
+				const items = yield* Queue.unbounded<Item>();
+				const c = yield* connect(harness, folder, (heard) => {
+					Queue.offerUnsafe(items, heard);
+				});
+				/** Wait until everything the harness sent before now is folded. */
+				const sync = Effect.gen(function* () {
+					const done = yield* Deferred.make<void>();
+					yield* Queue.offer(items, {kind: "sync", done});
+					yield* Deferred.await(done);
 				});
 
-			const asked = (ask: PendingAsk) =>
-				Effect.gen(function* () {
-					yield* fold({type: "asked", ask: askOf(ask)});
-					if (flags.permissions !== "ask") return yield* answer(ask, false);
-					pending.set(ask.id, ask);
-					yield* send("ask", shown(ask, "waiting"));
-				});
+				let turn: {readonly events: AcpEvents; readonly spans: AgentSpans<null> | null} | null =
+					null;
+				const draw = (events: readonly AgentEvent<null>[]) => {
+					for (const event of events) turn?.spans?.onEvent(event);
+				};
+				let loading = false;
+				let replayed = 0;
+				const pending = new Map<string, PendingAsk>();
 
-			const pump = Effect.gen(function* () {
-				const batch = yield* Queue.takeAll(items);
-				const now = yield* Clock.currentTimeMillis;
-				let seen: Seen[] = [];
-				const flush = Effect.suspend(() => {
-					if (seen.length === 0) return Effect.void;
-					const events = seen;
-					seen = [];
-					return fold({type: "seen", events});
-				});
-				for (const item of batch) {
-					if (item.kind === "update") {
-						const event = seenOf(item.update);
-						seen.push(event);
-						if (loading) replayed += 1;
-						if (turn !== null) draw(turn.events.seen(event, now));
-						continue;
+				const answer = (ask: PendingAsk, allow: boolean) =>
+					Effect.gen(function* () {
+						pending.delete(ask.id);
+						const option =
+							ask.request.options.find((o) => allow && o.kind === "allow_once") ??
+							ask.request.options.find((o) => o.kind === "reject_once");
+						const given: Answer =
+							option === undefined
+								? "cancelled"
+								: option.kind === "allow_once"
+									? "allowed"
+									: "refused";
+						ask.answer(
+							option === undefined
+								? {outcome: {outcome: "cancelled"}}
+								: {outcome: {outcome: "selected", optionId: option.optionId}},
+						);
+						yield* fold({type: "answered", ask: ask.id, answer: given});
+						yield* send("ask", shown(ask, given));
+					});
+
+				const asked = (ask: PendingAsk) =>
+					Effect.gen(function* () {
+						yield* fold({type: "asked", ask: askOf(ask)});
+						if (flags.permissions !== "ask") return yield* answer(ask, false);
+						pending.set(ask.id, ask);
+						yield* send("ask", shown(ask, "waiting"));
+					});
+
+				const pump = Effect.gen(function* () {
+					const batch = yield* Queue.takeAll(items);
+					const now = yield* Clock.currentTimeMillis;
+					let seen: Seen[] = [];
+					const flush = Effect.suspend(() => {
+						if (seen.length === 0) return Effect.void;
+						const events = seen;
+						seen = [];
+						return fold({type: "seen", events});
+					});
+					for (const item of batch) {
+						if (item.kind === "update") {
+							const event = seenOf(item.update);
+							seen.push(event);
+							if (loading) replayed += 1;
+							if (turn !== null) draw(turn.events.seen(event, now));
+							continue;
+						}
+						yield* flush;
+						if (item.kind === "ask") yield* asked(item.ask);
+						else yield* Deferred.succeed(item.done, undefined);
 					}
 					yield* flush;
-					if (item.kind === "ask") yield* asked(item.ask);
-					else yield* Deferred.succeed(item.done, undefined);
-				}
-				yield* flush;
-			});
-			yield* Effect.forkScoped(Effect.forever(pump));
+				});
+				yield* Effect.forkScoped(Effect.forever(pump));
 
-			// ---------------------------------------------------------------- open the session
-			const how: How =
-				was.id === null
-					? "new"
-					: c.can(flags.reopen ?? "load")
-						? (flags.reopen ?? "load")
-						: c.can("load")
-							? "load"
-							: c.can("resume")
-								? "resume"
-								: yield* refused(
-										`${flags.agent} can neither load nor resume a session: ${was.id} cannot be opened again`,
-									);
-			loading = true;
-			yield* fold({type: "opening", how, earlier: was.turns});
-			const t0 = yield* Clock.currentTimeMillis;
-			let opened = yield* c.open(how, was.id, folder, harness.meta);
-			const ms = (yield* Clock.currentTimeMillis) - t0;
-			yield* sync;
-			loading = false;
-			if (how === "new") yield* kept.dispatch({type: "opened", agent: flags.agent, id: opened.id});
-			// Set again at every start: a harness may not keep them with the session.
-			if (flags.model !== undefined) opened = yield* c.configure(opened, "model", flags.model);
-			if (flags.effort !== undefined)
-				opened = yield* c.configure(opened, "thought_level", flags.effort);
-			if (flags.mode !== undefined) opened = yield* c.configure(opened, "mode", flags.mode);
-			const mode = currentOf(opened, "mode") ?? opened.mode;
-			yield* fold({type: "opened", mode});
-			yield* send("opened", {
-				session: opened.id,
-				agent: flags.agent,
-				how,
-				ms,
-				mode,
-				model: currentOf(opened, "model"),
-				replayed,
-				earlier: was.turns,
-				resent: was.waiting.length,
-			});
-			const id = opened.id;
-			const model = currentOf(opened, "model");
-
-			// ---------------------------------------------------------------- answers and cancels
-			const byId = (ask: string) => pending.get(ask);
-			// ---------------------------------------------------------------- the turns, one after another
-			const todo = yield* Queue.unbounded<Waiting | null>();
-			for (const waiting of was.waiting) Queue.offerUnsafe(todo, waiting);
-			// Every handler is quick: a prompt only joins the turns waiting, so an answer or a cancel
-			// told while a turn runs is handled at once, in the order told.
-			const handlers = {
-				prompt: (prompt: string) =>
+				// ---------------------------------------------------------------- open the session
+				const how: How =
+					was.id === null
+						? "new"
+						: c.can(flags.reopen ?? "load")
+							? (flags.reopen ?? "load")
+							: c.can("load")
+								? "load"
+								: c.can("resume")
+									? "resume"
+									: yield* refused(
+											`${flags.agent} can neither load nor resume a session: ${was.id} cannot be opened again`,
+										);
+				loading = true;
+				yield* fold({type: "opening", how, earlier: was.turns});
+				const t0 = yield* Clock.currentTimeMillis;
+				let opened = yield* c.open(how, was.id, folder, harness.meta);
+				const ms = (yield* Clock.currentTimeMillis) - t0;
+				yield* sync;
+				loading = false;
+				if (how === "new")
+					yield* kept.dispatch({type: "opened", agent: flags.agent, id: opened.id});
+				// Set again at every start: a harness may not keep them with the session.
+				if (flags.model !== undefined) opened = yield* c.configure(opened, "model", flags.model);
+				if (flags.effort !== undefined)
+					opened = yield* c.configure(opened, "thought_level", flags.effort);
+				if (flags.mode !== undefined) opened = yield* c.configure(opened, "mode", flags.mode);
+				const mode = currentOf(opened, "mode") ?? opened.mode;
+				const offered = (category: string) => {
+					const option = opened.config.find((o) => o.category === category);
+					return option === undefined ? [] : valuesOf(option);
+				};
+				yield* fold({type: "opened", mode});
+				yield* send("opened", {
+					session: opened.id,
+					agent: flags.agent,
+					how,
+					ms,
+					mode,
+					model: currentOf(opened, "model"),
+					replayed,
+					earlier: was.turns,
+					resent: was.waiting.length,
+					models: offered("model"),
+					efforts: offered("thought_level"),
+				});
+				const id = opened.id;
+				let model = currentOf(opened, "model");
+				/**
+				 * Set one setting now. A value the harness does not take changes nothing, and the run goes
+				 * on: `settings` says what is set either way.
+				 */
+				const setting = (category: "model" | "thought_level", value: string) =>
 					Effect.gen(function* () {
-						yield* kept.dispatch({type: "told", prompt});
-						Queue.offerUnsafe(todo, {n: kept.getState().told, prompt});
-					}),
-				allow: (ask: string) => {
-					const found = byId(ask);
-					return found === undefined ? Effect.void : answer(found, true);
-				},
-				refuse: (ask: string) => {
-					const found = byId(ask);
-					return found === undefined ? Effect.void : answer(found, false);
-				},
-				cancel: () =>
-					Effect.gen(function* () {
-						if (turn === null) return;
-						yield* fold({type: "cancelling"});
-						// ACP: a client that cancels answers every ask still open with `cancelled`.
-						for (const ask of [...pending.values()]) {
-							pending.delete(ask.id);
-							ask.answer({outcome: {outcome: "cancelled"}});
-							yield* fold({type: "answered", ask: ask.id, answer: "cancelled"});
-							yield* send("ask", shown(ask, "cancelled"));
-						}
-						yield* c.cancel(id).pipe(Effect.ignore);
-					}),
-			};
-			// Once `prompt` closes, the last turns still run, and their asks are still answered.
-			yield* Effect.forkScoped(
-				serve(handlers, {until: ["prompt"]}).pipe(
-					Effect.andThen(Queue.offer(todo, null)),
-					Effect.andThen(serve(handlers)),
-				),
-			);
-
-			const runTurn = (w: Waiting) =>
-				Effect.gen(function* () {
-					const start = yield* Clock.currentTimeMillis;
-					turn = {
-						events: acpEvents(`${id}#${w.n}`),
-						spans: yield* agentTrace<null>(`acp ${flags.agent}`),
-					};
-					draw(turn.events.start(start, model));
-					yield* fold({type: "turn", n: w.n, prompt: w.prompt});
-					const response = yield* c.prompt(id, w.prompt);
-					yield* sync;
-					const ended: Ended = {n: w.n, stop: response.stopReason, usage: usageOf(response.usage)};
-					yield* fold({type: "ended", ended});
-					const end = yield* Clock.currentTimeMillis;
-					draw(turn.events.end(ended, end));
-					turn.spans?.end();
-					turn = null;
-					// The asks of a turn that ended are over: the harness no longer waits on them.
-					pending.clear();
-					yield* kept.dispatch({type: "ended", n: w.n});
-					const s = view.getState();
-					const said = saidIn(s, w.n);
-					if (said !== "") yield* send("said", said);
-					yield* send("result", {
-						turn: w.n,
-						stop: ended.stop,
-						ms: end - start,
-						input: ended.usage?.input ?? 0,
-						output: ended.usage?.output ?? 0,
-						cached: ended.usage?.cached ?? 0,
-						tools: s.tools.filter((t) => t.turn === w.n).length,
-						cost: s.context?.cost ?? null,
+						const set = yield* c.configure(opened, category, value).pipe(Effect.result);
+						if (set._tag === "Success") opened = set.success;
+						model = currentOf(opened, "model");
+						yield* send("settings", {model, effort: currentOf(opened, "thought_level")});
 					});
-				}).pipe(Effect.withSpan("acp turn", {attributes: {"acp.turn": w.n}}));
 
-			for (;;) {
-				const next = yield* Queue.take(todo);
-				if (next === null) return;
-				yield* runTurn(next);
-			}
-		}).pipe(Effect.scoped),
-});
+				// ---------------------------------------------------------------- answers and cancels
+				const byId = (ask: string) => pending.get(ask);
+				// ---------------------------------------------------------------- the turns, one after another
+				const todo = yield* Queue.unbounded<Waiting | null>();
+				for (const waiting of was.waiting) Queue.offerUnsafe(todo, waiting);
+				// Every handler is quick: a prompt only joins the turns waiting, so an answer or a cancel
+				// told while a turn runs is handled at once, in the order told.
+				const handlers = {
+					prompt: (prompt: string) =>
+						Effect.gen(function* () {
+							yield* kept.dispatch({type: "told", prompt});
+							const n = kept.getState().told;
+							yield* send("told", {turn: n});
+							Queue.offerUnsafe(todo, {n, prompt});
+						}),
+					allow: (ask: string) => {
+						const found = byId(ask);
+						return found === undefined ? Effect.void : answer(found, true);
+					},
+					refuse: (ask: string) => {
+						const found = byId(ask);
+						return found === undefined ? Effect.void : answer(found, false);
+					},
+					cancel: () =>
+						Effect.gen(function* () {
+							if (turn === null) return;
+							yield* fold({type: "cancelling"});
+							// ACP: a client that cancels answers every ask still open with `cancelled`.
+							for (const ask of [...pending.values()]) {
+								pending.delete(ask.id);
+								ask.answer({outcome: {outcome: "cancelled"}});
+								yield* fold({type: "answered", ask: ask.id, answer: "cancelled"});
+								yield* send("ask", shown(ask, "cancelled"));
+							}
+							yield* c.cancel(id).pipe(Effect.ignore);
+						}),
+					model: (value: string) => setting("model", value),
+					effort: (value: string) => setting("thought_level", value),
+				};
+				// Once `prompt` closes, the last turns still run, and their asks are still answered.
+				yield* Effect.forkScoped(
+					serve(handlers, {until: ["prompt"]}).pipe(
+						Effect.andThen(Queue.offer(todo, null)),
+						Effect.andThen(serve(handlers)),
+					),
+				);
+
+				const runTurn = (w: Waiting) =>
+					Effect.gen(function* () {
+						const start = yield* Clock.currentTimeMillis;
+						turn = {
+							events: acpEvents(`${id}#${w.n}`),
+							spans: yield* agentTrace<null>(`acp ${flags.agent}`),
+						};
+						draw(turn.events.start(start, model));
+						yield* fold({type: "turn", n: w.n, prompt: w.prompt});
+						const response = yield* c.prompt(id, w.prompt);
+						yield* sync;
+						const ended: Ended = {
+							n: w.n,
+							stop: response.stopReason,
+							usage: usageOf(response.usage),
+						};
+						yield* fold({type: "ended", ended});
+						const end = yield* Clock.currentTimeMillis;
+						draw(turn.events.end(ended, end));
+						turn.spans?.end();
+						turn = null;
+						// The asks of a turn that ended are over: the harness no longer waits on them.
+						pending.clear();
+						yield* kept.dispatch({type: "ended", n: w.n});
+						const s = view.getState();
+						const said = saidIn(s, w.n);
+						if (said !== "") yield* send("said", said);
+						yield* send("result", {
+							turn: w.n,
+							stop: ended.stop,
+							ms: end - start,
+							input: ended.usage?.input ?? 0,
+							output: ended.usage?.output ?? 0,
+							cached: ended.usage?.cached ?? 0,
+							tools: s.tools.filter((t) => t.turn === w.n).length,
+							cost: s.context?.cost ?? null,
+						});
+					}).pipe(Effect.withSpan("acp turn", {attributes: {"acp.turn": w.n}}));
+
+				for (;;) {
+					const next = yield* Queue.take(todo);
+					if (next === null) return;
+					yield* runTurn(next);
+				}
+			}).pipe(Effect.scoped),
+	});
+
+export const acpProgram = acpIn("scratch");
+
+/** `acp` in a person's git repository: what the host's summon starts, never tsh's list. */
+export const acpInRepo = acpIn("repo");
 
 /** `acp`, listed for tsh: Node's process spawner and file system under Effect's. */
 export const acpEntry: Entry = listed(acpProgram, nodeServices);

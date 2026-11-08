@@ -15,7 +15,10 @@ import {Schema} from "effect";
 //     cut: "Title",                      // the one column cut with … to fit; a header above, or it does not type
 //   }}})
 //   output(Comparison, "Two runs.", {person: {line: Comparison.toLine}})    one value, one line
+//   output(Reply, "A reply.", {person: {line: (r) => r.text, announce: true}})  a line a screen reader is told too
 //   output(Schema.String, "The page as markdown.", {person: "none"})          for a pipe or a window only
+//   output(Progress, "Where it is.", {person: {status: (p) => `reading ${p.file}`}})   in place, never printed
+//   output(Asked, "A yes or no.", {person: {ask: (a) => ({id: a.id, text: a.title}), answer: "allow"}})
 //
 // Left out, tsh prints its own short form of the value, by its fields (../shell/short.ts).
 //
@@ -64,10 +67,27 @@ export interface TableView<T, H extends string = string> {
 	readonly next?: (first: T) => readonly Hint[];
 }
 
-/** How tsh shows an output's values to a person. */
+/**
+ * A yes or no a run waits on from the person at its terminal: what to ask, and the id the answer
+ * names. `null`: the question is over (answered, or cancelled), and nothing waits.
+ */
+export interface Question {
+	readonly id: string;
+	readonly text: string;
+}
+
+/**
+ * How tsh shows an output's values to a person. `status`: one line shown in place while the run
+ * works, as a progress line is, and never printed. `ask`: a yes or no the run waits on; tsh prints
+ * it with `allow? [y/N]`, and tells the person's answer to the input `answer` as `{ask, allow}`.
+ * A line with `announce` is told to a screen reader too, as it is printed (a terminal's canvas
+ * is blank to one): a reply a person waited on, not every line of a long output.
+ */
 export type Person<T, H extends string = string> =
-	| {readonly line: (value: T) => string}
+	| {readonly line: (value: T) => string; readonly announce?: boolean}
 	| {readonly table: TableView<T, H>}
+	| {readonly status: (value: T) => string}
+	| {readonly ask: (value: T) => Question | null; readonly answer: string}
 	| "none";
 
 /**
@@ -76,7 +96,7 @@ export type Person<T, H extends string = string> =
  * is. The types already hold the cut column to a header of the table.
  */
 export function personOf<T, H extends string>(person: Person<T, H>): Person<T, H> {
-	if (typeof person === "string" || "line" in person) return person;
+	if (typeof person === "string" || !("table" in person)) return person;
 	const {title, columns, cut} = person.table;
 	const headers = columns.map((c) => c.header);
 	if (title.trim() === "") throw new Error("a table needs a title: what its rows are");
