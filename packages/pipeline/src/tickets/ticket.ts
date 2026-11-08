@@ -1,5 +1,6 @@
 import {type Row, TraceId, Writer, type Writes, writerOf} from "@kampus/fabrika-old";
 import {Option, Schema} from "effect";
+import {Asked, Answered, answerOf} from "./ask.ts";
 
 // A ticket: one stream of facts on the ledger, and nothing else
 // (docs/direction/tickets-start-in-our-tracker.md). Ticket 3 is the registered name
@@ -232,6 +233,9 @@ export const TicketFact = Schema.Union([
  * at run time, so a cast one is refused too.
  */
 export const CodeFact = Schema.Union([
+	Asked,
+	Schema.Struct({type: Schema.Literal("withdrawn"), ask: Id, why: Schema.String}),
+	Schema.Struct({type: Schema.Literal("stopped"), why: Schema.String, resume: Stage}),
 	/**
 	 * Code started an agent run. `log`: where its own log is, once there is one. `trace`: the trace
 	 * id of the job the run is in, the key of its `JobRecord`
@@ -427,6 +431,7 @@ export type PrFact = typeof PrFact.Type;
 
 /** The two a person writes in the window, never code. */
 export const PersonFact = Schema.Union([
+	Answered,
 	/**
 	 * A person answered an ask: one of its picks, and a note if they wrote one. Never an agent.
 	 * `text`: the hash of the ticket's title and body the person saw (./approval.ts), so an approval covers
@@ -509,6 +514,8 @@ export const WRITTEN_BY = {
 	reviewed: "anyone",
 	pr: "anyone",
 	asked: "anyone",
+	withdrawn: "anyone",
+	stopped: "anyone",
 	carried: "anyone",
 	answered: "person",
 	rated: "anyone",
@@ -602,6 +609,40 @@ export const factsOf = <T extends Fact["type"]>(
 ): readonly FactOf<T>[] =>
 	timeline.flatMap((e) => (e.fact.type === type ? [e.fact as FactOf<T>] : []));
 
+/** The current subject still matches the sealed display. Writer clocks never decide expiry. */
+export const answerRefused = (timeline: readonly Entry[], fact: Answered, at: number): string | null => {
+	const ask = factsOf(timeline, "asked").find((a) => a.ask === fact.ask);
+	if (ask === undefined || !("format" in ask)) return "The sealed ask is missing";
+	if (factsOf(timeline, "withdrawn").some((w) => w.ask === ask.ask)) return "The ask was withdrawn";
+	if (ask.until !== null && at >= ask.until) return "The ask expired";
+	if (fact.saw !== ask.saw) return "The displayed question changed";
+	if (answerOf(ask, fact.answer) === null) return "The answer is not offered by this ask";
+	const evidence = ask.shows.evidence;
+	if (evidence._tag === "plan" && factsOf(timeline, "planned").at(-1)?.version !== evidence.version)
+		return "The plan changed";
+	if (evidence._tag === "change") {
+		const current = timeline.findLast((e) => e.fact.type === "pushed" || e.fact.type === "pr");
+		if (current !== undefined && "head" in current.fact && current.fact.head !== evidence.head)
+			return "The change head moved";
+	}
+	return null;
+};
+
+/** One answer reader for current and historical facts, including replacement waits. */
+export const readAnswer = (timeline: readonly Entry[], fact: FactOf<"answered">) => {
+	if (!("format" in fact)) return {ask: fact.ask, pick: fact.pick, note: fact.note, head: fact.head};
+	const ask = factsOf(timeline, "asked").find((a) => a.ask === fact.ask);
+	if (ask === undefined || !("format" in ask)) return null;
+	const answer = answerOf(ask, fact.answer);
+	return answer === null ? null : {
+		...answer, ask: ask.replaces ?? ask.ask,
+		head: ask.shows.evidence._tag === "change" ? ask.shows.evidence.head : undefined,
+	};
+};
+
+export const questionOf = (ask: FactOf<"asked">): string => "format" in ask ? ask.shows.what : ask.what;
+export const picksOf = (ask: FactOf<"asked">): readonly string[] => "format" in ask ? ask.shows.picks.map((p) => p.pick) : ask.picks;
+
 /**
  * The run live on a timeline: its last `started`, while no `ended` names that run. `null`: none
  * is. An earlier start that never ended is a run that died, so a later start, ended or not, is
@@ -637,7 +678,7 @@ export const writtenDuring = (
 };
 
 /** Why a lane fact does not fit the timeline before it, or `null` when it fits. */
-const misfit = (timeline: readonly Entry[], fact: Fact): string | null => {
+const misfit = (timeline: readonly Entry[], fact: Fact, at: number): string | null => {
 	switch (fact.type) {
 		case "started":
 			return factsOf(timeline, "started").some((s) => s.run === fact.run)
@@ -668,6 +709,8 @@ const misfit = (timeline: readonly Entry[], fact: Fact): string | null => {
 			if (asked === undefined) return `an answer to ask ${fact.ask}, which was never asked`;
 			if (factsOf(timeline, "answered").some((a) => a.ask === fact.ask))
 				return `ask ${fact.ask} answered a second time`;
+			if ("format" in fact) return answerRefused(timeline, fact, at);
+			if ("format" in asked) return "A sealed ask needs an exact display answer";
 			return asked.picks.includes(fact.pick)
 				? null
 				: `"${fact.pick}" is not one of ask ${fact.ask}'s picks`;
@@ -699,7 +742,7 @@ const step = (ticket: Ticket | undefined, entry: Entry): Ticket | string => {
 			? {number: entry.ticket, title: fact.title, state: "open", timeline: [entry]}
 			: `${where}: filed a second time`;
 	if (ticket === undefined) return `${where}: ${fact.type}, but the ticket was never filed`;
-	const wrong = misfit(ticket.timeline, fact);
+	const wrong = misfit(ticket.timeline, fact, entry.at);
 	if (wrong !== null) return `${where}: ${wrong}`;
 	return {...ticket, state: after(ticket.state, fact), timeline: [...ticket.timeline, entry]};
 };
