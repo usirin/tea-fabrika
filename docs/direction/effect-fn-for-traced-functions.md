@@ -35,6 +35,9 @@ const place = Effect.fnUntraced(function* (stream: string, id: string, line: Lin
   false alarms are counted and found to be about 0%, as a check that blocks needs
   ([Checks in AGENTS.md](../../AGENTS.md#checks)). The first count is below. It is far from 0%,
   so the rule stays off for now.
+- **A named exception, the span sink.** The span sink's own functions use unnamed `Effect.fn`
+  (a stack frame, no span), since the sink would otherwise record spans about itself.
+  *Changed 2026-11-07 (lead, from P37's build).*
 
 What Effect's docs say each one does
 (`node_modules/.pnpm/effect@4.1.1/node_modules/effect/src/Effect.ts`):
