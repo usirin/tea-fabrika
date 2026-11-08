@@ -34,8 +34,8 @@ import {foldMembers, type MemberFact, type Members} from "./members.ts";
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const READER = "gateway:t1";
 const MEMBERS = "door/members";
-// The one place an input id's text form lives here; P6's `CauseText` reads `in-<8 hex>-<n>` today.
-const CAUSE = "in-3f9a0c21-41";
+const PARENT = "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41";
+const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const NAME = "home";
@@ -80,7 +80,8 @@ const from = (over: Partial<From> = {}): From => ({
 	for: P,
 	sentAt: SENT,
 	seen: 0,
-	cause: CAUSE,
+	parent: PARENT,
+	traceId: TRACE,
 	build: "b-7c1d073",
 	...over,
 });
@@ -294,7 +295,7 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
 				build: FOUNDER_BUILD,
 				for: P,
 				seen: 0,
-				cause: null,
+				parent: null,
 			});
 		}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
 	);
@@ -315,7 +316,7 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
 	/** A Ledger whose append of `founded` is refused with `why`, after `before` runs. */
 	const refusing = (
 		sql: Sql,
-		why: "bad_line" | "bad_cause" | "seen_ahead" | "id_reused" | "too_big",
+		why: "bad_line" | "bad_parent" | "bad_trace" | "seen_ahead" | "id_reused" | "too_big",
 		before: Effect.Effect<void, LedgerError> = Effect.void,
 	) =>
 		Layer.effect(
@@ -332,7 +333,7 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
 
 	it.effect("a founding the ledger refuses fails loud, and never starts with no members", () =>
 		Effect.gen(function* () {
-			for (const why of ["bad_line", "bad_cause", "seen_ahead", "too_big"] as const) {
+			for (const why of ["bad_line", "bad_parent", "bad_trace", "seen_ahead", "too_big"] as const) {
 				const sql = fresh();
 				const layer = ClientManager.layer(FOUNDER).pipe(Layer.provide(refusing(sql, why)));
 				const failed = yield* Effect.flip(members.pipe(Effect.provide(layer)));
@@ -406,7 +407,7 @@ describe("p96, the traced history from the plan", () => {
 				const grant = granted("pA", "t1");
 				yield* write(grant, {seen: 0});
 				const sheet = addedSheet("pA", "r1");
-				yield* write(sheet, {seen: 0, cause: null, by: "SHA256:door-2"});
+				yield* write(sheet, {seen: 0, parent: null, by: "SHA256:door-2"});
 				const [founding, first, second] = yield* entries;
 				expect(founding?.id).toBe("founded");
 				expect(first).toMatchObject({
@@ -417,7 +418,8 @@ describe("p96, the traced history from the plan", () => {
 					by: "SHA256:door",
 					for: P,
 					sentAt: SENT,
-					cause: CAUSE,
+					parent: PARENT,
+					traceId: TRACE,
 					build: "b-7c1d073",
 				});
 				expect(second).toMatchObject({
@@ -425,7 +427,8 @@ describe("p96, the traced history from the plan", () => {
 					_tag: "added",
 					rev: 3,
 					seen: 2,
-					cause: null,
+					parent: null,
+					traceId: TRACE,
 				});
 				expect(second?.by).toBe("SHA256:door-2");
 			}).pipe(Effect.provide(clientsOn(onSql(fresh())))),
@@ -510,6 +513,7 @@ describe("p96, the stolen sheet race", () => {
 				expect(hook.before).toBeNull(); // the other Mac did run in between
 				expect(xAnswer).toEqual({_tag: "applied", rev: 3});
 				expect(answer).toEqual({_tag: "ignored", rev: 4, why: "used"});
+				expect(yield* write(macC)).toEqual({_tag: "ignored", rev: 4, why: "used"});
 				const m = yield* members;
 				expect(m.keys.get("pX")?.live).toBe(true);
 				expect(m.keys.get("pC")?.live ?? false).toBe(false);

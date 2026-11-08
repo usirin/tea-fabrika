@@ -73,7 +73,7 @@ const home = () => {
 	return {open, asked, rows, names: () => [...dbs.keys()]};
 };
 
-const PROCESS = "process_01JC9Q4W7Z3M8N5R2T6V0XKB4D";
+const PROCESS = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
 const job: ChainValue = {_tag: "job", process: PROCESS};
 const spans: ChainValue = {_tag: "spans"};
 const part = (n: number) => `job/${PROCESS}/${n}`;

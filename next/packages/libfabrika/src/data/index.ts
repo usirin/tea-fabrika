@@ -3,7 +3,17 @@
 // subpath, `./sqlite`, so this one names no platform.
 export {Archive, type BucketCalls} from "./archive.ts";
 export {Doorbell, Ledger, type LedgerCalls, LedgerError} from "./ledger.ts";
-export {Appended, CauseText, Entry, type InputId, Line, Rev, Waited} from "./log.ts";
+export {
+	Appended,
+	Entry,
+	fromHere,
+	type InputId,
+	Line,
+	ParentText,
+	Rev,
+	TraceId,
+	Waited,
+} from "./log.ts";
 export {type RecordCalls, RecordManager, Written} from "./records.ts";
 export {Referee, type Sql, type SqlValue} from "./referee.ts";
 export {SinkError, SpanSink} from "./sink.ts";

@@ -16,7 +16,7 @@ export class ProcessManager extends Context.Service<
 	ProcessManager,
 	{
 		/** One `started` line on `<pid>`, under the build hash. The same build again with the same
-		 *  `by`, `for` and `cause` gets its first placing; from another input it is `id_reused`. */
+		 *  `by`, `for` and `parent` gets its first placing; from another input it is `id_reused`. */
 		readonly start: (
 			pid: string,
 			code: {readonly program: string; readonly hash: string},
