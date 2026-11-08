@@ -2,7 +2,9 @@
 // Imports are inside each law so an absent planned module reports every law, not zero tests.
 import {Cmd, Machine} from "@demlik/tea/effect";
 import {describe, expect, it} from "@effect/vitest";
-import {Effect, Exit, Result, Schema} from "effect";
+import {Effect, Exit, Result, Schema, SchemaIssue} from "effect";
+import * as fc from "fast-check";
+import {ProgramLoader} from "./entry.ts";
 import {Input, Program, stepper} from "./program.ts";
 
 const Model = Schema.Struct({count: Schema.Int, replies: Schema.Int});
@@ -43,122 +45,290 @@ const authoring = () => ({
 	wake: () => null,
 });
 const spec = () => Program.make(authoring());
+const SEED = 119120;
+const parameters = {seed: SEED, numRuns: 100};
+const model = fc.record({count: fc.integer(), replies: fc.nat()});
+const declarations = fc
+	.record({
+		name: fc.string({minLength: 1}),
+		v: fc.integer({min: 1}),
+		initial: model,
+		description: fc.string(),
+		personDescription: fc.string(),
+		query: fc.integer(),
+	})
+	.map(({name, v, initial, ...data}) => {
+		const modelSchema = Schema.Struct(Model.fields);
+		const msgSchema = Schema.Union(Msg.members);
+		return {
+			...data,
+			initial,
+			modelSchema,
+			msgSchema,
+			fields: {
+				...authoring(),
+				name,
+				state: {v, upgrades: []},
+				machine: Machine.make({
+					...machine,
+					cmds: [save],
+					model: modelSchema,
+					msg: msgSchema,
+					init: (loaded) => [loaded ?? initial, []],
+				}),
+			},
+		};
+	});
+
+// Other laws use the loader so they do not choose stepper's Effect or Result API.
+const load = (raw: unknown) =>
+	Effect.runSync(
+		Effect.gen(function* () {
+			return (yield* (yield* ProgramLoader).load("test")).stepper;
+		}).pipe(Effect.provide(ProgramLoader.layer({test: raw}, {}))),
+	);
 
 describe("Program.make authoring laws, next/", () => {
 	it("fills the load declaration from the machine without copying or wrapping it", () => {
-		const p = Program.make({
-			...authoring(),
-			inputs: {add: "Add", throw: {description: "Fail deliberately", personOnly: true}},
-		});
-		expect(machine.model).toBe(Model);
-		expect(machine.msg).toBe(Msg);
-		expect(p.machine).toBe(machine);
-		expect(p.state.schema).toBe(Model);
-		expect(p.msg).toBe(Msg);
-		expect(p.view.data).toBe(Schema.Json);
-		expect(p.inputs.add).toMatchObject({_tag: "write", description: "Add", personOnly: false});
-		expect(p.inputs.throw).toMatchObject({_tag: "write", personOnly: true});
-		expect(p.inputs.add.schema).toBe(Msg);
-		expect(p.inputs.throw.schema).toBe(Msg);
-		expect(Result.isSuccess(Schema.decodeUnknownResult(Program.schema)(p))).toBe(true);
-		expect(stepper(p).init(null)).toMatchObject({view: {count: 0}});
+		fc.assert(
+			fc.property(
+				declarations,
+				({fields, initial, modelSchema, msgSchema, description, personDescription}) => {
+					const p = Program.make({
+						...fields,
+						inputs: {add: description, throw: {description: personDescription, personOnly: true}},
+					});
+					expect(p.machine).toBe(fields.machine);
+					expect(fields.machine.model).toBe(modelSchema);
+					expect(fields.machine.msg).toBe(msgSchema);
+					expect(p.state.schema).toBe(fields.machine.model);
+					expect(p.msg).toBe(fields.machine.msg);
+					expect(p.view.data).toBe(Schema.Json);
+					expect(p.inputs.add).toMatchObject({_tag: "write", description, personOnly: false});
+					expect(p.inputs.throw).toMatchObject({
+						_tag: "write",
+						description: personDescription,
+						personOnly: true,
+					});
+					expect(p.inputs.add.schema).toBe(fields.machine.msg);
+					expect(p.inputs.throw.schema).toBe(fields.machine.msg);
+					expect(Result.isSuccess(Schema.decodeUnknownResult(Program.schema)(p))).toBe(true);
+					expect(load(p).init(null)).toMatchObject({model: initial, view: {count: initial.count}});
+				},
+			),
+			parameters,
+		);
 	});
 	it("checks the declaration without calling program code or running a Cmd", () => {
-		const calls: string[] = [];
-		const never = (name: string): never => {
-			calls.push(name);
-			throw new Error(name);
-		};
-		const untouched = Machine.make({
-			model: Model,
-			msg: Msg,
-			cmds: [save],
-			init: () => never("init"),
-			update: {
-				add: () => never("update"),
-				throw: () => never("update"),
-				save_ok: () => never("update"),
-				save_err: () => never("update"),
-			},
-		});
-		const p = Program.make({
-			...authoring(),
-			machine: untouched,
-			view: () => never("view"),
-			refuse: () => never("refuse"),
-			wake: () => never("wake"),
-			inputs: {
-				read: Input.cases.read.make({
-					schema: Schema.Null,
-					description: "Read",
-					answer: () => never("answer"),
-				}),
-			},
-		});
-		expect(p.machine).toBe(untouched);
-		expect(calls).toEqual([]);
-		expect(p.inputs.read._tag).toBe("read");
-		expect(p.inputs.read.schema).toBe(Schema.Null);
+		fc.assert(
+			fc.property(declarations, ({fields, description, query}) => {
+				const calls: string[] = [];
+				const never = (name: string): never => {
+					calls.push(name);
+					throw new Error(name);
+				};
+				const untouched = Machine.make({
+					model: fields.machine.model,
+					msg: fields.machine.msg,
+					cmds: [save],
+					init: () => never("init"),
+					update: {
+						add: () => never("update"),
+						throw: () => never("update"),
+						save_ok: () => never("update"),
+						save_err: () => never("update"),
+					},
+				});
+				const p = Program.make({
+					...fields,
+					machine: untouched,
+					view: () => never("view"),
+					refuse: () => never("refuse"),
+					wake: () => never("wake"),
+					inputs: {
+						read: Input.cases.read.make({
+							schema: Schema.Struct({offset: Schema.Int}),
+							description,
+							answer: () => never("answer"),
+						}),
+					},
+				});
+				expect(p.machine).toBe(untouched);
+				expect(calls).toEqual([]);
+				expect(p.inputs.read._tag).toBe("read");
+				expect(p.inputs.read.description).toBe(description);
+				expect(Schema.decodeUnknownSync(p.inputs.read.schema)({offset: query})).toEqual({
+					offset: query,
+				});
+			}),
+			parameters,
+		);
 	});
 	for (const [label, broken] of [
-		["empty name", {name: ""}],
-		["missing machine", {machine: null}],
-		["invalid version", {state: {v: 0, upgrades: []}}],
-		["non-function view", {view: 3}],
-		["non-function refusal", {refuse: 3}],
-		["non-schema output", {outputs: {rows: {}}}],
+		["empty name", fc.constant({name: ""})],
+		["missing machine", fc.jsonValue().map((machine) => ({machine}))],
+		["invalid version", fc.integer({max: 0}).map((v) => ({state: {v, upgrades: []}}))],
+		["non-function view", fc.jsonValue().map((view) => ({view}))],
+		["non-function refusal", fc.jsonValue().map((refuse) => ({refuse}))],
+		["non-schema output", fc.jsonValue().map((rows) => ({outputs: {rows}}))],
 	] as const)
-		it(`throws for ${label}, while makeEffect reports a typed schema error without a defect`, () => {
-			// Deliberately untrusted JavaScript reaches the same constructors without a cast.
-			const raw: unknown = {...authoring(), ...broken};
-			const make = Reflect.get(Program, "make");
-			const makeEffect = Reflect.get(Program, "makeEffect");
-			expect(() => Reflect.apply(make, Program, [raw])).toThrow();
-			let checked: Effect.Effect<unknown, unknown> = Effect.void;
-			expect(() => {
-				checked = Reflect.apply(makeEffect, Program, [raw]);
-			}).not.toThrow();
-			const exit = Effect.runSyncExit(Effect.result(checked));
-			expect(Exit.isSuccess(exit)).toBe(true);
-			if (!Exit.isSuccess(exit)) return;
-			expect(Result.isFailure(exit.value)).toBe(true);
-			if (Result.isFailure(exit.value)) {
-				expect(exit.value.failure).toMatchObject({
-					_tag: "ProgramInvalid",
-					cause: {_tag: "SchemaError"},
-				});
-			}
+		it(`throws for ${label}, while makeEffect reports a bare schema issue without a defect`, () => {
+			fc.assert(
+				fc.property(declarations, broken, ({fields}, change) => {
+					// Deliberately untrusted JavaScript reaches the same constructors without a cast.
+					const raw: unknown = {...fields, ...change};
+					const make = Reflect.get(Program, "make");
+					const makeEffect = Reflect.get(Program, "makeEffect");
+					expect(() => Reflect.apply(make, Program, [raw])).toThrow();
+					let checked: Effect.Effect<unknown, unknown> = Effect.void;
+					expect(() => {
+						checked = Reflect.apply(makeEffect, Program, [raw]);
+					}).not.toThrow();
+					const exit = Effect.runSyncExit(Effect.result(checked));
+					expect(Exit.isSuccess(exit)).toBe(true);
+					if (!Exit.isSuccess(exit)) return;
+					expect(Result.isFailure(exit.value)).toBe(true);
+					if (Result.isFailure(exit.value)) {
+						expect(
+							SchemaIssue.isIssue(exit.value.failure),
+							"makeEffect must fail with the bare SchemaIssue.Issue",
+						).toBe(true);
+					}
+				}),
+				parameters,
+			);
 		});
 	it("makeEffect also constructs and loads a valid program", () => {
-		const p = Effect.runSync(Program.makeEffect(authoring()));
-		expect(p.machine).toBe(machine);
-		expect(stepper(p).init(null)).toMatchObject({_tag: "stepped", model: {count: 0, replies: 0}});
+		fc.assert(
+			fc.property(declarations, ({fields, initial}) => {
+				const p = Effect.runSync(Program.makeEffect(fields));
+				expect(p.machine).toBe(fields.machine);
+				expect(load(p).init(null)).toMatchObject({_tag: "stepped", model: initial});
+			}),
+			parameters,
+		);
 	});
 	for (const [label, change] of [
-		["initial view", {view: () => () => 1}],
-		["initial wake", {wake: () => "later"}],
+		["initial view", fc.integer().map((n) => ({view: () => () => n}))],
+		["initial wake", fc.string().map((text) => ({wake: () => text}))],
 	] as const)
 		it(`defers a broken ${label} to checked initialization`, () => {
-			const raw: unknown = {...authoring(), ...change};
-			const p = Reflect.apply(Program.make, Program, [raw]);
-			expect(() => stepper(p).init(null)).toThrowError(expect.objectContaining({why: "load"}));
+			fc.assert(
+				fc.property(declarations, change, ({fields}, broken) => {
+					const raw: unknown = {...fields, ...broken};
+					const p = Reflect.apply(Program.make, Program, [raw]);
+					expect(() => load(p).init(null)).toThrowError(expect.objectContaining({why: "load"}));
+				}),
+				parameters,
+			);
 		});
 	it("rejects a model that encodes to a non-JSON value", () => {
-		const NonJson = Schema.Struct({count: Schema.Int, body: Schema.Unknown});
-		const nonJson = Machine.make({
-			model: NonJson,
-			msg: Msg,
-			cmds: [],
-			init: () => [{count: 0, body: () => 1}, []],
-			update: {add: (s) => [s, []], throw: (s) => [s, []]},
-		});
-		const p = Program.make({
-			...authoring(),
-			machine: nonJson,
-			view: (s) => ({count: s.count}),
-			refuse: () => null,
-		});
-		expect(() => stepper(p).init(null)).toThrowError(expect.objectContaining({why: "load"}));
+		fc.assert(
+			fc.property(declarations, fc.integer(), ({fields, initial}, n) => {
+				const NonJson = Schema.Struct({count: Schema.Int, body: Schema.Unknown});
+				const nonJson = Machine.make({
+					model: NonJson,
+					msg: Msg,
+					cmds: [],
+					init: () => [{count: initial.count, body: () => n}, []],
+					update: {add: (s) => [s, []], throw: (s) => [s, []]},
+				});
+				const p = Program.make({
+					...fields,
+					machine: nonJson,
+					view: (s) => ({count: s.count}),
+					refuse: () => null,
+				});
+				expect(() => load(p).init(null)).toThrowError(expect.objectContaining({why: "load"}));
+			}),
+			parameters,
+		);
+	});
+	it("stepper returns a typed load failure for broken unknown declarations without throwing", () => {
+		const missing = fc.constantFrom(
+			"name",
+			"machine",
+			"state",
+			"msg",
+			"view",
+			"refuse",
+			"inputs",
+			"outputs",
+			"writes",
+			"wake",
+		);
+		const malformed = fc
+			.option(
+				fc.oneof(
+					fc.tuple(declarations, missing).map(([{fields}, field]) => {
+						const raw: Record<string, unknown> = {...Program.make(fields)};
+						delete raw[field];
+						return raw;
+					}),
+					fc
+						.tuple(declarations, fc.jsonValue(), fc.constantFrom("msg", "state", "view", "outputs"))
+						.map(([{fields}, bad, field]) => {
+							const p = Program.make(fields);
+							return {
+								...p,
+								...(field === "state"
+									? {state: {...p.state, schema: bad}}
+									: field === "view"
+										? {view: {...p.view, data: bad}}
+										: field === "outputs"
+											? {outputs: {rows: bad}}
+											: {msg: bad}),
+							};
+						}),
+					fc
+						.tuple(declarations, fc.jsonValue(), fc.constantFrom("refuse", "wake", "view", "init"))
+						.map(([{fields}, bad, field]) => {
+							const p = Program.make(fields);
+							return {
+								...p,
+								...(field === "init"
+									? {machine: {...p.machine, init: bad}}
+									: field === "view"
+										? {view: {...p.view, select: bad}}
+										: {[field]: bad}),
+							};
+						}),
+				),
+				{nil: null},
+			)
+			.map((raw) => ({bug: "generated broken declaration", raw}));
+		fc.assert(
+			fc.property(malformed, ({raw}) => {
+				// Expect Result<Stepper, SchemaError> or Effect<Stepper, SchemaIssue.Issue>.
+				// ProgramDown belongs to ProgramLoader; this failure keeps Schema's details.
+				let checked: unknown;
+				expect(() => {
+					checked = stepper(raw);
+				}).not.toThrow();
+				const isLoadEffect = (u: unknown): u is Effect.Effect<unknown, unknown> =>
+					Effect.isEffect(u);
+				let result: Result.Result<unknown, unknown>;
+				if (Result.isResult(checked)) result = checked;
+				else {
+					expect(isLoadEffect(checked)).toBe(true);
+					if (!isLoadEffect(checked)) return;
+					const exit = Effect.runSyncExit(Effect.result(checked));
+					expect(Exit.isSuccess(exit)).toBe(true);
+					if (!Exit.isSuccess(exit)) return;
+					result = exit.value;
+				}
+				expect(Result.isFailure(result)).toBe(true);
+				if (Result.isFailure(result)) {
+					expect(Schema.isSchemaError(result.failure) || SchemaIssue.isIssue(result.failure)).toBe(
+						true,
+					);
+				}
+			}),
+			{
+				...parameters,
+				examples: [[{bug: "null module threw ProgramDown instead of a typed failure", raw: null}]],
+			},
+		);
 	});
 });
 
@@ -186,8 +356,7 @@ describe("P11 program contract and p22 refusal", () => {
 			expect(() => Schema.decodeUnknownSync(Program.schema)({...spec(), ...broken})).toThrow();
 	});
 	it("plant, let settled bypass program.msg: only fold accepts checked Cmd replies", async () => {
-		const {stepper} = await import("./program.ts");
-		const p = stepper(spec());
+		const p = load(spec());
 		const before = {count: 2, replies: 0};
 		const ok = {type: "save_ok", cmd: save({n: 3}), value: 3, at: 42};
 		const err = {type: "save_err", cmd: save({n: 3}), error: {_tag: "disk"}, at: 42};
@@ -211,7 +380,6 @@ describe("P11 program contract and p22 refusal", () => {
 		}
 	});
 	it("a Cmd with an async result schema cannot settle before validation finishes", async () => {
-		const {stepper} = await import("./program.ts");
 		const asyncSave = {
 			...save,
 			schema: {
@@ -220,16 +388,16 @@ describe("P11 program contract and p22 refusal", () => {
 			},
 		};
 		const broken: unknown = {...spec(), machine: {...machine, cmds: [asyncSave]}};
-		const p = stepper(broken);
+		const p = load(broken);
 		expect(
 			p.step({count: 0, replies: 0}, {type: "save_ok", cmd: save({n: 1}), value: 1, at: 42}),
 		).toEqual({_tag: "refused", why: "bad_msg"});
 	});
 	it("a saved-state failure conforms to its error schema", async () => {
-		const {ProgramDown, stepper} = await import("./program.ts");
+		const {ProgramDown} = await import("./program.ts");
 		let error: unknown;
 		try {
-			stepper(spec()).init({count: "bad", replies: 0});
+			load(spec()).init({count: "bad", replies: 0});
 		} catch (thrown) {
 			error = thrown;
 		}
@@ -237,8 +405,8 @@ describe("P11 program contract and p22 refusal", () => {
 		expect(Schema.is(ProgramDown)(error)).toBe(true);
 	});
 	it("plant, reject every declaration: a complete pure tea program loads and steps", async () => {
-		const {Program, stepper} = await import("./program.ts");
-		const p = stepper(Schema.decodeUnknownSync(Program.schema)(spec()));
+		const {Program} = await import("./program.ts");
+		const p = load(Schema.decodeUnknownSync(Program.schema)(spec()));
 		expect(p.init(null)).toMatchObject({
 			_tag: "stepped",
 			model: {count: 0, replies: 0},
@@ -254,8 +422,7 @@ describe("P11 program contract and p22 refusal", () => {
 		});
 	});
 	it("plant, collapse refusals: bad_msg differs from the program's limit fields", async () => {
-		const {stepper} = await import("./program.ts");
-		const p = stepper(spec());
+		const p = load(spec());
 		const before = {count: 7, replies: 0};
 		expect(p.step(before, {type: "add", n: "3"})).toEqual({_tag: "refused", why: "bad_msg"});
 		expect(p.step(before, {type: "add", n: 4})).toEqual({
@@ -267,8 +434,7 @@ describe("P11 program contract and p22 refusal", () => {
 		expect(before).toEqual({count: 7, replies: 0});
 	});
 	it("plant, run refusal during replay: fold applies a once-accepted letter despite today's limit", async () => {
-		const {stepper} = await import("./program.ts");
-		const p = stepper(spec());
+		const p = load(spec());
 		expect(p.fold({count: 9, replies: 0}, {type: "add", n: 4})).toMatchObject({
 			_tag: "stepped",
 			model: {count: 13, replies: 0},
@@ -276,14 +442,12 @@ describe("P11 program contract and p22 refusal", () => {
 		});
 	});
 	it("p25 plant, turn a thrown step into a refusal: ProgramDown retains its failure class", async () => {
-		const {stepper} = await import("./program.ts");
-		expect(() => stepper(spec()).step({count: 0, replies: 0}, {type: "throw"})).toThrowError(
+		expect(() => load(spec()).step({count: 0, replies: 0}, {type: "throw"})).toThrowError(
 			expect.objectContaining({_tag: "ProgramDown", why: "step"}),
 		);
 	});
 	for (const part of ["model", "view", "cmd"] as const)
 		it(`p25 plant, trust the returned ${part}: a malformed pure result is ProgramDown`, async () => {
-			const {stepper} = await import("./program.ts");
 			const broken: unknown = {
 				...spec(),
 				machine: {
@@ -298,13 +462,12 @@ describe("P11 program contract and p22 refusal", () => {
 				},
 				view: part === "view" ? {data: Model, select: () => ({count: "bad"})} : spec().view,
 			};
-			expect(() => stepper(broken).step({count: 0, replies: 0}, {type: "add", n: 1})).toThrowError(
+			expect(() => load(broken).step({count: 0, replies: 0}, {type: "add", n: 1})).toThrowError(
 				expect.objectContaining({_tag: "ProgramDown", why: "step"}),
 			);
 		});
 	it("plant, treat a saved poison letter as fresh bad_msg: folding fails closed", async () => {
-		const {stepper} = await import("./program.ts");
-		expect(() => stepper(spec()).fold({count: 0, replies: 0}, {type: "add", n: null})).toThrowError(
+		expect(() => load(spec()).fold({count: 0, replies: 0}, {type: "add", n: null})).toThrowError(
 			expect.objectContaining({_tag: "ProgramDown", why: "saved_letter"}),
 		);
 	});

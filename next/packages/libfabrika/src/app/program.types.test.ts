@@ -1,9 +1,9 @@
 // T280, next/: authoring depends on libfabrika and tea alone. tsc checks the uncalled cases.
 import {Cmd, Machine} from "@demlik/tea/effect";
 import {expect, it} from "@effect/vitest";
-import {Input, Program, type ProgramInvalid, Write, stepper} from "@kampus/libfabrika";
-import type {Effect} from "effect";
-import {Schema} from "effect";
+import {Input, Program, ProgramLoader, Write} from "@kampus/libfabrika";
+import {Effect, Schema, type SchemaIssue} from "effect";
+import * as fc from "fast-check";
 import {expectTypeOf} from "vitest";
 
 const Model = Schema.Struct({count: Schema.Int});
@@ -40,34 +40,45 @@ const fields = {
 };
 
 it("a from-scratch libfabrika program compiles and loads with a real Cmd and no app import", () => {
-	const p = Program.make({...fields, view: (m) => ({total: m.count})});
-	expectTypeOf(p.machine).toEqualTypeOf(machine);
-	expectTypeOf(p.machine.init(null, {})[0]).toEqualTypeOf<typeof Model.Type>();
-	expectTypeOf(p.machine.init(null, {})[1][0]!).toEqualTypeOf<ReturnType<typeof save>>();
-	expectTypeOf(p.msg.Type).toEqualTypeOf<typeof Msg.Type>();
-	expectTypeOf(p.state.schema.Type).toEqualTypeOf<typeof Model.Type>();
-	expectTypeOf(p.view.select({count: 1})).toEqualTypeOf<{total: number}>();
-	expectTypeOf(p.inputs.add.schema.Type).toEqualTypeOf<typeof Msg.Type>();
-	expectTypeOf(p.outputs.count.Type).toEqualTypeOf<number>();
-	expectTypeOf(p.writes.saved.schema.Type).toEqualTypeOf<{
-		readonly _tag: "saved";
-		readonly count: number;
-	}>();
-	const ok = p.machine.update.save_ok({count: 1}, save.ok(save({count: 1}), {stored: 1}, 1));
-	const err = p.machine.update.save_err({count: 1}, save.err(save({count: 1}), {_tag: "disk"}, 1));
-	expectTypeOf(ok[0]).toEqualTypeOf<typeof Model.Type>();
-	expectTypeOf(err[1][0]!).toEqualTypeOf<ReturnType<typeof save>>();
-	expectTypeOf(Program.makeEffect({...fields, view: (m) => ({total: m.count})})).toExtend<
-		Effect.Effect<unknown, ProgramInvalid>
-	>();
-	expectTypeOf<
-		Effect.Error<ReturnType<typeof Program.makeEffect>>
-	>().toEqualTypeOf<ProgramInvalid>();
-	expectTypeOf<ProgramInvalid["cause"]>().toEqualTypeOf<Schema.SchemaError>();
-	const loaded = stepper(p);
-	const boot = loaded.init(null);
-	expectTypeOf(boot).toExtend<{readonly _tag: "stepped" | "refused"}>();
-	expect(boot).toMatchObject({_tag: "stepped", model: {count: 0}, view: {total: 0}});
+	fc.assert(
+		fc.property(fc.integer(), (count) => {
+			const p = Program.make({...fields, view: (m) => ({total: m.count})});
+			expectTypeOf(p.machine).toEqualTypeOf(machine);
+			expectTypeOf(p.machine.init(null, {})[0]).toEqualTypeOf<typeof Model.Type>();
+			expectTypeOf(p.machine.init(null, {})[1][0]!).toEqualTypeOf<ReturnType<typeof save>>();
+			expectTypeOf(p.msg.Type).toEqualTypeOf<typeof Msg.Type>();
+			expectTypeOf(p.state.schema.Type).toEqualTypeOf<typeof Model.Type>();
+			expectTypeOf(p.view.select({count: 1})).toEqualTypeOf<{total: number}>();
+			expectTypeOf(p.inputs.add.schema.Type).toEqualTypeOf<typeof Msg.Type>();
+			expectTypeOf(p.outputs.count.Type).toEqualTypeOf<number>();
+			expectTypeOf(p.writes.saved.schema.Type).toEqualTypeOf<{
+				readonly _tag: "saved";
+				readonly count: number;
+			}>();
+			const ok = p.machine.update.save_ok({count: 1}, save.ok(save({count: 1}), {stored: 1}, 1));
+			const err = p.machine.update.save_err(
+				{count: 1},
+				save.err(save({count: 1}), {_tag: "disk"}, 1),
+			);
+			expectTypeOf(ok[0]).toEqualTypeOf<typeof Model.Type>();
+			expectTypeOf(err[1][0]!).toEqualTypeOf<ReturnType<typeof save>>();
+			expectTypeOf(Program.makeEffect({...fields, view: (m) => ({total: m.count})})).toExtend<
+				Effect.Effect<unknown, SchemaIssue.Issue>
+			>();
+			expectTypeOf<
+				Effect.Error<ReturnType<typeof Program.makeEffect>>
+			>().toEqualTypeOf<SchemaIssue.Issue>();
+			const loaded = Effect.runSync(
+				Effect.gen(function* () {
+					return yield* (yield* ProgramLoader).load("scratch");
+				}).pipe(Effect.provide(ProgramLoader.layer({scratch: p}, {}))),
+			);
+			const boot = loaded.stepper.init({count});
+			expectTypeOf(boot).toExtend<{readonly _tag: "stepped" | "refused"}>();
+			expect(boot).toMatchObject({_tag: "stepped", model: {count}, view: {total: count}});
+		}),
+		{seed: 119120, numRuns: 100},
+	);
 });
 
 it("tea exposes the original schemas with readonly fields and a plain Msg, excluding Cmd replies", () => {
