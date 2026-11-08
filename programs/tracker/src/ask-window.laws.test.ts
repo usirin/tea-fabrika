@@ -1,6 +1,7 @@
 import {
 	arbConstantMsg,
 	arbMsg,
+	arbMsgSequence,
 	arbRecordMsg,
 	type MsgArbitraryTable,
 	propertyInvariant,
@@ -95,14 +96,18 @@ interface Law {
 	readonly check: (machine: Machine) => void;
 }
 
-const every = (name: string, law: (step: AskStep) => boolean | string): Law => ({
+const every = (
+	name: string,
+	law: (step: AskStep) => boolean | string,
+	prefix: readonly Msg[] = [],
+): Law => ({
 	name,
 	check: (machine) => {
 		for (const ask of ASKS)
 			propertyInvariant(
 				machine,
 				{ticket: 117, ask, now: NOW},
-				fc.array(arbMsg(table()), {maxLength: 30, size: "max"}),
+				arbMsgSequence(arbMsg(table()), {prefix, maxLength: 30, size: "max"}),
 				law as never,
 				OPTS,
 			);
@@ -160,6 +165,15 @@ const choiceNotes = every(
 			"the save changed the optional note"
 		);
 	},
+	// Random Msgs can miss typing and submitting. Exercise both optional-note paths every time.
+	[
+		{type: "pick", pick: "approve"},
+		{type: "submit", key: "Enter", now: NOW},
+		{type: "save_ok", value: null},
+		{type: "pick", pick: "approve"},
+		{type: "note", text: "the second file needs a look"},
+		{type: "submit", key: "Enter", now: NOW},
+	],
 );
 
 /**
