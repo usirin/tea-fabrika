@@ -11,6 +11,12 @@
 	{ "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
 	{ "glob": "next/apps/fabrika/e2e.ts", "why": "the end-to-end runner" },
 	{ "glob": "next/apps/fabrika/e2e/**", "why": "the end-to-end tests" },
+	{
+		"glob": "apps/fabrika/src/**/*.test.ts",
+		"why": "today's app tests, including configurable keys"
+	},
+	{ "glob": "apps/fabrika/e2e.ts", "why": "today's app end-to-end runner and screenshot checks" },
+	{ "glob": "fixtures/keybindings/**", "why": "hand-written keybinding files used by the exam" },
 	{ "glob": ".oxlintrc.json", "why": "the lint rules" },
 	{ "glob": ".oxfmtrc.json", "why": "the format settings" },
 	{ "glob": "oxlint-plugins/**", "why": "the custom lint rules and the lint runner" },

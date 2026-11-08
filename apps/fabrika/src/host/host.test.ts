@@ -16,7 +16,7 @@ import type {Open} from "../desk/desk.ts";
 import {tilesOf} from "../desk/desk.ts";
 import {defaults} from "../desk/keymap.ts";
 import {gridOf} from "../editor/grid.ts";
-import type {Down, Up} from "../link.ts";
+import {type Down, PROTOCOL, type Up} from "../link.ts";
 import {readToPage, type ToPage} from "../messages.ts";
 import {appWire, Unattached} from "../wire.ts";
 import {runHost} from "./run.ts";
@@ -196,6 +196,66 @@ describe("the host", () => {
 		expect(tileIds(seen.after)).toEqual(["t1"]);
 	});
 
+	it("takes a screen away from the pages shown it, while an app with no page looks on", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const {home, paths} = yield* freshHome;
+				const host = yield* hostOn(home);
+				// The app with no page attaches first, so the host meets it first when a screen goes.
+				const bare = yield* appOn(paths.sock);
+				yield* bare.wire.up;
+				const app = yield* appOn(paths.sock);
+				yield* app.wire.up;
+				app.send({type: "page"});
+				yield* until("t1's prompt", () => (app.rows("t1")[0] === "tsh$" ? true : undefined));
+				app.type("t1", "counter\r");
+				const port = yield* until("counter's port", () =>
+					app.got.find((m) => m.type === "port" && !m.port.startsWith("tile:")),
+				);
+				app.type("t1", "\x03");
+				const gone = yield* until("counter's port gone", () =>
+					app.got.find((m) => m.type === "gone"),
+				);
+				const after = yield* app.press("<c-b>");
+				yield* host.stop;
+				return {port, gone, after};
+			}),
+		);
+		expect(seen.gone).toEqual({
+			type: "gone",
+			port: seen.port.type === "port" ? seen.port.port : "",
+		});
+		expect(seen.after).toMatchObject({type: "answer", took: true});
+	});
+
+	it("closes every window when the last tile closes, and begins again on one fresh tile", async () => {
+		const seen = await go(
+			Effect.gen(function* () {
+				const {home, paths} = yield* freshHome;
+				const host = yield* hostOn(home);
+				const app = yield* appOn(paths.sock);
+				yield* app.wire.up;
+				app.send({type: "page"});
+				yield* until("t1's prompt", () => (app.rows("t1")[0] === "tsh$" ? true : undefined));
+				const first = app.desk();
+				yield* app.press("<c-b>");
+				yield* app.press("x");
+				yield* app.press("y");
+				const closed = yield* until("the window told to close", () =>
+					app.got.find((m) => m.type === "close"),
+				);
+				const fresh = yield* until("a fresh desk", () => {
+					const d = app.desk();
+					return d !== undefined && d !== first && tileIds(d).length === 1 ? d : undefined;
+				});
+				yield* host.stop;
+				return {closed, fresh};
+			}),
+		);
+		expect(seen.closed).toEqual({type: "close"});
+		expect(tileIds(seen.fresh)).toEqual(["t1"]);
+	});
+
 	it("shows two apps at once the same desk: Ctrl-B | from one splits it on both", async () => {
 		const seen = await go(
 			Effect.gen(function* () {
@@ -217,8 +277,18 @@ describe("the host", () => {
 				// b was given a port for the new tile's terminal, and was sent no answer: the keys were a's.
 				const bPorts = b.got.flatMap((m) => (m.type === "port" ? [m.port] : []));
 				const bAnswers = b.page().filter((m) => m.type === "answer");
+				// A list a key shows opens on the page whose key asked for it, as tmux's list-keys does.
+				yield* a.press("<c-b>");
+				yield* a.press("a");
+				const shownOnA = yield* until("the asks list on a", () =>
+					a.page().find((m) => m.type === "show" && m.what === "asks"),
+				);
+				// The prefix armed after it reaches b behind anything said to b before it.
+				yield* a.press("<c-b>");
+				yield* until("the prefix on b", () => (b.desk()?.prefix.armed === true ? true : undefined));
+				const shownOnB = b.page().filter((m) => m.type === "show");
 				yield* host.stop;
-				return {prefix, split, onB, bPorts, bAnswers};
+				return {prefix, split, onB, bPorts, bAnswers, shownOnA, shownOnB};
 			}),
 		);
 		expect(seen.prefix).toEqual({type: "answer", id: 0, took: true});
@@ -227,6 +297,8 @@ describe("the host", () => {
 		expect(seen.onB.workspaces[0].focused).toBe("t2");
 		expect(seen.bPorts).toEqual(["tile:t1", "tile:t2"]);
 		expect(seen.bAnswers).toEqual([]);
+		expect(seen.shownOnA).toEqual({type: "show", what: "asks"});
+		expect(seen.shownOnB).toEqual([]);
 	});
 
 	it("answers a key the desk does not take with took: false, for the page to pass it on", async () => {
@@ -327,7 +399,7 @@ describe("the host", () => {
 			}),
 		);
 		expect(seen.refused).toBeInstanceOf(Unattached);
-		expect(seen.refused.why).toEqual({kind: "version", theirs: 1, ours: 0});
+		expect(seen.refused.why).toEqual({kind: "version", theirs: PROTOCOL, ours: 0});
 		expect(seen.state).toBe("refused");
 		// Nothing past the hello: no desk, no port.
 		expect(seen.said).toEqual([]);
@@ -563,7 +635,7 @@ describe("attaching", () => {
 		expect(seen.refused instanceof Unattached ? seen.refused.why : null).toEqual({
 			kind: "version",
 			theirs: 0,
-			ours: 1,
+			ours: PROTOCOL,
 		});
 		expect(seen.after).toBe("live");
 		expect(seen.started).toBe(0);
@@ -737,6 +809,8 @@ describe("the host and the keys file", () => {
 		expect(seen.atStart).toEqual({
 			type: "keys",
 			...defaults,
+			version: expect.any(String),
+			changes: [],
 			file: {_tag: "refused", line: 1, why: "tezgah.zom is not a command"},
 		});
 		expect(seen.good).toMatchObject({prefix: "<c-a>", rows: defaults.rows, file: {_tag: "read"}});
@@ -838,7 +912,7 @@ describe("the host and the keys file", () => {
 		]);
 	});
 
-	it("logs a workspace clicked in the top bar by its number's word, and the palette opening not at all (p13)", async () => {
+	it("K19: logs a workspace click and palette opening by name and via, never ordinary typing", async () => {
 		const did = await goLogged((lines) =>
 			Effect.gen(function* () {
 				const {home, paths} = yield* freshHome;
@@ -854,11 +928,24 @@ describe("the host and the keys file", () => {
 				// A click on the first workspace in the top bar.
 				app.send({type: "on", port: "desk", m: {type: "pick", workspace: desk.workspaces[0].id}});
 				yield* done(1);
-				// The palette's own command runs no desk command, so it logs nothing; a split after it
-				// shows the host read it.
 				app.send({type: "on", port: "desk", m: {type: "run", does: "palette.open"}});
 				app.send({type: "on", port: "desk", m: {type: "run", does: "tezgah.split"}});
-				yield* done(2);
+				yield* done(3);
+				app.type("t1", "ordinary typing");
+				yield* Effect.sleep("100 millis");
+				// A second workspace, then a click on it: the word names the workspace clicked.
+				app.send({type: "on", port: "desk", m: {type: "run", does: 'tezgah."workspace --to new"'}});
+				const second = yield* until("a second workspace, in front", () => {
+					const [, w2] = app.desk()?.workspaces ?? [];
+					return w2 !== undefined && app.desk()?.active === w2.id ? w2 : undefined;
+				});
+				app.send({type: "on", port: "desk", m: {type: "pick", workspace: second.id}});
+				yield* done(5);
+				// An ask picked in the asks list goes to its tile: its workspace comes forward.
+				app.send({type: "on", port: "desk", m: {type: "go", tile: "t1"}});
+				yield* until("t1's workspace forward", () =>
+					app.desk()?.active === desk.workspaces[0].id ? true : undefined,
+				);
 				yield* host.stop;
 				return lines
 					.map(fieldsOf)
@@ -868,7 +955,137 @@ describe("the host and the keys file", () => {
 		);
 		expect(did).toEqual([
 			['tezgah."workspace --to 1"', {_tag: "click"}],
+			["palette.open", {_tag: "palette"}],
 			["tezgah.split", {_tag: "palette"}],
+			['tezgah."workspace --to new"', {_tag: "palette"}],
+			['tezgah."workspace --to 2"', {_tag: "click"}],
 		]);
 	});
+});
+
+it("K12: an editor save publishes one version to two windows and watcher echo adds no change", async () => {
+	await go(
+		Effect.gen(function* () {
+			const {home, paths} = yield* freshHome;
+			const host = yield* hostOn(home);
+			const a = yield* appOn(paths.sock);
+			const b = yield* appOn(paths.sock);
+			yield* a.wire.up;
+			yield* b.wire.up;
+			a.send({type: "page"});
+			b.send({type: "page"});
+			yield* until("a desk", a.desk);
+			yield* until("b desk", b.desk);
+			yield* a.press("<c-b>");
+			a.send({
+				type: "on",
+				port: "desk",
+				m: {
+					type: "keys.edit",
+					request: "edit-1",
+					edit: {_tag: "bind", does: "tezgah.zoom", keys: ["<prefix>m"]},
+					said: 100,
+				},
+			});
+			const onA = yield* until("editor save on a", () =>
+				lastKeys(a)?.rows.find((row) => row.does === "tezgah.zoom")?.keys[0]?.key === "m"
+					? lastKeys(a)
+					: undefined,
+			);
+			const onB = yield* until("editor save on b", () =>
+				lastKeys(b)?.rows.find((row) => row.does === "tezgah.zoom")?.keys[0]?.key === "m"
+					? lastKeys(b)
+					: undefined,
+			);
+			expect(onA).toEqual(onB);
+			expect(onA).toHaveProperty("version", expect.any(String));
+			expect(onA).toHaveProperty("changes", [expect.objectContaining({how: "pressed"})]);
+			expect(a.desk()?.prefix.armed).toBe(false);
+			const countA = keysSent(a).length;
+			const countB = keysSent(b).length;
+			yield* Effect.sleep("200 millis");
+			expect(keysSent(a)).toHaveLength(countA);
+			expect(keysSent(b)).toHaveLength(countB);
+			const fs = yield* FileSystem.FileSystem;
+			const text = yield* fs.readFileString(join(home, "keybindings.toml"));
+			expect(text).toContain("tezgah.zoom");
+			yield* host.stop;
+		}),
+	);
+});
+
+it("K20: an editor a page opens shows its view on its own run's port, and closing takes it away", async () => {
+	const seen = await goLogged((lines) =>
+		Effect.gen(function* () {
+			const {home, paths} = yield* freshHome;
+			const host = yield* hostOn(home);
+			const app = yield* appOn(paths.sock);
+			yield* app.wire.up;
+			app.send({type: "page"});
+			yield* until("a desk", app.desk);
+			app.send({type: "on", port: "desk", m: {type: "keys.open"}});
+			const opened = yield* until("the editor opened", () =>
+				app.page().find((m) => m.type === "keys.opened"),
+			);
+			const run = opened.type === "keys.opened" ? opened.run : "";
+			const view = yield* until("the editor's view", () =>
+				app.got.find((m) => m.type === "to" && m.port === `run:${run}`),
+			);
+			// An edit comes only by the checked inputs on the desk's port, never on the view's own.
+			app.send({type: "on", port: `run:${run}`, m: {type: "edit"}});
+			const refused = yield* until("the view's port refuses", () =>
+				lines.find((l) => l.includes(`refused a message on run:${run}`)),
+			);
+			app.send({type: "on", port: "desk", m: {type: "keys.close"}});
+			const closed = yield* until("the editor closed", () =>
+				app.page().find((m) => m.type === "keys.closed"),
+			);
+			const gone = app.got.find((m) => m.type === "gone" && m.port === `run:${run}`);
+			yield* host.stop;
+			return {run, view, refused, closed, gone};
+		}),
+	);
+	expect(seen.run).toMatch(/^keys:/);
+	expect(seen.view).toEqual({
+		type: "to",
+		port: `run:${seen.run}`,
+		m: {type: "view", program: "keys", data: {open: true}},
+	});
+	expect(seen.refused).toContain("Use the checked keys inputs on the desk port.");
+	expect(seen.closed).toEqual({type: "keys.closed", run: seen.run});
+	expect(seen.gone).toEqual({type: "gone", port: `run:${seen.run}`});
+});
+
+it("K20: one window closing its editor leaves tsh's keys waiting on another window's editor", async () => {
+	const seen = await go(
+		Effect.gen(function* () {
+			const {home, paths} = yield* freshHome;
+			const host = yield* hostOn(home);
+			const a = yield* appOn(paths.sock);
+			const b = yield* appOn(paths.sock);
+			yield* a.wire.up;
+			yield* b.wire.up;
+			a.send({type: "page"});
+			b.send({type: "page"});
+			yield* until("t1's prompt", () => (a.rows("t1")[0] === "tsh$" ? true : undefined));
+			const prompts = () => a.rows("t1").filter((row) => row.trim() === "tsh$").length;
+			a.type("t1", "keys\r");
+			for (const app of [a, b]) {
+				yield* until("the editor asked for", () =>
+					app.page().find((m) => m.type === "show" && m.what === "keys"),
+				);
+				app.send({type: "on", port: "desk", m: {type: "keys.open"}});
+				yield* until("the editor opened", () => app.page().find((m) => m.type === "keys.opened"));
+			}
+			a.send({type: "on", port: "desk", m: {type: "keys.close"}});
+			yield* until("a's editor closed", () => a.page().find((m) => m.type === "keys.closed"));
+			yield* Effect.sleep("300 millis");
+			const waiting = prompts();
+			b.send({type: "on", port: "desk", m: {type: "keys.close"}});
+			yield* until("tsh's prompt back", () => (prompts() > waiting ? true : undefined));
+			yield* host.stop;
+			return {waiting};
+		}),
+	);
+	expect(seen.waiting).toBe(0);
 });

@@ -70,6 +70,7 @@ work, so what is wrong shows early. Every "after ticket 117" below that holds on
 longer holds. A plan that only builds a decided note is approved by the lead agent; one that
 raises a new design call goes to the owner.
 
+- **Configurable keys on today's app, ticket 174.** Two pull requests. Keys PR 1, change your keys without leaving the app, is built and in review. Keys PR 2 brings program and mode keys into the same table. → the lead agent lands PR 1, then plans PR 2
 - **Design foundations on today's app, approved by the owner 2026-11-07.** [The build plan](./design-foundations.md): ticket 245, three pull requests. → the lead agent builds it
 
 - **Pipeline v0.** Built and merged ([259](https://github.com/usirin/tea-fabrika/pull/259), [260](https://github.com/usirin/tea-fabrika/pull/260), [264](https://github.com/usirin/tea-fabrika/pull/264)). Two rehearsals on a throwaway repo, then ticket 117 (below). → the self-fix plan

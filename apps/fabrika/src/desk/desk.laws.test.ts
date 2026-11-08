@@ -660,8 +660,8 @@ describe("the desk's laws", () => {
 			deafToEnded: [endedGoes.name],
 			swallowsCtrlC: [ctrlCReaches.name],
 			splitKeepsFocus: [splitOpens.name],
-			// A kept desk opens its focused tile again as it reads it, so the fold under focus shows there too.
-			foldsUnderFocus: [focusOpen.name, comesBack.name],
+			// The focus-cycle rows change seed 1's lists; the restore law has its own plant.
+			foldsUnderFocus: [focusOpen.name],
 			forgetsTheKept: [comesBack.name],
 		});
 		// Every law is caught by at least one plant.

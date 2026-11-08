@@ -35,7 +35,13 @@ const scrollersOf = (css: string) =>
 
 describe("a tile's scroll", () => {
 	it("is the view's alone: the frame clips, and only the frame's lists over the desk scroll too", () => {
-		expect(scrollersOf(CSS)).toEqual(["main.program > *", ".pop.menu, .pop.panel", ".pop .list"]);
+		expect(scrollersOf(CSS)).toEqual([
+			"main.program > *",
+			".pop.menu, .pop.panel",
+			".pop .list",
+			// The keys dialog is the frame's palette overlay over the desk, not a box in a tile view.
+			".keys-dialog",
+		]);
 		const frame = rulesOf(CSS).filter((r) => r.selector === "main.program");
 		expect(frame.map((r) => r.says.get("overflow"))).toEqual(["clip"]);
 		const palette = rulesOf(CSS).filter((r) => r.selector === ".pop.palette");

@@ -1,3 +1,4 @@
+import {Dialog} from "@manti-ui/react";
 import {
 	type ReactNode,
 	type RefObject,
@@ -12,6 +13,9 @@ import type {AsksNow} from "../asks.ts";
 import {activeOf, focusedOf, type Open} from "../desk/desk.ts";
 import type {Keys} from "../desk/keymap.ts";
 import {type Group, wordOf} from "../desk/keys.ts";
+import type {Editor, EditorMsg} from "../keys/machine.ts";
+import type {Snapshot} from "../keys/program.ts";
+import {KeysWindow} from "../keys/window.tsx";
 import type {FromPage, HostNow, LinkNow, SummonedOn, ToApp} from "../messages.ts";
 import {
 	agentsWord,
@@ -78,6 +82,9 @@ export interface FrameProps {
 	readonly attachedOnce: boolean;
 	/** The keys file's table, as the host sent it (desk/keymap.ts): the defaults until it says. */
 	readonly keys: Keys;
+	readonly keysEditor?: Editor | null;
+	readonly editKeys?: (msg: EditorMsg) => void;
+	readonly keyChanges?: Snapshot["changes"];
 	readonly shapes: Shapes;
 	readonly tickets: TicketsShown;
 	readonly armed: boolean;
@@ -1092,6 +1099,30 @@ function CommandPalette(props: FrameProps): ReactNode {
 	const close = useCallback(() => step({type: "close"}), [step]);
 	if (frame.over.kind !== "palette") return null;
 	const {title, query, at} = frame.over;
+	if (title === "keys" && props.keysEditor != null && props.editKeys !== undefined)
+		return (
+			<Dialog
+				id={POP.palette}
+				className="keys-dialog"
+				title="Keyboard shortcuts"
+				open
+				size="lg"
+				closeOnEscape={false}
+				showCloseButton={false}
+				closeOnInteractOutside={props.keysEditor.recording._tag !== "saving"}
+				onOpenChange={(open) => {
+					if (!open && props.keysEditor?.recording._tag !== "saving") close();
+				}}
+			>
+				<KeysWindow
+					keys={props.keys}
+					editor={props.keysEditor}
+					send={props.editKeys}
+					changes={props.keyChanges ?? []}
+					close={close}
+				/>
+			</Dialog>
+		);
 	const keys = title === "keys";
 	const shown = matching(commandsOf(props.keys, desk?.workspaces.length ?? 0), query);
 	const run = (i: number) => {

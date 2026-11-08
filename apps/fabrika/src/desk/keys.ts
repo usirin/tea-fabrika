@@ -1,4 +1,4 @@
-import type {Does as Command, Keys} from "./keymap.ts";
+import type {Does as Command, Key, Keys} from "./keymap.ts";
 import type {Direction, Orientation, TileId} from "./layout/index.ts";
 
 // The desk's keys: what each command does, and the key after the prefix it ships on. tmux's
@@ -37,13 +37,24 @@ export const REPEAT_MS = 500;
  * bar's agents, sync or host. The desk only says so; the page draws it, as tmux's server runs
  * `list-keys` and the client that pressed shows it.
  */
-export const SHOWS = ["asks", "jobs", "keys", "info", "bars", "agents", "sync", "host"] as const;
+export const SHOWS = [
+	"asks",
+	"jobs",
+	"keys",
+	"info",
+	"bars",
+	"agents",
+	"sync",
+	"host",
+	"palette",
+] as const;
 export type Show = (typeof SHOWS)[number];
 
 /** What a key after the prefix does, or a tsh word does in the tile it was typed in. */
 export type Does =
 	| {readonly kind: "split"; readonly orientation: Orientation}
 	| {readonly kind: "focus"; readonly to: Direction}
+	| {readonly kind: "cycle"; readonly to: "next" | "previous"}
 	/** Focus this tile, wherever it is: a click on it in the top bar's line. No key does it. */
 	| {readonly kind: "go"; readonly tile: TileId}
 	/** Turn the container holding the focused tile: horizontal to vertical and back. */
@@ -106,6 +117,8 @@ export const BINDINGS: readonly Binding[] = [
 	once("<arrowdown>", 'tezgah."focus --to down"', "focus down", {kind: "focus", to: "down"}),
 	once("<arrowup>", 'tezgah."focus --to up"', "focus up", {kind: "focus", to: "up"}),
 	once("<arrowright>", 'tezgah."focus --to right"', "focus right", {kind: "focus", to: "right"}),
+	once("<f6>", 'tezgah."focus --to next"', "focus next", {kind: "cycle", to: "next"}),
+	once("<s-f6>", 'tezgah."focus --to previous"', "focus previous", {kind: "cycle", to: "previous"}),
 	// Space turns the container, as AeroSpace's `layout horizontal vertical`. `f` folds the tile.
 	once(" ", "tezgah.turn", "turn", {kind: "turn"}),
 	once("f", "tezgah.fold", "fold", {kind: "fold"}),
@@ -156,6 +169,7 @@ export const groupOf = (does: Does): Group => {
 		case "close":
 			return "tile";
 		case "focus":
+		case "cycle":
 		case "go":
 			return "focus";
 		case "new":
@@ -178,6 +192,8 @@ export const wordOf = (does: Does): string => {
 		case "split":
 			return does.orientation === "horizontal" ? "split" : "split --to down";
 		case "focus":
+			return `focus --to ${does.to}`;
+		case "cycle":
 			return `focus --to ${does.to}`;
 		case "go":
 			return `focus --to ${does.tile}`;
@@ -205,9 +221,24 @@ export interface Press {
 	readonly ctrl: boolean;
 	readonly alt: boolean;
 	readonly meta: boolean;
+	readonly code?: string;
+	readonly shift?: boolean;
+	readonly composing?: boolean;
+	readonly altGraph?: boolean;
 }
 
-const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock", "Fn"]);
+const MODIFIERS = new Set([
+	"Shift",
+	"Control",
+	"Alt",
+	"Meta",
+	"CapsLock",
+	"Fn",
+	"Dead",
+	"Unidentified",
+	"Process",
+	"AltGraph",
+]);
 
 /**
  * A key's one spelling, as the table writes it: `<c-b>` for Ctrl-B, `<arrowleft>`, or the
@@ -215,13 +246,39 @@ const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock", "Fn"])
  * before the `|` it makes, and must not disarm the prefix.
  */
 export const keyName = (press: Press): string | null => {
-	if (MODIFIERS.has(press.key)) return null;
-	const named = press.key.length === 1 ? press.key : press.key.toLowerCase();
-	const base = press.key.length === 1 ? named : `<${named}>`;
-	if (!press.ctrl && !press.alt && !press.meta) return base;
-	const bare = base.startsWith("<") ? base.slice(1, -1) : base.toLowerCase();
-	const mods = `${press.ctrl ? "c-" : ""}${press.alt ? "a-" : ""}${press.meta ? "m-" : ""}`;
+	if (press.composing || MODIFIERS.has(press.key) || press.key === "") return null;
+	const char = [...press.key].length === 1;
+	const modified = press.ctrl || press.alt || press.meta;
+	const shift = press.shift && (!char || modified);
+	if (!modified && !shift) return char ? press.key : `<${press.key.toLowerCase()}>`;
+	const bare = char ? press.key.replace(/[A-Z]/g, (c) => c.toLowerCase()) : press.key.toLowerCase();
+	const mods = `${press.ctrl ? "c-" : ""}${press.alt ? "a-" : ""}${shift ? "s-" : ""}${press.meta ? "m-" : ""}`;
 	return `<${mods}${bare}>`;
+};
+
+/** Character matching comes before a Ctrl/Cmd fallback to a Latin key position. */
+export const matchPress = (press: Press, keys: readonly Key[], mac: boolean): Key | null => {
+	const name = keyName(press);
+	if (name === null) return null;
+	const exact = keys.find((key) => key.key === name);
+	if (exact !== undefined) return exact;
+	if (((press.alt && mac) || press.altGraph) && [...press.key].length === 1) {
+		const typed = keyName({...press, alt: false, ctrl: press.altGraph ? false : press.ctrl});
+		const folded = keys.find((key) => key.key === typed);
+		if (folded !== undefined) return folded;
+	}
+	if (
+		(press.ctrl || press.meta) &&
+		!press.altGraph &&
+		[...press.key].some((char) => (char.codePointAt(0) ?? 0) > 127)
+	) {
+		const latin = /^Key([A-Z])$/.exec(press.code ?? "")?.[1];
+		if (latin !== undefined) {
+			const position = keyName({...press, key: latin.toLowerCase()});
+			return keys.find((key) => key.key === position) ?? null;
+		}
+	}
+	return null;
 };
 
 /** Who a key belongs to: the system and its menu, the app (the desk or a tile), or nobody at all. */
@@ -259,8 +316,14 @@ export const keyOwner = (press: Press, mac: boolean, keys: Keys): KeyOwner => {
 	const name = keyName(press);
 	if (name === null || THE_MACS.has(name)) return "system";
 	const bound =
-		name === keys.prefix ||
-		keys.rows.some((row) => row.keys.some((k) => k._tag === "alone" && k.key === name));
+		matchPress(
+			press,
+			[
+				{_tag: "alone", key: keys.prefix},
+				...keys.rows.flatMap((row) => row.keys.filter((k) => k._tag === "alone")),
+			],
+			mac,
+		) !== null;
 	if (bound) return "app";
 	return keys.ignore.includes(name) ? "nobody" : "system";
 };

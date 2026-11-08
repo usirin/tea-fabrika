@@ -1,0 +1,7 @@
+# Two table-relative claims, one multiline, on the same key.
+[tezgah]
+zoom = [
+  "<prefix>m",
+]
+# The later assignment must name both owners when refused.
+"split --to down" = "<prefix>m"
