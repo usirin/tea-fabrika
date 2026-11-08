@@ -619,7 +619,8 @@ const squashed = (r: Repo, notes: Array<{note: object; commit: string}>, moveMai
 					...note,
 					by: "agent:planted",
 					arrivedAt: "2026-11-07T10:00:00-08:00",
-					cause: null,
+					parent: null,
+					traceId: `trace-step-${i}`,
 					commit,
 					pr: "usirin/tea-fabrika#1",
 					base: r.base,
@@ -649,6 +650,17 @@ const twoSteps = (r: Repo) => {
 };
 
 describe("chain after the merge (p86 and p89)", () => {
+	it("d4: refuses a logged link containing cause even with parent and traceId present", () => {
+		const r = new Repo();
+		const {squash, rows} = squashed(r, twoSteps(r));
+		rows[1]!.attested[0] = {...rows[1]!.attested[0]!, cause: null};
+		log(r, rows);
+		const out = r.run(["chain", "--squash", squash]);
+		expect(out.code).toBe(2);
+		expect(out.answers).toEqual([]);
+		expect(out.err).toContain("a link that does not read");
+	});
+
 	it("done: a squash whose links run from its base's tree to its tree, one through a lead merge", () => {
 		const r = new Repo();
 		const c1 = r.change("a.ts");

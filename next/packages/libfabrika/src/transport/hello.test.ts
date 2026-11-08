@@ -111,6 +111,23 @@ const setup = Effect.fnUntraced(function* () {
 	return {hello, trusted, who, consume, admit};
 });
 describe("P10 hello", () => {
+	it.effect("d2: unknown key refusal includes the fingerprint checked from the signed hello", () =>
+		Effect.gen(function* () {
+			const x = yield* setup();
+			// Plant: return not_granted without identifying the caller's checked key.
+			const result = yield* Transport.checkHello({
+				...x.trusted,
+				hello: x.hello,
+				admit: () => Effect.succeed(Transport.Admission.cases.refused.make({why: "not_granted"})),
+			});
+			expect(result).toEqual({
+				_tag: "refused",
+				why: "not_granted",
+				fingerprint: x.who.key,
+			});
+			expect(x.consume).not.toHaveBeenCalled();
+		}),
+	);
 	for (const binding of ["tab", "nonce"] as const)
 		it.effect(
 			`p26: an unsigned ${binding} claim cannot differ from the ${binding} bound by the proof`,

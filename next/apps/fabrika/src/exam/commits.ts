@@ -44,7 +44,8 @@ export const Link = Schema.TaggedStruct("attested", {
 	...Note.fields,
 	by: Schema.String,
 	arrivedAt: Schema.String,
-	cause: Schema.NullOr(Schema.String),
+	parent: Schema.NullOr(Schema.String),
+	traceId: Schema.String,
 	commit: Sha,
 	pr: Schema.String,
 	base: Sha,
@@ -100,7 +101,7 @@ export const signedText = (link: {
 	].join("\n");
 
 export const decodeNote = Schema.decodeUnknownOption(Schema.fromJsonString(Note));
-export const decodeLink = Schema.decodeUnknownOption(Link);
+export const decodeLink = Schema.decodeUnknownOption(Link, {onExcessProperty: "error"});
 
 const KEY_LINE =
 	/^(\S+) namespaces="fabrika-step" ssh-ed25519 (AAAAC3NzaC1lZDI1NTE5AAAAI[A-Za-z0-9+/]{43})$/;

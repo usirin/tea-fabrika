@@ -426,7 +426,8 @@ const link = (n: Note, more: Partial<Link> = {}): Link => ({
 	...n,
 	by: "agent:test-writer",
 	arrivedAt: "2026-11-07T10:00:00-08:00",
-	cause: null,
+	parent: null,
+	traceId: "trace-tests-229",
 	commit: T("1"),
 	pr: "usirin/tea-fabrika#1",
 	base: T("0"),
@@ -440,6 +441,25 @@ const TREES = new Map([
 	[T("f"), C],
 ]);
 const PLACED = {onMain: true, before: new Set([T("0")])};
+
+describe("d4: logged links use parent and traceId (Q15)", () => {
+	it.each([null, "in-process-test-1"])("keeps parent %s and the request's traceId", (parent) => {
+		const value = link(note("tests", A, B), {parent});
+		expect(decodeLink(value)).toEqual(Option.some(value));
+	});
+	it("refuses the old cause field even alongside parent and traceId", () => {
+		const value = link(note("tests", A, B));
+		// Plant: accept cause as an extra field, or as the old name for parent.
+		expect(Option.isNone(decodeLink({...value, cause: null}))).toBe(true);
+		const {parent: _, ...old} = value;
+		expect(Option.isNone(decodeLink({...old, cause: null}))).toBe(true);
+	});
+	it.each(["parent", "traceId"] as const)("requires %s", (field) => {
+		const value: Record<string, unknown> = {...link(note("tests", A, B))};
+		delete value[field];
+		expect(Option.isNone(decodeLink(value))).toBe(true);
+	});
+});
 
 describe("chain (p86 and p89 after the merge)", () => {
 	const good = [logged(link(note("tests", A, B))), logged(link(note("build", B, C)))];

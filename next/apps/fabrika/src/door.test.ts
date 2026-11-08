@@ -586,6 +586,87 @@ describe("P10 review regressions", () => {
 		return {client, hello, trusted};
 	});
 
+	it.effect("d1: a knock answers only its own code and expiry, never another waiting row", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const owner = yield* online(d, w);
+				const first = yield* pendingHello(d, w.otherWindow, "first");
+				const second = yield* pendingHello(d, w.agent, "second");
+				const replies = [
+					yield* d.knock(first.client, {label: "First browser", pass: "first-pass-hash"}),
+					yield* d.knock(second.client, {label: "Second browser", pass: "second-pass-hash"}),
+				];
+				const sibling = yield* pendingHello(d, w.otherWindow, "same-key-second-tab");
+				replies.push(yield* d.knock(sibling.client, {label: "First browser"}));
+				replies.push(yield* d.knock(second.client, {label: "Second browser"}));
+				const rows = (yield* d.watch(owner.client)).rows;
+				expect(rows).toHaveLength(2);
+				for (const [index, key] of [
+					[1, w.agent],
+					[0, w.otherWindow],
+					[2, w.otherWindow],
+					[3, w.agent],
+				] as const) {
+					const row = rows.find((r) => r.key === key.raw);
+					assert(row);
+					// Plants: return all rows, or the caller's row plus one other row.
+					expect(replies[index]).toEqual({_tag: "ok", result: {code: row.code, until: row.until}});
+				}
+			}).pipe(w.provide);
+		}),
+	);
+
+	it.effect("d2: a checked unknown key is refused with its own fingerprint", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const {client, hello, trusted} = yield* signedHello(d, w.otherWindow, "unknown");
+				// Plant: keep not_granted but drop the caller's fingerprint.
+				expect(yield* d.initialize(client, hello, trusted)).toEqual({
+					_tag: "refused",
+					why: "not_granted",
+					fingerprint: w.otherWindow.fingerprint,
+				});
+			}).pipe(w.provide);
+		}),
+	);
+
+	for (const [random, code] of [
+		[0, "000000"],
+		[7, "000007"],
+		[482109, "482109"],
+	] as const)
+		it.effect(`d3: waiting code ${code} keeps all six digits, including leading zeros`, () =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					const owner = yield* online(d, w);
+					const pending = yield* pendingHello(d, w.otherWindow, "code");
+					const original = crypto.getRandomValues.bind(crypto);
+					const rng = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
+						if (array instanceof Uint32Array && array.length === 1) {
+							array[0] = random;
+							return array;
+						}
+						return original(array);
+					});
+					try {
+						yield* d.knock(pending.client, {label: "Code browser"});
+						const rows = (yield* d.watch(owner.client)).rows;
+						expect(rows).toHaveLength(1);
+						// Plants: keep four digits, or omit zero padding.
+						expect(rows[0]?.code).toBe(code);
+					} finally {
+						rng.mockRestore();
+					}
+				}).pipe(w.provide);
+			}),
+		);
+
 	it.effect(
 		"review 3.1: a full spent-receipt store writes nothing and keeps live nonces spent",
 		() =>

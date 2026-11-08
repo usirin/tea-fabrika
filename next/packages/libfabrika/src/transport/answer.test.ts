@@ -90,32 +90,45 @@ describe("P10 JSON-RPC", () => {
 			}),
 		);
 	for (const state of ["new", "waiting"] as const)
-		it.effect(`p23: ${state} never reaches an application route`, () =>
-			Effect.gen(function* () {
-				const attached =
-					state === "new"
-						? T.Attached.cases.new.make({client: "c1", nonce: "n"})
-						: T.Attached.cases.waiting.make({
-								client: "c1",
-								key: "k",
-								nonce: "n",
-								hello: {
-									versions: [1],
-									has: [],
-									ping: "30s",
+		it.effect(
+			`d2: ${state} gets one no_hello reply without reaching an application route (p23)`,
+			() =>
+				Effect.gen(function* () {
+					const attached =
+						state === "new"
+							? T.Attached.cases.new.make({client: "c1", nonce: "n"})
+							: T.Attached.cases.waiting.make({
+									client: "c1",
 									key: "k",
-									tab: "t",
 									nonce: "n",
-									platform: "headless",
-									os: "linux",
-									sentAt: "",
-									signed: "",
-								},
+									hello: {
+										versions: [1],
+										has: [],
+										ping: "30s",
+										key: "k",
+										tab: "t",
+										nonce: "n",
+										platform: "headless",
+										os: "linux",
+										sentAt: "",
+										signed: "",
+									},
+								});
+					const route = vi.fn(() => Effect.die("unauthenticated route"));
+					// Plant: silently drop a request before the connection is online.
+					for (const method of ["ledger.read", "process.send", "unknown.method"])
+						for (const id of ["r1", 0]) {
+							const result = yield* T.answerFrame(frame({id, method}), attached, admit, route);
+							expect(result.send).not.toBeNull();
+							expect(JSON.parse(result.send!)).toEqual({
+								jsonrpc: "2.0",
+								id,
+								error: {code: -32000, message: "no_hello", data: {why: "no_hello"}},
 							});
-				const route = vi.fn(() => Effect.die("unauthenticated route"));
-				yield* T.answerFrame(frame(), attached, admit, route);
-				expect(route).not.toHaveBeenCalled();
-			}),
+							expect(result.attached).toEqual(attached);
+						}
+					expect(route).not.toHaveBeenCalled();
+				}),
 		);
 	for (const id of ["r1", 0])
 		it.effect(`p23: parked wait retains reply id ${id} and cursor, with no unresolved work`, () =>
