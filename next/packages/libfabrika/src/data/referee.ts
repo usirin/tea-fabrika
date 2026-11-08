@@ -8,7 +8,8 @@
 // sleep under a parked wait. Every call ends one span with names, ids and numbers only.
 import {Cause, Context, Effect, Equal, Exit, Layer, Option, Result, Schema} from "effect";
 import {Doorbell, LedgerError} from "./ledger.ts";
-import {Appended, Entry, Line, PAGE, Rev, Row, Waited} from "./log.ts";
+import {Appended, Entry, Line, PAGE, ParentText, Rev, Row, Waited} from "./log.ts";
+import {errorClass, short} from "./trace.ts";
 
 export type SqlValue = string | number | null;
 
@@ -31,7 +32,8 @@ const TABLES = [
 	`CREATE TABLE IF NOT EXISTS entries (
 		rev INTEGER PRIMARY KEY, stream TEXT NOT NULL, pos INTEGER NOT NULL, id TEXT NOT NULL,
 		"arrivedAt" INTEGER NOT NULL, "by" TEXT NOT NULL, "for" TEXT NOT NULL, "sentAt" TEXT NOT NULL,
-		seen INTEGER NOT NULL, cause TEXT, build TEXT NOT NULL, "_tag" TEXT NOT NULL, body TEXT NOT NULL,
+		seen INTEGER NOT NULL, parent TEXT, "traceId" TEXT NOT NULL,
+		build TEXT NOT NULL, "_tag" TEXT NOT NULL, body TEXT NOT NULL,
 		UNIQUE (stream, pos), UNIQUE (stream, id))`,
 	`CREATE INDEX IF NOT EXISTS entries_by_stream ON entries (stream, rev)`,
 	`CREATE TABLE IF NOT EXISTS rings (
@@ -44,29 +46,6 @@ const ID = "messaging.message.id";
 const OPERATION = "messaging.operation.type";
 const ERROR = "error.type";
 export const tag = (name: string): string => `fab.ledger.${name}`;
-
-/** The most characters a span tag holds (p95). Caller text past it is cut, its length kept beside. */
-const MOST_CHARS = 128;
-
-/** The first `MOST_CHARS` characters, one fewer when the cut would split a surrogate pair. */
-const cut = (text: string): string => {
-	const last = text.charCodeAt(MOST_CHARS - 1);
-	return text.slice(0, last >= 0xd800 && last <= 0xdbff ? MOST_CHARS - 1 : MOST_CHARS);
-};
-
-/** Span tags from text a caller hands in (a stream, id, `_tag`, `by`, reader): each as it is when it
- *  fits, else cut to 128 characters with its full length beside as `<key>.length`. */
-export const short = (texts: Readonly<Record<string, string>>): Record<string, string | number> =>
-	Object.fromEntries(
-		Object.entries(texts).flatMap(([key, text]) =>
-			text.length <= MOST_CHARS
-				? [[key, text]]
-				: [
-						[key, cut(text)],
-						[`${key}.length`, text.length],
-					],
-		),
-	);
 
 /** A waiter to ring, as the rings table holds it. */
 const Ring = Schema.Struct({to: Schema.String, after: Rev});
@@ -85,10 +64,15 @@ const Last = Schema.Struct({pos: Rev});
 /** A stream's newest rev, and how many of its entries sit past a reader's `after`. */
 const Lag = Schema.Struct({head: Rev, lag: Rev});
 
-/** A line as it may come in, with any cause text, so a bad cause is told apart from a bad line. */
-const Loose = Schema.Struct({...Line.fields, cause: Schema.NullOr(Schema.String)});
+/** Checks types before telling a bad parent or trace id apart from a bad line. */
+const Loose = Schema.Struct({
+	...Line.fields,
+	parent: Schema.NullOr(Schema.String),
+	traceId: Schema.String,
+});
 const strict = {onExcessProperty: "error"} as const;
 const decodeLoose = Schema.decodeUnknownResult(Loose, strict);
+const isParent = Schema.is(Schema.NullOr(ParentText));
 const decodeLine = Schema.decodeUnknownResult(Line, strict);
 const decodeId = Schema.decodeUnknownResult(
 	Schema.Struct({stream: Entry.fields.stream, id: Entry.fields.id}),
@@ -105,32 +89,47 @@ const bytes = (texts: ReadonlyArray<string | null>): number =>
 
 type Why = (typeof Appended.cases.refused.Type)["why"];
 
-/** The line, checked: its shape (p92), its cause (p68) and its row's size (flag 13). */
+/** The line, checked: shape (p92), parent (p68), trace (p68b) and row size (flag 13). */
 const check = (stream: string, id: string, input: unknown): Result.Result<Line, Why> => {
 	if (Result.isFailure(decodeId({stream, id}))) return Result.fail("bad_line");
 	const loose = decodeLoose(input);
 	if (Result.isFailure(loose)) return Result.fail("bad_line");
+	if (!isParent(loose.success.parent)) return Result.fail("bad_parent");
 	const line = decodeLine(loose.success);
-	if (Result.isFailure(line)) return Result.fail("bad_cause");
-	const {by, sentAt, cause, build, body} = line.success;
-	const texts = [stream, id, by, line.success.for, sentAt, cause, build, line.success._tag];
+	if (Result.isFailure(line)) return Result.fail("bad_trace");
+	const {by, sentAt, parent, traceId, build, body} = line.success;
+	const texts = [
+		stream,
+		id,
+		by,
+		line.success.for,
+		sentAt,
+		parent,
+		traceId,
+		build,
+		line.success._tag,
+	];
 	const size = bytes([...texts, JSON.stringify(body)]);
 	return size > MOST_BYTES ? Result.fail("too_big") : Result.succeed(line.success);
 };
 
-/** What decides an append. No `sentAt`: the writer's clock never decides (D3, S1). */
-type Decides = Omit<Line, "sentAt">;
+/** What decides an append. The writer's clock and trace never decide (D3, S1). */
+type Decides = Omit<Line, "sentAt" | "traceId">;
 
-/** A resend is the same `by`, `for`, `cause`, `_tag` and `body`; `seen` and `build` may differ. */
-const same = (line: Decides, first: Entry): boolean =>
+/** A resend is the same `by`, `for`, `parent`, `_tag` and `body`; `seen` and `build` may differ. */
+const same = (line: Decides, first: Decides): boolean =>
 	line.by === first.by &&
 	line.for === first.for &&
-	line.cause === first.cause &&
+	line.parent === first.parent &&
 	line._tag === first._tag &&
 	Equal.equals(line.body, first.body);
 
 /** The answer when the line is not written, or none when it is new and in range. */
-const decide = (line: Decides, first: Option.Option<Entry>, head: Rev): Option.Option<Placing> =>
+const decide = (
+	line: Decides,
+	first: Option.Option<Decides & Pick<Entry, "rev" | "pos">>,
+	head: Rev,
+): Option.Option<Placing> =>
 	Option.match(first, {
 		onSome: (entry) =>
 			Option.some(
@@ -146,8 +145,6 @@ const decide = (line: Decides, first: Option.Option<Entry>, head: Rev): Option.O
 
 /** What an atomic step threw: a SQL error, or a row that did not decode. Typed at once below. */
 class Threw extends Schema.TaggedError<Threw>()("Threw", {error: Schema.Unknown}) {}
-
-const errorClass = (error: unknown): string => (error instanceof Error ? error.name : typeof error);
 
 /** SQLite's own error code, as node:sqlite gives it (`errcode`), or the platform's `code`. */
 const errorCode = (error: unknown): Option.Option<string | number> => {
@@ -264,8 +261,8 @@ const make = (sql: Sql, doorbell: (typeof Doorbell)["Service"]): (typeof Referee
 			Option.match(last, {onNone: () => 0, onSome: (row) => row.arrivedAt}),
 		);
 		sql.exec(
-			`INSERT INTO entries (rev, stream, pos, id, "arrivedAt", "by", "for", "sentAt", seen, cause,
-				build, "_tag", body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO entries (rev, stream, pos, id, "arrivedAt", "by", "for", "sentAt", seen, parent,
+				"traceId", build, "_tag", body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			rev,
 			stream,
 			pos,
@@ -275,7 +272,8 @@ const make = (sql: Sql, doorbell: (typeof Doorbell)["Service"]): (typeof Referee
 			line.for,
 			line.sentAt,
 			line.seen,
-			line.cause,
+			line.parent,
+			line.traceId,
 			line.build,
 			line._tag,
 			JSON.stringify(line.body),

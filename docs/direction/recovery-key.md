@@ -23,22 +23,22 @@ A calm move to a new Mac needs neither. Migration Assistant most likely carries 
 decided both ways are offered. The file name stays, so links hold.*
 
 ```ts
-// A sketch. The sheet in one block: a second key, kept off the Mac, that lets in one new Mac, once.
+// A sketch. The sheet in one block: a second key, kept off the device, that lets in one new device, once.
 
 // 1. While the Mac lives. Once, from a quiet row in the menu bar. The app makes a recovery key,
 //    prints its 12 words, keeps only its public half, and signs one fact with the person key.
 {_tag: "added", add: {adds: {_tag: "recovery", key: "ssh-ed25519 AAAA...r1", v: 1}, drops: [],
   saw: {how: "sheet", check: "touch", typed: true, kept: "print"}}, signed: sshsig(personKey)}
 
-// 2. On a new Mac. The person types the address and the 12 words. The app rebuilds the recovery
+// 2. On a new device. The person types the address and the 12 words. The app rebuilds the recovery
 //    key, makes a fresh person key and window key, and signs one fact with the recovery key.
 {_tag: "added", add: {adds: {_tag: "person", key: "...p2", window: "...w2"}, drops: ["...p1", "...w1"],
   saw: {how: "recovery", check: "touch", old: "lost"}}, signed: sshsig(recoveryKey)}
 
 // 3. The door checks it like a grant: SSHSIG, one namespace, one check. The fold then says:
 //    p2 and w2 are in. p1, w1 and everything p1 let in are out, forever. The sheet r1 is spent.
-//    The old Mac, if online, is told at once. Same ledger, same `founded`, same notes, same name.
-//    The 12 words never left the new Mac.
+//    The old device, if online, is told at once. Same ledger, same `founded`, same notes, same name.
+//    The 12 words never left the new device.
 ```
 
 ## The answer first
@@ -47,14 +47,15 @@ decided both ways are offered. The file name stays, so links hold.*
   It is printed first, and a PDF is allowed. No QR in Tier 1.
 - **The words are a key, not a password.** They rebuild an Ed25519 recovery key. Its public half
   joins `founded.keys` through an `added` fact. The door never sees the words.
-- **A recovery key does one thing, once:** it lets in one new Mac (a person key and its window key)
+- **A recovery key does one thing, once:** it lets in one new device (a person key and its window key)
   and drops the keys the person picks. Then it is spent. Making a new sheet kills the old one.
 - **Every device the person owns is an equal person key,** as on Apple and Keybase. Any one may let
   in tabs, agents and other devices, and remove any of them. The sheet is the backstop. An agent is
-  never one, and a browser tab cannot approve others (lean, 70%).
-- **A Mac whose keys did not come across goes to the recovery screen,** never to a new founding.
-- **Recovery asks once: "Is your old Mac lost or stolen?"** The default is yes. Yes drops the old
-  Mac and everything it let in, all the way down. The old Mac is told at once if online.
+  never one, and a browser tab cannot approve others (lean, 70%). *Changed 2026-11-07 (owner): a
+  tab with a passkey made with user verification can approve, as an equal person key.*
+- **A device whose keys did not come across goes to the recovery screen,** never to a new founding.
+- **Recovery asks once: "Is your old device lost or stolen?"** The default is yes. Yes drops the old
+  device and everything it let in, all the way down. The old device is told at once if online.
 - **No wait and no passphrase,** for the sheet, ever. A stolen sheet stays the known hole. This
   matches products whose recovery secret is a strong key (experiment 216). Email is weak proof, so
   it waits 24 hours.
@@ -213,7 +214,7 @@ address    https://<the ledger's address>
 
 These 12 words open your fabrika. We cannot get them back for you.
 Keep this with your passport. fabrika will never ask for these words.
-Only type them on a new Mac's first screen. It works once.
+Only type them on a new device's first screen. It works once.
 ```
 
 - **Numbered slots in a grid,** as Ledger's and Trezor's cards. The top failure after "never made"
@@ -278,7 +279,7 @@ export const seedFrom = (words: ReadonlyArray<string>): Effect.Effect<Uint8Array
 
 ### 3. Does recovery revoke the old Mac's keys (decided)
 
-The recovery screen asks once: "Is your old Mac lost or stolen?", with **Yes, remove it and
+The recovery screen asks once: "Is your old device lost or stolen?", with **Yes, remove it and
 everything it let in** picked by default, and **No, I still have it** beside it.
 
 - **Yes (`old: "lost"`)** → `drops` names the old Mac's person key and window key, and every other
@@ -371,7 +372,9 @@ export const mayAdd = (members: Members, signer: string, add: Add):
 - **A browser tab joins and works, but cannot approve others.** A tab holds only a window key.
   Why: browser storage is weaker than a sealed key, and a phone's browser may clear it after 7 days
   without a visit. **Lean, 70%,** not yet settled. What would settle it: a phone as approver, which
-  the plan puts later.
+  the plan puts later. *Changed 2026-11-07 (owner): a tab can approve when the approval is signed by
+  a passkey (WebAuthn) made with user verification required; that tab is a person key. A tab with
+  only its window key still cannot ([Tier 1's question 19](../plan/tier-1.md#open-questions)).*
 - **A recovery key may** let in one new device and drop keys, once. It never grants a tab or an
   agent. The sheet's only job is to bring a device back.
 - **Anyone can re-check it later** with `ssh-keygen -Y verify`, since the signed text and the
@@ -476,8 +479,8 @@ Sheet r1-7f3a is used up.  [Make a new sheet]
 | No sheet yet | A quiet row in the menu bar: "No backup sheet. [Make one]". Never a prompt on open | Until one exists |
 | Making a sheet | Touch ID, print or save or write 12 words, type two of them back | Once per person, and after each recovery, about 2 minutes |
 | Checking a sheet | "Check my sheet" in the menu bar: type all 12 into numbered slots, offline. It answers "This is your live sheet, r1-7f3a", "Word N looks wrong" or "This is an old sheet. It no longer works" | Only when they choose |
-| Using a sheet | On a new Mac's first screen: "I have a backup sheet". Type the address and 12 words, answer once, Touch ID | Once in years |
-| After a recovery that dropped the old Mac | Each browser and agent that was let in asks again, one Approve each | Once, a handful of times |
+| Using a sheet | On a new device's first screen: "I have a backup sheet". Type the address and 12 words, answer once, Touch ID | Once in years |
+| After a recovery that dropped the old device | Each browser and agent that was let in asks again, one Approve each | Once, a handful of times |
 
 **Two words typed back at setup, plus "Check my sheet" (decided).** Two words catch a person who
 never wrote anything down. "Check my sheet" catches the order mistakes two words miss, as Trezor's
@@ -500,7 +503,7 @@ Each says what the attacker gets in Tier 1.
   old one. The app never shows the words again after making, so a photo can only be of the paper
   or of the screen that one time.
 - **A phishing page or message asking for the words.** The sheet says "fabrika will never ask for
-  these words. Only type them on a new Mac's first screen."
+  these words. Only type them on a new device's first screen."
 - **A stolen Mac, off or locked.** FileVault and the login Keychain hold the sealed person key. The
   thief gets nothing without the login password. You recover on a new Mac, answer "lost", and the
   old Mac and everything it let in are dead.
@@ -535,7 +538,7 @@ Cloudflare setup. The sheet stays the way with no email, and the way for a local
 
 ```text
 On a new device:  "Email me a code" -> a 6-digit code to the checked address -> typed on this device
-                  -> "Is your old Mac lost or stolen?" -> Touch ID
+                  -> "Is your old device lost or stolen?" -> Touch ID
 Every live device, at once:  "A new device asked to get in by email. It gets in at 14:02 tomorrow.
                               [Cancel it]"
 24 hours later, if nobody canceled:  the new device is in, and the drops apply.
@@ -682,7 +685,7 @@ The sheet, all of it. The calls the owner made on it:
 
 1. No wait before a sheet recovery takes effect, ever. A stolen sheet stays the known hole.
 2. No passphrase on top of the sheet.
-3. Ask once "Is your old Mac lost or stolen?", default yes.
+3. Ask once "Is your old device lost or stolen?", default yes.
 4. A dropped key drops everything it let in, all the way down, for Remove too.
 5. A sheet works once, and making a new sheet kills the old one.
 6. Print first, PDF allowed, with two guards: the old Mac told at once, and the save screen's
@@ -705,6 +708,16 @@ The sheet, all of it. The calls the owner made on it:
 14. The person's devices are equal roots in the grant tree; only tabs and agents hang under a
     device. The sheet belongs to the person, and removing a device leaves it alone.
 15. Each "Check my sheet" is recorded: when, which device, matched or not. Never the words.
+
+Decided by the owner, 2026-11-08, for a few friends on one Cloudflare account
+([experiment 229](../../experiments/229-browser-only-friends.md) rows 18 and 19):
+
+16. Recovery mail goes to any friend: Email Sending with the group's own domain, Access's
+    one-time PIN with only `workers.dev`. No check per friend. The install sets up the address,
+    the domain's DNS and the mail route through alchemy, with no steps by hand.
+17. An admin can re-invite a person who lost every device, as the same person, at once, with no
+    wait. An admin's invite is already trust, so recovery has no barrier
+    ([principles](./principles.md)). The ledger records who re-invited whom.
 
 Inside the decided part, still a lean:
 

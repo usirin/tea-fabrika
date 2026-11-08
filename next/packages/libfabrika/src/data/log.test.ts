@@ -1,14 +1,14 @@
 // p68 and p92 (docs/plan/tier-1-detail.md, "Properties"; P6's plan writes them out), for
 // `data/log.ts` and the referee's first step: every entry has every field, a writer can leave none
-// out and set none of the referee's, and an entry keeps its `cause` as text. Written before the
+// out and set none of the referee's, and an entry keeps its `parent` as text. Written before the
 // modules (Tier 1, P6, ticket 233).
 //
 // The shape these tests hold the modules to:
-// - `Line` is what a writer hands in: `by`, `for`, `sentAt`, `seen`, `cause`, `build`, `_tag` and
+// - `Line` is what a writer hands in: `by`, `for`, `sentAt`, `seen`, `parent`, `traceId`, `build`, `_tag` and
 //   `body`, every key required. `Entry` is a line plus `id`, `stream`, `pos`, `rev` and `arrivedAt`.
 // - `Referee.append(stream, id, line: unknown)` decodes the line with excess keys refused. A missing
 //   key, a wrong type, an empty `by`, `for`, `build` or `_tag`, or a key `Line` does not have is
-//   `{_tag: "refused", why: "bad_line"}`; a `cause` that is not a `CauseText` is `bad_cause`.
+//   `{_tag: "refused", why: "bad_line"}`; a bad `parent` is `bad_parent`, a bad trace is `bad_trace`.
 //   Either way nothing is written.
 // - `InputId` is a type only: nothing `./data` exports gives one.
 import {mkdtempSync, rmSync} from "node:fs";
@@ -20,22 +20,23 @@ import {Effect, Layer, Schema, Stream} from "effect";
 import * as fc from "fast-check";
 import * as data from "./index.ts";
 import {Doorbell, Ledger} from "./ledger.ts";
-import {CauseText, type Entry, type InputId, type Line} from "./log.ts";
+import type {Entry, InputId, Line} from "./log.ts";
 import {Referee, type Sql} from "./referee.ts";
 import {nodeSql} from "./sqlite.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const READER = "gateway:t1";
 
-// The one place the input id's text form lives. Every cause below, good or bad, is built from it,
-// so a new form (for example a TypeID) is a change to these two lines.
-const CAUSE = /^in-[0-9a-f]{8}-[1-9][0-9]*$/;
-const causes = (count: number): ReadonlyArray<string> =>
-	fc.sample(fc.stringMatching(CAUSE), {seed: SEED, numRuns: count});
-const [goodCause = "", otherCause = ""] = causes(2);
+// T246's approved addendum: a parent names the door's process, then its input counter.
+const PARENT = /^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-[1-9][0-9]*$/;
+const PROCESS = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
+const parents = (count: number): ReadonlyArray<string> =>
+	fc.sample(fc.stringMatching(PARENT), {seed: SEED, numRuns: count});
+const [goodParent = "", otherParent = ""] = parents(2);
+const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
-/** Texts one slip away from a good cause: none of them may pass. */
-const badCauses = (good: string): ReadonlyArray<string> => [
+/** Texts one slip away from a good parent: none of them may pass. */
+const badParents = (good: string): ReadonlyArray<string> => [
 	"",
 	good.toUpperCase(),
 	`${good} `,
@@ -44,6 +45,18 @@ const badCauses = (good: string): ReadonlyArray<string> => [
 	`${good}\n`,
 	good.slice(0, 4) + good.slice(5),
 	good.replace(/-/g, "_"),
+	"in-3f9a0c21-41",
+	"in-3f9a0c21-0",
+	"in-3f9a0c21-01",
+	"in-3f9a0c21-",
+	"in-3f9a0c2g-1",
+	`in-${PROCESS}-0`,
+	`in-${PROCESS}-01`,
+	`in-${PROCESS}-`,
+	...["i", "l", "o", "u"].map((char) => `in-process_0${char}${"0".repeat(24)}-1`),
+	`in-process_8${"0".repeat(25)}-1`,
+	`in-process_0${"0".repeat(24)}-1`,
+	`in-process_0${"0".repeat(26)}-1`,
 ];
 
 // Every ledger is a fresh node:sqlite file in one temp folder, removed after.
@@ -69,7 +82,8 @@ const full: Line = {
 	for: "owner",
 	sentAt: "2026-11-07T21:10:01.204Z",
 	seen: 0,
-	cause: null,
+	parent: null,
+	traceId: TRACE,
 	build: "b-7c1d073",
 	_tag: "saved",
 	body: {note: "n-7f3a", base: 3},
@@ -79,7 +93,7 @@ const json = (): Record<string, unknown> => JSON.parse(JSON.stringify(full));
 const without = (key: string): Record<string, unknown> =>
 	Object.fromEntries(Object.entries(json()).filter(([k]) => k !== key));
 
-const KEYS = ["by", "for", "sentAt", "seen", "cause", "build", "_tag", "body"] as const;
+const KEYS = ["by", "for", "sentAt", "seen", "parent", "traceId", "build", "_tag", "body"] as const;
 const ENTRY_KEYS = [...KEYS, "id", "stream", "pos", "rev", "arrivedAt"].sort();
 
 const refused = (why: string) => ({_tag: "refused", why});
@@ -98,12 +112,14 @@ const handIn = (lines: ReadonlyArray<unknown>) =>
 	});
 
 describe("p92, every entry has every field: the type", () => {
+	// Plant: traceId is optionalKey. Branding ParentText as InputId must fail the type law below.
 	it("a Line with any one key left out does not compile", () => {
 		const {by: _by, ...noBy} = full;
 		const {for: _for, ...noFor} = full;
 		const {sentAt: _sentAt, ...noSentAt} = full;
 		const {seen: _seen, ...noSeen} = full;
-		const {cause: _cause, ...noCause} = full;
+		const {parent: _parent, ...noParent} = full;
+		const {traceId: _traceId, ...noTrace} = full;
 		const {build: _build, ...noBuild} = full;
 		const {_tag: _t, ...noTag} = full;
 		const {body: _body, ...noBody} = full;
@@ -115,15 +131,17 @@ describe("p92, every entry has every field: the type", () => {
 		const c: Line = noSentAt;
 		// @ts-expect-error `seen` is required
 		const d: Line = noSeen;
-		// @ts-expect-error `cause` is required, even though its value may be null
-		const e: Line = noCause;
+		// @ts-expect-error `parent` is required, even though its value may be null
+		const e: Line = noParent;
+		// @ts-expect-error `traceId` is required, including an own write with no parent
+		const i: Line = noTrace;
 		// @ts-expect-error `build` is required
 		const f: Line = noBuild;
 		// @ts-expect-error `_tag` is required
 		const g: Line = noTag;
 		// @ts-expect-error `body` is required
 		const h: Line = noBody;
-		expect([a, b, c, d, e, f, g, h].map((line) => Object.keys(line).length)).toEqual(
+		expect([a, b, c, d, e, f, g, h, i].map((line) => Object.keys(line).length)).toEqual(
 			KEYS.map(() => KEYS.length - 1),
 		);
 	});
@@ -138,10 +156,12 @@ describe("p92, every entry has every field: the type", () => {
 		expect([a, b, c].length).toBe(3);
 	});
 
-	it("an entry's cause is text or null, and nothing ./data exports gives an InputId", () => {
-		expectTypeOf<(typeof Entry.Type)["cause"]>().toEqualTypeOf<string | null>();
-		expectTypeOf<Line["cause"]>().toEqualTypeOf<string | null>();
-		expectTypeOf<typeof CauseText.Type>().toEqualTypeOf<string>();
+	it("type law, ParentText is string, never InputId, and no data export makes an InputId", () => {
+		// A missing schema fails this assertion while the tests precede the build, not the import.
+		expect(data.ParentText, "the parent text schema is public").toBeDefined();
+		expectTypeOf<(typeof Entry.Type)["parent"]>().toEqualTypeOf<string | null>();
+		expectTypeOf<Line["parent"]>().toEqualTypeOf<string | null>();
+		expectTypeOf<typeof data.ParentText.Type>().toEqualTypeOf<string>();
 		// Each export, as a function's answer or a schema's decoded type: none of them is an InputId.
 		type Gives<T> = T extends (...args: never) => infer R
 			? R
@@ -159,6 +179,7 @@ describe("p92, every entry has every field: the type", () => {
 });
 
 describe("p92, every entry has every field: at the referee", () => {
+	// Plant: traceId is optionalKey; the missing-key case must fail while the full line is placed.
 	it.effect.each(KEYS)("a line missing `%s` is refused bad_line, and nothing is written", (key) =>
 		Effect.gen(function* () {
 			const {answers, entries} = yield* handIn([without(key), json()]);
@@ -195,6 +216,8 @@ describe("p92, every entry has every field: at the referee", () => {
 				{...json(), seen: 0.5},
 				{...json(), by: 7},
 				{...json(), sentAt: 1762549801311},
+				{...json(), parent: 7},
+				{...json(), traceId: null},
 				{...json(), _tag: null},
 				null,
 				"a line",
@@ -212,7 +235,7 @@ describe("p92, every entry has every field: at the referee", () => {
 			Effect.gen(function* () {
 				const ledger = yield* Ledger;
 				yield* ledger.append("notes:1", "w-1", full);
-				yield* ledger.append("notes:2", "w-2", {...full, cause: goodCause});
+				yield* ledger.append("notes:2", "w-2", {...full, parent: goodParent});
 				yield* ledger.append("notes:1", "w-3", {...full, seen: 2});
 				const entries = yield* Stream.runCollect(ledger.read("notes:1", 0));
 				expect(entries.map((entry) => Object.keys(entry).sort())).toEqual([ENTRY_KEYS, ENTRY_KEYS]);
@@ -244,7 +267,7 @@ describe("p92, every entry has every field: at the referee", () => {
 		"a row of exactly 2,000,000 UTF-8 bytes is placed, and one byte more is refused too_big",
 		() =>
 			Effect.gen(function* () {
-				// The row's bytes: its texts as UTF-8 (stream, id, by, for, sentAt, cause, build, _tag) and
+				// The row's bytes: its texts as UTF-8 (stream, id, by, for, sentAt, parent, traceId, build, _tag) and
 				// the body as JSON; numbers are not counted. handIn's ids, w-1 and w-2, are the same length.
 				const encoder = new TextEncoder();
 				const rowBytes = (line: Line): number =>
@@ -254,7 +277,8 @@ describe("p92, every entry has every field: at the referee", () => {
 						line.by,
 						line.for,
 						line.sentAt,
-						line.cause ?? "",
+						line.parent ?? "",
+						line.traceId,
 						line.build,
 						line._tag,
 						JSON.stringify(line.body),
@@ -284,56 +308,69 @@ describe("p92, every entry has every field: at the referee", () => {
 	);
 });
 
-describe("p68, an entry keeps its cause", () => {
-	it("CauseText takes the input id's text form and nothing one slip away", () => {
-		const is = Schema.is(CauseText);
-		expect(causes(50).every(is)).toBe(true);
-		expect(badCauses(goodCause).filter(is)).toEqual([]);
+describe("p68, an entry keeps its parent", () => {
+	// Plants: keep the old eight-hex pattern, loosen it to in-.*, or answer bad_line.
+	it("p68b, ParentText takes a TypeID process and a positive counter, and nothing one slip away", () => {
+		expect(data.ParentText, "the parent text schema is public").toBeDefined();
+		const is = Schema.is(data.ParentText);
+		expect(parents(50).every(is)).toBe(true);
+		expect(badParents(goodParent).filter(is)).toEqual([]);
 	});
 
-	it.effect("a cause, or null for an own write, is read back the same", () =>
+	it.effect.each([
+		["first character 0, counter 1", `in-process_${"0".repeat(26)}-1`],
+		["first character 7, counter 41", `in-process_7${"z".repeat(25)}-41`],
+	] as const)("p68b, a parent with %s is placed and kept as sent", ([, parent]) =>
+		Effect.gen(function* () {
+			const {answers, entries} = yield* handIn([{...json(), parent}]);
+			expect(answers).toEqual([{_tag: "placed", rev: 1, pos: 1}]);
+			expect(entries.map((entry) => entry.parent)).toEqual([parent]);
+		}).pipe(Effect.provide(onReferee(fresh()))),
+	);
+
+	it.effect("a parent, or null for an own write, is read back the same", () =>
 		Effect.gen(function* () {
 			const ledger = yield* Ledger;
-			yield* ledger.append("notes:1", "w-1", {...full, cause: goodCause});
-			yield* ledger.append("notes:1", "w-2", {...full, cause: null});
-			yield* ledger.append("notes:1", "w-3", {...full, cause: otherCause});
+			yield* ledger.append("notes:1", "w-1", {...full, parent: goodParent});
+			yield* ledger.append("notes:1", "w-2", {...full, parent: null});
+			yield* ledger.append("notes:1", "w-3", {...full, parent: otherParent});
 			const entries = yield* Stream.runCollect(ledger.read("notes:1", 0));
-			expect(entries.map((entry) => entry.cause)).toEqual([goodCause, null, otherCause]);
+			expect(entries.map((entry) => entry.parent)).toEqual([goodParent, null, otherParent]);
 		}).pipe(Effect.provide(onLedger(fresh()))),
 	);
 
 	it.effect(
-		"a cause one slip away from the form is refused bad_cause, and nothing is written",
+		"p68b, old eight-hex parents and malformed TypeID parents are refused bad_parent and write nothing",
 		() =>
 			Effect.gen(function* () {
-				const bad = badCauses(goodCause);
+				const bad = badParents(goodParent);
 				const {answers, entries} = yield* handIn([
-					...bad.map((cause) => ({...json(), cause})),
-					{...json(), cause: goodCause},
+					...bad.map((parent) => ({...json(), parent})),
+					{...json(), parent: goodParent},
 				]);
 				expect(answers).toEqual([
-					...bad.map(() => refused("bad_cause")),
+					...bad.map(() => refused("bad_parent")),
 					{_tag: "placed", rev: 1, pos: 1},
 				]);
-				expect(entries.map((entry) => entry.cause)).toEqual([goodCause]);
+				expect(entries.map((entry) => entry.parent)).toEqual([goodParent]);
 			}).pipe(Effect.provide(onReferee(fresh()))),
 	);
 
-	it("for any text, the referee places it as a cause exactly when it has the form (fast-check)", async () => {
-		const text = fc.oneof(fc.stringMatching(CAUSE), fc.string(), fc.string({unit: "binary"}));
+	it("for any text, the referee places it as a parent exactly when it has the form (fast-check)", async () => {
+		const text = fc.oneof(fc.stringMatching(PARENT), fc.string(), fc.string({unit: "binary"}));
 		await fc.assert(
 			fc.asyncProperty(fc.array(text, {minLength: 1, maxLength: 8}), (texts) =>
 				Effect.runPromise(
 					Effect.gen(function* () {
-						const {answers, entries} = yield* handIn(texts.map((cause) => ({...json(), cause})));
+						const {answers, entries} = yield* handIn(texts.map((parent) => ({...json(), parent})));
 						expect(answers.map((answer) => answer._tag === "placed")).toEqual(
-							texts.map((cause) => CAUSE.test(cause)),
+							texts.map((parent) => PARENT.test(parent)),
 						);
 						expect(answers.filter((answer) => answer._tag === "refused")).toEqual(
-							texts.filter((cause) => !CAUSE.test(cause)).map(() => refused("bad_cause")),
+							texts.filter((parent) => !PARENT.test(parent)).map(() => refused("bad_parent")),
 						);
-						expect(entries.map((entry) => entry.cause)).toEqual(
-							texts.filter((cause) => CAUSE.test(cause)),
+						expect(entries.map((entry) => entry.parent)).toEqual(
+							texts.filter((parent) => PARENT.test(parent)),
 						);
 					}).pipe(Effect.provide(onReferee(fresh()))),
 				),
@@ -341,4 +378,25 @@ describe("p68, an entry keeps its cause", () => {
 			{seed: SEED, numRuns: 40},
 		);
 	});
+});
+
+describe("p68b, an entry keeps a W3C trace id", () => {
+	// Plants: drop the all-zeros guard, or allow uppercase hex.
+	it.effect.each([
+		["all zeros", "0".repeat(32)],
+		["uppercase", TRACE.toUpperCase()],
+		["31 characters", TRACE.slice(1)],
+		["33 characters", `a${TRACE}`],
+		["not hex", `g${TRACE.slice(1)}`],
+		["empty", ""],
+		["leading space", ` ${TRACE}`],
+		["trailing space", `${TRACE} `],
+		["trailing newline", `${TRACE}\n`],
+	] as const)("%s is refused bad_trace and writes nothing", ([, traceId]) =>
+		Effect.gen(function* () {
+			const {answers, entries} = yield* handIn([{...json(), traceId}, json()]);
+			expect(answers).toEqual([refused("bad_trace"), {_tag: "placed", rev: 1, pos: 1}]);
+			expect(entries.map((entry) => [entry.id, entry.traceId])).toEqual([["w-2", TRACE]]);
+		}).pipe(Effect.provide(onReferee(fresh()))),
+	);
 });

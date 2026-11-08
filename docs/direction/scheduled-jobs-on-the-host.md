@@ -1,5 +1,12 @@
 # Scheduled jobs run on the host's alarms
 
+**Decided, in pieces:**
+
+- The shape: decided by the owner 2026-11-01, below.
+- A kept TLA+ spec is checked in the drift job, advise only: decided 2026-10-25 ([experiment 139](../../experiments/139-tla-trace-validation.md)).
+- Where a job that reads code runs for a team: answered 2026-11-02, in [Still open](#still-open).
+- What is left (which job first, how often) is tuning, not a call.
+
 Proposed 2026-10-24. Decided by the owner 2026-11-01.
 
 ```ts

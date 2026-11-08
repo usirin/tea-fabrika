@@ -1,5 +1,10 @@
 # The services fabrika needs, and CI on our own machines
 
+**Decided, in pieces:**
+
+- Every edge is a service, and `Ci` leaves `CodeHost`: decided 2026-10-25, below.
+- Our own machines as CI hosts: deferred to v1 the same day, not an open call.
+
 **Proposed 2026-10-25. Decided the same day: every edge is a service now,
 even one with a single Layer, and `Ci` leaves `CodeHost`** (the next section
 after the sketch). Our own machines as CI hosts are still proposed. Nothing

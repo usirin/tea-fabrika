@@ -1,5 +1,31 @@
-// The data layer's public names: the ledger, its shapes, and the referee a project object runs.
-// Tier 1, P6. node:sqlite's `Sql` is on its own subpath, `./sqlite`, so this one names no platform.
+// The data layer's public names: the ledger, its shapes, the referee a project object runs, and the
+// span sink with its records and archive. Tier 1, P6 and P37. node:sqlite's `Sql` is on its own
+// subpath, `./sqlite`, so this one names no platform.
+export {Archive, type BucketCalls} from "./archive.ts";
 export {Doorbell, Ledger, type LedgerCalls, LedgerError} from "./ledger.ts";
-export {Appended, CauseText, Entry, type InputId, Line, Rev, Waited} from "./log.ts";
+export {
+	Appended,
+	Entry,
+	fromHere,
+	type InputId,
+	Line,
+	ParentText,
+	Rev,
+	TraceId,
+	Waited,
+} from "./log.ts";
+export {type RecordCalls, RecordManager, Written} from "./records.ts";
 export {Referee, type Sql, type SqlValue} from "./referee.ts";
+export {SinkError, SpanSink} from "./sink.ts";
+export {
+	Archived,
+	Chain,
+	Content,
+	Health,
+	ProcessId,
+	Rolled,
+	Size,
+	SpanRow,
+	Summary,
+	Tag,
+} from "./trace.ts";

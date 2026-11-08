@@ -1,6 +1,6 @@
 # Areas: what an area is, and how the tracker narrows to one
 
-**Proposed 2026-11-04.** The owner already decided these, and each is marked decided below:
+**Decided 2026-11-07.** Every principle and smaller call is now decided; the owner's walks:
 
 - **2026-11-03, the look:** design B3 is the default. The tracker's list narrows to one area by an
   `--area` flag, a filter chip, the `f` menu and view tabs. B1's grouping stays as a Display option
@@ -15,7 +15,9 @@
   name an area filter that is not on, and the menu's area names come from the ledger, not a fixed
   list.
 
-Not walked yet: the shape below, the leans on A5 to A7, and the smaller calls.
+- **2026-11-07, the rest:** A5, A6 and A7 as leaned. An area can be deleted, and merging stays
+  (call 2). A guess may come from a small classifier, a project setting that is off by default
+  (call 6).
 
 Built from [experiment 205](../../experiments/205-organizing-work.md), which read about 40 makers
 and tools and built four designs and three rounds in today's tracker, and a Design canvas, "Area
@@ -78,6 +80,7 @@ const AreaFact = Schema.Union([
 	Schema.TaggedStruct("area_made", {area: AreaNumber, name: AreaName, suggested: Schema.optionalKey(Suggested)}),
 	Schema.TaggedStruct("area_renamed", {area: AreaNumber, name: AreaName}),
 	Schema.TaggedStruct("area_merged", {area: AreaNumber, into: AreaNumber}),
+	Schema.TaggedStruct("area_deleted", {area: AreaNumber}), // call 2, decided 2026-11-07
 ]);
 
 // On the ticket's stream. They join today's `Fact` union, so they keep its `type` key.
@@ -89,7 +92,7 @@ Schema.Struct({type: Schema.Literal("area_picked"), area: Schema.NullOr(AreaNumb
 // The fold's answer. Nobody writes it; it rebuilds from the log.
 const TicketArea = Schema.Union([
 	Schema.TaggedStruct("picked", {area: Schema.NullOr(AreaNumber)}),        // the last pick wins
-	Schema.TaggedStruct("guessed", {area: AreaNumber, why: Schema.Literals(["filer", "source"])}),
+	Schema.TaggedStruct("guessed", {area: AreaNumber, why: Schema.Literals(["filer", "source", "judge"])}),
 	Schema.TaggedStruct("none", {}),
 ]);
 ```
@@ -206,19 +209,20 @@ Kind: **law** (the test writer can check it), **lint** (`pnpm lint` can hold it)
 
 ### A5: don't say it twice
 
-**Lean, 65%. Kind: taste.** Round 3, which the owner said yes to, follows it.
+**Decided 2026-11-07, as leaned. Kind: taste.** Round 3, which the owner said yes to, follows it.
 
 - **What it means.** A row drops the area word when the view already names the area. On "All open"
   each row says its area.
 - **Why.** Linear: "Choose what issue properties are displayed on individual issues on lists or
   the board" [l11]; Linear leaves it to the person, we decide it by the view.
 - **Doubt.** The "?" of a guess lived on that word. Under the Pipeline view a guessed row loses it.
-  Lean: a guessed row keeps a small "?" where the word was. A shot settles it.
+  Decided: a guessed row keeps a small "?" where the area word was dropped. A shot still checks
+  the look.
 - **B3 as first built broke it:** 21 rows said "Pipeline" under the Pipeline view.
 
 ### A6: picking an area is a menu, not a program, until areas have a job of their own
 
-**Lean, 70%. Kind: taste.**
+**Decided 2026-11-07, as leaned. Kind: taste.**
 
 - **What it means.** The area menu lives in the tracker. No `areas` program on a pipe.
 - **Why.** Program guidelines G1, one job per program
@@ -231,7 +235,7 @@ Kind: **law** (the test writer can check it), **lint** (`pnpm lint` can hold it)
 
 ### A7: a saved view is a named filter, never a title search
 
-**Lean, 75%. Kind: law.**
+**Decided 2026-11-07, as leaned. Kind: law.**
 
 - **What it means.** A view tab sets the same filter as the chip it shows. No view matches title
   words.
@@ -256,11 +260,25 @@ window    the f menu: each area row takes r (rename) and m (merge into ...); the
 anyway. The menu is where a person already looks. Keys inside a menu row are new here; a sheet
 over the tile ([layers](./layers.md), L2) was the other way.
 
-### 2. An area is never deleted, only merged
+### 2. An area can be deleted, and merged
 
-Lean, 60%. Jira's delete offers "substitute" or "remove ... from all issues" [j2]. A merge is the
-substitute; a remove leaves tickets with a pick that points nowhere. An area nobody uses stays in
-the menu with a count of 0, and can be merged away.
+```ts
+// A sketch, today's version. One more person fact on tracker/areas.
+Schema.TaggedStruct("area_deleted", {area: AreaNumber})
+// areaOf(193) before: {_tag: "picked", area: 1}; after area_deleted {area: 1}: {_tag: "none"}
+```
+
+```text
+f menu row   d on Pipeline   Delete Pipeline? 21 tickets go to No area yet.   [Delete] [Cancel]
+```
+
+**Decided 2026-11-07 by the owner.** **Changed 2026-11-07:** the lean was "never deleted, only
+merged". Now both stay, as Jira's delete offers "substitute" or "remove ... from all issues" [j2].
+A ticket needs no area, since "No area yet" is a normal value (A3), so deleting moves its tickets
+there. The menu row asks first, with the count. The ledger keeps the `area_deleted` fact, so
+history still shows a ticket's old area, and the fold maps a deleted area's tickets, picked or
+guessed, to `none`. The fold refuses a delete of an area that does not exist, is merged or is
+deleted already, and a merge into a deleted area.
 
 ### 3. How a guess looks
 
@@ -293,11 +311,27 @@ b   the job item keeps the typed line, as tsh's jobs table does; only the tab ro
 prints: a job's line means how to get back to where it is now, not what was typed. The job item
 is the frame's, and the frame note leaves it to nobody yet ([the frame](./the-frame.md)).
 
-### 6. No guess from a pull request's files yet
+### 6. A guess may come from a small classifier, off by default
 
-Lean, 60%. The designs guessed from a pull request's files through a list of folders, which call 5
-rules out. A files guess can come back later from past picks: the files of pull requests on
-tickets a person placed. v0 guesses from the filer and the source only.
+```toml
+# the project's settings
+[areas]
+guess = "off"   # or "jev": costs money and sends titles and file paths to Jev
+```
+
+```ts
+// A sketch. The pipeline's Judge primitive answers one narrow question.
+// in:  {title, files?: string[], areas: [{area, name}]}   files: a pull request's, when there is one
+// out: {_tag: "area", area: 1} | {_tag: "dont_know"}
+// areaOf(193)  {_tag: "guessed", area: 1, why: "judge"}   still a "?" until a person picks
+```
+
+**Decided 2026-11-07 by the owner.** **Changed 2026-11-07:** the lean was no files guess in v0.
+Now a guess may come from Judge (Jev), given the ticket's title, a pull request's changed files
+when there is one, and the project's areas. Its answer is still a guess with "?" (A2) until a
+person picks. It is a project-level setting, off by default. Before it is ever on by default, it is
+measured on this repo's tickets against the areas people picked. With it off, v0 guesses from the
+filer and the source only, as before.
 
 ### 7. The onboarding step
 
@@ -332,7 +366,7 @@ today, so on screen PR 1 still shows no area anywhere.
 | `guess` on `filed` | **Yes.** Only the filer knows its guess at filing. |
 | `suggested` on `area_made` | **Yes.** What the person saw and took exists only at that moment. |
 | `area_picked`, with its `by` and `at` | Yes: who placed a ticket, and when. |
-| `area_renamed`, `area_merged` | Yes: the old names, so old tickets and old talk still read. |
+| `area_renamed`, `area_merged`, `area_deleted` | Yes: the old names, so old tickets and old talk still read. |
 | A ticket's area | No: a fold, it rebuilds from the log. |
 
 ## The build in today's version
@@ -363,7 +397,7 @@ laws and the shots). One new stream, four new person kinds at the door, one new 
 
 ## Made up here
 
-`tracker/areas`, `AreaNumber`, `AreaName`, `AreaFact`, `area_made`, `area_renamed`, `area_merged`,
+`tracker/areas`, `AreaNumber`, `AreaName`, `AreaFact`, `area_made`, `area_renamed`, `area_merged`, `area_deleted`, the `d` key, `[areas] guess`, `dont_know`, the `judge` why,
 `suggested` and its two cases, `guess`, `area_picked`, `TicketArea` and its cases, `areasOf`,
 `areaOf`, the inputs `make_area`, `rename_area`, `merge_area`, the `p` key, the "?" mark, the
 onboarding words, and every count in the trace.
@@ -372,6 +406,7 @@ onboarding words, and every count in the trace.
 
 - Whether a "?" on most rows is calm or noisy. Only a shot of the build shows it.
 - Whether the filer's guess is often right. No agent has filed with a `guess` yet.
+- Whether the Judge guess is right often enough to be on by default. Not measured yet.
 - Whether the owner filters by area day to day. One person pressed a draft; a week of use answers it.
 - Whether the onboarding suggestions are good. PR 1 built them; on this repository most are
   folders, and whether a person wants twelve folder rows is not known until one uses it.

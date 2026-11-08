@@ -274,7 +274,7 @@ At 600 lines an agent hour ([agent hours](./agent-hours.md)):
    Fixed slot words: `background` (with `base` and `surface` under it), `text`, `icon`, `border`;
    `subtle`, `muted`, `strong`; `hover`, `active`, `focus`; ladders `low`/`lower`/`lowest` and
    `high`/`higher`/`highest`. Each token's data names its `owner`; the lint rule reads that field,
-   never the name's prefix. The keys inside a token file are still open. The renames land in call 6's
+   never the name's prefix. The keys inside a token file were decided 2026-11-07 (owner): `type` (`background`, `text`, `icon` or `border`), `tier`, `owner`, `description`, `[colors]` with `dark` and `light`, or `extends`, or a Radix `scale`, and `on`, `floor`, `aim` and `carries`. The renames land in call 6's
    one pull request. Code never reaches a primitive: the rule is lint (`no-restricted-imports`, one
    exception for the token build), not a test (owner, 2026-11-07).
 4. Restate "accent only for your turn" as "a token means one thing", with focus one slate token?

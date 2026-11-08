@@ -512,15 +512,68 @@ When a person meets it:
 - **At load, when a file does not decode:** `theme nord: ground is not a color; using fabrika`.
 - There is no prompt on opening the app.
 
-Not settled by this decision, still proposed:
+The points this decision left open, each decided 2026-11-07 unless marked:
 
-- **A Radix pick steps up its own scale,** one step at a time, solid or alpha: 11 to 12, a8 to a9,
+- **A Radix pick is only a choice of gray and accent. Decided 2026-11-07.** The token files say
+  which step each token takes. The token build checks every pick ahead of time: all 6 grays and 25
+  accents, dark and light, the 300 picks the study ran. A step that fails is fixed once, in the
+  token file. So a pick always passes at runtime, and the nudge never sees one.
+
+  ```ts
+  // A sketch: the token build's check over every pick, with the same checker the app uses.
+  const picks = grays.flatMap((gray) =>
+  	accents.flatMap((accent) => looks.map((look) => ({ gray, accent, look }))),
+  ); // 6 x 25 x 2 = 300
+  const failing = picks.flatMap((pick) => check(fromTokens(pick), pairs, version));
+  // the build fails while `failing` is not empty; the fix is a step in the token file
+  ```
+
+  - **Changed 2026-11-07.** This replaces the proposal below, which moved steps per pick:
+- **(Old text) A Radix pick steps up its own scale,** one step at a time, solid or alpha: 11 to 12, a8 to a9,
   9 to 10 or 11, so a pick stays on Radix steps and the nudge finds nothing to move. Run over all
   300 picks (6 grays, 25 accents, dark and light), this always ended on a Radix step. 275 of the
   300 needed a move: every light pick moves `running` (amber 11 to 12) and `focus` (a8 to a9). So
   the built-ins are written with those steps already. A guess: a pick has no upstream file anyone
   could mistake it for, so it keeps its name.
-- **The terminal's palette is never changed. Its text is kept readable per cell, when it is drawn.**
+- **The terminal and the cursor fall under the same switch, and the floor is a setting. Decided
+  2026-11-07.**
+
+  ```toml
+  # ~/.fabrika/fabrika.toml
+  [theme]
+  fix = "nudge"      # or "off": app colors, terminal text per cell and the cursor, together
+  contrast = 4.5     # the text floor everywhere; may be raised (7 is WCAG AAA), never lowered
+  ```
+
+  ```ts
+  // A sketch, in packages/fabrika-design.
+  const Contrast = Schema.Number.check(Schema.isBetween({ minimum: 4.5, maximum: 21 }));
+  // a number under 4.5 is raised to 4.5 with one line; a value that is not a number fails to
+  // decode, one line says so at load, and the default is used
+  const ThemeSettings = Schema.Struct({ fix: Fix, contrast: Contrast });
+  // the same schema gives the JSON Schema, so a TOML editor plugin flags a bad value while typing
+  const jsonSchema = Schema.toJsonSchemaDocument(ThemeSettings);
+  ```
+
+  ```text
+  fabrika.toml: [theme] contrast = 3 is under 4.5; using 4.5
+  ```
+
+  - `nudge` also lifts terminal text per cell against that cell's own background, lightness only.
+    It never changes the terminal's palette or any background, the Ghostty and iTerm2 way cited
+    below. `off` shows all of it raw.
+  - Non-text stays at 3:1: `focus`, `turn` and the cursor.
+  - `contrast` is decoded with Effect Schema as a number from 4.5 to 21. A number under 4.5, say 3,
+    loads raised to 4.5, and one line says so, at load and in the check command, as above. A value
+    that is not a number fails to decode: one line at load says so, and the default is used. The
+    person's file is never rewritten.
+  - A JSON Schema is generated from the same Effect Schema (`Schema.toJsonSchemaDocument` in Effect
+    4.1.1), so TOML editor plugins that read JSON Schema flag the value while typing.
+  - The terminal has no contrast setting of its own. It reads the same `contrast`.
+  - **Changed 2026-11-07.** The text below set a fixed 4.5 bar for the terminal and kept the cursor
+    a separate theme check. Now one switch covers all three, and the bar is `contrast`. The rest
+    of the per-cell rule stands as written:
+- **(Old text) The terminal's palette is never changed. Its text is kept readable per cell, when it is drawn.**
   Each cell's text moves, lightness only, against that cell's own background, and the background
   never moves. So ANSI black stays black where a program paints a bar with it, and only black text
   on that same black is lifted.
@@ -546,14 +599,63 @@ Not settled by this decision, still proposed:
   - Sure: 75%. Doubt: the cost of one more contrast step per cell in ghostty-web's renderer, and
     upstream's answer. A patch measured with four full terminals, as the study's swap was, settles
     the first.
-- **Which measure the one function uses, WCAG or APCA,** is still open (Radix promises APCA). The
-  nudge uses whatever the token build uses, so the choice is made once.
+- **The contrast math: two floors, both always. Decided 2026-11-07.** Text needs WCAG 4.5:1 (or
+  the person's raised `contrast`) and APCA Lc 60. Non-text needs WCAG 3:1 and APCA Lc 15. The one
+  contrast function computes both, so the token build and the nudge change together.
 
-### 5. Two names nobody has set yet (proposed)
+  ```ts
+  // A sketch: the one function both callers use.
+  declare const passes: (fg: Hex, bg: Hex, floor: Floor) => boolean;
+  const text: Floor = { wcag: 4.5, apca: 60 }; // wcag rises with the person's `contrast`
+  const nonText: Floor = { wcag: 3, apca: 15 };
+  ```
 
-Both are guesses. Nothing above sets them, and no other tool was found that answers them.
+  - The measurement (today's version, on main): 387 of today's color pairs, 365 text and 22
+    non-text, from `packages/fabrika-design/src/themes.test.ts` and
+    `apps/fabrika/src/window/colors.test.ts`, with apca-w3 0.1.9.
+  - 19 text pairs passed WCAG but failed APCA Lc 60, all in the dark look: status colors on
+    hovered or selected rows, one button label, and 4 terminal colors. No non-text pair failed
+    Lc 15.
+  - Why these levels: APCA's
+    [bronze simple mode](https://readtech.org/ARC/tests/bronze-simple-mode/) asks Lc 60 for
+    content text and Lc 75 for body text, and
+    [Why APCA](https://git.apcacontrast.com/documentation/WhyAPCA) gives Lc 15 for non-text that
+    must be seen. Radix
+    [promises](https://www.radix-ui.com/colors/docs/palette-composition/understanding-the-scale)
+    steps 11 and 12 reach Lc 60 and Lc 90 only on step 2 of the same scale, so a hovered or
+    selected row is outside that promise.
+  - **Wrong:** the earlier lean said non-text Lc 30. APCA's own non-text minimum is Lc 15.
+  - **Changed 2026-11-07.** The old text said: "Which measure the one function uses, WCAG or
+    APCA, is still open (Radix promises APCA). The nudge uses whatever the token build uses, so
+    the choice is made once." The last part still holds.
 
-- **A repaired cursor.** A guess: it gets its own row in `[repaired]`, keyed `cursor`, and the
+- **Radix is the primitive layer only. Decided 2026-11-07.** Primitives are Radix steps, solid
+  and alpha, so 24 per scale. A semantic token may name a scale and a floor instead of a fixed
+  step. The build picks the faintest step that passes both floors on every background in its `on`
+  list, per look.
+
+  ```toml
+  # tokens/color/text-stuck.toml (a sketch)
+  type = "text"
+  on = ["surface", "surface-hover", "surface-selected"]
+  floor = 4.5
+  [colors]
+  scale = "red"   # the build picks the step, per look
+  ```
+
+  - This walks back the [color principles](./color-principles.md)' rule that each Radix step
+    keeps its job (11 for quiet text, 12 for strong). Radix's roles become a starting point.
+  - If a token keeps landing on a step that is too bright, a finer step may be added to the
+    primitive layer, with its reason written beside it as a bend, and only then.
+  - Doubt: a status color may land on different steps in different places and look uneven. Shots
+    at the design PRs settle it.
+
+### 5. Two names nobody has set yet (one decided 2026-11-07, one proposed)
+
+Both were guesses. Nothing above sets them, and no other tool was found that answers them. The
+cursor's is decided; the picker's stays proposed.
+
+- **A repaired cursor. Decided 2026-11-07,** as sketched: it gets its own row in `[repaired]`, keyed `cursor`, and the
   import line names it apart from the app colors. Latte, from the same script:
 
   ```toml

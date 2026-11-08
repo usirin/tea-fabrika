@@ -4,7 +4,7 @@
 import {Context, Effect, Layer, Option, Schema, Stream} from "effect";
 import {Ledger, LedgerError} from "../data/ledger.ts";
 import {Appended, type Entry, type Line, lineFor, type Rev} from "../data/log.ts";
-import {short} from "../data/referee.ts";
+import {short} from "../data/trace.ts";
 
 /** What a writer says about itself, shared by every write in this layer: P6's `Line` without its
  *  case and body, so a writer can leave none out (p92). */
@@ -17,7 +17,8 @@ export type Letter = {
 	readonly by: string;
 	readonly for: string;
 	readonly sentAt: string;
-	readonly cause: string | null;
+	readonly parent: string | null;
+	readonly traceId: string;
 	readonly rev: Rev;
 	readonly pos: Rev;
 };
@@ -48,7 +49,8 @@ const letter = Effect.fnUntraced(function* (entry: Entry) {
 		by: entry.by,
 		for: entry.for,
 		sentAt: entry.sentAt,
-		cause: entry.cause,
+		parent: entry.parent,
+		traceId: entry.traceId,
 		rev: entry.rev,
 		pos: entry.pos,
 	});

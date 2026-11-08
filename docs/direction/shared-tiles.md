@@ -1,7 +1,8 @@
 # Shared tiles: summon an agent into your tile, and see who is there
 
-**Proposed 2026-11-04.** The owner decided these during the walk of the Design canvas "Shared tile
-guidelines" on 2026-11-04, and each is marked decided below:
+**Proposed 2026-11-04, presence, color and the smaller calls decided 2026-11-07.** Walked when Tier 5 starts (owner, 2026-11-08): agents sharing tiles and the inbox. The owner
+decided these during the walk of the Design canvas "Shared tile guidelines" on 2026-11-04, and more
+in later walks, each marked decided below:
 
 - **Decided, one kind of tile.** A tile holds the person and any agent they summon. The "agent's
   own tile" goes as a kind, for good.
@@ -24,8 +25,23 @@ guidelines" on 2026-11-04, and each is marked decided below:
 - **Decided 2026-11-05, no arrow pointer.** It is dropped everywhere. Agents have no cursor, so the
   presence label alone marks where an agent's job writes.
 
-Proposed, leaned in the walk but not settled: the presence design (P2 plus P4, below), its
-color, and the per-writer swatch.
+- **Decided 2026-11-07, presence is P2 plus P4,** as leaned: the avatar says who, the presence
+  label says where ([below](#presence-the-avatar-says-who-the-presence-label-says-where)).
+- **Decided 2026-11-07, each agent gets its own color,** picked from its name out of a swatch whose
+  every color passes the themes' contrast check. This walks back "one agent hue, Radix orange"
+  ([color](#color)).
+- **Decided 2026-11-07, the five smaller calls** ([below](#the-smaller-calls)): `@` in every text
+  box, a message from an agent nobody summoned is an inbox row, an `@` line runs in the background,
+  a dropped link says "away" then "gone", and the ticket shows what an agent changed.
+- **Changed 2026-11-08 (owner): it is a message, not a line.** What an agent, or a person, sends you
+  is a message, and the inbox groups those rows under **Messages**, below Your turn. "Line" stays
+  what a person types in the shell and what a writer hands the ledger
+  ([experiment 206](../../experiments/206-customization.md), step 5).
+
+Still proposed: the wording of [the rules](#the-rules-proposed).
+
+- **Walked back 2026-11-07:** "Proposed, leaned in the walk but not settled: the presence design
+  (P2 plus P4, below), its color, and the per-writer swatch." All three are decided above.
 
 Built from [experiment 209](../../experiments/209-talking-to-agents-in-place.md), the shared tile
 study behind it, and the Design canvas "Shared tile guidelines", where every design was drawn.
@@ -51,7 +67,8 @@ One sitting, traced (today's version, after the build):
 4. The owner presses Approve, there. The row lands by the owner (cause
    in-3f9a12c0-41). claude cannot press
    it: it has no `answer` tool.
-5. Ctrl-C stops claude's foreground job, and t1 says "claude stopped by owner".
+5. `fg %claude` brings claude's job to the front, since an `@` line runs in the background
+   (decided 2026-11-07). Ctrl-C stops it, and t1 says "claude stopped by owner".
 ```
 
 ## Which version
@@ -86,8 +103,8 @@ These build on the decided points above; the rules' wording is not settled.
 
 ## Presence: the avatar says who, the presence label says where
 
-Four louder options were drawn after the walk found the state word too quiet. P2 plus P4 was
-leaned in the walk (proposed).
+Four louder options were drawn after the walk found the state word too quiet. **Decided
+2026-11-07:** P2 plus P4, as leaned in the walk.
 
 | Option | What it is | Out or in, and why |
 |---|---|---|
@@ -117,6 +134,53 @@ leaned in the walk (proposed).
 
 ### Color
 
+**Decided 2026-11-07.** Each agent gets its own color. It walks back one agent hue for all agents,
+kept below, marked.
+
+```ts
+// A sketch. The swatch names are made up; the theme maps each name to its steps in each look.
+const Swatch = Schema.Literals(["teal", "plum", "sky", "cyan", "brown", "pink"]); // no status hue, no accent
+type Swatch = typeof Swatch.Type;
+
+// The default: a stable pick from the name, so "scout" gets the same color every day, on every Mac.
+const pick = (name: string): Swatch => Swatch.literals[hash(name) % Swatch.literals.length];
+
+// What a mark stores. `swatch` is set only when the person changed it; absent means pick(name).
+const Mark = Schema.TaggedUnion({
+	person: {name: Schema.String, swatch: Schema.optionalKey(Swatch)}, // a circle
+	agent: {name: Schema.String, swatch: Schema.optionalKey(Swatch)}, // a rounded square with ✦
+});
+
+pick("scout"); // "plum", say; the person may change it to "sky", and the mark stores "sky"
+```
+
+- **Picked from the name.** Nobody has to choose: the same name always lands on the same color.
+  The person may change it, and the change is kept.
+- **Every color in the swatch is accessible.** Each one passes the same contrast check as
+  [themes](./themes.md), one function called in both places, at 3:1 in both the dark and the light
+  look ([WCAG 1.4.11](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html)). So a
+  picked color is always one that passes, and so is a changed one.
+- **The swatch leaves out the status hues and the accent.** Green, amber and red mean a state, and
+  indigo means the accent, so no agent wears them.
+- **Shape and name stay the first cue.** The color only adds
+  ([WCAG 1.4.1](https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html)). Two agents that
+  land on one color still read apart by name.
+- **A swatch name is stored, never a hex value.** The theme maps the name to its steps, so a new
+  theme recolors every mark without touching the data.
+- **Open: whether the swatch shares hues with the pipes.** The sketch's names overlap them; the
+  foundations work settles the list.
+- **Still as before:** the color sits only inside the avatar and the presence label, never on the
+  tile edge, which means focus only.
+- **It bends a decided rule.** [Color principles](./color-principles.md) say a color is neutral, a
+  state or a pipe. An agent's color becomes a fourth kind. The owner said on 2026-11-04 that "the
+  accent only for asks you" predates the design system study and may bend to solve a real problem;
+  the color note is revisited in the foundations work.
+
+#### One agent hue, as proposed 2026-11-04
+
+**Walked back 2026-11-07** by the color above. Kept as it was written, so its meaning stays on the
+record.
+
 - **One agent hue, Radix orange, only inside the avatar and the presence label.** Never on the tile
   edge: the edge means focus only.
 - **Why orange:** the widest free gap on the hue wheel. Pipes hold the cool and purple-pink side
@@ -128,10 +192,6 @@ leaned in the walk (proposed).
   is 0.047 from amber in OKLab, closer than the pipes' tightest pair (pink and plum, 0.055). At step
   11 it is 0.081 from red and 0.119 from amber. A shot of a running ticket beside an orange avatar
   settles it. Lean 65%.
-- **It bends a decided rule.** [Color principles](./color-principles.md) say a color is neutral, a
-  state or a pipe. An agent becomes a fourth kind. The owner said on 2026-11-04 that "the accent
-  only for asks you" predates the design system study and may bend to solve a real problem; the
-  color note is revisited in the foundations work.
 - **Later, each writer picks a color** from an accessible swatch. Lean: store a swatch name, never a
   hex value; the swatch leaves out the status hues; a default comes from the name, so nobody has to
   pick. Shape and name stay the first cue.
@@ -145,7 +205,54 @@ const Mark = Schema.TaggedUnion({
 });
 ```
 
-## The smaller calls (leans)
+## The smaller calls
+
+**Decided 2026-11-07,** all five. Each lean they replace is kept below them, marked.
+
+```text
+A sketch, today's version. scout is summoned; researcher is not in t1.
+tsh$ @scout why does post print #7 twice?    [1] scout: runs behind you, the prompt stays yours
+tsh$ fg %scout                               wait on it; Ctrl-C stops the turn
+inbox: ✦ researcher  "the footer test fails on main"     a message nobody summoned: an inbox row
+  r, then type                               reply inline on that row; no tile opens
+t1's avatar for scout: "away"                its link dropped; letters queue in its mailbox
+t1's avatar for scout: "gone"                after about 10 minutes; dismiss it or summon it again
+ticket #7: ✦ scout set the area to "tracker"   an activity row, cause in-3f9a0c21-52
+```
+
+1. **How the person summons. Decided 2026-11-07:** `@` works in every text box, the command
+   palette included, as it does in tsh. There is no separate "Summon claude here" palette row. A
+   key later, from the keys file, stays possible.
+2. **An agent's message with no summon. Decided 2026-11-07:** it lands as a row in the person's inbox,
+   the `inbox` program of [the ask desk](./ask-desk.md). The person replies inline on that row.
+   Nothing opens a tile on its own; a thread tile opens only when the person asks for one.
+3. **An agent's line while the person's job runs. Decided 2026-11-07:** an `@` line runs in the
+   background, as if it ended in `&`. It is never refused, and the person's prompt is never taken
+   over. It lands in the name's mailbox, and a busy agent queues it. The full grammar is in
+   [summon guidelines](./summon-guidelines.md#the--line-decided-2026-11-07).
+4. **The agent's link drops. Decided 2026-11-07:** it stays summoned, and its avatar says "away" in
+   words. Messages to it queue in its mailbox. After about 10 minutes it says "gone", and the
+   person dismisses it or summons it again. The 10 minutes is a guess, set from a week of use.
+5. **The ticket shows the agent's activity too. Decided 2026-11-07:** the tile shows what an agent
+   said, and the ticket shows what it changed, as activity rows on the ticket. Each row points back
+   to the line that caused it, through `cause`
+   ([inputs carry their sender](./inputs-carry-their-sender.md)). It ships as it is and improves
+   later; folding many small edits into one row is a known follow-up.
+
+```ts
+// A sketch, today's version. What the avatar says, in words; "here" draws no word.
+const Link = Schema.TaggedUnion({
+	here: {},
+	away: {since: Schema.Number}, // the link dropped; letters queue
+	gone: {since: Schema.Number}, // about 10 minutes away; the person dismisses or summons again
+});
+// One activity row on ticket #7, pointing back at the line that caused it.
+{_tag: "areaSet", ticket: "7", area: "tracker", by: "agent:scout", cause: "in-3f9a0c21-52"}
+```
+
+### The leans, as written before 2026-11-07
+
+**Walked back 2026-11-07** by the calls above, where they differ. Kept as written.
 
 1. **How the person summons.** Decided 2026-11-05: `@claude <words>` in tsh, or the `@` menu in a
    shared text field. Still a lean: the palette's "Summon claude here" too, and a key later, from the
@@ -180,9 +287,11 @@ agent's link in the tile, and its jobs stay in the table, told.
 ## Accessibility
 
 - 1.4.1: the shape and the name carry it, the color only adds.
-- 1.4.11: 3:1 for the avatar's line, measured above.
+- 1.4.11: every swatch color passes 3:1 in both looks, by the themes' checker (decided
+  2026-11-07). The orange numbers above are from the walked-back hue.
 - 4.1.2: the tile's accessible name gains "with claude".
-- 4.1.3: one polite message per agent line, never per output line.
+- 4.1.3: one polite status per agent message, never per output line. "away" and "gone" are words in
+  the avatar's accessible name, and a change says so once, politely.
 - 2.3.3: the presence label's fade has a still twin under reduced motion.
 - 3.2.1 and 3.2.5: no focus move when an agent arrives.
 - Needs a real screen reader run: VoiceOver on the accessible name as claude's state changes, and
@@ -194,6 +303,12 @@ agent's link in the tile, and its jobs stay in the table, told.
 - **Plan 185b call C:** hiding person-only controls goes.
 - **[Tile guidelines](./tile-guidelines.md#title-bar):** the title bar gains an avatar by the id.
 - **[Color principles](./color-principles.md):** a fourth color kind, an agent's (above).
+- **[The ask desk](./ask-desk.md):** the inbox has held asks. A message from an agent nobody summoned
+  now lands there too, as a row the person replies to inline. It is not an ask: it asks for no
+  decision. How it sorts beside the open asks is not settled.
+- **[Talk where you work](./talk-where-you-work.md#the-thread-tile-and-replies):** its replies lean
+  keeps a spot's reply out of the inbox unless it ends in a real question. That is a reply to a
+  person's own talk; this call is a message nobody asked for, so the two do not clash.
 - **[An agent is a program](./agents-are-programs.md)** (proposed): see
   [talk where you work](./talk-where-you-work.md), which drops the chat window.
 
@@ -201,14 +316,15 @@ agent's link in the tile, and its jobs stay in the table, told.
 
 A guess from reading. The shared tile in today's version, about 600 to 900 lines with tests, 1 to
 1.5 agent hours at 600 lines an hour ([agent hours](./agent-hours.md)), with the signing note's
-part inside it. Presence (avatar, presence label, the orange steps), about 250 more. Sure of the
+part inside it. Presence (avatar, presence label, the swatch and its check, away and gone), about 250 more. Sure of the
 size: 55%. The doubt is the host's part: how much of today's writer code must change to sign each
 line by its sender. A plan that reads `packages/fabrika/src/host/` settles it.
 
 ## Made up here
 
 `summon` as a Msg and its fields, the "starting it · this starts a paid run" line, `writing`,
-`Mark`, `Swatch` and its four names, "away", "claude stopped by owner", job `%12`, the id
+`Mark`, `Swatch` and its names, `pick` and `hash`, `Link` and its cases, the `areaSet` row, the
+inbox row's words, "claude stopped by owner", job `%12`, the id
 `in-3f9a12c0-41`, and the account number `42` in the writer text.
 
 ## What it cannot tell us
@@ -217,4 +333,7 @@ line by its sender. A plan that reads `packages/fabrika/src/host/` settles it.
 - Whether two writers in one scrollback is noise at 1024x700. Only 1440x900 was drawn.
 - Whether a 12px avatar is enough in a 2x2. A shot of the real app settles it.
 - How long a presence label should stay, and how a person finds a write after it fades. No study.
+- Whether 10 minutes is the right time before "gone". A week of use sets it.
+- Whether the name pick spreads well over a small swatch, or two agents in one tile often share a
+  color. Shape and name still tell them apart.
 - No screen reader run.

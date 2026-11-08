@@ -99,6 +99,9 @@ const Pick = Schema.TaggedUnion({
   a pick of none. Else the filer's `guess`. Else the source's pick in that group, through `from`.
 - **Archive, not delete.** An archived label stays on its tickets and leaves the menu, as Linear
   and Shortcut do [l2] [s1]. GitHub's delete removes it from every issue [g1], which loses data.
+  **Changed 2026-11-07:** for areas, today's version, a delete is decided too. It moves the
+  area's tickets to "No area yet" and keeps an `area_deleted` fact, so no history is lost
+  ([areas](./areas.md), call 2).
 
 ## The six principles
 

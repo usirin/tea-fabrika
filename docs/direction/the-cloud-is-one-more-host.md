@@ -1,6 +1,6 @@
 # The cloud is one more host
 
-**Part decided, part proposed. Not built.**
+**Part decided, part proposed. Not built.** Walked when Tier 2 starts (owner, 2026-11-08): program storage and Topic for the tracker.
 
 - **Decided 2026-10-30:** [the brain and the hands](#decided-2026-10-30-the-brain-and-the-hands).
   A program instance is a Durable Object, all machine work is a Cmd the hands do, the

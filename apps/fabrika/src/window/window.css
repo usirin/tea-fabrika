@@ -3779,14 +3779,30 @@ main.program:has(> .view) {
 	}
 }
 
-/* The ruler's finer ticks show only where the ruler has room: 60px or more for each label. */
+/* The ruler's finer ticks show only where the ruler has room: 60px or more for each label
+   (ruler.ts). Rank 0 always shows: 2 ticks from 120px. Rank 1 from 240px, rank 2 from 480px,
+   rank 3 from 960px. Under 120px the "0" hides when rank 0 has a second tick, so one label
+   shows, with its unit. Labels drop, never shrink. */
 .trace-view .wf-ruler {
 	container: ruler / inline-size;
 }
 
+.trace-view .wf-tick.r1,
 .trace-view .wf-tick.r2,
 .trace-view .wf-tick.r3 {
 	display: none;
+}
+
+@container ruler (width < 120px) {
+	.trace-view .wf-tick:first-child:has(~ .wf-tick.r0) {
+		display: none;
+	}
+}
+
+@container ruler (min-width: 240px) {
+	.trace-view .wf-tick.r1 {
+		display: block;
+	}
 }
 
 @container ruler (min-width: 480px) {

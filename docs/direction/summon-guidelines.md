@@ -1,12 +1,16 @@
 # Summon guidelines: naming agents in the shell, and the grammar for it
 
-**Proposed 2026-11-06.** The seven principles below are proposed. Two sections are decided: the
+**Proposed 2026-11-06.** Walked when Tier 5 starts (owner, 2026-11-08): summoned agents, names and rooms. The seven principles below are proposed. Two sections are decided: the
 owner settled threads, forks and who may talk to whose agent the same night, in
 [threads, forks and the verbs](#threads-forks-and-the-verbs), and later that night made a talk a
 room with members, in [rooms, mentions and turns in order](#rooms-mentions-and-turns-in-order),
 which walks back parts of the first (each marked **Walked back** where it stands). On 2026-11-07
 the owner decided, for now, that joining a room never moves the tile ([R5](#r5-joining-a-room-never-moves-the-tile-a-line-to-a-room-starts-with-room)),
-which walks back the sticky room prompt of the night before. The note stands
+which walks back the sticky room prompt of the night before. Later on 2026-11-07 the owner decided
+[the `@` line](#the--line-decided-2026-11-07): an `@` line runs in the background, the first
+`@name` is who answers and every later one is a target, and every `@name` is a mailbox address.
+That walks back S6's foreground turn and R4's mentions in order, each marked where it stands. The
+note stands
 on these, decided before it and not asked again
 ([talk where you work](./talk-where-you-work.md)):
 
@@ -52,7 +56,9 @@ One line traced, today's version: "@scout why does post print #7 twice?"
 3. the check looks scout up in the desk's names: found, job 12, idle.
 4. the host log: at_resolved cause=in-... name=scout agent=claude job=12
 5. tsh tells job 12 its prompt input with the prose as a value (never a quoted tell line)
-6. the turn runs in the foreground; Ctrl-C tells job 12 `cancel`; scout stays summoned
+6. the turn runs in the background, as if the line ended in `&` (decided 2026-11-07); `fg %scout`
+   waits on it, and Ctrl-C then tells job 12 `cancel`; scout stays summoned
+   (walked back 2026-11-07: "the turn runs in the foreground; Ctrl-C tells job 12 `cancel`")
 ```
 
 ## Which version
@@ -269,6 +275,12 @@ complete, by what the cursor expects
 
 ### S6: a turn is a foreground job, and Ctrl-C cancels the turn, not the agent
 
+**Walked back in part 2026-11-07,** later the same day, by [the `@` line](#the--line-decided-2026-11-07):
+an `@` line now runs in the background, and `fg %scout` brings it to the front. What a turn does
+once in front stands: the status line, the reply printed once whole, Ctrl-C cancels the turn and
+not the agent, Ctrl-Z holds it at the next ask, the `done` line, and an ask that holds a background
+turn. The lines below that say a turn starts in the foreground are the walked-back part.
+
 **Decided 2026-11-07, by the owner.** The lean before it was 65%. Ctrl-Z was reopened and settled
 the same day, after a walk with a worked example: it holds the turn at the agent's next ask.
 
@@ -332,7 +344,8 @@ fabsh$ git log -3
 - **OTP.** The turn is one message in the run's mailbox; a second `@scout` while one runs queues
   (decided for `next/`, kept here).
 - **Not taken.** Design C, a turn as a background job by default. `bg` and Ctrl-Z give the prompt
-  back when a person wants it.
+  back when a person wants it. **Walked back 2026-11-07:** design C's default is now the decided
+  one ([the `@` line](#the--line-decided-2026-11-07)).
 - **Today.** Half: Ctrl-C and `cancel` exist; the reply is not shown in tsh.
 
 ### S7: you can always see and end what you summoned
@@ -472,7 +485,7 @@ tsh$ summon claude haiku as scout
 tsh$ @scout why does post print #7 twice?                (your DM with scout: a room of two, you and scout)
 tsh$ join #bug-17                                        (the verb is a lean, below; you are a member, nothing moves)
 tsh$ #bug-17 @scout here is the failing run              (a mention: scout answers in #bug-17, for everyone)
-tsh$ #bug-17 @scout @researcher why did this stall?      (scout answers first, then researcher, who sees scout's reply)
+tsh$ #bug-17 @scout @researcher why did this stall?      (scout answers, with a handle to researcher; 2026-11-07)
 tsh$ fork #bug-17 as bar at "footer"                     (#bar, with its origin message as a fact)
   #bar · forked from #bug-17 at "the footer adds #7 again"
 tsh$
@@ -549,6 +562,10 @@ tsh$
 
 ### R4: several mentions on one line answer in order, like a pipe
 
+**Walked back 2026-11-07** by [the `@` line](#the--line-decided-2026-11-07): the first `@name`
+answers, and every later one is a target that agent may use. To ask two agents, write two lines.
+Kept as it was decided.
+
 - **What.** `@scout @researcher why did this stall?` gives scout the turn first, then researcher.
   Each agent sees the room as it stands when its turn starts, so researcher reads scout's reply.
   They answer one after another, left to right, never at once.
@@ -568,7 +585,7 @@ kept below, marked.
 ```text
 fabsh$ join #bug-17                          you joined #bug-17. The prompt stays fabsh$.
 fabsh$ #bug-17 is this #193 again?           → #bug-17 · message 16
-fabsh$ #bug-17 @scout why did this stall?    scout answers in #bug-17, in the foreground (S6)
+fabsh$ #bug-17 @scout why did this stall?    scout answers in #bug-17, in the background (2026-11-07)
 fabsh$ @scout and the second run?            your DM with scout
 fabsh$ agents                                a plain line is still a command
 fabsh$ leave #bug-17                         you left #bug-17; the bottom line drops it
@@ -660,6 +677,8 @@ gone, and no later field brings them back for the entries already written.
 - **Who mentioned whom, as resolved then.** `mentions` keeps what each name meant at send, as the
   decided `@` log does, since a name can be dismissed and summoned again as another agent. Re-parsing
   the line later gives today's meaning, not that day's.
+- **Walked back 2026-11-07, with R4:** the next line. `mentions[0]` is now who answers, and the rest
+  are targets, as each name was resolved then ([the `@` line](#the--line-decided-2026-11-07)).
 - **Mention order.** The array's order is the order of the turns. Lost if not recorded: why the
   second agent said what it said, since it saw the first reply.
 - **What each turn saw.** `saw` is the last message in the room when the turn started. Lost if not
@@ -667,6 +686,112 @@ gone, and no later field brings them back for the entries already written.
 - **Whose bill.** `bill` follows the agent's owner, not `by` of the mention (T3).
 - `direct: true` marks a DM, as Matrix's `m.direct` does; a DM is still a room, so it needs no
   other entry.
+
+## The `@` line, decided 2026-11-07
+
+**Decided 2026-11-07,** by the owner. It holds for both versions; each part says where it runs.
+It walks back [S6](#s6-a-turn-is-a-foreground-job-and-ctrl-c-cancels-the-turn-not-the-agent)'s
+foreground turn and [R4](#r4-several-mentions-on-one-line-answer-in-order-like-a-pipe); each is
+kept above, marked.
+
+```text
+A sketch, fabsh. tsh reads the same lines in today's version.
+fabsh$ @scout why does post print #7 twice?   [1] scout: runs behind you, as if the line ended in &
+fabsh$ git log -3                             your prompt is yours
+fabsh$ fg %scout                              wait on it; Ctrl-C stops the turn, scout stays summoned
+fabsh$ @scout @researcher what changed?       scout answers; researcher is a target
+fabsh$ @scout talk to @researcher             scout may message researcher
+fabsh$ #bug-17 @scout why did this stall?     #room still says where
+fabsh$ @ana the plan is ready                 ana's inbox program gets it
+fabsh$ summon linear from linear              a connector, registered under the name linear
+fabsh$ @linear what is open in this cycle?    the same as any name: a letter to linear's mailbox
+```
+
+```ts
+// A sketch, both versions. What the grammar makes of one `@` line, before anything runs.
+const At = Schema.Struct({
+	to: Schema.String, // the first @name: who answers
+	targets: Schema.Array(Schema.String), // every later @name, in order: handles `to` may use
+	words: Schema.String, // the rest of the line, as typed, later @names included (S2)
+	room: Schema.optionalKey(Schema.String), // from a leading #room
+});
+// "@scout talk to @researcher" expands to: tell scout <input> "talk to @researcher"
+// with {to: "scout", targets: ["researcher"], words: "talk to @researcher"}
+```
+
+### A1: an `@` line runs in the background
+
+- **What.** An `@` line is like a shell command with other defaults. A plain command runs in the
+  foreground. An `@name` line runs in the background, as if it ended in `&`. It is never refused,
+  and the person's prompt is never taken over.
+- **When it ends,** one line prints before the next prompt, as S6 already says: `done` or `failed`,
+  and `fg %scout` prints the reply. An ask that needs a person still holds the turn and says so.
+- **Why.** The person keeps working while the agent works, and an agent's line never waits on the
+  person's job (shared tiles' smaller call 3, decided the same day).
+
+### A2: to wait on it, use job control
+
+- **What.** `fg %scout` brings the turn to the front; Ctrl-C then stops it, and scout stays
+  summoned. `jobs` lists the turns. `%scout` names a job by its name, as bash's `%ce` names the job
+  whose command begins with `ce`
+  ([bash, job control basics](https://www.gnu.org/software/bash/manual/html_node/Job-Control-Basics.html)).
+- **Ctrl-Z** on a turn in front still holds it at the next ask (S6).
+
+### A3: a send always lands in the name's mailbox
+
+- **What.** Every `@` line becomes a letter in its name's mailbox. A busy agent queues it and takes
+  it when the turn before ends. Nothing is refused because the agent is busy.
+- **Why.** It is what OTP does: a send puts the message in the process's mailbox, and the process
+  takes it when it is ready ([Erlang processes](https://www.erlang.org/doc/system/ref_man_processes.html)).
+  Zed queues a message sent during a turn, and Linear hands a follow-up into the running session
+  ([Zed's agent panel](https://zed.dev/docs/ai/agent-panel),
+  [Linear's agent interaction](https://linear.app/developers/agent-interaction)).
+
+### A4: the first `@name` answers; every later `@name` is a target
+
+- **What.** In `@scout @researcher what changed?`, scout answers. In `@scout talk to @researcher`,
+  scout gets a handle to researcher and may use it, for example to message it. `#room` still says
+  where. To ask two agents, write two lines.
+- **The words stay as typed.** A later `@researcher` stays in the words scout reads (S2); the
+  grammar only also gives scout the handle.
+- **Why position.** POSIX makes the first field of a simple command the command name, and the rest
+  are its arguments ([Shell Command Language, 2.9.1.1](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html)).
+  fabsh is a shell, so position says who runs.
+- **Why one `@`.** Claude Code puts subagents, files and MCP resources all under one `@`
+  ([subagents](https://code.claude.com/docs/en/sub-agents), [MCP](https://code.claude.com/docs/en/mcp)).
+  Cursor and Zed use `@` for every kind of context
+  ([Cursor's mentions](https://cursor.com/docs/context/mentions),
+  [Zed's agent panel](https://zed.dev/docs/ai/agent-panel)), and Linear `@`mentions people and
+  agents alike ([agents in Linear](https://linear.app/docs/agents-in-linear)). VS Code split
+  `@participant` from `#context`, and its docs now mark `@` participants deprecated
+  ([Copilot chat context](https://code.visualstudio.com/docs/copilot/chat/copilot-chat-context),
+  [chat participants API](https://code.visualstudio.com/api/extension-guides/ai/chat)).
+- **What no maker documents.** None we read writes "the first `@` answers" as a rule. It is our
+  rule, on the shell's. Read 2026-11-07.
+
+### A5: every `@name` is a mailbox address
+
+- **What.** An agent, a connector and a person all work the same way. The grammar expands
+  `@x words` to `tell x <input> "words"`, and `tell` delivers to x's mailbox. A connector is
+  registered under a name by `summon linear from linear`, then `@linear` reaches it like any name;
+  the `from` slot's grammar is not written yet.
+- **A person's inbox is a program registered under their name.** So `@ana hi` reaches ana's inbox
+  program, and her windows show it ([the ask desk](./ask-desk.md)'s `inbox`).
+- **One list of names.** People, agents and connectors share it, so no two are the same name.
+- **The sender never knows where the process runs:** one Mac, another, a browser tab or the brain.
+  This is Erlang's location transparency: a send to a registered name looks the same wherever the
+  process is
+  ([Erlang processes, registered names](https://www.erlang.org/doc/system/ref_man_processes.html),
+  [distributed Erlang](https://www.erlang.org/doc/system/distributed.html),
+  [`global`, names across nodes](https://www.erlang.org/doc/apps/kernel/global.html)).
+- **Today's version.** tsh's `tell` goes to the job the name meant then, and the letter queues in
+  that run's one mailbox ([tea-program](./tea-program.md)). One person per app, so a person's
+  inbox is this app's `inbox` program. All of it is on this Mac; connectors and other people need
+  the brain.
+- **`next/`.** `tell` sends through P9's `Mailbox` into the `<name>/inbox` stream on the ledger,
+  at least once (`next/packages/libfabrika/src/coordination/mailbox.ts`). The five layers' `Registry`
+  names the process; it is not built yet. The brain keeps the names, so a person
+  on a phone and an agent on a cloud host reach the same `@scout`.
 
 ## The smaller calls
 
@@ -706,7 +831,9 @@ Each is a different answer to how a turn is typed and shown in today's tsh. The 
   `tell scout prompt "..."`, a built-in on the job.
 - **C, a turn is a background job.** `@scout why ...` prints `[3] scout` and gives the prompt back;
   the reply lands above the prompt when whole; `jobs` and `attach %3` bring it forward. Pipe line:
-  `@scout ... ` then `jobs`. Not taken: S6 was decided foreground on 2026-11-07.
+  `@scout ... ` then `jobs`. Not taken: S6 was decided foreground on 2026-11-07. **Walked back
+  2026-11-07,** later that day: C's background default is decided
+  ([the `@` line](#the--line-decided-2026-11-07)), with `fg %scout` in place of `attach %3`.
 - **D, a quoted prompt on a typed pipe.** `ask scout "why does post print #7 twice?" | outline`:
   the prompt is a quoted value, so the reply is a typed output that pipes, Nushell-style [n1]. Pipe
   line: `ask scout prompt="..." | outline`. It gives up the prose mode for pipes, and quoting prose
@@ -780,6 +907,13 @@ Offered, not filed. A guess: about 650 lines with tests, 5 to 7 agent hours, 55%
   Each place is marked.
 - **R5's sticky room prompt,** decided 2026-11-06, is walked back on 2026-11-07, for now, by the
   owner: joining never moves the tile, and a line to a room starts with `#room`.
+- **S6's foreground turn and R4's mentions in order,** both decided earlier, are walked back on
+  2026-11-07 by [the `@` line](#the--line-decided-2026-11-07), by the owner. Each place is marked.
+- **S3 makes a name unique per person.** The `@` line puts people, agents and connectors in one
+  list of names, so an agent's name is also refused when it is a person's or a connector's.
+- **Today's mailbox has a bound.** Past its `capacity` (1000 by default), today's `tell` fails
+  `MailboxFull` ([tea-program](./tea-program.md)). "Never refused" holds up to that bound in
+  today's version; what a full mailbox says to the sender is not settled.
 
 ## What it costs
 
