@@ -128,18 +128,6 @@ const throwingOnce = (sql: Sql) => {
 		},
 	};
 };
-const broken: Sql = {
-	exec: () => {
-		throw sqliteFull();
-	},
-	transaction: () => {
-		throw sqliteFull();
-	},
-	size: () => {
-		throw sqliteFull();
-	},
-};
-
 /** A tracer that keeps every span it makes, so a test can count the ones that ended. */
 const capture = () => {
 	const spans: Array<Tracer.NativeSpan> = [];
@@ -613,9 +601,15 @@ describe("p20, failures are typed, and pass", () => {
 		await runtime.dispose();
 	});
 
-	it.effect(
-		"no Layer fails at build: a Sql that throws on every use still builds, and each call answers storage",
-		() =>
+	it.effect.each([
+		["an Error", sqliteFull()],
+		["text", "disk full"],
+		["a number", 13],
+		["null", null],
+		["undefined", undefined],
+	] as const)(
+		"no Layer fails at build: a Sql throwing %s still builds, and each call answers storage",
+		([, thrown]) =>
 			Effect.gen(function* () {
 				const ledger = yield* Ledger;
 				const errors = [
@@ -625,7 +619,17 @@ describe("p20, failures are typed, and pass", () => {
 				];
 				for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
 				expect(errors.map((error) => error.why)).toEqual(["storage", "storage", "storage"]);
-			}).pipe(Effect.provide(onSql(broken))),
+			}).pipe(
+				Effect.provide(
+					onSql({
+						exec: () => {
+							throw thrown;
+						},
+						transaction: (step) => step(),
+						size: () => 0,
+					}),
+				),
+			),
 	);
 
 	it.effect(

@@ -16,7 +16,8 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
-import {Effect, Layer} from "effect";
+import {Deferred, Effect, Fiber, Layer} from "effect";
+import {TestClock} from "effect/testing";
 import {Doorbell, Ledger, LedgerError} from "./ledger.ts";
 import type {Line} from "./log.ts";
 import {Referee, type Sql} from "./referee.ts";
@@ -178,6 +179,35 @@ describe("p94, a parked wait is a row, rung once", () => {
 			expect(rang.slice(2)).toEqual([{to: T1, stream: "b", rev: 2}]);
 		}).pipe(Effect.provide(onReferee(fresh(), layer)));
 	});
+
+	it.effect("a slow reader does not hold up another reader's ring", () =>
+		Effect.gen(function* () {
+			const release = yield* Deferred.make<void>();
+			const started = yield* Deferred.make<void>();
+			const rang: Array<string> = [];
+			const doorbell = Layer.succeed(Doorbell, {
+				ring: (to) =>
+					Effect.gen(function* () {
+						rang.push(to);
+						if (to === T1) {
+							yield* Deferred.succeed(started, undefined);
+							yield* Deferred.await(release);
+						}
+					}),
+			});
+			yield* Effect.gen(function* () {
+				const referee = yield* Referee;
+				yield* referee.wait("a", 0, T1);
+				yield* referee.wait("a", 0, T2);
+				const appending = yield* Effect.forkChild(referee.append("a", "w-1", line()));
+				yield* Deferred.await(started);
+				yield* TestClock.adjust(1);
+				expect([...rang].sort()).toEqual([T1, T2]);
+				yield* Deferred.succeed(release, undefined);
+				expect(yield* Fiber.join(appending)).toEqual(placed(1, 1));
+			}).pipe(Effect.provide(onReferee(fresh(), doorbell)));
+		}),
+	);
 
 	it.effect(
 		"a ring whose delivery fails is gone all the same, the others ring, and the append is placed",

@@ -513,6 +513,7 @@ describe("p96, the stolen sheet race", () => {
 				expect(hook.before).toBeNull(); // the other Mac did run in between
 				expect(xAnswer).toEqual({_tag: "applied", rev: 3});
 				expect(answer).toEqual({_tag: "ignored", rev: 4, why: "used"});
+				expect(yield* write(macC)).toEqual({_tag: "ignored", rev: 4, why: "used"});
 				const m = yield* members;
 				expect(m.keys.get("pX")?.live).toBe(true);
 				expect(m.keys.get("pC")?.live ?? false).toBe(false);
