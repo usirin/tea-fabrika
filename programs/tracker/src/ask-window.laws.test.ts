@@ -230,59 +230,133 @@ const focusedTime = every(
 );
 
 /**
- * Design E (owner, 2026-11-08): "Did this need you?" is offered only once a pick is in hand, never
- * before. A pick is in hand while its note is open, and while that answer saves or comes back
- * refused. Taking the rec saves at once, so it never has a pick in hand.
- */
-const pickInHand = (model: Model): boolean =>
-	model.editor._tag === "note" || (model.editor._tag === "saving" && model.draft?._tag === "note");
-
-/**
  * Property 17: the mark has three values. Pressing a mark sets it, pressing the selected one
- * clears it, and a save carries it exactly when it is set, false included. Since design E, a
- * press only counts while the marks are offered.
+ * clears it. Owner, 2026-11-08 (option d): "Did this need you?" is offered before any pick, as
+ * docs/direction/ask-desk.md has it, so a press takes in every state but saving, the first look
+ * included.
  */
 const threeMarks = every(
-	"needed stays unmarked, true or false, and a save carries it as it is",
+	"needed stays unmarked, true or false, and a press takes before any pick",
 	(step) => {
 		const {prev, msg, next} = step;
-		for (const save of savesOf(step))
-			if (save.needed !== prev.needed || "needed" in save !== (prev.needed !== undefined))
-				return "the save changed the mark";
-		if (msg.type !== "mark" || prev.editor._tag === "saving" || !pickInHand(prev)) return true;
+		if (msg.type !== "mark" || prev.editor._tag === "saving") return true;
 		if (prev.needed === msg.needed) return !("needed" in next) || "the selected mark did not clear";
 		return next.needed === msg.needed || "the mark did not take";
 	},
-	// Press each mark twice with a pick in hand, on every kind of ask (see markWithAPick).
+	// Press each mark twice before any pick, then with a note open, then with every pick open.
 	[
+		{type: "mark", needed: true},
+		{type: "mark", needed: true},
+		{type: "mark", needed: false},
 		{type: "do", value: AskCommand.cases.not.make({})},
 		{type: "mark", needed: true},
-		{type: "mark", needed: true},
+		{type: "escape"},
 		{type: "do", value: AskCommand.cases.picks.make({})},
-		{type: "pick", pick: "approve"},
 		{type: "mark", needed: false},
 		{type: "mark", needed: false},
 	],
 );
 
+/** Whether a model or a save holds the mark as `other` does: the same value, or neither has it. */
+const sameMark = (a: {readonly needed?: unknown}, b: {readonly needed?: unknown}) =>
+	"needed" in a === "needed" in b && a.needed === b.needed;
+
 /**
- * Design E: a mark is set only while a pick is in hand. A press before a pick changes nothing, and
- * a mark goes with its pick (Escape, or the save landing), so no save carries a mark the person
- * could not see.
+ * Option d: the marks stay offered while the ask is open. Only a mark press changes the mark;
+ * opening a note or every pick, Escape out of either (today's machine keeps the mark), a save and
+ * its answer all leave it. A new ask starts with no mark.
  */
-const markWithAPick = every(
-	"needed is set only while a pick is in hand",
-	({next}) => next.needed === undefined || pickInHand(next) || "a mark is set with no pick in hand",
-	// Mark, then leave the pick, on each kind of ask: n opens a note where a shown rec has one
-	// other pick; every pick, then approve, opens one where the rec is hidden or absent.
+const marksStay = every(
+	"only a mark press changes the mark, and a new ask starts unmarked",
+	({prev, msg, next}) => {
+		if (msg.type === "mark") return true;
+		if (msg.type === "show" && next.ask.ask !== prev.ask.ask)
+			return !("needed" in next) || "a new ask kept the old ask's mark";
+		return sameMark(next, prev) || `${msg.type} changed the mark`;
+	},
+	// Mark, then open and leave a note and every pick, on each kind of ask.
 	[
-		{type: "do", value: AskCommand.cases.not.make({})},
 		{type: "mark", needed: true},
+		{type: "do", value: AskCommand.cases.not.make({})},
 		{type: "escape"},
 		{type: "do", value: AskCommand.cases.picks.make({})},
 		{type: "pick", pick: "approve"},
-		{type: "mark", needed: false},
 		{type: "escape"},
+		{type: "do", value: AskCommand.cases.picks.make({})},
+		{type: "escape"},
+	],
+);
+
+type Save = Record<string, unknown> & {readonly needed?: unknown};
+const answerOf = (save: Save) => save.answer as {_tag: string; pick?: string};
+
+/**
+ * Option d: a mark set, then Take rec on one key, saves the rec with that mark: one save, the
+ * key that took it, and `needed` as set. A rec pick pressed by name is the same answer.
+ */
+const markThenTake = every(
+	"a mark then Take rec saves the rec with that mark, on one key",
+	(step) => {
+		const {prev, msg} = step;
+		const rec = prev.ask.shows.rec;
+		if (prev.editor._tag === "saving" || rec._tag !== "pick") return true;
+		const takes =
+			(msg.type === "do" && msg.value._tag === "rec") ||
+			(msg.type === "pick" && msg.pick === rec.pick);
+		if (!takes) return true;
+		const saves = savesOf(step) as Save[];
+		const [save] = saves;
+		if (saves.length !== 1 || save === undefined) return "Take rec did not save once";
+		if (answerOf(save)._tag !== "rec") return "Take rec saved something other than the rec";
+		if ((save.via as {took: {key: string}}).took.key !== (msg.key ?? "click"))
+			return "the save lost the key that took it";
+		return sameMark(save, prev) || "the rec saved without the mark as set";
+	},
+	[
+		{type: "mark", needed: true},
+		{type: "do", value: AskCommand.cases.rec.make({}), key: "y", now: NOW},
+	],
+);
+
+/**
+ * Option d: a mark set, then any other pick and its note, saves the mark with that pick.
+ */
+const markThenPick = every(
+	"a mark then any pick saves the mark with the pick",
+	(step) => {
+		const {prev, msg} = step;
+		if (msg.type !== "submit" || prev.editor._tag !== "note") return true;
+		const chosen = prev.editor.pick;
+		for (const save of savesOf(step) as Save[]) {
+			if (answerOf(save).pick !== chosen) return "the save is not the pick in hand";
+			if (!sameMark(save, prev)) return "the pick saved without the mark as set";
+		}
+		return true;
+	},
+	// Every pick, then approve and a note: a note against the rec, or a choice where none shows.
+	[
+		{type: "mark", needed: false},
+		{type: "do", value: AskCommand.cases.picks.make({})},
+		{type: "pick", pick: "approve"},
+		{type: "note", text: "the second file needs a look"},
+		{type: "submit", key: "Enter", now: NOW},
+	],
+);
+
+/** Option d: `needed` is optional on `answered`. No mark set means no `needed` key at all. */
+const noMarkNoKey = every(
+	"with no mark set, the answer has no needed key",
+	(step) =>
+		step.prev.needed !== undefined ||
+		savesOf(step).every((save) => !("needed" in save)) ||
+		"an unmarked answer has a needed key",
+	[
+		{type: "do", value: AskCommand.cases.rec.make({}), key: "y", now: NOW},
+		{type: "save_ok", value: null},
+		{type: "do", value: AskCommand.cases.picks.make({})},
+		{type: "pick", pick: "approve"},
+		{type: "note", text: "the second file needs a look"},
+		{type: "submit", key: "Enter", now: NOW},
 	],
 );
 
@@ -298,7 +372,10 @@ const LAWS = [
 	onlyAccepted,
 	focusedTime,
 	threeMarks,
-	markWithAPick,
+	marksStay,
+	markThenTake,
+	markThenPick,
+	noMarkNoKey,
 	noSilentAnswer,
 ];
 
@@ -310,6 +387,10 @@ const plant = (update: Partial<Machine["update"]>): Machine => ({
 	update: {...real, ...update},
 });
 type Do = Extract<Msg, {type: "do"}>;
+const withoutMark = <C extends {readonly needed?: boolean}>(cmd: C): C => {
+	const {needed: _needed, ...rest} = cmd;
+	return rest as C;
+};
 
 const PLANTS: readonly {readonly law: Law; readonly mistake: string; readonly machine: Machine}[] =
 	[
@@ -412,23 +493,63 @@ const PLANTS: readonly {readonly law: Law; readonly mistake: string; readonly ma
 			}),
 		},
 		{
-			law: markWithAPick,
-			mistake: "a mark before a pick takes (today's marks, drawn before any pick)",
+			law: threeMarks,
+			mistake: "a mark before a pick does nothing (round 6's reading of fix 1)",
 			machine: plant({
-				mark: (s, m) => {
-					if (s.editor._tag === "saving") return [s, []];
-					const {needed: _needed, ...rest} = s;
-					return [s.needed === m.needed ? rest : {...rest, needed: m.needed}, []];
+				mark: (s, m) => (s.editor._tag === "note" ? real.mark(s, m) : [s, []]),
+			}),
+		},
+		{
+			law: marksStay,
+			mistake: "Escape out of a note clears the mark",
+			machine: plant({
+				escape: (s, m) => {
+					const [next, cmds] = real.escape(s, m);
+					const {needed: _needed, ...rest} = next;
+					return [s.editor._tag === "note" ? rest : next, cmds];
 				},
 			}),
 		},
 		{
-			law: markWithAPick,
-			mistake: "Escape closes the note and keeps its mark",
+			law: marksStay,
+			mistake: "a new ask keeps the old ask's mark",
 			machine: plant({
-				escape: (s, m) => {
-					const [next, cmds] = real.escape(s, m);
+				show: (s, m) => {
+					const [next, cmds] = real.show(s, m);
 					return [s.needed === undefined ? next : {...next, needed: s.needed}, cmds];
+				},
+			}),
+		},
+		{
+			law: markThenTake,
+			mistake: "Take rec drops the mark",
+			machine: plant({
+				do: (s, m) => {
+					const [next, cmds] = real.do(s, m);
+					return [next, cmds.map((c) => (c.type === "save" ? withoutMark(c) : c))];
+				},
+			}),
+		},
+		{
+			law: markThenPick,
+			mistake: "a note's save drops the mark",
+			machine: plant({
+				submit: (s, m) => {
+					const [next, cmds] = real.submit(s, m);
+					return [next, cmds.map((c) => (c.type === "save" ? withoutMark(c) : c))];
+				},
+			}),
+		},
+		{
+			law: noMarkNoKey,
+			mistake: "an unmarked answer says needed: false",
+			machine: plant({
+				do: (s, m) => {
+					const [next, cmds] = real.do(s, m);
+					return [
+						next,
+						cmds.map((c) => (c.type === "save" && !("needed" in c) ? {...c, needed: false} : c)),
+					];
 				},
 			}),
 		},
@@ -454,8 +575,8 @@ const PLANTS: readonly {readonly law: Law; readonly mistake: string; readonly ma
  */
 type Row = {readonly pick: string; readonly does: string; readonly tag?: string};
 type DeskView = {
-	/** "Did this need you?" is offered: only once a pick is in hand. */
-	readonly marks?: boolean;
+	/** The mark as held: "Did this need you?" is drawn in every state (option d), so the view says it. */
+	readonly needed?: boolean;
 	/** The rec line's words: "Recommended approve · 95% sure"; a blind or no-rec ask's never say Recommended. */
 	readonly line?: string;
 	/** Every pick's row, in the ask's order, only while every pick is open. */
@@ -490,17 +611,14 @@ const everyView = (
 // Open every pick on each kind of ask, so the rows are drawn in every run.
 const OPEN_PICKS: readonly Msg[] = [{type: "do", value: AskCommand.cases.picks.make({})}];
 
-/** Design E, fix 1: the marks show only after a pick, never before. */
-const marksAfterAPick = everyView(
-	"the marks are offered exactly while a pick is in hand",
-	(view, model) =>
-		view.marks === pickInHand(model) ||
-		(view.marks === undefined
-			? "the view does not say whether the marks are offered"
-			: view.marks
-				? `the marks are offered while ${model.editor._tag}, before a pick`
-				: "the marks are not offered with a pick in hand"),
-	[{type: "do", value: AskCommand.cases.not.make({})}],
+/**
+ * Option d (owner, 2026-11-08): the marks are drawn before any pick and stay while the ask is
+ * open, so the view shows the mark as held in every state, the first look included.
+ */
+const markAsHeld = everyView(
+	"the view shows the mark as held, before a pick and after",
+	(view, model) => sameMark(view, model) || `the view hides the mark while ${model.editor._tag}`,
+	[{type: "mark", needed: true}],
 );
 
 const RECOMMENDED = /\brecommended\b/gi;
@@ -552,7 +670,7 @@ const rowsWhileOpen = everyView(
 	OPEN_PICKS,
 );
 
-const VIEW_LAWS = [marksAfterAPick, recommendedOnce, rowsWhileOpen];
+const VIEW_LAWS = [markAsHeld, recommendedOnce, rowsWhileOpen];
 
 const VIEW_PLANTS: readonly {
 	readonly law: ViewLaw;
@@ -560,9 +678,12 @@ const VIEW_PLANTS: readonly {
 	readonly draw: Draw;
 }[] = [
 	{
-		law: marksAfterAPick,
-		mistake: "the marks show before a pick (today's view)",
-		draw: (model) => ({...drawn(model), marks: true}),
+		law: markAsHeld,
+		mistake: "the view shows the mark only with a pick in hand (round 6's reading of fix 1)",
+		draw: (model) => {
+			const {needed: _needed, ...rest} = drawn(model);
+			return model.editor._tag === "note" ? drawn(model) : rest;
+		},
 	},
 	{
 		law: recommendedOnce,

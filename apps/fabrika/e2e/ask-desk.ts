@@ -228,7 +228,12 @@ export const askDesk = async (tools: Tools) => {
 		);
 		await page.keyboard.press("y");
 		check("P14 the old key is unbound", (await answers(home, 117)).length === 0);
-		check("P17 E: no mark before a pick", (await marksIn(first)) === 0, await marksIn(first));
+		check(
+			"P17 d: the marks show before a pick",
+			(await marksIn(first)) === 2,
+			await marksIn(first),
+		);
+		await onTheLine("P17 d: the marks sit on the rec line", first);
 		check("P23 E: Recommended once before a pick", (await recommendedIn(first)) === 1);
 		await page.keyboard.press("n");
 		const note = first.getByRole("textbox");
@@ -240,7 +245,7 @@ export const askDesk = async (tools: Tools) => {
 		await page.keyboard.type("yonh");
 		check("P14 letter keys type in a note", (await note.inputValue()) === "yonh");
 		check("P14 typing never answers", (await answers(home, 117)).length === 0);
-		check("P17 E: the marks show once a pick is in hand", (await marksIn(first)) === 2);
+		check("P17 d: the marks stay with a note open", (await marksIn(first)) === 2);
 		check("P23 E: Recommended once with the note open", (await recommendedIn(first)) === 1);
 		await button(first, "Needed me").click();
 		check(
@@ -259,16 +264,22 @@ export const askDesk = async (tools: Tools) => {
 			"P24 Escape closes the note before leaving the ask",
 			(await note.count()) === 0 && (await first.isVisible()),
 		);
-		check("P17 E: the marks go with the pick", (await marksIn(first)) === 0);
+		check("P17 d: the marks stay after Escape", (await marksIn(first)) === 2);
+		check(
+			"P17 d: Escape keeps the mark",
+			(await button(first, "Needed me").getAttribute("aria-pressed")) === "true",
+		);
 		await button(first, "Every pick").click();
 		await first
 			.getByRole("button", {name: /approve/i})
 			.last()
 			.waitFor();
-		check("P17 E: every pick open is not a pick, so no mark", (await marksIn(first)) === 0);
+		check("P17 d: the marks stay with every pick open", (await marksIn(first)) === 2);
 		check("P23 E: Recommended once with every pick open", (await recommendedIn(first)) === 1);
 		await page.keyboard.press("Escape");
 		check("P24 every pick closes one level", await first.isVisible());
+		// Clear the mark, so this rec answer is the unmarked one.
+		await button(first, "Needed me").click();
 		await clickRec(first);
 		await until(
 			"P15 click records rec",
@@ -276,7 +287,7 @@ export const askDesk = async (tools: Tools) => {
 			(a) => a.length === 1,
 		);
 		check(
-			"P17 E: a mark left with its pick never rides on the rec",
+			"P17 d: no mark set means no needed key on the answer",
 			!Object.hasOwn((await answers(home, 117))[0] ?? {}, "needed"),
 			(await answers(home, 117))[0],
 		);
@@ -319,6 +330,8 @@ export const askDesk = async (tools: Tools) => {
 		await tools.prompted(page, "t1");
 		await tools.run(page, "t1", "ticket --ticket 118");
 		await box(page).waitFor();
+		// Option d: a mark before a pick, then the rec on one key.
+		await button(box(page), "Needed me").click();
 		await box(page).focus();
 		await page.keyboard.down("r");
 		await until(
@@ -350,6 +363,11 @@ export const askDesk = async (tools: Tools) => {
 				JSON.stringify(click?.answer) === JSON.stringify(key?.answer),
 		);
 		check(
+			"P17 d: a mark then the rec key records needed: true with the rec",
+			key?.needed === true && JSON.stringify(key?.answer) === '{"_tag":"rec"}',
+			key,
+		);
+		check(
 			"P15 remapped actual key is recorded",
 			(key?.via as {took?: {key: string}})?.took?.key === "r",
 		);
@@ -370,7 +388,8 @@ export const askDesk = async (tools: Tools) => {
 				!(await box(page).innerHTML()).includes(DRAFT.rec.why),
 		);
 		check("P23 E: a blind ask never says Recommended", (await recommendedIn(box(page))) === 0);
-		check("P17 E: a blind ask offers no mark before a pick", (await marksIn(box(page))) === 0);
+		check("P17 d: a blind ask offers the marks before a pick", (await marksIn(box(page))) === 2);
+		await onTheLine("P17 d: a blind ask's marks sit on the bar's line", box(page));
 		await tools.prefixed(page, "|");
 		await tools.prompted(page, "t2");
 		await tools.run(page, "t2", "tracker | ticket");
@@ -391,7 +410,13 @@ export const askDesk = async (tools: Tools) => {
 			said.every((n) => n <= 1),
 			said,
 		);
-		check("P17 E: the menu offers no mark before a pick", (await marksIn(menu)) === 0);
+		const inMenu: number[] = [];
+		for (let i = 0; i < (await views.count()); i++) inMenu.push(await marksIn(views.nth(i)));
+		check(
+			"P17 d: each ask in the menu offers both marks before a pick",
+			inMenu.length > 0 && inMenu.every((n) => n === 2),
+			inMenu,
+		);
 		const selected = menu.getByRole("row", {selected: true});
 		check("P24 selection has a supported row role", (await selected.count()) === 1);
 		const before = await selected.textContent();
@@ -471,18 +496,21 @@ export const askDesk = async (tools: Tools) => {
 						.count()) === 0,
 				);
 				check("P23 E: a no-rec ask never says Recommended", (await recommendedIn(box(page))) === 0);
+				check("P17 d: a no-rec ask offers the marks", (await marksIn(box(page))) === 2);
+				await onTheLine("P17 d: a no-rec ask's marks sit on the bar's line", box(page));
 				await shot(page, "no-rec", layout, look);
 				await page.keyboard.press("Control+c");
 				await tools.prompted(page, "t1");
 				await tools.run(page, "t1", "ticket --ticket 118");
 				await box(page).waitFor();
 				await shot(page, "shown", layout, look);
-				check("P17 E: no mark before a pick", (await marksIn(box(page))) === 0);
+				check("P17 d: the marks show before a pick", (await marksIn(box(page))) === 2);
+				await onTheLine("P17 d: the marks sit on the rec line", box(page));
 				check("P23 E: Recommended once", (await recommendedIn(box(page))) === 1);
 				await inspectBar(page, box(page));
 				await button(box(page), "Every pick").click();
 				await shot(page, "every-pick", layout, look);
-				check("P17 E: every pick open offers no mark", (await marksIn(box(page))) === 0);
+				check("P17 d: the marks stay with every pick open", (await marksIn(box(page))) === 2);
 				check(
 					"P23 E: Recommended once with every pick open",
 					(await recommendedIn(box(page))) === 1,
@@ -498,7 +526,7 @@ export const askDesk = async (tools: Tools) => {
 				await page.keyboard.press("Escape");
 				await button(box(page), "Not the rec").click();
 				await shot(page, "required-note", layout, look);
-				check("P17 E: the marks show once a pick is in hand", (await marksIn(box(page))) === 2);
+				check("P17 d: the marks stay with a note open", (await marksIn(box(page))) === 2);
 				check("P23 E: Recommended once with the note open", (await recommendedIn(box(page))) === 1);
 				await inspectBar(page, box(page));
 				await inFlow(
@@ -516,7 +544,7 @@ export const askDesk = async (tools: Tools) => {
 				await button(box(page), "Agent could work it out").click();
 				await box(page).getByRole("textbox").focus();
 				await page.keyboard.press("Escape");
-				check("P17 E: the marks go with the pick", (await marksIn(box(page))) === 0);
+				check("P17 d: the marks stay after Escape", (await marksIn(box(page))) === 2);
 				await box(page).focus();
 				await page.keyboard.press("Space");
 				await shot(page, "evidence-open", layout, look);
@@ -620,7 +648,7 @@ export const askDesk = async (tools: Tools) => {
 					.click();
 				const note = ask.getByRole("textbox");
 				await note.waitFor();
-				check("P17 E: the marks show once a pick is in hand", (await marksIn(ask)) === 2);
+				check("P17 d: the marks stay with a pick's note open", (await marksIn(ask)) === 2);
 				check(
 					"P23 E: Recommended is never said for a blind or no-rec ask",
 					(await recommendedIn(ask)) === 0,
@@ -750,11 +778,39 @@ const inspectLook = async (page: Page, where: Locator, look: "dark" | "light") =
 const recommendedIn = async (where: Locator) =>
 	((await where.evaluate((element) => element.textContent ?? "")).match(/\brecommended\b/gi) ?? [])
 		.length;
-/** How many mark buttons an ask draws, hidden ones included (design E, fix 1). */
+/** How many mark buttons an ask shows (option d: both, in every state of an open ask). */
 const marksIn = (where: Locator) =>
-	where
-		.getByRole("button", {name: /^(needed me|agent could work it out)/i, includeHidden: true})
-		.count();
+	where.getByRole("button", {name: /^(needed me|agent could work it out)/i}).count();
+/**
+ * Option d (owner, 2026-11-08): "Did this need you?" sits at the end of the rec line, or of the
+ * bar's line where a blind or no-rec ask has no rec, never on a row of its own. The marks group
+ * is inside the line element (class `ask-rec`), with nothing after it there, and the line does
+ * not overflow its tile sideways. It may wrap in a 2x2 or small tile, so no top is compared.
+ */
+const onTheLine = async (what: string, where: Locator) => {
+	const group = where.getByRole("group", {name: "Did this need you?"});
+	const found = await group.count();
+	if (found !== 1) {
+		check(what, false, {groups: found});
+		return;
+	}
+	const placed = await group.evaluate((element) => {
+		const line = element.closest(".ask-rec");
+		if (line === null) return {inLine: false};
+		const range = document.createRange();
+		range.setStartAfter(element);
+		range.setEnd(line, line.childNodes.length);
+		const tile = line.closest("[data-tile]")?.getBoundingClientRect();
+		const box = line.getBoundingClientRect();
+		return {
+			inLine: true,
+			after: range.toString().trim(),
+			overflow: line.scrollWidth > line.clientWidth + 1,
+			outside: tile === undefined ? false : box.right > tile.right + 1 || box.left < tile.left - 1,
+		};
+	});
+	check(what, placed.inLine && placed.after === "" && !placed.overflow && !placed.outside, placed);
+};
 /** What opens under the bar stays in normal flow: nothing up to the ask is lifted out of it. */
 const inFlow = async (what: string, where: Locator, target: Locator) => {
 	const lifted = await target.evaluate((element) => {
@@ -858,13 +914,7 @@ const inspectCard = async (page: Page, where: Locator) => {
 		[...reached].some((text) => /every pick/i.test(text)),
 		[...reached],
 	);
-	// Design E: the marks come only with a pick, so take one that is not the rec first.
-	await button(where, "Every pick").click();
-	await where
-		.getByRole("button", {name: /\bno\b/i})
-		.last()
-		.click();
-	await where.getByRole("textbox").waitFor();
+	// Option d: the marks are there before a pick, so Tab reaches them from the first look.
 	await where.focus();
 	for (let i = 0; i < 24; i++) {
 		await page.keyboard.press("Tab");
@@ -885,6 +935,5 @@ const inspectCard = async (page: Page, where: Locator) => {
 		"P24 Space clears the mark",
 		(await button(where, "Needed me").getAttribute("aria-pressed")) === "false",
 	);
-	await page.keyboard.press("Escape");
-	check("P17 E: Escape closes the pick and its marks", (await marksIn(where)) === 0);
+	check("P17 d: the marks stay after a press", (await marksIn(where)) === 2);
 };

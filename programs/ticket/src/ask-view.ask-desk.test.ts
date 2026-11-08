@@ -186,9 +186,26 @@ const recommendedIn = (text: string) => text.match(/\brecommended\b/gi)?.length 
 /** Design E's fix 3 on the drawn words: once for a shown rec, never for a blind or no-rec ask. */
 const recommendedOnce = (rec: string, text: string) =>
 	recommendedIn(text) === (rec === "shown" ? 1 : 0);
-/** Design E's fix 1 on the drawn markup: no "Did this need you?" and no mark before a pick. */
-const noMarks = (markup: string) =>
-	!/did this need you|needed me|agent could work it out/i.test(textOf(markup));
+const MARKS_GROUP = /<div[^>]*role="group"[^>]*aria-label="Did this need you\?"/g;
+const REC_LINE = /<[a-z0-9]+\b[^>]*class="(?:[^"]* )?ask-rec(?: [^"]*)?"/;
+/**
+ * Option d (owner, 2026-11-08) on the drawn markup: before anything is pressed, one "Did this need
+ * you?" group with both marks sits at the end of the rec line (the element with class `ask-rec`),
+ * never on a row of its own. A blind or no-rec ask's line is the same element.
+ */
+const marksOnTheLine = (markup: string) => {
+	if ([...markup.matchAll(MARKS_GROUP)].length !== 1) return false;
+	const line = firstOf(markup, REC_LINE);
+	const at = line.search(MARKS_GROUP);
+	if (at < 0) return false;
+	const group = elementAt(line, at);
+	const after = line.slice(at + group.length);
+	return (
+		/needed me/i.test(textOf(group)) &&
+		/agent could work it out/i.test(textOf(group)) &&
+		textOf(after) === ""
+	);
+};
 
 describe("ask desk design E: the bar before anything is pressed", () => {
 	it("says Recommended once for a shown rec and never for a blind or no-rec ask", async () => {
@@ -199,10 +216,10 @@ describe("ask desk design E: the bar before anything is pressed", () => {
 			{seed: 119120, numRuns: 60},
 		);
 	});
-	it("offers no mark before a pick", async () => {
+	it("offers both marks before a pick, at the end of the rec line", async () => {
 		await fc.assert(
 			fc.asyncProperty(anyAsk, async (a) => {
-				expect(noMarks(view(await sealedAny(a)))).toBe(true);
+				expect(marksOnTheLine(view(await sealedAny(a)))).toBe(true);
 			}),
 			{seed: 119120, numRuns: 60},
 		);
@@ -211,12 +228,22 @@ describe("ask desk design E: the bar before anything is pressed", () => {
 	it("the planted blind line Recommended · Hidden until you pick is caught", () => {
 		expect(recommendedOnce("blind", "Your turn Recommended Hidden until you pick")).toBe(false);
 	});
-	it("the planted marks drawn before a pick are caught", () => {
+	it("the planted marks on a row of their own, after the rec line, are caught", () => {
 		expect(
-			noMarks(
-				'<div role="group" aria-label="Did this need you?"><span>Did this need you?</span><button type="button">Needed me</button></div>',
+			marksOnTheLine(
+				'<p class="ask-rec">Recommended approve · 95% sure</p><div role="group" aria-label="Did this need you?"><button type="button">Needed me</button><button type="button">Agent could work it out</button></div>',
 			),
 		).toBe(false);
+	});
+	it("the planted marks drawn only after a pick are caught", () => {
+		expect(marksOnTheLine('<p class="ask-rec">Recommended approve · 95% sure</p>')).toBe(false);
+	});
+	it("marks at the end of the rec line pass", () => {
+		expect(
+			marksOnTheLine(
+				'<div class="ask-rec"><span>Recommended approve · 95% sure</span><div role="group" aria-label="Did this need you?"><button type="button">Needed me</button><button type="button">Agent could work it out</button></div></div>',
+			),
+		).toBe(true);
 	});
 });
 
