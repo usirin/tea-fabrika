@@ -18,6 +18,7 @@ import {
 	Doorbell,
 	Ledger,
 	LedgerError,
+	LedgerTransaction,
 	lineFor,
 	RecordManager,
 	SinkError,
@@ -2097,6 +2098,228 @@ describe("P10 revocation and append", () => {
 				expect(placing._tag).toBe("placed");
 				expect(yield* d.append(append)).toEqual(placing);
 				expect(yield* entries("target")).toHaveLength(1);
+			}).pipe(w.provide);
+		}),
+	);
+});
+
+describe("P33 the door never writes process lifecycle facts", () => {
+	// Only the brain's ProcessManager writes the `processes` stream and ProcessFact cases.
+	const refusedAppend = (kind: string, stream: string) =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const {client} = yield* online(d, w);
+				yield* d.route(client, "process.send", request("press"));
+				const parent = w.deliveries.at(-1)!.envelope.id;
+				yield* writeId("fact-a", d.signer(parent, PROCESS, kind));
+				expect(
+					yield* Effect.flip(
+						d.append({id: "fact-a", parent, process: PROCESS, kind, stream, fact: {_tag: kind}}),
+					),
+				).toMatchObject({_tag: "SigningRefused"});
+				expect(yield* entries(stream)).toEqual([]);
+			}).pipe(w.provide);
+		});
+	it.effect("the door refuses any append to the processes stream", () =>
+		refusedAppend("saved", "processes"),
+	);
+	for (const stream of ["processes/counter:1", "processes/counter:1/inbox", "processes/a/b"])
+		it.effect(`the door refuses any append under processes/, here ${stream}`, () =>
+			refusedAppend("saved", stream),
+		);
+	for (const kind of Object.keys(C.ProcessFact.cases))
+		it.effect(`the door refuses a fact tagged ${kind} on any stream, from any receipt holder`, () =>
+			refusedAppend(kind, "tickets"),
+		);
+});
+
+describe("P33 signal ids belong to the brain", () => {
+	// A DOWN's entry id is ["DOWN", recipient, ref]. The door refuses any id in that space, so no
+	// receipt holder can hold a signal's id before the brain writes it.
+	const BRAIN = "SHA256:brain";
+	const WATCHER = "process_01m6v5270hetdrt4r8h9vvjwjv";
+	const TARGET = "process_01m6v5270hetdrt4r8h9vvjwjw";
+	const brainFrom = {
+		by: BRAIN,
+		for: PERSON,
+		sentAt: SENT,
+		seen: 0,
+		parent: `in-${WATCHER}-41`,
+		traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+		build: "test-build",
+	};
+	const toWatcher = C.Recipient.cases.process.make({process: WATCHER});
+	const asBrain = C.Owner.cases.brain.make({});
+	const brainSeat = C.Recipient.cases.client.make({client: "window-a", session: TARGET});
+	const processes = (w: World, owner: typeof C.Owner.Type, recipient: typeof C.Recipient.Type) => {
+		const next = [TARGET, WATCHER];
+		return C.ProcessManager.layer(
+			{owner, recipient, by: BRAIN},
+			Effect.sync(() => next.shift()!),
+		).pipe(
+			Layer.provide(
+				LedgerTransaction.layer(w.sql).pipe(
+					Layer.provide(Layer.succeed(Doorbell, {ring: () => Effect.void})),
+				),
+			),
+		);
+	};
+	const signalSpace = [
+		JSON.stringify(["DOWN", toWatcher, "watch:1"]),
+		JSON.stringify(["DOWN", "any", "spelling"]),
+		JSON.stringify(["DOWN"]),
+	];
+	for (const id of signalSpace)
+		it.effect(`a receipt holder's append under signal id ${id} is refused`, () =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					const {client} = yield* online(d, w);
+					yield* d.route(client, "process.send", request("press"));
+					const parent = w.deliveries.at(-1)!.envelope.id;
+					const fact = {_tag: "send", m: {_tag: "DOWN", ref: "watch:1", why: "normal"}};
+					// The signer refuses a signal id outright, and the append refuses it if reached.
+					expect(yield* Effect.flip(writeId(id, d.signer(parent, PROCESS, "send")))).toMatchObject({
+						_tag: "SigningRefused",
+					});
+					expect(
+						yield* Effect.flip(
+							d.append({id, parent, process: PROCESS, kind: "send", stream: "notes", fact}),
+						),
+					).toMatchObject({_tag: "SigningRefused"});
+					expect(yield* entries("notes")).toEqual([]);
+					// The same append under an ordinary id lands: the id alone was refused.
+					yield* writeId("note-1", d.signer(parent, PROCESS, "send"));
+					const placing = yield* d.append({
+						id: "note-1",
+						parent,
+						process: PROCESS,
+						kind: "send",
+						stream: "notes",
+						fact,
+					});
+					expect(placing._tag).toBe("placed");
+				}).pipe(w.provide);
+			}),
+		);
+	it.effect("a client cannot take a DOWN's id first; the real exit then writes its DOWN", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* C.ProcessManager.use((p) =>
+					Effect.gen(function* () {
+						yield* p.start(
+							C.Start.cases.first.make({
+								id: "start:target",
+								name: "target:1",
+								code: {program: "counter", hash: "build-a"},
+							}),
+							brainFrom,
+						);
+						yield* p.start(
+							C.Start.cases.first.make({
+								id: "start:watcher",
+								name: "watcher:1",
+								code: {program: "watcher", hash: "build-a"},
+							}),
+							brainFrom,
+						);
+					}),
+				).pipe(Effect.provide(processes(w, asBrain, brainSeat)));
+				const watcher = processes(w, C.Owner.cases.process.make({process: WATCHER}), toWatcher);
+				yield* C.ProcessManager.use((p) => p.monitor("watch:1", TARGET, brainFrom)).pipe(
+					Effect.provide(watcher),
+				);
+				const {client} = yield* online(d, w);
+				yield* d.route(client, "process.send", request("press"));
+				const parent = w.deliveries.at(-1)!.envelope.id;
+				const taken = JSON.stringify(["DOWN", toWatcher, "watch:1"]);
+				expect(yield* Effect.flip(writeId(taken, d.signer(parent, PROCESS, "send")))).toMatchObject(
+					{_tag: "SigningRefused"},
+				);
+				const forged = {
+					_tag: "send",
+					m: {_tag: "DOWN", ref: "watch:1", process: TARGET, why: "normal", to: toWatcher},
+				};
+				expect(
+					yield* Effect.flip(
+						d.append({
+							id: taken,
+							parent,
+							process: PROCESS,
+							kind: "send",
+							stream: "watcher:1/inbox",
+							fact: forged,
+						}),
+					),
+				).toMatchObject({_tag: "SigningRefused"});
+				yield* C.ProcessManager.use((p) => p.exit(TARGET, "crashed", brainFrom)).pipe(
+					Effect.provide(processes(w, asBrain, brainSeat)),
+				);
+				const inbox = yield* entries("watcher:1/inbox");
+				expect(inbox).toHaveLength(1);
+				expect(inbox[0]).toMatchObject({
+					_tag: "send",
+					by: BRAIN,
+					body: {m: {_tag: "DOWN", ref: "watch:1", process: TARGET, why: "crashed"}},
+				});
+				const letters = yield* C.ProcessManager.use((p) =>
+					Stream.runCollect(p.receive(WATCHER, 0)),
+				).pipe(Effect.provide(watcher));
+				expect(letters.map((letter) => letter.m)).toEqual([
+					{_tag: "DOWN", ref: "watch:1", process: TARGET, why: "crashed", to: toWatcher},
+				]);
+			}).pipe(w.provide);
+		}),
+	);
+	it.effect("a door send with no m, a wrong m or junk never wedges a process inbox", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* C.ProcessManager.use((p) =>
+					p.start(
+						C.Start.cases.first.make({
+							id: "start:watcher",
+							name: "watcher:1",
+							code: {program: "watcher", hash: "build-a"},
+						}),
+						brainFrom,
+					),
+				).pipe(Effect.provide(processes(w, asBrain, brainSeat)));
+				const {client} = yield* online(d, w);
+				const sends = [
+					{_tag: "send"},
+					{_tag: "send", m: {_tag: "DOWN", ref: 5}},
+					{_tag: "send", junk: [1, {m: 2}]},
+					{_tag: "send", m: "hello"},
+				];
+				for (const [n, fact] of sends.entries()) {
+					// Each receipt signs its own writes, so each append rides a fresh input.
+					yield* d.route(client, "process.send", request(`press-${n}`));
+					const parent = w.deliveries.at(-1)!.envelope.id;
+					const id = `junk-${n}`;
+					yield* writeId(id, d.signer(parent, PROCESS, "send"));
+					const placing = yield* d.append({
+						id,
+						parent,
+						process: PROCESS,
+						kind: "send",
+						stream: "watcher:1/inbox",
+						fact,
+					});
+					expect(placing._tag).toBe("placed");
+				}
+				// Pinned: a send with no m is skipped; any m is plain mail.
+				const watcher = processes(w, C.Owner.cases.process.make({process: TARGET}), brainSeat);
+				const letters = yield* C.ProcessManager.use((p) =>
+					Stream.runCollect(p.receive(TARGET, 0)),
+				).pipe(Effect.provide(watcher));
+				expect(letters.map((letter) => letter.m)).toEqual([{_tag: "DOWN", ref: 5}, "hello"]);
 			}).pipe(w.provide);
 		}),
 	);

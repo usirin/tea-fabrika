@@ -16,6 +16,7 @@ import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
 import {Effect, Layer, Option, Stream, Tracer} from "effect";
+import {LedgerTransaction} from "../data/ledger-transaction.ts";
 import {Doorbell, Ledger, LedgerError} from "../data/ledger.ts";
 import type {Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
@@ -23,6 +24,7 @@ import {ClientManager} from "./client-manager.ts";
 import {type From, Mailbox} from "./mailbox.ts";
 import type {MemberFact} from "./members.ts";
 import {ProcessManager} from "./process-manager.ts";
+import {A, brain, first as firstStart, ids} from "./process.test-support.ts";
 
 const READER = "gateway:t1";
 const PARENT = "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41";
@@ -60,11 +62,16 @@ afterAll(() => {
 });
 
 const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
-const onSql = (sql: Sql) => Ledger.sql(sql, {reader: READER}).pipe(Layer.provide(quiet));
-const all = (sql: Sql = fresh()) =>
-	Layer.mergeAll(Mailbox.layer, ProcessManager.layer, ClientManager.layer(FOUNDER)).pipe(
-		Layer.provideMerge(onSql(sql)),
+const onSql = (sql: Sql) =>
+	Layer.mergeAll(Ledger.sql(sql, {reader: READER}), LedgerTransaction.layer(sql)).pipe(
+		Layer.provide(quiet),
 	);
+const all = (sql: Sql = fresh()) =>
+	Layer.mergeAll(
+		Mailbox.layer,
+		ProcessManager.layer(brain(), ids(A).next),
+		ClientManager.layer(FOUNDER),
+	).pipe(Layer.provideMerge(onSql(sql)));
 
 const from = (over: Partial<From> = {}): From => ({
 	by: "SHA256:t2",
@@ -258,31 +265,35 @@ describe("p97, mailbox spans", () => {
 });
 
 describe("p97, process spans", () => {
-	it.effect("each start ends one process.start span with pid, program, hash and answer", () => {
-		const {tracer, ended, spans} = capture();
-		return Effect.gen(function* () {
-			const manager = yield* ProcessManager;
-			yield* manager.start("notes:1", {program: "notes", hash: "sha256-7c1d073e"}, from());
-			yield* manager.start(
-				"notes:1",
-				{program: "notes", hash: "sha256-7c1d073e"},
-				from({parent: null}),
-			);
-			const [first, second, ...more] = ended("process.start");
-			expect(more).toEqual([]);
-			if (first === undefined || second === undefined) return expect.unreachable();
-			expect(holds(first, "notes:1")).toBe(true);
-			expect(tagged(first, "pid")).toBe("notes:1");
-			expect(tagged(first, "program")).toBe("notes");
-			expect(tagged(first, "hash")).toBe("sha256-7c1d073e");
-			expect(tagged(first, "answer")).toBe("placed");
-			expect(tagged(second, "answer")).toBe("refused");
-			expect(tagged(second, "why")).toBe("id_reused");
-			const [append] = ended("ledger.append");
-			expect(append !== undefined && within(append, first)).toBe(true);
-			clean(spans);
-		}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
-	});
+	it.effect(
+		"each start ends one process.start span with process ID, program, hash and answer",
+		() => {
+			const {tracer, ended, spans} = capture();
+			return Effect.gen(function* () {
+				const manager = yield* ProcessManager;
+				const request = firstStart("start:notes:1", "notes:1", {
+					program: "notes",
+					hash: "sha256-7c1d073e",
+				});
+				yield* manager.start(request, from());
+				expect((yield* Effect.flip(manager.start(request, from({parent: null})))).why).toBe(
+					"id_reused",
+				);
+				const [first, second, ...more] = ended("process.start");
+				expect(more).toEqual([]);
+				if (first === undefined || second === undefined) return expect.unreachable();
+				expect(holds(first, "notes:1")).toBe(true);
+				expect(tags(first)["fab.process"]).toBe(A);
+				expect(tagged(first, "program")).toBe("notes");
+				expect(tagged(first, "hash")).toBe("sha256-7c1d073e");
+				expect(tagged(first, "answer")).toBe("placed");
+				expect(tagged(second, "answer")).toBe("refused");
+				expect(tagged(second, "why")).toBe("id_reused");
+				// P33 writes a group atomically; it no longer requires separate ledger.append calls.
+				clean(spans);
+			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+		},
+	);
 });
 
 describe("p97, member spans", () => {
@@ -386,12 +397,17 @@ describe("p97, names and numbers only", () => {
 	it.effect("a name, an id and a key far over 128 characters are cut in every tag", () => {
 		const {tracer, spans, ended} = capture();
 		const long = (letter: string) => letter.repeat(300);
+		// Process texts stay under their 256-character cap and still pass the 128 tag cut.
+		const capped = (letter: string) => letter.repeat(200);
 		return Effect.gen(function* () {
 			const mailbox = yield* Mailbox;
 			const manager = yield* ProcessManager;
 			yield* mailbox.send(long("n"), long("i"), {value: M_MARK}, from({by: long("b")}));
 			yield* Stream.runCollect(mailbox.receive(long("n"), 0));
-			yield* manager.start(long("p"), {program: long("g"), hash: long("h")}, from({seen: 1}));
+			yield* manager.start(
+				firstStart("start:long", capped("p"), {program: capped("g"), hash: capped("h")}),
+				from({seen: 1}),
+			);
 			yield* write(granted(long("k"), "t1"));
 			for (const name of ["mailbox.send", "mailbox.receive", "process.start", "members.write"])
 				expect(ended(name).length, name).toBe(1);

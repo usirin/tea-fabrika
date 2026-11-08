@@ -3,6 +3,7 @@
 // subpath, `./sqlite`, so this one names no platform.
 export {Archive, type BucketCalls} from "./archive.ts";
 export {Doorbell, Ledger, type LedgerCalls, LedgerError} from "./ledger.ts";
+export {LedgerTransaction, type LedgerTurn} from "./ledger-transaction.ts";
 export {
 	Appended,
 	Entry,

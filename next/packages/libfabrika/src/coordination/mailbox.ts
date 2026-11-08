@@ -5,6 +5,7 @@ import {Context, Effect, Layer, Option, Schema, Stream} from "effect";
 import {Ledger, LedgerError} from "../data/ledger.ts";
 import {Appended, type Entry, type Line, lineFor, type Rev} from "../data/log.ts";
 import {short} from "../data/trace.ts";
+import {brainOnly} from "./process.ts";
 
 /** What a writer says about itself, shared by every write in this layer: P6's `Line` without its
  *  case and body, so a writer can leave none out (p92). */
@@ -104,6 +105,9 @@ export class Mailbox extends Context.Service<
 							...short({[STREAM]: inbox(to), [ID]: id, [tag("to")]: to}),
 							[OPERATION]: "send",
 						});
+						// Mail never takes a stream or an id only the brain writes.
+						if (brainOnly({stream: inbox(to), id, tag: SEND}))
+							return Appended.cases.refused.make({why: "forbidden"});
 						const json = decodeJson(m);
 						// The ledger's own answer for a body that is not JSON, without the trip.
 						if (Option.isNone(json)) return Appended.cases.refused.make({why: "bad_line"});
