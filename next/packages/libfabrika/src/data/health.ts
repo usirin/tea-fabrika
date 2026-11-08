@@ -205,7 +205,7 @@ const due = (sql: Sql, object: string, now: number): Array<Part> => {
 				start,
 				start + DAY,
 			);
-			const last = Math.max(...read.map((row) => decodeSeq(row).seq));
+			const last = read.reduce((max, row) => Math.max(max, decodeSeq(row).seq), -Infinity);
 			const [had] = sql.exec(`SELECT coalesce(max(part), 0) AS n FROM archived WHERE day = ?`, day);
 			const part = (had === undefined ? 0 : decodeCount(had).n) + 1;
 			const body = encoder.encode(
