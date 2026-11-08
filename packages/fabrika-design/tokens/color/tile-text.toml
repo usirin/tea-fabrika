@@ -1,0 +1,6 @@
+tier = "component"
+owner = "tile"
+description = "a tile's title at rest"
+
+[colors]
+extends = "text-faint"

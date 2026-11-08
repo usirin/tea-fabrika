@@ -1,0 +1,10 @@
+type = "border"
+tier = "global"
+owner = "design"
+description = "the edge of a part that is not interactive; its content says what it is"
+on = ["surface", "surface-raised"]
+carries = "nothing"
+
+[colors]
+dark = "slate.a6"
+light = "slate.a6"

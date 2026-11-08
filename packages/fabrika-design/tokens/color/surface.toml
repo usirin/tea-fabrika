@@ -1,0 +1,9 @@
+type = "background"
+tier = "global"
+owner = "design"
+description = "a tile's ground"
+theme = "ground"
+
+[colors]
+dark = "slate.1"
+light = "slate.1"
