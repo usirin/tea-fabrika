@@ -1,5 +1,15 @@
 import {join} from "node:path";
-import {Data, Deferred, Effect, Exit, FileSystem, Path, Result, Stream} from "effect";
+import {
+	Data,
+	Deferred,
+	Effect,
+	Exit,
+	FileSystem,
+	Path,
+	type PlatformError,
+	Result,
+	Stream,
+} from "effect";
 import type {Launch} from "../launch.ts";
 
 // The one reader of the person's settings folder: keybindings.toml now (desk/keymap.ts), and
@@ -17,6 +27,27 @@ import type {Launch} from "../launch.ts";
 // bad fabrika.toml never touches the keys, and the other way round. An answer is said once: a
 // save that leaves the text as it was says nothing. A page never reads a file; the host sends
 // each value on (a browser is always a client).
+
+/**
+ * What an OS failure means, in words. The error's own message names the full path, which is a
+ * machine's and has no place on a screen or in a shot, so the file is named as the person knows
+ * it, `keybindings.toml`, and the failure by its kind.
+ */
+const PLAIN: Readonly<Record<PlatformError.PlatformError["reason"]["_tag"], string>> = {
+	AlreadyExists: "it already exists",
+	BadArgument: "the request was not valid",
+	BadResource: "it is not a file that can be read or written",
+	Busy: "it is busy",
+	InvalidData: "its contents are not valid",
+	NotFound: "it was not found",
+	PermissionDenied: "permission denied",
+	TimedOut: "it timed out",
+	UnexpectedEof: "it ended too early",
+	Unknown: "the system did not say why",
+	WouldBlock: "it would have to wait",
+	WriteZero: "nothing was written",
+};
+export const saidOf = (error: PlatformError.PlatformError): string => PLAIN[error.reason._tag];
 
 /** What came of a settings file: none, what it decoded to, or why not, with the line to look at. */
 export type Setting<A> = Data.TaggedEnum<{
@@ -68,7 +99,7 @@ export const settingsFile = <A>(
 							error.cause.code === "ENOTDIR")
 							? Effect.succeed(null)
 							: Effect.succeed(
-									Setting.refused({line: 1, why: `${name} could not be read: ${error.message}`}),
+									Setting.refused({line: 1, why: `it could not be read: ${saidOf(error)}`}),
 								),
 					),
 				);

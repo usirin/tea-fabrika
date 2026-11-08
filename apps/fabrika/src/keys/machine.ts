@@ -22,6 +22,11 @@ export interface Editor {
 	readonly next: number;
 	readonly error: string | null;
 	readonly undo: string | null;
+	/**
+	 * How this editor's last save ended, until the next one does: after a failed save, an older
+	 * "Keys saved." never stands beside its words.
+	 */
+	readonly save: "done" | "failed" | null;
 }
 
 const edit = Cmd.make("edit", {
@@ -199,12 +204,21 @@ const update = (s: Editor, m: EditorMsg): Step => {
 		case "saved":
 			return s.recording._tag !== "saving" || s.recording.request !== m.request
 				? [s, []]
-				: [{...s, recording: idle(), undo: s.recording.undo ? null : m.version, error: null}, []];
+				: [
+						{
+							...s,
+							recording: idle(),
+							undo: s.recording.undo ? null : m.version,
+							error: null,
+							save: "done",
+						},
+						[],
+					];
 		case "failed":
 			if (m.request === "open") return [{...s, error: m.why}, []];
 			return s.recording._tag !== "saving" || s.recording.request !== m.request
 				? [s, []]
-				: [{...s, recording: idle(), error: `Save failed: ${m.why}`}, []];
+				: [{...s, recording: idle(), error: `Save failed: ${m.why}`, save: "failed"}, []];
 		case "undo":
 			return s.undo === null ? [s, []] : saving(s, Edit.cases.undo.make({version: s.undo}));
 	}
@@ -218,6 +232,7 @@ const init = (loaded: Keys | Editor | null, _ctx: undefined): Step => [
 		next: 0,
 		error: null,
 		undo: null,
+		save: null,
 	},
 	[],
 ];

@@ -4,6 +4,7 @@ import {
 	Effect,
 	FileSystem,
 	Path,
+	type PlatformError,
 	Result,
 	Schema,
 	Semaphore,
@@ -25,7 +26,7 @@ import {
 	KeybindingService as ManagerService,
 	type Snapshot,
 } from "../keys/program.ts";
-import {settingsFile} from "./settings.ts";
+import {saidOf, settingsFile} from "./settings.ts";
 
 export {Edit};
 export type {Snapshot};
@@ -57,6 +58,9 @@ const same = (a: Key, b: Key) => a._tag === b._tag && a.key === b.key;
  */
 const CHANGES_SENT = 20;
 
+const failed = (what: "read" | "write", error: PlatformError.PlatformError) =>
+	new Refused({why: `${what} of keybindings.toml failed: ${saidOf(error)}`});
+
 export type KeybindingManager = Manager;
 export const KeybindingManager = Object.assign(ManagerService, {
 	make: (options: {readonly folder: string; readonly mac: boolean; readonly by: string}) =>
@@ -78,7 +82,7 @@ export const KeybindingManager = Object.assign(ManagerService, {
 				Effect.catch((error) =>
 					error.reason._tag === "NotFound"
 						? Effect.succeed(null)
-						: Effect.fail(new Refused({why: `read failed: ${error.message}`})),
+						: Effect.fail(failed("read", error)),
 				),
 			);
 			const modified = fs.stat(file).pipe(
@@ -241,9 +245,7 @@ export const KeybindingManager = Object.assign(ManagerService, {
 							Effect.andThen(fs.chmod(temporary, mode)),
 							Effect.andThen(fs.rename(temporary, real)),
 							Effect.ensuring(fs.remove(temporary).pipe(Effect.ignore)),
-							Effect.mapError(
-								(error) => new Refused({why: `write or rename failed: ${error.message}`}),
-							),
+							Effect.mapError((error) => failed("write", error)),
 						);
 						const applied = yield* observe(saved, from, displaced);
 						undo = request._tag === "undo" ? null : {version: applied.version, rows: restore};

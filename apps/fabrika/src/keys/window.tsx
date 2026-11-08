@@ -322,7 +322,8 @@ export function KeysWindow({
 				</div>
 			</div>
 			<div ref={result} tabIndex={-1} className="keys-result" role="status">
-				{latest !== undefined && (
+				{/* A failed save's words, in the alert above, replace the last result here. */}
+				{editor.save !== "failed" && latest !== undefined && (
 					<>
 						<p>{latest.how === "file" ? "File change applied." : "Keys saved."}</p>
 						{latest.displaced.map((lost) => (
