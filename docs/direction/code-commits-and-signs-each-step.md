@@ -39,15 +39,14 @@ an unsigned or wrongly owned step commit cannot be made.
 
 126 step-agent reports in one day, all in today's version with the steps run by hand. About 21 were
 signing problems. None was a forged or wrong signature: the keys and the check did their job. Every
-problem was in how the signing was driven. The day's field notes are 2026-11-08-04 to 2026-11-08-20,
-with 2026-11-07-02 and 2026-11-07-03 from the day before.
+problem was in how the signing was driven. The count is field note 2026-11-08-20.
 
 | Count | What happened | Field note |
 |---|---|---|
-| 7 | A builder stopped because its plan gave it an exam path: a lint plugin, a `pnpm patch`, `pnpm-workspace.yaml`, an old test with type errors | 2026-11-07-02 and the day's notes |
-| 10 | Commits left unsigned because the lead's brief said not to sign; the lead signed them all as `lead` at landing, so which role wrote each is lost | the day's notes |
-| 3 | Stale or broken chains: a dropped attempt's links stayed on `refs/notes/fabrika`; a test writer told to `git reset --soft HEAD~1` to take over a builder's commit, which made 7 `build` links stale; `main` moved ahead with no merge (`broken_chain`) | 2026-11-08-04 and the day's notes |
-| 1 | The mutation step had no role to sign with | 2026-11-07-03 |
+| 7 | A builder stopped because its plan gave it an exam path: a lint plugin, a `pnpm patch`, `pnpm-workspace.yaml`, an old test with type errors | 2026-11-08-15 |
+| 10 | Commits left unsigned because the lead's brief said not to sign; the lead signed them all as `lead` at landing, so which role wrote each is lost | 2026-11-08-11 |
+| 3 | Stale or broken chains: a dropped attempt's links stayed on `refs/notes/fabrika`; a test writer told to `git reset --soft HEAD~1` to take over a builder's commit, which made 7 `build` links stale; `main` moved ahead with no merge (`broken_chain`) | 2026-11-08-04, 2026-11-08-18 |
+| 1 | The mutation step had no role to sign with | 2026-11-08-19 |
 
 Three causes sit under all 21:
 
