@@ -91,7 +91,7 @@ describe("p21, CoordinationLayer", () => {
 					read: () => Stream.fail(failure),
 					wait: () => Effect.fail(failure),
 				}),
-				Layer.succeed(LedgerTransaction, {run: () => Effect.fail(failure)}),
+				Layer.succeed(LedgerTransaction, {transact: () => Effect.fail(failure)}),
 				Layer.succeed(Doorbell, {ring: () => Effect.void}),
 			);
 			return Effect.gen(function* () {

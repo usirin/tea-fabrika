@@ -2102,6 +2102,34 @@ describe("P10 revocation and append", () => {
 	);
 });
 
+describe("P33 the door never writes process lifecycle facts", () => {
+	// Only the brain's ProcessManager writes the `processes` stream and ProcessFact cases.
+	const refusedAppend = (kind: string, stream: string) =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const {client} = yield* online(d, w);
+				yield* d.route(client, "process.send", request("press"));
+				const parent = w.deliveries.at(-1)!.envelope.id;
+				yield* writeId("fact-a", d.signer(parent, PROCESS, kind));
+				expect(
+					yield* Effect.flip(
+						d.append({id: "fact-a", parent, process: PROCESS, kind, stream, fact: {_tag: kind}}),
+					),
+				).toMatchObject({_tag: "SigningRefused"});
+				expect(yield* entries(stream)).toEqual([]);
+			}).pipe(w.provide);
+		});
+	it.effect("the door refuses any append to the processes stream", () =>
+		refusedAppend("saved", "processes"),
+	);
+	for (const kind of Object.keys(C.ProcessFact.cases))
+		it.effect(`the door refuses a fact tagged ${kind} on any stream, from any receipt holder`, () =>
+			refusedAppend(kind, "tickets"),
+		);
+});
+
 describe("P10 span reader and recording", () => {
 	it.effect("P37 reader: first page stops pulling before a failure after row 256", () =>
 		Effect.gen(function* () {

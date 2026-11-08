@@ -116,7 +116,8 @@ describe("p79, addressed and independent monitors", () => {
 				yield* monitor(store, "watch:1");
 				const before = store.rows();
 				expect((yield* Effect.flip(monitor(store, "watch:1", W))).why).toBe("bad_ref");
-				expect((yield* Effect.flip(cancel(store, "watch:1", X))).why).toBe("bad_ref");
+				// Watches are keyed by (recipient, ref): X has no watch:1, so its cancel is a no-op.
+				yield* cancel(store, "watch:1", X);
 				expect(store.rows()).toEqual(before);
 				yield* exit(store);
 				expect(signals(store)[0]?.m.process).toBe(A);
@@ -313,13 +314,167 @@ describe("p79, cancellation, replay and stale delivery", () => {
 				yield* Mailbox.use((mailbox) =>
 					mailbox.send("watcher:1", "delayed-old", old.m, from()),
 				).pipe(Effect.provide(manager(store)));
+				// The delayed copy's id is not its signal id, so it is plain mail, never B's signal.
 				const later = yield* fresh(store, B);
-				expect(later).toHaveLength(1);
-				expect(later[0]!.id).not.toBe(old.id);
-				expect(Schema.decodeUnknownSync(Down)(later[0]!.m).to).toEqual(
+				const owed = later.filter((letter) => letter.id !== "delayed-old");
+				expect(owed).toHaveLength(1);
+				expect(owed[0]!.id).not.toBe(old.id);
+				expect(Schema.decodeUnknownSync(Down)(owed[0]!.m).to).toEqual(
 					Recipient.cases.process.make({process: B}),
 				);
 			});
 		},
 	);
+});
+
+// P33 review rules. A DOWN is a signal only under its own id, with a watch of that recipient,
+// ref and target, live or canceled. Anything else is plain mail. Watches key on (recipient, ref).
+const toW = Recipient.cases.process.make({process: W});
+const send = (store: Storage, id: string, m: unknown) =>
+	Mailbox.use((mailbox) => mailbox.send("watcher:1", id, m, from())).pipe(
+		Effect.provide(manager(store)),
+	);
+const demonitored = (store: Storage) =>
+	store
+		.rows()
+		.filter((row) => row._tag === "demonitored")
+		.map((row) => row.body as {readonly ref: string; readonly why?: unknown});
+
+describe("P33, a DOWN is a signal only under its signal id and a matching watch", () => {
+	it.effect("a DOWN-tagged letter under any other id is plain mail: cancel never drops it", () => {
+		const store = storage();
+		return Effect.gen(function* () {
+			yield* seed(store);
+			yield* monitor(store, "watch:1");
+			yield* cancel(store, "watch:1");
+			yield* send(
+				store,
+				"forged",
+				Down.make({ref: "watch:1", process: A, why: "crashed", to: toW}),
+			);
+			expect((yield* fresh(store)).map((letter) => letter.id)).toEqual(["forged"]);
+		});
+	});
+	it.effect(
+		"a DOWN under its signal id with no matching monitored watch is plain mail: cancel never drops it",
+		() => {
+			const store = storage();
+			return Effect.gen(function* () {
+				yield* seed(store);
+				yield* monitor(store, "watch:1");
+				yield* monitor(store, "real", X);
+				yield* cancel(store, "watch:1");
+				yield* exit(store, X);
+				// The manager's signal id for (to, ref), checked against a real signal.
+				const signalId = (ref: string) => JSON.stringify(["DOWN", toW, ref]);
+				expect(signals(store).map((row) => row.id)).toEqual([signalId("real")]);
+				// watch:1 targets A, so a DOWN for B under watch:1's signal id matches no watch.
+				const id = signalId("watch:1");
+				yield* send(store, id, Down.make({ref: "watch:1", process: B, why: "crashed", to: toW}));
+				expect((yield* fresh(store)).map((letter) => letter.id)).toEqual([signalId("real"), id]);
+			});
+		},
+	);
+	it.effect(
+		"a malformed DOWN-tagged row never throws or wedges the inbox: later receives still work",
+		() => {
+			const store = storage();
+			return Effect.gen(function* () {
+				yield* seed(store);
+				yield* send(store, "bad", {_tag: "DOWN", ref: 5});
+				yield* send(store, "good", {hello: 1});
+				expect((yield* fresh(store)).map((letter) => letter.id)).toEqual(["bad", "good"]);
+				const last = (yield* fresh(store)).at(-1)!;
+				yield* send(store, "later", {hello: 2});
+				expect((yield* fresh(store, W, last.rev)).map((letter) => letter.id)).toEqual(["later"]);
+			});
+		},
+	);
+});
+
+describe("P33, watches are keyed by (recipient, ref)", () => {
+	it.effect("two recipients may both use ref watch:1, and each cancel is its own", () => {
+		const store = storage();
+		return Effect.gen(function* () {
+			yield* seed(store);
+			yield* monitor(store, "watch:1", A, W);
+			yield* monitor(store, "watch:1", A, X);
+			yield* cancel(store, "watch:1", X);
+			store.reopen();
+			yield* exit(store);
+			expect(
+				(yield* fresh(store)).map((letter) => Schema.decodeUnknownSync(Down)(letter.m)),
+			).toEqual([Down.make({ref: "watch:1", process: A, why: "crashed", to: toW})]);
+			expect(yield* fresh(store, X)).toEqual([]);
+		});
+	});
+	it.effect("a restarted watcher may reuse its own ref after its old watch ended", () => {
+		const store = storage();
+		return Effect.gen(function* () {
+			yield* seed(store);
+			yield* monitor(store, "watch:1");
+			yield* exit(store, W);
+			yield* ProcessManager.use((p) =>
+				p.start(
+					Start.cases.again.make({
+						id: "watcher:restart",
+						after: W,
+						why: "crashed",
+						name: "watcher:1",
+						code: {program: "watcher", hash: "build-a"},
+					}),
+					from(),
+				),
+			).pipe(Effect.provide(manager(store, brain(), ids(B).next)));
+			yield* monitor(store, "watch:1", A, B);
+			yield* exit(store);
+			expect(
+				(yield* fresh(store, B)).map((letter) => Schema.decodeUnknownSync(Down)(letter.m)),
+			).toEqual([
+				Down.make({
+					ref: "watch:1",
+					process: A,
+					why: "crashed",
+					to: Recipient.cases.process.make({process: B}),
+				}),
+			]);
+		});
+	});
+});
+
+describe("P33, monitor again after demonitor", () => {
+	it.effect(
+		"the re-monitor takes effect: the watch is live again and a later exit sends DOWN",
+		() => {
+			const store = storage();
+			return Effect.gen(function* () {
+				yield* seed(store);
+				yield* monitor(store, "watch:1");
+				yield* cancel(store, "watch:1");
+				yield* monitor(store, "watch:1");
+				store.reopen();
+				yield* exit(store);
+				expect(
+					(yield* fresh(store)).map((letter) => Schema.decodeUnknownSync(Down)(letter.m)),
+				).toEqual([Down.make({ref: "watch:1", process: A, why: "crashed", to: toW})]);
+			});
+		},
+	);
+});
+
+describe("P33, demonitored records why", () => {
+	it.effect("a demonitor writes why canceled; a watcher's exit writes why watcher_exited", () => {
+		const store = storage();
+		return Effect.gen(function* () {
+			yield* seed(store);
+			yield* monitor(store, "by-cancel", A, W);
+			yield* monitor(store, "by-exit", A, X);
+			yield* cancel(store, "by-cancel");
+			yield* exit(store, X);
+			expect(Object.fromEntries(demonitored(store).map((body) => [body.ref, body.why]))).toEqual({
+				"by-cancel": "canceled",
+				"by-exit": "watcher_exited",
+			});
+		});
+	});
 });

@@ -2,6 +2,7 @@
 import {describe, expect, it} from "@effect/vitest";
 import {Effect, Exit, Schema} from "effect";
 import {Ledger} from "../data/ledger.ts";
+import {lineFor} from "../data/log.ts";
 import {ProcessId} from "../data/trace.ts";
 import {ProcessIdGenerator} from "./process-id.ts";
 import {ProcessManager} from "./process-manager.ts";
@@ -19,8 +20,10 @@ import {
 	manager,
 	read,
 	storage,
+	type Storage,
 	watcher,
 } from "./process.test-support.ts";
+import {Owner, ProcessFact, Recipient} from "./process.ts";
 
 describe("p79, process identity", () => {
 	it.effect(
@@ -301,4 +304,134 @@ describe("p79, names, parents and replay", () => {
 			});
 		},
 	);
+});
+
+// P33: the fold trusts a ProcessFact only from the brain's own writer, `from().by` here.
+const OTHER = "SHA256:not-the-brain";
+const toW = Recipient.cases.process.make({process: W});
+const forger = (store: Storage) => ({
+	forge: (stream: string, fact: {readonly _tag: string} & Schema.JsonObject) =>
+		Ledger.use((ledger) =>
+			ledger.append(stream, `forged:${fact._tag}`, lineFor(from({by: OTHER}), fact)),
+		).pipe(Effect.provide(manager(store))),
+	live: (process: string) =>
+		ProcessManager.use((p) => p.isLive(process)).pipe(Effect.provide(manager(store))),
+	downs: () => store.rows().filter((row) => row._tag === "send"),
+});
+const lawsFor = (
+	store: Storage,
+): Record<keyof typeof ProcessFact.cases, Effect.Effect<void, unknown>> => {
+	const {forge, live, downs} = forger(store);
+	return {
+		registered: Effect.gen(function* () {
+			yield* forge("processes", {
+				_tag: "registered",
+				name: "counter:2",
+				program: "counter",
+				owner: Owner.cases.process.make({process: W}),
+			});
+			yield* ProcessManager.use((p) => p.start(first("start:counter:2", "counter:2"), from())).pipe(
+				Effect.provide(manager(store, brain(), ids(B).next)),
+			);
+		}),
+		started: Effect.gen(function* () {
+			yield* forge("counter:1", {_tag: "started", process: B, name: "counter:1", ...CODE});
+			expect(yield* live(B)).toBe(false);
+		}),
+		exited: Effect.gen(function* () {
+			yield* forge("counter:1", {_tag: "exited", process: A, why: "crashed"});
+			expect(yield* live(A)).toBe(true);
+		}),
+		restarted: Effect.gen(function* () {
+			yield* forge("counter:1", {
+				_tag: "restarted",
+				process: A,
+				after: B,
+				name: "counter:1",
+				why: "crashed",
+				build: CODE.hash,
+			});
+			const info = yield* ProcessManager.use((p) => p.info).pipe(Effect.provide(manager(store)));
+			expect(info.find((row) => row.process === A)?.restarts).toBe(0);
+		}),
+		down: Effect.gen(function* () {
+			yield* forge("counter:1", {_tag: "down", process: A, why: "crashed", crashes: 1, until: 0});
+			expect(yield* live(A)).toBe(true);
+		}),
+		monitored: Effect.gen(function* () {
+			yield* forge("processes", {_tag: "monitored", ref: "watch:1", process: A, to: toW});
+			yield* ProcessManager.use((p) => p.exit(A, "crashed", from())).pipe(
+				Effect.provide(manager(store)),
+			);
+			expect(downs()).toEqual([]);
+		}),
+		demonitored: Effect.gen(function* () {
+			yield* ProcessManager.use((p) => p.monitor("watch:1", A, from())).pipe(
+				Effect.provide(manager(store, watcher(W))),
+			);
+			yield* forge("processes", {_tag: "demonitored", ref: "watch:1", to: toW, why: "canceled"});
+			yield* ProcessManager.use((p) => p.exit(A, "crashed", from())).pipe(
+				Effect.provide(manager(store)),
+			);
+			expect(downs()).toHaveLength(1);
+		}),
+	};
+};
+
+describe("P33, the process fold ignores facts not written by the brain", () => {
+	for (const tag of Object.keys(ProcessFact.cases) as Array<keyof typeof ProcessFact.cases>)
+		it.effect(`the fold ignores a fact tagged ${tag} whose by is not the brain's writer`, () => {
+			const store = storage();
+			return Effect.gen(function* () {
+				yield* Effect.gen(function* () {
+					const processes = yield* ProcessManager;
+					yield* processes.start(first(), from());
+					yield* processes.start(
+						first("watcher:start", "watcher:1", {program: "watcher", hash: "build-a"}),
+						from(),
+					);
+				}).pipe(Effect.provide(manager(store, brain(), ids(A, W).next)));
+				yield* lawsFor(store)[tag];
+			});
+		});
+});
+
+describe("P33, names and client ids are checked against a pattern", () => {
+	for (const name of ["processes", "a/b", "counter:1/inbox"])
+		it.effect(`a start named ${JSON.stringify(name)} is refused with a typed error`, () => {
+			const store = storage();
+			return Effect.gen(function* () {
+				const error = yield* Effect.flip(
+					ProcessManager.use((p) => p.start(first(`start:${name}`, name), from())).pipe(
+						Effect.provide(manager(store)),
+					),
+				);
+				expect(error._tag).toBe("ProcessError");
+				expect(store.rows()).toEqual([]);
+			});
+		});
+	for (const client of ["processes", "w/x", "counter:1"])
+		it.effect(
+			`a client recipient id ${JSON.stringify(client)} is refused with a typed error`,
+			() => {
+				const store = storage();
+				return Effect.gen(function* () {
+					yield* ProcessManager.use((p) => p.start(first(), from())).pipe(
+						Effect.provide(manager(store)),
+					);
+					const before = store.rows();
+					const caller = {
+						owner: Owner.cases.brain.make({}),
+						recipient: Recipient.cases.client.make({client, session: X}),
+					};
+					const error = yield* Effect.flip(
+						ProcessManager.use((p) => p.monitor("window:1", A, from())).pipe(
+							Effect.provide(manager(store, caller)),
+						),
+					);
+					expect(error._tag).toBe("ProcessError");
+					expect(store.rows()).toEqual(before);
+				});
+			},
+		);
 });
