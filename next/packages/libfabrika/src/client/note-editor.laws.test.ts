@@ -4,6 +4,7 @@ import {propertyInvariant} from "@demlik/tea/pbt";
 import {Effect, Result, Schema} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
+import {Entry, lineFor} from "../data/log.ts";
 import {syncTest} from "../testing.ts";
 import type {Sample} from "./editor.test-support.ts";
 
@@ -487,7 +488,7 @@ describe("P20 editor laws", () => {
 						type: "history_page",
 						note: k.first(s.ids),
 						request: history.state.history.request,
-						page: {entries: [k.historyEntry(s)], after: s.seen, more: false},
+						page: {entries: [historyEntry(k, s)], after: s.seen, more: false},
 					});
 					const loaded = history.state.history.versions;
 					expect(loaded.length).toBeGreaterThan(0);
@@ -519,7 +520,7 @@ describe("P20 editor laws", () => {
 					type: "history_page",
 					note: k.first(s.ids),
 					request: h.state.history.request,
-					page: {entries: [k.historyEntry(s)], after: s.seen, more: false},
+					page: {entries: [historyEntry(k, s)], after: s.seen, more: false},
 				});
 				expect(h.state.history._tag).toBe("ready");
 				h.send({type: "close_history"});
@@ -633,3 +634,25 @@ describe("P20 editor laws", () => {
 		);
 	});
 });
+
+const Send = Schema.TaggedStruct("send", {m: Schema.Json});
+const historyEntry = (k: Kit, s: Sample) =>
+	Entry.make({
+		id: `input_${k.first(s.ids).slice(5)}`,
+		stream: "notes:1/inbox",
+		pos: s.base,
+		rev: s.seen,
+		arrivedAt: 1000,
+		...lineFor(
+			{
+				by: "writer-test",
+				for: "person-test",
+				sentAt: "2026-11-08T00:00:00Z",
+				seen: 0,
+				parent: null,
+				traceId: "10000000000000000000000000000001",
+				build: "test",
+			},
+			Send.make({m: {type: "save", value: {note: k.first(s.ids), base: s.base - 1, body: s.body}}}),
+		),
+	});

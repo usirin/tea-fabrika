@@ -3,7 +3,6 @@ import {applyCell, type Cmd, type Machine, type Reducer, type Sub} from "@demlik
 import {type Brand, Effect, Ref, Schema} from "effect";
 import * as fc from "fast-check";
 import {Id} from "../data/id.ts";
-import {Entry, lineFor} from "../data/log.ts";
 import type {Delivery, LetterId} from "./protocol.ts";
 import {Letter, Via} from "./window.ts";
 
@@ -113,28 +112,6 @@ export const frozen = (s: Sample, note = first(s.ids), body = s.draft, base = s.
 		sentAt: "2026-11-08T08:09:10.123Z",
 		action: {does: "notes.done", via: Via.cases.click.make({})},
 	});
-const Send = Schema.TaggedStruct("send", {m: Schema.Json});
-export const historyEntry = (s: Sample) =>
-	Entry.make({
-		id: `input_${first(s.ids).slice(5)}`,
-		stream: "notes:1/inbox",
-		pos: s.base,
-		rev: s.seen,
-		arrivedAt: 1000,
-		...lineFor(
-			{
-				by: "writer-test",
-				for: "person-test",
-				sentAt: "2026-11-08T00:00:00Z",
-				seen: 0,
-				parent: null,
-				traceId: "10000000000000000000000000000001",
-				build: "test",
-			},
-			Send.make({m: {type: "save", value: {note: first(s.ids), base: s.base - 1, body: s.body}}}),
-		),
-	});
-
 export class Driver<S, M extends {readonly type: string}, C extends Cmd, U extends Sub, X> {
 	state: S;
 	readonly cmds: C[] = [];
