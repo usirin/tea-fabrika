@@ -357,7 +357,7 @@ const routerStep = (msg: KeysMsg): boolean => {
 						: undefined;
 				window.fabrika.send(`tile:${tile === undefined ? cmd.target.tile : tshOf(tile)}`, {
 					type: "keys",
-					data: "\\x03",
+					data: "\x03",
 				});
 			} else if (cmd.held) pressAgain(cmd.press);
 			else live = true;

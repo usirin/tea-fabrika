@@ -122,6 +122,7 @@ export const KeybindingManager = Object.assign(ManagerService, {
 				Effect.gen(function* () {
 					const current = yield* SubscriptionRef.get(state);
 					const digest = version(text);
+					bytes = text;
 					if (!initial && digest === current.version) {
 						if (current.keys.file._tag !== "refused") return current;
 						const recovered = {
@@ -165,7 +166,6 @@ export const KeybindingManager = Object.assign(ManagerService, {
 							Effect.annotateLogs({change: record}),
 						);
 					initial = false;
-					bytes = text;
 					yield* SubscriptionRef.set(state, snapshot);
 					return snapshot;
 				});
