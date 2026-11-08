@@ -66,7 +66,12 @@ export const brainOnly = (write: {
 	write.stream === PROCESSES ||
 	write.stream.startsWith(`${PROCESSES}/`) ||
 	Object.hasOwn(ProcessFact.cases, write.tag) ||
-	inSignalSpace(write.id);
+	inSignalSpace(write.id) ||
+	inRunnerSpace(write.id);
+
+/** Answer and alarm letters belong to the brain. Cmd write ids remain available to the signer. */
+export const inRunnerSpace = (id: string): boolean =>
+	/^process_[^/]+\/(?:due\/|[0-9]+\/[0-9]+\/answer(?:$|\/))/.test(id);
 export const Down = Schema.TaggedStruct("DOWN", {
 	ref: Text,
 	process: ProcessId,

@@ -1,6 +1,6 @@
 import {type AnyCmdDef, type Tagged} from "@demlik/tea";
-import {Effect, Result, Schema} from "effect";
-import {ProgramDown, stepper, Step} from "./program.ts";
+import {Effect, Option, Result, Schema} from "effect";
+import {type Input, ProgramDown, stepper, Step} from "./program.ts";
 import {Saved} from "./state.ts";
 
 const Upgraded = Schema.Struct({saved: Saved, ran: Schema.Array(Schema.String)});
@@ -23,7 +23,11 @@ export const Declaration = Schema.Struct({
 	name: Schema.String,
 	v: Schema.Int,
 	writes: Schema.Record(Schema.String, Schema.Struct({personOnly: Schema.Boolean})),
-	inputs: Schema.Record(Schema.String, Schema.Struct({personOnly: Schema.Boolean})),
+	/** Each input port: whether it takes writes, and whether only a person may send it. */
+	inputs: Schema.Record(
+		Schema.String,
+		Schema.Struct({write: Schema.Boolean, personOnly: Schema.Boolean}),
+	),
 	cmds: Schema.Array(Schema.String),
 });
 export type Declaration = typeof Declaration.Type;
@@ -35,6 +39,8 @@ export type Execution = {
 	readonly upgrade: (saved: unknown) => Effect.Effect<typeof Upgraded.Type, ProgramDown>;
 	readonly reply: (cmd: unknown, outcome: unknown) => Effect.Effect<Schema.Json, ProgramDown>;
 	readonly check: (kind: string, fact: unknown) => Effect.Effect<boolean, ProgramDown>;
+	/** Whether a stamped input decodes against its write port's schema, checked inside the box. */
+	readonly admit: (m: unknown) => Effect.Effect<boolean, ProgramDown>;
 };
 
 export type ExecutionCalls = {
@@ -44,31 +50,51 @@ export type ExecutionCalls = {
 	readonly upgrade: (saved: unknown) => Promise<unknown>;
 	readonly reply: (cmd: unknown, outcome: unknown) => Promise<unknown>;
 	readonly check?: (kind: string, fact: unknown) => Promise<unknown>;
+	readonly admit?: (m: unknown) => Promise<unknown>;
 };
 
 const attempt = <A>(why: ProgramDown["why"], f: () => A) =>
 	Effect.try({try: f, catch: () => new ProgramDown({why})});
+
+const isCodec = (schema: unknown): schema is Schema.Codec<unknown, unknown> =>
+	Schema.isSchema(schema);
+
+/** A Cmd answer as its schema encodes it, as JSON; a schema that is not a codec answers nothing. */
+const encodeAnswer = (schema: unknown, value: unknown): Schema.Json => {
+	if (!isCodec(schema)) throw new ProgramDown({why: "step"});
+	return Schema.decodeUnknownSync(Schema.Json)(Schema.encodeUnknownSync(schema)(value));
+};
+
+/** True when `m` names a write port and decodes against that port's schema. */
+const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean => {
+	const typed = Schema.decodeUnknownOption(Typed)(m);
+	if (Option.isNone(typed) || !Object.hasOwn(inputs, typed.value.type)) return false;
+	const port = inputs[typed.value.type];
+	return (
+		port !== undefined &&
+		port._tag === "write" &&
+		Result.isSuccess(Schema.decodeUnknownResult(port.schema)(m))
+	);
+};
 
 const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Schema.Json => {
 	const type = Schema.decodeUnknownSync(Typed)(cmd).type;
 	const def = defs.find((d) => d.cmdType === type);
 	if (def === undefined) throw new ProgramDown({why: "step"});
 	const outcome = Schema.decodeUnknownSync(Outcome)(raw);
-	if (outcome._tag === "Ok") {
-		const checked = def.schema.ok["~standard"].validate(outcome.value);
-		if (!("value" in checked)) throw new ProgramDown({why: "step"});
+	if (outcome._tag === "Ok")
 		return Schema.decodeUnknownSync(Schema.Json)({
 			type: def.okType,
 			cmd,
-			value: checked.value,
+			value: encodeAnswer(def.schema.ok, outcome.value),
 			at: outcome.at,
 		});
-	}
-	if (!def.errTags.includes(outcome.error._tag)) throw new ProgramDown({why: "step"});
+	const tag = outcome.error._tag;
+	if (!def.errTags.includes(tag)) throw new ProgramDown({why: "step"});
 	return Schema.decodeUnknownSync(Schema.Json)({
 		type: def.errType,
 		cmd,
-		error: outcome.error,
+		error: encodeAnswer(Schema.TaggedStruct(tag, {}), outcome.error),
 		at: outcome.at,
 	});
 };
@@ -86,6 +112,9 @@ export const nodeExecution = (declared: unknown, build = "node"): Execution => {
 		),
 		reply: Effect.fn("execution.reply")((cmd, outcome) =>
 			attempt("step", () => reply(pure.program.machine.cmds ?? [], cmd, outcome)),
+		),
+		admit: Effect.fn("execution.admit")((m) =>
+			attempt("step", () => admits(pure.program.inputs, m)),
 		),
 		check: Effect.fn("execution.check")((kind, fact) =>
 			attempt("step", () => {
@@ -132,6 +161,12 @@ export const workerExecution = (rpc: ExecutionCalls): Execution => {
 			return check === undefined
 				? Effect.fail(new ProgramDown({why: "load"}))
 				: ask(Schema.Boolean, () => check.call(rpc, kind, fact), "step");
+		}),
+		admit: Effect.fn("execution.admit")((m) => {
+			const admit = rpc.admit;
+			return admit === undefined
+				? Effect.fail(new ProgramDown({why: "load"}))
+				: ask(Schema.Boolean, () => admit.call(rpc, m), "step");
 		}),
 	};
 };

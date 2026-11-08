@@ -15,7 +15,7 @@ export const programBox = (declared: unknown, build: string) => {
 		inputs: Object.fromEntries(
 			Object.entries(pure.program.inputs).map(([name, p]) => [
 				name,
-				{personOnly: p._tag === "write" && p.personOnly},
+				{write: p._tag === "write", personOnly: p._tag === "write" && p.personOnly},
 			]),
 		),
 		cmds: (pure.program.machine.cmds ?? []).map((d) => d.cmdType),
@@ -47,6 +47,10 @@ export const programBox = (declared: unknown, build: string) => {
 		check(kind: string, fact: unknown) {
 			// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise
 			return Effect.runPromise(execution.check(kind, fact));
+		}
+		admit(m: unknown) {
+			// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise
+			return Effect.runPromise(execution.admit(m));
 		}
 	};
 };

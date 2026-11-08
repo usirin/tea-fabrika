@@ -452,7 +452,8 @@ const processLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 					: rpc(() => ctx.storage.setAlarm(at))
 				).pipe(Effect.orDie),
 		}),
-		Layer.succeed(Recording, {flush: sink.flush}),
+		// Recording captures its sink's services itself (main's P11); the runner no longer provides them.
+		Layer.succeed(Recording, {flush: sink.flush.pipe(Effect.provideContext(services))}),
 	);
 	const runnerLayer = ProgramRunner.layer(saved).pipe(
 		Layer.provide(dependencies),

@@ -13,6 +13,7 @@ import {
 	type Session,
 	type SigningRefused,
 	type SinkError,
+	SpanSink,
 	Writer,
 } from "../coordination/index.ts";
 import {nodeExecution, type Execution, type Declaration} from "./execution.ts";
@@ -24,7 +25,7 @@ type Code<A extends ReadonlyArray<unknown>, R> = {call(...args: A): R}["call"];
 
 /** A view as JSON. One runner serves every program, so the type stays open: each program's own
  *  client decodes its view (P14). */
-export type View = any;
+export type View = unknown;
 
 /** What a watcher is sent: the whole view once, then one patch per installed step. `rev` is the
  *  inbox position of the last installed letter, so other streams leave no gaps. */
@@ -103,7 +104,7 @@ export class ProgramLoader extends Context.Service<
 								inputs: Object.fromEntries(
 									Object.entries(loaded.program.inputs).map(([name, p]) => [
 										name,
-										{personOnly: p._tag === "write" && p.personOnly},
+										{write: p._tag === "write", personOnly: p._tag === "write" && p.personOnly},
 									]),
 								),
 								cmds: (loaded.program.machine.cmds ?? []).map((d) => d.cmdType),
@@ -164,9 +165,18 @@ export class Alarm extends Context.Service<
 	{readonly set: (at: number | null) => Effect.Effect<void>}
 >()("@kampus/libfabrika/Alarm") {}
 
-/** Sends the process's ended spans on to its JobRecord. P37's flush reads the object's record and
- *  archive services, which the runner's builder holds. */
+/** Sends the process's ended spans on to its JobRecord, with its services captured at build time. */
 export class Recording extends Context.Service<
 	Recording,
-	{readonly flush: Effect.Effect<unknown, LedgerError | SinkError, RecordManager | Archive>}
->()("@kampus/libfabrika/Recording") {}
+	{readonly flush: Effect.Effect<unknown, LedgerError | SinkError>}
+>()("@kampus/libfabrika/Recording") {
+	static readonly layer: Layer.Layer<Recording, never, SpanSink | RecordManager | Archive> =
+		Layer.effect(
+			Recording,
+			Effect.gen(function* () {
+				const sink = yield* SpanSink;
+				const context = yield* Effect.context<RecordManager | Archive>();
+				return {flush: sink.flush.pipe(Effect.provideContext(context))};
+			}),
+		);
+}
