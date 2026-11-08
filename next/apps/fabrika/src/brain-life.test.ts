@@ -1,6 +1,6 @@
 // P12, next/. Unit checks own the outbox and memory sampling. Child cleanup uses the real dev.ts.
 import {spawn, execFileSync, type ChildProcess} from "node:child_process";
-import {mkdtempSync, readFileSync, rmSync} from "node:fs";
+import {existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {createServer} from "node:net";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
@@ -52,7 +52,7 @@ const tree = (parent: number) => {
 		for (const row of rows) if (pids.has(row.parent)) pids.add(row.pid);
 	return rows.filter((r) => pids.has(r.pid));
 };
-const launch = async () => {
+const launch = async (startupGate = false) => {
 	readFileSync(resolve(import.meta.dirname, "../dev.ts"), "utf8");
 	const folder = home();
 	const listener = createServer();
@@ -67,6 +67,16 @@ const launch = async () => {
 	delete env.TYPESAFE_API_KEY;
 	delete env.FABRIKA_FOREGROUND;
 	delete env.CLOUDFLARE_API_TOKEN;
+	if (startupGate) {
+		const preload = join(folder, "startup.mjs");
+		// Delay only the detached child. Kill its parent before startup can finish.
+		// This is a test-only Node import, not a product startup flag.
+		writeFileSync(
+			preload,
+			`import {existsSync,writeFileSync} from "node:fs"; if (process.argv.includes("--child")) {writeFileSync(${JSON.stringify(join(folder, "starting"))}, String(process.pid)); while (!existsSync(${JSON.stringify(join(folder, "startup-release"))})) await new Promise(done => setTimeout(done, 25));}`,
+		);
+		env.NODE_OPTIONS = `${env.NODE_OPTIONS ?? ""} --import=${preload}`;
+	}
 	const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 	const child = spawn(
 		process.execPath,
@@ -95,6 +105,14 @@ const launch = async () => {
 		output += b.toString();
 	});
 	const url = `http://127.0.0.1:${at.port}`;
+	if (startupGate) {
+		while (!existsSync(join(folder, "starting"))) {
+			if (child.exitCode !== null || child.signalCode !== null)
+				throw new Error("stage ended before startup gate");
+			await pause();
+		}
+		return {child, folder, url};
+	}
 	for (;;) {
 		if (child.exitCode !== null) throw new Error(`P12 dev.ts did not start: ${output}`);
 		try {
@@ -121,6 +139,42 @@ const workerd = async (parent: number, excluding = 0) => {
 };
 
 describe("P12 local brain life", () => {
+	// Outside only: real dev.ts, process groups and TCP. This sandbox cannot bind sockets.
+	it("parent death before listener readiness leaves no stage group", async () => {
+		const s = await launch(true);
+		const leader = Number(readFileSync(join(s.folder, "starting"), "utf8"));
+		groups.push(leader);
+		expect(living(leader)).toBe(true);
+		await expect(fetch(s.url)).rejects.toThrow();
+		s.child.kill("SIGKILL");
+		await new Promise<void>((done) => s.child.once("exit", () => done()));
+		writeFileSync(join(s.folder, "startup-release"), "");
+		const until = performance.now() + 10_000;
+		while (living(leader) && performance.now() < until) await pause();
+		expect(
+			living(leader),
+			"the detached child must notice its original parent died during startup",
+		).toBe(false);
+		expect(tree(leader).filter((row) => living(row.pid))).toEqual([]);
+		await expect(fetch(s.url)).rejects.toThrow();
+	});
+	// Outside only: cleanup must address the process group after its leader already exited.
+	it("stage group cleanup still reaches descendants after the leader exits", async () => {
+		const s = await launch();
+		const rows = tree(s.child.pid!),
+			leader = rows.find((row) => row.parent === s.child.pid && row.command.includes("--child"));
+		expect(leader).toBeDefined();
+		groups.push(leader!.pid);
+		const descendants = tree(leader!.pid)
+			.filter((row) => row.pid !== leader!.pid)
+			.map((row) => row.pid);
+		expect(descendants.length).toBeGreaterThan(0);
+		process.kill(leader!.pid, "SIGKILL");
+		const until = performance.now() + 5_000;
+		while (descendants.some(living) && performance.now() < until) await pause();
+		expect(descendants.filter(living)).toEqual([]);
+		await expect(fetch(s.url)).rejects.toThrow();
+	});
 	it.effect(
 		"p81 plant: sample workerd RSS, replace at 500000000, never measure the Node parent",
 		() =>

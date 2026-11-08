@@ -1,8 +1,11 @@
+import {DatabaseSync} from "node:sqlite";
 // P12, next/. The callbacks are real platform duties, not replacement gateway logic.
 // The connection must save attachments and release its turn before calling the Project.
 import {describe, expect, it} from "@effect/vitest";
-import {Deferred, Effect, Fiber} from "effect";
+import {Deferred, Effect, Fiber, Layer} from "effect";
 import * as fc from "fast-check";
+import {Doorbell, Ledger, LedgerError, Referee, lineFor} from "../data/index.ts";
+import {nodeSql} from "../data/sqlite.ts";
 import {Answer, Attached} from "./wire.ts";
 
 const SEED = 119120;
@@ -27,7 +30,10 @@ const setup = Effect.fnUntraced(function* (
 		stream: string,
 		after: number,
 		reader: string,
-	) => Effect.Effect<{readonly _tag: "ready"; readonly rev: number} | {readonly _tag: "parked"}>,
+	) => Effect.Effect<
+		{readonly _tag: "ready"; readonly rev: number} | {readonly _tag: "parked"},
+		LedgerError
+	>,
 	call = () => Effect.succeed(Answer.cases.ok.make({result: null})),
 ) {
 	const {connection} = yield* Effect.promise(() => import("./gateway.ts"));
@@ -65,6 +71,63 @@ const request = (id: string | number, stream = "counter:1/inbox", after = 0) =>
 	JSON.stringify({jsonrpc: "2.0", id, method: "ledger.wait", params: {stream, after}});
 
 describe("P12 Gateway attachment laws", () => {
+	it.effect("a failed wait registration answers once and removes the saved request", () =>
+		Effect.gen(function* () {
+			const f = yield* setup(() => Effect.fail(new LedgerError({why: "unreachable"})));
+			// Inspect state even when the event fails, so an escaped failure cannot hide the lost reply.
+			yield* Effect.exit(f.c.frame(request("failed")));
+			expect.soft(f.frames).toMatchObject([{id: "failed", error: {data: {why: "unreachable"}}}]);
+			expect(f.saved()).toMatchObject({waits: []});
+			yield* f.c.ring("counter:1/inbox", 1);
+			expect(f.frames).toHaveLength(1);
+		}),
+	);
+	it.effect("each saved wait receives the first later revision on its stream", () =>
+		Effect.gen(function* () {
+			const db = new DatabaseSync(":memory:");
+			try {
+				const sql = nodeSql(db);
+				let ring: Connection["ring"] = () => Effect.void;
+				const bell = Layer.succeed(Doorbell, {ring: (_reader, stream, rev) => ring(stream, rev)});
+				const layer = Layer.mergeAll(Referee.layer(sql), Ledger.sql(sql, {reader: "writer"})).pipe(
+					Layer.provide(bell),
+				);
+				yield* Effect.gen(function* () {
+					const referee = yield* Referee;
+					const ledger = yield* Ledger;
+					const f = yield* setup(referee.wait);
+					ring = f.c.ring;
+					yield* f.c.frame(request("early", "facts", 0));
+					yield* f.c.frame(request("later", "facts", 100));
+					for (let n = 1; n <= 101; n++) {
+						yield* ledger.append(
+							"facts",
+							`fact-${n}`,
+							lineFor(
+								{
+									by: "writer",
+									for: "person",
+									sentAt: "2026-11-08T00:00:00Z",
+									seen: 0,
+									parent: null,
+									traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+									build: "test",
+								},
+								{_tag: "noted", n},
+							),
+						);
+					}
+					expect(f.frames).toEqual([
+						{jsonrpc: "2.0", id: "early", result: {rev: 1}},
+						{jsonrpc: "2.0", id: "later", result: {rev: 101}},
+					]);
+					expect(f.saved()).toMatchObject({waits: []});
+				}).pipe(Effect.provide(layer));
+			} finally {
+				db.close();
+			}
+		}),
+	);
 	it.effect("p79 plant: a probe must read the runtime timestamp of its exact live session", () =>
 		Effect.gen(function* () {
 			const f = yield* setup(() => Effect.succeed({_tag: "parked"} as const));
@@ -90,7 +153,7 @@ describe("P12 Gateway attachment laws", () => {
 			yield* Deferred.await(entered);
 			yield* f.c.ring("old", 1);
 			yield* f.c.frame(request("reused", "new"));
-			yield* Deferred.succeed(reply, {_tag: "ready", rev: 1});
+			yield* Deferred.succeed(reply, {_tag: "ready", rev: 1} as const);
 			yield* Fiber.join(first);
 			expect(f.frames).toEqual([{jsonrpc: "2.0", id: "reused", result: {rev: 1}}]);
 			expect(f.saved()).toMatchObject({waits: [{id: "reused", stream: "new", after: 0}]});
@@ -115,7 +178,7 @@ describe("P12 Gateway attachment laws", () => {
 			yield* Deferred.await(entered);
 			const fresh = Attached.cases.new.make({client: "gateway/session-1", nonce: "fresh"});
 			f.save(fresh);
-			yield* Deferred.succeed(reply, {_tag: "ready", rev: 1});
+			yield* Deferred.succeed(reply, {_tag: "ready", rev: 1} as const);
 			yield* Fiber.join(pending);
 			expect(f.saved()).toEqual(fresh);
 			expect(f.frames).toEqual([]);
