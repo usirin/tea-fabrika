@@ -264,25 +264,29 @@ describe("P16 stack and sealed loader", () => {
 				fc.uuid(),
 				fc.string({minLength: 1, maxLength: 20}),
 				async (source, process, missing) => {
-					const calls: Array<{key: string; config: unknown}> = [];
-					const get = (key: string, callback: () => unknown) => {
-						calls.push({key, config: callback()});
-						return {
-							getEntrypoint: () => ({
-								describe: async () => ({name: "counter", v: 1, writes: {}, inputs: {}, cmds: []}),
-							}),
-						};
+					const calls: Array<{key: string | null; config: unknown}> = [];
+					const unused = () => {
+						throw Error("unused Worker Loader capability");
 					};
-					// WorkerLoader is a platform capability. The stand-in only records calls to the real adapter.
-					const loader = workerLoader(
-						{
-							get,
-							load: () => {
-								throw Error("unused load");
-							},
-						} as WorkerLoader,
-						{counter: {hash: hash(source), source}},
-					);
+					const rpc = {
+						describe: async () => ({name: "counter", v: 1, writes: {}, inputs: {}, cmds: []}),
+						fetch: unused,
+						connect: unused,
+					};
+					const stub: WorkerStub = {
+						getEntrypoint: unused,
+						getDurableObjectClass: unused,
+					};
+					vi.spyOn(stub, "getEntrypoint").mockReturnValue(rpc);
+					// Record the real adapter's config; the copied-file tests below exercise workerd itself.
+					const platform: WorkerLoader = {
+						get: (key, callback) => {
+							calls.push({key, config: callback()});
+							return stub;
+						},
+						load: unused,
+					};
+					const loader = workerLoader(platform, {counter: {hash: hash(source), source}});
 					const loaded = await Effect.runPromise(loader.load("counter", process));
 					expect(loaded.hash).toBe(hash(source));
 					expect(calls).toEqual([
@@ -484,7 +488,7 @@ describe("P16 copied-file real stage, serial", () => {
 												}
 											}
 										},
-										catch: (e) => e,
+										catch: (error) => new Error("P16 isolation check failed", {cause: error}),
 									});
 								}),
 							).pipe(Effect.provide(localState()), Effect.provide(NodeServices.layer)),
@@ -631,7 +635,7 @@ describe("P16 copied-file real stage, serial", () => {
 												b.ws.close();
 											}
 										},
-										catch: (error) => error,
+										catch: (error) => new Error("P16 recovery check failed", {cause: error}),
 									});
 								}),
 							).pipe(
