@@ -8,6 +8,8 @@ import {
 	type JobTrace,
 	jobTraceId,
 	kind,
+	Replayed,
+	Replayer,
 	TraceId,
 	Traces,
 } from "@kampus/fabrika-old";
@@ -18,6 +20,7 @@ import {
 	type FactsSub,
 	type FollowSub,
 	Model,
+	type replayCmd,
 	RowKey,
 	statusOf,
 	type TickSub,
@@ -38,6 +41,8 @@ import {Shown, shownOf} from "./view.ts";
 //   tsh> trace --id 6c0f…e3a1            that job's record, followed while the job runs
 //   toggle {row: "job"}                  the job's row closes; again, it opens
 //   choose {row: "step:…"}               the step's detail shows
+//   replay {row: "machine:…"}            that machine run, replayed through today's code: "matches
+//                                        at every step", or the step where it parts
 //   quit null                            it ends
 //
 // The ticket view (ticket 141): every lane the ticket's `started` facts name, oldest first, one
@@ -62,9 +67,11 @@ export const Choose = Schema.Struct({row: Schema.NullOr(RowKey)});
 export const Seek = Schema.Struct({at: Schema.NullOr(Schema.Finite)});
 /** One stop back or on: the fact before or after the playhead. */
 export const StepBy = Schema.Struct({by: Schema.Literals([-1, 1])});
+/** A machine run's row, to replay through today's code. */
+export const ReplayRow = Schema.Struct({row: RowKey});
 
 /** The window's own inputs: closing them all ends the program, as a quit does. */
-const WINDOW = ["toggle", "choose", "seek", "step", "quit"] as const;
+const WINDOW = ["toggle", "choose", "seek", "step", "replay", "quit"] as const;
 
 /**
  * How long a record is still followed once its job has ended: the spans that end last, the
@@ -174,10 +181,27 @@ const factsRunner = (sub: FactsSub) =>
 		}),
 	);
 
-/** How the machine runs: following on the `Traces` service, the ledger's `Tickets`, and the clock. */
+/**
+ * One machine run's rows, replayed through the code of the programs the host lists, by its
+ * `Replayer`. Where none is given (a test, the shots), the answer says no code is listed: a job view
+ * needs no replay to show, so the program does not ask for one, as with `Tickets` above.
+ */
+const replayHandler = (cmd: ReturnType<typeof replayCmd>) =>
+	Effect.gen(function* () {
+		const given = yield* Effect.serviceOption(Replayer);
+		if (Option.isNone(given))
+			return Replayed.cases.cannot.make({
+				why: "no_code",
+				n: null,
+				detail: "no programs' code is given here to replay through",
+			});
+		return yield* given.value.replay({starts: cmd.starts, steps: cmd.steps});
+	});
+
+/** How the machine runs: following on the `Traces` service, the ledger's `Tickets`, and the clock; replaying on the `Replayer`. */
 export const traceOptions = {
 	ctx: undefined,
-	interpret: {},
+	interpret: {replay: replayHandler},
 	subscribe: {follow: followRunner, tick: tickRunner, facts: factsRunner},
 };
 
@@ -189,7 +213,12 @@ export const traceKind = kind({
 	options: () => traceOptions,
 	drawing: () => ({
 		name: "trace",
-		steps: {follow: "follow the record", tick: "tell the time", facts: "read the ticket"},
+		steps: {
+			follow: "follow the record",
+			tick: "tell the time",
+			facts: "read the ticket",
+			replay: "replay through current code",
+		},
 	}),
 	status: statusOf,
 });
@@ -213,6 +242,10 @@ export const trace = defineProgram({
 		choose: input(Choose, "Show one row's detail, or none with `null`."),
 		seek: input(Seek, "Replay the ticket up to a time, in Unix ms, or `null` for live."),
 		step: input(StepBy, "Replay one fact back (`-1`) or on (`1`). Past the last is live."),
+		replay: input(
+			ReplayRow,
+			"Replay one machine run of the job shown through today's code, by its row: its Msgs folded again from where it started.",
+		),
 		quit: input(Schema.Null, "Stop."),
 		id: input(TraceId, "A job's trace id: its record replaces what shows."),
 		ticket: input(
@@ -252,6 +285,7 @@ export const trace = defineProgram({
 					choose: ({row}) => step({type: "choose", row}),
 					seek: ({at}) => step({type: "seek", at}),
 					step: ({by}) => step({type: "step", by}),
+					replay: ({row}) => step({type: "replay", row}),
 					quit: () => end,
 				},
 				{until: WINDOW},

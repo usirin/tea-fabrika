@@ -190,16 +190,36 @@ export interface MachineStep<S> {
 }
 
 /**
- * Where a storage writes its runs' steps, each state as its machine's schema
- * encoded it. A job's record keeps them (../host/traces.ts); memory and
- * folder storage keep none.
+ * One boot of a machine run: when, the program that booted it, and the state
+ * it booted from. Elm's debugger keeps the same as a history's initial model,
+ * and a replay folds the steps after it from here
+ * (docs/plan/replay-through-current-code.md). A restart is another boot.
  */
-export type StepLog = (
-	run: string,
-	machine: string,
-	id: string,
-	step: MachineStep<unknown>,
-) => Effect.Effect<void, StorageBroken>;
+export interface MachineStart<S> {
+	readonly at: number;
+	readonly program: string;
+	readonly state: S;
+}
+
+/**
+ * Where a storage writes its runs' starts and steps, each state as its
+ * machine's schema encoded it. A job's record keeps them (../host/traces.ts);
+ * memory and folder storage keep none.
+ */
+export interface StepLog {
+	readonly step: (
+		run: string,
+		machine: string,
+		id: string,
+		step: MachineStep<unknown>,
+	) => Effect.Effect<void, StorageBroken>;
+	readonly start: (
+		run: string,
+		machine: string,
+		id: string,
+		start: MachineStart<unknown>,
+	) => Effect.Effect<void, StorageBroken>;
+}
 
 /** One open of one run: the only way to write to it. */
 export interface Handle {
@@ -252,6 +272,16 @@ export interface Handle {
 		id: string,
 		state: StateSchema<S>,
 		step: MachineStep<S>,
+	) => Effect.Effect<void, StorageFailed>;
+	/**
+	 * Keep one boot of one machine run, its state through the machine's schema,
+	 * fenced like a save. On the same storages as `step`, and only there.
+	 */
+	readonly start?: <S>(
+		machine: string,
+		id: string,
+		state: StateSchema<S>,
+		start: MachineStart<S>,
 	) => Effect.Effect<void, StorageFailed>;
 }
 
@@ -354,7 +384,7 @@ const promised = <A>(effect: Effect.Effect<A, StorageFailed>): Promise<A> =>
 
 /**
  * A storage over one `KeyValueStore`. `kv`: how to reach it; asked once per
- * call. `steps`: where each machine step goes, for a storage that keeps them.
+ * call. `steps`: where each machine start and step goes, for a storage that keeps them.
  */
 function storageOn(
 	kv: Effect.Effect<KeyValueStore.KeyValueStore, StorageBroken>,
@@ -573,7 +603,18 @@ function storageOn(
 							Effect.gen(function* () {
 								const kept = yield* through(state, machine, id).encode(step.state);
 								yield* fence;
-								yield* steps(run, machine, id, {...step, state: kept});
+								yield* steps.step(run, machine, id, {...step, state: kept});
+							}).pipe(one),
+						start: <S>(
+							machine: string,
+							id: string,
+							state: StateSchema<S>,
+							start: MachineStart<S>,
+						) =>
+							Effect.gen(function* () {
+								const kept = yield* through(state, machine, id).encode(start.state);
+								yield* fence;
+								yield* steps.start(run, machine, id, {...start, state: kept});
 							}).pipe(one),
 					}),
 		};
@@ -621,8 +662,8 @@ function storageOn(
  * A storage on any `KeyValueStore` Layer: memory, a folder through any
  * `FileSystem`, SQL, Web Storage. The Layer is built once, at the first use,
  * and lives as long as the storage value does. `steps`: where each machine
- * step goes, when this storage keeps them (a job's record does); left out,
- * its handles have no `step`.
+ * start and step goes, when this storage keeps them (a job's record does);
+ * left out, its handles have no `step` and no `start`.
  */
 export function storageOf<E>(
 	layer: Layer.Layer<KeyValueStore.KeyValueStore, E>,
@@ -640,7 +681,7 @@ export function storageOf<E>(
  * A storage in memory: it outlives a run in this process, not the process.
  * Each value is kept as JSON text and read back as a copy, so a test that
  * kills a run and starts it again sees only what was saved, never a live
- * object. `steps`: where each machine step goes, if anywhere.
+ * object. `steps`: where each machine start and step goes, if anywhere.
  */
 export const memoryStorage = (steps?: StepLog): Storage =>
 	storageOf(KeyValueStore.layerMemory, steps);
@@ -648,7 +689,7 @@ export const memoryStorage = (steps?: StepLog): Storage =>
 /**
  * A storage in a folder, through `fileSystem`: one file per slot, its name
  * the key's. Any `FileSystem` fits: Node's (`./storage-node.ts`), or one in a
- * browser, with no change here. `steps`: where each machine step goes, as
+ * browser, with no change here. `steps`: where each machine start and step goes, as
  * `storageOf` takes it; a host hands its jobs' records here (../host/records.ts).
  */
 export const folderStorage = (

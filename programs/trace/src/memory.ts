@@ -6,7 +6,7 @@ import {Effect, Layer, Stream} from "effect";
 // the real one refuses it. A record here never changes, so following one reads it once.
 //
 //   Effect.provide(Traces.read(TALLY_ID), memoryTraces([TALLY]))   // TALLY
-//   Effect.provide(Traces.read("0".repeat(32)), memoryTraces([]))  // {trace: "000…", job: null, runs: [], spans: [], steps: [], opened: []}
+//   Effect.provide(Traces.read("0".repeat(32)), memoryTraces([]))  // {trace: "000…", job: null, runs: [], spans: [], steps: [], starts: [], opened: []}
 
 const ID = /^[0-9a-f]{32}$/;
 
@@ -20,6 +20,7 @@ export const memoryTraces = (records: readonly JobTrace[]) => {
 						runs: [],
 						spans: [],
 						steps: [],
+						starts: [],
 						opened: [],
 					},
 				)

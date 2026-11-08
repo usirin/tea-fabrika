@@ -3,14 +3,16 @@ import {
 	type JobTrace,
 	type Json,
 	jsonPatchOf,
+	Replayed,
 	type Span,
+	type Start,
 	type Step,
 } from "@kampus/fabrika-old";
 import type {Entry} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
-import {isRunning, type Model, type Read} from "./machine.ts";
+import {isRunning, type Model, type Read, type Replay} from "./machine.ts";
 import {childrenOf, type Lane, type LaneRow, lanesOf, stopsOf, summaryOf} from "./ticket.ts";
-import {findOf, type Kind, type Node, nodesOf, treeOf} from "./tree.ts";
+import {findOf, type Kind, msgName, type Node, nodesOf, treeOf} from "./tree.ts";
 
 // What the trace's window is shown: the rows that are open, flattened in order with their depth,
 // and the chosen row's detail. Elm's `view`, less the HTML: the window only draws it.
@@ -21,6 +23,9 @@ import {findOf, type Kind, type Node, nodesOf, treeOf} from "./tree.ts";
 //   shownOf(model).chosen      // after choose "add 2":
 //   // {kind: "step", msg: {type: "add", n: 2}, before: {kind: "kept", state: {total: 1}},
 //   //  after: {total: 3}, changes: [{op: "replace", path: "/total", before: 1, after: 3}], cmds: []}
+//   shownOf(model)             // after choose "count total", replay it, and its answer parts at 2:
+//   // chosen {kind: "machine", replayable: true, replay: {answer: {_tag: "parts", n: 2, ...}, says: "..."}}
+//   // rows: "count total" {replay: "parts at step 2"}, "add 2" {replay: "parts from the recording"}
 //
 // Times are milliseconds from the job's start, so the window places bars with no clock of its own.
 //
@@ -54,6 +59,11 @@ export const Row = Schema.Struct({
 	/** How many rows it groups. */
 	size: Schema.Int,
 	dots: Schema.Array(Dot),
+	/**
+	 * What the replay answered of it, in words: on the machine run's row ("parts at step 2"), and
+	 * on the step that parts or is refused ("parts from the recording"). `null`: nothing to say.
+	 */
+	replay: Schema.NullOr(Schema.String),
 });
 export type Row = typeof Row.Type;
 
@@ -146,6 +156,10 @@ export const Detail = Schema.Union([
 		steps: Schema.Int,
 		/** Its state after its newest step. */
 		state: Schema.Unknown,
+		/** The record kept where it started, before its first step: it can be replayed. */
+		replayable: Schema.Boolean,
+		/** Its replay through today's code, asked: the answer once it came, and in words. `null`: none asked. */
+		replay: Schema.NullOr(Schema.Struct({answer: Schema.NullOr(Replayed), says: Schema.String})),
 	}),
 	Schema.Struct({
 		kind: Schema.Literal("step"),
@@ -156,7 +170,10 @@ export const Detail = Schema.Union([
 		n: Schema.Int,
 		at: Schema.Number,
 		msg: Schema.Unknown,
-		/** `start`: the first step, whose state before is the machine's start, which no row keeps. */
+		/**
+		 * The state it folded from: the step before's, or for the first step the start the record
+		 * kept. `start`: a first step in a record kept before starts were, so no row keeps it.
+		 */
 		before: Schema.Union([
 			Schema.Struct({kind: Schema.Literal("kept"), state: Schema.Unknown}),
 			Schema.Struct({kind: Schema.Literal("start")}),
@@ -363,7 +380,86 @@ const tagsOf = (tags: Span["tags"]) =>
 		.map(([k, v]) => [k, String(v)] as const)
 		.toSorted(([a], [b]) => a.localeCompare(b));
 
-const flatten = (root: Node, open: ReadonlySet<string>, zero: number): Row[] => {
+/** A machine run's starts in a record, the first first. */
+const startsIn = (trace: JobTrace, run: string, machine: string, id: string): readonly Start[] =>
+	trace.starts
+		.filter((s) => s.run === run && s.machine === machine && s.id === id)
+		.toSorted((a, b) => a.n - b.n);
+
+/** Where a machine run started, before its first step, when the record kept it. */
+const firstStart = (trace: JobTrace, run: string, machine: string, id: string): Start | null => {
+	const first = startsIn(trace, run, machine, id)[0];
+	return first?.after === 0 ? first : null;
+};
+
+/** What a machine run's row says of its replay's answer. */
+const machineWords = (answer: Replayed): string => {
+	switch (answer._tag) {
+		case "matches":
+			return "matches at every step";
+		case "parts":
+			return `parts at step ${answer.n}`;
+		case "refused":
+			return `no cell for step ${answer.n}`;
+		case "cannot":
+			return "can't be replayed";
+	}
+};
+
+/** What the step a replay stopped at says: the one that parts, or the one with no cell. */
+const stepWords = (answer: Replayed): {readonly n: number; readonly says: string} | null => {
+	switch (answer._tag) {
+		case "parts":
+			return {n: answer.n, says: "parts from the recording"};
+		case "refused":
+			return {n: answer.n, says: "no cell in today's code"};
+		default:
+			return null;
+	}
+};
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** A value in one line, as JSON writes it. */
+const inLine = (value: unknown): string => JSON.stringify(value) ?? String(value);
+
+/** What tea's refusal names a state with no tag, as tally's `{total}` is: nothing a person reads. */
+const UNTAGGED = "(untagged state)";
+
+/** A replay's answer, said whole: what the detail's status region reads out. `null`: on its way. */
+const saysOf = (answer: Replayed | null): string => {
+	if (answer === null) return "Replaying through current code…";
+	switch (answer._tag) {
+		case "matches":
+			return `Replayed through current code: matches at every step, ${plural(answer.steps, "step")}.`;
+		case "parts":
+			return `Replayed through current code: parts at step ${answer.n} (${msgName(answer.msg)}), at ${answer.path}: ${inLine(answer.recorded)} in the recording, ${inLine(answer.replayed)} now.`;
+		case "refused":
+			return `Replayed through current code: no cell for step ${answer.n} (${msgName(answer.msg)})${answer.state === UNTAGGED ? "" : ` in ${answer.state}`}. Today's code takes ${answer.accepts.length === 0 ? "no Msg there" : answer.accepts.join(", ")}.`;
+		case "cannot":
+			return `Can't replay through current code: ${answer.detail}.`;
+	}
+};
+
+/** Each row's replay words, by key: the machine run's row, and the step its answer names. */
+const replayWords = (root: Node, replay: Replay | null): ReadonlyMap<string, string> => {
+	const words = new Map<string, string>();
+	if (replay === null || replay.answer === null) return words;
+	words.set(replay.row, machineWords(replay.answer));
+	const at = stepWords(replay.answer);
+	const step = findOf(root, replay.row)?.children.find(
+		(c) => c.of.kind === "step" && c.of.step.n === at?.n,
+	);
+	if (at !== null && step !== undefined) words.set(step.key, at.says);
+	return words;
+};
+
+const flatten = (
+	root: Node,
+	open: ReadonlySet<string>,
+	zero: number,
+	words: ReadonlyMap<string, string>,
+): Row[] => {
 	const out: Row[] = [];
 	const walk = (n: Node, depth: number) => {
 		const opens = n.children.length > 0;
@@ -382,6 +478,7 @@ const flatten = (root: Node, open: ReadonlySet<string>, zero: number): Row[] => 
 			open: isOpen,
 			size: n.children.length,
 			dots: n.events.map((e) => ({name: e.name, at: e.at - zero})),
+			replay: words.get(n.key) ?? null,
 		});
 		if (isOpen) for (const c of n.children) walk(c, depth + 1);
 	};
@@ -389,20 +486,30 @@ const flatten = (root: Node, open: ReadonlySet<string>, zero: number): Row[] => 
 	return out;
 };
 
-const stepDetail = (key: string, step: Step, before: Step | null, zero: number): Detail => ({
-	kind: "step",
-	key,
-	run: step.run,
-	machine: step.machine,
-	id: step.id,
-	n: step.n,
-	at: step.at - zero,
-	msg: step.msg,
-	before: before === null ? {kind: "start"} : {kind: "kept", state: before.state},
-	after: step.state,
-	changes: before === null ? [] : changesOf(before.state, step.state),
-	cmds: step.cmds,
-});
+/** A step opened. `started`: where its machine run started, for a first step, when it was kept. */
+const stepDetail = (
+	key: string,
+	step: Step,
+	before: Step | null,
+	started: Start | null,
+	zero: number,
+): Detail => {
+	const from = before ?? started;
+	return {
+		kind: "step",
+		key,
+		run: step.run,
+		machine: step.machine,
+		id: step.id,
+		n: step.n,
+		at: step.at - zero,
+		msg: step.msg,
+		before: from === null ? {kind: "start"} : {kind: "kept", state: from.state},
+		after: step.state,
+		changes: from === null ? [] : changesOf(from.state, step.state),
+		cmds: step.cmds,
+	};
+};
 
 /** A span opened, Jaeger's way: its tags and events, with the run and the job it belongs to. */
 const spanDetail = (
@@ -431,6 +538,7 @@ const detailOf = (
 	node: Node,
 	trace: Extract<Read, {readonly at: "read"}>["trace"],
 	zero: number,
+	replay: Replay | null,
 ): Detail => {
 	const record = trace.runs.find((r) => r.run === node.note || `run:${r.run}` === node.key);
 	const run =
@@ -449,9 +557,15 @@ const detailOf = (
 				id: of.id,
 				steps: of.steps.length,
 				state: of.steps.at(-1)?.state ?? null,
+				replayable: firstStart(trace, of.run, of.machine, of.id) !== null,
+				replay:
+					replay?.row === node.key ? {answer: replay.answer, says: saysOf(replay.answer)} : null,
 			};
-		case "step":
-			return stepDetail(node.key, of.step, of.before, zero);
+		case "step": {
+			const {run, machine, id} = of.step;
+			const started = of.before === null ? firstStart(trace, run, machine, id) : null;
+			return stepDetail(node.key, of.step, of.before, started, zero);
+		}
 		case "group":
 			return {kind: "group", key: node.key, name: node.name, size: node.children.length, run, job};
 	}
@@ -815,7 +929,7 @@ export const shownOf = (s: Model): Shown => {
 			const end = Math.max(...all.map((n) => n.to));
 			const length = Math.max(1, end - zero);
 			const chosen = s.chosen === null ? undefined : findOf(root, s.chosen);
-			const rows = flatten(root, new Set(s.open), zero);
+			const rows = flatten(root, new Set(s.open), zero, replayWords(root, s.replay));
 			return {
 				shows: "job",
 				read: "read",
@@ -830,7 +944,7 @@ export const shownOf = (s: Model): Shown => {
 				steps: trace.steps.length,
 				empty: trace.runs.length + trace.spans.length + trace.steps.length === 0,
 				rows,
-				chosen: chosen === undefined ? null : detailOf(chosen, trace, zero),
+				chosen: chosen === undefined ? null : detailOf(chosen, trace, zero, s.replay),
 				ticket: null,
 			};
 		}

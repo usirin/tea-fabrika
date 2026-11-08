@@ -62,6 +62,8 @@ export * from "./host/move.ts";
 export * from "./host/observer.ts";
 // Where a host keeps its jobs' records, and how its table, steps and spans fill them.
 export * from "./host/records.ts";
+// One machine run of a record, replayed through today's code: the answer, and the service a host gives.
+export {layerReplayer, Replayed, Replayer, replayOf} from "./host/replay.ts";
 export * from "./host/rules.ts";
 export * from "./host/signer.ts";
 export {type KeyFile, keyFileOf, keyFileText, keyLineOf, keyOnly} from "./host/sshsig.ts";
@@ -69,6 +71,9 @@ export * from "./host/supervisor.ts";
 export * from "./host/tail.ts";
 // A job's record, read: the shape the trace tile draws, `Traces`, and the `Storage` over it.
 export * from "./host/traces.ts";
+// A record's `Start`, one boot of a machine run, wins over the supervisor's type of the same name,
+// which nothing outside the package names.
+export {Start} from "./host/traces.ts";
 export * from "./host/writer.ts";
 // program: a tea machine as a program.
 export * from "./program/ear.ts";

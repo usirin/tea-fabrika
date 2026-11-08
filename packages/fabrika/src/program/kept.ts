@@ -1,11 +1,4 @@
-import {
-	type Cmd,
-	foldUpdates,
-	type Machine,
-	type OnError,
-	RuntimeDiscardNotice,
-	type Sub,
-} from "@demlik/tea";
+import {type Cmd, type Machine, type OnError, RuntimeDiscardNotice, type Sub} from "@demlik/tea";
 import type {
 	CellErrors,
 	EffectInterpret,
@@ -18,7 +11,14 @@ import type {
 	SubscribeServices,
 } from "@demlik/tea/effect";
 import {Cause, Clock, Deferred, Effect, Fiber, Latch, Queue, type Scope, Stream} from "effect";
-import type {Handle, MachineStep, StateRefused, StateSchema, StorageFailed} from "./storage.ts";
+import type {
+	Handle,
+	MachineStart,
+	MachineStep,
+	StateRefused,
+	StateSchema,
+	StorageFailed,
+} from "./storage.ts";
 import {type Drawing, runTraced} from "./trace.ts";
 
 // How a program starts one copy of one of its machines, kept: what a ref's
@@ -69,12 +69,15 @@ import {type Drawing, runTraced} from "./trace.ts";
 // One once the run is closing (its last save: tea's "stop-save") has nobody
 // waiting on `done()`: it ends the program run instead, in the same words.
 //
-// On a storage that keeps steps (a job's record, ../host/traces.ts), each Msg
-// the machine folds is kept too: the Msg, the state after it, and the Cmds it
-// started, got by folding the Msg again from the state before it, since tea's
-// `observe` hands over only the Msg and the state. They are written in order,
-// behind the fold, and the run's scope waits for the last. A step that cannot
-// be kept ends the run, as a failed save does.
+// On a storage that keeps steps (a job's record, ../host/traces.ts), each boot
+// and each Msg the machine folds is kept too. A boot is a start: the program's
+// name and the state it booted from, so a replay can fold the steps after it
+// again (docs/plan/replay-through-current-code.md); a restart is another
+// start. A Msg is a step: the Msg, the state after it, and the Cmds its
+// transition started, as tea's `observe` hands them (tea 0.26.0). Both go
+// through one queue, in order, behind the fold, so a start lands before the
+// steps after it, and the run's scope waits for the last. A start or a step
+// that cannot be kept ends the run, as a failed save does.
 
 /** tea's own timer, the one its Effect engine runs when it is given none: here it is held like every other Sub. */
 const timer = (sub: {readonly deps: {readonly ms: number; readonly msg: unknown}}) =>
@@ -147,8 +150,10 @@ export const failureReport =
  * schema, from where it was kept. `show` is called with the booted machine before its first Msg, so a viewer
  * sees it from the kept state on. `drawing`: how its trace shows it
  * (`runTraced`), from the state as it was kept. `broken`: how a failure tea
- * reports once the run is closing ends the program run. See the note at the
- * top of this file.
+ * reports once the run is closing ends the program run. `program`: the name
+ * of the program that runs it, which each start a storage keeps names
+ * (./refs.ts gives it); a storage that keeps starts cannot do without it.
+ * See the note at the top of this file.
  */
 export const runKept = <
 	S,
@@ -169,6 +174,7 @@ export const runKept = <
 	show: (runtime: KeptRuntime<M, S, C, I>) => Effect.Effect<void, never, Scope.Scope>,
 	drawing: (kept: S | null) => Drawing<S, C, U>,
 	broken: (cause: Error) => void,
+	program?: string,
 ): Effect.Effect<
 	KeptRuntime<M, S, C, I>,
 	KeptFailed<C, I>,
@@ -206,21 +212,34 @@ export const runKept = <
 			store: handle.store(name, id, state),
 			onError,
 		} as EffectRunOptions<S, M, C, U, Ctx, never, I, B>;
-		// Before the run, so its finalizer runs after tea's `stop()`: every step folded is written.
-		const keep = handle.step === undefined ? null : yield* stepsOf(handle.step, name, id, state);
+		const log =
+			handle.step === undefined || handle.start === undefined
+				? null
+				: {step: handle.step, start: handle.start};
+		if (log !== null && program === undefined)
+			return yield* Effect.die(
+				new Error(`${name} run ${id} keeps its starts, and was given no program to name in them`),
+			);
+		// Before the run, so its finalizer runs after tea's `stop()`: every start and step is written.
+		const keep =
+			log === null || program === undefined
+				? null
+				: {program, ...(yield* keptOf(log, name, id, state))};
 		const booting = yield* runTraced(name, machine, opts, drawing(kept));
 		if (keep !== null) {
-			// Each step's Cmds, from the state before it: `update` is pure, so folding the Msg again
-			// gives the Cmds tea started for it (tea's `observe` hands over the Msg and the state only).
-			let before: S | null = null;
 			const clock = yield* Clock.Clock;
+			// The boot first, then each step: tea fires `onBoot` before any Msg is folded.
 			const offBoot = booting.onBoot((s) => {
-				before = s;
+				keep.add({
+					row: "start",
+					start: {at: clock.currentTimeMillisUnsafe(), program: keep.program, state: s},
+				});
 			});
-			const off = booting.observe((msg, after) => {
-				const cmds = before === null ? [] : foldUpdates(machine, before, [msg]).cmds;
-				before = after;
-				keep.add({at: clock.currentTimeMillisUnsafe(), msg, state: after, cmds});
+			const off = booting.observe((msg, after, cmds) => {
+				keep.add({
+					row: "step",
+					step: {at: clock.currentTimeMillisUnsafe(), msg, state: after, cmds: cmds ?? []},
+				});
 			});
 			yield* Effect.addFinalizer(() =>
 				Effect.sync(() => {
@@ -229,11 +248,14 @@ export const runKept = <
 				}),
 			);
 			yield* keep.failed.pipe(
-				Effect.flatMap((cause) =>
+				Effect.flatMap(({row, error}) =>
 					Effect.sync(() => {
-						const ended = new Error(`${name} run ${id} failed to keep a step: ${wordsOf(cause)}`, {
-							cause,
-						});
+						const ended = new Error(
+							`${name} run ${id} failed to keep a ${row}: ${wordsOf(error)}`,
+							{
+								cause: error,
+							},
+						);
 						if (closing) broken(ended);
 						else Deferred.doneUnsafe(failed, Effect.die(ended));
 					}),
@@ -258,30 +280,46 @@ export const runKept = <
 		return {...runtime, done};
 	});
 
+/** One row a kept machine run writes: a boot, or a Msg folded. */
+type Row<S> =
+	| {readonly row: "start"; readonly start: MachineStart<S>}
+	| {readonly row: "step"; readonly step: MachineStep<S>};
+
 /**
- * Where a machine run's steps go: written one at a time, in the order they
- * were folded, behind the fold, since tea's `observe` cannot wait. The
- * scope's end waits for the last one. `failed`: the first write that did not
- * land; nothing after it is written.
+ * Where a machine run's starts and steps go: written one at a time, in the
+ * order they came, behind the fold, since tea's `onBoot` and `observe` cannot
+ * wait. The scope's end waits for the last one. `failed`: the first write that
+ * did not land, and which row it was; nothing after it is written.
  */
-const stepsOf = <S>(
-	write: NonNullable<Handle["step"]>,
+const keptOf = <S>(
+	log: {
+		readonly step: NonNullable<Handle["step"]>;
+		readonly start: NonNullable<Handle["start"]>;
+	},
 	name: string,
 	id: string,
 	state: StateSchema<S>,
 ) =>
 	Effect.gen(function* () {
-		const queue = yield* Queue.unbounded<MachineStep<S>, Cause.Done>();
-		const failed = yield* Deferred.make<unknown>();
+		const queue = yield* Queue.unbounded<Row<S>, Cause.Done>();
+		const failed = yield* Deferred.make<{readonly row: Row<S>["row"]; readonly error: unknown}>();
+		let writing: Row<S>["row"] = "start";
 		const writer = yield* Stream.fromQueue(queue).pipe(
-			Stream.runForEach((step) => write(name, id, state, step)),
-			Effect.catchCause((cause) => Deferred.succeed(failed, Cause.squash(cause))),
+			Stream.runForEach((r) => {
+				writing = r.row;
+				return r.row === "start"
+					? log.start(name, id, state, r.start)
+					: log.step(name, id, state, r.step);
+			}),
+			Effect.catchCause((cause) =>
+				Deferred.succeed(failed, {row: writing, error: Cause.squash(cause)}),
+			),
 			Effect.forkScoped,
 		);
 		yield* Effect.addFinalizer(() => Queue.end(queue).pipe(Effect.andThen(Fiber.await(writer))));
 		return {
-			add: (step: MachineStep<S>) => {
-				Queue.offerUnsafe(queue, step);
+			add: (r: Row<S>) => {
+				Queue.offerUnsafe(queue, r);
 			},
 			failed: Deferred.await(failed),
 		};

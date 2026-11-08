@@ -6,6 +6,7 @@ import {
 	type Entry,
 	HostJobs,
 	type JobsOnHost,
+	layerReplayer,
 	Ledger,
 	listed,
 	memoryStorage,
@@ -250,6 +251,12 @@ export const RESET = "\x1bc";
  * compared), on the same ledger, read-only, and `markdown`, which draws what it is told
  * (experiment 170). `pipeline`, which runs one ticket's lane for `author`, on the host's home
  * (experiment 175).
+ *
+ * `trace` replays a machine run through today's code by a `Replayer` over the same programs a
+ * tile's tsh lists (`tshList`), so nothing is wired per program
+ * (docs/plan/replay-through-current-code.md). It leaves itself out: its own machine is kept
+ * nowhere, so no record holds a run of it. A lane's stage programs run in the pipeline's own
+ * runner, not this list, so a replay of one says no code is listed for it.
  */
 export const appPrograms = (
 	ledger: Ledger["Service"],
@@ -266,24 +273,28 @@ export const appPrograms = (
 		repoTree === undefined ? Layer.empty : Layer.succeed(RepoTree, repoTree),
 	);
 	const read = experimentsOnLedger(author).pipe(Layer.provide(Layer.succeed(Ledger, ledger)));
-	return [
+	const before = [
 		listed(counter, Layer.empty),
 		listed(tracker, tickets),
 		listed(ticket, tickets),
 		listed(map, tickets),
 		listed(pipeline, Layer.provide(laneRunner(author), Layer.succeed(Ledger, ledger))),
-		listed(
-			trace,
-			Layer.mergeAll(
-				Layer.succeed(Traces, traces),
-				ticketsOnLedger(author).pipe(Layer.provide(Layer.succeed(Ledger, ledger))),
-			),
-		),
+	];
+	const after = [
 		listed(experiments, read),
 		listed(experiment, read),
 		listed(compare, read),
 		listed(markdown, Layer.empty),
 	];
+	const traced = listed(
+		trace,
+		Layer.mergeAll(
+			Layer.succeed(Traces, traces),
+			ticketsOnLedger(author).pipe(Layer.provide(Layer.succeed(Ledger, ledger))),
+			layerReplayer(tshList([...before, ...after])),
+		),
+	);
+	return [...before, traced, ...after];
 };
 
 /** What a tile's tsh lists, and so what a line can pipe from: tsh's small programs, then `apps`. */

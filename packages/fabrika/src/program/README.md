@@ -78,7 +78,7 @@ const again = yield* tell(run, "n", 8).pipe(
 ```
 - Each machine kind names its state's Effect Schema as `state`. Every save is encoded through it, and a save that does not fit is a bug: the run dies, and the old value stays.
 - A state that holds a secret (an Effect `Redacted`) is never saved, by any storage: the run dies and says why. Effect Schema writes a `Redacted` either as its plain text or as `"<redacted>"`, which never reads back, so refusing is the one answer that cannot leak (`secrets.ts`). Keep where to find a secret, not the secret.
-- A storage may also keep steps (`Handle.step`): one per Msg each machine folds, with the state after it and the Cmds it started. A job's record does (`../host/traces.ts`); memory and folder storage keep none.
+- A storage may also keep starts and steps (`Handle.start`, `Handle.step`): one start per boot of each machine run, with its program's name and the state it booted from, and one step per Msg each machine folds, with the state after it and the Cmds its transition started (tea's `observe`). Both go through one queue, so a start lands before its steps. A job's record does (`../host/traces.ts`); memory and folder storage keep none.
 - A kept state the schema does not take was saved by older code. That machine run's start fails `StateRefused`, before any of its code reads it. Nothing is booted and nothing is written over. `list` shows it as `refused`, beside the runs that are kept.
 
 ```ts

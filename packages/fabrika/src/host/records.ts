@@ -4,25 +4,33 @@ import {jobTraceId} from "../program/trace.ts";
 import type {JobsOnHost, JobTable} from "./host-jobs.ts";
 import {type Job, type JobsMsg, traceIdOf} from "./jobs.ts";
 import type {SpanRow} from "./otlp.ts";
-import {type Changes, type JobEnd, jobWrites, layerTraces, type RecordCalls} from "./traces.ts";
+import {
+	type Changes,
+	type JobCall,
+	type JobEnd,
+	jobWrites,
+	layerTraces,
+	type RecordCalls,
+} from "./traces.ts";
 
 // Where a host keeps its jobs' records, and how it fills them as its jobs go
 // (docs/direction/a-job-record-holds-its-trace.md). One record per job, keyed by the job's trace
 // id. Three writers fill it, each by the same key:
 //
 //   the job      `keepJobs`: the host's table, as tsh tells it, writes when a job began and how it ended
-//   the steps    `stepsInto`: the runs' storage writes one step per Msg each kept machine folds
+//   the steps    `stepsInto`: the runs' storage writes one start per boot and one step per Msg
+//                each kept machine folds
 //   the spans    `recordTracing` (@kampus/fabrika-old/otel): each span, once it ends
 //
 //   const records = yield* sqliteRecords({dir: "<home>/records", by: "user:owner"});   // the laptop's
 //   const jobs = keepJobs(yield* openJobs(fileStorage(dir, stepsInto(records))), records, "laptop");
-//   tsh> seq --to 3 | tally            job %1 began; three steps of tally's count; four spans
-//   yield* Traces.read(runTraceId(seq's run id))    // job, spans and steps, as the trace tile draws them
+//   tsh> seq --to 3 | tally            job %1 began; tally's count started at 0, then three steps; four spans
+//   yield* Traces.read(runTraceId(seq's run id))    // job, spans, starts and steps, as the trace tile draws them
 //
-// A step and a span find their record the same way: by the trace they run in (`jobTraceId`). A
-// run in a tsh line runs in its line's trace, which is its job's, so its steps and its spans
-// always sit in one record. A machine run in no trace at all (the host's own table) writes no
-// step anywhere.
+// A start, a step and a span find their record the same way: by the trace they run in
+// (`jobTraceId`). A run in a tsh line runs in its line's trace, which is its job's, so its starts,
+// steps and spans always sit in one record. A machine run in no trace at all (the host's own
+// table) writes no start or step anywhere.
 //
 // The records live where the host says: on the laptop, one SQLite file per job in its home
 // (`sqliteRecords`, @kampus/fabrika-old/records), the same tables and SQL as the Durable Object
@@ -42,18 +50,20 @@ export interface Records {
 /** `Traces` over a host's own records: a followed record is read again on each write to it. */
 export const layerRecordTraces = (records: Records) => layerTraces(records.calls, records.changes);
 
+/** One call into the record of the job the current run is in; in no trace, nowhere. */
+const intoJob = (records: Records, call: JobCall) =>
+	Effect.flatMap(jobTraceId, (trace) =>
+		trace === null ? Effect.void : records.calls(trace, call).pipe(Effect.asVoid),
+	);
+
 /**
- * Where a storage's steps go: into the record of the job the step's run is in. A step written in
+ * Where a storage's starts and steps go: into the record of the job the run is in. One written in
  * no trace (a machine the host runs for itself) goes nowhere.
  */
-export const stepsInto =
-	(records: Records): StepLog =>
-	(run, machine, id, step) =>
-		Effect.flatMap(jobTraceId, (trace) =>
-			trace === null
-				? Effect.void
-				: records.calls(trace, {op: "step", run, machine, id, ...step}).pipe(Effect.asVoid),
-		);
+export const stepsInto = (records: Records): StepLog => ({
+	step: (run, machine, id, step) => intoJob(records, {op: "step", run, machine, id, ...step}),
+	start: (run, machine, id, start) => intoJob(records, {op: "start", run, machine, id, ...start}),
+});
 
 /** The worse of two ends: a job with one failed run failed, and one with a stopped run stopped. */
 const worse = (a: JobEnd, b: JobEnd): JobEnd => {

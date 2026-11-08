@@ -21,7 +21,12 @@ import type {
 // chosen row opens in place beneath itself: a span as Jaeger's span detail (its tags, its events),
 // a step as Elm's debugger and Redux DevTools show one (its Msg, what changed, the state before
 // and after, its Cmds). What is open and what is chosen is the program's state: this component
-// keeps none, and only sends `toggle`, `choose`, `step` and `seek`.
+// keeps none, and only sends `toggle`, `choose`, `step`, `seek` and `replay`.
+//
+// A machine run's detail offers "Replay through current code" (docs/plan/replay-through-current-code.md):
+// a button in the detail, never in its row, since the row is a button already. The answer is read
+// out from a status region in the detail, and said on the rows in words with an icon: the machine
+// run's ("parts at step 2"), and the step it names ("parts from the recording").
 //
 // The ticket view (ticket 141): one section per lane, oldest first, each on its own axis. A
 // folded lane is one line: its steps drawn small in its own time, how it ended in words, and its
@@ -283,7 +288,37 @@ const PRICED: Readonly<Record<Extract<Detail, {kind: "run"}>["priced"], string>>
 	never: "none: it never ended, so no tokens were counted",
 };
 
-function Opened({detail}: {readonly detail: Detail}) {
+/**
+ * A machine run's replay through today's code: the button, and a status region that reads the
+ * answer out when it comes. A machine run whose start was never kept says so in place of a button
+ * that could only answer no. The region is there before it is asked, so the answer is announced.
+ */
+function ReplayThrough({
+	detail,
+	send,
+}: {
+	readonly detail: Extract<Detail, {kind: "machine"}>;
+	readonly send: Send;
+}) {
+	if (!detail.replayable)
+		return <p className="faint">Recorded before starts were kept, so it can't be replayed.</p>;
+	return (
+		<div className="wf-replay">
+			<button
+				type="button"
+				className="btn sm"
+				onClick={() => send({type: "replay", value: {row: detail.key}})}
+			>
+				Replay through current code
+			</button>
+			<p className="wf-replay-says" role="status">
+				{detail.replay?.says ?? ""}
+			</p>
+		</div>
+	);
+}
+
+function Opened({detail, send}: {readonly detail: Detail; readonly send: Send}) {
 	switch (detail.kind) {
 		case "step":
 			return (
@@ -302,7 +337,10 @@ function Opened({detail}: {readonly detail: Detail}) {
 					<section className="wf-diff" aria-label="what changed">
 						<h4>What changed</h4>
 						{detail.before.kind === "start" ? (
-							<p className="faint">The first step: the state before it is the machine's start.</p>
+							<p className="faint">
+								The first step, recorded before starts were kept: no row keeps the state it began
+								from.
+							</p>
 						) : detail.changes.length === 0 ? (
 							<p className="faint">Nothing: the state stayed as it was.</p>
 						) : (
@@ -319,7 +357,7 @@ function Opened({detail}: {readonly detail: Detail}) {
 						) : (
 							<figure className="wf-json">
 								<figcaption>State before</figcaption>
-								<p className="faint">The machine's start: no row keeps it.</p>
+								<p className="faint">The machine's start: recorded before starts were kept.</p>
 							</figure>
 						)}
 						<Pre label="State after" value={detail.after} />
@@ -385,6 +423,7 @@ function Opened({detail}: {readonly detail: Detail}) {
 						{detail.steps} {detail.steps === 1 ? "step" : "steps"}, run{" "}
 						<span className="mono faint">{detail.run}</span>
 					</p>
+					<ReplayThrough detail={detail} send={send} />
 					<Pre label="State after its newest step" value={detail.state} />
 				</section>
 			);
@@ -684,7 +723,7 @@ function JobWindow({view, send}: {readonly view: Shown; readonly send: Send}) {
 								aria-level={row.depth + 1}
 								aria-expanded={row.opens ? row.open : undefined}
 								aria-selected={row.key === chosen}
-								aria-label={`${KIND_WORD[row.kind]} ${row.name}${row.note === "" ? "" : `, ${row.note}`}`}
+								aria-label={`${KIND_WORD[row.kind]} ${row.name}${row.note === "" ? "" : `, ${row.note}`}${row.replay === null ? "" : `, replayed: ${row.replay}`}`}
 								tabIndex={row.key === focusable ? 0 : -1}
 								onClick={() => press(row)}
 								onKeyDown={(e) => onTreeKey(e, row, view.rows, toggle, () => press(row))}
@@ -706,6 +745,12 @@ function JobWindow({view, send}: {readonly view: Shown; readonly send: Send}) {
 										/>
 										<span className={row.kind === "step" ? "mono" : ""}>{row.name}</span>
 										{row.note === "" ? null : <span className="faint wf-note">{row.note}</span>}
+										{row.replay === null ? null : (
+											<span className="wf-replayed">
+												<span aria-hidden="true">↻ </span>
+												{row.replay}
+											</span>
+										)}
 									</span>
 								</td>
 								<td className="wf-lane">
@@ -717,7 +762,7 @@ function JobWindow({view, send}: {readonly view: Shown; readonly send: Send}) {
 							{row.key === chosen && view.chosen !== null ? (
 								<tr className="wf-open">
 									<td colSpan={2}>
-										<Opened detail={view.chosen} />
+										<Opened detail={view.chosen} send={send} />
 									</td>
 								</tr>
 							) : null}
@@ -1151,7 +1196,7 @@ function TicketWindow({view, send}: {readonly view: Shown; readonly send: Send})
 					</table>
 					{view.chosen === null ? null : (
 						<aside className="tv-detail" aria-label="detail">
-							<Opened detail={view.chosen} />
+							<Opened detail={view.chosen} send={send} />
 						</aside>
 					)}
 				</div>

@@ -244,6 +244,7 @@ describe("an agent drives the app's programs through MCP", () => {
 			"trace_choose",
 			"trace_seek",
 			"trace_step",
+			"trace_replay",
 			"trace_quit",
 			"trace_id",
 			"trace_ticket",

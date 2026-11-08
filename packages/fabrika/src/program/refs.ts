@@ -159,6 +159,8 @@ export const refsOf = <
 							};
 						},
 						broken,
+						// Each start a storage keeps names the program: the replay finds its code by it.
+						program,
 					).pipe(Effect.map((runtime): Live => ({runtime, start: copy.msg})));
 				}) as Effect.Effect<Live, unknown>,
 		});

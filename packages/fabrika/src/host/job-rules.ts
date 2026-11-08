@@ -1,7 +1,7 @@
 import {apply, diff, type Json} from "../program/json-patch.ts";
 import {CONTENT} from "./otlp.ts";
 import type {Db, SqlRow} from "./rules.ts";
-import type {Content, Job, JobCall, Opened, RecordRead, Span, Step} from "./traces.ts";
+import type {Content, Job, JobCall, Opened, RecordRead, Span, Start, Step} from "./traces.ts";
 import {writerOf} from "./writer.ts";
 
 // A job's record, as SQL: the tables and every call on them. The Durable Object (./job-record.ts)
@@ -12,6 +12,8 @@ import {writerOf} from "./writer.ts";
 //   steps   one row per Msg a machine folded: the Msg, its Cmds, and the state after it, as a
 //           JSON Patch (RFC 6902) of the one before, or whole once the patches since the last
 //           whole one would outweigh it (or after `keyframe` of them)
+//   starts  one row per boot of a machine run: the program, the state it booted from, whole, and
+//           which boot it was (`n`) after how many of its steps (`after`), both counted here
 //   spans   one row per span of the job's trace, from any host
 //   opened  one row per span a run's work hangs under, written as it opens: a span reaches
 //           `spans` only once it ends, and a child run started meanwhile must nest under it
@@ -53,6 +55,12 @@ export const migrateJob = (db: Db) => {
 		at REAL NOT NULL, msg TEXT NOT NULL, cmds TEXT NOT NULL,
 		kind TEXT NOT NULL CHECK (kind IN ('full', 'patch')), body TEXT NOT NULL, by TEXT NOT NULL,
 		PRIMARY KEY (run, machine, id, n))`);
+	// A record made before starts were kept gets the table empty: its machine runs have no start.
+	db.all(`CREATE TABLE IF NOT EXISTS starts (
+		run TEXT NOT NULL, machine TEXT NOT NULL, id TEXT NOT NULL, n INTEGER NOT NULL,
+		after INTEGER NOT NULL, program TEXT NOT NULL, at REAL NOT NULL, body TEXT NOT NULL,
+		by TEXT NOT NULL,
+		PRIMARY KEY (run, machine, id, n))`);
 	db.all(`CREATE TABLE IF NOT EXISTS spans (
 		span TEXT PRIMARY KEY, parent TEXT, name TEXT NOT NULL, service TEXT NOT NULL,
 		start REAL NOT NULL, end REAL NOT NULL, status TEXT NOT NULL,
@@ -70,7 +78,7 @@ export const migrateJob = (db: Db) => {
 };
 
 /** Every table of a record, by name: what a law reads to look at every row. */
-export const TABLES = ["job", "state", "steps", "spans", "opened", "content"] as const;
+export const TABLES = ["job", "state", "steps", "starts", "spans", "opened", "content"] as const;
 
 const text = (row: SqlRow | undefined, key: string): string | null => {
 	const v = row?.[key];
@@ -331,6 +339,26 @@ export const callJob = (
 				);
 				return {n};
 			}
+			case "start": {
+				// Both counted here, never taken from the writer: which boot this is, and how many of
+				// the machine run's steps came before it.
+				const of = [call.run, call.machine, call.id] as const;
+				const where = `WHERE run = ? AND machine = ? AND id = ?`;
+				const n = num(db.all(`SELECT count(*) AS c FROM starts ${where}`, ...of)[0], "c") + 1;
+				const after = num(db.all(`SELECT count(*) AS c FROM steps ${where}`, ...of)[0], "c");
+				db.all(
+					`INSERT INTO starts (run, machine, id, n, after, program, at, body, by)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					...of,
+					n,
+					after,
+					call.program,
+					call.at,
+					JSON.stringify(plain(call.state)),
+					by,
+				);
+				return {n};
+			}
 			case "began":
 				db.all(
 					`INSERT OR IGNORE INTO job (one, n, text, host, by, started) VALUES (1, ?, ?, ?, ?, ?)`,
@@ -373,6 +401,7 @@ export const callJob = (
 					runs: runsOf(db),
 					spans: spansOf(db),
 					steps: stepsOf(db.all(`SELECT * FROM steps ORDER BY run, machine, id, n`)),
+					starts: startsOf(db),
 					opened: openedOf(db),
 					content: contentOf(db),
 				} satisfies RecordRead;
@@ -393,6 +422,19 @@ export const callJob = (
 				return null;
 		}
 	});
+
+const startsOf = (db: Db): Start[] =>
+	db.all(`SELECT * FROM starts ORDER BY run, machine, id, n`).map((r) => ({
+		run: String(r.run),
+		program: String(r.program),
+		machine: String(r.machine),
+		id: String(r.id),
+		n: num(r, "n"),
+		after: num(r, "after"),
+		at: num(r, "at"),
+		state: JSON.parse(String(r.body)),
+		by: String(r.by),
+	}));
 
 const openedOf = (db: Db): Opened[] =>
 	db.all(`SELECT * FROM opened ORDER BY at, rowid`).map((r) => ({

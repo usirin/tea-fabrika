@@ -11,6 +11,7 @@ import {RunRecord, type Storage, StorageBroken, storageOf} from "../program/stor
 //   trace.runs     [{run: "seq-3f9a1c02", status: "ended", ...}, {run: "tally-5d02c7a1", machines: [{machine: "count", id: "total"}], ...}]
 //   trace.spans    [{name: "seq --to 3 | tally", service: "tsh", ...}, {name: "run", service: "tally", events: [{name: "told add"}, ...]}, ...]
 //   trace.steps    [{run: "tally-5d02c7a1", machine: "count", id: "total", n: 1, msg: {type: "add", n: 1}, state: {total: 1}, cmds: []}, ...]
+//   trace.starts   [{run: "tally-5d02c7a1", program: "tally", machine: "count", id: "total", n: 1, after: 0, state: {total: 0}, ...}]
 //   trace.opened   [{run: "lane:700", span: "9f2c...", at, by}, ...]   spans still open, that others nest under
 //
 // The schemas are the record's read shape: the trace tile (#74) is built on them. The record
@@ -19,9 +20,9 @@ import {RunRecord, type Storage, StorageBroken, storageOf} from "../program/stor
 //
 // Spans keep names, tags and ids, never values (../program/trace.ts). An agent run's content, its
 // prompt, replies and tool results where its harness keeps them, is the exception: it sits in
-// `content` beside the spans, the one part of a record a person can delete. Steps keep values: they are
-// written by the run's own storage into this record, behind the door, never sent to a viewer
-// elsewhere. A step's state never holds a secret: storage refuses one (../program/secrets.ts).
+// `content` beside the spans, the one part of a record a person can delete. Steps and starts keep values:
+// they are written by the run's own storage into this record, behind the door, never sent to a
+// viewer elsewhere. Their states never hold a secret: storage refuses one (../program/secrets.ts).
 
 // The `u` flag is what lets Effect write the pattern into the JSON Schema; without it the shape
 // is a bare string, and any string output would fit a trace id input.
@@ -108,6 +109,28 @@ export const Step = Schema.Struct({
 export type Step = typeof Step.Type;
 
 /**
+ * One boot of one machine run: the state it booted from, whole, and the program that booted it.
+ * The first is where its steps start; a restart is another (docs/plan/replay-through-current-code.md).
+ */
+export const Start = Schema.Struct({
+	run: Schema.String,
+	/** The program that booted it, by name: what a replay finds today's code by. */
+	program: Schema.String,
+	machine: Schema.String,
+	id: Schema.String,
+	/** 1, 2, 3 ... per machine run: which boot this was. Counted by the record. */
+	n: Schema.Int,
+	/** How many of this machine run's steps the record held when it came: 0 for the first. Counted by the record. */
+	after: Schema.Int,
+	/** Unix ms. */
+	at: Schema.Number,
+	/** As the machine's state schema encodes it. */
+	state: Schema.Unknown,
+	by: Schema.String,
+});
+export type Start = typeof Start.Type;
+
+/**
  * A span a run's work hangs under, kept as it opens. A span reaches `spans` only once it ends,
  * so while a lane runs, its stages' spans name a parent that only this says: run `lane:700`, still
  * open. A child run started meanwhile nests under it the same way (`jobWrites`' `spanOf`).
@@ -159,6 +182,8 @@ export const JobTrace = Schema.Struct({
 	spans: Schema.Array(Span),
 	/** By run, machine run and number. */
 	steps: Schema.Array(Step),
+	/** Each boot of each machine run, by run, machine run and number. */
+	starts: Schema.Array(Start),
 	/** By when they opened. A run taken over has one per host that ran it, the newest last. */
 	opened: Schema.Array(Opened),
 });
@@ -168,8 +193,8 @@ export type JobTrace = typeof JobTrace.Type;
 
 /**
  * One call to a job's record, as it crosses the door: `POST /<ledger>/job/<trace>` with one of
- * these as its body. The first six are its `Storage` (a `KeyValueStore` and its steps); the
- * door adds who sent it, never the body.
+ * these as its body. The first seven are its `Storage` (a `KeyValueStore`, its steps and its
+ * starts); the door adds who sent it, never the body.
  */
 export const JobCall = Schema.Union([
 	Schema.Struct({op: Schema.Literal("get"), key: Schema.String}),
@@ -186,6 +211,16 @@ export const JobCall = Schema.Union([
 		msg: Schema.Unknown,
 		state: Schema.Unknown,
 		cmds: Schema.Array(Schema.Unknown),
+	}),
+	/** A boot. Its `n` and `after` are the record's to count: a writer never says them. */
+	Schema.Struct({
+		op: Schema.Literal("start"),
+		run: Schema.String,
+		program: Schema.String,
+		machine: Schema.String,
+		id: Schema.String,
+		at: Schema.Number,
+		state: Schema.Unknown,
 	}),
 	Schema.Struct({
 		op: Schema.Literal("began"),
@@ -228,6 +263,8 @@ export const RecordRead = Schema.Struct({
 	runs: Schema.Array(Schema.String),
 	spans: Schema.Array(Span),
 	steps: Schema.Array(Step),
+	/** A record that kept no starts yet, read by code from before them, says nothing of them: none. */
+	starts: Schema.Array(Start).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
 	opened: Schema.Array(Opened),
 	/** By span id. */
 	content: Schema.Array(Content),
@@ -296,15 +333,17 @@ const recordKv = (calls: RecordCalls, trace: string) =>
 
 /**
  * The `Storage` of one job's runs, in its record: the same interface a program takes from
- * memory or a folder, and one step row per Msg each machine folds besides. Every run of the
- * job is handed this one, as tsh hands its storage to every run of a line today.
+ * memory or a folder, and one start row per boot and one step row per Msg each machine folds
+ * besides. Every run of the job is handed this one, as tsh hands its storage to every run of a
+ * line today.
  */
 export const jobStorage = (calls: RecordCalls, trace: string): Storage =>
-	storageOf(
-		Layer.succeed(KeyValueStore.KeyValueStore, recordKv(calls, trace)),
-		(run, machine, id, step) =>
+	storageOf(Layer.succeed(KeyValueStore.KeyValueStore, recordKv(calls, trace)), {
+		step: (run, machine, id, step) =>
 			calls(trace, {op: "step", run, machine, id, ...step}).pipe(Effect.asVoid),
-	);
+		start: (run, machine, id, start) =>
+			calls(trace, {op: "start", run, machine, id, ...start}).pipe(Effect.asVoid),
+	});
 
 const SpanOf = Schema.Struct({span: Schema.NullOr(SpanId)});
 
@@ -416,6 +455,7 @@ const tracesOn = (calls: RecordCalls, changes: Changes): Traces["Service"] => {
 				runs,
 				spans: raw.spans,
 				steps: raw.steps,
+				starts: raw.starts,
 				opened: raw.opened,
 			};
 		}).pipe(

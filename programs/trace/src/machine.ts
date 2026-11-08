@@ -1,5 +1,6 @@
-import {type DepKeyedSub, defineMachine, type Sub} from "@demlik/tea";
-import {JobTrace, TraceId} from "@kampus/fabrika-old";
+import {type DepKeyedSub, defineMachine, type Settled, type Sub} from "@demlik/tea";
+import {Cmd} from "@demlik/tea/effect";
+import {JobTrace, Replayed, Start, Step as RecordStep, TraceId} from "@kampus/fabrika-old";
 import {Entry, TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {Schema} from "effect";
 import {lanesOf, stopsOf} from "./ticket.ts";
@@ -27,6 +28,13 @@ import {findOf, groupsOf, JOB, treeOf} from "./tree.ts";
 //            and after, and its Cmds. `null` closes the detail
 //   tick     the time, while the record shown says its job has not ended: an earlier tick keeps
 //            the later time, as a clock can step back. Anything else lets it go
+//   replay   replay one machine run of the record shown through today's code
+//            (docs/plan/replay-through-current-code.md): held as {row, steps, answer: null}, and
+//            asked by one `replay` Cmd carrying that machine run's starts and steps. A row that is
+//            no machine run of the record shown changes nothing
+//   replay_ok  tea's answer to that Cmd: it lands only on the replay held for its row and step
+//            count. A look at another record clears the replay, and so does a newer read whose
+//            machine run has another step count now
 //
 // The ticket view (ticket 141):
 //
@@ -121,14 +129,39 @@ export const Shows = Schema.Union([
 export type Shows = typeof Shows.Type;
 type TicketShows = Extract<Shows, {readonly kind: "ticket"}>;
 
+/** A replay asked: the machine run's row, its step count when asked, and its answer once it came. */
+export const Replay = Schema.Struct({
+	row: RowKey,
+	steps: Schema.Int,
+	/** `null`: asked, not answered yet. */
+	answer: Schema.NullOr(Replayed),
+});
+export type Replay = typeof Replay.Type;
+
 export const Model = Schema.Struct({
 	shows: Shows,
 	/** The rows open, each one that groups others in what is read. */
 	open: Schema.Array(RowKey),
 	/** The row whose detail shows. `null`: none. */
 	chosen: Schema.NullOr(RowKey),
+	/** The replay asked last, of a machine run of the record shown. `null`: none. */
+	replay: Schema.NullOr(Replay),
 });
 export type Model = typeof Model.Type;
+
+/**
+ * Replay one machine run through today's code: its row, and its starts and steps as the record
+ * keeps them. Its handler asks the `Replayer` (./index.ts); the answer comes as `replay_ok`.
+ */
+export const replayCmd = Cmd.make("replay", {
+	input: Schema.Struct({
+		row: RowKey,
+		starts: Schema.Array(Start),
+		steps: Schema.Array(RecordStep),
+	}),
+	ok: Replayed,
+	err: [],
+});
 
 export type TraceMsg =
 	| {readonly type: "look"; readonly id: string}
@@ -146,14 +179,24 @@ export type TraceMsg =
 	/** A drag on the replay: a time, or back to now. */
 	| {readonly type: "seek"; readonly at: number | null}
 	/** ← and →: the fact before or after. */
-	| {readonly type: "step"; readonly by: -1 | 1};
+	| {readonly type: "step"; readonly by: -1 | 1}
+	/** Replay this machine run's row through today's code. */
+	| {readonly type: "replay"; readonly row: string}
+	/** tea's answer to the replay Cmd: `replay_ok` with the replay's answer, or `replay_err`. */
+	| Settled<typeof replayCmd>;
 
 /** Read a ticket's facts again, while the tile shows that ticket: each read comes as `facts`. */
 export type FactsSub = Sub<"facts", {readonly number: number}>;
 
 type Step = readonly [Model, readonly never[]];
+type Asked = readonly [Model, readonly ReturnType<typeof replayCmd>[]];
 
-const start: Model = {shows: {kind: "job", read: {at: "waiting"}}, open: [], chosen: null};
+const start: Model = {
+	shows: {kind: "job", read: {at: "waiting"}},
+	open: [],
+	chosen: null,
+	replay: null,
+};
 
 /** The trace id the machine reads or shows. `null`: none told yet. */
 export const idOf = (r: Read): string | null => {
@@ -235,11 +278,37 @@ const keepingEnd = (shown: Kept, read: Kept): Kept => {
 /** A job view with this record. */
 const showing = (s: Model, read: Read): Model => ({...s, shows: {kind: "job", read}});
 
+/** The record a job view shows, read. `null`: none read yet, or the ticket view. */
+const shownRecord = (s: Model): Kept | null =>
+	s.shows.kind === "job" && s.shows.read.at === "read" ? s.shows.read.trace : null;
+
+/**
+ * The starts and steps of the machine run `row` names in `trace`, as the record keeps them.
+ * `null`: the row is no machine run there.
+ */
+export const machineRunOf = (
+	trace: Kept,
+	row: string,
+): {readonly starts: readonly Start[]; readonly steps: readonly RecordStep[]} | null => {
+	const node = findOf(treeOf(trace), row);
+	if (node?.of.kind !== "machine") return null;
+	const {run, machine, id} = node.of;
+	const mine = (r: {readonly run: string; readonly machine: string; readonly id: string}) =>
+		r.run === run && r.machine === machine && r.id === id;
+	return {starts: trace.starts.filter(mine), steps: trace.steps.filter(mine)};
+};
+
+/** The replay held, kept through a newer read while its machine run's step count is the same. */
+const replayAfter = (held: Replay | null, trace: Kept): Replay | null => {
+	if (held === null) return null;
+	return machineRunOf(trace, held.row)?.steps.length === held.steps ? held : null;
+};
+
 /**
  * A newer read of the record shown: the rows open stay open, and the detail stays, where they
  * still are. A record that had nothing under its job yet (a job just begun, its spans not in)
  * showed no row to open or close, so the first read with something in it opens the job's row,
- * as a first read does.
+ * as a first read does. The replay stays while its machine run has the same steps.
  */
 const again = (s: Model, read: Read & {readonly at: "read"}, trace: Kept): Model => {
 	const tree = treeOf(trace);
@@ -249,6 +318,7 @@ const again = (s: Model, read: Read & {readonly at: "read"}, trace: Kept): Model
 		shows: {kind: "job", read: {at: "read", trace, now: isRunning(trace) ? read.now : null}},
 		open: shown ? s.open.filter((k) => groups.has(k)) : firstOpen(trace),
 		chosen: s.chosen !== null && findOf(tree, s.chosen) !== undefined ? s.chosen : null,
+		replay: replayAfter(s.replay, trace),
 	};
 };
 
@@ -300,17 +370,25 @@ export const trace = defineMachine({
 		sub: {} as FollowSub | TickSub | FactsSub,
 		ctx: undefined,
 	},
-	cmds: [],
+	cmds: [replayCmd],
 	init: (): Step => [start, []],
 	update: {
-		// A newer id replaces what shows, with its rows and its detail. The same id again changes
-		// nothing, unless its record could not be read: then it is followed again.
+		// A newer id replaces what shows, with its rows, its detail and its replay. The same id again
+		// changes nothing, unless its record could not be read: then it is followed again.
 		look: (s, m): Step => {
 			if (s.shows.kind === "job") {
 				const read = s.shows.read;
 				if (idOf(read) === m.id && read.at !== "unread") return [s, []];
 			}
-			return [{shows: {kind: "job", read: {at: "reading", id: m.id}}, open: [], chosen: null}, []];
+			return [
+				{
+					shows: {kind: "job", read: {at: "reading", id: m.id}},
+					open: [],
+					chosen: null,
+					replay: null,
+				},
+				[],
+			];
 		},
 		got: (s, m): Step => {
 			if (s.shows.kind === "ticket") {
@@ -333,6 +411,7 @@ export const trace = defineMachine({
 						shows: {kind: "job", read: {at: "read", trace: m.trace, now: null}},
 						open: firstOpen(m.trace),
 						chosen: null,
+						replay: null,
 					},
 					[],
 				];
@@ -395,6 +474,7 @@ export const trace = defineMachine({
 							},
 							open: [],
 							chosen: null,
+							replay: null,
 						},
 						[],
 					],
@@ -432,6 +512,34 @@ export const trace = defineMachine({
 			if (s.shows.kind !== "ticket" || timeline === null) return [s, []];
 			const at = stepped(timeline, s.shows.at, m.by);
 			return at === s.shows.at ? [s, []] : [inTicket(s, {...s.shows, at}), []];
+		},
+		// A replay asked again replaces the one held, its answer gone.
+		replay: (s, m): Asked => {
+			const record = shownRecord(s);
+			const rows = record === null ? null : machineRunOf(record, m.row);
+			if (rows === null) return [s, []];
+			return [
+				{...s, replay: {row: m.row, steps: rows.steps.length, answer: null}},
+				[replayCmd({row: m.row, ...rows})],
+			];
+		},
+		replay_ok: (s, m): Step => {
+			const held = s.replay;
+			return held !== null && held.row === m.cmd.row && held.steps === m.cmd.steps.length
+				? [{...s, replay: {...held, answer: m.value}}, []]
+				: [s, []];
+		},
+		// The handler fails nothing it declares: its answer did not fit `Replayed`, a bug, said so.
+		replay_err: (s, m): Step => {
+			const held = s.replay;
+			if (held === null || held.row !== m.cmd.row || held.steps !== m.cmd.steps.length)
+				return [s, []];
+			const answer = Replayed.cases.cannot.make({
+				why: "threw",
+				n: null,
+				detail: `the replay's answer did not fit: ${m.error._tag}`,
+			});
+			return [{...s, replay: {...held, answer}}, []];
 		},
 	},
 	subs: [
