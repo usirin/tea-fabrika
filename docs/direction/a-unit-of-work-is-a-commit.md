@@ -74,6 +74,25 @@ const check = (commit: Commit, stepKeys: StepKeys): Outcome => {
   role as each key's name. It is an exam path, so a change to it asks the owner.
 - **Tier 1's P32 builds it,** with planted commits for each answer.
 
+**A person signs too** (decided by the owner, 2026-11-08). A person's own commit on a pull request
+passes the commit check like a step's. It walks back p87's "a fourth role" plant.
+
+```text
+# allowed_signers, one line per member. A sketch: the id and key are made up.
+person:<id> namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI...
+```
+
+- **A person signs with git's own SSH commit signing** (`gpg.format ssh`, `commit.gpgsign true`).
+  The check reads the commit's signature against their line, with `namespaces="git"`. No note and
+  no `pnpm` command for people. *It said first, the same day: a `fabrika-step` line and a
+  `pnpm commits sign --person` note; the owner replaced that before it was built.*
+- **The key line comes from GitHub's list of the person's signing keys,** copied into a pull
+  request the owner approves. GitHub helps find the key and is never trusted for it
+  ([a key per client](./a-key-per-client-and-no-github-trust.md)). Added by hand for now; from
+  Tier 3, from the ledger's members.
+- **Exam files still need the owner's read,** and a person's commit is never `build_touched_exam`.
+- Ticket 251 builds it.
+
 ## Squash merges stay: each step signs a link from tree to tree
 
 **Decided by the owner, 2026-11-05.** This repo squashes each pull request into one commit on

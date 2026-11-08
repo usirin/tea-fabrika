@@ -8,10 +8,12 @@ import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
 import {Brand, Effect, Schema} from "effect";
+import * as fc from "fast-check";
 import {type InputId} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
 import * as C from "./index.ts";
+import {signalId} from "./process.ts";
 
 const OTHER_PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjt";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -278,4 +280,59 @@ describe("P10 saved signing authority", () => {
 			}).pipe(Effect.provide(authority(sql)));
 		}),
 	);
+});
+
+// P33 review round 3, rule 2: an id in the signal id space is the brain's alone, so the signer
+// refuses it, signs nothing, saves no receipt and leaves the parent free for a real write.
+describe("P33, the signer refuses every id in the signal id space", () => {
+	const toW = C.Recipient.cases.process.make({process: OTHER_PROCESS});
+	const ids = [
+		signalId(toW, "watch:1", 1),
+		signalId(C.Recipient.cases.client.make({client: "window-a", session: START}), "w", 3),
+		JSON.stringify(["DOWN"]),
+		' [ "DOWN" , 1 ]',
+		'["DOWN", not json',
+	];
+	const refusedThenFree = (id: string) =>
+		Effect.gen(function* () {
+			const {sql, db} = database();
+			yield* Effect.gen(function* () {
+				const s = yield* C.SessionManager;
+				yield* s.record(saved());
+				yield* s.delivered(parent, PROCESS);
+				const before = snapshot(db);
+				expect(yield* Effect.flip(signer(id))).toMatchObject({_tag: "SigningRefused"});
+				expect(snapshot(db)).toBe(before);
+				expect((yield* signer("write-after")).parent).toBe(parent);
+			}).pipe(Effect.provide(authority(sql)));
+		});
+	for (const id of ids) {
+		it.effect(`${JSON.stringify(id)} is refused and spends nothing`, () =>
+			Effect.gen(function* () {
+				expect(C.inSignalSpace(id)).toBe(true);
+				yield* refusedThenFree(id);
+			}),
+		);
+	}
+	it("for any id the signal id space holds, the signer answers SigningRefused", async () => {
+		const id = fc.oneof(
+			fc
+				.array(fc.jsonValue({maxDepth: 2}), {maxLength: 4})
+				.map((rest) => JSON.stringify(["DOWN", ...rest])),
+			fc
+				.tuple(
+					fc.constantFrom("", " ", "\n", "\t"),
+					fc.array(fc.jsonValue({maxDepth: 1}), {maxLength: 3}),
+				)
+				.map(([space, rest]) => `[${space}${JSON.stringify(["DOWN", ...rest]).slice(1)}`),
+			fc.string({maxLength: 20}).map((tail) => `["DOWN"${tail}`),
+		);
+		await fc.assert(
+			fc.asyncProperty(
+				id.filter((value) => C.inSignalSpace(value)),
+				(value) => Effect.runPromise(refusedThenFree(value)),
+			),
+			{seed: 119120, numRuns: 25},
+		);
+	});
 });

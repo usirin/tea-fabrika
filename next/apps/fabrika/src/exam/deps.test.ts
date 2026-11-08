@@ -308,6 +308,13 @@ const bundleFaults = async (next: string): Promise<ReadonlyArray<string>> => {
 };
 
 describe("the real next/", () => {
+	it("P11: libfabrika exports its required browser entry instead of silently skipping it", async () => {
+		const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
+		expect(library).toBeDefined();
+		const entry = exportMap(library!).get(".");
+		expect(entry, "P11 adds libfabrika's browser-safe app entry").toBeDefined();
+		expect(await reach(NEXT, "@kampus/libfabrika", entry!)).toEqual([]);
+	});
 	it("has packages that are private at 0.0.0, with no side effects, a typecheck, and nothing of today's", () => {
 		expect(manifestFaults(NEXT)).toEqual([]);
 	});

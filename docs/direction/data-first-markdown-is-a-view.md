@@ -117,6 +117,8 @@ The same proposal for tea itself is
 carried a local copy, `defineCmd`, first. *2026-10-13: tea's own version was
 ruled on that issue to be `Cmd.define` in tea's Effect entry, not `defineCmd`.*
 
+*Superseded 2026-11-07: tea's name is `Cmd.make`* ([kamp-us/demlik#871](https://github.com/kamp-us/demlik/issues/871)). *The paragraph below says `Cmd.define`, its name until then.*
+
 *Done 2026-10-19.* `@demlik/tea` 0.21.0 ships it, the repo pins 0.21.0, and
 `defineCmd` is gone. The moves call tea's `Cmd.define` from
 `@demlik/tea/effect`. One thin part stays in `src/schema.ts`: tea's Effect

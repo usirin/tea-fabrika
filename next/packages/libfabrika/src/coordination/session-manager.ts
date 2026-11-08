@@ -3,6 +3,7 @@ import {LedgerError} from "../data/ledger.ts";
 import {type InputId, ParentText} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
 import {ProcessId} from "../data/trace.ts";
+import {inRunnerSpace, inSignalSpace} from "./process.ts";
 
 export const Writer = Schema.TaggedUnion({
 	person: {key: Schema.String, for: Schema.String},
@@ -24,7 +25,7 @@ export const Session = Schema.Struct({
 });
 export type Session = typeof Session.Type;
 export class SigningRefused extends Schema.TaggedError<SigningRefused>()("SigningRefused", {
-	why: Schema.Literals(["not_delivered", "spent", "person_only", "ended"]),
+	why: Schema.Literals(["not_delivered", "spent", "person_only", "ended", "signal"]),
 }) {}
 export class NotGranted extends Schema.TaggedError<NotGranted>()("NotGranted", {}) {}
 export class SignRequest extends Context.Service<SignRequest, {readonly id: string}>()(
@@ -123,6 +124,10 @@ export class SessionManager extends Context.Service<
 					kind: string,
 				) {
 					const request = yield* SignRequest;
+					// A signal id is the brain's alone: the signer refuses it before it reads or writes,
+					// so no receipt binds one and the delivery's one receipt stays free.
+					if (inSignalSpace(request.id) || inRunnerSpace(request.id))
+						return yield* new SigningRefused({why: "signal"});
 					const saved = yield* stored(() => {
 						ensure();
 						return load(parent);

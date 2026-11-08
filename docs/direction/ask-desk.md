@@ -83,7 +83,7 @@ const Rec = Schema.TaggedUnion({
 const Answer = Schema.TaggedUnion({
 	rec: {},                                 // y: the rec's pick, whatever it is
 	against: {pick: Pick, note: NonEmptyLine}, // n or o, with the rec in view: say why
-	chose: {pick: Pick},                     // no rec in view (blind, or none): pick freely
+	chose: {pick: Pick, note: Schema.optionalKey(NonEmptyLine)}, // no rec in view: pick freely, a note if you like
 });
 
 /** What the window saw the person do. Its own clock, so it is never used to decide. */
@@ -111,6 +111,11 @@ const Auto = Schema.TaggedStruct("auto", {ask: Id, rule: Id, pick: Pick});
 type Automatable = Exclude<Judgment,
 	"exam_merge" | "exam_touched" | "exam_conflict" | "check_change" | "disable" | "spend">;
 ```
+
+Decided by the owner, 2026-11-08: a `chose` answer may carry an optional note, so a person can
+still tell the planner or the builder something once the made-up rec is gone. Ask desk PR 1
+(ticket 102) builds it.
+
 
 - **Checked against the settled notes by reading, not by `tsc`.** `Judgment` is jidoka's closed list
   ([jidoka](./jidoka-and-andon.md#three-kinds-of-stop-and-the-andon-stop)). `shows`, `saw`, `via`
