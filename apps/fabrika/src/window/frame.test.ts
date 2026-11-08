@@ -54,7 +54,7 @@ import {
 	tookWord,
 	workspaceName,
 } from "./frame.ts";
-import {BottomArea, BottomLine, type FrameProps, ModeStatus} from "./frame.tsx";
+import {BottomArea, BottomLine, type FrameProps, ModeStatus, Over} from "./frame.tsx";
 
 // The frame's words, from a real desk folded by the real machine, and the keys file's real
 // table (desk/keymap.ts): the defaults, or a file's.
@@ -204,7 +204,8 @@ describe("the frame's keys, from the keys file (ticket 174)", () => {
 	const TODAY = [
 		["split", "tile", "C-b |", ["⌃B", "|"], "split"],
 		["split down", "tile", "C-b -", ["⌃B", "-"], "split --to down"],
-		["turn", "tile", "C-b Space", ["⌃B", "Space"], "turn"],
+		// The desk word is `turn-container`: `turn` is the plan's program for one said line.
+		["turn", "tile", "C-b Space", ["⌃B", "Space"], "turn-container"],
 		["fold", "tile", "C-b f", ["⌃B", "F"], "fold"],
 		["zoom", "tile", "C-b z", ["⌃B", "Z"], "zoom"],
 		["close", "tile", "C-b x", ["⌃B", "X"], "close-tile"],
@@ -834,6 +835,31 @@ describe("info mode", () => {
 			.replace(/\s+/g, " ")
 			.trim();
 	const line = (frame: Frame) => renderToStaticMarkup(createElement(BottomLine, props(frame)));
+	const agentsPanel = (summoned: NonNullable<HostNow["summoned"]>) =>
+		renderToStaticMarkup(
+			createElement(Over, {
+				...props({...FRAME, over: {kind: "item", what: "agents"}}),
+				host: {pid: 4242, since: 0, build: null, ledger: {kind: "own"}, agents: [], summoned},
+			}),
+		);
+
+	it("shows no summoned section when no agent is summoned", () => {
+		const html = agentsPanel([]);
+		expect(words(html)).toContain("No agent is attached");
+		expect(words(html)).not.toContain("summoned here");
+	});
+
+	it("shows a summoned agent's model and effort, and the icon for its state", () => {
+		const html = agentsPanel([
+			{name: "scout", agent: "fake", model: "fake-large", effort: "high", state: "idle", since: 0},
+			{name: "researcher", agent: "claude", model: null, effort: null, state: "down", since: 0},
+		]);
+		expect(words(html)).toContain("fake · fake-large · high · idle");
+		expect(words(html)).toContain("claude · down");
+		expect(html.match(/class="ic ic-running"/g)).toHaveLength(1);
+		expect(html.match(/class="ic ic-stuck"/g)).toHaveLength(1);
+		expect(html).toContain('aria-label="Dismiss scout"');
+	});
 	/** The words of one side of the bottom line: `left` or `right`. */
 	const side = (frame: Frame, which: "left" | "right") => {
 		const html = line(frame);

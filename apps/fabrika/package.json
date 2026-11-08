@@ -11,6 +11,7 @@
 		"start": "node build.ts && electron .",
 		"e2e": "node build.ts && node e2e.ts",
 		"e2e:lane": "node build.ts && node lane-e2e.ts",
+		"e2e:summon": "node build.ts && node summon-e2e.ts",
 		"e2e:ruler": "node build.ts && node ruler-e2e.ts",
 		"shots": "node build.ts && node shots.ts",
 		"table": "node table.ts",

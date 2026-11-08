@@ -1,6 +1,7 @@
 import {applyCell} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {type Entry, type JobsOnHost, Ledger, Shell, Traces, writerText} from "@kampus/fabrika-old";
+import {SummonedNow} from "@kampus/fabrika-old/agents/summon";
 import {
 	type AgentOptions,
 	EXIT_WITHIN,
@@ -11,7 +12,7 @@ import {
 	StopRefused,
 } from "@kampus/fabrika-old/mcp";
 import {Author, PullRequests, RepoTree} from "@tea-fabrika/tracker";
-import {Data, Deferred, Duration, Effect, Queue, Ref, Stream} from "effect";
+import {Data, Deferred, Duration, Effect, Option, Queue, Ref, Stream} from "effect";
 import {type Socket, SocketServer} from "effect/socket";
 import {
 	type AsksMsg,
@@ -383,14 +384,19 @@ export const serve = (options: {
 			Effect.runForkWith(services)(asks.dispatch(msg).pipe(Effect.ignore));
 		};
 		const ledger = yield* Ledger;
+		const author = yield* Author;
+		/** The agents the person summoned here, when the host keeps any (its repository is known). */
+		const summons = Option.getOrUndefined(yield* Effect.serviceOption(Shell.SummonManager));
 		const programs = programsOf(
-			appPrograms(ledger, yield* Author, yield* PullRequests, yield* Traces, yield* RepoTree),
+			appPrograms(ledger, author, yield* PullRequests, yield* Traces, yield* RepoTree, summons),
 		);
 
 		// The host as it says of itself, for the top bar's host, sync and agents: said as a page
 		// loads, and to every page as an agent attaches or goes, or its tile comes or goes. Each
 		// agent on the socket is one entry, by a number of its own, so two of one name are two.
 		const attached = new Map<number, Omit<AgentOn, "tile">>();
+		/** The agents summoned here now, as the manager last said them. */
+		let summoned: readonly Shell.Summoned[] = [];
 		let nextAgent = 0;
 		/** Who restarted the host before this one, said once: in its log, here, and in each tile's tsh. */
 		const before = restarts?.before ?? null;
@@ -408,12 +414,32 @@ export const serve = (options: {
 								.sort((a, b) => a.since - b.since)
 								.map((a) => ({...a, tile: agentsOf(desk)[a.name] ?? null})),
 				restarted: before === null ? null : {by: before.by, why: before.why, at: before.at},
+				summoned: summoned.map((a) => ({
+					name: a.name,
+					agent: a.agent,
+					model: a.model.resolved ?? a.model.typed,
+					effort: a.effort.set ?? a.effort.typed,
+					state: a.state,
+					since: a.since,
+				})),
 			},
 		});
 		const tellHost = () => {
 			const now = hostNow();
 			for (const client of clients) if (client.page) toPage(client, now);
 		};
+		// Each summon, dismiss and change of state, to every page: the top bar counts them.
+		const summonedNow = yield* Effect.serviceOption(SummonedNow);
+		if (Option.isSome(summonedNow))
+			yield* summonedNow.value.changes.pipe(
+				Stream.runForEach((all) =>
+					Effect.sync(() => {
+						summoned = all;
+						tellHost();
+					}),
+				),
+				Effect.forkScoped,
+			);
 		const agentCame = (name: string) =>
 			Effect.acquireRelease(
 				Effect.sync(() => {
@@ -753,6 +779,19 @@ export const serve = (options: {
 					return;
 				case "seen":
 					toAsks({type: "seen"});
+					return;
+				// The top bar's Dismiss: the person at the window, as `dismiss <name>` in their tile.
+				case "dismiss":
+					if (summons !== undefined)
+						Effect.runForkWith(services)(
+							summons
+								.dismiss(m.name, writerText(author))
+								.pipe(
+									Effect.catch((e) =>
+										Effect.logWarning(`fabrika host: could not dismiss ${m.name}: ${e.why}`),
+									),
+								),
+						);
 					return;
 			}
 		};

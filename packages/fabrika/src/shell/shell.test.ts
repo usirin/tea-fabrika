@@ -1,8 +1,9 @@
-import {Effect, Schema} from "effect";
+import {Effect, Layer, Logger, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {HostJobs, openJobs, TABLE} from "../host/host-jobs.ts";
 import {ear} from "../program/ear.ts";
-import {start, tell} from "../program/program.ts";
+import {listed} from "../program/listed.ts";
+import {defineProgram, start, tell} from "../program/program.ts";
 import {memoryStorage} from "../program/storage.ts";
 import {Programs, programList} from "./programs.ts";
 import {type Printed, type Ready, TABLE_REFUSED, tsh} from "./shell.ts";
@@ -134,5 +135,103 @@ describe("tsh: a line told beside the foreground", () => {
 		]);
 		expect(seen.after?.status).toBe(0);
 		expect(seen.said).toContain("still");
+	});
+});
+
+// `a && b` runs b only if a ended well, `a || b` only if it did not, and the line's status is the
+// last one that ran. Today's version; the parser's side is in parse.test.ts.
+describe("tsh: && and || between statements", () => {
+	/** Each line typed in turn on one tsh: its status and what it printed. */
+	const typed = (...lines: readonly string[]) =>
+		Effect.runPromise(
+			Effect.gen(function* () {
+				const printed = ear<Printed>();
+				const ready = ear<Ready>();
+				const started = yield* start(
+					tsh,
+					{show: "short"},
+					{printed: printed.hear, ready: ready.hear},
+					{id: "tsh:and-or", storage: memoryStorage()},
+				).pipe(
+					Effect.provideService(Programs, programList(SMALL)),
+					Effect.provideService(HostJobs, yield* openJobs(memoryStorage())),
+				);
+				if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+				const seen: {status: number | undefined; out: string[]}[] = [];
+				for (const [i, line] of lines.entries()) {
+					const from = printed.values.length;
+					expect(yield* tell(started.run, "line", line)).toBe("queued");
+					const all = yield* ready.upTo(i + 1);
+					seen.push({
+						status: all[i]?.status,
+						out: printed.values.slice(from).map((p) => p.text),
+					});
+				}
+				return seen;
+			}).pipe(Effect.scoped),
+		);
+
+	it("&& runs the second only after the first ended well", async () => {
+		const [failed, passed] = await typed("false && say --text after", "true && say --text after");
+		expect(failed?.out).not.toContain("after");
+		expect(failed?.status).not.toBe(0);
+		expect(passed?.out).toContain("after");
+		expect(passed?.status).toBe(0);
+	});
+
+	it("|| runs the second only after the first did not end well", async () => {
+		const [failed, passed] = await typed("false || say --text after", "true || say --text after");
+		expect(failed?.out).toContain("after");
+		expect(failed?.status).toBe(0);
+		expect(passed?.out).not.toContain("after");
+		expect(passed?.status).toBe(0);
+	});
+
+	it("--help with a part's name shows that part whole, not the program's short page", async () => {
+		const [short, part] = await typed("say --help", "say --help --text");
+		expect(short?.status).toBe(0);
+		expect(part?.status).toBe(0);
+		expect(part?.out.join("\n")).toContain("What to say.");
+		expect(part?.out).not.toEqual(short?.out);
+	});
+});
+
+describe("tsh: a line's logs carry the line and when it was said", () => {
+	const note = defineProgram({
+		name: "note",
+		description: "Writes one log line, and ends.",
+		inputs: {},
+		outputs: {},
+		main: () => Effect.log("noted"),
+	});
+
+	it("a line told as plain text is said when tsh takes it", async () => {
+		const rows: {line?: unknown; said?: unknown}[] = [];
+		const caught = Logger.make((o) => {
+			const row = Logger.formatStructured.log(o);
+			if (row.message === "noted") rows.push(row.annotations);
+		});
+		const before = Date.now();
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const ready = ear<Ready>();
+				const started = yield* start(
+					tsh,
+					{show: "short"},
+					{ready: ready.hear},
+					{id: "tsh:said", storage: memoryStorage()},
+				).pipe(
+					Effect.provideService(Programs, programList([...SMALL, listed(note, Layer.empty)])),
+					Effect.provideService(HostJobs, yield* openJobs(memoryStorage())),
+				);
+				if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+				expect(yield* tell(started.run, "line", "note")).toBe("queued");
+				yield* ready.upTo(1);
+			}).pipe(Effect.scoped, Effect.provide(Logger.layer([caught]))),
+		);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]?.line).toBe("note");
+		expect(rows[0]?.said).toBeGreaterThanOrEqual(before);
+		expect(rows[0]?.said).toBeLessThanOrEqual(Date.now());
 	});
 });

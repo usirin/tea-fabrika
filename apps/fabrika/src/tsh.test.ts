@@ -1,3 +1,4 @@
+import {execFileSync} from "node:child_process";
 import {layer as nodeFileSystem} from "@effect/platform-node/NodeFileSystem";
 import {
 	type Entry,
@@ -10,6 +11,7 @@ import {
 	streams,
 	Traces,
 } from "@kampus/fabrika-old";
+import {summonManager} from "@kampus/fabrika-old/agents/summon";
 import {memoryService} from "@kampus/fabrika-old/memory";
 import {fileStorage} from "@kampus/fabrika-old/storage/node";
 import {type CodeFact, nameOf} from "@kampus/pipeline/tickets/ticket";
@@ -17,7 +19,7 @@ import {Tickets, ticketsOnLedger} from "@kampus/pipeline/tickets/tickets";
 import {memoryTraces} from "@tea-fabrika/trace/memory";
 import {Author, PullRequests, tracker} from "@tea-fabrika/tracker";
 import {LANE, SEVEN, SEVEN_BODY, SEVEN_TITLE, SEVEN_TRACE} from "@tea-fabrika/tracker/seven";
-import {Effect, FileSystem, Layer, Schema} from "effect";
+import {Clock, Deferred, Effect, FileSystem, Layer, Logger, Schema} from "effect";
 import {describe, expect, it, vi} from "vitest";
 import {BINDINGS, type Does, wordOf} from "./desk/keys.ts";
 import {deskWords} from "./desk/words.ts";
@@ -33,6 +35,10 @@ import {appPrograms, type Placed, type Runs, startTsh, tshList, type WindowScree
 
 /** How many times tsh was told `signal`: one Ctrl-C is one interrupt, whichever path it took. */
 const signals = vi.hoisted(() => ({told: 0}));
+const lineGate = vi.hoisted(() => ({
+	wait: undefined as Effect.Effect<void> | undefined,
+	entered: false,
+}));
 
 // `tell` as it is, counted when it tells tsh's `signal`. Nothing else changes.
 vi.mock("@kampus/fabrika-old", async (importOriginal) => {
@@ -41,7 +47,13 @@ vi.mock("@kampus/fabrika-old", async (importOriginal) => {
 		if (name === "signal") signals.told += 1;
 		return real.tell(run, name, value);
 	};
-	return {...real, tell};
+	const offer: typeof real.offer = (run, name, value) =>
+		Effect.suspend(() => {
+			if (name !== "line" || lineGate.wait === undefined) return real.offer(run, name, value);
+			lineGate.entered = true;
+			return lineGate.wait.pipe(Effect.andThen(real.offer(run, name, value)));
+		});
+	return {...real, tell, offer};
 });
 
 /** What the fake tile saw, in order. */
@@ -118,7 +130,8 @@ const session = (
 		);
 		let bytes = "";
 		host.terminal.show((m) => {
-			bytes += m.data;
+			// The plan's status and reply regions share the terminal's port: only `write` is bytes.
+			if (m.type === "write") bytes += m.data;
 		});
 		const rows = () => gridOf(bytes, 80, 1000).rows;
 		/** Wait until `check` holds, for at most five seconds. */
@@ -201,6 +214,71 @@ const mentions = (seen: readonly Seen[], run: string, text: string): true | unde
 };
 
 describe("the terminal", () => {
+	// Plan: Enter stamps `said` before a line waits; turn_began keeps the job and typed line too.
+	it("T237-7: a delayed line keeps its Enter clock and execution clock in turn_began", async () => {
+		const logs: Record<string, unknown>[] = [];
+		const caught = Logger.make((o) => {
+			const row = Logger.formatStructured.log(o);
+			if (row.message === "turn_began")
+				logs.push({at: Date.parse(row.timestamp), ...row.annotations});
+		});
+		const text = "  @scout why #7? don't cut a | b &";
+		await go(
+			Effect.gen(function* () {
+				const folder = yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped();
+				execFileSync("git", ["init", "-q"], {cwd: folder});
+				const clock = yield* Clock.Clock;
+				let now = 1_000;
+				yield* Effect.gen(function* () {
+					const manager = yield* Shell.SummonManager;
+					yield* manager.summon({agent: "fake", settings: [], name: "scout", by: "user:owner"});
+					const s = yield* session();
+					yield* s.prompts(1);
+					const release = yield* Deferred.make<void>();
+					lineGate.wait = Deferred.await(release);
+					lineGate.entered = false;
+					s.type(`${text}\r`);
+					yield* s.until("the line at the door", () => (lineGate.entered ? true : undefined));
+					now = 2_000;
+					yield* Deferred.succeed(release, undefined);
+					yield* s.prompts(2);
+				}).pipe(
+					Effect.scoped,
+					Effect.provide(summonManager({storage: memoryStorage(), folder})),
+					Effect.provideService(Clock.Clock, {
+						currentTimeMillisUnsafe: () => now,
+						currentTimeMillis: Effect.sync(() => now),
+						currentTimeNanosUnsafe: () => BigInt(now) * 1_000_000n,
+						currentTimeNanos: Effect.sync(() => BigInt(now) * 1_000_000n),
+						monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+						monotonicTimeNanos: clock.monotonicTimeNanos,
+						sleep: (duration) => clock.sleep(duration),
+					}),
+					Effect.provide(Logger.layer([caught])),
+				);
+			}).pipe(
+				Effect.scoped,
+				Effect.ensuring(
+					Effect.sync(() => {
+						lineGate.wait = undefined;
+					}),
+				),
+			),
+		);
+		expect(logs).toHaveLength(1);
+		const began = logs[0]!;
+		expect({...began, job: began.job ?? began.n}).toMatchObject({
+			name: "scout",
+			agent: "fake",
+			turn: 1,
+			job: 1,
+			line: text,
+			said: 1_000,
+			at: 2_000,
+		});
+		expect(began.run).toMatch(/^acp:/);
+	});
+
 	it("runs a typed line, and shows what tsh printed under it", async () => {
 		const rows = await go(
 			Effect.gen(function* () {
@@ -221,11 +299,11 @@ describe("the terminal", () => {
 				// One page's terminal, shown the screen on its first port, then again on the next.
 				let page = "";
 				const first = s.host.terminal.show((m) => {
-					page += m.data;
+					if (m.type === "write") page += m.data;
 				});
 				first();
 				s.host.terminal.show((m) => {
-					page += m.data;
+					if (m.type === "write") page += m.data;
 				});
 				return gridOf(page, 80, 1000).rows;
 			}).pipe(Effect.scoped),
@@ -871,8 +949,10 @@ describe("the desk's words", () => {
 			}).pipe(Effect.scoped),
 		);
 		// C-b J's word is tsh's own `jobs`, which prints the list in the tile and tells the desk nothing.
-		const toDesk = BINDINGS.filter((b) => wordOf(b.does) !== "jobs");
-		expect(toDesk).toHaveLength(BINDINGS.length - 1);
+		// C-b A's `agents` is tsh's own too: the plan's grammar lists `agents` among tsh's built-ins.
+		const own = new Set(["jobs", "agents"]);
+		const toDesk = BINDINGS.filter((b) => !own.has(wordOf(b.does)));
+		expect(toDesk).toHaveLength(BINDINGS.length - 2);
 		expect(said).toEqual([
 			...toDesk.map((b) => b.does),
 			{kind: "go", tile: "t3"},

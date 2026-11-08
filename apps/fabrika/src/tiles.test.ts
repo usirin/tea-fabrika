@@ -80,7 +80,8 @@ const desk = (storage = memoryStorage(), more: {readonly sessionFor?: AgentSessi
 					bytes.set(tile, "");
 					shown.set(tile, []);
 					screen.show((m) => {
-						bytes.set(tile, (bytes.get(tile) ?? "") + m.data);
+						// The plan's status and reply regions share the terminal's port: only `write` is bytes.
+						if (m.type === "write") bytes.set(tile, (bytes.get(tile) ?? "") + m.data);
 						shown.get(tile)?.push(m);
 					});
 				},

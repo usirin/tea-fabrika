@@ -402,8 +402,11 @@ body,
 	caret-color: transparent;
 }
 
-/* The screen as text: there for a screen reader and a test, out of sight. */
-.screen-text {
+/* The screen as text, and a job's status and replies: there for a screen reader and a test, out of
+   sight. */
+.screen-text,
+.job-status,
+.job-replies {
 	position: absolute;
 	width: 1px;
 	height: 1px;

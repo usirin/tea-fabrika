@@ -25,6 +25,8 @@ export interface HostStart {
 	readonly entry: string;
 	readonly home: string;
 	readonly paths: HostPaths;
+	/** The selected repository where summoned agents work. */
+	readonly repo?: string | undefined;
 	/**
 	 * The person's settings folder, which holds keybindings.toml (host/settings.ts,
 	 * `settingsFolder`), passed as `FABRIKA_SETTINGS`. Not said: the host reads the home's own.
@@ -53,6 +55,7 @@ export const startHost = (s: HostStart): Effect.Effect<Effect.Effect<number | nu
 						...process.env,
 						ELECTRON_RUN_AS_NODE: "1",
 						FABRIKA_HOME: s.home,
+						...(s.repo === undefined ? {} : {FABRIKA_REPO: s.repo}),
 						...(s.settings === undefined ? {} : {FABRIKA_SETTINGS: s.settings}),
 					},
 					detached: true,
