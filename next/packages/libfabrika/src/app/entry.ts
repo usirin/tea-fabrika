@@ -13,6 +13,7 @@ import {
 	type Session,
 	type SigningRefused,
 	type SinkError,
+	SpanSink,
 	Writer,
 } from "../coordination/index.ts";
 import {type Patch} from "./patch.ts";
@@ -140,9 +141,18 @@ export class Alarm extends Context.Service<
 	{readonly set: (at: number | null) => Effect.Effect<void>}
 >()("@kampus/libfabrika/Alarm") {}
 
-/** Sends the process's ended spans on to its JobRecord. P37's flush reads the object's record and
- *  archive services, which the runner's builder holds. */
+/** Sends the process's ended spans on to its JobRecord, with its services captured at build time. */
 export class Recording extends Context.Service<
 	Recording,
-	{readonly flush: Effect.Effect<unknown, LedgerError | SinkError, RecordManager | Archive>}
->()("@kampus/libfabrika/Recording") {}
+	{readonly flush: Effect.Effect<unknown, LedgerError | SinkError>}
+>()("@kampus/libfabrika/Recording") {
+	static readonly layer: Layer.Layer<Recording, never, SpanSink | RecordManager | Archive> =
+		Layer.effect(
+			Recording,
+			Effect.gen(function* () {
+				const sink = yield* SpanSink;
+				const context = yield* Effect.context<RecordManager | Archive>();
+				return {flush: sink.flush.pipe(Effect.provideContext(context))};
+			}),
+		);
+}

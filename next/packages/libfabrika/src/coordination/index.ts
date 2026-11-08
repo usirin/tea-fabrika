@@ -41,7 +41,7 @@ export {Appended, ParentText, Rev} from "../data/log.ts";
 export {LedgerError} from "../data/ledger.ts";
 export {Archive} from "../data/archive.ts";
 export {RecordManager} from "../data/records.ts";
-export {SinkError} from "../data/sink.ts";
+export {SinkError, SpanSink} from "../data/sink.ts";
 export {addText, Change, enrollmentText, grantText, revokeText} from "./text.ts";
 export {
 	type Envelope,

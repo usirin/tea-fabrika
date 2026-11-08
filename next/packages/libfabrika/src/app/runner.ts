@@ -21,7 +21,6 @@ import {
 import {
 	Activity,
 	type Appended,
-	type Archive,
 	brainOnly,
 	type From,
 	type History,
@@ -34,7 +33,6 @@ import {
 	type Placed,
 	ProcessFact,
 	ProcessStore,
-	type RecordManager,
 	RuntimeRecord,
 	RunnerMail,
 	SessionManager,
@@ -144,15 +142,7 @@ export class ProgramRunner extends Context.Service<
 	): Layer.Layer<
 		ProgramRunner,
 		never,
-		| ProgramLoader
-		| ProcessStore
-		| Mailbox
-		| CheckedWriter
-		| WatcherManager
-		| Alarm
-		| Recording
-		| RecordManager
-		| Archive
+		ProgramLoader | ProcessStore | Mailbox | CheckedWriter | WatcherManager | Alarm | Recording
 	> =>
 		Layer.effect(
 			ProgramRunner,
@@ -165,10 +155,6 @@ export class ProgramRunner extends Context.Service<
 				const alarm = yield* Alarm;
 				const recording = yield* Recording;
 				const sessions = yield* Effect.serviceOption(SessionManager);
-				// Recording's flush reads the object's record and archive services; they are in the
-				// context this runner is built in whenever the real sink is wired (P12, P37).
-				const built = yield* Effect.context<RecordManager | Archive>();
-				const flushed = recording.flush.pipe(Effect.provideContext(built));
 				const permit = yield* Semaphore.make(1);
 				let live: Live | null = null;
 				/** Writes left dispatched by an earlier process life: retried once loaded. */
@@ -606,7 +592,7 @@ export class ProgramRunner extends Context.Service<
 						}),
 						Effect.exit,
 						Effect.flatMap((exit) =>
-							flushed.pipe(
+							recording.flush.pipe(
 								Effect.flatMap(() => exit),
 								Effect.catch((error) => (exit._tag === "Failure" ? exit : Effect.fail(error))),
 							),
