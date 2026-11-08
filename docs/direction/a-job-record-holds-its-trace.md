@@ -1,5 +1,10 @@
 # A JobRecord holds each host job: its runs' storage and its trace
 
+**Decided, in pieces:**
+
+- One `JobRecord` per job, for every program: decided 2026-10-28, below.
+- Its build: in the approved [Tier 1 plan](../plan/tier-1.md), P37.
+
 Decided 2026-10-28 by the owner. First proposed 2026-10-27 as one record per
 lane (`LaneRecord`). The owner widened it the next day: traces are for every
 program, not only the pipeline; the record is the storage programs already

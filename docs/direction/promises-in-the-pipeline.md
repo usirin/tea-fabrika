@@ -1,5 +1,7 @@
 # Promises in the pipeline
 
+**Superseded 2026-10-24 by [the plan stage](./the-plan-stage.md).** Its mutation half lives on in [fast and daily mutation](./fast-and-daily-mutation.md), and the verify writer is now the test writer.
+
 **Changed 2026-10-24:** a promise is now a Property; [The plan stage](./the-plan-stage.md) says what changed.
 
 Proposed 2026-10-22.

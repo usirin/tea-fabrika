@@ -1,5 +1,9 @@
 # Codex's box closes what is in home, not home itself
 
+**Decided, in pieces:**
+
+- Built in today's version: `homeFence` in `packages/fabrika/src/agents/acp/harness.ts`.
+
 **Proposed.** About today's version: `homeFence` in `packages/fabrika/src/agents/acp/harness.ts`.
 
 ```ts

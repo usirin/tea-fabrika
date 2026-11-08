@@ -1,5 +1,7 @@
 # Tabbed is an orientation
 
+**Superseded 2026-10-28 by [fold, not tabs](./fold-not-tabs.md).**
+
 **Replaced 2026-10-28 by [fold, not tabs](./fold-not-tabs.md).** The desk has
 no tabs now. Containers run horizontal or vertical only, and any tile folds
 into a strip that keeps its place. The note below is kept as it was written,

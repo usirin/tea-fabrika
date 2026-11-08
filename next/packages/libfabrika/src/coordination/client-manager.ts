@@ -6,10 +6,10 @@
 // id and folds on to the new rev. The second fold is the honest answer to a race: two Macs typing
 // one stolen sheet at once both pass the first check, the log puts one first, and the other hears
 // `ignored used`, never "you are in".
-import {Context, DateTime, Effect, Layer, Result, Schema, Stream} from "effect";
+import {Context, Effect, Layer, Result, Schema, Stream} from "effect";
 import {Ledger, LedgerError} from "../data/ledger.ts";
-import {Appended, type Entry, lineFor, Rev, valueFor} from "../data/log.ts";
-import {short} from "../data/referee.ts";
+import {Appended, type Entry, fromHere, lineFor, Rev, valueFor} from "../data/log.ts";
+import {short} from "../data/trace.ts";
 import type {From} from "./mailbox.ts";
 import {
 	allows,
@@ -127,9 +127,11 @@ export class ClientManager extends Context.Service<
 				const load = Effect.gen(function* () {
 					const first = yield* read;
 					if (first.rows.length > 0) return first;
-					const sentAt = DateTime.formatIso(yield* DateTime.now);
 					const {by, person, build} = founder;
-					const from = {by, for: person, sentAt, seen: 0, cause: null, build};
+					// Both callers, members.read and members.write, already own a span.
+					const from = yield* fromHere({by, for: person, seen: 0, parent: null, build}).pipe(
+						Effect.orDie,
+					);
 					// Two first calls at once write the same line under one id: the referee keeps one,
 					// and the other hears `id_reused` and reads what the first wrote. Any other refusal
 					// fails: a stream with no `founded` would start with no members.

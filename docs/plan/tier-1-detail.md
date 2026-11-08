@@ -252,7 +252,7 @@ export const notes: Program<Model, Msg, View, never> = {
 
 // The note is on version 3. One real value, before and after:
 yield* Mailbox.send("notes:1", id, {type: "save", value: {note: "n-7f3a", base: 3, body: "# Ideas for Tier 2\n..."}}, who);
-// notes:1/inbox  {id, m: {type: "save", value: {base: 3, ...}}, by, for, sentAt, arrivedAt, cause, rev, pos}     this becomes version 4
+// notes:1/inbox  {id, m: {type: "save", value: {base: 3, ...}}, by, for, sentAt, arrivedAt, parent, traceId, rev, pos}     this becomes version 4
 // An old window or an agent, still on version 3, saves too:
 // {why: "changed_elsewhere", now: 4}. No line is written. Its text stays with it, and nothing is overwritten.
 ```
@@ -984,10 +984,10 @@ const rung = (sockets: ReadonlyArray<BrainSocket>, stream: string, rev: number) 
 - `door/hellos`, one fact per online hello: key, tab, platform, versions, has, nonce, signature, `sentAt`, `where`, brain code hash. Why: which window on which code at which moment exists only then. Cost: one append per connect. Refused hellos write nothing, so an unknown key cannot fill the log.
 - `started` gains the brain's build hash, and each letter's fold can name the program's hash. A chaos letter's `tick`, seed, target, asked and did.
 - `seen` on a letter, the last log rev the writer had read, filled by code, and `sentAt`, both kept out of deciding code's types. The referee refuses a `seen` past its head. This was `saw`, the window's inbox position (the slice has it for counter); it became `seen` on the entry wrapper on 2026-11-01 ([saved state](../direction/saved-state.md)). A grant's `saw`, what a person looked at when they said yes, is a different fact and keeps its name.
-- **On each note's save:** `base`, since which version a writer worked on exists only then. `body` whole and raw, every time, since a version is never overwritten. `how`, since "kept from a stale screen" cannot be worked out later, and `from`, since nothing else ties a kept note to its source. The letter's `by`, `arrivedAt`, `sentAt`, `seen` and `cause` come with it, using the plan's existing fields: who wrote it, the log's clock, their own clock, what they had seen. **New on every letter: `for`, the person the writer works for,** from the checked grant, so a fact names both the agent and its person with no fold. The agent's name is its grant's `saw.label`, recorded and shown to the person at Approve. `sentAt` stays out of deciding code's types, and `refuse` sees only the Msg. Cost: one full body per save, about 500 small rows a day at most, a guess.
+- **On each note's save:** `base`, since which version a writer worked on exists only then. `body` whole and raw, every time, since a version is never overwritten. `how`, since "kept from a stale screen" cannot be worked out later, and `from`, since nothing else ties a kept note to its source. The letter's `by`, `arrivedAt`, `sentAt`, `seen`, `parent` and `traceId` come with it, using the plan's existing fields: who wrote it, the log's clock, their own clock, what they had seen. **New on every letter: `for`, the person the writer works for,** from the checked grant, so a fact names both the agent and its person with no fold. The agent's name is its grant's `saw.label`, recorded and shown to the person at Approve. `sentAt` stays out of deciding code's types, and `refuse` sees only the Msg. Cost: one full body per save, about 500 small rows a day at most, a guess.
 - **On each `revoked`:** what the person saw and the check, inside the signed text, the same as a grant.
 - **Added 2026-11-07 (owner), three facts that were lost:** `dead` keeps each throw's error class (p80), `down` gains `until` (p80), and a failed Cmd always comes back as a letter with a `why` (p35). Each existed only at the moment it happened. The throw's message goes to the trace, never the ledger, since a message can quote a note and the trace's content can be deleted.
-- **Added 2026-11-07 (owner), the record of how it ran:** each process's spans in its thin JobRecord, kept forever (P37); raw health rows about 2 weeks, and an hourly summary per piece kept forever; each object's own size, about once an hour while awake. Why: a slow step or a growing object is a trend, and a trend not kept cannot be rebuilt. [Monitoring is in Tier 1](./tier-1.md#monitoring-is-in-tier-1) has the rest.
+- **Added 2026-11-07 (owner), the record of how it ran:** each process's spans in its thin JobRecord, kept forever (P37); a raw health row per ended span, local about 2 weeks and then in R2, forever, and an hourly summary per piece kept forever; each object's own size, about once an hour while awake. Why: a slow step or a growing object is a trend, and a trend not kept cannot be rebuilt. [Monitoring is in Tier 1](./tier-1.md#monitoring-is-in-tier-1) has the rest.
 
 ```ts
 // A sketch of the new shapes, in next/'s Schema. Key names are P33's, P34's and P37's plans' to settle.
@@ -999,17 +999,20 @@ const Down = Schema.TaggedStruct("down", {
 	why: Schema.String, crashes: Schema.Number,
 	until: Schema.Number, // when it tries again, on the referee's clock
 });
+// Settled by P37, as built in next/packages/libfabrika/src/data/trace.ts.
 // One row per piece per hour, kept forever, in the object that wrote it. Not a ledger entry.
 const Summary = Schema.TaggedStruct("summary", {
-	piece: Schema.String,  // "runner.step", "door.envelope", "ledger.ring"
-	hour: Schema.Number,   // the hour's start
-	count: Schema.Number,  // rate
-	errors: Schema.Number, // errors
-	ms: Schema.Struct({p50: Schema.Number, p95: Schema.Number, max: Schema.Number}), // duration
-	lag: Schema.optional(Schema.Number), // a piece that delivers events: the furthest a reader fell behind the newest entry, in revs
+	piece: Schema.String,  // the span's name: "runner.step", "ledger.append", "sink.archive"
+	hour: Schema.Int,      // ms at the hour's start, UTC
+	count: Schema.Int,     // rate
+	errors: Schema.Int,    // errors
+	ms: Schema.Struct({p50: Schema.Number, p95: Schema.Number, max: Schema.Number}), // exact, nearest rank
+	lag: Schema.NullOr(Schema.Number), // the largest numeric tag whose key ends in `.lag`; null when none
 });
-const Size = Schema.TaggedStruct("size", {at: Schema.Number, bytes: Schema.Number}); // ctx.storage.sql.databaseSize
+const Size = Schema.TaggedStruct("size", {at: Schema.Int, bytes: Schema.Int}); // Sql.size(), at most once an hour
 ```
+
+*Changed 2026-11-07 by P37: `hour`, `count` and `errors` are `Int`, and `lag` is `NullOr`, not optional, so a row always has every key.*
 
 **Can wait, since they rebuild from the log:** durations, recovery times, verdict tables, any view, a note's version number and name, the list's order, a diff between versions, a note's drawn blocks and code colors. `check` is itself a fold, so a better checker later re-judges old runs.
 
@@ -1256,7 +1259,7 @@ export class ClientManager extends Context.Service<ClientManager, {
 // next/packages/libfabrika/src/coordination/mailbox.ts: as plan-115, and receive yields a Letter
 export type Letter = {
 	readonly id: string; readonly m: unknown; readonly by: string; readonly for: string; readonly sentAt: string;
-	readonly cause: string | null; readonly rev: number; readonly pos: number;
+	readonly parent: string | null; readonly traceId: string; readonly rev: number; readonly pos: number;
 };
 
 // next/packages/libfabrika/src/app/program.ts
@@ -1424,14 +1427,14 @@ Built 2026-11-07, from [P6's row](./tier-1.md#the-pull-requests-one-at-a-time). 
 export const Rev: Schema.Int;                         // 0 means before the first entry
 export const CauseText: Schema.String;                // matches /^in-[0-9a-f]{8}-[1-9][0-9]*$/
 export type InputId = Brand.Branded<string, "InputId">; // a type only: P10's door makes one
-export const Line: Schema.Struct<{by, for, sentAt, seen, cause, build, _tag, body}>; // every key required
+export const Line: Schema.Struct<{by, for, sentAt, seen, parent, traceId, build, _tag, body}>; // every key required
 export const Entry: Schema.Struct<{id, stream, pos, rev, arrivedAt, ...Line}>;     // arrivedAt: ms, the referee's
 // P9: a schema's value as a line, and an entry back, so no other file writes `_tag` by hand
 export const lineFor: <A extends {readonly _tag: string} & Schema.JsonObject>(from: Omit<Line, "_tag" | "body">, value: A) => Line;
 export const valueFor: (entry: Entry) => unknown;
 export const Appended = Schema.TaggedUnion({
 	placed: {rev: Rev, pos: Rev},                       // a resend gets its first placing again
-	refused: {why: Schema.Literals(["bad_line", "bad_cause", "seen_ahead", "id_reused", "too_big"])},
+	refused: {why: Schema.Literals(["bad_line", "bad_parent", "seen_ahead", "id_reused", "too_big"])},
 });
 export const Waited = Schema.TaggedUnion({ready: {rev: Rev}, parked: {}});
 
@@ -1481,8 +1484,8 @@ Built 2026-11-07, from [P9's row](./tier-1.md#the-pull-requests-one-at-a-time). 
 
 ```ts
 // mailbox.ts
-export type From = Omit<Line, "_tag" | "body">;       // by, for, sentAt, seen, cause, build: one for every write here
-export type Letter = {id, m, by, for, sentAt, cause, rev, pos};  // as the block above
+export type From = Omit<Line, "_tag" | "body">;       // by, for, sentAt, seen, parent, traceId, build: one for every write here
+export type Letter = {id, m, by, for, sentAt, parent, traceId, rev, pos};  // as the block above
 export class Mailbox extends Context.Service<Mailbox, {
 	readonly send: (to: string, id: string, m: unknown, from: From) => Effect.Effect<Appended, LedgerError>; // one `send {m}` on `<to>/inbox`
 	readonly receive: (name: string, after: Rev) => Stream.Stream<Letter, LedgerError>; // another `_tag` is skipped and kept
@@ -1532,6 +1535,77 @@ export class ClientManager extends Context.Service<ClientManager, {
 - One rule, `allows`, decides; `foldMembers` skips what it refuses, and `write` answers with it. `write` refuses before it appends, then folds again to the new rev, so the Mac that lost a sheet race hears `ignored used`.
 - `founded` is written by the first call on an empty `door/members`, under the fixed id `founded`, with the Layer's `by`, `person` and `build`; a refusal other than `id_reused` fails the call with `LedgerError refused`.
 - No `to` is checked here: P10's door checks it before `write`. Traced calls use `Effect.fn` ([Effect.fn for traced functions](../direction/effect-fn-for-traced-functions.md), owner, 2026-11-07). Spans: `mailbox.send`, `mailbox.receive`, `process.start`, `members.read`, `members.write`, with OpenTelemetry's `messaging.*` keys where they fit and `fab.<piece>.*` for the rest (p97).
+
+### The span sink, as P37 built it
+
+Built 2026-11-07, from [P37's row](./tier-1.md#the-pull-requests-one-at-a-time), beside the ledger in `next/packages/libfabrika/src/data/`. The exported names, with their bodies left out; the code is the source.
+
+```ts
+// data/trace.ts: the rows
+export const ProcessId: Schema.NonEmptyString;            // P33's, proposed process_<26 chars>
+export const Chain = Schema.TaggedUnion({job: {process: ProcessId}, spans: {}}); // job/<process>/<part>, spans/<part>
+export const Tag = Schema.Union([Schema.String, Schema.Number, Schema.Boolean]); // a string cut at 128
+export const SpanRow: Schema.Struct<{                     // OTLP's field names
+	traceId, spanId, parentSpanId, name, kind, startTimeUnixNano, endTimeUnixNano, // times: ns as text
+	attributes, events, links,                              // a link: {traceId, spanId, attributes}
+	resource,                                               // {attributes: {"fab.object": <the object that ended it>}}
+	ok,                                                     // a failure's class is attributes["error.type"]
+}>;
+export const Content = Schema.TaggedUnion({
+	kept: {spanId, message},                                // Cause.pretty, cut at 1,000,000 characters
+	deleted: {spanId, by, at, why},
+});
+export const Rolled = Schema.TaggedStruct("rolled", {part, next, bytes}); // a full part's last fact
+export const Health: Schema.Struct<{piece, at, ms, ok, error, lag, spanId}>; // error: a class, never a message
+export const Summary: Schema.TaggedStruct<"summary", {piece, hour, count, errors, ms, lag}>; // as in "What fact is lost forever"
+export const Size: Schema.TaggedStruct<"size", {at, bytes}>;
+export const Archived = Schema.TaggedStruct("archived", {day, part, key, sha256, rows}); // part 1 is the day's file
+export class SinkError extends Schema.TaggedError<SinkError>()("SinkError", {
+	why: Schema.Literals(["unreachable", "bad_row", "storage"]),
+	held: Schema.Int,                                       // spans in memory that met a full disk
+}) {}
+
+// data/sink.ts
+export class SpanSink extends Context.Service<SpanSink, {
+	readonly flush: Effect.Effect<{sent: number}, SinkError, RecordManager | Archive>; // fails with storage while spans are held
+	readonly summaries: (from: number, to: number) => Effect.Effect<ReadonlyArray<Summary>, SinkError>; // rolls up closed hours first
+}>()("@kampus/libfabrika/SpanSink") {
+	static readonly layer: (sql: Sql, who: {readonly object: string}) => Layer.Layer<SpanSink>; // also provides Tracer.Tracer
+}
+
+// data/records.ts: one record part's logic, the same for job/<process>/<part> and spans/<part>
+export const Written = Schema.TaggedUnion({written: {}, rolled: {next, had}}); // had: the batch's ids this part holds
+export class RecordManager extends Context.Service<RecordManager, {
+	readonly write: (chain: Chain, part: number, rows: ReadonlyArray<{span: SpanRow; content: string | null}>) => Effect.Effect<Written, SinkError>;
+	readonly read: (chain: Chain) => Stream.Stream<SpanRow, SinkError>;     // part 0, then each rolled.next
+	readonly content: (chain: Chain, spanId: string) => Effect.Effect<Option.Option<Content>, SinkError>;
+	readonly deleteContent: (chain: Chain, spanId: string, by: {by: string; why: string}) => Effect.Effect<void, SinkError>;
+}>()("@kampus/libfabrika/RecordManager") {
+	static readonly sql: (open: (name: string) => Sql, cap: number) => Layer.Layer<RecordManager>;
+	static readonly memory: (cap: number) => Layer.Layer<RecordManager>;   // tests
+	static readonly remote: (stub: (name: string) => RecordCalls) => Layer.Layer<RecordManager>; // one edge line
+}
+export type RecordCalls = {write, read, content, deleteContent};       // a part object's calls; answers decoded here
+
+// data/archive.ts: where old raw health rows go, our own interface, no Cloudflare import
+export interface BucketCalls {
+	readonly put: (key: string, body: Uint8Array, sha256: string) => Promise<void>; // R2 fails a mismatch
+	readonly head: (key: string) => Promise<{sha256: string} | null>;
+}
+export class Archive extends Context.Service<Archive, {
+	readonly put: (key: string, body: Uint8Array) => Effect.Effect<{sha256: string | null}, SinkError>; // what the store says it holds
+}>()("@kampus/libfabrika/Archive") {
+	static readonly memory: Layer.Layer<Archive>;
+	static readonly bucket: (calls: BucketCalls) => Layer.Layer<Archive>; // one edge line; P12 passes the R2 binding
+}
+```
+
+- **A span's `end`, in one SQLite step:** its health row and its `unsent` row, then, at a new hour, the rollup of every closed hour and the hour's size row. A step that throws keeps the spans held in memory, tries them again at each later `end`, and the next `flush` fails with `storage`.
+- **`flush`:** each chain's `unsent` rows, 100 a call, to the part in `parts`; a row is deleted only after its part answers. On `rolled`, the `had` rows are deleted and the rest go to the next part. Then the archive.
+- **The archive:** each UTC day older than 336 hours whose every hour with rows is summarized leaves as one JSON-lines file, `health/<object>/<day>.jsonl`. Its local rows are deleted only when the stored hash equals the one worked out here, and the rows read still count the same, so a row that landed during the put stays. Rows that land after their day left go as part 2, `<day>.2.jsonl`, and on. Every try, good or failed, writes a `sink.archive` health row, with `error` `unreachable` or `mismatch`; a failed try deletes nothing and never fails `flush`.
+- **Tables in an object with a sink:** `health`, `summarized`, `summary`, `sizes`, `archived`, `unsent`, `parts`, made with the first span, never when the layer is built. A record part's: its spans, its content and at most one `rolled`.
+- **The sink's own functions end no span.** `sha256` and `archiveDays` are exported and use unnamed `Effect.fn` (a stack frame, no span), and the helpers `Effect.fnUntraced`, since a named one would make the sink record spans about itself ([the exception](../direction/effect-fn-for-traced-functions.md#the-rule)).
+- The record object classes, their stubs, the R2 binding and the wiring in `brain.ts` are P12's; `spans.read` at the door is one line in P10's table, over `RecordManager.read`.
 
 ## Styling
 
@@ -1641,9 +1715,9 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - **p10 to p15, p17** run on `stage`, not Miniflare. **p15** adds the checks of p26.
 - **p17's bar is measured new** (T6). The old table's start numbers came from raw Miniflare. Known so far: restart 292 to 539 ms, first answer 1.2 to 1.4 s (exp 171). Same rule: base and head in one sitting, the laptop blocks, CI only prints.
 - **p18 and p20 are restated for a wait that answers at once** (P6, 2026-11-07, building the owner's call of 2026-11-02 that a wait is data). p18: a wait with news already there is `ready` with the stream's newest rev; a wait with none parks, and the first append to that stream past its `after` rings it once; an append to another stream, a resend or a refused line rings nothing. p20: a wait leaves nothing running, so `Effect.runSync` of a parking wait answers `parked`; and `LedgerError` gains `storage`, for a SQLite throw such as `SQLITE_FULL`. *p20 said: an interrupted wait ends and leaves no bell.*
-- **p10 and p18 refuse an id reused with another body** (owner, 2026-11-07). The same `(stream, id)` with another `by`, `for`, `cause`, `_tag` or `body` is `refused id_reused`, and nothing is written; `sentAt`, `seen` and `build` may differ on a resend. *They said: one line, the same answer, the first body kept, which dropped the second body with no trace.*
+- **p10 and p18 refuse an id reused with another body** (owner, 2026-11-07). The same `(stream, id)` with another `by`, `for`, `parent`, `traceId`, `_tag` or `body` is `refused id_reused`, and nothing is written; `sentAt`, `seen` and `build` may differ on a resend. *They said: one line, the same answer, the first body kept, which dropped the second body with no trace.*
 - **p21 moves to P9** (P6's plan, 2026-11-07). It tests `Mailbox`, `ProcessManager` and `CoordinationLayer`, which P9 builds. p10 to p13 stay with the stage, in P12.
-- **p21 is restated for P6's `append`** (P9, 2026-11-07). `send` writes one `{_tag: "send", body: {m}}` on `<to>/inbox` and answers P6's `Appended` as it is, `pos` included, so plan-115's extra read is gone; a resend gets its first placing. `receive` gives `Letter`s past `after` in rev order, every field from the entry, past one page; another `_tag` is skipped and stays in the log; a `send` with no `m` fails the Stream with `bad_row`. `start` writes one `started {program, hash}` per build under the hash; the same build again is its first placing, or `id_reused` from another input, and writes nothing. No Layer fails at build. Plants: a placing from the wrong line; a new id on each start; `for` or `cause` dropped from a Letter; an unknown tag that ends the Stream.
+- **p21 is restated for P6's `append`** (P9, 2026-11-07). `send` writes one `{_tag: "send", body: {m}}` on `<to>/inbox` and answers P6's `Appended` as it is, `pos` included, so plan-115's extra read is gone; a resend gets its first placing. `receive` gives `Letter`s past `after` in rev order, every field from the entry, past one page; another `_tag` is skipped and stays in the log; a `send` with no `m` fails the Stream with `bad_row`. `start` writes one `started {program, hash}` per build under the hash; the same build again is its first placing, or `id_reused` from another input, and writes nothing. No Layer fails at build. Plants: a placing from the wrong line; a new id on each start; `for`, `parent` or `traceId` dropped from a Letter; an unknown tag that ends the Stream.
 - **p28 is widened** (owner, 2026-11-06, built by P9): equal device roots, the grant tree, one live sheet, the limits. Its full list is in [P9's row](./tier-1.md#the-pull-requests-one-at-a-time) and P9's tests, fast-check, seed 119120. Added plants: a dropped device whose tabs stay; a dropped device that takes another with it; a spent sheet used twice; two live sheets; an agent's approve accepted; a revoked key let back in by a new grant.
 - **p22** adds, from PR D: a program's own `refuse` leaves no line and answers with that program's `why`. `bad_msg` stays for a bad shape.
 - **p24** runs oxlint on `next/`, with an edge only on a line under an edge comment, `-- edge: <why>` (owner, 2026-11-05; it said: only in files the exam PR lists).
@@ -1828,9 +1902,10 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Each envelope is logged in the brain's own log: who sent it and where it went. Never a raw key's text, and a `Redacted` value logs hidden.
 - Why: who sent each input exists only at the door, and the note decided to record it first. Plants: an `id` taken from the frame; `by` read from params; a client-sent `by` dropped silently instead of refused; a raw key in the log line; a start part reused after a restart.
 
-**p68, an entry keeps its cause (scenario of P6).** `new`, node. s7, s1. `data/log.ts`, `Ledger`. *Added 2026-11-05 (owner).*
-- Every entry has `cause`: a `CauseText` matching `/^in-[0-9a-f]{8}-[1-9][0-9]*$/`, or null for an `own` write. A text that does not match is refused and nothing is written. Read back, it is the same text, and no public function turns a `CauseText` into an `InputId`.
-- Why: an entry written without it never gets it back. Plants: `cause` dropped on append; a decode that brands the text as an `InputId`; a bad pattern accepted.
+**p68, an entry keeps its parent (scenario of P6).** `new`, node. s7, s1. `data/log.ts`, `Ledger`. *Added 2026-11-05 (owner).*
+- *Renamed 2026-11-07 (owner): `cause` is now `parent`, and `traceId` joins it ([question 15](./tier-1.md#open-questions)). The code rename is its own ticket.*
+- Every entry has `parent`: a `CauseText` matching `/^in-[0-9a-f]{8}-[1-9][0-9]*$/`, or null for an `own` write. A text that does not match is refused and nothing is written. Read back, it is the same text, and no public function turns a `CauseText` into an `InputId`.
+- Why: an entry written without it never gets it back. Plants: `parent` or `traceId` dropped on append; a decode that brands the text as an `InputId`; a bad pattern accepted.
 
 **p69, every write is signed by its cause's sender (scenario of P11).** `new`, node, through the program test kit. s11, s2. `app/runner.ts`, the signer. *Added 2026-11-05 (owner); the walk is [open question 17](./tier-1.md#open-questions).*
 - For any list of inputs, each told by a person or by an agent for that person, interleaved, across queued writes: every write an input causes is signed as that input's sender. An `own` write is signed as the process owner.
@@ -1897,7 +1972,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 **p92 to p95 are P6's** (*new 2026-11-07, from P6's plan, approved by the lead agent*). Each is `new`, node, in `next/packages/libfabrika/src/data/`, beside p18 to p20 and p68.
 
 **p92, every entry has every field (scenario of P6).** `new`, node. s7, s1. `data/log.ts`, `Referee.append`.
-- In the type: a `Line` with any one of `by`, `for`, `sentAt`, `seen`, `cause`, `build`, `_tag` or `body` left out does not compile (one `@ts-expect-error` each, so a key made optional fails the typecheck). `cause` is a required key whose value may be null.
+- In the type: a `Line` with any one of `by`, `for`, `sentAt`, `seen`, `parent`, `traceId`, `build`, `_tag` or `body` left out does not compile (one `@ts-expect-error` each, so a key made optional fails the typecheck). `parent` is a required key whose value may be null.
 - At the referee, for lines that come in as JSON: a line missing any key, or with an empty `by`, `for` or `build`, is `refused bad_line`, and nothing is written. A line that names `arrivedAt`, `rev`, `pos` or any key `Line` does not have is `refused bad_line` too.
 - Every entry read back has all 13 fields, and `arrivedAt`, `rev` and `pos` are the referee's.
 - The referee's deciding step reads `seen` and the id, and its input type has no `sentAt`, so nothing can decide with the writer's clock (D3, S1).
@@ -1934,6 +2009,38 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - With P6's test `Tracer`: each `send`, `receive`, `start`, `members` and `write` ends exactly one span of its name, with P6's spans inside it, and the tags P9's plan lists. A refused write still ends one span with `answer` and `why`.
 - No tag holds `m`, `saw`, a signature, or a string over 128 characters. A `members` call on a founded ledger ends no `ledger.append` span.
 - Plants: `m` in a tag; a refused write with no span; `ignored` reported as `applied`; the live count taken over every key.
+
+**p98 to p102 are P37's** (*new 2026-11-07, from P37's plan, approved by the lead agent*). Each is `new`, node, in `next/packages/libfabrika/src/data/`.
+
+**p98, a span that ends is never dropped (scenario of P37).** `new`, node. s7. `SpanSink`, `RecordManager`. `sink.test.ts`.
+- A span's health row and `unsent` row are in the object's own SQLite before `end` returns: `Effect.runSync` leaves them, and a file closed and opened again still holds them. No fiber, no timer.
+- A span goes to its own `fab.process`, else its nearest ancestor's, else to `spans`; each span to one chain. Every row names the object that ended it as its `resource`, and keeps its links in OTLP's shape.
+- `flush` deletes an `unsent` row only after a good answer. A `RecordManager` that fails leaves every row; a lost answer's resend adds nothing; after a roll, rows the old part holds are not written again.
+- A write that meets `SQLITE_FULL`: the next `flush` fails with `storage` and `held`, and the span lands at a later `end` once there is room. A disk that stays full fails every flush, and `unsent` plus `held` is every span. Building the layer touches nothing.
+- Plants: a queue in memory; `unsent` deleted before the answer; a part without the span-id key; a child that loses its parent's process; a full disk that drops the span or that `flush` does not fail on.
+
+**p99, tags hold names, ids and numbers (scenario of P37).** `new`, node. s7. `SpanSink`'s `end`. `sink.test.ts`.
+- A tagged `Redacted` and a throw's message appear in no table, read as the file's raw bytes, and in no archive file; the message only in `content`.
+- Every kept tag is a string of at most 128 characters (127 when the cut would split a surrogate pair, with `<key>.length` beside), a finite number or a boolean. Any other value is dropped and counted in `fab.sink.dropped`, on the span, its events and its links alike.
+- A failed span has its class in `error.type` and its `Cause.pretty` text only in `content`, cut at 1,000,000 characters with its full length after.
+- Plants: `Redacted` written as its value; an object tag stored as JSON; the message in `error.message`; the message in a health row's `error`.
+
+**p100, content is the one deletable part (scenario of P37).** `new`, node. s7. `RecordManager`, on `sql` and `memory` alike. `records.test.ts`.
+- `deleteContent` turns `kept` into `deleted {by, at, why}` in whichever part holds the span, an older part too, and the span row reads back the same. A second delete changes nothing.
+- No other call removes or changes a span row: `write` of a known span id changes not its row, its content nor a deletion. Who may delete (a person, never an agent) is the door's check, P10's.
+- Plants: a delete that drops the span row; a delete that leaves the message; `write` that overwrites; a delete that only looks in the last part.
+
+**p101, health in two levels, no raw row lost (scenario of P37).** `new`, node. s7. `health.ts`, `archive.ts`, under `TestClock`. `health.test.ts`.
+- For any spans over several days (fast-check, seed 119120), each summary's count, errors, p50 and p95 (nearest rank), max and lag match the raw rows. An object that sleeps rolls up at its next span; `summaries` rolls up closed hours first, never the open one. One size row an hour, across processes too, from `Sql.size()`; no alarm is set.
+- Local rows plus every archived file's rows are every health row ever written, at every point: none missing, none twice. A day leaves only when every hour with rows is summarized, it is older than 336 hours, the stored hash matches, and the rows read still count the same. A late row leaves as the next part, with its own key, hash and `archived` row.
+- Every raw row carries the `spanId` it measured. A failed put or a mismatch keeps every row and writes a `sink.archive` row, with the put's end time, its duration and the span `flush` ran in.
+- Plants: archive before summary; delete before the hash check or on a mismatch; delete by time range instead of the rows read; p95 off by one; lag from the wrong key; a size row on every span; rollup of the open hour; a day archived twice.
+
+**p102, a record rolls at its cap and never fills (scenario of P37).** `new`, node. s7. `RecordManager`, on `sql` and `memory`, with a small cap. `records.test.ts`.
+- A part at or past its cap writes `rolled {part, next, bytes}` once, before the write, and takes no new span after; the next part does. `spans/<part>` rolls by the same code.
+- A resend after the roll lands nowhere twice: rows the old part holds answer in `had`.
+- `read` walks part 0, then each `rolled.next`, and yields every span once, in write order, past a page of 500 too. `RecordManager.remote` sends each call to the part's own object by name; a rejected call is `unreachable`, an answer that does not decode `bad_row`.
+- Plants: a part that writes past its cap; a roll after the write; a resend in two parts; a reader that stops at part 0; two `rolled` rows in one part.
 
 ## Criteria
 
@@ -2045,7 +2152,7 @@ No fact is lost by waiting on any of these. Each adds a kind of fact, and old sa
 - `keep`, as a proposal: the tracker's filter is the first thing that needs it. Filters stay in the window's machine until then; nothing lost.
 - Topic, as a proposal: `tracker | ticket` is the first case that may need to read outside an inbox. A later Topic reads the same streams; nothing lost.
 
-**Tier 3, two people.**
+**Tier 3, a few people** (it said two people until 2026-11-07, owner; [the tiers](./tiers.md#tier-3-is-a-few-people-owner-2026-11-07)).
 
 - Typed codes on Cloudflare. `saw.how` gains a word; nothing lost.
 - Invites and join. New facts on a `founded.keys` list; nothing lost.

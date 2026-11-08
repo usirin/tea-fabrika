@@ -1,5 +1,10 @@
 # A yes binds to the diff, not the commit
 
+**Decided, in pieces:**
+
+- Decided to build 2026-11-02, below, settled when built.
+- Built in today's version: `git patch-id` in `packages/pipeline/src/stages/pipeline/carry.ts`.
+
 **Proposed.** Decided by the owner on 2026-11-02 to build, in today's version and in `next/`
 alike. It is settled when it is built. From
 [experiment 165](../../experiments/165-review-binds-to-diff.md), whose lean was never written down

@@ -1,6 +1,6 @@
 # The ticket is the lane's one view
 
-Decided 2026-10-24. One part is still proposed, and it is marked.
+Decided 2026-10-24. One part is still proposed, and it is marked. Walked when Tier 6 starts (owner, 2026-11-08): pipeline timelines and each step's brief.
 
 ```ts
 // A sketch. A ticket is the key that ties one lane's facts together.

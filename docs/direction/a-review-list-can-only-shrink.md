@@ -1,6 +1,6 @@
 # A review list can only shrink
 
-Proposed 2026-10-11. An idea being worked out, not a decision. It belongs to
+Proposed 2026-10-11. Walked when Tier 6 starts (owner, 2026-11-08): the review stage's findings and retry stop. An idea being worked out, not a decision. It belongs to
 the review machine, which is not designed yet.
 
 Keys renamed 2026-11-03 (short words keep one meaning): a recheck's `by` became `_tag`, written

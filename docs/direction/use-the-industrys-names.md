@@ -1,5 +1,12 @@
 # Use the industry's names
 
+**Decided, in pieces:**
+
+- The rule: decided 2026-10-18, below.
+- The glossary: it exists, [`.glossary/TERMS.md`](../../.glossary/TERMS.md).
+- The sweep's picks: made 2026-10-24 and 2026-10-28 ([the naming sweep](../naming-sweep/README.md)).
+- The two-domains rule: replaced 2026-11-03 by [we follow DDD](./we-follow-ddd.md).
+
 Decided 2026-10-18.
 
 ## What was decided
