@@ -524,8 +524,9 @@ describe("P33, a client's inbox is not a process's inbox", () => {
 			);
 			const rows = store.rows().filter((row) => row.id === "letter:1");
 			expect(rows.map((row) => row.stream)).toEqual(["notes/inbox"]);
-			const clientInbox = signals(store).filter((down) => down.m.to._tag === "client");
-			expect(clientInbox.map((down) => down.stream)).not.toContain("notes/inbox");
+			const clientInbox = store.rows().filter((row) => row.stream === "client:notes/inbox");
+			expect(clientInbox.map((row) => row.id)).not.toContain("letter:1");
+			expect(clientInbox).toHaveLength(1);
 		});
 	});
 	it.effect("a process named client:notes never shares client notes's inbox", () => {
