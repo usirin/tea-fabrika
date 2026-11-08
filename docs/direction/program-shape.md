@@ -41,7 +41,8 @@ refused only when the write runs, after the step was saved.
 
 Both keep everything settled: the door's checks, `refuse` before update on fresh inputs only, writes
 caused by an input's `parent`, saved state with a version and named upgrades, a JSON view, `wake`,
-init's Cmds once per process start, and the Cmd list the runner reads at runtime. Neither needs tea to
+init's Cmds once per process start (decided, built in ticket 292; the merged stepper drops them
+today), and the Cmd list the runner reads at runtime. Neither needs tea to
 change. Both compile down to the declaration the merged `stepper` loads, and the experiment's script
 shows all three shapes step the same.
 
@@ -88,7 +89,9 @@ export const ticketMachine = ticket.machine;   // still a tea machine a parent c
   one.
 - **Every empty part is left out.** An optional list holds at least one item. The saved version is
   one more than the number of upgrades, never written by hand.
+- **`refuse` is optional.** Left out, nothing is refused.
 - **`Program.make` only.** `makeEffect` goes; the loader's check is the Effect.
+- **A step cannot call the write Cmd itself.** Its `stream` is branded, and only an input's writer makes one.
 
 ## Which version
 
@@ -103,6 +106,11 @@ export const ticketMachine = ticket.machine;   // still a tea machine a parent c
 - [tea-program](./tea-program.md) (today's version, proposed): "outputs are events". Now an output
   is a selector of the model, sent on change.
 - P11's `Input` union of `read` and `write` ports: reads leave `inputs`.
+- [Elm first](./elm-first.md): "`Program` has a required `refuse`". Now it is left out when a program
+  refuses nothing.
+- [Schema classes](./schema-classes-not-of-helpers.md) give data both `make` and `makeEffect`.
+  `Program` drops `makeEffect` by the one-way rule: a program is built once, at load, where the
+  loader already runs as an Effect. Data keeps the pair.
 - Shape 3 only: [Program.make](./program-make.md)'s "the machine is its own `Machine.make` value,
   exported beside the program". The machine is still exported, but `Program.make` builds it.
 

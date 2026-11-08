@@ -1,12 +1,14 @@
 // The mistakes the owner named, made on purpose in each shape. `@ts-expect-error` marks a mistake
 // tsc stops; tsc fails this file if one of them compiles after all. A mistake with no mark
 // compiles, and its comment says when, if ever, it is caught. next/ only.
+import {applyCell} from "@demlik/tea";
 import {Machine} from "@demlik/tea/effect";
 import {Schema} from "effect";
 import {Program as Today} from "../../next/packages/libfabrika/src/index.ts";
 import {ticketMachine as todayMachine} from "./shape-1-today.ts";
 import {Fact as Fact2, Input} from "./shape-2-lib.ts";
 import {Fact as Fact3, Program as Records} from "./shape-3-lib.ts";
+import {ticket as threeTicket} from "./shape-3-records.ts";
 import {Answer, Answered, Comment, Model, readTicket, start} from "./ticket-data.ts";
 
 const base = {
@@ -39,7 +41,7 @@ Machine.make({
 });
 // Shape 3: the key IS the name, so a typo compiles and renames the input. A client that sends
 // `comment` is refused `bad_msg` at the door. Caught only by a test or a person reading.
-const three = Records.over({model: Model, facts: [], cmds: []});
+const three = Records.over({model: Model});
 three.make({
 	name: "ticket",
 	init: () => ({model: start, cmds: []}),
@@ -50,7 +52,6 @@ three.make({
 			update: (m) => ({model: m, cmds: []}),
 		}),
 	},
-	answers: {write: {ok: (m) => ({model: m, cmds: []}), err: (m) => ({model: m, cmds: []})}},
 	view: (m) => ({now: m.now}),
 });
 
@@ -111,7 +112,6 @@ answer2.write(
 const gated = Records.over({
 	model: Model,
 	facts: [Fact3.make(Answered, {who: "person"})],
-	cmds: [],
 });
 gated.input({
 	fields: Comment.fields,
@@ -148,15 +148,35 @@ three.make({
 			update: (m: Model) => ({model: m, cmds: []}),
 		},
 	},
-	answers: {write: {ok: (m) => ({model: m, cmds: []}), err: (m) => ({model: m, cmds: []})}},
 	view: (m) => ({now: m.now}),
 });
 
 // 4. A saved shape whose number does not match its upgrades.
-// Shape 1: compiles. The load fails as `ProgramDown load` (a gap: v 2 with no upgrade from 1).
+// Shape 1: compiles, and even loads: `v: 2` with no upgrades boots fresh. A model saved at version 1
+// fails later, when it is loaded, as `ProgramDown saved_state` (no upgrade from 1).
 Today.make({...base, state: {v: 2, upgrades: []}, inputs: {}});
 // Shapes 2 and 3: there is no number to write; it is one more than the upgrades.
 
 // 5. An empty part written out. Shapes 2 and 3 take no `[]` where a list may be left out.
 // @ts-expect-error `causes` names at least one fact, or is left out
 Input.make("close", {fields: Comment.fields, description: "Close", causes: []});
+
+// 6. A step that skips its input's writer and calls the write Cmd itself. Both new shapes list the
+// runner's write Cmd, but its `stream` is branded and only an input's writer makes one, so tsc
+// stops it.
+// @ts-expect-error the write Cmd takes only what an input's writer makes
+Fact2.write({stream: "ticket/1", write: {_tag: "own", fact: {_tag: "answered"}}});
+// @ts-expect-error the same in shape 3
+Fact3.write({stream: "ticket/1", write: {_tag: "own", fact: {_tag: "answered"}}});
+
+// 7. Shape 3's lists: left out when empty, never written empty.
+// @ts-expect-error `facts` holds at least one fact, or is left out
+Records.over({model: Model, facts: []});
+
+// 8. A parent steps shape 3's built machine with tea's own `applyCell`, as it would any machine.
+const [stepped] = applyCell(threeTicket.machine, start, {
+	type: "show",
+	ticket: 7,
+	parent: "in-process_0123456789abcdefghjkmnpqrs-1",
+});
+export {stepped};

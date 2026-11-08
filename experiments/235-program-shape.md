@@ -63,7 +63,7 @@ Read before writing: [Program.make](../docs/direction/program-make.md) (decided 
 [tea-program](../docs/direction/tea-program.md) (today's version, proposed) and
 [Tier 1's P11 as built](../docs/plan/tier-1-detail.md#programs-as-p11-built-it).
 
-Every shape keeps these, and all three do:
+Every shape keeps these, and all three do, except where a line says it is not built yet:
 
 - **The door's checks.** An input has a port; a person-only port needs a person; the door stamps
   `parent` and refuses an input that brings its own; `refuse` runs on fresh inputs only, before
@@ -75,8 +75,10 @@ Every shape keeps these, and all three do:
 - **Saved state** with a version and a chain of named upgrades (S3, branch A).
 - **A view as JSON,** a function of the model, typed from it.
 - **`wake`,** a time or none.
-- **init's Cmds once per process start.** init returns `[model, cmds]` or `{model, cmds}`; no
-  shape adds a separate setup hook.
+- **init's Cmds once per process start.** Decided, not built yet: the merged stepper drops the Cmds
+  init returns (`next/packages/libfabrika/src/app/program.ts`, `stepper`'s `init`), and ticket 292
+  builds it. Each shape's init returns its Cmds, so none stands in that build's way; no shape adds a
+  separate setup hook.
 - **The Cmd list at runtime.** The runner needs each Cmd's schemas to check a Cmd's input, check a
   saved answer, and encode a handler's answer. See "Why `cmds` is listed" below.
 - **The machine stays a tea machine** a parent can step and laws can fold
@@ -145,22 +147,23 @@ Judged by properties, never by size. "Stops" means tsc stops it, from `mistakes.
 | A typo in an input's name | tsc stops it (key must be a Msg type) | No key to mistype; tea checks the update keys | **Compiles:** the key is the name, so a typo renames the input; the door then refuses the real name |
 | A Msg no client can send | Compiles; dead code the door never reaches | Cannot be written: the Msg is the inputs | Cannot be written |
 | A Cmd not in the list | tsc stops it | tsc stops it | tsc stops it |
-| A plain input writes a person-only fact | **Compiles;** refused by the signer when the write runs, after the step was saved | tsc stops it where the input is made and where it writes; an input's writer takes only its own Msg | tsc stops it at the write |
+| A plain input writes a person-only fact | **Compiles;** refused by the signer when the write runs, after the step was saved | tsc stops it where the input is made and where it writes; an input's writer takes only its own Msg; the write Cmd itself takes only a stream a writer makes (a type-only brand) | tsc stops it at the write; the write Cmd is branded the same way |
 | The output | Declared; nothing can send it | A value, picked from the model, sent when it changes | Same, written in place |
-| A saved version that does not match its upgrades | Compiles; `ProgramDown load` | Cannot be written: the version is one more than the upgrades | Same |
-| Empty parts written | `state`, `refuse`, `outputs`, `writes`, `wake`: all required | None; an optional list takes at least one item | None, except each step's `cmds: []` |
+| A saved version that does not match its upgrades | Compiles, and loads: `v: 2` with no upgrades boots fresh, then a saved model at version 1 fails later as `ProgramDown saved_state` (`app/state.ts`, `Saved.upgrade`) | Cannot be written: the version is one more than the upgrades | Same |
+| Empty parts written | `state`, `refuse`, `outputs`, `writes`, `wake`: all required | None for optional parts; an optional list takes at least one item. `inputs` must name at least one input, so a program with none cannot be written | None: `facts`, `cmds`, `answers`, `outputs`, `wake`, `state` are left out when empty, and `facts: []` or `outputs: {}` does not compile. Each step's `cmds: []` is still written |
 | One input's whole story lives in | 4 places, linked by names | 3: its value, its place in the group, its update cell | 1 block, plus its fact in `over` |
-| Two ways to do one job (the owner's rule) | Input as a string or an object; `make` or `makeEffect`; a read input made a different way from a write input; person-only said twice, on the input and on the fact | None found | A step returns `{model, cmds}` in a program and `[model, cmds]` in a plain tea machine |
+| Two ways to do one job (the owner's rule) | Input as a string or an object; `make` or `makeEffect`; a read input made a different way from a write input; person-only said twice, on the input and on the fact | None found. One value is handed to two places (the input group, to the machine's `msg` and the program's `inputs`) | A step returns `{model, cmds}` in a program and `[model, cmds]` in a plain tea machine |
 | One word, two meanings | "input" is a write port and a read port; an output, once built, would be a Cmd named after it | None found | "answer" is a Cmd's result and the ticket's `answer` input; `over` is a new word |
 | How it fails | 3 of the named mistakes at load or run time | All at compile time | All at compile time but the typo, which a client finds |
-| Walks back | Nothing | Outputs and `writes` stop being required (P11: "required, `{}` for none"); outputs become model selectors, not events (tea-program, today's version; C8 already says "a source sends after each change"); read ports leave `inputs`; `makeEffect` goes | All of shape 2's, plus "the machine is its own `Machine.make` value" (Program.make, decided): `Program.make` builds it |
+| Walks back | Nothing | Outputs and `writes` stop being required (P11: "required, `{}` for none"); `refuse` becomes optional (Elm first: "a required `refuse`"); outputs become model selectors, not events (tea-program, today's version; C8 already says "a source sends after each change"); read ports leave `inputs`; `makeEffect` goes, against the `make` and `makeEffect` pair that schema classes set for data | All of shape 2's, plus "the machine is its own `Machine.make` value" (Program.make, decided): `Program.make` builds it |
 | Needs a tea change | No | No. Two hand-offs of one value, `inputs` to the machine and the program, would merge into one if tea's `Machine.make` kept the schema's own type (an addition to the demlik#897 patch) | No |
 | Needs a runner change | Outputs cannot be sent in any shape yet | The runner sends an output when its selected value changes | Same |
 
 **The rule in each new shape.** Shape 2 meets it with one maker per kind of thing (`Input.make`,
 `Fact.make`, `Output.make`, `Program.make`), each optional part written only as its non-default
 value (`who: "person"`, never `who: "anyone"`; `causes` only with a fact in it), the version derived
-from the upgrades, and outputs that are never Cmds. Its one wrinkle is not two ways but one value
+from the upgrades, outputs that are never Cmds, and a write Cmd no step can call except through
+its input's own writer. Its one wrinkle is not two ways but one value
 given twice: the input group goes to the machine's `msg` and to the program's `inputs`, and the load
 checks they are the same object. Shape 3 meets it inside a program, but not across the codebase:
 tea's machines step with a tuple, a program's steps with a record, so one job has two forms. It
@@ -190,6 +193,10 @@ tracker, with Subs and internal state) written both ways.
   request is the case to check.
 - Whether `Program.over` is the right word. XState says `setup`, which here already means init's
   work, so it was not used.
-- The libraries are sketches: each has one untyped join (shape 3's built update table; its input
-  brand), and neither is tested beyond this file and `mistakes.ts`.
+- The libraries are sketches, tested only by the script and `mistakes.ts`. Each has casts, each
+  marked where it stands: shape 3's built update table and init, its input brand, and the type of
+  the machine it builds (one `oxlint-disable` with its reason). A parent stepping shape 3's machine
+  with `applyCell` compiles (`mistakes.ts`, part 8), but no parent was written.
+- How a fact written `own`, caused by no input, is declared in shape 2. The ticket writes none; today
+  shape 2 finds facts only through the inputs that cause them.
 - Nothing ran on the runner or on workerd; only the stepper.

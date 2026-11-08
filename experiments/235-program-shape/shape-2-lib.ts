@@ -133,15 +133,15 @@ type ProgramMachine = {
 	readonly update: object;
 	readonly init: (loaded: never, ctx: never) => readonly [unknown, ReadonlyArray<unknown>];
 };
-type ModelOf<T extends ProgramMachine> = T["model"]["Type"];
+type MachineModel<T extends ProgramMachine> = T["model"]["Type"];
 
 /** The program: its machine and what only a program has. Every empty part is left out. */
 export type Program<T extends ProgramMachine, I extends ReadonlyArray<Input>, V> = {
 	readonly name: string;
 	readonly machine: T;
 	readonly inputs: Inputs<I>;
-	readonly view: (model: ModelOf<T>) => V;
-	readonly outputs: ReadonlyArray<Output<ModelOf<T>>>;
+	readonly view: (model: MachineModel<T>) => V;
+	readonly outputs: ReadonlyArray<Output<MachineModel<T>>>;
 	/** What the runner loads. */
 	readonly declared: Declaration;
 };
@@ -155,12 +155,12 @@ const make = <
 	readonly machine: T;
 	/** The same group the machine's `msg` is: tsc checks the Msg types, the load checks it is one value. */
 	readonly inputs: Inputs<I> & Schema.Schema<T["msg"]["Type"]>;
-	readonly view: (model: ModelOf<T>) => V;
+	readonly view: (model: MachineModel<T>) => V;
 	/** A pure check of a fresh input against the model. Left out, nothing is refused. */
-	readonly refuse?: (model: ModelOf<T>, msg: I[number]["schema"]["Type"]) => Refusal | null;
-	readonly outputs?: readonly [Output<ModelOf<T>>, ...ReadonlyArray<Output<ModelOf<T>>>];
+	readonly refuse?: (model: MachineModel<T>, msg: I[number]["schema"]["Type"]) => Refusal | null;
+	readonly outputs?: readonly [Output<MachineModel<T>>, ...ReadonlyArray<Output<MachineModel<T>>>];
 	/** When the runner should wake it. Left out, it never wakes. */
-	readonly wake?: (model: ModelOf<T>) => number | null;
+	readonly wake?: (model: MachineModel<T>) => number | null;
 	readonly state?: State;
 }): Program<T, I, V> => {
 	if (spec.inputs !== spec.machine.msg) throw new Error("inputs must be the machine's own msg");

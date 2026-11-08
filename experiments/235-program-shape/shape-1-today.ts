@@ -44,7 +44,7 @@ const write = Cmd.make("write", {
 const caused = (
 	m: {readonly parent: string; readonly ticket: number},
 	fact: typeof Write.cases.caused.fields.fact.Type,
-) => write({stream: stream(m.ticket), write: {_tag: "caused", parent: m.parent, fact}});
+) => write({stream: stream(m.ticket), write: Write.cases.caused.make({parent: m.parent, fact})});
 
 export const ticketMachine = Machine.make({
 	model: Model,

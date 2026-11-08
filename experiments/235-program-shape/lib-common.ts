@@ -15,12 +15,12 @@ export type {Refusal};
 export const parent = Write.cases.caused.fields.parent;
 
 /** A fact as the ledger keeps it: a schema whose values carry their own `_tag`. */
-type Tagged = Schema.Codec<{readonly _tag: string}, unknown> & {
+type FactSchema = Schema.Codec<{readonly _tag: string}, unknown> & {
 	readonly Type: {readonly _tag: string};
 };
 
 /** A fact a program may write, and whether only a person's input may cause it. */
-export type Fact<S extends Tagged = Tagged, P extends boolean = boolean> = {
+export type Fact<S extends FactSchema = FactSchema, P extends boolean = boolean> = {
 	readonly schema: S;
 	readonly personOnly: P;
 };
@@ -28,32 +28,41 @@ export type Fact<S extends Tagged = Tagged, P extends boolean = boolean> = {
 /** A fact's value. */
 export type FactValue<F extends Fact> = F["schema"]["Type"];
 
-function makeFact<S extends Tagged>(schema: S, spec: {readonly who: "person"}): Fact<S, true>;
-function makeFact<S extends Tagged>(schema: S): Fact<S, false>;
-function makeFact<S extends Tagged>(schema: S, spec?: {readonly who: "person"}): Fact<S> {
+function makeFact<S extends FactSchema>(schema: S, spec: {readonly who: "person"}): Fact<S, true>;
+function makeFact<S extends FactSchema>(schema: S): Fact<S, false>;
+function makeFact<S extends FactSchema>(schema: S, spec?: {readonly who: "person"}): Fact<S> {
 	return {schema, personOnly: spec !== undefined};
 }
 
 /**
- * The one Cmd the runner itself performs: a checked write. Declared once, here, so no program
- * writes its name, its input or the runner's refusals again.
+ * Where a write goes. Branded, so only `caused` below makes one: a step that calls the write Cmd
+ * itself, skipping its input's writer and its person-only gate, does not compile. The brand is a
+ * type only; the saved Cmd holds a plain string.
  */
-const writeCmd = Cmd.make("write", {
-	input: Schema.Struct({stream: Schema.String, write: Write}),
+const Stream = Schema.String.pipe(Schema.brand("WriteStream"));
+
+/**
+ * The one Cmd the runner itself performs: a checked write. Declared once, here, so no program
+ * writes its name, its input or the runner's refusals again. Programs list it in `cmds`.
+ */
+const write = Cmd.make("write", {
+	input: Schema.Struct({stream: Schema.toType(Stream), write: Write}),
 	ok: Schema.Json,
 	err: ["not_delivered", "spent", "person_only", "ended", "not_granted", "bad_cmd", "forbidden"],
 });
-export type WriteCmd = ReturnType<typeof writeCmd>;
+export type WriteDef = typeof write;
+export type WriteCmd = ReturnType<WriteDef>;
 
 /** A fact's maker and the write Cmd. A person-only fact says `{who: "person"}`; no other way. */
-export const Fact = {make: makeFact, write: writeCmd};
+export const Fact = {make: makeFact, write};
 
 /** A write the input `msg` caused: its parent is the door's stamp, never a value a client wrote. */
 export const caused = (
 	msg: {readonly parent: string},
 	stream: string,
 	fact: typeof Write.cases.caused.fields.fact.Type & {readonly _tag: string},
-): WriteCmd => writeCmd({stream, write: {_tag: "caused", parent: msg.parent, fact}});
+): WriteCmd =>
+	write({stream: Stream.make(stream), write: Write.cases.caused.make({parent: msg.parent, fact})});
 
 /** One step of a saved model's shape. Its number is its place in the list: no `from` to get wrong. */
 export type Upgrade = {readonly name: string; readonly run: (raw: unknown) => unknown};
@@ -116,14 +125,14 @@ export const declare = (parts: {
 		),
 		outputs: Object.fromEntries(parts.outputs.map((o) => [o.name, o.schema])),
 		writes: Object.fromEntries(
-			parts.facts.map((f) => [tagOf(f), {schema: f.schema, personOnly: f.personOnly}]),
+			parts.facts.map((f) => [factTag(f), {schema: f.schema, personOnly: f.personOnly}]),
 		),
 		wake: parts.wake,
 	});
 };
 
 /** A fact schema's own `_tag`, read off its fields. */
-const tagOf = (fact: Fact): string => {
+const factTag = (fact: Fact): string => {
 	const fields: unknown = "fields" in fact.schema ? fact.schema.fields : undefined;
 	const tag =
 		typeof fields === "object" && fields !== null && "_tag" in fields ? fields._tag : undefined;

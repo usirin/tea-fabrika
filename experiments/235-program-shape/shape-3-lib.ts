@@ -1,9 +1,9 @@
-import type {AnyCmdDef, CmdOf, Settled} from "@demlik/tea";
 // Shape 3's library: one record per input, holding its fields, words, gate, refusal and step, and
 // one per Cmd, holding its two answers. Program.make builds the tea machine from them. next/ only.
 // The known way is Redux Toolkit's `createSlice` (the reducers' keys make the action types) and
 // XState v5's `setup`, which fixes the types first so every named part is checked. tea is not
 // changed: the machine it builds is tea's own `Machine.make`, which a parent can still step.
+import type {AnyCmdDef, CmdOf, Machine as TeaMachine, Settled, Sub} from "@demlik/tea";
 import {Machine} from "@demlik/tea/effect";
 import {Schema} from "effect";
 import {
@@ -15,6 +15,7 @@ import {
 	type Refusal,
 	type State,
 	type WriteCmd,
+	type WriteDef,
 	Fact as Facts,
 	caused,
 	declare,
@@ -43,10 +44,10 @@ type Writer<A> = (stream: string, fact: A) => WriteCmd;
 /** Marks a record `input` made, so a hand-written one, which skips the gate, does not compile. */
 declare const made: unique symbol;
 
-/** One input, as Program.make keeps it. */
-type Spec<S, C> = {
+/** One input, as Program.make keeps it. `G` is its fields, kept so the Msg type can be built. */
+type Spec<S, C, G extends Fields = Fields> = {
 	readonly [made]: true;
-	readonly fields: Fields;
+	readonly fields: G;
 	readonly description: string;
 	readonly personOnly: boolean;
 	refuse(model: S, msg: Got<Fields>): Refusal | null;
@@ -74,22 +75,39 @@ type Answers<S, C, D> = D extends AnyCmdDef
 
 type Plain = Fact<Fact["schema"], false>;
 
+/** The Msg each input makes: its key as `type`, the door's `parent`, its fields. */
+type InputMsg<I> = {
+	readonly [K in keyof I & string]: I[K] extends {readonly fields: infer G extends Fields}
+		? {readonly type: K} & Got<G>
+		: never;
+}[keyof I & string];
+
+/** A list with at least one item: an optional list is left out, never written empty. */
+type Some<T> = readonly [T, ...ReadonlyArray<T>];
+
 /**
  * Fixes the model, the facts and the Cmds first, as XState's `setup` does, so that each input's
  * step below is checked against them. `input` makes one input; `make` makes the program.
  */
 const over = <
 	S,
-	const F extends ReadonlyArray<Fact>,
-	const D extends ReadonlyArray<AnyCmdDef>,
+	const F extends Some<Fact> = never,
+	const D extends Some<AnyCmdDef> = never,
 >(parts: {
 	readonly model: Schema.Schema<S>;
-	readonly facts: F;
-	readonly cmds: D;
+	/** The facts it writes. Left out, it writes none. */
+	readonly facts?: F;
+	/** The Cmds it runs, beside the runner's write. Left out, it runs none. */
+	readonly cmds?: D;
 }) => {
-	type C = CmdOf<D[number]> | WriteCmd;
+	type C = CmdOf<D[number]> | ([F] extends [never] ? never : WriteCmd);
 	type Person = FactValue<F[number]>;
 	type Anyone = FactValue<Extract<F[number], Plain>>;
+	const facts: ReadonlyArray<Fact> = parts.facts ?? [];
+	const defs: ReadonlyArray<AnyCmdDef> = [
+		...(parts.cmds ?? []),
+		...(facts.length > 0 ? [Facts.write] : []),
+	];
 
 	// Two cases, each written one way: `who` appears only as "person". A plain input's `write`
 	// takes only facts that are not person-only.
@@ -99,13 +117,13 @@ const over = <
 		readonly who: "person";
 		readonly refuse?: (model: S, msg: Got<G>) => Refusal | null;
 		readonly update: (model: S, msg: Got<G>, write: Writer<Person>) => Next<S, C>;
-	}): Spec<S, C>;
+	}): Spec<S, C, G>;
 	function input<const G extends Fields>(spec: {
 		readonly fields: G;
 		readonly description: string;
 		readonly refuse?: (model: S, msg: Got<G>) => Refusal | null;
 		readonly update: (model: S, msg: Got<G>, write: Writer<Anyone>) => Next<S, C>;
-	}): Spec<S, C>;
+	}): Spec<S, C, G>;
 	function input(spec: {
 		readonly fields: Fields;
 		readonly description: string;
@@ -124,23 +142,41 @@ const over = <
 		return one as Spec<S, C>;
 	}
 
-	const make = <const I extends Readonly<Record<string, Spec<S, C>>>, V extends Schema.Json>(spec: {
-		readonly name: string;
-		readonly init: (saved: S | null) => Next<S, C>;
-		readonly inputs: I;
-		/** Every Cmd's two answers, by its name. A missing or extra name does not compile. */
-		readonly answers: {readonly [K in D[number] as K["cmdType"]]: Answers<S, C, K>} & {
-			readonly write: Answers<S, C, typeof Facts.write>;
-		};
-		readonly view: (model: S) => V;
-		readonly outputs?: {readonly [name: string]: Omit<Output<S>, "name">};
-		/** When the runner should wake it, and the step it takes then. Left out, it never wakes. */
-		readonly wake?: {
-			readonly at: (model: S) => number | null;
-			readonly update: (model: S, at: number) => Next<S, C>;
-		};
-		readonly state?: State;
-	}): Program<S, I, V> => {
+	const make = <
+		const I extends Readonly<Record<string, Spec<S, C>>>,
+		V extends Schema.Json,
+		const O extends Readonly<Record<string, Omit<Output<S>, "name">>>,
+	>(
+		spec: {
+			readonly name: string;
+			readonly init: (saved: S | null) => Next<S, C>;
+			readonly inputs: I;
+			readonly view: (model: S) => V;
+			/** Its outputs, by name. Left out, it has none; `{}` does not compile. */
+			readonly outputs?: O & (keyof O extends never ? never : unknown);
+			/** When the runner should wake it, and the step it takes then. Left out, it never wakes. */
+			readonly wake?: {
+				readonly at: (model: S) => number | null;
+				readonly update: (model: S, at: number) => Next<S, C>;
+			};
+			readonly state?: State;
+		} & ([D | F] extends [never]
+			? {readonly answers?: never}
+			: {
+					/** Every Cmd's two answers, by its name. A missing or extra name does not compile. */
+					readonly answers: {readonly [K in D[number] as K["cmdType"]]: Answers<S, C, K>} & ([
+						F,
+					] extends [never]
+						? unknown
+						: {readonly write: Answers<S, C, WriteDef>});
+				}),
+	): Program<
+		S,
+		InputMsg<I>,
+		C | never,
+		V,
+		D[number] | ([F] extends [never] ? never : WriteDef)
+	> => {
 		const names = Object.keys(spec.inputs);
 		const structs = names.map((name) =>
 			Schema.Struct({type: Schema.Literal(name), parent, ...spec.inputs[name]?.fields}),
@@ -155,8 +191,11 @@ const over = <
 			cells[name] = (model, m) =>
 				tuple(one.update(model, m, (stream, fact) => caused(m, stream, fact)));
 		}
-		for (const def of [...parts.cmds, Facts.write]) {
-			const answer: unknown = Object.getOwnPropertyDescriptor(spec.answers, def.cmdType)?.value;
+		for (const def of defs) {
+			const answer: unknown =
+				spec.answers === undefined
+					? undefined
+					: Object.getOwnPropertyDescriptor(spec.answers, def.cmdType)?.value;
 			if (!isAnswer<S, C>(answer)) throw new Error(`no answers for ${def.cmdType}`);
 			cells[def.okType] = (model, m) => tuple(answer.ok(model, m.value));
 			cells[def.errType] = (model, m) => tuple(answer.err(model, m.error));
@@ -164,14 +203,15 @@ const over = <
 		const wake = spec.wake;
 		if (wake !== undefined) cells["timer"] = (model, m) => tuple(wake.update(model, m.at));
 		// The one untyped join: tea's Machine.make types a table written by hand, and this table is
-		// built from the records above, which carry the types instead.
+		// built from the records above, which carry the types instead. `Built` below says what it is.
+		// oxlint-disable-next-line fabrika/no-type-assertions -- the table is built, not written: its types come from the records
 		const machine = Machine.make({
 			model: parts.model,
 			msg,
-			cmds: [...parts.cmds, Facts.write],
-			init: (loaded: S | null) => tuple(spec.init(loaded)),
+			cmds: defs,
+			init: ((loaded: S | null) => tuple(spec.init(loaded))) as never,
 			update: cells as never,
-		});
+		}) as unknown as Built<S, InputMsg<I>, C, D[number] | ([F] extends [never] ? never : WriteDef)>;
 		const doors: ReadonlyArray<Door> = names.flatMap((name, i) => {
 			const one = spec.inputs[name];
 			const schema = structs[i];
@@ -195,7 +235,7 @@ const over = <
 				name: spec.name,
 				machine,
 				doors,
-				facts: parts.facts,
+				facts,
 				view: spec.view,
 				refuse,
 				outputs,
@@ -221,13 +261,21 @@ const isAnswer = <S, C>(
 	"err" in u &&
 	typeof u.err === "function";
 
-/** The program, with the tea machine it built: a parent steps it, laws fold it. */
-export type Program<S, I, V> = {
+/** The tea machine Program.make builds: tea's own type, so a parent steps it and laws fold it. */
+type Built<S, M extends {readonly type: string}, C, D extends AnyCmdDef> = TeaMachine<
+	S,
+	M | Settled<D>,
+	Extract<C, {readonly type: string}>,
+	Sub<never>,
+	unknown
+> & {readonly model: Schema.Schema<S>; readonly msg: Schema.Schema<M>};
+
+/** The program, with the tea machine it built. */
+export type Program<S, M extends {readonly type: string}, C, V, D extends AnyCmdDef> = {
 	readonly name: string;
-	readonly machine: {readonly model: Schema.Schema<S>; readonly msg: Schema.Top};
+	readonly machine: Built<S, M, C, D>;
 	readonly view: (model: S) => V;
 	readonly outputs: ReadonlyArray<Output<S>>;
-	readonly inputs?: I;
 	/** What the runner loads. */
 	readonly declared: Declaration;
 };
