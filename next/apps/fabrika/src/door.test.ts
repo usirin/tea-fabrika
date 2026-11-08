@@ -24,6 +24,7 @@ import {
 	SpanRow,
 } from "@kampus/libfabrika/data";
 import {nodeSql} from "@kampus/libfabrika/sqlite";
+import {checkSshsig, Hello} from "@kampus/libfabrika/transport";
 import {Deferred, Effect, Fiber, Layer, Logger, Option, Schema, Stream} from "effect";
 import {TestClock} from "effect/testing";
 const SpanPage = Schema.Struct({spans: Schema.Array(SpanRow), next: Schema.Int});
@@ -527,6 +528,197 @@ const enrolled = Effect.fnUntraced(function* (
 	const text = C.addText(add),
 		armored = yield* signer.sign(text);
 	return {sk, freshWindow, binding, nonce, add, text, armored, proof};
+});
+
+describe("P10 review regressions", () => {
+	const pendingHello = Effect.fnUntraced(function* (
+		d: typeof Door.Service,
+		k: World["window"],
+		client: string,
+	) {
+		const nonce = yield* d.challenge(client);
+		const hello = {
+			versions: [1, 2],
+			has: [],
+			ping: "30s",
+			key: k.raw,
+			tab: client,
+			platform: "browser",
+			os: "ios",
+			sentAt: SENT,
+			signed: yield* k.sign(`fabrika-hello\n${URL}\n${client}\n${nonce}`),
+		};
+		const trusted = {url: URL, tab: client, name: k.fingerprint};
+		expect(yield* d.initialize(client, hello, trusted)).toMatchObject({
+			_tag: "refused",
+			why: "not_granted",
+		});
+		expect((yield* d.knock(client, {label: "Pending"}))._tag).toBe("ok");
+		return {hello, trusted};
+	});
+
+	for (const removed of ["expired", "evicted"] as const)
+		it.effect(
+			`review 1: a saved unknown hello stays spent after its waiting row is ${removed}`,
+			() =>
+				Effect.gen(function* () {
+					const w = yield* world();
+					yield* Effect.gen(function* () {
+						const d = yield* Door;
+						yield* online(d, w);
+						const saved = yield* pendingHello(d, w.otherWindow, "pending");
+						expect((yield* d.watch("w1")).rows.map((row) => row.key)).toContain(w.otherWindow.raw);
+						if (removed === "expired") yield* TestClock.adjust(w.settings.waiting.ttl);
+						else
+							for (let i = 0; i < w.settings.waiting.most; i++) {
+								yield* TestClock.adjust(1);
+								yield* pendingHello(d, yield* key(), `push-${i}`);
+							}
+						expect((yield* d.watch("w1")).rows.map((row) => row.key)).not.toContain(
+							w.otherWindow.raw,
+						);
+						const text = C.grantText({
+							id: `approve-after-${removed}`,
+							key: w.otherWindow.raw,
+							for: PERSON,
+							to: "project-a",
+							as: "window",
+							saw: SAW,
+							sentAt: SENT,
+						});
+						expect((yield* d.grant({text, armored: yield* w.root.sign(text)}))._tag).toBe(
+							"applied",
+						);
+						const before = yield* entries("door/hellos");
+						expect((yield* d.initialize("pending", saved.hello, saved.trusted))._tag).toBe(
+							"refused",
+						);
+						expect(yield* entries("door/hellos")).toEqual(before);
+						yield* online(d, w, "fresh-proof", w.otherWindow);
+					}).pipe(w.provide);
+				}),
+		);
+
+	for (const [method, params, answer] of [
+		["ledger.read", {stream: "empty", after: 0}, "ok"],
+		["ledger.wait", {stream: "empty", after: 0}, "parked"],
+		["spans.read", {chain: Chain.cases.job.make({process: PROCESS}), after: 0}, "ok"],
+		["unknown.method", {}, "refused"],
+	] as const)
+		it.effect(
+			`review 2: an agent can repeat ${method} beyond inputCap without exhausting authority`,
+			() =>
+				Effect.gen(function* () {
+					const w = yield* world({inputCap: 2});
+					yield* Effect.gen(function* () {
+						const d = yield* Door;
+						yield* online(d, w);
+						yield* grantWindow(d, w, "reader", "agent");
+						const attempts = yield* Effect.forEach(
+							Array.from({length: w.settings.inputCap + 2}, (_, i) => i),
+							() => Effect.exit(d.route("reader", method, params)),
+							{concurrency: 1},
+						);
+						for (const attempt of attempts)
+							expect(attempt).toMatchObject({_tag: "Success", value: {_tag: answer}});
+						expect((yield* d.route("w1", "process.send", request("after-reads")))._tag).toBe("ok");
+					}).pipe(w.provide);
+				}),
+		);
+
+	for (const limit of ["cap", "expiry"] as const)
+		it.effect(`review 2: strangers' challenge rows obey the waiting ${limit}`, () =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					yield* online(d, w);
+					const count = () =>
+						Number(
+							w.sql.exec("SELECT count(*) total FROM door_state WHERE name LIKE 'client/%'")[0]
+								?.total ?? 0,
+						);
+					const before = count();
+					const total = limit === "cap" ? w.settings.waiting.most * 2 + 1 : w.settings.waiting.most;
+					for (let i = 0; i < total; i++) yield* d.challenge(`stranger-${i}`);
+					if (limit === "expiry") {
+						yield* TestClock.adjust(w.settings.waiting.ttl);
+						yield* d.watch("w1");
+					}
+					expect(count() - before).toBeLessThanOrEqual(
+						limit === "cap" ? w.settings.waiting.most : 0,
+					);
+					expect((yield* d.route("w1", "ledger.read", {stream: "empty", after: 0}))._tag).toBe(
+						"ok",
+					);
+				}).pipe(w.provide);
+			}),
+		);
+
+	it.effect("review 5: an added Ed25519 person cannot carry an unverified passkey block", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				const before = yield* entries("door/members");
+				const text = C.addText({
+					id: "ed25519-with-passkey-claims",
+					for: PERSON,
+					to: "project-a",
+					adds: C.Adds.cases.person.make({
+						key: w.otherRoot.line,
+						window: w.otherWindow.raw,
+						passkey: {
+							credential: "made-up-credential",
+							nonce: "never-issued",
+							proof: "",
+							rp: "attacker.test",
+							origin: "https://attacker.test",
+							be: true,
+							bs: true,
+						},
+					}),
+					drops: [],
+					saw: ADD_SAW,
+					sentAt: SENT,
+				});
+				expect(yield* d.grant({text, armored: yield* w.root.sign(text)})).toMatchObject({
+					_tag: "refused",
+					why: "bad_enrollment",
+				});
+				expect(yield* entries("door/members")).toEqual(before);
+			}).pipe(w.provide);
+		}),
+	);
+
+	it.effect("review 7: the saved hello key and signature can be checked together", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				const rows = yield* entries("door/hellos");
+				expect(rows).toHaveLength(1);
+				const saved = yield* Schema.decodeUnknownEffect(
+					Schema.Struct({...Hello.fields, nonce: Schema.String}),
+				)(rows[0]!.body);
+				const blob = Buffer.concat([
+					field("ssh-ed25519"),
+					field(Buffer.from(saved.key, "base64url")),
+				]);
+				const line = `ssh-ed25519 ${blob.toString("base64")}`;
+				expect(
+					yield* checkSshsig({
+						text: `fabrika-hello\n${URL}\n${saved.tab}\n${saved.nonce}`,
+						armored: saved.signed,
+						space: SPACE,
+						signers: [line],
+					}),
+				).toEqual({signer: line});
+			}).pipe(w.provide);
+		}),
+	);
 });
 
 describe("P10 door admission and waiting", () => {
