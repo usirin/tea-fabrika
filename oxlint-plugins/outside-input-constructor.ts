@@ -1,29 +1,57 @@
 // P17's decode paths. Follow local aliases, including aliases of curried Schema decoders.
-import type {CreateRule} from "@oxlint/plugins";
+import type {CreateRule, Scope, Variable} from "@oxlint/plugins";
 import {ancestors, dotted, pathIn, type Node} from "./match.ts";
 
 const scoped =
 	/^next\/packages\/libfabrika\/src\/(?:data\/(?:id|log)|coordination\/authorization|door\/(?:door|store|nonce)|app\/(?:nemesis|chaos-state|runner|entry))\.ts$/;
 const outside = /^(?:raw|wire|saved|row|params|input|body|bytes|stored|persisted)(?:[A-Z_].*)?$/;
 const sync = /(?:^|\.)(?:decodeSync|decodeUnknownSync)$/;
+// Existing response and reducer constructors are outside this change. These are the saved/input
+// schemas P17 changes. Its new modules and every named decode function are checked in full.
+const inputs = new Set([
+	"Row",
+	"Binding",
+	"InputFact",
+	"AppendMeta",
+	"EnvelopeState",
+	"ChangePending",
+	"Receipt",
+	"Enrollment",
+	"Enrolled",
+	"Incoming",
+]);
+const declarations = new Set(["Program", "Machine", "Cmd"]);
 
 export const outsideInputConstructor: CreateRule = {
 	create(context) {
 		if (!scoped.test(pathIn(context))) return {};
-		const aliases = new Map<string, Node>();
-		const names = new Map<string, string>();
-		const resolve = (node: Node, seen = new Set<string>()): Node => {
-			if (node.type !== "Identifier" || seen.has(node.name)) return node;
-			const value = aliases.get(node.name);
+		const aliases = new Map<Variable, Node>();
+		const names = new Map<Variable, string>();
+		const binding = (node: Node): Variable | undefined => {
+			if (node.type !== "Identifier") return undefined;
+			let scope: Scope | null = context.sourceCode.getScope(node);
+			while (scope !== null) {
+				const variable = scope.set.get(node.name);
+				if (variable !== undefined) return variable;
+				scope = scope.upper;
+			}
+			return undefined;
+		};
+		const resolve = (node: Node, seen = new Set<Variable>()): Node => {
+			const variable = binding(node);
+			if (variable === undefined || seen.has(variable)) return node;
+			const value = aliases.get(variable);
 			if (value === undefined) return node;
-			seen.add(node.name);
+			seen.add(variable);
 			return resolve(value, seen);
 		};
-		const constant = (node: Node, seen = new Set<string>()): boolean => {
+		const constant = (node: Node, seen = new Set<Variable>()): boolean => {
 			const value = resolve(node, seen);
 			switch (value.type) {
 				case "Literal":
 					return true;
+				case "TemplateLiteral":
+					return value.expressions.every((x) => constant(x, new Set(seen)));
 				case "UnaryExpression":
 					return constant(value.argument, seen);
 				case "TSAsExpression":
@@ -39,17 +67,20 @@ export const outsideInputConstructor: CreateRule = {
 					return false;
 			}
 		};
-		const untrusted = (node: Node, seen = new Set<string>()): boolean => {
+		const untrusted = (node: Node, seen = new Set<Variable>()): boolean => {
 			if (node.type === "Identifier") {
-				if (seen.has(node.name)) return false;
-				const value = aliases.get(node.name);
+				const variable = binding(node);
+				if (variable !== undefined && seen.has(variable)) return false;
+				const value = variable === undefined ? undefined : aliases.get(variable);
 				if (value === undefined) return outside.test(node.name);
-				seen.add(node.name);
+				if (variable !== undefined) seen.add(variable);
 				return untrusted(value, seen);
 			}
 			if (
 				node.type === "CallExpression" &&
-				/(?:decode.*(?:Effect|Result)|makeEffect)$/.test(dotted(node.callee) ?? "")
+				/(?:decode.*(?:Effect|Result)|makeEffect)$/.test(
+					dotted(node.callee.type === "CallExpression" ? node.callee.callee : node.callee) ?? "",
+				)
 			)
 				return false;
 			if (node.type === "MemberExpression") return untrusted(node.object, seen);
@@ -83,30 +114,44 @@ export const outsideInputConstructor: CreateRule = {
 			});
 		return {
 			ImportSpecifier(node) {
-				names.set(
-					node.local.name,
-					node.imported.type === "Identifier" ? node.imported.name : String(node.imported.value),
-				);
+				const variable = binding(node.local);
+				if (variable !== undefined)
+					names.set(
+						variable,
+						node.imported.type === "Identifier" ? node.imported.name : String(node.imported.value),
+					);
 			},
 			VariableDeclarator(node) {
-				if (node.id.type === "Identifier" && node.init !== null)
-					aliases.set(node.id.name, node.init);
+				if (node.init === null) return;
+				for (const variable of context.sourceCode.getDeclaredVariables(node))
+					aliases.set(variable, node.init);
 			},
 			AssignmentExpression(node) {
-				if (node.left.type === "Identifier") aliases.set(node.left.name, node.right);
+				const variable = binding(node.left);
+				if (variable !== undefined) aliases.set(variable, node.right);
 			},
 			CallExpression(node) {
 				const callee = resolve(node.callee);
 				const call = dotted(callee) ?? "";
+				const owner = callee.type === "MemberExpression" ? binding(callee.object) : undefined;
 				const idMake =
 					callee.type === "MemberExpression" &&
 					dotted(callee.property) === "make" &&
 					callee.object.type === "Identifier" &&
-					(names.get(callee.object.name) ?? callee.object.name) === "Id";
+					((owner === undefined ? undefined : names.get(owner)) ?? callee.object.name) === "Id";
 				const args = node.arguments;
 				const first = args[0];
 				const curried = callee.type === "CallExpression" && sync.test(dotted(callee.callee) ?? "");
-				const throwing = call.endsWith(".make") || sync.test(call) || curried;
+				const type = call.split(".")[0] ?? "";
+				const added =
+					/\/(?:data\/id|coordination\/authorization|app\/(?:nemesis|chaos-state))\.ts$/.test(
+						pathIn(context),
+					);
+				const constructor =
+					call.endsWith(".make") &&
+					!declarations.has(type) &&
+					(added || inputs.has(type) || inDecoder(node));
+				const throwing = constructor || sync.test(call) || curried;
 				if (!idMake && !throwing) return;
 				// A curried decoder declaration takes a schema; the following call takes the bytes.
 				if (sync.test(call) && args.length === 1 && first !== undefined && !untrusted(first))

@@ -4,6 +4,20 @@ import {plant} from "../next/apps/fabrika/src/exam/plant.ts";
 const code = "fabrika(outside-input-constructor)";
 const file = "next/packages/libfabrika/src/data/id.ts";
 describe("P17a, outside input has typed failures", () => {
+	it("follows destructured aliases and keeps same-named bindings in their own scope", () => {
+		const lines = [
+			'import {Id} from "./ids.ts";',
+			"declare const wire: string, saved: {body: unknown}, Row: any;",
+			'const prefix = "input";',
+			"function receive(prefix: string) { return Id.make(prefix); }",
+			"function local() { const prefix = wire; return Id.make(prefix); }",
+			"Id.make(prefix);",
+			"const {body: alias} = saved; Row.make(alias);",
+			"const mint = Id.make; mint(wire);",
+			"Id.make(`input`);",
+		].join("\n");
+		expect(plant({[file]: lines})(code, file)).toEqual([4, 5, 7, 8]);
+	});
 	it("plants throwing calls, saved aliases, decoder aliases and a wire prefix", () => {
 		const lines = [
 			'import {Schema} from "effect";',

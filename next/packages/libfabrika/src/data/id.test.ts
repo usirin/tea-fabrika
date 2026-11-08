@@ -32,7 +32,7 @@ const v7 = (raw: Uint8Array) => {
 };
 // Independent bit conversion, not the generator's encoder.
 const suffix = (raw: Uint8Array) => {
-	const bits = `00${  [...raw].map((n) => n.toString(2).padStart(8, "0")).join("")}`;
+	const bits = `00${[...raw].map((n) => n.toString(2).padStart(8, "0")).join("")}`;
 	return Array.from(
 		{length: 26},
 		(_, i) => alphabet[Number.parseInt(bits.slice(i * 5, i * 5 + 5), 2)],
