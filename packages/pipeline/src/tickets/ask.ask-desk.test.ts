@@ -2,7 +2,16 @@ import {readFileSync} from "node:fs";
 import {Effect, Schema} from "effect";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {Answer, Asked, Rec, answerOf, blindDraw, sealAsk, type Asked as Sealed} from "./ask.ts";
+import {
+	Answer,
+	Asked,
+	Rec,
+	answerOf,
+	blindDraw,
+	questionLine,
+	sealAsk,
+	type Asked as Sealed,
+} from "./ask.ts";
 import {Fact} from "./ticket.ts";
 const {DRAFT, NONE, NOW, REC, TOOK} = JSON.parse(
 	readFileSync(new URL("../../../../fixtures/ask-desk/cases.json", import.meta.url), "utf8"),
@@ -163,5 +172,43 @@ describe("ask desk P17: needed is optional data", () => {
 		expect(Schema.is(Fact)({...fact, via: {_tag: "window"}})).toBe(false);
 		expect(Schema.is(Fact)({...fact, via: {_tag: "window", took: {...TOOK, ms: -1}}})).toBe(false);
 		expect(NOW).toBe(TOOK.said);
+	});
+});
+
+describe("ask desk P1: an ask id is one word, whole", () => {
+	it.each([
+		["a space inside", "a b"],
+		["a space at the end", "a-1 "],
+		["129 characters", "x".repeat(129)],
+	])("refuses an id with %s", async (_name, id) => {
+		const ask = await sealed();
+		expect(Schema.is(Asked)({...ask, ask: id})).toBe(false);
+		expect(Schema.is(Asked)({...ask, replaces: id})).toBe(false);
+	});
+	it("keeps an id of 128 characters", async () => {
+		const ask = await sealed();
+		expect(Schema.is(Asked)({...ask, ask: "x".repeat(128)})).toBe(true);
+	});
+});
+
+describe("ask desk P21: a replacement names the ask it replaces", () => {
+	it("keeps replaces on the sealed fact, and leaves it out when the draft has none", async () => {
+		const replacing = await Effect.runPromise(seal({...DRAFT, replaces: "a-approve-8"}));
+		expect(replacing.replaces).toBe("a-approve-8");
+		expect(Object.hasOwn(await sealed(), "replaces")).toBe(false);
+	});
+});
+
+describe("ask desk P1: any question as one line", () => {
+	it("joins every run of whitespace into one space", () => {
+		expect(questionLine("a\n  b\tc")).toBe("a b c");
+		expect(questionLine("  Approve?  ")).toBe("Approve?");
+	});
+	it("keeps a line of 120 characters, and cuts a longer one at a word with an ellipsis", () => {
+		expect(questionLine("x".repeat(120))).toBe("x".repeat(120));
+		const line = questionLine(`${"word ".repeat(30)}end`);
+		expect(line.length).toBeLessThanOrEqual(120);
+		expect(line.endsWith("word…")).toBe(true);
+		expect(questionLine("x".repeat(130))).toBe(`${"x".repeat(119)}…`);
 	});
 });

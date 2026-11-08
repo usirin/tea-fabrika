@@ -19,6 +19,7 @@ type Model = {
 	needed?: boolean;
 	took: {ms: number; opened: readonly string[]};
 	failure: string | null;
+	status?: string;
 };
 type Msg =
 	| {type: "do"; value: {_tag: "rec" | "not" | "picks" | "later"}}
@@ -102,6 +103,20 @@ describe("ask desk P12: wait for the save", () => {
 		expect(step(model, {type: "submit", key: "Enter", now: NOW})[1]).toEqual([]);
 		const saving = step(await start(), {type: "do", value: {_tag: "rec"}})[0];
 		expect(step(saving, {type: "do", value: {_tag: "rec"}})[1]).toEqual([]);
+	});
+});
+
+describe("ask desk P12: the saved line says what was saved", () => {
+	it("reads Approved. after an approve, and names any other pick", async () => {
+		const approving = step(await start(), {type: "do", value: {_tag: "rec"}})[0];
+		expect(step(approving, {type: "save_ok", value: {ticket: 117}})[0].status).toBe("Approved.");
+		const declining = go(
+			await start(),
+			{type: "do", value: {_tag: "not"}},
+			{type: "note", text: "The plan misses the empty input"},
+			{type: "submit", key: "Enter", now: NOW},
+		);
+		expect(step(declining, {type: "save_ok", value: {ticket: 117}})[0].status).toBe("no saved.");
 	});
 });
 
