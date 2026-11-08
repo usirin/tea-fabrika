@@ -3,6 +3,7 @@ import {AskKey, AsksNow} from "./asks.ts";
 import {DeskSchema, TileIdSchema} from "./desk/desk.ts";
 import {Does, KeyName, Keys} from "./desk/keymap.ts";
 import {SHOWS} from "./desk/keys.ts";
+import {Change, Edit} from "./keys/program.ts";
 
 // What the app's one window and the host say to each other. The window draws the desk
 // (desk/desk.ts, run in the host), a terminal per tile, and a view per run of a program with one;
@@ -203,7 +204,20 @@ export type HostNow = typeof HostNow.Type;
  *    ledger: {kind: "own"}, agents: [{name: "claude", since: 1793400060000}]}}
  */
 export const ToPage = Schema.Union([
-	Schema.Struct({type: Schema.Literal("keys"), ...Keys.fields}),
+	Schema.Struct({
+		type: Schema.Literal("keys"),
+		...Keys.fields,
+		version: Schema.optionalKey(Schema.String),
+		changes: Schema.optionalKey(Schema.Array(Change)),
+	}),
+	Schema.Struct({
+		type: Schema.Literal("keys.saved"),
+		request: Schema.String,
+		version: Schema.String,
+	}),
+	Schema.Struct({type: Schema.Literal("keys.failed"), request: Schema.String, why: Schema.String}),
+	Schema.Struct({type: Schema.Literal("keys.opened"), run: Schema.String}),
+	Schema.Struct({type: Schema.Literal("keys.closed"), run: Schema.String}),
 	Schema.Struct({type: Schema.Literal("host"), now: HostNow}),
 	Schema.Struct({
 		type: Schema.Literal("programs"),
@@ -264,6 +278,14 @@ export type ToApp = typeof ToApp.Type;
  *   {type: "seen"}                    the asks list was opened: no ask is new any more
  */
 export const FromPage = Schema.Union([
+	Schema.Struct({
+		type: Schema.Literal("keys.edit"),
+		request: Schema.String,
+		edit: Edit,
+		said: Schema.Number,
+	}),
+	Schema.Struct({type: Schema.Literal("keys.open")}),
+	Schema.Struct({type: Schema.Literal("keys.close")}),
 	Schema.Struct({type: Schema.Literal("press"), id: PressId, key: KeyName}),
 	Schema.Struct({type: Schema.Literal("click"), tile: TileIdSchema}),
 	Schema.Struct({
