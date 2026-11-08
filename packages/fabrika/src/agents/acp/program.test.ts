@@ -90,6 +90,48 @@ const run = <A, E>(effect: Effect.Effect<A, E, Node | Scope.Scope>) =>
 	Effect.runPromise(onNode(effect));
 
 describe("acp on the fake agent", () => {
+	it("sets the requested permission mode before reporting opened", async () => {
+		const opened = await run(
+			Effect.gen(function* () {
+				const {started, heard} = yield* life(
+					fake(scratch(), {mode: "plan"}),
+					memoryStorage(),
+					"acp:initial-mode",
+				);
+				return yield* Effect.race(heard.opened.upTo(1), Effect.as(started.run.ended, []));
+			}),
+		);
+		expect(opened).toMatchObject([{mode: "plan"}]);
+	});
+
+	it("reports elapsed turn time, not a wall-clock timestamp", async () => {
+		const before = Date.now();
+		const results = await run(
+			Effect.gen(function* () {
+				const result = ear<{ms: number}>();
+				const started = yield* start(
+					acpProgram,
+					fake(scratch()),
+					{result: result.hear},
+					{
+						id: "acp:elapsed",
+						storage: memoryStorage(),
+					},
+				);
+				if (started.kind !== "running") return yield* Effect.die("acp did not start");
+				yield* tell(started.run, "prompt", "hello");
+				return yield* result.upTo(1);
+			}),
+		);
+		expect(results).toHaveLength(1);
+		expect(results[0]?.ms).toBeGreaterThanOrEqual(0);
+		expect(results[0]?.ms).toBeLessThanOrEqual(Date.now() - before);
+	});
+
+	it("accepts refuse as a permission setting and rejects an empty setting", () => {
+		expect(acpProgram.flags.permissions.shape.check("refuse")).toBe(true);
+		expect(acpProgram.flags.permissions.shape.check("")).toBe(false);
+	});
 	it("three turns (read two files and answer, then two follow-ups): three answers, one transcript of three whole turns", async () => {
 		const folder = scratch();
 		const {said, shapes, opened} = await run(

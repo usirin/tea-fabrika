@@ -155,6 +155,11 @@ describe("Tab completion for summon and @name (the summon tryout, PR 1)", () => 
 		expect(complete("@", list, EMPTY, NO_TALK).candidates).toEqual([]);
 	});
 
+	it("completes dismiss's one name, then stops offering names", () => {
+		expect(offered("dismiss re")).toEqual({candidates: ["researcher"], word: "re"});
+		expect(offered("dismiss scout ").candidates).toEqual([]);
+	});
+
 	it("after summon, offers the agents", () => {
 		expect(offered("summon ").candidates).toEqual(["fake"]);
 		expect(offered("summon f").candidates).toEqual(["fake"]);

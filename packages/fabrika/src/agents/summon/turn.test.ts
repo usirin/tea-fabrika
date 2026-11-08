@@ -191,6 +191,57 @@ const tshOn = (d: Double, by: string = PERSON) =>
 const texts = (printed: readonly Printed[]) => printed.map((p) => p.text);
 
 describe("summon, dismiss and agents, in tsh", () => {
+	it("explains extra summon settings and never calls the manager", async () => {
+		const d = double([]);
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				return yield* (yield* tshOn(d)).line("summon fake fake-large high low as scout");
+			}).pipe(Effect.scoped),
+		);
+		expect(seen).toMatchObject({
+			status: 2,
+			err: [
+				"tsh: summon takes at most two settings, a model then an effort, not fake-large high low",
+			],
+		});
+		expect(d.calls.summons).toEqual([]);
+	});
+
+	it("agents explains how to start when no agent is summoned", async () => {
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const t = yield* tshOn(double([]));
+				return {line: yield* t.line("agents"), tables: t.tables.values};
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.line).toEqual({
+			status: 0,
+			err: [],
+			out: ["No agent is summoned. summon <agent> as <name> starts one."],
+		});
+		expect(seen.tables).toEqual([]);
+	});
+
+	it("separates the model and effort in the summon answer", async () => {
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				return yield* (yield* tshOn(double([]))).line("summon fake fake-large high as scout");
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.out.join("\n")).toContain("fake fake-large · high");
+	});
+
+	it("bare @ lists both names when more than one agent is summoned", async () => {
+		const d = double(["scout", "researcher"]);
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				return yield* (yield* tshOn(d)).line("@ hello");
+			}).pipe(Effect.scoped),
+		);
+		expect(seen.status).toBe(2);
+		expect(seen.err.join("\n")).toContain("there are 2: @scout @researcher");
+		expect(d.calls.turns).toEqual([]);
+	});
 	it("summon hands the manager the agent, its setting words in order, the name and the person", async () => {
 		const d = double([]);
 		const seen = await Effect.runPromise(
@@ -260,6 +311,7 @@ describe("summon, dismiss and agents, in tsh", () => {
 		);
 		for (const refused of [seen.nobody, seen.upper, seen.typo]) expect(refused.status).not.toBe(0);
 		expect(seen.nobody.err.join("\n")).toContain("nobody");
+		expect(seen.nobody.err.join("\n")).toContain("no agent named nobody");
 		// Upper case is refused with the lower-case name as its did-you-mean, never folded (S3).
 		expect(seen.upper.err.join("\n")).toContain("Did you mean scout");
 		expect(seen.typo.err.join("\n")).toContain("Did you mean scout");
@@ -369,6 +421,39 @@ describe("S-7, tsh's side: the reply prints once, whole, under the name", () => 
 });
 
 describe("the ask: allow? [y/N] holds the prompt", () => {
+	it("keeps the ask's title when the person's answer clears it", async () => {
+		const d = double();
+		const asks = await Effect.runPromise(
+			Effect.gen(function* () {
+				const seen = ear<unknown>();
+				const started = yield* start(
+					turnProgram,
+					{to: "scout"},
+					{ask: seen.hear},
+					{
+						id: "turn:answer-title",
+						storage: memoryStorage(),
+					},
+				).pipe(Effect.provideService(SummonManager, d.service));
+				if (started.kind !== "running") return yield* Effect.die("turn did not start");
+				yield* tell(started.run, "prompt", "write it");
+				yield* until("the turn", () => d.calls.turns.length === 1);
+				const turn = d.calls.turns[0];
+				if (turn === undefined) return yield* Effect.die("no turn");
+				Queue.offerUnsafe(turn.news, {_tag: "ask", ask: "edit-1", title: "Write written.txt"});
+				yield* seen.upTo(1);
+				yield* tell(started.run, "allow", {ask: "edit-1", allow: false, by: PERSON});
+				yield* seen.upTo(2);
+				Queue.offerUnsafe(turn.news, RESULT);
+				return seen.values;
+			}).pipe(Effect.scoped),
+		);
+		expect(asks).toEqual([
+			{name: "scout", ask: "edit-1", title: "Write written.txt", answer: "waiting"},
+			{name: "scout", ask: "edit-1", title: "Write written.txt", answer: "refused"},
+		]);
+	});
+
 	it("shows the agent's ask with its name and title, and the turn ends once it is over", async () => {
 		const d = double(["scout"]);
 		const seen = await Effect.runPromise(
@@ -412,6 +497,7 @@ describe("S-8: only a person summons, dismisses or talks", () => {
 			expect(refused.status).not.toBe(0);
 			expect(refused.err.length).toBeGreaterThan(0);
 		}
+		expect(seen.dismiss.err.join("\n")).toContain("only a person dismisses an agent");
 		expect(d.calls.summons).toEqual([]);
 		expect(d.calls.dismisses).toEqual([]);
 		expect(d.calls.turns).toEqual([]);
@@ -504,9 +590,10 @@ describe("ask_answered records who answered", () => {
 				yield* until("the answer", () => d.calls.answers.length === 1);
 				Queue.offerUnsafe(asked.news, RESULT);
 				yield* t.done(n);
-				return d.calls.answers;
+				return {answers: d.calls.answers, errors: t.printed.values.filter((p) => p.to === "err")};
 			}).pipe(Effect.scoped),
 		);
-		expect(seen).toEqual([{name: "scout", ask: "t1.w", allow: true, by: PERSON}]);
+		expect(seen.answers).toEqual([{name: "scout", ask: "t1.w", allow: true, by: PERSON}]);
+		expect(seen.errors).toEqual([]);
 	});
 });

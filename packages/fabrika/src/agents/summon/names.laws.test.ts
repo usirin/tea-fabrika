@@ -86,6 +86,27 @@ const reopened = (storage: Storage) =>
 	);
 
 describe("the laws of names, the kept summoned names", () => {
+	it("refuses a taken name even when the requested run belongs to another name", async () => {
+		const first: Name = {
+			name: "scout",
+			agent: "fake",
+			run: "acp:1",
+			model: {typed: null, resolved: null},
+			effort: {typed: null, set: null},
+			folder: "/repo",
+			since: 0,
+			by: "user:owner",
+		};
+		const other = {...first, name: "researcher", run: "acp:2"};
+		const steps = await play(memoryStorage(), [
+			{type: "taken", name: first},
+			{type: "taken", name: other},
+			{type: "taken", name: {...other, name: "scout"}},
+		]);
+		expect(steps.at(-1)?.names).toEqual([first, other]);
+		expect(steps.map((s) => s.took)).toEqual([true, true, false]);
+	});
+
 	it("follows the model after every step: a clash refused, a free taking only that name", async () => {
 		await fc.assert(
 			fc.asyncProperty(lists, async (raw) => {
