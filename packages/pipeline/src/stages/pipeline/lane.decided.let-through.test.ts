@@ -1,5 +1,7 @@
 import {rmSync} from "node:fs";
+import {Schema} from "effect";
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
+import {Asked} from "../../tickets/ask.ts";
 import {
 	YES,
 	TIMED_OUT,
@@ -183,11 +185,24 @@ describe("a lane, on what the real agents answered", () => {
 						fake: {answers: MARKED_ONCE},
 					});
 					const {text} = readBy(ran, "a-step");
+					// The plan puts both in the evidence the person sees: the decision, then the finding
+					// against it, in one piece of that evidence, one line after the other.
+					const {shows} = Schema.decodeUnknownSync(Asked)(
+						ran.facts.find((f) => f.type === "asked" && String(f.ask).startsWith("a-step")),
+					);
+					const words = (value: unknown): readonly string[] =>
+						typeof value === "string"
+							? [value]
+							: typeof value === "object" && value !== null
+								? Object.values(value).flatMap(words)
+								: [];
+					const side = words(shows.evidence).filter((piece) => {
+						const lines = piece.split("\n");
+						const decided = lines.findIndex((line) => line.includes(RUN3_LEAN));
+						return decided > -1 && lines[decided + 1]?.includes(RUN3_FINDING.fault) === true;
+					});
+					expect(side).not.toEqual([]);
 					const lines = text.split("\n");
-					const decided = lines.findIndex((line) => line.includes(RUN3_LEAN));
-					const faulted = lines.findIndex((line) => line.includes(RUN3_FINDING.fault));
-					expect(decided).toBeGreaterThan(-1);
-					expect(faulted).toBe(decided + 1);
 					const goOn = lines.filter((line) => /go[ _]on/.test(line));
 					expect(goOn.filter((line) => line.includes("lets that finding through"))).not.toEqual([]);
 				});

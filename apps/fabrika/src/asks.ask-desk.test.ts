@@ -13,8 +13,16 @@ import {
 	policyFor,
 	type Sealed,
 } from "../../../fixtures/ask-desk/cases.ts";
-import type {load} from "./asks.ts";
-import {type Asks, asksMachine, asksNow, keysOf, marksOf, NO_MARKS, readMarks} from "./asks.ts";
+import {
+	type Asks,
+	asksMachine,
+	asksNow,
+	keysOf,
+	load,
+	marksOf,
+	NO_MARKS,
+	readMarks,
+} from "./asks.ts";
 
 // P10/P11/P20, restricted by the amendment to today's host queue and old asks menu.
 // Inbox tile, new glance, opening and focus history belong to the later inbox exam.
@@ -25,10 +33,10 @@ const step = (model: Asks, msg: Msg) =>
 const entry = (pos: number, fact: unknown, at = NOW) =>
 	Schema.decodeUnknownSync(Entry)({pos, ticket: 117, by: OWNER, at, fact});
 const initial = (entries: readonly Entry[]) =>
-	step(asksMachine.init(null, NO_MARKS)[0], {
-		type: "load_ok",
-		value: {entries, last: entries.length},
-	});
+	step(
+		asksMachine.init(null, NO_MARKS)[0],
+		load.ok(load({after: 0}), {entries, last: entries.length}, 0),
+	);
 
 describe("ask desk P10: one queue for today's menu and badge", () => {
 	it("removes Later from the shared live count, preserves it on restart, and clears it on answer", async () => {
@@ -49,7 +57,7 @@ describe("ask desk P10: one queue for today's menu and badge", () => {
 			saw: ask.saw,
 			via: {_tag: "chat", session: "s1"},
 		});
-		const after = step(later, {type: "load_ok", value: {entries: [answered], last: 3}});
+		const after = step(later, load.ok(load({after: 0}), {entries: [answered], last: 3}, 0));
 		expect(asksNow(after).asks).toEqual([]);
 		expect(asksNow(after).later).toEqual([]);
 		expect(marksOf(after).later).toEqual([]);
