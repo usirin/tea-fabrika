@@ -204,7 +204,8 @@ describe("the frame's keys, from the keys file (ticket 174)", () => {
 	const TODAY = [
 		["split", "tile", "C-b |", ["⌃B", "|"], "split"],
 		["split down", "tile", "C-b -", ["⌃B", "-"], "split --to down"],
-		["turn", "tile", "C-b Space", ["⌃B", "Space"], "turn"],
+		// The desk word is `turn-container`: `turn` is the plan's program for one said line.
+		["turn", "tile", "C-b Space", ["⌃B", "Space"], "turn-container"],
 		["fold", "tile", "C-b f", ["⌃B", "F"], "fold"],
 		["zoom", "tile", "C-b z", ["⌃B", "Z"], "zoom"],
 		["close", "tile", "C-b x", ["⌃B", "X"], "close-tile"],

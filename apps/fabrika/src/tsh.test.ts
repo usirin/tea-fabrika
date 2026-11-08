@@ -118,7 +118,8 @@ const session = (
 		);
 		let bytes = "";
 		host.terminal.show((m) => {
-			bytes += m.data;
+			// The plan's status and reply regions share the terminal's port: only `write` is bytes.
+			if (m.type === "write") bytes += m.data;
 		});
 		const rows = () => gridOf(bytes, 80, 1000).rows;
 		/** Wait until `check` holds, for at most five seconds. */
@@ -221,11 +222,11 @@ describe("the terminal", () => {
 				// One page's terminal, shown the screen on its first port, then again on the next.
 				let page = "";
 				const first = s.host.terminal.show((m) => {
-					page += m.data;
+					if (m.type === "write") page += m.data;
 				});
 				first();
 				s.host.terminal.show((m) => {
-					page += m.data;
+					if (m.type === "write") page += m.data;
 				});
 				return gridOf(page, 80, 1000).rows;
 			}).pipe(Effect.scoped),
@@ -871,8 +872,10 @@ describe("the desk's words", () => {
 			}).pipe(Effect.scoped),
 		);
 		// C-b J's word is tsh's own `jobs`, which prints the list in the tile and tells the desk nothing.
-		const toDesk = BINDINGS.filter((b) => wordOf(b.does) !== "jobs");
-		expect(toDesk).toHaveLength(BINDINGS.length - 1);
+		// C-b A's `agents` is tsh's own too: the plan's grammar lists `agents` among tsh's built-ins.
+		const own = new Set(["jobs", "agents"]);
+		const toDesk = BINDINGS.filter((b) => !own.has(wordOf(b.does)));
+		expect(toDesk).toHaveLength(BINDINGS.length - 2);
 		expect(said).toEqual([
 			...toDesk.map((b) => b.does),
 			{kind: "go", tile: "t3"},

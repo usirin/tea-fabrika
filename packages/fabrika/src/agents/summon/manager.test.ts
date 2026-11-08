@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {Duration, Effect, Exit, Fiber, type Scope, Stream} from "effect";
+import {Duration, Effect, Exit, Fiber, Logger, type Scope, Stream} from "effect";
 import {describe, expect, it} from "vitest";
 import {memoryStorage, type Storage} from "../../program/storage.ts";
 import {SummonManager, type TurnNews} from "../../shell/summon.ts";
@@ -336,7 +336,8 @@ describe("the ask: each edit waits for the person", () => {
 					}
 					const before = existsSync(join(folder, "written.txt"));
 					if (ask?._tag !== "ask") return yield* Effect.die("no ask");
-					yield* manager.answer("scout", ask.ask, true);
+					// The plan's ask_answered records `by`: the manager is told who answered.
+					yield* manager.answer("scout", ask.ask, true, PERSON);
 					yield* Fiber.join(t.fiber).pipe(Effect.timeout(Duration.seconds(10)));
 					return {ask, asking, before, news: t.got};
 				}),
@@ -391,6 +392,91 @@ describe("S-9: names are kept across a host restart", () => {
 			expect([one?.[2], two?.[2]]).toEqual(["1", "2"]);
 			// The same session, opened again: never a second one.
 			expect(sessions(folder)).toHaveLength(1);
+		},
+		TIME,
+	);
+});
+
+// The host log lines the plan's "What this piece records" names, caught through Effect's own
+// `Logger` in the format the host's file uses (host/main.ts), as agents-stop.test.ts does.
+// Expected to fail on 8398b44f: ask_answered has no `by`, and turn_ended no tokens.
+
+/** One log line's `key=value` fields, as `Logger.formatSimple` writes them, quotes taken off. */
+const fieldsOf = (line: string): Record<string, string> => {
+	const out: Record<string, string> = {};
+	for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g)) {
+		const [, key = "", raw = ""] = m;
+		out[key] = raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw;
+	}
+	return out;
+};
+
+/** One host's life, as `hosted`, and every log line it wrote. */
+const logged = async <A, E>(
+	folder: string,
+	body: Effect.Effect<A, E, SummonManager | Scope.Scope>,
+) => {
+	const lines: string[] = [];
+	const caught = Logger.make((o) => {
+		lines.push(Logger.formatSimple.log(o));
+	});
+	const value = await Effect.runPromise(
+		body.pipe(
+			Effect.scoped,
+			Effect.provide(summonManager({storage: memoryStorage(), folder})),
+			Effect.provide(Logger.layer([caught])),
+		),
+	);
+	return {value, lines};
+};
+
+/** The fields of each line whose message is `message`. */
+const linesOf = (lines: readonly string[], message: string) =>
+	lines.map(fieldsOf).filter((f) => f.message === message);
+
+describe("the host log records who answered and what a turn cost", () => {
+	it(
+		"ask_answered records by, the person who answered",
+		async () => {
+			const folder = repo();
+			const {lines} = await logged(
+				folder,
+				Effect.gen(function* () {
+					const manager = yield* SummonManager;
+					yield* summon("scout");
+					const t = yield* turning("scout", "write it");
+					yield* until("the ask", () => t.got.some((n) => n._tag === "ask"));
+					const ask = t.got.find((n) => n._tag === "ask");
+					if (ask?._tag !== "ask") return yield* Effect.die("no ask");
+					yield* manager.answer("scout", ask.ask, true, PERSON);
+					yield* Fiber.join(t.fiber).pipe(Effect.timeout(Duration.seconds(10)));
+				}),
+			);
+			const answered = linesOf(lines, "ask_answered");
+			expect(answered).toHaveLength(1);
+			expect(answered[0]).toMatchObject({name: "scout", allow: "true", by: PERSON});
+		},
+		TIME,
+	);
+
+	// The fake reports tokens on every turn (fake-agent.ts: input 100 + the prompt's length,
+	// output 10), so only the half where tokens come can be checked here. The half where a
+	// harness gives none needs a fake that leaves `usage` out, which no prompt word does yet.
+	it(
+		"turn_ended records the turn's input and output tokens as the harness reported them",
+		async () => {
+			const folder = repo();
+			const {lines} = await logged(
+				folder,
+				Effect.gen(function* () {
+					yield* summon("scout");
+					yield* turned("scout", "Read a.txt");
+				}),
+			);
+			const ended = linesOf(lines, "turn_ended");
+			expect(ended).toHaveLength(1);
+			expect(ended[0]).toMatchObject({name: "scout", stop: "end_turn", output: "10"});
+			expect(Number(ended[0]?.input)).toBeGreaterThan(100);
 		},
 		TIME,
 	);

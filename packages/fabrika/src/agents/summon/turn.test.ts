@@ -100,9 +100,11 @@ const double = (names: readonly string[] = ["scout"]) => {
 					if (t.name === name)
 						Queue.offerUnsafe(t.news, {_tag: "result", stop: "cancelled", ms: 1, cost: null});
 			}),
-		answer: (name, ask, allow) =>
+		// `by`: who answered, which the plan's ask_answered line records. Taken as a rest so the
+		// double fits the manager's signature before and after it gains the person.
+		answer: (name, ask, allow, ...rest: readonly unknown[]) =>
 			Effect.sync(() => {
-				calls.answers.push({name, ask, allow});
+				calls.answers.push({name, ask, allow, by: rest[0]});
 			}),
 	};
 	return {service, calls, state, agents};
@@ -427,5 +429,84 @@ describe("S-8: only a person summons, dismisses or talks", () => {
 		expect(theirs).toBeDefined();
 		expect(Object.keys(theirs?.program.inputs ?? {})).not.toContain("allow");
 		expect(Object.keys(theirs?.program.inputs ?? {})).toContain("prompt");
+	});
+});
+
+// Laws the lead added after the builder's first round (the plan's "What this piece records", its
+// Ctrl-C row and S-7). Each is expected to fail on 8398b44f.
+
+describe("S-7, tsh's side: a reply of several lines hangs under its name", () => {
+	it("indents each later line of the reply to where its text starts after ✦ scout", async () => {
+		const d = double(["scout"]);
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const t = yield* tshOn(d);
+				const n = yield* t.type("@scout read a.txt and b.txt");
+				yield* until("the turn", () => d.calls.turns.length === 1);
+				const [asked] = d.calls.turns;
+				if (asked === undefined) return yield* Effect.die("no turn");
+				Queue.offerUnsafe(asked.news, {_tag: "told", turn: 1});
+				Queue.offerUnsafe(asked.news, {
+					_tag: "said",
+					text: "The river is Kura.\nThe bridge has 7 arches.",
+				});
+				Queue.offerUnsafe(asked.news, RESULT);
+				yield* t.done(n);
+				return texts(t.printed.values).join("\n");
+			}).pipe(Effect.scoped),
+		);
+		const head = "✦ scout  ";
+		expect(seen).toContain(
+			`${head}The river is Kura.\n${" ".repeat(head.length)}The bridge has 7 arches.`,
+		);
+	});
+});
+
+describe("Ctrl-C on a turn prints one line", () => {
+	it("says scout: turn cancelled, and no second [stopped] line for the same job", async () => {
+		const d = double(["scout"]);
+		const said = await Effect.runPromise(
+			Effect.gen(function* () {
+				const t = yield* tshOn(d);
+				const n = yield* t.type("@scout slowly read everything");
+				yield* until("the turn", () => d.calls.turns.length === 1);
+				const [asked] = d.calls.turns;
+				if (asked === undefined) return yield* Effect.die("no turn");
+				Queue.offerUnsafe(asked.news, {_tag: "told", turn: 1});
+				yield* until("the turn job", () => t.table.getState().jobs.length === 1);
+				const from = t.printed.values.length;
+				expect(yield* tell(t.run, "signal", "interrupt")).toBe("queued");
+				yield* t.done(n);
+				return texts(t.printed.values.slice(from));
+			}).pipe(Effect.scoped),
+		);
+		// The plan's Ctrl-C row and its turn-cancelled shot name this line, and only it.
+		expect(said.filter((l) => /cancel|stopped/.test(l))).toEqual(["scout: turn cancelled"]);
+	});
+});
+
+describe("ask_answered records who answered", () => {
+	it("a person's y on tsh's answer reaches the manager with that person as by", async () => {
+		const d = double(["scout"]);
+		const seen = await Effect.runPromise(
+			Effect.gen(function* () {
+				const t = yield* tshOn(d);
+				const n = yield* t.type("@scout write it");
+				yield* until("the turn", () => d.calls.turns.length === 1);
+				const [asked] = d.calls.turns;
+				if (asked === undefined) return yield* Effect.die("no turn");
+				Queue.offerUnsafe(asked.news, {_tag: "told", turn: 1});
+				Queue.offerUnsafe(asked.news, {_tag: "ask", ask: "t1.w", title: "Write written.txt"});
+				yield* until("the ask shown", () => t.asked.values.length > 0);
+				const job = t.table.getState().jobs[0];
+				if (job === undefined) return yield* Effect.die("no job");
+				expect(yield* tell(t.run, "answer", {n: job.n, allow: true})).toBe("queued");
+				yield* until("the answer", () => d.calls.answers.length === 1);
+				Queue.offerUnsafe(asked.news, RESULT);
+				yield* t.done(n);
+				return d.calls.answers;
+			}).pipe(Effect.scoped),
+		);
+		expect(seen).toEqual([{name: "scout", ask: "t1.w", allow: true, by: PERSON}]);
 	});
 });

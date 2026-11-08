@@ -100,9 +100,10 @@ describe("the grammar", () => {
 
 	it("parts statements on ; and &, and reads built-ins as plain words", () => {
 		const all = statements("tally & tell %1 add 2 3; jobs");
-		expect(
-			all.map((s) => (s.kind === "run" ? s.pipeline.commands[0].program.name : s.name)),
-		).toEqual(["tally", "tell", "jobs"]);
+		// The plan's grammar adds `said` as a third kind of statement; it has no word name.
+		const word = (s: (typeof all)[number]) =>
+			s.kind === "run" ? s.pipeline.commands[0].program.name : s.kind === "said" ? s.text : s.name;
+		expect(all.map(word)).toEqual(["tally", "tell", "jobs"]);
 		const tell = all[1];
 		expect(tell?.kind === "builtin" && tell.args.map((a) => a.name)).toEqual([
 			"%1",
