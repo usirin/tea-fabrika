@@ -1,9 +1,9 @@
 # Principles: what fabrika is for, in five lines
 
-**Proposed 2026-11-05.** A first draft of the principles page the design language lacks
-([design language](./design-language.md)). The owner named the first three on 2026-11-05, the
-fourth, agent accessibility, the same day, and the fifth, unsure is a setting, the same evening.
-None is settled. Both versions.
+**Decided 2026-11-08 (owner): the five principles, as written.** The principles page the design
+language lacked ([design language](./design-language.md)). The owner named the first three on
+2026-11-05, the fourth, agent accessibility, the same day, and the fifth, unsure is a setting, the
+same evening. The "Other candidates" below stay proposed. Both versions.
 
 ```ts
 // A sketch. Each principle as a check a design or a pull request can be read against.
