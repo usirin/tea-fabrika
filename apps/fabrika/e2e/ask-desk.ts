@@ -35,9 +35,34 @@ type Tools = {
 	stop: (pid: number) => Promise<unknown>;
 	shots: string;
 };
+// ASK_DESK_SOFT=1 logs a failed check and goes on, so the shots still get taken; the run then
+// lists every failure and exits nonzero. Without it, the first failure stops the run.
+const soft = process.env.ASK_DESK_SOFT === "1";
+const failed: string[] = [];
+let watched: Page | null = null;
+let failShots: string | null = null;
 const check = (what: string, yes: boolean, seen?: unknown) => {
-	if (!yes) throw new Error(`${what}: ${JSON.stringify(seen)}`);
-	console.log(`ok  ask desk ${what}`);
+	if (!yes && !soft) throw new Error(`${what}: ${JSON.stringify(seen)}`);
+	if (!yes) {
+		failed.push(`${what}: ${JSON.stringify(seen)}`);
+		// What the window showed when the check failed, beside the shots, for whoever reads them.
+		if (watched !== null && failShots !== null)
+			void watched
+				.screenshot({path: join(failShots, `failed-${failed.length}.png`)})
+				.catch(() => {});
+	}
+	console.log(`${yes ? "ok  " : "FAIL"} ask desk ${what}`);
+};
+// In soft mode, a step that throws (a wait that times out) is a failed check, and the run goes on.
+const attempt = (what: string, step: () => Promise<unknown>) => {
+	if (!soft) return step();
+	return step().catch(async (e: unknown) => {
+		if (watched !== null && failShots !== null)
+			await watched
+				.screenshot({path: join(failShots, `${what.replaceAll(/[^a-z0-9]+/gi, "-")}.png`)})
+				.catch(() => {});
+		check(what, false, e instanceof Error ? e.message.split("\n")[0] : e);
+	});
 };
 const until = async <A>(what: string, read: () => Promise<A>, ok: (value: A) => boolean) => {
 	let value = await read();
@@ -45,6 +70,10 @@ const until = async <A>(what: string, read: () => Promise<A>, ok: (value: A) => 
 		await new Promise((resolve) => setTimeout(resolve, 50));
 		value = await read();
 	}
+	if (!ok(value) && watched !== null && failShots !== null)
+		await watched
+			.screenshot({path: join(failShots, `${what.replaceAll(/[^a-z0-9]+/gi, "-")}.png`)})
+			.catch(() => {});
 	check(what, ok(value), value);
 	return value;
 };
@@ -132,7 +161,8 @@ const browserHash = async (page: Page) => {
 		format: "iife",
 		globalName: "askDeskHash",
 	});
-	await page.addScriptTag({content: bundle.outputFiles[0]?.text ?? ""});
+	// The page's CSP refuses inline script tags; Playwright's evaluate runs over CDP, outside it.
+	await page.evaluate(bundle.outputFiles[0]?.text ?? "");
 	const seen = await page.evaluate(async (value) => {
 		const api = Reflect.get(window, "askDeskHash") as {digest: (v: unknown) => Promise<string>};
 		return api.digest(value);
@@ -180,6 +210,9 @@ export const askDesk = async (tools: Tools) => {
 	};
 	try {
 		const page = await app.firstWindow();
+		watched = page;
+		failShots = soft ? join(tools.shots, "ask-desk-failed") : null;
+		if (failShots !== null) await mkdir(failShots, {recursive: true});
 		await tools.prompted(page, "t1");
 		await browserHash(page);
 		await tools.run(page, "t1", "ticket --ticket 117");
@@ -255,18 +288,20 @@ export const askDesk = async (tools: Tools) => {
 			() => answers(home, 118),
 			(a) => a.length === 1,
 		);
-		await seedAsk(home, 118, false, DRAFT.rec, "a-approve-118-next");
-		await box(page).waitFor();
-		await page.keyboard.down("r");
-		await page.keyboard.press("o");
-		await box(page)
-			.getByRole("button", {name: /approve/i})
-			.last()
-			.waitFor();
-		check(
-			"P13 repeated keydown cannot answer the next ask",
-			(await answers(home, 118)).length === 1,
-		);
+		await attempt("P13 the next ask shows every pick under a held key", async () => {
+			await seedAsk(home, 118, false, DRAFT.rec, "a-approve-118-next");
+			await box(page).waitFor();
+			await page.keyboard.down("r");
+			await page.keyboard.press("o");
+			await box(page)
+				.getByRole("button", {name: /approve/i})
+				.last()
+				.waitFor({timeout: 5000});
+			check(
+				"P13 repeated keydown cannot answer the next ask",
+				(await answers(home, 118)).length === 1,
+			);
+		});
 		await page.keyboard.up("r");
 		await page.keyboard.press("Escape");
 		const click = (await answers(home, 117))[0];
@@ -322,10 +357,11 @@ export const askDesk = async (tools: Tools) => {
 		// No new inbox, new glance or content-opening screenshots are required by this PR.
 		await tools.focusOn(page, "t1");
 		await tools.prefixed(page, "-");
-		await tools.prompted(page, "t3");
+		// `tracker | ticket` took t2 and t3, so the two splits are t4 (under t1) and t5 (under t2).
+		await tools.prompted(page, "t4");
 		await tools.focusOn(page, "t2");
 		await tools.prefixed(page, "-");
-		await tools.prompted(page, "t4");
+		await tools.prompted(page, "t5");
 		await tools.focusOn(page, "t1");
 		const layouts = ["one", "side", "stacked", "2x2", "small"] as const;
 		for (const layout of layouts) {
@@ -336,16 +372,22 @@ export const askDesk = async (tools: Tools) => {
 					: layout === "side"
 						? ["t1", "t2"]
 						: layout === "stacked"
-							? ["t1", "t3"]
-							: ["t1", "t3", "t2", "t4"];
-			for (const id of ["t2", "t3", "t4"]) {
-				const shown = (await page.locator(`[data-tile="${id}"]`).count()) > 0;
-				if (shown !== visible.includes(id)) {
-					if (shown) {
-						await tools.focusOn(page, id);
-						await tools.prefixed(page, "f");
-					} else await page.locator(`[data-strip="${id}"]`).click();
-				}
+							? ["t1", "t4"]
+							: ["t1", "t4", "t2", "t5"];
+			// Open every strip first: a column whose tiles all folded is one strip named by the
+			// column, not by a tile, so a tile's own strip may not exist.
+			const strips = page.locator("[data-strip]").filter({visible: true});
+			// A strip may still be sliding into place, so press it in the page, not by its position.
+			for (let i = 0; i < 8 && (await strips.count()) > 0; i++) {
+				await strips.first().evaluate((element) => (element as HTMLElement).click());
+				await page.waitForTimeout(300);
+			}
+			for (const id of ["t1", "t2", "t3", "t4", "t5"])
+				await page.locator(`[data-tile="${id}"]`).waitFor();
+			for (const id of ["t2", "t3", "t4", "t5"]) {
+				if (visible.includes(id)) continue;
+				await tools.focusOn(page, id);
+				await tools.prefixed(page, "f");
 			}
 			await tools.focusOn(page, "t1");
 			await app.evaluate(
@@ -357,6 +399,13 @@ export const askDesk = async (tools: Tools) => {
 				await tools.lookIs(app, page, look);
 				await shot(page, "blind", layout, look);
 				await inspectCard(page, box(page), look);
+				// Today's asks menu, drawn with the shared ask view.
+				await attempt("P10 the asks menu opens", async () => {
+					await tools.prefixed(page, "a");
+					await page.locator("#pop-asks").getByText(DRAFT.what, {exact: true}).first().waitFor();
+					await shot(page, "asks-menu", layout, look);
+					await page.keyboard.press("Escape");
+				});
 				await page.keyboard.press("Control+c");
 				await tools.prompted(page, "t1");
 				await tools.run(page, "t1", "ticket --ticket 120");
@@ -426,14 +475,18 @@ export const askDesk = async (tools: Tools) => {
 				locked.exec("BEGIN IMMEDIATE");
 				try {
 					await draft.press("Enter");
-					await page.locator('[data-tile="t1"] [aria-busy="true"]').waitFor();
-					await shot(page, "saving", layout, look);
-					await box(page).getByRole("alert").waitFor();
-					check(
-						"P12 failed real write keeps the note",
-						(await draft.inputValue()) === "The plan misses the empty input",
+					await attempt("P12 a save shows it is pending", () =>
+						page.locator('[data-tile="t1"] [aria-busy="true"]').waitFor({timeout: 5000}),
 					);
-					await shot(page, "failed-save", layout, look);
+					await shot(page, "saving", layout, look);
+					await attempt("P12 a failed real write says so", async () => {
+						await box(page).getByRole("alert").waitFor({timeout: 15000});
+						check(
+							"P12 failed real write keeps the note",
+							(await draft.inputValue()) === "The plan misses the empty input",
+						);
+						await shot(page, "failed-save", layout, look);
+					});
 				} finally {
 					locked.exec("ROLLBACK");
 					locked.close();
@@ -474,6 +527,12 @@ export const askDesk = async (tools: Tools) => {
 		await app.close().catch(() => {});
 		const pid = await tools.hostPid(home);
 		if (pid !== null) await tools.stop(pid);
+	}
+	if (failed.length > 0) {
+		console.log(
+			`ask desk: ${failed.length} failed checks\n${failed.map((f) => `  ${f}`).join("\n")}`,
+		);
+		process.exitCode = 1;
 	}
 };
 
