@@ -2490,9 +2490,9 @@ const linesDiff = (was: string, now: string) => {
  * own: each key state at each of the five layouts, in the dark look only, since the tree is the
  * same in both. Each cell is read twice, a second apart; two reads that differ are a flake. Each
  * is compared as text with `aria/<state>-<layout>.aria.yml`, a diff printed per cell and a total,
- * and the trees it read are written to `aria-received/` under the screenshots' folder. A state
- * with no meaning in a layout prints `skipped: <why>`. It never fails on a diff: it answers 0,
- * and 2 only when it cannot reach a state. Blocking waits on its false alarms being counted.
+ * and the trees it read are written to `aria-received/` under the screenshots' folder. One tile
+ * shows a folded neighbor for strips and a zoomed ticket for a pipe. Every planned cell must be
+ * recorded. It answers 2 only when it cannot reach a state; tree diffs only advise.
  *
  *   pnpm --filter @kampus/fabrika-app-old e2e -- --aria    only this
  */
@@ -2502,7 +2502,9 @@ const ariaStage = async (): Promise<0 | 2> => {
 	await mkdir(out, {recursive: true});
 	await seedAsks(own);
 	const app = await launch(own);
-	const tally = {same: 0, diff: 0, fresh: 0, flake: 0, skipped: 0};
+	const tally = {same: 0, diff: 0, fresh: 0, flake: 0};
+	const pending = new Set(STATES.flatMap((state) => LAYOUTS.map((layout) => `${state}-${layout}`)));
+	const planned = pending.size;
 	let reached: 0 | 2 = 0;
 	try {
 		const page = await app.firstWindow();
@@ -2527,7 +2529,8 @@ const ariaStage = async (): Promise<0 | 2> => {
 		};
 		const cell = async (state: State, layout: Layout, ids: readonly string[]) => {
 			const name = `${state}-${layout}`;
-			if (state !== "strips") await layoutIs(page, layout, ids);
+			if (state === "strips") await tilesAre(page, ids);
+			else await layoutIs(page, layout, ids);
 			await page.waitForTimeout(250);
 			const first = await read();
 			await page.waitForTimeout(1100);
@@ -2537,6 +2540,7 @@ const ariaStage = async (): Promise<0 | 2> => {
 				console.log(`flake  ${name}: two reads differ\n${linesDiff(first, second)}`);
 			}
 			await writeFile(join(out, `${name}.aria.yml`), `${second}\n`);
+			check(`one planned ARIA tree: ${name}`, pending.delete(name));
 			const approved = await readFile(join(ARIA, `${name}.aria.yml`), "utf8").catch(() => null);
 			if (approved === null) {
 				tally.fresh += 1;
@@ -2549,11 +2553,6 @@ const ariaStage = async (): Promise<0 | 2> => {
 				console.log(`diff   ${name}\n${linesDiff(approved.replace(/\n$/, ""), second)}`);
 			}
 		};
-		const skip = (state: State, layout: Layout, why: string) => {
-			tally.skipped += 1;
-			console.log(`skipped: ${why} (${state}-${layout})`);
-		};
-
 		await grid(page, async (layout, ids) => {
 			const [first = "", ...rest] = ids;
 			const last = rest.at(-1) ?? first;
@@ -2597,46 +2596,48 @@ const ariaStage = async (): Promise<0 | 2> => {
 						await gone(page, "pop-palette");
 					}
 					if (state === "strips") {
-						if (rest.length === 0) {
-							skip(state, layout, "a strip lies beside another tile, and this is one tile");
-							continue;
-						}
-						await focusOn(page, first);
+						const folded = rest.length === 0 ? await splitTile(page, first, "|") : first;
+						await focusOn(page, folded);
 						await prefixed(page, "f");
-						await page.locator(`[data-strip="${first}"]`).waitFor();
-						await cell(state, layout, ids);
-						await page.locator(`[data-strip="${first}"]`).click();
+						const strip = page.locator(`[data-strip="${folded}"]`);
+						await strip.waitFor();
+						await cell(state, layout, rest.length === 0 ? ids : rest);
+						await strip.click();
+						if (rest.length === 0) {
+							await tilesAre(page, [first, folded]);
+							await focusOn(page, folded);
+							await prefixed(page, "x");
+							await askedIs(page, `close ${folded}? (y/n)`);
+							await page.keyboard.press("y");
+						}
 						await tilesAre(page, ids);
 					}
 					if (state === "pipe") {
-						if (rest.length === 0) {
-							skip(state, layout, "a pipe opens a tile per window, so it is never one tile");
-							continue;
-						}
-						// Closing was captured on the plain grid. Keep its first tile, then build a
-						// fresh pair for the pipe and split both columns for a 2x2.
-						for (const id of await tiles(page)) {
-							if (id === null || id === first) continue;
-							await focusOn(page, id);
-							await prefixed(page, "x");
-							await askedIs(page, `close ${id}? (y/n)`);
-							await page.keyboard.press("y");
-							await until(
-								`${id} closed`,
-								() => tile(page, id).count(),
-								(n) => n === 0,
-							);
-						}
-						await tilesAre(page, [first]);
-						await focusOn(page, first);
+						// Closing can remove the workspace's last tile. Start the pipe on a fresh one.
 						const before = await tiles(page);
-						await run(page, first, "tracker | ticket");
-						const ticket = await addedTile(page, before);
-						const pipeIds = await arrange(page, layout, first, ticket);
-						const tracker = tile(page, first).getByLabel("tracker view");
+						await prefixed(page, "N");
+						const source = await addedTile(page, before, 1);
+						await prompted(page, source);
+						await run(page, source, "tracker | ticket");
+						const ticket = await addedTile(page, [source]);
+						let pipeIds = [source, ticket];
+						if (layout !== "one") pipeIds = await arrange(page, layout, source, ticket);
+						const tracker = tile(page, source).getByLabel("tracker view");
 						await tracker.waitFor();
 						await tracker.locator(".tracker-list button").filter({hasText: SEVEN_TITLE}).click();
-						await tile(page, ticket).getByText(SEVEN_TITLE).first().waitFor();
+						// The ticket renders backticks as code type, so its heading has no backticks.
+						await tile(page, ticket)
+							.getByRole("heading", {
+								level: 1,
+								name: "fabrika post prints the ticket number twice",
+								exact: true,
+							})
+							.waitFor();
+						if (layout === "one") {
+							await focusOn(page, ticket);
+							await prefixed(page, "z");
+							pipeIds = [ticket];
+						}
 						await cell(state, layout, pipeIds);
 					}
 					if (state === "closing") {
@@ -2670,6 +2671,7 @@ const ariaStage = async (): Promise<0 | 2> => {
 				}
 			}
 		});
+		check("every planned ARIA tree was recorded", pending.size === 0, [...pending]);
 	} catch (e) {
 		reached = 2;
 		console.log(`the ARIA stage stopped: ${e instanceof Error ? e.message : String(e)}`);
@@ -2679,8 +2681,8 @@ const ariaStage = async (): Promise<0 | 2> => {
 		if (pid !== null) await stop(pid);
 	}
 	console.log(
-		`aria: ${String(tally.same)} same, ${String(tally.diff)} differ, ${String(tally.fresh)} new, ` +
-			`${String(tally.flake)} flaky, ${String(tally.skipped)} skipped; trees in ${out}`,
+		`aria: ${planned - pending.size}/${planned} planned, ${String(tally.same)} same, ` +
+			`${String(tally.diff)} differ, ${String(tally.fresh)} new, ${String(tally.flake)} flaky; trees in ${out}`,
 	);
 	return reached;
 };
