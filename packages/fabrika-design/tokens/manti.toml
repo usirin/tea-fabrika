@@ -24,6 +24,7 @@
 "--manti-text" = "--text-primary"
 "--manti-text-muted" = "--text-faint"
 "--manti-text-subtle" = "--text-faint"
+# A link is text; one drawn as a link needs an underline (WCAG 1.4.1), not only this color.
 "--manti-link" = "--text-primary"
 "--manti-fill-subtle" = "--surface-hover"
 "--manti-fill" = "--surface-hover"

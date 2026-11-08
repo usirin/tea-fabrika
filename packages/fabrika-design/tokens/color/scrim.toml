@@ -1,3 +1,4 @@
+# The Cmd-K palette has no scrim (owner, 2026-11-06), so nothing draws this token today.
 type = "background"
 tier = "global"
 owner = "design"
