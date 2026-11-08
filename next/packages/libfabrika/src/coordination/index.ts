@@ -21,3 +21,13 @@ export {CoordinationLayer, ProcessManager} from "./process-manager.ts";
 export {Appended, Rev} from "../data/log.ts";
 export {LedgerError} from "../data/ledger.ts";
 export {addText, Change, enrollmentText, grantText, revokeText} from "./text.ts";
+export {
+	type Envelope,
+	NotGranted,
+	SavedInput,
+	Session,
+	SessionManager,
+	SigningRefused,
+	SignRequest,
+	Writer,
+} from "./session-manager.ts";
