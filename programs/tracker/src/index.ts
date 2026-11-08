@@ -268,6 +268,13 @@ export const tracker = defineProgram({
 	},
 	machines: {tickets: ticketsKind},
 	view: {machine: "tickets", data: Shown, of: shownOf},
+	glance: {
+		machine: "tickets",
+		data: Schema.Struct({count: Schema.Int}),
+		of: (state: Tracker) => ({
+			count: state.tickets.filter((ticket) => ticket.state === "open").length,
+		}),
+	},
 	main: ({serve, send, watch}) =>
 		Effect.gen(function* () {
 			const runtime = yield* (yield* run(tickets, ticketsOptions)).ready;

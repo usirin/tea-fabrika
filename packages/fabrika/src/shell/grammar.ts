@@ -199,7 +199,13 @@ class Stop {
 }
 
 /** Read one line. A line with nothing but spaces, comments and `;` is no statements. */
-export function parse(line: string): Parsed {
+export function parse(
+	line: string,
+	resolveCommand?: (
+		program: string,
+		word: string,
+	) => {readonly type: string; readonly value: unknown} | undefined,
+): Parsed {
 	const said = saidLine(line);
 	if (said !== null)
 		return said.kind === "refused" ? said : {kind: "parsed", statements: [{...said, after: null}]};
@@ -305,11 +311,20 @@ export function parse(line: string): Parsed {
 					at: {start: t.start, end: t.start + eq},
 					value: glued(text.slice(eq + 1), name),
 				});
-			} else
-				stopAt(
-					t.start,
-					`expected --flag value, input=value, >output or <input, not ${text === "" ? "an empty word" : text}`,
-				);
+			} else {
+				const action = resolveCommand?.(program.name, text);
+				if (action !== undefined)
+					told.push({
+						name: action.type,
+						at,
+						value: {kind: "text", text: JSON.stringify(action.value), at},
+					});
+				else
+					stopAt(
+						t.start,
+						`expected --flag value, input=value, >output or <input, not ${text === "" ? "an empty word" : text}`,
+					);
+			}
 			end = tokens[i - 1]?.end ?? end;
 		}
 		return {program, flags, told, out, into, help: null, all, at: {start: first.start, end}};

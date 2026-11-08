@@ -37,7 +37,7 @@ import {type Attached, type Read, reader} from "./messages.ts";
 // closes the link. Once refused or closed, nothing changes it.
 
 /** The link's version. Raise it when what goes over the link changes. */
-export const PROTOCOL = 2;
+export const PROTOCOL = 3;
 
 /** A port's name, as the page's bridge takes it (bridge.ts). */
 const Port = Schema.String.check(

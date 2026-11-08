@@ -1,7 +1,9 @@
-import {Duration, Effect, Option, Scope, Semaphore, Stream} from "effect";
+import {Duration, Effect, Option, Scope, Semaphore, Stream, Schema} from "effect";
+import {NativeDelivery, MessageQuery, type RoomService} from "../host/rooms.ts";
 import type {AnyRunning} from "../program/listed.ts";
 import type {AnyRun} from "../program/program.ts";
 import {viewOf} from "../program/program.ts";
+import {shapeOf} from "../program/shape.ts";
 import {memoryStorage} from "../program/storage.ts";
 import type {ProgramList} from "../shell/programs.ts";
 import {JOB_TOOL, type JobAnswer, LAST_MAX, lastLines} from "./job.ts";
@@ -114,6 +116,7 @@ const shown = (run: AnyRun) => {
 };
 
 export const driveFor = (options: {
+	readonly dm?: Pick<ReturnType<RoomService["for"]>, "send" | "read"> | undefined;
 	/** The programs the agent drives, each packed with the agent's own services. */
 	readonly list: ProgramList;
 	readonly tiles: () => readonly InTile[];
@@ -138,6 +141,31 @@ export const driveFor = (options: {
 		const readOnly = options.readOnly ?? false;
 		/** The host's own tools, after `runs`: each one the host hands. */
 		const host: readonly Tool[] = [
+			...(options.dm === undefined
+				? []
+				: [
+						{
+							name: "dm_send",
+							description: "Send a local direct message as this connection's agent.",
+							inputSchema: {
+								type: "object" as const,
+								properties: {value: shapeOf(NativeDelivery).json},
+								required: ["value"],
+								additionalProperties: false,
+							},
+						},
+						{
+							name: "dm_read",
+							description: "Read only this connection's direct messages.",
+							inputSchema: {
+								type: "object" as const,
+								properties: {value: shapeOf(MessageQuery).json},
+								required: ["value"],
+								additionalProperties: false,
+							},
+							annotations: {readOnlyHint: true},
+						},
+					]),
 			...(job === undefined ? [] : [JOB_TOOL]),
 			...(stop === undefined ? [] : [STOP_TOOL]),
 			...(restart === undefined ? [] : [RESTART_TOOL]),
@@ -263,14 +291,32 @@ export const driveFor = (options: {
 		};
 
 		const drive: Drive = {
-			call: (name, args) =>
-				one.withPermit(
-					call(
-						listed.has(name)
-							? callOf(list, name, args)
-							: {kind: "refused", why: `there is no tool ${name}`},
-					),
-				),
+			call: (name, args) => {
+				const dm = options.dm;
+				return one.withPermit(
+					dm !== undefined && listed.has(name) && (name === "dm_send" || name === "dm_read")
+						? Effect.gen(function* () {
+								const valueOf =
+									typeof args === "object" && args !== null && "value" in args ? args.value : args;
+								if (name === "dm_read") return yield* dm.read(valueOf);
+								const value = yield* Schema.decodeUnknownEffect(NativeDelivery)(valueOf);
+								return yield* dm.send(value);
+							}).pipe(
+								Effect.map((data): Answer => ({kind: "done", data})),
+								Effect.catch(() =>
+									Effect.succeed<Answer>({
+										kind: "refused",
+										why: "The direct message request failed",
+									}),
+								),
+							)
+						: call(
+								listed.has(name)
+									? callOf(list, name, args)
+									: {kind: "refused", why: `there is no tool ${name}`},
+							),
+				);
+			},
 		};
 		return {drive, tools};
 	});

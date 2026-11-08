@@ -9,7 +9,9 @@ import {
 	type PlatformError,
 	Result,
 	Stream,
+	Semaphore,
 } from "effect";
+import {parse, stringify} from "smol-toml";
 import type {Launch} from "../launch.ts";
 
 // The one reader of the person's settings folder: keybindings.toml now (desk/keymap.ts), and
@@ -72,6 +74,100 @@ export const settingsFolder = (launch: Launch, userHome: string): string =>
 
 /** How long a burst of events from one save is waited out, in ms: an editor's write and rename are one save. */
 const SETTLE_MS = 50;
+
+export const glanceSettings = ({folder}: {readonly folder: string}) =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem;
+		const file = join(folder, "fabrika.toml");
+		const lock = yield* Semaphore.make(1);
+		let choice = "inbox";
+		let why: string | null = null;
+		let offers: readonly string[] = ["inbox"];
+		const listeners = new Set<() => void>();
+		const announce = () => {
+			for (const listener of listeners) listener();
+		};
+		const read = fs
+			.readFileString(file)
+			.pipe(
+				Effect.catch((error) =>
+					error.reason._tag === "NotFound"
+						? Effect.succeed("")
+						: Effect.fail({why: `fabrika.toml could not be read: ${saidOf(error)}`}),
+				),
+			);
+		const decode = (text: string) =>
+			Effect.try({try: () => parse(text), catch: () => ({why: "fabrika.toml is not valid TOML"})});
+		const load = read.pipe(
+			Effect.flatMap(decode),
+			Effect.match({
+				onSuccess: (table) => {
+					if (typeof table.glance === "string") choice = table.glance;
+					why = null;
+				},
+				onFailure: (error) => {
+					why = error.why;
+				},
+			}),
+		);
+		yield* load;
+		yield* settingsFile(folder, "fabrika.toml", (text) => {
+			try {
+				return Result.succeed(parse(text));
+			} catch {
+				return Result.fail({line: 1, why: "fabrika.toml is not valid TOML"});
+			}
+		}).pipe(
+			Stream.runForEach((setting) =>
+				Effect.sync(() => {
+					if (setting._tag === "refused") why = setting.why;
+					else {
+						if (setting._tag === "read" && typeof setting.value.glance === "string")
+							choice = setting.value.glance;
+						why = null;
+					}
+					announce();
+				}),
+			),
+			Effect.forkScoped,
+		);
+		return {
+			get: () => ({choice, effective: offers.includes(choice) ? choice : "inbox", why}),
+			follow: (listener: () => void) => {
+				listeners.add(listener);
+				return () => listeners.delete(listener);
+			},
+			providers: (names: readonly string[]) => {
+				offers = [...new Set(["inbox", ...names])];
+				announce();
+			},
+			choose: (program: string) =>
+				lock.withPermit(
+					Effect.gen(function* () {
+						if (!offers.includes(program))
+							return yield* Effect.fail({why: "That program has no running glance"});
+						const table = yield* read.pipe(Effect.flatMap(decode));
+						yield* fs.writeFileString(`${file}.new`, stringify({...table, glance: program})).pipe(
+							Effect.andThen(fs.rename(`${file}.new`, file)),
+							Effect.mapError((error) => ({
+								why: `fabrika.toml could not be saved: ${saidOf(error)}`,
+							})),
+						);
+						choice = program;
+						why = null;
+						announce();
+					}).pipe(
+						Effect.tapError((error) =>
+							Effect.sync(() => {
+								why = error.why;
+								announce();
+							}),
+						),
+					),
+				),
+		};
+	});
+export type GlanceSettings = Effect.Success<ReturnType<typeof glanceSettings>>;
 
 /**
  * Every answer for the file `name` in `folder`: one as the watch starts, then one each time a save

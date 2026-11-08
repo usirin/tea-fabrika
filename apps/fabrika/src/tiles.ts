@@ -8,8 +8,9 @@ import {
 	offer,
 } from "@kampus/fabrika-old";
 import {type LineAnswer, LineRefused} from "@kampus/fabrika-old/mcp";
+import {InboxRuntime} from "@tea-fabrika/inbox/runtime";
 import {Author, PullRequests, RepoTree} from "@tea-fabrika/tracker";
-import {Context, Effect, Exit, Scope, Stream} from "effect";
+import {Context, Effect, Exit, Scope, Stream, Option, Layer} from "effect";
 import type {AgentName, DeskMsg} from "./desk/desk.ts";
 import type {Does} from "./desk/keys.ts";
 import type {TileId} from "./desk/layout/index.ts";
@@ -83,6 +84,7 @@ export type TileNews = Extract<DeskMsg, {readonly type: "covered" | "over" | "jo
 
 /** What the tiles need of the edge: a way to tell the desk, and ports for the pages. */
 export interface Edge {
+	readonly provider?: (run: string, screen: WindowScreen | null) => void;
 	/** Tell the desk, beside the tiles in the host. */
 	readonly tell: (m: TileNews) => void;
 	/**
@@ -174,6 +176,7 @@ export const startTiles = (options: {
 		const pullRequests = yield* PullRequests;
 		const repoTree = yield* RepoTree;
 		const traces = yield* Traces;
+		const inboxRuntime = yield* Effect.serviceOption(InboxRuntime);
 		const open = new Map<TileId, Running>();
 		const live = new Map<string, Live>();
 		/** The agents' tiles whose tsh could not start, and why: no line runs there. */
@@ -221,6 +224,7 @@ export const startTiles = (options: {
 			const one = live.get(run);
 			if (one === undefined) return;
 			live.delete(run);
+			edge.provider?.(run, null);
 			// A run of the background was never shown: there is no port and nothing covered.
 			if (one.placed === "background") return;
 			edge.gone(`run:${run}`);
@@ -245,6 +249,7 @@ export const startTiles = (options: {
 					typed: () => edge.typed?.(tile),
 					runs: {
 						began: (run, program, placed, screen) => {
+							edge.provider?.(run, screen);
 							const one: Live = {tile, program, placed, screen};
 							live.set(run, one);
 							if (placed === "foreground") edge.view(run, screen);
@@ -266,6 +271,11 @@ export const startTiles = (options: {
 					Effect.provideService(PullRequests, pullRequests),
 					Effect.provideService(RepoTree, repoTree),
 					Effect.provideService(Traces, traces),
+					Effect.provide(
+						Option.isSome(inboxRuntime)
+							? Layer.succeed(InboxRuntime, inboxRuntime.value)
+							: Layer.empty,
+					),
 				);
 				open.set(tile, {host, scope, agent, state: "open"});
 				// tsh ended: `exit`, Ctrl-D, or after `close`. The desk takes the tile away, and asks to stop it here.

@@ -52,6 +52,7 @@ export type Show = (typeof SHOWS)[number];
 
 /** What a key after the prefix does, or a tsh word does in the tile it was typed in. */
 export type Does =
+	| {readonly kind: "previous"}
 	| {readonly kind: "split"; readonly orientation: Orientation}
 	| {readonly kind: "focus"; readonly to: Direction}
 	| {readonly kind: "cycle"; readonly to: "next" | "previous"}
@@ -106,6 +107,7 @@ const PICKS = [
 
 /** Every key the desk ships with after the prefix, today's table. */
 export const BINDINGS: readonly Binding[] = [
+	once(";", 'tezgah."focus --to last"', "last tile", {kind: "previous"}),
 	// `|` puts the two side by side: a row, "horizontal" in the tree. `-` puts one over the other.
 	once("|", "tezgah.split", "split", {kind: "split", orientation: "horizontal"}),
 	once("-", 'tezgah."split --to down"', "split down", {kind: "split", orientation: "vertical"}),
@@ -170,6 +172,7 @@ export const groupOf = (does: Does): Group => {
 			return "tile";
 		case "focus":
 		case "cycle":
+		case "previous":
 		case "go":
 			return "focus";
 		case "new":
@@ -189,6 +192,8 @@ export const groupOf = (does: Does): Group => {
  */
 export const wordOf = (does: Does): string => {
 	switch (does.kind) {
+		case "previous":
+			return "focus --to last";
 		case "split":
 			return does.orientation === "horizontal" ? "split" : "split --to down";
 		case "focus":

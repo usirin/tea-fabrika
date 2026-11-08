@@ -1,4 +1,6 @@
+import {commandsOf, commandKey} from "@kampus/fabrika-old";
 import {ASK_COMMANDS, type AskCommand} from "@kampus/pipeline/tickets/ask";
+import {inbox, INBOX_COMMANDS} from "@tea-fabrika/inbox";
 import {Result, Schema} from "effect";
 import {parse, TomlError} from "smol-toml";
 import {type Does as Action, BINDINGS, type Binding, keyName, THE_MACS, wordOf} from "./keys.ts";
@@ -48,6 +50,10 @@ export type Key = typeof Key.Type;
 
 /** Every command the app has, by its word in the file: the list in code, never a free string. */
 export const Does = Schema.Literals([
+	...Object.keys(INBOX_COMMANDS).map(
+		(name) => `program.inbox.${name as keyof typeof INBOX_COMMANDS}` as const,
+	),
+	'tezgah."focus --to last"',
 	"tezgah.split",
 	'tezgah."split --to down"',
 	'tezgah."focus --to left"',
@@ -130,6 +136,15 @@ interface Refused {
 
 const after = (key: string): Key => Key.cases.after_prefix.make({key});
 const alone = (key: string): Key => Key.cases.alone.make({key});
+const declaredKey = (spelled: string): Key => {
+	const press = commandKey(spelled);
+	const key = keyName({
+		...press,
+		key: press.shift && press.key.length === 1 ? press.key.toUpperCase() : press.key,
+	});
+	if (key === null) throw new Error(`Invalid program key: ${spelled}`);
+	return alone(key);
+};
 
 /** The default binding a command runs, or none: `palette.open` is the page's, and acts on no desk. */
 export const bindingFor = (does: Does): Binding | undefined =>
@@ -151,8 +166,9 @@ export const defaults: Keys = {
 	rows: Does.literals.map((does) =>
 		Row.make({
 			does,
-			keys:
-				does === "palette.open"
+			keys: does.startsWith("program.inbox.")
+				? (commandsOf(inbox).find((r) => `program.${r.id}` === does)?.keys ?? []).map(declaredKey)
+				: does === "palette.open"
 					? [alone(PALETTE_KEY)]
 					: BINDINGS.filter((b) => b.command === does).map((b) =>
 							b.does.kind === "cycle" ? alone(b.key) : after(b.key),
@@ -173,7 +189,11 @@ export const defaults: Keys = {
 
 /** The command a key runs in this table, or none. */
 export const commandOn = (keys: Keys, key: Key): Does | undefined =>
-	keys.rows.find((row) => row.keys.some((k) => k._tag === key._tag && k.key === key.key))?.does;
+	keys.rows.find(
+		(row) =>
+			!row.does.startsWith("program.") &&
+			row.keys.some((k) => k._tag === key._tag && k.key === key.key),
+	)?.does;
 
 // ---------------------------------------------------------------- one key, as the file spells it
 
@@ -709,8 +729,10 @@ const readWritten = (
 		for (const one of spelled.success) {
 			const read = readKey(one, mac, word.startsWith("program."));
 			if (Result.isFailure(read)) return no(read.failure);
-			if (Schema.is(ProgramDoes)(word) && read.success._tag === "after_prefix")
-				return no(`${word} takes a key pressed alone inside the focused ask, not ${one}`);
+			if (word.startsWith("program.") && read.success._tag === "after_prefix")
+				return no(
+					`${word} takes a key pressed alone inside the focused ${word.startsWith("program.ask.") ? "ask" : "program"}, not ${one}`,
+				);
 			keys.push({key: read.success, spelled: one});
 		}
 		rows.push({does: word, keys, line});
@@ -789,8 +811,11 @@ export const decodeKeys = (text: string, mac: boolean): Result.Result<Keys, Refu
 		(key._tag === "alone" && ignore.includes(key.key));
 	const rows = defaults.rows.map((row) => {
 		const yours = set.rows.find((r) => r.does === row.does);
+		const takenHere = set.rows
+			.filter((r) => scopeOf(r.does) === scopeOf(row.does))
+			.flatMap((r) => r.keys.map((k) => k.key));
 		return yours === undefined
-			? {...row, keys: row.keys.filter((k) => !lost(k))}
+			? {...row, keys: row.keys.filter((k) => !lost(k) && !takenHere.some((t) => sameKey(t, k)))}
 			: Row.make({does: row.does, keys: yours.keys.map((k) => k.key), source: "yours"});
 	});
 	if (!rows.some((row) => row.does.startsWith('tezgah."focus --to ') && row.keys.length > 0))
@@ -865,3 +890,24 @@ export const spell = (name: string): string => {
 	const key = base === " " ? "space" : (SPOKEN[base] ?? base);
 	return [...words, key].join("+");
 };
+
+export const inboxCommands = (keys: Keys) =>
+	commandsOf(
+		inbox,
+		Object.fromEntries(
+			keys.rows
+				.filter((r) => r.does.startsWith("program.inbox."))
+				.map((r) => [
+					r.does.slice(8),
+					r.keys.map((k) =>
+						/^[A-Z]$/.test(k.key)
+							? `shift+${k.key.toLowerCase()}`
+							: k.key === " "
+								? "space"
+								: k.key.startsWith("<arrow")
+									? k.key.slice(1, -1)
+									: spell(k.key).replace("cmd+", "meta+"),
+					),
+				]),
+		),
+	);

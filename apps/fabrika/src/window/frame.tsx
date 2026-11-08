@@ -1,6 +1,9 @@
 import {runIn} from "@demlik/tea/effect";
 import {useMachine} from "@demlik/tea/react";
+import {CommandVia} from "@kampus/fabrika-old";
 import {Button, Dialog} from "@manti-ui/react";
+import type {InboxState} from "@tea-fabrika/inbox/model";
+import {InboxCommands, InboxDispatch} from "@tea-fabrika/inbox/window";
 import {AskView} from "@tea-fabrika/tracker/ask-window";
 import {Layer, ManagedRuntime} from "effect";
 import {
@@ -15,6 +18,7 @@ import {
 } from "react";
 import type {AsksNow} from "../asks.ts";
 import {activeOf, focusedOf, type Open} from "../desk/desk.ts";
+import {inboxCommands} from "../desk/keymap.ts";
 import type {Keys} from "../desk/keymap.ts";
 import {type Group, wordOf} from "../desk/keys.ts";
 import type {Editor, EditorMsg} from "../keys/machine.ts";
@@ -59,6 +63,7 @@ import {
 } from "./frame.ts";
 import {type Cap, type Hint, type Row, sentence, type Words} from "./pop.ts";
 import {type Empty, Foot, IconOf, Lines, Menu, Palette, Panel, useTip, WordsOf} from "./pop.tsx";
+import {GLANCES} from "./windows.tsx";
 
 // The window's frame, drawn: the top bar, the bottom line, and what opens over the desk (the
 // asks list, the jobs list, the palette, an item's few lines). Its words are frame.ts's; this file only lays
@@ -77,6 +82,9 @@ const POP = {
 
 /** What the frame is drawn from, and how it sends. */
 export interface FrameProps {
+	readonly inbox?: InboxState | null;
+	readonly glance?: Extract<import("../messages.ts").ToPage, {type: "glance"}> | null;
+	readonly glanceView?: Extract<import("../messages.ts").ToPage, {type: "glance_view"}> | null;
 	readonly desk: Open | null;
 	readonly frame: Frame;
 	readonly asks: AsksNow | null;
@@ -204,7 +212,25 @@ export function TopBar(props: FrameProps): ReactNode {
 	const agents = reached === null ? null : agentsWord(reached);
 	const sync = asks === null || reached === null ? null : syncWord(asks, reached.ledger);
 	const host = hostWord(props.link, props.attachedOnce);
-	const asking = asks === null ? null : asksWord(asks.asks.length);
+	const turns =
+		props.inbox?.rows.filter(
+			(r) => r._tag !== "message" && !props.inbox?.marks.later.includes(r.key),
+		).length ?? 0;
+	const messages = props.inbox?.rows.filter((r) => r._tag === "message").length ?? 0;
+	const trackerCount =
+		props.glanceView?.program === "tracker" &&
+		typeof props.glanceView.data === "object" &&
+		props.glanceView.data !== null
+			? Reflect.get(props.glanceView.data, "count")
+			: 0;
+	const asking =
+		props.glance?.effective === "tracker"
+			? `tracker ${trackerCount}`
+			: props.inbox != null
+				? `inbox ${turns + messages}`
+				: asks === null
+					? null
+					: asksWord(asks.asks.length);
 	const unseen = asks?.asks.filter((a) => !a.seen).length ?? 0;
 	const quiet = quietOf(props.frame);
 	const over = props.frame.over;
@@ -272,16 +298,35 @@ export function TopBar(props: FrameProps): ReactNode {
 				{asking !== null && (
 					<>
 						<Item
-							name="asks"
+							name={
+								props.glance?.effective === "tracker"
+									? `Tracker, ${trackerCount} open tickets`
+									: props.inbox != null
+										? `Inbox, Your turn ${turns}, Messages ${messages}`
+										: "asks"
+							}
 							caps={capsFor(props, "asks")}
 							word={wordFor(props, "asks")}
 							quiet={quiet}
 							info={INFO.asks}
-							className="accent"
-							opens={{popup: "menu", id: POP.asks, open: over.kind === "asks"}}
+							className={props.inbox != null ? (turns > 0 ? "accent" : undefined) : "accent"}
+							opens={{
+								popup: props.inbox != null ? "dialog" : "menu",
+								id: POP.asks,
+								open: over.kind === "asks",
+							}}
 							onClick={() => step({type: "show", what: "asks"})}
 						>
-							{asking}
+							{props.inbox != null && props.glance?.effective !== "tracker" ? (
+								<>
+									<span className="inbox-wide">
+										{turns} your turn · {messages} messages
+									</span>
+									<span className="inbox-narrow">{asking}</span>
+								</>
+							) : (
+								asking
+							)}
 							{unseen > 0 && <span className="udot" role="img" aria-label={`${unseen} not seen`} />}
 						</Item>
 						<Sep />
@@ -419,7 +464,11 @@ export function Over(props: FrameProps): ReactNode {
 		case "none":
 			return null;
 		case "asks":
-			return props.asks === null ? null : <AsksList {...props} asks={props.asks} />;
+			return props.inbox != null ? (
+				<InboxPanel {...props} />
+			) : props.asks === null ? null : (
+				<AsksList {...props} asks={props.asks} />
+			);
 		case "jobs":
 			return props.desk === null ? null : <JobsMenu {...props} desk={props.desk} />;
 		case "item":
@@ -427,6 +476,58 @@ export function Over(props: FrameProps): ReactNode {
 		case "palette":
 			return <CommandPalette {...props} />;
 	}
+}
+
+function InboxPanel(props: FrameProps) {
+	const {step} = props;
+	const close = useCallback(() => step({type: "close"}), [step]);
+	const effective = props.glance?.effective ?? "inbox";
+	const provider = GLANCES.get(effective) ?? GLANCES.get("inbox");
+	if (provider === undefined) return <p role="alert">The inbox glance is unavailable.</p>;
+	const from = props.desk === null ? null : activeOf(props.desk).focused;
+	const send = (msg: any) => {
+		if (from === null) return;
+		if (effective === "tracker" && msg.type === "open")
+			props.toHost({
+				type: "open_program",
+				program: "tracker",
+				location: {row: null},
+				from,
+				via: CommandVia.cases.click.make({}),
+			});
+		else props.toHost({type: "inbox_input", msg, from});
+		if (msg.type === "open") close();
+	};
+	const data = effective === "inbox" ? props.inbox : props.glanceView?.data;
+	return (
+		<Panel id={POP.asks} label="Inbox" onClose={close}>
+			<InboxCommands.Provider value={inboxCommands(props.keys)}>
+				<InboxDispatch.Provider
+					value={(msg, via) => {
+						if (from === null) return;
+						props.toHost({type: "inbox_input", msg, from, via});
+						if (msg.type === "open") close();
+					}}
+				>
+					{provider.draw(data, send)}
+				</InboxDispatch.Provider>
+			</InboxCommands.Provider>
+			<div className="glance-picker" role="group" aria-label="Glance settings">
+				{(props.glance?.offers ?? ["inbox"]).map((name) => (
+					<Button
+						key={name}
+						size="sm"
+						variant="tertiary"
+						aria-pressed={props.glance?.choice === name}
+						onClick={() => props.toHost({type: "glance_choose", program: name})}
+					>
+						Show {name} glance
+					</Button>
+				))}
+			</div>
+			{props.glance?.why != null && <p role="alert">{props.glance.why}</p>}
+		</Panel>
+	);
 }
 
 /** The band left when both bars are hidden, or before there is a desk: room for the window's buttons. */
@@ -1220,11 +1321,28 @@ function CommandPalette(props: FrameProps): ReactNode {
 			</Dialog>
 		);
 	const keys = title === "keys";
-	const shown = matching(commandsOf(props.keys, desk?.workspaces.length ?? 0), query);
+	const actions = matching(commandsOf(props.keys, desk?.workspaces.length ?? 0), query).filter(
+		(c) =>
+			!c.runs.startsWith("program.inbox.") ||
+			c.runs === "program.inbox.open" ||
+			props.inbox?.selected != null,
+	);
+	const choices = (props.glance?.offers ?? [])
+		.map((program) => ({
+			name: `Show ${program} glance`,
+			group: "window" as const,
+			key: "",
+			caps: [] as readonly Cap[],
+			tsh: "",
+			choose: program,
+		}))
+		.filter((c) => c.name.toLowerCase().includes(query.toLowerCase()));
+	const shown = [...actions, ...choices];
 	const run = (i: number) => {
 		const c = shown[i];
 		if (c === undefined) return;
-		props.toHost({type: "run", does: c.runs});
+		if ("choose" in c) props.toHost({type: "glance_choose", program: c.choose});
+		else props.toHost({type: "run", does: c.runs});
 		step({type: "ran", key: c.key});
 	};
 	const focused = desk === null ? null : focusedOf(desk);

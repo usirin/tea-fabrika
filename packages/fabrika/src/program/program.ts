@@ -22,6 +22,7 @@ import {
 	SubscriptionRef,
 	type Tracer,
 } from "effect";
+import {registerCommands, type CommandDeclaration} from "./commands.ts";
 import type {KeptFailed, KeptOptions, KeptRuntime} from "./kept.ts";
 import {type Outbox, outboxOf} from "./outbox.ts";
 import {type AlreadyStarted, type Conflict, lineOf, refsOf} from "./refs.ts";
@@ -529,12 +530,14 @@ export interface View<S, V> {
 /** A program's view, of any machine and any data: what a host holds. */
 export interface AnyView {
 	readonly machine: string;
-	readonly data: Schema.Top;
+	readonly data: Schema.Codec<any, any>;
 	readonly of: (state: any) => unknown;
 }
 
 /** The view of each program `defineProgram` made with one. */
 const views = new WeakMap<object, AnyView>();
+const glances = new WeakMap<object, AnyView>();
+export const glanceOf = (program: AnyProgram): AnyView | undefined => glances.get(program);
 
 /** What a program's window is shown, as it declared it. `undefined`: it has no window. */
 export const viewOf = (program: AnyProgram): AnyView | undefined => views.get(program);
@@ -558,6 +561,7 @@ export interface Definition<
 	readonly flags?: F;
 	readonly machines?: Ks;
 	readonly capacity?: number;
+	readonly commands?: Readonly<Record<string, CommandDeclaration>>;
 }
 
 /** What a program with a view shows of it in its type: its data's type, for its window. */
@@ -594,7 +598,10 @@ export function defineProgram<
 	V = never,
 >(
 	definition: Definition<F, I, O, Ks, E, R> &
-		NoInfer<Parented<F, O, Ks>> & {readonly view?: ViewOf<NoInfer<Ks>, V>},
+		NoInfer<Parented<F, O, Ks>> & {
+			readonly view?: ViewOf<NoInfer<Ks>, V>;
+			readonly glance?: AnyView;
+		},
 ): Program<F, I, O, Ks, E, R> & Viewed<V> {
 	if (definition.name.trim() === "") throw new Error("a program needs a name");
 	described(definition.description);
@@ -616,6 +623,8 @@ export function defineProgram<
 			);
 	}
 	const view = definition.view;
+	if (definition.glance !== undefined && !Object.hasOwn(machines, definition.glance.machine))
+		throw new Error(`${definition.name}'s glance reads an undeclared machine`);
 	if (view !== undefined && !Object.hasOwn(machines, view.machine))
 		throw new Error(
 			`${definition.name}'s view reads ${view.machine}, which is not one of its machines`,
@@ -631,6 +640,8 @@ export function defineProgram<
 	>;
 	made.add(program);
 	if (view !== undefined) views.set(program, view);
+	if (definition.glance !== undefined) glances.set(program, definition.glance);
+	registerCommands(program, definition.commands ?? {});
 	// The view's data type is in the returned type alone: what its window is typed by.
 	return program as typeof program & Viewed<V>;
 }

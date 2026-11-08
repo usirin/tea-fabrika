@@ -1,6 +1,7 @@
 import {defineMachine, noop} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
-import {isAgentName} from "@kampus/fabrika-old";
+import {isAgentName, CommandVia} from "@kampus/fabrika-old";
+import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {Effect, Option, Schema, SchemaTransformation} from "effect";
 import {TileJobs} from "../tile-jobs.ts";
 import {bindingFor, type Does as Command, commandOn, defaults, Key, type Keys} from "./keymap.ts";
@@ -157,6 +158,7 @@ export type Prefix =
 
 /** The desk while it has tiles. */
 export interface Open {
+	readonly history?: readonly TileId[];
 	readonly at: "open";
 	readonly workspaces: readonly [Workspace, ...Workspace[]];
 	readonly active: string;
@@ -194,6 +196,7 @@ export const LINE: Orientation = "horizontal";
 export type Desk = Open | {readonly at: "over"};
 
 export type DeskMsg =
+	| ({readonly type: "open_program"} & typeof ProgramOpen.Type)
 	/** A key, named as `keyName` names it, and when it was pressed, in milliseconds. */
 	| {readonly type: "key"; readonly key: string; readonly at: number}
 	/** A tile was clicked. */
@@ -241,6 +244,27 @@ export type AgentName = string;
 
 /** A tile's id: `t` and a number. The host names a folder by it, so nothing else passes. */
 export const TileIdSchema = Schema.String.check(Schema.isPattern(/^t[0-9]{1,9}$/));
+const RowLocation = Schema.Struct({row: Schema.NullOr(Schema.String)});
+const TicketLocation = Schema.Struct({ticket: TicketNumber});
+const origin = {
+	from: TileIdSchema,
+	via: CommandVia,
+};
+const InboxOpen = Schema.Struct({
+	...origin,
+	program: Schema.Literal("inbox"),
+	location: RowLocation,
+});
+const TrackerOpen = Schema.Struct({
+	...origin,
+	program: Schema.Literal("tracker"),
+	location: Schema.Union([Schema.Struct({row: Schema.Null}), TicketLocation]),
+});
+export const ProgramOpen = Schema.Union([InboxOpen, TrackerOpen]);
+export const OpenProgramMessage = Schema.Union([
+	Schema.Struct({type: Schema.Literal("open_program"), ...InboxOpen.fields}),
+	Schema.Struct({type: Schema.Literal("open_program"), ...TrackerOpen.fields}),
+]);
 
 /** An agent's name: small letters, digits, dots, dashes and underscores. */
 const AgentNameSchema = Schema.String.check(
@@ -283,6 +307,7 @@ const savedWith = <S extends Schema.Top, A extends Schema.Top>(layout: S, agents
 		active: Schema.String,
 		next: Schema.Int,
 		agents,
+		history: Schema.optionalKey(Schema.Array(Schema.String)),
 	});
 
 /**
@@ -322,6 +347,7 @@ export const DeskSchema = Schema.Union([
 		area: Schema.NullOr(Schema.Struct({width: Schema.Number, height: Schema.Number})),
 		// A host from before agents had tiles sends none: no tile is an agent's.
 		agents: AgentsSchema.pipe(Schema.withDecodingDefaultKey(Effect.succeed({}))),
+		history: Schema.optionalKey(Schema.Array(TileIdSchema)),
 	}),
 	Schema.Struct({at: Schema.Literal("over")}),
 ]);
@@ -385,8 +411,23 @@ export const show = Cmd.make("show", {
 	ok: Done,
 	err: [],
 });
+const startProgram = Cmd.make("start_program", {
+	input: Schema.Union([
+		Schema.Struct({...InboxOpen.fields, tile: TileIdSchema}),
+		Schema.Struct({...TrackerOpen.fields, tile: TileIdSchema}),
+	]),
+	ok: Done,
+	err: [],
+});
+const locate = Cmd.make("locate", {
+	input: Schema.Struct({tile: TileIdSchema, location: Schema.Union([RowLocation, TicketLocation])}),
+	ok: Done,
+	err: [],
+});
 
 export type DeskCmd =
+	| ReturnType<typeof startProgram>
+	| ReturnType<typeof locate>
 	| ReturnType<typeof open>
 	| ReturnType<typeof close>
 	| ReturnType<typeof stop>
@@ -444,6 +485,15 @@ export const savedOf = (s: Open): Saved => ({
 	active: s.active,
 	next: s.next,
 	agents: s.agents,
+	...(s.history === undefined
+		? {}
+		: {
+				history: s.history.filter((id) =>
+					s.workspaces.some((ws) =>
+						[...tiles(quiet(ws.layout).root)].some((tile) => tile.id === id),
+					),
+				),
+			}),
 });
 
 /** The agent whose own tile this is, or `null`: the person's. */
@@ -460,10 +510,29 @@ const opening = (s: Open, tile: TileId) => {
  * The desk with this workspace in it. Its focused tile is unfolded on the way in, so focus is
  * always on an open tile, whatever moved focus there: a key, a click or a tile that went.
  */
-const withWorkspace = (s: Open, given: Workspace): Open => {
+const withWorkspace = (s: Open, given: Workspace, active = s.active): Open => {
 	const ws = {...given, layout: unfold(given.layout, given.focused)};
 	const [first, ...rest] = s.workspaces.map((w) => (w.id === ws.id ? ws : w));
-	return first === undefined ? s : {...s, workspaces: [first, ...rest]};
+	const previous = activeOf(s).focused;
+	const focused = active === ws.id ? ws.focused : activeOf(s).focused;
+	const history =
+		focused === previous
+			? s.history
+			: [previous, ...(s.history ?? []).filter((id) => id !== previous && id !== focused)];
+	return first === undefined
+		? s
+		: {
+				...s,
+				workspaces: [first, ...rest],
+				active,
+				...(history === undefined
+					? {}
+					: {
+							history: history.filter((id) =>
+								[first, ...rest].some((w) => tilesOf(w).some((t) => t.id === id)),
+							),
+						}),
+			};
 };
 
 const keep = (s: Open): readonly DeskCmd[] => [save({desk: savedOf(s)})];
@@ -492,10 +561,23 @@ const drop = (s: Open, ws: Workspace, doomed: readonly TileId[]): Desk => {
 		const workspaces: Open["workspaces"] = [first, ...rest];
 		const active =
 			s.active !== ws.id ? s.active : (workspaces[Math.min(at, workspaces.length - 1)] ?? first).id;
-		return {...s, workspaces, active, jobs, closing, ask, agents};
+		const recent = (s.history ?? []).find((id) =>
+			workspaces.some((workspace) => tilesOf(workspace).some((tile) => tile.id === id)),
+		);
+		const target =
+			recent === undefined
+				? undefined
+				: workspaces.find((workspace) => tilesOf(workspace).some((tile) => tile.id === recent));
+		const next = {...s, workspaces, active, jobs, closing, ask, agents};
+		return s.active === ws.id && target !== undefined && recent !== undefined
+			? withWorkspace(next, {...target, focused: recent}, target.id)
+			: next;
 	}
 	const layout = doomed.reduce(remove, ws.layout);
-	const focused = left.includes(ws.focused) ? ws.focused : heirOf(all, openIn(layout), ws.focused);
+	const focused = left.includes(ws.focused)
+		? ws.focused
+		: ((s.history ?? []).find((id) => openIn(layout).includes(id)) ??
+			heirOf(all, openIn(layout), ws.focused));
 	return {...withWorkspace(s, {...ws, layout, focused}), jobs, closing, ask, agents};
 };
 
@@ -584,6 +666,12 @@ const windowYes = (s: Open, tile: TileId, process: string): Step => {
 const act = (s: Open, does: Does): Step => {
 	const ws = activeOf(s);
 	switch (does.kind) {
+		case "previous": {
+			const tile = (s.history ?? []).find(
+				(id) => id !== ws.focused && whereIs(s, id) !== undefined,
+			);
+			return tile === undefined ? [s, []] : went(s, tile);
+		}
 		case "split": {
 			const ids = {tile: `t${s.next}`, container: `c${s.next}`};
 			const layout = split(unzoom(ws.layout), ws.focused, does.orientation, ids);
@@ -631,6 +719,7 @@ const act = (s: Open, does: Does): Step => {
 				workspaces: [first, ...rest, made],
 				active: made.id,
 				next: s.next + 1,
+				history: [ws.focused, ...(s.history ?? []).filter((id) => id !== ws.focused)],
 			};
 			return [next, [open({tile: made.focused}), ...keep(next)]];
 		}
@@ -673,8 +762,9 @@ const launched = (s: Open, agent: AgentName): Step => {
 
 /** This workspace comes forward. One not there, or the one forward already, changes nothing. */
 const picked = (s: Open, id: string): Step => {
-	if (s.active === id || !s.workspaces.some((ws) => ws.id === id)) return [s, []];
-	const next = {...s, active: id, ask: null};
+	const target = s.workspaces.find((ws) => ws.id === id);
+	if (s.active === id || target === undefined) return [s, []];
+	const next = {...withWorkspace(s, target, id), ask: null};
 	return [next, keep(next)];
 };
 
@@ -689,7 +779,7 @@ const went = (s: Open, tile: TileId): readonly [Open, readonly DeskCmd[]] => {
 	if (s.active === ws.id && ws.focused === tile && s.ask === null) return [s, []];
 	const layout =
 		ws.layout.zoomed === null || ws.layout.zoomed === tile ? ws.layout : unzoom(ws.layout);
-	const next = {...withWorkspace(s, {...ws, layout, focused: tile}), active: ws.id, ask: null};
+	const next = {...withWorkspace(s, {...ws, layout, focused: tile}, ws.id), ask: null};
 	return [next, keep(next)];
 };
 
@@ -887,6 +977,31 @@ const clicked = (s: Open, tile: TileId): Step => {
 	return [next, keep(next)];
 };
 
+const openedProgram = (s: Open, request: typeof ProgramOpen.Type): Step => {
+	const ws = activeOf(s);
+	if (whereIs(s, request.from) === undefined) return [s, []];
+	const existing = tilesOf(ws).find((tile) => tile.shows.run?.program === request.program);
+	if (existing !== undefined) {
+		const next = withWorkspace(s, {
+			...ws,
+			layout: unfold(unzoom(ws.layout), existing.id),
+			focused: existing.id,
+		});
+		return [next, [locate({tile: existing.id, location: request.location}), ...keep(next)]];
+	}
+	const ids = {tile: `t${s.next}`, container: `c${s.next}`};
+	let layout = split(unzoom(ws.layout), ws.focused, "horizontal", ids);
+	if (findTile(layout, ids.tile) === null) return [s, []];
+	layout = setShows(layout, ids.tile, {
+		kind: "tsh",
+		run: {program: request.program, id: `${request.program}:${ids.tile}`},
+	});
+	if (s.area !== null && s.area.width < 440)
+		for (const tile of tilesOf(ws)) layout = fold(layout, tile.id);
+	const next = {...withWorkspace(s, {...ws, layout, focused: ids.tile}), next: s.next + 1};
+	return [next, [startProgram({...request, tile: ids.tile}), ...keep(next)]];
+};
+
 /**
  * A line is in a tile's foreground. One run covers the tile, and nothing is kept: a kept desk
  * shows no run. Several open in place (`openLine`), each window after the first in a tile minted
@@ -897,6 +1012,15 @@ const covered = (s: Open, tile: TileId, runs: readonly [Shown, ...Shown[]]): Ste
 	const ws = whereIs(s, tile);
 	const node = ws === undefined ? null : findTile(ws.layout, tile);
 	if (ws === undefined || node === null || node.shows.kind === "window") return [s, []];
+	if (runs.length === 1 && runs[0].program === "inbox") {
+		const existing = tilesOf(ws).find(
+			(one) => one.id !== tile && one.shows.run?.program === "inbox",
+		);
+		if (existing !== undefined) {
+			const [next, cmds] = went(s, existing.id);
+			return [next, [end({process: runs[0].id}), ...cmds]];
+		}
+	}
 	const more = runs.length - 1;
 	// Colors and letters are counted per workspace (docs/direction/pipe-colors.md), so a repeat
 	// needs seven pipes in one.
@@ -949,7 +1073,7 @@ const closingNow = (s: Open, tile: TileId): Step =>
 
 export const deskMachine = defineMachine({
 	types: {model: {} as Desk, msg: {} as DeskMsg},
-	cmds: [open, close, stop, send, save, empty, end, kill, show],
+	cmds: [open, close, stop, send, save, empty, end, kill, show, startProgram, locate],
 	init: (loaded) => {
 		if (loaded !== null && loaded.at === "open")
 			return [
@@ -962,6 +1086,11 @@ export const deskMachine = defineMachine({
 		return [s, [open({tile: "t1"}), ...keep(s)]];
 	},
 	update: {
+		open_program: onOpen((s, m) => openedProgram(s, m)),
+		start_program_ok: noop,
+		start_program_err: noop,
+		locate_ok: noop,
+		locate_err: noop,
 		key: onOpen((s, m) => {
 			const routed = route(s, m.key, m.at);
 			return routed.kind === "desk" ? routed.step : [s, []];
@@ -1089,5 +1218,6 @@ export const restore = (raw: unknown): Open | null => {
 		next: Math.max(saved.next, top + 1),
 		area: null,
 		agents: agentsBack(saved.agents, workspaces),
+		...(saved.history === undefined ? {} : {history: saved.history.filter((id) => seen.has(id))}),
 	};
 };

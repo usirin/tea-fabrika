@@ -9,4 +9,5 @@
 //     runTsh().pipe(Effect.provideService(Shell.Programs, Shell.programList([...Shell.SMALL]))),
 //   );
 export {homeOf} from "./shell/launch.ts";
+export {readCommand} from "./shell/commands.ts";
 export {type Options, runTsh} from "./shell/main.ts";

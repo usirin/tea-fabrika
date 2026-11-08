@@ -1,7 +1,10 @@
+import {CommandVia} from "@kampus/fabrika-old";
+import {InboxState} from "@tea-fabrika/inbox/model";
 import {AskAnswer} from "@tea-fabrika/tracker";
 import {Cause, Effect, Exit, Schema} from "effect";
 import {AskKey, AsksNow} from "./asks.ts";
 import {DeskSchema, TileIdSchema} from "./desk/desk.ts";
+import {OpenProgramMessage} from "./desk/desk.ts";
 import {Does, KeyName, Keys} from "./desk/keymap.ts";
 import {SHOWS} from "./desk/keys.ts";
 import {Change, Edit} from "./keys/program.ts";
@@ -230,6 +233,19 @@ export type HostNow = typeof HostNow.Type;
  *    ledger: {kind: "own"}, agents: [{name: "claude", since: 1793400060000}]}}
  */
 export const ToPage = Schema.Union([
+	Schema.Struct({type: Schema.Literal("inbox"), now: InboxState}),
+	Schema.Struct({
+		type: Schema.Literal("glance_view"),
+		program: Schema.String,
+		data: Schema.Unknown,
+	}),
+	Schema.Struct({
+		type: Schema.Literal("glance"),
+		choice: Schema.String,
+		effective: Schema.String,
+		offers: Schema.Array(Schema.String),
+		why: Schema.NullOr(Schema.String),
+	}),
 	Schema.Struct({
 		type: Schema.Literal("ask_answered"),
 		id: Schema.String,
@@ -312,6 +328,14 @@ export type ToApp = typeof ToApp.Type;
  *   {type: "seen"}                    the asks list was opened: no ask is new any more
  */
 export const FromPage = Schema.Union([
+	OpenProgramMessage,
+	Schema.Struct({
+		type: Schema.Literal("inbox_input"),
+		msg: Schema.Struct({type: Schema.String, value: Schema.Unknown}),
+		from: TileIdSchema,
+		via: Schema.optionalKey(CommandVia),
+	}),
+	Schema.Struct({type: Schema.Literal("glance_choose"), program: Schema.String}),
 	Schema.Struct({type: Schema.Literal("open_lane"), from: TileIdSchema, ticket: Schema.Int}),
 	Schema.Struct({type: Schema.Literal("ask_answer"), id: Schema.String, value: AskAnswer}),
 	Schema.Struct({

@@ -74,6 +74,11 @@ export interface AgentPrograms {
 }
 
 export interface AgentOptions {
+	readonly dm?:
+		| ((
+				who: typeof Agent.Type,
+		  ) => Pick<ReturnType<import("../host/rooms.ts").RoomService["for"]>, "send" | "read">)
+		| undefined;
 	/**
 	 * What agent `who` is served, made as its handshake is read, in the agent's own scope: a
 	 * session made for it there lasts as long as the agent stays.
@@ -227,6 +232,7 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
 				const served = yield* programsFor(who);
 				const {stop, restart, line} = options;
 				const {drive, tools} = yield* driveFor({
+					dm: options.dm?.(who),
 					list: served.list,
 					tiles,
 					job: options.job,

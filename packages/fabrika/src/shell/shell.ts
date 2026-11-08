@@ -17,6 +17,7 @@ import {defineProgram, end, fork, kind} from "../program/program.ts";
 import {flag, input, output} from "../program/shape.ts";
 import {runBuiltin, type Said} from "./builtins.ts";
 import {check} from "./check.ts";
+import {readCommand} from "./commands.ts";
 import {type Asking, type JobStop, runLine, type Shell, stopJob, type Watcher} from "./execute.ts";
 import {parse, refusalLines} from "./grammar.ts";
 import {helpOf, partsHelp} from "./help.ts";
@@ -283,7 +284,12 @@ export const tsh = defineProgram({
 					const text = typeof line === "string" ? line : line.text;
 					const said = typeof line === "string" ? yield* Clock.currentTimeMillis : line.said;
 					return yield* Effect.gen(function* () {
-						const parsed = parse(text);
+						const parsed = parse(text, (name, word) => {
+							const entry = list.get(name);
+							if (entry === undefined) return undefined;
+							const read = readCommand(entry.program, [word]);
+							return read.kind === "read" ? read.msg : undefined;
+						});
 						if (parsed.kind === "refused") {
 							for (const l of refusalLines(text, parsed)) print("err", l);
 							return {status: 2, exit: false};

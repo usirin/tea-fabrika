@@ -11,6 +11,14 @@ import {
 	tell,
 	Traces,
 	writerText,
+	RoomManager,
+	readInput,
+	commandsOf,
+	CommandVia,
+	viewOf,
+	glanceOf,
+	type AnyRunning,
+	type Storage,
 } from "@kampus/fabrika-old";
 import {SummonedNow} from "@kampus/fabrika-old/agents/summon";
 import {
@@ -22,8 +30,11 @@ import {
 	StopAnswer,
 	StopRefused,
 } from "@kampus/fabrika-old/mcp";
-import {Author, PullRequests, RepoTree, saveCell} from "@tea-fabrika/tracker";
-import {Data, Deferred, Duration, Effect, Option, Queue, Ref, Stream} from "effect";
+import {inbox as inboxProgram} from "@tea-fabrika/inbox";
+import {InboxRow, InboxState, inboxMachine, type InboxMsg} from "@tea-fabrika/inbox/model";
+import {InboxRuntime} from "@tea-fabrika/inbox/runtime";
+import {Author, PullRequests, RepoTree, saveCell, tracker} from "@tea-fabrika/tracker";
+import {Data, Deferred, Duration, Effect, Option, Queue, Ref, Stream, Scope} from "effect";
 import {type Socket, SocketServer} from "effect/socket";
 import {
 	type AsksMsg,
@@ -38,6 +49,7 @@ import {
 import {BUILD} from "../build-id.ts";
 import {
 	claims,
+	activeOf,
 	type Desk,
 	type DeskCmd,
 	type DeskMsg,
@@ -51,6 +63,7 @@ import {
 	type Saved,
 	takenNow,
 	tilesOf,
+	type ProgramOpen,
 } from "../desk/desk.ts";
 import {
 	commandFor,
@@ -78,7 +91,7 @@ import type {AgentSessions} from "./agent-session.ts";
 import {serveAgents} from "./agents.ts";
 import {KeybindingManager} from "./keybindings.ts";
 import type {RestartNote} from "./restart.ts";
-import type {Setting} from "./settings.ts";
+import type {Setting, GlanceSettings} from "./settings.ts";
 
 // The host's server: what the host process does with each app that attaches, as tmux's server
 // does with each client. It names no platform: it takes Effect's `SocketServer`, which
@@ -206,6 +219,9 @@ const programsOf = (apps: readonly Entry[]): ToPage => ({
 const same = (a: ToPage, b: ToPage): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 export const serve = (options: {
+	readonly inboxStorage?: Storage;
+	readonly roomStorage?: Storage;
+	readonly glance?: GlanceSettings;
 	readonly history: SharedHistory;
 	/** The host's one job table (`openJobs`), handed to every tile's tsh. */
 	readonly jobs: JobsOnHost;
@@ -268,6 +284,7 @@ export const serve = (options: {
 		const clients = new Set<Client>();
 		/** Every screen there is, by its port's name: each tile's terminal, and each run's view in a tile. */
 		const screens = new Map<string, Screen<unknown>>();
+		const shownTickets = new Map<string, number>();
 
 		const showTo = (client: Client, name: string, screen: Screen<unknown>) => {
 			client.shown.get(name)?.();
@@ -363,6 +380,31 @@ export const serve = (options: {
 			desk = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, first, {type: "keys", keys: table})[0];
 			for (const c of cmds) Queue.offerUnsafe(queue, c);
 		};
+		const requestOpen = (request: typeof ProgramOpen.Type, looked = false) => {
+			const prior =
+				desk.at === "open"
+					? tilesOf(activeOf(desk)).find((tile) => tile.shows.run?.program === request.program)
+					: undefined;
+			step({type: "open_program", ...request});
+			const tile =
+				desk.at === "open"
+					? tilesOf(activeOf(desk)).find((one) => one.shows.run?.program === request.program)
+					: undefined;
+			Effect.runForkWith(services)(
+				Effect.logInfo("program_open").pipe(
+					Effect.annotateLogs({
+						program: request.program,
+						from: request.from,
+						via: JSON.stringify(request.via),
+						how: tile === undefined ? "refused" : prior === undefined ? "new" : "focused",
+						tile: tile?.id ?? null,
+						location: JSON.stringify(request.location),
+						looked,
+					}),
+				),
+			);
+			shout();
+		};
 
 		// The asks (asks.ts): one count, read off the ledger, said to every app, page or not, so
 		// the app's Dock badge counts the same as the window's top bar. It starts on the person's
@@ -404,12 +446,248 @@ export const serve = (options: {
 		const toAsks = (msg: AsksMsg) => {
 			Effect.runForkWith(services)(asks.dispatch(msg).pipe(Effect.ignore));
 		};
+		const rooms = yield* RoomManager.make({storage: options.roomStorage ?? memoryStorage()});
+		const recipient = rooms.for(author);
+		const inboxHandle = yield* (options.inboxStorage ?? memoryStorage()).open("inbox", {});
+		const savedInbox = yield* inboxHandle.read("inbox", "recipient", InboxState);
+		const inboxStore = inboxHandle.store("inbox", "recipient", InboxState);
+		const initialInbox = {...inboxMachine.init(null, undefined)[0], marks};
+		const leaveInbox = Effect.sync(() => {
+			if (step({type: "run", does: 'tezgah."focus --to last"'})) shout();
+		});
+		const inbox = yield* (yield* run(inboxMachine, {
+			ctx: undefined,
+			store: {...inboxStore, load: () => Promise.resolve(savedInbox ?? initialInbox)},
+			interpret: {
+				reply_send: (cmd) =>
+					recipient
+						.send(cmd)
+						.pipe(Effect.mapError((error) => ({_tag: error._tag, why: error.why}))),
+				open: (cmd) =>
+					Effect.sync(() => {
+						if (desk.at !== "open") return null;
+						requestOpen(
+							{
+								program: "inbox",
+								location: {row: cmd.row},
+								from: activeOf(desk).focused,
+								via: CommandVia.cases.word.make({}),
+							},
+							cmd.looked,
+						);
+						return null;
+					}),
+				leave: () => leaveInbox.pipe(Effect.as(null)),
+			},
+		})).ready;
+		const inboxNow = (): ToPage => ({type: "inbox", now: inbox.getState()});
+		const syncAsks = () => {
+			const now = asksNow(asks.getState());
+			const rows = [...now.asks, ...now.later].flatMap((item): InboxRow[] =>
+				item.kind === "stuck"
+					? [
+							InboxRow.cases.stop.make({
+								key: item.key,
+								stop: {
+									ticket: item.ticket,
+									why: item.why ?? item.what,
+									...(item.resume === undefined ? {} : {resume: item.resume}),
+									at: item.at,
+								},
+							}),
+						]
+					: item.sealed === undefined
+						? []
+						: [
+								InboxRow.cases.ask.make({
+									key: item.key,
+									ask: {
+										key: item.key,
+										ticket: item.ticket,
+										shows: item.sealed.shows,
+										saw: item.sealed.saw,
+										editor: {_tag: "reading"},
+										failure: null,
+										busy: false,
+										at: item.at,
+										sealed: item.sealed,
+									},
+								}),
+							],
+			);
+			Effect.runForkWith(services)(inbox.dispatch({type: "sync", rows}).pipe(Effect.ignore));
+		};
+		asks.observe(syncAsks);
+		syncAsks();
+		let inboxMarks = inbox.getState().marks;
+		inbox.observe(() => {
+			const state = inbox.getState();
+			for (const key of state.marks.later)
+				if (!inboxMarks.later.includes(key)) toAsks({type: "later", key});
+			for (const key of inboxMarks.later)
+				if (!state.marks.later.includes(key)) toAsks({type: "back", key});
+			if (state.marks.seen.length !== inboxMarks.seen.length) toAsks({type: "seen"});
+			inboxMarks = state.marks;
+			for (const client of clients) if (client.page) toPage(client, inboxNow());
+		});
+		const arrived = (message: import("@kampus/fabrika-old").DirectMessage) => {
+			if (writerText(message.to) !== writerText(author)) return;
+			const {to: _to, pos: _pos, ...content} = message;
+			Effect.runForkWith(services)(
+				inbox
+					.dispatch({
+						type: "arrive",
+						row: InboxRow.cases.message.make({
+							key: `${writerText(content.by)}/${content.id}`,
+							message: content,
+						}),
+					})
+					.pipe(Effect.ignore),
+			);
+		};
+		const unfollowRooms = rooms.follow(arrived);
+		yield* Effect.addFinalizer(() => Effect.sync(unfollowRooms));
+		const unfollowReceipts = rooms.followReceipt((by, id) => {
+			if (writerText(by) !== writerText(author)) return;
+			const value = recipient.receipt(id);
+			if (value !== null)
+				Effect.runForkWith(services)(
+					inbox.dispatch({type: "receipt", id, value}).pipe(Effect.ignore),
+				);
+		});
+		yield* Effect.addFinalizer(() => Effect.sync(unfollowReceipts));
+		for (const reply of [inbox.getState().reply, ...Object.values(inbox.getState().drafts)])
+			if ("id" in reply) {
+				const value = recipient.receipt(reply.id);
+				if (value !== null) yield* inbox.dispatch({type: "receipt", id: reply.id, value});
+			}
+		let messageAfter = 0;
+		while (true) {
+			const page = yield* recipient.read({after: messageAfter, limit: 1000});
+			for (const message of page) arrived(message);
+			if (page.length < 1000) break;
+			const last = page.at(-1);
+			if (last === undefined) break;
+			messageAfter = last.pos;
+		}
+		const runtime: InboxRuntime["Service"] = {
+			getState: inbox.getState,
+			subscribe: (listener) => inbox.subscribe(listener),
+			send: (msg) => inbox.dispatch(msg).pipe(Effect.asVoid, Effect.orDie),
+			deliver: recipient.send,
+			open: (row) =>
+				Effect.gen(function* () {
+					if (row !== null) yield* inbox.dispatch({type: "select", value: row});
+					yield* inbox.dispatch({type: "open", value: null});
+				}).pipe(Effect.orDie),
+			leave: leaveInbox,
+		};
+		const inboxTiles = new Map<string, AnyRunning>();
+		const glanceProviders = new Map<
+			string,
+			{program: string; last: import("../messages.ts").ToWindow | null; stop: () => void}
+		>();
+		const inboxOffers = () => [
+			...new Set(["inbox", ...[...glanceProviders.values()].map((p) => p.program)]),
+		];
+		const glanceNow = (): ToPage => ({
+			type: "glance",
+			...(options.glance?.get() ?? {choice: "inbox", effective: "inbox", why: null}),
+			offers: inboxOffers(),
+		});
+		const glanceView = (): ToPage => {
+			const effective = options.glance?.get().effective ?? "inbox";
+			const provider = [...glanceProviders.values()].find((p) => p.program === effective);
+			return {
+				type: "glance_view",
+				program: effective,
+				data: effective === "inbox" ? inbox.getState() : (provider?.last?.data ?? null),
+			};
+		};
+		const tellGlance = () => {
+			for (const client of clients)
+				if (client.page) {
+					toPage(client, glanceNow());
+					toPage(client, glanceView());
+				}
+		};
+		options.glance?.follow(tellGlance);
+		const sendInbox = (
+			raw: unknown,
+			from: string,
+			via: CommandVia = CommandVia.cases.click.make({}),
+		) => {
+			const read = readInput(inboxProgram, raw);
+			if (read.kind !== "read") {
+				warn(read.why);
+				return;
+			}
+			const msg = read.msg;
+			Effect.runForkWith(services)(
+				Effect.logInfo("inbox_command").pipe(
+					Effect.annotateLogs({
+						command: msg.type,
+						from,
+						via: JSON.stringify(via),
+						row: inbox.getState().selected,
+					}),
+				),
+			);
+			if (msg.type === "open") {
+				requestOpen(
+					{
+						program: "inbox",
+						location: {row: inbox.getState().selected},
+						from,
+						via,
+					},
+					inbox.getState().look,
+				);
+				return;
+			}
+			if (msg.type === "enter") {
+				const state = inbox.getState();
+				const row = state.rows.find((r) => r.key === state.selected);
+				const ticket =
+					row?._tag === "ask"
+						? row.ask.ticket
+						: row?._tag === "stop"
+							? row.stop.ticket
+							: row?._tag === "message"
+								? row.message.ticket
+								: null;
+				if (ticket !== null && ticket !== undefined) {
+					const existing =
+						desk.at === "open"
+							? desk.workspaces
+									.flatMap(tilesOf)
+									.find(
+										(tile) =>
+											tile.shows.run !== null && shownTickets.get(tile.shows.run.id) === ticket,
+									)
+							: undefined;
+					if (existing !== undefined) {
+						step({type: "go", tile: existing.id});
+						shout();
+					} else requestOpen({program: "tracker", location: {ticket}, from, via}, state.look);
+				}
+				return;
+			}
+			Effect.runForkWith(services)(runtime.send(msg as InboxMsg));
+		};
 		const ledger = yield* Ledger;
 		/** The agents the person summoned here, when the host keeps any (its repository is known). */
 		const summons = Option.getOrUndefined(yield* Effect.serviceOption(Shell.SummonManager));
-		const programs = programsOf(
-			appPrograms(ledger, author, yield* PullRequests, yield* Traces, yield* RepoTree, summons),
+		const apps = appPrograms(
+			ledger,
+			author,
+			yield* PullRequests,
+			yield* Traces,
+			yield* RepoTree,
+			summons,
+			runtime,
 		);
+		const programs = programsOf(apps);
 
 		// The host as it says of itself, for the top bar's host, sync and agents: said as a page
 		// loads, and to every page as an agent attaches or goes, or its tile comes or goes. Each
@@ -493,10 +771,17 @@ export const serve = (options: {
 		const keyWatches = new Map<string, () => void>();
 		/** A screen goes: its tile closed, or its run ended. Every page shown it loses its port. */
 		const gone = (name: string) => {
+			if (name.startsWith("run:")) shownTickets.delete(name.slice(4));
+			if (name.startsWith("run:")) {
+				glanceProviders.get(name.slice(4))?.stop();
+				glanceProviders.delete(name.slice(4));
+			}
 			keyRequests.delete(name);
 			keyWatches.get(name)?.();
 			keyWatches.delete(name);
 			screens.delete(name);
+			options.glance?.providers(inboxOffers());
+			tellGlance();
 			for (const client of clients) {
 				const shown = client.shown.get(name);
 				if (shown === undefined) continue;
@@ -517,6 +802,24 @@ export const serve = (options: {
 			jobs,
 			lines,
 			edge: {
+				provider: (run, screen) => {
+					glanceProviders.get(run)?.stop();
+					glanceProviders.delete(run);
+					if (screen?.glance !== undefined) {
+						const provider = {
+							program: run.split(":")[0] ?? run,
+							last: null as import("../messages.ts").ToWindow | null,
+							stop: () => {},
+						};
+						glanceProviders.set(run, provider);
+						provider.stop = screen.glance.show((view) => {
+							provider.last = view;
+							tellGlance();
+						});
+					}
+					options.glance?.providers(inboxOffers());
+					tellGlance();
+				},
 				tell: (m) => {
 					if (step(m)) shout();
 				},
@@ -535,6 +838,11 @@ export const serve = (options: {
 					keyWatches.set(
 						name,
 						screen.show((view) => {
+							if (view.program === "ticket") {
+								const number = Reflect.get(Object(view.data), "number");
+								if (typeof number === "number") shownTickets.set(run, number);
+								else shownTickets.delete(run);
+							}
 							if (view.program === "keys" && !keyRequests.has(name))
 								keyRequests.set(name, {
 									screen,
@@ -554,7 +862,7 @@ export const serve = (options: {
 				},
 			},
 			sessionFor: options.ledger.kind === "server" ? options.ledger.sessionFor : undefined,
-		});
+		}).pipe(Effect.provideService(InboxRuntime, runtime));
 
 		/**
 		 * Stop job n of the table for agent `who`, and why: the `stop` tool's host side. Its stop is
@@ -672,19 +980,142 @@ export const serve = (options: {
 
 		const carry = (c: Carried): Effect.Effect<void> => {
 			switch (c.type) {
+				case "locate":
+					if ("ticket" in c.location)
+						return Effect.sync(() => {
+							const tile =
+								desk.at === "open"
+									? desk.workspaces.flatMap(tilesOf).find((one) => one.id === c.tile)
+									: undefined;
+							const run = tile?.shows.run;
+							if (run !== undefined && run !== null)
+								screens
+									.get(`run:${run.id}`)
+									?.heard({type: "msg", msg: {type: "query", value: c.location}});
+						});
+					return c.location.row === null
+						? Effect.void
+						: runtime.send({type: "select", value: c.location.row});
+				case "start_program":
+					return Effect.gen(function* () {
+						yield* tiles.open(c.tile);
+						const entry = apps.find((app) => app.program.name === c.program);
+						if (entry === undefined) return yield* Effect.die(`No program named ${c.program}`);
+						const started = yield* entry.start(
+							{},
+							{},
+							{id: `${c.program}:${c.tile}`, storage: memoryStorage()},
+						);
+						if (started.kind !== "running") return;
+						inboxTiles.set(c.tile, started);
+						if ("row" in c.location && c.location.row !== null)
+							yield* runtime.send({type: "select", value: c.location.row});
+						if (c.program === "tracker") {
+							if ("ticket" in c.location) yield* started.run.offer("query", c.location);
+							const declared = viewOf(tracker);
+							const glance = glanceOf(tracker);
+							if (declared === undefined || glance === undefined)
+								return yield* Effect.die("Tracker has no declared views");
+							const pages = new Set<(m: import("../messages.ts").ToWindow) => void>();
+							let data: unknown = null;
+							const machine = started.run.machines[declared.machine];
+							if (machine === undefined)
+								return yield* Effect.die("Tracker has no declared machine");
+							const provider = {
+								program: "tracker",
+								last: null as import("../messages.ts").ToWindow | null,
+								stop: () => {},
+							};
+							glanceProviders.set(started.run.id, provider);
+							options.glance?.providers(inboxOffers());
+							yield* machine.changes.pipe(
+								Stream.runForEach((state) =>
+									Effect.sync(() => {
+										if (state !== null) {
+											data = declared.of(state);
+											provider.last = {
+												type: "view",
+												program: "tracker",
+												data: glance.of(state),
+											};
+											tellGlance();
+											for (const page of pages) page({type: "view", program: "tracker", data});
+										}
+									}),
+								),
+								Effect.forkScoped,
+							);
+							add(`run:tracker:${c.tile}`, {
+								show: (page) => {
+									pages.add(page);
+									if (data !== null) page({type: "view", program: "tracker", data});
+									return () => pages.delete(page);
+								},
+								heard: (raw) => {
+									const input = readInput(tracker, Reflect.get(Object(raw), "msg"));
+									if (input.kind === "refused") return input;
+									Effect.runForkWith(services)(
+										started.run.offer(input.msg.type, input.msg.value).pipe(Effect.ignore),
+									);
+									return {kind: "read"};
+								},
+							});
+							return;
+						}
+						add(`run:inbox:${c.tile}`, {
+							show: (show) => {
+								const draw = () => show({type: "view", program: "inbox", data: inbox.getState()});
+								draw();
+								return inbox.subscribe(draw);
+							},
+							heard: (raw) => {
+								if (typeof raw !== "object" || raw === null || Reflect.get(raw, "type") !== "msg")
+									return {kind: "refused", why: "Expected a program input"};
+								sendInbox(Reflect.get(raw, "msg"), c.tile);
+								return {kind: "read"};
+							},
+						});
+					}).pipe(Scope.provide(scope), Effect.asVoid);
 				case "fence":
 					return Deferred.succeed(c.done, undefined).pipe(Effect.asVoid);
 				case "open":
 					return tiles.open(c.tile, c.agent);
-				case "close":
+				case "close": {
+					const running = inboxTiles.get(c.tile);
+					if (running !== undefined) {
+						return running.stop.pipe(
+							Effect.andThen(
+								Effect.sync(() => {
+									inboxTiles.delete(c.tile);
+									gone(`run:${running.run.id}`);
+								}),
+							),
+							Effect.andThen(tiles.close(c.tile)),
+						);
+					}
 					return tiles.close(c.tile);
-				case "stop":
+				}
+				case "stop": {
+					const running = inboxTiles.get(c.tile);
+					if (running !== undefined) {
+						return running.stop.pipe(
+							Effect.andThen(
+								Effect.sync(() => {
+									inboxTiles.delete(c.tile);
+									gone(`run:${running.run.id}`);
+								}),
+							),
+							Effect.andThen(tiles.stop(c.tile)),
+						);
+					}
 					return tiles.stop(c.tile);
+				}
 				case "end":
 					return tiles.end(c.process);
 				case "kill":
 					return tiles.kill(c.process);
 				case "send":
+					if (inboxTiles.has(c.tile) && c.data === "\u0003") return runtime.leave;
 					return Effect.sync(() => {
 						const heard = screens.get(`tile:${c.tile}`)?.heard({type: "keys", data: c.data});
 						if (heard?.kind === "refused") warn(`the desk's keys for ${c.tile}: ${heard.why}`);
@@ -829,6 +1260,7 @@ export const serve = (options: {
 		);
 		if (agents !== undefined)
 			yield* serveAgents({
+				rooms,
 				server: agents.server,
 				ports: () => screens.keys(),
 				attached: agentCame,
@@ -858,6 +1290,20 @@ export const serve = (options: {
 		/** What the page sent on the desk's port. */
 		const fromPage = (client: Client, m: FromPage) => {
 			switch (m.type) {
+				case "open_program":
+					requestOpen(m);
+					return;
+				case "inbox_input":
+					sendInbox(m.msg, m.from, m.via);
+					return;
+				case "glance_choose":
+					if (options.glance !== undefined)
+						Effect.runForkWith(services)(
+							options.glance
+								.choose(m.program)
+								.pipe(Effect.catch((error) => Effect.logWarning(error.why))),
+						);
+					return;
 				case "open_lane": {
 					if (desk.at !== "open") return;
 					const source = desk.workspaces.flatMap(tilesOf).find((t) => t.id === m.from);
@@ -939,6 +1385,18 @@ export const serve = (options: {
 					return;
 				}
 				case "run":
+					if (m.does.startsWith("program.inbox.") && desk.at === "open") {
+						const command = commandsOf(inboxProgram).find((c) => `program.${c.id}` === m.does);
+						if (command !== undefined)
+							sendInbox(
+								command.send,
+								activeOf(desk).focused,
+								m.via === undefined
+									? CommandVia.cases.palette.make({})
+									: CommandVia.cases.key.make({keys: m.via.keys}),
+							);
+						return;
+					}
 					did(m.does, m.via === undefined ? Via.palette() : Via.key(m.via));
 					if (m.does === "palette.open") {
 						toPage(client, {type: "show", what: "palette"});
@@ -948,10 +1406,12 @@ export const serve = (options: {
 					return;
 				case "later":
 				case "back":
-					toAsks({type: m.type, key: m.key});
+					Effect.runForkWith(services)(
+						runtime.send({type: "mark", key: m.key, later: m.type === "later"}),
+					);
 					return;
 				case "seen":
-					toAsks({type: "seen"});
+					Effect.runForkWith(services)(runtime.send({type: "seen", value: null}));
 					return;
 				// The top bar's Dismiss: the person at the window, as `dismiss <name>` in their tile.
 				case "dismiss":
@@ -981,6 +1441,9 @@ export const serve = (options: {
 					toPage(client, programs);
 					toPage(client, hostNow());
 					toPage(client, saidAsks);
+					toPage(client, inboxNow());
+					toPage(client, glanceNow());
+					toPage(client, glanceView());
 					toPage(client, deskNow());
 					for (const [name, screen] of screens) showTo(client, name, screen);
 					return;

@@ -1,4 +1,6 @@
 import {applyCell} from "@demlik/tea";
+import type {InboxState} from "@tea-fabrika/inbox/model";
+import {InboxCommands, InboxDispatch} from "@tea-fabrika/inbox/window";
 import {AskActions} from "@tea-fabrika/tracker/ask-window";
 import {absurd, Effect} from "effect";
 import type {Ghostty} from "ghostty-web";
@@ -31,6 +33,7 @@ import {
 	Key as KeyCase,
 	type Keys,
 	spell,
+	inboxCommands,
 } from "../desk/keymap.ts";
 import {keyName, keyOwner, matchPress, THE_MACS} from "../desk/keys.ts";
 import {
@@ -132,6 +135,9 @@ const store: {
 	shapes: Shapes;
 	/** What waits on the person, as the host counts it; `null` until it says. */
 	asks: AsksNow | null;
+	inbox: InboxState | null;
+	glance: Extract<import("../messages.ts").ToPage, {type: "glance"}> | null;
+	glanceView: Extract<import("../messages.ts").ToPage, {type: "glance_view"}> | null;
 	/** The host's own state: its process, its ledger, the agents on it; `null` until it says. */
 	host: HostNow | null;
 	/** What the frame shows over the desk, and its modes (frame.ts). */
@@ -150,6 +156,9 @@ const store: {
 	keyChanges: [],
 	shapes: new Map(),
 	asks: null,
+	inbox: null,
+	glance: null,
+	glanceView: null,
 	host: null,
 	frame: FRAME,
 	link: {kind: "up"},
@@ -500,6 +509,15 @@ const heard = (raw: unknown) => {
 	if (read.kind === "refused") return console.warn(`fabrika: refused a message: ${read.why}`);
 	const m = read.msg;
 	switch (m.type) {
+		case "inbox":
+			store.inbox = m.now;
+			return changed();
+		case "glance":
+			store.glance = m;
+			return changed();
+		case "glance_view":
+			store.glanceView = m;
+			return changed();
 		case "ask_answered":
 			answering.get(m.id)?.(m.why);
 			answering.delete(m.id);
@@ -697,6 +715,13 @@ const onKey = (e: KeyboardEvent) => {
 			? e.target.closest("[data-ask-editor=note], [data-ask-editor=picks]")
 			: null;
 	if (e.key === "Escape" && innerAsk !== null && !midKey().armed) return;
+	const innerInbox =
+		e.target instanceof Element
+			? e.target.closest(
+					"[data-inbox-reply]:not([data-inbox-reply=closed]), [data-inbox-look=true]",
+				)
+			: null;
+	if (e.key === "Escape" && innerInbox !== null && !midKey().armed) return;
 	if (e.key === "Escape" && frameStep({type: "escape", desk: midKey()})) return swallow(e);
 	if (name === null) return;
 	const forOver = keyForOver(name, e.target);
@@ -737,7 +762,13 @@ function View({tile, run}: {readonly tile: TileId; readonly run: string}): React
 			) : known === undefined ? (
 				<p role="alert">no view for {view.program} in this app</p>
 			) : (
-				known.draw(view.data, send)
+				<InboxCommands.Provider value={inboxCommands(store.keys)}>
+					<InboxDispatch.Provider
+						value={(msg, via) => toHost({type: "inbox_input", msg, from: tile, via})}
+					>
+						{known.draw(view.data, send)}
+					</InboxDispatch.Provider>
+				</InboxCommands.Provider>
 			)}
 		</main>
 	);
@@ -960,7 +991,10 @@ function App(): ReactNode {
 		if (into?.contains(document.activeElement) === true && document.activeElement !== into) return;
 		if (focused.shows.kind === "tsh" && focused.shows.run === null)
 			terminals.get(focused.id)?.focus();
-		else document.querySelector<HTMLElement>(`[data-view="${focused.id}"]`)?.focus();
+		else {
+			const view = document.querySelector<HTMLElement>(`[data-view="${focused.id}"]`);
+			(view?.querySelector<HTMLElement>("[data-inbox-list]") ?? view)?.focus();
+		}
 	});
 	useLayoutEffect(() => {
 		if (!away && over === "none") focusTile();
@@ -974,6 +1008,9 @@ function App(): ReactNode {
 		desk: open,
 		frame: store.frame,
 		asks: store.asks,
+		inbox: store.inbox,
+		glance: store.glance,
+		glanceView: store.glanceView,
 		host: store.host,
 		link: store.link,
 		attachedOnce: store.attachedOnce,

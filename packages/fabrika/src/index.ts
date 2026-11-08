@@ -86,6 +86,22 @@ export type {Hint, Person, TableCell, TableColumn, TableView, Tone} from "./prog
 // and the storage's records of the same name.
 export type {Ended, Listed, Run, Started} from "./program/program.ts";
 export * from "./program/program.ts";
+export {
+	commandsOf,
+	commandFor,
+	commandKey,
+	CommandVia,
+	type CommandRow,
+} from "./program/commands.ts";
+export {
+	DirectMessage,
+	MessageDelivery,
+	MessageReceipt,
+	MessageQuery,
+	MessageRefused,
+	RoomManager,
+	type RoomService,
+} from "./host/rooms.ts";
 export * from "./program/shape.ts";
 export * from "./program/storage.ts";
 // The storage's `Stale` lost its name to the ledger's above, but a program's

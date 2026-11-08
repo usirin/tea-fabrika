@@ -18,6 +18,7 @@ import {holdLock} from "./lock.ts";
 import {logSteps, sampleLag} from "./log.ts";
 import {leaveNote, takeNote} from "./restart.ts";
 import {serve} from "./serve.ts";
+import {glanceSettings} from "./settings.ts";
 import {pathsOf, reach} from "./socket.ts";
 
 // The host on a home: its socket, its files and its services, around the server (serve.ts).
@@ -209,6 +210,9 @@ export const runHost = (options: {
 			Effect.forkScoped,
 		);
 		return yield* serve({
+			inboxStorage: fileStorage(at("storage", "inbox")),
+			roomStorage: fileStorage(at("storage", "rooms")),
+			glance: yield* glanceSettings({folder: settings}),
 			history,
 			keybindings,
 			ours,

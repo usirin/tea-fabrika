@@ -63,7 +63,7 @@ const focus = defineProgram({
 	description: "Moves focus from this tile to the next one that way, or to a tile by its name.",
 	flags: {
 		to: flag(
-			Schema.Union([Way, Cycle, TileIdSchema]),
+			Schema.Union([Way, Cycle, TileIdSchema, Schema.Literal("last")]),
 			"A direction, next, previous, or a tile: t3.",
 		),
 	},
@@ -71,11 +71,13 @@ const focus = defineProgram({
 	outputs: {},
 	main: ({flags}) =>
 		tell(
-			Schema.is(Way)(flags.to)
-				? {kind: "focus", to: flags.to}
-				: Schema.is(Cycle)(flags.to)
-					? {kind: "cycle", to: flags.to}
-					: {kind: "go", tile: flags.to},
+			flags.to === "last"
+				? {kind: "previous"}
+				: Schema.is(Way)(flags.to)
+					? {kind: "focus", to: flags.to}
+					: Schema.is(Cycle)(flags.to)
+						? {kind: "cycle", to: flags.to}
+						: {kind: "go", tile: flags.to},
 		),
 });
 

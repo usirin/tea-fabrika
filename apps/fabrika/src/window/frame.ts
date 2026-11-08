@@ -5,7 +5,15 @@ import {whenOf} from "@tea-fabrika/tracker/window";
 import {Option, Schema} from "effect";
 import type {Ask, AsksNow} from "../asks.ts";
 import {activeOf, focusedOf, type Open, questionOf, tilesOf, type Workspace} from "../desk/desk.ts";
-import {bindingFor, defaults, type Does, type File, type Key, type Keys} from "../desk/keymap.ts";
+import {
+	bindingFor,
+	defaults,
+	inboxCommands,
+	type Does,
+	type File,
+	type Key,
+	type Keys,
+} from "../desk/keymap.ts";
 import {type Group, groupOf, type Show, wordOf} from "../desk/keys.ts";
 import type {TileId, TileNode} from "../desk/layout/index.ts";
 import type {HostNow, LedgerLink, LinkNow, ToWindow} from "../messages.ts";
@@ -178,6 +186,21 @@ const keyCaps = (prefix: string, key: Key): readonly Cap[] =>
  */
 export const commandsOf = (keys: Keys, workspaces: number): readonly Command[] => {
 	const all = keys.rows.flatMap((row): Command[] => {
+		if (row.does.startsWith("program.inbox.")) {
+			const command = inboxCommands(keys).find((c) => `program.${c.id}` === row.does);
+			if (command === undefined) return [];
+			const first = row.keys[0];
+			return [
+				{
+					name: command.name,
+					group: "window",
+					key: first === undefined ? "" : keyText(keys.prefix, first),
+					caps: first === undefined ? [] : keyCaps(keys.prefix, first),
+					tsh: command.id.replace(".", " "),
+					runs: row.does,
+				},
+			];
+		}
 		const binding = bindingFor(row.does);
 		if (binding === undefined) return [];
 		const at = /^workspace (\d+)$/.exec(binding.name);

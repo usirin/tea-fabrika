@@ -1,4 +1,5 @@
 import {Ledger, Shell, Traces} from "@kampus/fabrika-old";
+import type {RoomService} from "@kampus/fabrika-old";
 import {type AgentOptions, type InTile, type JobAnswer, serveAgent} from "@kampus/fabrika-old/mcp";
 import {Author, PullRequests, RepoTree} from "@tea-fabrika/tracker";
 import {Context, Effect, type Scope} from "effect";
@@ -79,6 +80,7 @@ const inTile = (port: string): InTile | null => {
 
 /** Serve every agent that attaches to `server`, until the host stops. */
 export const serveAgents = (options: {
+	readonly rooms?: RoomService | undefined;
 	readonly server: SocketServer.SocketServer["Service"];
 	/** The screens' names now. */
 	readonly ports: () => Iterable<string>;
@@ -128,8 +130,26 @@ export const serveAgents = (options: {
 							),
 						),
 					);
+		const rooms = options.rooms;
 		return yield* server.run((socket) =>
 			serveAgent(socket, {
+				dm:
+					rooms === undefined
+						? undefined
+						: (who) => {
+								const client = rooms.for(who);
+								return {
+									read: client.read,
+									send: (raw) => {
+										const value = raw as {to: string};
+										const to =
+											value.to === "owner" || value.to === person.id
+												? person
+												: {kind: "agent", id: value.to, for: person.id};
+										return client.send({...Object(raw), to});
+									},
+								};
+							},
 				person: person.id,
 				programsFor,
 				tiles: () => [...ports()].flatMap((port) => inTile(port) ?? []),

@@ -1,4 +1,5 @@
 import {run} from "@demlik/tea/effect";
+import {glanceOf} from "@kampus/fabrika-old";
 import {
 	type AnyRun,
 	type AnyRunning,
@@ -26,6 +27,8 @@ import {compare} from "@tea-fabrika/compare";
 import {counter} from "@tea-fabrika/counter";
 import {experiment} from "@tea-fabrika/experiment";
 import {experiments} from "@tea-fabrika/experiments";
+import {inbox} from "@tea-fabrika/inbox";
+import {InboxRuntime} from "@tea-fabrika/inbox/runtime";
 import {map} from "@tea-fabrika/map";
 import {markdown} from "@tea-fabrika/markdown";
 import {pipeline} from "@tea-fabrika/pipeline";
@@ -148,6 +151,7 @@ export interface Screen<To> {
 
 /** A program's view, as the host sees it. */
 export interface WindowScreen extends Screen<ToWindow> {
+	readonly glance?: Screen<ToWindow>;
 	/**
 	 * The view was closed. The run's inputs close, as a terminal closes a program's stdin, and
 	 * the program ends the way it ends on that. Said after the run ended, or while the host stops,
@@ -271,6 +275,7 @@ export const appPrograms = (
 	traces: Traces["Service"],
 	repoTree?: RepoTreeShape,
 	summons?: Shell.SummonManager["Service"],
+	inboxRuntime?: InboxRuntime["Service"],
 ): readonly Entry[] => {
 	const tickets = Layer.mergeAll(
 		Layer.succeed(Ledger, ledger),
@@ -281,6 +286,9 @@ export const appPrograms = (
 	);
 	const read = experimentsOnLedger(author).pipe(Layer.provide(Layer.succeed(Ledger, ledger)));
 	return [
+		...(inboxRuntime === undefined || author.kind !== "user"
+			? []
+			: [listed(inbox, Layer.succeed(InboxRuntime, inboxRuntime))]),
 		listed(counter, Layer.empty),
 		listed(tracker, tickets),
 		listed(ticket, tickets),
@@ -496,7 +504,22 @@ export const startTsh = (options: {
 				let newest: ToWindow | null = null;
 				const shownOn = new Set<(m: ToWindow) => void>();
 				let over = false;
+				const glance = glanceOf(r.program);
+				const glancePages = new Set<(m: ToWindow) => void>();
+				let latestGlance: ToWindow | null = null;
 				const window: WindowScreen = {
+					...(glance === undefined
+						? {}
+						: {
+								glance: {
+									show: (page: (m: ToWindow) => void) => {
+										glancePages.add(page);
+										if (latestGlance !== null) page(latestGlance);
+										return () => glancePages.delete(page);
+									},
+									heard: () => ({kind: "refused" as const, why: "Use a program input"}),
+								},
+							}),
 					show: (next) => {
 						const one = (m: ToWindow) => next(m);
 						shownOn.add(one);
@@ -525,6 +548,10 @@ export const startTsh = (options: {
 					Stream.filter((state) => state !== null),
 					Stream.runForEach((state) =>
 						Effect.sync(() => {
+							if (glance !== undefined && glance.machine === declared.machine) {
+								latestGlance = {type: "view", program: r.program.name, data: glance.of(state)};
+								for (const page of glancePages) page(latestGlance);
+							}
 							const view: ToWindow = {
 								type: "view",
 								program: r.program.name,
@@ -563,7 +590,17 @@ export const startTsh = (options: {
 				yield* opened(running);
 			});
 
-		const apps = tshList(appPrograms(ledger, author, pullRequests, traces, repoTree, summons));
+		const apps = tshList(
+			appPrograms(
+				ledger,
+				author,
+				pullRequests,
+				traces,
+				repoTree,
+				summons,
+				Option.getOrUndefined(yield* Effect.serviceOption(InboxRuntime)),
+			),
+		);
 		// An agent's tsh lists no desk word, and only the inputs an agent may tell.
 		const watched = Shell.programList(
 			(agent === null ? [...apps, ...words] : apps).map((entry) =>
