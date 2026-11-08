@@ -2725,18 +2725,10 @@ main.program:has(> .view) {
 .ask-view [role="status"]:empty {
 	display: none;
 }
-.ask-evidence {
-	max-block-size: 32vh;
-	overflow: auto;
-}
 .ask-evidence pre {
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	font: var(--fs-small) / 1.5 var(--mono);
-}
-.asks-grid {
-	max-block-size: 70vh;
-	overflow: auto;
 }
 .asks-row {
 	padding-block: var(--s-1);

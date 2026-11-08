@@ -1,6 +1,8 @@
+import {runIn} from "@demlik/tea/effect";
 import {useMachine} from "@demlik/tea/react";
 import {Button} from "@manti-ui/react";
 import {AskView} from "@tea-fabrika/tracker/ask-window";
+import {Layer, ManagedRuntime} from "effect";
 import {
 	type ReactNode,
 	type RefObject,
@@ -426,10 +428,13 @@ export function Band(): ReactNode {
 	return <div className="band" data-info={INFO.drag} />;
 }
 
+/** The asks menu's selection runs on the Effect engine, with nothing to provide. */
+const menuRun = runIn(ManagedRuntime.make(Layer.empty));
+
 /** Today's menu keeps its opening and Later behavior, with the shared answer controls. */
 function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 	const {asks, desk, step, toHost, toRun, tickets} = props;
-	const [menu, select] = useMachine(asksMenuMachine, {});
+	const [menu, select] = useMachine(asksMenuMachine, {run: menuRun, ctx: undefined});
 	const grid = useRef<HTMLDivElement>(null);
 	useEffect(() => {
 		grid.current?.focus();
@@ -486,7 +491,6 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 					aria-label="Waiting asks"
 					tabIndex={0}
 					ref={grid}
-					className="asks-grid"
 					aria-activedescendant={
 						active === undefined ? undefined : `ask-row-${rows.indexOf(active)}`
 					}
@@ -534,9 +538,11 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 									tabIndex={-1}
 									onClick={() => select({type: "select", key: row.key})}
 								>
-									{labels.get(row.key)?.title ?? row.what}
+									<WordsOf words={labels.get(row.key)?.title ?? row.what} />
 								</Button>
-								<p>{labels.get(row.key)?.sub}</p>
+								<p>
+									<WordsOf words={labels.get(row.key)?.sub ?? ""} />
+								</p>
 								{row.key === active?.key && (
 									<>
 										{row.kind === "ask" && row.sealed !== undefined && (

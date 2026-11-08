@@ -351,7 +351,9 @@ export const loadCell = (cmd: ReturnType<typeof load>) =>
 			last = page.at(-1)?.pos ?? last;
 			if (page.length < PAGE) return {entries, last};
 		}
-	}).pipe(Effect.mapError((e) => ({_tag: "unreachable" as const, why: e.message})));
+	}).pipe(
+		Effect.mapError((e) => ({_tag: "unreachable" as const, why: "why" in e ? e.why : e.message})),
+	);
 
 /** How often the poll asks the ledger for news, as the tracker's does. */
 export const POLL = Duration.seconds(1);

@@ -3,12 +3,6 @@ import {writerOf} from "@kampus/fabrika-old";
 import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {whenOf} from "@tea-fabrika/tracker/window";
 import {Option, Schema} from "effect";
-
-export const asksMenuMachine = defineMachine({
-	types: {model: {} as {selected: string | null}, msg: {} as {type: "select"; key: string}},
-	init: () => [{selected: null}, []],
-	update: {select: (s, m) => [{...s, selected: m.key}, []]},
-});
 import type {Ask, AsksNow} from "../asks.ts";
 import {activeOf, focusedOf, type Open, questionOf, tilesOf, type Workspace} from "../desk/desk.ts";
 import {bindingFor, defaults, type Does, type File, type Key, type Keys} from "../desk/keymap.ts";
@@ -64,6 +58,16 @@ import {
 // status region tells a screen reader it came on or went off, and nothing on each part explained;
 // it explains what keyboard focus is on, from the moment it comes on, as well as what the pointer
 // is over; and Escape leaves it, once what lies over the desk has closed.
+
+/**
+ * The asks menu's selection: the one row it shows open, with the shared ask view in it. Pure. The
+ * asks themselves and their count are the host's (asks.ts); the menu only says which row is open.
+ */
+export const asksMenuMachine = defineMachine({
+	types: {model: {} as {selected: string | null}, msg: {} as {type: "select"; key: string}},
+	init: () => [{selected: null}, []],
+	update: {select: (s, m) => [{...s, selected: m.key}, []]},
+});
 
 /** The room macOS's three window buttons take at the top bar's left, in px. */
 export const LIGHTS = 84;
