@@ -233,6 +233,22 @@ The five calls the look step raised, each decided 2026-11-02 with its lean kept:
 | Q4. The selected row, to a screen reader | `aria-selected`, from the WAI-ARIA listbox and grid patterns [w1], not `aria-current`. A VoiceOver run settles it. | 85% |
 | Q5. The box around the ticket's properties | It goes too, in the same ask desk build, as AGENTS.md's "no extra containers" asks. Doubt: where the properties drop below the card in a narrow tile, they must still read as their own group without the box (spacing, the label and value rows); the pull request's narrow shots check it. | 80% |
 
+**Changed 2026-11-08 by the owner (ticket 102), after the look step for the ask desk build: design
+E.** The ask is one quiet bar under the ticket's title, where the "Your turn" card sat. It has no
+box and scrolls with the ticket. Two fixes go with it: a lighter line under the picks, and
+"Recommended" shown once. This replaces the "Your turn" card above for the ask; the running, stuck
+and done cards are not changed by it. Where the "Did this need you?" mark sits is in
+[did this ask need you](#did-this-ask-need-you).
+
+```ts
+// A sketch of E, in the words of the look above.
+const ask = {
+	place: "under the ticket title", box: null, scroll: "with the ticket",
+	rec: ["Recommended", "Approve", "95% sure", "Did this need you?"], // "Recommended" once; the mark at the end
+	picksRule: "lighter line",
+};
+```
+
 ## The six principles
 
 ### A1: one queue, a list beside the selected ask
@@ -572,6 +588,9 @@ const Answered = Schema.TaggedStruct("answered", {
 
 - **What it means.** Two small buttons beside the answer. Neither is picked for you. No mark means
   the person did not say; it never means yes or no.
+- **Where it sits, decided 2026-11-08 by the owner (ticket 102).** The mark shows before the pick,
+  as this section says, and quietly at the end of the "Recommended … sure" line, not on a row of its
+  own. It is still the optional `needed` on `answered`, with no new fact.
 - **Why.** Later, asks get counted per step and per agent, to find the steps that ask too much. A
   step that asks what it could have found gets the missing information in its brief, or a rule in
   code ([A6](#a6-code-answers-what-code-can-a-stop-shows-as-a-stop)). Nothing reads the mark yet.

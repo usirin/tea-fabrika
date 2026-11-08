@@ -3,6 +3,12 @@
 **Decided by the owner, 2026-11-07.** Written here on 2026-11-08, late: the decision lived only in
 chat for a day, and Tier 1's P11 was built without it. `next/` only.
 
+**Changed 2026-11-08 by the owner: the shape below gets rethought.** Too many parts are linked
+only by matching names (an input's key to a Msg, an output to a Cmd), and an empty field is still
+required. A study writes the real ticket program in three shapes, and the owner picks one. The
+pick follows [one meaning, one way](./one-meaning-one-way.md). Changing the shape after it merged
+is fine: that is what tiers are for. Until the pick, the sketch below is what main builds.
+
 ```ts
 // next/programs/counter/src/counter.ts: a sketch of the decided shape.
 import {Machine} from "@demlik/tea/effect";
