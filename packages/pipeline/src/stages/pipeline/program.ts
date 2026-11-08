@@ -17,7 +17,7 @@ import {planOf, readTicketId, type TicketId, ticketOf} from "../../ids.ts";
 import {CodeHost} from "../../services.ts";
 import type {AgentStep} from "../../settings.ts";
 import {hashOf, sha256, textOf} from "../../tickets/approval.ts";
-import {sealAsk, type Evidence, Rec} from "../../tickets/ask.ts";
+import {questionLine, sealAsk, type Evidence, Rec} from "../../tickets/ask.ts";
 import {
 	type Checked,
 	type CodeFact,
@@ -989,7 +989,8 @@ const bodies = {
 				plan: draft,
 				version,
 				rules: (draft.exam ?? []).map((c) => c.path),
-				decided: {questions: last?.data.questions ?? [], said: []},
+				// What a person wrote against the last plan binds this one, and every step after it too.
+				decided: {questions: last?.data.questions ?? [], said},
 			});
 		}),
 
@@ -1674,10 +1675,22 @@ const laneInterpret = ({send, machines}: Stages) => ({
 			const {repo} = yield* work.origin;
 			const kind = cmd.for ?? "unknown";
 			const plan = cmd.carry?.plan;
-			let evidence: typeof Evidence.Type = {
-				_tag: "other",
-				text: [...(cmd.also ?? []), ...spent].join("\n"),
-			};
+			// What the person reads beside the question, all of it in what the ask shows: the whole
+			// question when its line is cut, what the step wrote since it started (its reason, in its own
+			// words), and the lane's own lines.
+			const what = questionLine(cmd.what);
+			const started = ticket.timeline.findLastIndex((e) => e.fact.type === "started");
+			const said =
+				started < 0
+					? []
+					: factsOf(ticket.timeline.slice(started + 1), "commented").map((c) => c.body);
+			const words = [
+				...(what === cmd.what ? [] : [cmd.what]),
+				...said,
+				...(cmd.also ?? []),
+				...spent,
+			].join("\n");
+			let evidence: typeof Evidence.Type = {_tag: "other", text: words};
 			if (kind === "approve" && plan !== null && plan !== undefined)
 				evidence = {
 					_tag: "plan",
@@ -1697,6 +1710,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 					checks: change.checks.required,
 					review: factsOf(ticket.timeline, "reviewed").at(-1) ?? null,
 					rules: change.rules.map((r) => ({path: r.file, text: r.text})),
+					...(words === "" ? {} : {text: words}),
 				};
 			}
 			const questions = plan?.questions ?? [];
@@ -1734,7 +1748,7 @@ const laneInterpret = ({send, machines}: Stages) => ({
 				step: cmd.step ?? "unknown",
 				repo,
 				why: null,
-				what: cmd.what,
+				what,
 				picks: cmd.picks.map((pick, i) => ({pick, does: cmd.does?.[i] ?? `Take ${pick}`})),
 				rec,
 				ticket: textOf(ticket),

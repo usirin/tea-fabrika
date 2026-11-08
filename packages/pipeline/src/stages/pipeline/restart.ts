@@ -247,7 +247,13 @@ export const fold = (seen: Seen): Folded => {
 						(e) => e.fact.type === "asked" && e.fact.ask === fact.ask,
 					)?.fact;
 					if (asked?.type === "asked" && "format" in asked && asked.shows.evidence._tag === "plan")
-						carry = {...carry, decided: {questions: asked.shows.evidence.plan.questions, said: []}};
+						carry = {
+							...carry,
+							decided: {
+								questions: asked.shows.evidence.plan.questions,
+								said: carry.decided?.said ?? [],
+							},
+						};
 				}
 				const step = askedStep(kind, last);
 				at = resumeOf({ask: fact.ask, what: "", picks: [], for: kind, step}, answer.pick);

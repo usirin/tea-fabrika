@@ -1,10 +1,13 @@
 import {hash, TraceId, type ProgramCommand} from "@kampus/fabrika-old";
 import {Effect, Option, Schema} from "effect";
+import {QuestionId} from "../ids.ts";
 
+/** The most a question may say on its one line. */
+const LINE_MOST = 120;
 const Line = Schema.String.check(
 	Schema.isTrimmed(),
 	Schema.isNonEmpty(),
-	Schema.isMaxLength(120),
+	Schema.isMaxLength(LINE_MOST),
 	Schema.isPattern(/^[^\r\n]*$/),
 );
 const Id = Schema.String.check(Schema.isPattern(/^\S{1,128}$/));
@@ -45,7 +48,7 @@ const Plan = Schema.StructWithRest(
 		pointers: Schema.Array(Schema.Json),
 		questions: Schema.Array(
 			Schema.Struct({
-				id: Schema.String,
+				id: QuestionId,
 				ask: Schema.String,
 				options: Schema.Array(Schema.String),
 				lean: Schema.String,
@@ -66,9 +69,24 @@ export const Evidence = Schema.TaggedUnion({
 		checks: Schema.Array(Schema.Json),
 		review: Schema.NullOr(Schema.Json),
 		rules: Schema.Array(Schema.Struct({path: Schema.String, text: Schema.String})),
+		/** The words beside the change: what was let through, what each rule change does and why. */
+		text: Schema.optionalKey(Schema.String),
 	},
 	other: {text: Schema.String},
 });
+/**
+ * Any question as the one line an ask shows: as it is when it fits, else cut at a word, so what a
+ * question says first (a merge's count) survives. The whole question then goes beside it, so no
+ * word of it is lost. Pure.
+ */
+export const questionLine = (text: string): string => {
+	const flat = text.replace(/\s+/g, " ").trim();
+	if (flat.length <= LINE_MOST) return flat;
+	const cut = flat.slice(0, LINE_MOST - 1);
+	const space = cut.lastIndexOf(" ");
+	return `${(space > 0 ? cut.slice(0, space) : cut).trimEnd()}…`;
+};
+
 const display = {what: Line, picks: Schema.NonEmptyArray(Pick), ticket: Text, evidence: Evidence};
 export const Shows = Schema.Struct({...display, rec: DisplayRec});
 export type Shows = typeof Shows.Type;
@@ -127,7 +145,8 @@ export const sealAsk = (input: unknown, policy?: {seed: number}) =>
 		const draft = yield* Schema.decodeUnknownEffect(Draft)(input);
 		if (new Set(draft.picks.map((p) => p.pick)).size !== draft.picks.length)
 			return yield* Effect.fail(new Error("An ask repeats a pick"));
-		if (draft.rec._tag === "pick" && !draft.picks.some((p) => p.pick === draft.rec.pick))
+		const sealed = draft.rec;
+		if (sealed._tag === "pick" && !draft.picks.some((p) => p.pick === sealed.pick))
 			return yield* Effect.fail(new Error("The recommendation is not offered"));
 		const draw = blindDraw(draft.ask, policy?.seed);
 		const blind = {...draw, hidden: draft.rec._tag === "pick" && draw.hidden};
