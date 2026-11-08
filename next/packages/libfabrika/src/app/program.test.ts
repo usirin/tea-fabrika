@@ -2,7 +2,8 @@
 // Imports are inside each law so an absent planned module reports every law, not zero tests.
 import {Cmd, Machine} from "@demlik/tea/effect";
 import {describe, expect, it} from "@effect/vitest";
-import {Schema} from "effect";
+import {Effect, Exit, Result, Schema} from "effect";
+import {Input, Program, stepper} from "./program.ts";
 
 const Model = Schema.Struct({count: Schema.Int, replies: Schema.Int});
 type Model = typeof Model.Type;
@@ -29,18 +30,133 @@ const machine = Machine.make({
 		save_err: (s) => [{...s, replies: s.replies + 1}, []],
 	},
 });
-const spec = () => ({
+const authoring = () => ({
 	name: "test-counter",
 	machine,
-	state: {v: 1, schema: Model, upgrades: []},
-	msg: Msg,
-	view: {data: Schema.Struct({count: Schema.Int}), select: (s: Model) => ({count: s.count})},
+	state: {v: 1, upgrades: []},
+	view: (s: Model) => ({count: s.count}),
 	refuse: (s: Model, m: typeof Msg.Type) =>
 		m.type === "add" && s.count + m.n > 10 ? {why: "limit", now: s.count, most: 10} : null,
 	inputs: {},
 	outputs: {},
 	writes: {},
 	wake: () => null,
+});
+const spec = () => Program.make(authoring());
+
+describe("Program.make authoring laws, next/", () => {
+	it("fills the load declaration from the machine without copying or wrapping it", () => {
+		const p = Program.make({
+			...authoring(),
+			inputs: {add: "Add", throw: {description: "Fail deliberately", personOnly: true}},
+		});
+		expect(machine.model).toBe(Model);
+		expect(machine.msg).toBe(Msg);
+		expect(p.machine).toBe(machine);
+		expect(p.state.schema).toBe(Model);
+		expect(p.msg).toBe(Msg);
+		expect(p.view.data).toBe(Schema.Json);
+		expect(p.inputs.add).toMatchObject({_tag: "write", description: "Add", personOnly: false});
+		expect(p.inputs.throw).toMatchObject({_tag: "write", personOnly: true});
+		expect(p.inputs.add.schema).toBe(Msg);
+		expect(p.inputs.throw.schema).toBe(Msg);
+		expect(Result.isSuccess(Schema.decodeUnknownResult(Program.schema)(p))).toBe(true);
+		expect(stepper(p).init(null)).toMatchObject({view: {count: 0}});
+	});
+	it("checks the declaration without calling program code or running a Cmd", () => {
+		const calls: string[] = [];
+		const never = (name: string): never => {
+			calls.push(name);
+			throw new Error(name);
+		};
+		const untouched = Machine.make({
+			model: Model,
+			msg: Msg,
+			cmds: [save],
+			init: () => never("init"),
+			update: {
+				add: () => never("update"),
+				throw: () => never("update"),
+				save_ok: () => never("update"),
+				save_err: () => never("update"),
+			},
+		});
+		const p = Program.make({
+			...authoring(),
+			machine: untouched,
+			view: () => never("view"),
+			refuse: () => never("refuse"),
+			wake: () => never("wake"),
+			inputs: {
+				read: Input.cases.read.make({
+					schema: Schema.Null,
+					description: "Read",
+					answer: () => never("answer"),
+				}),
+			},
+		});
+		expect(p.machine).toBe(untouched);
+		expect(calls).toEqual([]);
+	});
+	for (const [label, broken] of [
+		["empty name", {name: ""}],
+		["invalid version", {state: {v: 0, upgrades: []}}],
+		["non-function view", {view: 3}],
+		["non-function refusal", {refuse: 3}],
+		["non-schema output", {outputs: {rows: {}}}],
+	] as const)
+		it(`throws for ${label}, while makeEffect reports a typed schema error without a defect`, () => {
+			// Deliberately untrusted JavaScript reaches the same constructors without a cast.
+			const raw: unknown = {...authoring(), ...broken};
+			const make = Reflect.get(Program, "make");
+			const makeEffect = Reflect.get(Program, "makeEffect");
+			expect(() => Reflect.apply(make, Program, [raw])).toThrow();
+			let checked: Effect.Effect<unknown, unknown> = Effect.void;
+			expect(() => {
+				checked = Reflect.apply(makeEffect, Program, [raw]);
+			}).not.toThrow();
+			const exit = Effect.runSyncExit(Effect.result(checked));
+			expect(Exit.isSuccess(exit)).toBe(true);
+			if (!Exit.isSuccess(exit)) return;
+			expect(Result.isFailure(exit.value)).toBe(true);
+			if (Result.isFailure(exit.value)) {
+				expect(exit.value.failure).toMatchObject({
+					_tag: "ProgramInvalid",
+					cause: {_tag: "SchemaError"},
+				});
+			}
+		});
+	it("makeEffect also constructs and loads a valid program", () => {
+		const p = Effect.runSync(Program.makeEffect(authoring()));
+		expect(p.machine).toBe(machine);
+		expect(stepper(p).init(null)).toMatchObject({_tag: "stepped", model: {count: 0, replies: 0}});
+	});
+	for (const [label, change] of [
+		["initial view", {view: () => () => 1}],
+		["initial wake", {wake: () => "later"}],
+	] as const)
+		it(`defers a broken ${label} to checked initialization`, () => {
+			const raw: unknown = {...authoring(), ...change};
+			const p = Reflect.apply(Program.make, Program, [raw]);
+			expect(() => stepper(p).init(null)).toThrowError(expect.objectContaining({why: "load"}));
+		});
+	it("rejects a model that encodes to a non-JSON value", () => {
+		const NonJson = Schema.Struct({count: Schema.Int, body: Schema.Unknown});
+		const nonJson = Machine.make({
+			model: NonJson,
+			msg: Msg,
+			cmds: [],
+			init: () => [{count: 0, body: () => 1}, []],
+			update: {add: (s) => [s, []], throw: (s) => [s, []]},
+		});
+		const p = Program.make({
+			...authoring(),
+			machine: nonJson,
+			view: (s) => ({count: s.count}),
+			refuse: () => null,
+		});
+		expect(() => stepper(p).init(null)).toThrowError(expect.objectContaining({why: "load"}));
+	});
 });
 
 describe("P11 program contract and p22 refusal", () => {
@@ -49,7 +165,7 @@ describe("P11 program contract and p22 refusal", () => {
 			const {Program} = await import("./program.ts");
 			const raw: Record<string, unknown> = {...spec()};
 			delete raw[field];
-			expect(() => Schema.decodeUnknownSync(Program)(raw)).toThrow();
+			expect(() => Schema.decodeUnknownSync(Program.schema)(raw)).toThrow();
 		});
 	it("plant, skip declaration checks: schemas and functions are checked, not mere presence", async () => {
 		const {Program} = await import("./program.ts");
@@ -64,7 +180,7 @@ describe("P11 program contract and p22 refusal", () => {
 			{outputs: {rows: {}}},
 			{writes: {saved: {schema: {}, personOnly: false}}},
 		])
-			expect(() => Schema.decodeUnknownSync(Program)({...spec(), ...broken})).toThrow();
+			expect(() => Schema.decodeUnknownSync(Program.schema)({...spec(), ...broken})).toThrow();
 	});
 	it("plant, let settled bypass program.msg: only fold accepts checked Cmd replies", async () => {
 		const {stepper} = await import("./program.ts");
@@ -100,7 +216,8 @@ describe("P11 program contract and p22 refusal", () => {
 				ok: {"~standard": {validate: (value: unknown) => Promise.resolve({value})}},
 			},
 		};
-		const p = stepper({...spec(), machine: {...machine, cmds: [asyncSave]}});
+		const broken: unknown = {...spec(), machine: {...machine, cmds: [asyncSave]}};
+		const p = stepper(broken);
 		expect(
 			p.step({count: 0, replies: 0}, {type: "save_ok", cmd: save({n: 1}), value: 1, at: 42}),
 		).toEqual({_tag: "refused", why: "bad_msg"});
@@ -118,7 +235,7 @@ describe("P11 program contract and p22 refusal", () => {
 	});
 	it("plant, reject every declaration: a complete pure tea program loads and steps", async () => {
 		const {Program, stepper} = await import("./program.ts");
-		const p = stepper(Schema.decodeUnknownSync(Program)(spec()));
+		const p = stepper(Schema.decodeUnknownSync(Program.schema)(spec()));
 		expect(p.init(null)).toMatchObject({
 			_tag: "stepped",
 			model: {count: 0, replies: 0},
@@ -164,7 +281,7 @@ describe("P11 program contract and p22 refusal", () => {
 	for (const part of ["model", "view", "cmd"] as const)
 		it(`p25 plant, trust the returned ${part}: a malformed pure result is ProgramDown`, async () => {
 			const {stepper} = await import("./program.ts");
-			const broken = {
+			const broken: unknown = {
 				...spec(),
 				machine: {
 					...machine,

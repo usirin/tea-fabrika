@@ -1,0 +1,16 @@
+diff --git a/dist/effect/index.d.ts b/dist/effect/index.d.ts
+index 207742a8af72534b9999a763733a4e86e8dc7975..2833f2ff17b573832f3a271e11c7791348d645d6 100644
+--- a/dist/effect/index.d.ts
++++ b/dist/effect/index.d.ts
+@@ -223,7 +223,10 @@ declare function make<S, M extends {
+     readonly msg: Schema.Schema<M>;
+     readonly cmds: readonly D[];
+     readonly types?: Pick<MachineTypes<S, M, never, U, Ctx>, "sub" | "ctx">;
+-}): Machine$1<S, M | Settled<D>, CmdOf<D>, U, Ctx>;
++}): Machine$1<S, M | Settled<D>, CmdOf<D>, U, Ctx> & {
++    readonly model: Schema.Schema<S>;
++    readonly msg: Schema.Schema<M>;
++};
+ /** A core tea machine, with the same init, update and engine contracts. */
+ type Machine<S, M extends {
+     type: string;

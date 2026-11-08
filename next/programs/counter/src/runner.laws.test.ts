@@ -52,6 +52,25 @@ const reconstruct = (before: unknown, change: Update): unknown => {
 };
 
 describe("p22 real counter in the runner", () => {
+	it("loads a constructed counter and returns typed load failures for broken modules", async () => {
+		const {counter} = await import("./program.ts");
+		const {ProgramLoader}: typeof import("@kampus/libfabrika") = await import(LIBRARY);
+		const missing: Record<string, unknown> = {...counter};
+		delete missing.view;
+		const wrongFunction: unknown = {...counter, refuse: 3};
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const loader = yield* ProgramLoader;
+				const healthy = yield* loader.load("counter");
+				expect(healthy.stepper.program.machine).toBe(counter.machine);
+				expect(healthy.stepper.init(null)).toMatchObject({_tag: "stepped", view: {count: 0}});
+				for (const name of ["missing", "wrongFunction"]) {
+					const loading = loader.load(name);
+					expect(yield* Effect.flip(loading)).toMatchObject({_tag: "ProgramDown", why: "load"});
+				}
+			}).pipe(Effect.provide(ProgramLoader.layer({counter, missing, wrongFunction}, {}))),
+		);
+	});
 	it("plant, skip first letter or patch the wrong base: wake and every watcher reproduce the counter", async () => {
 		const {counter} = await import("./program.ts");
 		const A: typeof import("@kampus/libfabrika") = await import(LIBRARY);
