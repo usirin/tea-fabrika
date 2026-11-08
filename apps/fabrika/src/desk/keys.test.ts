@@ -111,6 +111,7 @@ describe("today's complete presses", () => {
 		const russian = full("ж", {code: "KeyK", meta: true});
 		expect(matchPress(russian, [position, character], true)).toEqual(character);
 		expect(matchPress(russian, [position], true)).toEqual(position);
+		expect(matchPress(full("x", {code: "KeyK", meta: true}), [position], true)).toBeNull();
 		expect(matchPress(full("ж", {code: "KeyK"}), [bar], true)).toBeNull();
 		expect(matchPress(full("|", {altGraph: true, alt: true, ctrl: true}), [bar], true)).toEqual(
 			bar,

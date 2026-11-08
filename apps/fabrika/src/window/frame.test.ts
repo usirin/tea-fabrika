@@ -635,7 +635,10 @@ describe("the job item and the jobs list", () => {
 			...lined,
 			jobs: {
 				t1: {running: [job(1, "counter", 0)], ended: null},
-				t2: {running: [job(2, "tally", 0), job(5, "sleep --ms 9000", 0, true)], ended: ended()},
+				t2: {
+					running: [job(2, "tally", 0), job(5, "sleep --ms 9000", 60_000, true)],
+					ended: ended(),
+				},
 			},
 		};
 		const list = jobsList(desk, 120_000);
@@ -653,7 +656,7 @@ describe("the job item and the jobs list", () => {
 						icon: "running",
 						title: [typed("sleep --ms 9000")],
 						sub: [typed("%5"), plain(" · t2")],
-						side: "2m",
+						side: "1m",
 						second: null,
 					},
 					{
@@ -1067,6 +1070,18 @@ describe("info mode", () => {
 		expect(stepped).toEqual([{type: "info", focus: INFO.info}]);
 	});
 
+	it("K17: the keys button names its dialog and opens it on a click", () => {
+		const html = line(FRAME);
+		const button = /<button[^>]*data-item="keys"[^>]*>/.exec(html)?.[0];
+		expect(button).toContain('aria-haspopup="dialog"');
+		expect(button).toContain('aria-controls="pop-palette"');
+		const stepped: FrameMsg[] = [];
+		const key = itemsOf(FRAME, (m) => stepped.push(m))[1];
+		if (typeof key?.onClick !== "function") throw new Error("keys has no click handler");
+		key.onClick();
+		expect(stepped).toEqual([{type: "show", what: "keys"}]);
+	});
+
 	// M2: the mode is one value. Never on, on with what it explains, or off after it was on: an
 	// explanation with the mode off, or "left" while it is on, cannot be built.
 	it("keeps its state in one value, so the impossible mixes cannot be built", () => {
@@ -1160,6 +1175,10 @@ describe("info mode", () => {
 describe("info mode's words, from the keys file (p10)", () => {
 	/** The parts of the frame whose words name a key. */
 	const NAMING = ["workspace", "keys", "info", "titlebar"] as const;
+
+	it("K17: an unbound keys command points to its tsh word", () => {
+		expect(infoFor(table("keys.open = []")).keys).toContain("keys in tsh lists them all");
+	});
 
 	it("names your prefix, and never Ctrl-B, once the prefix is ctrl+a", () => {
 		const said = infoFor(table('prefix = "ctrl+a"'));

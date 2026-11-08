@@ -99,10 +99,11 @@ describe("today's KeybindingManager", () => {
 	it("K8: a new editor claim moves only that key and reports the losing user and default commands", async () => {
 		await go(
 			Effect.gen(function* () {
-				const h = yield* opened('tezgah.fold = ["<prefix>m", "<prefix>enter"]\n');
+				const h = yield* opened('tezgah.fold = ["<prefix>m", "<prefix>enter", "cmd+o"]\n');
 				const applied = yield* h.edit(bind("tezgah.zoom", ["<prefix>m", "<prefix>h"]));
 				expect(row(applied.keys, "tezgah.fold")?.keys).toEqual([
 					{_tag: "after_prefix", key: "<enter>"},
+					{_tag: "alone", key: "<m-o>"},
 				]);
 				expect(row(applied.keys, 'tezgah."focus --to left"')?.keys).toEqual([
 					{_tag: "after_prefix", key: "<arrowleft>"},
@@ -155,6 +156,16 @@ describe("today's KeybindingManager", () => {
 					tezgah: {"split --to down": ["<prefix>v"], close: ["<prefix>c"]},
 					palette: {open: ["cmd+o"]},
 				});
+			}),
+		);
+	});
+
+	it("K10: editing an existing assignment preserves the absence of a final newline", async () => {
+		await go(
+			Effect.gen(function* () {
+				const h = yield* opened('prefix = "ctrl+a"');
+				yield* h.edit(Edit.cases.prefix.make({key: "ctrl+d"}));
+				expect(yield* h.fs.readFileString(h.file)).toBe('prefix = "ctrl+d"');
 			}),
 		);
 	});

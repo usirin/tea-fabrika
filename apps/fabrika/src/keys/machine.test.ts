@@ -78,4 +78,48 @@ describe("today's keys editor", () => {
 			{_tag: "alone", key: "<m-k>"},
 		]);
 	});
+
+	it("K1: searching changes only the query and sends no edit", () => {
+		const model = select();
+		expect(step(model, {type: "query", query: "fold"})).toEqual([{...model, query: "fold"}, []]);
+	});
+
+	it("K14: live keys retain Undo only for its saved version", () => {
+		const read = decodeKeys('prefix = "ctrl+a"', true);
+		if (Result.isFailure(read)) throw new Error(read.failure.why);
+		const model = {...select(), undo: "saved-version"};
+		for (const version of [{}, {version: "saved-version"}]) {
+			const [next, out] = step(model, {type: "keys", keys: read.success, ...version});
+			expect(next.keys).toEqual(read.success);
+			expect(next.undo).toBe("saved-version");
+			expect(next.error).toBeNull();
+			expect(out).toEqual([]);
+		}
+		const [newer, out] = step(model, {type: "keys", keys: read.success, version: "newer"});
+		expect(newer.keys).toEqual(read.success);
+		expect(newer.undo).toBeNull();
+		expect(newer.error).toMatch(/file changed.*Undo/i);
+		expect(out).toEqual([]);
+	});
+
+	it("K11: only a matching save failure ends the save; opening failures are shown too", () => {
+		const [saving, cmds] = step(select(), {type: "unbind"});
+		const request = cmds[0]?.request;
+		if (request === undefined) throw new Error("no save request");
+		expect(step(saving, {type: "failed", request: "older", why: "old failure"})).toEqual([
+			saving,
+			[],
+		]);
+		const [failed, out] = step(saving, {type: "failed", request, why: "rename denied"});
+		expect(failed.recording._tag).toBe("idle");
+		expect(failed.error).toBe("Save failed: rename denied");
+		expect(out).toEqual([]);
+		const [unopened, opening] = step(start(), {
+			type: "failed",
+			request: "open",
+			why: "editor refused",
+		});
+		expect(unopened.error).toBe("editor refused");
+		expect(opening).toEqual([]);
+	});
 });
