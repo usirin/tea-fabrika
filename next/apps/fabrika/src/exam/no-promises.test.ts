@@ -74,6 +74,18 @@ const edges = [
 ].join("\n");
 
 describe("no-promises", () => {
+	it("unmarked object methods cannot return storage Promises directly", () => {
+		const file = "next/apps/fabrika/src/storage-method.ts";
+		const findings = plant({
+			[file]: [
+				"declare const storage: {put(key: string, value: unknown): Promise<void>};",
+				"export class Process {",
+				'  configure(value: unknown) { return storage.put("descriptor", value); }',
+				"}",
+			].join("\n"),
+		});
+		expect(findings(CODE, file)).toContain(3);
+	});
 	const all = plant({
 		[FIRES]: fires,
 		[PASSES]: passes,
