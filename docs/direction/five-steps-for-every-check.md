@@ -46,6 +46,39 @@ Every formal check in this repo follows five steps.
    fingerprint. CI goes red when covered code changes and nobody checks again.
    This matters most for a check that runs on a copy of the code.
 
+## Every law is a property
+
+Decided 2026-11-08 by the owner, after PR 516's laws were all example tests.
+
+- **Every law is a property test over generated inputs, on the real code,** not only a machine's
+  laws. A machine uses `@demlik/tea/pbt`; anything else uses fast-check or Effect's `Arbitrary`.
+- **A hand-picked example stays only as a pinned case of a named past bug,** in fast-check's
+  `examples`, with the bug named beside it.
+- **A check on the shape of code is a lint rule or a type,** not a test.
+- **Four kinds of law may be a fixed test, and the test's name says which** (owner, 2026-11-08).
+  Anything else is a property. A hand-picked example that checks a general rule is a miss.
+
+| Label | What it is | Example |
+|---|---|---|
+| `vector:` | A fixed input and answer from a spec | a TypeID from the TypeID spec's test vectors |
+| `format:` | A fixed format the code must write or read exactly | the `keybindings.toml` a person would write by hand |
+| `pinned:` | A named past bug, kept so it never comes back | the duplicate-id bug |
+| `scenario:` | One scripted run against the outside world | a real Electron window opens; a real `git push` lands |
+
+```ts
+// A sketch: one law, with one pinned case of a named past bug.
+fc.assert(
+	fc.property(fc.array(fc.integer()), (xs) => isSorted(sortIds(xs))),
+	{examples: [[[2, 1, 2]]]}, // the duplicate-id bug, pinned
+);
+
+// A sketch: the four fixed kinds, each named by its label.
+it("vector: TypeID spec, the nil UUID", () => {/* ... */});
+it("format: keys writes keybindings.toml as a person would", () => {/* ... */});
+it("pinned: duplicate ids sort once (the duplicate-id bug)", () => {/* ... */});
+it("scenario: the app opens a real window on a fresh home", () => {/* ... */});
+```
+
 ## Why
 
 - **Experiment 115:** a check on a hand-written copy of the lane found the

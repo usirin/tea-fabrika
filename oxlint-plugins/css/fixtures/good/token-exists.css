@@ -1,0 +1,5 @@
+.token { color: var(--text-primary); }
+.local { --local: var(--focus); color: var(--local); }
+.later { color: var(--later); --later: var(--focus); }
+.fallback { color: var(--focus, var(--text-primary)); }
+.text { content: "var(--not-a-reference)"; background: url("var(--not-a-reference).svg"); }

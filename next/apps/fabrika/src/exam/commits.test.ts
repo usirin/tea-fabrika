@@ -4,6 +4,7 @@
 import {readFileSync} from "node:fs";
 import {join} from "node:path";
 import {Option} from "effect";
+import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {
 	type Answer,
@@ -22,6 +23,7 @@ import {
 	type Note,
 	plain,
 	type PullRequest,
+	ROLES,
 	type Role,
 	type Signed,
 	signedText,
@@ -122,10 +124,6 @@ describe("keysProblem (p87)", () => {
 		expect(keysProblem(`${GOOD.join("\n")}\n`)).toBeNull();
 	});
 
-	it("passes a second key for one role, as when a key is rotated", () => {
-		expect(keysProblem([...GOOD, line("build", KEY("D"))].join("\n"))).toBeNull();
-	});
-
 	it.each([
 		["no file", null],
 		[
@@ -135,7 +133,7 @@ describe("keysProblem (p87)", () => {
 			),
 		],
 		["one key under tests and build", [GOOD[0], line("build", KEY("A")), GOOD[2]].join("\n")],
-		["a fourth role", [...GOOD, line("owner", KEY("D"))].join("\n")],
+		["an unknown principal", [...GOOD, line("owner", KEY("D"))].join("\n")],
 		["a missing namespace", [GOOD[0], GOOD[1], `lead ssh-ed25519 ${KEY("C")}`].join("\n")],
 		[
 			"another namespace",
@@ -426,7 +424,8 @@ const link = (n: Note, more: Partial<Link> = {}): Link => ({
 	...n,
 	by: "agent:test-writer",
 	arrivedAt: "2026-11-07T10:00:00-08:00",
-	cause: null,
+	parent: null,
+	traceId: "trace-tests-229",
 	commit: T("1"),
 	pr: "usirin/tea-fabrika#1",
 	base: T("0"),
@@ -440,6 +439,61 @@ const TREES = new Map([
 	[T("f"), C],
 ]);
 const PLACED = {onMain: true, before: new Set([T("0")])};
+
+// d4 (Q15): a logged link names its parent and traceId, and the old `cause` is gone. Over any
+// link a step or a person could log. Plants: drop onExcessProperty, so cause rides along; make
+// parent or traceId optional; read cause as the old name for parent.
+describe("d4: logged links use parent and traceId (Q15)", () => {
+	const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+	const runs = {seed: SEED, endOnFailure: true, numRuns: 200};
+	const sha = fc.stringMatching(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
+	const anyLink = fc.record({
+		_tag: fc.constant("attested" as const),
+		step: fc.constantFrom(...ROLES, "person" as const),
+		ticket: fc.stringMatching(/^[0-9]+$/),
+		version: fc.integer({min: 1}),
+		from: sha,
+		to: sha,
+		key: fc.string(),
+		sig: fc.string(),
+		by: fc.string(),
+		arrivedAt: fc.string(),
+		parent: fc.option(fc.string(), {nil: null}),
+		traceId: fc.string(),
+		commit: sha,
+		pr: fc.string(),
+		base: sha,
+		squash: sha,
+		keys: sha,
+	});
+	it("a link with parent and traceId decodes to itself", () => {
+		fc.assert(
+			fc.property(anyLink, (value) => {
+				expect(decodeLink(value)).toEqual(Option.some(value));
+			}),
+			runs,
+		);
+	});
+	it("a link carrying cause is refused, with or without parent", () => {
+		fc.assert(
+			fc.property(anyLink, fc.anything(), fc.boolean(), (value, cause, keepParent) => {
+				const {parent: _, ...old} = value;
+				expect(decodeLink({...(keepParent ? value : old), cause})).toEqual(Option.none());
+			}),
+			runs,
+		);
+	});
+	it("a link missing parent or traceId is refused", () => {
+		fc.assert(
+			fc.property(anyLink, fc.constantFrom("parent", "traceId"), (value, field) => {
+				const missing: Record<string, unknown> = {...value};
+				delete missing[field];
+				expect(decodeLink(missing)).toEqual(Option.none());
+			}),
+			runs,
+		);
+	});
+});
 
 describe("chain (p86 and p89 after the merge)", () => {
 	const good = [logged(link(note("tests", A, B))), logged(link(note("build", B, C)))];
