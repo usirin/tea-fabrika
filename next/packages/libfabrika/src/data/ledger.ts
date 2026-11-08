@@ -7,8 +7,9 @@ import {Referee, type Sql, STREAM, short, tag} from "./referee.ts";
 
 export class LedgerError extends Schema.TaggedError<LedgerError>()("LedgerError", {
 	/** `unreachable`: a call that never reached the referee. `bad_row`: an answer or a row that does
-	 *  not decode. `storage`: SQLite threw, for example `SQLITE_FULL`. */
-	why: Schema.Literals(["unreachable", "bad_row", "storage"]),
+	 *  not decode. `storage`: SQLite threw, for example `SQLITE_FULL`. `refused`: the ledger refused
+	 *  a line the caller needed written. */
+	why: Schema.Literals(["unreachable", "bad_row", "storage", "refused"]),
 	/** What the thrown error said. It rides in the span's failure, never in a tag. */
 	message: Schema.optional(Schema.String),
 }) {}

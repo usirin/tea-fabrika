@@ -250,10 +250,11 @@ const FORBIDDEN: ReadonlyArray<{readonly name: string; readonly test: (spec: str
 	];
 
 /** The detail's list, the top level of the library, of tuval and of notes, plus the library's
- *  `/transport`, which a browser tab runs (Tier 1, P7), and its `/data`, which names no platform
- *  and which a tab holds a read copy of later (Tier 1, P6). Every program's `/window` comes on top. */
+ *  `/transport`, which a browser tab runs (Tier 1, P7), its `/data`, which names no platform
+ *  and which a tab holds a read copy of later (Tier 1, P6), and its `/coordination`, whose names
+ *  the menu bar and the door share (Tier 1, P9). Every program's `/window` comes on top. */
 const BROWSER: Readonly<Record<string, ReadonlyArray<string>>> = {
-	"@kampus/libfabrika": [".", "./transport", "./data"],
+	"@kampus/libfabrika": [".", "./transport", "./data", "./coordination"],
 	"@kampus/tuval": ["."],
 	"@kampus/notes": ["."],
 };

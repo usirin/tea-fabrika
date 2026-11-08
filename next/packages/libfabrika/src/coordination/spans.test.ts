@@ -1,0 +1,496 @@
+// p97, every coordination call is one span, names and numbers only (P9's plan writes it out; the
+// lead commit adds it to docs/plan/tier-1-detail.md, "Properties"), for `coordination/mailbox.ts`,
+// `process-manager.ts` and `client-manager.ts`. Written before the modules (Tier 1, P9, ticket 236).
+//
+// The shape these tests hold the modules to, from the plan's "What this piece records" and flag 12:
+// - Span names: `mailbox.send`, `mailbox.receive` (one per Stream run), `process.start`,
+//   `members.read` (one per `members` call) and `members.write`. P6's `ledger.*` spans nest inside.
+// - Tags: OpenTelemetry's messaging keys where they fit and `fab.<piece>.*` for the rest. The plan
+//   does not fix each key, so these tests find a tag by its last word (`answer`, `why`, `after`,
+//   `letters`, `skipped`, `facts`, `keys`, `live`, `ignored`, `rev`, `program`, `hash`, `tag`), and
+//   find a name or an id by its value.
+// - No tag holds `m`, a `saw` text, a signature or a string over 128 characters.
+import {mkdtempSync, rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {DatabaseSync} from "node:sqlite";
+import {afterAll, describe, expect, it} from "@effect/vitest";
+import {Effect, Layer, Option, Stream, Tracer} from "effect";
+import {Doorbell, Ledger, LedgerError} from "../data/ledger.ts";
+import type {Sql} from "../data/referee.ts";
+import {nodeSql} from "../data/sqlite.ts";
+import {ClientManager} from "./client-manager.ts";
+import {type From, Mailbox} from "./mailbox.ts";
+import type {MemberFact} from "./members.ts";
+import {ProcessManager} from "./process-manager.ts";
+
+const READER = "gateway:t1";
+const CAUSE = "in-3f9a0c21-41";
+const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+const TO = "ledger:home";
+const SENT = "2026-11-07T21:10:01.204Z";
+const FOUNDER = {
+	name: "home",
+	keys: ["pA"],
+	window: "wA",
+	person: P,
+	by: "SHA256:founder-mac",
+	build: "b-5e9c2a0",
+} as const;
+const MOST = 128; // the longest text a span tag may hold (P37's law, as P6's p95)
+
+// Markers no tag may hold: the letter's m, every saw text, and the signature's two texts.
+const M_MARK = "m-marker-51c0";
+const SAW_MARK = "saw-marker-8a2e";
+const SIG_MARK = "sig-marker-3f71";
+const MARKS = [M_MARK, SAW_MARK, SIG_MARK];
+
+// Every ledger is a fresh node:sqlite file in one temp folder, removed after.
+const folder = mkdtempSync(join(tmpdir(), "p9-spans-"));
+const opened: Array<DatabaseSync> = [];
+let files = 0;
+const fresh = (): Sql => {
+	const db = new DatabaseSync(join(folder, `ledger-${++files}.db`));
+	opened.push(db);
+	return nodeSql(db);
+};
+afterAll(() => {
+	for (const db of opened.splice(0)) if (db.isOpen) db.close();
+	rmSync(folder, {recursive: true, force: true});
+});
+
+const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
+const onSql = (sql: Sql) => Ledger.sql(sql, {reader: READER}).pipe(Layer.provide(quiet));
+const all = (sql: Sql = fresh()) =>
+	Layer.mergeAll(Mailbox.layer, ProcessManager.layer, ClientManager.layer(FOUNDER)).pipe(
+		Layer.provideMerge(onSql(sql)),
+	);
+
+const from = (over: Partial<From> = {}): From => ({
+	by: "SHA256:t2",
+	for: P,
+	sentAt: SENT,
+	seen: 0,
+	cause: CAUSE,
+	build: "b-7c1d073",
+	...over,
+});
+
+/** A tracer that keeps every span it makes. */
+const capture = () => {
+	const spans: Array<Tracer.NativeSpan> = [];
+	const tracer = Tracer.make({
+		span(options) {
+			const span = new Tracer.NativeSpan(options);
+			spans.push(span);
+			return span;
+		},
+	});
+	const ended = (name: string) => spans.filter((s) => s.name === name && s.status._tag === "Ended");
+	return {tracer, spans, ended};
+};
+const tags = (span: Tracer.NativeSpan): Record<string, unknown> =>
+	Object.fromEntries(span.attributes);
+/** The tag whose key is `word` or ends in `.word`. */
+const tagged = (span: Tracer.NativeSpan, word: string): unknown =>
+	Object.entries(tags(span)).find(([key]) => key === word || key.endsWith(`.${word}`))?.[1];
+const holds = (span: Tracer.NativeSpan, value: unknown): boolean =>
+	Object.values(tags(span)).includes(value);
+/** Whether `outer` is above `span`, walking its parents. */
+const within = (span: Tracer.NativeSpan, outer: Tracer.NativeSpan): boolean => {
+	let at: Option.Option<Tracer.AnySpan> = span.parent;
+	while (Option.isSome(at)) {
+		if (at.value.spanId === outer.spanId) return true;
+		at = at.value._tag === "Span" ? at.value.parent : Option.none();
+	}
+	return false;
+};
+
+// ---- Facts with markers in every saw text and signature ----
+const SAW = {
+	code: SAW_MARK,
+	label: SAW_MARK,
+	where: SAW_MARK,
+	how: "compare",
+	check: "touch",
+	has: [SAW_MARK],
+} as const;
+const TOOK = {label: SAW_MARK, where: SAW_MARK, how: "panel", check: "touch"} as const;
+const signed = (signer: string) => ({
+	text: `${SIG_MARK} text`,
+	armored: `${SIG_MARK} armored`,
+	signer,
+});
+let made = 0;
+const nextId = (prefix: string): string => `${prefix}_${String(++made).padStart(26, "0")}`;
+const granted = (signer: string, key: string): MemberFact => ({
+	_tag: "granted",
+	grant: {id: nextId("grant"), key, for: P, to: TO, as: "window", saw: SAW, sentAt: SENT},
+	signed: signed(signer),
+});
+const revoked = (signer: string, key: string): MemberFact => ({
+	_tag: "revoked",
+	revoke: {id: nextId("revoke"), key, for: P, to: TO, saw: TOOK, sentAt: SENT},
+	signed: signed(signer),
+});
+const addSaw = (how: "sheet" | "recovery") => ({
+	how,
+	check: "touch" as const,
+	where: SAW_MARK,
+	has: [SAW_MARK],
+	typed: how === "sheet",
+	kept: how === "sheet" ? ("print" as const) : null,
+	old: how === "recovery" ? ("lost" as const) : null,
+});
+const addedDevice = (
+	signer: string,
+	key: string,
+	window: string,
+	drops: ReadonlyArray<string> = [],
+): MemberFact => ({
+	_tag: "added",
+	add: {
+		id: nextId("add"),
+		for: P,
+		to: TO,
+		adds: {_tag: "person", key, window},
+		drops: [...drops],
+		saw: addSaw("recovery"),
+		sentAt: SENT,
+	},
+	signed: signed(signer),
+});
+const addedSheet = (signer: string, key: string): MemberFact => ({
+	_tag: "added",
+	add: {
+		id: nextId("add"),
+		for: P,
+		to: TO,
+		adds: {_tag: "recovery", key, v: 1},
+		drops: [],
+		saw: addSaw("sheet"),
+		sentAt: SENT,
+	},
+	signed: signed(signer),
+});
+const denied = (key: string): MemberFact => ({
+	_tag: "denied",
+	id: nextId("deny"),
+	key,
+	saw: SAW,
+	by: "SHA256:menu",
+});
+
+const write = (fact: MemberFact) => ClientManager.use((clients) => clients.write(fact, from()));
+
+/** Every tag of every span: no marker, and no text over 128 characters. */
+const clean = (spans: ReadonlyArray<Tracer.NativeSpan>) => {
+	for (const span of spans) {
+		for (const [key, value] of Object.entries(tags(span))) {
+			const text = typeof value === "string" ? value : (JSON.stringify(value) ?? "");
+			for (const mark of MARKS) expect(text.includes(mark), `${span.name} ${key}`).toBe(false);
+			expect(
+				typeof value === "string" ? value.length : 0,
+				`${span.name} ${key}`,
+			).toBeLessThanOrEqual(MOST);
+		}
+	}
+};
+
+describe("p97, mailbox spans", () => {
+	it.effect(
+		"plant, m in a tag: each send ends one mailbox.send span with to, id and answer, ledger inside",
+		() => {
+			const {tracer, ended, spans} = capture();
+			return Effect.gen(function* () {
+				const mailbox = yield* Mailbox;
+				const m = {type: "save", value: M_MARK};
+				yield* mailbox.send("notes:1", "letter_a", m, from());
+				yield* mailbox.send("notes:1", "letter_a", {type: "delete", value: M_MARK}, from());
+				const sends = ended("mailbox.send");
+				expect(sends.length).toBe(2);
+				const [placed, refused] = sends;
+				if (placed === undefined || refused === undefined) return expect.unreachable();
+				expect(holds(placed, "notes:1") || holds(placed, "notes:1/inbox")).toBe(true);
+				expect(holds(placed, "letter_a")).toBe(true);
+				expect(tagged(placed, "answer")).toBe("placed");
+				expect(tagged(refused, "answer")).toBe("refused");
+				expect(tagged(refused, "why")).toBe("id_reused");
+				const appends = ended("ledger.append");
+				expect(appends.length).toBe(2);
+				expect(appends.every((append, i) => within(append, sends[i] ?? placed))).toBe(true);
+				clean(spans);
+			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+		},
+	);
+
+	it.effect(
+		"each receive run ends one mailbox.receive span with name, after, letters and skipped",
+		() => {
+			const {tracer, ended, spans} = capture();
+			return Effect.gen(function* () {
+				const mailbox = yield* Mailbox;
+				const ledger = yield* Ledger;
+				yield* mailbox.send("notes:1", "letter_a", M_MARK, from());
+				yield* ledger.append("notes:1/inbox", "x-1", {...from(), _tag: "exit", body: {m: M_MARK}});
+				yield* mailbox.send("notes:1", "letter_b", M_MARK, from());
+				const letters = yield* Stream.runCollect(mailbox.receive("notes:1", 0));
+				expect(letters.length).toBe(2);
+				const [receive, ...more] = ended("mailbox.receive");
+				expect(more).toEqual([]);
+				if (receive === undefined) return expect.unreachable();
+				expect(holds(receive, "notes:1") || holds(receive, "notes:1/inbox")).toBe(true);
+				expect(tagged(receive, "after")).toBe(0);
+				expect(tagged(receive, "letters")).toBe(2);
+				expect(tagged(receive, "skipped")).toBe(1);
+				const reads = ended("ledger.read");
+				expect(reads.length).toBeGreaterThan(0);
+				expect(reads.every((read) => within(read, receive))).toBe(true);
+				clean(spans);
+			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+		},
+	);
+});
+
+describe("p97, process spans", () => {
+	it.effect("each start ends one process.start span with pid, program, hash and answer", () => {
+		const {tracer, ended, spans} = capture();
+		return Effect.gen(function* () {
+			const manager = yield* ProcessManager;
+			yield* manager.start("notes:1", {program: "notes", hash: "sha256-7c1d073e"}, from());
+			yield* manager.start(
+				"notes:1",
+				{program: "notes", hash: "sha256-7c1d073e"},
+				from({cause: null}),
+			);
+			const [first, second, ...more] = ended("process.start");
+			expect(more).toEqual([]);
+			if (first === undefined || second === undefined) return expect.unreachable();
+			expect(holds(first, "notes:1")).toBe(true);
+			expect(tagged(first, "program")).toBe("notes");
+			expect(tagged(first, "hash")).toBe("sha256-7c1d073e");
+			expect(tagged(first, "answer")).toBe("placed");
+			expect(tagged(second, "answer")).toBe("refused");
+			expect(tagged(second, "why")).toBe("id_reused");
+			const [append] = ended("ledger.append");
+			expect(append !== undefined && within(append, first)).toBe(true);
+			clean(spans);
+		}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+	});
+});
+
+describe("p97, member spans", () => {
+	it.effect("plant, a refused write with no span: every write ends one members.write span", () => {
+		const {tracer, ended, spans} = capture();
+		return Effect.gen(function* () {
+			const clients = yield* ClientManager;
+			yield* write(granted("pA", "t1"));
+			yield* write(granted("wA", "t2"));
+			yield* write(denied("t3"));
+			yield* write(revoked("pA", "t1"));
+			const writes = ended("members.write");
+			expect(writes.length).toBe(4);
+			const [grant, refused, deny, revoke] = writes;
+			if (
+				grant === undefined ||
+				refused === undefined ||
+				deny === undefined ||
+				revoke === undefined
+			)
+				return expect.unreachable();
+			expect(tagged(grant, "tag")).toBe("granted");
+			expect(tagged(grant, "answer")).toBe("applied");
+			expect(tagged(grant, "rev")).toBe(2);
+			expect(holds(grant, "pA")).toBe(true); // the signer's key
+			expect(tagged(refused, "answer")).toBe("refused");
+			expect(tagged(refused, "why")).toBe("not_allowed");
+			expect(holds(refused, "wA")).toBe(true);
+			expect(tagged(deny, "tag")).toBe("denied");
+			expect(tagged(revoke, "tag")).toBe("revoked");
+			const before = ended("members.read").length;
+			yield* clients.members;
+			const reads = ended("members.read");
+			expect(reads.length).toBe(before + 1);
+			const read = reads.at(-1);
+			if (read === undefined) return expect.unreachable();
+			const facts = yield* Stream.runCollect((yield* Ledger).read("door/members", 0));
+			expect(tagged(read, "facts")).toBe(facts.length);
+			expect(typeof tagged(read, "keys")).toBe("number");
+			expect(typeof tagged(read, "live")).toBe("number");
+			expect(tagged(read, "ignored")).toBe(0);
+			clean(spans);
+		}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+	});
+
+	it.effect(
+		"plant, ignored reported as applied: the Mac that lost the sheet race has an ignored span",
+		() => {
+			const {tracer, ended, spans} = capture();
+			const sql = fresh();
+			const sheet = addedSheet("pA", "r1");
+			const macC = addedDevice("r1", "pC", "wC", ["pA"]);
+			const macX = addedDevice("r1", "pX", "wX");
+			const hook: {before: Effect.Effect<void, LedgerError> | null} = {
+				before: write(macX).pipe(
+					Effect.asVoid,
+					Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
+				),
+			};
+			const target = macC._tag === "added" ? macC.add.id : "";
+			// A Ledger that runs Mac X's whole write just before Mac C's append: the race, made certain.
+			const racing = Layer.effect(
+				Ledger,
+				Effect.gen(function* () {
+					const real = yield* Ledger;
+					return {
+						read: real.read,
+						wait: real.wait,
+						append: (stream: string, id: string, line: Parameters<typeof real.append>[2]) =>
+							Effect.suspend(() => {
+								const before = id === target ? hook.before : null;
+								if (before === null) return real.append(stream, id, line);
+								hook.before = null;
+								return Effect.andThen(before, real.append(stream, id, line));
+							}),
+					};
+				}),
+			).pipe(Layer.provide(onSql(sql)));
+			return Effect.gen(function* () {
+				const clients = yield* ClientManager;
+				yield* write(sheet);
+				expect(yield* write(macC)).toEqual({_tag: "ignored", rev: 4, why: "used"});
+				// Spans are kept in the order they start, and Mac X's starts inside Mac C's, so sort them.
+				const answers = ended("members.write")
+					.map((span) => `${String(tagged(span, "answer"))} ${String(tagged(span, "why") ?? "")}`)
+					.sort();
+				expect(answers).toEqual(["applied ", "applied ", "ignored used"]);
+				yield* clients.members;
+				const read = ended("members.read").at(-1);
+				expect(read === undefined ? null : tagged(read, "ignored")).toBe(1);
+				clean(spans);
+			}).pipe(
+				Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(racing))),
+				Effect.withTracer(tracer),
+			);
+		},
+	);
+});
+
+describe("p97, names and numbers only", () => {
+	it.effect("a name, an id and a key far over 128 characters are cut in every tag", () => {
+		const {tracer, spans, ended} = capture();
+		const long = (letter: string) => letter.repeat(300);
+		return Effect.gen(function* () {
+			const mailbox = yield* Mailbox;
+			const manager = yield* ProcessManager;
+			yield* mailbox.send(long("n"), long("i"), {value: M_MARK}, from({by: long("b")}));
+			yield* Stream.runCollect(mailbox.receive(long("n"), 0));
+			yield* manager.start(long("p"), {program: long("g"), hash: long("h")}, from({seen: 1}));
+			yield* write(granted(long("k"), "t1"));
+			for (const name of ["mailbox.send", "mailbox.receive", "process.start", "members.write"])
+				expect(ended(name).length, name).toBe(1);
+			clean(spans);
+		}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+	});
+});
+
+// Gaps the mutation step found on the build (ticket 236): tag names and numbers held loose above.
+describe("p97, the tags hold the right names and numbers", () => {
+	it.effect("members.read counts only live keys as live, and members.write names its key", () => {
+		const {tracer, ended} = capture();
+		return Effect.gen(function* () {
+			const clients = yield* ClientManager;
+			yield* write(granted("pA", "t1"));
+			yield* write(revoked("pA", "t1"));
+			const [grant] = ended("members.write");
+			if (grant === undefined) return expect.unreachable();
+			expect(tagged(grant, "key")).toBe("t1");
+			expect(tagged(grant, "signer")).toBe("pA");
+			yield* clients.members;
+			const read = ended("members.read").at(-1);
+			if (read === undefined) return expect.unreachable();
+			// pA, wA and t1 are known; t1 is revoked, so two are live.
+			expect(tagged(read, "keys")).toBe(3);
+			expect(tagged(read, "live")).toBe(2);
+		}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+	});
+
+	it.effect("a members call on a founded ledger appends nothing: no ledger.append span", () => {
+		const {tracer, ended} = capture();
+		return Effect.gen(function* () {
+			const clients = yield* ClientManager;
+			yield* clients.members;
+			expect(ended("ledger.append").length).toBe(1); // the founding
+			yield* clients.members;
+			yield* clients.members;
+			expect(ended("ledger.append").length).toBe(1);
+		}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+	});
+
+	it.effect("an ignored write's span holds the rev it was placed at", () => {
+		const {tracer, ended} = capture();
+		const sql = fresh();
+		const sheet = addedSheet("pA", "r1");
+		const macC = addedDevice("r1", "pC", "wC", ["pA"]);
+		const macX = addedDevice("r1", "pX", "wX");
+		const target = macC._tag === "added" ? macC.add.id : "";
+		let before: Effect.Effect<void, LedgerError> | null = write(macX).pipe(
+			Effect.asVoid,
+			Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
+		);
+		// Mac X's whole write runs just before Mac C's append, as in the race above.
+		const racing = Layer.effect(
+			Ledger,
+			Effect.map(Ledger, (real) => ({
+				read: real.read,
+				wait: real.wait,
+				append: (stream: string, id: string, line: Parameters<typeof real.append>[2]) =>
+					Effect.suspend(() => {
+						const first = id === target ? before : null;
+						if (first === null) return real.append(stream, id, line);
+						before = null;
+						return Effect.andThen(first, real.append(stream, id, line));
+					}),
+			})),
+		).pipe(Layer.provide(onSql(sql)));
+		return Effect.gen(function* () {
+			yield* write(sheet);
+			expect(yield* write(macC)).toEqual({_tag: "ignored", rev: 4, why: "used"});
+			const ignored = ended("members.write").find((span) => tagged(span, "answer") === "ignored");
+			if (ignored === undefined) return expect.unreachable();
+			expect(tagged(ignored, "rev")).toBe(4);
+			expect(tagged(ignored, "why")).toBe("used");
+		}).pipe(
+			Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(racing))),
+			Effect.withTracer(tracer),
+		);
+	});
+
+	it.effect("mailbox.send keeps the letter's id under OpenTelemetry's message id key", () => {
+		const {tracer, ended} = capture();
+		return Effect.gen(function* () {
+			const mailbox = yield* Mailbox;
+			yield* mailbox.send("notes:1", "letter_a", {value: M_MARK}, from());
+			const [send] = ended("mailbox.send");
+			if (send === undefined) return expect.unreachable();
+			expect(tags(send)["messaging.message.id"]).toBe("letter_a");
+		}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+	});
+
+	it.effect("a send the ledger fails ends its span with the ledger's why", () => {
+		const {tracer, ended} = capture();
+		const broken = Layer.succeed(Ledger, {
+			append: () => Effect.fail(new LedgerError({why: "storage"})),
+			read: () => Stream.fail(new LedgerError({why: "storage"})),
+			wait: () => Effect.fail(new LedgerError({why: "storage"})),
+		});
+		return Effect.gen(function* () {
+			const mailbox = yield* Mailbox;
+			const failed = yield* Effect.flip(mailbox.send("notes:1", "letter_a", {}, from()));
+			expect(failed.why).toBe("storage");
+			const [send] = ended("mailbox.send");
+			if (send === undefined) return expect.unreachable();
+			expect(tagged(send, "why")).toBe("storage");
+		}).pipe(Effect.provide(Mailbox.layer.pipe(Layer.provide(broken))), Effect.withTracer(tracer));
+	});
+});
