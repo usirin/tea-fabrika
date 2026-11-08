@@ -326,6 +326,7 @@ describe("P12 real object adapters", () => {
 							: {put: calls.put, head: async () => ({sha256: "0".repeat(64)})},
 					);
 					const records = RecordManager.remote((name) => stage.record("p12-records", name));
+					// P37: a failed archive try deletes nothing and never fails `flush`.
 					await expect(
 						Effect.runPromise(
 							Effect.gen(function* () {
@@ -334,6 +335,8 @@ describe("P12 real object adapters", () => {
 								db.prepare(
 									'INSERT INTO health (piece,at,ms,ok,error,lag,"spanId") VALUES (?,0,1,1,NULL,NULL,NULL)',
 								).run("fixture");
+								// Summarize the fixture's hour, so its day is due and flush tries the archive.
+								yield* sink.summaries(0, 1);
 								yield* sink.flush;
 							}).pipe(
 								Effect.provide(
@@ -345,11 +348,15 @@ describe("P12 real object adapters", () => {
 								),
 							),
 						),
-					).rejects.toThrow();
+					).resolves.toBeUndefined();
 					expect(db.prepare("SELECT piece FROM health WHERE piece='fixture'").all()).toHaveLength(
 						1,
 					);
 					expect(db.prepare("SELECT * FROM archived").all()).toEqual([]);
+					// The try happened and failed: its own health row says why.
+					expect(
+						db.prepare("SELECT ok,error FROM health WHERE piece='sink.archive'").all(),
+					).toEqual([{ok: 0, error: fail === "put" ? "unreachable" : "mismatch"}]);
 					expect(db.prepare("SELECT piece,count FROM summary").all()).toEqual(
 						expect.arrayContaining([expect.objectContaining({piece: "fixture", count: 1})]),
 					);
@@ -389,9 +396,9 @@ describe("P12 real object adapters", () => {
 					RecordManager.use((r) => Stream.runCollect(r.read(chain))).pipe(Effect.provide(manager)),
 				);
 			const job = await collect({_tag: "job", process: pid});
-			expect(job.some((r) => r.name === "runner.msg" && r.endTimeUnixNano !== "0")).toBe(true);
+			expect(job.some((r) => r.name === "runner.step" && r.endTimeUnixNano !== "0")).toBe(true);
 			const failures = await collect({_tag: "job", process: broken.process});
-			expect(failures.some((r) => r.ok === false && r.name === "runner.msg")).toBe(true);
+			expect(failures.some((r) => r.ok === false && r.name === "runner.step")).toBe(true);
 			expect(job.every((r) => r.attributes["fab.process"] === pid)).toBe(true);
 			const outside = await collect({_tag: "spans"});
 			expect(outside.some((r) => r.name === "door.initialize")).toBe(true);

@@ -27,7 +27,7 @@ const pause = () => new Promise<void>((done) => setTimeout(done, 25));
 afterEach(async () => {
 	for (const b of browsers.splice(0)) await b.close();
 	for (const c of children.splice(0))
-		if (c.exitCode === null) {
+		if (c.exitCode === null && c.signalCode === null) {
 			c.kill("SIGTERM");
 			await new Promise<void>((done) => c.once("exit", () => done()));
 		}
@@ -91,13 +91,8 @@ const start = async () => {
 	const browser = await chromium.launch({headless: true});
 	browsers.push(browser);
 	const context = await browser.newContext();
-	// P12 has no window yet. This empty document only gives the driver the real stage origin.
-	await context.route(`${url}/`, (route) =>
-		route.fulfill({
-			contentType: "text/html",
-			body: "<!doctype html><title>P12 protocol driver</title>",
-		}),
-	);
+	// P12 has no window yet. The driver loads the stage's own plain `/`, only for its real
+	// origin: Chromium blocks a WebSocket from a page faked with route.fulfill.
 	return {home, key, url, env, child, context, output: () => output};
 };
 

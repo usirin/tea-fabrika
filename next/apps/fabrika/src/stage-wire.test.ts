@@ -4,6 +4,7 @@
 import {spawn, execFileSync, type ChildProcess} from "node:child_process";
 import {createHash, generateKeyPairSync, sign} from "node:crypto";
 import {mkdtempSync, readFileSync, rmSync} from "node:fs";
+import {request} from "node:http";
 import {createServer} from "node:net";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
@@ -72,6 +73,17 @@ const unusedPort = () =>
 			if (at === null || typeof at === "string") return fail(new Error("no TCP port"));
 			listener.close(() => done(at.port));
 		});
+	});
+// Node's fetch drops a custom Host header (a forbidden header in the Fetch spec), so the
+// wrong-host check sends its request with node:http, which sends the header as given.
+const statusWithHost = (url: string, host: string) =>
+	new Promise<number>((done, fail) => {
+		const sent = request(url, {headers: {host}}, (response) => {
+			response.resume();
+			done(response.statusCode ?? 0);
+		});
+		sent.once("error", fail);
+		sent.end();
 	});
 const children: Array<ChildProcess> = [];
 const homes: Array<string> = [];
@@ -143,6 +155,9 @@ type Frame = {
 class Client {
 	readonly frames: Array<Frame | string> = [];
 	private serial = 0;
+	// Node's WebSocket fires `error` on a failed upgrade (the proxy's 502 while workerd
+	// restarts) but can stay CONNECTING with no `close`, so `error` counts as closed.
+	private closed = false;
 	private readonly ws: WebSocket;
 	private readonly base: string;
 	private readonly key: ReturnType<typeof identity>;
@@ -155,6 +170,12 @@ class Client {
 			`${base.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
 		);
 		sockets.push(this.ws);
+		this.ws.addEventListener("error", () => {
+			this.closed = true;
+		});
+		this.ws.addEventListener("close", () => {
+			this.closed = true;
+		});
 		this.ws.addEventListener("message", ({data}) => {
 			this.frames.push(data === "pong" ? "pong" : JSON.parse(String(data)));
 		});
@@ -163,7 +184,8 @@ class Client {
 		for (;;) {
 			const at = this.frames.findIndex(test);
 			if (at >= 0) return this.frames.splice(at, 1)[0];
-			if (this.ws.readyState === WebSocket.CLOSED) throw new Error("wire closed before answer");
+			if (this.closed || this.ws.readyState === WebSocket.CLOSED)
+				throw new Error("wire closed before answer");
 			await pause();
 		}
 	}
@@ -196,7 +218,10 @@ class Client {
 	}
 	async call(method: string, params: unknown): Promise<Frame> {
 		const id = ++this.serial;
-		while (this.ws.readyState === WebSocket.CONNECTING) await pause();
+		while (this.ws.readyState === WebSocket.CONNECTING) {
+			if (this.closed) throw new Error("wire closed before open");
+			await pause();
+		}
 		this.ws.send(JSON.stringify({jsonrpc: "2.0", id, method, params}));
 		return this.next((f) => typeof f !== "string" && f.id === id);
 	}
@@ -307,7 +332,9 @@ describe("P12 real dev.ts wire", () => {
 		expect(first).toHaveLength(PAGE);
 		const second = await read(c, "counter:1/inbox", first.at(-1)!.rev);
 		expect(second).toHaveLength(3);
-		expect([...first, ...second].map(({rev, pos}) => ({rev, pos}))).toEqual(accepted);
+		expect([...first, ...second].map(({rev, pos}) => ({rev, pos}))).toEqual(
+			accepted.map(({rev, pos}) => ({rev, pos})),
+		);
 		expect(accepted.map((a) => a.pos)).toEqual(Array.from({length: PAGE + 3}, (_, n) => n + 1));
 		expect(accepted.every((a, n) => n === 0 || a.rev > accepted[n - 1]!.rev)).toBe(true);
 		// Door input facts occupy the intervening global revisions.
@@ -361,8 +388,12 @@ describe("P12 real dev.ts wire", () => {
 	it("p15/p26 plant: skip Host/Origin or pre-hello guards, or trace strangers", async () => {
 		const s = await stage(),
 			c = await connected(s);
-		expect((await fetch(s.url, {headers: {host: "wrong.test"}})).status).toBe(421);
+		expect(await statusWithHost(s.url, "wrong.test")).toBe(421);
 		expect((await fetch(s.url, {headers: {origin: "https://foreign.test"}})).status).toBe(403);
+		// Every routed call is recorded, so reader c's own reads add rows here. Only rows
+		// written by anyone other than c's key could come from a stranger.
+		const notC = (rows: ReadonlyArray<typeof Entry.Type>) =>
+			rows.filter((r) => r.by !== s.key.fingerprint);
 		const before = await read(c, "door/inputs");
 		const traces = await c.call("spans.read", {chain: {_tag: "spans"}, after: 0});
 		const stranger = new Client(s.url, identity(), "stranger");
@@ -377,7 +408,9 @@ describe("P12 real dev.ts wire", () => {
 		expect(
 			(await Effect.runPromise(bad.hello(nonce, {signed: "not a proof"}))).error?.data?.why,
 		).toBe("bad_signature");
-		expect(await read(c, "door/inputs")).toEqual(before);
+		const inputs = await read(c, "door/inputs");
+		expect(inputs.length).toBeGreaterThan(before.length);
+		expect(notC(inputs)).toEqual(notC(before));
 		const after = await c.call("spans.read", {chain: {_tag: "spans"}, after: 0});
 		// Authorized audit reads may record themselves; no span may be attributed to the stranger.
 		expect(

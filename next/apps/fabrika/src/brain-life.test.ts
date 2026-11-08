@@ -26,7 +26,8 @@ const living = (pid: number) => {
 };
 afterEach(async () => {
 	for (const child of children.splice(0))
-		if (child.exitCode === null) {
+		// A child killed by a signal keeps `exitCode` null; `signalCode` says it already ended.
+		if (child.exitCode === null && child.signalCode === null) {
 			child.kill("SIGTERM");
 			await new Promise<void>((done) => child.once("exit", () => done()));
 		}
