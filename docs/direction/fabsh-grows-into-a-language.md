@@ -1,6 +1,6 @@
 # fabsh grows into a language
 
-**Proposed 2026-11-06, a vision note.** Nothing here is planned for a tier. It is saved so it is not
+**Proposed 2026-11-06, a vision note.** Walked when Tier 5 starts (owner, 2026-11-08): summon's grammar, completion and highlighting. Nothing here is planned for a tier. It is saved so it is not
 lost, and tied to a real problem: lines like `summon claude haiku xhigh as scout on cloud` already have
 a verb, values and keywords (`as`, `on`). That is a grammar, not a command with flags.
 

@@ -1,7 +1,7 @@
 # Every finding is rated
 
 Decided 2026-10-24: **a finding the user never rated counts as noise once its
-change ships.** The rest of this note is **proposed**.
+change ships.** The rest of this note is **proposed**. Walked when Tier 6 starts (owner, 2026-11-08): shared findings and ratings for pipeline checks.
 
 ```ts
 // A sketch. A user rates a finding with one of two buttons, as a fact of its own.

@@ -1,6 +1,6 @@
 # Shared tiles: summon an agent into your tile, and see who is there
 
-**Proposed 2026-11-04, presence, color and the smaller calls decided 2026-11-07.** The owner
+**Proposed 2026-11-04, presence, color and the smaller calls decided 2026-11-07.** Walked when Tier 5 starts (owner, 2026-11-08): agents sharing tiles and the inbox. The owner
 decided these during the walk of the Design canvas "Shared tile guidelines" on 2026-11-04, and more
 in later walks, each marked decided below:
 

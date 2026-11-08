@@ -1,7 +1,7 @@
 # Autonomy is measured trust
 
 **Decided 2026-11-03 by the owner:** the rule in [what was decided](#what-was-decided). The
-measures under it are **proposed**: leans, each marked with how sure. Both versions.
+measures under it are **proposed**: leans, each marked with how sure. Both versions. Walked when Tier 6 starts (owner, 2026-11-08): pipeline merge and failure measures.
 
 ```ts
 // A sketch. One row per merge nobody approved by hand, written when the merge happens.
