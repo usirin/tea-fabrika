@@ -321,7 +321,11 @@ These run on a laptop a person is using. A prompt can't see the load, so every a
 brief carries these caps. Each one came from a laptop that became unusable.
 
 - Tests: `nice -n 15 pnpm exec vitest run --maxWorkers=3`, a narrow path while you
-  work, the full suite once at the end. With two or more code agents running:
+  work, then `--changed origin/main` once at the end: only the tests that reach a changed file.
+  Never the full suite locally (owner, 2026-11-08). On a pull request, CI runs only the tests that
+  reach a changed file; the full suite runs after the merge, on main. `next/` has its own CI job that
+  runs all of its tests on every pull request. A run that
+  needs what CI lacks (Electron shots, a stage with workerd) still runs here. With two or more code agents running:
   `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at the very end. `tsgo` takes
   about 8 cores, so small jobs add up.
 - "Under load" means at most 8 code agents, one `pnpm typecheck` at a time across all of
