@@ -19,6 +19,7 @@ import {
 	Ledger,
 	LedgerError,
 	LedgerTransaction,
+	type LedgerTurn,
 	lineFor,
 	RecordManager,
 	SinkError,
@@ -1570,21 +1571,30 @@ describe("P10 inputs, retries and signer", () => {
 			Effect.gen(function* () {
 				const w = yield* world();
 				let lose = false;
-				const ledger = Layer.effect(
-					Ledger,
-					Ledger.pipe(
-						Effect.map((real: typeof Ledger.Service) => ({
-							...real,
-							append: (...args: Parameters<typeof real.append>) =>
-								real.append(...args).pipe(
-									Effect.flatMap((placing) => {
-										if (lose && args[0] === "door/inputs") {
-											lose = false;
-											return Effect.fail(new LedgerError({why: "unreachable"}));
-										}
-										return Effect.succeed(placing);
-									}),
-								),
+				const transaction = Layer.effect(
+					LedgerTransaction,
+					LedgerTransaction.pipe(
+						Effect.map((real) => ({
+							transact: <A>(step: (turn: LedgerTurn) => A) =>
+								Effect.gen(function* () {
+									let appended = false;
+									const placing = yield* real.transact((turn) =>
+										step({
+											...turn,
+											append: (stream, id, line) => {
+												const placing = turn.append(stream, id, line);
+												if (stream === "door/inputs") appended = true;
+												return placing;
+											},
+										}),
+									);
+									// Lose the answer only after the real input transaction commits.
+									if (lose && appended) {
+										lose = false;
+										return yield* new LedgerError({why: "unreachable"});
+									}
+									return placing;
+								}),
 						})),
 					),
 				).pipe(Layer.provide(w.env));
@@ -1592,7 +1602,10 @@ describe("P10 inputs, retries and signer", () => {
 					const d = yield* Door;
 					const {client} = yield* online(d, w);
 					lose = true;
-					yield* Effect.flip(d.route(client, "process.send", request("lost-append")));
+					expect(
+						yield* Effect.flip(d.route(client, "process.send", request("lost-append"))),
+					).toMatchObject({_tag: "LedgerError", why: "unreachable"});
+					expect(lose).toBe(false);
 					expect(w.deliveries).toEqual([]);
 					const before = rawRows(w.db, "door/inputs").filter((r) => r._tag === "received");
 					expect(before).toHaveLength(1);
@@ -1603,7 +1616,7 @@ describe("P10 inputs, retries and signer", () => {
 					expect(w.deliveries[0]!.trace.traceId).toBe(before[0]?.traceId);
 				}).pipe(
 					Effect.provide(
-						Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, ledger))),
+						Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, transaction))),
 					),
 				);
 			}),
@@ -2619,15 +2632,25 @@ describe("P10 span reader and recording", () => {
 		Effect.gen(function* () {
 			const w = yield* world();
 			let block = false;
-			const ledger = Layer.effect(
-				Ledger,
-				Ledger.pipe(
-					Effect.map((real: typeof Ledger.Service) => ({
-						...real,
-						append: (...args: Parameters<typeof real.append>) =>
-							block && args[0] === "door/inputs"
-								? Effect.fail(new LedgerError({why: "storage"}))
-								: real.append(...args),
+			const transaction = Layer.effect(
+				LedgerTransaction,
+				LedgerTransaction.pipe(
+					Effect.map((real) => ({
+						transact: <A>(step: (turn: LedgerTurn) => A) =>
+							real.transact((turn) =>
+								step({
+									...turn,
+									append: (stream, id, line) => {
+										// Fail the input write inside the real transaction, before storage changes.
+										if (block && stream === "door/inputs") {
+											block = false;
+											// oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- LedgerTransaction catches this synchronous callback's throw as a typed failure.
+											throw new LedgerError({why: "storage"});
+										}
+										return turn.append(stream, id, line);
+									},
+								}),
+							),
 					})),
 				),
 			).pipe(Layer.provide(w.env));
@@ -2636,11 +2659,15 @@ describe("P10 span reader and recording", () => {
 				const {client} = yield* online(d, w);
 				block = true;
 				expect(
-					(yield* Effect.flip(d.route(client, "process.send", request("unrecorded"))))._tag,
-				).toBe("LedgerError");
+					yield* Effect.flip(d.route(client, "process.send", request("unrecorded"))),
+				).toMatchObject({_tag: "LedgerError", why: "storage"});
+				expect(block).toBe(false);
+				expect(rawRows(w.db, "door/inputs")).toEqual([]);
 				expect(w.deliveries).toEqual([]);
 			}).pipe(
-				Effect.provide(Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, ledger)))),
+				Effect.provide(
+					Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, transaction))),
+				),
 			);
 		}),
 	);
