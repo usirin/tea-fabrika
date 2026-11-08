@@ -17,6 +17,7 @@
 	},
 	"devDependencies": {
 		"@effect/vitest": "catalog:",
+		"@kampus/counter": "workspace:*",
 		"@types/node": "catalog:",
 		"fast-check": "catalog:",
 		"typescript": "catalog:",
