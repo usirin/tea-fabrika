@@ -1,9 +1,9 @@
 import {applyCell} from "@demlik/tea";
-import {blindDraw, sealAsk} from "@kampus/pipeline/tickets/ask";
+import {type AskShown, askShownOf, blindDraw, sealAsk} from "@kampus/pipeline/tickets/ask";
 import {Effect} from "effect";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {DRAFT, NONE, NOW, policyFor, type Sealed} from "../../../fixtures/ask-desk/cases.ts";
+import {DRAFT, NONE, NOW, policyFor} from "../../../fixtures/ask-desk/cases.ts";
 import {askMachine, askView, type AskView} from "./ask-window.tsx";
 
 // P8/P12/P15/P16. Today's shared ask editor, not the later inbox program.
@@ -14,7 +14,7 @@ type Editor =
 	| {_tag: "saving"; answer: unknown};
 type Model = {
 	ticket: number;
-	ask: Sealed;
+	ask: AskShown;
 	editor: Editor;
 	needed?: boolean;
 	took: {ms: number; opened: readonly string[]};
@@ -29,17 +29,20 @@ type Msg =
 	| {type: "mark"; needed: boolean}
 	| {type: "focus" | "active" | "visible"; value: boolean; now: number}
 	| {type: "open"; name: string; now: number}
-	| {type: "show"; ask: Sealed; now: number}
+	| {type: "show"; ask: AskShown; now: number}
 	| {type: "save_ok"; value: unknown}
 	| {type: "save_err"; error: {why: string}}
 	| {type: "tick"; now: number};
 type Cmd = {type: string; [key: string]: unknown};
-const seal: (draft: unknown, policy: {seed: number}) => Effect.Effect<Sealed, unknown> = sealAsk;
 const start = async (hidden = false, rec: unknown = DRAFT.rec): Promise<Model> => {
 	const ask = await Effect.runPromise(
-		seal({...DRAFT, rec}, policyFor(DRAFT.ask, hidden, blindDraw)),
+		sealAsk({...DRAFT, rec}, policyFor(DRAFT.ask, hidden, blindDraw)),
 	);
-	const [model]: [Model, readonly Cmd[]] = askMachine.init(null, {ticket: 117, ask, now: NOW});
+	const [model]: [Model, readonly Cmd[]] = askMachine.init(null, {
+		ticket: 117,
+		ask: askShownOf(ask),
+		now: NOW,
+	});
 	return model;
 };
 const step = (model: Model, msg: Msg): readonly [Model, readonly Cmd[]] =>

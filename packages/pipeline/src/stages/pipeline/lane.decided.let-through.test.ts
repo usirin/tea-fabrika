@@ -60,14 +60,12 @@ describe("a lane, on what the real agents answered", () => {
 			};
 
 			// P28: this replaces a test whose new test passed from the start, which only a fake could write.
-			it("`again` with a note runs the builder once more with it, and no new test writer: a real fix lands", async () => {
-				const NOTE = "Fold ß to ss in `lower`, as the new test says.";
+			it("`again` with no recommendation runs the builder once more with no invented note, and no new test writer: a real fix lands", async () => {
 				const ran = await lane({
 					within: 50,
 					// The first step's question is round 1's surviving mutant, then the builder's no change.
 					steps: ["go_on", "again"],
 					picks: {...YES, step: "go_on"},
-					notes: {step: NOTE},
 					fake: {
 						...RUN_3,
 						// Each mutant is answered `cannot`, so a later mutation run writes no test twice.
@@ -78,7 +76,10 @@ describe("a lane, on what the real agents answered", () => {
 				});
 				const builds = runsOf(ran, "build");
 				expect(builds).toHaveLength(3);
-				expect(builds[2]?.prompt).toContain(NOTE);
+				const again = answersOf(ran).find(({answer}) => answer?.pick === "again");
+				expect(again?.fact).toMatchObject({answer: {_tag: "chose", pick: "again"}});
+				expect(again?.fact).not.toHaveProperty("answer.note");
+				expect(again?.answer?.note).toBe("");
 				expect(runsOf(ran, "tests")).toHaveLength(2);
 				expect(bye(ran)).toContain("ended: done");
 				expect(onMain(ran.remote, "src/lower.ts")).toContain("replaceAll");

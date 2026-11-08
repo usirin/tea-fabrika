@@ -26,6 +26,8 @@ import {
 	REDONE_MARK,
 	REDO,
 	SEE,
+	THE_LEAN,
+	answersOf,
 } from "./lane-harness.ts";
 import {PICKS} from "./machine.ts";
 
@@ -249,6 +251,7 @@ describe("a stopped lane, typed again", () => {
 			// A blind refusal has no note; the next, shown recommendation permits one.
 			queues: {approve: ["no", "no", "approve"]},
 			notes: {approve: NOTE},
+			fake: {answers: {plan: [...THE_LEAN.plan, ...THE_LEAN.plan]}},
 			fold: true,
 			again: [{}, {}],
 		});
@@ -261,6 +264,9 @@ describe("a stopped lane, typed again", () => {
 		const plans = runs.filter((r) => r.step === "plan");
 		expect(plans).toHaveLength(3);
 		expect(plans[2]?.prompt).toContain(NOTE);
+		expect(answersOf(ran).map(({fact}) => fact)).toContainEqual(
+			expect.objectContaining({answer: {_tag: "against", pick: "no", note: NOTE}}),
+		);
 		expect(ran.lines.at(-1)).toContain("ended: done");
 	});
 
@@ -346,14 +352,12 @@ describe("a stopped lane, typed again", () => {
 		expect(keys[1]).not.toBe(keys[0]);
 	});
 
-	it("exam_touched, `test_wrong`: the test writer redoes the touched file alone, told the note, its check runs, and build goes on from the builder's head as the next round", async () => {
-		const NOTE = "Keep the capitals test, and add one with mixed case.";
+	it("exam_touched, `test_wrong`: the test writer redoes the touched file alone, with no invented note, its check runs, and build goes on from the builder's head as the next round", async () => {
 		const ran = await lane({
 			within: 50,
 			// Answered once: a second exam_touched fails the test at once, out loud.
 			picks: YES,
 			queues: {exam_touched: ["test_wrong"]},
-			notes: {exam_touched: NOTE},
 			fake: {
 				writesAt: {build: {0: [{path: "src/lower.test.ts", text: TOUCHED}]}},
 				answers: REDO,
@@ -366,7 +370,10 @@ describe("a stopped lane, typed again", () => {
 		const runs = codexRuns(ran.dir);
 		const writers = runs.filter((r) => r.step === "tests");
 		expect(writers, said).toHaveLength(2);
-		expect(writers[1]?.prompt).toContain(NOTE);
+		const answer = answersOf(ran).find(({answer}) => answer?.pick === "test_wrong");
+		expect(answer?.fact).toMatchObject({answer: {_tag: "chose", pick: "test_wrong"}});
+		expect(answer?.fact).not.toHaveProperty("answer.note");
+		expect(answer?.answer?.note).toBe("");
 		expect(writers[1]?.prompt).toContain("src/lower.test.ts");
 		// Its check ran on the redo, and the redo's commit changes the touched file and nothing else.
 		const checks = ran.onBase.filter((c) => c.files.includes("src/lower.test.ts"));

@@ -309,7 +309,7 @@ describe("a lane, on what the real agents answered", () => {
 					queues: {approve: ["no", "no", "approve"]},
 					notes: {approve: NOTE},
 					again: [{}, {}],
-					fake: {answers: THE_LEAN},
+					fake: {answers: {plan: [...THE_LEAN.plan, ...THE_LEAN.plan]}},
 				});
 				expect(answeredWith(ran, "no")).toContainEqual(
 					expect.objectContaining({

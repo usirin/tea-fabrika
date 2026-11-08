@@ -7,7 +7,13 @@ import {
 	type Step,
 } from "@demlik/tea/pbt";
 import type {MsgOf} from "@kampus/fabrika-old";
-import {type Asked, AskCommand, blindDraw, sealAsk} from "@kampus/pipeline/tickets/ask";
+import {
+	type AskShown,
+	askShownOf,
+	AskCommand,
+	blindDraw,
+	sealAsk,
+} from "@kampus/pipeline/tickets/ask";
 import {Effect} from "effect";
 import * as fc from "fast-check";
 import {beforeAll, describe, expect, it} from "vitest";
@@ -25,13 +31,12 @@ type Model = ReturnType<Machine["init"]>[0];
 type AskStep = Step<Model, Msg, {readonly type: string; readonly [key: string]: unknown}>;
 
 const THIRD = {pick: "stop", does: "Stop the lane here"};
-let ASKS: readonly Asked[] = [];
+let ASKS: readonly AskShown[] = [];
 const seal = (rec: unknown, picks: typeof PICKS, ask: string, hidden: boolean) =>
 	Effect.runPromise(
-		sealAsk({...DRAFT, ask, rec, picks}, policyFor(ask, hidden, blindDraw)) as Effect.Effect<
-			Asked,
-			unknown
-		>,
+		sealAsk({...DRAFT, ask, rec, picks}, policyFor(ask, hidden, blindDraw)).pipe(
+			Effect.map(askShownOf),
+		),
 	);
 beforeAll(async () => {
 	ASKS = [
@@ -80,7 +85,7 @@ const OPTS = {numRuns: 150, seed: 119120};
 
 const savesOf = (step: AskStep) =>
 	step.cmds.flatMap((c) => (c.type === "save" ? [c as Record<string, unknown>] : []));
-const tookRec = (ask: Asked) =>
+const tookRec = (ask: AskShown) =>
 	ask.shows.rec._tag === "pick" ? "shown" : ask.shows.rec._tag === "hidden" ? "hidden" : "none";
 
 // ---------------------------------------------------------------- the laws
@@ -217,7 +222,7 @@ const PLANTS: readonly {readonly law: Law; readonly mistake: string; readonly ma
 				do: (s, m) => {
 					if ((m as Do).value._tag !== "rec" || s.ask.shows.rec._tag !== "hidden")
 						return real.do(s, m);
-					const shown = {...s.ask, shows: {...s.ask.shows, rec: s.ask.rec}};
+					const shown = {...s.ask, shows: {...s.ask.shows, rec: DRAFT.rec}};
 					const [next, cmds] = real.do({...s, ask: shown}, m);
 					return [{...next, ask: s.ask}, cmds];
 				},

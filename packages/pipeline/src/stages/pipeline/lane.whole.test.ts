@@ -13,6 +13,7 @@ import {
 	codexRuns,
 	WHOLE,
 	askedFor,
+	THE_LEAN,
 } from "./lane-harness.ts";
 import {askedFor as kindOfAsk, PICKS} from "./machine.ts";
 
@@ -79,6 +80,7 @@ describe("a lane, whole", () => {
 			picks: YES,
 			queues: {approve: ["no", "no", "approve"]},
 			notes: {approve: NOTE},
+			fake: {answers: {plan: [...THE_LEAN.plan, ...THE_LEAN.plan]}},
 			again: [{}, {}],
 			traced: true,
 		});

@@ -236,7 +236,7 @@ describe("ask desk P21: preparePending seals each parked old ask from what was k
 			}),
 		);
 	});
-	it("leaves a withdrawn or answered old ask alone", async () => {
+	it("seals a changed old ask with no replacement and leaves an answered old ask alone", async () => {
 		await run(
 			Effect.gen(function* () {
 				yield* stored;
@@ -255,7 +255,11 @@ describe("ask desk P21: preparePending seals each parked old ask from what was k
 				);
 				const before = yield* rows(5);
 				yield* preparePending(5);
-				expect(yield* rows(5)).toEqual(before);
+				const after = yield* rows(5);
+				expect(after.slice(0, before.length)).toEqual(before);
+				expect(sealedOf(yield* asked(5))).toMatchObject([{replaces: "a-approve-3"}]);
+				yield* preparePending(5);
+				expect(yield* rows(5)).toEqual(after);
 			}),
 		);
 	});

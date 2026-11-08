@@ -216,29 +216,40 @@ describe("ask desk P4: fresh answers, not title-and-body approvals", () => {
 });
 
 describe.each([false, true])("ask desk P5: concurrent answers, SQLite=%s", (disk) => {
-	it("records one answer under answer/<ask>; retries return the first result", async () => {
-		await run(
-			Effect.gen(function* () {
-				const ask = yield* seed();
-				const results = yield* Effect.all(
-					[
-						answer(ask, "ticket-click"),
-						answer(ask, "tracker-key", {
-							answer: {_tag: "against", pick: "no", note: "Need a new plan"},
-						}),
-					],
-					{concurrency: 2},
-				);
-				const recorded = answers(yield* rows);
-				expect(recorded).toHaveLength(1);
-				expect(recorded[0]?.id).toBe(`answer/${ask.ask}`);
-				expect(results[0]).toEqual(results[1]);
-				expect(yield* answer(ask, "retry")).toEqual(results[0]);
-				expect(answers(yield* rows)).toHaveLength(1);
-			}),
-			disk,
-		);
-	});
+	it.each([false, true])(
+		"records one answer; only a different answer is refused, different=%s",
+		async (different) => {
+			await run(
+				Effect.gen(function* () {
+					const ask = yield* seed();
+					const against = {answer: {_tag: "against", pick: "no", note: "Need a new plan"}};
+					const results = yield* Effect.all(
+						[answer(ask, "ticket-click"), answer(ask, "tracker-key", different ? against : {})].map(
+							(write) =>
+								write.pipe(
+									Effect.match({onSuccess: (value) => ({value}), onFailure: (error) => ({error})}),
+								),
+						),
+						{concurrency: 2},
+					);
+					const recorded = answers(yield* rows);
+					expect(recorded).toHaveLength(1);
+					expect(recorded[0]?.id).toBe(`answer/${ask.ask}`);
+					const fact = JSON.parse(recorded[0]?.data ?? "null");
+					const pick = fact.answer._tag === "rec" ? DRAFT.rec.pick : fact.answer.pick;
+					expect(results.filter((result) => "value" in result)).toEqual(
+						Array.from({length: different ? 1 : 2}, () => ({value: {ticket: 117}})),
+					);
+					expect(results.filter((result) => "error" in result)).toEqual(
+						different ? [{error: {_tag: "refused", why: `Already answered: ${pick}`}}] : [],
+					);
+					expect(yield* answer(ask, "retry", pick === "no" ? against : {})).toEqual({ticket: 117});
+					expect(answers(yield* rows)).toHaveLength(1);
+				}),
+				disk,
+			);
+		},
+	);
 });
 
 describe("ask desk P6: a person alone answers", () => {
