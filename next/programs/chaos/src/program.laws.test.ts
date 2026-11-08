@@ -175,13 +175,20 @@ describe("P17b schedule and machine laws", () => {
 				const [model] = A.chaosMachine.init(null, {});
 				const own = {
 					...raw.target,
+					program: "chaos",
 					...(byName ? {name: "chaos:1"} : {process: fixtureId("process", 1)}),
 				};
 				const decoded = Schema.decodeUnknownResult(A.Start)({...raw, target: own});
-				const refused =
-					Result.isFailure(decoded) ||
-					A.ChaosState.refuse(model, {type: "start", value: decoded.success}) !== null;
-				expect(refused).toBe(true);
+				expect(Result.isFailure(decoded)).toBe(true);
+				expect(
+					A.stepper(A.chaos).step(model, {type: "start", value: {...raw, target: own}}),
+				).toMatchObject({_tag: "refused"});
+				expect(
+					A.ChaosState.refuse(model, {
+						type: "start",
+						value: Schema.decodeUnknownSync(A.Start)(raw),
+					}),
+				).toBeNull();
 			}),
 			LAW,
 		);
