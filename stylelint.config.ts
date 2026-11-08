@@ -1,5 +1,4 @@
 // Today's version, design foundations PR 3. Every CSS rule blocks from day one.
-import {globSync} from "node:fs";
 import {join} from "node:path";
 import type {Config} from "stylelint";
 
@@ -7,11 +6,14 @@ const WINDOW = "apps/fabrika/src/window/window.css";
 const at = (selector: string, property: string) => `${WINDOW} ${selector} { ${property} }`;
 
 export default {
-	// Full paths let Node load each TypeScript plugin directly. An absent plugin is still an
-	// unknown-rule error, so discovering the files cannot silently turn a configured rule off.
-	plugins: globSync("oxlint-plugins/css/*.ts", {cwd: import.meta.dirname})
-		.sort()
-		.map((path) => join(import.meta.dirname, path)),
+	plugins: [
+		"token-exists",
+		"no-raw-color",
+		"no-primitive-var",
+		"part-token-owner",
+		"motion-under-guard",
+		"font-size-from-scale",
+	].map((name) => join(import.meta.dirname, "oxlint-plugins/css", `${name}.ts`)),
 	defaultSeverity: "error",
 	reportDescriptionlessDisables: true,
 	reportNeedlessDisables: true,
