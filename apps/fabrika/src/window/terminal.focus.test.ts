@@ -136,13 +136,27 @@ describe("a look change with nothing focused", () => {
 		settle();
 		expect(page.activeElement).toBe(body);
 	});
+
+	it("L4: a newly focused input keeps focus while restore timers run", async () => {
+		await twoTiles();
+		page.activeElement = body;
+		switchLook();
+		const input = element();
+		input.focus();
+		expect(page.activeElement).toBe(input);
+		while (timers.length > 0) {
+			tick();
+			expect(page.activeElement).toBe(input);
+		}
+	});
 });
 
 const twoTiles = async () => {
 	const {terminalFor} = await import("./terminal.ts");
 	const left = element();
 	const right = element();
-	terminalFor({} as never, "t1" as never).attach(left as never);
+	const other = terminalFor({} as never, "t1" as never);
+	other.attach(left as never);
 	const chosen = terminalFor({} as never, "t2" as never);
 	chosen.attach(right as never);
 	settle();
@@ -150,7 +164,7 @@ const twoTiles = async () => {
 	settle();
 	expect(right.contains(page.activeElement)).toBe(true);
 	sent.length = 0;
-	return {left, right};
+	return {left, right, other};
 };
 
 describe("a look change with the right tile focused", () => {
@@ -192,6 +206,26 @@ describe("a look change with the right tile focused", () => {
 			tick();
 			turns += 1;
 			staysRight();
+		}
+	});
+
+	it("L3: an unfocused tile can be chosen after the look change settles", async () => {
+		const {left, other} = await twoTiles();
+		switchLook();
+		settle();
+		other.focus();
+		const staysLeft = () => {
+			expect(left.contains(page.activeElement)).toBe(true);
+			page.activeElement?.dispatchEvent(Object.assign(new Event("keydown"), {key: "x"}));
+			expect(sent.filter(({msg}) => (msg as {type: string}).type === "keys")).toEqual([
+				{port: "tile:t1", msg: {type: "keys", data: "x"}},
+			]);
+			sent.length = 0;
+		};
+		staysLeft();
+		while (timers.length > 0) {
+			tick();
+			staysLeft();
 		}
 	});
 });
