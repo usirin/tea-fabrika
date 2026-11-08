@@ -135,6 +135,33 @@ const honestAnswers = every("a save is only an answer the shown ask offers", (st
 	return true;
 });
 
+const choiceNotes = every(
+	"a no-rec pick waits for an optional note, and Enter keeps it exactly",
+	(step) => {
+		const {prev, msg, next} = step;
+		if (prev.ask.shows.rec._tag === "pick" || prev.editor._tag === "saving") return true;
+		const saves = savesOf(step);
+		if (msg.type === "pick" && prev.ask.shows.picks.some((p) => p.pick === msg.pick)) {
+			if (saves.length !== 0) return "a no-rec pick saved before the optional note";
+			return (
+				(next.editor._tag === "note" && next.editor.pick === msg.pick && next.editor.text === "") ||
+				"a no-rec pick did not open its note"
+			);
+		}
+		if (msg.type !== "submit" || prev.editor._tag !== "note") return true;
+		const note = prev.editor.text.trim();
+		if (saves.length !== 1) return "Enter did not send the optional note";
+		const answer = saves[0]?.answer as {_tag: string; pick?: string; note?: string};
+		return (
+			(answer._tag === "chose" &&
+				answer.pick === prev.editor.pick &&
+				answer.note === (note || undefined) &&
+				Object.hasOwn(answer, "note") === (note !== "")) ||
+			"the save changed the optional note"
+		);
+	},
+);
+
 /**
  * Property 12: only an accepted answer advances. While a save is out, no second save goes and the
  * editor stays saving; a failed save keeps the ask and the draft, and says why.
@@ -202,7 +229,7 @@ const noSilentAnswer = every("silence never answers: a save only follows a press
 	return pressed || savesOf(step).length === 0 || `${step.msg.type} saved an answer`;
 });
 
-const LAWS = [honestAnswers, onlyAccepted, focusedTime, threeMarks, noSilentAnswer];
+const LAWS = [honestAnswers, choiceNotes, onlyAccepted, focusedTime, threeMarks, noSilentAnswer];
 
 // ---------------------------------------------------------------- planted mistakes
 
@@ -225,6 +252,52 @@ const PLANTS: readonly {readonly law: Law; readonly mistake: string; readonly ma
 					const shown = {...s.ask, shows: {...s.ask.shows, rec: DRAFT.rec}};
 					const [next, cmds] = real.do({...s, ask: shown}, m);
 					return [{...next, ask: s.ask}, cmds];
+				},
+			}),
+		},
+		{
+			law: choiceNotes,
+			mistake: "a no-rec pick sends before the person can leave a note",
+			machine: plant({
+				pick: (s, m) => {
+					const [next, cmds] = real.pick(s, m);
+					return s.ask.shows.rec._tag !== "pick" && next.editor._tag === "note"
+						? real.submit(next, {type: "submit", key: "Enter", now: NOW})
+						: [next, cmds];
+				},
+			}),
+		},
+		{
+			law: choiceNotes,
+			mistake: "Enter discards a chose note",
+			machine: plant({
+				submit: (s, m) => {
+					const [next, cmds] = real.submit(s, m);
+					return [
+						next,
+						cmds.map((c) =>
+							c.type === "save" && c.answer._tag === "chose"
+								? {...c, answer: {_tag: "chose", pick: c.answer.pick}}
+								: c,
+						),
+					];
+				},
+			}),
+		},
+		{
+			law: choiceNotes,
+			mistake: "Enter invents a blank chose note",
+			machine: plant({
+				submit: (s, m) => {
+					const [next, cmds] = real.submit(s, m);
+					return [
+						next,
+						cmds.map((c) =>
+							c.type === "save" && c.answer._tag === "chose"
+								? {...c, answer: {...c.answer, note: ""}}
+								: c,
+						),
+					];
 				},
 			}),
 		},

@@ -248,7 +248,7 @@ describe("a stopped lane, typed again", () => {
 		const ran = await lane({
 			within: 50,
 			picks: YES,
-			// A blind refusal has no note; the next, shown recommendation permits one.
+			// The first refusal is blind; the second is against a shown recommendation.
 			queues: {approve: ["no", "no", "approve"]},
 			notes: {approve: NOTE},
 			fake: {answers: {plan: [...THE_LEAN.plan, ...THE_LEAN.plan]}},
@@ -263,7 +263,11 @@ describe("a stopped lane, typed again", () => {
 		expect(runs.filter((r) => r.step === "triage")).toHaveLength(1);
 		const plans = runs.filter((r) => r.step === "plan");
 		expect(plans).toHaveLength(3);
+		expect(plans[1]?.prompt).toContain(NOTE);
 		expect(plans[2]?.prompt).toContain(NOTE);
+		expect(answersOf(ran).map(({fact}) => fact)).toContainEqual(
+			expect.objectContaining({answer: {_tag: "chose", pick: "no", note: NOTE}}),
+		);
 		expect(answersOf(ran).map(({fact}) => fact)).toContainEqual(
 			expect.objectContaining({answer: {_tag: "against", pick: "no", note: NOTE}}),
 		);

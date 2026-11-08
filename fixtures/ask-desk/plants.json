@@ -5,8 +5,8 @@
 	{"property":4,"plant":"Check only the ticket title and body; skip withdrawal, expiry or stale-revision recheck."},
 	{"property":5,"plant":"Use caller ids instead of answer/<ask>."},
 	{"property":6,"plant":"Remove the person check from the shared answer path or door."},
-	{"property":7,"plant":"Accept a blank against note or resolve rec to the first offered pick."},
-	{"property":8,"plant":"Put the blind rec in display data or convert a blind chose to rec."},
+	{"property":7,"plant":"Accept a blank against or chose note, drop a supplied chose note, or resolve rec to the first offered pick."},
+	{"property":8,"plant":"Put the blind rec in display data, convert a blind chose to rec, or save a no-rec pick before its optional note can be entered."},
 	{"property":9,"plant":"Draw again per render or forget the stored policy version."},
 	{"property":10,"plant":"Keep Later in today's host live count or fail to clear answered marks.","moved":"New glance, inbox tile and their shared selection belong to the inbox plan."},
 	{"property":11,"plant":"Sort kinds alphabetically or sort all asks globally by age."},
@@ -20,7 +20,7 @@
 	{"property":19,"moved":"Entire property: inbox leave and focus history are in the inbox plan."},
 	{"property":20,"plant":"Omit the saved resume step, give a stop answer controls or stop no_review."},
 	{"property":21,"plant":"Listen only for the old ask id or restart the completed plan step."},
-	{"property":22,"plant":"Read only fact.pick in approval, restart, activity, listener or trace."},
+	{"property":22,"plant":"Read only fact.pick in approval, restart, activity, listener or trace; drop a chose note before the planner or builder receives it, or invent one when absent."},
 	{"property":23,"plant":"Restore a side edge, nested card, properties box or third gray.","moved":"Inbox tile and new glance screenshots belong to the inbox plan."},
 	{"property":24,"plant":"Remove note focus, polite answer status or toolbar keyboard access.","moved":"Inbox opening and leaving focus checks belong to the inbox plan."}
 ]

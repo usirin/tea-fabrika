@@ -97,6 +97,29 @@ describe("ask desk P7: what an answer means", () => {
 	it.each(["", " ", "\t", "\n", "x".repeat(121)])("against rejects note %j", (note) => {
 		expect(Schema.is(Answer)({_tag: "against", pick: "no", note})).toBe(false);
 	});
+	it.each([undefined, "Keep the empty input test."])(
+		"chose keeps an optional note exactly, note=%j",
+		(note) => {
+			const answer = {_tag: "chose", pick: "no", ...(note === undefined ? {} : {note})};
+			expect(Schema.is(Answer)(answer)).toBe(true);
+			expect(Schema.decodeUnknownSync(Answer)(JSON.parse(JSON.stringify(answer)))).toStrictEqual(
+				answer,
+			);
+		},
+	);
+	it.each(["", " ", "\t", "\n", "x".repeat(121)])("chose rejects note %j", (note) => {
+		expect(Schema.is(Answer)({_tag: "chose", pick: "no", note})).toBe(false);
+	});
+	it.each([false, true])("resolves a chose note with hidden=%s", async (hidden) => {
+		const ask = await Effect.runPromise(
+			seal({...DRAFT, rec: hidden ? REC : NONE}, policyFor(DRAFT.ask, hidden, draw)),
+		);
+		expect(resolve(ask, {_tag: "chose", pick: "no", note: "Keep the empty input test."})).toEqual({
+			pick: "no",
+			note: "Keep the empty input test.",
+		});
+		expect(resolve(ask, {_tag: "chose", pick: "no"})).toEqual({pick: "no", note: ""});
+	});
 	it("refuses foreign picks, rec without a visible rec, and chose when the rec was shown", async () => {
 		const ask = await sealed();
 		expect(resolve(ask, {_tag: "against", pick: "merge", note: "No"})).toBeNull();

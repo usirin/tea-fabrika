@@ -56,12 +56,39 @@ describe("ask desk P8: honest editor actions", () => {
 		const [after, cmds] = step(model, {type: "do", value: {_tag: "rec"}});
 		expect(cmds).toEqual([]);
 		expect(after.editor._tag).not.toBe("saving");
-		const [picked, writes] = step(go(model, {type: "do", value: {_tag: "picks"}}), {
-			type: "pick",
-			pick: "approve",
-		});
-		expect(picked.editor).toMatchObject({_tag: "saving", answer: {_tag: "chose", pick: "approve"}});
-		expect(writes).toHaveLength(1);
+	});
+	describe.each([false, true])("an optional note with hidden=%s", (hidden) => {
+		it.each(["", "   ", "Keep the empty input test."])(
+			"waits after the pick, then Enter sends note=%j",
+			async (text) => {
+				const model = await start(hidden, hidden ? DRAFT.rec : NONE);
+				const [picked, early] = step(go(model, {type: "do", value: {_tag: "picks"}}), {
+					type: "pick",
+					pick: "approve",
+				});
+				expect(early).toEqual([]);
+				expect(askView(picked).editor).toMatchObject({_tag: "note", pick: "approve", text: ""});
+				const draft = go(picked, {type: "note", text});
+				const [saving, writes] = step(draft, {type: "submit", key: "Enter", now: NOW + 300});
+				const answer = {
+					_tag: "chose",
+					pick: "approve",
+					...(text.trim() ? {note: text.trim()} : {}),
+				};
+				expect(writes).toHaveLength(1);
+				expect(writes[0]).toMatchObject({
+					type: "save",
+					ask: model.ask.ask,
+					via: {_tag: "window", took: {key: "Enter", rec: hidden ? "hidden" : "none"}},
+				});
+				expect(writes[0]?.answer).toStrictEqual(answer);
+				expect(saving.editor).toMatchObject({_tag: "saving", answer});
+				expect(askView(saving).shows.rec).toEqual(model.ask.shows.rec);
+				const failed = step(saving, {type: "save_err", error: {why: "Try again"}})[0];
+				expect(failed.editor).toEqual(draft.editor);
+				expect(askView(failed).shows.rec).toEqual(model.ask.shows.rec);
+			},
+		);
 	});
 	it("n means against the rec, including a stop rec, and every-pick obeys the same rule", async () => {
 		const model = await start(false, {...DRAFT.rec, pick: "no"});

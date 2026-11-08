@@ -305,12 +305,18 @@ describe("a lane, on what the real agents answered", () => {
 				const ran = await lane({
 					within: 50,
 					picks: YES,
-					// The first recommendation is hidden. The next refusal can carry a note.
+					// Both the blind refusal and the refusal of a shown rec carry the note.
 					queues: {approve: ["no", "no", "approve"]},
 					notes: {approve: NOTE},
 					again: [{}, {}],
 					fake: {answers: {plan: [...THE_LEAN.plan, ...THE_LEAN.plan]}},
 				});
+				expect(runsOf(ran, "plan")[1]?.prompt).toContain(NOTE);
+				expect(answeredWith(ran, "no")).toContainEqual(
+					expect.objectContaining({
+						answer: {_tag: "chose", pick: "no", note: NOTE},
+					}),
+				);
 				expect(answeredWith(ran, "no")).toContainEqual(
 					expect.objectContaining({
 						answer: {_tag: "against", pick: "no", note: NOTE},

@@ -506,6 +506,63 @@ export const askDesk = async (tools: Tools) => {
 				await box(page).waitFor();
 			}
 		}
+		for (const [i, choice] of [
+			{hidden: false, note: undefined},
+			{hidden: false, note: "Keep the empty input test."},
+			{hidden: true, note: undefined},
+			{hidden: true, note: "Keep the empty input test."},
+		].entries()) {
+			await attempt(`P8 optional chose note ${i}`, async () => {
+				const ticket = 150 + i;
+				await seedAsk(home, ticket, choice.hidden, choice.hidden ? DRAFT.rec : NONE);
+				await page.keyboard.press("Control+c");
+				await tools.prompted(page, "t1");
+				await tools.run(page, "t1", `ticket --ticket ${ticket}`);
+				const ask = box(page);
+				await ask.waitFor();
+				await button(ask, "Every pick").click();
+				await ask.getByRole("button", {name: /approve:/i}).click();
+				const note = ask.getByRole("textbox", {name: /note/i});
+				await note.waitFor();
+				check("P8 a pick waits for its optional note", (await answers(home, ticket)).length === 0);
+				check(
+					"P8 the note is optional",
+					await note.evaluate(
+						(element) =>
+							!element.hasAttribute("required") && element.getAttribute("aria-required") !== "true",
+					),
+				);
+				check(
+					"P24 the optional note takes focus",
+					await note.evaluate((element) => element === document.activeElement),
+				);
+				if (choice.note !== undefined) await note.fill(choice.note);
+				if (choice.hidden) {
+					check(
+						"P8 the blind rec stays hidden while entering a note",
+						!(await ask.innerHTML()).includes(DRAFT.rec.why) &&
+							!(await ask.ariaSnapshot()).includes(DRAFT.rec.why) &&
+							(await ask.getByRole("button", {name: /take rec/i, includeHidden: true}).count()) ===
+								0,
+					);
+				}
+				await note.press("Enter");
+				const saved = await until(
+					"P8 Enter saves chose with or without a note",
+					() => answers(home, ticket),
+					(all) => all.length === 1,
+				);
+				const answer = saved[0]?.answer as Record<string, unknown>;
+				check(
+					"P22 the window records exactly the chose note supplied",
+					answer._tag === "chose" &&
+						answer.pick === "approve" &&
+						answer.note === choice.note &&
+						Object.hasOwn(answer, "note") === (choice.note !== undefined),
+					answer,
+				);
+			});
+		}
 		await writeFile(
 			join(dir, "capture-record.json"),
 			JSON.stringify(

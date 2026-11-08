@@ -60,30 +60,41 @@ describe("a lane, on what the real agents answered", () => {
 			};
 
 			// P28: this replaces a test whose new test passed from the start, which only a fake could write.
-			it("`again` with no recommendation runs the builder once more with no invented note, and no new test writer: a real fix lands", async () => {
-				const ran = await lane({
-					within: 50,
-					// The first step's question is round 1's surviving mutant, then the builder's no change.
-					steps: ["go_on", "again"],
-					picks: {...YES, step: "go_on"},
-					fake: {
-						...RUN_3,
-						// Each mutant is answered `cannot`, so a later mutation run writes no test twice.
-						cannot: REAL_MUTANT,
-						answers: {...RUN_3.answers, build: [null, NO_CHANGE, null]},
-						writesAt: {build: {2: [FOLDS]}},
-					},
-				});
-				const builds = runsOf(ran, "build");
-				expect(builds).toHaveLength(3);
-				const again = answersOf(ran).find(({answer}) => answer?.pick === "again");
-				expect(again?.fact).toMatchObject({answer: {_tag: "chose", pick: "again"}});
-				expect(again?.fact).not.toHaveProperty("answer.note");
-				expect(again?.answer?.note).toBe("");
-				expect(runsOf(ran, "tests")).toHaveLength(2);
-				expect(bye(ran)).toContain("ended: done");
-				expect(onMain(ran.remote, "src/lower.ts")).toContain("replaceAll");
-			});
+			it.each([undefined, "Keep the empty input test."])(
+				"`again` with no recommendation carries only the person's note=%j to the builder, with no new test writer",
+				async (note) => {
+					const ran = await lane({
+						within: 50,
+						// The first step's question is round 1's surviving mutant, then the builder's no change.
+						steps: ["go_on", "again"],
+						picks: {...YES, step: "go_on"},
+						...(note === undefined ? {} : {notes: {"step/again": note}}),
+						fake: {
+							...RUN_3,
+							// Each mutant is answered `cannot`, so a later mutation run writes no test twice.
+							cannot: REAL_MUTANT,
+							answers: {...RUN_3.answers, build: [null, NO_CHANGE, null]},
+							writesAt: {build: {2: [FOLDS]}},
+						},
+					});
+					const builds = runsOf(ran, "build");
+					expect(builds).toHaveLength(3);
+					const again = answersOf(ran).find(({answer}) => answer?.pick === "again");
+					expect(again?.fact).toHaveProperty("answer", {
+						_tag: "chose",
+						pick: "again",
+						...(note === undefined ? {} : {note}),
+					});
+					expect(again?.answer?.note).toBe(note ?? "");
+					if (note !== undefined) {
+						expect(builds[1]?.prompt).not.toContain(note);
+						expect(builds[2]?.prompt).toContain(note);
+					}
+					expect(runsOf(ran, "tests")).toHaveLength(2);
+					expect(bye(ran)).toContain("ended: done");
+					expect(onMain(ran.remote, "src/lower.ts")).toContain("replaceAll");
+				},
+			);
 
 			// P28
 			it("`again` counts as a round: a builder that keeps changing nothing ends stuck at the limit, in words", async () => {

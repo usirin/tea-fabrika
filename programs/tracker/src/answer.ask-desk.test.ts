@@ -5,7 +5,7 @@ import {Ledger, type Row, streams} from "@kampus/fabrika-old";
 import {memoryService} from "@kampus/fabrika-old/memory";
 import {layerSqliteSync} from "@kampus/fabrika-old/sqlite";
 import {blindDraw, sealAsk} from "@kampus/pipeline/tickets/ask";
-import {nameOf, readRow, fold} from "@kampus/pipeline/tickets/ticket";
+import {nameOf, readRow, readAnswer, fold} from "@kampus/pipeline/tickets/ticket";
 import {Clock, Effect, Layer, Schema} from "effect";
 import {afterEach, describe, expect, it} from "vitest";
 import {
@@ -14,6 +14,7 @@ import {
 	FILED,
 	HEAD,
 	NOW,
+	NONE,
 	OTHER_HEAD,
 	OWNER,
 	TOOK,
@@ -34,13 +35,13 @@ const send = (
 	Effect.gen(function* () {
 		return yield* (yield* Ledger).send(INBOX, id, {kind: fact.type, writer, data: fact});
 	});
-const seed = (draft: unknown = DRAFT) =>
+const seed = (draft: unknown = DRAFT, hidden = false) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
 		yield* ledger.register(nameOf(117), "user:owner");
 		yield* send("filed", FILED, "user:owner");
 		yield* send("plan/2", {type: "planned", version: 2, tasks: []});
-		const ask = yield* seal(draft, policyFor(DRAFT.ask, false, blindDraw));
+		const ask = yield* seal(draft, policyFor(DRAFT.ask, hidden, blindDraw));
 		yield* send(ask.ask, ask);
 		return ask;
 	});
@@ -79,6 +80,49 @@ const run = <A, E>(effect: Effect.Effect<A, E, Ledger | Author>, disk = false) =
 		effect.pipe(Effect.provideService(Author, OWNER), Effect.provide(layer), Effect.scoped),
 	);
 };
+
+describe.each([false, true])("ask desk P7/P22: chose notes in the ledger, SQLite=%s", (disk) => {
+	describe.each([false, true])("hidden=%s", (hidden) => {
+		it.each([undefined, "Keep the empty input test."])(
+			"saves and replays exactly the note the person supplied, note=%j",
+			async (note) => {
+				await run(
+					Effect.gen(function* () {
+						const ask = yield* seed({...DRAFT, rec: hidden ? DRAFT.rec : NONE}, hidden);
+						const chose = {_tag: "chose", pick: "no", ...(note === undefined ? {} : {note})};
+						yield* answer(ask, "person", {
+							answer: chose,
+							via: {_tag: "window", took: {...TOOK, rec: hidden ? "hidden" : "none"}},
+						});
+						const all = yield* rows;
+						const recorded = answers(all);
+						expect(recorded).toHaveLength(1);
+						const fact: {answer: Record<string, unknown>} = JSON.parse(recorded[0]!.data);
+						expect(fact.answer).toStrictEqual(chose);
+						expect(Object.hasOwn(fact.answer, "note")).toBe(note !== undefined);
+						const entries = all.flatMap((row) => {
+							const read = readRow(row);
+							return read.kind === "entry" ? [read.entry] : [];
+						});
+						const replayed = fold([], entries);
+						expect(replayed.problems).toEqual([]);
+						const timeline = replayed.tickets[0]!.timeline;
+						const saved = timeline.find((entry) => entry.fact.type === "answered");
+						if (saved?.fact.type !== "answered")
+							return yield* Effect.die(new Error("the replay lost the answer"));
+						expect(saved.fact).toHaveProperty("answer", chose);
+						expect(readAnswer(timeline, saved.fact)).toMatchObject({
+							ask: ask.ask,
+							pick: "no",
+							note: note ?? "",
+						});
+					}),
+					disk,
+				);
+			},
+		);
+	});
+});
 
 describe("ask desk P4: fresh answers, not title-and-body approvals", () => {
 	it.each(["hash", "withdrawn", "plan", "pick", "expired"])(

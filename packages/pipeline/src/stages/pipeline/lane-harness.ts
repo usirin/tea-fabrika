@@ -73,7 +73,7 @@ export const answerAsk = (ticket: number, ask: Asked, pick: string, note = "") =
 		const rec = ask.shows.rec;
 		const answer =
 			rec._tag !== "pick"
-				? Answer.cases.chose.make({pick})
+				? Schema.decodeUnknownSync(Answer)({_tag: "chose", pick, ...(note ? {note} : {})})
 				: rec.pick === pick
 					? Answer.cases.rec.make({})
 					: Answer.cases.against.make({pick, note: note || `Choose ${pick} instead.`});
@@ -145,7 +145,7 @@ export const answering = (
 					);
 				if (!("format" in fact))
 					return yield* Effect.die(new Error(`The test's person needs a sealed ask: ${fact.ask}`));
-				yield* answerAsk(NUMBER, fact, pick, notes[kind]);
+				yield* answerAsk(NUMBER, fact, pick, notes[`${kind}/${pick}`] ?? notes[kind]);
 			}
 			yield* Effect.sleep("50 millis");
 		}
@@ -207,7 +207,7 @@ export interface Script {
 	readonly picks?: Readonly<Record<string, string>>;
 	/** A step's questions, answered in turn. Past the last, `picks` answers. */
 	readonly steps?: readonly string[];
-	/** The person's required note when choosing against a shown recommendation, by question kind. */
+	/** The person's note by kind/pick or kind; required only against a shown recommendation. */
 	readonly notes?: Readonly<Record<string, string>>;
 	/** The person's picks for one kind of question, in turn. Past the last, `picks` answers. */
 	readonly queues?: Readonly<Record<string, readonly string[]>>;
