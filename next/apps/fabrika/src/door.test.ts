@@ -423,11 +423,12 @@ const request = (letter: string, m: unknown = comment()) => ({
 const online = Effect.fnUntraced(function* (
 	d: typeof Door.Service,
 	w: World,
-	client: string = "w1",
+	label: string = "w1",
 	k: World["window"] = w.window,
 ) {
+	const client = yield* d.connect();
 	const nonce = yield* d.challenge(client);
-	const tab = `tab-${client}`;
+	const tab = `tab-${label}`;
 	const signed = yield* k.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`);
 	const hello = {
 		versions: [1, 2],
@@ -552,35 +553,36 @@ describe("P10 review regressions", () => {
 	const signedHello = Effect.fnUntraced(function* (
 		d: typeof Door.Service,
 		k: World["window"],
-		client: string,
+		tab: string,
 	) {
+		const client = yield* d.connect();
 		const nonce = yield* d.challenge(client);
 		const hello = {
 			versions: [1, 2],
 			has: [],
 			ping: "30s",
 			key: k.raw,
-			tab: client,
+			tab,
 			nonce,
 			platform: "browser",
 			os: "ios",
 			sentAt: SENT,
-			signed: yield* k.sign(`fabrika-hello\n${URL}\n${client}\n${nonce}`),
+			signed: yield* k.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`),
 		};
-		const trusted = {url: URL, tab: client, name: k.fingerprint};
-		return {hello, trusted};
+		const trusted = {url: URL, tab, name: k.fingerprint};
+		return {client, hello, trusted};
 	});
 	const pendingHello = Effect.fnUntraced(function* (
 		d: typeof Door.Service,
 		k: World["window"],
-		client: string,
+		tab: string,
 	) {
-		const {hello, trusted} = yield* signedHello(d, k, client);
+		const {client, hello, trusted} = yield* signedHello(d, k, tab);
 		expect(yield* d.initialize(client, hello, trusted)).toMatchObject({
 			_tag: "refused",
 			why: "not_granted",
 		});
-		return {hello, trusted};
+		return {client, hello, trusted};
 	});
 
 	it.effect(
@@ -600,7 +602,7 @@ describe("P10 review regressions", () => {
 					const overflow = yield* signedHello(d, w.agent, "overflow");
 					const before = w.sql.exec("SELECT total_changes() total")[0]?.total;
 					const result = yield* Effect.result(
-						d.initialize("overflow", overflow.hello, overflow.trusted),
+						d.initialize(overflow.client, overflow.hello, overflow.trusted),
 					);
 					expect.soft(result).toMatchObject({
 						_tag: "Failure",
@@ -651,9 +653,9 @@ describe("P10 review regressions", () => {
 				const w = yield* world();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					const saved = yield* pendingHello(d, w.otherWindow, "pending");
-					expect((yield* d.watch("w1")).rows).toEqual([]);
+					expect((yield* d.watch(client)).rows).toEqual([]);
 					yield* TestClock.adjust(w.settings.waiting.ttl - 1);
 					const text = C.grantText({
 						id: "approve-key-without-knock",
@@ -667,10 +669,10 @@ describe("P10 review regressions", () => {
 					expect((yield* d.grant({text, armored: yield* w.root.sign(text)}))._tag).toBe("applied");
 					expect(w.notices).toEqual([]);
 					expect(
-						w.sql.exec("SELECT name FROM door_state WHERE name=?", "client/pending"),
+						w.sql.exec("SELECT name FROM door_state WHERE name=?", `client/${saved.client}`),
 					).toHaveLength(1);
 					const before = yield* entries("door/hellos");
-					expect(yield* d.initialize("pending", saved.hello, saved.trusted)).toMatchObject({
+					expect(yield* d.initialize(saved.client, saved.hello, saved.trusted)).toMatchObject({
 						_tag: "refused",
 					});
 					expect(yield* entries("door/hellos")).toEqual(before);
@@ -686,14 +688,14 @@ describe("P10 review regressions", () => {
 				const w = yield* world();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
-					yield* pendingHello(d, w.otherWindow, "pending");
-					expect((yield* d.knock("pending", {label: "Pending"}))._tag).toBe("ok");
-					const before = (yield* d.watch("w1")).rows;
+					const {client} = yield* online(d, w);
+					const pending = yield* pendingHello(d, w.otherWindow, "pending");
+					expect((yield* d.knock(pending.client, {label: "Pending"}))._tag).toBe("ok");
+					const before = (yield* d.watch(client)).rows;
 					expect(before).toHaveLength(1);
-					for (let i = 0; i <= w.settings.waiting.most; i++) yield* d.challenge(`stranger-${i}`);
-					expect((yield* d.knock("pending", {label: "Pending"}))._tag).toBe("ok");
-					expect((yield* d.watch("w1")).rows).toEqual(before);
+					for (let i = 0; i <= w.settings.waiting.most; i++) yield* d.challenge(yield* d.connect());
+					expect((yield* d.knock(pending.client, {label: "Pending"}))._tag).toBe("ok");
+					expect((yield* d.watch(client)).rows).toEqual(before);
 				}).pipe(w.provide);
 			}),
 	);
@@ -707,7 +709,7 @@ describe("P10 review regressions", () => {
 					yield* online(d, w);
 					const before = w.sql.exec("SELECT total_changes() total")[0]?.total;
 					for (let i = 0; i <= w.settings.waiting.most; i++) {
-						const client = `stranger-${i}`;
+						const client = yield* d.connect();
 						const nonce = yield* d.challenge(client);
 						if (attack === "bad signature")
 							expect(
@@ -739,8 +741,8 @@ describe("P10 review regressions", () => {
 			Effect.gen(function* () {
 				const w = yield* world();
 				const other = yield* world();
-				const client = "unissued",
-					tab = client;
+				const client = yield* Door.use((d) => d.connect()).pipe(other.provide);
+				const tab = "unissued";
 				const foreign = yield* Door.use((d) => d.challenge(client)).pipe(other.provide);
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
@@ -787,25 +789,27 @@ describe("P10 review regressions", () => {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
-				yield* online(d, w, "closed");
+				const {client} = yield* online(d, w);
+				const closed = yield* online(d, w, "closed");
 				const rows = () =>
 					w.sql.exec(
 						"SELECT name FROM door_state WHERE name IN (?,?)",
-						"client/closed",
-						"key/closed",
+						`client/${closed.client}`,
+						`key/${closed.client}`,
 					);
 				expect(rows()).toHaveLength(2);
 				assert(
 					"disconnect" in d && typeof d.disconnect === "function",
 					"Door.disconnect must handle a closed connection",
 				);
-				yield* d.disconnect("closed");
+				yield* d.disconnect(closed.client);
 				expect(rows()).toEqual([]);
-				expect((yield* d.route("closed", "ledger.read", {stream: "empty", after: 0}))._tag).toBe(
-					"refused",
+				expect(
+					(yield* d.route(closed.client, "ledger.read", {stream: "empty", after: 0}))._tag,
+				).toBe("refused");
+				expect((yield* d.route(client, "ledger.read", {stream: "empty", after: 0}))._tag).toBe(
+					"ok",
 				);
-				expect((yield* d.route("w1", "ledger.read", {stream: "empty", after: 0}))._tag).toBe("ok");
 			}).pipe(w.provide);
 		}),
 	);
@@ -823,21 +827,21 @@ describe("P10 review regressions", () => {
 					const w = yield* world({inputCap: 2});
 					yield* Effect.gen(function* () {
 						const d = yield* Door;
-						yield* online(d, w);
-						yield* grantWindow(d, w, "reader", "agent");
+						const {client} = yield* online(d, w);
+						const reader = yield* grantWindow(d, w, "reader", "agent");
 						const attempts = yield* Effect.forEach(
 							Array.from({length: w.settings.inputCap + 2}, (_, i) => i),
-							() => Effect.exit(d.route("reader", method, params)),
+							() => Effect.exit(d.route(reader.client, method, params)),
 							{concurrency: 1},
 						);
 						for (const attempt of attempts)
 							expect(attempt).toMatchObject({_tag: "Success", value: {_tag: answer}});
 						expect(w.sql.exec("SELECT count(*) total FROM door_bindings")[0]?.total).toBe(0);
 						for (let i = 0; i < w.settings.inputCap; i++)
-							expect((yield* d.route("w1", "process.send", request(`after-reads-${i}`)))._tag).toBe(
-								"ok",
-							);
-						expect((yield* d.route("reader", method, params))._tag).toBe(answer);
+							expect(
+								(yield* d.route(client, "process.send", request(`after-reads-${i}`)))._tag,
+							).toBe("ok");
+						expect((yield* d.route(reader.client, method, params))._tag).toBe(answer);
 					}).pipe(w.provide);
 				}),
 		);
@@ -848,7 +852,7 @@ describe("P10 review regressions", () => {
 				const w = yield* world();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					const count = () =>
 						Number(
 							w.sql.exec(
@@ -858,17 +862,17 @@ describe("P10 review regressions", () => {
 					const before = count();
 					const total = limit === "cap" ? w.settings.waiting.most * 2 + 1 : w.settings.waiting.most;
 					for (let i = 0; i < total; i++) {
-						yield* online(d, w, `stranger-${i}`);
-						yield* d.challenge(`stranger-${i}`);
+						const stranger = yield* online(d, w, `stranger-${i}`);
+						yield* d.challenge(stranger.client);
 					}
 					if (limit === "expiry") {
 						yield* TestClock.adjust(w.settings.waiting.ttl);
-						yield* d.watch("w1");
+						yield* d.watch(client);
 					}
 					expect(count() - before).toBeLessThanOrEqual(
 						limit === "cap" ? 2 * w.settings.waiting.most : 0,
 					);
-					expect((yield* d.route("w1", "ledger.read", {stream: "empty", after: 0}))._tag).toBe(
+					expect((yield* d.route(client, "ledger.read", {stream: "empty", after: 0}))._tag).toBe(
 						"ok",
 					);
 				}).pipe(w.provide);
@@ -950,18 +954,18 @@ describe("P10 door admission and waiting", () => {
 				const pending = yield* Effect.forEach([0, 1, 2, 3], () => key(), {concurrency: 1});
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
-					yield* d.watch("w1");
+					const {client} = yield* online(d, w);
+					yield* d.watch(client);
 					const before = rawRows(w.db, "door/inputs");
 					const healthBefore = w.db.prepare("SELECT count(*) n FROM health").get()?.n;
 					for (const [index, k] of pending.entries()) {
 						yield* TestClock.setTime(1000 + index);
-						const client = `pending-${index}`,
-							tab = client,
-							nonce = yield* d.challenge(client);
+						const pendingClient = yield* d.connect(),
+							tab = `pending-${index}`,
+							nonce = yield* d.challenge(pendingClient);
 						const signed = yield* k.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`);
 						yield* d.initialize(
-							client,
+							pendingClient,
 							{
 								versions: [1],
 								has: [],
@@ -976,16 +980,16 @@ describe("P10 door admission and waiting", () => {
 							},
 							{url: URL, tab, name: k.fingerprint},
 						);
-						yield* d.knock(client, {label: "Pending"});
+						yield* d.knock(pendingClient, {label: "Pending"});
 					}
 					expect(rawRows(w.db, "door/inputs")).toEqual(before);
 					expect(w.db.prepare("SELECT count(*) n FROM health").get()?.n).toBe(healthBefore);
-					const rows = (yield* d.watch("w1")).rows;
+					const rows = (yield* d.watch(client)).rows;
 					expect(rows.map((r) => r.key)).toEqual(pending.slice(1).map((k) => k.raw));
 					const restarted = w.reopen(nodeSql(open(join(w.dir, "project.db"))));
 					yield* Effect.gen(function* () {
 						const next = yield* Door;
-						expect((yield* next.watch("w1")).rows).toEqual(rows);
+						expect((yield* next.watch(client)).rows).toEqual(rows);
 					}).pipe(Effect.provide(restarted));
 				}).pipe(w.provide);
 			}),
@@ -1015,7 +1019,7 @@ describe("P10 door admission and waiting", () => {
 					});
 					expect(rows[0]?.by).toBe(w.window.fingerprint);
 					expect(
-						(yield* d.initialize("w1", h.hello, {
+						(yield* d.initialize(h.client, h.hello, {
 							url: URL,
 							tab: "tab-w1",
 							name: w.window.fingerprint,
@@ -1033,7 +1037,8 @@ describe("P10 door admission and waiting", () => {
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
 					const k = kind === "unknown" ? stranger : w.window;
-					const nonce = yield* d.challenge("stranger");
+					const client = yield* d.connect();
+					const nonce = yield* d.challenge(client);
 					const signed = yield* k.sign(`fabrika-hello\n${URL}\ntab\n${nonce}`);
 					const hello = {
 						versions: kind === "no version" ? [99] : [1, 2],
@@ -1047,7 +1052,7 @@ describe("P10 door admission and waiting", () => {
 						sentAt: SENT,
 						signed: kind === "bad signature" ? "broken" : signed,
 					};
-					const answer = yield* d.initialize("stranger", hello, {
+					const answer = yield* d.initialize(client, hello, {
 						url: URL,
 						tab: "tab",
 						name: kind === "wrong name" ? stranger.fingerprint : k.fingerprint,
@@ -1061,7 +1066,7 @@ describe("P10 door admission and waiting", () => {
 									? "no_version"
 									: "bad_signature",
 					});
-					expect((yield* d.knock("stranger", {label: "Pending"}))._tag).toBe(
+					expect((yield* d.knock(client, {label: "Pending"}))._tag).toBe(
 						kind === "unknown" ? "ok" : "refused",
 					);
 					expect(rawRows(w.db, "door/members")).toEqual([]);
@@ -1083,15 +1088,20 @@ describe("P10 door admission and waiting", () => {
 				const pending = yield* key();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					const rowsBefore = (yield* entries("door/members")).length;
-					yield* d.watch("w1");
-					for (const client of ["t1", "t2", "t2"]) {
-						const nonce = yield* d.challenge(client);
-						const tab = client;
+					yield* d.watch(client);
+					const t1 = yield* d.connect(),
+						t2 = yield* d.connect();
+					for (const [pendingClient, tab] of [
+						[t1, "t1"],
+						[t2, "t2"],
+						[t2, "t2"],
+					] as const) {
+						const nonce = yield* d.challenge(pendingClient);
 						const signed = yield* pending.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`);
 						yield* d.initialize(
-							client,
+							pendingClient,
 							{
 								versions: [1],
 								has: ["verify"],
@@ -1106,9 +1116,9 @@ describe("P10 door admission and waiting", () => {
 							},
 							{url: URL, tab, name: pending.fingerprint},
 						);
-						yield* d.knock(client, {label: "Pending"});
+						yield* d.knock(pendingClient, {label: "Pending"});
 					}
-					const waiting = yield* d.watch("w1");
+					const waiting = yield* d.watch(client);
 					expect(waiting.rows).toHaveLength(1);
 					expect(waiting.rows[0]).toMatchObject({tabs: 2, has: ["verify"]});
 					expect((yield* entries("door/members")).length).toBe(rowsBefore);
@@ -1116,9 +1126,9 @@ describe("P10 door admission and waiting", () => {
 					const resumed = w.reopen(nodeSql(reopened));
 					yield* Effect.gen(function* () {
 						const next = yield* Door;
-						expect((yield* next.watch("w1")).rows).toEqual(waiting.rows);
+						expect((yield* next.watch(client)).rows).toEqual(waiting.rows);
 						yield* TestClock.adjust("10 minutes");
-						expect((yield* next.watch("w1")).rows).toEqual([]);
+						expect((yield* next.watch(client)).rows).toEqual([]);
 					}).pipe(Effect.provide(resumed));
 				}).pipe(w.provide);
 			}),
@@ -1128,8 +1138,10 @@ describe("P10 door admission and waiting", () => {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
-				const nonce = yield* d.challenge("pending");
+				const {client} = yield* online(d, w);
+				const pending = yield* d.connect(),
+					pending2 = yield* d.connect();
+				const nonce = yield* d.challenge(pending);
 				const signed = yield* w.otherWindow.sign(`fabrika-hello\n${URL}\ntab\n${nonce}`);
 				const hello = {
 					versions: [1],
@@ -1143,20 +1155,20 @@ describe("P10 door admission and waiting", () => {
 					sentAt: SENT,
 					signed,
 				};
-				yield* d.initialize("pending", hello, {
+				yield* d.initialize(pending, hello, {
 					url: URL,
 					tab: "tab",
 					name: w.otherWindow.fingerprint,
 				});
-				yield* d.knock("pending", {label: "Pending"});
-				const nonce2 = yield* d.challenge("pending2"),
+				yield* d.knock(pending, {label: "Pending"});
+				const nonce2 = yield* d.challenge(pending2),
 					signed2 = yield* w.otherWindow.sign(`fabrika-hello\n${URL}\ntab2\n${nonce2}`);
 				yield* d.initialize(
-					"pending2",
+					pending2,
 					{...hello, tab: "tab2", nonce: nonce2, signed: signed2},
 					{url: URL, tab: "tab2", name: w.otherWindow.fingerprint},
 				);
-				yield* d.knock("pending2", {label: "Pending"});
+				yield* d.knock(pending2, {label: "Pending"});
 				const grant = {
 					id: "any-code",
 					key: w.otherWindow.raw,
@@ -1168,19 +1180,19 @@ describe("P10 door admission and waiting", () => {
 				} satisfies typeof C.Grant.Type;
 				const text = C.grantText(grant);
 				expect((yield* d.grant({text, armored: yield* w.root.sign(text)}))._tag).toBe("applied");
-				expect((yield* d.watch("w1")).rows).toEqual([]);
+				expect((yield* d.watch(client)).rows).toEqual([]);
 				expect(
 					w.notices.some(
-						(n) => n.client === "pending" && JSON.stringify(n.news).includes("client.granted"),
+						(n) => n.client === pending && JSON.stringify(n.news).includes("client.granted"),
 					),
 				).toBe(true);
 				expect(
 					w.notices.some(
-						(n) => n.client === "pending2" && JSON.stringify(n.news).includes("client.granted"),
+						(n) => n.client === pending2 && JSON.stringify(n.news).includes("client.granted"),
 					),
 				).toBe(true);
 				expect(
-					(yield* d.initialize("pending", hello, {
+					(yield* d.initialize(pending, hello, {
 						url: URL,
 						tab: "tab",
 						name: w.otherWindow.fingerprint,
@@ -1316,10 +1328,10 @@ describe("P10 signed membership changes", () => {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
-				yield* grantWindow(d, w, "agent", "agent");
-				expect((yield* d.watch("agent"))._tag).toBe("refused");
-				expect(yield* d.deny("agent", {key: w.otherWindow.raw})).toMatchObject({
+				const {client} = yield* online(d, w);
+				const agent = yield* grantWindow(d, w, "agent", "agent");
+				expect((yield* d.watch(agent.client))._tag).toBe("refused");
+				expect(yield* d.deny(agent.client, {key: w.otherWindow.raw})).toMatchObject({
 					_tag: "refused",
 					why: "person_only",
 				});
@@ -1327,9 +1339,9 @@ describe("P10 signed membership changes", () => {
 					{key: w.otherWindow.raw},
 					{key: w.otherWindow.raw, saw: SAW, by: "forged"},
 				]) {
-					expect(yield* d.deny("w1", params)).toMatchObject({_tag: "refused", why: "bad_input"});
+					expect(yield* d.deny(client, params)).toMatchObject({_tag: "refused", why: "bad_input"});
 				}
-				const answer = yield* d.route("w1", "door.deny", {key: w.otherWindow.raw, saw: SAW});
+				const answer = yield* d.route(client, "door.deny", {key: w.otherWindow.raw, saw: SAW});
 				expect(answer).toMatchObject({_tag: "ok", result: {_tag: "applied"}});
 				const last = (yield* entries("door/members")).at(-1)!;
 				expect(last._tag).toBe("denied");
@@ -1503,13 +1515,15 @@ describe("P10 inputs, retries and signer", () => {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
+				const {client} = yield* online(d, w);
 				const before = (yield* stamped()).length;
-				expect((yield* d.route("w1", "ledger.read", {stream: "empty", after: 0}))._tag).toBe("ok");
-				expect((yield* d.route("w1", "ledger.wait", {stream: "empty", after: 0}))._tag).toBe(
+				expect((yield* d.route(client, "ledger.read", {stream: "empty", after: 0}))._tag).toBe(
+					"ok",
+				);
+				expect((yield* d.route(client, "ledger.wait", {stream: "empty", after: 0}))._tag).toBe(
 					"parked",
 				);
-				expect((yield* d.route("w1", "unknown.method", {}))._tag).toBe("refused");
+				expect((yield* d.route(client, "unknown.method", {}))._tag).toBe("refused");
 				const rows = (yield* stamped()).slice(before);
 				expect(rows).toHaveLength(3);
 				expect(new Set(rows.map((r) => r.id)).size).toBe(3);
@@ -1528,9 +1542,9 @@ describe("P10 inputs, retries and signer", () => {
 				const w = yield* world();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					const message = {...comment(), personOnly: true};
-					yield* d.route("w1", "process.send", {
+					yield* d.route(client, "process.send", {
 						...request("comment-not-approval", message),
 						personOnly: true,
 					});
@@ -1567,13 +1581,13 @@ describe("P10 inputs, retries and signer", () => {
 				).pipe(Layer.provide(w.env));
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					lose = true;
-					yield* Effect.flip(d.route("w1", "process.send", request("lost-append")));
+					yield* Effect.flip(d.route(client, "process.send", request("lost-append")));
 					expect(w.deliveries).toEqual([]);
 					const before = rawRows(w.db, "door/inputs").filter((r) => r._tag === "received");
 					expect(before).toHaveLength(1);
-					yield* d.route("w1", "process.send", request("lost-append"));
+					yield* d.route(client, "process.send", request("lost-append"));
 					const after = rawRows(w.db, "door/inputs").filter((r) => r._tag === "received");
 					expect(after).toEqual(before);
 					expect(w.deliveries[0]!.envelope.id).toBe(before[0]?.id);
@@ -1591,9 +1605,9 @@ describe("P10 inputs, retries and signer", () => {
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
 				yield* online(d, w);
-				yield* grantWindow(d, w, "agent", "agent");
+				const agent = yield* grantWindow(d, w, "agent", "agent");
 				expect(
-					(yield* d.route("agent", "process.send", {
+					(yield* d.route(agent.client, "process.send", {
 						...request("forged-trace"),
 						traceId: "11111111111111111111111111111111",
 					}))._tag,
@@ -1607,9 +1621,9 @@ describe("P10 inputs, retries and signer", () => {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
+				const {client} = yield* online(d, w);
 				yield* TestClock.setTime(1_790_000_000_000);
-				expect((yield* d.route("w1", "process.send", request("l1")))._tag).toBe("ok");
+				expect((yield* d.route(client, "process.send", request("l1")))._tag).toBe("ok");
 				const e = w.deliveries[0]!.envelope;
 				expect(Object.keys(e).sort()).toEqual(["arrivedAt", "by", "id", "input"]);
 				expect(e.id).toMatch(/^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-1$/);
@@ -1628,12 +1642,12 @@ describe("P10 inputs, retries and signer", () => {
 						const w = yield* world();
 						yield* Effect.gen(function* () {
 							const d = yield* Door;
-							yield* online(d, w);
+							const {client} = yield* online(d, w);
 							const params =
 								where === "outer"
 									? {...request("spoof"), [field]: "forged-writer-marker"}
 									: request("spoof", {...comment(), [field]: "forged-writer-marker"});
-							expect(yield* d.route("w1", "process.send", params)).toMatchObject({
+							expect(yield* d.route(client, "process.send", params)).toMatchObject({
 								_tag: "refused",
 								why: where === "outer" ? "reserved" : "bad_input",
 							});
@@ -1650,19 +1664,20 @@ describe("P10 inputs, retries and signer", () => {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
-				yield* grantWindow(d, w);
-				yield* d.route("w1", "process.send", request("stable-letter"));
-				yield* d.route("w1", "process.send", request("stable-letter"));
+				const {client} = yield* online(d, w);
+				const other = yield* grantWindow(d, w);
+				yield* d.route(client, "process.send", request("stable-letter"));
+				yield* d.route(client, "process.send", request("stable-letter"));
 				const deliveries = w.deliveries;
 				expect(deliveries.length).toBeGreaterThan(0);
 				expect(new Set(deliveries.map((x) => x.envelope.id)).size).toBe(1);
 				expect(new Set(deliveries.map((x) => x.trace.traceId)).size).toBe(1);
 				expect(yield* entries(`${PROCESS}/inbox`)).toHaveLength(1);
 				expect(
-					(yield* d.route("w1", "process.send", request("stable-letter", comment("changed"))))._tag,
+					(yield* d.route(client, "process.send", request("stable-letter", comment("changed"))))
+						._tag,
 				).toBe("refused");
-				expect((yield* d.route("w2", "process.send", request("stable-letter")))._tag).toBe(
+				expect((yield* d.route(other.client, "process.send", request("stable-letter")))._tag).toBe(
 					"refused",
 				);
 				expect(yield* entries(`${PROCESS}/inbox`)).toHaveLength(1);
@@ -1680,8 +1695,8 @@ describe("P10 inputs, retries and signer", () => {
 				for (let i = 0; i < 2; i++)
 					yield* Effect.gen(function* () {
 						const d = yield* Door;
-						yield* online(d, w);
-						yield* d.route("w1", "process.send", request(`letter-${i}`));
+						const {client} = yield* online(d, w);
+						yield* d.route(client, "process.send", request(`letter-${i}`));
 						ids.push(w.deliveries.at(-1)!.envelope.id);
 					}).pipe(w.provide);
 				expect(ids).toEqual([`in-${START}-1`, `in-${OTHER_PROCESS}-1`]);
@@ -1695,12 +1710,12 @@ describe("P10 inputs, retries and signer", () => {
 				const w = yield* world({inputCap: 1});
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
-					yield* d.route("w1", "process.send", request("first"));
+					const {client} = yield* online(d, w);
+					yield* d.route(client, "process.send", request("first"));
 					const parent = w.deliveries[0]!.envelope.id;
-					expect((yield* Effect.flip(d.route("w1", "process.send", request("second"))))._tag).toBe(
-						"LedgerError",
-					);
+					expect(
+						(yield* Effect.flip(d.route(client, "process.send", request("second"))))._tag,
+					).toBe("LedgerError");
 					expect(w.deliveries).toHaveLength(1);
 					expect((yield* writeId("saved-a", d.signer(parent, PROCESS, "saved"))).parent).toBe(
 						parent,
@@ -1715,7 +1730,7 @@ describe("P10 inputs, retries and signer", () => {
 				const w = yield* world();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					let first = true;
 					w.controls.deliver = ({envelope}) =>
 						Effect.gen(function* () {
@@ -1729,8 +1744,8 @@ describe("P10 inputs, retries and signer", () => {
 								return yield* new LedgerError({why: "unreachable"});
 							}
 						});
-					yield* Effect.flip(d.route("w1", "process.send", request("retry-delivery")));
-					yield* d.route("w1", "process.send", request("retry-delivery"));
+					yield* Effect.flip(d.route(client, "process.send", request("retry-delivery")));
+					yield* d.route(client, "process.send", request("retry-delivery"));
 					expect(w.deliveries).toHaveLength(2);
 					expect(w.deliveries[0]!.envelope).toEqual(w.deliveries[1]!.envelope);
 					expect(yield* entries(`${PROCESS}/inbox`)).toHaveLength(1);
@@ -1749,10 +1764,10 @@ describe("P10 inputs, retries and signer", () => {
 				const w = yield* world();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					const before = yield* entries("door/members");
 					expect(
-						(yield* d.route("w1", method, {
+						(yield* d.route(client, method, {
 							by: "forged",
 							parent: "borrowed",
 							stream: "door/members",
@@ -1839,7 +1854,7 @@ describe("P10 passkey roots and recovery", () => {
 							passkey: {be: false, bs: false, counter: 123},
 						}))._tag,
 					).toBe("applied");
-					yield* online(d, w, "cleared", fresh);
+					const cleared = yield* online(d, w, "cleared", fresh);
 					const revoke = C.revokeText({
 						id: "remove-fresh",
 						key: fresh.raw,
@@ -1850,9 +1865,9 @@ describe("P10 passkey roots and recovery", () => {
 					});
 					const removal = yield* p.sk.sign(revoke);
 					expect((yield* d.grant({text: revoke, armored: removal.armored}))._tag).toBe("applied");
-					expect((yield* d.route("cleared", "ledger.read", {stream: "x", after: 0}))._tag).toBe(
-						"refused",
-					);
+					expect(
+						(yield* d.route(cleared.client, "ledger.read", {stream: "x", after: 0}))._tag,
+					).toBe("refused");
 					const facts = yield* entries("door/members");
 					for (const id of ["cleared-storage", "remove-fresh"])
 						expect(facts.find((row) => row.id === id)?.body).toMatchObject({
@@ -1980,12 +1995,12 @@ describe("P10 revocation and append", () => {
 				const w = yield* world();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
-					yield* grantWindow(d, w, "agent", "agent");
+					const {client} = yield* online(d, w);
+					const agent = yield* grantWindow(d, w, "agent", "agent");
 					yield* device(d, w);
 					yield* sheet(d, w);
-					yield* online(d, w, "other", w.otherWindow);
-					yield* d.route("agent", "process.send", request("old-agent"));
+					const other = yield* online(d, w, "other", w.otherWindow);
+					yield* d.route(agent.client, "process.send", request("old-agent"));
 					const parent = w.deliveries.at(-1)!.envelope.id;
 					w.controls.notify = () => Effect.fail(new LedgerError({why: "unreachable"}));
 					const text = C.revokeText({
@@ -1999,14 +2014,16 @@ describe("P10 revocation and append", () => {
 					expect((yield* d.grant({text, armored: yield* w.otherRoot.sign(text)}))._tag).toBe(
 						"applied",
 					);
-					for (const client of ["w1", "agent"])
-						expect((yield* d.route(client, "ledger.read", {stream: "x", after: 0}))._tag).toBe(
+					for (const revoked of [client, agent.client])
+						expect((yield* d.route(revoked, "ledger.read", {stream: "x", after: 0}))._tag).toBe(
 							"refused",
 						);
 					expect(
 						(yield* Effect.flip(writeId("after-revoke", d.signer(parent, PROCESS, "saved"))))._tag,
 					).toBe("NotGranted");
-					expect((yield* d.route("other", "ledger.read", {stream: "x", after: 0}))._tag).toBe("ok");
+					expect((yield* d.route(other.client, "ledger.read", {stream: "x", after: 0}))._tag).toBe(
+						"ok",
+					);
 					const members = yield* C.ClientManager.use((m) => m.members);
 					expect(members.keys.get(w.otherRoot.line)?.live).toBe(true);
 					expect(members.keys.get(w.sheet.line)?.live).toBe(true);
@@ -2020,8 +2037,8 @@ describe("P10 revocation and append", () => {
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
 				yield* online(d, w);
-				yield* grantWindow(d, w);
-				yield* d.route("w2", "process.send", request("press"));
+				const {client} = yield* grantWindow(d, w);
+				yield* d.route(client, "process.send", request("press"));
 				const parent = w.deliveries.at(-1)!.envelope.id;
 				yield* writeId("entry-a", d.signer(parent, PROCESS, "saved"));
 				const text = C.revokeText({
@@ -2054,8 +2071,8 @@ describe("P10 revocation and append", () => {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
-				yield* d.route("w1", "process.send", request("press"));
+				const {client} = yield* online(d, w);
+				yield* d.route(client, "process.send", request("press"));
 				const parent = w.deliveries[0]!.envelope.id;
 				yield* writeId("entry-a", d.signer(parent, PROCESS, "saved"));
 				const append = {
@@ -2112,7 +2129,7 @@ describe("P10 span reader and recording", () => {
 			).pipe(Layer.provide(w.env));
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
+				const {client} = yield* online(d, w);
 				const r = yield* RecordManager;
 				const chain = Chain.cases.job.make({process: PROCESS});
 				const rows = Array.from({length: 257}, (_, n) => ({
@@ -2133,7 +2150,7 @@ describe("P10 span reader and recording", () => {
 					content: null,
 				}));
 				yield* r.write(chain, 0, rows);
-				const answer = yield* d.route("w1", "spans.read", {chain, after: 0});
+				const answer = yield* d.route(client, "spans.read", {chain, after: 0});
 				assert(answer._tag === "ok");
 				const page = yield* Schema.decodeUnknownEffect(SpanPage)(answer.result);
 				expect(page.spans).toHaveLength(256);
@@ -2164,14 +2181,14 @@ describe("P10 span reader and recording", () => {
 				).pipe(Layer.provide(w.env));
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					block = true;
 					expect(
-						(yield* Effect.flip(d.route("w1", "process.send", request("flush-failure"))))._tag,
+						(yield* Effect.flip(d.route(client, "process.send", request("flush-failure"))))._tag,
 					).toBe("SinkError");
 					expect(w.deliveries).toEqual([]);
 					block = false;
-					yield* d.route("w1", "process.send", request("flush-failure"));
+					yield* d.route(client, "process.send", request("flush-failure"));
 					expect(w.deliveries).toHaveLength(1);
 				}).pipe(
 					Effect.provide(Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, sink)))),
@@ -2185,7 +2202,7 @@ describe("P10 span reader and recording", () => {
 				const w = yield* world({recordCap: 64 * 1024});
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					const records = yield* RecordManager;
 					const chain = Chain.cases.spans.make({});
 					for (let n = 0; n < 270; n++) {
@@ -2210,7 +2227,7 @@ describe("P10 span reader and recording", () => {
 					}
 					const baseline = yield* Stream.runCollect(records.read(chain));
 					expect(w.partCount()).toBeGreaterThan(1);
-					const first = yield* d.route("w1", "spans.read", {chain, after: 0});
+					const first = yield* d.route(client, "spans.read", {chain, after: 0});
 					assert(first._tag === "ok");
 					const firstPage = yield* Schema.decodeUnknownEffect(SpanPage)(first.result);
 					expect(firstPage.spans).toHaveLength(256);
@@ -2218,7 +2235,7 @@ describe("P10 span reader and recording", () => {
 					expect(firstPage.spans.map((s) => s.spanId)).toEqual(
 						baseline.slice(0, 256).map((s) => s.spanId),
 					);
-					const second = yield* d.route("w1", "spans.read", {chain, after: 256});
+					const second = yield* d.route(client, "spans.read", {chain, after: 256});
 					assert(second._tag === "ok");
 					const secondPage = yield* Schema.decodeUnknownEffect(SpanPage)(second.result);
 					expect(secondPage.spans.slice(0, baseline.length - 256).map((s) => s.spanId)).toEqual(
@@ -2243,9 +2260,9 @@ describe("P10 span reader and recording", () => {
 			).pipe(Layer.provide(w.env));
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
+				const {client} = yield* online(d, w);
 				expect(
-					(yield* Effect.flip(d.route("w1", "spans.read", {chain: {_tag: "spans"}, after: 0})))
+					(yield* Effect.flip(d.route(client, "spans.read", {chain: {_tag: "spans"}, after: 0})))
 						._tag,
 				).toBe("SinkError");
 			}).pipe(
@@ -2260,8 +2277,8 @@ describe("P10 span reader and recording", () => {
 				const w = yield* world();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
-					yield* grantWindow(d, w, "agent", "agent");
+					const {client} = yield* online(d, w);
+					const agent = yield* grantWindow(d, w, "agent", "agent");
 					const chain = Chain.cases.spans.make({}),
 						r = yield* RecordManager;
 					const span = SpanRow.make({
@@ -2280,7 +2297,7 @@ describe("P10 span reader and recording", () => {
 					});
 					yield* r.write(chain, 0, [{span, content: "deletable content"}]);
 					expect(
-						(yield* d.route("agent", "spans.deleteContent", {
+						(yield* d.route(agent.client, "spans.deleteContent", {
 							chain,
 							spanId: span.spanId,
 							why: "privacy",
@@ -2288,7 +2305,7 @@ describe("P10 span reader and recording", () => {
 					).toBe("refused");
 					expect(Option.getOrThrow(yield* r.content(chain, span.spanId))._tag).toBe("kept");
 					expect(
-						(yield* d.route("w1", "spans.deleteContent", {
+						(yield* d.route(client, "spans.deleteContent", {
 							chain,
 							spanId: span.spanId,
 							why: "privacy",
@@ -2297,7 +2314,7 @@ describe("P10 span reader and recording", () => {
 					).toBe("refused");
 					expect(Option.getOrThrow(yield* r.content(chain, span.spanId))._tag).toBe("kept");
 					expect(
-						(yield* d.route("w1", "spans.deleteContent", {
+						(yield* d.route(client, "spans.deleteContent", {
 							chain,
 							spanId: span.spanId,
 							why: "privacy",
@@ -2321,7 +2338,7 @@ describe("P10 span reader and recording", () => {
 				const w = yield* world();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					w.controls.deliver = ({envelope, trace}) =>
 						Effect.gen(function* () {
 							const rows = yield* stamped();
@@ -2338,7 +2355,7 @@ describe("P10 span reader and recording", () => {
 								),
 							).toBe(true);
 						});
-					yield* d.route("w1", "process.send", request("recorded"));
+					yield* d.route(client, "process.send", request("recorded"));
 					const rows = yield* stamped();
 					const received = rows.find((r) => r.id === w.deliveries[0]!.envelope.id)!;
 					expect(received.parent).toBeNull();
@@ -2375,10 +2392,10 @@ describe("P10 span reader and recording", () => {
 			).pipe(Layer.provide(w.env));
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
+				const {client} = yield* online(d, w);
 				block = true;
 				expect(
-					(yield* Effect.flip(d.route("w1", "process.send", request("unrecorded"))))._tag,
+					(yield* Effect.flip(d.route(client, "process.send", request("unrecorded"))))._tag,
 				).toBe("LedgerError");
 				expect(w.deliveries).toEqual([]);
 			}).pipe(
@@ -2391,9 +2408,9 @@ describe("P10 span reader and recording", () => {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
+				const {client} = yield* online(d, w);
 				w.controls.deliver = () => Effect.fail(new LedgerError({why: "unreachable"}));
-				yield* Effect.flip(d.route("w1", "process.send", request("failed-route")));
+				yield* Effect.flip(d.route(client, "process.send", request("failed-route")));
 				const spans = yield* RecordManager.use((r: typeof RecordManager.Service) =>
 					Stream.runCollect(r.read(Chain.cases.spans.make({}))),
 				);
@@ -2426,22 +2443,22 @@ describe("P10 span reader and recording", () => {
 				]);
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					for (const [index, marker] of [
 						"raw-key-marker",
 						"terminal-byte-marker",
 						"signature-marker",
 					].entries()) {
 						const result = yield* d.route(
-							"w1",
+							client,
 							"process.send",
 							request(`raw-${index}`, {_tag: "keys", bytes: marker}),
 						);
 						expect(result._tag).toBe("ok");
 					}
-					yield* d.route("w1", "process.send", {...request("spoof"), by: "forged-sender-marker"});
+					yield* d.route(client, "process.send", {...request("spoof"), by: "forged-sender-marker"});
 					const secret = yield* d.route(
-						"w1",
+						client,
 						"process.send",
 						request("secret", {_tag: "secret", value: {secret: "nested-redacted-marker"}}),
 					);
@@ -2451,7 +2468,7 @@ describe("P10 span reader and recording", () => {
 					).toBe(true);
 					yield* TestClock.adjust("16 days");
 					// P37 rolls up the old hour when a later span ends, before archiving it.
-					const later = yield* d.route("w1", "ledger.read", {stream: "x", after: 0});
+					const later = yield* d.route(client, "ledger.read", {stream: "x", after: 0});
 					expect(later._tag).toBe("ok");
 					yield* SpanSink.use((s: typeof SpanSink.Service) => s.flush);
 					const inputRows = yield* stamped(),
@@ -2526,7 +2543,8 @@ describe("P10 refusal records and checked writes", () => {
 							const d = yield* Door;
 							yield* online(d, w);
 							const k = known ? w.window : w.otherWindow;
-							const nonce = yield* d.challenge("replaced");
+							const client = yield* d.connect();
+							const nonce = yield* d.challenge(client);
 							const hello = {
 								versions: [1],
 								has: [],
@@ -2541,13 +2559,13 @@ describe("P10 refusal records and checked writes", () => {
 							};
 							replace =
 								interruption === "replaced"
-									? d.challenge("replaced").pipe(Effect.asVoid)
+									? d.challenge(client).pipe(Effect.asVoid)
 									: Effect.forEach(
 											Array.from({length: w.settings.waiting.most + 1}, (_, i) => i),
-											(i) => d.challenge(`stranger-${i}`),
+											() => d.connect().pipe(Effect.flatMap((id) => d.challenge(id))),
 											{concurrency: 1},
 										).pipe(Effect.asVoid);
-							const result = yield* d.initialize("replaced", hello, {
+							const result = yield* d.initialize(client, hello, {
 								url: URL,
 								tab: "replaced",
 								name: k.fingerprint,
@@ -2558,7 +2576,7 @@ describe("P10 refusal records and checked writes", () => {
 									: {_tag: "refused", why: known ? "bad_nonce" : "not_granted"},
 							);
 							expect(replace).toBeNull();
-							const knock = yield* d.knock("replaced", {label: "Checked proof"});
+							const knock = yield* d.knock(client, {label: "Checked proof"});
 							expect(knock).toMatchObject(
 								interruption === "stranger flood" && !known
 									? {_tag: "ok"}
@@ -2582,7 +2600,8 @@ describe("P10 refusal records and checked writes", () => {
 							const d = yield* Door;
 							yield* online(d, w);
 							const k = known ? w.window : w.otherWindow;
-							const nonce = yield* d.challenge("verifying");
+							const client = yield* d.connect();
+							const nonce = yield* d.challenge(client);
 							const hello = {
 								versions: [1],
 								has: [],
@@ -2609,17 +2628,17 @@ describe("P10 refusal records and checked writes", () => {
 							);
 							try {
 								const first = yield* Effect.forkChild(
-									d.initialize("verifying", hello, {
+									d.initialize(client, hello, {
 										url: URL,
 										tab: "verifying",
 										name: k.fingerprint,
 									}),
 								);
 								yield* Deferred.await(entered);
-								if (interruption === "replaced") yield* d.challenge("verifying");
+								if (interruption === "replaced") yield* d.challenge(client);
 								else
 									for (let i = 0; i <= w.settings.waiting.most; i++)
-										yield* d.challenge(`stranger-${i}`);
+										yield* d.challenge(yield* d.connect());
 								yield* Deferred.succeed(release, undefined);
 								const result = yield* Fiber.join(first);
 								expect(result).toMatchObject(
@@ -2630,7 +2649,7 @@ describe("P10 refusal records and checked writes", () => {
 												why: interruption === "replaced" ? "bad_nonce" : "not_granted",
 											},
 								);
-								const knock = yield* d.knock("verifying", {label: "Checked proof"});
+								const knock = yield* d.knock(client, {label: "Checked proof"});
 								expect(knock).toMatchObject(
 									interruption === "stranger flood" && !known
 										? {_tag: "ok"}
@@ -2782,8 +2801,8 @@ describe("P10 refusal records and checked writes", () => {
 				const w = yield* world();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
-					expect(yield* d.route("w1", method, params)).toMatchObject({
+					const {client} = yield* online(d, w);
+					expect(yield* d.route(client, method, params)).toMatchObject({
 						_tag: "refused",
 						why: "bad_input",
 					});
@@ -2800,9 +2819,9 @@ describe("P10 refusal records and checked writes", () => {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
+				const {client} = yield* online(d, w);
 				const input = Input.cases.approve.make({answer: "yes"});
-				yield* d.route("w1", "process.send", request("approval", input));
+				yield* d.route(client, "process.send", request("approval", input));
 				expect((yield* stamped()).at(-1)?.body).toMatchObject({input});
 				const parent = w.deliveries[0]!.envelope.id;
 				const session = yield* writeId("answer", d.signer(parent, PROCESS, "answered"));
@@ -2888,7 +2907,7 @@ describe("P10 refusal records and checked writes", () => {
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
 				yield* online(d, w);
-				yield* grantWindow(d, w);
+				const {client} = yield* grantWindow(d, w);
 				w.notices.length = 0;
 				const text = C.revokeText({
 					id: "close-window",
@@ -2899,7 +2918,7 @@ describe("P10 refusal records and checked writes", () => {
 					sentAt: SENT,
 				});
 				expect((yield* d.grant({text, armored: yield* w.root.sign(text)}))._tag).toBe("applied");
-				expect(w.notices).toEqual([{client: "w2", news: {close: 4003}}]);
+				expect(w.notices).toEqual([{client, news: {close: 4003}}]);
 			}).pipe(w.provide);
 		}),
 	);
@@ -2911,7 +2930,8 @@ describe("P10 refusal records and checked writes", () => {
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
 					yield* online(d, w);
-					const nonce = yield* d.challenge("race");
+					const client = yield* d.connect();
+					const nonce = yield* d.challenge(client);
 					const hello = {
 						versions: [1],
 						has: [],
@@ -2924,14 +2944,14 @@ describe("P10 refusal records and checked writes", () => {
 						sentAt: SENT,
 						signed: yield* w.window.sign(`fabrika-hello\n${URL}\nrace\n${nonce}`),
 					};
-					const initialize = d.initialize("race", hello, {
+					const initialize = d.initialize(client, hello, {
 						url: URL,
 						tab: "race",
 						name: w.window.fingerprint,
 					});
 					const answers = yield* Effect.all([initialize, initialize], {concurrency: "unbounded"});
 					expect(answers.map((a) => a._tag).sort()).toEqual(["online", "refused"]);
-					expect(yield* d.knock("race", {label: "Already online"})).toMatchObject({
+					expect(yield* d.knock(client, {label: "Already online"})).toMatchObject({
 						_tag: "refused",
 						why: "not_waiting",
 					});
@@ -2944,28 +2964,28 @@ describe("P10 refusal records and checked writes", () => {
 			const storage = failSessionRecord(w.sql);
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
-				yield* grantWindow(d, w, "agent", "agent");
-				yield* Effect.flip(d.route("w1", "process.send", request("not-delivered")));
+				const {client} = yield* online(d, w);
+				const agent = yield* grantWindow(d, w, "agent", "agent");
+				yield* Effect.flip(d.route(client, "process.send", request("not-delivered")));
 				expect(storage.failed()).toBe(true);
 				const row = (yield* stamped()).at(-1)!;
 				expect(
-					yield* d.route("agent", "process.send", {
+					yield* d.route(agent.client, "process.send", {
 						...request("stolen-trace"),
 						traceId: row.traceId,
 					}),
 				).toMatchObject({_tag: "refused", why: "bad_trace"});
-				yield* d.route("w1", "process.send", request("delivered"));
+				yield* d.route(client, "process.send", request("delivered"));
 				const traceId = w.deliveries.at(-1)!.trace.traceId;
 				expect(
-					yield* d.route("agent", "process.send", {
+					yield* d.route(agent.client, "process.send", {
 						...request("wrong-process"),
 						pid: OTHER_PROCESS,
 						traceId,
 					}),
 				).toMatchObject({_tag: "refused", why: "bad_trace"});
 				expect(
-					(yield* d.route("agent", "process.send", {...request("same-trace"), traceId}))._tag,
+					(yield* d.route(agent.client, "process.send", {...request("same-trace"), traceId}))._tag,
 				).toBe("ok");
 				expect(w.deliveries.at(-1)?.envelope.by.key).toBe(w.agent.fingerprint);
 			}).pipe(
@@ -3018,7 +3038,7 @@ describe("P10 refusal records and checked writes", () => {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
+				const {client} = yield* online(d, w);
 				const digest = crypto.subtle.digest.bind(crypto.subtle);
 				const spy = vi
 					.spyOn(crypto.subtle, "digest")
@@ -3026,7 +3046,7 @@ describe("P10 refusal records and checked writes", () => {
 					.mockRejectedValueOnce(new Error("crypto unavailable"));
 				try {
 					expect(
-						yield* Effect.flip(d.route("w1", "process.send", request("digest-failed"))),
+						yield* Effect.flip(d.route(client, "process.send", request("digest-failed"))),
 					).toMatchObject({_tag: "LedgerError", why: "storage"});
 					expect(w.deliveries).toEqual([]);
 				} finally {
