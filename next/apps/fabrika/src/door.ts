@@ -846,7 +846,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			const allocation = yield* store.atomic(() => {
 				const [prior] =
 					letter === null ? [] : sql.exec("SELECT value FROM door_bindings WHERE letter=?", letter);
-				let processId = target;
+				let processId = destination?.state._tag === "live" ? destination.state.process : target;
 				if (prior !== undefined) {
 					const old = decodeBinding(prior.value);
 					if (old.client !== raw || old.digest !== digest) return Result.succeed(null);
