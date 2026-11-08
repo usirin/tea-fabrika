@@ -752,18 +752,16 @@ describe("P12 real object adapters", () => {
 				).toMatchObject(refused);
 				expect(await p.read("facts", 0, "audit")).toEqual([]);
 				// A changed process identity cannot reuse a capability issued to the old process.
-				expect(
-					Schema.decodeUnknownSync(CommitReply)(
-						await capability.append({
-							id: "forged",
-							parent,
-							process: "another",
-							kind: "noted",
-							stream: "facts",
-							fact: {_tag: "noted"},
-						}),
-					),
-				).toMatchObject({_tag: "SigningRefused", why: "not_delivered"});
+				await expect(
+					capability.append({
+						id: "forged",
+						parent,
+						process: "another",
+						kind: "noted",
+						stream: "facts",
+						fact: {_tag: "noted"},
+					}),
+				).rejects.toMatchObject({_tag: "ControlError", why: "reserved"});
 				expect(await p.read("facts", 0, "audit")).toEqual([]);
 			});
 		},
