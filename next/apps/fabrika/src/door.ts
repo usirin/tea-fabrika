@@ -456,15 +456,16 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				has: attached.hello.has,
 				as: "window",
 				code: String(crypto.getRandomValues(new Uint32Array(1))[0] ?? 0)
-					.slice(-4)
-					.padStart(4, "0"),
+					.slice(-6)
+					.padStart(6, "0"),
 				pass: params.pass ?? null,
 				at,
 			});
 			store.set("waiting", Waiting, next);
 			return next;
 		});
-		return ok({rows: state.rows});
+		const row = state.rows.find((r) => r.key === attached.key);
+		return row === undefined ? no("not_waiting") : ok({code: row.code, until: row.until});
 	});
 	const watch = Effect.fnUntraced(function* (client: ConnectionId) {
 		const checked = yield* silent(Effect.result(online(client)));

@@ -22,8 +22,17 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <E, R, E
 	) => Effect.Effect<typeof Answer.Type, E, R>,
 ) {
 	const request = Schema.decodeUnknownResult(Request)(text);
-	if (Result.isFailure(request) || attached._tag !== "online") return {send: null, attached};
+	if (Result.isFailure(request)) return {send: null, attached};
 	const {id, method, params} = request.success;
+	if (attached._tag !== "online")
+		return {
+			send: JSON.stringify({
+				jsonrpc: "2.0",
+				id,
+				error: {code: -32000, message: "no_hello", data: {why: "no_hello"}},
+			}),
+			attached,
+		};
 	const exit = yield* Effect.exit(route(method, params, attached.who));
 	if (Exit.isFailure(exit)) return {send: null, attached};
 	return Answer.match(exit.value, {
