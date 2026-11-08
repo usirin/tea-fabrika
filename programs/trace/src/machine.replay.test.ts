@@ -215,3 +215,71 @@ describe("the code the trace is told of", () => {
 		expect(looked.code).toEqual(["tally"]);
 	});
 });
+
+// From the mutation step (seed 119120, at 4fcbb2ee): the machine run's rows, picked by run, machine
+// and id together, and tea's error answer, landing only on the replay that asked it.
+
+/** tally's record with count total's id also used by a run of another program and another machine. */
+const CROWDED: JobTrace = {
+	...TALLY_STARTED,
+	steps: [
+		...TALLY_STARTED.steps,
+		{...FIRST_STEP, run: "seq-3f9a1c02", at: FIRST_STEP.at + 1},
+		{...FIRST_STEP, machine: "sum", at: FIRST_STEP.at + 2},
+	],
+	starts: [
+		...TALLY_STARTED.starts,
+		{...FIRST_START, run: "seq-3f9a1c02"},
+		{...FIRST_START, machine: "sum"},
+	],
+};
+
+/** tea's error answer to a replay Cmd: the Cmd it answers, and the handler's failure. */
+type ReplayErr = Extract<TraceMsg, {readonly type: "replay_err"}>;
+const errOf = (cmd: unknown, tag: string): TraceMsg => ({
+	type: "replay_err",
+	cmd: cmd as ReplayErr["cmd"],
+	error: {_tag: tag} as ReplayErr["error"],
+	at: 0,
+});
+
+describe("the trace machine's replay, from the mutation step", () => {
+	it("asks with count total's rows alone, though another run and another machine share its id", () => {
+		const {cmds} = replayed(shown(CROWDED), COUNT);
+		expect(cmds).toEqual([
+			{type: "replay", row: COUNT, starts: TALLY_STARTED.starts, steps: TALLY_STARTED.steps},
+		]);
+	});
+
+	it("takes tea's error answer as a replay that cannot be done, on the replay that asked it", () => {
+		const {next, cmds} = replayed(shown(), COUNT);
+		const [failed] = applyCell<Model, TraceMsg, never>(trace, next, errOf(cmds[0], "ParseError"));
+		expect(failed.replay).toEqual({
+			row: COUNT,
+			steps: 3,
+			answer: {
+				_tag: "cannot",
+				why: "threw",
+				n: null,
+				detail: "the replay's answer did not fit: ParseError",
+			},
+		});
+	});
+
+	it("lets go of an error answer for another row, another step count, or no replay held", () => {
+		const s = shown(TWO);
+		const {next, cmds} = replayed(s, COUNT);
+		const asked = cmds[0] as {readonly row: string; readonly steps: readonly unknown[]};
+		const other = keyOf(TWO, "count other");
+		const late = [
+			errOf({...asked, row: other}, "ParseError"),
+			errOf({...asked, steps: asked.steps.slice(0, 2)}, "ParseError"),
+		];
+		for (const msg of late) {
+			const [after] = applyCell<Model, TraceMsg, never>(trace, next, msg);
+			expect(after).toBe(next);
+		}
+		const [none] = applyCell<Model, TraceMsg, never>(trace, s, errOf(asked, "ParseError"));
+		expect(none).toBe(s);
+	});
+});

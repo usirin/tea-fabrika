@@ -493,3 +493,107 @@ describe("the replay, only for a program this app has code for", () => {
 		}
 	});
 });
+
+// From the mutation step (seed 119120, at 4fcbb2ee): the words exactly, the rows' names and marks,
+// and the starts of a machine run picked by its run, machine and id together.
+
+/** The answer's words in the machine run's detail, said whole. */
+const saysFor = (answer: unknown) => {
+	const chosen = shownOf(replayed(opened(), answer)).chosen;
+	return chosen?.kind === "machine" ? chosen.replay?.says : undefined;
+};
+
+describe("the replay's answer, said whole", () => {
+	it("says how many steps matched, one step or many", () => {
+		expect(saysFor({_tag: "matches", steps: 1})).toBe(
+			"Replayed through current code: matches at every step, 1 step.",
+		);
+		expect(saysFor(MATCHES)).toBe("Replayed through current code: matches at every step, 3 steps.");
+	});
+
+	it("says a refusal in a state with no tag, where today's code takes no Msg, without naming the state", () => {
+		expect(saysFor(REFUSED)).toBe(
+			"Replayed through current code: no cell for step 1 (add 1). Today's code takes no Msg there.",
+		);
+	});
+
+	it("says a refusal in a tagged state by its tag, and the Msgs today's code takes there", () => {
+		expect(saysFor({...REFUSED, state: "counting", accepts: ["add", "reset"]})).toBe(
+			"Replayed through current code: no cell for step 1 (add 1) in counting. Today's code takes add, reset.",
+		);
+	});
+});
+
+/** The accessible name of the tree grid's row `key`, as the window draws it. */
+const nameOf = (s: Model, key: string) =>
+	windowOf(s).all.find((e) => e.type === "tr" && e.props["data-row"] === key)?.props["aria-label"];
+
+/** The marks beside row `key`'s replay words: hidden from a screen reader, which reads the words. */
+const marksIn = (s: Model, key: string) => {
+	const row = windowOf(s).all.find((e) => e.type === "tr" && e.props["data-row"] === key);
+	if (row === undefined) throw new Error(`no row ${key}`);
+	return drawnFrom(row.props.children as ReactNode)
+		.filter((e) => e.props.className === "wf-replayed")
+		.flatMap((e) => drawnFrom(e.props.children as ReactNode))
+		.filter((e) => e.props["aria-hidden"] === "true")
+		.map((e) => e.text.trim());
+};
+
+describe("the rows' replay words, for a screen reader and by eye", () => {
+	it("names a row with its replay words, and with none before an answer", () => {
+		expect(nameOf(opened(), "job")).toBe("job seq --to 3 | tally");
+		expect(nameOf(opened(), COUNT)).toBe("machine run count total, 3 steps");
+		expect(nameOf(replayed(opened()), COUNT)).toBe("machine run count total, 3 steps");
+		expect(nameOf(replayed(opened(), MATCHES), COUNT)).toBe(
+			"machine run count total, 3 steps, replayed: matches at every step",
+		);
+		expect(nameOf(replayed(opened(), PARTS), COUNT)).toBe(
+			"machine run count total, 3 steps, replayed: parts at step 2",
+		);
+		expect(nameOf(replayed(opened(), PARTS), ADD_2)).toBe(
+			"step add 2, step 2, replayed: parts from the recording",
+		);
+		expect(nameOf(replayed(opened(), PARTS), ADD_1)).toBe("step add 1, step 1");
+		expect(nameOf(replayed(opened(), REFUSED), ADD_1)).toBe(
+			"step add 1, step 1, replayed: no cell in today's code",
+		);
+		expect(nameOf(replayed(opened(), NO_CODE), COUNT)).toBe(
+			"machine run count total, 3 steps, replayed: can't be replayed",
+		);
+	});
+
+	it("marks a match, a parting and a refusal, each its own way, and a replay that cannot be done not at all", () => {
+		expect(marksIn(replayed(opened(), MATCHES), COUNT)).toEqual(["✓"]);
+		expect(marksIn(replayed(opened(), PARTS), COUNT)).toEqual(["✕"]);
+		expect(marksIn(replayed(opened(), PARTS), ADD_2)).toEqual(["✕"]);
+		expect(marksIn(replayed(opened(), REFUSED), ADD_1)).toEqual(["⊘"]);
+		expect(marksIn(replayed(opened(), NO_CODE), COUNT)).toEqual([]);
+		expect(marksIn(replayed(opened()), COUNT)).toEqual([]);
+	});
+});
+
+/** tally's record with starts of other machine runs beside count total's: same id, other owners. */
+const BESIDE: JobTrace = {
+	...TALLY_STARTED,
+	starts: [
+		...TALLY_STARTED.starts,
+		...[{run: "seq-3f9a1c02"}, {machine: "sum"}, {id: "other"}].map((other) => ({
+			...FIRST_START,
+			...other,
+			n: 2,
+			state: {total: 99},
+		})),
+	],
+};
+
+describe("a machine run's starts, beside other machine runs' starts", () => {
+	it("starts count total from its own start, though other runs, machines and ids kept starts too", () => {
+		const machine = shownOf(opened(BESIDE)).chosen;
+		expect(machine?.kind === "machine" && machine.started).toEqual({state: {total: 0}});
+		const step = shownOf(opened(BESIDE, [{type: "choose", row: ADD_1}])).chosen;
+		expect(step?.kind === "step" && [step.before, step.restarted]).toEqual([
+			{kind: "kept", state: {total: 0}},
+			null,
+		]);
+	});
+});

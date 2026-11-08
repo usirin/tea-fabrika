@@ -1,6 +1,6 @@
 import {defineMachine} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
-import {Effect, Layer, Schema} from "effect";
+import {Cause, Effect, Exit, Layer, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {listed} from "../program/listed.ts";
 import {defineProgram, kind} from "../program/program.ts";
@@ -268,6 +268,52 @@ describe("replayOf: one machine run through today's code", () => {
 	it("replays across a restart that booted from the state its step before it left", () => {
 		const starts = [startOf({total: 0}), startOf({total: 3}, {n: 2, after: 2, at: 50})];
 		expect(fits(replayOf([tally], {starts, steps: STEPS}))).toEqual({_tag: "matches", steps: 3});
+	});
+
+	it("replays starts given out of order: the first start is the one numbered 1", () => {
+		const starts = crashed.starts.toReversed();
+		expect(fits(replayOf([tally], {starts, steps: crashed.steps}))).toEqual({
+			_tag: "matches",
+			steps: 3,
+		});
+	});
+
+	it("keeps a step numbered at a restart's after in the life before it: that life parts there", () => {
+		const offAtTwo = tallyWith((s, m) => [{total: s.total + (m.n === 2 ? 3 : m.n)}, []]);
+		expect(fits(replayOf(offAtTwo, crashed))).toEqual({
+			_tag: "parts",
+			n: 2,
+			msg: {type: "add", n: 2},
+			path: "state.total",
+			recorded: 3,
+			replayed: 4,
+		});
+	});
+
+	it("says a refused state in the schema's own words, after the step it was kept at", () => {
+		const steps = [stepOf(1, 1, 1), stepOf(2, 2, 3.5), stepOf(3, 3, 6)];
+		const refused = Schema.decodeUnknownExit(Total)({total: 3.5});
+		if (!Exit.isFailure(refused)) throw new Error("the schema took 3.5");
+		const words = (Cause.squash(refused.cause) as Error).message;
+		expect(words).not.toBe("");
+		expect(replayOf([tally], {starts: STARTS, steps})).toEqual({
+			_tag: "cannot",
+			why: "state_refused",
+			n: 2,
+			detail: `step 2: ${words}`,
+		});
+	});
+
+	it("names an error thrown with no message by its name", () => {
+		const throws = tallyWith(() => {
+			throw new Error("");
+		});
+		expect(replayOf(throws, {starts: STARTS, steps: STEPS})).toEqual({
+			_tag: "cannot",
+			why: "threw",
+			n: null,
+			detail: "today's count threw: Error",
+		});
 	});
 
 	it("cannot replay when today's update throws, and says what it threw", () => {
