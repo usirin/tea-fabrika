@@ -176,8 +176,9 @@ them. The desktop has a note of its own. Config for every layer is one
   week, on the Mac locally and in Cloudflare's log storage there.* Now:
   - **A process's spans** go to its JobRecord, kept forever
     ([a JobRecord holds its trace](./a-job-record-holds-its-trace.md)). They
-    come from Effect's own `Effect.withSpan`, since tea 0.23.0's otel traces
-    agent runs only.
+    come from Effect's own `Effect.fn`, since tea 0.23.0's otel traces
+    agent runs only. *Changed 2026-11-07 (owner): it said `Effect.withSpan`; see
+    [`Effect.fn` for traced functions](./effect-fn-for-traced-functions.md).*
   - **Health has two levels.** Raw health rows (each ring, each renew) are kept
     about 2 weeks. An hourly summary per piece (counts, errors, slowest times,
     lag) is kept forever. Anything someone decides with stays a ledger fact

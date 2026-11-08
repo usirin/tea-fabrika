@@ -11,8 +11,9 @@ record per process, holding that process's spans, kept forever. A restart
 is a new process with its own id, as in OTP, so it gets a new record, and
 each span carries `fab.process`, that id. In Tier 1 no process starts
 another, so a job is one process. This note's "run" is today's word; in
-`next/` it is a process. Its spans come from Effect's own `Effect.withSpan` in the runner, since tea
-0.23.0's otel traces agent runs only. The letters stay in the ledger forever,
+`next/` it is a process. Its spans come from Effect's own `Effect.fn` in the runner, since tea
+0.23.0's otel traces agent runs only. *Changed 2026-11-07 (owner): it said `Effect.withSpan`;
+see [`Effect.fn` for traced functions](./effect-fn-for-traced-functions.md).* The letters stay in the ledger forever,
 and any state rebuilds by replay. Later tiers add the rest of the record.
 [Tier 1's P37](../plan/tier-1.md#monitoring-is-in-tier-1) builds it.
 
