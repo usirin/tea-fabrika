@@ -26,6 +26,10 @@ Laws d1 to d3 are red. This round: make them green in door.ts, answer.ts and hel
 
 - **Codex in a box runs every step:** plan, tests, build, mutation and review. That is the decided
   runner for steps, and each step is its own agent.
+- **Except work that needs Electron:** a change whose laws or shots need the app running (a
+  program's window, the desk, keys, the look) has its tests, build and review steps run by Claude
+  agents, which can start Electron themselves. That stops the round trip of a Codex build the lead
+  then has to run (owner, 2026-11-08). Still one agent per step.
 - **A Claude agent only drives:** it starts boxes, fetches, hands work along, and does what a Codex
   sandbox cannot (start Electron, bind a socket, list processes): e2e runs and screenshots.
 - A driver never writes the step's code or tests itself (owner, 2026-11-08: a session that gave step
