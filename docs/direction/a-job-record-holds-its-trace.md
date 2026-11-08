@@ -1,5 +1,10 @@
 # A JobRecord holds each host job: its runs' storage and its trace
 
+**Decided, in pieces:**
+
+- One `JobRecord` per job, for every program: decided 2026-10-28, below.
+- Its build: in the approved [Tier 1 plan](../plan/tier-1.md), P37.
+
 Decided 2026-10-28 by the owner. First proposed 2026-10-27 as one record per
 lane (`LaneRecord`). The owner widened it the next day: traces are for every
 program, not only the pipeline; the record is the storage programs already
@@ -11,8 +16,9 @@ record per process, holding that process's spans, kept forever. A restart
 is a new process with its own id, as in OTP, so it gets a new record, and
 each span carries `fab.process`, that id. In Tier 1 no process starts
 another, so a job is one process. This note's "run" is today's word; in
-`next/` it is a process. Its spans come from Effect's own `Effect.withSpan` in the runner, since tea
-0.23.0's otel traces agent runs only. The letters stay in the ledger forever,
+`next/` it is a process. Its spans come from Effect's own `Effect.fn` in the runner, since tea
+0.23.0's otel traces agent runs only. *Changed 2026-11-07 (owner): it said `Effect.withSpan`;
+see [`Effect.fn` for traced functions](./effect-fn-for-traced-functions.md).* The letters stay in the ledger forever,
 and any state rebuilds by replay. Later tiers add the rest of the record.
 [Tier 1's P37](../plan/tier-1.md#monitoring-is-in-tier-1) builds it.
 

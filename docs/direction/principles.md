@@ -1,9 +1,9 @@
 # Principles: what fabrika is for, in five lines
 
-**Proposed 2026-11-05.** A first draft of the principles page the design language lacks
-([design language](./design-language.md)). The owner named the first three on 2026-11-05, the
-fourth, agent accessibility, the same day, and the fifth, unsure is a setting, the same evening.
-None is settled. Both versions.
+**Decided 2026-11-08 (owner): the five principles, as written.** The principles page the design
+language lacked ([design language](./design-language.md)). The owner named the first three on
+2026-11-05, the fourth, agent accessibility, the same day, and the fifth, unsure is a setting, the
+same evening. The "Other candidates" below stay proposed. Both versions.
 
 ```ts
 // A sketch. Each principle as a check a design or a pull request can be read against.
@@ -102,6 +102,11 @@ repos can choose differently, and we do not force our beliefs on them.
   at all.
 - **Breaks it:** a guess hard-coded for everyone, a setting with no default or an unsafe one, or a
   flag nobody records the use of.
+
+## Decided rules
+
+- **fabrika is for building, not enterprise security** (owner, 2026-11-08). An admin's invite is
+  already trust, so recovery has no wait and no barrier.
 
 ## Other candidates
 

@@ -1,3 +1,4 @@
+import {EventEmitter} from "node:events";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {fabrika, fabrikaLight, followLook, frameColor} from "./themes.ts";
@@ -8,31 +9,31 @@ import {fabrika, fabrikaLight, followLook, frameColor} from "./themes.ts";
 // says `closed` once, after which it takes no more calls.
 
 const fakeLook = (dark: boolean) => {
-	const heard = new Set<() => void>();
+	const events = new EventEmitter();
 	return {
 		shouldUseDarkColors: dark,
-		on: (_: "updated", fn: () => void) => heard.add(fn),
-		off: (_: "updated", fn: () => void) => heard.delete(fn),
+		on: (event: "updated", fn: () => void) => events.on(event, fn),
+		off: (event: "updated", fn: () => void) => events.off(event, fn),
 		turn(next: boolean) {
 			this.shouldUseDarkColors = next;
-			for (const fn of [...heard]) fn();
+			events.emit("updated");
 		},
-		heard,
+		get listeners() {
+			return events.listenerCount("updated");
+		},
 	};
 };
 
 const fakeWindow = () => {
 	const painted: string[] = [];
-	let onClosed: (() => void) | undefined;
+	const events = new EventEmitter();
 	return {
 		painted,
 		setBackgroundColor: (color: string) => {
 			painted.push(color);
 		},
-		once: (_: "closed", fn: () => void) => {
-			onClosed = fn;
-		},
-		close: () => onClosed?.(),
+		once: (event: "closed", fn: () => void) => events.once(event, fn),
+		close: () => events.emit("closed"),
 	};
 };
 
@@ -57,7 +58,7 @@ describe("the window's frame takes the desk's color in the system's look", () =>
 		followLook(look, window);
 		window.close();
 		look.turn(false);
-		expect({painted: window.painted, listeners: look.heard.size}).toEqual({
+		expect({painted: window.painted, listeners: look.listeners}).toEqual({
 			painted: [],
 			listeners: 0,
 		});
@@ -80,7 +81,7 @@ describe("the window's frame takes the desk's color in the system's look", () =>
 					for (const dark of changes.slice(0, cut)) look.turn(dark);
 					window.close();
 					for (const dark of changes.slice(cut)) look.turn(dark);
-					expect({painted: window.painted, listeners: look.heard.size}).toEqual({
+					expect({painted: window.painted, listeners: look.listeners}).toEqual({
 						painted: changes
 							.slice(0, cut)
 							.map((dark) => (dark ? fabrika : fabrikaLight).colors.desk),

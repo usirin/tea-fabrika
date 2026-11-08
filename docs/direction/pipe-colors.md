@@ -3,9 +3,12 @@
 Decided 2026-11-01 by the owner, not built yet. This is about today's version. It replaces the faint tint described in
 [fold, not tabs](./fold-not-tabs.md) when the change lands, and `next/` takes it as a lesson.
 
+Changed 2026-11-08: design foundations PR 1 builds slate a9 focus in both looks for plain tiles
+in today's version. Dark pipes keep a8, and light pipes keep the a9 to a11 steps listed below.
+
 ```ts
 // A sketch. Values are Radix Colors 3.0.0, the dark alpha scales.
-const plain = { rest: "slateA2", focused: "slateA3", edge: "slateA8", mark: "dot" };
+const plain = { rest: "slateA2", focused: "slateA3", edge: "slateA9", mark: "dot" };
 const pipe = (color: PipeColor, letter: string) => ({
 	rest: `${color}A2`,
 	focused: `${color}A3`,
@@ -52,7 +55,8 @@ wash.
 | lime | `#78f7000a` | `#9bfd4c1a` | `#b6fd6d6c` | 3.60 | 3.44 |
 | plum | `#f22ff211` | `#fd4cfd27` | `#ee84ff95` | 3.58 | 3.33 |
 
-Plain tiles use slate: `#d8f4f609` at rest and `#ddeaf814` focused.
+Plain tiles use slate: `#d8f4f609` at rest, `#ddeaf814` focused, and `#dfebfd6d` for the a9 focus
+edge. That edge reads 3.68 on the ground and 3.57 on the focused wash.
 
 The light look, over the ground `#fcfcfd`, from Radix 3.0.0's light alpha scales (added by tile
 guidelines PR 1). The focus edge is the lowest step from a8 up that reads 3:1 on both the ground and
@@ -68,7 +72,8 @@ Teal's a9 reads 3.00 on the ground but 2.73 on the wash, so it takes a10.
 | lime | `#6b95000c` | `#96c80029` | `#375f00d0` | a11 | 4.69 | 4.37 |
 | plum | `#c000c008` | `#cc00cc14` | `#89009eb5` | a9 | 4.69 | 4.28 |
 
-Plain light tiles use slate: `#00005506` at rest and `#0000330f` focused.
+Plain light tiles use slate: `#00005506` at rest, `#0000330f` focused, and `#00051d74` for the a9
+focus edge.
 
 ## Why
 

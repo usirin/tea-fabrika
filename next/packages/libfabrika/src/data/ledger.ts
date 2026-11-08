@@ -3,12 +3,14 @@
 // it is the project's stub (`Ledger.remote`). Tier 1, P6 (laws p18 to p20, p94 and p95).
 import {Context, Effect, Layer, Option, Schema, Stream} from "effect";
 import {Appended, Entry, type Line, PAGE, type Rev, Waited} from "./log.ts";
-import {Referee, type Sql, STREAM, short, tag} from "./referee.ts";
+import {Referee, type Sql, STREAM, tag} from "./referee.ts";
+import {short} from "./trace.ts";
 
 export class LedgerError extends Schema.TaggedError<LedgerError>()("LedgerError", {
 	/** `unreachable`: a call that never reached the referee. `bad_row`: an answer or a row that does
-	 *  not decode. `storage`: SQLite threw, for example `SQLITE_FULL`. */
-	why: Schema.Literals(["unreachable", "bad_row", "storage"]),
+	 *  not decode. `storage`: SQLite threw, for example `SQLITE_FULL`. `refused`: the ledger refused
+	 *  a line the caller needed written. */
+	why: Schema.Literals(["unreachable", "bad_row", "storage", "refused"]),
 	/** What the thrown error said. It rides in the span's failure, never in a tag. */
 	message: Schema.optional(Schema.String),
 }) {}

@@ -1,0 +1,179 @@
+- banner:
+  - navigation "workspaces":
+    - button "1 tsh"
+    - 'button "2 #7"'
+    - button "3 tsh"
+    - 'button "4 #7"'
+    - button "5 tsh"
+    - 'button "6 #7"'
+    - button "7 tsh"
+    - 'button "8 #7"'
+    - button "9 tsh"
+  - navigation "the line": tsh
+  - button "1 asks you 1 not seen":
+    - text: 1 asks you
+    - img "1 not seen"
+  - text: ·
+  - status "the link to the host":
+    - button "host up"
+- region "tile t22":
+  - text: tsh t22
+  - textbox "Terminal input":
+    - textbox "Terminal input"
+  - region "t22 screen": tsh$
+- separator
+- region "tile t24":
+  - text: tsh t24
+  - textbox "Terminal input":
+    - textbox "Terminal input"
+  - region "t24 screen": tsh$
+- separator
+- region "tile t23":
+  - text: tsh t23
+  - textbox "Terminal input":
+    - textbox "Terminal input"
+  - region "t23 screen": tsh$
+- separator
+- region "tile t25":
+  - text: tsh t25
+  - textbox "Terminal input":
+    - textbox "Terminal input"
+  - region "t25 screen": tsh$
+- contentinfo:
+  - text: t22 tsh
+  - button "C-b i info"
+  - text: ·
+  - button "C-b ? keys"
+- status: Info mode off.
+- dialog "Commands":
+  - text: t22 · tsh
+  - combobox "Find commands" [expanded]
+  - listbox "Commands":
+    - group "Tile":
+      - text: Tile
+      - option "Split split ⌃B |" [selected]:
+        - text: Split
+        - code: split
+        - text: ⌃B |
+      - option "Split down split --to down ⌃B -":
+        - text: Split down
+        - code: split --to down
+        - text: ⌃B -
+      - option "Turn turn ⌃B Space":
+        - text: Turn
+        - code: turn
+        - text: ⌃B Space
+      - option "Fold fold ⌃B F":
+        - text: Fold
+        - code: fold
+        - text: ⌃B F
+      - option "Zoom zoom ⌃B Z":
+        - text: Zoom
+        - code: zoom
+        - text: ⌃B Z
+      - option "Close close-tile ⌃B X":
+        - text: Close
+        - code: close-tile
+        - text: ⌃B X
+    - group "Focus":
+      - text: Focus
+      - option "Focus left focus --to left ⌃B H":
+        - text: Focus left
+        - code: focus --to left
+        - text: ⌃B H
+      - option "Focus down focus --to down ⌃B J":
+        - text: Focus down
+        - code: focus --to down
+        - text: ⌃B J
+      - option "Focus up focus --to up ⌃B K":
+        - text: Focus up
+        - code: focus --to up
+        - text: ⌃B K
+      - option "Focus right focus --to right ⌃B L":
+        - text: Focus right
+        - code: focus --to right
+        - text: ⌃B L
+    - group "Workspace":
+      - text: Workspace
+      - option "New workspace --to new ⌃B ⇧N":
+        - text: New
+        - code: workspace --to new
+        - text: ⌃B ⇧N
+      - option "Previous workspace workspace --to previous ⌃B ⌃H":
+        - text: Previous workspace
+        - code: workspace --to previous
+        - text: ⌃B ⌃H
+      - option "Next workspace workspace --to next ⌃B ⌃L":
+        - text: Next workspace
+        - code: workspace --to next
+        - text: ⌃B ⌃L
+      - option "Workspace 1 workspace --to 1 ⌃B 1":
+        - text: Workspace 1
+        - code: workspace --to 1
+        - text: ⌃B 1
+      - option "Workspace 2 workspace --to 2 ⌃B 2":
+        - text: Workspace 2
+        - code: workspace --to 2
+        - text: ⌃B 2
+      - option "Workspace 3 workspace --to 3 ⌃B 3":
+        - text: Workspace 3
+        - code: workspace --to 3
+        - text: ⌃B 3
+      - option "Workspace 4 workspace --to 4 ⌃B 4":
+        - text: Workspace 4
+        - code: workspace --to 4
+        - text: ⌃B 4
+      - option "Workspace 5 workspace --to 5 ⌃B 5":
+        - text: Workspace 5
+        - code: workspace --to 5
+        - text: ⌃B 5
+      - option "Workspace 6 workspace --to 6 ⌃B 6":
+        - text: Workspace 6
+        - code: workspace --to 6
+        - text: ⌃B 6
+      - option "Workspace 7 workspace --to 7 ⌃B 7":
+        - text: Workspace 7
+        - code: workspace --to 7
+        - text: ⌃B 7
+      - option "Workspace 8 workspace --to 8 ⌃B 8":
+        - text: Workspace 8
+        - code: workspace --to 8
+        - text: ⌃B 8
+      - option "Workspace 9 workspace --to 9 ⌃B 9":
+        - text: Workspace 9
+        - code: workspace --to 9
+        - text: ⌃B 9
+    - group "Window":
+      - text: Window
+      - option "Asks asks ⌃B A":
+        - text: Asks
+        - code: asks
+        - text: ⌃B A
+      - option "Jobs jobs ⌃B ⇧J":
+        - text: Jobs
+        - code: jobs
+        - text: ⌃B ⇧J
+      - option "Keys keys ⌃B ?":
+        - text: Keys
+        - code: keys
+        - text: ⌃B ?
+      - option "Info info ⌃B I":
+        - text: Info
+        - code: info
+        - text: ⌃B I
+      - option "Bars bars ⌃B ⇧B":
+        - text: Bars
+        - code: bars
+        - text: ⌃B ⇧B
+      - option "Agents agents ⌃B ⇧A":
+        - text: Agents
+        - code: agents
+        - text: ⌃B ⇧A
+      - option "Sync sync ⌃B ⇧S":
+        - text: Sync
+        - code: sync
+        - text: ⌃B ⇧S
+      - option "Host host ⌃B ⇧H":
+        - text: Host
+        - code: host
+        - text: ⌃B ⇧H

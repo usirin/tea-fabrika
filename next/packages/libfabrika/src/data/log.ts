@@ -1,14 +1,21 @@
 // The log's shapes: what a writer hands in, what the referee keeps, and what it answers. Tier 1,
 // P6 (laws p68 and p92). The one file `no-hand-tag` lets write `_tag`: the log stores any fact and
 // knows no cases, so a line's `_tag` is an open string, the case as the writer's own schema wrote it.
-import {type Brand, Schema} from "effect";
+// `lineFor` and `valueFor` turn a schema's value into a line and an entry back, so no other file
+// writes the key.
+import {type Brand, DateTime, Effect, Schema} from "effect";
 
 /** A place in the log or in a stream. Both count from 1; 0 means before the first. */
 export const Rev = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 export type Rev = typeof Rev.Type;
 
 /** An input id's text form, as the door writes it (p68). Kept as text: nothing here makes an `InputId`. */
-export const CauseText = Schema.String.check(Schema.isPattern(/^in-[0-9a-f]{8}-[1-9][0-9]*$/));
+export const ParentText = Schema.String.check(
+	Schema.isPattern(/^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-[1-9][0-9]*$/),
+);
+
+/** A W3C trace id: 32 lowercase hex characters, never all zeros. */
+export const TraceId = Schema.String.check(Schema.isPattern(/^(?!0{32})[0-9a-f]{32}$/));
 
 /** The door's input id. A type only: P10's door makes one, and nothing in `./data` does. */
 export type InputId = Brand.Branded<string, "InputId">;
@@ -26,7 +33,9 @@ export const Line = Schema.Struct({
 	/** The last rev the writer had folded (S1). */
 	seen: Rev,
 	/** The input that made this write, or null for an own write (p68). */
-	cause: Schema.NullOr(CauseText),
+	parent: Schema.NullOr(ParentText),
+	/** The request this write belongs to. Shown and checked for delivery, never decides. */
+	traceId: TraceId,
 	/** The build of the code that wrote it (H6). */
 	build: Text,
 	/** The fact's case. */
@@ -35,6 +44,25 @@ export const Line = Schema.Struct({
 	body: Schema.Json,
 });
 export type Line = typeof Line.Type;
+
+/** Uses the caller's span: unnamed `fn` keeps the stack frame without inventing a trace. */
+export const fromHere = Effect.fn(function* (
+	from: Omit<Line, "_tag" | "body" | "sentAt" | "traceId">,
+) {
+	const span = yield* Effect.currentSpan;
+	const sentAt = DateTime.formatIso(yield* DateTime.now);
+	return {...from, sentAt, traceId: span.traceId};
+});
+
+/** A value a schema made, as a line: its case as the line's case, the rest as its body. */
+export const lineFor = <A extends {readonly _tag: string} & Schema.JsonObject>(
+	from: Omit<Line, "_tag" | "body">,
+	{_tag, ...body}: A,
+) => ({...from, _tag, body});
+
+/** The reverse of `lineFor`: an entry as the value its schema made, for that schema to decode. */
+export const valueFor = (entry: Entry): unknown =>
+	Object.assign({}, entry.body, {_tag: entry._tag});
 
 /** One entry: the line, plus what only the referee knows. */
 export const Entry = Schema.Struct({
@@ -56,7 +84,16 @@ export const Row = Schema.Struct({...Entry.fields, body: Schema.fromJsonString(S
 /** What `append` answers. A resend gets its first placing again. */
 export const Appended = Schema.TaggedUnion({
 	placed: {rev: Rev, pos: Rev},
-	refused: {why: Schema.Literals(["bad_line", "bad_cause", "seen_ahead", "id_reused", "too_big"])},
+	refused: {
+		why: Schema.Literals([
+			"bad_line",
+			"bad_parent",
+			"bad_trace",
+			"seen_ahead",
+			"id_reused",
+			"too_big",
+		]),
+	},
 });
 export type Appended = typeof Appended.Type;
 

@@ -123,7 +123,7 @@ several commands in a row on one thing    a mode: copy, select, resize, editing,
 - **Whose model:** the tile's own machine, on the window side, never the shared program. Tier 1
   already decided this for which note is open: "A process is shared by every window, so with one
   open note there, a phone opening a note would move the laptop's too." A mode is the same kind of
-  fact. With two people in Tier 3, one person's copy mode must not move the other's view.
+  fact. With a few people in Tier 3, one person's copy mode must not move the other's view.
   tmux differs: copy mode is the pane's, so two clients on one pane share it.
 - **So `send` is a Msg for the tile's machine.** The tile's update sends on to the program what is
   shared, as Tier 1's notes tile sends a save. A program with no tile machine takes its program

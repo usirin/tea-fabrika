@@ -4,6 +4,9 @@ Decided 2026-11-01 by the owner. Written for today's version, and `next/` reads 
 Today's code does not meet them yet: see [What today's code still breaks](#what-todays-code-still-breaks).
 [Pipe colors](./pipe-colors.md) is these principles applied to one job.
 
+**Changed 2026-11-08:** design foundations PR 1 builds one slate a9 focus token in both looks
+for today's version. The two focus bends become one, leaving four. Pipe focus keeps its own steps.
+
 ```ts
 // A sketch. Every color on screen is one of three things, and each brings its own second cue.
 type Color =
@@ -56,7 +59,8 @@ type Color =
 | 2 | subtle background | title at rest |
 | 3 | component background | title when focused |
 | 4 | component hover | resting tile edge, a bend (below) |
-| 8 | strong border and focus | focus edge |
+| 8 | strong border and focus | strong border; dark pipe focus edge |
+| 9 | solid background | slate focus edge and keyboard ring, a bend (below) |
 | 11 | low-contrast text | name at rest, and all quieter text |
 | 12 | high-contrast text | name when focused, the letter, every title and main line |
 
@@ -67,11 +71,10 @@ weight and size, never from a gray between the two. A title is always step 12, s
 weaker than the text beside it on a row at rest, hovered or selected. A row set aside stays at the
 low step, since that is a state and not a rank, and its dashed ring carries it too (principle 3).
 
-**The bends.** Five, each with its reason, listed in `packages/fabrika-design/src/themes.ts`: the
+**The bends.** Four, each with its reason, listed in `packages/fabrika-design/src/themes.ts`: the
 dark desk (`#0c0d0e`, darker than slate 1), white text on a step 9 fill (Radix's own rule for that
-step), the resting tile edge, the light focus edge (slate a9 as a line, since a8 reads 1.90 on the
-desk), and the dark keyboard ring (slate a9 as a line too, since a8 reads 2.82 on a selected row;
-written down in P31).
+step), the resting tile edge, and focus in both looks. Focus is slate a9 as a line, since a8 reads
+1.90 on the desk in light and 2.82 on a selected row in dark.
 The one that needs a word here is the edge. Radix gives borders steps 6 to 8. Our resting tile edge
 is step 4, because a higher one was too loud on a desk full of tiles. It is 1.31:1 on the ground, so
 it cannot carry a needed fact. The title bar and the focus edge do that. A pipe's light focus edge
@@ -81,6 +84,10 @@ bends too, from a9 to a11 by color; [pipe colors](./pipe-colors.md) gives each o
 Principle 5 holds for each use, not only for each value. A token made from a border step (4 to 8)
 or a solid fill (9, 10) is never a `color:`. Text takes 11 or 12, and it must read 4.5:1 on every
 place it sits, hovered and selected rows included, not only on the page.
+
+- **Changed 2026-11-07.** A text token no longer has to take 11 or 12: it may name a scale and a
+  floor, and the build picks the step
+  ([themes, point 4](./themes.md#4-a-theme-that-fails-contrast-decided-2026-11-07)).
 
 ```css
 /* Before: the wire line's step used as words, 1.87 to 3.02 */

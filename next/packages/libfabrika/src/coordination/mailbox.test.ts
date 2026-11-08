@@ -1,0 +1,321 @@
+// p21's mail half (the coordination suite; P9's plan restates it for P6's `append`), for
+// `coordination/mailbox.ts`: a letter goes into a name's inbox once per id, delivered at least once
+// and made safe by the id (C2, D4), and comes back out as a `Letter` in order. Written before the
+// module (Tier 1, P9, ticket 236).
+//
+// The shape these tests hold the module to, from the plan's "The shape" and flag 3:
+// - `Mailbox.send(to, id, m, from)` appends one line to the stream `<to>/inbox` under `id`, as
+//   `{_tag: "send", body: {m}}` with `from`'s `by`, `for`, `sentAt`, `seen`, `parent`, `traceId` and `build`,
+//   and answers P6's `Appended` as it is, `pos` included. A resend gets the same placing.
+// - `Mailbox.receive(name, after)` is a Stream of `Letter`s from `<name>/inbox` past the log rev
+//   `after`, in rev order, each `{id, m, by, for, sentAt, parent, traceId, rev, pos}` from its entry. A line
+//   with any other `_tag` is skipped and stays in the log; a `send` whose body has no `m` fails the
+//   Stream with `LedgerError` `bad_row`.
+// - No Layer fails when it is built.
+import {mkdtempSync, rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {DatabaseSync} from "node:sqlite";
+import {afterAll, describe, expect, it} from "@effect/vitest";
+import {Effect, Layer, Stream} from "effect";
+import * as fc from "fast-check";
+import {Doorbell, Ledger, LedgerError} from "../data/ledger.ts";
+import type {Line} from "../data/log.ts";
+import type {Sql} from "../data/referee.ts";
+import {nodeSql} from "../data/sqlite.ts";
+import {type From, type Letter, Mailbox} from "./mailbox.ts";
+
+const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+const READER = "gateway:t1";
+const PARENT = "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41";
+const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+const OTHER_TRACE = "5bf92f3577b34da6a3ce929d0e0e4737";
+const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+// The writer's clock is a date text, never a number, so a Letter that took it as its rev shows.
+const SENT = "2026-11-07T21:10:01.204Z";
+const LETTER = "letter_01m6v5270hetdrt4r8h9vvjwjr";
+
+// Every ledger is a fresh node:sqlite file in one temp folder, removed after.
+const folder = mkdtempSync(join(tmpdir(), "p9-mailbox-"));
+const opened: Array<DatabaseSync> = [];
+let files = 0;
+const fresh = (): Sql => {
+	const db = new DatabaseSync(join(folder, `ledger-${++files}.db`));
+	opened.push(db);
+	return nodeSql(db);
+};
+afterAll(() => {
+	for (const db of opened.splice(0)) if (db.isOpen) db.close();
+	rmSync(folder, {recursive: true, force: true});
+});
+
+const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
+const onSql = (sql: Sql) => Ledger.sql(sql, {reader: READER}).pipe(Layer.provide(quiet));
+/** A Mailbox and the Ledger beneath it, so a test can read and write the log beside it. */
+const mail = () => Mailbox.layer.pipe(Layer.provideMerge(onSql(fresh())));
+
+const from = (over: Partial<From> = {}): From => ({
+	by: "SHA256:t2",
+	for: P,
+	sentAt: SENT,
+	seen: 0,
+	parent: PARENT,
+	traceId: TRACE,
+	build: "b-7c1d073",
+	...over,
+});
+const send = (to: string, id: string, m: unknown, over: Partial<From> = {}) =>
+	Mailbox.use((mailbox) => mailbox.send(to, id, m, from(over)));
+const receive = (name: string, after = 0) =>
+	Mailbox.use((mailbox) => Stream.runCollect(mailbox.receive(name, after)));
+const inbox = (name: string) =>
+	Ledger.use((ledger) => Stream.runCollect(ledger.read(`${name}/inbox`, 0)));
+/** A line straight into the log, as another writer would put it. */
+const raw = (stream: string, id: string, over: Partial<Line>) =>
+	Ledger.use((ledger) =>
+		ledger.append(stream, id, {
+			by: "SHA256:other",
+			for: P,
+			sentAt: SENT,
+			seen: 0,
+			parent: null,
+			traceId: TRACE,
+			build: "b-7c1d073",
+			_tag: "send",
+			body: {m: null},
+			...over,
+		}),
+	);
+
+describe("p21, send", () => {
+	it.effect("writes one send line in the name's inbox, with every field the writer gave", () =>
+		Effect.gen(function* () {
+			const m = {type: "save", value: {text: "hello", n: 3}};
+			const answer = yield* send("notes:1", LETTER, m);
+			expect(answer).toEqual({_tag: "placed", rev: 1, pos: 1});
+			const [entry, ...rest] = yield* inbox("notes:1");
+			expect(rest).toEqual([]);
+			expect(entry).toMatchObject({
+				id: LETTER,
+				stream: "notes:1/inbox",
+				rev: 1,
+				pos: 1,
+				_tag: "send",
+				body: {m},
+				by: "SHA256:t2",
+				for: P,
+				sentAt: SENT,
+				seen: 0,
+				parent: PARENT,
+				traceId: TRACE,
+				build: "b-7c1d073",
+			});
+		}).pipe(Effect.provide(mail())),
+	);
+
+	it.effect("plant, a placing from the wrong line: each answer is its own line's rev and pos", () =>
+		Effect.gen(function* () {
+			const answers = [];
+			answers.push(yield* send("notes:1", "letter_a", 1));
+			yield* raw("other", "x-1", {_tag: "saved"});
+			answers.push(yield* send("notes:2", "letter_b", 2));
+			answers.push(yield* send("notes:1", "letter_c", 3, {seen: 3}));
+			answers.push(yield* send("notes:2", "letter_d", 4));
+			expect(answers).toEqual([
+				{_tag: "placed", rev: 1, pos: 1},
+				{_tag: "placed", rev: 3, pos: 1},
+				{_tag: "placed", rev: 4, pos: 2},
+				{_tag: "placed", rev: 5, pos: 2},
+			]);
+			const one = yield* inbox("notes:1");
+			expect(one.map((e) => [e.id, e.rev, e.pos])).toEqual([
+				["letter_a", 1, 1],
+				["letter_c", 4, 2],
+			]);
+		}).pipe(Effect.provide(mail())),
+	);
+
+	it.effect(
+		"a resend gets the first placing and writes nothing; another m under that id is refused",
+		() =>
+			Effect.gen(function* () {
+				const first = yield* send("notes:1", LETTER, {type: "save"});
+				yield* send("notes:1", "letter_other", {type: "save"});
+				expect(yield* send("notes:1", LETTER, {type: "save"}, {sentAt: "later", seen: 2})).toEqual(
+					first,
+				);
+				expect(yield* send("notes:1", LETTER, {type: "delete"})).toEqual({
+					_tag: "refused",
+					why: "id_reused",
+				});
+				expect((yield* inbox("notes:1")).length).toBe(2);
+			}).pipe(Effect.provide(mail())),
+	);
+
+	it.effect("passes the ledger's refusals up as they are", () =>
+		Effect.gen(function* () {
+			expect(yield* send("notes:1", LETTER, 1, {seen: 9})).toEqual({
+				_tag: "refused",
+				why: "seen_ahead",
+			});
+			expect(yield* send("notes:1", LETTER, 1, {parent: "not-a-parent"})).toEqual({
+				_tag: "refused",
+				why: "bad_parent",
+			});
+			expect(yield* send("notes:1", LETTER, 1, {traceId: "0".repeat(32)})).toEqual({
+				_tag: "refused",
+				why: "bad_trace",
+			});
+			expect(yield* inbox("notes:1")).toEqual([]);
+		}).pipe(Effect.provide(mail())),
+	);
+});
+
+describe("p21, receive", () => {
+	it.effect("plant, parent or traceId dropped: each Letter is its entry, field for field", () =>
+		Effect.gen(function* () {
+			yield* send("notes:1", "letter_a", {type: "save", value: 1});
+			yield* raw("other", "x-1", {_tag: "saved"});
+			yield* send("notes:1", "letter_b", [1, "two", null], {
+				by: "SHA256:g1",
+				for: P,
+				parent: null,
+				traceId: OTHER_TRACE,
+				sentAt: "1",
+			});
+			const letters: ReadonlyArray<Letter> = yield* receive("notes:1");
+			expect(letters).toEqual([
+				{
+					id: "letter_a",
+					m: {type: "save", value: 1},
+					by: "SHA256:t2",
+					for: P,
+					sentAt: SENT,
+					parent: PARENT,
+					traceId: TRACE,
+					rev: 1,
+					pos: 1,
+				},
+				{
+					id: "letter_b",
+					m: [1, "two", null],
+					by: "SHA256:g1",
+					for: P,
+					sentAt: "1",
+					parent: null,
+					traceId: OTHER_TRACE,
+					rev: 3,
+					pos: 2,
+				},
+			]);
+		}).pipe(Effect.provide(mail())),
+	);
+
+	it.effect("gives only the letters past after, a log rev", () =>
+		Effect.gen(function* () {
+			yield* send("notes:1", "letter_a", 1);
+			yield* send("notes:1", "letter_b", 2);
+			yield* send("notes:1", "letter_c", 3);
+			expect((yield* receive("notes:1", 1)).map((l) => l.id)).toEqual(["letter_b", "letter_c"]);
+			expect(yield* receive("notes:1", 3)).toEqual([]);
+		}).pipe(Effect.provide(mail())),
+	);
+
+	it.effect("reads only its own name's inbox", () =>
+		Effect.gen(function* () {
+			yield* send("notes:1", "letter_a", 1);
+			yield* send("notes:2", "letter_b", 2);
+			yield* raw("notes:1", "x-1", {_tag: "send"}); // the name's own stream, not its inbox
+			expect((yield* receive("notes:1")).map((l) => l.id)).toEqual(["letter_a"]);
+			expect((yield* receive("notes:2")).map((l) => l.id)).toEqual(["letter_b"]);
+			expect(yield* receive("notes:3")).toEqual([]);
+		}).pipe(Effect.provide(mail())),
+	);
+
+	it.effect(
+		"plant, an unknown tag that ends the Stream: it is skipped, kept, and the letters after it come",
+		() =>
+			Effect.gen(function* () {
+				yield* send("notes:1", "letter_a", 1);
+				yield* raw("notes:1/inbox", "x-1", {_tag: "exit", body: {why: "normal"}});
+				yield* send("notes:1", "letter_b", 2);
+				expect((yield* receive("notes:1")).map((l) => l.id)).toEqual(["letter_a", "letter_b"]);
+				expect((yield* inbox("notes:1")).map((e) => e._tag)).toEqual(["send", "exit", "send"]);
+			}).pipe(Effect.provide(mail())),
+	);
+
+	it.effect("a send line whose body has no m fails the Stream with bad_row", () =>
+		Effect.gen(function* () {
+			yield* send("notes:1", "letter_a", 1);
+			yield* raw("notes:1/inbox", "x-1", {_tag: "send", body: {value: 1}});
+			const failed = yield* Effect.flip(receive("notes:1"));
+			expect(failed).toBeInstanceOf(LedgerError);
+			expect(failed.why).toBe("bad_row");
+		}).pipe(Effect.provide(mail())),
+	);
+
+	it.effect("reads past one page: 300 letters, all, in order", () =>
+		Effect.gen(function* () {
+			for (let i = 0; i < 300; i++) yield* send("notes:1", `letter_${i}`, i, {seen: i});
+			const letters = yield* receive("notes:1");
+			expect(letters.map((l) => l.m)).toEqual(Array.from({length: 300}, (_, i) => i));
+			expect(letters.map((l) => l.pos)).toEqual(Array.from({length: 300}, (_, i) => i + 1));
+		}).pipe(Effect.provide(mail())),
+	);
+
+	it("over any sends with resends: each id comes out once, in first-send order, with its first m", async () => {
+		const sendArb = fc.record({
+			to: fc.constantFrom("notes:1", "notes:2"),
+			id: fc.constantFrom("letter_a", "letter_b", "letter_c", "letter_d", "letter_e"),
+			m: fc.oneof(
+				fc.integer(),
+				fc.string({maxLength: 5}),
+				fc.constant(null),
+				fc.record({n: fc.nat()}),
+			),
+		});
+		await fc.assert(
+			fc.asyncProperty(fc.array(sendArb, {maxLength: 30}), (sends) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const want = new Map<string, Array<{readonly id: string; readonly m: unknown}>>();
+						for (const {to, id, m} of sends) {
+							const answer = yield* send(to, id, m);
+							const box = want.get(to) ?? [];
+							const known = box.find((l) => l.id === id);
+							const same = known !== undefined && JSON.stringify(known.m) === JSON.stringify(m);
+							expect(answer._tag, `${to} ${id}`).toBe(
+								known === undefined || same ? "placed" : "refused",
+							);
+							if (known === undefined) want.set(to, [...box, {id, m}]);
+						}
+						for (const to of ["notes:1", "notes:2"]) {
+							const letters = yield* receive(to);
+							expect(letters.map((l) => ({id: l.id, m: l.m}))).toEqual(want.get(to) ?? []);
+							const revs = letters.map((l) => l.rev);
+							expect(revs).toEqual([...revs].sort((a, b) => a - b));
+						}
+					}).pipe(Effect.provide(mail())),
+				),
+			),
+			{seed: SEED, numRuns: 60},
+		);
+	});
+});
+
+describe("p21, no Layer fails at build", () => {
+	it.effect(
+		"a Mailbox over a Ledger that always fails builds, and each call fails with its error",
+		() => {
+			const broken = Layer.succeed(Ledger, {
+				append: () => Effect.fail(new LedgerError({why: "unreachable"})),
+				read: () => Stream.fail(new LedgerError({why: "unreachable"})),
+				wait: () => Effect.fail(new LedgerError({why: "unreachable"})),
+			});
+			return Effect.gen(function* () {
+				expect((yield* Effect.flip(send("notes:1", LETTER, 1))).why).toBe("unreachable");
+				expect((yield* Effect.flip(receive("notes:1"))).why).toBe("unreachable");
+			}).pipe(Effect.provide(Mailbox.layer.pipe(Layer.provide(broken))));
+		},
+	);
+});

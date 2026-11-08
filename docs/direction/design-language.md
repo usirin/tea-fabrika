@@ -2,11 +2,15 @@
 
 **Proposed 2026-11-04; most calls decided 2026-11-07.** A draft read on main at `ffa7056f`. The
 owner walked it on 2026-11-07 and decided calls 1, 2 and 4 to 9, below, with the changes written
-beside each; call 3 waits on the tier names. Each decided call
+beside each; call 3 decided the same day, with the tier words and naming grammar. Each decided call
 starts on today's app at once (AGENTS.md).
 Both versions: the design package is the one thing today's app and `next/` share
 ([one design package](./fabrika-design-package.md)). The owner's calls are at the end, each yes or
 no.
+
+**Changed 2026-11-08:** design foundations PR 1 builds one slate a9 focus token in both looks
+for today's version. `--tile-edge-on` reads `--focus`; pipes keep their own focus steps.
+The examples below follow that choice.
 
 ```text
 principles     one page, a few lines; plus one line of rules at the top of every page
@@ -54,8 +58,8 @@ const Level = Schema.TaggedUnion({
   ([color principles](./color-principles.md), 1).
 - **Foundations:** color, type, motion, icons, layering, words, and for us keys (the prefix, the
   notation, the keys a program cannot take). Example: [color principles](./color-principles.md).
-- **Tokens:** named values. Example: `--tile-edge-on`, the focused tile's edge: slate a8 in dark,
-  slate a9 in light, a pipe's own step inside `[data-pipe]` (`apps/fabrika/src/window/window.css`).
+- **Tokens:** named values. Example: `--tile-edge-on`, the focused tile's edge: `--focus`, slate a9
+  in both looks, a pipe's own step inside `[data-pipe]` (`apps/fabrika/src/window/window.css`).
 - **Components:** reusable parts with behavior, states and an API. [The frame](./the-frame.md) is
   this level's catalog: 50 parts, each with its word and its note. We don't split atoms, molecules
   and organisms ([atomic design](https://atomicdesign.bradfrost.com/)); the 50 parts are one list.
@@ -185,14 +189,14 @@ manti        --manti-*, set from the semantic tier in tokens.css        only Man
 // A sketch. packages/fabrika-design/src/tokens.ts. A primitive is a Radix step by name.
 export const tokens = {
 	"text-muted": {dark: "slate.a11", light: "slate.a11", on: ["surface-base", "fill-hover"], min: 4.5},
-	"focus-ring": {dark: "slate.a8", light: "slate.a9", on: ["surface-base", "surface-sunken"], min: 3},
+	"focus-ring": {dark: "slate.a9", light: "slate.a9", on: ["surface-base", "surface-sunken"], min: 3},
 	"surface-sunken": {dark: {hex: "#0c0d0e", bend: "nothing in slate is darker than 1"}, light: "slate.2"},
 } as const satisfies Record<string, Token>;
 // tokens.test.ts: every pair in `on` reaches `min` in both looks; a value that is no step needs `bend`.
 ```
 
 - **Names,** a lean of about 60% each: `--surface` becomes `--surface-base`; the three grays become
-  `--text-muted`; `--focus` and `--tile-focus` become `--focus-ring`; `--done`, `--running`,
+  `--text-muted`; `--focus` becomes `--focus-ring`; `--done`, `--running`,
   `--stuck` become `--state-*`; `--s-1` to `--s-10` become `--space-4` to `--space-40`; the `--r-*`
   become `--radius-*`, Manti's words; `on` in a tile token becomes `focused`. The 12 aliases go, all
   in one commit: two people and one app need no deprecation step.
@@ -261,10 +265,18 @@ At 600 lines an agent hour ([agent hours](./agent-hours.md)):
 2. Split each design note into a decision note and a guideline page made from doc tags?
    **Decided yes, 2026-11-07.** The page is read in Claude Design's fabrika design system, and a
    sync writes it from the package, never by hand (owner, the same day).
-3. Two token tiers, plus a component tier for the tile and popovers only? **Open.** The shape
-   stands; the tiers' names, and whether a shared tier for parts with states is needed now, wait on
-   a reference the owner asked for. Code never reaches a primitive: the rule is lint
-   (`no-restricted-imports`, one exception for the token build), not a test (owner, 2026-11-07).
+3. Two token tiers, plus a component tier for the tile and popovers only? **Decided 2026-11-07,
+   changed** (owner): four tier words, **primitive** (a Radix step, which no program reads),
+   **global** (a meaning every program reads), **shared** (a state set two or more parts repeat,
+   added only when they do) and **component** (a part's own tokens). Global names are
+   `category-subcategory-item` (`background-surface-high`, `text-muted`); a part's are
+   `part-piece-variant-category-state-interaction` (`tile-titlebar-background-selected-hover`).
+   Fixed slot words: `background` (with `base` and `surface` under it), `text`, `icon`, `border`;
+   `subtle`, `muted`, `strong`; `hover`, `active`, `focus`; ladders `low`/`lower`/`lowest` and
+   `high`/`higher`/`highest`. Each token's data names its `owner`; the lint rule reads that field,
+   never the name's prefix. The keys inside a token file were decided 2026-11-07 (owner): `type` (`background`, `text`, `icon` or `border`), `tier`, `owner`, `description`, `[colors]` with `dark` and `light`, or `extends`, or a Radix `scale`, and `on`, `floor`, `aim` and `carries`. The renames land in call 6's
+   one pull request. Code never reaches a primitive: the rule is lint (`no-restricted-imports`, one
+   exception for the token build), not a test (owner, 2026-11-07).
 4. Restate "accent only for your turn" as "a token means one thing", with focus one slate token?
    **Decided yes, 2026-11-07.** `turn` splits into `turn-fill` and `turn-text`; focus is one gray
    token everywhere. A colored primary button stays a separate pick.

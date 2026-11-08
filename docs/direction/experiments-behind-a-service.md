@@ -1,6 +1,6 @@
 # Experiments: a bare-bones experiment platform, behind a service
 
-Proposed 2026-10-29. Experiment 170 builds the smallest version of fabrika's
+Proposed 2026-10-29. Today's version; walked if a tryout is picked (owner, 2026-11-08). Experiment 170 builds the smallest version of fabrika's
 own experiment platform: a few small programs over an `Experiments` service.
 Our ledger is the first implementation. A hosted platform (MLflow, Langfuse,
 Weights & Biases) can be a second one later, the way GitHub sits behind

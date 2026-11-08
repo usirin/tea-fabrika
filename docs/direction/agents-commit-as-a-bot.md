@@ -1,6 +1,6 @@
 # Agents commit as a bot, with the person as co-author
 
-**Proposed 2026-11-05.** The owner decided the direction on 2026-11-05, marked decided below:
+**Proposed 2026-11-05.** Walked when Tier 5 starts (owner, 2026-11-08): agent commits, token swaps and trailers. The owner decided the direction on 2026-11-05, marked decided below:
 
 - **Decided, agents commit and push as a bot.** An agent's commit is authored by a GitHub App's
   bot identity (`fabrikalfa[bot]`, named 2026-11-06), never by the person's account. GitHub itself then
@@ -69,6 +69,11 @@ The email's number is the bot user's id, not the app's id, and a commit made fro
 carries one `Fabrika-Input` line for each
 ([experiment 212](../../experiments/212-fabrika-bot-commits.md)).
 
+**On Tier 1 pull requests** (owner, 2026-11-07, in use from 2026-11-08). From T246 and P10 on,
+step commits are authored by `fabrikalfa[bot]`, with the person as `Co-authored-by`. The lead
+pushes them to `fabrikalfa/<name>` with a token that lasts one hour. The pull request opens as the
+person.
+
 ## Why
 
 - **Nobody names themselves.** Today an agent commits as the person, and the only sign it was an
@@ -99,7 +104,13 @@ keys are a sketch until a plan checks them against git's trailer rules and the i
 
 1. **The box's edge and a remote brain.** The stand-in token is swapped at the box's edge, which
    asks the brain for a real token. How the edge reaches a brain on Cloudflare, and proves which
-   agent asks, is not designed.
+   agent asks, is not designed. Two runs show the swap itself works on a Cloudflare Container:
+   in [experiment 148](../../experiments/148-remote-programs.md) the box's outbound handler
+   (`interceptOutboundHttp`) sent each model call to a relay that added the starter's key on the
+   way out, and in [experiment 157](../../experiments/157-login-stays-home.md)'s round 1 the same
+   kind of handler (`interceptOutboundHttps`) added the person's Claude token on the way out, with
+   0 copies in 18 boxes. 157's ruled round 2 put the Claude token in the box instead, so this is
+   evidence for the swap, not a decided shape.
 2. **Who writes the trailers.** With plain `git push`, the commit is made in the box, so
    `Fabrika-Agent` and `Fabrika-Input` are no longer written by the host when it builds the
    commit. How the host still stamps them, and checks them at the proxy, is open.
