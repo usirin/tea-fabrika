@@ -71,6 +71,12 @@ type ProcessStorage = {
 	) => Effect.Effect<void, LedgerError>;
 	/** An accepted letter's first placing, or null when this process never accepted it. */
 	readonly placed: (id: string) => Effect.Effect<Placed | null, LedgerError>;
+	/**
+	 * A letter's first placing by any life in this store, or null. One object's store holds one
+	 * registered name, so this is every life of that name: a successor keeps its predecessors'
+	 * accepted history without copying their rows (P34).
+	 */
+	readonly placedByAny: (id: string) => Effect.Effect<Placed | null, LedgerError>;
 	/** Appends one RuntimeRecord to the process's stream. A retry answers its first placing. */
 	readonly record: (id: string, fact: unknown, from: From) => Effect.Effect<unknown, LedgerError>;
 };
@@ -183,6 +189,14 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
 							const [row] = sql.exec(
 								"SELECT id, rev, pos FROM process_letters WHERE process=? AND id=?",
 								who.process,
+								id,
+							);
+							return row === undefined ? null : decodePlaced(row);
+						}),
+					placedByAny: (id) =>
+						stored(() => {
+							const [row] = sql.exec(
+								"SELECT id, rev, pos FROM process_letters WHERE id=? ORDER BY rev LIMIT 1",
 								id,
 							);
 							return row === undefined ? null : decodePlaced(row);

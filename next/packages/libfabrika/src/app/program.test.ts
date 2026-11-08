@@ -66,22 +66,18 @@ describe("P11 program contract and p22 refusal", () => {
 		])
 			expect(() => Schema.decodeUnknownSync(Program)({...spec(), ...broken})).toThrow();
 	});
-	it("settled Cmd replies require their command, time and checked result", async () => {
+	it("plant, let settled bypass program.msg: only fold accepts checked Cmd replies", async () => {
 		const {stepper} = await import("./program.ts");
 		const p = stepper(spec());
 		const before = {count: 2, replies: 0};
 		const ok = {type: "save_ok", cmd: save({n: 3}), value: 3, at: 42};
 		const err = {type: "save_err", cmd: save({n: 3}), error: {_tag: "disk"}, at: 42};
 		for (const reply of [ok, err]) {
-			expect(p.step(before, reply)).toMatchObject({
-				_tag: "stepped",
-				model: {count: 2, replies: 1},
-				cmds: [],
-			});
 			expect(p.fold(before, reply)).toMatchObject({
 				_tag: "stepped",
 				model: {count: 2, replies: 1},
 			});
+			expect(p.step(before, reply)).toEqual({_tag: "refused", why: "bad_msg"});
 		}
 		for (const reply of [
 			{...ok, cmd: {type: "other", n: 3}},

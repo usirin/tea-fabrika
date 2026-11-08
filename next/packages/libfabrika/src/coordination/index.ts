@@ -2,7 +2,7 @@
 // passes the ledger's error and answers on, so a layer above never imports `./data`.
 export {ClientManager, Founder, Written} from "./client-manager.ts";
 export {GatewayManager} from "./gateway-manager.ts";
-export {type From, type History, type Letter, Mailbox} from "./mailbox.ts";
+export {type From, type History, type Letter, Mailbox, RunnerMail} from "./mailbox.ts";
 export {Checkpoint, Placed, ProcessStore, RuntimeRecord} from "./process-store.ts";
 export {RecoveryStore} from "./recovery-store.ts";
 export {
@@ -28,6 +28,7 @@ export {
 	canRestart,
 	Dead,
 	Down,
+	inRunnerSpace,
 	inSignalSpace,
 	Owner,
 	ProcessError,
@@ -42,7 +43,7 @@ export {LedgerError} from "../data/ledger.ts";
 export {type Sql} from "../data/referee.ts";
 export {Archive} from "../data/archive.ts";
 export {RecordManager} from "../data/records.ts";
-export {SinkError} from "../data/sink.ts";
+export {SinkError, SpanSink} from "../data/sink.ts";
 export {addText, Change, enrollmentText, grantText, revokeText} from "./text.ts";
 export {
 	type Envelope,

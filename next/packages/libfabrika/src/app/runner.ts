@@ -22,9 +22,10 @@ import {
 	Activity,
 	Dead,
 	type Appended,
-	type Archive,
+	brainOnly,
 	type From,
 	type History,
+	inRunnerSpace,
 	LedgerError,
 	Mailbox,
 	MemberFact,
@@ -37,8 +38,8 @@ import {
 	type ProcessError,
 	RecoveryStore,
 	Start,
-	type RecordManager,
 	RuntimeRecord,
+	RunnerMail,
 	SessionManager,
 	SigningRefused,
 	SignRequest,
@@ -59,7 +60,7 @@ import {
 	WatcherManager,
 } from "./entry.ts";
 import {diff} from "./patch.ts";
-import {ProgramDown, Refusal, type Step, Write} from "./program.ts";
+import {ProgramDown, Refusal, Step, Write} from "./program.ts";
 import {Saved} from "./state.ts";
 import {defaultPolicy, supervisor, type SupervisorMsg} from "./supervisor.ts";
 
@@ -182,12 +183,6 @@ export class ProgramRunner extends Context.Service<
 				const alarm = yield* Alarm;
 				const recording = yield* Recording;
 				const sessions = yield* Effect.serviceOption(SessionManager);
-				// Recording's flush reads the object's record and archive services; they are in the
-				// context this runner is built in whenever the real sink is wired (P12, P37).
-				const built = yield* Effect.context<never>();
-				const flushed = recording.flush.pipe(
-					Effect.provideContext(built as Context.Context<RecordManager | Archive>),
-				);
 				const permit = yield* Semaphore.make(1);
 				let live: Live | null = null;
 				/** Writes left dispatched by an earlier process life: retried once loaded. */
@@ -715,30 +710,45 @@ export class ProgramRunner extends Context.Service<
 				});
 
 				/**
-				 * Folds every inbox letter past `state.after`, records each step, and installs the result
-				 * in one save. The letter named `mine` is this turn's: its Cmds are saved as dispatched and
-				 * answered for running. `done` is a Cmd now answered, dropped in the same save.
+				 * Accepted letters fold; other mail takes the fresh checks and cannot fail the process.
+				 * Every first fold saves its Cmds, but only this call's letter returns Cmds to run.
 				 */
 				const catchUp = Effect.fnUntraced(function* (
 					state: Live,
-					options: {readonly mine?: string; readonly done?: string; readonly dirty?: boolean} = {},
+					options: {readonly mine?: string; readonly dirty?: boolean} = {},
 				) {
 					const letters = yield* Stream.runCollect(mailbox.read(process.name, state.after));
-					if (letters.length === 0 && options.done === undefined && options.dirty !== true)
+					if (letters.length === 0 && options.dirty !== true)
 						return {state, fresh: [] as ReadonlyArray<Dispatched>, mine: Option.none<History>()};
 					let model = state.model;
 					let view = state.view;
 					let wake = state.wake;
 					const fresh: Array<Dispatched> = [];
+					let cmds = state.cmds;
 					const placed: Array<Placed> = [];
+					const saved = yield* store.load;
+					const prepared = Schema.decodeUnknownOption(Turn)(saved?.turn);
 					let mine = Option.none<History>();
 					for (const letter of letters) {
-						const folded = yield* stepped(
-							yield* step("saved_letter", letter.id, () =>
-								state.loaded.stepper.fold(model, letter.m),
-							),
-							"saved_letter",
-						);
+						const own = inRunnerSpace(letter.id) && letter.id.startsWith(`${process.id}/`);
+						const accepted =
+							own ||
+							letter.id === options.mine ||
+							Option.exists(prepared, (turn) => turn.id === letter.id) ||
+							(yield* store.placed(letter.id)) !== null ||
+							// An earlier life of this name accepted it; an old life's own mail never drives this one.
+							(!inRunnerSpace(letter.id) && (yield* store.placedByAny(letter.id)) !== null);
+						const m =
+							accepted && !own && letter.parent !== null
+								? stamp(letter.m, letter.parent)
+								: letter.m;
+						const folded = accepted
+							? yield* stepped(
+									yield* step("saved_letter", letter.id, () => state.loaded.stepper.fold(model, m)),
+									"saved_letter",
+								)
+							: yield* receive(state, model, letter.m);
+						if (folded._tag === "refused") continue;
 						yield* store.record(
 							`step:${letter.id}`,
 							RuntimeRecord.cases.stepped.make({
@@ -752,17 +762,20 @@ export class ProgramRunner extends Context.Service<
 						view = folded.view;
 						wake = folded.wake;
 						placed.push({id: letter.id, rev: letter.rev, pos: letter.pos});
+						if (own && letter.id.endsWith("/answer"))
+							cmds = cmds.filter((cmd) => cmd.id !== letter.id.slice(0, -"/answer".length));
+						const dispatched = folded.cmds.map((cmd, index): Dispatched => ({
+							id: `${process.id}/${letter.pos}/${index}`,
+							cmd,
+							state: "dispatched",
+							parent: letter.parent,
+							traceId: letter.traceId,
+							build: process.build,
+						}));
+						cmds = [...cmds, ...dispatched];
 						if (letter.id === options.mine) {
 							mine = Option.some(letter);
-							for (const [index, cmd] of folded.cmds.entries())
-								fresh.push({
-									id: `${process.id}/${letter.pos}/${index}`,
-									cmd,
-									state: "dispatched",
-									parent: letter.parent,
-									traceId: letter.traceId,
-									build: process.build,
-								});
+							fresh.push(...dispatched);
 						}
 					}
 					const last = letters.at(-1);
@@ -773,12 +786,27 @@ export class ProgramRunner extends Context.Service<
 						wake,
 						after: last?.rev ?? state.after,
 						pos: last?.pos ?? state.pos,
-						cmds: [...state.cmds.filter((cmd) => cmd.id !== options.done), ...fresh],
+						cmds,
 					};
 					yield* store.save(checkpoint(next, null), placed);
 					live = next;
 					yield* publish(state, next);
 					return {state: next, fresh: fresh as ReadonlyArray<Dispatched>, mine};
+				});
+
+				const receive = Effect.fnUntraced(function* (state: Live, model: unknown, m: unknown) {
+					const port = inputPort(state, m);
+					if (
+						port === undefined ||
+						port._tag !== "write" ||
+						port.personOnly ||
+						hasParent(m) ||
+						Result.isFailure(Schema.decodeUnknownResult(port.schema)(m))
+					)
+						return Step.cases.refused.make({why: "bad_msg"});
+					return yield* pure("step", () => state.loaded.stepper.step(model, m)).pipe(
+						Effect.catch(() => Effect.succeed(Step.cases.refused.make({why: "bad_msg"}))),
+					);
 				});
 
 				/** The live process, loaded and caught up. */
@@ -795,7 +823,7 @@ export class ProgramRunner extends Context.Service<
 
 				/** Takes the writes an earlier life left dispatched, to run them once. */
 				const takeRetry = () => {
-					const taken = retry;
+					const taken = retry.filter((job) => live?.cmds.some((cmd) => cmd.id === job.id));
 					retry = [];
 					return taken;
 				};
@@ -839,6 +867,13 @@ export class ProgramRunner extends Context.Service<
 					const policy = kind !== null && Object.hasOwn(writes, kind) ? writes[kind] : undefined;
 					if (kind === null || RESERVED.has(kind) || policy === undefined || !isFact(fact))
 						return yield* err(job, "bad_cmd");
+					if (
+						brainOnly({stream, id: job.id, tag: kind}) ||
+						stream === "door" ||
+						stream.startsWith("door/") ||
+						(stream.endsWith("/inbox") && stream !== `${process.name}/inbox`)
+					)
+						return yield* err(job, "forbidden");
 					if (Result.isFailure(Schema.decodeUnknownResult(policy.schema)(fact)))
 						return yield* err(job, "bad_cmd");
 					const commit = <E>(
@@ -883,7 +918,7 @@ export class ProgramRunner extends Context.Service<
 						),
 					);
 					if (Result.isFailure(answer)) return yield* err(job, answer.failure);
-					if (answer.success._tag !== "placed") return yield* err(job, "bad_cmd");
+					if (answer.success._tag === "refused") return yield* err(job, answer.success.why);
 					return yield* ok(job, answer.success);
 				});
 
@@ -903,10 +938,10 @@ export class ProgramRunner extends Context.Service<
 						return yield* err(job, "handler_failed");
 					}
 					const outcome: Outcome<unknown, unknown> = exit.value;
-					if (outcome._tag === "Ok")
-						return yield* isAccepted(def.schema.ok, outcome.value)
-							? ok(job, outcome.value)
-							: err(job, "bad_cmd");
+					if (outcome._tag === "Ok") {
+						const encoded = encodeAnswer(def.schema.ok, outcome.value);
+						return yield* Option.isSome(encoded) ? ok(job, encoded.value) : err(job, "bad_cmd");
+					}
 					const declared = def.errTags.find(
 						(t) =>
 							typeof outcome.error === "object" &&
@@ -914,9 +949,11 @@ export class ProgramRunner extends Context.Service<
 							"_tag" in outcome.error &&
 							outcome.error._tag === t,
 					);
-					return yield* declared === undefined
-						? err(job, "bad_cmd")
-						: err(job, declared, outcome.error);
+					if (declared === undefined) return yield* err(job, "bad_cmd");
+					const encoded = encodeAnswer(Schema.TaggedStruct(declared, {}), outcome.error);
+					return yield* Option.isSome(encoded)
+						? err(job, declared, encoded.value)
+						: err(job, "bad_cmd");
 				});
 
 				/** Runs one saved Cmd, saves its answer as a letter, and folds it. Answers the Cmds that
@@ -968,15 +1005,14 @@ export class ProgramRunner extends Context.Service<
 									return [];
 								}
 								const current = yield* ready();
-								const sent = yield* mailbox.send(
-									process.name,
-									answer,
-									m,
-									yield* from(job.parent, job.traceId),
-								);
+								const sent = yield* mailbox
+									.send(process.name, answer, m, yield* from(job.parent, job.traceId))
+									.pipe(
+										Effect.provideService(RunnerMail, {process: process.id, name: process.name}),
+									);
 								if (sent._tag === "refused")
 									return yield* new LedgerError({why: "refused", message: sent.why});
-								return (yield* catchUp(current, {mine: answer, done: job.id})).fresh;
+								return (yield* catchUp(current, {mine: answer})).fresh;
 							}),
 						);
 					});
@@ -998,7 +1034,7 @@ export class ProgramRunner extends Context.Service<
 				): Effect.Effect<A, RunnerFailure> =>
 					Effect.gen(function* () {
 						const {answer, jobs} = yield* turn;
-						yield* flushed;
+						yield* recording.flush;
 						yield* runAll(jobs);
 						return answer;
 					}).pipe(
@@ -1007,7 +1043,7 @@ export class ProgramRunner extends Context.Service<
 						}),
 						Effect.exit,
 						Effect.flatMap((exit) =>
-							flushed.pipe(
+							recording.flush.pipe(
 								Effect.flatMap(() => exit),
 								Effect.catch((error) => (exit._tag === "Failure" ? exit : Effect.fail(error))),
 							),
@@ -1037,6 +1073,13 @@ export class ProgramRunner extends Context.Service<
 							"runner.open",
 							turn((state) =>
 								Effect.gen(function* () {
+									if (client.length === 0 || client.length > 256)
+										return yield* new RunnerError({why: "bad_client"});
+									clients.delete(client);
+									if (clients.size >= 1024) {
+										const oldest = clients.values().next();
+										if (!oldest.done) clients.delete(oldest.value);
+									}
 									clients.add(client);
 									yield* watchers.publish(client, {
 										type: "whole",
@@ -1088,12 +1131,16 @@ export class ProgramRunner extends Context.Service<
 									if (state.wake === null || state.wake > time)
 										return {answer: undefined, jobs: []};
 									const id = `${process.id}/due/${time}`;
-									const sent = yield* mailbox.send(
-										process.name,
-										id,
-										{type: "timer", at: time},
-										yield* from(null, yield* traceId),
-									);
+									const sent = yield* mailbox
+										.send(
+											process.name,
+											id,
+											{type: "timer", at: time},
+											yield* from(null, yield* traceId),
+										)
+										.pipe(
+											Effect.provideService(RunnerMail, {process: process.id, name: process.name}),
+										);
 									if (sent._tag === "refused")
 										return yield* new LedgerError({why: "refused", message: sent.why});
 									const {fresh} = yield* catchUp(state, {mine: id});
@@ -1164,6 +1211,11 @@ export class ProgramRunner extends Context.Service<
 					RunnerFailure
 				> {
 					return Effect.gen(function* () {
+						if (
+							brainOnly({stream: `${process.name}/inbox`, id: input.id, tag: "send"}) ||
+							hasParent(input.envelope.input)
+						)
+							return {answer: Sent.cases.refused.make({why: "bad_msg"}), jobs: []};
 						const prior = yield* store.placed(input.id);
 						if (prior !== null)
 							return {answer: Sent.cases.accepted.make({rev: prior.rev, pos: prior.pos}), jobs: []};
@@ -1174,6 +1226,16 @@ export class ProgramRunner extends Context.Service<
 								answer: Sent.cases.accepted.make({rev: existing.rev, pos: existing.pos}),
 								jobs: [],
 							};
+						const port = inputPort(state, input.envelope.input);
+						if (
+							port === undefined ||
+							port._tag !== "write" ||
+							(port.personOnly && input.envelope.by._tag !== "person")
+						)
+							return {answer: Sent.cases.refused.make({why: "bad_msg"}), jobs: []};
+						const m = stamp(input.envelope.input, input.envelope.id);
+						if (Result.isFailure(Schema.decodeUnknownResult(port.schema)(m)))
+							return {answer: Sent.cases.refused.make({why: "bad_msg"}), jobs: []};
 						if (supervision !== null && !supervision.receipts.some((r) => r.letter === input.id))
 							yield* saveRecovery({
 								...supervision,
@@ -1190,9 +1252,7 @@ export class ProgramRunner extends Context.Service<
 								],
 							});
 						const preparation = yield* Effect.result(
-							step("step", input.id, () =>
-								state.loaded.stepper.step(state.model, input.envelope.input),
-							),
+							step("step", input.id, () => state.loaded.stepper.step(state.model, m)),
 						);
 						if (Result.isFailure(preparation)) {
 							const terminal = supervision?.receipts.find((r) => r.letter === input.id)?.result;
@@ -1229,7 +1289,7 @@ export class ProgramRunner extends Context.Service<
 
 /** A delivery that does not have P10's shape. */
 export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError", {
-	why: Schema.Literals(["bad_input"]),
+	why: Schema.Literals(["bad_input", "bad_client"]),
 }) {}
 
 type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError | ProcessError;
@@ -1237,14 +1297,26 @@ type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError | Proce
 const cmdType = (job: Dispatched): string =>
 	Option.match(decodeTyped(job.cmd), {onNone: () => "", onSome: (c) => c.type});
 
+const hasParent = (m: unknown): boolean => typeof m === "object" && m !== null && "parent" in m;
+const stamp = (m: unknown, parent: string): unknown =>
+	typeof m === "object" && m !== null ? {...m, parent} : m;
+const inputPort = (state: Live, m: unknown) =>
+	Option.match(decodeTyped(m), {
+		onNone: () => undefined,
+		onSome: ({type}) => {
+			const inputs = state.loaded.stepper.program.inputs;
+			return Object.hasOwn(inputs, type) ? inputs[type] : undefined;
+		},
+	});
+
 const isFact = (u: Readonly<Record<string, Schema.Json>>): u is Fact => typeof u._tag === "string";
 
-const isAccepted = (
-	schema: {readonly "~standard": {readonly validate: (value: unknown) => unknown}},
-	value: unknown,
-): boolean => {
-	const answer = schema["~standard"].validate(value);
-	return (
-		typeof answer === "object" && answer !== null && "value" in answer && !("issues" in answer)
-	);
+const isCodec = (schema: unknown): schema is Schema.Codec<unknown, unknown> =>
+	Schema.isSchema(schema);
+
+const encodeAnswer = (schema: unknown, value: unknown): Option.Option<Schema.Json> => {
+	if (!isCodec(schema)) return Option.none();
+	return Option.liftThrowable(() =>
+		Schema.decodeUnknownSync(Schema.Json)(Schema.encodeUnknownSync(schema)(value)),
+	)();
 };

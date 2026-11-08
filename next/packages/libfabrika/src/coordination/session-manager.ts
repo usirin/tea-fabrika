@@ -3,7 +3,7 @@ import {LedgerError} from "../data/ledger.ts";
 import {type InputId, ParentText} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
 import {ProcessId} from "../data/trace.ts";
-import {inSignalSpace} from "./process.ts";
+import {inRunnerSpace, inSignalSpace} from "./process.ts";
 
 export const Writer = Schema.TaggedUnion({
 	person: {key: Schema.String, for: Schema.String},
@@ -126,7 +126,8 @@ export class SessionManager extends Context.Service<
 					const request = yield* SignRequest;
 					// A signal id is the brain's alone: the signer refuses it before it reads or writes,
 					// so no receipt binds one and the delivery's one receipt stays free.
-					if (inSignalSpace(request.id)) return yield* new SigningRefused({why: "signal"});
+					if (inSignalSpace(request.id) || inRunnerSpace(request.id))
+						return yield* new SigningRefused({why: "signal"});
 					const saved = yield* stored(() => {
 						ensure();
 						return load(parent);
