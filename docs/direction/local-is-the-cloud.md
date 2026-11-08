@@ -1,6 +1,6 @@
 # The laptop runs the same setup as Cloudflare, one command apart
 
-**Decided 2026-10-25.** Walked when Tier 1 starts (owner, 2026-11-08): checking local and cloud setup together. *Walked 2026-11-08: nothing new to decide; the proposed check is built in Tier 1's P12.* Everything fabrika runs on Cloudflare also runs on the
+**Decided 2026-10-25.** Walked at Tier 1's start (owner, 2026-11-08): checking local and cloud setup together; nothing new to decide, and the check is planned in Tier 1's P12. Everything fabrika runs on Cloudflare also runs on the
 laptop, from the same code and the same Alchemy stack. That covers the ledger
 server, a project's host, the relay that adds a key, and where keys are kept.
 Moving a project between the two is one command. The laptop setup never falls
@@ -46,7 +46,7 @@ const job = Cloudflare.Container("job", {schedulingPolicy: "durable_object", doc
   in Docker, which is how Cloudflare's own dev mode runs them.
 - **Make falling behind impossible, not discouraged.** A check in `pnpm lint`
   fails on a stack resource with no local provider. CI runs the tests against
-  the local stage. The check is built in Tier 1, P12 (was proposed).
+  the local stage. The check is planned in Tier 1's P12.
 - **Moving a project:** stop, copy in `pos` order, check by hash, switch. That
   is the move [the ledger goes to Cloudflare](./the-ledger-goes-to-cloudflare.md)
   leans to, measured in experiment 145.
