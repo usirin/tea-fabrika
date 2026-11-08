@@ -381,7 +381,7 @@ export const end = Cmd.make("end", {input: Process, ok: Done, err: []});
 export const kill = Cmd.make("kill", {input: Process, ok: Done, err: []});
 /** The frame shows something, on the page whose key asked: no tile and no layout changes. */
 export const show = Cmd.make("show", {
-	input: Schema.Struct({what: Schema.Literals(SHOWS)}),
+	input: Schema.Struct({what: Schema.Literals([...SHOWS, "focus-next", "focus-previous"])}),
 	ok: Done,
 	err: [],
 });
@@ -598,6 +598,9 @@ const act = (s: Open, does: Does): Step => {
 			const next = withWorkspace(s, {...ws, layout: unzoom(ws.layout), focused: to.id});
 			return [next, keep(next)];
 		}
+		case "cycle": {
+			return [s, [show({what: does.to === "next" ? "focus-next" : "focus-previous"})]];
+		}
 		case "go":
 			return went(s, does.tile);
 		case "fold":
@@ -778,6 +781,12 @@ const byteOf = (prefix: string): string | null => {
  */
 const boundOn = (keys: Keys, key: Key) => {
 	const does = commandOn(keys, key);
+	if (does === "palette.open" && key._tag === "after_prefix")
+		return {
+			does,
+			key,
+			binding: {does: {kind: "show" as const, what: "palette" as const}, repeats: false},
+		};
 	const binding = does === undefined ? undefined : bindingFor(does);
 	return does === undefined || binding === undefined ? null : {does, key, binding};
 };

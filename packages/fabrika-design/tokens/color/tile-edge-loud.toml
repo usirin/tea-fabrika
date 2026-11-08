@@ -1,0 +1,6 @@
+tier = "component"
+owner = "tile"
+description = "focus under more contrast only"
+
+[colors]
+extends = "text-faint"

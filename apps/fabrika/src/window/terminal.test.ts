@@ -89,16 +89,23 @@ vi.mock("ghostty-web", () => ({Terminal: FakeTerminal, FitAddon: FakeFit, Ghostt
 vi.mock("ghostty-web/ghostty-vt.wasm", () => ({default: new Uint8Array()}));
 
 /** Just enough of an element for terminal.ts to build and move its own. */
-const element = (): Record<string, unknown> => {
+const element = (tag = "div"): Record<string, unknown> => {
 	const el: Record<string, unknown> = {
+		tag,
+		attrs: {} as Record<string, string>,
 		className: "",
 		textContent: "",
 		style: {},
 		parentElement: null,
 		children: [] as unknown[],
-		setAttribute: () => {},
+		setAttribute: (name: string, value: string) => {
+			(el["attrs"] as Record<string, string>)[name] = value;
+		},
 		append: (...kids: Record<string, unknown>[]) => {
-			for (const kid of kids) kid["parentElement"] = el;
+			for (const kid of kids) {
+				kid["parentElement"] = el;
+				(el["children"] as unknown[]).push(kid);
+			}
 		},
 		remove: () => {
 			el["parentElement"] = null;
@@ -107,13 +114,29 @@ const element = (): Record<string, unknown> => {
 			page.activeElement = el;
 		},
 	};
+	let text = "";
+	Object.defineProperty(el, "textContent", {
+		get: () => text,
+		set: (value: string) => {
+			text = value;
+			page.writes.push({element: el, text: value});
+		},
+	});
+	page.made.push(el);
 	return el;
 };
 
 /** The page: what it makes, and which element has focus. */
-const page: {createElement: typeof element; activeElement: unknown} = {
+const page: {
+	createElement: typeof element;
+	activeElement: unknown;
+	made: Record<string, unknown>[];
+	writes: {element: Record<string, unknown>; text: string}[];
+} = {
 	createElement: element,
 	activeElement: undefined,
+	made: [],
+	writes: [],
 };
 
 type Heard = (e: {matches: boolean}) => void;
@@ -169,6 +192,8 @@ beforeEach(() => {
 	toTile = undefined;
 	sent = [];
 	page.activeElement = undefined;
+	page.made = [];
+	page.writes = [];
 	vi.stubGlobal("document", page);
 	vi.stubGlobal("requestAnimationFrame", (fn: () => void) => fn());
 	vi.stubGlobal("window", {
@@ -189,6 +214,7 @@ afterEach(() => {
 	for (const timer of FakeTerminal.timers) clearTimeout(timer);
 	FakeTerminal.timers = [];
 	vi.unstubAllGlobals();
+	vi.useRealTimers();
 });
 
 /** After the timeouts already queued, ghostty-web's re-focus among them. */
@@ -208,6 +234,54 @@ const replayed = () => showing()[0]?.written.join("");
 
 /** The terminals open now and not disposed: what the tile shows. */
 const showing = () => FakeTerminal.made.filter((t) => t.opened && !t.disposed);
+
+describe("the terminal's spoken status", () => {
+	const status = () => {
+		const found = page.made.find(
+			(e) => (e["attrs"] as Record<string, string>)["role"] === "status",
+		);
+		if (found === undefined) throw new Error("no job status region");
+		return found;
+	};
+	const writes = () => page.writes.filter((w) => w.element === status()).map((w) => w.text);
+
+	it("announces each complete reply in the log region", async () => {
+		await openTerminal([]);
+		const log = page.made.find((e) => (e["attrs"] as Record<string, string>)["role"] === "log");
+		if (log === undefined) throw new Error("no reply log region");
+		expect(log["tag"]).toBe("div");
+		toTile?.({type: "said", text: "scout: The river is Kura.\nThe bridge has 7 arches."});
+		expect((log["children"] as Record<string, unknown>[]).map((e) => e["textContent"])).toEqual([
+			"scout: The river is Kura.\nThe bridge has 7 arches.",
+		]);
+	});
+
+	it("creates a status region and clears it at once when the job ends", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-11-07T00:00:00Z"));
+		await openTerminal([]);
+		expect(status()["tag"]).toBe("div");
+		toTile?.({type: "status", text: "reading"});
+		expect(status()["textContent"]).toBe("reading");
+		toTile?.({type: "status", text: "finishing"});
+		expect(status()["textContent"]).toBe("reading");
+		toTile?.({type: "status", text: null});
+		expect(status()["textContent"]).toBe("");
+		vi.advanceTimersByTime(3000);
+		expect(writes()).toEqual(["reading", ""]);
+	});
+
+	it("drops a queued announcement when the terminal is disposed", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-11-07T00:00:00Z"));
+		const terminal = await openTerminal([]);
+		toTile?.({type: "status", text: "reading"});
+		toTile?.({type: "status", text: "waiting"});
+		terminal.dispose();
+		vi.advanceTimersByTime(3000);
+		expect(writes()).toEqual(["reading"]);
+	});
+});
 
 describe("an open terminal follows the system's look", () => {
 	it("is made in the system's look", async () => {

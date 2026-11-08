@@ -1,0 +1,6 @@
+tier = "component"
+owner = "tile"
+description = "on every tile, plain or pipe"
+
+[colors]
+extends = "border-faint"

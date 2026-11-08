@@ -15,7 +15,7 @@
 export type Cap = string;
 
 /** The Mac's modifier glyphs, in the order the Mac writes them: Control, Option, Shift, Command. */
-const MODS: Readonly<Record<string, string>> = {c: "⌃", a: "⌥", m: "⌘"};
+const MODS: Readonly<Record<string, string>> = {c: "⌃", a: "⌥", s: "⇧", m: "⌘"};
 
 const NAMED: Readonly<Record<string, string>> = {
 	arrowleft: "←",
@@ -45,11 +45,11 @@ const bareCap = (key: string): Cap => {
 export const capOf = (key: string): Cap => {
 	const wrapped = /^<(.+)>$/.exec(key)?.[1];
 	if (wrapped === undefined) return bareCap(key);
-	const parts = /^((?:[cam]-)*)(.+)$/.exec(wrapped);
+	const parts = /^((?:[casm]-)*)(.+)$/.exec(wrapped);
 	const mods = (parts?.[1] ?? "").split("-").filter(Boolean);
 	const base = parts?.[2] ?? wrapped;
-	const glyphs = ["c", "a", "m"].filter((m) => mods.includes(m)).map((m) => MODS[m] ?? "");
-	return `${glyphs.join("")}${mods.length > 0 && base.length === 1 ? base.toUpperCase() : bareCap(base)}`;
+	const glyphs = ["c", "a", "s", "m"].filter((m) => mods.includes(m)).map((m) => MODS[m] ?? "");
+	return `${glyphs.join("")}${mods.length > 0 && /^[a-z]$/.test(base) ? base.toUpperCase() : bareCap(base)}`;
 };
 
 /** A binding's whole key, as keycaps: the prefix, then its own key. `["⌃B", "Z"]`. */

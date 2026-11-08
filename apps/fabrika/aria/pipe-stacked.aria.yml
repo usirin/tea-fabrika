@@ -1,0 +1,155 @@
+- banner:
+  - navigation "workspaces":
+    - button "1 tsh"
+    - 'button "2 #7"'
+    - button "3 tsh"
+    - 'button "4 #7"'
+    - button "5 tsh"
+    - 'button "6 #7"'
+  - navigation "the line":
+    - button "tracker"
+    - text: "|"
+    - button "ticket"
+  - button "1 asks you 1 not seen":
+    - text: 1 asks you
+    - img "1 not seen"
+  - text: ·
+  - status "the link to the host":
+    - button "host up"
+- region "tile t12, tracker, a window of the line typed in t12":
+  - text: tracker t12
+  - textbox "Terminal input":
+    - textbox "Terminal input"
+  - region "t12 screen": tsh$ tracker | ticket ticket 7
+  - main "tracker view":
+    - region "tracker":
+      - button "← Tickets"
+      - text: Esc
+      - 'heading "`fabrika post` prints the ticket number twice" [level=2]'
+      - paragraph:
+        - img "open"
+        - text: "Open #7 waits on you: approve plan v1"
+      - list "timeline":
+        - listitem:
+          - paragraph:
+            - text: owner filed it
+            - time: <time>
+          - text: "Every line `fabrika post list` prints names the ticket number twice, like `#9 open c28 #9 The ledger moves to Cloudflare`. It should name it once. Done when every line names its number exactly once, and the rest of the line does not change."
+        - listitem:
+          - paragraph:
+            - text: lane,owner's agent triage started
+            - time: <time>
+        - listitem:
+          - paragraph:
+            - text: "lane,owner's agent triage: sent to plan: yes $0.11, 1 turn"
+            - time: <time>
+        - listitem:
+          - paragraph:
+            - text: lane,owner's agent plan started
+            - time: <time>
+        - listitem:
+          - paragraph:
+            - text: "lane,owner's agent plan: done $0.38, 9 turns"
+            - time: <time>
+        - listitem:
+          - paragraph:
+            - text: lane,owner's agent plan v1 2 tasks
+            - time: <time>
+        - listitem:
+          - paragraph:
+            - text: "lane,owner's agent asks you: approve plan v1 approve / no"
+            - time: <time>
+      - 'region "ask: approve plan v1"':
+        - paragraph:
+          - text: lane,owner's agent asks you
+          - time: <time>
+        - paragraph: approve plan v1
+        - textbox "note with the answer":
+          - /placeholder: A note with your answer, if it needs one
+        - button "approve"
+        - button "no"
+      - form "comment":
+        - textbox "comment":
+          - /placeholder: Leave a comment
+        - text: Ctrl Enter comments
+        - button "Close ticket"
+        - button "Request changes" [disabled]
+        - button "Comment" [disabled]
+- separator
+- region "tile t13, ticket, a window of the line typed in t12":
+  - text: "ticket #7 t13"
+  - main "ticket view":
+    - text: "#7 filed by owner, <time>"
+    - heading "fabrika post prints the ticket number twice" [level=1]
+    - region "Whose turn":
+      - text: Your turn · approve plan v1 lane (an agent) asked at 00:232 tasks
+      - button "No"
+      - button "Approve plan v1"
+    - paragraph: "Every line fabrika post list prints names the ticket number twice, like #9 open c28 #9 The ledger moves to Cloudflare. It should name it once."
+    - paragraph: Done when every line names its number exactly once, and the rest of the line does not change.
+    - region "Activity":
+      - heading "Activity" [level=2]
+      - text: 7 J K move ↵ open
+      - list:
+        - listitem:
+          - button "owner filed it <time>":
+            - text: owner filed it
+            - time: <time>
+        - listitem:
+          - button "lane (an agent) triage started <time>":
+            - text: lane (an agent) triage started
+            - time: <time>
+        - listitem:
+          - 'button "lane (an agent) triage: sent to plan: yes $0.11, 1 turn <time>"':
+            - text: "lane (an agent) triage: sent to plan: yes $0.11, 1 turn"
+            - time: <time>
+        - listitem:
+          - button "lane (an agent) plan started <time>":
+            - text: lane (an agent) plan started
+            - time: <time>
+        - listitem:
+          - 'button "lane (an agent) plan: done $0.38, 9 turns <time>"':
+            - text: "lane (an agent) plan: done $0.38, 9 turns"
+            - time: <time>
+        - listitem:
+          - button "lane (an agent) plan v1 2 tasks <time>":
+            - text: lane (an agent) plan v1 2 tasks
+            - time: <time>
+        - listitem:
+          - 'button "lane (an agent) asks you: approve plan v1 approve / no <time>"':
+            - text: "lane (an agent) asks you: approve plan v1 approve / no"
+            - time: <time>
+      - text: Leave a comment
+      - textbox "Leave a comment"
+      - text: ⌘ ↵ to send
+      - button "Request changes" [disabled]
+      - button "Comment" [disabled]
+    - complementary "Properties":
+      - heading "Properties" [level=3]
+      - term: Status
+      - definition: waits on you
+      - term: Filed by
+      - definition: owner
+      - term: Step
+      - definition: approval
+      - term: Plan
+      - definition: v1 2 tasks
+      - term: PR
+      - definition: none yet
+      - term: Checks
+      - definition: no PR yet
+      - term: Cost
+      - definition: $0.49
+      - term: Trace
+      - definition:
+        - code: trace --ticket 7
+      - heading "Made of" [level=3]
+      - text: "A lane and its steps, writing facts to one ledger stream. Type this in a tile to see them:"
+      - code: map --ticket 7
+- contentinfo:
+  - text: t12 tracker · takes nothing · sends ticket · → ticket·
+  - button "%6 tracker | ticket <time>"
+  - button "C-b i info"
+  - text: ·
+  - button "C-b ? keys"
+- status: Info mode off.

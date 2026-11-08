@@ -56,7 +56,7 @@
 	/* Text that names no size of its own: the app-down page, "starting", an alert. The scale does
 	   not read it. */
 	font-family: var(--mono);
-	font-size: 14px;
+	font-size: var(--fs-prose);
 	-webkit-font-smoothing: antialiased;
 }
 
@@ -97,6 +97,12 @@ body,
 	flex-direction: column;
 	height: 100%;
 	box-sizing: border-box;
+}
+
+/* With the bars hidden, F6 lands on the desk itself: show where focus went (WCAG 2.4.7). */
+.desk:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: -2px;
 }
 
 .workspace {
@@ -402,8 +408,11 @@ body,
 	caret-color: transparent;
 }
 
-/* The screen as text: there for a screen reader and a test, out of sight. */
-.screen-text {
+/* The screen as text, and a job's status and replies: there for a screen reader and a test, out of
+   sight. */
+.screen-text,
+.job-status,
+.job-replies {
 	position: absolute;
 	width: 1px;
 	height: 1px;
@@ -525,7 +534,7 @@ main.program > [role="alert"] {
 /*
  * The window's frame (frame.tsx): a top bar that is the whole desk, and a bottom line that is the
  * tile you are in and your last key. Plain words, ` · ` between them: no pills, no backgrounds on
- * items, digits that do not shift. Only "asks you" takes the accent (--turn), and only a broken
+ * items, digits that do not shift. Only "asks you" takes the accent (--turn-text), and only a broken
  * part takes red (--stuck), each with its word. On macOS the top bar is the window's title bar:
  * the window is moved by it, and its buttons take no drag. No line under the top bar or over the
  * bottom line: the tiles' own edges already end the desk there.
@@ -588,7 +597,7 @@ main.program > [role="alert"] {
 }
 
 .fb:focus-visible {
-	outline: 1px solid var(--text-faint);
+	outline: 1px solid var(--focus);
 	outline-offset: 2px;
 }
 
@@ -599,7 +608,7 @@ main.program > [role="alert"] {
 }
 
 .fb.accent {
-	color: var(--turn);
+	color: var(--turn-text);
 }
 
 .fb.broken {
@@ -738,7 +747,7 @@ main.program > [role="alert"] {
 	margin-left: 6px;
 	vertical-align: 1px;
 	border-radius: 50%;
-	background: var(--turn);
+	background: var(--turn-fill);
 }
 
 /* 26px, and two lines while info mode is on (below). */
@@ -871,8 +880,13 @@ main.program > [role="alert"] {
 	border-radius: var(--r-lg);
 	background: var(--pop-bg);
 	box-shadow: var(--pop-shadow);
-	animation: pop-in var(--pop-in) both;
 	transform-origin: top right;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.pop {
+		animation: pop-in var(--pop-in) both;
+	}
 }
 
 /* The box itself holds focus for its rows (aria-activedescendant): the active row shows where. */
@@ -885,7 +899,7 @@ main.program > [role="alert"] {
 	font-size: 0.95em;
 }
 
-/* In over --fast with a fade and a 0.96 scale from the anchor; with reduced motion, a fade only. */
+/* In over --fast with a fade and a 0.96 scale from the anchor, when motion is welcome. */
 @keyframes pop-in {
 	from {
 		opacity: 0;
@@ -896,12 +910,6 @@ main.program > [role="alert"] {
 @keyframes pop-fade {
 	from {
 		opacity: 0;
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.pop {
-		animation-name: pop-fade;
 	}
 }
 
@@ -1038,7 +1046,7 @@ main.program > [role="alert"] {
 }
 
 .ic-ask {
-	color: var(--turn);
+	color: var(--turn-text);
 }
 
 .ic-stuck {
@@ -1092,8 +1100,10 @@ main.program > [role="alert"] {
 	cursor: default;
 }
 
-.pop-chev {
-	transition: transform var(--fast) var(--ease-out);
+@media (prefers-reduced-motion: no-preference) {
+	.pop-chev {
+		transition: transform var(--fast) var(--ease-out);
+	}
 }
 
 .pop-fold[aria-expanded="false"] .pop-chev {
@@ -1328,6 +1338,96 @@ main.program > [role="alert"] {
 	padding: 0 16px;
 }
 
+[data-scope="dialog"][data-part="backdrop"]:has(+ [data-part="positioner"] .keys-dialog) {
+	background: none;
+	backdrop-filter: none;
+}
+
+.keys-dialog {
+	width: min(900px, calc(100vw - 32px));
+	/* At 1024 by 700 the editor is taller than the window: it scrolls inside, and Close stays reachable. */
+	max-height: calc(100vh - 32px);
+	overflow-y: auto;
+	background: var(--surface-raised);
+	color: var(--text-primary);
+}
+
+.keys-editor {
+	display: grid;
+	gap: var(--s-3);
+	min-width: 0;
+}
+
+.keys-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+	gap: var(--s-3);
+}
+
+.keys-list {
+	max-height: min(45vh, 420px);
+}
+
+.keys-list [data-part="item"] {
+	height: auto;
+	min-height: var(--row-2h);
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
+.keys-detail {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.keys-actions,
+.keys-combination {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--s-2);
+}
+
+.keys-actions,
+.keys-combination + .keys-combination {
+	margin-top: var(--s-2);
+}
+
+.keys-editor p {
+	margin-block: var(--s-2);
+}
+
+/* The one live region: always there, so each new line is heard. The same words show beside the
+   controls they explain. */
+.keys-live {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* Focus rests here while a save runs, so it shows where it is. */
+.keys-result:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
+
+.keys-system ul {
+	display: grid;
+	gap: var(--s-2);
+}
+
+@media (max-width: 640px) {
+	.keys-layout {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.keys-list {
+		max-height: 25vh;
+	}
+}
+
 /* A tooltip: a name and its keys, after a short wait. Never under the pointer's way. */
 .tip {
 	position: fixed;
@@ -1345,7 +1445,12 @@ main.program > [role="alert"] {
 	font-size: var(--fs-small);
 	white-space: nowrap;
 	pointer-events: none;
-	animation: pop-fade var(--pop-in) both;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.tip {
+		animation: pop-fade var(--pop-in) both;
+	}
 }
 
 .tip code {
@@ -1391,7 +1496,7 @@ button:hover {
 }
 
 button:focus-visible {
-	outline: 2px solid var(--key);
+	outline: 2px solid var(--focus);
 	outline-offset: 2px;
 }
 
@@ -1690,7 +1795,7 @@ button:focus-visible {
 	background: var(--ground);
 	color: var(--text-secondary);
 	font-family: var(--sans);
-	font-size: 13px;
+	font-size: var(--fs-body);
 	line-height: 1.45;
 	-webkit-font-smoothing: antialiased;
 }
@@ -1724,7 +1829,7 @@ button:focus-visible {
 
 .tracker small {
 	color: var(--faint);
-	font-size: 12px;
+	font-size: var(--fs-small);
 }
 
 .tracker-quiet,
@@ -1756,7 +1861,7 @@ button:focus-visible {
 .tracker a:focus-visible,
 .tracker input:focus-visible,
 .tracker textarea:focus-visible {
-	outline: 2px solid var(--key);
+	outline: 2px solid var(--focus);
 	outline-offset: 1px;
 }
 
@@ -1829,7 +1934,7 @@ button:focus-visible {
 }
 
 .tracker-find:focus-within {
-	border-color: var(--key);
+	border-color: var(--focus);
 }
 
 .tracker .tracker-find input {
@@ -1840,7 +1945,6 @@ button:focus-visible {
 	background: transparent;
 	color: var(--text-primary);
 	font: inherit;
-	outline: none;
 }
 
 .tracker-find input::-webkit-search-cancel-button {
@@ -1942,11 +2046,10 @@ button:focus-visible {
 	border: 1px solid var(--line);
 	border-radius: 8px;
 	padding: 7px 10px;
-	outline: none;
 }
 
 .tracker .tracker-composer input {
-	font-size: 14px;
+	font-size: var(--fs-prose);
 }
 
 .tracker .tracker-composer textarea {
@@ -1956,8 +2059,7 @@ button:focus-visible {
 
 .tracker .tracker-composer input:focus,
 .tracker .tracker-composer textarea:focus {
-	border-color: var(--key);
-	outline: none;
+	border-color: var(--focus);
 }
 
 .tracker input::placeholder,
@@ -2023,8 +2125,15 @@ button:focus-visible {
 
 .tracker .tracker-list button:focus-visible,
 .tracker-list a.tracker-pull-request:focus-visible {
-	outline: none;
-	box-shadow: inset 2px 0 0 var(--key);
+	outline: 2px solid var(--focus);
+	outline-offset: -2px;
+}
+
+@media (forced-colors: active) {
+	.tracker .tracker-list button:focus-visible,
+	.tracker-list a.tracker-pull-request:focus-visible {
+		outline-color: Highlight;
+	}
 }
 
 .tracker-number {
@@ -2038,7 +2147,7 @@ button:focus-visible {
 	color: var(--text-primary);
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	font-size: 14px;
+	font-size: var(--fs-prose);
 }
 
 .tracker-sub {
@@ -2046,7 +2155,7 @@ button:focus-visible {
 	gap: 12px;
 	align-items: center;
 	color: var(--faint);
-	font-size: 12px;
+	font-size: var(--fs-small);
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
 }
@@ -2091,7 +2200,7 @@ button:focus-visible {
 	border: 1px solid var(--line);
 	border-radius: 4px;
 	color: var(--faint);
-	font-size: 11px;
+	font-size: var(--fs-micro);
 	vertical-align: 1px;
 }
 
@@ -2104,7 +2213,7 @@ button:focus-visible {
 .tracker-pull-requests h3 {
 	padding: 0 10px;
 	color: var(--soft);
-	font-size: 12px;
+	font-size: var(--fs-small);
 	font-weight: 600;
 }
 
@@ -2126,7 +2235,7 @@ button:focus-visible {
 	padding-top: 10px;
 	border-top: 1px solid var(--line);
 	color: var(--faint);
-	font-size: 12px;
+	font-size: var(--fs-small);
 }
 
 .tracker-alert {
@@ -2181,7 +2290,7 @@ button:focus-visible {
 	padding: 1px 8px 1px 5px;
 	border: 1px solid var(--line);
 	border-radius: 999px;
-	font-size: 12px;
+	font-size: var(--fs-small);
 	font-weight: 500;
 }
 
@@ -2213,7 +2322,7 @@ button:focus-visible {
 
 .tracker-meta {
 	color: var(--faint);
-	font-size: 12px;
+	font-size: var(--fs-small);
 }
 
 .tracker-who {
@@ -2226,7 +2335,7 @@ button:focus-visible {
 	padding: 0 5px;
 	border: 1px solid var(--line);
 	border-radius: 4px;
-	font-size: 11px;
+	font-size: var(--fs-micro);
 	font-weight: 400;
 }
 
@@ -2234,14 +2343,14 @@ button:focus-visible {
 	max-width: 68ch;
 	margin-top: 4px;
 	color: var(--text-primary);
-	font-size: 14px;
+	font-size: var(--fs-prose);
 	line-height: 1.55;
 	white-space: pre-wrap;
 }
 
 /* A URL in a body: underlined, and a long one wraps rather than widen the tile. */
 .tracker-body a {
-	color: var(--turn);
+	color: var(--turn-text);
 	text-decoration: underline;
 	text-underline-offset: 2px;
 	overflow-wrap: anywhere;
@@ -2260,11 +2369,11 @@ button:focus-visible {
 /* A ticket's top line: quiet, and in the key color when it waits on the owner. */
 .tracker-head-line {
 	color: var(--faint);
-	font-size: 12px;
+	font-size: var(--fs-small);
 }
 
 .tracker-head-line[data-waits] {
-	color: var(--turn);
+	color: var(--turn-text);
 	font-weight: 600;
 }
 
@@ -2286,7 +2395,7 @@ button:focus-visible {
 
 .tracker-ask-what {
 	color: var(--text-primary);
-	font-size: 14px;
+	font-size: var(--fs-prose);
 	font-weight: 600;
 }
 
@@ -2443,9 +2552,14 @@ main.program:has(> .view) {
 	color: var(--text-primary);
 	font-weight: 500;
 	white-space: nowrap;
-	transition:
-		background-color var(--fast) ease,
-		scale 150ms ease-out;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.view .btn {
+		transition:
+			background-color var(--fast) ease,
+			scale 150ms ease-out;
+	}
 }
 
 .view .btn:disabled {
@@ -2534,7 +2648,7 @@ main.program:has(> .view) {
 .view .m.lg {
 	inline-size: 24px;
 	block-size: 24px;
-	font-size: 11px;
+	font-size: var(--fs-micro);
 }
 
 .view .who {
@@ -2562,7 +2676,7 @@ main.program:has(> .view) {
 }
 
 .view .dot.you {
-	box-shadow: inset 0 0 0 1.5px var(--turn);
+	box-shadow: inset 0 0 0 1.5px var(--turn-fill);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -2590,7 +2704,7 @@ main.program:has(> .view) {
 }
 
 .view .w-you {
-	color: var(--turn);
+	color: var(--turn-text);
 	font-weight: 600;
 }
 
@@ -2791,7 +2905,12 @@ main.program:has(> .view) {
 	min-block-size: 34px;
 	padding: 4px var(--s-2);
 	border-radius: var(--r-lg);
-	transition: background-color 100ms ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.ticket-view .act-r {
+		transition: background-color 100ms ease;
+	}
 }
 
 @media (hover: hover) {
@@ -2832,7 +2951,12 @@ main.program:has(> .view) {
 	block-size: 14px;
 	color: var(--text-faint);
 	opacity: 0;
-	transition: opacity var(--fast) ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.ticket-view .chev {
+		transition: opacity var(--fast) ease;
+	}
 }
 
 .ticket-view .act-r:hover .chev,
@@ -2856,7 +2980,12 @@ main.program:has(> .view) {
 	border-radius: var(--r-lg);
 	background: var(--surface-sunken);
 	box-shadow: inset 0 0 0 1px var(--border-faint);
-	transition: box-shadow var(--fast) ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.ticket-view .composer {
+		transition: box-shadow var(--fast) ease;
+	}
 }
 
 .ticket-view .composer:focus-within {
@@ -3775,14 +3904,30 @@ main.program:has(> .view) {
 	}
 }
 
-/* The ruler's finer ticks show only where the ruler has room: 60px or more for each label. */
+/* The ruler's finer ticks show only where the ruler has room: 60px or more for each label
+   (ruler.ts). Rank 0 always shows: 2 ticks from 120px. Rank 1 from 240px, rank 2 from 480px,
+   rank 3 from 960px. Under 120px the "0" hides when rank 0 has a second tick, so one label
+   shows, with its unit. Labels drop, never shrink. */
 .trace-view .wf-ruler {
 	container: ruler / inline-size;
 }
 
+.trace-view .wf-tick.r1,
 .trace-view .wf-tick.r2,
 .trace-view .wf-tick.r3 {
 	display: none;
+}
+
+@container ruler (width < 120px) {
+	.trace-view .wf-tick:first-child:has(~ .wf-tick.r0) {
+		display: none;
+	}
+}
+
+@container ruler (min-width: 240px) {
+	.trace-view .wf-tick.r1 {
+		display: block;
+	}
 }
 
 @container ruler (min-width: 480px) {
@@ -3965,7 +4110,7 @@ main.program:has(> .view) {
 }
 
 .trace-view .tv-out.waiting {
-	color: var(--turn);
+	color: var(--turn-text);
 }
 
 /* The detail: under the lanes where the tile is narrow (Datadog), beside them where it is wide (Honeycomb). One hairline, no panel. */

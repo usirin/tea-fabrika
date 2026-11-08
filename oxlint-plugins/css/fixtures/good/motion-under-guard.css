@@ -1,0 +1,4 @@
+@media (prefers-reduced-motion: no-preference) { .fade { transition: opacity 120ms; animation: pop-fade 1s; transition-delay: 0s; animation-name: pop-fade; } }
+@media screen { @media (prefers-reduced-motion: no-preference) { .nested { animation-duration: 1s; } } }
+@media (prefers-reduced-motion: reduce) { .still { transition: none; animation: none; transition-duration: 0s; animation-duration: 0s; } }
+.text { content: "transition: opacity 120ms"; }

@@ -26,6 +26,7 @@
 		"./agents/sandbox": "./src/agents/sandbox.ts",
 		"./agents/trace": "./src/agents/trace.ts",
 		"./agents/acp": "./src/agents/acp.ts",
+		"./agents/summon": "./src/agents/summon.ts",
 		"./agents/codex": "./src/agents/codex.ts",
 		"./mcp": "./src/mcp.ts",
 		"./sandbox/os": "./src/sandbox/os.ts",
@@ -88,6 +89,10 @@
 			"./agents/acp": {
 				"types": "./dist/agents/acp.d.ts",
 				"default": "./dist/agents/acp.js"
+			},
+			"./agents/summon": {
+				"types": "./dist/agents/summon.d.ts",
+				"default": "./dist/agents/summon.js"
 			},
 			"./agents/codex": {
 				"types": "./dist/agents/codex.d.ts",

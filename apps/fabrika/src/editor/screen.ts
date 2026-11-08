@@ -74,6 +74,21 @@ export const CLEAR = `${CSI}H${CSI}2J`;
 /** A new row, from the end of the current one. */
 export const NEWLINE = "\r\n";
 
+/**
+ * A job's status row, faint, cut with … to one row of `cols`, so it never wraps and is drawn again
+ * in place. The cursor stays at its end.
+ */
+export const statusRow = (text: string, cols: number): string => {
+	const room = Math.max(1, cols - 1);
+	const safe = shown(text).replaceAll(NEWLINE, " ");
+	let cut = "";
+	for (const c of safe) {
+		if (cells(cut + c) > room - 1 && cells(safe) > room) return `${CSI}90m${cut}…${CSI}39m`;
+		cut += c;
+	}
+	return `${CSI}90m${safe}${CSI}39m`;
+};
+
 /** The terminal's bell. */
 export const BELL = "\x07";
 

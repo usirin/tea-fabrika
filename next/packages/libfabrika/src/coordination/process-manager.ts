@@ -1,55 +1,301 @@
-// A process's start: which build it ran, recorded once per build on the stream `<pid>` (p21). In
-// `next/`, a program's start is a process; "run" is an agent run only. Tier 1, P9. P33 adds exit,
-// info, monitor, demonitor and the run number.
-import {Context, Effect, Layer, Schema} from "effect";
-import {Ledger, type LedgerError} from "../data/ledger.ts";
-import {type Appended, lineFor} from "../data/log.ts";
+import {Context, Effect, Layer, Option, Result, Schema, Stream} from "effect";
+import {LedgerTransaction, type LedgerTurn} from "../data/ledger-transaction.ts";
+import {type Ledger, type LedgerError} from "../data/ledger.ts";
+import {lineFor, type Rev} from "../data/log.ts";
 import {short} from "../data/trace.ts";
-import {answered, failed, type From, Mailbox} from "./mailbox.ts";
+import {type From, type Letter, Mailbox} from "./mailbox.ts";
+import {processMail} from "./process-mail.ts";
+import {
+	type Caller,
+	clientInbox,
+	Down,
+	ProcessError,
+	ProcessFact,
+	type ProcessInfo,
+	ProcessTable,
+	signalId,
+	type Start,
+	type StartAnswer,
+} from "./process.ts";
 
 const tag = (word: string): string => `fab.process.${word}`;
-
-/** The one line a start writes: the program and the hash of the build it ran. */
-const Started = Schema.TaggedStruct("started", {program: Schema.String, hash: Schema.String});
+const id = (...parts: ReadonlyArray<Schema.Json>): string => JSON.stringify(parts);
+const Send = Schema.TaggedStruct("send", {m: Down});
+type Policy = {readonly why: string; readonly crashes: number; readonly until: number};
+type Failure = ProcessError | LedgerError;
+/**
+ * Trusted wiring, never decoded from public params: who calls, and `by`, the brain's own writer
+ * key. Every fact this manager writes carries that `by`, and its fold trusts no other.
+ */
+type Wiring = Caller & {readonly by: string};
+const failed = Effect.fnUntraced(function* (error: Failure) {
+	yield* Effect.annotateCurrentSpan({[tag("answer")]: "refused", [tag("why")]: error.why});
+});
 
 export class ProcessManager extends Context.Service<
 	ProcessManager,
 	{
-		/** One `started` line on `<pid>`, under the build hash. The same build again with the same
-		 *  `by`, `for` and `parent` gets its first placing; from another input it is `id_reused`. */
-		readonly start: (
-			pid: string,
-			code: {readonly program: string; readonly hash: string},
-			from: From,
-		) => Effect.Effect<Appended, LedgerError>;
+		readonly start: (request: Start, from: From) => Effect.Effect<StartAnswer, Failure>;
+		readonly exit: (process: string, why: string, from: From) => Effect.Effect<void, Failure>;
+		readonly info: Effect.Effect<ReadonlyArray<ProcessInfo>, LedgerError>;
+		readonly isLive: (process: string) => Effect.Effect<boolean, LedgerError>;
+		readonly monitor: (ref: string, process: string, from: From) => Effect.Effect<void, Failure>;
+		readonly demonitor: (ref: string, from: From) => Effect.Effect<void, Failure>;
+		readonly receive: (process: string, after: Rev) => Stream.Stream<Letter, Failure>;
+		readonly down: (process: string, policy: Policy, from: From) => Effect.Effect<void, Failure>;
 	}
 >()("@kampus/libfabrika/ProcessManager") {
-	/** Building it touches nothing: each call reaches the ledger on its own. */
-	static readonly layer: Layer.Layer<ProcessManager, never, Ledger> = Layer.effect(
-		ProcessManager,
-		Effect.gen(function* () {
-			const ledger = yield* Ledger;
-			return {
-				start: Effect.fn("process.start")(
-					function* (
-						pid: string,
-						code: {readonly program: string; readonly hash: string},
-						from: From,
-					) {
-						const {program, hash} = code;
-						yield* Effect.annotateCurrentSpan(
-							short({[tag("pid")]: pid, [tag("program")]: program, [tag("hash")]: hash}),
+	static readonly layer = (
+		caller: Wiring,
+		nextId: Effect.Effect<string>,
+	): Layer.Layer<ProcessManager, never, LedgerTransaction> =>
+		Layer.effect(
+			ProcessManager,
+			Effect.gen(function* () {
+				const tx = yield* LedgerTransaction;
+				const fold = (turn: LedgerTurn) => ProcessTable.read(turn.read, caller.by);
+				// The brain writes every line here; `from` keeps the call's person, parent and trace, and
+				// `asked` keeps the caller's own key. The fold trusts `by` alone and never reads `asked`.
+				const line = (from: From, fact: Parameters<typeof lineFor>[1]) =>
+					lineFor({...from, by: caller.by}, {...fact, asked: from.by});
+				const checked = Effect.fnUntraced(function* <A>(
+					step: (table: ProcessTable, turn: LedgerTurn) => Result.Result<A, ProcessError>,
+				) {
+					return yield* Effect.fromResult(yield* tx.transact((turn) => step(fold(turn), turn)));
+				});
+				const signal = (
+					table: ProcessTable,
+					turn: LedgerTurn,
+					watch: {readonly ref: string; readonly round: number},
+					process: string,
+					why: string,
+					to: (typeof Down.Type)["to"],
+					from: From,
+				) => {
+					const {ref, round} = watch;
+					const inbox =
+						to._tag === "client"
+							? clientInbox(to.client)
+							: `${Option.getOrThrow(table.life(to.process)).name}/inbox`;
+					const letter = signalId(to, ref, round);
+					// A retried call may find this signal already written. Only the brain's own row counts;
+					// another writer's row at this id makes the append refuse, and the whole turn with it.
+					if (
+						[...turn.read(inbox, 0)].some((entry) => entry.id === letter && entry.by === caller.by)
+					)
+						return;
+					turn.append(
+						inbox,
+						letter,
+						line(from, Send.make({m: Down.make({ref, process, why, to})})),
+					);
+				};
+				const start = Effect.fn("process.start")(function* (request: Start, from: From) {
+					yield* Effect.annotateCurrentSpan(
+						short({
+							[tag("name")]: request.name,
+							[tag("program")]: request.code.program,
+							[tag("hash")]: request.code.hash,
+						}),
+					);
+					const saved = yield* checked((table) => table.start(request, caller, from));
+					const answer = Option.isSome(saved)
+						? saved.value
+						: yield* Effect.gen(function* () {
+								const process = yield* nextId;
+								return yield* checked((table, turn) => {
+									const current = table.start(request, caller, from);
+									if (Result.isFailure(current)) return Result.fail(current.failure);
+									if (Option.isSome(current.success)) return Result.succeed(current.success.value);
+									if (table.collision(process))
+										return Result.fail(new ProcessError({why: "id_collision"}));
+									if (request._tag === "first")
+										turn.append(
+											ProcessTable.stream,
+											id("registered", request.name),
+											line(
+												from,
+												ProcessFact.cases.registered.make({
+													name: request.name,
+													program: request.code.program,
+													owner: caller.owner,
+												}),
+											),
+										);
+									const placed = turn.append(
+										ProcessTable.facts(request.name),
+										request.id,
+										line(
+											from,
+											ProcessFact.cases.started.make({
+												process,
+												name: request.name,
+												...request.code,
+											}),
+										),
+									);
+									if (request._tag === "again")
+										turn.append(
+											ProcessTable.facts(request.name),
+											id("restarted", process),
+											line(
+												from,
+												ProcessFact.cases.restarted.make({
+													process,
+													after: request.after,
+													name: request.name,
+													why: request.why,
+													build: request.code.hash,
+												}),
+											),
+										);
+									return Result.succeed({process, rev: placed.rev});
+								});
+							});
+					yield* Effect.annotateCurrentSpan({
+						"fab.process": answer.process,
+						[tag("answer")]: "placed",
+						[tag("rev")]: answer.rev,
+					});
+					return answer;
+				}, Effect.tapError(failed));
+				const exit = Effect.fn("process.exit")(function* (
+					process: string,
+					why: string,
+					from: From,
+				) {
+					yield* Effect.annotateCurrentSpan({"fab.process": process});
+					yield* checked((table, turn) => {
+						const life = table.exit(process, why, caller.owner);
+						if (Result.isFailure(life)) return Result.fail(life.failure);
+						if (life.success.state._tag !== "live") return Result.succeed(undefined);
+						turn.append(
+							ProcessTable.facts(life.success.name),
+							id("exited", process),
+							line(from, ProcessFact.cases.exited.make({process, why})),
 						);
-						return yield* ledger.append(pid, hash, lineFor(from, Started.make({program, hash})));
-					},
-					Effect.tap((answer) => answered(tag, answer)),
-					Effect.tapError(failed(tag)),
-				),
-			};
-		}),
-	);
+						for (const watch of table.inbound(process))
+							signal(table, turn, watch, process, why, watch.to, from);
+						for (const watch of table.outbound(process))
+							turn.append(
+								ProcessTable.stream,
+								id("demonitored", watch.to, watch.ref, watch.round),
+								line(
+									from,
+									ProcessFact.cases.demonitored.make({
+										ref: watch.ref,
+										to: watch.to,
+										why: "watcher_exited",
+									}),
+								),
+							);
+						return Result.succeed(undefined);
+					});
+				}, Effect.tapError(failed));
+				const monitor = Effect.fn("process.monitor")(function* (
+					ref: string,
+					process: string,
+					from: From,
+				) {
+					yield* Effect.annotateCurrentSpan({
+						"fab.process": process,
+						...short({[tag("ref")]: ref}),
+					});
+					yield* checked((table, turn) => {
+						const round = table.monitor(ref, process, caller.recipient);
+						if (Result.isFailure(round)) return Result.fail(round.failure);
+						if (Option.isNone(round.success)) return Result.succeed(undefined);
+						turn.append(
+							ProcessTable.stream,
+							id("monitored", caller.recipient, ref, round.success.value),
+							line(from, ProcessFact.cases.monitored.make({ref, process, to: caller.recipient})),
+						);
+						if (!table.isLive(process))
+							signal(
+								table,
+								turn,
+								{ref, round: round.success.value},
+								process,
+								"noproc",
+								caller.recipient,
+								from,
+							);
+						return Result.succeed(undefined);
+					});
+				}, Effect.tapError(failed));
+				const demonitor = Effect.fn("process.demonitor")(function* (ref: string, from: From) {
+					yield* Effect.annotateCurrentSpan(short({[tag("ref")]: ref}));
+					yield* checked((table, turn) => {
+						const watch = table.demonitor(ref, caller.recipient);
+						if (Option.isSome(watch))
+							turn.append(
+								ProcessTable.stream,
+								id("demonitored", caller.recipient, ref, watch.value.round),
+								line(
+									from,
+									ProcessFact.cases.demonitored.make({ref, to: caller.recipient, why: "canceled"}),
+								),
+							);
+						return Result.succeed(undefined);
+					});
+				}, Effect.tapError(failed));
+				const down = Effect.fn("process.down")(function* (
+					process: string,
+					policy: Policy,
+					from: From,
+				) {
+					yield* Effect.annotateCurrentSpan({"fab.process": process});
+					yield* checked((table, turn) => {
+						const life = table.down(process, policy.why, caller.owner);
+						if (Result.isFailure(life)) return Result.fail(life.failure);
+						turn.append(
+							ProcessTable.facts(life.success.name),
+							id("down", process, policy),
+							line(from, ProcessFact.cases.down.make({process, ...policy})),
+						);
+						return Result.succeed(undefined);
+					});
+				}, Effect.tapError(failed));
+				const receive = (process: string, after: Rev): Stream.Stream<Letter, Failure> =>
+					Stream.unwrap(
+						Effect.gen(function* () {
+							yield* Effect.annotateCurrentSpan({"fab.process": process, [tag("after")]: after});
+							const mail = yield* checked((table, turn) => {
+								const life = table.life(process);
+								if (Option.isNone(life) || !table.isLive(process))
+									return Result.fail(new ProcessError({why: "ended"}));
+								return Result.succeed(
+									processMail(table, process, turn.read(`${life.value.name}/inbox`, after)),
+								);
+							});
+							const now = yield* Effect.clockWith((clock) => clock.currentTimeMillis);
+							yield* Effect.annotateCurrentSpan({
+								[tag("letters")]: mail.length,
+								...(mail.length === 0
+									? {}
+									: {[tag("lag")]: Math.max(...mail.map(({arrivedAt}) => now - arrivedAt))}),
+							});
+							return Stream.fromIterable(mail.map(({letter}) => letter));
+						}).pipe(Effect.tapError(failed)),
+					).pipe(Stream.withSpan("process.receive"));
+				return {
+					start,
+					exit,
+					monitor,
+					demonitor,
+					down,
+					receive,
+					info: tx.transact((turn) => fold(turn).info).pipe(Effect.withSpan("process.info")),
+					isLive: Effect.fn("process.isLive")(function* (process: string) {
+						return yield* tx.transact((turn) => fold(turn).isLive(process));
+					}),
+				};
+			}),
+		);
 }
 
-/** The Mailbox and the ProcessManager over one Ledger. */
-export const CoordinationLayer: Layer.Layer<Mailbox | ProcessManager, never, Ledger> =
-	Layer.mergeAll(Mailbox.layer, ProcessManager.layer);
+export const CoordinationLayer = (
+	caller: Wiring,
+	nextId: Effect.Effect<string>,
+): Layer.Layer<Mailbox | ProcessManager, never, Ledger | LedgerTransaction> =>
+	Layer.mergeAll(Mailbox.layer, ProcessManager.layer(caller, nextId));

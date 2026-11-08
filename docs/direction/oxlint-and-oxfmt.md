@@ -14,7 +14,7 @@ A study of Rust CSS linters, Biome's among them, is running; if it finds one tha
 rules, that replaces stylelint. Not decided: which tests move, each an exam change for the owner.
 
 ```sh
-pnpm lint     # oxlint-plugins/lint.ts, format.ts --check, then the code-graph and browser checks
+pnpm lint     # oxlint-plugins/lint.ts, format.ts --check, the code-graph and browser checks, then stylelint.ts on tracked CSS
 pnpm format   # format.ts, lint.ts --fix, format.ts
 ```
 
@@ -40,6 +40,10 @@ export const noNumericDuration: CreateRule = {
   [`oxlint-plugins/`](../../oxlint-plugins/README.md), with their reasons and old counts. A 14th,
   `use-import-extensions`, stands in for a Biome built-in that oxlint's own rule only partly covers.
   A 15th, `no-bare-disable`, keeps what Biome did with an ignore comment.
+- **A check on the shape of code is a lint rule, not a test** (decided by the owner, 2026-11-07).
+  An import ban or "no program reaches a step" is oxlint's built-in rule where one exists, such
+  as `no-restricted-imports`, else a rule of ours in `oxlint-plugins/`. One sweep found 7 of 27
+  shape tests could move (field note 2026-11-07-16).
 - **An ignore comment names its rules and says why.** The shape is
   `// oxlint-disable-next-line <rule> -- <why>`. Oxlint itself asks for neither, and its bare comment
   silences every rule, the secret rules too. So `no-bare-disable` blocks one with no rule or no

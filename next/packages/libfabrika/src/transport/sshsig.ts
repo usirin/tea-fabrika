@@ -9,62 +9,12 @@
 // encoding, never Node's `Buffer`.
 import {Effect, Option, Schema} from "effect";
 import {Base64} from "effect/encoding";
-
-type Bytes = Uint8Array<ArrayBuffer>;
+import {armor, type Bytes, field, holds, join, reader, same, subtle, u32, utf8} from "./binary.ts";
+import {checkPasskey, passkeyBlob} from "./webauthn.ts";
 
 const ED25519 = "ssh-ed25519";
 const BEGIN = "-----BEGIN SSH SIGNATURE-----";
 const END = "-----END SSH SIGNATURE-----";
-/** What `ssh-keygen` writes to a row. The spec only suggests 76; p44 holds us to its bytes. */
-const ROW = 70;
-
-const utf8 = (text: string): Bytes => new TextEncoder().encode(text);
-
-const join = (...parts: ReadonlyArray<Uint8Array>): Bytes => {
-	const out = new Uint8Array(parts.reduce((n, part) => n + part.length, 0));
-	parts.reduce((at, part) => {
-		out.set(part, at);
-		return at + part.length;
-	}, 0);
-	return out;
-};
-
-const u32 = (n: number): Bytes => {
-	const out = new Uint8Array(4);
-	new DataView(out.buffer).setUint32(0, n);
-	return out;
-};
-
-/** RFC 4251's `string`: its length, then its bytes. */
-const field = (value: Uint8Array | string): Bytes => {
-	const bytes = typeof value === "string" ? utf8(value) : value;
-	return join(u32(bytes.length), bytes);
-};
-
-const same = (a: Uint8Array, b: Uint8Array): boolean =>
-	a.length === b.length && a.every((x, i) => x === b[i]);
-
-/** RFC 4251's fields, read in order. A read past the end answers none; `rest` is what is left. */
-const reader = (bytes: Uint8Array) => {
-	let at = 0;
-	const take = (n: number): Option.Option<Bytes> => {
-		if (at + n > bytes.length) return Option.none();
-		const out = bytes.slice(at, at + n);
-		at += n;
-		return Option.some(out);
-	};
-	const word = (): Option.Option<number> =>
-		Option.map(take(4), (four) => new DataView(four.buffer).getUint32(0));
-	return {
-		take,
-		word,
-		string: (): Option.Option<Bytes> => Option.flatMap(word(), take),
-		rest: (): number => bytes.length - at,
-	};
-};
-
-/** Goes on only where `ok` holds. */
-const holds = (ok: boolean): Option.Option<true> => (ok ? Option.some(true) : Option.none());
 
 /** `string("ssh-ed25519") string(<n bytes>)` and nothing after: the n bytes. */
 const ed25519 = (blob: Uint8Array, n: number): Option.Option<Bytes> =>
@@ -99,15 +49,6 @@ export const KeyLine = Schema.String.pipe(
 );
 export type KeyLine = typeof KeyLine.Type;
 
-/** A WebCrypto call that answered with a rejection. */
-class WebCryptoError extends Schema.TaggedError<WebCryptoError>()("WebCryptoError", {
-	cause: Schema.Defect(),
-}) {}
-
-const subtle = <A>(call: () => Promise<A>): Effect.Effect<A, WebCryptoError> =>
-	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto answers only with a Promise
-	Effect.tryPromise({try: call, catch: (cause) => new WebCryptoError({cause})});
-
 /** A hash a signature may name, the spec's two, with WebCrypto's name for it. */
 type Hash = {readonly name: "sha512" | "sha256"; readonly web: "SHA-512" | "SHA-256"};
 const SHA512: Hash = {name: "sha512", web: "SHA-512"};
@@ -119,11 +60,7 @@ const HASHES: ReadonlyMap<string, Hash> = new Map([
 ]);
 
 /** What the signature covers. Reserved is always written empty. */
-const signedBytes = (
-	space: string,
-	hash: Hash,
-	text: string,
-): Effect.Effect<Bytes, WebCryptoError> =>
+const signedBytes = (space: string, hash: Hash, text: string) =>
 	Effect.map(
 		subtle(() => crypto.subtle.digest(hash.web, utf8(text))),
 		(digest) =>
@@ -139,7 +76,6 @@ const signedBytes = (
 /** An armored SSHSIG, read: the fields a check needs. `key` is the whole key blob. */
 type Sshsig = {
 	readonly key: Bytes;
-	readonly publicKey: Bytes;
 	readonly space: Bytes;
 	readonly hash: Hash;
 	readonly signature: Bytes;
@@ -165,10 +101,9 @@ const read = (armored: string): Option.Option<Sshsig> =>
 		yield* holds(same(magic, utf8("SSHSIG")) && version === 1 && fields.rest() === 0);
 		return {
 			key,
-			publicKey: yield* ed25519(key, 32),
 			space,
 			hash: yield* Option.fromNullishOr(HASHES.get(new TextDecoder().decode(hash))),
-			signature: yield* ed25519(signature, 64),
+			signature,
 		};
 	});
 
@@ -181,73 +116,106 @@ const refused: Answer = {why: "bad_signature"};
  * the signature is matched to a signer first, as Go's sshsig `Verify` does; a signer line that is
  * not Ed25519 never matches.
  */
-export const checkSshsig = (a: {
+export const Checked = Schema.TaggedUnion({
+	key: {signer: Schema.String},
+	passkey: {
+		signer: Schema.String,
+		origin: Schema.String,
+		rp: Schema.String,
+		be: Schema.Boolean,
+		bs: Schema.Boolean,
+		counter: Schema.Int,
+	},
+	refused: {why: Schema.Literal("bad_signature")},
+});
+const bad = Checked.cases.refused.make({why: "bad_signature"});
+
+export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {
 	readonly text: string;
 	readonly armored: string;
 	readonly space: "fabrika-client";
 	readonly signers: ReadonlyArray<string>;
-}): Effect.Effect<Answer> =>
-	Option.match(
+	readonly policy?: {readonly rp: string; readonly origins: ReadonlyArray<string>};
+}) {
+	return yield* Option.match(
 		Option.gen(function* () {
 			const sig = yield* read(a.armored);
 			const signer = yield* Option.fromNullishOr(
-				a.signers.find((line) => Option.exists(keyBlob(line), (blob) => same(blob, sig.key))),
+				a.signers.find((line) =>
+					Option.exists(
+						Option.orElse(keyBlob(line), () => passkeyBlob(line)),
+						(blob) => same(blob, sig.key),
+					),
+				),
 			);
 			yield* holds(same(sig.space, utf8(a.space)));
 			return {sig, signer};
 		}),
 		{
-			onNone: () => Effect.succeed(refused),
+			onNone: () => Effect.succeed(bad),
 			onSome: ({sig, signer}) =>
 				Effect.gen(function* () {
-					const key = yield* subtle(() =>
-						crypto.subtle.importKey("raw", sig.publicKey, {name: "Ed25519"}, false, ["verify"]),
-					);
 					const bytes = yield* signedBytes(a.space, sig.hash, a.text);
-					const ok = yield* subtle(() =>
-						crypto.subtle.verify({name: "Ed25519"}, key, sig.signature, bytes),
+					const publicKey = ed25519(sig.key, 32);
+					if (Option.isNone(publicKey)) {
+						if (a.policy === undefined) return bad;
+						const checked = yield* checkPasskey(sig.key, sig.signature, bytes, a.policy);
+						return checked === null ? bad : Checked.cases.passkey.make({signer, ...checked});
+					}
+					const signature = ed25519(sig.signature, 64);
+					if (Option.isNone(signature)) return bad;
+					const key = yield* subtle(() =>
+						crypto.subtle.importKey("raw", publicKey.value, {name: "Ed25519"}, false, ["verify"]),
 					);
-					return ok ? {signer} : refused;
-				}).pipe(Effect.catch(() => Effect.succeed(refused))),
+					const ok = yield* subtle(() =>
+						crypto.subtle.verify({name: "Ed25519"}, key, signature.value, bytes),
+					);
+					return ok ? Checked.cases.key.make({signer}) : bad;
+				}).pipe(Effect.catch(() => Effect.succeed(bad))),
 		},
 	);
+});
 
-const armor = (blob: Uint8Array): string => {
-	const body = Base64.encode(blob);
-	const rows = Array.from({length: Math.ceil(body.length / ROW)}, (_, i) =>
-		body.slice(i * ROW, (i + 1) * ROW),
-	);
-	return `${BEGIN}\n${rows.join("\n")}\n${END}\n`;
-};
+export const checkSshsig = Effect.fn("transport.checkSshsig")(function* (a: {
+	readonly text: string;
+	readonly armored: string;
+	readonly space: "fabrika-client";
+	readonly signers: ReadonlyArray<string>;
+}): Effect.fn.Return<Answer> {
+	const checked = yield* verifySshsig({
+		...a,
+		signers: a.signers.filter((line) => Option.isSome(keyBlob(line))),
+	});
+	return checked._tag === "key" ? {signer: checked.signer} : refused;
+});
 
 /**
  * The same bytes `ssh-keygen -Y sign -n <space>` writes: sha512, base64 wrapped at 70. `sign` is
  * the raw Ed25519 signature from any key holder (WebCrypto in a tab, the person key in the app).
  * It fails only with `sign`'s error: hashing bytes cannot fail, so a rejection there is a defect.
  */
-export const writeSshsig = <E>(a: {
+export const writeSshsig = Effect.fn("transport.writeSshsig")(function* <E>(a: {
 	readonly text: string;
 	readonly space: "fabrika-client";
 	readonly line: KeyLine;
 	readonly sign: (bytes: Uint8Array) => Effect.Effect<Uint8Array, E>;
-}): Effect.Effect<string, E> =>
-	Effect.gen(function* () {
-		const key = yield* Option.match(keyBlob(a.line), {
-			onNone: () => Effect.die("a KeyLine always holds an Ed25519 key"),
-			onSome: Effect.succeed,
-		});
-		const bytes = yield* Effect.orDie(signedBytes(a.space, SHA512, a.text));
-		const raw = yield* a.sign(bytes);
-		const signature = join(field(ED25519), field(raw));
-		return armor(
-			join(
-				utf8("SSHSIG"),
-				u32(1),
-				field(key),
-				field(a.space),
-				field(""),
-				field(SHA512.name),
-				field(signature),
-			),
-		);
+}) {
+	const key = yield* Option.match(keyBlob(a.line), {
+		onNone: () => Effect.die("a KeyLine always holds an Ed25519 key"),
+		onSome: Effect.succeed,
 	});
+	const bytes = yield* Effect.orDie(signedBytes(a.space, SHA512, a.text));
+	const raw = yield* a.sign(bytes);
+	const signature = join(field(ED25519), field(raw));
+	return armor(
+		join(
+			utf8("SSHSIG"),
+			u32(1),
+			field(key),
+			field(a.space),
+			field(""),
+			field(SHA512.name),
+			field(signature),
+		),
+	);
+});

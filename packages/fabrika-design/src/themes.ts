@@ -1,17 +1,19 @@
 // The two built-in themes, `fabrika` and `fabrika-light` (docs/direction/themes.md): Radix 3.0.0,
 // gray slate, accent indigo. Every value is a Radix step, used for that step's job (color
-// principles, principle 5), but for five bends, each written down with its reason:
+// principles, principle 5), but for four bends, each written down with its reason:
 // - the dark desk, `#0c0d0e`, is no step: nothing in slate is darker than 1;
 // - on-turn is white, Radix's rule for text on step 9, not a step;
 // - edge is slate a4, a background step used as a line: a higher one was too loud on a full desk;
-// - focus in light is slate a9, a solid step used as a line: a8 reads 1.90 on the desk;
-// - the keyboard ring in dark is slate a9 too (tokens.css --focus): a8 reads 2.82 on a selected row.
-// The terminal's black (dark) and two whites (light) are fills, not text. The package's stylesheet
-// writes the same values as tokens (tokens.css :root); the terminal and the window's frame read
-// them from here.
+// - focus is slate a9 in both looks, dark and light, a solid step used as a line: a8 reads 1.90 on
+//   the desk in light and 2.82 on a selected row in dark.
+// The fifteen colors come from tokens/color/<token>.toml, each step and bend with its reason
+// there: the token build writes them into theme-colors.ts and into tokens.css, so the stylesheet,
+// the terminal and the window's frame cannot drift. The terminal's palette is written here, and its
+// black (dark) and two whites (light) are fills, not text.
 //
 //   terminalTheme(fabrika).background   // "#111113", slate 1
 //   fabrikaLight.colors.done            // "#203c25", grass 12
+import {dark, light} from "./theme-colors.ts";
 
 type Hex = `#${string}`;
 
@@ -26,12 +28,12 @@ interface Colors {
 	readonly hover: Hex;
 	/** A tile's edge at rest: carries no fact, the bend color principles records. */
 	readonly edge: Hex;
-	/** The focused tile's edge. */
+	/** Focus: every keyboard ring and the focused tile's edge. */
 	readonly focus: Hex;
 	readonly text: Hex;
 	readonly faint: Hex;
 	/** The turn fill: your turn, and nothing else. */
-	readonly turn: Hex;
+	readonly "turn-fill": Hex;
 	readonly "on-turn": Hex;
 	readonly "turn-text": Hex;
 	readonly done: Hex;
@@ -85,23 +87,7 @@ export const fabrika: Theme = {
 	name: "fabrika",
 	look: "dark",
 	from: RADIX,
-	colors: {
-		desk: "#0c0d0e", // not a step: nothing in slate is darker than 1
-		ground: "#111113", // slate 1
-		raised: "#18191b", // slate 2
-		hover: "#ddeaf814", // slate a3
-		edge: "#d3edf81d", // slate a4
-		focus: "#d9edff5d", // slate a8
-		text: "#edeef0", // slate 12
-		faint: "#f1f7feb5", // slate a11
-		turn: "#3e63dd", // indigo 9
-		"on-turn": "#ffffff", // Radix's rule for text on step 9
-		"turn-text": "#9eb1ff", // indigo 11
-		done: "#71d083", // grass 11
-		running: "#ffca16", // amber 11
-		stuck: "#ff9592", // red 11
-		closed: "#f1f7feb5", // slate a11: no hue, the word says closed
-	},
+	colors: dark,
 	terminal: {
 		foreground: "#edeef0", // slate 12
 		background: "#111113", // slate 1
@@ -138,23 +124,7 @@ export const fabrikaLight: Theme = {
 	name: "fabrika-light",
 	look: "light",
 	from: RADIX,
-	colors: {
-		desk: "#f9f9fb", // slate 2
-		ground: "#fcfcfd", // slate 1
-		raised: "#fcfcfd", // slate 1
-		hover: "#0000330f", // slate a3
-		edge: "#00002d17", // slate a4
-		focus: "#00051d74", // slate a9: a8 reads 1.90
-		text: "#1c2024", // slate 12
-		faint: "#0007149f", // slate a11
-		turn: "#3e63dd", // indigo 9
-		"on-turn": "#ffffff",
-		"turn-text": "#002bb7c5", // indigo a11: indigo 11 reads 4.47 on a selected row
-		done: "#203c25", // grass 12: grass 11 reads 3.77 on a selected row
-		running: "#4f3422", // amber 12: amber 11 reads 4.38
-		stuck: "#641723", // red 12: red 11 reads 3.88 on a selected row
-		closed: "#0007149f", // slate a11
-	},
+	colors: light,
 	terminal: {
 		foreground: "#1c2024", // slate 12
 		background: "#fcfcfd", // slate 1

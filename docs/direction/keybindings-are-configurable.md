@@ -538,14 +538,21 @@ The owner approved each lean below on 2026-11-01. The numbers stay as written.
 
 ## A tryout in today's version
 
-Picked by the owner on 2026-11-02: tracker ticket 174, after ticket 117. Today's `apps/fabrika`
-reads `~/.fabrika/keybindings.toml` at start.
+Picked by the owner on 2026-11-02: tracker ticket 174. The foundations rule of 2026-11-03 ended
+its wait for ticket 117. Today's `apps/fabrika` reads `~/.fabrika/keybindings.toml` at start and on
+every save, and every hint reads the live table.
 
-- What it touches: `desk/keys.ts` takes the table as a value instead of a constant;
-  `window/desk.tsx`, `window/pop.ts` and `window/frame.ts` stop hardcoding Cmd-K, the popover keys
-  and the six keys shown after the prefix; a decoder for the file; tests.
-- **Size:** about 300 to 400 lines with tests, about 2 to 3 agent hours. An estimate from reading
-  the code, not a build.
+It lands in two pull requests, each usable alone:
+
+- **Keys PR 1, built:** change your keys without leaving the app. `C-b ?` or tsh's `keys` opens a
+  searchable editor in the palette layer: Change, Add, Unbind and Reset, a recorded key with no
+  timer, a displaced command named with Undo, and saves that change only your rows. Shift and
+  Option match, F6 and Shift-F6 move focus, and a table with no way out of a terminal is refused.
+  The app's README has the details.
+- **Keys PR 2, next:** program commands and modes join the same table, and mapping mode marks
+  real controls before it records a press.
+- **Size, wrong:** the first guess, about 300 to 400 lines and 2 to 3 agent hours, counted only
+  the start-up reader. PR 1's plan put it at about 1,900 product lines and 1,200 test lines.
 - What it would teach `next/`: whether people rebind at all, and which keys.
 
 ## What it costs

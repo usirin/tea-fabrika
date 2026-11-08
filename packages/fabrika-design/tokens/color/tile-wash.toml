@@ -1,0 +1,9 @@
+type = "background"
+tier = "component"
+owner = "tile"
+description = "a tile's title bar at rest: slate a2, which no theme name holds"
+on = ["surface"]
+
+[colors]
+dark = "slate.a2"
+light = "slate.a2"
