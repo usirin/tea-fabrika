@@ -2,7 +2,7 @@
 // A program gets no sender, key, ledger or service. `stepper` steps it by hand, as Elm's runtime
 // would, and never runs a Cmd: the runner does that, after the input is saved.
 import {applyCell, msgKeysOf, type AnyCmdDef} from "@demlik/tea";
-import {Effect, Option, Result, Schema} from "effect";
+import {Effect, Option, Result, Schema, type SchemaIssue} from "effect";
 import {ParentText} from "../coordination/index.ts";
 
 /** A function type whose parameters TypeScript checks both ways, as it does a method's: a program
@@ -230,10 +230,6 @@ export type Program<
 	readonly wake: (model: T["model"]["Type"]) => number | null;
 };
 
-export class ProgramInvalid extends Schema.TaggedError<ProgramInvalid>()("ProgramInvalid", {
-	cause: Schema.declare((u): u is Schema.SchemaError => Schema.isSchemaError(u)),
-}) {}
-
 const Authoring = Schema.Struct({
 	name: Declaration.fields.name,
 	machine: Schema.declare(
@@ -258,8 +254,6 @@ const Authoring = Schema.Struct({
 });
 const decodeDeclaration = Schema.decodeUnknownResult(Declaration);
 const decodeAuthoring = Schema.decodeUnknownResult(Authoring);
-const invalid = (cause: Schema.SchemaError) => new ProgramInvalid({cause});
-const checkDeclaration = (raw: unknown) => Result.mapError(decodeDeclaration(raw), invalid);
 const construct = (raw: unknown) =>
 	Result.flatMap(decodeAuthoring(raw), (spec) =>
 		decodeDeclaration({
@@ -280,7 +274,7 @@ const construct = (raw: unknown) =>
 				]),
 			),
 		}),
-	).pipe(Result.mapError(invalid));
+	);
 
 // Schema checks callable fields; the spec's types check the signatures without calling them.
 const typedProgram = <T extends ProgramMachine, V extends Schema.Json, I, O, W>(
@@ -288,7 +282,7 @@ const typedProgram = <T extends ProgramMachine, V extends Schema.Json, I, O, W>(
 ) =>
 	Schema.declare(
 		(u): u is Program<T, V, I, O, W> =>
-			Result.isSuccess(checkDeclaration(u)) &&
+			Result.isSuccess(decodeDeclaration(u)) &&
 			typeof u === "object" &&
 			u !== null &&
 			"machine" in u &&
@@ -315,11 +309,11 @@ const makeEffect = Effect.fn("program.make")(function* <
 	const I extends Readonly<Record<string, unknown>>,
 	O extends Readonly<Record<string, Declared>>,
 	W extends Readonly<Record<string, FactPolicy>>,
->(spec: Spec<T, V, I, O, W>): Effect.fn.Return<Program<T, V, I, O, W>, ProgramInvalid> {
+>(spec: Spec<T, V, I, O, W>): Effect.fn.Return<Program<T, V, I, O, W>, SchemaIssue.Issue> {
 	const checked = construct(spec);
-	if (Result.isFailure(checked)) return yield* checked.failure;
+	if (Result.isFailure(checked)) return yield* Effect.fail(checked.failure.issue);
 	return yield* Schema.decodeUnknownEffect(typedProgram(spec))(checked.success).pipe(
-		Effect.mapError(invalid),
+		Effect.mapError((error) => error.issue),
 	);
 });
 
@@ -416,9 +410,9 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
 	);
 };
 
-export const stepper = (declared: unknown): Stepper => {
-	const loaded = checkDeclaration(declared);
-	if (Result.isFailure(loaded)) throw new ProgramDown({why: "load"});
+export const stepper = (declared: unknown): Result.Result<Stepper, Schema.SchemaError> => {
+	const loaded = decodeDeclaration(declared);
+	if (Result.isFailure(loaded)) return Result.fail(loaded.failure);
 	const program = loaded.success;
 	const machine = program.machine;
 	const defs = machine.cmds ?? [];
@@ -491,7 +485,7 @@ export const stepper = (declared: unknown): Stepper => {
 		});
 	};
 
-	return {
+	return Result.succeed({
 		program,
 		init: (saved) => {
 			const start = saved === null ? null : model(saved, "saved_state");
@@ -520,5 +514,5 @@ export const stepper = (declared: unknown): Stepper => {
 			const [next, cmds] = guard("saved_letter", () => applyCell(machine, now, m.value));
 			return prepare(next, cmds, "saved_letter");
 		},
-	};
+	});
 };

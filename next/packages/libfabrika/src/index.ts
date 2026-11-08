@@ -18,7 +18,6 @@ export {
 	Input,
 	Program,
 	ProgramDown,
-	ProgramInvalid,
 	Refusal,
 	State,
 	Step,
