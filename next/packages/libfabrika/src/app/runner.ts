@@ -22,8 +22,10 @@ import {
 	Activity,
 	type Appended,
 	type Archive,
+	brainOnly,
 	type From,
 	type History,
+	inRunnerSpace,
 	LedgerError,
 	Mailbox,
 	MemberFact,
@@ -34,6 +36,7 @@ import {
 	ProcessStore,
 	type RecordManager,
 	RuntimeRecord,
+	RunnerMail,
 	SessionManager,
 	SigningRefused,
 	SignRequest,
@@ -52,7 +55,7 @@ import {
 	WatcherManager,
 } from "./entry.ts";
 import {diff} from "./patch.ts";
-import {ProgramDown, Refusal, type Step, Write} from "./program.ts";
+import {ProgramDown, Refusal, Step, Write} from "./program.ts";
 import {Saved} from "./state.ts";
 
 /** What `msg` answers: the input's placing in the inbox, or why it was not taken. */
@@ -141,7 +144,15 @@ export class ProgramRunner extends Context.Service<
 	): Layer.Layer<
 		ProgramRunner,
 		never,
-		ProgramLoader | ProcessStore | Mailbox | CheckedWriter | WatcherManager | Alarm | Recording
+		| ProgramLoader
+		| ProcessStore
+		| Mailbox
+		| CheckedWriter
+		| WatcherManager
+		| Alarm
+		| Recording
+		| RecordManager
+		| Archive
 	> =>
 		Layer.effect(
 			ProgramRunner,
@@ -156,10 +167,8 @@ export class ProgramRunner extends Context.Service<
 				const sessions = yield* Effect.serviceOption(SessionManager);
 				// Recording's flush reads the object's record and archive services; they are in the
 				// context this runner is built in whenever the real sink is wired (P12, P37).
-				const built = yield* Effect.context<never>();
-				const flushed = recording.flush.pipe(
-					Effect.provideContext(built as Context.Context<RecordManager | Archive>),
-				);
+				const built = yield* Effect.context<RecordManager | Archive>();
+				const flushed = recording.flush.pipe(Effect.provideContext(built));
 				const permit = yield* Semaphore.make(1);
 				let live: Live | null = null;
 				/** Writes left dispatched by an earlier process life: retried once loaded. */
@@ -306,9 +315,8 @@ export class ProgramRunner extends Context.Service<
 				});
 
 				/**
-				 * Folds every inbox letter past `state.after`, records each step, and installs the result
-				 * in one save. The letter named `mine` is this turn's: its Cmds are saved as dispatched and
-				 * answered for running. `done` is a Cmd now answered, dropped in the same save.
+				 * Accepted letters fold; other mail takes the fresh checks and cannot fail the process.
+				 * Every first fold saves its Cmds, but only this call's letter returns Cmds to run.
 				 */
 				const catchUp = Effect.fnUntraced(function* (
 					state: Live,
@@ -321,15 +329,29 @@ export class ProgramRunner extends Context.Service<
 					let view = state.view;
 					let wake = state.wake;
 					const fresh: Array<Dispatched> = [];
+					let cmds = state.cmds.filter((cmd) => cmd.id !== options.done);
 					const placed: Array<Placed> = [];
+					const saved = yield* store.load;
+					const prepared = Schema.decodeUnknownOption(Turn)(saved?.turn);
 					let mine = Option.none<History>();
 					for (const letter of letters) {
-						const folded = yield* stepped(
-							yield* step("saved_letter", letter.id, () =>
-								state.loaded.stepper.fold(model, letter.m),
-							),
-							"saved_letter",
-						);
+						const own = inRunnerSpace(letter.id) && letter.id.startsWith(`${process.id}/`);
+						const accepted =
+							own ||
+							letter.id === options.mine ||
+							Option.exists(prepared, (turn) => turn.id === letter.id) ||
+							(yield* store.placed(letter.id)) !== null;
+						const m =
+							accepted && !own && letter.parent !== null
+								? stamp(letter.m, letter.parent)
+								: letter.m;
+						const folded = accepted
+							? yield* stepped(
+									yield* step("saved_letter", letter.id, () => state.loaded.stepper.fold(model, m)),
+									"saved_letter",
+								)
+							: yield* receive(state, model, letter.m);
+						if (folded._tag === "refused") continue;
 						yield* store.record(
 							`step:${letter.id}`,
 							RuntimeRecord.cases.stepped.make({
@@ -343,17 +365,20 @@ export class ProgramRunner extends Context.Service<
 						view = folded.view;
 						wake = folded.wake;
 						placed.push({id: letter.id, rev: letter.rev, pos: letter.pos});
+						if (own && letter.id.endsWith("/answer"))
+							cmds = cmds.filter((cmd) => cmd.id !== letter.id.slice(0, -"/answer".length));
+						const dispatched = folded.cmds.map((cmd, index): Dispatched => ({
+							id: `${process.id}/${letter.pos}/${index}`,
+							cmd,
+							state: "dispatched",
+							parent: letter.parent,
+							traceId: letter.traceId,
+							build: process.build,
+						}));
+						cmds = [...cmds, ...dispatched];
 						if (letter.id === options.mine) {
 							mine = Option.some(letter);
-							for (const [index, cmd] of folded.cmds.entries())
-								fresh.push({
-									id: `${process.id}/${letter.pos}/${index}`,
-									cmd,
-									state: "dispatched",
-									parent: letter.parent,
-									traceId: letter.traceId,
-									build: process.build,
-								});
+							fresh.push(...dispatched);
 						}
 					}
 					const last = letters.at(-1);
@@ -364,12 +389,27 @@ export class ProgramRunner extends Context.Service<
 						wake,
 						after: last?.rev ?? state.after,
 						pos: last?.pos ?? state.pos,
-						cmds: [...state.cmds.filter((cmd) => cmd.id !== options.done), ...fresh],
+						cmds,
 					};
 					yield* store.save(checkpoint(next, null), placed);
 					live = next;
 					yield* publish(state, next);
 					return {state: next, fresh: fresh as ReadonlyArray<Dispatched>, mine};
+				});
+
+				const receive = Effect.fnUntraced(function* (state: Live, model: unknown, m: unknown) {
+					const port = inputPort(state, m);
+					if (
+						port === undefined ||
+						port._tag !== "write" ||
+						port.personOnly ||
+						hasParent(m) ||
+						Result.isFailure(Schema.decodeUnknownResult(port.schema)(m))
+					)
+						return Step.cases.refused.make({why: "bad_msg"});
+					return yield* pure("step", () => state.loaded.stepper.step(model, m)).pipe(
+						Effect.catch(() => Effect.succeed(Step.cases.refused.make({why: "bad_msg"}))),
+					);
 				});
 
 				/** The live process, loaded and caught up. */
@@ -383,7 +423,7 @@ export class ProgramRunner extends Context.Service<
 
 				/** Takes the writes an earlier life left dispatched, to run them once. */
 				const takeRetry = () => {
-					const taken = retry;
+					const taken = retry.filter((job) => live?.cmds.some((cmd) => cmd.id === job.id));
 					retry = [];
 					return taken;
 				};
@@ -427,6 +467,13 @@ export class ProgramRunner extends Context.Service<
 					const policy = kind !== null && Object.hasOwn(writes, kind) ? writes[kind] : undefined;
 					if (kind === null || RESERVED.has(kind) || policy === undefined || !isFact(fact))
 						return yield* err(job, "bad_cmd");
+					if (
+						brainOnly({stream, id: job.id, tag: kind}) ||
+						stream === "door" ||
+						stream.startsWith("door/") ||
+						(stream.endsWith("/inbox") && stream !== `${process.name}/inbox`)
+					)
+						return yield* err(job, "forbidden");
 					if (Result.isFailure(Schema.decodeUnknownResult(policy.schema)(fact)))
 						return yield* err(job, "bad_cmd");
 					const commit = <E>(
@@ -471,7 +518,7 @@ export class ProgramRunner extends Context.Service<
 						),
 					);
 					if (Result.isFailure(answer)) return yield* err(job, answer.failure);
-					if (answer.success._tag !== "placed") return yield* err(job, "bad_cmd");
+					if (answer.success._tag === "refused") return yield* err(job, answer.success.why);
 					return yield* ok(job, answer.success);
 				});
 
@@ -522,12 +569,11 @@ export class ProgramRunner extends Context.Service<
 							Effect.gen(function* () {
 								const current = yield* ready();
 								const answer = `${job.id}/answer`;
-								const sent = yield* mailbox.send(
-									process.name,
-									answer,
-									m,
-									yield* from(job.parent, job.traceId),
-								);
+								const sent = yield* mailbox
+									.send(process.name, answer, m, yield* from(job.parent, job.traceId))
+									.pipe(
+										Effect.provideService(RunnerMail, {process: process.id, name: process.name}),
+									);
 								if (sent._tag === "refused")
 									return yield* new LedgerError({why: "refused", message: sent.why});
 								return (yield* catchUp(current, {mine: answer, done: job.id})).fresh;
@@ -590,6 +636,10 @@ export class ProgramRunner extends Context.Service<
 							"runner.open",
 							turn((state) =>
 								Effect.gen(function* () {
+									if (client.length === 0 || client.length > 256)
+										return yield* new RunnerError({why: "bad_client"});
+									if (!clients.has(client) && clients.size >= 1024)
+										return yield* new RunnerError({why: "clients_full"});
 									clients.add(client);
 									yield* watchers.publish(client, {
 										type: "whole",
@@ -619,12 +669,16 @@ export class ProgramRunner extends Context.Service<
 									if (state.wake === null || state.wake > time)
 										return {answer: undefined, jobs: []};
 									const id = `${process.id}/due/${time}`;
-									const sent = yield* mailbox.send(
-										process.name,
-										id,
-										{type: "timer", at: time},
-										yield* from(null, yield* traceId),
-									);
+									const sent = yield* mailbox
+										.send(
+											process.name,
+											id,
+											{type: "timer", at: time},
+											yield* from(null, yield* traceId),
+										)
+										.pipe(
+											Effect.provideService(RunnerMail, {process: process.id, name: process.name}),
+										);
 									if (sent._tag === "refused")
 										return yield* new LedgerError({why: "refused", message: sent.why});
 									const {fresh} = yield* catchUp(state, {mine: id});
@@ -643,11 +697,26 @@ export class ProgramRunner extends Context.Service<
 					RunnerFailure
 				> {
 					return Effect.gen(function* () {
+						if (
+							brainOnly({stream: `${process.name}/inbox`, id: input.id, tag: "send"}) ||
+							hasParent(input.envelope.input)
+						)
+							return {answer: Sent.cases.refused.make({why: "bad_msg"}), jobs: []};
 						const prior = yield* store.placed(input.id);
 						if (prior !== null)
 							return {answer: Sent.cases.accepted.make({rev: prior.rev, pos: prior.pos}), jobs: []};
+						const port = inputPort(state, input.envelope.input);
+						if (
+							port === undefined ||
+							port._tag !== "write" ||
+							(port.personOnly && input.envelope.by._tag !== "person")
+						)
+							return {answer: Sent.cases.refused.make({why: "bad_msg"}), jobs: []};
+						const m = stamp(input.envelope.input, input.envelope.id);
+						if (Result.isFailure(Schema.decodeUnknownResult(port.schema)(m)))
+							return {answer: Sent.cases.refused.make({why: "bad_msg"}), jobs: []};
 						const prepared = yield* step("step", input.id, () =>
-							state.loaded.stepper.step(state.model, input.envelope.input),
+							state.loaded.stepper.step(state.model, m),
 						);
 						if (prepared._tag === "refused") {
 							const {_tag: _case, ...why} = prepared;
@@ -672,13 +741,25 @@ export class ProgramRunner extends Context.Service<
 
 /** A delivery that does not have P10's shape. */
 export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError", {
-	why: Schema.Literals(["bad_input"]),
+	why: Schema.Literals(["bad_input", "bad_client", "clients_full"]),
 }) {}
 
 type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError;
 
 const cmdType = (job: Dispatched): string =>
 	Option.match(decodeTyped(job.cmd), {onNone: () => "", onSome: (c) => c.type});
+
+const hasParent = (m: unknown): boolean => typeof m === "object" && m !== null && "parent" in m;
+const stamp = (m: unknown, parent: string): unknown =>
+	typeof m === "object" && m !== null ? {...m, parent} : m;
+const inputPort = (state: Live, m: unknown) =>
+	Option.match(decodeTyped(m), {
+		onNone: () => undefined,
+		onSome: ({type}) => {
+			const inputs = state.loaded.stepper.program.inputs;
+			return Object.hasOwn(inputs, type) ? inputs[type] : undefined;
+		},
+	});
 
 const isFact = (u: Readonly<Record<string, Schema.Json>>): u is Fact => typeof u._tag === "string";
 

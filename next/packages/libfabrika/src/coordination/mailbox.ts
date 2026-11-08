@@ -5,7 +5,13 @@ import {Context, Effect, Layer, Option, Schema, Stream} from "effect";
 import {Ledger, LedgerError} from "../data/ledger.ts";
 import {Appended, type Entry, type Line, lineFor, type Rev} from "../data/log.ts";
 import {short} from "../data/trace.ts";
-import {brainOnly} from "./process.ts";
+import {brainOnly, inRunnerSpace} from "./process.ts";
+
+/** Internal permission for a runner to save its own answers and alarm letters. */
+export class RunnerMail extends Context.Service<
+	RunnerMail,
+	{readonly process: string; readonly name: string}
+>()("@kampus/libfabrika/RunnerMail") {}
 
 /** What a writer says about itself, shared by every write in this layer: P6's `Line` without its
  *  case and body, so a writer can leave none out (p92). */
@@ -154,7 +160,12 @@ export class Mailbox extends Context.Service<
 							[OPERATION]: "send",
 						});
 						// Mail never takes a stream or an id only the brain writes.
-						if (brainOnly({stream: inbox(to), id, tag: SEND}))
+						const runner = yield* Effect.serviceOption(RunnerMail);
+						const own = Option.exists(
+							runner,
+							(r) => r.name === to && id.startsWith(`${r.process}/`) && inRunnerSpace(id),
+						);
+						if (brainOnly({stream: inbox(to), id: own ? "" : id, tag: SEND}))
 							return Appended.cases.refused.make({why: "forbidden"});
 						const json = decodeJson(m);
 						// The ledger's own answer for a body that is not JSON, without the trip.

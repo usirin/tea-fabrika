@@ -209,10 +209,21 @@ export const stepper = (declared: unknown): Stepper => {
 	};
 
 	/** A Msg as the machine takes it: a settled Cmd Msg, or one the program's Msg schema decodes. */
-	const message = (raw: unknown): Option.Option<Typed> => {
-		const result = settled(defs, raw);
-		if (Option.isSome(result))
-			return result.value && isTyped(raw) ? Option.some(raw) : Option.none();
+	const message = (raw: unknown, saved: boolean): Option.Option<Typed> => {
+		const typed = decodeTyped(raw);
+		if (
+			!saved &&
+			Option.exists(
+				typed,
+				(m) => m.type === "timer" || defs.some((d) => d.okType === m.type || d.errType === m.type),
+			)
+		)
+			return Option.none();
+		if (saved) {
+			const result = settled(defs, raw);
+			if (Option.isSome(result))
+				return result.value && isTyped(raw) ? Option.some(raw) : Option.none();
+		}
 		const decoded = decodeMsg(raw);
 		return Result.isSuccess(decoded) && isTyped(decoded.success)
 			? Option.some(decoded.success)
@@ -262,7 +273,7 @@ export const stepper = (declared: unknown): Stepper => {
 		},
 		step: (raw, msg) => {
 			const now = model(raw, "saved_state");
-			const m = message(msg);
+			const m = message(msg, false);
 			if (Option.isNone(m) || !cells.has(m.value.type))
 				return Step.cases.refused.make({why: "bad_msg"});
 			const refusal = guard("step", () => decodeRefusal(program.refuse(now, m.value)));
@@ -277,7 +288,7 @@ export const stepper = (declared: unknown): Stepper => {
 			// tea drops a Msg whose cell is gone by its turn; a saved one is dropped the same way.
 			if (Option.isSome(typed) && !cells.has(typed.value.type))
 				return prepare(now, [], "saved_letter");
-			const m = message(msg);
+			const m = message(msg, true);
 			if (Option.isNone(m)) throw new ProgramDown({why: "saved_letter"});
 			const [next, cmds] = guard("saved_letter", () => applyCell(machine, now, m.value));
 			return prepare(next, cmds, "saved_letter");

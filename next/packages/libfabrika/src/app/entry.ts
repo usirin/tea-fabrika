@@ -23,7 +23,7 @@ type Code<A extends ReadonlyArray<unknown>, R> = {call(...args: A): R}["call"];
 
 /** A view as JSON. One runner serves every program, so the type stays open: each program's own
  *  client decodes its view (P14). */
-export type View = any;
+export type View = unknown;
 
 /** What a watcher is sent: the whole view once, then one patch per installed step. `rev` is the
  *  inbox position of the last installed letter, so other streams leave no gaps. */
