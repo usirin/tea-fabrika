@@ -504,8 +504,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				break;
 			}
 		}
-		if (verified === null || verified._tag === "refused")
-			return GrantReply.cases.refused.make({why: "bad_signature"});
+		if (verified === null) return GrantReply.cases.refused.make({why: "bad_signature"});
 		const checked = verified;
 		const signer = checked.signer;
 		const signerFingerprint = yield* silent(fingerprint(signer, true));
