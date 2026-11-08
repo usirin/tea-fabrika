@@ -502,9 +502,14 @@ export class ProgramRunner extends Context.Service<
 						status.state.process !== s.recovery.process
 					) {
 						yield* saveRecovery({
-							...moved(s, {type: "started", process: status.state.process, at: status.at}),
+							...s,
 							build: status.state.code.hash,
 							restarts: status.restarts,
+							pending: {
+								type: "checkpoint",
+								after: s.recovery.process,
+								process: status.state.process,
+							},
 						});
 					}
 					yield* continueRecovery();
@@ -1174,8 +1179,10 @@ export class ProgramRunner extends Context.Service<
 									if (supervision !== null && supervision.recovery._tag !== "live")
 										return {answer: undefined, jobs: []};
 									const state = yield* ready();
-									if (state.wake === null || state.wake > time)
+									if (state.wake === null || state.wake > time) {
+										yield* alarm.set(state.wake);
 										return {answer: undefined, jobs: []};
+									}
 									const id = `${process.id}/due/${time}`;
 									const sent = yield* mailbox
 										.send(
