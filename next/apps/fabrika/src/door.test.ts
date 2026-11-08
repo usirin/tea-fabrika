@@ -593,7 +593,8 @@ describe("P10 review regressions", () => {
 	// same key, each knock answers exactly its own row's code and until, read back from the
 	// owner's watch at that moment. Four keys and up to eight tabs against a cap of three, so
 	// rows fall out and the oldest pending connections are pruned: a pruned one is refused
-	// not_waiting, never handed a row. Plants: return all rows; return the first row.
+	// not_waiting, never handed a row. Plants: return all rows; return the first row; give a
+	// second tab of a key its own row.
 	it("d1: any knock order answers each knock with only its own row's code and until", async () => {
 		await fc.assert(
 			fc.asyncProperty(
@@ -631,7 +632,10 @@ describe("P10 review regressions", () => {
 										expect(reply).toEqual({_tag: "refused", why: "not_waiting"});
 										continue;
 									}
-									const row = (yield* d.watch(owner.client)).rows.find((r) => r.key === k.raw);
+									const rows = (yield* d.watch(owner.client)).rows;
+									// One row per key: a second tab of a key joins that key's row, never a new one.
+									expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length);
+									const row = rows.find((r) => r.key === k.raw);
 									assert(row);
 									expect(reply).toEqual({_tag: "ok", result: {code: row.code, until: row.until}});
 								}
@@ -670,8 +674,8 @@ describe("P10 review regressions", () => {
 
 	// d3: for every Uint32 n that getRandomValues gives, the waiting code is six digits, n's last
 	// six, with leading zeros kept: String(n % 1_000_000).padStart(6, "0"). Plants: keep four
-	// digits; drop the zero padding. Pinned past bugs: 0 and 7 lost their leading zeros, and
-	// 4294967295 (the largest Uint32) was cut to four digits.
+	// digits (the code on main before PR 516); drop the zero padding; keep seven digits. The
+	// property covers leading zeros by itself, so no small value is pinned.
 	it("d3: any random Uint32 gives a six-digit waiting code with its leading zeros", async () => {
 		await fc.assert(
 			fc.asyncProperty(fc.integer({min: 0, max: 0xffffffff}), (random) =>
@@ -701,7 +705,9 @@ describe("P10 review regressions", () => {
 					}),
 				),
 			),
-			{...runs(30), examples: [[0], [7], [4294967295]]},
+			// pinned: 4294967295, the largest Uint32, must give 967295. In PR 516's round 1 mutation
+			// step, a .slice(-7) planted by hand survived, because no case had more than six digits.
+			{...runs(30), examples: [[4294967295]]},
 		);
 	});
 
