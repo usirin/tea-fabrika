@@ -188,7 +188,7 @@ describe("today's keyboard shortcuts view", () => {
 			renderToStaticMarkup(
 				createElement(KeysWindow, {keys: defaults, editor, send: () => {}, changes}),
 			);
-		const failed = step(saving, {type: "failed", request, why: "write of keybindings.toml failed"});
+		const failed = step(saving, {type: "failed", request, why: "save of keybindings.toml failed"});
 		expect(view(failed)).toContain("Save failed");
 		expect(view(failed)).not.toContain("Keys saved.");
 		const [again, next] = applyCell<Editor, EditorMsg, EditorCmd>(editorMachine, failed, {
@@ -197,5 +197,46 @@ describe("today's keyboard shortcuts view", () => {
 		const saved = step(again, {type: "saved", request: next[0]?.request ?? "", version: "v2"});
 		expect(view(saved)).toContain("Keys saved.");
 		expect(view(saved)).not.toContain("Save failed");
+	});
+	it("while a save runs, the focused result line says Saving and nothing older", () => {
+		const changes = [
+			{
+				by: "owner",
+				at: 1,
+				said: 1,
+				window: "w",
+				how: "pressed" as const,
+				modified: null,
+				before: defaults,
+				after: defaults,
+				displaced: [
+					{does: "tezgah.close" as const, key: {_tag: "after_prefix" as const, key: "x"}},
+				],
+				version: "v1",
+			},
+		];
+		const idle = {...selected(defaults, "tezgah.zoom"), undo: "v1"};
+		const result = (editor: Editor) =>
+			/<div tabindex="-1" class="keys-result" role="status">([\s\S]*?)<\/div>/.exec(
+				renderToStaticMarkup(
+					createElement(KeysWindow, {keys: defaults, editor, send: () => {}, changes}),
+				),
+			)?.[1] ?? "";
+		expect(result(idle)).toContain("Keys saved.");
+		expect(result(idle)).toContain("close lost ctrl+b then x.");
+		expect(result(idle)).not.toContain("tezgah.close lost");
+		expect(result(idle)).toContain("Undo");
+		const [saving] = applyCell<Editor, EditorMsg, EditorCmd>(editorMachine, idle, {type: "unbind"});
+		expect(saving.recording._tag).toBe("saving");
+		expect(result(saving)).toContain("Saving...");
+		expect(result(saving)).not.toContain("Keys saved.");
+		expect(result(saving)).not.toContain("lost");
+		expect(result(saving)).not.toContain("Undo");
+	});
+
+	it("Same key names the key as it is spoken, not as the file spells it", () => {
+		const html = draw(selected(defaults, "tezgah.zoom"));
+		const said = [...html.matchAll(/Same key: (?:<!-- -->)?([^<]*)/g)].map((m) => m[1]);
+		expect(said).toEqual(["ctrl+b then z"]);
 	});
 });

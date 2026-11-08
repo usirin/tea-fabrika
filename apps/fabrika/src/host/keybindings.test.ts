@@ -406,7 +406,7 @@ describe("today's KeybindingManager", () => {
 				const result = yield* h.edit(bind("tezgah.zoom", ["<prefix>m"])).pipe(Effect.result);
 				expect(Result.isFailure(result)).toBe(true);
 				const why = Result.isFailure(result) ? String(result.failure) : "";
-				expect(why).toContain("keybindings.toml failed:");
+				expect(why).toContain("save of keybindings.toml failed:");
 				expect(why).not.toContain(h.dir);
 				expect(why).not.toMatch(/\/(?:var|tmp|Users|home)\//);
 			}),
