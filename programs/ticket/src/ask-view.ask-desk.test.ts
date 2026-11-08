@@ -2,6 +2,7 @@ import {type Asked, blindDraw, sealAsk} from "@kampus/pipeline/tickets/ask";
 import {Entry, fold, type Ticket} from "@kampus/pipeline/tickets/ticket";
 import {AskActions, AskView} from "@tea-fabrika/tracker/ask-window";
 import {Effect, Schema} from "effect";
+import fc from "fast-check";
 import {createElement} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it} from "vitest";
@@ -141,6 +142,81 @@ describe("shot S8: no machine ids in what the person reads", () => {
 	it("the ask view never shows the ask's id", async () => {
 		const ask = await sealed();
 		expect(textOf(view(ask))).not.toContain(ask.ask);
+	});
+});
+
+// ---- design E (owner, 2026-11-08): what the bar draws before anything is pressed
+
+const POOL = [
+	{pick: "approve", does: "Take the lean on each open question and write the tests"},
+	{pick: "no", does: "Keep the lane parked for a new plan"},
+	{pick: "split", does: "Split the plan into two tickets and ask again"},
+	{pick: "stop", does: "Stop the lane here"},
+];
+/** Any sealed ask: two to four picks, a rec shown on one of them, drawn blind, or none. */
+const anyAsk = fc
+	.record({
+		picks: fc.subarray(POOL, {minLength: 2}),
+		at: fc.nat(),
+		rec: fc.constantFrom("shown", "blind", "none"),
+		sure: fc.option(fc.integer({min: 0, max: 100}), {nil: null}),
+		n: fc.nat({max: 1_000_000}),
+	})
+	.map(({picks, at, rec, sure, n}) => {
+		const chosen = picks[at % picks.length]?.pick ?? "approve";
+		const ask = `a-e-${n}`;
+		const draft = {
+			...DRAFT,
+			ask,
+			picks,
+			rec:
+				rec === "none"
+					? {_tag: "none", why: "No recommendation was recorded"}
+					: {...DRAFT.rec, pick: chosen, sure},
+			// A blind ask is a step's: an approve ask is never drawn blind (review 2, medium 2).
+			...(rec === "blind" ? {for: "step"} : {}),
+		};
+		return {rec, draft, policy: policyFor(ask, rec === "blind", blindDraw)};
+	});
+const sealedAny = (a: {draft: unknown; policy: {seed: number}}) =>
+	Effect.runPromise(sealAsk(a.draft, a.policy));
+
+/** How many times the words say Recommended. */
+const recommendedIn = (text: string) => text.match(/\brecommended\b/gi)?.length ?? 0;
+/** Design E's fix 3 on the drawn words: once for a shown rec, never for a blind or no-rec ask. */
+const recommendedOnce = (rec: string, text: string) =>
+	recommendedIn(text) === (rec === "shown" ? 1 : 0);
+/** Design E's fix 1 on the drawn markup: no "Did this need you?" and no mark before a pick. */
+const noMarks = (markup: string) =>
+	!/did this need you|needed me|agent could work it out/i.test(textOf(markup));
+
+describe("ask desk design E: the bar before anything is pressed", () => {
+	it("says Recommended once for a shown rec and never for a blind or no-rec ask", async () => {
+		await fc.assert(
+			fc.asyncProperty(anyAsk, async (a) => {
+				expect(recommendedOnce(a.rec, textOf(view(await sealedAny(a))))).toBe(true);
+			}),
+			{seed: 119120, numRuns: 60},
+		);
+	});
+	it("offers no mark before a pick", async () => {
+		await fc.assert(
+			fc.asyncProperty(anyAsk, async (a) => {
+				expect(noMarks(view(await sealedAny(a)))).toBe(true);
+			}),
+			{seed: 119120, numRuns: 60},
+		);
+	});
+	// The plants: the look branch's design E drew both of these.
+	it("the planted blind line Recommended · Hidden until you pick is caught", () => {
+		expect(recommendedOnce("blind", "Your turn Recommended Hidden until you pick")).toBe(false);
+	});
+	it("the planted marks drawn before a pick are caught", () => {
+		expect(
+			noMarks(
+				'<div role="group" aria-label="Did this need you?"><span>Did this need you?</span><button type="button">Needed me</button></div>',
+			),
+		).toBe(false);
 	});
 });
 

@@ -19,7 +19,7 @@ import {Effect} from "effect";
 import * as fc from "fast-check";
 import {beforeAll, describe, expect, it} from "vitest";
 import {DRAFT, NONE, NOW, PICKS, policyFor} from "../../../fixtures/ask-desk/cases.ts";
-import {askMachine} from "./ask-window.tsx";
+import {askMachine, askView} from "./ask-window.tsx";
 
 // The laws of today's shared ask editor (askMachine), on tea's pbt: after every step of any list
 // of Msgs, from the real init, on four sealed asks: a shown rec with two picks, a shown rec with
@@ -217,14 +217,30 @@ const focusedTime = every(
 		const kept = next.took.opened.slice(0, prev.took.opened.length);
 		if (JSON.stringify(kept) !== JSON.stringify(prev.took.opened))
 			return "the openings changed order";
-		if (msg.type === "open") return next.took.opened.at(-1) === msg.name;
+		// Only opening counts (review 2, low 2): closing the evidence again adds nothing.
+		const closing = msg.type === "open" && msg.name === "evidence" && prev.evidence === true;
+		if (msg.type === "open" && !closing)
+			return (
+				(next.took.opened.length === prev.took.opened.length + 1 &&
+					next.took.opened.at(-1) === msg.name) ||
+				"an opening was not recorded last"
+			);
 		return next.took.opened.length === prev.took.opened.length || "an opening came from nowhere";
 	},
 );
 
 /**
+ * Design E (owner, 2026-11-08): "Did this need you?" is offered only once a pick is in hand, never
+ * before. A pick is in hand while its note is open, and while that answer saves or comes back
+ * refused. Taking the rec saves at once, so it never has a pick in hand.
+ */
+const pickInHand = (model: Model): boolean =>
+	model.editor._tag === "note" || (model.editor._tag === "saving" && model.draft?._tag === "note");
+
+/**
  * Property 17: the mark has three values. Pressing a mark sets it, pressing the selected one
- * clears it, and a save carries it exactly when it is set, false included.
+ * clears it, and a save carries it exactly when it is set, false included. Since design E, a
+ * press only counts while the marks are offered.
  */
 const threeMarks = every(
 	"needed stays unmarked, true or false, and a save carries it as it is",
@@ -233,10 +249,41 @@ const threeMarks = every(
 		for (const save of savesOf(step))
 			if (save.needed !== prev.needed || "needed" in save !== (prev.needed !== undefined))
 				return "the save changed the mark";
-		if (msg.type !== "mark" || prev.editor._tag === "saving") return true;
+		if (msg.type !== "mark" || prev.editor._tag === "saving" || !pickInHand(prev)) return true;
 		if (prev.needed === msg.needed) return !("needed" in next) || "the selected mark did not clear";
 		return next.needed === msg.needed || "the mark did not take";
 	},
+	// Press each mark twice with a pick in hand, on every kind of ask (see markWithAPick).
+	[
+		{type: "do", value: AskCommand.cases.not.make({})},
+		{type: "mark", needed: true},
+		{type: "mark", needed: true},
+		{type: "do", value: AskCommand.cases.picks.make({})},
+		{type: "pick", pick: "approve"},
+		{type: "mark", needed: false},
+		{type: "mark", needed: false},
+	],
+);
+
+/**
+ * Design E: a mark is set only while a pick is in hand. A press before a pick changes nothing, and
+ * a mark goes with its pick (Escape, or the save landing), so no save carries a mark the person
+ * could not see.
+ */
+const markWithAPick = every(
+	"needed is set only while a pick is in hand",
+	({next}) => next.needed === undefined || pickInHand(next) || "a mark is set with no pick in hand",
+	// Mark, then leave the pick, on each kind of ask: n opens a note where a shown rec has one
+	// other pick; every pick, then approve, opens one where the rec is hidden or absent.
+	[
+		{type: "do", value: AskCommand.cases.not.make({})},
+		{type: "mark", needed: true},
+		{type: "escape"},
+		{type: "do", value: AskCommand.cases.picks.make({})},
+		{type: "pick", pick: "approve"},
+		{type: "mark", needed: false},
+		{type: "escape"},
+	],
 );
 
 /** No answer goes on its own: a save only follows a person's press, never a tick or a focus. */
@@ -245,7 +292,15 @@ const noSilentAnswer = every("silence never answers: a save only follows a press
 	return pressed || savesOf(step).length === 0 || `${step.msg.type} saved an answer`;
 });
 
-const LAWS = [honestAnswers, choiceNotes, onlyAccepted, focusedTime, threeMarks, noSilentAnswer];
+const LAWS = [
+	honestAnswers,
+	choiceNotes,
+	onlyAccepted,
+	focusedTime,
+	threeMarks,
+	markWithAPick,
+	noSilentAnswer,
+];
 
 // ---------------------------------------------------------------- planted mistakes
 
@@ -345,6 +400,39 @@ const PLANTS: readonly {readonly law: Law; readonly mistake: string; readonly ma
 			}),
 		},
 		{
+			law: focusedTime,
+			mistake: "closing the evidence records it again",
+			machine: plant({
+				open: (s, m) => {
+					const [next, cmds] = real.open(s, m);
+					return m.name === "evidence" && s.evidence === true
+						? [{...next, took: {...next.took, opened: [...next.took.opened, m.name]}}, cmds]
+						: [next, cmds];
+				},
+			}),
+		},
+		{
+			law: markWithAPick,
+			mistake: "a mark before a pick takes (today's marks, drawn before any pick)",
+			machine: plant({
+				mark: (s, m) => {
+					if (s.editor._tag === "saving") return [s, []];
+					const {needed: _needed, ...rest} = s;
+					return [s.needed === m.needed ? rest : {...rest, needed: m.needed}, []];
+				},
+			}),
+		},
+		{
+			law: markWithAPick,
+			mistake: "Escape closes the note and keeps its mark",
+			machine: plant({
+				escape: (s, m) => {
+					const [next, cmds] = real.escape(s, m);
+					return [s.needed === undefined ? next : {...next, needed: s.needed}, cmds];
+				},
+			}),
+		},
+		{
 			law: noSilentAnswer,
 			mistake: "a tick takes the rec",
 			machine: plant({
@@ -355,6 +443,176 @@ const PLANTS: readonly {readonly law: Law; readonly mistake: string; readonly ma
 			}),
 		},
 	];
+
+// ---------------------------------------------------------------- the view's laws (design E)
+
+/**
+ * What design E reads from the view model, beyond what today's AskView holds. Every field is
+ * optional here so this file types on a head that has none of them yet; the laws say which must be
+ * there. Design E, picked by the owner on 2026-11-08: one quiet bar, "Your turn", the question,
+ * the four actions, then the rec line "Recommended <pick> · NN% sure" and its reason.
+ */
+type Row = {readonly pick: string; readonly does: string; readonly tag?: string};
+type DeskView = {
+	/** "Did this need you?" is offered: only once a pick is in hand. */
+	readonly marks?: boolean;
+	/** The rec line's words: "Recommended approve · 95% sure"; a blind or no-rec ask's never say Recommended. */
+	readonly line?: string;
+	/** Every pick's row, in the ask's order, only while every pick is open. */
+	readonly rows?: readonly Row[];
+	readonly note?: {readonly label: string; readonly send: string};
+};
+type Draw = (model: Model) => DeskView;
+const drawn: Draw = (model) => askView(model);
+
+interface ViewLaw {
+	readonly name: string;
+	readonly check: (draw: Draw) => void;
+}
+/** A law on the view of every model the real machine reaches, from its real init. */
+const everyView = (
+	name: string,
+	law: (view: DeskView, model: Model) => boolean | string,
+	prefix: readonly Msg[] = [],
+): ViewLaw => ({
+	name,
+	check: (draw) => {
+		for (const ask of ASKS)
+			propertyInvariant(
+				askMachine,
+				{ticket: 117, ask, now: NOW},
+				arbMsgSequence(arbMsg(table()), {prefix, maxLength: 30, size: "max"}),
+				((step: AskStep) => law(draw(step.next), step.next)) as never,
+				OPTS,
+			);
+	},
+});
+// Open every pick on each kind of ask, so the rows are drawn in every run.
+const OPEN_PICKS: readonly Msg[] = [{type: "do", value: AskCommand.cases.picks.make({})}];
+
+/** Design E, fix 1: the marks show only after a pick, never before. */
+const marksAfterAPick = everyView(
+	"the marks are offered exactly while a pick is in hand",
+	(view, model) =>
+		view.marks === pickInHand(model) ||
+		(view.marks === undefined
+			? "the view does not say whether the marks are offered"
+			: view.marks
+				? `the marks are offered while ${model.editor._tag}, before a pick`
+				: "the marks are not offered with a pick in hand"),
+	[{type: "do", value: AskCommand.cases.not.make({})}],
+);
+
+const RECOMMENDED = /\brecommended\b/gi;
+const wordsOf = (view: DeskView): readonly string[] => [
+	view.line ?? "",
+	...(view.rows ?? []).flatMap((r) => [r.pick, r.does, r.tag ?? ""]),
+	view.note?.label ?? "",
+	view.note?.send ?? "",
+];
+
+/**
+ * Design E, fix 3: "Recommended" is said once across the whole view for an ask with a shown rec,
+ * whether every pick is open or not, and never for a blind or no-rec ask. The line for a shown rec
+ * is the fixed format "Recommended <pick> · NN% sure" (sureness unknown: no number).
+ */
+const recommendedOnce = everyView(
+	"Recommended is said once for a shown rec, and never for a blind or no-rec ask",
+	(view, model) => {
+		if (typeof view.line !== "string") return "the view has no rec line";
+		const rec = model.ask.shows.rec;
+		const said = wordsOf(view).join(" ").match(RECOMMENDED)?.length ?? 0;
+		if (rec._tag !== "pick")
+			return said === 0 || `a ${rec._tag} rec's view says Recommended ${said} times`;
+		if (said !== 1) return `the view says Recommended ${said} times`;
+		const line = view.line.toLowerCase();
+		const format =
+			rec.sure === null
+				? line.startsWith(`recommended ${rec.pick.toLowerCase()}`) && !line.includes("%")
+				: line === `recommended ${rec.pick.toLowerCase()} · ${rec.sure}% sure`;
+		return format || `the rec line is not the fixed format: ${view.line}`;
+	},
+	OPEN_PICKS,
+);
+
+/** Every pick opens under the bar: its rows, in the ask's order, only while every pick is open. */
+const rowsWhileOpen = everyView(
+	"every pick's row is drawn, in order, only while every pick is open",
+	(view, model) => {
+		if (model.editor._tag !== "picks")
+			return view.rows === undefined || `rows drawn while ${model.editor._tag}`;
+		const rows = view.rows ?? [];
+		const picks = model.ask.shows.picks;
+		return (
+			(rows.length === picks.length &&
+				rows.every((r, i) => r.pick === picks[i]?.pick && r.does === picks[i]?.does)) ||
+			"the rows are not the ask's picks in order"
+		);
+	},
+	OPEN_PICKS,
+);
+
+const VIEW_LAWS = [marksAfterAPick, recommendedOnce, rowsWhileOpen];
+
+const VIEW_PLANTS: readonly {
+	readonly law: ViewLaw;
+	readonly mistake: string;
+	readonly draw: Draw;
+}[] = [
+	{
+		law: marksAfterAPick,
+		mistake: "the marks show before a pick (today's view)",
+		draw: (model) => ({...drawn(model), marks: true}),
+	},
+	{
+		law: recommendedOnce,
+		mistake: "the rec's row repeats the Recommended tag the line already says",
+		draw: (model) => {
+			const view = drawn(model);
+			const rec = model.ask.shows.rec;
+			return rec._tag !== "pick" || view.rows === undefined
+				? view
+				: {
+						...view,
+						rows: view.rows.map((r) => (r.pick === rec.pick ? {...r, tag: "Recommended"} : r)),
+					};
+		},
+	},
+	{
+		// The look branch's design E said this for a blind ask.
+		law: recommendedOnce,
+		mistake: "a blind ask's line says Recommended · Hidden until you pick",
+		draw: (model) =>
+			model.ask.shows.rec._tag === "hidden"
+				? {...drawn(model), line: "Recommended · Hidden until you pick"}
+				: drawn(model),
+	},
+	{
+		law: rowsWhileOpen,
+		mistake: "the rows stay drawn after Escape closes every pick",
+		draw: (model) => ({
+			...drawn(model),
+			rows: model.ask.shows.picks.map((p) => ({pick: p.pick, does: p.does})),
+		}),
+	},
+];
+
+describe("the shared ask view's laws, design E (askView)", () => {
+	it.each(VIEW_LAWS.map((law) => [law.name, law] as const))("%s", (_, law) => {
+		law.check(drawn);
+	});
+
+	it.each(VIEW_PLANTS.map((p) => [p.mistake, p] as const))(
+		"the planted mistake %s is caught",
+		(_, {law, draw}) => {
+			expect(() => law.check(draw)).toThrow();
+		},
+	);
+
+	it("every view law has a planted mistake", () => {
+		expect(VIEW_LAWS.filter((law) => !VIEW_PLANTS.some((p) => p.law === law))).toEqual([]);
+	});
+});
 
 describe("the shared ask editor's laws (askMachine)", () => {
 	it.each(LAWS.map((law) => [law.name, law] as const))("%s", (_, law) => {

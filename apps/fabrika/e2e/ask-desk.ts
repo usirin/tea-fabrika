@@ -189,6 +189,7 @@ export const askDesk = async (tools: Tools) => {
 	await seedAsk(home, 118);
 	await seedAsk(home, 119, true);
 	await seedAsk(home, 120, false, NONE);
+	await seedAsk(home, 124);
 	await seedFacts(home, 121, [
 		{type: "started", run: "r-build-121", stage: "build", task: null, log: null},
 	]);
@@ -227,8 +228,10 @@ export const askDesk = async (tools: Tools) => {
 		);
 		await page.keyboard.press("y");
 		check("P14 the old key is unbound", (await answers(home, 117)).length === 0);
+		check("P17 E: no mark before a pick", (await marksIn(first)) === 0, await marksIn(first));
+		check("P23 E: Recommended once before a pick", (await recommendedIn(first)) === 1);
 		await page.keyboard.press("n");
-		const note = first.getByRole("textbox", {name: /note/i});
+		const note = first.getByRole("textbox");
 		await note.waitFor();
 		check(
 			"P24 n focuses the required note",
@@ -237,18 +240,8 @@ export const askDesk = async (tools: Tools) => {
 		await page.keyboard.type("yonh");
 		check("P14 letter keys type in a note", (await note.inputValue()) === "yonh");
 		check("P14 typing never answers", (await answers(home, 117)).length === 0);
-		await page.keyboard.press("Escape");
-		check(
-			"P24 Escape closes the note before leaving the ask",
-			(await note.count()) === 0 && (await first.isVisible()),
-		);
-		await button(first, "Every pick").click();
-		await first
-			.getByRole("button", {name: /approve/i})
-			.last()
-			.waitFor();
-		await page.keyboard.press("Escape");
-		check("P24 every pick closes one level", await first.isVisible());
+		check("P17 E: the marks show once a pick is in hand", (await marksIn(first)) === 2);
+		check("P23 E: Recommended once with the note open", (await recommendedIn(first)) === 1);
 		await button(first, "Needed me").click();
 		check(
 			"P17 true mark",
@@ -259,14 +252,34 @@ export const askDesk = async (tools: Tools) => {
 			"P17 clear mark",
 			(await button(first, "Needed me").getAttribute("aria-pressed")) === "false",
 		);
-		await button(first, "Agent could work it out").click();
+		await button(first, "Needed me").click();
+		await note.focus();
+		await page.keyboard.press("Escape");
+		check(
+			"P24 Escape closes the note before leaving the ask",
+			(await note.count()) === 0 && (await first.isVisible()),
+		);
+		check("P17 E: the marks go with the pick", (await marksIn(first)) === 0);
+		await button(first, "Every pick").click();
+		await first
+			.getByRole("button", {name: /approve/i})
+			.last()
+			.waitFor();
+		check("P17 E: every pick open is not a pick, so no mark", (await marksIn(first)) === 0);
+		check("P23 E: Recommended once with every pick open", (await recommendedIn(first)) === 1);
+		await page.keyboard.press("Escape");
+		check("P24 every pick closes one level", await first.isVisible());
 		await clickRec(first);
 		await until(
 			"P15 click records rec",
 			() => answers(home, 117),
 			(a) => a.length === 1,
 		);
-		check("P17 false survives the window write", (await answers(home, 117))[0]?.needed === false);
+		check(
+			"P17 E: a mark left with its pick never rides on the rec",
+			!Object.hasOwn((await answers(home, 117))[0] ?? {}, "needed"),
+			(await answers(home, 117))[0],
+		);
 		check(
 			"P24 answer is politely announced",
 			(await page
@@ -277,6 +290,29 @@ export const askDesk = async (tools: Tools) => {
 		check(
 			"P24 the answer keeps focus in its component",
 			await focusIn(page.locator('[data-tile="t1"]')),
+		);
+
+		// The mark rides with a picked answer: n, Agent could work it out, a note, Enter.
+		await page.keyboard.press("Control+c");
+		await tools.prompted(page, "t1");
+		await tools.run(page, "t1", "ticket --ticket 124");
+		await box(page).waitFor();
+		await button(box(page), "Not the rec").click();
+		await box(page).getByRole("textbox").fill("The plan misses the empty input");
+		await button(box(page), "Agent could work it out").click();
+		await box(page).getByRole("textbox").press("Enter");
+		const marked = await until(
+			"P17 a marked pick saves",
+			() => answers(home, 124),
+			(a) => a.length === 1,
+		);
+		check(
+			"P17 false survives the window write",
+			marked[0]?.needed === false &&
+				(marked[0]?.answer as Record<string, unknown> | undefined)?._tag === "against" &&
+				(marked[0]?.answer as Record<string, unknown> | undefined)?.note ===
+					"The plan misses the empty input",
+			marked[0],
 		);
 
 		await page.keyboard.press("Control+c");
@@ -333,6 +369,8 @@ export const askDesk = async (tools: Tools) => {
 			!(await box(page).ariaSnapshot()).includes(DRAFT.rec.why) &&
 				!(await box(page).innerHTML()).includes(DRAFT.rec.why),
 		);
+		check("P23 E: a blind ask never says Recommended", (await recommendedIn(box(page))) === 0);
+		check("P17 E: a blind ask offers no mark before a pick", (await marksIn(box(page))) === 0);
 		await tools.prefixed(page, "|");
 		await tools.prompted(page, "t2");
 		await tools.run(page, "t2", "tracker | ticket");
@@ -345,6 +383,15 @@ export const askDesk = async (tools: Tools) => {
 			"P10 old asks menu uses the shared answer controls",
 			(await menu.getByRole("button", {name: /every pick/i}).count()) > 0,
 		);
+		const views = menu.getByRole("region", {name: /^ask: /});
+		const said: number[] = [];
+		for (let i = 0; i < (await views.count()); i++) said.push(await recommendedIn(views.nth(i)));
+		check(
+			"P23 E: each ask in the menu says Recommended once at most",
+			said.every((n) => n <= 1),
+			said,
+		);
+		check("P17 E: the menu offers no mark before a pick", (await marksIn(menu)) === 0);
 		const selected = menu.getByRole("row", {selected: true});
 		check("P24 selection has a supported row role", (await selected.count()) === 1);
 		const before = await selected.textContent();
@@ -400,7 +447,8 @@ export const askDesk = async (tools: Tools) => {
 			for (const look of ["dark", "light"] as const) {
 				await tools.lookIs(app, page, look);
 				await shot(page, "blind", layout, look);
-				await inspectCard(page, box(page), look);
+				await inspectBar(page, box(page));
+				await inspectCard(page, box(page));
 				// Today's asks menu, drawn with the shared ask view.
 				await attempt("P10 the asks menu opens", async () => {
 					await tools.prefixed(page, "a");
@@ -422,30 +470,58 @@ export const askDesk = async (tools: Tools) => {
 						.getByRole("button", {name: /take rec/i})
 						.count()) === 0,
 				);
+				check("P23 E: a no-rec ask never says Recommended", (await recommendedIn(box(page))) === 0);
 				await shot(page, "no-rec", layout, look);
 				await page.keyboard.press("Control+c");
 				await tools.prompted(page, "t1");
 				await tools.run(page, "t1", "ticket --ticket 118");
 				await box(page).waitFor();
 				await shot(page, "shown", layout, look);
-				for (const [name, state] of [
-					["Needed me", "needed-true"],
-					["Agent could work it out", "needed-false"],
-				]) {
-					await button(box(page), name ?? "").click();
-					await shot(page, state ?? "", layout, look);
-				}
-				await button(box(page), "Agent could work it out").click();
+				check("P17 E: no mark before a pick", (await marksIn(box(page))) === 0);
+				check("P23 E: Recommended once", (await recommendedIn(box(page))) === 1);
+				await inspectBar(page, box(page));
 				await button(box(page), "Every pick").click();
 				await shot(page, "every-pick", layout, look);
+				check("P17 E: every pick open offers no mark", (await marksIn(box(page))) === 0);
+				check(
+					"P23 E: Recommended once with every pick open",
+					(await recommendedIn(box(page))) === 1,
+				);
+				await inspectBar(page, box(page));
+				await inFlow(
+					"P23 E: every pick opens under the bar in normal flow",
+					box(page),
+					box(page)
+						.getByRole("button", {name: /\bno\b/i})
+						.last(),
+				);
 				await page.keyboard.press("Escape");
 				await button(box(page), "Not the rec").click();
 				await shot(page, "required-note", layout, look);
+				check("P17 E: the marks show once a pick is in hand", (await marksIn(box(page))) === 2);
+				check("P23 E: Recommended once with the note open", (await recommendedIn(box(page))) === 1);
+				await inspectBar(page, box(page));
+				await inFlow(
+					"P23 E: the note opens under the bar in normal flow",
+					box(page),
+					box(page).getByRole("textbox"),
+				);
+				for (const [name, state] of [
+					["Needed me", "needed-true"],
+					["Agent could work it out", "needed-false"],
+				] as const) {
+					await button(box(page), name).click();
+					await shot(page, state, layout, look);
+				}
+				await button(box(page), "Agent could work it out").click();
+				await box(page).getByRole("textbox").focus();
 				await page.keyboard.press("Escape");
+				check("P17 E: the marks go with the pick", (await marksIn(box(page))) === 0);
 				await box(page).focus();
 				await page.keyboard.press("Space");
 				await shot(page, "evidence-open", layout, look);
-				await inspectCard(page, box(page), look);
+				await inspectBar(page, box(page));
+				await inspectCard(page, box(page));
 				for (const [ticket, state] of [
 					[121, "running"],
 					[122, "stuck"],
@@ -473,7 +549,7 @@ export const askDesk = async (tools: Tools) => {
 				await tools.run(page, "t1", `ticket --ticket ${failedTicket}`);
 				await box(page).waitFor();
 				await button(box(page), "Not the rec").click();
-				const draft = box(page).getByRole("textbox", {name: /note/i});
+				const draft = box(page).getByRole("textbox");
 				await draft.fill("The plan misses the empty input");
 				// Hold a real competing write lock. The host must expose pending, then failure.
 				// This changes no app code, response, clock or product export.
@@ -490,6 +566,21 @@ export const askDesk = async (tools: Tools) => {
 						check(
 							"P12 failed real write keeps the note",
 							(await draft.inputValue()) === "The plan misses the empty input",
+						);
+						const alert = await box(page).getByRole("alert").innerText();
+						check(
+							"P12 a failed save says it in a person's words, never the store's",
+							!/database is locked|SQLITE|LedgerUnreachable/i.test(alert),
+							alert,
+						);
+						await inFlow(
+							"P23 E: a failed save opens under the bar in normal flow",
+							box(page),
+							box(page).getByRole("alert"),
+						);
+						check(
+							"P23 E: Recommended once on a failed save",
+							(await recommendedIn(box(page))) === 1,
 						);
 						await shot(page, "failed-save", layout, look);
 					});
@@ -523,9 +614,17 @@ export const askDesk = async (tools: Tools) => {
 				const ask = box(page);
 				await ask.waitFor();
 				await button(ask, "Every pick").click();
-				await ask.getByRole("button", {name: /approve:/i}).click();
-				const note = ask.getByRole("textbox", {name: /note/i});
+				await ask
+					.getByRole("button", {name: /\bapprove\b/i})
+					.last()
+					.click();
+				const note = ask.getByRole("textbox");
 				await note.waitFor();
+				check("P17 E: the marks show once a pick is in hand", (await marksIn(ask)) === 2);
+				check(
+					"P23 E: Recommended is never said for a blind or no-rec ask",
+					(await recommendedIn(ask)) === 0,
+				);
 				check("P8 a pick waits for its optional note", (await answers(home, ticket)).length === 0);
 				check(
 					"P8 the note is optional",
@@ -570,6 +669,7 @@ export const askDesk = async (tools: Tools) => {
 			JSON.stringify(
 				{
 					version: "today",
+					look: "E: one quiet bar under the ticket title (owner, 2026-11-08)",
 					madeUp: [
 						"repository",
 						"plan contents",
@@ -646,8 +746,99 @@ const inspectLook = async (page: Page, where: Locator, look: "dark" | "light") =
 		properties,
 	);
 };
-const inspectCard = async (page: Page, where: Locator, look: "dark" | "light") => {
-	await inspectLook(page, where, look);
+/** How many times an ask's DOM text says Recommended, hidden text included (design E, fix 3). */
+const recommendedIn = async (where: Locator) =>
+	((await where.evaluate((element) => element.textContent ?? "")).match(/\brecommended\b/gi) ?? [])
+		.length;
+/** How many mark buttons an ask draws, hidden ones included (design E, fix 1). */
+const marksIn = (where: Locator) =>
+	where
+		.getByRole("button", {name: /^(needed me|agent could work it out)/i, includeHidden: true})
+		.count();
+/** What opens under the bar stays in normal flow: nothing up to the ask is lifted out of it. */
+const inFlow = async (what: string, where: Locator, target: Locator) => {
+	const lifted = await target.evaluate((element) => {
+		const out: string[] = [];
+		const root = element.closest('[aria-label^="ask: "]');
+		for (let node: Element | null = element; node !== null; node = node.parentElement) {
+			const position = getComputedStyle(node).position;
+			if (position !== "static" && position !== "relative") out.push(`${node.tagName} ${position}`);
+			if (node === root) break;
+		}
+		return out;
+	});
+	check(what, lifted.length === 0 && (await where.isVisible()), lifted);
+};
+/**
+ * Design E (owner, 2026-11-08): one quiet bar, no box around it, never pinned, and at most a
+ * hairline under it (fix 2), focused or not. Its background is the tile's own, so no fill makes it
+ * a card.
+ */
+const inspectBar = async (page: Page, where: Locator) => {
+	const read = () =>
+		where.evaluate((element) => {
+			const css = getComputedStyle(element);
+			const px = (w: string) => Number.parseFloat(w) || 0;
+			const clear = (c: string) => c === "transparent" || /rgba\(.*,\s*0\)$/.test(c);
+			let behind = "rgba(0, 0, 0, 0)";
+			for (let node = element.parentElement; node !== null; node = node.parentElement) {
+				const bg = getComputedStyle(node).backgroundColor;
+				if (!clear(bg)) {
+					behind = bg;
+					break;
+				}
+			}
+			const pinned: string[] = [];
+			const tile = element.closest("[data-tile]");
+			for (let node: Element | null = element; node !== null; node = node.parentElement) {
+				const position = getComputedStyle(node).position;
+				if (position === "sticky" || position === "fixed")
+					pinned.push(`${node.tagName} ${position}`);
+				if (node === tile) break;
+			}
+			const edges = (node: Element) => {
+				const s = getComputedStyle(node);
+				return (
+					[s.borderTopWidth, s.borderRightWidth, s.borderBottomWidth, s.borderLeftWidth].some(
+						(w) => px(w) > 0,
+					) || s.boxShadow !== "none"
+				);
+			};
+			return {
+				sides: [css.borderTopWidth, css.borderRightWidth, css.borderLeftWidth].map(px),
+				under: px(css.borderBottomWidth),
+				// Every length in the shadow: a 2px inset line under the bar is the thick line fix 2 drops.
+				shadow: css.boxShadow === "none" ? [] : (css.boxShadow.match(/-?[\d.]+px/g) ?? []).map(px),
+				background: css.backgroundColor,
+				fill: !clear(css.backgroundColor) && css.backgroundColor !== behind,
+				behind,
+				pinned,
+				nestedEdges: [...element.querySelectorAll("section, article, fieldset")].some(edges),
+				scrolls: document.documentElement.scrollWidth > innerWidth,
+			};
+		});
+	for (const focused of [false, true]) {
+		if (focused) await where.focus();
+		else
+			await page
+				.locator('[data-tile="t1"]')
+				.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+		const bar = await read();
+		check(
+			`P23 E: no box around the bar${focused ? ", focused" : ""}: no side edges, no fill`,
+			bar.sides.every((w) => w === 0) && !bar.fill && !bar.nestedEdges,
+			bar,
+		);
+		check(
+			`P23 E: at most a hairline under the bar${focused ? ", focused" : ""}`,
+			bar.under <= 1 && bar.shadow.every((l) => Math.abs(l) <= 1),
+			bar,
+		);
+		check("P23 E: the bar scrolls with the ticket, never pinned", bar.pinned.length === 0, bar);
+		check("P23 E: no page overflow", !bar.scrolls, bar);
+	}
+};
+const inspectCard = async (page: Page, where: Locator) => {
 	const toolbar = where.getByRole("toolbar");
 	check("P24 toolbar is keyboard reachable", (await toolbar.count()) === 1);
 	await toolbar.focus();
@@ -667,6 +858,13 @@ const inspectCard = async (page: Page, where: Locator, look: "dark" | "light") =
 		[...reached].some((text) => /every pick/i.test(text)),
 		[...reached],
 	);
+	// Design E: the marks come only with a pick, so take one that is not the rec first.
+	await button(where, "Every pick").click();
+	await where
+		.getByRole("button", {name: /\bno\b/i})
+		.last()
+		.click();
+	await where.getByRole("textbox").waitFor();
 	await where.focus();
 	for (let i = 0; i < 24; i++) {
 		await page.keyboard.press("Tab");
@@ -687,4 +885,6 @@ const inspectCard = async (page: Page, where: Locator, look: "dark" | "light") =
 		"P24 Space clears the mark",
 		(await button(where, "Needed me").getAttribute("aria-pressed")) === "false",
 	);
+	await page.keyboard.press("Escape");
+	check("P17 E: Escape closes the pick and its marks", (await marksIn(where)) === 0);
 };
