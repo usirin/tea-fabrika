@@ -3,7 +3,7 @@
 // about to append, appends through the door's checked writer, folds what landed and installs it.
 // Only then do its Cmds run, each saved as dispatched first, each answer saved as a letter before
 // the program sees it. A wake folds saved letters and runs none of their Cmds.
-import {type Outcome} from "@demlik/tea";
+import {applyCell, type Outcome} from "@demlik/tea";
 import {
 	Cause,
 	Clock,
@@ -20,11 +20,14 @@ import {
 } from "effect";
 import {
 	Activity,
+	Dead,
+	Down,
 	type Appended,
 	brainOnly,
 	type From,
 	type History,
 	inRunnerSpace,
+	inSignalSpace,
 	LedgerError,
 	Mailbox,
 	MemberFact,
@@ -33,14 +36,21 @@ import {
 	type Placed,
 	ProcessFact,
 	ProcessStore,
+	ProcessManager,
+	type ProcessError,
+	RecoveryStore,
+	Start,
 	RuntimeRecord,
 	RunnerMail,
 	SessionManager,
 	SigningRefused,
 	SignRequest,
 	type SinkError,
+	type Sql,
 	type Writer,
 } from "../coordination/index.ts";
+import {Failure, Policy, Recovery, type Supervision} from "../coordination/recovery.ts";
+import {sha256} from "../data/archive.ts";
 import {
 	Alarm,
 	CheckedWriter,
@@ -55,6 +65,7 @@ import {
 import {diff} from "./patch.ts";
 import {ProgramDown, Refusal, Step, Write} from "./program.ts";
 import {Saved} from "./state.ts";
+import {defaultPolicy, supervisor, type SupervisorMsg} from "./supervisor.ts";
 
 /** What `msg` answers: the input's placing in the inbox, or why it was not taken. */
 export const Sent = Schema.TaggedUnion({
@@ -106,6 +117,14 @@ const decodeWriteCmd = Schema.decodeUnknownResult(WriteCmd);
 const decodeIncoming = Schema.decodeUnknownEffect(Incoming);
 const Typed = Schema.Struct({type: Schema.String});
 const decodeTyped = Schema.decodeUnknownOption(Typed);
+const decodeDown = Schema.decodeUnknownOption(Down);
+const inputDigest = Effect.fnUntraced(function* (input: Incoming) {
+	return yield* sha256(
+		new TextEncoder().encode(
+			JSON.stringify([input.envelope.by, input.envelope.input, input.sentAt, input.seen]),
+		),
+	);
+});
 
 const PROCESS = "fab.process";
 const tag = (word: string): string => `fab.runner.${word}`;
@@ -135,10 +154,19 @@ export class ProgramRunner extends Context.Service<
 		readonly msg: (input: unknown) => Effect.Effect<Sent, RunnerFailure>;
 		/** The object's alarm fired at `at`: the program's timer, if it asked for one by then. */
 		readonly due: (at: number) => Effect.Effect<void, RunnerFailure>;
+		readonly restart: (request: {
+			readonly id: string;
+			readonly build: string;
+		}) => Effect.Effect<void, RunnerFailure>;
 	}
 >()("@kampus/libfabrika/ProgramRunner") {
 	static readonly layer = (
-		process: Descriptor,
+		initial: Descriptor,
+		options?: {
+			readonly policy?: Policy;
+			readonly recovery: {readonly sql: Sql; readonly name: string; readonly capacity: number};
+			readonly fault?: (cut: string) => Effect.Effect<void, LedgerError>;
+		},
 	): Layer.Layer<
 		ProgramRunner,
 		never,
@@ -148,7 +176,18 @@ export class ProgramRunner extends Context.Service<
 			ProgramRunner,
 			Effect.gen(function* () {
 				const loader = yield* ProgramLoader;
-				const store = yield* ProcessStore;
+				const rootStore = yield* ProcessStore;
+				let store = rootStore;
+				let process = initial;
+				const manager = yield* Effect.serviceOption(ProcessManager);
+				const recovery =
+					options === undefined
+						? null
+						: yield* RecoveryStore.pipe(
+								Effect.provide(RecoveryStore.layer(options.recovery.sql, options.recovery)),
+							);
+				let supervision: Supervision | null = null;
+				let woke = false;
 				const mailbox = yield* Mailbox;
 				const checked = yield* CheckedWriter;
 				const watchers = yield* WatcherManager;
@@ -179,11 +218,373 @@ export class ProgramRunner extends Context.Service<
 					} satisfies From;
 				});
 
+				const fault = (cut: string) => options?.fault?.(cut) ?? Effect.void;
+				const coordinator = Effect.gen(function* () {
+					if (Option.isNone(manager)) return yield* new LedgerError({why: "unreachable"});
+					return manager.value;
+				});
+				const saveRecovery = Effect.fnUntraced(function* (next: Supervision) {
+					if (recovery !== null) yield* recovery.save(next);
+					supervision = next;
+				});
+				const currentRecovery = Effect.suspend(() =>
+					supervision === null
+						? Effect.fail(new LedgerError({why: "bad_row"}))
+						: Effect.succeed(supervision),
+				);
+				const moved = (s: Supervision, msg: SupervisorMsg): Supervision =>
+					applyCell(supervisor, s, msg)[0];
+				const adopt = Effect.fnUntraced(function* (id: string, build: string) {
+					if (process.id === id && process.build === build) return;
+					store = yield* rootStore.select(id);
+					process = {...process, id, build};
+					live = null;
+					retry = [];
+				});
+				const resume = Effect.fnUntraced(function* () {
+					while (supervision !== null && supervision.pending !== null) {
+						const s: Supervision = supervision;
+						const action = s.pending;
+						if (action === null) break;
+						const p = yield* coordinator;
+						const meta = action.from ?? (yield* from(null, yield* traceId));
+						switch (action.type) {
+							case "dead": {
+								const receipt = s.receipts.find(
+									(r) => r.process === action.process && r.result !== null,
+								);
+								if (receipt === undefined) return yield* new LedgerError({why: "bad_row"});
+								yield* p
+									.dead(
+										action.process,
+										Dead.make({
+											tries: receipt.tries,
+											limit: s.policy.maxDeliveries,
+											m: receipt.letter,
+											build: s.build,
+											errors: receipt.errors,
+										}),
+										meta,
+									)
+									.pipe(
+										Effect.withSpan("runner.dead", {
+											attributes: {
+												[PROCESS]: action.process,
+												[tag("letter")]: receipt.letter,
+												[tag("attempt")]: receipt.tries,
+												[tag("build")]: s.build,
+											},
+										}),
+									);
+								yield* fault("after_dead");
+								yield* saveRecovery({...s, pending: {...action, type: "exit"}});
+								break;
+							}
+							case "exit": {
+								if (s.recovery._tag !== "ending") return yield* new LedgerError({why: "bad_row"});
+								const why =
+									s.restart !== undefined
+										? "restart"
+										: s.recovery.failure._tag === "saved"
+											? "saved_letter"
+											: s.recovery.failure._tag === "fresh"
+												? "step"
+												: "interrupted";
+								yield* p.exit(action.process, why, meta);
+								yield* fault("after_exit");
+								const status = yield* p.status(process.name);
+								if (s.restart !== undefined) {
+									const request = Start.cases.again.make({
+										id: s.restart.id,
+										name: s.name,
+										after: action.process,
+										why: "restart",
+										code: {program: process.program, hash: s.restart.build},
+									});
+									yield* saveRecovery({
+										...s,
+										build: s.restart.build,
+										recovery: Recovery.cases.starting.make({after: action.process, request}),
+										pending: {type: "start", process: action.process, from: meta},
+									});
+								} else {
+									const next = moved(
+										{...s, restarts: status.restarts},
+										{type: "exited", at: status.at},
+									);
+									yield* saveRecovery({
+										...next,
+										pending: next.pending === null ? null : {...next.pending, from: meta},
+									});
+								}
+								live = null;
+								retry = [];
+								break;
+							}
+							case "down": {
+								if (s.recovery._tag !== "down") return yield* new LedgerError({why: "bad_row"});
+								yield* p.down(action.process, s.recovery, meta);
+								yield* fault("after_down");
+								yield* alarm.set(s.recovery.until);
+								yield* saveRecovery({...s, pending: null});
+								break;
+							}
+							case "start": {
+								if (s.recovery._tag !== "starting") return yield* new LedgerError({why: "bad_row"});
+								const status = yield* p.status(s.name);
+								const started = yield* p.start(s.recovery.request, meta).pipe(
+									Effect.withSpan("runner.restart", {
+										attributes: {
+											[PROCESS]: action.process,
+											[tag("until")]: action.until ?? status.at,
+											[tag("lag")]: Math.max(0, status.at - (action.until ?? status.at)),
+											[tag("build")]: s.build,
+											[tag("crashes")]: s.crashes ?? 0,
+										},
+									}),
+								);
+								yield* fault("after_start");
+								yield* saveRecovery({
+									...s,
+									pending: {
+										...action,
+										type: "checkpoint",
+										after: action.process,
+										process: started.process,
+									},
+								});
+								break;
+							}
+							case "checkpoint": {
+								if (action.after === undefined) return yield* new LedgerError({why: "bad_row"});
+								const previous = yield* rootStore.select(action.after);
+								const next = yield* rootStore.select(action.process);
+								const checkpoint = yield* previous.load;
+								if (s.restart !== undefined && checkpoint !== null) {
+									// Keep the accepted turn in the index without carrying its rejected model.
+									const prepared = Schema.decodeUnknownOption(Turn)(checkpoint.turn);
+									if (
+										Option.isSome(prepared) &&
+										(yield* previous.placedByAny(prepared.value.id)) === null
+									) {
+										const accepted = yield* Stream.runHead(
+											mailbox
+												.read(s.name, checkpoint.saved.after)
+												.pipe(Stream.filter((letter) => letter.id === prepared.value.id)),
+										);
+										if (Option.isSome(accepted)) {
+											const {id, rev, pos} = accepted.value;
+											yield* previous.save(checkpoint, [{id, rev, pos}]);
+										}
+									}
+								} else if ((yield* next.load) === null) {
+									// The turn is the acceptance marker until its letter is indexed.
+									if (checkpoint !== null) yield* next.save({...checkpoint, cmds: []});
+								}
+								yield* fault("after_checkpoint");
+								const status = yield* p.status(s.name);
+								const {restart: _restart, ...kept} = s;
+								const requests =
+									s.restart === undefined
+										? s.requests
+										: [...(s.requests ?? []), {...s.restart, process: action.process}];
+								yield* saveRecovery({
+									...moved(kept, {type: "started", process: action.process, at: status.at}),
+									restarts: status.restarts,
+									...(requests === undefined ? {} : {requests}),
+								});
+								yield* adopt(action.process, s.build);
+								break;
+							}
+						}
+					}
+				});
+				const continueRecovery = Effect.fnUntraced(function* () {
+					yield* resume().pipe(
+						Effect.onError(() =>
+							Effect.gen(function* () {
+								if (supervision?.pending === null || supervision === null) return;
+								const at = yield* Clock.currentTimeMillis;
+								yield* alarm.set(at + supervision.policy.backoff.minMs);
+							}),
+						),
+					);
+				});
+				const observed = Effect.fnUntraced(function* (
+					failure: Failure,
+					at: number,
+					original?: unknown,
+				) {
+					if (supervision === null) return;
+					const s = supervision;
+					const meta = yield* from(null, yield* traceId);
+					let next = moved(s, {type: "threw", failure, at});
+					const observations = [
+						...s.observations,
+						{
+							seq: failure.seq,
+							process: failure.process,
+							letter: failure.letter,
+							phase: failure._tag,
+							at,
+							...(failure._tag === "interrupted" ? {} : {error: failure.error}),
+						},
+					];
+					next = {
+						...next,
+						observations,
+						pending: next.pending === null ? null : {...next.pending, from: meta},
+					};
+					if (failure._tag === "fresh") {
+						const old = s.receipts.find((r) => r.letter === failure.letter);
+						if (old === undefined || next.pending === null)
+							return yield* new LedgerError({why: "bad_row"});
+						const errors = [...old.errors, failure.error];
+						const terminal = errors.length >= s.policy.maxDeliveries;
+						const receipt = {
+							...old,
+							errors,
+							tries: errors.length,
+							process: failure.process,
+							result: terminal
+								? Schema.TaggedStruct("refused", {why: Schema.Literal("dead")}).make({why: "dead"})
+								: null,
+						};
+						next = {
+							...next,
+							receipts: s.receipts.map((r) => (r.letter === failure.letter ? receipt : r)),
+							pending: {...next.pending, type: terminal ? "dead" : "exit"},
+						};
+					}
+					yield* saveRecovery(next);
+					if (failure._tag !== "interrupted")
+						yield* Effect.exit(
+							Effect.fail(original).pipe(
+								Effect.withSpan("runner.throw", {
+									attributes: {
+										[PROCESS]: failure.process,
+										"error.type": failure.error,
+										[tag("letter")]: failure.letter,
+										[tag("build")]: failure.build,
+										[tag("phase")]: failure._tag,
+										[tag("attempt")]: failure.seq,
+									},
+								}),
+							),
+						);
+					yield* fault("after_observation");
+					yield* store.activity(Activity.cases.idle.make({process: failure.process}));
+					yield* continueRecovery();
+				});
+				const ensure = Effect.fnUntraced(function* (time?: number) {
+					if (recovery === null) return;
+					const p = yield* coordinator;
+					const status = yield* p.status(initial.name);
+					if (supervision === null) {
+						const policy = yield* Effect.try({
+							try: () => Schema.decodeUnknownSync(Policy)(options?.policy ?? defaultPolicy),
+							catch: () => new LedgerError({why: "bad_row"}),
+						});
+						supervision = yield* recovery.load;
+						if (supervision === null)
+							supervision = supervisor.init(null, {
+								policy,
+								process: status.state.process,
+								name: initial.name,
+								build: status.state.code.hash,
+								at: status.at,
+							})[0];
+					}
+					const s = supervision;
+					if (
+						status.state._tag === "live" &&
+						s.recovery._tag === "down" &&
+						status.state.process !== s.recovery.process
+					) {
+						yield* saveRecovery({
+							...s,
+							build: status.state.code.hash,
+							restarts: status.restarts,
+							pending: {
+								type: "checkpoint",
+								after: s.recovery.process,
+								process: status.state.process,
+							},
+						});
+					}
+					yield* continueRecovery();
+					const resumed = yield* currentRecovery;
+					if (resumed.recovery._tag === "live")
+						yield* adopt(resumed.recovery.process, resumed.build);
+					if (!woke) {
+						const marker = yield* store.readActivity;
+						const attempt = resumed.attempt?.process === process.id ? resumed.attempt : null;
+						if (
+							resumed.recovery._tag === "live" &&
+							((marker?._tag === "stepping" && marker.process === process.id) || attempt !== null)
+						) {
+							const seq = attempt?.seq ?? resumed.seq + 1;
+							yield* observed(
+								Failure.cases.interrupted.make({
+									process: process.id,
+									letter:
+										attempt?.letter ??
+										(marker?._tag === "stepping" ? marker.letter : "interrupted"),
+									build: process.build,
+									seq,
+								}),
+								status.at,
+							);
+						}
+						woke = true;
+					}
+					const waiting = yield* currentRecovery;
+					if (
+						time !== undefined &&
+						waiting.recovery._tag === "down" &&
+						status.at >= waiting.recovery.until
+					) {
+						const s = waiting;
+						const next = moved(s, {type: "due", at: status.at});
+						if (next.recovery._tag === "starting") {
+							const request = Start.cases.again.make({
+								...next.recovery.request,
+								code: {program: process.program, hash: s.build},
+							});
+							yield* saveRecovery({
+								...next,
+								recovery: Recovery.cases.starting.make({...next.recovery, request}),
+								pending:
+									next.pending === null
+										? null
+										: {...next.pending, from: yield* from(null, yield* traceId)},
+							});
+							yield* continueRecovery().pipe(
+								Effect.withSpan("runner.recover", {
+									attributes: {
+										[PROCESS]: s.recovery._tag === "down" ? s.recovery.process : process.id,
+										[tag("until")]: s.recovery._tag === "down" ? s.recovery.until : 0,
+										[tag("lag")]:
+											s.recovery._tag === "down" ? Math.max(0, status.at - s.recovery.until) : 0,
+									},
+								}),
+							);
+						}
+					}
+					const latest = yield* currentRecovery;
+					if (latest.recovery._tag === "down") yield* alarm.set(latest.recovery.until);
+					else if (latest.recovery._tag === "live") {
+						const healthy = moved(latest, {type: "healthy", at: status.at});
+						if (healthy !== latest) yield* saveRecovery(healthy);
+					}
+				});
+
 				/** A pure call: a ProgramDown it throws stays itself; any other throw is `why`. */
 				const pure = <A>(why: ProgramDown["why"], f: () => A) =>
 					Effect.try({
 						try: f,
-						catch: (error) => (error instanceof ProgramDown ? error : new ProgramDown({why})),
+						catch: (error) =>
+							error instanceof ProgramDown ? error : new ProgramDown({why, cause: error}),
 					});
 
 				const step = Effect.fnUntraced(function* (
@@ -191,10 +592,53 @@ export class ProgramRunner extends Context.Service<
 					letter: string,
 					f: () => Step,
 				) {
+					if (supervision !== null) {
+						const status = yield* (yield* coordinator).status(process.name);
+						const phase = why === "step" ? "fresh" : "saved";
+						const attempt = {
+							process: process.id,
+							letter,
+							build: process.build,
+							seq: supervision.seq + 1,
+							phase,
+							at: status.at,
+						} as const;
+						yield* saveRecovery({...supervision, seq: attempt.seq, attempt});
+					}
 					yield* store.activity(
 						Activity.cases.stepping.make({process: process.id, letter, build: process.build}),
 					);
-					return yield* pure(why, f).pipe(
+					const result = yield* pure(why, f).pipe(Effect.exit);
+					if (supervision !== null && result._tag === "Failure") {
+						const attempt = supervision.attempt;
+						if (attempt === null) return yield* new LedgerError({why: "bad_row"});
+						if (Cause.hasInterrupts(result.cause)) {
+							yield* observed(Failure.cases.interrupted.make(attempt), attempt.at);
+							return yield* Effect.failCause(result.cause);
+						}
+						const wrapped = Cause.squash(result.cause);
+						const original =
+							wrapped instanceof ProgramDown && Object.hasOwn(wrapped, "cause")
+								? wrapped.cause
+								: wrapped;
+						const error =
+							original instanceof Error
+								? original.constructor.name
+								: original === null
+									? "null"
+									: typeof original;
+						yield* observed(
+							(why === "step" ? Failure.cases.fresh : Failure.cases.saved).make({
+								...attempt,
+								error,
+							}),
+							attempt.at,
+							original,
+						);
+						return yield* new ProgramDown({why, cause: original});
+					}
+					if (supervision !== null) yield* saveRecovery({...supervision, attempt: null});
+					return yield* result.pipe(
 						Effect.onExit((exit) =>
 							store
 								.activity(Activity.cases.idle.make({process: process.id}))
@@ -319,18 +763,36 @@ export class ProgramRunner extends Context.Service<
 					const placed: Array<Placed> = [];
 					const saved = yield* store.load;
 					const prepared = Schema.decodeUnknownOption(Turn)(saved?.turn);
+					// The raw inbox keeps canceled signals; the manager filters them for this process.
+					const signals = new Set(
+						Option.isSome(manager) && letters.some((letter) => inSignalSpace(letter.id))
+							? (yield* Stream.runCollect(manager.value.receive(process.id, state.after))).map(
+									(letter) => letter.id,
+								)
+							: [],
+					);
 					let mine = Option.none<History>();
 					for (const letter of letters) {
+						const signal = inSignalSpace(letter.id);
+						if (signal && !signals.has(letter.id)) continue;
+						const down = signal ? decodeDown(letter.m) : Option.none();
+						if (
+							signal &&
+							!Option.exists(down, (m) => m.to._tag === "process" && m.to.process === process.id)
+						)
+							continue;
 						const own = inRunnerSpace(letter.id) && letter.id.startsWith(`${process.id}/`);
 						const accepted =
+							signal ||
 							own ||
 							letter.id === options.mine ||
 							Option.exists(prepared, (turn) => turn.id === letter.id) ||
-							(yield* store.placed(letter.id)) !== null;
+							(yield* store.placed(letter.id)) !== null ||
+							// An earlier life of this name accepted it; an old life's own mail never drives this one.
+							(!inRunnerSpace(letter.id) && (yield* store.placedByAny(letter.id)) !== null);
+						const input = Option.isSome(down) ? {...down.value, type: down.value._tag} : letter.m;
 						const m =
-							accepted && !own && letter.parent !== null
-								? stamp(letter.m, letter.parent)
-								: letter.m;
+							accepted && !own && letter.parent !== null ? stamp(input, letter.parent) : input;
 						const folded = accepted
 							? yield* stepped(
 									yield* step("saved_letter", letter.id, () => state.loaded.stepper.fold(model, m)),
@@ -400,6 +862,9 @@ export class ProgramRunner extends Context.Service<
 
 				/** The live process, loaded and caught up. */
 				const ready = Effect.fnUntraced(function* () {
+					yield* ensure();
+					if (supervision !== null && supervision.recovery._tag !== "live")
+						return yield* new ProgramDown({why: "saved_letter"});
 					if (live !== null) return (yield* catchUp(live)).state;
 					const {live: loaded, dirty} = yield* load();
 					const {state} = yield* catchUp(loaded, {dirty});
@@ -548,6 +1013,13 @@ export class ProgramRunner extends Context.Service<
 					job: Dispatched,
 				): Effect.Effect<ReadonlyArray<Dispatched>, RunnerFailure> =>
 					Effect.gen(function* () {
+						if (
+							!job.id.startsWith(`${process.id}/`) ||
+							(supervision !== null && supervision.recovery._tag !== "live")
+						)
+							return [];
+						const origin = process;
+						const originStore = store;
 						const state = live;
 						if (state === null) return [];
 						const m = yield* cmdType(job) === WRITE
@@ -555,8 +1027,35 @@ export class ProgramRunner extends Context.Service<
 							: handle(state, job);
 						return yield* permit.withPermit(
 							Effect.gen(function* () {
-								const current = yield* ready();
 								const answer = `${job.id}/answer`;
+								if (
+									origin.id !== process.id ||
+									(supervision !== null && supervision.recovery._tag !== "live")
+								) {
+									yield* originStore.record(
+										answer,
+										RuntimeRecord.cases["cmd.answered"].make({
+											m: Schema.decodeUnknownSync(Schema.Json)(m),
+											cmd: job.id,
+											build: origin.build,
+										}),
+										{...(yield* from(job.parent, job.traceId)), build: origin.build},
+									);
+									const old = yield* originStore.load;
+									if (old !== null)
+										yield* originStore.save({
+											...old,
+											cmds: old.cmds.filter(
+												(cmd) =>
+													typeof cmd !== "object" ||
+													cmd === null ||
+													!("id" in cmd) ||
+													cmd.id !== job.id,
+											),
+										});
+									return [];
+								}
+								const current = yield* ready();
 								const sent = yield* mailbox
 									.send(process.name, answer, m, yield* from(job.parent, job.traceId))
 									.pipe(
@@ -586,6 +1085,7 @@ export class ProgramRunner extends Context.Service<
 				): Effect.Effect<A, RunnerFailure> =>
 					Effect.gen(function* () {
 						const {answer, jobs} = yield* turn;
+						yield* recording.flush;
 						yield* runAll(jobs);
 						return answer;
 					}).pipe(
@@ -649,16 +1149,40 @@ export class ProgramRunner extends Context.Service<
 									Effect.mapError(() => new RunnerError({why: "bad_input"})),
 								);
 								yield* Effect.annotateCurrentSpan(tag("letter"), input.id);
-								return yield* turn((state) => accept(state, input));
+								return yield* permit.withPermit(
+									Effect.gen(function* () {
+										yield* ensure();
+										const receipt = supervision?.receipts.find((r) => r.letter === input.id);
+										if (receipt !== undefined) {
+											const digest =
+												receipt.digest ??
+												(yield* inputDigest(Schema.decodeUnknownSync(Incoming)(receipt.input)));
+											if ((yield* inputDigest(input)) !== digest)
+												return {answer: Sent.cases.refused.make({why: "id_reused"}), jobs: []};
+											if (receipt.result !== null)
+												return {answer: Sent.cases.refused.make({why: "dead"}), jobs: []};
+										}
+										const state = yield* ready();
+										const retried = takeRetry();
+										const {answer, jobs} = yield* accept(state, input);
+										return {answer, jobs: [...retried, ...jobs]};
+									}),
+								);
 							}),
 						),
 					due: (time: number) =>
 						call(
 							"runner.due",
-							turn((state) =>
+							permit.withPermit(
 								Effect.gen(function* () {
-									if (state.wake === null || state.wake > time)
+									yield* ensure(time);
+									if (supervision !== null && supervision.recovery._tag !== "live")
 										return {answer: undefined, jobs: []};
+									const state = yield* ready();
+									if (state.wake === null || state.wake > time) {
+										yield* alarm.set(state.wake);
+										return {answer: undefined, jobs: []};
+									}
 									const id = `${process.id}/due/${time}`;
 									const sent = yield* mailbox
 										.send(
@@ -674,6 +1198,58 @@ export class ProgramRunner extends Context.Service<
 										return yield* new LedgerError({why: "refused", message: sent.why});
 									const {fresh} = yield* catchUp(state, {mine: id});
 									return {answer: undefined, jobs: fresh};
+								}),
+							),
+						),
+					restart: (request: {readonly id: string; readonly build: string}) =>
+						call(
+							"runner.restart.request",
+							permit.withPermit(
+								Effect.gen(function* () {
+									if (recovery === null) return yield* new LedgerError({why: "unreachable"});
+									yield* ensure();
+									const s = yield* currentRecovery;
+									const prior = s.requests?.find((r) => r.id === request.id);
+									if (prior !== undefined) {
+										if (prior.build !== request.build)
+											return yield* new RunnerError({why: "bad_input"});
+										return {answer: undefined, jobs: []};
+									}
+									const p = yield* coordinator;
+									const status = yield* p.status(process.name);
+									const after = status.state.process;
+									const start = Start.cases.again.make({
+										id: request.id,
+										name: s.name,
+										after,
+										why: "restart",
+										code: {program: process.program, hash: request.build},
+									});
+									const meta = yield* from(null, yield* traceId);
+									if (status.state._tag === "live") {
+										const failure = Failure.cases.interrupted.make({
+											process: after,
+											letter: request.id,
+											build: process.build,
+											seq: s.seq + 1,
+										});
+										yield* saveRecovery({
+											...s,
+											restart: request,
+											recovery: Recovery.cases.ending.make({process: after, failure}),
+											pending: {type: "exit", process: after, from: meta},
+										});
+									} else
+										yield* saveRecovery({
+											...s,
+											build: request.build,
+											restart: request,
+											recovery: Recovery.cases.starting.make({after, request: start}),
+											pending: {type: "start", process: after, from: meta},
+										});
+									yield* continueRecovery();
+									yield* ready();
+									return {answer: undefined, jobs: []};
 								}),
 							),
 						),
@@ -693,7 +1269,7 @@ export class ProgramRunner extends Context.Service<
 							hasParent(input.envelope.input)
 						)
 							return {answer: Sent.cases.refused.make({why: "bad_msg"}), jobs: []};
-						const prior = yield* store.placed(input.id);
+						const prior = (yield* store.placed(input.id)) ?? (yield* store.placedByAny(input.id));
 						if (prior !== null)
 							return {answer: Sent.cases.accepted.make({rev: prior.rev, pos: prior.pos}), jobs: []};
 						const port = inputPort(state, input.envelope.input);
@@ -706,9 +1282,37 @@ export class ProgramRunner extends Context.Service<
 						const m = stamp(input.envelope.input, input.envelope.id);
 						if (Result.isFailure(Schema.decodeUnknownResult(port.schema)(m)))
 							return {answer: Sent.cases.refused.make({why: "bad_msg"}), jobs: []};
-						const prepared = yield* step("step", input.id, () =>
-							state.loaded.stepper.step(state.model, m),
+						if (supervision !== null && !supervision.receipts.some((r) => r.letter === input.id))
+							yield* saveRecovery({
+								...supervision,
+								receipts: [
+									...supervision.receipts,
+									{
+										letter: input.id,
+										input: Schema.decodeUnknownSync(Schema.Json)(input),
+										digest: yield* inputDigest(input),
+										errors: [],
+										tries: 0,
+										result: null,
+										process: process.id,
+									},
+								],
+							});
+						const preparation = yield* Effect.result(
+							step("step", input.id, () => state.loaded.stepper.step(state.model, m)),
 						);
+						if (Result.isFailure(preparation)) {
+							const terminal = supervision?.receipts.find((r) => r.letter === input.id)?.result;
+							if (
+								preparation.failure instanceof ProgramDown &&
+								terminal !== null &&
+								terminal !== undefined &&
+								supervision?.pending === null
+							)
+								return {answer: Sent.cases.refused.make({why: "dead"}), jobs: []};
+							return yield* Effect.fail(preparation.failure);
+						}
+						const prepared = preparation.success;
 						if (prepared._tag === "refused") {
 							const {_tag: _case, ...why} = prepared;
 							return {answer: Sent.cases.refused.make(why), jobs: []};
@@ -718,6 +1322,19 @@ export class ProgramRunner extends Context.Service<
 						if (appended._tag === "refused") {
 							yield* store.save(checkpoint(state, null));
 							return {answer: Sent.cases.refused.make({why: appended.why}), jobs: []};
+						}
+						// The inbox now holds the accepted input. Failed deliveries keep their original body.
+						if (supervision !== null) {
+							const receipt = supervision.receipts.find((r) => r.letter === input.id);
+							if (receipt !== undefined && receipt.tries === 0) {
+								const digest = receipt.digest ?? (yield* inputDigest(input));
+								yield* saveRecovery({
+									...supervision,
+									receipts: supervision.receipts.map((r) =>
+										r.letter === input.id ? {...r, input: null, digest} : r,
+									),
+								});
+							}
 						}
 						const {fresh} = yield* catchUp(state, {mine: input.id, dirty: true});
 						return {
@@ -735,7 +1352,7 @@ export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError"
 	why: Schema.Literals(["bad_input", "bad_client"]),
 }) {}
 
-type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError;
+type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError | ProcessError;
 
 const cmdType = (job: Dispatched): string =>
 	Option.match(decodeTyped(job.cmd), {onNone: () => "", onSome: (c) => c.type});
