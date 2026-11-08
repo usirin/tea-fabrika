@@ -85,7 +85,7 @@ const world = (thrown: unknown = new TypeError(PRIVATE)) => {
 		msg: Msg,
 		view: {data: Model, select: (s: Model) => s},
 		refuse: () => null,
-		inputs: {},
+		inputs: {poison: {_tag: "write", schema: Msg, description: "Poison", personOnly: false}},
 		outputs: {},
 		writes: {},
 		wake: () => null,
@@ -128,13 +128,7 @@ const world = (thrown: unknown = new TypeError(PRIVATE)) => {
 								alarms.push(at);
 							}),
 					}),
-					Layer.effect(
-						Recording,
-						Effect.gen(function* () {
-							const s = yield* SpanSink;
-							return {flush: s.flush};
-						}),
-					),
+					Recording.layer,
 				).pipe(Layer.provideMerge(base())),
 			),
 		);

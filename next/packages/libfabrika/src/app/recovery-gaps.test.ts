@@ -138,7 +138,12 @@ const world = Effect.fnUntraced(function* () {
 		msg: Msg,
 		view: {data: Model, select: (s: Model) => s},
 		refuse: () => null,
-		inputs: {},
+		inputs: {
+			poison: {_tag: "write", schema: Msg, description: "Poison", personOnly: false},
+			add: {_tag: "write", schema: Msg, description: "Add", personOnly: false},
+			wait: {_tag: "write", schema: Msg, description: "Wait", personOnly: false},
+			queue: {_tag: "write", schema: Msg, description: "Queue", personOnly: false},
+		},
 		outputs: {},
 		writes: {saved: {schema: Schema.TaggedStruct("saved", {count: Schema.Int}), personOnly: false}},
 		wake: () => null,
@@ -298,9 +303,28 @@ describe("P34 interrupted recovery", () => {
 				w.controls.cut = cut;
 				if (cut === "after_down") {
 					w.controls.saved = true;
-					yield* Mailbox.use((m) => m.send(NAME, "saved", {type: "add", n: 7}, from())).pipe(
-						Effect.provide(w.layer()),
-					);
+					// Accepted before the saved model, as P11 marks one: sent and indexed as placed.
+					yield* Effect.gen(function* () {
+						const sent = yield* Mailbox.use((m) =>
+							m.send(NAME, "saved", {type: "add", n: 7}, from()),
+						);
+						if (sent._tag === "placed")
+							yield* ProcessStore.use((s) =>
+								s.save(
+									{
+										saved: {
+											v: 1,
+											build: "build-a",
+											model: {count: 0, replies: 0, queue: null},
+											after: 0,
+										},
+										turn: null,
+										cmds: [],
+									},
+									[{id: "saved", rev: sent.rev, pos: sent.pos}],
+								),
+							);
+					}).pipe(Effect.provide(w.layer()));
 					yield* ProgramRunner.use((r) => Effect.exit(r.open("wake"))).pipe(
 						Effect.provide(w.layer()),
 					);
@@ -445,7 +469,7 @@ describe("P34 interrupted recovery", () => {
 				yield* Effect.gen(function* () {
 					const r = yield* ProgramRunner;
 					const sessions = yield* SessionManager;
-					const input = w.input("queued", {type: "queue", parent: `in-${X}-1`});
+					const input = w.input("queued", {type: "queue"});
 					yield* sessions.record({
 						id: input.envelope.id,
 						by: owner,

@@ -125,7 +125,12 @@ const world = () => {
 			msg: Msg,
 			view: {data: Model, select: (s: Model) => s},
 			refuse: (_s: Model, m: typeof Msg.Type) => (m.type === "refuse" ? {why: "bad_msg"} : null),
-			inputs: {},
+			inputs: {
+				add: {_tag: "write", schema: Msg, description: "Add", personOnly: false},
+				poison: {_tag: "write", schema: Msg, description: "Poison", personOnly: false},
+				work: {_tag: "write", schema: Msg, description: "Work", personOnly: false},
+				refuse: {_tag: "write", schema: Msg, description: "Refuse", personOnly: false},
+			},
 			outputs: {},
 			writes: {},
 			wake: () => null,
@@ -234,6 +239,22 @@ const failed = <A, E, R>(e: Effect.Effect<A, E, R>) =>
 		Effect.exit,
 		Effect.tap((exit) => Effect.sync(() => expect(Exit.isFailure(exit)).toBe(true))),
 	);
+/** A letter accepted before the saved model, as P11 marks one: sent and indexed as placed. */
+const accepted = (
+	id: string,
+	m: unknown,
+	saved: {saved: unknown; turn: unknown; cmds: ReadonlyArray<unknown>} | null,
+) =>
+	Effect.gen(function* () {
+		const sent = yield* Mailbox.use((box) => box.send(NAME, id, m, from()));
+		const checkpoint = saved ?? {
+			saved: {v: 1, build: BUILD, model: {count: 0, replies: 0}, after: 0},
+			turn: null,
+			cmds: [],
+		};
+		if (sent._tag === "placed")
+			yield* ProcessStore.use((s) => s.save(checkpoint, [{id, rev: sent.rev, pos: sent.pos}]));
+	});
 const recover = (w: ReturnType<typeof world>) =>
 	Effect.gen(function* () {
 		const deadline = w.alarms.at(-1);
@@ -458,8 +479,9 @@ describe("P34 runner supervision", () => {
 				);
 				let before: unknown;
 				yield* Effect.gen(function* () {
-					before = yield* ProcessStore.use((s) => s.load);
-					yield* Mailbox.use((m) => m.send(NAME, "saved-bad", {type: "add", n: 9}, from()));
+					const saved = yield* ProcessStore.use((s) => s.load);
+					before = saved;
+					yield* accepted("saved-bad", {type: "add", n: 9}, saved);
 				}).pipe(Effect.provide(w.layer()));
 				w.controls.savedThrows = true;
 				w.reopen();
@@ -481,7 +503,8 @@ describe("P34 runner supervision", () => {
 			Effect.gen(function* () {
 				const w = world();
 				yield* w.boot;
-				yield* Mailbox.use((m) => m.send(NAME, "saved", {type: "add", n: 1}, from())).pipe(
+				yield* ProcessStore.use((s) => s.load).pipe(
+					Effect.flatMap((saved) => accepted("saved", {type: "add", n: 1}, saved)),
 					Effect.provide(w.layer()),
 				);
 				w.controls.savedThrows = true;
