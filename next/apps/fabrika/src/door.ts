@@ -174,7 +174,7 @@ const methods: ReadonlySet<string> = new Set([
 	"door.deny",
 ]);
 
-type Options<A, R> = {
+type Options<A, RNext, RDeliver, RNotify> = {
 	readonly sql: Parameters<typeof doorStore>[0];
 	readonly founder: Parameters<typeof ClientManager.layer>[0];
 	readonly name: string;
@@ -186,13 +186,13 @@ type Options<A, R> = {
 	readonly waiting: {readonly most: number; readonly ttl: number};
 	readonly ping: {readonly min: number; readonly max: number};
 	readonly inputCap: number;
-	readonly nextProcess: () => Effect.Effect<string, never, R>;
+	readonly nextProcess: () => Effect.Effect<string, never, RNext>;
 	readonly deliver: (
 		process: string,
 		envelope: Envelope<A>,
 		span: typeof Link.Type,
-	) => Effect.Effect<void, LedgerError | SinkError | SigningRefused | NotGranted, R>;
-	readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError, R>;
+	) => Effect.Effect<void, LedgerError | SinkError | SigningRefused | NotGranted, RDeliver>;
+	readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError, RNotify>;
 	readonly inputs: {
 		readonly schema: Schema.Codec<A, unknown>;
 		readonly personOnly: ReadonlyArray<string>;
@@ -202,8 +202,10 @@ type Options<A, R> = {
 	readonly facts: {readonly personOnly: ReadonlyArray<string>};
 };
 
-const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
-	const context = yield* Effect.context<R>();
+const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
+	options: Options<A, RNext, RDeliver, RNotify>,
+) {
+	const context = yield* Effect.context<RNext | RDeliver | RNotify>();
 	const ledger = yield* Ledger;
 	const clients = yield* ClientManager;
 	const sink = yield* SpanSink;
@@ -971,7 +973,9 @@ const make = Effect.fnUntraced(function* <A, R>(options: Options<A, R>) {
 export class Door extends Context.Service<Door, Effect.Success<ReturnType<typeof make>>>()(
 	"@kampus/fabrika/Door",
 ) {
-	static readonly layer = <A, R>(options: Options<A, R>) => Layer.effect(Door, make(options));
+	static readonly layer = <A, RNext, RDeliver, RNotify>(
+		options: Options<A, RNext, RDeliver, RNotify>,
+	) => Layer.effect(Door, make(options));
 }
 
 const HelloFact = Schema.TaggedStruct("initialized", {
