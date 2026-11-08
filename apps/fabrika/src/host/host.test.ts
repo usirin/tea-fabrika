@@ -364,9 +364,10 @@ describe("the host", () => {
 				const refused = yield* until("why", () =>
 					a.rows("t1").find((r) => r.startsWith("tsh: focus failed")),
 				);
-				a.type("t1", "agents\r");
-				const shown = yield* until("the agents' lines on b", () =>
-					b.page().find((m) => m.type === "show" && m.what === "agents"),
+				// `agents` is a tsh built-in now (the plan's grammar), so C-b S's desk word stands in.
+				a.type("t1", "sync\r");
+				const shown = yield* until("the sync lines on b", () =>
+					b.page().find((m) => m.type === "show" && m.what === "sync"),
 				);
 				yield* host.stop;
 				return {said, split, refused, shown};
@@ -380,7 +381,7 @@ describe("the host", () => {
 		expect(tileIds(seen.split)).toEqual(["t1", "t2"]);
 		expect(seen.split.workspaces[0].focused).toBe("t2");
 		expect(seen.refused).toBe("tsh: focus failed: no tile t9");
-		expect(seen.shown).toEqual({type: "show", what: "agents"});
+		expect(seen.shown).toEqual({type: "show", what: "sync"});
 	});
 
 	it("refuses an app of another version, says which, and runs on for the next app", async () => {

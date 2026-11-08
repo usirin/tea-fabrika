@@ -9,12 +9,14 @@
 		"typecheck": "tsc --noEmit -p ."
 	},
 	"dependencies": {
+		"@kampus/libfabrika": "workspace:*",
 		"@effect/platform-node": "catalog:",
 		"effect": "catalog:",
 		"oxc-parser": "catalog:",
 		"oxc-transform-react": "catalog:"
 	},
 	"devDependencies": {
+		"@effect/vitest": "catalog:",
 		"@types/node": "catalog:",
 		"esbuild": "catalog:",
 		"typescript": "catalog:",

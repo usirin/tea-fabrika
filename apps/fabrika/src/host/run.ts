@@ -1,6 +1,7 @@
 import {monitorEventLoopDelay} from "node:perf_hooks";
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
 import {keepJobs, layerRecordTraces, openJobs, stepsInto, writerText} from "@kampus/fabrika-old";
+import {summonManager} from "@kampus/fabrika-old/agents/summon";
 import {RestartRefused} from "@kampus/fabrika-old/mcp";
 import {recordTracing} from "@kampus/fabrika-old/otel";
 import {sqliteRecords} from "@kampus/fabrika-old/records";
@@ -86,9 +87,14 @@ export const runHost = (options: {
 	readonly settings?: string | undefined;
 	/** The host runs on a Mac: `mod` in the keys file is Cmd there, and Ctrl elsewhere. */
 	readonly mac?: boolean | undefined;
+	/**
+	 * The person's git repository, where the agents they summon work (`FABRIKA_REPO`). Not said:
+	 * the host keeps no summoned agents, and tsh's `summon` says how to give it one.
+	 */
+	readonly repo?: string | undefined;
 }) =>
 	Effect.gen(function* () {
-		const {home, pid, ours, build, settings = home, mac = false} = options;
+		const {home, pid, ours, build, settings = home, mac = false, repo} = options;
 		/** The build this host names: `BUILD`, but in a test of an older host. */
 		const named = build === undefined ? BUILD : build;
 		const fs = yield* FileSystem.FileSystem;
@@ -157,6 +163,13 @@ export const runHost = (options: {
 		const before = yield* takeNote(paths);
 		// One job table for the host process, for every tile's tsh, open until the host stops. After
 		// a restart, each tile's tsh names who restarted it beside its jobs from an earlier tsh.
+		// The agents the person summons, in their repository, kept in the home for the next start.
+		const summons =
+			repo === undefined
+				? Context.empty()
+				: yield* Layer.build(
+						summonManager({storage: fileStorage(at("storage", "summon")), folder: repo}),
+					);
 		const jobs = {
 			...keepJobs(
 				yield* openJobs(fileStorage(at("storage", "jobs"), stepsInto(records))),
@@ -252,6 +265,7 @@ export const runHost = (options: {
 		}).pipe(
 			Effect.provideService(SocketServer.SocketServer, server),
 			Effect.provideContext(ledger),
+			Effect.provideContext(summons),
 			// Each lane step's begin and end in the log, read off the spans the records keep.
 			Effect.provide(logSteps),
 			Effect.provide(Layer.merge(layerRecordTraces(records), recordTracing(records))),

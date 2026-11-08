@@ -274,13 +274,13 @@ export interface Said {
 }
 
 /**
- * The agents' item: how many agents are attached to the host's agents' socket now, or `null`
- * when none is. Those are the agents at work on this desk: each drives the app's programs as tools
- * (host/agents.ts). No agent attached is not news, on a host where one could attach or on one
+ * The agents' item: how many agents are at work on this desk now, or `null` when none is: those
+ * the person summoned here (tsh's `summon`), and those attached to the host's agents' socket, each
+ * driving the app's programs as tools (host/agents.ts). No agent attached is not news, on a host where one could attach or on one
  * with no agents' socket (an older host's); C-b A still opens lines that say which.
  */
 export const agentsWord = (host: HostNow): string | null => {
-	const n = host.agents?.length ?? 0;
+	const n = (host.agents?.length ?? 0) + (host.summoned?.length ?? 0);
 	return n === 0 ? null : `${n} agent${n === 1 ? "" : "s"}`;
 };
 

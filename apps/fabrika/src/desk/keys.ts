@@ -184,7 +184,8 @@ export const groupOf = (does: Does): Group => {
 /**
  * The tsh word that does what `does` does, typed in a tile: one program per kind of command
  * (desk/words.ts), with `--to` where a key picks a way. `close-tile`, not `close`: tsh's own
- * `close %n input` ends a job's input.
+ * `close %n input` ends a job's input. `turn-container`, not `turn`: `turn` is one turn of a
+ * summoned agent (`@scout ...`), a program of its own.
  */
 export const wordOf = (does: Does): string => {
 	switch (does.kind) {
@@ -197,6 +198,7 @@ export const wordOf = (does: Does): string => {
 		case "go":
 			return `focus --to ${does.tile}`;
 		case "turn":
+			return "turn-container";
 		case "fold":
 		case "zoom":
 			return does.kind;

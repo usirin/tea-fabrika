@@ -1,8 +1,10 @@
-import {Duration, Effect, Schema} from "effect";
+import {Duration, Effect, Layer, Schema} from "effect";
 import {describe, expect, it} from "vitest";
 import {HostJobs, openJobs} from "../host/host-jobs.ts";
 import {ear} from "../program/ear.ts";
-import {start, tell} from "../program/program.ts";
+import {listed} from "../program/listed.ts";
+import {defineProgram, start, tell} from "../program/program.ts";
+import {input} from "../program/shape.ts";
 import {memoryStorage, type Storage} from "../program/storage.ts";
 import {SAVED_BY_OLDER_CODE} from "./execute.ts";
 import {Programs, programList} from "./programs.ts";
@@ -14,6 +16,54 @@ import {SMALL} from "./small.ts";
 // its kept state untouched. Every other job still opens.
 
 const SMALL_LIST = programList(SMALL);
+
+it("reports a stopped pipeline when an earlier stage already ended", async () => {
+	const printed = ear<Printed>();
+	const ready = ear<Ready>();
+	let reading = false;
+	const wait = defineProgram({
+		name: "wait",
+		description: "Wait after reading one number.",
+		inputs: {n: input(Schema.Int, "A number.")},
+		outputs: {},
+		main: ({serve}) =>
+			serve({
+				n: () =>
+					Effect.sync(() => {
+						reading = true;
+					}).pipe(Effect.andThen(Effect.never)),
+			}),
+	});
+	await Effect.runPromise(
+		Effect.gen(function* () {
+			const storage = memoryStorage();
+			const jobs = yield* openJobs(storage);
+			const started = yield* start(
+				tsh,
+				{show: "short"},
+				{printed: printed.hear, ready: ready.hear},
+				{
+					id: "tsh:mixed-end",
+					storage,
+				},
+			).pipe(
+				Effect.provideService(HostJobs, jobs),
+				Effect.provideService(Programs, programList([...SMALL, listed(wait, Layer.empty)])),
+			);
+			if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+			yield* tell(started.run, "line", "seq --to 1 | wait");
+			while (!reading) yield* Effect.sleep(Duration.millis(5));
+			// Let the producer finish after delivering its one value.
+			yield* Effect.sleep(Duration.millis(20));
+			yield* tell(started.run, "signal", "interrupt");
+			yield* ready.upTo(1);
+		}).pipe(Effect.scoped),
+	);
+	expect(ready.values[0]?.status).toBe(130);
+	expect(printed.values.filter((p) => p.to === "err").map((p) => p.text)).toContain(
+		"[stopped] seq --to 1 | wait",
+	);
+});
 
 /** tally's total as older code might have kept it: under a key this tally does not have. */
 const OlderTotal = Schema.Struct({sum: Schema.Int});

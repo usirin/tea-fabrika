@@ -1,12 +1,15 @@
 import {Effect} from "effect";
 import {type Job, jobNamed} from "../host/jobs.ts";
 import {writerOf} from "../host/writer.ts";
+import type {TableView} from "../program/person.ts";
 import {copyRows, fullRows} from "./copies.ts";
 import {readValue} from "./decode.ts";
 import {didYouMean} from "./did-you-mean.ts";
 import {reattach, type Shell, stopJob, waitForJob} from "./execute.ts";
 import type {Named, Statement} from "./grammar.ts";
 import {columns, helpOf} from "./help.ts";
+import type {Summoned} from "./summon.ts";
+import {tableOf} from "./table.ts";
 
 // tsh's built-ins: the words that work on tsh itself, not on a program. They
 // read the host's job table (the `jobs` machine's state, ../host/jobs.ts),
@@ -25,6 +28,9 @@ import {columns, helpOf} from "./help.ts";
 //   programs                what can be started, by name
 //   help [program]          tsh's own help; or a program's, as `<program> --help` prints it (./help.ts)
 //   exit [status]
+//   summon <agent> [model] [effort] as <name>    start an agent under a name, in this repo, on this Mac
+//   dismiss <name>          stop it, cancelling its turn first, and free the name
+//   agents                  each summoned agent: its name, harness, model, effort and what it does now
 
 type BuiltinStatement = Extract<Statement, {readonly kind: "builtin"}>;
 export interface Said {
@@ -46,8 +52,46 @@ export const HELP = [
 	"  <program> --help [name]  (or -h)         how to run it: flags, inputs, outputs; or one whole",
 	"  jobs | ps | programs | help [program] | exit [status]",
 	"  tell %n <input> <value>... | close %n <input> | stop %n | attach %n [&]",
+	"  summon <agent> [model] [effort] as <name> | dismiss <name> | agents",
+	"  @name <anything>                         tell a summoned agent, as typed: one turn, a job",
 	"Values are read as text first, then as JSON. Ctrl-C stops what runs here; Ctrl-D leaves.",
 ].join("\n");
+
+/** What a summoned agent runs on, in words: its harness, model and effort. */
+const settingsOf = (s: Summoned): string => {
+	const {typed, resolved} = s.model;
+	const model =
+		typed !== null && resolved !== null && typed !== resolved
+			? `${typed} (${resolved})`
+			: (resolved ?? typed ?? "its default model");
+	return [`${s.agent} ${model}`, ...(s.effort.set === null ? [] : [s.effort.set])].join(" · ");
+};
+
+/** The summoned agents as a person reads them, as `gh pr list` lays one out. */
+const AGENTS: TableView<Summoned> = {
+	title: "Agents",
+	note: "summoned here, in this repo, on this Mac",
+	columns: [
+		{header: "Name", cell: (s) => s.name},
+		{header: "Runs on", cell: settingsOf, muted: true},
+		{
+			header: "State",
+			cell: (s) =>
+				s.state === "down"
+					? {text: "down", tone: "warning"}
+					: s.state === "asking"
+						? {text: "asking you", tone: "warning"}
+						: s.state,
+		},
+		{
+			header: "Cost",
+			cell: (s) => (s.cost === null ? "" : `$${s.cost.toFixed(2)}`),
+			align: "right",
+			muted: true,
+		},
+	],
+	cut: "Runs on",
+};
 
 /** The job a built-in's first word names, or why none. */
 function named(shell: Shell, word: Named | undefined, verb: string): Job | string {
@@ -78,7 +122,63 @@ export const runBuiltin = (
 			shell.print("err", `tsh: ${why}`);
 			return failed(status);
 		};
+		/** Only a person summons, dismisses or talks: an agent's tsh never starts a paid run. */
+		const person = writerOf(shell.by ?? "")?.kind === "user";
 		switch (st.name) {
+			case "summon": {
+				if (!person) return refuse("only a person summons an agent");
+				const as = st.args.findIndex((a) => a.name === "as");
+				const agent = first?.name;
+				const name = st.args[as + 1]?.name;
+				if (agent === undefined || as < 1 || name === undefined)
+					return refuse(
+						"summon takes an agent and a name: summon <agent> [model] [effort] as <name>",
+					);
+				const settings = st.args.slice(1, as).map((a) => a.name);
+				const [on, place, ...more] = st.args.slice(as + 2);
+				if (on?.name === "on")
+					return refuse(
+						`${name} would run on this Mac: summon starts agents here only, so leave out on ${place?.name ?? "<place>"}`,
+					);
+				if (on !== undefined || more.length > 0)
+					return refuse(`summon ends with its name: nothing after as ${name}`);
+				if (settings.length > 2)
+					return refuse(
+						`summon takes at most two settings, a model then an effort, not ${settings.join(" ")}`,
+					);
+				const made = yield* shell.summons
+					.summon({agent, settings, name, by: shell.by ?? ""})
+					.pipe(Effect.result);
+				if (made._tag === "Failure") return refuse(made.failure.why, 1);
+				shell.print(
+					"out",
+					`  ${made.success.name} · ${settingsOf(made.success)} · in this repo, on this Mac · ready`,
+				);
+				return ok;
+			}
+			case "dismiss": {
+				if (!person) return refuse("only a person dismisses an agent");
+				if (first === undefined || second !== undefined)
+					return refuse("dismiss takes one name: dismiss <name>");
+				const gone = yield* shell.summons.dismiss(first.name, shell.by ?? "").pipe(Effect.result);
+				if (gone._tag === "Failure") return refuse(gone.failure.why, 1);
+				const {cut} = gone.success;
+				shell.print(
+					"out",
+					`  ${first.name} dismissed${cut === null ? "" : `: its turn ${cut} was cancelled first`}`,
+				);
+				return ok;
+			}
+			case "agents": {
+				if (first !== undefined) return refuse("agents takes no words");
+				const all = yield* shell.summons.list;
+				if (all.length === 0) {
+					shell.print("out", "No agent is summoned. summon <agent> as <name> starts one.");
+					return ok;
+				}
+				shell.printTable(tableOf(AGENTS, all, {all: true, typed: "agents"}));
+				return ok;
+			}
 			case "help": {
 				if (first === undefined) {
 					for (const line of HELP.split("\n")) shell.print("out", line);

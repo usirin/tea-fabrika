@@ -22,6 +22,7 @@ type Flags = Given<(typeof acpProgram)["flags"]>;
 type Heard = {
 	readonly opened: ReturnType<typeof ear<unknown>>;
 	readonly said: ReturnType<typeof ear<string>>;
+	readonly told: ReturnType<typeof ear<{readonly turn: number}>>;
 	readonly result: ReturnType<typeof ear<{readonly stop: string; readonly turn: number}>>;
 	readonly ask: ReturnType<typeof ear<{readonly ask: string; readonly answer: string}>>;
 };
@@ -44,13 +45,14 @@ let runs = 0;
 /** One start of the acp program, kept under `id` in `storage`. */
 const life = (flags: Flags, storage: Storage, id: string) =>
 	Effect.gen(function* () {
-		const heard: Heard = {opened: ear(), said: ear(), result: ear(), ask: ear()};
+		const heard: Heard = {opened: ear(), said: ear(), told: ear(), result: ear(), ask: ear()};
 		const started = yield* start(
 			acpProgram,
 			flags,
 			{
 				opened: heard.opened.hear,
 				said: heard.said.hear,
+				told: heard.told.hear,
 				result: heard.result.hear,
 				ask: heard.ask.hear,
 			},
@@ -90,6 +92,48 @@ const run = <A, E>(effect: Effect.Effect<A, E, Node | Scope.Scope>) =>
 	Effect.runPromise(onNode(effect));
 
 describe("acp on the fake agent", () => {
+	it("sets the requested permission mode before reporting opened", async () => {
+		const opened = await run(
+			Effect.gen(function* () {
+				const {started, heard} = yield* life(
+					fake(scratch(), {mode: "plan"}),
+					memoryStorage(),
+					"acp:initial-mode",
+				);
+				return yield* Effect.race(heard.opened.upTo(1), Effect.as(started.run.ended, []));
+			}),
+		);
+		expect(opened).toMatchObject([{mode: "plan"}]);
+	});
+
+	it("reports elapsed turn time, not a wall-clock timestamp", async () => {
+		const before = Date.now();
+		const results = await run(
+			Effect.gen(function* () {
+				const result = ear<{ms: number}>();
+				const started = yield* start(
+					acpProgram,
+					fake(scratch()),
+					{result: result.hear},
+					{
+						id: "acp:elapsed",
+						storage: memoryStorage(),
+					},
+				);
+				if (started.kind !== "running") return yield* Effect.die("acp did not start");
+				yield* tell(started.run, "prompt", "hello");
+				return yield* result.upTo(1);
+			}),
+		);
+		expect(results).toHaveLength(1);
+		expect(results[0]?.ms).toBeGreaterThanOrEqual(0);
+		expect(results[0]?.ms).toBeLessThanOrEqual(Date.now() - before);
+	});
+
+	it("accepts refuse as a permission setting and rejects an empty setting", () => {
+		expect(acpProgram.flags.permissions.shape.check("refuse")).toBe(true);
+		expect(acpProgram.flags.permissions.shape.check("")).toBe(false);
+	});
 	it("three turns (read two files and answer, then two follow-ups): three answers, one transcript of three whole turns", async () => {
 		const folder = scratch();
 		const {said, shapes, opened} = await run(
@@ -230,6 +274,7 @@ describe("acp on the fake agent", () => {
 							yield* started.run.ended;
 							return {
 								opened: heard.opened.values,
+								told: heard.told.values,
 								results: heard.result.values,
 								transcript: transcript(),
 							};
@@ -241,6 +286,8 @@ describe("acp on the fake agent", () => {
 					expect(sent.map((l) => l.split(" ")[3])).toEqual(["Read", "slowly", "slowly"]);
 					expect(again.opened).toMatchObject([{how: reopen, earlier: 1, resent: 1}]);
 					expect(again.results).toMatchObject([{turn: 2, stop: "end_turn"}]);
+					// The resent prompt is told once more under its own number, for a job that waits on it.
+					expect(again.told).toEqual([{turn: 2}]);
 					// Loaded, the transcript comes back from the replay; resumed, only what came after.
 					const replayed = again.transcript?.messages.filter((m) => m.turn === null).length ?? 0;
 					if (reopen === "load") expect(replayed).toBeGreaterThan(0);

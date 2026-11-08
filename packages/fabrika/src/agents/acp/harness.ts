@@ -1,5 +1,5 @@
 import {createHash} from "node:crypto";
-import {readdirSync, realpathSync} from "node:fs";
+import {existsSync, readdirSync, realpathSync} from "node:fs";
 import {userInfo} from "node:os";
 import {basename, dirname, isAbsolute, join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -118,7 +118,24 @@ export type Row = "claude" | "fake" | {readonly name: "codex"; readonly access: 
 /** The row's name. */
 export const rowName = (row: Row): AgentName => (typeof row === "string" ? row : row.name);
 
-const at = (path: string) => fileURLToPath(new URL(path, import.meta.url));
+/**
+ * This folder in the checkout. Beside this file when it runs from source; from the app's bundle
+ * (apps/fabrika/dist), which holds this code but not the fake agent or the adapters, it is found
+ * from the checkout's root, the folder above with `pnpm-workspace.yaml`.
+ */
+const HERE = (() => {
+	const here = fileURLToPath(new URL(".", import.meta.url));
+	if (existsSync(join(here, "fake-agent.ts"))) return here;
+	for (let up = here; dirname(up) !== up; up = dirname(up))
+		if (existsSync(join(up, "pnpm-workspace.yaml")))
+			return join(up, "packages", "fabrika", "src", "agents", "acp");
+	return here;
+})();
+
+const at = (path: string) => {
+	const whole = join(HERE, path);
+	return path.endsWith("/") && !whole.endsWith("/") ? `${whole}/` : whole;
+};
 
 /** Where the pinned adapters are installed: `pnpm --dir adapters install --ignore-workspace --frozen-lockfile`. */
 export const ADAPTERS = at("../../../../../adapters/node_modules/");
@@ -200,6 +217,10 @@ const LOGINS = [...LOGIN_FILES, ".codex/auth.json", CODEX_HOMES];
 
 /** Closed whether it is there or not. `.codex` is not a login: its `packages` may be opened. */
 const ALWAYS_CLOSED = [...LOGINS, ".codex"];
+
+const HIDDEN_FILES = ["**/.env", "**/.env.*"];
+
+const PROTECTED_FILES = [".fabrika", ".envrc", ".husky", ".claude", ".github/workflows"];
 
 const plain = (path: string) => path.replace(/(?<=.)\/+$/, "");
 
@@ -510,14 +531,13 @@ export const codexConfig = (
 			// `:workspace` makes the working folder writable whatever the folder's own line says
 			// (experiment 163, part 3), so a read turn starts from `:read-only`.
 			extends: access === "write" ? ":workspace" : ":read-only",
-			filesystem: homeFence(
-				home,
-				[...tools, ADAPTERS.replace(/\/$/, "")],
-				folder,
-				access,
-				disk,
-				logins,
-			),
+			filesystem: {
+				...homeFence(home, [...tools, ADAPTERS.replace(/\/$/, "")], folder, access, disk, logins),
+				...lines(
+					HIDDEN_FILES.map((path) => `/${path}`),
+					"deny" as const,
+				),
+			},
 		},
 	},
 	// Codex's own features that reach past the folder, on by default in a fresh home (listed at codex
@@ -738,23 +758,53 @@ export const withSystem = (
 };
 
 /** The Agent SDK options the Claude adapter is handed, the builder's own less what is a function. */
-export const claudeOptions = (folder: string, budget: number | null) => ({
-	settingSources: [],
-	strictMcpConfig: true,
-	mcpServers: {},
-	settings: {disableClaudeAiConnectors: true},
-	allowDangerouslySkipPermissions: false,
-	tools: [...TOOLS],
-	sandbox: {
-		enabled: true,
-		failIfUnavailable: true,
-		autoAllowBashIfSandboxed: true,
-		allowUnsandboxedCommands: false,
-		network: {allowedDomains: [], strictAllowlist: true},
-		filesystem: filesOf(folder),
-	},
-	...(budget === null ? {} : {maxBudgetUsd: budget}),
-});
+export const claudeOptions = (folder: string, budget: number | null) => {
+	const files = filesOf(folder);
+	return {
+		settingSources: [],
+		strictMcpConfig: true,
+		mcpServers: {},
+		settings: {
+			disableClaudeAiConnectors: true,
+			permissions: {deny: HIDDEN_FILES.map((path) => `Read(${path})`)},
+		},
+		allowDangerouslySkipPermissions: false,
+		tools: [...TOOLS],
+		sandbox: {
+			enabled: true,
+			failIfUnavailable: true,
+			autoAllowBashIfSandboxed: true,
+			allowUnsandboxedCommands: false,
+			network: {allowedDomains: [], strictAllowlist: true},
+			filesystem: {...files, denyRead: [...files.denyRead, ...HIDDEN_FILES]},
+		},
+		...(budget === null ? {} : {maxBudgetUsd: budget}),
+	};
+};
+
+/** A plain ACP session cannot plant commands in the person's repository for later execution. */
+const claudeRepoOptions = (folder: string, budget: number | null) => {
+	const base = claudeOptions(folder, budget);
+	return {
+		...base,
+		settings: {
+			...base.settings,
+			permissions: {
+				deny: [
+					...base.settings.permissions.deny,
+					...PROTECTED_FILES.flatMap((path) => [`Edit(${path})`, `Edit(${path}/**)`]),
+				],
+			},
+		},
+		sandbox: {
+			...base.sandbox,
+			filesystem: {
+				...base.sandbox.filesystem,
+				denyWrite: PROTECTED_FILES.map((path) => join(folder, path)),
+			},
+		},
+	};
+};
 
 /** Node, warnings about its own experimental parts off: they go to stderr, which nobody reads. */
 const node = (script: string): Pick<Spawnable, "command" | "args"> => ({
@@ -788,7 +838,7 @@ export function harnessOf(
 				...node(CLAUDE),
 				env: fencedEnv(agentEnv(parent)),
 				script: CLAUDE,
-				meta: {claudeCode: {options: claudeOptions(folder, budget)}},
+				meta: {claudeCode: {options: claudeRepoOptions(folder, budget)}},
 			};
 		case "fake":
 			return {name: row, ...node(FAKE), env: runEnv(parent), script: FAKE, meta: undefined};

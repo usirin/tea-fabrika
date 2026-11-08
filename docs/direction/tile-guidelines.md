@@ -5,6 +5,10 @@ as a lesson. It holds the written rules for every part of a tile, each tested ag
 would build it. [Pipe colors](./pipe-colors.md) and [color principles](./color-principles.md) came
 first, and this note applies them.
 
+**Changed 2026-11-08:** design foundations PR 1 builds slate a9 focus in both looks for today's
+version, shared by the plain tile's edge and strip ring through `--focus`. Dark pipes stay at a8;
+light pipes keep their a9 to a11 steps. The slate focus ratios below use the new value.
+
 ```tsx
 // A sketch. One region per open tile. Color decorates; a letter, a shape or a word says the fact.
 <section className="tile focused" data-pipe="sky" aria-current="true"
@@ -104,13 +108,14 @@ Where Linear and the tiling tools differ. Linear has no tiling, so tmux and Tuva
 ```css
 /* A sketch. Radix Colors 3.0.0, dark alpha, over the ground #111113. */
 :root {
+	--focus: #dfebfd6d;          /* slate a9 in dark; #00051d74 in light */
 	--tile-edge: #d3edf81d;       /* slate a4: --manti-border-subtle (new) */
 	--tile-text: #f1f7feb5;       /* slate a11: --manti-text-muted, and --text-faint */
 	--tile-text-on: #edeef0;      /* slate 12: --manti-text, and the letter */
 	--tile-wash: #d8f4f609;       /* a2 */
 	--tile-wash-on: #ddeaf814;    /* a3 */
 	--tile-edge-hover: #d9edff40; /* a7: --manti-border */
-	--tile-edge-on: #d9edff5d;    /* a8: --manti-border-strong */
+	--tile-edge-on: var(--focus); /* slate a9 in both looks */
 	--tile-edge-loud: #f1f7feb5;  /* a11, only under more contrast */
 }
 [data-pipe="sky"]    { --tile-wash: #1171fb18; --tile-wash-on: #1184fc33; --tile-edge-hover: #2badfe8b; --tile-edge-on: #1db2fea9; --tile-edge-loud: #7cd3ffef; }
@@ -150,7 +155,7 @@ and not a12, so a brought theme repaints it. The bars are
 
 | Color | a11 on rest wash | a12 on rest wash | a11 on focused wash | a12 on focused wash | Focus edge on ground | Focus edge on focused wash |
 |---|---|---|---|---|---|---|
-| slate | 8.68 | 15.25 | 8.08 | 13.86 | 3.02 | **2.99** |
+| slate | 8.68 | 15.25 | 8.08 | 13.86 | 3.68 | 3.57 |
 | sky | 8.62 | 15.12 | 7.67 | 13.04 | 4.07 | 3.60 |
 | pink | 8.77 | 15.52 | 7.96 | 13.73 | 3.55 | 3.30 |
 | teal | 8.60 | 15.08 | 7.56 | 12.81 | 3.87 | 3.64 |
@@ -159,10 +164,10 @@ and not a12, so a brought theme repaints it. The bars are
 | plum | 8.74 | 15.44 | 7.87 | 13.50 | 3.58 | 3.33 |
 
 - **All text clears 4.5:1 by far.** The lowest is 7.56.
-- **Two values are under 3:1.** Violet's focus edge is 2.92 on the focused title, as
-  [pipe colors](./pipe-colors.md) says. Slate's is 2.99, which that note did not record. Both hold
-  along the rest of the tile (3.25 and 3.02). Each crosses only 20px of title, and whether that passes
-  needs a look at the built tile.
+- **One value is under 3:1.** Violet's focus edge is 2.92 on the focused title, as
+  [pipe colors](./pipe-colors.md) says. It holds along the rest of the tile at 3.25. It crosses
+  only 20px of title, and whether that passes needs a look at the built tile. Slate a9 now clears
+  3:1 on both the ground and the focused wash.
 - **The wash carries no needed fact, and it could not.** Rest against ground is 1.05 to 1.08, focused
   against ground 1.19 to 1.29, focused against rest 1.11 to 1.19. The letter, the dot and the edge do
   that work.
@@ -176,9 +181,9 @@ and not a12, so a brought theme repaints it. The bars are
 | What | Step | Contrast | Holds? |
 |---|---|---|---|
 | Resting edge | slate a4 | 1.31 on ground | Only because the title bar identifies the tile |
-| Focused against resting edge | a8 against slate a4 | 2.31 plain; 2.48 to 3.11 in a pipe | Under the 3:1 [1.4.1][c141] allows, except sky, so it needs a second cue |
+| Focused against resting edge | slate a9 or pipe a8 against slate a4 | 2.82 plain; 2.48 to 3.11 in a pipe | Under the 3:1 [1.4.1][c141] allows, except sky, so it needs a second cue |
 | Strip hover | a7 | 2.05 plain; 2.39 to 3.04 in a pipe | Fine for hover, never for focus |
-| Strip ring, on the strip's wash | a8, 2px | 3.03 plain; 3.18 to 3.94 in a pipe | Yes, plain by 0.03 |
+| Strip ring, on the strip's wash | slate a9 or pipe a8, 2px | 3.68 plain; 3.18 to 3.94 in a pipe | Yes |
 | Faint text, on ground | a11, not a10 | 9.07; a10 was 4.45 | Yes |
 
 ## A tile is a region
@@ -325,17 +330,17 @@ touch.
 
 - **Job:** say which tile takes the keys. **Linear:** highlight by hover or arrows ([select
   issues][sel]); no tiling answer.
-- **Rule:** one per workspace. Edge to a8, title wash to step 3, name to step 12 at weight 500. The
-  tile's body stays plain.
+- **Rule:** one per workspace. Edge to slate a9 in both looks; pipes keep their own focus steps.
+  Title wash to step 3, name to step 12 at weight 500. The tile's body stays plain.
 - **Tokens:** `--tile-edge-on`, `--tile-wash-on`, `--tile-text-on`; more contrast a11 at 2px; forced 2px
   `Highlight`.
 - **Cue and keys:** weight 500 and the terminal's solid cursor are the non-color cues. ghostty-web
   already draws the cursor hollow when blurred (`patches/ghostty-web@0.4.0.patch`). A view has no
   cursor, so there the weight stands alone. `aria-current="true"` and the region's name. `C-b` keys and
   F6 move it. **Layouts:** same in all. One tile still shows it. 2x2 is the thin spot, at 1px and
-  3.02:1.
+  3.68:1 on the plain tile's ground.
 - **Breaks:** today's focus is `--n-9` (`window.css:41,296-298`), 5.29:1, with a text step and no weight.
-  That is stronger than a8, so a8 is quieter on purpose. `:379-381` and `:463-467` drop focus on a
+  That is stronger than slate a9, so a9 is quieter on purpose. `:379-381` and `:463-467` drop focus on a
   closing tile.
 
 ### Hover
@@ -422,8 +427,8 @@ touch.
 - **Rule:** the pattern above, the same wash and letter as its tile, a name that carries the pipe and
   `closing`, and a real focus ring. A strip for a folded column takes a pipe's wash only when all its tiles
   are in that one pipe.
-- **Tokens:** `--tile-wash`; text `--tile-text`, hover `--tile-text-on`; edge as Edge, hover a7; ring a8,
-  2px.
+- **Tokens:** `--tile-wash`; text `--tile-text`, hover `--tile-text-on`; edge as Edge, hover a7;
+  ring `--tile-edge-on`, slate a9 in both looks or the pipe's own focus step, 2px.
 - **Cue and keys:** a word, read sideways. Enter, Space or a `C-b` direction opens it. Tab stops on it; F6
   skips it. **Layouts:** upright 22px side by side, lying 20px stacked. A pipe of 3 in 506px folds two,
   since each would be 167px.
@@ -501,7 +506,7 @@ It is decided. These say what would change it, for each pick under 80%.
 | Focus name at weight 500 | 75% | Too faint at 12px, and a mono font with no medium weight shows no change | A blur test on the built app |
 | F6 does not stop on strips | 70% | Finding folded tiles from a terminal | A keyboard run with a screen reader |
 | Resize by keys only | 70% | APG expects a separator | A keyboard run with a screen reader |
-| Strip ring a8 | 75% | 3.03 is thin on a 22px strip, and it shares its step with the focused tile's edge | A look at the built app, with both in view |
+| Strip ring slate a9 | 75% | The 2px ring on a 22px strip shares its step with the focused tile's edge | A look at the built app, with both in view |
 | Title bar in mono | 70%, then settled | [Popovers](./popovers.md) puts `t2` in sans | Settled 2026-11-02 by the owner, from a shot of the title bars in sans: the title bars stay mono, as do the top bar and the bottom line. A study of one program never changes them. |
 | `C-b [` for a terminal's text | 70% | Reading one long block of text | A VoiceOver run |
 
@@ -558,9 +563,10 @@ moves, so it is stored from the first build.
 - **The tiles were judged on a mockup.** The built app was shot only after, in PR 1
   (`apps/fabrika/docs/tiles/`), with forced colors and more contrast emulated, not set on a real
   system.
-- **Contrast is computed from Radix's sRGB hex.** P3 values may differ a little, and a8's 3.02 has almost
-  no room. Today's numbers are worked out from `window.css`'s oklch, not read from a screen. The color-blind
-  figures are a simulation on one thin band.
+- **Contrast is computed from Radix's sRGB hex.** P3 values may differ a little. The slate focus
+  ratios use a9; the pipes keep their own values, including violet's 2.92 on its focused wash.
+  These are computed values, not screen readings. The color-blind figures are a simulation on one
+  thin band.
 - **Linear's logged-in app was not seen.** This rests on its writing, its docs and one page's markup, read
   2026-10-31. "Not documented" means we did not find it, not that it is absent.
 - **Tuval's carry-over is on paper,** as `next/` does not exist here yet. Electron's page zoom was not
