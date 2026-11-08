@@ -723,9 +723,9 @@ export const serve = (options: {
 		}>();
 		const closeEditor = (client: Client) =>
 			Effect.sync(() => {
-				for (const request of keyRequests.values()) request.closed();
 				const running = client.editor;
 				if (running === null) return;
+				for (const request of keyRequests.values()) request.closed();
 				client.editor = null;
 				running.close("close");
 				running.close("edit");
