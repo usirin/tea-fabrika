@@ -25,7 +25,7 @@ new)
 run)
 	prompt=$3; out=$4
 	cd "$work"
-	exec nice -n 15 codex exec -m "$CODEX_MODEL" -c model_reasoning_effort="$CODEX_EFFORT" -c service_tier=priority \
+	exec nice -n 15 codex exec --ignore-user-config -m "$CODEX_MODEL" -c model_reasoning_effort="$CODEX_EFFORT" -c service_tier=priority \
 		-s workspace-write -c "sandbox_workspace_write.writable_roots=[\"$work\",\"$gitdata\"]" \
 		-C "$work" --json -o "$out" - < "$prompt"
 	;;

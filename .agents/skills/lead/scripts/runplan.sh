@@ -7,5 +7,5 @@ set -eu
 name=$1; brief=$2
 mkdir -p "$BOXES"
 cd "$MAIN"
-exec nice -n 15 codex exec -m "$CODEX_MODEL" -c model_reasoning_effort="$CODEX_EFFORT" -c service_tier=priority \
+exec nice -n 15 codex exec --ignore-user-config -m "$CODEX_MODEL" -c model_reasoning_effort="$CODEX_EFFORT" -c service_tier=priority \
 	-s read-only -C . --json -o "$BOXES/$name-plan.md" - < "$brief" > "$BOXES/$name-plan.jsonl" 2>&1
