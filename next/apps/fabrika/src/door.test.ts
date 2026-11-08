@@ -17,13 +17,14 @@ import {
 	Doorbell,
 	Ledger,
 	LedgerError,
+	lineFor,
 	RecordManager,
 	SinkError,
 	SpanSink,
 	SpanRow,
 } from "@kampus/libfabrika/data";
 import {nodeSql} from "@kampus/libfabrika/sqlite";
-import {Effect, Layer, Logger, Option, Schema, Stream} from "effect";
+import {Deferred, Effect, Fiber, Layer, Logger, Option, Schema, Stream} from "effect";
 import {TestClock} from "effect/testing";
 const SpanPage = Schema.Struct({spans: Schema.Array(SpanRow), next: Schema.Int});
 const ADD_SAW = {
@@ -448,6 +449,20 @@ const grantWindow = Effect.fnUntraced(function* (
 });
 const writeId = (id: string, effect: ReturnType<typeof Door.Service.signer>) =>
 	effect.pipe(Effect.provideService(C.SignRequest, {id}));
+const failSessionRecord = (inner: ReturnType<typeof nodeSql>) => {
+	let armed = true;
+	const sql = {
+		...inner,
+		exec: (...args: Parameters<typeof inner.exec>) => {
+			if (armed && args[0] === "INSERT INTO door_sessions (parent,saved) VALUES (?,?)") {
+				armed = false;
+				throw new Error("SQLITE_FULL");
+			}
+			return inner.exec(...args);
+		},
+	};
+	return {sql, failed: () => !armed};
+};
 const device = Effect.fnUntraced(function* (
 	d: typeof Door.Service,
 	w: World,
@@ -624,6 +639,9 @@ describe("P10 door admission and waiting", () => {
 						name: kind === "wrong name" ? stranger.fingerprint : k.fingerprint,
 					});
 					expect(answer._tag).toBe("refused");
+					expect((yield* d.knock("stranger", {label: "Pending"}))._tag).toBe(
+						kind === "unknown" ? "ok" : "refused",
+					);
 					expect(rawRows(w.db, "door/members")).toEqual([]);
 					expect(rawRows(w.db, "door/hellos")).toEqual([]);
 					expect(rawRows(w.db, "door/inputs")).toEqual([]);
@@ -877,9 +895,18 @@ describe("P10 signed membership changes", () => {
 				yield* online(d, w);
 				yield* grantWindow(d, w, "agent", "agent");
 				expect((yield* d.watch("agent"))._tag).toBe("refused");
-				expect((yield* d.deny("agent", {key: w.otherWindow.raw}))._tag).toBe("refused");
-				const answer = yield* d.deny("w1", {key: w.otherWindow.raw, saw: SAW});
-				expect(answer._tag).toBe("applied");
+				expect(yield* d.deny("agent", {key: w.otherWindow.raw})).toMatchObject({
+					_tag: "refused",
+					why: "person_only",
+				});
+				for (const params of [
+					{key: w.otherWindow.raw},
+					{key: w.otherWindow.raw, saw: SAW, by: "forged"},
+				]) {
+					expect(yield* d.deny("w1", params)).toMatchObject({_tag: "refused", why: "bad_input"});
+				}
+				const answer = yield* d.route("w1", "door.deny", {key: w.otherWindow.raw, saw: SAW});
+				expect(answer).toMatchObject({_tag: "ok", result: {_tag: "applied"}});
 				const last = (yield* entries("door/members")).at(-1)!;
 				expect(last._tag).toBe("denied");
 				expect(last.body).toMatchObject({
@@ -1063,6 +1090,7 @@ describe("P10 inputs, retries and signer", () => {
 				expect(rows).toHaveLength(3);
 				expect(new Set(rows.map((r) => r.id)).size).toBe(3);
 				for (const [index, method] of ["ledger.read", "ledger.wait", "unknown.method"].entries()) {
+					expect(rows[index]?._tag).toBe(index === 2 ? "refused" : "received");
 					expect(rows[index]?.by).toBe(w.window.fingerprint);
 					expect(JSON.stringify(rows[index]?.body)).toContain(method);
 				}
@@ -1181,9 +1209,13 @@ describe("P10 inputs, retries and signer", () => {
 								where === "outer"
 									? {...request("spoof"), [field]: "forged-writer-marker"}
 									: request("spoof", {...comment(), [field]: "forged-writer-marker"});
-							expect((yield* d.route("w1", "process.send", params))._tag).toBe("refused");
+							expect(yield* d.route("w1", "process.send", params)).toMatchObject({
+								_tag: "refused",
+								why: where === "outer" ? "reserved" : "bad_input",
+							});
 							expect(w.deliveries).toEqual([]);
 							const row = (yield* stamped()).at(-1)!;
+							expect(row._tag).toBe("refused");
 							expect(row.by).toBe(w.window.fingerprint);
 							expect(JSON.stringify(row)).not.toContain("forged-writer-marker");
 						}).pipe(w.provide);
@@ -1403,7 +1435,13 @@ describe("P10 passkey roots and recovery", () => {
 				}).pipe(w.provide);
 			}),
 		);
-	for (const missing of ["proof", "verification", "backup metadata"] as const)
+	for (const missing of [
+		"proof",
+		"verification",
+		"backup metadata",
+		"backup state",
+		"origin",
+	] as const)
 		it.effect(
 			`question 19: missing or inconsistent ${missing} cannot create an SK person root`,
 			() =>
@@ -1422,7 +1460,13 @@ describe("P10 passkey roots and recovery", () => {
 								: {
 										passkey: {
 											...p.add.adds.passkey!,
-											...(missing === "verification" ? {proof: noUv.armored} : {be: false}),
+											...(missing === "verification"
+												? {proof: noUv.armored}
+												: missing === "backup state"
+													? {bs: false}
+													: missing === "origin"
+														? {origin: "https://other.test"}
+														: {be: false}),
 										},
 									};
 						const text = C.addText({
@@ -1978,5 +2022,451 @@ describe("P10 span reader and recording", () => {
 					),
 				);
 			}),
+	);
+});
+
+describe("P10 refusal records and checked writes", () => {
+	it.effect("p26: a challenge replaced while its proof is checked cannot be consumed", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			let replace: Effect.Effect<void, LedgerError> | null = null;
+			const ledger = Layer.effect(
+				Ledger,
+				Effect.map(Ledger, (real) => ({
+					...real,
+					read: (stream: string, after: number) =>
+						Stream.unwrap(
+							Effect.sync(() => {
+								const before = stream === "door/members" ? replace : null;
+								if (before === null) return real.read(stream, after);
+								replace = null;
+								return Stream.concat(
+									Stream.fromEffect(before).pipe(Stream.drain),
+									real.read(stream, after),
+								);
+							}),
+						),
+				})),
+			).pipe(Layer.provide(w.env));
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				const nonce = yield* d.challenge("replaced");
+				const hello = {
+					versions: [1],
+					has: [],
+					ping: "30s",
+					key: w.window.raw,
+					tab: "replaced",
+					platform: "browser",
+					os: "ios",
+					sentAt: SENT,
+					signed: yield* w.window.sign(`fabrika-hello\n${URL}\nreplaced\n${nonce}`),
+				};
+				replace = d.challenge("replaced").pipe(Effect.asVoid);
+				expect(
+					yield* d.initialize("replaced", hello, {
+						url: URL,
+						tab: "replaced",
+						name: w.window.fingerprint,
+					}),
+				).toMatchObject({_tag: "refused", why: "bad_nonce"});
+				expect(replace).toBeNull();
+				expect(yield* d.knock("replaced", {label: "Old proof"})).toMatchObject({
+					_tag: "refused",
+					why: "not_waiting",
+				});
+			}).pipe(
+				Effect.provide(Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, ledger)))),
+			);
+		}),
+	);
+	for (const retry of ["same receipt", "different armor", "replaced enrollment"] as const)
+		it.effect(`p42: a queued change rechecks ${retry} after the preceding write`, () =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				const entered = Deferred.makeUnsafe<void>(),
+					release = Deferred.makeUnsafe<void>(),
+					checked = Deferred.makeUnsafe<void>();
+				let block = false,
+					watching: string | null = null;
+				const sql = {
+					...w.sql,
+					exec: (...args: Parameters<typeof w.sql.exec>) => {
+						const answer = w.sql.exec(...args);
+						if (args[0] === "SELECT value FROM door_state WHERE name=?" && args[1] === watching)
+							queueMicrotask(() => Deferred.doneUnsafe(checked, Effect.void));
+						return answer;
+					},
+				};
+				const clients = Layer.effect(
+					C.ClientManager,
+					C.ClientManager.pipe(
+						Effect.map((real) => ({
+							...real,
+							write: (...args: Parameters<typeof real.write>) =>
+								Effect.gen(function* () {
+									if (block) {
+										block = false;
+										yield* Deferred.succeed(entered, undefined);
+										yield* Deferred.await(release);
+									}
+									return yield* real.write(...args);
+								}),
+						})),
+					),
+				).pipe(Layer.provide(w.env));
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					yield* online(d, w);
+					const p = retry === "replaced enrollment" ? yield* enrolled(d, w) : null;
+					const text = C.grantText({
+						id: "race-first",
+						key: w.otherWindow.raw,
+						for: PERSON,
+						to: "project-a",
+						as: "window",
+						saw: SAW,
+						sentAt: SENT,
+					});
+					const armored = yield* w.root.sign(text);
+					block = true;
+					const first = yield* Effect.forkChild(d.grant({text, armored}));
+					yield* Deferred.await(entered);
+					watching = p === null ? "change/race-first" : `enrollment/${p.add.id}`;
+					const second = yield* Effect.forkChild(
+						d.grant(
+							p === null
+								? {text, armored: retry === "different armor" ? `${armored}\n` : armored}
+								: {text: p.text, armored: p.armored},
+						),
+					);
+					yield* Deferred.await(checked);
+					if (p !== null) yield* d.enrollment(p.binding);
+					yield* Deferred.succeed(release, undefined);
+					const answer = yield* Fiber.join(first);
+					expect(answer._tag).toBe("applied");
+					const result = yield* Fiber.join(second);
+					if (retry === "same receipt") expect(result).toEqual(answer);
+					else
+						expect(result).toMatchObject({
+							_tag: "refused",
+							why: p === null ? "id_reused" : "bad_enrollment",
+						});
+				}).pipe(
+					Effect.provide(
+						Door.layer({...w.settings, sql}).pipe(Layer.provideMerge(Layer.merge(w.env, clients))),
+					),
+				);
+			}),
+		);
+	it.effect("p42: an unfinished membership write cannot change its signed bytes on retry", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			let fail = false;
+			const clients = Layer.effect(
+				C.ClientManager,
+				C.ClientManager.pipe(
+					Effect.map((real) => ({
+						...real,
+						write: (...args: Parameters<typeof real.write>) => {
+							if (fail) {
+								fail = false;
+								return Effect.fail(new LedgerError({why: "unreachable"}));
+							}
+							return real.write(...args);
+						},
+					})),
+				),
+			).pipe(Layer.provide(w.env));
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				const text = C.grantText({
+					id: "pending-change",
+					key: w.otherWindow.raw,
+					for: PERSON,
+					to: "project-a",
+					as: "window",
+					saw: SAW,
+					sentAt: SENT,
+				});
+				const armored = yield* w.root.sign(text);
+				fail = true;
+				expect(yield* Effect.flip(d.grant({text, armored}))).toMatchObject({
+					_tag: "LedgerError",
+					why: "unreachable",
+				});
+				expect(yield* d.grant({text, armored: `${armored}\n`})).toMatchObject({
+					_tag: "refused",
+					why: "id_reused",
+				});
+				expect((yield* d.grant({text, armored}))._tag).toBe("applied");
+			}).pipe(
+				Effect.provide(
+					Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, clients))),
+				),
+			);
+		}),
+	);
+	for (const [method, params] of [
+		["process.send", undefined],
+		["process.send", null],
+		["process.send", request("bad-message", 42)],
+		["ledger.read", {stream: "empty", after: -1}],
+		["ledger.wait", {stream: "empty"}],
+	] as const)
+		it.effect(`p67: malformed ${method} ${JSON.stringify(params)} is recorded as refused`, () =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					yield* online(d, w);
+					expect(yield* d.route("w1", method, params)).toMatchObject({
+						_tag: "refused",
+						why: "bad_input",
+					});
+					expect((yield* stamped()).at(-1)).toMatchObject({
+						_tag: "refused",
+						body: {why: "bad_input"},
+					});
+					expect(w.deliveries).toEqual([]);
+				}).pipe(w.provide);
+			}),
+		);
+	it.effect("p67: a person's approval keeps its safe body and can sign its answer", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				const input = Input.cases.approve.make({answer: "yes"});
+				yield* d.route("w1", "process.send", request("approval", input));
+				expect((yield* stamped()).at(-1)?.body).toMatchObject({input});
+				const parent = w.deliveries[0]!.envelope.id;
+				const session = yield* writeId("answer", d.signer(parent, PROCESS, "answered"));
+				expect(session.by.key).toBe(w.window.fingerprint);
+				for (const [stream, fact] of [
+					["door/members", {_tag: "answered"}],
+					["tickets", null],
+					["tickets", {_tag: "answered", value: 1n}],
+				] as const) {
+					expect(
+						yield* Effect.flip(
+							d.append({id: "answer", parent, process: PROCESS, kind: "answered", stream, fact}),
+						),
+					).toMatchObject({_tag: "SigningRefused", why: "not_delivered"});
+				}
+				expect(
+					(yield* d.append({
+						id: "answer",
+						parent,
+						process: PROCESS,
+						kind: "answered",
+						stream: "tickets",
+						fact: {_tag: "answered"},
+					}))._tag,
+				).toBe("placed");
+			}).pipe(w.provide);
+		}),
+	);
+	it.effect("p27: an added person needs a supported public key before anything is written", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				const before = yield* entries("door/members");
+				const text = C.addText({
+					id: "invalid-root",
+					for: PERSON,
+					to: "project-a",
+					adds: C.Adds.cases.person.make({
+						key: "unsupported-public-key",
+						window: w.otherWindow.raw,
+					}),
+					drops: [],
+					saw: ADD_SAW,
+					sentAt: SENT,
+				});
+				expect(yield* d.grant({text, armored: yield* w.root.sign(text)})).toMatchObject({
+					_tag: "refused",
+					why: "bad_enrollment",
+				});
+				expect(yield* entries("door/members")).toEqual(before);
+			}).pipe(w.provide);
+		}),
+	);
+	it.effect("p42: the same signed text with different armor is not an exact resend", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				const text = C.grantText({
+					id: "armor-retry",
+					key: w.otherWindow.raw,
+					for: PERSON,
+					to: "project-a",
+					as: "window",
+					saw: SAW,
+					sentAt: SENT,
+				});
+				const armored = yield* w.root.sign(text);
+				expect((yield* d.grant({text, armored}))._tag).toBe("applied");
+				expect(yield* d.grant({text, armored: `${armored}\n`})).toMatchObject({
+					_tag: "refused",
+					why: "id_reused",
+				});
+			}).pipe(w.provide);
+		}),
+	);
+	it.effect("p43: removing one connection closes only that connection", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				yield* grantWindow(d, w);
+				w.notices.length = 0;
+				const text = C.revokeText({
+					id: "close-window",
+					key: w.otherWindow.raw,
+					for: PERSON,
+					to: "project-a",
+					saw: TOOK,
+					sentAt: SENT,
+				});
+				expect((yield* d.grant({text, armored: yield* w.root.sign(text)}))._tag).toBe("applied");
+				expect(w.notices).toEqual([{client: "w2", news: {close: 4003}}]);
+			}).pipe(w.provide);
+		}),
+	);
+	it.effect(
+		"p26: concurrent hellos spend one nonce once and cannot leave an online tab waiting",
+		() =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					yield* online(d, w);
+					const nonce = yield* d.challenge("race");
+					const hello = {
+						versions: [1],
+						has: [],
+						ping: "30s",
+						key: w.window.raw,
+						tab: "race",
+						platform: "browser",
+						os: "ios",
+						sentAt: SENT,
+						signed: yield* w.window.sign(`fabrika-hello\n${URL}\nrace\n${nonce}`),
+					};
+					const initialize = d.initialize("race", hello, {
+						url: URL,
+						tab: "race",
+						name: w.window.fingerprint,
+					});
+					const answers = yield* Effect.all([initialize, initialize], {concurrency: "unbounded"});
+					expect(answers.map((a) => a._tag).sort()).toEqual(["online", "refused"]);
+					expect(yield* d.knock("race", {label: "Already online"})).toMatchObject({
+						_tag: "refused",
+						why: "not_waiting",
+					});
+				}).pipe(w.provide);
+			}),
+	);
+	it.effect("p67: an agent needs a delivered parent for the same process and trace", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			const storage = failSessionRecord(w.sql);
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				yield* grantWindow(d, w, "agent", "agent");
+				yield* Effect.flip(d.route("w1", "process.send", request("not-delivered")));
+				expect(storage.failed()).toBe(true);
+				const row = (yield* stamped()).at(-1)!;
+				expect(
+					yield* d.route("agent", "process.send", {
+						...request("stolen-trace"),
+						traceId: row.traceId,
+					}),
+				).toMatchObject({_tag: "refused", why: "bad_trace"});
+				yield* d.route("w1", "process.send", request("delivered"));
+				const traceId = w.deliveries.at(-1)!.trace.traceId;
+				expect(
+					yield* d.route("agent", "process.send", {
+						...request("wrong-process"),
+						pid: OTHER_PROCESS,
+						traceId,
+					}),
+				).toMatchObject({_tag: "refused", why: "bad_trace"});
+			}).pipe(
+				Effect.provide(
+					Door.layer({...w.settings, sql: storage.sql}).pipe(Layer.provideMerge(w.env)),
+				),
+			);
+		}),
+	);
+	it.effect("p42: a malformed stored member fact reports bad_row", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				const ledger = yield* Ledger;
+				yield* ledger.append(
+					"door/members",
+					"bad-row",
+					lineFor(
+						{
+							by: w.root.sshFingerprint,
+							for: PERSON,
+							sentAt: SENT,
+							seen: 0,
+							parent: null,
+							traceId: TRACE,
+							build: "test-build",
+						},
+						{_tag: "invalid_member"},
+					),
+				);
+				const text = C.grantText({
+					id: "after-bad-row",
+					key: w.otherWindow.raw,
+					for: PERSON,
+					to: "project-a",
+					as: "window",
+					saw: SAW,
+					sentAt: SENT,
+				});
+				expect(
+					yield* Effect.flip(d.grant({text, armored: yield* w.root.sign(text)})),
+				).toMatchObject({_tag: "LedgerError", why: "bad_row"});
+			}).pipe(w.provide);
+		}),
+	);
+	it.effect("p67: a failed input digest reports storage and never delivers", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				const digest = crypto.subtle.digest.bind(crypto.subtle);
+				const spy = vi
+					.spyOn(crypto.subtle, "digest")
+					.mockImplementationOnce(digest)
+					.mockRejectedValueOnce(new Error("crypto unavailable"));
+				try {
+					expect(
+						yield* Effect.flip(d.route("w1", "process.send", request("digest-failed"))),
+					).toMatchObject({_tag: "LedgerError", why: "storage"});
+					expect(w.deliveries).toEqual([]);
+				} finally {
+					spy.mockRestore();
+				}
+			}).pipe(w.provide);
+		}),
 	);
 });

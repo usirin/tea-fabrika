@@ -109,6 +109,24 @@ const setup = Effect.fnUntraced(function* () {
 	return {hello, trusted, who, consume, admit};
 });
 describe("P10 hello", () => {
+	it.effect("p26: an unsigned tab claim cannot differ from the tab bound by the proof", () =>
+		Effect.gen(function* () {
+			const x = yield* setup();
+			expect(
+				yield* Transport.checkHello({hello: {...x.hello, tab: "another-tab"}, ...x.trusted}),
+			).toMatchObject({_tag: "refused", why: "bad_signature"});
+			expect(x.admit).not.toHaveBeenCalled();
+			expect(x.consume).not.toHaveBeenCalled();
+		}),
+	);
+	it.effect("p82: a client with an unknown OS can still initialize", () =>
+		Effect.gen(function* () {
+			const x = yield* setup();
+			expect(
+				yield* Transport.checkHello({hello: {...x.hello, os: "unknown"}, ...x.trusted}),
+			).toMatchObject({_tag: "online", hello: {os: "unknown"}});
+		}),
+	);
 	it.effect("p26: a checked window goes online with the fold's identity and chosen version", () =>
 		Effect.gen(function* () {
 			const x = yield* setup();
