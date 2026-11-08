@@ -3,6 +3,7 @@ import {LedgerError} from "../data/ledger.ts";
 import {type InputId, ParentText} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
 import {ProcessId} from "../data/trace.ts";
+import {inSignalSpace} from "./process.ts";
 
 export const Writer = Schema.TaggedUnion({
 	person: {key: Schema.String, for: Schema.String},
@@ -136,6 +137,9 @@ export class SessionManager extends Context.Service<
 							if (current === null) return Result.fail(new SigningRefused({why: "not_delivered"}));
 							const session = SavedInput.sign(current, process, policy.fact(kind));
 							if (Result.isFailure(session)) return session;
+							// A signal id is the brain's alone: no receipt binds one, so the delivery's one
+							// receipt stays free and the door's append finds nothing to sign with.
+							if (inSignalSpace(request.id)) return session;
 							const [receipt] = sql.exec(
 								"SELECT * FROM door_receipts WHERE id=? OR (parent=? AND process=? AND kind=?)",
 								request.id,

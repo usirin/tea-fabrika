@@ -26,6 +26,7 @@ export {
 	canRestart,
 	Dead,
 	Down,
+	inSignalSpace,
 	Owner,
 	ProcessError,
 	ProcessFact,

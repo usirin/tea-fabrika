@@ -7,6 +7,7 @@ import {
 	type Envelope,
 	foldMembers,
 	type From,
+	inSignalSpace,
 	MemberFact,
 	NotGranted,
 	Saw,
@@ -1001,7 +1002,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				fact === null ||
 				fact._tag !== a.kind ||
 				a.stream.startsWith("door/") ||
-				brainOnly(a.stream, a.kind)
+				brainOnly(a.stream, a.kind) ||
+				inSignalSpace(a.id)
 			)
 				return yield* new SigningRefused({why: "not_delivered"});
 			const schema = Schema.StructWithRest(Schema.TaggedStruct(a.kind, {}), [

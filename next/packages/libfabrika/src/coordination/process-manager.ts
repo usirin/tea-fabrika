@@ -7,6 +7,7 @@ import {type From, type Letter, Mailbox} from "./mailbox.ts";
 import {processMail} from "./process-mail.ts";
 import {
 	type Caller,
+	clientInbox,
 	Down,
 	ProcessError,
 	ProcessFact,
@@ -70,9 +71,10 @@ export class ProcessManager extends Context.Service<
 					to: (typeof Down.Type)["to"],
 					from: From,
 				) => {
-					const name =
-						to._tag === "client" ? to.client : Option.getOrThrow(table.life(to.process)).name;
-					const inbox = `${name}/inbox`;
+					const inbox =
+						to._tag === "client"
+							? clientInbox(to.client)
+							: `${Option.getOrThrow(table.life(to.process)).name}/inbox`;
 					const letter = signalId(to, ref);
 					// A renewed watch on a dead target may find its first signal already written.
 					if ([...turn.read(inbox, 0)].some((entry) => entry.id === letter)) return;

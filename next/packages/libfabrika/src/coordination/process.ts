@@ -6,9 +6,13 @@ import type {From} from "./mailbox.ts";
 
 const Text = Schema.NonEmptyString;
 const PROCESSES = "processes";
-/** A process name is a stream name: no `/`, so `<name>` and `<name>/inbox` never meet another's. */
+const CLIENTS = "client:";
+/**
+ * A process name is a stream name: no `/`, so `<name>` and `<name>/inbox` never meet another's,
+ * and no `client:` lead, so it never meets a client's inbox.
+ */
 const ProcessName = Schema.String.check(
-	Schema.isPattern(new RegExp(`^(?!${PROCESSES}$)[a-z0-9][a-z0-9._:-]*$`)),
+	Schema.isPattern(new RegExp(`^(?!${PROCESSES}$)(?!${CLIENTS})[a-z0-9][a-z0-9._:-]*$`)),
 );
 /** A client id has no `:`, the mark of a process name such as `counter:1`. */
 const ClientId = Schema.String.check(
@@ -135,9 +139,18 @@ const canonical = (to: typeof Recipient.Type): typeof Recipient.Type =>
 		: Recipient.cases.client.make({client: to.client, session: to.session});
 const watchKey = (to: typeof Recipient.Type, ref: string): string =>
 	JSON.stringify([canonical(to), ref]);
+/** A client's own inbox, `client:<id>/inbox`, where its DOWNs land; never a process's inbox. */
+export const clientInbox = (client: string): string => `${CLIENTS}${client}/inbox`;
 /** The one id a DOWN for (recipient, ref) is written under. */
 export const signalId = (to: typeof Recipient.Type, ref: string): string =>
 	JSON.stringify(["DOWN", canonical(to), ref]);
+const SIGNAL_LEAD = JSON.stringify(["DOWN"]).slice(0, -1);
+const decodeIdParts = Schema.decodeUnknownOption(
+	Schema.fromJsonString(Schema.Array(Schema.Unknown)),
+);
+/** True for any id in the signal id space, a JSON array led by `"DOWN"`: only the brain writes one. */
+export const inSignalSpace = (id: string): boolean =>
+	id.startsWith(SIGNAL_LEAD) || Option.exists(decodeIdParts(id), (parts) => parts[0] === "DOWN");
 
 /**
  * A disposable fold of the ledger. No process authority survives outside its facts, and a fact
