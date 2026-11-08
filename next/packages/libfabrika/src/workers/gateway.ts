@@ -3,7 +3,7 @@ import {ProcessIdGenerator} from "../coordination/process-id.ts";
 import {LedgerError, Waited} from "../data/index.ts";
 import {workerSql} from "../data/worker-sql.ts";
 import {connection} from "../transport/gateway.ts";
-import {Answer, Attached, Hello, Row} from "../transport/index.ts";
+import {Answer, Attached, Hello} from "../transport/index.ts";
 import type {ConnectionId, ProjectBinding} from "./bindings.ts";
 import {
 	complete,
@@ -95,32 +95,23 @@ const gatewayLogic = Effect.fnUntraced(function* (
 						});
 					}
 					if (method === "door.knock") {
-						const result = yield* rpc<typeof Answer.Type>(() =>
-							p.knock(
-								client,
-								Schema.decodeUnknownSync(Schema.Struct({label: Schema.String}))(params),
-							),
+						const input = yield* Schema.decodeUnknownEffect(Schema.Struct({label: Schema.String}))(
+							params,
 						);
+						const result = yield* rpc<typeof Answer.Type>(() => p.knock(client, input));
 						if (result._tag === "ok") {
-							const rows = Schema.decodeUnknownSync(Schema.Struct({rows: Schema.Array(Row)}))(
-								result.result,
-							).rows;
-							for (const row of rows)
-								if (row.clients.includes(client))
-									for (const waiting of row.clients)
-										yield* rpc(() =>
-											p.publish(waiting, {
-												method: "door.waiting",
-												params: {code: row.code, until: row.until},
-											}),
-										);
+							const waiting = yield* Schema.decodeUnknownEffect(
+								Schema.Struct({code: Schema.String, until: Schema.Number}),
+							)(result.result);
+							yield* rpc(() => p.publish(client, {method: "door.waiting", params: waiting}));
+							return Answer.cases.ok.make({result: waiting});
 						}
 						return result;
 					}
 					return yield* rpc<typeof Answer.Type>(() => p.route(client, method, params));
 				},
-				// A failed object call still answers its request, so a client never waits forever.
-				Effect.catch(() => Effect.succeed(Answer.cases.refused.make({why: "unreachable"}))),
+				// A failed or defective call still answers its request without exposing error details.
+				Effect.catchCause(() => Effect.succeed(Answer.cases.refused.make({why: "unreachable"}))),
 			),
 		});
 		connections.set(ws, c);
