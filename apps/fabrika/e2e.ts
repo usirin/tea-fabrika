@@ -7,6 +7,7 @@ import {join} from "node:path";
 import {promisify} from "node:util";
 import type {Shell} from "@kampus/fabrika-old";
 import {_electron, type ElectronApplication, type Locator, type Page} from "playwright";
+import {askDesk} from "./e2e/ask-desk.ts";
 
 // The app, driven end to end through Playwright's Electron support: the whole flow in the one
 // tiled window, one screenshot per step. Not part of `pnpm test`: it opens a real window. The
@@ -2098,6 +2099,18 @@ const all = async () => {
 		await asksSwap();
 		await reconnect();
 		await tilesLook();
+		await askDesk({
+			launch,
+			prompted,
+			run,
+			prefixed,
+			focusOn,
+			tilesAre,
+			lookIs,
+			hostPid,
+			stop,
+			shots,
+		});
 	} finally {
 		// No person stops the host: there is no command for it. The run stops its own, by its pid.
 		const pid = await hostPid(home);
@@ -2106,7 +2119,9 @@ const all = async () => {
 };
 
 // `-- --tiles` takes the tiles' pictures alone, with no other stage.
-if (process.argv.includes("--tiles")) await tilesLook();
+if (process.argv.includes("--ask-desk"))
+	await askDesk({launch, prompted, run, prefixed, focusOn, tilesAre, lookIs, hostPid, stop, shots});
+else if (process.argv.includes("--tiles")) await tilesLook();
 else await all();
 const after = await pgrep(here);
 check(
