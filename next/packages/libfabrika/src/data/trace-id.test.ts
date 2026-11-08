@@ -32,7 +32,7 @@ describe("T246, fromHere", () => {
 	// Plant: fromHere returns a fresh random traceId instead of the current span's.
 	it.effect.each([
 		["no parent", null],
-		["an input parent", "in-3f9a0c21-41"],
+		["an input parent", "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41"],
 	] as const)("an entry with parent %s joins the ledger.call span P37 records", ([, parent]) => {
 		const db = new DatabaseSync(":memory:");
 		opened.push(db);

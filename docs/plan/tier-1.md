@@ -46,6 +46,7 @@ log           one row per agent run, with the sha of the commit it made, and a n
 - **A unit of work is a commit, not a pull request** ([the note](../direction/a-unit-of-work-is-a-commit.md), owner, 2026-11-05). An exam change is its own commit, by an agent that is not the builder, inside the same pull request. The test writer's commit comes first on the branch and may touch exam paths: a boundary row, a ledger line, a catalog line a test needs, an exam test moved to Rolldown. The builder's commits never do. Each step's agent signs its commits with its own key (the same SSHSIG shape as the door), into a git note on `refs/notes/fabrika`, not git's own signature slot, and CI decides from that signature. Each step's run also records the commit it made, as a `committed` entry, kept wide and never deciding; in Tier 1 its `field/` row stands in, with the commit's sha. *Changed 2026-11-05 (owner): this plan first had the lead agent write each boundary row inside its build, then split every exam change into its own pull request, ten small rows with a letter. Both are gone.*
 - **A new `next/` package's boundary row and its bare `package.json` come in its first pull request's test writer commit:** P7 for `@kampus/libfabrika` (it lands before P6), P11 for `@kampus/counter`, P13 for `@kampus/notes`, P14 for `@kampus/tuval` and P17 for `@kampus/chaos`. code-graph 0.12.0 refuses a `libraries` row for a folder with no `package.json` ("is no package root"), and a glob row fails the same way, so the rows cannot all land up front ([demlik 868](https://github.com/kamp-us/demlik/issues/868), filed to declare a library before it exists). `next/apps/fabrika` got its row, `next-app`, in P2.
 - **P32 builds the check for `next/`.** CI walks a pull request's commits and verifies the signature in each one's note against the step keys: a commit with no valid signature from a known step key is `stuck: unsigned_commit`, and a `build` commit that touches an exam path is `stuck: build_touched_exam`. A `Step: tests` or `Step: build` trailer is for people reading `git log`; CI trusts the signature. Any pull request that touches an exam path asks the owner to read it, flagged by path from one list of exam paths. Until P32 lands, the lead agent's read of each diff is the guard.
+- **Step commits come from the bot** (owner, 2026-11-07, in use from 2026-11-08). From T246 and P10 on, step commits are authored by `fabrikalfa[bot]`, with the person as `Co-authored-by`, and pushed to `fabrikalfa/<name>` with a token that lasts one hour. The pull request opens as the person ([agents commit as a bot](../direction/agents-commit-as-a-bot.md)).
 - **A merge never waits on the owner** ([autonomy is measured trust](../direction/autonomy-is-measured-trust.md), decided 2026-11-03). Each merge gets its `MergeRow` in `field/`, and a break found later gets a `BrokeRow` and a fix forward. Still the owner's: each exam pull request (P1, P2, P8, P32 and P35), the read of any pull request whose test writer commit touches an exam path, each new edge comment, the yes after reading `alchemy plan`, a real finger on Approve, and any new design call.
 - **The owner closes Tier 1 by hand,** on [the checks below](#what-done-looks-like), in a run logged in `field/`. No single pull request can prove the whole project.
 
@@ -411,7 +412,7 @@ Most of the order above is a choice. **These parts are not, and each says why:**
 ```ts
 // A sketch, next/. P10 stamps, P6 keeps, P11 signs.
 interface Envelope<A> {          // P10: made in memory at the door, never decoded, so no schema
-	readonly id: InputId;        // "in-3f9a0c21-41": the door's start, then a count
+	readonly id: InputId;        // "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41": the door's start, then a count
 	readonly by: Writer;         // from the checked key, never from params
 	readonly arrivedAt: number;  // the referee's clock as it came
 	readonly input: A;
@@ -525,11 +526,11 @@ The owner answers these. **As of 2026-11-05, nothing here stops the first wave.*
 
     ```text
     entry_a1  by person:p1     "@claude run the tests"   parent: null             traceId: t1 (new)
-    entry_b2  by agent:claude  turn started              parent: in-3f9a0c21-41   traceId: t1
-    entry_c4  by agent:claude  line "pnpm test"          parent: in-3f9a0c21-42   traceId: t1
+    entry_b2  by agent:claude  turn started              parent: in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41   traceId: t1
+    entry_c4  by agent:claude  line "pnpm test"          parent: in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-42   traceId: t1
     ```
 
-    The door stamps the person's ask as `in-3f9a0c21-41` and the agent's next input as `in-3f9a0c21-42`. The agent's line has `parent: in-3f9a0c21-42`, so it is signed as the agent, and `traceId: t1` ties it back to the person's ask. *It was, below:*
+    The door stamps the person's ask as `in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41` and the agent's next input as `in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-42`. The agent's line has `parent: in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-42`, so it is signed as the agent, and `traceId: t1` ties it back to the person's ask. *It was, below:*
     *Added 2026-11-05, from [the inputs note](../direction/inputs-carry-their-sender.md#open-an-agents-stated-reason). Needed before any agent's line carries a person's message as its reason; no Tier 1 row does, so it blocks nothing here.* A line claude runs because the person asked cannot be signed by its cause's sender and also carry the person's message as its cause. **Lean, the note's (70%):** two links, as event stores keep two ids. `cause` is the direct one and signs, so claude's line is claude's; the person's message rides as its stated reason (`asked` in the note's sketch), checked only for delivery, shown, and never deciding. The owner's call is the key's name and whether a reason is worth keeping at all.
 16. **The signing service.** **Decided (owner, 2026-11-07): `SessionManager`, owned by the door.** The door stamped every input, so it is the one authority over "who sent input X", the way one gen_server owns a table in OTP. A process asks it over one RPC. The four refusals stay as the inputs note writes them, with `cause` now named `parent`. The doubt: one extra round trip per write. A cache in the process could cut it, but would go stale.
 

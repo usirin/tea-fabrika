@@ -34,7 +34,7 @@ import {foldMembers, type MemberFact, type Members} from "./members.ts";
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const READER = "gateway:t1";
 const MEMBERS = "door/members";
-const PARENT = "in-3f9a0c21-41";
+const PARENT = "in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-41";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -513,6 +513,7 @@ describe("p96, the stolen sheet race", () => {
 				expect(hook.before).toBeNull(); // the other Mac did run in between
 				expect(xAnswer).toEqual({_tag: "applied", rev: 3});
 				expect(answer).toEqual({_tag: "ignored", rev: 4, why: "used"});
+				expect(yield* write(macC)).toEqual({_tag: "ignored", rev: 4, why: "used"});
 				const m = yield* members;
 				expect(m.keys.get("pX")?.live).toBe(true);
 				expect(m.keys.get("pC")?.live ?? false).toBe(false);

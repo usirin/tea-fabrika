@@ -23,7 +23,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
-import {Effect, Exit, Layer, Option, Redacted, Stream, Tracer} from "effect";
+import {Cause, Effect, Exit, Layer, Option, Redacted, Stream, Tracer} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
 import {Archive, type BucketCalls} from "./archive.ts";
@@ -71,9 +71,9 @@ const home = () => {
 	return {dir, db, sql: nodeSql(db), open, part, parts, bytes};
 };
 
-const OBJECT = "process_01JC9Q4W7Z3M8N5R2T6V0XKB4D";
+const OBJECT = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
 const P1 = OBJECT;
-const P2 = "process_01JC9Q4W7Z3M8N5R2T6V0XKB4E";
+const P2 = "process_01jc9q4w7z3m8n5r2t6v0xkb4e";
 const job = (process: string): ChainValue => ({_tag: "job", process});
 const spans: ChainValue = {_tag: "spans"};
 const BIG = 1024 * 1024 * 1024;
@@ -168,6 +168,59 @@ const bucket = () => {
 };
 
 const ids = (rows: ReadonlyArray<Row>) => rows.map((r) => r.spanId);
+
+describe("T246, P37 decodes TypeID process ids", () => {
+	it.effect.each([
+		["starting with 0", `process_${"0".repeat(26)}`],
+		["starting with 7", `process_7${"z".repeat(25)}`],
+	] as const)("a valid process %s reaches its JobRecord", ([, process]) => {
+		const {db, sql} = home();
+		return Effect.gen(function* () {
+			yield* step("runner.step", {"fab.process": process});
+			expect(yield* flush).toEqual({sent: 1});
+			expect(count(db, "unsent")).toBe(0);
+			expect((yield* recorded(job(process))).map((row) => row.name)).toEqual(["runner.step"]);
+		}).pipe(Effect.provide(world(sql)));
+	});
+
+	// Plant: keep ProcessId as NonEmptyString. P37 must refuse a stored chain with a bad id.
+	it.effect.each([
+		["old eight-hex id", "3f9a0c21"],
+		...["i", "l", "o", "u"].map((char) => [char, `process_0${char}${"0".repeat(24)}`] as const),
+		["first character 8", `process_8${"0".repeat(25)}`],
+		["uppercase suffix", `process_${P1.slice(8).toUpperCase()}`],
+		["25 characters", `process_${"0".repeat(25)}`],
+		["27 characters", `process_${"0".repeat(27)}`],
+		["wrong prefix", `person_${P1.slice(8)}`],
+		["leading space", ` ${P1}`],
+		["trailing space", `${P1} `],
+		["trailing newline", `${P1}\n`],
+	] as const)(
+		"a stored process with %s fails bad_row, keeps its row, and sends nothing",
+		([, process]) => {
+			const {db, sql} = home();
+			return Effect.gen(function* () {
+				yield* step("runner.step", {"fab.process": P1});
+				expect(count(db, "unsent")).toBe(1);
+				sql.exec(`UPDATE unsent SET chain = json_set(chain, '$.process', ?)`, process);
+				const exit = yield* Effect.exit(flush);
+				expect(Exit.isFailure(exit), "P37 must reject the stored process id before sending").toBe(
+					true,
+				);
+				const error = Exit.match(exit, {onFailure: Cause.squash, onSuccess: () => undefined});
+				expect(error).toBeInstanceOf(SinkError);
+				expect(error).toMatchObject({why: "bad_row", held: 0});
+				expect(count(db, "unsent")).toBe(1);
+				expect(yield* recorded(job(P1))).toEqual([]);
+				expect(yield* recorded(job(process))).toEqual([]);
+				sql.exec(`UPDATE unsent SET chain = json_set(chain, '$.process', ?)`, P1);
+				expect(yield* flush).toEqual({sent: 1});
+				expect(count(db, "unsent")).toBe(0);
+				expect((yield* recorded(job(P1))).map((row) => row.name)).toEqual(["runner.step"]);
+			}).pipe(Effect.provide(world(sql)));
+		},
+	);
+});
 
 describe("p98, a span that ends is never dropped", () => {
 	it("its rows are in the object's own SQLite before end returns, and a later process's flush sends them", async () => {

@@ -10,7 +10,9 @@ export const Rev = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 export type Rev = typeof Rev.Type;
 
 /** An input id's text form, as the door writes it (p68). Kept as text: nothing here makes an `InputId`. */
-export const ParentText = Schema.String.check(Schema.isPattern(/^in-[0-9a-f]{8}-[1-9][0-9]*$/));
+export const ParentText = Schema.String.check(
+	Schema.isPattern(/^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-[1-9][0-9]*$/),
+);
 
 /** A W3C trace id: 32 lowercase hex characters, never all zeros. */
 export const TraceId = Schema.String.check(Schema.isPattern(/^(?!0{32})[0-9a-f]{32}$/));

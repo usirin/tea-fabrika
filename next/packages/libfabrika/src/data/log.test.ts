@@ -27,9 +27,9 @@ import {nodeSql} from "./sqlite.ts";
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const READER = "gateway:t1";
 
-// The one place the input id's text form lives. Every parent below, good or bad, is built from it,
-// so a new form (for example a TypeID) is a change to these two lines.
-const PARENT = /^in-[0-9a-f]{8}-[1-9][0-9]*$/;
+// T246's approved addendum: a parent names the door's process, then its input counter.
+const PARENT = /^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-[1-9][0-9]*$/;
+const PROCESS = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
 const parents = (count: number): ReadonlyArray<string> =>
 	fc.sample(fc.stringMatching(PARENT), {seed: SEED, numRuns: count});
 const [goodParent = "", otherParent = ""] = parents(2);
@@ -45,10 +45,18 @@ const badParents = (good: string): ReadonlyArray<string> => [
 	`${good}\n`,
 	good.slice(0, 4) + good.slice(5),
 	good.replace(/-/g, "_"),
+	"in-3f9a0c21-41",
 	"in-3f9a0c21-0",
 	"in-3f9a0c21-01",
 	"in-3f9a0c21-",
 	"in-3f9a0c2g-1",
+	`in-${PROCESS}-0`,
+	`in-${PROCESS}-01`,
+	`in-${PROCESS}-`,
+	...["i", "l", "o", "u"].map((char) => `in-process_0${char}${"0".repeat(24)}-1`),
+	`in-process_8${"0".repeat(25)}-1`,
+	`in-process_0${"0".repeat(24)}-1`,
+	`in-process_0${"0".repeat(26)}-1`,
 ];
 
 // Every ledger is a fresh node:sqlite file in one temp folder, removed after.
@@ -301,13 +309,24 @@ describe("p92, every entry has every field: at the referee", () => {
 });
 
 describe("p68, an entry keeps its parent", () => {
-	// Plants: loosen the pattern to in-.*, or return bad_line instead of bad_parent.
-	it("ParentText takes the input id's text form and nothing one slip away", () => {
+	// Plants: keep the old eight-hex pattern, loosen it to in-.*, or answer bad_line.
+	it("p68b, ParentText takes a TypeID process and a positive counter, and nothing one slip away", () => {
 		expect(data.ParentText, "the parent text schema is public").toBeDefined();
 		const is = Schema.is(data.ParentText);
 		expect(parents(50).every(is)).toBe(true);
 		expect(badParents(goodParent).filter(is)).toEqual([]);
 	});
+
+	it.effect.each([
+		["first character 0, counter 1", `in-process_${"0".repeat(26)}-1`],
+		["first character 7, counter 41", `in-process_7${"z".repeat(25)}-41`],
+	] as const)("p68b, a parent with %s is placed and kept as sent", ([, parent]) =>
+		Effect.gen(function* () {
+			const {answers, entries} = yield* handIn([{...json(), parent}]);
+			expect(answers).toEqual([{_tag: "placed", rev: 1, pos: 1}]);
+			expect(entries.map((entry) => entry.parent)).toEqual([parent]);
+		}).pipe(Effect.provide(onReferee(fresh()))),
+	);
 
 	it.effect("a parent, or null for an own write, is read back the same", () =>
 		Effect.gen(function* () {
@@ -321,7 +340,7 @@ describe("p68, an entry keeps its parent", () => {
 	);
 
 	it.effect(
-		"a parent one slip away from the form is refused bad_parent, and nothing is written",
+		"p68b, old eight-hex parents and malformed TypeID parents are refused bad_parent and write nothing",
 		() =>
 			Effect.gen(function* () {
 				const bad = badParents(goodParent);
