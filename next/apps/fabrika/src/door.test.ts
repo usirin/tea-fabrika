@@ -585,6 +585,61 @@ describe("P10 review regressions", () => {
 		});
 		return {client, hello, trusted};
 	});
+	it.effect("P12: view.open rejects a bad pid before invoking the program", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			const opened: Array<unknown> = [];
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const {client} = yield* online(d, w);
+				expect(yield* d.route(client, "view.open", {pid: "invalid"})).toEqual({
+					_tag: "refused",
+					why: "bad_input",
+				});
+				expect(opened).toEqual([]);
+				expect(yield* d.route(client, "view.open", {pid: PROCESS})).toEqual({
+					_tag: "ok",
+					result: {count: 7},
+				});
+				expect(opened).toEqual([{pid: PROCESS, client}]);
+			}).pipe(
+				Effect.provide(
+					Door.layer({
+						...w.settings,
+						open: (pid, client) =>
+							Effect.sync(() => {
+								opened.push({pid, client});
+								return {count: 7};
+							}),
+					}).pipe(Layer.provideMerge(w.env)),
+				),
+			);
+		}),
+	);
+	it.live("P12: a grant target needs both the waiting key and its code", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const {client} = yield* pendingHello(d, w.otherWindow, "target");
+				const knocked = yield* d.knock(client, {label: "Pending"});
+				assert(knocked._tag === "ok");
+				const {rows} = Schema.decodeUnknownSync(
+					Schema.Struct({rows: Schema.Array(Schema.Struct({code: Schema.String}))}),
+				)(knocked.result);
+				const code = rows[0]!.code;
+				expect(yield* d.target(w.otherWindow.fingerprint, code)).toEqual({
+					key: w.otherWindow.raw,
+					for: PERSON,
+					to: "project-a",
+					code,
+					label: "Pending",
+				});
+				expect(yield* d.target(w.window.fingerprint, code)).toBeNull();
+				expect(yield* d.target(w.otherWindow.fingerprint, `${code}x`)).toBeNull();
+			}).pipe(w.provide);
+		}),
+	);
 
 	it.effect(
 		"review 3.1: a full spent-receipt store writes nothing and keeps live nonces spent",
