@@ -94,6 +94,55 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 		expect(await lint(good, name === "part-token-owner" ? WINDOW : undefined)).toEqual([]);
 	});
 
+	it("law 21 reads only var() past comments and spaces and names the unknown token", async () => {
+		const file = write(
+			temp(),
+			"reference.css",
+			".a { color: var(/* token */ --missing); }\n.label { content: attr(--label); }\n.literal { --keyword: var; }\n",
+		);
+		expect(await lint(file)).toEqual([
+			expect.objectContaining({
+				rule: "fabrika/token-exists",
+				text: expect.stringContaining("--missing"),
+			}),
+		]);
+	});
+
+	it("law 22 checks named backgrounds and hex colors without treating escapes as colors", async () => {
+		const file = write(
+			temp(),
+			"colors.css",
+			`.named { background: rebeccapurple; }
+.hex { color: #aabbcc; }
+.alpha { color: #aabbccdd; }
+.escaped { --anchor: \\#fff; }
+.image { background: url(red); }
+`,
+		);
+		const warnings = await lint(file);
+		expect(warnings.map(({rule, line}) => ({rule, line}))).toEqual(
+			[1, 2, 3].map((line) => ({rule: "fabrika/no-raw-color", line})),
+		);
+	});
+
+	it("law 26 ignores quoted fallback data when the font size is a scale token", async () => {
+		const file = write(temp(), "size.css", '.a { font-size: var(--fs-small, "12px"); }\n');
+		expect(await lint(file)).toEqual([]);
+	});
+
+	// env() can supply a style, and calc-mix() a numeric weight, before the size.
+	// https://www.w3.org/TR/css-env-1/#env-function
+	// https://www.w3.org/TR/css-values-5/#calc-mix
+	it.each(["env(--fs-style, italic)", "calc-mix(0.5, 400, 600)"])(
+		"law 26 checks the pixel font size after %s",
+		async (prefix) => {
+			const file = write(temp(), "font.css", `.a { font: ${prefix} 12px var(--font); }\n`);
+			expect(await lint(file)).toEqual([
+				expect.objectContaining({rule: "fabrika/font-size-from-scale"}),
+			]);
+		},
+	);
+
 	it("laws 22, 23, 24 and 26 allow the real generated regions and hand-written scale", async () => {
 		expect(await lint(join(ROOT, TOKENS))).toEqual([]);
 	});
@@ -104,6 +153,7 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 			"generated.css",
 			`:root {
 /* @generated colors from tokens/color by pnpm tokens: edit the TOML, never this */
+/* The @end generated colors marker comes after these declarations. */
 --slate-a9: #dfebfd6d;
 --indigo-9: #3e63dd;
 --focus: var(--indigo-9);
@@ -128,16 +178,27 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 		expect(warnings.map(({rule}) => rule)).toContain("fabrika/font-size-from-scale");
 	});
 
-	it("law 22 limits a pipe's exception to its five own tokens in the app stylesheet", async () => {
-		const file = write(
-			temp(),
-			"pipe.css",
-			'[data-pipe="sky"] { --tile-wash: #fff; --tile-wash-on: #fff; --tile-edge-hover: #fff; --tile-edge-on: #fff; --tile-edge-loud: #fff; }\n',
-		);
-		expect(await lint(file, WINDOW)).toEqual([]);
-		const warnings = await lint(file, "programs/css-plant/window.css");
-		expect(warnings.map(({rule}) => rule)).toContain("fabrika/no-raw-color");
-	});
+	it.each(['"sky"', "'sky'"])(
+		"law 22 limits pipe %s to its exact selector and five tokens",
+		async (name) => {
+			const file = write(
+				temp(),
+				"pipe.css",
+				`[data-pipe=${name}] { --tile-wash: #fff; --tile-wash-on: #fff; --tile-edge-hover: #fff; --tile-edge-on: #fff; --tile-edge-loud: #fff; }\n`,
+			);
+			expect(await lint(file, WINDOW)).toEqual([]);
+			const warnings = await lint(file, "programs/css-plant/window.css");
+			expect(warnings.map(({rule}) => rule)).toContain("fabrika/no-raw-color");
+			const nested = write(
+				temp(),
+				"nested-pipe.css",
+				`.outer [data-pipe=${name}] { --tile-wash: #fff; }\n`,
+			);
+			expect(await lint(nested, WINDOW)).toEqual([
+				expect.objectContaining({rule: "fabrika/no-raw-color"}),
+			]);
+		},
+	);
 });
 
 const settingsProblems = (config: stylelint.Config | undefined, base: stylelint.Config) => {
@@ -230,7 +291,7 @@ describe("T245 PR 3, laws 27 and 28: the effective config cannot weaken a rule",
 
 // The runner gets a real git index and its own root config. It imports the actual config and
 // plugins, clearing only the existing debt so a tiny planted repo can be clean.
-const runnerRepo = (knownRule?: string, known: string[] = []) => {
+const runnerRepo = (knownRule?: string, known: unknown = []) => {
 	assert(existsSync(RUNNER), "Today's lint has no CSS runner. PR 3 must check tracked CSS.");
 	assert(existsSync(CONFIG), "The CSS runner needs the real root config.");
 	const root = temp();
@@ -287,6 +348,35 @@ const run = (repo: string) => {
 };
 
 describe("T245 PR 3, law 29: known only shrinks", () => {
+	it("law 29 keeps the root known lists matched to the tracked CSS", () => {
+		const result = run(ROOT);
+		expect(result.status, result.output).toBe(0);
+	});
+
+	it("law 29 refuses a known value that is not a list", () => {
+		const repo = runnerRepo("fabrika/no-raw-color", "");
+		track(repo, {"apps/plant/window.css": ".a { color: var(--focus); }\n"});
+		const result = run(repo);
+		expect(result.status, result.output).toBe(2);
+		expect(result.output).toContain("fabrika/no-raw-color");
+		expect(result.output).toContain("known");
+	});
+
+	it("law 29 rejects non-string entries before a rule checks CSS", async () => {
+		const plant = configPlant(
+			'export default {...base, rules: {...base.rules, "fabrika/no-raw-color": [true, {severity: "error", known: [42]}]}};',
+		);
+		const report = await stylelint.lint({
+			configFile: plant.file,
+			code: ".a { color: var(--focus); }",
+			codeFilename: join(ROOT, WINDOW),
+		});
+		expect(report.errored).toBe(true);
+		expect(report.results.flatMap(({invalidOptionWarnings}) => invalidOptionWarnings)).toEqual([
+			expect.objectContaining({text: expect.stringContaining("known")}),
+		]);
+	});
+
 	it.each([
 		{
 			rule: "no-raw-color",
@@ -336,21 +426,38 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
 			readFileSync(join(ROOT, "package.json"), "utf8"),
 		);
 		expect(manifest.scripts.lint).toContain("node oxlint-plugins/stylelint.ts");
-		const repo = runnerRepo();
-		track(repo, {"apps/plant/window.css": ".a { color: var(--text-primary); }\n"});
+		const repo = runnerRepo("fabrika/no-raw-color", ["programs/plant/window.css .known { color }"]);
+		track(repo, {
+			"apps/plant/window.css": ".a { color: var(--text-primary); }\n",
+			"programs/plant/window.css": ".known { color: #fff; color: #fff; }\n",
+		});
 		const result = run(repo);
 		expect(result.status, result.output).toBe(0);
 		for (const {name} of RULES) expect(result.output).toContain(`fabrika/${name}`);
+		expect(result.output).toContain("fabrika/no-raw-color: 2 fires, 1 known entries");
+		expect(result.output).toContain("stylelint: 2 files, 0 blocking");
 	});
 
 	it.each(RULES)("law 30 fails and prints the path, line and $name fire", ({name}) => {
 		const repo = runnerRepo();
 		const path = "programs/plant/window.css";
-		track(repo, {[path]: readFileSync(fixture("bad", name), "utf8")});
+		track(repo, {[path]: `\n\n${readFileSync(fixture("bad", name), "utf8")}`});
 		const result = run(repo);
 		expect(result.status).not.toBe(0);
 		expect(result.output).toContain(`fabrika/${name}`);
-		expect(result.output).toContain(`${path}:1:`);
+		expect(result.output).toContain(`${path}:3:`);
+		expect(result.output).not.toContain("failed without a diagnostic");
+	});
+
+	it("law 30 gives invalid options a path, fallback location and stylelint label", () => {
+		const repo = runnerRepo("fabrika/no-raw-color", [42]);
+		const path = "apps/plant/window.css";
+		track(repo, {[path]: ".a { color: var(--focus); }\n"});
+		const result = run(repo);
+		expect(result.status).toBe(1);
+		expect(result.output).toContain(`${path}:1:1 stylelint `);
+		expect(result.output).toContain("known");
+		expect(result.output).not.toContain("failed without a diagnostic");
 	});
 
 	it("law 30 reads every tracked scope despite nested configs and ignore files", () => {
@@ -386,8 +493,10 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
 		const repo = runnerRepo();
 		track(repo, {"apps/plant/broken.css": ".broken { color:\n"});
 		const result = run(repo);
-		expect(result.status).not.toBe(0);
+		expect(result.status).toBe(1);
 		expect(result.output).toContain("broken.css");
+		expect(result.output).not.toContain("Unconfigured CSS rule");
+		for (const {name} of RULES) expect(result.output).toContain(`fabrika/${name}`);
 	});
 
 	it("law 30 fails if stylelint crashes before it can report", () => {
