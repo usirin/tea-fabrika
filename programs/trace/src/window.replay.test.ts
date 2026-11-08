@@ -665,7 +665,7 @@ const statusOf = (all: readonly Found[]) => {
 
 describe("the replay's answer, as one short sentence in its status region", () => {
 	it("names the path and both values where each fits on one line", () => {
-		expect(saysFor(SHORT)).toContain("at total: 3 in the recording, 6 now");
+		expect(saysFor(SHORT)).toContain("at state.total: 3 in the recording, 6 now");
 	});
 
 	it("says the values are shown below where one is over 64 characters, and does not read them out", () => {
