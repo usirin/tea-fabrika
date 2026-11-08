@@ -56,6 +56,7 @@ const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("poison"), key: Schema.String}),
 	Schema.Struct({type: Schema.Literal("work")}),
 	Schema.Struct({type: Schema.Literal("refuse")}),
+	Schema.Struct({type: Schema.Literal("timer"), at: Schema.Int}),
 	Schema.Struct({
 		type: Schema.Literal("DOWN"),
 		ref: Schema.String,
@@ -73,7 +74,7 @@ type Wiring = {
 const runnerLayer: (p: Descriptor, wiring: Wiring) => ReturnType<typeof ProgramRunner.layer> =
 	ProgramRunner.layer;
 
-const world = (personOnly = false, platformActivity = false) => {
+const world = (personOnly = false, platformActivity = false, wakeAt: number | null = null) => {
 	const ledger = storage(),
 		state = storage(),
 		authority = storage();
@@ -92,6 +93,7 @@ const world = (personOnly = false, platformActivity = false) => {
 		cut: "",
 		hits: [] as string[],
 		downs: [] as Array<typeof Down.Type>,
+		timers: [] as number[],
 	};
 	// The platform has one activity key per object, shared by every selected process.
 	// Back it with a SQLite file so reopening drops all runner memory but keeps the key.
@@ -159,6 +161,10 @@ const world = (personOnly = false, platformActivity = false) => {
 				},
 				work: (s) => [s, [work({})]],
 				refuse: (s) => [s, []],
+				timer: (s, m) => {
+					controls.timers.push(m.at);
+					return [{...s, replies: s.replies + 1}, []];
+				},
 				DOWN: (s, m) => {
 					controls.downs.push(Down.make({ref: m.ref, process: m.process, why: m.why, to: m.to}));
 					return [{...s, replies: s.replies + 1}, []];
@@ -182,7 +188,7 @@ const world = (personOnly = false, platformActivity = false) => {
 			},
 			outputs: {},
 			writes: {},
-			wake: () => null,
+			wake: (s: Model) => (s.replies === 0 ? wakeAt : null),
 		};
 	};
 	const base = () =>
@@ -323,6 +329,130 @@ const recover = (w: ReturnType<typeof world>) =>
 	});
 
 describe("P34 runner supervision", () => {
+	it("p80 p55 plant, adopt without handoff: external successor folds unindexed person-only mail once across reopen", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.uuid(), fc.integer({min: 1, max: 1000}), (id, n) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const w = world(true);
+						yield* w.boot;
+						w.controls.crashAdd = 2;
+						const letter = w.input(id, {type: "add", n});
+						const before = yield* Effect.gen(function* () {
+							yield* ProgramRunner.use((r) => failed(r.msg(letter)));
+							expect(w.controls.adds).toBe(2);
+							expect(yield* ProcessStore.use((s) => s.load)).toMatchObject({
+								turn: {_tag: "prepared", id},
+								saved: {model: {count: 0}},
+							});
+							expect(yield* ProcessStore.use((s) => s.placedByAny(id))).toBeNull();
+							expect((yield* lives).at(-1)).toMatchObject({
+								_tag: "down",
+								body: {process: A, why: "saved_letter"},
+							});
+							const rows = yield* inbox;
+							expect(rows).toMatchObject([{id, body: {m: {type: "add", n}}}]);
+							return rows;
+						}).pipe(Effect.provide(w.layer()));
+						// A trusted caller starts B outside the runner's recovery action.
+						yield* ProcessManager.use((p) => p.start(again(A, `external-${id}`), from())).pipe(
+							Effect.provide(w.manager()),
+						);
+						w.reopen();
+						const adopted = yield* ProgramRunner.use((r) => r.open("adopt")).pipe(
+							Effect.provide(w.layer()),
+						);
+						w.reopen();
+						yield* Effect.gen(function* () {
+							const runner = yield* ProgramRunner;
+							const reopened = yield* runner.open("reopened");
+							expect({
+								adopted: adopted.view,
+								reopened: reopened.view,
+								adds: w.controls.adds,
+							}).toEqual({
+								adopted: {count: n, replies: 0},
+								reopened: {count: n, replies: 0},
+								adds: 3,
+							});
+							expect(yield* ProcessManager.use((p) => p.isLive(B))).toBe(true);
+							expect(yield* inbox).toEqual(before);
+							expect(yield* ProcessStore.use((s) => s.placedByAny(id))).toMatchObject({
+								id,
+								rev: before[0]!.rev,
+								pos: before[0]!.pos,
+							});
+							expect(yield* runner.msg(letter)).toMatchObject({_tag: "accepted"});
+							expect((yield* runner.open("resend")).view).toMatchObject({count: n});
+							expect(w.controls.adds).toBe(3);
+							expect(yield* dead).toEqual([]);
+						}).pipe(Effect.provide(w.layer()));
+					}).pipe(Effect.provide(TestClock.layer())),
+				),
+			),
+			{
+				seed: 119120,
+				numRuns: 12,
+				// T271 review 3: external adoption drops the only acceptance marker before indexing.
+				examples: [["00000000-0000-4000-8000-000000000271", 7]],
+			},
+		);
+	});
+
+	it("p80 plant, never restore program wake: recovery rearms a future alarm without new mail and due runs its timer", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.uuid(),
+				fc.integer({min: 101, max: 60_000}),
+				fc.integer({min: 1, max: 1000}),
+				(id, time, n) =>
+					Effect.runPromise(
+						Effect.gen(function* () {
+							const w = world(false, false, time);
+							yield* w.boot;
+							const before = yield* Effect.gen(function* () {
+								const runner = yield* ProgramRunner;
+								yield* runner.msg(w.input(id, {type: "add", n}));
+								expect(w.alarms.at(-1)).toBe(time);
+								yield* failed(runner.msg(w.input(`crash-${id}`)));
+								expect(w.alarms.at(-1)).toBe(policy.backoff.minMs);
+								return yield* inbox;
+							}).pipe(Effect.provide(w.layer()));
+							w.reopen();
+							yield* Effect.gen(function* () {
+								const runner = yield* ProgramRunner;
+								yield* TestClock.setTime(policy.backoff.minMs);
+								yield* runner.due(policy.backoff.minMs);
+								const restored = w.alarms.at(-1);
+								expect(yield* ProcessManager.use((p) => p.isLive(B))).toBe(true);
+								expect(yield* inbox).toEqual(before);
+								expect(w.controls.timers).toEqual([]);
+								yield* TestClock.setTime(time);
+								yield* runner.due(time);
+								yield* runner.due(time);
+								expect({
+									restored,
+									timers: w.controls.timers,
+									view: (yield* runner.open("timer")).view,
+								}).toEqual({
+									restored: time,
+									timers: [time],
+									view: {count: n, replies: 1},
+								});
+								expect(w.alarms.at(-1)).toBeNull();
+							}).pipe(Effect.provide(w.layer()));
+						}).pipe(Effect.provide(TestClock.layer())),
+					),
+			),
+			{
+				seed: 119120,
+				numRuns: 12,
+				// T271 review 3: recovery consumes the object's alarm while its saved program wake is future.
+				examples: [["00000000-0000-4000-8000-000000000271", 1000, 7]],
+			},
+		);
+	});
+
 	it("p80 H3 plant, restart clears turn: explicit Restart keeps unindexed person-only acceptance after a failed fold", async () => {
 		await fc.assert(
 			fc.asyncProperty(fc.uuid(), fc.integer({min: 1, max: 1000}), (id, n) =>
