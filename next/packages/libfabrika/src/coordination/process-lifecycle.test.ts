@@ -435,3 +435,31 @@ describe("P33, names and client ids are checked against a pattern", () => {
 			},
 		);
 });
+
+describe("P33, the brain writes process facts and `parent` keeps who asked", () => {
+	it.effect(
+		"a start by caller X is written as the brain's key, with a parent that leads to X",
+		() => {
+			const store = storage();
+			const X_KEY = "SHA256:caller-x";
+			const asked = `in-${W}-7`;
+			return Effect.gen(function* () {
+				yield* Ledger.use((ledger) =>
+					ledger.append(
+						"caller-x/inbox",
+						asked,
+						lineFor(from({by: X_KEY}), {_tag: "send", m: {start: "counter:1"}}),
+					),
+				);
+				yield* ProcessManager.use((p) => p.start(first(), from({by: X_KEY, parent: asked})));
+				const written = store.rows().filter((row) => Object.hasOwn(ProcessFact.cases, row._tag));
+				expect(written.map((row) => row._tag)).toEqual(["registered", "started"]);
+				for (const row of written) {
+					expect(row.by).toBe(brain().by);
+					const cause = store.rows().find((entry) => entry.id === row.parent);
+					expect(cause?.by).toBe(X_KEY);
+				}
+			}).pipe(Effect.provide(manager(store, watcher(W))));
+		},
+	);
+});

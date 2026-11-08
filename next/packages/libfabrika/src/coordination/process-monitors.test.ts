@@ -20,7 +20,7 @@ import {
 	type Storage,
 	watcher,
 } from "./process.test-support.ts";
-import {Down, Recipient, Start} from "./process.ts";
+import {Down, Owner, Recipient, Start} from "./process.ts";
 
 const signals = (store: Storage) =>
 	store
@@ -475,6 +475,70 @@ describe("P33, demonitored records why", () => {
 				"by-cancel": "canceled",
 				"by-exit": "watcher_exited",
 			});
+		});
+	});
+});
+
+describe("P33, a client's inbox is not a process's inbox", () => {
+	// A client and a process may share a name. Each DOWN lands in its own recipient's inbox only.
+	const notesClient = Recipient.cases.client.make({client: "notes", session: X});
+	const asClient = {owner: Owner.cases.brain.make({}), recipient: notesClient};
+	const twin = (store: Storage, name: string) =>
+		Effect.gen(function* () {
+			yield* seed(store);
+			const placed = yield* Effect.exit(
+				ProcessManager.use((p) =>
+					p.start(first(`start:${name}`, name, {program: "notes", hash: "build-a"}), from()),
+				).pipe(Effect.provide(manager(store, brain(), ids(B).next))),
+			);
+			if (placed._tag === "Failure") return false;
+			yield* ProcessManager.use((p) => p.monitor("watch:notes", A, from())).pipe(
+				Effect.provide(manager(store, watcher(B))),
+			);
+			yield* ProcessManager.use((p) => p.monitor("watch:notes", A, from())).pipe(
+				Effect.provide(manager(store, asClient)),
+			);
+			yield* exit(store);
+			return true;
+		});
+	it.effect("a client notes and a process notes each get their DOWN in their own inbox", () => {
+		const store = storage();
+		return Effect.gen(function* () {
+			expect(yield* twin(store, "notes")).toBe(true);
+			const downs = signals(store);
+			const forProcess = downs.filter((down) => down.m.to._tag === "process");
+			const forClient = downs.filter((down) => down.m.to._tag === "client");
+			expect(forProcess.map((down) => down.stream)).toEqual(["notes/inbox"]);
+			expect(forClient.map((down) => down.m.to)).toEqual([notesClient]);
+			expect(forClient.map((down) => down.stream)).toEqual(["client:notes/inbox"]);
+			const letters = yield* fresh(store, B);
+			expect(letters.map((letter) => letter.m)).toEqual([forProcess[0]!.m]);
+		});
+	});
+	it.effect("plain mail to process notes never reaches client notes's inbox", () => {
+		const store = storage();
+		return Effect.gen(function* () {
+			expect(yield* twin(store, "notes")).toBe(true);
+			yield* Mailbox.use((mail) => mail.send("notes", "letter:1", {hello: "notes"}, from())).pipe(
+				Effect.provide(manager(store)),
+			);
+			const rows = store.rows().filter((row) => row.id === "letter:1");
+			expect(rows.map((row) => row.stream)).toEqual(["notes/inbox"]);
+			const clientInbox = signals(store).filter((down) => down.m.to._tag === "client");
+			expect(clientInbox.map((down) => down.stream)).not.toContain("notes/inbox");
+		});
+	});
+	it.effect("a process named client:notes never shares client notes's inbox", () => {
+		const store = storage();
+		return Effect.gen(function* () {
+			// Refusing the name or giving it another inbox both keep the two apart.
+			if (!(yield* twin(store, "client:notes"))) return;
+			const downs = signals(store);
+			const forProcess = downs.filter((down) => down.m.to._tag === "process");
+			const forClient = downs.filter((down) => down.m.to._tag === "client");
+			expect(forProcess).toHaveLength(1);
+			expect(forClient).toHaveLength(1);
+			expect(forClient[0]!.stream).not.toBe(forProcess[0]!.stream);
 		});
 	});
 });

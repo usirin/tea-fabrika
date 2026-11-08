@@ -18,6 +18,7 @@ import {
 	Doorbell,
 	Ledger,
 	LedgerError,
+	LedgerTransaction,
 	lineFor,
 	RecordManager,
 	SinkError,
@@ -2128,6 +2129,144 @@ describe("P33 the door never writes process lifecycle facts", () => {
 		it.effect(`the door refuses a fact tagged ${kind} on any stream, from any receipt holder`, () =>
 			refusedAppend(kind, "tickets"),
 		);
+});
+
+describe("P33 signal ids belong to the brain", () => {
+	// A DOWN's entry id is ["DOWN", recipient, ref]. The door refuses any id in that space, so no
+	// receipt holder can hold a signal's id before the brain writes it.
+	const BRAIN = "SHA256:brain";
+	const WATCHER = "process_01m6v5270hetdrt4r8h9vvjwjv";
+	const TARGET = "process_01m6v5270hetdrt4r8h9vvjwjw";
+	const brainFrom = {
+		by: BRAIN,
+		for: PERSON,
+		sentAt: SENT,
+		seen: 0,
+		parent: `in-${WATCHER}-41`,
+		traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+		build: "test-build",
+	};
+	const toWatcher = C.Recipient.cases.process.make({process: WATCHER});
+	const asBrain = C.Owner.cases.brain.make({});
+	const brainSeat = C.Recipient.cases.client.make({client: "window-a", session: TARGET});
+	const processes = (w: World, owner: typeof C.Owner.Type, recipient: typeof C.Recipient.Type) => {
+		const next = [TARGET, WATCHER];
+		return C.ProcessManager.layer(
+			{owner, recipient, by: BRAIN},
+			Effect.sync(() => next.shift()!),
+		).pipe(
+			Layer.provide(
+				LedgerTransaction.layer(w.sql).pipe(
+					Layer.provide(Layer.succeed(Doorbell, {ring: () => Effect.void})),
+				),
+			),
+		);
+	};
+	const signalSpace = [
+		JSON.stringify(["DOWN", toWatcher, "watch:1"]),
+		JSON.stringify(["DOWN", "any", "spelling"]),
+		JSON.stringify(["DOWN"]),
+	];
+	for (const id of signalSpace)
+		it.effect(`a receipt holder's append under signal id ${id} is refused`, () =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					const {client} = yield* online(d, w);
+					yield* d.route(client, "process.send", request("press"));
+					const parent = w.deliveries.at(-1)!.envelope.id;
+					const fact = {_tag: "send", m: {_tag: "DOWN", ref: "watch:1", why: "normal"}};
+					yield* writeId(id, d.signer(parent, PROCESS, "send"));
+					expect(
+						yield* Effect.flip(
+							d.append({id, parent, process: PROCESS, kind: "send", stream: "notes", fact}),
+						),
+					).toMatchObject({_tag: "SigningRefused"});
+					expect(yield* entries("notes")).toEqual([]);
+					// The same append under an ordinary id lands: the id alone was refused.
+					yield* writeId("note-1", d.signer(parent, PROCESS, "send"));
+					const placing = yield* d.append({
+						id: "note-1",
+						parent,
+						process: PROCESS,
+						kind: "send",
+						stream: "notes",
+						fact,
+					});
+					expect(placing._tag).toBe("placed");
+				}).pipe(w.provide);
+			}),
+		);
+	it.effect("a client cannot take a DOWN's id first; the real exit then writes its DOWN", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* C.ProcessManager.use((p) =>
+					Effect.gen(function* () {
+						yield* p.start(
+							C.Start.cases.first.make({
+								id: "start:target",
+								name: "target:1",
+								code: {program: "counter", hash: "build-a"},
+							}),
+							brainFrom,
+						);
+						yield* p.start(
+							C.Start.cases.first.make({
+								id: "start:watcher",
+								name: "watcher:1",
+								code: {program: "watcher", hash: "build-a"},
+							}),
+							brainFrom,
+						);
+					}),
+				).pipe(Effect.provide(processes(w, asBrain, brainSeat)));
+				const watcher = processes(w, C.Owner.cases.process.make({process: WATCHER}), toWatcher);
+				yield* C.ProcessManager.use((p) => p.monitor("watch:1", TARGET, brainFrom)).pipe(
+					Effect.provide(watcher),
+				);
+				const {client} = yield* online(d, w);
+				yield* d.route(client, "process.send", request("press"));
+				const parent = w.deliveries.at(-1)!.envelope.id;
+				const taken = JSON.stringify(["DOWN", toWatcher, "watch:1"]);
+				yield* writeId(taken, d.signer(parent, PROCESS, "send"));
+				const forged = {
+					_tag: "send",
+					m: {_tag: "DOWN", ref: "watch:1", process: TARGET, why: "normal", to: toWatcher},
+				};
+				expect(
+					yield* Effect.flip(
+						d.append({
+							id: taken,
+							parent,
+							process: PROCESS,
+							kind: "send",
+							stream: "watcher:1/inbox",
+							fact: forged,
+						}),
+					),
+				).toMatchObject({_tag: "SigningRefused"});
+				yield* C.ProcessManager.use((p) => p.exit(TARGET, "crashed", brainFrom)).pipe(
+					Effect.provide(processes(w, asBrain, brainSeat)),
+				);
+				const inbox = yield* entries("watcher:1/inbox");
+				expect(inbox).toHaveLength(1);
+				expect(inbox[0]).toMatchObject({
+					_tag: "send",
+					by: BRAIN,
+					body: {m: {_tag: "DOWN", ref: "watch:1", process: TARGET, why: "crashed"}},
+				});
+				const letters = yield* C.ProcessManager.use((p) =>
+					Stream.runCollect(p.receive(WATCHER, 0)),
+				).pipe(Effect.provide(watcher));
+				expect(letters.map((letter) => letter.m)).toEqual([
+					{_tag: "DOWN", ref: "watch:1", process: TARGET, why: "crashed", to: toWatcher},
+				]);
+			}).pipe(w.provide);
+		}),
+	);
 });
 
 describe("P10 span reader and recording", () => {
