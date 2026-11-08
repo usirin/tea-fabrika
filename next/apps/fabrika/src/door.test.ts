@@ -553,51 +553,125 @@ describe("P10 review regressions", () => {
 			_tag: "refused",
 			why: "not_granted",
 		});
-		expect((yield* d.knock(client, {label: "Pending"}))._tag).toBe("ok");
 		return {hello, trusted};
 	});
 
-	for (const removed of ["expired", "evicted"] as const)
-		it.effect(
-			`review 1: a saved unknown hello stays spent after its waiting row is ${removed}`,
-			() =>
-				Effect.gen(function* () {
-					const w = yield* world();
-					yield* Effect.gen(function* () {
-						const d = yield* Door;
-						yield* online(d, w);
-						const saved = yield* pendingHello(d, w.otherWindow, "pending");
-						expect((yield* d.watch("w1")).rows.map((row) => row.key)).toContain(w.otherWindow.raw);
-						if (removed === "expired") yield* TestClock.adjust(w.settings.waiting.ttl);
-						else
-							for (let i = 0; i < w.settings.waiting.most; i++) {
-								yield* TestClock.adjust(1);
-								yield* pendingHello(d, yield* key(), `push-${i}`);
-							}
-						expect((yield* d.watch("w1")).rows.map((row) => row.key)).not.toContain(
-							w.otherWindow.raw,
-						);
-						const text = C.grantText({
-							id: `approve-after-${removed}`,
-							key: w.otherWindow.raw,
-							for: PERSON,
-							to: "project-a",
-							as: "window",
-							saw: SAW,
-							sentAt: SENT,
-						});
-						expect((yield* d.grant({text, armored: yield* w.root.sign(text)}))._tag).toBe(
-							"applied",
-						);
-						const before = yield* entries("door/hellos");
-						expect((yield* d.initialize("pending", saved.hello, saved.trusted))._tag).toBe(
-							"refused",
-						);
-						expect(yield* entries("door/hellos")).toEqual(before);
-						yield* online(d, w, "fresh-proof", w.otherWindow);
-					}).pipe(w.provide);
-				}),
+	it.effect(
+		"review 2.2: a live unknown hello stays spent after a direct key grant before expiry",
+		() =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					yield* online(d, w);
+					const saved = yield* pendingHello(d, w.otherWindow, "pending");
+					expect((yield* d.watch("w1")).rows).toEqual([]);
+					yield* TestClock.adjust(w.settings.waiting.ttl - 1);
+					const text = C.grantText({
+						id: "approve-key-without-knock",
+						key: w.otherWindow.raw,
+						for: PERSON,
+						to: "project-a",
+						as: "window",
+						saw: SAW,
+						sentAt: SENT,
+					});
+					expect((yield* d.grant({text, armored: yield* w.root.sign(text)}))._tag).toBe("applied");
+					expect(w.notices).toEqual([]);
+					expect(
+						w.sql.exec("SELECT name FROM door_state WHERE name=?", "client/pending"),
+					).toHaveLength(1);
+					const before = yield* entries("door/hellos");
+					expect(yield* d.initialize("pending", saved.hello, saved.trusted)).toMatchObject({
+						_tag: "refused",
+					});
+					expect(yield* entries("door/hellos")).toEqual(before);
+					yield* online(d, w, "fresh-proof", w.otherWindow);
+				}).pipe(w.provide);
+			}),
+	);
+
+	it.effect(
+		"review 2.1: a verified waiting client can knock again after a stranger challenge flood",
+		() =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					yield* online(d, w);
+					yield* pendingHello(d, w.otherWindow, "pending");
+					expect((yield* d.knock("pending", {label: "Pending"}))._tag).toBe("ok");
+					const before = (yield* d.watch("w1")).rows;
+					expect(before).toHaveLength(1);
+					for (let i = 0; i <= w.settings.waiting.most; i++) yield* d.challenge(`stranger-${i}`);
+					expect((yield* d.knock("pending", {label: "Pending"}))._tag).toBe("ok");
+					expect((yield* d.watch("w1")).rows).toEqual(before);
+				}).pipe(w.provide);
+			}),
+	);
+
+	for (const attack of ["challenge only", "bad signature"] as const)
+		it.effect(`review 2.1: a stranger flood with ${attack} makes no storage writes`, () =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					yield* online(d, w);
+					const before = w.sql.exec("SELECT total_changes() total")[0]?.total;
+					for (let i = 0; i <= w.settings.waiting.most; i++) {
+						const client = `stranger-${i}`;
+						yield* d.challenge(client);
+						if (attack === "bad signature")
+							expect(
+								yield* d.initialize(
+									client,
+									{
+										versions: [1],
+										has: [],
+										ping: "30s",
+										key: w.otherWindow.raw,
+										tab: client,
+										platform: "browser",
+										os: "ios",
+										sentAt: SENT,
+										signed: "not-an-sshsig",
+									},
+									{url: URL, tab: client, name: w.otherWindow.fingerprint},
+								),
+							).toMatchObject({_tag: "refused", why: "bad_signature"});
+					}
+					expect(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(before);
+				}).pipe(w.provide);
+			}),
 		);
+
+	it.effect("review 2.4: a closed online connection retires its client and key rows", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				yield* online(d, w, "closed");
+				const rows = () =>
+					w.sql.exec(
+						"SELECT name FROM door_state WHERE name IN (?,?)",
+						"client/closed",
+						"key/closed",
+					);
+				expect(rows()).toHaveLength(2);
+				assert(
+					"disconnect" in d && typeof d.disconnect === "function",
+					"Door.disconnect must handle a closed connection",
+				);
+				yield* d.disconnect("closed");
+				expect(rows()).toEqual([]);
+				expect((yield* d.route("closed", "ledger.read", {stream: "empty", after: 0}))._tag).toBe(
+					"refused",
+				);
+				expect((yield* d.route("w1", "ledger.read", {stream: "empty", after: 0}))._tag).toBe("ok");
+			}).pipe(w.provide);
+		}),
+	);
 
 	for (const [method, params, answer] of [
 		["ledger.read", {stream: "empty", after: 0}, "ok"],
@@ -701,7 +775,7 @@ describe("P10 review regressions", () => {
 		}),
 	);
 
-	it.effect("review 7: the saved hello key and signature can be checked together", () =>
+	it.effect("review 2.3: a saved hello carries its signed URL and verifies on its own", () =>
 		Effect.gen(function* () {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
@@ -710,7 +784,7 @@ describe("P10 review regressions", () => {
 				const rows = yield* entries("door/hellos");
 				expect(rows).toHaveLength(1);
 				const saved = yield* Schema.decodeUnknownEffect(
-					Schema.Struct({...Hello.fields, nonce: Schema.String}),
+					Schema.Struct({...Hello.fields, nonce: Schema.String, url: Schema.String}),
 				)(rows[0]!.body);
 				const blob = Buffer.concat([
 					field("ssh-ed25519"),
@@ -719,7 +793,7 @@ describe("P10 review regressions", () => {
 				const line = `ssh-ed25519 ${blob.toString("base64")}`;
 				expect(
 					yield* checkSshsig({
-						text: `fabrika-hello\n${URL}\n${saved.tab}\n${saved.nonce}`,
+						text: `fabrika-hello\n${saved.url}\n${saved.tab}\n${saved.nonce}`,
 						armored: saved.signed,
 						space: SPACE,
 						signers: [line],
@@ -2281,10 +2355,10 @@ describe("P10 span reader and recording", () => {
 });
 
 describe("P10 refusal records and checked writes", () => {
-	for (const removed of ["replaced", "evicted"] as const)
+	for (const interruption of ["replaced", "stranger flood"] as const)
 		for (const known of [true, false])
 			it.effect(
-				`p26: ${known ? "known" : "unknown"} admission cannot keep a ${removed} challenge`,
+				`p26: ${known ? "member" : "unknown key"} admission ${interruption === "replaced" ? "refuses a replaced challenge" : "survives a stranger flood"}`,
 				() =>
 					Effect.gen(function* () {
 						const w = yield* world();
@@ -2324,25 +2398,30 @@ describe("P10 refusal records and checked writes", () => {
 								signed: yield* k.sign(`fabrika-hello\n${URL}\nreplaced\n${nonce}`),
 							};
 							replace =
-								removed === "replaced"
+								interruption === "replaced"
 									? d.challenge("replaced").pipe(Effect.asVoid)
 									: Effect.forEach(
-											Array.from({length: w.settings.waiting.most}, (_, i) => i),
-											(i) => d.challenge(`eviction-${i}`),
+											Array.from({length: w.settings.waiting.most + 1}, (_, i) => i),
+											(i) => d.challenge(`stranger-${i}`),
 											{concurrency: 1},
 										).pipe(Effect.asVoid);
-							expect(
-								yield* d.initialize("replaced", hello, {
-									url: URL,
-									tab: "replaced",
-									name: k.fingerprint,
-								}),
-							).toMatchObject({_tag: "refused", why: known ? "bad_nonce" : "not_granted"});
-							expect(replace).toBeNull();
-							expect(yield* d.knock("replaced", {label: "Old proof"})).toMatchObject({
-								_tag: "refused",
-								why: "not_waiting",
+							const result = yield* d.initialize("replaced", hello, {
+								url: URL,
+								tab: "replaced",
+								name: k.fingerprint,
 							});
+							expect(result).toMatchObject(
+								interruption === "stranger flood" && known
+									? {_tag: "online"}
+									: {_tag: "refused", why: known ? "bad_nonce" : "not_granted"},
+							);
+							expect(replace).toBeNull();
+							const knock = yield* d.knock("replaced", {label: "Checked proof"});
+							expect(knock).toMatchObject(
+								interruption === "stranger flood" && !known
+									? {_tag: "ok"}
+									: {_tag: "refused", why: "not_waiting"},
+							);
 						}).pipe(
 							Effect.provide(
 								Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, ledger))),
@@ -2350,10 +2429,10 @@ describe("P10 refusal records and checked writes", () => {
 						);
 					}),
 			);
-	for (const removed of ["replaced", "evicted"] as const)
+	for (const interruption of ["replaced", "stranger flood"] as const)
 		for (const known of [true, false])
 			it.effect(
-				`p26: ${known ? "known" : "unknown"} proof cannot claim a ${removed} challenge`,
+				`p26: ${known ? "member" : "unknown key"} proof ${interruption === "replaced" ? "refuses a replaced challenge" : "survives a stranger flood"}`,
 				() =>
 					Effect.gen(function* () {
 						const w = yield* world();
@@ -2394,16 +2473,26 @@ describe("P10 refusal records and checked writes", () => {
 									}),
 								);
 								yield* Deferred.await(entered);
-								if (removed === "replaced") yield* d.challenge("verifying");
+								if (interruption === "replaced") yield* d.challenge("verifying");
 								else
-									for (let i = 0; i < w.settings.waiting.most; i++)
-										yield* d.challenge(`evict-${i}`);
+									for (let i = 0; i <= w.settings.waiting.most; i++)
+										yield* d.challenge(`stranger-${i}`);
 								yield* Deferred.succeed(release, undefined);
-								expect(yield* Fiber.join(first)).toMatchObject({_tag: "refused", why: "bad_nonce"});
-								expect(yield* d.knock("verifying", {label: "Old proof"})).toMatchObject({
-									_tag: "refused",
-									why: "not_waiting",
-								});
+								const result = yield* Fiber.join(first);
+								expect(result).toMatchObject(
+									interruption === "stranger flood" && known
+										? {_tag: "online"}
+										: {
+												_tag: "refused",
+												why: interruption === "replaced" ? "bad_nonce" : "not_granted",
+											},
+								);
+								const knock = yield* d.knock("verifying", {label: "Checked proof"});
+								expect(knock).toMatchObject(
+									interruption === "stranger flood" && !known
+										? {_tag: "ok"}
+										: {_tag: "refused", why: "not_waiting"},
+								);
 							} finally {
 								spy.mockRestore();
 							}
