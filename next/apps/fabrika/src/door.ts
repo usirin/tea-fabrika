@@ -64,7 +64,9 @@ const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
 export type ConnectionId = typeof ConnectionId.Type;
 
 const quiet = Tracer.make({span: (options) => new Tracer.NativeSpan(options)});
-const silent = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.withTracer(quiet));
+const silent = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
+	return yield* effect.pipe(Effect.withTracer(quiet));
+});
 const json = Schema.decodeUnknownResult(Schema.Json);
 const rawObject = (a: unknown): Record<string, unknown> | null =>
 	typeof a === "object" && a !== null && !Array.isArray(a) ? (a as Record<string, unknown>) : null;
@@ -294,7 +296,9 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		const by = yield* membership(raw);
 		return {attached, raw, by};
 	});
-	const connect = () => Effect.sync(() => ConnectionId.make(random()));
+	const connect = Effect.fnUntraced(function* () {
+		return yield* Effect.sync(() => ConnectionId.make(random()));
+	});
 	const challenge = Effect.fnUntraced(function* (client: ConnectionId) {
 		for (const attempt of checking.get(client) ?? []) attempt.current = false;
 		yield* store.atomic(() => {
@@ -400,7 +404,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			}
 			return result;
 		}
-		yield* Effect.gen(function* () {
+		const recordHello = Effect.fn("door.initialize")(function* () {
 			const from = yield* fromHere({
 				by: result.who.key,
 				for: result.who.person,
@@ -433,7 +437,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					}),
 				);
 			});
-		}).pipe(Effect.withSpan("door.initialize"));
+		});
+		yield* recordHello();
 		yield* flush;
 		return result;
 	});
@@ -634,7 +639,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				enrollmentChecked = issued;
 			}
 		}
-		return yield* Effect.gen(function* () {
+		const applyGrant = Effect.fn("door.grant")(function* () {
 			const prior = yield* store.atomic(() => store.get(`change/${value.id}`, Receipt));
 			if (prior !== null)
 				return prior.text === text && prior.armored === armored
@@ -696,9 +701,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				}
 			});
 			return reply;
-		}).pipe(
-			turn.withPermits(1),
-			Effect.withSpan("door.grant"),
+		}, turn.withPermits(1));
+		return yield* applyGrant().pipe(
 			Effect.flatMap((reply) =>
 				Effect.gen(function* () {
 					if (reply._tag === "applied") {
@@ -736,6 +740,15 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			),
 		);
 	});
+	const denyFrom = Effect.fn("door.deny")(function* (by: Writer) {
+		return yield* fromHere({
+			by: by.key,
+			for: by.for,
+			seen: 0,
+			parent: null,
+			build: options.build,
+		});
+	});
 	const deny = Effect.fnUntraced(function* (client: ConnectionId, input: unknown) {
 		const checked = yield* silent(Effect.result(online(client)));
 		if (Result.isFailure(checked)) return GrantReply.cases.refused.make({why: "not_granted"});
@@ -745,13 +758,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		if (Result.isFailure(params) || reserved(input))
 			return GrantReply.cases.refused.make({why: "bad_input"});
 		const {key, saw} = params.success;
-		const from = yield* fromHere({
-			by: checked.success.by.key,
-			for: checked.success.by.for,
-			seen: 0,
-			parent: null,
-			build: options.build,
-		}).pipe(Effect.withSpan("door.deny"));
+		const from = yield* denyFrom(checked.success.by);
 		return yield* clients
 			.write(MemberFact.cases.denied.make({id: random(), key, saw, by: from.by}), from)
 			.pipe(turn.withPermits(1));
@@ -817,7 +824,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			refusal === null && request !== null && Result.isSuccess(request)
 				? `${target}/${request.success.letter}`
 				: null;
-		const inputSpan = Effect.gen(function* () {
+		const recordInput = Effect.fn("door.input")(function* () {
 			const span = yield* Effect.currentSpan;
 			const allocation = yield* store.atomic(() => {
 				const [prior] =
@@ -903,12 +910,14 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				return recorded;
 			}
 			return binding;
-		}).pipe(Effect.withSpan("door.input"));
-		const binding = yield* inputSpan;
+		});
+		const binding = yield* recordInput();
 		yield* flush;
 		if (binding === null) return no("id_reused");
-		const routed = yield* Effect.exit(
-			Effect.gen(function* () {
+		const routeInput = Effect.fn("door.route", {
+			links: [{span: Tracer.externalSpan(binding.span), attributes: {}}],
+		})(
+			function* () {
 				if (refusal !== null) return no(refusal);
 				if (method === "door.watch") {
 					const answer = yield* watch(client);
@@ -979,13 +988,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					return ok(null);
 				}
 				return no("unknown_method");
-			}).pipe(
-				Effect.tap((answer) => Effect.annotateCurrentSpan("fab.door.outcome", answer._tag)),
-				Effect.withSpan("door.route", {
-					links: [{span: Tracer.externalSpan(binding.span), attributes: {}}],
-				}),
-			),
+			},
+			Effect.tap((answer) => Effect.annotateCurrentSpan("fab.door.outcome", answer._tag)),
 		);
+		const routed = yield* Effect.exit(routeInput());
 		yield* flush;
 		return yield* Exit.isSuccess(routed)
 			? Effect.succeed(routed.value)

@@ -262,6 +262,7 @@ describe("each rule refuses what it is there to refuse", () => {
 			"no-promises",
 			"no-effect-run-outside-edge",
 			"edge-comment",
+			"effect-functions",
 			"no-of",
 			"no-hand-tag",
 			"one-store-hook",
