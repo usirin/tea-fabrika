@@ -57,9 +57,8 @@ JobTrace.starts: Start[]   // {run, program, machine, id, n, after, at, state, b
 - **Every boot, not only the first.** A restart boots from the kept state, and the kept state can
   be one step behind or ahead of the step rows: the step write and the save are two writes, and a
   crash can land between them. With only the first start kept, a replay across that restart would
-  fold from the wrong state and blame today's code for it. With every start kept, the adapter sees
-  it: start 2's state is not the state step `after` left, and it answers `cannot restarted`, never
-  a guess. This is the repo's "record wide" (AGENTS.md, "Record wide, read later": "record every
+  fold from the wrong state and blame today's code for it. With every start kept, each life
+  replays from its own start (section 2), and the gap shows as what it is: a crash. This is the repo's "record wide" (AGENTS.md, "Record wide, read later": "record every
   measure we can, even if nothing reads it yet") and "data shape first": a restart's boot state is
   a fact lost forever if it is not written then. The brief said "once per machine run"; this keeps
   that one and the later ones.
@@ -92,7 +91,7 @@ export const Replayed = Schema.TaggedUnion({
 	          recorded: Schema.Unknown, replayed: Schema.Unknown},   // path starts "state" or "cmds"
 	refused: {n: Schema.Int, msg: Schema.Unknown, state: Schema.String,
 	          accepts: Schema.Array(Schema.String)},
-	cannot:  {why: Schema.Literals(["no_start", "no_code", "state_refused", "restarted", "threw"]),
+	cannot:  {why: Schema.Literals(["no_start", "no_code", "state_refused", "threw"]),
 	          n: Schema.NullOr(Schema.Int), detail: Schema.String},
 });
 
@@ -101,11 +100,20 @@ replayOf(code, {starts, steps}): Replayed
 //   no start, or the first start's `after` is not 0   cannot no_start  ("recorded before its start was kept")
 //   no program or no machine of that name             cannot no_code   (detail: which)
 //   a start's or a step's state its schema refuses    cannot state_refused (n: the step, 0 for a start)
-//   a later start whose state is not what step `after` left   cannot restarted (n: after)
 //   today's update throws                             cannot threw (detail: its message)
-//   else: Trace {loaded: first start's state, msgs, finalState, steps: [{msg, state, cmds}]}
-//         replayTrace(kind.machine, trace)  ->  matches | parts (n = divergence.at.index + 1) | refused
+//   else: one tea Trace per life (a start and the steps until the next start),
+//         each {loaded: its start's state, msgs, finalState, steps: [{msg, state, cmds}]}
+//         replayTrace(kind.machine, life) in order; the first life that parts or is refused is
+//         the answer, its n the record's step number; every life matches -> matches
 ```
+
+**A restart is a new life, not a refusal** (changed 2026-11-08, the lead agent; it said
+`cannot restarted` when a later start's state was not what the step before it left). tea's own
+rule is one start per recording: `parseJSONL` refuses a second boot line, "A trace has exactly one
+boot line." So each life replays from its own start, with tea as it is, and tea does not grow to
+fit us (AGENTS.md: "tea stays small. A host composes tea and Effect; tea does not grow to fit a
+host"). A start whose state is not what the step before it left is a fact about a crash, never a
+verdict on the code: the tile shows it on that start and replays on.
 
 - States are decoded with the kind's own state schema (`Kind.state`), as storage reads them. Msgs
   and Cmds go in as the record keeps them (their JSON): no kept machine in today's code has a Msg
@@ -141,6 +149,14 @@ replay: {row: RowKey, steps: Int, answer: Replayed | null} | null
 - The answer shows in the detail as text in a `role="status"` region, so it is read out when it
   comes. The parting step's row says "parts from the recording", the refused one "no cell in
   today's code". Color is never the only cue (WCAG 1.4.1).
+- **A machine run with no start kept shows no button.** Its detail says "Recorded before starts
+  were kept, so it can't be replayed." A button that can only answer no is a dead button
+  (AGENTS.md, "No rough first versions": "all it shows works, with no stub, dead button"), and
+  the record alone says so, with no code asked. The adapter still answers `cannot no_start` for
+  any other caller.
+- tea names the Cmd's answer `replay_ok` / `replay_err` (a `Cmd.make` Cmd settles that way), not
+  `replayed`; a `defineMachine` with no tagged states reports its state as `"(untagged state)"`.
+  Choosing the same job again keeps the replay, since `look` on the same id changes nothing.
 - The first step's "before" is now the kept start (`{kind: "kept", state}`), and its changes are
   shown against it. A record with no start still says `{kind: "start"}`.
 
@@ -165,7 +181,7 @@ pieces, as `packages/fabrika/src/shell/trace/records.test.ts` runs them), then r
 - `seq --to 25 | tally`, 25 Msgs, replayed twice: the same answer both times, deep equal
 
 Plus: a record with steps and no start answers `cannot no_start`; a restart whose boot state is not
-the last step's answers `cannot restarted`; a kept state the schema now refuses answers `cannot
+the last step's still replays, each life from its own start; a kept state the schema now refuses answers `cannot
 state_refused`.
 
 ## Steps, by hand
