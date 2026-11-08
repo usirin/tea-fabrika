@@ -175,8 +175,10 @@ binding wins, said in words, with Undo). Kind: law.
 for typed words ([typography](./typography.md) T6, decided 2026-11-02), two grays
 ([typography](./typography.md) T3), the accent says your turn and nothing else
 ([color principles](./color-principles.md) 2, decided 2026-11-01), and one slate focus token (the
-same note, changed 2026-11-08). This note adds no font or color rule. The lean is the edge law and
-"no second line".
+same note, changed 2026-11-08). "No second line" is decided too: if something already draws an
+edge, a second line beside it goes ([color principles](./color-principles.md) 6). This note adds
+no font, color or line rule. The lean is the edge law: its pixel numbers and that the program, not
+the tile, gives way.
 
 - **What it means.** The program paints no background over the tile's edge, so the focus edge
   lights all the way round. No second line under a line: the search is a field with a rule under
