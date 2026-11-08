@@ -102,12 +102,18 @@ const prRow = (pr: PullRequest) => `pr:${pr.url}`;
 /** A repository's short name: the last part of its link. */
 const shortOf = (repo: string): string => repo.split("/").filter(Boolean).at(-1) ?? repo;
 
-export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
-	const [picked, setPicked] = useState<string | null>(null);
-	const [title, setTitle] = useState("");
-	const [body, setBody] = useState("");
-	const [find, setFind] = useState(view.filter.find);
-	const [comments, setComments] = useState<Readonly<Record<number, string>>>({});
+export function TrackerWindow({view, send, local, commands}: WindowProps<typeof tracker>) {
+	const {
+		picked = null,
+		title = "",
+		body = "",
+		find = view.filter.find,
+		comments = {},
+	} = local?.state ?? {};
+	const setPicked = (row: string) => local?.send({type: "pick", row});
+	const setTitle = (text: string) => local?.send({type: "draft", field: "title", text});
+	const setBody = (text: string) => local?.send({type: "draft", field: "body", text});
+	const setFind = (text: string) => local?.send({type: "draft", field: "find", text});
 	const {page} = view;
 	return (
 		<section className="tracker" aria-label="tracker">
@@ -117,25 +123,25 @@ export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
 					<p className="tracker-quiet">Reading the ledger…</p>
 				) : page.kind === "list" ? (
 					<ListPage
+						local={local}
+						commands={commands}
 						view={view}
 						page={page}
 						picked={picked}
 						pick={setPicked}
 						find={find}
-						setFind={(text) => {
-							setFind(text);
-							send({type: "query", value: {status: view.filter.show, find: text}});
-						}}
+						setFind={setFind}
 						draft={{title, body, setTitle, setBody}}
 						act={send}
 					/>
 				) : (
 					<TicketPage
+						commands={commands}
 						number={page.number}
 						opened={page.opened}
 						saving={view.saving}
 						draft={comments[page.number] ?? ""}
-						setDraft={(text) => setComments((all) => ({...all, [page.number]: text}))}
+						setDraft={(text) => local?.send({type: "comment", ticket: page.number, text})}
 						back={() => send({type: "query", value: {status: view.filter.show, find}})}
 						act={send}
 					/>
@@ -200,6 +206,8 @@ const SHOWS: readonly {readonly show: Show; readonly label: string; readonly key
 ];
 
 function ListPage(props: {
+	readonly local: WindowProps<typeof tracker>["local"];
+	readonly commands: WindowProps<typeof tracker>["commands"];
 	readonly view: Shown;
 	readonly page: ListView;
 	readonly picked: string | null;
@@ -222,6 +230,16 @@ function ListPage(props: {
 	const order = [...tickets.map((t) => ticketRow(t.number)), ...pullRequests.map(prRow)];
 	const picked = order.find((r) => r === props.picked) ?? order[0];
 	const counted = {open: counts.open, closed: counts.closed, all: counts.open + counts.closed};
+	useEffect(
+		() =>
+			props.local?.listen((cmd) => {
+				if (cmd.type !== "focus" || typeof cmd.where !== "string") return;
+				if (cmd.where === "new") titleRef.current?.focus();
+				else if (cmd.where === "search") findRef.current?.focus();
+				else (rows.current.get(cmd.where) ?? pageRef.current)?.focus();
+			}),
+		[props.local],
+	);
 
 	const toList = () => {
 		if (picked === undefined) pageRef.current?.focus();
@@ -271,46 +289,7 @@ function ListPage(props: {
 		draft.setBody("");
 		titleRef.current?.focus();
 	};
-	const onComposerKey = (e: KeyboardEvent<HTMLElement>) => {
-		if (isSubmit(e)) {
-			e.preventDefault();
-			file();
-		} else if (e.key === "Escape") {
-			e.preventDefault();
-			if (picked === undefined) e.currentTarget.blur();
-			else rows.current.get(picked)?.focus();
-		}
-	};
-	const move = (by: number) => {
-		const at = order.indexOf(picked ?? "");
-		const next = order[Math.min(order.length - 1, Math.max(0, at + by))];
-		if (next === undefined) return;
-		pick(next);
-		rows.current.get(next)?.focus();
-	};
 	const show = (s: Show) => act({type: "query", value: {status: s, find: props.find}});
-	/** The list's own keys, anywhere on the page but in a box being typed in. */
-	const onListKey = (e: KeyboardEvent) => {
-		if (e.ctrlKey || e.metaKey || e.altKey) return;
-		const target = e.target as HTMLElement;
-		if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
-		const keys: Readonly<Record<string, () => void>> = {
-			ArrowDown: () => move(1),
-			j: () => move(1),
-			ArrowUp: () => move(-1),
-			k: () => move(-1),
-			c: () => titleRef.current?.focus(),
-			"/": () => findRef.current?.focus(),
-			o: () => show("open"),
-			x: () => show("closed"),
-			a: () => show("all"),
-			q: () => act({type: "quit", value: null}),
-		};
-		const key = keys[e.key];
-		if (key === undefined) return;
-		e.preventDefault();
-		key();
-	};
 	const onFindKey = (e: KeyboardEvent<HTMLInputElement>) => {
 		if (e.key !== "Escape" && e.key !== "ArrowDown" && e.key !== "Enter") return;
 		e.preventDefault();
@@ -324,13 +303,7 @@ function ListPage(props: {
 
 	return (
 		// The list's keys are heard on the whole page, so they still work when a filter leaves no row.
-		<section
-			aria-label="list page"
-			className="tracker-page"
-			ref={pageRef}
-			tabIndex={-1}
-			onKeyDown={onListKey}
-		>
+		<section aria-label="list page" className="tracker-page" ref={pageRef} tabIndex={-1}>
 			<div className="tracker-bar">
 				<fieldset className="tracker-shows" aria-label="show">
 					{SHOWS.map((s) => (
@@ -383,7 +356,7 @@ function ListPage(props: {
 						if (e.key === "Enter" && !isSubmit(e)) {
 							e.preventDefault();
 							bodyRef.current?.focus();
-						} else onComposerKey(e);
+						}
 					}}
 					spellCheck={false}
 					autoComplete="off"
@@ -397,14 +370,14 @@ function ListPage(props: {
 							rows={draft.body === "" ? 2 : 5}
 							value={draft.body}
 							onChange={(e) => draft.setBody(e.target.value)}
-							onKeyDown={onComposerKey}
 						/>
 						<div className="tracker-row">
 							<small>
 								<Kbd>Ctrl</Kbd> <Kbd>Enter</Kbd> files it
 							</small>
 							<button
-								type="submit"
+								type="button"
+								{...props.commands.submit.control}
 								className="tracker-primary"
 								disabled={draft.title.trim() === ""}
 							>
@@ -754,6 +727,7 @@ const HeadLine = ({head}: {readonly head: Head}) => (
 );
 
 function TicketPage(props: {
+	readonly commands: WindowProps<typeof tracker>["commands"];
 	readonly number: number;
 	readonly opened: Opened | null;
 	readonly saving: readonly Write[];
@@ -773,11 +747,7 @@ function TicketPage(props: {
 	}, [number]);
 
 	/** Esc goes back to the list, from anywhere on the page. A comment half written stays. */
-	const onPageKey = (e: KeyboardEvent) => {
-		if (e.key !== "Escape") return;
-		e.preventDefault();
-		back();
-	};
+	const onPageKey = () => {};
 	/** "Comment", or with `asks: "changes"`, "Request changes": the person says which, nothing guesses. */
 	const comment = (e?: FormEvent, asks?: "changes") => {
 		e?.preventDefault();
@@ -862,11 +832,6 @@ function TicketPage(props: {
 							rows={3}
 							value={draft}
 							onChange={(e) => setDraft(e.target.value)}
-							onKeyDown={(e) => {
-								if (!isSubmit(e)) return onPageKey(e);
-								e.preventDefault();
-								comment();
-							}}
 						/>
 						<div className="tracker-row">
 							<small>
@@ -890,7 +855,8 @@ function TicketPage(props: {
 								Request changes
 							</button>
 							<button
-								type="submit"
+								type="button"
+								{...props.commands.submit.control}
 								className="tracker-primary"
 								disabled={draft.trim() === ""}
 								onKeyDown={onPageKey}

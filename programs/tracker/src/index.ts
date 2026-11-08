@@ -2,6 +2,7 @@ import {run} from "@demlik/tea/effect";
 import {defineProgram, end, input, kind, output} from "@kampus/fabrika-old";
 import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
 import {Effect, Schema} from "effect";
+import {WindowMsg, WindowState, windowMachine} from "./controller.ts";
 import {duplicatesCell} from "./duplicates.ts";
 import {foldersCell} from "./folders.ts";
 import {clockRunner, loadCell, pollRunner, saveCell, saveHintsCell} from "./ledger.ts";
@@ -208,6 +209,18 @@ export const ticketsKind = kind({
 });
 
 export const tracker = defineProgram({
+	commands: {
+		next: {send: {type: "next"}, keys: ["j", "down"]},
+		previous: {send: {type: "previous"}, keys: ["k", "up"]},
+		new: {send: {type: "new"}, keys: "c"},
+		search: {send: {type: "search"}, keys: "/"},
+		open: {send: {type: "open"}, keys: "o"},
+		closed: {send: {type: "closed"}, keys: "x"},
+		all: {send: {type: "all"}, keys: "a"},
+		quit: {send: {type: "quit"}, keys: "q"},
+		submit: {send: {type: "submit"}, keys: ["ctrl+enter", "cmd+enter"]},
+		return: {send: {type: "return"}, keys: "escape"},
+	},
 	name: "tracker",
 	description:
 		"Tickets on the ledger, one stream of facts each: lists them with the open pull requests beside them, files one, shows one's timeline and top line, comments, answers an open ask, closes and reopens. Holds the project's areas, which a person makes, renames and merges. It has a window.",
@@ -266,7 +279,12 @@ export const tracker = defineProgram({
 		),
 	},
 	machines: {tickets: ticketsKind},
-	view: {machine: "tickets", data: Shown, of: shownOf},
+	view: {
+		machine: "tickets",
+		data: Shown,
+		of: shownOf,
+		window: {machine: windowMachine, state: WindowState, msg: WindowMsg, refuse: () => null},
+	},
 	main: ({serve, send, watch}) =>
 		Effect.gen(function* () {
 			const runtime = yield* (yield* run(tickets, ticketsOptions)).ready;

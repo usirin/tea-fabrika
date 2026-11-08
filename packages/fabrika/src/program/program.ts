@@ -49,6 +49,7 @@ import {
 	type StorageFailed,
 } from "./storage.ts";
 import {ATTR, type Drawing, SERVICE_NAME, traceOf} from "./trace.ts";
+import {type InputMsg, readInput} from "./view.ts";
 
 // A program: the thing you start. It has a name, a sentence that says what it
 // does, typed flags, inputs and outputs, and `main`. It is not a machine. A
@@ -498,11 +499,26 @@ export interface Program<
 	readonly capacity: number;
 	/** Each machine it runs, as a kind ({@link Kind}), with its status line. */
 	readonly machines: Ks;
+	readonly commands: Readonly<Record<string, Command<any, string>>>;
+	readonly mode: (state: any) => string | null;
 	/** The program itself: serves its inputs, runs its machines, asks for its services, sends its outputs. */
 	readonly main: (io: Io<F, I, O, Ks>) => Effect.Effect<void, E, R>;
 }
 
 export type AnyProgram = Program<any, any, any, any, any, any>;
+
+export interface Command<M, Mode extends string> {
+	readonly send: M;
+	readonly keys: string | readonly string[];
+	readonly global?: true;
+	readonly mode?: Mode | readonly (Mode | null)[];
+}
+export interface WindowBehavior<S, M extends {type: string}> {
+	readonly machine: Machine<S, M, any, any, any>;
+	readonly state: Schema.Codec<S>;
+	readonly msg: Schema.Codec<M>;
+	readonly refuse: (state: S, msg: M) => string | null;
+}
 
 /**
  * What a program's window is shown, as data: one of its machines' state, picked by a pure
@@ -524,6 +540,7 @@ export interface View<S, V> {
 	readonly data: Schema.Codec<V, V>;
 	/** What the window is shown, from that machine's state alone. Pure: a checker may call it. */
 	readonly of: (state: S) => V;
+	readonly window?: WindowBehavior<any, any>;
 }
 
 /** A program's view, of any machine and any data: what a host holds. */
@@ -531,6 +548,7 @@ export interface AnyView {
 	readonly machine: string;
 	readonly data: Schema.Top;
 	readonly of: (state: any) => unknown;
+	readonly window?: WindowBehavior<any, any>;
 }
 
 /** The view of each program `defineProgram` made with one. */
@@ -554,7 +572,10 @@ export interface Definition<
 	Ks extends Kinds,
 	E,
 	R,
-> extends Omit<Program<F, I, O, Ks, E, R>, "flags" | "machines" | "capacity" | typeof defined> {
+> extends Omit<
+	Program<F, I, O, Ks, E, R>,
+	"flags" | "machines" | "capacity" | "commands" | "mode" | typeof defined
+> {
 	readonly flags?: F;
 	readonly machines?: Ks;
 	readonly capacity?: number;
@@ -562,6 +583,9 @@ export interface Definition<
 
 /** What a program with a view shows of it in its type: its data's type, for its window. */
 export type Viewed<V> = [V] extends [never] ? unknown : {readonly view: View<any, V>};
+type Commanded<Cs, W, V> = {readonly commands: Cs} & ([W] extends [undefined]
+	? unknown
+	: {readonly view: View<any, V> & {readonly window: W}});
 
 /**
  * What the types check of each kind against the program it is declared in:
@@ -592,10 +616,26 @@ export function defineProgram<
 	E = never,
 	R = never,
 	V = never,
+	W extends WindowBehavior<any, any> | undefined = undefined,
+	Mode extends ((state: any) => string | null) | undefined = undefined,
+	const Cs extends Readonly<Record<string, Command<any, any>>> = Record<never, never>,
 >(
 	definition: Definition<F, I, O, Ks, E, R> &
-		NoInfer<Parented<F, O, Ks>> & {readonly view?: ViewOf<NoInfer<Ks>, V>},
-): Program<F, I, O, Ks, E, R> & Viewed<V> {
+		NoInfer<Parented<F, O, Ks>> & {
+			readonly view?: ViewOf<NoInfer<Ks>, V> & {readonly window?: W};
+			readonly mode?: Mode;
+			readonly commands?: Cs &
+				Readonly<
+					Record<
+						string,
+						Command<
+							NoInfer<W extends WindowBehavior<any, infer M> ? M : InputMsg<I>>,
+							NoInfer<Mode extends (...args: any[]) => infer T ? Exclude<T, null> & string : never>
+						>
+					>
+				>;
+		},
+): Omit<Program<F, I, O, Ks, E, R>, "commands"> & Viewed<V> & Commanded<Cs, W, V> {
 	if (definition.name.trim() === "") throw new Error("a program needs a name");
 	described(definition.description);
 	const capacity = capacityOf(definition.capacity ?? CAPACITY);
@@ -620,19 +660,32 @@ export function defineProgram<
 		throw new Error(
 			`${definition.name}'s view reads ${view.machine}, which is not one of its machines`,
 		);
+	for (const [name, command] of Object.entries(definition.commands ?? {})) {
+		if (command.mode !== undefined && definition.mode === undefined)
+			throw new Error(
+				`${definition.name}'s command ${name} declares mode ${command.mode} without mode().`,
+			);
+		const why =
+			view?.window === undefined
+				? readInput({name: definition.name, inputs: definition.inputs} as AnyProgram, command.send)
+						.kind === "refused"
+				: !Schema.is(view.window.msg)(command.send);
+		if (why)
+			throw new Error(`${definition.name}'s command ${name} sends an unrelated message or input.`);
+	}
 	// The mark is in the types only; `made` is what a run checks.
-	const program = {...definition, flags: definition.flags ?? none, machines, capacity} as Program<
-		F,
-		I,
-		O,
-		Ks,
-		E,
-		R
-	>;
+	const program = {
+		...definition,
+		flags: definition.flags ?? none,
+		machines,
+		capacity,
+		commands: definition.commands ?? {},
+		mode: definition.mode ?? (() => null),
+	} as Program<F, I, O, Ks, E, R>;
 	made.add(program);
 	if (view !== undefined) views.set(program, view);
 	// The view's data type is in the returned type alone: what its window is typed by.
-	return program as typeof program & Viewed<V>;
+	return program as typeof program & Viewed<V> & Commanded<Cs, W, V>;
 }
 
 /** `name`: the first value that did not fit. `why`: what is wrong with it, in the schema's words. */

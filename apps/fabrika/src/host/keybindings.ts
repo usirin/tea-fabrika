@@ -13,10 +13,14 @@ import {
 } from "effect";
 import {
 	decodeKeys,
+	type CatalogOptions,
 	defaults,
 	File,
+	fileWord,
 	type Key,
 	patchKeys,
+	sameScope,
+	sameTarget,
 	spell,
 	writtenKeys,
 } from "../desk/keymap.ts";
@@ -64,7 +68,9 @@ const failed = (error: PlatformError.PlatformError) =>
 
 export type KeybindingManager = Manager;
 export const KeybindingManager = Object.assign(ManagerService, {
-	make: (options: {readonly folder: string; readonly mac: boolean; readonly by: string}) =>
+	make: (
+		options: {readonly folder: string; readonly mac: boolean; readonly by: string} & CatalogOptions,
+	) =>
 		Effect.gen(function* () {
 			const fs = yield* FileSystem.FileSystem;
 			const path = yield* Path.Path;
@@ -76,8 +82,23 @@ export const KeybindingManager = Object.assign(ManagerService, {
 				changes: [],
 			});
 			let bytes: string | null = null;
+			let programs = options.programs;
+			let generation = 0;
+			const decode = (text: string) =>
+				decodeKeys(text, options.mac, {...options, ...(programs === undefined ? {} : {programs})});
+			const empty = () => {
+				const read = decode("");
+				return Result.isSuccess(read)
+					? {...read.success, file: File.cases.none.make({})}
+					: defaults;
+			};
 			let initial = true;
-			let undo: {version: string; rows: ReadonlyMap<string, Value>} | null = null;
+			let undo: {
+				version: string;
+				catalog: number;
+				text: string;
+				rows: ReadonlyMap<string, Value>;
+			} | null = null;
 			const ready = yield* Deferred.make<void>();
 			const read = Effect.suspend(() => fs.readFileString(file)).pipe(
 				Effect.catch((error) =>
@@ -113,7 +134,7 @@ export const KeybindingManager = Object.assign(ManagerService, {
 						yield* SubscriptionRef.set(state, recovered);
 						return recovered;
 					}
-					const decoded = text === null ? Result.succeed(defaults) : decodeKeys(text, options.mac);
+					const decoded = text === null ? Result.succeed(empty()) : decode(text);
 					if (Result.isFailure(decoded)) {
 						yield* refuse(decoded.failure.why, decoded.failure.line);
 						initial = false;
@@ -131,11 +152,13 @@ export const KeybindingManager = Object.assign(ManagerService, {
 						after: keys,
 						displaced,
 						version: digest,
+						catalog: generation,
 					};
 					const snapshot: Snapshot = {
 						version: digest,
 						keys,
 						changes: initial ? [] : [...current.changes, record].slice(-CHANGES_SENT),
+						catalog: generation,
 					};
 					if (!initial)
 						yield* Effect.logInfo("keybindings_changed").pipe(
@@ -163,8 +186,7 @@ export const KeybindingManager = Object.assign(ManagerService, {
 				one(
 					Effect.gen(function* () {
 						const latest = yield* read;
-						const checked =
-							latest === null ? Result.succeed(defaults) : decodeKeys(latest, options.mac);
+						const checked = latest === null ? Result.succeed(empty()) : decode(latest);
 						if (Result.isFailure(checked))
 							return yield* new Refused({
 								why: `line ${checked.failure.line}: ${checked.failure.why}`,
@@ -174,54 +196,78 @@ export const KeybindingManager = Object.assign(ManagerService, {
 						const text = latest ?? "";
 						const values = writtenKeys(text);
 						const changes = new Map<string, Value>();
-						const displaced: {does: (typeof checked.success.rows)[number]["does"]; key: Key}[] = [];
-						switch (request._tag) {
-							case "prefix":
-								changes.set("prefix", request.key);
-								break;
-							case "ignore":
-								changes.set("ignore", request.keys);
-								break;
-							case "reset":
-								changes.set(request.does, null);
-								break;
-							case "undo":
-								if (
-									undo === null ||
-									request.version !== undo.version ||
-									request.version !== before.version
-								)
-									return yield* new Refused({
-										why: "The file changed to a newer version. Undo is no longer available.",
-									});
-								for (const [word, value] of undo.rows) changes.set(word, value);
-								break;
-							case "bind": {
-								// Decode the requested row apart so existing user claims can be removed before checking the result.
-								const candidate = decodeKeys(
-									`${request.does} = ${JSON.stringify(request.keys)}`,
-									options.mac,
-								);
-								if (Result.isFailure(candidate))
-									return yield* new Refused({why: candidate.failure.why});
-								const claimed =
-									candidate.success.rows.find((row) => row.does === request.does)?.keys ?? [];
-								for (const row of checked.success.rows) {
-									if (row.does === request.does) continue;
-									const lost = row.keys.filter((key) => claimed.some((take) => same(key, take)));
-									for (const key of lost) displaced.push({does: row.does, key});
-									if (lost.length > 0 && row.source === "yours")
-										changes.set(
-											row.does,
-											row.keys.filter((key) => !lost.some((take) => same(key, take))).map(spelling),
-										);
+						const displaced: Snapshot["changes"][number]["displaced"][number][] = [];
+						const requests = request._tag === "batch" ? request.edits : [request];
+						for (const request of requests)
+							switch (request._tag) {
+								case "prefix":
+									changes.set("prefix", request.key);
+									break;
+								case "ignore":
+									changes.set("ignore", request.keys);
+									break;
+								case "reset": {
+									const target = request.target;
+									if (
+										target !== undefined &&
+										!checked.success.rows.some((row) => sameTarget(row.target, target))
+									)
+										return yield* new Refused({why: "That command was unloaded or changed."});
+									const word = target === undefined ? request.does : fileWord(target);
+									if (word === undefined) return yield* new Refused({why: "Choose a command."});
+									changes.set(word, null);
+									break;
 								}
-								changes.set(request.does, request.keys);
-								break;
+								case "undo":
+									if (
+										undo === null ||
+										request.version !== undo.version ||
+										request.version !== before.version ||
+										undo.catalog !== generation
+									)
+										return yield* new Refused({
+											why: "The file or catalog changed. Undo is no longer available.",
+										});
+									for (const [word, value] of undo.rows) changes.set(word, value);
+									break;
+								case "bind": {
+									const row = checked.success.rows.find((row) =>
+										request.target === undefined
+											? row.does === request.does && row.target.mode === null
+											: sameTarget(row.target, request.target),
+									);
+									if (row === undefined)
+										return yield* new Refused({why: "That command was unloaded or changed."});
+									const word = fileWord(row.target);
+									// Decode the requested row apart so existing user claims can be removed before checking the result.
+									const candidate = decode(`${word} = ${JSON.stringify(request.keys)}`);
+									if (Result.isFailure(candidate))
+										return yield* new Refused({why: candidate.failure.why});
+									const claimed =
+										candidate.success.rows.find((one) => sameTarget(one.target, row.target))
+											?.keys ?? [];
+									for (const other of checked.success.rows) {
+										if (sameTarget(other.target, row.target) || !sameScope(other, row)) continue;
+										const lost = other.keys.filter((key) =>
+											claimed.some((take) => same(key, take)),
+										);
+										for (const key of lost)
+											displaced.push({does: other.does, target: other.target, key});
+										if (lost.length > 0)
+											changes.set(
+												fileWord(other.target),
+												other.keys
+													.filter((key) => !lost.some((take) => same(key, take)))
+													.map(spelling),
+											);
+									}
+									changes.set(word, request.keys);
+									break;
+								}
 							}
-						}
-						const saved = patchKeys(text, changes);
-						const decoded = decodeKeys(saved, options.mac);
+						const saved =
+							request._tag === "undo" && undo !== null ? undo.text : patchKeys(text, changes);
+						const decoded = decode(saved);
 						if (Result.isFailure(decoded))
 							return yield* new Refused({
 								why: `line ${decoded.failure.line}: ${decoded.failure.why}`,
@@ -249,13 +295,34 @@ export const KeybindingManager = Object.assign(ManagerService, {
 								Effect.mapError(failed),
 							);
 						const applied = yield* observe(saved, from, displaced);
-						undo = request._tag === "undo" ? null : {version: applied.version, rows: restore};
+						undo =
+							request._tag === "undo"
+								? null
+								: {version: applied.version, catalog: generation, text, rows: restore};
 						return applied;
 					}),
 				);
 			return ManagerService.of({
 				current: SubscriptionRef.get(state),
 				changes: SubscriptionRef.changes(state),
+				catalog: (next) =>
+					one(
+						Effect.gen(function* () {
+							programs = next;
+							generation += 1;
+							undo = null;
+							const decoded = decode(bytes ?? "");
+							if (Result.isFailure(decoded)) {
+								yield* refuse(decoded.failure.why, decoded.failure.line);
+							} else
+								yield* SubscriptionRef.update(state, (s) => ({
+									...s,
+									catalog: generation,
+									keys: decoded.success,
+								}));
+							return yield* SubscriptionRef.get(state);
+						}),
+					),
 				edit,
 			});
 		}),

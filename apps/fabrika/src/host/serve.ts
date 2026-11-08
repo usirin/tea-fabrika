@@ -37,28 +37,25 @@ import {
 } from "../asks.ts";
 import {BUILD} from "../build-id.ts";
 import {
-	claims,
 	type Desk,
 	type DeskCmd,
 	type DeskMsg,
 	deskMachine,
-	forPage,
 	type Open,
 	refusedOf,
 	agentOf,
 	restore,
-	route,
 	type Saved,
-	takenNow,
 	tilesOf,
 } from "../desk/desk.ts";
 import {
 	commandFor,
+	commandWord,
 	type Does as Command,
 	defaults,
 	File,
 	type Keys,
-	spell,
+	sameTarget,
 } from "../desk/keymap.ts";
 import type {SharedHistory} from "../editor/history.ts";
 import {jobLines} from "../job-lines.ts";
@@ -146,7 +143,15 @@ export interface AsksHome {
 }
 
 /** The desk's Cmds as the one fiber carries them, and a fence: done once every Cmd before it is. */
-type Carried = DeskCmd | {readonly type: "fence"; readonly done: Deferred.Deferred<void>};
+type Carried =
+	| DeskCmd
+	| {readonly type: "fence"; readonly done: Deferred.Deferred<void>}
+	| {
+			readonly type: "applied";
+			readonly client: Client;
+			readonly id: string;
+			readonly target: {readonly program: string; readonly tile: string};
+	  };
 
 /**
  * Where a restart is kept between hosts (host/restart.ts): the note the host before this one left,
@@ -287,8 +292,7 @@ export const serve = (options: {
 		let desk: Desk = {at: "over"};
 		const deskNow = (): ToPage => ({
 			type: "desk",
-			desk: forPage(desk),
-			takes: takenNow(desk, clock.currentTimeMillisUnsafe()),
+			desk,
 		});
 		/** The keys file's table: the last that read, or the defaults, with what came of the file now. */
 		let table: Keys = defaults;
@@ -296,7 +300,9 @@ export const serve = (options: {
 		const keysNow = (): ToPage => ({
 			type: "keys",
 			...table,
-			...(snapshot === null ? {} : {version: snapshot.version, changes: snapshot.changes}),
+			...(snapshot === null
+				? {}
+				: {version: snapshot.version, changes: snapshot.changes, catalog: snapshot.catalog}),
 		});
 		/** A desk command ran: its word, and how it was reached. */
 		const did = (does: Command, via: Via) => {
@@ -358,8 +364,7 @@ export const serve = (options: {
 		};
 		const begin = (kept: unknown) => {
 			const [first, cmds] = deskMachine.init(restore(kept), undefined);
-			// A desk read back, or begun again, is on the keys file's table too.
-			desk = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, first, {type: "keys", keys: table})[0];
+			desk = first;
 			for (const c of cmds) Queue.offerUnsafe(queue, c);
 		};
 
@@ -407,9 +412,19 @@ export const serve = (options: {
 		const author = yield* Author;
 		/** The agents the person summoned here, when the host keeps any (its repository is known). */
 		const summons = Option.getOrUndefined(yield* Effect.serviceOption(Shell.SummonManager));
-		const programs = programsOf(
-			appPrograms(ledger, author, yield* PullRequests, yield* Traces, yield* RepoTree, summons),
+		const entries = appPrograms(
+			ledger,
+			author,
+			yield* PullRequests,
+			yield* Traces,
+			yield* RepoTree,
+			summons,
 		);
+		const programs = programsOf(entries);
+		yield* options.keybindings.catalog([
+			...entries.map(({program}) => ({program, origin: "app"})),
+			{program: keysProgram, origin: "app"},
+		]);
 
 		// The host as it says of itself, for the top bar's host, sync and agents: said as a page
 		// loads, and to every page as an agent attaches or goes, or its tile comes or goes. Each
@@ -554,7 +569,7 @@ export const serve = (options: {
 				},
 			},
 			sessionFor: options.ledger.kind === "server" ? options.ledger.sessionFor : undefined,
-		});
+		}).pipe(Effect.provideService(KeybindingManager, options.keybindings));
 
 		/**
 		 * Stop job n of the table for agent `who`, and why: the `stop` tool's host side. Its stop is
@@ -672,6 +687,10 @@ export const serve = (options: {
 
 		const carry = (c: Carried): Effect.Effect<void> => {
 			switch (c.type) {
+				case "applied":
+					return Effect.sync(() => {
+						if (c.client.page) toPage(c.client, {type: "applied", id: c.id, target: c.target});
+					});
 				case "fence":
 					return Deferred.succeed(c.done, undefined).pipe(Effect.asVoid);
 				case "open":
@@ -718,7 +737,6 @@ export const serve = (options: {
 				table = {...table, file: File.cases.refused.make({line: answer.line, why: answer.why})};
 			} else {
 				table = answer._tag === "read" ? answer.value : defaults;
-				step({type: "keys", keys: table});
 			}
 			for (const client of clients) if (client.page) toPage(client, keysNow());
 			shout();
@@ -844,17 +862,6 @@ export const serve = (options: {
 				Effect.forkScoped,
 			);
 
-		/** A key the desk takes: logged when it runs a command, as the person spells it in the file. */
-		const pressed = (s: Open, key: string, at: number) => {
-			const routed = route(s, key, at);
-			if (routed.kind !== "desk" || routed.ran === null) return;
-			const {does, key: on} = routed.ran;
-			// The desk's prefix is the table's: a refused file changes neither.
-			const keys =
-				on._tag === "after_prefix" ? `${spell(table.prefix)} ${spell(on.key)}` : spell(on.key);
-			did(does, Via.key({keys}));
-		};
-
 		/** What the page sent on the desk's port. */
 		const fromPage = (client: Client, m: FromPage) => {
 			switch (m.type) {
@@ -863,17 +870,6 @@ export const serve = (options: {
 				case "keys.edit":
 					Queue.offerUnsafe(editorQueue, {client, message: m});
 					return;
-				case "press": {
-					const at = clock.currentTimeMillisUnsafe();
-					lastKey = at;
-					const took = claims(desk, m.key, at);
-					if (took && desk.at === "open") pressed(desk, m.key, at);
-					if (took) step({type: "key", key: m.key, at}, client);
-					// The desk first, so the page knows what the desk takes before it lets the next key go.
-					shout();
-					toPage(client, {type: "answer", id: m.id, took});
-					return;
-				}
 				case "click":
 					if (step({type: "click", tile: m.tile})) shout();
 					return;
@@ -903,14 +899,72 @@ export const serve = (options: {
 					if (step({type: "pick", workspace: m.workspace})) shout();
 					return;
 				}
-				case "run":
-					did(m.does, m.via === undefined ? Via.palette() : Via.key(m.via));
-					if (m.does === "palette.open") {
+				case "run": {
+					const row = table.rows.find((row) => sameTarget(row.target, m.target));
+					if (row === undefined || desk.at !== "open") return;
+					const tile = desk.workspaces.flatMap(tilesOf).find((tile) => tile.id === m.target.tile);
+					if (
+						tile === undefined ||
+						(row.scope === "focused" && (tile.shows.run?.program ?? "tsh") !== row.target.program)
+					)
+						return;
+					const does = commandWord(m.target);
+					lastKey = clock.currentTimeMillisUnsafe();
+					Effect.runForkWith(services)(
+						Effect.logInfo("did").pipe(
+							Effect.annotateLogs({
+								does,
+								program: m.target.program,
+								mode: m.target.mode,
+								tile: m.target.tile,
+								window: client.id,
+								via: JSON.stringify(m.via),
+								catalog: snapshot?.catalog ?? 0,
+								at: lastKey,
+							}),
+						),
+					);
+					if (does === "palette.open") {
 						toPage(client, {type: "show", what: "palette"});
 						return;
 					}
-					if (step({type: "run", does: m.does}, client)) shout();
+					if (
+						m.target.program === "tezgah" &&
+						m.target.mode === null &&
+						![
+							"info",
+							"bars",
+							"asks",
+							"jobs",
+							"agents",
+							"sync",
+							"host",
+							"focus --to next",
+							"focus --to previous",
+						].includes(m.target.word)
+					) {
+						if (does !== "tezgah.confirm" && does !== "tezgah.cancel")
+							step({type: "go", tile: m.target.tile});
+						if (step({type: "run", does}, client)) shout();
+					}
+					const current = desk;
+					const now =
+						current.at === "open"
+							? current.workspaces.find((ws) => ws.id === current.active)
+							: undefined;
+					const focused =
+						now === undefined ? undefined : tilesOf(now).find((tile) => tile.id === now.focused);
+					Queue.offerUnsafe(queue, {
+						type: "applied",
+						client,
+						id: m.id,
+						target: {
+							program: focused?.shows.run?.program ?? "tsh",
+							tile: focused?.id ?? m.target.tile,
+						},
+					});
 					return;
+				}
 				case "later":
 				case "back":
 					toAsks({type: m.type, key: m.key});

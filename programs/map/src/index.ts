@@ -14,6 +14,7 @@ import {Effect, Schema} from "effect";
 //   quit null                  it ends
 
 export const map = defineProgram({
+	commands: {quit: {send: {type: "quit", value: null}, keys: []}},
 	name: "map",
 	description:
 		"The map of today's programs: their inputs, outputs and wires, and where one ticket stands on the plan's nine steps. It has a window.",

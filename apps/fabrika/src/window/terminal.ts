@@ -113,7 +113,11 @@ export interface TileTerminal {
 	readonly dispose: () => void;
 }
 
-export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
+export const terminalFor = (
+	ghostty: Ghostty,
+	tile: TileId,
+	modeChanged?: (mode: "search" | null) => void,
+): TileTerminal => {
 	const port = `tile:${tile}`;
 	const element = document.createElement("div");
 	element.className = "term";
@@ -309,7 +313,8 @@ export const terminalFor = (ghostty: Ghostty, tile: TileId): TileTerminal => {
 					return;
 				}
 				const {msg} = read;
-				if (msg.type === "status") statusTo(msg.text);
+				if (msg.type === "mode") modeChanged?.(msg.mode);
+				else if (msg.type === "status") statusTo(msg.text);
 				else if (msg.type === "said") sayLine(msg.text);
 				else {
 					keep(msg.data);

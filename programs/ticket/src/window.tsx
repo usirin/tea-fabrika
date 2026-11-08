@@ -11,7 +11,7 @@ import {
 	stepWords,
 } from "@tea-fabrika/tracker";
 import {whenOf} from "@tea-fabrika/tracker/window";
-import {type KeyboardEvent, type ReactNode, useState} from "react";
+import {type ReactNode, useEffect, useRef, useState} from "react";
 import type {ticket} from "./index.ts";
 import {type Page, runTicketOf} from "./view.ts";
 
@@ -21,6 +21,8 @@ import {type Page, runTicketOf} from "./view.ts";
 // It holds only what a person is in the middle of: the rows they opened, what they typed.
 
 type Send = WindowProps<typeof ticket>["send"];
+type Props = Omit<WindowProps<typeof ticket>, "commands"> &
+	Partial<Pick<WindowProps<typeof ticket>, "commands">>;
 
 const SPARK = (
 	<svg viewBox="0 0 10 10" aria-hidden="true">
@@ -463,6 +465,8 @@ function Detail({entry, now}: {readonly entry: Entry; readonly now: number}) {
 }
 
 function Activity(props: {
+	readonly local: Props["local"];
+	readonly commands: Props["commands"];
 	readonly rows: readonly Row[];
 	readonly timeline: readonly Entry[];
 	readonly now: number;
@@ -477,25 +481,34 @@ function Activity(props: {
 			return next;
 		});
 	// J and K move between rows, as Linear's lists do; Enter or Space opens one, as a button does.
-	const walk = (e: KeyboardEvent<HTMLOListElement>) => {
-		if (e.key !== "j" && e.key !== "k") return;
-		const all = [...e.currentTarget.querySelectorAll<HTMLButtonElement>(".act-r")];
-		const at = all.indexOf(document.activeElement as HTMLButtonElement);
-		const next = all[Math.max(0, Math.min(all.length - 1, at + (e.key === "j" ? 1 : -1)))];
-		next?.focus();
-		e.preventDefault();
-	};
+	const list = useRef<HTMLOListElement>(null);
+	useEffect(
+		() =>
+			props.local?.listen((cmd) => {
+				if (cmd.type !== "focus" || typeof cmd.by !== "number") return;
+				const all = [...(list.current?.querySelectorAll<HTMLButtonElement>(".act-r") ?? [])];
+				const at = all.indexOf(document.activeElement as HTMLButtonElement);
+				const next = all[Math.max(0, Math.min(all.length - 1, at + cmd.by))];
+				next?.focus();
+			}),
+		[props.local],
+	);
 	return (
 		<>
 			<div className="act-h">
 				<h2>Activity</h2>
 				<span className="faint">{rows.length}</span>
 				<span className="hint">
-					<Kbd>J</Kbd>
-					<Kbd>K</Kbd> move <Kbd>↵</Kbd> open
+					{props.commands?.next.keys.map((key) => (
+						<Kbd key={key}>{key}</Kbd>
+					))}
+					{props.commands?.previous.keys.map((key) => (
+						<Kbd key={key}>{key}</Kbd>
+					))}{" "}
+					move <Kbd>↵</Kbd> open
 				</span>
 			</div>
-			<ol className="acts-l" onKeyDown={walk}>
+			<ol className="acts-l" ref={list}>
 				{rows.map((row) => {
 					const entry = timeline.find((e) => e.pos === row.pos);
 					const shown = open.has(row.pos);
@@ -533,9 +546,16 @@ function Activity(props: {
 	);
 }
 
-function Composer(props: {readonly ticket: number; readonly send: Send; readonly saving: number}) {
+function Composer(props: {
+	readonly ticket: number;
+	readonly send: Send;
+	readonly saving: number;
+	readonly local: Props["local"];
+	readonly commands: Props["commands"];
+}) {
 	const {ticket, send, saving} = props;
-	const [text, setText] = useState("");
+	const text = props.local?.state.drafts[ticket] ?? "";
+	const setText = (text: string) => props.local?.send({type: "draft", ticket, text});
 	const body = text.trim();
 	const post = (changes: boolean) => {
 		if (body === "") return;
@@ -556,12 +576,6 @@ function Composer(props: {readonly ticket: number; readonly send: Send; readonly
 				placeholder="Leave a comment"
 				value={text}
 				onChange={(e) => setText(e.target.value)}
-				onKeyDown={(e) => {
-					if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-						e.preventDefault();
-						post(false);
-					}
-				}}
 			/>
 			<div className="cf">
 				<span className="sp">
@@ -569,8 +583,10 @@ function Composer(props: {readonly ticket: number; readonly send: Send; readonly
 						`saving ${saving}`
 					) : (
 						<>
-							<Kbd>⌘</Kbd>
-							<Kbd>↵</Kbd> to send
+							{props.commands?.submit.keys.map((key) => (
+								<Kbd key={key}>{key}</Kbd>
+							))}{" "}
+							to send
 						</>
 					)}
 				</span>
@@ -580,10 +596,17 @@ function Composer(props: {readonly ticket: number; readonly send: Send; readonly
 					disabled={body === ""}
 					title="A person's request stops build until a new plan or a new approval"
 					onClick={() => post(true)}
+					{...props.commands?.changes.control}
 				>
 					Request changes
 				</button>
-				<button type="button" className="btn sm" disabled={body === ""} onClick={() => post(false)}>
+				<button
+					type="button"
+					className="btn sm"
+					disabled={body === ""}
+					onClick={() => post(false)}
+					{...props.commands?.submit.control}
+				>
 					Comment
 				</button>
 			</div>
@@ -595,11 +618,11 @@ function Composer(props: {readonly ticket: number; readonly send: Send; readonly
  * The window, drawn afresh for each ticket it shows: a half-written comment or an opened row of
  * #7 never shows on #3 when a pipe moves it there.
  */
-export function TicketWindow(props: WindowProps<typeof ticket>) {
+export function TicketWindow(props: Props) {
 	return <OneTicket key={props.view.number ?? 0} {...props} />;
 }
 
-function OneTicket({view, send}: WindowProps<typeof ticket>) {
+function OneTicket({view, send, local, commands}: Props) {
 	const {number, page, now} = view;
 	if (!view.ready)
 		return (
@@ -668,8 +691,20 @@ function OneTicket({view, send}: WindowProps<typeof ticket>) {
 							)}
 						</div>
 						<section aria-label="Activity">
-							<Activity rows={opened.rows} timeline={opened.ticket.timeline} now={now} />
-							<Composer ticket={number} send={send} saving={view.saving.length} />
+							<Activity
+								rows={opened.rows}
+								timeline={opened.ticket.timeline}
+								now={now}
+								local={local}
+								commands={commands}
+							/>
+							<Composer
+								ticket={number}
+								send={send}
+								saving={view.saving.length}
+								local={local}
+								commands={commands}
+							/>
 						</section>
 					</div>
 				</div>

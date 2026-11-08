@@ -2,6 +2,7 @@ import {defineMachine} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {defineProgram, end, flag, input, kind} from "@kampus/fabrika-old";
 import {Effect, Schema} from "effect";
+import {WindowMsg, WindowState, windowMachine} from "./controller.ts";
 import {Root} from "./root.ts";
 
 // Any markdown, drawn, as `glow` or `less` draws it in a terminal: in a tile of its own
@@ -54,7 +55,21 @@ export const markdown = defineProgram({
 			status: (s) => `${s.root.children.length} blocks`,
 		}),
 	},
-	view: {machine: "page", data: Root, of: (s) => s.root},
+	view: {
+		machine: "page",
+		data: Root,
+		of: (s) => s.root,
+		window: {machine: windowMachine, state: WindowState, msg: WindowMsg, refuse: () => null},
+	},
+	commands: {
+		next: {send: {type: "scroll", by: "line-down"}, keys: ["j", "down"]},
+		previous: {send: {type: "scroll", by: "line-up"}, keys: ["k", "up"]},
+		"page-down": {send: {type: "scroll", by: "page-down"}, keys: ["space", "f", "pagedown"]},
+		"page-up": {send: {type: "scroll", by: "page-up"}, keys: ["b", "pageup"]},
+		first: {send: {type: "scroll", by: "first"}, keys: ["g", "home"]},
+		last: {send: {type: "scroll", by: "last"}, keys: ["G", "end"]},
+		quit: {send: {type: "quit"}, keys: "q"},
+	},
 	main: ({flags, serve, watch}) =>
 		Effect.gen(function* () {
 			const runtime = yield* (yield* run(page, options)).ready;

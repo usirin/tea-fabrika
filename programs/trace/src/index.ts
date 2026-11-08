@@ -195,6 +195,12 @@ export const traceKind = kind({
 });
 
 export const trace = defineProgram({
+	commands: {
+		previous: {send: {type: "step", value: {by: -1}}, keys: []},
+		next: {send: {type: "step", value: {by: 1}}, keys: []},
+		live: {send: {type: "seek", value: {at: null}}, keys: []},
+		quit: {send: {type: "quit", value: null}, keys: []},
+	},
 	name: "trace",
 	description:
 		"One job's trace, read from its record, or one ticket's lanes, read from its facts. A job: a bar per span, nested by parent, one colour per program, and every grouped row opening down to one step. A ticket: every lane oldest first, its steps and its waits on a person, each step opening to its spans, and a replay to any fact. It has a window.",

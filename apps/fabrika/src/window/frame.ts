@@ -4,11 +4,21 @@ import {whenOf} from "@tea-fabrika/tracker/window";
 import {Option, Schema} from "effect";
 import type {Ask, AsksNow} from "../asks.ts";
 import {activeOf, focusedOf, type Open, questionOf, tilesOf, type Workspace} from "../desk/desk.ts";
-import {bindingFor, defaults, type Does, type File, type Key, type Keys} from "../desk/keymap.ts";
+import {
+	bindingFor,
+	defaults,
+	effectiveKeys,
+	type Does,
+	type File,
+	type Key,
+	type Keys,
+	type Target,
+} from "../desk/keymap.ts";
 import {type Group, groupOf, type Show, wordOf} from "../desk/keys.ts";
 import type {TileId, TileNode} from "../desk/layout/index.ts";
 import type {HostNow, LedgerLink, LinkNow, ToWindow} from "../messages.ts";
 import type {JobEnded, TileJobs} from "../tile-jobs.ts";
+import {available, type KeysModel, type Place} from "./keys.ts";
 import {
 	type Cap,
 	capOf,
@@ -136,6 +146,7 @@ const GROUPS: readonly Group[] = ["tile", "focus", "workspace", "window"];
 
 /** One command of the palette: its name, its group, its key, its tsh word, and its file word. */
 export interface Command {
+	readonly target: Target;
 	readonly name: string;
 	readonly group: Group;
 	/**
@@ -165,18 +176,30 @@ const keyCaps = (prefix: string, key: Key): readonly Cap[] =>
  * runs is listed still, as the palette and its tsh word run it. The palette's own is not: it is
  * what is open.
  */
-export const commandsOf = (keys: Keys, workspaces: number): readonly Command[] => {
+export const commandsOf = (
+	keys: Keys,
+	workspaces: number,
+	context?: {readonly target: Place; readonly modes: KeysModel["modes"]},
+): readonly Command[] => {
 	const all = keys.rows.flatMap((row): Command[] => {
+		if (context !== undefined && !available(row, context.target, context.modes)) return [];
 		const binding = bindingFor(row.does);
-		if (binding === undefined) return [];
-		const at = /^workspace (\d+)$/.exec(binding.name);
+		if (
+			binding === undefined &&
+			(context === undefined ||
+				row.does === "palette.open" ||
+				["tezgah.confirm", "tezgah.cancel", "tezgah.interrupt"].includes(row.does))
+		)
+			return [];
+		const at = /^workspace (\d+)$/.exec(binding?.name ?? "");
 		if (at !== null && Number(at[1]) > workspaces) return [];
-		const tsh = wordOf(binding.does);
-		const [first] = row.keys;
+		const tsh = binding === undefined ? row.does : wordOf(binding.does);
+		const [first] = effectiveKeys(row, keys.client);
 		return [
 			{
-				name: binding.name,
-				group: groupOf(binding.does),
+				target: row.target,
+				name: binding?.name ?? row.target.word,
+				group: binding === undefined ? "window" : groupOf(binding.does),
 				key: first === undefined ? `${tsh} in tsh` : keyText(keys.prefix, first),
 				caps: first === undefined ? [] : keyCaps(keys.prefix, first),
 				tsh,
@@ -184,7 +207,14 @@ export const commandsOf = (keys: Keys, workspaces: number): readonly Command[] =
 			},
 		];
 	});
-	return GROUPS.flatMap((g) => all.filter((c) => c.group === g));
+	const grouped = GROUPS.flatMap((g) => all.filter((c) => c.group === g));
+	return context === undefined
+		? grouped
+		: grouped.toSorted(
+				(a, b) =>
+					Number(b.target.mode !== null) - Number(a.target.mode !== null) ||
+					Number(b.target.word === "exit") - Number(a.target.word === "exit"),
+			);
 };
 
 /**
@@ -714,7 +744,17 @@ export const infoFor = (keys: Keys) => ({
 	...SAID,
 	workspace: `a workspace, named by what it holds. ${keyIn(keys, 'tezgah."workspace --to 1"', "workspace --to 1 in tsh")} goes to the first, and so on to 9; ${keyIn(keys, 'tezgah."workspace --to new"', "workspace --to new in tsh")} makes one.`,
 	keys: `keys: press ${keyWord(keys.prefix)}, then one key. ${keyIn(keys, "keys.open", "keys in tsh")} lists them all. ${keyIn(keys, "palette.open", "The palette")} finds any command by name.`,
-	info: `info: explains what the pointer or focus is on. Escape or ${keyIn(keys, "tezgah.info", "info in tsh")} leaves.`,
+	info: `info: explains what the pointer or focus is on. ${
+		keys.rows
+			.find(
+				(row) =>
+					row.target.program === "tezgah" &&
+					row.target.mode === "info" &&
+					row.target.word === "exit",
+			)
+			?.keys.map((key) => keyText(keys.prefix, key))
+			.join(" or ") ?? "Escape"
+	} or ${keyIn(keys, "tezgah.info", "info in tsh")} leaves.`,
 	titlebar: `title bar: a click focuses the tile, a double-click folds it into a strip. ${keyIn(keys, "tezgah.fold", "fold in tsh")} folds too.`,
 });
 

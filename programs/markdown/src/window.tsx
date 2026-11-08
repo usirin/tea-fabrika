@@ -1,14 +1,6 @@
 import type {WindowProps} from "@kampus/fabrika-old";
 import {Kbd} from "@manti-ui/react";
-import {
-	Fragment,
-	type KeyboardEvent,
-	type ReactNode,
-	useEffect,
-	useMemo,
-	useRef,
-	useSyncExternalStore,
-} from "react";
+import {Fragment, type ReactNode, useEffect, useMemo, useRef, useSyncExternalStore} from "react";
 import {type Colors, colorsNow, loadColors, onColors, type Span, wantsColors} from "./highlight.ts";
 import type {markdown} from "./index.ts";
 import type {Block, Code, Inline} from "./root.ts";
@@ -233,47 +225,39 @@ const scrollOf = (key: string, page: HTMLElement): ScrollToOptions | null => {
 	// A page less one line for the keys' line, and one kept on screen, as less keeps one.
 	const screen = page.clientHeight - 2 * line;
 	switch (key) {
-		case "j":
-		case "ArrowDown":
+		case "line-down":
 			return {top: page.scrollTop + line};
-		case "k":
-		case "ArrowUp":
+		case "line-up":
 			return {top: page.scrollTop - line};
-		case " ":
-		case "f":
-		case "PageDown":
+		case "page-down":
 			return {top: page.scrollTop + screen};
-		case "b":
-		case "PageUp":
+		case "page-up":
 			return {top: page.scrollTop - screen};
-		case "g":
-		case "Home":
+		case "first":
 			return {top: 0};
-		case "G":
-		case "End":
+		case "last":
 			return {top: page.scrollHeight};
 		default:
 			return null;
 	}
 };
 
-export function MarkdownWindow({view, send}: WindowProps<typeof markdown>) {
+type Props = Omit<WindowProps<typeof markdown>, "commands"> &
+	Partial<Pick<WindowProps<typeof markdown>, "commands">>;
+export function MarkdownWindow({view, local, commands}: Props) {
 	// The page is the view, so it is the one box that scrolls in the tile (the app's window.css).
 	const page = useRef<HTMLElement>(null);
 	// The page takes the keys as it opens, as less does: q works without a click first.
 	useEffect(() => page.current?.focus(), []);
-	const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
-		if (e.metaKey || e.ctrlKey || e.altKey) return;
-		if (e.key === "q") {
-			e.preventDefault();
-			send({type: "quit", value: {}});
-			return;
-		}
-		const to = scrollOf(e.key, e.currentTarget);
-		if (to === null) return;
-		e.preventDefault();
-		e.currentTarget.scrollTo(to);
-	};
+	useEffect(
+		() =>
+			local?.listen((cmd) => {
+				if (cmd.type !== "scroll" || typeof cmd.by !== "string" || page.current === null) return;
+				const to = scrollOf(cmd.by, page.current);
+				if (to !== null) page.current.scrollTo(to);
+			}),
+		[local],
+	);
 	return (
 		<article
 			ref={page}
@@ -281,7 +265,6 @@ export function MarkdownWindow({view, send}: WindowProps<typeof markdown>) {
 			aria-label="markdown"
 			// oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the page takes less's keys: q, j, k, space, g.
 			tabIndex={0}
-			onKeyDown={onKeyDown}
 		>
 			<div className="markdown-body">
 				<div className="markdown-page">
@@ -296,7 +279,15 @@ export function MarkdownWindow({view, send}: WindowProps<typeof markdown>) {
 				</div>
 			</div>
 			<footer className="markdown-keys">
-				<Kbd>q</Kbd> quit <Kbd>j</Kbd> <Kbd>k</Kbd> scroll <Kbd>space</Kbd> page
+				{commands === undefined
+					? null
+					: Object.entries(commands).map(([word, command]) =>
+							command.keys.length === 0 ? null : (
+								<span key={word}>
+									<Kbd>{command.keys.join(" / ")}</Kbd> {word}{" "}
+								</span>
+							),
+						)}
 			</footer>
 		</article>
 	);

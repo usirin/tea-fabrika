@@ -1,5 +1,7 @@
 import {Result, Schema} from "effect";
 import {parse, TomlError} from "smol-toml";
+import {promptKeys, searchKeys} from "../editor/bindings.ts";
+import {menuKeys} from "../window/menu-keys.ts";
 import {type Does as Action, BINDINGS, type Binding, keyName, THE_MACS, wordOf} from "./keys.ts";
 
 // The keys file: ~/.fabrika/keybindings.toml, read and laid over the defaults that ship with the
@@ -46,7 +48,7 @@ export const Key = Schema.TaggedUnion({
 export type Key = typeof Key.Type;
 
 /** Every command the app has, by its word in the file: the list in code, never a free string. */
-export const Does = Schema.Literals([
+const AppDoes = Schema.Literals([
 	"tezgah.split",
 	'tezgah."split --to down"',
 	'tezgah."focus --to left"',
@@ -80,12 +82,54 @@ export const Does = Schema.Literals([
 	"tezgah.sync",
 	"tezgah.host",
 	"palette.open",
+	"tezgah.confirm",
+	"tezgah.cancel",
+	"tezgah.interrupt",
 ]);
+export const Does = Object.assign(Schema.String.check(Schema.isMinLength(1)), {
+	literals: AppDoes.literals,
+});
 export type Does = typeof Does.Type;
+
+export const Target = Schema.Struct({
+	program: Schema.String,
+	word: Schema.String,
+	mode: Schema.NullOr(Schema.String),
+});
+export type Target = typeof Target.Type;
+export const sameTarget = (a: Target, b: Target): boolean =>
+	a.program === b.program && a.word === b.word && a.mode === b.mode;
+export const CheckedTarget = Target.check(
+	Schema.makeFilter((target) => {
+		if (target.program !== "tezgah" && target.program !== "palette") return true;
+		if (target.program === "tezgah" && target.word === "exit" && target.mode === "info")
+			return true;
+		return (
+			(target.mode === null &&
+				AppDoes.literals.some(
+					(does) =>
+						does.startsWith(`${target.program}.`) &&
+						does.slice(does.indexOf(".") + 1).replace(/^"(.*)"$/, "$1") === target.word,
+				)) ||
+			"Unknown command target"
+		);
+	}),
+);
+export const commandWord = (target: Target): string => pathWord([target.program, target.word]);
+export const fileWord = (target: Target): string =>
+	pathWord(
+		target.mode === null
+			? [target.program, target.word]
+			: ["mode", target.program, target.mode, "keys", target.word],
+	);
 
 /** One command and its keys. `source` is where its keys come from, as VS Code's Source column (K3). */
 export const Row = Schema.Struct({
 	does: Does,
+	target: CheckedTarget,
+	scope: Schema.Literals(["global", "focused"]),
+	origin: Schema.Union([Schema.Literal("app"), Schema.Struct({pack: Schema.String})]),
+	disabled: Schema.NullOr(Schema.String),
 	/** `[]` is unbound: no key runs it, and the palette and its tsh word still do. */
 	keys: Schema.Array(Key),
 	source: Schema.Literals(["default", "yours"]),
@@ -108,8 +152,109 @@ export const Keys = Schema.Struct({
 	/** Command keys nobody hears, as today's Cmd-W: on a Mac they never reach the menu. */
 	ignore: Schema.Array(KeyName),
 	file: File,
+	diagnostics: Schema.Array(Schema.Struct({line: Schema.Int, why: Schema.String})),
+	client: Schema.optionalKey(
+		Schema.Struct({
+			kind: Schema.String,
+			mac: Schema.Boolean,
+			unavailable: Schema.Array(Schema.Struct({key: Schema.String, why: Schema.String})),
+		}),
+	),
 });
 export type Keys = typeof Keys.Type;
+
+export interface Client {
+	readonly kind: string;
+	readonly mac: boolean;
+	readonly unavailable: readonly {readonly key: string; readonly why: string}[];
+}
+export interface CatalogOptions {
+	readonly programs?: readonly unknown[];
+	readonly client?: unknown;
+}
+interface Declaration {
+	readonly keys: string | readonly string[];
+	readonly global?: true;
+	readonly mode?: string | readonly (string | null)[];
+}
+interface Registration {
+	readonly program: {
+		readonly name: string;
+		readonly commands?: Readonly<Record<string, Declaration>>;
+	};
+	readonly origin: Row["origin"];
+}
+export const sameScope = (a: Row, b: Row): boolean =>
+	a.scope === b.scope &&
+	a.target.mode === b.target.mode &&
+	(a.scope === "global" || a.target.program === b.target.program);
+export const effectiveKeys = (row: Row, client?: Client): readonly Key[] =>
+	row.keys.filter((key) => !client?.unavailable.some((off) => off.key === key.key));
+
+const catalogRows = (mac: boolean, options: CatalogOptions): readonly Row[] => {
+	const rows = [...defaults.rows];
+	for (const unknown of options.programs ?? []) {
+		if (unknown === null || typeof unknown !== "object" || !("program" in unknown)) continue;
+		const entry = unknown as Registration;
+		for (const [word, command] of Object.entries(entry.program.commands ?? {})) {
+			const modes = Array.isArray(command.mode) ? command.mode : [command.mode ?? null];
+			for (const mode of modes) {
+				const target = {program: entry.program.name, word, mode};
+				if (rows.some((row) => sameTarget(row.target, target))) continue;
+				const spelled = typeof command.keys === "string" ? [command.keys] : command.keys;
+				const keys: Key[] = [];
+				for (const one of spelled) {
+					const read = readKey(one, mac, command.global !== true || mode !== null);
+					if (Result.isFailure(read)) throw new Error(`${fileWord(target)}: ${read.failure}`);
+					keys.push(read.success);
+				}
+				rows.push({
+					does: commandWord(target),
+					target,
+					scope: command.global === true ? "global" : "focused",
+					origin: entry.origin,
+					disabled: null,
+					source: "default",
+					keys,
+				});
+			}
+		}
+	}
+	const app = rows.filter((row) => row.origin === "app");
+	return rows.map((row) => {
+		if (row.origin === "app") return row;
+		const reasons: string[] = [];
+		const appKeys = {rows: app.filter((other) => sameScope(row, other))};
+		const keys = row.keys.filter((key) => {
+			if (
+				(key._tag === "alone" && [defaults.prefix, "<f6>", "<s-f6>"].includes(key.key)) ||
+				commandOn(appKeys, key) !== undefined
+			) {
+				reasons.push("Reserved for the app, prefix, or F6.");
+				return false;
+			}
+			const others = rows.filter(
+				(other) =>
+					other !== row &&
+					other.origin !== "app" &&
+					row.scope === "global" &&
+					sameScope(row, other) &&
+					other.keys.some((one) => sameKey(one, key)),
+			);
+			if (others.length > 0) {
+				reasons.push(
+					`Pack clash: ${[row, ...others]
+						.map((one) => one.does)
+						.sort()
+						.join(", ")}.`,
+				);
+				return false;
+			}
+			return true;
+		});
+		return {...row, keys, disabled: reasons.length === 0 ? null : [...new Set(reasons)].join(" ")};
+	});
+};
 
 /** Why a file is refused, and the line to look at, from 1. */
 interface Refused {
@@ -137,24 +282,77 @@ const PALETTE_KEY = "<m-k>";
 /** The table with no file: today's keys, Cmd-K for the palette, Cmd-W eaten. */
 export const defaults: Keys = {
 	prefix: "<c-b>",
-	rows: Does.literals.map((does) =>
+	rows: [
+		...Does.literals.map((does) =>
+			Row.make({
+				does,
+				target: {
+					program: does.split(".")[0] ?? "",
+					word: does.slice(does.indexOf(".") + 1).replace(/^"(.*)"$/, "$1"),
+					mode: null,
+				},
+				scope: "global",
+				origin: "app",
+				disabled: null,
+				keys:
+					does === "palette.open"
+						? [alone(PALETTE_KEY)]
+						: BINDINGS.filter((b) => b.command === does).map((b) =>
+								b.does.kind === "cycle" ? alone(b.key) : after(b.key),
+							),
+				source: "default",
+			}),
+		),
 		Row.make({
-			does,
-			keys:
-				does === "palette.open"
-					? [alone(PALETTE_KEY)]
-					: BINDINGS.filter((b) => b.command === does).map((b) =>
-							b.does.kind === "cycle" ? alone(b.key) : after(b.key),
-						),
+			does: "tezgah.exit",
+			target: {program: "tezgah", word: "exit", mode: "info"},
+			scope: "global",
+			origin: "app",
+			disabled: null,
+			keys: [alone("<escape>")],
 			source: "default",
 		}),
-	),
+		...Object.entries(promptKeys).map(([word, keys]) =>
+			Row.make({
+				does: `tsh.${word}`,
+				target: {program: "tsh", word, mode: null},
+				scope: "focused",
+				origin: "app",
+				disabled: null,
+				source: "default",
+				keys: keys.filter((key) => key !== "<c-b>").map(alone),
+			}),
+		),
+		...Object.entries(searchKeys).map(([word, keys]) =>
+			Row.make({
+				does: `tsh.${word}`,
+				target: {program: "tsh", word, mode: "search"},
+				scope: "focused",
+				origin: "app",
+				disabled: null,
+				source: "default",
+				keys: keys.map(alone),
+			}),
+		),
+		...Object.entries(menuKeys).map(([word, keys]) =>
+			Row.make({
+				does: `menu.${word}`,
+				target: {program: "menu", word, mode: null},
+				scope: "focused",
+				origin: "app",
+				disabled: null,
+				source: "default",
+				keys: keys.map(alone),
+			}),
+		),
+	],
 	ignore: ["<m-w>"],
 	file: File.cases.none.make({}),
+	diagnostics: [],
 };
 
 /** The command a key runs in this table, or none. */
-export const commandOn = (keys: Keys, key: Key): Does | undefined =>
+export const commandOn = (keys: Pick<Keys, "rows">, key: Key): Does | undefined =>
 	keys.rows.find((row) => row.keys.some((k) => k._tag === key._tag && k.key === key.key))?.does;
 
 // ---------------------------------------------------------------- one key, as the file spells it
@@ -253,7 +451,7 @@ const notOurs = (name: string, spelled: string): string | null => {
 };
 
 /** One key of a row: after the prefix (`<prefix>z`), or pressed alone (`cmd+d`). */
-const readKey = (spelled: string, mac: boolean): Result.Result<Key, string> => {
+const readKey = (spelled: string, mac: boolean, local = false): Result.Result<Key, string> => {
 	const word = /^<([^<>]*)>(.*)$/.exec(spelled);
 	if (word !== null) {
 		const [, name = "", rest = ""] = word;
@@ -275,12 +473,12 @@ const readKey = (spelled: string, mac: boolean): Result.Result<Key, string> => {
 	return Result.flatMap(readPress(spelled, mac), (p) => {
 		const no = notOurs(p.name, spelled);
 		if (no !== null) return Result.fail(no);
-		if (BARE.has(p.name))
+		if (!local && BARE.has(p.name))
 			return Result.fail(
 				`${spelled} pressed alone would stop it typing or moving in a tile: write <prefix>${spelled}, or add ctrl, alt or cmd`,
 			);
 		// A bare character pressed alone would stop typing in tsh (WCAG 2.1.4).
-		if (p.printable)
+		if (!local && p.printable)
 			return Result.fail(
 				`${spelled} pressed alone would stop typing in a tile: write <prefix>${spelled === " " ? "space" : spelled}, or add ctrl or cmd`,
 			);
@@ -515,7 +713,15 @@ export const patchKeys = (text: string, values: ReadonlyMap<string, Assigned | n
 					end: row.end,
 					text: tail.trimStart().startsWith("#") ? tail.trimStart() : "",
 				});
-			} else patches.push({start: row.value, end: row.until, text: JSON.stringify(value)});
+			} else
+				patches.push({
+					start: row.value,
+					end: row.until,
+					text:
+						Array.isArray(value) && /,\s/.test(text.slice(row.value, row.until))
+							? `[${value.map((one) => JSON.stringify(one)).join(", ")}]`
+							: JSON.stringify(value),
+				});
 		} else if (holder !== undefined) {
 			const read = readToml(`x = ${text.slice(holder.value, holder.until)}`);
 			const before =
@@ -609,12 +815,10 @@ const linesOf = (text: string): ReadonlyMap<string, number> => {
 	return at;
 };
 
-const isCommand = (word: string): word is Does =>
-	(Does.literals as readonly string[]).includes(word);
-
 /** One of your rows: its command, its keys as read and as spelled, and its line. */
 interface Yours {
 	readonly does: Does;
+	readonly row: Row;
 	readonly keys: readonly {readonly key: Key; readonly spelled: string}[];
 	readonly line: number;
 }
@@ -624,6 +828,7 @@ interface Written {
 	readonly prefix: {readonly name: string; readonly spelled: string; readonly line: number} | null;
 	readonly ignore: {readonly names: readonly string[]; readonly line: number} | null;
 	readonly rows: readonly Yours[];
+	readonly diagnostics: Keys["diagnostics"];
 }
 
 /** The prefix as the file sets it: one key, pressed alone, with a modifier or named. */
@@ -650,18 +855,21 @@ const readWritten = (
 	table: Readonly<Record<string, unknown>>,
 	text: string,
 	mac: boolean,
+	catalog: readonly Row[],
+	absent: boolean,
 ): Result.Result<Written, Refused> => {
 	const lines = linesOf(text);
 	const values = leaves(table)
 		.map((leaf) => {
 			const word = pathWord(leaf.path);
-			return {word, value: leaf.value, line: lines.get(word) ?? 1};
+			return {word, path: leaf.path, value: leaf.value, line: lines.get(word) ?? 1};
 		})
 		.sort((a, b) => a.line - b.line);
 	let prefix: Written["prefix"] = null;
 	let ignore: Written["ignore"] = null;
 	const rows: Yours[] = [];
-	for (const {word, value, line} of values) {
+	const diagnostics: {line: number; why: string}[] = [];
+	for (const {word, path, value, line} of values) {
 		const no = (why: string) => Result.fail({line, why});
 		if (word === "prefix") {
 			const read = readPrefix(value, mac);
@@ -670,10 +878,7 @@ const readWritten = (
 			continue;
 		}
 		const spelled = spellings(word, value);
-		if (Result.isFailure(spelled))
-			return no(
-				isCommand(word) || word === "ignore" ? spelled.failure : `${word} is not a command`,
-			);
+		if (Result.isFailure(spelled)) return no(spelled.failure);
 		if (word === "ignore") {
 			const names: string[] = [];
 			for (const one of spelled.success) {
@@ -686,23 +891,46 @@ const readWritten = (
 			ignore = {names, line};
 			continue;
 		}
-		if (!isCommand(word)) return no(`${word} is not a command`);
+		const target: Target =
+			path[0] === "mode"
+				? {program: path[1] ?? "", mode: path[2] ?? "", word: path[4] ?? ""}
+				: {program: path[0] ?? "", mode: null, word: path[1] ?? ""};
+		if (path[0] === "mode" && (path.length !== 5 || path[3] !== "keys"))
+			return no(
+				`${word}: mode entry is a flat command; write keys under [mode.${target.program}.${target.mode}.keys].`,
+			);
+		const row = catalog.find((row) => sameTarget(row.target, target));
+		if (row === undefined) {
+			const modeOnly = catalog.find((row) => row.does === word && row.target.mode !== null);
+			if (modeOnly !== undefined)
+				return no(
+					`${word} works only in a mode; write it under [mode.${target.program}.${modeOnly.target.mode}.keys].`,
+				);
+			if (absent && !catalog.some((row) => row.target.program === target.program)) {
+				diagnostics.push({
+					line,
+					why: `${target.program} is absent or unloaded; ${word} is retained in the file.`,
+				});
+				continue;
+			}
+			return no(`${word} is not a command`);
+		}
 		const keys: Yours["keys"][number][] = [];
 		for (const one of spelled.success) {
-			const read = readKey(one, mac);
+			const read = readKey(one, mac, row.scope === "focused" || row.target.mode !== null);
 			if (Result.isFailure(read)) return no(read.failure);
 			keys.push({key: read.success, spelled: one});
 		}
-		rows.push({does: word, keys, line});
+		rows.push({does: fileWord(row.target), row, keys, line});
 	}
-	return Result.succeed({prefix, ignore, rows});
+	return Result.succeed({prefix, ignore, rows, diagnostics});
 };
 
 const sameKey = (a: Key, b: Key): boolean => a._tag === b._tag && a.key === b.key;
 
 /** Your rows checked against each other and the prefix: one key does one thing in each place. */
 const clash = (set: Written, prefix: string): Refused | null => {
-	const seen: {key: Key; spelled: string; does: Does; line: number}[] = [];
+	const seen: {key: Key; spelled: string; does: Does; row: Row; line: number}[] = [];
 	const ignored = set.ignore?.names ?? [];
 	for (const row of set.rows)
 		for (const {key, spelled} of row.keys) {
@@ -721,10 +949,12 @@ const clash = (set: Written, prefix: string): Refused | null => {
 					line: Math.max(row.line, set.ignore.line),
 					why: `${spelled} is on both ignore and ${row.does}`,
 				};
-			const other = seen.find((s) => s.does !== row.does && sameKey(s.key, key));
+			const other = seen.find(
+				(s) => s.does !== row.does && sameScope(s.row, row.row) && sameKey(s.key, key),
+			);
 			if (other !== undefined)
 				return {line: row.line, why: `${spelled} is on both ${other.does} and ${row.does}`};
-			seen.push({key, spelled, does: row.does, line: row.line});
+			seen.push({key, spelled, does: row.does, row: row.row, line: row.line});
 		}
 	if (set.prefix !== null && set.ignore?.names.includes(set.prefix.name) === true)
 		return {
@@ -739,13 +969,20 @@ const clash = (set: Written, prefix: string): Refused | null => {
  * Cmd; elsewhere it is Ctrl. Your row wins: a default loses each key one of your rows, the prefix
  * or your `ignore` takes, and keeps its others.
  */
-export const decodeKeys = (text: string, mac: boolean): Result.Result<Keys, Refused> => {
+export const decodeKeys = (
+	text: string,
+	mac: boolean,
+	options: CatalogOptions = {},
+): Result.Result<Keys, Refused> => {
 	const lineCount = text.split("\n").length;
 	const within = (refused: Refused): Refused => ({
 		line: Math.min(Math.max(1, refused.line), lineCount),
 		why: refused.why,
 	});
-	const read = Result.flatMap(readToml(text), (table) => readWritten(table, text, mac));
+	const catalog = catalogRows(mac, options);
+	const read = Result.flatMap(readToml(text), (table) =>
+		readWritten(table, text, mac, catalog, options.programs !== undefined),
+	);
 	if (Result.isFailure(read)) return Result.fail(within(read.failure));
 	const set = read.success;
 	const prefix = set.prefix?.name ?? defaults.prefix;
@@ -757,19 +994,44 @@ export const decodeKeys = (text: string, mac: boolean): Result.Result<Keys, Refu
 	);
 	// A default loses a key you took, the prefix pressed alone (it arms), the prefix after itself
 	// (that sends the prefix on, so the row could never run), and an ignored key.
-	const lost = (key: Key) =>
-		taken.some((k) => sameKey(k, key)) ||
+	const lost = (row: Row, key: Key) =>
+		set.rows.some(
+			(yours) => sameScope(row, yours.row) && yours.keys.some((one) => sameKey(one.key, key)),
+		) ||
 		key.key === prefix ||
 		(key._tag === "alone" && ignore.includes(key.key));
-	const rows = defaults.rows.map((row) => {
-		const yours = set.rows.find((r) => r.does === row.does);
-		return yours === undefined
-			? {...row, keys: row.keys.filter((k) => !lost(k))}
-			: Row.make({does: row.does, keys: yours.keys.map((k) => k.key), source: "yours"});
+	const client = options.client as Client | undefined;
+	const rows = catalog.map((row) => {
+		const yours = set.rows.find((r) => sameTarget(r.row.target, row.target));
+		const applied =
+			yours === undefined
+				? {...row, keys: row.keys.filter((k) => !lost(row, k))}
+				: Row.make({...row, disabled: null, keys: yours.keys.map((k) => k.key), source: "yours"});
+		const off = applied.keys.flatMap(
+			(key) => client?.unavailable.filter((one) => one.key === key.key).map((one) => one.why) ?? [],
+		);
+		return off.length === 0 ? applied : {...applied, disabled: off.join(" ")};
 	});
-	if (!rows.some((row) => row.does.startsWith('tezgah."focus --to ') && row.keys.length > 0))
+	if (
+		!rows.some(
+			(row) => row.does.startsWith('tezgah."focus --to ') && effectiveKeys(row, client).length > 0,
+		)
+	)
 		return Result.fail({line: 1, why: "Keep a focus key so a terminal has a keyboard way out"});
-	return Result.succeed({prefix, rows, ignore, file: File.cases.read.make({})});
+	for (const row of rows.filter((one) => one.target.mode !== null && one.target.word === "exit"))
+		if (effectiveKeys(row, client).length === 0)
+			return Result.fail({
+				line: set.rows.find((one) => sameTarget(one.row.target, row.target))?.line ?? 1,
+				why: `${fileWord(row.target)} needs an effective exit, a keyboard way out.`,
+			});
+	return Result.succeed({
+		prefix,
+		rows,
+		ignore,
+		file: File.cases.read.make({}),
+		diagnostics: set.diagnostics,
+		...(client === undefined ? {} : {client}),
+	});
 };
 
 // ---------------------------------------------------------------- a key, as the file spells it

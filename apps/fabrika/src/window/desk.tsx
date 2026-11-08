@@ -19,12 +19,12 @@ import {
 	focusedOf,
 	type Open,
 	questionOf,
+	tshOf,
 	tilesOf,
 	type Workspace,
 } from "../desk/desk.ts";
-import {type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key} from "../desk/hold.ts";
-import {commandOn, defaults, Key as KeyCase, type Keys, spell} from "../desk/keymap.ts";
-import {keyName, keyOwner, matchPress, THE_MACS} from "../desk/keys.ts";
+import {commandWord, defaults, type Keys, type Target} from "../desk/keymap.ts";
+import {keyName, type Press} from "../desk/keys.ts";
 import {
 	type ContainerNode,
 	findTile,
@@ -61,13 +61,14 @@ import {
 	ticketsShown,
 } from "./frame.ts";
 import {Band, BottomArea, type FrameProps, Over, TopBar} from "./frame.tsx";
+import {type KeysCmd, type KeysModel, type KeysMsg, keysMachine, Via} from "./keys.ts";
 import {loadGhostty, type TileTerminal, terminalFor} from "./terminal.ts";
 import {Strip, Tile} from "./tile.tsx";
 import {WINDOWS} from "./windows.tsx";
 
 // The desk's page: the app's one window, tiled like tmux. It draws the desk the host sends
-// (desk/desk.ts runs in the host, host/serve.ts), and sends it the keys the desk takes, and its
-// clicks. A reload, a new window or a second app draws the same desk, as every tmux client does.
+// (desk/desk.ts runs in the host, host/serve.ts), and sends it completed commands and clicks.
+// A reload, a new window or a second app draws the same desk, as every tmux client does.
 //
 //   Ctrl-B |      sent to the host: it splits the focused tile, t2's tsh starts there, and the
 //                 page draws the desk it is sent back
@@ -77,13 +78,11 @@ import {WINDOWS} from "./windows.tsx";
 //   title bar     a click focuses its tile; a double-click folds it into a strip, in its place;
 //                 a click on the strip opens it
 //
-// Every key is read in the capture phase, before ghostty-web or a program's view sees it. The
-// host says, with each desk, which keys the desk takes now (`takes`): those go to the host and no
-// further. While one is out, later keys are held, and go on in order once the host answered
-// (desk/hold.ts). No timer: a held key waits for the answer, or for the link to drop. Every other
-// key stays in the page: typing in tsh goes to the terminal, and the terminal sends it on its
-// tile's port; typing in a view's text box stays in the view, which sends only its program's
-// declared inputs.
+// Each window resolves keys in the capture phase, before ghostty-web or a program's view sees
+// them. Its router owns the prefix and sends finished commands. A layout command holds later
+// input until its matching desk update supplies the new target; link loss discards that input.
+// Ordinary typing in tsh goes through the terminal's tile port. Typing in a view's text box
+// stays in the view, which sends only its program's declared inputs.
 //
 // Each tile's terminal is made once and moved into its body as the layout changes (terminal.ts).
 // A tile and a strip are drawn by tile.tsx.
@@ -163,6 +162,7 @@ const subscribe = (listener: () => void) => {
 };
 
 const terminals = new Map<TileId, TileTerminal>();
+const editorModes = new Map<TileId, "search" | null>();
 /** The runs whose view this page hears, on each run's port. */
 const followed = new Set<string>();
 let ghostty: Ghostty | null = null;
@@ -208,11 +208,19 @@ const follows = (desk: Desk) => {
 	const tiles = new Set(all.flatMap((t) => (t.shows.kind === "window" ? [] : [t.id])));
 	const runs = new Set(all.flatMap((t) => (t.shows.run === null ? [] : [t.shows.run.id])));
 	for (const tile of tiles)
-		if (!terminals.has(tile) && ghostty !== null) terminals.set(tile, terminalFor(ghostty, tile));
+		if (!terminals.has(tile) && ghostty !== null)
+			terminals.set(
+				tile,
+				terminalFor(ghostty, tile, (mode) => {
+					editorModes.set(tile, mode);
+					changed();
+				}),
+			);
 	for (const [tile, term] of terminals) {
 		if (tiles.has(tile)) continue;
 		term.dispose();
 		terminals.delete(tile);
+		editorModes.delete(tile);
 	}
 	for (const run of runs) {
 		if (followed.has(run)) continue;
@@ -256,7 +264,12 @@ const measure = (el: HTMLDivElement | null) => {
 };
 
 /** The keys while the host decides. */
-let hold: Hold = holdMachine.init(null, undefined)[0];
+let keyRouter = keysMachine.init(null, {
+	keys: defaults,
+	window: crypto.randomUUID(),
+	target: {program: "tsh", tile: "t1"},
+	mac: /Mac/.test(navigator.userAgent),
+})[0];
 /** A key held back is being pressed again: the page's own listener lets it go by. */
 let replaying = false;
 
@@ -284,7 +297,7 @@ const focusOver = (target: EventTarget | null): "in" | "moved in" => {
 const midKey = (): MidKey => {
 	const open = store.desk?.at === "open" ? store.desk : null;
 	return {
-		armed: (open?.prefix.armed ?? false) || hold.waiting !== null,
+		armed: keyRouter.prefix.armed || keyRouter.pending !== null,
 		asking: open?.ask != null,
 	};
 };
@@ -304,10 +317,9 @@ const keyForOver = (name: string, target: EventTarget | null): "desk" | "in" | "
  * Press a held key again, where focus is now: a character into a view's text box, as typing
  * does, or the key itself, which a tile's terminal reads as it reads the keyboard's.
  */
-const pressAgain = (key: Key) => {
-	const p = key.press;
+const pressAgain = (p: Press) => {
 	const target = document.activeElement ?? document.body;
-	if (keyForOver(key.name, target) === "moved in") return;
+	if (keyForOver(keyName(p) ?? "", target) === "moved in") return;
 	replaying = true;
 	if (editable(target) && p.key.length === 1 && !p.ctrl && !p.alt && !p.meta)
 		document.execCommand("insertText", false, p.key);
@@ -315,11 +327,11 @@ const pressAgain = (key: Key) => {
 		target.dispatchEvent(
 			new KeyboardEvent("keydown", {
 				key: p.key,
-				code: p.code,
+				code: p.code ?? "",
 				ctrlKey: p.ctrl,
 				altKey: p.alt,
 				metaKey: p.meta,
-				shiftKey: p.shift,
+				shiftKey: p.shift ?? false,
 				isComposing: p.composing ?? false,
 				modifierAltGraph: p.altGraph ?? false,
 				bubbles: true,
@@ -329,18 +341,94 @@ const pressAgain = (key: Key) => {
 	replaying = false;
 };
 
-/** Step the hold by one Msg. Answers whether the key pressed this instant goes on as it is. */
-const holdStep = (msg: HoldMsg): boolean => {
-	const [next, cmds] = applyCell<Hold, HoldMsg, HoldCmd>(holdMachine, hold, msg);
-	hold = next;
+/** Resolve locally. Only a completed command crosses the desk link. */
+const routerStep = (msg: KeysMsg): boolean => {
+	const [next, cmds] = applyCell<KeysModel, KeysMsg, KeysCmd>(keysMachine, keyRouter, msg);
+	keyRouter = next;
 	let live = false;
-	for (const c of cmds) {
-		if (c.type === "press") toHost({type: "press", id: c.id, key: c.key});
-		else if (!c.held) live = true;
-		else pressAgain(c.key);
+	for (const cmd of cmds) {
+		if (cmd.type === "record") editKeys({type: "press", press: cmd.press});
+		else if (cmd.type === "refuse") frameStep({type: "ran", key: cmd.why});
+		else if (cmd.type === "pass") {
+			if (keyName(cmd.press) === "<c-c>") {
+				const tile =
+					store.desk?.at === "open"
+						? store.desk.workspaces.flatMap(tilesOf).find((tile) => tile.id === cmd.target.tile)
+						: undefined;
+				window.fabrika.send(`tile:${tile === undefined ? cmd.target.tile : tshOf(tile)}`, {
+					type: "keys",
+					data: "\\x03",
+				});
+			} else if (cmd.held) pressAgain(cmd.press);
+			else live = true;
+		} else if (cmd.type === "system") live = true;
+		else if (cmd.type === "run") {
+			const {target} = cmd;
+			const does = commandWord(target);
+			if (does === "palette.open") {
+				routerStep({type: "palette"});
+				frameStep({type: "show", what: "palette"});
+			} else if (does === "keys.open") frameStep({type: "show", what: "keys"});
+			else if (target.program === "keys") {
+				if (target.word === "exit") {
+					editKeys({type: "mapping"});
+					frameStep({type: "close"});
+				} else if (["mapping", "change", "add", "save", "unbind", "reset"].includes(target.word))
+					editKeys({
+						type: target.word as "mapping" | "change" | "add" | "save" | "unbind" | "reset",
+					});
+			} else if (target.program === "tezgah" && target.mode === "info" && target.word === "exit")
+				frameStep({type: "info", focus: null});
+			else if (target.program === "tezgah" && target.word === "info")
+				frameStep({type: "info", focus: focusWords()});
+			else if (
+				target.program === "tezgah" &&
+				["bars", "asks", "jobs", "agents", "sync", "host"].includes(target.word)
+			)
+				frameStep({
+					type: "show",
+					what: target.word as "bars" | "asks" | "jobs" | "agents" | "sync" | "host",
+				});
+			else if (does === 'tezgah."focus --to next"' || does === 'tezgah."focus --to previous"') {
+				if (store.frame.over.kind !== "none") frameStep({type: "close"});
+				cycleFocus(does.endsWith('next"') ? "next" : "previous");
+			} else if (target.program === "tsh")
+				window.fabrika.send(`tile:${target.tile}`, {type: "command", command: target.word});
+			else if (target.program !== "tezgah") {
+				const tile =
+					store.desk?.at === "open"
+						? store.desk.workspaces.flatMap(tilesOf).find((tile) => tile.id === target.tile)
+						: undefined;
+				const run = tile?.shows.run;
+				if (run !== null && run !== undefined) {
+					const why = WINDOWS.get(target.program)?.command(target.tile, target.word, (msg) =>
+						toRun(run.id, msg),
+					);
+					if (why != null) {
+						frameStep({type: "ran", key: why});
+						continue;
+					}
+				}
+			}
+			toHost({
+				type: "run",
+				id: cmd.id,
+				target,
+				via:
+					typeof cmd.via === "string"
+						? cmd.via === "palette"
+							? Via.cases.palette.make({})
+							: cmd.via === "tsh"
+								? Via.cases.tsh.make({})
+								: Via.cases.button.make({})
+						: cmd.via,
+			});
+		}
 	}
 	return live;
 };
+const runCommand = (target: Target, via: "palette" | "button" = "button") =>
+	routerStep({type: "command", target, via});
 
 /** How long a note on the bottom line stays, as after the palette ran a command. */
 const NOTE_MS = 4000;
@@ -448,12 +536,21 @@ const heard = (raw: unknown) => {
 	const m = read.msg;
 	switch (m.type) {
 		case "keys":
-			store.keys = {prefix: m.prefix, rows: m.rows, ignore: m.ignore, file: m.file};
+			store.keys = {
+				prefix: m.prefix,
+				rows: m.rows,
+				ignore: m.ignore,
+				file: m.file,
+				diagnostics: m.diagnostics,
+				...(m.client === undefined ? {} : {client: m.client}),
+			};
+			routerStep({type: "keys", keys: store.keys});
 			store.keyChanges = m.changes ?? [];
 			editKeys({
 				type: "keys",
 				keys: store.keys,
 				...(m.version === undefined ? {} : {version: m.version}),
+				...(m.catalog === undefined ? {} : {catalog: m.catalog}),
 			});
 			return changed();
 		case "keys.saved":
@@ -495,16 +592,20 @@ const heard = (raw: unknown) => {
 			follows(m.desk);
 			// Drawn now, so a key held for this answer lands on the tile the desk just focused.
 			flushSync(changed);
-			holdStep({type: "takes", takes: m.takes});
+			routerStep({type: "up"});
+			routerStep({type: "question", tile: m.desk.at === "open" ? m.desk.ask : null});
 			return;
-		case "answer":
-			holdStep({type: "answer", id: m.id, took: m.took});
+		case "applied":
+			routerStep({type: "applied", id: m.id, target: m.target});
+			return;
+		case "command":
+			routerStep({type: "command", target: m.target, via: "tsh"});
 			return;
 		case "link":
 			store.link = m.now;
 			// Off a host, a key held for its answer gets none: the hold lets them go.
 			if (!attached(m.now)) {
-				holdStep({type: "down"});
+				routerStep({type: "down"});
 				if (store.keysEditor !== null) frameStep({type: "close"});
 			}
 			// On one, it may be a host that never heard the workspace's size.
@@ -548,8 +649,8 @@ const swallow = (e: KeyboardEvent) => {
  * from the menu, so Cmd-W does not reach Close Window.
  */
 const onKey = (e: KeyboardEvent) => {
-	if (replaying) return;
-	const pressed = {
+	if (replaying || e.isComposing || e.getModifierState("AltGraph")) return;
+	const press: Press = {
 		key: e.key,
 		code: e.code,
 		ctrl: e.ctrlKey,
@@ -559,85 +660,70 @@ const onKey = (e: KeyboardEvent) => {
 		composing: e.isComposing,
 		altGraph: e.getModifierState("AltGraph"),
 	};
-	const rawName = keyName(pressed);
-	if (MAC && rawName !== null && THE_MACS.has(rawName)) {
-		e.stopPropagation();
-		return;
-	}
+	const name = keyName(press);
+	const tile = store.desk?.at === "open" ? focusedOf(store.desk) : null;
+	if (tile !== null)
+		routerStep({
+			type: "target",
+			target: {program: tile.shows.run?.program ?? "tsh", tile: tile.id},
+		});
+	if (tile !== null)
+		routerStep({type: "mode", program: "tsh", mode: editorModes.get(tile.id) ?? null});
+	routerStep({
+		type: "mode",
+		program: "tezgah",
+		mode: store.frame.info.kind === "on" ? "info" : null,
+	});
 	const recording = store.keysEditor?.recording;
-	if (recording !== undefined && recording._tag !== "idle" && rawName === "<c-c>") {
-		swallow(e);
-		const tile = store.desk?.at === "open" ? focusedOf(store.desk) : null;
-		if (tile !== null) window.fabrika.send(`tile:${tile.id}`, {type: "keys", data: "\u0003"});
-		return;
-	}
-	if (recording?._tag === "waiting") {
-		if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey) return;
-		if (
-			(e.key === "Enter" || e.key === " ") &&
+	const mapping = store.keysEditor?.mapping === true;
+	routerStep({type: "mapping", active: mapping});
+	routerStep({type: "mode", program: "keys", mode: mapping ? "mapping" : null});
+	const nativeControl =
+		e.target instanceof Element &&
+		(editable(e.target) ||
+			(["Enter", " ", "Tab"].includes(e.key) && e.target.closest("button, select, a") !== null));
+	const nativeRecording =
+		(e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey) ||
+		((e.key === "Enter" || e.key === " ") &&
 			e.target instanceof Element &&
-			e.target.closest("button") !== null
-		)
-			return;
-		swallow(e);
-		return editKeys({type: "press", press: pressed});
+			e.target.closest("button") !== null);
+	routerStep({type: "recording", active: recording?._tag === "waiting" && !nativeRecording});
+	if (name !== "<c-c>" && !press.meta && !press.ctrl && !press.alt) {
+		if (
+			store.frame.over.kind !== "none" &&
+			!mapping &&
+			!keyRouter.prefix.armed &&
+			keyRouter.pending === null &&
+			name !== store.keys.prefix
+		) {
+			if (e.key === "Escape" && recording?._tag !== "waiting") {
+				swallow(e);
+				if (recording?._tag === "candidate") editKeys({type: "cancel"});
+				else frameStep({type: "close"});
+				return;
+			}
+			if (recording?._tag !== "waiting") {
+				if (focusOver(e.target) === "moved in") swallow(e);
+				return;
+			}
+		}
 	}
+	if (nativeRecording && recording?._tag === "waiting") return;
 	if (recording?._tag === "candidate" || recording?._tag === "saving") {
-		if (e.key === "Escape") {
-			swallow(e);
-			if (recording._tag === "candidate") editKeys({type: "cancel"});
+		if (name !== "<c-c>" && (!press.meta || press.ctrl || press.alt)) {
+			if (e.key === "Escape" && recording._tag === "candidate") {
+				swallow(e);
+				editKeys({type: "cancel"});
+			} else if (press.meta || press.ctrl || press.alt) swallow(e);
 			return;
 		}
-		// Keep candidates away from app shortcuts while the native controls still receive their keys.
-		if (pressed.meta || pressed.ctrl || pressed.alt) {
-			if (keyOwner(pressed, MAC, store.keys) === "system") return;
-			return swallow(e);
-		}
-		return;
 	}
-	const afterPrefix = midKey().armed
-		? matchPress(
-				pressed,
-				store.keys.rows.flatMap((row) => row.keys.filter((key) => key._tag === "after_prefix")),
-				MAC,
-			)
-		: null;
-	const owner = afterPrefix === null ? keyOwner(pressed, MAC, store.keys) : "app";
-	if (owner === "nobody") return swallow(e);
-	if (owner === "system") {
-		if (e.target instanceof Element && e.target.closest(".term") !== null) e.stopPropagation();
-		if (store.frame.over.kind !== "none") focusOver(e.target);
-		return;
-	}
-	const applicable = [
-		KeyCase.cases.alone.make({key: store.keys.prefix}),
-		...store.keys.rows.flatMap((row) =>
-			row.keys.filter((key) => key._tag === (midKey().armed ? "after_prefix" : "alone")),
-		),
-	];
-	const name = matchPress(pressed, applicable, MAC)?.key ?? rawName;
-	const alone =
-		name === null ? undefined : commandOn(store.keys, KeyCase.cases.alone.make({key: name}));
-	if (alone === "palette.open") {
-		swallow(e);
-		toHost({type: "run", does: "palette.open", via: {keys: spell(name ?? "")}});
-		return;
-	}
-	if (alone === 'tezgah."focus --to next"' || alone === 'tezgah."focus --to previous"') {
-		swallow(e);
-		if (store.frame.over.kind !== "none") frameStep({type: "close"});
-		toHost({type: "run", does: alone, via: {keys: spell(name ?? "")}});
-		return;
-	}
-	if (e.key === "Escape" && frameStep({type: "escape", desk: midKey()})) return swallow(e);
-	if (name === null) return;
-	const forOver = keyForOver(name, e.target);
-	if (forOver === "in") return;
-	if (forOver === "moved in") return swallow(e);
-	const press = pressed;
 	if (name === store.keys.prefix) noteKeyedFrom(e.target);
-	if (holdStep({type: "key", key: {name, press}})) return;
-	swallow(e);
+	const live = routerStep({type: "press", press, at: Date.now(), editing: nativeControl});
+	if (!live) swallow(e);
+	else if (press.meta && e.target instanceof Element && e.target.closest(".term") !== null)
+		e.stopPropagation();
+	changed();
 };
 
 /**
@@ -647,6 +733,31 @@ const onKey = (e: KeyboardEvent) => {
 const explainAt = (e: Event) => {
 	if (store.frame.info.kind !== "on") return;
 	frameStep({type: "explain", text: wordsAt(e.target)});
+};
+
+const selectControl = (event: MouseEvent) => {
+	if (store.keysEditor?.mapping !== true || !(event.target instanceof Element)) return;
+	const control = event.target.closest<HTMLElement>("[data-command]");
+	if (control === null || control.matches(":disabled") || control.closest(".keys-editor") !== null)
+		return;
+	const target = {
+		program: control.dataset.commandProgram ?? "",
+		word: control.dataset.command ?? "",
+		mode: control.dataset.commandMode || null,
+	};
+	if (
+		!store.keys.rows.some(
+			(row) =>
+				row.target.program === target.program &&
+				row.target.word === target.word &&
+				row.target.mode === target.mode,
+		)
+	)
+		return;
+	event.preventDefault();
+	event.stopImmediatePropagation();
+	editKeys({type: "select", target});
+	editKeys({type: "change"});
 };
 
 /** The run a tile shows, if any: a run covering its tsh. */
@@ -669,7 +780,12 @@ function View({tile, run}: {readonly tile: TileId; readonly run: string}): React
 			) : known === undefined ? (
 				<p role="alert">no view for {view.program} in this app</p>
 			) : (
-				known.draw(view.data, send)
+				known.draw(view.data, send, {
+					tile,
+					keys: store.keys,
+					mapping: store.keysEditor?.mapping ?? false,
+					run: runCommand,
+				})
 			)}
 		</main>
 	);
@@ -898,7 +1014,7 @@ function App(): ReactNode {
 		if (!away && over === "none") focusTile();
 	}, [shown, away, over]);
 	// The desk's key done, focus goes back to the bottom line's item it was on, if it fell.
-	const mid = (open?.prefix.armed ?? false) || open?.ask != null;
+	const mid = keyRouter.prefix.armed || keyRouter.pending !== null || open?.ask != null;
 	useLayoutEffect(() => {
 		if (!mid) focusBack();
 	}, [mid]);
@@ -915,7 +1031,9 @@ function App(): ReactNode {
 		editKeys,
 		shapes: store.shapes,
 		tickets: ticketsShown(store.views),
-		armed: open?.prefix.armed ?? false,
+		armed: keyRouter.prefix.armed,
+		runCommand: (target) => runCommand(target, "palette"),
+		keyContext: {target: keyRouter.palette ?? keyRouter.target, modes: keyRouter.modes},
 		toHost,
 		toApp,
 		toRun,
@@ -970,6 +1088,7 @@ function ZoomedTile(props: {
 const boot = Effect.gen(function* () {
 	ghostty = yield* loadGhostty;
 	window.addEventListener("keydown", onKey, {capture: true});
+	window.addEventListener("click", selectControl, {capture: true});
 	for (const on of EXPLAIN_ON) window.addEventListener(on, explainAt);
 	window.fabrika.onMessage("desk", heard);
 	const root = document.getElementById("root");

@@ -90,6 +90,11 @@ const withoutPersonOnly = (program: AnyProgram): AnyProgram => {
 	return defineProgram({
 		...program,
 		inputs: Object.fromEntries(inputs.filter(([, declared]) => !declared.personOnly)),
+		commands: Object.fromEntries(
+			Object.entries(program.commands).filter(
+				([, command]) => !program.inputs[command.send.type]?.personOnly,
+			),
+		),
 	});
 };
 

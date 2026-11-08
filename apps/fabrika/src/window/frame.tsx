@@ -11,7 +11,7 @@ import {
 } from "react";
 import type {AsksNow} from "../asks.ts";
 import {activeOf, focusedOf, type Open} from "../desk/desk.ts";
-import type {Keys} from "../desk/keymap.ts";
+import type {Keys, Target} from "../desk/keymap.ts";
 import {type Group, wordOf} from "../desk/keys.ts";
 import type {Editor, EditorMsg} from "../keys/machine.ts";
 import type {Snapshot} from "../keys/program.ts";
@@ -52,6 +52,7 @@ import {
 	tileWord,
 	workspaceName,
 } from "./frame.ts";
+import type {KeysModel, Place} from "./keys.ts";
 import {type Cap, type Hint, type Row, sentence, type Words} from "./pop.ts";
 import {type Empty, IconOf, Lines, Menu, Palette, Panel, useTip, WordsOf} from "./pop.tsx";
 
@@ -85,6 +86,8 @@ export interface FrameProps {
 	readonly keysEditor?: Editor | null;
 	readonly editKeys?: (msg: EditorMsg) => void;
 	readonly keyChanges?: Snapshot["changes"];
+	readonly runCommand?: (target: Target) => void;
+	readonly keyContext?: {readonly target: Place; readonly modes: KeysModel["modes"]};
 	readonly shapes: Shapes;
 	readonly tickets: TicketsShown;
 	readonly armed: boolean;
@@ -477,6 +480,7 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 	return (
 		<Menu
 			id={POP.asks}
+			keys={props.keys}
 			label="Asks"
 			from="top"
 			count={asks.asks.length}
@@ -533,6 +537,7 @@ function JobsMenu(props: FrameProps & {readonly desk: Open}): ReactNode {
 	return (
 		<Menu
 			id={POP.jobs}
+			keys={props.keys}
 			label="Jobs"
 			from="bottom"
 			count={list.count}
@@ -1028,10 +1033,14 @@ export function ModeStatus(props: {readonly frame: Frame}): ReactNode {
  */
 export function BottomArea(props: FrameProps & {readonly instead: boolean}): ReactNode {
 	const {frame, desk, armed, instead} = props;
-	const shows = bottomLineShows(frame, {armed, asking: desk?.ask != null});
+	const mapping = props.keysEditor?.mapping === true;
+	const shows = mapping || bottomLineShows(frame, {armed, asking: desk?.ask != null});
 	return (
 		<>
 			{!instead && shows && <BottomLine {...props} />}
+			{mapping && (
+				<p role="status">MAP KEYS · Escape leaves mapping. Select a control to change its keys.</p>
+			)}
 			<ModeStatus frame={frame} />
 		</>
 	);
@@ -1106,10 +1115,13 @@ function CommandPalette(props: FrameProps): ReactNode {
 				className="keys-dialog"
 				title="Keyboard shortcuts"
 				open
+				modal={!props.keysEditor.mapping}
 				size="lg"
 				closeOnEscape={false}
 				showCloseButton={false}
-				closeOnInteractOutside={props.keysEditor.recording._tag !== "saving"}
+				closeOnInteractOutside={
+					!props.keysEditor.mapping && props.keysEditor.recording._tag !== "saving"
+				}
 				onOpenChange={(open) => {
 					if (!open && props.keysEditor?.recording._tag !== "saving") close();
 				}}
@@ -1124,11 +1136,14 @@ function CommandPalette(props: FrameProps): ReactNode {
 			</Dialog>
 		);
 	const keys = title === "keys";
-	const shown = matching(commandsOf(props.keys, desk?.workspaces.length ?? 0), query);
+	const shown = matching(
+		commandsOf(props.keys, desk?.workspaces.length ?? 0, props.keyContext),
+		query,
+	);
 	const run = (i: number) => {
 		const c = shown[i];
 		if (c === undefined) return;
-		props.toHost({type: "run", does: c.runs});
+		if (props.runCommand !== undefined) props.runCommand(c.target);
 		step({type: "ran", key: c.key});
 	};
 	const focused = desk === null ? null : focusedOf(desk);

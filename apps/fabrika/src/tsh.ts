@@ -49,6 +49,7 @@ import type {TileId} from "./desk/layout/index.ts";
 import {type EditorMsg, editor} from "./editor/editor.ts";
 import type {SharedHistory} from "./editor/history.ts";
 import type {JobLines} from "./job-lines.ts";
+import {KeybindingService} from "./keys/program.ts";
 import {readFromTerminal, readFromWindow, type ToTerminal, type ToWindow} from "./messages.ts";
 import {type TileJobs, watchJobs} from "./tile-jobs.ts";
 
@@ -743,8 +744,10 @@ export const startTsh = (options: {
 		);
 
 		const lines = yield* history.load;
+		const keybindings = Option.getOrUndefined(yield* Effect.serviceOption(KeybindingService));
+		const appliedKeys = keybindings === undefined ? undefined : (yield* keybindings.current).keys;
 		const editing = yield* (yield* run(editor, {
-			ctx: {programs, history: lines},
+			ctx: {programs, history: lines, ...(appliedKeys === undefined ? {} : {keys: appliedKeys})},
 			interpret: {
 				write: (c) => Effect.sync(() => write(c.data)).pipe(Effect.as(null)),
 				// Offered, not told: a line a person typed is never dropped, even on a full mailbox. In an
@@ -780,6 +783,20 @@ export const startTsh = (options: {
 					agent === null ? history.save(c.lines).pipe(Effect.as(null)) : Effect.succeed(null),
 			},
 		})).ready;
+		if (keybindings !== undefined)
+			yield* keybindings.changes.pipe(
+				Stream.runForEach((snapshot) =>
+					editing.dispatch({type: "bindings", keys: snapshot.keys}).pipe(Effect.orDie),
+				),
+				Effect.forkScoped,
+			);
+		let editorMode: "search" | null = null;
+		editing.observe(() => {
+			const mode = editing.getState().mode.kind === "search" ? "search" : null;
+			if (mode === editorMode) return;
+			editorMode = mode;
+			for (const page of pages) page({type: "mode", mode});
+		});
 		// Every tile's editor hears each save, its own too, so a line typed anywhere is in its Ctrl-R.
 		const unfollow = history.follow((lines) => toEditor({type: "history", lines}));
 		yield* Effect.addFinalizer(() => Effect.sync(unfollow));
@@ -806,6 +823,7 @@ export const startTsh = (options: {
 					pages.add(one);
 					// Even with nothing on the screen yet: the page may hold a screen of a host that is gone.
 					one({type: "write", data: RESET + screen});
+					one({type: "mode", mode: editorMode});
 					return () => pages.delete(one);
 				},
 				heard: (raw) => {
@@ -816,7 +834,9 @@ export const startTsh = (options: {
 					// tile, the person's Ctrl-C goes to tsh at once, as the editor sends it while busy.
 					if (agent !== null && msg.type === "keys" && msg.data.includes("\x03"))
 						Queue.offerUnsafe(inbox, {to: "tsh"});
-					toEditor(msg.type === "keys" ? msg : {type: "size", cols: msg.cols});
+					toEditor(
+						msg.type === "keys" || msg.type === "command" ? msg : {type: "size", cols: msg.cols},
+					);
 					return {kind: "read"};
 				},
 			},

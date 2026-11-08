@@ -11,6 +11,27 @@
 // A terminal sends Alt and a key as ESC and that key (readline's "meta"), and the arrows and Home,
 // End and Delete as escape sequences: `ESC [` and numbers, then one letter or `~`.
 
+import {defaults} from "../desk/keymap.ts";
+import {promptKeys} from "./bindings.ts";
+
+export interface KeyTable {
+	readonly rows: readonly {
+		readonly target?: {
+			readonly program: string;
+			readonly word: string;
+			readonly mode: string | null;
+		};
+		readonly keys: readonly {readonly _tag: string; readonly key: string}[];
+	}[];
+}
+export const editorRows = (keys: KeyTable) => [
+	...new Map(
+		keys.rows.map(
+			(row) => [`${row.target?.program}.${row.target?.word}:${row.target?.mode}`, row] as const,
+		),
+	).values(),
+];
+
 export type Command =
 	| "beginning-of-line"
 	| "end-of-line"
@@ -54,52 +75,45 @@ export const KILLS: ReadonlySet<Command> = new Set<Command>([
 
 const ESC = "\x1b";
 
-/** Each key, as the terminal sends it, and the command readline's emacs keys bind it to. */
-const BOUND: ReadonlyMap<string, Command> = new Map<string, Command>([
-	["\x01", "beginning-of-line"],
-	[`${ESC}[H`, "beginning-of-line"],
-	[`${ESC}OH`, "beginning-of-line"],
-	[`${ESC}[1~`, "beginning-of-line"],
-	["\x05", "end-of-line"],
-	[`${ESC}[F`, "end-of-line"],
-	[`${ESC}OF`, "end-of-line"],
-	[`${ESC}[4~`, "end-of-line"],
-	["\x02", "backward-char"],
-	[`${ESC}[D`, "backward-char"],
-	[`${ESC}OD`, "backward-char"],
-	["\x06", "forward-char"],
-	[`${ESC}[C`, "forward-char"],
-	[`${ESC}OC`, "forward-char"],
-	[`${ESC}b`, "backward-word"],
-	[`${ESC}[1;3D`, "backward-word"],
-	[`${ESC}[1;5D`, "backward-word"],
-	[`${ESC}f`, "forward-word"],
-	[`${ESC}[1;3C`, "forward-word"],
-	[`${ESC}[1;5C`, "forward-word"],
-	["\x7f", "backward-delete-char"],
-	["\x08", "backward-delete-char"],
-	[`${ESC}[3~`, "delete-char"],
-	["\x0b", "kill-line"],
-	["\x15", "unix-line-discard"],
-	["\x17", "unix-word-rubout"],
-	[`${ESC}d`, "kill-word"],
-	[`${ESC}\x7f`, "backward-kill-word"],
-	["\x19", "yank"],
-	["\x14", "transpose-chars"],
-	["\x0c", "clear-screen"],
-	["\r", "accept-line"],
-	["\n", "accept-line"],
-	["\x10", "previous-history"],
-	[`${ESC}[A`, "previous-history"],
-	[`${ESC}OA`, "previous-history"],
-	["\x0e", "next-history"],
-	[`${ESC}[B`, "next-history"],
-	[`${ESC}OB`, "next-history"],
-	["\x12", "reverse-search-history"],
-	["\t", "complete"],
-	["\x03", "interrupt"],
-	["\x04", "end-of-file"],
+/** Terminal encodings normalize to key names before consulting the applied table. */
+const NAMES: ReadonlyMap<string, string> = new Map([
+	...Array.from(
+		{length: 26},
+		(_, i) => [String.fromCharCode(i + 1), `<c-${String.fromCharCode(i + 97)}>`] as const,
+	),
+	["\x1b", "<escape>"],
+	["\r", "<enter>"],
+	["\n", "<enter>"],
+	["\t", "<tab>"],
+	["\x7f", "<backspace>"],
+	["\b", "<backspace>"],
+	[`${ESC}[H`, "<home>"],
+	[`${ESC}OH`, "<home>"],
+	[`${ESC}[1~`, "<home>"],
+	[`${ESC}[F`, "<end>"],
+	[`${ESC}OF`, "<end>"],
+	[`${ESC}[4~`, "<end>"],
+	[`${ESC}[D`, "<arrowleft>"],
+	[`${ESC}OD`, "<arrowleft>"],
+	[`${ESC}[C`, "<arrowright>"],
+	[`${ESC}OC`, "<arrowright>"],
+	[`${ESC}b`, "<a-b>"],
+	[`${ESC}[1;3D`, "<a-b>"],
+	[`${ESC}[1;5D`, "<a-b>"],
+	[`${ESC}f`, "<a-f>"],
+	[`${ESC}[1;3C`, "<a-f>"],
+	[`${ESC}[1;5C`, "<a-f>"],
+	[`${ESC}[3~`, "<delete>"],
+	[`${ESC}d`, "<a-d>"],
+	[`${ESC}\x7f`, "<a-backspace>"],
+	[`${ESC}[A`, "<arrowup>"],
+	[`${ESC}OA`, "<arrowup>"],
+	[`${ESC}[B`, "<arrowdown>"],
+	[`${ESC}OB`, "<arrowdown>"],
 ]);
+
+export const nameOfBytes = (raw: string): string | null =>
+	NAMES.get(raw) ?? (raw.startsWith(ESC) && [...raw].length === 2 ? `<a-${raw.slice(1)}>` : null);
 
 /** A character a line can hold: not a control character, not DEL, not one of the C1 controls. */
 export const printable = (c: string): boolean => {
@@ -150,9 +164,22 @@ export function keysIn(raw: string): readonly string[] {
 }
 
 /** One key, as what it does. */
-export function keyOf(raw: string): Key {
-	const command = BOUND.get(raw);
-	if (command !== undefined) return {kind: "command", command};
+export function keyOf(
+	raw: string,
+	context?: {readonly keys: KeyTable; readonly mode: string | null},
+): Key {
+	if (raw === "\x03") return {kind: "command", command: "interrupt"};
+	const name = nameOfBytes(raw);
+	const rows = editorRows(context?.keys ?? defaults);
+	const mode = context?.mode ?? null;
+	const row = rows.find(
+		(row) =>
+			row.target?.program === "tsh" &&
+			row.target.mode === mode &&
+			row.keys.some((key) => key._tag === "alone" && key.key === name),
+	);
+	if (row?.target !== undefined && Object.hasOwn(promptKeys, row.target.word))
+		return {kind: "command", command: row.target.word as Command};
 	if (raw !== "" && [...raw].every(printable)) return {kind: "text", text: raw};
 	return {kind: "unknown"};
 }

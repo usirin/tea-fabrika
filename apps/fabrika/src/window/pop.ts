@@ -12,6 +12,10 @@
 // thing, on its own key (H for Later in the asks list). A key no row shows sits in the footer.
 
 /** One keycap, as the Mac draws it: `⌃B`, `A`, `⇧N`, `↵`, `Esc`. */
+import {defaults} from "../desk/keymap.ts";
+import {keyName} from "../desk/keys.ts";
+import type {KeyTable} from "../editor/keys.ts";
+
 export type Cap = string;
 
 /** The Mac's modifier glyphs, in the order the Mac writes them: Control, Option, Shift, Command. */
@@ -187,6 +191,7 @@ export const menuKey = (
 	stops: readonly Stop[],
 	at: string | null,
 	press: MenuPress,
+	context?: {readonly keys: KeyTable},
 ): MenuDo | null => {
 	if (press.key === "Escape" || press.key === "Tab") return {do: "close"};
 	if (press.mods === true) return null;
@@ -197,12 +202,25 @@ export const menuKey = (
 		const s = stops[(j + stops.length) % stops.length];
 		return s === undefined ? null : {do: "move", to: s.id};
 	};
+	const name = keyName({key: press.key, ctrl: false, alt: false, meta: false});
+	const rows = context?.keys.rows ?? defaults.rows;
+	const custom = [...rows]
+		.reverse()
+		.find(
+			(row) =>
+				row.target?.program === "menu" &&
+				row.keys.some((key) => key._tag === "alone" && key.key === name),
+		)?.target?.word;
+	if (custom === "next") return to(i + 1);
+	if (custom === "previous") return to(i - 1);
+	if (custom === "second")
+		return active.kind === "row" && active.row.second !== null
+			? {do: "second", row: active.row}
+			: null;
 	switch (press.key) {
 		case "ArrowDown":
-		case "j":
 			return to(i + 1);
 		case "ArrowUp":
-		case "k":
 			return to(i - 1);
 		case "Home":
 			return to(0);
@@ -212,11 +230,6 @@ export const menuKey = (
 			return active.kind === "row"
 				? {do: "act", row: active.row}
 				: {do: "fold", section: active.section.id};
-		case "h":
-		case "H":
-			return active.kind === "row" && active.row.second !== null
-				? {do: "second", row: active.row}
-				: null;
 	}
 	if (!/^\p{L}$/u.test(press.key)) return null;
 	const letter = press.key.toLowerCase();

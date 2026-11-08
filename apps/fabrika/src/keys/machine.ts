@@ -1,11 +1,25 @@
 import {defineMachine} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
 import {Schema} from "effect";
-import {bindingFor, defaults, Does, Key, type Keys, spell} from "../desk/keymap.ts";
+import {
+	bindingFor,
+	defaults,
+	Does,
+	fileWord,
+	Key,
+	Keys,
+	sameTarget,
+	spell,
+	Target as CommandTarget,
+} from "../desk/keymap.ts";
 import {keyName, matchPress, type Press, THE_MACS, wordOf} from "../desk/keys.ts";
-import {Edit} from "./program.ts";
+import {Edit} from "./schema.ts";
 
-const Target = Schema.TaggedUnion({command: {does: Does}, prefix: {}, ignore: {}});
+const Target = Schema.TaggedUnion({
+	command: {does: Schema.optionalKey(Does), target: Schema.optionalKey(CommandTarget)},
+	prefix: {},
+	ignore: {},
+});
 type Target = typeof Target.Type;
 const Recording = Schema.TaggedUnion({
 	idle: {},
@@ -17,7 +31,9 @@ const Recording = Schema.TaggedUnion({
 export interface Editor {
 	readonly keys: Keys;
 	readonly query: string;
-	readonly selected: Does | "prefix" | "ignore" | null;
+	readonly selected: Does | CommandTarget | null;
+	readonly mapping: boolean;
+	readonly catalog: number;
 	readonly recording: typeof Recording.Type;
 	readonly next: number;
 	readonly error: string | null;
@@ -28,6 +44,23 @@ export interface Editor {
 	 */
 	readonly save: "done" | "failed" | null;
 }
+export const EditorState = Schema.Struct({
+	keys: Keys,
+	query: Schema.String,
+	selected: Schema.NullOr(Schema.Union([Does, CommandTarget])),
+	recording: Recording,
+	next: Schema.Int,
+	error: Schema.NullOr(Schema.String),
+	undo: Schema.NullOr(Schema.String),
+	save: Schema.NullOr(Schema.Literals(["done", "failed"])),
+	mapping: Schema.Boolean,
+	catalog: Schema.Int,
+});
+export const EditorCommand = Schema.Union(
+	(["mapping", "change", "add", "save", "unbind", "reset", "cancel"] as const).map((type) =>
+		Schema.Struct({type: Schema.Literal(type)}),
+	),
+);
 
 const edit = Cmd.make("edit", {
 	input: Schema.Struct({edit: Edit, request: Schema.String}),
@@ -37,10 +70,25 @@ const edit = Cmd.make("edit", {
 export type EditorCmd = ReturnType<typeof edit>;
 export type EditorMsg =
 	| {readonly type: "query"; readonly query: string}
-	| {readonly type: "select"; readonly does: Editor["selected"]}
-	| {readonly type: "change" | "add" | "cancel" | "save" | "unbind" | "reset" | "escape-key"}
+	| {readonly type: "select"; readonly does?: Does | null; readonly target?: CommandTarget}
+	| {
+			readonly type:
+				| "change"
+				| "add"
+				| "cancel"
+				| "save"
+				| "unbind"
+				| "reset"
+				| "escape-key"
+				| "mapping";
+	  }
 	| {readonly type: "press"; readonly press: Press}
-	| {readonly type: "keys"; readonly keys: Keys; readonly version?: string}
+	| {
+			readonly type: "keys";
+			readonly keys: Keys;
+			readonly version?: string;
+			readonly catalog?: number;
+	  }
 	| {readonly type: "saved"; readonly request: string; readonly version: string}
 	| {readonly type: "failed"; readonly request: string; readonly why: string}
 	| {readonly type: "undo"};
@@ -51,7 +99,7 @@ export const matching = (keys: Keys, query: string) => {
 	return keys.rows.filter((row) => {
 		const binding = bindingFor(row.does);
 		const text =
-			`${row.does} ${binding?.name ?? "palette"} ${binding === undefined ? "palette" : wordOf(binding.does)} ${row.keys.map((key) => `${spelling(key)} ${key._tag === "after_prefix" ? `${spell(keys.prefix)} ${spell(key.key)}` : spell(key.key)}`).join(" ")}`.toLowerCase();
+			`${fileWord(row.target)} ${row.scope} ${row.disabled ?? ""} ${binding?.name ?? row.target.word} ${binding === undefined ? row.does : wordOf(binding.does)} ${row.keys.map((key) => `${spelling(key)} ${key._tag === "after_prefix" ? `${spell(keys.prefix)} ${spell(key.key)}` : spell(key.key)}`).join(" ")}`.toLowerCase();
 		return words.every((word) => text.includes(word));
 	});
 };
@@ -65,7 +113,9 @@ const target = (selected: Editor["selected"]): Target | null =>
 			? Target.cases.prefix.make({})
 			: selected === "ignore"
 				? Target.cases.ignore.make({})
-				: Target.cases.command.make({does: selected});
+				: Target.cases.command.make(
+						typeof selected === "string" ? {does: selected} : {target: selected},
+					);
 const saving = (s: Editor, request: typeof Edit.Type): Step => {
 	const id = `keys-${s.next}`;
 	return [
@@ -96,7 +146,9 @@ const update = (s: Editor, m: EditorMsg): Step => {
 		case "query":
 			return [{...s, query: m.query}, []];
 		case "select":
-			return [{...s, selected: m.does, recording: idle(), error: null}, []];
+			return [{...s, selected: m.target ?? m.does ?? null, recording: idle(), error: null}, []];
+		case "mapping":
+			return [{...s, mapping: !s.mapping, recording: idle(), error: null}, []];
 		case "change":
 			return recording(s, false);
 		case "add":
@@ -158,14 +210,27 @@ const update = (s: Editor, m: EditorMsg): Step => {
 			const original = r.add
 				? selected._tag === "ignore"
 					? s.keys.ignore.map(spell)
-					: (s.keys.rows.find((row) => row.does === selected.does)?.keys.map(spelling) ?? [])
+					: (s.keys.rows
+							.find((row) =>
+								selected.target === undefined
+									? row.does === selected.does
+									: sameTarget(row.target, selected.target),
+							)
+							?.keys.map(spelling) ?? [])
 				: [];
 			const keys = [...new Set([...original, ...r.keys.map(spelling)])];
 			return saving(
 				s,
 				selected._tag === "ignore"
 					? Edit.cases.ignore.make({keys})
-					: Edit.cases.bind.make({does: selected.does, keys}),
+					: Edit.cases.bind.make({
+							...(selected.target === undefined
+								? selected.does === undefined
+									? {}
+									: {does: selected.does}
+								: {target: selected.target}),
+							keys,
+						}),
 			);
 		}
 		case "unbind":
@@ -183,10 +248,20 @@ const update = (s: Editor, m: EditorMsg): Step => {
 			return saving(
 				s,
 				m.type === "reset"
-					? Edit.cases.reset.make({does: s.selected})
-					: Edit.cases.bind.make({does: s.selected, keys: []}),
+					? Edit.cases.reset.make(
+							typeof s.selected === "string" ? {does: s.selected} : {target: s.selected},
+						)
+					: Edit.cases.bind.make({
+							...(typeof s.selected === "string" ? {does: s.selected} : {target: s.selected}),
+							keys: [],
+						}),
 			);
 		case "keys": {
+			const gone =
+				typeof s.selected === "object" &&
+				s.selected !== null &&
+				!m.keys.rows.some((row) => sameTarget(row.target, s.selected as CommandTarget));
+			const catalog = m.catalog ?? s.catalog;
 			const moved = s.undo !== null && m.version !== undefined && m.version !== s.undo;
 			// While our own save runs, its broadcast can land before its answer: that new version is
 			// ours, so the old Undo just goes quietly and `saved` offers the new one.
@@ -195,7 +270,11 @@ const update = (s: Editor, m: EditorMsg): Step => {
 				{
 					...s,
 					keys: m.keys,
-					undo: moved ? null : s.undo,
+					catalog,
+					selected: gone ? null : s.selected,
+					recording: gone ? idle() : s.recording,
+					mapping: gone ? false : s.mapping,
+					undo: moved || catalog !== s.catalog ? null : s.undo,
 					error: moved && !ours ? "The file changed. Undo is no longer available." : s.error,
 				},
 				[],
@@ -228,6 +307,8 @@ const init = (loaded: Keys | Editor | null, _ctx: undefined): Step => [
 		keys: loaded !== null && "query" in loaded ? loaded.keys : (loaded ?? defaults),
 		query: "",
 		selected: null,
+		mapping: false,
+		catalog: 0,
 		recording: idle(),
 		next: 0,
 		error: null,
@@ -254,6 +335,7 @@ const machine = defineMachine({
 		saved: update,
 		failed: update,
 		undo: update,
+		mapping: update,
 	},
 });
 export const editorMachine = {...machine, init};

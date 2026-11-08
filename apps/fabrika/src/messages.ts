@@ -1,7 +1,15 @@
 import {Cause, Effect, Exit, Schema} from "effect";
 import {AskKey, AsksNow} from "./asks.ts";
 import {DeskSchema, TileIdSchema} from "./desk/desk.ts";
-import {Does, KeyName, Keys} from "./desk/keymap.ts";
+import {CheckedTarget, Keys, Target} from "./desk/keymap.ts";
+import {Via} from "./window/keys.ts";
+
+const CommandTarget = Schema.Struct({...Target.fields, tile: TileIdSchema}).check(
+	Schema.makeFilter(
+		({program, word, mode}) =>
+			Schema.is(CheckedTarget)({program, word, mode}) || "Unknown command target",
+	),
+);
 import {SHOWS} from "./desk/keys.ts";
 import {Change, Edit} from "./keys/program.ts";
 
@@ -43,6 +51,7 @@ const Cells = Schema.Int.check(Schema.isBetween({minimum: 2, maximum: 1000}));
  * blank to, a job's status (`null`: none any more) and a line to say, such as an agent's reply.
  */
 export const ToTerminal = Schema.Union([
+	Schema.Struct({type: Schema.Literal("mode"), mode: Schema.NullOr(Schema.Literal("search"))}),
 	Schema.Struct({type: Schema.Literal("write"), data: Schema.String}),
 	Schema.Struct({type: Schema.Literal("status"), text: Schema.NullOr(Schema.String)}),
 	Schema.Struct({type: Schema.Literal("said"), text: Schema.String}),
@@ -50,6 +59,7 @@ export const ToTerminal = Schema.Union([
 export type ToTerminal = typeof ToTerminal.Type;
 
 export const FromTerminal = Schema.Union([
+	Schema.Struct({type: Schema.Literal("command"), command: Schema.String}),
 	// A paste is one message: 64 KiB is a long one. Past it, the message is refused whole.
 	Schema.Struct({
 		type: Schema.Literal("keys"),
@@ -76,7 +86,6 @@ export const FromWindow = Schema.Struct({
 export type FromWindow = typeof FromWindow.Type;
 
 /** A number the page gives each key it sends the host, so the answer names the key it is for. */
-const PressId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 /** What waits on the person, as the host folded it (asks.ts): on the desk's port, to every app. */
 export const AsksMessage = Schema.Struct({type: Schema.Literal("asks"), now: AsksNow});
@@ -234,6 +243,7 @@ export const ToPage = Schema.Union([
 		...Keys.fields,
 		version: Schema.optionalKey(Schema.String),
 		changes: Schema.optionalKey(Schema.Array(Change)),
+		catalog: Schema.optionalKey(Schema.Int),
 	}),
 	Schema.Struct({
 		type: Schema.Literal("keys.saved"),
@@ -262,9 +272,18 @@ export const ToPage = Schema.Union([
 	Schema.Struct({
 		type: Schema.Literal("desk"),
 		desk: DeskSchema,
-		takes: Schema.Struct({all: Schema.Boolean, keys: Schema.Array(KeyName)}),
 	}),
-	Schema.Struct({type: Schema.Literal("answer"), id: PressId, took: Schema.Boolean}),
+	Schema.Struct({
+		type: Schema.Literal("applied"),
+		id: Schema.String,
+		target: Schema.Struct({program: Schema.String, tile: TileIdSchema}),
+	}),
+	Schema.Struct({
+		type: Schema.Literal("command"),
+		id: Schema.String,
+		target: CommandTarget,
+		via: Via,
+	}),
 	Schema.Struct({type: Schema.Literal("link"), now: LinkNow}),
 ]);
 export type ToPage = typeof ToPage.Type;
@@ -314,7 +333,6 @@ export const FromPage = Schema.Union([
 	}),
 	Schema.Struct({type: Schema.Literal("keys.open")}),
 	Schema.Struct({type: Schema.Literal("keys.close")}),
-	Schema.Struct({type: Schema.Literal("press"), id: PressId, key: KeyName}),
 	Schema.Struct({type: Schema.Literal("click"), tile: TileIdSchema}),
 	Schema.Struct({
 		type: Schema.Literal("resize"),
@@ -328,8 +346,9 @@ export const FromPage = Schema.Union([
 	Schema.Struct({type: Schema.Literal("pick"), workspace: Schema.String}),
 	Schema.Struct({
 		type: Schema.Literal("run"),
-		does: Does,
-		via: Schema.optionalKey(Schema.Struct({keys: Schema.String})),
+		id: Schema.String,
+		target: CommandTarget,
+		via: Via,
 	}),
 	Schema.Struct({type: Schema.Literal("later"), key: AskKey}),
 	Schema.Struct({type: Schema.Literal("back"), key: AskKey}),

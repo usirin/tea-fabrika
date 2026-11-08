@@ -1,5 +1,5 @@
 import {Schema} from "effect";
-import type {AnyProgram, Inputs, Program, View} from "./program.ts";
+import type {AnyProgram, Inputs, Program, View, WindowBehavior} from "./program.ts";
 import {type PayloadOf, shapeOf} from "./shape.ts";
 
 // A program's window, from the program's side: what it is shown and what it may send. Elm's
@@ -33,9 +33,33 @@ export type InputMsgOf<P> =
 export type ViewDataOf<P> = P extends {readonly view: View<any, infer V>} ? V : never;
 
 /** What a program's window component is handed: what it shows, and the way to send. */
+export type CommandHelper = (() => void) & {
+	readonly keys: readonly string[];
+	readonly control: {
+		readonly onClick: () => void;
+		readonly "data-command": string;
+		readonly "data-command-program": string;
+		readonly "data-command-mode": string;
+		readonly "aria-label"?: string;
+	};
+};
 export interface WindowProps<P> {
 	readonly view: ViewDataOf<P>;
 	readonly send: (msg: InputMsgOf<P>) => void;
+	readonly commands: P extends {readonly commands: infer Cs}
+		? {readonly [K in keyof Cs]: CommandHelper}
+		: Record<never, never>;
+	readonly local?: {
+		readonly state: P extends {readonly view: {readonly window: WindowBehavior<infer S, any>}}
+			? S
+			: never;
+		readonly send: (
+			msg: P extends {readonly view: {readonly window: WindowBehavior<any, infer M>}} ? M : never,
+		) => void;
+		readonly listen: (
+			listener: (cmd: {readonly type: string; readonly [key: string]: unknown}) => void,
+		) => () => void;
+	};
 }
 
 /** A message from a program's window, read: one of its inputs, or why it was refused. */

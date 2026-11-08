@@ -12,6 +12,7 @@ import {
 	type Write,
 } from "@tea-fabrika/tracker";
 import {Effect, Schema} from "effect";
+import {WindowMsg, WindowState, windowMachine} from "./controller.ts";
 import {Shown, shownOf} from "./view.ts";
 
 // One ticket, in a tile of its own: its title, whose turn it is, its body, a row per fact that
@@ -60,6 +61,13 @@ const msgOf = (write: Write): TrackerMsg => ({type: "write", id: crypto.randomUU
 const WINDOW = ["comment", "answer", "close", "reopen", "quit"] as const;
 
 export const ticket = defineProgram({
+	commands: {
+		next: {send: {type: "next"}, keys: "j"},
+		previous: {send: {type: "previous"}, keys: "k"},
+		submit: {send: {type: "submit"}, keys: ["ctrl+enter", "cmd+enter"]},
+		changes: {send: {type: "changes"}, keys: []},
+		quit: {send: {type: "quit"}, keys: []},
+	},
 	name: "ticket",
 	description:
 		"One ticket, read from the ledger: its title, whose turn it is, its body, its facts, and its properties. Answers its open ask, comments, asks for changes, closes and reopens. Shows the ticket a pipe sends it, and sends on the one it shows. It has a window.",
@@ -94,7 +102,12 @@ export const ticket = defineProgram({
 		),
 	},
 	machines: {tickets: ticketsKind},
-	view: {machine: "tickets", data: Shown, of: shownOf},
+	view: {
+		machine: "tickets",
+		data: Shown,
+		of: shownOf,
+		window: {machine: windowMachine, state: WindowState, msg: WindowMsg, refuse: () => null},
+	},
 	main: ({flags, serve, send, watch}) =>
 		Effect.gen(function* () {
 			const runtime = yield* (yield* run(tickets, ticketsOptions)).ready;

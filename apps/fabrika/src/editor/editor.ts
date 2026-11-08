@@ -2,7 +2,18 @@ import {defineMachine, noop} from "@demlik/tea";
 import {Cmd} from "@demlik/tea/effect";
 import {Shell} from "@kampus/fabrika-old";
 import {Schema} from "effect";
-import {type Command, KILLS, keyOf, keysIn, printable} from "./keys.ts";
+import {defaults} from "../desk/keymap.ts";
+import {promptKeys} from "./bindings.ts";
+import {
+	type Command,
+	editorRows,
+	KILLS,
+	keyOf,
+	keysIn,
+	type KeyTable,
+	nameOfBytes,
+	printable,
+} from "./keys.ts";
 import {
 	BELL,
 	back,
@@ -73,6 +84,7 @@ export type Mode =
 	| {readonly kind: "ended"};
 
 export interface Editor {
+	readonly keys: KeyTable;
 	readonly mode: Mode;
 	/** Lines run, oldest first, each once: a line run again moves to the end, as readline's `erasedups` does. */
 	readonly history: readonly string[];
@@ -103,6 +115,8 @@ export interface Editor {
 }
 
 export type EditorMsg =
+	| {readonly type: "command"; readonly command: string}
+	| {readonly type: "bindings"; readonly keys: KeyTable}
 	/** What the terminal sent: keys, typed or pasted. */
 	| {readonly type: "keys"; readonly data: string}
 	/** The terminal's width changed. */
@@ -128,6 +142,7 @@ export type EditorMsg =
 
 /** What the editor is handed at the start: the programs tsh knows, for Tab, and the history kept from before. */
 export interface EditorCtx {
+	readonly keys?: KeyTable;
 	readonly programs: Shell.ProgramList;
 	readonly history: readonly string[];
 }
@@ -183,6 +198,7 @@ const clean = (text: string): string => [...text].filter(printable).join("");
 
 /** The editor at the start, with the history it was handed, cleaned. */
 export const fresh = (ctx: EditorCtx): Editor => ({
+	keys: ctx.keys ?? defaults,
 	mode: prompt(EMPTY),
 	history: ctx.history
 		.map(clean)
@@ -381,9 +397,17 @@ const kill = (acc: Acc, recall: Recall | null, cut: string, next: Line, before: 
 };
 
 /** One key, at the prompt. */
-const atPrompt = (acc: Acc, mode: Extract<Mode, {kind: "prompt"}>, raw: string): Acc => {
+const atPrompt = (
+	acc: Acc,
+	mode: Extract<Mode, {kind: "prompt"}>,
+	raw: string,
+	semantic?: Command,
+): Acc => {
 	const {s} = acc;
-	const key = keyOf(raw);
+	const key =
+		semantic === undefined
+			? keyOf(raw, {keys: s.keys, mode: null})
+			: {kind: "command" as const, command: semantic};
 	const {left, right} = mode.line;
 	const l = [...left];
 	const r = [...right];
@@ -503,14 +527,46 @@ const completed = (acc: Acc, mode: Extract<Mode, {kind: "prompt"}>): Acc => {
 };
 
 /** One key, in a Ctrl-R search. */
-const inSearch = (acc: Acc, mode: Extract<Mode, {kind: "search"}>, raw: string): Acc => {
+const inSearch = (
+	acc: Acc,
+	mode: Extract<Mode, {kind: "search"}>,
+	raw: string,
+	semantic?: string,
+): Acc => {
 	const {s} = acc;
-	const stepped = Shell.Search.step(newestFirst(s.history), mode.search, Shell.Search.keyOf(raw));
+	const name = nameOfBytes(raw);
+	const command =
+		semantic ??
+		editorRows(s.keys).find(
+			(row) =>
+				row.target?.program === "tsh" &&
+				row.target.mode === "search" &&
+				row.keys.some((key) => key._tag === "alone" && key.key === name),
+		)?.target?.word;
+	const edit = command !== undefined && Object.hasOwn(promptKeys, command);
+	const key: Shell.Search.Key | null =
+		raw === "\x03" || command === "exit"
+			? {kind: "cancel"}
+			: command === "again"
+				? {kind: "again"}
+				: command === "accept"
+					? {kind: "run"}
+					: command === "back"
+						? {kind: "back"}
+						: edit
+							? {kind: "other", raw: ""}
+							: raw !== "" && [...raw].every(printable)
+								? {kind: "text", text: raw}
+								: null;
+	if (key === null) return acc;
+	const stepped = Shell.Search.step(newestFirst(s.history), mode.search, key);
 	if (stepped.kind === "searching")
 		return redraw(acc, withMode(s, {...mode, search: stepped.search}));
 	const found: Line = stepped.line === null ? mode.typed : {left: stepped.line, right: ""};
 	const back = redraw(acc, withMode(s, prompt(found)));
 	if (stepped.run) return accept(back, found.left + found.right);
+	if (edit && back.s.mode.kind === "prompt")
+		return atPrompt(back, back.s.mode, "", command as Command);
 	// The key that ended the search goes on, at the prompt, as bash hands it on.
 	return stepped.replay === null ? back : step(back, stepped.replay);
 };
@@ -518,7 +574,7 @@ const inSearch = (acc: Acc, mode: Extract<Mode, {kind: "search"}>, raw: string):
 /** One key, wherever the editor is. */
 const step = (acc: Acc, raw: string): Acc => {
 	const {mode} = acc.s;
-	const key = keyOf(raw);
+	const key = keyOf(raw, {keys: acc.s.keys, mode: acc.s.mode.kind === "search" ? "search" : null});
 	const command = key.kind === "command" ? key.command : null;
 	const after = (next: Acc): Acc => ({...next, s: {...next.s, last: command}});
 	switch (mode.kind) {
@@ -574,6 +630,23 @@ export const editor = defineMachine({
 		return [s, [write({data: drawn(s)})]];
 	},
 	update: {
+		bindings: (s, m) => [{...s, keys: m.keys}, []],
+		command: (s, m) => {
+			if (s.mode.kind === "search") {
+				if (
+					!editorRows(s.keys).some(
+						(row) =>
+							row.target?.program === "tsh" &&
+							row.target.mode === "search" &&
+							row.target.word === m.command,
+					)
+				)
+					return [s, []];
+				return done(inSearch(start(s), s.mode, "", m.command));
+			}
+			if (s.mode.kind !== "prompt" || !Object.hasOwn(promptKeys, m.command)) return [s, []];
+			return done(atPrompt(start(s), s.mode, "", m.command as Command));
+		},
 		keys: (s, m) => done(keys(start(s), keysIn(m.data))),
 		size: (s, m) => {
 			const cols = Math.max(1, m.cols);

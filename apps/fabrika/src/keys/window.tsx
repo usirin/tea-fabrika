@@ -1,6 +1,15 @@
 import {Button, Input, Kbd, Listbox, ScrollArea} from "@manti-ui/react";
 import {type ReactNode, useId, useLayoutEffect, useRef} from "react";
-import {bindingFor, defaults, type Key, type Keys, spell} from "../desk/keymap.ts";
+import {
+	bindingFor,
+	defaults,
+	fileWord,
+	type Key,
+	type Keys,
+	sameScope,
+	sameTarget,
+	spell,
+} from "../desk/keymap.ts";
 import {THE_MACS, wordOf} from "../desk/keys.ts";
 import {capOf} from "../window/pop.ts";
 import {type Editor, type EditorMsg, matching} from "./machine.ts";
@@ -107,7 +116,13 @@ export function KeysWindow({
 	readonly mac?: boolean;
 }): ReactNode {
 	const selected = editor.selected;
-	const row = keys.rows.find((r) => r.does === selected);
+	const row = keys.rows.find((r) =>
+		typeof selected === "object" && selected !== null
+			? sameTarget(r.target, selected)
+			: r.does === selected,
+	);
+	const selectedWord =
+		typeof selected === "object" && selected !== null ? fileWord(selected) : selected;
 	const recording = editor.recording;
 	const box = useRef<HTMLElement>(null);
 	const change = useRef<HTMLButtonElement>(null);
@@ -166,14 +181,14 @@ export function KeysWindow({
 	const candidate = recording._tag === "candidate" ? recording.keys : [];
 	const conflicts = keys.rows.filter(
 		(r) =>
-			r.does !== selected &&
+			(row === undefined || (!sameTarget(r.target, row.target) && sameScope(row, r))) &&
 			r.keys.some((key) => candidate.some((c) => spelling(c) === spelling(key))),
 	);
 	const select = (value: string[]) => {
 		const first = value[0];
-		const found = keys.rows.find((r) => r.does === first);
+		const found = keys.rows.find((r) => fileWord(r.target) === first);
 		if (first === "prefix" || first === "ignore") send({type: "select", does: first});
-		else if (found !== undefined) send({type: "select", does: found.does});
+		else if (found !== undefined) send({type: "select", target: found.target});
 	};
 	return (
 		<section
@@ -187,6 +202,14 @@ export function KeysWindow({
 			<p id={instructions} className="keys-live" role="status">
 				{said}
 			</p>
+			<Button size="sm" disabled={busy || choosing} onClick={() => send({type: "mapping"})}>
+				{editor.mapping ? "Stop mapping" : "Map controls"}
+			</Button>
+			{editor.mapping && (
+				<p role="status">
+					MAP KEYS. Select a real control to change its keys. Escape leaves mapping.
+				</p>
+			)}
 			<Input
 				label="Search commands or keys"
 				placeholder="Search commands, tsh words or keys"
@@ -205,7 +228,7 @@ export function KeysWindow({
 					<Listbox
 						label="Commands and settings"
 						disabled={busy || choosing}
-						value={selected === null ? [] : [selected]}
+						value={selectedWord === null ? [] : [selectedWord]}
 						onValueChange={select}
 						items={[
 							...(["prefix", "ignore"] as const)
@@ -221,8 +244,8 @@ export function KeysWindow({
 								const b = bindingFor(r.does);
 								const why = moved(r.does);
 								return {
-									value: r.does,
-									label: `${b?.name ?? "palette"} · ${r.does} · ${b === undefined ? "palette" : wordOf(b.does)} · ${r.keys.map((key) => spoken(keys, key)).join(", ") || "unbound"} · ${r.source}${why === "" ? "" : ` · ${why}`}`,
+									value: fileWord(r.target),
+									label: `${b?.name ?? r.target.word} · ${fileWord(r.target)} · ${r.scope} · ${r.keys.map((key) => spoken(keys, key)).join(", ") || "unbound"} · ${r.source}${r.disabled == null ? "" : ` · ${r.disabled}`}${why === "" ? "" : ` · ${why}`}`,
 								};
 							}),
 						]}
@@ -234,8 +257,14 @@ export function KeysWindow({
 						<p>Select a command to change its keys.</p>
 					) : (
 						<>
-							<h3>{binding?.name ?? selected}</h3>
-							<code>{selected}</code>
+							<h3>{binding?.name ?? selectedWord}</h3>
+							<code>{selectedWord}</code>
+							{row !== undefined && (
+								<p>
+									{row.target.program} · {row.target.mode ?? "No mode"} · {row.scope}
+									{row.disabled == null ? "" : ` · ${row.disabled}`}
+								</p>
+							)}
 							{row !== undefined && (
 								<p>
 									tsh: <code>{binding === undefined ? "palette" : wordOf(binding.does)}</code>

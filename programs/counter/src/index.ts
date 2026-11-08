@@ -30,6 +30,10 @@ export const counter = defineProgram({
 	name: "counter",
 	description: "Counts presses of +1 until done, and says the count. It has a window.",
 	inputs: {press: input(Press, "A press: plus counts one, done ends it.")},
+	commands: {
+		plus: {send: {type: "press", value: "plus"}, keys: []},
+		done: {send: {type: "press", value: "done"}, keys: []},
+	},
 	outputs: {n: output(Schema.Int, "The count, once done.")},
 	machines: {
 		count: kind({

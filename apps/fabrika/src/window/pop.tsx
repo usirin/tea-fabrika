@@ -10,6 +10,7 @@ import {
 	useState,
 } from "react";
 import {createPortal} from "react-dom";
+import type {Keys} from "../desk/keymap.ts";
 import {
 	activeIn,
 	type Cap,
@@ -177,6 +178,7 @@ export interface Empty {
 }
 
 export interface MenuProps {
+	readonly keys?: Keys;
 	/** Its element's id: the item that opens it names it in `aria-controls`. */
 	readonly id: string;
 	/** Its name, said by a screen reader and shown at its head: `Asks`. */
@@ -239,10 +241,15 @@ export function Menu(props: MenuProps): ReactNode {
 		}
 	};
 	const onKeyDown = (e: KeyboardEvent) => {
-		const did = menuKey(stops, active?.id ?? null, {
-			key: e.key,
-			mods: e.ctrlKey || e.altKey || e.metaKey,
-		});
+		const did = menuKey(
+			stops,
+			active?.id ?? null,
+			{
+				key: e.key,
+				mods: e.ctrlKey || e.altKey || e.metaKey,
+			},
+			props.keys === undefined ? undefined : {keys: props.keys},
+		);
 		if (did === null) return;
 		e.preventDefault();
 		run(did);
