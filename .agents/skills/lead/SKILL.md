@@ -30,6 +30,12 @@ Laws d1 to d3 are red. This round: make them green in door.ts, answer.ts and hel
   program's window, the desk, keys, the look) has its tests, build and review steps run by Claude
   agents, which can start Electron themselves. That stops the round trip of a Codex build the lead
   then has to run (owner, 2026-11-08). Still one agent per step.
+- **One driver per ticket, start to finish** (owner, 2026-11-08): a Claude agent carries one ticket
+  through every step, starting one agent per step, merges its own PR when the review is merge-ready,
+  CI is green and the leak grep is clean, and keeps its own status line and field rows. Only a new
+  design call or an exam read comes back to the lead.
+- **Steps that need sockets go to Claude too**, like Electron: a Codex box cannot bind one, so a
+  stage law run there goes half blind.
 - **A Claude agent only drives:** it starts boxes, fetches, hands work along, and does what a Codex
   sandbox cannot (start Electron, bind a socket, list processes): e2e runs and screenshots.
 - A driver never writes the step's code or tests itself (owner, 2026-11-08: a session that gave step
