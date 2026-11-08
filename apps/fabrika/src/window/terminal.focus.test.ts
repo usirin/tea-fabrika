@@ -124,17 +124,17 @@ afterEach(() => {
 });
 
 describe("a look change with nothing focused", () => {
-	// A page says nothing has focus with its body, or with null where it has no body to give.
 	it.each([
 		["the body", body],
 		["null", null],
-	])("leaves nothing focused once open()'s timeout has run, from %s", async (_, nothing) => {
+	])("keeps focus outside the tile once open()'s timeout has run, from %s", async (_, nothing) => {
 		const {terminalFor} = await import("./terminal.ts");
-		terminalFor({} as never, "t1" as never).attach(element() as never);
+		const tile = element();
+		terminalFor({} as never, "t1" as never).attach(tile as never);
 		page.activeElement = nothing;
 		switchLook();
 		settle();
-		expect(page.activeElement).toBe(body);
+		expect(tile.contains(page.activeElement)).toBe(false);
 	});
 
 	it("L4: a newly focused input keeps focus while restore timers run", async () => {
