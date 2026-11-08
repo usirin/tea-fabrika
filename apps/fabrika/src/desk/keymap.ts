@@ -322,6 +322,167 @@ const leaves = (table: Readonly<Record<string, unknown>>, above: readonly string
 
 const pathWord = (path: readonly string[]): string => path.map(partWord).join(".");
 
+interface Assignment {
+	readonly word: string;
+	readonly start: number;
+	readonly end: number;
+	readonly value: number;
+	readonly until: number;
+}
+
+/** Source positions, read with TOML's strings, comments and nested values intact. */
+const assignments = (text: string): {rows: Assignment[]; header: number} => {
+	const rows: Assignment[] = [];
+	let table: readonly string[] = [];
+	let header = text.length;
+	let at = 0;
+	while (at < text.length) {
+		const start = at;
+		const newline = text.indexOf("\n", at);
+		const end = newline < 0 ? text.length : newline + 1;
+		const line = text.slice(start, end).trim();
+		if (line === "" || line.startsWith("#")) {
+			at = end;
+			continue;
+		}
+		if (line.startsWith("[")) {
+			header = Math.min(header, start);
+			const read = readToml(line);
+			if (Result.isSuccess(read)) {
+				let nested = read.success;
+				const parts: string[] = [];
+				while (Object.keys(nested).length === 1) {
+					const part = Object.keys(nested)[0];
+					if (part === undefined || !isTable(nested[part])) break;
+					parts.push(part);
+					nested = nested[part];
+				}
+				table = parts;
+			}
+			at = end;
+			continue;
+		}
+		let quote = "";
+		let equal = start;
+		for (; equal < end; equal += 1) {
+			const c = text[equal];
+			if (quote === '"' && c === "\\") {
+				equal += 1;
+				continue;
+			}
+			if (quote !== "") {
+				if (c === quote) quote = "";
+				continue;
+			}
+			if (c === '"' || c === "'") {
+				quote = c;
+				continue;
+			}
+			if (c === "=") break;
+		}
+		if (equal === end) {
+			at = end;
+			continue;
+		}
+		const key = readToml(`${text.slice(start, equal)} = 0`);
+		if (Result.isFailure(key)) {
+			at = end;
+			continue;
+		}
+		const path = leaves(key.success)[0]?.path ?? [];
+		let value = equal + 1;
+		while (text[value] === " " || text[value] === "\t") value += 1;
+		let cursor = value;
+		let depth = 0;
+		quote = "";
+		let triple = false;
+		for (; cursor < text.length; cursor += 1) {
+			const c = text[cursor] ?? "";
+			if (quote !== "") {
+				if (quote === '"' && c === "\\") {
+					cursor += 1;
+					continue;
+				}
+				if (triple ? text.slice(cursor, cursor + 3) === quote.repeat(3) : c === quote) {
+					if (triple) cursor += 2;
+					quote = "";
+					triple = false;
+				}
+				continue;
+			}
+			if (c === '"' || c === "'") {
+				quote = c;
+				triple = text.slice(cursor, cursor + 3) === c.repeat(3);
+				if (triple) cursor += 2;
+				continue;
+			}
+			if (c === "#") {
+				if (depth === 0) break;
+				const next = text.indexOf("\n", cursor);
+				cursor = next < 0 ? text.length : next;
+				continue;
+			}
+			if (c === "[" || c === "{") depth += 1;
+			if (c === "]" || c === "}") depth -= 1;
+			if ((c === "\n" || c === "\r") && depth === 0) break;
+		}
+		let until = cursor;
+		while (until > value && /\s/.test(text[until - 1] ?? "")) until -= 1;
+		const last = text.indexOf("\n", cursor);
+		at = last < 0 ? text.length : last + 1;
+		rows.push({word: pathWord([...table, ...path]), start, end: at, value, until});
+	}
+	return {rows, header};
+};
+
+/** Change only the requested assignments. New rows precede table headers. */
+export const patchKeys = (
+	text: string,
+	values: ReadonlyMap<string, string | readonly string[] | null>,
+): string => {
+	const source = assignments(text);
+	const patches: {start: number; end: number; text: string}[] = [];
+	let added = "";
+	for (const [word, value] of values) {
+		const row = source.rows.find((row) => row.word === word);
+		if (row === undefined) {
+			if (value !== null) added += `${word} = ${JSON.stringify(value)}\n`;
+		} else if (value === null) {
+			// Leave a trailing hand-written comment in place when removing its assignment.
+			const tail = text.slice(row.until, row.end);
+			patches.push({
+				start: row.start,
+				end: row.end,
+				text: tail.trimStart().startsWith("#") ? tail.trimStart() : "",
+			});
+		} else patches.push({start: row.value, end: row.until, text: JSON.stringify(value)});
+	}
+	if (added !== "")
+		patches.push({
+			start: source.header,
+			end: source.header,
+			text: `${source.header > 0 && text[source.header - 1] !== "\n" ? "\n" : ""}${added}`,
+		});
+	let saved = text;
+	for (const patch of patches.sort((a, b) => b.start - a.start))
+		saved = saved.slice(0, patch.start) + patch.text + saved.slice(patch.end);
+	return saved;
+};
+
+export const writtenKeys = (text: string): ReadonlyMap<string, string | readonly string[]> => {
+	const read = readToml(text);
+	return new Map(
+		Result.isFailure(read)
+			? []
+			: leaves(read.success).flatMap(({path, value}) =>
+					typeof value === "string" ||
+					(Array.isArray(value) && value.every((one) => typeof one === "string"))
+						? [[pathWord(path), value] as const]
+						: [],
+				),
+	);
+};
+
 /** The text read as TOML, or the line it breaks on. */
 const readToml = (text: string): Result.Result<Readonly<Record<string, unknown>>, Refused> => {
 	try {

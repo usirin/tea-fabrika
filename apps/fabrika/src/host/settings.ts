@@ -62,15 +62,19 @@ export const settingsFile = <A>(
 				.readFileString(file)
 				.pipe(
 					Effect.catch((error) =>
-						error.reason._tag === "NotFound"
+						error.reason._tag === "NotFound" ||
+						(error.cause instanceof Error &&
+							"code" in error.cause &&
+							error.cause.code === "ENOTDIR")
 							? Effect.succeed(null)
-							: Effect.logWarning(`fabrika host: ${name} could not be read: ${error.message}`).pipe(
-									Effect.as(null),
+							: Effect.succeed(
+									Setting.refused({line: 1, why: `${name} could not be read: ${error.message}`}),
 								),
 					),
 				);
-			const answer = (said: string | null): Setting<A> => {
+			const answer = (said: string | null | Setting<never>): Setting<A> => {
 				if (said === null) return Setting.none();
+				if (typeof said !== "string") return said;
 				const read = decode(said);
 				return Result.isSuccess(read)
 					? Setting.read({value: read.success})
