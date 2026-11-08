@@ -43,6 +43,7 @@ const plain = (does: Does, description: string) =>
 	defineProgram({name: wordOf(does), description, inputs: {}, outputs: {}, main: () => tell(does)});
 
 const Way = Schema.Literals(["left", "down", "up", "right"]);
+const Cycle = Schema.Literals(["next", "previous"]);
 
 const split = defineProgram({
 	name: "split",
@@ -60,12 +61,21 @@ const focus = defineProgram({
 	name: "focus",
 	description: "Moves focus from this tile to the next one that way, or to a tile by its name.",
 	flags: {
-		to: flag(Schema.Union([Way, TileIdSchema]), "A way, left, down, up or right, or a tile: t3."),
+		to: flag(
+			Schema.Union([Way, Cycle, TileIdSchema]),
+			"A direction, next, previous, or a tile: t3.",
+		),
 	},
 	inputs: {},
 	outputs: {},
 	main: ({flags}) =>
-		tell(Schema.is(Way)(flags.to) ? {kind: "focus", to: flags.to} : {kind: "go", tile: flags.to}),
+		tell(
+			Schema.is(Way)(flags.to)
+				? {kind: "focus", to: flags.to}
+				: Schema.is(Cycle)(flags.to)
+					? {kind: "cycle", to: flags.to}
+					: {kind: "go", tile: flags.to},
+		),
 });
 
 /** A workspace's place in the top bar, from 1: past 9 too, where the number keys stop. */
@@ -100,6 +110,7 @@ const SHOWN: Readonly<Record<Exclude<Show, "jobs">, string>> = {
 	agents: "Opens the agents' lines under the top bar: each agent attached to this host.",
 	sync: "Opens the sync lines under the top bar: which ledger this home reads, and how.",
 	host: "Opens the host's lines under the top bar: its process, its build and how long it has run.",
+	palette: "Finds a command by name and runs it.",
 };
 
 /** The words with no flags, as tsh lists them after split, focus and workspace. */

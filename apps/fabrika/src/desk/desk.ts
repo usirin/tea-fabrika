@@ -598,6 +598,12 @@ const act = (s: Open, does: Does): Step => {
 			const next = withWorkspace(s, {...ws, layout: unzoom(ws.layout), focused: to.id});
 			return [next, keep(next)];
 		}
+		case "cycle": {
+			const tiles = tilesOf(ws).filter((tile) => !tile.folded);
+			const at = tiles.findIndex((tile) => tile.id === ws.focused);
+			const to = tiles[(at + (does.to === "next" ? 1 : tiles.length - 1)) % tiles.length];
+			return to === undefined ? [s, []] : went(s, to.id);
+		}
 		case "go":
 			return went(s, does.tile);
 		case "fold":
@@ -778,6 +784,12 @@ const byteOf = (prefix: string): string | null => {
  */
 const boundOn = (keys: Keys, key: Key) => {
 	const does = commandOn(keys, key);
+	if (does === "palette.open" && key._tag === "after_prefix")
+		return {
+			does,
+			key,
+			binding: {does: {kind: "show" as const, what: "palette" as const}, repeats: false},
+		};
 	const binding = does === undefined ? undefined : bindingFor(does);
 	return does === undefined || binding === undefined ? null : {does, key, binding};
 };

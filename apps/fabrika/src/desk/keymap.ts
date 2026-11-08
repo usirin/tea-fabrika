@@ -1,6 +1,6 @@
 import {Result, Schema} from "effect";
 import {parse, TomlError} from "smol-toml";
-import {type Does as Action, BINDINGS, type Binding, THE_MACS, wordOf} from "./keys.ts";
+import {type Does as Action, BINDINGS, type Binding, keyName, THE_MACS, wordOf} from "./keys.ts";
 
 // The keys file: ~/.fabrika/keybindings.toml, read and laid over the defaults that ship with the
 // app (docs/direction/keybindings-are-configurable.md, decided; ticket 174, PR 1). The file holds
@@ -53,6 +53,8 @@ export const Does = Schema.Literals([
 	'tezgah."focus --to down"',
 	'tezgah."focus --to up"',
 	'tezgah."focus --to right"',
+	'tezgah."focus --to next"',
+	'tezgah."focus --to previous"',
 	"tezgah.turn",
 	"tezgah.fold",
 	"tezgah.zoom",
@@ -141,7 +143,9 @@ export const defaults: Keys = {
 			keys:
 				does === "palette.open"
 					? [alone(PALETTE_KEY)]
-					: BINDINGS.filter((b) => b.command === does).map((b) => after(b.key)),
+					: BINDINGS.filter((b) => b.command === does).map((b) =>
+							b.does.kind === "cycle" ? alone(b.key) : after(b.key),
+						),
 			source: "default",
 		}),
 	),
@@ -217,21 +221,12 @@ const readPress = (spelled: string, mac: boolean): Result.Result<Pressed, string
 	const char = base === "space" ? " " : [...base].length === 1 ? base : null;
 	const named = char === null ? NAMED[base.toLowerCase()] : undefined;
 	if (char === null && named === undefined) return Result.fail(`${base} is not a key`);
-	if (shift) {
-		// Shift is told apart only by the character it types, as `keyName` reads a press.
-		if (mods.size > 0 || char === null || !/^[a-z]$/i.test(char))
-			return Result.fail(
-				`${spelled}: Shift is told apart only by the character it types, so write that character, such as N or |`,
-			);
-		return Result.succeed({name: char.toUpperCase(), printable: true});
-	}
-	if (mods.size === 0)
-		return Result.succeed(
-			char === null ? {name: `<${named}>`, printable: false} : {name: char, printable: true},
-		);
-	const letters = ["c", "a", "m"].filter((m) => mods.has(m)).map((m) => `${m}-`);
-	const bare = char === null ? named : char.toLowerCase();
-	return Result.succeed({name: `<${letters.join("")}${bare}>`, printable: false});
+	const key =
+		shift && char !== null && /^[a-z]$/.test(char) ? char.toUpperCase() : (char ?? named ?? "");
+	const name = keyName({key, ctrl: mods.has("c"), alt: mods.has("a"), meta: mods.has("m"), shift});
+	return name === null
+		? Result.fail(`${spelled} is not a key`)
+		: Result.succeed({name, printable: char !== null && mods.size === 0});
 };
 
 /**
@@ -460,10 +455,6 @@ const readWritten = (
 		for (const one of spelled.success) {
 			const read = readKey(one, mac);
 			if (Result.isFailure(read)) return no(read.failure);
-			if (word === "palette.open" && read.success._tag === "after_prefix")
-				return no(
-					`palette.open is the window's, so it takes a key pressed alone, such as cmd+k, not ${one}`,
-				);
 			keys.push({key: read.success, spelled: one});
 		}
 		rows.push({does: word, keys, line});
@@ -540,12 +531,14 @@ export const decodeKeys = (text: string, mac: boolean): Result.Result<Keys, Refu
 			? {...row, keys: row.keys.filter((k) => !lost(k))}
 			: Row.make({does: row.does, keys: yours.keys.map((k) => k.key), source: "yours"});
 	});
+	if (!rows.some((row) => row.does.startsWith('tezgah."focus --to ') && row.keys.length > 0))
+		return Result.fail({line: 1, why: "Keep a focus key so a terminal has a keyboard way out"});
 	return Result.succeed({prefix, rows, ignore, file: File.cases.read.make({})});
 };
 
 // ---------------------------------------------------------------- a key, as the file spells it
 
-const WORDS: Readonly<Record<string, string>> = {c: "ctrl", a: "alt", m: "cmd"};
+const WORDS: Readonly<Record<string, string>> = {c: "ctrl", a: "alt", s: "shift", m: "cmd"};
 const SPOKEN: Readonly<Record<string, string>> = Object.fromEntries(
 	Object.entries(NAMED).map(([word, name]) => [name, word]),
 );
@@ -556,7 +549,7 @@ const SPOKEN: Readonly<Record<string, string>> = Object.fromEntries(
  */
 export const spell = (name: string): string => {
 	if (name === " ") return "space";
-	const wrapped = /^<((?:[cam]-)*)(.+)>$/.exec(name);
+	const wrapped = /^<((?:[casm]-)*)(.+)>$/.exec(name);
 	if (wrapped === null) return name;
 	const [, mods = "", base = ""] = wrapped;
 	const words = mods

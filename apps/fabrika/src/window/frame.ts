@@ -99,9 +99,9 @@ export const keyWord = (key: string): string => {
 	const arrow = arrows[key];
 	if (arrow !== undefined) return arrow;
 	if (key === " ") return "Space";
-	const mod = /^<([cam])-(.+)>$/.exec(key);
+	const mod = /^<((?:[casm]-)*)(.+)>$/.exec(key);
 	if (mod === null) return key;
-	return `${mod[1]?.toUpperCase()}-${mod[2]}`;
+	return `${(mod[1] ?? "").toUpperCase()}${mod[2]}`;
 };
 
 /** A binding's whole key, as pressed: the prefix, then its own key. */
@@ -198,7 +198,11 @@ export const fileWord = (file: File): string | null =>
 export const matching = (commands: readonly Command[], query: string): readonly Command[] => {
 	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
 	return commands.filter((c) => {
-		const text = `${c.name} ${c.tsh}`.toLowerCase();
+		const spelling = c.key.replace(
+			/([CASM])-/g,
+			(_, mod: string) => ({C: "ctrl+", A: "alt+", S: "shift+", M: "cmd+"})[mod] ?? "",
+		);
+		const text = `${c.name} ${c.tsh} ${c.key} ${c.runs} ${spelling}`.toLowerCase();
 		return words.every((w) => text.includes(w));
 	});
 };
@@ -886,6 +890,8 @@ const shown = (f: Frame, what: Exclude<Show, "info">): Frame => {
 			return toggle(f, {kind: "jobs"});
 		case "keys":
 			return {...f, over: {kind: "palette", title: "keys", query: "", at: 0}};
+		case "palette":
+			return {...f, over: {kind: "palette", title: "commands", query: "", at: 0}};
 		case "bars":
 			return {...f, bare: !f.bare, over: {kind: "none"}};
 	}
