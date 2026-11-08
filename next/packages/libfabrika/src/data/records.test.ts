@@ -246,6 +246,23 @@ describe.each(backends)(
 			},
 		);
 
+		it.effect("read pages past 500 spans in one part, each span once, in write order", () => {
+			const {layer} = backend.make(1024 * 1024 * 1024);
+			return Effect.gen(function* () {
+				const records = yield* RecordManager;
+				const made = 1201;
+				for (let from = 0; from < made; from += 100) {
+					const batch = Array.from({length: Math.min(100, made - from)}, (_, n) =>
+						kept(row(id(from + n))),
+					);
+					expect(yield* records.write(job, 0, batch)).toEqual({_tag: "written"});
+				}
+				expect((yield* read(job)).map((r) => r.spanId)).toEqual(
+					Array.from({length: made}, (_, n) => id(n)),
+				);
+			}).pipe(Effect.provide(layer));
+		});
+
 		it.effect("spans/<part> rolls by the same code, and a chain with no write reads empty", () => {
 			const {layer, parts} = backend.make(CAP);
 			return Effect.gen(function* () {
@@ -463,6 +480,22 @@ describe("RecordManager.remote, the record object's stub", () => {
 				read(job).pipe(Effect.provide(RecordManager.remote(gone.make))),
 			);
 			expect(readFailed.why).toBe("unreachable");
+		}),
+	);
+
+	it.effect("a page keeps each span's events whole; an event that is not one is bad_row", () =>
+		Effect.gen(function* () {
+			const event = {name: "cache.miss", timeUnixNano: "1250000000", attributes: {"fab.n": 3}};
+			const page = (events: ReadonlyArray<unknown>) =>
+				stub(() => Promise.resolve({spans: [{...row(id(0)), events}], after: 1, rolled: false}));
+			const good = yield* read(job).pipe(Effect.provide(RecordManager.remote(page([event]).make)));
+			expect(good.map((r) => r.events)).toEqual([[event]]);
+			for (const broken of [{}, {...event, name: 7}, {...event, attributes: {"fab.n": {}}}]) {
+				const bad = yield* Effect.flip(
+					read(job).pipe(Effect.provide(RecordManager.remote(page([broken]).make))),
+				);
+				expect(bad.why, JSON.stringify(broken)).toBe("bad_row");
+			}
 		}),
 	);
 });

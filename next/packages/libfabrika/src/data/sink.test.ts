@@ -415,6 +415,64 @@ describe("p96, a span that ends is never dropped", () => {
 	);
 
 	it.effect(
+		"a second flush after a storage failure still fails while spans are held, and sends nothing",
+		() => {
+			const {db, sql: real} = home();
+			const {sql, arm} = filling(real);
+			return Effect.gen(function* () {
+				yield* step("warm", {});
+				arm(Number.POSITIVE_INFINITY);
+				yield* step("runner.step", {"fab.n": 0});
+				expect((yield* Effect.flip(flush)).held).toBe(1);
+				arm(0);
+				const again = yield* Effect.flip(flush);
+				expect(again.why, "no end since, but the span is still only in memory").toBe("storage");
+				expect(again.held).toBe(1);
+				expect(yield* recorded(spans), "the second flush sent nothing").toEqual([]);
+				expect(count(db, "unsent")).toBe(1);
+				yield* step("runner.step", {"fab.n": 1});
+				expect(yield* flush).toEqual({sent: 3});
+			}).pipe(Effect.provide(world(sql)));
+		},
+	);
+
+	it.effect(
+		"after a roll, rows the old part already holds are not written again to the next part",
+		() => {
+			const {db, sql} = home();
+			return Effect.gen(function* () {
+				yield* step("runner.step", {"fab.process": P1, "fab.n": 0});
+				yield* step("runner.step", {"fab.process": P1, "fab.n": 1});
+				const real = yield* RecordManager;
+				// Part 0 takes both rows, and the answer is lost on the way back.
+				let lose = 1;
+				const lossy = {
+					...real,
+					write: (...args: Parameters<typeof real.write>) =>
+						real
+							.write(...args)
+							.pipe(
+								Effect.flatMap((written) =>
+									lose-- > 0
+										? Effect.fail(new SinkError({why: "unreachable", held: 0}))
+										: Effect.succeed(written),
+								),
+							),
+				};
+				yield* Effect.exit(flush.pipe(Effect.provideService(RecordManager, lossy)));
+				expect(count(db, "unsent")).toBe(2);
+				// Part 0 is now past its 1-byte cap: the resend with one new row rolls it.
+				yield* step("runner.step", {"fab.process": P1, "fab.n": 2});
+				expect(yield* flush).toEqual({sent: 3});
+				const rows = yield* recorded(job(P1));
+				expect(rows.map((r) => r.attributes["fab.n"])).toEqual([0, 1, 2]);
+				expect(count(db, "unsent")).toBe(0);
+				expect(Number(db.prepare(`SELECT part FROM parts`).get()?.["part"])).toBe(1);
+			}).pipe(Effect.provide(world(sql, RecordManager.memory(1))));
+		},
+	);
+
+	it.effect(
 		"building touches nothing: on a Sql that always throws it builds, and traced work still succeeds",
 		() => {
 			const throwing: Sql = {
@@ -439,6 +497,7 @@ describe("p96, a span that ends is never dropped", () => {
 const SECRET = "sk-p97-secret";
 const NOTE = "note-body-p97";
 const NOTE_TWO = "note-two-p97";
+const a = (n: number) => "a".repeat(n);
 class NoteError extends Error {
 	override readonly name = "NoteError";
 }
@@ -580,4 +639,100 @@ describe("p97, tags hold names, ids and numbers; a message only in content", () 
 			{seed: SEED, numRuns: 60},
 		);
 	});
+
+	it.effect(
+		"text past 128 is cut to 128, or to 127 when the cut would split a surrogate pair, with <key>.length beside",
+		() => {
+			const {sql} = home();
+			return Effect.gen(function* () {
+				yield* step("runner.step", {
+					"fab.process": P1,
+					"fab.fits": a(128),
+					"fab.over": a(200),
+					// A high surrogate at the 128th character: the pair would split, so the cut keeps 127.
+					"fab.d800": `${a(127)}\u{10000}`,
+					"fab.d83d": `${a(127)}😀`,
+					"fab.dbff": `${a(127)}\u{10FFFF}`,
+					// A low surrogate there ends a pair, and the characters next to the range are not one.
+					"fab.low": `${a(126)}😀b`,
+					"fab.d7ff": `${a(127)}퟿b`,
+					"fab.e000": `${a(127)}b`,
+				});
+				yield* flush;
+				const [row] = yield* recorded(job(P1));
+				expect(row?.attributes).toEqual({
+					"fab.process": P1,
+					"fab.fits": a(128),
+					"fab.over": a(128),
+					"fab.over.length": 200,
+					"fab.d800": a(127),
+					"fab.d800.length": 129,
+					"fab.d83d": a(127),
+					"fab.d83d.length": 129,
+					"fab.dbff": a(127),
+					"fab.dbff.length": 129,
+					"fab.low": `${a(126)}😀`,
+					"fab.low.length": 129,
+					"fab.d7ff": `${a(127)}퟿`,
+					"fab.d7ff.length": 129,
+					"fab.e000": `${a(127)}`,
+					"fab.e000.length": 129,
+				});
+			}).pipe(Effect.provide(world(sql)));
+		},
+	);
+
+	it.effect(
+		"a row keeps its events' names, times and tags; a tag an event drops is counted",
+		() => {
+			const {sql} = home();
+			return Effect.gen(function* () {
+				yield* Effect.currentSpan.pipe(
+					Effect.flatMap((span) =>
+						Effect.sync(() => {
+							span.event("cache.miss", 1_250_000_000n, {"fab.key": "k-1", "fab.bad": {}});
+							span.event("cache.fill", 1_260_000_000n, {"fab.n": 3, "fab.worse": [1]});
+						}),
+					),
+					Effect.withSpan("runner.step", {attributes: {"fab.process": P1}}),
+				);
+				yield* flush;
+				const [row] = yield* recorded(job(P1));
+				expect(row?.events).toEqual([
+					{name: "cache.miss", timeUnixNano: "1250000000", attributes: {"fab.key": "k-1"}},
+					{name: "cache.fill", timeUnixNano: "1260000000", attributes: {"fab.n": 3}},
+				]);
+				expect(row?.attributes, "the span's own tags drop nothing; its events drop two").toEqual({
+					"fab.process": P1,
+					"fab.sink.dropped": 2,
+				});
+			}).pipe(Effect.provide(world(sql)));
+		},
+	);
+
+	it.effect(
+		"a failure's text past 1,000,000 characters is cut there, with its full length after",
+		() => {
+			const {sql} = home();
+			return Effect.gen(function* () {
+				const exit = yield* Effect.exit(
+					traced("runner.step", {"fab.process": P1}, Effect.fail(new NoteError(a(1_100_000)))),
+				);
+				expect(Exit.isFailure(exit)).toBe(true);
+				yield* flush;
+				const [row] = yield* recorded(job(P1));
+				const content = yield* RecordManager.use((records) =>
+					records.content(job(P1), row?.spanId ?? ""),
+				);
+				const message =
+					Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "";
+				const tail = /\n\[cut: (\d+) characters\]$/.exec(message);
+				expect(tail, "the cut text ends with its full length").not.toBeNull();
+				const full = Number(tail?.[1]);
+				expect(full).toBeGreaterThan(1_100_000);
+				expect(message.length).toBe(1_000_000 + (tail?.[0].length ?? 0));
+				expect(message.slice(0, 1_000_000)).toContain(`NoteError: ${a(1000)}`);
+			}).pipe(Effect.provide(world(sql)));
+		},
+	);
 });

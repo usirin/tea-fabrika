@@ -291,6 +291,28 @@ describe("p99, health in two levels", () => {
 	});
 });
 
+describe("p99, a size row per hour across processes", () => {
+	it.effect(
+		"a new process in the same hour writes no second size row; the next hour gets its own",
+		() => {
+			const {db, sql} = fresh();
+			// The first span ends exactly on the hour's first ms, the edge of the hour's range.
+			const first = span("runner.step", D + H - 1, 1).pipe(Effect.provide(world(sql)));
+			const later = Effect.gen(function* () {
+				yield* span("runner.step", D + H + 50 * 60_000, 1);
+				yield* span("runner.step", D + 2 * H + 30 * 60_000, 1);
+			}).pipe(Effect.provide(world(sql)));
+			return Effect.gen(function* () {
+				yield* first;
+				expect(count(db, "sizes")).toBe(1);
+				yield* later;
+				const rows = db.prepare(`SELECT at FROM sizes ORDER BY at`).all();
+				expect(rows.map((row) => Number(row["at"]))).toEqual([D + H, D + 2 * H + 30 * 60_000 + 1]);
+			});
+		},
+	);
+});
+
 /** The plan's traced day: 8 spans on 2026-10-23, one on the next day that rolls them up, and the
  *  clock 337 hours past that day's end, where one more span ends. */
 const oldDay = Effect.gen(function* () {
