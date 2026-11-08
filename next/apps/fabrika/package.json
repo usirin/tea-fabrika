@@ -18,7 +18,13 @@
 	"devDependencies": {
 		"@effect/vitest": "catalog:",
 		"@types/node": "catalog:",
-		"esbuild": "catalog:",
+		"rolldown": "catalog:",
+		"fast-check": "catalog:",
+		"playwright": "catalog:",
+		"@demlik/tea": "catalog:",
+		"@kampus/counter": "workspace:*",
+		"@alchemy.run/cloudflare": "catalog:",
+		"alchemy": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	}
