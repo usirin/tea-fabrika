@@ -39,6 +39,7 @@ export {
 } from "./process.ts";
 export {Appended, ParentText, Rev} from "../data/log.ts";
 export {LedgerError} from "../data/ledger.ts";
+export {type Sql} from "../data/referee.ts";
 export {Archive} from "../data/archive.ts";
 export {RecordManager} from "../data/records.ts";
 export {SinkError} from "../data/sink.ts";

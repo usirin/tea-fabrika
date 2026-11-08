@@ -43,10 +43,10 @@ import {
 	SigningRefused,
 	SignRequest,
 	type SinkError,
+	type Sql,
 	type Writer,
 } from "../coordination/index.ts";
 import {Failure, Policy, Recovery, type Supervision} from "../coordination/recovery.ts";
-import {type Sql} from "../data/referee.ts";
 import {
 	Alarm,
 	CheckedWriter,
