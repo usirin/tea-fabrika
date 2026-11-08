@@ -396,7 +396,8 @@ describe("A3: every text the app draws reads on what it sits on, in both looks",
 
 	// Color principles rule 5: each value is a Radix step, used for that step's job. A line's step
 	// (a4 to a8) and the turn fill (9, 10) are not text steps, so no line or fill is a `color:`.
-	// Approved 2026-11-01: wire and border-strong text takes --text-faint (slate a11), key text --turn.
+	// Approved 2026-11-01: wire and border-strong text takes --text-faint (slate a11), key text the
+	// turn's text token, --turn-text since `turn` split (design language call 4, 2026-11-07).
 	const LINES_AND_FILLS = [
 		"--border-faint",
 		"--border",
@@ -404,7 +405,6 @@ describe("A3: every text the app draws reads on what it sits on, in both looks",
 		"--wire",
 		"--line",
 		"--pop-edge",
-		"--tile-focus",
 		"--focus",
 		"--turn-fill",
 		"--turn-fill-hover",
@@ -413,7 +413,7 @@ describe("A3: every text the app draws reads on what it sits on, in both looks",
 
 	it("finds the tokens the window uses as text, and no line or fill token among them", () => {
 		expect(USED_AS_TEXT).toEqual(
-			expect.arrayContaining(["--text-primary", "--text-faint", "--turn"]),
+			expect.arrayContaining(["--text-primary", "--text-faint", "--turn-text"]),
 		);
 		expect(USED_AS_TEXT.filter((name) => LINES_AND_FILLS.includes(name))).toEqual([]);
 	});
@@ -517,7 +517,7 @@ describe("A3: every text the app draws reads on what it sits on, in both looks",
 // comes from weight and size, never a third gray, and a title is always step 12.
 describe("A3: text takes Radix's two text steps, and a title is step 12, in both looks", () => {
 	// The tokens with a hue: state words and the turn. Every other token set as `color:` is a gray.
-	const HUES = ["--turn", "--done", "--running", "--stuck", "--open", "--alert"];
+	const HUES = ["--turn-text", "--done", "--running", "--stuck", "--open", "--alert"];
 	const GRAYS = [
 		...new Set([
 			"--text-primary",
@@ -757,6 +757,8 @@ describe("A3: the accent fill says your turn and nothing else", () => {
 		".map-view .spot.you": "the map's spot that waits on you",
 		".trace-view .tv-bar.waiting":
 			"a lane's wait on a person, not yet answered: a bar that waits on you",
+		".udot": "the top bar's dot for an ask you have not seen: it waits on you",
+		".view .dot.you": "the map's ring on the spot that waits on you",
 	};
 
 	it("finds the accent's names, --key among them", () => {
@@ -770,16 +772,6 @@ describe("A3: the accent fill says your turn and nothing else", () => {
 	const PENDING = "owner call pending";
 	const KNOWN: Record<string, string> = {
 		"button:hover { border-color }": `hover border: ${PENDING}`,
-		"button:focus-visible { outline }": `Radix focus default, ${PENDING}`,
-		".tracker button:focus-visible { outline }": `Radix focus default, ${PENDING}`,
-		".tracker a:focus-visible { outline }": `Radix focus default, ${PENDING}`,
-		".tracker input:focus-visible { outline }": `Radix focus default, ${PENDING}`,
-		".tracker textarea:focus-visible { outline }": `Radix focus default, ${PENDING}`,
-		".tracker-find:focus-within { border-color }": `Radix focus default, ${PENDING}`,
-		".tracker .tracker-composer input:focus { border-color }": `Radix focus default, ${PENDING}`,
-		".tracker .tracker-composer textarea:focus { border-color }": `Radix focus default, ${PENDING}`,
-		".tracker .tracker-list button:focus-visible { box-shadow }": `Radix focus default, ${PENDING}`,
-		".tracker-list a.tracker-pull-request:focus-visible { box-shadow }": `Radix focus default, ${PENDING}`,
 		".tracker button.tracker-primary { background }": `Radix solid primary, ${PENDING}`,
 		'.tracker .tracker-hint button[aria-pressed="true"] { border-color }': `pressed hint border, ${PENDING}`,
 	};
@@ -807,6 +799,155 @@ describe("A3: the accent fill says your turn and nothing else", () => {
 
 	it("the known accent uses only shrink: each listed one is still in the stylesheets", () => {
 		expect(Object.keys(KNOWN).filter((use) => !OFF.includes(use))).toEqual([]);
+	});
+});
+
+// ---- one meaning per token (design language call 4, decided 2026-11-07) ------------------------
+
+/** A stylesheet's `@media` blocks whose query matches, cut out, and their bodies, kept apart. */
+const splitMedia = (css: string, query: RegExp) => {
+	const inside: string[] = [];
+	let outside = "";
+	let from = 0;
+	for (const m of css.matchAll(/@media([^{]*)\{/g)) {
+		if (!query.test(m[1] ?? "") || (m.index ?? 0) < from) continue;
+		let depth = 1;
+		const open = (m.index ?? 0) + m[0].length;
+		let i = open;
+		while (i < css.length && depth > 0) {
+			if (css[i] === "{") depth += 1;
+			if (css[i] === "}") depth -= 1;
+			i += 1;
+		}
+		outside += css.slice(from, m.index);
+		inside.push(css.slice(open, i - 1));
+		from = i;
+	}
+	return {inside: inside.join("\n"), outside: outside + css.slice(from)};
+};
+
+// Focus is one slate token everywhere: every keyboard ring and every focused edge draws in --focus,
+// the top bar's and the tracker's included. A tile and a strip draw theirs in --tile-edge-on, the
+// tile's own name for it (tile guidelines), which a pipe sets to its own color. A rule that draws
+// no indicator (`outline: none` where something else shows focus) names no color, so it passes.
+describe("every focus indicator draws in the one focus token", () => {
+	const FORCED = /forced-colors:\s*active/;
+	const app = uncommented(RESET + CSS);
+	/** The properties that draw a ring or an edge. */
+	const INDICATOR =
+		/^(outline|outline-color|border|border(-(top|right|bottom|left|block|inline)(-(start|end))?)?-color|border-(top|right|bottom|left|block|inline)(-(start|end))?|box-shadow)$/;
+	const FOCUS = /:focus(-visible|-within)?(?![\w-])/;
+	/** A value that draws nothing, so it names no color. Anything else must name the token. */
+	const PLAIN = /^(none|0|auto|inherit|initial|unset|revert)$/;
+
+	const focusRules = (css: string) =>
+		rulesOf(css).filter((r) => r.selector.split(",").some((s) => FOCUS.test(s)));
+
+	const drawn = (rules: ReturnType<typeof rulesOf>) =>
+		rules.flatMap((r) =>
+			[...r.says]
+				.filter(([name, value]) => INDICATOR.test(name) && !PLAIN.test(value))
+				.map(([name, value]) => ({selector: r.selector, name, value})),
+		);
+
+	it("finds the focus rules, the tracker's and the top bar's among them", () => {
+		const selectors = focusRules(splitMedia(app, FORCED).outside).flatMap((r) =>
+			r.selector.split(",").map((s) => s.trim()),
+		);
+		expect(selectors).toEqual(
+			expect.arrayContaining([
+				".fb:focus-visible",
+				".strip:focus-visible",
+				".tracker input:focus-visible",
+				".tracker-find:focus-within",
+				".tracker .tracker-composer textarea:focus",
+				".tracker-list a.tracker-pull-request:focus-visible",
+			]),
+		);
+	});
+
+	it("draws each ring and focused edge in --focus, or --tile-edge-on on a tile or strip", () => {
+		const off = drawn(focusRules(splitMedia(app, FORCED).outside)).filter(({selector, value}) => {
+			const tile = selector.split(",").every((s) => /\.(tile|strip)(?![\w-])/.test(s));
+			const token = tile ? "--tile-edge-on" : "--focus";
+			return !new RegExp(`var\\(${token}\\)`).test(value);
+		});
+		expect(off.map(({selector, name, value}) => `${selector} { ${name}: ${value} }`)).toEqual([]);
+	});
+
+	// Forced colors drop the theme, and the page must draw in the system's colors there: focus is a
+	// 2px Highlight, the one place a focus rule names no token. This holds it to that and only that.
+	it("under forced colors, a focus rule draws in Highlight and names no token", () => {
+		const forced = drawn(focusRules(splitMedia(app, FORCED).inside));
+		expect(forced.length).toBeGreaterThan(0);
+		expect(
+			forced
+				.filter(({value}) => !/\bHighlight\b/.test(value) || /var\(/.test(value))
+				.map(({selector, name, value}) => `${selector} { ${name}: ${value} }`),
+		).toEqual([]);
+	});
+
+	// T245 B: build.ts copies these declarations unchanged. This checks the replacement's
+	// geometry only; e2e.ts's trackerFocus checks what wins the cascade and forced colors.
+	it("a tracker row's replacement focus shadow spans all four sides at 2px", () => {
+		const off = focusRules(splitMedia(app, FORCED).outside).filter((rule) => {
+			if (!rule.selector.includes(".tracker-list") || !rule.says.has("box-shadow")) return false;
+			if (/^(none|0)$/.test(rule.says.get("box-shadow") ?? "")) return false;
+			const shadows = argsOf(rule.says.get("box-shadow") ?? "");
+			return !shadows.some((shadow) => {
+				const lengths = shadow
+					.replace(/var\([^)]*\)/g, "")
+					.match(/-?\d+(?:\.\d+)?(?:px)?\b/g)
+					?.map(Number.parseFloat);
+				return (
+					lengths?.length === 4 &&
+					lengths[0] === 0 &&
+					lengths[1] === 0 &&
+					lengths[2] === 0 &&
+					lengths[3] === 2 &&
+					shadow.includes("var(--focus)")
+				);
+			});
+		});
+		expect(off.map((rule) => rule.selector)).toEqual([]);
+	});
+});
+
+// `turn` split in two (call 4): --turn-fill is the fill, --turn-text the turn's text. A token
+// means one thing, so the text token is only ever a `color`, never a fill, a ring or an edge.
+// The wider check, every text token by its TOML `type`, comes with the token build (PR 2).
+describe("the turn's text token is only ever text", () => {
+	/** --turn-text and every :root name that points at it, however far. */
+	const TEXT = (() => {
+		const names = new Set(["--turn-text"]);
+		let grew = true;
+		while (grew) {
+			grew = false;
+			for (const [name, value] of ROOT) {
+				const to = /^var\((--[\w-]+)\)$/.exec(value.trim())?.[1];
+				if (to !== undefined && names.has(to) && !names.has(name)) {
+					names.add(name);
+					grew = true;
+				}
+			}
+		}
+		return names;
+	})();
+
+	const uses = PAGE.filter((r) => r.selector !== ":root").flatMap((r) =>
+		[...r.says]
+			.filter(([, value]) =>
+				[...value.matchAll(/var\((--[\w-]+)\)/g)].some(([, name = ""]) => TEXT.has(name)),
+			)
+			.map(([property]) => `${r.selector} { ${property} }`),
+	);
+
+	it("finds --turn-text used as text", () => {
+		expect(uses.filter((use) => use.endsWith("{ color }")).length).toBeGreaterThan(0);
+	});
+
+	it("names --turn-text in no property but color", () => {
+		expect(uses.filter((use) => !use.endsWith("{ color }"))).toEqual([]);
 	});
 });
 
