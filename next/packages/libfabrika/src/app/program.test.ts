@@ -54,6 +54,7 @@ describe("P11 program contract and p22 refusal", () => {
 	it("plant, skip declaration checks: schemas and functions are checked, not mere presence", async () => {
 		const {Program} = await import("./program.ts");
 		for (const broken of [
+			{machine: {...machine, update: 3}},
 			{state: {v: 0, schema: Model, upgrades: []}},
 			{state: {v: 1, schema: {}, upgrades: []}},
 			{msg: {}},
@@ -64,6 +65,60 @@ describe("P11 program contract and p22 refusal", () => {
 			{writes: {saved: {schema: {}, personOnly: false}}},
 		])
 			expect(() => Schema.decodeUnknownSync(Program)({...spec(), ...broken})).toThrow();
+	});
+	it("settled Cmd replies require their command, time and checked result", async () => {
+		const {stepper} = await import("./program.ts");
+		const p = stepper(spec());
+		const before = {count: 2, replies: 0};
+		const ok = {type: "save_ok", cmd: save({n: 3}), value: 3, at: 42};
+		const err = {type: "save_err", cmd: save({n: 3}), error: {_tag: "disk"}, at: 42};
+		for (const reply of [ok, err]) {
+			expect(p.step(before, reply)).toMatchObject({
+				_tag: "stepped",
+				model: {count: 2, replies: 1},
+				cmds: [],
+			});
+			expect(p.fold(before, reply)).toMatchObject({
+				_tag: "stepped",
+				model: {count: 2, replies: 1},
+			});
+		}
+		for (const reply of [
+			{...ok, cmd: {type: "other", n: 3}},
+			{...ok, at: "42"},
+			{...ok, value: "3"},
+			{...err, error: {_tag: 3}},
+		]) {
+			expect(p.step(before, reply)).toEqual({_tag: "refused", why: "bad_msg"});
+			expect(() => p.fold(before, reply)).toThrowError(
+				expect.objectContaining({_tag: "ProgramDown", why: "saved_letter"}),
+			);
+		}
+	});
+	it("a Cmd with an async result schema cannot settle before validation finishes", async () => {
+		const {stepper} = await import("./program.ts");
+		const asyncSave = {
+			...save,
+			schema: {
+				...save.schema,
+				ok: {"~standard": {validate: (value: unknown) => Promise.resolve({value})}},
+			},
+		};
+		const p = stepper({...spec(), machine: {...machine, cmds: [asyncSave]}});
+		expect(
+			p.step({count: 0, replies: 0}, {type: "save_ok", cmd: save({n: 1}), value: 1, at: 42}),
+		).toEqual({_tag: "refused", why: "bad_msg"});
+	});
+	it("a saved-state failure conforms to its error schema", async () => {
+		const {ProgramDown, stepper} = await import("./program.ts");
+		let error: unknown;
+		try {
+			stepper(spec()).init({count: "bad", replies: 0});
+		} catch (thrown) {
+			error = thrown;
+		}
+		expect(error).toMatchObject({_tag: "ProgramDown", why: "saved_state"});
+		expect(Schema.is(ProgramDown)(error)).toBe(true);
 	});
 	it("plant, reject every declaration: a complete pure tea program loads and steps", async () => {
 		const {Program, stepper} = await import("./program.ts");

@@ -36,6 +36,7 @@ describe("p22 whole view plus patches", () => {
 	for (const [label, before, after] of [
 		["array removals", {rows: [1, 2, 3, 4]}, {rows: [4]}],
 		["array insertions", [1], [0, 1, 2]],
+		["one changed array item", [1, 2], [1, 3]],
 		["escaped keys", {"a/b": {"~key": 1}}, {"a/b": {"~key": 2, "": 3}}],
 		["null root", null, {rows: []}],
 		["primitive root", 2, "three"],

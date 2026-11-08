@@ -85,6 +85,32 @@ type Store = {
 };
 
 describe("P11 process storage", () => {
+	it("malformed checkpoints fail as bad_row without replacing the saved state", async () => {
+		const {ProcessStore} = await import("./process-store.ts");
+		const disk = database();
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const store = yield* ProcessStore;
+				yield* store.save(checkpoint);
+				expect(
+					yield* Effect.flip(store.save({...checkpoint, saved: {...checkpoint.saved, v: "bad"}})),
+				).toMatchObject({_tag: "LedgerError", why: "bad_row"});
+				expect(yield* store.load).toEqual(checkpoint);
+				disk
+					.db()
+					.prepare("UPDATE process_state SET checkpoint=? WHERE process=?")
+					.run(JSON.stringify({...checkpoint, saved: {...checkpoint.saved, v: "bad"}}), PROCESS);
+				expect(yield* Effect.flip(store.load)).toMatchObject({
+					_tag: "LedgerError",
+					why: "bad_row",
+				});
+			}).pipe(
+				Effect.provide(
+					ProcessStore.layer(disk.sql, {process: PROCESS}).pipe(Layer.provide(data(disk.sql))),
+				),
+			),
+		);
+	});
 	it("plant, touch storage during Layer build: tables are created only by a call", async () => {
 		const {ProcessStore} = await import("./process-store.ts");
 		let calls = 0;

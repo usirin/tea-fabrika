@@ -373,7 +373,7 @@ const world = async (
 		commit: false,
 		record: false,
 		flush: false,
-		work: "ok" as "ok" | "declared" | "throw" | "malformed",
+		work: "ok" as "ok" | "declared" | "undeclared" | "throw" | "malformed",
 		pause: false,
 	};
 	let fireCalls = 0;
@@ -501,6 +501,7 @@ const world = async (
 							).toBe(true);
 							if (fault.pause) yield* Deferred.await(gate);
 							if (fault.work === "declared") return Outcome.err({_tag: "disk"});
+							if (fault.work === "undeclared") return Outcome.err({_tag: "other"});
 							if (fault.work === "throw")
 								return yield* Effect.die(new Error("private handler detail"));
 							return Outcome.ok(fault.work === "malformed" ? "wrong" : cmd.n);
@@ -858,6 +859,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
 		});
 	for (const [mode, why] of [
 		["declared", "disk"],
+		["undeclared", "bad_cmd"],
 		["throw", "handler_failed"],
 		["malformed", "bad_cmd"],
 	] as const)
@@ -963,7 +965,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
 		await Effect.runPromise(
 			Effect.gen(function* () {
 				const r: Runner = yield* w.ProgramRunner;
-				yield* r.open("a");
+				expect((yield* r.open("a")).rev).toBe(1);
 				expect(w.workCalls()).toBe(1);
 				expect(yield* resultLetters).toHaveLength(0);
 				const tables = w.store
@@ -1196,6 +1198,58 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 });
 
 describe("P11 recovery gaps and durable installation", () => {
+	it("opening after a failed append clears the prepared turn without accepting its input", async () => {
+		const w = await world();
+		const {ProcessStore} = await import("../coordination/process-store.ts");
+		w.fault.append = "before";
+		await Effect.runPromise(
+			w.ProgramRunner.use((r) => failure(r.msg(w.input(1, {type: "add", n: 7})))).pipe(
+				Effect.provide(w.layer()),
+			),
+		);
+		w.reopen();
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const r: Runner = yield* w.ProgramRunner;
+				expect(yield* r.open("a")).toMatchObject({rev: 0, view: {count: 0}});
+				expect(yield* ProcessStore.use((s) => s.load)).toMatchObject({
+					saved: {after: 0, model: {count: 0}},
+					turn: null,
+				});
+				expect(yield* inbox).toEqual([]);
+			}).pipe(Effect.provide(w.layer())),
+		);
+	});
+	it("an async handler result schema produces a saved bad_cmd reply", async () => {
+		const w = await world();
+		Object.assign(w.p, {
+			machine: {
+				...w.p.machine,
+				cmds: [
+					write,
+					{
+						...work,
+						schema: {
+							...work.schema,
+							ok: {
+								"~standard": {validate: (value: unknown) => Promise.resolve({value})},
+							},
+						},
+					},
+					fire,
+				],
+			},
+		});
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const r: Runner = yield* w.ProgramRunner;
+				expect((yield* r.msg(w.input(1, {type: "work", n: 23})))._tag).toBe("accepted");
+				expect((yield* resultLetters).map((row) => row.body)).toMatchObject([
+					{m: {type: "work_err", why: "bad_cmd"}},
+				]);
+			}).pipe(Effect.provide(w.layer())),
+		);
+	});
 	for (const cut of [
 		"before append",
 		"after append",
@@ -1236,7 +1290,10 @@ describe("P11 recovery gaps and durable installation", () => {
 					const letters = yield* inbox;
 					expect(letters).toHaveLength(1);
 					expect(answer).toEqual({_tag: "accepted", rev: letters[0]!.rev, pos: letters[0]!.pos});
-					expect((yield* r.open("a")).view.count).toBe(7);
+					expect(yield* r.open("a")).toMatchObject({
+						rev: letters[0]!.pos,
+						view: {count: 7},
+					});
 					expect(yield* steps).toHaveLength(1);
 					expect((yield* steps)[0]).toMatchObject({body: {input: i.id, pos: 1}, build: BUILD});
 					expect(w.workCalls()).toBe(0);
@@ -1426,6 +1483,12 @@ describe("P11 monitoring, content and storage failures", () => {
 				])
 					expect(rows.some((row) => row.name === name)).toBe(true);
 				const linked = rows.filter((row) => row.name === "runner.write");
+				expect(rows.find((row) => row.name === "runner.cmd")?.attributes).toMatchObject({
+					"fab.process": PROCESS,
+					"fab.runner.cmd": "write",
+					"fab.runner.id": w.signCalls[0]!.id,
+				});
+				expect(linked[0]?.attributes["fab.runner.stream"]).toBe("facts");
 				expect(
 					linked.some((row) =>
 						row.links.some((link) => link.traceId === TRACE && link.spanId === SPAN),

@@ -14,6 +14,15 @@ const msgs = fc.array(fc.constantFrom({type: "inc"}, {type: "dec"}, {type: "rese
 });
 
 describe("P11 real counter laws", () => {
+	it("counter ports allow agents and give each action a readable description", async () => {
+		const {counter} = await import("./program.ts");
+		for (const type of ["inc", "dec", "reset"] as const) {
+			const port = counter.inputs[type];
+			expect(port.personOnly).toBe(false);
+			expect(port.description.trim().length).toBeGreaterThan(0);
+			expect(Schema.decodeUnknownSync(port.schema)({type})).toEqual({type});
+		}
+	});
 	it("S2 plant, lose saved count: every JSON cut preserves every later model and Cmd", async () => {
 		const {counter} = await import("./program.ts");
 		const {syncTest}: typeof import("@kampus/libfabrika/testing") = await import(TESTING);
