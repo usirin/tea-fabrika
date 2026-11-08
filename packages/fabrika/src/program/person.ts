@@ -79,12 +79,18 @@ export interface Question {
 /**
  * How tsh shows an output's values to a person. `status`: one line shown in place while the run
  * works, as a progress line is, and never printed. `ask`: a yes or no the run waits on; tsh prints
- * it with `allow? [y/N]`, and tells the person's answer to the input `answer` as `{ask, allow}`.
+ * it with `allow? [y/N]`, and tells the person's answer to the input `answer` as
+ * `{ask, allow, by}`, `by` the person who answered.
  * A line with `announce` is told to a screen reader too, as it is printed (a terminal's canvas
- * is blank to one): a reply a person waited on, not every line of a long output.
+ * is blank to one): a reply a person waited on, not every line of a long output. A line with
+ * `ends` says how the run ended, a stop included, so tsh adds no `[stopped]` of its own.
  */
 export type Person<T, H extends string = string> =
-	| {readonly line: (value: T) => string; readonly announce?: boolean}
+	| {
+			readonly line: (value: T) => string;
+			readonly announce?: boolean;
+			readonly ends?: boolean;
+	  }
 	| {readonly table: TableView<T, H>}
 	| {readonly status: (value: T) => string}
 	| {readonly ask: (value: T) => Question | null; readonly answer: string}

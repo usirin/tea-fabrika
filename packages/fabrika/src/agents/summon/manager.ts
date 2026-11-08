@@ -70,6 +70,9 @@ type Heard =
 			readonly turn: number;
 			readonly stop: string;
 			readonly cost: number | null;
+			/** The turn's tokens, as the harness reported them. `null`: it reported none. */
+			readonly input: number | null;
+			readonly output: number | null;
 	  }
 	| {readonly _tag: "ask"; readonly ask: string; readonly title: string; readonly answer: string};
 
@@ -277,7 +280,15 @@ export const summonManager = (options: {
 							},
 							told: (t) => hear({_tag: "told", turn: t.turn}),
 							said: (text) => hear({_tag: "said", text}),
-							result: (r) => hear({_tag: "result", turn: r.turn, stop: r.stop, cost: r.cost}),
+							result: (r) =>
+								hear({
+									_tag: "result",
+									turn: r.turn,
+									stop: r.stop,
+									cost: r.cost,
+									input: r.input,
+									output: r.output,
+								}),
 							ask: (a) => hear({_tag: "ask", ask: a.ask, title: a.title, answer: a.answer}),
 						},
 						{id: name.run, storage},
@@ -525,6 +536,7 @@ export const summonManager = (options: {
 								room: room ?? "",
 							});
 							let mine: number | null = null;
+							let ended: Extract<Heard, {_tag: "result"}> | null = null;
 							const since = Effect.map(Clock.currentTimeMillis, (now) => now - began);
 							const news = Stream.fromSubscription(heard).pipe(
 								Stream.mapEffect((h) =>
@@ -540,9 +552,9 @@ export const summonManager = (options: {
 											return h.answer === "waiting"
 												? [{_tag: "ask", ask: h.ask, title: h.title}]
 												: [];
-										return h.turn === mine
-											? [{_tag: "result", stop: h.stop, ms, cost: h.cost}]
-											: [];
+										if (h.turn !== mine) return [];
+										ended = h;
+										return [{_tag: "result", stop: h.stop, ms, cost: h.cost}];
 									}),
 								),
 								Stream.flatMap((all) => Stream.fromIterable(all)),
@@ -558,14 +570,20 @@ export const summonManager = (options: {
 												room: room ?? "",
 											})
 										: n._tag === "result"
-											? log("turn_ended", {
-													name,
-													run: l.name.run,
-													turn: mine ?? "",
-													stop: n.stop,
-													ms: n.ms,
-													cost: n.cost ?? "",
-												})
+											? log(
+													"turn_ended",
+													// What the harness did not report stays out of the line, never a 0.
+													present({
+														name,
+														run: l.name.run,
+														turn: mine,
+														stop: n.stop,
+														ms: n.ms,
+														input: ended?.input ?? null,
+														output: ended?.output ?? null,
+														cost: n.cost,
+													}),
+												)
 											: Effect.void,
 								),
 							);
@@ -599,7 +617,7 @@ export const summonManager = (options: {
 						return l === undefined ? Effect.void : cancelTurn(l);
 					}),
 
-				answer: (name, ask, allow) =>
+				answer: (name, ask, allow, by) =>
 					Effect.suspend(() => {
 						const acp = live.get(name)?.acp;
 						if (acp === undefined || acp === null) return Effect.void;
@@ -607,7 +625,7 @@ export const summonManager = (options: {
 							.tell(allow ? "allow" : "refuse", ask)
 							.pipe(
 								Effect.ignore,
-								Effect.andThen(log("ask_answered", {name, ask, allow: String(allow)})),
+								Effect.andThen(log("ask_answered", {name, ask, allow: String(allow), by})),
 							);
 					}),
 			};
@@ -619,6 +637,10 @@ export const summonManager = (options: {
 			);
 		}),
 	);
+
+/** A log line's fields, each one known: a field that is `null` is left out. */
+const present = (fields: Readonly<Record<string, unknown>>): Record<string, unknown> =>
+	Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== null && v !== undefined));
 
 /** Why a run failed, in its own words: its declared failure's message. */
 const whyOf = (end: Ended<unknown>): string | null => {

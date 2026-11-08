@@ -606,6 +606,14 @@ const onItsOwn = (closed: readonly string[], left: string | null): string => {
 		: `${inputs} closed, and it stopped reading, with ${left}`;
 };
 
+/** Whether a program has an output whose line says how its run ended (a `line` form's `ends`). */
+const saysItsEnd = (program: Entry["program"] | undefined): boolean =>
+	program !== undefined &&
+	Object.keys(program.outputs).some((name) => {
+		const person = program.outputs[name]?.person;
+		return typeof person === "object" && "line" in person && person.ends === true;
+	});
+
 /** Say how foreground job `n` ended, when it did not end well: on err, like a shell. */
 const sayEnd = (
 	shell: Shell,
@@ -619,7 +627,11 @@ const sayEnd = (
 		const left = unreadWords(ended.unread);
 		if (left !== null) shell.print("err", `tsh: ${names[i] ?? "?"} ended with ${left}`, n);
 	});
-	if (ends.some((e) => e.kind === "stopped")) shell.print("err", `[stopped] ${text}`, n);
+	// A stopped stage whose program says how it ended, a stop included, said it already.
+	const unsaid = ends.some(
+		(e, i) => e.kind === "stopped" && !saysItsEnd(shell.list.get(names[i] ?? "")?.program),
+	);
+	if (unsaid) shell.print("err", `[stopped] ${text}`, n);
 };
 
 /**

@@ -96,8 +96,8 @@ export class SummonManager extends Context.Service<
 		) => Stream.Stream<TurnNews, SummonRefused>;
 		/** Cancel the turn the agent runs now, by ACP's `session/cancel`. The agent stays. */
 		readonly cancel: (name: string) => Effect.Effect<void>;
-		/** Answer the ask `ask` of the agent: allow it once, or refuse it. */
-		readonly answer: (name: string, ask: string, allow: boolean) => Effect.Effect<void>;
+		/** Answer the ask `ask` of the agent: allow it once, or refuse it. `by`: who answered. */
+		readonly answer: (name: string, ask: string, allow: boolean, by: string) => Effect.Effect<void>;
 	}
 >()("@kampus/fabrika-old/SummonManager") {}
 

@@ -88,9 +88,10 @@ const Result = Schema.Struct({
 	turn: Count,
 	stop: Schema.Literals(STOPS),
 	ms: Count,
-	input: Count,
-	output: Count,
-	cached: Count,
+	/** The turn's tokens, as the harness reported them. `null`: it reported none, which is not 0. */
+	input: Schema.NullOr(Count),
+	output: Schema.NullOr(Count),
+	cached: Schema.NullOr(Count),
 	tools: Count,
 	/** The session's cost so far in dollars, when the harness says it. */
 	cost: Schema.NullOr(Schema.Finite),
@@ -520,9 +521,9 @@ const acpIn = (place: "scratch" | "repo") =>
 							turn: w.n,
 							stop: ended.stop,
 							ms: end - start,
-							input: ended.usage?.input ?? 0,
-							output: ended.usage?.output ?? 0,
-							cached: ended.usage?.cached ?? 0,
+							input: ended.usage?.input ?? null,
+							output: ended.usage?.output ?? null,
+							cached: ended.usage?.cached ?? null,
 							tools: s.tools.filter((t) => t.turn === w.n).length,
 							cost: s.context?.cost ?? null,
 						});

@@ -37,6 +37,12 @@ const Result = Schema.Struct({
 	cost: Schema.NullOr(Schema.Finite),
 });
 
+/** A reply under its name: each later line hangs under where its text starts. */
+const saidLine = (s: typeof Said.Type): string => {
+	const head = `✦ ${s.name}  `;
+	return head + s.text.split("\n").join(`\n${" ".repeat(head.length)}`);
+};
+
 const seconds = (ms: number) => `${Math.round(ms / 1000)}s`;
 
 /** A result in a person's words: a cancel says so, an end says the turn and how long. */
@@ -55,7 +61,7 @@ export const turnProgram = defineProgram({
 	inputs: {
 		prompt: input(Schema.String, "What to tell the agent, as typed: one turn."),
 		allow: input(
-			Schema.Struct({ask: Schema.String, allow: Schema.Boolean}),
+			Schema.Struct({ask: Schema.String, allow: Schema.Boolean, by: Schema.String}),
 			"The person's answer to an ask the agent waits on: allow it once, or refuse it. A person only.",
 			{control: true, personOnly: true},
 		),
@@ -77,10 +83,10 @@ export const turnProgram = defineProgram({
 			},
 		}),
 		said: output(Said, "The agent's reply, once the turn ended: whole, never in pieces.", {
-			person: {line: (s) => `✦ ${s.name}  ${s.text}`, announce: true},
+			person: {line: saidLine, announce: true},
 		}),
 		result: output(Result, "How the turn ended, how long it took, and its dollars so far.", {
-			person: {line: resultLine},
+			person: {line: resultLine, ends: true},
 		}),
 	},
 	main: ({flags, serve, send}) =>
@@ -137,8 +143,8 @@ export const turnProgram = defineProgram({
 			yield* serve(
 				{
 					prompt: one,
-					allow: fork(({ask, allow}) =>
-						manager.answer(name, ask, allow).pipe(
+					allow: fork(({ask, allow, by}) =>
+						manager.answer(name, ask, allow, by).pipe(
 							Effect.andThen(
 								send("ask", {
 									name,

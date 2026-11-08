@@ -250,8 +250,17 @@ export const tsh = defineProgram({
 					const running = a === undefined ? undefined : shell.live.get(a.run);
 					if (a === undefined || running === undefined) return;
 					asking.delete(n);
+					// Who answered goes with the answer, for the record: only a person's tsh answers.
+					if (by === null) {
+						print(
+							"err",
+							`tsh: %${n} takes an answer only from a person, and this tsh has no writer`,
+							n,
+						);
+						return;
+					}
 					const word = yield* running.run
-						.tell(a.input, {ask: a.id, allow})
+						.tell(a.input, {ask: a.id, allow, by})
 						.pipe(Effect.catchTag("MailboxFull", () => Effect.succeed("full")));
 					if (word !== "queued") print("err", `tsh: %${n} did not take the answer: ${word}`, n);
 				});

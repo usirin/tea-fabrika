@@ -49,6 +49,19 @@ export function complete(
 	jobs: Jobs,
 	talk: Talk = NO_TALK,
 ): Completed {
+	// A said line (S2): only its `@name` is a word. What is said after it is the agent's, as typed,
+	// so no program, built-in or operator is offered in it.
+	const lead = line.trimStart();
+	if (lead.startsWith("@")) {
+		if (/\s/.test(lead)) return none(lead.slice(lead.search(/\S*$/)));
+		return {
+			candidates: matching(
+				lead,
+				talk.names.map((n) => `@${n}`),
+			),
+			word: lead,
+		};
+	}
 	const {tokens, open, trailing} = words(line);
 	// Inside an open quote the word's text is not what is on the line: no guess beats a wrong one.
 	if (open) return none("");
@@ -67,15 +80,6 @@ export function complete(
 	const args = before.slice(cut + 1).flatMap((t) => (t.kind === "word" ? [t.text] : []));
 	const [head, ...rest] = args;
 
-	// A said line's name: `@` starts one only as the line's first word.
-	if (head === undefined && cut === -1 && typed.startsWith("@"))
-		return {
-			candidates: matching(
-				typed,
-				talk.names.map((n) => `@${n}`),
-			),
-			word: raw,
-		};
 	if (head === undefined) {
 		// The program's own name. After `|` or `$(` a built-in cannot stand,
 		// and after `|` only a program the stage before can feed.
