@@ -1,5 +1,4 @@
 // T280, next/: authoring depends on libfabrika and tea alone. tsc checks the uncalled cases.
-import {applyCell} from "@demlik/tea";
 import {Cmd, Machine} from "@demlik/tea/effect";
 import {expect, it} from "@effect/vitest";
 import {Input, Program, type ProgramInvalid, Write, stepper} from "@kampus/libfabrika";
@@ -54,8 +53,8 @@ it("a from-scratch libfabrika program compiles and loads with a real Cmd and no 
 		readonly _tag: "saved";
 		readonly count: number;
 	}>();
-	const ok = applyCell(p.machine, {count: 1}, save.ok(save({count: 1}), {stored: 1}, 1));
-	const err = applyCell(p.machine, {count: 1}, save.err(save({count: 1}), {_tag: "disk"}, 1));
+	const ok = p.machine.update.save_ok({count: 1}, save.ok(save({count: 1}), {stored: 1}, 1));
+	const err = p.machine.update.save_err({count: 1}, save.err(save({count: 1}), {_tag: "disk"}, 1));
 	expectTypeOf(ok[0]).toEqualTypeOf<typeof Model.Type>();
 	expectTypeOf(err[1][0]!).toEqualTypeOf<ReturnType<typeof save>>();
 	expectTypeOf(Program.makeEffect({...fields, view: (m) => ({total: m.count})})).toExtend<
