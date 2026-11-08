@@ -153,6 +153,7 @@ describe("claude: SDK messages", () => {
 			disableClaudeAiConnectors: true,
 			autoMemoryEnabled: false,
 			pluginConfigs: AGENTS_MD,
+			permissions: {deny: ["Read(**/.env)", "Read(**/.env.*)"]},
 		});
 	});
 

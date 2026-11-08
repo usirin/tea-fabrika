@@ -5,7 +5,11 @@ import {createServer, type Socket} from "node:net";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {promisify} from "node:util";
-import type {Shell} from "@kampus/fabrika-old";
+import {Ledger, type Shell, streams, writerText} from "@kampus/fabrika-old";
+import {layerSqliteSync} from "@kampus/fabrika-old/sqlite";
+import {kindOf, nameOf} from "@kampus/pipeline/tickets/ticket";
+import {SEVEN, SEVEN_TITLE} from "@tea-fabrika/tracker/seven";
+import {Effect} from "effect";
 import {_electron, type ElectronApplication, type Locator, type Page} from "playwright";
 
 // The app, driven end to end through Playwright's Electron support: the whole flow in the one
@@ -86,6 +90,15 @@ import {_electron, type ElectronApplication, type Locator, type Page} from "play
 // stacked, a 2x2 in each state, and a small window, each in `tiles/` as `<state>-<layout>-<look>`.
 // `pnpm --filter @kampus/fabrika-app-old e2e -- --tiles` runs that stage alone.
 //
+// The ARIA stage (`ariaStage`) is not in the whole run: `-- --aria` runs it alone, on a home of its
+// own. It reads the accessibility tree of each key state at the five layouts and compares it with
+// `aria/`, and it only advises: a diff is printed, never failed on.
+// `-- --focus` takes the design foundations' 60 images: six states, five layouts, both looks.
+// Run each build with its own SHOTS folder to keep the 120 before and after images apart.
+// `-- --tracker-focus` checks T245's input outlines and whole row rings from computed styles.
+// The default run also checks T259: changing the look while typing into the right tile leaves
+// the left prompt empty. Its window is 1200 by 600, within the CI screen's 1440 by 674.
+//
 // Last, as no person ever does (there is no stop command), the run stops the host it started by
 // its pid, and the fake one too, and checks with pgrep that nothing of either home is left.
 //
@@ -145,10 +158,36 @@ const shows = (page: Page, id: string, what: string, ok: (text: string) => boole
 const prompted = (page: Page, id: string) =>
 	shows(page, id, "the prompt", (t) => lastRow(t) === "tsh$");
 
+/** Type at the focused prompt, with at most three attempts and an exact echo check. */
+const typeLine = async (page: Page, id: string, line: string) => {
+	const expected = `tsh$ ${line}`;
+	const seen: string[] = [];
+	for (let attempt = 0; attempt < 3; attempt += 1) {
+		if (attempt > 0) {
+			await page.keyboard.press("Control+e");
+			await page.keyboard.press("Control+u");
+			await prompted(page, id);
+		}
+		await page.keyboard.type(line);
+		let row = lastRow(await screen(page, id));
+		for (let i = 0; i < 200 && row !== expected; i += 1) {
+			await page.waitForTimeout(50);
+			row = lastRow(await screen(page, id));
+		}
+		if (row === expected) return;
+		seen.push(row);
+		console.warn(
+			`${id}: typing attempt ${attempt + 1} for ${JSON.stringify(line)}; saw ${JSON.stringify(row)}`,
+		);
+	}
+	throw new Error(
+		`${id}: could not type ${JSON.stringify(line)} after 3 attempts; saw ${JSON.stringify(seen)}`,
+	);
+};
+
 /** Type a line at the focused tile's prompt, wait to see it echoed, and press Enter. */
 const run = async (page: Page, id: string, line: string) => {
-	await page.keyboard.type(line);
-	await shows(page, id, `the line ${line}`, (t) => lastRow(t) === `tsh$ ${line}`);
+	await typeLine(page, id, line);
 	await page.keyboard.press("Enter");
 };
 
@@ -842,8 +881,7 @@ const systemKeys = async (app: ElectronApplication, page: Page) => {
 	await gone(page, "pop-asks");
 	await prompted(page, "t1");
 
-	await page.keyboard.type("ab");
-	await shows(page, "t1", "typing", (t) => lastRow(t) === "tsh$ ab");
+	await typeLine(page, "t1", "ab");
 	await page.keyboard.press("ArrowLeft");
 	await pressEnds(page, "Control+d", "taken");
 	await shows(page, "t1", "Ctrl-D deleting a character", (t) => lastRow(t) === "tsh$ a");
@@ -1057,9 +1095,10 @@ const flow = async (app: ElectronApplication) => {
 	);
 	const next = split[1] ?? "";
 	await prompted(page, next);
-	await page.keyboard.type("ab");
+	await typeLine(page, next, "ab");
 	await page.keyboard.press("Control+b");
 	await page.keyboard.press("Control+b");
+	// Keep the insertion raw so a retry cannot hide a cursor-routing bug.
 	await page.keyboard.type("X");
 	await shows(page, next, "aXb", (t) => lastRow(t) === "tsh$ aXb");
 	check("Ctrl-B twice sends one Ctrl-B on: the cursor went back one", true);
@@ -1841,6 +1880,14 @@ const lookIs = async (app: ElectronApplication, page: Page, look: "dark" | "ligh
 		() => page.evaluate(() => matchMedia("(prefers-color-scheme: light)").matches),
 		(light) => light === (look === "light"),
 	);
+	// Media change handlers remake terminals and restore focus on a timer (terminal.ts). Let
+	// that frame and its timers finish before a capture moves focus to a different control.
+	await page.evaluate(
+		() =>
+			new Promise<void>((done) => {
+				requestAnimationFrame(() => setTimeout(done, 0));
+			}),
+	);
 };
 /** The tile a title bar's slot, name and state belong to, as the page draws them. */
 const titleOf = (page: Page, id: string) =>
@@ -1855,6 +1902,59 @@ const titleOf = (page: Page, id: string) =>
 const focusOn = async (page: Page, id: string) => {
 	await tile(page, id).locator(".titlebar").click();
 	await focusIs(page, id);
+};
+
+/** L3, today's version: real keys overlap a look change, with no timer drain or typing retry. */
+const lookFocus = async () => {
+	const own = await mkdtemp(join(tmpdir(), "fabrika-look-"));
+	const app = await launch(own);
+	try {
+		await app.evaluate(({BrowserWindow}) =>
+			BrowserWindow.getAllWindows()[0]?.setBounds({x: 0, y: 0, width: 1200, height: 600}),
+		);
+		const page = await app.firstWindow();
+		await prompted(page, "t1");
+		await lookIs(app, page, "dark");
+		await prefixed(page, "|");
+		await tilesAre(page, ["t1", "t2"]);
+		await prompted(page, "t2");
+		await focusOn(page, "t2");
+		const burst = "focusstaysright".repeat(4);
+		for (const look of ["light", "dark"] as const) {
+			await prompted(page, "t1");
+			await prompted(page, "t2");
+			await app.evaluate(({nativeTheme}, to) => {
+				nativeTheme.themeSource = to;
+			}, look);
+			// lookIs waits for the bug to pass. Start real key events alongside the media change
+			// instead; the short burst spans its focus timers and is never retried.
+			await Promise.all([
+				page.emulateMedia({colorScheme: look}),
+				page.keyboard.type(burst, {delay: 1}),
+			]);
+			const rows = await until(
+				`L3: the burst echoed after switching to ${look}`,
+				async () => ({
+					left: lastRow(await screen(page, "t1")),
+					right: lastRow(await screen(page, "t2")),
+				}),
+				(seen) => seen.left !== "tsh$" || seen.right === `tsh$ ${burst}`,
+			);
+			check(`L3: the left prompt stays empty in ${look}`, rows.left === "tsh$", rows);
+			check(
+				`L3: the right prompt receives the whole burst in ${look}`,
+				rows.right === `tsh$ ${burst}`,
+				rows,
+			);
+			check("L3: the desk still picks the right tile", (await focused(page)) === "t2");
+			await page.keyboard.press("Control+u");
+			await prompted(page, "t2");
+		}
+	} finally {
+		await app.close().catch(() => {});
+		const pid = await hostPid(own);
+		if (pid !== null) await stop(pid);
+	}
 };
 
 /**
@@ -2059,6 +2159,589 @@ const tilesLook = async () => {
 	}
 };
 
+/** The five layouts every look is checked at (AGENTS.md, "Shoot more than one layout"). */
+const LAYOUTS = ["one", "side", "stacked", "2x2", "small"] as const;
+type Layout = (typeof LAYOUTS)[number];
+
+const addedTile = async (
+	page: Page,
+	before: readonly (string | null)[],
+	total = before.length + 1,
+) => {
+	const now = await until(
+		"a new tile",
+		() => tiles(page),
+		(t) => t.length === total && t.some((id) => !before.includes(id)),
+	);
+	const id = now.find((t) => t !== null && !before.includes(t));
+	if (id === undefined || id === null) throw new Error("no new tile");
+	return id;
+};
+
+const splitTile = async (page: Page, id: string, key: "|" | "-") => {
+	await focusOn(page, id);
+	const before = await tiles(page);
+	await prefixed(page, key);
+	const made = await addedTile(page, before);
+	await prompted(page, made);
+	return made;
+};
+
+/** Check both tile count and placement, including before a capture after a state changed. */
+const layoutIs = async (page: Page, layout: Layout, ids: readonly string[]) => {
+	await tilesAre(page, ids);
+	const columns = layout === "side" || layout === "2x2" || layout === "small" ? 2 : 1;
+	const rows = layout === "stacked" || layout === "2x2" || layout === "small" ? 2 : 1;
+	await until(
+		`${layout}: ${columns} columns, ${rows} rows, ${columns * rows} tiles`,
+		() =>
+			page.locator("[data-tile]").evaluateAll((all) =>
+				all.map((el) => {
+					const box = el.getBoundingClientRect();
+					return {x: box.x, y: box.y};
+				}),
+			),
+		(boxes) =>
+			boxes.length === columns * rows &&
+			new Set(boxes.map((b) => b.x)).size === columns &&
+			new Set(boxes.map((b) => b.y)).size === rows,
+	);
+};
+
+/** Start with one tile, or a pipe's two windows, and build the promised layout around them. */
+const arrange = async (page: Page, layout: Layout, first: string, second?: string) => {
+	let ids = [first];
+	if (layout !== "one") {
+		const b = second ?? (await splitTile(page, first, layout === "stacked" ? "-" : "|"));
+		if (second !== undefined && layout === "stacked") {
+			await focusOn(page, first);
+			await prefixed(page, " ");
+		}
+		ids =
+			layout === "2x2" || layout === "small"
+				? [first, await splitTile(page, first, "-"), b, await splitTile(page, b, "-")]
+				: [first, b];
+	}
+	await layoutIs(page, layout, ids);
+	await focusOn(page, first);
+	return ids;
+};
+
+/** Five fresh workspaces, shared by the screenshots and ARIA captures. Small comes last. */
+const grid = async (
+	page: Page,
+	visit: (layout: Layout, ids: readonly string[]) => Promise<void>,
+) => {
+	for (const layout of LAYOUTS) {
+		if (layout === "small") {
+			const cdp = await page.context().newCDPSession(page);
+			await cdp.send("Emulation.setDeviceMetricsOverride", {
+				width: 1024,
+				height: 700,
+				deviceScaleFactor: 0,
+				mobile: false,
+			});
+			await until(
+				"the window at 1024 by 700",
+				() => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
+				(size) => size === "1024x700",
+			);
+		}
+		const before = await tiles(page);
+		await prefixed(page, "N");
+		const first = await addedTile(page, before, 1);
+		await prompted(page, first);
+		await visit(layout, await arrange(page, layout, first));
+	}
+};
+
+/** The key states the ARIA stage reads, in the order it puts each layout through them. */
+const STATES = [
+	"plain",
+	"asks-dot",
+	"close-asked",
+	"info",
+	"palette",
+	"strips",
+	"closing",
+	"pipe",
+] as const;
+type State = (typeof STATES)[number];
+
+/** The existing, made-up ticket #7 has a plan waiting on the person. No agent is started. */
+const seedAsks = (own: string) =>
+	Effect.runPromise(
+		Effect.gen(function* () {
+			const ledger = yield* Ledger;
+			for (const entry of SEVEN) {
+				const name = nameOf(entry.ticket);
+				const writer = writerText(entry.by);
+				yield* ledger.register(name, writer);
+				yield* ledger.send(streams(name).inbox, `focus-${entry.pos}`, {
+					kind: kindOf(entry.fact.type),
+					writer,
+					data: entry.fact,
+				});
+			}
+		}).pipe(Effect.provide(layerSqliteSync({path: join(own, "ledger.sqlite")}))),
+	);
+
+const FOCUS = {
+	"tile-focused": "apps/fabrika/docs/focus",
+	"tracker-ring-input": "programs/tracker/docs/focus",
+	"tracker-ring-row": "programs/tracker/docs/focus",
+	"tracker-ring-composer": "programs/tracker/docs/focus",
+	"asks-dot": "apps/fabrika/docs/focus",
+	"map-you": "programs/map/docs/focus",
+} as const;
+const LOOKS = ["dark", "light"] as const;
+
+/** T245 A and B, today's tracker: actual keyboard focus, with the built app's CSS cascade. */
+const trackerFocus = async () => {
+	const own = await mkdtemp(join(tmpdir(), "fh-ring-"));
+	await seedAsks(own);
+	const app = await launch(own);
+	try {
+		const page = await app.firstWindow();
+		await prompted(page, "t1");
+		await run(page, "t1", "tracker");
+		const tracker = tile(page, "t1").getByLabel("tracker view");
+		await tracker.waitFor();
+		await tracker.getByLabel("new ticket title").fill("Focus check");
+		const failures: string[] = [];
+		const record = (law: string, ok: boolean, seen: unknown) => {
+			if (ok) check(law, true);
+			else failures.push(`${law}: ${JSON.stringify(seen)}`);
+		};
+		const ring = async (target: Locator) => {
+			await target.press("ArrowRight");
+			await until(
+				"keyboard focus on the tracker control",
+				() =>
+					target.evaluate(
+						(el) =>
+							document.hasFocus() && el === document.activeElement && el.matches(":focus-visible"),
+					),
+				(on) => on,
+			);
+			return target.evaluate((el) => {
+				const forced = matchMedia("(forced-colors: active)").matches;
+				const probe = document.createElement("span");
+				probe.style.position = "fixed";
+				probe.style.visibility = "hidden";
+				probe.style.outline = `2px solid ${forced ? "Highlight" : "var(--focus)"}`;
+				el.parentElement?.append(probe);
+				const expected = getComputedStyle(probe).outlineColor;
+				probe.remove();
+				const style = getComputedStyle(el);
+				const outline =
+					style.outlineStyle === "solid" &&
+					style.outlineWidth === "2px" &&
+					style.outlineColor === expected;
+				const shadow = style.boxShadow.split(/,(?![^()]*\))/).some((layer) => {
+					const lengths = layer.match(/-?\d+(?:\.\d+)?px/g)?.map(Number.parseFloat);
+					return (
+						lengths?.length === 4 &&
+						lengths[0] === 0 &&
+						lengths[1] === 0 &&
+						lengths[2] === 0 &&
+						lengths[3] === 2 &&
+						layer.includes(expected)
+					);
+				});
+				return {
+					forced,
+					outline,
+					shadow,
+					expected,
+					width: style.outlineWidth,
+					style: style.outlineStyle,
+					color: style.outlineColor,
+					boxShadow: style.boxShadow,
+				};
+			});
+		};
+		for (const look of LOOKS) {
+			await lookIs(app, page, look);
+			await page.emulateMedia({forcedColors: "none"});
+			for (const name of ["search titles", "new ticket title", "new ticket body"]) {
+				const seen = await ring(tracker.getByLabel(name));
+				record(`T245 A: ${name}, ${look}, draws a 2px --focus outline`, seen.outline, seen);
+			}
+			const row = tracker.locator(".tracker-list button").filter({hasText: SEVEN_TITLE});
+			const normal = await ring(row);
+			record(
+				`T245 B: the row, ${look}, draws a full --focus ring`,
+				normal.outline || normal.shadow,
+				normal,
+			);
+			await page.emulateMedia({forcedColors: "active"});
+			const forced = await ring(row);
+			record(
+				`T245 B: the row, ${look}, keeps a full ring in forced colors`,
+				forced.forced && forced.outline,
+				forced,
+			);
+		}
+		check("T245 tracker focus laws", failures.length === 0, failures);
+	} finally {
+		await app.close().catch(() => {});
+		const pid = await hostPid(own);
+		if (pid !== null) await stop(pid);
+	}
+};
+
+/** All 60 planned images per build, under SHOTS with the plan's repo-relative folders. */
+const focusShots = async () => {
+	const own = await mkdtemp(join(tmpdir(), "fh-focus-"));
+	await seedAsks(own);
+	const pending = new Set(
+		Object.keys(FOCUS).flatMap((state) =>
+			LAYOUTS.flatMap((layout) => LOOKS.map((look) => `${state}-${layout}-${look}`)),
+		),
+	);
+	const planned = pending.size;
+	const app = await launch(own);
+	try {
+		const page = await app.firstWindow();
+		await prompted(page, "t1");
+		await app.evaluate(({BrowserWindow}) =>
+			BrowserWindow.getAllWindows()[0]?.setContentSize(1440, 900),
+		);
+		await until(
+			"the window at 1440 by 900",
+			() => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
+			(size) => size === "1440x900",
+		);
+		const ringOn = async (target: Locator) => {
+			// A key on the target establishes keyboard focus without Tab moving to another control.
+			await target.press("ArrowRight");
+			await until(
+				"the keyboard focus ring",
+				() =>
+					target.evaluate((el) => ({
+						pageFocused: document.hasFocus(),
+						focused: el === document.activeElement,
+						visible: el.matches(":focus-visible"),
+						active:
+							document.activeElement?.getAttribute("aria-label") ?? document.activeElement?.tagName,
+						activeTile: document.activeElement?.closest("[data-tile]")?.getAttribute("data-tile"),
+					})),
+				(on) => on.pageFocused && on.focused && on.visible,
+			);
+		};
+		await grid(page, async (layout, ids) => {
+			const first = ids[0] ?? "";
+			const both = async (state: keyof typeof FOCUS, prepare: () => Promise<unknown>) => {
+				const folder = join(shots, FOCUS[state]);
+				await mkdir(folder, {recursive: true});
+				for (const look of LOOKS) {
+					await lookIs(app, page, look);
+					await prepare();
+					await layoutIs(page, layout, ids);
+					await page.mouse.move(1, 1);
+					await page.waitForTimeout(250);
+					const name = `${state}-${layout}-${look}`;
+					const file = join(folder, `${name}.png`);
+					await page.screenshot({path: file});
+					check(`one planned image: ${name}`, pending.delete(name));
+					saved.push(file);
+				}
+				await lookIs(app, page, "dark");
+			};
+			await both("tile-focused", () => focusOn(page, first));
+			await both("asks-dot", () => page.locator(".udot").waitFor({state: "visible"}));
+			await run(page, first, "tracker");
+			const tracker = tile(page, first).getByLabel("tracker view");
+			await tracker.waitFor();
+			await both("tracker-ring-input", () => ringOn(tracker.getByLabel("search titles")));
+			await both("tracker-ring-row", () =>
+				ringOn(tracker.locator(".tracker-list button").filter({hasText: SEVEN_TITLE})),
+			);
+			await both("tracker-ring-composer", () => ringOn(tracker.getByLabel("new ticket title")));
+			await focusOn(page, first);
+			await page.keyboard.press("Control+c");
+			await prompted(page, first);
+			await until(
+				"tracker closed",
+				() => tracker.count(),
+				(n) => n === 0,
+			);
+			await run(page, first, "map --ticket 7");
+			await both("map-you", () =>
+				tile(page, first).locator(".mapbar .dot.you").waitFor({state: "visible"}),
+			);
+		});
+		check("every planned focus image was taken", pending.size === 0, [...pending]);
+		console.log(`focus: ${planned} planned images taken; ${planned * 2} across before and after`);
+	} finally {
+		await app.close().catch(() => {});
+		const pid = await hostPid(own);
+		if (pid !== null) await stop(pid);
+	}
+};
+
+/** Where the approved trees are kept: `<state>-<layout>.aria.yml`. */
+const ARIA = join(here, "aria");
+
+/**
+ * A tree as text with what changes from run to run taken out: the stage's home is `<home>`, a pid
+ * is `<pid>`, a clock time or a job's age (`3s`, `1m`) is `<time>`, and a job's run id
+ * (`sleep:8c6246d7`) is `sleep:<id>`. Anything else that moves is a real change, or noise
+ * the ratings will find.
+ */
+const scrubbed = (tree: string, own: string, pids: readonly number[]) => {
+	let out = tree.replaceAll(own, "<home>").replaceAll(join("/private", own), "<home>");
+	for (const pid of pids) out = out.replace(new RegExp(`\\b${String(pid)}\\b`, "g"), "<pid>");
+	return out
+		.replace(/\bpid( ?)\d+\b/gi, "pid$1<pid>")
+		.replace(/\b\d{1,2}:\d{2}(:\d{2})?(\s?[AP]M)?\b/g, "<time>")
+		.replace(/\b\d+(ms|s|m|h|d)\b/g, "<time>")
+		.replace(/\b([a-z]+):[0-9a-f]{8}\b/g, "$1:<id>");
+};
+
+/** A line diff of two trees, as `-` and `+` lines with a little context: the longest common run. */
+const linesDiff = (was: string, now: string) => {
+	const a = was.split("\n");
+	const b = now.split("\n");
+	const lcs = a.map(() => b.map(() => 0));
+	for (let i = a.length - 1; i >= 0; i -= 1)
+		for (let j = b.length - 1; j >= 0; j -= 1) {
+			const row = lcs[i] ?? [];
+			row[j] =
+				a[i] === b[j]
+					? (lcs[i + 1]?.[j + 1] ?? 0) + 1
+					: Math.max(lcs[i + 1]?.[j] ?? 0, row[j + 1] ?? 0);
+		}
+	const out: string[] = [];
+	let i = 0;
+	let j = 0;
+	while (i < a.length || j < b.length) {
+		if (i < a.length && j < b.length && a[i] === b[j]) {
+			out.push(`  ${a[i] ?? ""}`);
+			i += 1;
+			j += 1;
+		} else if (
+			j < b.length &&
+			(i >= a.length || (lcs[i]?.[j + 1] ?? 0) >= (lcs[i + 1]?.[j] ?? 0))
+		) {
+			out.push(`+ ${b[j] ?? ""}`);
+			j += 1;
+		} else {
+			out.push(`- ${a[i] ?? ""}`);
+			i += 1;
+		}
+	}
+	// Context: three lines either side of a change, as a unified diff keeps.
+	const near = new Set<number>();
+	out.forEach((line, n) => {
+		if (!line.startsWith("  ")) for (let k = n - 3; k <= n + 3; k += 1) near.add(k);
+	});
+	return out.filter((_, n) => near.has(n)).join("\n");
+};
+
+/**
+ * The ARIA stage (design language call 8, decided 2026-11-07: advising first), on a home of its
+ * own: each key state at each of the five layouts, in the dark look only, since the tree is the
+ * same in both. Each cell is read twice, a second apart; two reads that differ are a flake. Each
+ * is compared as text with `aria/<state>-<layout>.aria.yml`, a diff printed per cell and a total,
+ * and the trees it read are written to `aria-received/` under the screenshots' folder. One tile
+ * shows a folded neighbor for strips and a zoomed ticket for a pipe. Every planned cell must be
+ * recorded. It answers 2 only when it cannot reach a state; tree diffs only advise.
+ *
+ *   pnpm --filter @kampus/fabrika-app-old e2e -- --aria    only this
+ */
+const ariaStage = async (): Promise<0 | 2> => {
+	const own = await mkdtemp(join(tmpdir(), "fh-aria-"));
+	const out = join(shots, "aria-received");
+	await mkdir(out, {recursive: true});
+	await seedAsks(own);
+	const app = await launch(own);
+	const tally = {same: 0, diff: 0, fresh: 0, flake: 0};
+	const pending = new Set(STATES.flatMap((state) => LAYOUTS.map((layout) => `${state}-${layout}`)));
+	const planned = pending.size;
+	let reached: 0 | 2 = 0;
+	try {
+		const page = await app.firstWindow();
+		await prompted(page, "t1");
+		await lookIs(app, page, "dark");
+		// The window opens at the size it last had, which a person's own use sets: a wider or narrower
+		// window lays a view out another way (the ticket's properties beside or under it), so the
+		// stage sets its own.
+		await app.evaluate(({BrowserWindow}) =>
+			BrowserWindow.getAllWindows()[0]?.setContentSize(1440, 900),
+		);
+		await until(
+			"the window at 1440 by 900",
+			() => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
+			(size) => size === "1440x900",
+		);
+		const read = async () => {
+			await page.mouse.move(1, 1);
+			const pid = await hostPid(own);
+			const tree = await page.locator("body").ariaSnapshot();
+			return scrubbed(tree, own, pid === null ? [] : [pid]);
+		};
+		const cell = async (state: State, layout: Layout, ids: readonly string[]) => {
+			const name = `${state}-${layout}`;
+			if (state === "strips") await tilesAre(page, ids);
+			else await layoutIs(page, layout, ids);
+			await page.waitForTimeout(250);
+			const first = await read();
+			await page.waitForTimeout(1100);
+			const second = await read();
+			if (first !== second) {
+				tally.flake += 1;
+				console.log(`flake  ${name}: two reads differ\n${linesDiff(first, second)}`);
+			}
+			await writeFile(join(out, `${name}.aria.yml`), `${second}\n`);
+			check(`one planned ARIA tree: ${name}`, pending.delete(name));
+			const approved = await readFile(join(ARIA, `${name}.aria.yml`), "utf8").catch(() => null);
+			if (approved === null) {
+				tally.fresh += 1;
+				console.log(`new    ${name}: no approved tree yet`);
+			} else if (approved === `${second}\n`) {
+				tally.same += 1;
+				console.log(`same   ${name}`);
+			} else {
+				tally.diff += 1;
+				console.log(`diff   ${name}\n${linesDiff(approved.replace(/\n$/, ""), second)}`);
+			}
+		};
+		await grid(page, async (layout, ids) => {
+			const [first = "", ...rest] = ids;
+			const last = rest.at(-1) ?? first;
+			for (const state of STATES) {
+				try {
+					if (state === "plain") await cell(state, layout, ids);
+					if (state === "asks-dot") {
+						await page.locator(".udot").waitFor({state: "visible"});
+						await cell(state, layout, ids);
+					}
+					if (state === "close-asked") {
+						await focusOn(page, first);
+						await prefixed(page, "x");
+						await askedIs(page, `close ${first}? (y/n)`);
+						await cell(state, layout, ids);
+						await page.keyboard.press("n");
+						await noQuestion(page);
+					}
+					if (state === "info") {
+						await focusOn(page, first);
+						await prefixed(page, "i");
+						await until(
+							"info mode on",
+							() => infoItem(page).getAttribute("aria-pressed"),
+							(on) => on === "true",
+						);
+						await cell(state, layout, ids);
+						await page.keyboard.press("Escape");
+						await until(
+							"info mode off",
+							() => infoItem(page).getAttribute("aria-pressed"),
+							(on) => on === "false",
+						);
+					}
+					if (state === "palette") {
+						await focusOn(page, first);
+						await page.keyboard.press("Meta+k");
+						await page.getByRole("dialog", {name: "Commands"}).waitFor();
+						await cell(state, layout, ids);
+						await page.keyboard.press("Escape");
+						await gone(page, "pop-palette");
+					}
+					if (state === "strips") {
+						const folded = rest.length === 0 ? await splitTile(page, first, "|") : first;
+						await focusOn(page, folded);
+						await prefixed(page, "f");
+						const strip = page.locator(`[data-strip="${folded}"]`);
+						await strip.waitFor();
+						await cell(state, layout, rest.length === 0 ? ids : rest);
+						await strip.click();
+						if (rest.length === 0) {
+							await tilesAre(page, [first, folded]);
+							await focusOn(page, folded);
+							await prefixed(page, "x");
+							await askedIs(page, `close ${folded}? (y/n)`);
+							await page.keyboard.press("y");
+						}
+						await tilesAre(page, ids);
+					}
+					if (state === "pipe") {
+						// Closing can remove the workspace's last tile. Start the pipe on a fresh one.
+						const before = await tiles(page);
+						await prefixed(page, "N");
+						const source = await addedTile(page, before, 1);
+						await prompted(page, source);
+						await run(page, source, "tracker | ticket");
+						const ticket = await addedTile(page, [source]);
+						let pipeIds = [source, ticket];
+						if (layout !== "one") pipeIds = await arrange(page, layout, source, ticket);
+						const tracker = tile(page, source).getByLabel("tracker view");
+						await tracker.waitFor();
+						await tracker.locator(".tracker-list button").filter({hasText: SEVEN_TITLE}).click();
+						// The ticket renders backticks as code type, so its heading has no backticks.
+						await tile(page, ticket)
+							.getByRole("heading", {
+								level: 1,
+								name: "fabrika post prints the ticket number twice",
+								exact: true,
+							})
+							.waitFor();
+						if (layout === "one") {
+							await focusOn(page, ticket);
+							await prefixed(page, "z");
+							pipeIds = [ticket];
+						}
+						await cell(state, layout, pipeIds);
+					}
+					if (state === "closing") {
+						await focusOn(page, last);
+						await run(page, last, "sleep --ms 600000 &");
+						await prompted(page, last);
+						await prefixed(page, "x");
+						await askedIs(page, `close ${last}? (y/n)`);
+						await page.keyboard.press("y");
+						await until(
+							`${last} closing`,
+							() => closingIn(page, last),
+							(n) => n === 1,
+						);
+						await cell(state, layout, ids);
+						await prefixed(page, "x");
+						await askedIs(page, `stop ${last} now? (y/n)`);
+						await page.keyboard.press("y");
+						await until(
+							`${last} stopped`,
+							() => tile(page, last).count(),
+							(n) => n === 0,
+						);
+					}
+				} catch (e) {
+					reached = 2;
+					console.log(
+						`cannot reach ${state}-${layout}: ${e instanceof Error ? e.message : String(e)}`,
+					);
+					throw e;
+				}
+			}
+		});
+		check("every planned ARIA tree was recorded", pending.size === 0, [...pending]);
+	} catch (e) {
+		reached = 2;
+		console.log(`the ARIA stage stopped: ${e instanceof Error ? e.message : String(e)}`);
+	} finally {
+		await app.close().catch(() => {});
+		const pid = await hostPid(own);
+		if (pid !== null) await stop(pid);
+	}
+	console.log(
+		`aria: ${planned - pending.size}/${planned} planned, ${String(tally.same)} same, ` +
+			`${String(tally.diff)} differ, ${String(tally.fresh)} new, ${String(tally.flake)} flaky; trees in ${out}`,
+	);
+	return reached;
+};
+
 const all = async () => {
 	const first = await launch(home);
 	let left = "";
@@ -2097,7 +2780,11 @@ const all = async () => {
 		await mismatch();
 		await asksSwap();
 		await reconnect();
+		await lookFocus();
 		await tilesLook();
+		await trackerFocus();
+		// The 60 focus images need a 1440 by 900 window, taller than a CI runner's screen, so they
+		// run only with --focus, the way the ARIA trees run only with --aria.
 	} finally {
 		// No person stops the host: there is no command for it. The run stops its own, by its pid.
 		const pid = await hostPid(home);
@@ -2105,8 +2792,11 @@ const all = async () => {
 	}
 };
 
-// `-- --tiles` takes the tiles' pictures alone, with no other stage.
+// Each capture stage can also run alone. ARIA answers 2 only when it cannot reach a state.
 if (process.argv.includes("--tiles")) await tilesLook();
+else if (process.argv.includes("--aria")) process.exitCode = await ariaStage();
+else if (process.argv.includes("--focus")) await focusShots();
+else if (process.argv.includes("--tracker-focus")) await trackerFocus();
 else await all();
 const after = await pgrep(here);
 check(

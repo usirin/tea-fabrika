@@ -1,6 +1,6 @@
 # An agent run keeps its content in the trace, the way Langfuse does
 
-Proposed 2026-10-29. An agent run is a conversation plus tool calls. Today its
+Proposed 2026-10-29. Walked when Tier 5 starts (owner, 2026-11-08): agent transcripts, masking and deletion. An agent run is a conversation plus tool calls. Today its
 spans keep only names: `chat`, `execute_tool Read`. The proposal is that they
 also keep the content: each prompt, each reply, and each tool's input and
 result. "Content" is OpenTelemetry's word for this ("content capture"), and

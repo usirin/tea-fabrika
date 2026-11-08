@@ -1,6 +1,6 @@
 # The laptop runs the same setup as Cloudflare, one command apart
 
-**Decided 2026-10-25.** Everything fabrika runs on Cloudflare also runs on the
+**Decided 2026-10-25.** Walked when Tier 1 starts (owner, 2026-11-08): checking local and cloud setup together. Everything fabrika runs on Cloudflare also runs on the
 laptop, from the same code and the same Alchemy stack. That covers the ledger
 server, a project's host, the relay that adds a key, and where keys are kept.
 Moving a project between the two is one command. The laptop setup never falls

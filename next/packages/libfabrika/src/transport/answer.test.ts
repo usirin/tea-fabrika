@@ -1,12 +1,17 @@
 // p23/p82: answerFrame(text, attachment, admit, route). A failed route stays retryable; a parked
 // wait is data. Plants: answer a notification; route before initialize; turn a failure into err.
-import {describe, expect, it, vi} from "@effect/vitest";
+import {assert, describe, expect, it, vi} from "@effect/vitest";
 import {Effect, Schema} from "effect";
 import * as T from "./index.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
 class Offline extends Schema.TaggedError<Offline>()("Offline", {}) {}
+type Route = (
+	method: string,
+	params: unknown,
+	who: typeof T.Who.Type,
+) => Effect.Effect<typeof T.Answer.Type, Offline>;
 const online = () =>
 	T.Attached.cases.online.make({
 		client: "c1",
@@ -50,6 +55,7 @@ describe("P10 JSON-RPC", () => {
 					mode === "ok" ? {rows: [1]} : {why: "stale"},
 				);
 				expect(route).toHaveBeenCalledOnce();
+				assert(result.attached._tag === "online");
 				expect(result.attached.waits).toEqual([]);
 			}),
 		);
@@ -60,7 +66,7 @@ describe("P10 JSON-RPC", () => {
 				const first =
 					mode === "failure" ? Effect.fail(new Offline({})) : Effect.die("route crashed");
 				const route = vi
-					.fn()
+					.fn<Route>()
 					.mockReturnValueOnce(first)
 					.mockReturnValueOnce(Effect.succeed(T.Answer.cases.ok.make({result: "recovered"})));
 				const failed = yield* T.answerFrame(frame(), attached, admit, route);
@@ -99,6 +105,7 @@ describe("P10 JSON-RPC", () => {
 									ping: "30s",
 									key: "k",
 									tab: "t",
+									nonce: "n",
 									platform: "headless",
 									os: "linux",
 									sentAt: "",
@@ -117,13 +124,16 @@ describe("P10 JSON-RPC", () => {
 					Effect.succeed(T.Answer.cases.parked.make({stream: "x", after: 8})),
 				);
 				expect(result.send).toBeNull();
+				assert(result.attached._tag === "online");
 				expect(result.attached.waits).toEqual([{id, stream: "x", after: 8}]);
 				expect(JSON.parse(JSON.stringify(result.attached))).toEqual(result.attached);
 			}),
 		);
 	it.effect("p82: additive request fields leave the reply id and checked writer alone", () =>
 		Effect.gen(function* () {
-			const route = vi.fn(() => Effect.succeed(T.Answer.cases.ok.make({result: null})));
+			const route = vi.fn((_method: string, _params: unknown, _who: typeof T.Who.Type) =>
+				Effect.succeed(T.Answer.cases.ok.make({result: null})),
+			);
 			const attached = online();
 			const result = yield* T.answerFrame(frame({future: {by: "forged"}}), attached, admit, route);
 			expect(JSON.parse(result.send!)).toMatchObject({id: "r1", result: null});

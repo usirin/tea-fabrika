@@ -12,7 +12,7 @@ import type {AsksNow} from "../asks.ts";
 import {activeOf, focusedOf, type Open} from "../desk/desk.ts";
 import type {Keys} from "../desk/keymap.ts";
 import {type Group, wordOf} from "../desk/keys.ts";
-import type {FromPage, HostNow, LinkNow, ToApp} from "../messages.ts";
+import type {FromPage, HostNow, LinkNow, SummonedOn, ToApp} from "../messages.ts";
 import {
 	agentsWord,
 	asksSections,
@@ -577,7 +577,7 @@ function ItemLines(props: FrameProps & {readonly what: Part}): ReactNode {
 				</>
 			);
 		return props.what === "agents" ? (
-			<AgentsLines host={host} now={now} />
+			<AgentsLines host={host} now={now} toHost={props.toHost} />
 		) : (
 			<SyncLines host={host} asks={props.asks} />
 		);
@@ -599,8 +599,90 @@ const ATTACH: Words = [
 	},
 ];
 
+/** What a summoned agent does now, in a word or two. */
+const STATE_WORD: Readonly<Record<SummonedOn["state"], string>> = {
+	opening: "opening",
+	idle: "idle",
+	turn: "working",
+	asking: "asking you",
+	down: "down",
+};
+
+/**
+ * The agents the person summoned here, a row each: its name, what it runs on and does now, and a
+ * Dismiss, as `dismiss <name>` is in a tile. Nothing when none is summoned.
+ */
+function SummonedLines(props: {
+	readonly summoned: readonly SummonedOn[];
+	readonly now: number;
+	readonly toHost: (m: FromPage) => void;
+}): ReactNode {
+	const {summoned} = props;
+	if (summoned.length === 0) return null;
+	return (
+		<>
+			<h2 className="pop-title">
+				{`${summoned.length} agent${summoned.length === 1 ? "" : "s"} summoned here`}
+			</h2>
+			<ul className="pop-lines">
+				{summoned.map((a) => (
+					<li key={a.name} className="pop-row two">
+						<span className="lead">
+							<IconOf icon={a.state === "down" ? "stuck" : "running"} />
+						</span>
+						<span className="text">
+							<span className="t">{a.name}</span>
+							<span className="s">
+								{[a.agent, a.model, a.effort].filter((w) => w !== null).join(" · ")} ·{" "}
+								{STATE_WORD[a.state]} · since {clockWord(a.since, props.now)}
+							</span>
+						</span>
+						<button
+							type="button"
+							className="pop-button"
+							aria-label={`Dismiss ${a.name}`}
+							onClick={() => props.toHost({type: "dismiss", name: a.name})}
+						>
+							Dismiss
+						</button>
+					</li>
+				))}
+			</ul>
+			<p className="pop-text">
+				<WordsOf words={SUMMON} />
+			</p>
+		</>
+	);
+}
+
+/** How an agent is summoned, said under the summoned ones, its command typed. */
+const SUMMON: Words = [
+	{text: "Summon one in a tile with ", typed: false},
+	{text: "summon claude as scout", typed: true},
+	{text: ", then talk with ", typed: false},
+	{text: "@scout", typed: true},
+	{text: ".", typed: false},
+];
+
+/**
+ * The agents on this desk: the ones the person summoned, ours to dismiss, then each attached to
+ * the host's agents' socket, under its own heading: its name, and since when.
+ */
+function AgentsLines(props: {
+	readonly host: HostNow;
+	readonly now: number;
+	readonly toHost: (m: FromPage) => void;
+}): ReactNode {
+	return (
+		<>
+			<SummonedLines summoned={props.host.summoned ?? []} now={props.now} toHost={props.toHost} />
+			<AttachedLines host={props.host} now={props.now} />
+		</>
+	);
+}
+
 /** Each agent attached to the host now, a row each: its name, and since when. */
-function AgentsLines(props: {readonly host: HostNow; readonly now: number}): ReactNode {
+function AttachedLines(props: {readonly host: HostNow; readonly now: number}): ReactNode {
 	const {agents} = props.host;
 	if (agents === null)
 		return (

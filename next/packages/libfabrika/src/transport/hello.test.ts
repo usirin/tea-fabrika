@@ -1,8 +1,9 @@
-// p26/p82. checkHello takes trusted upgrade values, an atomic nonce consumer and admission.
+// p26/p82. Hello echoes the issued nonce, bound by the existing signature with the URL and tab.
+// checkHello takes trusted upgrade values, an atomic nonce consumer and admission.
 // It answers online {who,version,ping} or refused {why}; capability claims grant no rank.
 // Plants: accept the first version; omit one signed binding; consume before checking; admit verify.
 import {createHash} from "node:crypto";
-import {describe, expect, it, vi} from "@effect/vitest";
+import {assert, describe, expect, it, vi} from "@effect/vitest";
 import {Effect} from "effect";
 import * as fc from "fast-check";
 import * as Transport from "./index.ts";
@@ -79,12 +80,17 @@ const setup = Effect.fnUntraced(function* () {
 		ping: "30s",
 		key: k.raw,
 		tab,
+		nonce,
 		platform: "browser",
 		os: "ios",
 		sentAt: SENT,
 		signed,
 	};
-	const who = {key: k.fingerprint, person: PERSON, as: "window"};
+	const who = {
+		key: k.fingerprint,
+		person: PERSON,
+		as: "window",
+	} satisfies typeof Transport.Who.Type;
 	let used = false;
 	const consume = vi.fn(() => {
 		if (used) return false;
@@ -105,12 +111,42 @@ const setup = Effect.fnUntraced(function* () {
 	return {hello, trusted, who, consume, admit};
 });
 describe("P10 hello", () => {
+	for (const binding of ["tab", "nonce"] as const)
+		it.effect(
+			`p26: an unsigned ${binding} claim cannot differ from the ${binding} bound by the proof`,
+			() =>
+				Effect.gen(function* () {
+					const x = yield* setup();
+					expect(
+						yield* Transport.checkHello({
+							hello: {...x.hello, [binding]: `another-${binding}`},
+							...x.trusted,
+						}),
+					).toMatchObject({_tag: "refused", why: "bad_signature"});
+					expect(x.admit).not.toHaveBeenCalled();
+					expect(x.consume).not.toHaveBeenCalled();
+				}),
+		);
+	it.effect("p82: a client with an unknown OS can still initialize", () =>
+		Effect.gen(function* () {
+			const x = yield* setup();
+			expect(
+				yield* Transport.checkHello({hello: {...x.hello, os: "unknown"}, ...x.trusted}),
+			).toMatchObject({_tag: "online", hello: {os: "unknown"}});
+		}),
+	);
 	it.effect("p26: a checked window goes online with the fold's identity and chosen version", () =>
 		Effect.gen(function* () {
 			const x = yield* setup();
 			const checked = Transport.checkHello({hello: x.hello, ...x.trusted});
 			const result = yield* checked;
-			expect(result).toMatchObject({_tag: "online", who: x.who, version: 2, ping: 30_000});
+			expect(result).toMatchObject({
+				_tag: "online",
+				who: x.who,
+				version: 2,
+				ping: 30_000,
+				hello: {nonce},
+			});
 			expect(x.admit).toHaveBeenCalledOnce();
 			expect(x.consume).toHaveBeenCalledOnce();
 		}),
@@ -197,6 +233,7 @@ describe("P10 hello", () => {
 			});
 			const result = yield* checked;
 			expect(result).toMatchObject({_tag: "online", who: x.who, version: 2, ping: 10_000});
+			assert(result._tag === "online");
 			expect(result.hello).toMatchObject({os: "ios", has: ["verify", "seal"]});
 		}),
 	);

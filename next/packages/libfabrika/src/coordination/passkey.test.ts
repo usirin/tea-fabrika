@@ -2,7 +2,7 @@
 // still own root equality and recovery folds. Plants: strip the extension; lose enrollment proof.
 import {describe, expect, it} from "@effect/vitest";
 import {Schema} from "effect";
-import {Adds, Signed} from "./members.ts";
+import {Add, Adds, Signed} from "./members.ts";
 
 const checked = {
 	origin: "https://fabrika.test",
@@ -12,6 +12,35 @@ const checked = {
 	counter: 0,
 };
 describe("P10 passkey records", () => {
+	it("p42: added-key records retain command and handwritten observations", () => {
+		const common = {
+			id: "change",
+			for: "person-a",
+			to: "project-a",
+			sentAt: "2026-11-08T04:00:00.000Z",
+		};
+		const add = {
+			...common,
+			adds: {_tag: "recovery", key: "sheet", v: 1},
+			drops: [],
+			saw: {
+				how: "sheet",
+				check: "touch",
+				where: "test",
+				has: [],
+				typed: true,
+				kept: "hand",
+				old: null,
+			},
+		};
+		expect(Schema.decodeUnknownSync(Add)(add)).toEqual(add);
+		const command = {...add, saw: {...add.saw, how: "command", kept: null, typed: false}};
+		expect(Schema.decodeUnknownSync(Add)(command)).toEqual(command);
+	});
+	it("question 19: an enrolled root cannot carry an incomplete proof record", () => {
+		for (const passkey of [{}, {credential: "credential", rp: "fabrika.test"}])
+			expect(Schema.is(Adds)({_tag: "person", key: "root", window: "window", passkey})).toBe(false);
+	});
 	it("question 19: Signed keeps checked backup state and zero counter beside the original bytes", () => {
 		const input = {text: "original\n", armored: "armor", signer: "sk-key", passkey: checked};
 		const decoded = Schema.decodeUnknownSync(Signed)(input);

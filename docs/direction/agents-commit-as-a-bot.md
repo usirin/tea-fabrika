@@ -1,6 +1,6 @@
 # Agents commit as a bot, with the person as co-author
 
-**Proposed 2026-11-05.** The owner decided the direction on 2026-11-05, marked decided below:
+**Proposed 2026-11-05.** Walked when Tier 5 starts (owner, 2026-11-08): agent commits, token swaps and trailers. The owner decided the direction on 2026-11-05, marked decided below:
 
 - **Decided, agents commit and push as a bot.** An agent's commit is authored by a GitHub App's
   bot identity (`fabrikalfa[bot]`, named 2026-11-06), never by the person's account. GitHub itself then

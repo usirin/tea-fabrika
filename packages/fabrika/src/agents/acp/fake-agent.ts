@@ -21,6 +21,7 @@ import * as acp from "@agentclientprotocol/sdk/unstable";
 //   think         two thought chunks
 //   write         an edit tool call that asks permission first, its input in the ask; allowed, it writes `written.txt`
 //   slowly        a second's pause before each step: a turn to cancel, or to kill
+//   untallied     the turn reports no tokens (no `usage`), as a harness may: none, not 0
 //
 // Each session is kept in `<folder>/.fake-acp/<id>.jsonl`, every update it
 // sent with the prompt that led to it, so `session/load` can replay it and
@@ -269,6 +270,8 @@ const app = acp
 		};
 
 		const stopReason = await turn();
+		// `untallied`: a harness that reports no tokens for the turn, which is not a turn of 0.
+		if (/\buntallied\b/.test(text)) return {stopReason};
 		const input = 100 + text.length;
 		const output = 10;
 		s.used += input + output;

@@ -32,7 +32,7 @@ const grant = {
 	as: "window",
 	saw: SAW,
 	sentAt: SENT,
-};
+} satisfies typeof C.Grant.Type;
 const revoke = {id: "r1", key: "window", for: PERSON, to: "project-a", saw: TOOK, sentAt: SENT};
 const add = {
 	id: "a1",

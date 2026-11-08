@@ -7,7 +7,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
-import {Brand, Effect} from "effect";
+import {Brand, Effect, Schema} from "effect";
 import {type InputId} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
@@ -112,6 +112,17 @@ const commitFault = (inner: Sql) => {
 };
 
 describe("P10 saved signing authority", () => {
+	it("question 16: a session without a complete parent span is not a valid receipt", () => {
+		const session = {
+			by: writer("person"),
+			parent,
+			traceId: TRACE,
+			span: {traceId: TRACE, spanId: SPAN},
+		};
+		expect(Schema.decodeUnknownSync(C.Session)(session)).toEqual(session);
+		for (const span of [{}, {traceId: TRACE}, {spanId: SPAN}])
+			expect(Schema.is(C.Session)({...session, span})).toBe(false);
+	});
 	it.effect("question 16: interleaved writers keep the direct parent's identity and span", () =>
 		Effect.gen(function* () {
 			const {sql} = database();

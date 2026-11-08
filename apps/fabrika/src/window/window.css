@@ -402,8 +402,11 @@ body,
 	caret-color: transparent;
 }
 
-/* The screen as text: there for a screen reader and a test, out of sight. */
-.screen-text {
+/* The screen as text, and a job's status and replies: there for a screen reader and a test, out of
+   sight. */
+.screen-text,
+.job-status,
+.job-replies {
 	position: absolute;
 	width: 1px;
 	height: 1px;
@@ -525,7 +528,7 @@ main.program > [role="alert"] {
 /*
  * The window's frame (frame.tsx): a top bar that is the whole desk, and a bottom line that is the
  * tile you are in and your last key. Plain words, ` · ` between them: no pills, no backgrounds on
- * items, digits that do not shift. Only "asks you" takes the accent (--turn), and only a broken
+ * items, digits that do not shift. Only "asks you" takes the accent (--turn-text), and only a broken
  * part takes red (--stuck), each with its word. On macOS the top bar is the window's title bar:
  * the window is moved by it, and its buttons take no drag. No line under the top bar or over the
  * bottom line: the tiles' own edges already end the desk there.
@@ -588,7 +591,7 @@ main.program > [role="alert"] {
 }
 
 .fb:focus-visible {
-	outline: 1px solid var(--text-faint);
+	outline: 1px solid var(--focus);
 	outline-offset: 2px;
 }
 
@@ -599,7 +602,7 @@ main.program > [role="alert"] {
 }
 
 .fb.accent {
-	color: var(--turn);
+	color: var(--turn-text);
 }
 
 .fb.broken {
@@ -738,7 +741,7 @@ main.program > [role="alert"] {
 	margin-left: 6px;
 	vertical-align: 1px;
 	border-radius: 50%;
-	background: var(--turn);
+	background: var(--turn-fill);
 }
 
 /* 26px, and two lines while info mode is on (below). */
@@ -1038,7 +1041,7 @@ main.program > [role="alert"] {
 }
 
 .ic-ask {
-	color: var(--turn);
+	color: var(--turn-text);
 }
 
 .ic-stuck {
@@ -1391,7 +1394,7 @@ button:hover {
 }
 
 button:focus-visible {
-	outline: 2px solid var(--key);
+	outline: 2px solid var(--focus);
 	outline-offset: 2px;
 }
 
@@ -1756,7 +1759,7 @@ button:focus-visible {
 .tracker a:focus-visible,
 .tracker input:focus-visible,
 .tracker textarea:focus-visible {
-	outline: 2px solid var(--key);
+	outline: 2px solid var(--focus);
 	outline-offset: 1px;
 }
 
@@ -1829,7 +1832,7 @@ button:focus-visible {
 }
 
 .tracker-find:focus-within {
-	border-color: var(--key);
+	border-color: var(--focus);
 }
 
 .tracker .tracker-find input {
@@ -1840,7 +1843,6 @@ button:focus-visible {
 	background: transparent;
 	color: var(--text-primary);
 	font: inherit;
-	outline: none;
 }
 
 .tracker-find input::-webkit-search-cancel-button {
@@ -1942,7 +1944,6 @@ button:focus-visible {
 	border: 1px solid var(--line);
 	border-radius: 8px;
 	padding: 7px 10px;
-	outline: none;
 }
 
 .tracker .tracker-composer input {
@@ -1956,8 +1957,7 @@ button:focus-visible {
 
 .tracker .tracker-composer input:focus,
 .tracker .tracker-composer textarea:focus {
-	border-color: var(--key);
-	outline: none;
+	border-color: var(--focus);
 }
 
 .tracker input::placeholder,
@@ -2023,8 +2023,15 @@ button:focus-visible {
 
 .tracker .tracker-list button:focus-visible,
 .tracker-list a.tracker-pull-request:focus-visible {
-	outline: none;
-	box-shadow: inset 2px 0 0 var(--key);
+	outline: 2px solid var(--focus);
+	outline-offset: -2px;
+}
+
+@media (forced-colors: active) {
+	.tracker .tracker-list button:focus-visible,
+	.tracker-list a.tracker-pull-request:focus-visible {
+		outline-color: Highlight;
+	}
 }
 
 .tracker-number {
@@ -2241,7 +2248,7 @@ button:focus-visible {
 
 /* A URL in a body: underlined, and a long one wraps rather than widen the tile. */
 .tracker-body a {
-	color: var(--turn);
+	color: var(--turn-text);
 	text-decoration: underline;
 	text-underline-offset: 2px;
 	overflow-wrap: anywhere;
@@ -2264,7 +2271,7 @@ button:focus-visible {
 }
 
 .tracker-head-line[data-waits] {
-	color: var(--turn);
+	color: var(--turn-text);
 	font-weight: 600;
 }
 
@@ -2562,7 +2569,7 @@ main.program:has(> .view) {
 }
 
 .view .dot.you {
-	box-shadow: inset 0 0 0 1.5px var(--turn);
+	box-shadow: inset 0 0 0 1.5px var(--turn-fill);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -2590,7 +2597,7 @@ main.program:has(> .view) {
 }
 
 .view .w-you {
-	color: var(--turn);
+	color: var(--turn-text);
 	font-weight: 600;
 }
 
@@ -3775,14 +3782,30 @@ main.program:has(> .view) {
 	}
 }
 
-/* The ruler's finer ticks show only where the ruler has room: 60px or more for each label. */
+/* The ruler's finer ticks show only where the ruler has room: 60px or more for each label
+   (ruler.ts). Rank 0 always shows: 2 ticks from 120px. Rank 1 from 240px, rank 2 from 480px,
+   rank 3 from 960px. Under 120px the "0" hides when rank 0 has a second tick, so one label
+   shows, with its unit. Labels drop, never shrink. */
 .trace-view .wf-ruler {
 	container: ruler / inline-size;
 }
 
+.trace-view .wf-tick.r1,
 .trace-view .wf-tick.r2,
 .trace-view .wf-tick.r3 {
 	display: none;
+}
+
+@container ruler (width < 120px) {
+	.trace-view .wf-tick:first-child:has(~ .wf-tick.r0) {
+		display: none;
+	}
+}
+
+@container ruler (min-width: 240px) {
+	.trace-view .wf-tick.r1 {
+		display: block;
+	}
 }
 
 @container ruler (min-width: 480px) {
@@ -3965,7 +3988,7 @@ main.program:has(> .view) {
 }
 
 .trace-view .tv-out.waiting {
-	color: var(--turn);
+	color: var(--turn-text);
 }
 
 /* The detail: under the lanes where the tile is narrow (Datadog), beside them where it is wide (Honeycomb). One hairline, no panel. */

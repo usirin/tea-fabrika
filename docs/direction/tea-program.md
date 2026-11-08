@@ -1,6 +1,6 @@
 # tea-program: programs between tea and a host
 
-**Proposed** 2026-10-15, changed 2026-10-16, 2026-10-17 (five times), 2026-10-19 and 2026-10-30. Not settled.
+**Proposed** 2026-10-15, changed 2026-10-16, 2026-10-17 (five times), 2026-10-19 and 2026-10-30. Not settled. Today's version; walked if a tryout is picked (owner, 2026-11-08).
 
 ```ts
 // tea: the kernel. A machine is a data structure: a state and the rules that move it.

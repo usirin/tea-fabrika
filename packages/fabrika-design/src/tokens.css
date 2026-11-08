@@ -31,8 +31,10 @@
 	--border: light-dark(#00002f26, #d6ebfd30); /* slate a6: a part that is not interactive */
 	--border-strong: light-dark(#00062e32, #d9edff40); /* slate a7: an interactive part */
 	--wire: light-dark(#00083046, #d9edff5d); /* slate a8: a strong line */
-	--tile-focus: light-dark(#00051d74, #d9edff5d); /* slate a9; slate a8 */
-	/* The keyboard ring: slate a9 in both looks, a bend. a8 reads 2.82 on a selected row in dark. */
+	/*
+	 * The one focus token: every ring and the focused tile's edge. Slate a9 in both looks, a bend:
+	 * a8 reads 1.90 on the desk in light and 2.82 on a selected row in dark.
+	 */
 	--focus: light-dark(#00051d74, #dfebfd6d);
 
 	/*
@@ -43,7 +45,7 @@
 	--text-faint: light-dark(#0007149f, #f1f7feb5); /* slate a11 */
 
 	/* The accent, your turn. */
-	--turn: light-dark(#002bb7c5, #9eb1ff); /* indigo a11; indigo 11 */
+	--turn-text: light-dark(#002bb7c5, #9eb1ff); /* indigo a11; indigo 11: the turn's text only */
 	--turn-fill: #3e63dd; /* indigo 9 */
 	--turn-fill-hover: light-dark(#3358d4, #5472e4); /* indigo 10 */
 	--turn-fg: #ffffff; /* Radix's rule for text on step 9, a bend */
@@ -67,7 +69,7 @@
 	 * name holds yet, so it is written out here.
 	 */
 	--tile-edge: var(--border-faint); /* slate a4, on every tile, plain or pipe */
-	--tile-edge-on: var(--tile-focus); /* focus: slate a8 dark, a9 light */
+	--tile-edge-on: var(--focus); /* focus: slate a9 in both looks */
 	--tile-edge-hover: var(--border-strong); /* slate a7 */
 	--tile-edge-loud: var(--text-faint); /* slate a11: focus under more contrast only */
 	--tile-text: var(--text-faint); /* slate a11 */

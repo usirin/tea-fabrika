@@ -119,6 +119,10 @@ read off a screen.
 
 **The built-in `fabrika`, a Radix pick, written out:**
 
+*Changed 2026-11-08: design foundations PR 1 builds slate a9 focus in both looks and the
+`turn-fill` name in today's version. The sketch follows those values. Dark focus contrast below
+is recomputed from a9 over the ground, with the same 8-bit alpha rounding as the app's laws.*
+
 ```toml
 # ~/.fabrika/themes/fabrika.toml (a sketch); picked by theme = "fabrika", or by no theme line
 format = 1
@@ -138,10 +142,10 @@ ground = "#111113"    # gray 1
 raised = "#18191b"    # gray 2
 hover = "#ddeaf814"   # gray a3
 edge = "#d3edf81d"    # gray a4, the bend color principles already records
-focus = "#dfebfd6d"   # gray a9; changed 2026-11-07, was a8 #d9edff5d
+focus = "#dfebfd6d"   # gray a9 in both looks; was a8 #d9edff5d in dark
 text = "#edeef0"      # gray 12
 faint = "#f1f7feb5"   # gray a11
-turn = "#3e63dd"      # accent 9: your turn; the token is turn-fill, see below
+turn-fill = "#3e63dd" # accent 9: your turn
 on-turn = "#ffffff"   # Radix's own rule for text on step 9
 turn-text = "#9eb1ff" # accent 11
 done = "#71d083"      # step 11
@@ -160,22 +164,24 @@ palette = [ ... ]     # 16 Radix steps: gray 3 (black, a fill); the six at 9, 9,
 
 ```text
 text 15.15   faint 8.71   turn-text 8.53   done 9.26   running 11.49   stuck 8.35   closed 8.71
-focus 3.01 (a8; a9 not yet run)   turn 3.62   on-turn 5.21   edge 1.31 (carries no fact, see below)
+focus 3.68 (a9; was 3.01 at a8)   turn-fill 3.62   on-turn 5.21   edge 1.31 (carries no fact, see below)
 terminal: every color but black (0, a fill) 4.82 or more on the background
 moved by repair: 0
 ```
 
-**The built-in `fabrika-light`:** the same pick, `look = "light"`. Five colors are a step up from
+**The built-in `fabrika-light`:** the same pick, `look = "light"`. Four colors are a step up from
 the dark one:
 
-- `running` is amber 12, since amber 11 reads 4.38, and `focus` is slate a9, since a8 reads 1.90.
-  Repair would move both there. *Changed 2026-11-07: focus is slate a9 in both looks now (call 4).*
+- `running` is amber 12, since amber 11 reads 4.38. Repair would move it there.
 - **Changed 2026-11-01, approved by the owner from the design review of ticket 144:** `done` is
   grass 12 (`#203c25`), `stuck` red 12 (`#641723`) and `turn-text` indigo a11 (`#002bb7c5`). This
   note had them at step 11. Step 11 passes on the desk, the ground and raised, but the window also
   draws these words on hovered and selected rows, and there step 11 fails: grass 11 reads 3.77, red
   11 3.88 and indigo 11 4.47 on a selected row. Grass a11 and red a11 fail there too (4.05, 4.15),
   so step 12 is the nearest that passes. Indigo a11 is the same step 11, see-through, and passes.
+
+Focus is slate a9 in both looks, since a8 reads 1.90 on the desk in light and 2.82 on a selected
+row in dark.
 
 ```toml
 # fabrika-light's [colors], the three that changed

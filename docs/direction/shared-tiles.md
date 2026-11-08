@@ -1,6 +1,6 @@
 # Shared tiles: summon an agent into your tile, and see who is there
 
-**Proposed 2026-11-04, presence, color and the smaller calls decided 2026-11-07.** The owner
+**Proposed 2026-11-04, presence, color and the smaller calls decided 2026-11-07.** Walked when Tier 5 starts (owner, 2026-11-08): agents sharing tiles and the inbox. The owner
 decided these during the walk of the Design canvas "Shared tile guidelines" on 2026-11-04, and more
 in later walks, each marked decided below:
 
@@ -31,8 +31,12 @@ in later walks, each marked decided below:
   every color passes the themes' contrast check. This walks back "one agent hue, Radix orange"
   ([color](#color)).
 - **Decided 2026-11-07, the five smaller calls** ([below](#the-smaller-calls)): `@` in every text
-  box, a line from an agent nobody summoned is an inbox row, an `@` line runs in the background,
+  box, a message from an agent nobody summoned is an inbox row, an `@` line runs in the background,
   a dropped link says "away" then "gone", and the ticket shows what an agent changed.
+- **Changed 2026-11-08 (owner): it is a message, not a line.** What an agent, or a person, sends you
+  is a message, and the inbox groups those rows under **Messages**, below Your turn. "Line" stays
+  what a person types in the shell and what a writer hands the ledger
+  ([experiment 206](../../experiments/206-customization.md), step 5).
 
 Still proposed: the wording of [the rules](#the-rules-proposed).
 
@@ -209,7 +213,7 @@ const Mark = Schema.TaggedUnion({
 A sketch, today's version. scout is summoned; researcher is not in t1.
 tsh$ @scout why does post print #7 twice?    [1] scout: runs behind you, the prompt stays yours
 tsh$ fg %scout                               wait on it; Ctrl-C stops the turn
-inbox: ✦ researcher  "the footer test fails on main"     a line nobody summoned: an inbox row
+inbox: ✦ researcher  "the footer test fails on main"     a message nobody summoned: an inbox row
   r, then type                               reply inline on that row; no tile opens
 t1's avatar for scout: "away"                its link dropped; letters queue in its mailbox
 t1's avatar for scout: "gone"                after about 10 minutes; dismiss it or summon it again
@@ -219,7 +223,7 @@ ticket #7: ✦ scout set the area to "tracker"   an activity row, cause in-3f9a0
 1. **How the person summons. Decided 2026-11-07:** `@` works in every text box, the command
    palette included, as it does in tsh. There is no separate "Summon claude here" palette row. A
    key later, from the keys file, stays possible.
-2. **An agent's line with no summon. Decided 2026-11-07:** it lands as a row in the person's inbox,
+2. **An agent's message with no summon. Decided 2026-11-07:** it lands as a row in the person's inbox,
    the `inbox` program of [the ask desk](./ask-desk.md). The person replies inline on that row.
    Nothing opens a tile on its own; a thread tile opens only when the person asks for one.
 3. **An agent's line while the person's job runs. Decided 2026-11-07:** an `@` line runs in the
@@ -286,7 +290,7 @@ agent's link in the tile, and its jobs stay in the table, told.
 - 1.4.11: every swatch color passes 3:1 in both looks, by the themes' checker (decided
   2026-11-07). The orange numbers above are from the walked-back hue.
 - 4.1.2: the tile's accessible name gains "with claude".
-- 4.1.3: one polite message per agent line, never per output line. "away" and "gone" are words in
+- 4.1.3: one polite status per agent message, never per output line. "away" and "gone" are words in
   the avatar's accessible name, and a change says so once, politely.
 - 2.3.3: the presence label's fade has a still twin under reduced motion.
 - 3.2.1 and 3.2.5: no focus move when an agent arrives.
@@ -299,12 +303,12 @@ agent's link in the tile, and its jobs stay in the table, told.
 - **Plan 185b call C:** hiding person-only controls goes.
 - **[Tile guidelines](./tile-guidelines.md#title-bar):** the title bar gains an avatar by the id.
 - **[Color principles](./color-principles.md):** a fourth color kind, an agent's (above).
-- **[The ask desk](./ask-desk.md):** the inbox has held asks. A line from an agent nobody summoned
+- **[The ask desk](./ask-desk.md):** the inbox has held asks. A message from an agent nobody summoned
   now lands there too, as a row the person replies to inline. It is not an ask: it asks for no
   decision. How it sorts beside the open asks is not settled.
 - **[Talk where you work](./talk-where-you-work.md#the-thread-tile-and-replies):** its replies lean
   keeps a spot's reply out of the inbox unless it ends in a real question. That is a reply to a
-  person's own talk; this call is a line nobody asked for, so the two do not clash.
+  person's own talk; this call is a message nobody asked for, so the two do not clash.
 - **[An agent is a program](./agents-are-programs.md)** (proposed): see
   [talk where you work](./talk-where-you-work.md), which drops the chat window.
 

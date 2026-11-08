@@ -1,6 +1,6 @@
 # An input can take anything, and says so
 
-**Proposed 2026-10-29.** A program may declare one input that takes any value, with `anyInput`.
+**Proposed 2026-10-29.** Today's version; walked if a tryout is picked (owner, 2026-11-08). A program may declare one input that takes any value, with `anyInput`.
 A pipe feeds it only when no typed input of the program fits, and then with the source's first
 output. Every other input keeps today's fit check, unchanged.
 

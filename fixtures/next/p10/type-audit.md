@@ -2,6 +2,10 @@
 
 `next/`, test writer, after commit `750fa71b`. These are pre-build results.
 
+The later [check on the build](./build-check.md) found local test errors this
+audit missed, including the mock argument type and widened rank literals.
+Its result supersedes this pre-build error list.
+
 ## Fixed test mistakes
 
 - The app's lockfile entry selects Effect **4.1.1**. Its installed

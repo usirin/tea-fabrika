@@ -3,6 +3,8 @@
 // Its options inject only production dependencies: typed program declarations, delivery,
 // notifications, settings and the shared ProcessIdGenerator.next. No workerd class or runner.
 // Each test names the plant it guards. The builder implements door.ts and does not edit this file.
+// Every hello echoes the issued nonce. Its existing signature binds that nonce, the URL and tab.
+import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {mkdtempSync, readdirSync, readFileSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
@@ -16,14 +18,17 @@ import {
 	Doorbell,
 	Ledger,
 	LedgerError,
+	lineFor,
 	RecordManager,
 	SinkError,
 	SpanSink,
 	SpanRow,
 } from "@kampus/libfabrika/data";
 import {nodeSql} from "@kampus/libfabrika/sqlite";
-import {Effect, Layer, Logger, Option, Schema, Stream} from "effect";
+import {checkSshsig, Hello} from "@kampus/libfabrika/transport";
+import {Deferred, Effect, Fiber, Layer, Logger, Option, Schema, Stream} from "effect";
 import {TestClock} from "effect/testing";
+const SpanPage = Schema.Struct({spans: Schema.Array(SpanRow), next: Schema.Int});
 const ADD_SAW = {
 	how: "device",
 	check: "touch",
@@ -249,7 +254,9 @@ type DeliveryCheck = Effect.Effect<
 	Ledger | RecordManager | Effect.Services<ReturnType<typeof writeId>>
 >;
 
-const world = Effect.fnUntraced(function* (options: {recordCap?: number; inputCap?: number} = {}) {
+const world = Effect.fnUntraced(function* (
+	options: {recordCap?: number; inputCap?: number; spentCap?: number} = {},
+) {
 	const dir = mkdtempSync(join(top, "w-"));
 	const db = open(join(dir, "project.db"));
 	const sql = nodeSql(db);
@@ -321,6 +328,7 @@ const world = Effect.fnUntraced(function* (options: {recordCap?: number; inputCa
 		waiting: {most: 3, ttl: 600_000},
 		ping: {min: 10_000, max: 60_000},
 		inputCap: options.inputCap ?? 1000,
+		spentCap: options.spentCap ?? 1000,
 		nextProcess: () => controls.next(),
 		deliver,
 		notify: (client: string, news: unknown) =>
@@ -385,6 +393,19 @@ const world = Effect.fnUntraced(function* (options: {recordCap?: number; inputCa
 	};
 });
 type World = Effect.Success<ReturnType<typeof world>>;
+
+// Compile-only law: a client cannot choose the connection whose state these calls change.
+const plainConnectionTypeLaw = (door: typeof Door.Service, wire: string) => {
+	// @ts-expect-error challenge requires a ConnectionId minted by the door or host
+	const challenge = door.challenge(wire);
+	// @ts-expect-error hello requires a ConnectionId minted by the door or host
+	const hello = door.initialize(wire, {}, {url: URL, tab: wire, name: wire});
+	// @ts-expect-error disconnect requires a ConnectionId minted by the door or host
+	const disconnect = door.disconnect(wire);
+	return [challenge, hello, disconnect];
+};
+void plainConnectionTypeLaw;
+
 const entries = (stream: string) =>
 	Ledger.use((l: typeof Ledger.Service) => Stream.runCollect(l.read(stream, 0)));
 const stamped = () => entries("door/inputs");
@@ -402,11 +423,12 @@ const request = (letter: string, m: unknown = comment()) => ({
 const online = Effect.fnUntraced(function* (
 	d: typeof Door.Service,
 	w: World,
-	client = "w1",
-	k = w.window,
+	label: string = "w1",
+	k: World["window"] = w.window,
 ) {
+	const client = yield* d.connect();
 	const nonce = yield* d.challenge(client);
-	const tab = `tab-${client}`;
+	const tab = `tab-${label}`;
 	const signed = yield* k.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`);
 	const hello = {
 		versions: [1, 2],
@@ -414,6 +436,7 @@ const online = Effect.fnUntraced(function* (
 		ping: "30s",
 		key: k.raw,
 		tab,
+		nonce,
 		platform: "browser",
 		os: "ios",
 		sentAt: SENT,
@@ -426,7 +449,7 @@ const online = Effect.fnUntraced(function* (
 const grantWindow = Effect.fnUntraced(function* (
 	d: typeof Door.Service,
 	w: World,
-	client = "w2",
+	client: string = "w2",
 	as: "window" | "agent" = "window",
 ) {
 	const k = as === "window" ? w.otherWindow : w.agent;
@@ -446,11 +469,25 @@ const grantWindow = Effect.fnUntraced(function* (
 });
 const writeId = (id: string, effect: ReturnType<typeof Door.Service.signer>) =>
 	effect.pipe(Effect.provideService(C.SignRequest, {id}));
+const failSessionRecord = (inner: ReturnType<typeof nodeSql>) => {
+	let armed = true;
+	const sql = {
+		...inner,
+		exec: (...args: Parameters<typeof inner.exec>) => {
+			if (armed && args[0] === "INSERT INTO door_sessions (parent,saved) VALUES (?,?)") {
+				armed = false;
+				throw new Error("SQLITE_FULL");
+			}
+			return inner.exec(...args);
+		},
+	};
+	return {sql, failed: () => !armed};
+};
 const device = Effect.fnUntraced(function* (
 	d: typeof Door.Service,
 	w: World,
-	k = w.otherRoot,
-	window = w.otherWindow,
+	k: World["otherRoot"] = w.otherRoot,
+	window: World["otherWindow"] = w.otherWindow,
 ) {
 	const text = C.addText({
 		id: `device-${k.raw}`,
@@ -478,8 +515,8 @@ const sheet = Effect.fnUntraced(function* (d: typeof Door.Service, w: World) {
 const enrolled = Effect.fnUntraced(function* (
 	d: typeof Door.Service,
 	w: World,
-	id = "passkey-device",
-	signer = w.root,
+	id: string = "passkey-device",
+	signer: World["root"] = w.root,
 ) {
 	const sk = yield* passkey(),
 		freshWindow = yield* key();
@@ -506,10 +543,406 @@ const enrolled = Effect.fnUntraced(function* (
 		drops: [],
 		saw: {...ADD_SAW, how: signer === w.sheet ? "recovery" : "device"},
 		sentAt: SENT,
-	};
+	} satisfies typeof C.Add.Type;
 	const text = C.addText(add),
 		armored = yield* signer.sign(text);
 	return {sk, freshWindow, binding, nonce, add, text, armored, proof};
+});
+
+describe("P10 review regressions", () => {
+	const signedHello = Effect.fnUntraced(function* (
+		d: typeof Door.Service,
+		k: World["window"],
+		tab: string,
+	) {
+		const client = yield* d.connect();
+		const nonce = yield* d.challenge(client);
+		const hello = {
+			versions: [1, 2],
+			has: [],
+			ping: "30s",
+			key: k.raw,
+			tab,
+			nonce,
+			platform: "browser",
+			os: "ios",
+			sentAt: SENT,
+			signed: yield* k.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`),
+		};
+		const trusted = {url: URL, tab, name: k.fingerprint};
+		return {client, hello, trusted};
+	});
+	const pendingHello = Effect.fnUntraced(function* (
+		d: typeof Door.Service,
+		k: World["window"],
+		tab: string,
+	) {
+		const {client, hello, trusted} = yield* signedHello(d, k, tab);
+		expect(yield* d.initialize(client, hello, trusted)).toMatchObject({
+			_tag: "refused",
+			why: "not_granted",
+		});
+		return {client, hello, trusted};
+	});
+
+	it.effect(
+		"review 3.1: a full spent-receipt store writes nothing and keeps live nonces spent",
+		() =>
+			Effect.gen(function* () {
+				const w = yield* world({spentCap: 2});
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					const earlier = yield* online(d, w, "earlier");
+					yield* d.disconnect(earlier.client);
+					yield* pendingHello(d, w.otherWindow, "fill-cap");
+					const receipts = () => w.sql.exec("SELECT nonce,until FROM door_spent ORDER BY nonce");
+					const full = receipts();
+					expect(full).toHaveLength(w.settings.spentCap);
+					expect(full).toContainEqual(expect.objectContaining({nonce: earlier.nonce}));
+					const overflow = yield* signedHello(d, w.agent, "overflow");
+					const before = w.sql.exec("SELECT total_changes() total")[0]?.total;
+					const result = yield* Effect.result(
+						d.initialize(overflow.client, overflow.hello, overflow.trusted),
+					);
+					expect.soft(result).toMatchObject({
+						_tag: "Failure",
+						failure: {_tag: "LedgerError", why: "storage"},
+					});
+					expect.soft(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(before);
+					expect.soft(receipts()).toEqual(full);
+					yield* TestClock.adjust(w.settings.waiting.ttl - 1);
+					const beforeReplay = w.sql.exec("SELECT total_changes() total")[0]?.total;
+					expect(
+						yield* d.initialize(earlier.client, earlier.hello, {
+							url: URL,
+							tab: earlier.hello.tab,
+							name: w.window.fingerprint,
+						}),
+					).toMatchObject({_tag: "refused", why: "bad_nonce"});
+					expect(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(beforeReplay);
+				}).pipe(w.provide);
+			}),
+	);
+
+	it.effect("review 3.3: two connections receive different door-minted ids", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const door: typeof d & {
+					readonly connect?: () => Effect.Effect<Parameters<typeof d.challenge>[0]>;
+				} = d;
+				assert(door.connect, "Door.connect must mint a connection id without client input");
+				const first = yield* door.connect();
+				const second = yield* door.connect();
+				expect(first).toBeTypeOf("string");
+				expect(first.length).toBeGreaterThan(0);
+				expect(second).toBeTypeOf("string");
+				expect(second.length).toBeGreaterThan(0);
+				expect(second).not.toBe(first);
+				yield* d.challenge(first);
+				yield* d.challenge(second);
+			}).pipe(w.provide);
+		}),
+	);
+
+	it.effect(
+		"review 2.2: a live unknown hello stays spent after a direct key grant before expiry",
+		() =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					const {client} = yield* online(d, w);
+					const saved = yield* pendingHello(d, w.otherWindow, "pending");
+					expect((yield* d.watch(client)).rows).toEqual([]);
+					yield* TestClock.adjust(w.settings.waiting.ttl - 1);
+					const text = C.grantText({
+						id: "approve-key-without-knock",
+						key: w.otherWindow.raw,
+						for: PERSON,
+						to: "project-a",
+						as: "window",
+						saw: SAW,
+						sentAt: SENT,
+					});
+					expect((yield* d.grant({text, armored: yield* w.root.sign(text)}))._tag).toBe("applied");
+					expect(w.notices).toEqual([]);
+					expect(
+						w.sql.exec("SELECT name FROM door_state WHERE name=?", `client/${saved.client}`),
+					).toHaveLength(1);
+					const before = yield* entries("door/hellos");
+					expect(yield* d.initialize(saved.client, saved.hello, saved.trusted)).toMatchObject({
+						_tag: "refused",
+					});
+					expect(yield* entries("door/hellos")).toEqual(before);
+					yield* online(d, w, "fresh-proof", w.otherWindow);
+				}).pipe(w.provide);
+			}),
+	);
+
+	it.effect(
+		"review 2.1: a verified waiting client can knock again after a stranger challenge flood",
+		() =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					const {client} = yield* online(d, w);
+					const pending = yield* pendingHello(d, w.otherWindow, "pending");
+					expect((yield* d.knock(pending.client, {label: "Pending"}))._tag).toBe("ok");
+					const before = (yield* d.watch(client)).rows;
+					expect(before).toHaveLength(1);
+					for (let i = 0; i <= w.settings.waiting.most; i++) yield* d.challenge(yield* d.connect());
+					expect((yield* d.knock(pending.client, {label: "Pending"}))._tag).toBe("ok");
+					expect((yield* d.watch(client)).rows).toEqual(before);
+				}).pipe(w.provide);
+			}),
+	);
+
+	for (const attack of ["challenge only", "bad signature"] as const)
+		it.effect(`review 2.1: a stranger flood with ${attack} makes no storage writes`, () =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					yield* online(d, w);
+					const before = w.sql.exec("SELECT total_changes() total")[0]?.total;
+					for (let i = 0; i <= w.settings.waiting.most; i++) {
+						const client = yield* d.connect();
+						const nonce = yield* d.challenge(client);
+						if (attack === "bad signature")
+							expect(
+								yield* d.initialize(
+									client,
+									{
+										versions: [1],
+										has: [],
+										ping: "30s",
+										key: w.otherWindow.raw,
+										tab: client,
+										nonce,
+										platform: "browser",
+										os: "ios",
+										sentAt: SENT,
+										signed: "not-an-sshsig",
+									},
+									{url: URL, tab: client, name: w.otherWindow.fingerprint},
+								),
+							).toMatchObject({_tag: "refused", why: "bad_signature"});
+					}
+					expect(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(before);
+				}).pipe(w.provide);
+			}),
+		);
+
+	for (const source of ["forged", "another door key"] as const)
+		it.effect(`p26: a nonce from ${source} is refused before any write`, () =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				const other = yield* world();
+				const client = yield* Door.use((d) => d.connect()).pipe(other.provide);
+				const tab = "unissued";
+				const foreign = yield* Door.use((d) => d.challenge(client)).pipe(other.provide);
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					yield* online(d, w);
+					const issued = yield* d.challenge(client);
+					const nonce =
+						source === "forged" ? `${issued[0] === "a" ? "b" : "a"}${issued.slice(1)}` : foreign;
+					expect(nonce).not.toBe(issued);
+					const signed = yield* w.window.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`);
+					expect(
+						yield* checkSshsig({
+							text: `fabrika-hello\n${URL}\n${tab}\n${nonce}`,
+							armored: signed,
+							space: SPACE,
+							signers: [w.window.line],
+						}),
+					).toEqual({signer: w.window.line});
+					const before = w.sql.exec("SELECT total_changes() total")[0]?.total;
+					expect(
+						yield* d.initialize(
+							client,
+							{
+								versions: [1, 2],
+								has: [],
+								ping: "30s",
+								key: w.window.raw,
+								tab,
+								nonce,
+								platform: "browser",
+								os: "ios",
+								sentAt: SENT,
+								signed,
+							},
+							{url: URL, tab, name: w.window.fingerprint},
+						),
+					).toMatchObject({_tag: "refused", why: "bad_nonce"});
+					expect(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(before);
+				}).pipe(w.provide);
+			}),
+		);
+
+	it.effect("review 2.4: a closed online connection retires its client and key rows", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const {client} = yield* online(d, w);
+				const closed = yield* online(d, w, "closed");
+				const rows = () =>
+					w.sql.exec(
+						"SELECT name FROM door_state WHERE name IN (?,?)",
+						`client/${closed.client}`,
+						`key/${closed.client}`,
+					);
+				expect(rows()).toHaveLength(2);
+				assert(
+					"disconnect" in d && typeof d.disconnect === "function",
+					"Door.disconnect must handle a closed connection",
+				);
+				yield* d.disconnect(closed.client);
+				expect(rows()).toEqual([]);
+				expect(
+					(yield* d.route(closed.client, "ledger.read", {stream: "empty", after: 0}))._tag,
+				).toBe("refused");
+				expect((yield* d.route(client, "ledger.read", {stream: "empty", after: 0}))._tag).toBe(
+					"ok",
+				);
+			}).pipe(w.provide);
+		}),
+	);
+
+	for (const [method, params, answer] of [
+		["ledger.read", {stream: "empty", after: 0}, "ok"],
+		["ledger.wait", {stream: "empty", after: 0}, "parked"],
+		["spans.read", {chain: Chain.cases.job.make({process: PROCESS}), after: 0}, "ok"],
+		["unknown.method", {}, "refused"],
+	] as const)
+		it.effect(
+			`review 2: an agent can repeat ${method} beyond inputCap without exhausting authority`,
+			() =>
+				Effect.gen(function* () {
+					const w = yield* world({inputCap: 2});
+					yield* Effect.gen(function* () {
+						const d = yield* Door;
+						const {client} = yield* online(d, w);
+						const reader = yield* grantWindow(d, w, "reader", "agent");
+						const attempts = yield* Effect.forEach(
+							Array.from({length: w.settings.inputCap + 2}, (_, i) => i),
+							() => Effect.exit(d.route(reader.client, method, params)),
+							{concurrency: 1},
+						);
+						for (const attempt of attempts)
+							expect(attempt).toMatchObject({_tag: "Success", value: {_tag: answer}});
+						expect(w.sql.exec("SELECT count(*) total FROM door_bindings")[0]?.total).toBe(0);
+						for (let i = 0; i < w.settings.inputCap; i++)
+							expect(
+								(yield* d.route(client, "process.send", request(`after-reads-${i}`)))._tag,
+							).toBe("ok");
+						expect((yield* d.route(reader.client, method, params))._tag).toBe(answer);
+					}).pipe(w.provide);
+				}),
+		);
+
+	for (const limit of ["cap", "expiry"] as const)
+		it.effect(`review 2: restarted connections and their keys obey the waiting ${limit}`, () =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					const {client} = yield* online(d, w);
+					const count = () =>
+						Number(
+							w.sql.exec(
+								"SELECT count(*) total FROM door_state WHERE name LIKE 'client/%' OR name LIKE 'key/%'",
+							)[0]?.total ?? 0,
+						);
+					const before = count();
+					const total = limit === "cap" ? w.settings.waiting.most * 2 + 1 : w.settings.waiting.most;
+					for (let i = 0; i < total; i++) {
+						const stranger = yield* online(d, w, `stranger-${i}`);
+						yield* d.challenge(stranger.client);
+					}
+					if (limit === "expiry") {
+						yield* TestClock.adjust(w.settings.waiting.ttl);
+						yield* d.watch(client);
+					}
+					expect(count() - before).toBeLessThanOrEqual(
+						limit === "cap" ? 2 * w.settings.waiting.most : 0,
+					);
+					expect((yield* d.route(client, "ledger.read", {stream: "empty", after: 0}))._tag).toBe(
+						"ok",
+					);
+				}).pipe(w.provide);
+			}),
+		);
+
+	it.effect("review 5: an added Ed25519 person cannot carry an unverified passkey block", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				const before = yield* entries("door/members");
+				const text = C.addText({
+					id: "ed25519-with-passkey-claims",
+					for: PERSON,
+					to: "project-a",
+					adds: C.Adds.cases.person.make({
+						key: w.otherRoot.line,
+						window: w.otherWindow.raw,
+						passkey: {
+							credential: "made-up-credential",
+							nonce: "never-issued",
+							proof: "",
+							rp: "attacker.test",
+							origin: "https://attacker.test",
+							be: true,
+							bs: true,
+						},
+					}),
+					drops: [],
+					saw: ADD_SAW,
+					sentAt: SENT,
+				});
+				expect(yield* d.grant({text, armored: yield* w.root.sign(text)})).toMatchObject({
+					_tag: "refused",
+					why: "bad_enrollment",
+				});
+				expect(yield* entries("door/members")).toEqual(before);
+			}).pipe(w.provide);
+		}),
+	);
+
+	it.effect("review 2.3: a saved hello carries its signed URL and verifies on its own", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				const rows = yield* entries("door/hellos");
+				expect(rows).toHaveLength(1);
+				const saved = yield* Schema.decodeUnknownEffect(
+					Schema.Struct({...Hello.fields, nonce: Schema.String, url: Schema.String}),
+				)(rows[0]!.body);
+				const blob = Buffer.concat([
+					field("ssh-ed25519"),
+					field(Buffer.from(saved.key, "base64url")),
+				]);
+				const line = `ssh-ed25519 ${blob.toString("base64")}`;
+				expect(
+					yield* checkSshsig({
+						text: `fabrika-hello\n${saved.url}\n${saved.tab}\n${saved.nonce}`,
+						armored: saved.signed,
+						space: SPACE,
+						signers: [line],
+					}),
+				).toEqual({signer: line});
+			}).pipe(w.provide);
+		}),
+	);
 });
 
 describe("P10 door admission and waiting", () => {
@@ -521,24 +954,25 @@ describe("P10 door admission and waiting", () => {
 				const pending = yield* Effect.forEach([0, 1, 2, 3], () => key(), {concurrency: 1});
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
-					yield* d.watch("w1");
+					const {client} = yield* online(d, w);
+					yield* d.watch(client);
 					const before = rawRows(w.db, "door/inputs");
 					const healthBefore = w.db.prepare("SELECT count(*) n FROM health").get()?.n;
 					for (const [index, k] of pending.entries()) {
 						yield* TestClock.setTime(1000 + index);
-						const client = `pending-${index}`,
-							tab = client,
-							nonce = yield* d.challenge(client);
+						const pendingClient = yield* d.connect(),
+							tab = `pending-${index}`,
+							nonce = yield* d.challenge(pendingClient);
 						const signed = yield* k.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`);
 						yield* d.initialize(
-							client,
+							pendingClient,
 							{
 								versions: [1],
 								has: [],
 								ping: "30s",
 								key: k.raw,
 								tab,
+								nonce,
 								platform: "browser",
 								os: "ios",
 								sentAt: SENT,
@@ -546,16 +980,16 @@ describe("P10 door admission and waiting", () => {
 							},
 							{url: URL, tab, name: k.fingerprint},
 						);
-						yield* d.knock(client, {label: "Pending"});
+						yield* d.knock(pendingClient, {label: "Pending"});
 					}
 					expect(rawRows(w.db, "door/inputs")).toEqual(before);
 					expect(w.db.prepare("SELECT count(*) n FROM health").get()?.n).toBe(healthBefore);
-					const rows = (yield* d.watch("w1")).rows;
+					const rows = (yield* d.watch(client)).rows;
 					expect(rows.map((r) => r.key)).toEqual(pending.slice(1).map((k) => k.raw));
 					const restarted = w.reopen(nodeSql(open(join(w.dir, "project.db"))));
 					yield* Effect.gen(function* () {
 						const next = yield* Door;
-						expect((yield* next.watch("w1")).rows).toEqual(rows);
+						expect((yield* next.watch(client)).rows).toEqual(rows);
 					}).pipe(Effect.provide(restarted));
 				}).pipe(w.provide);
 			}),
@@ -585,7 +1019,7 @@ describe("P10 door admission and waiting", () => {
 					});
 					expect(rows[0]?.by).toBe(w.window.fingerprint);
 					expect(
-						(yield* d.initialize("w1", h.hello, {
+						(yield* d.initialize(h.client, h.hello, {
 							url: URL,
 							tab: "tab-w1",
 							name: w.window.fingerprint,
@@ -603,7 +1037,8 @@ describe("P10 door admission and waiting", () => {
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
 					const k = kind === "unknown" ? stranger : w.window;
-					const nonce = yield* d.challenge("stranger");
+					const client = yield* d.connect();
+					const nonce = yield* d.challenge(client);
 					const signed = yield* k.sign(`fabrika-hello\n${URL}\ntab\n${nonce}`);
 					const hello = {
 						versions: kind === "no version" ? [99] : [1, 2],
@@ -611,17 +1046,29 @@ describe("P10 door admission and waiting", () => {
 						ping: "30s",
 						key: k.raw,
 						tab: "tab",
+						nonce,
 						platform: "browser",
 						os: "ios",
 						sentAt: SENT,
 						signed: kind === "bad signature" ? "broken" : signed,
 					};
-					const answer = yield* d.initialize("stranger", hello, {
+					const answer = yield* d.initialize(client, hello, {
 						url: URL,
 						tab: "tab",
 						name: kind === "wrong name" ? stranger.fingerprint : k.fingerprint,
 					});
-					expect(answer._tag).toBe("refused");
+					expect(answer).toMatchObject({
+						_tag: "refused",
+						why:
+							kind === "unknown"
+								? "not_granted"
+								: kind === "no version"
+									? "no_version"
+									: "bad_signature",
+					});
+					expect((yield* d.knock(client, {label: "Pending"}))._tag).toBe(
+						kind === "unknown" ? "ok" : "refused",
+					);
 					expect(rawRows(w.db, "door/members")).toEqual([]);
 					expect(rawRows(w.db, "door/hellos")).toEqual([]);
 					expect(rawRows(w.db, "door/inputs")).toEqual([]);
@@ -641,21 +1088,27 @@ describe("P10 door admission and waiting", () => {
 				const pending = yield* key();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					const rowsBefore = (yield* entries("door/members")).length;
-					yield* d.watch("w1");
-					for (const client of ["t1", "t2", "t2"]) {
-						const nonce = yield* d.challenge(client);
-						const tab = client;
+					yield* d.watch(client);
+					const t1 = yield* d.connect(),
+						t2 = yield* d.connect();
+					for (const [pendingClient, tab] of [
+						[t1, "t1"],
+						[t2, "t2"],
+						[t2, "t2"],
+					] as const) {
+						const nonce = yield* d.challenge(pendingClient);
 						const signed = yield* pending.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`);
 						yield* d.initialize(
-							client,
+							pendingClient,
 							{
 								versions: [1],
 								has: ["verify"],
 								ping: "30s",
 								key: pending.raw,
 								tab,
+								nonce,
 								platform: "browser",
 								os: "ios",
 								sentAt: SENT,
@@ -663,9 +1116,9 @@ describe("P10 door admission and waiting", () => {
 							},
 							{url: URL, tab, name: pending.fingerprint},
 						);
-						yield* d.knock(client, {label: "Pending"});
+						yield* d.knock(pendingClient, {label: "Pending"});
 					}
-					const waiting = yield* d.watch("w1");
+					const waiting = yield* d.watch(client);
 					expect(waiting.rows).toHaveLength(1);
 					expect(waiting.rows[0]).toMatchObject({tabs: 2, has: ["verify"]});
 					expect((yield* entries("door/members")).length).toBe(rowsBefore);
@@ -673,9 +1126,9 @@ describe("P10 door admission and waiting", () => {
 					const resumed = w.reopen(nodeSql(reopened));
 					yield* Effect.gen(function* () {
 						const next = yield* Door;
-						expect((yield* next.watch("w1")).rows).toEqual(waiting.rows);
+						expect((yield* next.watch(client)).rows).toEqual(waiting.rows);
 						yield* TestClock.adjust("10 minutes");
-						expect((yield* next.watch("w1")).rows).toEqual([]);
+						expect((yield* next.watch(client)).rows).toEqual([]);
 					}).pipe(Effect.provide(resumed));
 				}).pipe(w.provide);
 			}),
@@ -685,8 +1138,10 @@ describe("P10 door admission and waiting", () => {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
-				const nonce = yield* d.challenge("pending");
+				const {client} = yield* online(d, w);
+				const pending = yield* d.connect(),
+					pending2 = yield* d.connect();
+				const nonce = yield* d.challenge(pending);
 				const signed = yield* w.otherWindow.sign(`fabrika-hello\n${URL}\ntab\n${nonce}`);
 				const hello = {
 					versions: [1],
@@ -694,25 +1149,26 @@ describe("P10 door admission and waiting", () => {
 					ping: "30s",
 					key: w.otherWindow.raw,
 					tab: "tab",
+					nonce,
 					platform: "browser",
 					os: "ios",
 					sentAt: SENT,
 					signed,
 				};
-				yield* d.initialize("pending", hello, {
+				yield* d.initialize(pending, hello, {
 					url: URL,
 					tab: "tab",
 					name: w.otherWindow.fingerprint,
 				});
-				yield* d.knock("pending", {label: "Pending"});
-				const nonce2 = yield* d.challenge("pending2"),
+				yield* d.knock(pending, {label: "Pending"});
+				const nonce2 = yield* d.challenge(pending2),
 					signed2 = yield* w.otherWindow.sign(`fabrika-hello\n${URL}\ntab2\n${nonce2}`);
 				yield* d.initialize(
-					"pending2",
-					{...hello, tab: "tab2", signed: signed2},
+					pending2,
+					{...hello, tab: "tab2", nonce: nonce2, signed: signed2},
 					{url: URL, tab: "tab2", name: w.otherWindow.fingerprint},
 				);
-				yield* d.knock("pending2", {label: "Pending"});
+				yield* d.knock(pending2, {label: "Pending"});
 				const grant = {
 					id: "any-code",
 					key: w.otherWindow.raw,
@@ -721,22 +1177,22 @@ describe("P10 door admission and waiting", () => {
 					as: "window",
 					saw: {...SAW, code: "not-the-shown-code"},
 					sentAt: SENT,
-				};
+				} satisfies typeof C.Grant.Type;
 				const text = C.grantText(grant);
 				expect((yield* d.grant({text, armored: yield* w.root.sign(text)}))._tag).toBe("applied");
-				expect((yield* d.watch("w1")).rows).toEqual([]);
+				expect((yield* d.watch(client)).rows).toEqual([]);
 				expect(
 					w.notices.some(
-						(n) => n.client === "pending" && JSON.stringify(n.news).includes("client.granted"),
+						(n) => n.client === pending && JSON.stringify(n.news).includes("client.granted"),
 					),
 				).toBe(true);
 				expect(
 					w.notices.some(
-						(n) => n.client === "pending2" && JSON.stringify(n.news).includes("client.granted"),
+						(n) => n.client === pending2 && JSON.stringify(n.news).includes("client.granted"),
 					),
 				).toBe(true);
 				expect(
-					(yield* d.initialize("pending", hello, {
+					(yield* d.initialize(pending, hello, {
 						url: URL,
 						tab: "tab",
 						name: w.otherWindow.fingerprint,
@@ -844,7 +1300,7 @@ describe("P10 signed membership changes", () => {
 					as: "agent",
 					saw: SAW,
 					sentAt: SENT,
-				};
+				} satisfies typeof C.Grant.Type;
 				const text = C.grantText(grant),
 					armored = yield* w.root.sign(text),
 					first = yield* d.grant({text, armored});
@@ -872,12 +1328,21 @@ describe("P10 signed membership changes", () => {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
-				yield* grantWindow(d, w, "agent", "agent");
-				expect((yield* d.watch("agent"))._tag).toBe("refused");
-				expect((yield* d.deny("agent", {key: w.otherWindow.raw}))._tag).toBe("refused");
-				const answer = yield* d.deny("w1", {key: w.otherWindow.raw, saw: SAW});
-				expect(answer._tag).toBe("applied");
+				const {client} = yield* online(d, w);
+				const agent = yield* grantWindow(d, w, "agent", "agent");
+				expect((yield* d.watch(agent.client))._tag).toBe("refused");
+				expect(yield* d.deny(agent.client, {key: w.otherWindow.raw})).toMatchObject({
+					_tag: "refused",
+					why: "person_only",
+				});
+				for (const params of [
+					{key: w.otherWindow.raw},
+					{key: w.otherWindow.raw, saw: SAW, by: "forged"},
+				]) {
+					expect(yield* d.deny(client, params)).toMatchObject({_tag: "refused", why: "bad_input"});
+				}
+				const answer = yield* d.route(client, "door.deny", {key: w.otherWindow.raw, saw: SAW});
+				expect(answer).toMatchObject({_tag: "ok", result: {_tag: "applied"}});
 				const last = (yield* entries("door/members")).at(-1)!;
 				expect(last._tag).toBe("denied");
 				expect(last.body).toMatchObject({
@@ -968,7 +1433,7 @@ describe("P10 signed membership changes", () => {
 						as: "window",
 						saw: SAW,
 						sentAt: SENT,
-					};
+					} satisfies typeof C.Grant.Type;
 					const text = C.grantText(grant),
 						before = yield* entries("door/members");
 					expect(
@@ -999,7 +1464,7 @@ describe("P10 signed membership changes", () => {
 						as: "window",
 						saw: SAW,
 						sentAt: SENT,
-					};
+					} satisfies typeof C.Grant.Type;
 					const text = `${JSON.stringify({_tag: "granted", grant: value, future: {kept: true}}, null, 2)}\n`;
 					const armored = yield* w.root.sign(text);
 					const first = yield* d.grant({text, armored});
@@ -1050,17 +1515,20 @@ describe("P10 inputs, retries and signer", () => {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
+				const {client} = yield* online(d, w);
 				const before = (yield* stamped()).length;
-				expect((yield* d.route("w1", "ledger.read", {stream: "empty", after: 0}))._tag).toBe("ok");
-				expect((yield* d.route("w1", "ledger.wait", {stream: "empty", after: 0}))._tag).toBe(
+				expect((yield* d.route(client, "ledger.read", {stream: "empty", after: 0}))._tag).toBe(
+					"ok",
+				);
+				expect((yield* d.route(client, "ledger.wait", {stream: "empty", after: 0}))._tag).toBe(
 					"parked",
 				);
-				expect((yield* d.route("w1", "unknown.method", {}))._tag).toBe("refused");
+				expect((yield* d.route(client, "unknown.method", {}))._tag).toBe("refused");
 				const rows = (yield* stamped()).slice(before);
 				expect(rows).toHaveLength(3);
 				expect(new Set(rows.map((r) => r.id)).size).toBe(3);
 				for (const [index, method] of ["ledger.read", "ledger.wait", "unknown.method"].entries()) {
+					expect(rows[index]?._tag).toBe(index === 2 ? "refused" : "received");
 					expect(rows[index]?.by).toBe(w.window.fingerprint);
 					expect(JSON.stringify(rows[index]?.body)).toContain(method);
 				}
@@ -1074,9 +1542,9 @@ describe("P10 inputs, retries and signer", () => {
 				const w = yield* world();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					const message = {...comment(), personOnly: true};
-					yield* d.route("w1", "process.send", {
+					yield* d.route(client, "process.send", {
 						...request("comment-not-approval", message),
 						personOnly: true,
 					});
@@ -1113,13 +1581,13 @@ describe("P10 inputs, retries and signer", () => {
 				).pipe(Layer.provide(w.env));
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					lose = true;
-					yield* Effect.flip(d.route("w1", "process.send", request("lost-append")));
+					yield* Effect.flip(d.route(client, "process.send", request("lost-append")));
 					expect(w.deliveries).toEqual([]);
 					const before = rawRows(w.db, "door/inputs").filter((r) => r._tag === "received");
 					expect(before).toHaveLength(1);
-					yield* d.route("w1", "process.send", request("lost-append"));
+					yield* d.route(client, "process.send", request("lost-append"));
 					const after = rawRows(w.db, "door/inputs").filter((r) => r._tag === "received");
 					expect(after).toEqual(before);
 					expect(w.deliveries[0]!.envelope.id).toBe(before[0]?.id);
@@ -1137,9 +1605,9 @@ describe("P10 inputs, retries and signer", () => {
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
 				yield* online(d, w);
-				yield* grantWindow(d, w, "agent", "agent");
+				const agent = yield* grantWindow(d, w, "agent", "agent");
 				expect(
-					(yield* d.route("agent", "process.send", {
+					(yield* d.route(agent.client, "process.send", {
 						...request("forged-trace"),
 						traceId: "11111111111111111111111111111111",
 					}))._tag,
@@ -1153,9 +1621,9 @@ describe("P10 inputs, retries and signer", () => {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
+				const {client} = yield* online(d, w);
 				yield* TestClock.setTime(1_790_000_000_000);
-				expect((yield* d.route("w1", "process.send", request("l1")))._tag).toBe("ok");
+				expect((yield* d.route(client, "process.send", request("l1")))._tag).toBe("ok");
 				const e = w.deliveries[0]!.envelope;
 				expect(Object.keys(e).sort()).toEqual(["arrivedAt", "by", "id", "input"]);
 				expect(e.id).toMatch(/^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-1$/);
@@ -1174,14 +1642,18 @@ describe("P10 inputs, retries and signer", () => {
 						const w = yield* world();
 						yield* Effect.gen(function* () {
 							const d = yield* Door;
-							yield* online(d, w);
+							const {client} = yield* online(d, w);
 							const params =
 								where === "outer"
 									? {...request("spoof"), [field]: "forged-writer-marker"}
 									: request("spoof", {...comment(), [field]: "forged-writer-marker"});
-							expect((yield* d.route("w1", "process.send", params))._tag).toBe("refused");
+							expect(yield* d.route(client, "process.send", params)).toMatchObject({
+								_tag: "refused",
+								why: where === "outer" ? "reserved" : "bad_input",
+							});
 							expect(w.deliveries).toEqual([]);
 							const row = (yield* stamped()).at(-1)!;
+							expect(row._tag).toBe("refused");
 							expect(row.by).toBe(w.window.fingerprint);
 							expect(JSON.stringify(row)).not.toContain("forged-writer-marker");
 						}).pipe(w.provide);
@@ -1192,19 +1664,20 @@ describe("P10 inputs, retries and signer", () => {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
-				yield* grantWindow(d, w);
-				yield* d.route("w1", "process.send", request("stable-letter"));
-				yield* d.route("w1", "process.send", request("stable-letter"));
+				const {client} = yield* online(d, w);
+				const other = yield* grantWindow(d, w);
+				yield* d.route(client, "process.send", request("stable-letter"));
+				yield* d.route(client, "process.send", request("stable-letter"));
 				const deliveries = w.deliveries;
 				expect(deliveries.length).toBeGreaterThan(0);
 				expect(new Set(deliveries.map((x) => x.envelope.id)).size).toBe(1);
 				expect(new Set(deliveries.map((x) => x.trace.traceId)).size).toBe(1);
 				expect(yield* entries(`${PROCESS}/inbox`)).toHaveLength(1);
 				expect(
-					(yield* d.route("w1", "process.send", request("stable-letter", comment("changed"))))._tag,
+					(yield* d.route(client, "process.send", request("stable-letter", comment("changed"))))
+						._tag,
 				).toBe("refused");
-				expect((yield* d.route("w2", "process.send", request("stable-letter")))._tag).toBe(
+				expect((yield* d.route(other.client, "process.send", request("stable-letter")))._tag).toBe(
 					"refused",
 				);
 				expect(yield* entries(`${PROCESS}/inbox`)).toHaveLength(1);
@@ -1222,8 +1695,8 @@ describe("P10 inputs, retries and signer", () => {
 				for (let i = 0; i < 2; i++)
 					yield* Effect.gen(function* () {
 						const d = yield* Door;
-						yield* online(d, w);
-						yield* d.route("w1", "process.send", request(`letter-${i}`));
+						const {client} = yield* online(d, w);
+						yield* d.route(client, "process.send", request(`letter-${i}`));
 						ids.push(w.deliveries.at(-1)!.envelope.id);
 					}).pipe(w.provide);
 				expect(ids).toEqual([`in-${START}-1`, `in-${OTHER_PROCESS}-1`]);
@@ -1237,12 +1710,12 @@ describe("P10 inputs, retries and signer", () => {
 				const w = yield* world({inputCap: 1});
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
-					yield* d.route("w1", "process.send", request("first"));
+					const {client} = yield* online(d, w);
+					yield* d.route(client, "process.send", request("first"));
 					const parent = w.deliveries[0]!.envelope.id;
-					expect((yield* Effect.flip(d.route("w1", "process.send", request("second"))))._tag).toBe(
-						"LedgerError",
-					);
+					expect(
+						(yield* Effect.flip(d.route(client, "process.send", request("second"))))._tag,
+					).toBe("LedgerError");
 					expect(w.deliveries).toHaveLength(1);
 					expect((yield* writeId("saved-a", d.signer(parent, PROCESS, "saved"))).parent).toBe(
 						parent,
@@ -1257,7 +1730,7 @@ describe("P10 inputs, retries and signer", () => {
 				const w = yield* world();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					let first = true;
 					w.controls.deliver = ({envelope}) =>
 						Effect.gen(function* () {
@@ -1271,8 +1744,8 @@ describe("P10 inputs, retries and signer", () => {
 								return yield* new LedgerError({why: "unreachable"});
 							}
 						});
-					yield* Effect.flip(d.route("w1", "process.send", request("retry-delivery")));
-					yield* d.route("w1", "process.send", request("retry-delivery"));
+					yield* Effect.flip(d.route(client, "process.send", request("retry-delivery")));
+					yield* d.route(client, "process.send", request("retry-delivery"));
 					expect(w.deliveries).toHaveLength(2);
 					expect(w.deliveries[0]!.envelope).toEqual(w.deliveries[1]!.envelope);
 					expect(yield* entries(`${PROCESS}/inbox`)).toHaveLength(1);
@@ -1291,10 +1764,10 @@ describe("P10 inputs, retries and signer", () => {
 				const w = yield* world();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					const before = yield* entries("door/members");
 					expect(
-						(yield* d.route("w1", method, {
+						(yield* d.route(client, method, {
 							by: "forged",
 							parent: "borrowed",
 							stream: "door/members",
@@ -1307,6 +1780,52 @@ describe("P10 inputs, retries and signer", () => {
 });
 
 describe("P10 passkey roots and recovery", () => {
+	it.effect("question 19: a founding passkey approves without an added enrollment", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			const sk = yield* passkey();
+			w.founder.keys = [sk.line];
+			w.founder.by = sk.fingerprint;
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const text = C.grantText({
+					id: "founding-passkey-approval",
+					key: w.otherWindow.raw,
+					for: PERSON,
+					to: "project-a",
+					as: "window",
+					saw: SAW,
+					sentAt: SENT,
+				});
+				const before = yield* entries("door/members");
+				for (const over of [{flags: 25}, {origin: "https://other.test"}]) {
+					const proof = yield* sk.sign(text, over);
+					expect(yield* d.grant({text, armored: proof.armored})).toMatchObject({
+						_tag: "refused",
+						why: "bad_signature",
+					});
+					expect(yield* entries("door/members")).toEqual(before);
+				}
+				const proof = yield* sk.sign(text, {counter: 7});
+				expect((yield* d.grant({text, armored: proof.armored}))._tag).toBe("applied");
+				const rows = yield* entries("door/members");
+				expect(rows.map((row) => row._tag)).toEqual(["founded", "granted"]);
+				expect(rows.find((row) => row.id === "founding-passkey-approval")?.body).toMatchObject({
+					signed: {
+						signer: sk.line,
+						passkey: {
+							origin: "https://fabrika.test",
+							rp: "fabrika.test",
+							be: true,
+							bs: true,
+							counter: 7,
+						},
+					},
+				});
+				yield* online(d, w, "founding-approved", w.otherWindow);
+			}).pipe(w.provide);
+		}),
+	);
 	it.effect(
 		"question 19: an enrolled passkey root approves, removes and recovers a cleared window",
 		() =>
@@ -1335,7 +1854,7 @@ describe("P10 passkey roots and recovery", () => {
 							passkey: {be: false, bs: false, counter: 123},
 						}))._tag,
 					).toBe("applied");
-					yield* online(d, w, "cleared", fresh);
+					const cleared = yield* online(d, w, "cleared", fresh);
 					const revoke = C.revokeText({
 						id: "remove-fresh",
 						key: fresh.raw,
@@ -1346,9 +1865,9 @@ describe("P10 passkey roots and recovery", () => {
 					});
 					const removal = yield* p.sk.sign(revoke);
 					expect((yield* d.grant({text: revoke, armored: removal.armored}))._tag).toBe("applied");
-					expect((yield* d.route("cleared", "ledger.read", {stream: "x", after: 0}))._tag).toBe(
-						"refused",
-					);
+					expect(
+						(yield* d.route(cleared.client, "ledger.read", {stream: "x", after: 0}))._tag,
+					).toBe("refused");
 					const facts = yield* entries("door/members");
 					for (const id of ["cleared-storage", "remove-fresh"])
 						expect(facts.find((row) => row.id === id)?.body).toMatchObject({
@@ -1401,7 +1920,13 @@ describe("P10 passkey roots and recovery", () => {
 				}).pipe(w.provide);
 			}),
 		);
-	for (const missing of ["proof", "verification", "backup metadata"] as const)
+	for (const missing of [
+		"proof",
+		"verification",
+		"backup metadata",
+		"backup state",
+		"origin",
+	] as const)
 		it.effect(
 			`question 19: missing or inconsistent ${missing} cannot create an SK person root`,
 			() =>
@@ -1420,7 +1945,13 @@ describe("P10 passkey roots and recovery", () => {
 								: {
 										passkey: {
 											...p.add.adds.passkey!,
-											...(missing === "verification" ? {proof: noUv.armored} : {be: false}),
+											...(missing === "verification"
+												? {proof: noUv.armored}
+												: missing === "backup state"
+													? {bs: false}
+													: missing === "origin"
+														? {origin: "https://other.test"}
+														: {be: false}),
 										},
 									};
 						const text = C.addText({
@@ -1446,7 +1977,7 @@ describe("P10 passkey roots and recovery", () => {
 					const second = yield* enrolled(d, w, "recovered-b", w.sheet);
 					expect((yield* d.grant({text: first.text, armored: first.armored}))._tag).toBe("applied");
 					const result = yield* d.grant({text: second.text, armored: second.armored});
-					expect(result._tag).not.toBe("applied");
+					assert(result._tag !== "applied");
 					expect(result.why).toBe("used");
 					expect(yield* d.grant({text: first.text, armored: first.armored})).toMatchObject({
 						_tag: "applied",
@@ -1464,12 +1995,12 @@ describe("P10 revocation and append", () => {
 				const w = yield* world();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
-					yield* grantWindow(d, w, "agent", "agent");
+					const {client} = yield* online(d, w);
+					const agent = yield* grantWindow(d, w, "agent", "agent");
 					yield* device(d, w);
 					yield* sheet(d, w);
-					yield* online(d, w, "other", w.otherWindow);
-					yield* d.route("agent", "process.send", request("old-agent"));
+					const other = yield* online(d, w, "other", w.otherWindow);
+					yield* d.route(agent.client, "process.send", request("old-agent"));
 					const parent = w.deliveries.at(-1)!.envelope.id;
 					w.controls.notify = () => Effect.fail(new LedgerError({why: "unreachable"}));
 					const text = C.revokeText({
@@ -1483,14 +2014,16 @@ describe("P10 revocation and append", () => {
 					expect((yield* d.grant({text, armored: yield* w.otherRoot.sign(text)}))._tag).toBe(
 						"applied",
 					);
-					for (const client of ["w1", "agent"])
-						expect((yield* d.route(client, "ledger.read", {stream: "x", after: 0}))._tag).toBe(
+					for (const revoked of [client, agent.client])
+						expect((yield* d.route(revoked, "ledger.read", {stream: "x", after: 0}))._tag).toBe(
 							"refused",
 						);
 					expect(
 						(yield* Effect.flip(writeId("after-revoke", d.signer(parent, PROCESS, "saved"))))._tag,
 					).toBe("NotGranted");
-					expect((yield* d.route("other", "ledger.read", {stream: "x", after: 0}))._tag).toBe("ok");
+					expect((yield* d.route(other.client, "ledger.read", {stream: "x", after: 0}))._tag).toBe(
+						"ok",
+					);
 					const members = yield* C.ClientManager.use((m) => m.members);
 					expect(members.keys.get(w.otherRoot.line)?.live).toBe(true);
 					expect(members.keys.get(w.sheet.line)?.live).toBe(true);
@@ -1504,8 +2037,8 @@ describe("P10 revocation and append", () => {
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
 				yield* online(d, w);
-				yield* grantWindow(d, w);
-				yield* d.route("w2", "process.send", request("press"));
+				const {client} = yield* grantWindow(d, w);
+				yield* d.route(client, "process.send", request("press"));
 				const parent = w.deliveries.at(-1)!.envelope.id;
 				yield* writeId("entry-a", d.signer(parent, PROCESS, "saved"));
 				const text = C.revokeText({
@@ -1538,8 +2071,8 @@ describe("P10 revocation and append", () => {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
-				yield* d.route("w1", "process.send", request("press"));
+				const {client} = yield* online(d, w);
+				yield* d.route(client, "process.send", request("press"));
 				const parent = w.deliveries[0]!.envelope.id;
 				yield* writeId("entry-a", d.signer(parent, PROCESS, "saved"));
 				const append = {
@@ -1596,7 +2129,7 @@ describe("P10 span reader and recording", () => {
 			).pipe(Layer.provide(w.env));
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
+				const {client} = yield* online(d, w);
 				const r = yield* RecordManager;
 				const chain = Chain.cases.job.make({process: PROCESS});
 				const rows = Array.from({length: 257}, (_, n) => ({
@@ -1617,9 +2150,10 @@ describe("P10 span reader and recording", () => {
 					content: null,
 				}));
 				yield* r.write(chain, 0, rows);
-				const answer = yield* d.route("w1", "spans.read", {chain, after: 0});
-				expect(answer._tag).toBe("ok");
-				expect(answer.result.spans).toHaveLength(256);
+				const answer = yield* d.route(client, "spans.read", {chain, after: 0});
+				assert(answer._tag === "ok");
+				const page = yield* Schema.decodeUnknownEffect(SpanPage)(answer.result);
+				expect(page.spans).toHaveLength(256);
 				expect(poisoned).toBe(0);
 			}).pipe(
 				Effect.provide(
@@ -1647,14 +2181,14 @@ describe("P10 span reader and recording", () => {
 				).pipe(Layer.provide(w.env));
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					block = true;
 					expect(
-						(yield* Effect.flip(d.route("w1", "process.send", request("flush-failure"))))._tag,
+						(yield* Effect.flip(d.route(client, "process.send", request("flush-failure"))))._tag,
 					).toBe("SinkError");
 					expect(w.deliveries).toEqual([]);
 					block = false;
-					yield* d.route("w1", "process.send", request("flush-failure"));
+					yield* d.route(client, "process.send", request("flush-failure"));
 					expect(w.deliveries).toHaveLength(1);
 				}).pipe(
 					Effect.provide(Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, sink)))),
@@ -1668,7 +2202,7 @@ describe("P10 span reader and recording", () => {
 				const w = yield* world({recordCap: 64 * 1024});
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					const records = yield* RecordManager;
 					const chain = Chain.cases.spans.make({});
 					for (let n = 0; n < 270; n++) {
@@ -1693,21 +2227,22 @@ describe("P10 span reader and recording", () => {
 					}
 					const baseline = yield* Stream.runCollect(records.read(chain));
 					expect(w.partCount()).toBeGreaterThan(1);
-					const first = yield* d.route("w1", "spans.read", {chain, after: 0});
-					expect(first._tag).toBe("ok");
-					expect(first.result.spans).toHaveLength(256);
-					expect(first.result.next).toBe(256);
-					expect(first.result.spans.map((s: typeof SpanRow.Type) => s.spanId)).toEqual(
+					const first = yield* d.route(client, "spans.read", {chain, after: 0});
+					assert(first._tag === "ok");
+					const firstPage = yield* Schema.decodeUnknownEffect(SpanPage)(first.result);
+					expect(firstPage.spans).toHaveLength(256);
+					expect(firstPage.next).toBe(256);
+					expect(firstPage.spans.map((s) => s.spanId)).toEqual(
 						baseline.slice(0, 256).map((s) => s.spanId),
 					);
-					const second = yield* d.route("w1", "spans.read", {chain, after: 256});
-					expect(
-						second.result.spans
-							.slice(0, baseline.length - 256)
-							.map((s: typeof SpanRow.Type) => s.spanId),
-					).toEqual(baseline.slice(256).map((s) => s.spanId));
-					expect(second.result.spans.length).toBeLessThanOrEqual(256);
-					expect(second.result.next).toBe(256 + second.result.spans.length);
+					const second = yield* d.route(client, "spans.read", {chain, after: 256});
+					assert(second._tag === "ok");
+					const secondPage = yield* Schema.decodeUnknownEffect(SpanPage)(second.result);
+					expect(secondPage.spans.slice(0, baseline.length - 256).map((s) => s.spanId)).toEqual(
+						baseline.slice(256).map((s) => s.spanId),
+					);
+					expect(secondPage.spans.length).toBeLessThanOrEqual(256);
+					expect(secondPage.next).toBe(256 + secondPage.spans.length);
 				}).pipe(w.provide);
 			}),
 	);
@@ -1725,9 +2260,9 @@ describe("P10 span reader and recording", () => {
 			).pipe(Layer.provide(w.env));
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
+				const {client} = yield* online(d, w);
 				expect(
-					(yield* Effect.flip(d.route("w1", "spans.read", {chain: {_tag: "spans"}, after: 0})))
+					(yield* Effect.flip(d.route(client, "spans.read", {chain: {_tag: "spans"}, after: 0})))
 						._tag,
 				).toBe("SinkError");
 			}).pipe(
@@ -1742,8 +2277,8 @@ describe("P10 span reader and recording", () => {
 				const w = yield* world();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
-					yield* grantWindow(d, w, "agent", "agent");
+					const {client} = yield* online(d, w);
+					const agent = yield* grantWindow(d, w, "agent", "agent");
 					const chain = Chain.cases.spans.make({}),
 						r = yield* RecordManager;
 					const span = SpanRow.make({
@@ -1762,7 +2297,7 @@ describe("P10 span reader and recording", () => {
 					});
 					yield* r.write(chain, 0, [{span, content: "deletable content"}]);
 					expect(
-						(yield* d.route("agent", "spans.deleteContent", {
+						(yield* d.route(agent.client, "spans.deleteContent", {
 							chain,
 							spanId: span.spanId,
 							why: "privacy",
@@ -1770,7 +2305,7 @@ describe("P10 span reader and recording", () => {
 					).toBe("refused");
 					expect(Option.getOrThrow(yield* r.content(chain, span.spanId))._tag).toBe("kept");
 					expect(
-						(yield* d.route("w1", "spans.deleteContent", {
+						(yield* d.route(client, "spans.deleteContent", {
 							chain,
 							spanId: span.spanId,
 							why: "privacy",
@@ -1779,7 +2314,7 @@ describe("P10 span reader and recording", () => {
 					).toBe("refused");
 					expect(Option.getOrThrow(yield* r.content(chain, span.spanId))._tag).toBe("kept");
 					expect(
-						(yield* d.route("w1", "spans.deleteContent", {
+						(yield* d.route(client, "spans.deleteContent", {
 							chain,
 							spanId: span.spanId,
 							why: "privacy",
@@ -1803,7 +2338,7 @@ describe("P10 span reader and recording", () => {
 				const w = yield* world();
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					w.controls.deliver = ({envelope, trace}) =>
 						Effect.gen(function* () {
 							const rows = yield* stamped();
@@ -1820,7 +2355,7 @@ describe("P10 span reader and recording", () => {
 								),
 							).toBe(true);
 						});
-					yield* d.route("w1", "process.send", request("recorded"));
+					yield* d.route(client, "process.send", request("recorded"));
 					const rows = yield* stamped();
 					const received = rows.find((r) => r.id === w.deliveries[0]!.envelope.id)!;
 					expect(received.parent).toBeNull();
@@ -1857,10 +2392,10 @@ describe("P10 span reader and recording", () => {
 			).pipe(Layer.provide(w.env));
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
+				const {client} = yield* online(d, w);
 				block = true;
 				expect(
-					(yield* Effect.flip(d.route("w1", "process.send", request("unrecorded"))))._tag,
+					(yield* Effect.flip(d.route(client, "process.send", request("unrecorded"))))._tag,
 				).toBe("LedgerError");
 				expect(w.deliveries).toEqual([]);
 			}).pipe(
@@ -1873,9 +2408,9 @@ describe("P10 span reader and recording", () => {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
-				yield* online(d, w);
+				const {client} = yield* online(d, w);
 				w.controls.deliver = () => Effect.fail(new LedgerError({why: "unreachable"}));
-				yield* Effect.flip(d.route("w1", "process.send", request("failed-route")));
+				yield* Effect.flip(d.route(client, "process.send", request("failed-route")));
 				const spans = yield* RecordManager.use((r: typeof RecordManager.Service) =>
 					Stream.runCollect(r.read(Chain.cases.spans.make({}))),
 				);
@@ -1908,22 +2443,22 @@ describe("P10 span reader and recording", () => {
 				]);
 				yield* Effect.gen(function* () {
 					const d = yield* Door;
-					yield* online(d, w);
+					const {client} = yield* online(d, w);
 					for (const [index, marker] of [
 						"raw-key-marker",
 						"terminal-byte-marker",
 						"signature-marker",
 					].entries()) {
 						const result = yield* d.route(
-							"w1",
+							client,
 							"process.send",
 							request(`raw-${index}`, {_tag: "keys", bytes: marker}),
 						);
 						expect(result._tag).toBe("ok");
 					}
-					yield* d.route("w1", "process.send", {...request("spoof"), by: "forged-sender-marker"});
+					yield* d.route(client, "process.send", {...request("spoof"), by: "forged-sender-marker"});
 					const secret = yield* d.route(
-						"w1",
+						client,
 						"process.send",
 						request("secret", {_tag: "secret", value: {secret: "nested-redacted-marker"}}),
 					);
@@ -1932,6 +2467,9 @@ describe("P10 span reader and recording", () => {
 						Schema.is(Schema.toType(Input.cases.secret))(w.deliveries.at(-1)!.envelope.input),
 					).toBe(true);
 					yield* TestClock.adjust("16 days");
+					// P37 rolls up the old hour when a later span ends, before archiving it.
+					const later = yield* d.route(client, "ledger.read", {stream: "x", after: 0});
+					expect(later._tag).toBe("ok");
 					yield* SpanSink.use((s: typeof SpanSink.Service) => s.flush);
 					const inputRows = yield* stamped(),
 						spans = yield* RecordManager.use((r: typeof RecordManager.Service) =>
@@ -1971,5 +2509,550 @@ describe("P10 span reader and recording", () => {
 					),
 				);
 			}),
+	);
+});
+
+describe("P10 refusal records and checked writes", () => {
+	for (const interruption of ["replaced", "stranger flood"] as const)
+		for (const known of [true, false])
+			it.effect(
+				`p26: ${known ? "member" : "unknown key"} admission ${interruption === "replaced" ? "refuses a replaced challenge" : "survives a stranger flood"}`,
+				() =>
+					Effect.gen(function* () {
+						const w = yield* world();
+						let replace: Effect.Effect<void, LedgerError> | null = null;
+						const ledger = Layer.effect(
+							Ledger,
+							Effect.map(Ledger, (real) => ({
+								...real,
+								read: (stream: string, after: number) =>
+									Stream.unwrap(
+										Effect.sync(() => {
+											const before = stream === "door/members" ? replace : null;
+											if (before === null) return real.read(stream, after);
+											replace = null;
+											return Stream.concat(
+												Stream.fromEffect(before).pipe(Stream.drain),
+												real.read(stream, after),
+											);
+										}),
+									),
+							})),
+						).pipe(Layer.provide(w.env));
+						yield* Effect.gen(function* () {
+							const d = yield* Door;
+							yield* online(d, w);
+							const k = known ? w.window : w.otherWindow;
+							const client = yield* d.connect();
+							const nonce = yield* d.challenge(client);
+							const hello = {
+								versions: [1],
+								has: [],
+								ping: "30s",
+								key: k.raw,
+								tab: "replaced",
+								nonce,
+								platform: "browser",
+								os: "ios",
+								sentAt: SENT,
+								signed: yield* k.sign(`fabrika-hello\n${URL}\nreplaced\n${nonce}`),
+							};
+							replace =
+								interruption === "replaced"
+									? d.challenge(client).pipe(Effect.asVoid)
+									: Effect.forEach(
+											Array.from({length: w.settings.waiting.most + 1}, (_, i) => i),
+											() => d.connect().pipe(Effect.flatMap((id) => d.challenge(id))),
+											{concurrency: 1},
+										).pipe(Effect.asVoid);
+							const result = yield* d.initialize(client, hello, {
+								url: URL,
+								tab: "replaced",
+								name: k.fingerprint,
+							});
+							expect(result).toMatchObject(
+								interruption === "stranger flood" && known
+									? {_tag: "online"}
+									: {_tag: "refused", why: known ? "bad_nonce" : "not_granted"},
+							);
+							expect(replace).toBeNull();
+							const knock = yield* d.knock(client, {label: "Checked proof"});
+							expect(knock).toMatchObject(
+								interruption === "stranger flood" && !known
+									? {_tag: "ok"}
+									: {_tag: "refused", why: "not_waiting"},
+							);
+						}).pipe(
+							Effect.provide(
+								Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, ledger))),
+							),
+						);
+					}),
+			);
+	for (const interruption of ["replaced", "stranger flood"] as const)
+		for (const known of [true, false])
+			it.effect(
+				`p26: ${known ? "member" : "unknown key"} proof ${interruption === "replaced" ? "refuses a replaced challenge" : "survives a stranger flood"}`,
+				() =>
+					Effect.gen(function* () {
+						const w = yield* world();
+						yield* Effect.gen(function* () {
+							const d = yield* Door;
+							yield* online(d, w);
+							const k = known ? w.window : w.otherWindow;
+							const client = yield* d.connect();
+							const nonce = yield* d.challenge(client);
+							const hello = {
+								versions: [1],
+								has: [],
+								ping: "30s",
+								key: k.raw,
+								tab: "verifying",
+								nonce,
+								platform: "browser",
+								os: "ios",
+								sentAt: SENT,
+								signed: yield* k.sign(`fabrika-hello\n${URL}\nverifying\n${nonce}`),
+							};
+							const entered = Deferred.makeUnsafe<void>(),
+								release = Deferred.makeUnsafe<void>();
+							const verify = crypto.subtle.verify.bind(crypto.subtle);
+							const spy = vi.spyOn(crypto.subtle, "verify").mockImplementationOnce((...args) =>
+								Effect.runPromise(
+									Effect.gen(function* () {
+										yield* Deferred.succeed(entered, undefined);
+										yield* Deferred.await(release);
+										return yield* web(() => verify(...args));
+									}),
+								),
+							);
+							try {
+								const first = yield* Effect.forkChild(
+									d.initialize(client, hello, {
+										url: URL,
+										tab: "verifying",
+										name: k.fingerprint,
+									}),
+								);
+								yield* Deferred.await(entered);
+								if (interruption === "replaced") yield* d.challenge(client);
+								else
+									for (let i = 0; i <= w.settings.waiting.most; i++)
+										yield* d.challenge(yield* d.connect());
+								yield* Deferred.succeed(release, undefined);
+								const result = yield* Fiber.join(first);
+								expect(result).toMatchObject(
+									interruption === "stranger flood" && known
+										? {_tag: "online"}
+										: {
+												_tag: "refused",
+												why: interruption === "replaced" ? "bad_nonce" : "not_granted",
+											},
+								);
+								const knock = yield* d.knock(client, {label: "Checked proof"});
+								expect(knock).toMatchObject(
+									interruption === "stranger flood" && !known
+										? {_tag: "ok"}
+										: {_tag: "refused", why: "not_waiting"},
+								);
+							} finally {
+								spy.mockRestore();
+							}
+						}).pipe(w.provide);
+					}),
+			);
+	for (const retry of ["same receipt", "different armor", "replaced enrollment"] as const)
+		it.effect(`p42: a queued change rechecks ${retry} after the preceding write`, () =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				const entered = Deferred.makeUnsafe<void>(),
+					release = Deferred.makeUnsafe<void>(),
+					checked = Deferred.makeUnsafe<void>();
+				let block = false,
+					watching: string | null = null;
+				const sql = {
+					...w.sql,
+					exec: (...args: Parameters<typeof w.sql.exec>) => {
+						const answer = w.sql.exec(...args);
+						if (args[0] === "SELECT value FROM door_state WHERE name=?" && args[1] === watching)
+							queueMicrotask(() => Deferred.doneUnsafe(checked, Effect.void));
+						return answer;
+					},
+				};
+				const clients = Layer.effect(
+					C.ClientManager,
+					C.ClientManager.pipe(
+						Effect.map((real) => ({
+							...real,
+							write: (...args: Parameters<typeof real.write>) =>
+								Effect.gen(function* () {
+									if (block) {
+										block = false;
+										yield* Deferred.succeed(entered, undefined);
+										yield* Deferred.await(release);
+									}
+									return yield* real.write(...args);
+								}),
+						})),
+					),
+				).pipe(Layer.provide(w.env));
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					yield* online(d, w);
+					const p = retry === "replaced enrollment" ? yield* enrolled(d, w) : null;
+					const text = C.grantText({
+						id: "race-first",
+						key: w.otherWindow.raw,
+						for: PERSON,
+						to: "project-a",
+						as: "window",
+						saw: SAW,
+						sentAt: SENT,
+					});
+					const armored = yield* w.root.sign(text);
+					block = true;
+					const first = yield* Effect.forkChild(d.grant({text, armored}));
+					yield* Deferred.await(entered);
+					watching = p === null ? "change/race-first" : `enrollment/${p.add.id}`;
+					const second = yield* Effect.forkChild(
+						d.grant(
+							p === null
+								? {text, armored: retry === "different armor" ? `${armored}\n` : armored}
+								: {text: p.text, armored: p.armored},
+						),
+					);
+					yield* Deferred.await(checked);
+					if (p !== null) yield* d.enrollment(p.binding);
+					yield* Deferred.succeed(release, undefined);
+					const answer = yield* Fiber.join(first);
+					expect(answer._tag).toBe("applied");
+					const result = yield* Fiber.join(second);
+					if (retry === "same receipt") expect(result).toEqual(answer);
+					else
+						expect(result).toMatchObject({
+							_tag: "refused",
+							why: p === null ? "id_reused" : "bad_enrollment",
+						});
+				}).pipe(
+					Effect.provide(
+						Door.layer({...w.settings, sql}).pipe(Layer.provideMerge(Layer.merge(w.env, clients))),
+					),
+				);
+			}),
+		);
+	it.effect("p42: an unfinished membership write cannot change its signed bytes on retry", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			let fail = false;
+			const clients = Layer.effect(
+				C.ClientManager,
+				C.ClientManager.pipe(
+					Effect.map((real) => ({
+						...real,
+						write: (...args: Parameters<typeof real.write>) => {
+							if (fail) {
+								fail = false;
+								return Effect.fail(new LedgerError({why: "unreachable"}));
+							}
+							return real.write(...args);
+						},
+					})),
+				),
+			).pipe(Layer.provide(w.env));
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				const text = C.grantText({
+					id: "pending-change",
+					key: w.otherWindow.raw,
+					for: PERSON,
+					to: "project-a",
+					as: "window",
+					saw: SAW,
+					sentAt: SENT,
+				});
+				const armored = yield* w.root.sign(text);
+				fail = true;
+				expect(yield* Effect.flip(d.grant({text, armored}))).toMatchObject({
+					_tag: "LedgerError",
+					why: "unreachable",
+				});
+				expect(yield* d.grant({text, armored: `${armored}\n`})).toMatchObject({
+					_tag: "refused",
+					why: "id_reused",
+				});
+				expect((yield* d.grant({text, armored}))._tag).toBe("applied");
+			}).pipe(
+				Effect.provide(
+					Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, clients))),
+				),
+			);
+		}),
+	);
+	for (const [method, params] of [
+		["process.send", undefined],
+		["process.send", null],
+		["process.send", request("bad-message", 42)],
+		["ledger.read", {stream: "empty", after: -1}],
+		["ledger.wait", {stream: "empty"}],
+	] as const)
+		it.effect(`p67: malformed ${method} ${JSON.stringify(params)} is recorded as refused`, () =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					const {client} = yield* online(d, w);
+					expect(yield* d.route(client, method, params)).toMatchObject({
+						_tag: "refused",
+						why: "bad_input",
+					});
+					expect((yield* stamped()).at(-1)).toMatchObject({
+						_tag: "refused",
+						body: {why: "bad_input"},
+					});
+					expect(w.deliveries).toEqual([]);
+				}).pipe(w.provide);
+			}),
+		);
+	it.effect("p67: a person's approval keeps its safe body and can sign its answer", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const {client} = yield* online(d, w);
+				const input = Input.cases.approve.make({answer: "yes"});
+				yield* d.route(client, "process.send", request("approval", input));
+				expect((yield* stamped()).at(-1)?.body).toMatchObject({input});
+				const parent = w.deliveries[0]!.envelope.id;
+				const session = yield* writeId("answer", d.signer(parent, PROCESS, "answered"));
+				expect(session.by.key).toBe(w.window.fingerprint);
+				for (const [stream, fact] of [
+					["door/members", {_tag: "answered"}],
+					["tickets", null],
+					["tickets", {_tag: "answered", value: 1n}],
+				] as const) {
+					expect(
+						yield* Effect.flip(
+							d.append({id: "answer", parent, process: PROCESS, kind: "answered", stream, fact}),
+						),
+					).toMatchObject({_tag: "SigningRefused", why: "not_delivered"});
+				}
+				expect(
+					(yield* d.append({
+						id: "answer",
+						parent,
+						process: PROCESS,
+						kind: "answered",
+						stream: "tickets",
+						fact: {_tag: "answered"},
+					}))._tag,
+				).toBe("placed");
+			}).pipe(w.provide);
+		}),
+	);
+	it.effect("p27: an added person needs a supported public key before anything is written", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				const before = yield* entries("door/members");
+				const text = C.addText({
+					id: "invalid-root",
+					for: PERSON,
+					to: "project-a",
+					adds: C.Adds.cases.person.make({
+						key: "unsupported-public-key",
+						window: w.otherWindow.raw,
+					}),
+					drops: [],
+					saw: ADD_SAW,
+					sentAt: SENT,
+				});
+				expect(yield* d.grant({text, armored: yield* w.root.sign(text)})).toMatchObject({
+					_tag: "refused",
+					why: "bad_enrollment",
+				});
+				expect(yield* entries("door/members")).toEqual(before);
+			}).pipe(w.provide);
+		}),
+	);
+	it.effect("p42: the same signed text with different armor is not an exact resend", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				const text = C.grantText({
+					id: "armor-retry",
+					key: w.otherWindow.raw,
+					for: PERSON,
+					to: "project-a",
+					as: "window",
+					saw: SAW,
+					sentAt: SENT,
+				});
+				const armored = yield* w.root.sign(text);
+				expect((yield* d.grant({text, armored}))._tag).toBe("applied");
+				expect(yield* d.grant({text, armored: `${armored}\n`})).toMatchObject({
+					_tag: "refused",
+					why: "id_reused",
+				});
+			}).pipe(w.provide);
+		}),
+	);
+	it.effect("p43: removing one connection closes only that connection", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				const {client} = yield* grantWindow(d, w);
+				w.notices.length = 0;
+				const text = C.revokeText({
+					id: "close-window",
+					key: w.otherWindow.raw,
+					for: PERSON,
+					to: "project-a",
+					saw: TOOK,
+					sentAt: SENT,
+				});
+				expect((yield* d.grant({text, armored: yield* w.root.sign(text)}))._tag).toBe("applied");
+				expect(w.notices).toEqual([{client, news: {close: 4003}}]);
+			}).pipe(w.provide);
+		}),
+	);
+	it.effect(
+		"p26: concurrent hellos spend one nonce once and cannot leave an online tab waiting",
+		() =>
+			Effect.gen(function* () {
+				const w = yield* world();
+				yield* Effect.gen(function* () {
+					const d = yield* Door;
+					yield* online(d, w);
+					const client = yield* d.connect();
+					const nonce = yield* d.challenge(client);
+					const hello = {
+						versions: [1],
+						has: [],
+						ping: "30s",
+						key: w.window.raw,
+						tab: "race",
+						nonce,
+						platform: "browser",
+						os: "ios",
+						sentAt: SENT,
+						signed: yield* w.window.sign(`fabrika-hello\n${URL}\nrace\n${nonce}`),
+					};
+					const initialize = d.initialize(client, hello, {
+						url: URL,
+						tab: "race",
+						name: w.window.fingerprint,
+					});
+					const answers = yield* Effect.all([initialize, initialize], {concurrency: "unbounded"});
+					expect(answers.map((a) => a._tag).sort()).toEqual(["online", "refused"]);
+					expect(yield* d.knock(client, {label: "Already online"})).toMatchObject({
+						_tag: "refused",
+						why: "not_waiting",
+					});
+				}).pipe(w.provide);
+			}),
+	);
+	it.effect("p67: an agent needs a delivered parent for the same process and trace", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			const storage = failSessionRecord(w.sql);
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const {client} = yield* online(d, w);
+				const agent = yield* grantWindow(d, w, "agent", "agent");
+				yield* Effect.flip(d.route(client, "process.send", request("not-delivered")));
+				expect(storage.failed()).toBe(true);
+				const row = (yield* stamped()).at(-1)!;
+				expect(
+					yield* d.route(agent.client, "process.send", {
+						...request("stolen-trace"),
+						traceId: row.traceId,
+					}),
+				).toMatchObject({_tag: "refused", why: "bad_trace"});
+				yield* d.route(client, "process.send", request("delivered"));
+				const traceId = w.deliveries.at(-1)!.trace.traceId;
+				expect(
+					yield* d.route(agent.client, "process.send", {
+						...request("wrong-process"),
+						pid: OTHER_PROCESS,
+						traceId,
+					}),
+				).toMatchObject({_tag: "refused", why: "bad_trace"});
+				expect(
+					(yield* d.route(agent.client, "process.send", {...request("same-trace"), traceId}))._tag,
+				).toBe("ok");
+				expect(w.deliveries.at(-1)?.envelope.by.key).toBe(w.agent.fingerprint);
+			}).pipe(
+				Effect.provide(
+					Door.layer({...w.settings, sql: storage.sql}).pipe(Layer.provideMerge(w.env)),
+				),
+			);
+		}),
+	);
+	it.effect("p42: a malformed stored member fact reports bad_row", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				yield* online(d, w);
+				const ledger = yield* Ledger;
+				yield* ledger.append(
+					"door/members",
+					"bad-row",
+					lineFor(
+						{
+							by: w.root.sshFingerprint,
+							for: PERSON,
+							sentAt: SENT,
+							seen: 0,
+							parent: null,
+							traceId: TRACE,
+							build: "test-build",
+						},
+						{_tag: "invalid_member"},
+					),
+				);
+				const text = C.grantText({
+					id: "after-bad-row",
+					key: w.otherWindow.raw,
+					for: PERSON,
+					to: "project-a",
+					as: "window",
+					saw: SAW,
+					sentAt: SENT,
+				});
+				expect(
+					yield* Effect.flip(d.grant({text, armored: yield* w.root.sign(text)})),
+				).toMatchObject({_tag: "LedgerError", why: "bad_row"});
+			}).pipe(w.provide);
+		}),
+	);
+	it.effect("p67: a failed input digest reports storage and never delivers", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const {client} = yield* online(d, w);
+				const digest = crypto.subtle.digest.bind(crypto.subtle);
+				const spy = vi
+					.spyOn(crypto.subtle, "digest")
+					.mockImplementationOnce(digest)
+					.mockRejectedValueOnce(new Error("crypto unavailable"));
+				try {
+					expect(
+						yield* Effect.flip(d.route(client, "process.send", request("digest-failed"))),
+					).toMatchObject({_tag: "LedgerError", why: "storage"});
+					expect(w.deliveries).toEqual([]);
+				} finally {
+					spy.mockRestore();
+				}
+			}).pipe(w.provide);
+		}),
 	);
 });
