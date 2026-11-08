@@ -31,8 +31,9 @@ Laws d1 to d3 are red. This round: make them green in door.ts, answer.ts and hel
   agents, which can start Electron themselves. That stops the round trip of a Codex build the lead
   then has to run (owner, 2026-11-08). Still one agent per step.
 - **One driver per ticket, start to finish** (owner, 2026-11-08): a Claude agent carries one ticket
-  through every step, starting one agent per step, merges its own PR when the review is merge-ready,
-  CI is green and the leak grep is clean, and keeps its own status line and field rows. Only a new
+  through every step, starting one agent per step, writes no step's work itself, and merges its own PR
+  only after every step ran, each by its own agent (plan, tests, build, mutation, one review saying
+  merge-ready), with CI green and the leak grep clean. No step is ever skipped, and keeps its own status line and field rows. Only a new
   design call or an exam read comes back to the lead.
 - **Steps that need sockets go to Claude too**, like Electron: a Codex box cannot bind one, so a
   stage law run there goes half blind.
