@@ -865,6 +865,9 @@ importers:
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
+      fast-check:
+        specifier: 'catalog:'
+        version: 4.10.2
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
