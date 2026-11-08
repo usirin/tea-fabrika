@@ -57,10 +57,10 @@ const unreachable = (e: {readonly message: string}) => ({
 	_tag: "unreachable" as const,
 	why: e.message,
 });
-const refused = (stream: string) => ({
-	_tag: "refused" as const,
-	why: `the ledger refused ${stream}`,
-});
+/** The ledger said no, and why in the words a person reads. */
+const refusal = (why: string) => ({_tag: "refused" as const, why});
+/** The ledger said no to a write on one stream, named for whoever reads the log. */
+const refused = (stream: string) => refusal(`the ledger refused ${stream}`);
 
 /**
  * An agent's entry with its person's name, when this ledger's members name them. A ledger with no
@@ -215,7 +215,7 @@ const saveTicket = (cmd: ReturnType<typeof save>, write: TicketWrite) =>
 									: !ask.picks.includes(fact.pick)
 										? "The answer is not offered"
 										: null;
-				if (why !== null) return yield* Effect.fail({_tag: "refused" as const, why});
+				if (why !== null) return yield* Effect.fail(refusal(why));
 				const wrote = yield* ledger
 					.append(inbox, rows.at(-1)?.rev ?? 0, {
 						id: `answer/${fact.ask}`,
@@ -229,7 +229,7 @@ const saveTicket = (cmd: ReturnType<typeof save>, write: TicketWrite) =>
 					);
 				if (wrote) return {ticket};
 			}
-			return yield* Effect.fail(refused("The question kept changing. Try again."));
+			return yield* Effect.fail(refusal("The question kept changing. Try again."));
 		}
 		// A comment names the run live as it is written, read off the ticket's own facts.
 		const data =
@@ -255,7 +255,7 @@ export const prepareAsk = (ticket: number, ask: string, draft: unknown) =>
 			if (existing !== undefined && "format" in existing) return existing;
 			const old = factsOf(timeline, "asked").find((a) => a.ask === ask);
 			if (old === undefined || factsOf(timeline, "answered").some((a) => a.ask === ask))
-				return yield* Effect.fail(refused("The pending question is missing"));
+				return yield* Effect.fail(refusal("The pending question is missing"));
 			const sealed = yield* sealAsk({
 				...(draft as object),
 				ask: `${ask}/sealed`,
@@ -277,7 +277,7 @@ export const prepareAsk = (ticket: number, ask: string, draft: unknown) =>
 				);
 			if (!wrote) continue;
 		}
-		return yield* Effect.fail(refused("The pending question kept changing"));
+		return yield* Effect.fail(refusal("The pending question kept changing"));
 	});
 
 /** Recover only evidence the ledger actually kept. Unknown old change approvals stay unreadable. */
