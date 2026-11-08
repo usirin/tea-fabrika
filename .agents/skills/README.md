@@ -1,6 +1,7 @@
 # Step skills
 
 The hand-run pipeline's steps, as [Agent Skills](https://agentskills.io). Codex reads them here.
+They are today's hand-run tools, used for work in either version: `next/` or today's.
 Each `.claude/skills/<name>` is a link to the same folder, so Claude Code loads them too. One copy,
 both tools.
 

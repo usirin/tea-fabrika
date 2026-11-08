@@ -41,7 +41,9 @@ const DEFAULTS = {
   priority tier, beside Claude subagents, under the same caps as any code agent
   ([go easy on the machine](../../AGENTS.md#go-easy-on-the-machine)). Step agents (plan,
   exam, test writer, build, review, mutation fixes) run on Codex; the lead stays on Claude
-  opus, and Claude subagents only read and audit. The call, with the brief on stdin:
+  opus. *Replaced the same day, below: "Claude subagents only read and audit" no longer holds.
+  A Claude agent runs a step that needs Electron or a socket, and one Claude driver carries each
+  ticket.* The call, with the brief on stdin:
 
   ```sh
   codex exec -m gpt-6.1-sol -c model_reasoning_effort=xhigh -c service_tier=priority \
@@ -56,6 +58,20 @@ const DEFAULTS = {
   the bot, with a 1-hour token that may push only to `fabrikalfa/*`
   ([agents commit as a bot](./agents-commit-as-a-bot.md)). *Until 2026-11-08 the step left its
   changes in the working copy and the lead committed them as the bot.*
+
+- **Who runs which step, and one driver per ticket** (owner, 2026-11-08, later the same day).
+  It replaces "Claude subagents only read and audit" above.
+  - Codex runs step work: plan, tests, build, mutation and review, each its own agent.
+  - A Claude agent runs any step that needs Electron or a socket: laws or shots that start the
+    app, or that bind a socket. A Codex box can start neither, so a Codex step there comes back
+    half checked. Still one agent per step.
+  - One Claude driver per ticket carries it from start to finish. It starts one agent per step on
+    the runner above, and never writes a step's code or tests itself.
+  - The driver merges its own pull request only after plan, tests, build, mutation and one review
+    all ran, each by its own agent, with the review saying `merge-ready`, CI green and a clean leak
+    grep. No step is skipped. A new design call or an exam read goes back to the lead.
+  - The steps and their scripts are the skills in `.agents/skills/`, with
+    [the lead's skill](../../.agents/skills/lead/SKILL.md) for the driver.
 
 ## Why
 

@@ -20,7 +20,7 @@ if [ "$step" = build ]; then
 	staged=$(git diff --cached --name-only)
 	if python3 "$here/exam.py" exam-paths.json $staged; then :; else
 		echo "stepcommit: a build may not commit the exam paths above; answer send to tests" >&2
-		git reset -q -- $staged; exit 3
+		git restore --staged -- $staged; exit 3
 	fi
 fi
 git -c user.name="fabrikalfa[bot]" -c user.email="353269643+fabrikalfa[bot]@users.noreply.github.com" \

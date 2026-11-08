@@ -33,8 +33,12 @@ rows to read, and an older plan to copy the shape of. This skill holds the rest.
 - How others do it, with sources.
 - The shape: types in code blocks, Effect Schema, `_tag` unions, names from settled notes.
 - One value traced through, step by step.
-- A table of properties a test checks, each with its plant (the break that must make it fail). Ask
-  of each law: lint, type or test? A check on the shape of code is a lint rule.
+- A table of properties a test checks, each with its plant (the break that must make it fail) and
+  a `Generator` column: what its inputs are drawn from (fast-check, `@demlik/tea/pbt` or Effect's
+  `Arbitrary`). Every law is a property over generated inputs
+  ([five steps for every check](../../../docs/direction/five-steps-for-every-check.md)); a
+  hand-picked example is only a pinned case of a named past bug. Ask of each law: lint, type or
+  test? A check on the shape of code is a lint rule, and its generator cell says `lint` (or `type`).
 - **The files table, with lines, and an owner step for every file:** `tests`, `build` or `lead`.
   Every path that matches a glob in `exam-paths.json` belongs to `tests`. A builder is never handed
   one. If the build needs an exam file changed, that change goes in the tests commit.
@@ -62,8 +66,9 @@ Plain short sentences, American English, no em dashes.
 
 ## Scripts
 
-`scripts/plancheck.sh <plan.md>` lists every exam path a saved plan names. The lead runs it before
-approving.
+`scripts/plancheck.sh <plan.md>` lists every exam path a saved plan names, and fails a files table
+with no owner (or an exam path not owned by `tests`) and a laws table with no generator. The lead
+runs it before approving.
 
 ## Where code goes in `next/`
 

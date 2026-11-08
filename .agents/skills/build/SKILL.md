@@ -21,9 +21,16 @@ the rest.
    notes, and nothing they leave undecided.
 4. **If a test or an exam path must change, stop.** Name the file, the line and why, and answer
    `send` to tests. The step-commit script refuses a build commit that holds an exam path anyway.
-5. **Run** the narrow laws, then `pnpm exec vitest run --changed origin/main` once (only tests that
-   reach a changed file; a pull request's CI runs the same, the full suite runs on main after the
-   merge, and `next/`'s own job runs all its tests), then one typecheck at the end.
+5. **Run** one capped command, for the narrow check while you work and the final check:
+   `nice -n 15 pnpm exec vitest run --changed origin/main --maxWorkers=3` (only tests that reach a
+   changed file; a pull request's CI runs the same, the full suite runs on main after the merge,
+   and `next/`'s own job runs all its tests). In a Codex box, drop `nice` and use
+   `--maxWorkers=1`. Then one typecheck at the end.
+   - When the change touches a file in `forceRerunTriggers` (`vitest.config.ts`: vitest's own,
+     such as `package.json` and the vitest config, plus the lockfile, `pnpm-workspace.yaml`, a
+     `tsconfig`, the lint and format settings, `oxlint-plugins/`, `layer-rules.json`, `fixtures/`
+     and `.github/`), `--changed` selects the whole suite. Run it
+     still capped, once, at the end, and never while another agent's full run or typecheck runs.
 6. **Commit and sign** with the step-commit skill:
    `sh .agents/skills/step-commit/scripts/stepcommit.sh build <ticket> "T<ticket> build: <subject>" <paths...>`
 7. **Report** in at most 6 lines: which laws went green, any still red and why, any file you needed

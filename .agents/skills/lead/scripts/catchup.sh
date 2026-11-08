@@ -11,6 +11,7 @@
 #     push (a person's) is pushed with the person's gh login, notes by the bot
 #   - no auto-merge: it waits for check, e2e, next, commits and the tests on the pushed sha, then
 #     merges with --match-head-commit, so a newer head or a red check stops it (hand PRs only)
+#   - trusts commits only as one pull_request_target run of main's commits.yaml for this ticket
 set -eu
 . "$(dirname "$0")/env.sh"
 pr=$1; ticket=$2
@@ -55,5 +56,32 @@ if [ -n "$missing" ] || [ "$pending" != 0 ]; then
 	echo "pr $pr: checks not done at $tip after an hour (missing:${missing:- none}, pending: $pending)" >&2
 	exit 1
 fi
+# The commits check is never trusted by its name: any workflow can name a job `commits`
+# (docs/how-to/sign-a-step-commit.md). Read the runs of main's `.github/workflows/commits.yaml` on
+# this head instead: exactly one, from `pull_request_target` (so main's copy ran, not the PR's),
+# completed with success, and its own check run made by GitHub Actions.
+trusted=$(gh api "repos/$GH_REPO/actions/runs?head_sha=$tip&per_page=100" \
+	-q '.workflow_runs[]|select(.path==".github/workflows/commits.yaml")|"\(.id)\t\(.event)\t\(.status)\t\(.conclusion)\t\(.check_suite_id)"')
+target=$(printf '%s\n' "$trusted" | awk -F'\t' '$2=="pull_request_target"')
+if [ "$(printf '%s\n' "$target" | grep -c .)" != 1 ]; then
+	echo "pr $pr: want exactly one pull_request_target run of commits.yaml at $tip, got: ${trusted:-none}" >&2
+	exit 1
+fi
+run_id=$(printf '%s' "$target" | cut -f1); suite=$(printf '%s' "$target" | cut -f5)
+[ "$(printf '%s' "$target" | cut -f3,4)" = "completed	success" ] ||
+	{ echo "pr $pr: commits.yaml run $run_id at $tip is not a success" >&2; exit 1; }
+apps=$(gh api "repos/$GH_REPO/commits/$tip/check-runs?check_name=commits&per_page=100" \
+	-q ".check_runs[]|select(.check_suite.id==$suite)|.app.slug")
+[ "$apps" = github-actions ] ||
+	{ echo "pr $pr: run $run_id's commits check is not GitHub Actions' own (${apps:-none})" >&2; exit 1; }
+# The check's `check` step prints one count line: `commits: N commits, ticket T`, or "not in scope".
+said=$(gh run view "$run_id" -R "$GH_REPO" --log |
+	awk -F'\t' '$1=="commits" && $2=="check" {sub(/^[^ ]* /, "", $3); if ($3 ~ /^commits: ([0-9]+ commits|not in scope)/) print $3}')
+[ "$(printf '%s\n' "$said" | grep -c .)" = 1 ] ||
+	{ echo "pr $pr: run $run_id printed no single result: ${said:-nothing}" >&2; exit 1; }
+case $said in
+"commits: not in scope"* | "commits: "*" commits, ticket $ticket") ;;
+*) echo "pr $pr: run $run_id is not for ticket $ticket: $said" >&2; exit 1 ;;
+esac
 gh pr merge "$pr" -R "$GH_REPO" --squash --match-head-commit "$tip" >/dev/null
 echo "pr $pr: merged at $(git rev-parse --short "$tip"), signed for ticket $ticket"
