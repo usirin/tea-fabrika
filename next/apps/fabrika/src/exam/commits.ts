@@ -383,11 +383,26 @@ const verifier = Effect.gen(function* () {
 		}).pipe(Effect.mapError(() => new Failed({what: "could not write a temp file"})));
 });
 
+/** Git separates header lines only at LF and removes one space from continuation lines. */
+const headerField = (lines: ReadonlyArray<string>, name: string) => {
+	const values: string[] = [];
+	for (let i = 0; i < lines.length; i += 1) {
+		const line = lines[i] ?? "";
+		if (!line.startsWith(`${name} `)) continue;
+		const value = [line.slice(name.length + 1)];
+		while (lines[i + 1]?.startsWith(" ")) {
+			i += 1;
+			value.push((lines[i] ?? "").slice(1));
+		}
+		values.push(value.join("\n"));
+	}
+	return values.length === 1 ? values[0] : undefined;
+};
+
 /** p83b: git checks native SSH signatures using only the trusted file's person lines. */
 const personVerifier = Effect.gen(function* () {
 	const format = (yield* git(["rev-parse", "--show-object-format"])).trim();
 	const name = format === "sha256" ? "gpgsig-sha256" : "gpgsig";
-	const pattern = new RegExp(`^${name} (.*(?:\\n .*)*)`, "m");
 	return (keys: string) =>
 		Effect.gen(function* () {
 			const people = words(keys).filter((line) => line.startsWith("person:"));
@@ -399,17 +414,18 @@ const personVerifier = Effect.gen(function* () {
 				Effect.gen(function* () {
 					// gpg.format chooses how to sign; verification detects the signature's own format.
 					const raw = yield* gitMaybe(["cat-file", "commit", sha]);
-					const header = (raw ?? "").split("\n\n", 1)[0] ?? "";
-					const signature = pattern.exec(header)?.[1] ?? "";
-					if (signature.split("\n", 1)[0] !== "-----BEGIN SSH SIGNATURE-----") return false;
+					const headers = ((raw ?? "").split("\n\n", 1)[0] ?? "").split("\n");
+					const signature = headerField(headers, name);
+					const tree = headerField(headers, "tree");
+					if (
+						signature === undefined ||
+						tree === undefined ||
+						signature.split("\n", 1)[0] !== "-----BEGIN SSH SIGNATURE-----"
+					)
+						return false;
 					if (link !== undefined) {
-						const tree = /^tree ([0-9a-f]+)$/m.exec(header)?.[1];
 						const parent = yield* treeAt(`${sha}^1`);
-						if (
-							link.sig !== `${signature.replaceAll("\n ", "\n")}\n` ||
-							link.to !== tree ||
-							link.from !== parent?.trim()
-						)
+						if (link.sig !== `${signature}\n` || link.to !== tree || link.from !== parent?.trim())
 							return false;
 					}
 					const result = yield* run("git", [

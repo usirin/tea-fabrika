@@ -184,6 +184,29 @@ const verifyCommit = (r: Repo, sha: string, keys = PERSON_KEYS) => {
 	}).status;
 };
 
+/** Git accepts PGP here, so the exam must still prove that the real header is SSH. */
+const acceptPgp = (r: Repo) => {
+	const verifier = join(TOP, "pgp-verifier");
+	writeFileSync(
+		verifier,
+		[
+			"#!/bin/sh",
+			"cat >/dev/null",
+			"cat <<'STATUS'",
+			"[GNUPG:] NEWSIG",
+			"[GNUPG:] GOODSIG 1111111111111111 Fixture",
+			"[GNUPG:] VALIDSIG 1111111111111111111111111111111111111111 2026-11-08 1794168000 0 4 0 1 10 00 1111111111111111111111111111111111111111",
+			"[GNUPG:] TRUST_FULLY",
+			"STATUS",
+			// Keep the logged key check from hiding a header parsing bug after the squash.
+			`echo 'fixture key ${fingerprint("person")}' >&2`,
+			"",
+		].join("\n"),
+		{mode: 0o700},
+	);
+	r.git("config", "gpg.program", verifier);
+};
+
 const personLink = (r: Repo, sha: string, who = "person") => {
 	const signature = /^gpgsig(?:-sha256)? (.*(?:\n .*)*)/m.exec(r.git("cat-file", "commit", sha));
 	expect(signature).not.toBeNull();
@@ -293,23 +316,7 @@ describe("person git signatures (p83b)", () => {
 			fc.property(name, fc.boolean(), (name, before) => {
 				const r = new Repo(PERSON_KEYS);
 				const unsigned = r.change("a.ts");
-				const verifier = join(TOP, "pgp-verifier");
-				writeFileSync(
-					verifier,
-					[
-						"#!/bin/sh",
-						"cat >/dev/null",
-						"cat <<'STATUS'",
-						"[GNUPG:] NEWSIG",
-						"[GNUPG:] GOODSIG 1111111111111111 Fixture",
-						"[GNUPG:] VALIDSIG 1111111111111111111111111111111111111111 2026-11-08 1794168000 0 4 0 1 10 00 1111111111111111111111111111111111111111",
-						"[GNUPG:] TRUST_FULLY",
-						"STATUS",
-						"",
-					].join("\n"),
-					{mode: 0o700},
-				);
-				r.git("config", "gpg.program", verifier);
+				acceptPgp(r);
 				const decoys = ["xgpgsig", "gpgsig-sha256", `x-${name}`].map(
 					(header) => `${header} -----BEGIN SSH SIGNATURE-----`,
 				);
@@ -333,6 +340,66 @@ describe("person git signatures (p83b)", () => {
 			runs,
 		);
 	});
+
+	// Plant: use multiline RegExp anchors instead of Git's LF-only header lines.
+	it.each(["\r", "\u2028", "\u2029"])(
+		"G23: a fake SSH header after %j inside an extra header never counts before or after squash",
+		(lineBreak) => {
+			fc.assert(
+				fc.property(
+					name,
+					fc.stringMatching(/^[^\n\0]{0,24}$/),
+					fc.boolean(),
+					fc.constantFrom("sha1", "sha256"),
+					(name, value, before, format) => {
+						const r = new Repo(PERSON_KEYS, undefined, format);
+						const unsigned = r.change("a.ts");
+						acceptPgp(r);
+						const header = format === "sha256" ? "gpgsig-sha256" : "gpgsig";
+						const sig = "-----BEGIN SSH SIGNATURE-----\n";
+						const decoy = `x-${name} ${value}${lineBreak}${header} ${sig.trimEnd()}`;
+						const pgp = [
+							`${header} -----BEGIN PGP SIGNATURE-----`,
+							" fixture",
+							" -----END PGP SIGNATURE-----",
+						].join("\n");
+						const raw = r
+							.git("cat-file", "commit", unsigned)
+							.replace("\n\n", () => `\n${(before ? [decoy, pgp] : [pgp, decoy]).join("\n")}\n\n`);
+						const c = sh(
+							r.dir,
+							"git",
+							["hash-object", "-t", "commit", "-w", "--stdin"],
+							raw,
+						).trim();
+						expect(verifyCommit(r, c)).toBe(0);
+						r.git("update-ref", "refs/heads/pr", c);
+						const checked = r.check();
+						const note = {
+							_tag: "attested",
+							step: "person",
+							ticket: "251",
+							version: 1,
+							from: r.head(`${r.base}^{tree}`),
+							to: r.head(`${c}^{tree}`),
+							key: fingerprint("person"),
+							sig,
+						};
+						const {squash, rows} = squashed(r, [{note, commit: c}]);
+						log(r, rows);
+						const chained = r.run(["chain", "--squash", squash]);
+						expect({before: checked.answers, after: chained.answers}).toEqual({
+							before: [stuck("unsigned_commit", c)],
+							after: [stuck("broken_chain", squash)],
+						});
+						expect(checked.code).toBe(1);
+						expect(chained.code).toBe(1);
+					},
+				),
+				runs,
+			);
+		},
+	);
 
 	// Plant: erase the signer write failure reason. Generated contents vary the signed trees.
 	it("G21: person signers disk failure lost its reason (95c3610a)", () => {
