@@ -23,7 +23,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
-import {Effect, Exit, Layer, Option, Redacted, Stream} from "effect";
+import {Effect, Exit, Layer, Option, Redacted, Stream, Tracer} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
 import {Archive, type BucketCalls} from "./archive.ts";
@@ -263,6 +263,8 @@ describe("p96, a span that ends is never dropped", () => {
 				endTimeUnixNano: nanos(T + 7),
 				attributes: {"fab.process": P1, "fab.letter.id": "m-17"},
 				events: [],
+				links: [],
+				resource: {attributes: {"fab.object": OBJECT}},
 				ok: true,
 			});
 			expect(child).toMatchObject({
@@ -280,6 +282,92 @@ describe("p96, a span that ends is never dropped", () => {
 			]);
 		}).pipe(Effect.provide(world(sql)));
 	});
+
+	it.effect(
+		"every row names the object that ended it, as OTLP's resource, inside a process and outside one",
+		() => {
+			// Two objects end spans. The spans outside a process share one chain, `spans`, so the row
+			// is the only place that says which object ended each one (review must-fix, p96).
+			const one = home();
+			const two = home();
+			const ends = (sql: Sql, object: string, process: string) =>
+				Effect.gen(function* () {
+					yield* traced("runner.step", {"fab.process": process}, step("ledger.call"));
+					yield* step("door.envelope", {"fab.n": 1});
+					expect(yield* flush).toEqual({sent: 3});
+				}).pipe(Effect.provide(SpanSink.layer(sql, {object})));
+			return Effect.gen(function* () {
+				yield* ends(one.sql, OBJECT, P1);
+				yield* ends(two.sql, P2, P2);
+				const outside = yield* recorded(spans);
+				expect(outside).toHaveLength(2);
+				expect(
+					outside
+						.map((r) => r.resource)
+						.sort((x, y) =>
+							String(x.attributes["fab.object"]).localeCompare(String(y.attributes["fab.object"])),
+						),
+				).toEqual([{attributes: {"fab.object": OBJECT}}, {attributes: {"fab.object": P2}}]);
+				for (const row of outside)
+					expect(row.attributes, "the object is the resource's, not a span tag").not.toHaveProperty(
+						"fab.object",
+					);
+				for (const [process, object] of [
+					[P1, OBJECT],
+					[P2, P2],
+				] as const) {
+					const rows = yield* recorded(job(process));
+					expect(rows).toHaveLength(2);
+					for (const row of rows)
+						expect(row.resource).toEqual({attributes: {"fab.object": object}});
+				}
+			}).pipe(Effect.provide(Layer.merge(RecordManager.memory(BIG), Archive.memory)));
+		},
+	);
+
+	it.effect(
+		"a span's links stay on its row, in OTLP's link shape, their tags kept as a span's are",
+		() => {
+			const {sql, bytes} = home();
+			const first = Tracer.externalSpan({
+				traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+				spanId: "00f067aa0ba902b7",
+			});
+			const second = Tracer.externalSpan({
+				traceId: "5bf92f3577b34da6a3ce929d0e0e4737",
+				spanId: "10f067aa0ba902b8",
+			});
+			return Effect.gen(function* () {
+				yield* Effect.void.pipe(
+					Effect.withSpan("runner.step", {
+						attributes: {"fab.process": P1},
+						links: [
+							{
+								span: first,
+								attributes: {
+									"fab.link": "follows-from",
+									"fab.n": 2,
+									"fab.key": Redacted.make("sk-p96-link"),
+								},
+							},
+							{span: second, attributes: {}},
+						],
+					}),
+				);
+				yield* flush;
+				const [row] = yield* recorded(job(P1));
+				expect(row?.links).toEqual([
+					{
+						traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+						spanId: "00f067aa0ba902b7",
+						attributes: {"fab.link": "follows-from", "fab.n": 2, "fab.key": "<redacted>"},
+					},
+					{traceId: "5bf92f3577b34da6a3ce929d0e0e4737", spanId: "10f067aa0ba902b8", attributes: {}},
+				]);
+				expect(bytes("sk-p96-link"), "a link's secret is never written").toEqual([]);
+			}).pipe(Effect.provide(world(sql)));
+		},
+	);
 
 	it.effect(
 		"a RecordManager that fails leaves every unsent row; a lost answer's resend adds nothing",
