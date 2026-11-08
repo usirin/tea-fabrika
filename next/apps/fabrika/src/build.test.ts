@@ -1,10 +1,21 @@
 // P12, next/. Exercise the real build entry. A Compiler failure must preserve every last-good byte.
-import {mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import fs from "node:fs";
+import {
+	chmodSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import {syncBuiltinESMExports} from "node:module";
 import {tmpdir} from "node:os";
-import {join, relative} from "node:path";
+import {join, relative, resolve} from "node:path";
+import {pathToFileURL} from "node:url";
 import {Effect, Exit} from "effect";
 import {rolldown} from "rolldown";
-import {afterEach, describe, expect, it} from "vitest";
+import {afterEach, describe, expect, it, vi} from "vitest";
 
 const homes: Array<string> = [];
 afterEach(() => {
@@ -37,6 +48,37 @@ const plants = [
 ] as const;
 
 describe("P12 Rolldown build", () => {
+	it("default discovery publishes a view and custom modules export program", async () => {
+		const {build} = await import("./build.ts");
+		const parent = home(),
+			folder = join(parent, "owned"),
+			view = join(folder, "view.tsx"),
+			program = join(folder, "program.ts"),
+			out = join(folder, "dist");
+		mkdirSync(folder);
+		writeFileSync(view, 'export const label = "view-built";');
+		writeFileSync(
+			program,
+			`export {counter as program} from ${JSON.stringify(resolve(import.meta.dirname, "../../../programs/counter/src/program.ts"))};`,
+		);
+		const found = vi
+			.spyOn(fs, "globSync")
+			.mockReturnValue([relative(resolve(import.meta.dirname, "../../../.."), view)]);
+		syncBuiltinESMExports();
+		chmodSync(parent, 0o500);
+		try {
+			const built = await Effect.runPromise(build({out, programs: {counter: program}}));
+			expect(built.programs.counter?.hash).toMatch(/^[a-f0-9]{64}$/);
+			const views = readdirSync(out).filter((file) => file.endsWith(".js"));
+			expect(views).toHaveLength(1);
+			const compiled = await import(pathToFileURL(join(out, views[0]!)).href);
+			expect(compiled.label).toBe("view-built");
+		} finally {
+			chmodSync(parent, 0o700);
+			found.mockRestore();
+			syncBuiltinESMExports();
+		}
+	});
 	it("Compiler plant: calling compile without check publishes a skipped or impure rebuild", async () => {
 		const {build} = await import("./build.ts");
 		const h = home(),
