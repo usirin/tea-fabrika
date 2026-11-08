@@ -86,7 +86,7 @@ import {areaFact, areaFactOf, isAreaWrite, Summary, summaryOf, Write} from "./ti
  * Read the ledger after `after`: the facts found, the rows that did not read, the last row's
  * place, and the area facts found beside the tickets.
  */
-export const load = Cmd.define("load", {
+export const load = Cmd.make("load", {
 	input: Schema.Struct({after: Schema.Int}),
 	ok: Schema.Struct({
 		entries: Schema.Array(Entry),
@@ -102,21 +102,21 @@ export const load = Cmd.define("load", {
  * `next`: for a new ticket, the first number to try; a number taken already is passed over. The
  * answer names the ticket written, or the area for a write to the areas.
  */
-export const save = Cmd.define("save", {
+export const save = Cmd.make("save", {
 	input: Schema.Struct({id: Schema.String, write: Write, next: TicketNumber}),
 	ok: Schema.Union([Schema.Struct({ticket: TicketNumber}), Schema.Struct({area: AreaNumber})]),
 	err: ["unreachable", "refused"],
 });
 
 /** Read the connected repositories' top folders, for the onboarding step's suggestions. */
-export const folders = Cmd.define("folders", {
+export const folders = Cmd.make("folders", {
 	input: Schema.Struct({}),
 	ok: Schema.Struct({folders: Schema.Array(Schema.String)}),
 	err: ["unreachable"],
 });
 
 /** Read the open pull requests of every connected repository. */
-export const pullRequests = Cmd.define("pull_requests", {
+export const pullRequests = Cmd.make("pull_requests", {
 	input: Schema.Struct({}),
 	ok: Schema.Struct({pullRequests: Schema.Array(PullRequest)}),
 	err: ["unreachable"],
@@ -126,7 +126,7 @@ export const pullRequests = Cmd.define("pull_requests", {
  * Ask Jev whether a ticket just filed is a duplicate of one of `candidates`. `off`: no Jev was
  * given, so nothing was asked.
  */
-export const duplicates = Cmd.define("duplicates", {
+export const duplicates = Cmd.make("duplicates", {
 	input: Schema.Struct({
 		ticket: TicketNumber,
 		filed: Schema.Struct({title: Title, body: Body}),
@@ -140,7 +140,7 @@ export const duplicates = Cmd.define("duplicates", {
 });
 
 /** Put a ticket's duplicate hints on the ledger, as code's facts, not as the person's. */
-export const saveHints = Cmd.define("save_hints", {
+export const saveHints = Cmd.make("save_hints", {
 	input: Schema.Struct({ticket: TicketNumber, hints: Schema.Array(Scored)}),
 	ok: Schema.Struct({}),
 	err: ["unreachable", "refused"],

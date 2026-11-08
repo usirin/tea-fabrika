@@ -1,0 +1,169 @@
+diff --git a/dist/effect/index.d.ts b/dist/effect/index.d.ts
+index 4bba0f67345b933599966b2ddc5b0efe84d001a7..f9ffc464c357531acc52313e91731a715ce2a5c3 100644
+--- a/dist/effect/index.d.ts
++++ b/dist/effect/index.d.ts
+@@ -1,6 +1,6 @@
+ import { T as TellAnswer } from '../loop-DReKGV1X.js';
+ import { Scope, Effect, Schema } from 'effect';
+-import { C as Cmd$1, c as Sub, M as Machine, k as CmdInput, b as CmdDef, f as TaggedError } from '../core-DNDAEhO2.js';
++import { C as Cmd$1, c as Sub, M as Machine$1, k as CmdInput, b as CmdDef, f as TaggedError, A as AnyCmdDef, a as CmdOf, h as Settled } from '../core-DNDAEhO2.js';
+ import { E as EffectRun } from '../run-DBwvPwy7.js';
+ export { C as CellErrors, a as EffectBootingRun, b as EffectBootingRuntime, c as EffectInterpret, d as EffectInterpretCell, e as EffectRunOptions, f as EffectRunner, g as EffectRuntime, h as EffectSubscribe, I as InterpretServices, S as Stopped, i as StoreFailed, j as SubFailed, k as SubscribeServices, r as run } from '../run-DBwvPwy7.js';
+ import '@standard-schema/spec';
+@@ -57,7 +57,7 @@ declare const tell: <S, M extends {
+     type: string;
+ }, C extends Cmd$1, U extends Sub, Ctx, E extends {
+     type: string;
+-} = never, Err = never>(machine: Machine<S, M, C, U, Ctx>, runtime: EffectRun<S, M, E, Err>, msg: NoInfer<M>) => Effect.Effect<TellAnswer>;
++} = never, Err = never>(machine: Machine$1<S, M, C, U, Ctx>, runtime: EffectRun<S, M, E, Err>, msg: NoInfer<M>) => Effect.Effect<TellAnswer>;
+ /**
+  * The host's own steps of a {@link spawn}. The host owns the table of
+  * children, their ids and the parent's Msg names; `spawn` owns the order the
+@@ -150,8 +150,8 @@ declare const spawn: <A, E = never, R = never>(parentScope: Scope.Scope, steps:
+ declare const stop: (scope: Scope.Closeable) => Effect.Effect<void>;
+ 
+ /**
+- * The Effect entry's `Cmd`: the core `Cmd` with a `define` that takes plain
+- * Effect schemas (#631). It is a function over the core `Cmd.define`, so the
++ * The Effect entry's `Cmd`: the core `Cmd` with a `make` that takes plain
++ * Effect schemas (#631), in place of the core's `define`. It is a function over the core `Cmd.define`, so the
+  * def it returns is the same `CmdDef` a hand-wrapped call builds.
+  */
+ 
+@@ -166,7 +166,7 @@ declare const stop: (scope: Scope.Closeable) => Effect.Effect<void>;
+  * `Schema.toType(schema)` to keep the checks and drop the translation.
+  */
+ type CheckingSchema<T> = Schema.Codec<T, NoInfer<T>>;
+-declare function define<const Name extends string, Input extends CmdInput, Ok, const Tags extends readonly string[]>(name: Name, spec: {
++declare function makeCmd<const Name extends string, Input extends CmdInput, Ok, const Tags extends readonly string[]>(name: Name, spec: {
+     readonly input: CheckingSchema<Input>;
+     readonly ok: CheckingSchema<Ok>;
+     readonly err: Tags;
+@@ -178,8 +178,8 @@ declare function define<const Name extends string, Input extends CmdInput, Ok, c
+ type Cmd<T extends string = string, Ok = unknown, E = unknown> = Cmd$1<T, Ok, E>;
+ /**
+  * The helpers for building Cmds on the Effect engine. `Cmd.none`, `Cmd.batch`,
+- * `Cmd.when` and `Cmd.whenDefined` are the core's; `Cmd.define` is this
+- * entry's own.
++ * `Cmd.when` and `Cmd.whenDefined` are the core's; `Cmd.make` is this
++ * entry's own. The core's `Cmd.define` is not here.
+  */
+ declare const Cmd: {
+     /**
+@@ -187,7 +187,7 @@ declare const Cmd: {
+      * the core `Cmd.define` returns, with each schema passed through
+      * `Schema.toStandardSchemaV1` for you:
+      *
+-     *   const fetchUser = Cmd.define("fetch_user", {
++     *   const fetchUser = Cmd.make("fetch_user", {
+      *     input: Schema.Struct({ id: Schema.String }),
+      *     ok: Schema.Struct({ name: Schema.String }),
+      *     err: ["not_found"],
+@@ -209,11 +209,47 @@ declare const Cmd: {
+      * It takes Effect schemas only. A zod schema, or any other Standard Schema,
+      * goes to `Cmd.define` from `@demlik/tea`.
+      */
+-    readonly define: typeof define;
++    readonly make: typeof makeCmd;
+     readonly none: readonly never[];
+     readonly batch: <const C extends Cmd$1>(...arrs: readonly (readonly C[])[]) => readonly C[];
+     readonly when: <const C extends Cmd$1>(cond: boolean, cmd: C) => readonly C[];
+     readonly whenDefined: <T, const C extends Cmd$1>(value: T | undefined, build: (value: T) => C) => readonly C[];
+ };
+ 
+-export { type CheckingSchema, Cmd, EffectRun, type SpawnSteps, TellAnswer, spawn, stop, tell };
++/**
++ * Define a machine whose model and Msgs are Effect schemas. Only each schema's
++ * type side is read, so a brand or a transformation is fine; nothing decodes.
++ * It returns what `defineMachine` returns for `types: { model, msg }`:
++ *
++ *   const picker = Machine.make({
++ *     model: Schema.Struct({ selected: Schema.NullOr(Schema.String) }),
++ *     msg: Schema.Struct({ type: Schema.Literal("pick"), id: Schema.String }),
++ *     cmds: [],
++ *     init: (loaded) => [loaded ?? { selected: null }, []],
++ *     update: { pick: (s, m) => [{ ...s, selected: m.id }, []] },
++ *   });
++ *
++ * `cmds` is required; a machine with none says `cmds: []`. `types` names only
++ * the Subs and the context, the slots no value implies.
++ */
++declare function makeMachine<S, M extends {
++    type: string;
++}, D extends AnyCmdDef, U extends Sub = Sub<never>, Ctx = unknown>(spec: NoInfer<Omit<Machine$1<S, M | Settled<D>, CmdOf<D>, U, Ctx>, "cmds">> & {
++    readonly model: Schema.Schema<S>;
++    readonly msg: Schema.Schema<M>;
++    readonly cmds: readonly D[];
++    readonly types?: {
++        readonly sub?: U;
++        readonly ctx?: Ctx;
++    };
++}): Machine$1<S, M | Settled<D>, CmdOf<D>, U, Ctx>;
++/** A machine, as the core types it. */
++type Machine<S, M extends {
++    type: string;
++}, C extends Cmd$1, U extends Sub, Ctx> = Machine$1<S, M, C, U, Ctx>;
++/** Build a machine from Effect schemas. */
++declare const Machine: {
++    readonly make: typeof makeMachine;
++};
++
++export { type CheckingSchema, Cmd, EffectRun, Machine, type SpawnSteps, TellAnswer, spawn, stop, tell };
+diff --git a/dist/effect/index.js b/dist/effect/index.js
+index beca9e4fa627acf4b8e8fd6e2183ff8d598bf4f8..3a61f3537dcc9e7f830fcc0cddbd814a9e7e64ed 100644
+--- a/dist/effect/index.js
++++ b/dist/effect/index.js
+@@ -2,24 +2,25 @@ export { Stopped, StoreFailed, SubFailed, run, spawn, stop, tell } from '../chun
+ import '../chunk-EWTO43FQ.js';
+ import '../chunk-HCGCTRHR.js';
+ import '../chunk-YCRAOKAA.js';
+-import { Cmd } from '../chunk-VT524QXB.js';
++import { Cmd, defineMachine } from '../chunk-VT524QXB.js';
+ import { Schema } from 'effect';
+ 
+-function define(name, spec) {
++function makeCmd(name, spec) {
+   return Cmd.define(name, {
+     input: Schema.toStandardSchemaV1(spec.input),
+     ok: Schema.toStandardSchemaV1(spec.ok),
+     err: spec.err
+   });
+ }
++var { define: _coreDefine, ...coreCmd } = Cmd;
+ var Cmd2 = {
+-  ...Cmd,
++  ...coreCmd,
+   /**
+    * Declare a typed Cmd constructor from plain Effect schemas. It returns what
+    * the core `Cmd.define` returns, with each schema passed through
+    * `Schema.toStandardSchemaV1` for you:
+    *
+-   *   const fetchUser = Cmd.define("fetch_user", {
++   *   const fetchUser = Cmd.make("fetch_user", {
+    *     input: Schema.Struct({ id: Schema.String }),
+    *     ok: Schema.Struct({ name: Schema.String }),
+    *     err: ["not_found"],
+@@ -41,9 +42,21 @@ var Cmd2 = {
+    * It takes Effect schemas only. A zod schema, or any other Standard Schema,
+    * goes to `Cmd.define` from `@demlik/tea`.
+    */
+-  define
++  make: makeCmd
++};
++function makeMachine(spec) {
++  const { model: _model, msg: _msg, types: _types, ...machine } = spec;
++  return defineMachine(machine);
++}
++var Machine = {
++  /**
++   * Define a machine whose model and Msgs are Effect schemas. Only each
++   * schema's type side is read; nothing decodes. It returns what
++   * `defineMachine` returns, without `model`, `msg` and `types`.
++   */
++  make: makeMachine
+ };
+ 
+-export { Cmd2 as Cmd };
++export { Cmd2 as Cmd, Machine };
+ //# sourceMappingURL=index.js.map
+ //# sourceMappingURL=index.js.map

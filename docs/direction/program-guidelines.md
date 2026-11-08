@@ -109,11 +109,11 @@ const Opened = Schema.TaggedUnion({
 	opened: {tile: TileId, how: Schema.Literals(["new", "focused", "moved"]),
 		beside: Schema.optional(TileId), folded: Schema.optional(Schema.Array(TileId))},
 });
-const open = Cmd.define("open", {
+const open = Cmd.make("open", {
 	input: Open, ok: Opened,
 	err: ["no_press", "no_program", "bad_location", "bad_line", "not_allowed"],
 });
-const leave = Cmd.define("leave", {input: Schema.Struct({from: TileId}), ok: Schema.Null, err: []});
+const leave = Cmd.make("leave", {input: Schema.Struct({from: TileId}), ok: Schema.Null, err: []});
 
 // What the desk keeps, per workspace, to answer "back": the tiles in the order they were focused.
 type Workspace = {layout: Split; focus: TileId; recent: ReadonlyArray<TileId>}; // newest first

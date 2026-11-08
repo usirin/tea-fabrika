@@ -105,6 +105,10 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
 - **In today's version:** fixes that daily use or CI needs, the UX work the owner
   picks, and ideas the owner wants to try out there first. What a tryout teaches
   goes into `next/` as a lesson, rethought and not copied. Nothing else is added.
+- **A product foundation decided in a walk starts on today's app at once,** no exception (owner,
+  2026-11-07): tokens, focus, lint rules for the design, accessibility checks. Its build plan is
+  written the same day and comes to the owner as one yes, so the decision is pressed in the real
+  app while `next/` is built.
 - **When `next/` takes a job over,** the pull request that switches to it deletes
   the old part. Its tests or laws are ported first.
 - `next/` is the lab until a person opens it for real work, so it may be rough. "No
@@ -181,9 +185,9 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   question). They are in `packages/pipeline/src/primitives.ts`; the combos
   built from them are in `packages/pipeline/src/combos.ts`.
 - **New schemas are Effect Schema.** Define a Cmd through one of the primitives, or
-  through tea's own `Cmd.define` from `@demlik/tea/effect`. Both take Effect
+  through tea's own `Cmd.make` from `@demlik/tea/effect`. Both take Effect
   schemas as they are, so nobody writes `Schema.toStandardSchemaV1`. zod stays
-  only in code not yet moved. A primitive takes either; tea's Effect `Cmd.define`
+  only in code not yet moved. A primitive takes either; tea's Effect `Cmd.make`
   takes Effect schemas only. See
   [`docs/direction/data-first-markdown-is-a-view.md`](./docs/direction/data-first-markdown-is-a-view.md).
 
@@ -196,7 +200,7 @@ deleted when `next/` takes over. In `next/`, `@kampus/fabrika` is the app and
   type Ticket = typeof Ticket.Type;
   const Id = Schema.Struct({ id: Schema.String });
   const readTicket = gather("ticket_read", { input: Id, ok: Ticket, err: ["unknown"] });
-  const closeTicket = Cmd.define("ticket_close", { input: Id, ok: Schema.Null, err: ["unknown"] });
+  const closeTicket = Cmd.make("ticket_close", { input: Id, ok: Schema.Null, err: ["unknown"] });
   ```
 - **Names.** Use the industry's word for a thing
   ([use the industry's names](./docs/direction/use-the-industrys-names.md)), checked on

@@ -1,6 +1,9 @@
 # Design language: the levels, the page shape, and where each note sits
 
-**Proposed 2026-11-04.** A draft read on main at `ffa7056f`. Nothing is settled, and nothing ran.
+**Proposed 2026-11-04; most calls decided 2026-11-07.** A draft read on main at `ffa7056f`. The
+owner walked it on 2026-11-07 and decided calls 1, 2 and 4 to 9, below, with the changes written
+beside each; call 3 waits on the tier names. Each decided call
+starts on today's app at once (AGENTS.md).
 Both versions: the design package is the one thing today's app and `next/` share
 ([one design package](./fabrika-design-package.md)). The owner's calls are at the end, each yes or
 no.
@@ -254,17 +257,30 @@ At 600 lines an agent hour ([agent hours](./agent-hours.md)):
 
 ## The owner's calls
 
-1. Take these levels, with programs off the map as product? Lean yes, 75%.
-2. Split each design note into a decision note and a guideline page made from doc tags? Lean yes,
-   70%. Doubt: two places to look.
-3. Two token tiers, plus a component tier for the tile and popovers only? Lean yes, 80%.
+1. Take these levels, with programs off the map as product? **Decided yes, 2026-11-07.**
+2. Split each design note into a decision note and a guideline page made from doc tags?
+   **Decided yes, 2026-11-07.** The page is read in Claude Design's fabrika design system, and a
+   sync writes it from the package, never by hand (owner, the same day).
+3. Two token tiers, plus a component tier for the tile and popovers only? **Open.** The shape
+   stands; the tiers' names, and whether a shared tier for parts with states is needed now, wait on
+   a reference the owner asked for. Code never reaches a primitive: the rule is lint
+   (`no-restricted-imports`, one exception for the token build), not a test (owner, 2026-11-07).
 4. Restate "accent only for your turn" as "a token means one thing", with focus one slate token?
-   Lean yes, 65% on the words, 80% on slate focus. A colored primary button is a separate pick.
-5. Tokens from one data file with their pairs and bars? Lean yes, 70%. Doubt: the pipe blocks.
-6. Rename in one pull request, with no deprecation step? Lean yes, 80%. Doubt: the names, 60% each.
-7. A principles page? Lean yes, 75%: [principles](./principles.md) is its first draft.
-8. An ARIA snapshot per story and per layout, advising first? Lean yes, 75%.
-9. A `CODEOWNERS` line for `tokens.ts`? Lean yes, 60%. Doubt: it slows token changes.
+   **Decided yes, 2026-11-07.** `turn` splits into `turn-fill` and `turn-text`; focus is one gray
+   token everywhere. A colored primary button stays a separate pick.
+5. Tokens from one data source with their pairs and bars? **Decided yes, 2026-11-07, as TOML:** one
+   file per semantic color token (for example `tokens/color/text-muted.toml`), each naming its step
+   per look, what it sits on and the contrast it must reach. An Effect Schema checks every file at
+   build, and the build writes `tokens.css`, the Manti mapping and the design system's data. TOML,
+   as themes already are ([themes](./themes.md)); not YAML, and not one TypeScript file. Doubt kept:
+   the six pipe blocks.
+6. Rename in one pull request, with no deprecation step? **Decided yes, 2026-11-07,** once the
+   names are settled.
+7. A principles page? **Decided yes, 2026-11-07:** [principles](./principles.md) is its first draft.
+8. An ARIA snapshot per story and per layout, advising first? **Decided yes, 2026-11-07,** on
+   today's app first.
+9. A `CODEOWNERS` line for the token files? **Decided yes, 2026-11-07, for now:** the owner reviews
+   every change to the token files and their laws while the system settles, and may relax it after.
 
 ## What it cannot tell us
 

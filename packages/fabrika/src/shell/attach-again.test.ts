@@ -21,7 +21,7 @@ import {type Printed, type Ready, tsh} from "./shell.ts";
 // the job waits on an answer that never comes. A call that was answered before the stop is not
 // sent again either way.
 
-const call = Cmd.define("toy_call", {
+const call = Cmd.make("toy_call", {
 	input: Schema.Struct({}),
 	ok: Schema.String,
 	err: ["unknown"],

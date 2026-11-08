@@ -20,10 +20,10 @@ import {Jev} from "./services.ts";
 // (refine, gate, ask, remember, spawn) are in src/combos.ts.
 //
 // A move takes its schemas as Effect Schema and hands them to tea's own
-// `Cmd.define` from `@demlik/tea/effect`, so no caller writes
+// `Cmd.make` from `@demlik/tea/effect`, so no caller writes
 // `Schema.toStandardSchemaV1`. Until the repo is off zod a move takes a zod
 // schema too, one slot at a time: a Cmd may have a zod `input` beside an
-// Effect `ok`. tea's Effect `Cmd.define` takes Effect schemas only, so such a
+// Effect `ok`. tea's Effect `Cmd.make` takes Effect schemas only, so such a
 // spec goes to `zodCmd` (src/schema.ts) instead. Each place that does is
 // marked "zod", and removing zod is deleting those.
 
@@ -41,7 +41,7 @@ export const gather = <
 	spec: Spec<I, O, T>,
 ) =>
 	// zod: the second branch.
-	isEffectSpec(spec) ? Cmd.define(name, spec) : zodCmd(name, spec);
+	isEffectSpec(spec) ? Cmd.make(name, spec) : zodCmd(name, spec);
 
 /** What an Act carries besides its own input: the name of the one write it stands for. */
 export type Intended<I> = I & {readonly intent: string};
@@ -107,7 +107,7 @@ export function act(
 	if (!Schema.isSchema(input)) return actZod(name, {input, ok, err});
 	const withIntent = {input: intended(input), ok, err};
 	// zod: the second branch, for an Effect `input` beside a zod `ok`.
-	return isEffectSpec(withIntent) ? Cmd.define(name, withIntent) : zodCmd(name, withIntent);
+	return isEffectSpec(withIntent) ? Cmd.make(name, withIntent) : zodCmd(name, withIntent);
 }
 
 /**
@@ -190,7 +190,7 @@ export function createJudge<const N extends string, const C extends string>(conf
 	const questions = jevQuestions({
 		answer: {type: "choice", instructions: config.instructions, criteria: config.choices},
 	});
-	const ask = Cmd.define(`${config.name}_judge`, {
+	const ask = Cmd.make(`${config.name}_judge`, {
 		/** The texts Jev reads, by name; the instructions refer to them in backticks. */
 		input: Schema.Struct({key: Schema.String, texts: Schema.Record(Schema.String, Schema.String)}),
 		/** `Finite`, as zod's `number` was: a confidence is never NaN or infinite. */
@@ -239,7 +239,7 @@ export function createYesNoJudge<const N extends string>(config: {
 	const questions = jevQuestions({
 		answer: {type: "noul", instructions: config.instructions, criteria: config.criteria},
 	});
-	const ask = Cmd.define(`${config.name}_judge`, {
+	const ask = Cmd.make(`${config.name}_judge`, {
 		/** The texts Jev reads, by name; the instructions refer to them in backticks. */
 		input: Schema.Struct({key: Schema.String, texts: Schema.Record(Schema.String, Schema.String)}),
 		ok: Schema.Struct({yes: Schema.Finite}),
