@@ -4,6 +4,7 @@ export {ClientManager, Founder, Written} from "./client-manager.ts";
 export {GatewayManager} from "./gateway-manager.ts";
 export {type From, type History, type Letter, Mailbox} from "./mailbox.ts";
 export {Checkpoint, Placed, ProcessStore, RuntimeRecord} from "./process-store.ts";
+export {RecoveryStore} from "./recovery-store.ts";
 export {
 	Add,
 	AddSaw,

@@ -122,6 +122,7 @@ export type Step = typeof Step.Type;
  *  state or a saved letter does not fold. Never a refusal: nothing was decided. */
 export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown", {
 	why: Schema.Literals(["load", "no_program", "step", "saved_state", "saved_letter"]),
+	cause: Schema.optionalKey(Schema.Unknown),
 }) {}
 
 export type Stepper = {
@@ -146,7 +147,10 @@ const decodeWake = Schema.decodeUnknownResult(Schema.NullOr(Schema.Number));
 
 /** Runs `f`, turning any throw into ProgramDown with `why`. */
 const guard = <A>(why: ProgramDown["why"], f: () => A): A => {
-	const done = Result.try({try: f, catch: () => new ProgramDown({why})});
+	const done = Result.try({
+		try: f,
+		catch: (cause) => (cause instanceof ProgramDown ? cause : new ProgramDown({why, cause})),
+	});
 	if (Result.isFailure(done)) throw done.failure;
 	return done.success;
 };
