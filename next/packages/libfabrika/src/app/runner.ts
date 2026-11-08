@@ -21,11 +21,13 @@ import {
 import {
 	Activity,
 	Dead,
+	Down,
 	type Appended,
 	brainOnly,
 	type From,
 	type History,
 	inRunnerSpace,
+	inSignalSpace,
 	LedgerError,
 	Mailbox,
 	MemberFact,
@@ -115,6 +117,7 @@ const decodeWriteCmd = Schema.decodeUnknownResult(WriteCmd);
 const decodeIncoming = Schema.decodeUnknownEffect(Incoming);
 const Typed = Schema.Struct({type: Schema.String});
 const decodeTyped = Schema.decodeUnknownOption(Typed);
+const decodeDown = Schema.decodeUnknownOption(Down);
 const inputDigest = Effect.fnUntraced(function* (input: Incoming) {
 	return yield* sha256(
 		new TextEncoder().encode(
@@ -358,7 +361,8 @@ export class ProgramRunner extends Context.Service<
 								const next = yield* rootStore.select(action.process);
 								if (s.restart === undefined && (yield* next.load) === null) {
 									const checkpoint = yield* previous.load;
-									if (checkpoint !== null) yield* next.save({...checkpoint, turn: null, cmds: []});
+									// The turn is the acceptance marker until its letter is indexed.
+									if (checkpoint !== null) yield* next.save({...checkpoint, cmds: []});
 								}
 								yield* fault("after_checkpoint");
 								const status = yield* p.status(s.name);
@@ -736,20 +740,36 @@ export class ProgramRunner extends Context.Service<
 					const placed: Array<Placed> = [];
 					const saved = yield* store.load;
 					const prepared = Schema.decodeUnknownOption(Turn)(saved?.turn);
+					// The raw inbox keeps canceled signals; the manager filters them for this process.
+					const signals = new Set(
+						Option.isSome(manager) && letters.some((letter) => inSignalSpace(letter.id))
+							? (yield* Stream.runCollect(manager.value.receive(process.id, state.after))).map(
+									(letter) => letter.id,
+								)
+							: [],
+					);
 					let mine = Option.none<History>();
 					for (const letter of letters) {
+						const signal = inSignalSpace(letter.id);
+						if (signal && !signals.has(letter.id)) continue;
+						const down = signal ? decodeDown(letter.m) : Option.none();
+						if (
+							signal &&
+							!Option.exists(down, (m) => m.to._tag === "process" && m.to.process === process.id)
+						)
+							continue;
 						const own = inRunnerSpace(letter.id) && letter.id.startsWith(`${process.id}/`);
 						const accepted =
+							signal ||
 							own ||
 							letter.id === options.mine ||
 							Option.exists(prepared, (turn) => turn.id === letter.id) ||
 							(yield* store.placed(letter.id)) !== null ||
 							// An earlier life of this name accepted it; an old life's own mail never drives this one.
 							(!inRunnerSpace(letter.id) && (yield* store.placedByAny(letter.id)) !== null);
+						const input = Option.isSome(down) ? {...down.value, type: down.value._tag} : letter.m;
 						const m =
-							accepted && !own && letter.parent !== null
-								? stamp(letter.m, letter.parent)
-								: letter.m;
+							accepted && !own && letter.parent !== null ? stamp(input, letter.parent) : input;
 						const folded = accepted
 							? yield* stepped(
 									yield* step("saved_letter", letter.id, () => state.loaded.stepper.fold(model, m)),
