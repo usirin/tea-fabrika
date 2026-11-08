@@ -62,11 +62,16 @@ export const storage = () => {
 	};
 	let db = open();
 	let backend = nodeSql(db);
-	const fault: {after: number | null; writes: number} = {after: null, writes: 0};
+	const fault: {after: number | null; writes: number; error: Error | null} = {
+		after: null,
+		writes: 0,
+		error: null,
+	};
 	const sql: Sql = {
 		exec: (query, ...params) => {
 			if (/^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+entries\b/i.test(query)) {
-				if (fault.after === 0) throw new Error("SQLITE_FULL planted after an earlier write");
+				if (fault.after === 0)
+					throw fault.error ?? new Error("SQLITE_FULL planted after an earlier write");
 				if (fault.after !== null) fault.after--;
 				const answer = backend.exec(query, ...params);
 				fault.writes++;
@@ -82,7 +87,7 @@ export const storage = () => {
 		return db
 			.prepare("SELECT * FROM entries ORDER BY rev")
 			.all()
-			.map(Schema.decodeUnknownSync(Row));
+			.map((row) => Schema.decodeUnknownSync(Row)(row));
 	};
 	return {
 		sql,
