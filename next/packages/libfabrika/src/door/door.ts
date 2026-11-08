@@ -56,6 +56,7 @@ import {
 	Answer,
 	Attached,
 	checkHello,
+	type Checked,
 	Hello,
 	KeyLine,
 	PasskeyLine,
@@ -603,7 +604,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 		const signers = [...members.keys.keys()].filter(
 			(key) => Schema.is(KeyLine)(key) || Schema.is(PasskeyLine)(key),
 		);
-		let verified: typeof import("@kampus/libfabrika/transport").Checked.Type | null = null;
+		let verified: typeof Checked.Type | null = null;
 		for (const signer of signers) {
 			const rp = passkeyRp(signer);
 			const checked = yield* silent(

@@ -1,7 +1,7 @@
 import {type Brand, Context, Effect, Layer, Schema} from "effect";
 
 export type IdValue<P extends string> = Brand.Branded<string, P>;
-export interface IdSchema<P extends string> extends Schema.Codec<IdValue<P>, string> {}
+export type IdSchema<P extends string> = Schema.Codec<IdValue<P>, string>;
 
 export class IdError extends Schema.TaggedError<IdError>()("IdError", {
 	why: Schema.Literals(["prefix", "clock", "entropy", "exhausted"]),
@@ -66,32 +66,32 @@ export class IdGenerator extends Context.Service<
 		Effect.sync(() => {
 			let at = -1,
 				random = 0n;
+			const allocate = (prefix: string, now: number) => {
+				if (!Number.isSafeInteger(now) || now < 0 || now > maxTime)
+					throw new IdError({why: "clock"});
+				let nextAt = at,
+					nextRandom = random;
+				if (now > at) {
+					nextAt = now;
+					nextRandom =
+						crypto.getRandomValues(new Uint8Array(10)).reduce((n, b) => (n << 8n) | BigInt(b), 0n) &
+						maxRandom;
+				} else if (random === maxRandom) {
+					if (at === maxTime) throw new IdError({why: "exhausted"});
+					nextAt++;
+					nextRandom = 0n;
+				} else nextRandom++;
+				at = nextAt;
+				random = nextRandom;
+				return `${prefix}_${encode(at, random)}`;
+			};
 			return {
 				next: Effect.fn("id.next")(function* <P extends string>(schema: IdSchema<P>) {
 					const prefix = prefixes.get(schema);
 					if (prefix === undefined) return yield* new IdError({why: "prefix"});
 					const now = yield* Effect.clockWith((clock) => clock.currentTimeMillis);
 					const text = yield* Effect.try({
-						try: () => {
-							if (!Number.isSafeInteger(now) || now < 0 || now > maxTime)
-								throw new IdError({why: "clock"});
-							let nextAt = at,
-								nextRandom = random;
-							if (now > at) {
-								nextAt = now;
-								nextRandom =
-									crypto
-										.getRandomValues(new Uint8Array(10))
-										.reduce((n, b) => (n << 8n) | BigInt(b), 0n) & maxRandom;
-							} else if (random === maxRandom) {
-								if (at === maxTime) throw new IdError({why: "exhausted"});
-								nextAt++;
-								nextRandom = 0n;
-							} else nextRandom++;
-							at = nextAt;
-							random = nextRandom;
-							return `${prefix}_${encode(at, random)}`;
-						},
+						try: () => allocate(prefix, now),
 						catch: (error) => (error instanceof IdError ? error : new IdError({why: "entropy"})),
 					});
 					return yield* Schema.decodeUnknownEffect(schema)(text).pipe(

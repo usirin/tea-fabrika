@@ -1291,7 +1291,9 @@ export class ProgramRunner extends Context.Service<
 									...supervision.receipts,
 									{
 										letter: input.id,
-										input: Schema.decodeUnknownSync(Schema.Json)(input),
+										input: yield* Schema.decodeUnknownEffect(Schema.Json)(input).pipe(
+											Effect.mapError(() => new LedgerError({why: "bad_row"})),
+										),
 										digest: yield* inputDigest(input),
 										errors: [],
 										tries: 0,

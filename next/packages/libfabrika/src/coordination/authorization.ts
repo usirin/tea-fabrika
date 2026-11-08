@@ -24,7 +24,7 @@ export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(
 			for (const row of turn.read("door/members", 0)) {
 				if (!known.has(row._tag)) continue;
 				const fact = decodeFact(valueFor(row));
-				if (Result.isFailure(fact)) throw new LedgerError({why: "bad_row"});
+				if (Result.isFailure(fact)) return Result.fail(new LedgerError({why: "bad_row"}));
 				facts.push(fact.success);
 			}
 			if ("why" in admitted(foldMembers(facts), key)) return Result.fail(new NotGranted({}));
