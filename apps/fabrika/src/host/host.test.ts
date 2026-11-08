@@ -837,7 +837,7 @@ describe("the host and the keys file", () => {
 		]);
 	});
 
-	it("logs a workspace clicked in the top bar by its number's word, and the palette opening not at all (p13)", async () => {
+	it("K19: logs a workspace click and palette opening by name and via, never ordinary typing", async () => {
 		const did = await goLogged((lines) =>
 			Effect.gen(function* () {
 				const {home, paths} = yield* freshHome;
@@ -853,11 +853,11 @@ describe("the host and the keys file", () => {
 				// A click on the first workspace in the top bar.
 				app.send({type: "on", port: "desk", m: {type: "pick", workspace: desk.workspaces[0].id}});
 				yield* done(1);
-				// The palette's own command runs no desk command, so it logs nothing; a split after it
-				// shows the host read it.
 				app.send({type: "on", port: "desk", m: {type: "run", does: "palette.open"}});
 				app.send({type: "on", port: "desk", m: {type: "run", does: "tezgah.split"}});
-				yield* done(2);
+				yield* done(3);
+				app.type("t1", "ordinary typing");
+				yield* Effect.sleep("100 millis");
 				yield* host.stop;
 				return lines
 					.map(fieldsOf)
@@ -867,7 +867,59 @@ describe("the host and the keys file", () => {
 		);
 		expect(did).toEqual([
 			['tezgah."workspace --to 1"', {_tag: "click"}],
+			["palette.open", {_tag: "palette"}],
 			["tezgah.split", {_tag: "palette"}],
 		]);
 	});
+});
+
+it("K12: an editor save publishes one version to two windows and watcher echo adds no change", async () => {
+	await go(
+		Effect.gen(function* () {
+			const {home, paths} = yield* freshHome;
+			const host = yield* hostOn(home);
+			const a = yield* appOn(paths.sock);
+			const b = yield* appOn(paths.sock);
+			yield* a.wire.up;
+			yield* b.wire.up;
+			a.send({type: "page"});
+			b.send({type: "page"});
+			yield* until("a desk", a.desk);
+			yield* until("b desk", b.desk);
+			yield* a.press("<c-b>");
+			a.send({
+				type: "on",
+				port: "desk",
+				m: {
+					type: "keys.edit",
+					request: "edit-1",
+					edit: {_tag: "bind", does: "tezgah.zoom", keys: ["<prefix>m"]},
+					said: 100,
+				},
+			});
+			const onA = yield* until("editor save on a", () =>
+				lastKeys(a)?.rows.find((row) => row.does === "tezgah.zoom")?.keys[0]?.key === "m"
+					? lastKeys(a)
+					: undefined,
+			);
+			const onB = yield* until("editor save on b", () =>
+				lastKeys(b)?.rows.find((row) => row.does === "tezgah.zoom")?.keys[0]?.key === "m"
+					? lastKeys(b)
+					: undefined,
+			);
+			expect(onA).toEqual(onB);
+			expect(onA).toHaveProperty("version", expect.any(String));
+			expect(onA).toHaveProperty("changes", [expect.objectContaining({how: "pressed"})]);
+			expect(a.desk()?.prefix.armed).toBe(false);
+			const countA = keysSent(a).length;
+			const countB = keysSent(b).length;
+			yield* Effect.sleep("200 millis");
+			expect(keysSent(a)).toHaveLength(countA);
+			expect(keysSent(b)).toHaveLength(countB);
+			const fs = yield* FileSystem.FileSystem;
+			const text = yield* fs.readFileString(join(home, "keybindings.toml"));
+			expect(text).toContain("tezgah.zoom");
+			yield* host.stop;
+		}),
+	);
 });

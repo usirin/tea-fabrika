@@ -55,6 +55,7 @@ import {
 	workspaceName,
 } from "./frame.ts";
 import {BottomArea, BottomLine, type FrameProps, ModeStatus} from "./frame.tsx";
+import {capOf} from "./pop.ts";
 
 // The frame's words, from a real desk folded by the real machine, and the keys file's real
 // table (desk/keymap.ts): the defaults, or a file's.
@@ -65,6 +66,21 @@ const fold = (msgs: readonly DeskMsg[]): Open => {
 	if (s.at !== "open") throw new Error("the desk is over");
 	return s;
 };
+
+it("K18: moved keys update palette search, prefix hints, keycaps and spoken words", () => {
+	const read = decodeKeys('prefix = "ctrl+a"\ntezgah.zoom = "<prefix>shift+f6"', true);
+	if (Result.isFailure(read)) throw new Error(read.failure.why);
+	const commands = commandsOf(read.success, 1);
+	const zoom = commands.find((command) => command.runs === "tezgah.zoom");
+	expect(zoom?.key).toMatch(/C-a.*(?:Shift|S-).*F6/i);
+	expect(zoom?.caps).toEqual(["⌃A", expect.stringMatching(/⇧f6/i)]);
+	expect(matching(commands, "shift+f6")).toContain(zoom);
+	expect(prefixLine(read.success)).toContainEqual(
+		expect.objectContaining({name: "zoom", key: expect.stringMatching(/(?:Shift|S-).*F6/i)}),
+	);
+	expect(capOf("<s-m-w>")).toBe("⇧⌘W");
+	expect(JSON.stringify(zoom)).not.toContain("C-b z");
+});
 /** The default prefix, as keyName spells it. */
 const PREFIX = "<c-b>";
 /** The keybindings file's table, one line per argument; a refusal fails the test. */
@@ -169,6 +185,8 @@ describe("the frame's keys", () => {
 			"focus down",
 			"focus up",
 			"focus right",
+			"focus next",
+			"focus previous",
 			"new",
 			"previous workspace",
 			"next workspace",
@@ -212,6 +230,20 @@ describe("the frame's keys, from the keys file (ticket 174)", () => {
 		["focus down", "focus", "C-b j", ["⌃B", "J"], "focus --to down"],
 		["focus up", "focus", "C-b k", ["⌃B", "K"], "focus --to up"],
 		["focus right", "focus", "C-b l", ["⌃B", "L"], "focus --to right"],
+		[
+			"focus next",
+			"focus",
+			expect.stringMatching(/f6/i),
+			[expect.stringMatching(/f6/i)],
+			"focus --to next",
+		],
+		[
+			"focus previous",
+			"focus",
+			expect.stringMatching(/(?:Shift|S-).*f6/i),
+			[expect.stringMatching(/⇧f6/i)],
+			"focus --to previous",
+		],
 		["new", "workspace", "C-b N", ["⌃B", "⇧N"], "workspace --to new"],
 		["previous workspace", "workspace", "C-b C-h", ["⌃B", "⌃H"], "workspace --to previous"],
 		["next workspace", "workspace", "C-b C-l", ["⌃B", "⌃L"], "workspace --to next"],

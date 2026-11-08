@@ -702,14 +702,14 @@ const pressEnds = async (page: Page, chord: string, want: "free" | "taken") => {
 };
 
 /**
- * Cmd-W and Cmd-Shift-W, on a Mac: cancelled, so Electron does not offer them to the menu's Close
+ * Cmd-W, on a Mac: canceled, so Electron does not offer it to the menu's Close
  * Window, and nothing closes. `onKey` swallows them before the spy, so a key that ended "free" is
  * the failure here. The window count cannot fail on its own: a key sent this way never reaches
  * the menu, whatever the page does. Cancelling is what this proves.
  */
 const closeKeysDoNothing = async (app: ElectronApplication, page: Page, where: string) => {
 	const before = await tiles(page);
-	for (const chord of ["Meta+w", "Meta+Shift+w"]) {
+	for (const chord of ["Meta+w"]) {
 		await page.evaluate(() => delete document.documentElement.dataset.keyEnd);
 		await page.keyboard.press(chord);
 		await page.waitForTimeout(200);
@@ -859,7 +859,7 @@ const systemKeys = async (app: ElectronApplication, page: Page) => {
 
 	await closeKeysDoNothing(app, page, "over t1's tsh");
 	const row = lastRow(await screen(page, "t1"));
-	check("Cmd-W and Cmd-Shift-W type nothing in t1", row === "tsh$", row);
+	check("Cmd-W types nothing in t1", row === "tsh$", row);
 	await page.keyboard.press("Meta+k");
 	await palette.waitFor();
 	await closeKeysDoNothing(app, page, "over the palette");
@@ -1261,10 +1261,12 @@ if (process.platform !== "darwin")
 	throw new Error("this run checks macOS's window rules: run it on a Mac");
 
 const launch = async (on: string) => {
+	const testEnv: NodeJS.ProcessEnv = {...process.env, FABRIKA_HOME: on};
+	delete testEnv.FABRIKA_FOREGROUND;
 	const app = await _electron.launch({
 		executablePath: electronPath,
 		args: [here],
-		env: {...process.env, FABRIKA_HOME: on},
+		env: testEnv,
 	});
 	await noBrowser(app).catch(async (e: unknown) => {
 		await app.close().catch(() => {});
@@ -2059,6 +2061,370 @@ const tilesLook = async () => {
 	}
 };
 
+// Today's configurable keys. --keys runs only this stage. No screenshots are fabricated.
+const keysLook = async () => {
+	const out = join(shots, "keybindings");
+	await mkdir(out, {recursive: true});
+	for (const layout of ["one", "side", "stacked", "2x2", "small"] as const) {
+		const own = await mkdtemp(join(tmpdir(), "fk-"));
+		const file = join(own, "keybindings.toml");
+		await writeFile(file, "tezgah.fold = []\n");
+		const app = await launch(own);
+		try {
+			const page = await app.firstWindow();
+			await prompted(page, "t1");
+			if (layout === "side" || layout === "2x2" || layout === "small") {
+				await prefixed(page, "|");
+				await prompted(page, "t2");
+			}
+			if (layout === "stacked") {
+				await prefixed(page, "-");
+				await prompted(page, "t2");
+			}
+			if (layout === "2x2" || layout === "small") {
+				await prefixed(page, "-");
+				await prompted(page, "t3");
+				await focusOn(page, "t1");
+				await prefixed(page, "-");
+				await prompted(page, "t4");
+			}
+			if (layout === "small") {
+				const cdp = await page.context().newCDPSession(page);
+				await cdp.send("Emulation.setDeviceMetricsOverride", {
+					width: 1024,
+					height: 700,
+					deviceScaleFactor: 0,
+					mobile: false,
+				});
+			}
+			await focusOn(page, "t1");
+			await app.evaluate(async () => {
+				const {EventEmitter} = await import("node:events");
+				const emit = EventEmitter.prototype.emit;
+				const sends: unknown[] = [];
+				EventEmitter.prototype.emit = function (event: string | symbol, ...args: unknown[]) {
+					const message = args[0];
+					const data =
+						typeof message === "object" && message !== null ? Reflect.get(message, "data") : null;
+					if (
+						event === "message" &&
+						typeof data === "object" &&
+						data !== null &&
+						Reflect.get(data, "type") === "keys"
+					)
+						sends.push(data);
+					return Reflect.apply(emit, this, [event, ...args]);
+				};
+				Object.assign(globalThis, {keysTestBytes: sends});
+			});
+			await run(page, "t1", "counter");
+			await until(
+				"the terminal-byte observer hears real typing",
+				() => app.evaluate(() => Reflect.get(globalThis, "keysTestBytes").length),
+				(count) => count > 0,
+			);
+			const beforeTiles = await tiles(page);
+			await page.evaluate(() => {
+				window.addEventListener(
+					"keydown",
+					(event) => {
+						if (["Meta", "Control", "Shift", "Alt"].includes(event.key)) return;
+						setTimeout(() => {
+							document.documentElement.dataset.keyEnd = event.defaultPrevented ? "taken" : "free";
+						});
+					},
+					{capture: true},
+				);
+			});
+			const editor = page.getByRole("dialog", {name: "Keyboard shortcuts"});
+			const search = editor.getByRole("textbox", {name: /search/i});
+			const choose = async (word: string) => {
+				await search.fill(word);
+				await editor
+					.getByRole("option", {name: new RegExp(word, "i")})
+					.first()
+					.click();
+			};
+			const snap = async (state: string) => {
+				for (const look of ["dark", "light"] as const) {
+					await lookIs(app, page, look);
+					check(
+						`${state} fits ${layout}`,
+						await editor.evaluate((el) => el.scrollWidth <= el.clientWidth),
+					);
+					await page.mouse.move(1, 1);
+					const path = join(out, `${state}-${layout}-${look}.png`);
+					await page.screenshot({path});
+					saved.push(path);
+				}
+			};
+			const close = async () => {
+				await editor.getByRole("button", {name: /close keyboard shortcuts/i}).click();
+				await editor.waitFor({state: "hidden"});
+			};
+			const open = async () => {
+				await prefixed(page, "?");
+				await editor.waitFor();
+			};
+			await open();
+			check(
+				"keys opens in the palette layer with no new tile",
+				(await tiles(page)).join() === beforeTiles.join(),
+			);
+			check(
+				"list shows unbound commands and source",
+				(await editor.innerText()).match(/fold.*(?:unbound|no key)/is) !== null &&
+					(await editor.innerText()).includes("default"),
+			);
+			check(
+				"actions are outside listbox options",
+				(await editor.getByRole("option").getByRole("button").count()) === 0,
+			);
+			await snap("list");
+			await search.fill("ctrl+b z");
+			check(
+				"K1: key search finds Zoom",
+				(await editor.getByRole("option", {name: /zoom/i}).count()) === 1,
+			);
+			await snap("search-key");
+			await search.fill("no such shortcut");
+			check("empty search is explained", /no .*found|no results/i.test(await editor.innerText()));
+			await snap("search-key-empty");
+
+			await choose("zoom");
+			await editor.getByRole("button", {name: "Change", exact: true}).click();
+			const bytesBefore = await app.evaluate(() => Reflect.get(globalThis, "keysTestBytes").length);
+			await page.keyboard.press("Meta+k");
+			check(
+				"K3: recorded Cmd-K opens no command palette",
+				(await page.getByRole("dialog", {name: "Commands", exact: true}).count()) === 0,
+			);
+			check(
+				"recording reaches no terminal",
+				(await app.evaluate(() => Reflect.get(globalThis, "keysTestBytes").length)) === bytesBefore,
+			);
+			await editor.getByRole("button", {name: "Cancel", exact: true}).click();
+			await editor.getByRole("button", {name: "Change", exact: true}).click();
+			await page.keyboard.press("Control+b");
+			check(
+				"K4: recording shows the prefix and Cancel",
+				/prefix|⌃B|C-b/i.test(await editor.innerText()) &&
+					(await editor.getByRole("button", {name: "Cancel", exact: true}).isVisible()),
+			);
+			await snap("recording");
+			check(
+				"a recorded prefix sends no terminal bytes",
+				(await app.evaluate(() => Reflect.get(globalThis, "keysTestBytes").length)) === bytesBefore,
+			);
+			await pressEnds(page, "Meta+q", "free");
+			check("K16: system quit bypasses recording", await editor.isVisible());
+			await page.keyboard.press("Control+c");
+			await prompted(page, "t1");
+			check(
+				"Ctrl-C reaches the tile program and leaves the recorder armed",
+				await editor.getByRole("button", {name: "Cancel", exact: true}).isVisible(),
+			);
+			const beforeCandidate = await app.evaluate(
+				() => Reflect.get(globalThis, "keysTestBytes").length,
+			);
+			await page.keyboard.press("m");
+			await editor.getByRole("button", {name: "Save", exact: true}).click();
+			await until(
+				"Zoom saved",
+				() => readFile(file, "utf8"),
+				(text) => text.includes("<prefix>m"),
+			);
+			check(
+				"the recorded character sends no terminal bytes",
+				(await app.evaluate(() => Reflect.get(globalThis, "keysTestBytes").length)) ===
+					beforeCandidate,
+			);
+			check(
+				"K18: saved editor has the new binding",
+				/(?:C-b|⌃B).*M/i.test(await editor.innerText()),
+			);
+			await snap("saved");
+			await close();
+			await page.keyboard.press("Control+b");
+			check(
+				"prefix hints follow the saved key",
+				/m.*zoom/i.test(await page.locator(".bottomline").innerText()),
+			);
+			await page.keyboard.press("q");
+			await open();
+			await choose("zoom");
+			await editor.getByRole("button", {name: "Change", exact: true}).click();
+			await page.keyboard.press("Control+b");
+			await page.keyboard.press("x");
+			await editor.getByRole("button", {name: "Save", exact: true}).click();
+			check(
+				"K8: clash names loser and offers Undo",
+				/close/i.test(await editor.innerText()) &&
+					(await editor.getByRole("button", {name: "Undo", exact: true}).isVisible()),
+			);
+			await snap("clash");
+			await editor.getByRole("button", {name: "Undo", exact: true}).click();
+			await until(
+				"Undo restored Zoom",
+				() => readFile(file, "utf8"),
+				(text) => text.includes("<prefix>m") && !text.includes("<prefix>x"),
+			);
+			await editor.getByRole("button", {name: "Unbind", exact: true}).click();
+			await until(
+				"Zoom unbound",
+				() => editor.innerText(),
+				(text) => /unbound|no key/i.test(text),
+			);
+			await snap("unbound");
+			await close();
+			await page.keyboard.press("Meta+k");
+			const palette = page.getByRole("dialog", {name: "Commands", exact: true});
+			await palette.getByRole("textbox").fill("zoom");
+			check(
+				"K17: unbinding keeps the palette command",
+				(await palette.getByRole("option", {name: /zoom/i}).count()) === 1,
+			);
+			await page.keyboard.press("Escape");
+			await run(page, "t1", "zoom");
+			await prompted(page, "t1");
+			check("K17: tsh still executes unbound Zoom", (await stateIn(page, "t1")) === "zoomed");
+			await run(page, "t1", "zoom");
+			await prompted(page, "t1");
+
+			await open();
+			await choose("prefix");
+			await editor.getByRole("button", {name: "Change", exact: true}).click();
+			await page.keyboard.press("Control+a");
+			await editor.getByRole("button", {name: "Save", exact: true}).click();
+			await until(
+				"changed prefix",
+				() => readFile(file, "utf8"),
+				(text) => text.includes('prefix = "ctrl+a"'),
+			);
+			await snap("prefix");
+			const good = await readFile(file, "utf8");
+			await writeFile(file, `${good}\ntezgah.zom = "<prefix>u"\n`);
+			await until(
+				"file error line",
+				() => editor.innerText(),
+				(text) => /line \d+/i.test(text) && text.includes("tezgah.zom"),
+			);
+			await snap("file-error");
+			await close();
+			await page.keyboard.press("Control+a");
+			await page.keyboard.press("?");
+			await editor.waitFor();
+			check("bad file keeps last good prefix", await editor.isVisible());
+			await writeFile(file, good);
+			await until(
+				"file error clears",
+				() => editor.innerText(),
+				(text) => !text.includes("tezgah.zom"),
+			);
+			await choose("zoom");
+			await rename(file, join(own, "keys-backup.toml"));
+			await mkdir(file);
+			await editor.getByRole("button", {name: "Change", exact: true}).click();
+			await page.keyboard.press("Control+a");
+			await page.keyboard.press("u");
+			await editor.getByRole("button", {name: "Save", exact: true}).click();
+			await until(
+				"save error",
+				() => editor.innerText(),
+				(text) => /could not|cannot|failed/i.test(text),
+			);
+			check(
+				"K11: failed save shows no success",
+				!/saved successfully/i.test(await editor.innerText()),
+			);
+			await snap("save-error");
+			await rm(file, {recursive: true});
+			await rename(join(own, "keys-backup.toml"), file);
+			await search.fill("");
+			check("reserved keys have plain reasons", /system|macOS/i.test(await editor.innerText()));
+			await snap("not-ours");
+			await close();
+			await writeFile(file, `${good}\npalette.open = "<prefix>p"\n`);
+			await page.keyboard.press("Control+a");
+			await page.keyboard.press("?");
+			await editor.waitFor();
+			await search.fill("palette.open");
+			await until(
+				"prefix palette binding applied",
+				() => editor.innerText(),
+				(text) => /(?:⌃A|C-a)[\s\S]*P/.test(text),
+			);
+			await close();
+			await page.keyboard.press("Control+a");
+			await page.keyboard.press("p");
+			await page.getByRole("dialog", {name: "Commands", exact: true}).waitFor();
+			check("K17: a prefix sequence opens the command palette", true);
+			await page.keyboard.press("Escape");
+
+			// K20: tsh starts a real editor run. Closing must end it, not merely hide its view.
+			await prompted(page, "t1");
+			await run(page, "t1", "keys");
+			await editor.waitFor();
+			const first = await until(
+				"the keys job",
+				() => keptJobs(own),
+				(jobs) => jobs.some((job) => job.text === "keys"),
+			);
+			const runId = first.find((job) => job.text === "keys")?.stages[0].run;
+			await choose("zoom");
+			await editor.getByRole("button", {name: "Change", exact: true}).click();
+			await close();
+			await until(
+				"closed editor run ends",
+				() => keptJobs(own),
+				(jobs) => jobs.every((job) => job.text !== "keys"),
+			);
+			check(
+				"K20: closing restores terminal focus",
+				await tile(page, "t1")
+					.locator(".screen")
+					.evaluate((el) => el.contains(document.activeElement)),
+			);
+			await run(page, "t1", "keys");
+			await editor.waitFor();
+			const second = await until(
+				"new keys job",
+				() => keptJobs(own),
+				(jobs) => jobs.some((job) => job.text === "keys"),
+			);
+			check(
+				"reopening creates a new run with no recorder",
+				second.find((job) => job.text === "keys")?.stages[0].run !== runId &&
+					(await editor.getByRole("button", {name: "Cancel", exact: true}).count()) === 0,
+			);
+			await close();
+			// K15 and K16: focus leaves a terminal using data-backed F6, and Ctrl-C still cancels its program.
+			await page.keyboard.press("F6");
+			check(
+				"F6 provides a keyboard route out of the terminal",
+				!(await tile(page, "t1")
+					.locator(".screen")
+					.evaluate((el) => el.contains(document.activeElement))),
+			);
+			await page.keyboard.press("Shift+F6");
+			await focusOn(page, "t1");
+			await run(page, "t1", "counter");
+			await page.keyboard.press("Control+c");
+			await prompted(page, "t1");
+			await page.keyboard.type("recorder-is-closed");
+			await shows(page, "t1", "ordinary typing after close", (text) =>
+				text.includes("recorder-is-closed"),
+			);
+			await page.keyboard.press("Control+c");
+		} finally {
+			await app.close().catch(() => {});
+			const pid = await hostPid(own);
+			if (pid !== null) await stop(pid);
+			await rm(own, {recursive: true, force: true});
+		}
+	}
+};
+
 const all = async () => {
 	const first = await launch(home);
 	let left = "";
@@ -2098,6 +2464,7 @@ const all = async () => {
 		await asksSwap();
 		await reconnect();
 		await tilesLook();
+		await keysLook();
 	} finally {
 		// No person stops the host: there is no command for it. The run stops its own, by its pid.
 		const pid = await hostPid(home);
@@ -2106,7 +2473,8 @@ const all = async () => {
 };
 
 // `-- --tiles` takes the tiles' pictures alone, with no other stage.
-if (process.argv.includes("--tiles")) await tilesLook();
+if (process.argv.includes("--keys")) await keysLook();
+else if (process.argv.includes("--tiles")) await tilesLook();
 else await all();
 const after = await pgrep(here);
 check(

@@ -1,7 +1,7 @@
 import {Result} from "effect";
 import {describe, expect, it} from "vitest";
 import {fresh, takenNow} from "./desk/desk.ts";
-import {decodeKeys} from "./desk/keymap.ts";
+import {decodeKeys, defaults} from "./desk/keymap.ts";
 import {
 	readFromPage,
 	readFromTerminal,
@@ -55,6 +55,24 @@ describe("a program's window", () => {
 });
 
 describe("the desk's port", () => {
+	it("K21: editor requests and applied versions read strictly, with no sender identity from the client", () => {
+		const edit = {
+			type: "keys.edit",
+			request: "edit-1",
+			edit: {_tag: "bind", does: "tezgah.zoom", keys: ["<prefix>m"]},
+			said: 100,
+		};
+		expect(readFromPage(edit)).toEqual({kind: "read", msg: edit});
+		for (const bad of [
+			{...edit, by: "owner"},
+			{...edit, at: 1},
+			{...edit, edit: {_tag: "reset", does: "tezgah.zom"}},
+			{...edit, said: "yesterday"},
+			{...edit, edit: {_tag: "undo"}},
+		])
+			expect(readFromPage(bad).kind).toBe("refused");
+		expect(readToPage({type: "keys", ...defaults, version: "v1", changes: []}).kind).toBe("read");
+	});
 	it("sends the page the whole desk, with the keys the desk takes now", () => {
 		const desk = fresh();
 		const sent = {type: "desk", desk, takes: takenNow(desk, 0)};
