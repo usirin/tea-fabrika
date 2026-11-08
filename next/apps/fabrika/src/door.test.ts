@@ -638,6 +638,7 @@ describe("P10 review regressions", () => {
 		[0, "000000"],
 		[7, "000007"],
 		[482109, "482109"],
+		[4294967295, "967295"],
 	] as const)
 		it.effect(`d3: waiting code ${code} keeps all six digits, including leading zeros`, () =>
 			Effect.gen(function* () {
@@ -666,6 +667,86 @@ describe("P10 review regressions", () => {
 				}).pipe(w.provide);
 			}),
 		);
+
+	it.effect("a WebCrypto importKey failure is refused with crypto, never storage", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			const spy = vi
+				.spyOn(crypto.subtle, "importKey")
+				.mockRejectedValueOnce(new Error("crypto unavailable"));
+			try {
+				const failure = yield* Effect.flip(Door.pipe(w.provide));
+				expect(failure).toMatchObject({_tag: "LedgerError", why: "crypto"});
+				expect(failure).toBeInstanceOf(LedgerError);
+			} finally {
+				spy.mockRestore();
+			}
+		}),
+	);
+
+	it.effect("a WebCrypto nonce sign failure is refused with crypto, never storage", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const client = yield* d.connect();
+				const spy = vi
+					.spyOn(crypto.subtle, "sign")
+					.mockRejectedValueOnce(new Error("crypto unavailable"));
+				try {
+					const failure = yield* Effect.flip(d.challenge(client));
+					expect(failure).toMatchObject({_tag: "LedgerError", why: "crypto"});
+					expect(failure).toBeInstanceOf(LedgerError);
+				} finally {
+					spy.mockRestore();
+				}
+			}).pipe(w.provide);
+		}),
+	);
+
+	it.effect("a WebCrypto nonce verify failure is refused with crypto, never storage", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const {client, hello, trusted} = yield* signedHello(d, w.window, "crypto-failed");
+				const spy = vi
+					.spyOn(crypto.subtle, "verify")
+					.mockRejectedValueOnce(new Error("crypto unavailable"));
+				try {
+					const failure = yield* Effect.flip(d.initialize(client, hello, trusted));
+					expect(failure).toMatchObject({_tag: "LedgerError", why: "crypto"});
+					expect(failure).toBeInstanceOf(LedgerError);
+				} finally {
+					spy.mockRestore();
+				}
+			}).pipe(w.provide);
+		}),
+	);
+
+	it.effect("a WebCrypto fingerprint digest failure is refused with crypto, never storage", () =>
+		Effect.gen(function* () {
+			const w = yield* world();
+			yield* Effect.gen(function* () {
+				const d = yield* Door;
+				const {client} = yield* online(d, w);
+				yield* d.route(client, "process.send", request("before-crypto-failed"));
+				const parent = w.deliveries[0]!.envelope.id;
+				const spy = vi
+					.spyOn(crypto.subtle, "digest")
+					.mockRejectedValueOnce(new Error("crypto unavailable"));
+				try {
+					const failure = yield* Effect.flip(
+						writeId("crypto-failed", d.signer(parent, PROCESS, "saved")),
+					);
+					expect(failure).toMatchObject({_tag: "LedgerError", why: "crypto"});
+					expect(failure).toBeInstanceOf(LedgerError);
+				} finally {
+					spy.mockRestore();
+				}
+			}).pipe(w.provide);
+		}),
+	);
 
 	it.effect(
 		"review 3.1: a full spent-receipt store writes nothing and keeps live nonces spent",
@@ -3337,7 +3418,7 @@ describe("P10 refusal records and checked writes", () => {
 			}).pipe(w.provide);
 		}),
 	);
-	it.effect("p67: a failed input digest reports storage and never delivers", () =>
+	it.effect("a WebCrypto input hash digest failure is refused with crypto and never delivers", () =>
 		Effect.gen(function* () {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
@@ -3349,9 +3430,11 @@ describe("P10 refusal records and checked writes", () => {
 					.mockImplementationOnce(digest)
 					.mockRejectedValueOnce(new Error("crypto unavailable"));
 				try {
-					expect(
-						yield* Effect.flip(d.route(client, "process.send", request("digest-failed"))),
-					).toMatchObject({_tag: "LedgerError", why: "storage"});
+					const failure = yield* Effect.flip(
+						d.route(client, "process.send", request("digest-failed")),
+					);
+					expect(failure).toMatchObject({_tag: "LedgerError", why: "crypto"});
+					expect(failure).toBeInstanceOf(LedgerError);
 					expect(w.deliveries).toEqual([]);
 				} finally {
 					spy.mockRestore();
