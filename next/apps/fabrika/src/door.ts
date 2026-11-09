@@ -1,3 +1,4 @@
+import {type ProgramDown, type RunnerError, type Sent} from "@kampus/libfabrika";
 import {
 	admitted,
 	brainOnly,
@@ -9,6 +10,8 @@ import {
 	type From,
 	MemberFact,
 	NotGranted,
+	ProcessManager,
+	type ProcessError,
 	Saw,
 	SessionManager,
 	SigningRefused,
@@ -78,7 +81,13 @@ const reserved = (a: unknown) => {
 };
 const no = (why: string) => Answer.cases.refused.make({why});
 const ok = (result: typeof Schema.Json.Type) => Answer.cases.ok.make({result});
-const EnvelopeState = Schema.TaggedUnion({allocated: {}, recorded: {}, delivered: {}});
+const EnvelopeState = Schema.TaggedUnion({
+	allocated: {},
+	recorded: {},
+	delivered: {},
+	retryable: {},
+	settled: {result: Schema.Json},
+});
 const Link = Schema.Struct({traceId: Schema.String, spanId: Schema.String});
 const Binding = Schema.Struct({
 	id: Schema.String,
@@ -200,7 +209,18 @@ type Options<A, RNext, RDeliver, RNotify> = {
 		process: string,
 		envelope: Envelope<A>,
 		span: typeof Link.Type,
-	) => Effect.Effect<void, LedgerError | SinkError | SigningRefused | NotGranted, RDeliver>;
+		meta: {readonly id: string; readonly sentAt: string; readonly seen: number},
+	) => Effect.Effect<
+		Sent | void,
+		| LedgerError
+		| SinkError
+		| SigningRefused
+		| NotGranted
+		| ProgramDown
+		| RunnerError
+		| ProcessError,
+		RDeliver
+	>;
 	readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError, RNotify>;
 	readonly inputs: {
 		readonly schema: Schema.Codec<A, unknown>;
@@ -221,6 +241,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 	const sink = yield* SpanSink;
 	const records = yield* RecordManager;
 	const archive = yield* Archive;
+	const processes = yield* Effect.serviceOption(ProcessManager);
 	const store = doorStore(options.sql),
 		sql = options.sql;
 	const nonces = yield* silent(doorNonce(store, options.waiting.ttl, options.spentCap));
@@ -810,7 +831,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			const delivered = yield* store.atomic(
 				() =>
 					sql.exec(
-						"SELECT 1 FROM door_bindings WHERE json_extract(value, '$.process')=? AND json_extract(value, '$.span.traceId')=? AND json_extract(value, '$.state._tag')='delivered' LIMIT 1",
+						"SELECT 1 FROM door_bindings WHERE json_extract(value, '$.process')=? AND json_extract(value, '$.span.traceId')=? AND json_extract(value, '$.state._tag') IN ('delivered','retryable','settled') LIMIT 1",
 						target,
 						traceId,
 					).length > 0,
@@ -826,12 +847,31 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				: null;
 		const recordInput = Effect.fn("door.input")(function* () {
 			const span = yield* Effect.currentSpan;
+			const destination =
+				letter !== null && Option.isSome(processes) ? yield* processes.value.resolve(target) : null;
+			const accepted =
+				destination === null || request === null || Result.isFailure(request)
+					? false
+					: (yield* Stream.runCollect(ledger.read(`${destination.name}/inbox`, 0))).some(
+							(entry) => entry.id === request.success.letter,
+						);
 			const allocation = yield* store.atomic(() => {
 				const [prior] =
 					letter === null ? [] : sql.exec("SELECT value FROM door_bindings WHERE letter=?", letter);
+				let processId = destination?.state._tag === "live" ? destination.state.process : target;
 				if (prior !== undefined) {
 					const old = decodeBinding(prior.value);
-					return Result.succeed(old.client === raw && old.digest === digest ? old : null);
+					if (old.client !== raw || old.digest !== digest) return Result.succeed(null);
+					if (
+						old.state._tag === "settled" ||
+						accepted ||
+						destination?.state._tag !== "live" ||
+						destination.state.process === old.process
+					)
+						return Result.succeed(old);
+					// Keep the old parent and its authority unchanged. Only the pending letter gets a new delivery.
+					sql.exec("UPDATE door_bindings SET letter=NULL WHERE id=?", old.id);
+					processId = destination.state.process;
 				}
 				if (
 					(letter !== null &&
@@ -846,7 +886,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					id: mark(`in-${process}-${count}`),
 					client: raw,
 					by,
-					process: target,
+					process: processId,
 					name: typeof name === "string" ? name : method,
 					personOnly: typeof name === "string" && options.inputs.personOnly.includes(name),
 					digest,
@@ -933,21 +973,50 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 					request !== null &&
 					Result.isSuccess(request)
 				) {
+					if (binding.state._tag === "settled") {
+						const result = binding.state.result;
+						const value = rawObject(result);
+						return value?._tag === "refused" && typeof value.why === "string"
+							? no(value.why)
+							: ok(result);
+					}
 					yield* sessions.record({...binding, traceId: binding.span.traceId});
-					yield* sessions.delivered(binding.id, target);
+					yield* sessions.delivered(binding.id, binding.process);
 					const delivered = Binding.make({
 						...binding,
 						state: EnvelopeState.cases.delivered.make({}),
 					});
 					yield* store.atomic(() => saveBinding(delivered));
-					yield* options
-						.deliver(
-							target,
-							{id: mark(binding.id), by: binding.by, arrivedAt: binding.arrivedAt, input: message},
-							binding.span,
-						)
-						.pipe(Effect.provideContext(context));
-					return ok(null);
+					const result = yield* Effect.exit(
+						options
+							.deliver(
+								binding.process,
+								{
+									id: mark(binding.id),
+									by: binding.by,
+									arrivedAt: binding.arrivedAt,
+									input: message,
+								},
+								binding.span,
+								{
+									id: request.success.letter,
+									sentAt: request.success.sentAt,
+									seen: request.success.seen,
+								},
+							)
+							.pipe(Effect.provideContext(context)),
+					);
+					if (Exit.isFailure(result)) {
+						yield* store.atomic(() =>
+							saveBinding({...binding, state: EnvelopeState.cases.retryable.make({})}),
+						);
+						return yield* Effect.failCause(result.cause);
+					}
+					const answer = result.value ?? null;
+					yield* store.atomic(() =>
+						saveBinding({...binding, state: EnvelopeState.cases.settled.make({result: answer})}),
+					);
+					return result.value?._tag === "refused" ? no(result.value.why) : ok(answer);
 				}
 				if (method === "ledger.read" || method === "ledger.wait") {
 					const p = Schema.decodeUnknownResult(Read)(params);
