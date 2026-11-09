@@ -1007,6 +1007,29 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 		});
 	});
 
+	// Plant: compare every note the box holds, not only its run's commits. Themes and layers tests
+	// (2026-11-09) were stuck at fetch after MAIN re-signed another branch's commit mid-run.
+	it("K1 scenario: MAIN re-signing a commit outside the run after box start does not stop the fetch", () => {
+		fixture((b) => {
+			b.git(b.main, "checkout", "-q", "-b", "other");
+			const outside = b.commit(b.main, "src/b.ts", "other\n");
+			b.sign(b.main, "tests");
+			b.git(b.main, "checkout", "-q", "main");
+			// The box copies MAIN's notes at start, as box.sh new does.
+			b.git(b.work, "fetch", "-q", b.main, "refs/notes/fabrika:refs/notes/fabrika");
+			b.git(b.main, "notes", "--ref=fabrika", "add", "-f", "-m", "re-signed in MAIN", outside);
+			b.setup({operations: [{path: "src/a.ts", text: "run\n"}]});
+			expect(b.run().code).toBe(0);
+			const got = b.fetch();
+			expect(got.code, got.text).toBe(0);
+			expect(got.text).not.toMatch(/conflict/);
+			expect(b.git(b.main, "notes", "--ref=fabrika", "show", outside).trim()).toBe(
+				"re-signed in MAIN",
+			);
+			expect(b.notes()).toContain(b.head(b.main, b.branch));
+		});
+	});
+
 	// Plant: trust the installed checker's scope skip. Review round 1, finding 4.
 	it("K1 scenario: an unsigned commit outside the exam list is refused on a plain fetch", () => {
 		fixture((b) => {
