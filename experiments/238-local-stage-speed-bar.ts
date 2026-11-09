@@ -1,15 +1,15 @@
-// Experiment 233: the local stage's first speed bar (P12, ticket 270, `next/`).
+// Experiment 238: the local stage's first speed bar (P12, ticket 270, `next/`).
 // The real stage only: `next/apps/fabrika/dev.ts`, which builds the brain, deploys it at Alchemy's
 // local stage and serves it from workerd. No Miniflare stand-in, no network, no key, no model.
 //
-//   env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/233-local-stage-speed-bar.ts stage initial 4
-//   env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/233-local-stage-speed-bar.ts stage head 5
-//   env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/233-local-stage-speed-bar.ts compiler 5
-//   env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/233-local-stage-speed-bar.ts sink 5
+//   env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/238-local-stage-speed-bar.ts stage initial 4
+//   env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/238-local-stage-speed-bar.ts stage head 5
+//   env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/238-local-stage-speed-bar.ts compiler 5
+//   env -u TYPESAFE_API_KEY nice -n 15 node --no-warnings experiments/238-local-stage-speed-bar.ts sink 5
 //
 // Each stage run gets its own fresh FABRIKA_HOME (mktemp -d /tmp/fh.XXXX), removed after. One stage
 // at a time; before each, it waits while 6 or more vitest workers run. Every reading is saved, not
-// only medians, in results/233-local-stage-speed-bar.json (each call appends its runs).
+// only medians, in results/238-local-stage-speed-bar.json (each call appends its runs).
 // The wire client below is a copy of the one in next/apps/fabrika/src/stage-wire.test.ts.
 import {execFileSync, spawn, type ChildProcess} from "node:child_process";
 import {createHash, generateKeyPairSync, sign} from "node:crypto";
@@ -31,7 +31,7 @@ import {pathToFileURL} from "node:url";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const APP = join(ROOT, "next/apps/fabrika");
-const OUT = join(ROOT, "experiments/results/233-local-stage-speed-bar.json");
+const OUT = join(ROOT, "experiments/results/238-local-stage-speed-bar.json");
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
