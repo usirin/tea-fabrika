@@ -129,7 +129,6 @@ describe("P27a live faults", () => {
 			yield* forSchema(Schema.Struct({target: N.Target, count: Positive}), ({target, count}) =>
 				Effect.scoped(
 					Effect.gen(function* () {
-						const ids = yield* IdGenerator;
 						const hits: Hit[] = [];
 						for (let i = 0; i < Math.max(2, count); i++)
 							hits.push(
