@@ -171,6 +171,12 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   `stuck`, never a pass. A build that
   answers `done` with no commit is done only with a `laws: green <paths>` line (every law already
   green at its start); else it is `stuck:no_commit`, as a tests step with no commit always is.
+- A box has no network, so it cannot refresh `pnpm-lock.yaml`. When a step's commits change a
+  locked field of a workspace `package.json` (its name or dependencies) or `pnpm-workspace.yaml`
+  and leave the lockfile alone, drive answers `ask` (`lockfile`, exit 20) whatever the step said,
+  and still pushes `-wip`. The lead then, outside the box, runs `pnpm install --lockfile-only` on
+  `-wip`, checks each new version is exact and named in the approved plan, commits the lockfile
+  with `stepcommit.sh lead` and pushes it with `botpush.mjs`. The next step starts at that tip.
 - Then it pushes `<branch>-wip` (a `-wip` branch as it is) as the bot when the step committed, writes the field row to
   `BOXES/<lane>-rows.jsonl`, appends the step to `state/<lane>.json` and `.md`, and removes the box.
   It keeps the box, whatever the step answered, while it holds uncommitted files or commits off the

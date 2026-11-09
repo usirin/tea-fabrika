@@ -16,7 +16,15 @@ import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
-import {checkHolds, laneRoot, laneStuck, startHead, wipOf} from "./lane.ts";
+import {
+	checkHolds,
+	laneRoot,
+	laneStuck,
+	lockfileBehind,
+	startHead,
+	wipOf,
+	workspaceGlobs,
+} from "./lane.ts";
 
 // Today's tooling. Pure rules drive.ts and gc.ts share.
 const options = {seed: 119120, numRuns: 300};
@@ -137,5 +145,100 @@ describe("lane rules, today's tooling", () => {
 			}),
 			options,
 		);
+	});
+});
+
+describe("the lockfile follows the manifests, today's tooling", () => {
+	const globs = ["apps/*", "packages/*", "oxlint-plugins", "!packages/old"];
+	const dep = fc.stringMatching(/^[a-z][a-z0-9-]{0,7}$/);
+	const version = fc.stringMatching(/^[0-9]\.[0-9]{1,2}\.[0-9]$/);
+	const deps = fc.dictionary(dep, version, {maxKeys: 4});
+	const locked = fc.record({
+		dependencies: deps,
+		devDependencies: deps,
+	});
+	const loose = fc.record({
+		scripts: fc.dictionary(dep, fc.string({maxLength: 6}), {maxKeys: 3}),
+		version,
+	});
+	const member = fc.constantFrom(
+		"package.json",
+		"apps/fabrika/package.json",
+		"oxlint-plugins/package.json",
+	);
+	const outside = fc.constantFrom(
+		"fixtures/slugify/repo/package.json",
+		"packages/old/package.json",
+		"experiments/results/x-package.json",
+	);
+	const text = (o: object) => JSON.stringify(o, null, "\t");
+	const reversed = (o: Record<string, unknown>) =>
+		Object.fromEntries(Object.entries(o).toReversed());
+
+	// Plant: compare scripts too; compare raw text; drop the reorder canon.
+	it("a workspace manifest is behind exactly when a locked field changed, never on a reorder or other fields", () => {
+		fc.assert(
+			fc.property(member, locked, fc.option(locked), loose, loose, (path, a, other, la, lb) => {
+				// Half the runs keep the locked fields and change only the rest.
+				const b = other ?? a;
+				const before = text({...la, ...a});
+				const after = text(reversed({...lb, ...b, dependencies: reversed(b.dependencies)}));
+				const moved =
+					JSON.stringify(Object.entries(a.dependencies).toSorted()) !==
+						JSON.stringify(Object.entries(b.dependencies).toSorted()) ||
+					JSON.stringify(Object.entries(a.devDependencies).toSorted()) !==
+						JSON.stringify(Object.entries(b.devDependencies).toSorted());
+				expect(lockfileBehind([{path, before, after}], globs, false)).toEqual(moved ? [path] : []);
+				// The step refreshed the lockfile itself, and CI's frozen install judges it.
+				expect(lockfileBehind([{path, before, after}], globs, true)).toEqual([]);
+			}),
+			options,
+		);
+	});
+
+	// Plant: count every package.json; forget a negated glob.
+	it("a manifest outside the workspace never counts; an added, removed or unreadable one does", () => {
+		fc.assert(
+			fc.property(outside, member, locked, (out, path, a) => {
+				expect(lockfileBehind([{path: out, before: null, after: text(a)}], globs, false)).toEqual(
+					[],
+				);
+				expect(lockfileBehind([{path, before: null, after: text(a)}], globs, false)).toEqual([
+					path,
+				]);
+				expect(lockfileBehind([{path, before: text(a), after: null}], globs, false)).toEqual([
+					path,
+				]);
+				expect(lockfileBehind([{path, before: text(a), after: "{"}], globs, false)).toEqual([path]);
+			}),
+			options,
+		);
+	});
+
+	// pinned: the workspace file itself moves the lockfile (catalog, overrides, packages).
+	it("any change to pnpm-workspace.yaml counts, and the same text does not", () => {
+		const path = "pnpm-workspace.yaml";
+		expect(lockfileBehind([{path, before: "a: 1\n", after: "a: 2\n"}], globs, false)).toEqual([
+			path,
+		]);
+		expect(lockfileBehind([{path, before: "a: 1\n", after: "a: 1\n"}], globs, false)).toEqual([]);
+	});
+
+	// format: the packages block as this repo writes it, comments and quotes included.
+	it("reads the packages globs from pnpm-workspace.yaml", () => {
+		const yaml = [
+			"# a comment",
+			"packages:",
+			"  - apps/*",
+			"  # next/: the new version",
+			"  - 'next/packages/*'",
+			'  - "!next/old"',
+			"  - .github/ci",
+			"",
+			"catalog:",
+			"  effect: 4.1.2",
+		].join("\n");
+		expect(workspaceGlobs(yaml)).toEqual(["apps/*", "next/packages/*", "!next/old", ".github/ci"]);
+		expect(workspaceGlobs("catalog:\n  a: 1\n")).toEqual([]);
 	});
 });
