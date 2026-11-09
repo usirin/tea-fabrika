@@ -539,6 +539,13 @@ describe("P17a, revoke stops writes at the final door", () => {
 								d = yield* setup(w);
 							yield* send(d.a, d.old, w, target, "bound", text);
 							const incoming = last(w);
+							const malformed = yield* Effect.result(
+								d.a.accept({...incoming, envelope: {...incoming.envelope, input: {}}}),
+							);
+							expect(malformed).toMatchObject({
+								_tag: "Failure",
+								failure: {_tag: "LedgerError", why: "bad_row"},
+							});
 							for (const changed of [
 								{...incoming, id: "another-letter"},
 								{

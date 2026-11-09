@@ -415,6 +415,11 @@ describe("P17a, appendAdmitted", () => {
 									"the operation's own ended span records its id, stream and outcome",
 								).toHaveLength(1);
 								for (const row of operations) {
+									expect(row.attributes).toMatchObject({
+										"fab.authorization.id": id,
+										"fab.authorization.stream": "notes",
+										"fab.authorization.outcome": outcome,
+									});
 									expect(row.ok).toBe(outcome === "placed");
 									expect(row.endTimeUnixNano).toBeDefined();
 									const tags = JSON.stringify(row.attributes);
