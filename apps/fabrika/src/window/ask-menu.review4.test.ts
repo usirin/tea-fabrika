@@ -1,12 +1,18 @@
 import {applyCell} from "@demlik/tea";
 import {askShownOf, sealAsk, Evidence, type AskShown} from "@kampus/pipeline/tickets/ask";
+import {Entry, fold} from "@kampus/pipeline/tickets/ticket";
+import {ticket as ticketProgram} from "@tea-fabrika/ticket";
+import {TicketWindow} from "@tea-fabrika/ticket/window";
+import {tracker as trackerProgram, tickets} from "@tea-fabrika/tracker";
 import {AskActions, AskView} from "@tea-fabrika/tracker/ask-window";
+import {TrackerWindow} from "@tea-fabrika/tracker/window";
 import {Effect, Result, Schema} from "effect";
 import fc from "fast-check";
 import {act, createElement, type ReactNode} from "react";
 import {createRoot, type Root} from "react-dom/client";
 import {afterEach, beforeAll, expect, it, vi} from "vitest";
-import {DRAFT} from "../../../../fixtures/ask-desk/cases.ts";
+import {AGENT, DRAFT, FILED, NOW, OWNER} from "../../../../fixtures/ask-desk/cases.ts";
+import {property, ticketNumber} from "../../../../fixtures/ask-desk/property.ts";
 import type {Ask} from "../asks.ts";
 import {deskMachine, focusedOf, type Open} from "../desk/desk.ts";
 import {decodeKeys, defaults, programCommandOn, type Keys} from "../desk/keymap.ts";
@@ -233,6 +239,21 @@ const mount = async (node: ReactNode) => {
 	});
 	return {
 		document,
+		render: async (next: ReactNode) =>
+			act(async () => {
+				root.render(next);
+				await settle();
+			}),
+		focus: async (element: DomElement) =>
+			act(async () => {
+				const previous = document.activeElement;
+				if (previous === element) return;
+				previous.dispatchEvent(
+					Object.assign(new Event("focusout", {bubbles: true}), {relatedTarget: element}),
+				);
+				element.focus();
+				await settle();
+			}),
 		find: (selector: string) => {
 			const found = document.body.querySelector(selector);
 			if (found === null) throw new Error(`Missing ${selector}`);
@@ -279,18 +300,18 @@ const desk = (): Open => {
 	if (open.at !== "open") throw new Error("The desk closed");
 	return open;
 };
-const row = (ticket: number, kind: Ask["kind"] = "ask"): Ask => ({
-	key: kind === "ask" ? `${ticket}/${sealed.ask}` : `${ticket}/stuck/r-build-5`,
+const row = (ticket: number, kind: Ask["kind"] = "ask", ask = sealed): Ask => ({
+	key: kind === "ask" ? `${ticket}/${ask.ask}` : `${ticket}/stuck/r-build-5`,
 	ticket,
 	kind,
 	title: "Read names in one form",
 	what: kind === "ask" ? DRAFT.what : "Checks failed",
-	...(kind === "ask" ? {sealed} : {}),
+	...(kind === "ask" ? {sealed: ask} : {}),
 	resume: "build",
 	at: 0,
 	seen: false,
 });
-const menu = (ticket: number, keys = defaults, kind: Ask["kind"] = "ask") => {
+const menu = (ticket: number, keys = defaults, kind: Ask["kind"] = "ask", ask = sealed) => {
 	const toHost = vi.fn<FrameProps["toHost"]>();
 	const answer = vi.fn<AskActions["answer"]>(() => Effect.fail({why: "The host is disconnected"}));
 	const open = desk();
@@ -315,7 +336,7 @@ const menu = (ticket: number, keys = defaults, kind: Ask["kind"] = "ask") => {
 	const props: FrameProps = {
 		desk: open,
 		frame: {...FRAME, over: {kind: "asks"}},
-		asks: {asks: [row(ticket, kind)], later: [], reach: "ok", why: null},
+		asks: {asks: [row(ticket, kind, ask)], later: [], reach: "ok", why: null},
 		host: null,
 		link: {kind: "up"},
 		attachedOnce: true,
@@ -471,6 +492,112 @@ it("focused reading time reaches the answer from both the menu and the tile", as
 		{seed: 119120, numRuns: 20, examples: [[117, 60_000]]},
 	); // Review 5: a minute read in the menu saved zero.
 });
+
+// Today's version, plan law 16. Review 6's plant is present: each mounted AskView starts at
+// zero. Mount the real menu, ticket and tracker, sharing only their ask and host actions.
+// The old single-model law cannot catch an attention count lost when that model unmounts.
+const focusedMs = Schema.Int.check(
+	Schema.isGreaterThanOrEqualTo(1),
+	Schema.isLessThanOrEqualTo(120_000),
+);
+const visits = Schema.Array(
+	Schema.Struct({
+		place: Schema.Literals(["menu", "ticket", "tracker"]),
+		ms: focusedMs,
+		openings: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(3)),
+		away: focusedMs,
+	}),
+).check(Schema.isMinLength(2), Schema.isMaxLength(7));
+
+property(
+	"the same ask saves all focused time and evidence openings across mounted views",
+	{ticket: ticketNumber, visits},
+	async ({ticket, visits}) => {
+		const actual: {place: string; ms: number; opened: readonly string[]}[] = [];
+		const expected: typeof actual = [];
+		// Each generated history ends in each real view, so an early failure cannot hide an
+		// untested ticket or tracker mount. Earlier visits can repeat or return in any order.
+		for (const place of ["menu", "ticket", "tracker"] as const) {
+			const sequence = visits.map((visit, i) =>
+				i === visits.length - 1 ? {...visit, place} : visit,
+			);
+			// A fresh ask per evaluation keeps a future shared count independent during shrinking.
+			const asked = await Effect.runPromise(sealAsk({...DRAFT, ask: `a-${crypto.randomUUID()}`}));
+			const ask = askShownOf(asked);
+			const entries = [FILED, asked].map((fact, i) =>
+				Schema.decodeUnknownSync(Entry)({
+					pos: i + 1,
+					ticket,
+					by: i === 0 ? OWNER : AGENT,
+					at: NOW + i,
+					fact,
+				}),
+			);
+			const state = {
+				...tickets.init()[0],
+				ready: true,
+				tickets: fold([], entries).tickets,
+				open: ticket,
+				now: NOW,
+			};
+			const subject = menu(ticket, defaults, "ask", ask);
+			subject.answer.mockImplementation(() => Effect.succeed(null));
+			const nodes = {
+				menu: createElement(Over, subject.props),
+				ticket: createElement(TicketWindow, {view: ticketProgram.view.of(state), send: () => {}}),
+				tracker: createElement(TrackerWindow, {
+					view: trackerProgram.view.of(state),
+					send: () => {},
+				}),
+			};
+			const within = (node: ReactNode) =>
+				createElement(AskActions.Provider, {value: subject.actions}, node);
+			let now = NOW;
+			const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+			const test = await mount(within(null));
+			const opened: string[] = [];
+			let total = 0;
+			try {
+				for (const [i, visit] of sequence.entries()) {
+					await test.render(within(nodes[visit.place]));
+					expect(test.find(".ask-view").getAttribute("data-ask-place")).toBe(visit.place);
+					await test.focus(test.find(visit.place === "menu" ? '[role="grid"]' : ".ask-view"));
+					// Events on both sides of each reading interval exercise a running focus clock.
+					now += Math.floor(visit.ms / 2);
+					for (let opening = 0; opening < visit.openings; opening++) {
+						if (!test.find(".ask-evidence").hasAttribute("hidden")) await test.press(" ");
+						await test.press(" ");
+						expect(test.find(".ask-evidence").hasAttribute("hidden")).toBe(false);
+						opened.push("evidence");
+					}
+					now += visit.ms - Math.floor(visit.ms / 2);
+					total += visit.ms;
+					if (i < sequence.length - 1) {
+						await test.focus(test.document.body);
+						await test.render(within(null));
+						now += visit.away;
+					}
+				}
+				// Whichever view is last answers through the real mounted editor's save command.
+				await test.press("y");
+				expect(subject.answer).toHaveBeenCalledTimes(1);
+				const answer = subject.answer.mock.calls[0]?.[0];
+				expect(answer).toMatchObject({
+					ticket,
+					ask: ask.ask,
+					answer: {_tag: "rec"},
+				});
+				if (answer?.via._tag !== "window") throw new Error("The view saved no window attention");
+				actual.push({place, ms: answer.via.took.ms, opened: answer.via.took.opened});
+				expected.push({place, ms: total, opened});
+			} finally {
+				await test.close();
+				clock.mockRestore();
+			}
+		}
+		expect(actual, JSON.stringify({actual, expected})).toEqual(expected);
+	},
+);
 
 // Review 5, finding 4. Plant present: built-in j/k consume a person's answer binding first.
 it("a mapped answer key wins over built-in menu navigation", async () => {
