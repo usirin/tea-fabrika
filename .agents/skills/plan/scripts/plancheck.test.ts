@@ -200,8 +200,9 @@ describe("plancheck, today's tooling", () => {
 					].includes(path);
 					const body = `A bare \`${mention}\` mention is prose.\n\n${table(["File", "Why", "Owner step"], [[`\`${path}\``, `mentions ${mention}`, owner]])}`;
 					const got = check(body);
+					// Amendment A9 lists every exam path named anywhere, so a prose mention is listed; it still
+					// never decides the exit code. The listing law below covers it.
 					expect(got.code, got.text).toBe(!owner || (root && owner !== "tests") ? 1 : 0);
-					if (!root) expect(got.text).not.toContain(`exam path named: ${mention}\t`);
 				},
 			),
 			{
@@ -217,9 +218,67 @@ describe("plancheck, today's tooling", () => {
 		);
 	});
 
+	// Plant: list only qualified paths (with a "/") outside path cells, as 2e25c4e7 does, or skip words
+	// inside a Markdown link or emphasis. Amendment A9: the lead's backstop is plancheck's listing of
+	// every exam path named anywhere in the plan, so a backticked exam path is always listed.
+	it("every backticked exam path anywhere in the plan is listed", () => {
+		const exam = [
+			"package.json",
+			"vitest.config.ts",
+			"exam-paths.json",
+			"allowed_signers",
+			"pnpm-workspace.yaml",
+			".github/workflows/check.yaml",
+			"oxlint-plugins/laws.ts",
+		];
+		// A backticked path, maybe inside a Markdown link's text or target, maybe inside emphasis.
+		const links = {
+			none: (c: string) => c,
+			textSelf: (c: string, p: string) => `[${c}](${p})`,
+			textDot: (c: string, p: string) => `[${c}](./${p})`,
+			textOther: (c: string) => `[${c}](README.md)`,
+			target: (c: string) => `[see](${c})`,
+		};
+		type Link = keyof typeof links;
+		const emphasis = fc.constantFrom("", "**", "*", "_", "__");
+		const place = {
+			prose: (t: string) => `Before the build, ${t} changes once.`,
+			fileColumn: (t: string) => table(["File", "Why", "Owner step"], [[t, "the fix", "build"]]),
+			whyColumn: (t: string) =>
+				table(["File", "Why", "Owner step"], [["`src/plain.ts`", `touches ${t}`, "build"]]),
+			otherTable: (t: string) => table(["Law", "Note"], [["holds", `see ${t}`]]),
+			bullet: (t: string) => `- ${t} keeps its owner.`,
+		};
+		type Place = keyof typeof place;
+		fc.assert(
+			fc.property(
+				fc.constantFrom(...exam),
+				fc.boolean(),
+				fc.constantFrom(...(Object.keys(links) as Link[])),
+				emphasis,
+				fc.constantFrom(...(Object.keys(place) as Place[])),
+				(path, dot, link, around, where) => {
+					const code = `\`${dot ? "./" : ""}${path}\``;
+					const text = `${around}${links[link](code, path)}${around}`;
+					const got = check(place[where](text));
+					expect(got.text, `${text} in ${where}\n${got.text}`).toContain(
+						`exam path named: ${path}\t`,
+					);
+				},
+			),
+			{
+				...options,
+				// pinned: ticket 520 review round 5, the build-owned cell [`package.json`](package.json)
+				// printed "no exam paths named" at 2e25c4e7; main listed it.
+				examples: [["package.json", false, "textSelf", "", "fileColumn"]],
+			},
+		);
+	});
+
 	// Plant: split a path cell on commas only, as the build did after bfd35fb0; drop a several-word item
 	// with a bare non-exam name as a sentence, as ebb2cca5 does; ignore the possessive qualifier; keep
-	// the punctuation around a word, or let any possessive trigger the exception, as d1686a3b does.
+	// the punctuation around a word, or let any possessive trigger the exception, as d1686a3b does; read a
+	// Markdown link as one word, as 2e25c4e7 does.
 	// Amendment A8: every exam path in a path cell counts, whatever words surround it, unless the cell
 	// names another package with a possessive (`<name>'s`); then only qualified paths (with a "/") count.
 	// Amendment A9: punctuation around a word is stripped first, and a possessive of a word meaning this
@@ -265,6 +324,11 @@ describe("plancheck, today's tooling", () => {
 			semicolon: (w: string) => `${w};`,
 			colon: (w: string) => `${w}:`,
 			period: (w: string) => `${w}.`,
+			// Markdown links, review round 5: the path in the link's text, its target, or both.
+			linkCode: (w: string) => `[\`${w}\`](${w})`,
+			linkSelf: (w: string) => `[${w}](${w})`,
+			linkText: (w: string) => `[text](${w})`,
+			linkDot: (w: string) => `[\`${w}\`](./${w})`,
 		};
 		type Wrap = keyof typeof wraps;
 		const wrap = fc.constantFrom(...(Object.keys(wraps) as Wrap[]));
@@ -415,6 +479,17 @@ describe("plancheck, today's tooling", () => {
 							why: "the fix",
 						},
 					],
+					// pinned: ticket 520 review round 5, a Markdown link hid an exam path. The build-owned
+					// cell [`package.json`](package.json) printed "no exam paths named" at 2e25c4e7.
+					[
+						{
+							picked: [{path: "package.json", wrap: "linkCode"}],
+							separators: [" ", " ", " ", " "],
+							owner: "build",
+							possessive: undefined,
+							why: "the fix",
+						},
+					],
 				],
 			},
 		);
@@ -429,6 +504,13 @@ describe("plancheck, today's tooling", () => {
 		);
 		expect(makefile.code, makefile.text).toBe(1);
 		expect(makefile.text).toContain("package.json is an exam path owned by build, not tests");
+		// Review round 5's cell: at 2e25c4e7 it printed "no exam paths named" and exited 0.
+		const link = check(
+			"| File | Lines | Owner step |\n| --- | --- | --- |\n| [`package.json`](package.json) | 20 | build |",
+		);
+		expect(link.code, link.text).toBe(1);
+		expect(link.text).toContain("exam path named: package.json\t");
+		expect(link.text).toContain("package.json is an exam path owned by build, not tests");
 		const old = check(
 			[
 				head,
