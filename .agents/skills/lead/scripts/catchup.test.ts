@@ -1,11 +1,19 @@
 import {spawnSync} from "node:child_process";
-import {existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	readdirSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 
-// Today's tooling. Every command that can reach GitHub, git or a signing key is a local stub.
+// Today's tooling. GitHub, signing and pushes are stubbed. Cleanup uses disposable local Git.
 const script = join(import.meta.dirname, "catchup.sh");
 const tip = "0123456789abcdef0123456789abcdef01234567";
 const reads = ["head", "checks", "trust", "apps", "logs"] as const;
@@ -19,6 +27,8 @@ type Setup = {
 	branch: string;
 	merge: boolean;
 	refused: "none" | "notes" | "branch";
+	cleanup?: "clean" | "dirty" | "locked" | "unsaved" | "malformed" | "error";
+	mergeFails?: boolean;
 	// Seconds since the start, read by `date` after that many check reads (the last one repeats).
 	clock?: number[];
 };
@@ -79,6 +89,7 @@ if (cmd === "gh") {
   }
   if (key === "apps") console.log(setup.answer === "app" ? "impostor" : "github-actions");
   if (key === "logs") console.log("commits\tcheck\t2026-11-08T00:00:00Z commits: 3 commits, ticket " + (setup.answer === "ticket" ? "521" : "520"));
+  if (key === "merge" && setup.mergeFails) die("merge refused");
   process.exit(0);
 }
 if (cmd === "git") {
@@ -89,6 +100,14 @@ if (cmd === "git") {
     process.exit(ran.status ?? 1);
   }
   if (args.includes("merge-base")) process.exit(setup.merge ? 1 : 0);
+  const op = args[0] === "-C" ? args.slice(2) : args;
+  const local = ["update-ref", "worktree", "rev-parse", "for-each-ref", "status", "cat-file", "show-ref", "symbolic-ref", "rev-list", "config", "ls-files", "log"];
+  if (setup.cleanup && args.some(a => local.includes(a)) && !["fetch", "checkout", "push"].includes(op[0]) && !args.includes("merge")) {
+    if (setup.cleanup === "error" && args.includes("remove") && args.some(a => a.endsWith("driver"))) die("planted worktree removal failure");
+    const ran = require("node:child_process").spawnSync("/usr/bin/git", args, {encoding: "utf8"});
+    process.stdout.write(ran.stdout || ""); process.stderr.write(ran.stderr || ""); process.exit(ran.status ?? 1);
+  }
+  if (!setup.cleanup && (args.includes("update-ref") || args.includes("worktree"))) process.exit(0);
   if (args[0] === "rev-parse") console.log(args.includes("--short") ? process.env.CATCHUP_TIP.slice(0, 7) : process.env.CATCHUP_TIP);
   else if (args[0] === "push" && setup.refused === "branch") die("branch push refused");
   else if (!["fetch", "checkout", "push", "rev-parse"].includes(args[0]) && !args.includes("merge")) die("unhandled git command");
@@ -115,6 +134,73 @@ const run = (setup: Setup, args: string[] = []) => {
 		mkdirSync(bin);
 		mkdirSync(join(dir, "home"));
 		mkdirSync(join(dir, "boxes/catchup-900/node_modules"), {recursive: true});
+		const localEnv = {
+			...process.env,
+			HOME: join(dir, "home"),
+			GIT_CONFIG_NOSYSTEM: "1",
+			GIT_CONFIG_GLOBAL: "/dev/null",
+			TYPESAFE_API_KEY: undefined,
+		};
+		const git = (at: string, ...commands: string[]) => {
+			const got = spawnSync("/usr/bin/git", ["-C", at, ...commands], {
+				encoding: "utf8",
+				env: localEnv,
+				timeout: 5_000,
+			});
+			expect(got.status, got.stderr).toBe(0);
+			return got.stdout.trim();
+		};
+		let checkedTip = tip;
+		if (setup.cleanup) {
+			git(dir, "init", "-q", "--initial-branch=main");
+			git(dir, "config", "user.name", "Fixture");
+			git(dir, "config", "user.email", "fixture@example.test");
+			writeFileSync(join(dir, "tracked"), "base\n");
+			git(dir, "add", "tracked");
+			git(dir, "commit", "-qm", "base");
+			const base = git(dir, "rev-parse", "HEAD");
+			git(dir, "checkout", "-qb", setup.branch);
+			writeFileSync(join(dir, "tracked"), setup.branch);
+			git(dir, "commit", "-qam", "checked head");
+			checkedTip = git(dir, "rev-parse", "HEAD");
+			git(dir, "checkout", "-q", "main");
+			git(dir, "update-ref", "refs/remotes/origin/main", base);
+			// Simulate a squash: the checked head is not an ancestor of main.
+			writeFileSync(join(dir, "tracked"), `squashed ${setup.branch}`);
+			git(dir, "commit", "-qam", "landed squash");
+			rmSync(join(dir, "boxes/catchup-900"), {recursive: true});
+			git(dir, "worktree", "add", "-q", "--detach", join(dir, "boxes/catchup-900"), checkedTip);
+			mkdirSync(join(dir, "boxes/catchup-900/node_modules"));
+			git(dir, "worktree", "add", "-q", join(dir, "boxes/driver"), setup.branch);
+			git(dir, "branch", `${setup.branch}-sibling`, checkedTip);
+			git(dir, "worktree", "add", "-q", join(dir, "boxes/sibling"), `${setup.branch}-sibling`);
+			for (const [name, branch] of [
+				["exact box", setup.branch],
+				["sibling box", `${setup.branch}-sibling`],
+				["later box", setup.branch],
+			]) {
+				const work = join(dir, "boxes", name!),
+					data = `${work}-gitdata`;
+				git(dir, "clone", "-q", `--separate-git-dir=${data}`, dir, work);
+				git(work, "checkout", "-q", branch!);
+				git(work, "remote", "remove", "origin");
+				git(work, "config", "user.name", "Fixture");
+				git(work, "config", "user.email", "fixture@example.test");
+				if (name === "exact box") {
+					if (setup.cleanup === "dirty") writeFileSync(join(work, "tracked"), "dirty");
+					if (setup.cleanup === "unsaved") {
+						writeFileSync(join(work, "tracked"), "unsaved");
+						git(work, "commit", "-qam", "unsaved");
+					}
+					if (setup.cleanup === "malformed") writeFileSync(join(data, "HEAD"), "malformed");
+				}
+			}
+			if (setup.cleanup === "dirty") writeFileSync(join(dir, "boxes/driver/tracked"), "dirty");
+			if (setup.cleanup === "locked") git(dir, "worktree", "lock", join(dir, "boxes/driver"));
+			mkdirSync(join(dir, "boxes/state"));
+			writeFileSync(join(dir, "boxes/state/driver.md"), "saved wait");
+			expect(git(dir, "remote")).toBe("");
+		}
 		writeFileSync(join(dir, "setup.json"), JSON.stringify(setup));
 		for (const cmd of ["gh", "git", "node", "pnpm", "nice", "sleep", "date"]) {
 			writeFileSync(join(bin, cmd), `#!${process.execPath}\n${stub}`, {mode: 0o755});
@@ -133,7 +219,9 @@ const run = (setup: Setup, args: string[] = []) => {
 				REMOTE: "https://github.com/fixture/repo.git",
 				GH_REPO: "fixture/repo",
 				CATCHUP_FIXTURE: dir,
-				CATCHUP_TIP: tip,
+				CATCHUP_TIP: checkedTip,
+				GIT_CONFIG_NOSYSTEM: "1",
+				GIT_CONFIG_GLOBAL: "/dev/null",
 				TYPESAFE_API_KEY: undefined,
 			},
 		});
@@ -147,7 +235,23 @@ const run = (setup: Setup, args: string[] = []) => {
 			.filter(Boolean)
 			.map((line) => JSON.parse(line));
 		expect(existsSync(join(dir, "boxes/catchup.lock"))).toBe(false);
-		return {code: ran.status, text: ran.stdout + ran.stderr, calls};
+		const remaining = readdirSync(join(dir, "boxes"));
+		const keptHead = setup.cleanup
+			? spawnSync("/usr/bin/git", ["-C", dir, "rev-parse", "--verify", "refs/keep/pr/900"], {
+					encoding: "utf8",
+					env: localEnv,
+				}).stdout.trim()
+			: "";
+		const state = setup.cleanup ? readFileSync(join(dir, "boxes/state/driver.md"), "utf8") : "";
+		return {
+			code: ran.status,
+			text: ran.stdout + ran.stderr,
+			calls,
+			remaining,
+			keptHead,
+			checkedTip,
+			state,
+		};
 	} finally {
 		rmSync(dir, {recursive: true, force: true});
 	}
@@ -298,6 +402,135 @@ describe("catchup, today's tooling", () => {
 			{seed: 300, numRuns: 5},
 		);
 	});
+	// Plant: clean before a successful merge, including after checks, trust, pushes or merge fail.
+	it("T318 cleanup starts only after a successful merge", () => {
+		fc.assert(
+			fc.property(
+				fc.record({
+					suffix: fc.nat({max: 99}),
+					answer: fc.constantFrom<Setup["answer"]>("red", "event", "app", "ticket", "trust-red"),
+				}),
+				({suffix, answer}) => {
+					for (const patch of [
+						{answer},
+						{merge: true, refused: "notes" as const},
+						{mergeFails: true},
+					]) {
+						const got = run({
+							...green,
+							branch: `fabrikalfa/cleanup-${suffix}`,
+							cleanup: "clean",
+							...patch,
+						});
+						expect(got.code, got.text).toBe(1);
+						for (const path of [
+							"exact box",
+							"exact box-gitdata",
+							"later box",
+							"catchup-900",
+							"driver",
+							"sibling",
+						])
+							expect(got.remaining).toContain(path);
+						expect(got.keptHead).toBe("");
+						expect(
+							got.calls.filter(
+								(c) =>
+									c.cmd === "git" && (c.args.includes("remove") || c.args.includes("update-ref")),
+							),
+						).toEqual([]);
+					}
+					// Positive case keeps this law red until cleanup exists; absence alone is insufficient.
+					const landed = run({...green, branch: `fabrikalfa/cleanup-${suffix}`, cleanup: "clean"});
+					expect(landed.code, landed.text).toBe(0);
+					expect(landed.remaining).not.toContain("catchup-900");
+					const mergedAt = landed.calls.findIndex((c) => c.key === "merge");
+					for (const [i, c] of landed.calls.entries())
+						if (c.cmd === "git" && (c.args.includes("remove") || c.args.includes("update-ref")))
+							expect(i).toBeGreaterThan(mergedAt);
+				},
+			),
+			{seed: 3191, numRuns: 3},
+		);
+	});
+
+	// Plants: match a branch prefix, omit refs/keep, or leave the catch-up/driver checkout registered.
+	it("T318 cleanup retains the checked head and removes only exact branch boxes and registered worktrees", () => {
+		fc.assert(
+			fc.property(
+				fc.record({
+					suffix: fc.stringMatching(/^[a-z]{2,8}$/),
+					method: fc.constantFrom("merge", "squash"),
+				}),
+				({suffix, method}) => {
+					const got = run({...green, branch: `fabrikalfa/${suffix}`, cleanup: "clean"}, [
+						"--merge-method",
+						method,
+					]);
+					expect(got.code, got.text).toBe(0);
+					expect(got.keptHead).toBe(got.checkedTip);
+					for (const path of [
+						"exact box",
+						"exact box-gitdata",
+						"later box",
+						"later box-gitdata",
+						"catchup-900",
+						"driver",
+					])
+						expect(got.remaining).not.toContain(path);
+					for (const path of ["sibling box", "sibling box-gitdata", "sibling", "state"])
+						expect(got.remaining).toContain(path);
+					expect(got.state).toBe("saved wait");
+					const removes = got.calls.filter(
+						(c) => c.cmd === "git" && c.args.includes("worktree") && c.args.includes("remove"),
+					);
+					expect(removes).toHaveLength(2);
+					for (const call of removes) expect(call.args).not.toContain("--force");
+					expect(
+						got.calls.some(
+							(c) =>
+								c.cmd === "git" &&
+								c.args.includes("list") &&
+								c.args.includes("--porcelain") &&
+								c.args.includes("-z"),
+						),
+					).toBe(true);
+					const keepAt = got.calls.findIndex((c) => c.args.includes("refs/keep/pr/900"));
+					const firstRemove = got.calls.findIndex((c) => c.args.includes("remove"));
+					expect(keepAt).toBeGreaterThan(-1);
+					expect(keepAt).toBeLessThan(firstRemove);
+				},
+			),
+			{seed: 3192, numRuns: 3},
+		);
+	});
+
+	// Plants: propagate cleanup failure into merge status; stop after the first kept candidate.
+	it("T318 kept dirty unsaved locked malformed or failed candidates never stop later cleanup or turn merge red", () => {
+		fc.assert(
+			fc.property(fc.nat({max: 99}), (suffix) => {
+				for (const cleanup of ["dirty", "unsaved", "locked", "malformed", "error"] as const) {
+					const got = run({...green, branch: `fabrikalfa/kept-${suffix}`, cleanup});
+					expect(got.code, got.text).toBe(0);
+					expect(merges(got.calls)).toHaveLength(1);
+					expect(got.keptHead).toBe(got.checkedTip);
+					expect(got.remaining).not.toContain("later box");
+					expect(got.remaining).not.toContain("later box-gitdata");
+					expect(got.remaining).not.toContain("catchup-900");
+					const keepBox = ["dirty", "unsaved", "malformed"].includes(cleanup);
+					expect(got.remaining.includes("exact box")).toBe(keepBox);
+					expect(got.remaining.includes("exact box-gitdata")).toBe(keepBox);
+					expect(got.remaining.includes("driver")).toBe(
+						["dirty", "locked", "error"].includes(cleanup),
+					);
+					expect(got.text).toMatch(/kept [^\n]+: [^\n]+/);
+					expect(got.state).toBe("saved wait");
+				}
+			}),
+			{seed: 3193, numRuns: 3},
+		);
+	});
+
 	// Plant: exit on the first read failure, or allow a fourth attempt.
 	it("brief read failures recover within the three-attempt budget", () => {
 		fc.assert(
