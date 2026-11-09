@@ -78,6 +78,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `box.sh new <name> <base> <branch>` | a Codex box: its own clone, git data outside `.git`, installed |
 | `box.sh run <name> <prompt> <out>` | run Codex in the box, writable only there |
 | `box.sh fetch <name> <branch>` | fetch the branch and step notes into the main checkout, nothing else |
+| `drive.ts <lane> <step> <brief>` | one Codex step end to end, with no agent waiting: box, run, fetch, checks, backup push, field row, state; one JSON line (below) |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
@@ -91,6 +92,31 @@ that folder read-only inside the writable checkout.
 Catch-up retries read-only `gh` failures three times, waiting 1 and 2 seconds. A successful red or
 untrusted answer stops immediately. Logs are captured before parsing, so a failed read cannot
 look green. Pushes and merges are never retried by that helper.
+
+## Use drive.ts for any Codex step
+
+Use `drive.ts` for any Codex step. A Claude agent only reads its result and makes the judgment call.
+Start it in the background and read the last line only:
+
+```sh
+node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|review> <brief.md> \
+	[--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan-only] &
+```
+
+- It starts a box at `--from`, else the lane's last head (`BOXES/state/<lane>.json`, moved only
+  by a step it accepted), else `origin/main`. A plan reads the main checkout and takes no `--from`.
+- It runs Codex with the brief and an `answer:` line it asks for, waits with no agent, fetches,
+  and checks: `pnpm commits check` and this step's name on every new commit, no exam path in any
+  build commit, the leak grep on each commit's added lines, a review committing nothing, and
+  `plancheck --draft` on a plan. A check that cannot run is `stuck`, never a pass.
+- Then it pushes `<branch>-wip` as the bot when the step committed, writes the field row to
+  `BOXES/<lane>-rows.jsonl`, appends the step to `state/<lane>.json` and `.md`, and removes the box.
+  A stop after the time limit takes Codex's whole process group with it.
+- Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (the question
+  is in `why`), 30 stuck, 2 usage, 3 refused (8 Codex boxes running). It never retries. A stuck
+  step keeps its box. A tests or build step waits while `pgrep -x tsgo` finds one.
+- The mutation step binds a port, so a Claude agent still runs it. `DRIVE_MINUTES` (default 60)
+  stops a step that runs too long.
 
 ## Pushes and protected refs
 
