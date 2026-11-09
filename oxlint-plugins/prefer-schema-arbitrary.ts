@@ -315,13 +315,14 @@ export const preferSchemaArbitrary: CreateRule = {
 							continue;
 						const input = callback.params[0];
 						const parameter = input && binding(input);
-						if (!parameter) continue;
+						const body = callback.body;
+						if (!parameter || !body) continue;
 						const returns =
-							callback.body.type === "BlockStatement"
-								? [...below(callback.body)]
+							body.type === "BlockStatement"
+								? [...below(body)]
 										.filter((part) => {
 											if (part.type !== "ReturnStatement" || !part.argument) return false;
-											let owner = part.parent;
+											let owner: Node | null = part.parent;
 											while (
 												owner &&
 												owner !== callback &&
@@ -337,7 +338,7 @@ export const preferSchemaArbitrary: CreateRule = {
 										.flatMap((part) =>
 											part.type === "ReturnStatement" && part.argument ? [part.argument] : [],
 										)
-								: [callback.body];
+								: [body];
 						for (const returned of returns) {
 							if (returned.type !== "CallExpression") continue;
 							const name = maker(returned.callee);
