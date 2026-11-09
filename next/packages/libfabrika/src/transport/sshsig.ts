@@ -61,16 +61,8 @@ const HASHES: ReadonlyMap<string, Hash> = new Map([
 
 /** What the signature covers. Reserved is always written empty. */
 const signedBytes = Effect.fnUntraced(function* (space: string, hash: Hash, text: string) {
-	return yield* Effect.map(
-		subtle(() => crypto.subtle.digest(hash.web, utf8(text))),
-		(digest) =>
-			join(
-				utf8("SSHSIG"),
-				field(space),
-				field(""),
-				field(hash.name),
-				field(new Uint8Array(digest)),
-			),
+	return yield* Effect.map(subtle("digest", hash.web, utf8(text)), (digest) =>
+		join(utf8("SSHSIG"), field(space), field(""), field(hash.name), field(new Uint8Array(digest))),
 	);
 });
 
@@ -165,12 +157,10 @@ export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {
 					}
 					const signature = ed25519(sig.signature, 64);
 					if (Option.isNone(signature)) return bad;
-					const key = yield* subtle(() =>
-						crypto.subtle.importKey("raw", publicKey.value, {name: "Ed25519"}, false, ["verify"]),
-					);
-					const ok = yield* subtle(() =>
-						crypto.subtle.verify({name: "Ed25519"}, key, signature.value, bytes),
-					);
+					const key = yield* subtle("importKey", "raw", publicKey.value, {name: "Ed25519"}, false, [
+						"verify",
+					]);
+					const ok = yield* subtle("verify", {name: "Ed25519"}, key, signature.value, bytes);
 					return ok ? Checked.cases.key.make({signer}) : bad;
 				}).pipe(Effect.catch(() => Effect.succeed(bad))),
 		},

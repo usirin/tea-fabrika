@@ -1398,18 +1398,18 @@ const random = () => Base64Url.encode(crypto.getRandomValues(new Uint8Array(24))
 const fingerprint = Effect.fnUntraced(function* (value: string, line: boolean) {
 	const bytes = line ? Base64.decode(value.split(/\s+/)[1] ?? "") : Base64Url.decode(value);
 	if (Result.isFailure(bytes)) return yield* new NotGranted({});
+	const body = new Uint8Array(bytes.success);
+	const fail = () => new LedgerError({why: "crypto"});
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
-	const digest = yield* Effect.tryPromise({
-		try: () => crypto.subtle.digest("SHA-256", new Uint8Array(bytes.success)),
-		catch: () => new LedgerError({why: "crypto"}),
-	});
+	const work = Effect.tryPromise({try: () => crypto.subtle.digest("SHA-256", body), catch: fail});
+	const digest = yield* work;
 	return `SHA256:${Base64.encode(new Uint8Array(digest)).replace(/=+$/, "")}`;
 });
 const hash = Effect.fnUntraced(function* (text: string) {
+	const bytes = new TextEncoder().encode(text);
+	const fail = () => new LedgerError({why: "crypto"});
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
-	const digest = yield* Effect.tryPromise({
-		try: () => crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)),
-		catch: () => new LedgerError({why: "crypto"}),
-	});
+	const work = Effect.tryPromise({try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail});
+	const digest = yield* work;
 	return Base64Url.encode(new Uint8Array(digest));
 });

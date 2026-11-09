@@ -101,25 +101,25 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
 		args: ReadonlyArray<unknown>,
 	) {
 		if (port === 0) return yield* new ControlError({reason: "offline"});
+		const url = `http://127.0.0.1:${port}`;
+		const fail = () => new ControlError({reason: "unreachable"});
+		const request = yield* Effect.try({
+			try: () => ({
+				method: "POST",
+				headers: {
+					// oxlint-disable-next-line fabrika/no-redacted-value -- the private HTTP header sends the control bearer
+					authorization: `Bearer ${Redacted.value(token)}`,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({target, project, name, method, args}),
+			}),
+			catch: fail,
+		});
 		// oxlint-disable-next-line fabrika/no-promises -- edge: the private runtime socket is an HTTP transport for object calls
-		const response = yield* Effect.tryPromise({
-			try: () =>
-				fetch(`http://127.0.0.1:${port}`, {
-					method: "POST",
-					headers: {
-						// oxlint-disable-next-line fabrika/no-redacted-value -- the private HTTP header sends the control bearer
-						authorization: `Bearer ${Redacted.value(token)}`,
-						"content-type": "application/json",
-					},
-					body: JSON.stringify({target, project, name, method, args}),
-				}),
-			catch: () => new ControlError({reason: "unreachable"}),
-		});
+		const response = yield* Effect.tryPromise({try: () => fetch(url, request), catch: fail});
+		const badRow = () => new ControlError({reason: "bad_row"});
 		// oxlint-disable-next-line fabrika/no-promises -- edge: the binding transport response returns a Promise
-		const raw = yield* Effect.tryPromise({
-			try: () => response.json(),
-			catch: () => new ControlError({reason: "bad_row"}),
-		});
+		const raw = yield* Effect.tryPromise({try: () => response.json(), catch: badRow});
 		const answer = yield* Schema.decodeUnknownEffect(Response)(raw).pipe(
 			Effect.mapError(() => new ControlError({reason: "bad_row"})),
 		);

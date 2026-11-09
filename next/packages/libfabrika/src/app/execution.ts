@@ -182,54 +182,48 @@ class ExecutionClient extends Context.Service<
 >()("fabrika/ExecutionClient") {
 	static make(rpc: ExecutionCalls): ExecutionClient["Service"] {
 		return {
-			init: (saved) =>
+			init: (saved) => {
+				const fail = (cause: unknown) => new ProgramDown({why: "load", source: "rpc", cause});
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader init RPC enters Effect
-				Effect.tryPromise({
-					try: () => rpc.init(saved),
-					catch: (cause) => new ProgramDown({why: "load", source: "rpc", cause}),
-				}),
-			step: (model, msg) =>
+				return Effect.tryPromise({try: () => rpc.init(saved), catch: fail});
+			},
+			step: (model, msg) => {
+				const fail = (cause: unknown) => new ProgramDown({why: "step", source: "rpc", cause});
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader step RPC enters Effect
-				Effect.tryPromise({
-					try: () => rpc.step(model, msg),
-					catch: (cause) => new ProgramDown({why: "step", source: "rpc", cause}),
-				}),
-			fold: (model, msg) =>
+				return Effect.tryPromise({try: () => rpc.step(model, msg), catch: fail});
+			},
+			fold: (model, msg) => {
+				const fail = (cause: unknown) =>
+					new ProgramDown({why: "saved_letter", source: "rpc", cause});
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader fold RPC enters Effect
-				Effect.tryPromise({
-					try: () => rpc.fold(model, msg),
-					catch: (cause) => new ProgramDown({why: "saved_letter", source: "rpc", cause}),
-				}),
-			upgrade: (saved) =>
+				return Effect.tryPromise({try: () => rpc.fold(model, msg), catch: fail});
+			},
+			upgrade: (saved) => {
+				const fail = (cause: unknown) =>
+					new ProgramDown({why: "saved_state", source: "rpc", cause});
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader upgrade RPC enters Effect
-				Effect.tryPromise({
-					try: () => rpc.upgrade(saved),
-					catch: (cause) => new ProgramDown({why: "saved_state", source: "rpc", cause}),
-				}),
-			reply: (cmd, outcome) =>
+				return Effect.tryPromise({try: () => rpc.upgrade(saved), catch: fail});
+			},
+			reply: (cmd, outcome) => {
+				const fail = (cause: unknown) => new ProgramDown({why: "step", source: "rpc", cause});
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader reply RPC enters Effect
-				Effect.tryPromise({
-					try: () => rpc.reply(cmd, outcome),
-					catch: (cause) => new ProgramDown({why: "step", source: "rpc", cause}),
-				}),
+				return Effect.tryPromise({try: () => rpc.reply(cmd, outcome), catch: fail});
+			},
 			check: (kind, event) => {
 				const check = rpc.check;
 				if (check === undefined) return Effect.fail(new ProgramDown({why: "load"}));
+				const fail = (cause: unknown) => new ProgramDown({why: "step", source: "rpc", cause});
+				const args: Parameters<typeof check> = [kind, event];
 				// Reflect.apply keeps this without reading a remote method named call off the stub.
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader check RPC enters Effect
-				return Effect.tryPromise({
-					try: () => Reflect.apply(check, rpc, [kind, event]),
-					catch: (cause) => new ProgramDown({why: "step", source: "rpc", cause}),
-				});
+				return Effect.tryPromise({try: () => Reflect.apply(check, rpc, args), catch: fail});
 			},
 			admit: (m) => {
 				const admit = rpc.admit;
 				if (admit === undefined) return Effect.fail(new ProgramDown({why: "load"}));
+				const fail = (cause: unknown) => new ProgramDown({why: "step", source: "rpc", cause});
 				// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader admit RPC enters Effect
-				return Effect.tryPromise({
-					try: () => Reflect.apply(admit, rpc, [m]),
-					catch: (cause) => new ProgramDown({why: "step", source: "rpc", cause}),
-				});
+				return Effect.tryPromise({try: () => Reflect.apply(admit, rpc, [m]), catch: fail});
 			},
 		};
 	}

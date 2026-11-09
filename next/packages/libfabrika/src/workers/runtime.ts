@@ -207,11 +207,10 @@ export const checkedPut = Effect.fnUntraced(function* (
 	sha256: string,
 ) {
 	const copy = new Uint8Array(body);
+	const fail = () => new LedgerError({why: "crypto"});
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
-	const digest = yield* Effect.tryPromise({
-		try: () => crypto.subtle.digest("SHA-256", copy),
-		catch: () => new LedgerError({why: "crypto"}),
-	});
+	const work = Effect.tryPromise({try: () => crypto.subtle.digest("SHA-256", copy), catch: fail});
+	const digest = yield* work;
 	if (hex(digest) !== sha256.toLowerCase()) return yield* new LedgerError({why: "bad_row"});
 	yield* BucketClient.make(bucket).put(key, copy, sha256);
 });
@@ -250,12 +249,12 @@ const fingerprint = Effect.fnUntraced(function* (value: string) {
 	const ssh = value.startsWith("ssh-");
 	const blob = ssh ? Base64.decode(value.trim().split(/\s+/)[1] ?? "") : Base64Url.decode(value);
 	if (Result.isFailure(blob)) return yield* new LedgerError({why: "bad_row"});
+	const bytes = blob.success.slice(-32);
+	const fail = () => new LedgerError({why: "crypto"});
 	// SSH Ed25519 blobs end with the 32 public bytes. P10 uses this same key fingerprint.
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
-	const hash = yield* Effect.tryPromise({
-		try: () => crypto.subtle.digest("SHA-256", blob.success.slice(-32)),
-		catch: () => new LedgerError({why: "crypto"}),
-	});
+	const work = Effect.tryPromise({try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail});
+	const hash = yield* work;
 	return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
 });
 const projectLogic = Effect.fn("project.init")(function* (

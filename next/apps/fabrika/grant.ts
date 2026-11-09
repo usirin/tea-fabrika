@@ -42,19 +42,17 @@ const grant = Command.make(
 			try: () => new URL(url).origin,
 			catch: () => new GrantError({reason: "bad_url"}),
 		});
-		// oxlint-disable-next-line fabrika/no-promises -- edge: the grant command reads a public target over HTTP
-		const response = yield* Effect.tryPromise({
+		const unreachable = () => new GrantError({reason: "unreachable"});
+		const targetUrl = yield* Effect.try({
 			try: () =>
-				fetch(
-					`${origin}/grant/client/${encodeURIComponent(fingerprint)}?code=${encodeURIComponent(code)}`,
-				),
-			catch: () => new GrantError({reason: "unreachable"}),
+				`${origin}/grant/client/${encodeURIComponent(fingerprint)}?code=${encodeURIComponent(code)}`,
+			catch: unreachable,
 		});
+		// oxlint-disable-next-line fabrika/no-promises -- edge: the grant command reads a public target over HTTP
+		const response = yield* Effect.tryPromise({try: () => fetch(targetUrl), catch: unreachable});
+		const badTarget = () => new GrantError({reason: "bad_target"});
 		// oxlint-disable-next-line fabrika/no-promises -- edge: HTTP response bodies return a Promise
-		const raw = yield* Effect.tryPromise({
-			try: () => response.json(),
-			catch: () => new GrantError({reason: "bad_target"}),
-		});
+		const raw = yield* Effect.tryPromise({try: () => response.json(), catch: badTarget});
 		const target = yield* Schema.decodeUnknownEffect(Target)(raw).pipe(
 			Effect.mapError(() => new GrantError({reason: "bad_target"})),
 		);
@@ -90,22 +88,19 @@ const grant = Command.make(
 				return out;
 			}),
 		);
+		const grantUrl = `${origin}/grant`;
+		const request = {
+			method: "POST",
+			headers: {"content-type": "application/json"},
+			body: JSON.stringify({text, armored}),
+		};
 		// oxlint-disable-next-line fabrika/no-promises -- edge: the signed grant is posted over HTTP
-		const result = yield* Effect.tryPromise({
-			try: () =>
-				fetch(`${origin}/grant`, {
-					method: "POST",
-					headers: {"content-type": "application/json"},
-					body: JSON.stringify({text, armored}),
-				}),
-			catch: () => new GrantError({reason: "unreachable"}),
-		});
+		const post = Effect.tryPromise({try: () => fetch(grantUrl, request), catch: unreachable});
+		const result = yield* post;
 		if (!result.ok) return yield* new GrantError({reason: "refused"});
+		const badReply = () => new GrantError({reason: "bad_reply"});
 		// oxlint-disable-next-line fabrika/no-promises -- edge: HTTP response bodies return a Promise
-		const applied = yield* Effect.tryPromise({
-			try: () => result.json(),
-			catch: () => new GrantError({reason: "bad_reply"}),
-		});
+		const applied = yield* Effect.tryPromise({try: () => result.json(), catch: badReply});
 		const reply = yield* Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.Json))(
 			applied,
 		).pipe(Effect.mapError(() => new GrantError({reason: "bad_reply"})));

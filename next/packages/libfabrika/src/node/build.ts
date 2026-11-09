@@ -13,19 +13,18 @@ export const hash = Effect.fn("build.hash")((text: string) =>
 	).pipe(Effect.provide(Digest.layerWebCrypto)),
 );
 export const bundle = Effect.fn("build.bundle")(function* (input: string, plugins: Array<Plugin>) {
+	const options = {input, plugins, platform: "browser" as const, external: ["cloudflare:workers"]};
+	const fail = (error: unknown) => new BuildError({reason: "bundle", message: String(error)});
 	// oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown's build API returns a Promise
-	const built = yield* Effect.tryPromise({
-		try: () => rolldown({input, plugins, platform: "browser", external: ["cloudflare:workers"]}),
-		catch: (error) => new BuildError({reason: "bundle", message: String(error)}),
-	});
+	const built = yield* Effect.tryPromise({try: () => rolldown(options), catch: fail});
 	return yield* Effect.acquireUseRelease(
 		Effect.succeed(built),
-		(b) =>
+		(b) => {
+			const fail = (error: unknown) => new BuildError({reason: "generate", message: String(error)});
+			const options = {format: "esm" as const, codeSplitting: false};
 			// oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown generates through a Promise
-			Effect.tryPromise({
-				try: () => b.generate({format: "esm", codeSplitting: false}),
-				catch: (error) => new BuildError({reason: "generate", message: String(error)}),
-			}),
+			return Effect.tryPromise({try: () => b.generate(options), catch: fail});
+		},
 		// oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown closes through a Promise
 		(b) => Effect.promise(() => b.close()),
 	);
