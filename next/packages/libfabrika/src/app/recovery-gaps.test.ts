@@ -30,7 +30,7 @@ import {
 	storage,
 } from "../coordination/process.test-support.ts";
 import {Ledger, LedgerError} from "../data/ledger.ts";
-import {lineFor} from "../data/log.ts";
+import {InputId, lineFor} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
 import {
 	Alarm,
@@ -152,9 +152,7 @@ const world = Effect.fnUntraced(function* () {
 	const input = (id: string, m: unknown = {type: "poison"}): Incoming => ({
 		id,
 		envelope: {
-			id: Schema.decodeUnknownSync(Schema.NonEmptyString.pipe(Schema.brand("InputId")))(
-				`in-${X}-1`,
-			),
+			id: Schema.decodeUnknownSync(InputId)("input_0000000000e008000000000001"),
 			by: owner,
 			arrivedAt: 0,
 			input: m,

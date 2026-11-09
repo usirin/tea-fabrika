@@ -98,7 +98,7 @@ const Dispatched = Schema.Struct({
 	build: Schema.String,
 });
 type Dispatched = typeof Dispatched.Type;
-const decodeDispatched = Schema.decodeUnknownSync(Schema.Array(Dispatched));
+const decodeDispatched = Schema.decodeUnknownResult(Schema.Array(Dispatched));
 
 /** The turn a crash may cut: an input stepped and about to be appended. */
 const Turn = Schema.TaggedUnion({prepared: {id: Schema.NonEmptyString}});
@@ -114,11 +114,17 @@ const RESERVED = new Set([
 const WRITE = "write";
 const WriteCmd = Schema.Struct({stream: Schema.NonEmptyString, write: Write});
 const decodeWriteCmd = Schema.decodeUnknownResult(WriteCmd);
-const decodeIncoming = Schema.decodeUnknownEffect(Incoming);
+/** Pending deliveries keep their original parent, including one saved before input TypeIDs. */
+const Delivery = Schema.Struct({
+	...Incoming.fields,
+	envelope: Schema.Struct({...Incoming.fields.envelope.fields, id: ParentText}),
+});
+type Delivery = typeof Delivery.Type;
+const decodeDelivery = Schema.decodeUnknownEffect(Delivery);
 const Typed = Schema.Struct({type: Schema.String});
 const decodeTyped = Schema.decodeUnknownOption(Typed);
 const decodeDown = Schema.decodeUnknownOption(Down);
-const inputDigest = Effect.fnUntraced(function* (input: Incoming) {
+const inputDigest = Effect.fnUntraced(function* (input: Delivery) {
 	return yield* sha256(
 		new TextEncoder().encode(
 			JSON.stringify([input.envelope.by, input.envelope.input, input.sentAt, input.seen]),
@@ -727,7 +733,9 @@ export class ProgramRunner extends Context.Service<
 						};
 						return {live: fresh, dirty: false};
 					}
-					const cmds = yield* pure("saved_state", () => decodeDispatched(saved.cmds));
+					const decoded = decodeDispatched(saved.cmds);
+					if (Result.isFailure(decoded)) return yield* new ProgramDown({why: "saved_state"});
+					const cmds = decoded.success;
 					const {saved: next, ran} = yield* pure("saved_state", () =>
 						Saved.upgrade(saved.saved, program.state, process.build),
 					);
@@ -1201,7 +1209,7 @@ export class ProgramRunner extends Context.Service<
 					msg: (raw: unknown) =>
 						msg(
 							Effect.gen(function* () {
-								const input = yield* decodeIncoming(raw).pipe(
+								const input = yield* decodeDelivery(raw).pipe(
 									Effect.mapError(() => new RunnerError({why: "bad_input"})),
 								);
 								yield* Effect.annotateCurrentSpan(tag("letter"), input.id);
@@ -1209,7 +1217,10 @@ export class ProgramRunner extends Context.Service<
 								if (receipt !== undefined) {
 									const digest =
 										receipt.digest ??
-										(yield* inputDigest(Schema.decodeUnknownSync(Incoming)(receipt.input)));
+										(yield* decodeDelivery(receipt.input).pipe(
+											Effect.mapError(() => new LedgerError({why: "bad_row"})),
+											Effect.flatMap(inputDigest),
+										));
 									if ((yield* inputDigest(input)) !== digest)
 										return {answer: Sent.cases.refused.make({why: "id_reused"}), jobs: []};
 									if (receipt.result !== null)
@@ -1300,7 +1311,7 @@ export class ProgramRunner extends Context.Service<
 				/** A fresh input's turn. The permit is held. */
 				function accept(
 					state: Live,
-					input: Incoming,
+					input: Delivery,
 				): Effect.Effect<
 					{readonly answer: Sent; readonly jobs: ReadonlyArray<Dispatched>},
 					RunnerFailure
@@ -1331,7 +1342,9 @@ export class ProgramRunner extends Context.Service<
 									...supervision.receipts,
 									{
 										letter: input.id,
-										input: Schema.decodeUnknownSync(Schema.Json)(input),
+										input: yield* Schema.decodeUnknownEffect(Schema.Json)(input).pipe(
+											Effect.mapError(() => new LedgerError({why: "bad_row"})),
+										),
 										digest: yield* inputDigest(input),
 										errors: [],
 										tries: 0,
@@ -1360,8 +1373,12 @@ export class ProgramRunner extends Context.Service<
 							const {_tag: _case, ...why} = prepared;
 							return {answer: Sent.cases.refused.make(why), jobs: []};
 						}
+						// Reading an old delivery never authorizes a new write with a legacy input ID.
+						const incoming = yield* Schema.decodeUnknownEffect(Incoming)(input).pipe(
+							Effect.mapError(() => new RunnerError({why: "bad_input"})),
+						);
 						yield* store.save(checkpoint(state, Turn.cases.prepared.make({id: input.id})));
-						const appended = yield* checked.append(input);
+						const appended = yield* checked.append(incoming);
 						if (appended._tag === "refused") {
 							yield* store.save(checkpoint(state, null));
 							return {answer: Sent.cases.refused.make({why: appended.why}), jobs: []};
@@ -1395,7 +1412,13 @@ export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError"
 	why: Schema.Literals(["bad_input", "bad_client"]),
 }) {}
 
-type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError | ProcessError;
+type RunnerFailure =
+	| LedgerError
+	| ProgramDown
+	| RunnerError
+	| SinkError
+	| ProcessError
+	| NotGranted;
 
 const cmdType = (job: Dispatched): string =>
 	Option.match(decodeTyped(job.cmd), {onNone: () => "", onSome: (c) => c.type});

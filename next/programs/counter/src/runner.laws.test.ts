@@ -181,7 +181,7 @@ describe("p22 real counter in the runner", () => {
 					yield* r.msg({
 						id: `counter-${n}`,
 						envelope: {
-							id: `in-${PROCESS}-${n}`,
+							id: `input_0000000000e0080000000000${n.toString(16).padStart(2, "0")}`,
 							by: Writer.cases.person.make({key: "SHA256:person", for: "person"}),
 							arrivedAt: n,
 							input: {type: "inc"},
