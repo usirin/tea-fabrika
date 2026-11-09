@@ -73,7 +73,7 @@
 		"runtime": {
 			"name": "node",
 			"version": "26.13.0",
-			"onFail": "download"
+			"onFail": "warn"
 		}
 	},
 	"volta": {
