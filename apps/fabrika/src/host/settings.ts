@@ -119,7 +119,9 @@ export const settingsFile = <A>(
 			// The first read waits for the watch, so no save between the two is missed.
 			const ready = yield* Deferred.make<void>();
 			const saves = fs.watch(folder, {onReady: () => Deferred.doneUnsafe(ready, Effect.void)}).pipe(
-				Stream.filter((event) => path.basename(event.path) === name),
+				// A rename save may report the temporary name, including for later writes. Treat
+				// every folder event as a reason to reread the fixed path. Unchanged text below
+				// keeps edits to another file from producing another answer.
 				Stream.debounce(`${SETTLE_MS} millis`),
 				// A watch that fails before it is ready still lets the first read go, so the file is
 				// read once and the host never waits on a watch that will not start.
