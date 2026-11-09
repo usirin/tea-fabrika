@@ -111,7 +111,7 @@ export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
 	const {page} = view;
 	return (
 		<section className="tracker" aria-label="tracker">
-			<AskStatus>
+			<AskStatus left={page.kind === "list" ? 0 : (page.opened?.asks.length ?? 0)}>
 				<div className="tracker-column">
 					<Notices view={view} />
 					{!view.ready ? (
