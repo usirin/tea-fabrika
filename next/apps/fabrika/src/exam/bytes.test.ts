@@ -4,7 +4,7 @@ import {NodeServices} from "@effect/platform-node";
 import {expect, it} from "@effect/vitest";
 import {bundle, bundlePrograms} from "@kampus/libfabrika/node/build";
 import {Arbitrary, Effect, FileSystem, Path, Schema} from "effect";
-import type {Plugin} from "rolldown";
+import type {Plugin, RolldownPluginOption} from "rolldown";
 import {vi} from "vitest";
 import {build} from "../build.ts";
 
@@ -74,7 +74,10 @@ vi.mock("rolldown", async (original) => {
 					observations.builds.push({input: options.input, modules, chunks});
 				},
 			};
-			return real.rolldown({...options, plugins: [...(options.plugins ?? []), observer]});
+			const plugins: Array<RolldownPluginOption> = Array.isArray(options.plugins)
+				? options.plugins
+				: [options.plugins];
+			return real.rolldown({...options, plugins: [...plugins, observer]});
 		},
 	};
 });

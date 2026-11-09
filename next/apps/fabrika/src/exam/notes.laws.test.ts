@@ -150,6 +150,7 @@ const Msg = Schema.Struct({type: Schema.Literal("show"), text: Schema.String});
 const machine = Machine.make({
 	model: Model,
 	msg: Msg,
+	cmds: [],
 	init: (saved) => [saved ?? {body: ""}, []],
 	update: {show: (_s, m) => [{body: m.text}, []]},
 });

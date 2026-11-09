@@ -59,7 +59,7 @@ const key = Effect.fnUntraced(function* () {
 				line,
 				space: "fabrika-client",
 				sign: (bytes) =>
-					web(() => crypto.subtle.sign("Ed25519", pair.privateKey, bytes)).pipe(
+					web(() => crypto.subtle.sign("Ed25519", pair.privateKey, new Uint8Array(bytes))).pipe(
 						Effect.map((a) => new Uint8Array(a)),
 					),
 			}),
