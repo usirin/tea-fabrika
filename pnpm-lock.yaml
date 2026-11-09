@@ -471,6 +471,16 @@ importers:
         specifier: 'catalog:'
         version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
 
+  .github/ci:
+    dependencies:
+      effect:
+        specifier: 4.1.2
+        version: 4.1.2
+    devDependencies:
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.1
+
   apps/fabrika:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
