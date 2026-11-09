@@ -212,6 +212,18 @@ export const upcast = (raw: unknown) => (isRecord(raw) && "n" in raw ? {count: r
   store.
 - **Elm or OTP:** both branches cite one. Elm decodes and fails, never guesses (B's spirit, though
   `oneOf` is a guess). OTP passes the old version to `code_change` (A).
+- **Older code meeting a newer shape stops, decided by the owner 2026-11-08 (P15).** When code
+  meets saved state whose `v` it does not know, because a newer fabrika saved it, that process
+  stops. Nothing is deleted or rewritten. The tile says the state was saved by a newer fabrika and
+  offers Restart after an update. There is no downgrade chain. It is the same rule as a full disk:
+  fail loudly, never drop data.
+
+  ```ts
+  // A sketch: the code knows v 1 to 3; the saved model says v 4. P15's plan names the fact.
+  // saved {v: 4, model: {...}} -> no upgrade runs, no decode, the process stops
+  // the saved model is left as it was
+  // the tile: "Saved by a newer fabrika." [Restart after an update]
+  ```
 
 ### S4: a code step declares what it reads, and its key is built from that
 

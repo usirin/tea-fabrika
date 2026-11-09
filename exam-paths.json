@@ -19,6 +19,7 @@
 	{ "glob": "fixtures/keybindings/**", "why": "hand-written keybinding files used by the exam" },
 	{ "glob": ".oxlintrc.json", "why": "the lint rules" },
 	{ "glob": ".oxfmtrc.json", "why": "the format settings" },
+	{ "glob": "stylelint.config.ts", "why": "the CSS lint rules and their known lists" },
 	{ "glob": "oxlint-plugins/**", "why": "the custom lint rules and the lint runner" },
 	{ "glob": "vitest.config.ts", "why": "which tests run, and their time limit" },
 	{ "glob": "layer-rules.json", "why": "which way imports may point" },

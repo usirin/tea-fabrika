@@ -8,6 +8,14 @@ participant. Three things dial the brain: **hands**, a **window** and an
 protocol. A **host** is a place hands can run: a Mac, a VM or a browser profile.
 What a host can do is its **capabilities**.
 
+Decided by the owner, 2026-11-08: a window is one project. Each Electron window opens on one repo
+folder, with that project's own brain, as VS Code does: File > Open Folder opens a new window per
+project, and the Dock reopens the last ones. Changed by the owner later on 2026-11-08, after the
+look walk: Cmd-O opens a box of recent projects with Open Folder… as its last row, and that row
+opens the system's folder sheet ([the project window](./project-window.md)). The words before read
+"File > Open Folder and Cmd-O open a new window per project". Summon works in its window's project, and
+no `FABRIKA_REPO` setting picks one. It is built in today's app now; its plan is in progress.
+
 **Tier 1 builds the shape.** Each platform Layer says what its host can do, and
 the hello carries that list from the first day, because old hellos can never get
 it back. **Proposed, not decided:** a tab that runs jobs. That waits until hands

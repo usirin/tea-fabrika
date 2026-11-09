@@ -594,12 +594,13 @@ export class ProgramRunner extends Context.Service<
 				});
 
 				/** A pure call: a ProgramDown it throws stays itself; any other throw is `why`. */
-				const pure = <A>(why: ProgramDown["why"], f: () => A) =>
-					Effect.try({
+				const pure = Effect.fnUntraced(function* <A>(why: ProgramDown["why"], f: () => A) {
+					return yield* Effect.try({
 						try: f,
 						catch: (error) =>
 							error instanceof ProgramDown ? error : new ProgramDown({why, cause: error}),
 					});
+				});
 
 				const step = Effect.fnUntraced(function* (
 					why: ProgramDown["why"],
@@ -665,11 +666,11 @@ export class ProgramRunner extends Context.Service<
 					);
 				});
 
-				const stepped = (
-					step: Step,
-					why: ProgramDown["why"],
-				): Effect.Effect<typeof Step.cases.stepped.Type, ProgramDown> =>
-					step._tag === "stepped" ? Effect.succeed(step) : Effect.fail(new ProgramDown({why}));
+				const stepped = Effect.fnUntraced(function* (step: Step, why: ProgramDown["why"]) {
+					return yield* step._tag === "stepped"
+						? Effect.succeed(step)
+						: Effect.fail(new ProgramDown({why}));
+				});
 
 				/** Loads the program and its checkpoint, climbing saved state through its upgrades. */
 				const load = Effect.fnUntraced(function* () {
@@ -900,30 +901,40 @@ export class ProgramRunner extends Context.Service<
 				// --- Cmds ---------------------------------------------------------------------------
 
 				const at = Clock.currentTimeMillis;
-				const ok = (job: Dispatched, value: unknown) =>
-					Effect.map(at, (time) => ({type: `${cmdType(job)}_ok`, cmd: job.cmd, value, at: time}));
-				const err = (job: Dispatched, why: string, error: unknown = failure(why)) =>
-					Effect.map(at, (time) => ({
+				const ok = Effect.fnUntraced(function* (job: Dispatched, value: unknown) {
+					return yield* Effect.map(at, (time) => ({
+						type: `${cmdType(job)}_ok`,
+						cmd: job.cmd,
+						value,
+						at: time,
+					}));
+				});
+				const err = Effect.fnUntraced(function* (
+					job: Dispatched,
+					why: string,
+					error: unknown = failure(why),
+				) {
+					return yield* Effect.map(at, (time) => ({
 						type: `${cmdType(job)}_err`,
 						cmd: job.cmd,
 						error,
 						why,
 						at: time,
 					}));
+				});
 
 				/** The span one Cmd runs in. */
-				const cmdSpan =
-					(job: Dispatched) =>
-					<A, E>(work: Effect.Effect<A, E>): Effect.Effect<A, E> =>
-						work.pipe(
-							Effect.withSpan("runner.cmd", {
-								attributes: {
-									[PROCESS]: process.id,
-									[tag("cmd")]: cmdType(job),
-									[tag("id")]: job.id,
-								},
-							}),
-						);
+				const cmdSpan = Effect.fn("runner.cmd")(function* <A, E>(
+					job: Dispatched,
+					work: Effect.Effect<A, E>,
+				) {
+					yield* Effect.annotateCurrentSpan({
+						[PROCESS]: process.id,
+						[tag("cmd")]: cmdType(job),
+						[tag("id")]: job.id,
+					});
+					return yield* work;
+				});
 
 				/** A checked write: the fact must be declared, not reserved, and match its schema. */
 				const write = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
@@ -945,34 +956,31 @@ export class ProgramRunner extends Context.Service<
 						return yield* err(job, "forbidden");
 					if (Result.isFailure(Schema.decodeUnknownResult(policy.schema)(fact)))
 						return yield* err(job, "bad_cmd");
-					const commit = <E>(
-						appended: Effect.Effect<Appended, E>,
-						links: ReadonlyArray<Tracer.SpanLink>,
-					) =>
-						appended.pipe(
-							Effect.withSpan("runner.write", {
-								attributes: {
-									[PROCESS]: process.id,
-									[tag("write")]: job.id,
-									[tag("stream")]: stream,
-								},
-								links,
-							}),
-						);
+					const commit = (links: ReadonlyArray<Tracer.SpanLink>) =>
+						Effect.fn("runner.write", {
+							attributes: {
+								[PROCESS]: process.id,
+								[tag("write")]: job.id,
+								[tag("stream")]: stream,
+							},
+							links,
+						})(function* <E>(appended: Effect.Effect<Appended, E>) {
+							return yield* appended;
+						});
 					const attempt: Effect.Effect<Appended, LedgerError | SigningRefused | NotGranted> =
 						Effect.gen(function* () {
 							if (asked._tag === "own") {
 								if (policy.personOnly) return yield* new SigningRefused({why: "person_only"});
-								return yield* commit(checked.own(job.id, stream, fact), []);
+								return yield* commit([])(checked.own(job.id, stream, fact));
 							}
 							if (Option.isNone(sessions))
 								return yield* Effect.die(new Error("a caused write needs a SessionManager"));
 							const session = yield* sessions.value
 								.signer(asked.parent, process.id, kind)
 								.pipe(Effect.provideService(SignRequest, {id: job.id}));
-							return yield* commit(checked.commit(job.id, session, stream, fact), [
-								{span: Tracer.externalSpan(session.span), attributes: {}},
-							]);
+							return yield* commit([{span: Tracer.externalSpan(session.span), attributes: {}}])(
+								checked.commit(job.id, session, stream, fact),
+							);
 						});
 					// A refusal is the Cmd's answer; a storage failure is not, so the Cmd stays dispatched.
 					const answer = yield* attempt.pipe(
@@ -1000,7 +1008,7 @@ export class ProgramRunner extends Context.Service<
 					const run = state.loaded.handler(type);
 					if (def === undefined || Option.isNone(run)) return yield* err(job, "bad_cmd");
 					// The handler's own failure ends its span failed, with the message as deletable content.
-					const exit = yield* cmdSpan(job)(run.value(job.cmd)).pipe(Effect.exit);
+					const exit = yield* cmdSpan(job, run.value(job.cmd)).pipe(Effect.exit);
 					if (exit._tag === "Failure") {
 						// An interrupted handler stays dispatched: nobody knows whether it acted.
 						if (Cause.hasInterrupts(exit.cause)) return yield* Effect.interrupt;
@@ -1027,82 +1035,84 @@ export class ProgramRunner extends Context.Service<
 
 				/** Runs one saved Cmd, saves its answer as a letter, and folds it. Answers the Cmds that
 				 *  answer's step made. A failure that is not an answer leaves the Cmd dispatched. */
-				const dispatch = (
+				const dispatch = Effect.fnUntraced(function* (
 					job: Dispatched,
-				): Effect.Effect<ReadonlyArray<Dispatched>, RunnerFailure> =>
-					Effect.gen(function* () {
-						if (
-							!job.id.startsWith(`${process.id}/`) ||
-							(supervision !== null && supervision.recovery._tag !== "live")
-						)
-							return [];
-						const origin = process;
-						const originStore = store;
-						const state = live;
-						if (state === null) return [];
-						const m = yield* cmdType(job) === WRITE
-							? cmdSpan(job)(write(state, job))
-							: handle(state, job);
-						return yield* permit.withPermit(
-							Effect.gen(function* () {
-								const answer = `${job.id}/answer`;
-								if (
-									origin.id !== process.id ||
-									(supervision !== null && supervision.recovery._tag !== "live")
-								) {
-									yield* originStore.record(
-										answer,
-										RuntimeRecord.cases["cmd.answered"].make({
-											m: Schema.decodeUnknownSync(Schema.Json)(m),
-											cmd: job.id,
-											build: origin.build,
-										}),
-										{...(yield* from(job.parent, job.traceId)), build: origin.build},
-									);
-									const old = yield* originStore.load;
-									if (old !== null)
-										yield* originStore.save({
-											...old,
-											cmds: old.cmds.filter(
-												(cmd) =>
-													typeof cmd !== "object" ||
-													cmd === null ||
-													!("id" in cmd) ||
-													cmd.id !== job.id,
-											),
-										});
-									return [];
-								}
-								const current = yield* ready();
-								const sent = yield* mailbox
-									.send(process.name, answer, m, yield* from(job.parent, job.traceId))
-									.pipe(
-										Effect.provideService(RunnerMail, {process: process.id, name: process.name}),
-									);
-								if (sent._tag === "refused")
-									return yield* new LedgerError({why: "refused", message: sent.why});
-								return (yield* catchUp(current, {mine: answer})).fresh;
-							}),
-						);
-					});
+				): Effect.fn.Return<ReadonlyArray<Dispatched>, RunnerFailure> {
+					if (
+						!job.id.startsWith(`${process.id}/`) ||
+						(supervision !== null && supervision.recovery._tag !== "live")
+					)
+						return [];
+					const origin = process;
+					const originStore = store;
+					const state = live;
+					if (state === null) return [];
+					const m = yield* cmdType(job) === WRITE
+						? cmdSpan(job, write(state, job))
+						: handle(state, job);
+					return yield* permit.withPermit(
+						Effect.gen(function* () {
+							const answer = `${job.id}/answer`;
+							if (
+								origin.id !== process.id ||
+								(supervision !== null && supervision.recovery._tag !== "live")
+							) {
+								yield* originStore.record(
+									answer,
+									RuntimeRecord.cases["cmd.answered"].make({
+										m: Schema.decodeUnknownSync(Schema.Json)(m),
+										cmd: job.id,
+										build: origin.build,
+									}),
+									{...(yield* from(job.parent, job.traceId)), build: origin.build},
+								);
+								const old = yield* originStore.load;
+								if (old !== null)
+									yield* originStore.save({
+										...old,
+										cmds: old.cmds.filter(
+											(cmd) =>
+												typeof cmd !== "object" ||
+												cmd === null ||
+												!("id" in cmd) ||
+												cmd.id !== job.id,
+										),
+									});
+								return [];
+							}
+							const current = yield* ready();
+							const sent = yield* mailbox
+								.send(process.name, answer, m, yield* from(job.parent, job.traceId))
+								.pipe(Effect.provideService(RunnerMail, {process: process.id, name: process.name}));
+							if (sent._tag === "refused")
+								return yield* new LedgerError({why: "refused", message: sent.why});
+							return (yield* catchUp(current, {mine: answer})).fresh;
+						}),
+					);
+				});
 
 				/** Runs Cmds in order, each one's follow-ups before the next. */
-				const runAll = (jobs: ReadonlyArray<Dispatched>): Effect.Effect<void, RunnerFailure> =>
-					Effect.forEach(jobs, (job) => Effect.flatMap(dispatch(job), runAll), {
+				const runAll = Effect.fnUntraced(function* (
+					jobs: ReadonlyArray<Dispatched>,
+				): Effect.fn.Return<void, RunnerFailure> {
+					yield* Effect.forEach(jobs, (job) => Effect.flatMap(dispatch(job), runAll), {
 						concurrency: 1,
 						discard: true,
 					});
+				});
 
-				/** Every public call recovers and takes saved writes under the permit, then runs Cmds. */
-				const call = <A>(
-					name: string,
-					turn: Effect.Effect<
-						{readonly answer: A; readonly jobs: ReadonlyArray<Dispatched>},
-						RunnerFailure
-					>,
-					time?: number,
-				): Effect.Effect<A, RunnerFailure> =>
-					Effect.gen(function* () {
+				/** One public call: its span, saved writes and recovery under the permit, its Cmds, then
+				 *  the flush, on success and failure. */
+				const call = (name: string) => {
+					const operation = Effect.fn(name, {
+						attributes: {[PROCESS]: process.id, [tag("name")]: process.name},
+					})(function* <A>(
+						turn: Effect.Effect<
+							{readonly answer: A; readonly jobs: ReadonlyArray<Dispatched>},
+							RunnerFailure
+						>,
+						time?: number,
+					) {
 						const {answer, jobs} = yield* permit.withPermit(
 							Effect.gen(function* () {
 								// The platform consumes the alarm before due enters this wrapper.
@@ -1114,23 +1124,29 @@ export class ProgramRunner extends Context.Service<
 						);
 						yield* runAll(jobs);
 						return answer;
-					}).pipe(
-						Effect.withSpan(name, {
-							attributes: {[PROCESS]: process.id, [tag("name")]: process.name},
-						}),
-						Effect.exit,
-						Effect.flatMap((exit) =>
-							recording.flush.pipe(
-								Effect.flatMap(() => exit),
-								Effect.catch((error) => (exit._tag === "Failure" ? exit : Effect.fail(error))),
-							),
-						),
-					);
+					});
+					return Effect.fnUntraced(function* <A>(
+						turn: Effect.Effect<
+							{readonly answer: A; readonly jobs: ReadonlyArray<Dispatched>},
+							RunnerFailure
+						>,
+						time?: number,
+					) {
+						const exit = yield* Effect.exit(operation(turn, time));
+						return yield* recording.flush.pipe(
+							Effect.flatMap(() => exit),
+							Effect.catch((error) => (exit._tag === "Failure" ? exit : Effect.fail(error))),
+						);
+					});
+				};
+				const open = call("runner.open");
+				const msg = call("runner.step");
+				const due = call("runner.due");
+				const restart = call("runner.restart.request");
 
 				return {
 					open: (client: string) =>
-						call(
-							"runner.open",
+						open(
 							Effect.gen(function* () {
 								const state = yield* ready();
 								if (client.length === 0 || client.length > 256)
@@ -1150,8 +1166,7 @@ export class ProgramRunner extends Context.Service<
 							}),
 						),
 					msg: (raw: unknown) =>
-						call(
-							"runner.step",
+						msg(
 							Effect.gen(function* () {
 								const input = yield* decodeIncoming(raw).pipe(
 									Effect.mapError(() => new RunnerError({why: "bad_input"})),
@@ -1171,8 +1186,7 @@ export class ProgramRunner extends Context.Service<
 							}),
 						),
 					due: (time: number) =>
-						call(
-							"runner.due",
+						due(
 							Effect.gen(function* () {
 								if (supervision !== null && supervision.recovery._tag !== "live")
 									return {answer: undefined, jobs: []};
@@ -1200,8 +1214,7 @@ export class ProgramRunner extends Context.Service<
 							time,
 						),
 					restart: (request: {readonly id: string; readonly build: string}) =>
-						call(
-							"runner.restart.request",
+						restart(
 							Effect.gen(function* () {
 								if (recovery === null) return yield* new LedgerError({why: "unreachable"});
 								const s = yield* currentRecovery;

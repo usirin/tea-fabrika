@@ -8,6 +8,8 @@ the exam is the owner's call. *Added the same day (owner):* each step's agent si
 its own key, and CI decides from the signature; squash merges stay, and each step signs a link
 from tree to tree that survives the squash.
 
+*Renamed 2026-11-08 (question 15): the link's `cause` is now `parent`, with `traceId` beside it; a link with `cause` is refused.*
+
 ```text
 // A sketch. Tier 1's P6, one pull request, two step commits, oldest first, each signed.
 a1f0c3e  signed by tests  boundary-rules.json, next/packages/libfabrika/package.json, src/data/log.test.ts
@@ -16,8 +18,8 @@ b72d9e4  signed by build  next/packages/libfabrika/src/data/log.ts, src/data/led
 
 ```ts
 // What each step's run records, one entry per commit it made. Kept wide; CI does not read it.
-{_tag: "committed", step: "tests", sha: "a1f0c3e", by: "agent:test-writer", arrivedAt: "21:02:11", cause: "in-3f9a0c21-7"}
-{_tag: "committed", step: "build", sha: "b72d9e4", by: "agent:builder",     arrivedAt: "21:40:56", cause: "in-3f9a0c21-9"}
+{_tag: "committed", step: "tests", sha: "a1f0c3e", by: "agent:test-writer", arrivedAt: "21:02:11", parent: "in-3f9a0c21-7", traceId: "t1"}
+{_tag: "committed", step: "build", sha: "b72d9e4", by: "agent:builder",     arrivedAt: "21:40:56", parent: "in-3f9a0c21-9", traceId: "t1"}
 
 // CI walks the pull request's commits and decides from each signature, never from the message.
 // `stepKeys` is the repo's allowed-signers file: one public key per step role.
@@ -56,7 +58,7 @@ const check = (commit: Commit, stepKeys: StepKeys): Outcome => {
   signature from a known step key is `stuck: unsigned_commit`. A `build` commit that touches an exam
   path is `stuck: build_touched_exam`.
 - **Every step's run still records the commit it made,** as a `committed` entry: `step`, `sha`,
-  `by`, `arrivedAt` and `cause` ([record wide](../../AGENTS.md#before-you-design-anything)). It is
+  `by`, `arrivedAt`, `parent` and `traceId` ([record wide](../../AGENTS.md#before-you-design-anything)). It is
   not what CI decides from. In Tier 1, while the steps run by hand, the step's `field/` row stands
   in.
 - **A trailer is for people.** `Step: tests` or `Step: build` at the end of a commit message helps
@@ -74,6 +76,25 @@ const check = (commit: Commit, stepKeys: StepKeys): Outcome => {
   role as each key's name. It is an exam path, so a change to it asks the owner.
 - **Tier 1's P32 builds it,** with planted commits for each answer.
 
+**A person signs too** (decided by the owner, 2026-11-08). A person's own commit on a pull request
+passes the commit check like a step's. It walks back p87's "a fourth role" plant.
+
+```text
+# allowed_signers, one line per member. A sketch: the id and key are made up.
+person:<id> namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI...
+```
+
+- **A person signs with git's own SSH commit signing** (`gpg.format ssh`, `commit.gpgsign true`).
+  The check reads the commit's signature against their line, with `namespaces="git"`. No note and
+  no `pnpm` command for people. *It said first, the same day: a `fabrika-step` line and a
+  `pnpm commits sign --person` note; the owner replaced that before it was built.*
+- **The key line comes from GitHub's list of the person's signing keys,** copied into a pull
+  request the owner approves. GitHub helps find the key and is never trusted for it
+  ([a key per client](./a-key-per-client-and-no-github-trust.md)). Added by hand for now; from
+  Tier 3, from the ledger's members.
+- **Exam files still need the owner's read,** and a person's commit is never `build_touched_exam`.
+- Ticket 251 builds it.
+
 ## Squash merges stay: each step signs a link from tree to tree
 
 **Decided by the owner, 2026-11-05.** This repo squashes each pull request into one commit on
@@ -84,9 +105,9 @@ and CI checks the chain of links from `main`'s tree to the squash commit's tree.
 ```ts
 // A sketch. What a step signs: the tree before it and the tree after it. The ledger's words.
 {_tag: "attested", step: "tests", from: "4b1d0e7", to: "9e02a1c", by: "agent:test-writer",
- key: "SHA256:Tq3...", sig: "-----BEGIN SSH SIGNATURE-----...", arrivedAt: "21:02:11", cause: "in-3f9a0c21-7"}
+ key: "SHA256:Tq3...", sig: "-----BEGIN SSH SIGNATURE-----...", arrivedAt: "21:02:11", parent: "in-3f9a0c21-7", traceId: "t1"}
 {_tag: "attested", step: "build", from: "9e02a1c", to: "c7a8f55", by: "agent:builder",
- key: "SHA256:Bx9...", sig: "-----BEGIN SSH SIGNATURE-----...", arrivedAt: "21:40:56", cause: "in-3f9a0c21-9"}
+ key: "SHA256:Bx9...", sig: "-----BEGIN SSH SIGNATURE-----...", arrivedAt: "21:40:56", parent: "in-3f9a0c21-9", traceId: "t1"}
 
 // CI: the first link starts at main's tree, each link starts where the last one ended, the last
 // ends at the squash commit's tree, and every `sig` checks against a known step key.
@@ -119,9 +140,12 @@ ledger entry will have, and nothing a later reader would need to trust us for:
 | `by`, `key` | Who signed, and the key's fingerprint, so it maps to a role in the keys file |
 | `sig` | The whole SSHSIG text, with its namespace, so anyone re-checks it with `ssh-keygen -Y verify` and trusts no one |
 | `arrivedAt` | When the row was written, the referee's clock while `field/` stands in |
-| `cause` | The input that started the step, or null in Tier 1, where the lead session starts steps by hand |
+| `parent` | The input that directly started the step, or null in Tier 1, where the lead session starts steps by hand |
+| `traceId` | the whole request's id, the same one its spans carry |
 | `commit`, `pr`, `base`, `squash` | The step's commit sha, the pull request, `main`'s commit at the start, and the squash commit, so the chain can be walked from `main` |
 | `keys` | The commit of the keys file the check used, since a key can be dropped later |
+
+For `traceId`, open: what a hand run writes.
 
 ## Why
 

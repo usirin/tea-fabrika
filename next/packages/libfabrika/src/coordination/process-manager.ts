@@ -297,6 +297,9 @@ export class ProcessManager extends Context.Service<
 							return Stream.fromIterable(mail.map(({letter}) => letter));
 						}).pipe(Effect.tapError(failed)),
 					).pipe(Stream.withSpan("process.receive"));
+				const info = Effect.fn("process.info")(function* () {
+					return yield* tx.transact((turn) => fold(turn).info);
+				});
 				return {
 					resolve: Effect.fn("process.resolve")(function* (process: string) {
 						return yield* checked((table) => {
@@ -337,7 +340,7 @@ export class ProcessManager extends Context.Service<
 					demonitor,
 					down,
 					receive,
-					info: tx.transact((turn) => fold(turn).info).pipe(Effect.withSpan("process.info")),
+					info: info(),
 					isLive: Effect.fn("process.isLive")(function* (process: string) {
 						return yield* tx.transact((turn) => fold(turn).isLive(process));
 					}),

@@ -103,8 +103,8 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
 			Effect.gen(function* () {
 				const ledger = yield* Ledger;
 				let ready = false;
-				const stored = <A>(step: () => A) =>
-					Effect.try({
+				const stored = Effect.fnUntraced(function* <A>(step: () => A) {
+					return yield* Effect.try({
 						try: () => {
 							if (!ready) for (const query of TABLES) sql.exec(query);
 							ready = true;
@@ -116,6 +116,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
 								message: String(error),
 							}),
 					});
+				});
 				return {
 					select: Effect.fn("process.select")(function* (process: string) {
 						return yield* ProcessStore.pipe(
