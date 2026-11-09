@@ -5,10 +5,17 @@ import {Outcome} from "@demlik/tea";
 // left unnamed, not a second runner. All stepping, counts and replacement are product code.
 import {Cmd, Machine} from "@demlik/tea/effect";
 import {describe, expect, it} from "@effect/vitest";
-import {type Context, Effect, Exit, type Layer as LayerType, Layer, Schema} from "effect";
+import {Cause, type Context, Effect, Exit, type Layer as LayerType, Layer, Schema} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
-import {Mailbox, ProcessStore, SessionManager, Writer} from "../coordination/index.ts";
+import {
+	Archive,
+	Mailbox,
+	ProcessStore,
+	RecordManager,
+	SessionManager,
+	Writer,
+} from "../coordination/index.ts";
 import {ProcessManager} from "../coordination/process-manager.ts";
 import {
 	A,
@@ -30,6 +37,7 @@ import {RecoveryStore} from "../coordination/recovery-store.ts";
 import {Ledger, LedgerError} from "../data/ledger.ts";
 import {lineFor} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
+import {SpanSink} from "../data/sink.ts";
 import {
 	Alarm,
 	CheckedWriter,
@@ -99,6 +107,7 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 		loseWriteReply: false,
 		flushOnce: false,
 		flushFailures: 0,
+		flushes: [] as string[][],
 		adds: 0,
 		crashAdd: 0,
 		cut: "",
@@ -220,7 +229,9 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 			}),
 		);
 	const manager = () => ProcessManager.layer(brain(), next.next).pipe(Layer.provideMerge(base()));
-	const layer = () => {
+	const layer = (
+		recording: LayerType.Layer<Recording> = Layer.succeed(Recording, {flush: Effect.void}),
+	) => {
 		const loader = Layer.effect(
 			ProgramLoader,
 			Effect.gen(function* () {
@@ -305,14 +316,21 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 								alarms.push(at);
 							}),
 					}),
-					Layer.succeed(Recording, {
-						flush: Effect.suspend(() => {
-							if (!controls.flushOnce) return Effect.void;
-							controls.flushOnce = false;
-							controls.flushFailures++;
-							return Effect.fail(new LedgerError({why: "storage"}));
+					Layer.effect(
+						Recording,
+						Effect.gen(function* () {
+							const real = yield* Recording;
+							return {
+								flush: Effect.suspend(() => {
+									controls.flushes.push([...controls.writes]);
+									if (!controls.flushOnce) return real.flush;
+									controls.flushOnce = false;
+									controls.flushFailures++;
+									return Effect.fail(new LedgerError({why: "storage"}));
+								}),
+							};
 						}),
-					}),
+					).pipe(Layer.provideMerge(recording)),
 					ProcessManager.layer(brain(), next.next),
 					Mailbox.layer,
 				).pipe(Layer.provideMerge(base())),
@@ -378,12 +396,32 @@ const recover = (w: ReturnType<typeof world>) =>
 describe("P34 runner supervision", () => {
 	for (const pending of ["fresh", "saved retry"] as const) {
 		for (const path of ["open", "msg", "due", "restart"] as const) {
-			it(`storage plant, drop jobs on flush failure: ${pending} write survives on the same runner through ${path}`, async () => {
+			it(`storage plant, gate dispatch or repeat answered jobs on flush failure: ${pending} write completes before one flush through ${path}`, async () => {
 				await fc.assert(
 					fc.asyncProperty(fc.uuid(), fc.integer({min: 1000, max: 60_000}), (id, time) =>
 						Effect.runPromise(
 							Effect.gen(function* () {
 								const w = world(false, true);
+								const sink = storage();
+								const parts = new Map<string, ReturnType<typeof storage>>();
+								const records = RecordManager.sql((name) => {
+									let part = parts.get(name);
+									if (part === undefined) {
+										part = storage();
+										parts.set(name, part);
+									}
+									return part.sql;
+								}, 1024 ** 3);
+								const recording = Recording.layer.pipe(
+									Layer.provideMerge(
+										Layer.mergeAll(SpanSink.layer(sink.sql, {object: A}), records, Archive.memory),
+									),
+								);
+								const held = () => sink.sql.exec("SELECT spanId, row FROM unsent ORDER BY spanId");
+								const shipped = () =>
+									[...parts.values()].flatMap((part) =>
+										part.sql.exec("SELECT spanId FROM spans").map((row) => row.spanId),
+									);
 								const process = path === "restart" ? B : A;
 								const request = {id: `restart-${id}`, build: BUILD};
 								const input = w.input(id, {type: "save", token: id});
@@ -417,50 +455,80 @@ describe("P34 runner supervision", () => {
 										}
 									});
 									const before = [...w.controls.writes];
+									const flushes = w.controls.flushes.length;
 									w.controls.flushOnce = true;
-									yield* failed(pending === "fresh" ? r.msg(input) : wake);
+									const exit = yield* failed(pending === "fresh" ? r.msg(input) : wake);
+									if (Exit.isFailure(exit))
+										expect(Cause.squash(exit.cause)).toMatchObject({why: "storage"});
 									expect(w.controls.flushFailures).toBe(1);
 									expect(w.controls.flushOnce).toBe(false);
-									expect(w.controls.writes, "the failed flush must dispatch nothing").toEqual(
-										before,
+									expect(
+										w.controls.flushes,
+										"one flush after the call, even when it fails",
+									).toHaveLength(flushes + 1);
+									const job = w.controls.writes[before.length];
+									expect(
+										job,
+										"the call dispatches its fresh or saved write before flushing",
+									).toBeTypeOf("string");
+									if (pending === "saved retry") expect(job).toBe(before[0]);
+									expect(w.controls.writes, "the call dispatches each pending write once").toEqual([
+										...before,
+										job,
+									]);
+									expect(w.controls.flushes.at(-1), "flush follows dispatch").toEqual([
+										...before,
+										job,
+									]);
+									expect((yield* inbox).filter((row) => row.id === `${job}/answer`)).toMatchObject([
+										{body: {m: {type: "write_ok"}}},
+									]);
+									expect(yield* checkpoint).toMatchObject({cmds: []});
+									const spans = held();
+									const call =
+										pending === "fresh" || path === "msg"
+											? "step"
+											: path === "restart"
+												? "restart.request"
+												: path;
+									expect(spans.map((row) => JSON.parse(String(row.row)))).toEqual(
+										expect.arrayContaining([
+											expect.objectContaining({name: `runner.${call}`}),
+											expect.objectContaining({name: "runner.cmd"}),
+											expect.objectContaining({name: "runner.write"}),
+										]),
 									);
-									const saved = yield* checkpoint;
-									expect(saved?.cmds).toHaveLength(1);
-									const job = Schema.decodeUnknownSync(Schema.Struct({id: Schema.String}))(
-										saved!.cmds[0],
+									const sent = shipped();
+									expect(spans.map((row) => row.spanId)).toEqual(
+										sink.sql
+											.exec("SELECT spanId FROM health ORDER BY spanId")
+											.map((row) => row.spanId)
+											.filter((id) => !sent.includes(id)),
 									);
-									expect(saved?.cmds).toMatchObject([{id: job.id, state: "dispatched"}]);
-									expect((yield* inbox).filter((row) => row.id === `${job.id}/answer`)).toEqual([]);
-									expect(yield* read("facts")).toHaveLength(before.length);
 									const lifecycle = yield* lives;
 									yield* wake;
-									expect(
-										w.controls.writes,
-										"the next call must dispatch the pending write once",
-									).toEqual([...before, job.id]);
-									expect(
-										(yield* inbox).filter((row) => row.id === `${job.id}/answer`),
-									).toMatchObject([{body: {m: {type: "write_ok"}}}]);
-									expect(yield* checkpoint).toMatchObject({cmds: []});
+									expect(w.controls.flushes).toHaveLength(flushes + 2);
+									expect(held(), "the next call ships every retained span").toEqual([]);
+									expect(shipped()).toEqual(expect.arrayContaining(spans.map((row) => row.spanId)));
 									yield* wake;
 									expect(w.controls.writes, "an answered write must not dispatch again").toEqual([
 										...before,
-										job.id,
+										job,
 									]);
 									expect(yield* read("facts")).toMatchObject([{_tag: "saved", body: {token: id}}]);
-									expect(
-										(yield* inbox).filter((row) => row.id === `${job.id}/answer`),
-									).toHaveLength(1);
+									expect((yield* inbox).filter((row) => row.id === `${job}/answer`)).toHaveLength(
+										1,
+									);
 									expect(yield* lives).toEqual(lifecycle);
 									expect(w.controls.flushFailures).toBe(1);
-								}).pipe(Effect.provide(w.layer()));
+								}).pipe(Effect.provide(w.layer(recording)));
 							}).pipe(Effect.provide(TestClock.layer())),
 						),
 					),
 					{
 						seed: 119120,
 						numRuns: 12,
-						// Review 7: a failed pre-dispatch flush dropped fresh jobs and taken saved retries.
+						// Review 7 lost pending writes; round 12 keeps them without gating dispatch on flush.
 						examples: [["00000000-0000-4000-8000-000000000271", 1000]],
 					},
 				);
