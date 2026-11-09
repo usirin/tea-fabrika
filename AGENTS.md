@@ -100,7 +100,7 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   [PR 530](https://github.com/usirin/tea-fabrika/pull/530).
 - **In `next/`, nothing is built on Promises.** It is Effect all the way. A Promise
   appears only in a one-line edge the platform demands, marked where it stands with
-  `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the owner reads
+  `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the lead reads at merge
   ([no Promises](./docs/direction/no-promises.md)).
 - **In `next/`, an object class stays thin.** It holds what the platform gives it and
   a one-line handoff. The logic is plain code that also runs on Node in tests
@@ -136,6 +136,10 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   with its reason. Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no
   owner read is needed. The lead records both outputs in the PR. A hit goes to the lead's hand check,
   with the hit list in the PR. Only real loosening waits on the owner.
+  The lead merges any pull request, product code and exam changes included, with `catchup.sh`
+  once every step passed, CI is green, the leak grep is clean and `loosening.sh` shows no real
+  loosening after the hand check. Only real loosening of a law, or a new design call, waits on the
+  owner ([0014](./.decisions/0014-the-lead-merges-when-every-step-passed.md)).
 - **One fresh agent per step** (owner, 2026-11-09). Each step's agent reads the lane's state
   file, does its one step and writes the state file back for the next; no long driver carries a
   ticket. A drive script will chain the mechanical steps and start an agent only for judgment
