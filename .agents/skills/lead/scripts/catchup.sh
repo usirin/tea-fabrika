@@ -1,7 +1,8 @@
 #!/bin/sh
-# catchup.sh <pr> <ticket>
+# catchup.sh <pr> <ticket> [--merge-method squash|merge]
 # Bring a pull request up to date with main, sign the new merge as the lead, push, wait for every
-# check on that exact head, then squash-merge it pinned to that head. Run it in the background.
+# check on that exact head, then merge it pinned to that head. Squash is the default.
+# Run it in the background.
 #   - each pull request gets its own checkout (BOXES/catchup-<pr>), and one lock is held while it
 #     fetches, merges, signs and pushes, so two catch-ups never share a tree or the notes ref
 #   - merges origin/main in as fabrikalfa[bot] (the person as co-author) when the head lacks it,
@@ -13,8 +14,15 @@
 #     merges with --match-head-commit, so a newer head or a red check stops it (hand PRs only)
 #   - trusts commits only as one pull_request_target run of main's commits.yaml for this ticket
 set -eu
+usage() { echo "usage: catchup.sh <pr> <ticket> [--merge-method squash|merge]" >&2; exit 1; }
+[ "$#" = 2 ] || [ "$#" = 4 ] || usage
+pr=$1; ticket=$2; shift 2
+method=squash
+if [ "$#" != 0 ]; then
+	[ "$1" = --merge-method ] || usage
+	case $2 in squash|merge) method=$2 ;; *) usage ;; esac
+fi
 . "$(dirname "$0")/env.sh"
-pr=$1; ticket=$2
 W=$BOXES/catchup-$pr; LOCK=$BOXES/catchup.lock; LEAD=$lead_here
 AS='-c user.name=fabrikalfa[bot] -c user.email=353269643+fabrikalfa[bot]@users.noreply.github.com'
 # Only command failures are retried. Callers inspect successful answers, including red ones.
@@ -106,5 +114,5 @@ case $said in
 "commits: not in scope"* | "commits: "*" commits, ticket $ticket") ;;
 *) echo "pr $pr: run $run_id is not for ticket $ticket: $said" >&2; exit 1 ;;
 esac
-gh pr merge "$pr" -R "$GH_REPO" --squash --match-head-commit "$tip" >/dev/null
+gh pr merge "$pr" -R "$GH_REPO" "--$method" --match-head-commit "$tip" >/dev/null
 echo "pr $pr: merged at $(git rev-parse --short "$tip"), signed for ticket $ticket"

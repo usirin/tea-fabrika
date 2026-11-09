@@ -32,8 +32,12 @@ rest.
      its file kept per ticket. Only mutants whose code or tests changed run again.
    - **The last round before review** runs with `force`, so a stale answer cannot reach the review.
      The lead's brief says which round is the last. When unsure, use `force`.
-4. **Sort each survivor:** real (a law should catch it) or equivalent (no behavior changes). An
-   equivalent mutant gets one line on why, and is left alone.
+4. **Sort each survivor:** real (a law should catch it), equivalent (no behavior changes) or
+   unconfirmed. A schema or class created during module loading needs a hand-planted check
+   before any claim. In a disposable copy, show the unchanged code passing in a fresh process.
+   Apply the exact mutant replacement and run the relevant laws in another fresh process.
+   Report killed when they fail on that change. Report equivalent only with evidence that no
+   behavior changes. Otherwise report unconfirmed and why. Keep static mutants off.
 5. **Survivors advise.** A real survivor never holds the pull request. Kill one with a new or
    tighter law, in test files only, when the law is clear; list the rest in the report. Run the
    touched tests, `pnpm format`, `pnpm lint`. No typecheck: another agent may be running one.
@@ -42,7 +46,8 @@ rest.
    `sh .agents/skills/step-commit/scripts/stepcommit.sh mutation <ticket> "T<ticket> tests: <subject>" <paths...>`
 7. **Report** in under 15 lines: actual tested, killed, survived, timeout, compile-error, uncovered,
    reused and unreached counts, plus the seed and `sample.json` totals; each survivor with
-   `file:line` and real or equivalent; the laws added; the commit. If the five minutes ran out, say
+   `file:line` and its status, with hand-plant evidence for startup survivors; the laws added;
+   the commit. If the five minutes ran out, say
    how many lines and mutants it did not reach. That is reported, and the pull request goes on.
 
 ## The command
@@ -53,6 +58,9 @@ from the repo root of your worktree. `T` is the ticket, `BUILD` the build commit
 `RELATED` to the explicit related-test paths, separated by commas. Ticket 520's proof uses
 `.agents/skills/mutation/scripts/sample.test.ts`, the new TypeScript sampler's adjacent laws.
 This does not grade plancheck's shell or Python. Those rely on properties and planted breaks.
+The executable is `scripts/run.sh`. It refuses missing inputs, empty test lists and empty or
+failed selections before starting Stryker. It sets `vitest.related` to `false`, so tests that
+import by package name can run. Only the explicit `RELATED` paths enter its temporary config.
 
 The supervisor caps the whole command, including setup, and stops its process group on exit or
 signal. It removes its temporary config after success or failure. Run one command at a time.
@@ -67,58 +75,19 @@ mutant ran. This is socket work, as the lead skill's "Who runs which step" says.
 export T=520 BUILD=abc1234
 export RELATED=.agents/skills/mutation/scripts/sample.test.ts
 # nice lowers the priority of setup and all workers too.
-nice -n 15 node --input-type=module -e '
-import {spawn} from "node:child_process";
-import {rmSync} from "node:fs";
-const child = spawn("sh", ["-eu"], {detached: true, stdio: "inherit"});
-const kill = (signal) => { try { process.kill(-child.pid, signal); } catch (e) {
-  if (e.code !== "ESRCH") throw e;
-}};
-let stopped = false;
-const stop = () => { stopped = true; kill("SIGTERM");
-  hard = setTimeout(() => kill("SIGKILL"), 1000);
-};
-let hard;
-const cap = setTimeout(stop, 300_000);
-process.once("SIGINT", stop);
-process.once("SIGTERM", stop);
-child.once("exit", (code) => {
-  clearTimeout(cap); clearTimeout(hard); kill("SIGKILL");
-  rmSync("vitest.mutation.config.ts", {force: true});
-  process.exitCode = stopped ? 124 : code ?? 1;
-});
-' <<'SH'
-M=${TMPDIR:-/tmp}/mut-$T; mkdir -p "$M"   # one folder per ticket: the incremental file lives here
-S=packages/pipeline/node_modules/@stryker-mutator
-ranges=$(node .agents/skills/mutation/scripts/sample.ts \
-  --build "$BUILD" --seed 119120 --max 150 --report "$M/sample.json")
-# This config is temporary. Keep the 10 s limit and the existing nested-Stryker and e2e excludes.
-cat > vitest.mutation.config.ts <<'TS'
-import base from "./vitest.config.ts";
-import {defineConfig} from "vitest/config";
-const include = process.env.RELATED?.split(",").filter(Boolean);
-if (!include?.length) throw new Error("RELATED must list the test paths");
-export default defineConfig({...base, test: {...base.test, include, maxWorkers: 1,
-  testTimeout: 10_000, hookTimeout: 10_000,
-	exclude: [...(base.test?.exclude ?? []), "**/node_modules/**", "**/dist/**",
-		"packages/pipeline/src/stages/mutation/stryker*.test.ts",
-		"packages/pipeline/src/stages/pipeline/{program,github}.test.ts"]}});
-TS
-cat > "$M/stryker.json" <<JSON
-{"testRunner": "vitest", "vitest": {"configFile": "vitest.mutation.config.ts", "related": true},
- "plugins": ["$PWD/$S/vitest-runner/dist/src/index.js"], "coverageAnalysis": "perTest",
- "mutate": [$ranges], "ignoreStatic": true, "timeoutMS": 5000, "concurrency": 1,
- "incremental": true, "incrementalFile": "$M/incremental.json",
- "reporters": ["json", "event-recorder", "progress-append-only"],
- "jsonReporter": {"fileName": "$M/report.json"}, "eventReporter": {"baseDir": "$M/events"},
- "tempDirName": "$M/tmp", "tsconfigFile": "$M/none.json", "cleanTempDir": "always",
- "ignorePatterns": [".claude", "runs"]}
-JSON
-echo '{}' > "$M/none.json"
-# Keep --force on the last round before review. Omit it only for an intermediate reused round.
-node "$S/core/bin/stryker.js" run "$M/stryker.json" --force > "$M/log.txt" 2>&1
-SH
+nice -n 15 sh .agents/skills/mutation/scripts/run.sh
 ```
+
+The default is the final `--force` round. Set `FINAL=0` only for an intermediate round that
+reuses unchanged answers. The sampler still uses seed 119120, at most 150 enclosed mutants, and
+one range per changed line first. The supervisor keeps the five-minute cap, cleanup and one
+worker. The nested-Stryker and e2e excludes, 10 s test limit and 5 s over-run stay.
+
+Ticket 300's labeled command scenario at `scripts/run.test.ts:333` uses a disposable repo whose
+test imports by package name. It requires a discovered test and a real killed mutant. Run it
+within this step's five-minute budget where sockets work. A box socket refusal is neither red
+nor green. The unrelated-test-list plant must fail too. The command properties and plants check
+its config and cleanup. They do not prove mutation coverage of shell or Python.
 
 - `report.json` holds every answer when Stryker finished. When the cap stopped it, read
   `events/*-onMutantTested.json`, one file per mutant as it came: that is what it kept. Count the
@@ -135,8 +104,10 @@ SH
 - `concurrency` and Vitest's `maxWorkers` are both 1 under the current laptop caps.
 - `ignorePatterns` keeps `.claude` out of Stryker's sandbox copy: its skill links are folders
   linked to `.agents/skills`, and the copy fails on them (tried 2026-11-08).
-- `tsconfigFile` points at an empty file: Stryker rewrites a tsconfig with TypeScript's JavaScript
-  API, which TypeScript 7 does not have (`packages/pipeline/src/stages/mutation/stryker.ts`).
+- `tsconfigFile` points at a path nothing writes: Stryker rewrites a tsconfig with TypeScript's
+  JavaScript API, which TypeScript 7 does not have, but only when that path is one of the project's
+  files (`@stryker-mutator/core`'s `ts-config-preprocessor.js`). An empty file there still crashed
+  on Linux CI once TMPDIR sat inside the project (2026-11-08).
 - **The command as written ran** on 2026-11-08 on ticket 520's `sample.ts`, seed 119120: 150 of
   202 mutants selected; the final round had 94 killed, 1 survived (equivalent), 49 no coverage (the
   CLI block, which only the end-to-end run reaches) and 6 static ignored, in about 40 s. The dry run

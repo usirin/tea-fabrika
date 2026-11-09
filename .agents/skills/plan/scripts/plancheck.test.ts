@@ -25,6 +25,23 @@ const check = (body: string, marker = "Plancheck-Version: 2") => {
 	}
 };
 const word = fc.stringMatching(/^[a-z][a-z0-9]{0,8}$/);
+const handoff = (text: string, draft = false) => {
+	const folder = mkdtempSync(join(tmpdir(), "pc-300-"));
+	try {
+		const plan = join(folder, "plan.md");
+		writeFileSync(plan, text);
+		const ran = spawnSync("sh", [script, ...(draft ? ["--draft"] : []), plan], {
+			encoding: "utf8",
+			timeout: 5_000,
+			env: {...process.env, TYPESAFE_API_KEY: undefined},
+		});
+		expect(ran.error).toBeUndefined();
+		expect(ran.signal).toBeNull();
+		return {code: ran.status, text: ran.stdout + ran.stderr};
+	} finally {
+		rmSync(folder, {recursive: true, force: true});
+	}
+};
 const constructor = fc.constantFrom(
 	"boolean",
 	"integer",
@@ -86,6 +103,148 @@ const cell = fc.oneof(
 );
 
 describe("plancheck, today's tooling", () => {
+	// Plants: accept a filled slot; accept a displaced marker. Fenced approvals are examples.
+	it("T300 draft handoffs reserve line one and put the marker on line two", () => {
+		fc.assert(
+			fc.property(
+				fc.record({
+					first: fc.constantFrom("", "Approved by the lead agent, builds ticket 300.", "# Plan"),
+					position: fc.integer({min: 0, max: 3}),
+					approval: fc.boolean(),
+					fenced: fc.boolean(),
+					fence: fc.constantFrom("```md", "~~~md"),
+				}),
+				({first, position, approval, fenced, fence}) => {
+					const lines = [first, "", "", ""];
+					lines[position] = "Plancheck-Version: 2";
+					const example = "Approved by the lead agent, builds a different plan.";
+					const body = `${laws("fc.record: plan handoffs")}\n${approval ? (fenced ? `${fence}\n${example}\n${fence.slice(0, 3)}` : example) : ""}\n`;
+					const got = handoff(`${lines.join("\n")}\n${body}`, true);
+					const pass = first === "" && position === 1 && (!approval || fenced);
+					expect(got.code, got.text).toBe(pass ? 0 : 1);
+				},
+			),
+			{
+				...options,
+				seed: 300,
+				examples: [
+					[{first: "", position: 1, approval: false, fenced: false, fence: "```md"}],
+					[
+						{
+							first: "Approved by the lead agent, builds ticket 300.",
+							position: 1,
+							approval: false,
+							fenced: false,
+							fence: "```md",
+						},
+					],
+					[{first: "", position: 2, approval: false, fenced: false, fence: "```md"}],
+					[{first: "", position: 1, approval: true, fenced: false, fence: "```md"}],
+					[{first: "", position: 1, approval: true, fenced: true, fence: "~~~md"}],
+				],
+			},
+		);
+	});
+
+	// Plants: apply draft restrictions in normal mode; skip owners on legacy plans.
+	it("T300 saved approved, draft and legacy plans keep their normal checks", () => {
+		fc.assert(
+			fc.property(
+				fc.record({
+					first: fc.constantFrom("", "Approved by the lead agent, builds ticket 300."),
+					legacy: fc.boolean(),
+					valid: fc.boolean(),
+					owner: fc.constantFrom("tests", "build", ""),
+				}),
+				({first, legacy, valid, owner}) => {
+					const text = `${first}\n${legacy ? "" : "Plancheck-Version: 2"}\n${laws(valid ? "fc.record" : "TBD")}\n\n${table(["File", "Owner step"], [["package.json", owner]])}\n`;
+					const got = handoff(text);
+					expect(got.code, got.text).toBe(owner === "tests" && (legacy || valid) ? 0 : 1);
+				},
+			),
+			{...options, seed: 300},
+		);
+	});
+
+	// Plant: accept a marked scenario-only row. Keep the parent's generator grammar intact.
+	it("T300 secrets markers require a generated family in the same row", () => {
+		fc.assert(
+			fc.property(
+				fc.record({
+					marked: fc.boolean(),
+					heads: fc.shuffledSubarray(["Law", "Generator", "Plant"], {minLength: 3, maxLength: 3}),
+					generated: fc.constantFrom(
+						"fc.record: flows",
+						"fc.array: operations",
+						"@demlik/tea/pbt.arbMsgSequence",
+						"Effect Arbitrary: Flow",
+					),
+					label: fc.constantFrom("vector", "format", "pinned", "scenario"),
+				}),
+				({marked, heads, generated, label}) => {
+					for (const [generator, family] of [
+						[generated, true],
+						[`${label}: outside run`, false],
+						["lint", false],
+						["type", false],
+					] as const) {
+						const row: Record<string, string> = {
+							Law: `${marked ? "[secrets] " : ""}records hide passes`,
+							Generator: generator,
+							Plant: "write the pass",
+						};
+						const body = `${table(heads, [heads.map((h) => row[h]!)])}\n\n${laws("scenario: supplemental outside run")}`;
+						const got = handoff(`\nPlancheck-Version: 2\n${body}\n`);
+						expect(got.code, got.text).toBe(!marked || family ? 0 : 1);
+					}
+				},
+			),
+			{
+				...options,
+				seed: 300,
+				examples: [
+					[
+						{
+							marked: true,
+							heads: ["Law", "Generator", "Plant"],
+							generated: "fc.record: flows",
+							label: "scenario",
+						},
+					],
+				],
+			},
+		);
+	});
+
+	// Plant: mistake keyboard keys or leak detectors for an explicit secrets marker.
+	it("T300 unmarked keyboard and leak-detector laws keep the ordinary grammar", () => {
+		fc.assert(
+			fc.property(
+				fc.array(
+					fc.tuple(
+						fc.constantFrom(
+							"keyboard key works",
+							"key bindings",
+							"leak detector reports",
+							"ordinary law",
+						),
+						allowed,
+					),
+					{minLength: 1, maxLength: 4},
+				),
+				(rows) => {
+					const got = handoff(
+						`\nPlancheck-Version: 2\n${table(
+							["Law", "Generator", "Plant"],
+							rows.map(([law, generator]) => [law, generator, "break"]),
+						)}\n`,
+					);
+					expect(got.code, got.text).toBe(0);
+				},
+			),
+			{...options, seed: 300, examples: [[[["keyboard key works", "scenario: keyboard run"]]]]},
+		);
+	});
 	// Plant: accept an unknown constructor, or restore the old deny-list.
 	it("permitted cells pass and other families fail", () => {
 		fc.assert(
