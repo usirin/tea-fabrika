@@ -16,6 +16,7 @@ import type {Incoming} from "../app/entry.ts";
 import {Sent} from "../app/runner.ts";
 import {ClientManager} from "../coordination/client-manager.ts";
 import {ProcessIdGenerator} from "../coordination/process-id.ts";
+import type {ProcessError} from "../coordination/process.ts";
 import {NotGranted, SignRequest} from "../coordination/session-manager.ts";
 import {grantText, revokeText} from "../coordination/text.ts";
 import {Archive} from "../data/archive.ts";
@@ -120,7 +121,8 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
 		notices: unknown[] = [];
 	const controls = {
 		letter: "",
-		deliver: (_: Incoming): Effect.Effect<void | Sent, LedgerError | NotGranted> => Effect.void,
+		deliver: (_: Incoming): Effect.Effect<void | Sent, LedgerError | NotGranted | ProcessError> =>
+			Effect.void,
 	};
 	const storage = () => {
 		const db = new DatabaseSync(path);
