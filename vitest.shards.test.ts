@@ -51,12 +51,12 @@ it("generated sharding assigns once, ignores input order and balances measured s
 	);
 });
 
-it("vector: plan-supplied real CI measurements include the previously unweighted scripts", () => {
-	// Fixed measurements, not invented timing limits. Run 42579837468, from the approved plan.
-	expect(measured[".agents/skills/plan/scripts/plancheck.test.ts"]).toBe(53.9);
-	expect(measured[".agents/skills/lead/scripts/catchup.test.ts"]).toBe(39.3);
-	expect(measured["apps/fabrika/src/bundles.test.ts"]).toBe(3.2);
-	expect(measured["packages/pipeline/src/laws/standard.test.ts"]).toBe(3.4);
+it("vector: real CI medians include the previously unweighted scripts", () => {
+	// Fixed medians from runs 42579837468, 42573088027 and 42571265116, rounded to one decimal.
+	expect(measured[".agents/skills/plan/scripts/plancheck.test.ts"]).toBe(59.1);
+	expect(measured[".agents/skills/lead/scripts/catchup.test.ts"]).toBe(47.2);
+	expect(measured["apps/fabrika/src/bundles.test.ts"]).toBe(3.7);
+	expect(measured["packages/pipeline/src/laws/standard.test.ts"]).toBe(3.5);
 });
 
 // How the check's test machines split the test files: each gets about the same seconds, not the
