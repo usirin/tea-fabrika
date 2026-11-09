@@ -209,6 +209,7 @@ def fetch_box():
         if fetched.returncode: refuse("rewrite: non-fast-forward fetch rejected")
         head = rev(branch)
         if not ancestor(state["base"], head): refuse("base is not an ancestor")
+        chain = commits(state["base"], head)
         incoming = "refs/notes/box-" + name + "-" + uuid.uuid4().hex
         has_notes = git("ls-remote", "--exit-code", str(work), "refs/notes/fabrika")
         if has_notes.returncode == 0:
@@ -216,10 +217,13 @@ def fetch_box():
             try:
                 # Check every note before copying any, so a conflict leaves MAIN's notes as they were.
                 # Notes are copied one by one, never merged as a ref: a note the box deleted stays in
-                # MAIN, and a commit MAIN already links is never linked again.
-                copies = []
+                # MAIN, and a commit MAIN already links is never linked again. Only the run's own
+                # commits are read: the rest of the box's notes are MAIN's copy from box start, and
+                # MAIN may have re-signed one since (themes and layers tests, 2026-11-09).
+                copies, own = [], set(chain)
                 for line in must(git("notes", "--ref=" + incoming, "list"), "notes list failed").splitlines():
                     blob, sha = line.split()
+                    if sha not in own: continue
                     current = git("notes", "--ref=fabrika", "show", sha)
                     if current.returncode != 0: copies.append((blob, sha))
                     elif current.stdout != git("cat-file", "blob", blob).stdout: refuse("note conflict " + sha)
@@ -227,7 +231,6 @@ def fetch_box():
                     must(git("notes", "--ref=fabrika", "add", "-C", blob, sha), "note copy failed " + sha)
             finally: git("update-ref", "-d", incoming)
         elif has_notes.returncode != 2: refuse("notes read failed")
-        chain = commits(state["base"], head)
         if step:
             if step not in ("tests", "build", "mutation", "review") or ticket != state.get("ticket") or step != state.get("run-step") or ticket != state.get("run-ticket"):
                 refuse("run step or ticket mismatch")
