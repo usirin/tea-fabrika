@@ -50,7 +50,7 @@ const terminal = {
 	input,
 	errors: ["TypeError", "RangeError", "TypeError"],
 	tries: 3,
-	result: {_tag: "refused", why: "dead"},
+	result: {_tag: "refused", reason: "dead"},
 	process: B,
 };
 const snapshot = {
@@ -139,7 +139,7 @@ describe("P34 recovery storage", () => {
 						{...terminal, letter: "other", input: {...input, padding: "x".repeat(128 * 1024)}},
 					],
 				};
-				expect(yield* Effect.flip(s.save(full))).toMatchObject({why: "storage"});
+				expect(yield* Effect.flip(s.save(full))).toMatchObject({reason: "storage"});
 				expect(yield* s.load).toEqual(snapshot);
 			}).pipe(Effect.provide(layer())),
 		);
@@ -186,7 +186,7 @@ describe("P34 recovery storage", () => {
 		disk.reopen();
 		await Effect.runPromise(
 			Effect.gen(function* () {
-				expect(yield* Effect.flip((yield* S).load)).toMatchObject({why: "bad_row"});
+				expect(yield* Effect.flip((yield* S).load)).toMatchObject({reason: "bad_row"});
 			}).pipe(Effect.provide(layer())),
 		);
 	});

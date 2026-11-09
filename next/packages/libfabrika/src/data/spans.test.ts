@@ -9,7 +9,7 @@
 // - Tag keys: OpenTelemetry's `messaging.destination.name` (the stream), `messaging.message.id` (the
 //   id) and `messaging.operation.type` (`send` for an append, `receive` for a read); `fab.ledger.*`
 //   for the rest: `rev`, `pos`, `reader`, `to`, `after`, `head`, `lag`, `rows`, `visible_ms`,
-//   `answer`, `why`, and, by the same rule, `tag` (the line's `_tag`), `by`, `rings` and `ok`.
+//   `answer`, `reason`, and, by the same rule, `tag` (the line's `_tag`), `by`, `rings` and `ok`.
 // - `answer` on an append is `placed`, `resent` or `refused`; on a wait, `ready` or `parked`.
 // - `lag` is how many of the stream's entries sit past `after`. A wait's `head` is its stream's newest
 //   rev. `visible_ms` is the referee's clock at the answer minus the oldest returned `arrivedAt`.
@@ -48,7 +48,8 @@ const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
 /** A doorbell whose delivery to `fails` fails, as a gateway that went away would. */
 const failing = (fails: string) =>
 	Layer.succeed(Doorbell, {
-		ring: (to) => (to === fails ? Effect.fail(new LedgerError({why: "unreachable"})) : Effect.void),
+		ring: (to) =>
+			to === fails ? Effect.fail(new LedgerError({reason: "unreachable"})) : Effect.void,
 	});
 const onSql = (sql: Sql, doorbell: Layer.Layer<Doorbell> = quiet) =>
 	Ledger.sql(sql, {reader: READER}).pipe(Layer.provide(doorbell));
@@ -197,7 +198,7 @@ describe("p95, every call is one span, names and numbers only", () => {
 	});
 
 	it.effect(
-		"a resend and each refusal still end one ledger.append span, with answer and why",
+		"a resend and each refusal still end one ledger.append span, with answer and reason",
 		() => {
 			const {tracer, tags} = capture();
 			return Effect.gen(function* () {
@@ -209,7 +210,9 @@ describe("p95, every call is one span, names and numbers only", () => {
 				yield* ledger.append("a", "w-2", line({seen: 50}));
 				yield* referee.append("a", "w-3", {...line(), arrivedAt: 1});
 				yield* referee.append("a", "w-4", line({parent: "not an input id"}));
-				expect(tags("ledger.append").map((t) => [t[ID], t[tag("answer")], t[tag("why")]])).toEqual([
+				expect(
+					tags("ledger.append").map((t) => [t[ID], t[tag("answer")], t[tag("reason")]]),
+				).toEqual([
 					["w-1", "placed", undefined],
 					["w-1", "resent", undefined],
 					["w-1", "refused", "id_reused"],
@@ -436,7 +439,7 @@ describe("p95, every call is one span, names and numbers only", () => {
 			return Effect.gen(function* () {
 				const ledger = yield* Ledger;
 				const error = yield* Effect.flip(ledger.append("a", "w-1", line()));
-				expect(error.why).toBe("storage");
+				expect(error.reason).toBe("storage");
 				expect(failed("ledger.append")).toEqual([true]);
 				const values = Object.values(tags("ledger.append")[0] ?? {});
 				expect(values.some((value) => value === full.code || value === full.errcode)).toBe(true);
@@ -446,7 +449,7 @@ describe("p95, every call is one span, names and numbers only", () => {
 	);
 
 	it.effect(
-		"a storage failure tags each call's span with fab.ledger.why, fab.ledger.code and error.type",
+		"a storage failure tags each call's span with fab.ledger.reason, fab.ledger.code and error.type",
 		() => {
 			const {tracer, tags} = capture();
 			const full = Object.assign(new Error("database or disk is full"), {
@@ -464,7 +467,7 @@ describe("p95, every call is one span, names and numbers only", () => {
 					throw full;
 				},
 			};
-			const keys = {[tag("why")]: "storage", [tag("code")]: 13, [ERROR]: "Error"};
+			const keys = {[tag("reason")]: "storage", [tag("code")]: 13, [ERROR]: "Error"};
 			return Effect.gen(function* () {
 				const ledger = yield* Ledger;
 				yield* Effect.flip(ledger.append("a", "w-1", line()));
@@ -491,10 +494,10 @@ describe("p95, every call is one span, names and numbers only", () => {
 			return Effect.gen(function* () {
 				const ledger = yield* Ledger;
 				const error = yield* Effect.flip(ledger.append("a", "w-1", line()));
-				expect(error.why).toBe("storage");
+				expect(error.reason).toBe("storage");
 				const [span = {}] = tags("ledger.append");
 				expect(span).toEqual(
-					expect.objectContaining({[tag("why")]: "storage", [ERROR]: "TypeError"}),
+					expect.objectContaining({[tag("reason")]: "storage", [ERROR]: "TypeError"}),
 				);
 				expect(Object.keys(span)).not.toContain(tag("code"));
 			}).pipe(Effect.provide(onSql(odd)), Effect.withTracer(tracer));
@@ -517,11 +520,11 @@ describe("p95, every call is one span, names and numbers only", () => {
 					ledger.append("a", "w-2", line({body: {note: "y".repeat(100_000)}})),
 				);
 				expect(error).toBeInstanceOf(LedgerError);
-				expect(error.why).toBe("storage");
+				expect(error.reason).toBe("storage");
 				expect(failed("ledger.append")).toEqual([false, true]);
 				expect(tags("ledger.append")[1]?.[tag("code")]).toBe(13);
 				expect(tags("ledger.append")[1]).toEqual(
-					expect.objectContaining({[tag("why")]: "storage"}),
+					expect.objectContaining({[tag("reason")]: "storage"}),
 				);
 				expect(error.message ?? "").not.toMatch(/no transaction is active/);
 				// With room again, the failed step left nothing behind and the next append is placed.
@@ -609,7 +612,7 @@ describe("p95, every call is one span, names and numbers only", () => {
 	);
 
 	it.effect(
-		"Ledger.remote ends one ledger.call span per call, failed with its why when the call fails",
+		"Ledger.remote ends one ledger.call span per call, failed with its reason when the call fails",
 		() => {
 			const {tracer, tags, failed} = capture();
 			const reject = () => Promise.reject(new Error("the object went away"));
@@ -627,7 +630,7 @@ describe("p95, every call is one span, names and numbers only", () => {
 				expect(calls).toHaveLength(3);
 				expect(failed("ledger.call")).toEqual([false, true, true]);
 				expect(calls.map((t) => t[tag("reader")])).toEqual([READER, READER, READER]);
-				expect(calls.map((t) => t[tag("why")])).toEqual([undefined, "unreachable", "bad_row"]);
+				expect(calls.map((t) => t[tag("reason")])).toEqual([undefined, "unreachable", "bad_row"]);
 				expect(calls.map((t) => Object.values(t))).toEqual([
 					expect.arrayContaining(["append"]),
 					expect.arrayContaining(["read"]),

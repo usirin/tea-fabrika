@@ -228,7 +228,7 @@ const flow = async (sample: Flow) => {
 			getByName: () => ({
 				route: async () => {
 					if (mode === "rpc") throw new Error(`${bearer} ${rawFrame}`);
-					if (mode === "refused") return {_tag: "refused", why: "not_granted"};
+					if (mode === "refused") return {_tag: "refused", reason: "not_granted"};
 					return {_tag: "ok", result: {accepted: true}};
 				},
 				info: async () => [],

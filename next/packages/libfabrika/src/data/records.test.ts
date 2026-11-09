@@ -13,7 +13,7 @@
 //   part's name. `RecordManager.sql(open, cap)` opens each part by that name.
 // - `read(chain)` walks part 0, then each `rolled.next`, and yields every span once, in write order.
 // - `content(chain, spanId)` is none, `{_tag: "kept", spanId, message}`, or
-//   `{_tag: "deleted", spanId, by, at, why}`; `at` is the Clock's ms. `deleteContent` looks in every
+//   `{_tag: "deleted", spanId, by, at, reason}`; `at` is the Clock's ms. `deleteContent` looks in every
 //   part, and a second delete changes nothing. Nothing but content is ever deleted.
 // - A part's tables in `RecordManager.sql`: `spans`, `content` and `rolled` (at most one row).
 // - `RecordManager.remote(stub)` asks `stub(name)` for the part's object; a call that rejects is
@@ -327,7 +327,7 @@ describe("p102, the cap is checked before the write (RecordManager.sql)", () => 
 				RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])),
 			);
 			expect(error).toBeInstanceOf(SinkError);
-			expect(error.why).toBe("storage");
+			expect(error.reason).toBe("storage");
 		}).pipe(Effect.provide(RecordManager.sql(() => throwing, CAP)));
 	});
 });
@@ -339,7 +339,7 @@ describe.each(backends)(
 	"p100, content is the one deletable part, on RecordManager.$name",
 	(backend) => {
 		it.effect(
-			"deleteContent keeps who, when and why; the span row stays as it was; a second delete changes nothing",
+			"deleteContent keeps who, when and reason; the span row stays as it was; a second delete changes nothing",
 			() => {
 				const {layer, parts} = backend.make(CAP);
 				return Effect.gen(function* () {
@@ -360,19 +360,19 @@ describe.each(backends)(
 					yield* TestClock.setTime(T);
 					yield* records.deleteContent(job, id(0), {
 						by: "owner",
-						why: "a note's text was in the message",
+						reason: "a note's text was in the message",
 					});
 					const deleted = {
 						_tag: "deleted",
 						spanId: id(0),
 						by: "owner",
 						at: T,
-						why: "a note's text was in the message",
+						reason: "a note's text was in the message",
 					};
 					expect(yield* records.content(job, id(0))).toEqual(Option.some(deleted));
 
 					yield* TestClock.setTime(T + 60_000);
-					yield* records.deleteContent(job, id(0), {by: "someone-else", why: "again"});
+					yield* records.deleteContent(job, id(0), {by: "someone-else", reason: "again"});
 					expect(yield* records.content(job, id(0))).toEqual(Option.some(deleted));
 
 					expect(yield* read(job)).toEqual(before);
@@ -402,7 +402,7 @@ describe.each(backends)(
 					expect(yield* records.content(job, id(0))).toEqual(
 						Option.some({_tag: "kept", spanId: id(0), message: MESSAGE}),
 					);
-					yield* records.deleteContent(job, id(0), {by: "owner", why: "private"});
+					yield* records.deleteContent(job, id(0), {by: "owner", reason: "private"});
 					yield* records.write(job, 0, [kept(first, MESSAGE)]);
 					const after = yield* records.content(job, id(0));
 					expect(Option.map(after, (c) => c._tag)).toEqual(Option.some("deleted"));
@@ -420,9 +420,9 @@ describe.each(backends)(
 				for (let n = 1; n < 60; n++) at = yield* send(job, at, [kept(row(id(n), FILL))]);
 				expect(at, "the chain rolled past part 0").toBeGreaterThan(0);
 				yield* TestClock.setTime(T);
-				yield* records.deleteContent(job, id(0), {by: "owner", why: "private"});
+				yield* records.deleteContent(job, id(0), {by: "owner", reason: "private"});
 				expect(yield* records.content(job, id(0))).toEqual(
-					Option.some({_tag: "deleted", spanId: id(0), by: "owner", at: T, why: "private"}),
+					Option.some({_tag: "deleted", spanId: id(0), by: "owner", at: T, reason: "private"}),
 				);
 				expect((yield* read(job)).map((r) => r.spanId)).toEqual(
 					Array.from({length: 60}, (_, n) => id(n)),
@@ -472,17 +472,17 @@ describe("RecordManager.remote, the record object's stub", () => {
 				),
 			);
 			expect(unreachable).toBeInstanceOf(SinkError);
-			expect(unreachable.why).toBe("unreachable");
+			expect(unreachable.reason).toBe("unreachable");
 			const bad = yield* Effect.flip(
 				RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])).pipe(
 					Effect.provide(RecordManager.remote(odd.make)),
 				),
 			);
-			expect(bad.why).toBe("bad_row");
+			expect(bad.reason).toBe("bad_row");
 			const readFailed = yield* Effect.flip(
 				read(job).pipe(Effect.provide(RecordManager.remote(gone.make))),
 			);
-			expect(readFailed.why).toBe("unreachable");
+			expect(readFailed.reason).toBe("unreachable");
 		}),
 	);
 
@@ -497,7 +497,7 @@ describe("RecordManager.remote, the record object's stub", () => {
 				const bad = yield* Effect.flip(
 					read(job).pipe(Effect.provide(RecordManager.remote(page([broken]).make))),
 				);
-				expect(bad.why, JSON.stringify(broken)).toBe("bad_row");
+				expect(bad.reason, JSON.stringify(broken)).toBe("bad_row");
 			}
 		}),
 	);

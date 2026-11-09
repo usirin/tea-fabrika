@@ -125,7 +125,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
 		...actual,
 		append: (stream, id, line) =>
 			controls.fail === stream
-				? Effect.fail(new LedgerError({why: "storage"}))
+				? Effect.fail(new LedgerError({reason: "storage"}))
 				: actual.append(stream, id, line),
 	});
 	const transaction = Layer.effect(
@@ -138,7 +138,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
 							...turn,
 							append: (stream, id, line) => {
 								if (controls.fail === stream) {
-									throw new LedgerError({why: "storage"});
+									throw new LedgerError({reason: "storage"});
 								}
 								return turn.append(stream, id, line);
 							},
@@ -184,9 +184,9 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
 		nextProcess: () => Effect.succeed(PROCESS),
 		notify: () => Effect.void,
 		deliver: () =>
-			controls.deliveryFails ? Effect.fail(new LedgerError({why: "unreachable"})) : Effect.void,
+			controls.deliveryFails ? Effect.fail(new LedgerError({reason: "unreachable"})) : Effect.void,
 		inputs: {schema: Input, personOnly: [], raw: [], log: Schema.toCodecJson(Input)},
-		facts: {personOnly: []},
+		events: {personOnly: []},
 	}).pipe(
 		Layer.provideMerge(
 			Layer.mergeAll(

@@ -32,7 +32,7 @@ const setup = (now: number) => {
 				Effect.suspend(() => {
 					asked.push({gateway, session});
 					return failed.has(session)
-						? Effect.fail(new LedgerError({why: "unreachable"}))
+						? Effect.fail(new LedgerError({reason: "unreachable"}))
 						: Effect.succeed(pings.get(session) ?? null);
 				}),
 		});
@@ -117,7 +117,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
 						gateway.online("key-a").pipe(Effect.asVoid),
 					]) {
 						const result = yield* Effect.result(action);
-						expect(result).toMatchObject({_tag: "Failure", failure: {why: "storage"}});
+						expect(result).toMatchObject({_tag: "Failure", failure: {reason: "storage"}});
 						if (result._tag === "Failure") expect(result.failure).toBeInstanceOf(LedgerError);
 					}
 				}).pipe(Effect.provide(broken));
@@ -126,7 +126,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
 					yield* gateway.join(world.connection());
 					world.store.sql.exec("UPDATE process_gateways SET session = ?", `invalid:${message}`);
 					const result = yield* Effect.result(gateway.online("key-a"));
-					expect(result).toMatchObject({_tag: "Failure", failure: {why: "bad_row"}});
+					expect(result).toMatchObject({_tag: "Failure", failure: {reason: "bad_row"}});
 				}).pipe(Effect.provide(world.layer()));
 			});
 		}),
@@ -294,7 +294,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
 			});
 		}),
 	);
-	it.effect("plant, background polling: time alone causes no probe and no ledger fact", () =>
+	it.effect("plant, background polling: time alone causes no probe and no ledger event", () =>
 		check(time, [NOW], (NOW) => {
 			const world = setup(NOW);
 			const {connection} = world;

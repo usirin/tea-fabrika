@@ -1,6 +1,6 @@
 // p26/p82. Hello echoes the issued nonce, bound by the existing signature with the URL and tab.
 // checkHello takes trusted upgrade values, an atomic nonce consumer and admission.
-// It answers online {who,version,ping} or refused {why}; capability claims grant no rank.
+// It answers online {who,version,ping} or refused {reason}; capability claims grant no rank.
 // Plants: accept the first version; omit one signed binding; consume before checking; admit verify.
 import {createHash} from "node:crypto";
 import {assert, describe, expect, it, vi} from "@effect/vitest";
@@ -134,7 +134,7 @@ describe("P10 hello", () => {
 						};
 						const consume = vi.fn(() => true);
 						const admit = vi.fn((_key: string) =>
-							Effect.succeed(Transport.Admission.cases.refused.make({why: "not_granted"})),
+							Effect.succeed(Transport.Admission.cases.refused.make({reason: "not_granted"})),
 						);
 						const result = yield* Transport.checkHello({
 							hello,
@@ -150,7 +150,7 @@ describe("P10 hello", () => {
 						expect(admit.mock.calls).toEqual([[k.fingerprint]]);
 						expect(result).toEqual({
 							_tag: "refused",
-							why: "not_granted",
+							reason: "not_granted",
 							fingerprint: k.fingerprint,
 						});
 						expect(consume).not.toHaveBeenCalled();
@@ -171,7 +171,7 @@ describe("P10 hello", () => {
 							hello: {...x.hello, [binding]: `another-${binding}`},
 							...x.trusted,
 						}),
-					).toMatchObject({_tag: "refused", why: "bad_signature"});
+					).toMatchObject({_tag: "refused", reason: "bad_signature"});
 					expect(x.admit).not.toHaveBeenCalled();
 					expect(x.consume).not.toHaveBeenCalled();
 				}),
@@ -256,7 +256,7 @@ describe("P10 hello", () => {
 				const admit =
 					kind === "unknown"
 						? vi.fn(() =>
-								Effect.succeed(Transport.Admission.cases.refused.make({why: "not_granted"})),
+								Effect.succeed(Transport.Admission.cases.refused.make({reason: "not_granted"})),
 							)
 						: x.admit;
 				const checked = Transport.checkHello({hello, ...x.trusted, admit});
@@ -264,9 +264,9 @@ describe("P10 hello", () => {
 				expect(result).toMatchObject({
 					_tag: "refused",
 					...(kind === "version"
-						? {why: "no_version"}
+						? {reason: "no_version"}
 						: kind === "unknown"
-							? {why: "not_granted"}
+							? {reason: "not_granted"}
 							: {}),
 				});
 				expect(x.consume).not.toHaveBeenCalled();

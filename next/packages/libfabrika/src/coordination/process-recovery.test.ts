@@ -18,7 +18,7 @@ import {
 	CLIENT,
 	again,
 	brain,
-	facts,
+	events,
 	first,
 	from,
 	ids,
@@ -27,7 +27,7 @@ import {
 	storage,
 	watcher,
 } from "./process.test-support.ts";
-import {brainOnly, canRestart, Dead, ProcessFact, Start} from "./process.ts";
+import {brainOnly, canRestart, Dead, ProcessEvent, Start} from "./process.ts";
 const deadInput = {
 	tries: 3,
 	limit: 3,
@@ -79,7 +79,7 @@ type History = typeof history extends fc.Arbitrary<infer Value> ? Value : never;
 const seeded = Effect.fnUntraced(function* (h: History) {
 	const disk = storage();
 	const next = ids(...h.processes);
-	const starts: Array<typeof ProcessFact.cases.started.Type> = [];
+	const starts: Array<typeof ProcessEvent.cases.started.Type> = [];
 	const current: string[] = [];
 	const layer = () => manager(disk, brain(), next.next);
 	for (const i of [0, 1]) {
@@ -99,7 +99,7 @@ const seeded = Effect.fnUntraced(function* (h: History) {
 					name: h.names[i]!,
 					code: {program: h.programs[i]!, hash: "build-b"},
 					after,
-					why: "crashed",
+					reason: "crashed",
 				}),
 				from(),
 			);
@@ -109,7 +109,7 @@ const seeded = Effect.fnUntraced(function* (h: History) {
 	}
 	for (const row of disk.rows())
 		if (row._tag === "started" && row.by === BRAIN)
-			starts.push(Schema.decodeUnknownSync(ProcessFact.cases.started)(valueFor(row)));
+			starts.push(Schema.decodeUnknownSync(ProcessEvent.cases.started)(valueFor(row)));
 	return {disk, layer, starts: h.reverse ? starts.reverse() : starts};
 });
 
@@ -125,7 +125,7 @@ describe("T319, next/ dead-letter identity", () => {
 						const before = disk.rows();
 						for (const invalid of values) {
 							const error = yield* processes.dead(A, invalid, from()).pipe(Effect.flip);
-							expect(error).toMatchObject({_tag: "ProcessError", why: "bad_text"});
+							expect(error).toMatchObject({_tag: "ProcessError", reason: "bad_text"});
 							expect(disk.rows()).toEqual(before);
 						}
 					}).pipe(Effect.provide(manager(disk))),
@@ -140,7 +140,7 @@ describe("T319, next/ dead-letter identity", () => {
 		["program", "use another process's program or a constant"],
 		["name", "use the program or another registered name"],
 	] as const)
-		it(`plant, ${plant}: dead.${field} matches its historical started fact after replacement`, async () => {
+		it(`plant, ${plant}: dead.${field} matches its historical started event after replacement`, async () => {
 			await fc.assert(
 				fc.asyncProperty(history, (h) =>
 					Effect.runPromise(
@@ -267,7 +267,7 @@ describe("P34 coordination recovery", () => {
 						lineFor(from({by: CLIENT}), {
 							_tag: "down",
 							process: W,
-							why: "forged",
+							reason: "forged",
 							crashes: 99,
 							until: 999999,
 						}),
@@ -302,7 +302,7 @@ describe("P34 coordination recovery", () => {
 					const p = yield* ProcessManager;
 					yield* p.start(first(), from());
 					yield* p.exit(A, "saved_letter", from());
-					yield* p.down(A, {why: "saved_letter", crashes: 2, until: 5001}, from());
+					yield* p.down(A, {reason: "saved_letter", crashes: 2, until: 5001}, from());
 					expect(p.status, "P34 status must include ended and down processes").toBeTypeOf(
 						"function",
 					);
@@ -313,7 +313,7 @@ describe("P34 coordination recovery", () => {
 				disk.reopen();
 				yield* Effect.gen(function* () {
 					const p = yield* ProcessManager;
-					expect(yield* Effect.flip(p.status("counter:1"))).toMatchObject({why: "not_parent"});
+					expect(yield* Effect.flip(p.status("counter:1"))).toMatchObject({reason: "not_parent"});
 				}).pipe(Effect.provide(manager(disk, watcher(X))));
 			}),
 	);
@@ -351,7 +351,7 @@ describe("P34 coordination recovery", () => {
 				}).pipe(Effect.provide(manager(disk)));
 				yield* Effect.gen(function* () {
 					const p = yield* ProcessManager;
-					expect(yield* Effect.flip(p.dead(A, dead, from()))).toMatchObject({why: "not_parent"});
+					expect(yield* Effect.flip(p.dead(A, dead, from()))).toMatchObject({reason: "not_parent"});
 				}).pipe(Effect.provide(manager(disk, watcher(X))));
 			}),
 	);
@@ -374,8 +374,10 @@ describe("P34 coordination recovery", () => {
 					const p = yield* ProcessManager;
 					yield* p.exit(A, "crashed", from());
 					expect((yield* p.start(again(A), from())).process).toBe(B);
-					expect((yield* facts("counter:1")).filter((r) => r._tag === "exited")).toHaveLength(1);
-					expect((yield* facts("counter:1")).filter((r) => r._tag === "restarted")).toHaveLength(1);
+					expect((yield* events("counter:1")).filter((r) => r._tag === "exited")).toHaveLength(1);
+					expect((yield* events("counter:1")).filter((r) => r._tag === "restarted")).toHaveLength(
+						1,
+					);
 					expect(yield* read("client:window-a/inbox")).toMatchObject([
 						{body: {m: {ref: "watch-a", process: A, to: brain().recipient}}},
 					]);

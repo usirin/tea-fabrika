@@ -322,7 +322,7 @@ const world = Effect.fnUntraced(function* (
 					traceId: trace.traceId,
 					build: "test-build",
 				});
-				if (placing._tag === "refused") return yield* new LedgerError({why: "refused"});
+				if (placing._tag === "refused") return yield* new LedgerError({reason: "refused"});
 			}
 		});
 	const settings = {
@@ -346,7 +346,7 @@ const world = Effect.fnUntraced(function* (
 				yield* controls.notify(client, news);
 			}),
 		inputs: {schema: Input, personOnly: ["approve"], raw: ["keys"], log: Schema.toCodecJson(Input)},
-		facts: {personOnly: ["answered"]},
+		events: {personOnly: ["answered"]},
 	};
 	const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
 	const ledger = Ledger.sql(sql, {reader: "project-a"}).pipe(Layer.provide(quiet));
@@ -593,7 +593,7 @@ describe("P10 review regressions", () => {
 		const {client, hello, trusted} = yield* signedHello(d, k, tab);
 		expect(yield* d.initialize(client, hello, trusted)).toMatchObject({
 			_tag: "refused",
-			why: "not_granted",
+			reason: "not_granted",
 		});
 		return {client, hello, trusted};
 	});
@@ -638,7 +638,7 @@ describe("P10 review regressions", () => {
 										pass === undefined ? {label} : {label, pass},
 									);
 									if (!kept.includes(name)) {
-										expect(reply).toEqual({_tag: "refused", why: "not_waiting"});
+										expect(reply).toEqual({_tag: "refused", reason: "not_waiting"});
 										continue;
 									}
 									const rows = (yield* d.watch(owner.client)).rows;
@@ -670,7 +670,7 @@ describe("P10 review regressions", () => {
 							const {client, hello, trusted} = yield* signedHello(d, stranger, tab);
 							expect(yield* d.initialize(client, hello, trusted)).toEqual({
 								_tag: "refused",
-								why: "not_granted",
+								reason: "not_granted",
 								fingerprint: stranger.fingerprint,
 							});
 						}).pipe(w.provide);
@@ -721,7 +721,7 @@ describe("P10 review regressions", () => {
 	});
 
 	// crypto: for each of the five WebCrypto edges and any failure (a rejection or a throw, of any
-	// value), the call fails with LedgerError why "crypto", never "storage", and delivers
+	// value), the call fails with LedgerError reason "crypto", never "storage", and delivers
 	// nothing. Plant: map a WebCrypto failure to storage (or NotGranted) at any edge.
 	type Armed = <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
 	// The spied WebCrypto call fails once, by a throw or a rejection, with the generated value.
@@ -823,7 +823,7 @@ describe("P10 review regressions", () => {
 									Effect.ensuring(Effect.sync(() => restore())),
 								);
 								expect(failure).toBeInstanceOf(LedgerError);
-								expect(failure).toMatchObject({_tag: "LedgerError", why: "crypto"});
+								expect(failure).toMatchObject({_tag: "LedgerError", reason: "crypto"});
 								expect(w.deliveries).toHaveLength(before);
 							}),
 						),
@@ -853,7 +853,7 @@ describe("P10 review regressions", () => {
 					);
 					expect.soft(result).toMatchObject({
 						_tag: "Failure",
-						failure: {_tag: "LedgerError", why: "storage"},
+						failure: {_tag: "LedgerError", reason: "storage"},
 					});
 					expect.soft(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(before);
 					expect.soft(receipts()).toEqual(full);
@@ -865,7 +865,7 @@ describe("P10 review regressions", () => {
 							tab: earlier.hello.tab,
 							name: w.window.fingerprint,
 						}),
-					).toMatchObject({_tag: "refused", why: "bad_nonce"});
+					).toMatchObject({_tag: "refused", reason: "bad_nonce"});
 					expect(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(beforeReplay);
 				}).pipe(w.provide);
 			}),
@@ -976,7 +976,7 @@ describe("P10 review regressions", () => {
 									},
 									{url: URL, tab: client, name: w.otherWindow.fingerprint},
 								),
-							).toMatchObject({_tag: "refused", why: "bad_signature"});
+							).toMatchObject({_tag: "refused", reason: "bad_signature"});
 					}
 					expect(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(before);
 				}).pipe(w.provide);
@@ -1025,7 +1025,7 @@ describe("P10 review regressions", () => {
 							},
 							{url: URL, tab, name: w.window.fingerprint},
 						),
-					).toMatchObject({_tag: "refused", why: "bad_nonce"});
+					).toMatchObject({_tag: "refused", reason: "bad_nonce"});
 					expect(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(before);
 				}).pipe(w.provide);
 			}),
@@ -1156,7 +1156,7 @@ describe("P10 review regressions", () => {
 				});
 				expect(yield* d.grant({text, armored: yield* w.root.sign(text)})).toMatchObject({
 					_tag: "refused",
-					why: "bad_enrollment",
+					reason: "bad_enrollment",
 				});
 				expect(yield* entries("door/members")).toEqual(before);
 			}).pipe(w.provide);
@@ -1306,7 +1306,7 @@ describe("P10 door admission and waiting", () => {
 					});
 					expect(answer).toMatchObject({
 						_tag: "refused",
-						why:
+						reason:
 							kind === "unknown"
 								? "not_granted"
 								: kind === "no version"
@@ -1472,7 +1472,7 @@ describe("P10 signed membership changes", () => {
 				} satisfies typeof C.Add.Type;
 				const text = C.addText(winner),
 					armored = yield* w.sheet.sign(text);
-				const fact = C.MemberFact.cases.added.make({
+				const event = C.MemberEvent.cases.added.make({
 					add: winner,
 					signed: {text, armored, signer: w.sheet.line},
 				});
@@ -1502,7 +1502,7 @@ describe("P10 signed membership changes", () => {
 					yield* sheet(d, w);
 					const manager = yield* C.ClientManager;
 					intervene = manager
-						.write(fact, {
+						.write(event, {
 							by: w.sheet.sshFingerprint,
 							for: PERSON,
 							sentAt: SENT,
@@ -1524,7 +1524,7 @@ describe("P10 signed membership changes", () => {
 					armed = true;
 					const result = yield* d.grant({text: loser, armored: signature});
 					expect(armed).toBe(false);
-					expect(result).toMatchObject({_tag: "ignored", why: "used"});
+					expect(result).toMatchObject({_tag: "ignored", reason: "used"});
 					expect(yield* d.grant({text: loser, armored: signature})).toEqual(result);
 					const members = yield* manager.members;
 					expect(members.keys.get(winnerKey.line)?.live).toBe(true);
@@ -1532,7 +1532,7 @@ describe("P10 signed membership changes", () => {
 				}).pipe(Effect.provide(Door.layer(w.settings).pipe(Layer.provideMerge(env))));
 			}),
 	);
-	it.effect("p42: a removed signer can resend its exact old fact, but cannot change it", () =>
+	it.effect("p42: a removed signer can resend its exact old event, but cannot change it", () =>
 		Effect.gen(function* () {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
@@ -1580,13 +1580,16 @@ describe("P10 signed membership changes", () => {
 				expect((yield* d.watch(agent.client))._tag).toBe("refused");
 				expect(yield* d.deny(agent.client, {key: w.otherWindow.raw})).toMatchObject({
 					_tag: "refused",
-					why: "person_only",
+					reason: "person_only",
 				});
 				for (const params of [
 					{key: w.otherWindow.raw},
 					{key: w.otherWindow.raw, saw: SAW, by: "forged"},
 				]) {
-					expect(yield* d.deny(client, params)).toMatchObject({_tag: "refused", why: "bad_input"});
+					expect(yield* d.deny(client, params)).toMatchObject({
+						_tag: "refused",
+						reason: "bad_input",
+					});
 				}
 				const answer = yield* d.route(client, "door.deny", {key: w.otherWindow.raw, saw: SAW});
 				expect(answer).toMatchObject({_tag: "ok", result: {_tag: "applied"}});
@@ -1653,7 +1656,7 @@ describe("P10 signed membership changes", () => {
 									});
 					expect(yield* d.grant({text, armored: yield* w.root.sign(text)})).toMatchObject({
 						_tag: "refused",
-						why: "wrong_ledger",
+						reason: "wrong_ledger",
 					});
 					expect(called).not.toHaveBeenCalled();
 					expect(yield* entries("door/members")).toEqual([]);
@@ -1730,7 +1733,7 @@ describe("P10 signed membership changes", () => {
 			}),
 	);
 	for (const mutation of ["text", "namespace", "person"] as const)
-		it.effect(`p27: a ${mutation} mismatch writes no membership fact`, () =>
+		it.effect(`p27: a ${mutation} mismatch writes no membership event`, () =>
 			Effect.gen(function* () {
 				const w = yield* world();
 				yield* Effect.gen(function* () {
@@ -1798,7 +1801,7 @@ describe("P10 inputs, retries and signer", () => {
 					const parent = w.deliveries[0]!.envelope.id;
 					expect(
 						yield* Effect.flip(writeId("claimed-approval", d.signer(parent, PROCESS, "answered"))),
-					).toMatchObject({_tag: "SigningRefused", why: "person_only"});
+					).toMatchObject({_tag: "SigningRefused", reason: "person_only"});
 				}).pipe(w.provide);
 			}),
 	);
@@ -1828,7 +1831,7 @@ describe("P10 inputs, retries and signer", () => {
 									// Lose the answer only after the real input transaction commits.
 									if (lose && appended) {
 										lose = false;
-										return yield* new LedgerError({why: "unreachable"});
+										return yield* new LedgerError({reason: "unreachable"});
 									}
 									return placing;
 								}),
@@ -1841,7 +1844,7 @@ describe("P10 inputs, retries and signer", () => {
 					lose = true;
 					expect(
 						yield* Effect.flip(d.route(client, "process.send", request("lost-append"))),
-					).toMatchObject({_tag: "LedgerError", why: "unreachable"});
+					).toMatchObject({_tag: "LedgerError", reason: "unreachable"});
 					expect(lose).toBe(false);
 					expect(w.deliveries).toEqual([]);
 					const before = rawRows(w.db, "door/inputs").filter((r) => r._tag === "received");
@@ -1909,7 +1912,7 @@ describe("P10 inputs, retries and signer", () => {
 									: request("spoof", {...comment(), [field]: "forged-writer-marker"});
 							expect(yield* d.route(client, "process.send", params)).toMatchObject({
 								_tag: "refused",
-								why: where === "outer" ? "reserved" : "bad_input",
+								reason: where === "outer" ? "reserved" : "bad_input",
 							});
 							expect(w.deliveries).toEqual([]);
 							const row = (yield* stamped()).at(-1)!;
@@ -2010,7 +2013,7 @@ describe("P10 inputs, retries and signer", () => {
 							expect(session.by.key).toBe(w.window.fingerprint);
 							if (first) {
 								first = false;
-								return yield* new LedgerError({why: "unreachable"});
+								return yield* new LedgerError({reason: "unreachable"});
 							}
 						});
 					yield* Effect.flip(d.route(client, "process.send", request("retry-delivery")));
@@ -2071,7 +2074,7 @@ describe("P10 passkey roots and recovery", () => {
 					const proof = yield* sk.sign(text, over);
 					expect(yield* d.grant({text, armored: proof.armored})).toMatchObject({
 						_tag: "refused",
-						why: "bad_signature",
+						reason: "bad_signature",
 					});
 					expect(yield* entries("door/members")).toEqual(before);
 				}
@@ -2137,9 +2140,9 @@ describe("P10 passkey roots and recovery", () => {
 					expect(
 						(yield* d.route(cleared.client, "ledger.read", {stream: "x", after: 0}))._tag,
 					).toBe("refused");
-					const facts = yield* entries("door/members");
+					const events = yield* entries("door/members");
 					for (const id of ["cleared-storage", "remove-fresh"])
-						expect(facts.find((row) => row.id === id)?.body).toMatchObject({
+						expect(events.find((row) => row.id === id)?.body).toMatchObject({
 							signed: {
 								passkey: {
 									be: true,
@@ -2150,7 +2153,7 @@ describe("P10 passkey roots and recovery", () => {
 								},
 							},
 						});
-					expect(facts.find((row) => row.id === p.add.id)?.body).toMatchObject({
+					expect(events.find((row) => row.id === p.add.id)?.body).toMatchObject({
 						add: {adds: {passkey: {proof: p.proof.armored, nonce: p.nonce, be: true, bs: true}}},
 					});
 				}).pipe(w.provide);
@@ -2247,7 +2250,7 @@ describe("P10 passkey roots and recovery", () => {
 					expect((yield* d.grant({text: first.text, armored: first.armored}))._tag).toBe("applied");
 					const result = yield* d.grant({text: second.text, armored: second.armored});
 					assert(result._tag !== "applied");
-					expect(result.why).toBe("used");
+					expect(result.reason).toBe("used");
 					expect(yield* d.grant({text: first.text, armored: first.armored})).toMatchObject({
 						_tag: "applied",
 					});
@@ -2271,7 +2274,7 @@ describe("P10 revocation and append", () => {
 					const other = yield* online(d, w, "other", w.otherWindow);
 					yield* d.route(agent.client, "process.send", request("old-agent"));
 					const parent = w.deliveries.at(-1)!.envelope.id;
-					w.controls.notify = () => Effect.fail(new LedgerError({why: "unreachable"}));
+					w.controls.notify = () => Effect.fail(new LedgerError({reason: "unreachable"}));
 					const text = C.revokeText({
 						id: "revoke-root",
 						key: w.root.line,
@@ -2327,7 +2330,7 @@ describe("P10 revocation and append", () => {
 							process: PROCESS,
 							kind: "saved",
 							stream: "target",
-							fact: {_tag: "saved", value: "must-not-land"},
+							event: {_tag: "saved", value: "must-not-land"},
 						}),
 					))._tag,
 				).toBe("NotGranted");
@@ -2350,7 +2353,7 @@ describe("P10 revocation and append", () => {
 					process: PROCESS,
 					kind: "saved",
 					stream: "target",
-					fact: {_tag: "saved", value: 1},
+					event: {_tag: "saved", value: 1},
 				};
 				for (const change of [
 					{id: "other"},
@@ -2371,8 +2374,8 @@ describe("P10 revocation and append", () => {
 	);
 });
 
-describe("P33 the door never writes process lifecycle facts", () => {
-	// Only the brain's ProcessManager writes the `processes` stream and ProcessFact cases.
+describe("P33 the door never writes process lifecycle events", () => {
+	// Only the brain's ProcessManager writes the `processes` stream and ProcessEvent cases.
 	const refusedAppend = (kind: string, stream: string) =>
 		Effect.gen(function* () {
 			const w = yield* world();
@@ -2384,7 +2387,7 @@ describe("P33 the door never writes process lifecycle facts", () => {
 				yield* writeId("fact-a", d.signer(parent, PROCESS, kind));
 				expect(
 					yield* Effect.flip(
-						d.append({id: "fact-a", parent, process: PROCESS, kind, stream, fact: {_tag: kind}}),
+						d.append({id: "fact-a", parent, process: PROCESS, kind, stream, event: {_tag: kind}}),
 					),
 				).toMatchObject({_tag: "SigningRefused"});
 				expect(yield* entries(stream)).toEqual([]);
@@ -2397,9 +2400,10 @@ describe("P33 the door never writes process lifecycle facts", () => {
 		it.effect(`the door refuses any append under processes/, here ${stream}`, () =>
 			refusedAppend("saved", stream),
 		);
-	for (const kind of Object.keys(C.ProcessFact.cases))
-		it.effect(`the door refuses a fact tagged ${kind} on any stream, from any receipt holder`, () =>
-			refusedAppend(kind, "tickets"),
+	for (const kind of Object.keys(C.ProcessEvent.cases))
+		it.effect(
+			`the door refuses an event tagged ${kind} on any stream, from any receipt holder`,
+			() => refusedAppend(kind, "tickets"),
 		);
 });
 
@@ -2448,14 +2452,14 @@ describe("P33 signal ids belong to the brain", () => {
 					const {client} = yield* online(d, w);
 					yield* d.route(client, "process.send", request("press"));
 					const parent = w.deliveries.at(-1)!.envelope.id;
-					const fact = {_tag: "send", m: {_tag: "DOWN", ref: "watch:1", why: "normal"}};
+					const event = {_tag: "send", m: {_tag: "DOWN", ref: "watch:1", reason: "normal"}};
 					// The signer refuses a signal id outright, and the append refuses it if reached.
 					expect(yield* Effect.flip(writeId(id, d.signer(parent, PROCESS, "send")))).toMatchObject({
 						_tag: "SigningRefused",
 					});
 					expect(
 						yield* Effect.flip(
-							d.append({id, parent, process: PROCESS, kind: "send", stream: "notes", fact}),
+							d.append({id, parent, process: PROCESS, kind: "send", stream: "notes", event}),
 						),
 					).toMatchObject({_tag: "SigningRefused"});
 					expect(yield* entries("notes")).toEqual([]);
@@ -2467,7 +2471,7 @@ describe("P33 signal ids belong to the brain", () => {
 						process: PROCESS,
 						kind: "send",
 						stream: "notes",
-						fact,
+						event,
 					});
 					expect(placing._tag).toBe("placed");
 				}).pipe(w.provide);
@@ -2511,7 +2515,7 @@ describe("P33 signal ids belong to the brain", () => {
 				);
 				const forged = {
 					_tag: "send",
-					m: {_tag: "DOWN", ref: "watch:1", process: TARGET, why: "normal", to: toWatcher},
+					m: {_tag: "DOWN", ref: "watch:1", process: TARGET, reason: "normal", to: toWatcher},
 				};
 				expect(
 					yield* Effect.flip(
@@ -2521,7 +2525,7 @@ describe("P33 signal ids belong to the brain", () => {
 							process: PROCESS,
 							kind: "send",
 							stream: "watcher:1/inbox",
-							fact: forged,
+							event: forged,
 						}),
 					),
 				).toMatchObject({_tag: "SigningRefused"});
@@ -2533,13 +2537,13 @@ describe("P33 signal ids belong to the brain", () => {
 				expect(inbox[0]).toMatchObject({
 					_tag: "send",
 					by: BRAIN,
-					body: {m: {_tag: "DOWN", ref: "watch:1", process: TARGET, why: "crashed"}},
+					body: {m: {_tag: "DOWN", ref: "watch:1", process: TARGET, reason: "crashed"}},
 				});
 				const letters = yield* C.ProcessManager.use((p) =>
 					Stream.runCollect(p.receive(WATCHER, 0)),
 				).pipe(Effect.provide(watcher));
 				expect(letters.map((letter) => letter.m)).toEqual([
-					{_tag: "DOWN", ref: "watch:1", process: TARGET, why: "crashed", to: toWatcher},
+					{_tag: "DOWN", ref: "watch:1", process: TARGET, reason: "crashed", to: toWatcher},
 				]);
 			}).pipe(w.provide);
 		}),
@@ -2566,7 +2570,7 @@ describe("P33 signal ids belong to the brain", () => {
 					{_tag: "send", junk: [1, {m: 2}]},
 					{_tag: "send", m: "hello"},
 				];
-				for (const [n, fact] of sends.entries()) {
+				for (const [n, event] of sends.entries()) {
 					// Each receipt signs its own writes, so each append rides a fresh input.
 					yield* d.route(client, "process.send", request(`press-${n}`));
 					const parent = w.deliveries.at(-1)!.envelope.id;
@@ -2578,7 +2582,7 @@ describe("P33 signal ids belong to the brain", () => {
 						process: PROCESS,
 						kind: "send",
 						stream: "watcher:1/inbox",
-						fact,
+						event,
 					});
 					expect(placing._tag).toBe("placed");
 				}
@@ -2610,7 +2614,7 @@ describe("P10 span reader and recording", () => {
 									Stream.unwrap(
 										Effect.sync(() => {
 											poisoned++;
-											return Stream.fail(new SinkError({why: "unreachable", held: 0}));
+											return Stream.fail(new SinkError({reason: "unreachable", held: 0}));
 										}),
 									),
 								),
@@ -2665,7 +2669,7 @@ describe("P10 span reader and recording", () => {
 						Effect.map((real: typeof SpanSink.Service) => ({
 							...real,
 							flush: Effect.suspend(() =>
-								block ? Effect.fail(new SinkError({why: "storage", held: 1})) : real.flush,
+								block ? Effect.fail(new SinkError({reason: "storage", held: 1})) : real.flush,
 							),
 						})),
 					),
@@ -2745,7 +2749,7 @@ describe("P10 span reader and recording", () => {
 				RecordManager.pipe(
 					Effect.map((r: typeof RecordManager.Service) => ({
 						...r,
-						read: () => Stream.fail(new SinkError({why: "unreachable", held: 0})),
+						read: () => Stream.fail(new SinkError({reason: "unreachable", held: 0})),
 					})),
 				),
 			).pipe(Layer.provide(w.env));
@@ -2790,7 +2794,7 @@ describe("P10 span reader and recording", () => {
 						(yield* d.route(agent.client, "spans.deleteContent", {
 							chain,
 							spanId: span.spanId,
-							why: "privacy",
+							reason: "privacy",
 						}))._tag,
 					).toBe("refused");
 					expect(Option.getOrThrow(yield* r.content(chain, span.spanId))._tag).toBe("kept");
@@ -2798,7 +2802,7 @@ describe("P10 span reader and recording", () => {
 						(yield* d.route(client, "spans.deleteContent", {
 							chain,
 							spanId: span.spanId,
-							why: "privacy",
+							reason: "privacy",
 							by: "forged-deleter",
 						}))._tag,
 					).toBe("refused");
@@ -2807,13 +2811,13 @@ describe("P10 span reader and recording", () => {
 						(yield* d.route(client, "spans.deleteContent", {
 							chain,
 							spanId: span.spanId,
-							why: "privacy",
+							reason: "privacy",
 						}))._tag,
 					).toBe("ok");
 					expect(Option.getOrThrow(yield* r.content(chain, span.spanId))).toMatchObject({
 						_tag: "deleted",
 						by: w.window.fingerprint,
-						why: "privacy",
+						reason: "privacy",
 					});
 					expect(
 						(yield* Stream.runCollect(r.read(chain))).some((s) => s.spanId === span.spanId),
@@ -2881,7 +2885,7 @@ describe("P10 span reader and recording", () => {
 										if (block && stream === "door/inputs") {
 											block = false;
 											// oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- LedgerTransaction catches this synchronous callback's throw as a typed failure.
-											throw new LedgerError({why: "storage"});
+											throw new LedgerError({reason: "storage"});
 										}
 										return turn.append(stream, id, line);
 									},
@@ -2896,7 +2900,7 @@ describe("P10 span reader and recording", () => {
 				block = true;
 				expect(
 					yield* Effect.flip(d.route(client, "process.send", request("unrecorded"))),
-				).toMatchObject({_tag: "LedgerError", why: "storage"});
+				).toMatchObject({_tag: "LedgerError", reason: "storage"});
 				expect(block).toBe(false);
 				expect(rawRows(w.db, "door/inputs")).toEqual([]);
 				expect(w.deliveries).toEqual([]);
@@ -2913,7 +2917,7 @@ describe("P10 span reader and recording", () => {
 			yield* Effect.gen(function* () {
 				const d = yield* Door;
 				const {client} = yield* online(d, w);
-				w.controls.deliver = () => Effect.fail(new LedgerError({why: "unreachable"}));
+				w.controls.deliver = () => Effect.fail(new LedgerError({reason: "unreachable"}));
 				yield* Effect.flip(d.route(client, "process.send", request("failed-route")));
 				const spans = yield* RecordManager.use((r: typeof RecordManager.Service) =>
 					Stream.runCollect(r.read(Chain.cases.spans.make({}))),
@@ -3077,14 +3081,14 @@ describe("P10 refusal records and checked writes", () => {
 							expect(result).toMatchObject(
 								interruption === "stranger flood" && known
 									? {_tag: "online"}
-									: {_tag: "refused", why: known ? "bad_nonce" : "not_granted"},
+									: {_tag: "refused", reason: known ? "bad_nonce" : "not_granted"},
 							);
 							expect(replace).toBeNull();
 							const knock = yield* d.knock(client, {label: "Checked proof"});
 							expect(knock).toMatchObject(
 								interruption === "stranger flood" && !known
 									? {_tag: "ok"}
-									: {_tag: "refused", why: "not_waiting"},
+									: {_tag: "refused", reason: "not_waiting"},
 							);
 						}).pipe(
 							Effect.provide(
@@ -3150,14 +3154,14 @@ describe("P10 refusal records and checked writes", () => {
 										? {_tag: "online"}
 										: {
 												_tag: "refused",
-												why: interruption === "replaced" ? "bad_nonce" : "not_granted",
+												reason: interruption === "replaced" ? "bad_nonce" : "not_granted",
 											},
 								);
 								const knock = yield* d.knock(client, {label: "Checked proof"});
 								expect(knock).toMatchObject(
 									interruption === "stranger flood" && !known
 										? {_tag: "ok"}
-										: {_tag: "refused", why: "not_waiting"},
+										: {_tag: "refused", reason: "not_waiting"},
 								);
 							} finally {
 								spy.mockRestore();
@@ -3235,7 +3239,7 @@ describe("P10 refusal records and checked writes", () => {
 					else
 						expect(result).toMatchObject({
 							_tag: "refused",
-							why: p === null ? "id_reused" : "bad_enrollment",
+							reason: p === null ? "id_reused" : "bad_enrollment",
 						});
 				}).pipe(
 					Effect.provide(
@@ -3256,7 +3260,7 @@ describe("P10 refusal records and checked writes", () => {
 						write: (...args: Parameters<typeof real.write>) => {
 							if (fail) {
 								fail = false;
-								return Effect.fail(new LedgerError({why: "unreachable"}));
+								return Effect.fail(new LedgerError({reason: "unreachable"}));
 							}
 							return real.write(...args);
 						},
@@ -3279,11 +3283,11 @@ describe("P10 refusal records and checked writes", () => {
 				fail = true;
 				expect(yield* Effect.flip(d.grant({text, armored}))).toMatchObject({
 					_tag: "LedgerError",
-					why: "unreachable",
+					reason: "unreachable",
 				});
 				expect(yield* d.grant({text, armored: `${armored}\n`})).toMatchObject({
 					_tag: "refused",
-					why: "id_reused",
+					reason: "id_reused",
 				});
 				expect((yield* d.grant({text, armored}))._tag).toBe("applied");
 			}).pipe(
@@ -3308,11 +3312,11 @@ describe("P10 refusal records and checked writes", () => {
 					const {client} = yield* online(d, w);
 					expect(yield* d.route(client, method, params)).toMatchObject({
 						_tag: "refused",
-						why: "bad_input",
+						reason: "bad_input",
 					});
 					expect((yield* stamped()).at(-1)).toMatchObject({
 						_tag: "refused",
-						body: {why: "bad_input"},
+						body: {reason: "bad_input"},
 					});
 					expect(w.deliveries).toEqual([]);
 				}).pipe(w.provide);
@@ -3330,16 +3334,16 @@ describe("P10 refusal records and checked writes", () => {
 				const parent = w.deliveries[0]!.envelope.id;
 				const session = yield* writeId("answer", d.signer(parent, PROCESS, "answered"));
 				expect(session.by.key).toBe(w.window.fingerprint);
-				for (const [stream, fact] of [
+				for (const [stream, event] of [
 					["door/members", {_tag: "answered"}],
 					["tickets", null],
 					["tickets", {_tag: "answered", value: 1n}],
 				] as const) {
 					expect(
 						yield* Effect.flip(
-							d.append({id: "answer", parent, process: PROCESS, kind: "answered", stream, fact}),
+							d.append({id: "answer", parent, process: PROCESS, kind: "answered", stream, event}),
 						),
-					).toMatchObject({_tag: "SigningRefused", why: "not_delivered"});
+					).toMatchObject({_tag: "SigningRefused", reason: "not_delivered"});
 				}
 				expect(
 					(yield* d.append({
@@ -3348,7 +3352,7 @@ describe("P10 refusal records and checked writes", () => {
 						process: PROCESS,
 						kind: "answered",
 						stream: "tickets",
-						fact: {_tag: "answered"},
+						event: {_tag: "answered"},
 					}))._tag,
 				).toBe("placed");
 			}).pipe(w.provide);
@@ -3375,7 +3379,7 @@ describe("P10 refusal records and checked writes", () => {
 				});
 				expect(yield* d.grant({text, armored: yield* w.root.sign(text)})).toMatchObject({
 					_tag: "refused",
-					why: "bad_enrollment",
+					reason: "bad_enrollment",
 				});
 				expect(yield* entries("door/members")).toEqual(before);
 			}).pipe(w.provide);
@@ -3400,7 +3404,7 @@ describe("P10 refusal records and checked writes", () => {
 				expect((yield* d.grant({text, armored}))._tag).toBe("applied");
 				expect(yield* d.grant({text, armored: `${armored}\n`})).toMatchObject({
 					_tag: "refused",
-					why: "id_reused",
+					reason: "id_reused",
 				});
 			}).pipe(w.provide);
 		}),
@@ -3457,7 +3461,7 @@ describe("P10 refusal records and checked writes", () => {
 					expect(answers.map((a) => a._tag).sort()).toEqual(["online", "refused"]);
 					expect(yield* d.knock(client, {label: "Already online"})).toMatchObject({
 						_tag: "refused",
-						why: "not_waiting",
+						reason: "not_waiting",
 					});
 				}).pipe(w.provide);
 			}),
@@ -3478,7 +3482,7 @@ describe("P10 refusal records and checked writes", () => {
 						...request("stolen-trace"),
 						traceId: row.traceId,
 					}),
-				).toMatchObject({_tag: "refused", why: "bad_trace"});
+				).toMatchObject({_tag: "refused", reason: "bad_trace"});
 				yield* d.route(client, "process.send", request("delivered"));
 				const traceId = w.deliveries.at(-1)!.trace.traceId;
 				expect(
@@ -3487,7 +3491,7 @@ describe("P10 refusal records and checked writes", () => {
 						pid: OTHER_PROCESS,
 						traceId,
 					}),
-				).toMatchObject({_tag: "refused", why: "bad_trace"});
+				).toMatchObject({_tag: "refused", reason: "bad_trace"});
 				expect(
 					(yield* d.route(agent.client, "process.send", {...request("same-trace"), traceId}))._tag,
 				).toBe("ok");
@@ -3499,7 +3503,7 @@ describe("P10 refusal records and checked writes", () => {
 			);
 		}),
 	);
-	it.effect("p42: a malformed stored member fact reports bad_row", () =>
+	it.effect("p42: a malformed stored member event reports bad_row", () =>
 		Effect.gen(function* () {
 			const w = yield* world();
 			yield* Effect.gen(function* () {
@@ -3533,7 +3537,7 @@ describe("P10 refusal records and checked writes", () => {
 				});
 				expect(
 					yield* Effect.flip(d.grant({text, armored: yield* w.root.sign(text)})),
-				).toMatchObject({_tag: "LedgerError", why: "bad_row"});
+				).toMatchObject({_tag: "LedgerError", reason: "bad_row"});
 			}).pipe(w.provide);
 		}),
 	);

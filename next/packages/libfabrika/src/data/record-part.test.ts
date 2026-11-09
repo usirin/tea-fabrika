@@ -22,7 +22,7 @@ type Part = {
 	content: (span: string) => Effect.Effect<Lookup, unknown>;
 	deleteContent: (
 		span: string,
-		by: {by: string; at: number; why: string},
+		by: {by: string; at: number; reason: string},
 	) => Effect.Effect<Lookup, unknown>;
 };
 
@@ -79,7 +79,7 @@ describe("P12 single record part", () => {
 									_tag: "found",
 									content: {_tag: "kept", message: content},
 								});
-								const by = {by: "person-test", at, why: "requested"};
+								const by = {by: "person-test", at, reason: "requested"};
 								yield* part.deleteContent(span(total - 1).spanId, by);
 								yield* part.deleteContent(span(total - 1).spanId, {...by, at: at + 1});
 								expect(yield* part.content(span(total - 1).spanId)).toMatchObject({

@@ -116,7 +116,7 @@ describe("P10 shared process ids", () => {
 					for (const reason of exit.cause.reasons) {
 						expect(Cause.isDieReason(reason)).toBe(true);
 						if (Cause.isDieReason(reason))
-							expect(reason.defect).toMatchObject({_tag: "IdError", why: "clock"});
+							expect(reason.defect).toMatchObject({_tag: "IdError", reason: "clock"});
 					}
 				}
 			}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
@@ -179,9 +179,9 @@ describe("P10 shared process ids", () => {
 			}).pipe(Effect.provide(Coordination.ProcessIdGenerator.layer)),
 		options,
 	);
-	for (const why of ["clock", "entropy", "exhausted"] as const) {
+	for (const exitReason of ["clock", "entropy", "exhausted"] as const) {
 		it.effect.prop(
-			`next dies on IdError ${why} and keeps process.next around id.next`,
+			`next dies on IdError ${exitReason} and keeps process.next around id.next`,
 			{at: Time, distance: Count, marker: Schema.String},
 			({at, distance, marker}) => {
 				const spans: Array<Tracer.NativeSpan> = [];
@@ -193,17 +193,17 @@ describe("P10 shared process ids", () => {
 					},
 				});
 				const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
-					if (why === "entropy") throw new Error(marker);
+					if (exitReason === "entropy") throw new Error(marker);
 					if (array instanceof Uint8Array) array.fill(255);
 					return array;
 				});
 				return Effect.gen(function* () {
 					try {
 						yield* TestClock.setTime(
-							why === "clock" ? -distance : why === "exhausted" ? maxClock : at,
+							exitReason === "clock" ? -distance : exitReason === "exhausted" ? maxClock : at,
 						);
 						const generator = yield* Coordination.ProcessIdGenerator;
-						if (why === "exhausted") yield* generator.next;
+						if (exitReason === "exhausted") yield* generator.next;
 						const exit = yield* Effect.exit(generator.next);
 						expect(Exit.isFailure(exit)).toBe(true);
 						if (Exit.isFailure(exit)) {
@@ -211,7 +211,7 @@ describe("P10 shared process ids", () => {
 							const reason = exit.cause.reasons[0]!;
 							expect(Cause.isDieReason(reason)).toBe(true);
 							if (Cause.isDieReason(reason))
-								expect(reason.defect).toMatchObject({_tag: "IdError", why});
+								expect(reason.defect).toMatchObject({_tag: "IdError", reason: exitReason});
 						}
 						const process = spans.filter((span) => span.name === "process.next").at(-1)!;
 						const id = spans.filter((span) => span.name === "id.next").at(-1)!;

@@ -139,7 +139,7 @@ describe("P10 passkey records", () => {
 			{seed: 119120, includeErrorInReport: true, examples: [[example]]},
 		);
 	});
-	it("P7 compatibility: plain Ed25519 signed facts need no invented passkey fields", () => {
+	it("P7 compatibility: plain Ed25519 signed events need no invented passkey fields", () => {
 		fc.assert(
 			fc.property(fc.record({text, armored: text, signer: text}), (input) => {
 				expect(Schema.decodeUnknownSync(Signed)(input)).toEqual(input);

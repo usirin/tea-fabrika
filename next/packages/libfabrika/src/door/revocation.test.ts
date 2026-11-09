@@ -1,5 +1,5 @@
 // P17a, next/. Two independently built Door layers share real SQLite and membership history.
-// Plants: hello-only checks; treating close as permission; stale input/fact admission;
+// Plants: hello-only checks; treating close as permission; stale input/event admission;
 // duplicate before membership; a revoked key rejoining; refusal leaking to every client;
 // membership checked only before a paused hello write; decoding a transformed input twice;
 // answering a cached placing without checking membership after hashing a settled retry;
@@ -53,7 +53,7 @@ const processes = {
 	notes: "process_01m6v5270hetdrt4r8h9vvjwjt",
 };
 const Input = Schema.TaggedUnion({add: {n: Schema.Int}, save: {text: Schema.String}});
-const Fact = Schema.TaggedStruct("saved", {text: Schema.String});
+const Event = Schema.TaggedStruct("saved", {text: Schema.String});
 // The pre-P17 log shape, independent of the current door's input encoder.
 const LegacyReceived = Schema.TaggedStruct("received", {
 	method: Schema.String,
@@ -204,7 +204,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
 					notices.push({client, news});
 				}),
 			inputs: {schema: input, personOnly: [], raw: [], log: Schema.toCodecJson(input)},
-			facts: {personOnly: []},
+			events: {personOnly: []},
 		}).pipe(Layer.provideMerge(env));
 		return {layer, env};
 	};
@@ -327,7 +327,7 @@ describe("P12, door laws retained after the library move", () => {
 										.open(pid, String(client))
 										.pipe(Effect.map((result) => Answer.cases.ok.make({result})))
 								: door.route(client, "view.open", {pid});
-						expect(yield* open(badPid)).toEqual({_tag: "refused", why: "bad_input"});
+						expect(yield* open(badPid)).toEqual({_tag: "refused", reason: "bad_input"});
 						expect(opened).toEqual([]);
 						expect(yield* open(processes.counter)).toEqual({_tag: "ok", result: {count}});
 						expect(opened).toEqual([{pid: processes.counter, client: String(client)}]);
@@ -353,7 +353,7 @@ describe("P12, door laws retained after the library move", () => {
 						const w = yield* world();
 						const door = yield* Door.pipe(Effect.provide(w.layers().layer));
 						const {client, result} = yield* hello(door, w.other, tab);
-						expect(result).toMatchObject({_tag: "refused", why: "not_granted"});
+						expect(result).toMatchObject({_tag: "refused", reason: "not_granted"});
 						const knocked = yield* door.knock(client, {label});
 						assert(knocked._tag === "ok");
 						const {code} = yield* Schema.decodeUnknownEffect(Schema.Struct({code: Schema.String}))(
@@ -425,7 +425,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 								_tag: "refused",
 								body: {
 									method: "unknown.method",
-									why: refused._tag === "refused" ? refused.why : "",
+									reason: refused._tag === "refused" ? refused.reason : "",
 									door: expect.stringMatching(/^process_/),
 									n: 2,
 								},
@@ -443,7 +443,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 								yield* Effect.result(door.route(client.client, "process.send", params)),
 							).toMatchObject({
 								_tag: "Failure",
-								failure: {_tag: "LedgerError", why: "bad_row"},
+								failure: {_tag: "LedgerError", reason: "bad_row"},
 							});
 							expect(w.first.sql.exec("SELECT * FROM entries ORDER BY rev")).toEqual(before);
 							expect(w.deliveries).toHaveLength(1);
@@ -488,7 +488,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 								? "not_granted"
 								: result.failure
 							: result.success.result._tag === "refused"
-								? result.success.result.why
+								? result.success.result.reason
 								: result.success.result._tag;
 						// Plant: the hello checks membership only before the pause.
 						expect({
@@ -599,7 +599,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 								const result = yield* Fiber.join(pending);
 								const refused = Result.isFailure(result)
 									? result.failure._tag === "NotGranted"
-									: result.success._tag === "refused" && result.success.why === "not_granted";
+									: result.success._tag === "refused" && result.success.reason === "not_granted";
 								expect(refused).toBe(revokeFirst);
 								expect(yield* rows(w, "door/inputs")).toHaveLength(revokeFirst ? 0 : 1);
 								expect(w.deliveries).toHaveLength(revokeFirst ? 0 : 1);
@@ -627,7 +627,8 @@ describe("P17a, revoke stops writes at the final door", () => {
 								d = yield* setup(w);
 							w.controls.deliver = Effect.fnUntraced(function* (incoming: Incoming) {
 								const placing = yield* d.a.accept(incoming);
-								if (placing._tag !== "placed") return Sent.cases.refused.make({why: placing.why});
+								if (placing._tag !== "placed")
+									return Sent.cases.refused.make({reason: placing.reason});
 								return Sent.cases.accepted.make({rev: placing.rev, pos: placing.pos});
 							});
 							const marker = `settled-retry-${token}`;
@@ -669,10 +670,10 @@ describe("P17a, revoke stops writes at the final door", () => {
 								if (!revokeFirst) yield* remove(d.b, w, "revoke");
 								const answer = Result.isFailure(result)
 									? Schema.is(NotGranted)(result.failure)
-										? {why: "not_granted"}
+										? {reason: "not_granted"}
 										: result.failure
 									: result.success._tag === "refused"
-										? {why: result.success.why}
+										? {reason: result.success.reason}
 										: result.success;
 								// Plant: answer the cached placing without a final membership check.
 								expect({
@@ -681,7 +682,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 									inputs: yield* rows(w, "door/inputs"),
 									deliveries: w.deliveries.length,
 								}).toEqual({
-									answer: revokeFirst ? {why: "not_granted"} : first,
+									answer: revokeFirst ? {reason: "not_granted"} : first,
 									inbox,
 									inputs,
 									deliveries: 1,
@@ -836,7 +837,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 							for (let n = 0; n < after; n++)
 								expect(yield* send(d.a, d.old, w, target, `late-${n}`, text)).toMatchObject({
 									_tag: "refused",
-									why: "not_granted",
+									reason: "not_granted",
 								});
 							expect((yield* rows(w, `${processes[target]}/inbox`)).map((row) => row.id)).toEqual(
 								Array.from({length: before}, (_, n) => `before-${n}`),
@@ -889,7 +890,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 			checks,
 		);
 	});
-	it("a caused fact paused after receipt checking cannot cross a revoke on another Door", async () => {
+	it("a caused event paused after receipt checking cannot cross a revoke on another Door", async () => {
 		await fc.assert(
 			fc.asyncProperty(
 				fc.constantFrom("counter", "notes"),
@@ -946,7 +947,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 											process: processes[target],
 											kind: "saved",
 											stream: "notes",
-											fact: Fact.make({text: marker}),
+											event: Event.make({text: marker}),
 										}),
 									),
 								);
@@ -989,11 +990,11 @@ describe("P17a, revoke stops writes at the final door", () => {
 							if (pending !== null)
 								expect(
 									yield* d.a.initialize(pending.client, pending.params, pending.trusted),
-								).toMatchObject({_tag: "refused", why: "not_granted"});
+								).toMatchObject({_tag: "refused", reason: "not_granted"});
 							for (let n = 0; n < attempts; n++) {
 								expect((yield* hello(d.a, w.old, `reconnect-${n}`)).result).toMatchObject({
 									_tag: "refused",
-									why: "not_granted",
+									reason: "not_granted",
 								});
 								expect((yield* send(d.b, d.other, w, target, `live-${n}`, text))._tag).toBe("ok");
 								expect((yield* d.b.accept(last(w)))._tag).toBe("placed");
@@ -1042,7 +1043,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 							);
 							expect(malformed).toMatchObject({
 								_tag: "Failure",
-								failure: {_tag: "LedgerError", why: "bad_row"},
+								failure: {_tag: "LedgerError", reason: "bad_row"},
 							});
 							for (const changed of [
 								{...incoming, id: "another-letter"},

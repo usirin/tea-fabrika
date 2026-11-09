@@ -88,14 +88,14 @@ describe("P10 JSON-RPC", () => {
 				const answer =
 					mode === "ok"
 						? T.Answer.cases.ok.make({result: {rows: [1]}})
-						: T.Answer.cases.refused.make({why: "stale"});
+						: T.Answer.cases.refused.make({reason: "stale"});
 				const route = vi.fn(() => Effect.succeed(answer));
 				const result = yield* T.answerFrame(frame(), online(), admit, route);
 				expect(result.send).not.toBeNull();
 				const reply = JSON.parse(result.send!);
 				expect(reply).toMatchObject({jsonrpc: "2.0", id: "r1"});
 				expect(mode === "ok" ? reply.result : reply.error.data).toEqual(
-					mode === "ok" ? {rows: [1]} : {why: "stale"},
+					mode === "ok" ? {rows: [1]} : {reason: "stale"},
 				);
 				expect(route).toHaveBeenCalledOnce();
 				assert(result.attached._tag === "online");
@@ -172,7 +172,7 @@ describe("P10 JSON-RPC", () => {
 								expect(JSON.parse(result.send!)).toEqual({
 									jsonrpc: "2.0",
 									id,
-									error: {code: -32000, message: "no_hello", data: {why: "no_hello"}},
+									error: {code: -32000, message: "no_hello", data: {reason: "no_hello"}},
 								});
 							}
 						}),

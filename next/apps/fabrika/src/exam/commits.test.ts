@@ -79,16 +79,21 @@ const pr = (commits: Commit[], more: Partial<PullRequest> = {}): PullRequest => 
 	...more,
 });
 const EXAM = examMatcher([
-	{glob: "exam-paths.json", why: ""},
-	{glob: "boundary-rules.json", why: ""},
-	{glob: ".github/**", why: ""},
-	{glob: "next/apps/fabrika/src/exam/**", why: ""},
-	{glob: "next/**/*.test.ts", why: ""},
-	{glob: "fixtures/next/**", why: ""},
+	{glob: "exam-paths.json", reason: ""},
+	{glob: "boundary-rules.json", reason: ""},
+	{glob: ".github/**", reason: ""},
+	{glob: "next/apps/fabrika/src/exam/**", reason: ""},
+	{glob: "next/**/*.test.ts", reason: ""},
+	{glob: "fixtures/next/**", reason: ""},
 ]);
 const answers = (p: PullRequest) => check(p, EXAM).answers;
 const DONE = {_tag: "done" as const};
-const stuck = (why: string, sha: string, more: object = {}) => ({_tag: "stuck", why, sha, ...more});
+const stuck = (reason: string, sha: string, more: object = {}) => ({
+	_tag: "stuck",
+	reason,
+	sha,
+	...more,
+});
 const ask = (paths: string[]): Answer => ({_tag: "ask", who: "owner", for: "exam_read", paths});
 const examPaths = fc
 	.uniqueArray(filename, {minLength: 1, maxLength: 8})
@@ -347,14 +352,20 @@ describe("exam paths and scope", () => {
 	it("P12: generated exam lists decode, and the real list protects every listed check", () => {
 		fc.assert(
 			fc.property(
-				fc.array(fc.record({glob: filename, why: fc.string()})),
+				fc.array(fc.record({glob: filename, reason: fc.string()})),
 				filename,
 				(rows, name) => {
-					expect(decodeExam(JSON.stringify(rows))).toEqual(Option.some(rows));
+					const encoded = rows.map(({glob, reason}) =>
+						Object.fromEntries([
+							["glob", glob],
+							["why", reason],
+						]),
+					);
+					expect(decodeExam(JSON.stringify(encoded))).toEqual(Option.some(rows));
 					const list = Option.getOrThrow(
 						decodeExam(readFileSync(join(ROOT, "exam-paths.json"), "utf8")),
 					);
-					expect(list.every((row) => row.why.length > 0)).toBe(true);
+					expect(list.every((row) => row.reason.length > 0)).toBe(true);
 					const isExam = examMatcher(list);
 					for (const path of [
 						`next/apps/fabrika/src/exam/${name}.ts`,
@@ -768,9 +779,11 @@ describe("printed lines", () => {
 				role,
 				sha,
 				fc.constantFrom("stale_link", "unsigned_commit", "broken_chain", "build_touched_exam"),
-				(step, sha, why) => {
-					expect(plain({_tag: "stuck", why, sha, step})).toBe(`stuck ${why} ${sha} step ${step}`);
-					expect(plain({_tag: "stuck", why, sha})).toBe(`stuck ${why} ${sha}`);
+				(step, sha, reason) => {
+					expect(plain({_tag: "stuck", reason, sha, step})).toBe(
+						`stuck ${reason} ${sha} step ${step}`,
+					);
+					expect(plain({_tag: "stuck", reason, sha})).toBe(`stuck ${reason} ${sha}`);
 					expect(plain(DONE)).toBe("done");
 				},
 			),

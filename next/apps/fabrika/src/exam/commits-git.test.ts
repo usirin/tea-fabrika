@@ -171,7 +171,12 @@ const DONE = {_tag: "done"};
 const runs = {seed: 119120, numRuns: 5};
 const id = fc.stringMatching(/^[A-Za-z0-9._:-]{1,20}$/);
 const name = fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/);
-const stuck = (why: string, sha: string, more: object = {}) => ({_tag: "stuck", why, sha, ...more});
+const stuck = (reason: string, sha: string, more: object = {}) => ({
+	_tag: "stuck",
+	reason,
+	sha,
+	...more,
+});
 const ask = (...paths: string[]) => ({_tag: "ask", who: "owner", for: "exam_read", paths});
 
 const verifyCommit = (r: Repo, sha: string, keys = PERSON_KEYS) => {

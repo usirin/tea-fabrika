@@ -254,8 +254,8 @@ describe("P12 real browser protocol", () => {
 			second = await driver(b, s.url, "tab-b");
 		expect(first.extractable).toBe(false);
 		expect(first.fingerprint).toBe(second.fingerprint);
-		expect(first.first.error.data.why).toBe("not_granted");
-		expect(second.first.error.data.why).toBe("not_granted");
+		expect(first.first.error.data.reason).toBe("not_granted");
+		expect(second.first.error.data.reason).toBe("not_granted");
 		const firstKnock = await rpc(a, "door.knock", {label: "Chromium"});
 		const secondKnock = await rpc(b, "door.knock", {label: "Chromium"});
 		const code = firstKnock.result.code;

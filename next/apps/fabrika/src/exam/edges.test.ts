@@ -29,7 +29,7 @@ describe("asks", () => {
 				path: PRODUCT,
 				line: 3,
 				rules: "fabrika/no-promises",
-				why: "edge: a Durable Object answers a Promise",
+				reason: "edge: a Durable Object answers a Promise",
 			},
 		]);
 	});

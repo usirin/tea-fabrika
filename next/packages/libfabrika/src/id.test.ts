@@ -137,7 +137,7 @@ const v7 = (raw: Uint8Array): Uint8Array => {
 	bytes[8] = (bytes[8]! & 63) | 0x80;
 	return bytes;
 };
-const expectIdFailure = <A, E>(exit: Exit.Exit<A, E>, why: string): void => {
+const expectIdFailure = <A, E>(exit: Exit.Exit<A, E>, failureReason: string): void => {
 	expect(Exit.isFailure(exit)).toBe(true);
 	if (Exit.isFailure(exit)) {
 		expect(exit.cause.reasons).toHaveLength(1);
@@ -146,7 +146,7 @@ const expectIdFailure = <A, E>(exit: Exit.Exit<A, E>, why: string): void => {
 		if (Cause.isFailReason(reason)) {
 			expect(Public.IdError, "IdError is exported from the public package").toBeTypeOf("function");
 			expect(reason.error).toBeInstanceOf(Public.IdError);
-			expect(reason.error).toMatchObject({_tag: "IdError", why});
+			expect(reason.error).toMatchObject({_tag: "IdError", reason: failureReason});
 		}
 	}
 };
@@ -653,8 +653,8 @@ describe("P17a, one valid typed identity", () => {
 			{...options, numRuns: 30},
 		);
 	});
-	for (const why of ["clock", "entropy"] as const) {
-		it(`${why} failures are typed IdErrors, never defects`, async () => {
+	for (const reason of ["clock", "entropy"] as const) {
+		it(`${reason} failures are typed IdErrors, never defects`, async () => {
 			await fc.assert(
 				fc.asyncProperty(
 					fc.oneof(
@@ -675,8 +675,8 @@ describe("P17a, one valid typed identity", () => {
 						});
 						try {
 							expectIdFailure(
-								await Effect.runPromise(Effect.exit(run(why === "clock" ? at : 1000))),
-								why,
+								await Effect.runPromise(Effect.exit(run(reason === "clock" ? at : 1000))),
+								reason,
 							);
 						} finally {
 							entropy.mockRestore();

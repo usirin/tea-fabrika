@@ -191,7 +191,7 @@ const check = (armored: string, signer: string = line, body: string = text, over
 		signers: [signer],
 		policy: {...policy, ...over},
 	});
-const refused = {_tag: "refused", why: "bad_signature"};
+const refused = {_tag: "refused", reason: "bad_signature"};
 const blob = (armored = realArmor) =>
 	Buffer.from(armored.trim().split("\n").slice(1, -1).join(""), "base64");
 const runs = {seed: 119120, numRuns: 40};
@@ -641,7 +641,7 @@ describe("P10 WebAuthn SSHSIG", () => {
 					Effect.gen(function* () {
 						expect(
 							yield* T.checkSshsig({text, armored: realArmor, space: SPACE, signers: [line]}),
-						).toEqual({why: "bad_signature"});
+						).toEqual({reason: "bad_signature"});
 						const k = yield* key();
 						const armored = yield* k.sign(body);
 						const supplied = `${k.line} ${comment}`;

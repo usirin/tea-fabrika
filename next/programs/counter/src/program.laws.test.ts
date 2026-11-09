@@ -78,7 +78,7 @@ describe("P11 real counter laws", () => {
 			{seed: SEED, numRuns: 100},
 		);
 	});
-	it("plant, leave a declaration out: real program declares saved state, ports, view and fact policy", async () => {
+	it("plant, leave a declaration out: real program declares saved state, ports, view and event policy", async () => {
 		const {counter} = await import("./program.ts");
 		const {Program, ProgramLoader}: typeof import("@kampus/libfabrika") = await import(LIBRARY);
 		expect(Schema.decodeUnknownSync(Program.schema)(counter)).toMatchObject({
@@ -99,6 +99,9 @@ describe("P11 real counter laws", () => {
 			_tag: "stepped",
 			view: {count: 1},
 		});
-		expect(p.step({count: 0}, {type: "unknown"})).toMatchObject({_tag: "refused", why: "bad_msg"});
+		expect(p.step({count: 0}, {type: "unknown"})).toMatchObject({
+			_tag: "refused",
+			reason: "bad_msg",
+		});
 	});
 });

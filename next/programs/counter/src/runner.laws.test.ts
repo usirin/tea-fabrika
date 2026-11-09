@@ -34,7 +34,7 @@ type Update =
 	  };
 type Runner = {
 	readonly open: (client: string) => Effect.Effect<{rev: number; view: unknown}, unknown>;
-	readonly msg: (input: unknown) => Effect.Effect<{_tag: string; why?: string}, unknown>;
+	readonly msg: (input: unknown) => Effect.Effect<{_tag: string; reason?: string}, unknown>;
 };
 const reconstruct = (before: unknown, change: Update): unknown => {
 	if (change.type === "whole") return structuredClone(change.view);
@@ -105,7 +105,7 @@ describe("p22 real counter in the runner", () => {
 							expect(Result.isFailure(result)).toBe(true);
 							if (Result.isFailure(result)) {
 								expect(Schema.is(ProgramDown)(result.failure)).toBe(true);
-								expect(result.failure.why).toBe("load");
+								expect(result.failure.reason).toBe("load");
 							}
 						}).pipe(Effect.provide(ProgramLoader.layer({counter, [name]: broken}, {}))),
 					);
@@ -219,7 +219,7 @@ describe("p22 real counter in the runner", () => {
 		await Effect.runPromise(
 			Effect.gen(function* () {
 				const loader = yield* ProgramLoader;
-				expect(yield* Effect.flip(loader.load("missing"))).toMatchObject({why: "no_program"});
+				expect(yield* Effect.flip(loader.load("missing"))).toMatchObject({reason: "no_program"});
 			}).pipe(Effect.provide(ProgramLoader.layer({counter}, {}))),
 		);
 	});

@@ -74,7 +74,7 @@ describe("S3 saved state and named upgrades", () => {
 									]
 								: normal.upgrades;
 			expect(() => Saved.upgrade(raw, {...normal, upgrades}, "new-build")).toThrowError(
-				expect.objectContaining({_tag: "ProgramDown", why: "saved_state"}),
+				expect.objectContaining({_tag: "ProgramDown", reason: "saved_state"}),
 			);
 			expect(JSON.stringify(raw)).toBe(before);
 		});

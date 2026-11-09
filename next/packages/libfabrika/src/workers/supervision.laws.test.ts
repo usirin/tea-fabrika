@@ -252,7 +252,7 @@ for (const source of ["rpc", "decode"] as const)
 							expect(receipt).toMatchObject({
 								tries: crashes,
 								errors: Array.from({length: crashes}, () => "TypeError"),
-								result: crashes === sample.limit ? {_tag: "refused", why: "dead"} : null,
+								result: crashes === sample.limit ? {_tag: "refused", reason: "dead"} : null,
 							});
 							if (move !== "throw") {
 								expect(w.calls()).toBe(beforeCalls);
@@ -312,7 +312,7 @@ it("Node records the actual class for generated Error and non-Error throws", asy
 						yield* ProgramRunner.use((r) => r.msg(incoming(letter, 1))).pipe(
 							Effect.provide(w.layer()),
 						),
-					).toMatchObject({_tag: "refused", why: "dead"});
+					).toMatchObject({_tag: "refused", reason: "dead"});
 					expect(yield* w.receipt(letter)).toMatchObject({
 						tries: 1,
 						errors: [failureClass(failure)],
@@ -347,7 +347,7 @@ it("the real Worker box records the same thrown class as Node under supervision"
 							Effect.provide(w.layer()),
 							Effect.exit,
 						);
-						expect(exit).toMatchObject({_tag: "Success", value: {_tag: "refused", why: "dead"}});
+						expect(exit).toMatchObject({_tag: "Success", value: {_tag: "refused", reason: "dead"}});
 						receipts.push(yield* w.receipt(letter));
 						dead.push(
 							(yield* Effect.forEach([A, B], (p) => w.read(`${p}/dead`), {concurrency: 1}))

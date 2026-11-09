@@ -38,7 +38,7 @@ const authoring = () => ({
 	state: {v: 1, upgrades: []},
 	view: (s: Model) => ({count: s.count}),
 	refuse: (s: Model, m: typeof Msg.Type) =>
-		m.type === "add" && s.count + m.n > 10 ? {why: "limit", now: s.count, most: 10} : null,
+		m.type === "add" && s.count + m.n > 10 ? {reason: "limit", now: s.count, most: 10} : null,
 	inputs: {},
 	outputs: {},
 	writes: {},
@@ -217,7 +217,7 @@ describe("Program.make authoring laws, next/", () => {
 				fc.property(declarations, change, ({fields}, broken) => {
 					const raw: unknown = {...fields, ...broken};
 					const p = Reflect.apply(Program.make, Program, [raw]);
-					expect(() => load(p).init(null)).toThrowError(expect.objectContaining({why: "load"}));
+					expect(() => load(p).init(null)).toThrowError(expect.objectContaining({reason: "load"}));
 				}),
 				parameters,
 			);
@@ -239,7 +239,7 @@ describe("Program.make authoring laws, next/", () => {
 					view: (s) => ({count: s.count}),
 					refuse: () => null,
 				});
-				expect(() => load(p).init(null)).toThrowError(expect.objectContaining({why: "load"}));
+				expect(() => load(p).init(null)).toThrowError(expect.objectContaining({reason: "load"}));
 			}),
 			parameters,
 		);
@@ -365,7 +365,7 @@ describe("P11 program contract and p22 refusal", () => {
 				_tag: "stepped",
 				model: {count: 2, replies: 1},
 			});
-			expect(p.step(before, reply)).toEqual({_tag: "refused", why: "bad_msg"});
+			expect(p.step(before, reply)).toEqual({_tag: "refused", reason: "bad_msg"});
 		}
 		for (const reply of [
 			{...ok, cmd: {type: "other", n: 3}},
@@ -373,9 +373,9 @@ describe("P11 program contract and p22 refusal", () => {
 			{...ok, value: "3"},
 			{...err, error: {_tag: 3}},
 		]) {
-			expect(p.step(before, reply)).toEqual({_tag: "refused", why: "bad_msg"});
+			expect(p.step(before, reply)).toEqual({_tag: "refused", reason: "bad_msg"});
 			expect(() => p.fold(before, reply)).toThrowError(
-				expect.objectContaining({_tag: "ProgramDown", why: "saved_letter"}),
+				expect.objectContaining({_tag: "ProgramDown", reason: "saved_letter"}),
 			);
 		}
 	});
@@ -391,7 +391,7 @@ describe("P11 program contract and p22 refusal", () => {
 		const p = load(broken);
 		expect(
 			p.step({count: 0, replies: 0}, {type: "save_ok", cmd: save({n: 1}), value: 1, at: 42}),
-		).toEqual({_tag: "refused", why: "bad_msg"});
+		).toEqual({_tag: "refused", reason: "bad_msg"});
 	});
 	it("a saved-state failure conforms to its error schema", async () => {
 		const {ProgramDown} = await import("./program.ts");
@@ -401,7 +401,7 @@ describe("P11 program contract and p22 refusal", () => {
 		} catch (thrown) {
 			error = thrown;
 		}
-		expect(error).toMatchObject({_tag: "ProgramDown", why: "saved_state"});
+		expect(error).toMatchObject({_tag: "ProgramDown", reason: "saved_state"});
 		expect(Schema.is(ProgramDown)(error)).toBe(true);
 	});
 	it("plant, reject every declaration: a complete pure tea program loads and steps", async () => {
@@ -424,10 +424,10 @@ describe("P11 program contract and p22 refusal", () => {
 	it("plant, collapse refusals: bad_msg differs from the program's limit fields", async () => {
 		const p = load(spec());
 		const before = {count: 7, replies: 0};
-		expect(p.step(before, {type: "add", n: "3"})).toEqual({_tag: "refused", why: "bad_msg"});
+		expect(p.step(before, {type: "add", n: "3"})).toEqual({_tag: "refused", reason: "bad_msg"});
 		expect(p.step(before, {type: "add", n: 4})).toEqual({
 			_tag: "refused",
-			why: "limit",
+			reason: "limit",
 			now: 7,
 			most: 10,
 		});
@@ -443,7 +443,7 @@ describe("P11 program contract and p22 refusal", () => {
 	});
 	it("p25 plant, turn a thrown step into a refusal: ProgramDown retains its failure class", async () => {
 		expect(() => load(spec()).step({count: 0, replies: 0}, {type: "throw"})).toThrowError(
-			expect.objectContaining({_tag: "ProgramDown", why: "step"}),
+			expect.objectContaining({_tag: "ProgramDown", reason: "step"}),
 		);
 	});
 	for (const part of ["model", "view", "cmd"] as const)
@@ -463,12 +463,12 @@ describe("P11 program contract and p22 refusal", () => {
 				view: part === "view" ? {data: Model, select: () => ({count: "bad"})} : spec().view,
 			};
 			expect(() => load(broken).step({count: 0, replies: 0}, {type: "add", n: 1})).toThrowError(
-				expect.objectContaining({_tag: "ProgramDown", why: "step"}),
+				expect.objectContaining({_tag: "ProgramDown", reason: "step"}),
 			);
 		});
 	it("plant, treat a saved poison letter as fresh bad_msg: folding fails closed", async () => {
 		expect(() => load(spec()).fold({count: 0, replies: 0}, {type: "add", n: null})).toThrowError(
-			expect.objectContaining({_tag: "ProgramDown", why: "saved_letter"}),
+			expect.objectContaining({_tag: "ProgramDown", reason: "saved_letter"}),
 		);
 	});
 	it("plant, give read ports write fields: read and write declarations are exclusive", async () => {
@@ -501,11 +501,11 @@ describe("P11 program contract and p22 refusal", () => {
 	it("plant, synthesize a parent: Write requires caused.parent or explicit own", async () => {
 		const {Write} = await import("./program.ts");
 		const decode = Schema.decodeUnknownSync(Write);
-		expect(decode({_tag: "own", fact: {_tag: "polled", changed: false}})).toMatchObject({
+		expect(decode({_tag: "own", event: {_tag: "polled", changed: false}})).toMatchObject({
 			_tag: "own",
 		});
-		expect(() => decode({_tag: "caused", fact: {_tag: "saved"}})).toThrow();
-		expect(() => decode({_tag: "caused", parent: "forged", fact: {_tag: "saved"}})).toThrow();
+		expect(() => decode({_tag: "caused", event: {_tag: "saved"}})).toThrow();
+		expect(() => decode({_tag: "caused", parent: "forged", event: {_tag: "saved"}})).toThrow();
 	});
 });
 

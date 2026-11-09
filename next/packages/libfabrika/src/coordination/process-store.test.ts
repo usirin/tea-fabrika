@@ -137,7 +137,7 @@ type Checkpoint = {
 type Store = {
 	readonly load: Effect.Effect<Checkpoint | null, LedgerError>;
 	readonly save: (value: Checkpoint) => Effect.Effect<void, LedgerError>;
-	readonly record: (id: string, fact: unknown, from: From) => Effect.Effect<unknown, LedgerError>;
+	readonly record: (id: string, event: unknown, from: From) => Effect.Effect<unknown, LedgerError>;
 };
 
 describe("P11 process storage", () => {
@@ -151,7 +151,7 @@ describe("P11 process storage", () => {
 				yield* store.save(checkpoint);
 				expect(
 					yield* Effect.flip(store.save({...checkpoint, saved: {...checkpoint.saved, v: "bad"}})),
-				).toMatchObject({_tag: "LedgerError", why: "bad_row"});
+				).toMatchObject({_tag: "LedgerError", reason: "bad_row"});
 				expect(yield* store.load).toEqual(checkpoint);
 				disk
 					.db()
@@ -159,7 +159,7 @@ describe("P11 process storage", () => {
 					.run(JSON.stringify({...checkpoint, saved: {...checkpoint.saved, v: "bad"}}), PROCESS);
 				expect(yield* Effect.flip(store.load)).toMatchObject({
 					_tag: "LedgerError",
-					why: "bad_row",
+					reason: "bad_row",
 				});
 			}).pipe(
 				Effect.provide(
@@ -187,7 +187,7 @@ describe("P11 process storage", () => {
 				expect(calls).toBe(0);
 				expect(yield* Effect.flip(store.load)).toMatchObject({
 					_tag: "LedgerError",
-					why: "storage",
+					reason: "storage",
 				});
 				expect(calls).toBeGreaterThan(0);
 			}).pipe(
@@ -259,7 +259,7 @@ describe("P11 process storage", () => {
 							saved: {...checkpoint.saved, after: 9, model: {count: 9}},
 						}),
 					),
-				).toMatchObject({why: "storage"});
+				).toMatchObject({reason: "storage"});
 				disk.arm(false);
 				expect(yield* store.load).toEqual(checkpoint);
 			}).pipe(
@@ -321,9 +321,9 @@ describe("P11 process storage", () => {
 			return Effect.gen(function* () {
 				const store: Store = yield* ProcessStore;
 				const ledger = yield* Ledger;
-				const fact = {_tag: "stepped", input, pos, build};
-				const placed = yield* store.record("step:letter-a", fact, {...from, build});
-				expect(yield* store.record("step:letter-a", fact, {...from, build})).toEqual(placed);
+				const event = {_tag: "stepped", input, pos, build};
+				const placed = yield* store.record("step:letter-a", event, {...from, build});
+				expect(yield* store.record("step:letter-a", event, {...from, build})).toEqual(placed);
 				const rows = yield* Stream.runCollect(ledger.read(PROCESS, 0));
 				expect(rows).toHaveLength(1);
 				expect(rows[0]).toMatchObject({
@@ -398,7 +398,7 @@ describe("P11 process storage", () => {
 				values.set("activity", {_tag: "stepping", process: "bad"});
 				expect(yield* Effect.exit(Effect.flip(selected.readActivity))).toMatchObject({
 					_tag: "Success",
-					value: {_tag: "LedgerError", why: "bad_row"},
+					value: {_tag: "LedgerError", reason: "bad_row"},
 				});
 			}).pipe(
 				Effect.provide(

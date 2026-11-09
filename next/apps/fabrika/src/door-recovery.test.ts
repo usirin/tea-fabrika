@@ -223,7 +223,7 @@ const world = () => {
 							if (!controls.cutFlush) return real.flush;
 							controls.cutFlush = false;
 							controls.cuts++;
-							return Effect.fail(new SinkError({why: "storage", held: 0}));
+							return Effect.fail(new SinkError({reason: "storage", held: 0}));
 						}),
 					};
 				}),
@@ -309,7 +309,7 @@ const world = () => {
 		nextProcess: () => processIds.next(A.Id.Process).pipe(Effect.orDie),
 		notify: () => Effect.void,
 		inputs: {schema: Input, personOnly: [], raw: [], log: Schema.toCodecJson(Input)},
-		facts: {personOnly: []},
+		events: {personOnly: []},
 		deliver: (
 			pid: string,
 			envelope: C.Envelope<typeof Input.Type>,
@@ -317,7 +317,7 @@ const world = () => {
 			meta?: {id: string; sentAt: string; seen: number},
 		) => {
 			deliveries.push({process: pid, parent: envelope.id, letter: meta?.id});
-			if (controls.failDelivery) return Effect.fail(new LedgerError({why: "unreachable"}));
+			if (controls.failDelivery) return Effect.fail(new LedgerError({reason: "unreachable"}));
 			return A.ProgramRunner.use((r) =>
 				r.msg({
 					id: meta?.id ?? envelope.id,
@@ -519,7 +519,7 @@ describe("P34 door recovery", () => {
 												process: P2,
 												kind: "saved",
 												stream: `${NAME}/events`,
-												fact: Schema.TaggedStruct("saved", {count: Schema.Int}).make({count: 1}),
+												event: Schema.TaggedStruct("saved", {count: Schema.Int}).make({count: 1}),
 											}),
 										).toMatchObject({_tag: "placed"});
 										expect(
@@ -534,7 +534,7 @@ describe("P34 door recovery", () => {
 												.signer(old, P2, "saved")
 												.pipe(Effect.provideService(C.SignRequest, {id: `old-${letter}`})),
 										),
-									).toMatchObject({_tag: "Failure", failure: {why: "not_delivered"}});
+									).toMatchObject({_tag: "Failure", failure: {reason: "not_delivered"}});
 								}).pipe(Effect.provide(w.layer()));
 							}).pipe(Effect.provide(TestClock.layer())),
 						),
@@ -599,7 +599,7 @@ describe("P34 door recovery", () => {
 							);
 							expect({delivery, oldWrite, freshWrite}).toMatchObject({
 								delivery: {process: P2, letter},
-								oldWrite: {_tag: "Failure", failure: {why: "not_delivered"}},
+								oldWrite: {_tag: "Failure", failure: {reason: "not_delivered"}},
 								freshWrite: {
 									_tag: "Success",
 									success: {parent: delivery.parent, by: {key: w.window.fingerprint}},
@@ -612,7 +612,7 @@ describe("P34 door recovery", () => {
 									process: P2,
 									kind: "saved",
 									stream: `${NAME}/events`,
-									fact: Schema.TaggedStruct("saved", {count: Schema.Int}).make({count: 1}),
+									event: Schema.TaggedStruct("saved", {count: Schema.Int}).make({count: 1}),
 								}),
 							).toMatchObject({_tag: "placed"});
 							const ledger = yield* Ledger;
@@ -689,7 +689,7 @@ describe("P34 door recovery", () => {
 							);
 							expect({delivery, oldWrite, freshWrite}).toMatchObject({
 								delivery: {process: P2, letter, parent: expect.not.stringContaining(old)},
-								oldWrite: {_tag: "Failure", failure: {why: "not_delivered"}},
+								oldWrite: {_tag: "Failure", failure: {reason: "not_delivered"}},
 								freshWrite: {
 									_tag: "Success",
 									success: {parent: delivery.parent, by: {key: w.window.fingerprint}},
@@ -737,7 +737,9 @@ describe("P34 door recovery", () => {
 						const client = yield* w.online();
 						const d = yield* Door;
 						expect(yield* Effect.exit(d.route(client, "process.send", request()))).toMatchObject(
-							n < 2 ? {_tag: "Failure"} : {_tag: "Success", value: {_tag: "refused", why: "dead"}},
+							n < 2
+								? {_tag: "Failure"}
+								: {_tag: "Success", value: {_tag: "refused", reason: "dead"}},
 						);
 					}).pipe(Effect.provide(w.layer()));
 					w.reopen();
@@ -748,12 +750,12 @@ describe("P34 door recovery", () => {
 					const d = yield* Door;
 					expect(yield* d.route(client, "process.send", request())).toMatchObject({
 						_tag: "refused",
-						why: "dead",
+						reason: "dead",
 					});
 					expect(w.steps()).toBe(3);
 					expect(yield* d.route(client, "process.send", request(false))).toMatchObject({
 						_tag: "refused",
-						why: "id_reused",
+						reason: "id_reused",
 					});
 					const grant = C.Grant.make({
 						id: "other-caller",
@@ -778,7 +780,7 @@ describe("P34 door recovery", () => {
 					const other = yield* w.online(w.other);
 					expect(yield* d.route(other, "process.send", request())).toMatchObject({
 						_tag: "refused",
-						why: "id_reused",
+						reason: "id_reused",
 					});
 					expect(w.steps()).toBe(3);
 				}).pipe(Effect.provide(w.layer()));
@@ -803,7 +805,7 @@ describe("P34 door recovery", () => {
 							id: "replacement",
 							name: NAME,
 							after: P1,
-							why: "crashed",
+							reason: "crashed",
 							code: {program: "counter", hash: "build-a"},
 						}),
 						from(),
@@ -819,7 +821,7 @@ describe("P34 door recovery", () => {
 								.signer(old, P2, "saved")
 								.pipe(Effect.provideService(C.SignRequest, {id: "old-queued"})),
 						),
-					).toMatchObject({why: "not_delivered"});
+					).toMatchObject({reason: "not_delivered"});
 					expect(
 						yield* d
 							.signer(fresh, P2, "saved")

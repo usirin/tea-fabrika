@@ -81,7 +81,7 @@ const write = Cmd.make("write", {
 	err: ["person_only", "not_granted"],
 });
 const caused = (parent: string) =>
-	write({stream: "events", write: {_tag: "caused", parent, fact: {_tag: "answered"}}});
+	write({stream: "events", write: {_tag: "caused", parent, event: {_tag: "answered"}}});
 const approvals = {
 	name: "approvals",
 	machine: Machine.make({
@@ -430,7 +430,7 @@ describe("P12 Process RPC refusal answers", () => {
 				Schema.Struct({m: Schema.Struct({type: Schema.Literal("write_err")})}),
 			);
 			expect(inbox.filter((row) => isReply(row.body))).toMatchObject([
-				{body: {m: {type: "write_err", why: reason, error: {_tag: reason}}}},
+				{body: {m: {type: "write_err", reason: reason, error: {_tag: reason}}}},
 			]);
 			const checkpoint = w
 				.process(pid)

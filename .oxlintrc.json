@@ -346,6 +346,7 @@
 				"fabrika/edge-comment": "error",
 				"fabrika/effect-functions": "error",
 				"fabrika/no-of": "error",
+				"fabrika/no-why-key": "error",
 				"fabrika/no-hand-tag": "error",
 				"fabrika/one-store-hook": "error"
 			}
@@ -366,7 +367,7 @@
 		},
 		{
 			// Tests are left out: they await vitest, feed raw frames and may plant a broken view.
-			// `no-of` stays on, since a test names its helpers too.
+			// `no-of` and `no-why-key` stay on, since tests follow the same naming rules.
 			// Tests also manufacture spans as input for the sink. Tracing plants use product paths.
 			"files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
 			"rules": {

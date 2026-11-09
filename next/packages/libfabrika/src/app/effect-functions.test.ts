@@ -215,7 +215,7 @@ describe("T285, ledger tracing keep-laws", () => {
 												: {...cut("fab.ledger.by", a.by), "fab.ledger.tag": "saved"}),
 											"fab.ledger.answer": call.op === "resend" ? "resent" : answer._tag,
 											...(answer._tag === "refused"
-												? {"fab.ledger.why": answer.why}
+												? {"fab.ledger.reason": answer.reason}
 												: {"fab.ledger.rev": head, "fab.ledger.pos": head}),
 											...(accepted
 												? {
@@ -270,7 +270,7 @@ describe("T285, ledger tracing keep-laws", () => {
 							if (mode === "throw") throw new Error("generated ring throw");
 							if (mode === "die") return Effect.die(new Error("generated ring defect"));
 							return mode === "fail"
-								? Effect.fail(new LedgerError({why: "unreachable"}))
+								? Effect.fail(new LedgerError({reason: "unreachable"}))
 								: Effect.void;
 						},
 					});
@@ -349,7 +349,7 @@ describe("T285, ledger tracing keep-laws", () => {
 									ended(spans[0]!, false);
 									child(spans[0]!, parent);
 									expect(tags(spans[0]!)).toMatchObject({
-										"fab.ledger.why": "storage",
+										"fab.ledger.reason": "storage",
 										"error.type": "Error",
 									});
 								}
@@ -408,9 +408,9 @@ describe("T285, coordination tracing keep-laws", () => {
 									child(read, spans[0]!);
 									expect(tags(read)).toEqual(
 										fails
-											? {"fab.members.why": "storage"}
+											? {"fab.members.reason": "storage"}
 											: {
-													"fab.members.facts": 1,
+													"fab.members.events": 1,
 													"fab.members.keys": keys.length,
 													"fab.members.live": keys.length,
 													"fab.members.ignored": 0,
@@ -640,7 +640,7 @@ describe("T285, sink keep-law", () => {
 									yield* Effect.gen(function* () {
 										now += sample.ms;
 										if (sample.failure === "fail")
-											return yield* Effect.fail(new LedgerError({why: "storage"}));
+											return yield* Effect.fail(new LedgerError({reason: "storage"}));
 										if (sample.failure === "die")
 											return yield* Effect.die(new Error(`failure ${sample.name}`));
 									}).pipe(
@@ -748,8 +748,8 @@ const machine = Machine.make({
 				write({
 					stream: m.stream,
 					write: m.own
-						? {_tag: "own", fact: {_tag: "saved", value: m.value}}
-						: {_tag: "caused", parent: m.parent ?? "", fact: {_tag: "saved", value: m.value}},
+						? {_tag: "own", event: {_tag: "saved", value: m.value}}
+						: {_tag: "caused", parent: m.parent ?? "", event: {_tag: "saved", value: m.value}},
 				}),
 			],
 		],
@@ -796,7 +796,7 @@ const runnerWorld = (
 		Ledger.sql(data.sql, {reader: "runner-test"}).pipe(Layer.provide(quiet)),
 		SessionManager.layer(sessions.sql, () => Effect.succeed(owner), {
 			input: () => false,
-			fact: () => false,
+			event: () => false,
 		}),
 		SpanSink.layer(sink.sql, {object: PROCESS}),
 		RecordManager.memory(BIG),
@@ -810,7 +810,7 @@ const runnerWorld = (
 			const sessions = yield* SessionManager;
 			return {
 				append: Effect.fnUntraced(function* (input: Incoming) {
-					if (fault.at === "append_storage") return yield* new LedgerError({why: "storage"});
+					if (fault.at === "append_storage") return yield* new LedgerError({reason: "storage"});
 					return yield* mailbox.send(a.name, input.id, input.envelope.input, {
 						by: input.envelope.by.key,
 						for: PERSON,
@@ -822,11 +822,12 @@ const runnerWorld = (
 					});
 				}),
 				commit: Effect.fnUntraced(function* (
-					...[id, session, stream, fact]: Parameters<typeof CheckedWriter.Service.commit>
+					...[id, session, stream, event]: Parameters<typeof CheckedWriter.Service.commit>
 				) {
-					const receipt = yield* sessions.receipt(id, session.parent, PROCESS, fact._tag);
-					if (fault.at === "write_storage") return yield* new LedgerError({why: "storage"});
-					if (fault.at === "write_refused") return Appended.cases.refused.make({why: "seen_ahead"});
+					const receipt = yield* sessions.receipt(id, session.parent, PROCESS, event._tag);
+					if (fault.at === "write_storage") return yield* new LedgerError({reason: "storage"});
+					if (fault.at === "write_refused")
+						return Appended.cases.refused.make({reason: "seen_ahead"});
 					return yield* ledger.append(
 						stream,
 						id,
@@ -840,15 +841,16 @@ const runnerWorld = (
 								sentAt: "2026-11-08T00:00:00.000Z",
 								build: a.build,
 							},
-							fact,
+							event,
 						),
 					);
 				}),
 				own: Effect.fnUntraced(function* (
-					...[id, stream, fact]: Parameters<typeof CheckedWriter.Service.own>
+					...[id, stream, event]: Parameters<typeof CheckedWriter.Service.own>
 				) {
-					if (fault.at === "write_storage") return yield* new LedgerError({why: "storage"});
-					if (fault.at === "write_refused") return Appended.cases.refused.make({why: "seen_ahead"});
+					if (fault.at === "write_storage") return yield* new LedgerError({reason: "storage"});
+					if (fault.at === "write_refused")
+						return Appended.cases.refused.make({reason: "seen_ahead"});
 					return yield* ledger.append(
 						stream,
 						id,
@@ -860,7 +862,7 @@ const runnerWorld = (
 								seen: 0,
 								build: a.build,
 							}).pipe(Effect.orDie),
-							fact,
+							event,
 						),
 					);
 				}),
@@ -956,7 +958,7 @@ describe("T285, runner tracing keep-laws", () => {
 							);
 							expect(error).toMatchObject({
 								_tag: "LedgerError",
-								why: "refused",
+								reason: "refused",
 								message: "id_reused",
 							});
 							expect((yield* store.load)?.cmds).toHaveLength(1);

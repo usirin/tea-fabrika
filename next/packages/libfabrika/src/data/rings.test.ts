@@ -49,7 +49,7 @@ const bell = (fails: ReadonlyArray<string> = []) => {
 				rang.push({to, stream, rev});
 			}).pipe(
 				Effect.andThen(
-					fails.includes(to) ? Effect.fail(new LedgerError({why: "unreachable"})) : Effect.void,
+					fails.includes(to) ? Effect.fail(new LedgerError({reason: "unreachable"})) : Effect.void,
 				),
 			),
 	});

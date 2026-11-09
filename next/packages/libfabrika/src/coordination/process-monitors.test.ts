@@ -132,7 +132,7 @@ describe("P33, signal ids, ownership and delivery", () => {
 							before.filter((row) => row.id === id),
 						);
 					else {
-						expect(result).toMatchObject({_tag: "Failure", failure: {why: "refused"}});
+						expect(result).toMatchObject({_tag: "Failure", failure: {reason: "refused"}});
 						expect(store.rows()).toEqual(before);
 					}
 				}
@@ -148,7 +148,7 @@ describe("P33, signal ids, ownership and delivery", () => {
 				for (const ref of ["", long])
 					expect(table.monitor(ref, A, Recipient.cases.process.make({process: W}))).toMatchObject({
 						_tag: "Failure",
-						failure: {why: "bad_text"},
+						failure: {reason: "bad_text"},
 					});
 			});
 		}),
@@ -161,7 +161,7 @@ describe("P33, signal ids, ownership and delivery", () => {
 				yield* monitor(store, ref);
 				const table = new ProcessTable(store.rows(), from().by);
 				const to = Recipient.cases.process.make({process: W});
-				const down = Down.make({ref, process: A, to, why: "crashed"});
+				const down = Down.make({ref, process: A, to, reason: "crashed"});
 				const entry: Entry = {
 					...lineFor(from(), {_tag: "send", m: down}),
 					id: signalId(to, ref, 1),
@@ -191,7 +191,7 @@ describe("p79, addressed and independent monitors", () => {
 						yield* exit(store, W);
 					}
 					const before = store.rows();
-					expect((yield* Effect.flip(monitor(store, ref))).why).toBe("ended");
+					expect((yield* Effect.flip(monitor(store, ref))).reason).toBe("ended");
 					expect(store.rows()).toEqual(before);
 				});
 			});
@@ -222,19 +222,19 @@ describe("p79, addressed and independent monitors", () => {
 								Down.make({
 									ref: other!,
 									process: A,
-									why: "crashed",
+									reason: "crashed",
 									to: Recipient.cases.process.make({process: X}),
 								}),
 								Down.make({
 									ref: one!,
 									process: A,
-									why: "crashed",
+									reason: "crashed",
 									to: Recipient.cases.process.make({process: W}),
 								}),
 								Down.make({
 									ref: two!,
 									process: A,
-									why: "crashed",
+									reason: "crashed",
 									to: Recipient.cases.process.make({process: W}),
 								}),
 							].sort((a, b) => a.ref.localeCompare(b.ref)),
@@ -258,7 +258,7 @@ describe("p79, addressed and independent monitors", () => {
 					yield* seed(store);
 					yield* monitor(store, ref);
 					const before = store.rows();
-					expect((yield* Effect.flip(monitor(store, ref, W))).why).toBe("bad_ref");
+					expect((yield* Effect.flip(monitor(store, ref, W))).reason).toBe("bad_ref");
 					// Watches are keyed by (recipient, ref): X has no watch:1, so its cancel is a no-op.
 					yield* cancel(store, ref, X);
 					expect(store.rows()).toEqual(before);
@@ -283,7 +283,7 @@ describe("p79, addressed and independent monitors", () => {
 							Down.make({
 								ref,
 								process: target,
-								why: "noproc",
+								reason: "noproc",
 								to: Recipient.cases.process.make({process: W}),
 							}),
 						);
@@ -361,7 +361,7 @@ describe("p79, atomic exit", () => {
 								ProcessManager.use((p) => p.exit(A, "crashed", from())).pipe(
 									Effect.provide(manager(store, brain(), ids().next, bell)),
 								),
-							)).why,
+							)).reason,
 						).toBe("storage");
 						expect(store.fault.writes - passed).toBe(after);
 						expect(store.rows()).toEqual(before);
@@ -456,7 +456,7 @@ describe("p79, cancellation, replay and stale delivery", () => {
 							Start.cases.again.make({
 								id: "watcher:restart",
 								after: W,
-								why: "crashed",
+								reason: "crashed",
 								name: "watcher:1",
 								code: {program: "watcher", hash: "build-a"},
 							}),
@@ -494,7 +494,7 @@ const demonitored = (store: Storage) =>
 	store
 		.rows()
 		.filter((row) => row._tag === "demonitored")
-		.map((row) => row.body as {readonly ref: string; readonly why?: unknown});
+		.map((row) => row.body as {readonly ref: string; readonly reason?: unknown});
 
 describe("P33, a DOWN is a signal only under its signal id and a matching watch", () => {
 	it.effect("a DOWN-tagged letter under any other id is plain mail: cancel never drops it", () => {
@@ -504,7 +504,7 @@ describe("P33, a DOWN is a signal only under its signal id and a matching watch"
 				yield* seed(store);
 				yield* monitor(store, ref);
 				yield* cancel(store, ref);
-				yield* send(store, "forged", Down.make({ref, process: A, why: "crashed", to: toW}));
+				yield* send(store, "forged", Down.make({ref, process: A, reason: "crashed", to: toW}));
 				expect((yield* fresh(store)).map((letter) => letter.id)).toEqual(["forged"]);
 			});
 		});
@@ -528,7 +528,7 @@ describe("P33, a DOWN is a signal only under its signal id and a matching watch"
 						// watch:1 targets A, so a DOWN for B under a signal id matches no watch. Mail cannot
 						// take a signal id, so only another writer's raw row could, and it is plain mail.
 						const id = JSON.stringify(["DOWN", toW, ref, 1]);
-						const m = Down.make({ref, process: B, why: "crashed", to: toW});
+						const m = Down.make({ref, process: B, reason: "crashed", to: toW});
 						yield* Ledger.use((ledger) =>
 							ledger.append("watcher:1/inbox", id, lineFor(from({by: CLIENT}), {_tag: "send", m})),
 						).pipe(Effect.provide(manager(store)));
@@ -568,7 +568,7 @@ describe("P33, watches are keyed by (recipient, ref)", () => {
 				yield* exit(store);
 				expect(
 					(yield* fresh(store)).map((letter) => Schema.decodeUnknownSync(Down)(letter.m)),
-				).toEqual([Down.make({ref, process: A, why: "crashed", to: toW})]);
+				).toEqual([Down.make({ref, process: A, reason: "crashed", to: toW})]);
 				expect(yield* fresh(store, X)).toEqual([]);
 			});
 		});
@@ -585,7 +585,7 @@ describe("P33, watches are keyed by (recipient, ref)", () => {
 						Start.cases.again.make({
 							id: "watcher:restart",
 							after: W,
-							why: "crashed",
+							reason: "crashed",
 							name: "watcher:1",
 							code: {program: "watcher", hash: "build-a"},
 						}),
@@ -600,7 +600,7 @@ describe("P33, watches are keyed by (recipient, ref)", () => {
 					Down.make({
 						ref,
 						process: A,
-						why: "crashed",
+						reason: "crashed",
 						to: Recipient.cases.process.make({process: B}),
 					}),
 				]);
@@ -624,29 +624,34 @@ describe("P33, monitor again after demonitor", () => {
 					yield* exit(store);
 					expect(
 						(yield* fresh(store)).map((letter) => Schema.decodeUnknownSync(Down)(letter.m)),
-					).toEqual([Down.make({ref, process: A, why: "crashed", to: toW})]);
+					).toEqual([Down.make({ref, process: A, reason: "crashed", to: toW})]);
 				});
 			}),
 	);
 });
 
-describe("P33, demonitored records why", () => {
-	it.effect("a demonitor writes why canceled; a watcher's exit writes why watcher_exited", () => {
-		return check(refs, [["by-cancel", "by-exit"]], ([byCancel, byExit]) => {
-			const store = storage();
-			return Effect.gen(function* () {
-				yield* seed(store);
-				yield* monitor(store, byCancel!, A, W);
-				yield* monitor(store, byExit!, A, X);
-				yield* cancel(store, byCancel!);
-				yield* exit(store, X);
-				expect(Object.fromEntries(demonitored(store).map((body) => [body.ref, body.why]))).toEqual({
-					[byCancel!]: "canceled",
-					[byExit!]: "watcher_exited",
+describe("P33, demonitored records reason", () => {
+	it.effect(
+		"a demonitor writes reason canceled; a watcher's exit writes reason watcher_exited",
+		() => {
+			return check(refs, [["by-cancel", "by-exit"]], ([byCancel, byExit]) => {
+				const store = storage();
+				return Effect.gen(function* () {
+					yield* seed(store);
+					yield* monitor(store, byCancel!, A, W);
+					yield* monitor(store, byExit!, A, X);
+					yield* cancel(store, byCancel!);
+					yield* exit(store, X);
+					expect(
+						Object.fromEntries(demonitored(store).map((body) => [body.ref, body.reason])),
+					).toEqual({
+						[byCancel!]: "canceled",
+						[byExit!]: "watcher_exited",
+					});
 				});
 			});
-		});
-	});
+		},
+	);
 });
 
 describe("P33, a client's inbox is not a process's inbox", () => {

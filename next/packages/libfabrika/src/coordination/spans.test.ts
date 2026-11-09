@@ -6,8 +6,8 @@
 // - Span names: `mailbox.send`, `mailbox.receive` (one per Stream run), `process.start`,
 //   `members.read` (one per `members` call) and `members.write`. P6's `ledger.*` spans nest inside.
 // - Tags: OpenTelemetry's messaging keys where they fit and `fab.<piece>.*` for the rest. The plan
-//   does not fix each key, so these tests find a tag by its last word (`answer`, `why`, `after`,
-//   `letters`, `skipped`, `facts`, `keys`, `live`, `ignored`, `rev`, `program`, `hash`, `tag`), and
+//   does not fix each key, so these tests find a tag by its last word (`answer`, `reason`, `after`,
+//   `letters`, `skipped`, `events`, `keys`, `live`, `ignored`, `rev`, `program`, `hash`, `tag`), and
 //   find a name or an id by its value.
 // - No tag holds `m`, a `saw` text, a signature or a string over 128 characters.
 import {mkdtempSync, rmSync} from "node:fs";
@@ -22,7 +22,7 @@ import type {Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
 import {ClientManager} from "./client-manager.ts";
 import {type From, Mailbox} from "./mailbox.ts";
-import {foldMembers, MemberFact} from "./members.ts";
+import {foldMembers, MemberEvent} from "./members.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {A, brain, first as firstStart, ids} from "./process.test-support.ts";
 import {Start} from "./process.ts";
@@ -45,7 +45,7 @@ const nameArb = Start.cases.first.fields.name.check(
 	Schema.isPattern(/^notes:[a-z][a-z0-9._-]{0,30}$/),
 );
 const idArb = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9_-]{0,30}$/));
-const keyArb = MemberFact.cases.denied.fields.key.check(
+const keyArb = MemberEvent.cases.denied.fields.key.check(
 	Schema.isPattern(/^key-[a-z][a-z0-9_-]{0,30}$/),
 );
 // Include complete prefixed patterns: notes: plus 1..31, key- plus 1..31.
@@ -136,7 +136,7 @@ const within = (span: Tracer.NativeSpan, outer: Tracer.NativeSpan): boolean => {
 	return false;
 };
 
-// ---- Facts with markers in every saw text and signature ----
+// ---- Events with markers in every saw text and signature ----
 const SAW = {
 	code: SAW_MARK,
 	label: SAW_MARK,
@@ -153,12 +153,12 @@ const signed = (signer: string) => ({
 });
 let made = 0;
 const nextId = (prefix: string): string => `${prefix}_${String(++made).padStart(26, "0")}`;
-const granted = (signer: string, key: string): MemberFact => ({
+const granted = (signer: string, key: string): MemberEvent => ({
 	_tag: "granted",
 	grant: {id: nextId("grant"), key, for: P, to: TO, as: "window", saw: SAW, sentAt: SENT},
 	signed: signed(signer),
 });
-const revoked = (signer: string, key: string): MemberFact => ({
+const revoked = (signer: string, key: string): MemberEvent => ({
 	_tag: "revoked",
 	revoke: {id: nextId("revoke"), key, for: P, to: TO, saw: TOOK, sentAt: SENT},
 	signed: signed(signer),
@@ -177,7 +177,7 @@ const addedDevice = (
 	key: string,
 	window: string,
 	drops: ReadonlyArray<string> = [],
-): MemberFact => ({
+): MemberEvent => ({
 	_tag: "added",
 	add: {
 		id: nextId("add"),
@@ -190,7 +190,7 @@ const addedDevice = (
 	},
 	signed: signed(signer),
 });
-const addedSheet = (signer: string, key: string): MemberFact => ({
+const addedSheet = (signer: string, key: string): MemberEvent => ({
 	_tag: "added",
 	add: {
 		id: nextId("add"),
@@ -203,7 +203,7 @@ const addedSheet = (signer: string, key: string): MemberFact => ({
 	},
 	signed: signed(signer),
 });
-const denied = (key: string): MemberFact => ({
+const denied = (key: string): MemberEvent => ({
 	_tag: "denied",
 	id: nextId("deny"),
 	key,
@@ -211,7 +211,7 @@ const denied = (key: string): MemberFact => ({
 	by: "SHA256:menu",
 });
 
-const write = (fact: MemberFact) => ClientManager.use((clients) => clients.write(fact, from()));
+const write = (event: MemberEvent) => ClientManager.use((clients) => clients.write(event, from()));
 
 /** Every tag of every span: no marker, and no text over 128 characters. */
 const clean = (spans: ReadonlyArray<Tracer.NativeSpan>) => {
@@ -251,7 +251,7 @@ describe("p97, mailbox spans", () => {
 				expect(tagged(placed, "pos")).toBe(1);
 				expect(tags(placed)["messaging.operation.type"]).toBe("send");
 				expect(tagged(refused, "answer")).toBe("refused");
-				expect(tagged(refused, "why")).toBe("id_reused");
+				expect(tagged(refused, "reason")).toBe("id_reused");
 				const appends = ended("ledger.append");
 				expect(appends.length).toBe(2);
 				expect(appends.every((append, i) => within(append, sends[i] ?? placed))).toBe(true);
@@ -318,7 +318,7 @@ describe("p97, process spans", () => {
 						hash,
 					});
 					yield* manager.start(request, from());
-					expect((yield* Effect.flip(manager.start(request, from({parent: null})))).why).toBe(
+					expect((yield* Effect.flip(manager.start(request, from({parent: null})))).reason).toBe(
 						"id_reused",
 					);
 					const [first, second, ...more] = ended("process.start");
@@ -330,7 +330,7 @@ describe("p97, process spans", () => {
 					expect(tagged(first, "hash")).toBe(hash);
 					expect(tagged(first, "answer")).toBe("placed");
 					expect(tagged(second, "answer")).toBe("refused");
-					expect(tagged(second, "why")).toBe("id_reused");
+					expect(tagged(second, "reason")).toBe("id_reused");
 					// P33 writes a group atomically; it no longer requires separate ledger.append calls.
 					clean(spans);
 				}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
@@ -367,7 +367,7 @@ describe("p97, member spans", () => {
 				expect(tagged(grant, "rev")).toBe(2);
 				expect(holds(grant, "pA")).toBe(true); // the signer's key
 				expect(tagged(refused, "answer")).toBe("refused");
-				expect(tagged(refused, "why")).toBe("not_allowed");
+				expect(tagged(refused, "reason")).toBe("not_allowed");
 				expect(holds(refused, "wA")).toBe(true);
 				expect(tagged(deny, "tag")).toBe("denied");
 				expect(tagged(revoke, "tag")).toBe("revoked");
@@ -377,8 +377,8 @@ describe("p97, member spans", () => {
 				expect(reads.length).toBe(before + 1);
 				const read = reads.at(-1);
 				if (read === undefined) return expect.unreachable();
-				const facts = yield* Stream.runCollect((yield* Ledger).read("door/members", 0));
-				expect(tagged(read, "facts")).toBe(facts.length);
+				const events = yield* Stream.runCollect((yield* Ledger).read("door/members", 0));
+				expect(tagged(read, "events")).toBe(events.length);
 				expect(typeof tagged(read, "keys")).toBe("number");
 				expect(typeof tagged(read, "live")).toBe("number");
 				expect(tagged(read, "ignored")).toBe(0);
@@ -425,10 +425,12 @@ describe("p97, member spans", () => {
 			return Effect.gen(function* () {
 				const clients = yield* ClientManager;
 				yield* write(sheet);
-				expect(yield* write(macC)).toEqual({_tag: "ignored", rev: 4, why: "used"});
+				expect(yield* write(macC)).toEqual({_tag: "ignored", rev: 4, reason: "used"});
 				// Spans are kept in the order they start, and Mac X's starts inside Mac C's, so sort them.
 				const answers = ended("members.write")
-					.map((span) => `${String(tagged(span, "answer"))} ${String(tagged(span, "why") ?? "")}`)
+					.map(
+						(span) => `${String(tagged(span, "answer"))} ${String(tagged(span, "reason") ?? "")}`,
+					)
 					.sort();
 				expect(answers).toEqual(["applied ", "applied ", "ignored used"]);
 				yield* clients.members;
@@ -484,15 +486,15 @@ describe("p97, the tags hold the right names and numbers", () => {
 			const {tracer, ended} = capture();
 			return Effect.gen(function* () {
 				const clients = yield* ClientManager;
-				const fact = granted("pA", key);
-				yield* write(fact);
+				const event = granted("pA", key);
+				yield* write(event);
 				yield* write(revoked("pA", key));
 				const [grant] = ended("members.write");
 				if (grant === undefined) return expect.unreachable();
 				expect(tagged(grant, "key")).toBe(key);
 				expect(tagged(grant, "signer")).toBe("pA");
 				expect(tagged(grant, "id")).toBe(
-					fact._tag === "granted" ? fact.grant.id : expect.unreachable(),
+					event._tag === "granted" ? event.grant.id : expect.unreachable(),
 				);
 				yield* clients.members;
 				const read = ended("members.read").at(-1);
@@ -554,11 +556,11 @@ describe("p97, the tags hold the right names and numbers", () => {
 			).pipe(Layer.provide(onSql(sql)));
 			return Effect.gen(function* () {
 				yield* write(sheet);
-				expect(yield* write(macC)).toEqual({_tag: "ignored", rev: 4, why: "used"});
+				expect(yield* write(macC)).toEqual({_tag: "ignored", rev: 4, reason: "used"});
 				const ignored = ended("members.write").find((span) => tagged(span, "answer") === "ignored");
 				if (ignored === undefined) return expect.unreachable();
 				expect(tagged(ignored, "rev")).toBe(4);
-				expect(tagged(ignored, "why")).toBe("used");
+				expect(tagged(ignored, "reason")).toBe("used");
 			}).pipe(
 				Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(racing))),
 				Effect.withTracer(tracer),
@@ -584,41 +586,41 @@ describe("p97, the tags hold the right names and numbers", () => {
 	);
 
 	it.effect.prop(
-		"a send the ledger fails ends its span with the ledger's why",
+		"a send the ledger fails ends its span with the ledger's reason",
 		[nameArb, idArb],
 		examples([["notes:1", "letter_a"]], (name: string, id: string) => {
 			const {tracer, ended} = capture();
 			const broken = Layer.succeed(Ledger, {
-				append: () => Effect.fail(new LedgerError({why: "storage"})),
-				read: () => Stream.fail(new LedgerError({why: "storage"})),
-				wait: () => Effect.fail(new LedgerError({why: "storage"})),
+				append: () => Effect.fail(new LedgerError({reason: "storage"})),
+				read: () => Stream.fail(new LedgerError({reason: "storage"})),
+				wait: () => Effect.fail(new LedgerError({reason: "storage"})),
 			});
 			return Effect.gen(function* () {
 				const mailbox = yield* Mailbox;
 				const failed = yield* Effect.flip(mailbox.send(name, id, {}, from()));
-				expect(failed.why).toBe("storage");
+				expect(failed.reason).toBe("storage");
 				const [send] = ended("mailbox.send");
 				if (send === undefined) return expect.unreachable();
-				expect(tagged(send, "why")).toBe("storage");
+				expect(tagged(send, "reason")).toBe("storage");
 			}).pipe(Effect.provide(Mailbox.layer.pipe(Layer.provide(broken))), Effect.withTracer(tracer));
 		}),
 		options,
 	);
 	it.effect.prop(
-		"a failed members read ends its span with the ledger's why",
+		"a failed members read ends its span with the ledger's reason",
 		[Schema.Literals(["storage", "bad_row"])],
-		([why]) => {
+		([reason]) => {
 			const {tracer, ended} = capture();
 			const broken = Layer.succeed(Ledger, {
-				append: () => Effect.fail(new LedgerError({why})),
-				read: () => Stream.fail(new LedgerError({why})),
-				wait: () => Effect.fail(new LedgerError({why})),
+				append: () => Effect.fail(new LedgerError({reason})),
+				read: () => Stream.fail(new LedgerError({reason})),
+				wait: () => Effect.fail(new LedgerError({reason})),
 			});
 			return Effect.gen(function* () {
-				expect((yield* Effect.flip((yield* ClientManager).members)).why).toBe(why);
+				expect((yield* Effect.flip((yield* ClientManager).members)).reason).toBe(reason);
 				const reads = ended("members.read");
 				expect(reads).toHaveLength(1);
-				expect(tagged(reads[0]!, "why")).toBe(why);
+				expect(tagged(reads[0]!, "reason")).toBe(reason);
 			}).pipe(
 				Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(broken))),
 				Effect.withTracer(tracer),
@@ -634,11 +636,11 @@ describe("p97, the tags hold the right names and numbers", () => {
 				const clients = yield* ClientManager;
 				expect((yield* write(granted("pA", key)))._tag).toBe("applied");
 				const before = yield* clients.members;
-				const fact = granted("pA", key);
-				if (fact._tag !== "granted") return expect.unreachable();
-				expect(yield* write({...fact, grant: {...fact.grant, as: "agent"}})).toEqual({
+				const event = granted("pA", key);
+				if (event._tag !== "granted") return expect.unreachable();
+				expect(yield* write({...event, grant: {...event.grant, as: "agent"}})).toEqual({
 					_tag: "refused",
-					why: "not_allowed",
+					reason: "not_allowed",
 				});
 				expect(yield* clients.members).toEqual(before);
 			}).pipe(Effect.provide(all())),
@@ -646,7 +648,7 @@ describe("p97, the tags hold the right names and numbers", () => {
 	);
 	it.prop(
 		"founding twice with different person ids preserves the first membership",
-		[MemberFact.cases.founded, MemberFact.cases.founded],
+		[MemberEvent.cases.founded, MemberEvent.cases.founded],
 		([first, input]) => {
 			const second = {...input, id: `${first.id}${input.id}-second`};
 			expect(foldMembers([first, second])).toEqual(foldMembers([first]));

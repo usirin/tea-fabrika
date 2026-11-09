@@ -62,7 +62,7 @@ The other is `no-bare-tell.grit`. A `tell` or `offer` to a program's input is an
 T518 A8's count on 2026-11-08 was one fire, the second module from P17a, with no false alarm.
 Its property test generates file contents and checks nearby paths stay allowed.
 
-Seven rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13, and P35). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests live with the rest of the exam, in `next/apps/fabrika/src/exam/`, and lint each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file.
+Eight rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13, P35, and ticket 337). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests use `next/apps/fabrika/src/exam/plant.ts` and lint each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file.
 
 | Rule | Refuses | Edges | Tests |
 |---|---|---|---|
@@ -70,6 +70,7 @@ Seven rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md
 | `no-effect-run-outside-edge` | any of Effect's twelve run functions, on `Effect` or a runtime, and `runtimePromise` and `makeRuntimePromise`; `NodeRuntime.runMain` passes | a line under an edge comment | left out |
 | `edge-comment` | an ignore comment naming either rule above that is not `// oxlint-disable-next-line <rule> -- edge: <why>`: another form, another rule named beside them, or no `edge: ` reason | none | on |
 | `no-of` | a declared name `of` or ending in `Of`; a use passes | none | on |
+| `no-why-key` | a statically named `why` key in an object, class or type declaration; use `reason` | none | on |
 | `no-hand-tag` | an object key, class field or type member named `_tag`; a read passes | the log, `next/packages/libfabrika/src/data/log.ts` | left out |
 | `one-store-hook` | `useSyncExternalStore` imported or read as a plain member anywhere in `next/`; a store hook's value dropped | none | left out |
 | `no-clock-in-view` | `Date.now()`, `new Date()`, `Date()`, `performance.now()`, `Math.random()`, `crypto.randomUUID()` in a `.tsx` file, handlers included | none | left out |
@@ -82,6 +83,33 @@ The oxlint rules see syntax. A `.catch` is told apart by the name it is called o
 and `Effect.promise` and the run functions by their written names. P12 adds the typed
 check below for Promises passed through helpers. `no-hand-tag` misses `x._tag = "a"`,
 which the plan does not name. Report any miss.
+
+### Ticket 337: reason keys in next/
+
+`no-why-key` checks object fields, shorthand, methods, getters and setters; class fields and
+methods; and type or interface property and method signatures. Effect Schema field maps use
+the same object syntax. Quoted and escaped names, computed string literals and expression-free
+templates count by their decoded value. The match is exactly `why`, including readonly members.
+
+Reads, destructuring reads, local variables, comments, string values and dynamic keys pass.
+`whyNot`, `Why` and `reason` pass. Member assignments, SQL and JSON inside strings need the
+separate sweep audit. Today's paths keep their spelling. There is no autofix, since changing
+one declaration alone can break readers and saved formats. The glossary is not parsed as policy.
+
+The tests checkpoint on 2026-11-09 used base and unchanged product head
+`9b48d622b5d4cfe54ca6d0a8a53f0ac03d3f2c03`, with the tests changes in this commit.
+The standard wrapper, `node oxlint-plugins/lint.ts next`, scanned the 197 TypeScript files
+under `next/`. It reported 294 `no-why-key` diagnostics across 44 build-owned files.
+Every diagnostic was read against its declaration: 294 useful findings, 0 false findings,
+0 unclassified findings. No tests-owned file has a remaining declaration. Raw output is private
+under `runs/reason337/next-lint.log`. Product still uses `why`, so this is deliberately red.
+
+`no-why-key.test.ts` uses generated Unicode names, generated filenames and declaration forms
+through the real config, with seed 119120 and 12 runs per property. Every syntax run includes
+the exact retired key. Fixed format checks pin escaped spellings and the diagnostic.
+The final post-build scan and its exact final head are still owed. It must report zero
+remaining diagnostics before landing. A zero-hit final scan has no false-alarm percentage
+denominator; the generated positive and negative plants check both sides separately.
 
 ### P12 checks in lint
 

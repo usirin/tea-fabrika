@@ -432,7 +432,7 @@ describe("p101, no raw row is ever lost", () => {
 		() => {
 			const {db, sql} = fresh();
 			const r2 = bucket();
-			const failing = {put: () => Effect.fail(new SinkError({why: "unreachable", held: 0}))};
+			const failing = {put: () => Effect.fail(new SinkError({reason: "unreachable", held: 0}))};
 			const wrong = {put: () => Effect.succeed({sha256: "0".repeat(64)})};
 			const liar = bucket(true);
 			return Effect.gen(function* () {
@@ -547,7 +547,7 @@ describe("p101, an archive that fails is never silent", () => {
 		() => {
 			const {db, sql} = fresh();
 			const r2 = bucket();
-			const failing = {put: () => Effect.fail(new SinkError({why: "unreachable", held: 0}))};
+			const failing = {put: () => Effect.fail(new SinkError({reason: "unreachable", held: 0}))};
 			const wrong = {put: () => Effect.succeed({sha256: "0".repeat(64)})};
 			const liar = bucket(true);
 			const down: BucketCalls = {
@@ -705,7 +705,7 @@ describe("p101, a sink.archive row's time, duration and span", () => {
 						TestClock.adjust(ms).pipe(
 							Effect.andThen(
 								fail
-									? Effect.fail(new SinkError({why: "unreachable", held: 0}))
+									? Effect.fail(new SinkError({reason: "unreachable", held: 0}))
 									: real.put(key, body),
 							),
 						),

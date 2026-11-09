@@ -96,7 +96,7 @@ describe("p79, LedgerTransaction", () => {
 							turn.append("a", "two", line(2));
 							turn.append("b", "three", line(3));
 						}),
-					)).why,
+					)).reason,
 				).toBe("storage");
 				expect(store.fault.passed - before).toBe(1);
 				store.fault.after = null;
@@ -125,33 +125,33 @@ describe("p79, LedgerTransaction", () => {
 		return Effect.gen(function* () {
 			const tx = yield* LedgerTransaction;
 			const error = yield* Effect.flip(tx.transact(diskFailure));
-			expect(error.why).toBe("storage");
+			expect(error.reason).toBe("storage");
 			const codes = spans.flatMap((span) =>
 				[...span.attributes].filter(([key]) => key.endsWith(".code")).map(([, value]) => value),
 			);
 			expect(codes).toEqual(["EIO"]);
 		}).pipe(Effect.provide(store.layer), Effect.withTracer(tracer));
 	});
-	for (const why of ["id_reused", "seen_ahead", "bad_trace"] as const) {
-		it.effect(`plant, keep the first append on ${why}: refusal aborts the entire turn`, () => {
+	for (const reason of ["id_reused", "seen_ahead", "bad_trace"] as const) {
+		it.effect(`plant, keep the first append on ${reason}: refusal aborts the entire turn`, () => {
 			const store = setup();
 			return Effect.gen(function* () {
 				const ledger = yield* Ledger;
 				const tx = yield* LedgerTransaction;
 				yield* ledger.append("a", "one", line(1));
 				const refused =
-					why === "seen_ahead"
+					reason === "seen_ahead"
 						? {...line(3), seen: 900}
-						: why === "bad_trace"
+						: reason === "bad_trace"
 							? {...line(3), traceId: "wrong"}
 							: line(3);
 				expect(
 					(yield* Effect.flip(
 						tx.transact((turn) => {
 							turn.append("b", "early", line(2));
-							turn.append("a", why === "id_reused" ? "one" : "late", refused);
+							turn.append("a", reason === "id_reused" ? "one" : "late", refused);
 						}),
-					)).why,
+					)).reason,
 				).toBe("refused");
 				expect(yield* Stream.runCollect(ledger.read("b", 0))).toEqual([]);
 				expect(yield* Stream.runCollect(ledger.read("a", 0))).toHaveLength(1);
@@ -225,7 +225,7 @@ describe("p79, LedgerTransaction", () => {
 			const store = setup(() =>
 				Effect.sync(() => {
 					rings++;
-				}).pipe(Effect.andThen(Effect.fail(new LedgerError({why: "unreachable"})))),
+				}).pipe(Effect.andThen(Effect.fail(new LedgerError({reason: "unreachable"})))),
 			);
 			return Effect.gen(function* () {
 				const ledger = yield* Ledger;
@@ -257,7 +257,7 @@ describe("p79, LedgerTransaction", () => {
 			const tx = yield* LedgerTransaction;
 			yield* tx.transact((turn) => turn.append("a", "one", line(1)));
 			store.db.exec("UPDATE entries SET body='not JSON'");
-			expect((yield* Effect.flip(tx.transact((turn) => [...turn.read("a", 0)]))).why).toBe(
+			expect((yield* Effect.flip(tx.transact((turn) => [...turn.read("a", 0)]))).reason).toBe(
 				"bad_row",
 			);
 		}).pipe(Effect.provide(store.layer));

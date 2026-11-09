@@ -61,13 +61,13 @@ type PersonLink = typeof PersonLink.Type;
 const ChainLink = Schema.Union([Link, PersonLink]);
 type ChainLink = typeof ChainLink.Type;
 
-const Why = Schema.Literals([
+const Reason = Schema.Literals([
 	"unsigned_commit",
 	"build_touched_exam",
 	"broken_chain",
 	"stale_link",
 ]);
-type Why = typeof Why.Type;
+type Reason = typeof Reason.Type;
 
 export const Answer = Schema.TaggedUnion({
 	done: {},
@@ -77,7 +77,7 @@ export const Answer = Schema.TaggedUnion({
 		paths: Schema.Array(Schema.String),
 	},
 	stuck: {
-		why: Why,
+		reason: Reason,
 		sha: Schema.String,
 		paths: Schema.optional(Schema.Array(Schema.String)),
 		step: Schema.optional(Role),
@@ -86,8 +86,8 @@ export const Answer = Schema.TaggedUnion({
 export type Answer = typeof Answer.Type;
 
 const done = Answer.cases.done.make({});
-const stuck = (why: Why, sha: string, more: {paths?: string[]; step?: Role} = {}) =>
-	Answer.cases.stuck.make({why, sha, ...more});
+const stuck = (reason: Reason, sha: string, more: {paths?: string[]; step?: Role} = {}) =>
+	Answer.cases.stuck.make({reason, sha, ...more});
 
 /** What the key signs, v2: the link and nothing about the commit, so a copied note can be replayed. */
 export const signedText = (link: {
@@ -141,7 +141,10 @@ export const keysProblem = (text: string | null): string | null => {
 
 /** One row of `exam-paths.json`: a glob and why it is the exam's. */
 const ExamList = Schema.Array(
-	Schema.Struct({glob: Schema.String.check(Schema.isNonEmpty()), why: Schema.String}),
+	// The trusted root config keeps today's spelling; next/'s decoded rows use reason.
+	Schema.Struct({glob: Schema.String.check(Schema.isNonEmpty()), reason: Schema.String}).pipe(
+		Schema.encodeKeys({reason: "why"}),
+	),
 );
 type ExamList = typeof ExamList.Type;
 export const decodeExam = Schema.decodeUnknownOption(Schema.fromJsonString(ExamList));
@@ -528,7 +531,7 @@ export const plain = (a: Answer, show: (path: string) => string = quote) => {
 	if (a._tag === "done") return "done";
 	if (a._tag === "ask") return `ask owner exam_read ${a.paths.map(show).join(" ")}`;
 	const paths = a.paths === undefined ? "" : ` ${a.paths.map(show).join(" ")}`;
-	return `stuck ${a.why} ${a.sha}${a.step === undefined ? "" : ` step ${a.step}`}${paths}`;
+	return `stuck ${a.reason} ${a.sha}${a.step === undefined ? "" : ` step ${a.step}`}${paths}`;
 };
 
 /**

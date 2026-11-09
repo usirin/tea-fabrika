@@ -35,7 +35,7 @@ import {type Sql} from "../data/referee.ts";
 import {
 	Alarm,
 	CheckedWriter,
-	type Fact,
+	type Event,
 	type Incoming,
 	ProgramLoader,
 	Recording,
@@ -118,7 +118,7 @@ const world = Effect.fnUntraced(function* () {
 									write: {
 										_tag: "caused",
 										parent: s.queue,
-										fact: {_tag: "saved", count: s.count + m.n},
+										event: {_tag: "saved", count: s.count + m.n},
 									},
 								}),
 							],
@@ -166,7 +166,7 @@ const world = Effect.fnUntraced(function* () {
 			data(ledger.sql),
 			SessionManager.layer(authority.sql, () => Effect.succeed(owner), {
 				input: () => false,
-				fact: () => false,
+				event: () => false,
 			}),
 		);
 	const manager = () => ProcessManager.layer(brain(), next.next).pipe(Layer.provideMerge(base()));
@@ -188,7 +188,7 @@ const world = Effect.fnUntraced(function* () {
 						if (cut !== controls.cut) return Effect.void;
 						controls.hits.push(cut);
 						controls.cut = "";
-						return Effect.fail(new LedgerError({why: "unreachable"}));
+						return Effect.fail(new LedgerError({reason: "unreachable"}));
 					}),
 			},
 		).pipe(
@@ -217,22 +217,24 @@ const world = Effect.fnUntraced(function* () {
 							return {
 								append: (i: Incoming) =>
 									m.send(NAME, i.id, i.envelope.input, from({parent: i.envelope.id})),
-								commit: (id: string, session: Session, stream: string, fact: Fact) =>
+								commit: (id: string, session: Session, stream: string, event: Event) =>
 									Effect.gen(function* () {
 										controls.commits++;
 										const current = (yield* p.info)[0]!.process;
-										const signed = yield* sessions.receipt(id, session.parent, current, fact._tag);
+										const signed = yield* sessions.receipt(id, session.parent, current, event._tag);
 										return yield* ledger.append(
 											stream,
 											id,
-											lineFor(from({by: signed.by.key, parent: signed.parent}), fact),
+											lineFor(from({by: signed.by.key, parent: signed.parent}), event),
 										);
 									}),
-								own: (id: string, stream: string, fact: Fact) =>
+								own: (id: string, stream: string, event: Event) =>
 									Effect.sync(() => {
 										controls.owns++;
 									}).pipe(
-										Effect.andThen(ledger.append(stream, id, lineFor(from({by: owner.key}), fact))),
+										Effect.andThen(
+											ledger.append(stream, id, lineFor(from({by: owner.key}), event)),
+										),
 									),
 							};
 						}),
@@ -248,7 +250,7 @@ const world = Effect.fnUntraced(function* () {
 					}),
 					Layer.succeed(Recording, {
 						flush: Effect.suspend(() =>
-							controls.flush ? Effect.fail(new LedgerError({why: "storage"})) : Effect.void,
+							controls.flush ? Effect.fail(new LedgerError({reason: "storage"})) : Effect.void,
 						),
 					}),
 					ProcessManager.layer(brain(), next.next),
@@ -388,7 +390,10 @@ describe("P34 interrupted recovery", () => {
 						expect(records.flat()).toMatchObject([
 							{body: {tries: 3, errors: ["TypeError", "TypeError", "TypeError"]}},
 						]);
-						expect(yield* r.msg(w.input("poison"))).toMatchObject({_tag: "refused", why: "dead"});
+						expect(yield* r.msg(w.input("poison"))).toMatchObject({
+							_tag: "refused",
+							reason: "dead",
+						});
 						expect(w.controls.steps).toBe(3);
 					}
 				}).pipe(Effect.provide(w.layer()));
@@ -502,7 +507,7 @@ describe("P34 interrupted recovery", () => {
 					expect(w.controls.commits).toBe(0);
 					expect(
 						(yield* inbox).filter((row) => JSON.stringify(row.body).includes('"type":"write_err"')),
-					).toMatchObject([{body: {m: {why: "not_delivered"}}}]);
+					).toMatchObject([{body: {m: {reason: "not_delivered"}}}]);
 				}).pipe(Effect.provide(w.layer()));
 			}),
 	);
@@ -537,7 +542,7 @@ describe("P34 interrupted recovery", () => {
 		async () => {
 			type Status = {process: string; state: string; until: number | null};
 			type Stage = {
-				send: (id: string, m: unknown) => Effect.Effect<{_tag: string; why?: string}, unknown>;
+				send: (id: string, m: unknown) => Effect.Effect<{_tag: string; reason?: string}, unknown>;
 				status: Effect.Effect<Status, unknown>;
 				evict: Effect.Effect<void, unknown>;
 				waitForRecovery: Effect.Effect<void, unknown>;
@@ -561,10 +566,10 @@ describe("P34 interrupted recovery", () => {
 								expect(answer).toMatchObject(
 									n < 3
 										? {_tag: "Failure"}
-										: {_tag: "Success", value: {_tag: "refused", why: "dead"}},
+										: {_tag: "Success", value: {_tag: "refused", reason: "dead"}},
 								);
 								const down = yield* s.status;
-								// P34 amendment: three crashes stay inside the restart budget, so no down fact.
+								// P34 amendment: three crashes stay inside the restart budget, so no down event.
 								expect(down.state).toBe("ended");
 								yield* Effect.exit(s.send("poison", original));
 								expect(yield* s.status).toEqual(down);
@@ -579,7 +584,7 @@ describe("P34 interrupted recovery", () => {
 							}
 							expect(yield* s.send("poison", original)).toMatchObject({
 								_tag: "refused",
-								why: "dead",
+								reason: "dead",
 							});
 							expect(yield* s.executions).toBe(3);
 							expect(yield* s.dead).toMatchObject([

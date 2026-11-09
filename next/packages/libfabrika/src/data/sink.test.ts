@@ -12,7 +12,7 @@
 // - `SpanSink.flush` sends `unsent` to each chain's part (`parts`, 0 if none), follows `rolled`,
 //   deletes a row only after a good answer, and answers `{sent}`. The sink's own calls end no span.
 // - A write that throws `SQLITE_FULL` is held in memory and tried again at each later `end`; the
-//   next `flush` fails with `SinkError {why: "storage", held}` before it sends anything.
+//   next `flush` fails with `SinkError {reason: "storage", held}` before it sends anything.
 // - A row keeps OTLP's span fields. Tags are strings (cut at 128, `<key>.length` beside), numbers
 //   and booleans; a `Redacted` is `"<redacted>"`; anything else is dropped and counted in
 //   `fab.sink.dropped`. A failed span's class is `error.type`; `Cause.pretty` goes only to content.
@@ -212,7 +212,7 @@ describe("T246, P37 decodes TypeID process ids", () => {
 				);
 				const error = Exit.match(exit, {onFailure: Cause.squash, onSuccess: () => undefined});
 				expect(error).toBeInstanceOf(SinkError);
-				expect(error).toMatchObject({why: "bad_row", held: 0});
+				expect(error).toMatchObject({reason: "bad_row", held: 0});
 				expect(count(db, "unsent")).toBe(1);
 				expect(yield* recorded(job(P1))).toEqual([]);
 				expect(yield* recorded(job(process))).toEqual([]);
@@ -434,7 +434,7 @@ describe("p98, a span that ends is never dropped", () => {
 				const real = yield* RecordManager;
 				const down = {
 					...real,
-					write: () => Effect.fail(new SinkError({why: "unreachable", held: 0})),
+					write: () => Effect.fail(new SinkError({reason: "unreachable", held: 0})),
 				};
 				const failed = yield* Effect.flip(flush.pipe(Effect.provideService(RecordManager, down)));
 				expect(failed).toBeInstanceOf(SinkError);
@@ -451,7 +451,7 @@ describe("p98, a span that ends is never dropped", () => {
 							.pipe(
 								Effect.flatMap((written) =>
 									lose-- > 0
-										? Effect.fail(new SinkError({why: "unreachable", held: 0}))
+										? Effect.fail(new SinkError({reason: "unreachable", held: 0}))
 										: Effect.succeed(written),
 								),
 							),
@@ -495,7 +495,7 @@ describe("p98, a span that ends is never dropped", () => {
 				expect(Exit.isSuccess(exit), "end never fails the fiber").toBe(true);
 				const error = yield* Effect.flip(flush);
 				expect(error).toBeInstanceOf(SinkError);
-				expect(error.why).toBe("storage");
+				expect(error.reason).toBe("storage");
 				expect(error.held).toBe(1);
 				expect(yield* recorded(job(P1)), "flush fails before it sends anything").toEqual([]);
 				yield* step("runner.step", {"fab.process": P1, "fab.n": 2});
@@ -519,7 +519,7 @@ describe("p98, a span that ends is never dropped", () => {
 				expect((yield* Effect.flip(flush)).held).toBe(5);
 				for (let n = 5; n < 8; n++) yield* step("runner.step", {"fab.n": n});
 				const error = yield* Effect.flip(flush);
-				expect(error.why).toBe("storage");
+				expect(error.reason).toBe("storage");
 				expect(error.held).toBe(8);
 				expect(count(db, "unsent")).toBe(1);
 				arm(0);
@@ -545,7 +545,7 @@ describe("p98, a span that ends is never dropped", () => {
 				for (let n = 0; n < made; n++)
 					yield* step("runner.step", {"fab.n": n, "fab.pad": "p".repeat(100)});
 				const error = yield* Effect.flip(flush);
-				expect(error.why).toBe("storage");
+				expect(error.reason).toBe("storage");
 				expect(error.held).toBeGreaterThan(0);
 				expect(count(db, "unsent") + error.held).toBe(made + 1);
 				expect(yield* recorded(spans)).toEqual([]);
@@ -570,7 +570,7 @@ describe("p98, a span that ends is never dropped", () => {
 				expect((yield* Effect.flip(flush)).held).toBe(1);
 				arm(0);
 				const again = yield* Effect.flip(flush);
-				expect(again.why, "no end since, but the span is still only in memory").toBe("storage");
+				expect(again.reason, "no end since, but the span is still only in memory").toBe("storage");
 				expect(again.held).toBe(1);
 				expect(yield* recorded(spans), "the second flush sent nothing").toEqual([]);
 				expect(count(db, "unsent")).toBe(1);
@@ -598,7 +598,7 @@ describe("p98, a span that ends is never dropped", () => {
 							.pipe(
 								Effect.flatMap((written) =>
 									lose-- > 0
-										? Effect.fail(new SinkError({why: "unreachable", held: 0}))
+										? Effect.fail(new SinkError({reason: "unreachable", held: 0}))
 										: Effect.succeed(written),
 								),
 							),
@@ -631,7 +631,7 @@ describe("p98, a span that ends is never dropped", () => {
 			return Effect.gen(function* () {
 				expect(yield* traced("runner.step", {"fab.process": P1}, Effect.succeed(7))).toBe(7);
 				const error = yield* Effect.flip(flush);
-				expect(error.why).toBe("storage");
+				expect(error.reason).toBe("storage");
 				expect(error.held).toBe(1);
 			}).pipe(Effect.provide(world(throwing)));
 		},

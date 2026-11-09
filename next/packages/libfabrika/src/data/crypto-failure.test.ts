@@ -10,7 +10,7 @@ describe("a rejected WebCrypto Promise", () => {
 		try {
 			const error = await Effect.runPromise(Effect.flip(sha256(new Uint8Array([1]))));
 			assert.strictEqual(error._tag, "SinkError");
-			assert.strictEqual(error.why, "storage");
+			assert.strictEqual(error.reason, "storage");
 		} finally {
 			spy.mockRestore();
 		}

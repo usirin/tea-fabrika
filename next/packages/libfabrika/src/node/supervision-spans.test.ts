@@ -1,5 +1,5 @@
 // P34, next/. These are runner calls through P37's actual sink and JobRecords, not a span mock.
-// Only this file owns content deletion and trace attribution; other laws inspect lifecycle facts.
+// Only this file owns content deletion and trace attribution; other laws inspect lifecycle events.
 import {Machine} from "@demlik/tea/effect";
 import {describe, expect, it} from "@effect/vitest";
 import {Effect, Layer, Option, Schema, Stream} from "effect";
@@ -320,7 +320,7 @@ for (const adapter of ["node", "worker"] as const)
 							for (const content of kept) {
 								yield* r.deleteContent(chain, content.spanId, {
 									by: owner.key,
-									why: "test deletion",
+									reason: "test deletion",
 								});
 								expect(Option.getOrNull(yield* r.content(chain, content.spanId))).toMatchObject({
 									_tag: "deleted",
@@ -385,7 +385,7 @@ describe("P34 supervision recording", () => {
 		);
 
 	it.effect(
-		"content plant, message in errors/why/health: only deletable content holds failure text and stack",
+		"content plant, message in errors/reason/health: only deletable content holds failure text and stack",
 		() =>
 			Effect.gen(function* () {
 				const w = world(new TypeError(PRIVATE));
@@ -411,7 +411,7 @@ describe("P34 supervision recording", () => {
 					const span = rows[at]!;
 					yield* r.deleteContent({_tag: "job", process: A}, span.spanId, {
 						by: owner.key,
-						why: "test deletion",
+						reason: "test deletion",
 					});
 					expect(
 						Option.getOrNull(yield* r.content({_tag: "job", process: A}, span.spanId)),

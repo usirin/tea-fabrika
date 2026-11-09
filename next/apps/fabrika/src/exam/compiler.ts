@@ -19,7 +19,7 @@ import {parseSync} from "oxc-parser";
 import {type OxcError, transformSync} from "oxc-transform-react";
 
 /** A row of `compiler-ledger.json`: a function left out of the Compiler on purpose, and why. */
-export const Row = Schema.Struct({file: Schema.String, fn: Schema.String, why: Schema.String});
+export const Row = Schema.Struct({file: Schema.String, fn: Schema.String, reason: Schema.String});
 export type Row = typeof Row.Type;
 const Ledger = Schema.Array(Row);
 
@@ -28,7 +28,7 @@ interface Finding {
 	readonly file: string;
 	readonly fn: string;
 	readonly line: number;
-	readonly why: string;
+	readonly reason: string;
 }
 
 /** The one compile step: oxc's Rust port of the React Compiler, with its findings reported. */
@@ -146,7 +146,7 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
 		const name = fn?.name ?? "(module)";
 		said.add(name);
 		if (fn !== null && fn.memoOff && named(name)) return;
-		findings.push({file, fn: name, line: lineAt(text, at), why: e.message});
+		findings.push({file, fn: name, line: lineAt(text, at), reason: e.message});
 	};
 	for (const e of out.errors) diagnose(e);
 	for (const fn of source) {
@@ -155,7 +155,8 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
 				file,
 				fn: fn.name,
 				line: fn.line,
-				why: '"use no memo" with no row in compiler-ledger.json. A row is the owner\'s call, in a change of its own.',
+				reason:
+					'"use no memo" with no row in compiler-ledger.json. A row is the owner\'s call, in a change of its own.',
 			});
 		}
 		if (fn.top && fn.jsx && /^[A-Z]/.test(fn.name) && !fn.memoOff && !compiled.has(fn.name)) {
@@ -164,7 +165,8 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
 					file,
 					fn: fn.name,
 					line: fn.line,
-					why: "draws JSX and did not compile, and the Compiler said nothing. Has its output changed shape?",
+					reason:
+						"draws JSX and did not compile, and the Compiler said nothing. Has its output changed shape?",
 				});
 			}
 		}
@@ -175,7 +177,8 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
 				file,
 				fn: row.fn,
 				line: 0,
-				why: 'a stale row in compiler-ledger.json: this function carries no "use no memo" now. Drop the row.',
+				reason:
+					'a stale row in compiler-ledger.json: this function carries no "use no memo" now. Drop the row.',
 			});
 		}
 	}
@@ -203,7 +206,7 @@ export const check = (
 			file: r.file,
 			fn: r.fn,
 			line: 0,
-			why: "a stale row in compiler-ledger.json: its file is gone. Drop the row.",
+			reason: "a stale row in compiler-ledger.json: its file is gone. Drop the row.",
 		})),
 ];
 
@@ -227,7 +230,7 @@ const lint = Effect.gen(function* () {
 	const files = new Map<string, string>();
 	for (const path of paths) files.set(path, yield* read(path));
 	const findings = check(files, ledger);
-	for (const f of findings) yield* Console.error(`${f.file}:${f.line} ${f.fn}: ${f.why}`);
+	for (const f of findings) yield* Console.error(`${f.file}:${f.line} ${f.fn}: ${f.reason}`);
 	yield* Console.log(
 		`lint:compiler: ${files.size} files, ${findings.length} findings, ${ledger.length} ledger rows`,
 	);

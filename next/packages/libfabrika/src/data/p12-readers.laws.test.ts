@@ -31,7 +31,7 @@ const typed = (exit: Exit.Exit<unknown, unknown>) => {
 	expect(Cause.hasFails(cause)).toBe(true);
 	expect(Cause.findErrorOption(cause)).toMatchObject({
 		_tag: "Some",
-		value: {_tag: "SinkError", why: "bad_row"},
+		value: {_tag: "SinkError", reason: "bad_row"},
 	});
 };
 for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as const)
@@ -60,7 +60,7 @@ for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as co
 					if (reader === "state") db.prepare("UPDATE content SET state=?").run(`unknown-${text}`);
 					if (reader === "deleted")
 						db.prepare(
-							"UPDATE content SET state='deleted', at=?, \"by\"='actor', why='requested'",
+							"UPDATE content SET state='deleted', at=?, \"by\"='actor', reason='requested'",
 						).run(`bad-${text}`);
 					if (reader === "rolled")
 						db.prepare("INSERT INTO rolled (one,part,next,bytes) VALUES (1,?,?,?)").run(

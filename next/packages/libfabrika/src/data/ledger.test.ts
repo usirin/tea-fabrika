@@ -4,7 +4,7 @@
 // bounded by the log's head. Written before the modules (Tier 1, P6, ticket 233).
 //
 // The shape these tests hold the modules to:
-// - `append(stream, id, line)` answers `{_tag: "placed", rev, pos}` or `{_tag: "refused", why}`.
+// - `append(stream, id, line)` answers `{_tag: "placed", rev, pos}` or `{_tag: "refused", reason}`.
 //   `rev` is the place in the whole log, `pos` the place in the stream, both from 1. The same id on
 //   the same stream with the same `by`, `for`, `parent`, `_tag` and `body` gets its first placing
 //   again and writes nothing; with any of those different it is `id_reused` (owner, 2026-11-07).
@@ -12,7 +12,7 @@
 // - `read(stream, after)` is a Stream of the stream's entries past `after`, oldest first, fetched
 //   in pages of 256 only when it runs. `wait(stream, after)` answers at once: `{_tag: "ready", rev}`
 //   with the stream's newest rev, or `{_tag: "parked"}`.
-// - Failures are `LedgerError` with `why`: `unreachable` and `bad_row` from `Ledger.remote`,
+// - Failures are `LedgerError` with `reason`: `unreachable` and `bad_row` from `Ledger.remote`,
 //   `storage` when the Sql throws. No Layer fails when it is built.
 import {mkdtempSync, rmSync, statSync} from "node:fs";
 import {tmpdir} from "node:os";
@@ -78,7 +78,7 @@ const line = (over: Partial<Line> = {}): Line => ({
 	...over,
 });
 const placed = (rev: number, pos: number) => ({_tag: "placed", rev, pos});
-const refused = (why: string) => ({_tag: "refused", why});
+const refused = (reason: string) => ({_tag: "refused", reason});
 const readAll = (stream: string, after = 0) =>
 	Ledger.use((ledger) => Stream.runCollect(ledger.read(stream, after)));
 
@@ -524,7 +524,7 @@ describe("p20, failures are typed, and pass", () => {
 				yield* Effect.flip(ledger.wait("a", 0)),
 			];
 			for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
-			expect(errors.map((error) => error.why)).toEqual([
+			expect(errors.map((error) => error.reason)).toEqual([
 				"unreachable",
 				"unreachable",
 				"unreachable",
@@ -548,7 +548,7 @@ describe("p20, failures are typed, and pass", () => {
 					yield* Effect.flip(ledger.wait("a", 0)),
 				];
 				for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
-				expect(errors.map((error) => error.why)).toEqual(["bad_row", "bad_row", "bad_row"]);
+				expect(errors.map((error) => error.reason)).toEqual(["bad_row", "bad_row", "bad_row"]);
 			}).pipe(Effect.provide(Ledger.remote(stub, {reader: READER})));
 		},
 	);
@@ -588,16 +588,16 @@ describe("p20, failures are typed, and pass", () => {
 		arm();
 		const failed = await runtime.runPromise(Effect.flip(append("w-2")));
 		expect(failed).toBeInstanceOf(LedgerError);
-		expect(failed.why).toBe("storage");
+		expect(failed.reason).toBe("storage");
 		expect(await runtime.runPromise(append("w-3"))).toEqual(placed(2, 2));
 		arm();
 		const read = await runtime.runPromise(Effect.flip(readAll("a")));
-		expect(read.why).toBe("storage");
+		expect(read.reason).toBe("storage");
 		arm();
 		const waited = await runtime.runPromise(
 			Effect.flip(Ledger.use((ledger) => ledger.wait("a", 9))),
 		);
-		expect(waited.why).toBe("storage");
+		expect(waited.reason).toBe("storage");
 		expect((await runtime.runPromise(readAll("a"))).map((e) => e.id)).toEqual(["w-1", "w-3"]);
 		await runtime.dispose();
 	});
@@ -619,7 +619,7 @@ describe("p20, failures are typed, and pass", () => {
 					yield* Effect.flip(ledger.wait("a", 0)),
 				];
 				for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
-				expect(errors.map((error) => error.why)).toEqual(["storage", "storage", "storage"]);
+				expect(errors.map((error) => error.reason)).toEqual(["storage", "storage", "storage"]);
 			}).pipe(
 				Effect.provide(
 					onSql({
@@ -659,7 +659,7 @@ describe("p20, failures are typed, and pass", () => {
 					yield* Effect.flip(ledger.append("b", "w-3", line())),
 				];
 				for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
-				expect(errors.map((error) => error.why)).toEqual([
+				expect(errors.map((error) => error.reason)).toEqual([
 					"bad_row",
 					"bad_row",
 					"bad_row",

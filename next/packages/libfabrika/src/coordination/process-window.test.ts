@@ -16,7 +16,7 @@ import {
 	watcher,
 	W,
 } from "./process.test-support.ts";
-import {Activity, canRestart, Dead, ProcessFact, recoverActivity, State} from "./process.ts";
+import {Activity, canRestart, Dead, ProcessEvent, recoverActivity, State} from "./process.ts";
 
 // fast-check 4.10.2's default JSON has no hard depth bound. Effect 4.1.1's
 // recursive Schema.Json spends one shared size budget, so no finite size
@@ -32,9 +32,9 @@ const unboundedJson = Arbitrary.schema(
 const text = Schema.NonEmptyString.check(Schema.isMaxLength(40));
 // The old integer generator never made -0; JSON storage cannot distinguish it from 0.
 const policy = Schema.Struct({
-	why: ProcessFact.cases.down.fields.why,
-	crashes: ProcessFact.cases.down.fields.crashes,
-	until: ProcessFact.cases.down.fields.until.check(
+	reason: ProcessEvent.cases.down.fields.reason,
+	crashes: ProcessEvent.cases.down.fields.crashes,
+	until: ProcessEvent.cases.down.fields.until.check(
 		Schema.isBetween({minimum: -2_147_483_648, maximum: 2_147_483_647}),
 		Schema.makeFilter((n) => !Object.is(n, -0)),
 	),
@@ -102,7 +102,7 @@ describe("p79, saved activity is not a crash detector", () => {
 			for (const saved of [undefined, generated])
 				expect(
 					Result.match(recoverActivity(saved), {
-						onFailure: (error) => error.why,
+						onFailure: (error) => error.reason,
 						onSuccess: (value) => value._tag,
 					}),
 				).toBe("idle");
@@ -136,7 +136,7 @@ describe("p79, saved activity is not a crash detector", () => {
 					process: p,
 					letter: l,
 					build: b,
-					why: "interrupted",
+					reason: "interrupted",
 				});
 			}
 		},
@@ -150,7 +150,7 @@ describe("p79, saved activity is not a crash detector", () => {
 			for (const saved of [...corrupt, generated]) {
 				const answer = recoverActivity(saved);
 				expect(Result.isFailure(answer)).toBe(true);
-				if (Result.isFailure(answer)) expect(answer.failure.why).toBe("bad_row");
+				if (Result.isFailure(answer)) expect(answer.failure.reason).toBe("bad_row");
 			}
 		},
 		options,
@@ -195,19 +195,19 @@ describe("T540, next/ process UUIDv7 refusals", () => {
 	);
 });
 
-describe("p80, supplied policy facts", () => {
+describe("p80, supplied policy events", () => {
 	it.prop(
 		"plant, omit until: both down shapes require the promised retry time",
 		[processIds, policy],
 		([process, supplied]) => {
 			for (const [p, s] of [
-				[A, {why: "intensity", crashes: 3, until: 50_000}],
+				[A, {reason: "intensity", crashes: 3, until: 50_000}],
 				[process, supplied],
 			] as const) {
 				const down = {process: p, ...s};
-				expect(Schema.is(ProcessFact)({_tag: "down", ...down})).toBe(true);
+				expect(Schema.is(ProcessEvent)({_tag: "down", ...down})).toBe(true);
 				expect(
-					Schema.is(ProcessFact)({_tag: "down", process: p, why: s.why, crashes: s.crashes}),
+					Schema.is(ProcessEvent)({_tag: "down", process: p, reason: s.reason, crashes: s.crashes}),
 				).toBe(false);
 				expect(
 					Schema.is(State)({_tag: "down", ...down, code: {program: "counter", hash: "build-a"}}),
@@ -216,7 +216,7 @@ describe("p80, supplied policy facts", () => {
 					Schema.is(State)({
 						_tag: "down",
 						process: p,
-						why: s.why,
+						reason: s.reason,
 						crashes: s.crashes,
 						code: {program: "counter", hash: "build-a"},
 					}),
@@ -230,7 +230,7 @@ describe("p80, supplied policy facts", () => {
 		[policy],
 		([generated]) =>
 			Effect.forEach(
-				[{why: "owner-policy", crashes: 17, until: 123_456}, generated],
+				[{reason: "owner-policy", crashes: 17, until: 123_456}, generated],
 				(supplied) => {
 					const store = storage();
 					return Effect.gen(function* () {
@@ -309,7 +309,7 @@ describe("p80, supplied policy facts", () => {
 					Effect.provide(manager(store, brain())),
 				);
 				const before = store.rows();
-				for (const [caller, why] of [
+				for (const [caller, reason] of [
 					[brain(), "alive"],
 					[watcher(W), "not_parent"],
 				] as const) {
@@ -317,7 +317,7 @@ describe("p80, supplied policy facts", () => {
 						Effect.result(p.down(A, supplied, from())),
 					).pipe(Effect.provide(manager(store, caller)));
 					expect(Result.isFailure(answer)).toBe(true);
-					if (Result.isFailure(answer)) expect(answer.failure.why).toBe(why);
+					if (Result.isFailure(answer)) expect(answer.failure.reason).toBe(reason);
 					expect(store.rows()).toEqual(before);
 				}
 			});

@@ -112,10 +112,10 @@ const request = (id: string | number, stream = "counter:1/inbox", after = 0) =>
 describe("P12 Gateway attachment laws", () => {
 	law("a failed wait registration answers once and removes the saved request", ({id}) =>
 		Effect.gen(function* () {
-			const f = yield* setup(() => Effect.fail(new LedgerError({why: "unreachable"})));
+			const f = yield* setup(() => Effect.fail(new LedgerError({reason: "unreachable"})));
 			// Inspect state even when the event fails, so an escaped failure cannot hide the lost reply.
 			yield* Effect.exit(f.c.frame(request(id)));
-			expect.soft(f.frames).toMatchObject([{id, error: {data: {why: "unreachable"}}}]);
+			expect.soft(f.frames).toMatchObject([{id, error: {data: {reason: "unreachable"}}}]);
 			expect(f.saved()).toMatchObject({waits: []});
 			yield* f.c.ring("counter:1/inbox", 1);
 			expect(f.frames).toHaveLength(1);

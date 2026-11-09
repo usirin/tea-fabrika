@@ -4,7 +4,7 @@ import {describe, expect, it} from "vitest";
 import {check, type Row} from "./compiler.ts";
 
 const at = (file: string, text: string, ledger: readonly Row[] = []) =>
-	check(new Map([[file, text]]), ledger).map((f) => `${f.fn}:${f.line} ${f.why}`);
+	check(new Map([[file, text]]), ledger).map((f) => `${f.fn}:${f.line} ${f.reason}`);
 
 const CLEAN = [
 	'import {useId} from "react";',
@@ -31,7 +31,7 @@ const NAMED = [
 	"};",
 ].join("\n");
 
-const ROW: Row = {file: "next/a.tsx", fn: "Tip", why: "a planted row"};
+const ROW: Row = {file: "next/a.tsx", fn: "Tip", reason: "a planted row"};
 
 describe("the compile step's check", () => {
 	it("passes a view that compiles", () => {
