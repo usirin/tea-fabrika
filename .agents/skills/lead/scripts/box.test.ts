@@ -923,6 +923,26 @@ describe("T321 K2 box start, today's tooling", () => {
 		);
 	}, 180_000); // about 51 s alone on CI, over 60 s on a busy shard (#598); same cases
 
+	// Plant: judge a field-rows branch by its diff from the lane's base, not from main. A lane that
+	// started on an older main then sees main's newer files on the rows branch and refuses
+	// (projectwin build on ticket 276 beside field-rows PR 601, 2026-11-09).
+	it("K2 scenario: a rows-only branch on a newer main does not block a lane on an older one", () => {
+		fixture((b) => {
+			b.git(b.main, "checkout", "-q", b.branch);
+			const lane = b.commit(b.main, "src/a.ts", "lane work\n");
+			b.git(b.main, "checkout", "-q", "main");
+			const newer = b.commit(b.main, "src/b.ts", "main moved on\n");
+			b.git(b.main, "update-ref", "refs/remotes/origin/main", newer);
+			b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other");
+			b.commit(b.main, "field/runs.jsonl", "{}\n");
+			b.sign(b.main, "lead", "321");
+			b.setup({openPrs: ["fabrikalfa/other"]});
+			b.git(b.main, "checkout", "-q", "main");
+			const got = b.new(lane, b.branch);
+			expect(got.code, got.text).toBe(0);
+		});
+	});
+
 	// Plant: drop --root, save the base as the root, or accept a root the base does not hold.
 	it("K2 saves the lane's root only when the base holds it", () => {
 		fc.assert(
