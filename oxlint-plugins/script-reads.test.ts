@@ -9,6 +9,7 @@ import {scriptReads} from "./script-reads.mjs";
 // files. Deleting stepcommit.test.ts's own declaration also failed the real lint runner.
 // Mutation kills retained: import spacing/quotes/newlines and tests counted as scripts.
 // Review plant: an import inside a comment or a fixture string counts as declared.
+// Mutation round 2 plants: omit the TypeScript loader; count dynamic imports as declarations.
 const refs = fc.array(fc.nat({max: 19}), {maxLength: 3});
 const model = fc.record({
 	skills: fc.array(fc.array(refs, {minLength: 1, maxLength: 5}), {minLength: 1, maxLength: 4}),
@@ -16,8 +17,9 @@ const model = fc.record({
 		maxLength: 3,
 	}),
 	form: fc.integer({min: 0, max: 3}),
-	importForm: fc.integer({min: 0, max: 4}),
+	importForm: fc.integer({min: 0, max: 6}),
 	fixtureForm: fc.integer({min: 0, max: 4}),
+	syntaxForm: fc.integer({min: 0, max: 2}),
 });
 const forms = (path: string, form: number) => {
 	const name = posix.basename(path);
@@ -35,6 +37,14 @@ const imports = (path: string, form: number, n: number) =>
 		`import  value${n}  from"${path}";`,
 		`import  "${path}?raw";`,
 		`import value${n} from '${path}';`,
+		`const value${n} = import("${path}");`,
+		`const value${n} = await import('${path}?raw');`,
+	][form]!;
+const syntax = (form: number, n: number) =>
+	[
+		"",
+		`const count${n}: number = ${n};`,
+		`interface Sample${n} { value: number }\nconst sample${n}: Sample${n} = { value: ${n} };`,
 	][form]!;
 const fixtures = (statement: string, form: number) =>
 	[
@@ -48,7 +58,7 @@ const fixtures = (statement: string, form: number) =>
 it("reports exactly undeclared direct and transitive script reads", () => {
 	for (const addFixtures of [false, true])
 		fc.assert(
-			fc.property(model, ({skills, tests, form, importForm, fixtureForm}) => {
+			fc.property(model, ({skills, tests, form, importForm, fixtureForm, syntaxForm}) => {
 				const files = skills.flatMap((scripts, s) =>
 					scripts.map((edges, i) => ({
 						path: `.agents/skills/s${s}/scripts/s${s}file${i}.sh`,
@@ -66,8 +76,10 @@ it("reports exactly undeclared direct and transitive script reads", () => {
 				tests.forEach((test, i) => {
 					const path = `.agents/skills/s0/scripts/check${i}.test.ts`;
 					const roots = [...new Set(test.refs.map((n) => n % files.length))];
-					// Declarations name a subset of those same roots: at most three names per file.
-					const declared = new Set(roots.filter((_, n) => test.declared[n]));
+					// Imports name a subset of those same roots: at most three names per file.
+					const imported = roots.filter((_, n) => test.declared[n]);
+					// Dynamic imports read scripts but do not declare them for the affected walk.
+					const declared = new Set(importForm < 5 ? imported : []);
 					const statement = (n: number) =>
 						imports(
 							posix.relative(posix.dirname(path), files[n]!.path).replace(/^(?!\.)/, "./"),
@@ -78,7 +90,8 @@ it("reports exactly undeclared direct and transitive script reads", () => {
 						path,
 						[
 							...test.refs.map((n) => `// ${forms(files[n % files.length]!.path, form)}`),
-							...[...declared].map(statement),
+							...imported.map(statement),
+							syntax(syntaxForm, i),
 							// A basename inside a longer word is not a script read.
 							...files.map((f) => `// prefix${posix.basename(f.path)}suffix`),
 							// Another test file's name is not a script read.
@@ -116,20 +129,4 @@ it("reports exactly undeclared direct and transitive script reads", () => {
 			}),
 			{seed: 119120, numRuns: 100},
 		);
-});
-
-// Mutation round 2: tests are parsed as TypeScript, and only static imports declare a read.
-it("parses TypeScript tests and counts only static imports as declarations", () => {
-	const script = ".agents/skills/s0/scripts/tool.mjs";
-	const test = ".agents/skills/s0/scripts/tool.test.ts";
-	const tree = (text: string) =>
-		new Map([
-			[script, ""],
-			[test, text],
-		]);
-	const typed = 'import "./tool.mjs";\nconst n: number = 1;\ninterface X { a: string }\n';
-	expect(scriptReads(tree(typed))).toEqual([]);
-	expect(scriptReads(tree('const m = await import("./tool.mjs");\n// tool.mjs'))).toEqual([
-		{test, path: script, via: test},
-	]);
 });
