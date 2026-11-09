@@ -983,15 +983,17 @@ describe("T321 K2 box start, today's tooling", () => {
 		);
 	});
 
-	// Plant: accept any parent head, any role or any signer, rather than a verified build link.
-	it("K2 accepts only origin/main or a verified parent build head and records checked facts", () => {
+	// Plant: accept any parent head, any role or any signer, rather than a verified build or lead link.
+	// layers and themes, 2026-11-09: a signed lead commit (a merge of main, a lockfile) was refused.
+	it("K2 accepts only origin/main or a verified parent build or lead head and records checked facts", () => {
 		fc.assert(
 			fc.property(word, (text) => {
-				each(["main", "build", "unsigned", "tests", "forged"], (kind) =>
+				each(["main", "build", "lead", "unsigned", "tests", "forged"], (kind) =>
 					fixture((b) => {
 						b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/parent");
 						const parent = b.commit(b.main, "src/b.ts", `${text}\n`);
-						if (kind === "build" || kind === "tests") b.sign(b.main, kind, "300");
+						if (kind === "build" || kind === "tests" || kind === "lead")
+							b.sign(b.main, kind, "300");
 						if (kind === "forged")
 							b.git(
 								b.main,
@@ -1005,7 +1007,7 @@ describe("T321 K2 box start, today's tooling", () => {
 						b.git(b.main, "checkout", "-q", "main");
 						const got = b.new(kind === "main" ? "origin/main" : parent);
 						expect(got.code).not.toBeNull();
-						if (kind === "main" || kind === "build") {
+						if (kind === "main" || kind === "build" || kind === "lead") {
 							expect(got.code, got.text).toBe(0);
 							expect(
 								existsSync(join(b.boxes, "state/new.box")),
@@ -1015,7 +1017,7 @@ describe("T321 K2 box start, today's tooling", () => {
 							expect(state).toContain(`base: ${kind === "main" ? b.base : parent}`);
 							expect(state).toContain(`plan-sha256: ${hash(body())}`);
 							expect(state).toContain("ticket: 321");
-							if (kind === "build") expect(state).toContain(`fabrikalfa/parent@${parent}`);
+							if (kind !== "main") expect(state).toContain(`fabrikalfa/parent@${parent}`);
 						} else refused(got, /base_not_signed|base|build/);
 					}),
 				);

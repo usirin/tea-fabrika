@@ -399,8 +399,10 @@ def new_box():
     # A lane that starts one box per step continues its own branch: that head is a valid base too.
     own = any(git("rev-parse", "-q", "--verify", r + "^{commit}").stdout.decode().strip() == head for r in ("refs/heads/" + branch, "refs/remotes/origin/" + branch))
     if head != rev("origin/main") and not own:
-        if not verified(head, "build"): refuse("base_not_signed: verified build head required")
-        branches = must(git("for-each-ref", "--format=%(refname:short)", "--points-at=" + head, "refs/heads/fabrikalfa/"), "parent lookup failed").splitlines()
+        # A lead commit (a merge of main, a lockfile commit) is signed and checked like a step's, so
+        # it is a base too (layers and themes, 2026-11-09: a lead commit left both lanes stuck).
+        if not (verified(head, "build") or verified(head, "lead")): refuse("base_not_signed: verified build or lead head required")
+        branches = must(git("for-each-ref", "--format=%(refname:short)", "--points-at=" + head, "refs/heads/fabrikalfa/", "refs/remotes/origin/fabrikalfa/"), "parent lookup failed").splitlines()
         if not branches: refuse("base_not_signed: no parent branch at head")
         parent = branches[0] + "@" + head
     # Two live lanes must not write one ticket. A branch that shares the ticket blocks only while it

@@ -56,7 +56,7 @@ import {run} from "@demlik/tea/effect";
 import {act, gather, intentOf, listen} from "@kampus/pipeline/primitives";
 import {nameOf, outcomesOf} from "@kampus/pipeline/stages/outcome";
 import {Effect, Schema, Stream} from "effect";
-import {checkHolds, stepOf, wipOf} from "./lane.ts";
+import {checkHolds, startHead, stepOf, wipOf} from "./lane.ts";
 
 const HERE = import.meta.dirname;
 const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
@@ -1121,21 +1121,24 @@ const main = () => {
 		console.error("drive.ts: a plan reads the main checkout; it takes no --from");
 		process.exit(2);
 	}
-	// With no --from, a lane whose branch is on origin continues from that tip, unless the saved
-	// head has moved past it (a step accepted but not yet pushed). A box started at main on a
+	// With no --from, a lane whose branch or -wip backup is on origin continues from the newest
+	// tip, unless the saved head has moved past it (`startHead`). A box started at main on a
 	// branch that has work drops that work (2026-11-09), so a saved head off the branch loses.
-	const pushed = sh("git", [
-		"-C",
-		env.MAIN,
-		"rev-parse",
-		"-q",
-		"--verify",
-		`refs/remotes/origin/${branch}^{commit}`,
-	]).out.trim();
+	const pushed = [branch, wipOf(branch)]
+		.map((ref) =>
+			sh("git", [
+				"-C",
+				env.MAIN,
+				"rev-parse",
+				"-q",
+				"--verify",
+				`refs/remotes/origin/${ref}^{commit}`,
+			]).out.trim(),
+		)
+		.filter(Boolean);
 	const isAncestor = (a: string, b: string) =>
 		sh("git", ["-C", env.MAIN, "merge-base", "--is-ancestor", a, b]).code === 0;
-	const lastHead =
-		pushed && !(saved?.head && isAncestor(pushed, saved.head)) ? pushed : saved?.head;
+	const lastHead = startHead(pushed, saved?.head, isAncestor);
 	const from = step === "plan" ? "HEAD" : (flag(args, "--from") ?? lastHead ?? "origin/main");
 	const base = sh("git", [
 		"-C",
