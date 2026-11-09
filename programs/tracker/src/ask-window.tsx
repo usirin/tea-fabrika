@@ -9,7 +9,7 @@ import {
 	type AskCommand,
 	type Shows,
 } from "@kampus/pipeline/tickets/ask";
-import {Alert, Button, Collapsible, Kbd, Textarea, Toggle} from "@manti-ui/react";
+import {Button, Kbd, Textarea} from "@manti-ui/react";
 import {Effect, Fiber, Layer, ManagedRuntime, Schema} from "effect";
 import {
 	createContext,
@@ -290,6 +290,31 @@ const machine = defineMachine({
 /** The shared ask editor. Its `init` keeps its own type, so a caller reads the first model as it is. */
 export const askMachine = {...machine, init};
 
+/** A pick as a person reads it: the first letter up. Pure. */
+const said = (pick: string) => pick.slice(0, 1).toUpperCase() + pick.slice(1);
+
+/** The rec line's three parts, so the pick can stand out; joined, they are the view's `line`. */
+type RecLine = {lead: string; pick?: string; rest?: string};
+/**
+ * The rec line (design E, owner, 2026-11-08): "Recommended Approve · 95% sure", said once. A
+ * blind or no-rec ask never says Recommended: it says what stands where the rec would. Pure.
+ */
+const recLineOf = (rec: Shows["rec"]): RecLine =>
+	rec._tag === "pick"
+		? {
+				lead: "Recommended",
+				pick: said(rec.pick),
+				rest: rec.sure === null ? "· sureness unknown" : `· ${rec.sure}% sure`,
+			}
+		: rec._tag === "hidden"
+			? {lead: "Your pick first: the rec shows once you answer"}
+			: {lead: rec.why};
+const lineWords = (line: RecLine) =>
+	[line.lead, line.pick, line.rest].filter((w) => w !== undefined).join(" ");
+
+/** Every pick's row: what it is and what it does, in the ask's order. */
+type PickRow = {pick: string; does: string};
+
 export type AskView = {
 	key: string;
 	ticket: number;
@@ -299,6 +324,12 @@ export type AskView = {
 	needed?: boolean;
 	failure: string | null;
 	busy: boolean;
+	/** "Did this need you?" is offered: before a pick and with one, until the answer is saved. */
+	marks: boolean;
+	/** The rec line's words, "Recommended Approve · 95% sure"; a blind or no-rec ask's say no Recommended. */
+	line: string;
+	/** Every pick's row, only while every pick is open. */
+	rows?: readonly PickRow[];
 	/** The note editor's words, each naming the pick it sends; only while a note is open or saving. */
 	note?: {label: string; send: string};
 };
@@ -329,7 +360,12 @@ export const askView = (input: {
 		editor,
 		busy: editor._tag === "saving",
 		failure: input.failure,
+		marks: true,
+		line: lineWords(recLineOf(ask.shows.rec)),
 		...(input.needed === undefined ? {} : {needed: input.needed}),
+		...(editor._tag === "picks"
+			? {rows: ask.shows.picks.map((p) => ({pick: p.pick, does: p.does}))}
+			: {}),
 		...(draft._tag === "note" ? {note: noteWords(draft.pick, ask.shows.rec._tag === "pick")} : {}),
 	};
 };
@@ -527,7 +563,29 @@ const MARKS = [
 	[false, "Agent could work it out"],
 ] as const;
 
-export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: AskShown}) {
+/**
+ * Where the shared view is drawn. In the asks menu the row already says the question and holds
+ * Later, so the view draws neither.
+ */
+export type AskPlace = "ticket" | "tracker" | "menu";
+
+/** A failed save in a person's words: what happened, and that nothing is lost. Never the store's. */
+const failureWords = (why: string): string =>
+	/locked|busy|SQLITE/i.test(why)
+		? "The ledger was busy, so nothing was saved. Your answer is kept."
+		: /disconnect|host/i.test(why)
+			? "fabrika's host is not connected, so nothing was saved. Your answer is kept."
+			: "Nothing was saved. Your answer is kept.";
+
+export function AskView({
+	ticket,
+	ask,
+	place = "ticket",
+}: {
+	readonly ticket: number;
+	readonly ask: AskShown;
+	readonly place?: AskPlace;
+}) {
 	const actions = useContext(AskActions);
 	const says = useContext(Says);
 	const root = useRef<HTMLElement>(null);
@@ -646,9 +704,23 @@ export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: A
 	// Answered: the view goes, so the next ask, or the turn card, takes its place at once.
 	if (model.status !== undefined) return null;
 	const rec = view.shows.rec;
+	const line = recLineOf(rec);
+	const noting = view.note !== undefined;
 	const tools = (Object.keys(ASK_COMMANDS) as AskCommand["_tag"][]).filter(
-		(name) => rec._tag === "pick" || name === "picks" || name === "later",
+		(name) =>
+			(rec._tag === "pick" || name === "picks" || name === "later") &&
+			!(place === "menu" && name === "later"),
 	);
+	const evidenceId = `ask-evidence-${view.key.replace("/", "-")}`;
+	const keysOf = (name: AskCommand["_tag"]) => actions?.keys[name] ?? [ASK_COMMANDS[name].keys];
+	const retry = () =>
+		model.editor._tag === "note"
+			? send({type: "submit", key: "click", now: Date.now()})
+			: command("rec");
+	const cancel = () => {
+		send({type: "escape"});
+		root.current?.focus();
+	};
 	return (
 		<section
 			ref={root}
@@ -657,6 +729,7 @@ export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: A
 			tabIndex={-1}
 			aria-busy={view.busy}
 			data-ask-editor={view.editor._tag}
+			data-ask-place={place}
 			onKeyDown={onKey}
 			onFocus={() => send({type: "focus", value: true, now: Date.now()})}
 			onBlur={(e) => {
@@ -664,19 +737,10 @@ export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: A
 					send({type: "focus", value: false, now: Date.now()});
 			}}
 		>
-			<div className="ask-head">
-				<p className="ask-question">{view.shows.what}</p>
-				{rec._tag === "pick" ? (
-					<p className="ask-rec">
-						{rec.pick}: {rec.why}
-						<br />
-						{rec.cost} · {rec.sure === null ? "confidence unknown" : `${rec.sure}% confidence`}
-					</p>
-				) : (
-					<p className="ask-rec">
-						{rec._tag === "none"
-							? rec.why
-							: "Pick first. The recommendation is hidden for this ask."}
+			<div className="ask-line">
+				{place !== "menu" && (
+					<p className="ask-question">
+						<span className="ask-turn">Your turn</span> <span>{view.shows.what}</span>
 					</p>
 				)}
 				{/* Focusable by code only (-1): Tab reaches its one roving button, never the toolbar itself. */}
@@ -712,60 +776,96 @@ export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: A
 					}}
 				>
 					{tools.map((name, i) => {
-						const keys = actions?.keys[name] ?? [ASK_COMMANDS[name].keys];
+						const keys = keysOf(name);
+						// One indigo at a time: while a note is open, its Send is the one.
+						const primary = name === "rec" && !noting;
 						return (
 							<Button
 								key={name}
 								size="sm"
-								variant={name === "rec" ? "primary" : "tertiary"}
+								variant={primary ? "primary" : "outline"}
 								tabIndex={i === 0 ? 0 : -1}
 								disabled={view.busy}
 								aria-keyshortcuts={keys.length === 0 ? undefined : keys.join(" ")}
 								onClick={() => command(name)}
 							>
 								{ASK_COMMANDS[name].label}
-								{keys.length > 0 && <Kbd>{keys.join(" / ")}</Kbd>}
+								{keys.length > 0 && <Kbd size="sm">{keys.join(" / ")}</Kbd>}
 							</Button>
 						);
 					})}
 				</div>
-				<div className="ask-marks" role="group" aria-label="Did this need you?">
-					{MARKS.map(([needed, label]) => (
-						<Toggle
-							key={String(needed)}
-							variant="secondary"
-							pressed={view.needed === needed}
-							disabled={view.busy}
-							onPressedChange={() => send({type: "mark", needed})}
-						>
-							{(pressed: boolean) => (
-								<>
-									{pressed && ON}
-									{label}
-								</>
-							)}
-						</Toggle>
-					))}
-				</div>
-				{view.busy && <p className="ask-quiet">Saving answer…</p>}
-				{view.failure !== null && (
-					<Alert variant="danger" title="Not saved" icon={FAILED}>
-						{view.failure}
-					</Alert>
-				)}
 			</div>
-			{view.editor._tag === "picks" && (
-				<div className="ask-picks">
-					{view.shows.picks.map((p, i) => (
+			<div className="ask-rec">
+				<p className="ask-recwords">
+					{/* A space before the words, so the text a reader copies or reads keeps them apart. */}{" "}
+					<span className="ask-quiet">{line.lead}</span>
+					{line.pick !== undefined && (
+						<>
+							{" "}
+							<strong>{line.pick}</strong>
+						</>
+					)}
+					{line.rest !== undefined && (
+						<>
+							{" "}
+							<span className="ask-quiet">{line.rest}</span>
+						</>
+					)}
+				</p>
+				<div className="ask-marks" role="group" aria-label="Did this need you?">
+					<span className="ask-quiet" aria-hidden="true">
+						Did this need you?
+					</span>
+					{MARKS.map(([needed, label]) => {
+						const pressed = view.needed === needed;
+						return (
+							<Button
+								key={String(needed)}
+								size="sm"
+								variant="tertiary"
+								aria-pressed={pressed}
+								disabled={view.busy}
+								onClick={() => send({type: "mark", needed})}
+							>
+								{pressed && ON}
+								{label}
+							</Button>
+						);
+					})}
+				</div>
+			</div>
+			<div className="ask-why">
+				{rec._tag === "pick" && (
+					<p className="ask-quiet">
+						{rec.why} · {rec.cost}
+					</p>
+				)}
+				<Button
+					size="sm"
+					variant="tertiary"
+					aria-expanded={model.evidence ?? false}
+					aria-controls={evidenceId}
+					aria-keyshortcuts="Space"
+					onClick={() => send({type: "open", name: "evidence", now: Date.now()})}
+				>
+					{model.evidence === true ? "Hide evidence" : "Evidence"}
+					<Kbd size="sm">Space</Kbd>
+				</Button>
+			</div>
+			{view.rows !== undefined && (
+				<div className="ask-picks" role="group" aria-label="Every pick">
+					{view.rows.map((p, i) => (
 						<Button
 							key={p.pick}
+							size="sm"
 							variant="tertiary"
+							disabled={view.busy}
+							aria-keyshortcuts={String(i + 1)}
 							onClick={() => send({type: "pick", pick: p.pick, now: Date.now()})}
 						>
-							<Kbd>{i + 1}</Kbd>
-							<span>
-								{p.pick}: {p.does}
-							</span>
+							<Kbd size="sm">{i + 1}</Kbd> <strong>{said(p.pick)}</strong>{" "}
+							<span className="ask-quiet">{p.does}</span>
 						</Button>
 					))}
 				</div>
@@ -783,6 +883,11 @@ export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: A
 						label={view.note.label}
 						aria-required={rec._tag === "pick"}
 						requiredIndicator={null}
+						hint={
+							rec._tag === "pick"
+								? "Needed: one line the next step reads."
+								: "Optional: one line the next step reads."
+						}
 						maxLength={120}
 						rows={2}
 						resize="none"
@@ -804,23 +909,48 @@ export function AskView({ticket, ask}: {readonly ticket: number; readonly ask: A
 							}
 						}}
 					/>
-					<Button type="submit" size="sm" variant="secondary" disabled={view.busy}>
-						{view.note.send}
-					</Button>
+					<div className="ask-row">
+						<Button
+							type="submit"
+							size="sm"
+							variant="primary"
+							disabled={view.busy}
+							aria-keyshortcuts="Enter"
+						>
+							{view.note.send}
+							<Kbd size="sm">↵</Kbd>
+						</Button>
+						<Button
+							size="sm"
+							variant="outline"
+							disabled={view.busy}
+							aria-keyshortcuts="Escape"
+							onClick={cancel}
+						>
+							Cancel
+							<Kbd size="sm">Esc</Kbd>
+						</Button>
+					</div>
 				</form>
 			)}
-			<Collapsible
-				trigger="Evidence"
-				open={model.evidence ?? false}
-				onOpenChange={() => send({type: "open", name: "evidence", now: Date.now()})}
-			>
-				<div className="ask-evidence">
-					<p className="ask-evidence-label">The ticket</p>
-					<p>{view.shows.ticket.title}</p>
-					{view.shows.ticket.body !== "" && <p>{view.shows.ticket.body}</p>}
-					<EvidenceText shows={view.shows} />
+			{view.busy && <p className="ask-quiet">Saving your answer…</p>}
+			{view.failure !== null && !view.busy && (
+				<div className="ask-fail" role="alert">
+					{FAILED}
+					<p>
+						<strong>Not saved.</strong> {failureWords(view.failure)}
+					</p>
+					<Button size="sm" variant="outline" onClick={retry}>
+						Try again
+					</Button>
 				</div>
-			</Collapsible>
+			)}
+			<div className="ask-evidence" id={evidenceId} hidden={model.evidence !== true}>
+				<p className="ask-evidence-label">The ticket</p>
+				<p>{view.shows.ticket.title}</p>
+				{view.shows.ticket.body !== "" && <p>{view.shows.ticket.body}</p>}
+				<EvidenceText shows={view.shows} />
+			</div>
 		</section>
 	);
 }

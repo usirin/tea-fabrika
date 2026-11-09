@@ -949,7 +949,7 @@ function AskBox(props: {readonly number: number; readonly ask: OpenAsk}) {
 	return ask.sealed === undefined ? (
 		<StopView ticket={number} why="State not recorded" />
 	) : (
-		<AskView ticket={number} ask={ask.sealed} />
+		<AskView ticket={number} ask={ask.sealed} place="tracker" />
 	);
 }
 

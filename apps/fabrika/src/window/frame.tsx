@@ -1,6 +1,6 @@
 import {runIn} from "@demlik/tea/effect";
 import {useMachine} from "@demlik/tea/react";
-import {Button, Dialog} from "@manti-ui/react";
+import {Button, Dialog, Kbd} from "@manti-ui/react";
 import {AskStatus, AskView} from "@tea-fabrika/tracker/ask-window";
 import {Layer, ManagedRuntime} from "effect";
 import {
@@ -565,7 +565,7 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 									{row.key === active?.key && (
 										<>
 											{row.kind === "ask" && row.sealed !== undefined && (
-												<AskView key={row.key} ticket={row.ticket} ask={row.sealed} />
+												<AskView key={row.key} ticket={row.ticket} ask={row.sealed} place="menu" />
 											)}
 											{row.kind === "stuck" && (
 												<p>
@@ -573,12 +573,16 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 													{row.resume ?? "the saved step"}
 												</p>
 											)}
-											<Button variant="tertiary" onClick={() => open({id: row.key})}>
-												{row.kind === "stuck" ? "Open lane" : "Open ticket"}
-											</Button>
-											<Button variant="tertiary" onClick={() => aside({id: row.key})}>
-												{asks.later.some((a) => a.key === row.key) ? "Bring back" : "Later"}
-											</Button>
+											<div className="asks-acts">
+												<Button size="sm" variant="outline" onClick={() => open({id: row.key})}>
+													{row.kind === "stuck" ? "Open lane" : "Open ticket"}
+													<Kbd size="sm">↵</Kbd>
+												</Button>
+												<Button size="sm" variant="outline" onClick={() => aside({id: row.key})}>
+													{asks.later.some((a) => a.key === row.key) ? "Bring back" : "Later"}
+													<Kbd size="sm">h</Kbd>
+												</Button>
+											</div>
 										</>
 									)}
 								</div>

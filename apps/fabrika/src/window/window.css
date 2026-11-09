@@ -2813,23 +2813,39 @@ main.program:has(> .view) {
 	box-shadow: none;
 }
 
+/* Design E (owner, 2026-11-08): the ask is one quiet bar under the ticket's title, where the card
+   sat. No box and no fill: only a hairline under it. It scrolls with the ticket, and what opens
+   under it (every pick, the note, a failed save) stays in normal flow. */
 .ask-view {
 	display: grid;
 	gap: var(--s-2);
 	min-inline-size: 0;
-	padding: var(--s-3);
+	position: relative;
+	padding: var(--s-2) 0 var(--s-3);
 	border: 0;
 	border-radius: var(--r-lg);
-	background: var(--surface-card);
+	background: transparent;
 	color: var(--text-primary);
 	font: var(--fs-body) / 1.5 var(--font);
 }
 
-/* Focused, the card keeps its own corners and a thin ring: `.view :focus-visible` draws a control's. */
+/* The one hairline under the bar: square at both ends, so it never reads as a card's bottom. */
+.ask-view::after {
+	position: absolute;
+	inset-inline: 0;
+	inset-block-end: 0;
+	block-size: 1px;
+	background: var(--border-faint);
+	content: "";
+}
+
+/* Focused, the hairline turns the focus gray, still 1px: the bar never becomes a box. */
 .ask-view:focus-visible {
 	border-radius: var(--r-lg);
-	outline-width: 1px;
-	outline-offset: 0;
+	outline: none;
+}
+.ask-view:focus-visible::after {
+	background: var(--focus);
 }
 
 .ask-view p {
@@ -2837,25 +2853,64 @@ main.program:has(> .view) {
 	overflow-wrap: anywhere;
 }
 
-/* What it asks, the rec, the answers and a failed save: they stay in view while the evidence scrolls. */
-.ask-head {
-	position: sticky;
-	inset-block-start: 0;
-	z-index: 1;
-	display: grid;
-	gap: var(--s-2);
-	padding-block-end: var(--s-1);
-	background: var(--surface-card);
+/* Line one: whose turn and the question, then the four actions; they wrap under it when narrow. */
+.ask-line {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-2) var(--s-4);
 }
 .ask-question {
+	display: flex;
+	flex: 1 1 240px;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0 var(--s-2);
+	min-inline-size: 0;
 	font-weight: 600;
 }
-.ask-rec,
+/* The turn says so in words; its indigo only repeats them (WCAG 1.4.1). */
+.ask-turn {
+	color: var(--turn-text);
+}
+
+/* Line two: the rec line, then the optional mark, quiet, at its end. */
+.ask-rec {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--s-1) var(--s-3);
+	font-size: var(--fs-small);
+}
+.ask-recwords {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0 var(--s-1);
+	min-inline-size: 0;
+}
+.ask-recwords strong {
+	font-weight: 600;
+}
 .ask-quiet {
 	color: var(--text-faint);
 }
+/* Line three: the rec's reason, and the evidence's one quiet button at its end. */
+.ask-why {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-1) var(--s-3);
+	font-size: var(--fs-small);
+}
+.ask-why > p {
+	flex: 1 1 200px;
+}
 .ask-toolbar,
-.ask-marks {
+.ask-marks,
+.ask-row {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
@@ -2865,6 +2920,20 @@ main.program:has(> .view) {
 	white-space: normal;
 }
 
+/* The key on the one indigo button reads in the button's own text color, on no fill of its own. */
+.ask-view [data-variant="primary"] [data-scope="kbd"] {
+	border-color: currentcolor;
+	color: inherit;
+}
+
+/* The marks are quiet: small words, and a pressed one takes the selected fill and its check. */
+.ask-marks [data-scope="button"] {
+	color: var(--text-faint);
+}
+.ask-marks [aria-pressed="true"] {
+	background: var(--surface-selected);
+	color: var(--text-primary);
+}
 /* A pressed mark says so with a check beside its words, not only with its fill. */
 .ask-on {
 	inline-size: 10px;
@@ -2872,23 +2941,25 @@ main.program:has(> .view) {
 	margin-inline-end: var(--s-1);
 }
 
-/* Every pick, one under another, each starting at the same edge: its number, then its words. */
+/* Every pick, a list under the bar: rows with no edge of their own, each number at the same edge. */
 .ask-picks {
 	display: grid;
-	gap: var(--s-1);
+	gap: 2px;
 }
 .ask-picks [data-scope="button"] {
 	justify-content: flex-start;
 	inline-size: 100%;
+	block-size: auto;
+	min-block-size: 28px;
+	gap: var(--s-2);
 	text-align: start;
+}
+.ask-picks .ask-quiet {
+	font-weight: 400;
 }
 .ask-view form {
 	display: grid;
-	justify-items: start;
 	gap: var(--s-2);
-}
-.ask-view form > :first-child {
-	inline-size: 100%;
 }
 
 /* Manti's field draws the note's one box and its focus: the textarea inside draws neither. */
@@ -2896,10 +2967,26 @@ main.program:has(> .view) {
 	outline: none;
 }
 
+/* A failed save is a line under the bar, not a red box: its mark, its words, Try again. */
+.ask-fail {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--s-2);
+	color: var(--stuck);
+}
+.ask-fail p {
+	flex: 1 1 200px;
+}
+
 /* What the ask stands on, as words: labels, short lists, the step's own words, then the diff. */
 .ask-evidence {
 	display: grid;
 	gap: var(--s-1);
+}
+/* Closed, the evidence stays in the markup and out of sight: `hidden` beats the grid above. */
+.ask-evidence[hidden] {
+	display: none;
 }
 .ask-evidence ul {
 	margin: 0;
@@ -2939,13 +3026,14 @@ main.program:has(> .view) {
 .asks-row[aria-selected="true"] {
 	background: var(--surface-hover);
 }
-.asks-row .ask-view,
-.asks-row .ask-head {
-	padding-inline: 0;
-	background: transparent;
+/* In the menu the row draws the edge: the view adds no hairline of its own. */
+.asks-row .ask-view::after {
+	content: none;
 }
-.asks-row .ask-head {
-	position: static;
+.asks-row .asks-acts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--s-1);
 }
 
 /* A row's question lines up with the words under it: a button by role, plain text by look. */
