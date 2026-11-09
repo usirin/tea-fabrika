@@ -121,6 +121,8 @@ visible, and never weaken the rules to hide this message.
    one `field/runs.jsonl` row (`fieldrow.py` for Codex, `clauderow.py` for a Claude agent, a
    driver included, once it has finished), and one `field/notes.jsonl` note for anything that
    broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file.
+   Each correction the owner makes, and each slip of the lead's own, gets a note too, with the code
+   that would have caught it. Running the steps by hand is how `next/`'s pipeline learns.
 7. **Run what the box cannot,** yourself: Electron e2e and screenshots. One Electron app at a time,
    each run with its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`. Look at every shot.
 8. **Push** with `botpush.mjs` and open the pull request. Its body says which parts were this repo's
@@ -136,7 +138,23 @@ visible, and never weaken the rules to hide this message.
    Catch-up merges main in and keeps the child's tests. It never signs a step's commit: an
    unsigned one goes back to its own step.
 10. **After the merge:** comment the pull request's URL on its ticket and close it, write the
-    `MergeRow`, then `git pull --ff-only origin main` and `pnpm install` in the main checkout.
+    `MergeRow`, then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the
+    main checkout, plus any build the app needs to start. The owner runs the app from there and
+    never pulls or installs first. If the pull refuses, because of local edits or another branch,
+    leave them and tell the owner in one line.
+
+## Tickets and tracker posts
+
+Every ticket for this repo goes in the app's own tracker, through its `tracker_file`,
+`tracker_comment` and `tracker_close` tools. Never open a GitHub issue on this repo. GitHub issues
+are for other people's repos only.
+
+- Every lane gets a ticket before its agent starts. File one if it is missing.
+- Each brief names the ticket and a short writer name, such as `door-fix`.
+- The agent posts when a real step starts, on a finding that matters, when blocked, when a pull
+  request opens or is pushed, and when done. Not after every command.
+- A post is 2 to 5 plain lines with full pull request URLs. No security holes, secrets or personal
+  names: the tracker will be shared.
 
 ## Same-day decisions
 
