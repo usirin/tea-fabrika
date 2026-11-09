@@ -358,7 +358,7 @@ export const noticeCell = (notice: Noticed, writer: string) =>
 const PAGE = 500;
 
 /** Every ticket's row after `after`, read in pages. A row that does not read is left out. */
-const loadCell = (cmd: ReturnType<typeof load>) =>
+export const loadCell = (cmd: ReturnType<typeof load>) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
 		const entries: Entry[] = [];
