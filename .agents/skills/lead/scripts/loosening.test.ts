@@ -5,7 +5,7 @@ import {dirname, join} from "node:path";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 
-const script = join(import.meta.dirname, "loosening.sh");
+const script = process.env.T318_LOOSENING_SCRIPT ?? join(import.meta.dirname, "loosening.sh");
 const word = fc.stringMatching(/^[a-z]{2,12}$/);
 const input = fc.record({
 	name: word,
@@ -59,7 +59,16 @@ const compare = (
 		git("config", "user.email", "fixture@example.test");
 		expect(git("remote")).toBe("");
 		// Use the real exam classifier, with generated paths covered by the real list.
-		const rows = [{glob: "checks/**/*.test.ts"}, {glob: "checks/**/*.test.tsx"}];
+		const rows = [
+			{glob: "checks/**/*.test.ts"},
+			{glob: "checks/**/*.test.tsx"},
+			...[
+				"skillscheck.sh",
+				"exam-paths.json",
+				"vitest.config.ts",
+				".github/workflows/check.yml",
+			].map((glob) => ({glob})),
+		];
 		writeFileSync(join(dir, "exam-paths.json"), JSON.stringify(rows));
 		const write = (files: Record<string, string>) => {
 			for (const [path, content] of Object.entries(files)) {
@@ -265,14 +274,14 @@ describe("loosening, today's tooling", () => {
 		);
 	});
 
-	// Plant: conservatively flag even unchanged aliases, additions, mapped renames, or wider bounds.
-	it("T318 generated source forms accept additions mapped renames and wider settings", () => {
+	// Plants: reject additions or mapped renames; clear an edit to an old range.
+	it("T318 source forms accept additions and mapped renames but flag wider settings", () => {
 		fc.assert(
 			fc.property(input, form, range, (v, shape, r) => {
 				const before = call(v, shape, false);
 				const renamed = `${v.name}-new`;
 				for (const [after, mapping] of [
-					[before + call({...v, name: renamed}, {...shape, alias: "direct"}, false), undefined],
+					[before + source(v, undefined, "", renamed), undefined],
 					[before.replaceAll(" ", v.space), undefined],
 					[
 						call({...v, name: renamed}, shape, false),
@@ -285,7 +294,7 @@ describe("loosening, today's tooling", () => {
 				const start = r.bound;
 				const end = start + (r.key.startsWith("min") ? -v.delta : v.delta);
 				const wider = compare({[file]: ranged(v, r, start)}, {[file]: ranged(v, r, end)});
-				expect(wider.code, wider.text).toBe(0);
+				expect(wider.code, wider.text).toBe(1);
 			}),
 			{seed: 31835, numRuns: 12, endOnFailure: true},
 		);
@@ -391,7 +400,7 @@ describe("loosening, today's tooling", () => {
 	});
 
 	// Plants: flag all changed files or all renames; accept a missing replacement through any prose mention.
-	it("T318 pure additions wrapping wider ranges and mapped renames pass with exact exam counts", () => {
+	it("T318 additions wrapping and mapped renames pass but old body edits and file moves hit", () => {
 		let accepted = 0;
 		fc.assert(
 			fc.property(input, (v) => {
@@ -400,14 +409,6 @@ describe("loosening, today's tooling", () => {
 				for (const [after, map] of [
 					[before + source(v, undefined, "", renamed), undefined],
 					[before.replaceAll(" ", v.space), undefined],
-					[before.replace("fc.assert(", "fc.integer({min: 0, max: 1}); fc.assert("), undefined],
-					[
-						before
-							.replace(`min: ${-v.count}`, `min: ${-v.count - v.delta}`)
-							.replace(`max: ${v.count}`, `max: ${v.count + v.delta}`)
-							.replace(`numRuns: ${v.count}`, `numRuns: ${v.count + v.delta}`),
-						undefined,
-					],
 					[
 						source(v, undefined, "", renamed),
 						`Unrelated text\n\n| replacement | removed |\n| --- | --- |\n| \`${renamed}\` | \`${v.name}\` |\n`,
@@ -433,9 +434,15 @@ describe("loosening, today's tooling", () => {
 					{"checks/moved.test.tsx": source(v, undefined, "", renamed)},
 					`| removed | replacement |\n| --- | --- |\n| ${v.name} | ${renamed} |`,
 				);
-				expect(moved.code, moved.text).toBe(0);
-				expect(moved.text).toContain("0 hits in 2 exam files");
-				accepted++;
+				expect(moved.code, moved.text).toBe(1);
+				for (const after of [
+					before.replace("fc.assert(", "fc.integer({min: 0, max: 1}); fc.assert("),
+					before
+						.replace(`min: ${-v.count}`, `min: ${-v.count - v.delta}`)
+						.replace(`max: ${v.count}`, `max: ${v.count + v.delta}`)
+						.replace(`numRuns: ${v.count}`, `numRuns: ${v.count + v.delta}`),
+				])
+					expect(compare({[file]: before}, {[file]: after}).code).toBe(1);
 				const onlyProduct = compare({"product.ts": before}, {"product.ts": "it.only('ignored');"});
 				expect(onlyProduct.code).toBe(0);
 				expect(onlyProduct.text).toContain("0 hits in 0 exam files");
@@ -455,17 +462,284 @@ describe("loosening, today's tooling", () => {
 		);
 	});
 
-	// Plant: compare the matcher's expected value as though its expect call disappeared.
-	it("T318 updating a matcher argument keeps the existing expect", () => {
+	// Plant: ignore matcher arguments and silently clear a changed expected value.
+	it("T318 updating a matcher argument is an unrecognized change", () => {
 		fc.assert(
 			fc.property(input, (v) => {
 				const before = source(v),
 					after = before.replace(".toBe(value)", `.toBe(${v.count})`);
 				const got = compare({[file]: before}, {[file]: after});
-				expect(got.code, got.text).toBe(0);
-				expect(got.text.trim()).toBe("loosening: 0 hits in 1 exam files");
+				expect(got.code, got.text).toBe(1);
+				expect(got.text).toContain(`${file}: unrecognized change: line 1`);
 			}),
 			{seed: 3186, numRuns: 4},
+		);
+	});
+
+	// Plants: clear a token edit inside an old body or accept a mapped title with a changed body.
+	it("T318 fail closed on generated old body and old statement edits", () => {
+		fc.assert(
+			fc.property(input, (v) => {
+				const before = source(v);
+				for (const after of [
+					before.replace("toBe(value)", `toBe(${v.count})`),
+					before.replace("fc.assert(", "return; fc.assert("),
+					before.replace("fc.assert(", "if (false) fc.assert("),
+					before.replace("fc.integer(", "fc.nat("),
+					before.replace("expect(value)", "expect(value + 1)"),
+				]) {
+					const got = compare(
+						{[file]: `// ${v.extra}\n${before}`},
+						{[file]: `// ${v.extra}\n${after}`},
+					);
+					expect(got.code, got.text).toBe(1);
+					expect(got.text).toMatch(/unrecognized change: line \d+/);
+				}
+				const statement = `const size_${v.extra} = ${v.count};\n`;
+				expect(
+					compare(
+						{[file]: statement + before},
+						{[file]: statement.replace(`${v.count}`, `${v.count + v.delta}`) + before},
+					).code,
+				).toBe(1);
+				const renamed = `${v.name}-new`;
+				expect(
+					compare(
+						{[file]: before},
+						{[file]: source(v, `expect(value).toBe(${v.count});`, "", renamed)},
+						`| Removed | Replacement |\n| --- | --- |\n| ${v.name} | ${renamed} |`,
+					).code,
+				).toBe(1);
+			}),
+			{seed: 31840, numRuns: 4, endOnFailure: true},
+		);
+	});
+
+	// Plant: the old named-pattern-only parser clears these review2 misses. Each case runs alone.
+	it.each(["aliases", "conditions", "options", "removals", "assertions", "ranges"])(
+		"T318 review2 %s forms cannot clear a generated weaker law",
+		(kind) => {
+			fc.assert(
+				fc.property(input, (v) => {
+					const pairs: [string, string][] = [];
+					const body = `() => expect(value).toBe(${v.count})`;
+					const law = (target: string, options = "") =>
+						`${target}('${v.name}', ${options ? `${options}, ` : ""}${body});\n`;
+					if (kind === "aliases") {
+						for (const root of ["it", "test", "describe"])
+							for (const flag of [
+								"skip",
+								"todo",
+								"fails",
+								"only",
+								"skipIf(true)",
+								"runIf(false)",
+							]) {
+								const original = `const law_${v.extra} = ${root};\n${law(`law_${v.extra}`)}`;
+								pairs.push([original, original.replace(`= ${root};`, `= ${root}.${flag};`)]);
+							}
+					}
+					if (kind === "conditions") {
+						for (const root of ["it", "test", "describe", "suite"])
+							for (const flag of ["skipIf", "runIf"]) {
+								const off = flag === "skipIf" ? "false" : "true";
+								pairs.push([
+									law(`${root}.${flag}(${off})`),
+									law(`${root}.${flag}(${off === "true" ? "false" : "true"})`),
+								]);
+							}
+					}
+					if (kind === "options") {
+						for (const flag of ["skip", "todo", "only", "fails"])
+							for (const root of ["it", "describe"]) {
+								for (const declaration of [
+									`const settings: Options = {${flag}: false};`,
+									`const settings = {${flag}: false} as const;`,
+									`const settings = <Options>{${flag}: false};`,
+									`const settings = {['${flag}']: false};`,
+									`const muted = false; const settings = {${flag}: muted};`,
+									`const settings = {}; settings.${flag} = false;`,
+								]) {
+									const original = `${declaration}\n${law(root, "settings")}`;
+									pairs.push([original, original.replace("false", "true")]);
+								}
+							}
+					}
+					if (kind === "removals") {
+						for (const root of ["it", "test"])
+							for (const table of [
+								"",
+								`.each\`value | answer\n\${${v.count}} | \${${v.count}}\``,
+								`.for\`value | answer\n\${${v.count}} | \${${v.count}}\``,
+							]) {
+								const prelude = `const title = '${v.name}';\n`;
+								pairs.push([`${prelude}${root}${table}(title, () => check(value));\n`, prelude]);
+								if (table) pairs.push([`${root}${table}('${v.name}', () => check(value));\n`, ""]);
+							}
+					}
+					if (kind === "assertions") {
+						const original = `import {expect as check_${v.extra}} from 'vitest';\nit('${v.name}', () => { check_${v.extra}(value).toBe(${v.count}); });\n`;
+						pairs.push([
+							original,
+							original.replace(`check_${v.extra}(value).toBe(${v.count});`, ""),
+						]);
+					}
+					if (kind === "ranges") {
+						for (const [imports, target] of [
+							["import * as f from 'fast-check';", "f.integer"],
+							["import {integer} from 'fast-check';", "integer"],
+							["import {integer as numbers} from 'fast-check';", "numbers"],
+							["import fc from 'fast-check';", "fc.integer"],
+						]) {
+							for (const settings of [
+								`const settings: Bounds = {max: ${v.count}};`,
+								`const settings = {max: ${v.count}} as const;`,
+								`const settings = <Bounds>{max: ${v.count}};`,
+								`const settings = {['max']: ${v.count}};`,
+								`const size = ${v.count}; const settings = {max: size};`,
+								`const settings = {}; settings.max = ${v.count};`,
+							]) {
+								const original = `${imports}\n${settings}\nit('${v.name}', () => fc.assert(fc.property(${target}(settings), check)));`;
+								pairs.push([original, original.replace(`${v.count}`, `${v.count - v.delta}`)]);
+							}
+							const original = `${imports}\nconst values = ${target}({max: ${v.count}});\nit('${v.name}', () => fc.assert(fc.property(values, check)));`;
+							pairs.push([
+								original,
+								original
+									.replaceAll("values", `values_${v.extra}`)
+									.replace(`${v.count}`, `${v.count - v.delta}`),
+							]);
+						}
+					}
+					for (const [before, after] of pairs) {
+						const got = compare({[file]: before}, {[file]: after});
+						expect(got.code, `${kind}\n${before}\n${after}\n${got.text}`).toBe(1);
+					}
+				}),
+				{seed: 31841, numRuns: 2, endOnFailure: true},
+			);
+		},
+	);
+
+	// Plants: reject whole statements in a describe, or accept insertions inside old tests or consts.
+	it("T318 only whole new statements at file or describe level clear", () => {
+		fc.assert(
+			fc.property(input, (v) => {
+				const before = `const old_${v.extra} = [${v.count}];\ndescribe('group', () => {${source(v)}});\n`;
+				const added = source(v, undefined, "", `${v.name}-added`);
+				for (const addition of [
+					added,
+					`describe('${v.name}-group', () => {${added}});\n`,
+					`const helper_${v.extra} = (n) => n + ${v.count};\n`,
+					`import {helper_${v.extra}} from './helper';\n`,
+				]) {
+					for (const after of [
+						addition + before,
+						before + addition,
+						before.replace(source(v), addition + source(v)),
+					]) {
+						const got = compare({[file]: before}, {[file]: after});
+						expect(got.code, got.text).toBe(0);
+					}
+				}
+				for (const after of [
+					before.replace("fc.assert(", `${added}fc.assert(`),
+					before.replace(`[${v.count}]`, `[${v.count}, ${v.delta}]`),
+					`${before}const old_${v.extra} = ${v.count};\n`,
+					before.replace("describe(", `if (false) describe(`),
+				])
+					expect(compare({[file]: before}, {[file]: after}).code).toBe(1);
+				const wrapped = before
+					.replaceAll(" ", v.space)
+					.replace("fc.assert", `/* ${v.extra} */ fc.assert`);
+				expect(compare({[file]: before}, {[file]: wrapped}).code).toBe(0);
+				const destination = "checks/destination.test.ts";
+				const renamed = `${v.name}-new`;
+				const mapped = compare(
+					{[file]: source(v), [destination]: "// kept file\n"},
+					{[file]: "// kept file\n", [destination]: source(v, undefined, "", renamed)},
+					`| Removed | Replacement |\n| --- | --- |\n| ${v.name} | ${renamed} |`,
+				);
+				expect(mapped.code, mapped.text).toBe(0);
+			}),
+			{seed: 31842, numRuns: 3, endOnFailure: true},
+		);
+	});
+
+	// Plants: treat any addition as safe; ignore a deleted/renamed test or a non-test exam change.
+	it("T318 shared state additions and every non-additive exam file change hit", () => {
+		fc.assert(
+			fc.property(input, (v) => {
+				const before = source(v);
+				for (const added of [
+					`beforeEach(() => reset(${v.count}));`,
+					`afterEach(() => reset(${v.count}));`,
+					`beforeAll(() => reset(${v.count}));`,
+					`afterAll(() => reset(${v.count}));`,
+					`vi.mock('./${v.extra}');`,
+					`vi.stubGlobal('${v.extra}', ${v.count});`,
+					`vi.stubEnv('${v.extra}', '${v.count}');`,
+					`fc.configureGlobal({numRuns: ${v.count}});`,
+					`expect.extend({${v.extra}: () => ({pass: true})});`,
+					`process.env.${v.extra} = '${v.count}';`,
+					`import './${v.extra}';`,
+					`const helper_${v.extra} = vi.mock('./${v.extra}');`,
+					`test('${v.extra}', () => { vi.stubGlobal('${v.extra}', ${v.count}); });`,
+					`const helper_${v.extra} = () => { process.env.${v.extra} = '${v.count}'; };`,
+				])
+					for (const after of [before + added, `describe('group', () => {${before}${added}});`]) {
+						const base = after.startsWith("describe")
+							? `describe('group', () => {${before}});`
+							: before;
+						const got = compare({[file]: base}, {[file]: after});
+						expect(got.code, `${added}\n${got.text}`).toBe(1);
+					}
+				for (const path of [
+					"skillscheck.sh",
+					"exam-paths.json",
+					"vitest.config.ts",
+					".github/workflows/check.yml",
+				]) {
+					const content =
+						path === "exam-paths.json"
+							? JSON.stringify([{glob: "exam-paths.json"}])
+							: `# ${v.name}\n`;
+					expect(compare({[path]: content}, {[path]: `${content}\n`}).code).toBe(1);
+				}
+				for (const [original, after] of [
+					[{}, {[file]: before}],
+					[{[file]: before}, {}],
+					[{[file]: before}, {"checks/renamed.test.ts": before}],
+				] as const) {
+					const got = compare(original, after);
+					expect(got.code, got.text).toBe(Object.keys(original).length ? 1 : 0);
+				}
+			}),
+			{seed: 31843, numRuns: 2, endOnFailure: true},
+		);
+	});
+
+	// Plant: report every parser hit as an owner read, or turn bad refs into a clear diff.
+	it("T318 usage explains hand checks and operating errors exit two", () => {
+		fc.assert(
+			fc.property(word, (missing) => {
+				const usage = spawnSync("sh", [script], {encoding: "utf8", env});
+				expect(usage.status).toBe(2);
+				for (const phrase of [
+					"pattern parser cannot cover every form TypeScript can write",
+					"lead's hand check",
+					"hit list in the PR",
+					"Only real loosening waits on the owner",
+				])
+					expect(usage.stderr).toContain(phrase);
+				const invalid = spawnSync("sh", [script, `missing-${missing}`, "HEAD"], {
+					encoding: "utf8",
+					env,
+				});
+				expect(invalid.status).toBe(2);
+				expect(invalid.stdout).not.toContain("0 hits");
+			}),
+			{seed: 31844, numRuns: 3, endOnFailure: true},
 		);
 	});
 });

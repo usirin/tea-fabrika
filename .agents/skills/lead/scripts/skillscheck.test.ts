@@ -13,12 +13,12 @@ import {join, relative} from "node:path";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 
-const script = join(import.meta.dirname, "skillscheck.sh");
+const script = process.env.T318_SKILLSCHECK_SCRIPT ?? join(import.meta.dirname, "skillscheck.sh");
 // These fixtures are independent of the checker: deleting a checker clause must fail a law.
 const exam = [
 	"Every new or changed law is a property, or an example labeled vector, format, pinned or scenario with its reason.",
 	"Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no owner read is needed.",
-	"The lead records both outputs in the PR. Any hit waits on the owner.",
+	"The lead records both outputs in the PR. A hit goes to the lead's hand check, with the hit list in the PR. Only real loosening waits on the owner.",
 ];
 const check = [
 	"Sweep, do not sample. For each law in the plan's table, list every way in: each public call, each cut point, and each saved or binding state. Check each one.",
@@ -121,6 +121,41 @@ const states = ["relative", "absolute", "missing", "copy", "dangling", "wrong", 
 type State = (typeof states)[number];
 
 describe("skillscheck, today's tooling", () => {
+	// Plant: keep the old owner-read clause, omit the new clause, or find it outside its section.
+	it("T318 hit routing requires the lead hand check before a real loosening owner read", () => {
+		fc.assert(
+			fc.property(fc.constantFrom(" ", "\n  ", "\t"), (space) => {
+				const dir = mkdtempSync(join(tmpdir(), "hit-routing-"));
+				try {
+					tree(dir, space);
+					expect(run(dir).status).toBe(0);
+					for (const file of [".agents/skills/lead/SKILL.md", "AGENTS.md"]) {
+						for (const substitute of [
+							"The lead records both outputs in the PR. Any hit waits on the owner.",
+							"",
+						]) {
+							tree(dir, space);
+							const path = join(dir, file);
+							writeFileSync(
+								path,
+								`${readFileSync(path, "utf8").replace(
+									exam[2]!.split(" ").join(space),
+									substitute,
+								)}\n## Unrelated\n${exam[2]}\n`,
+							);
+							const got = run(dir);
+							expect(got.status, got.stderr).toBe(1);
+							expect(got.stderr).toContain(`${file}: missing`);
+						}
+					}
+				} finally {
+					rmSync(dir, {recursive: true, force: true});
+				}
+			}),
+			{seed: 31845, numRuns: 3, endOnFailure: true},
+		);
+	});
+
 	// Plants: accept an identical directory copy; accept a link to a different skill.
 	it("T300 generated source trees require links resolving to their own source", () => {
 		let clean = 0,
