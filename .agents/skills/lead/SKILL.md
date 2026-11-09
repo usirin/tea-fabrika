@@ -247,6 +247,7 @@ visible, and never weaken the rules to hide this message.
    Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no owner read is needed.
    The lead records both outputs in the PR. A hit goes to the lead's hand check, with the hit list
    in the PR. Only real loosening waits on the owner.
+   Then the lead merges, product code included; a new design call is the only other wait ([0014](../../../.decisions/0014-the-lead-merges-when-every-step-passed.md)).
    Apply the labels rule and both zero-hit checks together. These are proper property tests.
    Run `sh .agents/skills/lead/scripts/loosening.sh <base> <head> <mapping.md>` on the PR's exam
    diff. The PR writes a mapping table with `Removed` and `Replacement` columns for every renamed

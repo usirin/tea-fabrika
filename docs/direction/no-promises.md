@@ -29,7 +29,10 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
 
 ## Edges the owner has read
 
-Each new edge comment is read by the owner, one line at a time. The ones read so far:
+Each new edge comment is read by the lead at merge, one line at a time, and added here. A new kind
+of edge, one that is not a one-line call the platform demands, is a new design call and goes to the
+owner ([0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md)). *Changed
+2026-11-09 (owner): the owner read each new edge.* The ones read so far:
 
 | Where | The edge | Read |
 |---|---|---|
@@ -58,8 +61,8 @@ request moves them to `crypto`.
 - Effect's overhead on each step. Ticket 115 measures it against a bar on click
   time, and we do not know the answer yet.
 - A rule the lint can only partly check: an edge comment covers one line, however
-  long, so "one line that holds no logic" is checked by a reader, the owner, who reads
-  each new edge. *Changed 2026-11-06 (Tier 1, P35): it said the rule names files, not
+  long, so "one line that holds no logic" is checked by a reader, the lead, who reads
+  each new edge at merge (0014; it said the owner). *Changed 2026-11-06 (Tier 1, P35): it said the rule names files, not
   lines.*
 - `useMachine` and `useRuntime` in `@demlik/tea` expect Promise verbs, so the
   window may need its own small hook. *Updated 2026-11-01:* probes on tea's Effect
@@ -67,7 +70,8 @@ request moves them to `crypto`.
   [Tier 1's plan](../plan/tier-1.md) uses it. Nothing is built yet.
 
 **How sure: 95%** on the rule. The edge list is gone: an edge is a line with an edge comment,
-and the owner reads each new one (owner, 2026-11-05; Tier 1's P35 builds it). *It said: 80% on
+and the lead reads each new one (owner, 2026-11-05, and 2026-11-09 for the lead; Tier 1's P35
+builds it). *It said: 80% on
 the edge list, which ticket 115 sets.*
 
 ## What it cannot tell us
