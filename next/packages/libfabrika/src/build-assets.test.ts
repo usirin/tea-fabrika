@@ -43,9 +43,20 @@ const cssImports = fc.record({
 	),
 	escape: fc.constantFrom("literal", "simple", "hex"),
 	media: fc.constantFrom("", "print", "screen, print", "screen and (min-width: 40em), print"),
+	keyword: fc.constantFrom("import", "im\\70ort", "\\69mport", "\\000069mport"),
+	url: fc.constantFrom("url", "u\\72l", "\\75rl", "\\000075rl"),
+	continuation: fc.constantFrom("", "\n", "\r\n", "\r", "\f"),
 });
 // Generate the CSS spelling from a disk name. The expected content never decodes that spelling.
-const cssImport = (path: string, form: CssForm, escape: string, media: string) => {
+const cssImport = (
+	path: string,
+	form: CssForm,
+	escape: string,
+	media: string,
+	keyword: string,
+	url: string,
+	continuation: string,
+) => {
 	const quote = form.startsWith("single") ? "'" : form === "url" ? "" : '"';
 	const ref = [...path]
 		.map((char) => {
@@ -54,8 +65,8 @@ const cssImport = (path: string, form: CssForm, escape: string, media: string) =
 			return escape === "hex" ? `\\${char.codePointAt(0)!.toString(16)} ` : `\\${char}`;
 		})
 		.join("");
-	const target = `${quote}${ref}${quote}`;
-	return `@import ${form.endsWith("string") ? target : `url(${target})`}${media ? ` ${media}` : ""};`;
+	const target = `${quote}${quote && continuation ? `\\${continuation}` : ""}${ref}${quote}`;
+	return `@${keyword} ${form.endsWith("string") ? target : `${url}(${target})`}${media ? ` ${media}` : ""};`;
 };
 const homes: string[] = [];
 type Options = {
@@ -276,11 +287,11 @@ describe("P16 assets and Compiler", () => {
 						tokens = `../tokens${id}.css`;
 					writeFileSync(
 						join(pkg, "window.css"),
-						`${cssImport(theme, form, css.escape, css.media)} b { color: red; }`,
+						`${cssImport(theme, form, css.escape, css.media, css.keyword, css.url, css.continuation)} b { color: red; }`,
 					);
 					writeFileSync(
 						join(pkg, nested, file),
-						`${cssImport(tokens, form, css.escape, "")} b { --theme: ${id}; }`,
+						`${cssImport(tokens, form, css.escape, "", css.keyword, css.url, css.continuation)} b { --theme: ${id}; }`,
 					);
 					writeFileSync(join(pkg, `tokens${id}.css`), `b { --tokens: ${id}; }`);
 					const built = await run(f.options);
@@ -328,7 +339,14 @@ describe("P16 assets and Compiler", () => {
 					examples: [
 						[
 							{name: "View", value: "css", id: 1},
-							{name: "theme colors", escape: "literal", media: "screen, print"},
+							{
+								name: "theme colors",
+								escape: "literal",
+								media: "screen, print",
+								keyword: "import",
+								url: "url",
+								continuation: "",
+							},
 						],
 					],
 					endOnFailure: true,

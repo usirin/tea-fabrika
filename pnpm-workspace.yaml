@@ -65,6 +65,8 @@ catalog:
   oxc-parser: 0.157.0
   oxc-transform-react: 0.157.0
   rolldown: 1.2.13
+  # P16 bundles window CSS with its imports. Reuse the version already in the lockfile.
+  lightningcss: 1.33.0
   # Held on the SDK's 2.x line: OpenTelemetry 3 needs api 1.10, and @effect/opentelemetry 4.1.1 asks for
   # resources below 3. On that line sdk-trace-base 2.12.0 asks for api below 1.10, so api stays 1.9.1.
   '@opentelemetry/api': 1.9.1

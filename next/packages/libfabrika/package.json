@@ -37,6 +37,7 @@
 		"@demlik/tea": "catalog:",
 		"@effect/platform-node": "catalog:",
 		"effect": "catalog:",
+		"lightningcss": "catalog:",
 		"oxc-parser": "catalog:",
 		"oxc-transform-react": "catalog:",
 		"rolldown": "catalog:"

@@ -28,6 +28,63 @@ afterEach(() => {
 });
 
 describe("P16 CSS tokens", () => {
+	// The expected rule comes from the file, never from decoding the generated import spelling.
+	const verifyImport = (css: string, id: number) => {
+		expect(css, "the imported rule must be in the output").toMatch(
+			new RegExp(`\\.child${id}\\s*\\{[^}]*color:\\s*red\\s*;?\\s*\\}`),
+		);
+	};
+	it("escaped at-keywords import the same file as their unescaped spelling", () => {
+		fc.assert(
+			fc.property(
+				ids,
+				fc.constantFrom("im\\70ort", "\\69mport", "\\000069mport", "i\\mport"),
+				(id, keyword) => {
+					const f = fixture(id),
+						css = `@${keyword} "./child${id}.css";`;
+					// Plant the review bug: leave the import in the served text without its child.
+					expect(() => verifyImport(css, id)).toThrow("imported rule");
+					verifyImport(f.read(css), id);
+				},
+			),
+			{...runs, examples: [[0, "im\\70ort"]]}, // Pinned round-3 escaped @import bug.
+		);
+	});
+	it("escaped url functions import the same file as their unescaped spelling", () => {
+		fc.assert(
+			fc.property(
+				ids,
+				fc.constantFrom("u\\72l", "\\75rl", "\\000075rl", "u\\rl"),
+				fc.constantFrom('"', "'", ""),
+				(id, url, quote) => {
+					const f = fixture(id),
+						css = `@import ${url}(${quote}./child${id}.css${quote});`;
+					expect(() => verifyImport(css, id)).toThrow("imported rule");
+					verifyImport(f.read(css), id);
+				},
+			),
+			{...runs, examples: [[0, "u\\72l", '"']]}, // Pinned round-3 escaped url() bug.
+		);
+	});
+	// CSS Syntax 3 normalizes CRLF, CR and form feed to LF before consuming strings.
+	// https://www.w3.org/TR/css-syntax-3/#input-preprocessing
+	for (const [ending, newline] of [
+		["LF", "\n"],
+		["CRLF", "\r\n"],
+		["CR", "\r"],
+		["form feed", "\f"],
+	])
+		it(`${ending} string continuations import the same disk name after CSS input preprocessing`, () => {
+			fc.assert(
+				fc.property(ids, fc.constantFrom('"', "'"), (id, quote) => {
+					const f = fixture(id),
+						css = `@import ${quote}./chi\\${newline}ld${id}.css${quote};`;
+					expect(() => verifyImport(css, id)).toThrow("imported rule");
+					verifyImport(f.read(css), id);
+				}),
+				runs,
+			);
+		});
 	it("comments and whitespace around a quoted import URL keep every imported byte", () => {
 		fc.assert(
 			fc.property(

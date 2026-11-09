@@ -192,6 +192,40 @@ describe("fabrika/program-package-layout", () => {
 				runs,
 			);
 		});
+	for (const form of ["declaration", "specifier"] as const)
+		it(`type-only ${form} re-exports are erased; changing one to a value re-export is a finding`, () => {
+			fc.assert(
+				fc.property(name, name, (name, alias) => {
+					const binding = `DurableObject as ${alias}`,
+						statement =
+							form === "declaration"
+								? `export type {${binding}} from "cloudflare:workers";`
+								: `export {type ${binding}} from "cloudflare:workers";`;
+					expect(run(name, {".": "./src/program.ts"}, {"src/program.ts": statement})).toEqual([]);
+					// Plant a runtime re-export of the same name in the same pure entry.
+					const findings = run(
+						name,
+						{".": "./src/program.ts"},
+						{
+							"src/program.ts": `export {${binding}} from "cloudflare:workers";`,
+						},
+					);
+					expect(findings).toHaveLength(1);
+					expect(findings[0]?.message).toBe("Pure program code cannot export Worker runtime APIs.");
+					// A type-only specifier must not hide a value specifier in the same declaration.
+					expect(
+						run(
+							name,
+							{".": "./src/program.ts"},
+							{
+								"src/program.ts": `export {type ${binding}, env} from "cloudflare:workers";`,
+							},
+						),
+					).toHaveLength(1);
+				}),
+				runs,
+			);
+		});
 	it("measures the real tree: findings are inspected, with zero false alarms required to block", () => {
 		const result = spawnSync(
 			join(ROOT, "node_modules/.bin/oxlint"),
