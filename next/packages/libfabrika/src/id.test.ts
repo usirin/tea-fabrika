@@ -5,7 +5,7 @@ import {describe, expect, it, vi} from "@effect/vitest";
 import {Id} from "@kampus/libfabrika";
 import * as Public from "@kampus/libfabrika";
 import * as Data from "@kampus/libfabrika/data";
-import {Cause, Clock, Effect, Exit, Schema, SchemaIssue, Tracer} from "effect";
+import {Arbitrary, Cause, Clock, Effect, Exit, Schema, SchemaIssue, Tracer} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
 import {ProcessId} from "./data/trace.ts";
@@ -129,6 +129,7 @@ const compare = (left: string, right: string): -1 | 0 | 1 =>
 	left < right ? -1 : left > right ? 1 : 0;
 const Time = Schema.Int.check(Schema.isBetween({minimum: 0, maximum: maxClock}));
 const Count = Schema.Int.check(Schema.isBetween({minimum: 2, maximum: 128}));
+const Prefix = Schema.String.check(Schema.isPattern(/^[a-z](?:[a-z_]{0,61}[a-z])?$/));
 const rawBytes = fc.uint8Array({minLength: 16, maxLength: 16});
 const v7 = (raw: Uint8Array): Uint8Array => {
 	const bytes = raw.slice();
@@ -253,6 +254,33 @@ describe("T518 Id format", () => {
 			options,
 		);
 	});
+	// Plant: the schema hides its format in a refinement that Effect cannot generate from.
+	it.effect.prop(
+		"Effect Arbitrary generates 200 ids for each prefix that decode only under that prefix",
+		{type: Prefix, sampleSeed: Schema.Int},
+		({type, sampleSeed}) =>
+			Effect.gen(function* () {
+				const Specific = Id.make(type);
+				const Other = Id.make(type === "process" ? "letter" : "process");
+				const values = yield* Arbitrary.sampleEffect(Arbitrary.schema(Specific), {
+					count: 200,
+					seed: sampleSeed,
+				});
+				expect(values).toHaveLength(200);
+				for (const value of values) {
+					expect(accepts(value, type)).toBe(true);
+					expect(Schema.decodeUnknownSync(Specific)(value)).toBe(value);
+					expect(Schema.decodeUnknownSync(Id.Schema)(value)).toBe(value);
+					expectDecoded(
+						yield* Effect.exit(Schema.decodeUnknownEffect(Other)(value)),
+						false,
+						value,
+						Schema.isSchemaError,
+					);
+				}
+			}),
+		effectOptions,
+	);
 	it("round trips generated values through the schema encoder and decoder", () => {
 		fc.assert(
 			fc.property(prefix, uuid, (type, bytes) => {

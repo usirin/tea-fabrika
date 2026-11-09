@@ -31,6 +31,29 @@ afterAll(() => {
 	for (const db of opened.splice(0)) if (db.isOpen) db.close();
 });
 
+describe("T518, TraceId generation", () => {
+	// Plant: a lookahead in the schema's pattern prevents Effect Arbitrary generation.
+	it.effect.prop(
+		"Effect Arbitrary generates 200 decodable trace ids and their all-zero form is refused",
+		{sampleSeed: Schema.Int},
+		({sampleSeed}) =>
+			Effect.gen(function* () {
+				const values = yield* Arbitrary.sampleEffect(Arbitrary.schema(data.TraceId), {
+					count: 200,
+					seed: sampleSeed,
+				});
+				expect(values).toHaveLength(200);
+				for (const value of values) {
+					expect(Schema.decodeUnknownSync(data.TraceId)(value)).toBe(value);
+					expect(value).toMatch(/^[0-9a-f]{32}$/);
+					const zero = value.replace(/[0-9a-f]/g, "0");
+					expect(() => Schema.decodeUnknownSync(data.TraceId)(zero)).toThrow();
+				}
+			}),
+		{arbitrary: {seed: 119120, runs: 40}},
+	);
+});
+
 describe("T246, fromHere", () => {
 	// Plant: fromHere returns a fresh random traceId instead of the current span's.
 	it.effect.prop(
