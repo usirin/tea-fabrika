@@ -1,0 +1,16 @@
+{
+	"name": "p23-desktop-fixture",
+	"private": true,
+	"type": "module",
+	"description": "P23 real desktop, browser and local-stage scenario wiring.",
+	"dependencies": {
+		"@effect/platform-node": "4.1.1",
+		"@kampus/libfabrika": "workspace:*",
+		"@kampus/counter": "workspace:*",
+		"effect": "4.1.1"
+	},
+	"devDependencies": {
+		"electron": "45.2.1",
+		"playwright": "1.64.1"
+	}
+}

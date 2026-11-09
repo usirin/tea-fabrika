@@ -3,7 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "The new fabrika's library: its transport's SSHSIG (Tier 1, P7), its data layer, the ledger (P6), its coordination: the mailbox, starts and who belongs (P9), and its app layer: programs and the runner (P11).",
+	"description": "The new fabrika's library: transport, data, coordination, programs and the runner, with public desktop, browser, Electron and server entries.",
 	"sideEffects": false,
 	"exports": {
 		".": "./src/index.ts",

@@ -1,0 +1,169 @@
+{
+	"version": "next/",
+	"ticket": 327,
+	"seed": 119120,
+	"scope": "P23 round 2. Paths below start at the repository root.",
+	"rows": [
+		{
+			"law": "Only the native action creates a pass",
+			"checks": ["oxlint-plugins/wiring-only.ts", "oxlint-plugins/wiring-only.test.ts"]
+		},
+		{
+			"law": "Secure bytes and one shared hash format",
+			"checks": [
+				"next/packages/libfabrika/src/transport/browser-pass.test.ts",
+				"next/packages/libfabrika/src/desktop/browser-link.test.ts"
+			],
+			"missing": "Generated requests through the relocated Door to compare its stored digest with generation."
+		},
+		{
+			"law": "Install the hash before opening",
+			"checks": ["next/packages/libfabrika/src/desktop/browser-link.test.ts"]
+		},
+		{
+			"law": "p49: a pass grants at most one key",
+			"checks": ["next/packages/libfabrika/src/desktop/menu-browser.laws.test.ts"]
+		},
+		{
+			"law": "p49: 60 seconds is expired",
+			"checks": [
+				"next/packages/libfabrika/src/desktop/menu-browser.laws.test.ts",
+				"next/packages/libfabrika/src/desktop/browser-link.test.ts"
+			]
+		},
+		{
+			"law": "Used, old and unknown links give normal code rows",
+			"checks": [
+				"next/packages/libfabrika/src/desktop/menu-browser.laws.test.ts",
+				"next/apps/fabrika/e2e/browser-link.test.ts"
+			],
+			"missing": "Generated requests through the relocated Door. The live scenario covers the recovery screen."
+		},
+		{
+			"law": "Existing waiting key can use a fresh link",
+			"checks": [
+				"next/packages/libfabrika/src/client/browser-knock.test.ts",
+				"next/apps/fabrika/e2e/browser-link.test.ts"
+			]
+		},
+		{
+			"law": "Opening failure removes holder and menu authority",
+			"checks": [
+				"next/packages/libfabrika/src/desktop/browser-link.test.ts",
+				"next/packages/libfabrika/src/desktop/menu-browser.laws.test.ts"
+			]
+		},
+		{
+			"law": "Scope closure and interruption remove held bytes",
+			"checks": ["next/packages/libfabrika/src/desktop/browser-link.test.ts"]
+		},
+		{
+			"law": "Fragment clears before connecting",
+			"checks": [
+				"next/packages/libfabrika/src/browser/link.test.ts",
+				"next/apps/fabrika/e2e/browser-link.test.ts"
+			]
+		},
+		{
+			"law": "Pass travels in one knock only",
+			"checks": [
+				"next/packages/libfabrika/src/client/browser-knock.test.ts",
+				"next/packages/libfabrika/src/browser/link.test.ts"
+			]
+		},
+		{
+			"law": "p49: no secret in HTTP URLs or saved output",
+			"checks": [
+				"next/packages/libfabrika/src/desktop/menu-browser.laws.test.ts",
+				"next/packages/libfabrika/src/client/browser-knock.test.ts",
+				"next/packages/libfabrika/src/transport/browser-pass.test.ts",
+				"next/apps/fabrika/e2e/browser-link.test.ts"
+			]
+		},
+		{
+			"law": "Page routes serve the selected built assets",
+			"checks": [
+				"next/packages/libfabrika/src/server/pages.test.ts",
+				"next/apps/fabrika/e2e/browser-link.test.ts"
+			]
+		},
+		{
+			"law": "p31: founding window and linked tab press both ways",
+			"checks": ["next/apps/fabrika/e2e/app-demo.test.ts"]
+		},
+		{
+			"law": "p31: Quit and reopen keeps the key and needs no grant",
+			"checks": ["next/apps/fabrika/e2e/app-demo.test.ts"]
+		},
+		{
+			"law": "p31: brain loss recovers both clients; queued press lands once",
+			"checks": ["next/apps/fabrika/e2e/app-demo.test.ts"]
+		},
+		{
+			"law": "p31: renderer and key isolation hold",
+			"checks": ["next/apps/fabrika/e2e/app-demo.test.ts"]
+		},
+		{
+			"law": "p47: compare approval, cancellation and denial work whole",
+			"checks": ["next/apps/fabrika/e2e/app-demo.test.ts"]
+		},
+		{
+			"law": "p51: Remove closes with 4003 and records the right signed removal",
+			"checks": ["next/apps/fabrika/e2e/app-demo.test.ts"]
+		},
+		{
+			"law": "p48: app crash leaves brain and admitted tab working",
+			"checks": ["next/apps/fabrika/e2e/app-demo.test.ts"]
+		},
+		{
+			"law": "p48: reopen reuses brain; Quit removes service and workerd",
+			"checks": ["next/apps/fabrika/e2e/app-demo.test.ts"]
+		},
+		{
+			"law": "Five layouts and both looks remain usable",
+			"checks": ["next/apps/fabrika/e2e/app-shots.test.ts"]
+		},
+		{
+			"law": "c13: two real opens show no prompt",
+			"checks": ["next/apps/fabrika/e2e/app-demo.test.ts"],
+			"execution": "Needs the owner's actual build observation fixture; automation supplies no answer."
+		},
+		{
+			"law": "Observations survive unavailable brain and contain no secret",
+			"checks": ["next/packages/libfabrika/src/desktop/browser-recording.test.ts"],
+			"contract": "P19 desktopJournal({home, forward}); forward succeeding acknowledges rows."
+		},
+		{
+			"law": "A client can compile against libfabrika alone",
+			"checks": [
+				"next/packages/libfabrika/src/server/pages.test.ts",
+				"next/packages/libfabrika/package.json"
+			]
+		},
+		{
+			"law": "A client can perform the link flow through libfabrika alone",
+			"checks": [
+				"next/packages/libfabrika/src/server/pages.test.ts",
+				"next/packages/libfabrika/src/desktop/menu-browser.laws.test.ts"
+			]
+		},
+		{
+			"law": "App contains wiring only",
+			"checks": ["oxlint-plugins/wiring-only.ts", ".oxlintrc.json"]
+		},
+		{
+			"law": "Imports, Effect edges, tags and names obey the exam",
+			"checks": [".oxlintrc.json", "layer-rules.json"]
+		}
+	],
+	"planIssues": [
+		"The secret laws' Law cells omit the required [secrets] marker. The approved plan stays unchanged in this round."
+	],
+	"limits": [
+		"The journal behavior is red on the missing recording.ts. The independent encoded leak plants run without that module.",
+		"Real Electron, Chromium, launchd and OS prompt evidence must come from the lead's run. The root unit-test command excludes e2e files.",
+		"P12 readiness and lifecycle callbacks and P19/P18 registrations still need comparison with their built exports. The fixture has no replacement admission, menu or reconnect machine.",
+		"The fixture's journal forwards to a tests-only observation capture. It does not establish P37 delivery through P12's trusted control path.",
+		"The e2e plants cannot be run in this box. An expected missing module or fixture is not a measured platform result."
+	]
+}
