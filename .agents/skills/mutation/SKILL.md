@@ -27,7 +27,8 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
    only, static mutants off, a 10 s test limit and a 5 s over-run. Five minutes of wall time for the
    whole pull request, setup included: at five minutes, stop your workers and keep what they have.
    `sample.ts` sorts candidate identities and uses seed 119120 to select one range per changed
-   line first, then remaining ranges, at most 150 enclosed mutants. Equal locations and nested
+   line first, taking lines round-robin across changed files so every file gets mutants when the
+   cap allows, then remaining ranges, at most 150 enclosed mutants. No brief needs per-file caps. Equal locations and nested
    ranges count every mutant they select. The seed controls selection; Stryker does not promise
    to execute ranges in that order. Never the whole set. Ask before you scale up.
    - **A round after a send-back** reuses the last round's answers: Stryker's `incremental`, with
