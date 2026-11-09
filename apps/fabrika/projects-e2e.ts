@@ -859,10 +859,19 @@ const migrationCaptures = async (shots: string) => {
 						await shot(app, page, shots, "migration-ready", layout, look, false, async () => {
 							await orientation(page);
 							await page.keyboard.press("ArrowUp");
-							check(
-								(await screen(page)).includes("fixture-migration-history"),
-								"migration history did not reach the real desk",
-							);
+							// The redraw after ArrowUp is async: wait for the history line on the current tile.
+							let seen: string | null = null;
+							const read = async () => {
+								seen = await tile(page).locator(".screen-text").textContent();
+								return seen ?? "";
+							};
+							try {
+								await until(read, (text) => text.includes("fixture-migration-history"));
+							} catch {
+								throw new Error(
+									`migration history did not reach the real desk; screen=${JSON.stringify(seen)}`,
+								);
+							}
 							await page.keyboard.press("Control+u");
 							await prompt(page);
 						});
