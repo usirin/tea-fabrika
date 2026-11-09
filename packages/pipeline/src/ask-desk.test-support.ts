@@ -10,7 +10,12 @@ export const property = <const Inputs extends Record<string, Schema.Schema<unkno
 	it.live.prop(
 		name,
 		inputs,
-		(input) => Effect.tryPromise({try: async () => check(input), catch: (error) => error}),
+		(input) =>
+			Effect.tryPromise({
+				try: async () => check(input),
+				catch: (error) =>
+					error instanceof Error ? error : new Error("Ask desk property failed", {cause: error}),
+			}),
 		{arbitrary: {seed: 119120}},
 	);
 

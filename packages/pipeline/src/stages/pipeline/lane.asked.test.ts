@@ -307,23 +307,25 @@ describe("a lane, on what the real agents answered", () => {
 				const ran = await lane({
 					within: 50,
 					picks: YES,
-					// Both the blind refusal and the refusal of a shown rec carry the note.
+					// Review 2: every plan approval shows its recommendation, including after a refusal.
 					queues: {approve: ["no", "no", "approve"]},
 					notes: {approve: NOTE},
 					again: [{}, {}],
 					fake: {answers: {plan: [...THE_LEAN.plan, ...THE_LEAN.plan]}},
 				});
-				expect(runsOf(ran, "plan")[1]?.prompt).toContain(NOTE);
-				expect(answeredWith(ran, "no")).toContainEqual(
-					expect.objectContaining({
-						answer: {_tag: "chose", pick: "no", note: NOTE},
-					}),
-				);
-				expect(answeredWith(ran, "no")).toContainEqual(
-					expect.objectContaining({
-						answer: {_tag: "against", pick: "no", note: NOTE},
-					}),
-				);
+				const plans = runsOf(ran, "plan");
+				expect(plans).toHaveLength(3);
+				expect(plans[1]?.prompt).toContain(NOTE);
+				expect(plans[2]?.prompt).toContain(NOTE);
+				expect(askedFor(ran, "approve")).toMatchObject([
+					{blind: {hidden: false}},
+					{blind: {hidden: false}},
+					{blind: {hidden: false}},
+				]);
+				expect(answeredWith(ran, "no").map((fact) => fact.answer)).toEqual([
+					{_tag: "against", pick: "no", note: NOTE},
+					{_tag: "against", pick: "no", note: NOTE},
+				]);
 				const untold = ["tests", "build", "mutants", "review"].filter(
 					(step) => !(runsOf(ran, step)[0]?.prompt ?? "").includes(NOTE),
 				);

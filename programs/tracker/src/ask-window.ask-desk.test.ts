@@ -1,4 +1,5 @@
 import {applyCell} from "@demlik/tea";
+import {PICKS} from "@kampus/pipeline/stages/pipeline/machine";
 import {
 	type AskShown,
 	askShownOf,
@@ -44,11 +45,16 @@ type Msg =
 	| {type: "tick"; now: number}
 	| {type: "escape"};
 type Cmd = {type: string; [key: string]: unknown};
-const start = async (hidden = false, rec: unknown = DRAFT.rec, ticket = 117): Promise<Model> => {
+const start = async (
+	hidden = false,
+	rec: unknown = DRAFT.rec,
+	ticket = 117,
+	picks = DRAFT.picks,
+): Promise<Model> => {
 	const ask = await Effect.runPromise(
 		// Review 2, medium 2: an approve ask is never drawn blind, so a blind ask here is a step's.
 		sealAsk(
-			{...DRAFT, rec, ...(hidden ? {for: "step"} : {})},
+			{...DRAFT, rec, picks, ...(hidden ? {for: "step"} : {})},
 			policyFor(DRAFT.ask, hidden, blindDraw),
 		),
 	);
@@ -170,22 +176,30 @@ describe("ask desk P12: wait for the save", () => {
 });
 
 describe("ask desk P12: the saved line says what was saved", () => {
+	const picks = [...new Set(Object.values(PICKS).flat())];
+	// Review 3, advice 3. Plant: keep the old "no saved." wording for a non-approve pick.
 	property(
-		"reads Approved. after an approve, and names any other pick",
-		{sure: Rec.cases.pick.fields.sure},
-		async ({sure}) => {
-			const approving = step(await start(false, {...DRAFT.rec, sure}), {
-				type: "do",
-				value: {_tag: "rec"},
-			})[0];
-			expect(step(approving, {type: "save_ok", value: {ticket: 117}})[0].status).toBe("Approved.");
-			const declining = go(
-				await start(),
-				{type: "do", value: {_tag: "not"}},
-				{type: "note", text: "The plan misses the empty input"},
-				{type: "submit", key: "Enter", now: NOW},
-			);
-			expect(step(declining, {type: "save_ok", value: {ticket: 117}})[0].status).toBe("no saved.");
+		"names every saved pick in a plain sentence, with Approved. for approve",
+		{pick: Schema.Literals(picks)},
+		async ({pick}) => {
+			const offered = picks.map((pick) => ({pick, does: `Choose ${pick}`}));
+			for (const rec of [NONE, {...DRAFT.rec, pick}]) {
+				const model = await start(false, rec, 117, offered);
+				const saving =
+					rec._tag === "pick"
+						? step(model, {type: "do", value: {_tag: "rec"}})[0]
+						: go(
+								model,
+								{type: "do", value: {_tag: "picks"}},
+								{type: "pick", pick},
+								{type: "submit", key: "Enter", now: NOW},
+							);
+				expect(saving.editor._tag).toBe("saving");
+				const [saved, notices] = step(saving, {type: "save_ok", value: {ticket: 117}});
+				const said = pick === "approve" ? "Approved." : `You chose ${pick}.`;
+				expect(saved.status).toBe(said);
+				expect(notices).toContainEqual({type: "answered", ticket: 117, said});
+			}
 		},
 	);
 });

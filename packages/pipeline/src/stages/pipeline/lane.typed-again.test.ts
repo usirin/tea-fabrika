@@ -250,7 +250,7 @@ describe("a stopped lane, typed again", () => {
 		const ran = await lane({
 			within: 50,
 			picks: YES,
-			// The first refusal is blind; the second is against a shown recommendation.
+			// Review 2: every plan approval shows its recommendation, including after a refusal.
 			queues: {approve: ["no", "no", "approve"]},
 			notes: {approve: NOTE},
 			fake: {answers: {plan: [...THE_LEAN.plan, ...THE_LEAN.plan]}},
@@ -267,12 +267,19 @@ describe("a stopped lane, typed again", () => {
 		expect(plans).toHaveLength(3);
 		expect(plans[1]?.prompt).toContain(NOTE);
 		expect(plans[2]?.prompt).toContain(NOTE);
-		expect(answersOf(ran).map(({fact}) => fact)).toContainEqual(
-			expect.objectContaining({answer: {_tag: "chose", pick: "no", note: NOTE}}),
-		);
-		expect(answersOf(ran).map(({fact}) => fact)).toContainEqual(
-			expect.objectContaining({answer: {_tag: "against", pick: "no", note: NOTE}}),
-		);
+		expect(askedFor(ran, "approve")).toMatchObject([
+			{blind: {hidden: false}},
+			{blind: {hidden: false}},
+			{blind: {hidden: false}},
+		]);
+		expect(
+			answersOf(ran)
+				.filter(({answer}) => answer?.pick === "no")
+				.map(({fact}) => fact.answer),
+		).toEqual([
+			{_tag: "against", pick: "no", note: NOTE},
+			{_tag: "against", pick: "no", note: NOTE},
+		]);
 		expect(ran.lines.at(-1)).toContain("ended: done");
 	});
 

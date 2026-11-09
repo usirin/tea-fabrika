@@ -66,21 +66,27 @@ describe("a lane, on what the real agents answered", () => {
 				async (note) => {
 					const ran = await lane({
 						within: 50,
-						// The first step's question is round 1's surviving mutant, then the builder's no change.
-						steps: ["go_on", "again"],
+						// Let round 1's mutant through. After two red builds, `again` on rounds_spent
+						// really reruns the builder; mutation's later question would only rerun mutation.
+						steps: ["go_on"],
 						picks: {...YES, step: "go_on"},
-						...(note === undefined ? {} : {notes: {"step/again": note}}),
+						queues: {rounds_spent: ["again"]},
+						...(note === undefined ? {} : {notes: {"rounds_spent/again": note}}),
 						fake: {
 							...RUN_3,
 							// Each mutant is answered `cannot`, so a later mutation run writes no test twice.
 							cannot: REAL_MUTANT,
-							answers: {...RUN_3.answers, build: [null, NO_CHANGE, null]},
-							writesAt: {build: {2: [FOLDS]}},
+							answers: {...RUN_3.answers, build: [null, NO_CHANGE, NO_CHANGE, null]},
+							writesAt: {build: {3: [FOLDS]}},
 						},
 					});
 					const builds = runsOf(ran, "build");
-					expect(builds).toHaveLength(3);
+					expect(builds).toHaveLength(4);
 					const again = answersOf(ran).find(({answer}) => answer?.pick === "again");
+					expect(again?.fact.ask).toMatch(/^a-rounds_spent-/);
+					expect(askedFor(ran, "rounds_spent")).toMatchObject([
+						{step: "build", shows: {rec: {_tag: "none"}}},
+					]);
 					expect(again?.fact).toHaveProperty("answer", {
 						_tag: "chose",
 						pick: "again",
@@ -88,8 +94,8 @@ describe("a lane, on what the real agents answered", () => {
 					});
 					expect(again?.answer?.note).toBe(note ?? "");
 					if (note !== undefined) {
-						expect(builds[1]?.prompt).not.toContain(note);
-						expect(builds[2]?.prompt).toContain(note);
+						for (const build of builds.slice(0, 3)) expect(build.prompt).not.toContain(note);
+						expect(builds[3]?.prompt).toContain(note);
 					}
 					expect(runsOf(ran, "tests")).toHaveLength(2);
 					expect(bye(ran)).toContain("ended: done");
