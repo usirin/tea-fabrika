@@ -471,7 +471,7 @@ describe("what wakes a ticket (label-guidelines.md, L1: nothing decides on advic
 	it("has a row for every kind of fact a ticket's stream can hold, so a new kind must say if it is work", () => {
 		fc.assert(
 			fc.property(
-				fc.shuffledSubarray(Fact.members, {minLength: Fact.members.length}),
+				fc.shuffledSubarray([...Fact.members], {minLength: Fact.members.length}),
 				(members) => {
 					const kinds = new Set(members.map((m) => m.fields.type.literal));
 					expect([...KINDS].sort()).toEqual([...kinds].sort());
