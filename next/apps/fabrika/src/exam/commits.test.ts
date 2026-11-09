@@ -797,6 +797,10 @@ describe("trusted config files", () => {
 				{ "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
 				{ "glob": "**/*.ask-desk.test.ts", "why": "today's ask-desk PR 1 laws" },
 				{
+					"glob": "programs/tracker/src/ask-window.laws.test.ts",
+					"why": "the shared ask editor, attention and status laws"
+				},
+				{
 					"glob": "packages/pipeline/src/ask-desk.test-support.ts",
 					"why": "the ask-desk properties' test runner and input constraints"
 				},

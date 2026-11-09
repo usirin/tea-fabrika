@@ -4,7 +4,7 @@ import {Entry, fold} from "@kampus/pipeline/tickets/ticket";
 import {ticket as ticketProgram} from "@tea-fabrika/ticket";
 import {TicketWindow} from "@tea-fabrika/ticket/window";
 import {tracker as trackerProgram, tickets} from "@tea-fabrika/tracker";
-import {AskActions, AskView} from "@tea-fabrika/tracker/ask-window";
+import {AskActions, askMachine, AskView} from "@tea-fabrika/tracker/ask-window";
 import {TrackerWindow} from "@tea-fabrika/tracker/window";
 import {Effect, Result, Schema} from "effect";
 import fc from "fast-check";
@@ -237,6 +237,14 @@ const mount = async (node: ReactNode) => {
 		root.render(node);
 		await settle();
 	});
+	const focus = (element: DomElement) => {
+		const previous = document.activeElement;
+		if (previous === element) return;
+		previous.dispatchEvent(
+			Object.assign(new Event("focusout", {bubbles: true}), {relatedTarget: element}),
+		);
+		element.focus();
+	};
 	return {
 		document,
 		render: async (next: ReactNode) =>
@@ -246,12 +254,7 @@ const mount = async (node: ReactNode) => {
 			}),
 		focus: async (element: DomElement) =>
 			act(async () => {
-				const previous = document.activeElement;
-				if (previous === element) return;
-				previous.dispatchEvent(
-					Object.assign(new Event("focusout", {bubbles: true}), {relatedTarget: element}),
-				);
-				element.focus();
+				focus(element);
 				await settle();
 			}),
 		find: (selector: string) => {
@@ -279,6 +282,15 @@ const mount = async (node: ReactNode) => {
 		},
 		click: async (element: DomElement) =>
 			act(async () => {
+				// Native pointer clicks focus the nearest control or tabindex ancestor before click.
+				// dispatchEvent alone does not, and would leave this host's grid falsely focused.
+				let target: DomElement | null = element;
+				while (
+					target !== null &&
+					!["button", "input", "textarea", "[tabindex]"].some((s) => target!.matches(s))
+				)
+					target = target.parentNode;
+				focus(target ?? document.body);
 				element.dispatchEvent(new Event("click", {bubbles: true}));
 				await settle();
 			}),
@@ -363,6 +375,125 @@ const table = (text: string): Keys => {
 	return decoded.success;
 };
 const number = fc.integer({min: 1, max: 100_000});
+
+// Today's version, review 8, finding 1. Plant already present: frame.tsx only forwards answer
+// keys when the grid itself is focused. A pointer click leaves focus on its title button instead.
+const clickWord = Schema.String.check(Schema.isPattern(/^[a-z]{1,12}$/));
+property(
+	"after a click anywhere in a menu row, each mapped answer key acts once on the selected ask",
+	{
+		asks: Schema.Array(
+			Schema.Struct({ticket: ticketNumber, title: clickWord, what: clickWord, rec: Schema.Boolean}),
+		).check(Schema.isMinLength(2), Schema.isMaxLength(4)),
+		selected: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(99)),
+		click: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(999)),
+		remapped: Schema.Struct({
+			rec: Schema.Literals(["a", "j", "r"]),
+			not: Schema.Literals(["d", "k", "s"]),
+			picks: Schema.Literals(["e", "f", "u"]),
+		}),
+	},
+	async ({asks, selected, click, remapped}) => {
+		const rows = await Promise.all(
+			asks.map(async (input, i) => {
+				const ask = askShownOf(
+					await Effect.runPromise(
+						sealAsk({
+							...DRAFT,
+							ask: `a-click-${i}-${input.what}`,
+							what: input.what,
+							rec: {...DRAFT.rec, pick: input.rec ? "approve" : "no"},
+						}),
+					),
+				);
+				return {...row(input.ticket, "ask", ask), title: input.title, what: input.what};
+			}),
+		);
+		const at = selected % rows.length;
+		const chosen = rows[at]!;
+		const commands = vi.spyOn(askMachine.update, "do");
+		const openings = vi.spyOn(askMachine.update, "open");
+		const failures: unknown[] = [];
+		try {
+			for (const bindings of [{rec: "y", not: "n", picks: "o"}, remapped]) {
+				const keys = table(
+					Object.entries(bindings)
+						.map(([name, key]) => `program.ask.${name} = "${key}"`)
+						.join("\n"),
+				);
+				// Always press after the reported title click, plus a generated click on any reading
+				// part of the row. Answer/Open/Later buttons have their own actions; note fields type.
+				for (const part of ["title", "generated"] as const) {
+					for (const name of ["rec", "not", "picks", "evidence"] as const) {
+						const subject = menu(chosen.ticket, keys);
+						const test = await mount(
+							createElement(
+								AskActions.Provider,
+								{value: subject.actions},
+								createElement(Over, {
+									...subject.props,
+									asks: {asks: rows, later: [], reach: "ok", why: null},
+								}),
+							),
+						);
+						try {
+							const title = test.document.body
+								.querySelectorAll('[role="row"]')
+								[at]!.querySelector(".asks-title")!;
+							await test.click(title);
+							const selectedRow = test.find('[role="row"][aria-selected="true"]');
+							expect(selectedRow.id).toBe(`ask-row-${at}`);
+							const parts = [selectedRow, ...selectedRow.querySelectorAll("*")].filter(
+								(el) =>
+									el.closest("[hidden]") === null &&
+									(el.closest("button") === null || el.closest(".asks-title") !== null),
+							);
+							const target = part === "title" ? title : parts[click % parts.length]!;
+							if (part === "generated") await test.click(target);
+							commands.mockClear();
+							openings.mockClear();
+							const key = name === "evidence" ? " " : bindings[name];
+							await test.press(key);
+							const calls = (name === "evidence" ? openings.mock.calls : commands.mock.calls).map(
+								([model, msg]) => ({
+									ticket: model.ticket,
+									ask: model.ask.ask,
+									action: msg.type === "do" ? msg.value._tag : msg.name,
+								}),
+							);
+							const expected = [{ticket: chosen.ticket, ask: chosen.sealed!.ask, action: name}];
+							const view = test.find(".ask-view");
+							const acted =
+								name === "rec"
+									? subject.answer.mock.calls.length === 1 &&
+										subject.answer.mock.calls[0]?.[0].ask === chosen.sealed!.ask &&
+										subject.answer.mock.calls[0]?.[0].ticket === chosen.ticket
+									: name === "evidence"
+										? !test.find(".ask-evidence").hasAttribute("hidden")
+										: view.getAttribute("data-ask-editor") === (name === "not" ? "note" : "picks");
+							if (JSON.stringify(calls) !== JSON.stringify(expected) || !acted)
+								failures.push({
+									part,
+									key,
+									target: target.tagName,
+									focus: test.document.activeElement.attributes,
+									calls,
+									expected,
+									acted,
+								});
+						} finally {
+							await test.close();
+						}
+					}
+				}
+			}
+		} finally {
+			commands.mockRestore();
+			openings.mockRestore();
+		}
+		expect(failures, JSON.stringify(failures)).toEqual([]);
+	},
+);
 
 // Review 5, finding 1. The sealed display promises the full plan, including later writers' fields.
 // Plant present in today's renderer: Listed stops at a title, and EvidenceText drops whole fields.
