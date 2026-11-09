@@ -42,7 +42,6 @@ export const measured: Record<string, number> = {
 	"apps/fabrika/src/host/agents-restart.test.ts": 24,
 	"apps/fabrika/src/desk/desk.laws.test.ts": 24,
 	"packages/pipeline/src/laws/tea-host.test.ts": 21,
-	"packages/pipeline/src/tsh/desk.test.ts": 20,
 	[`${LANE}.exam-side-tree.test.ts`]: 20,
 };
 

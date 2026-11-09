@@ -79,11 +79,12 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `box.sh new <name> <base> <branch>` | a Codex box: its own clone, git data outside `.git`, installed |
 | `box.sh run <name> <prompt> <out>` | run Codex in the box, writable only there |
 | `box.sh fetch <name> <branch>` | fetch the branch and step notes into the main checkout, nothing else |
+| `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first; drive runs it at start |
 | `drive.ts <lane> <step> <brief>` | one Codex step end to end, with no agent waiting: box, run, fetch, checks, backup push, field row, state; one JSON line (below) |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
-| `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head and squash-land pinned to it |
+| `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head and squash-land pinned to it; a PR in a gh stack lands with `gh stack merge` |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
 | `clauderow.py --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [why]` | one `field/runs.jsonl` row from a Claude subagent's transcript, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
 
@@ -96,9 +97,9 @@ look green. Pushes and merges are never retried by that helper.
 
 ## Use drive.ts for any step
 
-Use `drive.ts` for any step, on a Codex box or a Claude agent. A Claude agent in the lead session
-only reads its result and makes the judgment call. Start it in the background and read the last
-line only:
+Every step goes through `drive.ts`, on a Codex box or a Claude agent; no box is made by hand. A
+Claude agent in the lead session only reads its result and makes the judgment call. Start it in the
+background and read the last line only:
 
 ```sh
 node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|review> <brief.md> \
@@ -127,9 +128,10 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   A stop after the time limit takes the agent's whole process group with it.
 - Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (the question
   is in `reason`), 30 stuck, 2 usage, 3 refused (8 agents running: Codex boxes plus Claude steps
-  drive started). It never retries. A stuck step keeps its box. A tests, build or mutation step
-  waits while `pgrep -x tsgo` finds one. `DRIVE_MINUTES` (default 60) stops a step that runs too
-  long.
+  drive started, or under 20 GB free after `box.sh gc`). It never retries. A stuck step keeps its
+  box. The commits check reads the whole lane, from where it left main, so each earlier step's
+  newest link is in its chain. A tests, build or mutation step waits while `pgrep -x tsgo` finds
+  one. `DRIVE_MINUTES` (default 60) stops a step that runs too long.
 
 ## Pushes and protected refs
 
@@ -159,15 +161,15 @@ visible, and never weaken the rules to hide this message.
    A plan that only builds decided notes: write "Approved by the lead agent, builds
    <note>" on its blank first line. A plan that raises a new design call goes to the owner as one
    yes or no. Answer, in the plan, any open question a decided note already answers.
-4. **Start a box** on a `fabrikalfa/<name>` branch, with `box.sh new`. Use `origin/main` for an
-   independent ticket. A stacked child starts at the parent's signed build head, before the
+4. **Start the lane** on a `fabrikalfa/<name>` branch through `drive.ts`, never `box.sh new` by
+   hand. Use `origin/main` for an independent ticket. A stacked child starts at the parent's signed build head, before the
    parent merges, as [Tier 1](../../../docs/plan/tier-1.md#the-pull-requests-one-at-a-time) allows.
    Record the child, parent branch and signed head before starting it. Keep the child's tests
    when merging parent work in. Never replace them with the parent's older tests.
-5. **Run the steps in order,** in the background: tests, build, mutation, review. Each runs in the
-   box with `box.sh run`, except a step with Electron or socket work, which a Claude agent runs
+5. **Run the steps in order,** in the background: tests, build, mutation, review. Each runs
+   through `drive.ts`, except a step with Electron or socket work, which a Claude agent runs
    (above). No builder starts before tests that exist. Each brief names its skill.
-6. **After each step:** `box.sh fetch`, read the report and the diff, and log the run the same day:
+6. **After each step:** read drive's last line, the report and the diff, and log the run the same day:
    one `field/runs.jsonl` row (`fieldrow.py` for Codex, `clauderow.py` for a Claude agent, a
    driver included, once it has finished), and one `field/notes.jsonl` note for anything that
    broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file.
@@ -186,7 +188,8 @@ visible, and never weaken the rules to hide this message.
    `ask owner exam_read`; never write "owner read" unless the owner did, and give each such merge
    a field note. Then run `catchup.sh` in the background: it brings the PR up to
    date, signs only the new merge as `lead`, waits for every check on that exact head (e2e and
-   commits included) and squash-lands it pinned to that head. Every PR squash-merges, a stacked
+   commits included) and squash-lands it pinned to that head; a PR in a gh stack lands with
+   `gh stack merge <pr> --squash --yes` once its head reads unchanged. Every PR squash-merges, a stacked
    parent too ([0004](../../../.decisions/0004-squash-merges-and-native-stacks.md)). A stack is a
    GitHub stack ([its commands](https://docs.github.com/en/pull-requests/reference/stacked-prs-cli-commands)):
    `gh stack init <bottom> ... <top>` adopts the branches, `gh stack submit` opens the PRs,

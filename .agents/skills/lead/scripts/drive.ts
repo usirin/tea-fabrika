@@ -14,6 +14,7 @@
 //
 // The step is a tea machine on the Effect engine, made of the pipeline's moves:
 //
+//   (before)           box.sh gc, then a refusal when the data volume has under 20 GB free
 //   starting   Act     box.sh new, at the lane's head
 //   drafting   Draft   a Sub: Codex (box.sh run) or Claude (claude -p) in the box, waited on
 //   reading    Gather  fetch (and sign Claude's work), then the commits, their step notes, exam
@@ -25,9 +26,9 @@
 //
 // Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (a question for
 // the lead, in `reason`), 30 stuck, 2 usage, 3 refused to start (8 agents running: Codex boxes plus
-// Claude steps drive started). It never retries. A stuck step keeps its box for the lead to look
-// at. DRIVE_MINUTES (default 60) is how long the agent may run before it is stopped and the step
-// is stuck.
+// Claude steps drive started, or under 20 GB free after box.sh gc). It never retries. A stuck step
+// keeps its box for the lead to look at. DRIVE_MINUTES (default 60) is how long the agent may run
+// before it is stopped and the step is stuck.
 
 import {spawn, spawnSync} from "node:child_process";
 import {randomUUID} from "node:crypto";
@@ -110,6 +111,9 @@ const Ask = Schema.Struct({
 	ticket: Schema.String,
 	branch: Schema.String,
 	base: Schema.String,
+	/** Where the lane left main. The commits check reads the whole lane from here, so the earlier
+	 * steps' links are in its chain and the newest of each is not stale. */
+	root: Schema.String,
 	box: Schema.String,
 	run: Schema.String,
 	prompt: Schema.String,
@@ -592,7 +596,7 @@ const handlers = (env: Env) => {
 									join(env.MAIN, "next/apps/fabrika/src/exam/commits.ts"),
 									"check",
 									"--base",
-									ask.base,
+									ask.root,
 									"--head",
 									head,
 								],
@@ -691,6 +695,7 @@ const handlers = (env: Env) => {
 					...saved,
 					ticket: ask.ticket,
 					branch: ask.branch,
+					root: ask.root,
 					head: accepted ? e.head : (saved.head ?? ask.base),
 					steps: [...saved.steps, entry],
 				};
@@ -853,6 +858,7 @@ type Lane = {
 	readonly lane: string;
 	readonly ticket?: string;
 	readonly branch?: string;
+	readonly root?: string;
 	readonly head?: string;
 	readonly steps: readonly {readonly step: string}[];
 };
@@ -869,6 +875,15 @@ answer: send build <why>
 answer: ask <the one question for the lead>
 answer: stuck <why>
 `;
+
+const MIN_FREE_GB = 20;
+
+/** Whole GB free on the volume that holds `path`, from `df -k`; `null` when df says nothing usable. */
+const freeGb = (path: string): number | null => {
+	const r = sh("df", ["-k", path]);
+	const kb = Number(r.out.trim().split("\n").at(-1)?.trim().split(/\s+/)[3]);
+	return r.code === 0 && Number.isFinite(kb) ? Math.floor(kb / 1024 / 1024) : null;
+};
 
 /** What a Claude step is told on top of the brief: its skill, and how its work is committed. */
 const claudeTail = (ask: Ask) => {
@@ -975,6 +990,13 @@ const main = () => {
 		console.error(`drive.ts: ${from} is not a commit in the main checkout`);
 		process.exit(2);
 	}
+	// The lane's root, kept from its first step: where its base left main.
+	const root =
+		saved?.root ?? sh("git", ["-C", env.MAIN, "merge-base", "origin/main", base]).out.trim();
+	if (!root) {
+		console.error(`drive.ts: ${base.slice(0, 8)} shares no history with origin/main`);
+		process.exit(2);
+	}
 	const s = step as StepName;
 	let n = (saved?.steps.filter((e) => e.step === s).length ?? 0) + 1;
 	while (
@@ -994,6 +1016,7 @@ const main = () => {
 		ticket,
 		branch,
 		base,
+		root,
 		box,
 		run: `t${ticket}-${s}${n === 1 ? "" : n}`,
 		prompt: at("-prompt.md"),
@@ -1014,6 +1037,19 @@ const main = () => {
 			JSON.stringify({
 				outcome: "refused",
 				reason: `${agents} agents running (Codex boxes and drive's Claude steps); the cap is 8`,
+			}),
+		);
+		process.exit(3);
+	}
+	// Dead boxes filled the disk once (2026-11-09): sweep them, then refuse on a nearly full disk.
+	spawnSync("sh", [join(HERE, "box.sh"), "gc"], {stdio: ["ignore", 2, 2]});
+	const free = freeGb(env.BOXES);
+	if (free === null || free < MIN_FREE_GB) {
+		const said = free === null ? "df could not read the free space" : `${free} GB free`;
+		console.log(
+			JSON.stringify({
+				outcome: "refused",
+				reason: `${said} on the boxes' volume; drive needs ${MIN_FREE_GB}`,
 			}),
 		);
 		process.exit(3);

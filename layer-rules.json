@@ -76,10 +76,6 @@
 			]
 		},
 		{
-			"name": "packs",
-			"paths": ["packs"]
-		},
-		{
 			"name": "programs",
 			"paths": ["programs"]
 		},
