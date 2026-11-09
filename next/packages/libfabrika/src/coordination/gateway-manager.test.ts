@@ -41,7 +41,7 @@ const setup = (now: number) => {
 const time = fc.integer({min: 0, max: 2 ** 47});
 const check = <A, E, R>(
 	arb: fc.Arbitrary<A>,
-	examples: A[],
+	examples: NoInfer<A>[],
 	law: (a: A) => Effect.Effect<void, E, R>,
 ) =>
 	Effect.gen(function* () {

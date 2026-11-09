@@ -16,7 +16,7 @@ const decode = (id: string): Uint8Array => {
 // Keep the test clock in each generated run; each sample builds a new generator layer.
 const check = <A, E, R>(
 	arb: fc.Arbitrary<A>,
-	examples: A[],
+	examples: NoInfer<A>[],
 	law: (a: A) => Effect.Effect<void, E, R>,
 ) =>
 	Effect.gen(function* () {

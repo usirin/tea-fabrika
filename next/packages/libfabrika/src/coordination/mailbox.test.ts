@@ -17,7 +17,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
-import {Effect, Layer, Stream} from "effect";
+import {Effect, Layer, Schema, Stream} from "effect";
 import * as fc from "fast-check";
 import {Doorbell, Ledger, LedgerError} from "../data/ledger.ts";
 import type {Line} from "../data/log.ts";
@@ -88,7 +88,7 @@ const raw = (stream: string, id: string, over: Partial<Line>) =>
 	);
 const check = <A, E, R>(
 	arb: fc.Arbitrary<A>,
-	examples: A[],
+	examples: NoInfer<A>[],
 	law: (a: A) => Effect.Effect<void, E, R>,
 ) =>
 	Effect.gen(function* () {
@@ -111,7 +111,7 @@ const json = fc.jsonValue();
 
 describe("p21, send", () => {
 	it.effect("non-JSON mail is refused as bad_line and writes no entry", () =>
-		check(
+		check<unknown, LedgerError, never>(
 			fc.oneof(
 				fc.constant(undefined),
 				fc.constant(() => null),
@@ -317,7 +317,10 @@ describe("p21, receive", () => {
 			(body) =>
 				Effect.gen(function* () {
 					yield* send("notes:1", "letter_a", 1);
-					yield* raw("notes:1/inbox", "x-1", {_tag: "send", body});
+					yield* raw("notes:1/inbox", "x-1", {
+						_tag: "send",
+						body: Schema.decodeUnknownSync(Schema.Json)(body),
+					});
 					const failed = yield* Effect.flip(receive("notes:1"));
 					expect(failed).toBeInstanceOf(LedgerError);
 					expect(failed.why).toBe("bad_row");

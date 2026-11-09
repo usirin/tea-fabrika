@@ -87,7 +87,7 @@ const founderArb: fc.Arbitrary<Parameters<typeof ClientManager.layer>[0]> = fc.r
 const leaf = fc.string().map((s) => `tab:${s}`);
 const check = <A, E, R>(
 	arb: fc.Arbitrary<A>,
-	examples: A[],
+	examples: NoInfer<A>[],
 	law: (a: A) => Effect.Effect<void, E, R>,
 ) =>
 	Effect.gen(function* () {

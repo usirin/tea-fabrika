@@ -29,7 +29,7 @@ import {Owner, ProcessFact, Recipient} from "./process.ts";
 
 const check = <A, E, R>(
 	arb: fc.Arbitrary<A>,
-	examples: A[],
+	examples: NoInfer<A>[],
 	law: (a: A) => Effect.Effect<void, E, R>,
 ) =>
 	Effect.gen(function* () {
@@ -378,7 +378,11 @@ describe("p79, names, parents and replay", () => {
 					const before = store.rows();
 					const stream = before.find((row) => row._tag === "registered")!.stream;
 					yield* Ledger.use((ledger) =>
-						ledger.append(stream, "future", {...from(), _tag: "future_process_fact", body}),
+						ledger.append(stream, "future", {
+							...from(),
+							_tag: "future_process_fact",
+							body: Schema.decodeUnknownSync(Schema.Json)(body),
+						}),
 					).pipe(Effect.provide(manager(store)));
 					store.reopen();
 					const replayed = yield* Effect.exit(
