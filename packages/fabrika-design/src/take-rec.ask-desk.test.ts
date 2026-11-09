@@ -1,3 +1,5 @@
+import {readFileSync} from "node:fs";
+import {createRequire} from "node:module";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {ratio} from "./build/contrast.ts";
@@ -10,10 +12,12 @@ import {dark, light} from "./theme-colors.ts";
 //
 // What Take rec is drawn with (programs/tracker/src/ask-window.tsx, the toolbar's Button): Manti's
 // primary solid, `--manti-accent-fill` = turn-fill, label `--manti-text-on-accent` = on-turn, and
-// Manti's own state mixes in oklab (hover 88% fill over white in light, black in dark; pressed 78%);
-// While a note is open
-// Take rec is the outline variant: label = 78% fill over black in light, 45% fill over white in
-// dark (Manti's `--variant-text`), on the raised surface.
+// Manti's own state mixes in oklab (`--variant-solid-hover`, `--variant-solid-active`). Those
+// are read from the installed, patched Manti CSS (`@manti-ui/styles/index.css`, the
+// `[data-variant=primary]` rule) and resolved with the real tokens, never copied here
+// (patches/@manti-ui__styles@0.13.0.patch turns the light side toward black: light hover and press
+// read 4.10:1 and 3.37:1 with Manti's mix toward white). While a note is open Take rec is the
+// outline variant: label = the rule's `--variant-text` on the raised surface.
 //
 // The saving state (busy: every action disabled, Manti draws the button at opacity .5) is not
 // covered: WCAG 1.4.3 exempts inactive user interface components, so the 4.5:1 law holds only while
@@ -81,24 +85,83 @@ const mix = (a: string, percent: number, b: string) => {
 	return fromLab([0, 1, 2].map((i) => A[i]! * p + B[i]! * (1 - p)) as [number, number, number]);
 };
 
+const manti = createRequire(new URL("../../../apps/fabrika/package.json", import.meta.url));
+const mantiCss = readFileSync(manti.resolve("@manti-ui/styles/index.css"), "utf8");
+
+/** The text between the matching parens that open at `from`, and the index after the close. */
+const group = (text: string, from: number): [string, number] => {
+	let depth = 0;
+	for (let i = from; i < text.length; i++) {
+		if (text[i] === "(") depth++;
+		if (text[i] === ")" && --depth === 0) return [text.slice(from + 1, i), i + 1];
+	}
+	throw new Error(`unbalanced parens in ${text.slice(from, from + 60)}`);
+};
+const splitTop = (text: string) => {
+	const parts: string[] = [];
+	let depth = 0;
+	let from = 0;
+	for (let i = 0; i < text.length; i++) {
+		if (text[i] === "(") depth++;
+		if (text[i] === ")") depth--;
+		if (text[i] === "," && depth === 0) {
+			parts.push(text.slice(from, i).trim());
+			from = i + 1;
+		}
+	}
+	return [...parts, text.slice(from).trim()];
+};
+
+/** One custom property of Manti's primary variant, for a look and a fill, resolved to a hex. */
+const primary = (css: string, name: string, look: Look): string => {
+	const start = css.indexOf("[data-variant=primary]{--variant-solid:");
+	if (start < 0) throw new Error("no [data-variant=primary] rule in Manti's CSS");
+	const body = css.slice(start, css.indexOf("}", start));
+	const decl = new RegExp(`[{;]--${name}:`).exec(body);
+	if (decl === null) throw new Error(`primary has no --${name}`);
+	const at = decl.index + decl[0].length;
+	let end = at;
+	for (let depth = 0; end < body.length; end++) {
+		if (body[end] === "(") depth++;
+		if (body[end] === ")") depth--;
+		if (body[end] === ";" && depth === 0) break;
+	}
+	const fill = LOOKS[look]["turn-fill"];
+	const resolve = (value: string): string => {
+		const v = value.trim();
+		if (v.startsWith("light-dark(")) {
+			const [inner] = group(v, v.indexOf("("));
+			const [lightSide, darkSide] = splitTop(inner);
+			return resolve(look === "light" ? lightSide! : darkSide!);
+		}
+		if (v.startsWith("color-mix(")) {
+			const [inner] = group(v, v.indexOf("("));
+			const [space, one, two] = splitTop(inner);
+			if (space !== "in oklab") throw new Error(`color-mix in ${space}`);
+			const [color, pct] = one!.split(/\s+(?=[\d.]+%$)/) as [string, string];
+			return mix(resolve(color), Number.parseFloat(pct), resolve(two!));
+		}
+		if (v === "var(--variant-solid)" || v === "var(--manti-accent-fill)") return fill;
+		if (v === "white") return "#ffffff";
+		if (v === "black") return "#000000";
+		if (/^#[0-9a-f]{6}$/i.test(v)) return v;
+		throw new Error(`cannot resolve ${v}`);
+	};
+	return resolve(body.slice(at, end));
+};
+
 /** Take rec's label and background in a state and a look: what the page draws, from the tokens. */
-const takeRec = (look: Look, state: State): {fg: string; bg: string} => {
+const takeRec = (look: Look, state: State, css = mantiCss): {fg: string; bg: string} => {
 	const t = LOOKS[look];
-	const fill = t["turn-fill"];
-	const surface = t.raised;
-	const toward = look === "light" ? "#ffffff" : "#000000";
 	switch (state) {
 		case "note open": // the outline variant: the one indigo is the note's Send
-			return {
-				fg: look === "light" ? mix(fill, 78, "#000000") : mix(fill, 45, "#ffffff"),
-				bg: surface,
-			};
+			return {fg: primary(css, "variant-text", look), bg: t.raised};
 		case "hovered":
-			return {fg: t["on-turn"], bg: mix(fill, 88, toward)};
+			return {fg: t["on-turn"], bg: primary(css, "variant-solid-hover", look)};
 		case "pressed":
-			return {fg: t["on-turn"], bg: mix(fill, 78, toward)};
+			return {fg: t["on-turn"], bg: primary(css, "variant-solid-active", look)};
 		default:
-			return {fg: t["on-turn"], bg: fill};
+			return {fg: t["on-turn"], bg: t["turn-fill"]};
 	}
 };
 
@@ -129,6 +192,27 @@ describe("law 23: Take rec's label reads 4.5:1 on its own background", () => {
 					expect(ratio(t["on-turn"], bg)).toBeLessThan(4.5);
 				},
 			),
+		);
+	});
+
+	// plant: Manti's own unpatched light mix, toward white (hover 88%, press 78%), read through the
+	// same resolver and the same ratio.
+	it("plant: Manti's unpatched light mix toward white under the label is caught by the same ratio", () => {
+		const unpatched = mantiCss
+			.replaceAll(
+				"88%, black),color-mix(in oklab, var(--variant-solid) 88%, black)",
+				"88%, white),color-mix(in oklab, var(--variant-solid) 88%, black)",
+			)
+			.replaceAll(
+				"78%, black),color-mix(in oklab, var(--variant-solid) 78%, black)",
+				"78%, white),color-mix(in oklab, var(--variant-solid) 78%, black)",
+			);
+		expect(unpatched).not.toBe(mantiCss);
+		fc.assert(
+			fc.property(fc.constantFrom<State>("hovered", "pressed"), (state) => {
+				const {fg, bg} = takeRec("light", state, unpatched);
+				expect(ratio(fg, bg), `${state}: ${fg} on ${bg}`).toBeLessThan(4.5);
+			}),
 		);
 	});
 });

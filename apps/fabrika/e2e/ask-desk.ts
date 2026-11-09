@@ -1289,71 +1289,129 @@ const oneRing = async (when: string, field: Locator) => {
  */
 const takeRecReads = async (when: string, where: Locator) => {
 	const rec = button(where, "Take rec");
-	const seen = await rec.evaluate((element) => {
-		const canvas = document.createElement("canvas");
-		canvas.width = canvas.height = 1;
-		const ctx = canvas.getContext("2d", {willReadFrequently: true});
-		if (ctx === null) throw new Error("no canvas");
-		// Any CSS color (oklab, color-mix, light-dark results) to rgba, as the page draws it.
-		const rgba = (css: string): [number, number, number, number] => {
-			ctx.clearRect(0, 0, 1, 1);
-			ctx.fillStyle = "#000";
-			ctx.fillStyle = css;
-			ctx.fillRect(0, 0, 1, 1);
-			const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
-			return [r ?? 0, g ?? 0, b ?? 0, (a ?? 0) / 255];
-		};
-		const over = (top: number[], alpha: number, under: number[]) =>
-			[0, 1, 2].map((i) => (top[i] ?? 0) * alpha + (under[i] ?? 0) * (1 - alpha));
-		const chain: Element[] = [];
-		for (let e: Element | null = element; e !== null; e = e.parentElement) chain.unshift(e);
-		let backdrop = [255, 255, 255];
-		let faded = 1;
-		for (const e of chain) {
-			const style = getComputedStyle(e);
-			faded *= Number(style.opacity);
-			const bg = rgba(style.backgroundColor);
-			backdrop = over(bg, bg[3] * faded, backdrop);
-		}
-		// The label: the button's first own text, not its key chip.
-		const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-		let label: Element = element;
-		for (let n = walker.nextNode(); n !== null; n = walker.nextNode())
-			if ((n.textContent ?? "").trim() !== "" && n.parentElement !== null) {
-				label = n.parentElement;
-				break;
+	// Manti transitions the button's colors, so a read straight after a state change sees mid-fade
+	// pale colors. Wait until the computed colors are equal on two reads in a row and no animation
+	// or transition on the button is still running, then read.
+	const settle = async () => {
+		await rec.evaluate(async (element) => {
+			const colors = () => {
+				const style = getComputedStyle(element);
+				const label = element.querySelector("span") ?? element;
+				return [style.backgroundColor, style.color, getComputedStyle(label).color].join("|");
+			};
+			let last = "";
+			for (let i = 0; i < 120; i++) {
+				await Promise.all(
+					element.getAnimations({subtree: true}).map((a) => a.finished.catch(() => {})),
+				);
+				await new Promise((done) => requestAnimationFrame(() => done(null)));
+				const now = colors();
+				if (now === last && element.getAnimations({subtree: true}).length === 0) return;
+				last = now;
 			}
-		const ink = rgba(getComputedStyle(label).color);
-		const text = over(ink, ink[3] * faded, backdrop);
-		const lin = (c: number) => {
-			const v = c / 255;
-			return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-		};
-		const lum = (c: number[]) =>
-			0.2126 * lin(c[0] ?? 0) + 0.7152 * lin(c[1] ?? 0) + 0.0722 * lin(c[2] ?? 0);
-		const [hi, lo] = [lum(text), lum(backdrop)].sort((a, b) => b - a);
-		return {
-			ratio: ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05),
-			text: text.map(Math.round),
-			background: backdrop.map(Math.round),
-			opacity: faded,
-			disabled: (element as HTMLButtonElement).disabled,
-		};
-	});
+			throw new Error("Take rec's colors never settled");
+		});
+	};
+	const read = async () => {
+		await settle();
+		return await rec.evaluate((element) => {
+			const canvas = document.createElement("canvas");
+			canvas.width = canvas.height = 1;
+			const ctx = canvas.getContext("2d", {willReadFrequently: true});
+			if (ctx === null) throw new Error("no canvas");
+			// Any CSS color (oklab, color-mix, light-dark results) to rgba, as the page draws it.
+			const rgba = (css: string): [number, number, number, number] => {
+				ctx.clearRect(0, 0, 1, 1);
+				ctx.fillStyle = "#000";
+				ctx.fillStyle = css;
+				ctx.fillRect(0, 0, 1, 1);
+				const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+				return [r ?? 0, g ?? 0, b ?? 0, (a ?? 0) / 255];
+			};
+			const over = (top: number[], alpha: number, under: number[]) =>
+				[0, 1, 2].map((i) => (top[i] ?? 0) * alpha + (under[i] ?? 0) * (1 - alpha));
+			const chain: Element[] = [];
+			for (let e: Element | null = element; e !== null; e = e.parentElement) chain.unshift(e);
+			let backdrop = [255, 255, 255];
+			let faded = 1;
+			for (const e of chain) {
+				const style = getComputedStyle(e);
+				faded *= Number(style.opacity);
+				const bg = rgba(style.backgroundColor);
+				backdrop = over(bg, bg[3] * faded, backdrop);
+			}
+			// The label: the button's first own text, not its key chip.
+			const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+			let label: Element = element;
+			for (let n = walker.nextNode(); n !== null; n = walker.nextNode())
+				if ((n.textContent ?? "").trim() !== "" && n.parentElement !== null) {
+					label = n.parentElement;
+					break;
+				}
+			const ink = rgba(getComputedStyle(label).color);
+			const text = over(ink, ink[3] * faded, backdrop);
+			const lin = (c: number) => {
+				const v = c / 255;
+				return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+			};
+			const lum = (c: number[]) =>
+				0.2126 * lin(c[0] ?? 0) + 0.7152 * lin(c[1] ?? 0) + 0.0722 * lin(c[2] ?? 0);
+			const [hi, lo] = [lum(text), lum(backdrop)].sort((a, b) => b - a);
+			return {
+				ratio: ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05),
+				text: text.map(Math.round),
+				background: backdrop.map(Math.round),
+				opacity: faded,
+				disabled: (element as HTMLButtonElement).disabled,
+			};
+		});
+	};
+	const page = where.page();
+	const rest = await read();
 	// WCAG 1.4.3 exempts inactive user interface components
 	// (https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html, "Incidental"), so 4.5:1
 	// binds only while Take rec is enabled. A disabled one (busy: saving) is recorded, never failed.
-	if (seen.disabled) {
+	if (rest.disabled) {
 		console.log(
-			`note ask desk P23 11-09, ${when}: Take rec is disabled, exempt from 4.5:1, reads ${seen.ratio.toFixed(2)}:1 ${JSON.stringify(seen)}`,
+			`note ask desk P23 11-09, ${when}: Take rec is disabled, exempt from 4.5:1, reads ${rest.ratio.toFixed(2)}:1 ${JSON.stringify(rest)}`,
 		);
 		return;
 	}
 	check(
 		`P23 11-09, ${when}: Take rec's label reads at least 4.5:1 on its background`,
-		seen.ratio >= 4.5,
-		seen,
+		rest.ratio >= 4.5,
+		rest,
 	);
+	// The hovered and the pressed state, from the page's own computed style (Manti's :hover and
+	// :active), each read once settled. Pressing focuses the button, so the focus the shot had is
+	// put back; the mouse goes off the button before it lifts, so no click fires.
+	await rec.evaluate(() => {
+		for (const e of document.querySelectorAll("[data-take-rec-was]"))
+			e.removeAttribute("data-take-rec-was");
+		document.activeElement?.setAttribute("data-take-rec-was", "");
+	});
+	await rec.hover();
+	const hovered = await read();
+	check(
+		`P23 11-09, ${when}, hovered: Take rec's label reads at least 4.5:1 on its background`,
+		hovered.ratio >= 4.5,
+		hovered,
+	);
+	await page.mouse.down();
+	const pressed = await read();
+	check(
+		`P23 11-09, ${when}, pressed: Take rec's label reads at least 4.5:1 on its background`,
+		pressed.ratio >= 4.5,
+		pressed,
+	);
+	await page.mouse.move(0, 0);
+	await page.mouse.up();
+	await rec.evaluate(() => {
+		const was = document.querySelector<HTMLElement>("[data-take-rec-was]");
+		was?.removeAttribute("data-take-rec-was");
+		if (was !== null) was.focus();
+		else (document.activeElement as HTMLElement | null)?.blur();
+	});
 };
 /**
  * Round 29, law 2, at every layout: in the saving and failed-save states, the "Your turn" line and
