@@ -453,7 +453,11 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 				location: options.location,
 				build: options.build,
 			});
-			const placed = yield* ledger.append("door/hellos", `hello-${random()}`, lineFor(from, fact));
+			const placed = yield* appendChecked(result.hello.key, {
+				stream: "door/hellos",
+				id: `hello-${random()}`,
+				line: lineFor(from, fact),
+			});
 			if (placed._tag === "refused") return yield* new LedgerError({why: "refused"});
 			yield* store.atomic(() => {
 				sql.exec("DELETE FROM door_pending WHERE client=?", client);
@@ -1120,9 +1124,9 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			reserved(incoming.envelope.input)
 		)
 			return yield* new NotGranted({});
-		const message = yield* Schema.decodeUnknownEffect(options.inputs.schema)(
-			incoming.envelope.input,
-		).pipe(Effect.mapError(() => new LedgerError({why: "bad_row"})));
+		// route already decoded this body; the guard checks its decoded type.
+		const message = incoming.envelope.input;
+		if (!Schema.is(options.inputs.schema)(message)) return yield* new LedgerError({why: "bad_row"});
 		if (binding.hash !== (yield* hash(JSON.stringify(message)))) return yield* new NotGranted({});
 		const destination = Option.isSome(processes)
 			? yield* processes.value.resolve(binding.process)
