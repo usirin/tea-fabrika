@@ -26,7 +26,7 @@ export type Row = typeof Row.Type;
 const Ledger = Schema.Array(Row);
 
 /** One thing the check refuses, at a function in a file. */
-export interface Finding {
+interface Finding {
 	readonly file: string;
 	readonly fn: string;
 	readonly line: number;
@@ -34,7 +34,7 @@ export interface Finding {
 }
 
 /** The one compile step: oxc's Rust port of the React Compiler, with its findings reported. */
-export const compile = (file: string, code: string) =>
+const compile = (file: string, code: string) =>
 	transformSync(file, code, {
 		jsx: {runtime: "automatic"},
 		reactCompiler: {

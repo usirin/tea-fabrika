@@ -22,12 +22,12 @@ import {Effect, Exit, Schema, Stream} from "effect";
 
 // ---------------------------------------------------------------- the child
 
-export const Count = Schema.Struct({
+const Count = Schema.Struct({
 	count: Schema.Number,
 	cursor: Schema.Number,
 	last: Schema.NullOr(Schema.String),
 });
-export type Count = typeof Count.Type;
+type Count = typeof Count.Type;
 type Inc = {
 	readonly type: "inc";
 	readonly id: string;
@@ -35,7 +35,7 @@ type Inc = {
 	readonly poison: boolean;
 };
 
-export const counter = defineMachine({
+const counter = defineMachine({
 	types: {model: {} as Count, msg: {} as Inc, ctx: undefined},
 	cmds: [],
 	init: (loaded) => [loaded ?? {count: 0, cursor: 0, last: null}, []],
@@ -48,7 +48,7 @@ export const counter = defineMachine({
 	},
 });
 
-export const Body = Schema.Struct({
+const Body = Schema.Struct({
 	poison: Schema.optional(Schema.Boolean),
 	crashAfter: Schema.optional(Schema.Boolean),
 });

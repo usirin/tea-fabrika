@@ -37,10 +37,10 @@ export const drop = Cmd.make("drop", {
 	err: ["unreachable"],
 });
 
-export const LentWhy = Schema.Literals(["done", "timed_out", "refused", "unsealed", "unreachable"]);
-export type LentWhy = typeof LentWhy.Type;
+const LentWhy = Schema.Literals(["done", "timed_out", "refused", "unsealed", "unreachable"]);
+type LentWhy = typeof LentWhy.Type;
 
-export type Lent =
+type Lent =
 	| {readonly at: "asking"; readonly turn: number; readonly waitMs: number | null}
 	| {readonly at: "opening"; readonly turn: number}
 	| {readonly at: "holding"; readonly turn: number; readonly renewInMs: number}

@@ -93,13 +93,13 @@ const ProgramDoes = Schema.Literals([
 type Command = Does | typeof ProgramDoes.Type;
 
 /** One command and its keys. `source` is where its keys come from, as VS Code's Source column (K3). */
-export const Row = Schema.Struct({
+const Row = Schema.Struct({
 	does: Does,
 	/** `[]` is unbound: no key runs it, and the palette and its tsh word still do. */
 	keys: Schema.Array(Key),
 	source: Schema.Literals(["default", "yours"]),
 });
-export type Row = typeof Row.Type;
+type Row = typeof Row.Type;
 const ProgramRow = Schema.Struct({...Row.fields, does: ProgramDoes});
 
 /** What came of the file: none (the defaults), read, or refused, with its line and why. */

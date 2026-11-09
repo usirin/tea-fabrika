@@ -10,7 +10,7 @@ import {defineProgram, envelope, inboxOf, input, Self, streams} from "@kampus/fa
 import {Duration, Effect, Exit, Schedule, Schema, Stream} from "effect";
 import {type AnswerCmd, answerer} from "../95-agents-across-hosts/answer-machine.ts";
 
-export const AnswererState = Schema.Struct({
+const AnswererState = Schema.Struct({
 	cursor: Schema.Number,
 	answered: Schema.Number,
 	repeats: Schema.Number,

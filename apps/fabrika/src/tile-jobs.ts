@@ -18,7 +18,7 @@ import {Schema} from "effect";
 // have ended once it has left the table and each of its runs has said how it ended.
 
 /** One job running in a tile: its `%n`, its line as typed, when it began, and whether tsh waits for it. */
-export const JobNow = Schema.Struct({
+const JobNow = Schema.Struct({
 	n: Schema.Int,
 	text: Schema.String,
 	/** Unix ms, by the host's clock: when this tile's tsh first saw it run. */
@@ -26,11 +26,11 @@ export const JobNow = Schema.Struct({
 	/** tsh waits for it, as a shell waits for its foreground job. Started with `&`, it is `false`. */
 	foreground: Schema.Boolean,
 });
-export type JobNow = typeof JobNow.Type;
+type JobNow = typeof JobNow.Type;
 
 /** How a job ended, in the words a job's record uses: on its own, with a failure, or stopped. */
-export const JobEnd = Schema.Literals(["done", "failed", "stopped"]);
-export type JobEnd = typeof JobEnd.Type;
+const JobEnd = Schema.Literals(["done", "failed", "stopped"]);
+type JobEnd = typeof JobEnd.Type;
 
 /** The last job of a tile to end: what it was, how it ended, and when. */
 export const JobEnded = Schema.Struct({
@@ -51,8 +51,6 @@ export const TileJobs = Schema.Struct({
 });
 export type TileJobs = typeof TileJobs.Type;
 
-export const NO_JOBS: TileJobs = {running: [], ended: null};
-
 /** How a job ended, from how each of its runs did: one failure fails it, one stop stops it. */
 export const endOf = (runs: readonly Ended<unknown>["kind"][]): JobEnd =>
 	runs.includes("failed") ? "failed" : runs.includes("stopped") ? "stopped" : "done";
@@ -68,7 +66,7 @@ interface Seen {
 	left: boolean;
 }
 
-export interface JobWatch {
+interface JobWatch {
 	/** The host's table changed, or a run of this tile's tsh was seen: `mine` has every run it started. */
 	readonly table: (now: Shell.Jobs | null, mine: {readonly has: (run: string) => boolean}) => void;
 	/** One run of this tile's tsh ended, this way. */

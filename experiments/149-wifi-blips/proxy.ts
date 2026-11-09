@@ -22,7 +22,7 @@ import {connect, createServer, type Server, type Socket} from "node:net";
 
 export type Mode = "pass" | "refuse" | "hang";
 
-export interface ProxyCounts {
+interface ProxyCounts {
 	/** Connections accepted, in all. */
 	conns: number;
 	/** Of those, WebSocket upgrades (the doorbell). */

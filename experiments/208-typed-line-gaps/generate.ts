@@ -14,7 +14,7 @@ import {type Run, type Spelling, spellingOf} from "./spelling.ts";
 // literal; ./agree.test.ts fails when that file is stale.
 
 /** The values a number flag most often gets wrong, tried on every spelled flag, whole and inside each run. */
-export const EDGES = ["0", "1", "1.5", "-1", "1e3", "0x10", "01", "99999999999999999999", ""];
+const EDGES = ["0", "1", "1.5", "-1", "1e3", "0x10", "01", "99999999999999999999", ""];
 
 /** Characters to try where a run expects others: a digit, letters, signs, and two outside ASCII. */
 const STRANGERS = ["0", "a", "Z", "_", "-", ".", "+", "é", "😀"];

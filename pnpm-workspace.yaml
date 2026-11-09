@@ -1,5 +1,4 @@
 # packages: what other code may build on. programs: one runnable tea program each.
-# packs: add-on packs, wired to the core by one config line; the core names none.
 # docs/tutorials: a tutorial's finished files, type-checked so it cannot drift.
 # apps: what a person opens, on top of everything else. Nothing imports an app.
 # experiments/142-web-terminals: one experiment's harness, so its terminal libraries stay out of the app.
@@ -13,9 +12,9 @@ packages:
   - apps/*
   - packages/*
   - programs/*
-  - packs/*
   - docs/tutorials/*
   - oxlint-plugins
+  - .github/ci
   - experiments/142-web-terminals
   - experiments/171-alchemy-local-twin
   - experiments/173-worker-loader
@@ -34,7 +33,7 @@ catalog:
   '@anthropic-ai/claude-agent-sdk': 0.3.316
   # The os sandbox (packages/fabrika/src/sandbox/os.ts), held exact: 0.0.x, as experiments 127, 128 and 137 ran it.
   '@anthropic-ai/sandbox-runtime': 0.0.81
-  '@demlik/code-graph': 0.12.0
+  '@demlik/code-graph': 0.15.0
   '@demlik/structure-sweep': 0.3.9
   '@demlik/tea': 0.25.0
   '@effect/opentelemetry': 4.1.2
@@ -144,6 +143,10 @@ patchedDependencies:
   # Draw on change, and a hollow cursor when a tile is unfocused (experiment 142).
   ghostty-web@0.4.0: patches/ghostty-web@0.4.0.patch
   '@manti-ui/styles@0.13.0': patches/@manti-ui__styles@0.13.0.patch
+  # demlik#905: a non-exported const beside an exported type of its name is not an unused export;
+  # drop at the release that has the fix.
+  '@demlik/code-graph@0.15.0': patches/@demlik__code-graph@0.15.0.patch
 
 minimumReleaseAgeExclude:
   - '@demlik/tea@0.24.0 || 0.25.0'
+  - '@demlik/code-graph@0.15.0'

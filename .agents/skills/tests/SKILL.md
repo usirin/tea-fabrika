@@ -49,8 +49,7 @@ the rest.
 5. **Fix test-side type errors** the build's product edits cause (a `// @ts-expect-error <why>` on a
    case that is invalid on purpose, or a reshaped test that still proves the refusal). Keep every
    law and plant.
-6. **Commit and sign** with the step-commit skill:
-   `sh .agents/skills/step-commit/scripts/stepcommit.sh tests <ticket> "T<ticket> tests: <subject>" <paths...>`
+6. **Commit** with the step-commit skill. In a box use `--commit-only`; fetch signs the run.
 7. **Report** in at most 6 lines: each new law with `file:line` and how you saw it fail, anything
    in the plan you found wrong, and any red that is a sandbox limit.
 
@@ -63,14 +62,14 @@ the rest.
   blocked there, so skip them.
 - Elsewhere: `nice -n 15 pnpm exec vitest run --maxWorkers=3 <narrow path>`, and `nice -n 19` with
   `--maxWorkers=1` when two or more code agents run.
-- `pnpm format` before each commit, `pnpm lint` once. One `pnpm typecheck` at the end only if the
+- Run `pnpm lint` once. Step-commit checks staged formatting. One `pnpm typecheck` at the end only if the
   brief allows it, and never while another runs (`pgrep -x tsgo`).
 - A sandbox may refuse sockets (`EPERM`), file watches (`EMFILE`), `ps` or Electron. Say which law
   that hits, and do not count it as red or green.
 
 ## Never
 
-- Change product code. The builder's uncommitted edits stay exactly as they are; stage only yours.
+- The builder's uncommitted edits stay exactly as they are.
 - Reset, rebase or amend. Taking over another step's work is a new commit on top.
 - Read, print or copy a key file. Push.
 - Write a law that cannot fail, or one whose plant you did not run.

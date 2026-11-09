@@ -32,7 +32,7 @@ import * as Patient from "./patient/idempotency.ts";
 
 // ---------------------------------------------------------------- the machine
 
-export const LaneState = Schema.Struct({
+const LaneState = Schema.Struct({
 	/** The last step done. */
 	k: Schema.Int,
 	/** The inbox rev of the last answer taken. */
@@ -42,10 +42,10 @@ export const LaneState = Schema.Struct({
 	/** A step is out. */
 	busy: Schema.Boolean,
 });
-export type LaneState = typeof LaneState.Type;
+type LaneState = typeof LaneState.Type;
 const ZERO: LaneState = {k: 0, cursor: 0, answers: [], busy: false};
 
-export const step = Cmd.make("step", {
+const step = Cmd.make("step", {
 	input: Schema.Struct({k: Schema.Int}),
 	ok: Schema.Struct({k: Schema.Int}),
 	err: ["unreachable"],
@@ -55,7 +55,7 @@ type LaneMsg =
 	| {readonly type: "tick"}
 	| {readonly type: "answer"; readonly id: string; readonly rev: number};
 
-export const laneMachine = defineMachine({
+const laneMachine = defineMachine({
 	types: {model: {} as LaneState, msg: {} as LaneMsg, ctx: undefined},
 	cmds: [step],
 	// A run started again (a restart, a takeover) has no step out: the one that was is sent again.
@@ -110,7 +110,7 @@ export type LaneNote =
 	| {readonly ev: "fenced"; readonly k: number; readonly fence: number}
 	| {readonly ev: "gate"; readonly step: string; readonly key: string; readonly fence: number};
 
-export interface LaneOptions {
+interface LaneOptions {
 	readonly run: string;
 	/** The ticket the lane's plan is made from: `o/r#<n>`. */
 	readonly ticket: string;

@@ -6,7 +6,7 @@ import {WorkerEntrypoint} from "cloudflare:workers";
 import {Schema} from "effect";
 
 type Msg = {type: string};
-export type Migrated = {ok: true; model: unknown} | {ok: false; why: string};
+type Migrated = {ok: true; model: unknown} | {ok: false; why: string};
 
 export const define = <S>(spec: {
 	state: Schema.Codec<S, unknown>;

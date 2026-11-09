@@ -25,7 +25,7 @@ import type {Takes} from "./desk.ts";
 // the keys reach the desk and the tiles in the order they were pressed.
 
 /** A key press as the page read it off the keyboard: enough to make the same press again. */
-export const KeyPress = Schema.Struct({
+const KeyPress = Schema.Struct({
 	key: Schema.String,
 	code: Schema.String,
 	ctrl: Schema.Boolean,
@@ -35,7 +35,7 @@ export const KeyPress = Schema.Struct({
 	composing: Schema.optionalKey(Schema.Boolean),
 	altGraph: Schema.optionalKey(Schema.Boolean),
 });
-export type KeyPress = typeof KeyPress.Type;
+type KeyPress = typeof KeyPress.Type;
 
 /** A key: its name, as `keyName` spells it (keys.ts), and the press itself. */
 export const Key = Schema.Struct({name: Schema.String, press: KeyPress});

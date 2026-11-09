@@ -38,7 +38,7 @@ const here = join(import.meta.dirname, "..");
 export const truth92b = Schema.decodeUnknownSync(Truth)(
 	JSON.parse(readFileSync(join(here, "92b-truth.json"), "utf8")),
 ).tickets;
-export const truth88 = Schema.decodeUnknownSync(Truth)(
+const truth88 = Schema.decodeUnknownSync(Truth)(
 	JSON.parse(readFileSync(join(here, "88-truth.json"), "utf8")),
 ).tickets;
 const Truth133 = Schema.Struct({
@@ -157,14 +157,14 @@ export const PHOENIX_NOTE = [
 	"Work is done by agents: a builder turns a ticket into a pull request, a reviewer checks it, a shipper merges it. The repo's owners make the calls that need a person.",
 ].join("\n");
 /** 92b's "both": the drafted bar plus the written clauses. */
-export const P_BAR_BOTH = withClauses(
+const P_BAR_BOTH = withClauses(
 	readBar(join(here, "92-value-bar.json")),
 	readBar(join(here, "92-written-bar.json")),
 );
 /** The bar as 92b's brief states it, examples without demlik's numbers. */
 const P_BAR = barLines(P_BAR_BOTH, {numbers: false});
 /** Experiment 161's security line, as a "still a yes" clause after 92b's "a person filed it". */
-export const SECURITY = {
+const SECURITY = {
 	id: "a-security-gap-is-not-hardening",
 	rule: "A security gap is not hardening. A hole in who may see or do what, or a secret that could leak into a log or an error message, is a yes even if nobody has used it yet: a hole nobody has used is still a hole.",
 	example: {what: "a webhook that takes a request without checking its signature"},
@@ -311,7 +311,7 @@ export function dWrongNo(n: number, r: DAnswered): boolean {
 	if (a.answer === "no") return true;
 	return a.answer === "duplicate" && !(truth133.fold[n]?.into.includes(a.of) ?? false);
 }
-export const pRealNo = (n: number) => truth92b[n]?.next === "no";
+const pRealNo = (n: number) => truth92b[n]?.next === "no";
 export const pRight = (n: number, r: PAnswered) => {
 	const s = pSaid(r);
 	return pRealNo(n) ? s === "no" || s === "dup" : s === truth92b[n]?.next;

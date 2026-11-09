@@ -4,7 +4,7 @@
 // Object (over HTTP) and against node:sqlite (`node-ledger.ts`).
 import type {AppendResult, ClaimResult, Event, Expected, RenewResult, Row} from "./sql.ts";
 
-export type Exec = {ok: true; rows: Row[]} | {ok: false; error: string};
+type Exec = {ok: true; rows: Row[]} | {ok: false; error: string};
 
 export interface LedgerClient {
 	append(
@@ -25,12 +25,9 @@ export interface LedgerClient {
 }
 
 /** Sends one call; returns the parsed JSON body. Throws on a network error or a 500. */
-export type Post = (
-	path: string,
-	body: string,
-) => Promise<{status: number; json(): Promise<unknown>}>;
+type Post = (path: string, body: string) => Promise<{status: number; json(): Promise<unknown>}>;
 
-export class CallError extends Error {}
+class CallError extends Error {}
 
 /** A client over the Ledger's HTTP face: POST /<ledger>/<method> with the args as a JSON array. */
 export const httpClient = (post: Post, ledger: string): LedgerClient => {

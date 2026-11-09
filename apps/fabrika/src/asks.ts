@@ -103,7 +103,7 @@ export const NO_MARKS: Marks = {later: [], seen: []};
  * there was no file, `refused` with why when it does not read, as a broken file or one an older
  * build wrote. Either way the host starts with `NO_MARKS`.
  */
-export type KeptMarks =
+type KeptMarks =
 	| {readonly kind: "read"; readonly marks: Marks}
 	| {readonly kind: "none"}
 	| {readonly kind: "refused"; readonly why: string};
@@ -153,9 +153,9 @@ export const load = Cmd.make("load", {
 });
 
 /** The poll: rows after `after` are news; `failed`, and the first read that works is news too. */
-export type PollSub = Sub<"poll", {readonly after: number; readonly failed: boolean}>;
+type PollSub = Sub<"poll", {readonly after: number; readonly failed: boolean}>;
 /** The clock: the time, once a minute. */
-export type ClockSub = Sub<"clock", Record<string, never>>;
+type ClockSub = Sub<"clock", Record<string, never>>;
 
 type Step = readonly [Asks, readonly ReturnType<typeof load>[]];
 
@@ -335,7 +335,7 @@ export const noticeOf = (fresh: readonly [Ask, ...Ask[]]): {title: string; body:
  * (plan: "Record each newly sent notice"). Outside `tracker/ticket`, so no ticket's facts and no
  * count of asks reads it; attention per ticket folds it by the tickets each row names.
  */
-export const NOTICES = "asks/notices";
+const NOTICES = "asks/notices";
 
 /**
  * Keep one sent notification on the ledger, as `noticed` in `asks/notices/inbox`, written as the
@@ -358,7 +358,7 @@ export const noticeCell = (notice: Noticed, writer: string) =>
 const PAGE = 500;
 
 /** Every ticket's row after `after`, read in pages. A row that does not read is left out. */
-export const loadCell = (cmd: ReturnType<typeof load>) =>
+const loadCell = (cmd: ReturnType<typeof load>) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
 		const entries: Entry[] = [];
@@ -392,13 +392,13 @@ export const loadCell = (cmd: ReturnType<typeof load>) =>
 	);
 
 /** How often the poll asks the ledger for news, as the tracker's does. */
-export const POLL = Duration.seconds(1);
+const POLL = Duration.seconds(1);
 
 /**
  * `moved` once the ledger has a row after `after`, or once it answers again after a failure;
  * `failed` once a read fails while the last one worked.
  */
-export const pollRunner = (sub: PollSub) =>
+const pollRunner = (sub: PollSub) =>
 	Stream.tick(POLL).pipe(
 		Stream.mapEffect(() =>
 			Effect.gen(function* () {
@@ -417,10 +417,10 @@ export const pollRunner = (sub: PollSub) =>
 	);
 
 /** How often the clock ticks: the tracker's head reads the time, as its own list does. */
-export const CLOCK = Duration.minutes(1);
+const CLOCK = Duration.minutes(1);
 
 /** `tick` with the time, at once and then once a minute. */
-export const clockRunner = (_sub: ClockSub) =>
+const clockRunner = (_sub: ClockSub) =>
 	Stream.tick(CLOCK).pipe(
 		Stream.mapEffect(() => Clock.currentTimeMillis),
 		Stream.map((now): AsksMsg => ({type: "tick", now})),

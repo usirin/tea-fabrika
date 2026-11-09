@@ -82,7 +82,7 @@ import {
 export type TileNews = Extract<DeskMsg, {readonly type: "covered" | "over" | "jobs" | "ended"}>;
 
 /** What the tiles need of the edge: a way to tell the desk, and ports for the pages. */
-export interface Edge {
+interface Edge {
 	/** Tell the desk, beside the tiles in the host. */
 	readonly tell: (m: TileNews) => void;
 	/**
@@ -100,7 +100,7 @@ export interface Edge {
 	readonly typed?: ((tile: TileId) => void) | undefined;
 }
 
-export interface Tiles {
+interface Tiles {
 	/** Open a real trace beside the existing programs, without starting another shell. */
 	readonly lane: (tile: TileId, ticket: number) => Effect.Effect<string, {why: string}>;
 	/**

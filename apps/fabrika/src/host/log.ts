@@ -34,7 +34,7 @@ export const LAG_P99 = 0.05;
 const seconds = (ns: number): number => Math.round(ns / 1e3) / 1e6;
 
 /** A delay histogram, as Node's `monitorEventLoopDelay` gives one: nanoseconds, and a reset. */
-export interface DelayHistogram {
+interface DelayHistogram {
 	readonly percentile: (p: number) => number;
 	readonly max: number;
 	readonly reset: () => void;

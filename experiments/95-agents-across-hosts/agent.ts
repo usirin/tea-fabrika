@@ -10,7 +10,7 @@ import {tmpdir} from "node:os";
 import {Context, Duration, Effect, Schema} from "effect";
 import {stubAnswer} from "./question.ts";
 
-export interface Thought {
+interface Thought {
 	readonly answer: string;
 	/** Dollars, as the SDK reports them; 0 for the stub. */
 	readonly usd: number;

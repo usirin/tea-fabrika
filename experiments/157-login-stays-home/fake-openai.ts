@@ -20,7 +20,7 @@ import {createServer, type IncomingMessage, type ServerResponse} from "node:http
 import type {AddressInfo} from "node:net";
 
 /** `~/.codex/auth.json` after `codex login` with `cli_auth_credentials_store = "file"`. */
-export interface AuthJson {
+interface AuthJson {
 	readonly OPENAI_API_KEY: null;
 	readonly auth_mode: "chatgpt";
 	readonly tokens: {
@@ -33,7 +33,7 @@ export interface AuthJson {
 }
 
 /** One model call, as the fake saw it. */
-export interface Call {
+interface Call {
 	/** Whose access token it carried; null when none of ours, or a dead one. */
 	readonly who: string | null;
 	readonly why: "ok" | "no_bearer" | "unknown" | "expired" | "revoked";
@@ -51,7 +51,7 @@ export interface Call {
 }
 
 /** One refresh, as the fake saw it. */
-export interface Refresh {
+interface Refresh {
 	readonly who: string | null;
 	readonly what: "ok" | "reused" | "refused";
 	/** The generation the refresh token belonged to. */
@@ -87,7 +87,7 @@ export interface FakeOpenAI {
 	readonly close: () => Promise<void>;
 }
 
-export interface FakeOptions {
+interface FakeOptions {
 	/** How long to wait before each model answer starts: a model's thinking, so calls overlap. */
 	readonly thinkMs?: number;
 	/** How long a refreshed access token lives. */
@@ -115,7 +115,7 @@ const json = (res: ServerResponse, status: number, body: unknown) => {
 };
 
 /** The one tool call: code mode's `exec`, which runs `exec_command` in the box's copy. */
-export const TOOL_JS = [
+const TOOL_JS = [
 	"const r = await tools.exec_command({",
 	`  cmd: "node -e \\"import('./bytes.js').then((m) => console.log('formatBytes(2048) =', m.formatBytes(2048)))\\"",`,
 	"  login: false,",

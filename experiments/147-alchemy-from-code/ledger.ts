@@ -13,7 +13,7 @@ import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import type {SecretProviders} from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 
-export interface LedgerInputs {
+interface LedgerInputs {
 	/** The Worker's name on Cloudflare. A new name is a replace (experiment 144). */
 	readonly name: string;
 	/** SHA-256 of the run's key, hex. */

@@ -16,7 +16,7 @@ export const DOCKER101 = {
 	image: "exp101-host:local",
 	volume: "exp101-node-modules",
 } as const;
-export const REPO = here("..");
+const REPO = here("..");
 const DIR98 = here("98-tea-host-package/");
 
 export const docker = (args: readonly string[]) =>
