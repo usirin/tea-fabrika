@@ -138,6 +138,8 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   green at its start); else it is `stuck:no_commit`, as a tests step with no commit always is.
 - Then it pushes `<branch>-wip` (a `-wip` branch as it is) as the bot when the step committed, writes the field row to
   `BOXES/<lane>-rows.jsonl`, appends the step to `state/<lane>.json` and `.md`, and removes the box.
+  It keeps the box, whatever the step answered, while it holds uncommitted files or commits off the
+  step's branch, and the outcome line's `reason` ends with `(box kept: ...)` saying what is left.
   A stop after the time limit takes the agent's whole process group with it.
 - Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (the question
   is in `reason`), 30 stuck, 2 usage, 3 refused (8 agents running: Codex boxes plus Claude steps
