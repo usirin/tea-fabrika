@@ -351,8 +351,22 @@ export type Step = typeof Step.Type;
  *  state or a saved letter does not fold. Never a refusal: nothing was decided. */
 export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown", {
 	why: Schema.Literals(["load", "no_program", "step", "saved_state", "saved_letter"]),
+	/** An RPC or reply decode failure decided nothing about the input. It must be retried. */
+	source: Schema.optionalKey(Schema.Literals(["rpc", "decode"])),
+	/** The thrown class, preserved as checked data across Worker RPC. */
+	error: Schema.optionalKey(Schema.String),
 	cause: Schema.optionalKey(Schema.Unknown),
-}) {}
+}) {
+	get errorClass(): string {
+		if (this.error !== undefined) return this.error;
+		const original = Object.hasOwn(this, "cause") ? this.cause : this;
+		return original instanceof Error
+			? original.constructor.name
+			: original === null
+				? "null"
+				: typeof original;
+	}
+}
 
 export type Stepper = {
 	readonly program: typeof Declaration.Type;
@@ -382,23 +396,10 @@ const guard = <A>(why: ProgramDown["why"], f: () => A): A => {
 	return done.success;
 };
 
-type Standard = {readonly "~standard": {readonly validate: (value: unknown) => unknown}};
-const isStandard = (u: unknown): u is Standard =>
-	(typeof u === "object" || typeof u === "function") &&
-	u !== null &&
-	"~standard" in u &&
-	typeof u["~standard"] === "object" &&
-	u["~standard"] !== null &&
-	"validate" in u["~standard"] &&
-	typeof u["~standard"].validate === "function";
-
-/** Whether a Standard Schema accepts `value` now. An answer that is not ready counts as no. */
-const accepts = (schema: Standard, value: unknown): boolean => {
-	const answer = schema["~standard"].validate(value);
-	return (
-		typeof answer === "object" && answer !== null && "value" in answer && !("issues" in answer)
-	);
-};
+/** tea keeps the Effect schema on its Standard Schema adapter. Decode it synchronously;
+ *  an unknown validator cannot prove it will finish without making a Promise. */
+const accepts = (schema: unknown, value: unknown): boolean =>
+	isDeclared(schema) && Result.isSuccess(Schema.decodeUnknownResult(schema)(value));
 
 /** A settled Cmd Msg (`<name>_ok` or `<name>_err`) of a declared Cmd, checked by its schemas. */
 const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<boolean> => {
@@ -468,7 +469,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
 		const def = defs.find((d) => d.cmdType === typed.value.type);
 		if (def === undefined) return true;
 		const schemas: object = def.schema;
-		return "input" in schemas && isStandard(schemas.input) && accepts(schemas.input, cmd);
+		return "input" in schemas && accepts(schemas.input, cmd);
 	};
 
 	/** The machine's answer as JSON, checked. Bad data is ProgramDown with `why`. */

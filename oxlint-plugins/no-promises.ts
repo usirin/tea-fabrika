@@ -15,7 +15,8 @@
 //
 // It sees no types: a `.catch` is told apart by the name it is called on, and Effect's calls by
 // their written names, so an Effect module bound to a name not imported from Effect, or a Promise
-// reached through a helper, passes. Report any such miss.
+// reached through a helper, passes this syntax rule. `pnpm lint:promise-types` checks those
+// values with the installed TypeScript API. Report any remaining miss.
 import type {CreateRule, ESTree} from "@oxlint/plugins";
 import {effectNames, type Node} from "./match.ts";
 
