@@ -2,7 +2,8 @@
 // Plants: hello-only checks; treating close as permission; stale input/fact admission;
 // duplicate before membership; a revoked key rejoining; refusal leaking to every client;
 // membership checked only before a paused hello write; decoding a transformed input twice;
-// answering a cached placing without checking membership after hashing a settled retry.
+// answering a cached placing without checking membership after hashing a settled retry;
+// rebuilding a pre-P17 input row with new door and n fields before comparing a duplicate.
 import {createHash} from "node:crypto";
 import {mkdtempSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
@@ -17,11 +18,12 @@ import {Sent} from "../app/runner.ts";
 import {ClientManager} from "../coordination/client-manager.ts";
 import {ProcessIdGenerator} from "../coordination/process-id.ts";
 import type {ProcessError} from "../coordination/process.ts";
-import {NotGranted, SignRequest} from "../coordination/session-manager.ts";
+import {NotGranted, SignRequest, Writer} from "../coordination/session-manager.ts";
 import {grantText, revokeText} from "../coordination/text.ts";
 import {Archive} from "../data/archive.ts";
 import {LedgerTransaction, type LedgerTurn} from "../data/ledger-transaction.ts";
 import {Doorbell, Ledger, type LedgerError} from "../data/ledger.ts";
+import {lineFor} from "../data/log.ts";
 import {RecordManager} from "../data/records.ts";
 import {SpanSink} from "../data/sink.ts";
 import {nodeSql} from "../data/sqlite.ts";
@@ -49,6 +51,16 @@ const processes = {
 };
 const Input = Schema.TaggedUnion({add: {n: Schema.Int}, save: {text: Schema.String}});
 const Fact = Schema.TaggedStruct("saved", {text: Schema.String});
+// The pre-P17 log shape, independent of the current door's input encoder.
+const LegacyReceived = Schema.TaggedStruct("received", {
+	method: Schema.String,
+	target: Schema.String,
+	by: Writer,
+	arrivedAt: Schema.Number,
+	traceId: Schema.String,
+	spanId: Schema.String,
+	input: Schema.Json,
+});
 const u32 = (n: number) => {
 	const bytes = Buffer.alloc(4);
 	bytes.writeUInt32BE(n);
@@ -520,6 +532,123 @@ describe("P17a, revoke stops writes at the final door", () => {
 								});
 							} finally {
 								spy.mockRestore();
+							}
+						}).pipe(Effect.provide(TestClock.layer())),
+					);
+				},
+			),
+			checks,
+		);
+	});
+	it("an admitted client gets its pre-P17 settled answer after reopen without appending", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.constantFrom("counter", "notes"),
+				fc.uuid(),
+				fc.integer({min: 1, max: Number.MAX_SAFE_INTEGER}),
+				fc.nat({max: 1_000_000}),
+				fc.string({maxLength: 30}),
+				fc.integer({min: 1, max: 3}),
+				async (target, letter, n, arrivedAt, text, retries) => {
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const w = yield* world();
+							const original = yield* Door.pipe(Effect.provide(w.layers().layer));
+							expect((yield* hello(original, w.old, "before-upgrade")).result._tag).toBe("online");
+							const params = request(target, letter, text);
+							const by = Writer.cases.person.make({key: w.old.fingerprint, for: person});
+							const traceId = letter.replaceAll("-", ""),
+								spanId = traceId.slice(0, 16);
+							const oldProcess = yield* ProcessIdGenerator.use((g) => g.next).pipe(
+								Effect.provide(w.layers().env),
+							);
+							const id = `in-${oldProcess}-${n}`;
+							const from = {
+								by: by.key,
+								for: person,
+								sentAt,
+								seen: 0,
+								parent: null,
+								traceId,
+								build: "test",
+							};
+							yield* TestClock.setTime(arrivedAt);
+							const result = yield* Ledger.use((ledger) =>
+								Effect.gen(function* () {
+									const logged = yield* ledger.append(
+										"door/inputs",
+										id,
+										lineFor(
+											from,
+											LegacyReceived.make({
+												method: "process.send",
+												target: params.pid,
+												by,
+												arrivedAt,
+												traceId,
+												spanId,
+												input: params.m,
+											}),
+										),
+									);
+									expect(logged._tag).toBe("placed");
+									const placing = yield* ledger.append(
+										`${params.pid}/inbox`,
+										letter,
+										lineFor(
+											{...from, parent: id},
+											Schema.TaggedStruct("send", {m: Input}).make({m: params.m}),
+										),
+									);
+									expect(placing._tag).toBe("placed");
+									if (placing._tag !== "placed")
+										return yield* Effect.die(new Error("legacy inbox seed was refused"));
+									return Sent.cases.accepted.make({rev: placing.rev, pos: placing.pos});
+								}),
+							).pipe(Effect.provide(w.layers().env));
+							// Pre-P17 bindings have no door, n, letter, seen or input hash fields.
+							const binding = {
+								id,
+								client: w.old.raw,
+								by,
+								process: params.pid,
+								name: params.m._tag,
+								personOnly: false,
+								digest: createHash("sha256").update(JSON.stringify(params)).digest("base64url"),
+								arrivedAt,
+								span: {traceId, spanId},
+								sentAt,
+								state: Schema.TaggedStruct("settled", {result: Sent}).make({result}),
+							};
+							w.first.sql.exec(
+								"INSERT INTO door_bindings (id,letter,value) VALUES (?,?,?)",
+								id,
+								`${params.pid}/${letter}`,
+								JSON.stringify(binding),
+							);
+							w.first.db.close();
+							const saved = w.storage();
+							const door = yield* Door.pipe(Effect.provide(w.layers(saved).layer));
+							const client = yield* hello(door, w.old, "after-upgrade");
+							expect(client.result._tag).toBe("online");
+							const entries = saved.sql.exec("SELECT * FROM entries ORDER BY rev");
+							const bindings = saved.sql.exec("SELECT * FROM door_bindings ORDER BY id");
+							for (let retry = 0; retry < retries; retry++) {
+								// Plant: rebuild this old row with door and n before the duplicate check.
+								const answer = yield* Effect.result(
+									door.route(client.client, "process.send", params),
+								);
+								expect({
+									answer,
+									entries: saved.sql.exec("SELECT * FROM entries ORDER BY rev"),
+									bindings: saved.sql.exec("SELECT * FROM door_bindings ORDER BY id"),
+									deliveries: w.deliveries,
+								}).toEqual({
+									answer: Result.succeed({_tag: "ok", result}),
+									entries,
+									bindings,
+									deliveries: [],
+								});
 							}
 						}).pipe(Effect.provide(TestClock.layer())),
 					);
