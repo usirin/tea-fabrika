@@ -947,6 +947,11 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
 					complete().replace("85%", "sure"),
 					complete().replace("None.", `1. ${text}? Lean yes, ${percent}%.\n2. Another?`),
 					complete().replace("None.", `1. ${text}? ${percent}%.`),
+					// Review round 1, finding 9: "None." followed by unnumbered questions.
+					complete().replace("None.", `None.\n- ${text}?`),
+					complete().replace("None.", `None.\n* ${text}?`),
+					complete().replace("None.", `None.\n+ ${text}?`),
+					complete().replace("None.", `None.\n${text}, and is it ready?`),
 				]) {
 					const bad = modeCheck(`\nPlancheck-Version: 2\n${body}`, "--draft");
 					expect(bad.code, bad.text).toBe(1);
@@ -1020,6 +1025,21 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
 					}
 				},
 			),
+			{seed: 321, numRuns: 3},
+		);
+	});
+
+	// Plant: read line one with splitlines(), so a CRLF approval passes here and fails in box.sh
+	// and stepcommit.sh. Review round 1, finding 7.
+	it("K2 approved mode refuses a CRLF approval line, as the byte readers do", () => {
+		fc.assert(
+			fc.property(word, (text) => {
+				const body = complete(`\n## Amendment 1\n${text}\n`);
+				const crlf = approved(body).replace("\n", "\r\n");
+				const bad = modeCheck(crlf, "--approved");
+				expect(bad.code, bad.text).toBe(1);
+				expect(bad.text).toMatch(/approval/);
+			}),
 			{seed: 321, numRuns: 3},
 		);
 	});

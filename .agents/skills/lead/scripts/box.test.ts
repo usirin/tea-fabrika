@@ -746,7 +746,7 @@ describe("T321 K1 fetch, today's tooling", () => {
 			}),
 			options,
 		);
-	});
+	}, 180_000); // about 55 s alone and over 60 s under load here; same cases and sizes
 
 	// Plant: overwrite existing notes, including stale or invalid ones; concatenate a conflict.
 	it("K1 preserves stale, malformed, invalid and conflicting notes and reports their checks", () => {
@@ -807,7 +807,7 @@ describe("T321 K1 fetch, today's tooling", () => {
 			}),
 			options,
 		);
-	});
+	}, 180_000); // measured 61 to 68 s under load in review and here; same cases and sizes
 
 	// Plant: treat exit 2, truncated JSON or a failed check as success; hide owner asks.
 	it("K1 prints every check answer and fails closed on status or unreadable output", () => {
@@ -844,7 +844,7 @@ describe("T321 K1 fetch, today's tooling", () => {
 			}),
 			options,
 		);
-	});
+	}, 180_000); // about 55 s alone and over 60 s under load here; same cases and sizes
 });
 
 describe("T321 K2 box start, today's tooling", () => {
@@ -938,6 +938,73 @@ describe("T321 K2 box start, today's tooling", () => {
 	});
 });
 
+describe("T321 review round 1 fixes, today's tooling", () => {
+	// Plant: merge the box's notes ref, so a note the box deleted is dropped from MAIN.
+	// Review round 1, finding 3.
+	it("K1 scenario: a note the box deleted stays in MAIN, and the linked commit is not signed again", () => {
+		fixture((b) => {
+			b.setup({operations: [{path: "src/a.ts", text: "linked\n"}]});
+			expect(b.run().code).toBe(0);
+			const first = b.fetch();
+			expect(first.code, first.text).toBe(0);
+			const linked = b.notes();
+			const sha = b.head(b.main, b.branch);
+			expect(linked).toContain(sha);
+			const note = b.git(b.main, "notes", "--ref=fabrika", "show", sha);
+			b.git(b.work, "fetch", "-q", b.main, "refs/notes/fabrika:refs/notes/fabrika");
+			b.git(b.work, "notes", "--ref=fabrika", "remove", sha);
+			b.call("sh", [program, "fetch", "one", b.branch], b.main, {...b.env, T321_FETCH: "1"});
+			expect(b.notes()).toContain(sha);
+			expect(b.git(b.main, "notes", "--ref=fabrika", "show", sha)).toBe(note);
+			const again = b.fetch();
+			expect(
+				b
+					.notes()
+					.split("\n")
+					.filter((l) => l.endsWith(sha)),
+			).toHaveLength(1);
+			expect(again.text).not.toMatch(/sign failed/);
+		});
+	});
+
+	// Plant: trust the installed checker's scope skip. Review round 1, finding 4.
+	it("K1 scenario: an unsigned commit outside the exam list is refused on a plain fetch", () => {
+		fixture((b) => {
+			b.setup({operations: [{path: "src/b.ts", text: "unsigned\n"}]});
+			expect(b.run().code).toBe(0);
+			const got = b.call("sh", [program, "fetch", "one", b.branch], b.main, {
+				...b.env,
+				T321_FETCH: "1",
+			});
+			refused(got, /unlinked_commit|commits check failed/);
+		});
+	});
+
+	// Plant: drop every answer when one line is unreadable. Review round 1, finding 11.
+	it("K1 scenario: a valid stuck answer before a bad line is still printed", () => {
+		fixture((b) => {
+			b.setup({
+				operations: [{path: "src/a.ts", text: "answer\n"}],
+				check: {status: 1, text: '{"_tag":"stuck","why":"fixture_reason"}\nnot json\nnull\n'},
+			});
+			expect(b.run().code).toBe(0);
+			const got = b.fetch();
+			refused(got, /unreadable/);
+			expect(got.text).toContain("fixture_reason");
+		});
+	});
+
+	// Plant: check the approval digest only at new. Review round 1, finding 6.
+	it("K2 scenario: a run refuses a plan amended after approval", () => {
+		fixture((b) => {
+			writeFileSync(b.plan, `${readFileSync(b.plan, "utf8")}\n## Amendment\nUnsigned.\n`);
+			const got = b.run("tests");
+			refused(got, /hash mismatch|approval/);
+			expect(b.calls().some((c) => c.cmd === "codex")).toBe(false);
+		});
+	});
+});
+
 describe("T321 K3 step order and rows, today's tooling", () => {
 	// Plant: count tests from before base, or any unverified note; skip review's mutation row.
 	it("K3 gates build on a verified tests link since base and review on mutation or a recorded skip", () => {
@@ -1015,6 +1082,8 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 					expect(new Set(rows.map((row) => row.run)).size).toBe(rows.length);
 				}),
 			),
+			// pinned: the slot-cap off-by-one plant (a ninth box let through at exactly 8 live) and
+			// the empty-state plant (a stale pid file counted as live at 0).
 			{...options, examples: [[8], [0]]},
 		);
 	});
@@ -1062,6 +1131,8 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 			),
 			{
 				...options,
+				// pinned: the dropped-row plants: no row for a failed run with no usage, or for an
+				// interrupted run that exited 0.
 				examples: [
 					[{exit: 7, signal: false, usage: false}],
 					[{exit: 0, signal: true, usage: true}],
@@ -1258,6 +1329,8 @@ describe("T321 K19 box and plan runners, today's tooling", () => {
 				),
 				{
 					...options,
+					// pinned: the case-sensitive secret-name plant (a lowercase name kept its value)
+					// and the interrupted-run plant (a signal skipped the scrub).
 					examples: [
 						[{value: "madeup", lower: true, exit: 7, signal: false}],
 						[{value: "madeup", lower: false, exit: 0, signal: true}],

@@ -161,6 +161,100 @@ describe("T321 K19 redaction, today's tooling", () => {
 		);
 	});
 
+	// Plants: match exact values only after decoding, drop the \\b \\f or surrogate-pair escapes,
+	// or require a PEM block's END line. Review round 1, finding 2.
+	it("K19 [secrets] exact values holding %HH or backslashes, JSON control escapes and cut PEM blocks go", () => {
+		fc.assert(
+			fc.property(
+				fc.record({
+					value: word,
+					shape: fc.constantFrom("percent", "backslash", "control", "emoji"),
+					json: fc.boolean(),
+				}),
+				({value, shape, json}) => {
+					const secret =
+						shape === "percent"
+							? `p%41${value}%2F`
+							: shape === "backslash"
+								? `b\\n${value}\\u0041`
+								: shape === "control"
+									? `c\b${value}\f`
+									: `e\u{1F600}${value}`;
+					const line = json ? JSON.stringify({text: secret}) : secret;
+					const pem = `-----BEGIN PRIVATE KEY-----\n${Buffer.from(value.repeat(10)).toString("base64")}\n`;
+					run(
+						`safe\n${line}\n${pem}`,
+						`${JSON.stringify({text: secret})}\n`,
+						{TOKEN: secret},
+						(got) => {
+							expect(got.code).toBe(0);
+							for (const output of [got.answer, got.events]) {
+								expect(output.includes(secret)).toBe(false);
+								expect(output.includes(JSON.stringify(secret).slice(1, -1))).toBe(false);
+							}
+							expect(got.answer).not.toContain(Buffer.from(value.repeat(10)).toString("base64"));
+							expect(got.answer).toContain("safe");
+						},
+					);
+				},
+			),
+			{...options, numRuns: 16},
+		);
+	});
+
+	// Plant: stop at the first unreadable file. Review round 1, finding 1.
+	it("K19 [secrets] scenario: an unreadable first file fails the run and later files are still scrubbed", () => {
+		const dir = mkdtempSync(join(tmpdir(), "red321-"));
+		try {
+			const missing = join(dir, "missing-dir");
+			mkdirSync(missing);
+			const later = join(dir, "later.txt");
+			const secret = `ghp_${"a1".repeat(20)}`;
+			writeFileSync(later, `${secret}\n`);
+			const got = spawnSync("sh", [script, missing, later], {
+				encoding: "utf8",
+				env: {HOME: dir, PATH: `${dirname(process.execPath)}:/usr/bin:/bin`, TMPDIR: dir},
+				timeout: 5_000,
+			});
+			expect(got.status).not.toBe(0);
+			expect(readFileSync(later, "utf8")).not.toContain(secret);
+		} finally {
+			rmSync(dir, {recursive: true, force: true});
+		}
+	});
+
+	// Plant: restore the config before scrubbing, or keep the backup in the temp folder.
+	// Review round 1, finding 1: a run that turns .npmrc into a folder.
+	it("K19 [secrets] scenario: a run that replaces .npmrc with a folder still scrubs and keeps the config", () => {
+		const dir = mkdtempSync(join(tmpdir(), "red321-"));
+		try {
+			const cwd = join(dir, "work");
+			mkdirSync(cwd);
+			writeFileSync(join(cwd, ".npmrc"), "original\n");
+			const prompt = join(dir, "prompt"),
+				answer = join(dir, "answer.md"),
+				events = join(dir, "events.jsonl");
+			writeFileSync(prompt, "");
+			const secret = `ghp_${"b2".repeat(20)}`;
+			const command = `rm -f .npmrc && mkdir .npmrc && printf '${secret}\\n' > ${answer} && printf '${secret}\\n'`;
+			const got = spawnSync(
+				"sh",
+				[script, "--run", cwd, prompt, answer, events, "sh", "-c", command],
+				{
+					encoding: "utf8",
+					env: {HOME: dir, PATH: `${dirname(process.execPath)}:/usr/bin:/bin`, TMPDIR: dir},
+					timeout: 10_000,
+				},
+			);
+			expect(got.error).toBeUndefined();
+			expect(readFileSync(answer, "utf8")).not.toContain(secret);
+			expect(readFileSync(events, "utf8")).not.toContain(secret);
+			expect(readFileSync(join(cwd, ".npmrc"), "utf8")).toBe("original\n");
+		} finally {
+			rmSync(dir, {recursive: true, force: true});
+		}
+	});
+
 	// Plant: lose multiline PEM blocks, or only scrub the file written first.
 	it("K19 [secrets] output order and partial failed-run logs do not leave multiline secrets", () => {
 		fc.assert(

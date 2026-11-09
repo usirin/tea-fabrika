@@ -261,6 +261,25 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 		);
 	});
 
+	// Plant: ask the file system whether a path is a folder. Review round 1, finding 8: with no
+	// .box state, a deleted src/ is no folder on disk, so "src" committed every deletion under it.
+	it("K4 refuses a folder git tracks even after its files are deleted, in both modes", () => {
+		fc.assert(
+			fc.property(fc.constantFrom("src", "./src"), fc.boolean(), (path, only) =>
+				withRepo([["src/owned.ts", "tests"]], (r) => {
+					rmSync(join(r.boxes, "state/one.box"));
+					rmSync(join(r.repo, "src"), {recursive: true});
+					const got = r.commit("tests", [path], only);
+					expect(got.code, got.text).not.toBe(0);
+					expect(got.text).toMatch(/named|folder/);
+					expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+					expect(r.git("diff", "--cached", "--name-only")).toBe("");
+				}),
+			),
+			{...options, numRuns: 4},
+		);
+	});
+
 	// Plant: check the working file instead of the staged bytes, or skip staged formatting.
 	it("K4 refuses unformatted staged content and accepts formatted content", () => {
 		fc.assert(
@@ -349,6 +368,8 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 					},
 				);
 			}),
+			// pinned: the plants where K4's owner check lets a path through: one side of a rename,
+			// its exam-path form, a deletion and mixed owners.
 			{...options, numRuns: 4, examples: [["rename"], ["exam-rename"], ["delete"], ["mixed"]]},
 		);
 	});

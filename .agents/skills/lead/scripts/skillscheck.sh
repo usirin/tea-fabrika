@@ -41,9 +41,16 @@ def sections(text):
             found[""].append(line)
     return {key: " ".join(" ".join(lines).split()) for key, lines in found.items()}
 
+# A tree holding none of the clause sources is a links-only tree (the laws' generated repos).
+# Once any clause source exists, a removed one drops no clause: each it held is reported.
+clause_tree = any((sources / skill / "SKILL.md").is_file() for skill, *_ in clauses)
 for skill, section, check, clause in clauses:
     source = sources / skill / "SKILL.md"
-    if source.is_file() and clause not in sections(source.read_text()).get(section, ""):
+    if not clause_tree:
+        continue
+    if not source.is_file():
+        bad.append(f".agents/skills/{skill}/SKILL.md: {check} source missing for clause: {clause}")
+    elif clause not in sections(source.read_text()).get(section, ""):
         bad.append(f".agents/skills/{skill}/SKILL.md: {check} missing clause in {section or 'skill'}: {clause}")
 count = 0
 for source in sorted(sources.iterdir()):

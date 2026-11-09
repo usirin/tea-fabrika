@@ -25,6 +25,9 @@ for p in paths:
     n = os.path.normpath(p)
     if p.startswith("-") or n in (".", "..") or n.startswith("../") or os.path.isabs(p) or (root / n).is_dir() or p.endswith("/"):
         refuse("named file paths required, no folders: " + p)
+    # A folder whose files were all deleted is gone from disk; git still knows it as a folder.
+    if git("ls-files", "--cached", "--", n + "/").stdout or git("ls-tree", "-r", "--name-only", "HEAD", "--", n + "/").stdout:
+        refuse("named file paths required, no folders: " + p)
     named.append(n)
 branch = git("branch", "--show-current").stdout.decode().strip()
 boxes = pathlib.Path(os.environ.get("BOXES", str(root.parent)))

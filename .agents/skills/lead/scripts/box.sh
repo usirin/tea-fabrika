@@ -135,6 +135,7 @@ def run_box():
     state = facts(state_path); step = flag("--step"); ticket = flag("--ticket", state["ticket"])
     if step not in ("tests", "build", "mutation", "review"): refuse("run step required")
     if ticket != state["ticket"]: refuse("run ticket mismatch")
+    plan_owners(state)  # the approval and body hash, checked again before every step
     if step == "build" and not any(verified(sha, "tests") for sha in commits(state["base"], state["branch"])):
         refuse("step_out_of_order: verified tests since base required")
     if step == "review" and not any(r.get("step", r.get("role")) == "mutation" and str(r.get("ticket")) == ticket and r.get("outcome") in ("done", "skip") for r in rows()):
@@ -172,6 +173,12 @@ def run_box():
                 status = status or 1
                 state["run-end"] = "unknown"
             state["run-status"] = str(status); save(state)
+            if not pathlib.Path(str(events) + ".redacted").exists():
+                # redact.sh was killed before its own scrub: scrub here, or remove the outputs.
+                scrubbed = call(["sh", str(here / "redact.sh"), out, str(events)])
+                if scrubbed.returncode:
+                    for left in (pathlib.Path(out), events): left.unlink(missing_ok=True)
+                    status = status or 1
             ended = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
             row = call([sys.executable, str(here / "fieldrow.py"), "--step", step, "--started", started, "--ended", ended, "--start", state.get("run-start", state["base"]), "--end", state["run-end"], "--status", str(status), str(events), run, ticket, "done" if status == 0 else "stuck", "runner exit " + str(status)])
             if row.returncode:
@@ -197,12 +204,17 @@ def fetch_box():
         if has_notes.returncode == 0:
             must(git("fetch", "-q", str(work), "refs/notes/fabrika:" + incoming), "notes fetch failed")
             try:
-                # Detect a conflict before starting a notes merge, so no partial merge is left.
+                # Check every note before copying any, so a conflict leaves MAIN's notes as they were.
+                # Notes are copied one by one, never merged as a ref: a note the box deleted stays in
+                # MAIN, and a commit MAIN already links is never linked again.
+                copies = []
                 for line in must(git("notes", "--ref=" + incoming, "list"), "notes list failed").splitlines():
                     blob, sha = line.split()
                     current = git("notes", "--ref=fabrika", "show", sha)
-                    if current.returncode == 0 and current.stdout != git("cat-file", "blob", blob).stdout: refuse("note conflict " + sha)
-                must(git("notes", "--ref=fabrika", "merge", "-q", incoming), "note conflict")
+                    if current.returncode != 0: copies.append((blob, sha))
+                    elif current.stdout != git("cat-file", "blob", blob).stdout: refuse("note conflict " + sha)
+                for blob, sha in copies:
+                    must(git("notes", "--ref=fabrika", "add", "-C", blob, sha), "note copy failed " + sha)
             finally: git("update-ref", "-d", incoming)
         elif has_notes.returncode != 2: refuse("notes read failed")
         chain = commits(state["base"], head)
@@ -239,12 +251,22 @@ def fetch_box():
                     if signed.returncode: refuse("sign failed " + sha)
             state["fetched-head"] = head; save(state)
         checked = call(["pnpm", "commits", "check", "--base", state["base"], "--head", head])
-        answers = []
-        try:
-            answers = [json.loads(l) for l in checked.stdout.splitlines() if l.strip()]
-            if not answers or any(not isinstance(a, dict) or a.get("_tag") not in ("done", "stuck", "ask", "send", "skip") for a in answers): raise ValueError()
-        except (ValueError, UnicodeError): refuse("commits check unreadable output")
-        for a in answers: print(json.dumps(a))
+        answers, unreadable = [], 0
+        for l in checked.stdout.splitlines():
+            if not l.strip(): continue
+            try: a = json.loads(l)
+            except (ValueError, UnicodeError): a = None
+            if isinstance(a, dict) and a.get("_tag") in ("done", "stuck", "ask", "send", "skip"):
+                answers.append(a); print(json.dumps(a))
+            else: unreadable += 1
+        # The checker skips paths outside its scope; every run commit still needs a valid link.
+        for sha in chain:
+            note = read_note(sha)
+            if person(sha): continue
+            if not isinstance(note, dict) or not isinstance(note.get("step"), str) or not verified(sha, note["step"]):
+                print(json.dumps({"_tag": "stuck", "why": "unlinked_commit", "commit": sha}))
+                answers.append({"_tag": "stuck"})
+        if unreadable or not answers: refuse("commits check unreadable output")
         if checked.returncode or any(a["_tag"] == "stuck" for a in answers): refuse("commits check failed")
     return 0
 try:

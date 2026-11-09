@@ -185,7 +185,8 @@ describe("T321 required clauses, today's tooling, slice 1a", () => {
 	it("refuses each absent clause alone, including misplaced and fenced copies", () => {
 		fc.assert(
 			fc.property(
-				fc.constantFrom("missing", "wrong-section", "fenced", "wrong-skill"),
+				// "removed": review round 1, finding 10, a deleted source dropped its clauses.
+				fc.constantFrom("missing", "wrong-section", "fenced", "wrong-skill", "removed"),
 				fc.constantFrom(" ", "\n"),
 				(where, wrap) => {
 					for (const [i, [skill, section, check, text]] of clauses.entries()) {
@@ -195,6 +196,7 @@ describe("T321 required clauses, today's tooling, slice 1a", () => {
 							if (where === "fenced")
 								content += `\n## ${section || "Example"}\n~~~md\n${text}\n~~~\n`;
 							writeFileSync(join(dir, ".agents/skills", skill, "SKILL.md"), content);
+							if (where === "removed") rmSync(join(dir, ".agents/skills", skill, "SKILL.md"));
 							if (where === "wrong-skill")
 								writeFileSync(
 									join(dir, ".agents/skills", skill === "plan" ? "lead" : "plan", "SKILL.md"),
@@ -206,12 +208,12 @@ describe("T321 required clauses, today's tooling, slice 1a", () => {
 					}
 				},
 			),
-			{seed: 321, numRuns: 4},
+			{seed: 321, numRuns: 10},
 		);
 	});
 
 	// scenario: each exact hand plant runs once on a disposable copy, which is then deleted.
-	it("kills the retired-clause and wrong-section plants", () => {
+	it("scenario: kills the retired-clause and wrong-section plants", () => {
 		const dir = mkdtempSync(join(tmpdir(), "clause-plants-"));
 		try {
 			const source = readFileSync(script, "utf8");

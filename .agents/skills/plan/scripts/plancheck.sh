@@ -74,7 +74,8 @@ lines, fence = [], None
 data = open(plan, "rb").read()
 parts = data.split(b"\n", 2)
 digest = hashlib.sha256(parts[2] if len(parts) == 3 else b"").hexdigest()
-raw = data.decode("utf-8").splitlines()
+# Split on LF only, as box.sh and stepcommit.sh read the bytes: a CR stays in the line and fails.
+raw = data.decode("utf-8").split("\n")
 opening, first_section, opened = False, False, False
 for line in raw:
     mark = re.match(r"^\s{0,3}(`{3,}|~{3,})(.*)$", line)
@@ -204,8 +205,10 @@ if draft in ("1", "approved"):
     for key, content in sections.items():
         if "open questions" not in key: continue
         value = "\n".join(content).strip()
-        if re.match(r"^none\.?(?:\n|$)", value, re.I) and not re.search(r"(?m)^\s*\d+[.)]\s+", value): continue
-        questions = re.split(r"(?m)^\s*(?:\d+[.)]|[-*])\s+", value)
+        # "None" counts only when no question follows it: no numbered item and no question mark,
+        # in a list item of any marker or in prose.
+        if re.match(r"^none\.?(?:\n|$)", value, re.I) and not re.search(r"(?m)^\s*\d+[.)]\s+|\?", value): continue
+        questions = re.split(r"(?m)^\s*(?:\d+[.)]|[-*+])\s+", value)
         questions = [q.strip() for q in questions if q.strip()]
         if not questions or any(not re.search(r"\blean\b", q, re.I) or not re.search(r"\d+(?:\.\d+)?%", q) for q in questions):
             bad.append("plan questions: each needs a lean and percent, or none")
