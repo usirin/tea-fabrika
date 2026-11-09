@@ -30,7 +30,8 @@ sol=x.model=="gpt-6.1-sol"
 usd=round((i-c)*2e-6+c*0.1e-6+o*10e-6,4) if sol and u else None
 if sol: why+=" Dollars are gpt-6.1-sol's standard list price (experiments/lib/list-price.ts); runs use the standard tier."
 row={"date":b.strftime("%Y-%m-%d"),"run":x.run,"ticket":x.ticket,"pr":None,"started":b.isoformat(timespec="seconds"),"ended":e.isoformat(timespec="seconds"),"parent":x.parent,"active":None,"role":"hand","model":x.model,"effort":x.effort,"outcome":x.outcome,"why":why,"tokens":None,"tools":None,"minutes":round((e-b).total_seconds()/60,1),"note":None,"costUsd":None,"listUsd":usd,"billed":i+o if u else None,"inputTokens":i,"cachedTokens":c,"outputTokens":o}
-if x.step: row.update(step=x.step,start=x.start,end=x.end,status=x.status)
+# box.sh run gives the run's bounds too; drive gives only the step, which box.sh's order check reads.
+if x.step: row.update(step=x.step,**{k:v for k,v in (("start",x.start),("end",x.end),("status",x.status)) if v is not None})
 receipt=x.jsonl+".redacted"
 if os.path.exists(receipt): row["redacted"]=int(open(receipt).read().strip())
 print(json.dumps(row,ensure_ascii=False))

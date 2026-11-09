@@ -21,7 +21,8 @@
 //   reading    Gather  fetch (and sign Claude's work), then the commits, their step notes, exam
 //                      paths, leaks and the report
 //   (update)   Check   pure: what the step answered and what the reads found make one outcome
-//   pushing    Act     botpush the backup branch, <branch>-wip, when the step committed
+//   pushing    Act     botpush the backup branch, <branch>-wip (a -wip branch as it is), when
+//                      the step committed
 //   recording  Act     the field row, state/<lane>.json and .md, and the box removed unless stuck
 //   over               the outcome
 //
@@ -52,6 +53,7 @@ import {run} from "@demlik/tea/effect";
 import {act, gather, intentOf, listen} from "@kampus/pipeline/primitives";
 import {nameOf, outcomesOf} from "@kampus/pipeline/stages/outcome";
 import {Effect, Schema, Stream} from "effect";
+import {checkHolds, stepOf, wipOf} from "./lane.ts";
 
 const HERE = import.meta.dirname;
 const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
@@ -457,6 +459,18 @@ const unsignedIn = (env: Env, ask: Ask, head: string): string[] => {
 	});
 };
 
+/** The steps signed on the lane's own commits, from where it left main. */
+const stepsIn = (env: Env, root: string, head: string): Set<string> =>
+	new Set(
+		sh("git", ["-C", env.MAIN, "rev-list", `${root}..${head}`])
+			.out.split("\n")
+			.filter(Boolean)
+			.flatMap((sha) => {
+				const r = sh("git", ["-C", env.MAIN, "notes", "--ref=fabrika", "show", sha]);
+				return r.code === 0 ? stepOf(r.out) : [];
+			}),
+	);
+
 // Git with no hooks and no repo-set helpers, so nothing Claude wrote into a tree runs as drive.
 const SAFE_GIT = {
 	...process.env,
@@ -514,6 +528,8 @@ const signClaude = (env: Env, ask: Ask) => {
 					// oxfmt in the main checkout's, where the signer comes from too.
 					PATH: `${join(env.MAIN, "node_modules/.bin")}:${process.env.PATH ?? ""}`,
 					STEPCOMMIT_SIGNER: `node ${join(env.MAIN, "next/apps/fabrika/src/exam/commits.ts")}`,
+					// The sign worktree is not the box: name the box whose facts stepcommit checks.
+					STEPCOMMIT_BOX: ask.box,
 				},
 			},
 		);
@@ -554,6 +570,10 @@ const handlers = (env: Env) => {
 					cmd.ticket,
 					"--plan",
 					cmd.plan,
+					"--root",
+					cmd.root,
+					"--lane",
+					cmd.lane,
 				);
 				writeFileSync(join(env.BOXES, `${cmd.box}.log`), r.out + r.err);
 				return {ok: r.code === 0, detail: r.code === 0 ? "" : `box.sh new: ${tail(r.err)}`};
@@ -637,8 +657,10 @@ const handlers = (env: Env) => {
 								env.MAIN,
 							);
 				if (check.code > 1) return failed("commits check", check);
+				// Exit 1 holds the step unless every stuck answer it gave was a waived stale link.
+				const holds = checkHolds(check.code, check.out, stepsIn(env, ask.root, head));
 				const unsigned = [
-					...(check.code === 1 ? [`commits check: ${tail(check.out + check.err)}`] : []),
+					...(holds ? [`commits check: ${tail(check.out + check.err)}`] : []),
 					...unsignedIn(env, ask, head),
 				];
 				return {
@@ -657,7 +679,7 @@ const handlers = (env: Env) => {
 				const r = sh("node", [
 					join(HERE, "botpush.mjs"),
 					env.MAIN,
-					`${cmd.ask.branch}-wip`,
+					wipOf(cmd.ask.branch),
 					cmd.head,
 				]);
 				return {
@@ -686,6 +708,8 @@ const handlers = (env: Env) => {
 									ask.ticket,
 									"--outcome",
 									row,
+									"--step",
+									ask.step,
 									"--billing",
 									billingOf(ask.events),
 									ask.events,
@@ -694,6 +718,8 @@ const handlers = (env: Env) => {
 							: sh("python3", [
 									"-I",
 									join(HERE, "fieldrow.py"),
+									"--step",
+									ask.step,
 									ask.events,
 									ask.run,
 									ask.ticket,
@@ -743,6 +769,8 @@ const handlers = (env: Env) => {
 				if (!keep && ask.step !== "plan" && ask.box) {
 					rmSync(join(env.BOXES, ask.box), {recursive: true, force: true});
 					rmSync(join(env.BOXES, `${ask.box}-gitdata`), {recursive: true, force: true});
+					// Its facts go with it, so no later stepcommit reads a dead box's plan hash.
+					rmSync(join(env.BOXES, "state", `${ask.box}.box`), {force: true});
 				}
 				return {ok, detail: notes.join("; ")};
 			}),
