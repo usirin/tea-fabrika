@@ -167,10 +167,9 @@ const seedFacts = (
 				});
 		}),
 	);
-const box = (page: Page, tile = "t1") =>
-	page
-		.locator(`[data-tile="${tile}"]`)
-		.getByRole("region", {name: `ask: ${DRAFT.what}`, exact: true});
+/** The open ask's view in `tile`, found by its question. */
+const box = (page: Page, tile = "t1", what: string = DRAFT.what) =>
+	page.locator(`[data-tile="${tile}"]`).getByRole("region", {name: `ask: ${what}`, exact: true});
 const button = (where: Locator, name: string) =>
 	where.getByRole("button", {name: new RegExp(`^${name}`)});
 const focusIn = (where: Locator) =>
@@ -495,14 +494,13 @@ export const askDesk = async (tools: Tools) => {
 				await tools.prefixed(page, "f");
 			}
 			await tools.focusOn(page, "t1");
-			await sizeTo(
-				app,
-				page,
-				layout === "small" ? {width: 1024, height: 700} : {width: 1440, height: 1000},
-			);
+			const size = layout === "small" ? {width: 1024, height: 700} : {width: 1440, height: 1000};
 			for (const look of ["dark", "light"] as const) {
+				// Again before each look's shots: a tiling window manager (yabai) may have moved it.
+				await sizeTo(app, page, size);
 				await tools.lookIs(app, page, look);
 				await shot(page, "blind", layout, look);
+				await inspectLine(`blind-${layout}-${look}`, box(page));
 				await inspectBar(page, box(page));
 				await inspectCard(page, box(page));
 				// Today's asks menu, drawn with the shared ask view.
@@ -514,6 +512,11 @@ export const askDesk = async (tools: Tools) => {
 						.locator("#pop-asks")
 						.evaluate((menu) => Promise.all(menu.getAnimations().map((a) => a.finished)));
 					await shot(page, "asks-menu", layout, look);
+					const menu = page.locator("#pop-asks");
+					await noCardInMenu(`asks-menu-${layout}-${look}`, menu);
+					const views = menu.getByRole("region", {name: /^ask: /});
+					for (let i = 0; i < (await views.count()); i++)
+						await inspectLine(`asks-menu-${layout}-${look}, ask ${i + 1}`, views.nth(i));
 					await page.keyboard.press("Escape");
 				});
 				await page.keyboard.press("Control+c");
@@ -530,6 +533,7 @@ export const askDesk = async (tools: Tools) => {
 				check("P17 d: a no-rec ask offers the marks", (await marksIn(box(page))) === 2);
 				await onTheLine("P17 d: a no-rec ask's marks sit on the bar's line", box(page));
 				await shot(page, "no-rec", layout, look);
+				await inspectLine(`no-rec-${layout}-${look}`, box(page));
 				if (layout === "one" && look === "dark")
 					await attempt("P23 E: the bar is the ask, in shown-one", async () => {
 						// A ticket of its own, with a question no other ask has: 118's answered asks
@@ -539,7 +543,7 @@ export const askDesk = async (tools: Tools) => {
 						await page.keyboard.press("Control+c");
 						await tools.prompted(page, "t1");
 						await tools.run(page, "t1", "ticket --ticket 125");
-						await box(page).waitFor();
+						await box(page, "t1", what).waitFor();
 						const tile = await page.locator('[data-tile="t1"]').innerText();
 						check(
 							"P23 E: in shown-one, the open ask's question is in the ticket tile once",
@@ -552,6 +556,7 @@ export const askDesk = async (tools: Tools) => {
 				await tools.run(page, "t1", "ticket --ticket 118");
 				await box(page).waitFor();
 				await shot(page, "shown", layout, look);
+				await inspectLine(`shown-${layout}-${look}`, box(page));
 				check("P17 d: the marks show before a pick", (await marksIn(box(page))) === 2);
 				await onTheLine("P17 d: the marks sit on the rec line", box(page));
 				check("P23 E: Recommended once", (await recommendedIn(box(page))) === 1);
@@ -858,6 +863,170 @@ const onTheLine = async (what: string, where: Locator) => {
 		};
 	});
 	check(what, placed.inLine && placed.after === "" && !placed.overflow && !placed.outside, placed);
+};
+/**
+ * Design E's lines, measured (lead, 2026-11-08, round 6d). One read of the ask's geometry:
+ * - the action row fits, or wraps with at least two buttons on every line; it may drop its key
+ *   chips first, but no button is left alone on a line;
+ * - the action row starts on a line under the question, at the content's left edge, on every
+ *   layout, wide tiles too, never pushed to the right;
+ * - "Did this need you?" and its two picks: any of them that starts a line starts at that edge;
+ * - Evidence sits after the reason's last line, or starts a line at that edge, never beside an
+ *   earlier line of a wrapped reason.
+ * An edge is what a person sees: a button with a border, fill or shadow by its box, a button with
+ * none (tertiary) by its text. The content's left edge is where the question's text starts, or in
+ * the menu, which draws no question, the rec line's.
+ */
+const inspectLine = async (when: string, where: Locator) => {
+	const read = await where.evaluate((root) => {
+		const clear = (c: string) => c === "transparent" || /rgba\(.*,\s*0\)$/.test(c);
+		const textRects = (element: Element) => {
+			const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+			const rects: DOMRect[] = [];
+			for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+				if ((node.textContent ?? "").trim() === "") continue;
+				const range = document.createRange();
+				range.selectNodeContents(node);
+				rects.push(...[...range.getClientRects()].filter((r) => r.width > 0));
+			}
+			return rects;
+		};
+		const textLeft = (element: Element | null) => {
+			const rects = element === null ? [] : textRects(element);
+			return rects.length === 0 ? null : Math.min(...rects.map((r) => r.left));
+		};
+		const boxed = (element: Element) => {
+			const s = getComputedStyle(element);
+			const border = [
+				[s.borderLeftWidth, s.borderLeftColor],
+				[s.borderTopWidth, s.borderTopColor],
+			].some(([w, c]) => (Number.parseFloat(w ?? "") || 0) > 0 && !clear(c ?? ""));
+			return border || !clear(s.backgroundColor) || s.boxShadow !== "none";
+		};
+		const edgeOf = (element: Element) =>
+			boxed(element) ? element.getBoundingClientRect().left : textLeft(element);
+		const shown = (element: Element) => element.getBoundingClientRect().width > 0;
+		/** Rects in reading order, grouped into lines: a new line starts below the last one. */
+		const linesOf = (rects: readonly DOMRect[]) => {
+			const lines: DOMRect[][] = [];
+			for (const r of rects) {
+				const last = lines.at(-1);
+				const bottom = last === undefined ? -Infinity : Math.max(...last.map((x) => x.bottom));
+				if (last === undefined || r.top >= bottom - 1) lines.push([r]);
+				else last.push(r);
+			}
+			return lines;
+		};
+		const question = root.querySelector(".ask-question");
+		const left = textLeft(question) ?? textLeft(root.querySelector(".ask-recwords"));
+
+		const buttons = [...root.querySelectorAll(".ask-toolbar button")].filter(shown);
+		const rowLines = linesOf(buttons.map((b) => b.getBoundingClientRect())).map((l) => l.length);
+		const first = buttons[0];
+		const toolbar = {
+			lines: rowLines,
+			left: first === undefined ? null : edgeOf(first),
+			top: first === undefined ? null : first.getBoundingClientRect().top,
+			questionBottom: question === null ? null : question.getBoundingClientRect().bottom,
+		};
+
+		const marks = root.querySelector(".ask-marks");
+		const items = [...(marks === null ? [] : [...marks.children].filter(shown))].map((element) => ({
+			name: (element.textContent ?? "").trim(),
+			top: element.getBoundingClientRect().top,
+			edge: element.tagName === "BUTTON" ? edgeOf(element) : textLeft(element),
+		}));
+		const words = root.querySelector(".ask-recwords");
+		const wordRects = words === null ? [] : textRects(words);
+		// An item starts a line when nothing before it reaches down to its top.
+		const marked = items.map((item, i) => {
+			const before = [
+				...wordRects.map((r) => r.bottom),
+				...items.slice(0, i).map((x, j) => {
+					const element = marks?.children[j];
+					return element === undefined ? x.top : element.getBoundingClientRect().bottom;
+				}),
+			];
+			return {...item, starts: before.length === 0 || item.top >= Math.max(...before) - 1};
+		});
+
+		const why = root.querySelector(".ask-why");
+		const reason = why?.querySelector("p") ?? null;
+		const evidence = why?.querySelector("button") ?? null;
+		const reasonLines = linesOf(reason === null ? [] : textRects(reason));
+		const at = evidence?.getBoundingClientRect();
+		const overlaps = (line: DOMRect[]) =>
+			at !== undefined &&
+			at.top < Math.max(...line.map((r) => r.bottom)) - 1 &&
+			at.bottom > Math.min(...line.map((r) => r.top)) + 1;
+		const lastLine = reasonLines.at(-1);
+		return {
+			left,
+			toolbar,
+			marks: marked.filter((m) => m.starts).map(({name, edge}) => ({name, edge})),
+			evidence:
+				at === undefined
+					? null
+					: {
+							besideEarlier: reasonLines.slice(0, -1).some(overlaps),
+							onLast: lastLine !== undefined && overlaps(lastLine),
+							afterLast:
+								lastLine === undefined
+									? true
+									: at.left >= Math.max(...lastLine.map((r) => r.right)) - 1,
+							edge: evidence === null ? null : edgeOf(evidence),
+						},
+		};
+	});
+	const at = (edge: number | null) =>
+		edge !== null && read.left !== null && Math.abs(edge - read.left) <= 1;
+	const {toolbar, evidence} = read;
+	check(
+		`P23 E 6d, ${when}: no action button alone on a line`,
+		toolbar.lines.length > 0 && (toolbar.lines.length === 1 || toolbar.lines.every((n) => n >= 2)),
+		toolbar.lines,
+	);
+	check(
+		`P23 E 6d, ${when}: the action row starts at the content's left edge, under the question`,
+		at(toolbar.left) &&
+			(toolbar.questionBottom === null ||
+				(toolbar.top !== null && toolbar.top >= toolbar.questionBottom - 1)),
+		{...toolbar, left: read.left},
+	);
+	check(
+		`P23 E 6d, ${when}: "Did this need you?" and its picks start a line at the content's left edge`,
+		read.marks.every((m) => at(m.edge)),
+		{left: read.left, starts: read.marks},
+	);
+	check(
+		`P23 E 6d, ${when}: Evidence sits after the reason's last line, or starts a line at the edge`,
+		evidence !== null &&
+			!evidence.besideEarlier &&
+			(evidence.onLast ? evidence.afterLast : at(evidence.edge)),
+		{left: read.left, evidence},
+	);
+};
+/**
+ * Fix 5 (lead, 2026-11-08, round 6d): an ask in the asks menu is no card in the popover. Nothing
+ * from the popover down to the ask's words has a fill of its own: buttons, key chips and fields
+ * keep theirs, and the selected row keeps its highlight.
+ */
+const noCardInMenu = async (when: string, menu: Locator) => {
+	const fills = await menu.evaluate((popover) => {
+		const clear = (c: string) => c === "transparent" || /rgba\(.*,\s*0\)$/.test(c);
+		let own = getComputedStyle(popover).backgroundColor;
+		for (let node = popover.parentElement; clear(own) && node !== null; node = node.parentElement)
+			own = getComputedStyle(node).backgroundColor;
+		const out: string[] = [];
+		for (const element of popover.querySelectorAll("*")) {
+			if (element.closest("button, kbd, input, textarea, select, [aria-selected='true']") !== null)
+				continue;
+			const bg = getComputedStyle(element).backgroundColor;
+			if (!clear(bg) && bg !== own) out.push(`${element.tagName}.${element.className} ${bg}`);
+		}
+		return out;
+	});
+	check(`P23 E 6d, ${when}: no filled card inside the asks menu`, fills.length === 0, fills);
 };
 /** What opens under the bar stays in normal flow: nothing up to the ask is lifted out of it. */
 const inFlow = async (what: string, where: Locator, target: Locator) => {
