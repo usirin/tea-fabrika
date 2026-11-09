@@ -109,9 +109,10 @@ export function TrackerWindow({view, send}: WindowProps<typeof tracker>) {
 	const [find, setFind] = useState(view.filter.find);
 	const [comments, setComments] = useState<Readonly<Record<number, string>>>({});
 	const {page} = view;
+	const asks = page.kind === "list" ? [] : (page.opened?.asks ?? []);
 	return (
 		<section className="tracker" aria-label="tracker">
-			<AskStatus left={page.kind === "list" ? 0 : (page.opened?.asks.length ?? 0)}>
+			<AskStatus asks={asks} left={asks.length}>
 				<div className="tracker-column">
 					<Notices view={view} />
 					{!view.ready ? (

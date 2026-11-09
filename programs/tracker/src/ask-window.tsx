@@ -21,6 +21,7 @@ import {
 	useContext,
 	useEffect,
 	useImperativeHandle,
+	useLayoutEffect,
 	useRef,
 } from "react";
 import {AskAnswer} from "./ticket.ts";
@@ -494,31 +495,61 @@ const attend = (actions: AskActions, msg: AttentionMsg) => {
 const held = new Set<string>();
 
 /** Where an ask view says what it saved: the one status region its window holds (review 6). */
-const Says = createContext<((text: string, answered?: boolean) => void) | null>(null);
+const Says = createContext<((text: string, ask?: string) => void) | null>(null);
 
-/** The last announcement and its count, or null before the first. */
+type Waiting = number | readonly {readonly ask: string}[];
+/** Live asks, saves not yet removed by a poll, and the last announcement. */
 type Said = {
-	readonly left: number;
+	readonly waiting: Waiting;
+	readonly saved: ReadonlySet<string>;
 	readonly said: {readonly text: string; readonly count: number; readonly left: number} | null;
 };
-type StatusMsg = {type: "say"; text: string; left: number} | {type: "count"; left: number};
+type StatusMsg = {type: "say"; text: string; ask?: string} | {type: "count"; waiting: Waiting};
 const statusMachine = defineMachine({
-	types: {model: {} as Said, msg: {} as StatusMsg, ctx: {} as number},
+	types: {model: {} as Said, msg: {} as StatusMsg, ctx: {} as Waiting},
 	cmds: [],
-	init: (_loaded, left): [Said, readonly never[]] => [{left, said: null}, []],
+	init: (_loaded, waiting = 0): [Said, readonly never[]] => [
+		{waiting, saved: new Set(), said: null},
+		[],
+	],
 	update: {
-		count: (model, msg): [Said, readonly never[]] => [{...model, left: msg.left}, []],
-		say: (model, msg): [Said, readonly never[]] => [
+		count: (model, {waiting}): [Said, readonly never[]] => [
 			{
 				...model,
-				said: {
-					text: msg.text,
-					count: (model.said?.count ?? 0) + 1,
-					left: Math.min(model.left, msg.left),
-				},
+				waiting,
+				saved: new Set(
+					typeof waiting === "number"
+						? []
+						: waiting.filter((ask) => model.saved.has(ask.ask)).map((ask) => ask.ask),
+				),
 			},
 			[],
 		],
+		say: (model, msg): [Said, readonly never[]] => {
+			const {waiting = 0} = model;
+			const saved = new Set(model.saved);
+			if (
+				msg.ask !== undefined &&
+				typeof waiting !== "number" &&
+				waiting.some((ask) => ask.ask === msg.ask)
+			)
+				saved.add(msg.ask);
+			return [
+				{
+					...model,
+					saved,
+					said: {
+						text: msg.text,
+						count: (model.said?.count ?? 0) + 1,
+						left:
+							typeof waiting === "number"
+								? waiting
+								: waiting.filter((ask) => !saved.has(ask.ask)).length,
+					},
+				},
+				[],
+			];
+		},
 	},
 });
 
@@ -532,18 +563,20 @@ const statusMachine = defineMachine({
 export function AskStatus({
 	children,
 	left,
+	asks,
 }: {
 	readonly children: ReactNode;
 	/** How many asks still wait where this region sits. */
 	readonly left: number;
+	/** The same live asks the count shows. Their ids account for saves before the next poll. */
+	readonly asks?: readonly {readonly ask: string}[];
 }) {
-	const ctx = useRef(left).current;
+	const ctx = useRef(asks ?? left).current;
 	const [{said}, send] = useMachine(statusMachine, {run, ctx});
-	useEffect(() => send({type: "count", left}), [left, send]);
-	// A save keeps this callback from before its reply. Exclude its ask, or use the poll's
-	// smaller count if it arrived first. Later polls never revise an announced result.
-	const say = (text: string, answered = false) =>
-		send({type: "say", text, left: Math.max(0, left - (answered ? 1 : 0))});
+	useLayoutEffect(() => send({type: "count", waiting: asks ?? left}), [asks, left, send]);
+	// A save may outlive its view. Only its id travels with the reply; the machine holds the list.
+	const say = (text: string, ask?: string) =>
+		send({type: "say", text, ...(ask === undefined ? {} : {ask})});
 	return (
 		<Says.Provider value={say}>
 			{children}
@@ -839,7 +872,7 @@ export function AskView({
 								: answer;
 						const result = yield* actions.answer(value);
 						yield* attend(actions, {...attention, type: "saved", now: Date.now()});
-						yield* Effect.sync(() => says?.(words, true));
+						yield* Effect.sync(() => says?.(words, answer.ask));
 						return result;
 					}).pipe(Effect.forkDetach);
 					return yield* Fiber.join(fiber);

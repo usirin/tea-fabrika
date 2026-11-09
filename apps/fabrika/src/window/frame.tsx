@@ -462,6 +462,7 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 		grid.current?.focus();
 	}, []);
 	const rows = [...asks.asks, ...asks.later];
+	const waiting = asks.asks.filter((ask) => ask.kind === "ask");
 	const labels = new Map(
 		asksSections(asks, desk, tickets, Date.now())
 			.flatMap((s) => s.rows)
@@ -533,12 +534,12 @@ function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
 	);
 	return (
 		<Panel id={POP.asks} label="Asks" onClose={close}>
-			<AskStatus left={asks.asks.filter((a) => a.kind === "ask").length}>
+			<AskStatus
+				asks={waiting.map((ask) => ({ask: ask.sealed?.ask ?? ask.key}))}
+				left={waiting.length}
+			>
 				<p className="pop-head">
-					{asksHead(
-						asks.asks.filter((a) => a.kind === "ask").length,
-						asks.asks.filter((a) => a.kind === "stuck").length,
-					)}
+					{asksHead(waiting.length, asks.asks.filter((a) => a.kind === "stuck").length)}
 				</p>
 				{asks.reach === "failed" && <p role="alert">{asks.why ?? "The ledger is disconnected"}</p>}
 				{rows.length === 0 ? (
