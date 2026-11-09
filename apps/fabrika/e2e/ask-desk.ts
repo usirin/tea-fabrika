@@ -455,6 +455,16 @@ export const askDesk = async (tools: Tools) => {
 		);
 		await page.keyboard.press("Escape");
 
+		// Round 7, fix 7: the remap above proves the keys are configurable; that case ends here. The
+		// shots show the decided keys (docs/direction/ask-desk.md, A3: `y` takes the rec), so the file
+		// goes back to empty, the defaults, and the host's watch hands the window the default table.
+		await writeFile(join(home, "keybindings.toml"), "");
+		await until(
+			"P14 7: the shots use the default keymap: Later is on h again",
+			() => button(box(page), "Later").getAttribute("aria-keyshortcuts"),
+			(keys) => keys === "h",
+		);
+
 		// P23/P24 captures: real ticket and tracker, both themes, all five required layouts.
 		// No new inbox, new glance or content-opening screenshots are required by this PR.
 		await tools.focusOn(page, "t1");
@@ -501,6 +511,7 @@ export const askDesk = async (tools: Tools) => {
 				await tools.lookIs(app, page, look);
 				await shot(page, "blind", layout, look);
 				await inspectLine(`blind-${layout}-${look}`, box(page));
+				if (layout !== "small") await blindLine(`blind-${layout}-${look}`, box(page));
 				await inspectBar(page, box(page));
 				await inspectCard(page, box(page));
 				// Today's asks menu, drawn with the shared ask view.
@@ -517,6 +528,28 @@ export const askDesk = async (tools: Tools) => {
 					const views = menu.getByRole("region", {name: /^ask: /});
 					for (let i = 0; i < (await views.count()); i++)
 						await inspectLine(`asks-menu-${layout}-${look}, ask ${i + 1}`, views.nth(i));
+					await closedRows(`asks-menu-${layout}-${look}`, menu);
+					await openRow(`asks-menu-${layout}-${look}`, menu, layout === "side" || layout === "2x2");
+					if (layout !== "small") {
+						// The blind ask's row, then back to the row that was open, so later shots match.
+						const rowId = () => menu.getByRole("row", {selected: true}).evaluate((row) => row.id);
+						const was = await rowId();
+						const total = await menu.getByRole("row").count();
+						const blindOpen = () =>
+							menu
+								.getByRole("row", {selected: true})
+								.evaluate((row) => (row.textContent ?? "").includes("Your pick first"));
+						for (let i = 0; i < total && !(await blindOpen()); i++)
+							await page.keyboard.press("ArrowDown");
+						if (await blindOpen())
+							await blindLine(
+								`asks-menu-${layout}-${look}, blind`,
+								menu.getByRole("row", {selected: true}).getByRole("region", {name: /^ask: /}),
+							);
+						else check(`P23 E 7, asks-menu-${layout}-${look}: the blind ask has a row`, false);
+						for (let i = 0; i < total && (await rowId()) !== was; i++)
+							await page.keyboard.press("ArrowDown");
+					}
 					await page.keyboard.press("Escape");
 				});
 				await page.keyboard.press("Control+c");
@@ -556,7 +589,43 @@ export const askDesk = async (tools: Tools) => {
 				await tools.run(page, "t1", "ticket --ticket 118");
 				await box(page).waitFor();
 				await shot(page, "shown", layout, look);
+				const rec = button(box(page), "Take rec");
+				check(
+					`P14 7, shown-${layout}-${look}: the shot shows the decided rec key, y`,
+					(await rec.getAttribute("aria-keyshortcuts")) === "y" &&
+						(await rec.locator("kbd").innerText()).trim() === "y",
+					{
+						keys: await rec.getAttribute("aria-keyshortcuts"),
+						chip: await rec
+							.locator("kbd")
+							.innerText()
+							.catch(() => null),
+					},
+				);
 				await inspectLine(`shown-${layout}-${look}`, box(page));
+				if (layout === "one")
+					await attempt(`P23 E 7: the focus shot, ${look}`, async () => {
+						await box(page).evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+						const resting = await barLine(box(page));
+						// The keyboard's way back to the bar: every pick opens on o, Escape returns focus.
+						await box(page).focus();
+						await page.keyboard.press("o");
+						await box(page)
+							.getByRole("button", {name: /approve/i})
+							.last()
+							.waitFor({timeout: 5000});
+						await page.keyboard.press("Escape");
+						const focused = await barLine(box(page));
+						check(
+							`P23 E 7, focus-one-${look}: the bar's focus line is visible and differs from its hairline`,
+							focused.focused &&
+								focused.visible &&
+								focused.color !== null &&
+								focused.color !== resting.color,
+							{resting, focused},
+						);
+						await shot(page, "focus", layout, look);
+					});
 				check("P17 d: the marks show before a pick", (await marksIn(box(page))) === 2);
 				await onTheLine("P17 d: the marks sit on the rec line", box(page));
 				check("P23 E: Recommended once", (await recommendedIn(box(page))) === 1);
@@ -578,6 +647,8 @@ export const askDesk = async (tools: Tools) => {
 				);
 				await page.keyboard.press("Escape");
 				await button(box(page), "Not the rec").click();
+				await box(page).getByRole("textbox").waitFor();
+				await oneRing(`required-note-${layout}-${look}`, box(page).getByRole("textbox"));
 				await shot(page, "required-note", layout, look);
 				check("P17 d: the marks stay with a note open", (await marksIn(box(page))) === 2);
 				check("P23 E: Recommended once with the note open", (await recommendedIn(box(page))) === 1);
@@ -663,6 +734,7 @@ export const askDesk = async (tools: Tools) => {
 							"P23 E: Recommended once on a failed save",
 							(await recommendedIn(box(page))) === 1,
 						);
+						await inView(`failed-save-${layout}-${look}`, box(page).getByRole("alert"));
 						await shot(page, "failed-save", layout, look);
 					});
 				} finally {
@@ -1028,6 +1100,386 @@ const noCardInMenu = async (when: string, menu: Locator) => {
 	});
 	check(`P23 E 6d, ${when}: no filled card inside the asks menu`, fills.length === 0, fills);
 };
+/**
+ * Round 7, fix 1 (lead, 2026-11-08): the focused note field draws one ring, 2px, and no second
+ * edge inside or outside it. Every edge the field and its tight wrappers draw (a border, an
+ * outline, a box-shadow) is a band at a distance from the textarea's own box; an outline covers
+ * what it lies on, and touching bands of one color read as one ring. What is left must be one
+ * band, 1.5 to 2.5px thick. A wrapper is tight when each side is within 8px of the textarea's.
+ */
+const oneRing = async (when: string, field: Locator) => {
+	const read = await field.evaluate((textarea) => {
+		const clear = (c: string) => c === "transparent" || /rgba\(.*,\s*0\)$/.test(c);
+		const px = (w: string) => Number.parseFloat(w) || 0;
+		const at = textarea.getBoundingClientRect();
+		type Band = {from: string; color: string; inner: number; outer: number; outline: boolean};
+		const bands: Band[] = [];
+		const stop = textarea.closest("form, .ask-view");
+		for (
+			let node: Element | null = textarea;
+			node !== null && node !== stop;
+			node = node.parentElement
+		) {
+			const r = node.getBoundingClientRect();
+			const sides = [at.top - r.top, r.right - at.right, r.bottom - at.bottom, at.left - r.left];
+			if (sides.some((d) => d < -1 || d > 8)) continue;
+			const d = Math.min(...sides);
+			const s = getComputedStyle(node);
+			const name = `${node.tagName}.${node.className}`;
+			const bw = px(s.borderTopWidth);
+			if (bw > 0 && s.borderTopStyle !== "none" && !clear(s.borderTopColor))
+				bands.push({
+					from: `${name} border`,
+					color: s.borderTopColor,
+					inner: d - bw,
+					outer: d,
+					outline: false,
+				});
+			const ow = px(s.outlineWidth);
+			if (ow > 0 && s.outlineStyle !== "none" && !clear(s.outlineColor)) {
+				const off = px(s.outlineOffset);
+				bands.push({
+					from: `${name} outline`,
+					color: s.outlineColor,
+					inner: d + off,
+					outer: d + off + ow,
+					outline: true,
+				});
+			}
+			if (s.boxShadow !== "none")
+				for (const layer of s.boxShadow.split(/,(?![^(]*\))/)) {
+					const color = /rgba?\([^)]*\)/.exec(layer)?.[0] ?? "";
+					const lengths = (layer.replace(/rgba?\([^)]*\)/, "").match(/-?[\d.]+px/g) ?? []).map(px);
+					const [x = 0, y = 0, blur = 0, spread = 0] = lengths;
+					const size = Math.max(Math.abs(x), Math.abs(y)) + blur + spread;
+					if (clear(color) || size <= 0) continue;
+					bands.push(
+						layer.includes("inset")
+							? {
+									from: `${name} inset shadow`,
+									color,
+									inner: d - bw - size,
+									outer: d - bw,
+									outline: false,
+								}
+							: {from: `${name} shadow`, color, inner: d, outer: d + size, outline: false},
+					);
+				}
+		}
+		const seen = bands.filter(
+			(b) =>
+				b.outline ||
+				!bands.some((o) => o.outline && o.inner <= b.inner + 0.01 && o.outer >= b.outer - 0.01),
+		);
+		seen.sort((a, b) => a.inner - b.inner);
+		const rings: Band[] = [];
+		for (const b of seen) {
+			const last = rings.at(-1);
+			if (last !== undefined && last.color === b.color && b.inner <= last.outer + 0.01)
+				rings[rings.length - 1] = {
+					...last,
+					from: `${last.from} + ${b.from}`,
+					outer: Math.max(last.outer, b.outer),
+				};
+			else rings.push(b);
+		}
+		return {
+			focused: textarea === document.activeElement,
+			rings: rings.map((r) => ({from: r.from, color: r.color, thick: r.outer - r.inner})),
+		};
+	});
+	const [ring] = read.rings;
+	check(
+		`P23 E 7, ${when}: the focused note draws one 2px ring, no second edge`,
+		read.focused &&
+			read.rings.length === 1 &&
+			ring !== undefined &&
+			ring.thick >= 1.5 &&
+			ring.thick <= 2.5,
+		read,
+	);
+};
+/**
+ * Round 7, fix 3: after a failed save, its line is in view. The alert's box sits inside the
+ * nearest scroller's visible area (its client rect), and inside the window, at every layout.
+ */
+const inView = async (when: string, alert: Locator) => {
+	await until(
+		`P12 7, ${when}: the failure line is scrolled into view`,
+		() =>
+			alert.evaluate((element) => {
+				const at = element.getBoundingClientRect();
+				let scroller: Element | null = element.parentElement;
+				while (
+					scroller !== null &&
+					!/(auto|scroll|overlay)/.test(getComputedStyle(scroller).overflowY)
+				)
+					scroller = scroller.parentElement;
+				const port =
+					scroller === null
+						? {top: 0, bottom: innerHeight}
+						: (() => {
+								const r = scroller.getBoundingClientRect();
+								const top = r.top + scroller.clientTop;
+								return {top, bottom: top + scroller.clientHeight};
+							})();
+				const top = Math.max(port.top, 0);
+				const bottom = Math.min(port.bottom, innerHeight);
+				return {
+					scroller: scroller === null ? null : `${scroller.tagName}.${scroller.className}`,
+					alert: {top: at.top, bottom: at.bottom},
+					port: {top, bottom},
+					inside: at.height > 0 && at.top >= top - 1 && at.bottom <= bottom + 1,
+				};
+			}),
+		(seen) => seen.inside,
+	);
+};
+/**
+ * Round 7, fix 2: a blind ask says "Your pick first: the rec shows once you answer", and the
+ * "Did this need you?" group shares that line (their text tops within 4px), at one, side, stacked
+ * and 2x2, in the ticket bar and the menu. Evidence sits on that line, or starts on the next: its
+ * box top no lower than 1em under the line.
+ */
+const blindLine = async (when: string, where: Locator) => {
+	const read = await where.evaluate((root) => {
+		const textRects = (element: Element | null) => {
+			if (element === null) return [];
+			const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+			const rects: DOMRect[] = [];
+			for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+				if ((node.textContent ?? "").trim() === "") continue;
+				const range = document.createRange();
+				range.selectNodeContents(node);
+				rects.push(...[...range.getClientRects()].filter((r) => r.width > 0));
+			}
+			return rects;
+		};
+		const words = root.querySelector(".ask-recwords");
+		const label = root.querySelector(".ask-marks > span[aria-hidden]");
+		const hint = textRects(words);
+		const said = textRects(label);
+		const evidence = root.querySelector(".ask-why button")?.getBoundingClientRect();
+		const lastHint = hint.at(-1);
+		const firstMark = said[0];
+		const marks = root.querySelector(".ask-marks")?.getBoundingClientRect();
+		const lineBottom = Math.max(lastHint?.bottom ?? 0, marks?.bottom ?? 0);
+		return {
+			hint: (words?.textContent ?? "").trim(),
+			hintTop: lastHint?.top ?? null,
+			marksTop: firstMark?.top ?? null,
+			lineTop: Math.min(lastHint?.top ?? 0, marks?.top ?? 0),
+			lineBottom,
+			em: Number.parseFloat(getComputedStyle(root).fontSize) || 16,
+			evidence: evidence === undefined ? null : {top: evidence.top, bottom: evidence.bottom},
+		};
+	});
+	check(
+		`P23 E 7, ${when}: "Your pick first" and "Did this need you?" share one line`,
+		read.hint.startsWith("Your pick first") &&
+			read.hintTop !== null &&
+			read.marksTop !== null &&
+			Math.abs(read.hintTop - read.marksTop) <= 4,
+		read,
+	);
+	check(
+		`P23 E 7, ${when}: Evidence sits on that line or the next`,
+		read.evidence !== null && read.evidence.top <= read.lineBottom + read.em,
+		read,
+	);
+};
+/**
+ * Round 7, fix 4: a closed row of the asks menu reads as two tight lines. The ticket title's text
+ * starts right under the question's: the gap between the question's last text line and the
+ * title's first is at most 0.5em of the row's font size. At line-height 1.5 that is the leading
+ * between two lines of one paragraph, so anything more is a blank band a person sees.
+ */
+const closedRows = async (when: string, menu: Locator) => {
+	const rows = await menu.evaluate((popover) => {
+		const textRects = (element: Element | null) => {
+			if (element === null) return [];
+			const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+			const rects: DOMRect[] = [];
+			for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+				if ((node.textContent ?? "").trim() === "") continue;
+				const range = document.createRange();
+				range.selectNodeContents(node);
+				rects.push(...[...range.getClientRects()].filter((r) => r.width > 0));
+			}
+			return rects;
+		};
+		return [...popover.querySelectorAll('[role="row"][aria-selected="false"]')].map((row) => {
+			const title = row.querySelector(".asks-title");
+			const sub = title?.nextElementSibling ?? null;
+			const above = textRects(title);
+			const below = textRects(sub);
+			const em = Number.parseFloat(getComputedStyle(row).fontSize) || 16;
+			const bottom = above.length === 0 ? null : Math.max(...above.map((r) => r.bottom));
+			const top = below.length === 0 ? null : Math.min(...below.map((r) => r.top));
+			return {
+				row: row.id,
+				gap: bottom === null || top === null ? null : top - bottom,
+				limit: em * 0.5,
+			};
+		});
+	});
+	const measured = rows.filter((r) => r.gap !== null);
+	check(
+		`P23 E 7, ${when}: each closed row's title sits right under its question`,
+		measured.length > 0 && measured.every((r) => (r.gap ?? 0) <= r.limit),
+		rows,
+	);
+};
+/**
+ * Round 7, fix 5: the open row of the asks menu. Its actions (Take rec, Not the rec, Every pick,
+ * Open ticket, Later) share one row; a wrap is allowed only where the next button could not fit at
+ * the end of the line before, and no button is left alone on a line (6d). The hint and the marks
+ * share a line where they fit, and Evidence is on that line or the next. In side and 2x2 (`tight`),
+ * the ask part of the row is at most 3 lines.
+ */
+const openRow = async (when: string, menu: Locator, tight: boolean) => {
+	const read = await menu.evaluate((popover) => {
+		const row = popover.querySelector('[role="row"][aria-selected="true"]');
+		if (row === null) return null;
+		const textRects = (element: Element | null) => {
+			if (element === null) return [];
+			const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+			const rects: DOMRect[] = [];
+			for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+				if ((node.textContent ?? "").trim() === "") continue;
+				if ((node.parentElement?.closest("[hidden]") ?? null) !== null) continue;
+				const range = document.createRange();
+				range.selectNodeContents(node);
+				rects.push(...[...range.getClientRects()].filter((r) => r.width > 0));
+			}
+			return rects;
+		};
+		const lines = (rects: readonly DOMRect[]) => {
+			const out: {top: number; bottom: number; items: DOMRect[]}[] = [];
+			for (const r of [...rects].sort((a, b) => a.top - b.top)) {
+				const line = out.find((l) => r.top < l.bottom - 1 && r.bottom > l.top + 1);
+				if (line === undefined) out.push({top: r.top, bottom: r.bottom, items: [r]});
+				else {
+					line.items.push(r);
+					line.top = Math.min(line.top, r.top);
+					line.bottom = Math.max(line.bottom, r.bottom);
+				}
+			}
+			return out;
+		};
+		const cell = row.querySelector('[role="gridcell"]') ?? row;
+		const box = cell.getBoundingClientRect();
+		const cs = getComputedStyle(cell);
+		const right = box.right - (Number.parseFloat(cs.paddingRight) || 0);
+		const buttons = [...row.querySelectorAll(".ask-toolbar button, .asks-acts button")]
+			.map((b) => ({name: (b.textContent ?? "").trim(), r: b.getBoundingClientRect()}))
+			.filter((b) => b.r.width > 0);
+		const acts = lines(buttons.map((b) => b.r));
+		const gap = 4;
+		const needless = acts.slice(1).some((line, i) => {
+			const before = acts[i];
+			const first = [...line.items].sort((a, b) => a.left - b.left)[0];
+			if (before === undefined || first === undefined) return false;
+			const end = Math.max(...before.items.map((r) => r.right));
+			return end + gap + first.width <= right + 1;
+		});
+		const words = row.querySelector(".ask-recwords");
+		const hint = textRects(words);
+		const label = textRects(row.querySelector(".ask-marks > span[aria-hidden]"));
+		const marks = [...row.querySelectorAll(".ask-marks button")].map((b) =>
+			b.getBoundingClientRect(),
+		);
+		const lastHint = hint.at(-1);
+		const need =
+			(lastHint?.width ?? 0) +
+			label.reduce((n, r) => n + r.width, 0) +
+			marks.reduce((n, r) => n + r.width, 0) +
+			8 * (1 + marks.length);
+		const line = row.querySelector(".ask-rec");
+		const room = line === null ? 0 : line.getBoundingClientRect().width;
+		const shared =
+			lastHint !== undefined &&
+			label[0] !== undefined &&
+			Math.abs(lastHint.top - label[0].top) <= 4;
+		const lineBottom = Math.max(
+			lastHint?.bottom ?? 0,
+			...marks.map((r) => r.bottom),
+			...label.map((r) => r.bottom),
+		);
+		const evidence = row.querySelector(".ask-why button")?.getBoundingClientRect();
+		const em = Number.parseFloat(getComputedStyle(row).fontSize) || 16;
+		const view = row.querySelector(".ask-view");
+		const all = [
+			...textRects(view),
+			...textRects(row.querySelector(".asks-acts")),
+			...buttons.map((b) => b.r),
+			...marks,
+		];
+		return {
+			acts: acts.map((l) => l.items.length),
+			names: buttons.map((b) => b.name.replace(/\s+/g, " ")),
+			needless,
+			shared,
+			fits: need <= room,
+			need,
+			room,
+			evidence:
+				evidence === undefined
+					? null
+					: {top: evidence.top, ok: evidence.top <= lineBottom + em, lineBottom},
+			lines: lines(all).length,
+		};
+	});
+	if (read === null) {
+		check(`P23 E 7, ${when}: the menu has an open row`, false);
+		return;
+	}
+	check(
+		`P23 E 7, ${when}: the open row's actions share one row (a wrap only when needed, none alone)`,
+		read.acts.length > 0 &&
+			!read.needless &&
+			(read.acts.length === 1 || read.acts.every((n) => n >= 2)),
+		read,
+	);
+	check(
+		`P23 E 7, ${when}: the open row's hint and marks share a line where they fit`,
+		read.shared || !read.fits,
+		read,
+	);
+	check(
+		`P23 E 7, ${when}: the open row's Evidence is on that line or the next`,
+		read.evidence?.ok === true,
+		read,
+	);
+	if (tight)
+		check(`P23 E 7, ${when}: the open row's ask is at most 3 lines`, read.lines <= 3, read);
+};
+/**
+ * The bar's line under it, as a person sees it: the ::after hairline (design E), or an outline,
+ * shadow or border the bar draws itself. `focused` says the bar holds keyboard focus.
+ */
+const barLine = (where: Locator) =>
+	where.evaluate((element) => {
+		const clear = (c: string) => c === "transparent" || /rgba\(.*,\s*0\)$/.test(c);
+		const px = (w: string) => Number.parseFloat(w) || 0;
+		const after = getComputedStyle(element, "::after");
+		const own = getComputedStyle(element);
+		const drawn =
+			after.content !== "none" && px(after.height) > 0 && !clear(after.backgroundColor)
+				? {color: after.backgroundColor, size: px(after.height)}
+				: px(own.outlineWidth) > 0 && own.outlineStyle !== "none" && !clear(own.outlineColor)
+					? {color: own.outlineColor, size: px(own.outlineWidth)}
+					: own.boxShadow !== "none"
+						? {color: /rgba?\([^)]*\)/.exec(own.boxShadow)?.[0] ?? null, size: 1}
+						: px(own.borderBottomWidth) > 0 && !clear(own.borderBottomColor)
+							? {color: own.borderBottomColor, size: px(own.borderBottomWidth)}
+							: {color: null, size: 0};
+		return {
+			focused: element === document.activeElement && element.matches(":focus-visible"),
+			visible: drawn.color !== null && drawn.size > 0,
+			...drawn,
+		};
+	});
 /** What opens under the bar stays in normal flow: nothing up to the ask is lifted out of it. */
 const inFlow = async (what: string, where: Locator, target: Locator) => {
 	const lifted = await target.evaluate((element) => {

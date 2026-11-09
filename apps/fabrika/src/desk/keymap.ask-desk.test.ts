@@ -24,6 +24,15 @@ describe("ask desk P14: scoped and configurable keys", () => {
 		])
 			expect(command(keys.success, "ask", "y", state)).toBeUndefined();
 	});
+	// docs/direction/ask-desk.md, A3 (line 319, traced at line 52): `y` takes the rec. The default
+	// lives in ASK_COMMANDS (packages/pipeline/src/tickets/ask.ts); the table is keymap.ts's.
+	it("vector: with no keys file, the default rec key is y, and only y", () => {
+		const keys = decodeKeys("", true);
+		if (Result.isFailure(keys)) throw new Error(keys.failure.why);
+		const rec = keys.success.programs?.find((r) => r.does === "program.ask.rec");
+		expect(rec?.keys).toEqual([{_tag: "alone", key: "y"}]);
+		expect(rec?.source).toBe("default");
+	});
 	it("rebinds and unbinds the same command table used by the buttons", () => {
 		const keys = decodeKeys('program.ask.rec = "r"\nprogram.ask.not = []', true);
 		if (Result.isFailure(keys)) throw new Error(keys.failure.why);
