@@ -212,13 +212,18 @@ visible, and never weaken the rules to hide this message.
    Every new or changed law is a property, or an example labeled vector, format, pinned or
    scenario with its reason.
    Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no owner read is needed.
-   The lead records both outputs in the PR. Any hit waits on the owner.
+   The lead records both outputs in the PR. A hit goes to the lead's hand check, with the hit list
+   in the PR. Only real loosening waits on the owner.
    Apply the labels rule and both zero-hit checks together. These are proper property tests.
    Run `sh .agents/skills/lead/scripts/loosening.sh <base> <head> <mapping.md>` on the PR's exam
    diff. The PR writes a mapping table with `Removed` and `Replacement` columns for every renamed
    or replaced law, using exact test titles. Save that table as `mapping.md` for the command.
-   A pure addition needs no replacement row. Missing replacements, muted tests, removed
-   assertions, fewer runs and tighter generated ranges are hits for the owner. Include the
+   A pure addition needs no replacement row. `loosening.sh` fails closed: any exam-file change
+   other than purely new tests or a rename listed in the mapping table is a hit. A pattern parser
+   cannot cover every TypeScript form, so it names forms it knows but never clears a change it
+   does not understand.
+   Missing replacements, muted tests, removed assertions, fewer runs and tighter generated ranges
+   are hits for the lead's hand check. Include the
    mutation step's narrowing list: a mutant main kills that the branch lets live is a hit too.
    Before this new check blocks anything, measure false alarms on the last 20 merged `next/`
    PRs and record the count. Do not claim that measure from generated tests alone.

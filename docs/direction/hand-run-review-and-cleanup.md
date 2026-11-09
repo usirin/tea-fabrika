@@ -77,11 +77,15 @@ Do not add a marker, key or readable file as proof.
 Every new or changed law is a property or has a fitting vector, format, pinned or scenario label
 with its reason. Run `loosening.sh <base> <head> [mapping.md]` over the exam diff. The PR writes
 the exact removed and replacement test titles in a table headed `Removed` and `Replacement`.
+`loosening.sh` fails closed: any exam-file change other than purely new tests or a rename listed
+in the mapping table is a hit. A pattern parser cannot cover every TypeScript form, so it names
+forms it knows but never clears a change it does not understand.
 Removed or muted laws, removed assertions, fewer runs and tighter generated ranges are hits.
 The mutation arm-a vs arm-b narrowing list also counts: main kills a mutant the branch lets live.
-Zero hits from both checks, plus the labels rule, needs no owner read. Lead records both outputs
-in the PR. Any hit waits on the owner. Measure false alarms on the last 20 merged `next/` PRs
-and record the count before the new loosening check blocks anything.
+Zero hits from both checks, plus the labels rule, needs no owner read.
+The lead records both outputs in the PR. A hit goes to the lead's hand check, with the hit list
+in the PR. Only real loosening waits on the owner. Measure false alarms on the last 20 merged
+`next/` PRs and record the count before the new loosening check blocks anything.
 
 ## Why, cost and limits
 

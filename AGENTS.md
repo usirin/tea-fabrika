@@ -102,7 +102,8 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   part is small, never absent.
   Every new or changed law is a property, or an example labeled vector, format, pinned or scenario
   with its reason. Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no
-  owner read is needed. The lead records both outputs in the PR. Any hit waits on the owner.
+  owner read is needed. The lead records both outputs in the PR. A hit goes to the lead's hand check,
+  with the hit list in the PR. Only real loosening waits on the owner.
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
   machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). From tea 0.23.0
