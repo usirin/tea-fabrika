@@ -36,9 +36,11 @@ const input = fc.record({
 	failure: fc.constantFrom("none" as const, "before" as const, "after" as const),
 });
 type Generated<A> = A extends fc.Arbitrary<infer Value> ? Value : never;
+// The transition API accepts any item name; the generator only samples some of them.
+type Layer = {_tag: "palette"} | {_tag: "popover"; item: string} | {_tag: "tooltip"; for: string};
 type Change =
-	| {_tag: "open"; layer: Generated<typeof layers>; via: Generated<typeof sources>}
-	| {_tag: "close"; layer: Generated<typeof layers>; reason: string};
+	| {_tag: "open"; layer: Layer; via: Generated<typeof sources>}
+	| {_tag: "close"; layer: Layer; reason: string};
 type FrameStep = (frame: Frame, msg: FrameMsg) => readonly [Frame, readonly Change[]];
 // The recorder law still requires the real PR 1 transition function once it exists.
 const frameApi: typeof frameModule & {readonly stepFrame?: FrameStep} = frameModule;
@@ -139,7 +141,12 @@ describe("today's LayerRecorder", () => {
 							said: data.said,
 							change: report.change,
 						});
-					}).pipe(Effect.provide(layerMemory()), Effect.provide(TestClock.layer()), Effect.scoped),
+					}).pipe(
+						// Keep the full generated clock range without replaying idle 25 ms alarms.
+						Effect.provide(layerMemory({tickMs: data.hostTime + 1})),
+						Effect.provide(TestClock.layer()),
+						Effect.scoped,
+					),
 				);
 			}),
 			settings,
