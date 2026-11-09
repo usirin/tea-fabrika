@@ -14,6 +14,7 @@ import {
 	NOW,
 	OWNER,
 	policyFor,
+	TOOK,
 } from "../../../fixtures/ask-desk/cases.ts";
 import {pageOf, type Shown} from "./view.ts";
 import {TicketWindow} from "./window.tsx";
@@ -320,5 +321,69 @@ describe("shot S9: the done card draws its check once", () => {
 		const marks = (textOf(turn).match(/✓/g) ?? []).length + (turn.match(/<svg\b/g) ?? []).length;
 		expect(marks).toBe(1);
 		expect(textOf(turn)).toContain("Done");
+	});
+});
+
+// ---- design E (owner, 2026-11-08): the bar is the ask
+
+const QUESTIONS = [
+	DRAFT.what,
+	"Approve plan v2 for the slug fix?",
+	"Merge the change that trims slugs?",
+	"Split the ticket into two?",
+];
+/** Any sealed ask with any of the questions, and what ends it: an answer or a withdrawal. */
+const anyOpenAsk = fc
+	.record({
+		a: anyAsk,
+		what: fc.constantFrom(...QUESTIONS),
+		end: fc.constantFrom("answered", "withdrawn"),
+	})
+	.map(({a, what, end}) => ({...a, draft: {...(a.draft as object), what}, what, end}));
+const entriesOf = (facts: readonly {readonly type: string}[]): Ticket => {
+	const entries = facts.map((fact, i) =>
+		Schema.decodeUnknownSync(Entry)({
+			pos: i + 1,
+			ticket: 117,
+			by: i === 0 || fact.type === "answered" ? OWNER : AGENT,
+			at: NOW - 60_000 + i,
+			fact,
+		}),
+	);
+	const [ticket] = fold([], entries).tickets;
+	if (ticket === undefined) throw new Error("the fold made no ticket");
+	return ticket;
+};
+/** The words of the window's Activity section. */
+const activityOf = (markup: string) => textOf(firstOf(markup, /<section aria-label="Activity"/));
+/** The fact that ends `ask`: the rec taken where one is drawn, else the first pick chosen. */
+const endOf = (ask: Asked, end: string) =>
+	end === "withdrawn"
+		? {type: "withdrawn", ask: ask.ask, why: "changed"}
+		: {
+				type: "answered",
+				format: 1,
+				ask: ask.ask,
+				answer:
+					ask.shows.rec._tag === "pick"
+						? {_tag: "rec"}
+						: {_tag: "chose", pick: ask.shows.picks[0]?.pick ?? "approve"},
+				saw: ask.saw,
+				via: {_tag: "window", took: TOOK},
+			};
+
+describe("ask desk design E: the bar is the ask, so the activity does not say it again", () => {
+	it("while an ask is open, the activity has no 'asks you' row for it; once it ends, the row is back", async () => {
+		await fc.assert(
+			fc.asyncProperty(anyOpenAsk, async (a) => {
+				const ask = await sealedAny(a);
+				const row = `asks you: ${a.what}`;
+				const open = drawn(entriesOf([FILED, ask]));
+				expect(textOf(open)).toContain(a.what);
+				expect(activityOf(open)).not.toContain(row);
+				expect(activityOf(drawn(entriesOf([FILED, ask, endOf(ask, a.end)])))).toContain(row);
+			}),
+			{seed: 119120, numRuns: 40},
+		);
 	});
 });

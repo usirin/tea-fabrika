@@ -77,6 +77,32 @@ const until = async <A>(what: string, read: () => Promise<A>, ok: (value: A) => 
 	check(what, ok(value), value);
 	return value;
 };
+/**
+ * Puts the window on the primary display's work area with its page `want` big, or as much of it as
+ * the work area holds, and waits until the page is that wide. The window opens on whichever display
+ * the system picks, and a second display can leave it narrower than main.ts asks (784 wide on a
+ * desktop of two), so no layout trusts the size it opened at.
+ */
+const sizeTo = async (
+	app: ElectronApplication,
+	page: Page,
+	want: {readonly width: number; readonly height: number},
+) => {
+	const got = await app.evaluate(({BrowserWindow, screen}, want) => {
+		const area = screen.getPrimaryDisplay().workArea;
+		const size = {
+			width: Math.min(want.width, area.width),
+			height: Math.min(want.height, area.height),
+		};
+		BrowserWindow.getAllWindows()[0]?.setContentBounds({x: area.x, y: area.y, ...size});
+		return size;
+	}, want);
+	await until(
+		`the window's page is ${got.width} wide on the primary display`,
+		() => page.evaluate(() => window.innerWidth),
+		(width) => width === got.width,
+	);
+};
 const seal: (draft: unknown, policy: {seed: number}) => Effect.Effect<Sealed, unknown> = sealAsk;
 const on = <A, E>(home: string, program: Effect.Effect<A, E, Ledger>) =>
 	Effect.runPromise(
@@ -91,6 +117,7 @@ const seedAsk = (
 	hidden = false,
 	rec: unknown = DRAFT.rec,
 	id = `a-approve-${ticket}`,
+	what: string = DRAFT.what,
 ) =>
 	on(
 		home,
@@ -105,7 +132,7 @@ const seedAsk = (
 				data: {type: "planned", version: 2, tasks: []},
 			});
 			// A blind ask is a step's: an approve ask is never drawn blind (review 2, medium 2).
-			const draft = {...DRAFT, ask: id, rec, ...(hidden ? {for: "step"} : {})};
+			const draft = {...DRAFT, ask: id, rec, what, ...(hidden ? {for: "step"} : {})};
 			const ask = yield* seal(draft, policyFor(id, hidden, blindDraw));
 			yield* ledger.send(inbox, id, {kind: "asked", writer: "agent:lane for:owner", data: ask});
 			return ask;
@@ -214,6 +241,8 @@ export const askDesk = async (tools: Tools) => {
 	try {
 		const page = await app.firstWindow();
 		watched = page;
+		// The size main.ts asks for, on the primary display, whatever display the window opened on.
+		await sizeTo(app, page, {width: 1200, height: 760});
 		failShots = soft ? join(tools.shots, "ask-desk-failed") : null;
 		if (failShots !== null) await mkdir(failShots, {recursive: true});
 		await tools.prompted(page, "t1");
@@ -448,6 +477,8 @@ export const askDesk = async (tools: Tools) => {
 						: layout === "stacked"
 							? ["t1", "t4"]
 							: ["t1", "t4", "t2", "t5"];
+			// Unfold at one known size, the big one, so a strip's tile gets its room on any display.
+			await sizeTo(app, page, {width: 1440, height: 1000});
 			// Open every strip first: a column whose tiles all folded is one strip named by the
 			// column, not by a tile, so a tile's own strip may not exist.
 			const strips = page.locator("[data-strip]").filter({visible: true});
@@ -464,9 +495,9 @@ export const askDesk = async (tools: Tools) => {
 				await tools.prefixed(page, "f");
 			}
 			await tools.focusOn(page, "t1");
-			await app.evaluate(
-				({BrowserWindow}, size) =>
-					BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height),
+			await sizeTo(
+				app,
+				page,
 				layout === "small" ? {width: 1024, height: 700} : {width: 1440, height: 1000},
 			);
 			for (const look of ["dark", "light"] as const) {
@@ -499,6 +530,23 @@ export const askDesk = async (tools: Tools) => {
 				check("P17 d: a no-rec ask offers the marks", (await marksIn(box(page))) === 2);
 				await onTheLine("P17 d: a no-rec ask's marks sit on the bar's line", box(page));
 				await shot(page, "no-rec", layout, look);
+				if (layout === "one" && look === "dark")
+					await attempt("P23 E: the bar is the ask, in shown-one", async () => {
+						// A ticket of its own, with a question no other ask has: 118's answered asks
+						// rightly keep their rows, which say the same question.
+						const what = "Do you approve plan version 3?";
+						await seedAsk(home, 125, false, DRAFT.rec, "a-approve-125", what);
+						await page.keyboard.press("Control+c");
+						await tools.prompted(page, "t1");
+						await tools.run(page, "t1", "ticket --ticket 125");
+						await box(page).waitFor();
+						const tile = await page.locator('[data-tile="t1"]').innerText();
+						check(
+							"P23 E: in shown-one, the open ask's question is in the ticket tile once",
+							tile.split(what).length - 1 === 1,
+							tile.split(what).length - 1,
+						);
+					});
 				await page.keyboard.press("Control+c");
 				await tools.prompted(page, "t1");
 				await tools.run(page, "t1", "ticket --ticket 118");
