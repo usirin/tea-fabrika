@@ -1,6 +1,6 @@
 # 95. An agent asks an agent in a container, through the shared ledger
 
-The question: tea-host's second test ([tea-host](../docs/direction/tea-host.md)).
+The question: tea-host's second test (tea-host).
 An agent on one host asks an agent on a second host, run in a Docker
 container, a question and gets the answer, both hosts on one shared ledger.
 The call has a timeout and is retried. Does every question get exactly one

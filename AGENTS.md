@@ -17,21 +17,34 @@ was decided are all kept here on purpose, so they can be analysed later.
 | You want to | Read | Write |
 |---|---|---|
 | Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) there | That README, in the same pull request or the same day, when the plan or its state changes. |
-| Know what the owner decided | [`.decisions/`](./.decisions/README.md), one short file per decision. Search it, `.glossary/` and `docs/direction/` before you ask the owner or write a plan | `.decisions/NNNN-slug.md`, the turn the owner decides, in its own docs pull request, in the shape that README gives. |
+| Know what the owner decided | [`.decisions/`](./.decisions/), one short file per decision; see [Decision discovery](#decision-discovery) | `.decisions/NNNN-slug.md`, the turn the owner decides, in its own docs pull request, with [`/adr`](./.agents/skills/adr/SKILL.md). |
 | Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), the long design notes | A note there when a decision needs the long reasoning, plus its row in that folder's README. Mark it **proposed** until it is settled. Its decision file links it. |
 | Know what a word means | [`.glossary/TERMS.md`](./.glossary/TERMS.md): `next/`'s words, one section per bounded context, one row per word in it, with what it is not; its last section translates today's code's words | A row there, in the same pull request that coins or renames a word. |
+| Know how the code is shaped now | [`.patterns/README.md`](./.patterns/README.md), the index, then the doc for your change. When a doc and the source disagree, the source wins | `.patterns/<name>.md` plus its index row, with the [write-pattern skill](./.agents/skills/write-pattern/SKILL.md): a Mermaid diagram first, then one real code block, then words, citing `path:line` ([0005](./.decisions/0005-patterns-and-decisions-are-visual.md)). |
 | Write guidelines for one design area | [`.claude/skills/guidelines/SKILL.md`](./.claude/skills/guidelines/SKILL.md), the steps in order, and its page checklist | One experiment, one proposed note, their two index rows and one Design canvas ([drawn on Claude Design](./docs/direction/design-on-claude-design.md)), in the shape that skill gives. |
-| Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up and `experiments/NN-name.ts` for its script, with the next free number, plus one row in the index. Shared helpers go in `experiments/lib/`, saved answers in `experiments/results/`. Raw samples, such as every timing of a run, are still recorded but kept privately, not in git (owner, 2026-11-09): the script writes them under `runs/` or to a path a flag names, and `results/` keeps a small summary of the numbers the write-up quotes. |
+| Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up, with the next free number, plus one row in the index. Saved answers go in `experiments/results/`. A script is not kept on main: keep it on its own branch and name that branch in the write-up. Raw samples, such as every timing of a run, are still recorded but kept privately, not in git (owner, 2026-11-09): the script writes them under `runs/` or to a path a flag names, and `results/` keeps a small summary of the numbers the write-up quotes. |
 | Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes.jsonl` and `field/runs.jsonl` | One row per agent run in `runs.jsonl` and one note per thing that broke, cost too much, needed a person or worked well in `notes.jsonl`, the same day, in the schema the README gives. |
-| Understand a design that is still a draft | `docs/` (for example [`docs/fabrika-sdk.md`](./docs/fabrika-sdk.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too. |
+| Understand a design that is still a draft | `docs/` (for example [`docs/review-machine.md`](./docs/review-machine.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too. |
 | Build the new version | [Two versions, side by side](#two-versions-side-by-side), then `docs/direction/` | Code in `next/`, with its test beside it as `name.test.ts`. |
-| Change the machines (today's version) | The workspace packages (`packages/fabrika`, `packages/pipeline`, `programs/*`, `packs/*`), with the list in the top-level [`README.md`](./README.md#what-is-in-this-repository) as the map and each part's own README for its files | Code in the part's folder, with its test beside it as `name.test.ts`. New pipeline work goes in `packages/pipeline/src/`; a tool any factory could use goes in `packages/fabrika`. Outside a package, import it by its name (`@kampus/fabrika-old`, a subpath such as `@kampus/fabrika-old/http`, or `@kampus/pipeline/<path>`), never by a path; the pipeline uses only fabrika's public names (`pnpm lint` checks both). Inside a package, parts import each other by relative path. The top level names no platform: a Node, Miniflare, Agent SDK, ACP or OpenTelemetry import goes on a subpath (`pnpm lint` bundles the top level for a browser and fails on one). `layer-rules.json` says which way imports may point (`pnpm lint` checks it). Toy projects used by tests live in `fixtures/`. |
+| Change the machines (today's version) | The workspace packages (`packages/fabrika`, `packages/pipeline`, `programs/*`), with the list in the top-level [`README.md`](./README.md#what-is-in-this-repository) as the map and each part's own README for its files | Code in the part's folder, with its test beside it as `name.test.ts`. New pipeline work goes in `packages/pipeline/src/`; a tool any factory could use goes in `packages/fabrika`. Outside a package, import it by its name (`@kampus/fabrika-old`, a subpath such as `@kampus/fabrika-old/http`, or `@kampus/pipeline/<path>`), never by a path; the pipeline uses only fabrika's public names (`pnpm lint` checks both). Inside a package, parts import each other by relative path. The top level names no platform: a Node, Miniflare, Agent SDK, ACP or OpenTelemetry import goes on a subpath (`pnpm lint` bundles the top level for a browser and fails on one). `layer-rules.json` says which way imports may point (`pnpm lint` checks it). Toy projects used by tests live in `fixtures/`. |
 | Learn a package by doing it | [`docs/tutorials/`](./docs/tutorials/), one folder per tutorial: its README and its finished files | A folder there with a `package.json` whose `typecheck` covers the files, so a change to the package that breaks the tutorial fails `pnpm typecheck`. Run every step on a fresh clone before it lands. |
-| Show one finding or idea to someone outside the project | [`singles/README.md`](./singles/README.md) | `singles/NN-short-title.md` with its one picture beside it, in the shape that README gives, plus its row in the table. It points back at the experiment it was cut from. |
 | Look at a live run's state and logs | `runs/` on your own machine | Nothing by hand. `runs/` is ignored by git and is never committed. |
 
-`blog/` and `video/` are finished pieces about earlier stages. Leave them unless
-asked.
+Tickets go in the app's own tracker (`tracker_file`). Never open a GitHub issue on this repo;
+GitHub issues are for other people's repos
+([the lead skill](./.agents/skills/lead/SKILL.md#tickets-and-tracker-posts)).
+
+## Decision discovery
+
+List `.decisions/`: filenames identify records, and each record's frontmatter gives
+its `id`, `title` and `status`. Read applicable records when changing the choice they
+govern or resolving conflicting guidance. Record new decisions with `/adr`
+([the adr skill](./.agents/skills/adr/SKILL.md)).
+
+There is no committed decision index and no startup hook. Filenames plus frontmatter are the
+discovery contract
+([0008](./.decisions/0008-decision-discovery-is-the-agents-md-contract.md), after
+[phoenix ADR 0129](https://github.com/kamp-us/phoenix/blob/main/.decisions/0129-adr-discovery-is-the-claude-md-contract.md)).
 
 **Rule of thumb:** a decision goes in `.decisions/`, and its long reasoning in
 `docs/direction/`. A measurement goes in `experiments/`. Something that happened on a real ticket goes in `field/`. If a
@@ -46,7 +59,7 @@ same turn, and never waits for a code pull request or the end of the day (owner,
 A new version of fabrika is growing in `next/`, built on
 [the five layers](./docs/direction/a-local-first-sync-engine.md). So far `next/` is on
 [PR 223](https://github.com/usirin/tea-fabrika/pull/223), and nothing is on main yet. Everything
-else (`packages/`, `programs/`, `packs/`, `apps/`, `wip`, `legacy`) is today's
+else (`packages/`, `programs/`, `apps/`) is today's
 version. It keeps running for daily use until the new one takes each job over
 ([clean slate](./docs/direction/clean-slate.md)).
 
@@ -97,10 +110,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   run the steps by hand, each logged in `field/`, and the lead agent reads every diff, CI
   and the leak grep before a merge. `next/` does not wait on the pipeline. No builder starts
   before an approved plan and tests that exist
-  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). A plan that only builds a
-  decided note is approved by the agent leading the session, which writes "Approved by the lead
-  agent, builds <note>" in it; a plan that raises a new design call goes to the owner (owner,
-  2026-11-03). A scheduled walk or approval that a decided note already answers is decided in
+  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). A plan that only builds a decided
+  note is approved by the lead session after its own read and draft check. It writes
+  `Approved by the lead agent, builds <note>; body <sha256-12>` on line 1 and replaces that line
+  after any body edit, including an appended amendment. A plan that raises a new design call
+  goes to the owner. A scheduled walk or approval that a decided note already answers is decided in
   the plan, and the lead approves it in one line; a question to the owner must be one they could
   answer no to without contradicting a decision (owner, 2026-11-08). In `next/`'s planner step
   this becomes code: a check on the plan's open questions. No merged pull request
@@ -117,6 +131,10 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   part is small, never absent. A rule that code already checks leaves a skill's prose; a rule
   that code could check becomes a check, then leaves the prose; only judgment stays in prose
   (owner, 2026-11-08).
+  Every new or changed law is a property, or an example labeled vector, format, pinned or scenario
+  with its reason. Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no
+  owner read is needed. The lead records both outputs in the PR. A hit goes to the lead's hand check,
+  with the hit list in the PR. Only real loosening waits on the owner.
 - **One fresh agent per step** (owner, 2026-11-09). Each step's agent reads the lane's state
   file, does its one step and writes the state file back for the next; no long driver carries a
   ticket. A drive script will chain the mechanical steps and start an agent only for judgment
@@ -146,12 +164,29 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
 - `next/` is the lab until a person opens it for real work, so it may be rough. "No
   rough first versions" (below) applies from then on.
 
+## Decision discovery
+
+List `.decisions/`: filenames identify records, and each record's frontmatter gives its `id`,
+`title` and `status`. Read applicable records when changing the choice they govern or resolving
+conflicting guidance. Record new decisions with `/adr`
+([skill](./.agents/skills/adr/SKILL.md)). Before you ask the owner or write a plan, also search
+`.glossary/` and `docs/direction/`.
+
+There is no committed decision index and no startup hook. Filenames plus frontmatter are the
+discovery contract
+([0008](./.decisions/0008-decision-discovery-is-the-agents-md-contract.md)).
+
+Repo tooling adds no Claude Code hooks, SessionStart or any other (owner, 2026-11-09). A tool runs
+when called: `drive.ts` runs `box.sh gc` itself on start.
+
+Tickets go in the app's own tracker (`tracker_file`). Never open a GitHub issue on this repo;
+GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/SKILL.md)).
+
 ## Before you design anything
 
 - **Check what is settled first.** Before any question to the owner, design question,
   recommendation or plan, search `.decisions/`, `.glossary/`, `docs/direction/`, `experiments/`
-  and the plan for the topic. A decision the owner makes is written to `.decisions/` the turn it
-  is made ([0001](./.decisions/0001-decisions-live-in-the-repo.md)). That holds for
+  and the plan for the topic. That holds for
   a question an agent's plan raises and for a pull request you walk: compare its shape
   with the note it says it builds, and name any place it walks a decision back. A
   claim about how a piece runs comes from reading that piece's note now, never from a
@@ -353,9 +388,11 @@ brief carries these caps. Each one came from a laptop that became unusable.
 
 - Tests: `nice -n 15 pnpm exec vitest run --maxWorkers=3`, a narrow path while you
   work, then `--changed origin/main` once at the end: only the tests that reach a changed file.
-  Never the full suite locally (owner, 2026-11-08). On a pull request, CI runs only the tests that
-  reach a changed file; the full suite runs after the merge, on main. `next/` has its own CI job that
-  runs all of its tests on every pull request. A run that
+  Never the full suite locally (owner, 2026-11-08). On a pull request, CI decides what to run from
+  the changed paths (`.github/ci/changes.mjs`). Only Markdown or `field/*.jsonl` rows: it skips
+  `check`, `test`, `next` and `e2e`. Only `next/` files (but not the exam helper): it runs `check` and `next`,
+  and skips `test` and `e2e`. Only today's files: it skips `next`. Markdown that a program or skill reads counts as code.
+  Anything else, and every push to main, runs all jobs, so the full suite runs after the merge. A run that
   needs what CI lacks (Electron shots, a stage with workerd) still runs here. With two or more code agents running:
   `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at the very end. `tsgo` takes
   about 8 cores, so small jobs add up.

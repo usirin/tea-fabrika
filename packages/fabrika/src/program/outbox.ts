@@ -54,7 +54,7 @@ export interface Outbox {
 }
 
 /** What an outbox is made from. */
-export interface Wiring {
+interface Wiring {
 	/** The sender's run, where the outbox is kept. */
 	readonly handle: Handle;
 	/** The sender's name and the output, for why a pipe broke. */

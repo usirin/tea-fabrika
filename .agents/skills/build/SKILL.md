@@ -17,8 +17,8 @@ the rest.
 1. **Read** `AGENTS.md` (all of it), then the approved plan, then the decided notes it builds. Say
    which version you are in. In `next/`: Effect all the way, no Promises, an object class stays thin.
 2. **Run the red laws** on a narrow path and read why each fails.
-3. **Build** only the files the plan's files table gives `build`. Follow the plan and the decided
-   notes, and nothing they leave undecided.
+3. **Build** as the plan and decided notes say, and nothing they leave undecided.
+   Step-commit checks the plan's file owners.
 4. **If a test or an exam path must change, stop.** Name the file, the line and why, and answer
    `send` to tests. The step-commit script refuses a build commit that holds an exam path anyway.
 5. **Run** one capped command, for the narrow check while you work and the final check:
@@ -35,7 +35,10 @@ the rest.
 6. **Commit and sign** with the step-commit skill:
    `sh .agents/skills/step-commit/scripts/stepcommit.sh build <ticket> "T<ticket> build: <subject>" <paths...>`
 7. **Report** in at most 6 lines: which laws went green, any still red and why, any file you needed
-   but may not touch, and what the lead's own run must show (Electron, screenshots).
+   but may not touch, and what the lead's own run must show (Electron, screenshots). If every law
+   was already green at the start and you changed nothing, do not commit: put
+   `laws: green <the narrow test paths you ran>` just before `answer: done`. drive.ts takes that as
+   done; `done` with no commit and no such line is `stuck:no_commit`.
 
 ## Go easy on the machine
 
@@ -46,7 +49,7 @@ the rest.
   blocked there, so skip them.
 - Elsewhere: `nice -n 15 pnpm exec vitest run --maxWorkers=3 <narrow path>`, and `nice -n 19` with
   `--maxWorkers=1` when two or more code agents run.
-- `pnpm format`, then `pnpm lint`. One `pnpm typecheck` at the very end, never while another runs.
+- Step-commit checks staged formatting. Run `pnpm lint` once. One `pnpm typecheck` at the very end, never while another runs.
 - Electron cannot start in a box. Reason from the code and say what the lead's rerun must show.
 
 ## Never

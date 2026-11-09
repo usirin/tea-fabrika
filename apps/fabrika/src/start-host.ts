@@ -18,7 +18,7 @@ import type {HostPaths} from "./host/socket.ts";
 // StandardErrorPath, systemd's `StandardError=append:`), so this one spawn is Node's.
 
 /** How the app starts a host on `home`. */
-export interface HostStart {
+interface HostStart {
 	/** The binary to run as Node: the app's own Electron binary, or Node in a test. */
 	readonly binary: string;
 	/** The host's bundle, host.mjs. */
@@ -35,7 +35,7 @@ export interface HostStart {
 }
 
 /** The host could not be started at all, and why in words. */
-export class StartFailed extends Schema.TaggedError<StartFailed>()("StartFailed", {
+class StartFailed extends Schema.TaggedError<StartFailed>()("StartFailed", {
 	why: Schema.String,
 }) {}
 

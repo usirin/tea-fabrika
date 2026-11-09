@@ -15,6 +15,43 @@ Two files, one record per line, so a script can read them:
 - `runs.jsonl`: one agent run each. Which role, which lane, how it ended, and
   what it cost.
 
+## What CI checks
+
+Today's CI checks field records for both versions. On a pull request, it checks
+lines in head that are not in base, counting repeated lines separately. An edit
+checks the replacement row. Moving an unchanged row does not check it again.
+On main, it compares the push's before and head commits. Old rows stay as written.
+
+The `field` job in [check.yaml](../.github/workflows/check.yaml) runs
+[field-check.ts](../.github/ci/field-check.ts). It reports the number of added rows,
+including zero. Missing history fails the check. A final newline ends a row;
+an added blank row fails because it is not JSON.
+
+Each added row must be a valid JSON object. The measured core fields and types in
+[field-schema.ts](../.github/ci/field-schema.ts) also block on errors:
+
+- Both files require a string `date` shaped as `YYYY-MM-DD`.
+- Notes require string `id`, `stage`, `kind` and `what`, an array `lanes`, and
+  string or null `fix`. If present, `cause`, `primitive` and `test` are string or
+  null, `person` is boolean, and `links` is an array of strings.
+- Runs require string `role`; string or null `model`, `effort`, `outcome`, `note`
+  and `why`; and finite, nonnegative numbers or null for `tokens`, `tools` and
+  `minutes`.
+- If present on a run, `run` is a string; `started`, `ended` and `parent` are
+  string or null; and `driver_caused` is boolean. `active`, `costUsd`, `listUsd`,
+  `billed`, `inputTokens`, `cachedTokens` and `outputTokens` are finite,
+  nonnegative numbers or null.
+
+Extra fields are allowed. Ticket and PR forms do not block. Unknown facts can
+stay null or absent where the schema allows it. Do not invent zero or success.
+
+Missing README metadata, words outside its stage, kind, role and outcome lists,
+non-string lane members, unusual or repeated ids, unusual references, dates,
+timestamps or URLs, and inconsistent times or counts only warn. Warnings exit
+with code 0. An unknown direct `field/*.jsonl` file gets the JSON object check
+and a warning that it has no detailed schema. The tables below guide writers;
+their stricter wording does not add blocking rules.
+
 ## A note
 
 | Field | What it holds |

@@ -41,6 +41,49 @@ Every agent may file tracker tickets, even during read-only repo work. Filing cl
 and starts no build.
 ```
 
+The draft check checks the handoff format. Shared shell access cannot prove which session signed.
+Do not add a marker, key or readable file as proof of session identity.
+
+## Review brief template
+
+Use this for the whole diff, including a re-review after fixes:
+
+```text
+Use the review skill for the ticket below.
+Ticket: <id and title>
+Version: <today's tooling or next/>
+Approved plan: <path, including amendments>
+Parent base: <branch and full signed SHA, or origin/main and full SHA>
+Reviewed head: <branch and full SHA>
+Decided notes: <every decided note the PR builds>
+Last fixes: <commit range and report, or none>
+```
+
+Sweep, do not sample. For each law in the plan's table, list every way in: each public call,
+each cut point, and each saved or binding state. Check each one.
+A finding names its class and every case of it.
+A law written as examples over a class the plan names is a defect when a found case escapes
+those examples.
+On a re-review, read every line the last fixes changed and what calls them first. Then finish
+the remaining checks.
+Read every decided note the PR builds, following the plan's references and the change itself.
+Block only on a broken decision in docs/direction or AGENTS.md, lost data, or a broken law.
+Each blocker cites that source and shows the missed case.
+
+Start with merge-ready; tickets: <m> or changes: <n>; tickets: <m>.
+n counts blocking classes. Each class lists every affected case. m counts distinct confirmed
+tracker tickets linked in this answer.
+Give every finding in that answer, grouped by class, most serious first.
+Name each checked decided note and say where the change follows or breaks it.
+Other actionable findings become tracker tickets. Use tracker_query to find an existing ticket,
+or tracker_file with value: {title, body, from: {_tag: "pr", url, step: "review"}}.
+Record the returned ID.
+If filing fails, include the exact pending payload for lead to retry. Do not count it as filed
+or start another review round for it.
+Every agent may file. Filing claims no ticket and starts no build.
+Keep the four reason labels in the review skill. A missed case in a named class checks the law;
+it does not reopen every test's merits.
+
 ## Who runs which step
 
 Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-codex.md) (owner,
@@ -76,19 +119,24 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 
 | Script | What it does |
 |---|---|
-| `box.sh new <name> <base> <branch>` | a Codex box: its own clone, git data outside `.git`, installed |
-| `box.sh run <name> <prompt> <out>` | run Codex in the box, writable only there |
-| `box.sh fetch <name> <branch>` | fetch the branch and step notes into the main checkout, nothing else |
+| `box.sh new <name> <base> <branch> --ticket <n> --plan <path> [--root <sha>]` | check the start and save its facts (the lane root that build order and the commits check read from), then clone and install |
+| `box.sh run <name> <prompt> <out> --step <step>` | run Codex, save redacted output and the run row |
+| `box.sh fetch <name> <branch> --sign <step> --ticket <n>` | fetch without force, sign the recorded run and check commits |
+| `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first, then every `state/<box>.box` whose box is gone; drive runs it at start |
 | `drive.ts <lane> <step> <brief>` | one Codex step end to end, with no agent waiting: box, run, fetch, checks, backup push, field row, state; one JSON line (below) |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
-| `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head and squash-land pinned to it |
+| `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head and squash-land pinned to it; a PR in a gh stack lands with `gh stack merge` |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
 | `clauderow.py --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [why]` | one `field/runs.jsonl` row from a Claude subagent's transcript, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
 
 `box.sh run` names the box's `.agents/` as its own writable root because Codex otherwise keeps
 that folder read-only inside the writable checkout.
+
+box.sh run and runplan.sh strip secret settings and redact saved output.
+fetch --sign checks owners and signs missing notes in MAIN.
+Review and mutation briefs say never to print npm, pnpm or env settings.
 
 Catch-up retries read-only `gh` failures three times, waiting 1 and 2 seconds. A successful red or
 untrusted answer stops immediately. Logs are captured before parsing, so a failed read cannot
@@ -96,9 +144,9 @@ look green. Pushes and merges are never retried by that helper.
 
 ## Use drive.ts for any step
 
-Use `drive.ts` for any step, on a Codex box or a Claude agent. A Claude agent in the lead session
-only reads its result and makes the judgment call. Start it in the background and read the last
-line only:
+Every step goes through `drive.ts`, on a Codex box or a Claude agent; no box is made by hand. A
+Claude agent in the lead session only reads its result and makes the judgment call. Start it in the
+background and read the last line only:
 
 ```sh
 node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|review> <brief.md> \
@@ -117,19 +165,32 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
 - Mutation runs on `--agent claude` only, since it binds ports and starts Electron. One mutation
   step at a time holds `BOXES/state/electron.lock`; the next waits.
 - It starts a box at `--from`, else the lane's last head (`BOXES/state/<lane>.json`, moved only
-  by a step it accepted), else `origin/main`. A plan reads the main checkout and takes no `--from`.
+  by a step it accepted) or the branch's tip on origin when that is ahead of it, else
+  `origin/main`. A plan reads the main checkout and takes no `--from`.
+- `box.sh new` refuses `shared_ticket` only when another live branch carries a link for the same
+  ticket: one with an open PR, or one a box on disk names. A branch the base already holds, one
+  with neither, or one whose change is only `field/*.jsonl` rows, does not block.
 - It runs the agent with the brief and an `answer:` line it asks for, waits with no agent, fetches,
   and checks: `pnpm commits check` and this step's name on every new commit, no exam path in any
   build commit, the leak grep on each commit's added lines, a review committing nothing, and
-  `plancheck --draft` on a plan. A check that cannot run is `stuck`, never a pass.
-- Then it pushes `<branch>-wip` as the bot when the step committed, writes the field row to
+  `plancheck --draft` on a plan. A `stale_link` counts only for a step the lane has signed; one for
+  a step it has not reached (lead, before catch-up) is left to CI on the PR. Stepcommit reads the
+  facts of the box it runs in, never another `.box` on the branch. A check that cannot run is
+  `stuck`, never a pass. A build that
+  answers `done` with no commit is done only with a `laws: green <paths>` line (every law already
+  green at its start); else it is `stuck:no_commit`, as a tests step with no commit always is.
+- Then it pushes `<branch>-wip` (a `-wip` branch as it is) as the bot when the step committed, writes the field row to
   `BOXES/<lane>-rows.jsonl`, appends the step to `state/<lane>.json` and `.md`, and removes the box.
+  It keeps the box, whatever the step answered, while it holds uncommitted files or commits off the
+  step's branch, and the outcome line's `reason` ends with `(box kept: ...)` saying what is left.
   A stop after the time limit takes the agent's whole process group with it.
 - Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (the question
   is in `reason`), 30 stuck, 2 usage, 3 refused (8 agents running: Codex boxes plus Claude steps
-  drive started). It never retries. A stuck step keeps its box. A tests, build or mutation step
-  waits while `pgrep -x tsgo` finds one. `DRIVE_MINUTES` (default 60) stops a step that runs too
-  long.
+  drive started, under 20 GB free after `box.sh gc`, or the lane's branch checked out in a
+  worktree, which the end-of-step fetch could not update). It never retries. A stuck step keeps its
+  box. The commits check reads the whole lane, from where it left main, so each earlier step's
+  newest link is in its chain. A tests, build or mutation step waits while `pgrep -x tsgo` finds
+  one. `DRIVE_MINUTES` (default 60) stops a step that runs too long.
 
 ## Pushes and protected refs
 
@@ -147,30 +208,32 @@ visible, and never weaken the rules to hide this message.
 
 1. **Plan.** Write a brief that names the ticket, its version, what to read and an older plan to copy
    the shape of. Run `runplan.sh` in the background. Save the answer as `BOXES/<name>-PLAN.md`.
-2. **Check the unsigned plan.** Run `sh .agents/skills/plan/scripts/plancheck.sh --draft <plan>`. It lists every exam
-   path the plan names and exits 1 when a files table has no owner, gives an exam path to a step
-   other than `tests`, or a law has no generator. Then the plan goes back. The `exam path named`
-   listing is a total scan of the whole file, fences and link titles included, so a false listing
-   is harmless. Check each listed path is owned by `tests` in the files table; the files-table
-   check is a parser over free text and may miss an exotic form the listing still shows.
+2. **Check the unsigned plan.** Run `sh .agents/skills/plan/scripts/plancheck.sh --draft <plan>`.
+   It checks sections, generators and file owners, and prints the whole body's hash.
+   The exam listing is a total scan of the whole file, fences and link titles included.
+   Read the list for paths the files-table parser may miss.
 3. **Approve in the lead session only.** Read the whole plan, its laws and generators or labels,
    its decided notes and open questions. Plan writers and agents reviewing or revising a plan
    return it unsigned, with line one blank. The agent that wrote it sends it to the lead session for approval.
-   A plan that only builds decided notes: write "Approved by the lead agent, builds
-   <note>" on its blank first line. A plan that raises a new design call goes to the owner as one
+   After the read, fill line one with `Approved by the lead agent, builds <note>; body <sha256-12>`
+   using the draft check's digest, then run `plancheck.sh --approved <plan>`. Any body edit,
+   including an amendment, needs the same read and checks again. A new design call goes to the owner as one
    yes or no. Answer, in the plan, any open question a decided note already answers.
-4. **Start a box** on a `fabrikalfa/<name>` branch, with `box.sh new`. Use `origin/main` for an
-   independent ticket. A stacked child starts at the parent's signed build head, before the
+4. **Start the lane** on a `fabrikalfa/<name>` branch through `drive.ts`, never `box.sh new` by
+   hand. Use `origin/main` for an independent ticket. A stacked child starts at the parent's signed build head, before the
    parent merges, as [Tier 1](../../../docs/plan/tier-1.md#the-pull-requests-one-at-a-time) allows.
    Record the child, parent branch and signed head before starting it. Keep the child's tests
    when merging parent work in. Never replace them with the parent's older tests.
-5. **Run the steps in order,** in the background: tests, build, mutation, review. Each runs in the
-   box with `box.sh run`, except a step with Electron or socket work, which a Claude agent runs
+   box.sh new checks the approved plan, base and ticket.
+5. **Run the steps in order,** in the background: tests, build, mutation, review. Each runs
+   through `drive.ts`, except a step with Electron or socket work, which a Claude agent runs
    (above). No builder starts before tests that exist. Each brief names its skill.
-6. **After each step:** `box.sh fetch`, read the report and the diff, and log the run the same day:
+   box.sh run --step checks order and slots, and saves the run row.
+6. **After each step:** read drive's last line, the report and the diff, and log the run the same day:
    one `field/runs.jsonl` row (`fieldrow.py` for Codex, `clauderow.py` for a Claude agent, a
    driver included, once it has finished), and one `field/notes.jsonl` note for anything that
    broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file.
+   Step-commit checks file owners.
    Each correction the owner makes, and each slip of the lead's own, gets a note too, with the code
    that would have caught it. Running the steps by hand is how `next/`'s pipeline learns.
 7. **Run what the box cannot,** yourself: Electron e2e and screenshots. One Electron app at a time,
@@ -178,15 +241,32 @@ visible, and never weaken the rules to hide this message.
 8. **Push** with `botpush.mjs` and open the pull request. Its body says which parts were this repo's
    steps, what ran each one, and the dollars.
 9. **Land it** by [the plan's rule](../../../docs/plan/README.md#how-a-change-lands): the review says
-   `merge-ready`, CI is green (e2e included), and you read the diff and run the leak grep. An exam
-   change that is all proper property tests merges without the owner's read (owner, 2026-11-08):
-   every new or changed law is a property, or an example labeled `vector:`, `format:`, `pinned:` or
-   `scenario:` with its reason; mutation shows no law got narrower; and nothing loosens. You check
-   that and say so in the PR. A change that loosens or removes a law still stays
-   `ask owner exam_read`; never write "owner read" unless the owner did, and give each such merge
-   a field note. Then run `catchup.sh` in the background: it brings the PR up to
+   `merge-ready`, CI is green (e2e included), and you read the diff and run the leak grep.
+   Every new or changed law is a property, or an example labeled vector, format, pinned or
+   scenario with its reason.
+   Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no owner read is needed.
+   The lead records both outputs in the PR. A hit goes to the lead's hand check, with the hit list
+   in the PR. Only real loosening waits on the owner.
+   Apply the labels rule and both zero-hit checks together. These are proper property tests.
+   Run `sh .agents/skills/lead/scripts/loosening.sh <base> <head> <mapping.md>` on the PR's exam
+   diff. The PR writes a mapping table with `Removed` and `Replacement` columns for every renamed
+   or replaced law, using exact test titles. Save that table as `mapping.md` for the command.
+   A pure addition needs no replacement row. `loosening.sh` fails closed: any exam-file change
+   other than purely new tests or a rename listed in the mapping table is a hit. A pattern parser
+   cannot cover every TypeScript form, so it names forms it knows but never clears a change it
+   does not understand.
+   Missing replacements, muted tests, removed assertions, fewer runs and tighter generated ranges
+   are hits for the lead's hand check. Include the
+   mutation step's narrowing list: a mutant main kills that the branch lets live is a hit too.
+   Before this new check blocks anything, measure false alarms on the last 20 merged `next/`
+   PRs and record the count. Do not claim that measure from generated tests alone.
+   Never write "owner read" unless the owner did. Log each required owner read in a field note.
+   An exam change that is all proper property tests merges without the owner's read (owner,
+   2026-11-08). A change that loosens or removes a law still stays `ask owner exam_read`.
+   Then run `catchup.sh` in the background: it brings the PR up to
    date, signs only the new merge as `lead`, waits for every check on that exact head (e2e and
-   commits included) and squash-lands it pinned to that head. Every PR squash-merges, a stacked
+   commits included) and squash-lands it pinned to that head; a PR in a gh stack lands with
+   `gh stack merge <pr> --squash --yes` once its head reads unchanged. Every PR squash-merges, a stacked
    parent too ([0004](../../../.decisions/0004-squash-merges-and-native-stacks.md)). A stack is a
    GitHub stack ([its commands](https://docs.github.com/en/pull-requests/reference/stacked-prs-cli-commands)):
    `gh stack init <bottom> ... <top>` adopts the branches, `gh stack submit` opens the PRs,
@@ -196,6 +276,22 @@ visible, and never weaken the rules to hide this message.
    same, so its links hold; if a tree changed, that child's steps sign again. A child keeps its own
    tests. It never signs a step's commit: an
    unsigned one goes back to its own step.
+   After a successful merge, retain the checked head under refs/keep/pr/<pr> in MAIN.
+   Remove the registered catchup-<pr> worktree, exact-branch boxes through box.sh rm, and the
+   driver's linked MAIN worktree on that exact branch. Never remove MAIN itself.
+   Before each removal, read MAIN's gitdir, common directory, object directory and all alternates
+   from outside. Keep their paths and every link they use. Refuse any removal that contains one.
+   Use git worktree remove without force. Keep dirty, locked, ambiguous or unreadable candidates
+   and any box that fails its guard.
+   Print one line per retained item and continue. Cleanup never changes a landed merge's success.
+   Saved plans, reports, logs and state/ remain.
+   Box removal ignores untracked-only files and installs. It requires clean tracked files and
+   every local branch, detached HEAD, stash and step-note tip retained in MAIN. Remote-tracking
+   refs and object presence do not count. Fetch remote-only work into a retained MAIN ref first.
+   HEAD, ORIG_HEAD, refs outside refs/remotes/ and reflogs outside logs/refs/remotes/ need that proof; FETCH_HEAD is a fetched copy, and ORIG_HEAD and config.worktree are ordinary metadata. Keep operation or linked-worktree
+   metadata, unknown state, and any pair holding MAIN or BOXES/state.
+   An annotated tag's own object ID must be reachable under MAIN's retained refs. Keeping only
+   its commit loses the annotation. This also applies to signed tags and tags pointing at tags.
 10. **After the merge:** comment the pull request's URL on its ticket and close it, write the
     `MergeRow`, then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the
     main checkout, plus any build the app needs to start. The owner runs the app from there and
@@ -232,7 +328,7 @@ owner decides -> write .decisions/NNNN-slug.md -> its own docs PR -> merge on gr
 ```
 
 - **Write it the turn it is decided,** with a docs agent using [the adr skill](../adr/SKILL.md),
-  in the shape [the folder's README](../../../.decisions/README.md) gives. Link its `docs/direction/` note when
+  in the shape the adr skill gives. Link its `docs/direction/` note when
   one exists.
 - **One decision, one PR.** Never batch decisions, and never wait for a code PR or for the end of
   the day.
@@ -259,7 +355,7 @@ push or merge, and the lead checks it by hand. A hit is never waved through by t
 
 ## Go easy on the machine
 
-- At most 8 code agents at once. One `pnpm typecheck` at a time across all of them: wait while
+- One `pnpm typecheck` at a time across all agents: wait while
   `pgrep -x tsgo` finds one.
 - One Electron test app and one Docker box at a time. Every wait or poll loop runs in the background.
 - Every brief carries the caps the step's skill names. A Codex box blocks `nice` and `pgrep`, so

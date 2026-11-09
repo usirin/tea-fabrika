@@ -80,6 +80,6 @@ order is never two glasses.
 
 - [`packages/fabrika/src/host/README.md`](../../../packages/fabrika/src/host/README.md): the exports and the rules
   the ledger keeps.
-- [`docs/direction/tea-host.md`](../../direction/tea-host.md): why tea-host is OTP for tea programs.
+- The archived tea-host note: why tea-host is OTP for tea programs.
 - [`experiments/100-supervision-tree.md`](../../../experiments/100-supervision-tree.md):
   supervisors, links and monitors on three hosts.

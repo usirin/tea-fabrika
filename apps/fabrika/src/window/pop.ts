@@ -81,7 +81,7 @@ export const textOf = (words: Words): string =>
 	typeof words === "string" ? words : words.map((p) => p.text).join("");
 
 /** A row's second thing, shown on the active row, with its own key. */
-export interface Second {
+interface Second {
 	readonly name: string;
 	readonly cap: Cap;
 }
@@ -116,7 +116,7 @@ export interface Hint {
 }
 
 /** A place the arrows stop at: a row, or a folding section's heading. */
-export type Stop =
+type Stop =
 	| {readonly kind: "row"; readonly id: string; readonly row: Row}
 	| {readonly kind: "fold"; readonly id: string; readonly section: Section};
 
@@ -168,7 +168,7 @@ export type MenuDo =
 	| {readonly do: "close"};
 
 /** A key, as a menu reads it: its name, and whether Ctrl, Option or Cmd was down. */
-export interface MenuPress {
+interface MenuPress {
 	readonly key: string;
 	readonly mods?: boolean;
 }
@@ -231,7 +231,7 @@ export const menuKey = (
 // ---------------------------------------------------------------- the palette
 
 /** A run of a command's name: drawn bold when `mark`, where it matched what was typed. */
-export interface Run {
+interface Run {
 	readonly text: string;
 	readonly mark: boolean;
 }

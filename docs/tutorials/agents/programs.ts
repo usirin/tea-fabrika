@@ -7,7 +7,7 @@ import {write} from "./agent.ts";
 
 // ------------------------------------------------------------------ the poet
 
-export const Order = Schema.Struct({id: Schema.String, guest: Schema.String});
+const Order = Schema.Struct({id: Schema.String, guest: Schema.String});
 
 export const Poet = Schema.Struct({
 	written: Schema.Number,
@@ -74,7 +74,7 @@ export const poetProgram = defineProgram({
 
 // ------------------------------------------------------------------ the book
 
-export const Line = Schema.Struct({guest: Schema.String, line: Schema.String});
+const Line = Schema.Struct({guest: Schema.String, line: Schema.String});
 
 export const Book = Schema.Struct({
 	cursor: Schema.Number,

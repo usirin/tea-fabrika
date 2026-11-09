@@ -25,13 +25,13 @@ export interface At {
 	readonly end: number;
 }
 
-export type Op = "|" | "&" | ";" | "$(" | ")" | "&&" | "||";
+type Op = "|" | "&" | ";" | "$(" | ")" | "&&" | "||";
 
 export type Token =
 	| (At & {readonly kind: "word"; readonly text: string})
 	| (At & {readonly kind: "op"; readonly op: Op});
 
-export interface Words {
+interface Words {
 	readonly tokens: readonly Token[];
 	/** A quote was opened and not closed: the last word is still being typed. */
 	readonly open: boolean;

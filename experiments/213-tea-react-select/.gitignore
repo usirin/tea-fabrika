@@ -1,3 +1,0 @@
-# compile.mjs writes these before the browser or jsdom probes run.
-out-compiled.mjs
-out-plain.mjs

@@ -39,7 +39,7 @@ behind a service.
   the test's own process. A test that reaches the code through Miniflare runs it
   in another process, so the flip never gets there and the mutant looks unanswered.
   Logic left in a class would get no
-  [mutation check](./promises-in-the-pipeline.md) at all.
+  mutation check at all.
 - **Laws can run more cases.** Plain code runs in the test's own process, with no
   socket and no second process to start. We have not measured how much that saves.
 

@@ -201,7 +201,7 @@ Inference has these sources:
 - **Port payloads:** each port’s concrete schema.
 - **Fact payloads:** each `writes` entry’s concrete schema.
 
-Tea has no view type to extract. The machine supplies the selector’s model type; the required view schema supplies its result type. That preserves the decided typed view without another type declaration. [Typed views](../direction/the-gui-is-a-local-web-page-first.md).
+Tea has no view type to extract. The machine supplies the selector’s model type; the required view schema supplies its result type. That preserves the decided typed view without another type declaration. Typed views.
 
 Keep `state.schema` and `msg` as references to the schemas used by `Machine.make`. Tea’s public machine type does not expose those schemas. This avoids depending on undeclared tea fields. The full machine Msg includes Cmd replies; the fresh-message schema may describe its external subset.
 

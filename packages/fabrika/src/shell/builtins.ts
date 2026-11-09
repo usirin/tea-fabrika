@@ -42,7 +42,7 @@ export interface Said {
 const ok: Said = {status: 0, exit: false};
 const failed = (status = 1): Said => ({status, exit: false});
 
-export const HELP = [
+const HELP = [
 	"tsh runs tea programs. A line is statements parted by ; or &.",
 	"  <program> --flag value input=value       run it here: wait, print what it sends",
 	"  a ... | b ...                            a's output into b's input, by their shapes",
