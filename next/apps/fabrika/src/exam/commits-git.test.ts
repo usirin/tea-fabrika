@@ -63,14 +63,19 @@ class Repo {
 	readonly dir: string;
 	readonly base: string;
 
-	constructor(keys: string | null = GOOD_KEYS, at?: string) {
+	constructor(
+		keys: string | null = GOOD_KEYS,
+		at?: string,
+		format: "sha1" | "sha256" = "sha1",
+		initial = "x\n",
+	) {
 		count += 1;
 		this.dir = at ?? join(TOP, `r${count}`);
 		mkdirSync(this.dir);
-		this.git("init", "-q", "-b", "main");
+		this.git("init", "-q", "-b", "main", `--object-format=${format}`);
 		if (keys !== null) this.write("allowed_signers", keys);
 		this.write("exam-paths.json", EXAM_LIST);
-		this.write("README.md", "x\n");
+		this.write("README.md", initial);
 		this.write("boundary-rules.json", "[]\n");
 		this.write("fixtures/next/v.txt", "v\n");
 		this.base = this.commit("main");
@@ -163,6 +168,9 @@ class Repo {
 }
 
 const DONE = {_tag: "done"};
+const runs = {seed: 119120, numRuns: 5};
+const id = fc.stringMatching(/^[A-Za-z0-9._:-]{1,20}$/);
+const name = fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/);
 const stuck = (why: string, sha: string, more: object = {}) => ({_tag: "stuck", why, sha, ...more});
 const ask = (...paths: string[]) => ({_tag: "ask", who: "owner", for: "exam_read", paths});
 
@@ -176,114 +184,391 @@ const verifyCommit = (r: Repo, sha: string, keys = PERSON_KEYS) => {
 	}).status;
 };
 
+/** Git accepts PGP here, so the exam must still prove that the real header is SSH. */
+const acceptPgp = (r: Repo) => {
+	const verifier = join(TOP, "pgp-verifier");
+	writeFileSync(
+		verifier,
+		[
+			"#!/bin/sh",
+			"cat >/dev/null",
+			"cat <<'STATUS'",
+			"[GNUPG:] NEWSIG",
+			"[GNUPG:] GOODSIG 1111111111111111 Fixture",
+			"[GNUPG:] VALIDSIG 1111111111111111111111111111111111111111 2026-11-08 1794168000 0 4 0 1 10 00 1111111111111111111111111111111111111111",
+			"[GNUPG:] TRUST_FULLY",
+			"STATUS",
+			// Keep the logged key check from hiding a header parsing bug after the squash.
+			`echo 'fixture key ${fingerprint("person")}' >&2`,
+			"",
+		].join("\n"),
+		{mode: 0o700},
+	);
+	r.git("config", "gpg.program", verifier);
+};
+
+const personLink = (r: Repo, sha: string, who = "person") => {
+	const signature = /^gpgsig(?:-sha256)? (.*(?:\n .*)*)/m.exec(r.git("cat-file", "commit", sha));
+	expect(signature).not.toBeNull();
+	return {
+		_tag: "attested",
+		step: "person",
+		ticket: "229",
+		version: 1,
+		from: r.head(`${sha}^1^{tree}`),
+		to: r.head(`${sha}^{tree}`),
+		key: fingerprint(who),
+		sig: `${signature![1]!.replaceAll("\n ", "\n")}\n`,
+	};
+};
+
 describe("person keys (p87b)", () => {
-	it("takes several distinct person ids in namespace git beside the three step roles", () => {
-		const r = new Repo(`${PERSON_KEYS}${personLine("github:43", "stranger")}\n`);
-		r.change("a.ts");
-		r.sign("tests");
-		const out = r.check();
-		expect(out.answers).toEqual([DONE]);
-		expect(out.code).toBe(0);
+	// Plant: reject every person line.
+	it("G01: distinct generated person ids and signer order pass beside the step roles", () => {
+		fc.assert(
+			fc.property(
+				fc.uniqueArray(id, {minLength: 2, maxLength: 2}),
+				fc.boolean(),
+				name,
+				(ids, reverse, name) => {
+					const lines = [personLine(ids[0]!), personLine(ids[1]!, "stranger")];
+					const r = new Repo(`${GOOD_KEYS}${(reverse ? lines.reverse() : lines).join("\n")}\n`);
+					r.change(`${name}.ts`);
+					r.sign("tests");
+					const out = r.check();
+					expect(out.answers).toEqual([DONE]);
+					expect(out.code).toBe(0);
+				},
+			),
+			runs,
+		);
 	});
 
-	it.each([
-		["a step role twice", `${GOOD_KEYS}${keyLine("build", "stranger")}\n`],
-		["an id twice", `${PERSON_KEYS}${personLine("github:42", "stranger")}\n`],
-		["a person reusing a step key", `${GOOD_KEYS}${personLine("github:42", "tests")}\n`],
-		["two people reusing a key", `${PERSON_KEYS}${personLine("github:43")}\n`],
-		["an empty id", `${GOOD_KEYS}${personLine("")}\n`],
-		[
-			"a person in namespace fabrika-step",
-			`${GOOD_KEYS}${keyLine("person:github:42", "person")}\n`,
-		],
-	])("refuses %s before judging commits", (_, keys) => {
-		const r = new Repo(keys);
-		r.change("a.ts");
-		r.sign("tests");
-		const out = r.check();
-		expect(out.code).toBe(2);
-		expect(out.answers).toEqual([]);
-		expect(out.err).toContain("allowed_signers");
+	// Plant: allow a person principal twice with different keys.
+	it("G02: repeated generated ids, reused keys, empty ids and step namespaces stop before commits", () => {
+		fc.assert(
+			fc.property(id, name, (id, name) => {
+				for (const people of [
+					[personLine(id), personLine(id, "stranger")],
+					[personLine(id, "tests")],
+					[personLine(id), personLine(`${id}:other`)],
+					[personLine("")],
+					[keyLine(`person:${id}`, "person")],
+				]) {
+					const r = new Repo(`${GOOD_KEYS}${people.join("\n")}\n`);
+					r.change(`${name}.ts`);
+					r.sign("tests");
+					const out = r.check();
+					expect(out.code).toBe(2);
+					expect(out.answers).toEqual([]);
+					expect(out.err).toMatch(/allowed_signers: \S/);
+				}
+			}),
+			runs,
+		);
 	});
 });
 
 describe("person git signatures (p83b)", () => {
-	it("counts a person's git-signed commit with no step note", () => {
-		const r = new Repo(PERSON_KEYS);
+	// Plant: accept person commits only when they have a step note.
+	it("G03: any listed person can sign generated file contents without a step note", () => {
+		fc.assert(
+			fc.property(
+				fc.uniqueArray(id, {minLength: 2, maxLength: 2}),
+				name,
+				fc.string(),
+				(ids, name, content) => {
+					for (const multiple of [false, true]) {
+						const keys = `${GOOD_KEYS}${personLine(ids[0]!)}\n${multiple ? `${personLine(ids[1]!, "stranger")}\n` : ""}`;
+						const r = new Repo(keys);
+						r.write(`next/packages/x/src/${name}.ts`, content);
+						const c = r.gitSigned(multiple ? "stranger" : "person");
+						expect(verifyCommit(r, c, keys)).toBe(0);
+						expect(r.git("notes", "--ref=fabrika", "list")).toBe("");
+						const out = r.check();
+						expect(out.answers).toEqual([DONE]);
+						expect(out.code).toBe(0);
+					}
+				},
+			),
+			runs,
+		);
+	});
+
+	// pinned: 95c3610a found this exact Git SHA-256 header regression.
+	it("pinned: Git gpgsig-sha256 rejected before and after squash (95c3610a)", () => {
+		const r = new Repo(PERSON_KEYS, undefined, "sha256");
 		r.write("next/packages/x/src/a.ts", "a\n");
 		const c = r.gitSigned();
 		expect(verifyCommit(r, c)).toBe(0);
-		expect(r.git("notes", "--ref=fabrika", "list")).toBe("");
-		const out = r.check();
-		expect(out.answers).toEqual([DONE]);
-		expect(out.code).toBe(0);
+		const before = r.check();
+		const {squash, rows} = squashed(r, [{note: personLink(r, c), commit: c}]);
+		log(r, rows);
+		const after = r.run(["chain", "--squash", squash]);
+		expect({before: before.answers, after: after.answers}).toEqual({before: [DONE], after: [DONE]});
+		expect(before.code).toBe(0);
+		expect(after.code).toBe(0);
 	});
 
-	it("uses the base's person keys when the head removes that person", () => {
-		const r = new Repo(PERSON_KEYS);
-		r.write("allowed_signers", GOOD_KEYS);
-		r.gitSigned();
-		const out = r.check();
-		expect(out.answers).toEqual([ask("allowed_signers")]);
-		expect(out.code).toBe(0);
+	// Plant: accept a dummy SSH header beside a verified PGP signature.
+	it("G04: generated header layouts cannot make a verified PGP commit an SSH person commit", () => {
+		fc.assert(
+			fc.property(name, fc.boolean(), (name, before) => {
+				const r = new Repo(PERSON_KEYS);
+				const unsigned = r.change("a.ts");
+				acceptPgp(r);
+				const decoys = ["xgpgsig", "gpgsig-sha256", `x-${name}`].map(
+					(header) => `${header} -----BEGIN SSH SIGNATURE-----`,
+				);
+				const pgp = [
+					"gpgsig -----BEGIN PGP SIGNATURE-----",
+					" fixture",
+					" -----END PGP SIGNATURE-----",
+				];
+				const raw = r
+					.git("cat-file", "commit", unsigned)
+					.replace(
+						"\n\n",
+						["", ...(before ? [...decoys, ...pgp] : [...pgp, ...decoys]), "", ""].join("\n"),
+					);
+				const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
+				expect(verifyCommit(r, c)).toBe(0);
+				const out = r.check([], r.base, c);
+				expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
+				expect(out.code).toBe(1);
+			}),
+			runs,
+		);
 	});
 
-	it("refuses a person's key added only at the head", () => {
-		const r = new Repo();
-		r.write("allowed_signers", PERSON_KEYS);
-		const c = r.gitSigned();
-		expect(verifyCommit(r, c)).toBe(0);
-		const out = r.check();
-		expect(out.answers).toEqual([stuck("unsigned_commit", c), ask("allowed_signers")]);
-		expect(out.code).toBe(1);
+	// Plant: use multiline RegExp anchors instead of Git's LF-only header lines.
+	it.each(["\r", "\u2028", "\u2029"])(
+		"G23: a fake SSH header after %j inside an extra header never counts before or after squash",
+		(lineBreak) => {
+			fc.assert(
+				fc.property(
+					name,
+					fc.stringMatching(/^[^\n\0]{0,24}$/),
+					fc.boolean(),
+					fc.constantFrom("sha1", "sha256"),
+					(name, value, before, format) => {
+						const r = new Repo(PERSON_KEYS, undefined, format);
+						const unsigned = r.change("a.ts");
+						acceptPgp(r);
+						const header = format === "sha256" ? "gpgsig-sha256" : "gpgsig";
+						const sig = "-----BEGIN SSH SIGNATURE-----\n";
+						const decoy = `x-${name} ${value}${lineBreak}${header} ${sig.trimEnd()}`;
+						const pgp = [
+							`${header} -----BEGIN PGP SIGNATURE-----`,
+							" fixture",
+							" -----END PGP SIGNATURE-----",
+						].join("\n");
+						const raw = r
+							.git("cat-file", "commit", unsigned)
+							.replace("\n\n", () => `\n${(before ? [decoy, pgp] : [pgp, decoy]).join("\n")}\n\n`);
+						const c = sh(
+							r.dir,
+							"git",
+							["hash-object", "-t", "commit", "-w", "--stdin"],
+							raw,
+						).trim();
+						expect(verifyCommit(r, c)).toBe(0);
+						r.git("update-ref", "refs/heads/pr", c);
+						const checked = r.check();
+						const note = {
+							_tag: "attested",
+							step: "person",
+							ticket: "251",
+							version: 1,
+							from: r.head(`${r.base}^{tree}`),
+							to: r.head(`${c}^{tree}`),
+							key: fingerprint("person"),
+							sig,
+						};
+						const {squash, rows} = squashed(r, [{note, commit: c}]);
+						log(r, rows);
+						const chained = r.run(["chain", "--squash", squash]);
+						expect({before: checked.answers, after: chained.answers}).toEqual({
+							before: [stuck("unsigned_commit", c)],
+							after: [stuck("broken_chain", squash)],
+						});
+						expect(checked.code).toBe(1);
+						expect(chained.code).toBe(1);
+					},
+				),
+				runs,
+			);
+		},
+	);
+
+	// Plant: erase the signer write failure reason. Generated contents vary the signed trees.
+	it("G21: person signers disk failure lost its reason (95c3610a)", () => {
+		fc.assert(
+			fc.property(fc.string(), (initial) => {
+				const r = new Repo(PERSON_KEYS, undefined, "sha1", initial);
+				r.write("next/packages/x/src/a.ts", "a\n");
+				r.gitSigned();
+				const preload = join(TOP, "no-person-writes.mjs");
+				writeFileSync(
+					preload,
+					`
+	import fs from "node:fs";
+	import {syncBuiltinESMExports} from "node:module";
+	const write = fs.writeFile;
+	fs.writeFile = (path, data, options, done) => {
+	  if (Buffer.from(data).toString("utf8").includes("person:"))
+	    return done(Object.assign(new Error("fixture disk full"), {code: "ENOSPC"}));
+	  return write(path, data, options, done);
+	};
+	syncBuiltinESMExports();
+	`,
+				);
+				const out = r.run(["check", "--base", r.base, "--head", "HEAD"], {
+					...ENV,
+					NODE_OPTIONS: `${ENV.NODE_OPTIONS ?? ""} --import=${preload}`.trim(),
+				});
+				expect(out.code).toBe(2);
+				expect(out.answers).toEqual([]);
+				expect(out.err).toMatch(/commits: the run failed: \S/);
+			}),
+			runs,
+		);
 	});
 
+	// Plant: read person keys from head. Generated initial contents vary the real trees.
+	it("G05: uses the base's person keys when the head removes that person", () => {
+		fc.assert(
+			fc.property(fc.string(), (initial) => {
+				const r = new Repo(PERSON_KEYS, undefined, "sha1", initial);
+				r.write("allowed_signers", GOOD_KEYS);
+				r.gitSigned();
+				const out = r.check();
+				expect(out.answers).toEqual([ask("allowed_signers")]);
+				expect(out.code).toBe(0);
+			}),
+			runs,
+		);
+	});
+
+	// Plant: read person keys from head. Generated initial contents vary the real trees.
+	it("G06: refuses a person's key added only at the head", () => {
+		fc.assert(
+			fc.property(fc.string(), (initial) => {
+				const r = new Repo(GOOD_KEYS, undefined, "sha1", initial);
+				r.write("allowed_signers", PERSON_KEYS);
+				const c = r.gitSigned();
+				expect(verifyCommit(r, c)).toBe(0);
+				const out = r.check();
+				expect(out.answers).toEqual([stuck("unsigned_commit", c), ask("allowed_signers")]);
+				expect(out.code).toBe(1);
+			}),
+			runs,
+		);
+	});
+
+	// Plant: ignore git verify-commit's exit, accepting either unlisted or step keys.
 	it.each([
 		["a key with no person line", "stranger"],
 		["a step key's git signature", "tests"],
-	] as const)("refuses %s", (_, who) => {
-		const r = new Repo(PERSON_KEYS);
-		r.write("next/packages/x/src/a.ts", "a\n");
-		const c = r.gitSigned(who);
-		const ownLine = `fixture namespaces="git" ${pub(who)}\n`;
-		expect(verifyCommit(r, c, ownLine)).toBe(0);
-		const out = r.check();
-		expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
-		expect(out.code).toBe(1);
+	] as const)("G18: refuses %s", (_, who) => {
+		fc.assert(
+			fc.property(fc.string(), (initial) => {
+				const r = new Repo(PERSON_KEYS, undefined, "sha1", initial);
+				r.write("next/packages/x/src/a.ts", "a\n");
+				const c = r.gitSigned(who);
+				const ownLine = `fixture namespaces="git" ${pub(who)}\n`;
+				expect(verifyCommit(r, c, ownLine)).toBe(0);
+				const out = r.check();
+				expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
+				expect(out.code).toBe(1);
+			}),
+			runs,
+		);
 	});
 
-	it("refuses a bad git signature from a listed person", () => {
-		const r = new Repo(PERSON_KEYS);
-		r.write("next/packages/x/src/a.ts", "a\n");
-		const original = r.gitSigned();
-		expect(verifyCommit(r, original)).toBe(0);
-		const raw = `${r.git("cat-file", "commit", original)}changed after signing\n`;
-		const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
-		r.git("reset", "--hard", "-q", c);
-		expect(verifyCommit(r, c)).not.toBe(0);
-		const out = r.check();
-		expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
-		expect(out.code).toBe(1);
+	// Plant: skip note principal verification. Generated initial contents vary the real trees.
+	it("G07: refuses a registered person's key on a step note", () => {
+		fc.assert(
+			fc.property(fc.string(), (initial) => {
+				const r = new Repo(PERSON_KEYS, undefined, "sha1", initial);
+				const c = r.change("a.ts");
+				const note = r.sign("tests");
+				const sig = sh(
+					r.dir,
+					"ssh-keygen",
+					["-Y", "sign", "-n", "fabrika-step", "-f", join(KEYS, "person")],
+					signedText(note),
+				);
+				const allowed = join(TOP, "person-step-signers");
+				const signature = join(TOP, "person-step-signature");
+				writeFileSync(allowed, `fixture namespaces="fabrika-step" ${pub("person")}\n`);
+				writeFileSync(signature, sig);
+				const verified = spawnSync(
+					"ssh-keygen",
+					["-Y", "verify", "-f", allowed, "-I", "fixture", "-n", "fabrika-step", "-s", signature],
+					{cwd: r.dir, env: ENV, input: signedText(note)},
+				);
+				expect(verified.status).toBe(0);
+				r.setNote(c, JSON.stringify({...note, key: fingerprint("person"), sig}));
+				const out = r.check();
+				expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
+				expect(out.code).toBe(1);
+			}),
+			runs,
+		);
 	});
 
-	it("refuses an unsigned commit even when person keys are available", () => {
-		const r = new Repo(PERSON_KEYS);
-		const c = r.change("a.ts");
-		const out = r.check();
-		expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
-		expect(out.code).toBe(1);
+	// Plant: ignore git verify-commit exit. Generated initial contents vary the real trees.
+	it("G08: refuses a bad git signature from a listed person", () => {
+		fc.assert(
+			fc.property(fc.string(), (initial) => {
+				const r = new Repo(PERSON_KEYS, undefined, "sha1", initial);
+				r.write("next/packages/x/src/a.ts", "a\n");
+				const original = r.gitSigned();
+				expect(verifyCommit(r, original)).toBe(0);
+				const raw = `${r.git("cat-file", "commit", original)}changed after signing\n`;
+				const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
+				r.git("update-ref", "HEAD", c);
+				expect(verifyCommit(r, c)).not.toBe(0);
+				const out = r.check();
+				expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
+				expect(out.code).toBe(1);
+			}),
+			runs,
+		);
+	});
+
+	// Plant: trust every person signature. Generated initial contents vary the real trees.
+	it("G09: refuses an unsigned commit even when person keys are available", () => {
+		fc.assert(
+			fc.property(fc.string(), (initial) => {
+				const r = new Repo(PERSON_KEYS, undefined, "sha1", initial);
+				const c = r.change("a.ts");
+				const out = r.check();
+				expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
+				expect(out.code).toBe(1);
+			}),
+			runs,
+		);
 	});
 });
 
 describe("person exam changes (p84b)", () => {
-	it("asks the owner without build_touched_exam for a person's exam commit", () => {
-		const r = new Repo(PERSON_KEYS);
-		r.write("boundary-rules.json", "[1]\n");
-		r.write("next/packages/x/src/a.test.ts", "t\n");
-		r.gitSigned();
-		const out = r.check();
-		expect(out.answers).toEqual([ask("boundary-rules.json", "next/packages/x/src/a.test.ts")]);
-		expect(out.code).toBe(0);
+	// Plant: omit exam_read. Generate the person's exam file name.
+	it("G10: asks the owner without build_touched_exam for a person's exam commit", () => {
+		fc.assert(
+			fc.property(name, (name) => {
+				const r = new Repo(PERSON_KEYS);
+				const path = `next/packages/x/src/${name}.test.ts`;
+				r.write("boundary-rules.json", "[1]\n");
+				r.write(path, "t\n");
+				r.gitSigned();
+				const out = r.check();
+				expect(out.answers).toEqual([ask("boundary-rules.json", path)]);
+				expect(out.code).toBe(0);
+			}),
+			runs,
+		);
 	});
 });
 
@@ -307,7 +592,8 @@ const verifies = (repo: Repo, note: {sig: string; step: Role}, text: string) => 
 };
 
 describe("done", () => {
-	it("a tests commit then a build commit off the list, each signed by its role with `sign`", () => {
+	// scenario: two real signing commands and their printed notes must agree with git.
+	it("scenario: a tests commit then a build commit off the list, each signed by its role with `sign`", () => {
 		const r = new Repo();
 		r.change("a.ts");
 		const signed = r.signWith("tests");
@@ -321,7 +607,8 @@ describe("done", () => {
 		expect(out.err).toContain("ticket 229");
 	});
 
-	it("a lead commit that merges main in, then a build commit: main's exam change asks nothing", () => {
+	// scenario: real merge ancestry and its three-dot diff are the behavior.
+	it("scenario: a lead commit that merges main in, then a build commit: main's exam change asks nothing", () => {
 		const r = new Repo();
 		r.change("a.ts");
 		r.sign("tests");
@@ -336,7 +623,8 @@ describe("done", () => {
 		expect(r.check([], main).answers).toEqual([DONE]);
 	});
 
-	it("tests v1, a build commit, then tests v2 after the mutation step, all in the chain", () => {
+	// scenario: three signing commands share a real notes ref and its version counter.
+	it("scenario: tests v1, a build commit, then tests v2 after the mutation step, all in the chain", () => {
 		const r = new Repo();
 		r.change("a.test.ts");
 		r.signWith("tests");
@@ -350,7 +638,8 @@ describe("done", () => {
 		]);
 	});
 
-	it("a note on a commit outside the pull request claims tests version 99 with a bad signature", () => {
+	// scenario: a separate git commit and forged signed note must stay outside the branch.
+	it("scenario: a note on a commit outside the pull request claims tests version 99 with a bad signature", () => {
 		const r = new Repo();
 		r.change("a.ts");
 		r.sign("tests");
@@ -364,7 +653,8 @@ describe("done", () => {
 });
 
 describe("ask exam_read (p85)", () => {
-	it("a tests commit adding a next/ test and changing boundary-rules.json, then a clean build", () => {
+	// scenario: two real signed commits distinguish step file changes from the PR diff.
+	it("scenario: a tests commit adding a next/ test and changing boundary-rules.json, then a clean build", () => {
 		const r = new Repo();
 		r.write("next/packages/x/src/a.test.ts", "t\n");
 		r.write("boundary-rules.json", "[2]\n");
@@ -377,45 +667,58 @@ describe("ask exam_read (p85)", () => {
 		expect(out.code).toBe(0);
 	});
 
-	it("a file whose name holds a newline and a workflow command counts, and is escaped", () => {
-		const r = new Repo();
-		const name = "a\n::add-mask::next/apps/fabrika/src/exam/commits.ts";
-		r.write(name, "x\n");
-		r.commit();
-		r.sign("tests");
-		const summary = join(r.dir, ".summary");
-		const out = r.run(["check", "--base", r.base, "--head", "HEAD"], {
-			...ENV,
-			GITHUB_STEP_SUMMARY: summary,
-		});
-		expect(out.answers).toEqual([ask(name)]);
-		const lines = out.out.split("\n");
-		expect(lines.some((l) => l.startsWith("::add-mask::"))).toBe(false);
-		expect(lines).toContain(
-			"::warning title=commits::ask owner exam_read a%0A::add-mask::next/apps/fabrika/src/exam/commits.ts",
+	// Plant: omit annotation escaping. Generate the name before the workflow command.
+	it("G22: workflow command in a filename reached printed output (P32 hole 2)", () => {
+		fc.assert(
+			fc.property(name, (prefix) => {
+				const r = new Repo();
+				const name = `${prefix}\n::add-mask::next/apps/fabrika/src/exam/commits.ts`;
+				r.write(name, "x\n");
+				r.commit();
+				r.sign("tests");
+				const summary = join(r.dir, ".summary");
+				const out = r.run(["check", "--base", r.base, "--head", "HEAD"], {
+					...ENV,
+					GITHUB_STEP_SUMMARY: summary,
+				});
+				expect(out.answers).toEqual([ask(name)]);
+				const lines = out.out.split("\n");
+				expect(lines.some((l) => l.startsWith("::add-mask::"))).toBe(false);
+				expect(lines).toContain(
+					`::warning title=commits::ask owner exam_read ${prefix}%0A::add-mask::next/apps/fabrika/src/exam/commits.ts`,
+				);
+				const written = readFileSync(summary, "utf8");
+				expect(written).toContain(JSON.stringify(name));
+				expect(written.split("\n").some((l) => l.startsWith("::"))).toBe(false);
+				expect(out.err.split("\n").some((l) => l.startsWith("::"))).toBe(false);
+			}),
+			runs,
 		);
-		const written = readFileSync(summary, "utf8");
-		expect(written).toContain('"a\\n::add-mask::next/apps/fabrika/src/exam/commits.ts"');
-		expect(written.split("\n").some((l) => l.startsWith("::"))).toBe(false);
-		expect(out.err.split("\n").some((l) => l.startsWith("::"))).toBe(false);
 	});
 });
 
 describe("unsigned_commit (p83)", () => {
-	it("no note at all", () => {
-		const r = new Repo();
-		const c = r.change("a.ts");
-		expect(r.check().answers).toEqual([stuck("unsigned_commit", c)]);
-		expect(r.check().code).toBe(1);
+	// Plant: accept unsigned commits. Generated initial contents vary the real trees.
+	it("G11: no note at all", () => {
+		fc.assert(
+			fc.property(fc.string(), (initial) => {
+				const r = new Repo(GOOD_KEYS, undefined, "sha1", initial);
+				const c = r.change("a.ts");
+				expect(r.check().answers).toEqual([stuck("unsigned_commit", c)]);
+				expect(r.check().code).toBe(1);
+			}),
+			runs,
+		);
 	});
 
+	// Plant: accept unsigned commits, including every invalid note in this table.
 	it.each([
 		["signed by stranger", (r: Repo) => r.sign("stranger")],
 		[
 			"the build key signs a note whose step says tests",
 			(r: Repo) => r.sign("build", {step: "tests"}),
 		],
-		["signed with namespace fabrika-client", (r: Repo) => r.sign("tests", {ns: "fabrika-client"})],
+		["signed with namespace fabrika-client", (r: Repo, ns: string) => r.sign("tests", {ns})],
 		[
 			"a good note, then its step edited by hand",
 			(r: Repo) => {
@@ -424,14 +727,20 @@ describe("unsigned_commit (p83)", () => {
 			},
 		],
 		["a note that is not JSON", (r: Repo) => r.setNote(r.head(), "step tests, trust me")],
-	])("%s", (_, plant) => {
-		const r = new Repo();
-		const c = r.change("a.ts");
-		plant(r);
-		expect(r.check().answers).toEqual([stuck("unsigned_commit", c)]);
+	])("G19: %s", (_, plant) => {
+		fc.assert(
+			fc.property(fc.string(), (initial) => {
+				const r = new Repo(GOOD_KEYS, undefined, "sha1", initial);
+				const c = r.change("a.ts");
+				plant(r, `fabrika-client:${initial}`);
+				expect(r.check().answers).toEqual([stuck("unsigned_commit", c)]);
+			}),
+			runs,
+		);
 	});
 
-	it("a signed commit rebased with notes.rewriteRef: the note came along and verifies, its trees do not fit", () => {
+	// scenario: real git rebase rewrites a signed commit and carries its note.
+	it("scenario: a signed commit rebased with notes.rewriteRef: the note came along and verifies, its trees do not fit", () => {
 		const r = new Repo();
 		r.change("a.ts");
 		const note = r.sign("tests");
@@ -447,15 +756,22 @@ describe("unsigned_commit (p83)", () => {
 		expect(r.check([], main).answers).toEqual([stuck("unsigned_commit", rebased)]);
 	});
 
-	it("a good signature whose note names another key's fingerprint", () => {
-		const r = new Repo();
-		const c = r.change("a.ts");
-		const note = r.sign("tests");
-		r.setNote(c, JSON.stringify({...note, key: fingerprint("stranger")}));
-		expect(r.check().answers).toEqual([stuck("unsigned_commit", c)]);
+	// Plant: ignore note fingerprint. Generated initial contents vary the real trees.
+	it("G12: a good signature whose note names another key's fingerprint", () => {
+		fc.assert(
+			fc.property(fc.string(), (initial) => {
+				const r = new Repo(GOOD_KEYS, undefined, "sha1", initial);
+				const c = r.change("a.ts");
+				const note = r.sign("tests");
+				r.setNote(c, JSON.stringify({...note, key: fingerprint("stranger")}));
+				expect(r.check().answers).toEqual([stuck("unsigned_commit", c)]);
+			}),
+			runs,
+		);
 	});
 
-	it("a key the event's base held and the checked-out main has dropped", () => {
+	// scenario: two branches and a key-removal merge distinguish event base from trusted main.
+	it("scenario: a key the event's base held and the checked-out main has dropped", () => {
 		const extra = stepKeys("stranger");
 		const r = new Repo(extra);
 		r.git("checkout", "-q", "main");
@@ -471,7 +787,8 @@ describe("unsigned_commit (p83)", () => {
 		expect(r.check().answers).toEqual([stuck("unsigned_commit", main), ask("allowed_signers")]);
 	});
 
-	it("a good link for ticket 230 on a commit in ticket 229's pull request", () => {
+	// scenario: two independently signed git notes establish the PR ticket before its mismatch.
+	it("scenario: a good link for ticket 230 on a commit in ticket 229's pull request", () => {
 		const r = new Repo();
 		r.change("a.ts");
 		r.sign("tests");
@@ -480,7 +797,8 @@ describe("unsigned_commit (p83)", () => {
 		expect(r.check().answers).toEqual([stuck("unsigned_commit", c)]);
 	});
 
-	it("a key added only in the pull request's own allowed_signers, signing a commit in it", () => {
+	// scenario: two signed commits distinguish the PR key file from its trusted ancestor.
+	it("scenario: a key added only in the pull request's own allowed_signers, signing a commit in it", () => {
 		const r = new Repo();
 		r.write("allowed_signers", stepKeys("stranger"));
 		r.commit();
@@ -492,7 +810,8 @@ describe("unsigned_commit (p83)", () => {
 });
 
 describe("stale_link (p89)", () => {
-	it("tests signs version 1, redoes it as version 2 on another commit; the branch uses version 1", () => {
+	// scenario: branch switching and real sign commands share the notes version history.
+	it("scenario: tests signs version 1, redoes it as version 2 on another commit; the branch uses version 1", () => {
 		const r = new Repo();
 		const t1 = r.change("a.test.ts");
 		r.signWith("tests");
@@ -508,7 +827,8 @@ describe("stale_link (p89)", () => {
 		]);
 	});
 
-	it("two verified tests links for the ticket, both version 2", () => {
+	// scenario: two branches hold independent signatures at the same version.
+	it("scenario: two verified tests links for the ticket, both version 2", () => {
 		const r = new Repo();
 		const t = r.change("a.ts");
 		r.sign("tests", {version: 2});
@@ -521,16 +841,26 @@ describe("stale_link (p89)", () => {
 });
 
 describe("build_touched_exam (p84)", () => {
-	it("a build commit changing next/apps/fabrika/src/exam/commits.ts", () => {
-		const r = new Repo();
-		const path = "next/apps/fabrika/src/exam/commits.ts";
-		r.write(path, "weaker\n");
-		const c = r.commit();
-		r.sign("build");
-		expect(r.check().answers).toEqual([stuck("build_touched_exam", c, {paths: [path]}), ask(path)]);
+	// Plant: omit build exam refusal. Generated initial contents vary the real trees.
+	it("G13: a build commit changing next/apps/fabrika/src/exam/commits.ts", () => {
+		fc.assert(
+			fc.property(fc.string(), (initial) => {
+				const r = new Repo(GOOD_KEYS, undefined, "sha1", initial);
+				const path = "next/apps/fabrika/src/exam/commits.ts";
+				r.write(path, "weaker\n");
+				const c = r.commit();
+				r.sign("build");
+				expect(r.check().answers).toEqual([
+					stuck("build_touched_exam", c, {paths: [path]}),
+					ask(path),
+				]);
+			}),
+			runs,
+		);
 	});
 
-	it("a build commit moving a file out of fixtures/next/: the rename's old path", () => {
+	// scenario: git rename detection must return both sides of the move.
+	it("scenario: a build commit moving a file out of fixtures/next/: the rename's old path", () => {
 		const r = new Repo();
 		mkdirSync(join(r.dir, "next/packages/x"), {recursive: true});
 		r.git("mv", "fixtures/next/v.txt", "next/packages/x/v.txt");
@@ -542,7 +872,8 @@ describe("build_touched_exam (p84)", () => {
 		]);
 	});
 
-	it("a build commit dropping a row from exam-paths.json and touching that path: the base's list counts", () => {
+	// scenario: real tree reads must use the ancestor list despite the changed list on head.
+	it("scenario: a build commit dropping a row from exam-paths.json and touching that path: the base's list counts", () => {
 		const r = new Repo();
 		const rows = JSON.parse(EXAM_LIST) as Array<{glob: string}>;
 		r.write(
@@ -559,7 +890,8 @@ describe("build_touched_exam (p84)", () => {
 		]);
 	});
 
-	it("a build commit that merges main in, bringing main's exam change", () => {
+	// scenario: git first-parent merge changes differ from the PR three-dot diff.
+	it("scenario: a build commit that merges main in, bringing main's exam change", () => {
 		const r = new Repo();
 		r.change("a.ts");
 		r.sign("tests");
@@ -575,18 +907,28 @@ describe("build_touched_exam (p84)", () => {
 		]);
 	});
 
-	it("a build commit adding a file whose name holds a carriage return", () => {
-		const r = new Repo();
-		const path = "next/packages/x/a\rb.ts";
-		r.write(path, "x\n");
-		const c = r.commit();
-		r.sign("build");
-		expect(r.check().answers).toEqual([stuck("build_touched_exam", c, {paths: [path]}), ask(path)]);
+	// Plant: ignore control characters in exam paths. Generate the file name around the CR.
+	it("G14: a build commit adding a file whose name holds a carriage return", () => {
+		fc.assert(
+			fc.property(name, (name) => {
+				const r = new Repo();
+				const path = `next/packages/x/${name}\rb.ts`;
+				r.write(path, "x\n");
+				const c = r.commit();
+				r.sign("build");
+				expect(r.check().answers).toEqual([
+					stuck("build_touched_exam", c, {paths: [path]}),
+					ask(path),
+				]);
+			}),
+			runs,
+		);
 	});
 });
 
 describe("broken_chain at pull request time (p86)", () => {
-	it("the branch is behind main, whose own exam change asks nothing (a three-dot diff)", () => {
+	// scenario: two diverged branches distinguish a three-dot diff from a two-dot diff.
+	it("scenario: the branch is behind main, whose own exam change asks nothing (a three-dot diff)", () => {
 		const r = new Repo();
 		r.change("a.ts");
 		r.sign("tests");
@@ -599,7 +941,8 @@ describe("broken_chain at pull request time (p86)", () => {
 		expect(r.check([], main, head).answers).toEqual([stuck("broken_chain", head)]);
 	});
 
-	it("the branch contains the event's base but not the newer main CI checked out", () => {
+	// scenario: event base, event head and newer main need separate real histories.
+	it("scenario: the branch contains the event's base but not the newer main CI checked out", () => {
 		const r = new Repo();
 		r.change("a.ts");
 		r.sign("tests");
@@ -613,6 +956,7 @@ describe("broken_chain at pull request time (p86)", () => {
 });
 
 describe("the run fails (p87), judging no commit", () => {
+	// Plant: silently pass an invalid or absent trusted keys file.
 	it.each([
 		[
 			"an ECDSA key",
@@ -622,30 +966,42 @@ describe("the run fails (p87), judging no commit", () => {
 		["an unknown principal", `${GOOD_KEYS}${keyLine("owner", "stranger")}\n`],
 		["a missing namespace", `${GOOD_KEYS}build ${pub("stranger")}\n`],
 		["no allowed_signers on the base", null],
-	])("%s", (_, keys) => {
-		const r = new Repo(keys);
-		r.change("a.ts");
-		const out = r.check();
-		expect(out.code).toBe(2);
-		expect(out.answers).toEqual([]);
-		expect(out.err).toContain("allowed_signers");
+	])("G20: %s", (_, keys) => {
+		fc.assert(
+			fc.property(fc.string(), (initial) => {
+				const r = new Repo(keys, undefined, "sha1", initial);
+				r.change("a.ts");
+				const out = r.check();
+				expect(out.code).toBe(2);
+				expect(out.answers).toEqual([]);
+				expect(out.err).toContain("allowed_signers");
+			}),
+			runs,
+		);
 	});
 });
 
 describe("the scope rule", () => {
-	it("done, not in scope: only docs/ and field/ changed, its commits unsigned", () => {
-		const r = new Repo();
-		r.write("docs/x.md", "d\n");
-		r.commit();
-		r.write("field/notes.jsonl", "{}\n");
-		r.commit();
-		const out = r.check();
-		expect(out.answers).toEqual([DONE]);
-		expect(out.code).toBe(0);
-		expect(out.err).toContain("not in scope");
+	// Plant: judge every path. Generate the docs file name outside the exam.
+	it("G15: done, not in scope: only docs/ and field/ changed, its commits unsigned", () => {
+		fc.assert(
+			fc.property(name, (name) => {
+				const r = new Repo();
+				r.write(`docs/${name}.md`, "d\n");
+				r.commit();
+				r.write("field/notes.jsonl", "{}\n");
+				r.commit();
+				const out = r.check();
+				expect(out.answers).toEqual([DONE]);
+				expect(out.code).toBe(0);
+				expect(out.err).toContain("not in scope");
+			}),
+			runs,
+		);
 	});
 
-	it("judged: the same plus one file under next/, every commit unsigned_commit", () => {
+	// scenario: a three-commit history must be judged in full once its last file enters scope.
+	it("scenario: judged: the same plus one file under next/, every commit unsigned_commit", () => {
 		const r = new Repo();
 		r.write("docs/x.md", "d\n");
 		const c1 = r.commit();
@@ -659,16 +1015,26 @@ describe("the scope rule", () => {
 		]);
 	});
 
-	it("judged when only an exam path changed, read from the base's list", () => {
-		const r = new Repo();
-		r.write("boundary-rules.json", "[5]\n");
-		const c = r.commit();
-		expect(r.check().answers).toEqual([stuck("unsigned_commit", c), ask("boundary-rules.json")]);
+	// Plant: skip exam-only changes. Generated initial contents vary the real trees.
+	it("G16: judged when only an exam path changed, read from the base's list", () => {
+		fc.assert(
+			fc.property(fc.string(), (initial) => {
+				const r = new Repo(GOOD_KEYS, undefined, "sha1", initial);
+				r.write("boundary-rules.json", "[5]\n");
+				const c = r.commit();
+				expect(r.check().answers).toEqual([
+					stuck("unsigned_commit", c),
+					ask("boundary-rules.json"),
+				]);
+			}),
+			runs,
+		);
 	});
 });
 
 describe("judged at the event's head (hole 3)", () => {
-	it("the branch gets one more unsigned commit after the event; the event's head is judged", () => {
+	// scenario: real revision selection must stop at the saved event commit.
+	it("scenario: the branch gets one more unsigned commit after the event; the event's head is judged", () => {
 		const r = new Repo();
 		r.change("a.ts");
 		r.sign("tests");
@@ -679,7 +1045,8 @@ describe("judged at the event's head (hole 3)", () => {
 		expect(r.check([], r.base, event).answers).toEqual([DONE]);
 	});
 
-	it("with --fetch, CI's own clone of main fetches the event's shas and notes, and nothing newer", () => {
+	// scenario: a bare remote, a later push and an independent CI clone exercise fetching.
+	it("scenario: with --fetch, CI's own clone of main fetches the event's shas and notes, and nothing newer", () => {
 		const origin = join(TOP, `origin${count}.git`);
 		sh(TOP, "git", ["init", "-q", "--bare", "-b", "main", origin]);
 		const r = new Repo();
@@ -722,15 +1089,30 @@ describe("judged at the event's head (hole 3)", () => {
 });
 
 describe("sign", () => {
-	it("refuses a key that does not verify as its step, and adds no note", () => {
-		const r = new Repo();
-		r.change("a.ts");
-		const out = r.run(["sign", "--step", "tests", "--ticket", "229", "--key", join(KEYS, "build")]);
-		expect(out.code).toBe(2);
-		expect(r.git("notes", "--ref=fabrika", "list")).toBe("");
+	// Plant: skip sign verification. Generated initial contents vary the real trees.
+	it("G17: refuses a key that does not verify as its step, and adds no note", () => {
+		fc.assert(
+			fc.property(fc.string(), (initial) => {
+				const r = new Repo(GOOD_KEYS, undefined, "sha1", initial);
+				r.change("a.ts");
+				const out = r.run([
+					"sign",
+					"--step",
+					"tests",
+					"--ticket",
+					"229",
+					"--key",
+					join(KEYS, "build"),
+				]);
+				expect(out.code).toBe(2);
+				expect(r.git("notes", "--ref=fabrika", "list")).toBe("");
+			}),
+			runs,
+		);
 	});
 
-	it("counts its versions per step and ticket, and the printed link is what the note holds", () => {
+	// scenario: two real signing commands and persisted notes establish per-ticket versions.
+	it("scenario: counts its versions per step and ticket, and the printed link is what the note holds", () => {
 		const r = new Repo();
 		r.change("a.ts");
 		r.signWith("tests", "300");
@@ -793,46 +1175,175 @@ const twoSteps = (r: Repo) => {
 };
 
 describe("person commits between step links (p86b)", () => {
-	it("connects tests, a person's file change, then build, before and after squash", () => {
+	// scenario: alternate real signed commits isolate each mismatched part of one logged proof.
+	it.each([
+		"the wrong key",
+		"another signature",
+		"another to tree",
+		"another from tree",
+		"an unsigned commit",
+		"a step key",
+	] as const)("scenario: refuses a person link with %s", (plant) => {
 		const r = new Repo(PERSON_KEYS);
-		const tests = r.change("a.ts");
-		const first = r.sign("tests");
-		r.write("next/packages/x/src/person.ts", "person\n");
+		r.write("next/packages/x/src/a.ts", "a\n");
 		const person = r.gitSigned();
 		expect(verifyCommit(r, person)).toBe(0);
-		const raw = r.git("cat-file", "commit", person);
-		const signature = /^gpgsig (.*(?:\n .*)*)/m.exec(raw);
-		expect(signature).not.toBeNull();
-		const middle = {
-			_tag: "attested",
-			step: "person",
-			ticket: first.ticket,
-			version: 1,
-			from: r.head(`${person}^1^{tree}`),
-			to: r.head(`${person}^{tree}`),
-			key: fingerprint("person"),
-			sig: `${signature![1]!.replaceAll("\n ", "\n")}\n`,
-		};
-		const build = r.change("b.ts");
-		const last = r.sign("build");
-		expect(first.to).toBe(middle.from);
-		expect(middle.to).toBe(last.from);
+		const middle = personLink(r, person);
 		expect(middle.from).not.toBe(middle.to);
-		const before = r.check();
-		const {squash, rows} = squashed(r, [
-			{note: first, commit: tests},
-			{note: middle, commit: person},
-			{note: last, commit: build},
-		]);
+		const signedCommit = (parent: string, tree: string, who: "person" | "tests" = "person") =>
+			r
+				.git(
+					"-c",
+					"gpg.format=ssh",
+					"-c",
+					`user.signingkey=${join(KEYS, who)}`,
+					"commit-tree",
+					"-S",
+					"-p",
+					parent,
+					"-m",
+					"planted signed commit",
+					tree,
+				)
+				.trim();
+		const {squash, rows} = squashed(r, [{note: middle, commit: person}]);
+		const row = rows[0]!.attested[0]!;
+		switch (plant) {
+			case "the wrong key":
+				row.key = fingerprint("tests");
+				break;
+			case "another signature":
+				row.sig = personLink(r, signedCommit(r.base, middle.from)).sig;
+				break;
+			case "another to tree":
+			case "another from tree": {
+				const other =
+					plant === "another to tree"
+						? signedCommit(r.base, middle.from)
+						: signedCommit(person, middle.to);
+				expect(verifyCommit(r, other)).toBe(0);
+				row.commit = other;
+				row.sig = personLink(r, other).sig;
+				break;
+			}
+			case "an unsigned commit":
+				row.commit = r.git("commit-tree", "-p", r.base, "-m", "unsigned", middle.to).trim();
+				break;
+			case "a step key": {
+				const other = signedCommit(r.base, middle.to, "tests");
+				expect(verifyCommit(r, other, `fixture namespaces="git" ${pub("tests")}\n`)).toBe(0);
+				row.commit = other;
+				row.key = fingerprint("tests");
+				row.sig = personLink(r, other, "tests").sig;
+				break;
+			}
+		}
 		log(r, rows);
-		const after = r.run(["chain", "--squash", squash]);
-		expect(before.answers).toEqual([DONE]);
-		expect(before.code).toBe(0);
-		expect(after.answers, after.err).toEqual([DONE]);
-		expect(after.code).toBe(0);
+		const out = r.run(["chain", "--squash", squash]);
+		expect(out.answers).toEqual([stuck("broken_chain", squash)]);
+		expect(out.code).toBe(1);
 	});
 
-	it("refuses an unsigned commit between step links, before and after squash", () => {
+	// Plant: ignore the logged signature mismatch. Generated contents vary the signed trees.
+	it("G23: xgpgsig was read as gpgsig (95c3610a)", () => {
+		fc.assert(
+			fc.property(fc.string(), (initial) => {
+				const r = new Repo(PERSON_KEYS, undefined, "sha1", initial);
+				r.write("next/packages/x/src/a.ts", "a\n");
+				const person = r.gitSigned();
+				const payload = r
+					.git("cat-file", "commit", person)
+					.replace(/^gpgsig .*(?:\n .*)*\n/m, "")
+					.replace("\n\n", "\nxgpgsig forged\n\n");
+				const sig = sh(
+					r.dir,
+					"ssh-keygen",
+					["-Y", "sign", "-n", "git", "-f", join(KEYS, "person")],
+					payload,
+				);
+				const raw = payload.replace(
+					"\n\n",
+					`\ngpgsig ${sig.trimEnd().replaceAll("\n", "\n ")}\n\n`,
+				);
+				const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
+				expect(verifyCommit(r, c)).toBe(0);
+				const {squash, rows} = squashed(r, [
+					{note: {...personLink(r, c), sig: "forged\n"}, commit: c},
+				]);
+				log(r, rows);
+				const out = r.run(["chain", "--squash", squash]);
+				expect(out.answers).toEqual([stuck("broken_chain", squash)]);
+				expect(out.code).toBe(1);
+			}),
+			runs,
+		);
+	});
+
+	// scenario: a native signed commit passes git but its logged chain reads an incomplete ancestor file.
+	it("scenario: refuses a person link whose keys file is incomplete", () => {
+		const keys = `${keyLine("tests", "tests")}\n${personLine("github:42")}\n`;
+		const r = new Repo(keys);
+		r.write("next/packages/x/src/a.ts", "a\n");
+		const person = r.gitSigned();
+		expect(verifyCommit(r, person, keys)).toBe(0);
+		const {squash, rows} = squashed(r, [{note: personLink(r, person), commit: person}]);
+		log(r, rows);
+		const out = r.run(["chain", "--squash", squash]);
+		expect(out.answers).toEqual([stuck("broken_chain", squash)]);
+		expect(out.code).toBe(1);
+	});
+
+	// scenario: an independent single-branch clone must fetch a missing signed object.
+	it("scenario: fetches a missing signed person commit before checking its logged link", () => {
+		const r = new Repo(PERSON_KEYS);
+		r.write("next/packages/x/src/a.ts", "a\n");
+		const person = r.gitSigned();
+		const {squash, rows} = squashed(r, [{note: personLink(r, person), commit: person}]);
+		log(r, rows);
+		const ci = join(TOP, `person-ci${count}`);
+		sh(TOP, "git", ["clone", "-q", "--no-local", "--single-branch", "--branch", "main", r.dir, ci]);
+		const missing = spawnSync("git", ["cat-file", "-e", `${person}^{commit}`], {cwd: ci, env: ENV});
+		expect(missing.error).toBeUndefined();
+		expect(missing.status).not.toBe(0);
+		const out = r.run(["chain", "--squash", squash], ENV, ci);
+		expect(out.answers, out.err).toEqual([DONE]);
+		expect(out.code).toBe(0);
+		expect(sh(ci, "git", ["cat-file", "-e", `${person}^{commit}`])).toBe("");
+	});
+
+	// scenario: three signed commits must connect through both squash and the later log.
+	it.each(["file change", "empty commit"] as const)(
+		"scenario: connects tests, a person's %s, then build, before and after squash",
+		(change) => {
+			const r = new Repo(PERSON_KEYS);
+			const tests = r.change("a.ts");
+			const first = r.sign("tests");
+			if (change === "file change") r.write("next/packages/x/src/person.ts", "person\n");
+			const person = r.gitSigned();
+			expect(verifyCommit(r, person)).toBe(0);
+			const middle = personLink(r, person);
+			const build = r.change("b.ts");
+			const last = r.sign("build");
+			expect(first.to).toBe(middle.from);
+			expect(middle.to).toBe(last.from);
+			expect(middle.from === middle.to).toBe(change === "empty commit");
+			const before = r.check();
+			const {squash, rows} = squashed(r, [
+				{note: first, commit: tests},
+				{note: middle, commit: person},
+				{note: last, commit: build},
+			]);
+			log(r, rows);
+			const after = r.run(["chain", "--squash", squash]);
+			expect(before.answers).toEqual([DONE]);
+			expect(before.code).toBe(0);
+			expect(after.answers, after.err).toEqual([DONE]);
+			expect(after.code).toBe(0);
+		},
+	);
+
+	// scenario: a real unsigned middle commit leaves a tree gap after squash.
+	it("scenario: refuses an unsigned commit between step links, before and after squash", () => {
 		const r = new Repo(PERSON_KEYS);
 		const tests = r.change("a.ts");
 		const first = r.sign("tests");
@@ -853,7 +1364,8 @@ describe("person commits between step links (p86b)", () => {
 		expect(out.code).toBe(1);
 	});
 
-	it("counts a person's signed merge of main and still requires the base in the head", () => {
+	// scenario: native signed merge ancestry is checked before and after catching up.
+	it("scenario: counts a person's signed merge of main and still requires the base in the head", () => {
 		const r = new Repo(PERSON_KEYS);
 		r.change("a.ts");
 		r.sign("tests");
@@ -888,8 +1400,8 @@ describe("person commits between step links (p86b)", () => {
 describe("chain after the merge (p86 and p89)", () => {
 	// d4: in a real repo, whichever logged link carries cause (with or without parent), or lacks
 	// parent or traceId, chain stops on that row's line and answers nothing. The same log without
-	// the change answers done. One repo for every run, and few runs, since each spawns git and
-	// node; commits.test.ts's d4 laws cover the link's input space at 200 runs. Plants: drop
+	// the change answers done. One repo for this property, and few runs, since each spawns git and
+	// node; commits.test.ts's decoder laws cover the input space at 100 runs. Plants: drop
 	// onExcessProperty; make parent or traceId optional; read cause as the old name for parent.
 	it("d4: any logged link with cause, or without parent or traceId, stops the chain on its line", () => {
 		const r = new Repo();
@@ -924,7 +1436,8 @@ describe("chain after the merge (p86 and p89)", () => {
 		);
 	});
 
-	it("done: a squash whose links run from its base's tree to its tree, one through a lead merge", () => {
+	// scenario: signed commits, squash and later log commits require a fixed real git history.
+	it("scenario: done: a squash whose links run from its base's tree to its tree, one through a lead merge", () => {
 		const r = new Repo();
 		const c1 = r.change("a.ts");
 		const n1 = r.sign("tests");
@@ -948,7 +1461,8 @@ describe("chain after the merge (p86 and p89)", () => {
 		expect(out.code).toBe(0);
 	});
 
-	it("broken_chain: field/ links with a gap between two links", () => {
+	// scenario: signed commits, squash and later log commits require a fixed real git history.
+	it("scenario: broken_chain: field/ links with a gap between two links", () => {
 		const r = new Repo();
 		const steps = twoSteps(r);
 		const {squash, rows} = squashed(r, steps);
@@ -956,7 +1470,8 @@ describe("chain after the merge (p86 and p89)", () => {
 		expect(r.run(["chain", "--squash", squash]).answers).toEqual([stuck("broken_chain", squash)]);
 	});
 
-	it("broken_chain: a link whose sig was made over another to", () => {
+	// scenario: signed commits, squash and later log commits require a fixed real git history.
+	it("scenario: broken_chain: a link whose sig was made over another to", () => {
 		const r = new Repo();
 		const steps = twoSteps(r);
 		const {squash, rows} = squashed(r, steps);
@@ -967,14 +1482,16 @@ describe("chain after the merge (p86 and p89)", () => {
 		expect(r.run(["chain", "--squash", squash]).answers).toEqual([stuck("broken_chain", squash)]);
 	});
 
-	it("broken_chain: the last link's to is the head's tree, but the squash took a main that moved", () => {
+	// scenario: signed commits, squash and later log commits require a fixed real git history.
+	it("scenario: broken_chain: the last link's to is the head's tree, but the squash took a main that moved", () => {
 		const r = new Repo();
 		const {squash, rows} = squashed(r, twoSteps(r), true);
 		log(r, rows);
 		expect(r.run(["chain", "--squash", squash]).answers).toEqual([stuck("broken_chain", squash)]);
 	});
 
-	it("broken_chain: a link signed by a key that allowed_signers did not hold at the row's keys commit", () => {
+	// scenario: signed commits, squash and later log commits require a fixed real git history.
+	it("scenario: broken_chain: a link signed by a key that allowed_signers did not hold at the row's keys commit", () => {
 		const r = new Repo();
 		const c1 = r.change("a.ts");
 		const n1 = r.sign("tests");
@@ -996,7 +1513,8 @@ describe("chain after the merge (p86 and p89)", () => {
 		expect(r.run(["chain", "--squash", squash]).answers).toEqual([stuck("broken_chain", squash)]);
 	});
 
-	it("done: a key main added before the squash counts, at a keys commit on main", () => {
+	// scenario: signed commits, squash and later log commits require a fixed real git history.
+	it("scenario: done: a key main added before the squash counts, at a keys commit on main", () => {
 		const r = new Repo();
 		r.git("checkout", "-q", "main");
 		r.write("allowed_signers", stepKeys("stranger"));
@@ -1016,7 +1534,8 @@ describe("chain after the merge (p86 and p89)", () => {
 		expect(r.run(["chain", "--squash", squash]).answers).toEqual([DONE]);
 	});
 
-	it("broken_chain: a log pull request that adds its own keys commit and points its rows at it", () => {
+	// scenario: signed commits, squash and later log commits require a fixed real git history.
+	it("scenario: broken_chain: a log pull request that adds its own keys commit and points its rows at it", () => {
 		const r = new Repo();
 		const c1 = r.change("a.ts");
 		const n1 = r.sign("tests");
@@ -1037,7 +1556,8 @@ describe("chain after the merge (p86 and p89)", () => {
 		expect(out.code).toBe(1);
 	});
 
-	it("broken_chain: a log pull request naming a squash that is not on main", () => {
+	// scenario: signed commits, squash and later log commits require a fixed real git history.
+	it("scenario: broken_chain: a log pull request naming a squash that is not on main", () => {
 		const r = new Repo();
 		const steps = twoSteps(r);
 		r.git("checkout", "-q", "-b", "elsewhere", r.base);
@@ -1056,7 +1576,8 @@ describe("chain after the merge (p86 and p89)", () => {
 		]);
 	});
 
-	it("broken_chain: a link whose base has the base's tree but is not on main", () => {
+	// scenario: signed commits, squash and later log commits require a fixed real git history.
+	it("scenario: broken_chain: a link whose base has the base's tree but is not on main", () => {
 		const r = new Repo();
 		const steps = twoSteps(r);
 		const {squash, rows} = squashed(r, steps);
@@ -1071,7 +1592,8 @@ describe("chain after the merge (p86 and p89)", () => {
 		expect(r.run(["chain", "--squash", squash]).answers).toEqual([stuck("broken_chain", squash)]);
 	});
 
-	it("broken_chain: a log row whose attested key is written with an escape is read all the same", () => {
+	// scenario: signed commits, squash and later log commits require a fixed real git history.
+	it("scenario: broken_chain: a log row whose attested key is written with an escape is read all the same", () => {
 		const r = new Repo();
 		const steps = twoSteps(r);
 		const {squash, rows} = squashed(r, steps);
@@ -1084,7 +1606,8 @@ describe("chain after the merge (p86 and p89)", () => {
 		expect(out.code).toBe(1);
 	});
 
-	it("stale_link: field/ rows hold a tests link for the ticket newer than any the squash's chain uses", () => {
+	// scenario: signed commits, squash and later log commits require a fixed real git history.
+	it("scenario: stale_link: field/ rows hold a tests link for the ticket newer than any the squash's chain uses", () => {
 		const r = new Repo();
 		const steps = twoSteps(r);
 		r.git("checkout", "-q", "-b", "redo", r.base);
@@ -1102,7 +1625,8 @@ describe("chain after the merge (p86 and p89)", () => {
 		]);
 	});
 
-	it("blocks a log pull request for the squashes its new rows name, and passes a good one", () => {
+	// scenario: signed commits, squash and later log commits require a fixed real git history.
+	it("scenario: blocks a log pull request for the squashes its new rows name, and passes a good one", () => {
 		const r = new Repo();
 		const steps = twoSteps(r);
 		const {squash, rows} = squashed(r, steps);
