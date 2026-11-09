@@ -6,10 +6,13 @@ import {
 	stubCtxThrowingProxy,
 	type Step,
 } from "@demlik/tea/pbt";
+import {askShownOf, sealAsk} from "@kampus/pipeline/tickets/ask";
+import {Effect} from "effect";
 import * as fc from "fast-check";
 import {createElement, isValidElement, type ReactNode} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {describe, expect, it, vi} from "vitest";
+import {DRAFT} from "../../../../fixtures/ask-desk/cases.ts";
 import type {AsksNow} from "../asks.ts";
 import {type Desk, type DeskCmd, type DeskMsg, deskMachine, type Open} from "../desk/desk.ts";
 import {defaults} from "../desk/keymap.ts";
@@ -129,6 +132,68 @@ const props = (over: Partial<FrameProps> = {}): FrameProps => ({
 const show = (over: Partial<FrameProps>) => renderToStaticMarkup(createElement(Over, props(over)));
 
 describe("today's frame display laws", () => {
+	it("draws only the selected sealed ask, with its actions and the separate ask and stop counts", async () => {
+		const sealed = askShownOf(await Effect.runPromise(sealAsk(DRAFT)));
+		const row = {
+			key: "7/a-1",
+			ticket: 7,
+			title: "Keys",
+			what: DRAFT.what,
+			kind: "ask" as const,
+			at: 0,
+			seen: false,
+			sealed,
+		};
+		const html = show({
+			frame: {...FRAME, over: {kind: "asks"}},
+			asks: {
+				...asks,
+				asks: [
+					row,
+					{...row, key: "8/a-2", ticket: 8},
+					{
+						key: "9/stuck/r-3",
+						ticket: 9,
+						kind: "stuck",
+						title: "Build",
+						what: "Read failed",
+						at: 0,
+						seen: false,
+					},
+				],
+			},
+		});
+		expect(html.match(/data-ask-place="menu"/g)).toHaveLength(1);
+		expect(html).toContain("Recommended");
+		expect(html).toContain("Open ticket");
+		expect(html.replace(/<!-- -->|<[^>]+>/g, " ").replace(/\s+/g, " ")).toContain(
+			"2 asks · 1 stop",
+		);
+	});
+	it.each([false, true])(
+		"a stop has reachable Open lane and Later actions, set aside=%s",
+		(later) => {
+			const row = {
+				key: "7/stuck/r-1",
+				ticket: 7,
+				title: "Keys",
+				what: "Read failed",
+				kind: "stuck" as const,
+				at: 0,
+				seen: false,
+			};
+			const html = show({
+				frame: {...FRAME, over: {kind: "asks"}},
+				asks: {...asks, asks: later ? [] : [row], later: later ? [row] : []},
+			});
+			const buttons = [...html.matchAll(/<button\b[\s\S]*?<\/button>/g)].map(([button]) => button);
+			for (const label of ["Open lane", later ? "Bring back" : "Later"]) {
+				const button = buttons.find((b) => b.includes(label));
+				expect(button, label).toBeDefined();
+				expect(button).not.toContain('tabindex="-1"');
+			}
+		},
+	);
 	it("shows attached agents only after the host answers, and marks only the active workspace", () => {
 		const desk = fold({type: "run", does: 'tezgah."workspace --to new"'});
 		const html = renderToStaticMarkup(createElement(TopBar, props({desk, host: null})));

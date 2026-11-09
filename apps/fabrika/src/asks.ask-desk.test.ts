@@ -138,10 +138,13 @@ describe("ask desk review 2, medium 1: old asks are sealed once per ticket per r
 				);
 				const ledger = yield* Ledger;
 				let reads = 0;
+				let otherReads = 0;
+				yield* put(7, [yield* seal(DRAFT, policyFor(DRAFT.ask, false, blindDraw))]);
 				const counted: typeof ledger = {
 					...ledger,
 					readStream: (stream, ...rest) => {
 						if (stream === inboxOf(5)) reads++;
+						if (stream === inboxOf(6) || stream === inboxOf(7)) otherReads++;
 						return ledger.readStream(stream, ...rest);
 					},
 				};
@@ -150,6 +153,7 @@ describe("ask desk review 2, medium 1: old asks are sealed once per ticket per r
 				);
 				expect(loaded.entries.length).toBeGreaterThan(500);
 				expect(reads).toBe(1);
+				expect(otherReads).toBe(0);
 			}),
 		);
 	});

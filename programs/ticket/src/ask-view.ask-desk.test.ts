@@ -380,9 +380,11 @@ describe("ask desk design E: the bar is the ask, so the activity does not say it
 			fc.asyncProperty(anyOpenAsk, async (a) => {
 				const ask = await sealedAny(a);
 				const row = `asks you: ${a.what}`;
-				const open = drawn(entriesOf([FILED, ask]));
+				const comment = {type: "commented", body: "Keep this activity note."};
+				const open = drawn(entriesOf([FILED, comment, ask]));
 				expect(textOf(open)).toContain(a.what);
 				expect(activityOf(open)).not.toContain(row);
+				expect(activityOf(open)).toContain(comment.body);
 				expect(activityOf(drawn(entriesOf([FILED, ask, endOf(ask, a.end)])))).toContain(row);
 				// A "changed" withdrawal with no replacement yet leaves the ask open, so still no row.
 				const changed = {type: "withdrawn", ask: ask.ask, why: "changed"};

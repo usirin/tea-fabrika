@@ -133,6 +133,13 @@ describe("ask desk P7: what an answer means", () => {
 });
 
 describe("ask desk P8/P9: blind asks", () => {
+	it("an ask with no rec records no hidden recommendation, even when its draw is blind", async () => {
+		const ask = await Effect.runPromise(
+			seal({...DRAFT, for: "step", rec: NONE}, policyFor(DRAFT.ask, true, draw)),
+		);
+		expect(ask.blind.hidden).toBe(false);
+		expect(ask.shows.rec).toEqual(NONE);
+	});
 	it("never hands a hidden rec to the display and keeps a blind answer chose after reveal", async () => {
 		// A step's ask: an approve ask is never drawn blind (review 2, medium 2, below).
 		const ask = await Effect.runPromise(

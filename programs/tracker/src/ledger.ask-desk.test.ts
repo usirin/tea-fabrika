@@ -337,6 +337,18 @@ describe("ask desk review 2, high 2: a save the store could not take says so in 
 const LONG = `The build used all 3 rounds and the checks are still red. The last review said: ${"the parser drops a trailing comma in nested lists, ".repeat(2)}Run again?`;
 
 describe("ask desk review 2, high 1: an old ask's long question is sealed as one line", () => {
+	it("keeps an approve ask's whole question beside its stored plan", async () => {
+		await run(
+			Effect.gen(function* () {
+				yield* stored;
+				yield* ticket(5, {type: "planned", version: 1, tasks: []}, {...LEGACY, what: LONG});
+				yield* preparePending(5);
+				const [sealed] = sealedOf(yield* asked(5));
+				expect(sealed?.shows.what).toBe(questionLine(LONG));
+				expect(sealed?.shows.evidence).toMatchObject({_tag: "plan", version: 1, text: LONG});
+			}),
+		);
+	});
 	it.each([
 		["rounds_spent", "a-rounds_spent-4"],
 		["exam_conflict", "a-exam_conflict-4"],

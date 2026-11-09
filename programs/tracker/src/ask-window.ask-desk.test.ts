@@ -20,6 +20,7 @@ type Model = {
 	took: {ms: number; opened: readonly string[]};
 	failure: string | null;
 	status?: string;
+	evidence?: boolean;
 };
 type Msg =
 	| {type: "do"; value: {_tag: "rec" | "not" | "picks" | "later"}}
@@ -32,7 +33,8 @@ type Msg =
 	| {type: "show"; ask: AskShown; now: number}
 	| {type: "save_ok"; value: unknown}
 	| {type: "save_err"; error: {why: string}}
-	| {type: "tick"; now: number};
+	| {type: "tick"; now: number}
+	| {type: "escape"};
 type Cmd = {type: string; [key: string]: unknown};
 const start = async (hidden = false, rec: unknown = DRAFT.rec): Promise<Model> => {
 	const ask = await Effect.runPromise(
@@ -249,4 +251,46 @@ describe("ask desk review 2, low 2: only opening the evidence counts as opened",
 		);
 		expect(model.took.opened).toEqual(["evidence"]);
 	});
+	it("opening a different part leaves the evidence closed", async () => {
+		const model = go(await start(), {type: "open", name: "plan", now: NOW});
+		expect(model.evidence).not.toBe(true);
+		expect(model.took.opened).toEqual(["plan"]);
+	});
+});
+
+describe("ask desk mutation: the view keeps the answer's words through each editor state", () => {
+	it("a hidden rec explains when it will show, and an absent rec keeps its reason", async () => {
+		expect(askView(await start(true)).line).toBe("Your pick first: the rec shows once you answer");
+		expect(askView(await start(false, NONE)).line).toBe(NONE.why);
+		expect(askView(await start(false, {...DRAFT.rec, sure: null})).line).toBe(
+			"Recommended Approve · sureness unknown",
+		);
+		expect(askView(await start()).line).toBe("Recommended Approve · 95% sure");
+	});
+	it("a saving view without a note draft has no note editor", async () => {
+		const initial = await start();
+		expect(
+			askView({...initial, editor: {_tag: "saving", answer: {_tag: "rec"}}}).note,
+		).toBeUndefined();
+	});
+	it.each([true, false])(
+		"keeps the note's labels while saving and closes it on Escape, rec=%s",
+		async (shown) => {
+			const initial = await start(false, shown ? DRAFT.rec : NONE);
+			const noting = shown
+				? go(initial, {type: "do", value: {_tag: "not"}})
+				: go(initial, {type: "do", value: {_tag: "picks"}}, {type: "pick", pick: "no"});
+			const draft = go(noting, {type: "note", text: "Keep the empty input test."});
+			const expected = {label: shown ? "Why no?" : "Note on no (optional)", send: "Send no"};
+			expect(askView(draft).note).toEqual(expected);
+			const saving = go(draft, {type: "submit", key: "Enter", now: NOW});
+			expect(askView(saving)).toMatchObject({busy: true, marks: true, note: expected});
+			const failed = go(saving, {type: "save_err", error: {why: "Try again"}});
+			expect(askView(failed).note).toEqual(expected);
+			const closed = go(failed, {type: "escape"});
+			expect(askView(closed).note).toBeUndefined();
+			expect(askView(initial).note).toBeUndefined();
+			expect(askView(go(initial, {type: "do", value: {_tag: "rec"}})).note).toBeUndefined();
+		},
+	);
 });
