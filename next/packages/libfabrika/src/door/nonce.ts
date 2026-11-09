@@ -19,29 +19,27 @@ export const doorNonce = Effect.fn("door.nonce")(function* (
 	const bytes = Base64Url.decode(secret);
 	if (Result.isFailure(bytes) || bytes.success.length !== 32)
 		return yield* new LedgerError({why: "storage"});
+	const fail = () => new LedgerError({why: "crypto"});
+	const args: Parameters<SubtleCrypto["importKey"]> = [
+		"raw",
+		new Uint8Array(bytes.success),
+		{name: "HMAC", hash: "SHA-256"},
+		false,
+		["sign", "verify"],
+	];
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto imports keys through a Promise
-	const key = yield* Effect.tryPromise({
-		try: () =>
-			crypto.subtle.importKey(
-				"raw",
-				new Uint8Array(bytes.success),
-				{name: "HMAC", hash: "SHA-256"},
-				false,
-				["sign", "verify"],
-			),
-		catch: () => new LedgerError({why: "crypto"}),
-	});
+	const imported = Effect.tryPromise({try: () => crypto.subtle.importKey(...args), catch: fail});
+	const key = yield* imported;
 	const clock = Effect.clockWith((c) => c.currentTimeMillis);
 	const text = (client: string, issuedAt: number, salt: string) =>
 		new TextEncoder().encode(JSON.stringify([client, issuedAt, salt]));
 	const issue = Effect.fnUntraced(function* (client: string) {
 		const issuedAt = yield* clock;
 		const salt = Base64Url.encode(crypto.getRandomValues(new Uint8Array(24)));
+		const data = text(client, issuedAt, salt);
 		// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto signs through a Promise
-		const mac = yield* Effect.tryPromise({
-			try: () => crypto.subtle.sign("HMAC", key, text(client, issuedAt, salt)),
-			catch: () => new LedgerError({why: "crypto"}),
-		});
+		const work = Effect.tryPromise({try: () => crypto.subtle.sign("HMAC", key, data), catch: fail});
+		const mac = yield* work;
 		return `${issuedAt}.${salt}.${Base64Url.encode(new Uint8Array(mac))}`;
 	});
 	const check = Effect.fnUntraced(function* (client: string, nonce: string) {
@@ -58,17 +56,15 @@ export const doorNonce = Effect.fn("door.nonce")(function* (
 			Result.isFailure(mac)
 		)
 			return null;
+		const args: Parameters<SubtleCrypto["verify"]> = [
+			"HMAC",
+			key,
+			new Uint8Array(mac.success),
+			text(client, issuedAt, salt),
+		];
 		// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto verifies through a Promise
-		const valid = yield* Effect.tryPromise({
-			try: () =>
-				crypto.subtle.verify(
-					"HMAC",
-					key,
-					new Uint8Array(mac.success),
-					text(client, issuedAt, salt),
-				),
-			catch: () => new LedgerError({why: "crypto"}),
-		});
+		const checked = Effect.tryPromise({try: () => crypto.subtle.verify(...args), catch: fail});
+		const valid = yield* checked;
 		return valid ? issuedAt + ttl : null;
 	});
 	// Called in the signature-checked transaction. Never evict a still-live receipt.

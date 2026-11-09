@@ -63,7 +63,71 @@ React's own `react/refs`, `react/immutability`, `react/display-name` and `react/
 
 **Edges are comments, not files** (owner, 2026-11-05; Tier 1, P35). The one line a platform demands, such as a Durable Object method that must answer a Promise, passes either rule only under `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, or the same for `fabrika/no-effect-run-outside-edge`, or one comment naming both. Until P35 the run rule held a list of 18 whole paths, which let a whole file wrap Promises; the list is gone. `edge-comment` keeps every such comment to one shape, reported at the top of the file as `no-bare-disable` is, so a comment cannot silence it. An edge comment over a line where nothing fires fails through `reportUnusedDisableDirectives`. CI's `edges` step (`next/apps/fabrika/src/exam/edges.ts`) lists each edge comment a pull request adds, with its reason, in the step summary and as a note on the diff, for the owner to read; it never blocks. Its industry match is clippy's `undocumented_unsafe_blocks`, with `edge:` for `SAFETY:`, and eslint-comments' `require-description` and `no-restricted-disable`.
 
-None of these rules sees types. A `.catch` is told apart by the name it is called on, `Effect.promise` and the run functions by their written names, so an Effect module under another name, or a Promise reached through a helper, passes. `no-hand-tag` misses `x._tag = "a"`, which the plan does not name. Report any miss.
+The oxlint rules see syntax. A `.catch` is told apart by the name it is called on,
+and `Effect.promise` and the run functions by their written names. P12 adds the typed
+check below for Promises passed through helpers. `no-hand-tag` misses `x._tag = "a"`,
+which the plan does not name. Report any miss.
+
+### P12 checks in lint
+
+`no-node-filesystem` refuses `fs`, `fs/promises` and `path`, with or without `node:`,
+in `next/` product files. It covers imports, re-exports, dynamic imports, `require`
+and TypeScript import assignments. Tests, test support files, declarations, the
+exam and browser test drivers are left out. Its generated plants use the real
+config at these paths. The P12 review-6 sweep found one filesystem import in
+`node/stage-recording.ts`, plus six path imports: that file, `node/build.ts`,
+and the app's `build.ts`, `dev.ts`, `src/local-stage.ts` and `src/stage.ts`.
+These are seven findings in six files, all read by hand, with no false alarm.
+All can use Effect's existing FileSystem or Path service. This rule deliberately
+stays red until the builder removes those imports.
+
+`pnpm lint:twin` runs `next/apps/fabrika/src/exam/twin.ts` on the real Alchemy stack.
+It reads the installed providers, prints the finding count and exits nonzero for any
+finding. Its generated plants stay in `twin.test.ts`, with seed 119120.
+
+`pnpm lint:promise-types` adds types to `no-promises`. TypeScript 7.0.2's installed
+sync API resolves every `next/` project. Calls, returns and function parameters may
+not carry a Promise or a function returning one outside a marked edge line. Type
+declarations, tests, test support files and today's code are left alone. The scanner does not emit code
+or run type diagnostics. `no-promises.test.ts` plants imported aliases, inferred
+returns, generic thunks, object methods and line-local edge comments. An edge comment
+covers only the next physical line. History: the initial P12 head scan at `4577f6b0`
+found 103 lines. It recorded false alarms inside wrapped statements whose first line
+had an edge marker. A statement-wide exception left 60 real findings in P12's files
+and 27 in unchanged files from main. P12's new files then reached zero. See
+`field/notes.jsonl`, note `2026-11-08-275`. The statement-wide exception was dropped
+because it walked back [no-promises.md](../docs/direction/no-promises.md). The build
+restructured the code to keep each Promise on its marked line. `pnpm lint:promise-types`
+reports 0 findings on the P12 tree at `97245dc7` with the narrowed rule below, with 0
+false alarms. The check runs in `pnpm lint`. Unknown types still need the regular typecheck.
+
+An untyped or `never` call needs an edge marker only inside an input to Effect's own
+`tryPromise` or `promise`. The checker follows the declaration's symbol, including imported
+aliases, parentheses, non-null assertions, `satisfies`, `as`, const aliases and their chains,
+destructuring and renamed bindings. Computed keys work when the checker resolves every
+possible key to one of those two declarations. A key that may select another function, or
+whose type cannot be resolved, supplies no evidence of a Promise bridge. The RPC property
+generates all 17 supported spellings for both bridges. Pinned laws keep two known gaps:
+a key that may select `sync`, and a bare RPC call whose Workers type is `never`.
+
+Replaying `97245dc7`'s broad rule on this tree still gives 75 findings: 9 real and 66 false
+alarms, or 88%. Those 66 synchronous calls are outside Effect bridges. The narrowed rule
+reports none of them. These nine real cases also sit outside bridges, so they remain for
+the build step rather than making every unknown return a finding:
+
+| File | Lines | Real or false | Why |
+|---|---|---|---|
+| `next/packages/libfabrika/src/app/program.ts` | 411 | real | A Standard Schema validator can create a Promise behind its `unknown` return type. |
+| `next/packages/libfabrika/src/node/stage.ts` | 349, 352, 353, 354, 359, 360, 362, 367 | real | `Reflect.get` erases the proxy's returned Promise thunks to `any`. |
+
+`no-ledger-sql` refuses SQL strings naming the ledger's `entries` or `rings` outside
+its three service files in `next/`. Tests, test support files and today's code are left alone. Its
+generated plants cover reads, joins, writes, quoted names, SQL comments, templates
+and allowed tables. The bootstrap read in `workers/runtime.ts` now uses `Ledger.read`;
+P12's product files have zero findings. The first scan
+also found a test helper reading rows for assertions. Leaving test support files
+out removes that false alarm. This check
+recognizes SQL text; it cannot resolve a table name assembled at runtime.
 
 Their count on PR 223's tree at `7c1d073` (33 files), each fire read by hand, on 2026-11-05:
 
