@@ -100,6 +100,9 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   A step is a program, and a prompt you would have typed is its first source: a rule in
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each
   part is small, never absent.
+  Every new or changed law is a property, or an example labeled vector, format, pinned or scenario
+  with its reason. Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no
+  owner read is needed. The lead records both outputs in the PR. Any hit waits on the owner.
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
   machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). From tea 0.23.0

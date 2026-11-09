@@ -24,7 +24,15 @@ Every agent may file tracker tickets, even during read-only repo work. Filing cl
 and starts no build.
 ```
 
+## Driver brief template
+
 For a driver, add the parent and landing facts before it starts:
+
+A ticket's driver is not the lead session. Every plan and amendment returns unsigned.
+Before handing it to lead, the driver runs plancheck.sh --draft, saves the approval wait and ends.
+Only the lead session reads and signs each plan and amendment itself.
+The draft check checks the handoff format. Shared shell access cannot prove which session signed.
+Do not add a marker, key or readable file as proof of session identity.
 
 ```text
 Parent: ticket <id>, branch <branch>, signed build head <sha>, or none.
@@ -32,10 +40,82 @@ Children: <ticket, branch and signed parent head for each child>, or none. Recor
 Merge method: merge when this parent has a stacked child; squash otherwise.
 Start a child at its parent's signed build head. Keep the child's tests through catch-up.
 Land the child after the parent reaches main. Pass the recorded method to catchup.sh.
-Return plans unsigned, including reviews and revisions. Only the lead session approves them.
+Return every plan and amendment unsigned, including reviews and revisions.
+Run plancheck.sh --draft, save the approval wait and end. The driver is not the lead session.
+Only the lead session reads and signs each plan and amendment itself.
 Every agent may file tracker tickets, even during read-only repo work. Filing claims no ticket
 and starts no build.
 ```
+
+## Review brief template
+
+Use this for the whole diff, including a re-review after fixes:
+
+```text
+Use the review skill for the ticket below.
+Ticket: <id and title>
+Version: <today's tooling or next/>
+Approved plan: <path, including amendments>
+Parent base: <branch and full signed SHA, or origin/main and full SHA>
+Reviewed head: <branch and full SHA>
+Decided notes: <every decided note the PR builds>
+Last fixes: <commit range and report, or none>
+```
+
+Sweep, do not sample. For each law in the plan's table, list every way in: each public call,
+each cut point, and each saved or binding state. Check each one.
+A finding names its class and every case of it.
+A law written as examples over a class the plan names is a defect when a found case escapes
+those examples.
+On a re-review, read every line the last fixes changed and what calls them first. Then finish
+the remaining checks.
+Read every decided note the PR builds, following the plan's references and the change itself.
+Block only on a broken decision in docs/direction or AGENTS.md, lost data, or a broken law.
+Each blocker cites that source and shows the missed case.
+
+Start with merge-ready; tickets: <m> or changes: <n>; tickets: <m>.
+n counts blocking classes. Each class lists every affected case. m counts distinct confirmed
+tracker tickets linked in this answer.
+Give every finding in that answer, grouped by class, most serious first.
+Name each checked decided note and say where the change follows or breaks it.
+Other actionable findings become tracker tickets. Use tracker_query to find an existing ticket,
+or tracker_file with value: {title, body, from: {_tag: "pr", url, step: "review"}}.
+Record the returned ID.
+If filing fails, include the exact pending payload for lead to retry. Do not count it as filed
+or start another review round for it.
+Every agent may file. Filing claims no ticket and starts no build.
+Keep the four reason labels in the review skill. A missed case in a named class checks the law;
+it does not reopen every test's merits.
+
+## Saved driver state
+
+Save each wait in `$BOXES/state/<name>.md`:
+
+```text
+Ticket or row:
+Branch and full SHA:
+Plan path:
+Parent branch and signed head:
+Children and merge method:
+Worktree and box names:
+Wait: kind, target, report or log path
+Cleared when: exact fact to read
+Next step:
+Field rows already written: run IDs, note IDs, commits
+Saved at:
+```
+
+A Codex box, parent build, CI, plan approval or owner read is a wait.
+Before ending, save completed field work and replace a temporary sibling with this file.
+Then end the driver session.
+Write the new state to a temporary sibling, then rename it over the saved path.
+Background commands may keep running after the session ends.
+Lead checks the saved clearing condition and starts a fresh driver when it holds.
+Pass the saved file and the driver brief above to the fresh driver.
+The new driver reads the current branch, SHA, reports and checks again before acting. It does
+not rerun completed steps or duplicate listed field rows.
+Missing or unclear state sends it back to those facts.
+This Markdown has no program reading it. Lead owns when to restart.
 
 ## Who runs which step
 
@@ -48,11 +128,13 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
   agent instead. A Codex box can start neither, so a Codex build there would come back half checked.
   The mutation step is socket work: Stryker binds a port, so it always runs on Claude.
   Still one agent per step.
-- **One driver per ticket, start to finish** (owner, 2026-11-08): a Claude agent carries one ticket
-  through every step, starting one agent per step on the runner above. It merges its own PR only
+- **One active driver per ticket** (owner, 2026-11-08): a Claude agent carries the ticket until a
+  wait, saves state and ends. Lead starts a fresh driver when that wait clears. Each starts one
+  agent per step on the runner above. It merges its own PR only
   after every step ran, each by its own agent (plan, tests, build, mutation, one review saying
   merge-ready), with CI green and the leak grep clean. No step is ever skipped. The driver keeps its
-  own status line and field rows. Only a new design call or an exam read comes back to the lead.
+  own status line and field rows. Plans and amendments always return unsigned to the lead session.
+  A new design call or an exam hit waits on the owner.
 - **A driver never writes a step's code or tests itself** (owner, 2026-11-08). It starts the step agents, fetches, hands
   work along, and runs what a Codex box cannot: e2e runs and screenshots.
 - Plan every row as soon as its tier opens, and start each test writer when its plan is approved.
@@ -68,6 +150,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `box.sh new <name> <base> <branch>` | a Codex box: its own clone, git data outside `.git`, installed |
 | `box.sh run <name> <prompt> <out>` | run Codex in the box, writable only there |
 | `box.sh fetch <name> <branch>` | fetch the branch and step notes into the main checkout, nothing else |
+| `box.sh rm <name>` | inspect from outside, keep unretained commits or tracked changes, otherwise remove the pair |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push |
 | `catchup.sh <pr> <ticket> [--merge-method squash\|merge]` | merge `main` in as the bot, sign `lead`, push, check that exact head and land pinned to it; squash by default |
@@ -104,7 +187,8 @@ visible, and never weaken the rules to hide this message.
    check is a parser over free text and may miss an exotic form the listing still shows.
 3. **Approve in the lead session only.** Read the whole plan, its laws and generators or labels,
    its decided notes and open questions. Plan writers and agents reviewing or revising a plan
-   return it unsigned, with line one blank. A driver sends it to the lead session for approval.
+   return it unsigned, with line one blank. This includes every amendment. A driver runs the draft
+   check, saves the approval wait and ends. Only the lead session reads and signs it itself.
    A plan that only builds decided notes: write "Approved by the lead agent, builds
    <note>" on its blank first line. A plan that raises a new design call goes to the owner as one
    yes or no. Answer, in the plan, any open question a decided note already answers.
@@ -124,15 +208,38 @@ visible, and never weaken the rules to hide this message.
 8. **Push** with `botpush.mjs` and open the pull request. Its body says which parts were this repo's
    steps, what ran each one, and the dollars.
 9. **Land it** by [the plan's rule](../../../docs/plan/README.md#how-a-change-lands): the review says
-   `merge-ready`, CI is green (e2e included), and you read the diff and run the leak grep. An exam
-   path touched stays `ask owner exam_read`; never write "owner read" unless the owner did, and give
-   each such merge a field note. Then run `catchup.sh` in the background: it brings the PR up to
+   `merge-ready`, CI is green (e2e included), and you read the diff and run the leak grep.
+   Every new or changed law is a property, or an example labeled vector, format, pinned or
+   scenario with its reason.
+   Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no owner read is needed.
+   The lead records both outputs in the PR. Any hit waits on the owner.
+   Apply the labels rule and both zero-hit checks together. These are proper property tests.
+   Run `sh .agents/skills/lead/scripts/loosening.sh <base> <head> <mapping.md>` on the PR's exam
+   diff. The PR writes a mapping table with `Removed` and `Replacement` columns for every renamed
+   or replaced law, using exact test titles. Save that table as `mapping.md` for the command.
+   A pure addition needs no replacement row. Missing replacements, muted tests, removed
+   assertions, fewer runs and tighter generated ranges are hits for the owner. Include the
+   mutation step's narrowing list: a mutant main kills that the branch lets live is a hit too.
+   Before this new check blocks anything, measure false alarms on the last 20 merged `next/`
+   PRs and record the count. Do not claim that measure from generated tests alone.
+   Never write "owner read" unless the owner did. Log each required owner read in a field note.
+   Then run `catchup.sh` in the background: it brings the PR up to
    date, signs only the new merge as `lead`, waits for every check on that exact head (e2e and
    commits included) and lands it pinned to that head. Pass `--merge-method merge` for a parent
    with a recorded stacked child, so the signed parent head stays in main's history. Otherwise
    pass `--merge-method squash`, the default. A child lands only after its parent reaches main.
    Catch-up merges main in and keeps the child's tests. It never signs a step's commit: an
    unsigned one goes back to its own step.
+   After a successful merge, retain the checked head under refs/keep/pr/<pr> in MAIN.
+   Remove the registered catchup-<pr> worktree, exact-branch boxes through box.sh rm, and the
+   driver's linked MAIN worktree on that exact branch. Never remove MAIN itself.
+   Use git worktree remove without force. Keep dirty, locked, ambiguous or unreadable candidates
+   and any box that fails its guard.
+   Print one line per retained item and continue. Cleanup never changes a landed merge's success.
+   Saved plans, reports, logs and state/ remain.
+   Box removal ignores untracked-only files and installs. It requires clean tracked files and
+   every local branch, detached HEAD, stash and step-note tip retained in MAIN. Remote-tracking
+   refs and object presence do not count. Fetch remote-only work into a retained MAIN ref first.
 10. **After the merge:** comment the pull request's URL on its ticket and close it, write the
     `MergeRow`, then `git pull --ff-only origin main` and `pnpm install` in the main checkout.
 

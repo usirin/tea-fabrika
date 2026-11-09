@@ -18,6 +18,16 @@ skill holds the rest.
 2. **Read every commit** since `origin/main`. The branch may be behind main: judge the change, and
    say if a merge of main would conflict.
 3. **Check:**
+   - Sweep, do not sample. For each law in the plan's table, list every way in: each public call,
+     each cut point, and each saved or binding state. Check each one.
+   - A finding names its class and every case of it.
+   - A law written as examples over a class the plan names is a defect when a found case escapes
+     those examples.
+   - On a re-review, read every line the last fixes changed and what calls them first. Then finish
+     the remaining checks.
+   - Read every decided note the PR builds, following the plan's references and the change itself.
+   - Block only on a broken decision in docs/direction or AGENTS.md, lost data, or a broken law.
+     Each blocker cites that source and shows the missed case.
    - It does what the plan and the notes' decided parts say, and nothing they leave undecided.
    - "No rough first versions": no stub, dead button or "(not yet)".
    - Names follow `AGENTS.md` for its version (`_tag`, no `xOf`, "run" means an agent run in `next/`).
@@ -40,8 +50,20 @@ skill holds the rest.
    - Nothing private in added lines: no personal or account names, no machine paths, no keys.
    - Screenshots in the program's `docs/` folder when the plan asks for them, at its layouts.
    - Anything else the brief names for this round, such as the mutation step's added laws.
-4. **Answer** with one verdict line first, `merge-ready` or `changes: <n>`. Then each finding as
-   `file:line`, what is wrong, and why it matters, most serious first.
+4. **Answer.** Start with merge-ready; tickets: <m> or changes: <n>; tickets: <m>.
+   n counts blocking classes. Each class lists every affected case. m counts distinct confirmed
+   tracker tickets linked in this answer.
+   Give every finding in that answer, grouped by class, most serious first.
+   Name each checked decided note and say where the change follows or breaks it.
+   Each blocker gives `file:line`, its source and the missed case. A demonstrated gap in a named
+   class checks the law; it does not reopen every test's merits.
+
+   Other actionable findings become tracker tickets. Use tracker_query to find an existing
+   ticket, or tracker_file with value: {title, body, from: {_tag: "pr", url, step: "review"}}.
+   Record the returned ID.
+   Link each confirmed ticket in the answer. Filing claims no ticket and starts no build.
+   If filing fails, include the exact pending payload for lead to retry. Do not count it as filed
+   or start another review round for it.
 
 ## Never
 

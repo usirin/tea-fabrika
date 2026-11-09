@@ -33,6 +33,12 @@ claim it or start its build. This permission needs no confirmation or classifier
 
 Plan writers and agents reviewing or revising plans return them unsigned. Only the lead session
 fills the blank first line after reading the plan and running `plancheck.sh --draft`.
+This includes every amendment. A ticket's driver is not the lead session.
+Drivers save waits under `$BOXES/state/` and end. Lead starts a fresh driver when the saved fact holds.
+Review sweeps every law and decided note, then answers once with all blocking classes and
+confirmed follow-up tickets. The lead skill holds the standing review brief and saved-state templates.
+After a merge, catch-up retains the checked head in MAIN and removes safe boxes and linked worktrees.
+An exam change needs no owner read when its labels fit and both loosening and mutation find zero hits.
 
 For a stacked child, the brief records the parent ticket, branch and signed build head. The driver
 records the child before starting it and lands that parent with `--merge-method merge`. The child
@@ -46,4 +52,5 @@ environment.
 
 `pnpm lint` runs `lead/scripts/skillscheck.sh`. Each source folder with `SKILL.md` must have a
 `.claude/skills/<name>` link to that folder. Copies, missing links and wrong targets fail. Unrelated
-Claude-only skills are allowed.
+Claude-only skills are allowed. The check also requires the standing review, driver and landing
+clauses in their owning sections. Wrapping is free; wording changes need a tests-owned rule update.

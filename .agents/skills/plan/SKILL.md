@@ -83,6 +83,12 @@ Plain short sentences, American English, no em dashes.
 
 ## Scripts
 
+A ticket's driver is not the lead session. Every plan and amendment returns unsigned.
+Before handing it to lead, the driver runs plancheck.sh --draft, saves the approval wait and ends.
+Only the lead session reads and signs each plan and amendment itself.
+The draft check checks the handoff format. It cannot prove session identity because the driver
+and lead share shell access. Do not add a marker, key or readable file as proof.
+
 `scripts/plancheck.sh --draft <plan.md>` requires a blank first line, `Plancheck-Version: 2` on
 line two, and no unfenced line beginning `Approved by the lead agent,`. The lead session runs it
 before approval. It checks the format, not who wrote it.

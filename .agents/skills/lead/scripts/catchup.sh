@@ -116,3 +116,111 @@ case $said in
 esac
 gh pr merge "$pr" -R "$GH_REPO" "--$method" --match-head-commit "$tip" >/dev/null
 echo "pr $pr: merged at $(git rev-parse --short "$tip"), signed for ticket $ticket"
+# A landed merge stays successful even if cleanup must keep a working copy.
+if cd "$MAIN"; then
+python3 - "$pr" "$head" "$tip" "$W" "$LEAD/box.sh" <<'PY' || echo "kept cleanup: inspection failed"
+from pathlib import Path
+import os
+import re
+import subprocess
+import sys
+
+pr, branch, tip, checkout, box_script = sys.argv[1:]
+main = Path(os.environ["MAIN"]).resolve()
+boxes = Path(os.environ["BOXES"]).resolve()
+
+def kept(item, why):
+    # Paths from Git may contain newlines. Keep each result on one line.
+    label = str(item).replace("\n", "\\n").replace("\r", "\\r")
+    print(f"kept {label}: {why}", flush=True)
+
+def git(*args):
+    try:
+        return subprocess.run(["git", "-C", str(main), *args], capture_output=True)
+    except OSError:
+        return subprocess.CompletedProcess(args, 1)
+
+try:
+    retained = git("update-ref", f"refs/keep/pr/{pr}", tip).returncode == 0
+    if not retained:
+        kept(f"head {tip}", "MAIN retention failed")
+
+    listing = git("worktree", "list", "--porcelain", "-z")
+    worktrees = []
+    if listing.returncode:
+        kept("worktrees", "cannot read registered worktrees")
+    else:
+        try:
+            for record in listing.stdout.split(b"\0\0"):
+                if not record:
+                    continue
+                fields = record.rstrip(b"\0").decode().split("\0")
+                if not fields[0].startswith("worktree "):
+                    raise ValueError("unreadable registration")
+                paths = [field[9:] for field in fields if field.startswith("worktree ")]
+                branches = [field[7:] for field in fields if field.startswith("branch ")]
+                if len(paths) != 1 or len(branches) > 1:
+                    raise ValueError("ambiguous registration")
+                worktrees.append((Path(paths[0]), branches, fields))
+        except (UnicodeError, ValueError):
+            worktrees = []
+            kept("worktrees", "ambiguous or unreadable registration")
+
+    def remove_worktree(path, fields):
+        label = f"worktree {path.name}"
+        if path.is_symlink() or path.resolve() == main:
+            kept(label, "MAIN or symlinked target")
+        elif not retained:
+            kept(label, "checked head not retained")
+        elif any(field.split(" ", 1)[0] in ("locked", "prunable") for field in fields):
+            kept(label, "locked or unreadable worktree")
+        elif git("worktree", "remove", str(path)).returncode:
+            kept(label, "worktree removal refused or failed")
+
+    # Git records canonical paths. BOXES may have arrived through a system directory link.
+    own = [(path, fields) for path, _, fields in worktrees if path.resolve() == Path(checkout).resolve()]
+    if Path(checkout).is_symlink():
+        kept(f"worktree {Path(checkout).name}", "symlinked target")
+    elif len(own) == 1:
+        remove_worktree(*own[0])
+    else:
+        kept(f"worktree {Path(checkout).name}", "missing or ambiguous registration")
+
+    # Read only plain HEAD files from outside the boxes. Never ask their Git config.
+    for data in sorted(boxes.glob("*-gitdata")):
+        name = data.name[:-8]
+        try:
+            head = data / "HEAD"
+            if data.is_symlink() or head.is_symlink() or not head.is_file():
+                raise ValueError("unreadable HEAD")
+            value = head.read_text()
+            target = f"ref: refs/heads/{branch}"
+            if value not in (target, target + "\n"):
+                if not re.fullmatch(r"(?:ref: refs/heads/[^\x00-\x20\x7f]+|[0-9a-f]{40})\n?", value):
+                    kept(f"box {name}", "unreadable HEAD")
+                continue
+            if not retained:
+                kept(f"box {name}", "checked head not retained")
+                continue
+            result = subprocess.run(["sh", box_script, "rm", name], capture_output=True, text=True)
+            if result.stdout.strip():
+                print(result.stdout.rstrip(), flush=True)
+            else:
+                kept(f"box {name}", "box removal failed")
+        except (OSError, ValueError, UnicodeError):
+            kept(f"box {name}", "unreadable metadata or removal failed")
+
+    drivers = [(path, fields) for path, branches, fields in worktrees
+               if branches == [f"refs/heads/{branch}"] and path.resolve() != Path(checkout).resolve() and path.resolve() != main]
+    for path, fields in drivers:
+        if len(drivers) != 1:
+            kept(f"worktree {path.name}", "ambiguous driver branch")
+        else:
+            remove_worktree(path, fields)
+except OSError:
+    kept("cleanup", "operating error")
+PY
+else
+	echo "kept cleanup: cannot leave catch-up checkout"
+fi
+exit 0
