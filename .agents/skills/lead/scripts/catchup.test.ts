@@ -18,6 +18,8 @@ type Setup = {
 	branch: string;
 	merge: boolean;
 	refused: "none" | "notes" | "branch";
+	// Seconds since the start, read by `date` after that many check reads (the last one repeats).
+	clock?: number[];
 };
 const green: Setup = {
 	failures: [0, 0, 0, 0, 0],
@@ -92,7 +94,11 @@ if (cmd === "node") {
 }
 if (cmd === "pnpm" || cmd === "nice") process.exit(0);
 if (cmd === "sleep") process.exit(0);
-if (cmd === "date") { console.log("1794096000"); process.exit(0); }
+if (cmd === "date") {
+  const clock = setup.clock || [0];
+  console.log(String(1794096000 + clock[Math.min(state.checks || 0, clock.length - 1)]));
+  process.exit(0);
+}
 die("unhandled tool: " + cmd);
 `;
 const run = (setup: Setup) => {
@@ -218,6 +224,38 @@ describe("catchup, today's tooling", () => {
 				},
 			),
 			options,
+		);
+	});
+
+	// Plant: test the deadline only after the green-and-complete break, as review round 4 found.
+	// The clock moves with each check read, so the law holds wherever the script reads `date`.
+	it("no merge once the clock is past the hour, and a green answer in time still merges", () => {
+		fc.assert(
+			fc.property(
+				fc.record({
+					pending: fc.integer({min: 0, max: 3}),
+					// One step per check read. 3,600 itself is left out: the law is about either side.
+					steps: fc.array(fc.integer({min: 0, max: 2500}), {minLength: 4, maxLength: 4}),
+				}),
+				({pending, steps}) => {
+					const clock = [0];
+					for (const step of steps) clock.push(clock.at(-1)! + step);
+					const seconds = clock.map((t) => (t === 3600 ? 3601 : t));
+					// The green answer is the check read after the pending ones.
+					const late = seconds[pending + 1]! >= 3600;
+					const got = run({...green, pending, clock: seconds});
+					expect(got.code, got.text).toBe(late ? 1 : 0);
+					expect(merges(got.calls)).toHaveLength(late ? 0 : 1);
+					if (late) expect(got.text).toMatch(/not done .* after an hour/);
+					else expect(got.text).not.toContain("after an hour");
+					assertHead(got.calls);
+				},
+			),
+			{
+				...options,
+				// pinned: ticket 520 review round 4, a green answer at 3,601 seconds still merged.
+				examples: [[{pending: 0, steps: [3601, 0, 0, 0]}]],
+			},
 		);
 	});
 

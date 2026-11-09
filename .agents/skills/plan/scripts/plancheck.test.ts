@@ -212,6 +212,63 @@ describe("plancheck, today's tooling", () => {
 		);
 	});
 
+	// Plant: split a path cell on commas only, as the build did after bfd35fb0.
+	it("every exam path in a multi-path cell keeps its owner check", () => {
+		const exam = [
+			"package.json",
+			"vitest.config.ts",
+			"exam-paths.json",
+			".github/workflows/check.yaml",
+			"oxlint-plugins/laws.ts",
+		];
+		const plainPaths = ["src/plain.ts", "README.md", "packages/pipeline/package.json"];
+		fc.assert(
+			fc.property(
+				fc.record({
+					picked: fc.uniqueArray(fc.constantFrom(...exam, ...plainPaths), {
+						minLength: 1,
+						maxLength: 4,
+					}),
+					separators: fc.array(fc.constantFrom(", ", ",", "; ", ";", " and ", " ", ", and "), {
+						minLength: 3,
+						maxLength: 3,
+					}),
+					ticks: fc.boolean(),
+					owner: fc.constantFrom("tests", "build", "lead", "mutation"),
+				}),
+				({picked, separators, ticks, owner}) => {
+					const cell = picked
+						.map((p) => (ticks ? `\`${p}\`` : p))
+						.reduce((joined, p, i) => `${joined}${separators[i - 1]}${p}`);
+					const got = check(table(["File", "Why", "Owner step"], [[cell, "the fix", owner]]));
+					const owned = picked.filter((p) => exam.includes(p));
+					const bad = owner !== "tests" && owned.length > 0;
+					expect(got.code, `${cell}\n${got.text}`).toBe(bad ? 1 : 0);
+					for (const p of picked) {
+						const line = `${p} is an exam path owned by ${owner}, not tests`;
+						if (bad && owned.includes(p)) expect(got.text, cell).toContain(line);
+						else expect(got.text, cell).not.toContain(line);
+					}
+				},
+			),
+			{
+				...options,
+				// pinned: ticket 520 review round 4, semicolon-separated paths in a path cell. The old
+				// script (bfd35fb0) refused this build-owned cell; the comma-only split passed it.
+				examples: [
+					[
+						{
+							picked: ["package.json", "vitest.config.ts"],
+							separators: ["; ", "; ", "; "],
+							ticks: true,
+							owner: "build",
+						},
+					],
+				],
+			},
+		);
+	});
+
 	// Plant: return early for legacy plans, skipping the owner check too.
 	it("file-owner checks survive every plan version", () => {
 		fc.assert(
