@@ -7,6 +7,7 @@ import {afterEach, expect, it} from "@effect/vitest";
 import type {BrainEvent} from "@kampus/libfabrika/brain-event";
 import {ProcessIdGenerator} from "@kampus/libfabrika/coordination";
 import {Context, Effect} from "effect";
+import {SecureRandom} from "effect/crypto";
 import * as fc from "fast-check";
 import {vi} from "vitest";
 
@@ -73,6 +74,7 @@ it("a later dev command links its first start to the last runtime in that home",
 					await Effect.runPromise(
 						Effect.scoped(startStage({build, brain: "unused.mjs", programs: {}}, config)).pipe(
 							Effect.provide(ProcessIdGenerator.layer),
+							Effect.provide(SecureRandom.layerWebCrypto),
 							Effect.provide(NodeServices.layer),
 						),
 					);

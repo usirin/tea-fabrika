@@ -8,6 +8,7 @@ import {inspect} from "node:util";
 import {RuntimeLifecycle, type RuntimeEvent} from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import {NodeServices} from "@effect/platform-node";
 import {Context, Effect, Exit, Layer, Logger, ManagedRuntime, Redacted, Schema} from "effect";
+import {SecureRandom} from "effect/crypto";
 import * as fc from "fast-check";
 import {expect, expectTypeOf, it, vi} from "vitest";
 import {BrainEvent} from "../app/brain-event.ts";
@@ -22,25 +23,13 @@ import {control} from "../workers/control.ts";
 import {GatewayService, gatewayRuntime} from "../workers/gateway.ts";
 import type {Env} from "../workers/runtime.ts";
 import {brainOutbox} from "./local-stage.ts";
+import {rssLayer} from "./stage.fixture.ts";
 import {startStage} from "./stage.ts";
 
 class CallError extends Schema.TaggedError<CallError>()("CallError", {
 	cause: Schema.Unknown,
 }) {}
 
-const platform = vi.hoisted(() => ({bytes: "made-up-control-secret"}));
-vi.mock("node:crypto", async (original) => ({
-	...(await original<typeof import("node:crypto")>()),
-	randomBytes: () => Buffer.from(platform.bytes),
-}));
-vi.mock("node:child_process", async (original) => ({
-	...(await original<typeof import("node:child_process")>()),
-	execFile: (...args: Array<unknown>) => {
-		const callback = args.at(-1) as (error: null, stdout: string) => void;
-		callback(null, "0");
-		return {kill: () => true};
-	},
-}));
 const config = {
 	name: "secret-test",
 	person: "person-test",
@@ -96,8 +85,15 @@ type Flow = ReturnType<typeof generated.generate>["value"];
 const flow = async (sample: Flow) => {
 	const home = mkdtempSync(join(tmpdir(), "p12-sec-"));
 	vi.stubEnv("FABRIKA_HOME", home);
-	platform.bytes = `fake bearer/${sample.word}"\\\n`;
-	const bearer = Buffer.from(platform.bytes).toString("base64url");
+	const material = `${sample.word}/"\\\n`.padEnd(32, "!");
+	const random = Layer.succeed(
+		SecureRandom.SecureRandom,
+		SecureRandom.make((size) => {
+			expect(size).toBe(32);
+			return Buffer.from(material);
+		}),
+	);
+	const bearer = Buffer.from(material).toString("base64url");
 	const key = `fake private key/${sample.pass}"\\\n`;
 	const body = `fake body/${sample.word}/${sample.pass}"\\\n`;
 	const rawFrame = JSON.stringify({
@@ -106,7 +102,7 @@ const flow = async (sample: Flow) => {
 		method: "process.send",
 		params: {body, key, pass: sample.pass, authorization: bearer},
 	});
-	const words = [platform.bytes, bearer, key, body, sample.pass, rawFrame];
+	const words = [material, bearer, key, body, sample.pass, rawFrame];
 	const outputs: Outputs = {spans: [], logs: [], journal: [], health: [], outbox: []};
 	const journalDb = new DatabaseSync(":memory:");
 	const journal = ManagedRuntime.make(
@@ -336,6 +332,8 @@ const flow = async (sample: Flow) => {
 				}),
 			).pipe(
 				Effect.provide(ProcessIdGenerator.layer),
+				Effect.provide(random),
+				Effect.provide(rssLayer(() => 0)),
 				Effect.provide(NodeServices.layer),
 				Effect.provide(logger),
 			),

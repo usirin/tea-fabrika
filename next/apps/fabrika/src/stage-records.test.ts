@@ -16,6 +16,7 @@ import {Archive, RecordManager, SpanRow, SpanSink} from "@kampus/libfabrika/data
 import {nodeSql} from "@kampus/libfabrika/sqlite";
 import {CommitReply, SigningReply} from "@kampus/libfabrika/workers/bindings";
 import {Effect, Layer, Schema, Stream} from "effect";
+import {SecureRandom} from "effect/crypto";
 import {rolldown} from "rolldown";
 import {describe, expect, it} from "vitest";
 
@@ -203,7 +204,12 @@ const world = async (
 						},
 					}),
 				);
-			}).pipe(Effect.scoped, Effect.provide(localState()), Effect.provide(NodeServices.layer)),
+			}).pipe(
+				Effect.scoped,
+				Effect.provide(localState()),
+				Effect.provide(SecureRandom.layerWebCrypto),
+				Effect.provide(NodeServices.layer),
+			),
 		);
 	} finally {
 		await new Promise<void>((done) => outbound.close(() => done()));

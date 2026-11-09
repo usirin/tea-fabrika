@@ -7,6 +7,16 @@ import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
 import {vi} from "vitest";
 import {
+	Alarm,
+	CheckedWriter,
+	type Incoming,
+	ProgramLoader,
+	Recording,
+	WatcherManager,
+} from "../app/entry.ts";
+import {workerExecution} from "../app/execution.ts";
+import {type Descriptor, ProgramRunner} from "../app/runner.ts";
+import {
 	Archive,
 	Mailbox,
 	ProcessManager,
@@ -31,16 +41,6 @@ import {RecoveryStore} from "../coordination/recovery-store.ts";
 import {type Sql} from "../data/referee.ts";
 import {SpanSink} from "../data/sink.ts";
 import {programBox} from "../workers/box.ts";
-import {
-	Alarm,
-	CheckedWriter,
-	type Incoming,
-	ProgramLoader,
-	Recording,
-	WatcherManager,
-} from "./entry.ts";
-import {workerExecution} from "./execution.ts";
-import {type Descriptor, ProgramRunner} from "./runner.ts";
 
 const policy = {
 	maxDeliveries: 3,

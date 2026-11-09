@@ -5,24 +5,16 @@ import {join} from "node:path";
 import {RuntimeLifecycle, type RuntimeEvent} from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import {NodeServices} from "@effect/platform-node";
 import {Cause, Context, Effect, Exit, Schema} from "effect";
+import {SecureRandom} from "effect/crypto";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
 import {expect, it, vi} from "vitest";
 import type {BrainEvent} from "../app/brain-event.ts";
 import {ProcessIdGenerator} from "../coordination/process-id.ts";
 import {brainOutbox} from "./local-stage.ts";
+import {rssLayer} from "./stage.fixture.ts";
 import {startStage} from "./stage.ts";
 
-const platform = vi.hoisted(() => ({rss: 0, samples: 0}));
-vi.mock("node:child_process", async (original) => ({
-	...(await original<typeof import("node:child_process")>()),
-	execFile: (...args: Array<unknown>) => {
-		const callback = args.at(-1) as (error: null, stdout: string) => void;
-		platform.samples++;
-		callback(null, String(platform.rss));
-		return {kill: () => true};
-	},
-}));
 const step = fc.record({
 	// A crash has no RSS; a memory kill carries the measured bytes, including the cap.
 	rss: fc.option(fc.integer({min: 488_282, max: 900_000}), {nil: null}),
@@ -51,7 +43,12 @@ it("the control plugin returns a typed error for malformed platform port data", 
 									return plugin.start({"fabrika-control": raw});
 								}),
 							),
-						).pipe(Effect.provide(ProcessIdGenerator.layer), Effect.provide(NodeServices.layer)),
+						).pipe(
+							Effect.provide(ProcessIdGenerator.layer),
+							Effect.provide(SecureRandom.layerWebCrypto),
+							Effect.provide(rssLayer(() => 0)),
+							Effect.provide(NodeServices.layer),
+						),
 					);
 					expect(Exit.isFailure(exit)).toBe(true);
 					const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
@@ -86,6 +83,7 @@ it("every observed exit is durable once across restart or brake, with its reason
 }) => {
 	await fc.assert(
 		fc.asyncProperty(sequence, async ({restarts, final, reason}) => {
+			const platform = {rss: 0, samples: 0};
 			const home = mkdtempSync(join(tmpdir(), "p12-exit-"));
 			vi.stubEnv("FABRIKA_HOME", home);
 			const kill = vi.spyOn(process, "kill").mockReturnValue(true);
@@ -210,6 +208,13 @@ it("every observed exit is durable once across restart or brake, with its reason
 						}),
 					).pipe(
 						Effect.provide(ProcessIdGenerator.layer),
+						Effect.provide(SecureRandom.layerWebCrypto),
+						Effect.provide(
+							rssLayer(() => {
+								platform.samples++;
+								return platform.rss;
+							}),
+						),
 						Effect.provide(NodeServices.layer),
 						Effect.provide(TestClock.layer()),
 					),
