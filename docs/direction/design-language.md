@@ -94,7 +94,7 @@ const Level = Schema.TaggedUnion({
 | [Top bar's name](./top-bar-name.md) | component | merge with the top bar's page | One rule of one part. |
 | [Popovers](./popovers.md) | components and pattern | split | Five parts, and one "which one opens" pattern. |
 | [Fold, not tabs](./fold-not-tabs.md) | pattern | keep | The model pattern. |
-| [Tabbed is an orientation](./tabbed-is-an-orientation.md) | none | retire | Replaced the same day by fold, not tabs. |
+| Tabbed is an orientation | none | retire | Replaced the same day by fold, not tabs. |
 | [Modes](./modes.md) | pattern | keep | Spans the status bar, the title, Esc and every program. |
 | [The ask desk](./ask-desk.md) | pattern and product | split | A2, A3, A6 are the asking pattern; the rest is the inbox program. |
 | [Ask for decisions, not facts](./ask-for-decisions-not-facts.md) | pattern | merge with the asking pattern | Its one rule is the pattern's first line. |

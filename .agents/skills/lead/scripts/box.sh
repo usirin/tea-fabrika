@@ -398,12 +398,25 @@ def new_box():
         branches = must(git("for-each-ref", "--format=%(refname:short)", "--points-at=" + head, "refs/heads/fabrikalfa/"), "parent lookup failed").splitlines()
         if not branches: refuse("base_not_signed: no parent branch at head")
         parent = branches[0] + "@" + head
+    # Two live lanes must not write one ticket. A branch that shares the ticket blocks only while it
+    # is live: an open PR, or a box on disk whose state names it. A branch the base already holds,
+    # or one with no open PR and no box, is history (an old or merged lane) and does not block.
+    open_heads = [None]
+    def live(other):
+        lane = other.removeprefix("origin/").removesuffix("-wip")
+        if open_heads[0] is None:
+            got = call(["gh", "pr", "list", "--state", "open", "--limit", "500", "--json", "headRefName", "-q", ".[].headRefName"])
+            if got.returncode: refuse("shared_ticket " + ticket + " on " + other + ": open PRs cannot be read")
+            open_heads[0] = set(got.stdout.decode().split())
+        if lane in open_heads[0]: return True
+        return any(facts(p).get("branch") == lane and (boxes / p.stem).is_dir() for p in state_dir.glob("*.box") if p.stem != name)
     for other in must(git("for-each-ref", "--format=%(refname:short)", "refs/heads/", "refs/remotes/origin/"), "branch lookup failed").splitlines():
         # The branch itself and its own backup copy (<branch>-wip) are not other branches.
         if other in (branch, "origin/" + branch, branch + "-wip", "origin/" + branch + "-wip", "main", "origin/main", "origin/HEAD"): continue
-        for sha in commits("origin/main", other):
-            note = read_note(sha)
-            if isinstance(note, dict) and note.get("ticket") == ticket: refuse("shared_ticket " + ticket + " on " + other)
+        # Only links this lane's base lacks: an older branch of the same lane, already merged into
+        # the base, is history, not another lane holding the ticket.
+        if any(isinstance(n, dict) and n.get("ticket") == ticket for n in map(read_note, commits(head, other))) and live(other):
+            refuse("shared_ticket " + ticket + " on " + other)
     must(git("clone", "-q", "--no-checkout", "--reference", str(main), "--separate-git-dir=" + str(gitdata), os.environ["REMOTE"], str(work)), "box clone failed")
     edge = ["--git-dir=" + str(gitdata), "--work-tree=" + str(work)]
     must(git(*edge, "fetch", "-q", str(main), head + ":refs/heads/" + branch), "box base fetch failed")
@@ -492,6 +505,7 @@ def fetch_box():
         if fetched.returncode: refuse("rewrite: non-fast-forward fetch rejected")
         head = rev(branch)
         if not ancestor(state["base"], head): refuse("base is not an ancestor")
+        chain = commits(state["base"], head)
         incoming = "refs/notes/box-" + name + "-" + uuid.uuid4().hex
         has_notes = git("ls-remote", "--exit-code", str(work), "refs/notes/fabrika")
         if has_notes.returncode == 0:
@@ -499,10 +513,13 @@ def fetch_box():
             try:
                 # Check every note before copying any, so a conflict leaves MAIN's notes as they were.
                 # Notes are copied one by one, never merged as a ref: a note the box deleted stays in
-                # MAIN, and a commit MAIN already links is never linked again.
-                copies = []
+                # MAIN, and a commit MAIN already links is never linked again. Only the run's own
+                # commits are read: the rest of the box's notes are MAIN's copy from box start, and
+                # MAIN may have re-signed one since (themes and layers tests, 2026-11-09).
+                copies, own = [], set(chain)
                 for line in must(git("notes", "--ref=" + incoming, "list"), "notes list failed").splitlines():
                     blob, sha = line.split()
+                    if sha not in own: continue
                     current = git("notes", "--ref=fabrika", "show", sha)
                     if current.returncode != 0: copies.append((blob, sha))
                     elif current.stdout != git("cat-file", "blob", blob).stdout: refuse("note conflict " + sha)
@@ -510,7 +527,6 @@ def fetch_box():
                     must(git("notes", "--ref=fabrika", "add", "-C", blob, sha), "note copy failed " + sha)
             finally: git("update-ref", "-d", incoming)
         elif has_notes.returncode != 2: refuse("notes read failed")
-        chain = commits(state["base"], head)
         if step:
             if step not in ("tests", "build", "mutation", "review") or ticket != state.get("ticket") or step != state.get("run-step") or ticket != state.get("run-ticket"):
                 refuse("run step or ticket mismatch")

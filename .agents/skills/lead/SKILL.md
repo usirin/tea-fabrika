@@ -165,7 +165,11 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
 - Mutation runs on `--agent claude` only, since it binds ports and starts Electron. One mutation
   step at a time holds `BOXES/state/electron.lock`; the next waits.
 - It starts a box at `--from`, else the lane's last head (`BOXES/state/<lane>.json`, moved only
-  by a step it accepted), else `origin/main`. A plan reads the main checkout and takes no `--from`.
+  by a step it accepted) or the branch's tip on origin when that is ahead of it, else
+  `origin/main`. A plan reads the main checkout and takes no `--from`.
+- `box.sh new` refuses `shared_ticket` only when another live branch carries a link for the same
+  ticket: one with an open PR, or one a box on disk names. A branch the base already holds, or one
+  with neither, is history and does not block.
 - It runs the agent with the brief and an `answer:` line it asks for, waits with no agent, fetches,
   and checks: `pnpm commits check` and this step's name on every new commit, no exam path in any
   build commit, the leak grep on each commit's added lines, a review committing nothing, and
@@ -177,7 +181,8 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   A stop after the time limit takes the agent's whole process group with it.
 - Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (the question
   is in `reason`), 30 stuck, 2 usage, 3 refused (8 agents running: Codex boxes plus Claude steps
-  drive started, or under 20 GB free after `box.sh gc`). It never retries. A stuck step keeps its
+  drive started, under 20 GB free after `box.sh gc`, or the lane's branch checked out in a
+  worktree, which the end-of-step fetch could not update). It never retries. A stuck step keeps its
   box. The commits check reads the whole lane, from where it left main, so each earlier step's
   newest link is in its chain. A tests, build or mutation step waits while `pgrep -x tsgo` finds
   one. `DRIVE_MINUTES` (default 60) stops a step that runs too long.

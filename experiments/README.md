@@ -13,13 +13,11 @@ trusting any line that says an agent could not see a file.
 
 - `NN-title.md` is the write-up of experiment NN. The numbers run in the order
   the experiments were done, 01 first.
-- `NN-name.ts` (or `.mjs`) is a script, numbered by the first experiment that
-  used it. So `10-bad-tests.ts` sorts next to `10-bad-tests.md`. A number with
-  no script has none of its own: it ran from `src/`, reran an earlier script,
-  or read earlier results.
-- `lib/` holds the helpers the scripts share. They have no number.
-- `results/` holds the answers the scripts saved, and `failures/` the failing
-  runs experiment 34 reads. Raw samples are kept privately, not here: a script
+- Scripts are not kept on main. On 2026-11-09 every experiment script, its `lib/` helpers and
+  the five harness packages were removed. They are all on the branch
+  `fabrikalfa/archive-2026-11-09`, and a write-up that names a script means that copy. Data
+  that a write-up reads (`results/`, specs, patches, inputs) stays.
+- `results/` holds the answers the scripts saved. Raw samples are kept privately, not here: a script
   writes them under `runs/`, which git ignores, or to a path a flag names, and
   `results/` keeps only a small summary of the numbers its write-up quotes.
 - [open-questions.md](./open-questions.md) is the list of open questions the
