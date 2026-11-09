@@ -62,6 +62,7 @@
 	"devDependencies": {
 		"@demlik/structure-sweep": "catalog:",
 		"@effect/tsgo": "catalog:",
+		"@effect/vitest": "catalog:",
 		"@types/node": "catalog:",
 		"esbuild": "catalog:",
 		"fast-check": "catalog:",
