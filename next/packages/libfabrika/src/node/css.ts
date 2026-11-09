@@ -4,6 +4,7 @@
 // A window's stylesheet is served from the brain's table, which holds scripts and stylesheets only,
 // so any other local file a stylesheet names stops the build instead of answering 404 later.
 // It runs inside a Rolldown hook, outside Effect: it reads files directly, and a throw fails the bundle.
+import {Buffer} from "node:buffer";
 import {readFileSync, realpathSync} from "node:fs";
 import {dirname, resolve} from "node:path";
 import {type ImportDependency, transform} from "lightningcss";
@@ -25,23 +26,52 @@ const parseError = (error: unknown) => {
 	return new Error(`stylesheet has a broken @import: ${message}`);
 };
 
+// lightningcss reports a rule's start as a 0-based line and a 1-based UTF-16 column, and counts
+// LF, CRLF, CR and form feed as one line break each, as CSS input preprocessing does.
+const offsets = (text: string) => {
+	const starts = [0];
+	for (const m of text.matchAll(/\r\n|[\n\r\f]/g)) starts.push(m.index + m[0].length);
+	return ({line, column}: {readonly line: number; readonly column: number}) =>
+		(starts[line] ?? text.length) + column - 1;
+};
+
+// 1.33.0 gives `layer: null` both for no layer and for a bare `layer`, so the import's own raw text
+// is printed alone, where the printer writes the url as one string and keeps the bare keyword.
+const bareLayer = (rule: string) =>
+	/^@import "(?:[^"\\]|\\.)*" layer[ ;]/.test(
+		transform({filename: "import.css", code: Buffer.from(rule)}).code.toString(),
+	);
+
 const parse = (file: string) => {
+	const text = readFileSync(file, "utf8"),
+		at = offsets(text),
+		starts: number[] = [],
+		imports: number[] = [];
 	try {
-		return transform({
+		const result = transform({
 			filename: file,
-			code: readFileSync(file),
+			code: Buffer.from(text),
 			analyzeDependencies: true,
 			errorRecovery: false,
 			visitor: {
-				Rule: {
-					import(rule) {
-						// `layer` and `supports()` would need their own wrapper; a media query is not one.
-						if ((rule.value.layer ?? rule.value.supports ?? null) !== null)
-							throw new Error(unsupported);
-					},
+				Rule(rule) {
+					// Neither has a place in the source to start from.
+					if (rule.type === "ignored" || rule.type === "custom") return;
+					const start = at(rule.value.loc);
+					starts.push(start);
+					if (rule.type !== "import") return;
+					// `layer` and `supports()` would need their own wrapper; a media query is not one.
+					if ((rule.value.layer ?? rule.value.supports ?? null) !== null)
+						throw new Error(unsupported);
+					imports.push(start);
 				},
 			},
 		});
+		for (const start of imports) {
+			const end = Math.min(text.length, ...starts.filter((next) => next > start));
+			if (bareLayer(text.slice(start, end))) throw new Error(unsupported);
+		}
+		return result;
 	} catch (error) {
 		throw parseError(error);
 	}
