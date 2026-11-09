@@ -10,7 +10,7 @@ import * as fc from "fast-check";
 import {assert, describe, expect, it, vi} from "vitest";
 import {deskMachine, savedOf} from "../desk/desk.ts";
 import {defaults} from "../desk/keymap.ts";
-import {type Does, wordOf} from "../desk/keys.ts";
+import {type Does, SHOWS, wordOf} from "../desk/keys.ts";
 import {memoryHistory, sharedHistory} from "../editor/history.ts";
 import type {Down, Up} from "../link.ts";
 import {readToPage} from "../messages.ts";
@@ -67,7 +67,14 @@ const navigation: readonly Does[] = [
 	{kind: "turn"},
 ];
 
-const tshNavigation = (does: Does) =>
+// Starts the real host on a two-tile desk with one page, runs `drive`, and returns the desk
+// messages the page was sent. `said` is the tsh edge; `receive` is the page's side of the wire.
+const hostSays = (
+	does: Does,
+	drive: (said: NonNullable<typeof edge.said>, receive: (message: Up) => void) => void,
+	/** False: the client has not announced a page, as an app that only relays does. */
+	loaded = true,
+) =>
 	Effect.gen(function* () {
 		const vertical = does.kind === "focus" && (does.to === "up" || does.to === "down");
 		const initial = foldEvents(deskMachine, undefined, null, [
@@ -119,10 +126,9 @@ const tshNavigation = (does: Does) =>
 		const receive: ((message: Up) => void) | null = edge.receive;
 		const said = edge.said;
 		assert(receive !== null && said !== null);
-		receive({type: "page"});
+		if (loaded) receive({type: "page"});
 		edge.down = [];
-		const source = does.kind === "focus" && (does.to === "left" || does.to === "up") ? "t2" : "t1";
-		expect(said(source, does), wordOf(does)).toBeNull();
+		drive(said, receive);
 		return edge.down.flatMap((message) => {
 			if (message.type !== "to" || message.port !== "desk") return [];
 			const read = readToPage(message.m);
@@ -130,6 +136,12 @@ const tshNavigation = (does: Does) =>
 			return [read.msg];
 		});
 	}).pipe(Effect.scoped, Effect.provide(Logger.layer([])));
+
+const tshNavigation = (does: Does) =>
+	hostSays(does, (said) => {
+		const source = does.kind === "focus" && (does.to === "left" || does.to === "up") ? "t2" : "t1";
+		expect(said(source, does), wordOf(does)).toBeNull();
+	});
 
 describe("today's host: tsh navigation under an overlay", () => {
 	it("every successful navigation sends cleanup before workspace focus, as keys and the palette do", async () => {
@@ -165,6 +177,81 @@ describe("today's host: tsh navigation under an overlay", () => {
 				},
 			),
 			{seed: 119120, numRuns: 10},
+		);
+	});
+	it("a client that loaded no page is told nothing of a show or navigation", async () => {
+		const sent = await Effect.runPromise(
+			hostSays(
+				{kind: "show", what: "info"},
+				(said) => {
+					expect(said("t1", {kind: "show", what: "info"})).toBeNull();
+					expect(said("t1", {kind: "split", orientation: "horizontal"})).toBeNull();
+				},
+				false,
+			),
+		);
+		expect(sent).toEqual([]);
+	});
+	it("a tsh show word toggles in the page and a focus cycle cleans up there: neither is told a navigation", async () => {
+		// The page closes the overlay itself on these, so a host navigation first would reopen a
+		// toggled overlay or close the one a show word just asked for (layers plan, frame toggles).
+		const words: readonly Does[] = [
+			...SHOWS.map((what) => ({kind: "show", what}) as const),
+			{kind: "cycle", to: "next"},
+			{kind: "cycle", to: "previous"},
+		];
+		await fc.assert(
+			fc.asyncProperty(
+				fc.shuffledSubarray([...words], {minLength: words.length}),
+				async (order) => {
+					for (const does of order) {
+						const messages = await Effect.runPromise(tshNavigation(does));
+						expect(
+							messages.map((msg) => msg.type),
+							wordOf(does),
+						).not.toContain("navigation");
+						// A word typed in a tile has no page of its own: the show says it came by word.
+						const shown = messages.filter((msg) => msg.type === "show");
+						expect(shown.length, wordOf(does)).toBeGreaterThan(0);
+						for (const msg of shown) expect(msg.via, wordOf(does)).toEqual({_tag: "word"});
+					}
+				},
+			),
+			{seed: 119120, numRuns: 5},
+		);
+	});
+});
+
+// A show the page asked for says how: the keys it pressed, or the palette it ran. Neither is a tsh
+// word, which the page cannot have typed.
+describe("today's host: a show is said to the page that asked", () => {
+	it("carries the keys pressed, or the palette when the run names none", async () => {
+		const spelled = (keys: string) => ({_tag: "key", keys});
+		const said = (send: (receive: (message: Up) => void) => void) =>
+			Effect.runPromise(
+				hostSays({kind: "show", what: "info"}, (_said, receive) => send(receive)).pipe(
+					Effect.map((messages) => messages.flatMap((msg) => (msg.type === "show" ? [msg] : []))),
+				),
+			);
+		const desk = (m: object): Up => ({type: "on", port: "desk", m});
+		await fc.assert(
+			fc.asyncProperty(fc.constantFrom("info", "bars"), async (what) => {
+				const word = `tezgah.${what}`;
+				const pressed = await said((receive) => {
+					receive(desk({type: "press", id: 1, key: defaults.prefix}));
+					receive(desk({type: "press", id: 2, key: what === "info" ? "i" : "B"}));
+				});
+				expect(pressed.map((msg) => msg.what)).toEqual([what]);
+				expect(pressed[0]?.via?._tag).toBe("key");
+				expect(pressed[0]?.via).toEqual(spelled(`ctrl+b ${what === "info" ? "i" : "B"}`));
+				const ran = await said((receive) =>
+					receive(desk({type: "run", does: word, via: {keys: "x"}})),
+				);
+				expect(ran.map((msg) => msg.via)).toEqual([spelled("x")]);
+				const palette = await said((receive) => receive(desk({type: "run", does: word})));
+				expect(palette.map((msg) => msg.via)).toEqual([{_tag: "palette"}]);
+			}),
+			{seed: 119120, numRuns: 4},
 		);
 	});
 });
