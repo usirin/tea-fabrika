@@ -41,6 +41,7 @@ import {nodeSql} from "../data/sqlite.ts";
 import {type SpanRow} from "../data/trace.ts";
 import {processId} from "../id.test-support.ts";
 import {type Update as WatcherUpdate} from "./entry.ts";
+import {Input, Program} from "./program.ts";
 
 const SEED = 119120;
 const PROCESS = Effect.runSync(processId);
@@ -91,7 +92,13 @@ const Msg = Schema.Union([
 		parent: Schema.NullOr(Schema.String),
 		tag: Schema.String,
 	}),
-	Schema.Struct({type: Schema.Literal("work"), n: Schema.Int}),
+	Schema.Struct({
+		type: Schema.Literal("work"),
+		n: Schema.Int,
+		parent: Schema.optionalKey(Schema.String),
+	}),
+	Schema.Struct({type: Schema.Literal("approve")}),
+	Schema.Struct({type: Schema.Literal("comment")}),
 	Schema.Struct({type: Schema.Literal("background"), token: Schema.String, tag: Schema.String}),
 	Schema.Struct({type: Schema.Literal("throw")}),
 	Schema.Struct({type: Schema.Literal("fire")}),
@@ -144,6 +151,8 @@ const machine = Machine.make({
 	init: (loaded) => [loaded ?? initial, []],
 	update: {
 		add: (s, m) => [{...s, count: s.count + m.n}, []],
+		approve: (s) => [s, []],
+		comment: (s) => [s, []],
 		request: (s, m) =>
 			s.busy
 				? [{...s, queue: [...s.queue, {token: m.token, parent: m.parent, tag: m.tag}]}, []]
@@ -172,25 +181,31 @@ const machine = Machine.make({
 const SavedFact = Schema.TaggedStruct("saved", {token: Schema.String});
 const Answered = Schema.TaggedStruct("answered", {token: Schema.String});
 const Polled = Schema.TaggedStruct("polled", {token: Schema.String});
-const program = (name = "queue") => ({
+const authoring = (name = "queue") => ({
 	name,
 	machine,
-	state: {v: 1, schema: Model, upgrades: []},
-	msg: Msg,
-	view: {data: Model, select: (s: Model) => s},
+	state: {v: 1, upgrades: []},
+	view: (s: Model) => s,
 	refuse: (s: Model, m: typeof Msg.Type) =>
 		m.type === "add" && s.count + m.n > 1000 ? {why: "limit", now: s.count, most: 1000} : null,
 	inputs: {
-		add: {_tag: "write", schema: Msg, description: "Add", personOnly: false},
-		approve: {_tag: "write", schema: Msg, description: "Approve", personOnly: true},
-		comment: {_tag: "write", schema: Msg, description: "Comment", personOnly: false},
-		request: {_tag: "write", schema: Msg, description: "Queue a write", personOnly: false},
-		work: {_tag: "write", schema: Msg, description: "Work", personOnly: false},
-		background: {_tag: "write", schema: Msg, description: "Own work", personOnly: false},
-		schedule: {_tag: "write", schema: Msg, description: "Schedule", personOnly: false},
-		fire: {_tag: "write", schema: Msg, description: "Fire", personOnly: false},
-		throw: {_tag: "write", schema: Msg, description: "Throw", personOnly: false},
-		count: {_tag: "read", schema: Schema.Null, description: "Read", answer: (v: Model) => v.count},
+		add: "Add",
+		approve: {description: "Approve", personOnly: true} satisfies {
+			description: string;
+			personOnly: true;
+		},
+		comment: "Comment",
+		request: "Queue a write",
+		work: "Work",
+		background: "Own work",
+		schedule: "Schedule",
+		fire: "Fire",
+		throw: "Throw",
+		count: Input.cases.read.make({
+			schema: Schema.Null,
+			description: "Read",
+			answer: (v: Model) => v.count,
+		}),
 	},
 	outputs: {},
 	writes: {
@@ -359,13 +374,12 @@ const world = async (
 	const sink = disk();
 	const process = options.process ?? PROCESS;
 	const checkedOwner = options.owner ?? owner;
-	const normal = program(options.name ?? "queue");
+	const normal = authoring(options.name ?? "queue");
 	const ghost = Cmd.make("ghost", {input: Schema.Struct({}), ok: Schema.Null, err: []});
-	const p = {
+	const p = Program.make({
 		...normal,
-		machine: options.unknownCmd
-			? {...machine, update: {...machine.update, fire: (s: Model) => [s, [ghost({})]] as const}}
-			: options.onStep === undefined
+		machine:
+			options.onStep === undefined
 				? machine
 				: {
 						...machine,
@@ -377,7 +391,18 @@ const world = async (
 							},
 						},
 					},
-	};
+	});
+	// The undeclared Cmd is an explicit broken module, not supported authoring.
+	const loaded = (): unknown =>
+		options.unknownCmd
+			? {
+					...p,
+					machine: {
+						...machine,
+						update: {...machine.update, fire: (s: Model) => [s, [ghost({})]] as const},
+					},
+				}
+			: p;
 	const published = new Map<string, Update[]>();
 	const alarms: Array<number | null> = [];
 	const calls: Array<{kind: string; id: string; parent: string | null}> = [];
@@ -530,7 +555,7 @@ const world = async (
 	const wiring = () =>
 		Layer.mergeAll(
 			ProgramLoader.layer(
-				{[p.name]: p},
+				{[p.name]: loaded()},
 				{
 					work: (cmd: {readonly n: number}) =>
 						Effect.gen(function* () {
@@ -949,7 +974,13 @@ describe("p35 Cmd order, replay and recorded failures", () => {
 			const w = await world();
 			w.fault.work = mode;
 			const declared = Cmd.make("work", {input: Schema.Struct({n: Schema.Int}), ok, err: ["disk"]});
-			Object.assign(w.p, {machine: {...machine, cmds: [write, declared, fire]}});
+			Object.assign(
+				w.p,
+				Program.make({
+					...authoring(w.p.name),
+					machine: {...machine, cmds: [write, declared, fire]},
+				}),
+			);
 			await Effect.runPromise(
 				Effect.gen(function* () {
 					const r: Runner = yield* w.ProgramRunner;
@@ -1194,7 +1225,13 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 	for (const as of ["person", "agent"] as const)
 		it(`p69 plant, admit person-only mail: mail from ${as} cannot use a person-only port`, async () => {
 			const w = await world();
-			w.p.inputs.add.personOnly = true;
+			Object.assign(
+				w.p,
+				Program.make({
+					...authoring(w.p.name),
+					inputs: {...authoring().inputs, add: {description: "Person add", personOnly: true}},
+				}),
+			);
 			await Effect.runPromise(
 				Effect.gen(function* () {
 					const r: Runner = yield* w.ProgramRunner;
@@ -1283,30 +1320,33 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 			n: Schema.Int,
 			parent: Schema.optionalKey(Schema.String),
 		});
-		Object.assign(w.p, {
-			msg: Stamped,
-			machine: {
-				...machine,
-				update: {
-					...machine.update,
-					work: (s: Model, m: typeof Stamped.Type) => [
-						{...s, note: m.parent ?? "no stamped parent"},
-						m.parent === undefined
-							? []
-							: [
-									write({
-										stream: "facts",
-										write: {
-											_tag: "caused",
-											parent: m.parent,
-											fact: {_tag: "saved", token: "stamped"},
-										},
-									}),
-								],
-					],
+		Object.assign(
+			w.p,
+			Program.make({
+				...authoring(w.p.name),
+				machine: {
+					...machine,
+					update: {
+						...machine.update,
+						work: (s: Model, m: typeof Stamped.Type) => [
+							{...s, note: m.parent ?? "no stamped parent"},
+							m.parent === undefined
+								? []
+								: [
+										write({
+											stream: "facts",
+											write: {
+												_tag: "caused",
+												parent: m.parent,
+												fact: {_tag: "saved", token: "stamped"},
+											},
+										}),
+									],
+						],
+					},
 				},
-			},
-		});
+			}),
+		);
 		const input = w.input(1, {type: "work", n: 1}, "agent");
 		await Effect.runPromise(
 			Effect.gen(function* () {
@@ -1402,15 +1442,19 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 		});
 	it("plant, spend by Cmd position: a second answered with the same parent is refused", async () => {
 		const w = await world();
-		Object.assign(w.p, {
-			machine: {
-				...machine,
-				update: {
-					...machine.update,
-					request: (s: Model, m: Request) => [s, [command(m), command({...m, token: "second"})]],
+		Object.assign(
+			w.p,
+			Program.make({
+				...authoring(w.p.name),
+				machine: {
+					...machine,
+					update: {
+						...machine.update,
+						request: (s: Model, m: Request) => [s, [command(m), command({...m, token: "second"})]],
+					},
 				},
-			},
-		});
+			}),
+		);
 		const first = w.input(1, {type: "request", token: "first", tag: "answered"});
 		await Effect.runPromise(
 			Effect.gen(function* () {
@@ -1676,30 +1720,34 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
 		for (const signing of ["own", "caused"] as const)
 			it(`plant, trust a valid fact on ${stream}: ${signing} write is refused before commit`, async () => {
 				const w = await world();
-				Object.assign(w.p, {
-					machine: {
-						...machine,
-						update: {
-							...machine.update,
-							work: (s: Model) => [
-								s,
-								[
-									write({
-										stream,
-										write:
-											signing === "own"
-												? {_tag: "own", fact: {_tag: "polled", token: "forbidden"}}
-												: {
-														_tag: "caused",
-														parent: `in-${DOOR}-1`,
-														fact: {_tag: "saved", token: "forbidden"},
-													},
-									}),
+				Object.assign(
+					w.p,
+					Program.make({
+						...authoring(w.p.name),
+						machine: {
+							...machine,
+							update: {
+								...machine.update,
+								work: (s: Model) => [
+									s,
+									[
+										write({
+											stream,
+											write:
+												signing === "own"
+													? {_tag: "own", fact: {_tag: "polled", token: "forbidden"}}
+													: {
+															_tag: "caused",
+															parent: `in-${DOOR}-1`,
+															fact: {_tag: "saved", token: "forbidden"},
+														},
+										}),
+									],
 								],
-							],
+							},
 						},
-					},
-				});
+					}),
+				);
 				const input = w.input(1, {type: "work", n: 1});
 				await Effect.runPromise(
 					Effect.gen(function* () {
@@ -1718,18 +1766,22 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
 		it(`plant, replace refused commit why with bad_cmd: ${why} survives in the saved answer`, async () => {
 			const w = await world();
 			w.fault.commitWhy = why;
-			Object.assign(w.p, {
-				machine: {
-					...machine,
-					update: {
-						...machine.update,
-						work: (s: Model) => [
-							s,
-							[command({token: "refused-commit", parent: `in-${DOOR}-1`, tag: "saved"})],
-						],
+			Object.assign(
+				w.p,
+				Program.make({
+					...authoring(w.p.name),
+					machine: {
+						...machine,
+						update: {
+							...machine.update,
+							work: (s: Model) => [
+								s,
+								[command({token: "refused-commit", parent: `in-${DOOR}-1`, tag: "saved"})],
+							],
+						},
 					},
-				},
-			});
+				}),
+			);
 			const input = w.input(1, {type: "work", n: 1});
 			await Effect.runPromise(
 				Effect.gen(function* () {
@@ -1747,19 +1799,22 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
 	for (const port of ["read", "personOnly"] as const)
 		it(`plant, treat port policy as documentation: ${port} port cannot accept an agent write`, async () => {
 			const w = await world();
-			Object.assign(w.p, {
-				inputs: {
-					add:
-						port === "read"
-							? {
-									_tag: "read",
-									schema: Msg,
-									description: "Read count",
-									answer: (v: Model) => v.count,
-								}
-							: {_tag: "write", schema: Msg, description: "Person add", personOnly: true},
-				},
-			});
+			Object.assign(
+				w.p,
+				Program.make({
+					...authoring(w.p.name),
+					inputs: {
+						add:
+							port === "read"
+								? Input.cases.read.make({
+										schema: Msg,
+										description: "Read count",
+										answer: (v: Model) => v.count,
+									})
+								: {description: "Person add", personOnly: true},
+					},
+				}),
+			);
 			await Effect.runPromise(
 				Effect.gen(function* () {
 					const r = yield* w.ProgramRunner;
@@ -1852,18 +1907,27 @@ describe("P11 recovery gaps and durable installation", () => {
 			});
 	it("p35 plant, retire only options.done: folding a saved write answer prevents another commit", async () => {
 		const w = await world();
-		Object.assign(w.p, {
-			machine: {
-				...machine,
-				update: {
-					...machine.update,
-					work: (s: Model) => [
-						s,
-						[write({stream: "facts", write: {_tag: "own", fact: {_tag: "polled", token: "once"}}})],
-					],
+		Object.assign(
+			w.p,
+			Program.make({
+				...authoring(w.p.name),
+				machine: {
+					...machine,
+					update: {
+						...machine.update,
+						work: (s: Model) => [
+							s,
+							[
+								write({
+									stream: "facts",
+									write: {_tag: "own", fact: {_tag: "polled", token: "once"}},
+								}),
+							],
+						],
+					},
 				},
-			},
-		});
+			}),
+		);
 		w.fault.answer = true;
 		await Effect.runPromise(
 			Effect.gen(function* () {
@@ -1890,12 +1954,16 @@ describe("P11 recovery gaps and durable installation", () => {
 	});
 	it("p35 plant, drop replayed follow-ups: an answer folded on wake saves its new Cmd without running it", async () => {
 		const w = await world();
-		Object.assign(w.p, {
-			machine: {
-				...machine,
-				update: {...machine.update, work_ok: (s: Model) => [s, [work({n: 73})]]},
-			},
-		});
+		Object.assign(
+			w.p,
+			Program.make({
+				...authoring(w.p.name),
+				machine: {
+					...machine,
+					update: {...machine.update, work_ok: (s: Model) => [s, [work({n: 73})]]},
+				},
+			}),
+		);
 		w.fault.answer = true;
 		await Effect.runPromise(
 			w.ProgramRunner.use((r) => failure(r.msg(w.input(1, {type: "work", n: 72})))).pipe(
@@ -1942,7 +2010,7 @@ describe("P11 recovery gaps and durable installation", () => {
 	});
 	it("an async handler result schema produces a saved bad_cmd reply", async () => {
 		const w = await world();
-		Object.assign(w.p, {
+		const broken: unknown = {
 			machine: {
 				...w.p.machine,
 				cmds: [
@@ -1959,7 +2027,8 @@ describe("P11 recovery gaps and durable installation", () => {
 					fire,
 				],
 			},
-		});
+		};
+		Object.assign(w.p, broken);
 		await Effect.runPromise(
 			Effect.gen(function* () {
 				const r: Runner = yield* w.ProgramRunner;
@@ -2036,7 +2105,6 @@ describe("P11 recovery gaps and durable installation", () => {
 	});
 	it("S3 plant, replace without recording: a successful upgrade records ran and the new build", async () => {
 		const w = await world({build: "new-build"});
-		w.p.state.v = 3;
 		const Legacy = Schema.Struct({n: Schema.Int});
 		const Middle = Schema.Struct({count: Schema.Int});
 		const upgrades = [
@@ -2051,7 +2119,7 @@ describe("P11 recovery gaps and durable installation", () => {
 				run: (raw: unknown) => ({...initial, count: Schema.decodeUnknownSync(Middle)(raw).count}),
 			},
 		];
-		Object.assign(w.p.state, {upgrades});
+		Object.assign(w.p, Program.make({...authoring(w.p.name), state: {v: 3, upgrades}}));
 		const {ProcessStore} = await import("../coordination/process-store.ts");
 		await Effect.runPromise(
 			Effect.gen(function* () {
@@ -2114,9 +2182,16 @@ describe("P11 recovery gaps and durable installation", () => {
 	for (const tag of ["granted", "started", "stepped", "state.upgraded"])
 		it(`plant, trust a forbidden declaration: programs cannot emit ${tag} even if declared`, async () => {
 			const w = await world();
-			Object.assign(w.p.writes, {
-				[tag]: {schema: Schema.TaggedStruct(tag, {token: Schema.String}), personOnly: false},
-			});
+			Object.assign(
+				w.p,
+				Program.make({
+					...authoring(w.p.name),
+					writes: {
+						...authoring().writes,
+						[tag]: {schema: Schema.TaggedStruct(tag, {token: Schema.String}), personOnly: false},
+					},
+				}),
+			);
 			const i = w.input(1, {type: "request", token: "reserved", tag});
 			await Effect.runPromise(
 				Effect.gen(function* () {

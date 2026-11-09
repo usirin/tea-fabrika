@@ -1,0 +1,3 @@
+.token { color: var(--focus); }
+.local { --local: var(--text-primary); color: var(--local); }
+.text { content: "--slate-a9 var(--indigo-9)"; }

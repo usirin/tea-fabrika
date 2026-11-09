@@ -1,0 +1,3 @@
+.read { outline-color: var(--tile-edge-on); }
+.declare { --tile-edge: var(--border); }
+.global { color: var(--text-primary); }

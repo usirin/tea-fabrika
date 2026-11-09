@@ -10,8 +10,11 @@ export class ProcessIdGenerator extends Context.Service<
 >()("@kampus/libfabrika/ProcessIdGenerator") {
 	static readonly layer = Layer.effect(
 		ProcessIdGenerator,
-		Effect.map(Id.Generator, (generator) => ({
-			next: generator.next(Id.Process).pipe(Effect.withSpan("process.next")),
-		})),
+		Effect.map(Id.Generator, (generator) => {
+			const next = Effect.fn("process.next")(function* () {
+				return yield* generator.next(Id.Process);
+			});
+			return {next: next()};
+		}),
 	).pipe(Layer.provide(Id.Generator.layer));
 }

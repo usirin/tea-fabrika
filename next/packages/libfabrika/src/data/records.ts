@@ -121,7 +121,9 @@ type Calls = {
 
 /** A part reached in this process: each call one synchronous step, a throw typed. */
 const local = (made: ReturnType<typeof part>): Calls => {
-	const attempt = <A>(step: () => A) => Effect.try({try: step, catch: sinkError});
+	const attempt = Effect.fnUntraced(function* <A>(step: () => A) {
+		return yield* Effect.try({try: step, catch: sinkError});
+	});
 	return {
 		write: (rows) => attempt(() => made.write(rows)),
 		page: (after) => attempt(() => made.page(after)),
@@ -131,20 +133,23 @@ const local = (made: ReturnType<typeof part>): Calls => {
 };
 
 /** Walks a chain's parts from 0 until `found` ends it or a part that never rolled has it absent. */
-const walk = (
+const walk = Effect.fnUntraced(function* (
 	calls: (chain: Chain, part: number) => Calls,
 	chain: Chain,
 	ask: (part: Calls) => Effect.Effect<Lookup, SinkError>,
-): Effect.Effect<Option.Option<Content>, SinkError> => {
-	const from = (at: number): Effect.Effect<Option.Option<Content>, SinkError> =>
-		Effect.flatMap(ask(calls(chain, at)), (answer) =>
+): Effect.fn.Return<Option.Option<Content>, SinkError> {
+	const from = Effect.fnUntraced(function* (
+		at: number,
+	): Effect.fn.Return<Option.Option<Content>, SinkError> {
+		return yield* Effect.flatMap(ask(calls(chain, at)), (answer) =>
 			Lookup.match(answer, {
 				found: ({content}) => Effect.succeed(Option.fromNullOr(content)),
 				absent: ({rolled}) => (rolled ? from(at + 1) : Effect.succeed(Option.none())),
 			}),
 		);
-	return from(0);
-};
+	});
+	return yield* from(0);
+});
 
 const manager = (
 	calls: (chain: Chain, part: number) => Calls,
