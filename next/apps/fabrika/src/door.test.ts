@@ -19,6 +19,7 @@ import {
 	Ledger,
 	LedgerError,
 	LedgerTransaction,
+	type LedgerTurn,
 	lineFor,
 	RecordManager,
 	SinkError,
@@ -29,6 +30,9 @@ import {nodeSql} from "@kampus/libfabrika/sqlite";
 import {checkSshsig, Hello} from "@kampus/libfabrika/transport";
 import {Deferred, Effect, Fiber, Layer, Logger, Option, Schema, Stream} from "effect";
 import {TestClock} from "effect/testing";
+import * as fc from "fast-check";
+const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+const runs = (numRuns: number) => ({seed: SEED, endOnFailure: true, numRuns});
 const SpanPage = Schema.Struct({spans: Schema.Array(SpanRow), next: Schema.Int});
 const ADD_SAW = {
 	how: "device",
@@ -215,9 +219,13 @@ const passkey = Effect.fn("test.passkey")(function* () {
 
 // Loading inside the test hook lets each new law report the missing door on the pre-build base,
 // instead of losing every law to a collection error. This always imports the real module.
-let Door: typeof import("./door.ts").Door;
+let Door: typeof import("@kampus/libfabrika/door").Door;
+let IdGenerator: typeof import("@kampus/libfabrika/data").IdGenerator;
 beforeEach(async () => {
-	({Door} = await vi.importActual<typeof import("./door.ts")>("./door.ts"));
+	({Door} =
+		await vi.importActual<typeof import("@kampus/libfabrika/door")>("@kampus/libfabrika/door"));
+	({IdGenerator} =
+		await vi.importActual<typeof import("@kampus/libfabrika/data")>("@kampus/libfabrika/data"));
 });
 const top = mkdtempSync(join(tmpdir(), "p10-door-"));
 const opened: Array<DatabaseSync> = [];
@@ -347,11 +355,13 @@ const world = Effect.fnUntraced(function* (
 	const records = RecordManager.sql(part, options.recordCap ?? 64 * 1024);
 	const env = Layer.mergeAll(
 		clients,
+		LedgerTransaction.layer(sql).pipe(Layer.provide(quiet)),
 		C.Mailbox.layer.pipe(Layer.provide(clients)),
 		SpanSink.layer(sql, {object: START}),
 		records,
 		Archive.memory,
 		C.ProcessIdGenerator.layer,
+		IdGenerator.layer,
 	);
 	const layer = Door.layer(settings).pipe(Layer.provideMerge(env));
 	const reopen = (storage: ReturnType<typeof nodeSql>) => {
@@ -361,11 +371,13 @@ const world = Effect.fnUntraced(function* (
 			Layer.provideMerge(
 				Layer.mergeAll(
 					freshClients,
+					LedgerTransaction.layer(storage).pipe(Layer.provide(quiet)),
 					C.Mailbox.layer.pipe(Layer.provide(freshClients)),
 					SpanSink.layer(storage, {object: START}),
 					records,
 					Archive.memory,
 					C.ProcessIdGenerator.layer,
+					IdGenerator.layer,
 				),
 			),
 		);
@@ -585,6 +597,240 @@ describe("P10 review regressions", () => {
 		});
 		return {client, hello, trusted};
 	});
+
+	// d1: for any waiting clients and any knock order, with repeat knocks and a second tab of the
+	// same key, each knock answers exactly its own row's code and until, read back from the
+	// owner's watch at that moment. Four keys and up to eight tabs against a cap of three, so
+	// rows fall out and the oldest pending connections are pruned: a pruned one is refused
+	// not_waiting, never handed a row. Plants: return all rows; return the first row; give a
+	// second tab of a key its own row.
+	it("d1: any knock order answers each knock with only its own row's code and until", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.array(
+					fc.record({
+						who: fc.nat(3),
+						tab: fc.nat(1),
+						pass: fc.oneof(fc.constant(undefined), fc.constant(null), fc.string()),
+					}),
+					{minLength: 1, maxLength: 8},
+				),
+				(knocks) =>
+					Effect.runPromise(
+						Effect.gen(function* () {
+							const w = yield* world();
+							yield* Effect.gen(function* () {
+								const d = yield* Door;
+								const owner = yield* online(d, w);
+								const keys = [w.otherWindow, w.agent, w.otherRoot, w.sheet] as const;
+								const clients = new Map<string, Effect.Success<ReturnType<typeof d.connect>>>();
+								for (const {who, tab, pass} of knocks) {
+									const k = keys[who]!;
+									const name = `${who}-${tab}`;
+									const client =
+										clients.get(name) ?? (yield* pendingHello(d, k, `tab-${name}`)).client;
+									clients.set(name, client);
+									// The door keeps the newest `most` pending connections.
+									const kept = [...clients.keys()].slice(-w.settings.waiting.most);
+									const label = `browser ${who}`;
+									const reply = yield* d.knock(
+										client,
+										pass === undefined ? {label} : {label, pass},
+									);
+									if (!kept.includes(name)) {
+										expect(reply).toEqual({_tag: "refused", why: "not_waiting"});
+										continue;
+									}
+									const rows = (yield* d.watch(owner.client)).rows;
+									// One row per key: a second tab of a key joins that key's row, never a new one.
+									expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length);
+									const row = rows.find((r) => r.key === k.raw);
+									assert(row);
+									expect(reply).toEqual({_tag: "ok", result: {code: row.code, until: row.until}});
+								}
+							}).pipe(w.provide);
+						}),
+					),
+			),
+			runs(25),
+		);
+	});
+
+	// d2: for any unknown key and any tab, the checked hello's not_granted refusal carries that
+	// caller's own fingerprint. Plant: refuse without the fingerprint.
+	it("d2: any unknown key is refused with its own fingerprint", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.string(), (tab) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const w = yield* world();
+						const stranger = yield* key();
+						yield* Effect.gen(function* () {
+							const d = yield* Door;
+							const {client, hello, trusted} = yield* signedHello(d, stranger, tab);
+							expect(yield* d.initialize(client, hello, trusted)).toEqual({
+								_tag: "refused",
+								why: "not_granted",
+								fingerprint: stranger.fingerprint,
+							});
+						}).pipe(w.provide);
+					}),
+				),
+			),
+			runs(25),
+		);
+	});
+
+	// d3: for every Uint32 n that getRandomValues gives, the waiting code is six digits, n's last
+	// six, with leading zeros kept: String(n % 1_000_000).padStart(6, "0"). Plants: keep four
+	// digits (the code on main before PR 516); drop the zero padding; keep seven digits. The
+	// property covers leading zeros by itself, so no small value is pinned.
+	it("d3: any random Uint32 gives a six-digit waiting code with its leading zeros", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.integer({min: 0, max: 0xffffffff}), (random) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const w = yield* world();
+						yield* Effect.gen(function* () {
+							const d = yield* Door;
+							const owner = yield* online(d, w);
+							const pending = yield* pendingHello(d, w.otherWindow, "code");
+							const original = crypto.getRandomValues.bind(crypto);
+							const rng = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
+								if (array instanceof Uint32Array && array.length === 1) {
+									array[0] = random;
+									return array;
+								}
+								return original(array);
+							});
+							const reply = yield* d
+								.knock(pending.client, {label: "Code browser"})
+								.pipe(Effect.ensuring(Effect.sync(() => rng.mockRestore())));
+							const code = String(random % 1_000_000).padStart(6, "0");
+							expect(code).toMatch(/^[0-9]{6}$/);
+							expect((yield* d.watch(owner.client)).rows.map((r) => r.code)).toEqual([code]);
+							expect(reply).toMatchObject({_tag: "ok", result: {code}});
+						}).pipe(w.provide);
+					}),
+				),
+			),
+			// pinned: 4294967295, the largest Uint32, must give 967295. In PR 516's round 1 mutation
+			// step, a .slice(-7) planted by hand survived, because no case had more than six digits.
+			{...runs(30), examples: [[4294967295]]},
+		);
+	});
+
+	// crypto: for each of the five WebCrypto edges and any failure (a rejection or a throw, of any
+	// value), the call fails with LedgerError why "crypto", never "storage", and delivers
+	// nothing. Plant: map a WebCrypto failure to storage (or NotGranted) at any edge.
+	type Armed = <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
+	// The spied WebCrypto call fails once, by a throw or a rejection, with the generated value.
+	type Spy = {
+		mockImplementationOnce: (fn: () => never) => unknown;
+		mockRejectedValueOnce: (value: unknown) => unknown;
+		mockRestore: () => void;
+	};
+	const failOnce = (spy: Spy, thrown: unknown, sync: boolean) =>
+		sync
+			? spy.mockImplementationOnce(() => {
+					throw thrown;
+				})
+			: spy.mockRejectedValueOnce(thrown);
+	type Edge = {
+		readonly name: string;
+		readonly spy: () => Spy;
+		readonly fail: (w: World, armed: Armed) => Effect.Effect<unknown, unknown>;
+	};
+	const edges: ReadonlyArray<Edge> = [
+		{
+			name: "importKey",
+			spy: () => vi.spyOn(crypto.subtle, "importKey"),
+			fail: (w: World, armed: Armed) => armed(Door.pipe(w.provide)),
+		},
+		{
+			name: "nonce sign",
+			spy: () => vi.spyOn(crypto.subtle, "sign"),
+			fail: (w: World, armed: Armed) =>
+				Effect.gen(function* () {
+					const d = yield* Door;
+					const client = yield* d.connect();
+					return yield* armed(d.challenge(client));
+				}).pipe(w.provide),
+		},
+		{
+			name: "nonce verify",
+			spy: () => vi.spyOn(crypto.subtle, "verify"),
+			fail: (w: World, armed: Armed) =>
+				Effect.gen(function* () {
+					const d = yield* Door;
+					const {client, hello, trusted} = yield* signedHello(d, w.window, "crypto-failed");
+					return yield* armed(d.initialize(client, hello, trusted));
+				}).pipe(w.provide),
+		},
+		{
+			name: "fingerprint digest",
+			spy: () => vi.spyOn(crypto.subtle, "digest"),
+			fail: (w: World, armed: Armed) =>
+				Effect.gen(function* () {
+					const d = yield* Door;
+					const {client} = yield* online(d, w);
+					yield* d.route(client, "process.send", request("before-crypto-failed"));
+					const parent = w.deliveries[0]!.envelope.id;
+					return yield* armed(writeId("crypto-failed", d.signer(parent, PROCESS, "saved")));
+				}).pipe(w.provide),
+		},
+		{
+			// The first digest is the caller's fingerprint, which runs as it is; the second hashes
+			// the input.
+			name: "input hash digest",
+			spy: () => {
+				const digest = crypto.subtle.digest.bind(crypto.subtle);
+				return vi.spyOn(crypto.subtle, "digest").mockImplementationOnce(digest);
+			},
+			fail: (w: World, armed: Armed) =>
+				Effect.gen(function* () {
+					const d = yield* Door;
+					const {client} = yield* online(d, w);
+					return yield* armed(d.route(client, "process.send", request("digest-failed")));
+				}).pipe(w.provide),
+		},
+	];
+	for (const edge of edges)
+		it(`a WebCrypto ${edge.name} failure, of any value, is refused with crypto and delivers nothing`, async () => {
+			await fc.assert(
+				fc.asyncProperty(
+					fc.oneof(
+						fc.anything(),
+						fc.string().map((message) => new Error(message)),
+						fc.constantFrom(undefined, null, "crypto unavailable"),
+					),
+					fc.boolean(),
+					(thrown, sync) =>
+						Effect.runPromise(
+							Effect.gen(function* () {
+								const w = yield* world();
+								// Armed only around the call under test, so setup's own WebCrypto runs as it is.
+								let before = -1;
+								let restore = () => {};
+								const armed: Armed = (effect) =>
+									Effect.sync(() => {
+										before = w.deliveries.length;
+										const spy = edge.spy();
+										restore = () => spy.mockRestore();
+										failOnce(spy, thrown, sync);
+									}).pipe(Effect.andThen(effect));
+								const failure = yield* Effect.flip(edge.fail(w, armed)).pipe(
+									Effect.ensuring(Effect.sync(() => restore())),
+								);
+								expect(failure).toBeInstanceOf(LedgerError);
+								expect(failure).toMatchObject({_tag: "LedgerError", why: "crypto"});
+								expect(w.deliveries).toHaveLength(before);
+							}),
+						),
+				),
+				runs(15),
+			);
+		});
 
 	it.effect(
 		"review 3.1: a full spent-receipt store writes nothing and keeps live nonces spent",
@@ -1562,21 +1808,30 @@ describe("P10 inputs, retries and signer", () => {
 			Effect.gen(function* () {
 				const w = yield* world();
 				let lose = false;
-				const ledger = Layer.effect(
-					Ledger,
-					Ledger.pipe(
-						Effect.map((real: typeof Ledger.Service) => ({
-							...real,
-							append: (...args: Parameters<typeof real.append>) =>
-								real.append(...args).pipe(
-									Effect.flatMap((placing) => {
-										if (lose && args[0] === "door/inputs") {
-											lose = false;
-											return Effect.fail(new LedgerError({why: "unreachable"}));
-										}
-										return Effect.succeed(placing);
-									}),
-								),
+				const transaction = Layer.effect(
+					LedgerTransaction,
+					LedgerTransaction.pipe(
+						Effect.map((real) => ({
+							transact: <A>(step: (turn: LedgerTurn) => A) =>
+								Effect.gen(function* () {
+									let appended = false;
+									const placing = yield* real.transact((turn) =>
+										step({
+											...turn,
+											append: (stream, id, line) => {
+												const placing = turn.append(stream, id, line);
+												if (stream === "door/inputs") appended = true;
+												return placing;
+											},
+										}),
+									);
+									// Lose the answer only after the real input transaction commits.
+									if (lose && appended) {
+										lose = false;
+										return yield* new LedgerError({why: "unreachable"});
+									}
+									return placing;
+								}),
 						})),
 					),
 				).pipe(Layer.provide(w.env));
@@ -1584,7 +1839,10 @@ describe("P10 inputs, retries and signer", () => {
 					const d = yield* Door;
 					const {client} = yield* online(d, w);
 					lose = true;
-					yield* Effect.flip(d.route(client, "process.send", request("lost-append")));
+					expect(
+						yield* Effect.flip(d.route(client, "process.send", request("lost-append"))),
+					).toMatchObject({_tag: "LedgerError", why: "unreachable"});
+					expect(lose).toBe(false);
 					expect(w.deliveries).toEqual([]);
 					const before = rawRows(w.db, "door/inputs").filter((r) => r._tag === "received");
 					expect(before).toHaveLength(1);
@@ -1595,7 +1853,7 @@ describe("P10 inputs, retries and signer", () => {
 					expect(w.deliveries[0]!.trace.traceId).toBe(before[0]?.traceId);
 				}).pipe(
 					Effect.provide(
-						Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, ledger))),
+						Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, transaction))),
 					),
 				);
 			}),
@@ -1627,7 +1885,8 @@ describe("P10 inputs, retries and signer", () => {
 				expect((yield* d.route(client, "process.send", request("l1")))._tag).toBe("ok");
 				const e = w.deliveries[0]!.envelope;
 				expect(Object.keys(e).sort()).toEqual(["arrivedAt", "by", "id", "input"]);
-				expect(e.id).toMatch(/^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-1$/);
+				expect(e.id).toMatch(/^input_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
+				expect(Object.values((yield* stamped()).at(-1)!.body ?? {})).toContain(1);
 				expect(e.by).toEqual({_tag: "person", key: w.window.fingerprint, for: PERSON});
 				expect(e.arrivedAt).toBe(1_790_000_000_000);
 				expect(e.input).toEqual(comment());
@@ -1699,8 +1958,17 @@ describe("P10 inputs, retries and signer", () => {
 						const {client} = yield* online(d, w);
 						yield* d.route(client, "process.send", request(`letter-${i}`));
 						ids.push(w.deliveries.at(-1)!.envelope.id);
+						const recorded = Object.values((yield* stamped()).at(-1)!.body ?? {});
+						// P17a leaves the door's process and count as separate recorded fields.
+						// The plan leaves their key names to the builder.
+						expect(recorded).toContain(i === 0 ? START : OTHER_PROCESS);
+						expect(recorded).toContain(1);
 					}).pipe(w.provide);
-				expect(ids).toEqual([`in-${START}-1`, `in-${OTHER_PROCESS}-1`]);
+				expect(new Set(ids).size).toBe(2);
+				for (const id of ids) expect(id).toMatch(/^input_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
+				expect(
+					w.sql.exec("SELECT id FROM door_starts ORDER BY rowid").map((row) => row.id),
+				).toEqual([START, OTHER_PROCESS]);
 				expect(starts).toEqual([]);
 			}),
 	);
@@ -2601,15 +2869,25 @@ describe("P10 span reader and recording", () => {
 		Effect.gen(function* () {
 			const w = yield* world();
 			let block = false;
-			const ledger = Layer.effect(
-				Ledger,
-				Ledger.pipe(
-					Effect.map((real: typeof Ledger.Service) => ({
-						...real,
-						append: (...args: Parameters<typeof real.append>) =>
-							block && args[0] === "door/inputs"
-								? Effect.fail(new LedgerError({why: "storage"}))
-								: real.append(...args),
+			const transaction = Layer.effect(
+				LedgerTransaction,
+				LedgerTransaction.pipe(
+					Effect.map((real) => ({
+						transact: <A>(step: (turn: LedgerTurn) => A) =>
+							real.transact((turn) =>
+								step({
+									...turn,
+									append: (stream, id, line) => {
+										// Fail the input write inside the real transaction, before storage changes.
+										if (block && stream === "door/inputs") {
+											block = false;
+											// oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- LedgerTransaction catches this synchronous callback's throw as a typed failure.
+											throw new LedgerError({why: "storage"});
+										}
+										return turn.append(stream, id, line);
+									},
+								}),
+							),
 					})),
 				),
 			).pipe(Layer.provide(w.env));
@@ -2618,11 +2896,15 @@ describe("P10 span reader and recording", () => {
 				const {client} = yield* online(d, w);
 				block = true;
 				expect(
-					(yield* Effect.flip(d.route(client, "process.send", request("unrecorded"))))._tag,
-				).toBe("LedgerError");
+					yield* Effect.flip(d.route(client, "process.send", request("unrecorded"))),
+				).toMatchObject({_tag: "LedgerError", why: "storage"});
+				expect(block).toBe(false);
+				expect(rawRows(w.db, "door/inputs")).toEqual([]);
 				expect(w.deliveries).toEqual([]);
 			}).pipe(
-				Effect.provide(Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, ledger)))),
+				Effect.provide(
+					Door.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, transaction))),
+				),
 			);
 		}),
 	);
@@ -3253,28 +3535,6 @@ describe("P10 refusal records and checked writes", () => {
 				expect(
 					yield* Effect.flip(d.grant({text, armored: yield* w.root.sign(text)})),
 				).toMatchObject({_tag: "LedgerError", why: "bad_row"});
-			}).pipe(w.provide);
-		}),
-	);
-	it.effect("p67: a failed input digest reports storage and never delivers", () =>
-		Effect.gen(function* () {
-			const w = yield* world();
-			yield* Effect.gen(function* () {
-				const d = yield* Door;
-				const {client} = yield* online(d, w);
-				const digest = crypto.subtle.digest.bind(crypto.subtle);
-				const spy = vi
-					.spyOn(crypto.subtle, "digest")
-					.mockImplementationOnce(digest)
-					.mockRejectedValueOnce(new Error("crypto unavailable"));
-				try {
-					expect(
-						yield* Effect.flip(d.route(client, "process.send", request("digest-failed"))),
-					).toMatchObject({_tag: "LedgerError", why: "storage"});
-					expect(w.deliveries).toEqual([]);
-				} finally {
-					spy.mockRestore();
-				}
 			}).pipe(w.provide);
 		}),
 	);

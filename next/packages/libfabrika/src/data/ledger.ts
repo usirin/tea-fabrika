@@ -9,8 +9,9 @@ import {short} from "./trace.ts";
 export class LedgerError extends Schema.TaggedError<LedgerError>()("LedgerError", {
 	/** `unreachable`: a call that never reached the referee. `bad_row`: an answer or a row that does
 	 *  not decode. `storage`: SQLite threw, for example `SQLITE_FULL`. `refused`: the ledger refused
-	 *  a line the caller needed written. */
-	why: Schema.Literals(["unreachable", "bad_row", "storage", "refused"]),
+	 *  a line the caller needed written.
+	 *  `crypto`: WebCrypto threw or rejected. */
+	why: Schema.Literals(["unreachable", "bad_row", "storage", "refused", "crypto"]),
 	/** What the thrown error said. It rides in the span's failure, never in a tag. */
 	message: Schema.optional(Schema.String),
 }) {}
@@ -76,27 +77,29 @@ export class Ledger extends Context.Service<
 	/** Any other object: the project's stub. A rejected call is `unreachable`; an answer that does
 	 *  not decode, `bad_row`. Each call ends one `ledger.call` span on the caller's side. */
 	static readonly remote = (stub: LedgerCalls, who: Who): Layer.Layer<Ledger> => {
-		const call = <A>(
+		const call = Effect.fn("ledger.call")(function* <A>(
 			method: keyof LedgerCalls,
 			stream: string,
 			answer: Schema.Decoder<A>,
 			send: () => Promise<unknown>,
-		): Effect.Effect<A, LedgerError> =>
+		): Effect.fn.Return<A, LedgerError> {
+			yield* Effect.annotateCurrentSpan({
+				"rpc.method": method,
+				...short({[STREAM]: stream, [tag("reader")]: who.reader}),
+			});
 			// oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object stub answers with a Promise
-			Effect.tryPromise({try: send, catch: () => new LedgerError({why: "unreachable"})}).pipe(
+			return yield* Effect.tryPromise({
+				try: send,
+				catch: () => new LedgerError({why: "unreachable"}),
+			}).pipe(
 				Effect.flatMap((raw) =>
 					Schema.decodeUnknownEffect(answer)(raw).pipe(
 						Effect.mapError(() => new LedgerError({why: "bad_row"})),
 					),
 				),
 				Effect.tapError((error) => Effect.annotateCurrentSpan(tag("why"), error.why)),
-				Effect.withSpan("ledger.call", {
-					attributes: {
-						"rpc.method": method,
-						...short({[STREAM]: stream, [tag("reader")]: who.reader}),
-					},
-				}),
 			);
+		});
 		const page = Schema.Array(Entry);
 		return Layer.succeed(Ledger, {
 			append: (stream, id, line) =>

@@ -29,6 +29,10 @@
 		"fabrika/no-numeric-duration": "error",
 		"fabrika/no-throw-in-effect-gen": "error",
 		"fabrika/no-type-assertions": "error",
+		// P17a counted before enabling: 53 retired-door statements, 1 throwing saved decoder.
+		// All inspected: app door code moves; runner's saved Cmd decode needs a typed result.
+		"fabrika/door-is-library": "error",
+		"fabrika/outside-input-constructor": "error",
 
 		// Where a Claude run's settings come from is said by `ownRules` alone, so its file is left
 		// out below (experiment 155). So are tests: they write the options' shape to check it, and
@@ -346,6 +350,7 @@
 				"fabrika/no-promises": "error",
 				"fabrika/no-effect-run-outside-edge": "error",
 				"fabrika/edge-comment": "error",
+				"fabrika/effect-functions": "error",
 				"fabrika/no-of": "error",
 				"fabrika/no-hand-tag": "error",
 				"fabrika/one-store-hook": "error"
@@ -368,10 +373,12 @@
 		{
 			// Tests are left out: they await vitest, feed raw frames and may plant a broken view.
 			// `no-of` stays on, since a test names its helpers too.
+			// Tests also manufacture spans as input for the sink. Tracing plants use product paths.
 			"files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
 			"rules": {
 				"fabrika/no-promises": "off",
 				"fabrika/no-effect-run-outside-edge": "off",
+				"fabrika/effect-functions": "off",
 				"fabrika/no-hand-tag": "off",
 				"fabrika/one-store-hook": "off",
 				"react/refs": "off",

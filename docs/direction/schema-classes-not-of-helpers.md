@@ -56,6 +56,39 @@ Schema.encodeSync(OpenTicket)({...t, now: 3}); // a spread still encodes, so a k
   pull request lands. Measured on today's code: one false alarm in about 1,400
   hits.
 
+## Which one throws: as Effect does (decided 2026-11-08)
+
+Decided by the owner, 2026-11-08. `next/`. A Schema class or a parser offers the same pair Effect
+4.1.1's own Schema API offers, and picks by where the input came from.
+
+```ts
+// Trusted input, built by our own code: the throwing one. A throw here is a bug.
+const n = Note.make({id, title: "Groceries"});
+const t = Schema.decodeSync(Ticket)(fromOurOwnFold);
+
+// Untrusted input (saved state, the wire, disk): the typed error, never the throwing one.
+const saved = yield* Schema.decodeUnknownEffect(Saved)(row); // Effect<Saved, SchemaError>
+const made = yield* Note.makeEffect(fields);                 // Effect<Note, SchemaIssue.Issue>
+
+// Plain code that needs the details, not an Effect: the Result.
+const r = Schema.decodeUnknownResult(Row)(raw); // Result<Row, SchemaError>
+```
+
+- **`make` and `decodeSync` throw.** For trusted input only. Effect's own docs on `make`: "Use
+  when constructor input is trusted or when validation failure should abort with a thrown `Error`."
+- **`makeEffect` and `decodeEffect` (with `decodeUnknownEffect`) keep the failure in the error
+  channel.** Effect's docs on `makeEffect`: "Use when construction must compose with other `Effect`
+  operations". `makeEffect` answers a bare `SchemaIssue.Issue`.
+- **`decodeResult` (and `decodeUnknownResult`) only where plain code needs the details.** Effect
+  4.1.1's Schema has no `makeResult`; `makeOption` gives none and drops the details.
+- **Untrusted input never takes the throwing one:** saved state, anything off the wire, anything
+  read from disk. So libfabrika's `app/state.ts` stops throwing `ProgramDown` when a saved row
+  does not fit, and answers it as a typed error. That code change is its own ticket.
+
+*Sources: Effect 4.1.1, `Schema.d.ts`: the docs on `make`, `makeOption` and `makeEffect`, and on
+`decodeSync`, `decodeEffect` and `decodeResult`; `SchemaParser.d.ts` for the same names as
+functions.*
+
 ## Why not `Schema.Class`
 
 `Schema.Class` makes real class instances. Tested on Effect 4.0.6, with tsc and
@@ -95,3 +128,4 @@ save, and the types do not warn.
 ## Sources
 
 - Effect 4.0.6, `Schema.d.ts`: `Opaque`, `Class`, `TaggedStruct`, `make`, `makeOption`.
+- Effect 4.1.1, `Schema.d.ts`: `make`, `makeOption`, `makeEffect`, `decodeSync`, `decodeEffect`, `decodeResult` (the 2026-11-08 section).
