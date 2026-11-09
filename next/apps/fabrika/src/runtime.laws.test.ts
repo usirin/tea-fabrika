@@ -21,6 +21,9 @@ import {Settings} from "./settings.ts";
 
 const table = vi.hoisted(() => ({programs: {} as Record<string, {hash: string; source: string}>}));
 vi.mock("./table.ts", () => table);
+// P16: the brain reads its embedded tables from the build's generated module
+// (libfabrika's build-modules.d.ts). Mocking both keeps these laws on either wiring.
+vi.mock("virtual:fabrika-built", () => ({...table, assets: {}}));
 vi.mock("effect", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("effect")>();
 	return {...actual, ManagedRuntime: {...actual.ManagedRuntime}};

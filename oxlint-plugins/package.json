@@ -13,6 +13,8 @@
 	"devDependencies": {
 		"@oxlint/plugins": "catalog:",
 		"@types/node": "catalog:",
+		"fast-check": "catalog:",
+		"oxc-parser": "catalog:",
 		"postcss-value-parser": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:",

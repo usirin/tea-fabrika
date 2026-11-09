@@ -23,6 +23,8 @@
 		"fabrika/no-numeric-duration": "error",
 		"fabrika/no-throw-in-effect-gen": "error",
 		"fabrika/no-type-assertions": "error",
+		// P16: the package keeps its pure entry; a real window is always './window'.
+		"fabrika/program-package-layout": "error",
 		// P17a counted before enabling: 53 retired-door statements, 1 throwing saved decoder.
 		// All inspected: app door code moves; runner's saved Cmd decode needs a typed result.
 		"fabrika/door-is-library": "error",

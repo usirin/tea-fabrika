@@ -14,12 +14,18 @@ import type {Env} from "./runtime.ts";
 
 const table = vi.hoisted(() => ({programs: {} as Record<string, {hash: string; source: string}>}));
 vi.mock("./table.ts", () => table);
+// P16: the brain reads its embedded tables from the build's generated module
+// (libfabrika's build-modules.d.ts). Mocking both keeps these laws on either wiring.
+vi.mock("virtual:fabrika-built", () => ({...table, assets: {}}));
 vi.mock("cloudflare:workers", () => ({
 	DurableObject: class {
-		constructor(
-			readonly ctx: DurableObjectState,
-			readonly env: Env,
-		) {}
+		// No parameter properties: the app's tsconfig keeps to erasable syntax (plain Node).
+		readonly ctx: DurableObjectState;
+		readonly env: Env;
+		constructor(ctx: DurableObjectState, env: Env) {
+			this.ctx = ctx;
+			this.env = env;
+		}
 	},
 	WorkerEntrypoint: class {},
 }));

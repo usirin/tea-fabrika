@@ -30,6 +30,7 @@ import {oneIdModule} from "./one-id-module.ts";
 import {oneStoreHook} from "./one-store-hook.ts";
 import {outsideInputConstructor} from "./outside-input-constructor.ts";
 import {preferSchemaArbitrary} from "./prefer-schema-arbitrary.ts";
+import {programPackageLayout} from "./program-package-layout.ts";
 import {useImportExtensions} from "./use-import-extensions.ts";
 
 const plugin: Plugin = {
@@ -61,6 +62,7 @@ const plugin: Plugin = {
 		"no-throw-in-effect-gen": noThrowInEffectGen,
 		"no-type-assertions": noTypeAssertions,
 		"one-store-hook": oneStoreHook,
+		"program-package-layout": programPackageLayout,
 		"one-id-module": oneIdModule,
 		"outside-input-constructor": outsideInputConstructor,
 		"prefer-schema-arbitrary": preferSchemaArbitrary,

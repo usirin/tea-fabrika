@@ -57,6 +57,19 @@ The other is `no-bare-tell.grit`. A `tell` or `offer` to a program's input is an
 
 ## The new version's exam rules
 
+P16 adds `fabrika/program-package-layout` for `next/programs/` only. A package exports
+its pure program at `.` and its real window at `./window`. A package awaiting a window needs
+no stub. Worker entries and Worker runtime imports in the pure import graph fail, through
+re-exports, helpers, cycles and literal dynamic imports. Type-only imports and re-exports pass,
+with either a declaration or a specifier marked `type`, and so do `types` export conditions and
+declaration files. This follows `docs/plan/tier-1-detail.md`, Packages, and the approved P16 plan.
+On 2026-11-09 it checked 3 files in the real program tree: 0 findings, 0 false alarms; the
+counter's manifest and pure entry were inspected. Its 15 laws run the real oxlint plugin over
+generated layouts at seed 119120; with the rule switched off, 13 fail (the 2 left are the
+accept laws). The rule blocks. It does not resolve package aliases or computed dynamic imports;
+those need a future resolved-import check. It parses other files with `oxc-parser`, a dev
+dependency of this folder.
+
 `one-id-module` keeps `next/`'s Id code in `libfabrika/src/id.ts`. It refuses the retired
 `libfabrika/src/data/id.ts`, even empty or forwarding, so a second module cannot stay behind.
 T518 A8's count on 2026-11-08 was one fire, the second module from P17a, with no false alarm.
