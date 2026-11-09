@@ -53,8 +53,10 @@ What Effect's docs say each one does
 
 ## Span names
 
-A span name is `<piece>.<verb>`, all lowercase, the piece's word from the glossary and the
-verb the function's own name. The names already in `next/` on main follow it:
+A span name is `<piece>.<verb>`, the piece's word from the glossary and the
+verb the function's own name, spelled as the function spells it, two-word verbs included
+(`process.isLive`, `transport.checkSshsig`), as Effect's own docs do. *Changed 2026-11-09 (owner):
+"all lowercase" applies to the piece only. It said: "all lowercase".* The names already in `next/` on main follow it:
 
 | Span | Where it is today |
 |---|---|
