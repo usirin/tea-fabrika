@@ -524,32 +524,72 @@ export const askDesk = async (tools: Tools) => {
 						.evaluate((menu) => Promise.all(menu.getAnimations().map((a) => a.finished)));
 					await shot(page, "asks-menu", layout, look);
 					const menu = page.locator("#pop-asks");
+					await menuWidth(`asks-menu-${layout}-${look}`, menu);
 					await noCardInMenu(`asks-menu-${layout}-${look}`, menu);
 					const views = menu.getByRole("region", {name: /^ask: /});
 					for (let i = 0; i < (await views.count()); i++)
 						await inspectLine(`asks-menu-${layout}-${look}, ask ${i + 1}`, views.nth(i));
 					await closedRows(`asks-menu-${layout}-${look}`, menu);
-					await openRow(`asks-menu-${layout}-${look}`, menu, layout === "side" || layout === "2x2");
+					const tight = layout === "side" || layout === "2x2";
+					await openRow(`asks-menu-${layout}-${look}`, menu, tight);
+					const rowId = () => menu.getByRole("row", {selected: true}).evaluate((row) => row.id);
+					const was = await rowId();
+					const total = await menu.getByRole("row").count();
 					if (layout !== "small") {
 						// The blind ask's row, then back to the row that was open, so later shots match.
-						const rowId = () => menu.getByRole("row", {selected: true}).evaluate((row) => row.id);
-						const was = await rowId();
-						const total = await menu.getByRole("row").count();
 						const blindOpen = () =>
 							menu
 								.getByRole("row", {selected: true})
 								.evaluate((row) => (row.textContent ?? "").includes("Your pick first"));
 						for (let i = 0; i < total && !(await blindOpen()); i++)
 							await page.keyboard.press("ArrowDown");
-						if (await blindOpen())
+						if (await blindOpen()) {
+							// Round 7b: in the narrow menu the blind hint and the marks share a line only
+							// where they fit; openRow holds the line rule, blindLine the hint and Evidence.
 							await blindLine(
 								`asks-menu-${layout}-${look}, blind`,
 								menu.getByRole("row", {selected: true}).getByRole("region", {name: /^ask: /}),
+								true,
 							);
-						else check(`P23 E 7, asks-menu-${layout}-${look}: the blind ask has a row`, false);
+							await openRow(`asks-menu-${layout}-${look}, blind`, menu, tight);
+						} else check(`P23 E 7, asks-menu-${layout}-${look}: the blind ask has a row`, false);
 						for (let i = 0; i < total && (await rowId()) !== was; i++)
 							await page.keyboard.press("ArrowDown");
 					}
+					// Round 7b, fix 3: a shown-rec ask (seeded above with the rec, picks approve and no)
+					// open in the menu, at all five layouts: its own shot, its row and its five buttons.
+					const opened = menu.getByRole("row", {selected: true});
+					const recOpen = () =>
+						opened.evaluate((row) =>
+							[...row.querySelectorAll("button")].some(
+								(b) =>
+									/^Take rec/.test((b.textContent ?? "").trim()) &&
+									b.getBoundingClientRect().width > 0,
+							),
+						);
+					for (let i = 0; i < total && !(await recOpen()); i++)
+						await page.keyboard.press("ArrowDown");
+					if (await recOpen()) {
+						await menu.evaluate((popover) =>
+							Promise.all(popover.getAnimations({subtree: true}).map((a) => a.finished)),
+						);
+						await shot(page, "asks-menu-rec", layout, look);
+						const when = `asks-menu-rec-${layout}-${look}`;
+						await menuWidth(when, menu);
+						const names = ["Take rec", "Not the rec", "Every pick", "Open ticket", "Later"];
+						const counts = await Promise.all(
+							names.map((name) => button(opened, name).filter({visible: true}).count()),
+						);
+						check(
+							`P23 E 7b, ${when}: the open row shows its five actions`,
+							counts.every((n) => n === 1),
+							Object.fromEntries(names.map((name, i) => [name, counts[i]])),
+						);
+						await inspectLine(when, opened.getByRole("region", {name: /^ask: /}));
+						await openRow(when, menu, tight);
+					} else check(`P23 E 7b, asks-menu-${layout}-${look}: a shown-rec ask has a row`, false);
+					for (let i = 0; i < total && (await rowId()) !== was; i++)
+						await page.keyboard.press("ArrowDown");
 					await page.keyboard.press("Escape");
 				});
 				await page.keyboard.press("Control+c");
@@ -1240,8 +1280,10 @@ const inView = async (when: string, alert: Locator) => {
  * "Did this need you?" group shares that line (their text tops within 4px), at one, side, stacked
  * and 2x2, in the ticket bar and the menu. Evidence sits on that line, or starts on the next: its
  * box top no lower than 1em under the line.
+ * Round 7b (lead, 2026-11-08): the asks menu stays narrow, so in the menu (`narrow`) the two share
+ * a line only where they fit; openRow checks that rule there, and this checks the hint and Evidence.
  */
-const blindLine = async (when: string, where: Locator) => {
+const blindLine = async (when: string, where: Locator, narrow = false) => {
 	const read = await where.evaluate((root) => {
 		const textRects = (element: Element | null) => {
 			if (element === null) return [];
@@ -1275,11 +1317,14 @@ const blindLine = async (when: string, where: Locator) => {
 		};
 	});
 	check(
-		`P23 E 7, ${when}: "Your pick first" and "Did this need you?" share one line`,
+		narrow
+			? `P23 E 7, ${when}: the blind ask says "Your pick first"`
+			: `P23 E 7, ${when}: "Your pick first" and "Did this need you?" share one line`,
 		read.hint.startsWith("Your pick first") &&
-			read.hintTop !== null &&
-			read.marksTop !== null &&
-			Math.abs(read.hintTop - read.marksTop) <= 4,
+			(narrow ||
+				(read.hintTop !== null &&
+					read.marksTop !== null &&
+					Math.abs(read.hintTop - read.marksTop) <= 4)),
 		read,
 	);
 	check(
@@ -1336,6 +1381,10 @@ const closedRows = async (when: string, menu: Locator) => {
  * the end of the line before, and no button is left alone on a line (6d). The hint and the marks
  * share a line where they fit, and Evidence is on that line or the next. In side and 2x2 (`tight`),
  * the ask part of the row is at most 3 lines.
+ * Round 7b (lead, 2026-11-08): the menu stays narrow, `min(400px, 100% - 16px)`. Where the hint
+ * and the marks do not fit one line, the marks group ("Did this need you?" and its two picks)
+ * takes the next line as one unit, starting at the hint's left edge. So in side and 2x2 the row
+ * may take 4 lines.
  */
 const openRow = async (when: string, menu: Locator, tight: boolean) => {
 	const read = await menu.evaluate((popover) => {
@@ -1408,6 +1457,17 @@ const openRow = async (when: string, menu: Locator, tight: boolean) => {
 		);
 		const evidence = row.querySelector(".ask-why button")?.getBoundingClientRect();
 		const em = Number.parseFloat(getComputedStyle(row).fontSize) || 16;
+		const group = [...label, ...marks];
+		const unit =
+			group.length === 0
+				? null
+				: {
+						lines: lines(group).length,
+						left: Math.min(...group.map((r) => r.left)),
+						top: Math.min(...group.map((r) => r.top)),
+						edge: hint.length === 0 ? null : Math.min(...hint.map((r) => r.left)),
+						under: lastHint?.bottom ?? null,
+					};
 		const view = row.querySelector(".ask-view");
 		const all = [
 			...textRects(view),
@@ -1427,6 +1487,19 @@ const openRow = async (when: string, menu: Locator, tight: boolean) => {
 				evidence === undefined
 					? null
 					: {top: evidence.top, ok: evidence.top <= lineBottom + em, lineBottom},
+			unit:
+				unit === null
+					? null
+					: {
+							...unit,
+							ok:
+								unit.lines === 1 &&
+								unit.edge !== null &&
+								Math.abs(unit.left - unit.edge) <= 1 &&
+								unit.under !== null &&
+								unit.top >= unit.under - 1 &&
+								unit.top <= unit.under + em,
+						},
 			lines: lines(all).length,
 		};
 	});
@@ -1447,12 +1520,32 @@ const openRow = async (when: string, menu: Locator, tight: boolean) => {
 		read,
 	);
 	check(
+		`P23 E 7b, ${when}: the open row's marks share the hint's line, or take the next line as one unit at its left edge`,
+		read.unit === null || read.shared || read.unit.ok,
+		read,
+	);
+	check(
 		`P23 E 7, ${when}: the open row's Evidence is on that line or the next`,
 		read.evidence?.ok === true,
 		read,
 	);
 	if (tight)
-		check(`P23 E 7, ${when}: the open row's ask is at most 3 lines`, read.lines <= 3, read);
+		check(`P23 E 7b, ${when}: the open row's ask is at most 4 lines`, read.lines <= 4, read);
+};
+/**
+ * Round 7b, fix 2 (lead, 2026-11-08): the asks menu stays narrow, `min(400px, 100% - 16px)`. Its
+ * panel is at most 400px wide and at most the window's width less 16px, at every layout.
+ */
+const menuWidth = async (when: string, menu: Locator) => {
+	const read = await menu.evaluate((panel) => ({
+		width: panel.getBoundingClientRect().width,
+		window: innerWidth,
+	}));
+	check(
+		`P23 E 7b, ${when}: the asks menu is at most 400px wide, and 16px under the window's width`,
+		read.width > 0 && read.width <= 400.5 && read.width <= read.window - 16 + 0.5,
+		read,
+	);
 };
 /**
  * The bar's line under it, as a person sees it: the ::after hairline (design E), or an outline,
