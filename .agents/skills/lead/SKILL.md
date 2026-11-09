@@ -81,6 +81,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `box.sh fetch <name> <branch>` | fetch the branch and step notes into the main checkout, nothing else |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push |
+| `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
 | `catchup.sh <pr> <ticket> [--merge-method squash\|merge]` | merge `main` in as the bot, sign `lead`, push, check that exact head and land pinned to it; squash by default |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
 | `clauderow.py --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [why]` | one `field/runs.jsonl` row from a Claude subagent's transcript, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
@@ -180,11 +181,26 @@ Product code (`next/` and today's app) keeps its steps.
 
 ## Decisions land at once
 
-A decision lands in the repo as soon as it is made (owner, 2026-11-09). Each decision gets its own
-docs PR, opened the turn it is decided, with a docs agent. Never batch decisions, and never wait for
-a code PR or for the end of the day. A docs-only PR that writes down a decision is merged when CI
-is green and the leak grep is clean, with no plan, tests, review or field rows. Code PRs keep their
-steps.
+Decisions live in `.decisions/`, one file per decision
+([0001](../../../.decisions/0001-decisions-live-in-the-repo.md), owner, 2026-11-09). The whole path:
+
+```text
+owner decides -> write .decisions/NNNN-slug.md -> its own docs PR -> merge on green
+```
+
+- **Write it the turn it is decided,** with a docs agent, in the shape
+  [the folder's README](../../../.decisions/README.md) gives. Link its `docs/direction/` note when
+  one exists.
+- **One decision, one PR.** Never batch decisions, and never wait for a code PR or for the end of
+  the day.
+- **Merge on green.** A docs-only PR that writes down a decision is merged when CI is green and the
+  leak grep is clean, with no plan, tests, review or field rows. Code PRs keep their steps.
+- **Search before you ask.** Before the lead or any step asks the owner or writes a plan, it
+  searches `.decisions/`, `.glossary/` and `docs/direction/` for the topic.
+- **Read what a diff touches.** Before a review and before a merge, run
+  `sh .agents/skills/lead/scripts/governance.sh` on the branch. It lists the decision files the
+  diff's words touch. The review step and the lead read each one and say whether the diff walks it
+  back. It only lists for now; it blocks later, once its false alarms are measured.
 
 The lead owns the count of decisions still missing from the repo. Its status gives that count and
 the open docs PRs carrying them. The owner does not keep the list. Code cannot count decisions
