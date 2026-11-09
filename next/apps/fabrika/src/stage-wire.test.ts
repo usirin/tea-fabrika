@@ -482,12 +482,13 @@ describe("P12 real dev.ts wire", () => {
 		);
 		expect(original).toBeDefined();
 		const binding = JSON.parse(String(original!.value));
+		// P17a saves the completed answer before replying; a retry reuses this settled binding.
 		expect(binding).toMatchObject({
 			by: {key: s.key.fingerprint},
 			process: pid,
 			seen,
 			sentAt: SENT,
-			state: {_tag: "delivered"},
+			state: {_tag: "settled", result: accepted},
 		});
 		await send(c, pid, "later", {type: "dec"});
 		expect(placing(await send(c, pid, "metadata", {type: "inc"}, seen))).toEqual(accepted);

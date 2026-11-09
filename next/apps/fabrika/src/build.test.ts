@@ -1,5 +1,4 @@
 // P12, next/. Exercise the real build entry. A Compiler failure must preserve every last-good byte.
-import fs from "node:fs";
 import {
 	chmodSync,
 	mkdirSync,
@@ -10,19 +9,26 @@ import {
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
-import {syncBuiltinESMExports} from "node:module";
 import {tmpdir} from "node:os";
 import {join, relative, resolve} from "node:path";
 import {pathToFileURL} from "node:url";
 import {NodeServices} from "@effect/platform-node";
-import {Effect, Exit, type FileSystem, type Path} from "effect";
+import {Effect, Exit, FileSystem, Layer, type Path} from "effect";
 import * as fc from "fast-check";
 import {rolldown} from "rolldown";
-import {afterEach, describe, expect, it, vi} from "vitest";
+import {afterEach, describe, expect, it} from "vitest";
 
 const homes: Array<string> = [];
 const runNode = <A, E>(work: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>) =>
 	Effect.runPromise(work.pipe(Effect.provide(NodeServices.layer)));
+const discovery = (files: Array<string>) =>
+	Layer.effect(
+		FileSystem.FileSystem,
+		Effect.map(FileSystem.FileSystem, (fs) => ({
+			...fs,
+			glob: () => Effect.succeed(files),
+		})),
+	);
 afterEach(() => {
 	for (const h of homes.splice(0)) rmSync(h, {recursive: true, force: true});
 });
@@ -108,22 +114,15 @@ describe("P12 Rolldown build", () => {
 				root = resolve(import.meta.dirname, "../../../..");
 			writeFileSync(file, 'export const Tip = () => {"use no memo"; return <b>approved</b>;}');
 			const path = relative(root, file);
-			const found = vi.spyOn(fs, "globSync").mockReturnValue([path]);
-			syncBuiltinESMExports();
-			try {
-				const result = await runNode(
-					Effect.exit(
-						build({
-							out: join(folder, "dist"),
-							ledger: [{file: path, fn: "Tip", why: "fixture approval"}],
-						}),
-					),
-				);
-				expect(result).toMatchObject({_tag: "Success"});
-			} finally {
-				found.mockRestore();
-				syncBuiltinESMExports();
-			}
+			const result = await runNode(
+				Effect.exit(
+					build({
+						out: join(folder, "dist"),
+						ledger: [{file: path, fn: "Tip", why: "fixture approval"}],
+					}),
+				).pipe(Effect.provide(discovery([path]))),
+			);
+			expect(result).toMatchObject({_tag: "Success"});
 		},
 	);
 	law(
@@ -141,13 +140,15 @@ describe("P12 Rolldown build", () => {
 				program,
 				`export {counter as program} from ${JSON.stringify(resolve(import.meta.dirname, "../../../programs/counter/src/program.ts"))};`,
 			);
-			const found = vi
-				.spyOn(fs, "globSync")
-				.mockReturnValue([relative(resolve(import.meta.dirname, "../../../.."), view)]);
-			syncBuiltinESMExports();
 			chmodSync(parent, 0o500);
 			try {
-				const built = await runNode(build({out, programs: {counter: program}}));
+				const built = await runNode(
+					build({out, programs: {counter: program}}).pipe(
+						Effect.provide(
+							discovery([relative(resolve(import.meta.dirname, "../../../.."), view)]),
+						),
+					),
+				);
 				expect(built.programs.counter?.hash).toMatch(/^[a-f0-9]{64}$/);
 				const views = readdirSync(out).filter((file) => file.endsWith(".js"));
 				expect(views).toHaveLength(1);
@@ -155,8 +156,6 @@ describe("P12 Rolldown build", () => {
 				expect(compiled.label).toBe(label);
 			} finally {
 				chmodSync(parent, 0o700);
-				found.mockRestore();
-				syncBuiltinESMExports();
 			}
 		},
 	);
