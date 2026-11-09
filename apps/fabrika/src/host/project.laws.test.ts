@@ -28,6 +28,23 @@ const live = (sock: string) =>
 		Effect.timeout("5 seconds"),
 	);
 const pause = Effect.sleep("100 millis");
+/**
+ * Wait until every host's lines have been quiet for 150 ms, 5 s at most. A host that has just
+ * opened a page draws its own prompt, and may redraw it a moment later; that is the sibling's own
+ * line, not a line from the other host. The law (nothing of one host's work reaches the other's tile
+ * or run) is checked from the quiet on, so a redraw cannot be taken for a crossing.
+ */
+const quiet = (lists: readonly (readonly unknown[])[]) =>
+	Effect.gen(function* () {
+		let last = lists.map((l) => l.length);
+		let still = 0;
+		for (let i = 0; i < 100 && still < 6; i += 1) {
+			yield* Effect.sleep("25 millis");
+			const now = lists.map((l) => l.length);
+			still = now.every((n, at) => n === last[at]) ? still + 1 : 0;
+			last = now;
+		}
+	});
 
 it("P2: two real hosts keep equal tile and agent names, ledger files, jobs and ports separate", async () => {
 	const {Project} = await import("../project.ts");
@@ -75,6 +92,7 @@ it("P2: two real hosts keep equal tile and agent names, ledger files, jobs and p
 					)) {
 						const h = hosts[op.index]!;
 						const other = hosts[1 - op.index]!;
+						yield* quiet(hosts.map((x) => x.got));
 						const before = other.got.length;
 						if (op.action === "split")
 							h.wire.send({type: "on", port: "desk", m: {type: "run", does: "tezgah.split"}});
@@ -119,7 +137,8 @@ it("P10: crash, stale cleanup and restart touch only the chosen project's runtim
 			);
 			const paths = await Promise.all(projects.map((project) => go(Project.paths(app, project))));
 			for (const op of operations) {
-				if (!["crash", "stale", "restart"].includes(op.action)) continue;
+				const why = op.action;
+				if (why !== "crash" && why !== "stale" && why !== "restart") continue;
 				const selected = projects[op.index]!;
 				const sibling = paths[1 - op.index]!;
 				await go(
@@ -128,7 +147,7 @@ it("P10: crash, stale cleanup and restart touch only the chosen project's runtim
 						yield* fs.makeDirectory(sibling.dir, {recursive: true, mode: 0o700});
 						for (const file of [sibling.sock, sibling.mcp, sibling.pid, sibling.lock])
 							writeFileSync(file, "sibling fixture");
-						yield* Project.recover(app, selected, op.action);
+						yield* Project.recover(app, selected, why);
 						for (const file of [sibling.sock, sibling.mcp, sibling.pid, sibling.lock])
 							expect(readFileSync(file, "utf8")).toBe("sibling fixture");
 					}),

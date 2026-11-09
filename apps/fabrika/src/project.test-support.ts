@@ -7,6 +7,7 @@ import * as NodePath from "@effect/platform-node/NodePath";
 import {Effect, Layer, type Scope} from "effect";
 import * as fc from "fast-check";
 import {afterEach, expect, it, vi} from "vitest";
+import {Project} from "./project.ts";
 
 // Today's app, T276 PR 1. These are fixtures and checks, never substitute product behavior.
 export const options = {seed: 119120, numRuns: 25};
@@ -46,6 +47,19 @@ export const platform = NodeChildProcessSpawner.layer.pipe(
 );
 export const go = <A, E>(body: Effect.Effect<A, E, Layer.Success<typeof platform> | Scope.Scope>) =>
 	Effect.runPromise(body.pipe(Effect.scoped, Effect.provide(platform)));
+
+/**
+ * A project's home in an app home, as the app makes one: a git working tree named `name`, its
+ * checked record in `<app>/projects/<key>/project.json`, and the host's paths. A host process
+ * (host/main.ts) starts on `home` only with that record, so a real-host test gets its home here.
+ */
+export const projectHome = (app: string, name: string) =>
+	Effect.gen(function* () {
+		const project = yield* Project.check(repo(app, name));
+		const home = join(app, "projects", project.key);
+		yield* Project.write(home, project);
+		return {app, home, project, paths: yield* Project.paths(app, project)};
+	});
 
 // Run the same assertion on a deliberately bad answer. fc.check must reach that assertion;
 // a missing product import never counts as catching a plant.

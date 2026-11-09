@@ -159,9 +159,9 @@ const invalidWindows = (project: Project, start: Omit<HostStart, "project">) => 
 	const welcome: Look = {_tag: "welcome", recent: [], selected: "folder", link: {kind: "up"}};
 	// @ts-expect-error P19 a project window requires its checked Project
 	const absent: Look = {_tag: "project", name: "fixture", box: {_tag: "closed"}};
-	// @ts-expect-error P19 a raw root is not a checked Project
 	const unchecked: Look = {
 		_tag: "project",
+		// @ts-expect-error P19 a raw root is not a checked Project
 		project: {root: project.root},
 		name: "fixture",
 		box: {_tag: "closed"},

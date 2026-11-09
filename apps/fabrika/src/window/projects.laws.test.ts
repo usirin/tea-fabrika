@@ -3,7 +3,7 @@ import * as fc from "fast-check";
 import {createElement} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {expect, it} from "vitest";
-import {deskMachine} from "../desk/desk.ts";
+import {deskMachine, type Open} from "../desk/desk.ts";
 import {defaults} from "../desk/keymap.ts";
 import {go, home, options, plant, repo, word} from "../project.test-support.ts";
 import {FRAME, frameUpdate, keyGoesTo, middleFree} from "./frame.ts";
@@ -31,8 +31,14 @@ const recent = async (input: readonly {name: string; at: number}[]) => {
 		})),
 	);
 };
+// The desk a fresh window starts with: open, as the frame's props need.
+const openDesk = (): Open => {
+	const desk = deskMachine.init(null, undefined)[0];
+	if (desk.at !== "open") throw new Error("a fresh desk is closed");
+	return desk;
+};
 const props = (extra = {}): FrameProps => ({
-	desk: deskMachine.init(null, undefined)[0],
+	desk: openDesk(),
 	frame: FRAME,
 	asks: {asks: [], later: [], reach: "ok", why: null},
 	host: null,
@@ -115,7 +121,7 @@ it("P21: welcome and box share row facts; the box omits current and labels open 
 				for (const fact of facts) {
 					const row = welcome.find((r) => r.id === fact.project.key);
 					expect(row).toMatchObject({name: fact.name, path: fact.path});
-					if (fact.open) expect(row?.at).toBe("open");
+					if (fact.open) expect(row).toMatchObject({_tag: "recent", at: "open"});
 				}
 			},
 		),
@@ -159,8 +165,9 @@ it("P22: queries and late rows keep selection by ID, and Enter acts on that ID o
 					expect(next.opening).toBe(selected);
 					frame = frameUpdate(next, {type: "projects", rows: rows(facts), focus: "tile:t1"});
 				}
-				if (frame.over.kind === "palette")
-					expect(frame.over.rows.some((row) => row.id === frame.over.selected)).toBe(true);
+				const over = frame.over;
+				if (over.kind === "palette")
+					expect(over.rows.some((row) => row.id === over.selected)).toBe(true);
 			}
 		}),
 		options,
@@ -261,12 +268,12 @@ plant("P25 unnamed clickable span", word, (name) =>
 );
 
 it("P27: Cmd-O on welcome focuses its first row without a second box", async () => {
-	const {projectsMachine} = await import("../projects.ts");
+	const {projectsMachine, restored} = await import("../projects.ts");
 	await fc.assert(
 		fc.asyncProperty(recentInput, async (input) => {
 			const facts = await recent(input);
 			const {applyCell} = await import("@demlik/tea");
-			const model = projectsMachine.init({recent: facts, restore: []}, undefined)[0];
+			const model = projectsMachine.init(restored({recent: facts, restore: []}), undefined)[0];
 			const [next, cmds] = applyCell(projectsMachine, model, {type: "projects"});
 			expect(next.look._tag).toBe("welcome");
 			expect(cmds.filter((c) => c.type === "focus_row")).toEqual([

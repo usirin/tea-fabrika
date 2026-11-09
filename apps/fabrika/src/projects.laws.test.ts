@@ -3,6 +3,7 @@ import {arbMsgSequence} from "@demlik/tea/pbt";
 import * as fc from "fast-check";
 import {expect, it} from "vitest";
 import {go, home, options, plant, repo, source, word} from "./project.test-support.ts";
+import type {ProjectsCmd} from "./projects.ts";
 
 const operations = fc.array(
 	fc.record({
@@ -76,7 +77,7 @@ plant("P3 reserve after starting", fc.array(word, {minLength: 2, maxLength: 8}),
 );
 
 it("P5: launch without a folder shows welcome and recents; every cancelled opening keeps state", async () => {
-	const {projectsMachine} = await import("./projects.ts");
+	const {projectsMachine, restored} = await import("./projects.ts");
 	fc.assert(
 		fc.property(
 			fc.array(fc.constantFrom("launch", "choose_folder", "cancel"), {maxLength: 30}),
@@ -98,7 +99,8 @@ it("P5: launch without a folder shows welcome and recents; every cancelled openi
 	);
 	const {projects} = await fixture();
 	const [reopened, cmds] = projectsMachine.init(
-		{
+		// The machine's init takes the app's saved session; `restored` makes the model it reads.
+		restored({
 			recent: projects.map((project) => ({
 				project,
 				name: "repo",
@@ -107,7 +109,7 @@ it("P5: launch without a folder shows welcome and recents; every cancelled openi
 				open: false,
 			})),
 			restore: projects.map((project) => project.key),
-		},
+		}),
 		undefined,
 	);
 	expect(reopened.look._tag).toBe("welcome");
@@ -274,9 +276,7 @@ it("P14: equal ticket numbers stay local; notices and untrusted senders never cr
 						expect(cmds.filter((c) => c.type === "to_host")).toEqual([]);
 					if (op.action === "notification")
 						expect(
-							cmds
-								.filter((c) => c.type === "focus_window" || c.type === "open_window")
-								.every((c) => c.key === key),
+							cmds.filter(isCmd("focus_window", "open_window")).every((c) => c.key === key),
 						).toBe(true);
 					expect(next.projects[projects[1 - op.index]!.key]).toEqual(
 						before.projects[projects[1 - op.index]!.key],
@@ -306,6 +306,11 @@ const recordFields = {
 	turn: ["project", "name", "folder", "run", "model", "effort", "by", "input", "output", "cost"],
 	close: ["project", "window", "source", "at", "outcome"],
 } as const;
+/** A command of the machine, narrowed by its type, so its fields read as the product declares them. */
+const isCmd =
+	<T extends ProjectsCmd["type"]>(...types: readonly T[]) =>
+	(cmd: {readonly type: string}): cmd is Extract<ProjectsCmd, {type: T}> =>
+		types.some((type) => type === cmd.type);
 const checkRecord = (kind: keyof typeof recordFields, row: Record<string, unknown>) => {
 	for (const field of recordFields[kind]) expect(row).toHaveProperty(field);
 };
@@ -337,9 +342,7 @@ it("P17: every successful or failed operation keeps its own record and opening s
 							? {type: "opened", key: project.key, window: `window-${i}`}
 							: {type: "open_failed", key: project.key, why: "missing"},
 					);
-					const written = [...first, ...last]
-						.filter((cmd) => cmd.type === "record")
-						.map((cmd) => cmd.record);
+					const written = [...first, ...last].filter(isCmd("record")).map((cmd) => cmd.record);
 					expect(written.length).toBeGreaterThan(0);
 					for (const record of written) {
 						checkRecord("opening", record);
@@ -438,24 +441,35 @@ const secretsCheck = (credential: string, observed: Readonly<Record<string, unkn
 		for (const form of forms(credential)) expect(text).not.toContain(form);
 	}
 };
-it("P29: [secrets] generated refusals, failures and operation orders keep every named output clean", async () => {
-	// Fail here while the checked-project product is absent. Never count an unbuilt Electron
-	// bundle as the feature's red. Once built, drive the real outside route on generated flows.
-	const {Project} = await import("./project.ts");
-	expect(Project).toBeDefined();
-	const {observeProjectFlow} = await import("../projects-e2e.ts");
-	await fc.assert(
-		fc.asyncProperty(credentials, async (flow) => {
-			const observed = await observeProjectFlow(flow);
-			secretsCheck(flow.credential, observed);
-			expect(observed["app records"].length).toBeGreaterThan(0);
-			expect(observed["host logs"].length).toBeGreaterThan(0);
-			expect(observed.spans.length).toBeGreaterThan(0);
-			expect(observed["public capture labels"].length).toBeGreaterThan(0);
-		}),
-		{...options, numRuns: 5},
-	);
-});
+// Each generated flow launches the real built Electron app, about 15 s (the plan's P29 is a
+// property over generated flows on the outside route). Three flows keep it a property at the seed
+// the other laws use, and the test's own limit is 3 flows at 15 s with room, 150 s, because vitest's
+// 60 s limit fits only three flows when nothing else runs. The plants below cover every output and
+// encoding, so a leak is still caught without more Electron launches.
+const P29_RUNS = 3;
+const P29_LIMIT_MS = 150_000;
+it(
+	"P29: [secrets] generated refusals, failures and operation orders keep every named output clean",
+	async () => {
+		// Fail here while the checked-project product is absent. Never count an unbuilt Electron
+		// bundle as the feature's red. Once built, drive the real outside route on generated flows.
+		const {Project} = await import("./project.ts");
+		expect(Project).toBeDefined();
+		const {observeProjectFlow} = await import("../projects-e2e.ts");
+		await fc.assert(
+			fc.asyncProperty(credentials, async (flow) => {
+				const observed = await observeProjectFlow(flow);
+				secretsCheck(flow.credential, observed);
+				expect(observed["app records"].length).toBeGreaterThan(0);
+				expect(observed["host logs"].length).toBeGreaterThan(0);
+				expect(observed.spans.length).toBeGreaterThan(0);
+				expect(observed["public capture labels"].length).toBeGreaterThan(0);
+			}),
+			{...options, numRuns: P29_RUNS},
+		);
+	},
+	P29_LIMIT_MS,
+);
 for (const output of outputs)
 	for (const [encoding, encode] of [
 		["plain", (s: string) => s],

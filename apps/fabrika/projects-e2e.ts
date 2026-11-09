@@ -14,6 +14,7 @@ import {DatabaseSync} from "node:sqlite";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import {Effect, Layer} from "effect";
+import type {BaseWindow, MessageBoxOptions, OpenDialogOptions} from "electron";
 import {_electron, type ElectronApplication, type Page} from "playwright";
 import {deskMachine, savedOf} from "./src/desk/desk.ts";
 
@@ -64,10 +65,10 @@ const until = async <A>(read: () => Promise<A>, accepts: (a: A) => boolean): Pro
 const fixture = () => {
 	const home = realpathSync(mkdtempSync("/tmp/fh."));
 	const name = "fixture-project-with-a-long-name-that-must-stay-usable";
-	const projects = [
-		join(home, "fixtures", "left", name),
-		join(home, "fixtures", "right", name),
-	] as const;
+	// The app shows a folder under its `~` as `~/...`, so the run's HOME is its own home and the
+	// projects sit at `~/work/<left|right>/<name>`: a short, neutral path, and no shot or row shows
+	// this machine's account, its temp folder or its real home. FABRIKA_SETTINGS stays the run's too.
+	const projects = [join(home, "work", "left", name), join(home, "work", "right", name)] as const;
 	for (const [index, root] of projects.entries()) {
 		mkdirSync(root, {recursive: true});
 		execFileSync("git", ["init", "-q"], {cwd: root});
@@ -83,6 +84,7 @@ const fixture = () => {
 		)
 			env[name] = value;
 	env.FABRIKA_HOME = home;
+	env.HOME = home;
 	return {home, projects, name, env};
 };
 type Fixture = ReturnType<typeof fixture>;
@@ -132,11 +134,15 @@ export const openFixtureProject = async (
 		openedPages.set(app, known);
 	}
 	await app.evaluate(({dialog, BrowserWindow}, folder) => {
-		dialog.showOpenDialog = async (parent, options) => {
-			if (!options?.properties?.includes("openDirectory")) throw new Error("not a folder sheet");
-			if (!BrowserWindow.getAllWindows().includes(parent))
-				throw new Error("sheet has no requesting window");
-			const dialogs = await parent.webContents.executeJavaScript(
+		// The sheet takes its window first, or only its options: the test's answer is for the first.
+		dialog.showOpenDialog = async (
+			...args: [BaseWindow, OpenDialogOptions] | [OpenDialogOptions]
+		) => {
+			const [parent, options] = args.length === 2 ? args : [undefined, args[0]];
+			if (!options.properties?.includes("openDirectory")) throw new Error("not a folder sheet");
+			const requester = BrowserWindow.getAllWindows().find((window) => window === parent);
+			if (requester === undefined) throw new Error("sheet has no requesting window");
+			const dialogs = await requester.webContents.executeJavaScript(
 				"document.querySelectorAll('[role=\"dialog\"]').length",
 			);
 			if (dialogs !== 0) throw new Error("P28: sheet stacked over projects box");
@@ -183,6 +189,15 @@ const switchTo = async (page: Page, parent: "left" | "right") => {
 		(n) => n === 0,
 	);
 };
+/** Is this process still there? Signal 0 only asks. */
+const alive = (pid: number) => {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch {
+		return false;
+	}
+};
 const dispose = async (app: ElectronApplication | null, f: Fixture) => {
 	await app?.close().catch(() => {});
 	// Only hosts this run started, from its own private project homes. Never pgrep or a key file.
@@ -191,16 +206,27 @@ const dispose = async (app: ElectronApplication | null, f: Fixture) => {
 	try {
 		keys = readdirSync(projects);
 	} catch {}
+	const pids: number[] = [];
 	for (const key of keys) {
 		try {
 			const record = JSON.parse(readFileSync(join(projects, key, "project.json"), "utf8"));
 			if (!f.projects.includes(record.root)) continue;
 			const selected = await testProject(f.home, record.root);
 			const pid = Number(readFileSync(selected.paths.pid, "utf8").trim());
-			if (Number.isSafeInteger(pid) && pid > 1 && pid !== process.pid) process.kill(pid, "SIGTERM");
+			if (Number.isSafeInteger(pid) && pid > 1 && pid !== process.pid) {
+				process.kill(pid, "SIGTERM");
+				pids.push(pid);
+			}
 		} catch {}
 	}
-	rmSync(f.home, {recursive: true, force: true});
+	// A host still writes (its log, its ledger, its records) until it has exited: the home goes only
+	// after every host this run signalled is gone, 10 s at most, then it is killed and waited for.
+	for (let i = 0; i < 200 && pids.some(alive); i++)
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	for (const pid of pids.filter(alive)) process.kill(pid, "SIGKILL");
+	for (let i = 0; i < 40 && pids.some(alive); i++)
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	rmSync(f.home, {recursive: true, force: true, maxRetries: 20, retryDelay: 100});
 };
 
 const e1 = async () => {
@@ -365,8 +391,10 @@ export const observeProjectFlow = async (flow: RecordedProjectFlow) => {
 			shell.openExternal = async (url) => {
 				outputs.urls.push(url);
 			};
-			dialog.showMessageBox = async (...args) => {
-				const options = args.at(-1) as {message?: string; detail?: string; cancelId?: number};
+			dialog.showMessageBox = async (
+				...args: [BaseWindow, MessageBoxOptions] | [MessageBoxOptions]
+			) => {
+				const options = args.length === 2 ? args[1] : args[0];
 				outputs.errors.push(options.message ?? "", options.detail ?? "");
 				return {response: options.cancelId ?? 0, checkboxChecked: false};
 			};
@@ -460,13 +488,14 @@ const resize = async (app: ElectronApplication, page: Page, small: boolean) => {
 			throw new Error("E2 requires a real 1024x700 window");
 	}, small);
 };
-const geometry = async (page: Page, layout: Layout | "normal", hostless: boolean) => {
-	const bounds = await page.locator("[data-tile]").evaluateAll((tiles) =>
+const tileBounds = (page: Page) =>
+	page.locator("[data-tile]").evaluateAll((tiles) =>
 		tiles.map((tile) => {
 			const r = tile.getBoundingClientRect();
 			return {x: r.x, y: r.y, w: r.width, h: r.height};
 		}),
 	);
+const geometry = async (page: Page, layout: Layout | "normal", hostless: boolean) => {
 	const expected = hostless
 		? 0
 		: layout === "2x2"
@@ -474,6 +503,18 @@ const geometry = async (page: Page, layout: Layout | "normal", hostless: boolean
 			: layout === "side" || layout === "stacked"
 				? 2
 				: 1;
+	// A split shows its tile 10 to 40 ms after the key, so the count is read until it equals the
+	// expected one, or has stood still for 300 ms (a wrong count that stays is the law's red), or
+	// 5 s have passed. The law (the count and the places) is checked on what the page settled on.
+	let bounds = await tileBounds(page);
+	let still = 0;
+	for (let i = 0; i < 200 && bounds.length !== expected && still < 12; i++) {
+		await new Promise((resolve) => setTimeout(resolve, 25));
+		const next = await tileBounds(page);
+		still = next.length === bounds.length ? still + 1 : 0;
+		bounds = next;
+	}
+	if (bounds.length === expected) bounds = await tileBounds(page);
 	check(bounds.length === expected, `E2 ${layout}: wrong tile count`);
 	if (hostless) return;
 	for (const r of bounds) check(r.w > 0 && r.h > 0, "E2: zero-size tile");
@@ -733,7 +774,7 @@ const captures = async (shots: string) => {
 					});
 				}
 			if (layout === "one" || layout === "small") {
-				const invalid = join(f.home, "fixtures", "not-a-git-project");
+				const invalid = join(f.home, "work", "not-a-git-project");
 				mkdirSync(invalid);
 				await rejectFolder(app, page, invalid);
 				for (const look of ["dark", "light"] as const)
