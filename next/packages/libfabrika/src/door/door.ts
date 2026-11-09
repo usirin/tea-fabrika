@@ -940,43 +940,43 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(
 			if (Result.isFailure(allocation)) return yield* allocation.failure;
 			const binding = allocation.success;
 			if (binding === null) return null;
-			if (binding.state._tag === "allocated") {
-				let safe: typeof Schema.Json.Type | undefined;
-				if (
-					refusal === null &&
-					message !== null &&
-					typeof name === "string" &&
-					!options.inputs.raw.includes(name)
-				) {
-					const encoded = Schema.encodeUnknownResult(options.inputs.log)(message);
-					if (Result.isSuccess(encoded)) {
-						const value = json(encoded.success);
-						if (Result.isSuccess(value)) safe = value.success;
-					}
+			let safe: typeof Schema.Json.Type | undefined;
+			if (
+				refusal === null &&
+				message !== null &&
+				typeof name === "string" &&
+				!options.inputs.raw.includes(name)
+			) {
+				const encoded = Schema.encodeUnknownResult(options.inputs.log)(message);
+				if (Result.isSuccess(encoded)) {
+					const value = json(encoded.success);
+					if (Result.isSuccess(value)) safe = value.success;
 				}
-				const fields = {
-					door: binding.door ?? process,
-					n: binding.n ?? count,
-					method,
-					target,
-					by,
-					arrivedAt: binding.arrivedAt,
-					traceId: binding.span.traceId,
-					spanId: binding.span.spanId,
-				};
-				const fact =
-					refusal === null
-						? InputFact.cases.received.make({
-								...fields,
-								...(safe === undefined ? {} : {input: safe}),
-							})
-						: InputFact.cases.refused.make({...fields, why: refusal});
-				const placed = yield* appendChecked(binding.client, {
-					stream: "door/inputs",
-					id: binding.id,
-					line: lineFor(fromInput(binding), fact),
-				});
-				if (placed._tag === "refused") return yield* new LedgerError({why: "refused"});
+			}
+			const fields = {
+				door: binding.door ?? process,
+				n: binding.n ?? count,
+				method,
+				target,
+				by,
+				arrivedAt: binding.arrivedAt,
+				traceId: binding.span.traceId,
+				spanId: binding.span.spanId,
+			};
+			const fact =
+				refusal === null
+					? InputFact.cases.received.make({
+							...fields,
+							...(safe === undefined ? {} : {input: safe}),
+						})
+					: InputFact.cases.refused.make({...fields, why: refusal});
+			const placed = yield* appendChecked(binding.client, {
+				stream: "door/inputs",
+				id: binding.id,
+				line: lineFor(fromInput(binding), fact),
+			});
+			if (placed._tag === "refused") return yield* new LedgerError({why: "refused"});
+			if (binding.state._tag === "allocated") {
 				const recorded: Binding = {...binding, state: EnvelopeState.cases.recorded.make({})};
 				if (letter !== null) yield* store.atomic(() => saveBinding(recorded));
 				return recorded;
