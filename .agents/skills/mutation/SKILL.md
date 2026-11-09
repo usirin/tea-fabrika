@@ -104,8 +104,10 @@ its config and cleanup. They do not prove mutation coverage of shell or Python.
 - `concurrency` and Vitest's `maxWorkers` are both 1 under the current laptop caps.
 - `ignorePatterns` keeps `.claude` out of Stryker's sandbox copy: its skill links are folders
   linked to `.agents/skills`, and the copy fails on them (tried 2026-11-08).
-- `tsconfigFile` points at an empty file: Stryker rewrites a tsconfig with TypeScript's JavaScript
-  API, which TypeScript 7 does not have (`packages/pipeline/src/stages/mutation/stryker.ts`).
+- `tsconfigFile` points at a path nothing writes: Stryker rewrites a tsconfig with TypeScript's
+  JavaScript API, which TypeScript 7 does not have, but only when that path is one of the project's
+  files (`@stryker-mutator/core`'s `ts-config-preprocessor.js`). An empty file there still crashed
+  on Linux CI once TMPDIR sat inside the project (2026-11-08).
 - **The command as written ran** on 2026-11-08 on ticket 520's `sample.ts`, seed 119120: 150 of
   202 mutants selected; the final round had 94 killed, 1 survived (equivalent), 49 no coverage (the
   CLI block, which only the end-to-end run reaches) and 6 static ignored, in about 40 s. The dry run

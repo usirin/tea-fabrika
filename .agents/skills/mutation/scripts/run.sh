@@ -55,6 +55,8 @@ export default defineConfig({...base, test: {...base.test, include, maxWorkers: 
 		"packages/pipeline/src/stages/mutation/stryker*.test.ts",
 		"packages/pipeline/src/stages/pipeline/{program,github}.test.ts"]}});
 TS
+# Stryker parses tsconfigFile with TypeScript's JS API only when it is one of the project's
+# files; TypeScript 7 has none. Nothing writes this path, so it is never a project file.
 cat > "$M/stryker.json" <<JSON
 {"testRunner": "vitest", "vitest": {"configFile": "vitest.mutation.config.ts", "related": false},
  "plugins": ["$PWD/$S/vitest-runner/dist/src/index.js"], "coverageAnalysis": "perTest",
@@ -62,10 +64,9 @@ cat > "$M/stryker.json" <<JSON
  "incremental": true, "incrementalFile": "$M/incremental.json",
  "reporters": ["json", "event-recorder", "progress-append-only"],
  "jsonReporter": {"fileName": "$M/report.json"}, "eventReporter": {"baseDir": "$M/events"},
- "tempDirName": "$M/tmp", "tsconfigFile": "$M/none.json", "cleanTempDir": "always",
+ "tempDirName": "$M/tmp", "tsconfigFile": "$M/no-tsconfig/absent.json", "cleanTempDir": "always",
  "ignorePatterns": [".claude", "runs"]}
 JSON
-echo '{}' > "$M/none.json"
 set --
 [ "${FINAL:-1}" = 0 ] || set -- --force
 node "$S/core/bin/stryker.js" run "$M/stryker.json" "$@" > "$M/log.txt" 2>&1
