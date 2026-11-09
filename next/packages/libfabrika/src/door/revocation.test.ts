@@ -1,6 +1,7 @@
 // P17a, next/. Two independently built Door layers share real SQLite and membership history.
 // Plants: hello-only checks; treating close as permission; stale input/fact admission;
-// duplicate before membership; a revoked key rejoining; refusal leaking to every client.
+// duplicate before membership; a revoked key rejoining; refusal leaking to every client;
+// membership checked only before a paused hello write; decoding a transformed input twice.
 import {createHash} from "node:crypto";
 import {mkdtempSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
@@ -13,10 +14,10 @@ import * as fc from "fast-check";
 import type {Incoming} from "../app/entry.ts";
 import {ClientManager} from "../coordination/client-manager.ts";
 import {ProcessIdGenerator} from "../coordination/process-id.ts";
-import {SignRequest} from "../coordination/session-manager.ts";
+import {NotGranted, SignRequest} from "../coordination/session-manager.ts";
 import {grantText, revokeText} from "../coordination/text.ts";
 import {Archive} from "../data/archive.ts";
-import {LedgerTransaction} from "../data/ledger-transaction.ts";
+import {LedgerTransaction, type LedgerTurn} from "../data/ledger-transaction.ts";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {RecordManager} from "../data/records.ts";
 import {SpanSink} from "../data/sink.ts";
@@ -100,7 +101,7 @@ const key = Effect.fnUntraced(function* () {
 	};
 });
 let homes = 0;
-const world = Effect.fnUntraced(function* () {
+const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown> = Input) {
 	const root = yield* key(),
 		old = yield* key(),
 		other = yield* key();
@@ -122,12 +123,32 @@ const world = Effect.fnUntraced(function* () {
 		return {db, sql: nodeSql(db)};
 	};
 	const first = storage();
-	const layers = (saved = first) => {
+	const layers = (saved = first, beforeWrite: Effect.Effect<void> = Effect.void) => {
 		const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
-		const ledger = Ledger.sql(saved.sql, {reader: "p17"}).pipe(Layer.provide(quiet));
+		const ledger = Layer.effect(
+			Ledger,
+			Ledger.pipe(
+				Effect.map((ledger) => ({
+					...ledger,
+					append: (...args: Parameters<typeof ledger.append>) =>
+						(args[0] === "door/hellos" ? beforeWrite : Effect.void).pipe(
+							Effect.andThen(ledger.append(...args)),
+						),
+				})),
+			),
+		).pipe(Layer.provide(Ledger.sql(saved.sql, {reader: "p17"})), Layer.provide(quiet));
+		const transaction = Layer.effect(
+			LedgerTransaction,
+			LedgerTransaction.pipe(
+				Effect.map((transaction) => ({
+					transact: <A>(step: (turn: LedgerTurn) => A) =>
+						beforeWrite.pipe(Effect.andThen(transaction.transact(step))),
+				})),
+			),
+		).pipe(Layer.provide(LedgerTransaction.layer(saved.sql)), Layer.provide(quiet));
 		const env = Layer.mergeAll(
 			ledger,
-			LedgerTransaction.layer(saved.sql).pipe(Layer.provide(quiet)),
+			transaction,
 			ClientManager.layer(founder).pipe(Layer.provide(ledger)),
 			SpanSink.layer(saved.sql, {object: processes.counter}),
 			RecordManager.memory(4 * 1024 * 1024),
@@ -158,7 +179,7 @@ const world = Effect.fnUntraced(function* () {
 				Effect.sync(() => {
 					notices.push({client, news});
 				}),
-			inputs: {schema: Input, personOnly: [], raw: [], log: Schema.toCodecJson(Input)},
+			inputs: {schema: input, personOnly: [], raw: [], log: Schema.toCodecJson(input)},
 			facts: {personOnly: []},
 		}).pipe(Layer.provideMerge(env));
 		return {layer, env};
@@ -258,6 +279,100 @@ const last = (w: World) => {
 };
 
 describe("P17a, revoke stops writes at the final door", () => {
+	it("a hello paused before its final write cannot land after revoke", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.boolean(), fc.uuid(), async (revokeFirst, tab) => {
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const w = yield* world(),
+							d = yield* setup(w);
+						const before = (yield* rows(w, "door/hellos")).filter(
+							(row) => row.by === w.old.fingerprint,
+						).length;
+						const entered = yield* Deferred.make<void>(),
+							release = yield* Deferred.make<void>();
+						// Pause both write services before their real SQLite transaction. This also
+						// reaches a hello once the builder moves it to appendAdmitted.
+						const gate = Deferred.succeed(entered, undefined).pipe(
+							Effect.andThen(Deferred.await(release)),
+						);
+						const door = yield* Door.pipe(Effect.provide(w.layers(w.first, gate).layer));
+						const pending = yield* Effect.forkChild(Effect.result(hello(door, w.old, tab)));
+						yield* Deferred.await(entered);
+						if (revokeFirst) yield* remove(d.b, w, "revoke");
+						yield* Deferred.succeed(release, undefined);
+						const result = yield* Fiber.join(pending);
+						if (!revokeFirst) yield* remove(d.b, w, "revoke");
+						const revoke = (yield* rows(w, "door/members")).at(-1);
+						expect(revoke?._tag).toBe("revoked");
+						const hellos = (yield* rows(w, "door/hellos")).filter(
+							(row) => row.by === w.old.fingerprint,
+						);
+						const answer = Result.isFailure(result)
+							? Schema.is(NotGranted)(result.failure)
+								? "not_granted"
+								: result.failure._tag
+							: result.success.result._tag === "refused"
+								? result.success.result.why
+								: result.success.result._tag;
+						// Plant: the hello checks membership only before the pause.
+						expect({
+							answer,
+							hellos: hellos.length - before,
+							afterRevoke: hellos.filter((row) => row.rev > (revoke?.rev ?? 0)).length,
+						}).toEqual({
+							answer: revokeFirst ? "not_granted" : "online",
+							hellos: revokeFirst ? 0 : 1,
+							afterRevoke: 0,
+						});
+					}).pipe(Effect.provide(TestClock.layer())),
+				);
+			}),
+			{
+				...checks,
+				// Review regression: revoke lands while this hello's final write is paused.
+				examples: [[true, "paused-hello"]],
+			},
+		);
+	});
+	it("a transforming program input is decoded once and delivered with its decoded value", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.integer(), fc.uuid(), async (n, letter) => {
+				await Effect.runPromise(
+					Effect.gen(function* () {
+						const input = Schema.TaggedStruct("add", {n: Schema.NumberFromString});
+						const w = yield* world(input),
+							d = yield* setup(w);
+						w.controls.letter = letter;
+						const answer = yield* d.a.route(d.old, "process.send", {
+							pid: processes.counter,
+							letter,
+							m: {_tag: "add", n: String(n)},
+							sentAt,
+							seen: 0,
+						});
+						expect(answer._tag).toBe("ok");
+						expect(w.deliveries).toHaveLength(1);
+						const incoming = last(w);
+						expect(incoming.envelope.input).toEqual({_tag: "add", n});
+						// Plant: decode the already decoded input a second time in accept.
+						expect(yield* Effect.result(d.a.accept(incoming))).toMatchObject({
+							_tag: "Success",
+							success: {_tag: "placed"},
+						});
+						const inbox = yield* rows(w, `${processes.counter}/inbox`);
+						expect(inbox).toHaveLength(1);
+						expect(inbox[0]?.body).toEqual({m: {_tag: "add", n}});
+					}).pipe(Effect.provide(TestClock.layer())),
+				);
+			}),
+			{
+				...checks,
+				// Review regression: NumberFromString turns "7" into 7 before accept.
+				examples: [[7, "transformed-input"]],
+			},
+		);
+	});
 	it("a route paused after its online check cannot record authenticated input after revoke", async () => {
 		await fc.assert(
 			fc.asyncProperty(

@@ -45,6 +45,24 @@ export const outsideInputConstructor: CreateRule = {
 			seen.add(variable);
 			return resolve(value, seen);
 		};
+		const name = (node: Node, seen = new Set<Variable>()): string | null => {
+			if (node.type === "Identifier") {
+				const variable = binding(node);
+				if (variable === undefined || seen.has(variable)) return node.name;
+				const imported = names.get(variable);
+				if (imported !== undefined) return imported;
+				const value = aliases.get(variable);
+				if (value === undefined) return node.name;
+				seen.add(variable);
+				return name(value, seen) ?? node.name;
+			}
+			if (node.type === "MemberExpression" && !node.computed && !node.optional) {
+				const owner = name(node.object, seen);
+				const member = dotted(node.property);
+				return owner === null || member === null ? null : `${owner}.${member}`;
+			}
+			return dotted(node);
+		};
 		const constant = (node: Node, seen = new Set<Variable>()): boolean => {
 			const value = resolve(node, seen);
 			switch (value.type) {
@@ -79,7 +97,7 @@ export const outsideInputConstructor: CreateRule = {
 			if (
 				node.type === "CallExpression" &&
 				/(?:decode.*(?:Effect|Result)|makeEffect)$/.test(
-					dotted(node.callee.type === "CallExpression" ? node.callee.callee : node.callee) ?? "",
+					name(node.callee.type === "CallExpression" ? node.callee.callee : node.callee) ?? "",
 				)
 			)
 				return false;
@@ -125,23 +143,31 @@ export const outsideInputConstructor: CreateRule = {
 				if (node.init === null) return;
 				for (const variable of context.sourceCode.getDeclaredVariables(node))
 					aliases.set(variable, node.init);
+				if (node.id.type !== "ObjectPattern") return;
+				const owner = name(node.init);
+				if (owner === null) return;
+				for (const property of node.id.properties) {
+					if (property.type !== "Property" || property.computed) continue;
+					const variable = binding(property.value);
+					const member =
+						property.key.type === "Literal" ? String(property.key.value) : dotted(property.key);
+					if (variable !== undefined && member !== null) names.set(variable, `${owner}.${member}`);
+				}
 			},
 			AssignmentExpression(node) {
 				const variable = binding(node.left);
-				if (variable !== undefined) aliases.set(variable, node.right);
+				if (variable !== undefined) {
+					names.delete(variable);
+					aliases.set(variable, node.right);
+				}
 			},
 			CallExpression(node) {
 				const callee = resolve(node.callee);
-				const call = dotted(callee) ?? "";
-				const owner = callee.type === "MemberExpression" ? binding(callee.object) : undefined;
-				const idMake =
-					callee.type === "MemberExpression" &&
-					dotted(callee.property) === "make" &&
-					callee.object.type === "Identifier" &&
-					((owner === undefined ? undefined : names.get(owner)) ?? callee.object.name) === "Id";
+				const call = name(node.callee) ?? "";
+				const idMake = call === "Id.make";
 				const args = node.arguments;
 				const first = args[0];
-				const curried = callee.type === "CallExpression" && sync.test(dotted(callee.callee) ?? "");
+				const curried = callee.type === "CallExpression" && sync.test(name(callee.callee) ?? "");
 				const type = call.split(".")[0] ?? "";
 				const added =
 					/\/(?:data\/id|coordination\/authorization|app\/(?:nemesis|chaos-state))\.ts$/.test(

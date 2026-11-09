@@ -4,6 +4,22 @@ import {plant} from "../next/apps/fabrika/src/exam/plant.ts";
 const code = "fabrika(outside-input-constructor)";
 const file = "next/packages/libfabrika/src/data/id.ts";
 describe("P17a, outside input has typed failures", () => {
+	it("plants schema aliases and destructured decoder aliases in the door", () => {
+		const door = "next/packages/libfabrika/src/door/door.ts";
+		const lines = [
+			'import {Schema} from "effect";',
+			"declare const raw: unknown, Binding: any;",
+			"const Alias = Binding; Alias.make(raw);",
+			"const Other = Alias; Other.make(raw);",
+			"const {decodeUnknownSync} = Schema; decodeUnknownSync(Binding)(raw);",
+			"const {decodeSync: decode} = Schema; decode(Binding)(raw);",
+			"const read = decodeUnknownSync(Binding); read(raw);",
+			"const parser = decode; parser(Binding)(raw);",
+			"const Local = Schema.Struct({value: Schema.String});",
+			"function decodeLocal(value: unknown) { const Alias = Local; return Alias.make(value); }",
+		].join("\n");
+		expect(plant({[door]: lines})(code, door)).toEqual([3, 4, 5, 6, 7, 8, 10]);
+	});
 	it("follows destructured aliases and keeps same-named bindings in their own scope", () => {
 		const lines = [
 			'import {Id} from "./ids.ts";',
@@ -48,6 +64,11 @@ describe("P17a, outside input has typed failures", () => {
 			'const decodeRow = () => Row.make({n: 0, nested: [true, "idle"]});',
 			'Program.make({name: "counter"}); Machine.make({name: "counter"}); Cmd.make("read", {});',
 			"Schema.decodeSync(Row)({n: 0});",
+			"const Alias = Row; Alias.make({n: 0});",
+			"const {decodeUnknownEffect: decode} = Schema; decode(Row)(raw);",
+			"const {decodeUnknownResult: result} = Schema; Alias.make(result(Row)(raw));",
+			"const Declaration = Program; Declaration.make({name: raw});",
+			"function scope() { const Alias = Schema.decodeSync(Row); Alias({n: 0}); }",
 		].join("\n");
 		expect(plant({[file]: lines})(code, file)).toEqual([]);
 	});
