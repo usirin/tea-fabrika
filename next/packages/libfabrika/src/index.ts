@@ -1,6 +1,7 @@
 // The new fabrika's library, its app layer (Tier 1, P11): programs, their saved state, view
 // patches and the runner that steps a process. Browser-safe: it reaches no platform.
 export * as Id from "./id.ts";
+export {IdError, type IdSchema, type IdValue} from "./id.ts";
 export {
 	Alarm,
 	CheckedWriter,

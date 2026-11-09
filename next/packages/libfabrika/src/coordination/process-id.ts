@@ -12,7 +12,7 @@ export class ProcessIdGenerator extends Context.Service<
 		ProcessIdGenerator,
 		Effect.map(Id.Generator, (generator) => {
 			const next = Effect.fn("process.next")(function* () {
-				return yield* generator.next(Id.Process);
+				return yield* generator.next(Id.Process).pipe(Effect.orDie);
 			});
 			return {next: next()};
 		}),
