@@ -402,10 +402,13 @@ still see their theme exactly as written. One setting picks which:
 
 ```toml
 # ~/.fabrika/fabrika.toml
-[theme]
-fix = "nudge"   # the default
-# fix = "off"   show the theme exactly as written, with a warning line
+theme-fix = "nudge"   # the default
+# theme-fix = "off"   show the theme exactly as written, with a warning line
 ```
+
+Each setting is its own line beside `theme = "<name>"`, as Ghostty keeps `minimum-contrast` beside
+`theme`. A `[theme]` table can't be used: TOML refuses a key and a table with the same name
+(decided 2026-11-09; the examples before said `[theme]` with `fix` and `contrast`).
 
 ```ts
 // A sketch, in packages/fabrika-design: the one checker. The token build calls it on the
@@ -540,9 +543,8 @@ The points this decision left open, each decided 2026-11-07 unless marked:
 
   ```toml
   # ~/.fabrika/fabrika.toml
-  [theme]
-  fix = "nudge"      # or "off": app colors, terminal text per cell and the cursor, together
-  contrast = 4.5     # the text floor everywhere; may be raised (7 is WCAG AAA), never lowered
+  theme-fix = "nudge"      # or "off": app colors, terminal text per cell and the cursor, together
+  theme-contrast = 4.5     # the text floor everywhere; may be raised (7 is WCAG AAA), never lowered
   ```
 
   ```ts
@@ -556,7 +558,7 @@ The points this decision left open, each decided 2026-11-07 unless marked:
   ```
 
   ```text
-  fabrika.toml: [theme] contrast = 3 is under 4.5; using 4.5
+  fabrika.toml: theme-contrast = 3 is under 4.5; using 4.5
   ```
 
   - `nudge` also lifts terminal text per cell against that cell's own background, lightness only.
@@ -704,7 +706,7 @@ up.
   - A doubt: cyan sits 4 degrees from sky and mint 4 from teal, iris 10 from violet, and indigo, the
     default, 21 from violet. A pipe's letter tells them apart (principle 3), but on a desk the
     accent may look like a pipe. A look on a real desk settles it.
-- **Principle 1, accessible.** Kept by the nudge, above, unless the person sets `fix = "off"`.
+- **Principle 1, accessible.** Kept by the nudge, above, unless the person sets `theme-fix = "off"`.
 
 ## What this cannot tell us
 

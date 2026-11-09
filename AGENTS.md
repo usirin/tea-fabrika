@@ -17,10 +17,10 @@ was decided are all kept here on purpose, so they can be analysed later.
 | You want to | Read | Write |
 |---|---|---|
 | Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) there | That README, in the same pull request or the same day, when the plan or its state changes. |
-| Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), one note per decision | A note there, the same day a direction is set or changed, plus its row in that folder's README. Mark it **proposed** until it is settled. |
+| Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), one note per decision | A note there, as soon as a direction is set or changed, plus its row in that folder's README. Mark it **proposed** until it is settled. |
 | Know what a word means | [`.glossary/TERMS.md`](./.glossary/TERMS.md): `next/`'s words, one section per bounded context, one row per word in it, with what it is not; its last section translates today's code's words | A row there, in the same pull request that coins or renames a word. |
 | Write guidelines for one design area | [`.claude/skills/guidelines/SKILL.md`](./.claude/skills/guidelines/SKILL.md), the steps in order, and its page checklist | One experiment, one proposed note, their two index rows and one Design canvas ([drawn on Claude Design](./docs/direction/design-on-claude-design.md)), in the shape that skill gives. |
-| Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up and `experiments/NN-name.ts` for its script, with the next free number, plus one row in the index. Shared helpers go in `experiments/lib/`, saved answers in `experiments/results/`. |
+| Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up and `experiments/NN-name.ts` for its script, with the next free number, plus one row in the index. Shared helpers go in `experiments/lib/`, saved answers in `experiments/results/`. Raw samples, such as every timing of a run, are still recorded but kept privately, not in git (owner, 2026-11-09): the script writes them under `runs/` or to a path a flag names, and `results/` keeps a small summary of the numbers the write-up quotes. |
 | Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes.jsonl` and `field/runs.jsonl` | One row per agent run in `runs.jsonl` and one note per thing that broke, cost too much, needed a person or worked well in `notes.jsonl`, the same day, in the schema the README gives. |
 | Check a change against old tickets | [`replay/README.md`](./replay/README.md) | New replay cases under `replay/`, as that README describes. |
 | Understand a design that is still a draft | `docs/` (for example [`docs/fabrika-sdk.md`](./docs/fabrika-sdk.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too. |
@@ -36,7 +36,9 @@ asked.
 **Rule of thumb:** a decision goes in `docs/direction/`. A measurement goes in
 `experiments/`. Something that happened on a real ticket goes in `field/`. If a
 piece of knowledge about this project lives only in a chat or in an agent's
-private memory, it is in the wrong place: write it here.
+private memory, it is in the wrong place: write it here. A decision lands as soon
+as it is made: the lead starts its docs pull request in the same turn, and never
+waits for a code pull request or the end of the day (owner, 2026-11-09).
 
 ## Two versions, side by side
 
@@ -76,6 +78,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   holds the colors, the Manti mapping and the text roles, and today's app and `next/` both
   import it. Its contents come from settled notes, not today's shapes, and moving a file into it
   means rethinking it against them ([one design package](./docs/direction/fabrika-design-package.md)).
+- **In `next/`, use Effect's platform modules, not `node:` imports,** where they cover the job:
+  `effect/process`'s `ChildProcess` to spawn, `effect/cli` for flags, `FileSystem` and `Path` for
+  files. A `node:` import stays only where Effect has nothing, marked as an edge with its reason
+  (owner, 2026-11-09). The lint rule `fabrika/no-node-imports` comes with
+  [PR 530](https://github.com/usirin/tea-fabrika/pull/530).
 - **In `next/`, nothing is built on Promises.** It is Effect all the way. A Promise
   appears only in a one-line edge the platform demands, marked where it stands with
   `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the owner reads
@@ -97,9 +104,27 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   answer no to without contradicting a decision (owner, 2026-11-08). In `next/`'s planner step
   this becomes code: a check on the plan's open questions. No merged pull request
   has been built this way yet ([where we are](./docs/plan/README.md#where-we-are-now)).
+  A docs-only pull request that writes down a decision is opened the turn it is decided and
+  merged when CI is green and the leak grep is clean, with no plan, tests, review or field rows.
+  Code pull requests keep their steps (owner, 2026-11-09). Lead tooling is fast-tracked too
+  (owner, 2026-11-09): skills, the lead scripts and the drive script run on our own laptop, so
+  they are not product work. They skip the plan, tests, mutation and review steps. The lead or one
+  agent changes them directly, keeps each change small, and merges on green CI with a clean leak
+  grep. Product code (`next/` and today's app) keeps its steps.
   A step is a program, and a prompt you would have typed is its first source: a rule in
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each
-  part is small, never absent.
+  part is small, never absent. A rule that code already checks leaves a skill's prose; a rule
+  that code could check becomes a check, then leaves the prose; only judgment stays in prose
+  (owner, 2026-11-08).
+- **One fresh agent per step** (owner, 2026-11-09). Each step's agent reads the lane's state
+  file, does its one step and writes the state file back for the next; no long driver carries a
+  ticket. A drive script will chain the mechanical steps and start an agent only for judgment
+  (tracker ticket 341). The lead skill says how.
+- **An exam change that is all proper property tests merges without the owner's read** (owner,
+  2026-11-08). Proper means every new or changed law is a property, or an example labeled
+  `vector:`, `format:`, `pinned:` or `scenario:` with its reason, and mutation shows no law got
+  narrower. A change that loosens or removes a law still waits on the owner
+  ([how a change lands](./docs/plan/README.md#how-a-change-lands)).
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
   machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). From tea 0.23.0
@@ -215,9 +240,12 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   ([use the industry's names](./docs/direction/use-the-industrys-names.md)), checked on
   every pull request, prose included. An Effect service name is never plural: one that holds many is
   `<Thing>Manager`, such as `LeaseManager`.
-- **Data keys are short everyday words.** `for`, not `forWhat`. `why`, not
-  `reasonCode`. A key does not say again what its parent already says: inside
-  an outcome, the reason is `why`, not `outcomeReason`. If a short word could
+- **Data keys are short everyday words.** `for`, not `forWhat`. `reason`, not
+  `reasonCode`: `reason` is the industry's word (OTP's exit reason, Kubernetes' condition
+  `reason`), so it wins over `why` (owner, 2026-11-09). Today's code keeps `why` until that code
+  goes, as with `kind`, and main's `next/` code is renamed by a sweep after PR 530 merges (ticket
+  337). A key does not say again what its parent already says: inside
+  an outcome, the reason is `reason`, not `outcomeReason`. If a short word could
   mean two things, pick a clearer short word before you reach for a long one.
   A short word that already means something here keeps that one meaning inside its
   [bounded context](./docs/direction/we-follow-ddd.md): `at` is a
@@ -227,15 +255,15 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   CreateTime). Today's code says `at` and `said`. In `next/`, a word means one thing. "Run"
   means an agent run only; one start of a program is a process (a restart is a new process, as
   in OTP). A place, a path, a ref, a state, a reason or a total gets its own word
-  (`location`, `path`, `ref`, `state`, `why`, `total`). `rg` the word under
+  (`location`, `path`, `ref`, `state`, `reason`, `total`). `rg` the word under
   `docs/direction/` and `next/` before you use it.
 
   ```ts
   // Values as they read. In `next/`, Effect Schema writes the `_tag`; nobody types it.
-  // Today's code says `kind` here.
+  // Today's code says `kind` and `why` here.
   // Yes: read it out loud and it is a sentence.
   { _tag: "ask", who: "owner", for: "approval" }
-  { _tag: "send", to: "builder", why: "checks_red" }
+  { _tag: "send", to: "builder", reason: "checks_red" }
 
   // No: longer, and the parent already said it.
   { _tag: "ask", askWho: "owner", forWhat: "owner_approval" }
@@ -348,6 +376,9 @@ brief carries these caps. Each one came from a laptop that became unusable.
   scale up.
 - A test window always sets its own `FABRIKA_HOME`, with a short path, since a socket
   path has a 103-byte limit. It never sets `FABRIKA_FOREGROUND=1`.
+- A test window stays out of the way of the person at the laptop. Right after launch, each
+  `BrowserWindow` gets `setOpacity(0)`, `setIgnoreMouseEvents(true)` and a position in the work
+  area's corner. Never `focus()` or `show()`. Shots come only from `page.screenshot`.
 - A wait or poll loop runs in the background.
 
 ### Tool facts that cost us time
