@@ -33,6 +33,9 @@ type Setup = {
 	hold?: boolean;
 	check?: {status: number; text: string};
 	secrets?: string[];
+	/** Head branches of the open PRs the fake gh lists; `gh: "down"` makes it fail. */
+	openPrs?: string[];
+	gh?: "down";
 };
 const body = (
 	files: Array<[string, string]> = [
@@ -77,6 +80,11 @@ if (cmd === "pnpm") {
   }
   if (args[0] === "exec" && args[1] === "oxfmt") finish(run(process.env.T321_OXFMT,args.slice(2)));
   console.error("fixture refuses package or network command"); process.exit(97);
+}
+if (cmd === "gh") {
+  if (setup.gh === "down" || args.slice(0,2).join(" ") !== "pr list") { console.error("fixture gh is down"); process.exit(1); }
+  for (const head of setup.openPrs || []) console.log(head);
+  process.exit(0);
 }
 if (cmd === "codex") {
   const out = args[args.indexOf("-o")+1];
@@ -157,7 +165,7 @@ class Box {
 		write(join(this.home, ".npmrc"), "");
 		write(join(this.dir, "global.npmrc"), "");
 		this.setup({});
-		for (const cmd of ["pnpm", "codex", "git"])
+		for (const cmd of ["pnpm", "codex", "git", "gh"])
 			writeFileSync(join(this.bin, cmd), `#!${process.execPath}\n${stub}`, {mode: 0o755});
 		writeFileSync(join(this.bin, "nice"), '#!/bin/sh\nshift 2\nexec "$@"\n', {mode: 0o755});
 		this.git(
@@ -848,22 +856,47 @@ describe("T321 K1 fetch, today's tooling", () => {
 });
 
 describe("T321 K2 box start, today's tooling", () => {
-	// Plant: inspect only the current branch's links. Main and this box's branch are allowed.
-	it("K2 refuses a shared ticket only when its links are on another open branch", () => {
+	// Plant: inspect only the current branch's links, or block on any branch that shares the
+	// ticket. Main and this box's branch are allowed; another branch blocks only while it is live.
+	it("K2 refuses a shared ticket only when another live branch carries its links", () => {
+		const places = [
+			"main",
+			"this",
+			"open-pr",
+			"running-box",
+			"history",
+			"merged",
+			"gh-down",
+			"different-ticket",
+		] as const;
+		const blocks = new Set(["open-pr", "running-box", "gh-down"]);
 		fc.assert(
 			fc.property(word, (text) => {
-				each(["main", "this", "other", "different-ticket"], (place) =>
+				each(places, (place) =>
 					fixture((b) => {
 						b.git(b.main, "checkout", "-q", place === "main" ? "main" : b.branch);
-						if (place === "other" || place === "different-ticket")
-							b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other");
+						const other = !["main", "this"].includes(place);
+						if (other) b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other");
 						const sha = b.commit(b.main, "src/a.ts", `${text}\n`);
 						b.sign(b.main, "tests", place === "different-ticket" ? "322" : "321");
-						if (place === "main") b.git(b.main, "update-ref", "refs/remotes/origin/main", sha);
+						if (place === "main" || place === "merged")
+							b.git(b.main, "update-ref", "refs/remotes/origin/main", sha);
+						b.setup({
+							openPrs: place === "open-pr" ? ["fabrikalfa/other"] : ["fabrikalfa/unrelated"],
+							...(place === "gh-down" ? {gh: "down" as const} : {}),
+						});
+						if (place === "running-box") {
+							write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
+							mkdirSync(join(b.boxes, "two"));
+						}
+						if (place === "history") {
+							// A box state left behind with no box on disk is not a running lane.
+							write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
+						}
 						b.git(b.main, "checkout", "-q", "main");
 						const got = b.new("origin/main", place === "this" ? b.branch : "fabrikalfa/new");
 						expect(got.code).not.toBeNull();
-						if (place === "other") refused(got, /shared_ticket/);
+						if (blocks.has(place)) refused(got, /shared_ticket 321 on fabrikalfa\/other/);
 						else expect(got.code, got.text).toBe(0);
 					}),
 				);

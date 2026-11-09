@@ -113,12 +113,24 @@ def new_box():
         branches = must(git("for-each-ref", "--format=%(refname:short)", "--points-at=" + head, "refs/heads/fabrikalfa/"), "parent lookup failed").splitlines()
         if not branches: refuse("base_not_signed: no parent branch at head")
         parent = branches[0] + "@" + head
+    # Two live lanes must not write one ticket. A branch that shares the ticket blocks only while it
+    # is live: an open PR, or a box on disk whose state names it. A branch the base already holds,
+    # or one with no open PR and no box, is history (an old or merged lane) and does not block.
+    open_heads = [None]
+    def live(other):
+        lane = other.removeprefix("origin/").removesuffix("-wip")
+        if open_heads[0] is None:
+            got = call(["gh", "pr", "list", "--state", "open", "--limit", "500", "--json", "headRefName", "-q", ".[].headRefName"])
+            if got.returncode: refuse("shared_ticket " + ticket + " on " + other + ": open PRs cannot be read")
+            open_heads[0] = set(got.stdout.decode().split())
+        if lane in open_heads[0]: return True
+        return any(facts(p).get("branch") == lane and (boxes / p.stem).is_dir() for p in state_dir.glob("*.box") if p.stem != name)
     for other in must(git("for-each-ref", "--format=%(refname:short)", "refs/heads/", "refs/remotes/origin/"), "branch lookup failed").splitlines():
         # The branch itself and its own backup copy (<branch>-wip) are not other branches.
         if other in (branch, "origin/" + branch, branch + "-wip", "origin/" + branch + "-wip", "main", "origin/main", "origin/HEAD"): continue
-        for sha in commits("origin/main", other):
-            note = read_note(sha)
-            if isinstance(note, dict) and note.get("ticket") == ticket: refuse("shared_ticket " + ticket + " on " + other)
+        if ancestor(other, head): continue
+        if any(isinstance(n, dict) and n.get("ticket") == ticket for n in map(read_note, commits("origin/main", other))) and live(other):
+            refuse("shared_ticket " + ticket + " on " + other)
     must(git("clone", "-q", "--no-checkout", "--reference", str(main), "--separate-git-dir=" + str(gitdata), os.environ["REMOTE"], str(work)), "box clone failed")
     edge = ["--git-dir=" + str(gitdata), "--work-tree=" + str(work)]
     must(git(*edge, "fetch", "-q", str(main), head + ":refs/heads/" + branch), "box base fetch failed")
