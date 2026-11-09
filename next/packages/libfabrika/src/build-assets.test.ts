@@ -30,6 +30,33 @@ const graphs = fc.record({
 	value: values,
 	id: fc.integer({min: 0, max: 10000}),
 });
+const cssForms = ["double string", "single string", "url", "single url", "double url"] as const;
+type CssForm = (typeof cssForms)[number];
+const cssImports = fc.record({
+	name: fc.constantFrom(
+		"theme",
+		"theme colors",
+		"theme'\"colors",
+		"theme\\colors",
+		"theme(colors)",
+		"theme雪",
+	),
+	escape: fc.constantFrom("literal", "simple", "hex"),
+	media: fc.constantFrom("", "print", "screen, print", "screen and (min-width: 40em), print"),
+});
+// Generate the CSS spelling from a disk name. The expected content never decodes that spelling.
+const cssImport = (path: string, form: CssForm, escape: string, media: string) => {
+	const quote = form.startsWith("single") ? "'" : form === "url" ? "" : '"';
+	const ref = [...path]
+		.map((char) => {
+			const required = char === "\\" || (quote === "" ? /[\s'"()]/.test(char) : char === quote);
+			if (!required && (escape === "literal" || !/[\s'"()]/.test(char))) return char;
+			return escape === "hex" ? `\\${char.codePointAt(0)!.toString(16)} ` : `\\${char}`;
+		})
+		.join("");
+	const target = `${quote}${ref}${quote}`;
+	return `@import ${form.endsWith("string") ? target : `url(${target})`}${media ? ` ${media}` : ""};`;
+};
 const homes: string[] = [];
 type Options = {
 	readonly out: string;
@@ -236,38 +263,37 @@ describe("P16 assets and Compiler", () => {
 			runs,
 		);
 	});
-	for (const url of [false, true])
-		it(`CSS graph plant: ${url ? "import url()" : "quoted imports"} resolves to served routes after rebasing`, async () => {
+	for (const form of cssForms)
+		it(`CSS graph plant: ${form} with spaces, escapes and media lists includes every imported rule`, async () => {
 			await fc.assert(
-				fc.asyncProperty(graphs, async ({name, value, id}) => {
+				fc.asyncProperty(graphs, cssImports, async ({name, value, id}, css) => {
 					const f = fixture(name, value),
 						pkg = dirname(f.file),
 						nested = `styles${id}`;
 					mkdirSync(join(pkg, nested));
-					const theme = `./${nested}/theme.css`,
+					const file = `${css.name}${id}.css`,
+						theme = `./${nested}/${file}`,
 						tokens = `../tokens${id}.css`;
 					writeFileSync(
 						join(pkg, "window.css"),
-						`@import ${url ? `url("${theme}")` : `"${theme}"`}; b { color: red; }`,
+						`${cssImport(theme, form, css.escape, css.media)} b { color: red; }`,
 					);
 					writeFileSync(
-						join(pkg, nested, "theme.css"),
-						`@import url("${tokens}"); b { --theme: ${id}; }`,
+						join(pkg, nested, file),
+						`${cssImport(tokens, form, css.escape, "")} b { --theme: ${id}; }`,
 					);
 					writeFileSync(join(pkg, `tokens${id}.css`), `b { --tokens: ${id}; }`);
 					const built = await run(f.options);
 					const {serveAsset} = await import("./workers/index.ts");
 					const verify = async (assets: Readonly<Record<string, Asset>>) => {
 						for (const [route, asset] of Object.entries(assets)) {
-							const refs = asset.type.startsWith("text/css")
-								? [
-										...asset.body.matchAll(
-											/@import\s+["']([^"']+)["']|url\(\s*["']?([^\s"')]+)["']?\s*\)/g,
-										),
-									].map((m) => m[1] ?? m[2]!)
-								: [...asset.body.matchAll(/(?:from\s*|import\s*\(?\s*)["']([^"']+)["']/g)].map(
-										(m) => m[1]!,
-									);
+							if (asset.type.startsWith("text/css")) {
+								expect(asset.body, "local CSS import must be included").not.toMatch(/@import\b/);
+								continue;
+							}
+							const refs = [
+								...asset.body.matchAll(/(?:from\s*|import\s*\(?\s*)["']([^"']+)["']/g),
+							].map((m) => m[1]!);
 							for (const ref of refs) {
 								if (/^(?:data:|https?:|#)/.test(ref)) continue;
 								const request = new Request(new URL(ref, `https://test.invalid${route}`));
@@ -277,11 +303,16 @@ describe("P16 assets and Compiler", () => {
 						}
 					};
 					// Plant the exact old behavior in real output: retain a CSS import to an absent route.
-					const css = Object.entries(built.assets).find(([, a]) => a.type.startsWith("text/css"));
-					assert(css, "window stylesheet must be emitted");
+					const stylesheet = Object.entries(built.assets).find(([, a]) =>
+						a.type.startsWith("text/css"),
+					);
+					assert(stylesheet, "window stylesheet must be emitted");
 					await expect(
-						verify({...built.assets, [css[0]]: {...css[1], body: '@import "./absent-theme.css";'}}),
-					).rejects.toThrow("references");
+						verify({
+							...built.assets,
+							[stylesheet[0]]: {...stylesheet[1], body: '@import "./absent-theme.css";'},
+						}),
+					).rejects.toThrow("local CSS import");
 					await verify(built.assets);
 					const styles = Object.values(built.assets)
 						.filter((a) => a.type.startsWith("text/css"))
@@ -289,11 +320,17 @@ describe("P16 assets and Compiler", () => {
 						.join("\n");
 					expect(styles).toContain(`--theme: ${id}`);
 					expect(styles).toContain(`--tokens: ${id}`);
+					if (css.media) expect(styles).toContain(`@media ${css.media}`);
 				}),
-				// Pinned review bug: the published stylesheet's two import forms request absent routes.
+				// Pinned round-2 bug: a quoted url containing a space leaves its target out.
 				{
 					...runs,
-					examples: [[{name: "View", value: "css", id: 1}]],
+					examples: [
+						[
+							{name: "View", value: "css", id: 1},
+							{name: "theme colors", escape: "literal", media: "screen, print"},
+						],
+					],
 					endOnFailure: true,
 				},
 			);
@@ -506,6 +543,88 @@ describe("P16 cleanup and recording", () => {
 					{...runs, numRuns: 2, endOnFailure: true},
 				);
 			});
+	for (const point of ["backup", "final"] as const)
+		it(`publication plant: interruption during an in-flight ${point} rename keeps a complete brain after delayed I/O settles`, async () => {
+			await fc.assert(
+				fc.asyncProperty(
+					values,
+					fc.record({
+						rename: fc.integer({min: 20, max: 40}),
+						exists: fc.integer({min: 0, max: 2}),
+						remove: fc.integer({min: 0, max: 2}),
+						write: fc.integer({min: 0, max: 2}),
+					}),
+					async (value, delays) => {
+						const f = fixture("View", value),
+							good = `last-good-${value}`,
+							entered = Effect.runSync(Deferred.make<void>()),
+							pending: Fiber.Fiber<unknown, unknown>[] = [];
+						previous(f, good);
+						let fired = false,
+							complete: string | undefined;
+						// Like Node's accepted disk requests, this work finishes even if its caller stops waiting.
+						const delayed = <A, E>(work: Effect.Effect<A, E>, ms: number, signal = false) =>
+							Effect.callback<A, E>((resume) => {
+								const io = Effect.runFork(
+									Effect.gen(function* () {
+										if (signal) yield* Deferred.succeed(entered, undefined);
+										yield* Effect.sleep(ms);
+										return yield* work;
+									}),
+								);
+								pending.push(io);
+								io.addObserver(resume);
+							});
+						const builder = await load();
+						const task = Effect.gen(function* () {
+							const fs = yield* FileSystem.FileSystem;
+							const rename: typeof fs.rename = (from, to) =>
+								Effect.suspend(() => {
+									const backup = from === f.options.out && to.endsWith(".old"),
+										final = to === f.options.out && !from.endsWith(".old"),
+										selected = !fired && (point === "backup" ? backup : final);
+									if (selected) {
+										fired = true;
+										complete = readFileSync(
+											join(backup ? to.slice(0, -4) : from, "brain.mjs"),
+											"utf8",
+										);
+									}
+									return delayed(fs.rename(from, to), selected ? delays.rename : 0, selected);
+								});
+							return yield* builder.build(f.options).pipe(
+								Effect.provideService(FileSystem.FileSystem, {
+									...fs,
+									rename,
+									exists: (path) => delayed(fs.exists(path), delays.exists),
+									remove: (path, options) => delayed(fs.remove(path, options), delays.remove),
+									writeFileString: (path, text, options) =>
+										delayed(fs.writeFileString(path, text, options), delays.write),
+								}),
+							);
+						}).pipe(Effect.provide(NodeServices.layer));
+						const fiber = Effect.runFork(task);
+						try {
+							await Effect.runPromise(Effect.race(Deferred.await(entered), Fiber.join(fiber)));
+							await Effect.runPromise(Fiber.interrupt(fiber));
+						} finally {
+							await Effect.runPromise(Fiber.interrupt(fiber));
+							await Effect.runPromise(Fiber.awaitAll(pending));
+						}
+						expect(fired, "plant interrupted a real publication rename already in flight").toBe(
+							true,
+						);
+						const published = join(f.options.out, "brain.mjs");
+						expect(
+							existsSync(published),
+							"settled build must keep a complete published brain",
+						).toBe(true);
+						expect([good, complete]).toContain(readFileSync(published, "utf8"));
+					},
+				),
+				{...runs, endOnFailure: true},
+			);
+		});
 	it("cleanup plants run on P12's real bundler: failed and interrupted generation closes acquired handles", async () => {
 		await fc.assert(
 			fc.asyncProperty(values, async (value) => {

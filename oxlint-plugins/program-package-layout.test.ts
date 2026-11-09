@@ -167,6 +167,31 @@ describe("fabrika/program-package-layout", () => {
 			{...runs, numRuns: 3},
 		);
 	});
+	for (const form of ["declaration", "specifier"] as const)
+		it(`type-only ${form} imports are erased; changing one to a value import is a finding`, () => {
+			fc.assert(
+				fc.property(name, name, (name, alias) => {
+					const binding = `DurableObject as ${alias}`,
+						statement =
+							form === "declaration"
+								? `import type {${binding}} from "cloudflare:workers";`
+								: `import {type ${binding}} from "cloudflare:workers";`,
+						files = {"src/program.ts": `${statement} export type {${alias}};`};
+					expect(run(name, {".": "./src/program.ts"}, files)).toEqual([]);
+					// Plant a runtime import of the same name in the same pure entry.
+					const findings = run(
+						name,
+						{".": "./src/program.ts"},
+						{
+							"src/program.ts": `import {${binding}} from "cloudflare:workers"; export {${alias}};`,
+						},
+					);
+					expect(findings).toHaveLength(1);
+					expect(findings[0]?.message).toBe("Pure program code cannot import Worker runtime APIs.");
+				}),
+				runs,
+			);
+		});
 	it("measures the real tree: findings are inspected, with zero false alarms required to block", () => {
 		const result = spawnSync(
 			join(ROOT, "node_modules/.bin/oxlint"),

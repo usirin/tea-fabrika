@@ -101,6 +101,11 @@ export const programPackageLayout: CreateRule = {
 				if (
 					pure.has(file) &&
 					node.importKind !== "type" &&
+					(node.specifiers.length === 0 ||
+						node.specifiers.some(
+							(specifier) =>
+								specifier.type !== "ImportSpecifier" || specifier.importKind !== "type",
+						)) &&
 					typeof node.source.value === "string" &&
 					worker(node.source.value)
 				)
