@@ -364,6 +364,10 @@ Opened with `C-b a` or a click on `2 ask you`:
 
 ## 7. Keys in the palette and the keys panel
 
+**Changed 2026-11-08** ([keys editor](./keys-editor.md) E1): `C-b ?` opens the `keys` program in
+a tile, not in the palette's box. Today's app moves when that build lands; the palette part below
+stays for Cmd-K.
+
 The palette (Cmd-K) and the keys panel (`C-b ?`) are one component with two
 names, as Linear's command menu and its `?` list are two. Its rows are grouped
 (Tile, Focus, Workspace), and the focused tile is named on top (`t2 · ticket #1`),

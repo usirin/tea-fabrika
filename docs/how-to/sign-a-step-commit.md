@@ -11,8 +11,9 @@ pnpm commits push                                                               
 
 ## The keys, made once by the lead
 
-One Ed25519 key per step role that commits: `tests`, `build` and `lead`. No passphrase, since a step
-signs with no person there. The comment is the role, so no machine name reaches the repo.
+Each step role that commits needs an Ed25519 key: `tests`, `build` and `lead`. A role may list a
+second, distinct key during rotation. No passphrase, since a step signs with no person there.
+The comment is the role, so no machine name reaches the repo.
 
 ```sh
 umask 077
@@ -34,9 +35,10 @@ done > allowed_signers
 ## Your own commits
 
 For `next/`, add your Ed25519 public signing key to `allowed_signers` in a separate pull request
-the owner approves. Use `person:<id>` as its principal and `namespaces="git"`. A GitHub signing key
-can help find the public key; the checked-in line is what the check trusts. Each id and key must
-appear only once, and a person cannot reuse a step key.
+the owner approves. Use `person:<id>` as its principal and `namespaces="git"`. Use one literal id
+matching `[A-Za-z0-9._:-]+`. A GitHub signing key can help find the public key; the checked-in line
+is what the check trusts. Each person id and each key must appear only once, and a person cannot
+reuse a step key.
 
 Then turn on [Git's SSH commit signing](https://git-scm.com/docs/git-config#Documentation/git-config.txt-usersigningKey)
 once, using your own signing key's public path:
