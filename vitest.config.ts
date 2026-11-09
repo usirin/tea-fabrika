@@ -28,8 +28,6 @@ export default defineConfig({
 			"packages/*/src/**/*.test.ts",
 			"programs/*/src/**/*.test.ts",
 			"packs/*/src/**/*.test.ts",
-			"wip/src/**/*.test.ts",
-			"legacy/src/**/*.test.ts",
 			"oxlint-plugins/*.test.ts",
 			"vitest.shards.test.ts",
 			".agents/skills/*/scripts/*.test.ts",
