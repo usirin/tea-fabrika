@@ -31,11 +31,10 @@ export const workerLoader = (
 			globalOutbound: null,
 		}));
 		const rpc = worker.getEntrypoint<Calls>();
+		const fail = () => new ProgramDown({why: "load"});
 		// oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader describes its checked declaration through RPC
-		const raw = yield* Effect.tryPromise({
-			try: () => rpc.describe(),
-			catch: () => new ProgramDown({why: "load"}),
-		});
+		const work = Effect.tryPromise({try: () => rpc.describe(), catch: fail});
+		const raw = yield* work;
 		const declaration = yield* Schema.decodeUnknownEffect(Declaration)(raw).pipe(
 			Effect.mapError(() => new ProgramDown({why: "load"})),
 		);
