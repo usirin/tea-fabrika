@@ -41,6 +41,20 @@ const start = Cmd.make("start", {
 	err: [],
 });
 const pending = (s: Supervision) => [s, []] as const;
+const crashWhy = (failure: Failure) =>
+	failure._tag === "saved" ? "saved_letter" : failure._tag === "fresh" ? "step" : "interrupted";
+/** The successor's start request, after the process that crashed. */
+const again = (s: Supervision, after: string, why: string) =>
+	Recovery.cases.starting.make({
+		after,
+		request: Start.cases.again.make({
+			id: `recover:${after}:${s.seq}`,
+			name: s.name,
+			after,
+			why,
+			code: {program: s.name.split(":")[0] ?? s.name, hash: s.build},
+		}),
+	});
 
 export const supervisor = Machine.make({
 	model: Supervision,
@@ -92,38 +106,33 @@ export const supervisor = Machine.make({
 				s.policy.backoff.minMs * 2 ** Math.min(crashes - 1, 53),
 				s.policy.backoff.maxMs,
 			);
-			let until = m.at + wait;
-			if (!canRestart(s.restarts, until, s.policy.periodMs, s.policy.intensity)) {
-				const times = s.restarts
-					.filter((at) => at >= until - s.policy.periodMs)
-					.toSorted((a, b) => a - b);
-				const edge = times[times.length - s.policy.intensity];
-				if (edge !== undefined) until = Math.max(until, edge + s.policy.periodMs + 1);
+			const until = m.at + wait;
+			const why = crashWhy(failure);
+			// Inside the restart budget the successor waits its backoff, and nothing goes down.
+			if (canRestart(s.restarts, until, s.policy.periodMs, s.policy.intensity)) {
+				const pending = start({process, until});
+				return [{...s, recovery: again(s, process, why), pending}, [pending]];
 			}
-			const why =
-				failure._tag === "saved"
-					? "saved_letter"
-					: failure._tag === "fresh"
-						? "step"
-						: "interrupted";
+			// The brake: N crashes in T. Down waits until the window has room again.
+			const times = s.restarts
+				.filter((at) => at >= until - s.policy.periodMs)
+				.toSorted((a, b) => a - b);
+			const edge = times[times.length - s.policy.intensity];
+			const held = edge === undefined ? until : Math.max(until, edge + s.policy.periodMs + 1);
 			const pending = down({process});
 			return [
-				{...s, recovery: Recovery.cases.down.make({process, why, crashes, until}), pending},
+				{
+					...s,
+					recovery: Recovery.cases.down.make({process, why, crashes, until: held}),
+					pending,
+				},
 				[pending],
 			];
 		},
 		due: (s, m) => {
 			if (s.recovery._tag !== "down" || m.at < s.recovery.until) return [s, []];
-			const after = s.recovery.process;
-			const request = Start.cases.again.make({
-				id: `recover:${after}:${s.seq}`,
-				name: s.name,
-				after,
-				why: s.recovery.why,
-				code: {program: s.name.split(":")[0] ?? s.name, hash: s.build},
-			});
-			const pending = start({process: after, until: s.recovery.until});
-			return [{...s, recovery: Recovery.cases.starting.make({after, request}), pending}, [pending]];
+			const pending = start({process: s.recovery.process, until: s.recovery.until});
+			return [{...s, recovery: again(s, s.recovery.process, s.recovery.why), pending}, [pending]];
 		},
 		started: (s, m) => [
 			{

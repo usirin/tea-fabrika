@@ -28,6 +28,7 @@ import {
 	first,
 	from,
 	ids,
+	PIDS,
 	read,
 	storage,
 	watcher,
@@ -81,19 +82,28 @@ const write = Cmd.make("write", {
 	err: ["failed"],
 });
 const Saved = Schema.TaggedStruct("saved", {token: Schema.String});
+/** The wiring's policy. P34 amendment: its `maxDeliveries` may be absent (then 3). */
+type WiringPolicy = Omit<typeof policy, "maxDeliveries"> & {readonly maxDeliveries?: number};
+/** Limits a law sets: the program's own `maxDeliveries`, and the wiring's policy. */
+type Limits = {readonly program?: number | undefined; readonly policy?: WiringPolicy};
 type Wiring = {
-	policy: typeof policy;
+	policy: WiringPolicy;
 	recovery: {sql: Sql; name: string; capacity: number};
 	fault: (cut: string) => Effect.Effect<void, LedgerError>;
 };
 const runnerLayer: (p: Descriptor, wiring: Wiring) => ReturnType<typeof ProgramRunner.layer> =
 	ProgramRunner.layer;
 
-const world = (personOnly = false, platformActivity = false, wakeAt: number | null = null) => {
+const world = (
+	personOnly = false,
+	platformActivity = false,
+	wakeAt: number | null = null,
+	limits: Limits = {},
+) => {
 	const ledger = storage(),
 		state = storage(),
 		authority = storage();
-	const next = ids(A, B, W, X);
+	const next = ids(...PIDS);
 	const controls = {
 		throws: true,
 		savedThrows: false,
@@ -203,6 +213,7 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 		});
 		return {
 			name: "counter",
+			...(limits.program === undefined ? {} : {maxDeliveries: limits.program}),
 			machine,
 			state: {v: 1, schema: Model, upgrades: []},
 			msg: Msg,
@@ -292,7 +303,7 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 		return runnerLayer(
 			{id: A, name: NAME, program: "counter", build: controls.build, owner: person},
 			{
-				policy,
+				policy: limits.policy ?? policy,
 				recovery: {sql: state.sql, name: NAME, capacity: 1024 ** 3},
 				fault: (cut) =>
 					Effect.suspend(() => {
@@ -361,7 +372,7 @@ const world = (personOnly = false, platformActivity = false, wakeAt: number | nu
 };
 const lives = read(`processes/${NAME}`);
 const inbox = read(`${NAME}/inbox`);
-const dead = Effect.forEach([A, B, W, X], (p) => read(`${p}/dead`), {concurrency: 1}).pipe(
+const dead = Effect.forEach(PIDS, (p) => read(`${p}/dead`), {concurrency: 1}).pipe(
 	Effect.map((rows) => rows.flat()),
 );
 const failed = <A, E, R>(e: Effect.Effect<A, E, R>) =>
@@ -644,13 +655,17 @@ describe("P34 runner supervision", () => {
 								Effect.gen(function* () {
 									const restarting = path === "Restart live" || path === "Restart down";
 									// A selected Restart build gets a timer even if the old build had none.
-									const w = world(false, false, restarting ? null : time);
+									// P34 amendment: after_down crashes until the brake trips, past 2300 ms, so its
+									// program wake sits beyond every recovery deadline.
+									const wakeAt = path === "after_down" ? time + 10_000 : time;
+									const w = world(false, false, restarting ? null : wakeAt);
 									yield* w.boot;
 									if (history)
 										yield* ProgramRunner.use((r) => r.msg(w.input(id, {type: "add", n}))).pipe(
 											Effect.provide(w.layer()),
 										);
 									const before = yield* inbox.pipe(Effect.provide(w.manager()));
+									let crashes = 1;
 									// A platform alarm has fired before due enters the runner.
 									const fire = (r: Context.Service.Shape<typeof ProgramRunner>, at: number) => {
 										w.consumeAlarm();
@@ -673,12 +688,38 @@ describe("P34 runner supervision", () => {
 										yield* ProgramRunner.use((r) => failed(r.msg(w.input(`crash-${id}`)))).pipe(
 											Effect.provide(w.layer()),
 										);
+										// P34 amendment: down is written only when the brake trips, so after_down
+										// crashes a fresh letter after each recovery until the cut is reached.
+										for (let n = 0; path === "after_down" && w.controls.hits.length === 0; n++) {
+											expect(n, "the brake trips within the restart intensity").toBeLessThan(
+												policy.intensity,
+											);
+											const at = w.alarm()!;
+											w.reopen();
+											yield* TestClock.setTime(at);
+											yield* ProgramRunner.use((r) => fire(r, at)).pipe(Effect.provide(w.layer()));
+											yield* ProgramRunner.use((r) =>
+												failed(r.msg(w.input(`crash-${n}-${id}`))),
+											).pipe(Effect.provide(w.layer()));
+										}
+										// The tripped brake's deadline is the down fact's own `until`.
+										const tripped = (yield* lives.pipe(Effect.provide(w.manager()))).filter(
+											(row) => row._tag === "down",
+										);
+										const deadline =
+											path === "after_down"
+												? Schema.decodeUnknownSync(Schema.Struct({until: Schema.Int}))(
+														tripped.at(-1)?.body,
+													).until
+												: 100;
+										// Each crash's successor takes the next ID; A was the first.
+										crashes = path === "after_down" ? w.controls.steps.length : 1;
 										w.reopen();
 										if (earlyCut)
 											yield* ProgramRunner.use((r) => failed(r.open("resume-down"))).pipe(
 												Effect.provide(w.layer()),
 											);
-										expect(w.alarm(), "only recovery is eligible while down").toBe(100);
+										expect(w.alarm(), "only recovery is eligible while down").toBe(deadline);
 										if (earlyCut) expect(w.controls.hits).toEqual([path]);
 										if (path === "Restart down") {
 											w.controls.build = `build-${id}`;
@@ -695,11 +736,11 @@ describe("P34 runner supervision", () => {
 												Effect.provide(w.layer()),
 											);
 										} else {
-											yield* TestClock.setTime(100);
+											yield* TestClock.setTime(deadline!);
 											const lateCut = path === "after_start" || path === "after_checkpoint";
 											if (lateCut) w.controls.cut = path;
 											yield* ProgramRunner.use((r) =>
-												lateCut ? failed(fire(r, 100)) : fire(r, 100),
+												lateCut ? failed(fire(r, deadline!)) : fire(r, deadline!),
 											).pipe(Effect.provide(w.layer()));
 											if (lateCut) {
 												expect(w.controls.hits).toEqual([path]);
@@ -720,30 +761,32 @@ describe("P34 runner supervision", () => {
 									// exits above checked the other side of the same earliest-deadline law.
 									expect(recovery?.recovery._tag ?? "live").toBe("live");
 									expect(
-										yield* ProcessManager.use((p) => p.isLive(path === "wake" ? A : B)).pipe(
-											Effect.provide(w.manager()),
-										),
+										yield* ProcessManager.use((p) =>
+											p.isLive(path === "wake" ? A : PIDS[crashes]!),
+										).pipe(Effect.provide(w.manager())),
 									).toBe(true);
 									expect(yield* inbox.pipe(Effect.provide(w.manager()))).toEqual(before);
 									expect(w.controls.timers).toEqual([]);
 									yield* Effect.gen(function* () {
 										const r = yield* ProgramRunner;
-										yield* TestClock.setTime(time);
-										yield* fire(r, time);
-										yield* fire(r, time);
+										yield* TestClock.setTime(wakeAt);
+										yield* fire(r, wakeAt);
+										yield* fire(r, wakeAt);
 										expect({
 											armed,
 											timers: w.controls.timers,
 											view: (yield* r.open("timer")).view,
 										}).toEqual({
-											armed: time,
-											timers: [time],
+											armed: wakeAt,
+											timers: [wakeAt],
 											view: {count: history ? n : 0, replies: 1},
 										});
 										expect(w.alarm()).toBeNull();
 										const rows = yield* inbox;
 										expect(rows).toHaveLength(before.length + 1);
-										expect(rows.at(-1)?.id).toBe(`${path === "wake" ? A : B}/due/${time}`);
+										expect(rows.at(-1)?.id).toBe(
+											`${path === "wake" ? A : PIDS[crashes]!}/due/${wakeAt}`,
+										);
 									}).pipe(Effect.provide(w.layer()));
 								}).pipe(Effect.provide(TestClock.layer())),
 							),
@@ -776,8 +819,10 @@ describe("P34 runner supervision", () => {
 								saved: {model: {count: 0}},
 							});
 							expect(yield* ProcessStore.use((s) => s.placedByAny(id))).toBeNull();
+							// P34 amendment: one crash inside the restart budget writes no down fact.
+							expect((yield* lives).filter((row) => row._tag === "down")).toEqual([]);
 							expect((yield* lives).at(-1)).toMatchObject({
-								_tag: "down",
+								_tag: "exited",
 								body: {process: A, why: "saved_letter"},
 							});
 							const rows = yield* inbox;
@@ -900,8 +945,10 @@ describe("P34 runner supervision", () => {
 								saved: {model: {count: 0}},
 							});
 							expect(yield* ProcessStore.use((s) => s.placedByAny(id))).toBeNull();
+							// P34 amendment: one crash inside the restart budget writes no down fact.
+							expect((yield* lives).filter((row) => row._tag === "down")).toEqual([]);
 							expect((yield* lives).at(-1)).toMatchObject({
-								_tag: "down",
+								_tag: "exited",
 								body: {process: A, why: "saved_letter"},
 							});
 							return yield* inbox;
@@ -1053,7 +1100,9 @@ describe("P34 runner supervision", () => {
 							const runner = yield* ProgramRunner;
 							yield* failed(runner.msg(letter));
 							expect(w.controls.adds).toBe(2);
-							expect((yield* lives).filter((row) => row._tag === "down")).toMatchObject([
+							// P34 amendment: both crashes are inside the restart budget, so no down fact.
+							expect((yield* lives).filter((row) => row._tag === "down")).toEqual([]);
+							expect((yield* lives).filter((row) => row._tag === "exited")).toMatchObject([
 								{body: {process: A}},
 								{body: {process: B, why: "saved_letter"}},
 							]);
@@ -1498,9 +1547,12 @@ describe("P34 runner supervision", () => {
 				w.reopen();
 				yield* Effect.gen(function* () {
 					yield* failed(ProgramRunner.use((r) => r.open("wake")));
-					expect((yield* lives).filter((row) => row._tag === "down")).toMatchObject([
-						{body: {process: A, why: "saved_letter", until: expect.any(Number)}},
+					// P34 amendment: inside the restart budget the wake exits, waits and writes no down.
+					expect((yield* lives).filter((row) => row._tag === "down")).toEqual([]);
+					expect((yield* lives).filter((row) => row._tag === "exited")).toMatchObject([
+						{body: {process: A, why: "saved_letter"}},
 					]);
+					expect(w.alarms.at(-1)).toBe(policy.backoff.minMs);
 					expect((yield* inbox).map((row) => row.id)).toEqual(["good", "saved-bad"]);
 					expect(yield* ProcessStore.use((s) => s.load)).toEqual(before);
 					expect(yield* dead).toEqual([]);
@@ -1522,8 +1574,11 @@ describe("P34 runner supervision", () => {
 				yield* ProgramRunner.use((r) => failed(r.open("wake"))).pipe(Effect.provide(w.layer()));
 				const loads = w.controls.loads;
 				const rows = yield* lives.pipe(Effect.provide(w.manager()));
-				const down = rows.find((row) => row._tag === "down");
-				expect(down, "saved failure must go down").toBeDefined();
+				// P34 amendment: one saved failure is inside the restart budget, so it writes no down;
+				// the saved wait is the backoff's.
+				expect(rows.filter((row) => row._tag === "down")).toEqual([]);
+				const until = w.alarms.at(-1);
+				expect(until).toBe(policy.backoff.minMs);
 				w.reopen();
 				yield* Effect.gen(function* () {
 					const r = yield* ProgramRunner;
@@ -1531,9 +1586,7 @@ describe("P34 runner supervision", () => {
 					expect(w.controls.loads).toBe(loads);
 					expect(w.controls.steps).toEqual([]);
 					expect(yield* lives).toEqual(rows);
-					expect(w.alarms.at(-1)).toBe(
-						Schema.decodeUnknownSync(Schema.Struct({until: Schema.Int}))(down!.body).until,
-					);
+					expect(w.alarms.at(-1)).toBe(until);
 				}).pipe(Effect.provide(w.layer()));
 			}),
 	);
@@ -1618,4 +1671,131 @@ describe("P34 runner supervision", () => {
 				}).pipe(Effect.provide(w.layer()));
 			}),
 	);
+});
+
+describe("P34 amendment, 2026-11-08: down only at the brake; a program's own maxDeliveries", () => {
+	const decodeUntil = Schema.decodeUnknownSync(Schema.Struct({until: Schema.Int}));
+	const restartedRows = lives.pipe(
+		Effect.map((rows) => rows.filter((row) => row._tag === "restarted").length),
+	);
+
+	it("p80 plant, down after one crash: the runner writes down only on the crash that trips the brake, and no successor starts before its wait", async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.integer({min: 1, max: policy.intensity + 1}), fc.uuid(), (crashes, id) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const w = world();
+						yield* w.boot;
+						let now = 0;
+						for (let n = 1; n <= crashes; n++) {
+							// A different letter each time: each crash is one fresh throw, never a dead letter.
+							yield* ProgramRunner.use((r) => failed(r.msg(w.input(`poison-${n}-${id}`)))).pipe(
+								Effect.provide(w.layer()),
+							);
+							const rows = yield* lives.pipe(Effect.provide(w.manager()));
+							const downs = rows.filter((row) => row._tag === "down");
+							const deadline = w.alarms.at(-1);
+							expect(deadline, `crash ${n} schedules its successor`).toBeTypeOf("number");
+							if (n <= policy.intensity) {
+								expect(downs, `crash ${n} is inside the restart budget`).toEqual([]);
+								const wait = Math.min(policy.backoff.minMs * 2 ** (n - 1), policy.backoff.maxMs);
+								expect(deadline, "the saved wait is the backoff").toBe(now + wait);
+							} else {
+								expect(downs, `crash ${n} trips the brake`).toHaveLength(1);
+								expect(deadline).toBe(decodeUntil(downs[0]!.body).until);
+							}
+							const before = yield* restartedRows.pipe(Effect.provide(w.manager()));
+							w.reopen();
+							yield* TestClock.setTime(deadline! - 1);
+							yield* ProgramRunner.use((r) => Effect.exit(r.due(deadline! - 1))).pipe(
+								Effect.provide(w.layer()),
+							);
+							expect(
+								yield* restartedRows.pipe(Effect.provide(w.manager())),
+								"no successor before the wait",
+							).toBe(before);
+							w.reopen();
+							yield* TestClock.setTime(deadline!);
+							yield* ProgramRunner.use((r) => r.due(deadline!)).pipe(Effect.provide(w.layer()));
+							expect(
+								yield* restartedRows.pipe(Effect.provide(w.manager())),
+								"one successor when the wait is due",
+							).toBe(before + 1);
+							now = deadline!;
+						}
+						const downs = (yield* lives.pipe(Effect.provide(w.manager()))).filter(
+							(row) => row._tag === "down",
+						);
+						expect(downs).toHaveLength(crashes > policy.intensity ? 1 : 0);
+					}).pipe(Effect.provide(TestClock.layer())),
+				),
+			),
+			{
+				seed: 119120,
+				numRuns: 12,
+				// T271 decision check: one crash inside the budget wrote a down fact.
+				examples: [
+					[1, "00000000-0000-4000-8000-000000000271"],
+					[policy.intensity + 1, "00000000-0000-4000-8000-000000000271"],
+				],
+			},
+		);
+	});
+
+	it("p80 plant, ignore the program's limit: a letter is tried the program's maxDeliveries, else the wiring's, else 3 times, then moves to dead with that limit", async () => {
+		const limit = fc.option(fc.integer({min: 1, max: 32}), {nil: undefined});
+		const {maxDeliveries: _default, ...rest} = policy;
+		await fc.assert(
+			fc.asyncProperty(limit, limit, fc.uuid(), (program, wiring, id) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						// A wide budget, so every generated limit fits under the restart intensity.
+						const wide: WiringPolicy = {
+							...rest,
+							intensity: 32,
+							periodMs: 30_000,
+							...(wiring === undefined ? {} : {maxDeliveries: wiring}),
+						};
+						const expected = program ?? wiring ?? 3;
+						const w = world(false, false, null, {program, policy: wide});
+						yield* w.boot;
+						const letter = w.input(id);
+						for (let n = 1; n < expected; n++) {
+							yield* ProgramRunner.use((r) => failed(r.msg(letter))).pipe(
+								Effect.provide(w.layer()),
+							);
+							w.reopen();
+							yield* recover(w);
+						}
+						yield* Effect.gen(function* () {
+							const r = yield* ProgramRunner;
+							expect(yield* r.msg(letter), `throw ${expected} is the last`).toMatchObject({
+								_tag: "refused",
+								why: "dead",
+							});
+							expect(yield* r.msg(letter)).toMatchObject({_tag: "refused", why: "dead"});
+							expect(w.controls.steps).toEqual(Array.from({length: expected}, () => id));
+							const errors = Array.from({length: expected}, (_, n) =>
+								n === 1 ? "RangeError" : "TypeError",
+							);
+							expect((yield* dead).map((row) => row.body)).toMatchObject([
+								{m: id, tries: expected, limit: expected, errors},
+							]);
+						}).pipe(Effect.provide(w.layer()));
+					}).pipe(Effect.provide(TestClock.layer())),
+				),
+			),
+			{
+				seed: 119120,
+				numRuns: 12,
+				// Each order case once: neither, program only, wiring only, both.
+				examples: [
+					[undefined, undefined, "00000000-0000-4000-8000-000000000271"],
+					[5, undefined, "00000000-0000-4000-8000-000000000271"],
+					[undefined, 7, "00000000-0000-4000-8000-000000000271"],
+					[2, 9, "00000000-0000-4000-8000-000000000271"],
+				],
+			},
+		);
+	});
 });

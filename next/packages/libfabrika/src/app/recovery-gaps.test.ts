@@ -25,6 +25,7 @@ import {
 	first,
 	from,
 	ids,
+	PIDS,
 	read,
 	storage,
 } from "../coordination/process.test-support.ts";
@@ -80,7 +81,7 @@ const world = Effect.fnUntraced(function* () {
 	const ledger = storage(),
 		state = storage(),
 		authority = storage();
-	const next = ids(A, B, W, X);
+	const next = ids(...PIDS);
 	const gate = yield* Deferred.make<void>();
 	const entered = yield* Deferred.make<void>();
 	const controls = {
@@ -326,6 +327,16 @@ describe("P34 interrupted recovery", () => {
 					yield* ProgramRunner.use((r) => Effect.exit(r.open("wake"))).pipe(
 						Effect.provide(w.layer()),
 					);
+					// P34 amendment: down is written only when the brake trips, so each successor
+					// folds the same saved letter and crashes again until the restart budget is spent.
+					for (let n = 0; n < 8 && w.controls.hits.length === 0; n++) {
+						const deadline = w.alarms.at(-1);
+						if (typeof deadline !== "number") break;
+						yield* TestClock.setTime(deadline);
+						yield* ProgramRunner.use((r) => Effect.exit(r.due(deadline))).pipe(
+							Effect.provide(w.layer()),
+						);
+					}
 				} else if (cut === "after_checkpoint") {
 					yield* Effect.gen(function* () {
 						const r = yield* ProgramRunner;
@@ -553,8 +564,8 @@ describe("P34 interrupted recovery", () => {
 										: {_tag: "Success", value: {_tag: "refused", why: "dead"}},
 								);
 								const down = yield* s.status;
-								expect(down.state).toBe("down");
-								expect(down.until).toBeTypeOf("number");
+								// P34 amendment: three crashes stay inside the restart budget, so no down fact.
+								expect(down.state).toBe("ended");
 								yield* Effect.exit(s.send("poison", original));
 								expect(yield* s.status).toEqual(down);
 								expect(yield* s.executions).toBe(n);
