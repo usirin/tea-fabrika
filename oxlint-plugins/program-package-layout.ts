@@ -7,8 +7,18 @@ import {parseSync, Visitor} from "oxc-parser";
 
 const map = (x: unknown): x is Record<string, unknown> =>
 	typeof x === "object" && x !== null && !Array.isArray(x);
+const declaration = (file: string) => /\.d\.[cm]?ts$/.test(file);
+// Keep runtime conditions, including custom ones, but never TypeScript's types branch.
 const targets = (x: unknown): string[] =>
-	typeof x === "string" ? [x] : map(x) ? Object.values(x).flatMap(targets) : [];
+	typeof x === "string"
+		? declaration(x)
+			? []
+			: [x]
+		: map(x)
+			? Object.entries(x).flatMap(([condition, target]) =>
+					condition === "types" ? [] : targets(target),
+				)
+			: [];
 const worker = (name: string) =>
 	/^(?:cloudflare:|workerd(?:\/|$)|miniflare(?:\/|$)|@alchemy\.run\/cloudflare-runtime(?:\/|$)|@kampus\/libfabrika\/(?:box|workers)(?:\/|$))/.test(
 		name,
@@ -30,7 +40,7 @@ const valueLink = (
 const pureFiles = (root: string, entries: readonly string[]) => {
 	const seen = new Set<string>();
 	const visit = (file: string) => {
-		if (seen.has(file) || !existsSync(file)) return;
+		if (declaration(file) || seen.has(file) || !existsSync(file)) return;
 		seen.add(file);
 		const tree = parseSync(file, readFileSync(file, "utf8")).program;
 		const follow = (name: string) => {
@@ -77,7 +87,7 @@ export const programPackageLayout: CreateRule = {
 		}
 		const exports = map(manifest) ? manifest.exports : undefined;
 		const entries =
-			typeof exports === "string" ? [exports] : map(exports) ? targets(exports["."]) : [];
+			typeof exports === "string" ? targets(exports) : map(exports) ? targets(exports["."]) : [];
 		const pure = pureFiles(root, entries);
 		const main = entries.some((entry) => resolve(root, entry) === file);
 		const errors: string[] = [];

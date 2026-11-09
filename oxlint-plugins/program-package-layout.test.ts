@@ -72,6 +72,62 @@ describe("fabrika/program-package-layout", () => {
 			runs,
 		);
 	});
+	it("mixed export conditions follow runtime entries and skip types and declaration files", () => {
+		fc.assert(
+			fc.property(
+				name,
+				fc.shuffledSubarray(
+					["default", "import", "require", "node", "browser", "development", "production"],
+					{minLength: 2, maxLength: 4},
+				),
+				fc.constantFrom(".d.ts", ".d.mts", ".d.cts"),
+				(name, conditions, extension) => {
+					const statement = 'import "cloudflare:workers";',
+						declaration = `./src/program${extension}`,
+						files: Record<string, string> = {
+							[`src/program${extension}`]: statement,
+							[`src/helper${extension}`]: statement,
+							"src/types.ts": statement,
+						},
+						exports = {
+							".": {
+								types: {import: "./src/types.ts", default: declaration},
+								...Object.fromEntries(
+									conditions.map((condition) => [
+										condition,
+										{
+											types: "./src/types.ts",
+											import: `./src/${condition}.ts`,
+											default: declaration,
+										},
+									]),
+								),
+							},
+						};
+					for (const condition of conditions)
+						files[`src/${condition}.ts`] =
+							`import "./helper${extension}"; export const program = 1;`;
+					expect(run(name, exports, files)).toEqual([]);
+					// Plant the same Worker import in each runtime entry, one at a time.
+					for (const condition of conditions) {
+						const findings = run(name, exports, {
+							...files,
+							[`src/${condition}.ts`]: statement,
+						});
+						expect(findings).toHaveLength(1);
+						expect(findings[0]?.message).toBe(
+							"Pure program code cannot import Worker runtime APIs.",
+						);
+					}
+				},
+			),
+			{
+				...runs,
+				// Review round 5: a types export pulled program.d.ts into the runtime graph.
+				examples: [["program0", ["import", "default"], ".d.ts"]],
+			},
+		);
+	});
 	it("plants: Worker entries, hidden windows, missing files and a missing pure entry are refused", () => {
 		fc.assert(
 			fc.property(name, fc.constantFrom("worker", "workerd", "box", "brain"), (name, entry) => {

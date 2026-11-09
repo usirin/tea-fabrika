@@ -59,6 +59,15 @@ and value-import and value-re-export plants for each type-only form. A mixed typ
 re-export still fails. The rule blocks. It does not resolve
 package aliases or computed dynamic imports; those need a future resolved-import check.
 
+Round 5 keeps `types` export conditions and declaration files out of the runtime graph.
+The same Worker import passes in `program.d.ts`, a declaration helper and a types-only
+target, and fails in each runtime entry. At seed 119120 with `numRuns: 8`, the property
+generates mixed, nested conditions using `default`, `import`, `require`, `node`, `browser`,
+`development` and `production`, and `.d.ts`, `.d.mts` and `.d.cts` targets. The pinned review
+case failed before the fix with 3 false findings. All 15 rule tests then passed in 52.15 seconds.
+The real `next/programs/` recount remains 3 files, 0 findings and 0 false alarms. The counter's
+pure entry and manifest were inspected again.
+
 Seven rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13, and P35). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests live with the rest of the exam, in `next/apps/fabrika/src/exam/`, and lint each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file.
 
 | Rule | Refuses | Edges | Tests |
