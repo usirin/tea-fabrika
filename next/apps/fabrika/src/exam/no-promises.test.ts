@@ -113,8 +113,94 @@ const bridgeSpellings = [
 	"localAlias",
 	"destructured",
 	"computedKey",
+	"aliasChain",
+	"renamedDestructured",
+	"moduleAlias",
+	"computedBridgeKeys",
 ] as const;
-const rpcForms = [...bridgeSpellings, "bare"] as const;
+
+const rpcSource = (
+	suffix: string,
+	method: "tryPromise" | "promise",
+	gap: number,
+	marked: boolean,
+	spelling: (typeof bridgeSpellings)[number] | "bare" | "unresolvedKey",
+) => {
+	const [setup, callee] = (
+		{
+			module: ['import {Effect} from "effect";', `Effect.${method}`],
+			renamedModule: ['import {Effect as E} from "effect";', `E.${method}`],
+			namespace: ['import * as Fx from "effect";', `Fx.Effect.${method}`],
+			function: [`import {${method}} from "effect/Effect";`, method],
+			renamedFunction: [`import {${method} as tp} from "effect/Effect";`, "tp"],
+			computed: ['import {Effect} from "effect";', `Effect["${method}"]`],
+			parenthesized: ['import {Effect} from "effect";', `(Effect.${method})`],
+			nonNull: ['import {Effect} from "effect";', `Effect.${method}!`],
+			satisfies: [
+				'import {Effect} from "effect";',
+				`(Effect.${method} satisfies typeof Effect.${method})`,
+			],
+			sameTypeAs: [
+				'import {Effect} from "effect";',
+				`(Effect.${method} as typeof Effect.${method})`,
+			],
+			localAlias: [`import {Effect} from "effect";\nconst tp = Effect.${method};`, "tp"],
+			destructured: [`import {Effect} from "effect";\nconst {${method}} = Effect;`, method],
+			computedKey: [`import {Effect} from "effect";\nconst k = "${method}";`, "Effect[k]"],
+			aliasChain: [
+				`import {Effect} from "effect";\nconst first = (Effect.${method})!;\nconst tp = first satisfies typeof first;`,
+				"(tp)",
+			],
+			renamedDestructured: [
+				`import {Effect} from "effect";\nconst {${method}: tp} = Effect;`,
+				"tp",
+			],
+			moduleAlias: [`import {Effect} from "effect";\nconst E = Effect;`, `E.${method}`],
+			computedBridgeKeys: [
+				'import {Effect} from "effect";\ndeclare const k: "tryPromise" | "promise";',
+				`(Effect[k] as typeof Effect.${method})`,
+			],
+			unresolvedKey: [
+				`import {Effect} from "effect";\ndeclare const k: "${method}" | "sync";`,
+				`(Effect[k] as typeof Effect.${method})`,
+			],
+			bare: ["", ""],
+		} as const
+	)[spelling];
+	const inBridge = spelling !== "bare";
+	// Installed workers-types: WorkerStub -> Fetcher<T> -> Rpc.Provider<T> ->
+	// MethodOrProperty<V> -> Result<Awaited<R>> turns Promise<unknown> into never.
+	const before = [
+		...setup.split("\n"),
+		`type Calls = Rpc.WorkerEntrypointBranded & {describe${suffix}(): Promise<unknown>};`,
+		"declare const worker: WorkerStub;",
+		"const rpc = worker.getEntrypoint<Calls>();",
+		...(inBridge
+			? [
+					"// oxlint-disable-next-line fabrika/no-promises -- edge: the RPC call enters Effect",
+					`export const edge = ${callee}(${method === "tryPromise" ? "{" : ""}`,
+					...(method === "tryPromise" ? ["  try: () =>"] : ["  () =>"]),
+				]
+			: []),
+		...Array.from({length: gap}, () => ""),
+		...(marked
+			? ["// oxlint-disable-next-line fabrika/no-promises -- edge: Worker RPC returns a Promise"]
+			: []),
+	];
+	return {
+		file: "next/rpc.ts",
+		line: before.length + 1,
+		source: [
+			...before,
+			`    rpc.describe${suffix}()${inBridge ? (method === "tryPromise" ? "," : "") : ";"}`,
+			...(inBridge
+				? method === "tryPromise"
+					? ['  catch: () => new Error("rpc"),', "});"]
+					: [");"]
+				: []),
+		].join("\n"),
+	};
+};
 
 const fires = [
 	'import {Effect, Schema, Stream} from "effect";', // 1
@@ -181,74 +267,18 @@ const edges = [
 ].join("\n");
 
 describe("no-promises", async () => {
-	it("refuses an unmarked mapped Workers RPC call however the bridge is written or absent", () => {
+	it("refuses an unmarked mapped Workers RPC call in every resolved Effect bridge spelling", () => {
 		fc.assert(
 			fc.property(
 				fc.stringMatching(/^[a-z]{1,8}$/),
 				fc.constantFrom("tryPromise", "promise"),
 				fc.nat({max: 8}),
 				fc.boolean(),
-				fc.constantFrom(...rpcForms),
+				fc.constantFrom(...bridgeSpellings),
 				(suffix, method, gap, marked, spelling) => {
-					const file = "next/rpc.ts";
-					const [setup, callee] = (
-						{
-							module: ['import {Effect} from "effect";', `Effect.${method}`],
-							renamedModule: ['import {Effect as E} from "effect";', `E.${method}`],
-							namespace: ['import * as Fx from "effect";', `Fx.Effect.${method}`],
-							function: [`import {${method}} from "effect/Effect";`, method],
-							renamedFunction: [`import {${method} as tp} from "effect/Effect";`, "tp"],
-							computed: ['import {Effect} from "effect";', `Effect["${method}"]`],
-							parenthesized: ['import {Effect} from "effect";', `(Effect.${method})`],
-							nonNull: ['import {Effect} from "effect";', `Effect.${method}!`],
-							satisfies: [
-								'import {Effect} from "effect";',
-								`(Effect.${method} satisfies typeof Effect.${method})`,
-							],
-							sameTypeAs: [
-								'import {Effect} from "effect";',
-								`(Effect.${method} as typeof Effect.${method})`,
-							],
-							localAlias: [`import {Effect} from "effect";\nconst tp = Effect.${method};`, "tp"],
-							destructured: [`import {Effect} from "effect";\nconst {${method}} = Effect;`, method],
-							computedKey: [`import {Effect} from "effect";\nconst k = "${method}";`, "Effect[k]"],
-							bare: ["", ""],
-						} as const
-					)[spelling];
-					const inBridge = spelling !== "bare";
-					// Installed workers-types 5.20261027.1: WorkerStub.getEntrypoint -> Fetcher<T>
-					// -> Rpc.Provider<T> -> MethodOrProperty<V> -> Result<Awaited<R>>.
-					// Promise<unknown> becomes never through that conditional return type.
-					const before = [
-						...setup.split("\n"),
-						`type Calls = Rpc.WorkerEntrypointBranded & {describe${suffix}(): Promise<unknown>};`,
-						"declare const worker: WorkerStub;",
-						"const rpc = worker.getEntrypoint<Calls>();",
-						...(inBridge
-							? [
-									"// oxlint-disable-next-line fabrika/no-promises -- edge: the RPC call enters Effect",
-									`export const edge = ${callee}(${method === "tryPromise" ? "{" : ""}`,
-									...(method === "tryPromise" ? ["  try: () =>"] : ["  () =>"]),
-								]
-							: []),
-						...Array.from({length: gap}, () => ""),
-						...(marked
-							? [
-									"// oxlint-disable-next-line fabrika/no-promises -- edge: Worker RPC returns a Promise",
-								]
-							: []),
-					];
-					const source = [
-						...before,
-						`    rpc.describe${suffix}()${inBridge ? (method === "tryPromise" ? "," : "") : ";"}`,
-						...(inBridge
-							? method === "tryPromise"
-								? ['  catch: () => new Error("rpc"),', "});"]
-								: [");"]
-							: []),
-					].join("\n");
+					const {file, source, line} = rpcSource(suffix, method, gap, marked, spelling);
 					expect(typed({[file]: source}, true).map((f) => ({file: f.file, line: f.line}))).toEqual(
-						marked ? [] : [{file, line: before.length + 1}],
+						marked ? [] : [{file, line}],
 					);
 				},
 			),
@@ -257,37 +287,92 @@ describe("no-promises", async () => {
 				numRuns: 12,
 				// P12 review 7: the marker covered Effect.tryPromise, but not rpc.describe below it.
 				// P12 review 8: renamed imports and computed access hid the same RPC call.
-				// P12 review 9: wrappers, local aliases and a bare call bypassed bridge recognition.
+				// P12 review 9: wrappers and local aliases bypassed bridge recognition.
 				examples: (["tryPromise", "promise"] as const).flatMap((method) =>
-					rpcForms.map((spelling): [string, typeof method, number, boolean, typeof spelling] => [
-						"",
-						method,
-						0,
-						false,
-						spelling,
-					]),
+					bridgeSpellings.map(
+						(spelling): [string, typeof method, number, boolean, typeof spelling] => [
+							"",
+							method,
+							0,
+							false,
+							spelling,
+						],
+					),
 				),
 			},
 		);
 	});
-	it("counts a declared synchronous never throw helper as a false alarm off a marked line", () => {
+	it.each(["tryPromise", "promise"] as const)(
+		"pinned: P12 cannot identify Effect.%s through a key that may select sync",
+		(method) => {
+			// A cast does not prove which declaration a runtime key selects. Guessing would
+			// flag synchronous calls too, so the unresolved RPC return is missed here.
+			const {file, source} = rpcSource("", method, 0, false, "unresolvedKey");
+			expect(typed({[file]: source}, true)).toEqual([]);
+		},
+	);
+	it("pinned: P12 cannot distinguish a bare never-returning RPC from a synchronous throw", () => {
+		// The installed Workers mapping erases Promise<unknown> to never. Without an
+		// Effect bridge, catching it also flags the real synchronous throw helpers.
+		const {file, source} = rpcSource("", "promise", 0, false, "bare");
+		expect(typed({[file]: source}, true)).toEqual([]);
+	});
+	it("leaves declared never throw helpers outside a Promise bridge alone", () => {
 		fc.assert(
-			fc.property(fc.stringMatching(/^[a-z]{1,8}$/), fc.boolean(), (suffix, marked) => {
+			fc.property(fc.stringMatching(/^[a-z]{1,8}$/), (suffix) => {
 				const file = "next/throw.ts";
-				const before = [
-					`declare function fail${suffix}(): never;`,
-					...(marked
-						? [
-								"// oxlint-disable-next-line fabrika/no-promises -- edge: a synchronous throw helper",
-							]
-						: []),
-				];
-				// A real never return cannot prove a call is synchronous. Count this known false alarm.
-				const source = [...before, `fail${suffix}();`].join("\n");
-				expect(typed({[file]: source}).map((f) => ({file: f.file, line: f.line}))).toEqual(
-					marked ? [] : [{file, line: before.length + 1}],
-				);
+				const source = [`declare function fail${suffix}(): never;`, `fail${suffix}();`].join("\n");
+				expect(typed({[file]: source})).toEqual([]);
 			}),
+			{seed: 119120, numRuns: 12},
+		);
+	});
+	it("leaves any, unknown, generic and unresolved calls outside Promise bridges alone", () => {
+		fc.assert(
+			fc.property(fc.stringMatching(/^[a-z]{1,8}$/), (suffix) => {
+				const file = "next/sync.ts";
+				expect(
+					typed({
+						[file]: [
+							`declare function any${suffix}(): any;`,
+							`declare function unknown${suffix}(): unknown;`,
+							`declare function identity${suffix}<A>(value: A): A;`,
+							`any${suffix}(); unknown${suffix}();`,
+							`export function generic${suffix}<A>(value: A) { return identity${suffix}(value); }`,
+							"// @ts-ignore -- plant: an unresolved name gives the checker an error type",
+							`missing${suffix}();`,
+						].join("\n"),
+					}),
+				).toEqual([]);
+			}),
+			{seed: 119120, numRuns: 12},
+		);
+	});
+	it("recognizes Effect's bridge declarations rather than another module with the same names", () => {
+		fc.assert(
+			fc.property(
+				fc.stringMatching(/^[a-z]{1,8}$/),
+				fc.constantFrom("tryPromise", "promise"),
+				fc.constantFrom(...bridgeSpellings),
+				(suffix, method, spelling) => {
+					const {file, source} = rpcSource(suffix, method, 0, false, spelling);
+					expect(
+						typed(
+							{
+								[file]: source
+									.replaceAll('"effect/Effect"', '"./lookalike-functions"')
+									.replaceAll('"effect"', '"./lookalike"'),
+								"next/lookalike.ts": 'export * as Effect from "./lookalike-functions";',
+								"next/lookalike-functions.ts": [
+									"export declare const tryPromise: <A>(options: {try: () => PromiseLike<A>; catch: () => Error}) => number;",
+									"export declare const promise: <A>(fn: () => PromiseLike<A>) => number;",
+								].join("\n"),
+							},
+							true,
+						),
+					).toEqual([]);
+				},
+			),
 			{seed: 119120, numRuns: 12},
 		);
 	});

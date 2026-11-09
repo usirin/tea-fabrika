@@ -98,8 +98,27 @@ and 27 in unchanged files from main. P12's new files then reached zero. See
 `field/notes.jsonl`, note `2026-11-08-275`. The statement-wide exception was dropped
 because it walked back [no-promises.md](../docs/direction/no-promises.md). The build
 restructured the code to keep each Promise on its marked line. `pnpm lint:promise-types`
-now reports 0 findings on the P12 tree. The check runs in `pnpm lint`. Unknown types
-still need the regular typecheck.
+reports 0 findings on the P12 tree at `97245dc7` with the narrowed rule below, with 0
+false alarms. The check runs in `pnpm lint`. Unknown types still need the regular typecheck.
+
+An untyped or `never` call needs an edge marker only inside an input to Effect's own
+`tryPromise` or `promise`. The checker follows the declaration's symbol, including imported
+aliases, parentheses, non-null assertions, `satisfies`, `as`, const aliases and their chains,
+destructuring and renamed bindings. Computed keys work when the checker resolves every
+possible key to one of those two declarations. A key that may select another function, or
+whose type cannot be resolved, supplies no evidence of a Promise bridge. The RPC property
+generates all 17 supported spellings for both bridges. Pinned laws keep two known gaps:
+a key that may select `sync`, and a bare RPC call whose Workers type is `never`.
+
+Replaying `97245dc7`'s broad rule on this tree still gives 75 findings: 9 real and 66 false
+alarms, or 88%. Those 66 synchronous calls are outside Effect bridges. The narrowed rule
+reports none of them. These nine real cases also sit outside bridges, so they remain for
+the build step rather than making every unknown return a finding:
+
+| File | Lines | Real or false | Why |
+|---|---|---|---|
+| `next/packages/libfabrika/src/app/program.ts` | 411 | real | A Standard Schema validator can create a Promise behind its `unknown` return type. |
+| `next/packages/libfabrika/src/node/stage.ts` | 349, 352, 353, 354, 359, 360, 362, 367 | real | `Reflect.get` erases the proxy's returned Promise thunks to `any`. |
 
 `no-ledger-sql` refuses SQL strings naming the ledger's `entries` or `rings` outside
 its three service files in `next/`. Tests, test support files and today's code are left alone. Its
