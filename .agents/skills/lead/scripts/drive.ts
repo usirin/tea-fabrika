@@ -60,6 +60,8 @@ const drive = outcomesOf({
 		"codex_failed",
 		"timeout",
 		"fetch_failed",
+		"read_failed",
+		"record_failed",
 		"review_committed",
 		"unsigned",
 		"leak",
@@ -199,6 +201,7 @@ const stuck = (why: Extract<Outcome, {kind: "stuck"}>["why"], text: string): Jud
 /** The Check, pure: what the reads found wins over what the step said. */
 const decide = (ask: Ask, read: Read): Judged => {
 	if (read.head === null) return stuck("fetch_failed", read.problem ?? "fetch failed");
+	if (read.problem !== null) return stuck("read_failed", read.problem);
 	if (ask.step === "review" && read.head !== ask.base)
 		return stuck("review_committed", `the review moved the head to ${read.head.slice(0, 8)}`);
 	if (read.unsigned.length > 0) return stuck("unsigned", read.unsigned.slice(0, 5).join("; "));
@@ -311,13 +314,23 @@ const machine = defineMachine({
 			s.phase === "pushing"
 				? recordIt(s.ask, stuck("push_failed", "botpush threw"), s.head)
 				: stay(s),
-		record_ok: (s, m): Step =>
-			s.phase === "recording"
-				? [{...s, phase: "over", why: m.value.ok ? s.why : `${s.why} (${m.value.detail})`}, []]
-				: stay(s),
+		record_ok: (s, m): Step => {
+			if (s.phase !== "recording") return stay(s);
+			if (m.value.ok) return [{...s, phase: "over"}, []];
+			const outcome: Outcome = {kind: "stuck", why: "record_failed"};
+			return [{...s, phase: "over", outcome, why: `${s.why} (${m.value.detail})`}, []];
+		},
 		record_err: (s): Step =>
 			s.phase === "recording"
-				? [{...s, phase: "over", why: `${s.why} (not recorded)`}, []]
+				? [
+						{
+							...s,
+							phase: "over",
+							outcome: {kind: "stuck", why: "record_failed"},
+							why: `${s.why} (not recorded)`,
+						},
+						[],
+					]
 				: stay(s),
 	},
 });
@@ -443,29 +456,62 @@ const handlers = (env: Env) => {
 					};
 				const head = git("rev-parse", ref).out.trim();
 				if (ask.step === "review") git("update-ref", "-d", ref);
-				const commits = Number(git("rev-list", "--count", `${ask.base}..${head}`).out.trim());
-				const names = git("diff", "--name-only", `${ask.base}..${head}`)
-					.out.split("\n")
-					.filter(Boolean);
-				const exam =
+				const failed = (what: string, r: {code: number; err: string}) => ({
+					...empty,
+					head,
+					problem: `${what}: ${tail(r.err)}`,
+				});
+				const count = git("rev-list", "--count", `${ask.base}..${head}`);
+				if (count.code !== 0) return failed("rev-list", count);
+				const commits = Number(count.out.trim());
+				// Every path any commit touched, so a change undone by a later commit still counts.
+				const touched = git("log", "--format=", "--name-only", `${ask.base}..${head}`);
+				if (touched.code !== 0) return failed("git log", touched);
+				const names = [...new Set(touched.out.split("\n").filter(Boolean))];
+				const examRun =
 					names.length === 0
-						? []
+						? {code: 0, out: "", err: ""}
 						: sh("python3", [
 								"-I",
 								join(HERE, "../../step-commit/scripts/exam.py"),
 								join(env.MAIN, "exam-paths.json"),
 								...names,
-							])
-								.out.split("\n")
-								.filter(Boolean)
-								.map((l) => l.split("\t")[0] ?? l);
-				const diff = git("diff", "-U0", "--no-color", `${ask.base}..${head}`).out;
+							]);
+				if (examRun.code > 1) return failed("exam.py", examRun);
+				const exam = examRun.out
+					.split("\n")
+					.filter(Boolean)
+					.map((l) => l.split("\t")[0] ?? l);
+				// Each commit's own added lines, so nothing a later commit removed slips past.
+				const diff = git("log", "-p", "-U0", "--no-color", "--format=", `${ask.base}..${head}`);
+				if (diff.code !== 0) return failed("git log -p", diff);
+				// The repo's own commit check verifies the signatures; this step's name is checked here.
+				const check =
+					commits === 0
+						? {code: 0, out: "", err: ""}
+						: sh(
+								"node",
+								[
+									join(env.MAIN, "next/apps/fabrika/src/exam/commits.ts"),
+									"check",
+									"--base",
+									ask.base,
+									"--head",
+									head,
+								],
+								env.MAIN,
+							);
+				if (check.code > 1) return failed("commits check", check);
+				const unsigned = [
+					...(check.code === 1 ? [`commits check: ${tail(check.out + check.err)}`] : []),
+					...unsignedIn(env, ask, head),
+				];
 				return {
 					head,
 					commits,
-					unsigned: unsignedIn(env, ask, head),
+					unsigned,
 					exam,
-					leaks: leaksIn(diff, env.GH_REPO),
+					leaks: leaksIn(diff.out, env.GH_REPO),
 					plancheck: null,
 					report,
 					problem: null,
@@ -506,6 +552,11 @@ const handlers = (env: Env) => {
 					if (r.code === 0) appendFileSync(join(env.BOXES, `${ask.lane}-rows.jsonl`), r.out);
 					else notes.push(`no field row: ${tail(r.err, 1)}`);
 				}
+				const ok = notes.length === 0;
+				const outcome = ok ? e.outcome : "stuck:record_failed";
+				const keep = e.keep || !ok;
+				// A stuck step, or a build sent back for exam paths, does not move the lane's head.
+				const accepted = !outcome.startsWith("stuck") && outcome !== "send:tests:exam_paths";
 				const state = join(env.BOXES, "state", `${ask.lane}.json`);
 				const saved = existsSync(state)
 					? (JSON.parse(readFileSync(state, "utf8")) as Lane)
@@ -516,31 +567,31 @@ const handlers = (env: Env) => {
 					run: ask.run,
 					from: ask.base,
 					head: e.head,
-					outcome: e.outcome,
-					why: e.why,
-					exit: e.exit,
+					outcome,
+					why: ok ? e.why : `${e.why} (${notes.join("; ")})`,
+					exit: ok ? e.exit : 30,
 					report: ask.report,
-					kept: e.keep,
+					kept: keep,
 					ended,
 				};
 				const lane: Lane = {
 					...saved,
 					ticket: ask.ticket,
 					branch: ask.branch,
-					head: e.head,
+					head: accepted ? e.head : (saved.head ?? ask.base),
 					steps: [...saved.steps, entry],
 				};
 				writeFileSync(`${state}.tmp`, `${JSON.stringify(lane, null, "\t")}\n`);
 				renameSync(`${state}.tmp`, state);
 				appendFileSync(
 					join(env.BOXES, "state", `${ask.lane}.md`),
-					`- ${ended} drive.ts ${ask.step} in box ${ask.box}: ${e.outcome}, head ${e.head.slice(0, 8)}. ${e.why}\n`,
+					`- ${ended} drive.ts ${ask.step} in box ${ask.box}: ${outcome}, head ${e.head.slice(0, 8)}. ${e.why}\n`,
 				);
-				if (!e.keep && ask.step !== "plan" && ask.box) {
+				if (!keep && ask.step !== "plan" && ask.box) {
 					rmSync(join(env.BOXES, ask.box), {recursive: true, force: true});
 					rmSync(join(env.BOXES, `${ask.box}-gitdata`), {recursive: true, force: true});
 				}
-				return {ok: notes.length === 0, detail: notes.join("; ")};
+				return {ok, detail: notes.join("; ")};
 			}),
 	};
 };
@@ -556,21 +607,36 @@ const codexRunner = (sub: CodexSub) =>
 				ask.step === "plan"
 					? [join(HERE, "runplan.sh"), ask.box, ask.prompt]
 					: [join(HERE, "box.sh"), "run", ask.box, ask.prompt, ask.report];
-			const child = spawn("sh", args, {stdio: ["ignore", out, err]});
+			// Its own process group, so a stop reaches every command Codex started too.
+			const child = spawn("sh", args, {stdio: ["ignore", out, err], detached: true});
 			let timedOut = false;
+			let force: ReturnType<typeof setTimeout> | undefined;
+			const stopAll = () => {
+				const group = child.pid === undefined ? undefined : -child.pid;
+				if (group === undefined) return;
+				try {
+					process.kill(group, "SIGTERM");
+					force = setTimeout(() => {
+						try {
+							process.kill(group, "SIGKILL");
+						} catch {}
+					}, 10_000);
+				} catch {}
+			};
 			const timer = setTimeout(() => {
 				timedOut = true;
-				child.kill("SIGTERM");
+				stopAll();
 			}, ask.minutes * 60_000);
 			child.on("exit", (code) => {
 				clearTimeout(timer);
+				clearTimeout(force);
 				closeSync(out);
 				closeSync(err);
 				resume(Effect.succeed({type: "drafted", code, timedOut}));
 			});
 			return Effect.sync(() => {
 				clearTimeout(timer);
-				child.kill("SIGTERM");
+				stopAll();
 			});
 		}),
 	);
@@ -635,7 +701,12 @@ const main = () => {
 	const branch = flag(args, "--branch") ?? saved?.branch ?? `fabrikalfa/${lane}`;
 	if (!branch.startsWith("fabrikalfa/")) usage();
 	sh("git", ["-C", env.MAIN, "fetch", "-q", "origin"]);
-	const from = flag(args, "--from") ?? saved?.head ?? "origin/main";
+	// A plan writer reads the main checkout as it stands, so its base is that checkout's HEAD.
+	if (step === "plan" && flag(args, "--from") !== undefined) {
+		console.error("drive.ts: a plan reads the main checkout; it takes no --from");
+		process.exit(2);
+	}
+	const from = step === "plan" ? "HEAD" : (flag(args, "--from") ?? saved?.head ?? "origin/main");
 	const base = sh("git", [
 		"-C",
 		env.MAIN,

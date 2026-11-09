@@ -92,12 +92,15 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|review> <brie
 	[--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan-only] &
 ```
 
-- It starts a box at `--from`, else the lane's last head (`BOXES/state/<lane>.json`), else
-  `origin/main`, runs Codex with the brief and an `answer:` line it asks for, waits with no agent,
-  fetches, and checks: every new commit signed by this step, a build touching no exam path, the
-  leak grep on added lines, a review committing nothing, `plancheck --draft` on a plan.
+- It starts a box at `--from`, else the lane's last head (`BOXES/state/<lane>.json`, moved only
+  by a step it accepted), else `origin/main`. A plan reads the main checkout and takes no `--from`.
+- It runs Codex with the brief and an `answer:` line it asks for, waits with no agent, fetches,
+  and checks: `pnpm commits check` and this step's name on every new commit, no exam path in any
+  build commit, the leak grep on each commit's added lines, a review committing nothing, and
+  `plancheck --draft` on a plan. A check that cannot run is `stuck`, never a pass.
 - Then it pushes `<branch>-wip` as the bot when the step committed, writes the field row to
   `BOXES/<lane>-rows.jsonl`, appends the step to `state/<lane>.json` and `.md`, and removes the box.
+  A stop after the time limit takes Codex's whole process group with it.
 - Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (the question
   is in `why`), 30 stuck, 2 usage, 3 refused (8 Codex boxes running). It never retries. A stuck
   step keeps its box. A tests or build step waits while `pgrep -x tsgo` finds one.
