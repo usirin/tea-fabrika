@@ -16,7 +16,7 @@ was decided are all kept here on purpose, so they can be analysed later.
 
 | You want to | Read | Write |
 |---|---|---|
-| Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) there | That README, in the same pull request or the same day, when the plan or its state changes. |
+| Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) there | That README, in the same pull request or the same day, when the plan or its state changes. A pull request that builds or finishes a Tier 1 row or a tracked plan item updates that row in `tier-1.md` and "Where we are now" in the README in the same pull request; if the step's owner list does not allow it, the lead updates them the same day ([0013](./.decisions/0013-plan-docs-change-with-the-work.md)). |
 | Know what the owner decided | [`.decisions/`](./.decisions/), one short file per decision; see [Decision discovery](#decision-discovery) | `.decisions/NNNN-slug.md`, the turn the owner decides, in its own docs pull request, with [`/adr`](./.agents/skills/adr/SKILL.md). |
 | Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), the long design notes | A note there when a decision needs the long reasoning, plus its row in that folder's README. Mark it **proposed** until it is settled. Its decision file links it. |
 | Know what a word means | [`.glossary/TERMS.md`](./.glossary/TERMS.md): `next/`'s words, one section per bounded context, one row per word in it, with what it is not; its last section translates today's code's words | A row there, in the same pull request that coins or renames a word. |
@@ -57,8 +57,9 @@ same turn, and never waits for a code pull request or the end of the day (owner,
 ## Two versions, side by side
 
 A new version of fabrika is growing in `next/`, built on
-[the five layers](./docs/direction/a-local-first-sync-engine.md). So far `next/` is on
-[PR 223](https://github.com/usirin/tea-fabrika/pull/223), and nothing is on main yet. Everything
+[the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-09,
+`next/` is on main, and 18 of Tier 1's 37 rows have merged
+([where we are](./docs/plan/README.md#where-we-are-now)). Everything
 else (`packages/`, `programs/`, `apps/`) is today's
 version. It keeps running for daily use until the new one takes each job over
 ([clean slate](./docs/direction/clean-slate.md)).
