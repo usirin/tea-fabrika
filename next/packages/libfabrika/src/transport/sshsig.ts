@@ -60,8 +60,8 @@ const HASHES: ReadonlyMap<string, Hash> = new Map([
 ]);
 
 /** What the signature covers. Reserved is always written empty. */
-const signedBytes = (space: string, hash: Hash, text: string) =>
-	Effect.map(
+const signedBytes = Effect.fnUntraced(function* (space: string, hash: Hash, text: string) {
+	return yield* Effect.map(
 		subtle(() => crypto.subtle.digest(hash.web, utf8(text))),
 		(digest) =>
 			join(
@@ -72,6 +72,7 @@ const signedBytes = (space: string, hash: Hash, text: string) =>
 				field(new Uint8Array(digest)),
 			),
 	);
+});
 
 /** An armored SSHSIG, read: the fields a check needs. `key` is the whole key blob. */
 type Sshsig = {

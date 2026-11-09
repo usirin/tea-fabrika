@@ -20,8 +20,6 @@ export default defineConfig({
 			"**/fixtures/**",
 			"**/.github/**",
 			"**/.agents/skills/**",
-			"**/.gitattributes",
-			"**/.claude/skills/**",
 		],
 		include: [
 			"apps/*/src/**/*.test.ts",

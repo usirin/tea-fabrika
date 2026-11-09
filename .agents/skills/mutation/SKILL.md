@@ -54,7 +54,7 @@ rest.
 
 The settings are [the decided fast check](../../../docs/direction/fast-and-daily-mutation.md#the-fast-check-decided-2026-11-01)
 on StrykerJS 10.1.1 (read `pnpm-lock.yaml` first; a newer Stryker may rename an option). Run it
-from the repo root of your box or worktree. `T` is the ticket, `BUILD` the build commit. Set
+from the repo root of your worktree. `T` is the ticket, `BUILD` the build commit. Set
 `RELATED` to the explicit related-test paths, separated by commas. Ticket 520's proof uses
 `.agents/skills/mutation/scripts/sample.test.ts`, the new TypeScript sampler's adjacent laws.
 This does not grade plancheck's shell or Python. Those rely on properties and planted breaks.
@@ -64,13 +64,17 @@ import by package name can run. Only the explicit `RELATED` paths enter its temp
 
 The supervisor caps the whole command, including setup, and stops its process group on exit or
 signal. It removes its temporary config after success or failure. Run one command at a time.
-Outside a box, wait in the background while `pgrep -f "vitest run" | wc -l` is 6 or more before
-starting. In a box `pgrep` is blocked; never start another test command alongside this one.
+Wait in the background while `pgrep -f "vitest run" | wc -l` is 6 or more before starting.
+
+**A Claude agent in a worktree runs this step, never a Codex box.** Stryker starts a local logging
+server that listens on a port, and the Codex sandbox refuses it (`listen EPERM`). On ticket 520,
+2026-11-08, the sampler picked its 150 mutants, then Stryker stopped before the dry run and no
+mutant ran. This is socket work, as the lead skill's "Who runs which step" says.
 
 ```sh
 export T=520 BUILD=abc1234
 export RELATED=.agents/skills/mutation/scripts/sample.test.ts
-# In a Codex box, drop nice. Elsewhere it lowers the priority of setup and all workers too.
+# nice lowers the priority of setup and all workers too.
 nice -n 15 sh .agents/skills/mutation/scripts/run.sh
 ```
 
@@ -102,14 +106,17 @@ its config and cleanup. They do not prove mutation coverage of shell or Python.
   linked to `.agents/skills`, and the copy fails on them (tried 2026-11-08).
 - `tsconfigFile` points at an empty file: Stryker rewrites a tsconfig with TypeScript's JavaScript
   API, which TypeScript 7 does not have (`packages/pipeline/src/stages/mutation/stryker.ts`).
-- In a Codex box, drop `nice`.
+- **The command as written ran** on 2026-11-08 on ticket 520's `sample.ts`, seed 119120: 150 of
+  202 mutants selected; the final round had 94 killed, 1 survived (equivalent), 49 no coverage (the
+  CLI block, which only the end-to-end run reaches) and 6 static ignored, in about 40 s. The dry run
+  took 1 s with `RELATED` limiting the tests, so no settings test came near 10 s.
 
 ## Go easy on the machine
 
 - Any run that starts the app, the brain or the stage sets its own temp `FABRIKA_HOME` first
   (`mktemp -d /tmp/fh.XXXX`, short, since a socket path has a 103-byte limit). Never the real
   `~/.fabrika`: a P12 hand run once wrote its stage files there.
-- Under `nice -n 15` outside a Codex box. In a box, `nice` and `pgrep` are blocked: skip them.
+- Under `nice -n 15`, on a Claude agent in a worktree. A Codex box cannot bind Stryker's port.
 - One worker. Changed lines only, at most 150 enclosed mutants, never the whole set.
 
 ## Never

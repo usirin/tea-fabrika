@@ -46,6 +46,7 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
 - **Except Electron or socket work** (owner, 2026-11-08): a step whose laws or shots need the app
   running (a program's window, the desk, keys, the look) or need to bind a socket is run by a Claude
   agent instead. A Codex box can start neither, so a Codex build there would come back half checked.
+  The mutation step is socket work: Stryker binds a port, so it always runs on Claude.
   Still one agent per step.
 - **One driver per ticket, start to finish** (owner, 2026-11-08): a Claude agent carries one ticket
   through every step, starting one agent per step on the runner above. It merges its own PR only
@@ -97,7 +98,10 @@ visible, and never weaken the rules to hide this message.
    the shape of. Run `runplan.sh` in the background. Save the answer as `BOXES/<name>-PLAN.md`.
 2. **Check the unsigned plan.** Run `sh .agents/skills/plan/scripts/plancheck.sh --draft <plan>`. It lists every exam
    path the plan names and exits 1 when a files table has no owner, gives an exam path to a step
-   other than `tests`, or a law has no generator. Then the plan goes back. Check that each listed path is in the files table at all.
+   other than `tests`, or a law has no generator. Then the plan goes back. The `exam path named`
+   listing is a total scan of the whole file, fences and link titles included, so a false listing
+   is harmless. Check each listed path is owned by `tests` in the files table; the files-table
+   check is a parser over free text and may miss an exotic form the listing still shows.
 3. **Approve in the lead session only.** Read the whole plan, its laws and generators or labels,
    its decided notes and open questions. Plan writers and agents reviewing or revising a plan
    return it unsigned, with line one blank. A driver sends it to the lead session for approval.

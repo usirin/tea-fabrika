@@ -263,7 +263,7 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
 
 ```sh
 pnpm typecheck
-pnpm lint       # oxlint and oxfmt: lint rules, format and imports, changing nothing
+pnpm lint       # oxlint, oxfmt and stylelint: lint rules, format, imports and CSS, changing nothing
 pnpm test
 ```
 

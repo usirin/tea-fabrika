@@ -19,15 +19,12 @@
 	{ "glob": "fixtures/keybindings/**", "why": "hand-written keybinding files used by the exam" },
 	{ "glob": ".oxlintrc.json", "why": "the lint rules" },
 	{ "glob": ".oxfmtrc.json", "why": "the format settings" },
+	{ "glob": "stylelint.config.ts", "why": "the CSS lint rules and their known lists" },
 	{ "glob": "oxlint-plugins/**", "why": "the custom lint rules and the lint runner" },
 	{ "glob": "vitest.config.ts", "why": "which tests run, and their time limit" },
 	{
 		"glob": ".agents/skills/*/scripts/*.test.ts",
 		"why": "the step scripts' laws and planted breaks"
-	},
-	{
-		"glob": ".agents/skills/lead/scripts/skillscheck.sh",
-		"why": "the shared skills' source-and-link lint check"
 	},
 	{ "glob": "layer-rules.json", "why": "which way imports may point" },
 	{ "glob": "boundary-rules.json", "why": "which package may import which" },

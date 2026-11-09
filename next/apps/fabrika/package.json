@@ -16,9 +16,11 @@
 		"oxc-transform-react": "catalog:"
 	},
 	"devDependencies": {
+		"@demlik/tea": "catalog:",
 		"@effect/vitest": "catalog:",
 		"@types/node": "catalog:",
 		"esbuild": "catalog:",
+		"fast-check": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	}

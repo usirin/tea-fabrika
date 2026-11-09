@@ -152,7 +152,7 @@ The terminals (ghostty-web's canvas) stay out: they are not UI parts.
 |---|---|---|
 | Keycaps (`.cap`, `kbd`, `.markdown-key`, `.tracker kbd`, `.view .kbd`) | Manti `Kbd`, one look | 1 |
 | Asks list, jobs menu (`Menu` in `pop.tsx`) | Zag `menu` machine from `@manti-ui/folds`, on Manti's menu anatomy; our keys in `pop.ts` stay | 2 |
-| Cmd-K palette, `C-b ?` keys panel (`Palette`) | Zag `dialog` as the modal shell; inside it our combobox and list, on Manti's tokens | 2 |
+| Cmd-K palette, `C-b ?` keys panel (`Palette`) | Zag `dialog` as the modal shell; inside it our combobox and list, on Manti's tokens. `C-b ?` later moves to a tile ([keys editor](./keys-editor.md) E1, 2026-11-08) | 2 |
 | Item lines panel (`Panel`) | Zag `popover` machine, on Manti's popover anatomy | 2 |
 | Tooltips (`useTip`) | Zag `tooltip`, `openDelay: 700`, as popovers.md says | 2 |
 | Buttons (ticket's Comment, Request changes; tracker's forms) | Manti `Button` | 3 |

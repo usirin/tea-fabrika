@@ -1,4 +1,4 @@
-import {mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import {mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
 import {pathToFileURL} from "node:url";
 import {arbMsg, arbRecordMsg, type MsgArbitraryTable} from "@demlik/tea/pbt";
@@ -61,6 +61,17 @@ const real: Mod = {...realDoor, ...realWriter, ...realKeys, ...realGitHub};
 
 const madeDirs: string[] = [];
 const runtimes: ManagedRuntime.ManagedRuntime<Keys, never>[] = [];
+// A killed run skips afterAll and leaves its plant folders here. Clear the ones older than an
+// hour, so a run beside this one keeps its own. The root .gitignore names the pattern too.
+const PLANT = ".door-laws-plant-";
+const STALE_MS = 60 * 60 * 1000;
+const clearStalePlants = () => {
+	for (const name of readdirSync(import.meta.dirname)) {
+		if (!name.startsWith(PLANT)) continue;
+		const dir = join(import.meta.dirname, name);
+		if (Date.now() - statSync(dir).mtimeMs > STALE_MS) rmSync(dir, {recursive: true, force: true});
+	}
+};
 afterAll(async () => {
 	for (const rt of runtimes) await rt.dispose();
 	for (const d of madeDirs) rmSync(d, {recursive: true, force: true});
@@ -79,7 +90,7 @@ async function plant(
 	to: string,
 	more: readonly (readonly [string, string])[] = [],
 ): Promise<Mod> {
-	const dir = mkdtempSync(join(import.meta.dirname, ".door-laws-plant-"));
+	const dir = mkdtempSync(join(import.meta.dirname, PLANT));
 	madeDirs.push(dir);
 	for (const f of FILES) {
 		let text = readFileSync(join(import.meta.dirname, `${f}.ts`), "utf8");
@@ -118,6 +129,7 @@ const newKey = async (): Promise<Key> => {
 /** A pool of Ed25519 keys, made once and reused, so a law's many runs do not each make keys. */
 let POOL: Key[] = [];
 beforeAll(async () => {
+	clearStalePlants();
 	POOL = await Promise.all(Array.from({length: 12}, () => newKey()));
 });
 /** The nth key of the pool. */

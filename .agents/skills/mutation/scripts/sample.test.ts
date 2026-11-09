@@ -228,3 +228,87 @@ describe("mutation sampling, today's tooling", () => {
 		);
 	});
 });
+
+describe("mutation sampling across lines, today's tooling", () => {
+	const span = (id: number, from: Position, to: Position): Candidate => ({
+		...candidate(id, "src/a.ts", from.line, from.column, to.column),
+		location: {start: from, end: to},
+	});
+
+	// Plant: drop the check that refuses a range enclosing a mutant on an unchanged line.
+	it("a range never pulls in a mutant from an unchanged line", () => {
+		fc.assert(
+			fc.property(
+				fc.integer({min: 1, max: 40}),
+				fc.integer(),
+				fc.nat({max: 150}),
+				(line, seed, max) => {
+					const candidates = [
+						span(0, {line, column: 0}, {line: line + 1, column: 5}),
+						span(1, {line: line + 1, column: 0}, {line: line + 1, column: 1}),
+					];
+					const changed = [{file: "src/a.ts", line}];
+					const report: Report = sample({candidates, changed, seed, max});
+					expect(checkReport(report, candidates, changed, seed, max)).toHaveLength(0);
+					expect(report).toMatchObject({total: 1, selected: 0, left: 1});
+
+					// A refused range must not end its line's search: a cheap mutant inside it still fits.
+					const other = line + 5;
+					const mixed = [
+						...candidates,
+						span(2, {line, column: 10}, {line, column: 11}),
+						span(3, {line: other, column: 0}, {line: other, column: 1}),
+						span(4, {line: other, column: 5}, {line: other, column: 6}),
+					];
+					const both = [...changed, {file: "src/a.ts", line: other}];
+					const picked = checkReport(
+						sample({candidates: mixed, changed: both, seed, max: 2}),
+						mixed,
+						both,
+						seed,
+						2,
+					);
+					expect(new Set(picked.map((c) => c.location.start.line))).toEqual(new Set([line, other]));
+				},
+			),
+			options,
+		);
+	});
+
+	// Plants: retry a line an earlier multi-line pick already covers, or stop a line's search
+	// at the first range over the cap instead of trying the next one.
+	it("each changed line gets a first pick before any line gets a second", () => {
+		fc.assert(
+			fc.property(fc.integer({min: 1, max: 40}), fc.integer(), (line, seed) => {
+				const at = (l: number, column: number) => ({line: l, column});
+				// One range covers lines line and line+1. Line line+1 also has its own mutant.
+				const covered = [
+					span(0, at(line, 0), at(line + 1, 1)),
+					span(1, at(line + 1, 5), at(line + 1, 6)),
+					span(2, at(line + 2, 0), at(line + 2, 1)),
+				];
+				const three = [0, 1, 2].map((n) => ({file: "src/a.ts", line: line + n}));
+				const a: Report = sample({candidates: covered, changed: three, seed, max: 2});
+				const lines = (c: Candidate[]) =>
+					new Set(c.flatMap((m) => [m.location.start.line, m.location.end.line]));
+				expect(lines(checkReport(a, covered, three, seed, 2))).toEqual(
+					new Set(three.map((c) => c.line)),
+				);
+
+				// Line line has a wide range that costs three, over a cap of two, beside cheap ones.
+				const nested = [
+					span(0, at(line, 0), at(line, 10)),
+					span(1, at(line, 0), at(line, 1)),
+					span(2, at(line, 2), at(line, 3)),
+					span(3, at(line, 20), at(line, 21)),
+					span(4, at(line + 1, 0), at(line + 1, 1)),
+					span(5, at(line + 1, 5), at(line + 1, 6)),
+				];
+				const two = three.slice(0, 2);
+				const b: Report = sample({candidates: nested, changed: two, seed, max: 2});
+				expect(lines(checkReport(b, nested, two, seed, 2))).toEqual(new Set([line, line + 1]));
+			}),
+			options,
+		);
+	});
+});

@@ -258,10 +258,14 @@ describe("each rule refuses what it is there to refuse", () => {
 			"no-redacted-value",
 			"no-project-settings",
 			"no-bare-disable",
+			// P17a's path-scoped rules have plants in their own oxlint-plugins/*.test.ts files.
+			"door-is-library",
+			"outside-input-constructor",
 			// next/'s exam rules, planted at next/ paths in next/apps/fabrika/src/exam/.
 			"no-promises",
 			"no-effect-run-outside-edge",
 			"edge-comment",
+			"effect-functions",
 			"no-of",
 			"no-hand-tag",
 			"one-store-hook",

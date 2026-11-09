@@ -67,7 +67,8 @@ fi
 rmdir "$LOCK"; trap - EXIT INT TERM
 # Wait for every check on this exact sha, up to an hour. A skipped job (no code changed) is done.
 need="check e2e next commits"
-missing=$need; pending=1
+# The clock is read after every answer and before a green one can break out to the merge.
+missing=$need; pending=1; finished=no
 deadline=$(($(date +%s) + 3600))
 for _ in $(seq 120); do
 	runs=$(read_gh api "repos/$GH_REPO/commits/$tip/check-runs?per_page=100" \
@@ -77,11 +78,11 @@ for _ in $(seq 120); do
 	missing=""
 	for n in $need; do printf '%s\n' "$runs" | grep -q "^$n	" || missing="$missing $n"; done
 	pending=$(printf '%s\n' "$runs" | awk -F'\t' 'NF && $2!="completed"' | wc -l | tr -d ' ')
-	[ -z "$missing" ] && [ "$pending" = 0 ] && break
 	[ "$(date +%s)" -lt "$deadline" ] || break
+	if [ -z "$missing" ] && [ "$pending" = 0 ]; then finished=yes; break; fi
 	sleep 30
 done
-if [ -n "$missing" ] || [ "$pending" != 0 ]; then
+if [ "$finished" != yes ]; then
 	echo "pr $pr: checks not done at $tip after an hour (missing:${missing:- none}, pending: $pending)" >&2
 	exit 1
 fi

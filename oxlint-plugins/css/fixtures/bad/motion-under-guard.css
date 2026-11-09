@@ -1,0 +1,12 @@
+.fade { transition: opacity 120ms; }
+@media (prefers-reduced-motion: reduce) { .fade { animation: pop-fade 1s; } }
+.transition-property { transition-property: opacity; }
+.transition-duration { transition-duration: 120ms; }
+.transition-delay { transition-delay: 120ms; }
+.transition-timing { transition-timing-function: ease; }
+.animation-name { animation-name: pop-fade; }
+.animation-duration { animation-duration: 1s; }
+.animation-delay { animation-delay: 1s; }
+.animation-timing { animation-timing-function: ease; }
+.animation-iteration { animation-iteration-count: infinite; }
+@media (prefers-reduced-motion: reduce) { .still-moving { transition-duration: 1s; } }

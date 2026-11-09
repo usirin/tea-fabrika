@@ -1,11 +1,15 @@
 #!/bin/sh
-# plancheck.sh [--draft] <plan.md>: list every exam path the plan names and check
-# the plan's files tables. A files table is one whose first header starts with "file" or "path", or
-# that has an owner column ("owner", "step", "writer" or "writes it"). Exits 1 when a files table has no owner
-# column, a row has an empty owner, or an exam path in a row is owned by a step other than tests.
-# Version 2 checks the generator grammar on laws tables (a "plant" column). Legacy plans keep
-# their owner checks. Fixed inputs need one of the four labels in five-steps-for-every-check.md.
-# Paths are read as the repo reads them: `./package.json` is `package.json`.
+# plancheck.sh [--draft] <plan.md>: list every exam path the plan names, and check the plan's files tables.
+# The listing is a total scan that reads no Markdown: the whole file, fences, link titles and
+# comments included, is split into words on every character outside `A-Z a-z 0-9 . _ / -`, and each
+# word the exam list matches, as it stands or with its leading dots removed, is listed. A false
+# listing is harmless; the lead checks each listed path is owned by tests. A files table is one whose first header starts with "file" or
+# "path", or that has an owner column ("owner", "step", "writer" or "writes it"). Exits 1 when a
+# files table has no owner column, a row has an empty owner, or an exam path in a row is owned by a
+# step other than tests. Version 2 checks the generator grammar on laws tables (a "plant" column).
+# Legacy plans keep their owner checks. Fixed inputs need one of the four labels in
+# five-steps-for-every-check.md. Paths are read as the repo reads them: `./package.json` is
+# `package.json`.
 set -eu
 draft=0
 if [ "${1:-}" = --draft ]; then draft=1; shift; fi
@@ -30,10 +34,27 @@ def plain(text):
                        if text.startswith(m) and text.endswith(m) and len(text) >= 2 * len(m)), None)
         if marker is None: return text
         text = text[len(marker):-len(marker)].strip()
+def bare(word):
+    # Strip the punctuation around a word, as a plan writer types it: `x`, [x], (x), "x", 'x', x, x; x: x.
+    while True:
+        out = plain(word).lstrip("`[(\"'").rstrip("`])\"',;:.")
+        if out == word: return out
+        word = out
+HOME = {"repository", "repo", "root", "project", "workspace", "monorepo", "top-level"}
+def tokens(text):
+    # The words of a piece of plan text, each stripped of the punctuation around it. A Markdown link
+    # [text](target) gives its text's words and its target as words of their own.
+    text = re.sub(r"\[([^\]]*)\]\(([^)\s]*)\)", r" \1 \2 ", text)
+    return [bare(w) for w in re.split(r"[\s,;]+|<br\s*/?>", text) if bare(w)]
 def paths(text):
-    # A path item must be complete. A sentence mentioning package.json is not a path.
-    return [p for item in re.split(r",|<br\s*/?>", text)
-            if (p := plain(item)) and not re.search(r"\s", p)]
+    # Every word in a path cell is a candidate path; hits() keeps the exam paths, whatever words
+    # surround them. A cell that names another package with a possessive ("Counter's package.json")
+    # holds that package's files, so only its qualified paths (with a "/") are candidates. A
+    # possessive of a word meaning this repository ("the repo's package.json"), in any letter case,
+    # names no other package and keeps every word.
+    words = tokens(text)
+    owners = [m[1].lower() for m in (re.fullmatch(r"([\w-]+)'s", w) for w in words) if m]
+    return [w for w in words if "/" in norm(w)] if any(o not in HOME for o in owners) else words
 def cells(text):
     out, start, slashes = [], 0, 0
     for j, char in enumerate(text):
@@ -88,8 +109,18 @@ def generator(text):
     if text in ("lint", "type") or generated(text): return True
     match = re.fullmatch(r"(vector|format|pinned|scenario):\s*(.+)", text)
     return bool(match and any(c.isalnum() for c in match[2]))
-# Explicit qualified paths still get reported outside files tables. Bare root files do not.
-named = hits(p for p in re.findall(r"`([^`\s]+)`", "\n".join(lines)) if "/" in norm(p))
+def scanned(word):
+    # A word as the total scan reads it: no leading `./`, `_` or `-`, and no trailing `_`, `-` or `.`.
+    # A leading `.` stays, since dotfiles start with one.
+    while True:
+        out = norm(word).lstrip("_-").rstrip("_-.")
+        if out == word: return out
+        word = out
+# The lead's backstop, a total scan: split the raw file on every character that cannot be in a repo
+# path, and list each word the exam list matches, as it stands or with its leading dots removed.
+# Only path cells decide the exit code.
+words = [scanned(w) for w in re.split(r"[^A-Za-z0-9._/-]+", open(plan).read())]
+named = hits(words + [w.lstrip(".") for w in words])
 col, files, gen, path, law = None, False, None, None, None
 for i, l in enumerate(lines):
     l = l.strip()
