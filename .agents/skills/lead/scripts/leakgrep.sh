@@ -49,7 +49,8 @@ own_url = re.compile(re.escape(repo_url) + r'(?:\.git)?(?=$|[\s/#?)>]|\.(?=$|[\s
 # Keep the provider alphabets and minimum lengths, without relying on embedded brand markers.
 # OpenSSH's short sk- type names contain punctuation outside these key payloads.
 patterns = [
-    ('machine_path', re.compile(r'/(?:Users|home|tmp|private/tmp|private/var/folders|var/folders)/|[A-Za-z]:[\\/]Users[\\/]', re.I)),
+    # Decision 0011: a plain path under /tmp passes; a first part ending in -<number> may hold a user id.
+    ('machine_path', re.compile(r'/(?:Users|home|private/tmp|private/var/folders|var/folders)/|/(?:tmp)/[^/\s]*-[0-9]+(?![^/\s"\'`)\]>,;:])|[A-Za-z]:[\\/]Users[\\/]', re.I)),
     ('key', re.compile(r'\b(?:npm_[A-Za-z0-9]{36,}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{82,}|sk-(?:[A-Za-z0-9]{48,}|(?:proj|svcacct|admin)-[A-Za-z0-9_-]{124,}))|-----BEGIN (?:[A-Z ]*PRIVATE )?KEY-----')),
     ('em_dash', re.compile(chr(0x2014))),
     ('canvas', re.compile(r'https?://(?:claude\.ai/(?:design|artifacts)|[^/\s]*\.claude\.site)(?:[/?#]|$)', re.I)),

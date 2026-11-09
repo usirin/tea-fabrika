@@ -33,7 +33,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
 						});
 					for (const leak of [
 						word,
-						"/" + "tmp/private",
+						"/" + "tmp/private-501",
 						`npm_${"a".repeat(36)}`,
 						String.fromCodePoint(0x2014),
 						"https://claude.ai/" + "design/private",
@@ -157,7 +157,7 @@ describe("T325 K6 leakgrep, today's tooling", () => {
 							word.toUpperCase(),
 							`/` + `Users/${suffix}/work`,
 							`/` + `home/${suffix}/work`,
-							`/` + `tmp/${suffix}`,
+							`/` + `tmp/${suffix}-501/work`,
 							`/private/` + `var/folders/${suffix}`,
 							`C:\\Users\\${suffix}`,
 							...["npm_", "ghp_", "gho_", "sk-"].map((prefix) => prefix + suffix.repeat(12)),
@@ -346,4 +346,45 @@ describe("T325 R5 leakgrep defaults and token lengths, today's tooling", () => {
 			{...options, numRuns: 2, endOnFailure: true},
 		);
 	});
+});
+
+describe("T396 leakgrep plain /tmp paths, today's tooling (decision 0011)", () => {
+	const run = (text: string) => {
+		const dir = mkdtempSync(join(tmpdir(), "lg-tmp-"));
+		try {
+			const repo = join(dir, "repo"),
+				words = join(dir, "words");
+			expect(spawnSync("git", ["init", "-q", repo]).status).toBe(0);
+			writeFileSync(words, "");
+			return spawnSync("sh", [script], {
+				cwd: repo,
+				input: `+${text}\n`,
+				encoding: "utf8",
+				env: {...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined},
+			});
+		} finally {
+			rmSync(dir, {recursive: true, force: true});
+		}
+	};
+
+	// vector: AGENTS.md asks test homes to use a short path under /tmp; 0011 lets it through.
+	it("vector: a short test home under /tmp passes", () => {
+		const ran = run("/" + "tmp/fh.abc");
+		expect(ran.status, ran.stderr).toBe(0);
+	});
+
+	// pinned: 0011 keeps these flagged. A /tmp first part ending in -<number> may hold a user id,
+	// and the other four are home or per-user temp folders.
+	for (const leak of [
+		"/" + "tmp/claude-501/x",
+		"/private/" + "tmp/x",
+		"/" + "var/folders/ab/x",
+		"/" + "Users/x",
+	])
+		it(`pinned: ${leak.replace(/^\//, "")} is a machine path`, () => {
+			const ran = run(leak);
+			expect(ran.status).toBe(1);
+			expect(ran.stderr).toContain("leak machine_path");
+			expect(ran.stdout + ran.stderr).not.toContain(leak);
+		});
 });
