@@ -275,7 +275,7 @@ describe("a stopped lane, typed again", () => {
 		expect(
 			answersOf(ran)
 				.filter(({answer}) => answer?.pick === "no")
-				.map(({fact}) => fact.answer),
+				.map(({fact}) => ("format" in fact ? fact.answer : null)),
 		).toEqual([
 			{_tag: "against", pick: "no", note: NOTE},
 			{_tag: "against", pick: "no", note: NOTE},

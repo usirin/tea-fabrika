@@ -322,7 +322,9 @@ describe("a lane, on what the real agents answered", () => {
 					{blind: {hidden: false}},
 					{blind: {hidden: false}},
 				]);
-				expect(answeredWith(ran, "no").map((fact) => fact.answer)).toEqual([
+				expect(
+					answeredWith(ran, "no").map((fact) => ("format" in fact ? fact.answer : null)),
+				).toEqual([
 					{_tag: "against", pick: "no", note: NOTE},
 					{_tag: "against", pick: "no", note: NOTE},
 				]);

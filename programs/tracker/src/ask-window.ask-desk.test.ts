@@ -177,12 +177,12 @@ describe("ask desk P12: wait for the save", () => {
 
 describe("ask desk P12: the saved line says what was saved", () => {
 	const picks = [...new Set(Object.values(PICKS).flat())];
-	// Review 3, advice 3. Plant: keep the old "no saved." wording for a non-approve pick.
+	// Review 3, advice 3; round 10. Plant: show a raw pick id instead of its person-facing label.
 	property(
-		"names every saved pick in a plain sentence, with Approved. for approve",
+		"names every saved pick by its person-facing label, with Approved. for approve",
 		{pick: Schema.Literals(picks)},
 		async ({pick}) => {
-			const offered = picks.map((pick) => ({pick, does: `Choose ${pick}`}));
+			const offered = picks.map((pick, index) => ({pick, does: `Use option ${index + 1}`}));
 			for (const rec of [NONE, {...DRAFT.rec, pick}]) {
 				const model = await start(false, rec, 117, offered);
 				const saving =
@@ -196,7 +196,8 @@ describe("ask desk P12: the saved line says what was saved", () => {
 							);
 				expect(saving.editor._tag).toBe("saving");
 				const [saved, notices] = step(saving, {type: "save_ok", value: {ticket: 117}});
-				const said = pick === "approve" ? "Approved." : `You chose ${pick}.`;
+				const label = offered.find((option) => option.pick === pick)!.does;
+				const said = pick === "approve" ? "Approved." : `You chose ${label}.`;
 				expect(saved.status).toBe(said);
 				expect(notices).toContainEqual({type: "answered", ticket: 117, said});
 			}
