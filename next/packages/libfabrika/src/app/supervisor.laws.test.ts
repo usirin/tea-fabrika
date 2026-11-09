@@ -1,6 +1,7 @@
 // P34, next/. Pure rules own policy validation and saved-machine equivalence.
 // Proposed test contract: supervisor is a tea machine; context supplies policy/process/build/at.
-// threw -> ending/exit, exited -> down, due -> starting/start, started -> live.
+// threw -> ending/exit; exited -> starting inside the restart budget, down only at the brake;
+// due -> starting/start from down; started -> live.
 // A pending action belongs in the saved model, even after its Cmd has been emitted.
 import {existsSync} from "node:fs";
 import {applyCell, type Machine} from "@demlik/tea";
@@ -39,6 +40,12 @@ const subject = async (): Promise<Supervisor> => {
 	return await import(modulePath);
 };
 const ctx: Ctx = {policy, process: A, name: "counter:1", build: "build-a", at: 0};
+/** The saved wait: a down's own `until`, else the pending start action's. */
+const savedWait = (model: Model): number | undefined => {
+	if (model.recovery._tag === "down") return model.recovery.until;
+	const pending = model.pending as {readonly type?: unknown; readonly until?: unknown} | null;
+	return pending?.type === "start" && typeof pending.until === "number" ? pending.until : undefined;
+};
 const thrown = (seq: number, at: number, process = A): Msg => ({
 	type: "threw",
 	at,
@@ -96,10 +103,13 @@ describe("P34 policy and saved supervision laws", () => {
 							},
 						});
 						[model] = applyCell(s.supervisor, model, {type: "exited", at});
-						const until = model.recovery.until;
+						const until = savedWait(model);
 						expect(until).toBeTypeOf("number");
-						if (n === intensity + 1) expect(until).toBeGreaterThan(accepted.periodMs);
-						else {
+						if (n === intensity + 1) {
+							expect(model.recovery._tag).toBe("down");
+							expect(until).toBeGreaterThan(accepted.periodMs);
+						} else {
+							expect(model.recovery._tag).toBe("starting");
 							at = until!;
 							[model] = applyCell(s.supervisor, model, {type: "due", at});
 							[model] = applyCell(s.supervisor, model, {type: "started", process: B, at});
@@ -111,6 +121,103 @@ describe("P34 policy and saved supervision laws", () => {
 		);
 	});
 
+	it("p80 plant, down after one crash: a down fact only on the crash that trips the brake, and every start waits its backoff", async () => {
+		const s = await subject();
+		const policies = fc
+			.record({
+				intensity: fc.integer({min: 1, max: 8}),
+				minMs: fc.integer({min: 1, max: 200}),
+				spread: fc.integer({min: 0, max: 800}),
+				slack: fc.integer({min: 1, max: 5000}),
+			})
+			.map(({intensity, minMs, spread, slack}) => {
+				const maxMs = minMs + spread;
+				let total = 0;
+				for (let n = 0; n < intensity; n++) total += Math.min(minMs * 2 ** n, maxMs);
+				return {
+					maxDeliveries: 1,
+					intensity,
+					periodMs: total + slack,
+					backoff: {minMs, maxMs, resetAfterMs: 1_000_000},
+				};
+			});
+		const crashes = fc.array(
+			fc.record({live: fc.integer({min: 0, max: 3000}), exit: fc.integer({min: 0, max: 50})}),
+			{minLength: 1, maxLength: 20},
+		);
+		fc.assert(
+			fc.property(policies, crashes, (candidate, plan) => {
+				const accepted = Schema.decodeUnknownSync(s.Policy)(candidate);
+				let [model] = s.supervisor.init(null, {...ctx, policy: accepted});
+				let process = A;
+				let at = 0;
+				const restarts: number[] = [];
+				const step = (msg: Msg) => {
+					const [next, cmds] = applyCell(s.supervisor, model, msg);
+					model = next;
+					return cmds;
+				};
+				for (const [index, crash] of plan.entries()) {
+					const n = index + 1;
+					at += crash.live;
+					const threwCmds = step(thrown(n, at, process));
+					expect(threwCmds.filter((cmd) => cmd.type === "down")).toEqual([]);
+					const exitAt = at + crash.exit;
+					const exitedCmds = step({type: "exited", at: exitAt});
+					const wait = Math.min(
+						accepted.backoff.minMs * 2 ** Math.min(n - 1, 53),
+						accepted.backoff.maxMs,
+					);
+					const earliest = exitAt + wait;
+					const inBudget =
+						restarts.filter((t) => t >= earliest - accepted.periodMs).length + 1 <=
+						accepted.intensity;
+					const downs = exitedCmds.filter((cmd) => cmd.type === "down");
+					let until: number;
+					if (inBudget) {
+						expect(downs, `crash ${n} is inside the restart budget`).toEqual([]);
+						expect(model.recovery._tag).toBe("starting");
+						expect(savedWait(model), "the saved wait is the backoff").toBe(earliest);
+						until = earliest;
+					} else {
+						expect(downs, `crash ${n} trips the brake`).toHaveLength(1);
+						expect(model.recovery._tag).toBe("down");
+						until = savedWait(model)!;
+						expect(until).toBeGreaterThanOrEqual(earliest);
+					}
+					const dueCmds = [
+						...step({type: "due", at: until - 1}),
+						...step({type: "due", at: until}),
+						...step({type: "due", at: until}),
+					];
+					const starts = [...exitedCmds, ...dueCmds].filter((cmd) => cmd.type === "start");
+					expect(starts, "one start, never sooner than the wait").toMatchObject([{until}]);
+					expect(dueCmds.filter((cmd) => cmd.type === "down")).toEqual([]);
+					process = process === A ? B : A;
+					expect(step({type: "started", process, at: until})).toEqual([]);
+					restarts.push(until);
+					at = until;
+				}
+			}),
+			{
+				seed: SEED,
+				numRuns: 100,
+				// T271 decision check: one crash inside the budget wrote a down fact.
+				examples: [
+					[
+						{
+							maxDeliveries: 1,
+							intensity: 5,
+							periodMs: 5000,
+							backoff: {minMs: 100, maxMs: 800, resetAfterMs: 1_000_000},
+						},
+						[{live: 0, exit: 0}],
+					],
+				],
+			},
+		);
+	});
+
 	it("p80 plant, reset streak while down: waits double to the cap across replacement IDs", async () => {
 		const s = await subject();
 		let [model] = s.supervisor.init(null, ctx);
@@ -119,7 +226,8 @@ describe("P34 policy and saved supervision laws", () => {
 			[model] = applyCell(s.supervisor, model, thrown(n + 1, at, n === 0 ? A : B));
 			expect(model.recovery._tag).toBe("ending");
 			[model] = applyCell(s.supervisor, model, {type: "exited", at});
-			expect(model.recovery).toMatchObject({_tag: "down", until: at + wait});
+			expect(model.recovery._tag).toBe("starting");
+			expect(savedWait(model)).toBe(at + wait);
 			at += wait;
 			[model] = applyCell(s.supervisor, model, {type: "due", at});
 			[model] = applyCell(s.supervisor, model, {type: "started", process: B, at});
@@ -130,17 +238,21 @@ describe("P34 policy and saved supervision laws", () => {
 		const s = await subject();
 		let [model] = s.supervisor.init(null, ctx);
 		[model] = applyCell(s.supervisor, model, thrown(1, 0));
-		[model] = applyCell(s.supervisor, model, {type: "exited", at: 0});
-		const [early, earlyCmds] = applyCell(s.supervisor, model, {type: "due", at: 99});
-		expect(early).toEqual(model);
+		const [exited, exitedCmds] = applyCell(s.supervisor, model, {type: "exited", at: 0});
+		expect(exited.recovery._tag).toBe("starting");
+		expect(savedWait(exited)).toBe(100);
+		const [early, earlyCmds] = applyCell(s.supervisor, exited, {type: "due", at: 99});
+		expect(early).toEqual(exited);
 		expect(earlyCmds).toEqual([]);
-		const [due, cmds] = applyCell(s.supervisor, model, {type: "due", at: 100});
+		const [due, cmds] = applyCell(s.supervisor, early, {type: "due", at: 100});
 		expect(due.recovery._tag).toBe("starting");
-		expect(cmds.filter((cmd) => cmd.type === "start")).toHaveLength(1);
 		expect(due.pending).toBeDefined();
 		expect(due.pending).not.toBeNull();
 		const [, duplicate] = applyCell(s.supervisor, due, {type: "due", at: 100});
-		expect(duplicate).toEqual([]);
+		const starts = [...exitedCmds, ...earlyCmds, ...cmds, ...duplicate].filter(
+			(cmd) => cmd.type === "start",
+		);
+		expect(starts).toMatchObject([{until: 100}]);
 	});
 
 	it("S2 p88 plant, omit pending Cmds: every saved cut resumes the same recovery", async () => {
@@ -189,6 +301,7 @@ describe("P34 policy and saved supervision laws", () => {
 		}
 		[model] = applyCell(s.supervisor, model, thrown(2, 5101, B));
 		[model] = applyCell(s.supervisor, model, {type: "exited", at: 5101});
-		expect(model.recovery).toMatchObject({_tag: "down", until: 5201});
+		expect(model.recovery._tag).toBe("starting");
+		expect(savedWait(model)).toBe(5201);
 	});
 });
