@@ -16,6 +16,7 @@ import {
 	SpanSink,
 	Writer,
 } from "../coordination/index.ts";
+import {nodeExecution, type Execution, type Declaration} from "./execution.ts";
 import {type Patch} from "./patch.ts";
 import {ProgramDown, stepper, type Stepper} from "./program.ts";
 
@@ -56,9 +57,11 @@ export type Incoming = typeof Incoming.Type;
 /** A Cmd handler: it does the outside work and answers with tea's Outcome. */
 export type Handler<R> = Code<[cmd: unknown], Effect.Effect<Outcome<unknown, unknown>, unknown, R>>;
 
-/** A loaded program: its stepper, and the handler for a Cmd it may run, if there is one. */
+/** An in-process program: its pure stepper, runner execution and allowed Cmd handlers. */
 export type Loaded = {
 	readonly stepper: Stepper;
+	readonly execution: Execution;
+	readonly declaration: Declaration;
 	readonly handler: (
 		cmd: string,
 	) => Option.Option<(cmd: unknown) => Effect.Effect<Outcome<unknown, unknown>, unknown>>;
@@ -69,7 +72,7 @@ const CHAOS_ONLY: Readonly<Record<string, string>> = {fire: "chaos"};
 
 export class ProgramLoader extends Context.Service<
 	ProgramLoader,
-	{readonly load: (name: string) => Effect.Effect<Loaded, ProgramDown>}
+	{readonly load: (name: string, build?: string) => Effect.Effect<Loaded, ProgramDown>}
 >()("@kampus/libfabrika/ProgramLoader") {
 	/** The in-process loader, for Node: each program's declaration, decoded when it is loaded, and
 	 *  the handlers its Cmds may use. A handler names its Cmd; `fire` runs only for `chaos`. */
@@ -82,13 +85,34 @@ export class ProgramLoader extends Context.Service<
 			Effect.gen(function* () {
 				const context = yield* Effect.context<R>();
 				return {
-					load: Effect.fn("loader.load")(function* (name: string) {
+					load: Effect.fn("loader.load")(function* (name: string, build = "node") {
 						if (!Object.hasOwn(programs, name)) return yield* new ProgramDown({why: "no_program"});
 						const loaded = yield* Effect.fromResult(stepper(programs[name])).pipe(
 							Effect.mapError(() => new ProgramDown({why: "load"})),
 						);
 						return {
 							stepper: loaded,
+							execution: nodeExecution(programs[name], build),
+							declaration: {
+								name: loaded.program.name,
+								v: loaded.program.state.v,
+								...(loaded.program.maxDeliveries === undefined
+									? {}
+									: {maxDeliveries: loaded.program.maxDeliveries}),
+								writes: Object.fromEntries(
+									Object.entries(loaded.program.writes).map(([name, p]) => [
+										name,
+										{personOnly: p.personOnly},
+									]),
+								),
+								inputs: Object.fromEntries(
+									Object.entries(loaded.program.inputs).map(([name, p]) => [
+										name,
+										{write: p._tag === "write", personOnly: p._tag === "write" && p.personOnly},
+									]),
+								),
+								cmds: (loaded.program.machine.cmds ?? []).map((d) => d.cmdType),
+							},
 							handler: (cmd: string) => {
 								const owner = CHAOS_ONLY[cmd];
 								const run = Object.hasOwn(handlers, cmd) ? handlers[cmd] : undefined;
@@ -113,6 +137,11 @@ export type Fact = Schema.JsonObject & Tagged;
 export class CheckedWriter extends Context.Service<
 	CheckedWriter,
 	{
+		readonly sign?: (
+			id: string,
+			parent: string,
+			kind: string,
+		) => Effect.Effect<Session, LedgerError | SigningRefused | NotGranted>;
 		readonly append: (input: Incoming) => Effect.Effect<Appended, LedgerError | NotGranted>;
 		readonly commit: (
 			id: string,
