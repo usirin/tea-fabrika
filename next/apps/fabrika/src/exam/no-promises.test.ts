@@ -17,7 +17,7 @@ const PASSES = "next/packages/libfabrika/src/app/passes.ts";
 const EDGE = "next/packages/libfabrika/src/data/project.ts";
 const paths = Effect.runSync(Path.Path.pipe(Effect.provide(NodePath.layer)));
 
-const typed = (files: Readonly<Record<string, string>>) => {
+const typed = (files: Readonly<Record<string, string>>, workers = false) => {
 	const root = mkdtempSync(join(tmpdir(), "p12-types-"));
 	const api = new API({cwd: root});
 	try {
@@ -28,7 +28,24 @@ const typed = (files: Readonly<Record<string, string>>) => {
 		const config = join(root, "tsconfig.json");
 		writeFileSync(
 			config,
-			JSON.stringify({compilerOptions: {strict: true, target: "ES2023"}, include: ["**/*.ts"]}),
+			JSON.stringify({
+				compilerOptions: {
+					strict: true,
+					target: "ES2023",
+					...(workers
+						? {
+								lib: ["ES2023"],
+								types: [
+									paths.resolve(
+										import.meta.dirname,
+										"../../node_modules/@cloudflare/workers-types",
+									),
+								],
+							}
+						: {}),
+				},
+				include: ["**/*.ts"],
+			}),
 		);
 		const snapshot = api.updateSnapshot({openProjects: [config]});
 		try {
@@ -135,6 +152,54 @@ const edges = [
 ].join("\n");
 
 describe("no-promises", async () => {
+	it("refuses an unmarked mapped Workers RPC call inside either Promise bridge", () => {
+		fc.assert(
+			fc.property(
+				fc.stringMatching(/^[a-z]{1,8}$/),
+				fc.constantFrom("tryPromise", "promise"),
+				fc.nat({max: 8}),
+				fc.boolean(),
+				(suffix, method, gap, marked) => {
+					const file = "next/rpc.ts";
+					// Installed workers-types 5.20261027.1: WorkerStub.getEntrypoint -> Fetcher<T>
+					// -> Rpc.Provider<T> -> MethodOrProperty<V> -> Result<Awaited<R>>.
+					// Promise<unknown> becomes never through that conditional return type.
+					const before = [
+						`type Calls = Rpc.WorkerEntrypointBranded & {describe${suffix}(): Promise<unknown>};`,
+						"declare const worker: WorkerStub;",
+						"const rpc = worker.getEntrypoint<Calls>();",
+						"declare const Effect: {",
+						"  tryPromise(options: {try: () => Promise<unknown>; catch: () => Error}): void;",
+						"  promise(thunk: () => Promise<unknown>): void;",
+						"};",
+						"// oxlint-disable-next-line fabrika/no-promises -- edge: the RPC call enters Effect",
+						`export const edge = Effect.${method}(${method === "tryPromise" ? "{" : ""}`,
+						...(method === "tryPromise" ? ["  try: () =>"] : ["  () =>"]),
+						...Array.from({length: gap}, () => ""),
+						...(marked
+							? [
+									"// oxlint-disable-next-line fabrika/no-promises -- edge: Worker RPC returns a Promise",
+								]
+							: []),
+					];
+					const source = [
+						...before,
+						`    rpc.describe${suffix}()${method === "tryPromise" ? "," : ""}`,
+						...(method === "tryPromise" ? ['  catch: () => new Error("rpc"),', "});"] : [");"]),
+					].join("\n");
+					expect(typed({[file]: source}, true).map((f) => ({file: f.file, line: f.line}))).toEqual(
+						marked ? [] : [{file, line: before.length + 1}],
+					);
+				},
+			),
+			{
+				seed: 119120,
+				numRuns: 12,
+				// P12 review 7: the marker covered Effect.tryPromise, but not rpc.describe below it.
+				examples: [["", "tryPromise", 0, false]],
+			},
+		);
+	});
 	it("The edge comment covers the next line and only that line", () => {
 		fc.assert(
 			fc.property(markedEdge, fc.nat({max: 8}), ([method, rule, indent], gap) => {

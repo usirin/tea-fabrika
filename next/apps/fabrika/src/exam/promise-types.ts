@@ -3,7 +3,7 @@
 import {NodeRuntime, NodeServices} from "@effect/platform-node";
 import {Effect, FileSystem, Path} from "effect";
 import * as ts from "typescript/unstable/ast";
-import {API, SignatureKind, type Project, type Type} from "typescript/unstable/sync";
+import {API, SignatureKind, TypeFlags, type Project, type Type} from "typescript/unstable/sync";
 
 interface PromiseFinding {
 	readonly file: string;
@@ -20,7 +20,8 @@ export const checkPromiseTypes = (
 	const found = new Map<string, PromiseFinding>();
 	const memo = new Map<number, boolean>();
 	const carries = (type: Type | undefined, seen = new Set<number>()): boolean => {
-		if (type === undefined || seen.has(type.id)) return false;
+		if (type === undefined || type.isErrorType()) return true;
+		if (seen.has(type.id)) return false;
 		const saved = memo.get(type.id);
 		if (saved !== undefined) return saved;
 		seen.add(type.id);
@@ -48,7 +49,17 @@ export const checkPromiseTypes = (
 		const source = program.getSourceFile(path);
 		if (source === undefined) throw new Error(`Cannot read ${file}`);
 		const candidates = new Map<ts.Node, string>();
-		const visit = (node: ts.Node): void => {
+		const promiseInputs = new Set<ts.Node>();
+		const visit = (node: ts.Node, inPromise = false): void => {
+			if (inPromise) promiseInputs.add(node);
+			const bridge =
+				ts.isCallExpression(node) &&
+				((ts.isPropertyAccessExpression(node.expression) &&
+					ts.isIdentifier(node.expression.expression) &&
+					node.expression.expression.text === "Effect" &&
+					["tryPromise", "promise"].includes(node.expression.name.text)) ||
+					(ts.isIdentifier(node.expression) &&
+						["tryPromise", "promise"].includes(node.expression.text)));
 			if (ts.isCallExpression(node)) {
 				candidates.set(node, "call returns a Promise or a Promise thunk");
 				for (const argument of node.arguments)
@@ -70,7 +81,9 @@ export const checkPromiseTypes = (
 				candidates.set(node.expression, "function returns a Promise or a Promise thunk");
 			if (ts.isArrowFunction(node) && !ts.isBlock(node.body))
 				candidates.set(node.body, "function returns a Promise or a Promise thunk");
-			node.forEachChild(visit);
+			node.forEachChild((child) =>
+				visit(child, inPromise || (bridge && node.arguments.some((arg) => arg === child))),
+			);
 		};
 		visit(source);
 		const nodes = [...candidates.keys()];
@@ -88,13 +101,30 @@ export const checkPromiseTypes = (
 		for (let i = 0; i < nodes.length; i++) {
 			const node = nodes[i];
 			if (node === undefined) throw new Error("Missing Promise candidate");
-			if (!carries(types[i])) continue;
+			const type = types[i];
+			// Workers RPC's mapped conditional returns can resolve to never. That cannot
+			// prove a call inside a Promise input is synchronous, so require its own marker.
+			const unresolved =
+				promiseInputs.has(node) &&
+				(type === undefined ||
+					(type.flags &
+						(TypeFlags.Any |
+							TypeFlags.Unknown |
+							TypeFlags.Never |
+							TypeFlags.TypeParameter |
+							TypeFlags.Conditional |
+							TypeFlags.IndexedAccess |
+							TypeFlags.Substitution)) !==
+						0);
+			if (!carries(type) && !unresolved) continue;
 			const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line;
 			if (marked(line)) continue;
 			found.set(`${file}:${line + 1}`, {
 				file,
 				line: line + 1,
-				reason: candidates.get(node) ?? "Promise value outside a marked edge",
+				reason: unresolved
+					? "Promise input has a type the check cannot resolve"
+					: (candidates.get(node) ?? "Promise value outside a marked edge"),
 			});
 		}
 	}
