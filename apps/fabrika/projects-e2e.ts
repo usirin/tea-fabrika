@@ -54,10 +54,23 @@ const required = <A>(value: A | null | undefined): A => {
 	if (value === null || value === undefined) throw new Error("required test value is absent");
 	return value;
 };
-const until = async <A>(read: () => Promise<A>, accepts: (a: A) => boolean): Promise<A> => {
-	for (let i = 0; i < 200; i++) {
+/**
+ * Read until the value is accepted. `ms` is how long a wait may last: 10 s for what the page does
+ * by itself, 30 s for what needs a new window, its host and its shell, which start slowly when the
+ * machine is busy (the run is niced); a wait that the run's own state makes certain to fail
+ * (`fail` returns a reason) stops at once with that reason instead of timing out.
+ */
+const until = async <A>(
+	read: () => Promise<A>,
+	accepts: (a: A) => boolean,
+	ms = 10_000,
+	fail: () => Promise<string | null> = async () => null,
+): Promise<A> => {
+	for (let i = 0; i < ms / 50; i++) {
 		const value = await read();
 		if (accepts(value)) return value;
+		const why = await fail();
+		if (why !== null) throw new Error(why);
 		await new Promise((resolve) => setTimeout(resolve, 50));
 	}
 	throw new Error("project check timed out");
@@ -102,11 +115,27 @@ const box = (page: Page) => page.getByRole("dialog", {name: "Open a project…",
 const tile = (page: Page) => page.locator('[data-tile][aria-current="true"]');
 const screen = async (page: Page) =>
 	(await page.locator("[data-tile] .screen-text").allTextContents()).join("\n");
-const prompt = (page: Page) =>
-	until(
-		() => tile(page).locator(".screen-text").textContent(),
-		(text) => text?.split("\n").at(-1) === "tsh$",
+/**
+ * The current tile shows its prompt, and has shown the same screen for 400 ms. A prompt read once
+ * can be the old project's tile in a window that is still switching, or a shell that has drawn its
+ * prompt but is not yet reading keys, so keys typed on it are lost; a screen that stands still is
+ * the one the keys will reach.
+ */
+const prompt = async (page: Page) => {
+	const read = () => tile(page).locator(".screen-text").textContent();
+	let last: string | null | undefined;
+	let still = 0;
+	return until(
+		async () => {
+			const text = await read();
+			still = text === last && text?.split("\n").at(-1) === "tsh$" ? still + 1 : 0;
+			last = text;
+			return still;
+		},
+		(n) => n >= 8,
+		30_000,
 	);
+};
 const command = async (page: Page, line: string) => {
 	await prompt(page);
 	await tile(page).click();
@@ -114,6 +143,7 @@ const command = async (page: Page, line: string) => {
 	await until(
 		() => screen(page),
 		(text) => text.includes(`tsh$ ${line}`),
+		30_000,
 	);
 	await page.keyboard.press("Enter");
 };
@@ -139,13 +169,21 @@ export const openFixtureProject = async (
 			...args: [BaseWindow, OpenDialogOptions] | [OpenDialogOptions]
 		) => {
 			const [parent, options] = args.length === 2 ? args : [undefined, args[0]];
-			if (!options.properties?.includes("openDirectory")) throw new Error("not a folder sheet");
+			// A refusal thrown here reaches no one: the product's ask fails inside the app and no
+			// window ever opens, which the test would see only as a timeout. The reason is kept where
+			// the test reads it, so its wait stops with it.
+			const refuse = (why: string): never => {
+				Reflect.set(globalThis, "projectSheetRefusal", why);
+				throw new Error(why);
+			};
+			Reflect.set(globalThis, "projectSheetRefusal", null);
+			if (!options.properties?.includes("openDirectory")) return refuse("not a folder sheet");
 			const requester = BrowserWindow.getAllWindows().find((window) => window === parent);
-			if (requester === undefined) throw new Error("sheet has no requesting window");
+			if (requester === undefined) return refuse("sheet has no requesting window");
 			const dialogs = await requester.webContents.executeJavaScript(
 				"document.querySelectorAll('[role=\"dialog\"]').length",
 			);
-			if (dialogs !== 0) throw new Error("P28: sheet stacked over projects box");
+			if (dialogs !== 0) return refuse("P28: sheet stacked over projects box");
 			return {canceled: folder === null, filePaths: folder === null ? [] : [folder]};
 		};
 	}, root);
@@ -174,6 +212,12 @@ export const openFixtureProject = async (
 			return null;
 		},
 		(page) => page !== null,
+		30_000,
+		() =>
+			app.evaluate(() => {
+				const why: unknown = Reflect.get(globalThis, "projectSheetRefusal");
+				return typeof why === "string" ? why : null;
+			}),
 	);
 	const found = required(page);
 	known.set(canonical, found);

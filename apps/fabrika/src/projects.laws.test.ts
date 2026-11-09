@@ -314,94 +314,102 @@ const isCmd =
 const checkRecord = (kind: keyof typeof recordFields, row: Record<string, unknown>) => {
 	for (const field of recordFields[kind]) expect(row).toHaveProperty(field);
 };
-it("P17: every successful or failed operation keeps its own record and opening source", async () => {
-	const {projectsMachine} = await import("./projects.ts");
-	const {projects} = await fixture();
-	fc.assert(
-		fc.property(
-			fc.array(fc.record({source, success: fc.boolean(), said: fc.integer()}), {
-				minLength: 1,
-				maxLength: 20,
-			}),
-			(flow) => {
-				let model = projectsMachine.init(null, undefined)[0];
-				const records: Record<string, unknown>[] = [];
-				for (const [i, op] of flow.entries()) {
-					const project = projects[i % 2]!;
-					const [pending, first] = applyCell(projectsMachine, model, {
-						type: "open",
-						project,
-						source: op.source,
-						said: op.said,
-						by: "user:fixture",
-					});
-					const [next, last] = applyCell(
-						projectsMachine,
-						pending,
-						op.success
-							? {type: "opened", key: project.key, window: `window-${i}`}
-							: {type: "open_failed", key: project.key, why: "missing"},
-					);
-					const written = [...first, ...last].filter(isCmd("record")).map((cmd) => cmd.record);
-					expect(written.length).toBeGreaterThan(0);
-					for (const record of written) {
-						checkRecord("opening", record);
-						expect(record).toMatchObject({
-							project: project.key,
-							root: project.root,
+// P17's second property drives the real built app like P29: three generated orders, each a real
+// Electron launch of about 15 s, so the test states its own limit, 150 s, instead of vitest's 5 s.
+// The first property (100 runs, pure) is unchanged and takes milliseconds.
+const P17_LIMIT_MS = 150_000;
+it(
+	"P17: every successful or failed operation keeps its own record and opening source",
+	async () => {
+		const {projectsMachine} = await import("./projects.ts");
+		const {projects} = await fixture();
+		fc.assert(
+			fc.property(
+				fc.array(fc.record({source, success: fc.boolean(), said: fc.integer()}), {
+					minLength: 1,
+					maxLength: 20,
+				}),
+				(flow) => {
+					let model = projectsMachine.init(null, undefined)[0];
+					const records: Record<string, unknown>[] = [];
+					for (const [i, op] of flow.entries()) {
+						const project = projects[i % 2]!;
+						const [pending, first] = applyCell(projectsMachine, model, {
+							type: "open",
+							project,
 							source: op.source,
 							said: op.said,
 							by: "user:fixture",
 						});
+						const [next, last] = applyCell(
+							projectsMachine,
+							pending,
+							op.success
+								? {type: "opened", key: project.key, window: `window-${i}`}
+								: {type: "open_failed", key: project.key, why: "missing"},
+						);
+						const written = [...first, ...last].filter(isCmd("record")).map((cmd) => cmd.record);
+						expect(written.length).toBeGreaterThan(0);
+						for (const record of written) {
+							checkRecord("opening", record);
+							expect(record).toMatchObject({
+								project: project.key,
+								root: project.root,
+								source: op.source,
+								said: op.said,
+								by: "user:fixture",
+							});
+						}
+						records.push(...written);
+						model = next;
 					}
-					records.push(...written);
-					model = next;
-				}
-				expect(new Set(records.map((record) => record.id)).size).toBe(records.length);
-			},
-		),
-		options,
-	);
-	// P11 checks migration records; the built-flow check below checks real host/agent output.
-	const {observeProjectFlow} = await import("../projects-e2e.ts");
-	await fc.assert(
-		fc.asyncProperty(
-			fc.array(fc.constantFrom("open", "focus", "cancel", "close"), {minLength: 1, maxLength: 6}),
-			async (order) => {
-				const observed = await observeProjectFlow({
-					credential: "made-up-fixture-key",
-					refusal: false,
-					failure: "summon",
-					order,
-				});
-				const objects: Record<string, unknown>[] = [];
-				const visit = (value: unknown): void => {
-					if (typeof value === "string") {
-						try {
-							visit(JSON.parse(value));
-						} catch {}
-						return;
+					expect(new Set(records.map((record) => record.id)).size).toBe(records.length);
+				},
+			),
+			options,
+		);
+		// P11 checks migration records; the built-flow check below checks real host/agent output.
+		const {observeProjectFlow} = await import("../projects-e2e.ts");
+		await fc.assert(
+			fc.asyncProperty(
+				fc.array(fc.constantFrom("open", "focus", "cancel", "close"), {minLength: 1, maxLength: 6}),
+				async (order) => {
+					const observed = await observeProjectFlow({
+						credential: "made-up-fixture-key",
+						refusal: false,
+						failure: "summon",
+						order,
+					});
+					const objects: Record<string, unknown>[] = [];
+					const visit = (value: unknown): void => {
+						if (typeof value === "string") {
+							try {
+								visit(JSON.parse(value));
+							} catch {}
+							return;
+						}
+						if (Array.isArray(value)) {
+							for (const child of value) visit(child);
+							return;
+						}
+						if (value === null || typeof value !== "object") return;
+						objects.push(value as Record<string, unknown>);
+						for (const child of Object.values(value)) visit(child);
+					};
+					for (const text of [...observed["app records"], ...observed["host logs"]])
+						for (const line of text.split("\n")) visit(line);
+					for (const kind of ["host", "summon", "turn", "close"] as const) {
+						const record = objects.find((row) => recordFields[kind].every((field) => field in row));
+						expect(record, `missing real ${kind} record`).toBeDefined();
+						if (record) checkRecord(kind, record);
 					}
-					if (Array.isArray(value)) {
-						for (const child of value) visit(child);
-						return;
-					}
-					if (value === null || typeof value !== "object") return;
-					objects.push(value as Record<string, unknown>);
-					for (const child of Object.values(value)) visit(child);
-				};
-				for (const text of [...observed["app records"], ...observed["host logs"]])
-					for (const line of text.split("\n")) visit(line);
-				for (const kind of ["host", "summon", "turn", "close"] as const) {
-					const record = objects.find((row) => recordFields[kind].every((field) => field in row));
-					expect(record, `missing real ${kind} record`).toBeDefined();
-					if (record) checkRecord(kind, record);
-				}
-			},
-		),
-		{...options, numRuns: 3},
-	);
-});
+				},
+			),
+			{...options, numRuns: 3},
+		);
+	},
+	P17_LIMIT_MS,
+);
 plant(
 	"P17 write only the current project list",
 	fc.constantFrom(...(Object.keys(recordFields) as (keyof typeof recordFields)[])),
