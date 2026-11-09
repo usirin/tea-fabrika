@@ -10,6 +10,7 @@ import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {NodeServices} from "@effect/platform-node";
+import {Id} from "@kampus/libfabrika";
 import type {From} from "@kampus/libfabrika/coordination";
 import {Archive, RecordManager, SpanRow, SpanSink} from "@kampus/libfabrika/data";
 import {nodeSql} from "@kampus/libfabrika/sqlite";
@@ -21,6 +22,8 @@ import {describe, expect, it} from "vitest";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+const ids = Effect.runSync(Id.Generator.pipe(Effect.provide(Id.Generator.layer)));
+const processId = () => Effect.runSync(ids.next(Id.Process));
 const field = (value: Buffer | string) => {
 	const body = Buffer.from(value),
 		n = Buffer.alloc(4);
@@ -526,11 +529,11 @@ describe("P12 real object adapters", () => {
 				client: "client-1",
 				key: key.fingerprint,
 				gateway: "gateway-1",
-				session: "process_01jc9q4w7z3m8n5r2t6v0xkb4d",
+				session: processId(),
 				at: 1,
 			};
 			await p.gateways.join(first);
-			const newer = "process_01jc9q4w7z3m8n5r2t6v0xkb4e";
+			const newer = processId();
 			await p.gateways.join({...first, session: newer, at: 2});
 			await p.gateways.leave("client-1", first.session);
 			const rows = await p.gateways.online(key.fingerprint);
@@ -802,13 +805,13 @@ describe("P12 real object adapters", () => {
 	it("scenario: sealed program plant: external fetch and Project/R2 bindings stay unavailable; unknown program fails", async () => {
 		await world(async (stage, _key, probe) => {
 			const loader = stage.loader;
-			await expect(
-				loader.load("no-such-program", "process_01jc9q4w7z3m8n5r2t6v0xkb4d"),
-			).rejects.toMatchObject({why: "no_program"});
-			const sealed = await loader.load("sealed-fixture", "process_01jc9q4w7z3m8n5r2t6v0xkb4e");
+			await expect(loader.load("no-such-program", processId())).rejects.toMatchObject({
+				why: "no_program",
+			});
+			const sealed = await loader.load("sealed-fixture", processId());
 			expect((await sealed.init(null)).view).toEqual({bindings: [], outbound: "blocked"});
 			expect(probe.hits()).toBe(0);
-			const counter = await loader.load("counter", "process_01jc9q4w7z3m8n5r2t6v0xkb4f");
+			const counter = await loader.load("counter", processId());
 			expect(await counter.init(null)).toMatchObject({_tag: "stepped", view: {count: 0}});
 			expect(await counter.step({count: 0}, {type: "inc"})).toMatchObject({
 				_tag: "stepped",

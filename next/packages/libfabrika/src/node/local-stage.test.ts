@@ -6,6 +6,7 @@ import {afterEach, describe, expect, it} from "@effect/vitest";
 import {Cause, Effect, Exit, FileSystem, Layer, Path, Schema} from "effect";
 import * as fc from "fast-check";
 import {BrainFact} from "../app/brain-fact.ts";
+import {processId} from "../id.test-support.ts";
 import {brainOutbox, checkMemory} from "./local-stage.ts";
 
 const SEED = 119120;
@@ -14,7 +15,7 @@ const runNode = <A, E>(work: Effect.Effect<A, E, FileSystem.FileSystem | Path.Pa
 const firstStart: typeof BrainFact.Type = {
 	id: "brain-start-1",
 	_tag: "started",
-	start: "process_01jc9q4w7z3m8n5r2t6v0xkb4d",
+	start: Effect.runSync(processId),
 	after: null,
 	build: "build-a",
 	why: "open",

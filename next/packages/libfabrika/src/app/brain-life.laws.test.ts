@@ -2,13 +2,14 @@
 import {applyCell} from "@demlik/tea";
 import {propertyInvariant} from "@demlik/tea/pbt";
 import {syncTest} from "@kampus/libfabrika/testing";
-import {Schema} from "effect";
+import {Effect, Schema} from "effect";
 import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
+import {fcProcessIds, processId} from "../id.test-support.ts";
 
 const SEED = 119120;
-const start = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
-const after = "process_01jc9q4w7z3m8n5r2t6v0xkb4e";
+const start = Effect.runSync(processId);
+const after = Effect.runSync(processId);
 const events = [
 	{type: "started", start, after: null, build: "build-a", why: "open"},
 	{type: "waiting", after: start, until: 250, why: "crash"},
@@ -18,8 +19,8 @@ const events = [
 	{type: "stopped"},
 ] as const;
 const lifecycle = fc.record({
-	start: fc.uuid(),
-	after: fc.uuid(),
+	start: fcProcessIds,
+	after: fcProcessIds,
 	build: fc.string(),
 	until: fc.nat(),
 	why: fc.string(),

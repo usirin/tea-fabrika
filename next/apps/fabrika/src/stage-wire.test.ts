@@ -10,6 +10,7 @@ import {createServer} from "node:net";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
 import {DatabaseSync} from "node:sqlite";
+import {Id} from "@kampus/libfabrika";
 import {Entry, PAGE} from "@kampus/libfabrika/data";
 import {Effect, Schema} from "effect";
 import {afterEach, describe, expect, it} from "vitest";
@@ -516,7 +517,10 @@ describe("P12 real dev.ts wire", () => {
 		const s = await stage(),
 			c = await connected(s);
 		// The trusted process API is exercised by stage-records, including an outbound probe program.
-		const missing = await c.call("view.open", {pid: "process_01jc9q4w7z3m8n5r2t6v0xkb4e"});
+		const pid = Effect.runSync(
+			Id.Generator.use((ids) => ids.next(Id.Process)).pipe(Effect.provide(Id.Generator.layer)),
+		);
+		const missing = await c.call("view.open", {pid});
 		expect(missing.error).toBeDefined();
 		for (const method of ["project.sign", "project.append", "process.start", "signer.sign"]) {
 			const response = await c.call(method, {

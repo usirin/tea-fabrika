@@ -7,12 +7,13 @@ import * as fc from "fast-check";
 import {Mailbox, ProcessStore, Writer} from "../coordination/index.ts";
 import {Archive, Doorbell, Ledger, RecordManager, SpanSink} from "../data/index.ts";
 import {nodeSql} from "../data/sqlite.ts";
+import {processId} from "../id.test-support.ts";
 import {Alarm, CheckedWriter, ProgramLoader, Recording, WatcherManager} from "./entry.ts";
 import {workerExecution} from "./execution.ts";
 import {stepper} from "./program.ts";
 import {ProgramRunner} from "./runner.ts";
 
-const PID = "process_01jc9q4w7z3m8n5r2t6v0xkb4d";
+const PID = Effect.runSync(processId);
 const Model = Schema.Struct({count: Schema.Int});
 const Msg = Schema.Struct({type: Schema.Literal("inc")});
 const program = {

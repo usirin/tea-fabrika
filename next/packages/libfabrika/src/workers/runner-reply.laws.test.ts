@@ -16,9 +16,9 @@ import {
 import {workerExecution} from "../app/execution.ts";
 import {ProgramRunner} from "../app/runner.ts";
 import {Mailbox, ProcessStore, Writer} from "../coordination/index.ts";
-import {IdGenerator, InputId} from "../data/id.ts";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {nodeSql} from "../data/sqlite.ts";
+import * as Id from "../id.ts";
 import {programBox} from "./box.ts";
 
 const SEED = 119120;
@@ -67,8 +67,8 @@ const replyCase = (
 	adapter: "node" | "worker" = "worker",
 ) =>
 	Effect.gen(function* () {
-		const inputId = yield* IdGenerator.use((ids) => ids.next(InputId)).pipe(
-			Effect.provide(IdGenerator.layer),
+		const inputId = yield* Id.Generator.use((ids) => ids.next(Id.Input)).pipe(
+			Effect.provide(Id.Generator.layer),
 		);
 		const db = new DatabaseSync(":memory:");
 		try {
