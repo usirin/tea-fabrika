@@ -2,11 +2,12 @@
 # Today's tooling. Every shell shares this lock, regardless of its temp settings.
 set -eu
 exec python3 - <<'PY'
-import fcntl, subprocess, sys
+import fcntl, os, subprocess, sys
 
 # Keep this file in place. Unlinking it could give waiters different locks.
 # The OS releases a dead holder's lock, including after SIGKILL.
-with open("/tmp/fabrika-typecheck.lock", "a") as lock:
+# One fixed system folder, never TMPDIR: agents' TMPDIR differs, and the lock must be shared.
+with open(os.path.join(os.sep, "tmp", "fabrika-typecheck.lock"), "a") as lock:
     fcntl.flock(lock, fcntl.LOCK_EX)
     for command in (["pnpm", "exec", "effect-tsgo", "patch", "--typescript"],
                     ["pnpm", "-r", "typecheck"]):
