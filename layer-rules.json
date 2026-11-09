@@ -30,7 +30,13 @@
 		},
 		{
 			"name": "next-libfabrika-entry",
-			"paths": ["next/packages/libfabrika/src/index.ts", "next/packages/libfabrika/src/testing.ts"]
+			"paths": [
+				"next/packages/libfabrika/src/index.ts",
+				"next/packages/libfabrika/src/testing.ts",
+				"next/packages/libfabrika/src/id.test.ts",
+				"next/packages/libfabrika/src/id.types.test.ts",
+				"next/packages/libfabrika/src/testing.test.ts"
+			]
 		},
 		{
 			"name": "next-mcp",
@@ -51,6 +57,10 @@
 		{
 			"name": "next-transport",
 			"paths": ["next/packages/libfabrika/src/transport"]
+		},
+		{
+			"name": "next-id-test-support",
+			"paths": ["next/packages/libfabrika/src/id.test-support.ts"]
 		},
 		{
 			"name": "next-id",
