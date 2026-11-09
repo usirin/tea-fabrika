@@ -57,8 +57,9 @@ same turn, and never waits for a code pull request or the end of the day (owner,
 ## Two versions, side by side
 
 A new version of fabrika is growing in `next/`, built on
-[the five layers](./docs/direction/a-local-first-sync-engine.md). So far `next/` is on
-[PR 223](https://github.com/usirin/tea-fabrika/pull/223), and nothing is on main yet. Everything
+[the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-09,
+`next/` is on main, and 18 of Tier 1's 37 rows have merged
+([where we are](./docs/plan/README.md#where-we-are-now)). Everything
 else (`packages/`, `programs/`, `apps/`) is today's
 version. It keeps running for daily use until the new one takes each job over
 ([clean slate](./docs/direction/clean-slate.md)).
