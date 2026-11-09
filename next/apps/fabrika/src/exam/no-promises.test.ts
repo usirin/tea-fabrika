@@ -6,8 +6,7 @@ import {Effect, Path} from "effect";
 import * as fc from "fast-check";
 import {API} from "typescript/unstable/sync";
 // `no-promises` (exam item 1): every Promise shape fires in next/, Effect's own Promise calls with
-// them, and the Effect ones pass. The typed check follows a marked statement through wrapping.
-// Oxlint's syntax-only plants still check physical lines (Tier 1, P35).
+// them, and the Effect ones pass. Both checks limit an edge comment to the next physical line.
 import {describe, expect, it} from "vitest";
 import {plant} from "./plant.ts";
 import {checkPromiseTypes} from "./promise-types.ts";
@@ -45,7 +44,7 @@ const typed = (files: Readonly<Record<string, string>>) => {
 	}
 };
 
-const wrappedEdge = (method: string, rule: string, indent: string) =>
+const wrappedEdge = (method: string, rule: string, indent: string, gap = 0) =>
 	[
 		"declare const platform: {read(): Promise<number>};",
 		"declare const Effect: {",
@@ -57,6 +56,7 @@ const wrappedEdge = (method: string, rule: string, indent: string) =>
 		...(method === "runPromise" ? [`${indent}Effect.tryPromise(`] : []),
 		`${indent}{`,
 		`${indent}  try: () =>`,
+		...Array.from({length: gap}, () => ""),
 		`${indent}    platform.read(),`,
 		`${indent}  catch: () => new Error("platform"),`,
 		`${indent}}`,
@@ -135,16 +135,22 @@ const edges = [
 ].join("\n");
 
 describe("no-promises", async () => {
-	it("covers Promise findings throughout a wrapped marked statement", () => {
+	it("The edge comment covers the next line and only that line", () => {
 		fc.assert(
-			fc.property(markedEdge, ([method, rule, indent]) => {
-				expect(typed({"next/wrapped.ts": wrappedEdge(method, rule, indent)})).toEqual([]);
+			fc.property(markedEdge, fc.nat({max: 8}), ([method, rule, indent], gap) => {
+				const file = "next/wrapped.ts";
+				expect(
+					typed({[file]: wrappedEdge(method, rule, indent, gap)}).map((f) => ({
+						file: f.file,
+						line: f.line,
+					})),
+				).toEqual([{file, line: (method === "runPromise" ? 11 : 10) + gap}]);
 			}),
 			{
 				seed: 119120,
 				numRuns: 12,
-				// P12 door-nonce: importKey starts two lines below the marked tryPromise.
-				examples: [[["tryPromise", "fabrika/no-promises", "\t"]]],
+				// P12 wrapped-edge bug: a statement-wide marker hid later Promise calls.
+				examples: [[["tryPromise", "fabrika/no-promises", "\t"], 0]],
 			},
 		);
 	});
@@ -156,6 +162,7 @@ describe("no-promises", async () => {
 				const line = before.split("\n").length + (sameLine ? 0 : 1);
 				const source = `${before}${sameLine ? " " : "\n"}platform.read();`;
 				expect(typed({[file]: source}).map((f) => ({file: f.file, line: f.line}))).toEqual([
+					{file, line: method === "runPromise" ? 11 : 10},
 					{file, line},
 				]);
 			}),
@@ -174,7 +181,7 @@ describe("no-promises", async () => {
 		});
 		expect(findings.filter((f) => f.file === file).map((f) => f.line)).toContain(3);
 	});
-	it("refuses Promise values, inferred returns, imported aliases and thunks outside one marked statement", () => {
+	it("refuses Promise values, inferred returns, imported aliases and thunks outside one marked line", () => {
 		fc.assert(
 			fc.property(fc.stringMatching(/^[a-z]{1,8}$/), (suffix) => {
 				const file = `next/case-${suffix}.ts`;
@@ -194,7 +201,7 @@ describe("no-promises", async () => {
 						"// oxlint-disable-next-line fabrika/no-promises -- edge: platform read enters Effect",
 						"const edge = () => platform.read();",
 						"const afterEdge = () => platform.read();",
-						"// oxlint-disable-next-line fabrika/no-promises -- edge: covers the wrapped statement",
+						"// oxlint-disable-next-line fabrika/no-promises -- edge: covers only the next line",
 						"const twoLines = () => {",
 						"  return platform.read();",
 						"};",
@@ -213,7 +220,7 @@ describe("no-promises", async () => {
 					"packages/today.ts": "declare const p: Promise<number>; export const f = () => p;",
 				});
 				expect(findings.filter((f) => f.file === file).map((f) => f.line)).toEqual([
-					3, 4, 5, 6, 7, 8, 9, 12,
+					3, 4, 5, 6, 7, 8, 9, 12, 15,
 				]);
 				expect(findings.filter((f) => f.file !== file)).toEqual([]);
 			}),

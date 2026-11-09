@@ -93,7 +93,8 @@ const checkSecretTypes = (project: Project, root: string) => {
 };
 
 const root = resolve(import.meta.dirname, "../../../../..");
-it("[secrets] actual P12 sources keep their secret values Redacted from the read", () => {
+// Pin the P12 source-read gap found in the whole-change sweep, on the actual workspace types.
+it("pinned: [secrets] P12 source-read gap, actual sources keep secret values Redacted from the read", () => {
 	const api = new API({cwd: root});
 	try {
 		const snapshot = api.updateSnapshot({

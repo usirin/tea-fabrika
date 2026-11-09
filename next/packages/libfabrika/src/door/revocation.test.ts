@@ -382,7 +382,8 @@ describe("P12, door laws retained after the library move", () => {
 		await fc.assert(grantTarget(), checks);
 	});
 	for (const field of ["fingerprint", "code"] as const)
-		it(`the grant-target law catches an ignored ${field}`, async () => {
+		// Pin each P12 grant-target bypass plant, retaining the generated law and both fields.
+		it(`pinned: P12 grant-target bypass, the law catches an ignored ${field}`, async () => {
 			const result = await fc.check(grantTarget(field), {...checks, endOnFailure: true});
 			expect(result.failed).toBe(true);
 			expect(result.errorInstance).toMatchObject({name: "AssertionError"});

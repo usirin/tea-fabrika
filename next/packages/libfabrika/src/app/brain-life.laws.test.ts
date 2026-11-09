@@ -82,7 +82,8 @@ describe("P12 stage machine laws", () => {
 			{seed: SEED, numRuns: 100, examples: [[[...stopInFlight]]]},
 		);
 	});
-	it("p81 plant: a braked or cleanly stopped stage must never launch a replacement", async () => {
+	// Pin p81's replacement-after-stop plant; generated events also cover the restart brake.
+	it("pinned: p81 replacement-after-stop, a braked or cleanly stopped stage must never launch a replacement", async () => {
 		const {brainLife} = await import("./brain-life.ts");
 		propertyInvariant(
 			brainLife,

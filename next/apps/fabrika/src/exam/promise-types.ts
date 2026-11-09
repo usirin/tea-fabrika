@@ -76,29 +76,21 @@ export const checkPromiseTypes = (
 		const nodes = [...candidates.keys()];
 		const types = checker.getTypeAtLocation(nodes);
 		const lines = source.text.split("\n");
-		const marked = (node: ts.Node): boolean => {
-			// A marker covers the whole statement, even after formatting wraps it. It also
-			// covers a marked expression body at a platform edge. Never reach a later sibling.
-			for (let scope = node; scope !== source; scope = scope.parent) {
-				const {line, character} = source.getLineAndCharacterOfPosition(scope.getStart(source));
-				// Only the first statement or expression on the marked line gets the comment.
-				if ((lines[line] ?? "").slice(0, character).trim() !== "") continue;
-				const edge = /^\s*\/\/ oxlint-disable-next-line (.+?) -- edge: \S/.exec(
-					lines[line - 1] ?? "",
-				);
-				const rules = new Set(edge?.[1]?.split(/[,\s]+/));
-				// Oxlint separately checks that each comment is used.
-				if (rules.has("fabrika/no-promises") || rules.has("fabrika/no-effect-run-outside-edge"))
-					return true;
-			}
-			return false;
+		const marked = (line: number): boolean => {
+			// A marker covers only the next physical line, even inside a wrapped statement.
+			const edge = /^\s*\/\/ oxlint-disable-next-line (.+?) -- edge: \S/.exec(
+				lines[line - 1] ?? "",
+			);
+			const rules = new Set(edge?.[1]?.split(/[,\s]+/));
+			// Oxlint separately checks that each comment is used.
+			return rules.has("fabrika/no-promises") || rules.has("fabrika/no-effect-run-outside-edge");
 		};
 		for (let i = 0; i < nodes.length; i++) {
 			const node = nodes[i];
 			if (node === undefined) throw new Error("Missing Promise candidate");
 			if (!carries(types[i])) continue;
 			const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line;
-			if (marked(node)) continue;
+			if (marked(line)) continue;
 			found.set(`${file}:${line + 1}`, {
 				file,
 				line: line + 1,
