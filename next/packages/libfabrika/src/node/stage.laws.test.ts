@@ -13,11 +13,12 @@ import {ProcessIdGenerator} from "../coordination/process-id.ts";
 import {brainOutbox} from "./local-stage.ts";
 import {startStage} from "./stage.ts";
 
-const platform = vi.hoisted(() => ({rss: 0}));
+const platform = vi.hoisted(() => ({rss: 0, samples: 0}));
 vi.mock("node:child_process", async (original) => ({
 	...(await original<typeof import("node:child_process")>()),
 	execFile: (...args: Array<unknown>) => {
 		const callback = args.at(-1) as (error: null, stdout: string) => void;
+		platform.samples++;
 		callback(null, String(platform.rss));
 		return {kill: () => true};
 	},
@@ -26,7 +27,9 @@ const step = fc.record({
 	// A crash has no RSS; a memory kill carries the measured bytes, including the cap.
 	rss: fc.option(fc.integer({min: 488_282, max: 900_000}), {nil: null}),
 	exitCode: fc.option(fc.integer({min: 0, max: 255}), {nil: null}),
-	signal: fc.option(fc.constantFrom<NodeJS.Signals | number>("SIGTERM", "SIGKILL", 15), {nil: null}),
+	signal: fc.option(fc.constantFrom<NodeJS.Signals | number>("SIGTERM", "SIGKILL", 15), {
+		nil: null,
+	}),
 	delay: fc.integer({min: 0, max: 10_000}),
 });
 
@@ -76,7 +79,9 @@ const sequence = fc.record({
 	why: fc.constantFrom<"intensity" | "restart_failed">("intensity", "restart_failed"),
 });
 
-it("every observed exit is durable once across restart or brake, with its reason and RSS", async () => {
+it("every observed exit is durable once across restart or brake, with its reason and RSS", async ({
+	signal,
+}) => {
 	await fc.assert(
 		fc.asyncProperty(sequence, async ({restarts, final, why}) => {
 			const home = mkdtempSync(join(tmpdir(), "p12-exit-"));
@@ -117,6 +122,16 @@ it("every observed exit is durable once across restart or brake, with its reason
 								);
 							});
 							const outbox = yield* brainOutbox(home);
+							const waitForFact = (ready: (fact: typeof BrainFact.Type) => boolean) =>
+								Effect.gen(function* () {
+									// The event queue writes files asynchronously, outside the supplied clock.
+									// The enclosing test's abort signal bounds this wait.
+									for (;;) {
+										const rows = yield* outbox.pending;
+										if (rows.some(ready)) return rows;
+										yield* TestClock.withLive(Effect.sleep("10 millis"));
+									}
+								});
 							const expected: Array<{
 								start: string;
 								why: string;
@@ -142,7 +157,14 @@ it("every observed exit is durable once across restart or brake, with its reason
 							for (const [index, item] of [...restarts, final].entries()) {
 								// Run the real memory sampler and replacement request on a supplied clock.
 								platform.rss = item.rss ?? 0;
-								yield* TestClock.adjust("1 second");
+								const samples = platform.samples;
+								for (;;) {
+									yield* TestClock.adjust("1 second");
+									if (platform.samples > samples) break;
+									// The previous sample's file flush must finish before it sleeps again.
+									yield* TestClock.withLive(Effect.sleep("10 millis"));
+								}
+								if (item.rss !== null) expect(kill).toHaveBeenCalledWith(27001 + index, "SIGTERM");
 								const rows = yield* outbox.pending;
 								// Startup may already be acknowledged; last remains durable in either case.
 								const start =
@@ -157,17 +179,17 @@ it("every observed exit is durable once across restart or brake, with its reason
 									...(item.rss === null ? {} : {bytes: item.rss * 1024}),
 								});
 								observe({type: "exit", worker: "life-test", exit});
-								yield* TestClock.adjust("1 millis");
 								if (index < restarts.length) {
 									observe({type: "restart", worker: "life-test", exit, delay: item.delay});
-									yield* TestClock.adjust("1 millis");
+									yield* waitForFact((fact) => fact._tag === "restarting" && fact.start === start);
 									yield* assertExits;
 									observe({type: "start", worker: "life-test", pid: 27002 + index});
-									yield* TestClock.adjust("1 millis");
+									yield* waitForFact((fact) => fact._tag === "started" && fact.after === start);
 								} else {
 									observe({type: "stop", worker: "life-test", exit, why});
-									yield* TestClock.adjust("1 millis");
-									const pending: ReadonlyArray<typeof BrainFact.Type> = yield* outbox.pending;
+									const pending = yield* waitForFact(
+										(fact) => fact._tag === "braked" && fact.start === start,
+									);
 									expect(pending.filter((fact) => fact._tag === "braked")).toMatchObject([
 										{start, why, exitCode: exit.exitCode, signal: expected.at(-1)!.signal},
 									]);
@@ -185,6 +207,7 @@ it("every observed exit is durable once across restart or brake, with its reason
 						Effect.provide(NodeServices.layer),
 						Effect.provide(TestClock.layer()),
 					),
+					{signal},
 				);
 			} finally {
 				fetch.mockRestore();
@@ -200,6 +223,8 @@ it("every observed exit is durable once across restart or brake, with its reason
 				// Review 5: final memory kill, no replacement to carry the RSS.
 				[{restarts: [], final: memoryBrake, why: "intensity"}],
 				[{restarts: [memoryBrake, crashBrake], final: crashBrake, why: "restart_failed"}],
+				// Review 5: a pending start write resets the next memory kill's reason and RSS.
+				[{restarts: [crashBrake], final: memoryBrake, why: "intensity"}],
 			],
 		},
 	);
