@@ -19,6 +19,8 @@ Two findings need more than words:
   waits at most about 5 s and tries again, forever. A program that always throws restarts about
   once a second, about 270,000 ledger entries a day for one broken name. Lean: close it, with a
   wait that grows like Kubernetes' (ticket 404). This is the one design call for the owner.
+  *Owner decided 2026-11-09 ([0016](../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)):
+  OTP's give-up, not the growing wait. Past intensity the name is `failed` until a person restarts it.*
 - **`exited`'s reason is free text.** OTP's `normal`, `shutdown` and `kill` decide what a link,
   a trap or a restart type does. Free text written now cannot be sorted later. Lean: close it
   before Tier 4 (ticket 406), 65%.
