@@ -28,6 +28,8 @@ import {lineFor} from "../data/log.ts";
 import {RecordManager} from "../data/records.ts";
 import {SpanSink} from "../data/sink.ts";
 import {nodeSql} from "../data/sqlite.ts";
+import {ProcessId} from "../data/trace.ts";
+import {Answer} from "../transport/index.ts";
 
 let Door: typeof import("@kampus/libfabrika/door").Door;
 let Id: typeof import("../id.ts");
@@ -134,6 +136,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
 		notices: unknown[] = [];
 	const controls = {
 		letter: "",
+		open: (_process: string, _client: string): Effect.Effect<Schema.Json> => Effect.succeed(null),
 		deliver: (_: Incoming): Effect.Effect<void | Sent, LedgerError | NotGranted | ProcessError> =>
 			Effect.void,
 	};
@@ -190,6 +193,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
 			inputCap: 1000,
 			spentCap: 1000,
 			nextProcess: () => ProcessIdGenerator.use((g) => g.next),
+			open: (process, client) => controls.open(process, client),
 			deliver: (_process, envelope, span) => {
 				const incoming: Incoming = {id: controls.letter, envelope, span, sentAt, seen: 0};
 				deliveries.push(incoming);
@@ -297,6 +301,94 @@ const last = (w: World) => {
 	if (!incoming) throw new Error("door did not deliver an input");
 	return incoming;
 };
+
+describe("P12, door laws retained after the library move", () => {
+	const viewOpen = (plant = false) =>
+		fc.asyncProperty(
+			fc.string().filter((pid) => !Schema.is(ProcessId)(pid)),
+			fc.integer(),
+			(badPid, count) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const w = yield* world();
+						const opened: Array<{pid: string; client: string}> = [];
+						w.controls.open = (pid, client) =>
+							Effect.sync(() => {
+								opened.push({pid, client});
+								return {count};
+							});
+						const door = yield* Door.pipe(Effect.provide(w.layers().layer));
+						const {client, result} = yield* hello(door, w.old, "view");
+						expect(result._tag).toBe("online");
+						// Plant: bypass the door's pid check and invoke the program directly.
+						const open = (pid: string) =>
+							plant
+								? w.controls
+										.open(pid, String(client))
+										.pipe(Effect.map((result) => Answer.cases.ok.make({result})))
+								: door.route(client, "view.open", {pid});
+						expect(yield* open(badPid)).toEqual({_tag: "refused", why: "bad_input"});
+						expect(opened).toEqual([]);
+						expect(yield* open(processes.counter)).toEqual({_tag: "ok", result: {count}});
+						expect(opened).toEqual([{pid: processes.counter, client: String(client)}]);
+					}),
+				),
+		);
+	it("view.open refuses any bad pid before invoking the program, and opens a valid pid", async () => {
+		await fc.assert(viewOpen(), checks);
+	});
+	it("the view.open law catches a bypassed pid check", async () => {
+		const result = await fc.check(viewOpen(true), {...checks, endOnFailure: true});
+		expect(result.failed).toBe(true);
+		expect(result.errorInstance).toMatchObject({name: "AssertionError"});
+	});
+	const grantTarget = (plant?: "fingerprint" | "code") =>
+		fc.asyncProperty(
+			fc.string(),
+			fc.string({minLength: 1}),
+			fc.string({minLength: 1, maxLength: 30}),
+			(tab, suffix, label) =>
+				Effect.runPromise(
+					Effect.gen(function* () {
+						const w = yield* world();
+						const door = yield* Door.pipe(Effect.provide(w.layers().layer));
+						const {client, result} = yield* hello(door, w.other, tab);
+						expect(result).toMatchObject({_tag: "refused", why: "not_granted"});
+						const knocked = yield* door.knock(client, {label});
+						assert(knocked._tag === "ok");
+						const {code} = yield* Schema.decodeUnknownEffect(Schema.Struct({code: Schema.String}))(
+							knocked.result,
+						);
+						// Plants: ignore either the supplied fingerprint or the supplied code.
+						const target = (fingerprint: string, suppliedCode: string) =>
+							door.target(
+								plant === "fingerprint" ? w.other.fingerprint : fingerprint,
+								plant === "code" ? code : suppliedCode,
+							);
+						expect(yield* target(w.other.fingerprint, code)).toEqual({
+							key: w.other.raw,
+							for: person,
+							to: "p17",
+							code,
+							label,
+						});
+						expect(yield* target(w.old.fingerprint, code)).toBeNull();
+						expect(yield* target(w.other.fingerprint, `${code}${suffix}`)).toBeNull();
+						expect(yield* target(w.old.fingerprint, `${code}${suffix}`)).toBeNull();
+					}),
+				),
+		);
+	it("a grant target matches both the waiting fingerprint and its code", async () => {
+		await fc.assert(grantTarget(), checks);
+	});
+	for (const field of ["fingerprint", "code"] as const)
+		// Pin each P12 grant-target bypass plant, retaining the generated law and both fields.
+		it(`pinned: P12 grant-target bypass, the law catches an ignored ${field}`, async () => {
+			const result = await fc.check(grantTarget(field), {...checks, endOnFailure: true});
+			expect(result.failed).toBe(true);
+			expect(result.errorInstance).toMatchObject({name: "AssertionError"});
+		});
+});
 
 describe("P17a, revoke stops writes at the final door", () => {
 	it("current inputs keep their fields and a retry with missing metadata fails as a bad row", async () => {

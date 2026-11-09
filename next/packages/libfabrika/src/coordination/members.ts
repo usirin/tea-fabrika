@@ -192,7 +192,9 @@ class Change {
 	readonly keys: Map<string, Key>;
 	readonly spent: Set<string>;
 	readonly replaced: Set<string>;
-	constructor(readonly folded: Folded) {
+	readonly folded: Folded;
+	constructor(folded: Folded) {
+		this.folded = folded;
 		this.keys = new Map(folded.members.keys);
 		this.spent = new Set(folded.members.spent);
 		this.replaced = new Set(folded.replaced);
