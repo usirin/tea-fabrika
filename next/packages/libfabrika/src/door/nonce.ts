@@ -29,7 +29,7 @@ export const doorNonce = Effect.fn("door.nonce")(function* (
 				false,
 				["sign", "verify"],
 			),
-		catch: () => new LedgerError({why: "storage"}),
+		catch: () => new LedgerError({why: "crypto"}),
 	});
 	const clock = Effect.clockWith((c) => c.currentTimeMillis);
 	const text = (client: string, issuedAt: number, salt: string) =>
@@ -40,7 +40,7 @@ export const doorNonce = Effect.fn("door.nonce")(function* (
 		// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto signs through a Promise
 		const mac = yield* Effect.tryPromise({
 			try: () => crypto.subtle.sign("HMAC", key, text(client, issuedAt, salt)),
-			catch: () => new LedgerError({why: "storage"}),
+			catch: () => new LedgerError({why: "crypto"}),
 		});
 		return `${issuedAt}.${salt}.${Base64Url.encode(new Uint8Array(mac))}`;
 	});
@@ -67,7 +67,7 @@ export const doorNonce = Effect.fn("door.nonce")(function* (
 					new Uint8Array(mac.success),
 					text(client, issuedAt, salt),
 				),
-			catch: () => new LedgerError({why: "storage"}),
+			catch: () => new LedgerError({why: "crypto"}),
 		});
 		return valid ? issuedAt + ttl : null;
 	});

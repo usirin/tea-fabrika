@@ -14,7 +14,10 @@ export class ProcessIdGenerator extends Context.Service<
 		ProcessIdGenerator,
 		Effect.gen(function* () {
 			const generator = yield* IdGenerator;
-			return {next: generator.next(Process).pipe(Effect.orDie, Effect.withSpan("process.next"))};
+			const next = Effect.fn("process.next")(function* () {
+				return yield* generator.next(Process).pipe(Effect.orDie);
+			});
+			return {next: next()};
 		}),
 	).pipe(Layer.provide(IdGenerator.layer));
 }
