@@ -76,12 +76,30 @@ describe("P33, saved state and process authority", () => {
 	});
 	it("dead letters keep exactly one error class per try", () => {
 		fc.assert(
-			fc.property(fc.array(hash, {minLength: 1, maxLength: 32}), hash, hash, (errors, m, build) => {
-				const dead = {_tag: "dead", tries: errors.length, limit: 32, m, build, errors};
-				expect(Schema.is(Dead)(dead), "one error class per try is accepted").toBe(true);
-				expect(Schema.is(Dead)({...dead, errors: errors.slice(1)})).toBe(false);
-				expect(Schema.is(Dead)({...dead, tries: errors.length + 1})).toBe(false);
-			}),
+			fc.property(
+				fc.array(hash, {minLength: 1, maxLength: 32}),
+				hash,
+				hash,
+				fc.record({
+					process: fc.stringMatching(/^process_[0-7][0-9abcdefghjkmnpqrstvwxyz]{25}$/),
+					program: hash,
+					name: fc.stringMatching(/^p:[a-z0-9._:-]{1,254}$/),
+				}),
+				(errors, m, build, identity) => {
+					const dead = {
+						...identity,
+						_tag: "dead",
+						tries: errors.length,
+						limit: 32,
+						m,
+						build,
+						errors,
+					};
+					expect(Schema.is(Dead)(dead), "one error class per try is accepted").toBe(true);
+					expect(Schema.is(Dead)({...dead, errors: errors.slice(1)})).toBe(false);
+					expect(Schema.is(Dead)({...dead, tries: errors.length + 1})).toBe(false);
+				},
+			),
 			{seed: 119120, numRuns: 100},
 		);
 	});
