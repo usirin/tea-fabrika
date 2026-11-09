@@ -4,5 +4,5 @@ owner = "design"
 description = "the turn fill, hovered"
 
 [colors]
-dark = "indigo.10"
+dark = "indigo.9" # T343: 10 -> 9, the nearest solid step where white meets both floors.
 light = "indigo.10"

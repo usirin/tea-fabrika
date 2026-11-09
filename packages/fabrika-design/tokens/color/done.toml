@@ -15,5 +15,5 @@ on = [
 floor = 4.5
 
 [colors]
-dark = "grass.11"
+dark = "grass.a11" # T343: 11 -> a11, so dark selected rows also reach APCA Lc 60.
 light = "grass.12"

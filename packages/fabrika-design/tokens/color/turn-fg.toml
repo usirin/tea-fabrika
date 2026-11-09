@@ -5,9 +5,6 @@ description = "text on the turn fill"
 theme = "on-turn"
 on = ["turn-fill", "turn-fill-hover"]
 floor = 4.5
-except = [
-	{ on = "turn-fill-hover", look = "dark", ratio = 4.28, ticket = 153, why = "the owner kept Radix's indigo 10 for the hovered fill" },
-]
 
 [colors]
 dark = { hex = "#ffffff", bend = "Radix's rule for text on step 9" }
