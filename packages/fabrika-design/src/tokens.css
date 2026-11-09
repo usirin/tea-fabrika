@@ -32,7 +32,7 @@
 	--surface-selected: light-dark(#0009321f, #d9edfe25); /* slate a5 */
 	--surface-sunken: light-dark(#f9f9fb, #0c0d0e); /* light slate 2; dark a bend */
 	--turn-fill: #3e63dd; /* indigo 9 */
-	--turn-fill-hover: light-dark(#3358d4, #5472e4); /* indigo 10 */
+	--turn-fill-hover: light-dark(#3358d4, #3e63dd); /* light indigo 10; dark indigo 9 */
 
 	/* The design's borders. */
 	--border: light-dark(#00002f26, #d6ebfd30); /* slate a6 */
@@ -42,13 +42,13 @@
 	--wire: light-dark(#00083046, #d9edff5d); /* slate a8 */
 
 	/* The design's text. */
-	--done: light-dark(#203c25, #71d083); /* light grass 12; dark grass 11 */
+	--done: light-dark(#203c25, #89ff9fcd); /* light grass 12; dark grass a11 */
 	--running: light-dark(#4f3422, #ffca16); /* light amber 12; dark amber 11 */
-	--stuck: light-dark(#641723, #ff9592); /* light red 12; dark red 11 */
+	--stuck: light-dark(#641723, #ffd1d9); /* red 12 */
 	--text-faint: light-dark(#0007149f, #f1f7feb5); /* slate a11 */
 	--text-primary: light-dark(#1c2024, #edeef0); /* slate 12 */
 	--turn-fg: #ffffff; /* a bend */
-	--turn-text: light-dark(#002bb7c5, #9eb1ff); /* light indigo a11; dark indigo 11 */
+	--turn-text: light-dark(#002bb7c5, #d6e1ff); /* light indigo a11; dark indigo 12 */
 
 	/* The design's names for other tokens. */
 	--closed: var(--text-faint);

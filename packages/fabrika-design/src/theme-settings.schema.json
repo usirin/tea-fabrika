@@ -1,0 +1,25 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"type": "object",
+	"properties": {
+		"theme": {
+			"type": "string",
+			"pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+		},
+		"theme-fix": {
+			"type": "string",
+			"enum": ["nudge", "off"]
+		},
+		"theme-contrast": {
+			"type": "number",
+			"minimum": 4.5,
+			"maximum": 21
+		}
+	},
+	"additionalProperties": true,
+	"default": {
+		"theme": "fabrika",
+		"theme-fix": "nudge",
+		"theme-contrast": 4.5
+	}
+}

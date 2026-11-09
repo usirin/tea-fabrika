@@ -4,7 +4,7 @@ import {parse, TomlError} from "smol-toml";
 import {GlobalColors, RepairableColor} from "./theme-contract.ts";
 
 const Hex = Schema.String.check(Schema.isPattern(/^#[0-9a-f]{6}([0-9a-f]{2})?$/));
-export const ThemeName = Schema.String.check(Schema.isPattern(/^[a-z0-9]+(-[a-z0-9]+)*$/));
+export const ThemeName = Schema.String.check(Schema.isPattern(/^[a-z0-9]+(-[a-z0-9]+)*$/u));
 const Basename = Schema.String.check(
 	Schema.isPattern(/^(?!\.{1,2}$)[^/\\]+$/),
 	Schema.makeFilter((value) => [...value].every((letter) => letter.charCodeAt(0) >= 32)),

@@ -2,11 +2,11 @@
 // gray slate, accent indigo. Every value is a Radix step, used for that step's job (color
 // principles, principle 5), but for four bends, each written down with its reason:
 // - the dark desk, `#0c0d0e`, is no step: nothing in slate is darker than 1;
-// - on-turn is white, Radix's rule for text on step 9, not a step;
-// - edge is slate a4, a background step used as a line: a higher one was too loud on a full desk;
+// - turn-fg is white, Radix's rule for text on step 9, not a step;
+// - border-faint is slate a4, a background step used as a line: a higher one was too loud on a full desk;
 // - focus is slate a9 in both looks, dark and light, a solid step used as a line: a8 reads 1.90 on
 //   the desk in light and 2.82 on a selected row in dark.
-// The fifteen colors come from tokens/color/<token>.toml, each step and bend with its reason
+// The twenty-one global colors come from tokens/color/<token>.toml, each step and bend with its reason
 // there: the token build writes them into theme-colors.ts and into tokens.css, so the stylesheet,
 // the terminal and the window's frame cannot drift. The terminal's palette is written here, and its
 // black (dark) and two whites (light) are fills, not text.
@@ -17,30 +17,8 @@ import {dark, light} from "./theme-colors.ts";
 
 type Hex = `#${string}`;
 
-/** The fifteen colors the note names. */
-interface Colors {
-	/** Behind the tiles. */
-	readonly desk: Hex;
-	/** A tile. */
-	readonly ground: Hex;
-	/** What opens over the desk. */
-	readonly raised: Hex;
-	readonly hover: Hex;
-	/** A tile's edge at rest: carries no fact, the bend color principles records. */
-	readonly edge: Hex;
-	/** Focus: every keyboard ring and the focused tile's edge. */
-	readonly focus: Hex;
-	readonly text: Hex;
-	readonly faint: Hex;
-	/** The turn fill: your turn, and nothing else. */
-	readonly "turn-fill": Hex;
-	readonly "on-turn": Hex;
-	readonly "turn-text": Hex;
-	readonly done: Hex;
-	readonly running: Hex;
-	readonly stuck: Hex;
-	readonly closed: Hex;
-}
+/** Every global token, with the names supplied by the token build. */
+type Colors = {readonly [Name in keyof typeof dark]: Hex};
 
 /** The terminal's sixteen colors, in ANSI order: the eight, then their bright eight. */
 type Palette = readonly [
@@ -196,7 +174,7 @@ interface Look {
 
 /** The window's frame, what shows before the page draws and behind it as the window resizes. */
 export const frameColor = (look: Look) =>
-	(look.shouldUseDarkColors ? fabrika : fabrikaLight).colors.desk;
+	(look.shouldUseDarkColors ? fabrika : fabrikaLight).colors["surface-sunken"];
 
 /**
  * Repaint a window's frame on each look change, as the page follows it with light-dark(), until the

@@ -11,6 +11,13 @@ const Contrast = Schema.Number.check(
 const Policy = Schema.Struct({fix: Fix, contrast: Contrast});
 type Policy = typeof Policy.Type;
 
+/** The same three file settings, for the generated editor schema. */
+export const Settings = Schema.Struct({
+	theme: Schema.optionalKey(ThemeName),
+	"theme-fix": Schema.optionalKey(Fix),
+	"theme-contrast": Schema.optionalKey(Contrast),
+});
+
 interface ThemeSettings {
 	readonly pick: string;
 	readonly policy: Policy;

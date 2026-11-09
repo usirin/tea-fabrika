@@ -113,7 +113,7 @@ export const settingsFile = <A>(
 			};
 			const made = yield* Effect.exit(fs.makeDirectory(folder, {recursive: true}));
 			if (Exit.isFailure(made)) {
-				yield* Effect.logWarning(`fabrika host: no settings folder at ${folder}, so none is heard`);
+				yield* Effect.logWarning("fabrika host: the settings folder could not be created");
 				return Stream.fromEffect(Effect.map(text, answer));
 			}
 			// The first read waits for the watch, so no save between the two is missed.
@@ -123,12 +123,10 @@ export const settingsFile = <A>(
 				Stream.debounce(`${SETTLE_MS} millis`),
 				// A watch that fails before it is ready still lets the first read go, so the file is
 				// read once and the host never waits on a watch that will not start.
-				Stream.catchCause((cause) =>
+				Stream.catchCause(() =>
 					Stream.fromEffect(
 						Deferred.succeed(ready, undefined).pipe(
-							Effect.andThen(
-								Effect.logWarning(`fabrika host: the watch on ${folder} ended`, cause),
-							),
+							Effect.andThen(Effect.logWarning("fabrika host: the settings watch ended")),
 						),
 					).pipe(Stream.drain),
 				),
