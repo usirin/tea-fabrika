@@ -232,8 +232,13 @@ function ListPage(props: {
 
 	// Where the focus goes on coming to the list: the first areas' first row while that step shows,
 	// else the row picked, or the title when there is none. Once, on coming to the list: a new view
-	// must not pull the focus back.
+	// must not pull the focus back. Only the focus its own program holds, as an ask view takes it:
+	// a list that comes while the asks menu or another layer is open leaves the focus there, so
+	// the menu's arrows and answer keys keep working (P24).
 	const focusStart = useEffectEvent(() => {
+		const held = document.activeElement;
+		const program = pageRef.current?.closest(".program") ?? pageRef.current;
+		if (held !== null && held !== document.body && program?.contains(held) !== true) return;
 		if (stepRef.current !== null) stepRef.current.querySelector("input")?.focus();
 		else if (picked === undefined) titleRef.current?.focus();
 		else rows.current.get(picked)?.focus();
