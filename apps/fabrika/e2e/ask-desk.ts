@@ -544,12 +544,11 @@ export const askDesk = async (tools: Tools) => {
 						for (let i = 0; i < total && !(await blindOpen()); i++)
 							await page.keyboard.press("ArrowDown");
 						if (await blindOpen()) {
-							// Round 7b: in the narrow menu the blind hint and the marks share a line only
-							// where they fit; openRow holds the line rule, blindLine the hint and Evidence.
+							// Round 7c: the blind hint takes its width and the marks follow it or take the
+							// next line, the same rule as in the bar; openRow holds the row's own rules.
 							await blindLine(
 								`asks-menu-${layout}-${look}, blind`,
 								menu.getByRole("row", {selected: true}).getByRole("region", {name: /^ask: /}),
-								true,
 							);
 							await openRow(`asks-menu-${layout}-${look}, blind`, menu, tight);
 						} else check(`P23 E 7, asks-menu-${layout}-${look}: the blind ask has a row`, false);
@@ -1276,14 +1275,17 @@ const inView = async (when: string, alert: Locator) => {
 	);
 };
 /**
- * Round 7, fix 2: a blind ask says "Your pick first: the rec shows once you answer", and the
- * "Did this need you?" group shares that line (their text tops within 4px), at one, side, stacked
- * and 2x2, in the ticket bar and the menu. Evidence sits on that line, or starts on the next: its
- * box top no lower than 1em under the line.
- * Round 7b (lead, 2026-11-08): the asks menu stays narrow, so in the menu (`narrow`) the two share
- * a line only where they fit; openRow checks that rule there, and this checks the hint and Evidence.
+ * Round 7, fix 2: a blind ask says "Your pick first: the rec shows once you answer". Evidence sits
+ * on the hint's line, or starts on the next: its box top no lower than 1em under the line.
+ * Round 7c (lead, 2026-11-08), in the ticket bar and the menu alike, at one, side, stacked and 2x2:
+ * - the hint takes its full width, never a narrow column: its first line reaches at least the
+ *   smaller of its own one-line width and the line's content width, less one word (a wrap moves at
+ *   most a word) and 1em;
+ * - the "Did this need you?" group follows on the hint's last line where it fits (text tops within
+ *   4px), else takes the next line as one unit, starting at the hint's left edge;
+ * - sharing a line, the gap from the hint's last word to the group is at most 2em.
  */
-const blindLine = async (when: string, where: Locator, narrow = false) => {
+const blindLine = async (when: string, where: Locator) => {
 	const read = await where.evaluate((root) => {
 		const textRects = (element: Element | null) => {
 			if (element === null) return [];
@@ -1297,34 +1299,125 @@ const blindLine = async (when: string, where: Locator, narrow = false) => {
 			}
 			return rects;
 		};
+		const wordWidths = (element: Element | null) => {
+			if (element === null) return [];
+			const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+			const widths: number[] = [];
+			for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+				for (const match of (node.textContent ?? "").matchAll(/\S+/g)) {
+					const range = document.createRange();
+					range.setStart(node, match.index);
+					range.setEnd(node, match.index + match[0].length);
+					widths.push(range.getBoundingClientRect().width);
+				}
+			}
+			return widths;
+		};
+		const lines = (rects: readonly DOMRect[]) => {
+			const out: {top: number; bottom: number; left: number; right: number}[] = [];
+			for (const r of [...rects].sort((a, b) => a.top - b.top)) {
+				const line = out.find((l) => r.top < l.bottom - 1 && r.bottom > l.top + 1);
+				if (line === undefined)
+					out.push({top: r.top, bottom: r.bottom, left: r.left, right: r.right});
+				else {
+					line.top = Math.min(line.top, r.top);
+					line.bottom = Math.max(line.bottom, r.bottom);
+					line.left = Math.min(line.left, r.left);
+					line.right = Math.max(line.right, r.right);
+				}
+			}
+			return out;
+		};
+		const em = Number.parseFloat(getComputedStyle(root).fontSize) || 16;
 		const words = root.querySelector(".ask-recwords");
-		const label = root.querySelector(".ask-marks > span[aria-hidden]");
+		const rec = root.querySelector(".ask-rec");
 		const hint = textRects(words);
-		const said = textRects(label);
+		const said = textRects(root.querySelector(".ask-marks > span[aria-hidden]"));
+		const marks = [...root.querySelectorAll(".ask-marks button")]
+			.map((b) => b.getBoundingClientRect())
+			.filter((r) => r.width > 0);
 		const evidence = root.querySelector(".ask-why button")?.getBoundingClientRect();
+		const hintLines = lines(hint);
 		const lastHint = hint.at(-1);
 		const firstMark = said[0];
-		const marks = root.querySelector(".ask-marks")?.getBoundingClientRect();
-		const lineBottom = Math.max(lastHint?.bottom ?? 0, marks?.bottom ?? 0);
+		const recBox = rec?.getBoundingClientRect();
+		const cs = rec === null ? null : getComputedStyle(rec);
+		const content =
+			recBox === undefined || cs === null
+				? 0
+				: recBox.width -
+					(Number.parseFloat(cs.paddingLeft) || 0) -
+					(Number.parseFloat(cs.paddingRight) || 0) -
+					(Number.parseFloat(cs.borderLeftWidth) || 0) -
+					(Number.parseFloat(cs.borderRightWidth) || 0);
+		const oneLine = hint.reduce((n, r) => n + r.width, 0);
+		const longest = Math.max(0, ...wordWidths(words));
+		const first = hintLines[0];
+		const reach = first === undefined ? 0 : first.right - first.left;
+		const shared =
+			lastHint !== undefined &&
+			firstMark !== undefined &&
+			Math.abs(lastHint.top - firstMark.top) <= 4;
+		const group = [...said, ...marks];
+		const edge = hint.length === 0 ? null : Math.min(...hint.map((r) => r.left));
+		const groupLeft = group.length === 0 ? null : Math.min(...group.map((r) => r.left));
+		const groupTop = group.length === 0 ? null : Math.min(...group.map((r) => r.top));
+		const under = lastHint?.bottom ?? null;
+		const lineBottom = Math.max(
+			lastHint?.bottom ?? 0,
+			...said.map((r) => r.bottom),
+			...marks.map((r) => r.bottom),
+		);
 		return {
 			hint: (words?.textContent ?? "").trim(),
-			hintTop: lastHint?.top ?? null,
-			marksTop: firstMark?.top ?? null,
-			lineTop: Math.min(lastHint?.top ?? 0, marks?.top ?? 0),
+			em,
+			width: {reach, oneLine, content, longest, lines: hintLines.length},
+			shared,
+			next: {
+				lines: lines(group).length,
+				edge,
+				left: groupLeft,
+				top: groupTop,
+				under,
+				ok:
+					group.length > 0 &&
+					lines(group).length === 1 &&
+					edge !== null &&
+					groupLeft !== null &&
+					Math.abs(groupLeft - edge) <= 1 &&
+					under !== null &&
+					groupTop !== null &&
+					groupTop >= under - 1 &&
+					groupTop <= under + em,
+			},
+			gap:
+				shared && lastHint !== undefined && firstMark !== undefined
+					? firstMark.left - lastHint.right
+					: null,
 			lineBottom,
-			em: Number.parseFloat(getComputedStyle(root).fontSize) || 16,
 			evidence: evidence === undefined ? null : {top: evidence.top, bottom: evidence.bottom},
 		};
 	});
 	check(
-		narrow
-			? `P23 E 7, ${when}: the blind ask says "Your pick first"`
-			: `P23 E 7, ${when}: "Your pick first" and "Did this need you?" share one line`,
-		read.hint.startsWith("Your pick first") &&
-			(narrow ||
-				(read.hintTop !== null &&
-					read.marksTop !== null &&
-					Math.abs(read.hintTop - read.marksTop) <= 4)),
+		`P23 E 7, ${when}: the blind ask says "Your pick first"`,
+		read.hint.startsWith("Your pick first"),
+		read,
+	);
+	check(
+		`P23 E 7c, ${when}: the blind hint takes its full width, not a narrow column`,
+		read.width.content > 0 &&
+			read.width.reach >=
+				Math.min(read.width.oneLine, read.width.content) - read.width.longest - read.em,
+		read,
+	);
+	check(
+		`P23 E 7c, ${when}: "Did this need you?" follows the hint's last word, or takes the next line as one unit at the hint's left edge`,
+		read.shared || read.next.ok,
+		read,
+	);
+	check(
+		`P23 E 7c, ${when}: sharing a line, the hint's last word and "Did this need you?" are at most 2em apart`,
+		!read.shared || (read.gap !== null && read.gap >= 0 && read.gap <= 2 * read.em),
 		read,
 	);
 	check(
