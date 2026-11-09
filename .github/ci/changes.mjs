@@ -11,10 +11,28 @@ const today = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
 const helper = "next/apps/fabrika/src/exam/plant.ts";
 /** @param {string} path */
 const rows = (path) => /^field\/[^/]+\.jsonl$/.test(path);
-/** @param {string} path */
-const markdown = (path) =>
+const readTrees = [
+	"programs/",
+	"fixtures/",
+	"packages/",
+	"next/",
+	".agents/skills/",
+	".claude/skills/",
+];
+const readFolders = new Set(["brief", "briefs", "prompt", "prompts"]);
+/**
+ * Markdown a program or test reads: skills, briefs, prompts and fixtures are inputs, not prose.
+ * @param {string} path
+ */
+const reads = (path) =>
 	path.endsWith(".md") &&
-	![".agents/skills/", ".claude/skills/"].some((tree) => path.startsWith(tree));
+	(readTrees.some((tree) => path.startsWith(tree)) ||
+		path
+			.split("/")
+			.slice(0, -1)
+			.some((dir) => readFolders.has(dir)));
+/** @param {string} path */
+const markdown = (path) => path.endsWith(".md") && !reads(path);
 /** @param {string} path */
 const safe = (path) => rows(path) || markdown(path);
 /** @param {string} path */
@@ -31,6 +49,7 @@ const old = (path) =>
  */
 export const classify = (paths, event) => {
 	if (event !== "pull_request" || paths === null || paths.length === 0) return {...all};
+	if (paths.some(reads)) return {...all, field: paths.some(rows)};
 	return {
 		check: !paths.every(safe),
 		test: !paths.every((path) => safe(path) || (path.startsWith("next/") && path !== helper)),

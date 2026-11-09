@@ -25,7 +25,7 @@ const Run = Schema.Struct({
 	model: Text,
 	effort: Text,
 	outcome: Text,
-	note: Text,
+	note: Schema.optionalKey(Text),
 	why: Text,
 	tokens: Count,
 	tools: Count,

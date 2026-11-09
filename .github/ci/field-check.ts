@@ -69,8 +69,11 @@ export const checkFile = (file: string, base: string, head: string) => {
 
 type Runner = (args: string[]) => {status: number | null; stdout: string};
 const git: Runner = (args) => spawnSync("git", args, {encoding: "utf8", maxBuffer: 2 ** 28});
-/** A missing tree or unreadable blob is an error, never an empty successful delta. */
-export const readFieldFiles = (base: string, head: string, run: Runner = git) => {
+/**
+ * A missing tree or unreadable blob is an error, never an empty successful delta.
+ * A PR's rows start at the merge base, as changes.mjs reads its paths; a push uses its two trees.
+ */
+export const readFieldFiles = (base: string, head: string, event: string, run: Runner = git) => {
 	if (!validSha(base) || !validSha(head))
 		throw new Error("field: valid base and head SHAs are required");
 	const read = (args: string[]) => {
@@ -78,18 +81,19 @@ export const readFieldFiles = (base: string, head: string, run: Runner = git) =>
 		if (result.status !== 0) throw new Error("field: Git could not read the requested history");
 		return result.stdout;
 	};
-	// Field rows compare the event's two trees, not the PR classifier's merge base.
-	const paths = readPaths(base, head, "push", run);
+	const from = event === "pull_request" ? read(["merge-base", base, head]).trim() : base;
+	if (!validSha(from)) throw new Error("field: the merge base could not be read");
+	const paths = readPaths(from, head, "push", run);
 	if (paths === null) throw new Error("field: changed paths could not be read");
 	const tree = (ref: string) =>
 		new Set(read(["ls-tree", "-r", "--name-only", "-z", ref, "--", "field/"]).split("\0"));
-	const before = tree(base),
+	const before = tree(from),
 		after = tree(head);
 	return paths
 		.filter((path) => /^field\/[^/]+\.jsonl$/.test(path))
 		.map((file) => ({
 			file,
-			base: before.has(file) ? read(["show", `${base}:${file}`]) : "",
+			base: before.has(file) ? read(["show", `${from}:${file}`]) : "",
 			head: after.has(file) ? read(["show", `${head}:${file}`]) : "",
 		}));
 };
@@ -97,8 +101,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 	try {
 		const base = process.env["BASE"] ?? "";
 		const head = process.env["HEAD"] ?? "";
+		const event = process.env["EVENT"] ?? "";
 		let total = 0;
-		for (const input of readFieldFiles(base, head)) {
+		for (const input of readFieldFiles(base, head, event)) {
 			const report = checkFile(input.file, input.base, input.head);
 			total += report.added;
 			for (const message of report.annotations) console.log(message);
