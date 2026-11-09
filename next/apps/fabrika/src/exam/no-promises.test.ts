@@ -34,6 +34,18 @@ const typed = (files: Readonly<Record<string, string>>, workers = false) => {
 					target: "ES2023",
 					...(workers
 						? {
+								module: "preserve",
+								moduleResolution: "bundler",
+								// Effect's DOM declarations are not Workers globals; check our source here.
+								skipLibCheck: true,
+								paths: {
+									effect: [
+										paths.resolve(import.meta.dirname, "../../node_modules/effect/dist/index.d.ts"),
+									],
+									"effect/*": [
+										paths.resolve(import.meta.dirname, "../../node_modules/effect/dist/*.d.ts"),
+									],
+								},
 								lib: ["ES2023"],
 								types: [
 									paths.resolve(
@@ -86,6 +98,15 @@ const markedEdge = fc.tuple(
 	fc.constantFrom("fabrika/no-promises", "fabrika/no-effect-run-outside-edge"),
 	fc.constantFrom(" ", "  ", "\t"),
 );
+
+const bridgeSpellings = [
+	"module",
+	"renamedModule",
+	"namespace",
+	"function",
+	"renamedFunction",
+	"computed",
+] as const;
 
 const fires = [
 	'import {Effect, Schema, Stream} from "effect";', // 1
@@ -159,21 +180,29 @@ describe("no-promises", async () => {
 				fc.constantFrom("tryPromise", "promise"),
 				fc.nat({max: 8}),
 				fc.boolean(),
-				(suffix, method, gap, marked) => {
+				fc.constantFrom(...bridgeSpellings),
+				(suffix, method, gap, marked, spelling) => {
 					const file = "next/rpc.ts";
+					const [imports, callee] = (
+						{
+							module: ['import {Effect} from "effect";', `Effect.${method}`],
+							renamedModule: ['import {Effect as E} from "effect";', `E.${method}`],
+							namespace: ['import * as Fx from "effect";', `Fx.Effect.${method}`],
+							function: [`import {${method}} from "effect/Effect";`, method],
+							renamedFunction: [`import {${method} as tp} from "effect/Effect";`, "tp"],
+							computed: ['import {Effect} from "effect";', `Effect["${method}"]`],
+						} as const
+					)[spelling];
 					// Installed workers-types 5.20261027.1: WorkerStub.getEntrypoint -> Fetcher<T>
 					// -> Rpc.Provider<T> -> MethodOrProperty<V> -> Result<Awaited<R>>.
 					// Promise<unknown> becomes never through that conditional return type.
 					const before = [
+						imports,
 						`type Calls = Rpc.WorkerEntrypointBranded & {describe${suffix}(): Promise<unknown>};`,
 						"declare const worker: WorkerStub;",
 						"const rpc = worker.getEntrypoint<Calls>();",
-						"declare const Effect: {",
-						"  tryPromise(options: {try: () => Promise<unknown>; catch: () => Error}): void;",
-						"  promise(thunk: () => Promise<unknown>): void;",
-						"};",
 						"// oxlint-disable-next-line fabrika/no-promises -- edge: the RPC call enters Effect",
-						`export const edge = Effect.${method}(${method === "tryPromise" ? "{" : ""}`,
+						`export const edge = ${callee}(${method === "tryPromise" ? "{" : ""}`,
 						...(method === "tryPromise" ? ["  try: () =>"] : ["  () =>"]),
 						...Array.from({length: gap}, () => ""),
 						...(marked
@@ -196,7 +225,18 @@ describe("no-promises", async () => {
 				seed: 119120,
 				numRuns: 12,
 				// P12 review 7: the marker covered Effect.tryPromise, but not rpc.describe below it.
-				examples: [["", "tryPromise", 0, false]],
+				// P12 review 8: renamed imports and computed access hid the same RPC call.
+				examples: (["tryPromise", "promise"] as const).flatMap((method) =>
+					bridgeSpellings.map(
+						(spelling): [string, typeof method, number, boolean, typeof spelling] => [
+							"",
+							method,
+							0,
+							false,
+							spelling,
+						],
+					),
+				),
 			},
 		);
 	});
