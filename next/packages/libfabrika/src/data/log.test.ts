@@ -10,7 +10,7 @@
 //   key, a wrong type, an empty `by`, `for`, `build` or `_tag`, or a key `Line` does not have is
 //   `{_tag: "refused", why: "bad_line"}`; a bad `parent` is `bad_parent`, a bad trace is `bad_trace`.
 //   Either way nothing is written.
-// - `InputId` is a type only: nothing `./data` exports gives one.
+// - P17a exports the checked `InputId` schema; saved parents still accept legacy text.
 import {mkdtempSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -156,13 +156,13 @@ describe("p92, every entry has every field: the type", () => {
 		expect([a, b, c].length).toBe(3);
 	});
 
-	it("type law, ParentText is string, never InputId, and no data export makes an InputId", () => {
+	it("type law, ParentText keeps legacy text, and only input and parent schemas expose InputId", () => {
 		// A missing schema fails this assertion while the tests precede the build, not the import.
 		expect(data.ParentText, "the parent text schema is public").toBeDefined();
-		expectTypeOf<(typeof Entry.Type)["parent"]>().toEqualTypeOf<string | null>();
-		expectTypeOf<Line["parent"]>().toEqualTypeOf<string | null>();
-		expectTypeOf<typeof data.ParentText.Type>().toEqualTypeOf<string>();
-		// Each export, as a function's answer or a schema's decoded type: none of them is an InputId.
+		expectTypeOf<(typeof Entry.Type)["parent"]>().toEqualTypeOf<string | InputId | null>();
+		expectTypeOf<Line["parent"]>().toEqualTypeOf<string | InputId | null>();
+		expectTypeOf<typeof data.ParentText.Type>().toEqualTypeOf<string | InputId>();
+		// P17a's input schema and parent reader expose the brand. No other data export does.
 		type Gives<T> = T extends (...args: never) => infer R
 			? R
 			: T extends {readonly Type: infer A}
@@ -173,7 +173,7 @@ describe("p92, every entry has every field: the type", () => {
 				? never
 				: K;
 		}[keyof typeof data];
-		expectTypeOf<MakesInputId>().toEqualTypeOf<never>();
+		expectTypeOf<MakesInputId>().toEqualTypeOf<"InputId" | "ParentText">();
 		expect(Object.keys(data).length).toBeGreaterThan(0);
 	});
 });

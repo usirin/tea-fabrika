@@ -6,7 +6,8 @@ import {Option, Schema} from "effect";
 import * as fc from "fast-check";
 import * as T from "./index.ts";
 
-const state = () => T.Waiting.make({rows: [], most: 3, ttl: 600_000});
+const state = (ttl = 600_000, most = 3) => T.Waiting.make({rows: [], most, ttl});
+const runs = {seed: 119120, numRuns: 100};
 const knock = (
 	s: ReturnType<typeof state>,
 	key: string,
@@ -27,38 +28,86 @@ const knock = (
 	});
 describe("P10 waiting rows", () => {
 	it("p43: one checked key, two tabs, one stable code until expiry", () => {
-		const first = knock(state(), "k", "tab1", 0);
-		const second = knock(first, "k", "tab2", 1, "9999");
-		const duplicate = knock(second, "k", "tab2", 2, "8888");
-		expect(first.rows[0]?.tabs).toBe(1);
-		expect(duplicate.rows).toHaveLength(1);
-		expect(duplicate.rows[0]).toMatchObject({
-			key: "k",
-			tabs: 2,
-			code: "1234",
-			until: 600_000,
-			has: ["verify", "seal"],
-			pass: null,
-		});
-		const left = T.Waiting.leave(duplicate, {key: "k", client: "tab1"});
-		expect(left.rows[0]?.tabs).toBe(1);
-		expect(T.Waiting.leave(left, {key: "k", client: "tab2"}).rows).toEqual([]);
+		// Plant: append duplicate clients without a Set. The two-tab match must fail.
+		fc.assert(
+			fc.property(
+				fc.record({
+					key: fc.string(),
+					clients: fc.uniqueArray(fc.string(), {minLength: 2, maxLength: 2}),
+					codes: fc.tuple(fc.string(), fc.string(), fc.string()),
+					at: fc.nat({max: 1_000_000_000}),
+					ttl: fc.integer({min: 3, max: 1_000_000}),
+				}),
+				({key, clients: [one = "", two = ""], codes: [code, secondCode, thirdCode], at, ttl}) => {
+					const first = knock(state(ttl), key, one, at, code);
+					const second = knock(first, key, two, at + 1, secondCode);
+					const duplicate = knock(second, key, two, at + 2, thirdCode);
+					expect(first.rows[0]?.tabs).toBe(1);
+					expect(duplicate.rows).toHaveLength(1);
+					expect(duplicate.rows[0]).toMatchObject({
+						key,
+						tabs: 2,
+						code,
+						until: at + ttl,
+						has: ["verify", "seal"],
+						pass: null,
+					});
+					const left = T.Waiting.leave(duplicate, {key, client: one});
+					expect(left.rows[0]?.tabs).toBe(1);
+					expect(T.Waiting.leave(left, {key, client: two}).rows).toEqual([]);
+				},
+			),
+			{
+				...runs,
+				examples: [
+					[
+						{
+							key: "k",
+							clients: ["tab1", "tab2"],
+							codes: ["1234", "9999", "8888"],
+							at: 0,
+							ttl: 600_000,
+						},
+					],
+				],
+			},
+		);
 	});
 	it("p43: expiry boundary and access pruning do not renew an old code", () => {
-		const first = knock(state(), "a", "tab1", 0);
-		expect(T.Waiting.expire(first, 599_999).rows).toHaveLength(1);
-		expect(T.Waiting.expire(first, 600_000).rows).toEqual([]);
-		const next = knock(first, "a", "tab2", 600_000, "5678");
-		expect(next.rows[0]).toMatchObject({code: "5678", tabs: 1, until: 1_200_000});
+		// Plant: keep rows whose until equals at. The empty rows assertion must fail.
+		fc.assert(
+			fc.property(
+				fc.string(),
+				fc.string(),
+				fc.string(),
+				fc.string(),
+				fc.string(),
+				fc.nat({max: 1_000_000_000}),
+				fc.integer({min: 1, max: 1_000_000}),
+				(key, one, two, code, replacement, at, ttl) => {
+					const first = knock(state(ttl), key, one, at, code);
+					expect(T.Waiting.expire(first, at + ttl - 1).rows).toHaveLength(1);
+					expect(T.Waiting.expire(first, at + ttl).rows).toEqual([]);
+					const next = knock(first, key, two, at + ttl, replacement);
+					expect(next.rows[0]).toMatchObject({code: replacement, tabs: 1, until: at + 2 * ttl});
+				},
+			),
+			{...runs, examples: [["a", "tab1", "tab2", "1234", "5678", 0, 600_000]]},
+		);
 	});
 	it("p43: the cap evicts the oldest key, never another tab's newer code", () => {
-		let s = knock(state(), "a", "a1", 0);
-		s = knock(s, "b", "b1", 1);
-		s = knock(s, "c", "c1", 2);
-		s = knock(s, "d", "d1", 3);
-		expect(s.rows.map((r) => r.key)).toEqual(["b", "c", "d"]);
+		// Plant: keep the oldest rows with slice(0, most). The remaining-key equality must fail.
+		fc.assert(
+			fc.property(fc.uniqueArray(fc.string(), {minLength: 2, maxLength: 20}), (keys) => {
+				let s = state(600_000, keys.length - 1);
+				for (const [at, key] of keys.entries()) s = knock(s, key, `${key}1`, at);
+				expect(s.rows.map((r) => r.key)).toEqual(keys.slice(1));
+			}),
+			{...runs, examples: [[["a", "b", "c", "d"]]]},
+		);
 	});
 	it("p43: arbitrary duplicate knocks have exactly the distinct live tab count", () => {
+		// Plant: append duplicate clients without a Set. The distinct-count equality must fail.
 		fc.assert(
 			fc.property(fc.array(fc.integer({min: 0, max: 5}), {minLength: 1, maxLength: 40}), (tabs) => {
 				let s = state();

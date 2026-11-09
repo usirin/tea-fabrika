@@ -8,7 +8,7 @@ import {
 	type Archive,
 	type LedgerError,
 	type NotGranted,
-	ParentText,
+	InputId,
 	type RecordManager,
 	type Session,
 	type SigningRefused,
@@ -42,7 +42,7 @@ export type Update =
 export const Incoming = Schema.Struct({
 	id: Schema.NonEmptyString,
 	envelope: Schema.Struct({
-		id: ParentText.pipe(Schema.brand("InputId")),
+		id: InputId,
 		by: Writer,
 		arrivedAt: Schema.Number,
 		input: Schema.Unknown,
@@ -113,7 +113,7 @@ export type Fact = Schema.JsonObject & Tagged;
 export class CheckedWriter extends Context.Service<
 	CheckedWriter,
 	{
-		readonly append: (input: Incoming) => Effect.Effect<Appended, LedgerError>;
+		readonly append: (input: Incoming) => Effect.Effect<Appended, LedgerError | NotGranted>;
 		readonly commit: (
 			id: string,
 			session: Session,
