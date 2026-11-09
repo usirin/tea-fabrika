@@ -1,7 +1,8 @@
 // P17a, next/. Two independently built Door layers share real SQLite and membership history.
 // Plants: hello-only checks; treating close as permission; stale input/fact admission;
 // duplicate before membership; a revoked key rejoining; refusal leaking to every client;
-// membership checked only before a paused hello write; decoding a transformed input twice.
+// membership checked only before a paused hello write; decoding a transformed input twice;
+// answering a cached placing without checking membership after hashing a settled retry.
 import {createHash} from "node:crypto";
 import {mkdtempSync, rmSync} from "node:fs";
 import {tmpdir} from "node:os";
@@ -12,13 +13,14 @@ import {Deferred, Effect, Fiber, Layer, Result, Schema, Stream} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
 import type {Incoming} from "../app/entry.ts";
+import {Sent} from "../app/runner.ts";
 import {ClientManager} from "../coordination/client-manager.ts";
 import {ProcessIdGenerator} from "../coordination/process-id.ts";
 import {NotGranted, SignRequest} from "../coordination/session-manager.ts";
 import {grantText, revokeText} from "../coordination/text.ts";
 import {Archive} from "../data/archive.ts";
 import {LedgerTransaction, type LedgerTurn} from "../data/ledger-transaction.ts";
-import {Doorbell, Ledger} from "../data/ledger.ts";
+import {Doorbell, Ledger, type LedgerError} from "../data/ledger.ts";
 import {RecordManager} from "../data/records.ts";
 import {SpanSink} from "../data/sink.ts";
 import {nodeSql} from "../data/sqlite.ts";
@@ -116,7 +118,10 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
 	};
 	const deliveries: Incoming[] = [],
 		notices: unknown[] = [];
-	const controls = {letter: "", deliver: (_: Incoming): Effect.Effect<void> => Effect.void};
+	const controls = {
+		letter: "",
+		deliver: (_: Incoming): Effect.Effect<void | Sent, LedgerError | NotGranted> => Effect.void,
+	};
 	const storage = () => {
 		const db = new DatabaseSync(path);
 		opened.push(db);
@@ -420,6 +425,89 @@ describe("P17a, revoke stops writes at the final door", () => {
 								expect(refused).toBe(revokeFirst);
 								expect(yield* rows(w, "door/inputs")).toHaveLength(revokeFirst ? 0 : 1);
 								expect(w.deliveries).toHaveLength(revokeFirst ? 0 : 1);
+							} finally {
+								spy.mockRestore();
+							}
+						}).pipe(Effect.provide(TestClock.layer())),
+					);
+				},
+			),
+			checks,
+		);
+	});
+	it("a settled retry paused after online rechecks revoke before answering its cached placing", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.constantFrom("counter", "notes"),
+				fc.boolean(),
+				fc.uuid(),
+				fc.string({maxLength: 30}),
+				async (target, revokeFirst, token, text) => {
+					await Effect.runPromise(
+						Effect.gen(function* () {
+							const w = yield* world(),
+								d = yield* setup(w);
+							w.controls.deliver = Effect.fnUntraced(function* (incoming: Incoming) {
+								const placing = yield* d.a.accept(incoming);
+								if (placing._tag !== "placed") return Sent.cases.refused.make({why: placing.why});
+								return Sent.cases.accepted.make({rev: placing.rev, pos: placing.pos});
+							});
+							const marker = `settled-retry-${token}`;
+							const first = yield* send(d.a, d.old, w, target, marker, text);
+							expect(first).toMatchObject({_tag: "ok", result: {_tag: "accepted"}});
+							const inbox = yield* rows(w, `${processes[target]}/inbox`);
+							expect(inbox).toHaveLength(1);
+							const inputs = yield* rows(w, "door/inputs");
+							const entered = yield* Deferred.make<void>(),
+								release = yield* Deferred.make<void>();
+							const digest = crypto.subtle.digest.bind(crypto.subtle);
+							let paused = false;
+							const spy = vi
+								.spyOn(crypto.subtle, "digest")
+								.mockImplementation((algorithm, data) => {
+									const bytes = ArrayBuffer.isView(data)
+										? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+										: new Uint8Array(data);
+									if (!paused && new TextDecoder().decode(bytes).includes(marker)) {
+										paused = true;
+										return Effect.runPromise(
+											Deferred.succeed(entered, undefined).pipe(
+												Effect.andThen(Deferred.await(release)),
+												Effect.andThen(web(() => digest(algorithm, data))),
+											),
+										);
+									}
+									return digest(algorithm, data);
+								});
+							try {
+								const pending = yield* Effect.forkChild(
+									Effect.result(send(d.a, d.old, w, target, marker, text)),
+								);
+								// Request hashing follows online(); the settled reply is still pending.
+								yield* Deferred.await(entered);
+								if (revokeFirst) yield* remove(d.b, w, "revoke");
+								yield* Deferred.succeed(release, undefined);
+								const result = yield* Fiber.join(pending);
+								if (!revokeFirst) yield* remove(d.b, w, "revoke");
+								const answer = Result.isFailure(result)
+									? Schema.is(NotGranted)(result.failure)
+										? {why: "not_granted"}
+										: result.failure
+									: result.success._tag === "refused"
+										? {why: result.success.why}
+										: result.success;
+								// Plant: answer the cached placing without a final membership check.
+								expect({
+									answer,
+									inbox: yield* rows(w, `${processes[target]}/inbox`),
+									inputs: yield* rows(w, "door/inputs"),
+									deliveries: w.deliveries.length,
+								}).toEqual({
+									answer: revokeFirst ? {why: "not_granted"} : first,
+									inbox,
+									inputs,
+									deliveries: 1,
+								});
 							} finally {
 								spy.mockRestore();
 							}
