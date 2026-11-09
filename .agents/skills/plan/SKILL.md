@@ -80,7 +80,11 @@ unknown, malformed or duplicate markers fail. Escaped pipes stay in their cells.
 a files table's file/path cell counts, whatever words or punctuation surround it, unless the cell
 names another package with a possessive (`Counter's package.json`); then only paths with a `/`
 count. A possessive of this repository (`the repo's package.json`) is not another package. Bare root
-paths in prose or other columns never count. Explicit qualified exam paths elsewhere still get listed. The lead runs this before approving.
+paths in prose or other columns never decide the exit code. Apart from that check, the `exam path
+named` listing is a total scan that reads no Markdown: it splits the whole file, fences, link titles
+and comments included, into words and lists each one the exam list matches, wherever it stands. A
+false listing is harmless; the lead checks each listed path is owned by `tests`. The lead runs this
+before approving.
 
 ## Where code goes in `next/`
 

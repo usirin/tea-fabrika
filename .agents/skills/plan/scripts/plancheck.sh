@@ -1,11 +1,15 @@
 #!/bin/sh
-# plancheck.sh <plan.md>: list every exam path the plan names, root-level files included, and check
-# the plan's files tables. A files table is one whose first header starts with "file" or "path", or
-# that has an owner column ("owner", "step", "writer" or "writes it"). Exits 1 when a files table has no owner
-# column, a row has an empty owner, or an exam path in a row is owned by a step other than tests.
-# Version 2 checks the generator grammar on laws tables (a "plant" column). Legacy plans keep
-# their owner checks. Fixed inputs need one of the four labels in five-steps-for-every-check.md.
-# Paths are read as the repo reads them: `./package.json` is `package.json`.
+# plancheck.sh <plan.md>: list every exam path the plan names, and check the plan's files tables.
+# The listing is a total scan that reads no Markdown: the whole file, fences, link titles and
+# comments included, is split into words on whitespace and on marks that cannot sit in a repo path,
+# and each word the exam list matches is listed. A false listing is harmless; the lead checks each
+# listed path is owned by tests. A files table is one whose first header starts with "file" or
+# "path", or that has an owner column ("owner", "step", "writer" or "writes it"). Exits 1 when a
+# files table has no owner column, a row has an empty owner, or an exam path in a row is owned by a
+# step other than tests. Version 2 checks the generator grammar on laws tables (a "plant" column).
+# Legacy plans keep their owner checks. Fixed inputs need one of the four labels in
+# five-steps-for-every-check.md. Paths are read as the repo reads them: `./package.json` is
+# `package.json`.
 here=$(cd "$(dirname "$0")" && pwd -P)
 plan=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 cd "$here/../../../.." && python3 - "$plan" "$here/../../step-commit/scripts/exam.py" <<'PY'
@@ -91,9 +95,15 @@ def generator(text):
     if re.fullmatch(r"Effect Arbitrary:\s*[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*", text): return True
     match = re.fullmatch(r"(vector|format|pinned|scenario):\s*(.+)", text)
     return bool(match and any(c.isalnum() for c in match[2]))
-# The lead's backstop: every backticked path anywhere in the plan is listed, in links, emphasis,
-# tables or prose. Only path cells decide the exit code.
-named = hits(w for line in lines for span in re.findall(r"`([^`]+)`", line) for w in tokens(span))
+def scanned(word):
+    # A word as the total scan reads it: no leading `./`, trailing period, or wrapping `_` and `*`.
+    while True:
+        out = norm(word).strip("_*").rstrip(".")
+        if out == word: return out
+        word = out
+# The lead's backstop, a total scan: split the raw file on whitespace and on every mark that cannot
+# sit in a repo path, and list each word the exam list matches. Only path cells decide the exit code.
+named = hits(scanned(w) for w in re.split(r"[\s`\[\]()\"'*|,;:<>=]+", open(plan).read()))
 col, files, gen, path = None, False, None, None
 for i, l in enumerate(lines):
     l = l.strip()
