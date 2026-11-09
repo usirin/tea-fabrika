@@ -4,9 +4,14 @@
 #   box.sh new   <name> <base-ref> <branch> --ticket <n> --plan <path>
 #   box.sh run   <name> <prompt-file> <out> --step tests|build|mutation|review
 #   box.sh fetch <name> <branch> [--sign <step> --ticket <n>]
+#   box.sh gc [--dry-run]                     remove boxes whose work is safe elsewhere (gc.ts says how)
 # Paths come from env.sh beside this script.
 set -eu
 . "$(dirname "$0")/env.sh"
+if [ "${1:-}" = gc ]; then
+	shift
+	exec node "$(dirname "$0")/gc.ts" "$@"
+fi
 here=$(cd "$(dirname "$0")" && pwd -P)
 exec python3 - "$here" "$@" <<'PY'
 import contextlib, datetime, fcntl, hashlib, json, os, pathlib, re, signal, subprocess, sys, tempfile, uuid

@@ -17,7 +17,8 @@ was decided are all kept here on purpose, so they can be analysed later.
 | You want to | Read | Write |
 |---|---|---|
 | Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) there | That README, in the same pull request or the same day, when the plan or its state changes. |
-| Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), one note per decision | A note there, as soon as a direction is set or changed, plus its row in that folder's README. Mark it **proposed** until it is settled. |
+| Know what the owner decided | [`.decisions/`](./.decisions/), one short file per decision; see [Decision discovery](#decision-discovery) | `.decisions/NNNN-slug.md`, the turn the owner decides, in its own docs pull request, with [`/adr`](./.agents/skills/adr/SKILL.md). |
+| Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), the long design notes | A note there when a decision needs the long reasoning, plus its row in that folder's README. Mark it **proposed** until it is settled. Its decision file links it. |
 | Know what a word means | [`.glossary/TERMS.md`](./.glossary/TERMS.md): `next/`'s words, one section per bounded context, one row per word in it, with what it is not; its last section translates today's code's words | A row there, in the same pull request that coins or renames a word. |
 | Write guidelines for one design area | [`.claude/skills/guidelines/SKILL.md`](./.claude/skills/guidelines/SKILL.md), the steps in order, and its page checklist | One experiment, one proposed note, their two index rows and one Design canvas ([drawn on Claude Design](./docs/direction/design-on-claude-design.md)), in the shape that skill gives. |
 | Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up and `experiments/NN-name.ts` for its script, with the next free number, plus one row in the index. Shared helpers go in `experiments/lib/`, saved answers in `experiments/results/`. Raw samples, such as every timing of a run, are still recorded but kept privately, not in git (owner, 2026-11-09): the script writes them under `runs/` or to a path a flag names, and `results/` keeps a small summary of the numbers the write-up quotes. |
@@ -32,12 +33,29 @@ was decided are all kept here on purpose, so they can be analysed later.
 `blog/` and `video/` are finished pieces about earlier stages. Leave them unless
 asked.
 
-**Rule of thumb:** a decision goes in `docs/direction/`. A measurement goes in
-`experiments/`. Something that happened on a real ticket goes in `field/`. If a
+Tickets go in the app's own tracker (`tracker_file`). Never open a GitHub issue on this repo;
+GitHub issues are for other people's repos
+([the lead skill](./.agents/skills/lead/SKILL.md#tickets-and-tracker-posts)).
+
+## Decision discovery
+
+List `.decisions/`: filenames identify records, and each record's frontmatter gives
+its `id`, `title` and `status`. Read applicable records when changing the choice they
+govern or resolving conflicting guidance. Record new decisions with `/adr`
+([the adr skill](./.agents/skills/adr/SKILL.md)).
+
+There is no committed decision index and no startup hook. Filenames plus frontmatter are the
+discovery contract
+([0008](./.decisions/0008-decision-discovery-is-the-agents-md-contract.md), after
+[phoenix ADR 0129](https://github.com/kamp-us/phoenix/blob/main/.decisions/0129-adr-discovery-is-the-claude-md-contract.md)).
+
+**Rule of thumb:** a decision goes in `.decisions/`, and its long reasoning in
+`docs/direction/`. A measurement goes in `experiments/`. Something that happened on a real ticket goes in `field/`. If a
 piece of knowledge about this project lives only in a chat or in an agent's
 private memory, it is in the wrong place: write it here. A decision lands as soon
-as it is made: the lead starts its docs pull request in the same turn, and never
-waits for a code pull request or the end of the day (owner, 2026-11-09).
+as it is made: the lead writes `.decisions/NNNN-slug.md` and starts its docs pull request in the
+same turn, and never waits for a code pull request or the end of the day (owner, 2026-11-09,
+[0001](./.decisions/0001-decisions-live-in-the-repo.md)).
 
 ## Two versions, side by side
 
@@ -145,10 +163,29 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
 - `next/` is the lab until a person opens it for real work, so it may be rough. "No
   rough first versions" (below) applies from then on.
 
+## Decision discovery
+
+List `.decisions/`: filenames identify records, and each record's frontmatter gives its `id`,
+`title` and `status`. Read applicable records when changing the choice they govern or resolving
+conflicting guidance. Record new decisions with `/adr`
+([skill](./.agents/skills/adr/SKILL.md)). Before you ask the owner or write a plan, also search
+`.glossary/` and `docs/direction/`.
+
+There is no committed decision index and no startup hook. Filenames plus frontmatter are the
+discovery contract
+([0008](./.decisions/0008-decision-discovery-is-the-agents-md-contract.md)).
+
+Repo tooling adds no Claude Code hooks, SessionStart or any other (owner, 2026-11-09). A tool runs
+when called: `drive.ts` runs `box.sh gc` itself on start.
+
+Tickets go in the app's own tracker (`tracker_file`). Never open a GitHub issue on this repo;
+GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/SKILL.md)).
+
 ## Before you design anything
 
-- **Check what is settled first.** Before any design question or recommendation,
-  search `docs/direction/`, `experiments/` and the plan for the topic. That holds for
+- **Check what is settled first.** Before any question to the owner, design question,
+  recommendation or plan, search `.decisions/`, `.glossary/`, `docs/direction/`, `experiments/`
+  and the plan for the topic. That holds for
   a question an agent's plan raises and for a pull request you walk: compare its shape
   with the note it says it builds, and name any place it walks a decision back. A
   claim about how a piece runs comes from reading that piece's note now, never from a

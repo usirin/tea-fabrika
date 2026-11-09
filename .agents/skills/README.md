@@ -15,6 +15,7 @@ both tools.
 | [lead](./lead/SKILL.md) | start the boxes, approve plans, run e2e, push and land |
 | [step-commit](./step-commit/SKILL.md) | commit and sign a step's work in one command |
 | [guidelines](./guidelines/SKILL.md) | study one design area, show the choices and plan the build |
+| [adr](./adr/SKILL.md) | write one owner decision to `.decisions/`, the turn it is made |
 
 ## How a brief uses them
 
@@ -40,8 +41,9 @@ needs a fresh read and approval. `plancheck.sh --approved` checks that digest at
 owners and staged formatting; its `--commit-only` route leaves missing notes for `fetch --sign`.
 
 For a stacked child, the brief records the parent ticket, branch and signed build head. The driver
-records the child before starting it and lands that parent with `--merge-method merge`. The child
-keeps its tests through catch-up and lands after its parent reaches main.
+records the child before starting it. The stack lands with `gh stack merge <pr> --squash`, then
+`gh stack sync --prune` moves the rest onto main ([0004](../../.decisions/0004-squash-merges-and-native-stacks.md)). The child
+keeps its tests and lands after its parent reaches main.
 
 ## Changing a skill
 
