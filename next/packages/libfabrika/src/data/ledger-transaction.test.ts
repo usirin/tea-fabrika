@@ -131,6 +131,47 @@ describe("p79, LedgerTransaction", () => {
 			}).pipe(Effect.provide(store.layer));
 		},
 	);
+	// From the T546 mutation step: no law kept a turn past its callback, so `!open` in
+	// ledger-store.ts's `ensureOpen` could be `false` and every check still passed.
+	law(
+		"a turn kept past its callback refuses every read and append as storage, and writes nothing",
+		Arbitrary.all({
+			count: Inputs.count,
+			ops: Arbitrary.schema(
+				Schema.Array(Schema.Literals(["read", "append"])).check(
+					Schema.isMinLength(1),
+					Schema.isMaxLength(8),
+				),
+			),
+		}),
+		[{count: 1, ops: ["read", "append"]}],
+		({count, ops}) => {
+			const store = setup();
+			return Effect.gen(function* () {
+				const ledger = yield* Ledger;
+				const tx = yield* LedgerTransaction;
+				const kept = yield* tx.transact((turn) => {
+					for (let i = 0; i < count; i++) turn.append("a", `in-${i}`, line(i));
+					return turn;
+				});
+				for (const [i, op] of ops.entries()) {
+					const late = () =>
+						op === "read" ? [...kept.read("a", 0)] : kept.append("a", `late-${i}`, line(100 + i));
+					let thrown: unknown;
+					try {
+						late();
+					} catch (error) {
+						thrown = error;
+					}
+					expect(thrown).toBeInstanceOf(LedgerError);
+					expect((thrown as LedgerError).why).toBe("storage");
+				}
+				expect((yield* Stream.runCollect(ledger.read("a", 0))).map((row) => row.id)).toEqual(
+					Array.from({length: count}, (_, i) => `in-${i}`),
+				);
+			}).pipe(Effect.provide(store.layer));
+		},
+	);
 	law(
 		"plant, swallow a later storage failure: an earlier successful INSERT rolls back",
 		Inputs.count,

@@ -1204,6 +1204,47 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 		{arbitrary: {seed: SEED, runs: 60, size: 4096}, timeout: 60000},
 	);
 
+	// From the T546 mutation step: no law set `error.type` on a span before it failed, so
+	// `typeof named === "string"` (sink.ts) could be `false` and every check still passed.
+	it.effect.prop(
+		"a failed span that names its own error.type keeps that name, in the row and in health",
+		{
+			named: Arbitrary.array(
+				Arbitrary.schema(
+					Schema.Literals([..."ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_."]),
+				),
+				{minLength: 1, maxLength: 64},
+			).pipe(Arbitrary.map((chars) => `Named${chars.join("")}`)),
+			ok: Arbitrary.schema(Schema.Boolean),
+		},
+		({named, ok}) => {
+			const h = home();
+			return Effect.gen(function* () {
+				yield* Effect.exit(
+					traced(
+						"runner.step",
+						{"fab.process": P1, "error.type": named},
+						ok ? Effect.void : Effect.fail(new NoteError(NOTE)),
+					),
+				);
+				const health = h.db.prepare(`SELECT error FROM health`).all();
+				expect(health.map((x) => x["error"])).toEqual([ok ? null : named]);
+				yield* flush;
+				const [row] = yield* recorded(job(P1));
+				expect(row?.ok).toBe(ok);
+				expect(row?.attributes["error.type"]).toBe(named);
+			}).pipe(
+				Effect.provide(world(h.sql)),
+				Effect.ensuring(
+					Effect.sync(() => {
+						for (const db of opened.splice(0)) if (db.isOpen) db.close();
+					}),
+				),
+			);
+		},
+		{arbitrary: {seed: SEED, runs: 30, size: 4096}, timeout: 60000},
+	);
+
 	law(
 		"text past 128 is cut to 128, or to 127 when the cut would split a surrogate pair, with <key>.length beside",
 		(P1, _P2, input) => {
