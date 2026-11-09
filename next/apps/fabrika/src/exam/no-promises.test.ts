@@ -106,7 +106,15 @@ const bridgeSpellings = [
 	"function",
 	"renamedFunction",
 	"computed",
+	"parenthesized",
+	"nonNull",
+	"satisfies",
+	"sameTypeAs",
+	"localAlias",
+	"destructured",
+	"computedKey",
 ] as const;
+const rpcForms = [...bridgeSpellings, "bare"] as const;
 
 const fires = [
 	'import {Effect, Schema, Stream} from "effect";', // 1
@@ -173,17 +181,17 @@ const edges = [
 ].join("\n");
 
 describe("no-promises", async () => {
-	it("refuses an unmarked mapped Workers RPC call inside either Promise bridge", () => {
+	it("refuses an unmarked mapped Workers RPC call however the bridge is written or absent", () => {
 		fc.assert(
 			fc.property(
 				fc.stringMatching(/^[a-z]{1,8}$/),
 				fc.constantFrom("tryPromise", "promise"),
 				fc.nat({max: 8}),
 				fc.boolean(),
-				fc.constantFrom(...bridgeSpellings),
+				fc.constantFrom(...rpcForms),
 				(suffix, method, gap, marked, spelling) => {
 					const file = "next/rpc.ts";
-					const [imports, callee] = (
+					const [setup, callee] = (
 						{
 							module: ['import {Effect} from "effect";', `Effect.${method}`],
 							renamedModule: ['import {Effect as E} from "effect";', `E.${method}`],
@@ -191,19 +199,38 @@ describe("no-promises", async () => {
 							function: [`import {${method}} from "effect/Effect";`, method],
 							renamedFunction: [`import {${method} as tp} from "effect/Effect";`, "tp"],
 							computed: ['import {Effect} from "effect";', `Effect["${method}"]`],
+							parenthesized: ['import {Effect} from "effect";', `(Effect.${method})`],
+							nonNull: ['import {Effect} from "effect";', `Effect.${method}!`],
+							satisfies: [
+								'import {Effect} from "effect";',
+								`(Effect.${method} satisfies typeof Effect.${method})`,
+							],
+							sameTypeAs: [
+								'import {Effect} from "effect";',
+								`(Effect.${method} as typeof Effect.${method})`,
+							],
+							localAlias: [`import {Effect} from "effect";\nconst tp = Effect.${method};`, "tp"],
+							destructured: [`import {Effect} from "effect";\nconst {${method}} = Effect;`, method],
+							computedKey: [`import {Effect} from "effect";\nconst k = "${method}";`, "Effect[k]"],
+							bare: ["", ""],
 						} as const
 					)[spelling];
+					const inBridge = spelling !== "bare";
 					// Installed workers-types 5.20261027.1: WorkerStub.getEntrypoint -> Fetcher<T>
 					// -> Rpc.Provider<T> -> MethodOrProperty<V> -> Result<Awaited<R>>.
 					// Promise<unknown> becomes never through that conditional return type.
 					const before = [
-						imports,
+						...setup.split("\n"),
 						`type Calls = Rpc.WorkerEntrypointBranded & {describe${suffix}(): Promise<unknown>};`,
 						"declare const worker: WorkerStub;",
 						"const rpc = worker.getEntrypoint<Calls>();",
-						"// oxlint-disable-next-line fabrika/no-promises -- edge: the RPC call enters Effect",
-						`export const edge = ${callee}(${method === "tryPromise" ? "{" : ""}`,
-						...(method === "tryPromise" ? ["  try: () =>"] : ["  () =>"]),
+						...(inBridge
+							? [
+									"// oxlint-disable-next-line fabrika/no-promises -- edge: the RPC call enters Effect",
+									`export const edge = ${callee}(${method === "tryPromise" ? "{" : ""}`,
+									...(method === "tryPromise" ? ["  try: () =>"] : ["  () =>"]),
+								]
+							: []),
 						...Array.from({length: gap}, () => ""),
 						...(marked
 							? [
@@ -213,8 +240,12 @@ describe("no-promises", async () => {
 					];
 					const source = [
 						...before,
-						`    rpc.describe${suffix}()${method === "tryPromise" ? "," : ""}`,
-						...(method === "tryPromise" ? ['  catch: () => new Error("rpc"),', "});"] : [");"]),
+						`    rpc.describe${suffix}()${inBridge ? (method === "tryPromise" ? "," : "") : ";"}`,
+						...(inBridge
+							? method === "tryPromise"
+								? ['  catch: () => new Error("rpc"),', "});"]
+								: [");"]
+							: []),
 					].join("\n");
 					expect(typed({[file]: source}, true).map((f) => ({file: f.file, line: f.line}))).toEqual(
 						marked ? [] : [{file, line: before.length + 1}],
@@ -226,18 +257,38 @@ describe("no-promises", async () => {
 				numRuns: 12,
 				// P12 review 7: the marker covered Effect.tryPromise, but not rpc.describe below it.
 				// P12 review 8: renamed imports and computed access hid the same RPC call.
+				// P12 review 9: wrappers, local aliases and a bare call bypassed bridge recognition.
 				examples: (["tryPromise", "promise"] as const).flatMap((method) =>
-					bridgeSpellings.map(
-						(spelling): [string, typeof method, number, boolean, typeof spelling] => [
-							"",
-							method,
-							0,
-							false,
-							spelling,
-						],
-					),
+					rpcForms.map((spelling): [string, typeof method, number, boolean, typeof spelling] => [
+						"",
+						method,
+						0,
+						false,
+						spelling,
+					]),
 				),
 			},
+		);
+	});
+	it("counts a declared synchronous never throw helper as a false alarm off a marked line", () => {
+		fc.assert(
+			fc.property(fc.stringMatching(/^[a-z]{1,8}$/), fc.boolean(), (suffix, marked) => {
+				const file = "next/throw.ts";
+				const before = [
+					`declare function fail${suffix}(): never;`,
+					...(marked
+						? [
+								"// oxlint-disable-next-line fabrika/no-promises -- edge: a synchronous throw helper",
+							]
+						: []),
+				];
+				// A real never return cannot prove a call is synchronous. Count this known false alarm.
+				const source = [...before, `fail${suffix}();`].join("\n");
+				expect(typed({[file]: source}).map((f) => ({file: f.file, line: f.line}))).toEqual(
+					marked ? [] : [{file, line: before.length + 1}],
+				);
+			}),
+			{seed: 119120, numRuns: 12},
 		);
 	});
 	it("The edge comment covers the next line and only that line", () => {

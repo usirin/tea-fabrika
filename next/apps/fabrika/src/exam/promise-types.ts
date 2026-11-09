@@ -3,14 +3,7 @@
 import {NodeRuntime, NodeServices} from "@effect/platform-node";
 import {Effect, FileSystem, Path} from "effect";
 import * as ts from "typescript/unstable/ast";
-import {
-	API,
-	SignatureKind,
-	SymbolFlags,
-	TypeFlags,
-	type Project,
-	type Type,
-} from "typescript/unstable/sync";
+import {API, SignatureKind, TypeFlags, type Project, type Type} from "typescript/unstable/sync";
 
 interface PromiseFinding {
 	readonly file: string;
@@ -45,28 +38,6 @@ export const checkPromiseTypes = (
 		memo.set(type.id, yes);
 		return yes;
 	};
-	const isPromiseBridge = (callee: ts.Expression): boolean => {
-		// Element access keeps its property symbol on the index expression.
-		const symbol = checker.getSymbolAtLocation(
-			ts.isPropertyAccessExpression(callee)
-				? callee.name
-				: ts.isElementAccessExpression(callee)
-					? callee.argumentExpression
-					: callee,
-		);
-		if (symbol === undefined) return false;
-		const target =
-			(symbol.flags & SymbolFlags.Alias) !== 0 ? checker.getAliasedSymbol(symbol) : symbol;
-		return (
-			["tryPromise", "promise"].includes(target.name) &&
-			target.declarations.some((declaration) =>
-				// TypeScript folds path case on case-insensitive file systems.
-				/(?:^|\/)node_modules\/effect\/(?:dist\/Effect\.d\.ts|src\/Effect\.ts)$/i.test(
-					declaration.path.replaceAll("\\", "/"),
-				),
-			)
-		);
-	};
 	for (const path of program.getSourceFileNames()) {
 		const file = pathService.relative(root, path).replaceAll("\\", "/");
 		if (
@@ -78,10 +49,7 @@ export const checkPromiseTypes = (
 		const source = program.getSourceFile(path);
 		if (source === undefined) throw new Error(`Cannot read ${file}`);
 		const candidates = new Map<ts.Node, string>();
-		const promiseInputs = new Set<ts.Node>();
-		const visit = (node: ts.Node, inPromise = false): void => {
-			if (inPromise) promiseInputs.add(node);
-			const bridge = ts.isCallExpression(node) && isPromiseBridge(node.expression);
+		const visit = (node: ts.Node): void => {
 			if (ts.isCallExpression(node)) {
 				candidates.set(node, "call returns a Promise or a Promise thunk");
 				for (const argument of node.arguments)
@@ -103,9 +71,7 @@ export const checkPromiseTypes = (
 				candidates.set(node.expression, "function returns a Promise or a Promise thunk");
 			if (ts.isArrowFunction(node) && !ts.isBlock(node.body))
 				candidates.set(node.body, "function returns a Promise or a Promise thunk");
-			node.forEachChild((child) =>
-				visit(child, inPromise || (bridge && node.arguments.some((arg) => arg === child))),
-			);
+			node.forEachChild(visit);
 		};
 		visit(source);
 		const nodes = [...candidates.keys()];
@@ -124,11 +90,12 @@ export const checkPromiseTypes = (
 			const node = nodes[i];
 			if (node === undefined) throw new Error("Missing Promise candidate");
 			const type = types[i];
-			// Workers RPC's mapped conditional returns can resolve to never. That cannot
-			// prove a call inside a Promise input is synchronous, so require its own marker.
+			// Workers RPC can resolve to never. No unresolved call proves it is synchronous,
+			// wherever it appears. Real synchronous never helpers count as false alarms too.
 			const unresolved =
-				promiseInputs.has(node) &&
+				ts.isCallExpression(node) &&
 				(type === undefined ||
+					type.isErrorType() ||
 					(type.flags &
 						(TypeFlags.Any |
 							TypeFlags.Unknown |
@@ -145,7 +112,7 @@ export const checkPromiseTypes = (
 				file,
 				line: line + 1,
 				reason: unresolved
-					? "Promise input has a type the check cannot resolve"
+					? "call has a type the check cannot resolve"
 					: (candidates.get(node) ?? "Promise value outside a marked edge"),
 			});
 		}
