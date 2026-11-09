@@ -130,6 +130,11 @@ export const upcast = (raw: unknown) => (isRecord(raw) && "n" in raw ? {count: r
 - **How sure:** 70%. The doubt is the rollback: it is safe only while a step is pure. A real
   program also returns Cmds, and a swap that changes Subs must stop old ones and start new. That
   was not run.
+- **Open, 2026-11-09:** P34 ([PR 535](https://github.com/usirin/tea-fabrika/pull/535), `next/`)
+  makes a throw a crash: a fresh letter is counted toward its delivery limit, and the process
+  restarts after its backoff on the same build. It does not roll back. Which comes first when a
+  step throws after a swap, H4's rollback or P34's crash and restart, is open on P15's row in
+  [Tier 1](../plan/tier-1.md).
 
 ### H5: running work keeps running
 
