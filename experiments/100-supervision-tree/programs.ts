@@ -40,11 +40,11 @@ const decodeFlags = Schema.decodeUnknownExit(Schema.fromJsonString(Flags));
 
 // ---------------------------------------------------------------- the worker
 
-export const Count = Schema.Struct({count: Schema.Number, cursor: Schema.Number});
-export type Count = typeof Count.Type;
+const Count = Schema.Struct({count: Schema.Number, cursor: Schema.Number});
+type Count = typeof Count.Type;
 type Inc = {readonly type: "inc"; readonly rev: number; readonly poison: boolean};
 
-export const counter = defineMachine({
+const counter = defineMachine({
 	types: {model: {} as Count, msg: {} as Inc, ctx: undefined},
 	cmds: [],
 	init: (loaded) => [loaded ?? {count: 0, cursor: 0}, []],
@@ -64,7 +64,7 @@ const Body = Schema.Struct({
 const decodeBody = Schema.decodeUnknownExit(Body);
 const decodeExit = Schema.decodeUnknownExit(ExitMessage);
 
-export type Trap = "no" | "graceful" | "ignore";
+type Trap = "no" | "graceful" | "ignore";
 
 export const worker = (trap: Trap) =>
 	defineProgram({

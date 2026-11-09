@@ -19,14 +19,14 @@ interface Scale {
 const FILE = readFileSync(join(import.meta.dirname, "schemes/radix-colors-3.0.0.json"), "utf8");
 const {scales: SCALES} = JSON.parse(FILE) as {scales: Record<string, Scale>};
 
-export const GRAYS = ["gray", "mauve", "slate", "sage", "olive", "sand"];
-export const ACCENTS = Object.keys(SCALES).filter((name) => !GRAYS.includes(name));
+const GRAYS = ["gray", "mauve", "slate", "sage", "olive", "sand"];
+const ACCENTS = Object.keys(SCALES).filter((name) => !GRAYS.includes(name));
 
 const toLinear = (u: number) => (u <= 0.04045 ? u / 12.92 : ((u + 0.055) / 1.055) ** 2.4);
 const channels = (hex: string) =>
 	[1, 3, 5].map((at) => toLinear(Number.parseInt(hex.slice(at, at + 2), 16) / 255));
 
-export const ratio = (a: string, b: string) => {
+const ratio = (a: string, b: string) => {
 	const lum = (hex: string) => {
 		const [r = 0, g = 0, bl = 0] = channels(hex);
 		return 0.2126 * r + 0.7152 * g + 0.0722 * bl;

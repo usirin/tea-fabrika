@@ -26,7 +26,7 @@ export interface Run {
 }
 
 /** One piece of a spelling: fixed text, or a run. */
-export type Piece = string | Run;
+type Piece = string | Run;
 export type Spelling = readonly Piece[];
 
 export const DIGITS = "0123456789";

@@ -138,7 +138,7 @@ export const duration: Toy = {
 };
 
 /** The same toy with some criteria reworded: every map of it is rekeyed to the new text. */
-export function reword(toy: Toy, wording: Readonly<Record<string, string>>): Toy {
+function reword(toy: Toy, wording: Readonly<Record<string, string>>): Toy {
 	const rekey = (map: Readonly<Record<string, string>>) =>
 		Object.fromEntries(Object.entries(map).map(([text, value]) => [wording[text] ?? text, value]));
 	return {...toy, criteria: rekey(toy.criteria), breakers: rekey(toy.breakers)};

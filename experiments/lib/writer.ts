@@ -4,7 +4,7 @@
 import type {Criterion} from "../../legacy/src/issue.ts";
 import {TEST_FILE} from "./grading.ts";
 
-export interface WriterBrief {
+interface WriterBrief {
 	readonly title: string;
 	/** The file the function under test lives in. */
 	readonly file: string;

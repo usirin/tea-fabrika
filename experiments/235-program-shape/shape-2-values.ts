@@ -60,7 +60,7 @@ const shown = Output.make("ticket", {
 // The Msg is the inputs. A Msg no client can send cannot be written.
 const inputs = Input.group([show, comment, answer, close, reopen]);
 
-export const ticketMachine = Machine.make({
+const ticketMachine = Machine.make({
 	model: Model,
 	msg: inputs,
 	cmds: [readTicket, commented.write, answered.write, closed.write, reopened.write],

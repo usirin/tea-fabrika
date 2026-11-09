@@ -8,12 +8,12 @@
 //
 //   linkUpdate({state: "live"}, {type: "failed", at: 1000, waiting: 2})
 //   // {state: "away", since: 1000, waiting: 2}
-export type Link =
+type Link =
 	| {readonly state: "live"}
 	| {readonly state: "slow"; readonly ms: number}
 	| {readonly state: "away"; readonly since: number; readonly waiting: number};
 
-export type LinkMsg =
+type LinkMsg =
 	| {readonly type: "answered"; readonly ms: number}
 	| {readonly type: "failed"; readonly at: number; readonly waiting: number};
 

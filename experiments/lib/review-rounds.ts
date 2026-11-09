@@ -34,7 +34,7 @@ export interface VerdictEvent {
 }
 
 /** What one task's log says outside its verdicts. */
-export interface TaskEnd {
+interface TaskEnd {
 	/** The state the task stood in when the log ends. */
 	readonly state: string;
 	/** Rounds a person granted after the repair budget ran out. */
@@ -69,7 +69,7 @@ export interface Item {
 	readonly whole: string;
 }
 
-export interface Label {
+interface Label {
 	/** A kind of the codebook, or `unsure`. */
 	readonly kind: string;
 	/** The kind's family, or `unsure`. Known more often than the kind. */
@@ -88,7 +88,7 @@ interface JevLabel {
 	readonly restsOn: Readonly<Record<string, number>>;
 }
 
-export const FAMILY: Readonly<Record<string, string>> = {
+const FAMILY: Readonly<Record<string, string>> = {
 	stale_text: "text",
 	wrong_text: "text",
 	prose_craft: "text",
@@ -170,7 +170,7 @@ function sampleOf(all: readonly FailedReview[]): FailedReview[] {
 	return picked;
 }
 
-export interface Rounds {
+interface Rounds {
 	/** Every verdict line of every lane, in the order the lanes were read. */
 	readonly events: readonly VerdictEvent[];
 	/** `<lane>/<task>` to what else the task's log says. */

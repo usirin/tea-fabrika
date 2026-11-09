@@ -38,7 +38,7 @@ export const Ended = Schema.Struct({said: Schema.String, code: Schema.Int});
 export type Ended = typeof Ended.Type;
 
 /** Run one job in a box of its own. `job` is the job's id: asked again, the same job answers, never a second box. */
-export class Boxes extends Context.Service<
+class Boxes extends Context.Service<
 	Boxes,
 	{readonly run: (job: string, cmd: string) => Effect.Effect<Ended>}
 >()("exp148/Boxes") {}
@@ -61,7 +61,7 @@ const boxMachine = defineMachine({
 	},
 });
 
-export const box = defineProgram({
+const box = defineProgram({
 	name: "box",
 	description:
 		"Runs one command in a box of its own, and says what it printed. The box goes when it ends.",
@@ -97,7 +97,7 @@ export const box = defineProgram({
 // ---------------------------------------------------------------- storage on the object
 
 /** The object's synchronous key-value store, as much of it as this needs. */
-export interface Kv {
+interface Kv {
 	get<T = unknown>(key: string): T | undefined;
 	put<T>(key: string, value: T): void;
 	delete(key: string): boolean;

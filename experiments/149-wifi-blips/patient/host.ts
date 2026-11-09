@@ -76,22 +76,6 @@ const deliver = (
 	});
 
 /**
- * gen_server:cast from outside any program: one message into `name`'s inbox, no lease needed,
- * sent again under the same id while the ledger does not answer. `unknown`: nobody registered it.
- */
-export const cast = (name: string, id: string, body: unknown, writer: string) =>
-	Effect.gen(function* () {
-		const ledger = yield* Ledger;
-		return yield* deliver(
-			ledger,
-			streams(name).inbox,
-			id,
-			{kind: "cast", writer, data: body},
-			undefined,
-		);
-	});
-
-/**
  * One ledger call, sent again while the ledger does not answer (each call is idempotent), its
  * refusals turned into words. Never fails: `unreachable` after `tries`.
  */
@@ -126,7 +110,7 @@ type Servable<I extends Inputs, E, R> = Program<
 	R
 >;
 
-export interface ServeOptions<P> {
+interface ServeOptions<P> {
 	/** The registered name. Someone registers it first: `Ledger.register`, or its parent's `startChild`. */
 	readonly name: string;
 	/** This host's name in the ledger: unique per process start. */
@@ -149,7 +133,7 @@ export interface ServeOptions<P> {
 }
 
 /** What `serve` answers: the host machine's state, read when asked. */
-export interface Serving {
+interface Serving {
 	readonly state: () => Host;
 }
 

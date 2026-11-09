@@ -135,4 +135,4 @@ export const ticket = make({
 });
 
 /** The machine it built: a parent holds it and steps it, and laws fold it. */
-export const ticketMachine = ticket.machine;
+const _ticketMachine = ticket.machine;

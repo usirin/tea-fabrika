@@ -10,7 +10,7 @@ import type {Form} from "@kampus/pipeline/stages/review/sheet";
 export type FormName = "pass" | "fail";
 
 /** Every row passes, no finding. */
-export const passForm = (brief: Brief): Form => ({
+const passForm = (brief: Brief): Form => ({
 	rows: brief.criteria.map((criterion) => ({
 		n: criterion.n,
 		grade: "pass",
@@ -23,7 +23,7 @@ export const passForm = (brief: Brief): Form => ({
 });
 
 /** The last row fails with a finding of the first kind owed, and a standing check of the same kind finds one more. */
-export const failForm = (brief: Brief): Form => {
+const failForm = (brief: Brief): Form => {
 	const last = brief.criteria[brief.criteria.length - 1]?.n ?? 1;
 	const kind = brief.kinds[0] ?? "review-code";
 	const base = passForm(brief);

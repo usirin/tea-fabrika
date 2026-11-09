@@ -270,7 +270,7 @@ const accepts = (s: Schema.Top, v: unknown) => {
 	}
 };
 
-export const main = async () => {
+const main = async () => {
 	const results: Record<string, unknown> = {
 		when: new Date().toISOString().slice(0, 10),
 		versions: {node: process.version},

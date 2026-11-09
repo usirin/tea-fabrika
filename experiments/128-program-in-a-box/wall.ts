@@ -45,7 +45,7 @@ export const Down = Schema.Union([
 export type Down = typeof Down.Type;
 
 /** How a run in a box ended, as the box says it. */
-export const How = Schema.Literals(["ended", "stopped", "failed", "bad_shape"]);
+const How = Schema.Literals(["ended", "stopped", "failed", "bad_shape"]);
 
 /** What the box writes to its stdout. */
 export const Up = Schema.Union([
@@ -82,7 +82,7 @@ export interface Wall<Id, S, Rpcs extends Rpc.Any> {
 	/** The RPC handlers, made of the real service. On the host. */
 	readonly outside: (service: S) => RpcGroup.HandlersFrom<Rpcs>;
 }
-export type AnyWall = Wall<any, any, any>;
+type AnyWall = Wall<any, any, any>;
 
 /**
  * A program a box can start: the program, the file that exports it under `name`, and the

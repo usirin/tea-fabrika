@@ -69,7 +69,7 @@ const factOf = (planned: Planned): Fact | null => {
 			};
 };
 
-export const spikeAsks = Program.make("asks", {
+const _spikeAsks = Program.make("asks", {
 	description:
 		"Keeps what waits on the owner: a plan to approve, a stuck task, a ticket to rule on, a build someone asked the owner to check. It says each new ask on `ask`, takes answers on `answer`, checks each against the open ask, and keeps the ones it takes in the ledger. It never knows who shows the asks.",
 	flags: {

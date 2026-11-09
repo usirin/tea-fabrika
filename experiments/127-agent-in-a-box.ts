@@ -63,7 +63,7 @@ const STOP_AT = 0.15;
 // ---------------------------------------------------------------- the box
 
 /** What a box starts: any program that talks over stdio. */
-export interface Command {
+interface Command {
 	readonly command: string;
 	readonly args: readonly string[];
 	readonly env: Readonly<Record<string, string | undefined>>;
@@ -117,7 +117,7 @@ const defined = (env: Command["env"]): Record<string, string> =>
 	);
 
 /** The docker flags that make a container a box. Network stays open: the API needs it. */
-export const dockerHardening = [
+const dockerHardening = [
 	"--cap-drop",
 	"ALL",
 	"--security-opt",
@@ -141,7 +141,7 @@ export const dockerHardening = [
  * Start one program in a box, with its stdin, stdout and stderr piped. The program must
  * exist where it runs: on this machine for `none` and `srt`, in the image for `docker`.
  */
-export const boxed = (box: Box, cmd: Command): ChildProcess => {
+const boxed = (box: Box, cmd: Command): ChildProcess => {
 	const env = defined(cmd.env);
 	switch (box.kind) {
 		case "none":
@@ -182,7 +182,7 @@ export const boxed = (box: Box, cmd: Command): ChildProcess => {
 };
 
 /** The box as the Agent SDK's `spawnClaudeCodeProcess`. In a container, `claude` is the image's own. */
-export const claudeIn =
+const claudeIn =
 	(box: Box) =>
 	(o: SpawnOptions): SpawnedProcess => {
 		const child = boxed(box, {

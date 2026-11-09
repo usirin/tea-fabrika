@@ -38,7 +38,7 @@ export interface HostProps {
 	readonly ledger: "memory" | "local";
 }
 
-export interface HostAttributes {
+interface HostAttributes {
 	readonly pid: number;
 	readonly socket: string;
 	readonly home: string;
@@ -50,7 +50,7 @@ export interface HostAttributes {
 export type Host = Resource<"Fabrika.Host", HostProps, HostAttributes>;
 export const Host = Resource<Host>("Fabrika.Host");
 
-export class HostError extends Schema.TaggedError<HostError>()("HostError", {
+class HostError extends Schema.TaggedError<HostError>()("HostError", {
 	message: Schema.String,
 }) {}
 

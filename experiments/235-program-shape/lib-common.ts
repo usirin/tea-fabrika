@@ -86,7 +86,7 @@ export const caused = (
 ): WriteCmd => write({stream, write: seal(msg, fact)});
 
 /** One step of a saved model's shape. Its number is its place in the list: no `from` to get wrong. */
-export type Upgrade = {readonly name: string; readonly run: (raw: unknown) => unknown};
+type Upgrade = {readonly name: string; readonly run: (raw: unknown) => unknown};
 
 /** Saved state with at least one upgrade. Left out, the shape is version 1 and has none. */
 export type State = {readonly upgrades: readonly [Upgrade, ...ReadonlyArray<Upgrade>]};

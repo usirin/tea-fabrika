@@ -10,14 +10,14 @@ import type {Declared, Part} from "./register.ts";
 //   read("asks | nope", programs)
 //   // {_tag: "refused", why: "no program nope"}
 
-export interface Stage {
+interface Stage {
 	readonly program: string;
 	readonly flags: Readonly<Record<string, unknown>>;
 	/** Into the next stage: this one's output and the next one's input. `null` on the last. */
 	readonly wire: {readonly output: string; readonly input: string} | null;
 }
 
-export type Read =
+type Read =
 	| {readonly _tag: "line"; readonly stages: readonly Stage[]; readonly job: boolean}
 	| {readonly _tag: "refused"; readonly why: string};
 

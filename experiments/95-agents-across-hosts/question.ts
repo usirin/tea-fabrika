@@ -5,7 +5,7 @@
 //   stubAnswer("What is 40 + 75?")   "115"
 //   isRight(questionOf(17), "The answer is 115.")   true
 
-export interface Question {
+interface Question {
 	/** The message id: the answerer's idempotency key. The same on every retry of the call. */
 	readonly id: string;
 	/** The correlation id the reply carries back: OTP's call reference. */
@@ -15,7 +15,7 @@ export interface Question {
 }
 
 /** In real mode the one question: small, and checkable without reading the prose around it. */
-export const REAL_QUESTION = {
+const REAL_QUESTION = {
 	text: "What is 17 times 23? Answer with the number only.",
 	expected: 391,
 } as const;
@@ -31,12 +31,6 @@ export const questionOf = (i: number, real = false): Question => {
 		text: `What is ${a} ${times ? "times" : "+"} ${b}?`,
 		expected: times ? a * b : a + b,
 	};
-};
-
-/** The index a message id names, or `null`. */
-export const indexOf = (id: string): number | null => {
-	const m = /^q-(\d+)$/.exec(id);
-	return m === null ? null : Number(m[1]);
 };
 
 /** The first whole number in an answer, so "391", "391." and "The answer is 391" all read 391. */

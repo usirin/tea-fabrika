@@ -13,7 +13,7 @@ import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 
 export const here = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url));
-export const RESULTS = here("results/98-tea-host-package.json");
+const RESULTS = here("results/98-tea-host-package.json");
 export const GRACE_MS = 1000;
 
 export const results: Record<string, unknown> = existsSync(RESULTS)

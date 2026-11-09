@@ -156,7 +156,7 @@ export type Answer = {
 
 // ---------------------------------------------------------------- one answer, as a record
 
-export const MODELS = ["opus", "sol"] as const;
+const MODELS = ["opus", "sol"] as const;
 export const Model = Schema.Literals(MODELS);
 export type Model = typeof Model.Type;
 
@@ -241,7 +241,7 @@ export const fakeSorter = (
 	);
 
 /** One Sorter answer as a record. Pure but for `at`, which the caller passes. */
-export function recordOf(
+function recordOf(
 	c: Asked,
 	half: Half,
 	brief: Brief,
@@ -273,7 +273,7 @@ export function recordOf(
 	};
 }
 
-export interface Job {
+interface Job {
 	readonly brief: Brief;
 	readonly model: Model;
 	readonly cases: readonly Asked[];
@@ -327,7 +327,7 @@ export const score = (job: Job): Effect.Effect<readonly RunRecord[], never, Sort
 // ---------------------------------------------------------------- the numbers
 
 /** Wilson's 95% interval for k of n, as fractions. Pure. */
-export function wilson(k: number, n: number): readonly [number, number] {
+function wilson(k: number, n: number): readonly [number, number] {
 	if (n === 0) return [0, 1];
 	const z = 1.96;
 	const p = k / n;
@@ -336,13 +336,13 @@ export function wilson(k: number, n: number): readonly [number, number] {
 	return [Math.max(0, mid - half), Math.min(1, mid + half)];
 }
 
-export const Count = Schema.Struct({
+const Count = Schema.Struct({
 	k: Schema.Int,
 	n: Schema.Int,
 	lo: Schema.Number,
 	hi: Schema.Number,
 });
-export type Count = typeof Count.Type;
+type Count = typeof Count.Type;
 const countOf = (k: number, n: number): Count => {
 	const [lo, hi] = wilson(k, n);
 	return {k, n, lo, hi};
@@ -404,7 +404,7 @@ export function summarize(cases: readonly Case[], records: readonly RunRecord[])
 // ---------------------------------------------------------------- the bar
 
 /** The numbers a bar line may name: the shares of a Summary. */
-export const METRICS = [
+const METRICS = [
 	"badClose",
 	"badCloseAnswers",
 	"securityClosed",
@@ -413,7 +413,7 @@ export const METRICS = [
 	"missedNo",
 	"agreement",
 ] as const;
-export const BarLine = Schema.Struct({
+const BarLine = Schema.Struct({
 	metric: Schema.Literals(METRICS),
 	/** `max`: the share must be at most `value`; `min`: at least. On the point share, not the interval. */
 	is: Schema.Literals(["max", "min"]),
@@ -527,7 +527,7 @@ export const ExamSummary = Schema.Struct({
 	usd: Schema.Number,
 });
 export type ExamSummary = typeof ExamSummary.Type;
-export const EXAM_METRICS = [
+const EXAM_METRICS = [
 	"badClose",
 	"badCloseBuiltRandom",
 	"securityClosed",
@@ -591,7 +591,7 @@ export const setHashOf = (set: ExamSet): string =>
 		.slice(0, 12);
 
 /** One brief hash and model on the exam: the set it started on, and when it finished. */
-export const ExamEntry = Schema.Struct({
+const ExamEntry = Schema.Struct({
 	brief: Schema.String,
 	hash: Schema.String,
 	model: Model,
@@ -600,7 +600,7 @@ export const ExamEntry = Schema.Struct({
 	/** null while it runs or after it stopped part way: it may go on, on the same set only. */
 	done: Schema.NullOr(Schema.String),
 });
-export type ExamEntry = typeof ExamEntry.Type;
+type ExamEntry = typeof ExamEntry.Type;
 
 /** Every exam taken: who took it, and every answer. One file, kept apart from tuning's. */
 export const ExamBook = Schema.Struct({
@@ -638,7 +638,7 @@ export function examGate(
 	return {go: "resume"};
 }
 
-export interface ExamJob {
+interface ExamJob {
 	readonly book: ExamBook;
 	readonly bar: ExamBar;
 	readonly brief: Brief;
