@@ -43,6 +43,11 @@ const fixture = (id: number) => {
 		},
 	};
 };
+const failure = async (stylesheet: Effect.Effect<string, Error>) => {
+	const result = await Effect.runPromise(Effect.result(stylesheet));
+	if (result._tag !== "Failure") throw new Error("expected stylesheet failure");
+	return result.failure;
+};
 
 // The remote sheets are disk fixtures too. Only the oracle resolves their URLs, never the product.
 const cssGraphs = fc.record({
@@ -187,15 +192,13 @@ describe("P16 CSS tokens", () => {
 						expect(() => verify(f.expanded(f.render(true, f.order, true)))).toThrow(
 							"cascade layer priority",
 						);
-					let output: string;
-					try {
-						output = inlineStylesheet(f.file);
-					} catch (error) {
+					const output = await Effect.runPromise(Effect.result(inlineStylesheet(f.file)));
+					if (output._tag === "Failure") {
 						expect(
 							graph.named || graph.between || remoteAfterLocal,
 							"a supported graph must bundle",
 						).toBe(true);
-						expect(error).toBeInstanceOf(Error);
+						expect(output.failure).toBeInstanceOf(Error);
 						expect(await refusedBuild(f.home)).toMatchObject({
 							_tag: "Failure",
 							failure: {_tag: "BuildError", why: "bundle"},
@@ -203,7 +206,7 @@ describe("P16 CSS tokens", () => {
 						return;
 					}
 					const file = join(f.home, "actual.css");
-					writeFileSync(file, output);
+					writeFileSync(file, output.success);
 					verify(await f.oracle(file));
 				}),
 				{
@@ -230,33 +233,33 @@ describe("P16 CSS tokens", () => {
 		for (const plant of ["", `${css}\n${css}`])
 			expect(() => verifyImport(plant, id)).toThrow("imported rule");
 	};
-	it("escaped at-keywords import the same file as their unescaped spelling", () => {
-		fc.assert(
-			fc.property(
+	it("escaped at-keywords import the same file as their unescaped spelling", async () => {
+		await fc.assert(
+			fc.asyncProperty(
 				ids,
 				fc.constantFrom("im\\70ort", "\\69mport", "\\000069mport", "i\\mport"),
-				(id, keyword) => {
+				async (id, keyword) => {
 					const f = fixture(id),
 						css = `@${keyword} "./child${id}.css";`;
 					// Plant the review bug: leave the import in the served text without its child.
 					expect(() => verifyImport(css, id)).toThrow("imported rule");
-					imported(f.read(css), id);
+					imported(await Effect.runPromise(f.read(css)), id);
 				},
 			),
 			{...runs, examples: [[0, "im\\70ort"]]}, // Pinned round-3 escaped @import bug.
 		);
 	});
-	it("escaped url functions import the same file as their unescaped spelling", () => {
-		fc.assert(
-			fc.property(
+	it("escaped url functions import the same file as their unescaped spelling", async () => {
+		await fc.assert(
+			fc.asyncProperty(
 				ids,
 				fc.constantFrom("u\\72l", "\\75rl", "\\000075rl", "u\\rl"),
 				fc.constantFrom('"', "'", ""),
-				(id, url, quote) => {
+				async (id, url, quote) => {
 					const f = fixture(id),
 						css = `@import ${url}(${quote}./child${id}.css${quote});`;
 					expect(() => verifyImport(css, id)).toThrow("imported rule");
-					imported(f.read(css), id);
+					imported(await Effect.runPromise(f.read(css)), id);
 				},
 			),
 			{...runs, examples: [[0, "u\\72l", '"']]}, // Pinned round-3 escaped url() bug.
@@ -270,186 +273,208 @@ describe("P16 CSS tokens", () => {
 		["CR", "\r"],
 		["form feed", "\f"],
 	])
-		it(`${ending} string continuations import the same disk name after CSS input preprocessing`, () => {
-			fc.assert(
-				fc.property(ids, fc.constantFrom('"', "'"), (id, quote) => {
+		it(`${ending} string continuations import the same disk name after CSS input preprocessing`, async () => {
+			await fc.assert(
+				fc.asyncProperty(ids, fc.constantFrom('"', "'"), async (id, quote) => {
 					const f = fixture(id),
 						css = `@import ${quote}./chi\\${newline}ld${id}.css${quote};`;
 					expect(() => verifyImport(css, id)).toThrow("imported rule");
-					imported(f.read(css), id);
+					imported(await Effect.runPromise(f.read(css)), id);
 				}),
 				runs,
 			);
 		});
-	it("comments and whitespace around a quoted import URL keep every imported rule", () => {
-		fc.assert(
-			fc.property(
+	it("comments and whitespace around a quoted import URL keep every imported rule", async () => {
+		await fc.assert(
+			fc.asyncProperty(
 				ids,
 				fc.constantFrom(" ", "\t", "\n", "\r", "\f", "/**/", " /*first*/\t/*second*/ "),
 				fc.constantFrom('"', "'"),
-				(id, gap, quote) => {
+				async (id, gap, quote) => {
 					expect.hasAssertions();
 					const f = fixture(id);
 					// A quoted url() allows whitespace before its quote, but no comment there.
 					// https://www.w3.org/TR/css-syntax-3/#consume-ident-like-token
 					const space = gap.includes("/*") ? " " : gap;
-					imported(f.read(`@import${gap}url(${space}${quote}./child${id}.css${quote}${gap});`), id);
+					imported(
+						await Effect.runPromise(
+							f.read(`@import${gap}url(${space}${quote}./child${id}.css${quote}${gap});`),
+						),
+						id,
+					);
 					if (gap.includes("/*"))
-						expect(() =>
-							f.read(`@import${gap}url(${gap}${quote}./child${id}.css${quote}${gap});`),
-						).toThrow("stylesheet has a broken url()");
+						expect(
+							await failure(
+								f.read(`@import${gap}url(${gap}${quote}./child${id}.css${quote}${gap});`),
+							),
+						).toMatchObject({message: expect.stringContaining("stylesheet has a broken url()")});
 				},
 			),
 			runs,
 		);
 	});
 
-	it("hex escapes consume only their digits and optional whitespace, including CRLF", () => {
-		fc.assert(
-			fc.property(ids, fc.constantFrom("", " ", "\t", "\n", "\r", "\f", "\r\n"), (id, gap) => {
-				const f = fixture(id);
-				imported(f.read(`@import "\\63${gap}hild${id}.css";`), id);
-			}),
+	it("hex escapes consume only their digits and optional whitespace, including CRLF", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				ids,
+				fc.constantFrom("", " ", "\t", "\n", "\r", "\f", "\r\n"),
+				async (id, gap) => {
+					const f = fixture(id);
+					imported(await Effect.runPromise(f.read(`@import "\\63${gap}hild${id}.css";`)), id);
+				},
+			),
 			runs,
 		);
 	});
 
-	it("an asterisk inside a quoted filename does not start a comment", () => {
-		fc.assert(
-			fc.property(ids, fc.constantFrom('"', "'"), (id, quote) => {
+	it("an asterisk inside a quoted filename does not start a comment", async () => {
+		await fc.assert(
+			fc.asyncProperty(ids, fc.constantFrom('"', "'"), async (id, quote) => {
 				const f = fixture(id);
 				writeFileSync(join(f.home, `*child${id}.css`), f.body);
-				imported(f.read(`@import url(${quote}*child${id}.css${quote});`), id);
-			}),
-			runs,
-		);
-	});
-
-	it("whitespace ends an unquoted URL only when the closing parenthesis follows", () => {
-		fc.assert(
-			fc.property(ids, fc.constantFrom(" ", "\t", "\n", "\r", "\f"), (id, gap) => {
-				const f = fixture(id);
-				imported(f.read(`@import url(./child${id}.css${gap});`), id);
-				expect(() => f.read(`a { background: url(https://test.invalid/a${gap}b); }`)).toThrow(
-					"stylesheet has a broken url()",
+				imported(
+					await Effect.runPromise(f.read(`@import url(${quote}*child${id}.css${quote});`)),
+					id,
 				);
 			}),
 			runs,
 		);
 	});
 
-	it("zero, surrogate and out-of-range hex escapes name the replacement character", () => {
-		fc.assert(
-			fc.property(ids, fc.constantFrom("0", "d800", "dfff", "110000"), (id, hex) => {
+	it("whitespace ends an unquoted URL only when the closing parenthesis follows", async () => {
+		await fc.assert(
+			fc.asyncProperty(ids, fc.constantFrom(" ", "\t", "\n", "\r", "\f"), async (id, gap) => {
+				const f = fixture(id);
+				imported(await Effect.runPromise(f.read(`@import url(./child${id}.css${gap});`)), id);
+				expect(
+					await failure(f.read(`a { background: url(https://test.invalid/a${gap}b); }`)),
+				).toMatchObject({
+					message: expect.stringContaining("stylesheet has a broken url()"),
+				});
+			}),
+			runs,
+		);
+	});
+
+	it("zero, surrogate and out-of-range hex escapes name the replacement character", async () => {
+		await fc.assert(
+			fc.asyncProperty(ids, fc.constantFrom("0", "d800", "dfff", "110000"), async (id, hex) => {
 				const f = fixture(id);
 				writeFileSync(join(f.home, `child�${id}.css`), f.body);
-				imported(f.read(`@import "child\\${hex} ${id}.css";`), id);
+				imported(await Effect.runPromise(f.read(`@import "child\\${hex} ${id}.css";`)), id);
 			}),
 			runs,
 		);
 	});
 
-	it("a hex escape ends after six digits even when the filename continues with hex digits", () => {
-		fc.assert(
-			fc.property(ids, fc.constantFrom("af", "face", "00"), (id, suffix) => {
+	it("a hex escape ends after six digits even when the filename continues with hex digits", async () => {
+		await fc.assert(
+			fc.asyncProperty(ids, fc.constantFrom("af", "face", "00"), async (id, suffix) => {
 				const f = fixture(id);
 				writeFileSync(join(f.home, `c${suffix}${id}.css`), f.body);
-				imported(f.read(`@import "\\000063${suffix}${id}.css";`), id);
+				imported(await Effect.runPromise(f.read(`@import "\\000063${suffix}${id}.css";`)), id);
 			}),
 			runs,
 		);
 	});
 
-	it("a newline in a quoted reference fails instead of accepting a different disk name", () => {
-		fc.assert(
-			fc.property(ids, fc.constantFrom('"', "'"), (id, quote) => {
+	it("a newline in a quoted reference fails instead of accepting a different disk name", async () => {
+		await fc.assert(
+			fc.asyncProperty(ids, fc.constantFrom('"', "'"), async (id, quote) => {
 				const f = fixture(id);
 				writeFileSync(join(f.home, `child\n${id}.css`), f.body);
-				expect(() => f.read(`@import ${quote}child\n${id}.css${quote};`)).toThrow(
-					"stylesheet has a broken string",
-				);
+				expect(await failure(f.read(`@import ${quote}child\n${id}.css${quote};`))).toMatchObject({
+					message: expect.stringContaining("stylesheet has a broken string"),
+				});
 			}),
 			runs,
 		);
 	});
 
-	it("a string token ending at the end of the file still imports its stylesheet", () => {
-		fc.assert(
-			fc.property(ids, fc.constantFrom('"', "'"), (id, quote) => {
+	it("a string token ending at the end of the file still imports its stylesheet", async () => {
+		await fc.assert(
+			fc.asyncProperty(ids, fc.constantFrom('"', "'"), async (id, quote) => {
 				const f = fixture(id);
-				imported(f.read(`@import ${quote}child${id}.css`), id);
+				imported(await Effect.runPromise(f.read(`@import ${quote}child${id}.css`)), id);
 			}),
 			runs,
 		);
 	});
 
-	it("media comments become whitespace and do not hide the following root rule", () => {
-		fc.assert(
-			fc.property(ids, fc.constantFrom("", "note", "* longer *", "line\nnext"), (id, note) => {
-				const f = fixture(id),
-					last = `.root${id} { color: blue; }`;
-				const rules = cssRules(
-					f.read(`@import "child${id}.css" print/*${note}*/and/*${note}*/(color);${last}`),
-				);
-				const verify = (actual: readonly Rule[]) =>
-					expect(meaning(actual), "imported rules keep their order and media condition").toEqual(
-						meaning(cssRules(`@media print and (color) {${f.body}}${last}`)),
+	it("media comments become whitespace and do not hide the following root rule", async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				ids,
+				fc.constantFrom("", "note", "* longer *", "line\nnext"),
+				async (id, note) => {
+					const f = fixture(id),
+						last = `.root${id} { color: blue; }`;
+					const rules = cssRules(
+						await Effect.runPromise(
+							f.read(`@import "child${id}.css" print/*${note}*/and/*${note}*/(color);${last}`),
+						),
 					);
-				verify(rules);
-				const media = rules[0]!;
-				expect(media.type).toBe("media");
-				if (media.type !== "media") throw new Error("imported media rule missing");
-				for (const plant of [
-					rules.slice(1),
-					[media, ...rules],
-					[...rules].reverse(),
-					[...media.value.rules, ...rules.slice(1)],
-				])
-					expect(() => verify(plant)).toThrow("imported rules");
-			}),
+					const verify = (actual: readonly Rule[]) =>
+						expect(meaning(actual), "imported rules keep their order and media condition").toEqual(
+							meaning(cssRules(`@media print and (color) {${f.body}}${last}`)),
+						);
+					verify(rules);
+					const media = rules[0]!;
+					expect(media.type).toBe("media");
+					if (media.type !== "media") throw new Error("imported media rule missing");
+					for (const plant of [
+						rules.slice(1),
+						[media, ...rules],
+						[...rules].reverse(),
+						[...media.value.rules, ...rules.slice(1)],
+					])
+						expect(() => verify(plant)).toThrow("imported rules");
+				},
+			),
 			runs,
 		);
 	});
 
-	it("layer and supports imports fail before their rules can become a media query", () => {
+	it("layer and supports imports fail before their rules can become a media query", async () => {
 		// 1.33.0 reports layer:null for both bare layer and no layer, and dependencies omit it.
 		// Keep the refusal: flattening an anonymous layer changes the cascade. Raw CSS retains it.
-		fc.assert(
-			fc.property(
+		await fc.assert(
+			fc.asyncProperty(
 				ids,
 				fc.constantFrom("layer", "layer(theme)", "supports(display: grid)", "LAYER(theme)"),
-				(id, condition) => {
+				async (id, condition) => {
 					const f = fixture(id);
-					expect(() => f.read(`@import "child${id}.css" ${condition};`)).toThrow(
-						"unsupported @import condition",
-					);
+					expect(await failure(f.read(`@import "child${id}.css" ${condition};`))).toMatchObject({
+						message: expect.stringContaining("unsupported @import condition"),
+					});
 				},
 			),
 			{...runs, examples: [[0, "layer"]]}, // Pinned 1.33.0 anonymous-layer loss.
 		);
 	});
 
-	it("a bare layer on a later import is refused after ordinary imports and line breaks", () => {
-		fc.assert(
-			fc.property(ids, fc.constantFrom(" ", "\n", "\r\n", "\r", "\f"), (id, gap) => {
+	it("a bare layer on a later import is refused after ordinary imports and line breaks", async () => {
+		await fc.assert(
+			fc.asyncProperty(ids, fc.constantFrom(" ", "\n", "\r\n", "\r", "\f"), async (id, gap) => {
 				const f = fixture(id),
 					first = `@import "child${id}.css";${gap}`,
 					last = `.root${id} { color: blue; }`;
-				const verify = (condition: string) =>
-					expect(() =>
-						f.read(`${first}@import "child${id}.css" ${condition};${gap}${last}`),
-					).toThrow("unsupported @import condition");
-				verify("layer");
+				const verify = async (condition: string) =>
+					expect(
+						await failure(f.read(`${first}@import "child${id}.css" ${condition};${gap}${last}`)),
+					).toMatchObject({message: expect.stringContaining("unsupported @import condition")});
+				await verify("layer");
 				// Removing the unsupported condition must make this refusal check fail.
-				expect(() => verify("")).toThrow();
+				await expect(verify("")).rejects.toThrow("expected stylesheet failure");
 			}),
 			runs,
 		);
 	});
 
-	it("nested stylesheets keep remote imports with their media conditions before local rules", () => {
-		fc.assert(
-			fc.property(ids, fc.constantFrom("print", "screen and (color)"), (id, media) => {
+	it("nested stylesheets keep remote imports with their media conditions before local rules", async () => {
+		await fc.assert(
+			fc.asyncProperty(ids, fc.constantFrom("print", "screen and (color)"), async (id, media) => {
 				const f = fixture(id),
 					remote = `@import url("https://test.invalid/theme${id}.css") ${media};`,
 					last = `.root${id} { color: blue; }`;
@@ -459,7 +484,7 @@ describe("P16 CSS tokens", () => {
 						meaning(cssRules(css)),
 						"nested imports keep their URLs, order and conditions",
 					).toEqual(meaning(cssRules(`${remote}\n${f.body}\n${last}`)));
-				verify(f.read(`@import "child${id}.css";\n${last}`));
+				verify(await Effect.runPromise(f.read(`@import "child${id}.css";\n${last}`)));
 				for (const plant of [
 					`${f.body}\n${last}`,
 					`@import url("https://test.invalid/theme${id}.css");\n${f.body}\n${last}`,
@@ -470,9 +495,9 @@ describe("P16 CSS tokens", () => {
 		);
 	});
 
-	it("broken CSS reports an Error that names the broken token", () => {
-		fc.assert(
-			fc.property(ids, fc.constantFrom("string", "url()", "@import"), (id, token) => {
+	it("broken CSS reports an Error that names the broken token", async () => {
+		await fc.assert(
+			fc.asyncProperty(ids, fc.constantFrom("string", "url()", "@import"), async (id, token) => {
 				const f = fixture(id);
 				const css =
 					token === "string"
@@ -480,12 +505,7 @@ describe("P16 CSS tokens", () => {
 						: token === "url()"
 							? `a { background: url(https://test.invalid/a ${id}); }`
 							: `@import ("child${id}.css");`;
-				let error: unknown;
-				try {
-					f.read(css);
-				} catch (caught) {
-					error = caught;
-				}
+				const error = await failure(f.read(css));
 				const verify = (actual: unknown) => {
 					expect(actual).toBeInstanceOf(Error);
 					expect(actual).toMatchObject({
@@ -500,45 +520,51 @@ describe("P16 CSS tokens", () => {
 		);
 	});
 
-	it("CSS multiplication does not hide a later local file reference", () => {
-		fc.assert(
-			fc.property(ids, (id) => {
+	it("CSS multiplication does not hide a later local file reference", async () => {
+		await fc.assert(
+			fc.asyncProperty(ids, async (id) => {
 				const f = fixture(id);
-				expect(() =>
-					f.read(`.root { width: calc(1*${id}px); background: url(./image${id}.png); }`),
-				).toThrow("stylesheet references a file");
+				expect(
+					await failure(
+						f.read(`.root { width: calc(1*${id}px); background: url(./image${id}.png); }`),
+					),
+				).toMatchObject({message: expect.stringContaining("stylesheet references a file")});
 			}),
 			runs,
 		);
 	});
 
-	it("unquoted remote URLs reject quote and parenthesis characters", () => {
-		fc.assert(
-			fc.property(ids, fc.constantFrom('"', "'", "("), (id, char) => {
+	it("unquoted remote URLs reject quote and parenthesis characters", async () => {
+		await fc.assert(
+			fc.asyncProperty(ids, fc.constantFrom('"', "'", "("), async (id, char) => {
 				const f = fixture(id);
-				expect(() => f.read(`a { background: url(https://test.invalid/a${char}${id}); }`)).toThrow(
-					"stylesheet has a broken url()",
-				);
+				expect(
+					await failure(f.read(`a { background: url(https://test.invalid/a${char}${id}); }`)),
+				).toMatchObject({
+					message: expect.stringContaining("stylesheet has a broken url()"),
+				});
 			}),
 			runs,
 		);
 	});
 
-	it("a scheme-like word inside a relative path still names a local file", () => {
-		fc.assert(
-			fc.property(ids, fc.constantFrom("https", "data", "custom+3"), (id, scheme) => {
+	it("a scheme-like word inside a relative path still names a local file", async () => {
+		await fc.assert(
+			fc.asyncProperty(ids, fc.constantFrom("https", "data", "custom+3"), async (id, scheme) => {
 				const f = fixture(id);
-				expect(() => f.read(`a { background: url(./folder/${scheme}:${id}.png); }`)).toThrow(
-					"stylesheet references a file",
-				);
+				expect(
+					await failure(f.read(`a { background: url(./folder/${scheme}:${id}.png); }`)),
+				).toMatchObject({
+					message: expect.stringContaining("stylesheet references a file"),
+				});
 			}),
 			runs,
 		);
 	});
 
-	it("an escaped identifier ending in url is not a URL function", () => {
-		fc.assert(
-			fc.property(ids, fc.constantFrom("61", "000061", "62", "000062"), (id, hex) => {
+	it("an escaped identifier ending in url is not a URL function", async () => {
+		await fc.assert(
+			fc.asyncProperty(ids, fc.constantFrom("61", "000061", "62", "000062"), async (id, hex) => {
 				const f = fixture(id),
 					css = `a { --value: \\${hex}url(./file${id}.png); }`;
 				const expected = cssRules(
@@ -548,7 +574,7 @@ describe("P16 CSS tokens", () => {
 					expect(meaning(rules), "the escaped function and its argument must remain").toEqual(
 						meaning(expected),
 					);
-				const rules = cssRules(f.read(css));
+				const rules = cssRules(await Effect.runPromise(f.read(css)));
 				verify(rules);
 				for (const plant of [
 					[],
@@ -561,24 +587,26 @@ describe("P16 CSS tokens", () => {
 		);
 	});
 
-	it("parentheses without the URL keyword are a broken import", () => {
-		fc.assert(
-			fc.property(ids, fc.constantFrom('"', "'"), (id, quote) => {
+	it("parentheses without the URL keyword are a broken import", async () => {
+		await fc.assert(
+			fc.asyncProperty(ids, fc.constantFrom('"', "'"), async (id, quote) => {
 				const f = fixture(id);
-				expect(() => f.read(`@import (${quote}child${id}.css${quote});`)).toThrow(
-					"stylesheet has a broken @import",
-				);
+				expect(await failure(f.read(`@import (${quote}child${id}.css${quote});`))).toMatchObject({
+					message: expect.stringContaining("stylesheet has a broken @import"),
+				});
 			}),
 			runs,
 		);
 	});
 
-	it("an imported file cannot hide an import cycle behind another relative path", () => {
-		fc.assert(
-			fc.property(ids, (id) => {
+	it("an imported file cannot hide an import cycle behind another relative path", async () => {
+		await fc.assert(
+			fc.asyncProperty(ids, async (id) => {
 				const f = fixture(id);
 				writeFileSync(join(f.home, `child${id}.css`), '@import "./root.css";');
-				expect(() => f.read(`@import "./child${id}.css";`)).toThrow("stylesheet imports itself");
+				expect(await failure(f.read(`@import "./child${id}.css";`))).toMatchObject({
+					message: expect.stringContaining("stylesheet imports itself"),
+				});
 			}),
 			runs,
 		);
