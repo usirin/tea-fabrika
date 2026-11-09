@@ -289,6 +289,30 @@ describe("P12 durable brain outbox", () => {
 			},
 		);
 	});
+	it("an event with an excess property is a bad_row on add and on a saved pending row", async () => {
+		await fc.assert(
+			fc.asyncProperty(brainEvent, fc.string({minLength: 1}), (event, extra) =>
+				runNode(
+					Effect.gen(function* () {
+						const folder = home();
+						const outbox = yield* brainOutbox(folder);
+						const excess = {...event, [`x-${extra}`]: extra};
+						expect(yield* Effect.flip(outbox.add(excess))).toMatchObject({
+							_tag: "BrainError",
+							reason: "bad_row",
+						});
+						expect(yield* outbox.pending).toEqual([]);
+						writeFileSync(join(folder, "brain.pending.jsonl"), `${JSON.stringify(excess)}\n`);
+						expect(yield* Effect.flip(outbox.pending)).toMatchObject({
+							_tag: "BrainError",
+							reason: "bad_row",
+						});
+					}),
+				),
+			),
+			{seed: SEED, numRuns: 20},
+		);
+	});
 	it("an outbox id accepts an exact retry once and rejects changed content", async () => {
 		await fc.assert(
 			fc.asyncProperty(brainEvent, (event) =>
