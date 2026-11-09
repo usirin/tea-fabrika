@@ -12,6 +12,7 @@ import {type InputId} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
 import {ProcessId} from "../data/trace.ts";
+import {json} from "./arbitrary.test-support.ts";
 import * as C from "./index.ts";
 import {signalId} from "./process.ts";
 
@@ -33,6 +34,9 @@ const sample = {
 	id: "write-a",
 	kinds: ["saved", "commented"],
 };
+// Size covers the whole pattern: 14 characters of SHA256:person- plus
+// the old 1..40 suffix, not just one suffix character at the default size.
+const sessionOptions = {arbitrary: {seed: 119120, runs: 20, size: 54}};
 const sessionSchema = Schema.Struct({
 	PROCESS: ProcessId,
 	OTHER_PROCESS: ProcessId,
@@ -152,7 +156,7 @@ const authorityProperty = (
 		name,
 		[sessionArb],
 		([value]) => Effect.andThen(law(setup(sample)), law(setup(value))),
-		{arbitrary: {seed: 119120, runs: 20}},
+		sessionOptions,
 	);
 const snapshot = (db: DatabaseSync) =>
 	JSON.stringify(
@@ -210,7 +214,7 @@ describe("P10 saved signing authority", () => {
 					expect(Schema.is(C.Session)({...session, span})).toBe(false);
 			}
 		},
-		{arbitrary: {seed: 119120, runs: 100}},
+		{arbitrary: {seed: 119120, runs: 100, size: 54}},
 	);
 	authorityProperty(
 		"unknown delivery and a signer on a fresh database refuse not_delivered",
@@ -468,24 +472,6 @@ describe("P33, the signer refuses every id in the signal id space", () => {
 				expect((yield* signer("write-after")).parent).toBe(parent);
 			}).pipe(Effect.provide(authority(sql)));
 		});
-	// Match the old fast-check JSON's depth and its default width/string length of 10.
-	// Finite schema levels give each value its full range without a shared recursion cap.
-	const scalar = Schema.Union([
-		Schema.Null,
-		Schema.Boolean,
-		Schema.Finite,
-		Schema.String.check(Schema.isMaxLength(10)),
-	]);
-	const json = (depth: number): Schema.Codec<Schema.Json> =>
-		depth === 0
-			? scalar
-			: Schema.Union([
-					scalar,
-					Schema.Array(json(depth - 1)).check(Schema.isMaxLength(10)),
-					Schema.Record(Schema.String.check(Schema.isMaxLength(10)), json(depth - 1)).check(
-						Schema.isMaxProperties(10),
-					),
-				]);
 	const id = Arbitrary.schema(
 		Schema.Tuple([
 			Schema.Literals([0, 1, 2]),

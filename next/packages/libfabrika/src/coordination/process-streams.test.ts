@@ -4,6 +4,7 @@ import {describe, expect, it} from "@effect/vitest";
 import {Arbitrary, Effect, Result, Schema} from "effect";
 import {Ledger} from "../data/ledger.ts";
 import {type Entry, lineFor} from "../data/log.ts";
+import {json} from "./arbitrary.test-support.ts";
 import {Mailbox} from "./mailbox.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {
@@ -43,6 +44,9 @@ const validName = Arbitrary.schema(nameInput).pipe(
 	Arbitrary.filter((name) => !["door", "processes"].includes(name) && !name.startsWith("client:")),
 );
 const textInput = Schema.NonEmptyString.check(Schema.isMaxLength(40));
+// Cover complete names 1..31, processes/ plus 0..50 characters, refs and
+// caller keys 1..40. Fixed-depth JSON below keeps width/string length 10.
+const options = {arbitrary: {seed: 119120, runs: 20, size: 60}};
 
 const POLICY = {why: "crashed", crashes: 1, until: 0};
 const toW = Recipient.cases.process.make({process: W});
@@ -122,7 +126,7 @@ describe("P33, every process fact lives on a stream only the brain may write", (
 				expect(rows.filter((row) => row.stream === name || row.stream === "watcher:1")).toEqual([]);
 			});
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	{
 		const pid = (...parts: ReadonlyArray<unknown>) => JSON.stringify(parts);
@@ -182,7 +186,7 @@ describe("P33, every process fact lives on a stream only the brain may write", (
 				expect(store.rows()).toEqual([]);
 			}).pipe(Effect.provide(manager(store)));
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	it.prop(
 		"the bare processes stream reserves ordinary non-fact writes",
@@ -209,7 +213,7 @@ describe("P33, every process fact lives on a stream only the brain may write", (
 				expect(next.calls()).toBe(1);
 			}).pipe(Effect.provide(manager(store, brain(), next.next)));
 		},
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	it.effect.prop(
 		"a start losing a name race refuses before writing its own lifecycle",
@@ -233,7 +237,7 @@ describe("P33, every process fact lives on a stream only the brain may write", (
 				expect(store.rows()).toEqual(winner);
 			}).pipe(Effect.provide(manager(store, brain(), next)));
 		},
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 });
 
@@ -247,7 +251,7 @@ describe("P33, signal ids belong to the brain alone", () => {
 	it.effect.prop(
 		"Mailbox.send refuses signal ids, as the door does",
 		[
-			Arbitrary.schema(Schema.Array(Schema.Json).check(Schema.isMaxLength(5))).pipe(
+			Arbitrary.schema(Schema.Array(json(2)).check(Schema.isMaxLength(5))).pipe(
 				Arbitrary.map((rest) => JSON.stringify(["DOWN", ...rest])),
 			),
 		],
@@ -270,11 +274,11 @@ describe("P33, signal ids belong to the brain alone", () => {
 				}).pipe(Effect.provide(manager(store)));
 			},
 		),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	it.effect.prop(
 		"a row at the signal id counts as the signal only when the brain's key wrote it",
-		[Down.fields.ref],
+		[Down.fields.ref.check(Schema.isMaxLength(40))],
 		examples([["watch:1"]], (ref: string) =>
 			Effect.gen(function* () {
 				// The brain's own signal id for this watch, read from a clean run.
@@ -299,11 +303,11 @@ describe("P33, signal ids belong to the brain alone", () => {
 					).toBe(true);
 			}),
 		),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	it.effect.prop(
 		"signal ids carry the watch's round: a watch renewed after a cancel gets a fresh DOWN",
-		[Down.fields.ref],
+		[Down.fields.ref.check(Schema.isMaxLength(40))],
 		examples([["watch:1"]], (ref: string) => {
 			const store = storage();
 			return Effect.gen(function* () {
@@ -320,30 +324,12 @@ describe("P33, signal ids belong to the brain alone", () => {
 				expect(new Set(inbox.map((row) => row.id)).size).toBe(2);
 			});
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 });
 
 describe("P33, an inbox read is total", () => {
 	// Pinned: a `send` whose body has no `m` is skipped; any `m`, whatever its shape, is plain mail.
-	// Match the old fast-check JSON's depth and its default width/string length of 10.
-	// Finite schema levels avoid Effect's shared recursion budget and unbounded tree growth.
-	const scalar = Schema.Union([
-		Schema.Null,
-		Schema.Boolean,
-		Schema.Finite,
-		Schema.String.check(Schema.isMaxLength(10)),
-	]);
-	const json = (depth: number): Schema.Codec<Schema.Json> =>
-		depth === 0
-			? scalar
-			: Schema.Union([
-					scalar,
-					Schema.Array(json(depth - 1)).check(Schema.isMaxLength(10)),
-					Schema.Record(Schema.String.check(Schema.isMaxLength(10)), json(depth - 1)).check(
-						Schema.isMaxProperties(10),
-					),
-				]);
 	const junk = Schema.Union([
 		json(1),
 		// Optional keys keep every subset, from 0 to 5 keys, with nested JSON in every value.
@@ -430,7 +416,7 @@ describe("P33, every brain-written line records who asked", () => {
 				asks(exited, clientKey);
 			});
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	it.effect.prop(
 		"asked is kept out of the trust check: another writer's line naming the brain counts for nothing",
@@ -460,7 +446,7 @@ describe("P33, every brain-written line records who asked", () => {
 				if (Result.isSuccess(started)) expect(started.success.process).toBe(A);
 			});
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 });
 
@@ -479,6 +465,6 @@ describe("P33, a process name never meets a door stream", () => {
 				expect(store.rows()).toEqual([]);
 			}).pipe(Effect.provide(manager(store, brain(), ids(X).next)));
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 });

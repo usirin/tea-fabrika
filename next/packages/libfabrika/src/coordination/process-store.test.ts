@@ -10,6 +10,7 @@ import type {LedgerError} from "../data/ledger.ts";
 import {Doorbell, Ledger} from "../data/ledger.ts";
 import {type Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
+import {unboundedJson} from "./arbitrary.test-support.ts";
 import {type From} from "./mailbox.ts";
 import {
 	Checkpoint as CheckpointSchema,
@@ -75,10 +76,30 @@ const checkpoint: typeof CheckpointSchema.Type = {
 	turn: null,
 	cmds: [],
 };
-// JSON storage canonicalizes -0 to 0. Keep the schema's complete JSON value space.
-const checkpointArb = Arbitrary.schema(CheckpointSchema).pipe(
+// Match 4ddc0ed7: full 32-bit v/cursor, build 0..10, unbounded JSON depth,
+// and 0..5 Cmds. Size 12 below also retains nonempty strings of length 11..12.
+const nat = (schema: typeof Placed.fields.pos) =>
+	schema.check(Schema.isBetween({minimum: 0, maximum: 2_147_483_647}));
+const checkpointArb = Arbitrary.all({
+	saved: Arbitrary.all({
+		v: Arbitrary.schema(
+			CheckpointSchema.fields.saved.fields.v.check(
+				Schema.isBetween({minimum: -2_147_483_648, maximum: 2_147_483_647}),
+			),
+		),
+		build: Arbitrary.schema(
+			CheckpointSchema.fields.saved.fields.build.check(Schema.isMaxLength(10)),
+		),
+		model: unboundedJson,
+		after: Arbitrary.schema(nat(CheckpointSchema.fields.saved.fields.after)),
+	}),
+	turn: unboundedJson,
+	cmds: Arbitrary.array(unboundedJson, {maxLength: 5}),
+}).pipe(
+	// JSON storage canonicalizes -0 to 0.
 	Arbitrary.map((value): typeof CheckpointSchema.Type => JSON.parse(JSON.stringify(value))),
 );
+const options = {arbitrary: {seed: 119120, runs: 20, size: 12}};
 // Effect 4.1.1 has no examples option; run the old input beside each generated input.
 const examples =
 	<A extends ReadonlyArray<unknown>, E, R>(
@@ -133,11 +154,11 @@ describe("P11 process storage", () => {
 				),
 			);
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	it.effect.prop(
 		"plant, touch storage during Layer build: tables are created only by a call",
-		[Schema.NonEmptyString],
+		[Schema.NonEmptyString.check(Schema.isMaxLength(12))],
 		examples([[PROCESS]], (process: string) => {
 			let calls = 0;
 			const sql: Sql = {
@@ -162,7 +183,7 @@ describe("P11 process storage", () => {
 				),
 			);
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	it.effect.prop(
 		"plant, keep state in memory: reopen retains version, build, cursor, turn and Cmd dispatch",
@@ -207,7 +228,7 @@ describe("P11 process storage", () => {
 				);
 			}),
 		),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	it.effect.prop(
 		"plant, save partial checkpoint: a failed transaction retains all original state",
@@ -234,14 +255,16 @@ describe("P11 process storage", () => {
 				),
 			);
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	it.prop(
 		"plant, make runtime records arbitrary writes: only stepped and state.upgraded decode",
 		[
-			RuntimeRecord.cases.stepped.fields.input,
-			RuntimeRecord.cases.stepped.fields.pos,
-			RuntimeRecord.cases["state.upgraded"].fields.ran,
+			RuntimeRecord.cases.stepped.fields.input.check(Schema.isMaxLength(12)),
+			nat(RuntimeRecord.cases.stepped.fields.pos),
+			Schema.Array(
+				RuntimeRecord.cases["state.upgraded"].fields.ran.value.check(Schema.isMaxLength(10)),
+			).check(Schema.isMaxLength(8)),
 		],
 		(generated) => {
 			for (const [input, pos, ran] of [["a", 2, ["one", "two"]], generated] as const) {
@@ -268,14 +291,17 @@ describe("P11 process storage", () => {
 					expect(() => decode(raw)).toThrow();
 			}
 		},
-		{arbitrary: {seed: 119120, runs: 100}},
+		{arbitrary: {seed: 119120, runs: 100, size: 12}},
 	);
 	it.effect.prop(
 		"plant, append stepped twice: runtime record retries have the first placing and build",
 		[
-			RuntimeRecord.cases.stepped.fields.input,
-			RuntimeRecord.cases.stepped.fields.pos,
-			RuntimeRecord.cases.stepped.fields.build.check(Schema.isPattern(/^[\x20-\x7e]+$/)),
+			RuntimeRecord.cases.stepped.fields.input.check(Schema.isMaxLength(12)),
+			nat(RuntimeRecord.cases.stepped.fields.pos),
+			RuntimeRecord.cases.stepped.fields.build.check(
+				Schema.isPattern(/^[\x20-\x7e]+$/),
+				Schema.isMaxLength(12),
+			),
 		],
 		examples([["letter-a", 1, "build-a"]], (input: string, pos: number, build: string) => {
 			const disk = database();
@@ -298,13 +324,15 @@ describe("P11 process storage", () => {
 				),
 			);
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	it.effect.prop(
 		"selected stores keep checkpoints, first placings and valid activity",
 		[
 			checkpointArb,
-			Arbitrary.schema(Placed).pipe(
+			Arbitrary.schema(
+				Schema.Struct({...Placed.fields, rev: nat(Placed.fields.rev), pos: nat(Placed.fields.pos)}),
+			).pipe(
 				Arbitrary.map((value) => ({
 					...value,
 					id: JSON.stringify(value.id),
@@ -360,6 +388,6 @@ describe("P11 process storage", () => {
 				),
 			);
 		},
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 });

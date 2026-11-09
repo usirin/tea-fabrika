@@ -2,6 +2,7 @@
 import {describe, expect, it} from "@effect/vitest";
 import {Arbitrary, Effect, Result, Schema} from "effect";
 import {ProcessId} from "../data/trace.ts";
+import {unboundedJson} from "./arbitrary.test-support.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {
 	A,
@@ -21,11 +22,16 @@ const text = Schema.NonEmptyString.check(Schema.isMaxLength(40));
 const policy = Schema.Struct({
 	why: ProcessFact.cases.down.fields.why,
 	crashes: ProcessFact.cases.down.fields.crashes,
-	until: ProcessFact.cases.down.fields.until.check(Schema.makeFilter((n) => !Object.is(n, -0))),
+	until: ProcessFact.cases.down.fields.until.check(
+		Schema.isBetween({minimum: -2_147_483_648, maximum: 2_147_483_647}),
+		Schema.makeFilter((n) => !Object.is(n, -0)),
+	),
 });
 const nat = (max: number) => Schema.Int.check(Schema.isBetween({minimum: 0, maximum: max}));
 // Effect 4.1.1 has no examples option. Each callback also checks its old inputs.
-const options = {arbitrary: {seed: 119120, runs: 100}};
+// Retain 0..40 times/texts and 2..31 errors. Explicit number bounds above
+// keep the old full nat range without making every string that large.
+const options = {arbitrary: {seed: 119120, runs: 100, size: 40}};
 
 describe("p79, inclusive restart window", () => {
 	it.prop(
@@ -125,7 +131,7 @@ describe("p79, saved activity is not a crash detector", () => {
 	const corrupt = [null, {}, {_tag: "idle", process: "counter:1"}, {_tag: "stepping", process: A}];
 	it.prop(
 		"plant, reset corrupt saved state: corrupt activity fails closed",
-		[Arbitrary.schema(Schema.Json).pipe(Arbitrary.filter((value) => !Schema.is(Activity)(value)))],
+		[unboundedJson.pipe(Arbitrary.filter((value) => !Schema.is(Activity)(value)))],
 		([generated]) => {
 			for (const saved of [...corrupt, generated]) {
 				const answer = recoverActivity(saved);
@@ -191,7 +197,7 @@ describe("p80, supplied policy facts", () => {
 				},
 				{concurrency: 1},
 			),
-		{arbitrary: {seed: 119120, runs: 20}},
+		{arbitrary: {seed: 119120, runs: 20, size: 40}},
 	);
 	// Dead needs dependent generation: errors.length must equal tries.
 	const dead = Arbitrary.array(Arbitrary.schema(text), {minLength: 2, maxLength: 31}).pipe(
@@ -255,6 +261,6 @@ describe("p80, supplied policy facts", () => {
 				}
 			});
 		},
-		{arbitrary: {seed: 119120, runs: 20}},
+		{arbitrary: {seed: 119120, runs: 20, size: 40}},
 	);
 });

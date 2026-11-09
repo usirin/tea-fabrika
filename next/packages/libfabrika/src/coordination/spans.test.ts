@@ -48,6 +48,9 @@ const idArb = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9_-]{0,30}$/));
 const keyArb = MemberFact.cases.denied.fields.key.check(
 	Schema.isPattern(/^key-[a-z][a-z0-9_-]{0,30}$/),
 );
+// Include complete prefixed patterns: notes: plus 1..31, key- plus 1..31.
+// Bare ids, programs and hashes retain 1..31 characters too.
+const options = {arbitrary: {seed: 119120, runs: 20, size: 40}};
 // The installed runner uses runs/seed; old examples stay in these callbacks.
 const examples =
 	<A extends ReadonlyArray<unknown>, E, R>(
@@ -255,7 +258,7 @@ describe("p97, mailbox spans", () => {
 				clean(spans);
 			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 
 	it.effect.prop(
@@ -290,7 +293,7 @@ describe("p97, mailbox spans", () => {
 				clean(spans);
 			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 });
 
@@ -333,7 +336,7 @@ describe("p97, process spans", () => {
 				}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
 			},
 		),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 });
 
@@ -382,7 +385,7 @@ describe("p97, member spans", () => {
 				clean(spans);
 			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 
 	it.effect.prop(
@@ -437,7 +440,7 @@ describe("p97, member spans", () => {
 				Effect.withTracer(tracer),
 			);
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 });
 
@@ -468,7 +471,7 @@ describe("p97, names and numbers only", () => {
 				clean(spans);
 			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 });
 
@@ -499,7 +502,7 @@ describe("p97, the tags hold the right names and numbers", () => {
 				expect(tagged(read, "live")).toBe(2);
 			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 
 	it.effect.prop(
@@ -517,7 +520,7 @@ describe("p97, the tags hold the right names and numbers", () => {
 				expect(ended("ledger.append").length).toBe(1);
 			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 
 	it.effect.prop(
@@ -561,7 +564,7 @@ describe("p97, the tags hold the right names and numbers", () => {
 				Effect.withTracer(tracer),
 			);
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 
 	it.effect.prop(
@@ -577,7 +580,7 @@ describe("p97, the tags hold the right names and numbers", () => {
 				expect(tags(send)["messaging.message.id"]).toBe(id);
 			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 
 	it.effect.prop(
@@ -599,7 +602,7 @@ describe("p97, the tags hold the right names and numbers", () => {
 				expect(tagged(send, "why")).toBe("storage");
 			}).pipe(Effect.provide(Mailbox.layer.pipe(Layer.provide(broken))), Effect.withTracer(tracer));
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	it.effect.prop(
 		"a failed members read ends its span with the ledger's why",

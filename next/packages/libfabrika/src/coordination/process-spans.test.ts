@@ -25,6 +25,8 @@ import {
 } from "./process.test-support.ts";
 import {Down} from "./process.ts";
 
+// Retain refs and marker suffixes through 40 characters, including the old 11..12.
+const options = {arbitrary: {seed: 119120, runs: 20, size: 40}};
 // Effect 4.1.1 has runs/seed but no examples option. Keep the old cases in the callback.
 const examples =
 	<A extends ReadonlyArray<unknown>, E, R>(
@@ -98,7 +100,7 @@ const leakFree = (rows: ReadonlyArray<SpanRow>, marks: ReadonlyArray<string>) =>
 describe("p97, process calls", () => {
 	it.effect.prop(
 		"plant, omit refusal spans: each call ends exactly one named process span",
-		[Down.fields.ref],
+		[Down.fields.ref.check(Schema.isMaxLength(40))],
 		examples([["one"]], (ref: string) => {
 			const store = storage();
 			const trace = capture();
@@ -149,7 +151,7 @@ describe("p97, process calls", () => {
 				Effect.withTracer(trace.tracer),
 			);
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	it.effect.prop(
 		"plant, replacement spans in the old record: P37 stores each life in its own JobRecord",
@@ -189,7 +191,7 @@ describe("p97, process calls", () => {
 				expect(world.parts.has(`job/${B}/0`)).toBe(true);
 			}).pipe(Effect.provide(world.layer));
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	it.effect.prop(
 		"plant, client clock decides lag: DOWN delivery lag uses the referee's arrivedAt",
@@ -229,7 +231,7 @@ describe("p97, process calls", () => {
 				}).pipe(Effect.provide(world.layer), Effect.provide(TestClock.layer()));
 			},
 		),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 });
 
@@ -277,6 +279,6 @@ describe("p99, process content stays out of span tags and health", () => {
 				}).pipe(Effect.provide(world.layer));
 			},
 		),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 });

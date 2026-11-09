@@ -28,6 +28,10 @@ const at = (length: number, unit = "a") => unit.repeat(length);
 const over = at(CAP + 1);
 const acceptedText = Down.fields.ref;
 const overText = Schema.String.check(Schema.isMinLength(CAP + 1), Schema.isMaxLength(CAP * 4));
+// Size applies to the complete string. 1024 retains every old accepted and
+// refused length, including 258..1024, rather than only the 257 minimum.
+const options = {arbitrary: {seed: 119120, runs: 20, size: CAP * 4}};
+const schemaOptions = {arbitrary: {seed: 119120, runs: 100, size: CAP * 4}};
 // The installed Effect runner has no examples option; keep old inputs in the callback.
 const examples =
 	<A extends ReadonlyArray<unknown>, E, R>(
@@ -163,7 +167,7 @@ describe("P33 rule 1, the text caps live in the schema", () => {
 					expect(Schema.is(schema)(value(refused))).toBe(false);
 				}
 			},
-			{arbitrary: {seed: 119120, runs: 100}},
+			schemaOptions,
 		);
 	// A dead letter keeps one error class per try, so its list is capped too: 32 entries at most.
 	const dead = (errors: ReadonlyArray<string>) => ({
@@ -186,7 +190,7 @@ describe("P33 rule 1, the text caps live in the schema", () => {
 				expect(Schema.is(Dead)(dead(classes(33)))).toBe(false);
 			}
 		},
-		{arbitrary: {seed: 119120, runs: 100}},
+		schemaOptions,
 	);
 	it.prop(
 		`a dead letter's errors: each entry is capped at ${CAP} characters`,
@@ -197,7 +201,7 @@ describe("P33 rule 1, the text caps live in the schema", () => {
 				expect(Schema.is(Dead)(dead([...classes(31), refused]))).toBe(false);
 			}
 		},
-		{arbitrary: {seed: 119120, runs: 100}},
+		schemaOptions,
 	);
 	it.prop(
 		`a dead letter's m and build: ${CAP} characters decode, ${CAP + 1} do not`,
@@ -210,7 +214,7 @@ describe("P33 rule 1, the text caps live in the schema", () => {
 				}
 			}
 		},
-		{arbitrary: {seed: 119120, runs: 100}},
+		schemaOptions,
 	);
 });
 
@@ -225,7 +229,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
 				yield* refusedWritingNothing(store, monitor(store, over));
 			});
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	it.effect.prop(
 		`a monitor with a ${CAP}-character ref is accepted`,
@@ -239,7 +243,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
 				expect(downs(yield* fresh(store)).map((down) => down.ref)).toEqual([ref]);
 			});
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	it.effect.prop(
 		`a monitor for a client whose id has ${CAP + 1} characters`,
@@ -260,7 +264,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
 				);
 			});
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	it.effect.prop(
 		`an exit whose why has ${CAP + 1} characters`,
@@ -273,7 +277,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
 				yield* refusedWritingNothing(store, exit(store, over));
 			});
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	it.effect.prop(
 		`a down whose why has ${CAP + 1} characters`,
@@ -291,7 +295,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
 				);
 			});
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	const starts: ReadonlyArray<readonly [string, Start]> = [
 		["id", raw({_tag: "first", id: over, name: "counter:2", code: CODE})],
@@ -326,7 +330,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
 					);
 				});
 			}),
-			{arbitrary: {seed: 119120, runs: 20}},
+			options,
 		);
 	it.effect.prop(
 		`a restart whose why has ${CAP + 1} characters`,
@@ -352,7 +356,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
 				);
 			});
 		}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 });
 
@@ -393,7 +397,7 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
 					}),
 				)(generated);
 			}),
-		{arbitrary: {seed: 119120, runs: 20}},
+		options,
 	);
 	// Effect has no grapheme or grapheme-composite generator. Only those two inputs use fast-check.
 	const generatorSeed = Arbitrary.schema(
