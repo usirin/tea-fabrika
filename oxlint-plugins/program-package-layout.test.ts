@@ -226,6 +226,43 @@ describe("fabrika/program-package-layout", () => {
 				runs,
 			);
 		});
+	for (const edge of [
+		'import type {X} from "./helper.ts"; export type {X};',
+		'import {type X} from "./helper.ts"; export type {X};',
+		'export type {X} from "./helper.ts";',
+		'export {type X} from "./helper.ts";',
+		'export type * from "./helper.ts";',
+	])
+		it(`a type-only helper link loads no Worker code: ${edge}`, () => {
+			fc.assert(
+				fc.property(name, name, (name, alias) => {
+					const files = {
+						"src/program.ts": edge,
+						"src/helper.ts": `import {env} from "cloudflare:workers"; export type X = string; export const ${alias} = env;`,
+					};
+					// Run the plant first, so the same helper is proved reachable by a value link.
+					for (const link of [
+						`export {${alias}} from "./helper.ts";`,
+						'export {} from "./helper.ts";',
+						`export {type X, ${alias}} from "./helper.ts";`,
+						`import {type X, ${alias}} from "./helper.ts"; export {${alias}};`,
+						'import "./helper.ts";',
+					]) {
+						const findings = run(
+							name,
+							{".": "./src/program.ts"},
+							{...files, "src/program.ts": link},
+						);
+						expect(findings).toHaveLength(1);
+						expect(findings[0]?.message).toBe(
+							"Pure program code cannot import Worker runtime APIs.",
+						);
+					}
+					expect(run(name, {".": "./src/program.ts"}, files)).toEqual([]);
+				}),
+				{...runs, numRuns: 3},
+			);
+		});
 	it("measures the real tree: findings are inspected, with zero false alarms required to block", () => {
 		const result = spawnSync(
 			join(ROOT, "node_modules/.bin/oxlint"),

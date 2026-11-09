@@ -1,9 +1,12 @@
 // P16, next/. CSS spelling changes must keep the same imported rules.
-import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
-import {join} from "node:path";
+import {mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
+import {dirname, join, resolve} from "node:path";
+import {NodeServices} from "@effect/platform-node";
+import {Effect} from "effect";
 import * as fc from "fast-check";
-import {type Rule, transform} from "lightningcss";
+import {bundle, bundleAsync, type Rule, transform} from "lightningcss";
 import {afterEach, describe, expect, it} from "vitest";
+import {build} from "../build.ts";
 import {inlineStylesheet} from "./css.ts";
 
 const runs = {seed: 119120, numRuns: 30};
@@ -40,11 +43,180 @@ const fixture = (id: number) => {
 		},
 	};
 };
+
+// The remote sheets are disk fixtures too. Only the oracle resolves their URLs, never the product.
+const cssGraphs = fc.record({
+	id: ids,
+	order: fc.shuffledSubarray([0, 1, 2, 3], {minLength: 4, maxLength: 4}),
+	before: fc.boolean(),
+	between: fc.boolean(),
+	named: fc.boolean(),
+});
+type CssGraph = typeof cssGraphs extends fc.Arbitrary<infer A> ? A : never;
+const graphFixture = (graph: CssGraph, mixed: boolean) => {
+	const f = fixture(graph.id),
+		order = mixed ? graph.order : graph.order.filter((n) => n < 2),
+		statement = "@layer a, b;",
+		body = (n: number) => {
+			const rule = (layer: string) =>
+				`.same.source${n}${layer} { --winner: source${n}-${graph.id}; }`;
+			return mixed ? rule("") : `@layer b {${rule("b")}} @layer a {${rule("a")}}`;
+		},
+		wrapped = (n: number) =>
+			graph.named ? `@layer ${n % 2 === 0 ? "a" : "b"} {${body(n)}}` : body(n),
+		remote = new Map<string, string>();
+	for (const n of order) {
+		const file = join(f.home, `source${n}.css`);
+		writeFileSync(file, body(n));
+		if (mixed && n >= 2) remote.set(`https://test.invalid/source${n}.css`, file);
+	}
+	const render = (expanded: boolean, sources = order, late = false) => {
+		const parts = sources.flatMap((n, i) => [
+			...(i === 0 && graph.before && !late ? [statement] : []),
+			...(i === 1 && graph.between && !late ? [statement] : []),
+			expanded
+				? wrapped(n)
+				: `@import "${mixed && n >= 2 ? `https://test.invalid/source${n}.css` : `./source${n}.css`}"${graph.named ? ` layer(${n % 2 === 0 ? "a" : "b"})` : ""};`,
+		]);
+		if (late && (graph.before || graph.between)) parts.push(statement);
+		return parts.join("\n");
+	};
+	const file = join(f.home, "root.css");
+	writeFileSync(file, render(false));
+	const oracle = async (path: string) =>
+		(
+			await bundleAsync({
+				filename: path,
+				resolver: {
+					resolve: (url, from) => remote.get(url) ?? resolve(dirname(from), url),
+					read: (path) => readFileSync(path, "utf8"),
+				},
+			})
+		).code.toString();
+	const expanded = (css: string) => {
+		const path = join(f.home, "expanded.css");
+		writeFileSync(path, css);
+		return bundle({filename: path}).code.toString();
+	};
+	return {...f, file, order, render, oracle, expanded};
+};
+
+// A parser refusal is acceptable only if the real build returns its typed bundle failure.
+// A tiny program/window drives the production CSS plugin; no test catches and retags its error.
+const refusedBuild = async (home: string) => {
+	const pkg = join(home, "node_modules/@p16/css");
+	mkdirSync(pkg, {recursive: true});
+	for (const name of ["effect", "@demlik", "@kampus"])
+		symlinkSync(
+			resolve(import.meta.dirname, "../../../../apps/fabrika/node_modules", name),
+			join(home, "node_modules", name),
+			"dir",
+		);
+	writeFileSync(join(home, "package.json"), '{"type":"module"}');
+	writeFileSync(
+		join(pkg, "package.json"),
+		JSON.stringify({type: "module", exports: {".": "./program.ts", "./window": "./window.js"}}),
+	);
+	writeFileSync(join(pkg, "program.ts"), 'export {counter as program} from "@kampus/counter";');
+	writeFileSync(join(pkg, "window.js"), `import ${JSON.stringify(join(home, "root.css"))};`);
+	writeFileSync(join(home, "brain.ts"), "export const ready = true;");
+	const attempt = build({
+		root: home,
+		out: join(home, "dist"),
+		entry: join(home, "brain.ts"),
+		programs: [{name: "css", package: "@p16/css", export: "program"}],
+		files: [],
+		ledger: [],
+		chaos: false,
+	}).pipe(Effect.result, Effect.provide(NodeServices.layer));
+	const file = join(home, "root.css"),
+		original = readFileSync(file, "utf8");
+	try {
+		writeFileSync(file, ".baseline { color: red; }");
+		expect(
+			await Effect.runPromise(attempt),
+			"the same build succeeds with supported CSS",
+		).toMatchObject({_tag: "Success"});
+	} finally {
+		writeFileSync(file, original);
+	}
+	return Effect.runPromise(attempt);
+};
 afterEach(() => {
 	for (const home of homes.splice(0)) rmSync(home, {recursive: true, force: true});
 });
 
 describe("P16 CSS tokens", () => {
+	// First layer appearance and source order decide the cascade, including imported sheets.
+	// https://www.w3.org/TR/css-cascade-5/#layer-order
+	// https://www.w3.org/TR/css-cascade-5/#at-import
+	for (const kind of ["before", "between", "named", "mixed"] as const)
+		it(`CSS graph cascade: ${kind} imports keep layer priority and source rule order or refuse with BuildError`, async () => {
+			await fc.assert(
+				fc.asyncProperty(cssGraphs, async (generated) => {
+					const graph = {
+						...generated,
+						before: kind === "before" || generated.before,
+						between: kind === "between" || (kind !== "before" && generated.between),
+						named: kind === "named",
+					};
+					const f = graphFixture(graph, kind === "mixed");
+					// 1.33.0 rejects a statement between imports, although Cascade 5 allows it.
+					// For that parser gap, bundle the fixture's literal expansion in source order.
+					const expected = graph.between ? f.expanded(f.render(true)) : await f.oracle(f.file);
+					const verify = (css: string) =>
+						expect(meaning(cssRules(css)), "cascade layer priority and source rule order").toEqual(
+							meaning(cssRules(expected)),
+						);
+					// Plants: lose a source; reverse rules that compete in the same layer; move declarations.
+					expect(() => verify(f.expanded(f.render(true, f.order.slice(0, -1))))).toThrow(
+						"cascade layer priority",
+					);
+					if (!graph.named)
+						expect(() => verify(f.expanded(f.render(true, [...f.order].reverse())))).toThrow(
+							"cascade layer priority",
+						);
+					const remoteAfterLocal =
+						kind === "mixed" &&
+						f.order.some((n, i) => n >= 2 && f.order.slice(0, i).some((previous) => previous < 2));
+					if (remoteAfterLocal) {
+						const hoisted = [...f.order.filter((n) => n >= 2), ...f.order.filter((n) => n < 2)];
+						expect(() => verify(f.expanded(f.render(true, hoisted)))).toThrow("source rule order");
+					}
+					if (kind === "before")
+						expect(() => verify(f.expanded(f.render(true, f.order, true)))).toThrow(
+							"cascade layer priority",
+						);
+					let output: string;
+					try {
+						output = inlineStylesheet(f.file);
+					} catch (error) {
+						expect(
+							graph.named || graph.between || remoteAfterLocal,
+							"a supported graph must bundle",
+						).toBe(true);
+						expect(error).toBeInstanceOf(Error);
+						expect(await refusedBuild(f.home)).toMatchObject({
+							_tag: "Failure",
+							failure: {_tag: "BuildError", why: "bundle"},
+						});
+						return;
+					}
+					const file = join(f.home, "actual.css");
+					writeFileSync(file, output);
+					verify(await f.oracle(file));
+				}),
+				{
+					seed: runs.seed,
+					numRuns: 8,
+					examples: [
+						[{id: 0, order: [0, 2, 1, 3], before: kind === "before", between: false, named: false}],
+					],
+					// Pinned round-4 bugs: parent layer priority and a later remote import overtaking a local.
+					endOnFailure: true,
+				},
+			);
+		});
 	// The expected rule comes from the file, never from decoding the generated import spelling.
 	const verifyImport = (css: string, id: number) => {
 		expect(

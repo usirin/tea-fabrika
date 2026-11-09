@@ -49,7 +49,10 @@ imports and re-exports pass, with either a declaration or a specifier marked `ty
 This follows `docs/plan/tier-1-detail.md`, Packages, and the approved P16 plan.
 On 2026-11-08 it checked 3 files in the real program tree: 0 findings, 0 false alarms,
 including recounts after following literal dynamic imports and accepting both type-only import
-and re-export forms. The counter's only public entry
+and re-export forms. Round 4 also stops traversal at type-only helper links: declaration and
+specifier imports, declaration and specifier re-exports, and `export type *`. Each has a value-link
+plant to the same helper; mixed specifiers, empty value re-exports and side-effect imports still
+load it. The recount remains 3 files, 0 findings and 0 false alarms. The counter's only public entry
 was inspected. Generated layouts at seed 119120 exercise each plant with the real oxlint plugin,
 including nested dynamic imports through helpers and cycles, type-only declarations and specifiers,
 and value-import and value-re-export plants for each type-only form. A mixed type and value

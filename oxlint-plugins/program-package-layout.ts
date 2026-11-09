@@ -14,6 +14,18 @@ const worker = (name: string) =>
 		name,
 	);
 
+// A side-effect import or empty value re-export still loads its target. Only erased links stop here.
+const valueLink = (
+	kind: string | undefined,
+	specifiers: readonly {
+		readonly type: string;
+		readonly importKind?: string;
+		readonly exportKind?: string;
+	}[],
+) =>
+	kind !== "type" &&
+	(specifiers.length === 0 || specifiers.some((s) => (s.importKind ?? s.exportKind) !== "type"));
+
 // Follow the actual pure entry, including re-exports. A window may share pure helpers.
 const pureFiles = (root: string, entries: readonly string[]) => {
 	const seen = new Set<string>();
@@ -26,13 +38,16 @@ const pureFiles = (root: string, entries: readonly string[]) => {
 		};
 		new Visitor({
 			ImportDeclaration(node) {
-				if (typeof node.source.value === "string") follow(node.source.value);
+				if (valueLink(node.importKind, node.specifiers) && typeof node.source.value === "string")
+					follow(node.source.value);
 			},
 			ExportNamedDeclaration(node) {
-				if (typeof node.source?.value === "string") follow(node.source.value);
+				if (valueLink(node.exportKind, node.specifiers) && typeof node.source?.value === "string")
+					follow(node.source.value);
 			},
 			ExportAllDeclaration(node) {
-				if (typeof node.source.value === "string") follow(node.source.value);
+				if (node.exportKind !== "type" && typeof node.source.value === "string")
+					follow(node.source.value);
 			},
 			ImportExpression(node) {
 				if (node.source.type === "Literal" && typeof node.source.value === "string")
@@ -100,12 +115,7 @@ export const programPackageLayout: CreateRule = {
 			ImportDeclaration(node) {
 				if (
 					pure.has(file) &&
-					node.importKind !== "type" &&
-					(node.specifiers.length === 0 ||
-						node.specifiers.some(
-							(specifier) =>
-								specifier.type !== "ImportSpecifier" || specifier.importKind !== "type",
-						)) &&
+					valueLink(node.importKind, node.specifiers) &&
 					typeof node.source.value === "string" &&
 					worker(node.source.value)
 				)
@@ -114,9 +124,7 @@ export const programPackageLayout: CreateRule = {
 			ExportNamedDeclaration(node) {
 				if (
 					pure.has(file) &&
-					node.exportKind !== "type" &&
-					(node.specifiers.length === 0 ||
-						node.specifiers.some((specifier) => specifier.exportKind !== "type")) &&
+					valueLink(node.exportKind, node.specifiers) &&
 					typeof node.source?.value === "string" &&
 					worker(node.source.value)
 				)
