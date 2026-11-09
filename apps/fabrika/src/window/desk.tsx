@@ -387,7 +387,16 @@ const frameStep = (m: FrameMsg): boolean => {
 	return true;
 };
 
+/**
+ * A configured focus key just dismissed something over the desk, and the host's answer to it has
+ * not come yet. The dismissal gave focus back to where the opener was, which is no place to cycle
+ * on from: the key's answer enters the workspace.
+ */
+let leftOver = false;
+
 const cycleFocus = (to: "next" | "previous") => {
+	const fromOver = leftOver;
+	leftOver = false;
 	const open = store.desk?.at === "open" ? store.desk : null;
 	const tile = open === null ? null : focusedOf(open);
 	const screen =
@@ -406,7 +415,10 @@ const cycleFocus = (to: "next" | "previous") => {
 	const at = regions.findIndex((el) =>
 		el.matches(".desk") ? el === document.activeElement : el.contains(document.activeElement),
 	);
-	const target = regions[(at + (to === "next" ? 1 : regions.length - 1)) % regions.length];
+	const target =
+		fromOver && screen !== null && regions.includes(screen)
+			? screen
+			: regions[(at + (to === "next" ? 1 : regions.length - 1)) % regions.length];
 	if (target === screen && tile !== null && tile.shows.run === null)
 		terminals.get(tile.id)?.focus();
 	else target?.focus();
@@ -646,8 +658,10 @@ const onKey = (e: KeyboardEvent) => {
 	}
 	if (alone === 'tezgah."focus --to next"' || alone === 'tezgah."focus --to previous"') {
 		swallow(e);
-		if (store.frame.over.kind !== "none")
+		if (store.frame.over.kind !== "none") {
 			flushSync(() => frameStep({type: "close", reason: "navigation"}));
+			leftOver = true;
+		}
 		toHost({type: "run", does: alone, via: {keys: spell(name ?? "")}});
 		return;
 	}
