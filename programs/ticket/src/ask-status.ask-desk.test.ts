@@ -14,7 +14,7 @@ import {flushSync} from "react-dom";
 import {createRoot} from "react-dom/client";
 import {afterEach, describe, expect, vi} from "vitest";
 import {DRAFT, policyFor} from "../../../fixtures/ask-desk/cases.ts";
-import {property} from "../../../fixtures/ask-desk/property.ts";
+import {property, ticketNumber} from "../../../fixtures/ask-desk/property.ts";
 
 // Observe the real tea hook, without replacing its state or dispatch behavior.
 vi.mock("@demlik/tea/react", async (original) => {
@@ -270,7 +270,9 @@ const drain = async () => {
 	flushSync(() => {});
 	await new Promise<void>((resolve) => setImmediate(resolve));
 };
-const mountAnswer = (asks: readonly Asked[], selected: Asked) => {
+type TicketAsk = Asked & {readonly ticket: number};
+const key = (ask: {readonly ticket: number; readonly ask: string}) => `${ask.ticket}/${ask.ask}`;
+const mountAnswer = (asks: readonly TicketAsk[], selected: TicketAsk, oneTicket = false) => {
 	const document = new Dom();
 	vi.stubGlobal("document", document);
 	vi.stubGlobal("window", document.defaultView);
@@ -284,15 +286,16 @@ const mountAnswer = (asks: readonly Asked[], selected: Asked) => {
 	let current = selected;
 	const aside = new Set<string>();
 	// The live asks behind frame.tsx's header count, including each ask's id. Later stays out.
-	const waiting = () => queue.filter((ask) => !aside.has(ask.ask));
+	const waiting = () =>
+		queue.filter((ask) => !aside.has(key(ask)) && (!oneTicket || ask.ticket === current.ticket));
 	const answers: string[] = [];
 	const actions: AskActions = {
 		openLane: () => {},
 		command: () => undefined,
 		answer: (answer) =>
 			Effect.gen(function* () {
-				const request = requests.get(answer.ask)!;
-				answers.push(answer.ask);
+				const request = requests.get(key(answer))!;
+				answers.push(key(answer));
 				yield* Deferred.succeed(request.started, undefined);
 				return yield* Deferred.await(request.reply);
 			}),
@@ -301,13 +304,14 @@ const mountAnswer = (asks: readonly Asked[], selected: Asked) => {
 		blocked: () => false,
 	};
 	const render = () => {
-		const ask = queue.find((ask) => ask.ask === current.ask) ?? queue[0];
+		const ask = queue.find((ask) => key(ask) === key(current)) ?? queue[0];
 		const live = waiting();
 		// Keep ids: polling out A or B can leave the same count but change A's save result.
 		const status = {
 			asks: live,
 			left: live.length,
-			children: ask === undefined ? null : createElement(AskView, {key: ask.ask, ticket: 102, ask}),
+			children:
+				ask === undefined ? null : createElement(AskView, {key: key(ask), ticket: ask.ticket, ask}),
 		};
 		flushSync(() =>
 			root.render(
@@ -320,14 +324,14 @@ const mountAnswer = (asks: readonly Asked[], selected: Asked) => {
 		document,
 		answers,
 		waiting,
-		available: () => queue.filter((ask) => !requests.has(ask.ask)),
+		available: () => queue.filter((ask) => !requests.has(key(ask))),
 		start: async (ask = selected, from: "list" | "later" = "list") => {
 			current = ask;
-			if (from === "later") aside.add(ask.ask);
-			else aside.delete(ask.ask);
+			if (from === "later") aside.add(key(ask));
+			else aside.delete(key(ask));
 			render();
 			const started = Deferred.makeUnsafe<void>();
-			requests.set(ask.ask, {started, reply: Deferred.makeUnsafe<null>()});
+			requests.set(key(ask), {started, reply: Deferred.makeUnsafe<null>()});
 			const button = document.body.find(
 				(node) => node.tagName === "BUTTON" && node.textContent.startsWith("Take rec"),
 			)[0];
@@ -337,16 +341,21 @@ const mountAnswer = (asks: readonly Asked[], selected: Asked) => {
 			await drain();
 		},
 		save: async (ask = selected) => {
-			await Effect.runPromise(Deferred.succeed(requests.get(ask.ask)!.reply, null));
+			await Effect.runPromise(Deferred.succeed(requests.get(key(ask))!.reply, null));
 			await drain();
 		},
-		arrive: async (ask: Asked) => {
+		select: async (ask: TicketAsk) => {
+			current = ask;
+			render();
+			await drain();
+		},
+		arrive: async (ask: TicketAsk) => {
 			queue = [...queue, ask];
 			render();
 			await drain();
 		},
-		poll: async (removed: readonly Asked[] = [selected]) => {
-			queue = queue.filter((ask) => !removed.some((removed) => removed.ask === ask.ask));
+		poll: async (removed: readonly TicketAsk[] = [selected]) => {
+			queue = queue.filter((ask) => !removed.some((removed) => key(removed) === key(ask)));
 			render();
 			await drain();
 		},
@@ -361,7 +370,9 @@ describe.each(["save-first", "poll-first"] as const)("answer status with %s", (o
 		async ({waiting, choice}) => {
 			const asks = await Promise.all(
 				waiting.map((ask) =>
-					Effect.runPromise(sealAsk({...DRAFT, ask}, policyFor(ask, false, blindDraw))),
+					Effect.runPromise(sealAsk({...DRAFT, ask}, policyFor(ask, false, blindDraw))).then(
+						(ask) => ({...ask, ticket: 102}),
+					),
 				),
 			);
 			const selected = asks[choice % asks.length]!;
@@ -375,7 +386,7 @@ describe.each(["save-first", "poll-first"] as const)("answer status with %s", (o
 					writes = test.document.writes;
 				};
 				await test.start();
-				expect(test.answers).toEqual([selected.ask]);
+				expect(test.answers).toEqual([key(selected)]);
 				record();
 				expect(announcements, "a pending answer must stay silent").toEqual([]);
 				if (order === "poll-first") {
@@ -402,10 +413,7 @@ describe.each(["save-first", "poll-first"] as const)("answer status with %s", (o
 	);
 });
 
-const flowAsks = Schema.UniqueArray(Asked.fields.ask).check(
-	Schema.isMinLength(2),
-	Schema.isMaxLength(6),
-);
+const flowAsks = Schema.Array(Asked.fields.ask).check(Schema.isMinLength(2), Schema.isMaxLength(6));
 const flowChoice = Schema.Int.check(Schema.isBetween({minimum: 0, maximum: 5}));
 const statusStep = Schema.TaggedUnion({
 	answer: {choice: flowChoice, from: Schema.Literals(["list", "later"])},
@@ -416,129 +424,146 @@ const statusStep = Schema.TaggedUnion({
 });
 const steps = Schema.Array(statusStep).check(Schema.isMaxLength(24));
 
+// Round 28, review 13: ask ids are local to a ticket. Keep same-ticket coverage and repeat
+// each generated id across different tickets. The real bare-id status reducer is the plant.
 // Keep review 12's three bug families in every run, with generated ask ids, targets and tails.
 // The free-flow family has no prescribed prefix: any answer/arrival/save/poll order is drawn.
-describe.each([
-	"Later with a live ask",
-	"arrival while saving, save-first",
-	"arrival while saving, poll-first",
-	"two answers before polling",
-	"free-flow",
-] as const)("remaining count across %s", (flow) => {
-	property(
-		"every saved answer announces once, counting the current live asks without saved answers",
-		{waiting: flowAsks, choice: flowChoice, steps},
-		async ({waiting, choice, steps}) => {
-			const asks = await Promise.all(
-				waiting.map((ask) =>
-					Effect.runPromise(sealAsk({...DRAFT, ask}, policyFor(ask, false, blindDraw))),
-				),
-			);
-			const first = asks[choice % asks.length]!;
-			const rest = asks.filter((ask) => ask !== first);
-			const initial = flow.startsWith("arrival") ? [first] : [first, rest[0]!];
-			const future = asks.filter((ask) => !initial.includes(ask));
-			const test = mountAnswer(initial, first);
-			const started: Asked[] = [];
-			const saved = new Set<string>();
-			const expected: string[] = [];
-			const trace: string[] = [];
-			const pending = () => started.filter((ask) => !saved.has(ask.ask));
-			const check = () => {
-				expect(
-					test.document.announcements,
-					`${flow}: ${trace.join(" -> ")}; each save must announce once with the header's live asks minus saved answers`,
-				).toEqual(expected);
-				expect(test.document.body.findStatus()?.textContent).toBe(expected.at(-1) ?? "");
-			};
-			const answer = async (ask: Asked, from: "list" | "later") => {
-				trace.push(`answer ${ask.ask} from ${from}`);
-				started.push(ask);
-				await test.start(ask, from);
-				expect(test.answers).toEqual(started.map((ask) => ask.ask));
-				check();
-			};
-			const arrive = async () => {
-				const ask = future.shift();
-				if (ask === undefined) return;
-				trace.push(`arrival ${ask.ask}`);
-				await test.arrive(ask);
-				check();
-			};
-			const save = async (ask: Asked) => {
-				trace.push(`save ${ask.ask}`);
-				saved.add(ask.ask);
-				const left = test.waiting().filter((ask) => !saved.has(ask.ask)).length;
-				expected.push(`Approved. ${left} left.`);
-				await test.save(ask);
-				check();
-			};
-			const poll = async (beforeReply?: Asked) => {
-				trace.push(`poll${beforeReply === undefined ? "" : ` including ${beforeReply.ask}`}`);
-				await test.poll([
-					...started.filter((ask) => saved.has(ask.ask)),
-					...(beforeReply === undefined ? [] : [beforeReply]),
-				]);
-				check();
-			};
-			try {
-				switch (flow) {
-					case "Later with a live ask":
-						await answer(first, "later");
-						await save(first);
-						break;
-					case "arrival while saving, save-first":
-					case "arrival while saving, poll-first":
-						await answer(first, "list");
-						await arrive();
-						if (flow === "arrival while saving, poll-first") await poll(first);
-						await save(first);
-						await poll();
-						break;
-					case "two answers before polling":
-						await answer(first, "list");
-						await answer(rest[0]!, "list");
-						await save(first);
-						await save(rest[0]!);
-						break;
-					case "free-flow":
-						break;
-				}
-				for (const step of steps) {
-					switch (step._tag) {
-						case "answer": {
-							const available = test.available();
-							const ask = available[step.choice % available.length];
-							if (ask !== undefined) await answer(ask, step.from);
+describe.each(["same ticket", "ticket-local ids"] as const)("ask identity: %s", (identity) => {
+	describe.each([
+		"Later with a live ask",
+		"arrival while saving, save-first",
+		"arrival while saving, poll-first",
+		"two answers before polling",
+		"switch tickets during saving",
+		"free-flow",
+	] as const)("remaining count across %s", (flow) => {
+		property(
+			"every saved answer announces once, counting the current live asks without saved answers",
+			{waiting: flowAsks, ticket: ticketNumber, choice: flowChoice, steps},
+			async ({waiting, ticket, choice, steps}) => {
+				const asks = await Promise.all(
+					waiting.map(async (id, i) => {
+						const ask = identity === "same ticket" ? `${id}-${i}` : waiting[0]!;
+						return {
+							...(await Effect.runPromise(
+								sealAsk({...DRAFT, ask}, policyFor(ask, false, blindDraw)),
+							)),
+							ticket: identity === "same ticket" ? ticket : ticket + i,
+						};
+					}),
+				);
+				const first = asks[choice % asks.length]!;
+				const rest = asks.filter((ask) => ask !== first);
+				const initial = flow.startsWith("arrival") ? [first] : [first, rest[0]!];
+				const future = asks.filter((ask) => !initial.includes(ask));
+				const test = mountAnswer(initial, first, flow === "switch tickets during saving");
+				const started: TicketAsk[] = [];
+				const saved = new Set<string>();
+				const expected: string[] = [];
+				const trace: string[] = [];
+				const pending = () => started.filter((ask) => !saved.has(key(ask)));
+				const check = () => {
+					expect(
+						test.document.announcements,
+						`${flow}: ${trace.join(" -> ")}; each save must announce once with the header's live asks minus saved answers`,
+					).toEqual(expected);
+					expect(test.document.body.findStatus()?.textContent).toBe(expected.at(-1) ?? "");
+				};
+				const answer = async (ask: TicketAsk, from: "list" | "later") => {
+					trace.push(`answer ${key(ask)} from ${from}`);
+					started.push(ask);
+					await test.start(ask, from);
+					expect(test.answers).toEqual(started.map(key));
+					check();
+				};
+				const arrive = async () => {
+					const ask = future.shift();
+					if (ask === undefined) return;
+					trace.push(`arrival ${key(ask)}`);
+					await test.arrive(ask);
+					check();
+				};
+				const save = async (ask: TicketAsk) => {
+					trace.push(`save ${key(ask)}`);
+					saved.add(key(ask));
+					const left = test.waiting().filter((ask) => !saved.has(key(ask))).length;
+					expected.push(`Approved. ${left} left.`);
+					await test.save(ask);
+					check();
+				};
+				const poll = async (beforeReply?: TicketAsk) => {
+					trace.push(`poll${beforeReply === undefined ? "" : ` including ${key(beforeReply)}`}`);
+					await test.poll([
+						...started.filter((ask) => saved.has(key(ask))),
+						...(beforeReply === undefined ? [] : [beforeReply]),
+					]);
+					check();
+				};
+				try {
+					switch (flow) {
+						case "Later with a live ask":
+							await answer(first, "later");
+							await save(first);
 							break;
-						}
-						case "arrive":
+						case "arrival while saving, save-first":
+						case "arrival while saving, poll-first":
+							await answer(first, "list");
 							await arrive();
+							if (flow === "arrival while saving, poll-first") await poll(first);
+							await save(first);
+							await poll();
 							break;
-						case "save": {
-							const waiting = pending();
-							const ask = waiting[step.choice % waiting.length];
-							if (ask !== undefined) await save(ask);
+						case "two answers before polling":
+							await answer(first, "list");
+							await answer(rest[0]!, "list");
+							await save(first);
+							await save(rest[0]!);
 							break;
-						}
-						case "poll": {
-							const waiting = pending();
-							await poll(step.beforeReply ? waiting[step.choice % waiting.length] : undefined);
+						case "switch tickets during saving":
+							await answer(first, "list");
+							trace.push(`select ${key(rest[0]!)}`);
+							await test.select(rest[0]!);
+							await save(first);
 							break;
+						case "free-flow":
+							break;
+					}
+					for (const step of steps) {
+						switch (step._tag) {
+							case "answer": {
+								const available = test.available();
+								const ask = available[step.choice % available.length];
+								if (ask !== undefined) await answer(ask, step.from);
+								break;
+							}
+							case "arrive":
+								await arrive();
+								break;
+							case "save": {
+								const waiting = pending();
+								const ask = waiting[step.choice % waiting.length];
+								if (ask !== undefined) await save(ask);
+								break;
+							}
+							case "poll": {
+								const waiting = pending();
+								await poll(step.beforeReply ? waiting[step.choice % waiting.length] : undefined);
+								break;
+							}
 						}
 					}
+					// Deliver every outstanding reply, even for an ask a poll already unmounted.
+					while (pending().length > 0) await save(pending()[choice % pending().length]!);
+					await poll();
+					await poll();
+					expect(expected).toHaveLength(started.length);
+				} finally {
+					// A failing count must not leave detached saves waiting across generated samples.
+					for (const ask of pending()) await test.save(ask);
+					test.close();
+					await drain();
 				}
-				// Deliver every outstanding reply, even for an ask a poll already unmounted.
-				while (pending().length > 0) await save(pending()[choice % pending().length]!);
-				await poll();
-				await poll();
-				expect(expected).toHaveLength(started.length);
-			} finally {
-				// A failing count must not leave detached saves waiting across generated samples.
-				for (const ask of pending()) await test.save(ask);
-				test.close();
-				await drain();
-			}
-		},
-	);
+			},
+		);
+	});
 });

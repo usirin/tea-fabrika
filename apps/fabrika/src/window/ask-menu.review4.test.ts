@@ -1,12 +1,12 @@
 import {applyCell} from "@demlik/tea";
-import {askShownOf, sealAsk, Evidence, type AskShown} from "@kampus/pipeline/tickets/ask";
+import {askShownOf, sealAsk, Asked, Evidence, type AskShown} from "@kampus/pipeline/tickets/ask";
 import {Entry, fold} from "@kampus/pipeline/tickets/ticket";
 import {ticket as ticketProgram} from "@tea-fabrika/ticket";
 import {TicketWindow} from "@tea-fabrika/ticket/window";
 import {tracker as trackerProgram, tickets} from "@tea-fabrika/tracker";
 import {AskActions, askMachine, AskView} from "@tea-fabrika/tracker/ask-window";
 import {TrackerWindow} from "@tea-fabrika/tracker/window";
-import {Effect, Result, Schema} from "effect";
+import {Deferred, Effect, Result, Schema} from "effect";
 import fc from "fast-check";
 import {act, createElement, type ReactNode} from "react";
 import {createRoot, type Root} from "react-dom/client";
@@ -902,3 +902,195 @@ it("Open lane sends open_lane for the stopped ticket, and Open ticket opens its 
 		{seed: 119120, numRuns: 30},
 	);
 });
+
+// Today's version, round 28, review 13, A1/A4. The product is the plant: AskBox is keyed
+// by a ticket-local id and AskView keeps its first ticket and ask. Switch the real tracker
+// without unmounting it. Refused replies keep each form available for the next generated visit.
+property(
+	"after ticket switches with repeated ask ids, the question and every answer belong to the selected ticket",
+	{
+		numbers: Schema.UniqueArray(ticketNumber).check(Schema.isMinLength(2), Schema.isMaxLength(4)),
+		id: Asked.fields.ask,
+		word: clickWord,
+		switches: Schema.Array(Schema.Int.check(Schema.isBetween({minimum: 0, maximum: 99}))).check(
+			Schema.isMaxLength(12),
+		),
+	},
+	async ({numbers, id, word, switches}) => {
+		const asks = await Promise.all(
+			numbers.map(async (ticket) => ({
+				ticket,
+				ask: await Effect.runPromise(
+					sealAsk({...DRAFT, ask: id, what: `Ticket ${ticket}: ${word}?`}),
+				),
+			})),
+		);
+		const entries = asks.flatMap(({ticket, ask}, n) =>
+			[FILED, ask].map((fact, i) =>
+				Schema.decodeUnknownSync(Entry)({
+					pos: n * 2 + i + 1,
+					ticket,
+					by: i === 0 ? OWNER : AGENT,
+					at: NOW + i,
+					fact,
+				}),
+			),
+		);
+		const state = {
+			...tickets.init(null, undefined)[0],
+			ready: true,
+			tickets: fold([], entries).tickets,
+			now: NOW,
+		};
+		const subject = menu(numbers[0]!);
+		const node = (open: number) =>
+			createElement(
+				AskActions.Provider,
+				{value: subject.actions},
+				createElement(TrackerWindow, {
+					view: trackerProgram.view.of({...state, open}),
+					send: () => {},
+				}),
+			);
+		const test = await mount(node(numbers[0]!));
+		const actual: unknown[] = [];
+		const expected: unknown[] = [];
+		try {
+			// The first switch always crosses tickets; the generated tail may revisit either one.
+			for (const index of [1, ...switches]) {
+				const selected = asks[index % asks.length]!;
+				await test.render(node(selected.ticket));
+				const question = test.find(".ask-question").textContent;
+				const take = test.document.body
+					.querySelectorAll("button")
+					.find((button) => button.textContent.startsWith("Take rec"));
+				expect(take, "the selected question must have a working Take rec button").toBeDefined();
+				await test.click(take!);
+				const answer = subject.answer.mock.calls.at(-1)?.[0];
+				actual.push({
+					question,
+					ticket: answer?.ticket,
+					ask: answer?.ask,
+					saw: answer?.saw,
+					calls: subject.answer.mock.calls.length,
+				});
+				expected.push({
+					question: `Your turn ${selected.ask.shows.what}`,
+					ticket: selected.ticket,
+					ask: id,
+					saw: selected.ask.saw,
+					calls: expected.length + 1,
+				});
+			}
+			expect(actual, JSON.stringify({actual, expected})).toEqual(expected);
+		} finally {
+			await test.close();
+		}
+	},
+);
+
+// Round 28, review 13, A1 and plan laws 10/24. Exercise the real callers as well as the
+// shared status law: the menu currently drops each ticket, and tracker passes bare ask ids.
+// The answer reply is the only controlled outside event. A poll or ticket switch can win it.
+// Each selected ask shares its generated id with every other ticket's waiting ask.
+property(
+	"a saved answer counts the other tickets' asks in the real menu and after a tracker switch",
+	{
+		numbers: Schema.UniqueArray(ticketNumber).check(Schema.isMinLength(2), Schema.isMaxLength(4)),
+		id: Asked.fields.ask,
+		selected: Schema.Int.check(Schema.isBetween({minimum: 0, maximum: 99})),
+	},
+	async ({numbers, id, selected}) => {
+		const asked = await Effect.runPromise(sealAsk({...DRAFT, ask: id}));
+		const ask = askShownOf(asked);
+		const chosen = numbers[selected % numbers.length]!;
+		const other = numbers[(selected + 1) % numbers.length]!;
+		const entries = numbers.flatMap((ticket, n) =>
+			[FILED, asked].map((fact, i) =>
+				Schema.decodeUnknownSync(Entry)({
+					pos: n * 2 + i + 1,
+					ticket,
+					by: i === 0 ? OWNER : AGENT,
+					at: NOW + i,
+					fact,
+				}),
+			),
+		);
+		const state = {
+			...tickets.init(null, undefined)[0],
+			ready: true,
+			tickets: fold([], entries).tickets,
+			now: NOW,
+		};
+		const actual: unknown[] = [];
+		const expected: unknown[] = [];
+		for (const place of [
+			"menu list",
+			"menu Later",
+			"menu list after poll",
+			"menu Later after poll",
+			"tracker switch",
+		] as const) {
+			const subject = menu(chosen, defaults, "ask", ask);
+			const reply = Deferred.makeUnsafe<null>();
+			subject.answer.mockImplementation(() => Deferred.await(reply));
+			let rows = numbers.map((ticket) => row(ticket, "ask", ask));
+			const later = place.includes("Later") ? rows.filter((row) => row.ticket === chosen) : [];
+			let open = chosen;
+			const node = () =>
+				createElement(
+					AskActions.Provider,
+					{value: subject.actions},
+					place === "tracker switch"
+						? createElement(TrackerWindow, {
+								view: trackerProgram.view.of({...state, open}),
+								send: () => {},
+							})
+						: createElement(Over, {
+								...subject.props,
+								asks: {
+									asks: rows.filter((row) => !later.some((aside) => aside.key === row.key)),
+									later: later.filter((ask) => rows.includes(ask)),
+									reach: "ok",
+									why: null,
+								},
+							}),
+				);
+			const test = await mount(node());
+			try {
+				if (place !== "tracker switch") {
+					const index = [...rows.filter((row) => !later.includes(row)), ...later].findIndex(
+						(row) => row.ticket === chosen,
+					);
+					await test.click(test.document.body.querySelectorAll(".asks-title")[index]!);
+				}
+				const take = test.document.body
+					.querySelectorAll("button")
+					.find((button) => button.textContent.startsWith("Take rec"));
+				expect(take).toBeDefined();
+				await test.click(take!);
+				expect(
+					subject.answer.mock.calls.map(([answer]) => ({ticket: answer.ticket, ask: answer.ask})),
+				).toEqual([{ticket: chosen, ask: id}]);
+				expect(test.find('[role="status"]').textContent).toBe("");
+				if (place === "tracker switch") open = other;
+				else if (place.includes("after poll")) rows = rows.filter((row) => row.ticket !== chosen);
+				await test.render(node());
+				await act(async () => {
+					await Effect.runPromise(Deferred.succeed(reply, null));
+					await settle();
+				});
+				actual.push({place, said: test.find('[role="status"]').textContent});
+				expected.push({
+					place,
+					said: `Approved. ${place === "tracker switch" ? 1 : numbers.length - 1} left.`,
+				});
+			} finally {
+				await Effect.runPromise(Deferred.succeed(reply, null));
+				await test.close();
+			}
+		}
+		// Collect every caller before failing so one bad count cannot hide another missed path.
+		expect(actual, JSON.stringify({actual, expected})).toEqual(expected);
+	},
+);
