@@ -74,6 +74,15 @@ export const settingsFolder = (launch: Launch, userHome: string): string =>
 const SETTLE_MS = 50;
 
 /**
+ * How often the file is read again while the watch runs, in ms. A watch can miss a save: on a Mac,
+ * Node's folder watch is FSEvents, which says it is ready before its stream runs and drops events
+ * while the stream restarts for a new watch in the same process (seen in this file's tests and
+ * in the ask desk's end-to-end run). A read each second finds such a save, and a read with the
+ * same text says nothing, so a heard save is still said once.
+ */
+const AGAIN_MS = 1000;
+
+/**
  * Every answer for the file `name` in `folder`: one as the watch starts, then one each time a save
  * changes its text. The folder is made if it is missing, so a file put there later is heard; when it
  * cannot be made, or the watch fails, the answer stays as it was last said.
@@ -133,7 +142,11 @@ export const settingsFile = <A>(
 					).pipe(Stream.drain),
 				),
 			);
-			return Stream.merge(Stream.fromEffect(Deferred.await(ready)), saves).pipe(
+			// After the first read, the file is read on each save heard and each second, for as long
+			// as the watch runs: a watch that fails leaves the answer as it was last said.
+			const again = Stream.tick(`${AGAIN_MS} millis`).pipe(Stream.drop(1));
+			const later = Stream.merge(saves, again, {haltStrategy: "left"});
+			return Stream.merge(Stream.fromEffect(Deferred.await(ready)), later).pipe(
 				Stream.mapEffect(() => text),
 				Stream.changesWith((a, b) => a === b),
 				Stream.map(answer),
