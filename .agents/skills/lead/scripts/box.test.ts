@@ -1125,6 +1125,35 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 		);
 	});
 
+	// Plants: hand the checker the lane's root, or the merge-base even when it does not hold the root.
+	// Layers tests10 (2026-11-09): after a lead merge of main, main's own commits sat in root..head.
+	it("K1 scenario: main's commits after the lane's root are not judged as the lane's", () => {
+		each(["main-moved", "root-off-main"] as const, (kind) =>
+			fixture((b) => {
+				const moved = b.commit(b.main, "src/b.ts", "main moved\n");
+				b.git(b.main, "update-ref", "refs/remotes/origin/main", moved);
+				b.git(b.work, "fetch", "-q", b.main, moved);
+				b.git(b.work, "reset", "-q", "--hard", moved);
+				let start = moved;
+				if (kind === "root-off-main") {
+					start = b.commit(b.work, "src/old.ts", "off main\n");
+					b.git(b.main, "fetch", "-q", b.work, start);
+				}
+				b.state(start);
+				const root = kind === "main-moved" ? b.base : start;
+				appendFileSync(join(b.boxes, "state/one.box"), `root: ${root}\n`);
+				b.setup({operations: [{path: "src/a.ts", text: "tested\n"}]});
+				expect(b.run().code).toBe(0);
+				const got = b.fetch();
+				expect(got.code, got.text).toBe(0);
+				const check = b
+					.calls()
+					.find((c) => c.cmd === "pnpm" && c.args[0] === "commits" && c.args[1] === "check");
+				expect(check?.args[check.args.indexOf("--base") + 1]).toBe(start);
+			}),
+		);
+	});
+
 	// Plant: trust the installed checker's scope skip. Review round 1, finding 4.
 	it("K1 scenario: an unsigned commit outside the exam list is refused on a plain fetch", () => {
 		fixture((b) => {

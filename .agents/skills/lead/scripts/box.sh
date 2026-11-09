@@ -578,6 +578,11 @@ def fetch_box():
                     if signed.returncode: refuse("sign failed " + sha)
             state["fetched-head"] = head; save(state)
         lane_root = state.get("root", state["base"])
+        # A lead merge of main brings main's own commits into root..head, and the checker calls each
+        # one unsigned (layers tests10, 2026-11-09). Start at the merge-base with origin/main when it
+        # holds the root, so only the lane's commits are judged; a root off main keeps its root.
+        joined = must(git("merge-base", head, "origin/main"), "merge-base with origin/main failed")
+        if ancestor(lane_root, joined): lane_root = joined
         checked = call(["pnpm", "commits", "check", "--base", lane_root, "--head", head])
         # A stale link is judged here only for a step the lane itself has signed. A step the lane
         # has not reached yet (lead, before catch-up) may hold a newer link from an older PR on the
