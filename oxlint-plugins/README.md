@@ -79,7 +79,7 @@ P12 head scan at `4577f6b0` found 103 lines. Some were false alarms inside wrapp
 statements whose first line had an edge marker. The marker now covers exactly the
 next statement. After that fix, 60 real findings were in P12's files and 27 in
 unchanged files from main. P12's new files reached zero; the 27 inherited findings
-remain. See `field/notes.jsonl`, note `2026-11-08-44`. The check stays out of
+remain. See `field/notes.jsonl`, note `2026-11-08-275`. The check stays out of
 `pnpm lint` until its false alarms are measured on main. Unknown types still need
 the regular typecheck.
 
